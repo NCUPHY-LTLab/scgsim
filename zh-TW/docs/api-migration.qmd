@@ -36,7 +36,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 模式選擇決定幾何表示，不選擇求解器系列或公開 A/B/C 執行路徑。完整的座標轉換、材料、終端、僅建構與失敗行為，定義於 [AEDT 實體與薄膜契約](specs/aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 與 Palace 不在這次遷移範圍。Q3D input-v1/v2 要求結構仍已移除；其他受支援系列路徑的共用 V1/V2 交接相容性，不會恢復這些 Q3D 要求結構，也不會略過明確模式要求。
 
-此擴充使用下一個已宣告的 AEDT 執行期來源身份 `scgsim.aedt.runtime-source.v15`；V14 仍保留給暫停的 PR35，V1–V14 維持既有契約。V15 將綁定實作模組的位元組與摘要，不宣稱涵蓋完整傳遞相依性；精確路徑清單由固定實作清單負責。
+此擴充引入 AEDT 執行期來源身份 `scgsim.aedt.runtime-source.v15`；目前的產生器輸出 v28，較早的身份維持既有契約。每個身份都綁定實作模組的位元組與摘要，不宣稱涵蓋完整傳遞相依性；精確路徑清單由固定實作清單負責。
 
 目前延續工作的候選範圍包括無終端 Q3D C/G、含 EPR／已儲存場分析的 HFSS Eigenmode，以及 HFSS Driven Terminal。Q3D AC/RL 與 HFSS Driven Modal 在本次延續工作中延後；此範圍界線不移除既有要求或結果契約。下方執行期契約定義這些建模路徑中，元件實例局部 Ground、場側與厚度的區別。
 
@@ -212,7 +212,7 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 
 ## Palace 套件符號 {#palace-package-symbols}
 
-`scgsim.palace` 保留目前 25 個套件門面名稱，下列清單依 v2 責任模組分組。
+`scgsim.palace` 宣告 30 個套件門面名稱。下列清單依 v2 責任模組分組其中 25 個；AMR 與電容參考名稱（`analyze_amr`、`show_amr_analysis`、`PalaceAmrAnalysis`、`PalaceAmrReport`、`CapacitanceReference`）說明於 [AMR 分析](amr-analysis.qmd)。
 
 
 - **目前負責模組與責任：** `scgsim.palace.preparation`; 保留分開的可變準備狀態負責者。 **門面匯出：** `ElectrostaticSim`, `EigenmodeSim`.

@@ -20,9 +20,7 @@ The current implementation separates source geometry, solver preparation,
 native execution, result collection, and offline resolution. Palace and AEDT
 retain separate solver lifecycles; one AEDT transaction owns each Desktop and
 receipt. Prepared-native HFSS EPR can run through local preparation, a
-standalone solver process, and collection on the requested AEDT version. Follow
-the [convergence status](convergence-status.qmd) for current implementation and
-delivery state.
+standalone solver process, and collection on the requested AEDT version.
 
 ## Current package structure
 
@@ -200,9 +198,9 @@ canonical declared module paths, including 41 AEDT modules. Its records carry
 truthful Git observation may be unavailable. V13 has no helper-hash map and
 does not claim exhaustive transitive-source coverage. Historical runtime-source
 inventories continue to interpret their original module paths and identities;
-relocation does not rewrite or reinterpret their receipts. The responsibility
-correction advances the prior v17 producer to runtime-source v18 while retaining
-receipt V3; its declared inventory binds the relocated implementation.
+relocation does not rewrite or reinterpret their receipts. The current producer
+emits runtime-source v28 while retaining receipt V3; its declared inventory
+binds the relocated implementation.
 
 The flow below shows the accepted source structure. Geometry source preparation
 and compiler planning have separate owners, and neither backend defines source
@@ -231,12 +229,12 @@ flowchart LR
 The current geometry implementation starts from component-local source facts and
 named occurrences. A `GeometryPlan` holds the expanded entity inventory and
 the Notebook's final `Net -> Entity` map, then prepares one immutable source
-snapshot for the normalized `GeometryBuildInput` boundary. The accepted 1.1.0
-source model includes authored curve declarations and explicit GDS
+snapshot for the normalized `GeometryBuildInput` boundary. The source model
+includes authored curve declarations and explicit GDS
 reconstruction records in that snapshot while preserving Entity/Net ownership.
 `scgsim.geometry` owns the source-facing plan and snapshot; the
 `scgsim.geometry.compiler` surface owns route planning and derived construction
-records. Palace consumes curve intent through SGB (`scgsim.geometry.sgb`); AEDT curve
+records. Palace builds line and circular-arc curves through SGB (`scgsim.geometry.sgb`); AEDT curve
 lowering is unsupported. The
 [GeometryPlan contract](geometry-sgb.qmd) owns exact curve identity and
 arrangement semantics. Native observations do not replace source identity or
@@ -320,13 +318,13 @@ only prepares values and persists caller-supplied JSON payloads; it is not a
 base simulation object and does not receive callbacks into simulation state.
 
 Both public `mesh()` methods invalidate derived state before checking
-prerequisites. Geometry preparation then applies the existing vacuum, Route-A,
-and indium-bump transformations in order and returns the prepared component,
-stack, bump-fill record, and optional material mapping before airbox lowering.
-The simulation conditionally stores that mapping at the existing point, so an
-earlier transform failure or a non-mapping `materials` value retains the prior
-mapping, while an airbox or mesh-construction failure retains the newly prepared
-mapping. Eigenmode resolves authored ports before those transformations and
+prerequisites. Geometry preparation then applies the vacuum region, the
+indium-bump fill and the airbox to the stack, then interprets the physical
+geometry and records Route-A metadata, and returns the prepared component,
+stack, bump-fill record, and optional material mapping. The simulation stores
+that mapping only after preparation returns, so a failure during preparation or
+a non-mapping `materials` value retains the prior mapping, while a
+mesh-construction failure retains the newly prepared mapping. Eigenmode resolves authored ports before those transformations and
 caches the resolved ports only after mesh construction succeeds.
 
 Both public `write_config()` methods invalidate config and handoff state before
@@ -524,15 +522,3 @@ not invented pass history.
 See [Folder tree and ownership](ownership.qmd) for repository placement and
 [Headless Geometry Preview](geometry-preview.qmd) for the static and connected
 Notebook inspection contract.
-
-## Historical closeout snapshot
-
-An earlier closeout used `develop` slimming successor
-`b46bcc7d64fbb8bab181c0da2b9234a003a20adf` (tree
-`c99c670927e877fb407aa4c73de32793e86a4460`) and migration baseline
-`develop@3a52fb1` (tree `96adcf8672b497a29dd0a6b43043cca11efc3043`). At that
-snapshot, Q3D body-v3 had build-only/readback/save/release evidence, while a
-completed C/G solve was not observed. Xmon Route A, CircularPad Route B, and
-HFSS Eigenmode/saved-field EPR/offline-loss had not yet been observed as full
-native-to-report workflows. These are historical observations for that
-snapshot; current work is tracked on the [convergence status page](convergence-status.qmd).

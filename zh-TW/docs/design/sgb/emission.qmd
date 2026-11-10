@@ -310,7 +310,7 @@ HXT 在某些模型上會讓 Gmsh 4.15.2 的 process 直接中止（heap 損毀�
 
 ## 交給 AEDT {#handing-the-solids-to-aedt}
 
-AEDT 的交接已有結論：以 XDE assembly 的 STEP 匯入具名 solid，band 在寫檔時就切好，face identity 來自每個 solid 內的 face 順序，port 由 PyAEDT 依 sidecar 以原生方式重建。完整的事實、量測數字與未決事項見 [交給 AEDT](aedt-handoff.qmd)。
+SGB 以 `export_aedt_step` 把具名 solid 匯出成 XDE assembly 的 STEP：band 在寫檔時就切好，face identity 來自每個 solid 內的 face 順序，並另外寫出 guard 檔。AEDT 的方向是使用這份輸出；develop 上的 AEDT 流程尚未呼叫它。
 
 ## 限制與風險 {#limits-and-risks}
 
