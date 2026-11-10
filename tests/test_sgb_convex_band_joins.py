@@ -19,6 +19,8 @@ import math
 
 import pytest
 from sgb_supported_kit import (
+    CONTOUR_SNAP_UM,
+    GRID,
     Conductor,
     Scene,
     assert_exact_bands,
@@ -30,6 +32,7 @@ from scgsim.geometry.sgb.cutfamilies.inset import SHORT_ARC_GRID_STEPS
 
 HALF_WIDTH_UM = 20.0
 MARGINS_GRID = (500, 1000)
+CONTOUR_SNAP_GRID = CONTOUR_SNAP_UM / GRID.size_um
 
 
 def peaked_pad(turn_degrees: float) -> tuple[Scene, tuple[int, int]]:
@@ -104,6 +107,11 @@ def test_a_chamfer_offset_is_kept_exactly_where_it_bounds_the_eroded_corner(cham
     otherwise the chamfer's offset would lose more than its length to the two crossings, it is not ended at
     them, and R_m keeps the plain corner ``(20 um - m, 10 um - m)``.  A 0.2 um chamfer is below the bound at both
     margins; a 0.5 um chamfer above it at 0.5 um and below it at 1.0 um.  The bands stay exact either way.
+
+    A corner where the two offsets cross properly is the pixel of their crossing once their end points are on
+    the lattice, as the noding has always placed it: on the side's offset, and within half a grid diagonal of
+    the chamfer's exact offset line (the contour snap bound), not necessarily within half a step of the exact
+    crossing.
     """
     model = assert_exact_bands(chamfered_pad(chamfer_um))
     points = {(v.x, v.y) for v in model.topology.vertices.values()}
@@ -115,6 +123,11 @@ def test_a_chamfer_offset_is_kept_exactly_where_it_bounds_the_eroded_corner(cham
         )  # x + y on the chamfer's offset
         cut = chamfer > (2 - math.sqrt(2)) * margin
         assert ((right, top) in points) is not cut, margin
-        for corner in ((right, level - right), (level - top, top)):
-            found = any(math.dist(p, corner) <= 0.5 for p in points)
-            assert found is cut, (margin, corner)
+        on_right = [p for p in points if p[0] == right and p[1] < top]
+        on_top = [p for p in points if p[1] == top and p[0] < right]
+        for side in (on_right, on_top):
+            found = any(
+                abs(p[0] + p[1] - level) / math.sqrt(2) <= CONTOUR_SNAP_GRID
+                for p in side
+            )
+            assert found is cut, margin

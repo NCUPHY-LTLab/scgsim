@@ -71,7 +71,11 @@ from scgsim.geometry.sgb.cutfamilies.inset_regions import (
     RequiredEdge,
     margin_cells,
 )
-from scgsim.geometry.sgb.noding.snap_rounding import Segment
+from scgsim.geometry.sgb.noding.snap_rounding import (
+    Segment,
+    crossing_pixel,
+    proper_crossing,
+)
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records import circle_math
 from scgsim.geometry.sgb.records.band_regions import (
@@ -412,8 +416,33 @@ def _convex_joins(
             _line_length(ring[pi]) > max(trims[pi], convex_junction.reach)
             for pi in sides
         ):
-            joins[k] = convex_junction.junction.offsets_meet(margin)
+            joins[k] = _crossing_on_lattice(
+                ring[k], ring[(k + 1) % count], convex_junction, margin
+            )
     return joins
+
+
+def _crossing_on_lattice(
+    prim: RingPrimitive,
+    following: RingPrimitive,
+    convex_junction: _ConvexJunction,
+    margin: int,
+) -> Point:
+    """The lattice point at which both offsets of a joined convex junction end.
+
+    Where the two offsets, with their end points on the lattice, cross properly, the noding has always put
+    their corner at the pixel of that crossing (``snap_rounding.crossing_pixel``); the join keeps that point.
+    Where they do not -- near a straight junction they touch or overlap instead -- the exact crossing is rounded.
+    """
+    crossing = proper_crossing(
+        _offset_point(prim, margin, at_end=False),
+        _offset_point(prim, margin, at_end=True),
+        _offset_point(following, margin, at_end=False),
+        _offset_point(following, margin, at_end=True),
+    )
+    if crossing is not None:
+        return crossing_pixel(crossing)
+    return convex_junction.junction.offsets_meet(margin)
 
 
 def _line_length(prim: RingPrimitive) -> Decimal:
