@@ -5,7 +5,8 @@
 * which imported copy of a face each Surface-EPR row integrates, and the ``surface``/``adjacent`` choice by
   sidecar group, on the guard and sidecar of real SGB builds (``occt``).
 
-The live import (STEP, materials, Region, boundaries) runs in AEDT and is checked there.
+The live import (STEP, materials, Region, boundaries) runs in AEDT and is checked there.  The module is skipped
+where OCP (the ``occt`` group) is missing, since the AEDT SGB modules import the SGB exporter.
 """
 
 from __future__ import annotations
@@ -15,13 +16,28 @@ import math
 
 import pytest
 
-from scgsim.aedt.runtime.families.sgb_import import (
+pytest.importorskip(
+    "OCP"
+)  # the AEDT SGB modules import the SGB exporter, which needs OCP
+
+from sgb_inputs import rectangular_junction_source  # noqa: E402
+
+from scgsim.aedt.epr.sgb_surfaces import (  # noqa: E402
+    SurfaceBindingError,
+    surface_face_bindings,
+    surface_field_selections,
+)
+from scgsim.aedt.preparation.sgb_model import prepare_sgb_model  # noqa: E402
+from scgsim.aedt.runtime.families.sgb_import import (  # noqa: E402
     ImportedSgbModel,
     SgbImportError,
     current_line_um,
     polyline_of_loop,
     segment_length_um,
 )
+from scgsim.geometry.surface_epr import normalize_surface_epr_specs  # noqa: E402
+
+pytestmark = pytest.mark.occt
 
 
 def _line(a, b):
@@ -50,7 +66,11 @@ def test_a_loop_that_does_not_close_is_refused():
 
 @pytest.mark.parametrize(
     ("mid", "length"),
-    [((1, 1, 0), math.pi), ((1, -1, 0), math.pi), ((1 + math.sqrt(0.5), math.sqrt(0.5), 0), math.pi / 2)],
+    [
+        ((1, 1, 0), math.pi),
+        ((1, -1, 0), math.pi),
+        ((1 + math.sqrt(0.5), math.sqrt(0.5), 0), math.pi / 2),
+    ],
 )
 def test_an_arc_is_as_long_as_the_side_its_mid_point_lies_on(mid, length):
     """A half circle either way, and a quarter circle whose mid point lies on the minor arc."""
@@ -93,12 +113,6 @@ def test_a_port_end_with_a_gap_is_refused():
 @pytest.fixture(scope="module")
 def models(tmp_path_factory):
     """The Route C and Route A models of one junction pair with MA, MS and SA bands."""
-    pytest.importorskip("OCP")
-    from sgb_inputs import rectangular_junction_source  # noqa: PLC0415 -- needs OCP
-
-    from scgsim.aedt.preparation.sgb_model import prepare_sgb_model  # noqa: PLC0415
-    from scgsim.geometry.surface_epr import normalize_surface_epr_specs  # noqa: PLC0415
-
     film = {"film_thickness_m": 3e-9, "permittivity": 10.0, "loss_tangent": 1e-3}
     specs = normalize_surface_epr_specs(
         {kind: {**film, "inset_margins_um": [0.5]} for kind in ("MA", "MS", "SA")},
@@ -129,11 +143,8 @@ def _as_imported(model):
     return sidecar, ImportedSgbModel(objects, copies, {})
 
 
-@pytest.mark.occt
 def test_route_c_rows_read_ms_and_sa_on_the_substrate_and_ma_on_the_conductor(models):
     """MS faces import on the conductor and the substrate; the row reads the substrate's copy, once."""
-    from scgsim.aedt.epr.sgb_surfaces import surface_face_bindings  # noqa: PLC0415
-
     sidecar, imported = _as_imported(models["solid"])
     bindings = surface_face_bindings(sidecar, imported)
     assert set(bindings) == set(sidecar["surface_epr_rows"])
@@ -152,11 +163,8 @@ def test_route_c_rows_read_ms_and_sa_on_the_substrate_and_ma_on_the_conductor(mo
     assert all(name.replace("_", "").isalnum() for name in names)
 
 
-@pytest.mark.occt
 def test_route_a_sheet_rows_read_the_substrate_face_under_the_sheet(models):
     """A Route A sheet lies on the substrate's top face, its one copy, for both its MA and MS rows."""
-    from scgsim.aedt.epr.sgb_surfaces import surface_face_bindings  # noqa: PLC0415
-
     sidecar, imported = _as_imported(models["thin_film"])
     bindings = surface_face_bindings(sidecar, imported)
     ma = bindings["MA::chip/left__sheet::band=0"]
@@ -166,31 +174,17 @@ def test_route_a_sheet_rows_read_the_substrate_face_under_the_sheet(models):
     assert {name for name, _ in ma.faces} == {"substrate"}
 
 
-@pytest.mark.occt
 def test_a_face_with_two_copies_and_no_dielectric_side_is_refused(models):
     """An MA face on two imported solids has no copy its type reads."""
-    from scgsim.aedt.epr.sgb_surfaces import (  # noqa: PLC0415
-        SurfaceBindingError,
-        surface_face_bindings,
-    )
-
     sidecar, imported = _as_imported(models["solid"])
     face = sidecar["physical_groups"]["MA::chip/left__sidewall"]["ids"][0]
     copies = {**imported.face_copies, face: {"chip_left": 1, "substrate": 2}}
     with pytest.raises(SurfaceBindingError, match="none of them"):
-        surface_face_bindings(
-            sidecar, ImportedSgbModel(imported.objects, copies, {})
-        )
+        surface_face_bindings(sidecar, ImportedSgbModel(imported.objects, copies, {}))
 
 
-@pytest.mark.occt
 def test_selectors_are_keyed_by_group_and_default_to_the_face_itself(models):
     """``adjacent`` on one group switches only that group's rows; an unknown group is refused."""
-    from scgsim.aedt.epr.sgb_surfaces import (  # noqa: PLC0415
-        surface_face_bindings,
-        surface_field_selections,
-    )
-
     sidecar, imported = _as_imported(models["thin_film"])
     bindings = surface_face_bindings(sidecar, imported)
     tokens = surface_field_selections(bindings, {"chip/left::band=0": "adjacent"})

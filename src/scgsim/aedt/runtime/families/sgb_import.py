@@ -201,7 +201,9 @@ def _rebuild_free_faces(
     app: Any, free_faces: Sequence[FreeFace], tolerance_um: float
 ) -> dict[str, str]:
     """Planned free face id -> the AEDT sheet rebuilt from its guarded loops, named by its group."""
-    names = aedt_names([(face["face"], face["group"] or "sheet") for face in free_faces])
+    names = aedt_names(
+        [(face["face"], face["group"] or "sheet") for face in free_faces]
+    )
     sheets: dict[str, str] = {}
     for face in free_faces:
         outer, *holes = (
@@ -269,10 +271,14 @@ def segment_length_um(segment: LoopSegment) -> float:
         return math.dist(points[0], points[1])
     start, mid, end = points
     a, b, c = math.dist(start, mid), math.dist(mid, end), math.dist(start, end)
-    radius = a * b * c / math.sqrt((a + b + c) * (-a + b + c) * (a - b + c) * (a + b - c))
+    radius = (
+        a * b * c / math.sqrt((a + b + c) * (-a + b + c) * (a - b + c) * (a + b - c))
+    )
     # The inscribed angle at ``mid`` subtends the chord ``start``-``end``; the arc is the side holding mid.
     half = math.asin(min(1.0, c / (2 * radius)))
-    obtuse = a * a + b * b < c * c  # mid sees the chord at more than 90 degrees: the minor arc
+    obtuse = (
+        a * a + b * b < c * c
+    )  # mid sees the chord at more than 90 degrees: the minor arc
     return radius * (2 * half if obtuse else 2 * (math.pi - half))
 
 
@@ -507,7 +513,9 @@ def _port_end_midpoint(
     ]
     points = [p for edge in across for p in edge]
     if not across:
-        raise SgbImportError(f"the port face has no edge across its direction at {extreme} um")
+        raise SgbImportError(
+            f"the port face has no edge across its direction at {extreme} um"
+        )
     a, b = max(
         ((p, q) for p in points for q in points), key=lambda pair: math.dist(*pair)
     )

@@ -46,7 +46,9 @@ class SurfaceFaceList:
     entities: tuple[str, ...]
     band: int | None
     face_list: str
-    faces: tuple[tuple[str, int], ...]  # (AEDT object, AEDT face id), one per planned face
+    faces: tuple[
+        tuple[str, int], ...
+    ]  # (AEDT object, AEDT face id), one per planned face
 
     def to_payload(self) -> dict[str, Any]:
         """The canonical record of this binding."""
@@ -148,7 +150,9 @@ def surface_field_selections(
     groups = {binding.group for binding in bindings.values()}
     unknown = sorted(set(selectors) - groups)
     if unknown:
-        raise ValueError(f"surface_field_selectors name groups no row carries: {unknown}")
+        raise ValueError(
+            f"surface_field_selectors name groups no row carries: {unknown}"
+        )
     wrong = sorted(g for g, value in selectors.items() if value not in _ENTER)
     if wrong:
         raise ValueError(
