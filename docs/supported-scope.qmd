@@ -11,7 +11,7 @@ the geometry it declares, on one fixed grid, with the Surface-EPR bands you ask
 for. It then meshes that geometry for Palace, so that every tetrahedron meets
 the mesh quality threshold, or it stops with a report. SCGSim never changes the
 layout to make it fit: a layout that breaks a rule is refused, and the error
-says which rule and where.
+says which rule.
 
 Read this page before you draw a layout for simulation or when a build or a
 mesh fails. The rules are grouped by what they are about; each row links to the
@@ -38,7 +38,7 @@ The layout owns the drawing rules because only the layout knows what it means.
 SCGSim builds exactly what is declared and never repairs a layout: it does not
 close nanometre gaps, remove short edges or resample curves, because it cannot
 tell a drawing defect from a feature that was meant. What SCGSim does own is
-telling you where a rule is broken.
+telling you which rule is broken.
 
 The words this page uses:
 
@@ -194,5 +194,5 @@ Find the error you see, then follow the owner's next action.
 | `InputError` about a port sheet, an Entity id, an arc or a margin | Layout and declarations | Read the message: it names the port, Entity or request. Fix the drawing or the setting it names. |
 | `NoGapEdgeError` | Declarations | The conductor named in `inset_margins_by_entity_um` has no gap edge on that face. Remove it there, or band the face by type. |
 | `ValidationError` "… invariant(s) failed" | SCGSim | A structural check of SGB failed on input it accepted. Report it to SCGSim with the layout. |
-| `MeshRepairError` | First check the layout, then SCGSim | Read the quality report: it names the stop reason and lists the remaining bad elements and the features they touch. If they sit on fine structure of the layout, fix the drawing; a `stalled` stop usually points there. If the layout has none there, adjust the [mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls), or report it to SCGSim when the bad elements sit on band edges. |
+| `MeshRepairError` | First check the layout, then SCGSim | Read the quality report: it names the stop reason and lists the remaining bad elements and the features they touch. If they sit on fine structure of the layout, fix the drawing. If the layout has none there, adjust the [mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls), or report it to SCGSim when the bad elements sit on band edges. |
 | An error whose message does not match the layout you drew | SCGSim | Report it to SCGSim with the layout and the message. |
