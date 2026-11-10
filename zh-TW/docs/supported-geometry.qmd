@@ -1,13 +1,13 @@
 ---
 title: "支援的幾何"
-description: "SCGSim 能以 Surface-EPR band 建立的 layout 圖形，每個都附圖與尺寸，以及繪製曲線輪廓的規則。"
+description: "SCGSim 能以 Surface-EPR band 建立的 layout 圖形，每個都附圖與尺寸，以及量測過的多邊形曲線輪廓。"
 lang: zh-TW
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/supported-geometry"
 ---
 
-本頁列出 SCGSim 的幾何建構器（SGB）經過測試的 layout 圖形，每個圖形都附有圖，以及使用它的 OrcaPen SC PDK cell 的尺寸；本頁也說明繪製曲線輪廓的規則。由這些圖形組成、且落在下列範圍內的 layout，建出的 Surface-EPR band 面積與精確幾何相符。沒有列出的圖形未經驗證。已知會失敗或需要修改 layout 的情況及其原因，列在[已知的幾何問題](known-geometry-problems.qmd)。
+本頁列出 SCGSim 的幾何建構器（SGB）經過測試的 layout 圖形，每個圖形都附有圖，以及使用它的 OrcaPen SC PDK cell 的尺寸；本頁也說明繪製曲線輪廓的規則。由這些圖形組成、且落在下列範圍內的 layout，建出的 Surface-EPR band 面積與精確幾何相符。沒有列出的圖形未經驗證。已知會失敗或需要修改 layout 的情況及其原因，列在[已知的幾何問題](known-geometry-problems.qmd)。每個 layout 都必須遵守的規則，以及失敗由誰負責，見[支援範圍](supported-scope.qmd)。
 
 ## 模擬之前先檢查 layout
 
@@ -95,47 +95,45 @@ scgsim-id: "docs/supported-geometry"
 
 ![**20 指叉梳。** 20 指，寬 3.3、間距 3.3、長 100，由 21.6° 的漏斗饋入（開孔 42.7°）。使用者：`interdigital_capacitor`、Purcell。](assets/supported-geometry/cell-20.svg){fig-alt="兩組交錯的指狀梳，由漏斗形饋入，位於接地開孔內。"}
 
-![**21 重新取樣的 spline 條帶。** y 方向寬 10，重新取樣使每個頂點至少轉 2.8125°。使用者：`interpolation_spline_strip`、`bspline_strip`。](assets/supported-geometry/cell-21.svg){fig-alt="周圍沒有接地的彎曲條帶。"}
+![**21 重新取樣的 spline 條帶。** y 方向寬 10，重新取樣為每個頂點約轉 3°。使用者：`interpolation_spline_strip`、`bspline_strip`。](assets/supported-geometry/cell-21.svg){fig-alt="周圍沒有接地的彎曲條帶。"}
 
 ![**22 中空 TSV。** 兩個 24 點圓（r 29.8 與 30）之間 0.2 µm 的壁，高 500；兩面各有 r 29.8 至 100 的 Al 著陸墊，位於 r 120 的開孔內。使用者：TSV coupon。](assets/supported-geometry/cell-22.svg){fig-alt="接地開孔內、圍繞 TSV 孔的環形著陸墊。"}
 
 ![**23 Airbridge。** 12 × 84 的橋面架在兩個 14 × 14 的橋墩上，跨越寬 10、gap 6 的 CPW。使用者：`airbridge`、`cpw_airbridge_coupon`、meander coupon。](assets/supported-geometry/cell-23.svg){fig-alt="架在兩個橋墩上、跨越 CPW 的橋面。"}
 
-![**24 跨越 gap 的集總薄片。** 2 × 20 的薄片跨越 20 µm 的 gap，伸入焊墊與接地各 1 nm；方形焊墊 200，或 r 100 的 32 點焊墊。使用者：方形、圓形與覆晶焊墊 coupon。](assets/supported-geometry/cell-24.svg){fig-alt="跨越焊墊邊與接地之間 gap 的窄埠薄片。"}
+![**24 跨越 gap 的集總薄片。** 2 × 20 的薄片跨越 20 µm 的 gap，伸入焊墊與接地各 1 nm；方形焊墊 200。使用者：方形與覆晶焊墊 coupon。同樣的薄片若跨越 r 100 的 32 點多邊形焊墊，則不受支援：模型可以建立，但無法寫成建立網格時讀取的幾何檔。圓形焊墊 coupon 不屬於這種情形，因為它把焊墊與開孔宣告為圓弧。](assets/supported-geometry/cell-24.svg){fig-alt="跨越焊墊邊與接地之間 gap 的窄埠薄片。"}
 :::
 
-PDK 以 258 點畫 cell 21 的 spline 條帶。依原圖它們不符合下面的曲線規則而會被拒絕；樣本先將它們重新取樣（見[已知的幾何問題](known-geometry-problems.qmd#spline-258)）。
+PDK 以 258 點畫 cell 21 的 spline 條帶。樣本將它們重新取樣；依原圖的條帶也能建出精確的 band（見[以多邊形畫成的曲線輪廓](#curve-rule)）。
 
 cell 22 的壁厚 0.2 µm，比兩個 margin 都薄。壁面是垂直的，所以上面沒有 band，著陸墊的 band 只從 20 µm 的 gap 量起。
 
-cell 14、15 與 18 有少數頂點的轉角小於 2.8125°。它們依原圖在這些 cell 中受支援；[已知的幾何問題](known-geometry-problems.qmd#small-turn-runs)列出這些頂點，以及在其他地方哪些情況未經驗證。
+cell 14、15 與 18 有少數頂點的轉角小於 2.8125°；它們依原圖就能建出精確的 band（見[以多邊形畫成的曲線輪廓](#curve-rule)）。
 
-## 曲線輪廓：每整圈最多 128 點 {#curve-rule}
+## 以多邊形畫成的曲線輪廓 {#curve-rule}
 
-以多邊形畫成的曲線，若每整圈最多使用 128 點，即受支援；這時它的每個頂點都轉至少 360° / 128 = 2.8125°。這是關於每個頂點轉角的規則，與邊長無關：半徑 150 µm 的 256 點圓，邊長 3.68 µm，仍會被拒絕。
+以多邊形畫成的曲線，會建出與精確侵蝕相同的 band。SGB 不設每個頂點的最小轉角，也不設每整圈的最多點數：在兩條直線邊相交的凸頂點上，只要兩條邊的 offset 在彼此範圍內相交，就會終止於該交點，共用同一個格點。
 
-OrcaPen SC PDK 的 `curve_sampling="simulation"` 設定每整圈畫 16、24 或 32 點，遠在規則之內。
+下列輪廓都已建立並與精確侵蝕比對，margin 為 0.5 與 1.0 µm：
 
-規則以正多邊形圓、margin 0.5 與 1.0 µm 量測：
+| 輪廓 | 每個頂點的轉角 | 量測條件 | 結果 |
+| --- | --- | --- | --- |
+| 正多邊形圓，16、24、32、64 或 128 點 | 22.5° 至 2.8125° | 半徑 5、10、50 與 150 µm | band 精確 |
+| 128 點的圓，圓心不在 grid 上（(0.3337, 0.1234) µm）、旋轉 0.73°，或兩者同時成立（圓心 (12.0004, −7.7771) µm、旋轉 1.7°） | 2.8125° | 半徑 5、10、37.3、75 與 150 µm | band 精確 |
+| 正多邊形圓，256 點 | 1.41° | 半徑 5、10、50 與 150 µm | band 精確 |
+| PDK 依原圖畫出的 spline 條帶，258 點 | 最小 0.058°（插值）與 0.012°（B-spline） | 依原圖 | band 精確 |
+| cell 14、15 與 18 的 Euler 彎與漸縮段 | 少數頂點 0.15° 至 2.7° | 依原圖 | band 精確 |
+| 半徑 50 µm 的 16 點圓，在一條邊上加一個頂點 | 凸 2.9°、2.7°、1.41°、0.3° 與 0.01°；凹 2.7° 與 0.01°；0° | 邊長 9.8 µm | band 精確 |
 
-| 每整圈點數 | 每個頂點的轉角 | 半徑 5、10、50 與 150 µm |
-| --- | --- | --- |
-| 16、24、32、64、128 | 22.5° 至 2.8125° | 可建立，band 精確 |
-| 多於 128 | 小於 2.8125° | 不受支援；見[更密的多邊形圓](known-geometry-problems.qmd#dense-circles) |
+這些是量測過的例子，不是限制。每整圈點數多得多的輪廓在開啟 band 時的網格化成本，尚未量測。
 
-128 點的圓在半徑 5、10、37.3、75 與 150 µm 時，圓心不在 grid 上（(0.3337, 0.1234) µm）、旋轉 0.73°、或兩者同時成立（圓心 (12.0004, −7.7771) µm、旋轉 1.7°），也都能建出精確的 band。
-
-規則之外的曲線可能以這則訊息停止建構：
+若相鄰兩條 offset 仍既不相接也不相交，建構會以這則訊息停止，而不會輸出錯誤的 band：
 
 ```text
 inset family '…': the inset curve at m = … um is not closed near (x, y) um: two
 offsets of the support boundary neither meet nor cross there, so the band regions
-cannot be told apart. An outline whose vertices turn by less than 2.8125 degrees
-each, … does this: draw curved outlines with at most 128 points per full circle, …
+cannot be told apart. This is an SCGSim defect, not a layout rule: report it to
+SCGSim with the layout …
 ```
 
-### 畫出符合規則的曲線
-
-- 以 `curve_sampling="simulation"` 建立用於模擬的 PDK 元件。
-- 重新取樣 spline，使每個頂點都轉至少 2.8125°，就像 cell 21 的樣本那樣。
-- 把圓弧宣告為精確圓弧，SGB 會直接攜帶它，不需取樣。
+圓弧也可以宣告為精確圓弧，SGB 會直接攜帶它，不需取樣。

@@ -1,6 +1,6 @@
 ---
 title: "Tetrahedral Mesh Quality"
-description: "Stored tetrahedron diagnostics, numerical status, units and strict serialization."
+description: "Stored tetrahedron diagnostics, numerical status, units, strict serialization and the version identities of a mesh."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/mesh-quality"
@@ -27,6 +27,9 @@ measures the minimum signed inverse condition number (minSICN) on the linear mes
 elevation to the geometry order, holds it to the mesh's quality threshold and
 writes its own report; see the
 [Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
+The sizes the audited mesh starts from, including those at film walls and on
+Surface-EPR band boundary curves, are the sizing recipe's
+([Sizing recipes](specs/palace-electrostatic-sgb.qmd#palace-mesh-recipes)).
 `check_mesh_quality()` measures the stored solver mesh after elevation, with
 different metrics, and applies no threshold. The two reports do not replace each
 other.
@@ -38,6 +41,48 @@ chords on curved high-order elements; they are not curved arc lengths or a
 higher-order quality metric. Point regions have zero edges and no length
 extrema. Missing historical statistics remain `not_recorded` rather than
 being inferred by this tetrahedron reader.
+
+## Version identities of a mesh {#version-identities}
+
+A mesh that `mesh()` writes carries three versions. Read them to tell whether
+two meshes were made the same way.
+
+::: {.askr-table-compact}
+| Identity | Example | Where it is recorded | When it changes |
+|---|---|---|---|
+| Package version | `scgsim 2.0.0rc15` | `scgsim_version` in the run's provenance (`metadata/route_b_provenance.json`, or `route_a_…` on Route A) | With every release of SCGSim. |
+| Recipe version | `scgsim.meshing.features/N` for `FeatureRecipe`, `scgsim.meshing.uniform-boundary/N` for `UniformBoundaryRecipe`, `scgsim.meshing.global-size/N` for `GlobalSizeRecipe` | `recipe.version` in each quality report and in the mesh manifest, beside `recipe.parameters` | Only when the sizes the recipe asks for change. |
+| Report format | `scgsim.meshing.report/N` | `report_version` in each quality report | When the fields of the quality report change. |
+:::
+
+A recipe's version goes up only when the sizes it asks for change. `FeatureRecipe`
+went from `features/1` to `features/2` when it began to size every Surface-EPR
+band boundary curve. So two reports with the same recipe version and the same
+parameters asked for the same initial sizes, even when they were made by
+different package releases; a different recipe version means the meshes were
+made by different sizing rules. The recipe version covers the initial sizes
+only: the repair policy is recorded in each report, and the Gmsh version in the
+mesh manifest.
+
+The versions are separate because one version for the whole meshing module
+would change whenever any recipe changed, and could not say which one did. A
+run with `UniformBoundaryRecipe` keeps its version when `FeatureRecipe` changes,
+so its reports stay comparable across that change.
+
+For example, the same default `FeatureRecipe()` on a flip-chip qubit with bands
+of 0.5 and 1 µm (the OrcaPen SC PDK `disk_flip_chip_qubit` under common ground
+planes, Route B) gives two different meshes under the two versions:
+
+::: {.askr-table-compact}
+| | `scgsim.meshing.features/1` | `scgsim.meshing.features/2` |
+|---|---|---|
+| Sizes asked for | 1.30 µm on the 801 film-wall curves | 1.30 µm on 3,104 curves: the film walls and every band boundary curve |
+| First mesh | 402,784 tetrahedra, 1 below the quality threshold | 569,325 tetrahedra, none below it |
+| Result | clean after one repair round: 407,093 tetrahedra, 82.5 s | clean in the first mesh: 569,325 tetrahedra, 53.4 s |
+:::
+
+The two quality reports name different recipe versions, so the different mesh
+comes from the sizing rules, not from anything else in the run.
 
 ## Input and ownership
 

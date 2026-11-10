@@ -163,7 +163,7 @@ Noding 不能是每個 tile 各自獨立的工作，因為改道後的弦可能�
 
 真實模型上的偏離（production 的 sliver report）：來源圓弧的端點是精確的格點，偏離為 0；inset band 的衍生 offset 圓弧，端點被 snap，在 `pad_in_ground_A_bands` 的 59 條 arc edge 上平均 0.046 g、最大 0.632 g，在 `pad_in_ground_B_bands` 的 90 條 arc edge 上平均 0.030 g、最大 0.632 g（port 在 $z = 0$）。
 
-圓弧若被外來的 vertex 切開（例如 port 的 edge 終止在圓形 pad 的圓弧上），每一段圓弧各自由它 snap 後的端點 realise，落在各自的圓上，偏離量以段為單位記錄。以這樣的圓弧為底的圓柱 wall（Route B 與 Route C）如果不處理就會有 5 條邊界 edge；production 在 assembly 中於該 vertex 處用一條垂直 edge 把 wall 切開，底邊與頂邊的圓弧都在同一個格點被切開，每一片是自己圓上的精確圓柱（見 [Assembly](assembly.qmd#curved-walls)）。原型的 direct writer 曾因此拒絕這個案例。完全由 polygon 組成的圓（GDS 的 16 到 128 個點）不會產生圓柱 wall，它們的 wall 是平面。
+圓弧若被外來的 vertex 切開（例如 port 的 edge 終止在圓形 pad 的圓弧上），每一段圓弧各自由它 snap 後的端點 realise，落在各自的圓上，偏離量以段為單位記錄。以這樣的圓弧為底的圓柱 wall（Route B 與 Route C）如果不處理就會有 5 條邊界 edge；production 在 assembly 中於該 vertex 處用一條垂直 edge 把 wall 切開，底邊與頂邊的圓弧都在同一個格點被切開，每一片是自己圓上的精確圓柱（見 [Assembly](assembly.qmd#curved-walls)）。原型的 direct writer 曾因此拒絕這個案例。完全由 polygon 組成的圓（GDS 中以多邊形近似的圓）不會產生圓柱 wall，它們的 wall 是平面。
 
 witness 的代價是大小。半徑為 $r$ 的 quarter arc 約需要 $\sqrt{r/g}$ 乘上一個常數的弦數：$r = 100$ g 時 12 條，$r = 8\,\mu$m（8 000 g，也就是 pad 的孔）時 100 條，$r = 100\,\mu$m（100 000 g）時 352 條；從 $r = 24$ g 到 $100\,000$ g，斜率介於 0.47 與 0.50 之間（`arrangement_guarantees.py`）。對執行範例 `pad_in_ground_A_bands`（Route A，三個 margin 的 band）的 $z = 0$ level 而言，弦合併之前，noded arrangement 有 4 058 條 edge 與 4 050 個 hot pixel，合併之後是 166 條 edge（`figures/arrangement-guarantees-numbers.json` 的 `level_stats`）。對這個範例而言這很便宜，但對於圓弧很多的 layout，是需要預算的成本。圓弧的原生 snap rounding（Eigenwillig 等人）是升級路徑；structural validation 則是 witness 的安全網（見 [Validation](validation.qmd)）。
 

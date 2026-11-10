@@ -21,6 +21,8 @@ lookup and source-version pairing, use the [knowledge guide](knowledge-guide.qmd
 | Driven S-parameters | [HFSS Modal or Terminal](tutorials/scattering.qmd) | Two-port response with the selected port family |
 | Transmission-line parameters | [AEDT Q2D](tutorials/transmission-line.qmd) | Per-length C, G, L and R matrices |
 
+Before you simulate a layout of your own, read the [supported scope](supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.
+
 ## Prepare a model and read its return
 
 Start with [installation](course/installation.qmd), then select explicit geometry, materials, conductors and ports for your physical question. The [model and materials reference](reference.qmd#model-materials) and [conductors and ports reference](reference.qmd#conductors-ports) explain those choices. Use [returned results](course/returned-results.qmd) to keep the returned quantity, units, mode or conductor identity, and solver status together.

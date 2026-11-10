@@ -33,7 +33,7 @@ from scgsim.geometry.sgb.records.support import (  # private-import: the cells a
     distance_to_primitive,
 )
 
-SCENES = {**disk_qubit.SCENES, **pdk.SCENES}
+SCENES = {**disk_qubit.SCENES, **pdk.SCENES, **pdk.NOT_WRITTEN}
 
 
 def sparse_origins() -> tuple[PrismCatalogue, tuple[InsetRequest, ...]]:
@@ -58,10 +58,12 @@ def build_input(name: str) -> tuple[PrismCatalogue, tuple[InsetRequest, ...]]:
 @pytest.mark.parametrize(
     "name, at_least",
     [
-        pytest.param("cell20_comb", 100, marks=pytest.mark.slow),
-        pytest.param("d1_die_defaults", 100, marks=pytest.mark.slow),
-        ("cell22_tsv_signal", 100),
-        ("cell24_sheet_circular_pad", 100),
+        # Floors that keep the comparison from being vacuous, not a cost bound.  Ending the offsets of a
+        # convex junction at their crossing (Issue #138) leaves fewer cells to sample: 56 to 92 queries here.
+        pytest.param("cell20_comb", 50, marks=pytest.mark.slow),
+        pytest.param("d1_die_defaults", 50, marks=pytest.mark.slow),
+        ("cell22_tsv_signal", 50),
+        ("cell24_sheet_circular_pad", 50),
         (
             "sparse_origins",
             10,

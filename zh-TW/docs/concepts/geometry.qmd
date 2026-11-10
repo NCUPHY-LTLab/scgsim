@@ -17,7 +17,7 @@ SGB 將明確宣告的版圖與製程資料整理成求解器後端可建構的�
 本文以一個含孔洞、兩個 Net、基板與真空，並明確要求矩形接面的公開案例，逐步說明每個準備步驟為什麼存在，以及它交給下一步什麼資料。案例說明止於 CAD 建構，不代表已產生網格或場解結果。
 
 ::: {.callout-note title="本頁以 Gmsh 與 Palace 建構路徑為主"}
-本文描述的路徑由 Gmsh/OCC 建立 CAD、由 Gmsh 產生網格，再交給 Palace。AEDT 在支援範圍內使用相同來源語意，但透過 AEDT 原生 Modeler 建立工程，因此建構步驟不同。共用語意與後端界線請參閱[物理表示契約](../specs/physical-representation.qmd)及[幾何契約](../geometry-sgb.qmd)。
+本文描述的路徑把實體模型寫成 BREP 與 XAO 檔、由 Gmsh 產生網格，再交給 Palace。AEDT 在支援範圍內使用相同來源語意，但透過 AEDT 原生 Modeler 建立工程，因此建構步驟不同。共用語意與後端界線請參閱[物理表示契約](../specs/physical-representation.qmd)及[幾何契約](../geometry-sgb.qmd)。
 :::
 
 ## 1. 先說清楚模型由哪些事實組成 {#source-stage}
@@ -162,7 +162,7 @@ MS 與 MA 可以指向同一平面支撐幾何，但保留不同的場側與材�
 
 ![切分來源邊界後的共用線網路。](../images/sgb-concept/method-shared-network.svg){#fig-sgb-method-network}
 
-`polygonize` 只利用閉合線網路形成候選面；來源歸屬由另一個傳播步驟決定。每個有向環都帶有依環角色解讀的正負邊界變化：外環表示從外部跨入形狀，孔環則扣除該區域並反轉這項變化。規劃先將無界外部面設為 $(0,0)$，再沿共用邊將變化傳到相鄰面。它會沿不同路徑重算；若同一面得到不一致歸屬，或任何值不是 0／1，準備就會失敗。因此歸屬來自明確環方向與共享拓樸，不是取面中心點抽樣。
+SGB 在整數格點上以 snap rounding 為閉合線網路建立節點，並在半邊結構中形成候選面；來源歸屬由另一個傳播步驟決定。每個有向環都帶有依環角色解讀的正負邊界變化：外環表示從外部跨入形狀，孔環則扣除該區域並反轉這項變化。規劃先將無界外部面設為 $(0,0)$，再沿共用邊將變化傳到相鄰面。它會沿不同路徑重算；若同一面得到不一致歸屬，或任何值不是 0／1，準備就會失敗。因此歸屬來自明確環方向與共享拓樸，不是取面中心點抽樣。
 
 在 $y=1.5$ µm 的路徑上，穿過孔洞左邊 $x=1$ 時，A 的位元由 $1$ 變為 $0$；穿過右邊 $x=2$ 時再由 $0$ 變為 $1$。外環內的孔洞沒有 A 金屬，越過孔洞後 A 又恢復。@fig-sgb-method-arrangement 彙整最後的面。孔洞與無界外部的歸屬都為 $(0,0)$，但兩者是被環分隔的不同面。
 
@@ -196,32 +196,32 @@ MS 與 MA 可以指向同一平面支撐幾何，但保留不同的場側與材�
 
 ![蓋面與側壁共用相同邊 ID，引用方向相反。](../images/sgb-concept/method-shared-edge.svg){#fig-sgb-method-shared-edge}
 
-目前三維拓樸鍵會將 µm 座標四捨五入到小數點後九位，讓規劃中的相同點共用一個身分。這是座標身分鍵，不是來源 DBU，也不是再做一次 XY 吸附。平面網格用於各次相關的平面準備操作；三維鍵則在收集已規劃的表面邊界時使用。
+SGB 把每個 XY 座標放在所宣告間距的整數格點上，讓規劃中的相同點精確共用一個身分；不會再做第二次 XY 吸附。Z 值則是指定堆疊的精確層位。
 
-### OCC 依 SGB 計畫實現 CAD
+### SGB 直接寫出它擁有的計畫
 
-OCC（Open CASCADE）是 Gmsh 使用的 CAD 核心。SGB 將已規劃的點、線、環與面交給它，再用這些面組成封閉殼與求解體積。SGB 先決定面所有者與相鄰關係，再讓 CAD 實現這些記錄；建構不依賴全域 fragment 操作事後猜測新面的材料所有者。
+SGB 把已規劃的點、線、環與面直接寫成 BREP 與 XAO 文字，再用這些面組成封閉殼與求解體積。SGB 先決定面所有者與相鄰關係，再由寫出器記錄；過程中沒有 CAD 核心呼叫、布林運算或全域 fragment 操作來決定面的材料所有者。
 
-匯出再讀回 CAD 時，原生實體的整數 tag 可能改變。因此 SCGSim 將原生實體回綁至穩定的規劃面與體積身分，再依標籤計畫建立具名實體群組。原生整數 tag 只在該次匯入模型中有效，不是 Entity 或表面的永久身分。
+寫出形狀的編號依循 Gmsh 重新開啟檔案時的順序；sidecar 把每個編號綁定到穩定的規劃面與體積身分，再據以建立具名實體群組。原生整數 tag 只在該次匯入模型中有效，不是 Entity 或表面的永久身分。
 
-本節說明建構器如何使用計畫：建立規劃中的 CAD 點、曲線、環、面、殼與體積，再將匯出的原生實體回綁到規劃身分。曾展示已撤回距離帶子面的歷史 XAO 圖，保留於[距離帶歷史頁](../history/sgb-geometric-bands.qmd)。
+本節說明建構器如何使用計畫：寫出規劃中的點、曲線、環、面、殼與體積，並記錄每個寫出的實體對應到哪個規劃身分。
 
 ### 網格階段使用已建構幾何及自己的尺寸配方
 
-Palace 以 SGB 建立幾何，並用 `scgsim.meshing` 模組在新的 Gmsh 程序中，為匯出的 XAO 與和它成對的 sidecar 產生網格。模組在求解體積中建立四面體、修復有壞元素接觸的曲線，若有四面體持續低於品質門檻就以錯誤中止。接著 Palace 把 SGB 的實體群組降階為求解器屬性，並寫出交給 Palace 的網格輸入。尺寸配方屬於網格化階段：它控制元素尺寸；來源 DBU 與組裝 XY 網格則控制幾何座標。加密網格無法補上缺少的來源語意，也不會改變接面所有權。
+Palace 以 SGB 建立幾何，並用 `scgsim.meshing` 模組在新的 Gmsh 程序中，為匯出的 XAO 與和它成對的 sidecar 產生網格。模組在求解體積中建立四面體、在每個壞元素周圍的球形區域給予更細的局部尺寸，若在預算內仍有四面體低於品質門檻就以錯誤中止。接著 Palace 把 SGB 的實體群組降階為求解器屬性，並寫出交給 Palace 的網格輸入。尺寸配方屬於網格化階段：它控制元素尺寸；來源 DBU 與組裝 XY 網格則控制幾何座標。加密網格無法補上缺少的來源語意，也不會改變接面所有權。
 
 網格控制項請見 [Palace 網格控制](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
-## 4. 現行能力與歷史界線 {#distance-bands}
+## 4. 能力 {#distance-bands}
 
 目前 SGB 路徑會將來源形狀、材料與物理解讀、最終 Net 宣告、明確的埠與接面要求、介面所有權、共用平面歸屬及三維拓樸交給後端建構。Gmsh／Palace 與 AEDT 在各自支援範圍內共用來源事實，但原生建構與執行仍由各後端負責。
 
-::: {.callout-warning title="GeometryPlan 距離帶產生器已撤回"}
-SCGSim 目前不提供先前的 GeometryPlan 表面距離帶產生器。舊分區及其子 CAD 面保留在[距離帶歷史頁](../history/sgb-geometric-bands.qmd)。Palace 的 Surface EPR 邊距是另一條路徑：`mesh()` 建立幾何時，`inset_margins_um` 會請 SGB 把內縮帶切進模型，Palace 再把它們當作普通屬性積分。鍵與限制請見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)。
+::: {.callout-note title="Surface EPR 條帶"}
+Palace 的 Surface EPR 邊距：`mesh()` 建立幾何時，`inset_margins_um` 會請 SGB 把內縮帶切進模型，Palace 再把它們當作普通屬性積分。鍵與限制請見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)。
 :::
 
-一般多邊形輪廓即使近似圓弧，仍是多邊形。明確宣告的曲線則走保留曲線意圖的獨立 OCC 路徑，並有各自的路線支援範圍；詳見[曲線契約](../geometry-sgb.qmd#source-curves)。來源、物理表示及後端的正式契約請參閱[SGB 幾何契約](../geometry-sgb.qmd)。
+一般多邊形輪廓即使近似圓弧，仍是多邊形。明確宣告的曲線是線段與圓弧，由 SGB 自行處理；其他曲線類型會引發 `UnsupportedCurveError`。詳見[曲線契約](../geometry-sgb.qmd#source-curves)。來源、物理表示及後端的正式契約請參閱[SGB 幾何契約](../geometry-sgb.qmd)。
 
 ::: {.callout-note collapse="true" title="公開案例來源與範圍"}
-本文案例來自公開的矩形接面與孔洞測試 [`tests/test_rectangular_junction_geometry.py`](https://github.com/OrPenStrike/scgsim/blob/2ed85adc/tests/test_rectangular_junction_geometry.py#L230)。[案例索引](../images/sgb-concept/public-case-binding.json)記錄來源版本、單位、物理表示及各圖對應階段。案例索引中與距離帶及 XAO 讀回有關的觀察屬於歷史設計頁；本頁以來源、物理表示及接面圖解釋目前保留的流程。
+本文案例來自公開的矩形接面與孔洞測試 [`tests/test_rectangular_junction_geometry.py`](https://github.com/OrPenStrike/scgsim/blob/2ed85adc/tests/test_rectangular_junction_geometry.py#L230)。[案例索引](../images/sgb-concept/public-case-binding.json)記錄來源版本、單位、物理表示及各圖對應階段。本頁以來源、物理表示及接面圖解釋目前保留的流程。
 :::

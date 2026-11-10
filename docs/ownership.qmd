@@ -105,8 +105,6 @@ for contributor coordination and delivery.
 | [Architecture](architecture.qmd) | Module and state boundaries, preparation and runtime flow |
 | [Provenance](provenance.qmd) | Source/result identities and public data boundaries |
 | [Goals and derivation](goals-and-upstream.qmd) | Current scope and upstream relationship |
-| [Roadmap](roadmap.qmd) | Deferred families and documentation direction |
-| [Historical errors](errors.qmd) | Revision-bound diagnostic observations |
 | [Repository maintenance](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md) | Build, version catalogue and publication procedure |
 
 These secondary references retain implementation detail outside the researcher

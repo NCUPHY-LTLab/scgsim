@@ -16,7 +16,6 @@ project:
   - docs/research/*/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
-  - '!docs/concepts/geometry-en.qmd'
   - '!zh-TW/**'
   post-render: python3 scripts/build_bilingual_docs.py
 execute:
@@ -119,7 +118,6 @@ website:
     - section: Historical reference
       contents:
       - docs/history/aedt-capacitance-pre-v3.qmd
-      - docs/course/palace-surface-bands.qmd
   - id: concept
     title: Pages
     style: floating
@@ -156,6 +154,7 @@ website:
     - docs/api/input-index.qmd
     - section: Geometry and physical model
       contents:
+      - docs/supported-scope.qmd
       - docs/geometry-sgb.qmd
       - docs/supported-geometry.qmd
       - docs/known-geometry-problems.qmd
@@ -185,11 +184,6 @@ website:
       - docs/architecture.qmd
       - docs/goals-and-upstream.qmd
       - docs/provenance.qmd
-      - docs/roadmap.qmd
-    - section: Maintenance records
-      contents:
-      - docs/errors.qmd
-      - docs/convergence-status.qmd
 format:
   askr-html:
     html-math-method: mathjax

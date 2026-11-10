@@ -893,7 +893,9 @@ The structured frontend is
 aedt_version: str, modeling, output_dir, project_name, design_name,
 materials: Mapping[str, PdkMaterial],
 net_types: Mapping[str, Literal["Signal", "Ground"]],
-physical_ground_nets: Sequence[str], run_control: MatrixRunControl | None = None,
+physical_ground_nets: Sequence[str],
+terminal_pairs: Mapping[str, Q3dTerminalPair] | None = None,
+run_control: MatrixRunControl | None = None,
 region_padding_um: Sequence[float], resources: AedtResources | None = None)
 -> HandoffPlan`. It consumes the immutable GeometryPlan snapshot and returns a
 portable v3 handoff for C/G only (`solve_ac_rl=False`). The snapshot owns
@@ -901,8 +903,8 @@ source geometry and final Net membership. `net_types` must cover exactly its
 conductor Net IDs; `physical_ground_nets` explicitly identifies a subset of
 those IDs independently of their requested native type. Materials, run
 control, Region padding and optional resources remain caller inputs. The
-frontend does not infer connectivity, rewrite Net membership or create
-terminals. A C/G Signal Net may have no terminals; AC/RL requires a complete
+frontend does not infer connectivity or rewrite Net membership. It sets a
+Net's source and sink terminals only from its entry in `terminal_pairs`. A C/G Signal Net may have no terminals; AC/RL requires a complete
 source/sink pair for each Signal Net. Source curves are not silently
 linearized; the existing AEDT curve-intent exclusion remains in force.
 
@@ -1068,7 +1070,7 @@ intent, then records a separate AEDT binding from those facts to native bodies,
 sheets, faces, material sides, and calculator selections. Native adjacency is
 observed geometry evidence and is not proof of source contact intent.
 
-The native construction target is planar Route A and Route B with real
+The native construction target is planar Solid or Thin Film modeling with real
 isotropic dielectrics and PEC conductors. Covered polygon sheets, local hole
 subtraction, sweeps or thickenings, and explicit boxes are allowed; blanket
 geometry unites or subtractions are not. Curved or tilted geometry,
@@ -1142,7 +1144,7 @@ Each required field quantity is evaluated in an explicitly bound setup,
 `LastAdaptive` solution, mode, frequency, phase, and excitation context. That
 context is read back with the value: a saved expression name or expression
 digest alone is not solution identity because an unevaluated calculator stack
-can follow later context changes. Both Route A and Route B currently use
+can follow later context changes. Both Solid and Thin Film modeling use
 non-model analysis sheets for masked evaluations and the unmasked baseline.
 Their `Surface`/`Adjacent` selector is distinct from geometric normal
 projection, and the ThinFilm mapping remains empirical as described below.
@@ -1790,7 +1792,7 @@ from the existing in-tree geometry workflow. They carry the source geometry,
 material and vacuum-region facts; the AEDT request separately selects its
 `modeling` representation. Route A/B is not an argument to this AEDT helper.
 See
-[Geometry and SGB Route A/B](../geometry-sgb.qmd#shared-source-facts-for-aedt).
+[GeometryPlan and SGB](../geometry-sgb.qmd#shared-source-facts-for-aedt).
 The first call requests no analysis contributions and exposes the horizontal
 top/bottom `contribution_catalog` after applying the declared junctions. A row
 can retain original or derived polygon IDs, or a planned SA surface ID. In

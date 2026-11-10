@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from scgsim.palace.results.index_contract import validate_index_entries
+from scgsim.palace.results.models import ParsedTable
 from scgsim.palace.results.report_models import (
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
@@ -16,7 +17,11 @@ from scgsim.palace.results.report_models import (
     SurfaceMarginEprSeriesSnapshot,
 )
 from scgsim.palace.results.surface_contract import entry_rows, surface_epr_entries
-from scgsim.palace.results.tables import read_csv_table, validate_surface_table
+from scgsim.palace.results.tables import (
+    read_csv_table,
+    requested_modes,
+    validate_surface_table,
+)
 
 
 def _surface_inverse_loss(records: Sequence[SurfaceEprRecord]) -> float | None:
@@ -98,6 +103,12 @@ def _lineage(entry: dict[str, Any]) -> dict[str, dict[str, float]]:
     }
 
 
+def _read_surface_table(path: Path, mode_count: int | None) -> ParsedTable:
+    """Read a surface-Q table, keeping the requested modes when their count is known."""
+    table = read_csv_table(path)
+    return table if mode_count is None else requested_modes(table, mode_count)
+
+
 @dataclass(frozen=True)
 class SurfaceEprReader:
     """A native surface-Q table and its pass-local source bindings for detached EPR."""
@@ -110,13 +121,14 @@ class SurfaceEprReader:
     expected_rows: int
     bindings: tuple[dict[str, Any], ...] | None
     surface_count: int
+    mode_count: int | None = None
 
     def read(self) -> tuple[SurfaceEprSeriesSnapshot, ...] | None:
         """Read whole-surface participation and loss series in native mode or excitation order."""
         if not self.path.is_file() or not self.bindings or self.expected_rows <= 0:
             return None
         try:
-            table = read_csv_table(self.path)
+            table = _read_surface_table(self.path, self.mode_count)
             validate_surface_table(table, self.surface_count, self.expected_rows)
             snapshots: list[SurfaceEprSeriesSnapshot] = []
             index_name = "m" if self.problem == "Eigenmode" else "i"
@@ -184,13 +196,14 @@ class SurfaceMarginEprReader:
     expected_rows: int
     bindings: tuple[dict[str, Any], ...] | None
     surface_count: int
+    mode_count: int | None = None
 
     def read(self) -> tuple[SurfaceMarginEprSeriesSnapshot, ...] | None:
         """Read margin participation and Q for every mode or excitation."""
         if not self.path.is_file() or not self.bindings or self.expected_rows <= 0:
             return None
         try:
-            table = read_csv_table(self.path)
+            table = _read_surface_table(self.path, self.mode_count)
             validate_surface_table(table, self.surface_count, self.expected_rows)
             index_name = "m" if self.problem == "Eigenmode" else "i"
             return tuple(
