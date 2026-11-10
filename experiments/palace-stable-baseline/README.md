@@ -22,12 +22,14 @@ says which, and why.
 | `cases.py` | How each layout is built: component, layer stack, instances, Net assignment, simulation class. Also the banded scenes of `tests/sgb_supported_*`. |
 | `run_case.py` | One layout through plan, SGB build, `simulation_drc` and `mesh()`, with Surface-EPR bands (Route B, MA/MS/SA at margins 0.5 and 1.0 um by type) or with `--no-bands`. `--scene` builds a test scene and measures its fine structure only. Writes one JSON record. |
 | `run_baseline.py` | Every case in its own process, at most `--jobs` at a time (default 8), each stopped after `--timeout` seconds (default 900). Then every layout that stopped with bands again without bands, and every layout whose banded `mesh()` failed again with the vacuum the PDK's Palace notebooks use (`run_case.py --notebook-vacuum`). It removes a case's earlier record before the case starts, so a rerun into the same folder never shows stages it did not run. |
-| `check_rerun.py` | Checks that removal: a case that stops before its first record, in a folder that holds an earlier record of the same name, leaves a record with no stage. Needs no PDK. |
-| `fine_structure.py` | Counts short edges, narrow faces and small angles from SGB's sliver report, split by whether a band curve is involved, and the classes A, B and C of issue 125. |
+| `check_records.py` | Checks that a record says only what its run did: a case that stops before its first record leaves no earlier run's stages, a record read while it is rewritten is always complete, and an unreadable record counts as one with no stage. Needs no PDK. |
+| `fine_structure.py` | Counts short edges, narrow faces and small angles from SGB's sliver report, split by whether a band curve is involved, and the classes A, B and C of issue 125. An arc edge, and the column gap of a curved wall, is measured along its arc. |
 | `check_pdk47.py` | Looks for the drawing artifacts of orcapen-sc-pdk#47 (the eight 1 nm claw jogs and the 9.9 nm lead-fan step) in the Disk Qubit builds. |
 | `tables.py` | Prints the stage, fine-structure and class tables of a records folder as Markdown. |
 
-Each stage of a record says `pass` or the exact error class and message, and its wall time. The
+Every record is written whole, through a temporary file in the same folder, so a case the time limit
+stops mid-write leaves its previous complete record. Each stage of a record says `pass` or the exact error
+class and message, and its wall time. The
 `simulation_drc` stage also keeps the findings of its meshing stage (the fine edges and faces the mesher
 cannot use, with their owner and place): the warnings of a pass, or the refusals of the
 `SimulationDrcError` it raises. The mesh stage keeps the recipe, the counts, the stop reason and the stop
@@ -59,7 +61,8 @@ uv pip check --python "$VENV/bin/python"
 python experiments/palace-stable-baseline/tables.py "$RECORDS"
 ```
 
-`--only CASE ...` limits a run to some cases; `run_case.py CASE OUT.json` runs one. The cheapest check
+`--only CASE ...` limits a run to some cases; `run_case.py CASE OUT.json` runs one. Give each running
+`run_baseline.py` its own records folder: two at once in one folder would write the same records. The cheapest check
 that every stage works is SimplePad and one scene, about 25 s:
 
 ```bash
@@ -84,6 +87,29 @@ polygon. The results on issue 149 stay as measured. A rerun on this develop give
 | Two straight band offsets that meet at a convex junction end at their crossing (PR 148). | Fewer short band edges in the scenes. | Band edges under 25 grid steps, issue 149 → now: `cell14_euler_bend` 36 → 0, `cell15_euler_u_turn` 84 → 0, `cell16_coupled_pair` 72 → 0, `cell18_taper` 24 → 0, `cell18_handoff` 12 → 6, `cell21_bspline_resampled` 45 → 9, `cell21_interpolation_resampled` 120 → 6, `junction_fan`, `junction_fan_noport` and `d1_die_defaults` 7 → 5. Unchanged: `junction_straight` and `d1_die_test_build` (8, with the 0.71 nm face and 0.0007° wedge); the other scenes still have none. |
 | `cell24_sheet_circular_pad` left the supported list, because its files cannot be written (PR 155). | `cases.scene_builders` keeps it, so its row is still measured. | Unchanged: 2 source edges under 25 grid steps, 10.1 nm, 5.6°. |
 
-Not rerun on this develop: the other layouts, the `--no-bands` and `--notebook-vacuum` passes, and the
-Kosen Xmon's 2.2 nm band edges. The Palace readers that now keep the requested modes (PR 157) are not
-used here, because no solver runs.
+Not rerun on this develop: the other layouts, the `--no-bands` and `--notebook-vacuum` passes. The SGB
+build alone (no `simulation_drc`, no mesh) of the Kosen Xmon with bands no longer has its 8 band edges of
+2.2 to 2.8 nm: its shortest band edge is 37.4 nm, and none is under 25 grid steps. The Palace readers that
+now keep the requested modes (PR 157) are not used here, because no solver runs.
+
+## Correction: lengths along the arc
+
+SGB's sliver report gives every edge as the distance between its end points. Before this correction,
+`fine_structure.py` and `check_pdk47.py` counted and listed an arc edge by that chord, and measured a
+curved wall's column gap the same way. They now measure along the arc (`2 r asin(chord / 2r)`, as
+`tests/sgb_supported_kit.py` does).
+
+No count, class or attribution moves. On develop `464ba5b`, SimplePad, every banded scene and the four
+Disk Qubit builds of `check_pdk47.py` give the same counts at 2, 10 and 25 grid steps before and after. So
+do the SGB builds with bands of the other layouts in issue 149's fine-structure table. Smallest values
+that are arcs grow. In issue 149's fine-structure table, measured by chord → along the arc:
+
+| case | shortest band edge |
+|---|---|
+| SimplePad | 707 nm → 785 nm (the quarter circle a 0.5 um band draws around a square corner) |
+| flip-chip pad | 707 nm → 785 nm (the same corner) |
+| scene `cell24_sheet_circular_pad` | 97.4 nm → 97.5 nm (issue 149: 97 nm) |
+
+The other rows of that table do not move at the precision issue 149 gives: the circular pad (981 nm), the
+airbridge coupon (500 um), the Disk Qubits (36.8 nm) and the scenes. In the per-case records on issue 149,
+every `smallest` edge entry that is an arc grows the same way, by up to 11 % (a quarter circle).

@@ -25,6 +25,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+from run_case import write_record  # noqa: E402
+
 
 def main() -> None:
     """Run the three passes of the baseline."""
@@ -115,16 +117,15 @@ def run_one(name: str, bands: bool, scene: bool, notebook_vacuum: bool, args) ->
     if code != 0:
         # The case writes its record around every stage, so a stopped case keeps the stages it finished and
         # names the one that was running.  The file was removed above, so a record here is this run's.
-        record = (
-            json.loads(out.read_text())
-            if out.exists()
-            else {
+        record = stopped_record(
+            out,
+            {
                 "case": name,
                 "bands": bands,
                 "scene": scene,
                 "notebook_vacuum": notebook_vacuum,
                 "stages": {},
-            }
+            },
         )
         for stage in record["stages"].values():
             if stage["result"] == "running":
@@ -132,8 +133,20 @@ def run_one(name: str, bands: bool, scene: bool, notebook_vacuum: bool, args) ->
                     result="timeout" if code == "timeout" else "crashed", seconds=None
                 )
         record.update(timeout=code == "timeout", exit_code=code, seconds=seconds)
-        out.write_text(json.dumps(record, indent=1))
+        write_record(out, record)
     return f"{out.name}: exit {code}, {seconds} s"
+
+
+def stopped_record(out: Path, empty: dict) -> dict:
+    """The record a stopped case left at ``out``, or ``empty`` when it left none or none that can be read.
+
+    ``run_case`` writes whole records only, so an unreadable file should not occur; if one does, the run's
+    stages are unknown and the record says none rather than stopping the whole baseline.
+    """
+    try:
+        return json.loads(out.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return empty
 
 
 if __name__ == "__main__":

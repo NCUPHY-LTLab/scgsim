@@ -13,7 +13,6 @@ within 3 um of a #47 location.
 
 from __future__ import annotations
 
-import json
 import math
 import sys
 from pathlib import Path
@@ -23,7 +22,12 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import fine_structure  # noqa: E402
-from run_case import configured_simulation, prepare_plan, surface_epr_specs  # noqa: E402
+from run_case import (  # noqa: E402
+    configured_simulation,
+    prepare_plan,
+    surface_epr_specs,
+    write_record,
+)
 
 TC_JOGS = [(212.424, 87.9885), (169.0415, 59.289)]
 C1_STEP = [(77.36, -78.78)]
@@ -98,11 +102,11 @@ def main() -> None:
             sim = configured_simulation(layout, snapshot, surface_epr_specs(False))
             # The geometry build mesh() and simulation_drc share; no public call keeps its files.
             sim._build_geometry(folder)  # noqa: SLF001
-        report = captured[-1]["report"]
+        report, facts = captured[-1]["report"], captured[-1]["facts"]
         g = report["grid_um"]
         model_edges = [
             {
-                "length_nm": round(row["value_um"] * 1000, 2),
+                "length_nm": round(fine_structure.edge_length_um(row, facts) * 1000, 2),
                 "at_um": row["location_um"],
                 "kind": row["kind"],
                 "near_tc_jog": bool(_near(row["location_um"], jogs)),
@@ -110,7 +114,7 @@ def main() -> None:
                 "sources": row["sources"][:3],
             }
             for row in report["shortest_edges"]
-            if row["value_um"] < 25 * g
+            if fine_structure.edge_length_um(row, facts) < 25 * g
             and row["kind"] == "horizontal"
             and not any(fine_structure.is_band_source(s) for s in row["sources"])
         ]
@@ -126,7 +130,7 @@ def main() -> None:
             "model source edges <25 steps",
             flush=True,
         )
-    Path(sys.argv[1]).write_text(json.dumps(result, indent=1))
+    write_record(Path(sys.argv[1]), result)
 
 
 if __name__ == "__main__":

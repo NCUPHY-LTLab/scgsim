@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import traceback
@@ -218,7 +219,18 @@ _CHECKPOINT: list[
 def _checkpoint() -> None:
     if _CHECKPOINT:
         path, record = _CHECKPOINT
-        path.write_text(json.dumps(record, indent=1, default=_json_default))
+        write_record(path, record)
+
+
+def write_record(path: Path, record: dict[str, Any]) -> None:
+    """Write a record whole or not at all: to a temporary file in the same folder, then ``os.replace``.
+
+    The baseline's time limit kills a case at any moment, also while it rewrites its record; the file then
+    still holds the previous complete record, never a truncated one.
+    """
+    partial = path.with_name(path.name + ".partial")
+    partial.write_text(json.dumps(record, indent=1, default=_json_default))
+    os.replace(partial, path)
 
 
 def _stage(stages: dict[str, Any], name: str, action):
@@ -306,6 +318,10 @@ def main() -> None:
     parser.add_argument("--notebook-vacuum", action="store_true")
     parser.add_argument("--scene", action="store_true")
     args = parser.parse_args()
+    if args.scene and (args.no_bands or args.notebook_vacuum):
+        # A scene is measured with its type bands and has no plan vacuum: the record would claim a setting
+        # that never ran.
+        parser.error("--scene takes neither --no-bands nor --notebook-vacuum")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     OUT[:] = [args.out]
     started = time.perf_counter()
@@ -315,7 +331,7 @@ def main() -> None:
         else run_layout(args.case, not args.no_bands, args.notebook_vacuum)
     )
     record["seconds"] = round(time.perf_counter() - started, 2)
-    args.out.write_text(json.dumps(record, indent=1, default=_json_default))
+    write_record(args.out, record)
 
 
 def _json_default(value):

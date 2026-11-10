@@ -8,6 +8,11 @@ hands SGB the same ten-entry report it would have written.  Nothing SGB builds o
 
 Attribution follows issue 141: an entry whose lineage names a band curve (a carrier id with ``@m``, the margin
 of an inset offset) involves a band; an entry whose lineage names source curves only comes from the layout.
+
+SGB's report gives every edge as the distance between its end points.  An arc edge, and the column gap of a
+curved wall, is measured here along its arc instead (``2 r asin(chord / 2r)``, as
+``tests/sgb_supported_kit.py`` measures a band edge): the chord is shorter, and would count an arc of 25 grid
+steps or more as short.
 """
 
 from __future__ import annotations
@@ -79,13 +84,35 @@ def _as_written(full: dict[str, Any], top: int) -> dict[str, Any]:
     return written
 
 
+def edge_length_um(row: dict[str, Any], facts: dict[str, Any]) -> float:
+    """The length of a sliver-report edge: along its arc for an arc edge, else the report's own value."""
+    return facts["arc_length_um"].get(row["id"], row["value_um"])
+
+
+def _along_arc(chord: float, radius: float) -> float:
+    """The length of the minor arc of ``radius`` over ``chord`` (same unit)."""
+    return 2 * radius * math.asin(min(1.0, chord / (2 * radius)))
+
+
 def _topology_facts(model) -> dict[str, Any]:
-    """Which edges bound a wall face, each wall's column gap, and each face's band involvement."""
+    """Which edges bound a wall face, each wall's column gap, each face's band involvement, and arc lengths."""
     topo = model.topology
     g = model.labelled.catalogue.grid.size_um
     wall_edges: set[str] = set()
     wall_gap_um: dict[str, float] = {}
     face_band: dict[str, bool] = {}
+    arc_length_um = {
+        eid: _along_arc(
+            math.dist(
+                (topo.vertices[edge.v0].x, topo.vertices[edge.v0].y),
+                (topo.vertices[edge.v1].x, topo.vertices[edge.v1].y),
+            ),
+            edge.curve.radius,
+        )
+        * g
+        for eid, edge in topo.edges.items()
+        if edge.kind == "horizontal" and edge.curve is not None
+    }
     for fid, face in topo.faces.items():
         loop_edges = [eid for loop in face.loops for eid, _ in loop]
         face_band[fid] = any(
@@ -96,19 +123,35 @@ def _topology_facts(model) -> dict[str, Any]:
         if face.kind == "horizontal":
             continue
         wall_edges.update(loop_edges)
-        # As SGB's wall measure does: the distance between the wall's vertical edges (its columns).
+        # As SGB's wall measure does: the distance between the wall's vertical edges (its columns), along
+        # the arc for a curved wall, whose horizontal edges carry its circle.
         columns = {
             (topo.vertices[topo.edges[eid].v0].x, topo.vertices[topo.edges[eid].v0].y)
             for eid, _ in face.loops[0]
             if topo.edges[eid].kind == "vertical"
         }
+        circle = next(
+            (
+                topo.edges[eid].curve
+                for eid, _ in face.loops[0]
+                if topo.edges[eid].curve is not None
+            ),
+            None,
+        )
         points = list(columns)
-        gaps = [math.dist(p, q) for i, p in enumerate(points) for q in points[i + 1 :]]
+        gaps = [
+            math.dist(p, q)
+            if circle is None
+            else _along_arc(math.dist(p, q), circle.radius)
+            for i, p in enumerate(points)
+            for q in points[i + 1 :]
+        ]
         wall_gap_um[fid] = min(gaps, default=math.inf) * g
     return {
         "wall_edges": wall_edges,
         "wall_gap_um": wall_gap_um,
         "face_band": face_band,
+        "arc_length_um": arc_length_um,
     }
 
 
@@ -152,13 +195,17 @@ def _edges(rows, facts, g) -> dict[str, Any]:
         if row["kind"] != "horizontal":
             continue
         horizontal.append(
-            {**row, "_origin": _origin(row["sources"]), "_value": row["value_um"]}
+            {
+                **row,
+                "_origin": _origin(row["sources"]),
+                "_value": edge_length_um(row, facts),
+            }
         )
     vertical = [row["value_um"] for row in rows if row["kind"] == "vertical"]
     return {
-        "measure": "horizontal edge length, um (counts below N grid steps)",
+        "measure": "horizontal edge length along the edge, um (counts below N grid steps)",
         "total_horizontal": len(horizontal),
-        **_binned(horizontal, lambda row: row["value_um"], EDGE_STEPS, g),
+        **_binned(horizontal, lambda row: row["_value"], EDGE_STEPS, g),
         "shortest_vertical_um": min(vertical, default=None),
     }
 
@@ -220,7 +267,7 @@ def _classes(report, facts, g) -> dict[str, Any]:
         if row["kind"] == "horizontal" and row["width_2a_over_p_um"] is not None
     ]
     free_edges = [
-        (row["value_um"], row)
+        (edge_length_um(row, facts), row)
         for row in report["shortest_edges"]
         if row["kind"] == "horizontal" and row["id"] not in facts["wall_edges"]
     ]
