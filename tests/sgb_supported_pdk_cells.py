@@ -708,8 +708,7 @@ def cell24_sheet_across_gap(circular: bool) -> Scene:
 
 
 SPLINES = {"interpolation": hermite_centreline, "bspline": bspline_centreline}
-TURN_RULE_DEGREES = 360.0 / 128
-# The resampled strips aim at 3 degrees so that the turns stay above the rule once rounded to the lattice.
+# The resampled strips turn by about 3 degrees per vertex; the strips as the PDK draws them are DRAWN_SPLINES.
 RESAMPLE_TURN_DEGREES = 3.0
 
 SCENES = {
