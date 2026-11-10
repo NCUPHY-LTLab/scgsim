@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
@@ -213,13 +214,13 @@ def test_a_refused_layout_raises_the_error_mesh_raises(
 def geometry_inset_requests(monkeypatch, simulation, **options):
     """The ``insets`` of every SGB build ``simulation_drc`` makes."""
     builds = []
-    real = build_module.build_sgb_geometry
+    real = banded_build.build_sgb_geometry
 
     def recording(*args, **kwargs):
         builds.append(kwargs.get("insets", ()))
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(build_module, "build_sgb_geometry", recording)
+    monkeypatch.setattr(banded_build, "build_sgb_geometry", recording)
     check(simulation, two_pads(monkeypatch, gap_um=10.0), **options)
     return builds
 

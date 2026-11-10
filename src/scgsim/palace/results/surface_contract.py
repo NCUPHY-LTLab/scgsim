@@ -14,7 +14,7 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-from scgsim.palace.mesh.margins import margins_of
+from scgsim.geometry.surface_epr.specs import margins_of
 from scgsim.palace.results.artifacts import (
     expect_list,
     expect_mapping,

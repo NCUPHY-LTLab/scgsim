@@ -15,6 +15,7 @@ from typing import Any, Literal
 from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
+from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
@@ -44,7 +45,6 @@ from .layout_snapshot import (
     prepare_layout_snapshot,
     snapshot_owns_vacuum,
 )
-from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
     RouteAThinFilm,
     normalize_route_a_thin_film,

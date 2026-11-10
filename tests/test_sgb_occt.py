@@ -33,6 +33,7 @@ from scgsim.geometry.sgb.exchange.step import StepExportError, export_aedt_step 
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 from scgsim.geometry.sgb.records.grid import Grid  # noqa: E402
 from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar  # noqa: E402
+from scgsim.geometry.sgb.sidecar.files import write_sidecar  # noqa: E402
 from scgsim.geometry.sgb.slivers.report import sliver_report  # noqa: E402
 from scgsim.geometry.sgb.verification import ocp  # noqa: E402
 from scgsim.geometry.sgb.verification.occt import (
@@ -283,18 +284,15 @@ def test_without_ocp_the_checks_name_the_dependency_group(monkeypatch):
 def exported(tmp_path_factory, emit_models):
     """Route B pad with bands: BREP, sidecar and the STEP export."""
     model = emit_models["pad_b_bands"]
-    plan = plan_brep(model.topology, model.routed)
     folder = tmp_path_factory.mktemp("step")
-    write_brep_file(plan, folder / "m.brep")
-    sidecar = build_sidecar(
-        model, plan, SidecarContext(sliver_report(model)["summary"])
-    )
+    brep, sidecar = written(model, folder)
+    plan = plan_brep(model.topology, model.routed)
     return (
         model,
         plan,
         sidecar,
         folder,
-        export_aedt_step(folder / "m.brep", sidecar, folder / "m.step"),
+        export_aedt_step(brep, folder / "m.sidecar.json", folder / "m.step"),
     )
 
 
@@ -355,29 +353,32 @@ def test_the_guard_lists_every_face_of_each_solid_in_occ_order_with_area_and_cen
 ):
     """The guard lists every face of each solid in occ order with area and centre."""
     model, plan, sidecar, _, export = exported
-    ids = {s.solid_id for s in export.solids}
+    ids = {s["solid"] for s in export.solids}
     assert ids == {v for v, rec in sidecar["volumes"].items() if rec["emitted"]}
     for solid in export.solids:
         planned_faces = {
             fid
             for fid, f in sidecar["faces"].items()
-            if solid.solid_id in (f["negative_volume"], f["positive_volume"])
+            if solid["solid"] in (f["negative_volume"], f["positive_volume"])
             and f["negative_volume"] != f["positive_volume"]
         }  # an embedded sheet has the same volume on both sides and bounds no shell
-        assert {f["face"] for f in solid.faces} == planned_faces
-        assert all(f["area_um2"] > 0 and len(f["centre_um"]) == 3 for f in solid.faces)
-    assert sum(len(s.faces) for s in export.solids) == sum(
+        assert {f["face"] for f in solid["faces"]} == planned_faces
+        assert all(
+            f["area_um2"] > 0 and len(f["centre_um"]) == 3 for f in solid["faces"]
+        )
+    assert sum(len(s["faces"]) for s in export.solids) == sum(
         len(plan.found.shells[i]) for i in range(len(plan.found.shells))
     )
 
 
 def written(model, folder):
-    """BREP and sidecar of a model, written into ``folder``."""
+    """BREP and sidecar of a model, written into ``folder`` (the sidecar as ``m.sidecar.json``)."""
     plan = plan_brep(model.topology, model.routed)
     write_brep_file(plan, folder / "m.brep")
     sidecar = build_sidecar(
         model, plan, SidecarContext(sliver_report(model)["summary"])
     )
+    write_sidecar(folder / "m.sidecar.json", sidecar)
     return folder / "m.brep", sidecar
 
 
@@ -398,11 +399,16 @@ def test_a_brep_of_the_same_topology_at_another_scale_is_refused(tmp_path):
     brep, sidecar = written(fine, tmp_path / "fine")
     _, other_sidecar = written(coarse, tmp_path / "coarse")
     assert sidecar["binding"]["ids_by_tag"] == other_sidecar["binding"]["ids_by_tag"]
-    assert export_aedt_step(brep, sidecar, tmp_path / "ok.step").path.is_file()
+    ok = export_aedt_step(
+        brep, tmp_path / "fine" / "m.sidecar.json", tmp_path / "ok.step"
+    )
+    assert ok.path.is_file() and ok.guard_path.is_file()
     with pytest.raises(
         StepExportError, match="does not belong to the sidecar"
     ) as refused:
-        export_aedt_step(brep, other_sidecar, tmp_path / "x.step")
+        export_aedt_step(
+            brep, tmp_path / "coarse" / "m.sidecar.json", tmp_path / "x.step"
+        )
     for what in (
         "vertices not where",
         "face areas differing",
@@ -410,6 +416,7 @@ def test_a_brep_of_the_same_topology_at_another_scale_is_refused(tmp_path):
     ):
         assert what in str(refused.value)
     assert not (tmp_path / "x.step").exists()
+    assert not (tmp_path / "x.guard.json").exists()
 
 
 def test_a_brep_with_other_counts_than_the_sidecar_is_refused(
@@ -417,18 +424,16 @@ def test_a_brep_with_other_counts_than_the_sidecar_is_refused(
 ):
     """A sidecar of another model (other entity counts) is refused, naming what differs."""
     _, _, sidecar, folder, _ = exported
-    plan = plan_brep(emit_models["pad_c"].topology, emit_models["pad_c"].routed)
-    other = build_sidecar(
-        emit_models["pad_c"],
-        plan,
-        SidecarContext(sliver_report(emit_models["pad_c"])["summary"]),
-    )
+    written(emit_models["pad_c"], tmp_path)
     with pytest.raises(
         StepExportError,
         match=r"does not belong to the sidecar.*(faces|solids): the shape has",
     ):
-        export_aedt_step(folder / "m.brep", other, tmp_path / "x.step")
+        export_aedt_step(
+            folder / "m.brep", tmp_path / "m.sidecar.json", tmp_path / "x.step"
+        )
     assert not (tmp_path / "x.step").exists()
+    assert not (tmp_path / "x.guard.json").exists()
     assert sidecar["binding"]["ids_by_tag"][
         "3"
     ]  # the matching pair is what ``exported`` already exports
@@ -451,7 +456,9 @@ def test_the_export_works_from_an_xao_too(exported, tmp_path):
     """The export works from an xao too."""
     model, plan, sidecar, folder, export = exported
     write_xao_file(plan, tmp_path / "m.xao", brep=folder / "m.brep")
-    again = export_aedt_step(tmp_path / "m.xao", sidecar, tmp_path / "m.step")
+    again = export_aedt_step(
+        tmp_path / "m.xao", folder / "m.sidecar.json", tmp_path / "m.step"
+    )
     assert again.object_names == export.object_names
     shutil.rmtree(tmp_path, ignore_errors=True)
 
