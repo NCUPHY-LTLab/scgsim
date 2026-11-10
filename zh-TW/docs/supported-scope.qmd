@@ -54,7 +54,6 @@ scgsim-id: "docs/supported-scope"
 | 規則 | SCGSim 為何需要它 | 回報方式 | 細節 |
 |---|---|---|---|
 | 精確宣告的曲線只能是線段或圓弧。SGB 會拒絕 `interpolation_spline` 與 `bspline` 宣告，以及 `circular_arc` 以外的邊界重建。 | SGB 處理線段與圓弧，並能精確偏移它們；它不處理 spline 曲線。 | 建構時 `UnsupportedCurveError` | [Spline 曲線](known-geometry-problems.qmd#spline-curves) |
-| 以多邊形畫出的曲線，每一整圈最多 128 點，因此每個頂點至少轉 2.8125°。在 OrcaPen SC PDK 中，請以 `curve_sampling="simulation"` 建構。 | 頂點轉角更小時，兩側邊的偏移在格點上可能互相錯過，條帶就無法區分。例如 PDK 預設的 256 點圓會被拒絕。 | `ValidationError`「the inset curve … is not closed」，只在要求條帶時出現 | [曲線規則](supported-geometry.qmd#curve-rule) |
 | 精確圓弧要夠大，使它的各段落在不同的格點上。 | 各段縮到同一個格點上的圓弧，已經沒有可建構的形狀。 | 建構時 `InputError`（「the arc is too small for the grid」） | 本頁 |
 
 ### 格點 {#rules-grid}
@@ -110,8 +109,7 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 
 | 不支援 | 替代做法 |
 |---|---|
-| 把 spline 曲線當作曲線讀取：SGB 處理線段與圓弧 | 把 spline 畫成遵守[曲線規則](supported-geometry.qmd#curve-rule)的多邊形；見 [Spline 曲線](known-geometry-problems.qmd#spline-curves)。 |
-| 每一整圈超過 128 點的多邊形曲線 | 以 `curve_sampling="simulation"` 建構；見[每整圈多於 128 點的多邊形圓](known-geometry-problems.qmd#dense-circles)。 |
+| 把 spline 曲線當作曲線讀取：SGB 處理線段與圓弧 | 把 spline 畫成多邊形；見 [Spline 曲線](known-geometry-problems.qmd#spline-curves)。 |
 | 由互相接觸的幾何推斷 Net | 以 `set_nets` 宣告每個 Net。 |
 | 展開陣列參照 | 註冊之前先展開成個別參照。 |
 | 在 Palace 模擬中使用 Route C | 使用 Route A 或 Route B。SGB 為保留導體體積的後端建構 Route C；見 [GeometryPlan 與 SGB](geometry-sgb.qmd)。 |
@@ -123,7 +121,6 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 
 通過檢查表示這次檢查所建的模型被接受：Route B、您傳入的 Net 與邊距，以及[檢查使用的設定](layout-modeling-check.qmd#what-the-check-uses)所列的固定設定。它只確立這次建構實際檢查過的規則：
 
-- 多邊形曲線[每整圈最多 128 點的規則](#rules-curves)，只在建構切出條帶時才檢查。請傳入模擬將使用的 `surface_epr_specs`；沒有傳入時，通過檢查不代表這條規則成立。
 - [埠的規則](#rules-ports)只由 `EigenmodeSim.simulation_drc` 檢查。`ElectrostaticSim` 不選用埠薄片，所以它的檢查不會測到埠的規則。
 
 檢查在產生網格之前就停止，因此看不到微細結構。它也不檢查 Route A、其他設定或 AEDT。
@@ -136,8 +133,8 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 |---|---|---|
 | 規劃時關於 `component_semantics`、註冊、Net、選取點、埠或接地貢獻的 `ValueError` | 版圖及其宣告 | 閱讀訊息，它會指出 occurrence 或 Entity。在元件或筆記本中修正該宣告。 |
 | `ValueError`「… topology changed at grid」或「… contact changed at grid」 | 版圖 | 有頸部、縫隙、孔洞或狹縫等於或小於一個格點間距。在圖面上把它加寬或封閉。 |
-| `UnsupportedCurveError` | 版圖 | 以線段與圓弧宣告曲線，或把它畫成遵守曲線規則的多邊形。 |
-| `ValidationError`「the inset curve … is not closed near (x, y)」 | 版圖 | 該點附近的曲線每一整圈超過 128 點。以 `curve_sampling="simulation"` 建構，或重新取樣曲線。 |
+| `UnsupportedCurveError` | 版圖 | 以線段與圓弧宣告曲線，或把它畫成多邊形。 |
+| `ValidationError`「the inset curve … is not closed near (x, y)」 | SCGSim | 該點附近兩條相鄰的條帶偏移既不相接也不相交。請把版圖回報給 SCGSim。 |
 | 不同 Net 之間的 `ContactError` 或 `OverlapError` | 版圖，或 Net 宣告 | 若兩個導體應為同一導體，就把它們放進同一個 Net；否則在圖面上把它們分開，間距大於一個格點間距。使用 `simulation_drc` 時，傳入模擬所用的 `nets`。 |
 | `OverlapError`「… with equal priority」 | 宣告 | 為同一 Net 中互相重疊的 Entity 指定不同的優先序。 |
 | `NonManifoldError` | 版圖 | 在回報的位置讓兩塊幾何共用一條邊，或把它們分開。 |

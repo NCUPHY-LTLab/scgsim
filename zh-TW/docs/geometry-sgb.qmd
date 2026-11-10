@@ -31,7 +31,7 @@ Palace 與 AEDT 使用同一個選定解讀。不同明確近似設定保留不�
 
 `SourceCurveSpec` 以微米描述 XY 座標。其類型為 `line_segment`（兩端點）、`circular_arc`（起點、弧上點、終點）、`interpolation_spline`（通過提供點的原生插值），以及 `bspline`（控制點及明確階數，並在提供時包含有理權重、不同節點及重數）。選用的 `parameter_interval` 修剪原生來源曲線，不縮放或重新擬合幾何。控制點不是拓撲頂點。`circular_arc` 轉換為原生定義域 `[0, 1]` 上單一精確複合有理 B-spline；內部節點分隔精確區段，修剪可跨越這些節點。呼叫端指定 `bspline` 時，所提供階數、權重、節點、重數及原生參數定義域維持權威。
 
-Palace 所用的幾何建構器（SGB）處理 `line_segment` 與 `circular_arc`。它以 `UnsupportedCurveError` 拒絕 `interpolation_spline` 或 `bspline` 宣告，以及 `circular_arc` 以外的邊界重建。供 SGB 使用的版圖請以線段、圓弧，或遵守[曲線規則](supported-geometry.qmd#curve-rule)的多邊形繪製。
+Palace 所用的幾何建構器（SGB）處理 `line_segment` 與 `circular_arc`。它以 `UnsupportedCurveError` 拒絕 `interpolation_spline` 或 `bspline` 宣告，以及 `circular_arc` 以外的邊界重建。供 SGB 使用的版圖請以線段、圓弧或[多邊形](supported-geometry.qmd#curve-rule)繪製。
 
 `BoundaryCurveChainSpec` 將有序閉合邊界綁定至 `entity_id`、`boundary_id` 及 `selector_point_um`。選取點位於所選 Entity 擁有的**正導體區域**。複合來源多邊形在選取前先聯集為邏輯多邊形，包含以橋接方式編碼的 GDS 孔洞。`role="outer"` 選取外環；`role="hole", hole_index=0` 選取同一多邊形紀錄的第一個孔洞。孔洞選取點仍位於導體內，不在空孔內。孔洞順序與來源方向隨出現實例傳遞；原生標記不識別 Entity、Net 或來源邊界。
 

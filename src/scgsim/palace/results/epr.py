@@ -23,8 +23,7 @@ from scgsim.palace.results.surface_contract import entry_rows
 from scgsim.palace.results.tables import (
     count_index_entries,
     output_families,
-    read_csv_table,
-    validate_table,
+    read_result_table,
 )
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
@@ -93,9 +92,9 @@ def _iteration_result(
     counts = count_index_entries(result.provenance.index_map)
     tables = {}
     for family in output_families(result.problem, counts):
-        table = read_csv_table(verified(f"{family}.csv"))
-        validate_table(result.problem, table, counts, result.provenance.config)
-        tables[family] = table
+        tables[family] = read_result_table(
+            verified(f"{family}.csv"), result.problem, counts, result.provenance.config
+        )
     return replace(
         result, tables=tables, provenance=replace(result.provenance, palace_json=native)
     ), prefix

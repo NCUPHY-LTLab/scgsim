@@ -166,7 +166,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 理由 | （a）的成本隨規模成長得比線性快：同一個 Route B 隨機 layout，Gmsh API 的 oracle 在 N = 500、1 000、2 000 要 2.3 s、8.9 s、63.3 s（局部斜率 2.0 與 2.8），N = 5 000 超過 10 分鐘仍未完成；直接 writer 在 N = 1 000 要 0.49 s，N = 20 000 也只要 13.8 s。Gmsh API 也無法指定 solid 的 sense：oracle 重播出的 substrate solid 質量是負的（N = 500、1 000、2 000 都是，`figures/why-scaling-oracle.json`），也就是 solid 的內外顛倒。直接 writer 明確寫出每個 orientation。 |
 | 原型的限制 | **直接 writer 對 cylinder wall 並非「任意邊數都精確」。** 當一條宣告的 arc 帶著外來的 vertex（例如 port 的邊落在圓形 pad 上，或有一個 post 站在彎曲的邊上），wall 變成 5 條 boundary edge；arc 被切開的兩段各自經由 snapped 端點實現，落在略有不同的圓上，wall 的底邊與頂邊不在同一個圓柱面上，原型的直接 writer 因此拒絕這種 wall（Route B/C；Route A 的 sheet 沒有這個問題）。Gmsh API oracle 可以寫出它。 |
 | 修正（已實作） | 在外來 vertex 處以一條 vertical edge 把 wall 切開（頂部的 arc 在同一處切開）；每一段在自己的 realised 圓上是精確的圓柱，兩段共用那條 vertical edge。production 的 assembly 對 arc 上的每個外來 vertex 都加入這條垂直 edge，並反覆計算直到沒有新的 vertex 被迫加入；上下兩側的 horizontal face 與疊在上下的 wall 也看到同樣的切點，所以共用的 edge 仍然完整共用。驗證檢查 `curved_walls_are_single_cylinders` 斷言每面曲面 wall 都由同一個圓上的一條下 arc 與一條上 arc 圍成。 |
-| 範圍 | 只有宣告的 arc 會產生 cylinder wall；直線 wall 是平面，可以有任意多條邊界 edge，不需要切開。以 polygon 表示的圓（GDS 的 16–128 個點）永遠不會產生 cylinder wall，它們的 wall 是平面（見 [Assembly](assembly.qmd)）。 |
+| 範圍 | 只有宣告的 arc 會產生 cylinder wall；直線 wall 是平面，可以有任意多條邊界 edge，不需要切開。以 polygon 表示的圓（GDS 中以多邊形近似的圓）永遠不會產生 cylinder wall，它們的 wall 是平面（見 [Assembly](assembly.qmd)）。 |
 | 後果 | 去掉大部分寫出成本，但不去掉載入成本；writer 成為 topology contract 的第二個實作，必須與 API 路徑保持一致（E3 的檢查比對 group 內容與體積）。planned ID 對 native tag 的綁定由 writer 的建構順序決定，並記錄在 sidecar。 |
 | 實作狀態 | 已實作（1d）：直接寫出 BREP 與 XAO（含 pcurve、圓柱與明確的 orientation），輸出對 `workers`、`tiles` 與 hash seed 逐位元組相同（同一台機器上測過；跨作業系統、CPU 或 libm 相同只是論證，尚未在第二個平台比較，見[使用契約](consumer-contract.qmd#determinism)）。 |
 | 決定者 | Lead 決定，architecture review 中。 |

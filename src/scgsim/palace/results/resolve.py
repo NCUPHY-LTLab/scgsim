@@ -62,8 +62,7 @@ from scgsim.palace.results.tables import (
     PROBLEM_FAMILIES,
     count_index_entries,
     output_families,
-    read_csv_table,
-    validate_table,
+    read_result_table,
 )
 
 _REQUIRED_FILES = (
@@ -284,9 +283,7 @@ def _discover_results(
         path = results_root / f"{family}.csv"
         if not path.is_file():
             raise FileNotFoundError(f"required result family is missing: {path}")
-        table = read_csv_table(path)
-        validate_table(problem, table, index_counts, config)
-        discovered[family] = table
+        discovered[family] = read_result_table(path, problem, index_counts, config)
     return discovered
 
 
