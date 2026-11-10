@@ -63,6 +63,11 @@ def pad_and_electrode(monkeypatch, *, round_pad: bool, exact_arc: bool = False):
         [(ELECTRODE_X_UM, -30), (150, -30), (150, 30), (ELECTRODE_X_UM, 30)],
         layer=(2, 0),
     )
+    # An undeclared die outline keeps the substrate edge clear of the pad: a polygon circle
+    # touching it would leave a wedge of half a vertex turn, which the meshing stage refuses.
+    component.add_polygon(
+        [(-110, -110), (160, -110), (160, 110), (-110, 110)], layer=(50, 0)
+    )
     sheet_end = ELECTRODE_X_UM + 1.0
     component.add_polygon(
         [
@@ -160,15 +165,12 @@ def built_sidecar(monkeypatch, component, nets=NETS):
         return geometry
 
     monkeypatch.setattr(EigenmodeSim, "_build_geometry", recording)
-    assert (
-        EigenmodeSim.simulation_drc(
-            component,
-            layer_stack=NO_VACUUM_STACK,
-            material_records=MATERIALS,
-            nets=nets,
-        )
-        is None
-    )
+    assert EigenmodeSim.simulation_drc(
+        component,
+        layer_stack=NO_VACUUM_STACK,
+        material_records=MATERIALS,
+        nets=nets,
+    ).passed
     (sidecar,) = sidecars
     return sidecar
 
@@ -327,12 +329,9 @@ def test_a_port_on_conductors_without_a_net_joins_each_end_to_its_own_conductor(
         ("chip/pad_0000", "chip/pad_0000"),
         ("chip/electrode_0000", "chip/electrode_0000"),
     ]
-    assert (
-        EigenmodeSim.simulation_drc(
-            component, layer_stack=NO_VACUUM_STACK, material_records=MATERIALS
-        )
-        is None
-    )
+    assert EigenmodeSim.simulation_drc(
+        component, layer_stack=NO_VACUUM_STACK, material_records=MATERIALS
+    ).passed
 
 
 def pad_in_round_opening(monkeypatch):
