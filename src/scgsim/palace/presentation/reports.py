@@ -45,6 +45,7 @@ from scgsim.palace.results.surface_readers import (
     read_surface_bindings,
     read_surface_margin_bindings,
 )
+from scgsim.palace.results.tables import configured_mode_count
 
 from .trust import PalaceTrustReport as PalaceTrustReport
 from .views import PhysicsQuantitiesReport as PhysicsQuantitiesReport
@@ -271,6 +272,7 @@ def _build_trust_report(
         surface_bindings,
         surface_margin_bindings,
         failed_attempt=receipt is not None and receipt.get("status") == "failed",
+        mode_count=configured_mode_count(config),
     )
     passes = collected.passes
     receipt_status = receipt.get("status") if receipt is not None else None
