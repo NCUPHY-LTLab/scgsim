@@ -13,6 +13,12 @@ entries, the `surface-Q.csv` columns Palace wrote, and the rows `resolve_palace_
 | `simplepad` | `square_pad_capacitor(200, 20, 1000, 2)` | `pad`, `ground` | `chip/o_junction_lumped`, 10 nH |
 | `circular_pad` | `circular_pad_capacitor(100, 0, 20, 1000, 2)` | `pad`, `ground` | `chip/o_junction_lumped`, 10 nH |
 | `airbridge` | `cpw_airbridge_coupon()`, stack with airbridges | `signal`, `ground` (both grounds and the bridge) | none |
+| `flip_chip_pad` | `flip_chip_pad_coupon()`, two-die flip-chip stack | `pad`, `ground` (lower ground, upper plane, four bumps) | none |
+| `disk_qubit` | `disk_flip_chip_qubit()` at its defaults as `chip/device`, with the common flip-chip ground planes | `Ground` (both planes and every bump) | every authored port, 10 nH |
+
+The two flip-chip cases are built as the #149 baseline builds them (`curve_sampling="simulation"`), with
+the vacuum of the PDK's flip-chip notebooks, (0, 0, 1000) µm. They need a PDK revision that holds
+orcapen-sc-pdk#64; the single-die cases ran at the CI pin.
 
 `--route A` or `--route B` selects the Palace route. Every case uses MA, MS and SA films from the
 PDK's `LiteratureCentral_*` presets with `inset_margins_um=[0.5, 1.0]`, one mode, FEM order 2 and up
@@ -35,5 +41,6 @@ python run_case.py readback OUT
 `prepare` runs `simulation_drc`, `mesh()`, `write_config()` and
 `prepare_handoff(profile="direct-local")` into `OUT/run`, and writes `OUT/prepare.json`. The handoff
 script puts `PALACE_MPI_BIN` on `PATH` through its `setup_commands`, because the Palace wrapper finds
-`mpirun` there. `execute` runs that script and stops it after 30 minutes. `readback` writes
+`mpirun` there. `execute` runs that script and stops it, with every MPI rank, after `--wall-limit-s`
+seconds (default 1800). `readback` writes
 `OUT/report.json`. `OUT` holds the mesh and Palace output; keep it out of the repository.

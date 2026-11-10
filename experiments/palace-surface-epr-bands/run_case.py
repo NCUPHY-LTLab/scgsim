@@ -24,6 +24,7 @@ import math
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -51,6 +52,10 @@ MARGINS_UM = (0.5, 1.0)
 PRESET_PREFIX = "LiteratureCentral"
 PORT_INDUCTANCE_H = 10e-9
 VACUUM_PADDING_UM = (250.0, 250.0, 1000.0)
+# The PDK's flip-chip Palace notebooks pad the coupon by 1000 um in z only.
+FLIP_CHIP_VACUUM_UM = (0.0, 0.0, 1000.0)
+# The flip-chip cases are built as the #149 baseline builds them, with simulation sampling of curves.
+CURVE_SAMPLING = "simulation"
 # Pipeline settings from #84: mode 1, order 2, a few AMR passes.  They check the pipeline, not convergence.
 NUM_MODES = 1
 SEARCH_FREQUENCY_HZ = 1e9
@@ -75,6 +80,10 @@ class Case:
     # Child occurrences that carry their own semantics, keyed by plan path, as GeometryPlan.register_instance takes them.
     instances: dict[str, Any] = field(default_factory=dict)
     notes: dict[str, Any] = field(default_factory=dict)
+    # The plan vacuum of the PDK's Palace notebooks: (x, y, z) padding in um.
+    vacuum_padding_um: tuple[float, float, float] = VACUUM_PADDING_UM
+    # Bind every port the plan's layout authors (as simulation_drc does) instead of ``ports``.
+    all_authored_ports: bool = False
 
 
 def main() -> None:
@@ -84,7 +93,7 @@ def main() -> None:
     if args.stage == "prepare":
         prepare(args.case, args.route, output, args)
     elif args.stage == "execute":
-        execute(output)
+        execute(output, args.wall_limit_s)
     else:
         readback(output)
 
@@ -95,8 +104,20 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument("output_dir")
     parser.add_argument(
         "--case",
-        choices=("simplepad", "circular_pad", "airbridge"),
+        choices=(
+            "simplepad",
+            "circular_pad",
+            "airbridge",
+            "flip_chip_pad",
+            "disk_qubit",
+        ),
         default="simplepad",
+    )
+    parser.add_argument(
+        "--wall-limit-s",
+        type=float,
+        default=WALL_LIMIT_S,
+        help="execute: stop the Palace run after this many seconds",
     )
     parser.add_argument("--route", choices=("A", "B"), default="B")
     parser.add_argument("--palace", default=os.environ.get("PALACE_EXECUTABLE"))
@@ -205,6 +226,10 @@ def build_case(name: str) -> Case:
             {"pad": ("chip/PAD",), "ground": ("chip/GROUND",)},
             ("chip/o_junction_lumped",),
         )
+    if name == "flip_chip_pad":
+        return flip_chip_pad_case()
+    if name == "disk_qubit":
+        return disk_qubit_case()
     component = gf.get_component("cpw_airbridge_coupon")
     stack = get_single_die_layer_stack(include_airbridges=True)
     instances = {
@@ -221,6 +246,79 @@ def build_case(name: str) -> Case:
         (),
         instances=instances,
         notes={"entities": entities, "ports": "the coupon authors no port"},
+    )
+
+
+def flip_chip_pad_case() -> Case:
+    """The flip-chip pad coupon and its four ground bumps, built as the #149 baseline builds it.
+
+    One Ground net holds the lower ground, the upper plane and every bump.  The baseline gives this coupon
+    no port (the lower die's locator is not forwarded), so none is bound here either.
+    """
+    # Imported here for the same reason as in disk_qubit_case: the flip-chip cases run at a later PDK pin.
+    from orcapen_sc_pdk.tech import get_two_die_flip_chip_layer_stack  # noqa: PLC0415
+
+    component = gf.get_component("flip_chip_pad_coupon", curve_sampling=CURVE_SAMPLING)
+    references = {reference.name: reference for reference in component.insts}
+    bumps = ("BUMP_MM", "BUMP_MP", "BUMP_PM", "BUMP_PP")
+    nets = {
+        "pad": ("chip/LOWER_PAD_DIE/PAD",),
+        "ground": (
+            "chip/LOWER_PAD_DIE/GROUND",
+            "chip/UPPER_GROUND",
+            *(f"chip/{name}/D0_D1_INDIUM_BUMP" for name in bumps),
+        ),
+    }
+    return Case(
+        component,
+        get_two_die_flip_chip_layer_stack(),
+        nets,
+        (),
+        instances={
+            f"chip/{name}": references[name] for name in ("LOWER_PAD_DIE", *bumps)
+        },
+        notes={"ports": "none, as in the #149 baseline"},
+        vacuum_padding_um=FLIP_CHIP_VACUUM_UM,
+    )
+
+
+def disk_qubit_case() -> Case:
+    """``disk_flip_chip_qubit`` at its defaults as ``chip/device`` under the common ground planes (#149).
+
+    Every authored port is bound with the 10 nH inductance, as ``simulation_drc`` and the baseline bind them.
+    """
+    # Imported here: the common ground planes exist only at PDK revisions holding orcapen-sc-pdk#64, and the
+    # single-die cases still run at the earlier pin.
+    from orcapen_sc_pdk.helpers.assembly import author_common_flip_chip_ground_planes  # noqa: PLC0415
+    from orcapen_sc_pdk.tech import LAYER_STACK_FLIP_CHIP  # noqa: PLC0415 -- same reason as the line above
+
+    qubit = gf.get_component("disk_flip_chip_qubit", curve_sampling=CURVE_SAMPLING)
+    parent = gf.Component()
+    device = parent << qubit
+    device.name = "device"
+    parent.add_ports(device.ports)
+    author_common_flip_chip_ground_planes(parent, plane_bounds_um=None)
+    references = {reference.name: reference for reference in qubit.insts}
+    bumps = sorted(qubit.info["bump_instance_names"])
+    nets = {
+        "Ground": (
+            "chip/D0_TOP_GROUND_PLANE",
+            "chip/D1_BOTTOM_GROUND_PLANE",
+            *(f"chip/device/{name}/D0_D1_INDIUM_BUMP" for name in bumps),
+        )
+    }
+    return Case(
+        parent,
+        LAYER_STACK_FLIP_CHIP,
+        nets,
+        (),
+        instances={
+            "chip/device": device,
+            **{f"chip/device/{name}": references[name] for name in bumps},
+        },
+        notes={"bumps": bumps},
+        vacuum_padding_um=FLIP_CHIP_VACUUM_UM,
+        all_authored_ports=True,
     )
 
 
@@ -296,9 +394,10 @@ def configure_simulation(
     for path, reference in case.instances.items():
         plan.register_instance(path, reference)
     plan.set_nets(case.nets)
-    plan.set_vacuum_region(padding=VACUUM_PADDING_UM)
+    plan.set_vacuum_region(padding=case.vacuum_padding_um)
+    snapshot = plan.prepare()
     sim = EigenmodeSim()
-    sim.set_plan(plan.prepare())
+    sim.set_plan(snapshot)
     sim.set_output_dir(run_dir)
     sim.set_surface_epr(
         representation=route,
@@ -308,14 +407,18 @@ def configure_simulation(
         if route == "A"
         else None,
     )
-    for port in case.ports:
-        sim.add_port(
-            port, layer=case.port_layer, layout_sheet=True, inductance=PORT_INDUCTANCE_H
-        )
+    ports = [(port, case.port_layer) for port in case.ports]
+    if case.all_authored_ports:
+        ports = [
+            (record["name"], record["target_layer"])
+            for record in snapshot.stack["metadata"].get("port_sheet_source_layers", ())
+        ]
+    for port, layer in ports:
+        sim.add_port(port, layer=layer, layout_sheet=True, inductance=PORT_INDUCTANCE_H)
     sim.set_epr_request(
         surface_interfaces=INTERFACE_KINDS,
         bulk_domain_ids=None,
-        port_names=case.ports or None,
+        port_names=None,
     )
     sim.set_eigenmode(
         num_modes=NUM_MODES,
@@ -360,22 +463,23 @@ def _timed_mesh(sim: EigenmodeSim) -> dict[str, Any]:
 # --------------------------------------------------------------------------- execute
 
 
-def execute(output: Path) -> None:
+def execute(output: Path, wall_limit_s: float) -> None:
     """Run the handoff's own script with the wall-time limit and record the outcome."""
     handoff = json.loads((output / "prepare.json").read_text(encoding="utf-8"))[
         "handoff"
     ]
     start = time.perf_counter()
+    # A session of its own, so a timeout stops mpirun and every Palace rank with the script.
+    process = subprocess.Popen(
+        ["bash", handoff["script"]], cwd=handoff["run_dir"], start_new_session=True
+    )
     try:
-        completed = subprocess.run(
-            ["bash", handoff["script"]],
-            cwd=handoff["run_dir"],
-            timeout=WALL_LIMIT_S,
-            check=False,
-        )
-        record = {"exit_code": completed.returncode}
+        record: dict[str, Any] = {"exit_code": process.wait(timeout=wall_limit_s)}
     except subprocess.TimeoutExpired:
-        record = {"exit_code": None, "error": f"stopped after {WALL_LIMIT_S} s"}
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait()
+        record = {"exit_code": None, "error": f"stopped after {wall_limit_s} s"}
+    record["wall_limit_s"] = wall_limit_s
     record["wall_seconds"] = time.perf_counter() - start
     _write(output / "execute.json", record)
     print(json.dumps(record, indent=2))
