@@ -44,7 +44,7 @@ SGB 從這五個 prism 推導出下面的實體模型（Route B）。為了讓�
 3. **Identity**：每個實體有一個 semantic 名稱（例如 `MA::pad__top::band=2`）與一個依內容定址的 atomic id，並附有回到產生它的來源曲線的 lineage。
 4. **CAD 檔案與 sidecar**：直接由 topology 寫出的 BREP 與 XAO 檔案，不經任何 Boolean 運算；以及一個 JSON **sidecar**，記錄每個 native 實體對應的規劃 id、physical group、lineage 與依面積加權的 membership。
 
-無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見 [Emission](emission.qmd)）。
+無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見[交給 AEDT](emission.qmd#handing-the-solids-to-aedt)）。
 
 production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<entity>__<face kind>[::band=k]`（例如 pad 的頂面是 `MA::pad__top`，有 inset band 時是 `MA::pad__top::band=2`；face kind 以雙底線接在 entity 後面，命名規則見 [identity](identity.qmd#band-group-names)），完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。
 
