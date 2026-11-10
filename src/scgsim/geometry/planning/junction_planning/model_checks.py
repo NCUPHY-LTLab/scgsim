@@ -46,8 +46,8 @@ def fraction_boundary_contact(left, right):
     )
 
 
-def fraction_area_overlap(left, right):
-    """Test whether emitted regions overlap over a positive area (an end piece on its terminal)."""
+def fraction_overlap(left, right):
+    """The overlap of two region collections (rings of model points), as Boolean polygons."""
 
     def native(regions):
         polygons = []
@@ -61,9 +61,15 @@ def fraction_area_overlap(left, right):
             )
         return polygons
 
-    return bool(
+    return tuple(
         polygon_boolean(native(left), native(right), "and", precision=PRECISION_UM)
+        or ()
     )
+
+
+def fraction_area_overlap(left, right):
+    """Test whether emitted regions overlap over a positive area (an end piece on its terminal)."""
+    return bool(fraction_overlap(left, right))
 
 
 def emitted_partition_coverage(free, parts):
