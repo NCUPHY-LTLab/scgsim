@@ -1,8 +1,9 @@
-"""Represent grid operands/results and reconstruct atomic polygon boundaries."""
+"""Represent grid operands/results, reconstruct atomic polygon boundaries, and locate refused changes."""
 
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
+from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -14,7 +15,7 @@ from typing import TYPE_CHECKING, cast, overload
 from scgsim.diagnostics import (
     diagnostic_stage,
 )
-from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.models.grid import GeometryGridContext, format_box, format_length
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -248,6 +249,8 @@ class GridOperand:
     holes: tuple[GridRing, ...] = ()
     physical: bool = True
     contact: bool = True
+    # The source layer, named by a refusal only; it never changes the grid work.
+    layer: str | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "exterior", tuple(map(tuple, self.exterior)))
@@ -421,3 +424,268 @@ class PolygonRegion:
             )
 
         return area(self.exterior) - sum(area(r) for r in self.holes)
+
+
+# -- Locating a refused grid change -------------------------------------------------
+#
+# The grid audits compare a requested (unsnapped) geometry with its realized
+# (snapped) one and refuse when a count or a contact relation differs.  These
+# helpers find the places behind that difference from the same two geometries, so
+# a refusal can name where in micrometres the layout must change.  They add no
+# tolerance: components and holes are matched by shared area, a merge is measured
+# as the shortest line between the drawn parts, and a split is the dropped piece
+# of the drawn part that joined the snapped parts.  Coordinates and lengths are
+# printed by the grid's own formatters (``models.grid``).
+
+
+def topology_changes(
+    requested: BaseGeometry, realized: BaseGeometry, grid_um: float | None
+) -> tuple[str, ...]:
+    """Each place where snapping merged, split, removed or added a component or a hole.
+
+    When the component or hole counts differ, at least one finding is returned:
+    a count can only change through one of these four events.  A geometry GEOS
+    cannot process gives no finding; the refusal itself still stands.
+    """
+    from shapely import Polygon  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+    from shapely.errors import GEOSException  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    before = polygon_components(requested)
+    after = polygon_components(realized)
+
+    def holes(components: Sequence[Polygon]) -> list[Polygon]:
+        return [Polygon(ring) for p in components for ring in p.interiors]
+
+    try:
+        return (
+            *_matching_changes("component", before, after, grid_um),
+            *_matching_changes("hole", holes(before), holes(after), grid_um),
+        )
+    except GEOSException:
+        return ()
+
+
+def contact_changes(
+    requested: tuple[BaseGeometry, BaseGeometry],
+    realized: tuple[BaseGeometry, BaseGeometry],
+    grid_um: float | None,
+) -> tuple[str, ...]:
+    """Where the contact of two geometries differs before and after snapping.
+
+    The contact relation can change only where the dimension of their
+    intersection changes: a gap closes into a touch or an overlap, a touch
+    becomes an overlap, or a contact is lost.  The parts of the higher-dimension
+    intersection that the other one lacks are reported; any other change falls
+    back to the parts the two intersections do not share.  A geometry GEOS
+    cannot process gives no finding; the refusal itself still stands.
+    """
+    from shapely.errors import GEOSException  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    try:
+        return _contact_changes(requested, realized, grid_um)
+    except GEOSException:
+        return ()
+
+
+def _contact_changes(
+    requested: tuple[BaseGeometry, BaseGeometry],
+    realized: tuple[BaseGeometry, BaseGeometry],
+    grid_um: float | None,
+) -> tuple[str, ...]:
+    first, second = requested
+    before = first.intersection(second)
+    after = realized[0].intersection(realized[1])
+    dim_before, dim_after = _dimension(before), _dimension(after)
+    if dim_after > dim_before:
+        closed = tuple(
+            f"they {_CONTACT_WORDS[_part_dimension(part)]} after snapping at "
+            f"{format_place(part, grid_um)}"
+            for part in _parts_above(after, dim_before)
+        )
+        if dim_before >= 0:
+            return closed
+        gap = format_length(first.distance(second), grid_um)
+        return (*closed, f"the narrowest drawn gap between them is {gap}")
+    if dim_before > dim_after:
+        return tuple(
+            f"their drawn {_CONTACT_NOUNS[_part_dimension(part)]} at "
+            f"{format_place(part, grid_um)} is lost after snapping"
+            for part in _parts_above(before, dim_after)
+        )
+    return tuple(
+        f"their contact differs after snapping at {format_place(part, grid_um)}"
+        for part in _parts_above(before.symmetric_difference(after), -1)
+    )
+
+
+FIX_SHAPE = "Fix the layout: draw each gap, neck and hole named here on the grid, widening or closing it."
+FIX_CONTACT = "Fix the layout: draw the gap or contact between them on the grid, widening or closing it."
+
+
+def grid_change_message(
+    lead: str,
+    layers: Sequence[str],
+    grid_um: float | None,
+    findings: Sequence[str],
+    action: str,
+) -> str:
+    """One refusal: what changed, on which layers, where (each finding) and who must act."""
+    names = sorted(set(layers))
+    on = f" on layer{'s' if len(names) > 1 else ''} {', '.join(names)}" if names else ""
+    grid = "" if grid_um is None else f" (grid g = {grid_um} um)"
+    where = "; ".join(findings) if findings else "the place could not be located"
+    return f"{lead}{on}{grid}: {where}. {action}"
+
+
+_CONTACT_WORDS = {0: "touch at a point", 1: "touch along an edge", 2: "overlap"}
+_CONTACT_NOUNS = {0: "point contact", 1: "edge contact", 2: "overlap"}
+
+
+def format_place(geometry: BaseGeometry, grid_um: float | None) -> str:
+    """Where a geometry is: its point, or its bounding box."""
+    return format_box(geometry.bounds, grid_um)
+
+
+def _matching_changes(
+    kind: str,
+    before: Sequence[Polygon],
+    after: Sequence[Polygon],
+    grid_um: float | None,
+) -> list[str]:
+    """Match parts before and after snapping by shared area and report the ones that do not pair."""
+    shared = _shared_areas(before, after)
+    image = _largest_partner(shared)
+    origin = _largest_partner({(j, i): a for (i, j), a in shared.items()})
+    findings: list[str] = []
+    for _, group in _groups(image):
+        findings.extend(
+            f"two drawn {kind}s merge at {format_place(line, grid_um)}: "
+            f"they are {format_length(line.length, grid_um)} apart"
+            for line in _closest_lines([before[i] for i in group])
+        )
+    for i, group in _groups(origin):
+        findings.extend(
+            f"a drawn {kind} splits in two at {format_place(neck, grid_um)}: "
+            f"the drawn neck there is {_size(neck, grid_um)}"
+            for neck in _necks(before[i], [after[j] for j in group])
+        )
+    findings.extend(
+        f"a drawn {kind} disappears at {format_place(before[i], grid_um)} "
+        f"({_size(before[i], grid_um)})"
+        for i in range(len(before))
+        if i not in image
+    )
+    findings.extend(
+        f"a {kind} that is not drawn appears at {format_place(after[j], grid_um)} "
+        f"({_size(after[j], grid_um)})"
+        for j in range(len(after))
+        if j not in origin
+    )
+    return findings
+
+
+def _shared_areas(
+    before: Sequence[Polygon], after: Sequence[Polygon]
+) -> dict[tuple[int, int], float]:
+    from shapely import STRtree  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    if not before or not after:
+        return {}
+    tree = STRtree(list(after))
+    shared: dict[tuple[int, int], float] = {}
+    for i, part in enumerate(before):
+        for j in tree.query(part):
+            area = part.intersection(after[int(j)]).area
+            if area > 0:
+                shared[(i, int(j))] = area
+    return shared
+
+
+def _largest_partner(shared: dict[tuple[int, int], float]) -> dict[int, int]:
+    """For each part, the part on the other side it shares the most area with."""
+    best: dict[int, tuple[float, int]] = {}
+    for (i, j), area in sorted(shared.items()):
+        if i not in best or area > best[i][0]:
+            best[i] = (area, j)
+    return {i: j for i, (_, j) in best.items()}
+
+
+def _groups(partner: dict[int, int]) -> list[tuple[int, list[int]]]:
+    """Each partner shared by more than one part, with those parts, in partner order."""
+    by_partner: dict[int, list[int]] = defaultdict(list)
+    for part, other in sorted(partner.items()):
+        by_partner[other].append(part)
+    return [
+        (other, parts) for other, parts in sorted(by_partner.items()) if len(parts) > 1
+    ]
+
+
+def _necks(drawn: Polygon, parts: Sequence[Polygon]) -> list[BaseGeometry]:
+    """The pieces of a drawn part that snapping dropped and that joined its snapped parts.
+
+    A piece of the drawn part outside every snapped part is either a sliver
+    along a moved edge, touching one part, or the neck that joined two of them.
+    Only the second kind is reported; without one, the closest line between the
+    parts stands for the place.
+    """
+    from shapely import union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    dropped = polygon_components(drawn.difference(union_all(list(parts))))
+    necks = [
+        piece for piece in dropped if sum(piece.intersects(part) for part in parts) > 1
+    ]
+    return sorted(necks, key=lambda piece: piece.bounds) or _closest_lines(parts)
+
+
+def _closest_lines(parts: Sequence[Polygon]) -> list[BaseGeometry]:
+    """The shortest line from each part after the first to the parts before it."""
+    from shapely import shortest_line, union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    return [
+        shortest_line(union_all(list(parts[:k])), parts[k])
+        for k in range(1, len(parts))
+    ]
+
+
+def _size(geometry: BaseGeometry, grid_um: float | None) -> str:
+    """The width by the height of a geometry's bounding box."""
+    x0, y0, x1, y1 = geometry.bounds
+    return f"{format_length(x1 - x0, grid_um)} by {format_length(y1 - y0, grid_um)}"
+
+
+def _dimension(geometry: BaseGeometry) -> int:
+    """The largest dimension of a geometry's parts: -1 when it is empty."""
+    return max((_part_dimension(p) for p in _flat_parts(geometry)), default=-1)
+
+
+def _part_dimension(part: BaseGeometry) -> int:
+    return {"Point": 0, "LineString": 1, "LinearRing": 1, "Polygon": 2}[part.geom_type]
+
+
+def _flat_parts(geometry: BaseGeometry) -> list[BaseGeometry]:
+    from shapely import get_parts  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    if geometry.is_empty:
+        return []
+    if geometry.geom_type in {"Point", "LineString", "LinearRing", "Polygon"}:
+        return [geometry]
+    return [q for p in get_parts(geometry) for q in _flat_parts(p)]
+
+
+def _parts_above(geometry: BaseGeometry, dimension: int) -> list[BaseGeometry]:
+    """The connected parts of a geometry whose dimension exceeds ``dimension``, in coordinate order.
+
+    The union drops a lower-dimension part that lies on a higher one (the edge
+    of an overlap), and touching edge pieces are merged into one line.
+    """
+    from shapely import line_merge, union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    kept = [p for p in _flat_parts(geometry) if _part_dimension(p) > dimension]
+    if not kept:
+        return []
+    parts = _flat_parts(union_all(kept))
+    lines = [p for p in parts if _part_dimension(p) == 1]
+    joined = [p for p in parts if _part_dimension(p) != 1]
+    if lines:
+        joined.extend(_flat_parts(line_merge(union_all(lines))))
+    return sorted(joined, key=lambda part: part.bounds)
