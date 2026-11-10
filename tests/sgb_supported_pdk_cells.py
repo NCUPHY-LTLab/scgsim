@@ -735,6 +735,10 @@ SCENES = {
     "cell22_tsv_signal": cell22_tsv_signal,
     "cell23_airbridge": cell23_airbridge,
     "cell24_sheet_square_pad": lambda: cell24_sheet_across_gap(False),
+}
+# The sheet across the 32-point pad builds with the bands of its exact erosion, but its files cannot be written:
+# it is off the supported list until they can.
+NOT_WRITTEN = {
     "cell24_sheet_circular_pad": lambda: cell24_sheet_across_gap(True),
 }
 # The spline strips as the PDK draws them (258 vertices, smallest turns 0.012 and 0.058 degrees): outside the

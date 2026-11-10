@@ -101,7 +101,7 @@ scgsim-id: "docs/supported-geometry"
 
 ![**23 Airbridge。** 12 × 84 的橋面架在兩個 14 × 14 的橋墩上，跨越寬 10、gap 6 的 CPW。使用者：`airbridge`、`cpw_airbridge_coupon`、meander coupon。](assets/supported-geometry/cell-23.svg){fig-alt="架在兩個橋墩上、跨越 CPW 的橋面。"}
 
-![**24 跨越 gap 的集總薄片。** 2 × 20 的薄片跨越 20 µm 的 gap，伸入焊墊與接地各 1 nm；方形焊墊 200，或 r 100 的 32 點焊墊。使用者：方形、圓形與覆晶焊墊 coupon。](assets/supported-geometry/cell-24.svg){fig-alt="跨越焊墊邊與接地之間 gap 的窄埠薄片。"}
+![**24 跨越 gap 的集總薄片。** 2 × 20 的薄片跨越 20 µm 的 gap，伸入焊墊與接地各 1 nm；方形焊墊 200。使用者：方形與覆晶焊墊 coupon。同樣的薄片若跨越 r 100 的 32 點焊墊（圓形焊墊 coupon 畫出的多邊形），則不受支援：模型可以建立，但無法寫成建立網格時讀取的幾何檔。](assets/supported-geometry/cell-24.svg){fig-alt="跨越焊墊邊與接地之間 gap 的窄埠薄片。"}
 :::
 
 PDK 以 258 點畫 cell 21 的 spline 條帶。依原圖它們不符合下面的曲線規則而會被拒絕；樣本先將它們重新取樣（見[已知的幾何問題](known-geometry-problems.qmd#spline-258)）。

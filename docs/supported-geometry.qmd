@@ -128,7 +128,7 @@ Every CPW here has a 6 µm gap, and every bend a 100 µm radius.
 
 ![**23 Airbridge.** A 12 × 84 deck on two 14 × 14 piers over a CPW of width 10, gap 6. Used by `airbridge`, `cpw_airbridge_coupon` and the meander coupons.](assets/supported-geometry/cell-23.svg){fig-alt="A bridge deck on two piers crossing a CPW."}
 
-![**24 Lumped sheet across a gap.** A 2 × 20 sheet over a 20 µm gap, entering pad and ground by 1 nm; square pad 200, or a 32-point pad of r 100. Used by the square, circular and flip-chip pad coupons.](assets/supported-geometry/cell-24.svg){fig-alt="A narrow port sheet spanning the gap between a pad edge and the ground."}
+![**24 Lumped sheet across a gap.** A 2 × 20 sheet over a 20 µm gap, entering pad and ground by 1 nm; square pad 200. Used by the square and flip-chip pad coupons. The same sheet across a 32-point pad of r 100, the polygon that the circular pad coupon draws, is not supported: its model builds, but it cannot be written to the geometry file that meshing reads.](assets/supported-geometry/cell-24.svg){fig-alt="A narrow port sheet spanning the gap between a pad edge and the ground."}
 :::
 
 The PDK draws the spline strips of cell 21 with 258 points. As drawn they are
