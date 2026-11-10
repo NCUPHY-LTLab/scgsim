@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from scgsim.geometry.models.grid import format_box
 from scgsim.geometry.sgb import identity
 from scgsim.geometry.sgb.arrangement.dcel import (
     Arrangement,
@@ -154,11 +155,19 @@ def _check_ports_keep_a_face(catalogue: PrismCatalogue, layers: list[Layer]) -> 
         for label in layer.labels[1:]
         if label.sheet is not None
     }
+    grid = catalogue.grid
     for prism in catalogue.prisms:
         if prism.port is not None and prism.entity_id not in labelled:
+            xs = [grid.to_um(p[0]) for p in prism.footprint.outer]
+            ys = [grid.to_um(p[1]) for p in prism.footprint.outer]
+            box = format_box((min(xs), min(ys), max(xs), max(ys)), grid.size_um)
             raise InputError(
                 f"port sheet {prism.entity_id!r} has no active remainder: "
-                "its host overlaps cover it entirely"
+                f"its host overlaps cover it entirely; the sheet on layer "
+                f"{prism.port.source_layer} at {box}, z = {float(prism.z0)} um, has "
+                f"no part off its hosts ({', '.join(prism.port.host_entity_ids)}). "
+                "Fix the layout: draw the sheet across the gap between its hosts, so "
+                "part of it lies off them."
             )
 
 

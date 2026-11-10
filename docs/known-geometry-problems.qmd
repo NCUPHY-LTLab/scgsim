@@ -131,57 +131,7 @@ ground mask too, or take it out of the etch layer, so both give the same metal.
 **Corrected in the PDK** by [orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61): the frame is drawn on
 the ground mask as well.
 
-## Curves outside the 128-point scope {#curves-outside-scope}
-
-The supported scope for curved outlines is at most 128 points per full circle,
-so that every vertex turns by at least 2.8125°
-([the curve rule](supported-geometry.qmd#curve-rule)). The cases below are
-outside it.
-
-### Polygon circles denser than 128 points per circle {#dense-circles}
-
-![A 256-point circle of radius 10 µm; the zoom shows its vertices, 0.245 µm apart and turning 1.41° each.](assets/supported-geometry/problem-dense-circle.svg){fig-alt="A polygon circle and a zoom onto a few of its vertices, marked as red dots."}
-
-**What goes wrong.** Measured on regular polygon circles at margins 0.5 and
-1.0 µm:
-
-| Points per full circle | Turn per vertex | Result |
-| --- | --- | --- |
-| 144 to 224 | 2.5° to 1.6° | depends on the case: 180 and 224 points are refused at r = 10 µm and build at r = 75 µm |
-| 256 | 1.41° | refused at r = 5, 10, 50 and 150 µm |
-
-A refused curve stops the build with
-`the inset curve at m = … um is not closed near (x, y) um`: the offsets of two
-neighbouring edges at a band margin neither meet nor cross, so the band regions
-cannot be told apart. The edge length does not decide it: a 256-point circle of
-radius 150 µm has 3.68 µm edges and is still refused. The suspected cause, from
-the measurements and not tested separately: past a convex vertex the offsets of
-two neighbouring edges overlap by about $m\theta^2/2$ for a turn $\theta$, which
-at small turns is comparable to the rounding of each offset's end point to the
-grid (up to half a grid unit), so the two offsets can miss each other. The PDK's default
-`"fabrication"` profile, 256 points per full circle, is refused this way.
-
-**Why SCGSim does not fix it.** The supported scope is set at 128 points per
-full circle; a fix in SGB's band construction was tried and not adopted.
-Build components for simulation with `curve_sampling="simulation"`.
-
-### Spline strips drawn with 258 points {#spline-258}
-
-![The interpolation spline strip as the PDK draws it; the zoom shows its vertices near the end, where they turn least.](assets/supported-geometry/problem-spline-258.svg){fig-alt="A wavy strip and a zoom onto its end with the vertices marked as red dots."}
-
-**What goes wrong.** `interpolation_spline_strip` and `bspline_strip` draw each
-edge with 129 points, sampled per span rather than by `curve_sampling`. Their
-flattest vertices turn by 0.058° and 0.012°, and the build is refused with the
-same `inset curve … not closed` message as a dense circle.
-
-**Why SCGSim does not fix it.** The strips are outside the 128-point scope.
-Resample each strip so that every vertex turns by at least 2.8125°; the
-resampled strips build with exact bands (cell 21 on
-[Supported Geometry](supported-geometry.qmd#pads-and-parts)). How to resample is
-the PDK's choice
-([orcapen-sc-pdk#52](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/52)).
-
-### Spline curves are not read as curves {#spline-curves}
+## Spline curves are not read as curves {#spline-curves}
 
 ![The B-spline strip and its control polygon (dashed red): the curve a spline boundary declares.](assets/supported-geometry/problem-spline-curve.svg){fig-alt="A curved strip with its five control points joined by a dashed red polygon."}
 
@@ -194,40 +144,4 @@ supported yet (this version carries lines and circular arcs)`, and the same for
 offset of a spline has no exact form, so reading splines needs a tolerance that
 has not been decided. This is tracked in
 [scgsim#109](https://github.com/NCUPHY-LTLab/scgsim/issues/109). Until then,
-draw the strip as a polygon that follows the curve rule.
-
-## Runs of vertices that turn less than 2.8125° {#small-turn-runs}
-
-![The Euler U-turn of cell 15; the zoom marks the first centreline vertices, which turn 0.15°, 0.9°, 1.8° and 2.7°.](assets/supported-geometry/problem-small-turn-runs.svg){fig-alt="A CPW U-turn with its first centreline vertices marked as red dots in a zoom."}
-
-The curve rule is stated per vertex, but some supported cells have vertices
-that turn less, and they build with exact bands as drawn:
-
-- the 90° Euler bend (cell 14) turns by 0.30° and 1.8° at its first two
-  vertices, and the 180° U-turn (cell 15) by 0.15°, 0.9°, 1.8° and 2.7° at its
-  first four, with chords of 11 to 14 µm;
-- the tapers (cell 18) kink by 0.86° and 1.72°.
-
-Outside these cells, a run of several consecutive vertices that turn less than
-2.8125° is not verified: it may build, or it may be refused like a dense circle.
-
-![A 16-point circle of radius 50 µm with one added vertex turning 0.3°; the zoom shows it against the original edge (dashed).](assets/supported-geometry/problem-single-vertex.svg){fig-alt="A 16-sided polygon with one extra vertex marked, and a zoom showing the vertex slightly outside the dashed original edge."}
-
-A single vertex that turns less, between longer edges, was also measured: one
-vertex added to a 16-point circle of radius 50 µm, with 9.8 µm edges on both
-sides.
-
-| Turn of the one vertex | Result |
-| --- | --- |
-| 2.9°, 2.7°, 1.41°, 0.3° and 0.01°, convex | builds, bands exact |
-| 2.7° and 0.01°, reflex | builds, bands exact |
-| 0° (a point on a straight edge) | builds, bands exact |
-
-A point on a straight edge leaves an axis-aligned edge's bands unchanged. On an
-oblique edge the bands move by a few 10⁻⁴ µm², within the snap bound, because
-the offsets of the two halves end on a grid point there. These are observations
-at margins 0.5 and 1.0 µm, not guarantees.
-
-**Why SCGSim does not extend the rule.** The supported scope was set from the
-measured circles and the PDK cells; widening it needs measurements of the new
-patterns and a separate decision.
+draw the strip as a polygon.

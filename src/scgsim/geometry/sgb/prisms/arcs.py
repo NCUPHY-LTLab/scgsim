@@ -17,10 +17,12 @@ from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
 
+from scgsim.geometry.models.grid import format_length, format_point
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records import circle_math
 from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage
+from scgsim.geometry.sgb.records.grid import Grid
 
 RationalPoint = tuple[Fraction, Fraction]
 QUARTER_TURN = circle_math.HALF_PI
@@ -65,8 +67,13 @@ def arc_through_points(  # noqa: PLR0913 - an arc is defined by its three points
     end: Point,
     lineage: Lineage,
     what: str,
+    *,
+    grid: Grid,
 ) -> list[ArcCarrier]:
-    """Pieces of the arc from ``start`` through ``through`` to ``end`` (lattice end points)."""
+    """Pieces of the arc from ``start`` through ``through`` to ``end`` (lattice end points).
+
+    ``grid`` converts a refusal's location to micrometres.
+    """
     a: RationalPoint = (Fraction(start[0]), Fraction(start[1]))
     c: RationalPoint = (Fraction(end[0]), Fraction(end[1]))
     centre, radius = circumcircle(a, through, c, what)
@@ -75,18 +82,27 @@ def arc_through_points(  # noqa: PLR0913 - an arc is defined by its three points
     t_end = circle_math.vector_angle(centre, c)
     magnitude = circle_math.sweep_magnitude(t_start, t_end, ccw=ccw)
     return _pieces(
-        _Circle(arc_id, centre, radius, ccw), (start, end), magnitude, lineage, what
+        _Circle(arc_id, centre, radius, ccw),
+        (start, end),
+        magnitude,
+        lineage,
+        _ArcSource(what, grid),
     )
 
 
-def full_circle(
+def full_circle(  # noqa: PLR0913 - a circle is defined by its anchors, its direction and its identity
     arc_id: str,
     anchors: tuple[Point, Point, Point],
     ccw: bool,
     lineage: Lineage,
     what: str,
+    *,
+    grid: Grid,
 ) -> list[ArcCarrier]:
-    """A full circle through three lattice anchors, starting and ending at the first anchor."""
+    """A full circle through three lattice anchors, starting and ending at the first anchor.
+
+    ``grid`` converts a refusal's location to micrometres.
+    """
     points = [(Fraction(p[0]), Fraction(p[1])) for p in anchors]
     centre, radius = circumcircle(points[0], points[1], points[2], what)
     return _pieces(
@@ -94,7 +110,7 @@ def full_circle(
         (anchors[0], anchors[0]),
         circle_math.TWO_PI,
         lineage,
-        what,
+        _ArcSource(what, grid),
     )
 
 
@@ -108,12 +124,20 @@ class _Circle:
     ccw: bool
 
 
+@dataclass(frozen=True)
+class _ArcSource:
+    """What names the arc in a refusal, and the grid that locates it in micrometres."""
+
+    what: str
+    grid: Grid
+
+
 def _pieces(
     circle: _Circle,
     ends: tuple[Point, Point],
     magnitude: Decimal,
     lineage: Lineage,
-    what: str,
+    source: _ArcSource,
 ) -> list[ArcCarrier]:
     """Cut an arc of the given sweep into pieces of at most a quarter turn at lattice points."""
     start, end = ends
@@ -139,11 +163,11 @@ def _pieces(
                 )
             )
     points.append(end)
-    if any(p == q for p, q in zip(points, points[1:], strict=False)):
-        raise InputError(
-            f"{what}: the arc is too small for the grid (radius {float(circle.radius):.2f} grid "
-            "units); its pieces collapse onto one lattice point"
-        )
+    collapsed = next(
+        (p for p, q in zip(points, points[1:], strict=False) if p == q), None
+    )
+    if collapsed is not None:
+        raise _too_small(circle, collapsed, source)
     return [
         ArcCarrier(
             f"{circle.arc_id}/q{k}",
@@ -157,3 +181,19 @@ def _pieces(
         )
         for k, (p, q) in enumerate(zip(points, points[1:], strict=False))
     ]
+
+
+def _too_small(circle: _Circle, collapsed: Point, source: _ArcSource) -> InputError:
+    """The refusal of an arc whose pieces collapse: its size and where it is, in micrometres."""
+    grid = source.grid
+    size = grid.size_um
+
+    def point(p: tuple[Fraction, Fraction] | Point) -> str:
+        return format_point(grid.to_um(p[0]), grid.to_um(p[1]), size)
+
+    return InputError(
+        f"{source.what}: the arc is too small for the grid (radius "
+        f"{format_length(grid.to_um(circle.radius), size)}, centre {point(circle.centre)}); "
+        f"its pieces collapse onto the lattice point {point(collapsed)}. Fix the layout: "
+        "draw the arc with a radius the grid resolves, or as straight edges."
+    )

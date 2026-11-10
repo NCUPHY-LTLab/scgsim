@@ -49,7 +49,13 @@ def test_projection_keeps_port_contact_failure_and_message():
     with pytest.raises(ValueError) as error:
         apply_geometry_grid(build, GeometryGridContext(0.001))
 
-    assert str(error.value) == "port contact changed at grid: sheet, chip/other, other"
+    assert str(error.value) == (
+        "port contact changed at grid: sheet, chip/other, other on layers junction, metal "
+        "(grid g = 0.001 um): they touch along an edge after snapping at "
+        "(4.000, 2.000)..(5.000, 2.000) um; the narrowest drawn gap between them is "
+        "0.2 nm = 0.2 grid steps. Fix the layout: draw the gap or contact between them "
+        "on the grid, widening or closing it."
+    )
 
 
 def test_bound_context_mismatch_fails_before_projection():

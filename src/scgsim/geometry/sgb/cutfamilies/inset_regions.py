@@ -234,11 +234,8 @@ def _check_curve_closed(  # noqa: PLR0913 - one margin's cells, its support and 
                 f"inset family {family_id!r}: the inset curve at m = {margin * grid_um:g} um is not "
                 f"closed near ({x * grid_um:.4f}, {y * grid_um:.4f}) um: two offsets of the support "
                 "boundary neither meet nor cross there, so the band regions cannot be told apart. "
-                "An outline whose vertices turn by less than 2.8125 degrees each, as a polygon circle "
-                "with more than 128 points per full circle or a densely sampled spline has, does this: "
-                "draw curved outlines with at most 128 points per full circle, so that every vertex "
-                "turns by at least 2.8125 degrees (see 'Supported Geometry', docs/supported-geometry, "
-                "in the SCGSim documentation)"
+                "This is an SCGSim defect, not a layout rule: report it to SCGSim with the layout "
+                "(see 'When something fails', docs/supported-scope, in the SCGSim documentation)"
             )
 
 

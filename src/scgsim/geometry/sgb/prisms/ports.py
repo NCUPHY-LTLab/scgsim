@@ -36,6 +36,7 @@ from collections.abc import Sequence
 from fractions import Fraction
 from math import hypot, isfinite
 
+from scgsim.geometry.models.grid import format_box
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.physical import (
     PhysicalLayerDeclaration,
@@ -97,7 +98,7 @@ def _port_prism(
 ) -> PrismRecord:
     what = f"port sheet {region.port_sheet_id!r}"
     hosts = tuple(dict.fromkeys(o.host_semantic_id for o in region.overlaps))
-    z = _support_plane(what, hosts, representation, plan)
+    z = _support_plane(what, _place(region, grid), hosts, representation, plan)
     exterior = lattice_ring(region.exterior, grid, f"{what} exterior")
     holes = [
         lattice_ring(hole, grid, f"{what} hole {k}")
@@ -126,15 +127,32 @@ def _port_prism(
     )
 
 
+def _place(region: PortSheetRegionRecord, grid: Grid) -> str:
+    """Where a port sheet is drawn: its source layer and its bounding box in micrometres."""
+    xs = [p[0] for p in region.exterior]
+    ys = [p[1] for p in region.exterior]
+    box = format_box((min(xs), min(ys), max(xs), max(ys)), grid.size_um)
+    return f"on layer {region.source_layer} at {box}"
+
+
 def _support_plane(
     what: str,
+    place: str,
     hosts: Sequence[str],
     representation: RepresentationContext,
     plan: PhysicalRepresentationPlan,
 ) -> Fraction:
-    """The effective plane every host of the port agrees on (fail closed otherwise)."""
+    """The effective plane every host of the port agrees on (fail closed otherwise).
+
+    ``place`` says where the port sheet is drawn, for the refusals a layout author acts on.
+    """
     if not hosts:
-        raise InputError(f"{what} has no host overlap, so its plane is undefined")
+        raise InputError(
+            f"{what} has no host overlap, so its plane is undefined: the sheet {place} "
+            "overlaps no conductor of its target layer. Fix the layout or the port "
+            "declaration: draw the sheet onto the conductors it excites, or name their "
+            "layer as its target layer."
+        )
     unknown = [h for h in hosts if h not in representation.entities]
     if unknown:
         raise InputError(
@@ -147,7 +165,9 @@ def _support_plane(
     if len({z for z, _ in sources.values()}) != 1:
         raise InputError(
             f"{what} hosts do not share one authored support plane (source Z, um): "
-            f"{ {host: z for host, (z, _) in sources.items()} }"
+            f"{ {host: z for host, (z, _) in sources.items()} }; the sheet is drawn "
+            f"{place}. Fix the declarations or the layout: give the host layers one "
+            "layer_attachment_face plane, or land the sheet only on hosts of one plane."
         )
     source_z = next(iter(sources.values()))[0]
     effective = {
@@ -157,7 +177,9 @@ def _support_plane(
     if len(set(effective.values())) != 1:
         raise InputError(
             f"{what} hosts project to different effective support planes: "
-            f"{ {host: str(z) for host, z in effective.items()} }"
+            f"{ {host: str(z) for host, z in effective.items()} }; the sheet is drawn "
+            f"{place}. Fix the declarations: the physical representation must project "
+            "the hosts' shared authored plane to one effective plane."
         )
     z = next(iter(effective.values()))
     for host in hosts:

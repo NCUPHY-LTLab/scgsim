@@ -175,7 +175,7 @@ def meander_long_outline() -> Scene:
 
     Twelve U-turns of radius 25, each drawn as a circular bend with 48 points per full circle, join thirteen
     straight legs 150 um long; both ends lie on the die edge.  Every vertex on a bend turns 7.5 degrees and
-    every vertex where a bend meets a straight 3.75, inside the 128-points-per-circle rule.
+    every vertex where a bend meets a straight 3.75.
     """
     pitch, chords = 2 * MEANDER_R, MEANDER_POINTS_PER_CIRCLE // 2
     x_left, x_right = -50.0, MEANDER_LEG + 50.0
@@ -741,8 +741,8 @@ SCENES = {
 NOT_WRITTEN = {
     "cell24_sheet_circular_pad": lambda: cell24_sheet_across_gap(True),
 }
-# The spline strips as the PDK draws them (258 vertices, smallest turns 0.012 and 0.058 degrees): outside the
-# turn-per-vertex rule, refused until resampled.
+# The spline strips as the PDK draws them (258 vertices, smallest turns 0.012 and 0.058 degrees).  They build
+# with exact bands as drawn; the supported roster above carries the resampled strips.
 DRAWN_SPLINES = {
     "cell21_interpolation_drawn": lambda: cell21_spline_strip(
         "cell21_interpolation_drawn", hermite_centreline()

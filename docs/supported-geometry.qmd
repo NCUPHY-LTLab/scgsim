@@ -1,6 +1,6 @@
 ---
 title: "Supported Geometry"
-description: "The layout patterns SCGSim builds with Surface-EPR bands, each with a figure and its dimensions, and the rule for drawing curved outlines."
+description: "The layout patterns SCGSim builds with Surface-EPR bands, each with a figure and its dimensions, and the curved outlines drawn as polygons that were measured."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/supported-geometry"
@@ -131,53 +131,49 @@ Every CPW here has a 6 µm gap, and every bend a 100 µm radius.
 ![**24 Lumped sheet across a gap.** A 2 × 20 sheet over a 20 µm gap, entering pad and ground by 1 nm; square pad 200. Used by the square and flip-chip pad coupons. The same sheet across a 32-point polygon pad of r 100 is not supported: its model builds, but it cannot be written to the geometry file that meshing reads. The circular pad coupon is not this case, because it declares its pad and opening as circular arcs.](assets/supported-geometry/cell-24.svg){fig-alt="A narrow port sheet spanning the gap between a pad edge and the ground."}
 :::
 
-The PDK draws the spline strips of cell 21 with 258 points. As drawn they are
-outside the curve rule below and are refused; the samples resample them first
-(see [Known Geometry Problems](known-geometry-problems.qmd#spline-258)).
+The PDK draws the spline strips of cell 21 with 258 points. The samples
+resample them; the strips as drawn also build with exact bands (see
+[Curved outlines drawn as polygons](#curve-rule)).
 
 In cell 22 the wall's 0.2 µm thickness is thinner than either margin. Its faces
 are vertical, so no band lies on them, and the landing's bands are measured from
 the 20 µm gap only.
 
-Cells 14, 15 and 18 contain a few vertices that turn by less than 2.8125°.
-They are supported as drawn in those cells;
-[Known Geometry Problems](known-geometry-problems.qmd#small-turn-runs) lists
-them and what is not verified elsewhere.
+Cells 14, 15 and 18 contain a few vertices that turn by less than 2.8125°;
+they build with exact bands as drawn (see [Curved outlines drawn as
+polygons](#curve-rule)).
 
-## Curved outlines: at most 128 points per full circle {#curve-rule}
+## Curved outlines drawn as polygons {#curve-rule}
 
-A curve drawn as a polygon is supported when it uses at most 128 points per full
-circle. Each of its vertices then turns by at least 360° / 128 = 2.8125°. This
-is a rule about the turn at each vertex, not about edge length: a 256-point
-circle of radius 150 µm has 3.68 µm edges and is still refused.
+A curve drawn as a polygon builds with the bands of its exact erosion. SGB sets
+no minimum turn per vertex and no maximum number of points per circle: at a
+convex vertex between two straight edges, the offsets of the two edges end at
+their crossing, one shared grid point, wherever that crossing lies on both.
 
-The OrcaPen SC PDK's `curve_sampling="simulation"` profile draws 16, 24 or 32
-points per full circle, well inside the rule.
+These outlines were built and checked against the exact erosion, at margins 0.5
+and 1.0 µm:
 
-The rule was measured on regular polygon circles at margins 0.5 and 1.0 µm:
+| Outline | Turn per vertex | Measured at | Result |
+| --- | --- | --- | --- |
+| Regular polygon circle, 16, 24, 32, 64 or 128 points | 22.5° to 2.8125° | radius 5, 10, 50 and 150 µm | bands exact |
+| 128-point circle, centre off the grid at (0.3337, 0.1234) µm, rotated by 0.73°, or both (centre (12.0004, −7.7771) µm, rotated by 1.7°) | 2.8125° | radius 5, 10, 37.3, 75 and 150 µm | bands exact |
+| Regular polygon circle, 256 points | 1.41° | radius 5, 10, 50 and 150 µm | bands exact |
+| Spline strips as the PDK draws them, 258 points | down to 0.058° (interpolation) and 0.012° (B-spline) | as drawn | bands exact |
+| Euler bends and tapers of cells 14, 15 and 18 | 0.15° to 2.7° at a few vertices | as drawn | bands exact |
+| A 16-point circle of radius 50 µm with one vertex added on an edge | 2.9°, 2.7°, 1.41°, 0.3° and 0.01° convex; 2.7° and 0.01° reflex; 0° | 9.8 µm edges | bands exact |
 
-| Points per full circle | Turn per vertex | Radius 5, 10, 50 and 150 µm |
-| --- | --- | --- |
-| 16, 24, 32, 64, 128 | 22.5° to 2.8125° | builds, bands exact |
-| more than 128 | less than 2.8125° | not supported; see [denser circles](known-geometry-problems.qmd#dense-circles) |
+These are examples, not limits. The meshing cost of outlines with many more
+points per circle, with bands on, has not been measured.
 
-At 128 points the circle also builds with exact bands at radii of 5, 10, 37.3,
-75 and 150 µm when its centre is off the grid at (0.3337, 0.1234) µm, when it is
-rotated by 0.73°, and when both apply (centre (12.0004, −7.7771) µm, rotated by
-1.7°).
-
-A curve outside the rule can stop the build with this message:
+Where two neighbouring offsets still neither meet nor cross, the build stops
+with this message rather than return wrong bands:
 
 ```text
 inset family '…': the inset curve at m = … um is not closed near (x, y) um: two
 offsets of the support boundary neither meet nor cross there, so the band regions
-cannot be told apart. An outline whose vertices turn by less than 2.8125 degrees
-each, … does this: draw curved outlines with at most 128 points per full circle, …
+cannot be told apart. This is an SCGSim defect, not a layout rule: report it to
+SCGSim with the layout …
 ```
 
-### Draw a curve that fits the rule
-
-- Build PDK components for simulation with `curve_sampling="simulation"`.
-- Resample a spline so that every vertex turns by at least 2.8125°, as the
-  samples of cell 21 do.
-- Declare a circular arc as an exact arc, which SGB carries without sampling.
+A circular arc can also be declared as an exact arc, which SGB carries without
+sampling.
