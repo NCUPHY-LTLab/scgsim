@@ -336,11 +336,12 @@ def test_a_port_on_conductors_without_a_net_joins_each_end_to_its_own_conductor(
     ).passed
 
 
-def pad_in_round_opening(monkeypatch):
+def pad_in_round_opening(monkeypatch, boundary_selectors=((0.0, 0.0), (160.0, 0.0))):
     """A round pad in a round ground opening, both declared as exact circles, as the PDK's circular pad.
 
     Pad radius 100 um, opening radius 120 um, 256-sided polygons; the 2 um sheet enters the pad
-    by 1 nm at its corners and the ground by 1 nm at its centre line.
+    by 1 nm at its corners and the ground by 1 nm at its centre line.  ``boundary_selectors``
+    are the selector points of the pad's and the ground's exact boundaries.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
     import gdstk  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
@@ -427,14 +428,14 @@ def pad_in_round_opening(monkeypatch):
             {
                 "boundary_id": "PAD_OUTER",
                 "entity_id": "pad",
-                "selector_point_um": (0.0, 0.0),
+                "selector_point_um": boundary_selectors[0],
                 "role": "outer",
                 "curves": arcs(PAD_RADIUS_UM, 1),
             },
             {
                 "boundary_id": "GROUND_OPENING",
                 "entity_id": "ground",
-                "selector_point_um": ground_selector,
+                "selector_point_um": boundary_selectors[1],
                 "role": "hole",
                 "hole_index": 0,
                 "curves": arcs(ELECTRODE_X_UM, -1),
@@ -469,3 +470,22 @@ def test_a_port_ending_in_a_round_opening_meets_the_exact_arc(monkeypatch):
     assert group["area_um2"] == pytest.approx(
         (end - start) * 2 * SHEET_HALF_WIDTH_UM, abs=1e-9
     )
+
+
+def test_a_boundary_selector_inside_a_landing_end_binds_the_authored_ring(monkeypatch):
+    """A selector point a landing end piece overlaps still names one polygon: the authored one.
+
+    The pad's boundary selector lies at (99.997, 0) and the ground's at (120.0005, 0): inside the
+    drawn terminals and inside their landing end pieces.  SGB builds, and the exact arcs it
+    carries are those of the authored polygons (index 0), not of the end pieces.
+    """
+    component = pad_in_round_opening(
+        monkeypatch, boundary_selectors=((99.997, 0.0), (120.0005, 0.0))
+    )
+    nets = {"pad": ("chip/pad",), "ground": ("chip/ground",)}
+    _, _, record = prepared_port(eigenmode_sim(component, nets))
+    assert all(end["landing"] for end in record["ends"])
+    carriers = json.dumps(built_sidecar(monkeypatch, component, nets)["lineage"])
+    assert "chip/pad/polygon0/ring0/arc" in carriers
+    assert "chip/ground/polygon0/ring1/arc" in carriers
+    assert "/polygon1/ring0/arc" not in carriers

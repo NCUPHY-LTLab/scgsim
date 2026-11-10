@@ -8,7 +8,10 @@ from fractions import Fraction
 from typing import cast
 
 from scgsim.geometry.models.input import LayoutPolygonSpec
-from scgsim.geometry.models.junctions import junction_net_id
+from scgsim.geometry.models.junctions import (
+    JUNCTION_END_PIECE_PART,
+    junction_net_id,
+)
 from scgsim.geometry.planning.junction_planning.core import PRECISION_UM, plain_record
 from scgsim.geometry.planning.junction_planning.exact_geometry import (
     closed_contact,
@@ -138,6 +141,7 @@ def emit_partitions(state: JunctionModel) -> None:
                         metadata={
                             state.output_format.junction_metadata_key: jid,
                             "source_entity_id": end["source_entity_id"],
+                            "part": JUNCTION_END_PIECE_PART,
                         },
                     )
                 )

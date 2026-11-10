@@ -93,6 +93,20 @@ class RectangularJunctionSpec:
         return cls(**fields)
 
 
+# The metadata ``part`` of a polygon the junction partition derives as a terminal's end piece.
+JUNCTION_END_PIECE_PART = "junction_end_piece"
+
+
+def is_junction_end_piece(polygon: Any) -> bool:
+    """Whether a polygon is a junction end piece the partition derived, not an authored polygon.
+
+    A landing end piece overlaps its terminal, so a selector point that names the terminal's
+    authored polygon can lie inside the end piece too.  Selection by point binds authored
+    polygons only, as it did before the partition.
+    """
+    return polygon.metadata.get("part") == JUNCTION_END_PIECE_PART
+
+
 def junction_net_id(entity: Any) -> str:
     """The Net a junction terminal conductor belongs to, as SGB keys conductors.
 
