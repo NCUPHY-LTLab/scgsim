@@ -22,7 +22,7 @@ SCGSim 會準備 Palace 與 Ansys AEDT 模擬，並回傳具單位的電容、�
 uv init --python 3.12 scgsim-study
 cd scgsim-study
 uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@fb8cbe199386bbe6d81cc9c58817fbe7d339573f' \
-  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c'
+  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
 `uv` 會建立 `.venv`，並將解析後的版本寫入 `uv.lock`。把 `pyproject.toml` 和 `uv.lock` 留在研究專案中，其他電腦即可用 `uv sync` 重建環境。
@@ -152,3 +152,5 @@ uv run simplepad_q3d.py
 | 共振與 EPR | [Palace 或 HFSS 模態](docs/tutorials/resonance.qmd) · [能量參與率](docs/tutorials/resonance-epr.qmd) |
 | Driven S 參數 | [HFSS Modal 或 Terminal](docs/tutorials/scattering.qmd) |
 | 傳輸線參數 | [AEDT Q2D](docs/tutorials/transmission-line.qmd) |
+
+模擬自己的版圖之前，請先閱讀[支援範圍](docs/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。

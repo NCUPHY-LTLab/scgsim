@@ -157,6 +157,7 @@ website:
     - docs/api/input-index.qmd
     - section: 幾何與物理模型
       contents:
+      - docs/supported-scope.qmd
       - docs/geometry-sgb.qmd
       - docs/supported-geometry.qmd
       - docs/known-geometry-problems.qmd
