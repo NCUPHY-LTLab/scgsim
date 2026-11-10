@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from scgsim.meshing.driver import RoundOutcome
@@ -74,21 +75,24 @@ def features_of(*entries: dict[str, Any]) -> SidecarFeatures:
     return read_features(sidecar_with(*entries))
 
 
-def bad_element(
+def bad_element(  # noqa: PLR0913 - a test builder with independent switches
     element: int,
-    candidates: list[tuple[int, float, float]],
+    candidates: Sequence[tuple[int, float, float]] = (),
     *,
     edge_max: float = 9.0,
+    edge_min: float = 0.2,
     location: str = "curve",
     quality: float = 0.001,
+    at: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> BadElement:
-    """A bad element with candidate curves given as (tag, local edge, curve length)."""
+    """A bad element thinnest ``at``, with candidate curves given as (tag, local edge, curve length)."""
     return BadElement(
         element=element,
         quality=quality,
-        edge_min=0.2,
+        edge_min=edge_min,
         edge_max=edge_max,
-        centroid=(0.0, 0.0, 0.0),
+        centroid=at,
+        shortest_edge_midpoint=at,
         location=location,
         points=(),
         curves=tuple(t for t, _, _ in candidates),
