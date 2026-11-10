@@ -141,6 +141,39 @@ def test_a_physical_operand_whose_neck_snaps_apart_is_located_on_its_layer():
     assert on(place, (2, 1, 3, 1.0004))
 
 
+def test_two_necks_that_snap_apart_are_both_located():
+    """Three blocks joined by necks 0.4 nm wide at x = 2..3 um and x = 5..6 um."""
+    necks = (
+        (0, 0),
+        (2, 0),
+        (2, 1),
+        (3, 1),
+        (3, 0),
+        (5, 0),
+        (5, 1),
+        (6, 1),
+        (6, 0),
+        (8, 0),
+        (8, 2),
+        (6, 2),
+        (6, 1.0004),
+        (5, 1.0004),
+        (5, 2),
+        (3, 2),
+        (3, 1.0004),
+        (2, 1.0004),
+        (2, 2),
+        (0, 2),
+    )
+    with pytest.raises(ValueError) as error:
+        build_grid_arrangement(
+            (GridOperand("bridge", necks, contact=False, layer="metal"),), GRID
+        )
+    first, second = places(str(error.value))
+    assert on(first, (2, 1, 3, 1.0004))
+    assert on(second, (5, 1, 6, 1.0004))
+
+
 # -------------------------------------------------------------- contact changed at grid
 
 
@@ -319,6 +352,21 @@ def test_a_port_sheet_with_no_host_is_located_on_its_layer():
     )
     (place,) = places(message)
     assert place == (3.5, 1.0, 6.5, 3.0)
+
+
+def test_of_two_port_sheets_with_no_host_the_first_is_reported():
+    """Ports are read in source order: the first sheet without a host is the one named."""
+    effective = thin_film_pair(0.5)
+    region = replace(effective.build_input.port_sheet_regions[0], overlaps=())
+    second = replace(
+        region, port_sheet_id="second", exterior=rectangle(3.5, 5.0, 6.5, 6.0)
+    )
+    bare = replace(effective.build_input, port_sheet_regions=(region, second))
+    with pytest.raises(InputError) as error:
+        build_prism_catalogue(bare, effective.representation)
+    message = str(error.value)
+    assert "'port_sheet'" in message and "'second'" not in message
+    assert places(message) == [(3.5, 1.0, 6.5, 3.0)]
 
 
 def test_a_port_sheet_with_hosts_on_two_planes_is_located(tmp_path):
