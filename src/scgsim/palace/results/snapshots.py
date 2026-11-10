@@ -19,7 +19,7 @@ from scgsim.palace.results.surface_readers import (
     SurfaceEprReader,
     SurfaceMarginEprReader,
 )
-from scgsim.palace.results.tables import read_csv_table, requested_modes
+from scgsim.palace.results.tables import read_csv_table, read_requested_modes
 
 _ITERATION_DIR = re.compile(r"^iteration(\d+)$")
 
@@ -95,7 +95,8 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
 
     ``mode_count`` is the requested Eigenmode count when the run's config is known.
     Each pass then keeps those modes of the tables Palace wrote for every converged
-    eigenpair; without it a pass reports the rows it finds.
+    eigenpair, and a pass whose mode index is not those modes in order is unreadable.
+    Without it a pass reports the rows it finds.
     """
     results = root / "results" / "palace"
     if not results.is_dir():
@@ -273,12 +274,18 @@ def _native_iteration(problem: Any) -> int | None:
 def _read_numeric_table_columns(
     path: Path, mode_count: int | None = None
 ) -> dict[str, tuple[float, ...]] | None:
-    """Read result columns as numeric traces while excluding index and solver-error columns."""
+    """Read result columns as numeric traces while excluding index and solver-error columns.
+
+    With ``mode_count`` the table must hold the requested modes in order, so a pass
+    whose mode index is wrong is unreadable instead of reported by row position.
+    """
     if not path.is_file():
         return None
-    table = read_csv_table(path)
-    if mode_count is not None:
-        table = requested_modes(table, mode_count)
+    table = (
+        read_csv_table(path)
+        if mode_count is None
+        else read_requested_modes(path, mode_count)
+    )
     columns: dict[str, tuple[float, ...]] = {}
     for header in table.headers:
         if header in _INDEX_COLUMNS:

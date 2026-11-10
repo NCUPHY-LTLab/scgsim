@@ -345,6 +345,18 @@ def requested_modes(table: ParsedTable, mode_count: int) -> ParsedTable:
     return replace(table, rows=table.rows[:mode_count])
 
 
+def read_requested_modes(path: Path, mode_count: int) -> ParsedTable:
+    """Read an Eigenmode mode table as exactly the requested modes.
+
+    For a reader that takes columns without a family validator: once the modes
+    nobody requested are dropped, the index must be 1..N.  A table that repeats,
+    skips, reorders or lacks a requested mode is refused, never read by position.
+    """
+    table = requested_modes(read_csv_table(path), mode_count)
+    _require_ordered_index(table, "m", mode_count)
+    return table
+
+
 def configured_mode_count(config: Mapping[str, Any] | None) -> int | None:
     """Read the requested mode count of a config that an inspection may lack."""
     solver = config.get("Solver") if isinstance(config, Mapping) else None

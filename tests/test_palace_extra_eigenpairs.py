@@ -186,6 +186,37 @@ def test_an_amr_pass_read_without_a_config_reports_the_rows_it_finds(tmp_path):
     assert [len(item.frequencies_ghz) for item in collected.passes] == [3, 3]
 
 
+_BAD_INDEXES = {
+    "swapped": [1, 3, 2],
+    "reversed": [2, 1],
+    "repeated": [1, 1, 2],
+    "shifted": [2, 3],
+    "insufficient": [1],
+}
+
+
+@pytest.mark.parametrize("modes", _BAD_INDEXES.values(), ids=_BAD_INDEXES.keys())
+@pytest.mark.parametrize("family", ["eig", "port-EPR"])
+def test_an_amr_pass_without_the_requested_modes_in_order_is_unreadable(
+    tmp_path, family, modes
+):
+    """Either table alone makes its pass unreadable; nothing is read by row position."""
+    _eigenmode_run(tmp_path, [1, 2, 3])
+    results = tmp_path / "results" / "palace"
+    _write(results / "iteration1", family, modes)
+    collected = collect_amr_passes(
+        tmp_path, "Eigenmode", None, None, failed_attempt=False, mode_count=2
+    )
+    assert [item.source for item in collected.passes] == ["final"]
+    assert collected.final_snapshot_status == "readable"
+    _write(results, family, modes)
+    collected = collect_amr_passes(
+        tmp_path, "Eigenmode", None, None, failed_attempt=False, mode_count=2
+    )
+    assert collected.passes == ()
+    assert collected.final_snapshot_status == "unreadable"
+
+
 def test_the_trust_report_of_a_run_with_extra_modes_shows_the_requested_mode(tmp_path):
     """The public inspector reads the run's own config for the requested count."""
     _eigenmode_run(tmp_path, [1, 2, 3])
