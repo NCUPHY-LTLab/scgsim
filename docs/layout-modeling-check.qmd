@@ -1,18 +1,27 @@
 ---
 title: "Layout Modeling Check"
-description: "Check from a layout repository that a Palace simulation can model a layout, before any simulation is set up."
+description: "Check from a layout repository that a Palace simulation can model and mesh a layout, before any simulation is set up."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/layout-modeling-check"
 ---
 
 Each Palace simulation class has a class-level `simulation_drc()` that tells a
-layout repository whether that simulation can model its layout. It runs the
-same preparation and geometry build that the class's `mesh()` runs, then stops
-before meshing. A layout that cannot be modeled is refused with the error the
-build raises, and a layout that can be modeled returns `None`.
+layout repository whether that simulation can model and mesh its layout, and
+where to fix it when it cannot. It runs in two stages and never meshes:
 
-The check catches layout defects that stop modeling: malformed shapes,
+1. **Geometry stage.** The same preparation and geometry build that the class's
+   `mesh()` runs. A layout that cannot be built is refused with the error the
+   build raises.
+2. **Meshing stage.** Only a model that built goes on. The check measures every
+   edge and face of the built model and reports those too fine for the mesher,
+   each with its place in µm, its size, its owner and its fix. A refusal raises
+   `SimulationDrcError`.
+
+A layout that passes both stages returns a `SimulationDrcReport`, which lists
+the meshing-stage warnings.
+
+The geometry stage catches layout defects that stop modeling: malformed shapes,
 overlaps, tiny misalignments, wrong semantic declarations, port sheets that do
 not sit where they should, and Surface EPR bands that do not fit the drawn
 gaps. It does not predict the final simulation geometry. The patterns SCGSim is
@@ -37,13 +46,14 @@ from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
 def test_the_layout_can_be_modeled():
     for simulation in (EigenmodeSim, ElectrostaticSim):
-        simulation.simulation_drc(
+        report = simulation.simulation_drc(
             component,
             layer_stack=layer_stack,
             material_records=material_records,
             nets=nets,
             surface_epr_specs=surface_epr_specs,
         )
+        print(report.render_text())  # the warnings, if any
 ```
 
 Call it from the repository's tests and while the layout is being drawn. Pass
@@ -59,20 +69,66 @@ children (`chip/device` before `chip/device/pads`).
 
 Pass `nets` with the Net assignment the simulation's plan is given, in the form
 `GeometryPlan.set_nets` takes: `{"Ground": ("chip/D0_TOP_GROUND_PLANE", ...),
-...}`, with each member a qualified Entity ID under `chip`. The check then
-builds the model that simulation builds. Without `nets` no conductor has a Net,
+...}`, with each member a qualified Entity ID under `chip`. With `nets`, the
+check uses the same Net declaration as the simulation, so it builds the model
+that simulation builds. Without `nets` no conductor has a Net,
 so any two conductors that touch are refused as a different-Net contact. That
 refuses every flip-chip layout whose indium bumps join the two ground planes,
 until both planes and every bump are given as one Ground net. A contact between
 conductors of two different Nets is refused with or without `nets`.
 
 The check builds the geometry and does not mesh or solve, so it can be repeated
-as the layout changes. It stops at the first refusal. Read the message, fix the
-layout, and run it again. The [error archive](errors.qmd) records diagnostics
-seen in practice.
+as the layout changes. The geometry stage stops at its first refusal; the
+meshing stage lists every finding at once. Read the message, fix the layout,
+and run it again. The [error archive](errors.qmd) records diagnostics seen in
+practice.
 
-A refusal can also come from a defect in SGB rather than from the layout. If
-the message does not match the layout you drew, report it to SCGSim.
+A geometry-stage refusal can also come from a defect in SGB rather than from
+the layout. If the message does not match the layout you drew, report it to
+SCGSim.
+
+## What the meshing stage reports {#what-the-meshing-stage-reports}
+
+The mesher cannot fill an edge or face of a few grid steps with usable
+tetrahedra: it refines around it and new bad elements appear. Such geometry is
+valid, so the geometry stage passes it. The meshing stage reads only the
+sidecar of the built model and sorts each such edge or face into a class:
+
+| Class | What is measured | Limit | Action |
+|---|---|---|---|
+| A | a wall face whose column gap, the length of the outline edge it stands on, is short | 10 grid steps | refuse |
+| B | a horizontal face whose width 2A/P is small, or whose corner is sharp | 10 grid steps, 1° | refuse |
+| C | a horizontal edge that bounds no wall and is short | 25 grid steps | warn |
+
+These limits and actions are provisional and may change. They are held in
+`scgsim.meshing.FineStructureLimits`. Limits are in grid steps, so they
+scale with the model grid; findings give µm beside them.
+
+Each finding names its stage, class, measure and size, the SGB entity and its
+physical group, the layout objects and band requests it comes from, its
+location and box in µm, why the mesher fails on it, and the fix. Its owner
+comes from the lineage the sidecar records:
+
+- **layout**: the feature is bounded only by source curves, or it is a band
+  curve within the band's widest margin of such a feature, which the band
+  repeats. Whoever draws the layout fixes it. A fine edge or face that SGB did
+  not cause is a layout problem: SCGSim reports it and does not repair it.
+- **erosion**: band offsets of two source edges that are not neighbours meet
+  here, as when a conductor is barely wider than twice the margin. The exact
+  erosion has this structure. Change the margins in `surface_epr_specs` or the
+  conductor's width.
+- **sgb**: a band curve where the source has no fine structure. This is an SGB
+  defect; report it to SCGSim with the finding. The layout needs no change.
+
+The sidecar does not record how many edges a band's support ring has, so a
+pair of offsets from a ring's first and last edges counts as neighbours, and
+such a feature is attributed to SGB.
+
+`mesh()` reports places in the same terms. When its repair loop stops without
+a clean mesh, the error and the quality report (`stop_places`) give the µm
+location of the remaining bad elements and the meshing-stage findings at those
+places, with their owner and fix. A place is the reach of the refinement the
+loop applied there. A place with no finding is SCGSim's to answer for.
 
 ## What the check uses
 
@@ -89,13 +145,15 @@ The settings are fixed:
 - for `ElectrostaticSim`, no terminals, and an empty Surface EPR when
   `surface_epr_specs` is not given, because `mesh()` requires Surface EPR.
 
-`simulation_drc()` writes into a temporary folder and removes it. It adds no
-rules of its own and no report type, so the error is the one that class's
-`mesh()` raises for the same layout and settings.
+`simulation_drc()` writes into a temporary folder and removes it. The geometry
+stage adds no rules of its own, so its error is the one that class's `mesh()`
+raises for the same layout and settings. The meshing stage's rules are the
+classes above.
 
 ::: {.callout-note title="What a pass means"}
-A pass means the model built with the fixed settings above was accepted; it
-does not say how many bands were cut. It does not promise that other settings will model: Route A,
+A pass means the model built with the fixed settings above was accepted and
+has no edge or face that a meshing-stage class refuses; it does not say how
+many bands were cut. It does not promise that other settings will model: Route A,
 Electrostatic terminals, junctions, lumped supports, indium bumps or a
 different vacuum region. To check a specific set-up, run that simulation's own `mesh()`.
 :::

@@ -279,7 +279,7 @@ def test_the_report_records_the_recipe_the_policies_and_what_the_quality_was_mea
         budgets=Budgets(max_rounds=3),
         mesher=MesherOptions(algorithm_2d=5),
     ).report
-    assert report["report_version"] == "scgsim.meshing.report/3"
+    assert report["report_version"] == "scgsim.meshing.report/4"
     assert report["recipe"]["name"] == "features"
     assert report["recipe"]["parameters"]["max_size_divisor"] == 20.0
     assert report["repair"] == {"edge_fraction": 0.4}

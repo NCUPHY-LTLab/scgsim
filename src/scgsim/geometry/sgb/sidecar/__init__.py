@@ -84,5 +84,7 @@ Top-level fields and who uses them
     A build without a type-level request writes the same bytes as before they existed.
 ``expected``
     the expectations of ``verify_loaded`` (positions, boundaries, areas, volumes), the load check the tests
-    run; the mesher trusts the files of one build and does not read it.
+    run; the mesher trusts the files of one build and does not check them against it.  The meshing stage of
+    ``simulation_drc`` (``scgsim.meshing.check_fine_structure``) reads its positions, boundaries and face
+    areas as the geometry of the built model.
 """

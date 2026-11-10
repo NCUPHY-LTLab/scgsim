@@ -11,7 +11,6 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
 from scgsim.geometry.models.input import VacuumRegionSpec
@@ -39,6 +38,7 @@ from .config import (
     build_eigenmode_config,
     configure_numerical_controls,
 )
+from .drc import SimulationDrcReport, run_stages
 from .inputs import (
     load_stack,
     non_negative_number,
@@ -570,14 +570,20 @@ class EigenmodeSim:
         instances: Mapping[str, Any] | None = None,
         nets: Mapping[str, Sequence[str]] | None = None,
         surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
-    ) -> None:
-        """Return ``None`` when an ``EigenmodeSim`` can model ``component``; otherwise raise the error ``mesh()`` raises.
+    ) -> SimulationDrcReport:
+        """Check that an ``EigenmodeSim`` can model and mesh ``component``, in two stages, and return their report.
 
-        This runs the preparation and SGB geometry build of ``mesh()`` and stops before meshing, with fixed
-        settings: Route B, Palace's default airbox, a 1 um vacuum region when the layout has none of its own, zero coupon padding, and every authored port with a fixed inductance (the geometry never reads it).  The
-        error is the stage's own, unchanged.  The geometry is written to a temporary folder that is removed.
-        With ``surface_epr_specs`` the bands are cut as ``set_surface_epr(representation="B", specs=...)``
-        would cut them.
+        The geometry stage runs the preparation and SGB geometry build of ``mesh()``, with fixed settings:
+        Route B, Palace's default airbox, a 1 um vacuum region when the layout has none of its own, zero
+        coupon padding, and every authored port with a fixed inductance (the geometry never reads it).  A
+        layout it refuses raises the error ``mesh()`` raises, unchanged.  With ``surface_epr_specs`` the bands
+        are cut as ``set_surface_epr(representation="B", specs=...)`` would cut them.
+
+        Only a model that built goes to the meshing stage, ``scgsim.meshing.check_fine_structure``: the fine
+        edges and faces the mesher cannot use, each with its location, size, owner and fix.  A refusal there
+        raises :class:`~scgsim.palace.SimulationDrcError` carrying both stages; otherwise the
+        :class:`~scgsim.palace.SimulationDrcReport` is returned, warnings included.  Nothing is meshed, and
+        the geometry is written to a temporary folder that is removed.
 
         A pass means the layout can be modeled with these settings.  It does not promise that other
         settings (Route A, junctions, lumped supports, another vacuum region) will model; run that
@@ -614,9 +620,7 @@ class EigenmodeSim:
             )
         if surface_epr_specs is not None:
             sim.set_surface_epr(representation="B", specs=surface_epr_specs)
-        with TemporaryDirectory(prefix="scgsim-simulation-drc-") as folder:
-            # The geometry build requires an empty folder; the temporary one is, and goes away with the check.
-            sim._build_geometry(folder)  # noqa: SLF001 -- the check is a classmethod of the same class
+        return run_stages(sim._build_geometry)  # noqa: SLF001 -- the check is a classmethod of the same class
 
     def _build_geometry(self, output_dir: str | Path) -> RouteGeometry:
         """Run the preparation and SGB geometry build of ``mesh()`` into ``output_dir``, then stop.
