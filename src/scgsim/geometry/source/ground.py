@@ -9,20 +9,20 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.primitives.grid import (
     polygon_boolean,
+    polygon_rings,
     preserve_declared_source,
-    split_gdstk_cutline_loop,
 )
 from scgsim.geometry.primitives.loops import canonical_loop_sort_key
+from scgsim.geometry.primitives.planar_loops import PlanarLoop
 from scgsim.geometry.source.polygon_ops import (
     fused_gdstk_components,
     point_in_layout_polygon,
     realized_on_lattice,
-    ring_from_gdstk_polygon,
 )
 from scgsim.geometry.source.polygon_ops import (
     layout_polygon_region as layout_polygon_region,
@@ -114,10 +114,7 @@ def derived_ground_polygons(
             included.extend(layout_polygon_region(gdstk, matches[0]))
     regions = polygon_boolean(without_mask or (), tuple(included), "or", precision=1e-9)
     normalized_regions = sorted(
-        (
-            split_gdstk_cutline_loop(ring_from_gdstk_polygon(region))
-            for region in regions or ()
-        ),
+        (_region_loops(region) for region in regions or ()),
         key=lambda region: (
             canonical_loop_sort_key(region[0]),
             tuple(canonical_loop_sort_key(hole) for hole in region[1]),
@@ -186,6 +183,20 @@ def _merged_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
         precision=1e-9,
     )
     return tuple(merged or ())
+
+
+def _region_loops(region: Any) -> tuple[PlanarLoop, tuple[PlanarLoop, ...]]:
+    """Read one Boolean region's exterior and holes as planar loops.
+
+    Under a grid the Boolean already returns each region as its exterior and
+    holes, so they are read as they are. Rebuilding them from the region's
+    cutline walk loses that split: a hole that touches the exterior or another
+    hole at one vertex, and the unrounded source reference's vertex pairs one
+    float step apart, no longer form simple loops (Issue #87). Only a native
+    gdstk polygon, from an unbound Boolean, has its walk split.
+    """
+    # The grid's ring type admits points of any length; ground regions are XY.
+    return cast("tuple[PlanarLoop, tuple[PlanarLoop, ...]]", polygon_rings(region))
 
 
 def _ground_plane_bounds(

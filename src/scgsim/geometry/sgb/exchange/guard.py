@@ -9,11 +9,12 @@ writes, beside the STEP, a guard file the importer reads again before it assigns
   refuses a guard whose files changed, so a STEP is never paired with another model's sidecar.
 * **Solids.**  Per exported solid its AEDT name and its faces in OCC solid face order, each with the planned
   face id, area, centre of mass, vertex positions, vertex centroid and whether the face is curved.  A planar
-  face is identified by centre and area; a curved one by its vertices, because PyAEDT reports a vertex
-  centroid, not a centre of mass, for a curved face.  Both centres are kept so neither stands in for the
-  other.
+  face is identified by centre, area and vertices; a curved one by its vertices, because PyAEDT reports a
+  vertex centroid, not a centre of mass, for a curved face.  Both centres are kept so neither stands in for
+  the other.
 * **Free faces.**  Conductor-sheet and lumped-port faces that bound no exported solid (a Route A sheet with
-  vacuum on both sides, a port sheet that is not on a support plane; the vacuum itself is not exported).  STEP cannot carry them at micrometre scale (E4), so
+  vacuum on both sides, a port sheet that is not on a support plane; the vacuum itself is not exported).
+  STEP cannot carry them at micrometre scale (E4), so
   the guard keeps their loops as read from the written BREP -- lines and three-point circular arcs -- for the
   importer to rebuild them from SGB output, never from the layout source.
 
@@ -21,10 +22,17 @@ The guard is plain JSON: keys sorted, numbers rounded to twelve significant digi
 paths relative to the guard's folder, no timestamps.  Reading it needs no OCP.  :func:`read_step_guard`
 checks the whole structure and then the solids and free faces against the bound sidecar
 (:func:`guard_mismatches`), down to each face record being the record of the face its id names (its
-vertices and area are that planned face's, from the sidecar's ``expected`` block).  A guard edited by hand,
-even with valid file hashes, is refused rather than handing the importer a wrong face identity or boundary
-group.  The exporter runs the same check before it
-writes anything, so it never writes a guard the reader would refuse.
+vertices and area are that planned face's, from the sidecar's ``expected`` block), and each free-face loop
+being connected.  The exporter runs the same check before it writes anything, so it never writes a guard the
+reader would refuse.
+
+Two values have no planned counterpart in the sidecar, so this check cannot bind them: a planar face's
+centre of mass, and the shape between the ends of a free-face edge (line or arc, and an arc's mid point).
+So the guard is trusted as the exporter's output.  A consumer reads the guard of the export it ran, and
+binds the guard's own bytes when it keeps it across steps (the AEDT importer of #67 binds all four files by
+SHA-256).  An importer matches a planar face by centre, area *and* vertices, so a centre never decides a
+face on its own.  A guard edited by hand in those two values, with every hash left valid, is not detected
+here.
 
 The guard of ``model.step`` is ``model.step.guard.json``: the STEP's full file name is kept, so ``model.step``
 and ``model.stp`` in one folder have separate guards.
@@ -179,7 +187,11 @@ def guard_mismatches(
     the #67 decision 3 tolerances.  So a guard whose face ids were swapped is refused although every id is in
     its place.  Two faces the sidecar cannot tell apart that way (same planned vertices, areas within
     tolerance) in one solid, or among the free faces, are refused too, because their ids could not be bound.
-    The centre of mass has no planned counterpart; the importer matches it against the imported face.
+    Each free-face loop must be connected: every edge ends where the next one starts.
+
+    The centre of mass and the shape of a free-face edge between its ends have no planned counterpart and
+    are not bound here (see the module docstring); the importer matches a planar face by centre, area and
+    vertices together.
     """
     tag_of = _tags(sidecar["binding"]["ids_by_tag"]["3"])
     unknown = [s["solid"] for s in solids if s["solid"] not in tag_of]
@@ -317,7 +329,27 @@ def _free_face_mismatches(
             face["area_um2"],
             each_vertex_once=False,  # a hole touching the outer loop passes one vertex twice
         )
+        mismatches += _loop_gaps(
+            f"free face {face['face']}", face["loops"], planned_faces.tolerance_um
+        )
     return mismatches + planned_faces.indistinct("the free faces", listed)
+
+
+def _loop_gaps(
+    where: str, loops: Sequence[Sequence[LoopSegment]], tolerance_um: float
+) -> list[str]:
+    """Each place where a loop of ``where`` breaks: an edge that does not end where the next one starts."""
+    return [
+        f"{where}: loop {k} edge {i} ends at {segment['points_um'][-1]}, "
+        f"the next edge starts at {following['points_um'][0]}"
+        for k, loop in enumerate(loops)
+        for i, (segment, following) in enumerate(
+            zip(loop, [*loop[1:], *loop[:1]], strict=True)
+        )
+        if not _within(
+            segment["points_um"][-1], following["points_um"][0], tolerance_um
+        )
+    ]
 
 
 @dataclass(frozen=True)

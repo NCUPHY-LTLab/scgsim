@@ -249,6 +249,11 @@ def swap_planar_face_ids(guard):
     raise AssertionError("the example has no solid with two planar faces")
 
 
+def disconnect_loop(guard):
+    """Move the end of one free-face loop edge, keeping every start point (the vertices) and the area."""
+    guard["free_faces"][0]["loops"][0][0]["points_um"][-1][0] += 1.0
+
+
 def move_vertex_centroid(guard):
     """Move one face's vertex centroid off the mean of its vertices."""
     guard["solids"][0]["faces"][0]["vertex_centroid_um"][0] += 1.0
@@ -266,6 +271,7 @@ def move_vertex_centroid(guard):
         (swap_solid_ids, "not distinct planned solids in tag order"),
         (swap_planar_face_ids, "the recorded vertices are not those of planned face"),
         (move_vertex_centroid, "the vertex centroid is not the mean"),
+        (disconnect_loop, "loop 0 edge 0 ends at .* the next edge starts at"),
     ],
     ids=lambda v: getattr(v, "__name__", None),
 )

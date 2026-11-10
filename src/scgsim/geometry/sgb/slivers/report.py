@@ -172,9 +172,11 @@ def _area_and_perimeter(
 def _prim(topo: Topology, eid: str, sign: int) -> Prim:
     """A loop edge as an exact primitive in grid units (a segment, or the realised arc)."""
     e = topo.edges[eid]
-    v0, v1 = topo.vertices[e.v0], topo.vertices[e.v1]
-    a, b = ((v0.x, v0.y), (v1.x, v1.y)) if sign > 0 else ((v1.x, v1.y), (v0.x, v0.y))
-    ids = (e.v0, e.v1)
+    # Order the vertex ids along the loop first and read the points from them, so a reversed
+    # edge keeps each end point with its own id (the altitude fallback matches them by id).
+    ids = (e.v0, e.v1) if sign > 0 else (e.v1, e.v0)
+    start, end = topo.vertices[ids[0]], topo.vertices[ids[1]]
+    a, b = (start.x, start.y), (end.x, end.y)
     if e.curve is None:
         return Prim(a, b, ids=ids)
     c = e.curve
