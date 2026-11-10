@@ -62,8 +62,10 @@ class Budgets:
 
     The time budget is the Human's rule of 2026-11-10 (issue 124): a model whose footprint (its x by y
     extent) is at most ``time_reference_area_mm2`` must mesh within ``time_limit_seconds``, and a larger
-    one gets proportionally more.  The clock covers the whole meshing call.  A round still running at the
-    limit is stopped and the call fails with its report; it never returns a mesh below the threshold.
+    one gets proportionally more.  The clock starts with the meshing call.  The limit decides whether a
+    round may start and how long its worker may run; writing the round's request and reading its result
+    are not counted, so a result can arrive later than the limit by that much.  A round still running at
+    the limit is stopped and the call fails with its report; it never returns a mesh below the threshold.
     ``time_target_seconds`` is the good-case target on the same scale; the report says whether it was met,
     but it stops nothing.
     """
@@ -259,26 +261,28 @@ def refine_locally(
       refined over the region it covers: a fine core of half its longest edge around its centroid, which
       costs at most about (longest / shortest edge)**3 elements.
 
-    An element lies in a local size when that point is inside the size's fine core: the core did not fix
-    it, so it must get finer.  An element outside every core gets a local size of its own.  Claiming only
-    by the core lets the refinement follow a thin feature along its length.  On the flip-chip Disk Qubit
-    (issue 124), whose transmon pads have spikes one nanometre wide and over a micrometre long, claiming
-    every element within the first element's longest edge left 4 elements there after 7 rounds; claiming
-    by the core cleaned them in 2.  Refining slivers at a point only, without the wide core, left 1 to 14
-    slivers along the band edges with bands on; the wide core cleaned the default recipe's mesh in 2.
+    An element lies in a local size when the size's fine core covers what the element needs: its point,
+    and for a sliver its whole core.  The core did not fix it, so it must get finer.  An element no core
+    covers gets a local size of its own, so a sliver beside a needle is not squeezed into the needle's
+    one-element core.  Claiming only by the core lets the refinement follow a thin feature along its
+    length.  On the flip-chip Disk Qubit (issue 124), whose transmon pads have spikes one nanometre wide
+    and over a micrometre long, claiming every element within the first element's longest edge left 4
+    elements there after 7 rounds; claiming by the core cleaned them in 2.  Refining slivers at a point
+    only, without the wide core, left 1 to 14 slivers along the band edges with bands on; the wide core
+    cleaned the default recipe's mesh in 2.
 
     A local size takes the finest its elements ask for, on the ladder, and one that existed already goes
     at least one ladder step finer.  A needle core shrinks with its size, so an element it claimed at the
-    old width can fall outside the final core: such an element leaves it for a local size of its own,
-    and the size it left is sized again from the elements still inside.  Elements are taken in tag order
-    and a local size is found by its position in the list, so the same bad elements always give the same
-    sizes.
+    old width can be left uncovered by the final core: such an element leaves it for a local size of its
+    own, and the size it left is sized again from the elements still covered.  Elements are taken in tag
+    order and a local size is found by its position in the list, so the same bad elements always give the
+    same sizes.
     """
     refined = list(local)
     members: dict[int, list[_Claim]] = {}
     for element in sorted(bad, key=lambda e: e.element):
         claim = _claim(element, threshold, policy)
-        holder = _holding(refined, claim.spot)
+        holder = _holding(refined, claim)
         if holder is None:
             refined.append(claim.own_size(max_size))
             holder = len(refined) - 1
@@ -300,6 +304,14 @@ class _Claim:
     size: float
     radius: float | None  # None for a needle, whose core is as wide as its size
 
+    @property
+    def reach(self) -> float:
+        """How far from ``spot`` a core must reach to cover it: a sliver's radius, a needle's point only.
+
+        A needle's core is one element of whatever size it is given, so a core holding its point covers it.
+        """
+        return 0.0 if self.radius is None else self.radius
+
     def own_size(self, max_size: float) -> LocalSize:
         """A local size for this element alone."""
         return LocalSize(self.spot, ladder_size(self.size, max_size), self.radius)
@@ -318,10 +330,10 @@ def _settle(
     claims: list[_Claim],
     max_size: float,
 ) -> tuple[LocalSize, list[_Claim]]:
-    """The final size of one local size and the claims that fall outside its final core.
+    """The final size of one local size and the claims its final core no longer covers.
 
     Removing a claim can only make the size coarser and a needle core wider, so the claims kept stay
-    inside; the loop ends when none falls outside.
+    covered; the loop ends when every kept claim is covered.
     """
     kept = list(claims)
     while True:
@@ -329,9 +341,7 @@ def _settle(
         if previous is not None:
             size = min(size, previous.size / 2)
         settled = replace(ball, size=size)
-        outside = [
-            c for c in kept if math.dist(settled.centre, c.spot) > settled.core_radius
-        ]
+        outside = [c for c in kept if not _covers(settled, c)]
         if not outside:
             return settled, [c for c in claims if c not in kept]
         kept = [c for c in kept if c not in outside]
@@ -356,12 +366,16 @@ def wanted_size(element: BadElement, threshold: float, policy: RepairPolicy) -> 
     return policy.edge_fraction * element.edge_max * scale
 
 
-def _holding(local: list[LocalSize], point: tuple[float, float, float]) -> int | None:
-    """Index of the first local size whose fine core holds ``point``; ``None`` when none does."""
+def _holding(local: list[LocalSize], claim: _Claim) -> int | None:
+    """Index of the first local size whose fine core covers ``claim``; ``None`` when none does."""
     for index, ball in enumerate(local):
-        if math.dist(ball.centre, point) <= ball.core_radius:
+        if _covers(ball, claim):
             return index
     return None
+
+
+def _covers(ball: LocalSize, claim: _Claim) -> bool:
+    return math.dist(ball.centre, claim.spot) + claim.reach <= ball.core_radius
 
 
 def _job(inputs: RepairInputs, local: tuple[LocalSize, ...], index: int) -> MeshJob:

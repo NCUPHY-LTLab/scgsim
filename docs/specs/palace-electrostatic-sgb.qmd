@@ -91,7 +91,7 @@ prior state intact.
 |---|---|---|
 | `recipe` | `FeatureRecipe()` | Chooses the initial element sizes: `FeatureRecipe`, `GlobalSizeRecipe` or `UniformBoundaryRecipe`. |
 | `mesher` | `MesherOptions()` | Gmsh algorithms and the order of the delivered mesh: `algorithm_2d` (Gmsh's default when `None`), `algorithm_3d` (Delaunay), `geometry_order` (1) and `high_order_optimize` (`True`). |
-| `budgets` | `Budgets()` | When the repair loop gives up: `max_rounds` (8 refinement rounds), `max_tetrahedra` (2,000,000) and a time limit of `time_limit_seconds` (180 s) for a model of at most `time_reference_area_mm2` (4 mm²) in x by y, growing in proportion above that area. `time_target_seconds` (60 s, scaled the same way) is reported, not enforced. |
+| `budgets` | `Budgets()` | When the repair loop gives up: `max_rounds` (8 refinement rounds), `max_tetrahedra` (2,000,000) and a time limit of `time_limit_seconds` (180 s) for a model of at most `time_reference_area_mm2` (4 mm²) in x by y, growing in proportion above that area. The limit decides whether a round may start and how long its worker may run; writing the round's request and reading its result are not counted, so a result can arrive later than the limit by that much. `time_target_seconds` (60 s, scaled the same way) is reported, not enforced. |
 | `quality_threshold` | `0.01` | The minimum signed inverse condition number (minSICN) every tetrahedron must reach. |
 :::
 

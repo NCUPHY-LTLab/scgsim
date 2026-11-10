@@ -239,6 +239,42 @@ def test_an_existing_core_that_shrinks_away_from_its_elements_still_goes_finer()
     )
 
 
+def co_centred_needle_and_sliver(needle_tag: int, sliver_tag: int):
+    """A needle asking 0.078125 and a sliver asking 0.625 over a 3 um core, both at the origin."""
+    needle = bad_element(needle_tag, edge_max=5.0, edge_min=0.001, quality=0.0005)
+    sliver = bad_element(sliver_tag, edge_max=6.0, edge_min=2.0, quality=0.004)
+    return needle, sliver
+
+
+@pytest.mark.parametrize("needle_first", [True, False])
+def test_a_sliver_beside_a_needle_keeps_its_whole_core_refined(needle_first):
+    """The review's case: a needle's one-element core must not absorb a co-centred sliver's 3 um core.
+
+    Alone, the sliver gets 0.625 over 3 um.  Whichever element comes first, every point of that range
+    must still get 0.625 or finer, through the sliver's own size or one that covers it.
+    """
+    needle, sliver = co_centred_needle_and_sliver(*((1, 2) if needle_first else (2, 1)))
+    refined = refine_locally((), (needle, sliver), 20.0, THRESHOLD, RepairPolicy())
+    assert any(
+        ball.size <= 0.625
+        and math.dist(ball.centre, sliver.centroid) + 3.0 <= ball.core_radius
+        for ball in refined
+    )
+    assert field_at(refined, (3.0, 0.0, 0.0)) <= 0.625
+    assert field_at(refined, (0.0, 0.0, 0.0)) <= 0.078125
+
+
+def test_a_size_whose_core_covers_a_sliver_s_core_is_shared():
+    """A sliver whose whole 1 um core lies inside an existing 3 um core refines that size; no new one."""
+    existing = LocalSize((0.0, 0.0, 0.0), 1.25, 3.0)
+    # 0.5 x 2 x max(0.4, 1 / 2) = 0.5 -> 0.3125, over a 1 um core 1 um from the centre: 1 + 1 <= 3.
+    sliver = bad_element(
+        1, at=(1.0, 0.0, 0.0), edge_max=2.0, edge_min=1.0, quality=0.004
+    )
+    refined = refine_locally((existing,), (sliver,), 20.0, THRESHOLD, RepairPolicy())
+    assert refined == (LocalSize((0.0, 0.0, 0.0), 0.3125, 3.0),)
+
+
 def test_a_recipe_s_own_local_sizes_reach_every_round_unchanged(tmp_path, monkeypatch):
     """Local sizes a recipe asks for come first in every job; the loop adds its own after them."""
     recipe_size = LocalSize((5.0, 5.0, 5.0), 0.5, 2.0)

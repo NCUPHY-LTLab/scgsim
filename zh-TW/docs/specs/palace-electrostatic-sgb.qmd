@@ -61,7 +61,7 @@ prepare shared GeometryPlan snapshot
 |---|---|---|
 | `recipe` | `FeatureRecipe()` | 決定初始元素尺寸：`FeatureRecipe`、`GlobalSizeRecipe` 或 `UniformBoundaryRecipe`。 |
 | `mesher` | `MesherOptions()` | Gmsh 演算法與輸出網格的階數：`algorithm_2d`（為 `None` 時用 Gmsh 預設）、`algorithm_3d`（Delaunay）、`geometry_order`（1）與 `high_order_optimize`（`True`）。 |
-| `budgets` | `Budgets()` | 修復迴圈何時放棄：`max_rounds`（8 輪細化）、`max_tetrahedra`（2,000,000），以及時間上限：x 乘 y 範圍不超過 `time_reference_area_mm2`（4 mm²）的模型為 `time_limit_seconds`（180 秒），面積更大時按比例增加。`time_target_seconds`（60 秒，以相同比例調整）只記錄在報告中，不會中止執行。 |
+| `budgets` | `Budgets()` | 修復迴圈何時放棄：`max_rounds`（8 輪細化）、`max_tetrahedra`（2,000,000），以及時間上限：x 乘 y 範圍不超過 `time_reference_area_mm2`（4 mm²）的模型為 `time_limit_seconds`（180 秒），面積更大時按比例增加。時間上限決定一輪能否開始，以及該輪 worker 最多能執行多久；寫入該輪請求檔與讀取其結果的時間不計入，因此結果可能比時間上限晚這段時間才送達。`time_target_seconds`（60 秒，以相同比例調整）只記錄在報告中，不會中止執行。 |
 | `quality_threshold` | `0.01` | 每個四面體必須達到的最小有號反條件數（minSICN）。 |
 :::
 
