@@ -105,7 +105,7 @@ def ring_primitives(
                 piece.curve, fitting.bound_um, piece.start, piece.end
             )
         else:
-            chain = ac.naive_chain(piece.curve, fitting.bound_um)
+            chain = ac.naive_chain(piece.curve, fitting.bound_um, *_leads(piece))
         fitting.deviations_nm.append(chain.max_deviation_nm)
         fitting.kinks_rad.extend(chain.kinks_rad)
         fitting.arcs += len(chain.arcs)
@@ -127,6 +127,18 @@ def ring_primitives(
             )
     _check_closed(out)
     return out
+
+
+def _leads(piece: CurvePiece) -> tuple[Dir | None, Dir | None]:
+    """The directions of the straight leads a curve joins at its start and its end, ``None`` where it joins none.
+
+    A CPW curve (cells 13 to 15) joins a straight lead at both ends.  A curve that ends on the die edge
+    (cell 21's strip edges) meets an end cap at a corner at both ends: its ``start`` is only the direction its
+    chain leaves along, not a lead it continues.
+    """
+    if piece.end is None:
+        return None, None
+    return piece.start, piece.end
 
 
 def _check_closed(ring: list[LineEdge | ArcCarrier]) -> None:

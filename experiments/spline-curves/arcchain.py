@@ -536,8 +536,18 @@ def tangent_chain(  # noqa: PLR0913 - the curve, its bound, both end tangents an
     return Chain(tuple(arcs), deviation * GRID_UM * 1000, tuple(kinks))
 
 
-def naive_chain(curve: Curve, bound_um: float) -> Chain:
-    """Each biarc joint rounded to the lattice, each arc through its rounded ends and its old middle point."""
+def naive_chain(
+    curve: Curve,
+    bound_um: float,
+    start_tangent: tuple[Fraction, Fraction] | None = None,
+    end_tangent: tuple[Fraction, Fraction] | None = None,
+) -> Chain:
+    """Each biarc joint rounded to the lattice, each arc through its rounded ends and its old middle point.
+
+    ``start_tangent`` and ``end_tangent`` are the exact directions of the straight leads the curve joins, or
+    ``None`` where it joins none.  Rounding turns the first arc's start tangent and the last arc's end tangent
+    too, so the kinks are those at the two leads as well as at every joint between two arcs.
+    """
     pieces = fit(curve, bound_um)
     arcs: list[LatticeArc] = []
     samples = []
@@ -562,10 +572,14 @@ def naive_chain(curve: Curve, bound_um: float) -> Chain:
         uy = (a2 * (mx - bx) + b2 * (ax - mx) + m2 * (bx - ax)) / det
         arcs.append(LatticeArc(start, end, (ux, uy), lam > 0))
     kinks = []
+    if start_tangent is not None:
+        kinks.append(_angle(start_tangent, _tangent_at(arcs[0], at_end=False)))
     for first, second in zip(arcs, arcs[1:], strict=False):
         kinks.append(
             _angle(_tangent_at(first, at_end=True), _tangent_at(second, at_end=False))
         )
+    if end_tangent is not None:
+        kinks.append(_angle(_tangent_at(arcs[-1], at_end=True), end_tangent))
     deviation = max(_deviation(a, s) for a, s in zip(arcs, samples, strict=True))
     return Chain(tuple(arcs), deviation * GRID_UM * 1000, tuple(kinks))
 

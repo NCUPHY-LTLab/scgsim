@@ -57,3 +57,23 @@ issue 109 stays as measured. A rerun on this develop gives these differences:
 The with-bands mesh table of issue 109 compares polygons and arc chains, and both sides change on this
 develop; its polygon side changes the most. That comparison was not rerun with meshing here. The fit
 table is unchanged.
+
+## Correction: kinks of the naive chains
+
+Before this correction, `naive_chain` counted only the kinks between two of its arcs. Rounding the joints
+also turns the first arc's start tangent and the last arc's end tangent, so a CPW curve kinks where it
+meets its straight lead-in and lead-out too. It now takes the lead directions and counts those two joints
+as well. A curve that ends on the die edge (cell 21) meets an end cap at a corner, not a lead, so it has
+no such joint. The tangent chains leave and arrive along the leads exactly, so their counts stand.
+
+The naive scenes on develop `464ba5b`, before → after the correction (`kinks` in `summarize.py`):
+
+| scene | kinks over 10⁻⁹ rad | the 8 lead kinks | largest kink | build |
+|---|---|---|---|---|
+| `cell13_arcs_naive` | 4 → 12 | 3.3–8.0 × 10⁻⁶ rad | 4.6 × 10⁻⁵ rad, unchanged | builds |
+| `cell14_arcs_naive` | 100 → 108 | 1.4–7.2 × 10⁻⁵ rad | 8.4 × 10⁻⁴ rad, unchanged | refused, unchanged |
+| `cell15_arcs_naive` | 172 → 180 | 4.1–7.1 × 10⁻⁵ rad | 6.0 × 10⁻⁴ rad, unchanged | refused, unchanged |
+| `cell21_*_arcs_naive` | unchanged (310 and 138) | none | unchanged | refused, unchanged |
+
+The comment on issue 109 gives the naive kinks as 2 to 16 × 10⁻⁴ rad and does not mention the lead
+joints. The four naive scenes it reports are still refused, and the largest kink of each is unchanged.
