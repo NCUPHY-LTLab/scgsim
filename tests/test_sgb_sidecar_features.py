@@ -92,9 +92,9 @@ def oxide_model(route: str) -> ConformalModel:
 
 
 @pytest.fixture(scope="module")
-def sidecars() -> dict[str, dict]:
+def sidecars(emit_models) -> dict[str, dict]:
     """The sidecar of every named case, built once."""
-    return {name: sidecar_of(build()) for name, build in CASES.items()}
+    return {name: sidecar_of(model) for name, model in emit_models.items()}
 
 
 # --------------------------------------------------------------------------- shape, order, schema

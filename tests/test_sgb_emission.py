@@ -47,12 +47,6 @@ def sidecar_of(model, plan):
     return build_sidecar(model, plan, SidecarContext(sliver_report(model)["summary"]))
 
 
-@pytest.fixture(scope="module")
-def models():
-    """Every named case, built once."""
-    return {name: build() for name, build in CASES.items()}
-
-
 def written(model, tmp_path: Path, suffix: str = "xao", **options):
     """Plan and write a model; returns the plan and the path."""
     plan = plan_brep(model.topology, model.routed)
@@ -79,9 +73,9 @@ def test_the_angle_without_libm_agrees_with_atan2_to_a_few_ulps_in_every_quadran
 # --------------------------------------------------------------------------- format
 
 
-def test_file_layout_matches_the_documented_sections(tmp_path, models):
+def test_file_layout_matches_the_documented_sections(tmp_path, emit_models):
     """File layout matches the documented sections."""
-    plan, path = written(models["pad_a"], tmp_path, "brep")
+    plan, path = written(emit_models["pad_a"], tmp_path, "brep")
     lines = path.read_text().splitlines()
     assert lines[:3] == [
         "DBRep_DrawableShape",
@@ -113,9 +107,9 @@ def test_file_layout_matches_the_documented_sections(tmp_path, models):
     assert lines[-1] == "+1 0 "  # the root: the compound
 
 
-def test_tolerance_is_written_on_every_vertex_edge_and_face(tmp_path, models):
+def test_tolerance_is_written_on_every_vertex_edge_and_face(tmp_path, emit_models):
     """Tolerance is written on every vertex edge and face."""
-    model = models["pad_a"]
+    model = emit_models["pad_a"]
     plan = plan_brep(model.topology, model.routed, 2.5e-7)
     write_brep_file(plan, tmp_path / "m.brep")
     text = (tmp_path / "m.brep").read_text()
@@ -124,10 +118,10 @@ def test_tolerance_is_written_on_every_vertex_edge_and_face(tmp_path, models):
 
 
 def test_the_brep_inside_the_xao_is_the_brep_file_whether_copied_or_rendered(
-    tmp_path, models
+    tmp_path, emit_models
 ):
     """Copying the body of the BREP file into the XAO saves a second rendering and changes no byte."""
-    plan, brep = written(models["pad_b"], tmp_path, "brep")
+    plan, brep = written(emit_models["pad_b"], tmp_path, "brep")
     write_xao_file(plan, tmp_path / "copied.xao", name="m", brep=brep)
     write_xao_file(plan, tmp_path / "rendered.xao", name="m")
     assert (tmp_path / "copied.xao").read_bytes() == (
@@ -143,9 +137,11 @@ def test_the_brep_inside_the_xao_is_the_brep_file_whether_copied_or_rendered(
 
 
 @pytest.mark.parametrize("name", ["pad_a", "pad_b", "pad_c", "bridge_b"])
-def test_shared_faces_are_written_once_and_used_with_both_orientations(models, name):
+def test_shared_faces_are_written_once_and_used_with_both_orientations(
+    emit_models, name
+):
     """Shared faces are written once and used with both orientations."""
-    model = models[name]
+    model = emit_models[name]
     plan = plan_brep(model.topology, model.routed)
     uses: dict[int, int] = {}
     for shell in plan.found.shells:
@@ -161,10 +157,10 @@ def test_shared_faces_are_written_once_and_used_with_both_orientations(models, n
 
 @pytest.mark.parametrize("name", sorted(CASES))
 def test_round_trip_counts_boundaries_groups_volumes_areas_and_a_conformal_mesh(
-    tmp_path, models, name
+    tmp_path, emit_models, name
 ):
     """Open the XAO in Gmsh: verify_loaded passes on the sidecar alone, and a coarse mesh is conformal."""
-    model = models[name]
+    model = emit_models[name]
     plan, path = written(model, tmp_path, "xao")
     sidecar = sidecar_of(model, plan)
     with gmsh_session(path):
@@ -183,9 +179,9 @@ def test_round_trip_counts_boundaries_groups_volumes_areas_and_a_conformal_mesh(
     assert conformity["conformal"], conformity["problems"][:3]
 
 
-def test_the_xao_is_well_formed_and_lists_the_planned_groups(tmp_path, models):
+def test_the_xao_is_well_formed_and_lists_the_planned_groups(tmp_path, emit_models):
     """The xao is well formed and lists the planned groups."""
-    model = models["pad_b"]
+    model = emit_models["pad_b"]
     plan, path = written(model, tmp_path, "xao")
     root = ET.parse(path).getroot()
     assert {g.get("name") for g in root.find("groups")} == set(model.routed.groups)
@@ -196,9 +192,9 @@ def test_the_xao_is_well_formed_and_lists_the_planned_groups(tmp_path, models):
     assert refs == sorted(set(refs))  # strictly increasing pre-order indices
 
 
-def test_every_group_element_is_a_planned_entity_of_the_right_dimension(models):
+def test_every_group_element_is_a_planned_entity_of_the_right_dimension(emit_models):
     """Every group element is a planned entity of the right dimension."""
-    model = models["pad_b"]
+    model = emit_models["pad_b"]
     plan = plan_brep(model.topology, model.routed)
     for group in plan.groups:
         ids = plan.face_ids if group.dim == 2 else plan.solid_ids
@@ -212,10 +208,10 @@ def test_every_group_element_is_a_planned_entity_of_the_right_dimension(models):
 
 
 def test_reversed_shells_give_negative_volume_so_the_check_sees_orientation(
-    tmp_path, models
+    tmp_path, emit_models
 ):
     """Reversed shells give negative volume so the check sees orientation."""
-    model = models["pad_a"]
+    model = emit_models["pad_a"]
     plan = plan_brep(model.topology, model.routed)
     plan.found.shells = [[-ref for ref in shell] for shell in plan.found.shells]
     write_brep_file(plan, tmp_path / "bad.brep")
@@ -232,9 +228,11 @@ def _verify(plan, model, path):
         return verify_loaded(sidecar_of(model, plan), groups=False).problems
 
 
-def test_pad_b_volumes_equal_the_closed_form_including_cylinder_walls(tmp_path, models):
+def test_pad_b_volumes_equal_the_closed_form_including_cylinder_walls(
+    tmp_path, emit_models
+):
     """The substrate and the vacuum volume agree with an analytic area to 1e-12: the walls are exact cylinders."""
-    model = models["pad_b"]
+    model = emit_models["pad_b"]
     plan, path = written(model, tmp_path, "brep")
     polygon = [
         (-45, -30),
@@ -267,10 +265,10 @@ def test_pad_b_volumes_equal_the_closed_form_including_cylinder_walls(tmp_path, 
             )
 
 
-def test_every_curved_wall_is_one_cylinder_written_exactly(models):
+def test_every_curved_wall_is_one_cylinder_written_exactly(emit_models):
     """Every curved wall is one cylinder written exactly."""
     for name in ("pad_b", "pad_c", "bridge_b"):
-        model = models[name]
+        model = emit_models[name]
         plan = plan_brep(model.topology, model.routed)
         curved = [
             f
@@ -327,9 +325,9 @@ def _pcurve(rec: list[float], t: float) -> tuple[float, float]:
 
 
 @pytest.mark.parametrize("name", ["pad_b", "bridge_b", "pad_c"])
-def test_every_pcurve_lifts_onto_its_3d_curve(tmp_path, models, name):
+def test_every_pcurve_lifts_onto_its_3d_curve(tmp_path, emit_models, name):
     """Parse the written file: for each edge representation, surface(pcurve(t)) == curve(t) at both ends and the middle."""
-    _, path = written(models[name], tmp_path, "brep")
+    _, path = written(emit_models[name], tmp_path, "brep")
     sections = _sections(path)
     curves = [_numbers(x) for x in sections["Curves"]]
     pcurves = [_numbers(x) for x in sections["Curve2ds"]]
@@ -360,10 +358,10 @@ def test_every_pcurve_lifts_onto_its_3d_curve(tmp_path, models, name):
     assert checked > 0 and worst < 1e-9
 
 
-def test_pcurves_are_not_needed_for_planes_but_are_for_cylinders(tmp_path, models):
+def test_pcurves_are_not_needed_for_planes_but_are_for_cylinders(tmp_path, emit_models):
     """Measured on OCCT 7.8.1 / Gmsh 4.15.2: without pcurves planar models load and mesh, a cylinder wall fails at merge."""
     for name, expect_ok in (("bridge_b", True), ("pad_b", False)):
-        model = models[name]
+        model = emit_models[name]
         plan = plan_brep(model.topology, model.routed, pcurves=False)
         path = tmp_path / f"{name}.brep"
         write_brep_file(plan, path)
@@ -380,10 +378,10 @@ def test_pcurves_are_not_needed_for_planes_but_are_for_cylinders(tmp_path, model
 
 
 def test_output_is_byte_identical_for_every_worker_count_and_chunk_size(
-    tmp_path, models
+    tmp_path, emit_models
 ):
     """Many tiny chunks so the pool really interleaves; the bytes never change."""
-    model = models["pad_b"]
+    model = emit_models["pad_b"]
     plan = plan_brep(model.topology, model.routed)
     blobs = set()
     for workers, chunk in ((1, 40_000), (1, 7), (2, 7), (4, 3), (4, 40_000)):
@@ -412,9 +410,9 @@ PINNED_DIGESTS = {
 
 
 @pytest.mark.parametrize("name", sorted(PINNED_DIGESTS))
-def test_the_written_bytes_are_pinned_by_a_digest(tmp_path, models, name):
+def test_the_written_bytes_are_pinned_by_a_digest(tmp_path, emit_models, name):
     """The written bytes are pinned by a digest."""
-    _, path = written(models[name], tmp_path, "brep")
+    _, path = written(emit_models[name], tmp_path, "brep")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     assert digest == PINNED_DIGESTS[name], f"{name}: sha256 of the BREP is now {digest}"
 
@@ -441,9 +439,11 @@ def test_an_edge_that_leaves_its_plane_is_refused():
         plan_brep(topology, model.routed)
 
 
-def test_a_planned_id_numbered_twice_is_refused_in_every_dimension(models):
+def test_a_planned_id_numbered_twice_is_refused_in_every_dimension(emit_models):
     """Every planned id maps to exactly one native tag, so a repeated id is an error, not a quiet merge."""
-    plan = plan_brep(models["pad_b_bands"].topology, models["pad_b_bands"].routed)
+    plan = plan_brep(
+        emit_models["pad_b_bands"].topology, emit_models["pad_b_bands"].routed
+    )
     check_one_tag_per_id(plan.found)
     assert len(plan.tags()) == sum(
         len(ids)
@@ -459,9 +459,11 @@ def test_a_planned_id_numbered_twice_is_refused_in_every_dimension(models):
 # --------------------------------------------------------------------------- paths the examples do not all exercise
 
 
-def test_inner_void_shell_is_a_second_shell_with_cavity_orientation(tmp_path, models):
+def test_inner_void_shell_is_a_second_shell_with_cavity_orientation(
+    tmp_path, emit_models
+):
     """Inner void shell is a second shell with cavity orientation."""
-    model = models["void_shell_b"]
+    model = emit_models["void_shell_b"]
     plan, path = written(model, tmp_path, "brep")
     vacuum = next(
         i
@@ -480,9 +482,11 @@ def test_inner_void_shell_is_a_second_shell_with_cavity_orientation(tmp_path, mo
     assert mass == pytest.approx(40 * 40 * 10 - 12 * 8 * 0.2, rel=1e-12)
 
 
-def test_a_void_shell_with_the_outward_orientation_is_visibly_wrong(tmp_path, models):
+def test_a_void_shell_with_the_outward_orientation_is_visibly_wrong(
+    tmp_path, emit_models
+):
     """Negative control: flipping only the inner shell adds the cavity volume instead of removing it."""
-    model = models["void_shell_b"]
+    model = emit_models["void_shell_b"]
     plan = plan_brep(model.topology, model.routed)
     vacuum = next(
         i
@@ -519,10 +523,10 @@ def test_a_pinched_hole_is_written_as_two_wires_that_share_the_pinch_vertex(tmp_
 
 
 def test_refinement_only_curve_is_a_free_edge_and_is_reembedded_from_the_sidecar(
-    tmp_path, models
+    tmp_path, emit_models
 ):
     """Refinement only curve is a free edge and is reembedded from the sidecar."""
-    model = models["pad_a_refinement"]
+    model = emit_models["pad_a_refinement"]
     host = [f for f in model.topology.faces.values() if f.refinement_edges]
     assert len(host) == 1 and len(host[0].refinement_edges) == 1
     plan, path = written(model, tmp_path, "xao")
@@ -553,9 +557,9 @@ def test_refinement_only_curve_is_a_free_edge_and_is_reembedded_from_the_sidecar
 
 
 @pytest.mark.parametrize("name", ["pad_a_bands", "pad_b_bands", "pad_c_bands"])
-def test_band_faces_through_the_direct_writer(tmp_path, models, name):
+def test_band_faces_through_the_direct_writer(tmp_path, emit_models, name):
     """Per-group areas equal the plan and no triangle or tet straddles a band boundary."""
-    model = models[name]
+    model = emit_models[name]
     band_groups = [n for n in model.routed.groups if "::band=" in n]
     assert len(band_groups) == (8 if name.startswith("pad_a") else 12)
     plan, path = written(model, tmp_path, "xao")
@@ -592,7 +596,7 @@ def test_band_faces_through_the_direct_writer(tmp_path, models, name):
 
 
 def test_pad_b_bands_meshed_with_the_cheap_recipe_has_no_flat_tetrahedron(
-    tmp_path, models
+    tmp_path, emit_models
 ):
     """The 0.1 um band strips make a uniform 60 um mesh put a zero-volume tet on them; the cheap recipe does not.
 
@@ -603,7 +607,7 @@ def test_pad_b_bands_meshed_with_the_cheap_recipe_has_no_flat_tetrahedron(
     remedy is the mesher's: a maximum size of a twentieth of the bounding-box diagonal with HXT (the default
     algorithm when HXT aborts), no size field and no use of the band features.
     """
-    model = models["pad_b_bands"]
+    model = emit_models["pad_b_bands"]
     plan, path = written(model, tmp_path, "xao")
     sidecar = sidecar_of(model, plan)
     with gmsh_session(path):
@@ -622,10 +626,10 @@ def test_pad_b_bands_meshed_with_the_cheap_recipe_has_no_flat_tetrahedron(
     "name", ["pad_a", "pad_b", "pad_a_bands", "pad_a_refinement", "void_shell_b"]
 )
 def test_the_gmsh_api_oracle_agrees_on_entities_groups_and_face_areas(
-    tmp_path, models, name
+    tmp_path, emit_models, name
 ):
     """An independent bottom-up replay through Gmsh's API gives the same entities, groups and face areas."""
-    model = models[name]
+    model = emit_models[name]
     plan, path = written(model, tmp_path, "xao")
     with gmsh_session():
         oracle = emit_with_gmsh_api(model)

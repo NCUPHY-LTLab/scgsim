@@ -34,6 +34,8 @@ CROSSING_EPSILON = 1e-7
 # Grid units added on both sides of a segment's clipped y range when it is entered into the
 # crossing cells: it covers float rounding of the clip, and only ever adds candidate cells.
 CELL_PAD = 1e-6
+CELL_SIZE = 256.0
+"""Side of the broad-phase cells of the crossing check, in grid units."""
 
 
 @dataclass(frozen=True)
@@ -162,16 +164,24 @@ def face_exact_area(
 def sampled_crossings(
     arr: Arrangement, curves: list[RealisedArc | None], step: float = 8.0
 ) -> list[tuple[int, int]]:
-    """Pairs of edges whose *realised* geometry crosses, found by sampling arcs every ``step`` grid units.
+    """Pairs of edges, at least one of them an arc, whose *realised* geometry crosses.
 
-    Edges of a pair that merely share an end point are not crossings.  A float
+    Arcs are sampled every ``step`` grid units.  Two straight edges are not tested: their realised
+    geometry is their chord, and ``arrangements_planar`` proves in exact integer arithmetic that no
+    two chords cross.  Edges of a pair that merely share an end point are not crossings.  A float
     test used for validation and by the tests; it never decides topology.
     """
     polylines = [_edge_polyline(arr, curves, ei, step) for ei in range(len(arr.edges))]
-    cells = _segment_cells(polylines, 256.0)
+    is_arc = [curve is not None for curve in curves]
+    arc_cells = _segment_cells(
+        [line if arc else [] for line, arc in zip(polylines, is_arc, strict=True)],
+        CELL_SIZE,
+    )
+    straight_cells = _straight_edges_in(arc_cells, polylines, is_arc)
     found: set[tuple[int, int]] = set()
-    for members in cells.values():
-        for i, (edge_a, seg_a) in enumerate(members):
+    for cell, arc_members in arc_cells.items():
+        members = arc_members + straight_cells.get(cell, [])
+        for i, (edge_a, seg_a) in enumerate(arc_members):
             for edge_b, seg_b in members[i + 1 :]:
                 pair = (min(edge_a, edge_b), max(edge_a, edge_b))
                 if edge_a == edge_b or pair in found:
@@ -214,6 +224,22 @@ def _segment_cells(
                 polyline[segment], polyline[segment + 1], size
             ):
                 cells.setdefault(cell, []).append((edge, segment))
+    return cells
+
+
+def _straight_edges_in(
+    arc_cells: dict[tuple[int, int], list[tuple[int, int]]],
+    polylines: list[list[tuple[float, float]]],
+    is_arc: list[bool],
+) -> dict[tuple[int, int], list[tuple[int, int]]]:
+    """Every straight edge (its one segment) under each of its cells that also holds an arc segment."""
+    cells: dict[tuple[int, int], list[tuple[int, int]]] = {}
+    for edge, polyline in enumerate(polylines):
+        if is_arc[edge]:
+            continue
+        for cell in _cells_on_segment(polyline[0], polyline[1], CELL_SIZE):
+            if cell in arc_cells:
+                cells.setdefault(cell, []).append((edge, 0))
     return cells
 
 
