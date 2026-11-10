@@ -1,4 +1,4 @@
-"""Select terminal-owned residual ends on the authored corridor and grid.
+"""Select terminal-owned end pieces on the authored corridor and grid.
 
 Besides the topology of each end piece, this module owns the steps an end piece leaves on its
 terminal: where the terminal's built outline meets a sheet side (``built_outline_meetings``)
@@ -100,15 +100,22 @@ def grid_cut(index, step):
     return (requested, round(requested / PRECISION_UM))
 
 
-def end_candidate(free, own, foreign, section: EndSection):
-    """Check the selected terminal end against exact closed-contact conditions."""
+def end_candidate(sheet, own, foreign, section: EndSection):
+    """Cut the end piece from the drawn sheet and check it against exact contact conditions.
+
+    The end piece is the drawn sheet from its own end to the cut, so it overlaps its terminal
+    where the sheet lands: joined to the terminal it reaches wherever SGB builds the terminal's
+    edge, also where an exactly rebuilt arc lies beyond the drawn polygon.  It is accepted when
+    it is one piece, meets its own terminal over an area or a length, touches no other net and
+    with its terminal covers the cut edge.
+    """
     clip = (
         rectangle(0, 0, section.cut, section.width)
         if section.left
         else rectangle(section.cut, 0, section.span, section.width)
     )
     region = (
-        boolean(free, build_polygon_region(clip), "and")
+        boolean(sheet, build_polygon_region(clip), "and")
         if (section.cut > 0 if section.left else section.cut < section.span)
         else []
     )
@@ -125,10 +132,10 @@ def end_candidate(free, own, foreign, section: EndSection):
                 "components": len(end),
             },
         )
-    if end and (not positive_boundary_contact(end, own)):
+    if end and (not own_contact(end, own)):
         return (
             None,
-            {"valid": False, "reason": "end lacks positive-length own-arm contact"},
+            {"valid": False, "reason": "end lacks positive own-arm contact"},
         )
     if closed_contact(end, foreign):
         return (
@@ -141,6 +148,13 @@ def end_candidate(free, own, foreign, section: EndSection):
             {"valid": False, "reason": "designated end edge is not wholly covered"},
         )
     return (end, {"valid": True, "empty_residual": not end, "components": len(end)})
+
+
+def own_contact(end, own) -> bool:
+    """Whether an end piece meets its terminal over a positive area or along a positive length."""
+    return positive_boundary_contact(end, own) or bool(
+        boolean(build_polygon_region(end), build_polygon_region(own), "and")
+    )
 
 
 @dataclass(frozen=True)

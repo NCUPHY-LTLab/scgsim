@@ -90,8 +90,6 @@ CIRCLE_PAD = tuple(
 DIAMOND_PAD = ((10, 0), (20, 10), (10, 20), (0, 10))
 
 SIMULATIONS = [EigenmodeSim, ElectrostaticSim]
-# The Nets of the two pads: a lumped port's rectangle gives each end piece to its conductor's Net.
-TWO_NETS = {"pad": ("chip/pad",), "electrode": ("chip/electrode",)}
 
 
 def two_pads(monkeypatch, *, gap_um, port=False, pad=None):
@@ -191,14 +189,14 @@ def mesh_refusal(simulation, component, tmp_path, monkeypatch, specs=None):
 def test_a_layout_that_models_returns_none(monkeypatch, simulation, port):
     """Two separate pads on a substrate, with or without an authored port, model directly."""
     component = two_pads(monkeypatch, gap_um=10.0, port=port)
-    assert check(simulation, component, nets=TWO_NETS) is None
+    assert check(simulation, component) is None
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
 def test_a_layout_with_bands_returns_none(monkeypatch, simulation):
     """Bands cut from Surface-EPR margins fit the gap between the pads."""
     component = two_pads(monkeypatch, gap_um=10.0, port=True)
-    assert check(simulation, component, nets=TWO_NETS, surface_epr_specs=BANDED) is None
+    assert check(simulation, component, surface_epr_specs=BANDED) is None
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)

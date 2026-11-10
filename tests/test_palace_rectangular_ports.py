@@ -19,6 +19,8 @@ from scgsim.palace import EigenmodeSim
 
 PAD_RADIUS_UM = 100.0
 PAD_VERTICES = 1024
+# The PDK's circular pad draws its circles with 256 points.
+OPENING_VERTICES = 256
 ELECTRODE_X_UM = 120.0
 SHEET_HALF_WIDTH_UM = 1.0
 GRID_UM = 0.001
@@ -191,11 +193,19 @@ def assert_rectangle_along_x(exterior):
     return min(xs), max(xs)
 
 
+def end_piece(prepared, end):
+    """The emitted end piece of one partition end: its x range, y range and corner count."""
+    (polygon,) = [p for p in prepared.polygons if p.polygon_id == end["polygon_id"]]
+    xs = {x for x, _ in polygon.exterior}
+    ys = {y for _, y in polygon.exterior}
+    return (min(xs), max(xs)), (min(ys), max(ys)), len(polygon.exterior)
+
+
 @pytest.mark.parametrize("exact_arc", [False, True], ids=["polyline", "exact-arc"])
 def test_a_port_on_a_round_pad_is_a_rectangle_whose_ends_join_their_conductors(
     monkeypatch, exact_arc
 ):
-    """The port face is the central rectangle; the end piece on the pad is pad metal, the straight end empty."""
+    """The port face is the central rectangle; each end piece is the sheet beyond its cut, metal of its conductor."""
     component = pad_and_electrode(monkeypatch, round_pad=True, exact_arc=exact_arc)
     prepared, region, record = prepared_port(eigenmode_sim(component))
     start, end = assert_rectangle_along_x(region.exterior)
@@ -205,8 +215,23 @@ def test_a_port_on_a_round_pad_is_a_rectangle_whose_ends_join_their_conductors(
     pad_end, electrode_end = record["ends"]
     assert (pad_end["source_entity_id"], pad_end["net_id"]) == ("chip/pad", "pad")
     assert pad_end["polygon_id"] in entities["chip/pad"].polygon_ids
-    assert electrode_end["source_entity_id"] == "chip/electrode"
-    assert electrode_end["empty_residual"]
+    assert (electrode_end["source_entity_id"], electrode_end["net_id"]) == (
+        "chip/electrode",
+        "electrode",
+    )
+    assert electrode_end["polygon_id"] in entities["chip/electrode"].polygon_ids
+    # Each end piece is the drawn sheet from its own end to the cut, overlapping its conductor.
+    half = (-SHEET_HALF_WIDTH_UM, SHEET_HALF_WIDTH_UM)
+    assert end_piece(prepared, pad_end) == (
+        pytest.approx((PAD_RADIUS_UM - 0.1, start)),
+        half,
+        4,
+    )
+    assert end_piece(prepared, electrode_end) == (
+        pytest.approx((end, ELECTRODE_X_UM + 1.0)),
+        half,
+        4,
+    )
     # SGB builds the same rectangle as the port face: its area is the rectangle's.
     group = port_group(built_sidecar(monkeypatch, component))
     assert group["area_um2"] == pytest.approx(
@@ -253,11 +278,16 @@ def test_the_cut_on_a_round_pad_is_the_first_whose_steps_reach_the_class_a_limit
 def test_a_port_between_straight_edges_keeps_its_face_and_conductors(monkeypatch):
     """On straight edges the cuts are the conductor edges: the face and the conductors are those built before."""
     component = pad_and_electrode(monkeypatch, round_pad=False)
-    _, region, record = prepared_port(eigenmode_sim(component))
+    prepared, region, record = prepared_port(eigenmode_sim(component))
     assert assert_rectangle_along_x(region.exterior) == pytest.approx(
         (100.0, ELECTRODE_X_UM)
     )
-    assert [end["empty_residual"] for end in record["ends"]] == [True, True]
+    # The end pieces are the sheet's landings, wholly inside their conductors.
+    half = (-SHEET_HALF_WIDTH_UM, SHEET_HALF_WIDTH_UM)
+    assert [end_piece(prepared, end) for end in record["ends"]] == [
+        (pytest.approx((99.0, 100.0)), half, 4),
+        (pytest.approx((ELECTRODE_X_UM, ELECTRODE_X_UM + 1.0)), half, 4),
+    ]
     partitioned = built_sidecar(monkeypatch, component)
     monkeypatch.undo()
     # Preparation as it was before every port was partitioned: the sheet whole, its landings cut by SGB.
@@ -274,12 +304,164 @@ def test_a_port_between_straight_edges_keeps_its_face_and_conductors(monkeypatch
         }
 
     assert conductors_and_port(partitioned) == conductors_and_port(whole)
+    assert partitioned["counts"] == whole["counts"]
 
 
-def test_a_port_on_conductors_without_a_net_is_refused(monkeypatch):
-    """The end pieces join their terminal's Net, so a port between conductors without Nets is refused."""
+def test_a_port_on_conductors_without_a_net_joins_each_end_to_its_own_conductor(
+    monkeypatch,
+):
+    """A conductor without a Net is a Net of its own, keyed by its Entity, as SGB keys it."""
     component = two_pads(monkeypatch, gap_um=10.0, port=True)
-    with pytest.raises(ValueError, match=r"lumped port 'chip/P1' lands on .* no Net"):
+    plan = GeometryPlan(
+        component,
+        root_id="chip",
+        layer_stack=NO_VACUUM_STACK,
+        material_records=MATERIALS,
+        coupon_padding_um=0.0,
+    )
+    sim = EigenmodeSim()
+    sim.set_plan(plan.prepare())
+    sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
+    _, _, record = prepared_port(sim)
+    assert [(end["source_entity_id"], end["net_id"]) for end in record["ends"]] == [
+        ("chip/pad_0000", "chip/pad_0000"),
+        ("chip/electrode_0000", "chip/electrode_0000"),
+    ]
+    assert (
         EigenmodeSim.simulation_drc(
             component, layer_stack=NO_VACUUM_STACK, material_records=MATERIALS
         )
+        is None
+    )
+
+
+def pad_in_round_opening(monkeypatch):
+    """A round pad in a round ground opening, both declared as exact circles, as the PDK's circular pad.
+
+    Pad radius 100 um, opening radius 120 um, 256-sided polygons; the 2 um sheet enters the pad
+    by 1 nm at its corners and the ground by 1 nm at its centre line.
+    """
+    import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
+    import gdstk  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
+
+    monkeypatch.setattr(
+        gf.pdk,
+        "_ACTIVE_PDK",
+        gf.pdk._ACTIVE_PDK,  # noqa: SLF001 -- preserve the active PDK during test setup
+    )
+    gf.gpdk.PDK.activate()
+
+    def circle(radius):
+        return [
+            (
+                radius * math.cos(2 * math.pi * i / OPENING_VERTICES),
+                radius * math.sin(2 * math.pi * i / OPENING_VERTICES),
+            )
+            for i in range(OPENING_VERTICES)
+        ]
+
+    def arcs(radius, sign):
+        return [
+            {
+                "kind": "circular_arc",
+                "points_um": [[radius, 0], [0, sign * radius], [-radius, 0]],
+            },
+            {
+                "kind": "circular_arc",
+                "points_um": [[-radius, 0], [0, -sign * radius], [radius, 0]],
+            },
+        ]
+
+    component = gf.Component()
+    component.add_polygon(circle(PAD_RADIUS_UM), layer=(1, 0))
+    (ground,) = gdstk.boolean(
+        gdstk.rectangle((-200, -200), (200, 200)),
+        gdstk.Polygon(circle(ELECTRODE_X_UM)),
+        "not",
+    )
+    component.add_polygon(ground.points, layer=(2, 0))
+    sheet_start = math.sqrt(PAD_RADIUS_UM**2 - SHEET_HALF_WIDTH_UM**2) - 0.001
+    sheet_end = ELECTRODE_X_UM + 0.001
+    component.add_polygon(
+        [
+            (sheet_start, -SHEET_HALF_WIDTH_UM),
+            (sheet_end, -SHEET_HALF_WIDTH_UM),
+            (sheet_end, SHEET_HALF_WIDTH_UM),
+            (sheet_start, SHEET_HALF_WIDTH_UM),
+        ],
+        layer=(9, 0),
+    )
+    component.add_port(
+        name="P1",
+        center=((sheet_start + sheet_end) / 2, 0),
+        width=2 * SHEET_HALF_WIDTH_UM,
+        orientation=0,
+        layer=(9, 0),
+    )
+    ground_selector = (160.0, 0.0)
+    component.info["component_semantics"] = {
+        "schema_version": 2,
+        "conductor_regions": [
+            {
+                "semantic_id": "pad",
+                "level": "metal",
+                "gds_layer": [1, 0],
+                "geometry": {
+                    "geometry_source": "gds_polygon",
+                    "selector_point_um": (0.0, 0.0),
+                },
+            },
+            {
+                "semantic_id": "ground",
+                "level": "metal",
+                "gds_layer": [2, 0],
+                "geometry": {
+                    "geometry_source": "gds_polygon",
+                    "selector_point_um": ground_selector,
+                },
+            },
+        ],
+        "ports": [{"name": "P1", "layer": [9, 0], "target_layer": "metal"}],
+        "boundary_curves": [
+            {
+                "boundary_id": "PAD_OUTER",
+                "entity_id": "pad",
+                "selector_point_um": (0.0, 0.0),
+                "role": "outer",
+                "curves": arcs(PAD_RADIUS_UM, 1),
+            },
+            {
+                "boundary_id": "GROUND_OPENING",
+                "entity_id": "ground",
+                "selector_point_um": ground_selector,
+                "role": "hole",
+                "hole_index": 0,
+                "curves": arcs(ELECTRODE_X_UM, -1),
+            },
+        ],
+    }
+    return component
+
+
+def test_a_port_ending_in_a_round_opening_meets_the_exact_arc(monkeypatch):
+    """The ground end piece reaches the sheet's end, so it meets the exact opening, not only the polygon's chords.
+
+    Cut from the polygon alone, the end piece would touch the exact ground at one point, a
+    non-manifold pinch.  Both steps are 10 grid steps on the arcs SGB builds.
+    """
+    component = pad_in_round_opening(monkeypatch)
+    nets = {"pad": ("chip/pad",), "ground": ("chip/ground",)}
+    prepared, region, record = prepared_port(eigenmode_sim(component, nets))
+    start, end = assert_rectangle_along_x(region.exterior)
+    # The exact arcs meet y = +-1 um at 99.99499987 and 119.99583326 um, on the grid 99.995 and 119.996.
+    assert (start, end) == pytest.approx(
+        (99.995 + STEP_LIMIT_UM, 119.996 - STEP_LIMIT_UM)
+    )
+    _, ground_end = record["ends"]
+    assert end_piece(prepared, ground_end)[0] == pytest.approx(
+        (end, ELECTRODE_X_UM + 0.001)
+    )
+    group = port_group(built_sidecar(monkeypatch, component, nets))
+    assert group["area_um2"] == pytest.approx(
+        (end - start) * 2 * SHEET_HALF_WIDTH_UM, abs=1e-9
+    )

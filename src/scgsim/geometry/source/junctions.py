@@ -9,7 +9,10 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.junctions import RectangularJunctionSpec
+from scgsim.geometry.models.junctions import (
+    RectangularJunctionSpec,
+    junction_net_id,
+)
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.primitives.grid import with_input_grid
 from scgsim.geometry.source.ports import port_sheet_overlaps
@@ -126,7 +129,7 @@ def _selected_terminal_polygons(
                 "rectangular junction terminal source Entity is missing or not conductor"
             )
         if (
-            entity.net_id != terminal.net_id
+            junction_net_id(entity) != terminal.net_id
             or entity.metadata.get("source_occurrence_path")
             != terminal.source_occurrence_path
         ):

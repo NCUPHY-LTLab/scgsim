@@ -148,44 +148,46 @@ polygons](#curve-rule)).
 Palace accepts a Lumped Port or Lumped RLC only as a rectangle: it compares the
 port's bounding-box length with its length along the port direction. Each
 lumped port that an `EigenmodeSim` configures is therefore the central
-rectangle of its drawn sheet. The two pieces of the sheet outside that
-rectangle become metal of the conductors the sheet lands on: the piece at the
-start of the port direction joins that conductor and its Net, and the piece at
-the other end joins the other conductor. You draw the sheet as before, a
-rectangle that reaches into both conductors.
+rectangle of its drawn sheet. The rest of the sheet becomes metal of the
+conductors it lands on: the drawn sheet from its start to the first cut joins
+the conductor at the start of the port direction, and the sheet from the
+second cut to its end joins the other conductor. A conductor without a Net is
+a Net of its own. You draw the sheet as before, a rectangle that reaches into
+both conductors.
+
+Each end piece overlaps its conductor where the sheet lands on it, so the
+joined conductor is the conductor plus the free part of the sheet up to the
+cut, and it meets the conductor's edge wherever SGB builds that edge: also
+where an exactly declared arc lies beyond the drawn polygon, as on the inside
+of a round opening.
 
 On each end, SCGSim chooses the cut in two steps:
 
-1. It starts at the first grid step past the conductor that leaves one
-   connected end piece: the largest rectangle the sheet holds.
+1. It starts at the first grid step at or past the conductor's farthest reach
+   into the sheet: the largest rectangle the sheet holds.
 2. The end piece adds an edge to its conductor along each long side of the
    sheet, from where the conductor's outline meets that side to the cut. The
    cut moves one grid step further into the gap at a time until each such edge
    is zero or at least 10 grid steps long, so the side wall that stands on it
-   is not narrower than the fine-structure limit for side walls.
+   is not narrower than the fine-structure limit for side walls. Where the
+   conductor's own edge already runs along the side, the end piece continues
+   that edge and adds none.
 
 The outline is the one SGB builds: a conductor declared with an exact arc meets
 the side where the arc does, on the grid point SGB rounds the crossing to, not
 where its polygon does. A sheet that ends on straight conductor edges at right
-angles to it keeps the face it had: its cuts lie on those edges and its end
-pieces are empty.
+angles to it keeps the face and the conductors it had: its cuts lie on those
+edges, and its end pieces are its landings, which lie inside the conductors.
 
 For the circular pad coupon (pad radius 100 µm in a ground opening of radius
 120 µm, a 2 µm sheet, 1 nm grid):
 
 | End | The outline meets the sheet sides at | Largest rectangle | Cut taken | Edge added |
 | --- | --- | --- | --- | --- |
-| Pad, arc of radius 100 µm | x = 99.995 µm | x = 100.001 µm, edge 6 nm | x = 100.005 µm | 10 nm |
+| Pad, arc of radius 100 µm | x = 99.995 µm | x = 100.000 µm, edge 5 nm | x = 100.005 µm | 10 nm |
 | Ground opening, arc of radius 120 µm | x = 119.996 µm | x = 119.988 µm, edge 8 nm | x = 119.986 µm | 10 nm |
 
-The port is 19.981 µm long, 0.013 µm shorter than the largest rectangle.
-
-The end pieces are cut from the conductors' drawn polygons. Where a sheet ends
-inside a round opening declared as an exact arc, as on the ground of this
-coupon, the polygon's chords lie inside the opening, so the end piece meets the
-exact arc at a single point and the build stops with `NonManifoldError` at that
-point. A sheet that ends on an exact arc of a convex conductor, such as the pad,
-builds.
+The port is 19.981 µm long, 0.007 µm shorter than the largest rectangle.
 
 ## Curved outlines drawn as polygons {#curve-rule}
 

@@ -21,6 +21,7 @@ from scgsim.geometry import (
     SemanticEntitySpec,
     with_rectangular_junctions,
 )
+from scgsim.geometry.models.junctions import junction_net_id
 
 from .config import LayoutPortBinding
 
@@ -150,7 +151,7 @@ def _port_request(
             f"lumped port {name!r} must land on two conductors to be made a rectangle; "
             f"it lands on {len(hosts)}: {list(hosts)}."
         )
-    terminals = [_terminal(name, host, entities) for host in hosts]
+    terminals = [_terminal(entities[host]) for host in hosts]
     terminals.sort(key=lambda item: _along_direction(region, item.source_entity_id))
     return RectangularJunctionSpec(
         junction_id=region.port_sheet_id,
@@ -162,21 +163,12 @@ def _port_request(
     )
 
 
-def _terminal(
-    name: str, host: str, entities: Mapping[str, SemanticEntitySpec]
-) -> JunctionTerminalBinding:
-    """The terminal binding of one host conductor, which must belong to a Net."""
-    entity = entities[host]
-    if not entity.net_id:
-        # The partition gives each end piece to its terminal's Net; without one there is no owner.
-        raise ValueError(
-            f"lumped port {name!r} lands on {host!r}, which has no Net; give both conductors "
-            "of the port a Net (GeometryPlan.set_nets) so its rectangle's end pieces can join them."
-        )
+def _terminal(entity: SemanticEntitySpec) -> JunctionTerminalBinding:
+    """The terminal binding of one host conductor; one without a Net is a Net of its own."""
     return JunctionTerminalBinding(
         source_entity_id=entity.semantic_id,
         source_occurrence_path=str(entity.metadata.get("source_occurrence_path")),
-        net_id=entity.net_id,
+        net_id=junction_net_id(entity),
     )
 
 

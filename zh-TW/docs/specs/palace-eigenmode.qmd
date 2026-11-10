@@ -36,7 +36,7 @@ lang: zh-TW
 
 ## 集總埠 {#lumped-ports}
 
-每個 `add_port(..., layout_sheet=True)` 成為一列 `Boundaries.LumpedPort`，以 `L` 帶入它的 `inductance`。Palace 的均勻集總元件必須是矩形，因此 `mesh()` 以所畫薄片中央的矩形作為交給 Palace 的埠面，並把薄片的兩個端塊併入薄片所落的導體：位於埠 `Direction` 起點的導體，以及方向所指的導體。各端切線如何選擇，見[集總埠一律切成矩形](../supported-geometry.qmd#lumped-port-rectangle)。薄片必須恰好落在兩個導體上，且兩者都需要 Net（`GeometryPlan.set_nets`）；否則 `mesh()` 與 `EigenmodeSim.simulation_drc` 會引發指出該埠的 `ValueError`。
+每個 `add_port(..., layout_sheet=True)` 成為一列 `Boundaries.LumpedPort`，以 `L` 帶入它的 `inductance`。Palace 的均勻集總元件必須是矩形，因此 `mesh()` 以所畫薄片中央的矩形作為交給 Palace 的埠面，並把薄片其餘的部分併入薄片所落的導體：位於埠 `Direction` 起點的導體，以及方向所指的導體。各端切線如何選擇，見[集總埠一律切成矩形](../supported-geometry.qmd#lumped-port-rectangle)。薄片必須恰好落在兩個導體上；否則 `mesh()` 與 `EigenmodeSim.simulation_drc` 會引發指出該埠的 `ValueError`。沒有 Net 的導體自成一個 Net。
 
 ## 選取與物理意義 {#selection-and-physical-meaning}
 

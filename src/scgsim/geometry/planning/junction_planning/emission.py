@@ -8,6 +8,7 @@ from fractions import Fraction
 from typing import cast
 
 from scgsim.geometry.models.input import LayoutPolygonSpec
+from scgsim.geometry.models.junctions import junction_net_id
 from scgsim.geometry.planning.junction_planning.core import PRECISION_UM, plain_record
 from scgsim.geometry.planning.junction_planning.exact_geometry import (
     closed_contact,
@@ -15,8 +16,10 @@ from scgsim.geometry.planning.junction_planning.exact_geometry import (
     inside_ring,
     region_edges,
 )
+from scgsim.geometry.planning.junction_planning.incidence import sheet_boundary
 from scgsim.geometry.planning.junction_planning.model_checks import (
     emitted_partition_coverage,
+    fraction_area_overlap,
     fraction_boundary_contact,
     model_edge_contacts,
     model_edge_covered,
@@ -65,11 +68,21 @@ def rebuild_original_polygons(state: JunctionModel) -> None:
 
 
 def emit_partitions(state: JunctionModel) -> None:
-    """Emit central and terminal pieces with their exact source provenance."""
+    """Emit central and terminal pieces with their exact source provenance.
+
+    Each end piece emitted is the drawn sheet beyond its cut.  The free part of that piece,
+    between the sheet's terminals, is what rebuilds the terminal's support outline: the
+    terminal joined with either is the same region.
+    """
     state.additions, state.appended = ([], defaultdict(list))
     state.physical_ends = defaultdict(list)
+    owners = {entity.semantic_id: entity for entity in state.build_input.entities}
     for jid, record in state.records.items():
         parts = [state.lower(state.refine(part)) for part in state.sliced[jid]]
+        ends = [
+            state.lower(state.refine(part), simplify=True)
+            for part in state.sheet_sliced[jid]
+        ]
         central = state.lower(state.refine(state.sliced[jid][1]), simplify=True)
         if len(central) != 1 or len(central[0]) != 1 or len(central[0][0]) != 4:
             raise ValueError(
@@ -100,7 +113,7 @@ def emit_partitions(state: JunctionModel) -> None:
                 },
             )
         )
-        for n, part in ((0, parts[0]), (1, parts[2])):
+        for n, part in ((0, ends[0]), (1, ends[2])):
             end = record["ends"][n]
             if len(part) > 1:
                 raise ValueError(
@@ -117,7 +130,7 @@ def emit_partitions(state: JunctionModel) -> None:
                         sheet.layer,
                         part[0][0],
                         tuple(part[0][1:]),
-                        net_name=end["net_id"],
+                        net_name=owners[end["source_entity_id"]].net_id,
                         metadata={
                             state.output_format.junction_metadata_key: jid,
                             "source_entity_id": end["source_entity_id"],
@@ -136,7 +149,17 @@ def emit_partitions(state: JunctionModel) -> None:
             raise ValueError(
                 "numerical junction emitted partition does not cover source free boundary"
             )
+        final_sheet = state.lower(
+            state.refine(sheet_boundary(state, record["authored_polygon_id"]))
+        )
+        if not emitted_partition_coverage(
+            final_sheet, [*ends[0], (corners,), *ends[2]]
+        ):
+            raise ValueError(
+                "numerical junction emitted end pieces and rectangle do not cover the sheet"
+            )
         record["free_model_regions"] = plain_record(final_free)
+        record["sheet_model_regions"] = plain_record(final_sheet)
         record["central_model_regions"] = [[list(corners)]]
         record["proof_conditions"]["emitted_partition_coverage"] = True
         record["model_coordinate_method"] = "source_edge_incidence_and_two_cuts.v1"
@@ -250,7 +273,7 @@ def check_emitted_partitions(state: JunctionModel) -> None:
     )
     for record in state.records.values():
         conductors = [
-            (e.net_id, pid, state.actual_rings[pid])
+            (junction_net_id(e), pid, state.actual_rings[pid])
             for e in state.entities
             if e.material_kind == "conductor"
             and e.semantic_id in record["support_plane"]["eligible_entity_ids"]
@@ -295,9 +318,12 @@ def check_emitted_partitions(state: JunctionModel) -> None:
                         for part in r["ends"]
                     }
                 ]
-                if not fraction_boundary_contact([piece], arms):
+                if not (
+                    fraction_boundary_contact([piece], arms)
+                    or fraction_area_overlap([piece], arms)
+                ):
                     raise ValueError(
-                        "final model end lacks positive-length source-arm contact"
+                        "final model end lacks positive source-arm contact"
                     )
                 if closed_contact([piece], other):
                     raise ValueError("final cross-junction end contacts another net")

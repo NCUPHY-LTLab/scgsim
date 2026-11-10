@@ -16,7 +16,7 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.junctions import JunctionGeometry
+from scgsim.geometry.models.junctions import JunctionGeometry, junction_net_id
 from scgsim.geometry.planning.junction_planning.boolean_geometry import (
     boolean,
     build_polygon_region,
@@ -37,7 +37,7 @@ from scgsim.geometry.planning.junction_planning.core import (
 )
 from scgsim.geometry.planning.junction_planning.exact_geometry import (
     covered,
-    positive_boundary_contact,
+    cross,
     section,
 )
 from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
@@ -54,6 +54,7 @@ from scgsim.geometry.planning.junction_planning.selection import (
     contacts,
     end_candidate,
     grid_cut,
+    own_contact,
     side_steps,
 )
 from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
@@ -124,6 +125,7 @@ class _JunctionPartitionPlanner:
     meetings_b: dict[int, tuple[SideMeeting, ...]] = field(init=False)
     lower: int | Fraction = field(init=False)
     upper: int | Fraction = field(init=False)
+    sheet_region: Sequence[PolygonCoordinates] = field(init=False)
     free: Sequence[PolygonCoordinates] = field(init=False)
     choices: list[tuple] = field(init=False)
     checks: list[dict[str, Any]] = field(init=False)
@@ -227,7 +229,7 @@ class _JunctionPartitionPlanner:
         }
         by_net = defaultdict(list)
         for eid, polygons in self.by_entity.items():
-            by_net[self.entities[eid].net_id].extend(polygons)
+            by_net[junction_net_id(self.entities[eid])].extend(polygons)
         self.own_a, self.own_b = (
             by_net[self.junction.terminal_a_net],
             by_net[self.junction.terminal_b_net],
@@ -248,7 +250,11 @@ class _JunctionPartitionPlanner:
         self.meetings_a, self.meetings_b = (
             built_outline_meetings(
                 self.build_input,
-                (eid for eid in self.by_entity if self.entities[eid].net_id == net),
+                (
+                    eid
+                    for eid in self.by_entity
+                    if junction_net_id(self.entities[eid]) == net
+                ),
                 self.frame,
                 self.width,
             )
@@ -276,9 +282,9 @@ class _JunctionPartitionPlanner:
                         raise ValueError(
                             "unsupported corridor side-boundary metal contact"
                         )
-        sheet_region = build_polygon_region(rectangle(0, 0, self.span, self.width))
+        self.sheet_region = build_polygon_region(rectangle(0, 0, self.span, self.width))
         self.free = boolean(
-            sheet_region, build_polygon_region([*self.own_a, *self.own_b]), "not"
+            self.sheet_region, build_polygon_region([*self.own_a, *self.own_b]), "not"
         )
         corridor = build_polygon_region(
             rectangle(self.lower, 0, self.upper, self.width)
@@ -371,7 +377,7 @@ class _JunctionPartitionPlanner:
         requested, cut = grid_cut(index, self.step)
         left = side.left
         end, evidence = end_candidate(
-            self.free,
+            self.sheet_region,
             side.own,
             side.foreign,
             EndSection(cut, self.span, self.width, left=left),
@@ -394,7 +400,11 @@ class _JunctionPartitionPlanner:
         return end
 
     def check_partition(self):
-        """Check closed endpoint contacts, open sides and exact partition coverage."""
+        """Check closed endpoint contacts, open sides and that the three pieces partition the sheet.
+
+        The two end pieces and the central rectangle cover the drawn sheet once; the free part
+        of the sheet, between the two terminals, lies within them.
+        """
         for y in (0, self.width):
             for rings in [
                 *self.own_a,
@@ -422,7 +432,7 @@ class _JunctionPartitionPlanner:
             build_polygon_region(self.end_b),
         ]
         union = boolean([p for part in parts for p in part], [], "or")
-        if boolean(union, self.free, "xor") or any(
+        if boolean(union, self.sheet_region, "xor") or any(
             (boolean(parts[i], parts[j], "and") for i, j in ((0, 1), (0, 2), (1, 2)))
         ):
             raise ValueError(
@@ -430,7 +440,7 @@ class _JunctionPartitionPlanner:
             )
 
     def record_ends(self):
-        """Bind terminal residuals to their unique source Entity/material lineage."""
+        """Bind each end piece to its unique source Entity/material lineage."""
         self.end_records = []
         for label, end, _own, cut, net in (
             ("A", self.end_a, self.own_a, self.a, self.junction.terminal_a_net),
@@ -439,9 +449,9 @@ class _JunctionPartitionPlanner:
             owners = [
                 eid
                 for eid, polygons in self.by_entity.items()
-                if self.entities[eid].net_id == net
+                if junction_net_id(self.entities[eid]) == net
                 and (
-                    positive_boundary_contact(end, polygons)
+                    own_contact(end, polygons)
                     if end
                     else covered(polygons, 0, cut, 0, self.width)
                 )
@@ -552,7 +562,9 @@ class _JunctionPartitionPlanner:
         if context is not None:
             from scgsim.geometry.source.grid import apply_geometry_grid  # noqa: PLC0415 -- retain the conditional grid-realization dependency and its failure boundary.
 
-            self.result = apply_geometry_grid(self.result, context)
+            self.result = _straight_end_pieces(
+                apply_geometry_grid(self.result, context), self.records
+            )
             actual = {p.polygon_id: p for p in self.result.polygons}
             for junction in self.junctions:
                 record = self.records[junction.junction_id]
@@ -571,7 +583,7 @@ class _JunctionPartitionPlanner:
                     emitted = [(p.exterior, *p.holes) for p in ends]
                     emitted.append((polygon.exterior, *polygon.holes))
                     if not emitted_partition_coverage(
-                        record["free_model_regions"], emitted
+                        record["sheet_model_regions"], emitted
                     ):
                         raise ValueError(
                             "junction grid realization changes partition coverage"
@@ -607,3 +619,42 @@ class _JunctionPartitionPlanner:
                         end["model_regions"] = [
                             [list(piece.exterior), *map(list, piece.holes)]
                         ]
+
+
+def _straight_end_pieces(result: GeometryBuildInput, records) -> GeometryBuildInput:
+    """The grid-realized input with every end piece cleared of collinear vertices.
+
+    The grid realization nodes a polygon wherever another polygon's vertex lies on its edge.
+    An end piece overlaps its terminal, so the drawn terminal's vertices on the sheet sides
+    land on the end piece's side edges.  SGB would keep each as a corner between two
+    carriers and split the side wall standing there; without them the region is the same.
+    """
+    ids = {
+        end["polygon_id"]
+        for record in records.values()
+        for end in record["ends"]
+        if end["polygon_id"]
+    }
+    return replace(
+        result,
+        polygons=tuple(
+            replace(
+                polygon,
+                exterior=_without_collinear(polygon.exterior),
+                holes=tuple(_without_collinear(hole) for hole in polygon.holes),
+            )
+            if polygon.polygon_id in ids
+            else polygon
+            for polygon in result.polygons
+        ),
+    )
+
+
+def _without_collinear(ring):
+    exact = [tuple(Fraction(str(v)) for v in point) for point in ring]
+    count = len(ring)
+    return tuple(
+        ring[n]
+        for n in range(count)
+        if cross(exact[n - 1], exact[n], exact[(n + 1) % count]) != 0
+    )

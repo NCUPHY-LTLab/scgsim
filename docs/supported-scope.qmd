@@ -115,7 +115,7 @@ SGB classes named in the table (`InputError`, `UnsupportedCurveError`,
 | A port sheet overlaps at least one host conductor, and its hosts share one support plane. | The port lies on the surface under its hosts; without a host, or with hosts on two planes, its plane is undefined. | `InputError` at build | [Eigenmode contract](specs/palace-eigenmode.qmd) |
 | A port sheet is not covered entirely by its hosts. | A sheet wholly on metal has nothing left to excite. | `InputError` at build ("… has no active remainder") | [Eigenmode contract](specs/palace-eigenmode.qmd) |
 | A port sheet overlaps no other sheet. | Each point of a sheet must belong to one port. | `OverlapError` at build | [Eigenmode contract](specs/palace-eigenmode.qmd) |
-| A lumped port's sheet lands on exactly two conductors, and each of them has a Net. | The port is the central rectangle of the sheet; the piece at each end joins that end's conductor and Net. | `ValueError` at build, naming the port | [Lumped ports are made rectangles](supported-geometry.qmd#lumped-port-rectangle) |
+| A lumped port's sheet lands on exactly two conductors. A conductor without a Net is a Net of its own. | The port is the central rectangle of the sheet; the piece at each end joins that end's conductor. | `ValueError` at build, naming the port | [Lumped ports are made rectangles](supported-geometry.qmd#lumped-port-rectangle) |
 | Between its two conductors the sheet crosses a clear gap: across its full width it touches no metal there, and no third conductor touches it. | The rectangle and its two end pieces are cut across that gap. | `ValueError` at build from the rectangle cut, for example "unsupported junction contact ordering or clear corridor" | [Lumped ports are made rectangles](supported-geometry.qmd#lumped-port-rectangle) |
 
 ### Surface-EPR margins {#rules-margins}
@@ -133,8 +133,9 @@ On a layout that follows every rule above, SCGSim guarantees:
 
 - **The declared geometry, on the grid.** Every Entity is built as declared, with
   its vertices on the grid. Nothing is added, merged or removed, except that the
-  two end pieces of each lumped-port sheet join the conductors the sheet lands
-  on, as [Lumped ports are made rectangles](supported-geometry.qmd#lumped-port-rectangle)
+  parts of each lumped-port sheet outside its central rectangle join the
+  conductors the sheet lands on, as
+  [Lumped ports are made rectangles](supported-geometry.qmd#lumped-port-rectangle)
   describes.
 - **Bands that match the exact geometry.** Each band's area agrees with the exact
   erosion of the same polygons within the grid's snap bound, as

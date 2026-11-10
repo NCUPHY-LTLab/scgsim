@@ -66,12 +66,12 @@ owns the shared mesh controls and config controls.
 Each `add_port(..., layout_sheet=True)` becomes one `Boundaries.LumpedPort` row
 that carries its `inductance` as `L`. Palace's uniform lumped element must be a
 rectangle, so `mesh()` gives Palace the central rectangle of the drawn sheet as
-the port face and joins the two end pieces of the sheet to the conductors it
-lands on: the conductor at the start of the port `Direction` and the one it
-points to. [Lumped ports are made rectangles](../supported-geometry.qmd#lumped-port-rectangle)
-states how each cut is chosen. The sheet must land on exactly two conductors,
-and each needs a Net (`GeometryPlan.set_nets`); otherwise `mesh()` and
-`EigenmodeSim.simulation_drc` raise `ValueError` naming the port.
+the port face and joins the rest of the sheet to the conductors it lands on:
+the conductor at the start of the port `Direction` and the one it points to.
+[Lumped ports are made rectangles](../supported-geometry.qmd#lumped-port-rectangle)
+states how each cut is chosen. The sheet must land on exactly two conductors;
+otherwise `mesh()` and `EigenmodeSim.simulation_drc` raise `ValueError` naming
+the port. A conductor without a Net is a Net of its own.
 
 ## Selection and physical meaning
 

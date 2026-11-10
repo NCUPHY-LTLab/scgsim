@@ -7,12 +7,16 @@ from collections import defaultdict
 from fractions import Fraction
 from itertools import pairwise
 
+import gdstk
+
+from scgsim.geometry.planning.junction_planning.core import PRECISION_UM
 from scgsim.geometry.planning.junction_planning.exact_geometry import (
     covered,
     on,
     region_edges,
     section,
 )
+from scgsim.geometry.primitives.grid import polygon_boolean
 from scgsim.geometry.primitives.planar_loops import cancel_reversed_planar_edges
 
 
@@ -39,6 +43,26 @@ def fraction_boundary_contact(left, right):
             for x0, x1 in a[key]
             for y0, y1 in b[key]
         )
+    )
+
+
+def fraction_area_overlap(left, right):
+    """Test whether emitted regions overlap over a positive area (an end piece on its terminal)."""
+
+    def native(regions):
+        polygons = []
+        for region in regions:
+            outer, *holes = (
+                gdstk.Polygon([(float(point[0]), float(point[1])) for point in ring])
+                for ring in region
+            )
+            polygons.extend(
+                polygon_boolean([outer], holes, "not", precision=PRECISION_UM) or ()
+            )
+        return polygons
+
+    return bool(
+        polygon_boolean(native(left), native(right), "and", precision=PRECISION_UM)
     )
 
 

@@ -93,6 +93,14 @@ class RectangularJunctionSpec:
         return cls(**fields)
 
 
+def junction_net_id(entity: Any) -> str:
+    """The Net a junction terminal conductor belongs to, as SGB keys conductors.
+
+    A conductor without a declared Net is a Net of its own, named by its Entity.
+    """
+    return entity.net_id or entity.semantic_id
+
+
 @dataclass(frozen=True)
 class JunctionGeometry:
     """Geometry algorithm input without solver inductance or capacitance settings."""
