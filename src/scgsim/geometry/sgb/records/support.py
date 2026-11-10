@@ -214,7 +214,9 @@ class _OriginGrid:
     A query visits the cells in square rings around its own cell, nearest ring first, and stops once
     every primitive not yet met is farther away than the best distance found.  The result is the minimum
     of :func:`distance_to_primitive` over a set that contains the nearest primitive, so it is the same
-    float as the minimum over all origins.
+    float as the minimum over all origins.  Only the cells of the occupied column and row range are ever
+    visited, so a query far outside the origins (a large interface measured from one small conductor)
+    costs at most the grid's own cell count, wherever it lies.
     """
 
     def __init__(self, origins: tuple[RingPrimitive, ...]) -> None:
@@ -244,6 +246,14 @@ class _OriginGrid:
     def nearest(self, x: float, y: float) -> float:
         """Distance from ``(x, y)`` to the nearest origin."""
         column, row = self._cell(x), self._cell(y)
+        # No origin lies in a ring nearer than the occupied range, nor beyond its far corner.
+        first_ring = max(
+            self.columns[0] - column,
+            column - self.columns[1],
+            self.rows[0] - row,
+            row - self.rows[1],
+            0,
+        )
         last_ring = max(
             abs(column - self.columns[0]),
             abs(column - self.columns[1]),
@@ -252,13 +262,13 @@ class _OriginGrid:
         )
         best = math.inf
         met: set[int] = set()
-        for ring in range(last_ring + 1):
+        for ring in range(first_ring, last_ring + 1):
             # A primitive first met in this ring lies in cells of this ring or farther out, so at least
             # (ring - 1) cells from the point, wherever it sits in its own cell.  Stopping one ring later
             # than that leaves a whole cell for float rounding of the boxes and the distances.
             if (ring - 2) * self.size > best:
                 break
-            for cell in _ring_cells(column, row, ring):
+            for cell in _ring_cells((column, row), ring, self.columns, self.rows):
                 for index in self.cells.get(cell, ()):
                     if index not in met:
                         met.add(index)
@@ -281,18 +291,31 @@ def _bounding_box(prim: RingPrimitive) -> tuple[float, float, float, float]:
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def _ring_cells(column: int, row: int, ring: int) -> list[tuple[int, int]]:
-    """The cells at Chebyshev distance ``ring`` from ``(column, row)``."""
+def _ring_cells(
+    centre: tuple[int, int],
+    ring: int,
+    columns: tuple[int, int],
+    rows: tuple[int, int],
+) -> list[tuple[int, int]]:
+    """The cells at Chebyshev distance ``ring`` from ``centre`` that lie in the given column and row range."""
+    column, row = centre
     if ring == 0:
-        return [(column, row)]
-    top_and_bottom = [
+        return [centre]
+    first_column, last_column = (
+        max(columns[0], column - ring),
+        min(columns[1], column + ring),
+    )
+    first_row, last_row = max(rows[0], row - ring + 1), min(rows[1], row + ring - 1)
+    cells = [
         (c, r)
-        for c in range(column - ring, column + ring + 1)
         for r in (row - ring, row + ring)
+        if rows[0] <= r <= rows[1]
+        for c in range(first_column, last_column + 1)
     ]
-    sides = [
+    cells.extend(
         (c, r)
-        for r in range(row - ring + 1, row + ring)
         for c in (column - ring, column + ring)
-    ]
-    return top_and_bottom + sides
+        if columns[0] <= c <= columns[1]
+        for r in range(first_row, last_row + 1)
+    )
+    return cells
