@@ -20,7 +20,6 @@ from scgsim.aedt.specs.epr import (
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
 )
-from scgsim.geometry.models.lumped import LumpedSupport
 
 from .eigenmode import EigenmodeSim
 from .epr.analysis import combine_epr_mode, combine_surface_epr_mode, reanalyze_epr
@@ -89,7 +88,6 @@ __all__ = [
     "HfssDrivenMode",
     "HfssDrivenSpec",
     "HfssDrivenGeometrySpec",
-    "LumpedSupport",
     "LumpedRlc",
     "LumpedTerminalPort",
     "HfssEigenmodeSpec",

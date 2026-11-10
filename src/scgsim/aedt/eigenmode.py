@@ -213,11 +213,11 @@ class EigenmodeSim:
         self._invalidate_model()
 
     def add_lumped_rlc(self, treatment: LumpedRlc) -> None:
-        """Apply an electrical treatment to an explicitly declared neutral support."""
+        """Apply an electrical treatment to one lumped-port sheet of the plan."""
         if not isinstance(treatment, LumpedRlc):
             raise TypeError("treatment must be LumpedRlc")
-        if treatment.support_id in {item.support_id for item in self.lumped_rlcs}:
-            raise ValueError("support already has an RLC treatment")
+        if treatment.port_sheet_id in {item.port_sheet_id for item in self.lumped_rlcs}:
+            raise ValueError("port sheet already has an RLC treatment")
         self.lumped_rlcs = (*self.lumped_rlcs, treatment)
         self._invalidate_model()
 

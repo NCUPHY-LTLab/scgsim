@@ -21,12 +21,12 @@ from scgsim.aedt.runtime.native.common import (
     detached_data,
 )
 from scgsim.aedt.runtime.native.hfss_geometry import native_conductor_objects
-from scgsim.aedt.runtime.native.hfss_lumped import assign_terminal_lumped
 from scgsim.aedt.specs.common import (
     LumpedTerminalPort,
     ModalPort,
     TerminalPort,
 )
+from scgsim.aedt.specs.geometry import NATIVE_LUMPED_REFUSAL
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
     HfssDrivenSpec,
@@ -37,11 +37,11 @@ from scgsim.aedt.specs.hfss import (
 def assign_body_terminal_ports(
     hfss: Any, spec: HfssDrivenGeometrySpec, geometry: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    """Use authored Entities and supports; AutoIdentify does not author ownership."""
+    """Use authored Entities; AutoIdentify does not author ownership.
 
-    supports = {
-        item["support_id"]: item for item in geometry.get("lumped_supports", ())
-    }
+    A ``LumpedTerminalPort`` names a port sheet, which the native builder does not have; its spec is
+    refused before this runs (issue #67 decision 8).
+    """
     records = []
     for port in spec.ports:
         record: dict[str, Any] = {}
@@ -57,14 +57,7 @@ def assign_body_terminal_ports(
                 spec.geometry, geometry, reference_ids
             )
             if isinstance(port, LumpedTerminalPort):
-                support = supports[port.support_id]
-                record = assign_terminal_lumped(
-                    hfss,
-                    hfss.modeler[support["object_name"]],
-                    port,
-                    reference_objects=references,
-                )
-                record["support"] = detached_data(support)
+                raise ValueError(NATIVE_LUMPED_REFUSAL)
             else:
                 region = hfss.modeler["Region"]
                 faces = [

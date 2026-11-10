@@ -39,7 +39,6 @@ from scgsim.geometry.models.input import (
     SourceCurveSpec,
     VacuumRegionSpec,
 )
-from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalLayerDeclaration,
@@ -97,7 +96,6 @@ __all__ = [
     "InterfaceKindLiteral",
     "InterfacePlanRecord",
     "LayoutPolygonSpec",
-    "LumpedSupport",
     "MMContactRecord",
     "PathInput",
     "PointPlanRecord",

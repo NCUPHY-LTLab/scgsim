@@ -37,7 +37,7 @@ from scgsim.aedt.specs.common import (
     text_value,
     validate_region_padding,
 )
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
+from scgsim.aedt.specs.geometry import NATIVE_LUMPED_REFUSAL, PreparedPlanarGeometry
 from scgsim.aedt.specs.hfss_common import (
     FrequencySweepSpec,
     HfssRunControl,
@@ -499,15 +499,11 @@ def _validate_driven_geometry_ports(spec: HfssDrivenGeometrySpec) -> None:
         or len({port.name for port in ports}) != 2
     ):
         raise ValueError("V1 requires unique ordered ports 1 and 2")
-    supports = {
-        item["support_id"]: item
-        for item in spec.geometry.source.get("lumped_supports", ())
-    }
     conductor_ids = {item["semantic_id"] for item in spec.geometry.source["conductors"]}
     conductor_ids.update(
         item["source_semantic_id"] for item in spec.geometry.source["conductors"]
     )
-    _validate_driven_port_bindings(spec, ports, supports, conductor_ids)
+    _validate_driven_port_bindings(spec, ports, conductor_ids)
     if all(isinstance(port, TerminalPort) for port in ports):
         terminal_ports = cast(tuple[TerminalPort, ...], ports)
         if {port.side for port in terminal_ports} != {"-X", "+X"}:
@@ -529,22 +525,12 @@ def _validate_driven_geometry_ports(spec: HfssDrivenGeometrySpec) -> None:
 def _validate_driven_port_bindings(
     spec: HfssDrivenGeometrySpec,
     ports: tuple[TerminalPort | LumpedTerminalPort, ...],
-    supports: dict[str, Any],
     conductor_ids: set[str],
 ) -> None:
     for port in ports:
         if isinstance(port, LumpedTerminalPort):
-            support = supports.get(port.support_id)
-            if support is None:
-                raise ValueError(f"terminal support {port.support_id!r} is missing")
-            original = support["source"]
-            if port.signal_entity_ids != tuple(
-                original["terminal_a_entity_ids"]
-            ) or port.reference_entity_ids != tuple(original["terminal_b_entity_ids"]):
-                raise ValueError(
-                    "lumped terminal ownership differs from ordered source contacts"
-                )
-        elif isinstance(port, TerminalPort):
+            raise ValueError(NATIVE_LUMPED_REFUSAL)
+        if isinstance(port, TerminalPort):
             if not port.signal_entity_ids or not set(port.signal_entity_ids).issubset(
                 conductor_ids
             ):

@@ -1,7 +1,8 @@
 """The AEDT SGB import's geometry rules that need no AEDT session.
 
 * the free-face loop drawn as one closed AEDT polyline, and its segment lengths;
-* the junction current line read from a port face's own edges;
+* the junction current line read from a port face's own edges, and a generic RLC's native branches;
+* the refusal of a port sheet with no treatment, and of lumped ports, before AEDT is touched;
 * which imported copy of a face each Surface-EPR row integrates, and the ``surface``/``adjacent`` choice by
   sidecar group, on the guard and sidecar of real SGB builds (``occt``).
 
@@ -33,10 +34,13 @@ from scgsim.aedt.runtime.families.sgb_import import (  # noqa: E402
     ImportedSgbModel,
     SgbImportError,
     current_line_um,
+    import_sgb_model,
     polyline_of_loop,
     q3d_net_roles,
+    rlc_branches,
     segment_length_um,
 )
+from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort  # noqa: E402
 from scgsim.geometry.surface_epr import normalize_surface_epr_specs  # noqa: E402
 
 pytestmark = pytest.mark.occt
@@ -114,20 +118,24 @@ def test_a_port_end_with_a_gap_is_refused():
 
 @pytest.fixture(scope="module")
 def models(tmp_path_factory):
-    """The Route C and Route A models of one junction pair with MA, MS and SA bands."""
+    """The Route C and Route A models of one junction pair with MA, MS and SA bands, and Route A with a bump."""
     film = {"film_thickness_m": 3e-9, "permittivity": 10.0, "loss_tangent": 1e-3}
     specs = normalize_surface_epr_specs(
         {kind: {**film, "inset_margins_um": [0.5]} for kind in ("MA", "MS", "SA")},
         materials={},
     )
     out = {}
-    for modeling in ("solid", "thin_film"):
-        source, stack = rectangular_junction_source("VACUUM_REGION")
-        out[modeling] = prepare_sgb_model(
+    for key, modeling, bump in (
+        ("solid", "solid", False),
+        ("thin_film", "thin_film", False),
+        ("bump", "thin_film", True),
+    ):
+        source, stack = rectangular_junction_source("VACUUM_REGION", bump=bump)
+        out[key] = prepare_sgb_model(
             source,
             prepared_stack=stack,
             modeling=modeling,
-            output_dir=tmp_path_factory.mktemp(modeling),
+            output_dir=tmp_path_factory.mktemp(key),
             surface_epr_specs=specs,
         )
     return out
@@ -232,3 +240,81 @@ def test_a_ground_net_the_model_does_not_have_is_refused(tmp_path):
             output_dir=tmp_path / "bad",
             ground_net_ids=("GND",),
         )
+
+
+def test_a_generic_rlc_enables_exactly_its_authored_branches():
+    """``None`` disables a branch; an authored zero stays an enabled branch of value zero."""
+    branches = rlc_branches(
+        LumpedRlc("sheet", "series", resistance_ohm=50.0, capacitance_f=0.0)
+    )
+    assert branches == {
+        "RLC Type": "Serial",
+        "UseResist": True,
+        "Resistance": "50.0ohm",
+        "UseInduct": False,
+        "UseCap": True,
+        "Capacitance": "0.0F",
+    }
+
+
+def _bare_model(tmp_path, **treatments):
+    source, stack = rectangular_junction_source("VACUUM_REGION")
+    return prepare_sgb_model(
+        source,
+        prepared_stack=stack,
+        modeling="solid",
+        output_dir=tmp_path / "model",
+        **treatments,
+    )
+
+
+def test_a_port_sheet_without_a_junction_or_rlc_is_refused_before_aedt(tmp_path):
+    """A port sheet with no treatment has no AEDT meaning; the import refuses it before touching the design."""
+    model = _bare_model(tmp_path)
+    with pytest.raises(
+        ValueError, match=r"PORT::sheet.*carry no junction or LumpedRlc"
+    ):
+        import_sgb_model(None, model, family="hfss")
+
+
+def test_lumped_ports_are_refused_until_the_driven_terminal_design_exists(tmp_path):
+    """The import sets up no Driven Terminal design, so a model with lumped ports is refused."""
+    port = LumpedTerminalPort(1, "p1", "sheet", ("chip_left",), ("chip_right",), 50.0)
+    model = _bare_model(tmp_path, ports=(port,))
+    with pytest.raises(NotImplementedError, match="Driven Terminal design"):
+        import_sgb_model(None, model, family="hfss")
+
+
+def test_q3d_refuses_a_lumped_rlc(tmp_path):
+    """A lumped RLC belongs to HFSS Eigenmode, not Q3D."""
+    model = _bare_model(
+        tmp_path, lumped_rlcs=(LumpedRlc("sheet", "parallel", inductance_h=1e-8),)
+    )
+    with pytest.raises(ValueError, match="Q3D has no junctions or lumped RLCs"):
+        import_sgb_model(None, model, family="q3d")
+
+
+def test_route_a_bump_rows_read_the_body_as_route_c_reads_a_conductor(models):
+    """Decision 8: a retained Route A bump is read like a Route C conductor; the sheets stay on the substrate."""
+    sidecar, imported = _as_imported(models["bump"])
+    bindings = surface_face_bindings(sidecar, imported)
+    assert set(bindings) == set(sidecar["surface_epr_rows"])
+    bodies = {
+        imported.objects[solid]
+        for solid, volume in sidecar["volumes"].items()
+        if volume["kind"] == "conductor"
+    }
+    assert len(bodies) == 1
+    owners = {
+        name
+        for binding in bindings.values()
+        if binding.interface_type == "MA"
+        for name, _ in binding.faces
+    }
+    assert owners == {
+        "substrate",
+        *bodies,
+    }  # sheet rows on the substrate, bump rows on the bump
+    for binding in bindings.values():
+        planned = sidecar["physical_groups"][binding.group]["ids"]
+        assert len(binding.faces) == len(planned) == len(set(binding.faces))

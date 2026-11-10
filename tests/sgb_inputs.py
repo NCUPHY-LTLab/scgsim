@@ -20,7 +20,7 @@ All return the effective input and the ``RepresentationContext`` S2 consumes.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -527,6 +527,7 @@ def geometry_plan_electrodes(monkeypatch, *, gap_um: float = 10.0) -> EffectiveI
 JUNCTION_SHEET = ((0, 0), (10, 0), (10, 2), (0, 2))
 JUNCTION_LEFT = ((-2, 0), (3, 0), (3, 1), (2, 1), (2, 2), (-2, 2))
 JUNCTION_RIGHT = ((7, 0), (12, 0), (12, 2), (8, 2), (8, 1), (7, 1))
+JUNCTION_BUMP_LOOP = ((-1.5, 0.5), (0.5, 0.5), (0.5, 1.5), (-1.5, 1.5))
 JUNCTION_GRID_UM = 0.5
 
 
@@ -544,12 +545,13 @@ def rectangular_junction_pair() -> EffectiveInput:
 
 
 def rectangular_junction_source(
-    vacuum: str = "upper_air",
+    vacuum: str = "upper_air", *, bump: bool = False
 ) -> tuple[GeometryBuildInput, dict[str, Any]]:
     """The source and stack of :func:`rectangular_junction_pair` before physical interpretation.
 
     ``vacuum`` names the vacuum region above the metals (``VACUUM_REGION`` for an AEDT model, whose
-    Region is that box).
+    Region is that box).  With ``bump`` a 2.75 um tall ``finite_volume`` body of Net ``A`` stands on the
+    left film (:data:`JUNCTION_BUMP_LOOP`): a finite body that is not a film.
     """
     declaration = PhysicalLayerDeclaration(
         "film",
@@ -588,6 +590,18 @@ def rectangular_junction_source(
         )
         for name, net, loop in terminals
     )
+    if bump:
+        body = _bump_entity()
+        metals = (
+            *metals,
+            replace(
+                body,
+                net_id="A",
+                host_void_semantic_id=vacuum,
+                geometry={**body.geometry, "outer_loop": JUNCTION_BUMP_LOOP},
+                metadata={**body.metadata, "source_occurrence_path": "chip"},
+            ),
+        )
     region = PortSheetRegionRecord(
         "sheet",
         "junction",
@@ -641,7 +655,10 @@ def rectangular_junction_source(
         "metadata": {},
     }
     source = GeometryBuildInput(
-        tuple(LayoutPolygonSpec(name, "metal", loop) for name, _, loop in terminals),
+        (
+            *(LayoutPolygonSpec(name, "metal", loop) for name, _, loop in terminals),
+            *((LayoutPolygonSpec("bump", "bump", JUNCTION_BUMP_LOOP),) if bump else ()),
+        ),
         (*metals, substrate, upper),
         solution_regions=regions,
         metadata={

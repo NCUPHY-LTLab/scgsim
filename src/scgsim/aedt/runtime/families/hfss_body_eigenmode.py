@@ -27,10 +27,6 @@ from scgsim.aedt.runtime.native.hfss_eigenmode import (
 from scgsim.aedt.runtime.native.hfss_geometry import (
     prepare_native_planar_geometry,
 )
-from scgsim.aedt.runtime.native.hfss_lumped import (
-    assign_generic_rlcs,
-    read_generic_rlcs,
-)
 from scgsim.aedt.runtime.native.resources import analyze_with_resources
 from scgsim.aedt.runtime.native.saved_geometry import read_saved_junction_lines
 from scgsim.aedt.specs.common import (
@@ -109,7 +105,6 @@ def prepare_body_eigenmode(  # noqa: PLR0913 -- preserve the family geometry/ana
     geometry = prepare_native_planar_geometry(app, bound.geometry)
     if geometry_extension is not None:
         geometry_extension(app, bound.geometry, geometry)
-    assign_generic_rlcs(app, bound, geometry)
     timings["geometry_seconds"] = round(time.perf_counter() - started, 6)
     timings["geometry_phases"] = geometry.pop("geometry_phases")
     started = time.perf_counter()
@@ -142,7 +137,6 @@ def prepare_body_eigenmode(  # noqa: PLR0913 -- preserve the family geometry/ana
     read_saved_junction_lines(
         app, project_path, bound.design_name, bound.geometry, geometry
     )
-    read_generic_rlcs(app, geometry)
     setup = (
         read_body_eigenmode_setup(app, bound) if bound.run_control is not None else None
     )

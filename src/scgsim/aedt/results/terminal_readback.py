@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
-from scgsim.aedt.results.hfss_readback import validate_lumped_readback
 from scgsim.aedt.results.provenance import (
     SOURCE_SCHEMA_V19,
     SOURCE_SCHEMA_V20,
@@ -51,7 +50,6 @@ def validate_body_terminal_readback(
     geometry = receipt.get("geometry", {})
     if geometry.get("source_sha256") != spec.geometry.source_sha256:
         raise RuntimeError("body-first Terminal geometry source differs")
-    validate_lumped_readback(receipt, spec.geometry)
     conductors = spec.geometry.source["conductors"]
     objects = geometry.get("objects", [])
     global_references = {
@@ -129,17 +127,6 @@ def _validate_body_terminal_port(
     )
     if record.get("requested") != requested:
         raise RuntimeError("body-first Terminal authored treatment differs")
-    if isinstance(port, LumpedTerminalPort):
-        support = next(
-            item
-            for item in context.geometry["lumped_supports"]
-            if item["support_id"] == port.support_id
-        )
-        if (
-            record.get("support") != support
-            or record.get("object_name") != support["object_name"]
-        ):
-            raise RuntimeError("body-first Lumped support identity differs")
     if (
         record.get("index") != port.index
         or record.get("boundary") != port.name

@@ -159,21 +159,21 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 | Q3D | 明確 `modeling="solid"` 或 `modeling="thin_film"`；精確導體 Net 成員；AC/RL 使用真實 Signal source/sink 對；支援無終端 C/G；可選精確六面 Region 接地封閉；求解需完整系列控制 | 原生電容矩陣，以及啟用時的電阻／電感矩陣 |
 | Q2D | 明確剖面幾何與導體／參考指派 | 每單位長度電容／電導及電阻／電感矩陣 |
 
-### 共用集總支撐與終端 RLC {#hfss-shared-lumped-support}
+### 集總埠片與終端 RLC {#hfss-shared-lumped-support}
 
 此 HFSS 集總元件範圍為 `CONVERGING`，新增一般電路元件，同時保留既有 Wave Terminal 與 Josephson 接面契約。
 
-`LumpedSupport` 與 `set_lumped_supports()` 在呼叫者模型快照中宣告有來源依據的支撐幾何。本體優先流程使用 `HfssDrivenGeometrySpec`，設定 `mode="terminal"` 與結構 `hfss-driven-geometry.v1`，透過 `prepare_hfss_driven_from_geometry()` 準備。`body_first_driven_terminal` 是準備流程名稱，不是規格模式。幾何要求不含 RLC 欄位。既有 `TerminalPort.signal_entity_ids` 在舊酬載中仍可省略；本體優先路徑則必填，由前端明確宣告 Signal 與參考。舊 GDS 參考綁定不變。
+`LumpedRlc` 與 `LumpedTerminalPort` 指名一個 `port_sheet_id`：計畫中的一個埠片，SGB 模型把它記成 `PORT::<port_sheet_id>` group，與 Palace 的集總元件相同（issue #67 decision 8）。不再有另外的支撐紀錄。`prepare_sgb_model()` 把每一個綁到它的 group；模型中沒有該 group 的名稱會被拒絕，接面、RLC 或集總埠共用同一個埠片也會被拒絕。原生平面建構器沒有埠片，因此兩種紀錄都會被它拒絕。本體優先流程使用 `HfssDrivenGeometrySpec`，設定 `mode="terminal"` 與結構 `hfss-driven-geometry.v1`，透過 `prepare_hfss_driven_from_geometry()` 準備。`body_first_driven_terminal` 是準備流程名稱，不是規格模式。幾何要求不含 RLC 欄位。既有 `TerminalPort.signal_entity_ids` 在舊酬載中仍可省略；本體優先路徑則必填，由前端明確宣告 Signal 與參考。舊 GDS 參考綁定不變。
 
-來源金屬本體與非金屬支撐／定位片需保持分開。定位片實際的非金屬 `source_level` 決定所在平面；另外的 `contact_physical_layer_id` 綁定 M1 物理接觸與有效 Z。不從材料名稱推定膜厚，也不寫死 100 nm。
+在 SGB 流程中，HFSS 匯入把每個 `LumpedRlc` 放在它的埠面上，方式與接面相同：在匯入的 face 上建立一個 Lumped RLC，電流線沿 sidecar 的 `direction`，連接該 face 自身兩端 edge 的中點。每個埠片都必須帶有一個接面或一個 RLC。SGB 流程拒絕 Driven wave `TerminalPort` 與 Driven Modal 埠，訊息指向 NCUPHY-LTLab/scgsim#135；在該 Issue 完成之前，原生建構器移除後 AEDT 無法執行 Driven wave 與 modal。在 SGB 流程建立 Driven Terminal 設計之前，匯入也拒絕集總 Terminal 埠。
 
-`TerminalPort` 仍是既有 Wave 埠輸入。`LumpedTerminalPort` 是獨立的 Driven Terminal 輸入，明確指定支撐、終端與參考，且必須提供 `impedance_ohm`；它沒有 RLC 網路欄位。50 ohm 這類值是作業輸入，不是套件預設值。Lumped 要求不會轉換成 Wave 埠。
+`TerminalPort` 仍是既有 Wave 埠輸入。`LumpedTerminalPort` 是獨立的 Driven Terminal 輸入，明確指定埠片、終端與參考，且必須提供 `impedance_ohm`；它沒有 RLC 網路欄位。50 ohm 這類值是作業輸入，不是套件預設值。Lumped 要求不會轉換成 Wave 埠。
 
 目前 Wave Terminal 契約的來源有向點對註記，記錄 Wave 埠參考來源，不是 Modal `IntLine`。要求停用重新正規化，物理去嵌入位移為零。此時原生未啟用的 50-ohm 設定，不是來源負載、重新正規化目標或已解得的特性阻抗。實際原生去嵌入啟用旗標另外記錄；位移為零不表示旗標已停用。
 
 每個 `HfssDrivenGeometrySpec` Terminal 埠都必須使用相同且有順序的來源 Entity 參考 tuple：Lumped 使用 `LumpedTerminalPort.reference_entity_ids`，Wave 使用 `TerminalPort.reference_objects`。此要求適用於 Lumped、Wave 及混合要求，選取器不排序或合併。先執行既有所有權、埠系列及全 Wave 側別檢查。原生讀回驗證設計層級 `TerminalReferenceConductors` 清單，不能據此建立每個埠不同的參考指派。具有不同參考 tuple 的歷史酬載，會被目前建構器拒絕，包含酬載解碼；原執行證據仍屬歷史。已儲存的本體優先 Terminal 子指派，原生讀回為 `Edges` 或 `Faces`，每個 ID 必須唯一解析為一個由來源建立的導體物件。缺少或不明確的指定型別／所有者會使讀回失敗。父埠的 `Faces` 支撐指派和子訊號所有權保持分開。
 
-`LumpedRlc` 要求明確 `series` 或 `parallel` 拓樸。R、L、C 分別選擇，`None` 停用對應元件；每個啟用的一般 R、L、C 值，在數值轉換後必須有限。零仍表示啟用，有限負值保留。目前建構器會拒絕含非有限值的歷史一般 RLC 酬載，包含解碼；限制只適用於這些一般 RLC 元件，不延伸到其他電路或 EPR 量。負載的唯一來源為 `PreparedPlanarGeometry.lumped_rlcs`；`EigenmodeSim.add_lumped_rlc()` 加入這份模型負責的集合，`HfssEprSpec` 只投影準備清單，不建立第二份可編輯副本。模型來源雜湊包含 RLC 資料。此一般線性網路不是 Josephson 接面，不建立 `PlanarJunction`、接面參與率或 EPR 貢獻；既有接面與已儲存場 EPR 結果契約保持分開。
+`LumpedRlc` 要求明確 `series` 或 `parallel` 拓樸。R、L、C 分別選擇，`None` 停用對應元件；每個啟用的一般 R、L、C 值，在數值轉換後必須有限。零仍表示啟用，有限負值保留。目前建構器會拒絕含非有限值的歷史一般 RLC 酬載，包含解碼；限制只適用於這些一般 RLC 元件，不延伸到其他電路或 EPR 量。`EigenmodeSim.add_lumped_rlc()` 加入模型負責的集合，每個埠片一個處理，`HfssEprSpec` 只投影準備清單，不建立第二份可編輯副本。模型來源雜湊包含 RLC 資料。此一般線性網路不是 Josephson 接面，不建立 `PlanarJunction`、接面參與率或 EPR 貢獻；既有接面與已儲存場 EPR 結果契約保持分開。
 
 ### 各系列的求解設定控制 {#aedt-family-setup-controls}
 

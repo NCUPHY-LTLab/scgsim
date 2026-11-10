@@ -6,10 +6,13 @@ AEDT models the geometry Palace meshes (issue #67).  One preparation runs, in or
    (:mod:`scgsim.aedt.preparation.modeling`), which also derives the plan's rectangular junctions into
    their port sheets;
 2. the binding of each AEDT junction to the port sheet of the plan's ``RectangularJunctionSpec`` of the
-   same id;
+   same id, and of each lumped RLC and lumped port to the port sheet it names (issue #67 decision 8);
+   wave and modal ports are refused (follow-up NCUPHY-LTLab/scgsim#135);
 3. the SGB build with the Surface-EPR bands of the normalized specs
    (:func:`scgsim.geometry.surface_epr.build_banded_geometry`).  ``thin_film`` builds Route A (conductor
-   sheets); ``solid`` builds Route C (conductor solids), which is how AEDT realizes a Route B request
+   sheets) with its finite bodies (bumps, posts) retained as conductor solids, which AEDT makes PEC
+   (decision 8): Route A's faces, with the bodies' interiors kept as solids instead of excluded;
+   ``solid`` builds Route C (conductor solids), which is how AEDT realizes a Route B request
    (decision 7): the same faces and bands, with the conductor interiors kept as solids;
 4. :func:`scgsim.geometry.sgb.exchange.step.export_aedt_step`, which writes the STEP without the vacuum and
    its durable guard.  AEDT creates its own Region from the plan's ``VACUUM_REGION`` bounds instead.
@@ -27,11 +30,22 @@ from typing import Any, Literal
 
 from scgsim.aedt.data import canonical_sha256, detached, freeze
 from scgsim.aedt.preparation.modeling import interpret_geometry
+from scgsim.aedt.specs.common import (
+    LumpedRlc,
+    LumpedTerminalPort,
+    ModalPort,
+    TerminalPort,
+)
 from scgsim.aedt.specs.epr import PlanarJunction
 from scgsim.aedt.specs.modeling import Modeling, modeling_from_value
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.sgb.exchange.guard import file_sha256, read_step_guard
 from scgsim.geometry.sgb.exchange.step import export_aedt_step
+from scgsim.geometry.sgb.routes.policy import (
+    ROUTE_A_RETAINED_BODIES,
+    ROUTE_C,
+    RoutePolicy,
+)
 from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.surface_epr import build_banded_geometry
 
@@ -40,7 +54,13 @@ VACUUM_REGION = "VACUUM_REGION"
 STEP_NAME = "model.step"
 REQUESTED_ROUTE: dict[str, Literal["A", "B"]] = {"thin_film": "A", "solid": "B"}
 REALIZED_ROUTE: dict[str, Literal["A", "C"]] = {"thin_film": "A", "solid": "C"}
+# The SGB policy each modeling builds: every finite conductor body is a solid AEDT makes PEC.
+BUILD_POLICY: dict[str, RoutePolicy] = {
+    "thin_film": ROUTE_A_RETAINED_BODIES,
+    "solid": ROUTE_C,
+}
 _BOUND_FILES = ("step", "geometry", "sidecar", "guard")
+DRIVEN_PORT_FOLLOW_UP = "NCUPHY-LTLab/scgsim#135"
 
 
 @dataclass(frozen=True)
@@ -60,6 +80,11 @@ class SgbJunction:
         return cls(PlanarJunction.from_payload(value["junction"]), value["port_group"])
 
 
+def port_group(port_sheet_id: str) -> str:
+    """The SGB lumped-port group of the plan's port sheet ``port_sheet_id``."""
+    return f"PORT::{port_sheet_id}"
+
+
 @dataclass(frozen=True)
 class PreparedSgbModel:
     """The bound STEP, sidecar and guard of one SGB build, and the AEDT inputs bound to its groups.
@@ -69,6 +94,8 @@ class PreparedSgbModel:
     the sidecar's model record.  ``vacuum_bounds_um`` is ``(x_min, y_min, z_min, x_max, y_max, z_max)`` of
     the plan's ``VACUUM_REGION``, the box SGB built and the box AEDT's Region takes.  ``materials`` are the
     stack's records of the materials the model's volumes name, which AEDT realizes on the imported objects.
+    ``lumped_rlcs`` and ``lumped_ports`` each sit on the ``PORT::<port_sheet_id>`` group they name; a port
+    sheet carries at most one of them or one junction.
     """
 
     modeling: Modeling
@@ -81,6 +108,8 @@ class PreparedSgbModel:
     vacuum_bounds_um: tuple[float, float, float, float, float, float]
     materials: Mapping[str, Mapping[str, Any]]
     junctions: tuple[SgbJunction, ...] = ()
+    lumped_rlcs: tuple[LumpedRlc, ...] = ()
+    lumped_ports: tuple[LumpedTerminalPort, ...] = ()
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
     ground_net_ids: tuple[str, ...] | None = None
 
@@ -100,6 +129,9 @@ class PreparedSgbModel:
         object.__setattr__(self, "model_identity", freeze(self.model_identity))
         object.__setattr__(self, "materials", freeze(self.materials))
         object.__setattr__(self, "junctions", tuple(self.junctions))
+        object.__setattr__(self, "lumped_rlcs", tuple(self.lumped_rlcs))
+        object.__setattr__(self, "lumped_ports", tuple(self.lumped_ports))
+        check_port_sheet_owners(self.junctions, self.lumped_rlcs, self.lumped_ports)
         if self.ground_net_ids is not None:
             ground = tuple(self.ground_net_ids)
             if len(set(ground)) != len(ground) or not all(
@@ -147,6 +179,8 @@ class PreparedSgbModel:
             "vacuum_bounds_um": list(self.vacuum_bounds_um),
             "materials": detached(self.materials),
             "junctions": [item.to_payload() for item in self.junctions],
+            "lumped_rlcs": [item.to_payload() for item in self.lumped_rlcs],
+            "lumped_ports": [item.to_payload() for item in self.lumped_ports],
             "surface_epr_specs": detached(self.surface_epr_specs),
             "ground_net_ids": None
             if self.ground_net_ids is None
@@ -181,6 +215,12 @@ class PreparedSgbModel:
             junctions=tuple(
                 SgbJunction.from_payload(item) for item in value["junctions"]
             ),
+            lumped_rlcs=tuple(
+                LumpedRlc.from_payload(item) for item in value["lumped_rlcs"]
+            ),
+            lumped_ports=tuple(
+                LumpedTerminalPort.from_payload(item) for item in value["lumped_ports"]
+            ),
             surface_epr_specs=value["surface_epr_specs"],
             ground_net_ids=None
             if value["ground_net_ids"] is None
@@ -195,6 +235,8 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
     modeling: Modeling,
     output_dir: str | Path,
     junctions: Sequence[PlanarJunction] = (),
+    lumped_rlcs: Sequence[LumpedRlc] = (),
+    ports: Sequence[LumpedTerminalPort | TerminalPort | ModalPort] = (),
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
     ground_net_ids: Sequence[str] | None = None,
 ) -> PreparedSgbModel:
@@ -204,25 +246,27 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
     :func:`scgsim.geometry.surface_epr.normalize_surface_epr_specs`; their margins become bands.
     ``ground_net_ids`` declares the Nets that are ground, as Palace's electrostatic ground does; Q3D reads
     each Net's role from it and refuses a model without it.  Every one must be a Net of the model.
+    ``lumped_rlcs`` and the ``LumpedTerminalPort`` entries of ``ports`` name the plan's port sheets; a wave
+    ``TerminalPort`` or a ``ModalPort`` is refused before anything is built (:func:`lumped_ports_of`).
     """
     modeling = modeling_from_value(modeling)
     if not isinstance(build_input, GeometryBuildInput):
         raise TypeError("build_input must be GeometryBuildInput")
-    if build_input.lumped_supports:
-        # TODO(human): issue #67 decision 8 settles how lumped supports reach the SGB model.
-        raise NotImplementedError(
-            "the SGB model has no lumped supports; see issue #67 decision 8"
-        )
+    lumped_ports = lumped_ports_of(ports)
+    rlcs = tuple(lumped_rlcs)
+    if any(not isinstance(item, LumpedRlc) for item in rlcs):
+        raise TypeError("lumped_rlcs must contain LumpedRlc records")
     effective_input, effective_stack, plan = interpret_geometry(
         build_input, prepared_stack, modeling
     )
     bounds = vacuum_bounds_um(effective_stack)
     bound_junctions = bind_junctions(effective_input, junctions)
+    check_port_sheet_owners(bound_junctions, rlcs, lumped_ports)
     model_dir = Path(output_dir).expanduser().resolve()
     artifacts = build_banded_geometry(
         effective_input,
         plan.context,
-        route=REALIZED_ROUTE[modeling],
+        route=BUILD_POLICY[modeling],
         surface_epr_specs=surface_epr_specs,
         output_dir=model_dir,
     )
@@ -231,7 +275,7 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
     )
     sidecar = read_sidecar(artifacts.sidecar)
     check_region_box(sidecar, bounds)
-    _check_junction_ports(sidecar, bound_junctions)
+    _check_port_groups(sidecar, bound_junctions, rlcs, lumped_ports)
     _check_ground_nets(sidecar, ground_net_ids)
     files = {
         role: {"path": path.name, "sha256": file_sha256(path)}
@@ -253,6 +297,8 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
         vacuum_bounds_um=bounds,
         materials=model_materials(sidecar, effective_stack),
         junctions=bound_junctions,
+        lumped_rlcs=rlcs,
+        lumped_ports=lumped_ports,
         surface_epr_specs=surface_epr_specs,
         ground_net_ids=None if ground_net_ids is None else tuple(ground_net_ids),
     )
@@ -360,11 +406,61 @@ def bind_junctions(
     return tuple(out)
 
 
-def _check_junction_ports(
-    sidecar: Mapping[str, Any], junctions: Sequence[SgbJunction]
+def lumped_ports_of(
+    ports: Sequence[LumpedTerminalPort | TerminalPort | ModalPort],
+) -> tuple[LumpedTerminalPort, ...]:
+    """The lumped ports of ``ports``; a wave or modal port is refused.
+
+    A Driven wave ``TerminalPort`` (on a Region ``side``) and a Driven Modal port have no realization in the
+    SGB flow yet (issue #67 decision 8), so a model that needs one is refused rather than built without it.
+    """
+    out = []
+    for port in ports:
+        if isinstance(port, (TerminalPort, ModalPort)):
+            kind = (
+                "Driven Modal"
+                if isinstance(port, ModalPort)
+                else "Driven wave Terminal"
+            )
+            raise NotImplementedError(
+                f"the SGB flow has no {kind} ports yet ({port.name!r} on side {port.side}); "
+                f"they follow in {DRIVEN_PORT_FOLLOW_UP}"
+            )
+        if not isinstance(port, LumpedTerminalPort):
+            raise TypeError("ports must contain LumpedTerminalPort records")
+        out.append(port)
+    return tuple(out)
+
+
+def check_port_sheet_owners(
+    junctions: Sequence[SgbJunction],
+    lumped_rlcs: Sequence[LumpedRlc],
+    lumped_ports: Sequence[LumpedTerminalPort],
+) -> None:
+    """Refuse a port sheet that a junction, an RLC or a lumped port share: each carries one treatment."""
+    groups = [
+        *(item.port_group for item in junctions),
+        *(port_group(item.port_sheet_id) for item in lumped_rlcs),
+        *(port_group(item.port_sheet_id) for item in lumped_ports),
+    ]
+    shared = sorted({group for group in groups if groups.count(group) > 1})
+    if shared:
+        raise ValueError(f"port sheets {shared} carry more than one treatment")
+
+
+def _check_port_groups(
+    sidecar: Mapping[str, Any],
+    junctions: Sequence[SgbJunction],
+    lumped_rlcs: Sequence[LumpedRlc],
+    lumped_ports: Sequence[LumpedTerminalPort],
 ) -> None:
     groups = {port["group"] for port in sidecar["ports"]}
-    missing = [item.port_group for item in junctions if item.port_group not in groups]
+    named = [
+        *(item.port_group for item in junctions),
+        *(port_group(item.port_sheet_id) for item in lumped_rlcs),
+        *(port_group(item.port_sheet_id) for item in lumped_ports),
+    ]
+    missing = [group for group in named if group not in groups]
     if missing:
         raise ValueError(f"the SGB model has no lumped-port group {missing}")
 

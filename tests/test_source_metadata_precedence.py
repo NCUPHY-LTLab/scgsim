@@ -156,7 +156,6 @@ def test_fixed_fields_win_and_benign_metadata_preserves_geometry(
     assert value.port_sheet_regions == plain.port_sheet_regions
     assert value.boundary_curves == plain.boundary_curves
     assert value.boundary_reconstruction == plain.boundary_reconstruction
-    assert value.lumped_supports == plain.lumped_supports
     assert (
         value.metadata["unquantized_source_sha256"]
         == plain.metadata["unquantized_source_sha256"]

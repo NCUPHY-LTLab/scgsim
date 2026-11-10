@@ -8,6 +8,9 @@ owned by the solid on the type's dielectric side, the way Palace sides a shared 
 * ``MS`` and ``SA``: the dielectric solid's copy;
 * ``MA``: the only copy -- the conductor solid's (Route C, where the vacuum is not imported) or the substrate's
   under a Route A sheet;
+* a Route A sheet face that a retained finite body (a bump or post, issue #67 decision 8) stands on imports on
+  the body and on the substrate: every row reads the substrate's copy, the copy it has when the body is
+  excluded, since a PEC body is an excluded volume with a PEC surface;
 * a rebuilt sheet (a free face) has its one copy.
 
 Any other number of copies fails rather than picking one.
@@ -34,7 +37,7 @@ from scgsim.aedt.runtime.families.sgb_import import ImportedSgbModel
 from scgsim.geometry.sgb.sidecar.aedt import aedt_names
 
 FieldSelector = Literal["surface", "adjacent"]
-DIELECTRIC_SIDE_TYPES = ("MS", "SA")
+DIELECTRIC_SIDE_TYPES = ("MS", "SA", "SHEET")
 _ENTER = {"surface": "EnterSurface", "adjacent": "EnterAdjacentSurface"}
 
 
@@ -119,12 +122,18 @@ def surface_face_bindings(
         name: sidecar["volumes"][solid]["kind"]
         for solid, name in imported.objects.items()
     }
+    groups = sidecar["physical_groups"]
     bindings = {}
     for row, record in sorted(rows.items()):
-        planned = sidecar["physical_groups"][record["group"]]["ids"]
+        planned = groups[record["group"]]["ids"]
+        # A sheet group's faces are read on their dielectric side whatever the row type (see the module).
+        side = (
+            "SHEET"
+            if groups[record["group"]].get("interface_type") == "SHEET"
+            else record["interface_type"]
+        )
         faces = tuple(
-            selected_copy(row, record["interface_type"], face, imported, kinds)
-            for face in planned
+            selected_copy(row, side, face, imported, kinds) for face in planned
         )
         bindings[row] = SurfaceSelection(
             row=row,
@@ -145,7 +154,10 @@ def selected_copy(
     imported: ImportedSgbModel,
     kinds: Mapping[str, str],
 ) -> tuple[str, int]:
-    """The ``(object, face id)`` copy of ``face`` that row ``row`` integrates (see the module)."""
+    """The ``(object, face id)`` copy of ``face`` that row ``row`` integrates (see the module).
+
+    ``interface_type`` is the side the row reads: its type, or ``SHEET`` for a row of a sheet group.
+    """
     copies = imported.face_copies.get(face, {})
     if len(copies) == 1:
         ((name, face_id),) = copies.items()

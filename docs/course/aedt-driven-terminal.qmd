@@ -95,13 +95,14 @@ failure behavior and the bounded two-port interface.
 ### Wave and Lumped Terminal ports
 
 The example above uses Wave `TerminalPort` inputs. A Lumped excitation uses a
-separate `LumpedTerminalPort` declaration with explicit source-backed support,
-terminal and reference assignments and a required `impedance_ohm`. The two
+separate `LumpedTerminalPort` declaration with an explicit port sheet
+(`port_sheet_id`), terminal and reference assignments and a required `impedance_ohm`. The two
 port kinds have distinct native models, so a Lumped request does not fall back
 to Wave-port creation. Generic Series/Parallel RLC model elements belong to
-the Eigenmode model's `PreparedPlanarGeometry.lumped_rlcs` collection; they
+the Eigenmode model's `lumped_rlcs` collection, each on the port sheet it
+names; they
 are separate from a Driven Terminal's scalar port impedance and from
-Josephson-junction/EPR models. The runtime reference describes source-backed
-support identity and the body-first path. In that body-first route,
+Josephson-junction/EPR models. The runtime reference describes port-sheet
+identity and the body-first path. In that body-first route,
 `TerminalPort.signal_entity_ids` is required so the declared Signal and its
 references are explicit; the existing GDS reference binding is unchanged.

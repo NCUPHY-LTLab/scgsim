@@ -109,7 +109,7 @@ class ConformalModel:
 def build_conformal_model(  # noqa: PLR0913 - the effective input, the route and its options
     build_input: GeometryBuildInput,
     representation: RepresentationContext,
-    route: str,
+    route: str | RoutePolicy,
     *,
     insets: tuple[InsetRequest, ...] = (),
     refinements: tuple[RefinementRequest, ...] = (),
@@ -130,7 +130,7 @@ def build_conformal_model(  # noqa: PLR0913 - the effective input, the route and
 
 def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and its options
     catalogue: PrismCatalogue,
-    route: str,
+    route: str | RoutePolicy,
     *,
     insets: tuple[InsetRequest, ...] = (),
     refinements: tuple[RefinementRequest, ...] = (),
