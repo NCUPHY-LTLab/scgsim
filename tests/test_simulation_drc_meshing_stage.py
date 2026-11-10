@@ -57,6 +57,15 @@ ELECTRODE = ((30, 0), (60, 0), (60, 25), (30, 25))
 PADS = {
     "clean": ((0, 0), (20, 0), (20, 20), (0, 20)),
     "jog": ((0, 0), (20, 0), (20, 10), (20.001, 10), (20.001, 20), (0, 20)),
+    # A jog of exactly ten grid steps whose coordinates subtract to 0.00999999999999801 um.
+    "ten_step_jog": (
+        (0, 0),
+        (19.001, 0),
+        (19.001, 10),
+        (19.011, 10),
+        (19.011, 20),
+        (0, 20),
+    ),
     "convex": ((0, 0), (20, 0), (20, 20), (10, 20.05), (0, 20)),
 }
 BAR = ((0, 10), (20, 10), (20, 12.004), (0, 12.004))
@@ -337,10 +346,10 @@ def test_gmsh_meshes_a_model_with_only_warnings(monkeypatch, tmp_path):
     assert meshing["linear_mesh"]["bad_count"] == 0
 
 
-def built_jog(monkeypatch, tmp_path):
-    """The jog scene built by the geometry stage into ``tmp_path``: its SGB artifacts."""
+def built_jog(monkeypatch, tmp_path, pad="jog"):
+    """A jog scene built by the geometry stage into ``tmp_path``: its SGB artifacts."""
     snapshot = prepare_layout_snapshot(
-        scene(monkeypatch, PADS["jog"]),
+        scene(monkeypatch, PADS[pad]),
         layer_stack=NO_VACUUM_STACK,
         material_records=MATERIALS,
         instances=None,
@@ -358,6 +367,19 @@ def test_limits_change_what_is_found(monkeypatch, tmp_path):
     assert not check_fine_structure(artifacts.sidecar).passed
     relaxed = FineStructureLimits(wall_column_gap_steps=1.0)
     assert check_fine_structure(artifacts.sidecar, relaxed).findings == ()
+
+
+def test_a_wall_of_exactly_the_limit_is_not_below_it(monkeypatch, tmp_path):
+    """Ten grid steps is not below ten, though its coordinates subtract to a hair under 0.01 um."""
+    artifacts = built_jog(monkeypatch, tmp_path, pad="ten_step_jog")
+    assert check_fine_structure(artifacts.sidecar).passed
+    stricter = FineStructureLimits(wall_column_gap_steps=11.0)
+    walls = [
+        f
+        for f in check_fine_structure(artifacts.sidecar, stricter).findings
+        if f.value_steps == 10.0
+    ]
+    assert len(walls) == 1
 
 
 def bad_at(element, point, *, edge_min, edge_max, quality=0.0005):

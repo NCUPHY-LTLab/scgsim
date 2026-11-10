@@ -228,17 +228,28 @@ class _Found:
     limit_unit: str
 
 
+# Lengths are read from micrometre coordinates, so a length of exactly N grid steps can come out a hair
+# under N (100.005 - 99.995 = 0.009999999999990905).  Comparing in steps, below the limit by more than this
+# margin, keeps "below N steps" exact; the margin is float noise, far below the one step a lattice resolves.
+_FLOAT_NOISE_STEPS = 1e-6
+
+
+def _below_steps(value_um: float, limit_steps: float, grid_um: float) -> bool:
+    """Whether a length is below a limit given in grid steps, ignoring float noise at the limit itself."""
+    return value_um / grid_um < limit_steps - _FLOAT_NOISE_STEPS
+
+
 def _below_limits(model: BuiltModel, limits: FineStructureLimits) -> list[_Found]:
     g = model.grid_um
     found = [
         _Found(m, "A", limits.wall_action, limits.wall_column_gap_steps, "grid steps")
         for m in wall_gaps(model)
-        if m.value < limits.wall_column_gap_steps * g
+        if _below_steps(m.value, limits.wall_column_gap_steps, g)
     ]
     found += [
         _Found(m, "B", limits.face_action, limits.face_width_steps, "grid steps")
         for m in face_widths(model)
-        if m.value < limits.face_width_steps * g
+        if _below_steps(m.value, limits.face_width_steps, g)
     ]
     found += [
         _Found(m, "B", limits.face_action, limits.wedge_angle_deg, "deg")
@@ -248,7 +259,7 @@ def _below_limits(model: BuiltModel, limits: FineStructureLimits) -> list[_Found
     found += [
         _Found(m, "C", limits.free_edge_action, limits.free_edge_steps, "grid steps")
         for m in free_edges(model)
-        if m.value < limits.free_edge_steps * g
+        if _below_steps(m.value, limits.free_edge_steps, g)
     ]
     return found
 
