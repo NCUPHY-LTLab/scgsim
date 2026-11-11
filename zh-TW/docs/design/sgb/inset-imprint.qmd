@@ -92,7 +92,7 @@ band 的區域、seam 與標記怎麼建立、在哪裡會拒絕，見下一節[
 ::: {.askr-table-compact}
 | 情形 | 例 |
 |---|---|
-| **指定的 support 沒有任何 gap edge** | 一整片 ground plane 蓋住整個 die、沒有任何開口：`inset request 'ground_top': the top of 'ground' has no gap edge to measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)`。懸空、旁邊只有 vacuum 的導體也是同樣的情形。按種類要求時這種 face 不是錯誤，會被略過（見[要 band 的兩種寫法](#request-forms)） |
+| **指定的 support 沒有任何 gap edge** | 一整片 ground plane 蓋住整個 die、沒有任何開口：`inset request 'ground': the sheet of 'pad' has no gap edge to measure the bands from (a conductor edge counts only where exposed dielectric lies next to it); the face lies at z = 0 um within (-40.000, -40.000)..(40.000, 40.000) um. Fix the declaration or the layout: drop the band margins asked for this face, or draw exposed dielectric beside one of its edges.`。懸空、旁邊只有 vacuum 的導體也是同樣的情形。按種類要求時這種 face 不是錯誤，會被略過（見[要 band 的兩種寫法](#request-forms)） |
 | margin 不合法 | 沒有 margin、margin 不是 model grid 的正整數倍、margin 沒有嚴格遞增 |
 | support 選不到面 | 實體不是導體、`side` 與導體的種類不符（有限厚度的導體要 `top` 或 `bottom`，sheet 要 `sheet`）、`SolutionInterface` 的兩個 region 沒有共同介面、介面在多個高度出現而沒有給 `z_um`、`interface` 宣告的種類找不到 |
 | request id 重複 | 每個 request id 是 family 的名稱，必須唯一 |

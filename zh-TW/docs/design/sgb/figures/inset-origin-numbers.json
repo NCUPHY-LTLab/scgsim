@@ -302,5 +302,5 @@
   "faces": 31,
   "groups": 20
  },
- "no_gap_edge_error": "inset request 'ground': the sheet of 'pad' has no gap edge to measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)"
+ "no_gap_edge_error": "inset request 'ground': the sheet of 'pad' has no gap edge to measure the bands from (a conductor edge counts only where exposed dielectric lies next to it); the face lies at z = 0 um within (-40.000, -40.000)..(40.000, 40.000) um. Fix the declaration or the layout: drop the band margins asked for this face, or draw exposed dielectric beside one of its edges."
 }

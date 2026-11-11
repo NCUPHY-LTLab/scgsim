@@ -408,3 +408,34 @@ def point_in_ring(
                 inside = not inside
         j = i
     return inside
+
+
+FIX_SELECTOR = (
+    "Fix the layout or the declaration: draw one region under the selector point on this "
+    "layer, or move the point into the region it names."
+)
+
+
+def selector_place(
+    point: Sequence[float],
+    matched: Sequence[Sequence[Sequence[float]]],
+    drawn: Sequence[Sequence[Sequence[float]]],
+    *,
+    what: str = "the selector point",
+) -> str:
+    """Where a selector point lies in the layout and which drawn regions hold it, for its refusal.
+
+    ``matched`` and ``drawn`` are the outer rings of the regions that hold the point and of
+    every region on the layer, in the polygon frame (``source_place`` maps them to the layout).
+    """
+    at = source_place([point])
+    if matched:
+        boxes = ", ".join(source_place(ring) for ring in matched)
+        return f"{what} lies at {at}, inside each of the regions at {boxes}"
+    if not drawn:
+        return f"{what} lies at {at}, and nothing is drawn on the layer"
+    extent = source_place([p for ring in drawn for p in ring])
+    return (
+        f"{what} lies at {at}, outside every region drawn on the layer, "
+        f"which lie within {extent}"
+    )

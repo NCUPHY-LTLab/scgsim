@@ -7,6 +7,7 @@ from dataclasses import KW_ONLY, dataclass, field
 from fractions import Fraction
 from typing import Any
 
+from scgsim.geometry.models.grid import format_box, geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
 from scgsim.geometry.models.junctions import junction_net_id
 from scgsim.geometry.models.physical import (
@@ -20,6 +21,7 @@ from scgsim.geometry.planning.junction_planning.core import (
     plain_record,
 )
 from scgsim.geometry.planning.junction_planning.exact_geometry import closed_contact
+from scgsim.geometry.primitives.grid_regions import grid_change_message
 from scgsim.semantics.route_a import geometry_z_range
 
 
@@ -180,9 +182,7 @@ class _ContactInventory:
             if self.facts[host["source_entity_id"]]["anchor"] is not None
         }
         if len(anchors) != 1:
-            raise ValueError(
-                "junction port hosts lack one common authored support plane"
-            )
+            raise ValueError(self.no_common_plane(region))
         self.source_z = next(iter(anchors))
         if any(
             (
@@ -197,6 +197,34 @@ class _ContactInventory:
                 "junction port host is disjoint from its authored support plane"
             )
         self.basis = "port_overlap_hosts"
+
+    def no_common_plane(self, region: PortSheetRegionRecord) -> str:
+        """The refusal of port hosts without one film plane: each host's interval and plane, and the sheet."""
+        grid = geometry_grid_context(self.build_input)
+        grid_um = None if grid is None else grid.grid_size_um
+        hosts = []
+        for host in self.hosts:
+            fact = self.facts[host["source_entity_id"]]
+            low, high = fact["source_interval_um"]
+            plane = (
+                "no film plane"
+                if fact["anchor"] is None
+                else f"its film plane at z = {fact['anchor']:g} um"
+            )
+            hosts.append(
+                f"{host['source_entity_id']} (z {low:g}..{high:g} um, {plane})"
+            )
+        xs, ys = [x for x, _ in region.exterior], [y for _, y in region.exterior]
+        box = format_box((min(xs), min(ys), max(xs), max(ys)), grid_um)
+        name = region.metadata.get("source_name", region.port_sheet_id)
+        return grid_change_message(
+            f"junction port hosts lack one common authored support plane: lumped port {name!r}",
+            [region.source_layer],
+            grid_um,
+            [f"the sheet at {box} lands on {', '.join(hosts)}"],
+            "Fix the declaration: land the port on conductors of one film level "
+            "(stack_film or local_film), or declare its target level as a film.",
+        )
 
     def from_terminal_contacts(self):
         """Bind terminal closed contacts to the unique authored support plane."""

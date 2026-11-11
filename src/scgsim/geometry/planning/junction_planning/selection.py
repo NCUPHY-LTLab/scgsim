@@ -19,7 +19,7 @@ from scgsim.geometry.construction.curved_geometry.boundaries import (
     source_boundaries,
     source_rings,
 )
-from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.grid import format_point, geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput, SourceCurveSpec
 from scgsim.geometry.planning.junction_planning.boolean_geometry import (
     boolean,
@@ -35,6 +35,7 @@ from scgsim.geometry.planning.junction_planning.exact_geometry import (
     section,
 )
 from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
+from scgsim.geometry.primitives.grid_regions import grid_change_message
 from scgsim.geometry.source.curves import boundary_binding
 
 
@@ -50,13 +51,24 @@ class EndSection:
 
 def contacts(polygons, span, width):
     """Find extrema of area, segment and point contact with closed authored S."""
+    positions = [u for u, _ in contact_points(polygons, span, width)]
+    return (min(positions), max(positions)) if positions else None
+
+
+def contact_points(polygons, span, width) -> list[tuple]:
+    """The local points ``(u, v)`` that bound the polygons' area, segment and point contact with closed S.
+
+    ``contacts`` reads their extent along the junction; a refusal locates the contact by them.
+    """
     region = boolean(
         build_polygon_region(polygons),
         build_polygon_region(rectangle(0, 0, span, width)),
         "and",
     )
-    positions: list[int | Fraction] = [
-        round(x / PRECISION_UM) for p in region for x, _ in p.points
+    found: list[tuple] = [
+        (round(x / PRECISION_UM), round(y / PRECISION_UM))
+        for p in region
+        for x, y in p.points
     ]
     for rings in polygons:
         for axis, c, low, high in (
@@ -66,12 +78,9 @@ def contacts(polygons, span, width):
             (1, width, 0, span),
         ):
             intervals, points = section(rings, axis, c, low, high)
-            if axis == 0 and (intervals or points):
-                positions.append(c)
-            elif axis == 1:
-                positions.extend(points)
-                positions.extend((v for pair in intervals for v in pair))
-    return (min(positions), max(positions)) if positions else None
+            across = [*points, *(v for pair in intervals for v in pair)]
+            found.extend((c, v) if axis == 0 else (v, c) for v in across)
+    return found
 
 
 def bound_decimal(bound):
@@ -111,16 +120,7 @@ def end_candidate(source, own, foreign, section: EndSection):
     accepted when it is one piece, meets its own terminal over an area or a length, touches no
     other net and with its terminal covers the cut edge.
     """
-    clip = (
-        rectangle(0, 0, section.cut, section.width)
-        if section.left
-        else rectangle(section.cut, 0, section.span, section.width)
-    )
-    region = (
-        boolean(source, build_polygon_region(clip), "and")
-        if (section.cut > 0 if section.left else section.cut < section.span)
-        else []
-    )
+    region = end_region(source, section)
     try:
         end = read_boolean_rings(region)
     except ValueError as exc:
@@ -150,6 +150,31 @@ def end_candidate(source, own, foreign, section: EndSection):
             {"valid": False, "reason": "designated end edge is not wholly covered"},
         )
     return (end, {"valid": True, "empty_residual": not end, "components": len(end)})
+
+
+def end_region(source, section: EndSection):
+    """The part of ``source`` beyond the cut, as the native Boolean gives it: empty for a cut at the sheet's end."""
+    if not (section.cut > 0 if section.left else section.cut < section.span):
+        return []
+    clip = (
+        rectangle(0, 0, section.cut, section.width)
+        if section.left
+        else rectangle(section.cut, 0, section.span, section.width)
+    )
+    return boolean(source, build_polygon_region(clip), "and")
+
+
+# Why ``end_candidate`` refuses an end piece, in the words of a layout refusal.
+END_REFUSALS = {
+    "nonempty end has disconnected components": "falls apart into separate pieces",
+    "end lacks positive own-arm contact": (
+        "meets its conductor neither along an edge nor over an area"
+    ),
+    "end contacts wrong terminal or third net": "touches a conductor of another Net",
+    "designated end edge is not wholly covered": (
+        "leaves part of the cut covered neither by it nor by its conductor"
+    ),
+}
 
 
 def own_contact(end, own) -> bool:
@@ -226,11 +251,13 @@ def built_outline(
         boundary_reconstruction=reconstructions,
     )
     chains, _ = source_boundaries(terminals, source_rings(terminals))
+    layers = {p.polygon_id: p.layer for p in build_input.polygons}
     meetings: dict[int, list[SideMeeting]] = {0: [], width: []}
-    for chain in chains.values():
+    for (entity_id, polygon_id, *_), chain in chains.items():
+        drawn = _DrawnRing(entity_id, layers.get(polygon_id), grid_um)
         for curve in chain:
             for side, found in meetings.items():
-                found.extend(_curve_meetings(curve, frame, side, grid_um))
+                found.extend(_curve_meetings(curve, frame, side, drawn))
     arcs = [
         curve
         for chain in chains.values()
@@ -292,10 +319,20 @@ def _arc_positions(
     return found
 
 
+@dataclass(frozen=True)
+class _DrawnRing:
+    """The terminal ring a curve outlines: its Entity and source layer, and the model grid, for a refusal."""
+
+    entity_id: str
+    layer: str | None
+    grid_um: float | None
+
+
 def _curve_meetings(
-    curve: SourceCurveSpec, frame: JunctionLocalFrame, side: int, grid_um: float | None
+    curve: SourceCurveSpec, frame: JunctionLocalFrame, side: int, drawn: _DrawnRing
 ) -> list[SideMeeting]:
     """The meetings of one line or circular arc with the side line ``v = side``."""
+    grid_um = drawn.grid_um
     if curve.kind == "line_segment":
         (u0, v0), (u1, v1) = (_local_units(point, frame) for point in curve.points_um)
         if v0 == v1 == side:
@@ -316,9 +353,19 @@ def _curve_meetings(
             for u in sorted({cu - half, cu + half})
             if _on_arc((u, side * PRECISION_UM), start, through, end)
         ]
+    (x0, y0), (x1, y1) = curve.points_um[0], curve.points_um[-1]
     raise ValueError(
-        f"junction terminal outline curve {curve.kind!r} is not supported; "
-        "a terminal is built from lines and circular arcs"
+        grid_change_message(
+            f"junction terminal outline curve {curve.kind!r} is not supported; "
+            f"a terminal is built from lines and circular arcs: {drawn.entity_id}",
+            [] if drawn.layer is None else [drawn.layer],
+            grid_um,
+            [
+                f"its outline runs the curve from {format_point(x0, y0, grid_um)} "
+                f"to {format_point(x1, y1, grid_um)}"
+            ],
+            "Fix the layout: draw the curve as lines and circular arcs.",
+        )
     )
 
 
@@ -380,12 +427,34 @@ def side_steps(
     """
     steps = []
     for found in meetings.values():
-        if left:
-            reached = [m for m in found if 0 <= m.position <= cut]
-            nearest = max((m.position for m in reached), default=0)
-        else:
-            reached = [m for m in found if cut <= m.position <= span]
-            nearest = min((m.position for m in reached), default=span)
-        continues = any(m.along_side and m.position == nearest for m in reached)
+        nearest, continues = _nearest_meeting(found, cut, span, left=left)
         steps.append(0 if continues else abs(cut - nearest))
     return tuple(steps)
+
+
+def nearest_meetings(
+    meetings: Mapping[int, tuple[SideMeeting, ...]],
+    cut: int,
+    span: int,
+    *,
+    left: bool,
+) -> tuple[tuple[int, int], ...]:
+    """Per sheet side line, where the end piece's edge along it starts: ``(position, side line)``.
+
+    The positions ``side_steps`` measures from, for a refusal to locate.
+    """
+    return tuple(
+        (_nearest_meeting(found, cut, span, left=left)[0], line)
+        for line, found in meetings.items()
+    )
+
+
+def _nearest_meeting(found, cut, span, *, left) -> tuple[int, bool]:
+    """The terminal's meeting with one side line nearest the cut on its side, or the sheet corner, and whether an edge along the side ends there."""
+    if left:
+        reached = [m for m in found if 0 <= m.position <= cut]
+        nearest = max((m.position for m in reached), default=0)
+    else:
+        reached = [m for m in found if cut <= m.position <= span]
+        nearest = min((m.position for m in reached), default=span)
+    return nearest, any(m.along_side and m.position == nearest for m in reached)
