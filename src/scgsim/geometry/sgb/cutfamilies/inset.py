@@ -40,7 +40,8 @@ and a seam may end on it.  The die edge is a dicing line, so a run of origins th
 conductor the dicing cut, which continues past it (Issue #138): where the run ends in a line, that line is
 continued past the die edge (``SupportRegion.continued_origins``), its offsets run straight on until the die
 edge clips them, and no half circle is drawn round that end.  Otherwise the part of the half circle inside the
-die would be a short arc, the margin times the angle's deviation from a right angle, at every oblique cut.
+die would be a short arc, the margin times the angle's deviation from a right angle, at every oblique cut.  A
+run that ends on the die edge in an arc never reaches this module: the support is refused when it is resolved.
 Contact caps, other bands and tile seams are never origins -- they are not inputs of this module.  Ports are
 never origins either: a port footprint on the support's level is no origin
 and moves no band, but it keeps the band seams out of itself (below).  Topology changes (a neck that splits, a

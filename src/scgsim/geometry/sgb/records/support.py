@@ -14,7 +14,7 @@ cell from the area it covers (``labelling.bands``), never a topological question
 
 The die edge is a dicing line: a straight origin that runs onto it belongs to a conductor the dicing cut, so
 distances are measured from that origin continued straight past the die edge (Issue #138), as if the
-conductor went on.
+conductor went on.  An arc origin that runs onto it has no single way on, and the build refuses it.
 """
 
 from __future__ import annotations
@@ -25,7 +25,12 @@ from fractions import Fraction
 from functools import cached_property
 
 from scgsim.geometry.sgb.plane import Point, RepPoint, point_in_ring
-from scgsim.geometry.sgb.records.carriers import ArcCarrier, LineEdge, RingPrimitive
+from scgsim.geometry.sgb.records.carriers import (
+    ArcCarrier,
+    LineEdge,
+    RingPrimitive,
+    round_to_lattice,
+)
 
 ORIGIN_CELL = 64.0
 """Smallest cell, in grid units, of the grid that finds the nearest distance origin of a point."""
@@ -154,8 +159,9 @@ class SupportRegion:
         the die.  Where the die outline comes back beside a continuation, the build is refused when the support
         is resolved (``cutfamilies.die_cuts``).
 
-        Not cut, so their end keeps the half circle of the bands about it: an arc origin, and a line where the
-        die edge turns back over it (a die that is not convex there), which has no straight way out.
+        Not cut, so its end keeps the half circle of the bands about it: a line where the die edge turns back
+        over it (a die that is not convex there), which has no straight way out.  An arc origin that ends on the
+        die edge is not continued either; it is listed in :attr:`cut_arcs`, and the build is refused.
         """
         reach = 2 * self.margins[-1]
         cuts: list[DieCut] = []
@@ -174,6 +180,28 @@ class SupportRegion:
                     end = _past_the_die(inner, vertex, direction, reach)
                     if end is not None:
                         cuts.append(DieCut(ri, pi, at_end, vertex, end, direction))
+        return tuple(cuts)
+
+    @cached_property
+    def cut_arcs(self) -> tuple[ArcCut, ...]:
+        """Every end of an arc origin whose neighbour on the ring lies on the die edge: a conductor cut along an arc.
+
+        A conductor cut by the die edge is measured as continuing past it (:attr:`die_cuts`), and a straight
+        origin has one way on, along its own line.  An arc has none that the layout states, so SGB does not
+        model it: the build is refused when the support is resolved (``cutfamilies.die_cuts``, Issue #138).
+        """
+        cuts: list[ArcCut] = []
+        for ri, ring in enumerate(self.rings):
+            count = len(ring)
+            for pi, prim in enumerate(ring):
+                if not (self.is_origin(ri, pi) and isinstance(prim, ArcCarrier)):
+                    continue
+                for at_end, neighbour, vertex in (
+                    (True, (pi + 1) % count, prim.end),
+                    (False, (pi - 1) % count, prim.start),
+                ):
+                    if self.is_die_edge(ri, neighbour):
+                        cuts.append(ArcCut(ri, pi, at_end, round_to_lattice(vertex)))
         return tuple(cuts)
 
     @cached_property
@@ -294,6 +322,20 @@ class DieCut:
     vertex: Point
     end: Point
     die_direction: tuple[Fraction, Fraction]
+
+
+@dataclass(frozen=True)
+class ArcCut:
+    """One end of an arc distance origin that lies on the die edge, which SGB refuses.
+
+    ``ring`` and ``primitive`` locate the arc and ``at_end`` says which of its ends lies on the die edge;
+    ``vertex`` is that end, a lattice point.
+    """
+
+    ring: int
+    primitive: int
+    at_end: bool
+    vertex: Point
 
 
 def _direction_at(prim: RingPrimitive, *, at_end: bool) -> tuple[Fraction, Fraction]:

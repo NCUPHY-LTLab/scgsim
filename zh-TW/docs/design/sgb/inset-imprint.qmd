@@ -284,10 +284,10 @@ $R_m$ 的邊界由 origin 依每種特徵各一條規則得出（下表以 $O = 
 | reflex vertex（內角 > 180°） | offset 直線之間留下縫隙，以**圓心在該 vertex、半徑 $m$ 的 arc** 補上 | notch |
 | 半徑 $\rho$ 的 convex arc | 同心、半徑 $\rho - m$ 的 arc；當 $m \ge \rho$ 時**消失**成尖角 | rounded corner，$\rho = 5$ µm |
 | 半徑 $r$ 的 hole（concave arc） | 同心、半徑 $r + m$ 的圓 | hole，$r = 8$ µm |
-| 一串 origin 的端點（下一段邊不是 origin） | 以端點為圓心、半徑 $m$ 的半圓；端點在 die edge 上而 origin 是直線時沒有半圓，offset 直線一直延伸到 die edge | 範例中沒有（整條邊界都是 origin） |
+| 一串 origin 的端點（下一段邊不是 origin） | 以端點為圓心、半徑 $m$ 的半圓；端點在 die edge 上而 origin 是直線時沒有半圓，offset 直線一直延伸到 die edge；端點在 die edge 上而 origin 是圓弧時，建構被拒絕 | 範例中沒有（整條邊界都是 origin） |
 :::
 
-**被 die edge 切斷的直線 origin 越過 die edge 繼續延伸。** die edge 是切割線，導體在那裡被切斷，而不是結束。一串 origin 停在 die edge 上、而最後一段是直線時，SGB 把這段直線沿自己的方向延長到 die edge 之外，直到端點距 die edge 在該處的切線兩個最大 margin；距離從延長後的直線量起，offset 直線在 die 外結束，由 die edge 裁切，端點不畫半圓。die 是凸的時候，最大 margin 的 disk 以延長後的端點為圓心也完全在 die 外，所以 die 內每一點的距離都與整條直線的距離相同，延長得更長結果也一樣。若畫半圓，交角不是直角時，半圓會有一段留在 die 內，長度是 $m$ 乘以交角與 90° 的差，是 mesher 用不了的短 arc（Issue #138）。圓弧 origin，以及 die edge 在端點處折回、直線無法離開 die 的情形，不延長，仍畫半圓。
+**被 die edge 切斷的直線 origin 越過 die edge 繼續延伸。** die edge 是切割線，導體在那裡被切斷，而不是結束。一串 origin 停在 die edge 上、而最後一段是直線時，SGB 把這段直線沿自己的方向延長到 die edge 之外，直到端點距 die edge 在該處的切線兩個最大 margin；距離從延長後的直線量起，offset 直線在 die 外結束，由 die edge 裁切，端點不畫半圓。die 是凸的時候，最大 margin 的 disk 以延長後的端點為圓心也完全在 die 外，所以 die 內每一點的距離都與整條直線的距離相同，延長得更長結果也一樣。若畫半圓，交角不是直角時，半圓會有一段留在 die 內，長度是 $m$ 乘以交角與 90° 的差，是 mesher 用不了的短 arc（Issue #138）。die edge 在端點處折回、直線無法離開 die 的情形，不延長，仍畫半圓。一串 origin 以圓弧停在 die edge 上時，圓弧沒有直線的延伸，SGB 也不改畫半圓：解析 support 時就以 `InputError` 拒絕，指出導體與切點（見[支援的幾何](../../supported-geometry.qmd#unsupported-arc-die-cut)）。
 
 **短的 reflex arc 改成兩條 offset 的交點。** 轉角 $\theta$ 的 reflex vertex 上，arc 長 $m\theta$。兩側都是直線、且 $m\theta$ 不到 25 個 grid step（`SHORT_ARC_GRID_STEPS`）時，SGB 不畫 arc，而是把兩條 offset 直線延伸到交點。交點落在 vertex 的角平分線上、距 vertex $m / \cos(\theta/2)$，比 arc 遠 $m(1/\cos(\theta/2) - 1)$。只有這個差小於一個 grid step 時才替換，否則 arc 保留。這段幾步長的 arc 是精確的幾何，但 mesher 用不了（Issue #125）。25 步是 $0.5$ µm 乘上 2.8125°（128 點圓一個頂點的轉角）；在 margin 0.5 µm 時，差最大約 0.16 grid step。
 

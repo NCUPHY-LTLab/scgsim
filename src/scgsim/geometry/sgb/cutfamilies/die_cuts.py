@@ -7,11 +7,12 @@ continuation.
 * **Where the die edge lies** (:func:`cells_beyond_the_die`).  A level cell lies beyond the die when no substrate
   and no metal meet the plane there and such cells join it to the outside of the model.  The rim of a vacuum
   bore, trench or cavity that the die encloses is no dicing line.
-* **Whether a cut may be continued** (:func:`check_die_cuts`).  Each continuation runs from the cut vertex to a
-  point twice the largest margin beyond the die edge's line.  The build is refused where the die outline comes
-  back within the largest margin of a continuation on the far side of that line, as beside a notch, or where two
-  continuations of one support cross: a band there would come from a conductor that is not drawn, and SCGSim
-  does not model it.  Nothing is extended further and no cap is put back.
+* **Whether a cut may be continued** (:func:`check_die_cuts`).  Only a straight origin is continued, so the
+  build is refused where an arc origin ends on the die edge (``SupportRegion.cut_arcs``).  Each continuation runs
+  from the cut vertex to a point twice the largest margin beyond the die edge's line.  The build is refused
+  where the die outline comes back within the largest margin of a continuation on the far side of that line, as
+  beside a notch, or where two continuations of one support cross: a band there would come from a conductor
+  that is not drawn, and SCGSim does not model it.  Nothing is extended further and no cap is put back.
 
 Every test is exact, in fractions of the lattice.  A curved stretch of the die outline is enclosed by the circle
 on its chord, which holds an arc of at most a half turn, so a cut beside one is refused rather than cleared.
@@ -26,9 +27,13 @@ from fractions import Fraction
 from scgsim.geometry.sgb.derivation.layer import Layer
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.plane import Point
-from scgsim.geometry.sgb.records.carriers import LineEdge
+from scgsim.geometry.sgb.records.carriers import (
+    ArcCarrier,
+    RingPrimitive,
+    round_to_lattice,
+)
 from scgsim.geometry.sgb.records.labels import LevelLabel
-from scgsim.geometry.sgb.records.support import DieCut, SupportRegion
+from scgsim.geometry.sgb.records.support import ArcCut, DieCut, SupportRegion
 
 Exact = tuple[Fraction, Fraction]
 
@@ -77,12 +82,20 @@ def check_die_cuts(  # noqa: PLR0913 - one support, the plane its die edge was r
     conductor: str | None,
     grid_um: float,
 ) -> None:
-    """Refuse a support whose continuations past the die edge the die outline comes back to, or that cross.
+    """Refuse a support cut by the die edge along an arc, or whose continuations past the die edge the die outline comes back to, or that cross.
 
     ``plane`` is the level the die edge was read on and ``beyond`` its cells beyond the die.  ``conductor`` names
     the cut conductor of a conductor face; for a solution interface it is ``None`` and each cut is named by the
     conductor beside it on the plane.  ``grid_um`` only scales the locations in the message.
     """
+    if region.cut_arcs:
+        arc = region.cut_arcs[0]
+        raise InputError(
+            f"inset request {request_id!r}: the die edge cuts {_name(conductor, plane, region, arc)!r} at "
+            f"{_at(arc.vertex, grid_um)} um, where its gap edge is an exact arc. A conductor cut by the die edge "
+            "is continued straight past it, which an arc cannot be; SCGSim does not model it. Let a straight "
+            "edge of the conductor meet the die edge"
+        )
     cuts = region.die_cuts
     if not cuts:
         return
@@ -192,29 +205,42 @@ def _side(cut: DieCut, point: Exact) -> Fraction:
 
 
 def _name(
-    conductor: str | None, plane: Layer, region: SupportRegion, cut: DieCut
+    conductor: str | None, plane: Layer, region: SupportRegion, cut: DieCut | ArcCut
 ) -> str:
     """The cut conductor: given for a conductor face, else the conductor beside the cut edge on the plane."""
     if conductor is not None:
         return conductor
     prim = region.rings[cut.ring][cut.primitive]
-    assert isinstance(prim, LineEdge), "only straight origins are cut"
-    inner = prim.p if cut.at_end else prim.q
-    toward = (inner[0] - cut.vertex[0], inner[1] - cut.vertex[1])
     arr = plane.arr
     for index, edge in enumerate(arr.edges):
         if cut.vertex not in (edge.a, edge.b):
             continue
         other = edge.b if edge.a == cut.vertex else edge.a
-        run = (other[0] - cut.vertex[0], other[1] - cut.vertex[1])
-        parallel = run[0] * toward[1] - run[1] * toward[0] == 0
-        if not parallel or run[0] * toward[0] + run[1] * toward[1] <= 0:
-            continue  # not the plane edge that runs back along the cut origin
+        if not _runs_back_along(prim, cut, other, plane.edge_curve[index] is not None):
+            continue
         for half_edge in (2 * index, 2 * index + 1):
             owner = _conductor_owner(plane.labels[arr.he_face[half_edge]])
             if owner is not None:
                 return owner
     return "a conductor"
+
+
+def _runs_back_along(
+    prim: RingPrimitive, cut: DieCut | ArcCut, other: Point, curved: bool
+) -> bool:
+    """Whether the plane edge from the cut vertex to ``other`` runs back along the cut origin.
+
+    A straight origin runs along it in the same direction.  An arc origin of a solution interface is one curved
+    edge of the plane, its own level, so that edge ends where the arc does.
+    """
+    if isinstance(prim, ArcCarrier):
+        inner = round_to_lattice(prim.start if cut.at_end else prim.end)
+        return curved and other == inner
+    inner = prim.p if cut.at_end else prim.q
+    toward = (inner[0] - cut.vertex[0], inner[1] - cut.vertex[1])
+    run = (other[0] - cut.vertex[0], other[1] - cut.vertex[1])
+    parallel = run[0] * toward[1] - run[1] * toward[0] == 0
+    return parallel and run[0] * toward[0] + run[1] * toward[1] > 0
 
 
 def _conductor_owner(label: LevelLabel | None) -> str | None:

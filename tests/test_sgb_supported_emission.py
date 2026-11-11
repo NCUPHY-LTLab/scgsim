@@ -14,13 +14,12 @@ import pytest
 import sgb_supported_cells as disk_qubit
 import sgb_supported_pdk_cells as pdk
 from sgb_supported_kit import (
-    Conductor,
     Scene,
     assert_exact_bands,
     catalogue,
-    to_lattice,
     type_bands,
 )
+from sgb_unsupported_cells import straight_lead
 from test_sgb_supported_geometry import SCENES, scene_params
 
 from scgsim.geometry.sgb.build import emit_model
@@ -31,8 +30,6 @@ from scgsim.meshing import check_fine_structure
 # Where the core of the straight lead lies, from the disk end to the tip (um): the lead runs at -45 degrees.
 LEAD_CORE_X_UM = (84.670, 165.074)
 LEAD_CORE_Y_UM = (-165.074, -84.670)
-# An isolated lead along x on a 40 x 60 um die, banded at the kit's margins (0.5, 1.0) um on a 1 nm grid.
-LEAD_DIE = (0.0, -30.0, 40.0, 30.0)
 
 
 def sample_model(scene: Scene) -> ConformalModel:
@@ -88,13 +85,6 @@ def test_a_lead_twice_a_margin_wide_is_refused_before_meshing_as_the_erosion(
         assert (y0, y1) == pytest.approx(LEAD_CORE_Y_UM, abs=0.001)
         assert finding.value_steps is not None and finding.value_steps < 1
         assert "change the margins" in finding.fix
-
-
-def straight_lead(width_um: float) -> Scene:
-    """A lead along x from x = 10 to x = 30 um, ``width_um`` wide, on its own on the die."""
-    half = width_um / 2
-    ring = to_lattice([(10.0, -half), (30.0, -half), (30.0, half), (10.0, half)])
-    return Scene("straight_lead", (), LEAD_DIE, [Conductor("lead", "lead", ring)])
 
 
 @pytest.mark.parametrize(

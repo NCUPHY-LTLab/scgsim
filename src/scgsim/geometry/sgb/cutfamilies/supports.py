@@ -33,7 +33,8 @@ vacuum bore, trench or cavity that the die encloses is no dicing line, so a gap 
 half circle of its bands.  A solution interface is read the same way on its own level.  The face of a finite
 conductor on its other plane takes the die edges of the attachment plane along the same source edges, as it
 takes the gap edges.  A support whose continuation the die outline comes back to is refused
-(``cutfamilies.die_cuts``).
+(``cutfamilies.die_cuts``), and so is one whose gap edge runs onto the die edge as an arc, which has no single
+way on.
 
 Arc edges of the boundary are expressed on the exact circle of their source arc (centre and radius of the
 carrier) through the snapped end points, so offsets stay concentric with the source circle.

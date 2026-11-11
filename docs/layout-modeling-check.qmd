@@ -117,6 +117,15 @@ right at the limit can still be refused as class B where it is cut open, for
 example at the die edge: the width 2A/P of a piece that ends is a little less
 than the band's width. Choose bands wider than the limit.
 
+::: {.callout-tip title="Keep each conductor's core wide"}
+With Surface-EPR bands, keep each conductor's core, the region beyond its
+largest margin, much wider than its bands. Where a conductor narrows to exactly
+twice its largest margin, the bands meet down its middle: the model is still
+the exact erosion and meshes, with class C warnings for the short band edges at
+that neck. A little wider, the conductor keeps a sliver of core that class B
+refuses; see [Surface-EPR margins](supported-scope.qmd#rules-margins).
+:::
+
 Each finding names its stage, class, measure and size, the SGB entity and its
 physical group, the layout objects and band requests it comes from, its
 location and box in µm, why the mesher fails on it, and the fix. Its owner
