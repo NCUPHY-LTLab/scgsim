@@ -26,7 +26,7 @@ from scgsim.geometry.primitives.grid_cache import with_grid_work_cache
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
 from scgsim.geometry.source.curves import (
     boundary_binding,
-    occurrence_gds_walks,
+    occurrence_drawn_walks,
     transform_boundary,
     with_drawn_rings,
 )
@@ -750,21 +750,18 @@ class GeometryPlan:
             polygons=polygons,
             metadata=metadata,
             boundary_curves=tuple(boundary_curves),
+            boundary_reconstruction=tuple(reconstruction),
             lumped_supports=tuple(lumped_supports),
         )
-        # The records name segments of rings as drawn in the GDS; the source stage has
-        # since fused, rounded and noded them, so each record keeps its drawn ring.
-        build_input = replace(
+        # Reconstruction indices name rings as drawn in the GDS; the source stage has
+        # since fused, rounded and noded them, so each polygon keeps its drawn rings.
+        build_input = with_drawn_rings(
             build_input,
-            boundary_reconstruction=with_drawn_rings(
-                reconstruction,
+            occurrence_drawn_walks(
+                self._instances,
+                source.source_cells,
+                source.child_reference_indexes,
                 build_input,
-                occurrence_gds_walks(
-                    self._instances,
-                    source.source_cells,
-                    source.child_reference_indexes,
-                    build_input.entities,
-                ),
             ),
         )
         if self._rectangular_junctions:

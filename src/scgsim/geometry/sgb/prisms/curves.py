@@ -10,8 +10,8 @@ did:
 * a **reconstruction** record replaces selected ordered segments of one ring with a
   circular arc (open chain: three anchors; closed chain: a full circle through three
   anchors), keeping the unselected straight segments.  Its indices name the ring as
-  drawn in the GDS, which the source stage records on the record; they are carried
-  onto the footprint's ring by ``drawn_chain_on_ring``.
+  drawn in the GDS, which the source stage records in the polygon's ``drawn_rings``;
+  they are carried onto the footprint's ring by ``drawn_chain_on_ring``.
 
 Lines and circular arcs are the curve classes of this version.  Interpolation
 splines and B-splines fail closed, naming the boundary and the entity: B-spline
@@ -32,10 +32,9 @@ from scgsim.geometry.models.input import (
     GeometryBuildInput,
     LayoutPolygonSpec,
     SourceCurveSpec,
-    carried_drawn_ring,
     drawn_chain_on_ring,
+    drawn_ring_of,
     drawn_vertices_off_ring,
-    emitted_by_source_grid,
     ring_lost_drawn_order,
     ring_without_drawn_order,
 )
@@ -360,19 +359,19 @@ class _BoundaryBinder:
     def _drawn_ring(
         self, record: GdsBoundaryReconstructionSpec, key: RingKey, ring: Ring, what: str
     ) -> Ring:
-        """The ring the record's indices name, on the lattice.
+        """The ring the record's indices name, on the lattice, by the rule ``drawn_ring_of`` states.
 
-        It is the one the source stage recorded, or the footprint's own ring when no source
-        grid stage emitted the polygon.
+        A footprint no polygon backs, as an Entity's outline loop, is given as drawn.
         """
-        carried = carried_drawn_ring(record)
-        if carried is not None:
-            return tuple(
-                self._lattice_point(point, f"{what} drawn ring") for point in carried
-            )
-        if emitted_by_source_grid(self.polygons.get((key[0], key[1]))):
+        polygon = self.polygons.get((key[0], key[1]))
+        if polygon is None:
+            return ring
+        drawn = drawn_ring_of(polygon, key[2])
+        if drawn is None:
             raise InputError(ring_without_drawn_order(what, self._place(ring)))
-        return ring
+        return tuple(
+            self._lattice_point(point, f"{what} drawn ring") for point in drawn
+        )
 
     # -- coordinates -------------------------------------------------------------------
 

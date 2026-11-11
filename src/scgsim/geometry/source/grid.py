@@ -390,6 +390,9 @@ def _project_layout_polygons(
                 polygon,
                 exterior=oriented_exterior,
                 holes=oriented_holes,
+                drawn_rings=_drawn_rings_on(
+                    polygon, (oriented_exterior, *oriented_holes)
+                ),
                 metadata={
                     **polygon.metadata,
                     "unquantized_source_geometry": polygon.metadata.get(
@@ -407,6 +410,28 @@ def _project_layout_polygons(
         records=records,
         by_id={polygon.polygon_id: polygon for polygon in records},
     )
+
+
+def _drawn_rings_on(
+    polygon: LayoutPolygonSpec, rings: Sequence[PolygonRing]
+) -> tuple[PolygonRing | None, ...]:
+    # Each ring the grid emits keeps the drawn order of the input ring whose vertices it
+    # holds: noding adds vertices to a ring and can reorder the holes, never its drawn ones.
+    if not polygon.drawn_rings:
+        return ()
+    before = [
+        {tuple(point) for point in ring} for ring in (polygon.exterior, *polygon.holes)
+    ]
+    carried: list[PolygonRing | None] = []
+    for ring in rings:
+        present = {tuple(point) for point in ring}
+        found = [i for i, keys in enumerate(before) if keys <= present]
+        carried.append(
+            polygon.drawn_rings[found[0]]
+            if len(found) == 1 and found[0] < len(polygon.drawn_rings)
+            else None
+        )
+    return tuple(carried)
 
 
 def _validate_conductor_contacts(

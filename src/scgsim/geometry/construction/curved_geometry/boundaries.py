@@ -16,10 +16,9 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
     SourceCurveSpec,
-    carried_drawn_ring,
     drawn_chain_on_ring,
+    drawn_ring_of,
     drawn_vertices_off_ring,
-    emitted_by_source_grid,
     ring_lost_drawn_order,
     ring_without_drawn_order,
 )
@@ -115,16 +114,18 @@ def _named(
 
 def _drawn_ring(
     record: GdsBoundaryReconstructionSpec,
+    key: BoundaryKey,
     ring: PolygonRing,
     polygon: LayoutPolygonSpec | None,
     grid_size_um: float | None,
 ) -> PolygonRing:
-    # The ring the record's indices name: the one the source stage recorded, or the ring
-    # itself when no source grid stage has emitted it.
-    carried = carried_drawn_ring(record)
-    if carried is not None:
-        return carried
-    if emitted_by_source_grid(polygon):
+    # The ring the record's indices name, by the one rule drawn_ring_of states; a ring no
+    # polygon holds (an Entity's outline loop) is given as drawn.
+    if polygon is None:
+        return ring
+    _, _, role, hole_index = key
+    drawn = drawn_ring_of(polygon, 0 if role == "outer" else 1 + cast(int, hole_index))
+    if drawn is None:
         xs, ys = [x for x, _ in ring], [y for _, y in ring]
         raise ValueError(
             ring_without_drawn_order(
@@ -132,7 +133,7 @@ def _drawn_ring(
                 format_box((min(xs), min(ys), max(xs), max(ys)), grid_size_um),
             )
         )
-    return ring
+    return drawn
 
 
 def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals name it, and the grid
@@ -239,7 +240,7 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
         curves,
         {
             "requested": asdict(record),
-            "drawn_ring_um": drawn,
+            "drawn_ring": drawn,
             "original_ring_um": ring,
             "selected_segments": [
                 {"index": i, "start_um": ring[i], "end_um": ring[(i + 1) % count]}
@@ -285,7 +286,7 @@ def source_boundaries(
         record = boundary_binding(raw, reconstruction=True)
         key, ring = select_boundary(record, rings, end_pieces)
         polygon = polygons.get(key[1])
-        drawn = _drawn_ring(record, ring, polygon, grid_size_um)
+        drawn = _drawn_ring(record, key, ring, polygon, grid_size_um)
         segments, curves, operation = _reconstruct(
             record, ring, drawn, _named(record, polygon), grid_size_um
         )

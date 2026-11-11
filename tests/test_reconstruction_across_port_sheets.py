@@ -20,7 +20,13 @@ from sgb_inputs import gds_pad_in_ground
 from test_located_refusals import on, places
 from test_lumped_ports_at_any_angle import built_sidecar as built_device_sidecar
 from test_lumped_ports_at_any_angle import plan_snapshot as device_plan_snapshot
-from test_palace_rectangular_ports import built_sidecar, eigenmode_sim, prepared_port
+from test_palace_rectangular_ports import (
+    OPENING_VERTICES,
+    built_sidecar,
+    eigenmode_sim,
+    pad_in_round_opening,
+    prepared_port,
+)
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
 
 from scgsim.geometry import GeometryPlan
@@ -30,7 +36,6 @@ from scgsim.geometry.construction.curved_geometry.boundaries import (
     source_rings,
 )
 from scgsim.geometry.models.input import (
-    DRAWN_RING_METADATA,
     GdsBoundaryReconstructionSpec,
     RingChain,
     drawn_chain_on_ring,
@@ -39,9 +44,12 @@ from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import build_conformal_model
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
+from scgsim.palace import EigenmodeSim
 
 GRID_UM = 0.001
 PAD_RADIUS_UM = 100.0
+# The ground opening of ``pad_in_round_opening``.
+OPENING_RADIUS_UM = 120.0
 # The PDK's circular pad draws its circle with 256 points.
 PAD_VERTICES = 256
 NETS = {"pad": ("chip/pad",), "electrode": ("chip/electrode",)}
@@ -448,6 +456,144 @@ def test_drawn_segments_are_found_on_a_ring_that_runs_the_other_way():
     assert drawn_chain_on_ring((0,), (0, 1), False, drawn, ["a", "b", "c", "d"]) is None
 
 
+# ------------------------------------------------------------------ the drawn rings
+
+
+def plan_polygons(component, nets=NETS):
+    """The polygons the plan's source stage emits for a root-level layout."""
+    plan = GeometryPlan(
+        component,
+        root_id="chip",
+        layer_stack=NO_VACUUM_STACK,
+        material_records=MATERIALS,
+        coupon_padding_um=0.0,
+    )
+    plan.set_nets(nets)
+    return {p.polygon_id: p for p in plan.prepare().geometry_input.polygons}
+
+
+def test_a_pad_drawn_as_two_polygons_has_no_drawn_ring_and_is_refused_at_it(
+    monkeypatch,
+):
+    """Two rectangles drawn side by side fuse into one pad ring that no one GDS walk draws.
+
+    The source stage reads the pad's two walks and finds no single one whose vertices all
+    lie on the fused ring, so ``drawn_rings`` holds None for it; a reconstruction on that
+    ring is refused at the ring, (-100, -100)..(100, 100) um on layer 1/0.
+    """
+    component = pad_layout(
+        monkeypatch,
+        [(-100, -100), (0, -100), (0, 100), (-100, 100)],
+        electrode=[(120, -30), (150, -30), (150, 30), (120, 30)],
+        sheet=None,
+        port_orientation=0,
+        reconstruction={
+            "boundary_id": "PAD_CORNER",
+            "entity_id": "pad",
+            "selector_point_um": (-50.0, 0.0),
+            "role": "outer",
+            "kind": "circular_arc",
+            "closed": False,
+            "segment_indices": [0, 1],
+            "anchor_indices": [0, 1, 2],
+        },
+    )
+    component.add_polygon([(0, -100), (100, -100), (100, 100), (0, 100)], layer=(1, 0))
+    (pad,) = [p for p in plan_polygons(component).values() if p.layer == "1/0"]
+    assert pad.drawn_rings == (None,)
+    with pytest.raises(InputError) as error:
+        EigenmodeSim.simulation_drc(
+            component,
+            layer_stack=NO_VACUUM_STACK,
+            material_records=MATERIALS,
+            nets=NETS,
+        )
+    message = str(error.value)
+    assert message.startswith(
+        "chip/PAD_CORNER (Entity 'chip/pad', layer 1/0): the ring it selects has no "
+        "drawn GDS ring recorded for it: the ring at "
+    )
+    (place,) = places(message)
+    box = (-100.0, -100.0, 100.0, 100.0)
+    assert on(place, box) and on(box, place)
+
+
+def test_a_mirrored_occurrence_carries_the_mirrored_drawn_walk(monkeypatch):
+    """The pad's drawn ring is the device cell's walk, each vertex mirrored in its place.
+
+    The source grid emits the ring from another vertex, but ``drawn_rings`` keeps the
+    walk's own start and its sequence, which the mirror about y = 0 only turns round.
+    """
+    import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
+
+    device = cornered_pad(monkeypatch, port=False)
+    drawn = drawn_pad_ring(device)
+    chip = gf.Component()
+    reference = chip << device
+    reference.dmirror_y(0)
+    chip.info["component_semantics"] = {"schema_version": 2, "conductor_regions": []}
+    (pad,) = [
+        p
+        for p in device_plan_snapshot(chip, reference).geometry_input.polygons
+        if p.layer == "1/0"
+    ]
+    (ring,) = pad.drawn_rings
+    assert ring is not None
+    assert [grid_key(point) for point in ring] == [grid_key((x, -y)) for x, y in drawn]
+    assert grid_key(pad.exterior[0]) != grid_key(ring[0])
+
+
+def test_a_hole_ring_has_its_own_drawn_ring_and_a_reconstruction_on_it_builds(
+    monkeypatch,
+):
+    """The ground's round opening, drawn as the hole of one GDS polygon, gets its own entry.
+
+    The ground is one walk joined to its opening by a cut line; the source stage splits it
+    and records the opening's 256 vertices as the hole's drawn ring.  A closed circular
+    reconstruction of the hole, crossed by the port sheet, builds the opening's 120 um arc.
+    """
+    component = pad_in_round_opening(monkeypatch)
+    semantics = component.info["component_semantics"]
+    semantics["boundary_curves"] = semantics["boundary_curves"][:1]
+    semantics["boundary_reconstruction"] = [
+        {
+            "boundary_id": "GROUND_OPENING",
+            "entity_id": "ground",
+            "selector_point_um": (160.0, 0.0),
+            "role": "hole",
+            "hole_index": 0,
+            "kind": "circular_arc",
+            "closed": True,
+            "segment_indices": list(range(OPENING_VERTICES)),
+            "anchor_indices": [0, OPENING_VERTICES // 3, 2 * OPENING_VERTICES // 3],
+        }
+    ]
+    nets = {"pad": ("chip/pad",), "ground": ("chip/ground",)}
+    (ground,) = [p for p in plan_polygons(component, nets).values() if p.layer == "2/0"]
+    assert len(ground.holes) == len(ground.drawn_rings) - 1 == 1
+    hole = ground.drawn_rings[1]
+    assert hole is not None and len(hole) == OPENING_VERTICES
+    opening = {
+        grid_key(
+            (
+                OPENING_RADIUS_UM * math.cos(2 * math.pi * i / OPENING_VERTICES),
+                OPENING_RADIUS_UM * math.sin(2 * math.pi * i / OPENING_VERTICES),
+            )
+        )
+        for i in range(OPENING_VERTICES)
+    }
+    assert {grid_key(point) for point in hole} == opening
+    # The port sheet's crossings are noded into the emitted hole ring.
+    assert len(ground.holes[0]) > OPENING_VERTICES
+    sidecar = built_sidecar(monkeypatch, component, nets)
+    (arc,) = [
+        feature
+        for feature in sidecar["mesh_features"]
+        if feature["kind"] == "arc" and feature["source"] == "chip/ground"
+    ]
+    assert arc["facts"]["radius_um"] == pytest.approx(OPENING_RADIUS_UM, abs=GRID_UM)
+
+
 # ------------------------------------------------------------------ located refusals
 
 # The square pad of ``gds_pad_in_ground``: its ring and the GDS layer it is drawn on.
@@ -455,7 +601,7 @@ SQUARE_PAD = (40.0, 40.0, 60.0, 60.0)
 PAD_LAYER = "2/0"
 
 
-def square_pad_corner(**metadata):
+def square_pad_corner():
     """An open arc over the square pad's first two sides, anchored at its first three vertices."""
     return GdsBoundaryReconstructionSpec(
         "pad_corner",
@@ -464,8 +610,17 @@ def square_pad_corner(**metadata):
         "circular_arc",
         segment_indices=(0, 1),
         anchor_indices=(0, 1, 2),
-        metadata=metadata,
     )
+
+
+def with_pad_drawn_rings(effective, drawn_rings):
+    """The effective input with the square pad's ``drawn_rings`` replaced."""
+    build_input = effective.build_input
+    polygons = tuple(
+        replace(p, drawn_rings=drawn_rings) if p.object_name == "pad" else p
+        for p in build_input.polygons
+    )
+    return replace(effective, build_input=replace(build_input, polygons=polygons))
 
 
 def refusal(stage, effective, record):
@@ -481,20 +636,22 @@ def refusal(stage, effective, record):
 
 
 @pytest.mark.parametrize("stage", ["construction", "sgb"])
-def test_a_record_attached_after_the_source_stage_is_located_at_its_ring(
+def test_a_grid_emitted_ring_without_drawn_rings_is_located_at_the_ring(
     tmp_path, stage
 ):
-    """A record attached to the gridded input carries no drawn ring: the refusal names the ring.
+    """A polygon the source grid emitted, stripped of ``drawn_rings``, has lost its drawn order.
 
-    The pad ring is (40, 40)..(60, 60) um, on layer 2/0.
+    The refusal names the ring, (40, 40)..(60, 60) um on layer 2/0.
     """
-    effective = gds_pad_in_ground(tmp_path, with_port=False)
+    effective = with_pad_drawn_rings(gds_pad_in_ground(tmp_path, with_port=False), ())
     message = refusal(stage, effective, square_pad_corner())
     assert message.startswith(
         f"pad_corner (Entity 'pad', layer {PAD_LAYER}): the ring it selects has no "
         "drawn GDS ring recorded for it: the ring at "
     )
-    assert "Fix the declaration: declare the reconstruction with the layout" in message
+    assert "Fix the layout or the declaration: draw the ring as one GDS polygon" in (
+        message
+    )
     (place,) = places(message)
     assert on(place, SQUARE_PAD) and on(SQUARE_PAD, place)
 
@@ -524,9 +681,10 @@ def test_a_ring_that_lost_its_drawn_order_is_located_at_the_drawn_vertex(
     tmp_path, stage, drawn, faults
 ):
     """The refusal names each drawn vertex the ring lacks or meets out of order, where it was drawn."""
-    effective = gds_pad_in_ground(tmp_path, with_port=False)
-    record = square_pad_corner(**{DRAWN_RING_METADATA: drawn})
-    message = refusal(stage, effective, record)
+    effective = with_pad_drawn_rings(
+        gds_pad_in_ground(tmp_path, with_port=False), (drawn,)
+    )
+    message = refusal(stage, effective, square_pad_corner())
     assert message.startswith(
         f"pad_corner (Entity 'pad', layer {PAD_LAYER}): the ring it selects no longer "
         "holds each vertex of its drawn ring once, in drawn order: "

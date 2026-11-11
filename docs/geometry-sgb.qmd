@@ -123,10 +123,12 @@ rounds the ring, starts it elsewhere or nodes into it the crossings of a port
 sheet. A gdsfactory component stores a polygon as KLayout normalizes it, so read
 the sequence from the component, for example with `component.get_polygons()`,
 rather than from the points given to `add_polygon`; exactly repeated
-consecutive vertices count once. Declare the record with the layout, in the
-component semantics, the plan or the stack file, on a ring drawn as one GDS
-polygon: the source stage reads the drawn sequence there, and a record without
-it is refused. The selected consecutive chain can cross index zero.
+consecutive vertices count once. The source stage reads each polygon's GDS walk
+into `LayoutPolygonSpec.drawn_rings`, one entry per ring, and every binding
+stage takes the drawn order from there; the records stay as declared. A ring
+that is not one drawn GDS polygon, such as two drawn polygons fused into one,
+has no drawn order, and a reconstruction on it is refused at the ring. The
+selected consecutive chain can cross index zero.
 `closed=True` selects an entire ring; a partial chain keeps its drawn endpoints
 and leaves every unselected straight segment unchanged. `anchor_indices` name
 drawn vertices in the same order, and `degree` and `parameter_interval`

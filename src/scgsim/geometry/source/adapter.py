@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -31,7 +31,7 @@ from scgsim.geometry.source.adapter_records import (
     solution_region_entity,
 )
 from scgsim.geometry.source.curves import (
-    GdsWalk,
+    DrawnWalks,
     boundary_binding,
     gds_walks,
     with_drawn_rings,
@@ -243,17 +243,13 @@ class _SourceLowering:
         gridded = apply_geometry_grid(
             self.geometry_input(metadata, ports), self.source.grid_context
         )
-        # Stack-file records name segments of rings as drawn in the top cell's GDS.
-        return replace(
-            gridded,
-            boundary_reconstruction=with_drawn_rings(
-                gridded.boundary_reconstruction, gridded, self.gds_walks
-            ),
+        # Reconstruction indices name rings as drawn in the top cell's GDS; the grid
+        # has since rounded and noded them, so each polygon keeps its drawn rings.
+        drawn = DrawnWalks.read(
+            gds_walks(self.source.polygons_by_layer),
+            self.source.grid_context.grid_size_um,
         )
-
-    def gds_walks(self, _record: GdsBoundaryReconstructionSpec) -> tuple[GdsWalk, ...]:
-        """The top cell's GDS polygon walks as drawn: one cell, so one answer for every record."""
-        return gds_walks(self.source.polygons_by_layer)
+        return with_drawn_rings(gridded, lambda _polygon: drawn)
 
     def lower_solution_regions(self) -> None:
         self.entities = [

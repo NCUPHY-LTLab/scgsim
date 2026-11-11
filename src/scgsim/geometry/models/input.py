@@ -23,7 +23,17 @@ from scgsim.geometry.models.regions import PortSheetRegionRecord
 
 @dataclass(frozen=True)
 class LayoutPolygonSpec:
-    """Adapter-normalized polygon with stable frontend provenance."""
+    """Adapter-normalized polygon with stable frontend provenance.
+
+    ``drawn_rings`` holds, for each ring of the polygon (the exterior, then each hole in
+    the order of ``holes``), its vertices in the order and direction the GDS draws them:
+    the polygon's walk from its own first vertex, carried through the occurrence
+    transform and placed on the model grid as the source stage places it, in assembly
+    micrometres.  Reconstruction indices name these vertices.  The source stage fills it
+    where it reads the GDS, for every polygon it reads; an entry is None where that ring
+    is not one drawn GDS polygon (fused from several walks, or a drawn vertex dropped).
+    It stays empty when nothing filled it, as on a polygon built by hand.
+    """
 
     polygon_id: str
     layer: str
@@ -33,6 +43,7 @@ class LayoutPolygonSpec:
     net_name: str | None = None
     port_name: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    drawn_rings: tuple[PolygonRing | None, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,7 +89,8 @@ class GdsBoundaryReconstructionSpec:
     Segment index ``i`` is the edge from vertex ``i`` to vertex ``i + 1`` of the
     selected ring as drawn in the GDS: the order and direction in which the GDS
     polygon walks it, from its own first vertex, carried through the occurrence
-    transform.  Anchor indices name drawn vertices in the same order.  Circular
+    transform, as the selected polygon's ``LayoutPolygonSpec.drawn_rings`` holds it.
+    Anchor indices name drawn vertices in the same order.  Circular
     reconstruction uses three caller-selected vertex indices. Spline
     reconstruction uses the recorded boundary vertices, or explicit selected
     indices. No polygon-only input is implicitly reconstructed.
@@ -99,15 +111,6 @@ class GdsBoundaryReconstructionSpec:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
-DRAWN_RING_METADATA = "drawn_ring_um"
-"""The ``GdsBoundaryReconstructionSpec.metadata`` key of the drawn ring its indices name.
-
-The source stage records it where it reads the GDS polygon the record selects: the
-ring's vertices in drawn order, carried through the occurrence transform and placed
-on the model grid as the source stage places them, in assembly micrometres.
-"""
-
-
 # A refusal lists at most this many drawn vertices, then counts the rest.
 _LISTED_VERTICES = 5
 
@@ -120,11 +123,10 @@ def ring_without_drawn_order(what: str, ring_place: str) -> str:
     """
     return (
         f"{what}: the ring it selects has no drawn GDS ring recorded for it: the ring at "
-        f"{ring_place}. Its indices name no drawn edge: the record was attached after the "
-        "source stage, or the ring is not one drawn GDS polygon (several fused together, "
-        "or vertices the source stage dropped). Fix the declaration: declare the "
-        "reconstruction with the layout (component semantics, GeometryPlan or the stack "
-        "file), on a ring drawn as one GDS polygon."
+        f"{ring_place}. Its indices name no drawn edge: the ring is not one drawn GDS "
+        "polygon (several fused together, or vertices the source stage dropped), or its "
+        "polygon was not read from the GDS by the source stage. Fix the layout or the "
+        "declaration: draw the ring as one GDS polygon, or reconstruct a ring that is."
     )
 
 
@@ -153,21 +155,30 @@ class RingChain:
     anchors: tuple[int, ...]
 
 
-def carried_drawn_ring(
-    record: GdsBoundaryReconstructionSpec,
-) -> tuple[tuple[float, float], ...] | None:
-    """The drawn ring the source stage recorded on the record, if it recorded one."""
-    ring = record.metadata.get(DRAWN_RING_METADATA)
-    return None if ring is None else tuple((float(x), float(y)) for x, y in ring)
+def drawn_ring_of(polygon: LayoutPolygonSpec, ring_index: int) -> PolygonRing | None:
+    """The drawn order of one ring of a polygon (0 the exterior, 1 + k hole k), or None.
 
-
-def emitted_by_source_grid(polygon: LayoutPolygonSpec | None) -> bool:
-    """Whether the source grid stage emitted the polygon, so its ring order is not the drawn one.
-
-    The grid stage records the polygon it rounded and noded under this key; a polygon
-    built without it holds its ring as it was given, which is then its drawn ring.
+    This is the one rule for which vertex order a ring's reconstruction indices name.  A
+    polygon the source stage read from the GDS carries it in ``drawn_rings``; a None entry
+    there means the ring is not one drawn GDS polygon.  A polygon without ``drawn_rings``
+    that the source grid never emitted, as an input built by hand, holds its rings as they
+    were given, and they are its drawn order.  A polygon the grid emitted without
+    ``drawn_rings`` has lost its drawn order.  A ring no polygon holds, as an Entity's
+    outline loop, is given as drawn.
     """
-    return polygon is not None and "unquantized_source_geometry" in polygon.metadata
+    rings = (polygon.exterior, *polygon.holes)
+    if not 0 <= ring_index < len(rings):
+        return None
+    if polygon.drawn_rings:
+        return (
+            polygon.drawn_rings[ring_index]
+            if ring_index < len(polygon.drawn_rings)
+            else None
+        )
+    # The source grid stage records under this key every polygon it rounds and nodes.
+    if "unquantized_source_geometry" in polygon.metadata:
+        return None
+    return rings[ring_index]
 
 
 def drawn_chain_on_ring[Key](  # noqa: PLR0913 -- the declared chain, its closure, and the two rings it joins
