@@ -30,9 +30,9 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 ## 實體／薄膜要求遷移 {#solidthin-film-request-migration}
 
-新的 Q3D 與 HFSS 三維要求必須明確選擇 `modeling="solid"` 或 `modeling="thin_film"`。省略或提供其他模式不會啟用隱含相容路徑。PDK／來源契約也提供精確的物理層身份、層表示（承載堆疊的膜、局部膜／deck 或保留實體）、物理厚度，以及適用時的片接觸側。既有 Object、Net、埠、連通外框與孔洞身份，仍是要求的來源依據。
+新的 Q3D 與 HFSS 三維要求必須明確選擇 `modeling="solid"` 或 `modeling="thin_film"`。省略或提供其他模式不會啟用隱含相容路徑。PDK／來源契約也提供精確的物理層身份、特徵種類（堆疊膜、局部膜或有限體積）、物理厚度，以及適用時的薄膜附著面。既有 Object、Net、埠、連通外框與孔洞身份，仍是要求的來源依據。
 
-此選擇沿用既有 Q3D body-v3 與 HFSS 系列結構識別字。受支援但沒有 `modeling` 的歷史 Q3D／HFSS 結果，只能透過原版本化結果讀取器讀取；其原始酬載與雜湊保留，且不能啟動新執行。新執行路徑不會推定或補上缺少的模式。層宣告在唯一編寫的 `LayerStack` 座標系中使用 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side, source_thickness_um=None)`。實體模式的 `physical_layers` 可為空；來源本體與 `LayerImport` 可用 `physical_layer_id` 指定層。準備結果透過 `effective_bodies` 與 `effective_layer_imports` 揭示來源及映射區間。同一物理層 ID 在多邊形、元件實例及 Net 成員間只計算一次，不新增每層 `stack_id`。GeometryPlan 準備會以 `source_thickness_um` 傳遞原 Level 厚度，直接呼叫者也可提供這項原始來源事實。膜物理厚度輸出保留此值，不取整，也不由端點重新計算；省略時表示厚度由端點定義，不能宣稱是原始 PDK 厚度。座標映射仍使用端點跨度；保留實體維持自己的本體範圍。
+此選擇沿用既有 Q3D body-v3 與 HFSS 系列結構識別字。受支援但沒有 `modeling` 的歷史 Q3D／HFSS 結果，只能透過原版本化結果讀取器讀取；其原始酬載與雜湊保留，且不能啟動新執行。新執行路徑不會推定或補上缺少的模式。新的要求在唯一編寫的 `LayerStack` 座標系中以 `PhysicalLayerDeclaration` 紀錄宣告層，其欄位列於[物理表示契約](specs/physical-representation.qmd)。薄膜宣告以 `physical_dimensions["normal_thickness_um"]` 記錄原始法向厚度，膜物理厚度輸出直接回報此值，不由端點重新計算。較早的 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side, source_thickness_um=None)` 紀錄只由歷史讀取器解碼；新的要求若傳入此紀錄，會引發 `TypeError`，並要求改用 `PhysicalLayerDeclaration`。實體模式的 `physical_layers` 可為空；來源本體與 `LayerImport` 可用 `physical_layer_id` 指定層。準備結果透過 `effective_bodies` 與 `effective_layer_imports` 揭示來源及映射區間。同一物理層 ID 在多邊形、元件實例及 Net 成員間只計算一次，不新增每層 `stack_id`。座標映射使用端點跨度；有限體積維持自己的本體範圍。
 
 模式選擇決定幾何表示，不選擇求解器系列或公開 A/B/C 執行路徑。完整的座標轉換、材料、終端、僅建構與失敗行為，定義於 [AEDT 實體與薄膜契約](specs/aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 與 Palace 不在這次遷移範圍。Q3D input-v1/v2 要求結構仍已移除；其他受支援系列路徑的共用 V1/V2 交接相容性，不會恢復這些 Q3D 要求結構，也不會略過明確模式要求。
 

@@ -7,32 +7,37 @@ scgsim-id: "docs/course/aedt-driven-terminal"
 ---
 
 For a complete workflow, start with the [CPW scattering tutorial](../tutorials/scattering.qmd#configure-port-models).
-This page remains the detailed Driven Terminal reference and links to the
+This page is the detailed Driven Terminal reference and links to the
 shared [CPW input lesson](aedt-inputs.qmd). Terminal ports identify reference
 conductors explicitly. They use the same source GDS and PDK material mapping as
 Modal, but this model's reference assignment has its own native evidence and
 result meaning. A similar network curve would not make the two port models
-identical. As in the Eigenmode lesson, replace the inputs page's legacy
-zero-thickness M1 sheet interval with the CPW source owner's explicit `NB_FILM`
-interval and lower contact side. This preserves the existing sheet plane and
-does not claim that c997 embeds the declaration.
+identical. As in the Eigenmode lesson, replace the inputs page's zero-thickness
+M1 import with the 0.2 µm `NB_FILM` interval and declare that film with a
+`PhysicalLayerDeclaration` whose lower face is the attachment face, so the HFSS
+sheet stays at z = 0. The example writes this declaration itself; the coupon
+GDS carries none.
 
 ```python
 from pathlib import Path
 from scgsim.aedt import (
     FrequencySweepSpec, HfssDrivenSpec, HfssRunControl, LayerImport,
-    LengthMeshSpec, PhysicalLayerSpec, TerminalPort, prepare_handoff,
+    LengthMeshSpec, TerminalPort, prepare_handoff,
 )
+from scgsim.geometry import PhysicalLayerDeclaration
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 metal_thickness_um = 0.2
 physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerSpec(
+physical_layer = PhysicalLayerDeclaration(
     physical_layer_id=physical_layer_id,
-    kind="stack_film",
-    z_min_um=0.0,
-    z_max_um=metal_thickness_um,
-    contact_side="lower",
+    source_level_id="D0_TOP_M1",
+    source_level_and_gds_pair={"layer": 1, "datatype": 0},
+    source_interval_um=(0.0, metal_thickness_um),
+    material_id="Nb",
+    feature_kind="stack_film",
+    physical_dimensions={"normal_thickness_um": metal_thickness_um},
+    source_contact_facts={"layer_attachment_face": "lower"},
 )
 layer_imports = (
     LayerImport(

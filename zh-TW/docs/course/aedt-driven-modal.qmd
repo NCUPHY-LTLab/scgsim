@@ -7,24 +7,28 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-modal"
 ---
 
-接續[CPW 輸入](aedt-inputs.qmd)。Driven Modal 要求的是網路響應，而非未受激發的共振模態。其埠使用明確的積分線。CPW 端面上的兩個有序埠決定激發方式與回報的埠順序；間隙圖片無法取代這些線段端點。輸入頁面的等 Z M1 對應是歷史上的薄片請求。目前的 Thin Film 範例提供 CPW 來源擁有者明確指定的 `NB_FILM` 區間與下方接觸側；這不表示 c997 已包含此宣告。
+接續[CPW 輸入](aedt-inputs.qmd)。Driven Modal 要求的是網路響應，而非未受激發的共振模態。其埠使用明確的積分線。CPW 端面上的兩個有序埠決定激發方式與回報的埠順序；間隙圖片無法取代這些線段端點。輸入頁面以單一高度匯入 M1，描述的是零厚度薄片。Thin Film 請求則需宣告薄膜：本範例以 0.2 µm 的 `NB_FILM` 區間取代 `layer_imports`，並以 `PhysicalLayerDeclaration` 宣告此薄膜，以下表面為附著面，因此 HFSS 薄片仍位於 z = 0。此宣告由範例自行撰寫；coupon GDS 本身不含任何宣告。
 
 ```python
 from pathlib import Path
 from scgsim.aedt import (
     FrequencySweepSpec, HfssDrivenSpec, HfssRunControl, LayerImport,
-    LengthMeshSpec, ModalPort, PhysicalLayerSpec, prepare_handoff,
+    LengthMeshSpec, ModalPort, prepare_handoff,
 )
+from scgsim.geometry import PhysicalLayerDeclaration
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 metal_thickness_um = 0.2
 physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerSpec(
+physical_layer = PhysicalLayerDeclaration(
     physical_layer_id=physical_layer_id,
-    kind="stack_film",
-    z_min_um=0.0,
-    z_max_um=metal_thickness_um,
-    contact_side="lower",
+    source_level_id="D0_TOP_M1",
+    source_level_and_gds_pair={"layer": 1, "datatype": 0},
+    source_interval_um=(0.0, metal_thickness_um),
+    material_id="Nb",
+    feature_kind="stack_film",
+    physical_dimensions={"normal_thickness_um": metal_thickness_um},
+    source_contact_facts={"layer_attachment_face": "lower"},
 )
 layer_imports = (
     LayerImport(

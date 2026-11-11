@@ -82,30 +82,32 @@ the v2 package and the corresponding old-to-new map.
 New Q3D and HFSS 3D requests require the explicit request-level selection
 `modeling="solid"` or `modeling="thin_film"`. Omitting it or supplying another
 mode does not select an implicit compatibility path. The PDK/source contract
-also supplies exact physical-layer identity, layer representation
-(stack-bearing film, local film/deck, or retained solid), physical thickness,
-and sheet-contact side where applicable. Existing Object, Net, port, connected
+also supplies exact physical-layer identity, feature kind (stack film, local
+film or finite volume), physical thickness, and the film attachment face where
+applicable. Existing Object, Net, port, connected
 outline and hole identities remain the request's source of truth.
 
 This selection uses the existing Q3D body-v3 and HFSS family schema
 identifiers. A supported historical Q3D/HFSS result payload without `modeling`
 can only be read through its original versioned result reader; its raw payload
 and hash are preserved, and it cannot start a new execution. The new execution
-path never infers or supplies a missing mode. Layer declarations use
+path never infers or supplies a missing mode. Fresh requests declare layers
+with `PhysicalLayerDeclaration` records in the single authored `LayerStack`
+coordinate system; the
+[physical representation contract](specs/physical-representation.qmd) lists
+their fields. A film declaration carries its original normal thickness in
+`physical_dimensions["normal_thickness_um"]`, and film physical-thickness
+output reports that value without recomputing it from endpoints. The earlier
 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side,
-source_thickness_um=None)`
-in the single authored `LayerStack` coordinate system. In solid mode the
-`physical_layers` collection may be empty; source body and `LayerImport`
-records may identify a layer with `physical_layer_id`. Preparation exposes
-source and mapped intervals in `effective_bodies` and
-`effective_layer_imports`. The physical layer ID is counted once across
-polygons, occurrences, and Net membership; no per-layer `stack_id` is
-introduced. GeometryPlan preparation carries the original Level thickness in
-`source_thickness_um`; direct callers may supply that original source fact.
-Film physical-thickness output retains it without rounding or recomputing it
-from endpoints. Omission means endpoint-defined thickness, not an original PDK
-thickness claim. Coordinate mapping still uses endpoint spans; retained solids
-keep their own body extent.
+source_thickness_um=None)` record is decoded only by historical readers: a
+fresh request that passes one raises `TypeError` and asks for
+`PhysicalLayerDeclaration`. In solid mode the `physical_layers` collection may
+be empty; source body and `LayerImport` records may identify a layer with
+`physical_layer_id`. Preparation exposes source and mapped intervals in
+`effective_bodies` and `effective_layer_imports`. The physical layer ID is
+counted once across polygons, occurrences, and Net membership; no per-layer
+`stack_id` is introduced. Coordinate mapping uses endpoint spans; finite
+volumes keep their own body extent.
 
 The mode selection chooses geometry representation; it does not choose a solver
 family or a public A/B/C execution route. The complete transform and material,
