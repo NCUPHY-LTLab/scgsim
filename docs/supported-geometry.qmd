@@ -10,7 +10,8 @@ This page lists the layout patterns that SCGSim's geometry builder (SGB) is
 tested on, each with a figure and the dimensions of the OrcaPen SC PDK cells
 that use it, and the rule for drawing curved outlines. A layout made of these
 patterns, within the ranges below, builds with Surface-EPR bands whose areas
-match the exact geometry. A pattern that is not listed is not verified. The
+match the exact geometry. A pattern that is not listed is not verified; those
+SCGSim refuses are shown under [Geometry SCGSim does not model](#unsupported). The
 cases known to fail or to need a layout change, with their causes, are on
 [Known Geometry Problems](known-geometry-problems.qmd). The rules every layout
 must follow, and who owns a failure, are on [Supported Scope](supported-scope.qmd).
@@ -37,8 +38,8 @@ conductor that face exposed substrate. The die edge is a dicing line: where it
 cuts a straight conductor edge, the conductor is treated as continuing past it,
 so the bands along that edge run straight to the die edge at any angle, with no
 rounded end. A die outline that comes back within the largest band margin of
-that continuation, as beside a notch, is refused; see
-[Surface-EPR margins](supported-scope.qmd#rules-margins).
+that continuation, as beside a notch, is refused, and so is an exact arc that
+the die edge cuts; see [Geometry SCGSim does not model](#unsupported).
 
 For every band, the test compares the built area with the exact erosion of the
 same polygons. The two agree within the grid's snap bound: half a grid diagonal
@@ -152,6 +153,59 @@ the 20 µm gap only.
 Cells 14, 15 and 18 contain a few vertices that turn by less than 2.8125°;
 they build with exact bands as drawn (see [Curved outlines drawn as
 polygons](#curve-rule)).
+
+## Geometry SCGSim does not model {#unsupported}
+
+SCGSim refuses these layouts with a message that names the conductor and the
+place, and builds no model from them. Each figure is drawn from a sample in the
+test suite, banded at `inset_margins_um=(0.5, 1.0)`. White is outside the die,
+so the die edge is where white meets cream; thin dark lines are band boundaries
+and red marks the problem. Dimensions are in µm. The rules themselves are on
+[Surface-EPR margins](supported-scope.qmd#rules-margins).
+
+### A conductor cut by the die edge along an arc {#unsupported-arc-die-cut}
+
+![A curved strip between two exact arcs about one centre, radii 6.5 and 10, runs into the die edge at x = 0. Near the outer arc's cut, each band boundary would end in a half circle about the cut (red, enlarged on the right).](assets/supported-geometry/unsupported-arc-die-cut.svg){fig-alt="A curved strip running into the die edge, with its band boundaries; near the cut, the boundaries end in short red dashed arcs about the cut point."}
+
+The die edge is a dicing line, so SCGSim treats a conductor cut by it as
+continuing past it, and a straight edge continues along its own line. An edge
+declared as an exact arc has no straight continuation. Ending its bands in a
+half circle about the cut, as at the end of a conductor, would measure the
+strip as if it ended there, so SCGSim does not model it.
+
+The build raises `InputError`, naming the conductor and the cut point:
+
+```text
+inset request 'ma::strip::top': the die edge cuts 'strip'
+at (0.0000, 2.5000) um, where its gap edge is an exact arc. …
+Let a straight edge of the conductor meet the die edge
+```
+
+A curve drawn as a polygon meets the die edge with a straight chord, which
+continues like any straight edge.
+
+### The die outline beside a cut {#unsupported-notch-beside-cut}
+
+![A strip 3 wide is cut by the floor of an 8 × 4 notch in the die's top edge. Its right side, continued past the die edge (red dashed) to twice the largest margin beyond the floor, ends 0.1 from the notch wall (red), inside the 1.0 margin.](assets/supported-geometry/unsupported-notch-beside-cut.svg){fig-alt="A diagonal strip ending on the floor of a notch in the die edge; a dashed continuation of its side reaches close to the notch wall."}
+
+Bands beside the continuation would be measured from a conductor that is not
+drawn. The same rule refuses a conductor that overhangs the die from a vertex
+on its edge, two cut conductors whose continuations cross past the die edge,
+and a cut beside a curved stretch of the die outline. The build raises
+`InputError`, naming the conductor and the cut point, for example
+`the die outline comes back within the band margin (1 um) of the continuation of
+'strip', cut by the die edge at (21.4000, 26.0000) um`.
+
+### A conductor a little wider than twice its largest margin {#unsupported-lead-core}
+
+![An isolated lead 2.004 wide, from left to right: the lead on its die, a window across its width, and a 20 nm window at its middle. The 0.5 band boundary is the thin dark line; the 1.0 boundary (red) leaves a core 4 nm wide.](assets/supported-geometry/unsupported-lead-core.svg){fig-alt="A straight lead with its band boundaries; enlarged, the two innermost boundaries run 4 nm apart down the middle of the lead."}
+
+The core, the face beyond the largest margin, is narrower than the 10 grid
+steps the mesher needs. A lead exactly twice the margin wide has no core and is
+modeled. The meshing stage of `mesh()` and `simulation_drc()` refuses the core
+with `SimulationDrcError`: a class B narrow face owned by `erosion`, with its
+location and the fix, change the margins or the width; see
+[What the meshing stage reports](layout-modeling-check.qmd#what-the-meshing-stage-reports).
 
 ## Lumped ports are made rectangles {#lumped-port-rectangle}
 

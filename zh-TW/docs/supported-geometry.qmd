@@ -7,7 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/supported-geometry"
 ---
 
-本頁列出 SCGSim 的幾何建構器（SGB）經過測試的 layout 圖形，每個圖形都附有圖，以及使用它的 OrcaPen SC PDK cell 的尺寸；本頁也說明繪製曲線輪廓的規則。由這些圖形組成、且落在下列範圍內的 layout，建出的 Surface-EPR band 面積與精確幾何相符。沒有列出的圖形未經驗證。已知會失敗或需要修改 layout 的情況及其原因，列在[已知的幾何問題](known-geometry-problems.qmd)。每個 layout 都必須遵守的規則，以及失敗由誰負責，見[支援範圍](supported-scope.qmd)。
+本頁列出 SCGSim 的幾何建構器（SGB）經過測試的 layout 圖形，每個圖形都附有圖，以及使用它的 OrcaPen SC PDK cell 的尺寸；本頁也說明繪製曲線輪廓的規則。由這些圖形組成、且落在下列範圍內的 layout，建出的 Surface-EPR band 面積與精確幾何相符。沒有列出的圖形未經驗證；SCGSim 會拒絕的圖形列在 [SCGSim 不建模的幾何](#unsupported)。已知會失敗或需要修改 layout 的情況及其原因，列在[已知的幾何問題](known-geometry-problems.qmd)。每個 layout 都必須遵守的規則，以及失敗由誰負責，見[支援範圍](supported-scope.qmd)。
 
 ## 模擬之前先檢查 layout
 
@@ -15,7 +15,7 @@ scgsim-id: "docs/supported-geometry"
 
 ## 「支援」的意思 {#what-supported-means}
 
-下面每個 unit cell 都是 SCGSim 測試集中的一個樣本 layout。樣本直接以 SGB 紀錄畫在 1 nm 的 grid 上，不使用任何 PDK 程式碼；尺寸取自以 `curve_sampling="simulation"` 建立的 PDK cell。每個樣本都以 Route B 建立，並在 `inset_margins_um=(0.5, 1.0)` 帶有 MA、MS 與 SA band。band 從 [gap edge](specs/palace-eigenmode.qmd#surface-epr-margins)量起，也就是導體上面向裸露 substrate 的邊。die edge 是切割線：die edge 切斷導體的直線邊時，導體視為越過 die edge 繼續延伸，所以沿這條邊的 band 不論交角多少，都直直延伸到 die edge，末端沒有圓頭。die 的外框若在這段延伸的最大 band margin 之內又回來（例如凹口旁），建構會被拒絕，見 [Surface-EPR 邊距](supported-scope.qmd#rules-margins)。
+下面每個 unit cell 都是 SCGSim 測試集中的一個樣本 layout。樣本直接以 SGB 紀錄畫在 1 nm 的 grid 上，不使用任何 PDK 程式碼；尺寸取自以 `curve_sampling="simulation"` 建立的 PDK cell。每個樣本都以 Route B 建立，並在 `inset_margins_um=(0.5, 1.0)` 帶有 MA、MS 與 SA band。band 從 [gap edge](specs/palace-eigenmode.qmd#surface-epr-margins)量起，也就是導體上面向裸露 substrate 的邊。die edge 是切割線：die edge 切斷導體的直線邊時，導體視為越過 die edge 繼續延伸，所以沿這條邊的 band 不論交角多少，都直直延伸到 die edge，末端沒有圓頭。die 的外框若在這段延伸的最大 band margin 之內又回來（例如凹口旁），建構會被拒絕；die edge 切斷的若是精確圓弧，也會被拒絕，見 [SCGSim 不建模的幾何](#unsupported)。
 
 測試把每個 band 建出的面積，與同一組多邊形的精確侵蝕（erosion）比較。兩者的差在 grid 的 snap 界限之內：半個 grid 對角線（0.71 nm）乘以 band 邊的長度，因此每 100 µm 的 band 邊最多容許 0.07 µm² 的差。
 
@@ -111,6 +111,38 @@ PDK 以 258 點畫 cell 21 的 spline 條帶。樣本將它們重新取樣；依
 cell 22 的壁厚 0.2 µm，比兩個 margin 都薄。壁面是垂直的，所以上面沒有 band，著陸墊的 band 只從 20 µm 的 gap 量起。
 
 cell 14、15 與 18 有少數頂點的轉角小於 2.8125°；它們依原圖就能建出精確的 band（見[以多邊形畫成的曲線輪廓](#curve-rule)）。
+
+## SCGSim 不建模的幾何 {#unsupported}
+
+SCGSim 會拒絕下列 layout，訊息會指出導體與位置，且不會從它們建出任何模型。每張圖都由測試集中的一個樣本畫成，band 為 `inset_margins_um=(0.5, 1.0)`。白色是 die 以外的區域，所以白色與米色的交界就是 die edge；深色細線是 band 的邊界，紅色標出問題所在。尺寸的單位是 µm。規則本身見 [Surface-EPR 邊距](supported-scope.qmd#rules-margins)。
+
+### die edge 沿圓弧切斷的導體 {#unsupported-arc-die-cut}
+
+![一條彎曲的條帶夾在同一圓心、半徑 6.5 與 10 的兩段精確圓弧之間，在 x = 0 處碰到 die edge。在外弧的切點附近，每條 band 邊界都會以繞切點的半圓結束（紅色，右圖放大）。](assets/supported-geometry/unsupported-arc-die-cut.svg){fig-alt="碰到 die edge 的彎曲條帶與它的 band 邊界；在切點附近，邊界以繞切點的紅色虛線短弧結束。"}
+
+die edge 是切割線，所以 SCGSim 把被它切斷的導體視為越過 die edge 繼續延伸，直線邊則沿自己的直線延伸。宣告為精確圓弧的邊沒有直線的延伸。若像導體末端那樣，在切點以半圓結束它的 band，就等於把條帶當成在那裡終止來量，所以 SCGSim 不為它建模。
+
+建構時拋出 `InputError`，指出導體與切點：
+
+```text
+inset request 'ma::strip::top': the die edge cuts 'strip'
+at (0.0000, 2.5000) um, where its gap edge is an exact arc. …
+Let a straight edge of the conductor meet the die edge
+```
+
+以多邊形畫成的曲線會以一段直的弦碰到 die edge，這段弦會像其他直線邊一樣延伸。
+
+### 切點旁的 die 外框 {#unsupported-notch-beside-cut}
+
+![一條寬 3 的條帶，被 die 上緣一個 8 × 4 凹口的底部切斷。它的右側越過 die edge 延伸（紅色虛線），直到凹口底部所在直線外兩個最大 margin 處；延伸的末端距凹口側壁（紅色）0.1，在 1.0 的 margin 之內。](assets/supported-geometry/unsupported-notch-beside-cut.svg){fig-alt="斜向條帶終止於 die edge 凹口的底部；它側邊的虛線延伸接近凹口的側壁。"}
+
+延伸旁的 band 會從沒有畫出的導體量起。同一條規則也會拒絕：從 die 邊上一個頂點懸出 die 的導體、兩個被切斷的導體的延伸在 die edge 外相交，以及切點旁 die 外框彎曲的情形。建構時拋出 `InputError`，指出導體與切點，例如 `the die outline comes back within the band margin (1 um) of the continuation of 'strip', cut by the die edge at (21.4000, 26.0000) um`。
+
+### 比最大 margin 的兩倍稍寬的導體 {#unsupported-lead-core}
+
+![一條寬 2.004 的獨立引線，由左至右：die 上的引線、橫跨其寬度的視窗，以及引線中段 20 nm 的視窗。深色細線是 0.5 的 band 邊界；1.0 的邊界（紅色）留下 4 nm 寬的核心。](assets/supported-geometry/unsupported-lead-core.svg){fig-alt="直線引線與它的 band 邊界；放大後，最內側的兩條邊界在引線中線相距 4 nm。"}
+
+核心（超出最大 margin 的面）比網格產生器需要的 10 個格點間距還窄。寬度恰好是 margin 兩倍的引線沒有核心，照常建模。`mesh()` 與 `simulation_drc()` 的網格階段以 `SimulationDrcError` 拒絕這個核心：類別 B 的窄面，負責方為 `erosion`，並附上位置與修改方式（改 margin 或寬度），見[網格階段回報什麼](layout-modeling-check.qmd#what-the-meshing-stage-reports)。
 
 ## 集總埠一律切成矩形 {#lumped-port-rectangle}
 
