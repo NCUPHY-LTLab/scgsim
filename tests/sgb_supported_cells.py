@@ -535,10 +535,16 @@ SCENES = {
     "claw_floating": lambda: claw_scene(DISK_R, False),
     "claw_floating_test_build": lambda: claw_scene(DISK_R_TEST_BUILD, False),
     "claw_grounded": lambda: claw_scene(DISK_R, True),
-    "junction_straight": lambda: junction_scene(False),
     "junction_fan": lambda: junction_scene(True),
     "junction_fan_noport": lambda: junction_scene(True, port=False),
-    "d1_die_test_build": lambda: d1_die(False),
     "d1_die_defaults": lambda: d1_die(True),
     "cell11_bumps_flip_chip": cell11_bumps,
+}
+# The test build's straight junction lead is 2 um wide, twice the 1 um margin.  The bands are those of its exact
+# erosion, which leaves a core under a nanometre wide down the lead, and the meshing stage refuses that core
+# (Issue #128): SCGSim does not model a conductor this close to twice a margin wide.  Off the supported list with
+# these margins; pinned at that refusal.
+REFUSED_BEFORE_MESHING = {
+    "junction_straight": lambda: junction_scene(False),
+    "d1_die_test_build": lambda: d1_die(False),
 }

@@ -65,6 +65,10 @@ def build_input(name: str) -> tuple[PrismCatalogue, tuple[InsetRequest, ...]]:
         ("cell22_tsv_signal", 50),
         ("cell24_sheet_circular_pad", 50),
         (
+            "cell18_handoff",
+            40,
+        ),  # every query on a support whose origins continue past the die edge
+        (
             "sparse_origins",
             10,
         ),  # one small support boundary: few queries, one of them 1 mm away

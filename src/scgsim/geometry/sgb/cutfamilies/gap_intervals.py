@@ -1,7 +1,8 @@
-"""Where along a boundary edge a gap lies: the intervals of an edge that face a gap.
+"""Where along a boundary edge a gap lies: the intervals of an edge that face a gap, or lie on the die edge.
 
 Owns cutting one boundary edge of a support face (a straight edge or an arc, travelled with the face on its left)
-at the ends of the gap edges of another level that lie along it, and saying which of the pieces face a gap.
+at the ends of the gap edges and die edges of another level that lie along it, and saying which of the pieces
+face a gap and which of the others lie on the die edge.
 
 A support face on a plane other than its conductor's attachment plane (the face of a finite conductor away from
 its substrate: the top on an upright die, the bottom on a flipped one) is bounded by the
@@ -25,11 +26,12 @@ from scgsim.geometry.sgb.plane import Point
 
 @dataclass(frozen=True)
 class Piece:
-    """A stretch of a boundary edge between two lattice points, and whether it faces a gap."""
+    """A stretch of a boundary edge between two lattice points: whether it faces a gap, or else lies on the die edge."""
 
     start: Point
     end: Point
     faces_gap: bool
+    on_die_edge: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,10 @@ class LineSpan:
     def before(self, p: Point, q: Point) -> bool:
         """Whether the projection of ``p`` is nearer the start than that of ``q``."""
         return self._along(p) < self._along(q)
+
+    def part(self, start: Point, end: Point) -> LineSpan:
+        """The stretch of this edge between two of its points."""
+        return LineSpan(start, end)
 
     def same_sense(self, other: Span) -> bool:
         """Whether ``other`` is a straight edge pointing the same way."""
@@ -88,6 +94,10 @@ class ArcSpan:
         cross = self._cross(p, q)
         return cross > 0 if self.ccw else cross < 0
 
+    def part(self, start: Point, end: Point) -> ArcSpan:
+        """The stretch of this arc between two of its points."""
+        return ArcSpan(self.centre, self.ccw, start, end)
+
     def same_sense(self, other: Span) -> bool:
         """Whether ``other`` is an arc about the same centre travelled the same way."""
         return (
@@ -101,23 +111,43 @@ Span = LineSpan | ArcSpan
 """An edge as a stretch of its carrier, ordered along its direction of travel."""
 
 
-def split_at_gaps(span: Span, gaps: Sequence[Span]) -> list[Piece]:
-    """The pieces of an edge, cut where a gap edge begins or ends along it; each says whether it faces a gap.
+def split_at_gaps(
+    span: Span, gaps: Sequence[Span], die_edges: Sequence[Span] = ()
+) -> list[Piece]:
+    """The pieces of an edge, cut where a gap edge or a die edge begins or ends along it.
 
-    A piece faces a gap iff a gap edge of the same sense covers it.  Gap edges that touch or overlap are one gap, so
-    an edge is cut only where a gap really begins or ends.  An edge with no gap along it is one piece.
+    A piece faces a gap iff a gap edge of the same sense covers it; a piece that faces no gap lies on the die
+    edge iff a die edge of the same sense covers it.  Gap edges that touch or overlap are one gap, so an edge is
+    cut only where a gap really begins or ends, and the same holds for die edges.  An edge with no gap and no die
+    edge along it is one piece.
     """
-    runs = _merged(span, [run for gap in gaps if (run := _overlap(span, gap))])
     pieces: list[Piece] = []
+    for start, end, faces_gap in _covered_runs(span, gaps):
+        if faces_gap:
+            pieces.append(Piece(start, end, True))
+            continue
+        pieces.extend(
+            Piece(a, b, False, on_die_edge=on_die)
+            for a, b, on_die in _covered_runs(span.part(start, end), die_edges)
+        )
+    return pieces
+
+
+def _covered_runs(
+    span: Span, covers: Sequence[Span]
+) -> list[tuple[Point, Point, bool]]:
+    """The stretches of an edge in travel order, each with whether an edge of ``covers`` covers it."""
+    runs = _merged(span, [run for cover in covers if (run := _overlap(span, cover))])
+    stretches: list[tuple[Point, Point, bool]] = []
     position = span.start
     for begin, finish in runs:
         if span.before(position, begin):
-            pieces.append(Piece(position, begin, False))
-        pieces.append(Piece(begin, finish, True))
+            stretches.append((position, begin, False))
+        stretches.append((begin, finish, True))
         position = finish
     if span.before(position, span.end):
-        pieces.append(Piece(position, span.end, False))
-    return pieces
+        stretches.append((position, span.end, False))
+    return stretches
 
 
 def _overlap(span: Span, gap: Span) -> tuple[Point, Point] | None:
