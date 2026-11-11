@@ -629,16 +629,27 @@ def _arcs_of(
     arc_pieces: dict[str, tuple[ArcCarrier, list[Point]]],
     band: int,
 ) -> tuple[list[ArcCarrier], list[BandSeam]]:
-    """Arc members: maximal runs of seam chords of each candidate arc with ``R_m`` on one side of the arc."""
+    """Arc members: maximal runs of seam chords of each candidate arc with ``R_m`` on one side of the arc.
+
+    Where two arcs meet at a shallow angle, snap rounding can make a few edges common to chords of both.
+    Such an edge is kept for one of them, the first by id: kept for both, each run would end at the far end
+    of the common edges, so the two sub-arcs would overlap there; drawn again as their own chords in the
+    level arrangement they part, and the stretch of one beyond its meeting with the other is left inside
+    a single face.
+    """
     kept_side: dict[str, dict[int, bool]] = {}
     kept_points: dict[
         tuple[str, int], set[Point]
     ] = {}  # end points of the seam (possibly trimmed) part of each chord
     for seam in required:
         e = seam.edge
+        arcs = {c.partition("#")[0] for c in e.carriers if "#" in c}
+        if not arcs:
+            continue
+        owner = min(arcs)
         for c in e.carriers:
             base, _, k = c.partition("#")
-            if not k:
+            if not k or base != owner:
                 continue
             chord = int(k)
             points = arc_pieces[base][1]

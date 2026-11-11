@@ -24,12 +24,12 @@ layout, settings or native result of a particular study. The current
 runtime-source manifest and content digest identify the module bytes used for
 execution; a Git revision is recorded only when truthfully available.
 
-Current AEDT manifests use `runtime-source.v28` with 284 sorted, unique paths.
-V28 starts from all current AEDT modules, both AEDT visualization loaders, and
-the non-AEDT paths retained from V27, then closes over AST-resolved imports and
-package initializers. It adds `scgsim/geometry/primitives/topology_validation.py`
-to the frozen 283-path V27 roster. Preparation and execution record their
-declared module bytes and content digest separately. Historical V1–V27 manifests
+Current AEDT manifests use `runtime-source.v29` with 285 sorted, unique paths.
+V29 starts from all current AEDT modules, both AEDT visualization loaders, and
+the non-AEDT paths retained from V28, then closes over AST-resolved imports and
+package initializers. It adds `scgsim/geometry/planning/junction_planning/lattice.py`
+to the frozen 284-path V28 roster. Preparation and execution record their
+declared module bytes and content digest separately. Historical V1–V28 manifests
 keep their original paths and interpretation.
 
 The current Palace geometry authority is `scgsim.geometry.sgb`. Palace

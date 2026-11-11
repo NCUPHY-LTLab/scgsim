@@ -245,11 +245,11 @@ New handoffs retain `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`. Both records add
 `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
 V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v28` manifest for the current source, with 284 sorted, unique
-paths. V28 starts from all current AEDT modules, both AEDT visualization loaders,
-and the non-AEDT paths retained from V27, then follows AST-resolved imports and
-package initializers. It adds `scgsim/geometry/primitives/topology_validation.py`
-to the frozen 283-path V27 roster. The fields are `schema_version`, `stage`,
+`runtime-source.v29` manifest for the current source, with 285 sorted, unique
+paths. V29 starts from all current AEDT modules, both AEDT visualization loaders,
+and the non-AEDT paths retained from V28, then follows AST-resolved imports and
+package initializers. It adds `scgsim/geometry/planning/junction_planning/lattice.py`
+to the frozen 284-path V28 roster. The fields are `schema_version`, `stage`,
 `modules`, `content_sha256`, and `revision_observation`; there is no helper-hash
 map. Each declared module has measured bytes and the content digest binds that
 inventory. The Git observation is either available with the actual 40-hex
@@ -281,8 +281,8 @@ partial markers, noncanonical members, and hash mismatches reject before
 receipt mutation.
 
 Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v28` and a content digest for the code that actually executed
-it. Declared module bytes and the digest are mandatory; V28 has no redundant
+`runtime-source.v29` and a content digest for the code that actually executed
+it. Declared module bytes and the digest are mandatory; V29 has no redundant
 helper-hash fields. `revision_observation` carries the actual 40-hex commit
 when available and records `unavailable` truthfully for an immutable wheel
 without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
@@ -301,7 +301,7 @@ These unsigned consistency checks do not authenticate an artifact set against
 an actor able to rewrite every member.
 
 `runtime-source.v1` is a frozen thirteen-module reader contract, not a live
-enumeration rule. The V2–V27 inventories retain their original module paths as well. V4 added
+enumeration rule. The V2–V28 inventories retain their original module paths as well. V4 added
 `scgsim/aedt/_presentation.py`; V5 added `scgsim/sgb/geometry_plan.py` and
 `scgsim/sgb/__init__.py`. V7 added
 `scgsim/_notebook_presentation.py` to V6. V8 added
@@ -329,8 +329,10 @@ V26 freezes 167 paths for the request, preparation, transaction, native-family,
 EPR-expression, result-reader, and shared geometry modules after responsibility
 splits. V27 freezes 283 sorted, unique paths, seeded by 118 AEDT modules, both
 AEDT visualization loaders, and the retained non-AEDT paths, then closed over
-AST-resolved imports and package initializers. V28 is current with 284 paths; it
-adds `scgsim/geometry/primitives/topology_validation.py` to V27. V23–V28 use the
+AST-resolved imports and package initializers. V28 freezes 284 paths; it
+adds `scgsim/geometry/primitives/topology_validation.py` to V27. V29 is current
+with 285 paths; it adds `scgsim/geometry/planning/junction_planning/lattice.py` to V28.
+V23–V29 use the
 same five record fields described above, with no helper-hash map. Each
 version's exact path list is its declared implementation inventory. These
 manifests bind their declared file inventories, not an exhaustive transitive
@@ -344,7 +346,7 @@ historical hashes with the installed package.
 
 Execution computes mandatory runtime-source provenance inside the receipt-bound
 failure transaction, before importing PyAEDT or constructing Desktop. Current
-V28 may record `revision_observation` as unavailable; that alone does not fail
+V29 may record `revision_observation` as unavailable; that alone does not fail
 byte-bound identity or prevent execution. Missing or corrupt declared module
 bytes, digest, schema, or cohort still yield a failed V3 receipt without a
 Desktop launch rather than escaping receipt finalization. V1–V17 retain their

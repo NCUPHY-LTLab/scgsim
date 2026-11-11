@@ -111,7 +111,7 @@ SGB 先替每個 support 與每個 margin 算出 **band 區域** $R_m$（support
 ![四個步驟（概念圖）。上排由左到右：建區域、只切必要的 seam、Imprint 與檢查、以點定位標記。下排以 10 × 10 µm 的正方形示意前兩步：點線是兩個 margin 的候選 offset，實線是切出的 seam。](figures/inset-regions-steps.svg){#fig-band-regions fig-alt="四個方框由左到右以箭頭相連，下方兩張正方形示意圖：一張有延伸到邊界的點線，一張只剩兩圈實線正方形。"}
 
 1. **區域。**對每個 margin，[候選 offset](#erosion-rule)、support 的整圈邊界與 port 的邊界組成一個小 arrangement（cell 是其中的平面區域）。cell 是否在 support 內由邊界的方向決定，是精確的；cell 在 $R_m$ 內或外，由一個與 margin 相差超過 cut 容許量（`DISTANCE_SLACK`，1.5 個 grid）的取樣點決定。只有正面積的 cell，所以只是一條線或一個點的區域不會成為 band。
-2. **必要的 seam。**只有帶候選 offset、兩側都在 support 內、而且一側在 $R_m$ 內一側在外的 edge 才成為 seam；每條 seam 記錄兩側的 band（內側 $k$，外側 $k - 1$）。兩側同一個 band 的 edge 不切，例如 convex corner 外延伸的 offset，以及寬度剛好 $2m$ 的 gap 的中線。seam 只能停在 support 邊界或 port 邊界上，這就是 band 到達 die edge 或 port 時的「裁切」；停在其他地方代表邊界遺失，會被拒絕。
+2. **必要的 seam。**只有帶候選 offset、兩側都在 support 內、而且一側在 $R_m$ 內一側在外的 edge 才成為 seam；每條 seam 記錄兩側的 band（內側 $k$，外側 $k - 1$）。兩側同一個 band 的 edge 不切，例如 convex corner 外延伸的 offset，以及寬度剛好 $2m$ 的 gap 的中線。seam 只能停在 support 邊界或 port 邊界上，這就是 band 到達 die edge 或 port 時的「裁切」；停在其他地方代表邊界遺失，會被拒絕。兩條 arc 以很小的角度相交時，snap rounding 可能讓兩者的 witness chord 共用幾條 edge；這些 edge 只算其中 id 較前的那條 arc 的 seam，兩條 seam 因此在同一點相接，不會在 Imprint 時各自重畫成兩段而留下一段懸空。
 3. **Imprint 與檢查。**seam 與 level 上其他曲線一起進入 level arrangement（Imprint）。之後每條 seam 都必須由帶著它 carrier 的 level edge 從頭到尾覆蓋、沒有缺口，而且兩側 face 的 band 正是 seam 記錄的 band；缺一段、缺整圈或 face 標錯，都以 `ValidationError`（`Imprint lost band boundaries on …`）拒絕，訊息以 µm 指出位置。
 4. **標記。**face 的內部點先判斷是否在 support 內（support 邊界是 arrangement 的 edge，face 不會跨過它），再數它落在幾個 $R_m$ 內，那個數就是 band。lumped port 的 face 仍標成 band 0（nominal），不與 seam 比對。
 

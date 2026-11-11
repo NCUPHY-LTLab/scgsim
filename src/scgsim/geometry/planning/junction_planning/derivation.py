@@ -8,6 +8,10 @@ from dataclasses import replace
 
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.junctions import JunctionGeometry, RectangularJunctionSpec
+from scgsim.geometry.planning.junction_planning.lattice import (
+    drawn_exterior,
+    lattice_rectangle,
+)
 from scgsim.geometry.planning.junction_planning.partition import partition_junctions
 from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
 from scgsim.geometry.primitives.grid import with_input_grid
@@ -31,18 +35,27 @@ def derive_rectangular_junctions(build_input):
         dx, dy = region.metadata["direction"][:2]
         norm = math.hypot(dx, dy)
         dx, dy = (dx / norm, dy / norm)
-        across = [-dy * x + dx * y for x, y in region.exterior]
-        geometry = JunctionGeometry(
-            request.junction_id,
-            request.source_polygon_id,
-            request.terminal_a.net_id,
-            request.terminal_b.net_id,
-            (dx, dy),
-            max(across) - min(across),
-        )
         try:
+            # The sheet as its four corners on the grid; its width is theirs.
+            corners = lattice_rectangle(
+                region.exterior,
+                build_input.metadata["source_dbu_um"],
+                (dx, dy),
+                drawn=drawn_exterior(region),
+                port=f"lumped port {region.metadata.get('source_name', region.port_sheet_id)!r}",
+                layer=region.source_layer,
+            ).corners_um
+            across = [-dy * x + dx * y for x, y in corners]
+            geometry = JunctionGeometry(
+                request.junction_id,
+                request.source_polygon_id,
+                request.terminal_a.net_id,
+                request.terminal_b.net_id,
+                (dx, dy),
+                max(across) - min(across),
+            )
             junction_terminal_line(
-                {"exterior": region.exterior, "holes": region.holes}, geometry, 0.0
+                {"exterior": corners, "holes": region.holes}, geometry, 0.0
             )
         except ValueError as error:
             context = geometry_grid_context(build_input)
@@ -52,7 +65,7 @@ def derive_rectangular_junctions(build_input):
                         {
                             "junction_id": request.junction_id,
                             "geometry_grid": context.to_payload(),
-                            "requested_direction_xy": list(geometry.direction_xy),
+                            "requested_direction_xy": [dx, dy],
                             "realization_status": "incompatible_with_existing_shape_contract",
                         },
                         sort_keys=True,
@@ -86,6 +99,7 @@ def derive_rectangular_junctions(build_input):
                     "rectangular_junction_source_geometry": record[
                         "authored_source_geometry"
                     ],
+                    "rectangular_junction_lattice": record["lattice"],
                 },
             )
         )

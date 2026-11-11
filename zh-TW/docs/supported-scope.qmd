@@ -82,7 +82,9 @@ scgsim-id: "docs/supported-scope"
 | 埠薄片沒有被宿主完全覆蓋。 | 完全落在金屬上的薄片沒有剩下可激發的部分。 | 建構時 `InputError`（「… has no active remainder」） | [Eigenmode 契約](specs/palace-eigenmode.qmd) |
 | 埠薄片不與其他薄片重疊。 | 薄片上每一點都必須只屬於一個埠。 | 建構時 `OverlapError` | [Eigenmode 契約](specs/palace-eigenmode.qmd) |
 | 集總埠的薄片恰好落在兩個導體上。沒有 Net 的導體自成一個 Net。 | 埠是薄片中央的矩形；兩端各一塊併入該端的導體。 | 建構時 `ValueError`，訊息指出該埠 | [集總埠一律切成矩形](supported-geometry.qmd#lumped-port-rectangle) |
+| 集總埠的薄片是沿埠方向的矩形，角度不限；它的四個角是格點，或各自位於這種矩形對應角的半個 grid 對角線之內。格點在邊上加出、距該邊半個 grid 對角線之內的頂點會被捨去。 | 埠是四個角都在格點上的矩形；SCGSim 移動一個角不超過格點的 snap 界限，並記錄每次移動。 | 建構時 `ValueError`，訊息指出該埠、所在 layer，以及以 µm 表示的四個所畫角 | [格點上的矩形，任意角度](supported-geometry.qmd#lumped-port-angle) |
 | 薄片在兩個導體之間跨過一段淨空的 gap：在那裡它整個寬度都不碰金屬，也沒有第三個導體碰到它。 | 矩形與兩個端塊沿這段 gap 切出。 | 建構時由矩形切割回報 `ValueError`，例如「unsupported junction contact ordering or clear corridor」 | [集總埠一律切成矩形](supported-geometry.qmd#lumped-port-rectangle) |
+| 這段淨空的 gap 至少容納兩個切線位置。埠方向為 v = (p, q) 個整數格點步時，切線位置每隔 √(p² + q²) 個格點一個：沿 x 或 y 時每個格點都是，45° 時每 1.414 個格點一個。 | 切線只有在切線位置上才兩端都落在格點上，而埠位於兩條切線之間。 | 建構時 `ValueError`，訊息指出埠的薄片、所在 layer、gap 的位置與長度，以及切線間距 | [切線的位置](supported-geometry.qmd#lumped-port-cuts) |
 
 ### Surface-EPR 邊距 {#rules-margins}
 

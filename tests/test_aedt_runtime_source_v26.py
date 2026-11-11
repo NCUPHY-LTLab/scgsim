@@ -15,6 +15,7 @@ from scgsim.aedt.results.runtime_inventory import (
     SOURCE_SCHEMA,
     SOURCE_SCHEMA_V26,
     SOURCE_SCHEMA_V27,
+    SOURCE_SCHEMA_V28,
     current_runtime_source_closure,
     current_runtime_source_paths,
     runtime_import_closure,
@@ -53,6 +54,7 @@ HISTORICAL_INVENTORY_DIGESTS = {
 
 V27_PATH_DIGEST = "304e9c166cc231a33de53bd345743eb6f29a5ca92f54b8b972024182b3ddc37d"
 V28_PATH_DIGEST = "1ea4a853b9d06382d6dcff5659c8863457404a8373e970c6da532d16dc700bf0"
+V29_PATH_DIGEST = "0066775548d0e67d447ec80f20a617129e11c84159fc461a38aaf3ce34a0046a"
 
 
 @pytest.mark.parametrize(("schema", "expected"), HISTORICAL_INVENTORY_DIGESTS.items())
@@ -67,8 +69,8 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
     """Bind every AEDT module, preview reader, and retained shared seed."""
     repository = Path(__file__).resolve().parents[1]
     paths = current_runtime_source_paths()
-    assert SOURCE_SCHEMA == "scgsim.aedt.runtime-source.v28"
-    assert len(paths) == 284
+    assert SOURCE_SCHEMA == "scgsim.aedt.runtime-source.v29"
+    assert len(paths) == 285
     assert paths == tuple(sorted(set(paths)))
     assert runtime_source_paths(SOURCE_SCHEMA) == paths
     assert all((repository / path).is_file() for path in paths)
@@ -77,8 +79,8 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
         for path in (repository / "src/scgsim/aedt").rglob("*.py")
     }
     assert all_aedt_modules <= set(paths)
-    assert set(paths) - set(runtime_source_paths(SOURCE_SCHEMA_V27) or ()) == {
-        "src/scgsim/geometry/primitives/topology_validation.py"
+    assert set(paths) - set(runtime_source_paths(SOURCE_SCHEMA_V28) or ()) == {
+        "src/scgsim/geometry/planning/junction_planning/lattice.py"
     }
     assert {
         "src/scgsim/visualization/loaders/aedt.py",
@@ -102,14 +104,26 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
         ).hexdigest()
         == V27_PATH_DIGEST
     )
+    v28_paths = runtime_source_paths(SOURCE_SCHEMA_V28)
+    assert v28_paths is not None
+    assert len(v28_paths) == 284
+    assert set(v28_paths) - set(v27_paths) == {
+        "src/scgsim/geometry/primitives/topology_validation.py"
+    }
+    assert (
+        hashlib.sha256(
+            json.dumps(v28_paths, separators=(",", ":")).encode()
+        ).hexdigest()
+        == V28_PATH_DIGEST
+    )
     encoded = json.dumps(paths, separators=(",", ":")).encode()
-    assert hashlib.sha256(encoded).hexdigest() == V28_PATH_DIGEST
+    assert hashlib.sha256(encoded).hexdigest() == V29_PATH_DIGEST
 
     assert current_runtime_source_closure() == paths
 
 
-def test_current_runtime_identity_uses_v28_without_changing_receipt_schema():
-    """Measure V28 while retaining the V3 receipt contract."""
+def test_current_runtime_identity_uses_v29_without_changing_receipt_schema():
+    """Measure V29 while retaining the V3 receipt contract."""
     identity = runtime_source_identity()
     validate_runtime_source(identity, stage="actual")
     assert identity["schema_version"] == SOURCE_SCHEMA
