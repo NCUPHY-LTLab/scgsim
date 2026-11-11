@@ -11,6 +11,8 @@ scgsim-id: "docs/course/aedt-inputs"
 
 公開樣本與可執行 Notebook 來源屬於 [OrPen 固定版本的 CPW 群組](../examples.qmd#public-inputs)。其中 CPW 長 500 µm，訊號寬 10 µm、間隙 6 µm、接地寬 80 µm，基板厚 500 µm。這些是範例設計輸入，不是量測所得的元件幾何，也不是通用求解器設定。GDS 包含三個金屬矩形與基板區域；PDK 提供圖層配對及材料／函式庫資訊。這些教學沿用 PDK CPW Driven 來源中的 Nb 導體；同一版本的 CPW Eigenmode 與 Q3D 筆記本則改用 100 nm 的 Al 薄膜。
 
+![公開有限接地 CPW 的來源幾何：基板、中央訊號線、兩條接地帶及 Modal 積分線位置。此圖呈現宣告的版圖，不是求解結果。](../assets/cpw-source.svg){#fig-public-cpw-source}
+
 ## 建立共用來源與對應 {#make-the-shared-source-and-mapping}
 
 ```python

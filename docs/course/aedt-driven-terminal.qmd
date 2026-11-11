@@ -6,8 +6,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-terminal"
 ---
 
-For a complete workflow, start with the [CPW scattering tutorial](../tutorials/scattering.qmd#configure-port-models).
-This page is the detailed Driven Terminal reference and links to the
+This page is the detailed Driven Terminal reference and continues from the
 shared [CPW input lesson](aedt-inputs.qmd). Terminal ports identify reference
 conductors explicitly. They use the same source GDS and PDK material mapping as
 Modal, but this model's reference assignment has its own native evidence and

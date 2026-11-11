@@ -6,18 +6,19 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
 ---
 
-SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別資訊的回傳結果。請依所需物理量選擇筆記本；其中的後端分頁涵蓋從來源輸入到結果讀取的完整流程。API
-參數與來源版本配對方式請見[參考指南](knowledge-guide.qmd)。
+SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別資訊的回傳結果。完整的元件模擬筆記本屬於 OrcaPen SC PDK，由它負責元件、設定與 SCGSim 環境。請依所需物理量選擇筆記本。API 參數與來源版本配對方式請見[參考指南](knowledge-guide.qmd)。
 
 ## 選擇模擬目標 {#getting-started}
 
-| 目標 | 筆記本 | 結果 |
-|---|---|---|
-| 電容 | [Palace Electrostatic 或 AEDT Q3D](tutorials/capacitance.qmd) | 具標籤的導體電容矩陣 |
-| 共振模態 | [Palace 或 HFSS Eigenmode](tutorials/resonance.qmd) | 模態頻率與回傳模態報表 |
-| 能量參與率 | [Palace 或 HFSS EPR](tutorials/resonance-epr.qmd) | 依模態整理的表面、體積與支路參與率 |
-| Driven S 參數 | [HFSS Modal 或 Terminal](tutorials/scattering.qmd) | 使用所選埠類型的雙埠響應 |
-| 傳輸線參數 | [AEDT Q2D](tutorials/transmission-line.qmd) | 單位長度 C、G、L 與 R 矩陣 |
+每一列都連結 PDK 版本 `49e539f` 的筆記本來源，也就是[首頁](../index.qmd)安裝的版本。
+
+| 你會得到 | PDK 筆記本 |
+|---|---|
+| SimplePad 焊盤與 Ground 的具標籤導體電容矩陣 | [Palace Electrostatic](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd)・[AEDT Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
+| SimplePad 的模態頻率，以及每個模態的表面、體積與支路能量參與率 | [Palace Eigenmode 與 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd)・[HFSS Eigenmode 與表面 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
+| 有限接地 CPW 橫截面的單位長度 C、G、L 與 R 矩陣 | [AEDT Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.qmd) |
+
+PDK 沒有有限接地 CPW 雙埠 S 參數的現行筆記本；其 HFSS Driven Terminal 筆記本使用 [17 座橋的 CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge)，而 [Driven Modal](course/aedt-driven-modal.qmd) 與 [Driven Terminal](course/aedt-driven-terminal.qmd) 教學會準備有限接地 CPW 的請求。
 
 模擬自己的版圖之前，請先閱讀[支援範圍](supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。
 

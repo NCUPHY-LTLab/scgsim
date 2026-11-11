@@ -6,7 +6,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/palace-electrostatic"
 ---
 
-For a complete extraction workflow, start with [pad capacitance](../tutorials/capacitance.qmd).
+For a complete extraction workflow, use a PDK notebook from [Choose a simulation](../examples.qmd#getting-started).
 This backend reference uses the `snapshot` from [source observations](source-observations.qmd).
 The branch asks for Electrostatic terminal response rather than resonant modes.
 The public OrPen [Xmon notebook group](../examples.qmd#public-inputs) owns the

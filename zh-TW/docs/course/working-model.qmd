@@ -7,7 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/working-model"
 ---
 
-完成一個[電容](../tutorials/capacitance.qmd)或[共振／EPR](../tutorials/resonance-epr.qmd)範例後，再開始本教學。接著可變更模型的一個部分，並了解該變更會影響哪些輸入與結果。準備新執行前，請先保存原始模型與結果。
+先完成[選擇模擬目標](../examples.qmd#getting-started)中一份電容或共振／EPR 筆記本，再開始本教學。接著可變更模型的一個部分，並了解該變更會影響哪些輸入與結果。準備新執行前，請先保存原始模型與結果。
 
 ## 變更來源幾何 {#change-the-source-geometry}
 

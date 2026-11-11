@@ -57,11 +57,6 @@
     "docs/tutorial-xmon-aedt.qmd",
     "docs/tutorial-xmon-input.qmd",
     "docs/tutorial-xmon-palace.qmd",
-    "docs/tutorials/capacitance.qmd",
-    "docs/tutorials/resonance-epr.qmd",
-    "docs/tutorials/resonance.qmd",
-    "docs/tutorials/scattering.qmd",
-    "docs/tutorials/transmission-line.qmd",
     "index.qmd",
     "zh-TW/MAINTAINING.md",
     "zh-TW/README.md",
@@ -116,11 +111,6 @@
     "zh-TW/docs/tutorial-xmon-aedt.qmd",
     "zh-TW/docs/tutorial-xmon-input.qmd",
     "zh-TW/docs/tutorial-xmon-palace.qmd",
-    "zh-TW/docs/tutorials/capacitance.qmd",
-    "zh-TW/docs/tutorials/resonance-epr.qmd",
-    "zh-TW/docs/tutorials/resonance.qmd",
-    "zh-TW/docs/tutorials/scattering.qmd",
-    "zh-TW/docs/tutorials/transmission-line.qmd",
     "zh-TW/index.qmd"
   ]
 }

@@ -11,7 +11,6 @@ project:
   - docs/specs/*.qmd
   - docs/api/*.qmd
   - docs/course/*.qmd
-  - docs/tutorials/*.qmd
   - docs/research/*.qmd
   - docs/research/*/*.qmd
   - docs/history/*.qmd
@@ -86,13 +85,6 @@ website:
     contents:
     - docs/examples.qmd
     - docs/course/installation.qmd
-    - section: 依模擬目標
-      contents:
-      - docs/tutorials/capacitance.qmd
-      - docs/tutorials/resonance.qmd
-      - docs/tutorials/resonance-epr.qmd
-      - docs/tutorials/scattering.qmd
-      - docs/tutorials/transmission-line.qmd
     - section: 準備與檢視模型
       contents:
       - docs/course/working-model.qmd

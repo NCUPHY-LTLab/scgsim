@@ -6,7 +6,7 @@ scgsim-status: "ACCEPTED"
 scgsim-id: "docs/course/aedt-q3d"
 ---
 
-For a complete pad-capacitance workflow, start with [extract a pad capacitance](../tutorials/capacitance.qmd).
+For a complete pad-capacitance workflow, use a PDK notebook from [Choose a simulation](../examples.qmd#getting-started).
 This backend reference uses [CPW inputs](aedt-inputs.qmd) for the public
 dimensions and PDK materials. That lesson's GDS mapping is for ordinary HFSS; current Q3D accepts
 explicit body geometry under `scgsim.aedt.q3d.v3`. This source-free example

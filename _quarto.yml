@@ -11,7 +11,6 @@ project:
   - docs/specs/*.qmd
   - docs/api/*.qmd
   - docs/course/*.qmd
-  - docs/tutorials/*.qmd
   - docs/research/*.qmd
   - docs/research/*/*.qmd
   - docs/history/*.qmd
@@ -85,13 +84,6 @@ website:
     contents:
     - docs/examples.qmd
     - docs/course/installation.qmd
-    - section: By simulation goal
-      contents:
-      - docs/tutorials/capacitance.qmd
-      - docs/tutorials/resonance.qmd
-      - docs/tutorials/resonance-epr.qmd
-      - docs/tutorials/scattering.qmd
-      - docs/tutorials/transmission-line.qmd
     - section: Prepare and inspect a model
       contents:
       - docs/course/working-model.qmd
