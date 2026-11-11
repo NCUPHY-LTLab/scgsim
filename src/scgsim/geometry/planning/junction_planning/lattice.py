@@ -25,7 +25,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
-from itertools import product
+from itertools import combinations, product
 from typing import Any
 
 from scgsim.geometry.models.grid import format_point
@@ -229,44 +229,65 @@ def lattice_rectangle(  # noqa: PLR0913 -- the sheet on the grid, as drawn, and 
 
     ``exterior`` is the sheet on the grid, ``drawn`` the same sheet as drawn (``drawn_exterior``).
 
-    1. The four corners: a vertex is dropped when it lies within the snap bound of the line
-       between the two corners of its side, as a vertex the grid adds where an outline crosses
-       a side does.  On the grid, each corner is the one vertex within the snap bound of its
+    1. The four corners: four drawn vertices can be the corners when each side, from one of
+       them to the next, holds every vertex between them within the snap bound of the line
+       between its two corners; a vertex the grid adds where an outline crosses a side lies
+       that near it.  On the grid, each corner is the one vertex within the snap bound of its
        drawn corner.
     2. The lattice rectangle: the nearest one to the drawn corners, by the sum of squared
        corner shifts, whose corners each lie within the snap bound of the drawn ones.  For
        corners drawn on grid points that is the drawn rectangle itself, or none.  It must run
        along the port direction, as ``junction_terminal_line`` checks a sheet.
+    3. A vertex just beside a corner can make more than one set of four corners: each set is
+       read by steps 1 and 2, and the one whose rectangle shifts its corners least is the
+       sheet's.  A tie is refused: the drawing then does not say where the port lies, and
+       choosing by the order of the ring's vertices, which the layout tool sets, would hide
+       the choice from the user.
 
     ``port`` and ``layer`` name the sheet in a refusal, which says what must change.
     """
-    sheet = _grid_points(exterior, grid_um)
-    drawn_points = _grid_points(drawn, grid_um)
-    found = _sheet_corners(drawn_points)
-    if found is None:
-        raise ValueError(_not_a_rectangle(port, layer, drawn_points, grid_um))
-    drawn_corners = [drawn_points[n] for n in found]
-    positions = _rounded_corners(sheet, drawn_corners)
-    if positions is None:
-        raise ValueError(_rounded_off_its_sides(port, layer, sheet, grid_um))
-    if not _forward(positions, len(sheet)):
-        # The ring runs the other way round than the drawn one: read the corners in ring order.
-        drawn_corners.reverse()
-        positions.reverse()
-    lattice = _nearest_lattice_rectangle(drawn_corners)
-    if lattice is None:
-        raise ValueError(
-            _no_lattice_rectangle(port, layer, drawn_corners, grid_um, None)
-        )
-    rectangle = _oriented(
-        lattice, drawn_corners, sheet, positions, direction_xy, grid_um
+    sheet = _Sheet(
+        _grid_points(exterior, grid_um),
+        _grid_points(drawn, grid_um),
+        direction_xy,
+        grid_um,
+        port,
+        layer,
     )
-    if not rectangle_along(rectangle.corners_um, direction_xy):
-        crosswise = (rectangle.direction, direction_xy)
-        raise ValueError(
-            _no_lattice_rectangle(port, layer, drawn_corners, grid_um, crosswise)
-        )
-    return rectangle
+    corner_sets = _corner_sets(sheet.drawn)
+    if not corner_sets:
+        raise ValueError(_not_a_rectangle(sheet))
+    readings = [_read_corners(sheet, corners) for corners in corner_sets]
+    rectangles = [r for r in readings if isinstance(r, LatticeRectangle)]
+    if not rectangles:
+        # The reading that got furthest says most about what must change.
+        refusals = [r for r in readings if isinstance(r, _Refusal)]
+        raise ValueError(max(refusals, key=lambda refusal: refusal.stage).message)
+    return _least_shifted(rectangles, sheet)
+
+
+@dataclass(frozen=True)
+class _Sheet:
+    """A sheet being read: its ring on the grid and as drawn, in grid steps, and how a refusal names it."""
+
+    on_grid: list[GridPoint]
+    drawn: list[GridPoint]
+    direction_xy: tuple[float, float]
+    grid_um: float
+    port: str
+    layer: str
+
+
+@dataclass(frozen=True)
+class _Refusal:
+    """Why one set of drawn corners gives no port, and how far its reading got.
+
+    ``stage`` is where the reading stopped, the later the more its refusal says: 1, its
+    corners on the grid; 2, a lattice rectangle near them; 3, one along the port.
+    """
+
+    stage: int
+    message: str
 
 
 def _grid_points(ring, grid_um) -> list[GridPoint]:
@@ -279,50 +300,61 @@ def _grid_points(ring, grid_um) -> list[GridPoint]:
     return [point for n, point in enumerate(points) if point != points[n - 1]]
 
 
-def _sheet_corners(points: list[GridPoint]) -> list[int] | None:
-    """The indices of the sheet's four corners in ``points``, or ``None`` when it has no four.
+def _corner_sets(points: list[GridPoint]) -> list[tuple[int, ...]]:
+    """Every four vertices, as indices in ring order, that can be the sheet's corners.
 
-    Vertices are dropped nearest first while one lies within the snap bound of the line
-    through its two remaining neighbours; the four that remain are then checked against the
-    rule itself: every dropped vertex lies within the snap bound of the line between the two
-    corners of its side.
+    Each side, from one of them to the next, must hold every vertex between them within the
+    snap bound of the line between its two corners.  For a ring of n vertices, finding which
+    of the n^2 sides hold their vertices takes O(n^3) steps and trying the n^4 / 24 sets of
+    four O(n^4); a drawn sheet has a handful of vertices.
     """
-    kept = list(range(len(points)))
-    while len(kept) > 4:
-        nearest = min(
-            (
-                (ratio, n)
-                for n in range(len(kept))
-                if (ratio := _offset_ratio(points, kept, n)) is not None
-            ),
-            default=None,
-        )
-        if nearest is None:
-            return None
-        del kept[nearest[1]]
-    if len(kept) != 4:
-        return None
-    for n, start in enumerate(kept):
-        finish = kept[(n + 1) % 4]
-        if any(
-            not _within_snap_bound(points[start], points[finish], points[m])
-            for m in _between(start, finish, len(points))
-        ):
-            return None
-    return kept
+    count = len(points)
+    holds = [
+        [_holds(points, start, finish) for finish in range(count)]
+        for start in range(count)
+    ]
+    return [
+        corners
+        for corners in combinations(range(count), 4)
+        if all(holds[corners[n]][corners[(n + 1) % 4]] for n in range(4))
+    ]
 
 
-def _offset_ratio(points, kept, n) -> Fraction | None:
-    """The squared offset of kept vertex ``n`` from the line through its neighbours, over the snap bound's.
+def _holds(points: list[GridPoint], start: int, finish: int) -> bool:
+    """Whether the side from vertex ``start`` to ``finish`` holds the vertices between them within the snap bound."""
+    if points[start] == points[finish]:
+        return False
+    return all(
+        _within_snap_bound(points[start], points[finish], points[m])
+        for m in _between(start, finish, len(points))
+    )
 
-    ``None`` when the vertex lies beyond the snap bound, so it is a corner.
-    """
-    before, at, after = (points[kept[(n + k) % len(kept)]] for k in (-1, 0, 1))
-    length = _squared(before, after)
-    if length == 0:
-        return None
-    ratio = cross(before, after, at) ** 2 / (length * SNAP_BOUND_SQUARED_STEPS)
-    return ratio if ratio <= 1 else None
+
+def _read_corners(sheet: _Sheet, found: tuple[int, ...]) -> LatticeRectangle | _Refusal:
+    """The sheet read with the drawn vertices ``found`` as its corners: its lattice rectangle, or why there is none."""
+    drawn_corners = [sheet.drawn[n] for n in found]
+    positions = _rounded_corners(sheet.on_grid, drawn_corners)
+    if positions is None:
+        return _Refusal(1, _rounded_off_its_sides(sheet))
+    if not _forward(positions, len(sheet.on_grid)):
+        # The ring runs the other way round than the drawn one: read the corners in ring order.
+        drawn_corners.reverse()
+        positions.reverse()
+    lattice = _nearest_lattice_rectangle(drawn_corners)
+    if lattice is None:
+        return _Refusal(2, _no_lattice_rectangle(sheet, drawn_corners, None))
+    rectangle = _oriented(
+        lattice,
+        drawn_corners,
+        sheet.on_grid,
+        positions,
+        sheet.direction_xy,
+        sheet.grid_um,
+    )
+    if not rectangle_along(rectangle.corners_um, sheet.direction_xy):
+        crosswise = (rectangle.direction, sheet.direction_xy)
+        return _Refusal(3, _no_lattice_rectangle(sheet, drawn_corners, crosswise))
+    return rectangle
 
 
 def _rounded_corners(sheet, drawn_corners) -> list[int] | None:
@@ -387,7 +419,7 @@ def _nearest_lattice_rectangle(drawn) -> tuple[GridPoint, ...] | None:
     for corners in product(*choices):
         if not _is_rectangle(corners):
             continue
-        shift = sum(_squared(c, d) for c, d in zip(corners, drawn, strict=True))
+        shift = _shift(corners, drawn)
         if best is None or (shift, corners) < best:
             best = (shift, corners)
     return None if best is None else best[1]
@@ -462,6 +494,25 @@ def _oriented(  # noqa: PLR0913 -- the lattice, the drawn corners and the sheet 
     )
 
 
+def _least_shifted(
+    rectangles: list[LatticeRectangle], sheet: _Sheet
+) -> LatticeRectangle:
+    """The rectangle whose corners moved least from the drawn corners it was read from; a tie is refused."""
+    shifts = [_shift(r.corners, r.drawn) for r in rectangles]
+    least = min(shifts)
+    nearest = [r for r, shift in zip(rectangles, shifts, strict=True) if shift == least]
+    if len(nearest) > 1:
+        raise ValueError(_tied_corner_sets(sheet, nearest))
+    return nearest[0]
+
+
+def _shift(corners: Sequence[GridPoint], drawn: Sequence[GridPoint]) -> Fraction:
+    """How far the corners moved from the drawn ones: the sum of the squared shifts, in grid steps squared."""
+    return sum(
+        (_squared(c, d) for c, d in zip(corners, drawn, strict=True)), Fraction(0)
+    )
+
+
 def _format_points(points, grid_um) -> str:
     grid = Fraction(str(grid_um))
     return ", ".join(
@@ -473,42 +524,43 @@ def _snap_bound_um(grid_um: float) -> str:
     return f"{math.sqrt(2) / 2 * grid_um:.3g} um"
 
 
-def _not_a_rectangle(port, layer, points, grid_um) -> str:
+def _not_a_rectangle(sheet: _Sheet) -> str:
     return grid_change_message(
-        f"{port} is not a rectangle",
-        [layer],
-        grid_um,
+        f"{sheet.port} is not a rectangle",
+        [sheet.layer],
+        sheet.grid_um,
         [
             "no four of its drawn vertices hold every other one within half a grid "
-            f"diagonal ({_snap_bound_um(grid_um)}) of the sides between them; it is drawn "
-            f"with the vertices {_format_points(points, grid_um)}"
+            f"diagonal ({_snap_bound_um(sheet.grid_um)}) of the sides between them; it is "
+            f"drawn with the vertices {_format_points(sheet.drawn, sheet.grid_um)}"
         ],
         "Fix the layout: draw the sheet as a rectangle.",
     )
 
 
-def _rounded_off_its_sides(port, layer, sheet, grid_um) -> str:
+def _rounded_off_its_sides(sheet: _Sheet) -> str:
     return grid_change_message(
-        f"{port} lost its rectangle on the grid",
-        [layer],
-        grid_um,
+        f"{sheet.port} lost its rectangle on the grid",
+        [sheet.layer],
+        sheet.grid_um,
         [
             "on the grid it has the vertices "
-            f"{_format_points(sheet, grid_um)}, and not each of its drawn corners has one "
-            f"vertex within half a grid diagonal ({_snap_bound_um(grid_um)}) of it with the "
-            "others within that bound of its drawn sides"
+            f"{_format_points(sheet.on_grid, sheet.grid_um)}, and not each of its drawn "
+            "corners has one vertex within half a grid diagonal "
+            f"({_snap_bound_um(sheet.grid_um)}) of it with the others within that bound of "
+            "its drawn sides"
         ],
         "This is an SCGSim defect, not a layout rule: report it to SCGSim with the layout.",
     )
 
 
-def _no_lattice_rectangle(port, layer, drawn, grid_um, crosswise) -> str:
+def _no_lattice_rectangle(sheet: _Sheet, drawn, crosswise) -> str:
     """The refusal of a sheet with no lattice rectangle near its drawn corners along its port.
 
     ``crosswise`` is ``None`` when no lattice rectangle lies that near, else the nearest one's
     direction v and the port direction it does not run along.
     """
-    bound = f"half a grid diagonal ({_snap_bound_um(grid_um)})"
+    bound = f"half a grid diagonal ({_snap_bound_um(sheet.grid_um)})"
     if crosswise is None:
         finding = (
             "no rectangle with its corners on grid points has each corner within "
@@ -522,13 +574,32 @@ def _no_lattice_rectangle(port, layer, drawn, grid_um, crosswise) -> str:
             f"({dx:.6g}, {dy:.6g})"
         )
     return grid_change_message(
-        f"{port} has no rectangle with its corners on the grid near its drawn corners",
-        [layer],
-        grid_um,
-        [f"its corners are drawn at {_format_points(drawn, grid_um)}, and {finding}"],
+        f"{sheet.port} has no rectangle with its corners on the grid near its drawn corners",
+        [sheet.layer],
+        sheet.grid_um,
+        [
+            f"its corners are drawn at {_format_points(drawn, sheet.grid_um)}, and "
+            f"{finding}"
+        ],
         "Fix the layout: draw the sheet with its four corners on the grid, along x or y "
         "or along a direction of whole grid steps such as 45 degrees, or place a sheet "
         "drawn along x or y through an instance turned by a quarter turn.",
+    )
+
+
+def _tied_corner_sets(sheet: _Sheet, tied: list[LatticeRectangle]) -> str:
+    """The refusal of a sheet whose vertices hold more than one set of corners with the same shift."""
+    return grid_change_message(
+        f"{sheet.port} has more than one set of four corners equally near a rectangle "
+        "with its corners on the grid",
+        [sheet.layer],
+        sheet.grid_um,
+        [
+            f"read with its corners drawn at {_format_points(r.drawn, sheet.grid_um)}, it is "
+            f"the rectangle with its corners at {_format_points(r.corners, sheet.grid_um)}"
+            for r in tied
+        ],
+        "Fix the layout: draw each corner of the sheet as one vertex.",
     )
 
 

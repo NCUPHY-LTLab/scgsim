@@ -242,7 +242,10 @@ in y. SCGSim reads each sheet as such a rectangle:
    point can lie off the side by up to half a grid diagonal (0.71 nm on a 1 nm
    grid), the grid's snap bound. SCGSim drops every vertex that lies within the
    snap bound of the line between the two corners of its side and keeps the four
-   corners.
+   corners. When a vertex lies so close to a corner that more than one set of
+   four vertices passes this rule, SCGSim reads each set as in step 2 and keeps
+   the one whose rectangle lies nearest its drawn corners; when two lie equally
+   near, SCGSim refuses the port and names both.
 2. **The rectangle.** When the four corners as drawn are grid points of such a
    rectangle, nothing moves. Otherwise, for example when an instance registered
    with a `GeometryPlan` and turned by 45° places a sheet drawn along x, so that

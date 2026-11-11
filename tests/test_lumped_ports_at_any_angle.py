@@ -20,6 +20,7 @@ from test_palace_rectangular_ports import port_group, prepared_port
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
 
 from scgsim.geometry import GeometryPlan
+from scgsim.geometry.planning.junction_partition import lattice_rectangle
 from scgsim.palace import EigenmodeSim
 
 GRID_UM = 0.001
@@ -120,6 +121,14 @@ ALONG_X = LatticeLayout(
     sheet=(-500, 10500, -500, 500),
 )
 ALONG_X_OFFSET_UM = 50.0
+# A 45 degree sheet 200 grid steps long and 10 wide, its corners A (0, 0), B (200, 200),
+# C (190, 210) and D (-10, 10) in grid steps, crossing a gap from s = 50 to s = 150.
+NEAR_CORNER_45 = LatticeLayout(
+    direction=(1, 1),
+    pad=(-1000, 50, -500, 500),
+    electrode=(150, 1000, -500, 500),
+    sheet=(0, 200, 0, 10),
+)
 
 
 def lattice_device(monkeypatch, layout: LatticeLayout, offset_um: float = 0.0):
@@ -309,6 +318,79 @@ def test_a_45_degree_port_with_bent_sides_is_its_central_lattice_rectangle(monke
     length_um, width_um = gap_end * layout.spacing_um, (t1 - t0) * layout.spacing_um
     assert built_port_area(monkeypatch, chip, reference) == pytest.approx(
         length_um * width_um, abs=1e-9
+    )
+
+
+def test_a_vertex_beside_a_corner_is_dropped_and_the_corner_kept(monkeypatch):
+    """A vertex (1, 0) drawn just after corner A, half a grid diagonal off side AB, is dropped.
+
+    A in turn lies within half a grid diagonal of the line from D to that vertex, so the sheet's
+    vertices hold two sets of four corners by the rule; only A, B, C and D are a rectangle with
+    its corners on the grid, so they are the corners, and the port is cut from them.
+    """
+    layout = NEAR_CORNER_45
+    a, b, c, d = layout.box_um(layout.sheet)
+    sheet = [a, (1 / NM_PER_UM, 0.0), b, c, d]
+    device = device_with_port(
+        monkeypatch,
+        pad=layout.box_um(layout.pad),
+        electrode=layout.box_um(layout.electrode),
+        sheet=sheet,
+        port_centre=layout.centre_um(layout.sheet),
+        port_width_um=10 * layout.spacing_um,
+        direction=layout.direction,
+    )
+    chip, reference = placed(device, 0)
+    _, region, record = prepared_port(eigenmode_sim(chip, reference))
+    lattice = record["lattice"]
+    assert lattice["corners_grid"] == [[0, 0], [200, 200], [190, 210], [-10, 10]]
+    assert lattice["direction_grid"] == [1, 1]
+    assert [cut["index"] for cut in lattice["cuts"]] == [50, 150]
+    expected = {layout.point_um(s, t) for s in (50, 150) for t in (0, 10)}
+    assert {tuple(map(float, p)) for p in region.exterior} == expected
+
+
+def test_two_sets_of_corners_equally_near_a_rectangle_are_refused():
+    """A sheet drawn with each corner doubled one grid step along x holds two rectangles exactly.
+
+    Read with the corners (0, 0), (200, 200), (190, 210) and (-10, 10), in grid steps, every
+    other vertex lies within half a grid diagonal of a side, and read with their twins one step
+    along x as well.  Neither moves a corner, so the drawing does not say where the port lies,
+    and the sheet is refused with both.  It is read as drawn: placed through a plan, the grid's
+    snap rounding drops the corner (-10, 10) and leaves only the twins.
+    """
+    corners = [(0, 0), (200, 200), (190, 210), (-10, 10)]
+    twins = [(x + 1, y) for x, y in corners]
+    (a, b, c, d), (a1, b1, c1, d1) = corners, twins
+    ring = [(x / NM_PER_UM, y / NM_PER_UM) for x, y in (a, a1, b, b1, c1, c, d1, d)]
+    with pytest.raises(
+        ValueError, match="more than one set of four corners"
+    ) as refused:
+        lattice_rectangle(
+            ring,
+            GRID_UM,
+            (math.sqrt(0.5), math.sqrt(0.5)),
+            drawn=ring,
+            port=f"junction {PORT!r}",
+            layer="9/0",
+        )
+    message = str(refused.value)
+    assert message.startswith(
+        f"junction {PORT!r} has more than one set of four corners equally near a "
+        "rectangle with its corners on the grid on layer 9/0 (grid g = 0.001 um): "
+    )
+    rectangles = [
+        {
+            (round(float(x) * NM_PER_UM), round(float(y) * NM_PER_UM))
+            for x, y in re.findall(r"\(([-\d.e]+), ([-\d.e]+)\) um", found)
+        }
+        for found in re.findall(
+            r"it is the rectangle with its corners at ([^;]+)", message
+        )
+    ]
+    assert sorted(map(sorted, rectangles)) == [sorted(corners), sorted(twins)]
+    assert message.endswith(
+        "Fix the layout: draw each corner of the sheet as one vertex."
     )
 
 
