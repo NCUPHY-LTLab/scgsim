@@ -95,5 +95,5 @@ Keep `source_gds`, `materials`, `layer_imports`, `object_bindings` and
 [ordinary Eigenmode](aedt-eigenmode.qmd), [Driven Modal](aedt-driven-modal.qmd),
 or [Driven Terminal](aedt-driven-terminal.qmd). For Q3D, use its separate
 body-backed input-v3 lesson. This shared lesson authors no component notebook;
-the canonical OrPen notebooks remain the source authority for their consumer
-workflow, with current Q3D migration status stated in that lesson.
+the canonical OrPen notebooks are the source authority for their consumer
+workflow.

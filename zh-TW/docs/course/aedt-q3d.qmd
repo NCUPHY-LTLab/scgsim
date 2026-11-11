@@ -9,7 +9,7 @@ scgsim-id: "docs/course/aedt-q3d"
 
 請從 [CPW 輸入](aedt-inputs.qmd)取得公開尺寸與 PDK 材料資訊。該教學的 GDS 對應供一般 HFSS 使用；目前 Q3D 透過 `scgsim.aedt.q3d.v3` 接受明確的實體幾何。此無來源範例直接宣告 CPW 輪廓及有限 Z 區間，不會匯入或轉換共用 GDS。
 
-無來源範例保留既有 AC/RL 請求契約。目前 Solid／Thin-Film 延伸工作的目標是無端子的 C/G；AC/RL 原生觀測尚未納入。下方以 GeometryPlan 為基礎的 C/G 範例，是此範圍內有來源依據的流程。
+無來源範例使用 AC/RL 請求契約。下方以 GeometryPlan 為基礎的範例是有來源依據的流程，用於無端子的 C/G。
 
 ```python
 from pathlib import Path
@@ -79,7 +79,7 @@ Signal net 指定訊號實體及其 `-X`、`+X` 端子面；Ground net 則包含
 
 若研究只需要電容／電導，請建立另一份 `solve_ac_rl=False` 規格。此模型形式只回傳原生 `c_matrix.csv`，不會建立 AC-RL 設定或相容性矩陣產物。此僅含 CG 的規格還可選擇專用的接地 Region 包覆：`grounded_region_net="EnclosureGround"`，其中新的網路名稱必須與所有實體網路不同。此設定會要求六個原生 PEC 面薄片，並保留實體 Ground 網路；它不會合併薄片、不會加入橋接，也不代表存在 AC/DC 回流路徑。[契約](../specs/aedt-runtime.qmd#q3d-extraction-and-region-ground-candidate)說明原生驗證／讀回，以及包覆接地與實體接地的差異。
 
-請將實體輪廓、Z 區間、精確 Net 成員資格與擷取選項視為請求輸入。此範例準備可攜式 v3 請求；它本身不會執行原生僅建置操作，也不會求解。body-v3 API 與僅建置行為已獲接受；已觀察的僅建置操作及其限制，記載於[矩陣觀測契約](../specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)與 [Q3D 契約](../specs/aedt-runtime.qmd#q3d-body-input-v3)。改變包覆或擷取形式代表進行不同實驗，不能當作離線更新舊結果的損耗假設。
+請將實體輪廓、Z 區間、精確 Net 成員資格與擷取選項視為請求輸入。此範例準備可攜式 v3 請求；它本身不會執行原生僅建置操作，也不會求解。[矩陣觀測契約](../specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)與 [Q3D 契約](../specs/aedt-runtime.qmd#q3d-body-input-v3)說明僅建置操作及其限制。改變包覆或擷取形式代表進行不同實驗，不能當作離線更新舊結果的損耗假設。
 
 ## 以 GeometryPlan 準備 C/G {#geometryplan-backed-cg-preparation}
 
@@ -107,10 +107,10 @@ handoff = prepare_q3d_from_geometry(
 print(handoff.spec_path, handoff.archive_path)
 ```
 
-此範例保留呼叫端的最終 Net ID，並明確將實體 `Ground` 分類為物理角色，同時要求兩個 Net 的原生 `Signal` 矩陣列。它不會建立端子或定位薄片幾何，也不會推斷連通性。來源座標、完整外環與內環、Z 區間、材料、最終 Net 及可用來源脈絡，都會保留在 v3 實體與 `geometry_source` 附件中；標準快照 GDS 維持不變。已接受的僅建置觀測讀回受測的原生實體、孔洞、Z 區間、材料、Net 指派、Region 與設定，接著儲存並釋放專案；另有檢視幾何預覽。此流程沒有呼叫 `Analyze`，也沒有回傳 C/G 矩陣。來源曲線目前仍不在 AEDT 降階契約的範圍內。
+此範例保留呼叫端的最終 Net ID，並明確將實體 `Ground` 分類為物理角色，同時要求兩個 Net 的原生 `Signal` 矩陣列。它不會建立端子或定位薄片幾何，也不會推斷連通性。來源座標、完整外環與內環、Z 區間、材料、最終 Net 及可用來源脈絡，都會保留在 v3 實體與 `geometry_source` 附件中；標準快照 GDS 維持不變。原生僅建置操作會讀回原生實體、孔洞、Z 區間、材料、Net 指派、Region 與設定，接著儲存並釋放專案。此操作不會呼叫 `Analyze`，也不會回傳 C/G 矩陣。AEDT 降階契約不承載來源曲線。
 
 若 Ground 實體是衍生而來，請保留子來源 occurrence、輪廓與孔洞、呼叫端擁有的最終 Net，以及紀錄的 occurrence 轉換。該轉換只套用一次。實體 Ground 角色須與最終 Net 名稱及原生 Net 類型分開處理；不要從父項名稱或邊界推斷。
 
-已接受的原生僅建置操作會使用既有 CLI 與已準備的 Q3D v3 交接套件：`python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only`（請代入 `prepare_q3d_from_geometry` 回傳的資料夾）。此操作會準備並讀回原生模型、儲存專案，並釋放其管理的 Desktop；過程不會呼叫 `Analyze` 或匯出 C/G 矩陣。此交接套件只能使用一次；日後求解前請準備新的交接套件。僅建置觀測不能取代已完成的求解；一般 `--execute` 流程不變。[Q3D 契約](../specs/aedt-runtime.qmd#q3d-body-input-v3)說明收據與嚴格解析的界線。
+原生僅建置操作會使用既有 CLI 與已準備的 Q3D v3 交接套件：`python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only`（請代入 `prepare_q3d_from_geometry` 回傳的資料夾）。此操作會準備並讀回原生模型、儲存專案，並釋放其管理的 Desktop；過程不會呼叫 `Analyze` 或匯出 C/G 矩陣。此交接套件只能使用一次；日後求解前請準備新的交接套件。僅建置執行不能取代已完成的求解；一般 `--execute` 流程不變。[Q3D 契約](../specs/aedt-runtime.qmd#q3d-body-input-v3)說明收據與嚴格解析的界線。
 
 準備此結構化 GDSFactory／KLayout 來源時，請使用既有的 `aedt-epr` 安裝 extra。無來源的 `Q3dSpec` 實體不需要匯入 GDS。設定的資源值會記錄為執行輸入；單憑這些值無法保證嚴格的程序記憶體上限，也不會回報獨立觀測到的有效求解器配置。

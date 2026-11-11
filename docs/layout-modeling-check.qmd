@@ -188,4 +188,4 @@ fine structure, and `mesh()` can still stop with `MeshRepairError`, which then
 names the places where it stopped.
 :::
 
-AEDT is outside this check: its STEP import is not covered yet.
+AEDT is outside this check, because AEDT does not build its model from SGB geometry.

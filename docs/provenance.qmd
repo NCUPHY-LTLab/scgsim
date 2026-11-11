@@ -31,8 +31,6 @@ package initializers. It adds `scgsim/geometry/primitives/topology_validation.py
 to the frozen 283-path V27 roster. Preparation and execution record their
 declared module bytes and content digest separately. Historical V1–V27 manifests
 keep their original paths and interpretation.
-Earlier implementation and native-run records are linked from the
-[API migration reference](api-migration.qmd#accepted-scope-and-evidence-status).
 
 The current Palace geometry authority is `scgsim.geometry.sgb`. Palace
 continues to serialize the established `scgsim_sgb` field, whose current value

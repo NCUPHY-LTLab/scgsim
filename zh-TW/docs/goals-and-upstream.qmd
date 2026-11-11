@@ -15,7 +15,7 @@ SCGSim 是從 [gsim](https://github.com/gdsfactory/gsim) 衍生出的獨立下�
 
 ## 範圍 {#scope}
 
-Palace Electrostatic／Eigenmode、AEDT HFSS Eigenmode／Driven、Q3D 與 Q2D 均已實作。公開元件 Notebook 由 OrPen 維護。Palace Driven 與 Magnetostatic 尚未實作；Meep 不屬於本套件範圍。
+Palace Electrostatic／Eigenmode、AEDT HFSS Eigenmode／Driven、Q3D 與 Q2D 均已實作。公開元件 Notebook 由 OrPen 維護。Palace Driven 與 Magnetostatic 未實作；Meep 不屬於本套件範圍。
 
 SCGSim 不會安裝原生求解器、不會暗中提交已準備的交接工作，也不會因計算完成就將結果視為普遍準確。研究作者負責選擇物理假設並解讀物理量。
 

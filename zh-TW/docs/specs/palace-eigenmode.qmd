@@ -26,7 +26,7 @@ lang: zh-TW
 
 幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。本徵模態與 Electrostatic 兩個外觀介面共用同一組網格控制與預設值，記載於 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls)，該節也說明細微結構會使 `mesh()` 在產生網格之前被拒絕，以及網格低於品質門檻時 `mesh()` 會中止。
 
-## 本徵模態網格與 AMR 預設值（CONVERGING） {#eigenmode-mesh-and-amr-defaults-converging}
+## 本徵模態網格與 AMR 預設值 {#eigenmode-mesh-and-amr-defaults}
 
 新的 `EigenmodeSim` 使用共用的預設網格控制（`FeatureRecipe()`、`MesherOptions()`、`Budgets()` 與 `0.01` 品質門檻），並寫入 `Model.Refinement.Nonconformal=true`。在 `write_config()` 之前，透過 `set_numerical(...)` 提供 `amr_max_passes`。若迭代上限為正值，也必須提供 `amr_tolerance` 與 `amr_update_fraction`；設定 `amr_max_passes=0` 會停用自適應細化，並允許另外兩值維持未設定。之後的 `set_numerical(...)` 呼叫若省略 `ksp_type`、`amr_max_passes`、`amr_nonconformal`、`amr_nc_levels`、`amr_tolerance`、`amr_update_fraction` 或 `save_adapt_diagnostics`，就保留目前設定；其餘省略的值（`order`、`tolerance`、`max_iterations`、`solver_type`、`preconditioner`、`device`、`save_adapt_iterations`、`save_adapt_mesh`、`estimator_mg`、`output_paraview` 與 `output_grid_function`）都採用預設值。這些是輸入控制，不是充分性建議。Electrostatic 保留共用契約中既有的 AMR 預設值。
 
@@ -86,9 +86,9 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 
 ### 原生本徵模態 Q 的可用性 {#native-eigenmode-q}
 
-Human 已接受的 V1 契約允許這項限縮行為：結果解析時，只有原生 `eig.csv` 的 `Q` 欄位可保留正無窮大（`+inf`）作為原生回報值。報表會明確標示為**原生回報的無窮大 Q**；該值無法提供以有限 Q 為基礎的檢視。不推論物理上無損的模型、不以有限數字或零取代無窮大，也不僅因這個 Q 值就拒絕原本有效的頻率／域能量資料。
+這是一項限縮的例外：結果解析時，只有原生 `eig.csv` 的 `Q` 欄位可保留正無窮大（`+inf`）作為原生回報值。報表會明確標示為**原生回報的無窮大 Q**；該值無法提供以有限 Q 為基礎的檢視。不推論物理上無損的模型、不以有限數字或零取代無窮大，也不僅因這個 Q 值就拒絕原本有效的頻率／域能量資料。
 
-其他原生欄位及既有 NaN／負無窮大政策維持不變。這不是全面允許非有限值，也不放寬完成狀態、表格結構、模態／索引順序、要求身分或產物完整性。EPR 正規化仍使用其實際能量／頻率通道，不使用原生 Q 特殊值。表面 Q 行為保留既有的獨立契約。V1 接受狀態不代表科學充分性或已完成穩定化。
+其他原生欄位及既有 NaN／負無窮大政策維持不變。這不是全面允許非有限值，也不放寬完成狀態、表格結構、模態／索引順序、要求身分或產物完整性。EPR 正規化仍使用其實際能量／頻率通道，不使用原生 Q 特殊值。表面 Q 行為保留既有的獨立契約。
 
 原生埠參與率有正負號，並依賴相位慣例；它不是 AEDT 的非負接面電感／電容配對。損耗假設與未知項在分離及更新之後保留其意義；[EPR 概念](../eigenmode-epr.qmd) 負責正規化與損耗解讀。[報表契約](../report-model.qmd) 負責涵蓋範圍、基準與邊距呈現、部分可用性及求解器專屬物理量。
 

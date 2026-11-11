@@ -63,4 +63,4 @@ ground_objects = ("D0_TOP_M1_2", "D0_TOP_M1_3")
 
 原生六面補距順序為 `(+X, -X, +Y, -Y, +Z, -Z)`，與 PyAEDT 相同。此順序不同於 Q2D 的四值順序。請依規格文件所列順序設定，不要複製其他模型的註解。
 
-在 HFSS 分支中保留 `source_gds`、`materials`、`layer_imports`、`object_bindings` 與 `ground_objects`。接著閱讀[一般 Eigenmode](aedt-eigenmode.qmd)、[Driven Modal](aedt-driven-modal.qmd)或 [Driven Terminal](aedt-driven-terminal.qmd)。Q3D 請使用獨立的 body-backed input-v3 教學。此共用教學不建立元件 Notebook；消費端工作流程仍以 OrPen 的標準 Notebook 為來源依據，該教學也會說明目前的 Q3D 遷移狀態。
+在 HFSS 分支中保留 `source_gds`、`materials`、`layer_imports`、`object_bindings` 與 `ground_objects`。接著閱讀[一般 Eigenmode](aedt-eigenmode.qmd)、[Driven Modal](aedt-driven-modal.qmd)或 [Driven Terminal](aedt-driven-terminal.qmd)。Q3D 請使用獨立的 body-backed input-v3 教學。此共用教學不建立元件 Notebook；消費端工作流程以 OrPen 的標準 Notebook 為來源依據。

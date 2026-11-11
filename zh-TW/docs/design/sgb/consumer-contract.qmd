@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/consumer-contract"
 
 Palace 的 mesh 流程與 AEDT 的 geometry 流程要採用新的 SGB，需要知道兩件事：SGB 交給它們什麼，以及怎麼讀。本頁回答第一件事與讀取的順序：入口函式 `build_sgb_geometry`、它寫出的五個檔案、sidecar 的欄位，以及兩個讀取端的流程。今天的 Palace 與 AEDT 契約如何對到這些欄位，另見[對應表](consumer-mapping.qmd)。
 
-這裡描述的程式是階段 1 的 SGB core。它已經實作並有測試；Palace 使用這個入口，AEDT 尚未使用，`export_aedt_step` 只提供匯出端；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v2`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band），另有一條 refinement curve。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
+這裡描述的程式是 SGB core。Palace 使用這個入口，AEDT 不使用它，`export_aedt_step` 只提供匯出端；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v2`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band），另有一條 refinement curve。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
 
 ## 呼叫與回傳 {#call}
 
