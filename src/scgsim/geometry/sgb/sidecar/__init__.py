@@ -6,8 +6,9 @@ written compound -- never by geometry), lists the primary physical groups with t
 a solver adapter needs, and records everything the file formats cannot carry: embedding, lineage,
 inset families, the load-side expectations.  It is deterministic: a fixed key order, no timestamps,
 no paths, numbers rounded to twelve significant digits, identical for any worker count and tile layout.
-``sidecar.schema.json`` (next to this file) is the contract; tests validate every emitted sidecar
-against it.
+The contract is one definition, ``scgsim.contracts.sgb_sidecar``, which also holds the version constant
+and the shared reader; ``sidecar.schema.json`` (next to this file) is the JSON Schema derived from it by
+``scripts/generate_sidecar_schema.py``, and tests validate every emitted sidecar against it.
 
 Top-level fields and who uses them
 ----------------------------------

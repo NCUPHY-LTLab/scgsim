@@ -22,6 +22,7 @@ from sgb_supported_kit import (
 from sgb_unsupported_cells import straight_lead
 from test_sgb_supported_geometry import SCENES, scene_params
 
+from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
@@ -39,10 +40,14 @@ def sample_model(scene: Scene) -> ConformalModel:
 
 @pytest.mark.parametrize("name", scene_params())
 def test_a_supported_cell_is_written_as_brep_and_xao(name, tmp_path):
-    """The model of the scene is planned and both files are written; a scene that cannot be written fails here."""
+    """The model of the scene is planned and both files are written; a scene that cannot be written fails here.
+
+    Its sidecar passes the shared reader: the version, the structure of the definition and the references.
+    """
     artifacts = emit_model(sample_model(SCENES[name]()), tmp_path)
     assert artifacts.brep.stat().st_size > 0
     assert artifacts.xao.stat().st_size > 0
+    read_sidecar(artifacts.sidecar)
 
 
 @pytest.mark.parametrize("name", sorted(pdk.NOT_WRITTEN))

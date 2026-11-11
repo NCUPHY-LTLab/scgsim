@@ -30,9 +30,10 @@ from collections import defaultdict
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.contracts.sgb_sidecar import SIDECAR_SCHEMA
+
 from .attributes import SurfacePart, lower_surface_group
 
-SIDECAR_SCHEMA = "scgsim.sgb.sidecar.v2"
 CONDUCTOR_INTERFACE_TYPES = ("MA", "MS", "SHEET")
 SOLUTION_KINDS = ("vacuum", "dielectric")
 
