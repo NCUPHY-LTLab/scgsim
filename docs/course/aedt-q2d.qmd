@@ -16,8 +16,8 @@ and a 200 µm wide, 500 µm thick substrate. These are model inputs.
 
 ```python
 from pathlib import Path
-import orpen_sc_pdk
-from orpen_sc_pdk.materials import get_material_records
+import orcapen_sc_pdk
+from orcapen_sc_pdk.materials import get_material_records
 from scgsim.aedt import (
     MatrixRunControl, PdkMaterial, Q2dConductorSpec,
     Q2dRectangleSpec, Q2dSpec, prepare_handoff,
@@ -25,7 +25,7 @@ from scgsim.aedt import (
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 
-orpen_sc_pdk.activate()
+orcapen_sc_pdk.activate()
 records = get_material_records()
 materials = {
     name: PdkMaterial(name, records[name]["material_kind"],

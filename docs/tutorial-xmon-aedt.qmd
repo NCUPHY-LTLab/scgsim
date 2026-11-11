@@ -82,7 +82,7 @@ come from OrPen's synthetic `LiteratureCentral` presets; margins are alternative
 evaluations relative to the separately retained unmasked baseline.
 
 ```python
-from orpen_sc_pdk.materials import validate_interface_preset_records
+from orcapen_sc_pdk.materials import validate_interface_preset_records
 from scgsim.aedt import SurfaceEprSpec, prepare_planar_geometry_input
 
 prepared = prepare_planar_geometry_input(

@@ -25,7 +25,7 @@ from the component annotation.
 ```python
 from pathlib import Path
 
-from orpen_sc_pdk import (
+from orcapen_sc_pdk import (
     get_interface_preset_records,
     validate_interface_preset_records,
 )

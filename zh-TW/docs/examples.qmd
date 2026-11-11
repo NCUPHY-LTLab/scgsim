@@ -27,13 +27,14 @@ SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別�
 
 ## 探索較大型範例 {#public-inputs}
 
-較深入的 Xmon 與 CPW 來源筆記本固定使用公開 OrPen SC PDK 版本 [`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9)，該版本宣告 OrPen `0.1.0` 與 GDSFactory 9.48.x。請依各範例指定的來源版本操作。
+較深入的 Xmon 與 CPW 來源筆記本固定使用公開 OrPen SC PDK 版本 [`49e539fd59f3224ecda965d777c7ec3aadcc3b85`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85)，也就是[首頁](../index.qmd)安裝的版本。該版本宣告 `orcapen-sc-pdk` `1.0.0`（匯入名稱為 `orcapen_sc_pdk`）與 GDSFactory 9.48.x。在此版本中，PDK 將 SCGSim 範例放在 `SCGSimExamples/` 之下；Xmon 來源與 CPW Driven Terminal 來源位於其 `ComponentSimulation/` 群組。請依各範例指定的來源版本操作。
 
 | 公開筆記本群組 | 用途 |
 |---|---|
-| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic／Eigenmode 與以來源為起點的 Xmon 研究 |
-| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode／Driven 與歷史 Q3D GDS 輸入來源 |
-| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D 矩形與導體群組 |
+| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic／Eigenmode 與以來源為起點的 Xmon 研究 |
+| [SCGSimExamples/ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwFiniteGround) | CPW coupon 的 HFSS Eigenmode、Q3D 與 Palace Eigenmode；其中的 Driven Modal 頁面只記錄設定 |
+| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Driven Terminal 來源 |
+| [SCGSimExamples/CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround) | Q2D 矩形與導體群組 |
 
 來源尺寸與預設值是範例模型輸入。SCGSim 請求的現行用法請依相關教學與 API 參考操作。
 

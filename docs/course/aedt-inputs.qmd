@@ -21,19 +21,21 @@ backend input details. The public specimen and executable notebook sources belon
 long, with a 10 µm signal, 6 µm gaps, 80 µm grounds and a 500 µm substrate.
 Those are example design inputs, not measured device geometry or universal
 solver settings. The GDS contains three metal rectangles and the substrate
-area. The PDK supplies the layer pairs and material/library facts.
+area. The PDK supplies the layer pairs and material/library facts. These
+lessons keep the Nb conductors of the PDK's CPW Driven sources; its CPW
+Eigenmode and Q3D notebooks at the same revision use a 100 nm Al film instead.
 
 ## Make the shared source and mapping
 
 ```python
 from pathlib import Path
 import gdsfactory as gf
-import orpen_sc_pdk
-from orpen_sc_pdk.tech import LAYER
-from orpen_sc_pdk.materials import get_material_records
+import orcapen_sc_pdk
+from orcapen_sc_pdk.tech import LAYER
+from orcapen_sc_pdk.materials import get_material_records
 from scgsim.aedt import LayerImport, ObjectBinding, PdkMaterial
 
-orpen_sc_pdk.activate()
+orcapen_sc_pdk.activate()
 coupon = gf.Component()
 coupon << gf.components.rectangle(size=(500.0, 10.0), centered=True,
                                   layer=LAYER.D0_TOP_M1_DRAW)

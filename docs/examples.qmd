@@ -29,13 +29,14 @@ Start with [installation](course/installation.qmd), then select explicit geometr
 
 ## Explore larger examples {#public-inputs}
 
-The deeper Xmon and CPW source notebooks are pinned to public OrPen SC PDK revision [`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9), which declares OrPen `0.1.0` and GDSFactory 9.48.x. Use the source revision named by each example.
+The deeper Xmon and CPW source notebooks are pinned to public OrPen SC PDK revision [`49e539fd59f3224ecda965d777c7ec3aadcc3b85`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85), the revision the [home page](../index.qmd#install) installs. It declares `orcapen-sc-pdk` `1.0.0`, imported as `orcapen_sc_pdk`, and GDSFactory 9.48.x. At this revision the PDK keeps its SCGSim examples under `SCGSimExamples/`; the Xmon sources and the CPW Driven Terminal source are in its `ComponentSimulation/` group. Use the source revision named by each example.
 
 | Public notebook group | Use |
 |---|---|
-| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic/Eigenmode and source-first Xmon studies |
-| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode/Driven and historical Q3D GDS-input source |
-| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
+| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic/Eigenmode and source-first Xmon studies |
+| [SCGSimExamples/ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode, Q3D and Palace Eigenmode on the CPW coupon; its Driven Modal page records the settings only |
+| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Driven Terminal source |
+| [SCGSimExamples/CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
 
 The source dimensions and presets are example model inputs. For current SCGSim requests, follow the relevant tutorial and API references.
 
