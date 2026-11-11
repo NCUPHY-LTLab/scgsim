@@ -10,11 +10,14 @@ from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.primitives.grid import (
     current_grid_size_um,
+    named_source,
     polygon_boolean,
+    source_refusal,
 )
 from scgsim.geometry.source.polygon_ops import (
     layout_polygon_region,
     ring_from_gdstk_polygon,
+    selector_place,
 )
 
 SOURCE_OCCURRENCE_POLYGON_METADATA_KEY = "source_occurrence_polygon_um"
@@ -230,9 +233,23 @@ def _selected_port_polygons(
             if _point_in_ring(point, ring_from_gdstk_polygon(polygon))
         )
         if len(selected) != 1:
-            raise ValueError(
-                f"port sheet {source_name!r} selector matched {len(selected)} polygons"
-            )
+            with named_source(source_name, f"{layer}/{datatype}"):
+                raise ValueError(
+                    source_refusal(
+                        f"port sheet {source_name!r} selector matched {len(selected)} "
+                        "polygons",
+                        [
+                            selector_place(
+                                point,
+                                [ring_from_gdstk_polygon(p) for _, p in selected],
+                                [ring_from_gdstk_polygon(p) for p in source_polygons],
+                            )
+                        ],
+                        "Fix the layout or the declaration: draw the port's sheet as one "
+                        "polygon on its layer under the selector point, or move the point "
+                        "onto it.",
+                    )
+                )
     return tuple(
         (
             index,

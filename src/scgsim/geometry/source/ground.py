@@ -19,13 +19,17 @@ from scgsim.geometry.primitives.grid import (
     polygon_boolean,
     polygon_rings,
     preserve_declared_source,
+    source_place,
+    source_refusal,
 )
 from scgsim.geometry.primitives.loops import canonical_loop_sort_key
 from scgsim.geometry.primitives.planar_loops import PlanarLoop
 from scgsim.geometry.source.polygon_ops import (
+    FIX_SELECTOR,
     fused_gdstk_components,
     point_in_layout_polygon,
     realized_on_lattice,
+    selector_place,
 )
 from scgsim.geometry.source.polygon_ops import (
     layout_polygon_region as layout_polygon_region,
@@ -134,8 +138,16 @@ def derived_ground_polygons(  # noqa: PLR0913 -- the Ground recipe: the entity, 
         ),
     )
     if not normalized_regions:
+        plane = [corner for polygon in base for corner in polygon.bounding_box()]
         raise ValueError(
-            f"{entity.semantic_id} derived ground must lower to at least one planar region"
+            source_refusal(
+                f"{entity.semantic_id} derived ground must lower to at least one planar region",
+                [
+                    f"the ground mask on this layer covers its whole plane, at {source_place(plane)}"
+                ],
+                "Fix the layout or the declaration: leave part of the plane outside the "
+                "ground mask, or include the metal the Ground keeps.",
+            )
         )
     return tuple(
         LayoutPolygonSpec(
@@ -201,7 +213,18 @@ def _selected_includes(
         ]
         if len(matches) != 1:
             raise ValueError(
-                f"{entity.semantic_id} include selector {tuple(point)!r} matched {len(matches)} source polygons"
+                source_refusal(
+                    f"{entity.semantic_id} include selector {tuple(point)!r} matched "
+                    f"{len(matches)} source polygons",
+                    [
+                        selector_place(
+                            selector,
+                            [polygon.exterior for polygon in matches],
+                            [polygon.exterior for polygon, _, _ in components],
+                        )
+                    ],
+                    FIX_SELECTOR,
+                )
             )
         included.extend(layout_polygon_region(gdstk, matches[0]))
     return included

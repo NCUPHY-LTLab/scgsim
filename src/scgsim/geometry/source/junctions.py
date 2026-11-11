@@ -4,6 +4,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import cast
 
+from scgsim.geometry.models.grid import format_box, geometry_grid_context
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
     LayoutPolygonSpec,
@@ -14,8 +15,12 @@ from scgsim.geometry.models.junctions import (
     junction_net_id,
     junction_occurrence_path,
 )
-from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.models.regions import (
+    PortSheetOverlapRecord,
+    PortSheetRegionRecord,
+)
 from scgsim.geometry.primitives.grid import with_input_grid
+from scgsim.geometry.primitives.grid_regions import grid_change_message
 from scgsim.geometry.source.ports import port_sheet_overlaps
 
 
@@ -102,9 +107,49 @@ def _bind_request(
         or {item.host_semantic_id for item in overlaps} != expected_hosts
     ):
         raise ValueError(
-            "rectangular junction requires one actual overlap per explicit terminal"
+            _overlap_count_refusal(build_input, region, overlaps, polygons, request)
         )
     return replace(region, overlaps=overlaps)
+
+
+def _overlap_count_refusal(
+    build_input: GeometryBuildInput,
+    region: PortSheetRegionRecord,
+    overlaps: tuple[PortSheetOverlapRecord, ...],
+    polygons: Mapping[str, LayoutPolygonSpec],
+    request: RectangularJunctionSpec,
+) -> str:
+    """Where the sheet overlaps each terminal, when it does not overlap each one exactly once."""
+    grid = geometry_grid_context(build_input)
+    grid_um = None if grid is None else grid.grid_size_um
+    findings = []
+    for terminal in (request.terminal_a, request.terminal_b):
+        host = terminal.source_entity_id
+        mine = [item for item in overlaps if item.host_semantic_id == host]
+        if not mine:
+            findings.append(f"it does not overlap {host}")
+            continue
+        layers = sorted({polygons[item.host_polygon_id].layer for item in mine})
+        places = ", ".join(_loop_place(item.overlap_loop, grid_um) for item in mine)
+        times = "once" if len(mine) == 1 else f"{len(mine)} times"
+        findings.append(
+            f"it overlaps {host} on layer {', '.join(layers)} {times}, at {places}"
+        )
+    name = region.metadata.get("source_name", region.port_sheet_id)
+    return grid_change_message(
+        "rectangular junction requires one actual overlap per explicit terminal: "
+        f"lumped port {name!r}",
+        [region.source_layer],
+        grid_um,
+        findings,
+        "Fix the layout: draw the sheet so that it overlaps each of its two conductors "
+        "once, at its own end.",
+    )
+
+
+def _loop_place(loop, grid_um: float | None) -> str:
+    xs, ys = [x for x, _ in loop], [y for _, y in loop]
+    return format_box((min(xs), min(ys), max(xs), max(ys)), grid_um)
 
 
 def _validate_sheet_ownership(

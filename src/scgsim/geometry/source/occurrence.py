@@ -17,18 +17,23 @@ from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.primitives.grid import (
     in_occurrence_frame,
     named_source,
+    polygon_world_frame,
     preserve_declared_source,
+    source_place,
+    source_refusal,
     split_gdstk_cutline_loop,
 )
 from scgsim.geometry.source.ground import derived_ground_polygons
 from scgsim.geometry.source.normalization import gds_layer
 from scgsim.geometry.source.polygon_ops import (
+    FIX_SELECTOR,
     flattened_polygons,
     fused_gdstk_components,
     point_in_layout_polygon,
     point_in_ring,
     realized_on_lattice,
     ring_from_gdstk_polygon,
+    selector_place,
     without_repeated_vertices,
 )
 
@@ -330,12 +335,32 @@ def _gds_layer_polygons(
         ]
         if len(indexes) != 1:
             raise ValueError(
-                f"{entity.semantic_id} selector point {point!r} matched "
-                f"{len(indexes)} fused polygons"
+                source_refusal(
+                    f"{entity.semantic_id} selector point {point!r} matched "
+                    f"{len(indexes)} fused polygons",
+                    [
+                        selector_place(
+                            point,
+                            [components[i][0].exterior for i in indexes],
+                            [polygon.exterior for polygon, _, _ in components],
+                        )
+                    ],
+                    FIX_SELECTOR,
+                )
             )
         if indexes[0] in matched:
+            earlier = points[matched.index(indexes[0])]
+            region = source_place(components[indexes[0]][0].exterior)
             raise ValueError(
-                f"{entity.semantic_id} selector points must match distinct polygons"
+                source_refusal(
+                    f"{entity.semantic_id} selector points must match distinct polygons",
+                    [
+                        f"the selector points at {source_place([earlier])} and "
+                        f"{source_place([point])} both lie in the region at {region}"
+                    ],
+                    "Fix the declaration or the layout: give each selector point a region "
+                    "of its own, or draw the regions apart.",
+                )
             )
         matched.append(indexes[0])
     if selector is not None:
@@ -401,17 +426,28 @@ def _source_layer_polygons(
     datatype: int,
 ) -> tuple[LayoutPolygonSpec, ...]:
     if selector is not None:
+        point = (float(selector[0]), float(selector[1]))
         selected = [
             polygon
             for polygon in candidates
-            if point_in_ring(
-                (float(selector[0]), float(selector[1])),
-                ring_from_gdstk_polygon(polygon),
-            )
+            if point_in_ring(point, ring_from_gdstk_polygon(polygon))
         ]
         if len(selected) != 1:
             raise ValueError(
-                f"{entity.semantic_id} selector_point_um matched {len(selected)} polygons"
+                source_refusal(
+                    f"{entity.semantic_id} selector_point_um matched {len(selected)} polygons",
+                    [
+                        selector_place(
+                            point,
+                            [ring_from_gdstk_polygon(polygon) for polygon in selected],
+                            [
+                                ring_from_gdstk_polygon(polygon)
+                                for polygon in candidates
+                            ],
+                        )
+                    ],
+                    FIX_SELECTOR,
+                )
             )
     else:
         selected = list(candidates)
@@ -545,11 +581,18 @@ def occurrence_ground_polygons_for_entity(  # noqa: PLR0913 -- the uniform occur
                 _occurrence_inverse_point(transform, point) for point in geometry[key]
             ]
     polygons = polygons_by_layer
-    plane = polygons.get(gds_layer(plane_layer, entity.semantic_id), ())
+    plane_key = gds_layer(plane_layer, entity.semantic_id)
+    plane = polygons.get(plane_key, ())
     if not plane:
-        raise ValueError(
-            f"{entity.semantic_id} occurrence has no declared plane-bound geometry"
-        )
+        with named_source(entity.semantic_id, f"{plane_key[0]}/{plane_key[1]}"):
+            raise ValueError(
+                source_refusal(
+                    f"{entity.semantic_id} occurrence has no declared plane-bound geometry",
+                    [_drawn_without(polygons)],
+                    "Fix the layout or the declaration: draw the Ground's plane on this "
+                    "layer in the component, or name the layer its plane is drawn on.",
+                )
+            )
     derived = derived_ground_polygons(
         replace(entity, geometry=geometry),
         polygons_by_layer=polygons,
@@ -582,9 +625,27 @@ def occurrence_port_polygon(
         if point_in_ring(point, ring_from_gdstk_polygon(polygon))
     ]
     if len(selected) != 1:
-        raise ValueError(
-            f"GeometryPlan port {record['name']!r} matched {len(selected)} local sheet polygons"
-        )
+        drawn = [ring_from_gdstk_polygon(p) for p in polygons_by_layer.get(layer, ())]
+        with (
+            polygon_world_frame(transform),
+            named_source(str(record["name"]), f"{layer[0]}/{layer[1]}"),
+        ):
+            raise ValueError(
+                source_refusal(
+                    f"GeometryPlan port {record['name']!r} matched {len(selected)} local "
+                    "sheet polygons",
+                    [
+                        selector_place(
+                            point,
+                            [ring_from_gdstk_polygon(p) for p in selected],
+                            drawn,
+                            what="the port's centre",
+                        )
+                    ],
+                    "Fix the layout: draw the port's sheet as one polygon on its layer, "
+                    "under the port's centre.",
+                )
+            )
     local = LayoutPolygonSpec(
         polygon_id="source_port_sheet",
         layer=f"{layer[0]}/{layer[1]}",
@@ -606,8 +667,13 @@ def _lumped_ring_identity(ring):
     )
 
 
-def occurrence_lumped_polygon(support, *, cell, excluded_reference_indexes=()):
-    """Bind the complete authored local ring to actual original GDS geometry."""
+def occurrence_lumped_polygon(
+    support, *, cell, excluded_reference_indexes=(), transform=(1, 0, 0, 1, 0, 0)
+):
+    """Bind the complete authored local ring to actual original GDS geometry.
+
+    ``transform`` places the occurrence in the layout, where a refusal locates the ring.
+    """
 
     declared = (
         _lumped_ring_identity(support.exterior),
@@ -626,9 +692,20 @@ def occurrence_lumped_polygon(support, *, cell, excluded_reference_indexes=()):
         if actual == declared:
             selected.append(local)
     if len(selected) != 1:
-        raise ValueError(
-            f"lumped support {support.support_id!r} matched {len(selected)} source polygons"
-        )
+        layer = f"{support.source_layer[0]}/{support.source_layer[1]}"
+        with polygon_world_frame(transform), named_source(support.support_id, layer):
+            raise ValueError(
+                source_refusal(
+                    f"lumped support {support.support_id!r} matched {len(selected)} "
+                    "source polygons",
+                    [
+                        f"its authored ring lies at {source_place(support.exterior)}, and "
+                        f"{len(selected)} polygons drawn on the layer have exactly that outline"
+                    ],
+                    "Fix the declaration or the layout: give the lumped support the exact "
+                    "outline and holes of one polygon drawn on its layer.",
+                )
+            )
     return selected[0]
 
 
@@ -656,8 +733,39 @@ def occurrence_include_polygon(
         if point_in_layout_polygon((point[0], point[1]), polygon)
     ]
     if len(selected) != 1:
-        raise ValueError(
-            f"ground contribution {record.get('source_local_id')!r} matched "
-            f"{len(selected)} local source polygons"
-        )
+        name = str(record.get("source_local_id", "ground contribution"))
+        with (
+            polygon_world_frame(transform),
+            named_source(name, f"{layer[0]}/{layer[1]}"),
+        ):
+            raise ValueError(
+                source_refusal(
+                    f"ground contribution {record.get('source_local_id')!r} matched "
+                    f"{len(selected)} local source polygons",
+                    [
+                        selector_place(
+                            point,
+                            [polygon.exterior for polygon in selected],
+                            [polygon.exterior for polygon, _, _ in components],
+                        )
+                    ],
+                    FIX_SELECTOR,
+                )
+            )
     return _occurrence_polygon_record(selected[0], transform)
+
+
+def _drawn_without(polygons_by_layer: Mapping[tuple[int, int], Sequence[Any]]) -> str:
+    """Where an occurrence draws, when it draws nothing on the layer a refusal names."""
+    corners = [
+        corner
+        for polygons in polygons_by_layer.values()
+        for polygon in polygons
+        for corner in polygon.bounding_box()
+    ]
+    if not corners:
+        return "the occurrence draws nothing"
+    return (
+        "the occurrence draws nothing on this layer; what it draws lies within "
+        f"{source_place(corners)}"
+    )

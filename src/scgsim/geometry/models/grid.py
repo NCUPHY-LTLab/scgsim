@@ -70,7 +70,9 @@ def format_um(value: float, grid_um: float | None) -> str:
     """A coordinate in micrometres with the decimals of the grid size (in full without a grid)."""
     if grid_um is None:
         return repr(float(value))
-    return f"{value:.{grid_decimals(grid_um)}f}"
+    decimals = grid_decimals(grid_um)
+    # A coordinate a hair below zero rounds to zero; it prints without a sign.
+    return f"{round(value, decimals) + 0.0:.{decimals}f}"
 
 
 def format_point(x: float, y: float, grid_um: float | None) -> str:

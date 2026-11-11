@@ -1,18 +1,24 @@
-"""Plan emitted junction geometry and source-bound support checks."""
+"""Plan emitted junction geometry, realize it on the input grid, and check its source-bound support."""
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from dataclasses import replace
 from fractions import Fraction
 from typing import cast
 
-from scgsim.geometry.models.input import LayoutPolygonSpec
+from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
 from scgsim.geometry.models.junctions import (
     JUNCTION_END_PIECE_PART,
     junction_net_id,
 )
-from scgsim.geometry.planning.junction_planning.core import PRECISION_UM, plain_record
+from scgsim.geometry.planning.junction_planning.core import (
+    PRECISION_UM,
+    canonical_sha256,
+    plain_record,
+)
 from scgsim.geometry.planning.junction_planning.exact_geometry import (
     closed_contact,
     cross,
@@ -28,6 +34,7 @@ from scgsim.geometry.planning.junction_planning.model_checks import (
     model_edge_section,
 )
 from scgsim.geometry.planning.junction_planning.model_state import JunctionModel
+from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
 from scgsim.geometry.primitives.planar_loops import (
     cancel_reversed_planar_edges,
     simple_planar_loops_from_edges,
@@ -349,3 +356,107 @@ def check_emitted_partitions(state: JunctionModel) -> None:
                 if intervals or any((0 < point < 1 for point in points)):
                     raise ValueError("final cross-junction open-side contact")
         record["proof_conditions"]["all_derived_junctions_checked"] = True
+
+
+def realized_on_grid(build_input, result, junctions, records):
+    """The emitted input realized on the input grid, each central rectangle and partition checked again.
+
+    Without a grid the input is returned as emitted; a failure keeps the junction and its grid in a note.
+    """
+    context = geometry_grid_context(build_input)
+    if context is not None:
+        from scgsim.geometry.source.grid import apply_geometry_grid  # noqa: PLC0415 -- retain the conditional grid-realization dependency and its failure boundary.
+
+        result = _straight_end_pieces(apply_geometry_grid(result, context), records)
+        actual = {p.polygon_id: p for p in result.polygons}
+        for junction in junctions:
+            record = records[junction.junction_id]
+            polygon = actual[record["central_polygon_id"]]
+            try:
+                junction_terminal_line(
+                    {"exterior": polygon.exterior, "holes": polygon.holes},
+                    junction,
+                    record["z_um"],
+                )
+                ends = [
+                    actual[end["polygon_id"]]
+                    for end in record["ends"]
+                    if end["polygon_id"]
+                ]
+                emitted = [(p.exterior, *p.holes) for p in ends]
+                emitted.append((polygon.exterior, *polygon.holes))
+                if not emitted_partition_coverage(
+                    record["partition_model_regions"], emitted
+                ):
+                    raise ValueError(
+                        "junction grid realization changes partition coverage"
+                    )
+            except ValueError as error:
+                error.add_note(
+                    json.dumps(
+                        {
+                            "junction_id": junction.junction_id,
+                            "geometry_grid": context.to_payload(),
+                            "requested_direction_xy": list(junction.direction_xy),
+                            "requested_width_um": junction.width_um,
+                            "realization_status": "incompatible_with_existing_shape_contract",
+                        },
+                        sort_keys=True,
+                    )
+                )
+                raise
+            record["geometry_grid"] = context.to_payload()
+            record["requested_central_model_regions"] = record["central_model_regions"]
+            record["central_model_regions"] = [
+                [list(polygon.exterior), *map(list, polygon.holes)]
+            ]
+            record["realized_central_geometry_sha256"] = canonical_sha256(
+                {"exterior": polygon.exterior, "holes": polygon.holes}
+            )
+            for end in record["ends"]:
+                if end["polygon_id"]:
+                    piece = actual[end["polygon_id"]]
+                    end["requested_model_regions"] = end["model_regions"]
+                    end["model_regions"] = [
+                        [list(piece.exterior), *map(list, piece.holes)]
+                    ]
+    return result
+
+
+def _straight_end_pieces(result: GeometryBuildInput, records) -> GeometryBuildInput:
+    """The grid-realized input with every landing end piece cleared of collinear vertices.
+
+    The grid realization nodes a polygon wherever another polygon's vertex lies on its edge.
+    A landing end piece overlaps its terminal, so the drawn terminal's vertices on the sheet
+    sides land on the end piece's side edges.  SGB would keep each as a corner between two
+    carriers and split the side wall standing there; without them the region is the same.
+    """
+    ids = {
+        end["polygon_id"]
+        for record in records.values()
+        for end in record["ends"]
+        if end["polygon_id"] and end["landing"]
+    }
+    return replace(
+        result,
+        polygons=tuple(
+            replace(
+                polygon,
+                exterior=_without_collinear(polygon.exterior),
+                holes=tuple(_without_collinear(hole) for hole in polygon.holes),
+            )
+            if polygon.polygon_id in ids
+            else polygon
+            for polygon in result.polygons
+        ),
+    )
+
+
+def _without_collinear(ring):
+    exact = [tuple(Fraction(str(v)) for v in point) for point in ring]
+    count = len(ring)
+    return tuple(
+        ring[n]
+        for n in range(count)
+        if cross(exact[n - 1], exact[n], exact[(n + 1) % count]) != 0
+    )

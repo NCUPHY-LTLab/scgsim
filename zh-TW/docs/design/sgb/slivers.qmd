@@ -159,7 +159,8 @@ report 是已完成 build 的函式（`sliver_report(model)`）。它讀取 topo
   ```text
   different-Net contact between Ground (entities ground) and pad (entities pad) at
   (-50.0000, -30.0000) um on level[0] (grid g = 0.01 um; a gap smaller than the grid
-  closes when the sources snap)
+  closes when the sources snap). Fix the layout or the Net declaration: draw the
+  conductors of different Nets apart, or declare them one Net.
   ```
 
   同一條規則涵蓋 derived-to-source snapping：若 snap 封閉了兩個 Net 之間的來源 gap，必須失敗，並指出兩個 Entity 與位置。同 Net 的接觸則屬正常。因此 policy 永遠不會在無聲無息中讓兩個 Net 短路。
