@@ -16,6 +16,7 @@ from typing import Any
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.primitives.grid import (
     in_occurrence_frame,
+    named_source,
     preserve_declared_source,
     split_gdstk_cutline_loop,
 )
@@ -282,6 +283,17 @@ def gds_polygons_for_entity(
 
     layer = int(entity.geometry["gds_layer"])
     datatype = int(entity.geometry["gds_datatype"])
+    with named_source(entity.semantic_id, f"{layer}/{datatype}"):
+        return _gds_layer_polygons(entity, polygons_by_layer, layer, datatype)
+
+
+def _gds_layer_polygons(
+    entity: SemanticEntitySpec,
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
+    layer: int,
+    datatype: int,
+) -> tuple[LayoutPolygonSpec, ...]:
+    """The entity's polygons on its GDS layer, fused and selected as it declares."""
     candidates = realized_on_lattice(polygons_by_layer.get((layer, datatype), ()))
     if not candidates:
         return ()
@@ -544,6 +556,7 @@ def occurrence_ground_polygons_for_entity(  # noqa: PLR0913 -- the uniform occur
         cell_bounds_um={},
         domain_bounds_by_semantic_id={},
         plane_polygons=plane,
+        plane_layer=plane_layer,
     )
     return [_occurrence_polygon_record(polygon, transform) for polygon in derived]
 

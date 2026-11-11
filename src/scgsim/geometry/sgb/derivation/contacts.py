@@ -11,8 +11,8 @@ arrangement vertex is a point where its incident faces' footprints meet, so this
 finds shared edges and shared corners alike.  Ports and dielectrics never count.
 
 The error names both Nets, the entities of each that reach the contact point
-(footprint within two grid units at that Z), the location in micrometres and the
-plane.
+(footprint within two grid units at that Z) with their source layers, the location
+in micrometres, the plane and who must act.
 
 A non-manifold pinch is the same-Net counterpart: finite metal (or the vacuum
 between metal) that meets itself only along a vertical edge.  Sheets of one Net
@@ -26,6 +26,7 @@ from fractions import Fraction
 
 from scgsim.geometry.sgb.derivation.layer import Layer
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
+from scgsim.geometry.sgb.labelling.prism_set import FIX_NETS, named_entities
 from scgsim.geometry.sgb.plane import Point, point_in_ring, segment_point_distance_sq
 from scgsim.geometry.sgb.records.labels import Domain, LevelLabel, SheetOwner
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
@@ -116,15 +117,13 @@ def _raise_contact(
     z_lo, z_hi = _layer_z_range(layer)
     parts = []
     for net in sorted(nets):
-        names = sorted(
-            p.entity_id for p in catalogue.prisms if _reaches(p, net, point, z_lo, z_hi)
-        )
-        parts.append(f"{net} (entities {', '.join(names) or '?'})")
+        reaching = [p for p in catalogue.prisms if _reaches(p, net, point, z_lo, z_hi)]
+        parts.append(f"{net} (entities {named_entities(reaching) or '?'})")
     raise ContactError(
         f"different-Net contact between {' and '.join(parts)} at "
         f"({grid.to_um(point[0]):.4f}, {grid.to_um(point[1]):.4f}) um "
         f"on {layer.plane} (grid g = {grid.size_um} um; "
-        "a gap smaller than the grid closes when the sources snap)"
+        f"a gap smaller than the grid closes when the sources snap). {FIX_NETS}"
     )
 
 
@@ -134,12 +133,10 @@ def _raise_pinch(
     grid = catalogue.grid
     z_lo, z_hi = _layer_z_range(layer)
     if domain.kind == "conductor":
-        names = sorted(
-            p.entity_id
-            for p in catalogue.prisms
-            if _reaches(p, domain.net, point, z_lo, z_hi)
-        )
-        what = f"Net {domain.net} (entities {', '.join(names) or '?'})"
+        reaching = [
+            p for p in catalogue.prisms if _reaches(p, domain.net, point, z_lo, z_hi)
+        ]
+        what = f"Net {domain.net} (entities {named_entities(reaching) or '?'})"
     else:
         around = [
             p
@@ -147,14 +144,14 @@ def _raise_pinch(
             if p.material_kind == "conductor"
             and _reaches(p, p.net_id or "", point, z_lo, z_hi)
         ]
-        names = ", ".join(sorted({p.entity_id for p in around})) or "?"
+        names = named_entities(around) or "?"
         nets = ", ".join(sorted({p.net_id or "" for p in around}))
         what = f"{domain.name} (pinched between conductors {names} of Net {nets})"
     raise NonManifoldError(
         f"non-manifold pinch: {what} touches itself along the vertical edge at "
         f"({grid.to_um(point[0]):.4f}, {grid.to_um(point[1]):.4f}) um, "
         f"z {float(z_lo)}..{float(z_hi)} um ({layer.plane}): two cells of one domain "
-        "meet only at a vertex; give them a shared edge or separate them"
+        "meet only at a vertex. Fix the layout: give them a shared edge or separate them."
     )
 
 

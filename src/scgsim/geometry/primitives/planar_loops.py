@@ -46,14 +46,7 @@ def cutline_boundary_loops(
     independent boundary cycles; that representation is suitable for both the
     adapter's fused selector components and Boolean residual lowering.
     """
-    atomic_edges: list[PlanarEdge] = []
-    for start, end in ring_edges(loop):
-        points = sorted(
-            {point for point in loop if point_on_planar_segment(point, start, end)},
-            key=lambda point: _planar_segment_parameter(point, start, end),
-        )
-        atomic_edges.extend((left, right) for left, right in pairwise(points))
-    loops = simple_planar_loops_from_edges(cancel_reversed_planar_edges(atomic_edges))
+    loops = simple_planar_loops_from_edges(cutline_boundary_edges(loop))
     if not loops:
         raise ValueError("gdstk cutline polygon has no simple boundary loop")
     outer_index = max(
@@ -70,6 +63,39 @@ def cutline_boundary_loops(
         )
     )
     return outer, holes
+
+
+def cutline_boundary_edges(loop: PlanarLoop) -> tuple[PlanarEdge, ...]:
+    """The boundary edges of a cutline walk: split at every walk vertex, paired cutlines cancelled."""
+    atomic_edges: list[PlanarEdge] = []
+    for start, end in ring_edges(loop):
+        points = sorted(
+            {point for point in loop if point_on_planar_segment(point, start, end)},
+            key=lambda point: _planar_segment_parameter(point, start, end),
+        )
+        atomic_edges.extend((left, right) for left, right in pairwise(points))
+    return cancel_reversed_planar_edges(atomic_edges)
+
+
+def repeated_boundary_edges(edges: Sequence[PlanarEdge]) -> tuple[PlanarEdge, ...]:
+    """The edges a boundary runs along more than once, in either direction, in first-run order.
+
+    Read only to locate the refusal of :func:`simple_planar_loops_from_edges`.
+    """
+    counts = Counter((min(start, end), max(start, end)) for start, end in edges)
+    return tuple(edge for edge, count in counts.items() if count > 1)
+
+
+def boundary_meeting_points(edges: Sequence[PlanarEdge]) -> tuple[Point2D, ...]:
+    """The points where a boundary meets itself: more or fewer than two edges end there.
+
+    Read only to locate the refusal of :func:`simple_planar_loops_from_edges`.
+    """
+    neighbors: dict[Point2D, set[Point2D]] = {}
+    for start, end in edges:
+        neighbors.setdefault(start, set()).add(end)
+        neighbors.setdefault(end, set()).add(start)
+    return tuple(sorted(point for point, near in neighbors.items() if len(near) != 2))
 
 
 def clean_loop(loop: LoopCoordinates) -> PlanarLoop:

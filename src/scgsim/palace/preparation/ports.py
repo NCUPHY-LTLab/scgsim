@@ -21,6 +21,7 @@ from scgsim.geometry import (
     SemanticEntitySpec,
     with_rectangular_junctions,
 )
+from scgsim.geometry.models.grid import format_box, geometry_grid_context
 from scgsim.geometry.models.junctions import (
     junction_net_id,
     junction_occurrence_path,
@@ -133,8 +134,9 @@ def with_rectangular_ports(build_input: GeometryBuildInput) -> GeometryBuildInpu
     kept = tuple(item for item in existing if item.port_sheet_id in selected)
     requested = {item.port_sheet_id for item in kept}
     entities = {entity.semantic_id: entity for entity in build_input.entities}
+    grid = geometry_grid_context(build_input)
     added = tuple(
-        _port_request(region, entities)
+        _port_request(region, entities, None if grid is None else grid.grid_size_um)
         for region in build_input.port_sheet_regions
         if region.port_sheet_id not in requested
     )
@@ -144,7 +146,9 @@ def with_rectangular_ports(build_input: GeometryBuildInput) -> GeometryBuildInpu
 
 
 def _port_request(
-    region: PortSheetRegionRecord, entities: Mapping[str, SemanticEntitySpec]
+    region: PortSheetRegionRecord,
+    entities: Mapping[str, SemanticEntitySpec],
+    grid_um: float | None,
 ) -> RectangularJunctionSpec:
     """The partition request of one port sheet: its own identity and its two host conductors.
 
@@ -154,9 +158,15 @@ def _port_request(
     name = region.metadata.get("source_name", region.port_sheet_id)
     hosts = tuple(dict.fromkeys(item.host_semantic_id for item in region.overlaps))
     if len(hosts) != 2:
+        xs = [x for x, _ in region.exterior]
+        ys = [y for _, y in region.exterior]
+        box = format_box((min(xs), min(ys), max(xs), max(ys)), grid_um)
         raise ValueError(
             f"lumped port {name!r} must land on two conductors to be made a rectangle; "
-            f"it lands on {len(hosts)}: {list(hosts)}."
+            f"it lands on {len(hosts)}: {list(hosts)}; the sheet is drawn on layer "
+            f"{region.source_layer} at {box}. Fix the layout or the port declaration: "
+            "draw the sheet so that it lands on exactly two conductors of its target "
+            f"layer {region.metadata.get('target_layer')!r}, one at each end."
         )
     terminals = [_terminal(entities[host]) for host in hosts]
     terminals.sort(key=lambda item: _along_direction(region, item.source_entity_id))
