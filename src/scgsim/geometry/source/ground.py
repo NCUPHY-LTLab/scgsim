@@ -7,12 +7,14 @@ transforms remain at the occurrence boundary and are applied exactly once.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from functools import wraps
 from types import ModuleType
 from typing import Any, cast
 
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.primitives.grid import (
+    named_source,
     polygon_boolean,
     polygon_rings,
     preserve_declared_source,
@@ -29,7 +31,32 @@ from scgsim.geometry.source.polygon_ops import (
 )
 
 
+def _mask_key(entity: SemanticEntitySpec) -> tuple[int, int]:
+    """The GDS layer a Ground's mask is drawn on, which its derived polygons carry."""
+    mask_layer = entity.geometry.get("mask_layer")
+    if mask_layer is None:
+        return (int(entity.geometry["gds_layer"]), int(entity.geometry["gds_datatype"]))
+    return (int(mask_layer[0]), int(mask_layer[1]))
+
+
+def _named_by_mask_layer(
+    function: Callable[..., tuple[LayoutPolygonSpec, ...]],
+) -> Callable[..., tuple[LayoutPolygonSpec, ...]]:
+    """Name the Ground and its mask layer in the refusals of the drawn polygons it reads."""
+
+    @wraps(function)
+    def named(
+        entity: SemanticEntitySpec, **kwargs: Any
+    ) -> tuple[LayoutPolygonSpec, ...]:
+        mask = _mask_key(entity)
+        with named_source(entity.semantic_id, f"{mask[0]}/{mask[1]}"):
+            return function(entity, **kwargs)
+
+    return named
+
+
 @preserve_declared_source
+@_named_by_mask_layer
 def derived_ground_polygons(
     entity: SemanticEntitySpec,
     *,
@@ -41,14 +68,7 @@ def derived_ground_polygons(
     """Derive one positive Ground from its plane, mask and explicit includes."""
     import gdstk  # noqa: PLC0415 -- Ground construction is the boundary that requires the optional native GDS kernel
 
-    mask_layer = entity.geometry.get("mask_layer")
-    if mask_layer is None:
-        mask_key = (
-            int(entity.geometry["gds_layer"]),
-            int(entity.geometry["gds_datatype"]),
-        )
-    else:
-        mask_key = (int(mask_layer[0]), int(mask_layer[1]))
+    mask_key = _mask_key(entity)
     if plane_polygons is None:
         exterior = _rectangle_ring(
             _ground_plane_bounds(entity, domain_bounds_by_semantic_id, cell_bounds_um)
