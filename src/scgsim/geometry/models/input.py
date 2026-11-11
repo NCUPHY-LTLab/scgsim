@@ -108,19 +108,41 @@ on the model grid as the source stage places them, in assembly micrometres.
 """
 
 
-RING_WITHOUT_DRAWN_ORDER = (
-    "the ring it selects has no drawn GDS ring recorded for it, so its indices name "
-    "no drawn edge: the record was attached after the source stage, or the ring is "
-    "not one drawn GDS polygon (several fused together, or vertices the source stage "
-    "dropped). Fix the declaration: declare the reconstruction with the layout "
-    "(component semantics, GeometryPlan or the stack file), on a ring drawn as one "
-    "GDS polygon."
-)
-RING_LOST_DRAWN_ORDER = (
-    "the ring it selects no longer holds each vertex of its drawn ring once, in drawn "
-    "order, so its drawn segments cannot be found on it. Fix the layout: draw the "
-    "ring's vertices at least one grid step apart, so the source stage keeps each one."
-)
+# A refusal lists at most this many drawn vertices, then counts the rest.
+_LISTED_VERTICES = 5
+
+
+def ring_without_drawn_order(what: str, ring_place: str) -> str:
+    """The refusal of a record whose ring has no drawn ring recorded for it, at the ring.
+
+    ``what`` names the record, its Entity and its layer; ``ring_place`` is where the
+    selected ring lies, in micrometres.
+    """
+    return (
+        f"{what}: the ring it selects has no drawn GDS ring recorded for it: the ring at "
+        f"{ring_place}. Its indices name no drawn edge: the record was attached after the "
+        "source stage, or the ring is not one drawn GDS polygon (several fused together, "
+        "or vertices the source stage dropped). Fix the declaration: declare the "
+        "reconstruction with the layout (component semantics, GeometryPlan or the stack "
+        "file), on a ring drawn as one GDS polygon."
+    )
+
+
+def ring_lost_drawn_order(what: str, findings: Sequence[str]) -> str:
+    """The refusal of a ring that no longer holds its drawn vertices once each, in order.
+
+    ``findings`` say, for each drawn vertex at fault, where it lies and what the ring does
+    with it (:func:`drawn_vertices_off_ring` finds them).
+    """
+    shown = "; ".join(findings[:_LISTED_VERTICES])
+    rest = len(findings) - _LISTED_VERTICES
+    more = f"; and {rest} more drawn vertices" if rest > 0 else ""
+    return (
+        f"{what}: the ring it selects no longer holds each vertex of its drawn ring once, "
+        f"in drawn order: {shown}{more}. Its drawn segments cannot be found on it. Fix the "
+        "layout: draw the ring's vertices at least one grid step apart, so the source "
+        "stage keeps each one."
+    )
 
 
 @dataclass(frozen=True)
@@ -185,6 +207,40 @@ def drawn_chain_on_ring[Key](  # noqa: PLR0913 -- the declared chain, its closur
     if step < 0 and not closed:
         ring_anchors = ring_anchors[::-1]
     return RingChain(tuple(j for i in order for j in run(i)), ring_anchors)
+
+
+def drawn_vertices_off_ring[Key](
+    drawn: Sequence[Key], ring: Sequence[Key]
+) -> tuple[tuple[int, str], ...]:
+    """The drawn vertices that keep ``drawn_chain_on_ring`` from finding the chain, and why.
+
+    Each is a drawn vertex index with what the ring does with it: it lacks the vertex,
+    holds it more than once, or meets it out of drawn order (the next drawn vertex along
+    the ring is not its neighbour in the drawing, either way round).
+    """
+    where: dict[Key, list[int]] = {}
+    for index, key in enumerate(ring):
+        where.setdefault(key, []).append(index)
+    held = [len(where.get(key, ())) for key in drawn]
+    if any(count != 1 for count in held):
+        return tuple(
+            (index, "is missing from it" if count == 0 else f"is held {count} times")
+            for index, count in enumerate(held)
+            if count != 1
+        )
+    places = [where[key][0] for key in drawn]
+    count = len(drawn)
+    along = sorted(range(count), key=places.__getitem__)
+    after = {along[k]: along[(k + 1) % count] for k in range(count)}
+    # Read the ring in whichever direction keeps more of the drawn order.
+    breaks = min(
+        (
+            [i for i in range(count) if after[i] != (i + step) % count]
+            for step in (1, -1)
+        ),
+        key=len,
+    )
+    return tuple((index, "is out of drawn order") for index in breaks)
 
 
 def _places_on_ring[Key](

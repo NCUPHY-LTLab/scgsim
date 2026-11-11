@@ -27,8 +27,6 @@ from fractions import Fraction
 
 from scgsim.geometry.models.grid import format_box, format_point
 from scgsim.geometry.models.input import (
-    RING_LOST_DRAWN_ORDER,
-    RING_WITHOUT_DRAWN_ORDER,
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
     GeometryBuildInput,
@@ -36,7 +34,10 @@ from scgsim.geometry.models.input import (
     SourceCurveSpec,
     carried_drawn_ring,
     drawn_chain_on_ring,
+    drawn_vertices_off_ring,
     emitted_by_source_grid,
+    ring_lost_drawn_order,
+    ring_without_drawn_order,
 )
 from scgsim.geometry.sgb.errors import InputError, UnsupportedCurveError
 from scgsim.geometry.sgb.plane import (
@@ -326,7 +327,15 @@ class _BoundaryBinder:
             )
         chain = drawn_chain_on_ring(segments, anchors, record.closed, drawn, ring)
         if chain is None:
-            raise InputError(f"{what}: {RING_LOST_DRAWN_ORDER}")
+            raise InputError(
+                ring_lost_drawn_order(
+                    what,
+                    [
+                        f"drawn vertex {i} at {self._point(drawn[i])} {fault}"
+                        for i, fault in drawn_vertices_off_ring(drawn, ring)
+                    ],
+                )
+            )
         segments, anchors = chain.segments, chain.anchors
         points = tuple(ring[i] for i in anchors)
         arc_id = _arc_id(key, segments[0])
@@ -362,7 +371,7 @@ class _BoundaryBinder:
                 self._lattice_point(point, f"{what} drawn ring") for point in carried
             )
         if emitted_by_source_grid(self.polygons.get((key[0], key[1]))):
-            raise InputError(f"{what}: {RING_WITHOUT_DRAWN_ORDER}")
+            raise InputError(ring_without_drawn_order(what, self._place(ring)))
         return ring
 
     # -- coordinates -------------------------------------------------------------------

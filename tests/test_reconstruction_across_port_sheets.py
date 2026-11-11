@@ -12,10 +12,12 @@ stack adapter and SGB.  No mesher or solver runs.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import gdstk
 import pytest
 from sgb_inputs import gds_pad_in_ground
+from test_located_refusals import on, places
 from test_lumped_ports_at_any_angle import built_sidecar as built_device_sidecar
 from test_lumped_ports_at_any_angle import plan_snapshot as device_plan_snapshot
 from test_palace_rectangular_ports import built_sidecar, eigenmode_sim, prepared_port
@@ -24,10 +26,19 @@ from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.construction.curved_geometry.boundaries import (
     circle_through_points,
+    source_boundaries,
+    source_rings,
 )
-from scgsim.geometry.models.input import RingChain, drawn_chain_on_ring
+from scgsim.geometry.models.input import (
+    DRAWN_RING_METADATA,
+    GdsBoundaryReconstructionSpec,
+    RingChain,
+    drawn_chain_on_ring,
+)
 from scgsim.geometry.models.junctions import is_junction_end_piece
+from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import build_conformal_model
+from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 
 GRID_UM = 0.001
 PAD_RADIUS_UM = 100.0
@@ -435,3 +446,96 @@ def test_drawn_segments_are_found_on_a_ring_that_runs_the_other_way():
         is None
     )
     assert drawn_chain_on_ring((0,), (0, 1), False, drawn, ["a", "b", "c", "d"]) is None
+
+
+# ------------------------------------------------------------------ located refusals
+
+# The square pad of ``gds_pad_in_ground``: its ring and the GDS layer it is drawn on.
+SQUARE_PAD = (40.0, 40.0, 60.0, 60.0)
+PAD_LAYER = "2/0"
+
+
+def square_pad_corner(**metadata):
+    """An open arc over the square pad's first two sides, anchored at its first three vertices."""
+    return GdsBoundaryReconstructionSpec(
+        "pad_corner",
+        "pad",
+        (50.0, 50.0),
+        "circular_arc",
+        segment_indices=(0, 1),
+        anchor_indices=(0, 1, 2),
+        metadata=metadata,
+    )
+
+
+def refusal(stage, effective, record):
+    """The refusal of the binding stage that binds the record on the effective input."""
+    build_input = replace(effective.build_input, boundary_reconstruction=(record,))
+    if stage == "sgb":
+        with pytest.raises(InputError) as error:
+            build_prism_catalogue(build_input, effective.representation)
+    else:
+        with pytest.raises(ValueError) as error:
+            source_boundaries(build_input, source_rings(build_input))
+    return str(error.value)
+
+
+@pytest.mark.parametrize("stage", ["construction", "sgb"])
+def test_a_record_attached_after_the_source_stage_is_located_at_its_ring(
+    tmp_path, stage
+):
+    """A record attached to the gridded input carries no drawn ring: the refusal names the ring.
+
+    The pad ring is (40, 40)..(60, 60) um, on layer 2/0.
+    """
+    effective = gds_pad_in_ground(tmp_path, with_port=False)
+    message = refusal(stage, effective, square_pad_corner())
+    assert message.startswith(
+        f"pad_corner (Entity 'pad', layer {PAD_LAYER}): the ring it selects has no "
+        "drawn GDS ring recorded for it: the ring at "
+    )
+    assert "Fix the declaration: declare the reconstruction with the layout" in message
+    (place,) = places(message)
+    assert on(place, SQUARE_PAD) and on(SQUARE_PAD, place)
+
+
+@pytest.mark.parametrize("stage", ["construction", "sgb"])
+@pytest.mark.parametrize(
+    ("drawn", "faults"),
+    [
+        # The pad's corner (40, 60) drawn 1 um higher: the ring lacks it.
+        (
+            ((40.0, 40.0), (60.0, 40.0), (60.0, 60.0), (40.0, 61.0)),
+            {(40.0, 61.0): "is missing from it"},
+        ),
+        # Two corners swapped: the ring meets them out of drawn order.
+        (
+            ((40.0, 40.0), (60.0, 60.0), (60.0, 40.0), (40.0, 60.0)),
+            {
+                (40.0, 40.0): "is out of drawn order",
+                (60.0, 60.0): "is out of drawn order",
+                (60.0, 40.0): "is out of drawn order",
+            },
+        ),
+    ],
+    ids=["missing-vertex", "out-of-order"],
+)
+def test_a_ring_that_lost_its_drawn_order_is_located_at_the_drawn_vertex(
+    tmp_path, stage, drawn, faults
+):
+    """The refusal names each drawn vertex the ring lacks or meets out of order, where it was drawn."""
+    effective = gds_pad_in_ground(tmp_path, with_port=False)
+    record = square_pad_corner(**{DRAWN_RING_METADATA: drawn})
+    message = refusal(stage, effective, record)
+    assert message.startswith(
+        f"pad_corner (Entity 'pad', layer {PAD_LAYER}): the ring it selects no longer "
+        "holds each vertex of its drawn ring once, in drawn order: "
+    )
+    assert "Fix the layout: draw the ring's vertices at least one grid step apart" in (
+        message
+    )
+    found = places(message)
+    assert len(found) == len(faults)
+    for (x, y), fault in faults.items():
+        assert any(on(place, (x, y, x, y)) for place in found)
+        assert f" um {fault}" in message
