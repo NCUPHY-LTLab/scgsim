@@ -1,4 +1,4 @@
-"""Normalize authored boundaries and restore them after stack preparation.
+"""Normalize authored boundaries, bind them to source rings, and restore them after stack preparation.
 
 This module owns source XY curve identity. Prepared geometry owns its Z,
 materials, and solution-region state.
@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Literal, cast, overload
 
+from scgsim.geometry.models.common import PolygonRing
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
@@ -24,6 +25,9 @@ from scgsim.geometry.models.regions import PortSheetRegionRecord
 _BoundaryRecord = BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec
 _BoundaryInput = _BoundaryRecord | Mapping[str, Any]
 _BoundaryPoint = Callable[[tuple[float, ...], Sequence[float]], Sequence[float]]
+# Keep tuple keys so binding errors retain the established source identifier text.
+BoundaryKey = tuple[str, str, str, int | None]
+SourceRings = dict[str, list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]]
 
 
 @dataclass(frozen=True)
@@ -221,6 +225,42 @@ def transform_boundary(
         selector_point_um=selector_point_um,
         source_occurrence_path=path,
         metadata=metadata,
+    )
+
+
+def select_boundary(
+    record: _BoundaryRecord,
+    rings: SourceRings,
+    end_pieces: frozenset[str] = frozenset(),
+) -> tuple[BoundaryKey, PolygonRing]:
+    """Bind one boundary record to the ring its selector point and role name.
+
+    The selector lies in exactly one Entity-owned logical polygon; ``role`` and
+    ``hole_index`` then name that polygon's exterior or one of its holes.
+    """
+    # GDS polygon selection is optional until source boundaries are bound.
+    import gdstk  # noqa: PLC0415 - optional native layout dependency
+
+    candidates = []
+    for pid, outer, holes in rings.get(record.entity_id, ()):
+        # A junction end piece can overlap the terminal the selector names; it is never selected.
+        if pid in end_pieces:
+            continue
+        region = [gdstk.Polygon(outer)]
+        if holes:
+            region = (
+                gdstk.boolean(region, [gdstk.Polygon(h) for h in holes], "not") or []
+            )
+        if gdstk.inside([record.selector_point_um], region)[0]:
+            candidates.append((pid, outer, holes))
+    if len(candidates) != 1:
+        raise ValueError(
+            f"{record.boundary_id} selector must bind one Entity-owned logical polygon"
+        )
+    pid, outer, holes = candidates[0]
+    ring = outer if record.role == "outer" else holes[cast(int, record.hole_index)]
+    return (record.entity_id, pid, record.role, record.hole_index), cast(
+        PolygonRing, tuple(tuple(float(x) for x in xy) for xy in ring)
     )
 
 

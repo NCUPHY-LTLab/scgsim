@@ -10,18 +10,19 @@ from typing import cast
 
 from scgsim.geometry.models.common import Coordinate, PolygonRing
 from scgsim.geometry.models.input import (
-    BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
     GeometryBuildInput,
     SemanticEntitySpec,
     SourceCurveSpec,
 )
 from scgsim.geometry.models.junctions import is_junction_end_piece
-from scgsim.geometry.source.curves import boundary_binding
+from scgsim.geometry.source.curves import (
+    BoundaryKey,
+    SourceRings,
+    boundary_binding,
+    select_boundary,
+)
 
-# Keep tuple keys so binding errors retain the established source identifier text.
-BoundaryKey = tuple[str, str, str, int | None]
-SourceRings = dict[str, list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]]
 BoundaryChains = dict[BoundaryKey, tuple[SourceCurveSpec, ...]]
 ReconstructionSelection = tuple[tuple[int, ...], tuple[SourceCurveSpec, ...], str]
 
@@ -73,37 +74,6 @@ def source_rings(build_input: GeometryBuildInput) -> SourceRings:
                 )
             ]
     return result
-
-
-def _select_boundary(
-    record: BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec,
-    rings: SourceRings,
-    end_pieces: frozenset[str] = frozenset(),
-) -> tuple[BoundaryKey, PolygonRing]:
-    # GDS polygon selection is optional until source boundaries are bound.
-    import gdstk  # noqa: PLC0415 - optional native layout dependency
-
-    candidates = []
-    for pid, outer, holes in rings.get(record.entity_id, ()):
-        # A junction end piece can overlap the terminal the selector names; it is never selected.
-        if pid in end_pieces:
-            continue
-        region = [gdstk.Polygon(outer)]
-        if holes:
-            region = (
-                gdstk.boolean(region, [gdstk.Polygon(h) for h in holes], "not") or []
-            )
-        if gdstk.inside([record.selector_point_um], region)[0]:
-            candidates.append((pid, outer, holes))
-    if len(candidates) != 1:
-        raise ValueError(
-            f"{record.boundary_id} selector must bind one Entity-owned logical polygon"
-        )
-    pid, outer, holes = candidates[0]
-    ring = outer if record.role == "outer" else holes[cast(int, record.hole_index)]
-    return (record.entity_id, pid, record.role, record.hole_index), cast(
-        PolygonRing, tuple(tuple(float(x) for x in xy) for xy in ring)
-    )
 
 
 def circle_through_points(points: Sequence[Coordinate]) -> tuple[Coordinate, float]:
@@ -233,7 +203,7 @@ def source_boundaries(
     )
     for raw in build_input.boundary_curves:
         record = boundary_binding(raw)
-        key, ring = _select_boundary(record, rings, end_pieces)
+        key, ring = select_boundary(record, rings, end_pieces)
         if key in authored:
             raise ValueError(f"multiple complete authored boundaries claim {key}")
         authored[key] = record.curves
@@ -246,7 +216,7 @@ def source_boundaries(
         )
     for raw in build_input.boundary_reconstruction:
         record = boundary_binding(raw, reconstruction=True)
-        key, ring = _select_boundary(record, rings, end_pieces)
+        key, ring = select_boundary(record, rings, end_pieces)
         segments, curves, operation = _reconstruct(record, ring)
         reconstructed[key].append((segments, curves, record.boundary_id))
         provenance.append({"operation": "explicit_gds_reconstruction", **operation})
