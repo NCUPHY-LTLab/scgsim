@@ -44,3 +44,8 @@ script puts `PALACE_MPI_BIN` on `PATH` through its `setup_commands`, because the
 `mpirun` there. `execute` runs that script and stops it, with every MPI rank, after `--wall-limit-s`
 seconds (default 1800). `readback` writes
 `OUT/report.json`. `OUT` holds the mesh and Palace output; keep it out of the repository.
+
+Run one case at a time. Open MPI binds each job's ranks from the first core, so two Palace jobs
+started side by side share the same cores and leave the rest idle; check `Cpus_allowed_list` of the
+ranks, or give each job its own cores. The Disk Qubit, the largest case, needs a wall limit above the
+default: `--wall-limit-s 10800` with `--processes 32` on a 32-core host.
