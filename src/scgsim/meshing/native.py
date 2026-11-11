@@ -70,7 +70,9 @@ def _elevate_if_accepted(job: MeshJob, audit: MeshAudit) -> NativeRound:
     stays the one of the linear mesh: it is not repeated after the order is raised.
     """
     elevation = job.elevation
-    if elevation is None or not audit.accepted(elevation.max_tetrahedra):
+    if elevation is None or not audit.accepted(
+        elevation.max_tetrahedra, enforce_threshold=elevation.enforce_threshold
+    ):
         return NativeRound(audit, elevated=False, elevation_error=None)
     try:
         gmsh.model.mesh.setOrder(job.mesher.geometry_order)

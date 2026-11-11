@@ -162,6 +162,7 @@ def test_the_request_carries_the_two_dimensional_algorithm_and_the_order(
     assert request["elevation"] == {
         "msh": str(tmp_path / "round.elevated.msh"),
         "max_tetrahedra": 1234,
+        "enforce_threshold": True,
     }
     assert MeshJob.from_json(request) == job
 

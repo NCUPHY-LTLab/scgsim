@@ -316,11 +316,13 @@ class ElectrostaticSim:
         """Set geometry-mesh controls; every omitted value retains its setting.
 
         These are the controls of ``scgsim.meshing.mesh_sgb``: ``recipe`` (``FeatureRecipe``,
-        ``GlobalSizeRecipe`` or ``UniformBoundaryRecipe``) chooses the initial element sizes, ``mesher``
-        (``MesherOptions``) the Gmsh algorithms and the geometry order, ``budgets`` when the repair loop
-        gives up, and ``quality_threshold`` the minimum signed inverse condition number (minSICN) of every tetrahedron (default
-        0.01).  A mesh that cannot reach the threshold raises ``MeshRepairError`` from ``mesh()``.
-        Geometry order is independent of ``set_numerical(order=...)``.
+        ``GlobalSizeRecipe``, ``UniformBoundaryRecipe`` or the report-only ``GmshDefaultRecipe``) chooses
+        the initial element sizes, ``mesher`` (``MesherOptions``) the Gmsh algorithms and the geometry
+        order, ``budgets`` when the repair loop gives up, and ``quality_threshold`` the minimum signed
+        inverse condition number (minSICN) of every tetrahedron (default 0.01).  A mesh that cannot reach
+        the threshold raises ``MeshRepairError`` from ``mesh()``, except with ``GmshDefaultRecipe``, whose
+        mesh is delivered with its quality reported, not enforced.  Geometry order is independent of
+        ``set_numerical(order=...)``.
         """
         controls = self.mesh_controls.updated(
             recipe=recipe,

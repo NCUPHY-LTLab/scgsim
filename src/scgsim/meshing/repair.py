@@ -8,7 +8,8 @@ wherever it is: at a point, on a curve, in a face or in the interior.
 
 The loop stops when the mesh is clean, or when a budget ends it: the rounds, the tetrahedra, the time
 (:class:`Budgets`), or a bad count that no longer falls (``STALL_ROUNDS``).  Only a clean stop delivers a
-mesh.
+mesh, except for a report-only strategy (``RepairInputs.enforce_threshold`` false): it stops after its
+first mesh and delivers it within the tetrahedron budget whatever its quality.
 
 The audit and the threshold apply to the linear mesh.  When the mesher options ask for a higher order, the
 worker of the round that passes the audit raises the order and writes that mesh as well; the loop keeps
@@ -29,8 +30,10 @@ from .job import Elevation, MeshJob
 from .mesher import MesherOptions
 from .sizing import LocalSize, SizeRequests, ladder_size
 
-# Why the loop stopped.  Only "clean" is success.
+# Why the loop stopped.  Only "clean" is success; a report-only strategy also delivers on "report_only".
 STOP_CLEAN = "clean"
+# A report-only strategy's mesh, delivered with tetrahedra below the threshold it does not enforce.
+STOP_REPORT_ONLY = "report_only"
 STOP_ROUNDS = "rounds"  # the refinement-round budget is spent
 STOP_ELEMENTS = "elements"  # the mesh exceeds the tetrahedron budget
 STOP_TIME = "time_limit"  # the time budget ran out
@@ -38,6 +41,8 @@ STOP_STALLED = "stalled"  # the bad count stopped falling (see STALL_ROUNDS)
 STOP_CRASH = "mesh_crash"  # no algorithm produced a mesh
 # The linear mesh passed but its order could not be raised.
 STOP_ELEVATION = "elevation_failed"
+# The stops after which the loop delivers its last mesh.
+DELIVERED_STOPS = (STOP_CLEAN, STOP_REPORT_ONLY)
 
 # The loop stops when this many rounds in a row leave more bad elements than the fewest any earlier round
 # had (Human, 2026-11-10, issue 124): refining further has stopped paying, which is what geometry the
@@ -129,6 +134,8 @@ class RepairInputs:
     work_dir: Path
     # time.perf_counter() reading at which the time budget runs out; infinite for no time limit.
     deadline: float = math.inf
+    # False for a report-only strategy: one mesh, no repair, delivered below the threshold too.
+    enforce_threshold: bool = True
 
 
 @dataclass(frozen=True)
@@ -424,7 +431,9 @@ def _elevation(inputs: RepairInputs, linear_msh: Path) -> Elevation | None:
     if inputs.mesher.geometry_order <= 1:
         return None
     return Elevation(
-        linear_msh.with_suffix(".elevated.msh"), inputs.budgets.max_tetrahedra
+        linear_msh.with_suffix(".elevated.msh"),
+        inputs.budgets.max_tetrahedra,
+        inputs.enforce_threshold,
     )
 
 
@@ -434,7 +443,8 @@ def _stop_reason(
     """The reason to stop after a round that made a mesh; ``None`` to refine and go on.
 
     The tetrahedron budget caps every mesh the loop accepts, a clean one included.  A clean mesh whose
-    order could not be raised is not delivered: the caller asked for a mesh of that order.
+    order could not be raised is not delivered: the caller asked for a mesh of that order.  A report-only
+    strategy stops after its first mesh, delivered under the same two conditions.
     """
     audit = outcome.audit
     assert audit is not None
@@ -442,6 +452,8 @@ def _stop_reason(
         return STOP_ELEVATION if outcome.elevation_error else STOP_CLEAN
     if audit.tetrahedra > inputs.budgets.max_tetrahedra:
         return STOP_ELEMENTS
+    if not inputs.enforce_threshold:
+        return STOP_ELEVATION if outcome.elevation_error else STOP_REPORT_ONLY
     if stalled([r.bad_count for r in history if r.bad_count is not None]):
         return STOP_STALLED
     if history[-1].index >= inputs.budgets.max_rounds:
@@ -482,7 +494,7 @@ def _outcome(
     last: _MadeMesh | None,
     inputs: RepairInputs,
 ) -> RepairOutcome:
-    elevated_mesh = last.elevated_mesh if last and stop == STOP_CLEAN else None
+    elevated_mesh = last.elevated_mesh if last and stop in DELIVERED_STOPS else None
     final = last.outcome if last else None
     return RepairOutcome(
         stop=stop,

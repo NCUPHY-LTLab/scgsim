@@ -17,10 +17,12 @@ from .sizing import LocalSize, SizeField, SizeRequests
 
 @dataclass(frozen=True)
 class Elevation:
-    """Where the worker writes the elevated mesh, and the largest linear mesh it elevates."""
+    """Where the worker writes the elevated mesh, and which linear mesh it elevates: the one the loop delivers."""
 
     msh: Path
     max_tetrahedra: int
+    # False for a report-only strategy, whose mesh is delivered, and so elevated, below the threshold too.
+    enforce_threshold: bool = True
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,7 @@ class MeshJob:
             else {
                 "msh": str(self.elevation.msh),
                 "max_tetrahedra": self.elevation.max_tetrahedra,
+                "enforce_threshold": self.elevation.enforce_threshold,
             },
         }
 
@@ -113,7 +116,9 @@ class MeshJob:
             elevation=None
             if raw["elevation"] is None
             else Elevation(
-                Path(raw["elevation"]["msh"]), int(raw["elevation"]["max_tetrahedra"])
+                Path(raw["elevation"]["msh"]),
+                int(raw["elevation"]["max_tetrahedra"]),
+                bool(raw["elevation"]["enforce_threshold"]),
             ),
         )
 

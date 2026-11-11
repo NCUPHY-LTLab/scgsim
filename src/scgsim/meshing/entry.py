@@ -1,4 +1,8 @@
-"""The public entry point: mesh an SGB XAO to a quality threshold, or fail with the quality report."""
+"""The public entry point: mesh an SGB XAO to a quality threshold, or fail with the quality report.
+
+The one exception is :class:`GmshDefaultRecipe`, which is report-only: meshed once and delivered whatever its
+quality.
+"""
 
 from __future__ import annotations
 
@@ -17,9 +21,9 @@ from .errors import MeshRepairError
 from .features import SidecarFeatures, load_features, read_features
 from .fine_structure import check_fine_structure
 from .mesher import MesherOptions
-from .recipes import FeatureRecipe, SizingRecipe
+from .recipes import FeatureRecipe, GmshDefaultRecipe, SizingRecipe
 from .repair import (
-    STOP_CLEAN,
+    DELIVERED_STOPS,
     STOP_TIME,
     Budgets,
     RepairInputs,
@@ -42,7 +46,11 @@ _WORK_DIR_PREFIX = ".meshing-work-"
 
 @dataclass(frozen=True)
 class MeshResult:
-    """A mesh that met the threshold, where it and its report are, and the report itself."""
+    """A delivered mesh, where it and its report are, and the report itself.
+
+    The mesh met the threshold, unless the recipe was the report-only :class:`GmshDefaultRecipe`: the
+    report's ``stop`` is then ``"report_only"`` when tetrahedra are below it.
+    """
 
     mesh: Path  # Gmsh MSH 4.1 with the XAO's physical groups
     report_path: Path  # JSON quality report
@@ -76,6 +84,12 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     threshold and the report's counts refer to the linear mesh: with ``mesher.geometry_order`` above 1
     the accepted mesh is raised to that order afterwards, in the worker that still has the CAD, and the
     file at ``<xao stem>.msh`` is the elevated one.
+
+    ``GmshDefaultRecipe`` is the one report-only recipe, and never the default: no size of SCGSim's own,
+    one mesh without repair whatever ``budgets.max_rounds`` says, and the mesh is delivered whatever its
+    quality.  The report still records the minSICN and the tetrahedra below ``threshold``, with
+    ``stop="report_only"`` when there are any; the threshold refuses nothing, so the mesh has no quality
+    guarantee.  The tetrahedron and time budgets and the order elevation apply as for every recipe.
 
     Two things are the caller's to keep, and are not checked:
 
@@ -126,6 +140,7 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
                     mesher=mesher,
                     work_dir=work_dir,
                     deadline=started + time_budget.limit_seconds,
+                    enforce_threshold=not isinstance(recipe, GmshDefaultRecipe),
                 )
             )
         report = build_report(
@@ -178,8 +193,11 @@ def _resolve_sidecar(
 def _places_of_stop(
     outcome: RepairOutcome, sidecar: Path, threshold: float, policy: RepairPolicy
 ) -> list[StopPlace]:
-    """Where the bad elements of a stop are, with the fine structure the sidecar records there; none for a clean stop."""
-    if outcome.stop == STOP_CLEAN or outcome.last_audit is None:
+    """Where the bad elements of a stop are, with the fine structure the sidecar records there.
+
+    None for a delivered mesh: the places say who must act on a refused one.
+    """
+    if outcome.stop in DELIVERED_STOPS or outcome.last_audit is None:
         return []
     fine = check_fine_structure(sidecar)
     return stop_places(
@@ -199,7 +217,7 @@ def _deliver(
     The report has just been rewritten, so a mesh an earlier run left under the other name is removed:
     the directory never holds a mesh that the report beside it does not describe.
     """
-    if outcome.stop != STOP_CLEAN:
+    if outcome.stop not in DELIVERED_STOPS:
         files.mesh.unlink(missing_ok=True)
         files.rejected.unlink(missing_ok=True)
         if outcome.last_mesh is not None:
@@ -210,8 +228,8 @@ def _deliver(
             + (f"\n{where}" if where else ""),
             dict(report),
         )
-    # A clean stop follows a round that made a mesh, and one that also made the elevated mesh when the
-    # mesher options asked for a higher order.
+    # A delivering stop follows a round that made a mesh, and one that also made the elevated mesh when
+    # the mesher options asked for a higher order.
     delivered = outcome.elevated_mesh or outcome.last_mesh
     assert delivered is not None
     files.rejected.unlink(missing_ok=True)

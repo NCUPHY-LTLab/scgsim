@@ -95,9 +95,14 @@ class MeshAudit:
     mesh_seconds: float
     audit_seconds: float
 
-    def accepted(self, max_tetrahedra: int) -> bool:
-        """Whether the loop stops with this mesh: no tetrahedron below the threshold, within the budget."""
-        return self.bad_count == 0 and self.tetrahedra <= max_tetrahedra
+    def accepted(self, max_tetrahedra: int, *, enforce_threshold: bool = True) -> bool:
+        """Whether the loop delivers this mesh: no tetrahedron below the threshold, within the budget.
+
+        ``enforce_threshold=False`` (a report-only strategy) drops the threshold condition.
+        """
+        return (
+            self.bad_count == 0 or not enforce_threshold
+        ) and self.tetrahedra <= max_tetrahedra
 
     def to_json(self) -> dict[str, Any]:
         """The JSON form of the audit."""
