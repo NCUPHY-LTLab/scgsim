@@ -134,6 +134,37 @@ def test_a_file_that_is_not_json_is_refused(tmp_path, text):
         read_sidecar(path)
 
 
+def test_a_number_beyond_the_float_range_is_refused_where_it_is(tmp_path, sidecars):
+    """JSON allows ``1e400``, which Python decodes as an infinity; no sidecar number is infinite."""
+    path = tmp_path / "huge.sidecar.json"
+    marked = json.dumps(_with(sidecars["pad_b"], ("grid_um",), "HUGE"))
+    path.write_text(marked.replace('"HUGE"', "1e400"), encoding="utf-8")
+    with pytest.raises(
+        SidecarError, match=r"sidecar grid_um: inf is not a finite number"
+    ):
+        read_sidecar(path)
+
+
+def test_a_non_finite_number_is_refused_where_no_schema_describes_it(sidecars):
+    """A face request's ``support`` is free-form, and still holds only finite numbers."""
+    good = sidecars["pad_b_bands"]
+    support = next(
+        path
+        for path in _paths(good)
+        if path[-1] == "support" and "z_um" in _at(good, path)
+    )
+    with pytest.raises(
+        SidecarError, match=r"support\.z_um: nan is not a finite number"
+    ):
+        check_sidecar(_with(good, (*support, "z_um"), float("nan")))
+
+
+def _at(document, path):
+    for key in path:
+        document = document[key]
+    return document
+
+
 def _with(document, path, value):
     """A copy of ``document`` with the value at ``path`` replaced, or removed when ``value`` is ``_REMOVED``."""
     changed = copy.deepcopy(document)
@@ -213,9 +244,11 @@ def _first_group(sidecar, dim):
 
 
 def test_a_reference_that_does_not_resolve_is_refused(sidecars):
-    """Planned ids, native tags, group names, volumes, carriers and the binding's sizes are checked across sections."""
+    """Planned ids, native tags, groups of the right dimension, volumes, carriers and the binding's sizes are
+    checked across sections."""
     good = sidecars["pad_b_bands"]
     surface = _first_group(good, 2)
+    volume = _first_group(good, 3)
     edges = good["binding"]["ids_by_tag"]["1"]
     carrier_edge = next(iter(good["lineage"]["edges"]))
     for path, value, message in (
@@ -254,6 +287,16 @@ def test_a_reference_that_does_not_resolve_is_refused(sidecars):
             ("unions", "nets", "GND"),
             ["MA::nowhere"],
             r"unions\.nets\['GND'\] names the group",
+        ),
+        (
+            ("surface_epr_rows", next(iter(good["surface_epr_rows"])), "group"),
+            volume,
+            f"names the group {volume!r}, which is not a face group",
+        ),
+        (
+            ("volumes", next(iter(good["volumes"])), "group"),
+            surface,
+            f"names the group {surface!r}, which is not a volume group",
         ),
     ):
         with pytest.raises(

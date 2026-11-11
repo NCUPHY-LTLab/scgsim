@@ -2,7 +2,9 @@
 
 Owns the cross-section checks v2 allows.  ``binding.ids_by_tag`` is the table of planned ids: every planned
 id a section names must be in it, in its dimension, and every native tag must name the id written beside
-it.  ``physical_groups`` is the table of group names, ``volumes`` the table of planned volumes and
+it.  ``physical_groups`` is the table of groups by dimension: a reference to a surface group must name a
+group of dimension 2, one to a volume group a group of dimension 3.  ``volumes`` is the table of planned
+volumes and
 ``lineage.carriers`` the table of carriers; ``counts`` and ``expected`` must have the binding's sizes.
 
 v2 also refers to things it keeps no table of, so these stay unchecked until slice C of #170 gives each one
@@ -50,7 +52,7 @@ class _Index:
 
     ids: tuple[list[str], ...]  # planned ids by dimension, in native-tag order
     known: tuple[frozenset[str], ...]
-    groups: frozenset[str]
+    groups: dict[int, frozenset[str]]  # primary group names by dimension, 2 and 3
     volumes: frozenset[str]
 
     @classmethod
@@ -58,10 +60,14 @@ class _Index:
         """The tables of ``sidecar``."""
         by_tag = sidecar["binding"]["ids_by_tag"]
         ids = (by_tag["0"], by_tag["1"], by_tag["2"], by_tag["3"])
+        groups = sidecar["physical_groups"]
         return cls(
             ids,
             tuple(frozenset(dimension) for dimension in ids),
-            frozenset(sidecar["physical_groups"]),
+            {
+                dim: frozenset(n for n, g in groups.items() if g["dim"] == dim)
+                for dim in (2, 3)
+            },
             frozenset(sidecar["volumes"]),
         )
 
@@ -83,10 +89,16 @@ class _Index:
             if not (1 <= tag <= len(table)) or table[tag - 1] != planned:
                 yield f"{where}: native tag {tag} is not {_DIMENSIONS[dimension]} {planned!r}"
 
-    def unknown_groups(self, names: Iterable[str | None], where: str) -> Iterator[str]:
-        """A problem for each name that is no primary physical group (``None`` is no group, and resolves)."""
+    def unknown_groups(
+        self, dimension: int, names: Iterable[str | None], where: str
+    ) -> Iterator[str]:
+        """A problem for each name that is no primary group of ``dimension`` (``None`` is no group, and resolves)."""
         for name in names:
-            if name is not None and name not in self.groups:
+            if name is None or name in self.groups[dimension]:
+                continue
+            if any(name in groups for groups in self.groups.values()):
+                yield f"{where} names the group {name!r}, which is not a {_DIMENSIONS[dimension]} group"
+            else:
                 yield f"{where} names the group {name!r}, which physical_groups lacks"
 
 
@@ -119,7 +131,7 @@ def _embeddings(sidecar: Sidecar, index: _Index) -> Iterator[str]:
         where = f"embedded_faces[{position}]"
         yield from index.unknown(2, [face["face"]], where)
         yield from index.unknown(3, [face["host_volume"]], where)
-        yield from index.unknown_groups([face["group"]], where)
+        yield from index.unknown_groups(2, [face["group"]], where)
     for position, edge in enumerate(sidecar["refinement_edges"]):
         where = f"refinement_edges[{position}]"
         yield from index.unknown(1, [edge["edge"]], where)
@@ -130,7 +142,7 @@ def _planned_faces_and_volumes(sidecar: Sidecar, index: _Index) -> Iterator[str]
     """``faces`` describes written faces; ``volumes`` every planned volume, the written solids among them."""
     yield from index.unknown(2, sidecar["faces"], "faces")
     for face_id, face in sidecar["faces"].items():
-        yield from index.unknown_groups([face["group"]], f"faces[{face_id!r}]")
+        yield from index.unknown_groups(2, [face["group"]], f"faces[{face_id!r}]")
         for side in (face["negative_volume"], face["positive_volume"]):
             if side is not None and side not in index.volumes:
                 yield f"faces[{face_id!r}] names the volume {side!r}, which volumes lacks"
@@ -138,20 +150,22 @@ def _planned_faces_and_volumes(sidecar: Sidecar, index: _Index) -> Iterator[str]
         if solid not in index.volumes:
             yield f"binding.ids_by_tag['3'] names {solid!r}, which volumes lacks"
     for volume_id, volume in sidecar["volumes"].items():
-        yield from index.unknown_groups([volume["group"]], f"volumes[{volume_id!r}]")
+        yield from index.unknown_groups(3, [volume["group"]], f"volumes[{volume_id!r}]")
 
 
 def _surface_epr_rows(sidecar: Sidecar, index: _Index) -> Iterator[str]:
     for row_id, row in sidecar["surface_epr_rows"].items():
         where = f"surface_epr_rows[{row_id!r}]"
-        yield from index.unknown_groups([row["group"], row["shared_face_group"]], where)
+        yield from index.unknown_groups(
+            2, [row["group"], row["shared_face_group"]], where
+        )
         yield from index.unknown(2, row["face_sides"] or {}, where)
 
 
 def _ports(sidecar: Sidecar, index: _Index) -> Iterator[str]:
     for port in sidecar["ports"]:
         where = f"port {port['port_sheet_id']!r}"
-        yield from index.unknown_groups([port["group"]], where)
+        yield from index.unknown_groups(2, [port["group"]], where)
         yield from index.unknown(2, port["faces"], where)
         yield from index.unknown(
             3, [*port["host_volumes"], *port["adjacent_volumes"]], where
@@ -175,7 +189,8 @@ def _lineage(sidecar: Sidecar, index: _Index) -> Iterator[str]:
 
 
 def _group_lists(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    """Unions name primary groups.
+    """Unions name primary surface groups: interface types are surface types, and a Net's union lists its
+    exposed conductor surfaces.
 
     The ``bands`` of an inset family do not always: SGB lists the band group of every face that carries the
     band, emitted or not, so in Route B a family also names the ``MM`` group of a metal-metal contact, which
@@ -184,7 +199,7 @@ def _group_lists(sidecar: Sidecar, index: _Index) -> Iterator[str]:
     unions = sidecar["unions"]
     for kind in ("interface_types", "nets"):
         for key, names in unions[kind].items():
-            yield from index.unknown_groups(names, f"unions.{kind}[{key!r}]")
+            yield from index.unknown_groups(2, names, f"unions.{kind}[{key!r}]")
 
 
 def _expected(sidecar: Sidecar, index: _Index) -> Iterator[str]:

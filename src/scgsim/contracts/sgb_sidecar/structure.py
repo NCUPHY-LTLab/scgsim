@@ -3,7 +3,7 @@
 Owns the subset of JSON Schema draft 2020-12 that :mod:`.schema` writes, with the standard's meaning: an
 ``integer`` may be written ``2.0``, a boolean is neither an integer nor a number, ``pattern`` searches the
 string, a keyword of objects, arrays, strings or numbers applies only to a value of that type, and a
-``oneOf`` holds when exactly one branch does.  :func:`require_known_keywords` refuses a schema with any other
+``oneOf`` holds when exactly one branch does.  Every number is finite, as a JSON number is, wherever it is.  :func:`require_known_keywords` refuses a schema with any other
 keyword, so the schema never states more than this check enforces.  The first mismatch raises
 :class:`.errors.SidecarError` with its place in the document.
 """
@@ -35,6 +35,7 @@ ANNOTATIONS = frozenset({"$schema", "$id", "title", "description", "$defs"})
 def require_structure(value: object, schema: dict[str, Any]) -> None:
     """Raise :class:`SidecarError` at the first place ``value`` does not match the root ``schema``."""
     try:
+        _require_finite_numbers(value, ())
         _Checker(schema.get("$defs", {})).check(value, schema, ())
     except _Mismatch as mismatch:
         raise SidecarError(
@@ -60,6 +61,22 @@ def require_known_keywords(schema: object) -> None:
             require_known_keywords(subschema)
     for keyword in ("oneOf", "items", "additionalProperties", "propertyNames"):
         require_known_keywords(schema.get(keyword))
+
+
+def _require_finite_numbers(value: Any, path: Path) -> None:
+    """Every number of ``value`` is finite, as a JSON number is, the values no schema describes included.
+
+    Python's JSON reader decodes a number beyond the float range, such as ``1e400``, as an infinity, and a
+    document built in memory can hold an infinity or a NaN.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        raise _Mismatch(path, f"{value!r} is not a finite number")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _require_finite_numbers(item, (*path, key))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _require_finite_numbers(item, (*path, index))
 
 
 class _Mismatch(Exception):
