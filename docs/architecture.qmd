@@ -199,7 +199,7 @@ truthful Git observation may be unavailable. V13 has no helper-hash map and
 does not claim exhaustive transitive-source coverage. Historical runtime-source
 inventories continue to interpret their original module paths and identities;
 relocation does not rewrite or reinterpret their receipts. The current producer
-emits runtime-source v28 while retaining receipt V3; its declared inventory
+emits runtime-source v29 while retaining receipt V3; its declared inventory
 binds the relocated implementation.
 
 The flow below shows the source structure. Geometry source preparation
@@ -448,18 +448,18 @@ carrier and cannot reinterpret a caller spec or workspace.
 
 New preparation keeps the handoff and handoff-manifest schemas at V1 while both
 declare that the mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial
-V3 receipt records a declared `runtime-source.v28` preparation-time SCGSim module
-manifest and content digest for 284 sorted, unique paths. V28 starts from all
+V3 receipt records a declared `runtime-source.v29` preparation-time SCGSim module
+manifest and content digest for 285 sorted, unique paths. V29 starts from all
 current AEDT modules, both AEDT visualization loaders, and the non-AEDT paths
-retained from V27, then follows AST-resolved imports and package initializers. It
-adds `scgsim/geometry/primitives/topology_validation.py` to the frozen V27
+retained from V28, then follows AST-resolved imports and package initializers. It
+adds `scgsim/geometry/planning/junction_planning/lattice.py` to the frozen V28
 roster. Before mutation, execution verifies the canonical manifest and binds the
 initial-receipt and prepared-manifest hashes. A canonical historical
 V1 `not_run` handoff with neither marker remains executable, but its resulting
 V3 receipt records preparation provenance as `legacy_v1_not_recorded`; it does
 not fabricate history.
 
-Every new completed V3 receipt records a separate declared `runtime-source.v28`
+Every new completed V3 receipt records a separate declared `runtime-source.v29`
 execution-time module manifest and digest. Its measured module bytes and
 content digest are mandatory; it has no helper-hash map. Preparation and
 execution identities are not required to match: their separation records what
@@ -472,7 +472,7 @@ consistency contract is not source authenticity for an actor able
 to rewrite the entire unsigned artifact set.
 
 The [AEDT receipt/provenance contract](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance)
-is the unique authority for the exact current V28 284-path inventory and frozen
+is the unique authority for the exact current V29 285-path inventory and frozen
 historical reader evolution. V1–V12 retain their exact prior path assignments
 and reader interpretations; V13 binds its declared file set, not every
 transitive dependency. One pure, versioned initial-receipt codec owns historical

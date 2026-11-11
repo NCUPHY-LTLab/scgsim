@@ -106,7 +106,7 @@ paths does not restore those Q3D request schemas or bypass the explicit-mode
 requirement.
 
 This extension introduced AEDT runtime-source identity
-`scgsim.aedt.runtime-source.v15`; the current producer emits v28, and earlier
+`scgsim.aedt.runtime-source.v15`; the current producer emits v29, and earlier
 identities keep their existing contracts. Each identity binds the implemented
 module bytes and digest without claiming exhaustive transitive dependency coverage;
 its precise path list is owned by the frozen implementation inventory.
@@ -304,14 +304,14 @@ export/readback dependency becomes an explicit internal service. Visualization
 imports current PyAEDT constants from the canonical spec owner without making
 them public exports.
 
-The current producer uses runtime-source v28 with 284 sorted, unique declared
+The current producer uses runtime-source v29 with 285 sorted, unique declared
 paths. Its inventory starts with all current AEDT modules, both AEDT
-visualization loaders, and the non-AEDT paths retained from V27, then follows
+visualization loaders, and the non-AEDT paths retained from V28, then follows
 AST-resolved imports and package initializers. It adds
-`scgsim/geometry/primitives/topology_validation.py` to the frozen V27 roster.
+`scgsim/geometry/planning/junction_planning/lattice.py` to the frozen V28 roster.
 Per-module hashes bind the declared files, and the canonical manifest digest
 identifies that source snapshot; neither is a permanent code value. Historical
-V1–V27 readers retain their original paths, hashes, revision rules, and schema
+V1–V28 readers retain their original paths, hashes, revision rules, and schema
 meanings. Do not map old module strings onto new paths while resolving old
 receipts. Handoff and receipt histories remain separate from Q3D request
 versioning; Q3D remains v3 only. This map does not claim native Q3D completion.

@@ -90,7 +90,10 @@ SOURCE_SCHEMA_V27 = "scgsim.aedt.runtime-source.v27"
 SOURCE_SCHEMA_V28 = "scgsim.aedt.runtime-source.v28"
 
 
-SOURCE_SCHEMA = SOURCE_SCHEMA_V28
+SOURCE_SCHEMA_V29 = "scgsim.aedt.runtime-source.v29"
+
+
+SOURCE_SCHEMA = SOURCE_SCHEMA_V29
 
 
 _RUNTIME_SOURCE_V1_MODULES = (
@@ -965,7 +968,7 @@ _RUNTIME_SOURCE_V27_PATHS = (
 
 
 def current_runtime_source_closure() -> tuple[str, ...]:
-    """Recompute V28 closure for roster generation and consistency checks."""
+    """Recompute V29 closure for roster generation and consistency checks."""
     source_root = Path(__file__).resolve().parents[3]
     aedt_root = source_root / "scgsim/aedt"
     aedt_modules = tuple(
@@ -974,7 +977,7 @@ def current_runtime_source_closure() -> tuple[str, ...]:
     )
     retained_shared_seeds = tuple(
         path
-        for path in _RUNTIME_SOURCE_V27_PATHS
+        for path in _RUNTIME_SOURCE_V28_PATHS
         if not path.startswith("src/scgsim/aedt/")
     )
     visualization_seeds = (
@@ -1275,6 +1278,16 @@ _RUNTIME_SOURCE_V28_PATHS = (
 )
 
 
+_RUNTIME_SOURCE_V29_PATHS = tuple(
+    sorted(
+        (
+            *_RUNTIME_SOURCE_V28_PATHS,
+            "src/scgsim/geometry/planning/junction_planning/lattice.py",
+        )
+    )
+)
+
+
 def runtime_source_paths(schema: Any) -> tuple[str, ...] | None:
     """Resolve the declared inventory without rewriting historical module paths."""
     return {
@@ -1305,9 +1318,10 @@ def runtime_source_paths(schema: Any) -> tuple[str, ...] | None:
         SOURCE_SCHEMA_V26: _RUNTIME_SOURCE_V26_PATHS,
         SOURCE_SCHEMA_V27: _RUNTIME_SOURCE_V27_PATHS,
         SOURCE_SCHEMA_V28: _RUNTIME_SOURCE_V28_PATHS,
+        SOURCE_SCHEMA_V29: _RUNTIME_SOURCE_V29_PATHS,
     }.get(schema)
 
 
 def current_runtime_source_paths() -> tuple[str, ...]:
     """Return the current producer inventory in canonical order."""
-    return _RUNTIME_SOURCE_V28_PATHS
+    return _RUNTIME_SOURCE_V29_PATHS
