@@ -2,7 +2,7 @@
  "coarser_grid_stand_in": {
   "grid_10nm": {
    "gap_nm": 4,
-   "message": "different-Net contact between Ground (entities ground) and pad (entities pad) at (-50.0000, -30.0000) um on level[0] (grid g = 0.01 um; a gap smaller than the grid closes when the sources snap)",
+   "message": "different-Net contact between Ground (entities ground) and pad (entities pad) at (-50.0000, -30.0000) um on level[0] (grid g = 0.01 um; a gap smaller than the grid closes when the sources snap). Fix the layout or the Net declaration: draw the conductors of different Nets apart, or declare them one Net.",
    "stopped": "ContactError"
   },
   "grid_1nm": {

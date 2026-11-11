@@ -54,6 +54,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from fractions import Fraction
 
+from scgsim.geometry.models.grid import format_box
 from scgsim.geometry.sgb.cutfamilies.die_cuts import (
     cells_beyond_the_die,
     check_die_cuts,
@@ -92,7 +93,7 @@ from scgsim.geometry.sgb.records.carriers import (
 from scgsim.geometry.sgb.records.grid import Grid, exact_z
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
-from scgsim.geometry.sgb.records.support import SupportRegion
+from scgsim.geometry.sgb.records.support import SupportRegion, primitive_ends
 from scgsim.geometry.sgb.routes.naming import (
     SHEET,
     interface_type_of,
@@ -179,7 +180,10 @@ def resolve_support(
     if not any(any(ring) for ring in origin_mask):
         raise NoGapEdgeError(
             f"inset request {request.request_id!r}: {_describe(support)} has no gap edge to "
-            "measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)"
+            "measure the bands from (a conductor edge counts only where exposed dielectric lies next to it); "
+            f"{_face_place(support, catalogue, layer, rings)}. Fix the declaration or the layout: "
+            "drop the band margins asked for this face, or draw exposed dielectric beside one of "
+            "its edges."
         )
     region = SupportRegion(rings, margins, origin_mask, die_edge_mask)
     conductor = support.entity_id if isinstance(support, ConductorSurface) else None
@@ -204,6 +208,29 @@ def _describe(support: ConcreteSupport) -> str:
     return (
         f"the interface of {support.first_entity_id!r} and {support.second_entity_id!r}"
     )
+
+
+def _face_place(
+    support: ConcreteSupport,
+    catalogue: PrismCatalogue,
+    layer: Layer,
+    rings: tuple[tuple[RingPrimitive, ...], ...],
+) -> str:
+    """Where a support face lies: its source layers, its level and the box of its boundary's vertices."""
+    entities = (
+        {support.entity_id}
+        if isinstance(support, ConductorSurface)
+        else {support.first_entity_id, support.second_entity_id}
+    )
+    layers = {p.layer for p in catalogue.prisms if p.entity_id in entities and p.layer}
+    on = f" on layer {', '.join(sorted(layers))}" if layers else ""
+    ends = [end for ring in rings for prim in ring for end in primitive_ends(prim)]
+    xs, ys = (
+        [catalogue.grid.to_um(x) for x, _ in ends],
+        [catalogue.grid.to_um(y) for _, y in ends],
+    )
+    box = format_box((min(xs), min(ys), max(xs), max(ys)), catalogue.grid.size_um)
+    return f"the face{on} lies at z = {float(layer.level_z):g} um within {box}"
 
 
 # --------------------------------------------------------------------------- gap edges

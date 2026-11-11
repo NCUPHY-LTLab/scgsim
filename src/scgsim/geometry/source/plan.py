@@ -664,6 +664,7 @@ class GeometryPlan:
                 support,
                 cell=source.source_cells[cell.name],
                 excluded_reference_indexes=source.child_reference_indexes[path],
+                transform=transform,
             )
             lumped_supports.append(
                 replace(

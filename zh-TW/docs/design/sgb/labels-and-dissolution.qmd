@@ -39,7 +39,9 @@ Arrangement 只告訴我們平面被曲線切成哪些 **cell**（平面區域�
 下列兩種來源上的事實是*錯誤*而不是選擇，因為默默解決它們會掩蓋建模上的錯誤。對 pad 加上一個 Net 為 `other` 且與 pad 重疊的導體，build 會以下列訊息中止：
 
 ```text
-different-Net conductors overlap near (42.5000, 46.5000) um: other_net, pad
+different-Net conductors overlap near (42.5000, 46.5000) um: other_net, pad on layer metal. Fix
+the layout or the Net declaration: draw the conductors of different Nets apart, or declare them one
+Net.
 ```
 
 若再加入一個與 substrate 優先序相同的 dielectric，則得到（結尾的子句指出該由哪個來源補上 priority）：
@@ -62,9 +64,10 @@ entity priorities (SemanticEntitySpec.priority) so that exactly one of them owns
 重疊不是唯一的衝突。**在每一種 route 中，不同 Net 的接觸都是錯誤。** 兩個不同 Net 的導體只是*接觸*（在同一平面上共用 edge 或 vertex：兩個 Route A sheet、有限厚度的金屬、站在另一個 Net 金屬上的 post），會在 arrangement 建立後、由 arrangement 的 vertex 與 face 偵測到，並使 build 中止。只存在於 grid 上的接觸也是錯誤：粗的 grid 或 snap 把來源中的間隙封閉了。若第二個 Net 的矩形與 pad 共用左邊緣，會得到：
 
 ```text
-different-Net contact between P (entities pad) and other (entities touching_net) at
+different-Net contact between P (entities pad on layer metal) and other (entities touching_net) at
 (40.0000, 45.0000) um on slab[0,1/5] (grid g = 0.001 um; a gap smaller than the grid
-closes when the sources snap)
+closes when the sources snap). Fix the layout or the Net declaration: draw the conductors
+of different Nets apart, or declare them one Net.
 ```
 
 訊息指出兩個 Net、各自到達該點的 Entity、位置與 plane。同 Net 的接觸則屬正常。

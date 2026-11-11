@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from scgsim.geometry.models.grid import format_um
 from scgsim.geometry.sgb.assembly.records import Topology
 from scgsim.geometry.sgb.emission.numbers import PI, angle_of
 from scgsim.geometry.sgb.emission.surfaces import (
@@ -198,9 +199,7 @@ def _finish(  # noqa: PLR0913 - the walk's products travel together
         + delta[:, 2] * delta[:, 2]
     )
     if span.size and span.min() <= MIN_EDGE_TOLERANCES * tolerance:
-        raise SgbError(
-            f"edge shorter than {MIN_EDGE_TOLERANCES} x tolerance ({span.min():.3g} um)"
-        )
+        raise SgbError(_short_edge(topology, found, verts[edge_v], span, tolerance))
     direction = delta / span[:, None]
     n_edges = len(found.edge_ids)
     kind = np.zeros(n_edges, dtype=np.int8)
@@ -314,3 +313,37 @@ def _group_plans(routed: RoutedModel, found: Numbering) -> list[GroupPlan]:
         out.append(GroupPlan(name, group.dim, next_tag[group.dim], elements))
         next_tag[group.dim] += 1
     return out
+
+
+def _short_edge(
+    topology: Topology,
+    found: Numbering,
+    ends: np.ndarray,
+    span: np.ndarray,
+    tolerance: float,
+) -> str:
+    """The refusal of the shortest edge: where it runs, its sources, and which declaration sets its length.
+
+    In the plane every edge is at least one grid step long, so an edge this short is a film
+    thickness or a gap between levels unless the model grid itself is that fine.
+    """
+    index = int(span.argmin())
+    edge_id = found.edge_ids[index]
+    (x0, y0, z0), (x1, y1, z1) = ends[index]
+    grid = topology.grid_um
+    points = " to ".join(
+        f"({format_um(x, grid)}, {format_um(y, grid)}, {z!r}) um"
+        for x, y, z in ((x0, y0, float(z0)), (x1, y1, float(z1)))
+    )
+    sources = ", ".join(topology.lineage.get(edge_id, ())) or "no source carrier"
+    limit = MIN_EDGE_TOLERANCES * tolerance
+    fix = (
+        f"Fix the layer stack: this edge is a film thickness or a gap between levels; "
+        f"make each at least {limit:g} um."
+        if (x0, y0) == (x1, y1)
+        else f"Fix the declaration: use a model grid of at least {limit:g} um."
+    )
+    return (
+        f"edge shorter than {MIN_EDGE_TOLERANCES} x tolerance ({span.min():.3g} um): "
+        f"edge {edge_id} runs from {points}, from {sources}. {fix}"
+    )
