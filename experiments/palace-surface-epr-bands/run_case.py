@@ -65,6 +65,8 @@ AMR_MAX_PASSES = 2
 AMR_TOLERANCE = 0.02
 AMR_UPDATE_FRACTION = 0.7
 WALL_LIMIT_S = 30 * 60
+# How long the stopped run gets to end after SIGTERM before it is killed.
+TERMINATION_GRACE_S = 60
 DIELECTRIC_SECTION = "Boundaries.Postprocessing.Dielectric"
 
 
@@ -477,7 +479,12 @@ def execute(output: Path, wall_limit_s: float) -> None:
         record: dict[str, Any] = {"exit_code": process.wait(timeout=wall_limit_s)}
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGTERM)
-        process.wait()
+        try:
+            process.wait(timeout=TERMINATION_GRACE_S)
+        except subprocess.TimeoutExpired:
+            # A wrapper or rank that ignores SIGTERM must not hold the run past its limit.
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
         record = {"exit_code": None, "error": f"stopped after {wall_limit_s} s"}
     record["wall_limit_s"] = wall_limit_s
     record["wall_seconds"] = time.perf_counter() - start
