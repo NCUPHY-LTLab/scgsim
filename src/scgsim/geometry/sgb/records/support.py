@@ -11,12 +11,17 @@ measured on the exact primitives in floating point, from the region's *distance 
 primitives the bands are measured from.  A conductor face has its whole boundary as origins; a solution
 interface has only the parts of its boundary where it meets a conductor.  Distances decide the band of a
 cell from the area it covers (``labelling.bands``), never a topological question.
+
+The die edge is a dicing line: a straight origin that runs onto it belongs to a conductor the dicing cut, so
+distances are measured from that origin continued straight past the die edge (Issue #138), as if the
+conductor went on.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from fractions import Fraction
 from functools import cached_property
 
 from scgsim.geometry.sgb.plane import Point, RepPoint, point_in_ring
@@ -98,12 +103,14 @@ class SupportRegion:
     """A planar region bounded by rings of exact primitives (interior on the left of each ring) and its margins.
 
     ``origin_mask`` says, per ring and primitive, whether the primitive is a distance origin; empty
-    means every boundary primitive is one.
+    means every boundary primitive is one.  ``die_edge_mask`` says, the same way, whether a primitive that is
+    no origin lies on the die edge (the substrate's outer edge); empty means none does.
     """
 
     rings: tuple[tuple[RingPrimitive, ...], ...]
     margins: tuple[int, ...]  # grid units, strictly increasing
     origin_mask: tuple[tuple[bool, ...], ...] = ()
+    die_edge_mask: tuple[tuple[bool, ...], ...] = ()
     _witness_cache: list[list[Point]] = field(
         default_factory=list, compare=False, repr=False
     )
@@ -129,13 +136,77 @@ class SupportRegion:
         """Whether a boundary primitive is a distance origin."""
         return not self.origin_mask or self.origin_mask[ring_index][primitive_index]
 
+    def is_die_edge(self, ring_index: int, primitive_index: int) -> bool:
+        """Whether a boundary primitive that is no distance origin lies on the die edge."""
+        return (
+            bool(self.die_edge_mask) and self.die_edge_mask[ring_index][primitive_index]
+        )
+
+    @cached_property
+    def die_cuts(self) -> tuple[DieCut, ...]:
+        """Every end of a straight origin that the die edge cuts, with the origin continued past it there.
+
+        A straight origin whose neighbour on the ring lies on the die edge is continued at that end, along its
+        own line, until the end lies twice the largest margin beyond the die edge's tangent there.  Where the
+        die is convex the disk of the largest margin about the new end then lies outside the die, so inside the
+        die the continued edge is as far from every point as the whole line is, and each offset of it ends at
+        least one margin outside the die, clear of snapping.  A longer continuation gives the same distances in
+        the die.  Where the die outline comes back beside a continuation, the build is refused when the support
+        is resolved (``cutfamilies.die_cuts``).
+
+        Not cut, so their end keeps the half circle of the bands about it: an arc origin, and a line where the
+        die edge turns back over it (a die that is not convex there), which has no straight way out.
+        """
+        reach = 2 * self.margins[-1]
+        cuts: list[DieCut] = []
+        for ri, ring in enumerate(self.rings):
+            count = len(ring)
+            for pi, prim in enumerate(ring):
+                if not (self.is_origin(ri, pi) and isinstance(prim, LineEdge)):
+                    continue
+                for at_end, neighbour, inner, vertex in (
+                    (True, (pi + 1) % count, prim.p, prim.q),
+                    (False, (pi - 1) % count, prim.q, prim.p),
+                ):
+                    if not self.is_die_edge(ri, neighbour):
+                        continue
+                    direction = _direction_at(ring[neighbour], at_end=not at_end)
+                    end = _past_the_die(inner, vertex, direction, reach)
+                    if end is not None:
+                        cuts.append(DieCut(ri, pi, at_end, vertex, end, direction))
+        return tuple(cuts)
+
+    @cached_property
+    def continued_origins(self) -> dict[tuple[int, int], LineEdge]:
+        """The straight origins the die edge cuts, each continued past it (:attr:`die_cuts`): ``(ring, primitive)`` -> edge."""
+        continued: dict[tuple[int, int], LineEdge] = {}
+        for cut in self.die_cuts:
+            key = (cut.ring, cut.primitive)
+            edge = continued.get(key)
+            if edge is None:
+                prim = self.rings[cut.ring][cut.primitive]
+                assert isinstance(prim, LineEdge), "only straight origins are cut"
+                edge = prim
+            continued[key] = (
+                LineEdge(edge.p, cut.end, edge.source_edge)
+                if cut.at_end
+                else LineEdge(cut.end, edge.q, edge.source_edge)
+            )
+        return continued
+
+    def origin(self, ring_index: int, primitive_index: int) -> RingPrimitive:
+        """A distance origin as distances are measured from it: continued past the die edge where it cuts it."""
+        return self.continued_origins.get(
+            (ring_index, primitive_index), self.rings[ring_index][primitive_index]
+        )
+
     @cached_property
     def origins(self) -> tuple[RingPrimitive, ...]:
-        """The boundary primitives distances are measured from."""
+        """The boundary primitives distances are measured from, each as :meth:`origin` gives it."""
         return tuple(
-            prim
+            self.origin(ri, pi)
             for ri, ring in enumerate(self.rings)
-            for pi, prim in enumerate(ring)
+            for pi in range(len(ring))
             if self.is_origin(ri, pi)
         )
 
@@ -206,6 +277,58 @@ class SupportRegion:
     def band_count(self) -> int:
         """Number of bands: one more than the margins."""
         return len(self.margins) + 1
+
+
+@dataclass(frozen=True)
+class DieCut:
+    """One end of a straight distance origin that the die edge cuts, and the origin's continuation past it.
+
+    ``ring`` and ``primitive`` locate the origin and ``at_end`` says which of its ends is cut.  ``vertex`` is that
+    end, on the die edge; ``end`` is where the continuation stops, past the die edge; ``die_direction`` is the die
+    edge's direction of travel at the vertex, not normalised, with the die on its left.
+    """
+
+    ring: int
+    primitive: int
+    at_end: bool
+    vertex: Point
+    end: Point
+    die_direction: tuple[Fraction, Fraction]
+
+
+def _direction_at(prim: RingPrimitive, *, at_end: bool) -> tuple[Fraction, Fraction]:
+    """The direction of travel of a primitive at its start or end, not normalised (an arc's tangent there)."""
+    if isinstance(prim, LineEdge):
+        return Fraction(prim.q[0] - prim.p[0]), Fraction(prim.q[1] - prim.p[1])
+    x, y = prim.end if at_end else prim.start
+    rx, ry = x - prim.centre[0], y - prim.centre[1]
+    return (-ry, rx) if prim.ccw else (ry, -rx)
+
+
+def _past_the_die(
+    inner: Point, vertex: Point, die_direction: tuple[Fraction, Fraction], reach: int
+) -> Point | None:
+    """``vertex`` moved on along the line from ``inner`` until it lies ``reach`` beyond the die edge's line.
+
+    The die edge runs along ``die_direction`` at ``vertex``, with the die on its left.  The point moves in whole
+    steps of the line's smallest lattice step, so it stays a lattice point exactly on the line.  ``None`` when
+    the line does not leave the die there.
+    """
+    dx, dy = vertex[0] - inner[0], vertex[1] - inner[1]
+    divisor = math.gcd(dx, dy)
+    sx, sy = dx // divisor, dy // divisor
+    ex, ey = die_direction
+    cross = (
+        sx * ey - sy * ex
+    )  # |step| |die| sin(angle): positive when a step leaves the die
+    if cross <= 0:
+        return None
+    # k steps lie k * cross / |die| beyond the die edge's line; the smallest k that puts them `reach` beyond.
+    bound = reach * reach * (ex * ex + ey * ey) / (cross * cross)
+    steps = math.isqrt(math.ceil(bound))
+    if steps * steps < bound:
+        steps += 1
+    return (vertex[0] + steps * sx, vertex[1] + steps * sy)
 
 
 class _OriginGrid:

@@ -36,8 +36,13 @@ Distance origins: only the region's gap edges (``SupportRegion.origins``; see ``
 offset is built from those primitives alone: a line or arc per origin, a bridging arc at every reflex vertex
 between two consecutive origins, and a half circle round each end of a run of origins.  The rest of the
 boundary (the die edge, an edge shared with another conductor) only clips the candidates where they cross it,
-and a seam may end on it.  Contact caps, other bands and tile seams are never origins -- they are not
-inputs of this module.  Ports are never origins either: a port footprint on the support's level is no origin
+and a seam may end on it.  The die edge is a dicing line, so a run of origins that ends on it belongs to a
+conductor the dicing cut, which continues past it (Issue #138): where the run ends in a line, that line is
+continued past the die edge (``SupportRegion.continued_origins``), its offsets run straight on until the die
+edge clips them, and no half circle is drawn round that end.  Otherwise the part of the half circle inside the
+die would be a short arc, the margin times the angle's deviation from a right angle, at every oblique cut.
+Contact caps, other bands and tile seams are never origins -- they are not inputs of this module.  Ports are
+never origins either: a port footprint on the support's level is no origin
 and moves no band, but it keeps the band seams out of itself (below).  Topology changes (a neck that splits, a
 band that vanishes) are ordinary outcomes: the bands that survive are the ones the regions hold.
 
@@ -172,9 +177,15 @@ def _left_normal(prim: RingPrimitive, *, at_end: bool) -> Vec:
     return -ty, tx
 
 
-def _offset_point(prim: RingPrimitive, margin: int, *, at_end: bool) -> Point:
-    """End point of the offset of ``prim`` by ``margin`` toward the interior, rounded to the lattice."""
-    x, y = _ends(prim)[1 if at_end else 0]
+def _offset_point(
+    prim: RingPrimitive, margin: int, *, at_end: bool, vertex: Vec | None = None
+) -> Point:
+    """End point of the offset of ``prim`` by ``margin`` toward the interior, rounded to the lattice.
+
+    ``vertex`` replaces the primitive's own end point: the end of a line continued past the die edge, offset
+    along the line's own normal.
+    """
+    x, y = vertex or _ends(prim)[1 if at_end else 0]
     nx, ny = _left_normal(prim, at_end=at_end)
     return (
         circle_math.round_half_up(x + margin * nx),
@@ -243,10 +254,15 @@ def _generate_candidates(
                 if not region.is_origin(ri, pi):
                     continue
                 name = f"ring{ri}/edge{pi}"
+                # The ends the die edge cuts are those of the line continued past it; joins lie at the others.
+                first, last = _ends(region.origin(ri, pi))
+                cut_first, cut_last = first != _ends(prim)[0], last != _ends(prim)[1]
                 start = joins.get((pi - 1) % count) or _offset_point(
-                    prim, margin, at_end=False
+                    prim, margin, at_end=False, vertex=first
                 )
-                end = joins.get(pi) or _offset_point(prim, margin, at_end=True)
+                end = joins.get(pi) or _offset_point(
+                    prim, margin, at_end=True, vertex=last
+                )
                 if isinstance(prim, LineEdge):
                     candidates.add_line(name, start, end)
                 else:
@@ -257,9 +273,14 @@ def _generate_candidates(
                         )
                 following = (pi + 1) % count
                 if not region.is_origin(ri, following):
-                    _cap_arcs(
-                        f"ring{ri}/capend{pi}", prim, margin, candidates, at_end=True
-                    )
+                    if not cut_last:
+                        _cap_arcs(
+                            f"ring{ri}/capend{pi}",
+                            prim,
+                            margin,
+                            candidates,
+                            at_end=True,
+                        )
                 elif (
                     pi not in joins
                 ):  # a joined junction has its two offsets meet: no arc
@@ -270,7 +291,7 @@ def _generate_candidates(
                         margin,
                         candidates,
                     )
-                if not region.is_origin(ri, (pi - 1) % count):
+                if not region.is_origin(ri, (pi - 1) % count) and not cut_first:
                     _cap_arcs(
                         f"ring{ri}/capstart{pi}", prim, margin, candidates, at_end=False
                     )

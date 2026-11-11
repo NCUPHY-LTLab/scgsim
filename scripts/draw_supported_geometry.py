@@ -117,7 +117,12 @@ def main() -> None:
 
 def cell_figures() -> list[Figure]:
     """The figure of every unit cell, with a narrower window where the feature is small against its die."""
-    scenes = {**disk_qubit.SCENES, **pdk.SCENES}
+    # Cell 12 is drawn from the test build of the qubit die, off the banded list for its straight lead (Issue #128).
+    scenes = {
+        **disk_qubit.SCENES,
+        **disk_qubit.REFUSED_BEFORE_MESHING,
+        **pdk.SCENES,
+    }
 
     def cell(
         number: int,
