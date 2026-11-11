@@ -53,7 +53,7 @@ This index lists names declared by nine public facades; it does not replace each
 | Source | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `753ed86a4f527917bb62becaca2b55fc57020da2bac29f2088285b75d4eae5ee` |
-| `docs/knowledge-sources.json` | `b5e8e1c3585c05ed4ee59aca7f8a7e956b0097c2dd1e0439234bb65267019422` |
+| `docs/knowledge-sources.json` | `614bd2ada2248376b22d9261c73ab26efc3696d1b942e09c5a66e8a7b3704c2b` |
 | `src/scgsim/aedt/epr/workflow.py` | `e820d10b5c7ef94a160d1e985a2466da5952c49522d656651f35c9bc313f4162` |
 | `docs/api/analyze-epr-usage.md` | `39dd5b84a8154ae373bc495141fc82d015ea59aa2210793c072f5c0d6069ddba` |
 | `zh-TW/docs/api/analyze-epr-usage.md` | `5cdfd9f0aa8b57e1dbd3365b3907235c12b4a33d985358b6eb321a0d15c7675c` |
@@ -131,9 +131,4 @@ The README and English `docs/*.qmd` pages are bundled; the following public docu
 - `zh-TW/docs/tutorial-xmon-aedt.qmd`
 - `zh-TW/docs/tutorial-xmon-input.qmd`
 - `zh-TW/docs/tutorial-xmon-palace.qmd`
-- `zh-TW/docs/tutorials/capacitance.qmd`
-- `zh-TW/docs/tutorials/resonance-epr.qmd`
-- `zh-TW/docs/tutorials/resonance.qmd`
-- `zh-TW/docs/tutorials/scattering.qmd`
-- `zh-TW/docs/tutorials/transmission-line.qmd`
 - `zh-TW/index.qmd`

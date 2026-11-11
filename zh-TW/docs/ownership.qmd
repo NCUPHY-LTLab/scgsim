@@ -7,15 +7,15 @@ scgsim-status: "ACCEPTED"
 scgsim-id: "docs/ownership"
 ---
 
-SCGSim 擁有可重用的幾何、求解器準備、交接、結果與報告 API。[OrPen SC PDK](https://github.com/OrPenStrike/orpen-sc-pdk)擁有公開元件幾何、材料／堆疊資料及可執行的元件 Notebook。Python 指令碼或 Notebook 可直接呼叫 SCGSim，不需要上層工作區。
+SCGSim 擁有可重用的幾何、求解器準備、交接、結果與報告 API。[OrPen SC PDK](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk)擁有公開元件幾何、材料／堆疊資料及可執行的元件 Notebook。Python 指令碼或 Notebook 可直接呼叫 SCGSim，不需要上層工作區。
 
 網站使用 Askr 原生呈現方式。Overview 介紹套件；Tutorial 引導使用者完成計算；Concept 說明模型；Contract 提供精確的介面參考。既有文件網址仍可使用。
 
 儲存庫配置、實作責任、文件建置與發行程序，列於次要的[維護者入口](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)。
 
-## 已接受的 SCGSim 2.0 所有權 {#accepted-scgsim-2.0-ownership}
+## SCGSim 2.0 所有權 {#scgsim-2.0-ownership}
 
-Human 於 2026-10-09 接受 v2 模組與 API 結構，候選版本為 `a932a173edb5c56ae14740ff5177190996255bdd`（tree `2745321736e53e2a4fe8d150f2e9d8bd176669db`）。其語意狀態為 `ACCEPTED`，不是 `STABILIZED`。此實作透過 PR34 整合至 `develop`，修訂版本為 `cc1424c84ffe9d295a57dbabb3c2ab6431110f6c`（tree `f9ecfe49df4c79be84a7991e44cc50c2602e3adb`）。本次收尾工作從較後續的 `develop` 瘦身版本 `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`（tree `c99c670927e877fb407aa4c73de32793e86a4460`）開始。匯入／遷移基準仍為 `develop@3a52fb1`，tree `96adcf8672b497a29dd0a6b43043cca11efc3043`。既有使用者會繼續使用其記錄的固定版本，直到自行選擇遷移。已接受的 API 範圍不代表 Xmon Palace Eigenmode Route A、CircularPad Palace Eigenmode Route B，或 HFSS 本徵模儲存場 EPR／離線損耗的完整原生至 Resolve 再至 Report 操作已完成。這些操作尚未被觀察為完整工作流程，且不屬於本次收尾範圍；先前的部分證據不能證明它們已完成或失敗。請參閱[遷移參考](api-migration.qmd#accepted-scope-and-evidence-status)。
+SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域的責任。既有使用者會繼續使用其記錄的固定版本，直到自行選擇遷移；[遷移參考](api-migration.qmd)列出 v1 名稱與其 2.0 負責模組的對應。
 
 | 目標區域 | 負責範圍 | 不得接管的範圍 |
 |---|---|---|
@@ -43,7 +43,7 @@ Human 於 2026-10-09 接受 v2 模組與 API 結構，候選版本為 `a932a173e
 
 以來源為基礎的本徵模準備、求解與匯出，屬於 HFSS 家族，即使沒有要求 EPR 分析也一樣。已宣告的接面與一般 RLC 負載會獨立於該請求建構。EPR 會將分析選擇與場／快取工作加入同一個原生模型及求解生命週期。純 RLC 單位／拓撲解讀與 Q3D 來源外部鏈選擇，由僅使用標準函式庫的私有輔助工具供原生寫入器與離線讀取器共用；共用解讀方式不會取代各自獨立的原生收據與來源歸屬檢查。
 
-幾何、AEDT、Palace 與 visualization 的基準 facade 和直接子模組符號對應，以及已接受的目的位置，列於 [API 遷移參考](api-migration.qmd)。公開性取決於文件所述的 facade／契約與宣告的匯出項目，不取決於 Python 模組是否剛好可匯入。v2 刻意不保留 `scgsim.sgb` 相容包裝器或 Q3D 輸入 v1／v2 路徑；公開 AEDT 指令 `python -m scgsim.aedt.run` 仍受支援，並會交由交易擁有者處理。
+幾何、AEDT、Palace 與 visualization 的基準 facade 和直接子模組符號對應，以及目前的負責模組，列於 [API 遷移參考](api-migration.qmd)。公開性取決於文件所述的 facade／契約與宣告的匯出項目，不取決於 Python 模組是否剛好可匯入。v2 刻意不保留 `scgsim.sgb` 相容包裝器或 Q3D 輸入 v1／v2 路徑；公開 AEDT 指令 `python -m scgsim.aedt.run` 仍受支援，並會交由交易擁有者處理。
 
 狀態界線必須保持可觀察。Palace Electrostatic 與 Eigenmode 準備流程各自保留可變狀態及失效／失敗順序；Gmsh 工作程序是程序界線，其網格觀察器不是離線品質讀取器。AEDT `EigenmodeSim` 保留可變設定與失效狀態；單一交易則負責收據狀態轉換與 Desktop 釋放優先順序。幾何 snapshot 保持脫離原物件；編譯器記錄是衍生輸出；後端標記是觀察資料，不是來源權威。搬移程式碼時必須保留這些所有權與失敗契約。
 

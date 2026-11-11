@@ -65,6 +65,6 @@ Palace Surface EPR 以 `inset_margins_um` 提供內縮邊距：每個邊距 $m$ 
 
 ## 探索結果 {#explore-a-result}
 
-請先閱讀[共振／EPR 教學](tutorials/resonance-epr.qmd)，再使用[離線 EPR](course/offline-epr.qmd)檢視已記錄模態並修訂損耗假設。[範例](examples.qmd)會將物理模型與後端流程連結起來。
+請先完成[選擇模擬目標](examples.qmd#getting-started)中的共振／EPR 筆記本，再使用[離線 EPR](course/offline-epr.qmd)檢視已記錄模態並修訂損耗假設。[範例](examples.qmd)會將物理模型與後端流程連結起來。
 
 綁定方式與 API 細節請參閱 [AEDT EPR 參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)與 [Palace Eigenmode 參考](specs/palace-eigenmode.qmd)。[報告參考](report-model.qmd#eigenmode-epr-presentation)說明選取方式、排序，以及基準值、遮罩邊距與不可取得物理量之間的區別。

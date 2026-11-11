@@ -14,26 +14,28 @@ described in the [Q3D lesson](aedt-q3d.qmd), not this GDS import mapping;
 source-backed Q3D preparation is a separate GeometryPlan frontend. Q2D has
 its own explicit [cross-section lesson](aedt-q2d.qmd).
 
-Use the complete [CPW scattering tutorial](../tutorials/scattering.qmd) for a
-standalone Driven Modal or Wave Terminal workflow. This page keeps shared
-backend input details. The public specimen and executable notebook sources belong to
+This page keeps the shared backend input details. The public specimen and executable notebook sources belong to
 [OrPen's pinned CPW group](../examples.qmd#public-inputs). Its CPW is 500 µm
 long, with a 10 µm signal, 6 µm gaps, 80 µm grounds and a 500 µm substrate.
 Those are example design inputs, not measured device geometry or universal
 solver settings. The GDS contains three metal rectangles and the substrate
-area. The PDK supplies the layer pairs and material/library facts.
+area. The PDK supplies the layer pairs and material/library facts. These
+lessons keep the Nb conductors of the PDK's CPW Driven sources; its CPW
+Eigenmode and Q3D notebooks at the same revision use a 100 nm Al film instead.
+
+![Source geometry for the public finite-ground CPW: substrate, center signal, two ground strips, and the modal integration-line locations. This is the declared layout, not a solver result.](../assets/cpw-source.svg){#fig-public-cpw-source}
 
 ## Make the shared source and mapping
 
 ```python
 from pathlib import Path
 import gdsfactory as gf
-import orpen_sc_pdk
-from orpen_sc_pdk.tech import LAYER
-from orpen_sc_pdk.materials import get_material_records
+import orcapen_sc_pdk
+from orcapen_sc_pdk.tech import LAYER
+from orcapen_sc_pdk.materials import get_material_records
 from scgsim.aedt import LayerImport, ObjectBinding, PdkMaterial
 
-orpen_sc_pdk.activate()
+orcapen_sc_pdk.activate()
 coupon = gf.Component()
 coupon << gf.components.rectangle(size=(500.0, 10.0), centered=True,
                                   layer=LAYER.D0_TOP_M1_DRAW)
@@ -93,5 +95,5 @@ Keep `source_gds`, `materials`, `layer_imports`, `object_bindings` and
 [ordinary Eigenmode](aedt-eigenmode.qmd), [Driven Modal](aedt-driven-modal.qmd),
 or [Driven Terminal](aedt-driven-terminal.qmd). For Q3D, use its separate
 body-backed input-v3 lesson. This shared lesson authors no component notebook;
-the canonical OrPen notebooks remain the source authority for their consumer
-workflow, with current Q3D migration status stated in that lesson.
+the canonical OrPen notebooks are the source authority for their consumer
+workflow.

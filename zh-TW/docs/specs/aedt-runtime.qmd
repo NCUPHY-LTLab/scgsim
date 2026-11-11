@@ -9,13 +9,7 @@ scgsim-id: "docs/specs/aedt-runtime"
 
 [課程地圖](../examples.qmd)連結所有已實作的 AEDT 系列課程。本頁定義精確規格、失敗規則與歷史讀取器契約。
 
-::: {.callout-note title="已接受的實作／API 範圍與證據"}
-Human 於 2026-10-09 接受 v2 實作／API，候選版本為 `a932a173edb5c56ae14740ff5177190996255bdd`（tree `2745321736e53e2a4fe8d150f2e9d8bd176669db`）。語意狀態為 `ACCEPTED`，不是 `STABILIZED`。六次較早的完整 native-to-Resolve-to-Report 觀察，屬於舊 wheel SHA256 `48963671d4f854c185b8f95f3cd8000960355a7c48550b9ccf19b739b49f8df3` 與 runtime-source v13 內容摘要 `42b48f3d5946fadb1e93e92a1d3eb2a55f72ff00fc41aeccf71c0fded5919fa1`，不能據此認定已接受候選 wheel 有相同執行成果。已接受並固定的 `2.0.0.dev1` 候選 wheel SHA256 `e0ab1117aad4e5578ec98251732d33f6faa2fe7524dd70dcbc44891ed024824d`，另有 Q3D 僅建構／讀回／儲存／釋放觀察與幾何預覽，未執行 `Analyze`、求解或 C/G 矩陣匯出。完整 Xmon Palace Eigenmode Route A、CircularPad Palace Eigenmode Route B，以及 HFSS Eigenmode／已儲存場 EPR／離線損耗流程，仍維持延後。
-:::
-
-下方實體／薄膜建模擴充是獨立的 `CONVERGING` 範圍。除本頁明列新增的必要三維建模選擇外，不修訂已接受的 v2 交易、歷史讀取器或 Q3D body-v3 契約。
-
-目前延續工作以無終端 Q3D C/G、含 EPR／已儲存場分析的 HFSS Eigenmode，以及 HFSS Driven Terminal 為目標，包含已分配的短求解觀察。Q3D AC/RL 與 HFSS Driven Modal 在本次延續工作中延後；既有要求與結果契約仍有效，不會移除。這些是候選範圍界線，不表示原生作業已完成。
+下方實體／薄膜建模擴充除本頁明列的必要三維建模選擇外，不修訂 v2 交易、歷史讀取器或 Q3D body-v3 契約。
 
 ## 共用生命週期 {#one-shared-lifecycle}
 
@@ -30,9 +24,9 @@ PDK geometry and material identities
 -> strict result resolution
 ```
 
-雙版本候選以同一個 PyAEDT 1.3.0 釘選支援 AEDT 2023.2 與 2024.2。它複製所有必要輸入，只在明確執行時開啟新的本機 AEDT Desktop，儲存並釋放其負責的專案；缺少原生證據或結果位元組時，明確失敗。套件以不變的 PyAEDT 釘選允許 Python 3.12 與 3.13；直譯器相容性與 AEDT 原生運算式正確性是分開的主張。
+SCGSim 以同一個 PyAEDT 1.3.0 釘選支援 AEDT 2023.2 與 2024.2。它複製所有必要輸入，只在明確執行時開啟新的本機 AEDT Desktop，儲存並釋放其負責的專案；缺少原生證據或結果位元組時，明確失敗。套件以不變的 PyAEDT 釘選允許 Python 3.12 與 3.13；直譯器相容性與 AEDT 原生運算式正確性是分開的主張。
 
-### 明確選擇 AEDT 版本（CONVERGING） {#aedt-version-selection}
+### 明確選擇 AEDT 版本 {#aedt-version-selection}
 
 每個新的 AEDT 原生準備、執行或已儲存場分析要求，以及每份交接，都必須提供 `aedt_version` 關鍵字，且只能為 `"2023.2"` 或 `"2024.2"`。缺少或不受支援的值，會在匯入 PyAEDT 或建立 Desktop 前失敗。沒有預設值，也不在版本間備援切換。選擇只限於該次交易；兩個版本使用既有交易負責者與執行設定檔，所選 AEDT Desktop 和 SCGSim 在同一節點執行。
 
@@ -59,8 +53,6 @@ Q3D、HFSS Eigenmode 與 HFSS Driven 的公開幾何準備函式，以及 `Eigen
 成功的僅模型交接記錄 `native_preparation_only` 階段。`resolve_prepared_model(run_dir)` 根據已儲存交接與原生準備／讀回證據回傳 `PreparedModel`。此讀取器報告的是已準備模型階段，不是已完成物理結果。`resolve_results()` 仍是完成求解結果的嚴格讀取器，不把僅模型收據當作已完成求解。
 
 ## 已準備原生 HFSS EPR 批次執行 {#prepared-native-hfss-epr-batch}
-
-⚠️ **CONVERGING：**尚未觀察 AEDT 2023.2 原生 BatchSolve 執行。
 
 當純求解程序必須與本機 PyAEDT 交易分開執行時，對已完整準備並釋放的 HFSS EPR 使用此流程。準備資料必須包含綁定的來源與專案、設定與快取讀回，以及原生計算器定義證據。封裝不開啟 Desktop，也不更動已編寫的模型、設定、margin、模式或 EPR 準則。
 
@@ -141,7 +133,7 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 `resolve_results()` 保留真實歷史 V1、V2 完成收據的既有規則。若收據被重新標示為比準備標記更舊的版本，屬不一致降版，會拒絕。V2、V3 解析先驗證精確相容群組、標記、標準準備清單、初始收據綁定及完整實際執行期清單，再套用各版本系列結果檢查。只有 V3 HFSS 完成要求封存的原生 PEC 綁定證據，不會把此要求投射到歷史 V1/V2 收據。這些無簽章的一致性檢查，無法對抗能重寫所有成員的行為者以驗證產物真偽。
 
-`runtime-source.v1` 是固定的十三模組讀取器契約，不是即時列舉規則。V2–V27 清單也已固定。V4 新增 `scgsim/aedt/_presentation.py`；V5 新增 `scgsim/sgb/geometry_plan.py` 與 `scgsim/sgb/__init__.py`。V7 在 V6 基礎新增 `scgsim/_notebook_presentation.py`。V8 在 V7 基礎新增 `scgsim/aedt/_junction_partition.py`。V9 在 V8 基礎新增 `scgsim/aedt/__init__.py`、`scgsim/aedt/_q3d_geometry.py`、`scgsim/sgb/adapter.py` 及 `scgsim/sgb/stack.py`。V10 在 V9 基礎新增共用 `scgsim/aedt/_handoff_cohort.py`；V11 在 V10 基礎新增 `scgsim/aedt/_q3d_bodies.py`。V12 固定保留 V11 的精確路徑成員。V13 保留固定清單、必要宣告模組位元組與摘要，以及可選 `revision_observation`；V1–V17 保留各自固定路徑、欄位意義與版本專屬讀取器規則。V14 保留給暫停的 PR35。V16 在 V15 清單新增 HFSS Eigenmode 原生實作模組。V17 在 V16 基礎新增共用集總模型、HFSS 集總原生模組與 AEDT specs 套件初始化模組。V18 移除原 EPR 私有路徑 `epr/junction_partition.py`，納入 `preparation/junction_partition.py`、移動後的 AEDT 資料／RLC／終端輔助函式、幾何／EPR／支撐規格、建模／平面準備、HFSS 幾何執行期、中立幾何表示模組，以及含多邊形操作葉節點的共用來源 Ground 建構輔助函式。V19 新增僅模型的已準備模型讀取器；V20–V22 保留各自宣告的歷史清單。V23 是 V24 的固定基礎清單。V24 在 V23 清單新增 `scgsim/aedt/runtime/batch_protocol.py`、`scgsim/aedt/runtime/batch_runner.py` 與 `scgsim/aedt/epr/evidence.py`；V25 新增矩陣執行控制實作。V26 凍結 167 條路徑；V27 凍結 283 條路徑，包含 118 個 AEDT 模組、兩個 AEDT 視覺化載入器、既有的非 AEDT 路徑，以及 AST 匯入與套件初始化檔閉合結果。V28 是目前版本，共 284 條路徑；相較 V27 新增 `scgsim/geometry/primitives/topology_validation.py`。V23–V28 均使用上述五個欄位，沒有輔助雜湊對照。各版本精確路徑清單是其宣告實作清單，綁定已宣告檔案而非認證完整傳遞相依性。例如固定 V12 清單不另外雜湊 `scgsim/sgb/engine_gates.py`；這些清單也不改變 V3 收據結構。純初始收據編解碼器負責精確 V1/V2/V3 成員順序、兩個空白的 JSON 縮排與結尾換行。V1 省略準備來源資訊；V2、V3 將它放在 `source` 與 `outputs` 之間。讀取歷史證據使用已宣告固定結構，不把歷史雜湊與已安裝套件比較。
+`runtime-source.v1` 是固定的十三模組讀取器契約，不是即時列舉規則。V2–V27 清單也已固定。V4 新增 `scgsim/aedt/_presentation.py`；V5 新增 `scgsim/sgb/geometry_plan.py` 與 `scgsim/sgb/__init__.py`。V7 在 V6 基礎新增 `scgsim/_notebook_presentation.py`。V8 在 V7 基礎新增 `scgsim/aedt/_junction_partition.py`。V9 在 V8 基礎新增 `scgsim/aedt/__init__.py`、`scgsim/aedt/_q3d_geometry.py`、`scgsim/sgb/adapter.py` 及 `scgsim/sgb/stack.py`。V10 在 V9 基礎新增共用 `scgsim/aedt/_handoff_cohort.py`；V11 在 V10 基礎新增 `scgsim/aedt/_q3d_bodies.py`。V12 固定保留 V11 的精確路徑成員。V13 保留固定清單、必要宣告模組位元組與摘要，以及可選 `revision_observation`；V1–V17 保留各自固定路徑、欄位意義與版本專屬讀取器規則。V14 未使用，SCGSim 沒有 V14 清單。V16 在 V15 清單新增 HFSS Eigenmode 原生實作模組。V17 在 V16 基礎新增共用集總模型、HFSS 集總原生模組與 AEDT specs 套件初始化模組。V18 移除原 EPR 私有路徑 `epr/junction_partition.py`，納入 `preparation/junction_partition.py`、移動後的 AEDT 資料／RLC／終端輔助函式、幾何／EPR／支撐規格、建模／平面準備、HFSS 幾何執行期、中立幾何表示模組，以及含多邊形操作葉節點的共用來源 Ground 建構輔助函式。V19 新增僅模型的已準備模型讀取器；V20–V22 保留各自宣告的歷史清單。V23 是 V24 的固定基礎清單。V24 在 V23 清單新增 `scgsim/aedt/runtime/batch_protocol.py`、`scgsim/aedt/runtime/batch_runner.py` 與 `scgsim/aedt/epr/evidence.py`；V25 新增矩陣執行控制實作。V26 凍結 167 條路徑；V27 凍結 283 條路徑，包含 118 個 AEDT 模組、兩個 AEDT 視覺化載入器、既有的非 AEDT 路徑，以及 AST 匯入與套件初始化檔閉合結果。V28 是目前版本，共 284 條路徑；相較 V27 新增 `scgsim/geometry/primitives/topology_validation.py`。V23–V28 均使用上述五個欄位，沒有輔助雜湊對照。各版本精確路徑清單是其宣告實作清單，綁定已宣告檔案而非認證完整傳遞相依性。例如固定 V12 清單不另外雜湊 `scgsim/sgb/engine_gates.py`；這些清單也不改變 V3 收據結構。純初始收據編解碼器負責精確 V1/V2/V3 成員順序、兩個空白的 JSON 縮排與結尾換行。V1 省略準備來源資訊；V2、V3 將它放在 `source` 與 `outputs` 之間。讀取歷史證據使用已宣告固定結構，不把歷史雜湊與已安裝套件比較。
 
 執行在收據綁定的失敗交易內、匯入 PyAEDT 或建立 Desktop 前，計算必要執行期來源資訊。目前 V28 可將 `revision_observation` 記為無法提供；單憑此點不會使逐位元組身份失敗或阻止執行。宣告模組位元組、摘要、結構或相容群組缺少／損壞，仍會在不啟動 Desktop 的情況下產生失敗 V3 收據，而不是逸出收據收尾。V1–V17 保留各版本歷史驗證規則，包含已宣告的修訂要求。
 
@@ -161,7 +153,7 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 ### 共用集總支撐與終端 RLC {#hfss-shared-lumped-support}
 
-此 HFSS 集總元件範圍為 `CONVERGING`，新增一般電路元件，同時保留既有 Wave Terminal 與 Josephson 接面契約。
+此 HFSS 集總元件支援新增一般電路元件，同時保留既有 Wave Terminal 與 Josephson 接面契約。
 
 `LumpedSupport` 與 `set_lumped_supports()` 在呼叫者模型快照中宣告有來源依據的支撐幾何。本體優先流程使用 `HfssDrivenGeometrySpec`，設定 `mode="terminal"` 與結構 `hfss-driven-geometry.v1`，透過 `prepare_hfss_driven_from_geometry()` 準備。`body_first_driven_terminal` 是準備流程名稱，不是規格模式。幾何要求不含 RLC 欄位。既有 `TerminalPort.signal_entity_ids` 在舊酬載中仍可省略；本體優先路徑則必填，由前端明確宣告 Signal 與參考。舊 GDS 參考綁定不變。
 
@@ -192,7 +184,7 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 ## 實體與薄膜三維建模 {#aedt-solid-thin-film}
 
-共用物理來源／設定檔範圍為 **CONVERGING**。每個新的 Q3D 或 HFSS 三維要求，都明確選擇 `modeling="solid"` 或 `"thin_film"`；不推定模式，也沒有公開 A/B/C 執行別名。沿用目前系列結構識別字。新要求在來源宣告旁攜帶帶標記的 `physical_representation` 計畫；平面來源將同一份帶標記解讀存於標準 `source["modeling"]` 位置。中立 ABI 與明確 Palace 設定檔介面見[共用物理表示契約](physical-representation.qmd)；Q2D 仍為獨立剖面契約。
+每個新的 Q3D 或 HFSS 三維要求，都明確選擇 `modeling="solid"` 或 `"thin_film"`；不推定模式，也沒有公開 A/B/C 執行別名。沿用目前系列結構識別字。新要求在來源宣告旁攜帶帶標記的 `physical_representation` 計畫；平面來源將同一份帶標記解讀存於標準 `source["modeling"]` 位置。中立 ABI 與明確 Palace 設定檔介面見[共用物理表示契約](physical-representation.qmd)；Q2D 仍為獨立剖面契約。
 
 所選 PDK／來源宣告 `PhysicalLayerDeclaration`，包含物理身份、來源 level／選取器、來源區間、材料身份、`feature_kind`、物理尺寸與編寫的接觸事實。特徵種類為 `stack_film`、`local_film`、`finite_volume`。來源承載欄位為 `physical_layer`；新的 `aedt_modeling` 中繼資料與角色推導路徑分類已退役。不從名稱、Net、材料、大小、鄰近或相同 Z 值推定分類。同一物理層身份在多邊形與放置實例間共用，沒有另外的 stack 識別字；輸入使用唯一明確編寫的 LayerStack 組裝座標系。
 
@@ -218,7 +210,7 @@ Q3D AC/RL 保留要求的 Signal Net 與 ConstantVoltage source/sink 語意。�
 
 ### HFSS Driven 由呼叫者決定掃描點數 {#hfss-driven-sweep-count}
 
-Human 已接受的 V1 契約提供此行為。`FrequencySweepSpec(start_ghz, stop_ghz, points=20000)` 保留既有公開 `points` 欄位及預設值，由呼叫者選擇研究取樣數。精確整數的數值輸入（包含 `20000.0`）可接受，並無損轉為原生／計數整數；非整數輸入會拒絕，不截斷。此契約不新增科學最小值、最大值或足夠取樣範圍；原生掃描／定義域失敗保留原意。
+`FrequencySweepSpec(start_ghz, stop_ghz, points=20000)` 保留既有公開 `points` 欄位及預設值，由呼叫者選擇研究取樣數。精確整數的數值輸入（包含 `20000.0`）可接受，並無損轉為原生／計數整數；非整數輸入會拒絕，不截斷。此契約不新增科學最小值、最大值或足夠取樣範圍；原生掃描／定義域失敗保留原意。
 
 綁定點數同時約束原生掃描設定、匯出與回傳資料讀回／讀取器筆數。回傳頻率及有順序的網路資料必須屬於該要求，並保留既有端點、單位、埠順序、來源／讀回及雜湊綁定。對其他要求點數，不存在隱藏的 20,000 點匯出或讀取器假設；不重新取樣、內插或備援至其他掃描。
 
@@ -226,7 +218,7 @@ Human 已接受的 V1 契約提供此行為。`FrequencySweepSpec(start_ghz, sto
 
 ### HFSS 收斂觀察 {#hfss-convergence-observations}
 
-此已接受觀察契約只涵蓋 HFSS Driven 與 Eigenmode。原生收斂狀態、呼叫者編寫的準則及變更、回報 delta、最終 pass 與可用原生記錄，都保持為觀察。Eigenmode 的 `Current Consecutive Passes` 及原生收斂歷史，仍保留在雜湊綁定的 `adaptive-convergence.prop` 匯出。解析器讀取並檢查此計數結構；既有正規化結果／報告不揭露該計數，也不重現完整原始歷史。SCGSim 只移除下列三項額外資格拒絕：
+此觀察契約只涵蓋 HFSS Driven 與 Eigenmode。原生收斂狀態、呼叫者編寫的準則及變更、回報 delta、最終 pass 與可用原生記錄，都保持為觀察。Eigenmode 的 `Current Consecutive Passes` 及原生收斂歷史，仍保留在雜湊綁定的 `adaptive-convergence.prop` 匯出。解析器讀取並檢查此計數結構；既有正規化結果／報告不揭露該計數，也不重現完整原始歷史。SCGSim 只移除下列三項額外資格拒絕：
 
 - 原生判定已收斂時，不會僅因最終回報 delta 超過呼叫者目標而拒絕：Driven 為最大 delta-S 幅值（比率），Eigenmode 為頻率變化（百分比）。
 - 原生判定未收斂時，不會僅因最終 pass 不等於設定最大值而拒絕。
@@ -238,14 +230,14 @@ Human 已接受的 V1 契約提供此行為。`FrequencySweepSpec(start_ghz, sto
 
 ### Q2D／Q3D 收斂觀察 {#q2d-q3d-convergence-observations}
 
-已接受的 Q2D／Q3D 契約，將原生觀察方向套用到下列兩項額外資格，和先前僅 HFSS 的範圍分開：
+Q2D／Q3D 契約將原生觀察方向套用到下列兩項額外資格，和先前僅 HFSS 的範圍分開：
 
 - 原生判定已收斂時，不會僅因最終回報 delta 超過設定目標而拒絕。
 - 原生判定未收斂時，不會僅因完成 pass 數不等於設定最大值而拒絕。
 
 原生狀態、目標、最終 delta、完成 pass 與來源，仍記為觀察。針對預定研究解讀矩陣量時，應保留呼叫者實際控制及變更。原生分類不獨立認證準則或研究充分性。僅有 pass 數不能辨識 OOM、walltime 或成功提前停止，未知原因仍維持未知。
 
-原生 analyze／save／export 失敗及缺少／損壞產物，保留失敗意義，既有 FAILED 收據不重新分類。必要指標／控制格式、設定控制身份、原生／來源身份及產物綁定仍會檢查。已接受的 Q2D 單檔主要矩陣匯出、有限 C/G/L/R 資料、單位、頻率、導體順序與歷史讀取器不變。此行為不改 API／結構或數值精度，也不建立研究門檻或科學認證。
+原生 analyze／save／export 失敗及缺少／損壞產物，保留失敗意義，既有 FAILED 收據不重新分類。必要指標／控制格式、設定控制身份、原生／來源身份及產物綁定仍會檢查。Q2D 單檔主要矩陣匯出、有限 C/G/L/R 資料、單位、頻率、導體順序與歷史讀取器不變。此行為不改 API／結構或數值精度，也不建立研究門檻或科學認證。
 
 ### HFSS Eigenmode 原生頻率匯出 {#hfss-eigenmode-native-frequency-export}
 
@@ -271,13 +263,13 @@ Human 已接受的 V1 契約提供此行為。`FrequencySweepSpec(start_ghz, sto
 
 原 `results/q2d/cg_matrix.csv`、`results/q2d/rl_matrix.csv` 與正規化 `results/q2d/matrices.csv` 已被取代，不出現在新執行清單，SCGSim 不產生相容副本。`resolve_results()` 綁定唯一原生產物，`result.primary_csv` 指向該檔；`result.physics_results()` 揭露解析後主要 C/G/L/R 列，不建立第二份產物。
 
-解析要求已連線 AEDT／PyAEDT 版本、宣告設定與 `LastAdaptive` 解、頻率、每單位長度單位、導體順序及每個主要矩陣值，都符合封存執行且數值有限，否則明確失敗。此 Q2D 契約是已接受 V1 行為；較廣的 AEDT 實作介面也為 `STABILIZED`，穩定化與發布交付另外追蹤。
+解析要求已連線 AEDT／PyAEDT 版本、宣告設定與 `LastAdaptive` 解、頻率、每單位長度單位、導體順序及每個主要矩陣值，都符合封存執行且數值有限，否則明確失敗。
 
 ## Q3D 擷取與 Region 接地契約 {#q3d-extraction-and-region-ground-candidate}
 
 目前 Q3D 要求只使用 `scgsim.aedt.q3d.v3`。`Q3dSpec` 的 `bodies` 含明確 `Q3dBodySpec`，沒有 GDS 匯入或逐片綁定欄位。每個本體宣告 XY `exterior_um` 外環、零個以上 `holes_um`、`z_min_um`／`z_max_um`、`material_id`、`physical_role` 與最終 `net_id`。無來源呼叫者直接編寫這些正規化本體事實。可選來源身份欄位，只在有來源準備提供時存在；SCGSim 不替無來源本體推定。下述其餘專案、材料、Net、執行控制、Region 及擷取控制保持既有意義。
 
-`Q3dNetSpec.object_names` 指向本體 ID，因此一個 Net 可含多個獨立導體本體，每個導體本體恰屬一個最終 Net。基板本體使用介電材料且無 Net。C/G 可不提供 Signal 終端；AC/RL 必須為每個 Signal Net 提供完整 source/sink 物件與側別對。此 body-v3 要求與轉換行為屬於已接受 v2 實作／API；原生觀察只限下方僅建構操作，不宣稱已接受候選版本完成 C/G 求解或矩陣結果。
+`Q3dNetSpec.object_names` 指向本體 ID，因此一個 Net 可含多個獨立導體本體，每個導體本體恰屬一個最終 Net。基板本體使用介電材料且無 Net。C/G 可不提供 Signal 終端；AC/RL 必須為每個 Signal Net 提供完整 source/sink 物件與側別對。此 body-v3 要求與轉換行為屬於 v2 實作／API。
 
 `Q3dSpec.solve_ac_rl` 是嚴格布林值，預設 `true`，因此保留既有電容／電導加 AC 電阻／電感聯合擷取，封存並解析 `results/q3d/c_matrix.csv`、`results/q3d/ac_rl_matrix.csv` 及正規化 `results/q3d/matrices.csv`。`solve_ac_rl=false` 時，只建立電容／電導設定，並封存／解析唯一原生 `results/q3d/c_matrix.csv`；不產生 AC-RL 設定欄位、匯出、收斂證據或正規化相容產物。
 
@@ -291,7 +283,7 @@ Region 接地時，SCGSim 從名為 `Region` 的 AEDT 物件六個原生面，�
 
 模型片放在 Region 面上後，AEDT Region 歷史會再次擴張。因此 SCGSim 先保存要求擴張後的原生面，在該處建立六張片，再以零額外偏移重建最終原生 Region。最終 Region 具有要求擴張邊界；收據明確記錄要求 padding 與零偏移收尾。
 
-先前失敗的 `_01` 專案保留為不可變診斷證據。沒有相容備援、物理橋或聯集路徑。此替代 Region-ground 契約為 `STABILIZED`，不重新標記歷史診斷證據。
+沒有相容備援、物理橋或聯集路徑。
 
 ### Q3D 本體輸入 v3 {#q3d-body-input-v3}
 
@@ -307,17 +299,17 @@ run_control: MatrixRunControl | None = None,
 region_padding_um: Sequence[float], resources: AedtResources | None = None)
 -> HandoffPlan`。它接受不可變 GeometryPlan 快照，回傳僅供 C/G 的可攜式 v3 交接（`solve_ac_rl=False`）。快照負責來源幾何與最終 Net 成員。`net_types` 必須精確涵蓋導體 Net ID；`physical_ground_nets` 明確指定其中一個子集，與要求的原生型別獨立。材料、執行控制、Region padding 及可選資源仍由呼叫者提供。前端不推定連通性，也不改寫 Net 成員；只依 `terminal_pairs` 中該 Net 的項目設定其 source 與 sink 終端。C/G Signal Net 可沒有終端；AC/RL 則每個 Signal Net 都需完整 source/sink 對。不默默線性化來源曲線，既有 AEDT 曲線意圖排除仍有效。
 
-有來源要求的 `geometry_source` 使用 `scgsim.aedt.q3d-geometry-source.v3`，透過路徑與 SHA-256 綁定標準 GDS、獨立堆疊與來源追蹤，並記錄宣告本體及其正規化來源關係。來源附件移入可攜式交接。已接受的有來源表示，將完整外環與內環保留為單一本體足跡；原生建構使用已覆蓋外片、扣除孔區域，再沿 +Z 掃出宣告區間。下方僅建構觀察包含該案例的原生本體、孔洞與 Z 讀回及幾何預覽，不是一般拓樸主張或成功求解。此 input-v3 契約不含三角化、GDS 逐片匯入、Net Unite、座標修復或一般特徵尺寸政策。來源與轉換後幾何的寬度／細長區 DRC 延後至套件外，不阻擋本體修正；不宣稱 DRC 覆蓋或版圖驗證，也不套用通用最小特徵規則。
+有來源要求的 `geometry_source` 使用 `scgsim.aedt.q3d-geometry-source.v3`，透過路徑與 SHA-256 綁定標準 GDS、獨立堆疊與來源追蹤，並記錄宣告本體及其正規化來源關係。來源附件移入可攜式交接。有來源表示將完整外環與內環保留為單一本體足跡；原生建構使用已覆蓋外片、扣除孔區域，再沿 +Z 掃出宣告區間。此 input-v3 契約不含三角化、GDS 逐片匯入、Net Unite、座標修復或一般特徵尺寸政策。AEDT 路徑不檢查來源或轉換後幾何的寬度與細長區，也不套用通用最小特徵規則。
 
-有來源 Q3D 直接建構每個正規化完整本體，不做 GDS 匯入或物件重新命名。接著在材料／Net 指派、設定或求解前，讀取完整原生原始物件清單，確認必要本體身份歸屬。單一本體建構呼叫成功，不代表所有必要本體都已建立。缺少或不明確必要本體、額外未歸屬物件，都在本體清單／讀回階段失敗。原始例外在收據 `error` 中保持主要錯誤；階段細節保留本體歸屬、原始清單、可讀時的原生 ID，以及可取得的原生警告／錯誤脈絡。診斷讀取失敗時，該脈絡為無法提供，不能取代主要失敗。只有警告不會拒絕完整清單。來源契約定義本體歸屬與失敗行為；下方範圍內僅建構觀察，確認所測候選操作的讀回，不是求解完成或矩陣回傳。
+有來源 Q3D 直接建構每個正規化完整本體，不做 GDS 匯入或物件重新命名。接著在材料／Net 指派、設定或求解前，讀取完整原生原始物件清單，確認必要本體身份歸屬。單一本體建構呼叫成功，不代表所有必要本體都已建立。缺少或不明確必要本體、額外未歸屬物件，都在本體清單／讀回階段失敗。原始例外在收據 `error` 中保持主要錯誤；階段細節保留本體歸屬、原始清單、可讀時的原生 ID，以及可取得的原生警告／錯誤脈絡。診斷讀取失敗時，該脈絡為無法提供，不能取代主要失敗。只有警告不會拒絕完整清單。來源契約定義本體歸屬與失敗行為。
 
 #### Q3D 原生僅建構執行 {#q3d-native-build-only-execution}
 
-Q3D v3 透過既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 入口，提供明確啟用的原生僅建構操作。它沿用求解路徑的本體建構、材料／Net 指派、Region 與設定建立／讀回、專案儲存及所負責 Desktop 釋放，不呼叫原生 `Analyze`、建立求解器網格、求解，或匯出矩陣／收斂資料。收據記錄 `status="native_preparation_only"`、`solver_invoked=false` 及 `resources.status="not_used_prepare_only"`，唯一原生輸出是已儲存 AEDT 專案。此次執行會消耗一次性交接，後續求解需重新準備交接。嚴格 `resolve_results` 仍要求已完成求解結果，不把僅準備收據解析成結果。在已接受固定候選 wheel 上，觀察到的僅建構作業讀回本體／孔洞幾何、Z 區間、材料、全 Signal Net 指派、Region 與設定，並儲存專案、釋放所負責 Desktop，另有俯視／等角幾何預覽。未呼叫 `Analyze`、求解或匯出 C/G 矩陣。一般 Q3D `--execute` 行為不變。
+Q3D v3 透過既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 入口，提供明確啟用的原生僅建構操作。它沿用求解路徑的本體建構、材料／Net 指派、Region 與設定建立／讀回、專案儲存及所負責 Desktop 釋放，不呼叫原生 `Analyze`、建立求解器網格、求解，或匯出矩陣／收斂資料。收據記錄 `status="native_preparation_only"`、`solver_invoked=false` 及 `resources.status="not_used_prepare_only"`，唯一原生輸出是已儲存 AEDT 專案。此次執行會消耗一次性交接，後續求解需重新準備交接。嚴格 `resolve_results` 仍要求已完成求解結果，不把僅準備收據解析成結果。一般 Q3D `--execute` 行為不變。
 
 v3 交接以既有順序保留五條一般允許路徑。有來源相容群組追加 `geometry/source.gds`、`metadata/geometry_stack.json` 及 `metadata/geometry_trace.json`；清單 `members` 在 `allowed_paths` 中略過自身路徑，其他檔案的順序、雜湊與宣告檢查不變。因此無來源交接有五條允許路徑、四筆成員；有來源 v3 則有八條允許路徑、七筆成員。
 
-#### Q3D 使用者要求停止／中止並儲存（CONVERGING）
+#### Q3D 使用者要求停止／中止並儲存
 
 此功能提供兩種互斥操作：`scgsim.aedt.request_q3d_stop_and_save(handoff)` 要求 Clean Stop，讓目前通過完成；`scgsim.aedt.request_q3d_abort_and_save(handoff)` 則要求中止目前工作。目前收據使用帶有明確模式的單一 `termination` 欄位；不新增僅供 Clean Stop 的 `normal_stop` 別名。既有封存收據與讀取規則維持不變，不使用轉換介面。直接 CLI 操作如下：
 
@@ -336,11 +328,11 @@ Analyze 結束後，recorder 關閉新請求並觀察一次原生 `odesktop.AreT
 
 原生已停止且控制 ledger 狀態明確時，recorder 會先嘗試本次交易的明確 Save；準備階段的存檔不符合此要求。接著獨立嘗試並記錄所要求且可用的已完成結果矩陣與原生收斂匯出。即使匯出或讀取解析失敗，實際產生的原始原生檔案仍會保留，並如實記錄可用性與錯誤。選用輸出不代表遭中斷的通過已完成，也不保證可復原或完整。只有明確 Save 成功才會關閉／釋出 Desktop。Save 失敗時收據為 `FAILED`；recorder 會以 `release.ok=false` 與原因 `save_failed` 非關閉 detach，保留專案、Desktop、可取回產物及擁有權／錯誤證據，不產生執行後封存，也不自動清理。成功釋出後才能封存實際釋出的識別資訊。
 
-`normal_stop_saved` 與 `abort_saved` 必須符合相符的已提交意圖、RPC 回傳、Analyze 成功、已確認原生停止、明確 Save 與 Desktop 釋出成功，以及執行後封存。它們僅表示停止／中止並儲存流程完成，不代表物理求解完成，也不證明請求造成終止；Analyze 也可能自然結束。Analyze 失敗或例外仍是主要錯誤，因果關係未知；控制模式／意圖、ACF 還原、RPC、Save／匯出及釋出錯誤分別保留。選用匯出錯誤不決定停止／中止流程狀態，也不會使流程成為已完成求解結果。嚴格的 `resolve_results()` 與 Report 行為維持不變，不新增部分結果讀取器或 Report API。不進行輪詢、等待、再次 Stop／Abort、重試或自動清理。原生 Stop／Abort／Save 操作尚未觀察。此控制僅適用於此執行階段新登記的執行，不回溯套用於舊執行。沒有請求意圖的一般 Q3D、HFSS、Q2D、Eigenmode EPR 與非 Linux 流程維持不變；Eigenmode EPR 不自動部分儲存的規則也維持不變。
+`normal_stop_saved` 與 `abort_saved` 必須符合相符的已提交意圖、RPC 回傳、Analyze 成功、已確認原生停止、明確 Save 與 Desktop 釋出成功，以及執行後封存。它們僅表示停止／中止並儲存流程完成，不代表物理求解完成，也不證明請求造成終止；Analyze 也可能自然結束。Analyze 失敗或例外仍是主要錯誤，因果關係未知；控制模式／意圖、ACF 還原、RPC、Save／匯出及釋出錯誤分別保留。選用匯出錯誤不決定停止／中止流程狀態，也不會使流程成為已完成求解結果。嚴格的 `resolve_results()` 與 Report 行為維持不變，不新增部分結果讀取器或 Report API。不進行輪詢、等待、再次 Stop／Abort、重試或自動清理。此控制僅適用於此執行階段新登記的執行，不回溯套用於舊執行。沒有請求意圖的一般 Q3D、HFSS、Q2D、Eigenmode EPR 與非 Linux 流程維持不變；Eigenmode EPR 不自動部分儲存的規則也維持不變。
 
 ## Eigenmode 已儲存場與 Surface-EPR 方向 {#eigenmode-saved-fields-and-surface-epr-direction}
 
-已接受的 Eigenmode Surface-EPR 路徑是新增生命週期，不重新解釋已完成 V1/V2/V3 收據。它從共用來源多邊形、孔洞、材料／區域事實、路徑設定檔與宣告接面意圖開始，再另外記錄這些事實到原生本體、片、面、材料側與計算器選取的 AEDT 綁定。原生相鄰關係是幾何觀察證據，不是來源接觸意圖的證明。
+Eigenmode Surface-EPR 路徑是新增生命週期，不重新解釋已完成 V1/V2/V3 收據。它從共用來源多邊形、孔洞、材料／區域事實、路徑設定檔與宣告接面意圖開始，再另外記錄這些事實到原生本體、片、面、材料側與計算器選取的 AEDT 綁定。原生相鄰關係是幾何觀察證據，不是來源接觸意圖的證明。
 
 原生建構目標為平面 Solid 或 Thin Film 建模，採實數等向性介電材料與 PEC 導體。允許覆蓋多邊形片、局部扣孔、掃掠／加厚及明確盒體，不允許全面幾何聯集或扣除。曲線或傾斜幾何、異向性或色散材料、開放輻射模型、Driven EPR 及多片接面仍排除。
 
@@ -506,7 +498,7 @@ flowchart TB
 
 `analyze_epr()` 是唯一可執行原生已儲存場分析的公開入口，進入相同 `run.py` 交易負責者，再委派私有 Eigenmode 分析路徑；離線解析器不匯入 PyAEDT 或負責 Desktop。`resolve_saved_solution()` 驗證不可變專案及完整結果資料夾清單。`resolve_epr_result()` 只做結構驗證並載入部分歷史或最終已儲存場 JSON，不補缺值；這不是產物認證。獨立 EPR 資料保留記錄的來源身份，以及存在時已儲存解的內容雜湊，但這些值不認證獨立 JSON。
 
-### 儲存場分析的明確原生場選擇器（CONVERGING） {#explicit-native-field-selectors-for-saved-analysis-converging}
+### 儲存場分析的明確原生場選擇器 {#explicit-native-field-selectors-for-saved-analysis}
 
 `analyze_epr()` 接受選用關鍵字 `surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None`。鍵必須是 EPR 請求中已選取的 `contribution_id`。`"surface"` 要求原生 `EnterSurface` 選擇器，`"adjacent"` 則要求 `EnterAdjacentSurface`。指定選擇會套用至該貢獻的每個綁定、元件、評估與邊距，不會篩選或合併請求的面片或邊距。未指定的貢獻保留既有依法向量推導選擇器的行為；未知或未選取的貢獻 ID，以及不支援的值，皆明確失敗。
 

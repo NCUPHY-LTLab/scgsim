@@ -112,7 +112,7 @@ in the [native Q reference](specs/palace-eigenmode.qmd#native-eigenmode-q).
 
 ## Explore a result
 
-Start with the [resonance/EPR tutorial](tutorials/resonance-epr.qmd), then use
+Start with a resonance/EPR notebook from [Choose a simulation](examples.qmd#getting-started), then use
 [offline EPR](course/offline-epr.qmd) to inspect recorded modes and revise loss
 assumptions. The [examples](examples.qmd) connect the physical model to its
 backend workflow.

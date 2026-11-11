@@ -6,8 +6,8 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/working-model"
 ---
 
-Start after one complete [capacitance](../tutorials/capacitance.qmd) or
-[resonance/EPR](../tutorials/resonance-epr.qmd) example. The next useful step is
+Start after one complete capacitance or resonance/EPR notebook from
+[Choose a simulation](../examples.qmd#getting-started). The next useful step is
 to change one part of the model and understand which inputs and results that
 change affects. Save the original model and result before preparing a new run.
 

@@ -7,19 +7,28 @@ scgsim-id: "docs/examples"
 ---
 
 SCGSim prepares a geometry and solver request, then resolves the returned results with
-their units and model identity. Choose a notebook by the quantity you need; its backend
-tabs carry the procedure from source inputs through result reading. For API parameter
-lookup and source-version pairing, use the [knowledge guide](knowledge-guide.qmd).
+their units and model identity. The complete component-simulation notebooks belong to
+the OrcaPen SC PDK, which owns their components, settings and SCGSim environment.
+Choose one by the quantity you need. For API parameter lookup and source-version
+pairing, use the [knowledge guide](knowledge-guide.qmd).
 
 ## Choose a simulation {#getting-started}
 
-| Goal | Notebook | Result |
-|---|---|---|
-| Capacitance | [Palace Electrostatic or AEDT Q3D](tutorials/capacitance.qmd) | Labeled conductor capacitance matrix |
-| Resonant modes | [Palace or HFSS Eigenmode](tutorials/resonance.qmd) | Mode frequencies and returned mode report |
-| Energy participation | [Palace or HFSS EPR](tutorials/resonance-epr.qmd) | Surface, bulk and branch participation by mode |
-| Driven S-parameters | [HFSS Modal or Terminal](tutorials/scattering.qmd) | Two-port response with the selected port family |
-| Transmission-line parameters | [AEDT Q2D](tutorials/transmission-line.qmd) | Per-length C, G, L and R matrices |
+Each row links the PDK notebook source at revision `49e539f`, the revision the
+[home page](../index.qmd#install) installs.
+
+| What you get | PDK notebook |
+|---|---|
+| A labelled conductor capacitance matrix for the SimplePad pad and Ground | [Palace Electrostatic](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd) · [AEDT Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
+| SimplePad mode frequencies, and the surface, bulk and branch energy participation of each mode | [Palace Eigenmode and EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd) · [HFSS Eigenmode and surface EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
+| Per-unit-length C, G, L and R matrices of a finite-ground CPW cross-section | [AEDT Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.qmd) |
+
+The PDK has no current notebook for the two-port S-parameters of the
+finite-ground CPW; its HFSS Driven Terminal notebooks use the
+[17-bridge CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge),
+and the [Driven Modal](course/aedt-driven-modal.qmd) and
+[Driven Terminal](course/aedt-driven-terminal.qmd) lessons prepare the
+finite-ground CPW request.
 
 Before you simulate a layout of your own, read the [supported scope](supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.
 
@@ -29,13 +38,14 @@ Start with [installation](course/installation.qmd), then select explicit geometr
 
 ## Explore larger examples {#public-inputs}
 
-The deeper Xmon and CPW source notebooks are pinned to public OrPen SC PDK revision [`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9), which declares OrPen `0.1.0` and GDSFactory 9.48.x. Use the source revision named by each example.
+The deeper Xmon and CPW source notebooks are pinned to public OrPen SC PDK revision [`49e539fd59f3224ecda965d777c7ec3aadcc3b85`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85), the revision the [home page](../index.qmd#install) installs. It declares `orcapen-sc-pdk` `1.0.0`, imported as `orcapen_sc_pdk`, and GDSFactory 9.48.x. At this revision the PDK keeps its SCGSim examples under `SCGSimExamples/`; the Xmon sources and the CPW Driven Terminal source are in its `ComponentSimulation/` group. Use the source revision named by each example.
 
 | Public notebook group | Use |
 |---|---|
-| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic/Eigenmode and source-first Xmon studies |
-| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode/Driven and historical Q3D GDS-input source |
-| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
+| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic/Eigenmode and source-first Xmon studies |
+| [SCGSimExamples/ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode, Q3D and Palace Eigenmode on the CPW coupon; its Driven Modal page records the settings only |
+| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Driven Terminal source |
+| [SCGSimExamples/CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
 
 The source dimensions and presets are example model inputs. For current SCGSim requests, follow the relevant tutorial and API references.
 

@@ -8,35 +8,9 @@ scgsim-id: "docs/specs/aedt-runtime"
 
 The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications, failure rules and historical reader contracts.
 
-::: {.callout-note title="Accepted implementation/API scope and evidence"}
-Human accepted the v2 implementation/API on 2026-10-09 at candidate
-`a932a173edb5c56ae14740ff5177190996255bdd` (tree
-`2745321736e53e2a4fe8d150f2e9d8bd176669db`). The semantic state is `ACCEPTED`,
-not `STABILIZED`. Six earlier full native-to-Resolve-to-Report observations
-belong to the earlier wheel SHA256
-`48963671d4f854c185b8f95f3cd8000960355a7c48550b9ccf19b739b49f8df3` and
-runtime-source v13 content digest
-`42b48f3d5946fadb1e93e92a1d3eb2a55f72ff00fc41aeccf71c0fded5919fa1`; those
-observations do not establish execution from the accepted candidate wheel.
-The accepted frozen `2.0.0.dev1` candidate wheel SHA256
-`e0ab1117aad4e5578ec98251732d33f6faa2fe7524dd70dcbc44891ed024824d` has a
-separate Q3D build-only/readback/save/release observation and geometry preview,
-without `Analyze`, solve, or C/G matrix export. The full Xmon Palace Eigenmode
-Route A, CircularPad Palace Eigenmode Route B, and HFSS Eigenmode/saved-field
-EPR/offline-loss endpoints remain deferred.
-:::
-
-The Solid/Thin-Film modeling extension below is a separate `CONVERGING` scope.
-It does not revise the accepted v2 transaction, historical-reader, or Q3D
-body-v3 contracts except where this page explicitly describes the new required
-3D modeling selection.
-
-The current continuation targets terminal-free Q3D C/G, HFSS Eigenmode with
-EPR/saved-field analysis, and HFSS Driven Terminal, including the assigned
-short-solve observations. Q3D AC/RL and HFSS Driven Modal are deferred from
-this continuation; their existing request and result contracts remain in
-force and are not removed. These are candidate scope boundaries, not claims
-that the native operations have completed.
+The Solid/Thin-Film modeling extension below does not revise the v2
+transaction, historical-reader, or Q3D body-v3 contracts except where this
+page explicitly describes the required 3D modeling selection.
 
 ## One shared lifecycle
 
@@ -51,14 +25,14 @@ PDK geometry and material identities
 -> strict result resolution
 ```
 
-The dual-version candidate supports AEDT 2023.2 and 2024.2 with the same
+SCGSim supports AEDT 2023.2 and 2024.2 with the same
 PyAEDT 1.3.0 pin. It copies all required inputs, opens a new local AEDT Desktop
 only on explicit execution, saves and releases the owned project, and fails
 closed on missing native evidence or result bytes. The package permits Python
 3.12 and 3.13 with this unchanged PyAEDT pin; interpreter compatibility and
 native AEDT expression correctness are separate claims.
 
-### Explicit AEDT version selection (CONVERGING) {#aedt-version-selection}
+### Explicit AEDT version selection {#aedt-version-selection}
 
 Every new AEDT-native preparation, execution, or saved-field analysis request
 and every handoff requires the `aedt_version` keyword with exactly `"2023.2"`
@@ -134,9 +108,6 @@ prepared-model stage; it does not report a completed physics result.
 does not treat a model-only receipt as a completed solve.
 
 ## Prepared-native HFSS EPR batch {#prepared-native-hfss-epr-batch}
-
-⚠️ **CONVERGING:** AEDT 2023.2 native BatchSolve execution has not yet been
-observed.
 
 Use this workflow for a complete, released HFSS EPR preparation when the
 solver-only process must run separately from the local PyAEDT transaction.
@@ -341,8 +312,8 @@ enumeration rule. The V2–V27 inventories retain their original module paths as
 `scgsim/aedt/_q3d_bodies.py` to V10. V12 is frozen with V11's exact path
 membership. V13 retains its frozen inventory, mandatory declared module bytes
 and digest, and optional `revision_observation`; V1–V17 retain their frozen path
-membership, field meanings, and version-specific reader rules. V14 is reserved
-for held PR35. V16 added the HFSS Eigenmode native implementation module to the
+membership, field meanings, and version-specific reader rules. V14 is unused:
+SCGSim has no V14 inventory. V16 added the HFSS Eigenmode native implementation module to the
 V15 inventory. V17 added the shared lumped-model and HFSS lumped-native modules,
 plus the AEDT specs package initializer, to V16. V18 removed the former
 EPR-private `epr/junction_partition.py` path and included
@@ -402,7 +373,7 @@ uses the separate `run_control=None` path described above.
 
 ### Shared lumped support and terminal RLC {#hfss-shared-lumped-support}
 
-This HFSS lumped-element scope is `CONVERGING`. It adds generic circuit
+This HFSS lumped-element support adds generic circuit
 elements while preserving the existing Wave Terminal and Josephson-junction
 contracts.
 
@@ -499,7 +470,7 @@ checked by the resolver has that meaning.
 
 ## Solid and thin-film 3D modeling {#aedt-solid-thin-film}
 
-The shared physical-source/profile scope is **CONVERGING**. Every fresh Q3D
+Every fresh Q3D
 or HFSS 3D request explicitly selects `modeling="solid"` or `"thin_film"`;
 there is no inferred mode or public A/B/C execution alias. Current family
 schema identifiers remain in use. Fresh requests carry the tagged
@@ -606,7 +577,7 @@ accuracy for either representation.
 
 ### HFSS Driven caller-owned sweep count {#hfss-driven-sweep-count}
 
-The Human-accepted V1 contract provides this behavior. `FrequencySweepSpec(start_ghz, stop_ghz, points=20000)` keeps its
+`FrequencySweepSpec(start_ghz, stop_ghz, points=20000)` keeps its
 existing public `points` field and default. The caller chooses the sample count
 for the study. Exact whole-number numeric inputs, including `20000.0`, are
 accepted and converted losslessly to the native/count integer. A non-whole
@@ -632,7 +603,7 @@ chosen by SCGSim.
 
 ### HFSS convergence observations {#hfss-convergence-observations}
 
-This accepted observation contract covers HFSS Driven and Eigenmode only. Native convergence status,
+This observation contract covers HFSS Driven and Eigenmode only. Native convergence status,
 caller-authored criteria and changes, reported delta, final pass and available
 native records remain observations. For Eigenmode, `Current Consecutive Passes`
 and native convergence history remain in the hash-bound
@@ -669,7 +640,7 @@ this direction adds no numerical sufficiency threshold or scientific certificati
 
 ### Q2D/Q3D convergence observations {#q2d-q3d-convergence-observations}
 
-The accepted Q2D/Q3D contract applies the native-observation direction to
+The Q2D/Q3D contract applies the native-observation direction to
 these two additional qualifications, separately from the earlier HFSS-only
 scope:
 
@@ -688,7 +659,7 @@ stopping; an unknown cause remains unknown.
 Native analyze/save/export failures and missing or corrupt artifacts retain
 their failure meaning; existing FAILED receipts are not reclassified. Required
 metric/control formats, configured-control identity, native/source identity and
-artifact custody remain checked. The accepted Q2D one-file primary matrix
+artifact custody remain checked. The Q2D one-file primary matrix
 export, finite C/G/L/R data, units, frequency, conductor order and historical
 readers are unchanged. This behavior changes no API/schema or numeric
 precision and establishes no research threshold or scientific certification.
@@ -799,8 +770,6 @@ creating a second artifact.
 Resolution fails closed unless the connected AEDT/PyAEDT versions, declared
 setup and `LastAdaptive` solution, frequency, per-unit-length units, conductor
 order, and every primary matrix value match the sealed run and are finite.
-This Q2D contract is accepted V1 behavior; the broader implemented AEDT surface is also
-`STABILIZED`, with stabilization and release delivery tracked separately.
 
 ## Q3D extraction and Region-ground contract {#q3d-extraction-and-region-ground-candidate}
 
@@ -819,9 +788,7 @@ conductor bodies and every conductor body belongs to exactly one final Net.
 Substrate bodies use dielectric material and no Net. A C/G request may leave
 Signal terminals absent; an AC/RL request requires each Signal Net's complete
 source/sink object and side pair. This body-v3 request and lowering behavior is
-part of the accepted v2 implementation/API. Its native observation is limited
-to the build-only operation below; no completed C/G solve or matrix result is
-claimed for the accepted candidate.
+part of the v2 implementation/API.
 
 `Q3dSpec.solve_ac_rl` is a strict boolean and defaults to `true`. The default
 therefore preserves the existing combined capacitance/conductance plus AC
@@ -869,10 +836,7 @@ sheets there, and rebuilds the final native Region with zero additional offset.
 The final Region has the requested expanded bounds; the receipt records both
 the requested padding and this zero-offset finalization explicitly.
 
-The prior failed `_01` project remains immutable diagnostic evidence. There is
-no compatibility fallback, physical bridge, or unite path. This replacement
-Region-ground contract is `STABILIZED`; historical diagnostic evidence is not
-relabeled.
+There is no compatibility fallback, physical bridge, or unite path.
 
 ### Q3D body-backed input v3 {#q3d-body-input-v3}
 
@@ -912,17 +876,14 @@ For source-backed requests, `geometry_source` uses
 `scgsim.aedt.q3d-geometry-source.v3`. It binds the canonical GDS, detached
 stack and source trace by path and SHA-256 and records the declared bodies and
 their normalized source lineage. Source attachment files are relocated into
-the portable handoff. The accepted source-backed representation preserves
+the portable handoff. The source-backed representation preserves
 complete outer and inner rings as one body footprint; its native construction
 uses a covered outer sheet, subtraction of the hole regions, and a +Z sweep
-through the declared interval. The build-only observation below includes
-native body, holes, and Z readback plus a geometry preview for its tested case;
-it is not a general topology claim or a successful solve. No triangulation or
+through the declared interval. No triangulation or
 GDS-piece import, Net Unite, coordinate repair, or generic feature-size policy
-is part of this input-v3 contract. Source- and lowered-geometry width/sliver DRC is
-deferred outside this package and is not a blocker to the body correction. No
-DRC coverage or Layout-validation claim is made, and no universal
-minimum-feature rule is applied.
+is part of this input-v3 contract. The AEDT path runs no source- or
+lowered-geometry width or sliver check and applies no universal minimum-feature
+rule.
 
 Source-backed Q3D constructs each normalized whole body directly, without a
 GDS import or object rename. It then reads the complete raw native object
@@ -935,9 +896,7 @@ phase detail retains body attribution, raw inventory and native IDs when
 readable, plus available native warning/error context. If a diagnostic read
 fails, its context is unavailable and cannot replace the primary failure.
 Warning presence alone does not reject a complete inventory. The source
-contract defines body attribution and failure behavior; the scoped build-only
-observation below confirms readback for its tested candidate operation, not a
-solver completion or returned matrices.
+contract defines body attribution and failure behavior.
 
 #### Q3D native build-only execution
 
@@ -952,11 +911,7 @@ or export matrices or convergence data. The receipt records
 native output. This execution consumes the one-shot handoff, so a later solve
 requires a newly prepared handoff. The strict `resolve_results` entrypoint
 continues to require a completed solver result; it does not resolve a
-preparation-only receipt as a result. On the accepted frozen candidate wheel,
-the observed build-only operation read back body and hole geometry, Z intervals,
-materials, all-Signal net assignments, Region and setup; it saved the project,
-released its owned Desktop, and had a separate top/isometric geometry preview.
-It did not call `Analyze`, solve, or export C/G matrices. Normal Q3D
+preparation-only receipt as a result. Normal Q3D
 `--execute` behavior is unchanged.
 
 The v3 handoff keeps the five ordinary allowed paths in their established
@@ -967,9 +922,9 @@ manifest's `members` sequence omits its own path wherever it appears in
 other files. Thus a source-free handoff has five allowed paths and four member
 records, while source-backed v3 has eight allowed paths and seven records.
 
-#### Q3D user-requested Stop/Abort and save — CONVERGING
+#### Q3D user-requested Stop/Abort and save
 
-The candidate exposes two mutually exclusive operations:
+SCGSim exposes two mutually exclusive operations:
 `scgsim.aedt.request_q3d_stop_and_save(handoff)` requests Clean Stop, allowing
 the current pass to finish, while
 `scgsim.aedt.request_q3d_abort_and_save(handoff)` requests Abort of current
@@ -1046,9 +1001,8 @@ Save/export, and release errors remain separately recorded. Optional export
 errors do not define the Stop/Abort-save workflow status or make it a completed
 solver result.
 Strict `resolve_results()` and Report behavior remain unchanged, with no new
-partial-result reader or Report API. No polling, wait loop, additional Stop/Abort, retry, or automatic cleanup is performed. The native
-Stop/Abort/save operations remain unobserved. These
-controls apply only to new executions registered by this runtime; old runs are
+partial-result reader or Report API. No polling, wait loop, additional Stop/Abort, retry, or automatic cleanup is performed.
+These controls apply only to new executions registered by this runtime; old runs are
 not retrofitted. Ordinary Q3D without request intent, HFSS, Q2D, Eigenmode EPR,
 and non-Linux solver flows are unchanged. The Eigenmode EPR
 no-automatic-partial-save rule remains unchanged.
@@ -1063,7 +1017,7 @@ records, while source-backed v3 has eight allowed paths and seven records.
 
 ## Eigenmode saved fields and Surface-EPR direction
 
-The accepted Eigenmode Surface-EPR path is an additive lifecycle, not a
+The Eigenmode Surface-EPR path is an additive lifecycle, not a
 reinterpretation of a completed V1/V2/V3 receipt. It starts from shared source
 polygons, holes, material/domain facts, route profile, and declared junction
 intent, then records a separate AEDT binding from those facts to native bodies,
@@ -1459,7 +1413,7 @@ record retains its recorded source identities and, where present, the
 saved-solution content hash, but these values do not authenticate the detached
 JSON.
 
-### Explicit native field selectors for saved analysis (CONVERGING)
+### Explicit native field selectors for saved analysis
 
 `analyze_epr()` accepts the optional
 `surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None`

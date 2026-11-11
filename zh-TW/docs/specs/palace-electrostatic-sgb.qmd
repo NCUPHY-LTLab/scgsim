@@ -7,9 +7,7 @@ scgsim-id: "docs/specs/palace-electrostatic-sgb"
 lang: zh-TW
 ---
 
-::: {.callout-note title="已接受行為與交付狀態"}
-後端、Route A／B 轉換、交接、Slurm 執行、嚴格結果解析及既有報告摘要，屬於已接受的 V1 範圍。紀錄的操作資料保留其限制；穩定化與版本交付仍是不同狀態。
-:::
+本契約涵蓋 Palace 靜電分析後端：Route A／B 轉換、交接、Slurm 執行、嚴格結果解析與報告摘要，以及兩個 Palace 外觀介面共用的網格控制。
 
 ## 公開介面 {#candidate-surface}
 
@@ -48,7 +46,7 @@ prepare shared GeometryPlan snapshot
 | 網格 | `mesh` | 以 SGB 建立幾何，檢查其中的細微結構，用 `scgsim.meshing` 產生網格，並把群組降階為 Palace 屬性。 |
 | 設定 | `write_config` | 為已審閱網格身分寫入 Palace Electrostatic 設定。 |
 
-這些方法是已接受的公開 API。
+這些方法是公開 API。
 
 相對於此分階段狀態，設定器具有原子性。Airbox、Surface EPR 與 Eigenmode 控制先驗證所有提供值，才變更任何欄位。因此驗證失敗會保留原設定，以及快取網格、已解析埠、設定檔及交接狀態。成功變更保留既有網格／設定失效邊界；這不改變 `mesh()` 或 `write_config()` 內部的操作失敗行為。
 
@@ -145,7 +143,7 @@ Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_
 
 ## 靜電預設值 {#candidate-electrostatic-defaults}
 
-下列為已接受的實作預設值，不是通用科學建議或充分性門檻：
+下列為實作預設值，不是通用科學建議或充分性門檻：
 
 | 控制 | 預設值 |
 |---|---|

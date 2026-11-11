@@ -144,7 +144,5 @@ supported yet (this version carries lines and circular arcs)`, and the same for
 `interpolation_spline`.
 
 **Why SCGSim does not fix it.** SGB offsets lines and circular arcs exactly; the
-offset of a spline has no exact form, so reading splines needs a tolerance that
-has not been decided. This is tracked in
-[scgsim#109](https://github.com/NCUPHY-LTLab/scgsim/issues/109). Until then,
-draw the strip as a polygon.
+offset of a spline has no exact form, so SGB does not read splines. Draw the
+strip as a polygon.

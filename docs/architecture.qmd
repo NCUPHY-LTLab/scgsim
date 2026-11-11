@@ -109,11 +109,11 @@ calculation. Visualization reads solver-authoritative metadata and artifacts;
 it does not start a solve or determine run status.
 
 Publicness follows explicit package facades, declared submodule exports and
-documented contracts—not mere importability. The accepted v2 source keeps the
+documented contracts—not mere importability. SCGSim 2.0 keeps the
 high-level `scgsim.geometry`, `scgsim.palace`, `scgsim.aedt`, and
 `scgsim.visualization` entrypoints, and supplies an old-to-new submodule and
 symbol map in the [API migration reference](api-migration.qmd). Moved private
-implementations do not gain public status by relocation. There will be one
+implementations do not gain public status by relocation. Each symbol has one
 current implementation, without old `scgsim.sgb` compatibility wrappers or
 revived Q3D input-v1/v2 paths. The formal `python -m scgsim.aedt.run` entrypoint
 remains supported; it is the AEDT transaction CLI, not a legacy wrapper.
@@ -191,7 +191,7 @@ Within Palace, `results.report_data` owns detached report records and snapshot
 readers; `presentation.reports` owns trust/physics views and figures. The
 package facade retains the existing public result and report names.
 
-The accepted v2 starting producer emitted `scgsim.aedt.runtime-source.v13` with 61
+The first SCGSim 2.0 producer emitted `scgsim.aedt.runtime-source.v13` with 61
 canonical declared module paths, including 41 AEDT modules. Its records carry
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; module bytes and their digest are mandatory, while the
@@ -202,7 +202,7 @@ relocation does not rewrite or reinterpret their receipts. The current producer
 emits runtime-source v28 while retaining receipt V3; its declared inventory
 binds the relocated implementation.
 
-The flow below shows the accepted source structure. Geometry source preparation
+The flow below shows the source structure. Geometry source preparation
 and compiler planning have separate owners, and neither backend defines source
 identity.
 
@@ -371,11 +371,11 @@ family-specific setup translations. Shared Desktop, ACF/resource, and raw
 saved-setup helpers do not define solver-specific setup fields; see the
 [AEDT setup-control contract](specs/aedt-runtime.qmd#aedt-family-setup-controls).
 
-The Q3D user-requested Stop/Abort-and-save scope remains `CONVERGING`; native operations are unobserved. It exposes `request_q3d_stop_and_save(handoff)` for Clean Stop after the current pass and `request_q3d_abort_and_save(handoff)` to interrupt current work, with exclusive CLI flags `--stop-and-save` and `--abort-and-save`. Both use one exact-target local-Linux requester, the owned Desktop and transaction identity/nonce, and the shared control ledger/lock. Repeating the same mode is idempotent; a conflicting committed mode is refused without another native RPC. Raw RPC responses are uninterpreted. Linux stop-managed Q3D refuses PyAEDT documentation mode before Desktop creation because it overrides the close flags needed for exclusive transaction ownership.
+The Q3D user-requested Stop/Abort-and-save path exposes `request_q3d_stop_and_save(handoff)` for Clean Stop after the current pass and `request_q3d_abort_and_save(handoff)` to interrupt current work, with exclusive CLI flags `--stop-and-save` and `--abort-and-save`. Both use one exact-target local-Linux requester, the owned Desktop and transaction identity/nonce, and the shared control ledger/lock. Repeating the same mode is idempotent; a conflicting committed mode is refused without another native RPC. Raw RPC responses are uninterpreted. Linux stop-managed Q3D refuses PyAEDT documentation mode before Desktop creation because it overrides the close flags needed for exclusive transaction ownership.
 
 The recorder retains blocking Analyze, then observes native `odesktop.AreThereSimulationsRunning(True)` once; `True` includes pending simulations and only native `False` confirms inactivity. Active, unknown, or unavailable state, or uncertain control-ledger closure/read/write/readback, fails and preserves the Desktop by non-closing detach with `release.ok=false`, defers Save/export, and writes no post-release seal or success status. With confirmed inactivity and known ledger state, the recorder attempts explicit Save first, independently records requested available completed-result matrix/convergence exports, retains any raw native files actually produced, and records errors separately. It closes/releases the Desktop only if that Save succeeds. Save failure yields `release.ok=false` with reason `save_failed` and a non-closing detach; it leaves the project/Desktop preserved, with no seal or automatic cleanup. Optional artifacts do not promise recovery or completeness for interrupted work, and their errors do not define the Stop/Abort-save workflow status. `normal_stop_saved` and `abort_saved` require the matching committed intent, returned RPC, Analyze true, confirmed inactivity, successful explicit Save/release, and post-release seal. They label finalized workflows, not physics completion or causal proof. Analyze false/exception stays primary with causality unknown; RPC, control-mode, ACF, Save/export, and release errors stay separately visible. Strict completed-result resolution and Report remain unchanged; there is no partial-result surface. Ordinary no-intent Q3D, other solver families, and non-Linux solver flows are unchanged.
 
-### Request-scoped AEDT version selection (CONVERGING)
+### Request-scoped AEDT version selection
 
 The dual-version request requires `aedt_version` explicitly as either
 `"2023.2"` or `"2024.2"`; it has no default or cross-version fallback. The
@@ -487,8 +487,8 @@ also keep source material identity distinct from verified native PEC
 implementation: solids are native `pec` with Solve Inside disabled, while
 sheets receive Perfect E and must have complete native face coverage.
 
-The accepted Eigenmode EPR lifecycle is an explicit additive path under that
-same transaction owner. It does not reinterpret the historical one-shot
+The Eigenmode EPR workflow is an explicit additional path under that same
+transaction owner. It does not reinterpret the historical one-shot
 prepare--solve--export path or broaden the meaning of an ordinary completed
 receipt. Before its one solve, the EPR path declares geometry bindings,
 junctions, contributions, margins, calculator definitions, and native pass

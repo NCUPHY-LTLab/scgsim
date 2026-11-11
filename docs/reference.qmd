@@ -7,19 +7,7 @@ scgsim-kind: "reference"
 scgsim-status: "CONVERGING"
 ---
 
-Start with a goal tutorial, then use the topic links below to find the model, geometry, mesh, execution or result guidance for that task. Check the [Convention dictionary](conventions.qmd) when a technical term or unit needs clarification.
-
-## Goal tutorials {#goal-tutorials}
-
-Choose a complete reader workflow by calculation goal:
-
-| Calculation goal | Tutorial |
-| --- | --- |
-| Terminal capacitance | [Extract a pad capacitance](tutorials/capacitance.qmd) |
-| Resonant mode | [Find a resonant mode](tutorials/resonance.qmd) |
-| Mode energy participation | [Read mode energy participation](tutorials/resonance-epr.qmd) |
-| Driven CPW scattering response | [Extract a CPW scattering response](tutorials/scattering.qmd) |
-| CPW per-unit-length RLGC | [Extract CPW transmission-line parameters](tutorials/transmission-line.qmd) |
+Start with a goal notebook from [Choose a simulation](examples.qmd#getting-started), then use the topic links below to find the model, geometry, mesh, execution or result guidance for that task. Check the [Convention dictionary](conventions.qmd) when a technical term or unit needs clarification.
 
 ## Model and materials {#model-materials}
 
@@ -33,8 +21,8 @@ describes how source declarations reach backend preparation.
 Read [Entities, occurrences, and Nets](concepts/geometry.qmd#entity-occurrence-and-net)
 with the [driven-response concept](concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency).
 The [model preparation tutorial](course/working-model.qmd) shows how those
-choices enter a selected case; the [CPW scattering tutorial](tutorials/scattering.qmd#configure-port-models)
-compares its Modal and Wave Terminal declarations.
+choices enter a selected case; the [Driven Modal](course/aedt-driven-modal.qmd) and
+[Driven Terminal](course/aedt-driven-terminal.qmd) lessons show the Modal and Wave Terminal declarations.
 
 ## Mesh and adaptation {#mesh-adaptation}
 

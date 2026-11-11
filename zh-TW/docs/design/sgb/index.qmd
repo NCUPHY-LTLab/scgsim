@@ -11,8 +11,8 @@ scgsim-id: "docs/design/sgb/index"
 
 重新設計的 semantic geometry builder（SGB）把順序倒過來。它把晶片描述成有限個 **prism**，**在任何 CAD kernel 介入之前**就推導出完整的 topology 與每個 cell 的意義，再自己把結果寫成 BREP/XAO 檔案。Gmsh 不建立幾何：它載入檔案並對其產生 **mesh**，測試中也把它當作 oracle。模型上不執行任何三維 Boolean 運算。
 
-::: {.callout-note title="實作狀態"}
-這個設計已有 production 實作：`scgsim.geometry.sgb`（階段 1，1a 到 1e）。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band 與 refinement curve、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 以 SGB 建立幾何、以 `scgsim.meshing` 產生網格，並只接受 Route A 與 Route B。AEDT 目前經由自己的平面路徑準備幾何，方向是使用同一份 SGB 輸出；舊的幾何路徑因此仍在（[D6](decisions.qmd#d6)）。要使用 SGB 的輸出，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
+::: {.callout-note title="SGB 的實作"}
+這個設計的 production 實作是 `scgsim.geometry.sgb`。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band 與 refinement curve、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 以 SGB 建立幾何、以 `scgsim.meshing` 產生網格，並只接受 Route A 與 Route B。AEDT 目前經由自己的平面路徑準備幾何，方向是使用同一份 SGB 輸出；舊的幾何路徑因此仍在（[D6](decisions.qmd#d6)）。要使用 SGB 的輸出，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
 :::
 
 ## 執行範例：輸入與輸出

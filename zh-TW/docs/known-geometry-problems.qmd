@@ -75,4 +75,4 @@ OrcaPen SC PDK 已修正全部六項：C1 至 C4 由 [orcapen-sc-pdk#64](https:/
 
 **出了什麼錯。** cell 把邊宣告為 spline 邊界曲線時，建構以 `UnsupportedCurveError: … 'bspline' curves are not supported yet (this version carries lines and circular arcs)` 停止，`interpolation_spline` 也一樣。
 
-**SCGSim 為何不修正。** SGB 能精確地為直線與圓弧做 offset；spline 的 offset 沒有精確形式，讀取 spline 需要一個尚未決定的容差。這由 [scgsim#109](https://github.com/NCUPHY-LTLab/scgsim/issues/109) 追蹤。在那之前，請把條帶畫成多邊形。
+**SCGSim 為何不修正。** SGB 能精確地為直線與圓弧做 offset；spline 的 offset 沒有精確形式，因此 SGB 不讀取 spline。請把條帶畫成多邊形。

@@ -6,7 +6,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-eigenmode"
 ---
 
-For a complete mode workflow, start with [find a resonant mode](../tutorials/resonance.qmd).
+For a complete mode workflow, use a PDK notebook from [Choose a simulation](../examples.qmd#getting-started).
 This backend reference continues from [CPW inputs](aedt-inputs.qmd). Ordinary
 HFSS Eigenmode has no driven excitation ports. It searches for the requested modes
 using an explicit adaptive setup; it does not create a source-first Surface-EPR

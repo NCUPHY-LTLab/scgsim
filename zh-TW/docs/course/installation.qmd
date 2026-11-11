@@ -62,7 +62,7 @@ uv sync
 
 ## 下一步
 
-- [準備焊墊電容計算](../tutorials/capacitance.qmd)。
+- [選擇模擬目標](../examples.qmd)及其 PDK 筆記本。
 - [執行已準備的模型](execute.qmd)。
 - [讀取回傳結果](returned-results.qmd)。
 

@@ -9,10 +9,6 @@ lang: zh-TW
 
 分階段使用方式請見[求解器觀察](course/solver-observations.qmd)。本頁負責預覽綁定與可用性。
 
-::: {.callout-note title="已穩定化的 V1 預覽契約"}
-公開 V1 預覽執行期屬於 Human 已接受的範圍。公開 Palace 與 AEDT 2024.2 無圖形模式預覽已產生，供 Human 視覺審閱。這些觀察保留原始範圍；接受狀態不另外確立數值準確性、已完成穩定化或穩定版交付。
-:::
-
 ## 用途與責任 {#purpose-and-ownership}
 
 [SGB 幾何概念](concepts/geometry.qmd#construction-stage) 說明來源如何成為此處檢視的求解器綁定幾何。

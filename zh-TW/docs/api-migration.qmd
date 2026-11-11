@@ -1,15 +1,15 @@
 ---
 title: "SCGSim 2.0 API 遷移對照"
 lang: zh-TW
-description: "目前公開的幾何、AEDT、Palace 與視覺化符號對應至 SCGSim 2.0，包含收斂中的 AEDT 建模與版本選擇契約。"
+description: "目前公開的幾何、AEDT、Palace 與視覺化符號對應至 SCGSim 2.0，包含 AEDT 建模與版本選擇契約。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
 ---
 
-本參考頁將已固定的 v1 API 介面對應至已接受的 SCGSim 2.0 實作。Human 於 2026-10-09 接受候選版本 `a932a173edb5c56ae14740ff5177190996255bdd`（tree `2745321736e53e2a4fe8d150f2e9d8bd176669db`），其語意狀態為 `ACCEPTED`，不是 `STABILIZED`。實作已透過 PR34 整合至 `develop` 的 `cc1424c84ffe9d295a57dbabb3c2ab6431110f6c`（tree `f9ecfe49df4c79be84a7991e44cc50c2602e3adb`）。目前收尾工作從後續精簡版 `develop` 的 `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`（tree `c99c670927e877fb407aa4c73de32793e86a4460`）開始。原遷移基準仍為 `develop@3a52fb1`、tree `96adcf8672b497a29dd0a6b43043cca11efc3043`。隔離 wheel 的觀察只適用於其精確套件與執行期來源身份，不能據此認定使用者已安裝，也不能把原生結果移算到另一個 wheel。
+本參考頁將已固定的 v1 API 介面（下文稱為基準）對應至 SCGSim 2.0 的負責模組。
 
-Solid/Thin-Film 三維要求擴充是獨立的 `CONVERGING` API 範圍。每個新的 Q3D 與 HFSS 三維要求，都必須在要求層級明確設定 `modeling` 為 `"solid"` 或 `"thin_film"`。此欄位沒有預設值，也不會替這些系列推定省略的模式。先前支援的結果酬載只能透過原系列／結構版本的讀取器讀取，原始酬載與雜湊保持不變。這不改變 Q2D 等未變更系列的共用版本化交接相容性；Q2D 與 Palace 的其餘契約也保持不變。
+Solid/Thin-Film 三維要求擴充規定：每個新的 Q3D 與 HFSS 三維要求，都必須在要求層級明確設定 `modeling` 為 `"solid"` 或 `"thin_film"`。此欄位沒有預設值，也不會替這些系列推定省略的模式。先前支援的結果酬載只能透過原系列／結構版本的讀取器讀取，原始酬載與雜湊保持不變。這不改變 Q2D 等未變更系列的共用版本化交接相容性；Q2D 與 Palace 的其餘契約也保持不變。
 
 ## AEDT 版本選擇 {#aedt-release-selection}
 
@@ -24,21 +24,21 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 - 保留 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 及 `scgsim.visualization` 作為套件入口；`scgsim.geometry.compiler` 保留為明確的進階編譯器介面。Palace 不再經由它建置：見 [Palace 網格化與 Surface EPR](#palace-mesh-migration)。
 - 以文件列出的門面與宣告匯出為公開介面；私有或可匯入的實作模組不會自動成為受支援 API。
 - 將每個受支援符號移至單一責任模組，從套件門面重新匯出核准的高階符號；不保留可呼叫的第二份舊實作或相容包裝。
-- 不恢復 Q3D input-v1 或 input-v2；具本體支援的 input-v3 是已接受的 Q3D 契約。已接受候選版本有原生僅建構觀察，但不代表 C/G 求解或矩陣結果已完成。
+- 不恢復 Q3D input-v1 或 input-v2；具本體支援的 input-v3 是 Q3D 契約。
 - 保留正式命令 `python -m scgsim.aedt.run` 作為 AEDT 交易入口；它是受支援 CLI，不是舊版包裝。
-- 已接受的 2.0 基準 AEDT 產生端輸出 `scgsim.aedt.runtime-source.v13`。該固定清單宣告 61 條路徑，其中有 41 個 AEDT 模組，並記錄 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`；模組位元組與摘要為必填，Git 觀察可如實記為無法提供。V13 不新增輔助雜湊對照，所列檔案也不是傳遞相依性認證。V1–V13 保留精確的歷史路徑與身份規則；遷移不重寫或重新解釋收據。
+- SCGSim 2.0 的第一個 AEDT 產生端輸出 `scgsim.aedt.runtime-source.v13`。該固定清單宣告 61 條路徑，其中有 41 個 AEDT 模組，並記錄 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`；模組位元組與摘要為必填，Git 觀察可如實記為無法提供。V13 不新增輔助雜湊對照，所列檔案也不是傳遞相依性認證。V1–V13 保留精確的歷史路徑與身份規則；遷移不重寫或重新解釋收據。
 
 ## 實體／薄膜要求遷移 {#solidthin-film-request-migration}
 
-新的 Q3D 與 HFSS 三維要求必須明確選擇 `modeling="solid"` 或 `modeling="thin_film"`。省略或提供其他模式不會啟用隱含相容路徑。PDK／來源契約也提供精確的物理層身份、層表示（承載堆疊的膜、局部膜／deck 或保留實體）、物理厚度，以及適用時的片接觸側。既有 Object、Net、埠、連通外框與孔洞身份，仍是要求的來源依據。
+新的 Q3D 與 HFSS 三維要求必須明確選擇 `modeling="solid"` 或 `modeling="thin_film"`。省略或提供其他模式不會啟用隱含相容路徑。PDK／來源契約也提供精確的物理層身份、特徵種類（堆疊膜、局部膜或有限體積）、物理厚度，以及適用時的薄膜附著面。既有 Object、Net、埠、連通外框與孔洞身份，仍是要求的來源依據。
 
-此選擇沿用既有 Q3D body-v3 與 HFSS 系列結構識別字。受支援但沒有 `modeling` 的歷史 Q3D／HFSS 結果，只能透過原版本化結果讀取器讀取；其原始酬載與雜湊保留，且不能啟動新執行。新執行路徑不會推定或補上缺少的模式。層宣告在唯一編寫的 `LayerStack` 座標系中使用 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side, source_thickness_um=None)`。實體模式的 `physical_layers` 可為空；來源本體與 `LayerImport` 可用 `physical_layer_id` 指定層。準備結果透過 `effective_bodies` 與 `effective_layer_imports` 揭示來源及映射區間。同一物理層 ID 在多邊形、元件實例及 Net 成員間只計算一次，不新增每層 `stack_id`。GeometryPlan 準備會以 `source_thickness_um` 傳遞原 Level 厚度，直接呼叫者也可提供這項原始來源事實。膜物理厚度輸出保留此值，不取整，也不由端點重新計算；省略時表示厚度由端點定義，不能宣稱是原始 PDK 厚度。座標映射仍使用端點跨度；保留實體維持自己的本體範圍。
+此選擇沿用既有 Q3D body-v3 與 HFSS 系列結構識別字。受支援但沒有 `modeling` 的歷史 Q3D／HFSS 結果，只能透過原版本化結果讀取器讀取；其原始酬載與雜湊保留，且不能啟動新執行。新執行路徑不會推定或補上缺少的模式。新的要求在唯一編寫的 `LayerStack` 座標系中以 `PhysicalLayerDeclaration` 紀錄宣告層，其欄位列於[物理表示契約](specs/physical-representation.qmd)。薄膜宣告以 `physical_dimensions["normal_thickness_um"]` 記錄原始法向厚度，膜物理厚度輸出直接回報此值，不由端點重新計算。較早的 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side, source_thickness_um=None)` 紀錄只由歷史讀取器解碼；新的要求若傳入此紀錄，會引發 `TypeError`，並要求改用 `PhysicalLayerDeclaration`。實體模式的 `physical_layers` 可為空；來源本體與 `LayerImport` 可用 `physical_layer_id` 指定層。準備結果透過 `effective_bodies` 與 `effective_layer_imports` 揭示來源及映射區間。同一物理層 ID 在多邊形、元件實例及 Net 成員間只計算一次，不新增每層 `stack_id`。座標映射使用端點跨度；有限體積維持自己的本體範圍。
 
 模式選擇決定幾何表示，不選擇求解器系列或公開 A/B/C 執行路徑。完整的座標轉換、材料、終端、僅建構與失敗行為，定義於 [AEDT 實體與薄膜契約](specs/aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 與 Palace 不在這次遷移範圍。Q3D input-v1/v2 要求結構仍已移除；其他受支援系列路徑的共用 V1/V2 交接相容性，不會恢復這些 Q3D 要求結構，也不會略過明確模式要求。
 
 此擴充引入 AEDT 執行期來源身份 `scgsim.aedt.runtime-source.v15`；目前的產生器輸出 v28，較早的身份維持既有契約。每個身份都綁定實作模組的位元組與摘要，不宣稱涵蓋完整傳遞相依性；精確路徑清單由固定實作清單負責。
 
-目前延續工作的候選範圍包括無終端 Q3D C/G、含 EPR／已儲存場分析的 HFSS Eigenmode，以及 HFSS Driven Terminal。Q3D AC/RL 與 HFSS Driven Modal 在本次延續工作中延後；此範圍界線不移除既有要求或結果契約。下方執行期契約定義這些建模路徑中，元件實例局部 Ground、場側與厚度的區別。
+上方連結的 AEDT 實體與薄膜契約定義這些建模路徑中，元件實例局部 Ground、場側與厚度的區別。
 
 ## 幾何與編譯器 API {#geometry-and-compiler-api}
 
@@ -111,7 +111,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 ## AEDT API、交易與狀態歸屬 {#aedt-api-transaction-and-state-ownership}
 
-下列清單將基準套件匯出對應至目前候選來源的負責模組，也記錄 `run.main` 等只能直接匯入的入口。套件根匯出維持既有符號與語意；在此列出私有定義模組，不會使其成為公開介面。
+下列清單將基準套件匯出對應至目前的負責模組，也記錄 `run.main` 等只能直接匯入的入口。套件根匯出維持既有符號與語意；在此列出私有定義模組，不會使其成為公開介面。
 
 
 - **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.common`.** 基準名稱： `AedtResources`, `LayerImport`, `ObjectBinding`, `PdkMaterial`, `TerminalPort`, `ModalPort`, `MatrixRunControl`, `HfssDrivenMode`.
@@ -230,11 +230,11 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 這些名稱不以下劃線開頭的模組各自宣告 `__all__`，因此除了套件門面外，也需要明確的遷移項目。
 
 
-- **基準直接匯入 `scgsim.palace.electrostatic` → 目前候選來源 `scgsim.palace.preparation.electrostatic`.** 宣告符號： `ElectrostaticSim`.
-- **基準直接匯入 `scgsim.palace.eigenmode` → 目前候選來源 `scgsim.palace.preparation.eigenmode`.** 宣告符號： `EigenmodeSim`.
-- **基準直接匯入 `scgsim.palace.handoff` → 目前候選來源 `scgsim.palace.execution.handoff`.** 宣告符號： `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
-- **基準直接匯入 `scgsim.palace.resolve` → 目前候選來源 `scgsim.palace.results.resolve`.** 宣告符號： `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
-- **基準直接匯入 `scgsim.palace.report`.** 宣告符號： `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. 目前候選來源： `scgsim.palace.presentation.reports` 保留此直接匯出清單；資料定義位於 `scgsim.palace.results.report_data`. 套件門面保留其他報告匯出，包含 `SimulationBenchmarkReport` 及表面邊距資料。
+- **基準直接匯入 `scgsim.palace.electrostatic` → 目前負責模組 `scgsim.palace.preparation.electrostatic`.** 宣告符號： `ElectrostaticSim`.
+- **基準直接匯入 `scgsim.palace.eigenmode` → 目前負責模組 `scgsim.palace.preparation.eigenmode`.** 宣告符號： `EigenmodeSim`.
+- **基準直接匯入 `scgsim.palace.handoff` → 目前負責模組 `scgsim.palace.execution.handoff`.** 宣告符號： `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
+- **基準直接匯入 `scgsim.palace.resolve` → 目前負責模組 `scgsim.palace.results.resolve`.** 宣告符號： `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
+- **基準直接匯入 `scgsim.palace.report`.** 宣告符號： `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. 目前負責模組： `scgsim.palace.presentation.reports` 保留此直接匯出清單；資料定義位於 `scgsim.palace.results.report_data`. 套件門面保留其他報告匯出，包含 `SimulationBenchmarkReport` 及表面邊距資料。
 
 
 目前 `scgsim.palace.results.report_data` 直接模組匯出 `AmrPassSnapshot`、`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceEprRecord`、`SurfaceEprSeriesSnapshot`、`SurfaceMarginEprRecord` 及 `SurfaceMarginEprSeriesSnapshot`。`scgsim.palace.presentation.reports` 保留上列七個直接匯出。
@@ -257,9 +257,3 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 ## 共用呈現 {#shared-presentation}
 
 基準 `scgsim._notebook_presentation` 包含幾何與 AEDT 使用、與物理無關的格式化輔助函式；現行實作位於 `scgsim.presentation.notebook`。格式化函式不負責 Palace／AEDT 投影、計算或結果狀態，這些呈現仍依求解器分開。移動私有輔助模組，不會把函式名稱變成新公開 API。
-
-## 已接受範圍與證據狀態 {#accepted-scope-and-evidence-status}
-
-幾何／編譯器、AEDT、Palace 與視覺化的基準門面匯出及文件化直接子模組介面，已對應至上述已接受的來源負責模組。六次較早的完整 native-to-Resolve-to-Report 觀察，綁定舊 wheel SHA256 `48963671d4f854c185b8f95f3cd8000960355a7c48550b9ccf19b739b49f8df3` 與 runtime-source v13 內容摘要 `42b48f3d5946fadb1e93e92a1d3eb2a55f72ff00fc41aeccf71c0fded5919fa1`，涵蓋 CPW Modal 與 Terminal、Q2D、Q3D AC/RL、SimplePad Q3D C/G 及 Palace ES，不是目前 wheel 的執行證據。另外，固定的 `2.0.0.dev1` 候選 wheel SHA256 `e0ab1117aad4e5578ec98251732d33f6faa2fe7524dd70dcbc44891ed024824d`，有 Q3D 僅建構／讀回／儲存／釋放觀察及幾何預覽，未執行 `Analyze`、求解或產生 C/G 矩陣。
-
-完整 Xmon Palace Eigenmode Route A、CircularPad Palace Eigenmode Route B，以及 HFSS Eigenmode 已儲存場 EPR／離線損耗作業，尚未觀察到完整 native-to-Resolve-to-Report 流程，且不在本次收尾範圍。較早的準備與部分原生證據不能建立上述完整成果；此狀態不表示這些作業已失敗或完成。Q3D input-v1/v2 讀取器仍不存在。
