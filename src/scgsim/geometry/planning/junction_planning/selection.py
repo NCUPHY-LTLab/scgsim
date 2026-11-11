@@ -180,11 +180,15 @@ class BuiltOutline:
     it.  ``rebuilt_arcs`` says whether the sheet lands on an edge SGB builds as an exact arc
     instead of its drawn polygon: an arc of the terminal that meets the sheet's rectangle.  An
     arc elsewhere on the terminal, such as a rounded corner away from the port, leaves a
-    landing on a straight edge as drawn.
+    landing on a straight edge as drawn.  ``arc_reach`` is the lowest and highest position
+    along the junction direction, in Boolean units, of those arcs inside the sheet's
+    rectangle, or ``None``: an exact arc can reach farther into the sheet than the drawn
+    polygon's chords, and the cut must lie beyond it.
     """
 
     meetings: dict[int, tuple[SideMeeting, ...]]
     rebuilt_arcs: bool
+    arc_reach: tuple[int, int] | None
 
 
 def built_outline(
@@ -227,45 +231,55 @@ def built_outline(
         for curve in chain:
             for side, found in meetings.items():
                 found.extend(_curve_meetings(curve, frame, side, grid_um))
+    arcs = [
+        curve
+        for chain in chains.values()
+        for curve in chain
+        if curve.kind == "circular_arc"
+    ]
     # SGB rounds an arc's crossings to the grid, so an arc within one grid step of the sheet
     # may touch it once built.
-    reach_um = PRECISION_UM if grid_um is None else grid_um
+    near = PRECISION_UM if grid_um is None else grid_um
+    sheet = (0.0, span * PRECISION_UM, 0.0, width * PRECISION_UM)
+    widened = (-near, sheet[1] + near, -near, sheet[3] + near)
+    inside = [u for curve in arcs for u in _arc_positions(curve, frame, sheet)]
     return BuiltOutline(
         {side: tuple(found) for side, found in meetings.items()},
-        any(
-            curve.kind == "circular_arc"
-            and _arc_meets_sheet(curve, frame, span, width, reach_um)
-            for chain in chains.values()
-            for curve in chain
+        any(_arc_positions(curve, frame, widened) for curve in arcs),
+        (
+            (round(min(inside) / PRECISION_UM), round(max(inside) / PRECISION_UM))
+            if inside
+            else None
         ),
     )
 
 
-def _arc_meets_sheet(
+def _arc_positions(
     curve: SourceCurveSpec,
     frame: JunctionLocalFrame,
-    span: int,
-    width: int,
-    reach_um: float,
-) -> bool:
-    """Whether a circular arc comes within ``reach_um`` of the sheet's rectangle.
+    box: tuple[float, float, float, float],
+) -> list[float]:
+    """Where a circular arc inside the box ``(low u, high u, low v, high v)`` reaches farthest along u.
 
-    The arc is continuous, so it meets the rectangle exactly when one of its ends lies inside
-    or it crosses one of the rectangle's four edges.
+    These are the arc's ends inside the box, its crossings with the box's four edges and its
+    points farthest along u, each where it lies on the arc and in the box, in micrometres.  The
+    arc is continuous and moves monotonically along u between those points, so the list is
+    empty exactly when the arc misses the box, and its extremes are the arc's reach inside it.
     """
+    low_u, high_u, low_v, high_v = box
     start, through, end = (_local_um(point, frame) for point in curve.points_um)
-    low_u, high_u = -reach_um, span * PRECISION_UM + reach_um
-    low_v, high_v = -reach_um, width * PRECISION_UM + reach_um
-    if any(low_u <= u <= high_u and low_v <= v <= high_v for u, v in (start, end)):
-        return True
     (cu, cv), radius = circle_through_points((start, through, end))
-    edges = (
-        (True, low_u, low_v, high_v),
-        (True, high_u, low_v, high_v),
-        (False, low_v, low_u, high_u),
-        (False, high_v, low_u, high_u),
+
+    def in_box(u: float, v: float) -> bool:
+        return low_u <= u <= high_u and low_v <= v <= high_v
+
+    found = [u for u, v in (start, end) if in_box(u, v)]
+    found.extend(
+        u
+        for u in (cu - radius, cu + radius)
+        if in_box(u, cv) and _on_arc((u, cv), start, through, end)
     )
-    for at_u, value, low, high in edges:
+    for at_u, value in ((True, low_u), (True, high_u), (False, low_v), (False, high_v)):
         offset = value - (cu if at_u else cv)
         if abs(offset) > radius:
             continue
@@ -273,9 +287,9 @@ def _arc_meets_sheet(
         centre = cv if at_u else cu
         for across in (centre - half, centre + half):
             point = (value, across) if at_u else (across, value)
-            if low <= across <= high and _on_arc(point, start, through, end):
-                return True
-    return False
+            if in_box(*point) and _on_arc(point, start, through, end):
+                found.append(point[0])
+    return found
 
 
 def _curve_meetings(

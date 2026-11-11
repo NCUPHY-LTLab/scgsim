@@ -188,7 +188,8 @@ On each end, SCGSim chooses the cut in two steps:
 
 The outline is the one SGB builds: a conductor declared with an exact arc meets
 the side where the arc does, on the grid point SGB rounds the crossing to, not
-where its polygon does. A sheet that ends on straight conductor edges at right
+where its polygon does, and reaches into the sheet as far as the arc does, also
+where a chord of its polygon faces the sheet. A sheet that ends on straight conductor edges at right
 angles to it keeps the face and the conductors it had: its cuts lie on those
 edges and its end pieces are empty.
 

@@ -272,9 +272,18 @@ class _JunctionPartitionPlanner:
             contacts(self.own_a, self.span, self.width),
             contacts(self.own_b, self.span, self.width),
         )
-        if ca is None or cb is None or ca[1] >= cb[0]:
+        if ca is None or cb is None:
             raise ValueError("unsupported junction contact ordering or clear corridor")
-        self.lower, self.upper = (ca[1], cb[0])
+        # An exact arc can reach farther into the sheet than the drawn polygon's chords; the
+        # cuts lie beyond it, so the central rectangle stays clear of the conductor SGB builds.
+        lower, upper = ca[1], cb[0]
+        if self.outline_a.arc_reach is not None:
+            lower = max(lower, self.outline_a.arc_reach[1])
+        if self.outline_b.arc_reach is not None:
+            upper = min(upper, self.outline_b.arc_reach[0])
+        if lower >= upper:
+            raise ValueError("unsupported junction contact ordering or clear corridor")
+        self.lower, self.upper = (lower, upper)
         for polygons in (self.own_a, self.own_b, self.other):
             for rings in polygons:
                 for y in (0, self.width):

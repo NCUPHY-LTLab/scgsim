@@ -31,15 +31,22 @@ NETS = {"pad": ("chip/pad",), "electrode": ("chip/electrode",)}
 
 
 def pad_and_electrode(
-    monkeypatch, *, round_pad: bool, exact_arc: bool = False, round_back: bool = False
+    monkeypatch,
+    *,
+    round_pad: bool,
+    exact_arc: bool = False,
+    round_back: bool = False,
+    chord_facing_sides: int | None = None,
 ):
     """A pad and a straight electrode 20 um away, joined by a 2 um lumped-port sheet.
 
     The round pad is a 1024-sided polygon of radius 100 um; with ``exact_arc`` it also carries
     the authored circle, as the PDK's circular pad does, so SGB builds the exact arc.  The square
     pad has a straight edge at x = 100 um; with ``round_back`` its back half, away from the
-    port, is a semicircle of radius 100 um declared as an exact arc.  The sheet starts inside
-    the pad and ends 1 um inside the electrode.
+    port, is a semicircle of radius 100 um declared as an exact arc.  ``chord_facing_sides``
+    draws the round pad with that many sides instead, turned by half a side so that a chord's
+    midpoint faces the port.  The sheet starts inside the pad and ends 1 um inside the
+    electrode.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
 
@@ -51,14 +58,16 @@ def pad_and_electrode(
     gf.gpdk.PDK.activate()
     component = gf.Component()
     if round_pad:
+        sides = chord_facing_sides or PAD_VERTICES
+        turn = math.pi / sides if chord_facing_sides else 0.0
         pad = [
             (
-                PAD_RADIUS_UM * math.cos(2 * math.pi * i / PAD_VERTICES),
-                PAD_RADIUS_UM * math.sin(2 * math.pi * i / PAD_VERTICES),
+                PAD_RADIUS_UM * math.cos(2 * math.pi * i / sides + turn),
+                PAD_RADIUS_UM * math.sin(2 * math.pi * i / sides + turn),
             )
-            for i in range(PAD_VERTICES)
+            for i in range(sides)
         ]
-        sheet_start = PAD_RADIUS_UM - 0.1
+        sheet_start = PAD_RADIUS_UM * math.cos(turn) - 0.1
     elif round_back:
         back = [
             (
@@ -269,6 +278,30 @@ def test_a_port_on_a_round_pad_is_a_rectangle_whose_ends_join_their_conductors(
         # The free part starts where the pad polygon leaves the sheet sides, near 99.995 um.
         assert PAD_RADIUS_UM - 0.01 < xs[0] < PAD_RADIUS_UM
     # SGB builds the same rectangle as the port face: its area is the rectangle's.
+    group = port_group(built_sidecar(monkeypatch, component))
+    assert group["area_um2"] == pytest.approx(
+        (end - start) * 2 * SHEET_HALF_WIDTH_UM, abs=1e-9
+    )
+
+
+def test_a_round_pad_whose_chord_faces_the_port_is_cut_beyond_its_exact_arc(
+    monkeypatch,
+):
+    """A 64-sided pad turns a chord to the port, 120 nm inside the exact circle SGB builds.
+
+    The cut is measured from the arc, not the chord: it lies beyond the arc's reach at the
+    sheet's centre line, 10 grid steps past where the arc meets the sheet sides, as on the
+    1024-sided pad, so the port face stays clear of the pad and SGB builds it.
+    """
+    component = pad_and_electrode(
+        monkeypatch, round_pad=True, exact_arc=True, chord_facing_sides=64
+    )
+    _, region, record = prepared_port(eigenmode_sim(component))
+    start, end = assert_rectangle_along_x(region.exterior)
+    assert start == pytest.approx(99.995 + STEP_LIMIT_UM)
+    assert end == pytest.approx(ELECTRODE_X_UM)
+    pad_end, _ = record["ends"]
+    assert pad_end["landing"]
     group = port_group(built_sidecar(monkeypatch, component))
     assert group["area_um2"] == pytest.approx(
         (end - start) * 2 * SHEET_HALF_WIDTH_UM, abs=1e-9
