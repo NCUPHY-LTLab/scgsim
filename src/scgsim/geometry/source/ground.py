@@ -106,32 +106,17 @@ def derived_ground_polygons(
             raise TypeError(
                 f"{entity.semantic_id} include_layer must be a GDS layer pair"
             )
-        candidates = realized_on_lattice(
-            polygons_by_layer.get((int(include_layer[0]), int(include_layer[1])), ())
-        )
-        # Fuse exact contacts before applying an explicit selector; ownership
-        # still comes from the authored layer and selector, not proximity.
-        components = fused_gdstk_components(candidates)
-        for point in include_points:
-            if (
-                not isinstance(point, Sequence)
-                or isinstance(point, str | bytes)
-                or len(point) != 2
-            ):
-                raise TypeError(
-                    f"{entity.semantic_id} include_selector_points_um requires 2D points"
+        include_key = (int(include_layer[0]), int(include_layer[1]))
+        # The include polygons are drawn on the include layer, so their refusals name it.
+        with named_source(entity.semantic_id, f"{include_key[0]}/{include_key[1]}"):
+            included.extend(
+                _selected_includes(
+                    entity,
+                    gdstk,
+                    polygons_by_layer.get(include_key, ()),
+                    include_points,
                 )
-            selector = (float(point[0]), float(point[1]))
-            matches = [
-                polygon
-                for polygon, _, _ in components
-                if point_in_layout_polygon(selector, polygon)
-            ]
-            if len(matches) != 1:
-                raise ValueError(
-                    f"{entity.semantic_id} include selector {tuple(point)!r} matched {len(matches)} source polygons"
-                )
-            included.extend(layout_polygon_region(gdstk, matches[0]))
+            )
     regions = polygon_boolean(without_mask or (), tuple(included), "or", precision=1e-9)
     normalized_regions = sorted(
         (_region_loops(region) for region in regions or ()),
@@ -161,6 +146,41 @@ def derived_ground_polygons(
         )
         for index, (outer, holes) in enumerate(normalized_regions)
     )
+
+
+def _selected_includes(
+    entity: SemanticEntitySpec,
+    gdstk: ModuleType,
+    drawn: Sequence[Any],
+    include_points: Sequence[Any],
+) -> list[Any]:
+    """The include-layer components the Ground's selector points pick, one per point."""
+    candidates = realized_on_lattice(drawn)
+    # Fuse exact contacts before applying an explicit selector; ownership
+    # still comes from the authored layer and selector, not proximity.
+    components = fused_gdstk_components(candidates)
+    included: list[Any] = []
+    for point in include_points:
+        if (
+            not isinstance(point, Sequence)
+            or isinstance(point, str | bytes)
+            or len(point) != 2
+        ):
+            raise TypeError(
+                f"{entity.semantic_id} include_selector_points_um requires 2D points"
+            )
+        selector = (float(point[0]), float(point[1]))
+        matches = [
+            polygon
+            for polygon, _, _ in components
+            if point_in_layout_polygon(selector, polygon)
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"{entity.semantic_id} include selector {tuple(point)!r} matched {len(matches)} source polygons"
+            )
+        included.extend(layout_polygon_region(gdstk, matches[0]))
+    return included
 
 
 def _append_source_includes(

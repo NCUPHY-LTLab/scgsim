@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import gdstk
 import pytest
 from sgb_inputs import gds_pad_in_ground
 from test_located_refusals import GRID, on, places, rectangle
@@ -34,6 +35,7 @@ from scgsim.geometry.sgb.errors import (
 )
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.source.grid import apply_geometry_grid
+from scgsim.geometry.source.ground import derived_ground_polygons
 from scgsim.palace import EigenmodeSim
 
 # Pad outlines inside the 20 um square of ``two_pads``.
@@ -104,6 +106,40 @@ def test_an_outline_that_meets_itself_is_refused_at_each_point(
     found = places(message)
     assert len(found) == len(defects)
     assert all(on(place, defect) for place, defect in zip(found, defects, strict=True))
+
+
+def test_a_ground_include_refusal_names_the_include_layer():
+    """An include polygon on layer 3/0 that meets itself is refused on 3/0, not on the mask layer 1/0."""
+    build, _ = junction_fixture()
+    ground = replace(
+        build.entities[0],
+        semantic_id="chip/ground",
+        net_id="Ground",
+        geometry={
+            "mask_layer": (1, 0),
+            "include_layer": (3, 0),
+            "include_selector_points_um": ((5.0, 15.0),),
+        },
+    )
+    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
+        derived_ground_polygons(
+            ground,
+            polygons_by_layer={(3, 0): (gdstk.Polygon(HOLE_TOUCHING_THE_OUTLINE),)},
+            cell_bounds_um={
+                "x_min_um": 0,
+                "x_max_um": 20,
+                "y_min_um": 0,
+                "y_max_um": 20,
+            },
+            domain_bounds_by_semantic_id={},
+            plane_polygons=(gdstk.rectangle((0, 0), (20, 20)),),
+        )
+    message = str(error.value)
+    assert message.startswith(
+        "gdstk cutline boundary is not a simple loop: chip/ground on layer 3/0"
+    )
+    (place,) = places(message)
+    assert on(place, point(10, 0))
 
 
 # The occurrence transform of a component placed at (100, 50) um.
