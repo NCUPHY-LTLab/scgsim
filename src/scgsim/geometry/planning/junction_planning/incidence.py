@@ -219,21 +219,33 @@ def slice_free_boundaries(state: JunctionModel) -> None:
     """Slice the traced free boundaries, and the sheet's own boundary, at the two cut planes.
 
     The free slices are the parts of the sheet between its terminals; the sheet slices are the
-    whole drawn sheet on each side of a cut, which the emitted end pieces are.
+    whole drawn sheet on each side of a cut, which the emitted end pieces are.  Each cut plane
+    is measured along the lattice direction v, an integer vector, through the cut's lattice
+    point, so it meets both lattice sides exactly at grid points in any direction.
     """
     state.sliced, state.free_edges, state.sheet_sliced = ({}, {}, {})
     for jid, record in state.records.items():
-        dx, dy = (Fraction(str(v)) for v in record["direction_xy"])
-        origin = Fraction(str(record["local_origin_projection_um"][0])) / Fraction(
-            str(PRECISION_UM)
-        )
-        cuts = [origin + round(v / PRECISION_UM) for v in record["actual_cuts_um"]]
+        direction, cuts = _lattice_cut_planes(record)
         state.sliced[jid], state.free_edges[jid] = _slice_at_cuts(
-            state, state.raw_free[jid], cuts, (dx, dy)
+            state, state.raw_free[jid], cuts, direction
         )
         state.sheet_sliced[jid], _ = _slice_at_cuts(
-            state, sheet_boundary(state, record["authored_polygon_id"]), cuts, (dx, dy)
+            state, sheet_boundary(state, record["authored_polygon_id"]), cuts, direction
         )
+
+
+def _lattice_cut_planes(record) -> tuple[tuple[int, int], list[Fraction]]:
+    """The lattice direction v and each cut's position along it, v . P for its lattice point P.
+
+    Model units are Boolean units; along x or y these are the cut positions the slicing has
+    always used, the local origin plus each cut.
+    """
+    lattice = record["lattice"]
+    p, q = lattice["direction_grid"]
+    x, y = lattice["corners_grid"][0]
+    units = Fraction(str(lattice["grid_um"])) / Fraction(str(PRECISION_UM))
+    cuts = [((x + n * p) * p + (y + n * q) * q) * units for n in record["cut_indices"]]
+    return (p, q), cuts
 
 
 def sheet_boundary(state: JunctionModel, sheet_id: str) -> list:

@@ -17,7 +17,11 @@ from scgsim.aedt.specs.epr import (
     PlanarJunction,
 )
 from scgsim.geometry import GeometryBuildInput
-from scgsim.geometry.planning.junction_partition import junction_terminal_line
+from scgsim.geometry.planning.junction_partition import (
+    drawn_exterior,
+    junction_terminal_line,
+    lattice_rectangle,
+)
 from scgsim.geometry.source.validation import validate_geometry_input
 
 
@@ -97,7 +101,21 @@ def planar_junction_from_port(  # noqa: PLR0913 -- preserve the supported explic
     dx, dy = float(direction[0]), float(direction[1])
     magnitude = math.hypot(dx, dy)
     dx, dy = dx / magnitude, dy / magnitude
-    across = tuple(-dy * x + dx * y for x, y in region.exterior)
+    grid_um = build_input.metadata.get("source_dbu_um")
+    if grid_um is None:
+        raise ValueError(
+            f"port {port_name!r} needs the source grid (source_dbu_um) its sheet is drawn on"
+        )
+    # The sheet as its four corners on the grid; its width is theirs.
+    corners = lattice_rectangle(
+        region.exterior,
+        grid_um,
+        (dx, dy),
+        drawn=drawn_exterior(region),
+        port=f"port {port_name!r}",
+        layer=region.source_layer,
+    ).corners_um
+    across = tuple(-dy * x + dx * y for x, y in corners)
     width_um = max(across) - min(across)
     junction = PlanarJunction(
         junction_id=junction_id,
@@ -114,7 +132,7 @@ def planar_junction_from_port(  # noqa: PLR0913 -- preserve the supported explic
         },
     )
     junction_terminal_line(
-        {"exterior": region.exterior, "holes": region.holes},
+        {"exterior": corners, "holes": region.holes},
         junction_geometry(junction),
         0.0,
     )

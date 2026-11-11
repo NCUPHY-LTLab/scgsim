@@ -6,12 +6,13 @@ import json
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from decimal import Decimal
 from fractions import Fraction
 from typing import Any
 
 from scgsim.geometry.models.grid import (
     WALL_COLUMN_LIMIT_STEPS,
+    format_length,
+    format_point,
     geometry_grid_context,
 )
 from scgsim.geometry.models.input import (
@@ -42,6 +43,12 @@ from scgsim.geometry.planning.junction_planning.exact_geometry import (
     cross,
     section,
 )
+from scgsim.geometry.planning.junction_planning.lattice import (
+    CutLattice,
+    LatticeRectangle,
+    drawn_exterior,
+    lattice_rectangle,
+)
 from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
 from scgsim.geometry.planning.junction_planning.model import model_geometry
 from scgsim.geometry.planning.junction_planning.model_checks import (
@@ -50,17 +57,19 @@ from scgsim.geometry.planning.junction_planning.model_checks import (
 from scgsim.geometry.planning.junction_planning.selection import (
     BuiltOutline,
     EndSection,
-    bound_decimal,
     built_outline,
-    candidate_indices,
     contacts,
     end_candidate,
-    grid_cut,
     own_contact,
     side_steps,
 )
 from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
-from scgsim.geometry.primitives.grid import polygon_world_frame, with_input_grid
+from scgsim.geometry.primitives.grid import (
+    geometry_grid_scope,
+    polygon_world_frame,
+    with_input_grid,
+)
+from scgsim.geometry.primitives.grid_regions import grid_change_message
 from scgsim.geometry.primitives.planar_loops import PolygonCoordinates
 
 
@@ -110,6 +119,9 @@ class _JunctionPartitionPlanner:
     junction: JunctionGeometry = field(init=False)
     support_plane: dict[str, Any] = field(init=False)
     sheet: LayoutPolygonSpec = field(init=False)
+    lattice: LatticeRectangle = field(init=False)
+    cuts: CutLattice = field(init=False)
+    modelled_sheets: dict[str, LayoutPolygonSpec] = field(init=False)
     dx: float = field(init=False)
     dy: float = field(init=False)
     px: float = field(init=False)
@@ -155,35 +167,57 @@ class _JunctionPartitionPlanner:
         return self.result
 
     def plan_one(self) -> None:
-        """Keep all local selection inside its original polygon world frame."""
+        """Select one junction's cuts in its local frame, then record them."""
         self.read_source_frame()
         self.frame = JunctionLocalFrame(
             self.dx, self.dy, self.px, self.py, self.origin, self.deviations
         )
-        transform = (
-            self.dx,
-            self.px,
-            self.dy,
-            self.py,
-            self.origin[0] * self.dx + self.origin[1] * self.px,
-            self.origin[0] * self.dy + self.origin[1] * self.py,
-        )
-        with polygon_world_frame(transform):
+        self.cuts = CutLattice(self.lattice, self.frame, self.step)
+        with self.selection_grid():
             self.read_conductors()
             self.read_outline_meetings()
             self.find_corridor()
+            self.check_cut_room()
             self.choose_ends()
             self.check_partition()
             self.record_ends()
             self.record_junction()
+        self.model_sheet()
+
+    def selection_grid(self):
+        """The grid the local selection's Booleans run on.
+
+        Along x or y the world grid lines are local ones, so the Booleans run in the polygon
+        world frame and snap as SGB will.  In any other direction no local line is a grid line:
+        snapping there would move every cut edge and every side crossing off its line, so the
+        Booleans run at the local Boolean precision instead, and the lattice keeps the cut ends
+        and the central corners on grid points.
+        """
+        if not self.lattice.unit:
+            return geometry_grid_scope(None)
+        return polygon_world_frame(
+            (
+                self.dx,
+                self.px,
+                self.dy,
+                self.py,
+                self.origin[0] * self.dx + self.origin[1] * self.px,
+                self.origin[0] * self.dy + self.origin[1] * self.py,
+            )
+        )
 
     def initialize(self):
         """Index immutable authored polygons, source Entities and junction identities."""
         self.originals = {p.polygon_id: p for p in self.build_input.polygons}
+        # A port sheet keeps its metadata, where the grid realization records it as drawn.
         self.originals.update(
             {
                 r.source_polygon_id: LayoutPolygonSpec(
-                    r.source_polygon_id, r.source_layer, r.exterior, r.holes
+                    r.source_polygon_id,
+                    r.source_layer,
+                    r.exterior,
+                    r.holes,
+                    metadata=r.metadata,
                 )
                 for r in self.build_input.port_sheet_regions
             }
@@ -191,9 +225,14 @@ class _JunctionPartitionPlanner:
         self.authored_ids = {j.source_polygon_id for j in self.junctions}
         self.entities = {e.semantic_id: e for e in self.build_input.entities}
         self.records = {}
+        self.modelled_sheets = {}
 
     def read_source_frame(self):
-        """Resolve support, direction and the complete authored rectangle extent."""
+        """Resolve support, direction and the sheet's lattice rectangle and extent.
+
+        The extent is that of the lattice rectangle's four corners; along x or y on the grid
+        they are the drawn sheet's extremes, as the extent always was.
+        """
         self.support_plane = junction_contact_inventory(
             self.build_input,
             JunctionContactRequest(
@@ -205,10 +244,23 @@ class _JunctionPartitionPlanner:
             ),
         )
         self.sheet = self.originals[self.junction.source_polygon_id]
+        self.lattice = lattice_rectangle(
+            self.sheet.exterior,
+            self.step,
+            self.junction.direction_xy,
+            drawn=drawn_exterior(self.sheet),
+            port=f"junction {self.junction.junction_id!r}",
+            layer=self.sheet.layer,
+        )
+        corners = self.lattice.corners_um
+        # The declared direction must be the lattice rectangle's, within the shared rectangle check.
+        junction_terminal_line(
+            {"exterior": corners, "holes": self.sheet.holes}, self.junction, 0.0
+        )
         self.dx, self.dy = self.junction.direction_xy
         self.px, self.py = (-self.dy, self.dx)
-        along = [x * self.dx + y * self.dy for x, y in self.sheet.exterior]
-        across = [x * self.px + y * self.py for x, y in self.sheet.exterior]
+        along = [x * self.dx + y * self.dy for x, y in corners]
+        across = [x * self.px + y * self.py for x, y in corners]
         self.origin = (min(along), min(across))
         self.span = round((max(along) - self.origin[0]) / PRECISION_UM)
         self.width = round((max(across) - self.origin[1]) / PRECISION_UM)
@@ -306,6 +358,48 @@ class _JunctionPartitionPlanner:
                 "unsupported corridor containment; no general search performed"
             )
 
+    def check_cut_room(self) -> None:
+        """Refuse, located, a corridor that holds fewer than two cut positions.
+
+        A cut lies only every |v| grid steps along the port, so the clear gap between the two
+        conductors must hold two of them for the central rectangle to have a length.
+        """
+        first = self.cuts.candidates(self.lower, left=True)[0]
+        if self.cuts.position(first + 1)[1] <= self.upper:
+            return
+        grid = geometry_grid_context(self.build_input)
+        grid_um = None if grid is None else grid.grid_size_um
+        p, q = self.lattice.direction
+        start, end = (self.centre_line_point(u) for u in (self.lower, self.upper))
+        raise ValueError(
+            grid_change_message(
+                f"junction {self.junction.junction_id!r} has no room for a rectangle "
+                "between its conductors",
+                [self.sheet.layer],
+                grid_um,
+                [
+                    f"its sheet runs along v = ({p}, {q}), where a cut lies only every "
+                    f"{format_length(self.lattice.spacing_um, grid_um)} along it; the "
+                    f"clear gap between its conductors runs from {start} to {end}, "
+                    f"{format_length((self.upper - self.lower) * PRECISION_UM, grid_um)} "
+                    "long, and holds fewer than two such cuts"
+                ],
+                "Fix the layout: lengthen the gap the sheet crosses, or draw the sheet "
+                "along x or y or along a direction of fewer grid steps, such as 45 degrees.",
+            )
+        )
+
+    def centre_line_point(self, u) -> str:
+        """Where the sheet's centre line lies ``u`` Boolean units along the port, in the layout."""
+        along = self.origin[0] + float(u) * PRECISION_UM
+        across = self.origin[1] + self.width * PRECISION_UM / 2
+        grid = geometry_grid_context(self.build_input)
+        return format_point(
+            along * self.dx + across * self.px,
+            along * self.dy + across * self.py,
+            None if grid is None else grid.grid_size_um,
+        )
+
     def choose_ends(self):
         """Select each end's grid cut and the central span between them.
 
@@ -336,13 +430,9 @@ class _JunctionPartitionPlanner:
     def first_valid_cut(self, side: _EndSide):
         """The first grid candidate beside ``bound`` whose end piece passes every topology check."""
         left, bound = side.left, side.bound
-        for index in candidate_indices(bound, self.step, left=left):
-            requested, cut = grid_cut(index, self.step)
-            interior = (
-                Decimal(index) * Decimal(str(self.step)) > bound_decimal(bound)
-                if left
-                else Decimal(index) * Decimal(str(self.step)) < bound_decimal(bound)
-            )
+        for index in self.cuts.candidates(bound, left=left):
+            _, cut = self.cuts.position(index)
+            interior = self.cuts.beyond(index, bound, left=left)
             if interior and cut == bound:
                 raise ValueError(
                     "numerical junction geometry failure: interior grid cut collapses to boundary"
@@ -371,7 +461,7 @@ class _JunctionPartitionPlanner:
             for step in side_steps(side.outline.meetings, cut, self.span, left=left)
         ):
             index += 1 if left else -1
-            cut = grid_cut(index, self.step)[1]
+            cut = self.cuts.position(index)[1]
             if (cut >= self.upper) if left else (cut <= self.lower):
                 raise ValueError(
                     "junction corridor has no cut whose terminal steps are zero or at "
@@ -386,7 +476,7 @@ class _JunctionPartitionPlanner:
 
     def check_end(self, side: _EndSide, index):
         """Check the end piece of one grid cut and keep the evidence, with its side steps."""
-        requested, cut = grid_cut(index, self.step)
+        requested, cut = self.cuts.position(index)
         left = side.left
         end, evidence = end_candidate(
             self.sheet_region if side.outline.rebuilt_arcs else self.free,
@@ -526,13 +616,45 @@ class _JunctionPartitionPlanner:
             "ends": self.end_records,
             "free_local_regions": plain_record(read_boolean_rings(self.free)),
             "central_local_regions": plain_record(self.central),
+            "lattice": {
+                **self.lattice.record(),
+                "cuts": [
+                    self.lattice.cut_record(index) for index in (self.ka, self.kb)
+                ],
+            },
         }
 
+    def model_sheet(self) -> None:
+        """Keep the sheet the model partitions: straight along its lattice lines between the cuts."""
+        exterior = self.lattice.modelled_sheet((self.ka, self.kb))
+        if exterior is not None:
+            self.modelled_sheets[self.sheet.polygon_id] = replace(
+                self.sheet, exterior=exterior
+            )
+
     def emit_model(self):
-        """Emit registered model coordinates only after all local selections."""
+        """Emit registered model coordinates only after all local selections.
+
+        The model partitions each sheet as ``model_sheet`` kept it; the records keep the sheet
+        as drawn, with the modelled one beside it.
+        """
         self.model, self.derived_entities = model_geometry(
-            self.build_input, self.originals, self.records, self.output_format
+            self.build_input,
+            {**self.originals, **self.modelled_sheets},
+            self.records,
+            self.output_format,
         )
+        for record in self.records.values():
+            sheet_id = record["authored_polygon_id"]
+            if sheet_id in self.modelled_sheets:
+                drawn = self.originals[sheet_id]
+                record["lattice"]["modelled_sheet_um"] = plain_record(
+                    self.modelled_sheets[sheet_id].exterior
+                )
+                record["authored_source_geometry"] = {
+                    "exterior": plain_record(drawn.exterior),
+                    "holes": plain_record(drawn.holes),
+                }
 
     def assemble_output(self):
         """Assemble derived source records and the authored-input hash."""
