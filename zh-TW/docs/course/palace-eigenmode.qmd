@@ -50,7 +50,7 @@ print(mesh_path, config_path)
 
 ## Surface EPR 的邊距列 {#surface-epr-margin-rows}
 
-Palace Surface EPR 除了每個整面的基準列，還能回報距間隙至少某個距離的那一部分表面。請在 `set_surface_epr` 規格中用 `inset_margins_um` 要求這些列，例如 `"inset_margins_um": (0.01, 0.05, 0.1)`，並在 `mesh()` 之前呼叫 `set_surface_epr`，因為 SGB 會把邊距切進幾何。省略此鍵就只要求基準列。這些列是普通的 Palace 屬性，一般的 Palace 執行檔即可。鍵、面種類與限制見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)，公開的 [Xmon EPR 延伸範例](../tutorial-xmon-palace.qmd)示範來源設定。
+Palace Surface EPR 除了每個整面的基準列，還能回報距間隙至少某個距離的那一部分表面。請在 `set_surface_epr` 規格中用 `inset_margins_um` 要求這些列，例如 `"inset_margins_um": (0.5, 1.0)`，並在 `mesh()` 之前呼叫 `set_surface_epr`，因為 SGB 會把邊距切進幾何。省略此鍵就只要求基準列。這些列是普通的 Palace 屬性，一般的 Palace 執行檔即可。鍵、面種類與限制見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)，公開的 [Xmon EPR 延伸範例](../tutorial-xmon-palace.qmd)示範來源設定。
 
 ## Circular Pad LC 研究 {#circular-pad-lc-study}
 

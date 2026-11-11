@@ -51,7 +51,7 @@ prepared = prepare_planar_geometry_input(
 )
 catalogue = prepared.contribution_catalog
 presets = validate_interface_preset_records()
-margins_um = (0.01, 0.05, 0.1)
+margins_um = (0.5, 1.0)
 surface_specs = []
 
 for record in catalogue:
