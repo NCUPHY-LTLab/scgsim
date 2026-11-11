@@ -129,6 +129,19 @@ NEAR_CORNER_45 = LatticeLayout(
     electrode=(150, 1000, -500, 500),
     sheet=(0, 200, 0, 10),
 )
+# The Xmon's port at a small scale: a 45 degree sheet 190 grid steps wide, from a round pad (the
+# circle inscribed in the box ``pad``, 0.99985 um in radius, centred on the sheet's middle line) to
+# an electrode 2800 grid steps along it.
+ROUND_PAD_45 = LatticeLayout(
+    direction=(1, 1),
+    pad=(-714, 700, -612, 802),
+    electrode=(2800, 5000, -1500, 1700),
+    sheet=(0, 4000, 0, 190),
+)
+# Substrate-air bands 0.5 and 1 um wide, as the Xmon tutorial asks for.
+SA_BANDS = {
+    "SA": {"film_thickness_m": 2e-9, "permittivity": 4, "inset_margins_um": [0.5, 1.0]}
+}
 
 
 def lattice_device(monkeypatch, layout: LatticeLayout, offset_um: float = 0.0):
@@ -247,8 +260,30 @@ def eigenmode_sim(chip, reference):
     return sim
 
 
+def round_pad(layout: LatticeLayout, count: int) -> list[tuple[float, float]]:
+    """The circle inscribed in the layout's pad box, drawn as ``count`` vertices on the grid, in micrometres."""
+    s0, s1, t0, t1 = layout.pad
+    cx, cy = layout.centre_um(layout.pad)
+    radius_um = (s1 - s0) / 2 * layout.spacing_um
+    assert s1 - s0 == t1 - t0
+    return [
+        (
+            round((cx + radius_um * math.cos(2 * math.pi * k / count)) * NM_PER_UM)
+            / NM_PER_UM,
+            round((cy + radius_um * math.sin(2 * math.pi * k / count)) * NM_PER_UM)
+            / NM_PER_UM,
+        )
+        for k in range(count)
+    ]
+
+
 def built_port_area(monkeypatch, chip, reference) -> float:
-    """The port face area of the SGB build ``simulation_drc`` makes, read before its folder is removed."""
+    """The port face area of the SGB build ``simulation_drc`` makes."""
+    return port_group(built_sidecar(monkeypatch, chip, reference))["area_um2"]
+
+
+def built_sidecar(monkeypatch, chip, reference, **options):
+    """The sidecar of the SGB build ``simulation_drc`` makes, read before its folder is removed."""
     sidecars = []
     real = EigenmodeSim._build_geometry  # noqa: SLF001 -- the geometry half the check runs
 
@@ -264,9 +299,10 @@ def built_port_area(monkeypatch, chip, reference) -> float:
         material_records=MATERIALS,
         instances={"chip/device": reference},
         nets=NETS,
+        **options,
     ).passed
     (sidecar,) = sidecars
-    return port_group(sidecar)["area_um2"]
+    return sidecar
 
 
 def turned(point, degrees: float) -> tuple[float, float]:
@@ -528,6 +564,35 @@ def test_a_gap_shorter_than_the_cut_spacing_is_refused_where_it_lies(monkeypatch
     assert "runs along v = (1000, 1), where a cut lies only every 1000 nm" in message
     assert "runs from (0.200, 0.501) um to (0.500, 0.502) um" in message
     assert "Fix the layout: lengthen the gap the sheet crosses" in message
+
+
+def test_a_45_degree_port_on_a_round_pad_keeps_every_band_boundary(monkeypatch):
+    """Substrate-air bands 0.5 and 1 um wide beside a 45 degree port landing on a round pad of 128 vertices.
+
+    The partition joins an end piece to the pad.  Its corner at the cut lies tens of nm from the
+    next pad vertices, and the 1 um arcs round them meet at a shallow angle, where snap rounding
+    makes a few edges common to both.  Each such edge is one arc's seam, so the two seams meet at
+    one point and the level arrangement keeps every band boundary.
+    """
+    layout = ROUND_PAD_45
+    _, _, t0, t1 = layout.sheet
+    device = device_with_port(
+        monkeypatch,
+        pad=round_pad(layout, 128),
+        electrode=layout.box_um(layout.electrode),
+        sheet=layout.box_um(layout.sheet),
+        port_centre=layout.centre_um(layout.sheet),
+        port_width_um=(t1 - t0) * layout.spacing_um,
+        direction=layout.direction,
+    )
+    chip, reference = placed(device, 0)
+    sidecar = built_sidecar(monkeypatch, chip, reference, surface_epr_specs=SA_BANDS)
+    bands = {
+        name.rsplit("::band=", 1)[1]
+        for name in sidecar["physical_groups"]
+        if name.startswith("SA::") and "::band=" in name
+    }
+    assert bands == {"0", "1", "2"}
 
 
 def test_aedt_binds_a_45_degree_sheet_to_its_central_lattice_rectangle(monkeypatch):
