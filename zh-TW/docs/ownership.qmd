@@ -56,8 +56,6 @@ Palace 與 AEDT 後端實作、測試及技術文件仍屬不同來源責任，�
 | [架構](architecture.qmd) | 模組與狀態界線、準備與執行流程 |
 | [來源沿革](provenance.qmd) | 來源／結果識別資訊與公開資料界線 |
 | [目標與衍生來源](goals-and-upstream.qmd) | 目前範圍與上游關係 |
-| [路線圖](roadmap.qmd) | 延後實作的類別與文件方向 |
-| [歷史錯誤](errors.qmd) | 依修訂版本記錄的診斷觀察 |
 | [儲存庫維護](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md) | 建置、版本目錄與發布程序 |
 
 這些次要參考資料將實作細節保留在研究者學習流程之外。契約頁面會說明公開 API 與物理結果意義；它們不是發行檢查清單。

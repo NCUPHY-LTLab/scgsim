@@ -1,5 +1,5 @@
 ---
-title: "GeometryPlan 與 SGB Route A／B"
+title: "GeometryPlan 與 SGB"
 description: "GeometryPlan 來源身分、出現實例與 Net 歸屬、路徑轉換及輸入摘要。"
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
@@ -21,15 +21,17 @@ lang: zh-TW
 
 ## 共用物理來源與表示 {#physical-representation}
 
-共用物理來源／近似設定範圍為 **CONVERGING**。其[物理表示契約](specs/physical-representation.qmd) 區分來源物理分類及選定求解器表示。單一中性計畫將每個原始 Entity 與物理層，綁定至有效幾何、支撐及完整包絡追蹤。本體保留實際來源端點及孔洞；名義層跨度不能取代本體。缺少合格接觸或宿主關聯時，保留缺項，不加推論。
+[物理表示契約](specs/physical-representation.qmd) 區分來源物理分類及選定求解器表示。單一中性計畫將每個原始 Entity 與物理層，綁定至有效幾何、支撐及完整包絡追蹤。本體保留實際來源端點及孔洞；名義層跨度不能取代本體。缺少合格接觸或宿主關聯時，保留缺項，不加推論。
 
 Palace 與 AEDT 使用同一個選定解讀。不同明確近似設定保留不同近似意義；來源附著法向不決定原生 HFSS 場側選取。歷史紀錄的來源與執行期同批產物，保留原始解讀與身分。
 
 ## 來源曲線與原生共用拓撲 {#source-curves}
 
-曲線範圍為 **ACCEPTED**。只有多邊形的輸入保留多邊形邊界。曲線是明確來源宣告，不是從繪出版圖或網格推論的平滑化。
+只有多邊形的輸入保留多邊形邊界。曲線是明確來源宣告，不是從繪出版圖或網格推論的平滑化。
 
-`SourceCurveSpec` 以微米描述 XY 座標。支援類型為 `line_segment`（兩端點）、`circular_arc`（起點、弧上點、終點）、`interpolation_spline`（通過提供點的原生插值），以及 `bspline`（控制點及明確階數，並在提供時包含有理權重、不同節點及重數）。選用的 `parameter_interval` 修剪原生來源曲線，不縮放或重新擬合幾何。控制點不是拓撲頂點。`circular_arc` 轉換為原生定義域 `[0, 1]` 上單一精確複合有理 B-spline；內部節點分隔精確區段，修剪可跨越這些節點。呼叫端指定 `bspline` 時，所提供階數、權重、節點、重數及原生參數定義域維持權威。
+`SourceCurveSpec` 以微米描述 XY 座標。其類型為 `line_segment`（兩端點）、`circular_arc`（起點、弧上點、終點）、`interpolation_spline`（通過提供點的原生插值），以及 `bspline`（控制點及明確階數，並在提供時包含有理權重、不同節點及重數）。選用的 `parameter_interval` 修剪原生來源曲線，不縮放或重新擬合幾何。控制點不是拓撲頂點。`circular_arc` 轉換為原生定義域 `[0, 1]` 上單一精確複合有理 B-spline；內部節點分隔精確區段，修剪可跨越這些節點。呼叫端指定 `bspline` 時，所提供階數、權重、節點、重數及原生參數定義域維持權威。
+
+Palace 所用的幾何建構器（SGB）處理 `line_segment` 與 `circular_arc`。它以 `UnsupportedCurveError` 拒絕 `interpolation_spline` 或 `bspline` 宣告，以及 `circular_arc` 以外的邊界重建。供 SGB 使用的版圖請以線段、圓弧或[多邊形](supported-geometry.qmd#curve-rule)繪製。
 
 `BoundaryCurveChainSpec` 將有序閉合邊界綁定至 `entity_id`、`boundary_id` 及 `selector_point_um`。選取點位於所選 Entity 擁有的**正導體區域**。複合來源多邊形在選取前先聯集為邏輯多邊形，包含以橋接方式編碼的 GDS 孔洞。`role="outer"` 選取外環；`role="hole", hole_index=0` 選取同一多邊形紀錄的第一個孔洞。孔洞選取點仍位於導體內，不在空孔內。孔洞順序與來源方向隨出現實例傳遞；原生標記不識別 Entity、Net 或來源邊界。
 
@@ -37,19 +39,17 @@ Palace 與 AEDT 使用同一個選定解讀。不同明確近似設定保留不�
 
 `GdsBoundaryReconstructionSpec` 要求明確有序的 `segment_indices`：索引 `i` 表示由頂點 `i` 至 `(i + 1) % N` 的原始邊。選定連續鏈可跨越索引零。`closed=True` 選取整個環；部分鏈保留原端點，每個未選取直線段維持不變。`anchor_indices` 識別重建使用的原始頂點，`degree` 及 `parameter_interval` 保留要求的樣條操作。閉合圓重建使用三個明確錨點；開放弧使用起點、弧上點及終點錨點。重疊替換鏈或互相競爭的整體邊界宣告，不能擁有相同來源線段。
 
-對啟用的宣告，樹內幾何建構器在指派材料介面前建立單一原生 OCC 平面排列。原生布林歷史保留來源成員及修剪參數區間。相同排列曲線構成金屬、介電與真空補集及埠分割的邊界。指定堆疊提供 Z；共用排列邊的集體原生 1D 至 2D 掃掠建立精確直紋壁，並保留修剪曲線幾何。它保留共用上緣，以及每個來源頂點的一條垂直邊。由表面起始的殼接著形成求解體積，包含內部 PEC 空腔殼。原生建構錯誤向外傳遞；沒有直線邊備援、逐表面重新擬合或全域體積修復。
+SGB 把宣告的線段與圓弧在整數格點上建成單一精確平面排列，沿指定堆疊擠出，並自行寫出 BREP 與 XAO 檔；過程中不執行 OCC 布林運算，也不修復殼。每個面在 sidecar 中保留來源身分；Gmsh 只在產生網格之前開啟寫出的 XAO 加以檢查。建構錯誤會停止建構，沒有直線邊備援，也沒有體積修復。
 
-標準 Gmsh 殼 AutoFix 修正殼方向時可能替換原生面標記。SGB 透過完整原生線框／邊對應，將各修復面重新綁定至來源 `SurfaceID`，再將來源映射帶入匯出與後端建構。來源身分固定，數值 Gmsh 標記可以改變；不使用標記、座標、面積或順序猜測替代面。已觀察的 Circle Route B 建構中，共用面與金屬切口邊界仍綁定來源，埠薄片保持獨立表示。若無法保留對應或必要拓撲，原生建構會失敗，不輸出備援幾何。
+Palace 不使用的進階建構器 `scgsim.geometry.compiler`，對曲線輸入另有自己的紀錄：OCC 平面排列、型別化的 `MMContactRecord` 接觸，以及 `metadata.curved_arrangement`。它的路徑分派會拒絕 Route C 上啟用的曲線。
 
-隱藏的同 Net 接觸保留型別化 `MMContactRecord` 歸屬，不成為 MM 物理群組。其新增的 `geometry_ref` 包含獨立的正規點、曲線及表面環定義，並具有可解析的 `outer_loop_ref` 與 `hole_loop_refs`。共用即時邊界曲線使用相同正規 ID。真正的多邊形接觸保留 `outer_loop`；真正的曲線接觸則記為 `None`。平面接觸可記錄平面法向；曲壁記錄 `normal=None` 及實際表面幾何，不虛構固定方向。實際接觸幾何不指派 Net，不同 Net 接觸仍是物理短路錯誤。
+幾何階數與有限元素階數是不同選擇。曲面模型幾何不會讓正表面內縮成為精確曲線周界距離；請見 [EPR 解讀](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions)。
 
-建構計畫的 `metadata.curved_arrangement` 區分要求的來源綁定／重建，以及實際原生區間、成員與 Z 掃掠。其獨立邊界傳輸保留共用原生面與邊；求解器／網格標記仍屬轉換資料。幾何階數與有限元素階數是不同選擇。曲面模型幾何不會讓正表面內縮成為精確曲線周界距離；請見 [EPR 解讀](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions)。
-
-Palace Route A／B 透過既有幾何入口使用啟用的曲線意圖。既有路徑分派拒絕保留導體的 Route C 上啟用曲線意圖；只有多邊形的 Route C 行為不變。目前 AEDT 平面轉換明確拒絕啟用宣告，不默默替代為診斷用多邊形。
+Palace 在 Route A 或 Route B 上透過 SGB 建構宣告的線段與圓弧；其他曲線類型會引發 `UnsupportedCurveError`。目前 AEDT 平面轉換明確拒絕啟用宣告，不默默替代為診斷用多邊形。
 
 ## 元件至後端幾何契約 {#component-to-backend-geometry-contract}
 
-已接受契約在 Palace 或 AEDT 準備之前，明確建立元件局部幾何與階層。公開 `scgsim.geometry.GeometryPlan` 是可變 Notebook 建構器：建立展開元件實體清單，並儲存最終 `Net -> Entity` 指派。其 `prepare()` 方法回傳不可變 `GeometryPlanSnapshot`；`GeometryBuildInput` 仍是後端準備路徑使用的正規化幾何邊界。
+此契約在 Palace 或 AEDT 準備之前，明確建立元件局部幾何與階層。公開 `scgsim.geometry.GeometryPlan` 是可變 Notebook 建構器：建立展開元件實體清單，並儲存最終 `Net -> Entity` 指派。其 `prepare()` 方法回傳不可變 `GeometryPlanSnapshot`；`GeometryBuildInput` 仍是後端準備路徑使用的正規化幾何邊界。
 
 以 `GeometryPlan(component=assembled, root_id="chip", layer_stack=..., material_records=..., coupon_padding_um=..., grid_size_um=layoutgrid_um)` 建立計畫。在建構儲存格之前，先將來源版圖 DBU 設為選定的 `layoutgrid_um`。使用 `register_instance("chip/q0", q0_ref)`，依父實例優先順序註冊每個具名參考出現實例。`plan.entities` 提供既有語意實體清單，其 `.semantic_id` 以斜線限定。Notebook 以 `set_nets({NetID: tuple(qualified_entity_ids)})` 提供最終映射；`prepare()` 回傳凍結的 `GeometryPlanSnapshot`，包含正規化 `geometry_input`、堆疊、GDS 位元組與摘要，以及獨立來源出現實例紀錄，不保留即時元件參照。Palace 與 AEDT 透過 `EigenmodeSim.set_plan(snapshot)` 使用該確切快照。
 
@@ -77,7 +77,7 @@ Palace Route A／B 透過既有幾何入口使用啟用的曲線意圖。既有�
 
 端子合併來源與端部支撐後，內部抵消的接縫不是新增表面意圖。
 
-| 事實或操作 | 已接受契約 |
+| 事實或操作 | 契約 |
 |---|---|
 | 元件定義 | 持有局部多邊形、來源 Entity ID、埠、拓撲選取器及局部元件事實。重用元件不改寫局部 ID。結構 v2 不指派最終 Net，也不在元件內提供公開 `Group` API。 |
 | 元件出現實例 | `register_instance(path, reference)` 將具名路徑綁定至實際 GDSFactory 出現實例。父路徑區段先於子區段註冊。路徑在展平之前限定實體與多邊形身分；旋轉及反射一致套用至幾何、選取器及埠。 |
@@ -90,26 +90,23 @@ Palace Route A／B 透過既有幾何入口使用啟用的曲線意圖。既有�
 | AEDT 物件名稱 | 新原生名稱可讀且可重現，依需要清理及消除歧義，仍綁定原始限定 Entity ID。歷史準備名稱保留版本專屬讀取器策略。 |
 | 邊界預設值 | Palace 將未指定的外部真空邊界保留為自然 PMC 條件。AEDT 使用 HFSS 預設 Perfect E。共用輸入不將一種政策轉成另一種。 |
 
-以上為已接受的 V1 語意。來源準備建立幾何輸入契約，不代表原生幾何驗證或求解器執行。
+來源準備建立幾何輸入契約，不代表原生幾何驗證或求解器執行。
 
-### 已接受的 Q3D 來源正規化 {#accepted-q3d-source-normalization}
+### Q3D 來源正規化 {#accepted-q3d-source-normalization}
 
-Q3D GeometryPlan 前端屬於已接受的 v2 實作／API（2026-10-09 接受，候選版本 `a932a173edb5c56ae14740ff5177190996255bdd`）。識別的 `airbridge_deck` 及 `airbridge_post` 紀錄，在正規化快照中仍是角色中立的來源幾何；正規化不賦予 Palace 路徑表示或原生導體角色。選定的 Palace 路徑繼續拒絕無法表示的導體。AEDT Q3D 透過獨立有限 C／G 來源前端，使用快照中呼叫端指定的最終 Net 成員及明確物理接地角色。目前 AEDT 轉換仍拒絕來源曲線意圖，不默默線性化。此已接受來源契約不宣稱 Q3D 求解完成或已觀察回傳矩陣。
+Q3D GeometryPlan 前端屬於 v2 API。識別的 `airbridge_deck` 及 `airbridge_post` 紀錄，在正規化快照中仍是角色中立的來源幾何；正規化不賦予 Palace 路徑表示或原生導體角色。選定的 Palace 路徑繼續拒絕無法表示的導體。AEDT Q3D 透過獨立有限 C／G 來源前端，使用快照中呼叫端指定的最終 Net 成員及明確物理接地角色。目前 AEDT 轉換仍拒絕來源曲線意圖，不默默線性化。此來源契約不宣稱 Q3D 求解完成或已觀察回傳矩陣。
 
-## 目前 Surface-EPR 方向 {#current-surface-epr-direction}
+## 路徑 {#current-surface-epr-direction}
 
-| 路徑 | 公開意圖 | 目前狀態 |
-|---|---|---|
-| Route A | 零厚度面金屬 PEC 薄片與有限凸塊殼 | 已實作、已接受 |
-| Route B | 有限建構金屬體積的閉合外部邊界殼為 PEC；其內部從 Palace 求解域排除，不產生四面體 | 已實作、已接受 |
+| 路徑 | 模型內容 | SGB 能否建構 | Palace 是否接受 |
+|---|---|---|---|
+| Route A | 零厚度面金屬 PEC 薄片與有限凸塊殼 | 是 | 是 |
+| Route B | 有限建構金屬體積的閉合外部邊界殼為 PEC；其內部從 Palace 求解域排除，不產生四面體 | 是 | 是 |
+| Route C | 每個導體體積都以求解域的形式留在模型中 | 是 | 否 |
 
-目前方向只包含 Route A 與 Route B。
+Palace 模擬接受 Route A 與 Route B：`set_surface_epr` 與 `mesh()` 會以 `ValueError` 拒絕其他路徑。Route C 供保留導體體積的後端使用。AEDT 的方向是使用同一份 SGB 輸出；它目前的準備流程經由自己的平面路徑讀取 GeometryPlan 快照。
 
-## 歷史 SGB 幾何距離帶（已撤回） {#surface-distance-bands}
-
-SCGSim 已不再提供 SGB 幾何距離帶產生器。本節保留舊設計範圍，供閱讀舊資料時參考；`GeometryPlan.set_surface_distance_bands(...)`、`SurfaceDistanceBandSpec` 與 Palace 彙總 API 都不是現行介面。
-
-已撤回的設計會從指定平面父面及原始外環、孔環邊界切出幾何區域，為各子區保留來源譜系，並將區域送入 CAD 與網格流程。其 EPR 彙總依賴已完成的 Palace 結果，不需要 Q2D。這些歷史區域不同於 Palace 的 Surface EPR 邊距列，後者仍透過 `inset_margins_um` 要求：`mesh()` 建立幾何時，SGB 會把這些帶切進模型。請見現行[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。
+Surface EPR 邊距的條帶由 SGB 在 `mesh()` 建立幾何時切進模型；請見[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。
 
 ## 內部語意投影 {#internal-semantic-projection}
 
@@ -149,7 +146,7 @@ AEDT 準備也從明確來源／有效層紀錄，建立私有程序內表示內
 
 AEDT 負責的綁定附屬檔，必須另外記錄每個建立的本體、薄片、面、材料側、選取及已儲存場運算式與來源身分的關係。原生面重疊或鄰接查詢是觀察幾何資料，不能製造來源接觸意圖。Route-A 近似設定正規化仍在共用前端邊界只發生一次；Route-B 有限本體事實仍與 PEC 近似及實現它們的 AEDT 實作區分。
 
-## 準備資源（CONVERGING） {#preparation-resources}
+## 準備資源 {#preparation-resources}
 
 在來源準備及網格產生外層使用 `scgsim.preparation.preparation_resources(max_workers=...)`，共用單一準備工作者預算。未使用此範圍時，準備採序列執行。
 

@@ -38,6 +38,7 @@ from scgsim.palace.results.surface_readers import (
     read_surface_bindings,
     read_surface_margin_bindings,
 )
+from scgsim.palace.results.tables import configured_mode_count
 
 
 @runtime_checkable
@@ -156,6 +157,7 @@ def _analysis_source(result: ResolvedRunData | PartialAmrReport) -> _AnalysisSou
             read_surface_bindings(index_map),
             read_surface_margin_bindings(index_map),
             failed_attempt=result.status != "completed",
+            mode_count=configured_mode_count(result.provenance.config),
         )
         context = AmrAnalysisContext(
             result.run_dir, result.problem, result.status, "receipt_bound"

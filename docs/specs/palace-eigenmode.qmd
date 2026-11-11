@@ -22,7 +22,7 @@ ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics
 | Numerical controls | `set_numerical(...)` retains explicit order, linear solver, AMR and output choices |
 | Source/settings view | `input_summary()` returns detached source plus settings, no file/native I/O |
 | Surface model | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`, before `mesh()` |
-| Authored port | `add_port(qualified_name, *, layer, layout_sheet=True, inductance)` |
+| Authored port | `add_port(name, *, layer, layout_sheet=True, inductance)`; `layout_sheet` must be `True` (its signature default `False` is refused) |
 | Output selection | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | Preparation | `mesh()`, `write_config()`, then `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
@@ -31,7 +31,8 @@ Geometric order is distinct from the FEM order configured through
 Eigenmode and Electrostatic facades share one set of mesh controls and
 defaults, described in the
 [Palace mesh controls](palace-electrostatic-sgb.qmd#palace-mesh-controls), which
-also state that a mesh below the quality threshold stops `mesh()`.
+also state that fine structure refuses `mesh()` before meshing and that a mesh
+below the quality threshold stops it.
 
 ## Eigenmode mesh and AMR defaults (CONVERGING)
 
@@ -41,8 +42,13 @@ threshold) and writes `Model.Refinement.Nonconformal=true`. Before
 `write_config()`, provide `amr_max_passes` through `set_numerical(...)`. For a
 positive pass limit, also provide `amr_tolerance` and `amr_update_fraction`;
 setting `amr_max_passes=0` disables adaptive refinement and allows those two
-values to remain unset. Omitted values in later `set_numerical(...)` calls
-retain their current settings. These are input controls, not adequacy
+values to remain unset. In later `set_numerical(...)` calls, omitted
+`ksp_type`, `amr_max_passes`, `amr_nonconformal`, `amr_nc_levels`,
+`amr_tolerance`, `amr_update_fraction` and `save_adapt_diagnostics` retain their
+current settings; every other omitted value (`order`, `tolerance`,
+`max_iterations`, `solver_type`, `preconditioner`, `device`,
+`save_adapt_iterations`, `save_adapt_mesh`, `estimator_mg`, `output_paraview`
+and `output_grid_function`) takes its default. These are input controls, not adequacy
 recommendations. Electrostatic retains its existing AMR defaults in the shared
 contract.
 
@@ -60,6 +66,18 @@ standalone geometry/stack or conflicting envelope setters. The
 [GeometryPlan contract](../geometry-sgb.qmd) owns source identity and route
 preparation. The [Electrostatic/shared Palace contract](palace-electrostatic-sgb.qmd)
 owns the shared mesh controls and config controls.
+
+## Lumped ports {#lumped-ports}
+
+Each `add_port(..., layout_sheet=True)` becomes one `Boundaries.LumpedPort` row
+that carries its `inductance` as `L`. Palace's uniform lumped element must be a
+rectangle, so `mesh()` gives Palace the central rectangle of the drawn sheet as
+the port face and joins the rest of the sheet to the conductors it lands on:
+the conductor at the start of the port `Direction` and the one it points to.
+[Lumped ports are made rectangles](../supported-geometry.qmd#lumped-port-rectangle)
+states how each cut is chosen. The sheet must land on exactly two conductors;
+otherwise `mesh()` and `EigenmodeSim.simulation_drc` raise `ValueError` naming
+the port. A conductor without a Net is a Net of its own.
 
 ## Selection and physical meaning
 
@@ -103,21 +121,6 @@ configuration, and no special Palace build is needed. The
 [SGB design pages](../../zh-TW/docs/design/sgb/inset-imprint.html#band-measure)
 (Traditional Chinese) define how distance is measured.
 
-::: {.callout-warning title="Draw curves with at most 128 points per full circle"}
-A curved conductor outline drawn as a polygon is supported when it uses at most
-128 points per full circle, so that every vertex turns by at least 2.8125°.
-A denser outline, such as a 256-point circle or a finely sampled spline, can
-leave the inset curve open: two neighbouring edge offsets neither meet nor
-cross. SGB then refuses the layout with `inset family '…': the inset curve at
-m = … um is not closed near (x, y) um` rather than return wrong bands. What
-decides it is the turn at each vertex, not the edge length. Build PDK
-components with `curve_sampling="simulation"`, or declare true arcs.
-[Supported Geometry](../supported-geometry.qmd#curve-rule) gives the rule, the
-measurements and the layout fixes; the
-[band construction](../../zh-TW/docs/design/sgb/inset-imprint.html#band-regions)
-(Traditional Chinese) explains the cause.
-:::
-
 ::: {.callout-important title="Call set_surface_epr before mesh()"}
 Margins are geometry: `mesh()` hands them to SGB with the rest of the model.
 Configure `set_surface_epr` first. Calling it after `mesh()` invalidates the mesh,
@@ -130,7 +133,7 @@ inputs:
 ::: {.askr-table-compact}
 | Key | Meaning |
 |---|---|
-| `inset_margins_um` | Strictly increasing positive margins in µm. `mesh()` asks SGB for bands at these margins on every face of the spec's type, in one geometry build. Omit it for baseline rows only. |
+| `inset_margins_um` | Strictly increasing positive margins in µm. `mesh()` asks SGB for bands at these margins on every face of the spec's type, in one geometry build. Every band must be at least 10 grid steps wide (the first band is the first margin, each next band the difference of two margins); a narrower band is refused with `ValueError` before the build. Omit it for baseline rows only. |
 | `inset_margins_by_entity_um` | `{entity_id: [margins]}` for `MA` and `MS`. Each named conductor takes its own margins, and the rest of the type keeps `inset_margins_um`, if given. It adds one extra, unbanded geometry build to find the conductors' faces. A named conductor with no face of that type raises `ValueError` from `mesh()`. It is rejected for `SA`, whose interface lies between solution regions and has no owning conductor. |
 | `face_kinds` | Restricts the spec to some of `"sheet"`, `"top"`, `"bottom"` and `"interface"`. When the spec asks for margins, `"sidewall"` is rejected because SGB never bands sidewalls. |
 :::
@@ -182,6 +185,12 @@ return and the separately retained preparation ID. The resulting
 `reanalyze_epr(result, *, surface_defaults=None, group_overrides=None)` returns a
 new detached result, and `show_epr(result, *, mode=None)` returns a Plotly Figure.
 Neither operation opens Palace.
+
+A result holds exactly the `num_modes` modes that `set_eigenmode` requested.
+Palace reports every mode that converged, so its mode tables can hold more rows
+than that. The readers keep modes 1 through `num_modes` in Palace's order and
+read nothing from the rest. A table with fewer rows than requested, or whose
+mode index is not 1, 2, … in order, is refused.
 
 ### Native Eigenmode Q availability {#native-eigenmode-q}
 

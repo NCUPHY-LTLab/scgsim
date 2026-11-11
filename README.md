@@ -22,7 +22,7 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git, t
 uv init --python 3.12 scgsim-study
 cd scgsim-study
 uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@fb8cbe199386bbe6d81cc9c58817fbe7d339573f' \
-  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c'
+  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
 `uv` creates `.venv` and records resolved versions in `uv.lock`. Keep `pyproject.toml` and `uv.lock` with the study; run `uv sync` on another computer to recreate the environment.
@@ -152,3 +152,5 @@ Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground
 | Resonance and EPR | [Palace or HFSS modes](docs/tutorials/resonance.qmd) · [Energy participation](docs/tutorials/resonance-epr.qmd) |
 | Driven S-parameters | [HFSS Modal or Terminal](docs/tutorials/scattering.qmd) |
 | Transmission-line parameters | [AEDT Q2D](docs/tutorials/transmission-line.qmd) |
+
+Before you simulate a layout of your own, read the [supported scope](docs/supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.

@@ -1,6 +1,6 @@
 ---
 title: "Supported Geometry"
-description: "The layout patterns SCGSim builds with Surface-EPR bands, each with a figure and its dimensions, and the rule for drawing curved outlines."
+description: "The layout patterns SCGSim builds with Surface-EPR bands, each with a figure and its dimensions, and the curved outlines drawn as polygons that were measured."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/supported-geometry"
@@ -12,7 +12,8 @@ that use it, and the rule for drawing curved outlines. A layout made of these
 patterns, within the ranges below, builds with Surface-EPR bands whose areas
 match the exact geometry. A pattern that is not listed is not verified. The
 cases known to fail or to need a layout change, with their causes, are on
-[Known Geometry Problems](known-geometry-problems.qmd).
+[Known Geometry Problems](known-geometry-problems.qmd). The rules every layout
+must follow, and who owns a failure, are on [Supported Scope](supported-scope.qmd).
 
 ## Check a layout before you simulate it
 
@@ -32,7 +33,12 @@ dimensions come from the PDK cells built with `curve_sampling="simulation"`.
 Every sample builds under Route B with MA, MS and SA bands at
 `inset_margins_um=(0.5, 1.0)`. Bands are measured from the
 [gap edges](specs/palace-eigenmode.qmd#surface-epr-margins), the edges of a
-conductor that face exposed substrate.
+conductor that face exposed substrate. The die edge is a dicing line: where it
+cuts a straight conductor edge, the conductor is treated as continuing past it,
+so the bands along that edge run straight to the die edge at any angle, with no
+rounded end. A die outline that comes back within the largest band margin of
+that continuation, as beside a notch, is refused; see
+[Surface-EPR margins](supported-scope.qmd#rules-margins).
 
 For every band, the test compares the built area with the exact erosion of the
 same polygons. The two agree within the grid's snap bound: half a grid diagonal
@@ -96,6 +102,11 @@ In cell 10 the simulation sees only the lumped sheet and the two leads. The
 5 × 0.09 µm cross that the PDK draws on layer 22/0 is the fabrication junction;
 it is not in the simulation layer stack.
 
+The test build draws the disk's junction lead straight, 2 µm wide along its whole
+length, on a diagonal. On the grid it is 0.7 nm wider than twice the 1.0 µm
+margin, so it keeps a core 0.7 nm wide and is refused before meshing; see
+[Surface-EPR margins](supported-scope.qmd#rules-margins).
+
 ### Lines and bends {#lines-and-bends}
 
 Every CPW here has a 6 µm gap, and every bend a 100 µm radius.
@@ -121,62 +132,108 @@ Every CPW here has a 6 µm gap, and every bend a 100 µm radius.
 
 ![**20 Interdigitated comb.** 20 fingers, 3.3 wide with 3.3 gaps and 100 long, fed by a funnel at 21.6° (opening 42.7°). Used by `interdigital_capacitor` and Purcell.](assets/supported-geometry/cell-20.svg){fig-alt="Two interleaved finger combs fed by funnels, inside a ground opening."}
 
-![**21 Spline strip, resampled.** Width 10 in y, resampled so that every vertex turns at least 2.8125°. Used by `interpolation_spline_strip` and `bspline_strip`.](assets/supported-geometry/cell-21.svg){fig-alt="A curved strip with no ground around it."}
+![**21 Spline strip, resampled.** Width 10 in y, resampled to about 3° of turn per vertex. Used by `interpolation_spline_strip` and `bspline_strip`.](assets/supported-geometry/cell-21.svg){fig-alt="A curved strip with no ground around it."}
 
 ![**22 Hollow TSV.** A 0.2 µm wall between two 24-point circles (r 29.8 and 30), 500 tall, with an Al landing from r 29.8 to 100 in an opening of r 120 on both faces. Used by the TSV coupons.](assets/supported-geometry/cell-22.svg){fig-alt="A landing annulus around the TSV bore inside a ground opening."}
 
 ![**23 Airbridge.** A 12 × 84 deck on two 14 × 14 piers over a CPW of width 10, gap 6. Used by `airbridge`, `cpw_airbridge_coupon` and the meander coupons.](assets/supported-geometry/cell-23.svg){fig-alt="A bridge deck on two piers crossing a CPW."}
 
-![**24 Lumped sheet across a gap.** A 2 × 20 sheet over a 20 µm gap, entering pad and ground by 1 nm; square pad 200, or a 32-point pad of r 100. Used by the square, circular and flip-chip pad coupons.](assets/supported-geometry/cell-24.svg){fig-alt="A narrow port sheet spanning the gap between a pad edge and the ground."}
+![**24 Lumped sheet across a gap.** A 2 × 20 sheet over a 20 µm gap, entering pad and ground by 1 nm; square pad 200. Used by the square and flip-chip pad coupons. The same sheet across a 32-point polygon pad of r 100 is not supported: its model builds, but it cannot be written to the geometry file that meshing reads. The circular pad coupon is not this case, because it declares its pad and opening as circular arcs.](assets/supported-geometry/cell-24.svg){fig-alt="A narrow port sheet spanning the gap between a pad edge and the ground."}
 :::
 
-The PDK draws the spline strips of cell 21 with 258 points. As drawn they are
-outside the curve rule below and are refused; the samples resample them first
-(see [Known Geometry Problems](known-geometry-problems.qmd#spline-258)).
+The PDK draws the spline strips of cell 21 with 258 points. The samples
+resample them; the strips as drawn also build with exact bands (see
+[Curved outlines drawn as polygons](#curve-rule)).
 
 In cell 22 the wall's 0.2 µm thickness is thinner than either margin. Its faces
 are vertical, so no band lies on them, and the landing's bands are measured from
 the 20 µm gap only.
 
-Cells 14, 15 and 18 contain a few vertices that turn by less than 2.8125°.
-They are supported as drawn in those cells;
-[Known Geometry Problems](known-geometry-problems.qmd#small-turn-runs) lists
-them and what is not verified elsewhere.
+Cells 14, 15 and 18 contain a few vertices that turn by less than 2.8125°;
+they build with exact bands as drawn (see [Curved outlines drawn as
+polygons](#curve-rule)).
 
-## Curved outlines: at most 128 points per full circle {#curve-rule}
+## Lumped ports are made rectangles {#lumped-port-rectangle}
 
-A curve drawn as a polygon is supported when it uses at most 128 points per full
-circle. Each of its vertices then turns by at least 360° / 128 = 2.8125°. This
-is a rule about the turn at each vertex, not about edge length: a 256-point
-circle of radius 150 µm has 3.68 µm edges and is still refused.
+Palace accepts a Lumped Port or Lumped RLC only as a rectangle: it compares the
+port's bounding-box length with its length along the port direction. Each
+lumped port that an `EigenmodeSim` configures is therefore the central
+rectangle of its drawn sheet. The rest of the sheet becomes metal of the
+conductors it lands on: the part before the first cut joins the conductor at
+the start of the port direction, and the part after the second cut joins the
+other conductor. A conductor without a Net is a Net of its own. You draw the
+sheet as before, a rectangle that reaches into both conductors.
 
-The OrcaPen SC PDK's `curve_sampling="simulation"` profile draws 16, 24 or 32
-points per full circle, well inside the rule.
+Each conductor gains the free part of the sheet up to its cut. Where the sheet
+lands on a conductor edge that SGB builds as an exactly declared arc, the end
+piece is the whole drawn sheet from its start to the cut and overlaps the
+conductor, so it meets the arc also where the arc lies beyond the drawn polygon,
+as on the inside of a round opening. Where the sheet lands on edges SGB builds
+as drawn, the end piece is only the free part, and on a straight edge at right
+angles to the sheet it is empty. An arc elsewhere on the conductor, away from
+the sheet, changes neither.
 
-The rule was measured on regular polygon circles at margins 0.5 and 1.0 µm:
+On each end, SCGSim chooses the cut in two steps:
 
-| Points per full circle | Turn per vertex | Radius 5, 10, 50 and 150 µm |
-| --- | --- | --- |
-| 16, 24, 32, 64, 128 | 22.5° to 2.8125° | builds, bands exact |
-| more than 128 | less than 2.8125° | not supported; see [denser circles](known-geometry-problems.qmd#dense-circles) |
+1. It starts at the first grid step, at or past the conductor's farthest reach
+   into the sheet, that leaves one connected end piece: the largest rectangle
+   the sheet holds.
+2. The end piece adds an edge to its conductor along each long side of the
+   sheet, from where the conductor's outline meets that side to the cut. The
+   cut moves one grid step further into the gap at a time until each such edge
+   is zero or at least 10 grid steps long, so the side wall that stands on it
+   is not narrower than the fine-structure limit for side walls. Where the
+   conductor's own edge already runs along the side, the end piece continues
+   that edge and adds none.
 
-At 128 points the circle also builds with exact bands at radii of 5, 10, 37.3,
-75 and 150 µm when its centre is off the grid at (0.3337, 0.1234) µm, when it is
-rotated by 0.73°, and when both apply (centre (12.0004, −7.7771) µm, rotated by
-1.7°).
+The outline is the one SGB builds: a conductor declared with an exact arc meets
+the side where the arc does, on the grid point SGB rounds the crossing to, not
+where its polygon does, and reaches into the sheet as far as the arc does, also
+where a chord of its polygon faces the sheet. A sheet that ends on straight conductor edges at right
+angles to it keeps the face and the conductors it had: its cuts lie on those
+edges and its end pieces are empty.
 
-A curve outside the rule can stop the build with this message:
+For the circular pad coupon (pad radius 100 µm in a ground opening of radius
+120 µm, a 2 µm sheet, 1 nm grid):
+
+| End | The outline meets the sheet sides at | Largest rectangle | Cut taken | Edge added |
+| --- | --- | --- | --- | --- |
+| Pad, arc of radius 100 µm | x = 99.995 µm | x = 100.000 µm, edge 5 nm | x = 100.005 µm | 10 nm |
+| Ground opening, arc of radius 120 µm | x = 119.996 µm | x = 119.988 µm, edge 8 nm | x = 119.986 µm | 10 nm |
+
+The port is 19.981 µm long, 0.007 µm shorter than the largest rectangle.
+
+## Curved outlines drawn as polygons {#curve-rule}
+
+A curve drawn as a polygon builds with the bands of its exact erosion. SGB sets
+no minimum turn per vertex and no maximum number of points per circle: at a
+convex vertex between two straight edges, the offsets of the two edges end at
+their crossing, one shared grid point, wherever that crossing lies on both.
+
+These outlines were built and checked against the exact erosion, at margins 0.5
+and 1.0 µm:
+
+| Outline | Turn per vertex | Measured at | Result |
+| --- | --- | --- | --- |
+| Regular polygon circle, 16, 24, 32, 64 or 128 points | 22.5° to 2.8125° | radius 5, 10, 50 and 150 µm | bands exact |
+| 128-point circle, centre off the grid at (0.3337, 0.1234) µm, rotated by 0.73°, or both (centre (12.0004, −7.7771) µm, rotated by 1.7°) | 2.8125° | radius 5, 10, 37.3, 75 and 150 µm | bands exact |
+| Regular polygon circle, 256 points | 1.41° | radius 5, 10, 50 and 150 µm | bands exact |
+| Spline strips as the PDK draws them, 258 points | down to 0.058° (interpolation) and 0.012° (B-spline) | as drawn | bands exact |
+| Euler bends and tapers of cells 14, 15 and 18 | 0.15° to 2.7° at a few vertices | as drawn | bands exact |
+| A 16-point circle of radius 50 µm with one vertex added on an edge | 2.9°, 2.7°, 1.41°, 0.3° and 0.01° convex; 2.7° and 0.01° reflex; 0° | 9.8 µm edges | bands exact |
+
+These are examples, not limits. The meshing cost of outlines with many more
+points per circle, with bands on, has not been measured.
+
+Where two neighbouring offsets still neither meet nor cross, the build stops
+with this message rather than return wrong bands:
 
 ```text
 inset family '…': the inset curve at m = … um is not closed near (x, y) um: two
 offsets of the support boundary neither meet nor cross there, so the band regions
-cannot be told apart. An outline whose vertices turn by less than 2.8125 degrees
-each, … does this: draw curved outlines with at most 128 points per full circle, …
+cannot be told apart. This is an SCGSim defect, not a layout rule: report it to
+SCGSim with the layout …
 ```
 
-### Draw a curve that fits the rule
-
-- Build PDK components for simulation with `curve_sampling="simulation"`.
-- Resample a spline so that every vertex turns by at least 2.8125°, as the
-  samples of cell 21 do.
-- Declare a circular arc as an exact arc, which SGB carries without sampling.
+A circular arc can also be declared as an exact arc, which SGB carries without
+sampling.

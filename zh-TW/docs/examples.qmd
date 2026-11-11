@@ -19,6 +19,8 @@ SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別�
 | Driven S 參數 | [HFSS Modal 或 Terminal](tutorials/scattering.qmd) | 使用所選埠類型的雙埠響應 |
 | 傳輸線參數 | [AEDT Q2D](tutorials/transmission-line.qmd) | 單位長度 C、G、L 與 R 矩陣 |
 
+模擬自己的版圖之前，請先閱讀[支援範圍](supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。
+
 ## 準備模型並讀取回傳結果
 
 從[安裝](course/installation.qmd)開始，再依物理問題選擇明確的幾何、材料、導體與埠。[模型與材料參考](reference.qmd#model-materials)及[導體與埠參考](reference.qmd#conductors-ports)說明這些選擇。請使用[回傳結果教學](course/returned-results.qmd)，一併保留回傳量、單位、模態或導體識別資訊及求解器狀態。

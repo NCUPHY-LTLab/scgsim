@@ -11,10 +11,13 @@ Construction (no polygonised disk), per margin:
    (centre on the interior side) becomes the concentric arc of radius ``rho - m`` (it vanishes to a sharp corner
    when ``m >= rho``); every concave arc (a hole) the concentric arc of radius ``r + m``; at every reflex vertex
    the offset curves leave a gap bridged by an arc of radius ``m`` centred at the vertex; at convex vertices the
-   offset lines overlap and simply cross -- convex corners stay sharp.  A reflex vertex between two lines whose
-   arc would be shorter than :data:`SHORT_ARC_GRID_STEPS` gets no arc: both offsets end at their intersection
-   instead, which lies ``m (1 / cos(theta / 2) - 1)`` beyond the arc (``theta`` the turn) -- under one grid step,
-   or the arc stays.  An edge of a few grid steps is exact geometry that the mesher cannot use (Issue #125).
+   offset lines overlap and cross -- convex corners stay sharp.  At a convex vertex between two lines both
+   offsets end at their crossing, one shared lattice point, when it lies inside both (Issue #138): the overlap
+   past it is never band boundary, and near a straight junction snapping would fuse it into a seam piece a few
+   grid steps long.  A reflex vertex between two lines whose arc would be shorter than
+   :data:`SHORT_ARC_GRID_STEPS` gets no arc: both offsets end at their intersection instead, which lies
+   ``m (1 / cos(theta / 2) - 1)`` beyond the arc (``theta`` the turn) -- under one grid step, or the arc stays.
+   An edge of a few grid steps is exact geometry that the mesher cannot use (Issue #125).
 2. **Region.**  The candidates, the support boundary and the port boundaries form a small arrangement; its cells
    lie in ``R_m`` or outside it, one sample point per cell deciding (``cutfamilies.inset_regions``).
 3. **Required seams.**  Only the candidate edges between a cell of ``R_m`` and a cell outside it become
@@ -24,16 +27,22 @@ Construction (no polygonised disk), per margin:
 The regions and seams travel with the family (``CurveFamilyRecord.regions``): labelling locates a face in them
 and the Imprint check proves that the level arrangement kept every seam (``labelling.bands``).  Neither proves
 that the candidates contain the whole level set ``dist = m``.  One failure is refused: where two neighbouring
-offsets neither meet nor cross (an outline whose vertices turn by small angles, such as a polygon circle with
-more than 128 points per full circle), the curve has a gap and one cell lies on both sides of the margin
-(``inset_regions``).  A piece the candidates miss without leaving such a gap is not detected.
+offsets neither meet nor cross, the curve has a gap and one cell lies on both sides of the margin
+(``inset_regions``).  Two lines whose offsets are ended at their crossing or intersection always meet; the
+refusal remains for the junctions that are not (an arc beside a small turn, or a convex junction whose crossing
+lies outside an offset).  A piece the candidates miss without leaving such a gap is not detected.
 
 Distance origins: only the region's gap edges (``SupportRegion.origins``; see ``cutfamilies.requests``).  The
 offset is built from those primitives alone: a line or arc per origin, a bridging arc at every reflex vertex
 between two consecutive origins, and a half circle round each end of a run of origins.  The rest of the
 boundary (the die edge, an edge shared with another conductor) only clips the candidates where they cross it,
-and a seam may end on it.  Contact caps, other bands and tile seams are never origins -- they are not
-inputs of this module.  Ports are never origins either: a port footprint on the support's level is no origin
+and a seam may end on it.  The die edge is a dicing line, so a run of origins that ends on it belongs to a
+conductor the dicing cut, which continues past it (Issue #138): where the run ends in a line, that line is
+continued past the die edge (``SupportRegion.continued_origins``), its offsets run straight on until the die
+edge clips them, and no half circle is drawn round that end.  Otherwise the part of the half circle inside the
+die would be a short arc, the margin times the angle's deviation from a right angle, at every oblique cut.
+Contact caps, other bands and tile seams are never origins -- they are not inputs of this module.  Ports are
+never origins either: a port footprint on the support's level is no origin
 and moves no band, but it keeps the band seams out of itself (below).  Topology changes (a neck that splits, a
 band that vanishes) are ordinary outcomes: the bands that survive are the ones the regions hold.
 
@@ -67,7 +76,11 @@ from scgsim.geometry.sgb.cutfamilies.inset_regions import (
     RequiredEdge,
     margin_cells,
 )
-from scgsim.geometry.sgb.noding.snap_rounding import Segment
+from scgsim.geometry.sgb.noding.snap_rounding import (
+    Segment,
+    crossing_pixel,
+    proper_crossing,
+)
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records import circle_math
 from scgsim.geometry.sgb.records.band_regions import (
@@ -92,7 +105,7 @@ PARALLEL_EPSILON = Decimal(
 PIECE_SLACK = Decimal("1e-9")
 # A reflex arc shorter than this many grid steps (margin times turn) is replaced by the intersection of its two
 # offsets, when both are lines and the intersection lies under one grid step beyond the arc.  The value is the
-# Human's choice on Issue #125: 0.5 um times the 2.8125 degree turn of the 128-points-per-circle rule.
+# Human's choice on Issue #125, derived as 0.5 um times a 2.8125 degree turn (one vertex of a 128-point circle).
 SHORT_ARC_GRID_STEPS = 25
 
 
@@ -164,9 +177,15 @@ def _left_normal(prim: RingPrimitive, *, at_end: bool) -> Vec:
     return -ty, tx
 
 
-def _offset_point(prim: RingPrimitive, margin: int, *, at_end: bool) -> Point:
-    """End point of the offset of ``prim`` by ``margin`` toward the interior, rounded to the lattice."""
-    x, y = _ends(prim)[1 if at_end else 0]
+def _offset_point(
+    prim: RingPrimitive, margin: int, *, at_end: bool, vertex: Vec | None = None
+) -> Point:
+    """End point of the offset of ``prim`` by ``margin`` toward the interior, rounded to the lattice.
+
+    ``vertex`` replaces the primitive's own end point: the end of a line continued past the die edge, offset
+    along the line's own normal.
+    """
+    x, y = vertex or _ends(prim)[1 if at_end else 0]
     nx, ny = _left_normal(prim, at_end=at_end)
     return (
         circle_math.round_half_up(x + margin * nx),
@@ -230,15 +249,20 @@ def _generate_candidates(
     with circle_math.working_precision():
         for ri, ring in enumerate(region.rings):
             count = len(ring)
-            joins = _short_corner_joins(region, ri, margin)
+            joins = _corner_joins(region, ri, margin)
             for pi, prim in enumerate(ring):
                 if not region.is_origin(ri, pi):
                     continue
                 name = f"ring{ri}/edge{pi}"
+                # The ends the die edge cuts are those of the line continued past it; joins lie at the others.
+                first, last = _ends(region.origin(ri, pi))
+                cut_first, cut_last = first != _ends(prim)[0], last != _ends(prim)[1]
                 start = joins.get((pi - 1) % count) or _offset_point(
-                    prim, margin, at_end=False
+                    prim, margin, at_end=False, vertex=first
                 )
-                end = joins.get(pi) or _offset_point(prim, margin, at_end=True)
+                end = joins.get(pi) or _offset_point(
+                    prim, margin, at_end=True, vertex=last
+                )
                 if isinstance(prim, LineEdge):
                     candidates.add_line(name, start, end)
                 else:
@@ -249,9 +273,14 @@ def _generate_candidates(
                         )
                 following = (pi + 1) % count
                 if not region.is_origin(ri, following):
-                    _cap_arcs(
-                        f"ring{ri}/capend{pi}", prim, margin, candidates, at_end=True
-                    )
+                    if not cut_last:
+                        _cap_arcs(
+                            f"ring{ri}/capend{pi}",
+                            prim,
+                            margin,
+                            candidates,
+                            at_end=True,
+                        )
                 elif (
                     pi not in joins
                 ):  # a joined junction has its two offsets meet: no arc
@@ -262,63 +291,184 @@ def _generate_candidates(
                         margin,
                         candidates,
                     )
-                if not region.is_origin(ri, (pi - 1) % count):
+                if not region.is_origin(ri, (pi - 1) % count) and not cut_first:
                     _cap_arcs(
                         f"ring{ri}/capstart{pi}", prim, margin, candidates, at_end=False
                     )
     return candidates
 
 
-def _short_corner_joins(
+def _corner_joins(
     region: SupportRegion, ring_index: int, margin: int
 ) -> dict[int, Point]:
-    """Where the offsets of two consecutive lines meet instead of an arc: junction index -> their intersection.
+    """Where the offsets of two consecutive origin lines end at their intersection: junction index -> that point.
 
-    Junction ``k`` lies between primitives ``k`` and ``k + 1`` of the ring.  Only a reflex junction between two
-    origin lines qualifies, when its arc (``margin`` times the turn) is shorter than
-    :data:`SHORT_ARC_GRID_STEPS` and the intersection lies less than one grid step beyond the arc.
+    Junction ``k`` lies between primitives ``k`` and ``k + 1`` of the ring.  Two kinds qualify:
+
+    * a reflex junction whose arc (``margin`` times the turn) is shorter than :data:`SHORT_ARC_GRID_STEPS`
+      and whose intersection lies less than one grid step beyond the arc (Issue #125);
+    * a convex junction whose offsets cross inside both of them (:func:`_convex_joins`).
     """
     ring = region.rings[ring_index]
     joins: dict[int, Point] = {}
+    convex: dict[int, _ConvexJunction] = {}
     for k, prim in enumerate(ring):
         following = (k + 1) % len(ring)
         if not (
             region.is_origin(ring_index, k) and region.is_origin(ring_index, following)
         ):
             continue
-        join = _short_corner_join(prim, ring[following], margin)
+        after = ring[following]
+        if not (isinstance(prim, LineEdge) and isinstance(after, LineEdge)):
+            continue
+        junction = _line_junction(prim, after)
+        if junction.cross > PARALLEL_EPSILON:
+            convex_junction = _convex_junction(junction, margin)
+            if convex_junction is not None:
+                convex[k] = convex_junction
+            continue
+        join = _short_corner_join(junction, margin)
         if join is not None:
             joins[k] = join
+    joins.update(_convex_joins(ring, convex, margin))
     return joins
 
 
-def _short_corner_join(
-    prim: RingPrimitive, following: RingPrimitive, margin: int
-) -> Point | None:
-    """The intersection of the two offsets at a short reflex junction of two lines, or ``None`` to keep the arc."""
-    if not (isinstance(prim, LineEdge) and isinstance(following, LineEdge)):
-        return None
+@dataclass(frozen=True)
+class _LineJunction:
+    """The vertex between two lines, their unit normals and the cross and dot products of their tangents."""
+
+    vertex: Vec
+    n0: Vec
+    n1: Vec
+    cross: Decimal  # sine of the turn: positive at a convex junction, negative at a reflex one
+    dot: Decimal  # cosine of the turn
+
+    def offsets_meet(self, margin: int) -> Point:
+        """The intersection of the two offset lines, rounded to the lattice.
+
+        It lies on the bisector of the two normals at ``margin / cos(turn / 2)`` from the vertex.
+        """
+        scale = margin / (1 + self.dot)
+        return (
+            circle_math.round_half_up(
+                self.vertex[0] + scale * (self.n0[0] + self.n1[0])
+            ),
+            circle_math.round_half_up(
+                self.vertex[1] + scale * (self.n0[1] + self.n1[1])
+            ),
+        )
+
+
+def _line_junction(prim: LineEdge, following: LineEdge) -> _LineJunction:
     t0 = _unit_tangent(prim, at_end=True)
     t1 = _unit_tangent(following, at_end=False)
-    cross = t0[0] * t1[1] - t0[1] * t1[0]
-    dot = t0[0] * t1[0] + t0[1] * t1[1]
-    if cross >= -PARALLEL_EPSILON:
-        return None  # straight, tangent or convex: there is no arc to replace
-    turn = circle_math.atan2(-cross, dot)
+    return _LineJunction(
+        _ends(prim)[1],
+        _left_normal(prim, at_end=True),
+        _left_normal(following, at_end=False),
+        t0[0] * t1[1] - t0[1] * t1[0],
+        t0[0] * t1[0] + t0[1] * t1[1],
+    )
+
+
+def _short_corner_join(junction: _LineJunction, margin: int) -> Point | None:
+    """The intersection of the two offsets at a short reflex junction of two lines, or ``None`` to keep the arc."""
+    if junction.cross >= -PARALLEL_EPSILON:
+        return None  # straight or tangent: there is no arc to replace
+    turn = circle_math.atan2(-junction.cross, junction.dot)
     if margin * turn >= SHORT_ARC_GRID_STEPS:
         return None
-    # The offsets meet at margin / cos(turn / 2) from the vertex, on the bisector of the two normals.
-    cos_half = circle_math.sqrt((1 + dot) / 2)
+    cos_half = circle_math.sqrt((1 + junction.dot) / 2)
     if margin / cos_half - margin >= 1:
         return None  # the intersection would lie a grid step or more beyond the arc
-    n0 = _left_normal(prim, at_end=True)
-    n1 = _left_normal(following, at_end=False)
-    x, y = _ends(prim)[1]
-    scale = margin / (1 + dot)
-    return (
-        circle_math.round_half_up(x + scale * (n0[0] + n1[0])),
-        circle_math.round_half_up(y + scale * (n0[1] + n1[1])),
+    return junction.offsets_meet(margin)
+
+
+@dataclass(frozen=True)
+class _ConvexJunction:
+    """A convex junction of two lines at one margin: how far each offset runs past their crossing.
+
+    ``trim`` is the length of offset past the crossing on each of the two offsets, ``margin * tan(turn / 2)``.
+    ``reach`` is how far along each line, from the vertex, the feet of those two overlap pieces lie on the other
+    line: at most ``margin * max(sin(turn), tan(turn / 2))``.
+    """
+
+    junction: _LineJunction
+    trim: Decimal
+    reach: Decimal
+
+
+def _convex_junction(junction: _LineJunction, margin: int) -> _ConvexJunction | None:
+    """The trim and reach of a convex junction, or ``None`` where the lines fold back (a 180 degree turn)."""
+    if 1 + junction.dot <= 0:
+        return None
+    trim = margin * junction.cross / (1 + junction.dot)
+    return _ConvexJunction(junction, trim, max(trim, margin * junction.cross))
+
+
+def _convex_joins(
+    ring: tuple[RingPrimitive, ...] | list[RingPrimitive],
+    convex: dict[int, _ConvexJunction],
+    margin: int,
+) -> dict[int, Point]:
+    """The convex junctions whose two offsets end at their crossing, with that crossing on the lattice.
+
+    At a convex junction of two lines the offsets cross ``trim`` before their own ends.  Past the crossing each
+    offset runs nearer than ``margin`` to the other line, so that overlap piece is never part of the boundary of
+    ``R_m`` whatever else the support holds; the boundary turns from one offset to the other at the crossing.
+    Ending both offsets there drops only those two pieces and adds no point: the curve is the same set.
+
+    That holds when the overlap pieces lie within ``margin`` of the other *segment*, not only of its line:
+    their feet must fall on it, so each line must be at least ``reach`` long, and its offset must keep a part
+    between the crossings at its two ends.  A junction that fails either keeps the offsets as they are, and the
+    cells decide as before.  (At a near-straight junction the overlap pieces are under a grid step from
+    each other, so snapping fuses them into a seam piece a few grid steps long: Issue #138.)
+    """
+    trims: dict[int, Decimal] = {}  # primitive index -> trim at its two ends together
+    count = len(ring)
+    for k, convex_junction in convex.items():
+        for pi in (k, (k + 1) % count):
+            trims[pi] = trims.get(pi, Decimal(0)) + convex_junction.trim
+    joins: dict[int, Point] = {}
+    for k, convex_junction in convex.items():
+        sides = (k, (k + 1) % count)
+        if all(
+            _line_length(ring[pi]) > max(trims[pi], convex_junction.reach)
+            for pi in sides
+        ):
+            joins[k] = _crossing_on_lattice(
+                ring[k], ring[(k + 1) % count], convex_junction, margin
+            )
+    return joins
+
+
+def _crossing_on_lattice(
+    prim: RingPrimitive,
+    following: RingPrimitive,
+    convex_junction: _ConvexJunction,
+    margin: int,
+) -> Point:
+    """The lattice point at which both offsets of a joined convex junction end.
+
+    Where the two offsets, with their end points on the lattice, cross properly, the noding has always put
+    their corner at the pixel of that crossing (``snap_rounding.crossing_pixel``); the join keeps that point.
+    Where they do not -- near a straight junction they touch or overlap instead -- the exact crossing is rounded.
+    """
+    crossing = proper_crossing(
+        _offset_point(prim, margin, at_end=False),
+        _offset_point(prim, margin, at_end=True),
+        _offset_point(following, margin, at_end=False),
+        _offset_point(following, margin, at_end=True),
     )
+    if crossing is not None:
+        return crossing_pixel(crossing)
+    return convex_junction.junction.offsets_meet(margin)
+
+
+def _line_length(prim: RingPrimitive) -> Decimal:
+    (px, py), (qx, qy) = _ends(prim)
+    return circle_math.sqrt((qx - px) ** 2 + (qy - py) ** 2)
 
 
 def _cap_arcs(

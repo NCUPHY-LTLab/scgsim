@@ -1,0 +1,232 @@
+---
+title: "Supported Scope"
+description: "What a layout must guarantee before SCGSim can build and mesh it, what SCGSim guarantees in return, what it does not do, and who owns a failure."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/supported-scope"
+---
+
+SCGSim takes a layout that follows the rules on this page and builds exactly
+the geometry it declares, on one fixed grid, with the Surface-EPR bands you ask
+for. It then meshes that geometry for Palace, so that every tetrahedron meets
+the mesh quality threshold, or it stops with a report. SCGSim never changes the
+layout to make it fit: a layout that breaks a rule is refused, and the error
+says which rule.
+
+Read this page before you draw a layout for simulation or when a build or a
+mesh fails. The rules are grouped by what they are about; each row links to the
+page that holds the detail.
+
+## Three stages, three owners {#stages-and-owners}
+
+A layout reaches a Palace mesh in three stages. Each stage has one owner, and
+each guarantees something to the next.
+
+| Stage | Owner | What it guarantees to the next stage |
+|---|---|---|
+| Layout and its declarations | The PDK and whoever draws the layout, including whoever declares the Nets and the Surface-EPR margins for the simulation | Every rule in [What a layout must guarantee](#layout-rules) holds. |
+| Geometry building (SGB, SCGSim's geometry builder) | SCGSim | On such a layout: exactly the declared geometry on the grid, never repaired, and bands that match the exact geometry within the snap bound. A broken rule is refused with an error that names it. |
+| Meshing | SCGSim | On that geometry: first the meshing-stage check, which refuses fine structure with `SimulationDrcError` before the mesher starts; then a mesh whose every tetrahedron, measured on the linear mesh, meets the quality threshold you set (0.01 by default), or `MeshRepairError` with a report. Never a mesh that failed that check. |
+
+**A failure belongs to the first stage whose guarantee is broken.** If a layout
+draws a 1 nm slit, the failure is the layout's, even when it first shows up as a
+meshing stop minutes later. If the layout follows every rule and the build or
+the mesh still fails, the failure is SCGSim's; report it to SCGSim with the
+layout.
+
+The layout owns the drawing rules because only the layout knows what it means.
+SCGSim builds exactly what is declared and never repairs a layout: it does not
+close nanometre gaps, remove short edges or resample curves, because it cannot
+tell a drawing defect from a feature that was meant. What SCGSim does own is
+telling you which rule is broken.
+
+The words this page uses:
+
+- An **Entity** is one named piece of source geometry, such as a pad or a ground
+  plane, identified by its path in the assembly (`chip/q0/pad`); see
+  [Source identity, Occurrence and Net](concepts/geometry.qmd#entity-occurrence-and-net).
+- A **Net** is a set of Entities that you declare to be one conductor
+  electrically; see [Net](conventions.qmd#term-net).
+- The **grid** is the fixed spacing on which SCGSim places every coordinate: the
+  layout's database unit, 1 nm for OrcaPen SC PDK layouts. One **grid step** is
+  that spacing.
+- A **band** is a strip of a surface cut into the geometry so that Surface EPR
+  can be integrated over it. Its **margin** is its distance from a **gap edge**,
+  the edge of a conductor that faces exposed substrate; see
+  [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins).
+- **Route B** models each conductor as a finite metal volume whose surface is a
+  perfect conductor; **Route A** models face metal as zero-thickness sheets; see
+  [Geometric approximations](concepts/model-and-numerics.qmd#choose-the-geometric-approximation).
+  **Route C** keeps each conductor volume in the model, for backends that solve
+  inside conductors. SGB builds all three; the Palace simulations take Route A
+  and Route B.
+- **Fine structure** is geometry far smaller than the features around it: edges
+  only a few grid steps long, or spikes and slits only nanometres wide, such as
+  the slits of [C2 and C3](known-geometry-problems.qmd#c2-c3-slits).
+
+## What a layout must guarantee {#layout-rules}
+
+The errors are reported at one of three moments. **At plan** means while you build
+the `GeometryPlan` (its constructor, `register_instance`, `set_nets` or
+`prepare()`); these errors are `ValueError`. **At build** means when the
+geometry is built, inside `mesh()` or `simulation_drc()`; these errors are the
+SGB classes named in the table (`InputError`, `UnsupportedCurveError`,
+`ContactError` and the others), from `scgsim.geometry.sgb.errors`. **Before
+meshing** means the meshing-stage check that `mesh()` and `simulation_drc()`
+run on the built model; its error is `SimulationDrcError`, from
+`scgsim.palace`.
+
+### Declarations {#rules-declarations}
+
+| Rule | Why SCGSim needs it | Reported as | Detail |
+|---|---|---|---|
+| The root component carries a `component_semantics` record with `schema_version=2`. | SCGSim reads conductors, ports and ground contributions only from this record, never from the drawing. | `ValueError` at plan | [Geometry contract](geometry-sgb.qmd#component-to-backend-geometry-contract) |
+| Every child occurrence that has its own `component_semantics` is registered with `register_instance`, parents first. An array reference is expanded into individual references before it is registered. | One registered occurrence names one GDS reference; an unregistered child would vanish when the layout is flattened. | `ValueError` at plan | [Geometry contract](geometry-sgb.qmd#component-to-backend-geometry-contract) |
+| You declare the Nets with `set_nets`, and each Entity belongs to at most one Net. | SCGSim never infers connectivity from shapes that touch. Two pads that touch but sit in different Nets are a short, not one conductor. | `ValueError` at plan | [Net](conventions.qmd#term-net) |
+| Each selector point (of a conductor, an exclusion, a port sheet or a ground contribution) lies in exactly one polygon of its layer. | A selector point is how a declaration says which polygon it means; a point in zero or two polygons names nothing. | `ValueError` at plan | [Geometry contract](geometry-sgb.qmd#component-to-backend-geometry-contract) |
+| A port record gives its `name`, `layer` and `target_layer`. A ground contribution gives exactly `local_id`, `plane_id`, `level`, `layer` and `selector_point_um`. | These fields decide which sheet is the port and which plane the metal joins; none is guessed. | `ValueError` at plan | [Geometry contract](geometry-sgb.qmd#component-to-backend-geometry-contract) |
+| No Entity id contains `::` or `__`, and none equals an interface prefix (`MA`, `MS`, `MM`, `SA`, `AA`, `SS`, `EXT`, `PORT`). | Physical-group names join these parts, as in `MA::D1_pad__bottom`; such an id would make a name ambiguous. | `InputError` at build | This page |
+
+### Curves {#rules-curves}
+
+| Rule | Why SCGSim needs it | Reported as | Detail |
+|---|---|---|---|
+| A curve declared exactly is a line segment or a circular arc. SGB refuses `interpolation_spline` and `bspline` declarations, and boundary reconstructions of any kind other than `circular_arc`. | SGB carries lines and circular arcs, which it offsets exactly; it does not carry spline curves. | `UnsupportedCurveError` at build | [Spline curves](known-geometry-problems.qmd#spline-curves) |
+| An exact arc is large enough that its pieces land on different grid points. | An arc whose pieces collapse onto one grid point has no shape left to build. | `InputError` at build ("the arc is too small for the grid") | This page |
+
+### Grid {#rules-grid}
+
+| Rule | Why SCGSim needs it | Reported as | Detail |
+|---|---|---|---|
+| The plan's `grid_size_um` equals the layout's database unit, or is left as `None` to take it. The end points of exact curves lie on the grid. | SCGSim computes on integer grid coordinates; a second grid would move points the layout did not move. | `ValueError` at plan; `InputError` at build for an off-grid curve end point | [Geometry contract](geometry-sgb.qmd#component-to-backend-geometry-contract) |
+| Snapping to the grid changes no topology: no neck, gap, hole or slit at or below one grid step. | SCGSim places every vertex on the grid. A 0.4 nm gap between two conductors closes on a 1 nm grid, and two separate pieces become one. | `ValueError` at plan: "… topology changed at grid", "… contact changed at grid" | [Geometry contract](geometry-sgb.qmd#component-to-backend-geometry-contract) |
+| The outline holds no fine structure: no outline edge under a side wall shorter than 10 grid steps, and no horizontal face narrower than 10 grid steps or with a corner sharper than 1°. SCGSim keeps such structure as drawn and does not remove it. | A 1 nm edge or slit is valid geometry, but the mesher must resolve it with elements of that size. | `SimulationDrcError` before meshing, in `mesh()` and `simulation_drc()`, with the location; a free horizontal edge shorter than 25 grid steps is a warning | [What the meshing stage reports](layout-modeling-check.qmd#what-the-meshing-stage-reports) |
+
+### Conductors {#rules-conductors}
+
+| Rule | Why SCGSim needs it | Reported as | Detail |
+|---|---|---|---|
+| Conductors of different Nets do not touch, including across a gap that closes when the layout snaps to the grid. | A contact between two Nets is a short circuit; SCGSim does not decide which Net is right. | `ContactError` at build, with the location | [Layout modeling check](layout-modeling-check.qmd) |
+| Conductors of different Nets do not overlap. | The same: overlapping metal of two Nets has no single owner. | `OverlapError` at build, with the location | [Layout modeling check](layout-modeling-check.qmd) |
+| Overlapping conductors of one Net carry different priorities, so one owns the overlap. | Two Entities of one Net may overlap, but the overlap must belong to exactly one of them. | `OverlapError` at build ("… overlap … with equal priority") | [Geometry contract](geometry-sgb.qmd) |
+| No region touches itself along a single vertical edge. Example: two pieces of one Net that meet only at a corner. | Two cells of one volume that share only a vertex give a non-manifold solid that cannot be meshed. | `NonManifoldError` at build, with the location | This page |
+| Each Entity is either a sheet, with zero thickness after the physical interpretation, or a body with a positive Z extent. | A sheet with thickness, or a body with none, has no consistent place in the stack. | `InputError` at build ("… is a sheet but its effective Z interval is …", "… has a non-positive Z extent …") | [Physical representation](specs/physical-representation.qmd) |
+
+### Ports {#rules-ports}
+
+| Rule | Why SCGSim needs it | Reported as | Detail |
+|---|---|---|---|
+| A port sheet overlaps at least one host conductor, and its hosts share one support plane. | The port lies on the surface under its hosts; without a host, or with hosts on two planes, its plane is undefined. | `InputError` at build | [Eigenmode contract](specs/palace-eigenmode.qmd) |
+| A port sheet is not covered entirely by its hosts. | A sheet wholly on metal has nothing left to excite. | `InputError` at build ("… has no active remainder") | [Eigenmode contract](specs/palace-eigenmode.qmd) |
+| A port sheet overlaps no other sheet. | Each point of a sheet must belong to one port. | `OverlapError` at build | [Eigenmode contract](specs/palace-eigenmode.qmd) |
+| A lumped port's sheet lands on exactly two conductors. A conductor without a Net is a Net of its own. | The port is the central rectangle of the sheet; the piece at each end joins that end's conductor. | `ValueError` at build, naming the port | [Lumped ports are made rectangles](supported-geometry.qmd#lumped-port-rectangle) |
+| Between its two conductors the sheet crosses a clear gap: across its full width it touches no metal there, and no third conductor touches it. | The rectangle and its two end pieces are cut across that gap. | `ValueError` at build from the rectangle cut, for example "unsupported junction contact ordering or clear corridor" | [Lumped ports are made rectangles](supported-geometry.qmd#lumped-port-rectangle) |
+
+### Surface-EPR margins {#rules-margins}
+
+| Rule | Why SCGSim needs it | Reported as | Detail |
+|---|---|---|---|
+| The margins of each request are positive, strictly increasing multiples of the grid, such as `(0.5, 1.0)` µm. | Each margin is a band boundary cut on the grid. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
+| Every band is at least 10 grid steps wide: the first band is the first margin, each next band the difference of two margins. | A narrower band is a face the mesher cannot use. | `ValueError` at build, before SGB runs, naming the spec, the band and its width | [What the meshing stage reports](layout-modeling-check.qmd#what-the-meshing-stage-reports) |
+| No conductor runs wider than twice its largest band margin by less than 10 grid steps, such as a lead 2.004 µm wide banded at 1 µm on a 1 nm grid. Change the margins or the width; SCGSim does not model such a conductor. A width of exactly twice the margin leaves no core and is modeled. The width that counts is the one on the grid: a lead drawn 2 µm wide on a diagonal can come out a fraction of a grid step wider. | Inside that margin the conductor keeps a core narrower than 10 grid steps, a face the mesher cannot use. | `SimulationDrcError` before meshing: a narrow face with owner `erosion`, with its location | [What the meshing stage reports](layout-modeling-check.qmd#what-the-meshing-stage-reports) |
+| Where the die edge cuts a straight conductor edge, the die outline does not come back, or curve, within the largest band margin of that edge's continuation past the die edge, and no two such continuations cross. A notch beside the cut, a conductor that overhangs the die from a vertex on its edge, or two cut conductors converging past the edge break it. | SCGSim treats a conductor cut by the die edge as continuing straight past it; a die outline beside the continuation would take bands from a conductor that is not drawn. SCGSim does not model it. | `InputError` at build, naming the conductor and the cut point in µm | [Supported Geometry](supported-geometry.qmd#what-supported-means) |
+| One face gets one set of margins, even when two Surface-EPR types reach it. | A face holds one family of bands. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
+| A band is measured from a gap edge. A conductor named in `inset_margins_by_entity_um` needs a gap edge on each face it bands. A face reached only through its Surface-EPR type that has no gap edge gets no bands. | Without a gap edge there is nothing to measure the distance from. | `NoGapEdgeError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
+| Side walls are never banded; `face_kinds` names only `sheet`, `top`, `bottom` or `interface`. | SGB cuts bands only on these four kinds of face. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
+
+Bands are supported on both routes a Palace simulation takes: on the sheets of
+Route A and on the faces of the Route B volumes. A layout sets nothing else for
+them: the mesher sizes every band boundary curve from the width of its bands, as
+[Band boundary curves](specs/palace-electrostatic-sgb.qmd#palace-mesh-band-edges) describes.
+
+## What SCGSim guarantees {#scgsim-guarantees}
+
+On a layout that follows every rule above, SCGSim guarantees:
+
+- **The declared geometry, on the grid.** Every Entity is built as declared, with
+  its vertices on the grid. Nothing is added, merged or removed, except that the
+  free parts of each lumped-port sheet outside its central rectangle join the
+  conductors the sheet lands on, as
+  [Lumped ports are made rectangles](supported-geometry.qmd#lumped-port-rectangle)
+  describes.
+- **Bands that match the exact geometry.** Each band's area agrees with the exact
+  erosion of the same polygons within the grid's snap bound, as
+  [Supported Geometry](supported-geometry.qmd#what-supported-means) states it.
+- **A mesh that meets the quality threshold, or a report.** Before it meshes,
+  `mesh()` runs the meshing-stage check on the model it built and raises
+  `SimulationDrcError` if a finding refuses it. `mesh()` then returns a mesh
+  in which every tetrahedron reaches `quality_threshold`: a minimum signed
+  inverse condition number (minSICN) of 0.01, unless you set another value
+  with `set_mesh`. It does so within the limits of `Budgets`: by default 8
+  refinement rounds, 2,000,000 tetrahedra and 180 s for a model of at most
+  4 mm² in x by y, with more time in proportion for a larger one. Otherwise
+  it raises `MeshRepairError` with the quality report and returns no mesh.
+  The threshold is checked on the linear mesh. With `geometry_order` above 1,
+  the accepted mesh is then raised to that order and written without a second
+  check; the [mesh-quality reader](mesh-quality.qmd) measures the stored mesh.
+  The controls and their defaults are in
+  [Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
+
+[Supported Geometry](supported-geometry.qmd) lists the layout patterns SCGSim is
+tested on. That list verifies that each pattern builds and that its bands match
+the exact geometry; it does not by itself show that a layout meshes or solves.
+
+## What SCGSim does not do {#not-done}
+
+SCGSim does not repair a layout. It does not close nanometre gaps, remove short
+edges, round off spikes or resample curves. A defect in the layout stays in the
+model, or the model is refused.
+
+These are not supported today:
+
+| Not supported | Instead |
+|---|---|
+| Spline curves read as curves: SGB carries lines and circular arcs | Draw the spline as a polygon; see [Spline curves](known-geometry-problems.qmd#spline-curves). |
+| Inferring Nets from geometry that touches | Declare every Net with `set_nets`. |
+| Expanding array references | Expand them into individual references before registering them. |
+| Route C in a Palace simulation | Use Route A or Route B. SGB builds Route C for backends that keep conductor volumes; see [GeometryPlan and SGB](geometry-sgb.qmd). |
+| Checking an AEDT model with `simulation_drc` | The check covers the Palace build only; see [Layout modeling check](layout-modeling-check.qmd). |
+
+## Check a layout before simulating it {#check-a-layout}
+
+Call `EigenmodeSim.simulation_drc`, `ElectrostaticSim.simulation_drc`, or both,
+from the layout's tests and while you draw. Each runs the plan and the geometry
+build that its class's `mesh()` runs, with your Nets and Surface-EPR margins,
+and then the meshing-stage check that `mesh()` also runs first; it raises the
+same errors. The [layout modeling check](layout-modeling-check.qmd) shows the
+call.
+
+A pass means that the model built for that check was accepted: Route B, the
+Nets and margins you passed, and the fixed settings listed under
+[What the check uses](layout-modeling-check.qmd#what-the-check-uses). It
+establishes the rules that build checks, and no others:
+
+- The [port rules](#rules-ports) are checked only by
+  `EigenmodeSim.simulation_drc`.
+  `ElectrostaticSim` selects no port sheets, so its check does not test them.
+
+The check stops before meshing. Its meshing stage finds the fine structure of
+the [meshing-stage classes](layout-modeling-check.qmd#what-the-meshing-stage-reports),
+but a pass does not promise that the model meshes. It does not check Route A,
+other settings or AEDT.
+
+## When something fails {#when-something-fails}
+
+Find the error you see, then follow the owner's next action.
+
+| What you see | Owner | Next action |
+|---|---|---|
+| `ValueError` at plan about `component_semantics`, a registration, a Net, a selector point, a port or a ground contribution | Layout and declarations | Read the message: it names the occurrence or Entity. Fix that declaration in the component or in the notebook. |
+| `ValueError` "… topology changed at grid" or "… contact changed at grid" | Layout | A neck, gap, hole or slit is at or below one grid step. Widen it or close it in the drawing. |
+| `UnsupportedCurveError` | Layout | Declare the curve as lines and circular arcs, or draw it as a polygon. |
+| `ValidationError` "the inset curve … is not closed near (x, y)" | SCGSim | Two neighbouring band offsets near that point neither meet nor cross. Report it to SCGSim with the layout. |
+| `ContactError` or `OverlapError` between different Nets | Layout, or the Net declaration | If the two conductors should be one, put them in one Net. Otherwise separate them in the drawing, by more than one grid step. In `simulation_drc`, pass the `nets` the simulation uses. |
+| `OverlapError` "… with equal priority" | Declarations | Give the overlapping Entities of one Net different priorities. |
+| `NonManifoldError` | Layout | At the reported point, give the two pieces a shared edge or separate them. |
+| `InputError` about a port sheet, an Entity id, an arc or a margin | Layout and declarations | Read the message: it names the port, Entity or request. Fix the drawing or the setting it names. |
+| `ValueError` "Surface EPR bands narrower than the meshing stage's face-width limit …" | Declarations | Widen the margins it names so that every band is at least 10 grid steps wide. |
+| `NoGapEdgeError` | Declarations | The conductor named in `inset_margins_by_entity_um` has no gap edge on that face. Remove it there, or band the face by type. |
+| `ValidationError` "… invariant(s) failed" | SCGSim | A structural check of SGB failed on input it accepted. Report it to SCGSim with the layout. |
+| `SimulationDrcError` | The owner each finding names: layout, erosion or sgb | Each refusing finding gives its class, size, µm location and fix. `layout`: fix the drawing there. `erosion`: change the margins in `surface_epr_specs` or the conductor's width. `sgb`: report it to SCGSim with the finding. |
+| `MeshRepairError` | First check the layout, then SCGSim | Read the quality report: it names the stop reason and lists the remaining bad elements and the features they touch. If they sit on fine structure of the layout, fix the drawing. If the layout has none there, adjust the [mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls), or report it to SCGSim when the bad elements sit on band edges. |
+| An error whose message does not match the layout you drew | SCGSim | Report it to SCGSim with the layout and the message. |

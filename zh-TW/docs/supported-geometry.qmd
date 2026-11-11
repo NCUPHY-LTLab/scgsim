@@ -1,13 +1,13 @@
 ---
 title: "支援的幾何"
-description: "SCGSim 能以 Surface-EPR band 建立的 layout 圖形，每個都附圖與尺寸，以及繪製曲線輪廓的規則。"
+description: "SCGSim 能以 Surface-EPR band 建立的 layout 圖形，每個都附圖與尺寸，以及量測過的多邊形曲線輪廓。"
 lang: zh-TW
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/supported-geometry"
 ---
 
-本頁列出 SCGSim 的幾何建構器（SGB）經過測試的 layout 圖形，每個圖形都附有圖，以及使用它的 OrcaPen SC PDK cell 的尺寸；本頁也說明繪製曲線輪廓的規則。由這些圖形組成、且落在下列範圍內的 layout，建出的 Surface-EPR band 面積與精確幾何相符。沒有列出的圖形未經驗證。已知會失敗或需要修改 layout 的情況及其原因，列在[已知的幾何問題](known-geometry-problems.qmd)。
+本頁列出 SCGSim 的幾何建構器（SGB）經過測試的 layout 圖形，每個圖形都附有圖，以及使用它的 OrcaPen SC PDK cell 的尺寸；本頁也說明繪製曲線輪廓的規則。由這些圖形組成、且落在下列範圍內的 layout，建出的 Surface-EPR band 面積與精確幾何相符。沒有列出的圖形未經驗證。已知會失敗或需要修改 layout 的情況及其原因，列在[已知的幾何問題](known-geometry-problems.qmd)。每個 layout 都必須遵守的規則，以及失敗由誰負責，見[支援範圍](supported-scope.qmd)。
 
 ## 模擬之前先檢查 layout
 
@@ -15,7 +15,7 @@ scgsim-id: "docs/supported-geometry"
 
 ## 「支援」的意思 {#what-supported-means}
 
-下面每個 unit cell 都是 SCGSim 測試集中的一個樣本 layout。樣本直接以 SGB 紀錄畫在 1 nm 的 grid 上，不使用任何 PDK 程式碼；尺寸取自以 `curve_sampling="simulation"` 建立的 PDK cell。每個樣本都以 Route B 建立，並在 `inset_margins_um=(0.5, 1.0)` 帶有 MA、MS 與 SA band。band 從 [gap edge](specs/palace-eigenmode.qmd#surface-epr-margins)量起，也就是導體上面向裸露 substrate 的邊。
+下面每個 unit cell 都是 SCGSim 測試集中的一個樣本 layout。樣本直接以 SGB 紀錄畫在 1 nm 的 grid 上，不使用任何 PDK 程式碼；尺寸取自以 `curve_sampling="simulation"` 建立的 PDK cell。每個樣本都以 Route B 建立，並在 `inset_margins_um=(0.5, 1.0)` 帶有 MA、MS 與 SA band。band 從 [gap edge](specs/palace-eigenmode.qmd#surface-epr-margins)量起，也就是導體上面向裸露 substrate 的邊。die edge 是切割線：die edge 切斷導體的直線邊時，導體視為越過 die edge 繼續延伸，所以沿這條邊的 band 不論交角多少，都直直延伸到 die edge，末端沒有圓頭。die 的外框若在這段延伸的最大 band margin 之內又回來（例如凹口旁），建構會被拒絕，見 [Surface-EPR 邊距](supported-scope.qmd#rules-margins)。
 
 測試把每個 band 建出的面積，與同一組多邊形的精確侵蝕（erosion）比較。兩者的差在 grid 的 snap 界限之內：半個 grid 對角線（0.71 nm）乘以 band 邊的長度，因此每 100 µm 的 band 邊最多容許 0.07 µm² 的差。
 
@@ -70,6 +70,8 @@ scgsim-id: "docs/supported-geometry"
 
 在 cell 10 中，模擬只看到集總薄片與兩條引線。PDK 在 layer 22/0 上畫的 5 × 0.09 µm 十字是製程用的接面，不在模擬的層堆疊中。
 
+測試建置把 disk 的接面引線畫成斜向的直線，全長都是 2 µm 寬。放上格點後，它比 1.0 µm margin 的兩倍寬 0.7 nm，留下 0.7 nm 寬的核心，因此會在產生網格之前被拒絕，見 [Surface-EPR 邊距](supported-scope.qmd#rules-margins)。
+
 ### 線路與彎道 {#lines-and-bends}
 
 這裡每條 CPW 的 gap 都是 6 µm，每個彎道的半徑都是 100 µm。
@@ -95,47 +97,67 @@ scgsim-id: "docs/supported-geometry"
 
 ![**20 指叉梳。** 20 指，寬 3.3、間距 3.3、長 100，由 21.6° 的漏斗饋入（開孔 42.7°）。使用者：`interdigital_capacitor`、Purcell。](assets/supported-geometry/cell-20.svg){fig-alt="兩組交錯的指狀梳，由漏斗形饋入，位於接地開孔內。"}
 
-![**21 重新取樣的 spline 條帶。** y 方向寬 10，重新取樣使每個頂點至少轉 2.8125°。使用者：`interpolation_spline_strip`、`bspline_strip`。](assets/supported-geometry/cell-21.svg){fig-alt="周圍沒有接地的彎曲條帶。"}
+![**21 重新取樣的 spline 條帶。** y 方向寬 10，重新取樣為每個頂點約轉 3°。使用者：`interpolation_spline_strip`、`bspline_strip`。](assets/supported-geometry/cell-21.svg){fig-alt="周圍沒有接地的彎曲條帶。"}
 
 ![**22 中空 TSV。** 兩個 24 點圓（r 29.8 與 30）之間 0.2 µm 的壁，高 500；兩面各有 r 29.8 至 100 的 Al 著陸墊，位於 r 120 的開孔內。使用者：TSV coupon。](assets/supported-geometry/cell-22.svg){fig-alt="接地開孔內、圍繞 TSV 孔的環形著陸墊。"}
 
 ![**23 Airbridge。** 12 × 84 的橋面架在兩個 14 × 14 的橋墩上，跨越寬 10、gap 6 的 CPW。使用者：`airbridge`、`cpw_airbridge_coupon`、meander coupon。](assets/supported-geometry/cell-23.svg){fig-alt="架在兩個橋墩上、跨越 CPW 的橋面。"}
 
-![**24 跨越 gap 的集總薄片。** 2 × 20 的薄片跨越 20 µm 的 gap，伸入焊墊與接地各 1 nm；方形焊墊 200，或 r 100 的 32 點焊墊。使用者：方形、圓形與覆晶焊墊 coupon。](assets/supported-geometry/cell-24.svg){fig-alt="跨越焊墊邊與接地之間 gap 的窄埠薄片。"}
+![**24 跨越 gap 的集總薄片。** 2 × 20 的薄片跨越 20 µm 的 gap，伸入焊墊與接地各 1 nm；方形焊墊 200。使用者：方形與覆晶焊墊 coupon。同樣的薄片若跨越 r 100 的 32 點多邊形焊墊，則不受支援：模型可以建立，但無法寫成建立網格時讀取的幾何檔。圓形焊墊 coupon 不屬於這種情形，因為它把焊墊與開孔宣告為圓弧。](assets/supported-geometry/cell-24.svg){fig-alt="跨越焊墊邊與接地之間 gap 的窄埠薄片。"}
 :::
 
-PDK 以 258 點畫 cell 21 的 spline 條帶。依原圖它們不符合下面的曲線規則而會被拒絕；樣本先將它們重新取樣（見[已知的幾何問題](known-geometry-problems.qmd#spline-258)）。
+PDK 以 258 點畫 cell 21 的 spline 條帶。樣本將它們重新取樣；依原圖的條帶也能建出精確的 band（見[以多邊形畫成的曲線輪廓](#curve-rule)）。
 
 cell 22 的壁厚 0.2 µm，比兩個 margin 都薄。壁面是垂直的，所以上面沒有 band，著陸墊的 band 只從 20 µm 的 gap 量起。
 
-cell 14、15 與 18 有少數頂點的轉角小於 2.8125°。它們依原圖在這些 cell 中受支援；[已知的幾何問題](known-geometry-problems.qmd#small-turn-runs)列出這些頂點，以及在其他地方哪些情況未經驗證。
+cell 14、15 與 18 有少數頂點的轉角小於 2.8125°；它們依原圖就能建出精確的 band（見[以多邊形畫成的曲線輪廓](#curve-rule)）。
 
-## 曲線輪廓：每整圈最多 128 點 {#curve-rule}
+## 集總埠一律切成矩形 {#lumped-port-rectangle}
 
-以多邊形畫成的曲線，若每整圈最多使用 128 點，即受支援；這時它的每個頂點都轉至少 360° / 128 = 2.8125°。這是關於每個頂點轉角的規則，與邊長無關：半徑 150 µm 的 256 點圓，邊長 3.68 µm，仍會被拒絕。
+Palace 只接受矩形的 Lumped Port 或 Lumped RLC：它會比較埠的外框長度與沿埠方向投影的長度。因此 `EigenmodeSim` 設定的每個集總埠，都是所畫薄片中央的矩形。薄片其餘的部分成為薄片所落導體的金屬：第一條切線之前的部分併入位於埠方向起點的導體，第二條切線之後的部分併入另一個導體。沒有 Net 的導體自成一個 Net。薄片的畫法不變，仍是伸入兩個導體的矩形。
 
-OrcaPen SC PDK 的 `curve_sampling="simulation"` 設定每整圈畫 16、24 或 32 點，遠在規則之內。
+每個導體都會多出薄片在其切線之前的空出部分。薄片落在 SGB 以精確宣告的圓弧建出的導體邊緣上時，端塊就是從薄片起點到切線的整段所畫薄片，與導體重疊，因此即使圓弧位於所畫多邊形之外（例如圓形開孔的內側），端塊也會碰到圓弧。薄片落在 SGB 依原圖建出的邊緣上時，端塊只是空出部分；在與薄片垂直的直線邊上，端塊是空的。導體在別處、離薄片較遠的圓弧，不影響這兩種情形。
 
-規則以正多邊形圓、margin 0.5 與 1.0 µm 量測：
+SCGSim 在每一端分兩步選擇切線：
 
-| 每整圈點數 | 每個頂點的轉角 | 半徑 5、10、50 與 150 µm |
-| --- | --- | --- |
-| 16、24、32、64、128 | 22.5° 至 2.8125° | 可建立，band 精確 |
-| 多於 128 | 小於 2.8125° | 不受支援；見[更密的多邊形圓](known-geometry-problems.qmd#dense-circles) |
+1. 從導體伸入薄片最遠處或其後、使端塊只成一塊的第一個格點開始，也就是薄片能容納的最大矩形。
+2. 端塊會沿薄片的兩條長邊，各為導體多加一段輪廓邊，從導體輪廓與該邊的交點延伸到切線。切線每次往 gap 內移一個格點，直到每段這樣的邊都是零，或至少 10 個格點長，使立在這段邊上的側壁不窄於側壁的微細結構限值。導體本身的邊若已沿著長邊延伸，端塊只是延續那條邊，不另加邊。
 
-128 點的圓在半徑 5、10、37.3、75 與 150 µm 時，圓心不在 grid 上（(0.3337, 0.1234) µm）、旋轉 0.73°、或兩者同時成立（圓心 (12.0004, −7.7771) µm、旋轉 1.7°），也都能建出精確的 band。
+這裡的輪廓是 SGB 建出的輪廓：以精確圓弧宣告的導體，與薄片長邊的交點在圓弧與該邊相交之處，並取 SGB 把交點捨入到的格點，而不是多邊形與該邊相交之處；它伸入薄片的深度也以圓弧為準，即使多邊形是以一段弦朝向薄片也一樣。薄片若終止於與它垂直的直線導體邊，就保持原本的面與導體：切線落在這些邊上，端塊是空的。
 
-規則之外的曲線可能以這則訊息停止建構：
+以圓形焊墊 coupon 為例（半徑 100 µm 的焊墊位於半徑 120 µm 的接地開孔內，薄片寬 2 µm，格點 1 nm）：
+
+| 端 | 輪廓與薄片長邊的交點 | 最大矩形 | 採用的切線 | 多加的邊 |
+| --- | --- | --- | --- | --- |
+| 焊墊，半徑 100 µm 的圓弧 | x = 99.995 µm | x = 100.000 µm，邊長 5 nm | x = 100.005 µm | 10 nm |
+| 接地開孔，半徑 120 µm 的圓弧 | x = 119.996 µm | x = 119.988 µm，邊長 8 nm | x = 119.986 µm | 10 nm |
+
+埠長 19.981 µm，比最大矩形短 0.007 µm。
+
+## 以多邊形畫成的曲線輪廓 {#curve-rule}
+
+以多邊形畫成的曲線，會建出與精確侵蝕相同的 band。SGB 不設每個頂點的最小轉角，也不設每整圈的最多點數：在兩條直線邊相交的凸頂點上，只要兩條邊的 offset 在彼此範圍內相交，就會終止於該交點，共用同一個格點。
+
+下列輪廓都已建立並與精確侵蝕比對，margin 為 0.5 與 1.0 µm：
+
+| 輪廓 | 每個頂點的轉角 | 量測條件 | 結果 |
+| --- | --- | --- | --- |
+| 正多邊形圓，16、24、32、64 或 128 點 | 22.5° 至 2.8125° | 半徑 5、10、50 與 150 µm | band 精確 |
+| 128 點的圓，圓心不在 grid 上（(0.3337, 0.1234) µm）、旋轉 0.73°，或兩者同時成立（圓心 (12.0004, −7.7771) µm、旋轉 1.7°） | 2.8125° | 半徑 5、10、37.3、75 與 150 µm | band 精確 |
+| 正多邊形圓，256 點 | 1.41° | 半徑 5、10、50 與 150 µm | band 精確 |
+| PDK 依原圖畫出的 spline 條帶，258 點 | 最小 0.058°（插值）與 0.012°（B-spline） | 依原圖 | band 精確 |
+| cell 14、15 與 18 的 Euler 彎與漸縮段 | 少數頂點 0.15° 至 2.7° | 依原圖 | band 精確 |
+| 半徑 50 µm 的 16 點圓，在一條邊上加一個頂點 | 凸 2.9°、2.7°、1.41°、0.3° 與 0.01°；凹 2.7° 與 0.01°；0° | 邊長 9.8 µm | band 精確 |
+
+這些是量測過的例子，不是限制。每整圈點數多得多的輪廓在開啟 band 時的網格化成本，尚未量測。
+
+若相鄰兩條 offset 仍既不相接也不相交，建構會以這則訊息停止，而不會輸出錯誤的 band：
 
 ```text
 inset family '…': the inset curve at m = … um is not closed near (x, y) um: two
 offsets of the support boundary neither meet nor cross there, so the band regions
-cannot be told apart. An outline whose vertices turn by less than 2.8125 degrees
-each, … does this: draw curved outlines with at most 128 points per full circle, …
+cannot be told apart. This is an SCGSim defect, not a layout rule: report it to
+SCGSim with the layout …
 ```
 
-### 畫出符合規則的曲線
-
-- 以 `curve_sampling="simulation"` 建立用於模擬的 PDK 元件。
-- 重新取樣 spline，使每個頂點都轉至少 2.8125°，就像 cell 21 的樣本那樣。
-- 把圓弧宣告為精確圓弧，SGB 會直接攜帶它，不需取樣。
+圓弧也可以宣告為精確圓弧，SGB 會直接攜帶它，不需取樣。

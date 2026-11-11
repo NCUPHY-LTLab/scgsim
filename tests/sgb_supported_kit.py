@@ -12,12 +12,14 @@ gdsfactory, KQCircuits or PDK code.  This module owns what the cells share:
 
 MA is the metal-to-air surface (a conductor face toward vacuum), MS the metal-to-substrate surface and SA the
 substrate-to-air surface.  A band is measured from gap edges only: the edges of a conductor footprint that face
-exposed substrate.  The die edge, a port and a contact with another conductor are no distance origins.
+exposed substrate.  The die edge, a port and a contact with another conductor are no distance origins.  The die
+edge is a dicing line: a gap edge that runs onto it is measured as if its conductor continued past it.
 """
 
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
@@ -45,10 +47,6 @@ SUBSTRATE_SA = "sa::substrate|vacuum::z=0.0"
 # band bounded by contours of total length L differs from the exact area by at most L * sqrt(2)/2 * grid
 # (the bound of test_oblique_edges_give_the_hand_calculated_bands_within_the_snap_bound).
 CONTOUR_SNAP_UM = math.sqrt(2) / 2 * GRID.size_um
-# The refusal of an outline whose vertices turn too little (``cutfamilies.inset_regions``).
-TURN_REFUSAL = (
-    r"turn by less than 2\.8125 degrees each.*at most 128 points per full circle"
-)
 # Double-precision sums of face areas: a band that vanishes comes out as +-4e-16 um^2 rather than 0, which a
 # zero snap bound (no contour) must still accept.  Relative to the area, far below any snap bound.
 FLOAT_ROUNDOFF = 1e-12
@@ -235,7 +233,8 @@ class Port:
 
 
 # The reference of one band family: its support face and the region whose boundary is the distance origin
-# (exposed substrate for a conductor face, metal for SA), both as micrometre shapely geometry.
+# (exposed substrate for a conductor face, metal for SA), both as micrometre shapely geometry.  Where the origin
+# is no region's boundary (beside a contact between two conductors), it is given as the gap edges themselves.
 Expectation = tuple[BaseGeometry, BaseGeometry]
 
 
@@ -363,28 +362,78 @@ class ReferenceBands:
 def reference(scene: Scene) -> dict[str, ReferenceBands]:
     """Exact erosion of the scene's lattice polygons, one entry per band family the build must produce."""
     expectations = (scene.expectations or planar_expectations)(scene)
-    die_edge = die_shape(scene).boundary
+    die = die_shape(scene)
     return {
-        family: exact_bands(support, gap_edges(origin, die_edge))
+        family: exact_bands(
+            support, continued_past_the_die(gap_edges(origin, die.boundary), die)
+        )
         for family, (support, origin) in expectations.items()
     }
 
 
 def gap_edges(origin: BaseGeometry, die_edge: BaseGeometry) -> BaseGeometry:
-    """The distance origins of a band family: the origin region's boundary, less the die edge."""
-    return origin.boundary.difference(die_edge)
+    """The distance origins of a band family: the origin region's boundary (or the given lines), less the die edge."""
+    lines = (
+        origin
+        if origin.geom_type in ("LineString", "MultiLineString")
+        else origin.boundary
+    )
+    return lines.difference(die_edge)
 
 
-def exact_bands(support: BaseGeometry, edges: BaseGeometry) -> ReferenceBands:
+def continued_past_the_die(edges: BaseGeometry, die: Polygon) -> list[tuple[Um, Um]]:
+    """The segments of the gap ``edges``, each one that the die edge cuts continued straight past it.
+
+    The die edge is a dicing line, so a conductor it cuts continues past it.  A segment whose end lies on the die
+    edge and ends a run of gap edges (no other segment meets it there) is continued along its own line to the box
+    two largest margins outside the die: a point on that box lies farther than every margin from the die, so the
+    stadium of the continued segment enters the die through its straight sides only, as the continuing line's
+    neighbourhood does.  The bands keep only the part inside the support, which lies in the die.
+    """
+    pairs = segment_pairs(edges)
+    meeting = Counter(point for pair in pairs for point in pair)
+    x0, y0, x1, y1 = die.bounds
+    reach = 2 * MARGINS[-1]
+    outside = (x0 - reach, y0 - reach, x1 + reach, y1 + reach)
+
+    def cut_end(point: Um) -> bool:
+        x, y = point
+        on_edge = (x in (x0, x1) and y0 <= y <= y1) or (y in (y0, y1) and x0 <= x <= x1)
+        return meeting[point] == 1 and on_edge
+
+    continued = []
+    for a, b in pairs:
+        if cut_end(b):
+            b = _to_the_box(a, b, outside)
+        if cut_end(a):
+            a = _to_the_box(b, a, outside)
+        continued.append((a, b))
+    return continued
+
+
+def _to_the_box(inner: Um, end: Um, outside: tuple[float, float, float, float]) -> Um:
+    """``end`` moved on along the line from ``inner`` until it reaches the boundary of the ``outside`` box."""
+    dx, dy = end[0] - inner[0], end[1] - inner[1]
+    x0, y0, x1, y1 = outside
+    steps = []
+    if dx:
+        steps.append(((x1 if dx > 0 else x0) - end[0]) / dx)
+    if dy:
+        steps.append(((y1 if dy > 0 else y0) - end[1]) / dy)
+    t = min(steps)
+    return (end[0] + t * dx, end[1] + t * dy)
+
+
+def exact_bands(support: BaseGeometry, edges: list[tuple[Um, Um]]) -> ReferenceBands:
     """Band k of ``support``: the part within ``m_k`` of the gap ``edges`` and not within ``m_(k-1)``; band K the rest.
 
-    The points within ``m`` of the edges are the union of one stadium per edge segment, which is the definition
-    of that distance.  A stadium's straight sides are exact and only its end caps are polygonised, from inside,
-    so a band that erodes away is covered by straight sides and has no reference area.  (Buffering a closed
-    ring as a whole is not used: when its inner offset collapses, GEOS leaves a small hole, about 0.0012 um^2
-    in a 16-gon of radius 1 um at a 1 um margin.)
+    The points within ``m`` of the edge segments are the union of one stadium per segment, which is the
+    definition of that distance.  A stadium's straight sides are exact and only its end caps are polygonised,
+    from inside, so a band that erodes away is covered by straight sides and has no reference area.  (Buffering
+    a closed ring as a whole is not used: when its inner offset collapses, GEOS leaves a small hole, about
+    0.0012 um^2 in a 16-gon of radius 1 um at a 1 um margin.)
     """
-    segments = [LineString(pair) for pair in segment_pairs(edges)]
+    segments = [LineString(pair) for pair in edges]
     grown = [
         unary_union([seg.buffer(m, quad_segs=BUFFER_QUAD_SEGMENTS) for seg in segments])
         for m in MARGINS
@@ -414,8 +463,11 @@ def segment_pairs(lines: BaseGeometry) -> list[tuple[Um, Um]]:
     return pairs
 
 
-def assert_exact_bands(scene: Scene) -> None:
-    """The build has the reference's band families, each band within its snap bound of the exact erosion."""
+def assert_exact_bands(scene: Scene) -> ConformalModel:
+    """The build has the reference's band families, each band within its snap bound of the exact erosion.
+
+    Returns the built model, for checks of the same build.
+    """
     model = build_model_from_catalogue(catalogue(scene), "B", insets=type_bands())
     got = band_areas(model)
     expected = reference(scene)
@@ -432,6 +484,35 @@ def assert_exact_bands(scene: Scene) -> None:
                 exact,
                 bound,
             )
+    return model
+
+
+def short_band_edges(model: ConformalModel, steps: int) -> list[str]:
+    """The emitted horizontal edges that carry a band seam and are shorter than ``steps`` grid steps.
+
+    Each is given as its length in grid steps, its two end points in um and the carriers it comes from.  An arc
+    edge is measured along its arc.
+    """
+    topology = model.topology
+    um = topology.grid_um
+    found = []
+    for edge in topology.edges.values():
+        if edge.kind != "horizontal" or not any("@m" in s for s in edge.sources):
+            continue
+        a, b = topology.vertices[edge.v0], topology.vertices[edge.v1]
+        length = math.hypot(a.x - b.x, a.y - b.y)
+        if edge.curve is not None:
+            length = (
+                2
+                * edge.curve.radius
+                * math.asin(min(1.0, length / (2 * edge.curve.radius)))
+            )
+        if length < steps:
+            found.append(
+                f"{length:.1f} steps ({a.x * um:.4f}, {a.y * um:.4f})-"
+                f"({b.x * um:.4f}, {b.y * um:.4f}) um {sorted(edge.sources)}"
+            )
+    return found
 
 
 def shape(outer: list[Point], holes: Sequence[list[Point]] = ()) -> Polygon:

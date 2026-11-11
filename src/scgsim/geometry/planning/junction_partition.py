@@ -39,6 +39,9 @@ from scgsim.geometry.planning.junction_planning.exact_geometry import (
 from scgsim.geometry.planning.junction_planning.exact_geometry import (
     section as section,
 )
+from scgsim.geometry.planning.junction_planning.model_checks import (
+    fraction_overlap as fraction_overlap,
+)
 from scgsim.geometry.planning.junction_planning.partition import (
     partition_junctions as partition_junctions,
 )

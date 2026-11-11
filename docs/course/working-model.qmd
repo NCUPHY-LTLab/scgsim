@@ -101,7 +101,7 @@ limitations.
 Choose the curve description from the source you have. For authored geometry,
 the component can carry `BoundaryCurveChainSpec` records in
 `component.info["component_semantics"]["boundary_curves"]`, naming an existing
-Entity and boundary and listing its ordered line, arc, or spline segments.
+Entity and boundary and listing its ordered line and circular-arc segments; SGB refuses spline kinds with `UnsupportedCurveError`.
 GeometryPlan qualifies those local identities for the registered occurrence
 and transforms the curve chain with it. For records authored after assembly,
 use `plan.set_boundary_curves(...)` with qualified IDs in assembled coordinates.
@@ -117,8 +117,9 @@ Continue with the plan flow above: register the source's actual references,
 inspect `plan.entities`, assign the intended final Net IDs with
 `plan.set_nets(net_membership)`, set the vacuum region, and call
 `plan.prepare()`. The snapshot retains the selected curve declarations and
-their Entity and occurrence identities. Palace Routes A and B lower active
-curves; Route C and AEDT planar preparation do not. With no curve declaration,
+their Entity and occurrence identities. SGB builds line and circular-arc
+curves on every route; Palace takes Route A and Route B, and AEDT planar
+preparation rejects active curve declarations. With no curve declaration,
 existing polygon-only behavior is unchanged.
 
 ::: {.callout-note title="Authored curves and GDS reconstruction are separate inputs"}

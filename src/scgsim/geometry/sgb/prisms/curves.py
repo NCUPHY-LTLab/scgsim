@@ -56,7 +56,7 @@ def bind_boundaries(
     footprints: Mapping[str, Sequence[SourceFootprint]],
 ) -> dict[RingKey, tuple[RingPrimitive, ...]]:
     """Ring primitives for every ring an authored or reconstruction record binds."""
-    binder = _BoundaryBinder(grid, footprints)
+    binder = _BoundaryBinder(grid, footprints, _entity_layers(build_input))
     bound: dict[RingKey, tuple[RingPrimitive, ...]] = {}
     for record in build_input.boundary_curves:
         key, _ = binder.select_ring(record)
@@ -89,15 +89,29 @@ class _BoundaryBinder:
     """Selects the ring a record addresses and builds its primitives on the grid."""
 
     def __init__(
-        self, grid: Grid, footprints: Mapping[str, Sequence[SourceFootprint]]
+        self,
+        grid: Grid,
+        footprints: Mapping[str, Sequence[SourceFootprint]],
+        layers: Mapping[str, str],
     ) -> None:
         self.grid = grid
         self.footprints = footprints
+        self.layers = layers
+
+    def _named(self, record: BoundaryRecord) -> str:
+        """The record, its Entity and the Entity's layer, as refusals name them."""
+        layer = self.layers.get(record.entity_id)
+        on = f", layer {layer}" if layer else ""
+        return f"{record.boundary_id} (Entity {record.entity_id!r}{on})"
 
     # -- selecting the ring ------------------------------------------------------------
 
     def select_ring(self, record: BoundaryRecord) -> tuple[RingKey, Ring]:
-        """The one entity-owned footprint the selector point lies in, and the ring the role names."""
+        """The one authored entity-owned footprint the selector point lies in, and the ring the role names.
+
+        A junction end piece is never the selector's polygon: it can overlap the terminal's
+        authored polygon, which the selector names as it did before the partition.
+        """
         selector = fraction_to_rep(
             self.grid.exact_units(record.selector_point_um[0]),
             self.grid.exact_units(record.selector_point_um[1]),
@@ -105,7 +119,9 @@ class _BoundaryBinder:
         matches = [
             footprint
             for footprint in self.footprints.get(record.entity_id, ())
-            if sum(point_in_ring(ring, selector) for ring in footprint.rings()) % 2 == 1
+            if footprint.authored
+            and sum(point_in_ring(ring, selector) for ring in footprint.rings()) % 2
+            == 1
         ]
         if len(matches) != 1:
             raise InputError(
@@ -141,7 +157,7 @@ class _BoundaryBinder:
         first_start: Point | None = None
         previous_end: Point | None = None
         for index, curve in enumerate(record.curves):
-            what = f"{record.boundary_id} (Entity {record.entity_id!r}) curve {index}"
+            what = f"{self._named(record)} curve {index}"
             start, end, new = self._curve_primitives(curve, key, index, what)
             if previous_end is not None and start != previous_end:
                 raise InputError(f"{what} does not start where the previous curve ends")
@@ -169,7 +185,11 @@ class _BoundaryBinder:
             return (
                 start,
                 end,
-                list(arc_through_points(arc_id, start, through, end, lineage, what)),
+                list(
+                    arc_through_points(
+                        arc_id, start, through, end, lineage, what, grid=self.grid
+                    )
+                ),
             )
         raise UnsupportedCurveError(
             f"{what}: {curve.kind!r} curves are not supported yet "
@@ -182,7 +202,7 @@ class _BoundaryBinder:
         self, record: GdsBoundaryReconstructionSpec, key: RingKey, ring: Ring
     ) -> _Selection:
         """The segments a reconstruction record replaces and the circular arc that replaces them."""
-        what = f"{record.boundary_id} (Entity {record.entity_id!r})"
+        what = self._named(record)
         if record.kind != "circular_arc":
             raise UnsupportedCurveError(
                 f"{what}: reconstruction kind {record.kind!r} is not supported yet "
@@ -209,12 +229,17 @@ class _BoundaryBinder:
         if record.closed:
             ccw = ring_twice_area(ring) > 0
             arcs = full_circle(
-                arc_id, (points[0], points[1], points[2]), ccw, lineage, what
+                arc_id,
+                (points[0], points[1], points[2]),
+                ccw,
+                lineage,
+                what,
+                grid=self.grid,
             )
         else:
             through = (Fraction(points[1][0]), Fraction(points[1][1]))
             arcs = arc_through_points(
-                arc_id, points[0], through, points[2], lineage, what
+                arc_id, points[0], through, points[2], lineage, what, grid=self.grid
             )
         return _Selection(segments, tuple(arcs), record.boundary_id)
 
@@ -234,6 +259,17 @@ class _BoundaryBinder:
 
     def _exact_point(self, point_um: Sequence[float]) -> tuple[Fraction, Fraction]:
         return (self.grid.exact_units(point_um[0]), self.grid.exact_units(point_um[1]))
+
+
+def _entity_layers(build_input: GeometryBuildInput) -> dict[str, str]:
+    """The source layer(s) of each Entity's polygons, joined for a refusal."""
+    layer_of = {p.polygon_id: p.layer for p in build_input.polygons}
+    return {
+        e.semantic_id: ", ".join(
+            sorted({layer_of[i] for i in e.polygon_ids if i in layer_of})
+        )
+        for e in build_input.entities
+    }
 
 
 def _arc_id(key: RingKey, edge: int) -> str:

@@ -14,22 +14,19 @@ import sgb_supported_cells as disk_qubit
 import sgb_supported_pdk_cells as pdk
 from sgb_supported_kit import (
     MARGINS,
-    TURN_REFUSAL,
     Conductor,
     Scene,
     assert_exact_bands,
-    catalogue,
     die_box,
     ngon,
     rect,
     reference,
+    short_band_edges,
     to_lattice,
     turns_degrees,
-    type_bands,
 )
 
-from scgsim.geometry.sgb.errors import ValidationError
-from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.cutfamilies.inset import SHORT_ARC_GRID_STEPS
 
 SCENES = {**disk_qubit.SCENES, **pdk.SCENES}
 SLOW = {
@@ -43,10 +40,8 @@ SLOW = {
     "claw_floating",
     "claw_floating_test_build",
     "claw_grounded",
-    "junction_straight",
     "junction_fan",
     "junction_fan_noport",
-    "d1_die_test_build",
     "d1_die_defaults",
     "cell11_bumps_flip_chip",
     "cell19_launcher",
@@ -69,32 +64,54 @@ def test_the_sample_set_covers_every_supported_unit_cell():
     assert covered == set(range(1, 25))
 
 
+# The emitted band edges shorter than SHORT_ARC_GRID_STEPS that remain, per scene (Issue #138); every other
+# scene has none.  They are exact geometry:
+# * the 2 um neck of the Disk Qubit junction's fan lead, at the 1 um margin: the eroded region closes where the
+#   lead is 2 m wide, and the offsets of the neck's two sides meet within a grid step (Issue #128);
+# * an SA offset between a convex crossing and a reflex arc, 14 nm long, beside the ground tongue's 195 nm cap
+#   chord, which is shorter than the margin.
+# A band that ends on the die edge leaves none: it runs straight to the die edge, with no cap (cells 18 and 21).
+SHORT_BAND_EDGES = {
+    "junction_fan": 5,
+    "junction_fan_noport": 5,
+    "d1_die_defaults": 5,
+}
+
+
 @pytest.mark.parametrize("name", scene_params())
 def test_a_supported_cell_has_the_bands_of_its_exact_erosion(name):
-    """The scene builds, with every band family it should have and no other, at the exact areas."""
-    assert_exact_bands(SCENES[name]())
+    """The scene builds, with every band family it should have and no other, at the exact areas.
+
+    The band seams emit no edge shorter than 25 grid steps beyond the recorded exact ones.
+    """
+    model = assert_exact_bands(SCENES[name]())
+    short = short_band_edges(model, SHORT_ARC_GRID_STEPS)
+    assert len(short) == SHORT_BAND_EDGES.get(name, 0), short
 
 
 @pytest.mark.parametrize("name", sorted(pdk.DRAWN_SPLINES))
-def test_a_spline_strip_drawn_at_258_points_is_refused_by_its_turn_per_vertex(name):
-    """The PDK's spline strips turn 0.012 and 0.058 degrees at their flattest vertices: the bands are refused."""
+def test_a_spline_strip_drawn_at_258_points_builds_exact_bands(name):
+    """The PDK's spline strips turn 0.012 and 0.058 degrees at their flattest vertices.
+
+    The offsets of two lines end at their crossing on both sides of a vertex (Issue #138), so the curve closes
+    at turns this small and the bands are those of the exact erosion.
+    """
     scene = pdk.DRAWN_SPLINES[name]()
     assert min(abs(t) for t in turns_degrees(scene.conductors[0].outer)) < 0.06
-    with pytest.raises(ValidationError, match=TURN_REFUSAL):
-        build_model_from_catalogue(catalogue(scene), "B", insets=type_bands())
+    assert_exact_bands(scene)
 
 
 @pytest.mark.parametrize(
     "name", ["cell21_interpolation_resampled", "cell21_bspline_resampled"]
 )
-def test_a_resampled_spline_strip_turns_at_least_the_rule_at_every_vertex(name):
+def test_a_resampled_spline_strip_turns_at_least_2_8125_degrees_at_every_vertex(name):
     """The resampled strips that build above keep every lattice vertex at 2.8125 degrees or more."""
     ring = SCENES[name]().conductors[0].outer
     assert min(abs(t) for t in turns_degrees(ring)) >= 360 / 128
 
 
-def test_the_long_meander_has_outlines_of_500_to_900_vertices_within_the_turn_rule():
-    """The stress case of 500 to 900 vertices in one outline, drawn inside the 128-points-per-circle rule.
+def test_the_long_meander_has_outlines_of_500_to_900_vertices():
+    """The stress case of 500 to 900 vertices in one outline, each vertex turning at least 2.8125 degrees.
 
     The scene builds with exact bands in the parametrised test above (``meander_long_outline``).
     """

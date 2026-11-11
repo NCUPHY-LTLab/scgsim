@@ -216,49 +216,75 @@ def trace_free_boundaries(state: JunctionModel) -> None:
 
 
 def slice_free_boundaries(state: JunctionModel) -> None:
-    """Slice the traced free boundaries at the two selected cut planes."""
-    state.sliced, state.free_edges = ({}, {})
+    """Slice the traced free boundaries, and the sheet's own boundary, at the two cut planes.
+
+    The free slices are the parts of the sheet between its terminals; the sheet slices are the
+    whole drawn sheet on each side of a cut, which the emitted end pieces are.
+    """
+    state.sliced, state.free_edges, state.sheet_sliced = ({}, {}, {})
     for jid, record in state.records.items():
         dx, dy = (Fraction(str(v)) for v in record["direction_xy"])
         origin = Fraction(str(record["local_origin_projection_um"][0])) / Fraction(
             str(PRECISION_UM)
         )
         cuts = [origin + round(v / PRECISION_UM) for v in record["actual_cuts_um"]]
+        state.sliced[jid], state.free_edges[jid] = _slice_at_cuts(
+            state, state.raw_free[jid], cuts, (dx, dy)
+        )
+        state.sheet_sliced[jid], _ = _slice_at_cuts(
+            state, sheet_boundary(state, record["authored_polygon_id"]), cuts, (dx, dy)
+        )
 
-        def project(p, dx=dx, dy=dy):
-            return p[0] * dx + p[1] * dy
 
-        cap = [set(), set()]
-        parts = [[], [], []]
-        divided = []
-        for a, b, sources in state.refine(state.raw_free[jid]):
-            ua, ub = (project(a), project(b))
-            split = {Fraction(0): a, Fraction(1): b}
-            for k, cut in enumerate(cuts):
-                if ua == ub == cut:
-                    cap[k].update((a, b))
-                elif ua != ub and min(ua, ub) <= cut <= max(ua, ub):
-                    u = (cut - ua) / (ub - ua)
-                    point = tuple((a[i] + u * (b[i] - a[i]) for i in (0, 1)))
-                    split[u] = point
-                    cap[k].add(point)
-                    for source in sources:
-                        parameter = state.events[source][a] + u * (
-                            state.events[source][b] - state.events[source][a]
-                        )
-                        state.event(source, point, parameter)
-            ordered = [point for _, point in sorted(split.items())]
-            for start, end in pairwise(ordered):
-                midpoint = (project(start) + project(end)) / 2
-                which = 0 if midpoint < cuts[0] else 2 if midpoint > cuts[1] else 1
-                if midpoint == cuts[1]:
-                    which = 1
-                edge = (start, end, sources)
-                parts[which].append(edge)
-                divided.append(edge)
-        _close_cut_caps(cap, parts, dx, dy)
-        state.sliced[jid] = parts
-        state.free_edges[jid] = divided
+def sheet_boundary(state: JunctionModel, sheet_id: str) -> list:
+    """The drawn sheet's own directed boundary, each edge carried by its source edge."""
+    traced = []
+    for index, ring in enumerate(state.rings[sheet_id]):
+        area = sum((a[0] * b[1] - b[0] * a[1] for a, b in region_edges((ring,))))
+        forward = (area > 0) == (index == 0)
+        for n, (a, b) in enumerate(region_edges((ring,))):
+            edge = (a, b) if forward else (b, a)
+            traced.append((*edge, ((sheet_id, index, n),)))
+    return traced
+
+
+def _slice_at_cuts(state: JunctionModel, traced, cuts, direction):
+    """Split traced edges at the two cut planes into the A end, central and B end pieces."""
+    dx, dy = direction
+
+    def project(p):
+        return p[0] * dx + p[1] * dy
+
+    cap = [set(), set()]
+    parts = [[], [], []]
+    divided = []
+    for a, b, sources in state.refine(traced):
+        ua, ub = (project(a), project(b))
+        split = {Fraction(0): a, Fraction(1): b}
+        for k, cut in enumerate(cuts):
+            if ua == ub == cut:
+                cap[k].update((a, b))
+            elif ua != ub and min(ua, ub) <= cut <= max(ua, ub):
+                u = (cut - ua) / (ub - ua)
+                point = tuple((a[i] + u * (b[i] - a[i]) for i in (0, 1)))
+                split[u] = point
+                cap[k].add(point)
+                for source in sources:
+                    parameter = state.events[source][a] + u * (
+                        state.events[source][b] - state.events[source][a]
+                    )
+                    state.event(source, point, parameter)
+        ordered = [point for _, point in sorted(split.items())]
+        for start, end in pairwise(ordered):
+            midpoint = (project(start) + project(end)) / 2
+            which = 0 if midpoint < cuts[0] else 2 if midpoint > cuts[1] else 1
+            if midpoint == cuts[1]:
+                which = 1
+            edge = (start, end, sources)
+            parts[which].append(edge)
+            divided.append(edge)
+    _close_cut_caps(cap, parts, dx, dy)
+    return parts, divided
 
 
 def _close_cut_caps(cap, parts, dx, dy) -> None:

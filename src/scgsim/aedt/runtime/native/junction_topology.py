@@ -14,6 +14,8 @@ from scgsim.aedt.preparation.junction_partition import (
     inside_ring,
     section,
 )
+from scgsim.geometry.planning.junction_partition import fraction_overlap
+from scgsim.geometry.primitives.grid import polygon_rings
 from scgsim.geometry.primitives.planar_loops import (
     cancel_reversed_planar_edges,
     simple_planar_loops_from_edges,
@@ -273,6 +275,45 @@ def native_boundary_contact(left, right) -> bool:
                     if not native_coordinates_close(a, b):
                         return True
     return False
+
+
+def native_end_contact(end, arms) -> bool:
+    """Whether a derived end piece meets its own source arm, resolved at readback resolution.
+
+    An end piece cut from the free part of the sheet shares an edge with its arm.  A landing
+    end piece, the drawn sheet from its end to the cut where SGB rebuilds the arm with an exact
+    arc, overlaps the arm instead.  The shared partition accepts either contact, and so does
+    the readback: a positive span of shared boundary, or an overlap whose mean width ``2 A / P``
+    exceeds the native coordinate tolerance, so CAD round-off where two pieces only touch at a
+    point proves neither.
+    """
+    return native_boundary_contact(end, arms) or native_area_contact(end, arms)
+
+
+def native_area_contact(left, right) -> bool:
+    """Require an overlap piece wider, on average, than the native coordinate tolerance."""
+    for piece in fraction_overlap(left, right):
+        outer, holes = polygon_rings(piece)
+        rings = (outer, *holes)
+        area = abs(_ring_area(outer)) - sum(abs(_ring_area(hole)) for hole in holes)
+        perimeter = sum(
+            math.dist(a, b)
+            for ring in rings
+            for a, b in zip(ring, (*ring[1:], ring[0]), strict=False)
+        )
+        if perimeter and 2 * area / perimeter > NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM:
+            return True
+    return False
+
+
+def _ring_area(ring) -> float:
+    return (
+        sum(
+            a[0] * b[1] - b[0] * a[1]
+            for a, b in zip(ring, (*ring[1:], ring[0]), strict=False)
+        )
+        / 2
+    )
 
 
 def native_closed_contact(left, right) -> bool:

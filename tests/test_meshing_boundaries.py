@@ -15,6 +15,13 @@ import scgsim.meshing
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 FORBIDDEN = ("scgsim.geometry", "scgsim.aedt", "scgsim.palace")
+# The one import the contract ignores: the class A wall-column limit, owned by the geometry layer.
+SHARED_LIMIT = {
+    "fine_structure.py": {
+        "scgsim.geometry.models.grid",
+        "scgsim.geometry.models.grid.WALL_COLUMN_LIMIT_STEPS",
+    }
+}
 CONTRACT = "importlinter:contract:meshing-reads-contracts-only"
 PARENT_PROCESS_MODULES = (
     "entry",
@@ -70,7 +77,7 @@ def test_no_meshing_module_imports_sgb_aedt_or_palace(source: Path):
         for name in imported_modules(source)
         if any(name == f or name.startswith(f"{f}.") for f in FORBIDDEN)
     }
-    assert not offending
+    assert not offending - SHARED_LIMIT.get(source.name, set())
 
 
 @pytest.mark.parametrize(
