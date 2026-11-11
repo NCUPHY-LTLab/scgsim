@@ -287,6 +287,11 @@ def test_a_reference_that_does_not_resolve_is_refused(sidecars):
         ),
         (("counts", "edges"), len(edges) + 1, "counts has"),
         (
+            ("counts", "volumes_total"),
+            len(good["volumes"]) + 1,
+            r"counts\.volumes_total is \d+, volumes has",
+        ),
+        (
             ("expected", "face_area_um2"),
             [1.0],
             r"expected\.face_area_um2 has 1 entries",

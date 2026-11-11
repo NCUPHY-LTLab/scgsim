@@ -108,8 +108,11 @@ class _Index:
 
 
 def _binding_sizes(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    """Each planned id once per dimension, and as many as ``counts`` says were written."""
+    """Each planned id once per dimension, as many as ``counts`` says were written, and as many planned
+    volumes as ``counts.volumes_total``."""
     counts = sidecar["counts"]
+    if counts["volumes_total"] != len(sidecar["volumes"]):
+        yield f"counts.volumes_total is {counts['volumes_total']}, volumes has {len(sidecar['volumes'])}"
     written = (counts["vertices"], counts["edges"], counts["faces"], counts["solids"])
     for dimension, (ids, count) in enumerate(zip(index.ids, written, strict=True)):
         if len(index.known[dimension]) != len(ids):
