@@ -100,9 +100,9 @@ def _owning_conductor(
     priority fails closed naming both entities.
     """
     if len({p.net_id for p in conductors}) > 1:
-        names = ", ".join(sorted({p.entity_id for p in conductors}))
         raise OverlapError(
-            f"different-Net conductors overlap near {format_location(where, grid)}: {names}"
+            f"different-Net conductors overlap near {format_location(where, grid)}: "
+            f"{named_entities(conductors)}. {FIX_NETS}"
         )
     top = max(p.priority for p in conductors)
     leaders = sorted({p.entity_id for p in conductors if p.priority == top})
@@ -247,6 +247,21 @@ def without_landings(
     if owner is not None and owner.kind == "port":
         owner = None
     return owner, kept
+
+
+FIX_NETS = (
+    "Fix the layout or the Net declaration: draw the conductors of different Nets apart, "
+    "or declare them one Net."
+)
+
+
+def named_entities(prisms: Sequence[PrismRecord]) -> str:
+    """The prisms' entities, each with its source layer, sorted, for error messages."""
+    named = {
+        p.entity_id if p.layer is None else f"{p.entity_id} on layer {p.layer}"
+        for p in prisms
+    }
+    return ", ".join(sorted(named))
 
 
 def format_location(where: RepPoint, grid: Grid) -> str:

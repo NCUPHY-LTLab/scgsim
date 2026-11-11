@@ -23,6 +23,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 
+from scgsim.geometry.models.grid import format_point
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
@@ -193,7 +194,19 @@ class _BoundaryBinder:
             )
         raise UnsupportedCurveError(
             f"{what}: {curve.kind!r} curves are not supported yet "
-            f"(this version carries {SUPPORTED_CURVES})"
+            f"(this version carries {SUPPORTED_CURVES}){self._runs(curve)}. "
+            "Fix the layout: draw the curve as lines and circular arcs."
+        )
+
+    def _runs(self, curve: SourceCurveSpec) -> str:
+        """Where an authored curve starts and ends, as the layout author wrote it."""
+        if not curve.points_um:
+            return ""
+        (x0, y0), (x1, y1) = curve.points_um[0], curve.points_um[-1]
+        size = self.grid.size_um
+        return (
+            f"; the curve runs from {format_point(x0, y0, size)} "
+            f"to {format_point(x1, y1, size)}"
         )
 
     # -- reconstruction ----------------------------------------------------------------

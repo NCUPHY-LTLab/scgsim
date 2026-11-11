@@ -13,11 +13,14 @@ from typing import Any, cast
 
 from scgsim.geometry.models.input import LayoutPolygonSpec
 from scgsim.geometry.primitives.grid import (
+    FIX_EMPTY,
     SOURCE_INTENT,
     current_grid_context,
     current_grid_size_um,
     frame_point,
     polygon_boolean,
+    source_place,
+    source_refusal,
     split_gdstk_cutline_loop,
 )
 from scgsim.geometry.primitives.grid_regions import GridPoint, canonical_grid_point
@@ -262,7 +265,15 @@ def ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
     if len(points) > 1 and points[0] == points[-1]:
         points = points[:-1]
     if len(points) < 3:
-        raise ValueError("GDS polygon requires at least 3 unique points")
+        raise ValueError(
+            source_refusal(
+                "GDS polygon requires at least 3 unique points",
+                [f"the polygon at {source_place(points)} has only {len(points)} points"]
+                if points
+                else [],
+                FIX_EMPTY,
+            )
+        )
     return points
 
 
