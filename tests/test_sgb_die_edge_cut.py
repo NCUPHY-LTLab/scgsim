@@ -23,11 +23,15 @@ A strip that runs into a corner of the die continues past the corner like any ot
 would put bands on the die from a conductor that is not drawn, the build is refused with the conductor and the
 cut point: a die outline that comes back within the band margin beside it (a notch, or the outline of a conductor
 that overhangs the die from a vertex on its edge), and two continuations that cross past the die edge.
+
+Only a straight edge is continued.  A conductor whose gap edge runs onto the die edge as an exact arc is refused,
+with the conductor and the cut point; the same arc ending on a pad of its own Net keeps its half circle.
 """
 
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pytest
 from sgb_supported_kit import (
@@ -41,16 +45,23 @@ from sgb_supported_kit import (
     die_footprint,
     die_shape,
     planar_expectations,
+    rect,
     reference,
     shape,
     to_lattice,
     type_bands,
 )
+from sgb_unsupported_cells import arc_cut_by_the_die_edge, strip_into_notch
 
+from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, InterfaceSurfaces
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import Footprint, PrismRecord
+from scgsim.geometry.sgb.records.prisms import (
+    Footprint,
+    PrismCatalogue,
+    PrismRecord,
+)
 
 DIE = (0.0, -30.0, 20.0, 30.0)
 STRIP = [(0.0, -25.0), (20.0, 15.0), (20.0, 25.0), (0.0, -15.0)]
@@ -262,54 +273,19 @@ def test_a_strip_cut_at_a_corner_of_the_die_continues_past_it():
 
 def refusal(scene: Scene) -> str:
     """The message the build of ``scene`` is refused with."""
+    return refused_build(catalogue(scene), type_bands())
+
+
+def refused_build(cat: PrismCatalogue, insets: tuple[InsetRequest, ...]) -> str:
+    """The message the Route B build of ``cat`` with ``insets`` is refused with."""
     with pytest.raises(InputError) as raised:
-        build_model_from_catalogue(catalogue(scene), "B", insets=type_bands())
+        build_model_from_catalogue(cat, "B", insets=insets)
     return str(raised.value)
 
 
 def test_a_die_outline_that_comes_back_beside_a_continuation_is_refused():
     """A strip cut on the floor of a notch in the die's top edge: its right side's continuation ends 0.1 um from the notch wall."""
-    notched = Scene(
-        "strip_into_notch",
-        (),
-        (0.0, -30.0, 40.0, 30.0),
-        [
-            Conductor(
-                "strip",
-                "strip",
-                to_lattice([(8.4, -14.0), (11.4, -14.0), (21.4, 26.0), (18.4, 26.0)]),
-            )
-        ],
-    )
-    outline = [
-        (0, -30),
-        (40, -30),
-        (40, 30),
-        (22, 30),
-        (22, 26),
-        (14, 26),
-        (14, 30),
-        (0, 30),
-    ]
-    notched.prisms = [
-        PrismRecord(
-            "substrate",
-            Footprint.from_rings(to_lattice(outline)),
-            exact_z(-100),
-            exact_z(0),
-            "substrate",
-            "dielectric",
-        ),
-        PrismRecord(
-            "vacuum",
-            die_footprint(notched),
-            exact_z(0),
-            exact_z(100),
-            "vacuum",
-            "vacuum",
-        ),
-    ]
-    message = refusal(notched)
+    message = refusal(strip_into_notch())
     assert "the die outline comes back within the band margin (1 um)" in message
     assert "of 'strip', cut by the die edge at (21.4000, 26.0000) um" in message
     assert "SCGSim does not model it" in message
@@ -383,3 +359,53 @@ def test_two_continuations_that_cross_past_the_die_edge_are_refused():
         "cut by the die edge at (20.1000, 30.0000) and (19.9000, 30.0000) um" in message
     )
     assert "cross past the die edge" in message
+
+
+@pytest.mark.parametrize(
+    ("band_type", "cut_um"),
+    [
+        ("MA", "(0.0000, 2.5000)"),
+        ("MS", "(0.0000, 2.5000)"),
+        ("SA", "(0.0000, 8.0000)"),
+    ],
+)
+def test_a_conductor_cut_by_the_die_edge_along_an_arc_is_refused(band_type, cut_um):
+    """A curved strip whose long edges are exact arcs runs into the die's left edge: no band type builds it.
+
+    A straight gap edge cut by the die edge is continued along its line; an arc cannot be, and SCGSim does not
+    model it.  The strip's own faces name the strip at the first cut on their ring, the inner arc's; the exposed
+    substrate, an interface, names the conductor beside its first cut, the outer arc's.
+    """
+    request = InsetRequest(band_type.lower(), InterfaceSurfaces(band_type), MARGINS)
+    message = refused_build(arc_cut_by_the_die_edge(), (request,))
+    assert (
+        f"the die edge cuts 'strip' at {cut_um} um, where its gap edge is an exact arc"
+        in message
+    )
+    assert "SCGSim does not model it" in message
+    assert "Let a straight edge of the conductor meet the die edge" in message
+
+
+def test_an_arc_that_ends_on_a_pad_of_its_own_net_keeps_its_half_circle():
+    """The same curved strip ends on a pad of its own Net inside the die: the contact is no die edge, and it builds.
+
+    The outer arc's end on the pad keeps the half circle of the strip's bands about it, as on a straight edge.
+    """
+    pad = Scene(
+        "arc_onto_pad",
+        (),
+        (-6.0, -4.0, 20.0, 14.0),
+        [Conductor("pad", "strip", to_lattice(rect(-4.0, 0.0, 0.0, 12.0)))],
+    )
+    strip = arc_cut_by_the_die_edge().prisms[-1]
+    assert strip.entity_id == "strip" and strip.arcs
+    with_pad = catalogue(pad)
+    model = build_model_from_catalogue(
+        replace(with_pad, prisms=(*with_pad.prisms, strip)), "B", insets=type_bands()
+    )
+    for family in STRIP_FAMILIES:
+        centres = {
+            (float(arc.centre[0]), float(arc.centre[1]))
+            for arc in cap_arcs(model, family)
+        }
+        assert (0.0, 8_000.0) in centres, family
