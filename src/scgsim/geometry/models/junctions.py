@@ -115,6 +115,17 @@ def junction_net_id(entity: Any) -> str:
     return entity.net_id or entity.semantic_id
 
 
+# A standalone layout, bound by ``set_geometry``, records no source occurrences; its port
+# sheets and conductors all share this one occurrence identity.
+STANDALONE_OCCURRENCE_PATH = "<standalone>"
+
+
+def junction_occurrence_path(metadata: Mapping[str, Any]) -> str:
+    """The source occurrence a port sheet or conductor records, or the standalone layout's."""
+    path = metadata.get("source_occurrence_path")
+    return STANDALONE_OCCURRENCE_PATH if path is None else str(path)
+
+
 @dataclass(frozen=True)
 class JunctionGeometry:
     """Geometry algorithm input without solver inductance or capacitance settings."""

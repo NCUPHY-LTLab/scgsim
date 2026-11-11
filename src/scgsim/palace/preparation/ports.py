@@ -21,7 +21,10 @@ from scgsim.geometry import (
     SemanticEntitySpec,
     with_rectangular_junctions,
 )
-from scgsim.geometry.models.junctions import junction_net_id
+from scgsim.geometry.models.junctions import (
+    junction_net_id,
+    junction_occurrence_path,
+)
 
 from .config import LayoutPortBinding
 
@@ -161,7 +164,7 @@ def _port_request(
         junction_id=region.port_sheet_id,
         port_sheet_id=region.port_sheet_id,
         source_polygon_id=region.source_polygon_id,
-        source_occurrence_path=str(region.metadata.get("source_occurrence_path")),
+        source_occurrence_path=junction_occurrence_path(region.metadata),
         terminal_a=terminals[0],
         terminal_b=terminals[1],
     )
@@ -171,7 +174,7 @@ def _terminal(entity: SemanticEntitySpec) -> JunctionTerminalBinding:
     """The terminal binding of one host conductor; one without a Net is a Net of its own."""
     return JunctionTerminalBinding(
         source_entity_id=entity.semantic_id,
-        source_occurrence_path=str(entity.metadata.get("source_occurrence_path")),
+        source_occurrence_path=junction_occurrence_path(entity.metadata),
         net_id=junction_net_id(entity),
     )
 
