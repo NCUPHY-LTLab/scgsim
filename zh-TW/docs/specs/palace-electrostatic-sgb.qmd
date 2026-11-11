@@ -54,28 +54,32 @@ prepare shared GeometryPlan snapshot
 
 `mesh()` 以 SGB 建立幾何、用 `scgsim.meshing` 產生網格，再寫出 Palace 網格，因此網格控制就是該模組的控制。兩個 Palace 外觀介面都透過 `set_mesh(...)` 接受這些控制，預設值相同。省略的引數保留目前設定。實際改變任何設定的更新會使網格、設定檔及交接失效；無效的更新提案則保留原狀態。
 
+::: {.callout-note title="不一定要使用 SCGSim 的網格化"}
+SGB 寫出的 XAO（位於 `geometry/`）也可以交給其他工具產生網格；直接使用 Gmsh 已在 SCGSim 的單晶片與覆晶測試模型上試過，可以完成網格化。這不是官方支援的流程，本頁也不說明這樣產生的網格如何銜接 SCGSim 的後續步驟。
+:::
+
 網格器啟動之前，`mesh()` 會對自己建出的幾何執行 `simulation_drc` 的網格階段。有拒絕項目時，拋出 `scgsim.palace.SimulationDrcError`，並附上列出每項發現的位置、負責方與修改方式的報告，且不產生網格；只有警告時，`mesh()` 不會停止。類別與界限見[網格階段回報什麼](../layout-modeling-check.qmd#what-the-meshing-stage-reports)。以下網格控制適用於通過檢查的模型。
 
 ::: {.askr-table-compact}
 | 控制 | 預設值 | 意義 |
 |---|---|---|
-| `recipe` | `FeatureRecipe()` | 決定初始元素尺寸：`FeatureRecipe`、`GlobalSizeRecipe` 或 `UniformBoundaryRecipe`。 |
+| `recipe` | `FeatureRecipe()` | 決定初始元素尺寸：`FeatureRecipe`、`GlobalSizeRecipe`、`UniformBoundaryRecipe` 或 `GmshDefaultRecipe`。 |
 | `mesher` | `MesherOptions()` | Gmsh 演算法與輸出網格的階數：`algorithm_2d`（為 `None` 時用 Gmsh 預設）、`algorithm_3d`（Delaunay）、`geometry_order`（1）與 `high_order_optimize`（`True`）。 |
 | `budgets` | `Budgets()` | 修復迴圈何時放棄：`max_rounds`（8 輪細化）、`max_tetrahedra`（2,000,000），以及時間上限：x 乘 y 範圍不超過 `time_reference_area_mm2`（4 mm²）的模型為 `time_limit_seconds`（180 秒），面積更大時按比例增加。時間上限決定一輪能否開始，以及該輪 worker 最多能執行多久；寫入該輪請求檔與讀取其結果的時間不計入，因此結果可能比時間上限晚這段時間才送達。`time_target_seconds`（60 秒，以相同比例調整）只記錄在報告中，不會中止執行。 |
 | `quality_threshold` | `0.01` | 每個四面體必須達到的最小有號反條件數（minSICN）。 |
 :::
 
-請從 `scgsim.meshing` 匯入 `FeatureRecipe`、`GlobalSizeRecipe`、`UniformBoundaryRecipe`、`MesherOptions`、`Budgets`，以及演算法常數 `DELAUNAY` 與 `HXT`。修復策略不是 Palace 控制：Palace 一律使用模組預設的 `RepairPolicy`。
+請從 `scgsim.meshing` 匯入 `FeatureRecipe`、`GlobalSizeRecipe`、`UniformBoundaryRecipe`、`GmshDefaultRecipe`、`MesherOptions`、`Budgets`，以及演算法常數 `DELAUNAY` 與 `HXT`。修復策略不是 Palace 控制：Palace 一律使用模組預設的 `RepairPolicy`。
 
 ::: {.callout-important title="網格低於品質門檻時，執行會中止"}
-當修復迴圈在 `budgets` 內無法讓每個四面體達到 `quality_threshold` 時，`mesh()` 會拋出 `scgsim.meshing.MeshRepairError`，並附上品質報告。網格需要超過 `max_tetrahedra` 個四面體、到達時間上限（仍在執行的那一輪會被中止）、不良元素數連續兩輪都沒有低於先前的最低值（`stalled`）、已接受的網格無法升到 `geometry_order`，或 Gmsh 沒有產生網格時，同樣會拋出。此時不會回傳網格路徑，因此無法繼續準備設定檔與交接。報告會寫明停止原因、時間上限與剩下的不良元素，並寫入執行資料夾的 `mesh` 目錄；若有某一輪產生了網格，最後一個網格會以 `.rejected.msh` 檔留在同一處。
+當修復迴圈在 `budgets` 內無法讓每個四面體達到 `quality_threshold` 時，`mesh()` 會拋出 `scgsim.meshing.MeshRepairError`，並附上品質報告；只有 `GmshDefaultRecipe` 會交付這樣的網格。網格需要超過 `max_tetrahedra` 個四面體、到達時間上限（仍在執行的那一輪會被中止）、不良元素數連續兩輪都沒有低於先前的最低值（`stalled`）、已接受的網格無法升到 `geometry_order`，或 Gmsh 沒有產生網格時，同樣會拋出。此時不會回傳網格路徑，因此無法繼續準備設定檔與交接。報告會寫明停止原因、時間上限與剩下的不良元素，並寫入執行資料夾的 `mesh` 目錄；若有某一輪產生了網格，最後一個網格會以 `.rejected.msh` 檔留在同一處。
 
 遇到這種情況，請先看剩下的元素在哪裡。停滯通常表示網格器無法修復的幾何，例如只有一個格點寬的邊或面；請在佈局中修正。其他情況可改選對問題區域給出更細尺寸的配方、提高 `Budgets.max_rounds` 或時間上限，或降低 `quality_threshold` 並把降低後的值記錄在研究中。`Budgets(max_rounds=0)` 讓配方只跑一次、不做修復；它只關閉修復，所以第一個網格若低於門檻，仍會被拒絕。
 :::
 
 ### 尺寸配方 {#palace-mesh-recipes}
 
-配方只決定初始元素尺寸。修復、門檻與報告對每種配方都相同。請從 `FeatureRecipe` 開始：它依幾何本身的事實為需要的曲線設尺寸，其預設值經量測，在 1 至 4 mm 晶片上，以及帶有 Surface-EPR 條帶的覆晶量子位元與 Route A 薄片上，都能達到預設門檻。
+配方只決定初始元素尺寸。修復、門檻與報告對每種配方都相同，只有 `GmshDefaultRecipe` 例外：它只回報品質，不強制門檻。請從 `FeatureRecipe` 開始：它依幾何本身的事實為需要的曲線設尺寸，其預設值經量測，在 1 至 4 mm 晶片上，以及帶有 Surface-EPR 條帶的覆晶量子位元與 Route A 薄片上，都能達到預設門檻。
 
 ::: {.askr-table-compact}
 | 配方 | 尺寸 | 參數（預設值） |
@@ -83,6 +87,7 @@ prepare shared GeometryPlan snapshot
 | `FeatureRecipe` | 粗略最大尺寸為包圍盒對角線除以 `max_size_divisor`，並在薄膜側壁處（當膜厚的倍數小於粗略尺寸的一半時，取膜厚的倍數）與每一條 Surface-EPR 條帶邊界曲線上（取所在面最窄條帶寬度的倍數；見[條帶邊界曲線](#palace-mesh-band-edges)）用較細的元素。另有選用規則，為導體輪廓設尺寸。 | `max_size_divisor=20`、`gradation=1`、`film_sidewall_thickness_multiple=25`、`film_sidewall_ceiling_fraction=0.5`、`conductor_outline=False`、`conductor_edge_size_um=5`、`conductor_edge_grow_um=300`、`band_mesh_size_multiple=4` |
 | `GlobalSizeRecipe` | 只有粗略最大尺寸，即包圍盒對角線除以 `max_size_divisor`。這是便宜的對照組，會在薄金屬側壁留下近乎扁平的四面體，因此仰賴修復輪次。 | `max_size_divisor=20`、`gradation=1` |
 | `UniformBoundaryRecipe` | 模型中每條曲線都用 `near_um`，並在 `far_um` 微米的距離內成長到 `far_um`。它不分辨每條曲線是什麼。 | `near_um=5`、`far_um=300` |
+| `GmshDefaultRecipe` | 不設任何自己的尺寸：由 Gmsh 以自身預設值產生一次網格，沒有最大元素尺寸，也不做修復。無論 minSICN 多低，網格都會交付，報告只記錄其品質，因此不保證網格品質；四面體與時間預算仍然適用。它絕不是預設配方，須以 `set_mesh(recipe=GmshDefaultRecipe())` 明確選用。 | 無 |
 :::
 
 每個配方都有名稱與版本，連同參數一起記錄在網格清單中，因此每次執行都會說明是哪組尺寸規則產生了網格。配方版本只在配方要求的尺寸改變時才改變；見[網格的版本識別](../mesh-quality.qmd#version-identities)。

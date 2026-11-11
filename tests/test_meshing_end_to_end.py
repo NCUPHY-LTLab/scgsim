@@ -1,4 +1,4 @@
-"""The meshing module on a real SGB build: attribution, a clean mesh per recipe, determinism, a failing repair and a second-order mesh.
+"""The meshing module on a real SGB build: attribution, a clean mesh per recipe, determinism, a failing repair, a second-order mesh and the report-only recipe.
 
 Runs Gmsh in worker processes (each case takes seconds), so the whole module is marked slow.
 """
@@ -26,6 +26,7 @@ from scgsim.meshing import (  # noqa: E402
     Budgets,
     FeatureRecipe,
     GlobalSizeRecipe,
+    GmshDefaultRecipe,
     MesherOptions,
     MeshRepairError,
     MeshResult,
@@ -38,6 +39,7 @@ from scgsim.meshing import (  # noqa: E402
 from scgsim.meshing.driver import measure_bounding_box, run_round  # noqa: E402
 from scgsim.meshing.features import load_features  # noqa: E402
 from scgsim.meshing.job import MeshJob  # noqa: E402
+from scgsim.meshing.recipes.gmsh_default import GMSH_DEFAULT_MAX_SIZE  # noqa: E402
 
 pytestmark = pytest.mark.slow
 
@@ -461,6 +463,99 @@ def test_hxt_can_be_chosen_through_the_mesher_options(pad_in_ground_b, tmp_path)
     )
     assert result.report["stop"] == "clean"
     assert result.report["mesh"]["algorithm_3d"] == HXT
+
+
+# A threshold far above any tetrahedron of these meshes, so every recipe's first mesh has bad elements.
+UNREACHABLE = 0.9
+
+
+def test_the_gmsh_default_recipe_meshes_once_with_gmsh_s_sizes_and_reports_without_refusing(
+    pad_in_ground_b, tmp_path
+):
+    """No size, no repair round, and a mesh far below the threshold is delivered with its quality reported."""
+    result = mesh_sgb(
+        pad_in_ground_b.xao,
+        pad_in_ground_b.sidecar,
+        tmp_path,
+        threshold=UNREACHABLE,
+        recipe=GmshDefaultRecipe(),
+    )
+    report = result.report
+    assert report["recipe"] == {
+        "name": "gmsh-default",
+        "version": "scgsim.meshing.gmsh-default/1",
+        "parameters": {},
+    }
+    assert (report["stop"], report["rounds"], len(report["history"])) == (
+        "report_only",
+        0,
+        1,
+    )
+    mesh = report["mesh"]
+    assert (mesh["sized_curves"], mesh["local_sizes"]) == (0, 0)
+    assert mesh["min_quality"] < UNREACHABLE
+    assert mesh["bad_count"] == report["remaining_bad"]["count"] > 0
+    assert report["remaining_bad"]["listed"]
+    assert report["stop_places"] == []
+    stem = pad_in_ground_b.xao.stem
+    assert result.mesh == tmp_path / f"{stem}.msh"
+    assert not (tmp_path / f"{stem}.rejected.msh").exists()
+    sidecar = json.loads(pad_in_ground_b.sidecar.read_text(encoding="utf-8"))
+    assert physical_names(result.mesh) >= set(sidecar["physical_groups"])
+    assert "report-only" in result.summary_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "recipe", [FeatureRecipe(), GlobalSizeRecipe(), UniformBoundaryRecipe()]
+)
+def test_every_other_recipe_still_refuses_a_first_mesh_below_the_threshold(
+    pad_in_ground_b, tmp_path, recipe
+):
+    """The same unreachable threshold, also without repair: the report-only switch is the new recipe's alone."""
+    with pytest.raises(MeshRepairError) as failure:
+        mesh_sgb(
+            pad_in_ground_b.xao,
+            pad_in_ground_b.sidecar,
+            tmp_path,
+            threshold=UNREACHABLE,
+            recipe=recipe,
+            budgets=Budgets(max_rounds=0),
+        )
+    assert failure.value.report["stop"] == "rounds"
+    assert not (tmp_path / f"{pad_in_ground_b.xao.stem}.msh").exists()
+
+
+def test_a_report_only_mesh_below_the_threshold_is_still_raised_to_the_asked_order(
+    pad_in_ground_b, tmp_path
+):
+    """Delivered means elevated too: the file has second-order tetrahedra, the report is of the linear mesh."""
+    result = mesh_sgb(
+        pad_in_ground_b.xao,
+        pad_in_ground_b.sidecar,
+        tmp_path,
+        threshold=UNREACHABLE,
+        recipe=GmshDefaultRecipe(),
+        mesher=MesherOptions(geometry_order=2),
+    )
+    assert result.report["stop"] == "report_only"
+    assert result.report["mesh"]["geometry_order"] == 2
+    assert read_element_types(result.mesh)["types"]["3"] == [QUADRATIC_TETRAHEDRON]
+
+
+def test_the_gmsh_default_recipe_s_maximum_size_is_gmsh_s_own_default():
+    """The worker always sets Mesh.MeshSizeMax; the recipe's value must be the one a fresh Gmsh has."""
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import gmsh; gmsh.initialize(['-noenv']); "
+            "print(gmsh.option.getNumber('Mesh.MeshSizeMax'))",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert float(done.stdout) == GMSH_DEFAULT_MAX_SIZE
 
 
 # The benchmark vacuum of issue 124: nothing beside the die, 1000 um above and below it.

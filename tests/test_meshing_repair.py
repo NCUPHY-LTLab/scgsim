@@ -682,6 +682,40 @@ def test_zero_rounds_mesh_once_and_the_threshold_still_applies(tmp_path, monkeyp
     assert (accepted.stop, accepted.rounds) == ("clean", 0)
 
 
+def test_a_report_only_loop_meshes_once_and_refuses_only_over_the_tetrahedron_budget(
+    tmp_path, monkeypatch
+):
+    """With the threshold not enforced, the first mesh ends the loop whatever ``max_rounds`` says."""
+    jobs = script_rounds(monkeypatch, never_clean())
+    reported = repair_mesh(inputs_for(tmp_path, enforce_threshold=False))
+    assert (reported.stop, reported.rounds, len(jobs)) == ("report_only", 0, 1)
+    assert reported.last_audit is not None and reported.last_audit.bad_count == 19
+    assert (jobs[0].sizes.local_sizes, reported.local_sizes) == ((), ())
+    small = Budgets(max_tetrahedra=10)
+    over = repair_mesh(inputs_for(tmp_path, enforce_threshold=False, budgets=small))
+    assert (over.stop, len(jobs)) == ("elements", 2)
+
+
+def test_a_report_only_mesh_below_the_threshold_is_elevated_and_delivered(
+    tmp_path, monkeypatch
+):
+    """The worker is told to elevate it although it has bad elements, and the loop keeps the elevated file."""
+    jobs = []
+
+    def fake_run_round(job, work_dir, timeout_seconds=None):
+        jobs.append(job)
+        bad = audit_of((bad_element(1, at=SPOT, quality=0.009),))
+        return replace(outcome_of(bad), elevated=True)
+
+    monkeypatch.setattr(repair, "run_round", fake_run_round)
+    curved = MesherOptions(geometry_order=2)
+    outcome = repair_mesh(inputs_for(tmp_path, mesher=curved, enforce_threshold=False))
+    assert jobs[0].elevation and jobs[0].elevation.enforce_threshold is False
+    assert outcome.stop == "report_only"
+    assert outcome.elevated_mesh == tmp_path / "round_00.elevated.msh"
+    assert outcome.geometry_order == 2
+
+
 def test_a_linear_mesh_job_asks_for_no_elevation(tmp_path, monkeypatch):
     """The default order is 1: no round is asked to write an elevated mesh."""
     jobs = script_rounds(monkeypatch, lambda job: audit_of())

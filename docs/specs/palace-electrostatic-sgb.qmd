@@ -83,6 +83,13 @@ Omitted arguments retain their current settings. A change that alters a setting
 invalidates the mesh, config and handoff; an invalid proposed value leaves the
 prior state intact.
 
+::: {.callout-note title="SCGSim's meshing is not required"}
+The XAO that SGB writes (in `geometry/`) can be meshed with another tool, and
+plain Gmsh has been tried on SCGSim's single-die and flip-chip test models and
+meshes them. This is not an officially supported flow, and this page does not
+describe how such a mesh connects to the rest of SCGSim.
+:::
+
 Before the mesher starts, `mesh()` runs the meshing stage of `simulation_drc` on
 the geometry it built. A refusing finding raises `scgsim.palace.SimulationDrcError`,
 carrying the report with each finding's location, owner and fix, and no mesh is
@@ -93,21 +100,22 @@ The mesh controls below apply to a model that passed.
 ::: {.askr-table-compact}
 | Control | Default | Meaning |
 |---|---|---|
-| `recipe` | `FeatureRecipe()` | Chooses the initial element sizes: `FeatureRecipe`, `GlobalSizeRecipe` or `UniformBoundaryRecipe`. |
+| `recipe` | `FeatureRecipe()` | Chooses the initial element sizes: `FeatureRecipe`, `GlobalSizeRecipe`, `UniformBoundaryRecipe` or `GmshDefaultRecipe`. |
 | `mesher` | `MesherOptions()` | Gmsh algorithms and the order of the delivered mesh: `algorithm_2d` (Gmsh's default when `None`), `algorithm_3d` (Delaunay), `geometry_order` (1) and `high_order_optimize` (`True`). |
 | `budgets` | `Budgets()` | When the repair loop gives up: `max_rounds` (8 refinement rounds), `max_tetrahedra` (2,000,000) and a time limit of `time_limit_seconds` (180 s) for a model of at most `time_reference_area_mm2` (4 mm²) in x by y, growing in proportion above that area. The limit decides whether a round may start and how long its worker may run; writing the round's request and reading its result are not counted, so a result can arrive later than the limit by that much. `time_target_seconds` (60 s, scaled the same way) is reported, not enforced. |
 | `quality_threshold` | `0.01` | The minimum signed inverse condition number (minSICN) every tetrahedron must reach. |
 :::
 
 Import `FeatureRecipe`, `GlobalSizeRecipe`, `UniformBoundaryRecipe`,
-`MesherOptions`, `Budgets` and the `DELAUNAY` and `HXT` algorithm constants from
+`GmshDefaultRecipe`, `MesherOptions`, `Budgets` and the `DELAUNAY` and `HXT`
+algorithm constants from
 `scgsim.meshing`. The repair policy is not a Palace control: Palace always uses
 the module's default `RepairPolicy`.
 
 ::: {.callout-important title="A mesh below the quality threshold stops the run"}
 `mesh()` raises `scgsim.meshing.MeshRepairError`, carrying the quality report,
 when the repair loop cannot bring every tetrahedron to `quality_threshold`
-within `budgets`. It also raises when the mesh needs more than
+within `budgets`; only `GmshDefaultRecipe` delivers such a mesh. It also raises when the mesh needs more than
 `max_tetrahedra`, when the time limit is reached (a round still running is
 stopped), when the count of bad elements has not fallen below its lowest for
 two rounds in a row (`stalled`), when the accepted mesh cannot be raised to
@@ -129,7 +137,8 @@ only, so a first mesh below the threshold is still rejected.
 ### Sizing recipes {#palace-mesh-recipes}
 
 A recipe decides only the initial element sizes. Repair, the threshold and the
-report are the same for every recipe. Start with `FeatureRecipe`: it sizes the
+report are the same for every recipe except `GmshDefaultRecipe`, which reports
+the quality without enforcing it. Start with `FeatureRecipe`: it sizes the
 curves the geometry itself calls for, and its defaults were measured to reach the
 default threshold on 1 to 4 mm chips and, with Surface-EPR bands, on a flip-chip
 qubit and on Route A sheets.
@@ -140,6 +149,7 @@ qubit and on Route A sheets.
 | `FeatureRecipe` | A coarse maximum size, the bounding-box diagonal over `max_size_divisor`, with finer elements at thin film sidewalls (a multiple of the film thickness when that is finer than half the coarse size) and on every Surface-EPR band boundary curve (a multiple of the narrowest band width of its face; see [Band boundary curves](#palace-mesh-band-edges)). An optional rule sizes the outlines of the conductors. | `max_size_divisor=20`, `gradation=1`, `film_sidewall_thickness_multiple=25`, `film_sidewall_ceiling_fraction=0.5`, `conductor_outline=False`, `conductor_edge_size_um=5`, `conductor_edge_grow_um=300`, `band_mesh_size_multiple=4` |
 | `GlobalSizeRecipe` | Only the coarse maximum size, the bounding-box diagonal over `max_size_divisor`. A cheap reference that leaves near-flat tetrahedra at thin metal sidewalls, so it relies on repair rounds. | `max_size_divisor=20`, `gradation=1` |
 | `UniformBoundaryRecipe` | Every curve of the model at `near_um`, growing to `far_um` over `far_um` micrometres. It ignores what each curve is. | `near_um=5`, `far_um=300` |
+| `GmshDefaultRecipe` | No size of its own: Gmsh meshes the model once with its own defaults, with no maximum element size and no repair. The mesh is delivered whatever its minSICN, which the report records, so it carries no quality guarantee; the tetrahedron and time budgets still apply. It is never the default: choose it with `set_mesh(recipe=GmshDefaultRecipe())`. | None |
 :::
 
 Each recipe has a name and a version, recorded with its parameters in the mesh

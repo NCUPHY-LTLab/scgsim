@@ -5,6 +5,8 @@ is below the quality threshold, or raises :class:`MeshRepairError` carrying the 
 pipeline serves every sizing recipe: a recipe (:class:`FeatureRecipe`, :class:`GlobalSizeRecipe`,
 :class:`UniformBoundaryRecipe`) decides only the initial element sizes, while repair
 (:class:`RepairPolicy`, :class:`Budgets`), the threshold check and the report are shared.
+:class:`GmshDefaultRecipe`, never the default, leaves the sizes to Gmsh and is report-only: one mesh, no
+repair, delivered whatever its quality.
 :class:`MesherOptions` sets the Gmsh algorithms and the order of the delivered mesh; the audit always
 measures the linear mesh.  :func:`check_fine_structure` is the meshing stage of ``simulation_drc``: before
 any meshing it finds the fine edges and faces of a built model below :class:`FineStructureLimits`, with
@@ -27,6 +29,7 @@ from .mesher import DELAUNAY, HXT, MesherOptions
 from .recipes import (
     FeatureRecipe,
     GlobalSizeRecipe,
+    GmshDefaultRecipe,
     SizingRecipe,
     UniformBoundaryRecipe,
 )
@@ -41,6 +44,7 @@ __all__ = [
     "FineStructureLimits",
     "FineStructureReport",
     "GlobalSizeRecipe",
+    "GmshDefaultRecipe",
     "MeshRepairError",
     "MeshResult",
     "MesherOptions",

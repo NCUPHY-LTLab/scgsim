@@ -236,6 +236,8 @@ def _headline(report: QualityReport) -> str:
     plural = "" if rounds == 1 else "s"
     if report["stop"] == "clean":
         return f"clean after {rounds} refinement round{plural}"
+    if report["stop"] == "report_only":
+        return "delivered below the threshold, which this report-only recipe does not enforce"
     return f"stopped without a clean mesh ({report['stop']}) after {rounds} refinement round{plural}"
 
 

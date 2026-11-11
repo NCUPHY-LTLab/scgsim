@@ -1,4 +1,4 @@
-"""The three sizing recipes, on the cases the benchmark measured."""
+"""The sizing recipes, on the cases the benchmark measured."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from meshing_support import feature, features_of, film
 from scgsim.meshing import (
     FeatureRecipe,
     GlobalSizeRecipe,
+    GmshDefaultRecipe,
     UniformBoundaryRecipe,
 )
 from scgsim.meshing.recipes.feature import conductor_outline_curves
@@ -44,6 +45,7 @@ def test_the_default_feature_recipe_is_the_measured_one():
             "uniform-boundary",
             "scgsim.meshing.uniform-boundary/1",
         ),
+        (GmshDefaultRecipe(), "gmsh-default", "scgsim.meshing.gmsh-default/1"),
     ],
 )
 def test_every_recipe_has_its_own_name_and_version_that_are_not_parameters(
@@ -335,6 +337,18 @@ def test_the_global_size_divisor_is_a_parameter():
         features_of(), box_with_diagonal(2000.0)
     )
     assert requests.max_size == pytest.approx(200.0)
+
+
+def test_the_gmsh_default_recipe_asks_for_nothing_and_leaves_gmsh_its_own_maximum_size():
+    """No curve size, no field, no local size, and Gmsh's own default Mesh.MeshSizeMax, whatever the model."""
+    small = GmshDefaultRecipe().size_requests(features_of(), box_with_diagonal(10.0))
+    large = GmshDefaultRecipe().size_requests(
+        features_of(film([1, 2, 3])), box_with_diagonal(9000.0)
+    )
+    assert small == large
+    assert small.max_size == 1e22
+    assert (dict(small.curve_sizes), small.fields, small.local_sizes) == ({}, (), ())
+    assert dataclasses.asdict(GmshDefaultRecipe()) == {}
 
 
 def test_the_uniform_boundary_recipe_sizes_every_curve_of_the_model_alike():
