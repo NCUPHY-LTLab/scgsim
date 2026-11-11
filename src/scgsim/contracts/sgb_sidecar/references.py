@@ -1,11 +1,16 @@
 """The references of a v2 sidecar that resolve against a table in the same file, checked after its structure.
 
-Owns the cross-section checks v2 allows.  ``binding.ids_by_tag`` is the table of planned ids: every planned
-id a section names must be in it, in its dimension, and every native tag must name the id written beside
-it.  ``physical_groups`` is the table of groups by dimension: a reference to a surface group must name a
-group of dimension 2, one to a volume group a group of dimension 3.  ``volumes`` is the table of planned
-volumes and
-``lineage.carriers`` the table of carriers; ``counts`` and ``expected`` must have the binding's sizes.
+Owns the cross-section checks v2 allows: every reference names a record that exists, of the kind it
+needs, and every table v2 keys by written shape covers them all.  ``binding.ids_by_tag`` is the table of
+planned ids: every planned id a section names must be in it, in its dimension, and every native tag must
+name the id written beside it.  ``physical_groups`` is the table of groups by dimension, each tag once per
+dimension: a reference to a surface group must name a group of dimension 2, one to a volume group a group
+of dimension 3.  ``faces`` describes exactly the written faces, and ``volumes`` every planned volume, the
+written solids exactly those it marks emitted.  ``lineage.carriers`` is the table of carriers; ``counts``
+and ``expected`` must have the binding's sizes.
+
+v2 states some facts twice (a face's group and the group's members, a port's faces and its group's), and
+the two copies are not compared here: v3 writes each fact once (#170).
 
 v2 also refers to things it keeps no table of, so these stay unchecked until slice C of #170 gives each one
 a table: Entity ids (volume entities, face sources and membership, group and row entities, port hosts,
@@ -114,10 +119,19 @@ def _binding_sizes(sidecar: Sidecar, index: _Index) -> Iterator[str]:
 
 
 def _group_members(sidecar: Sidecar, index: _Index) -> Iterator[str]:
+    """Each group's members and, for a surface group, the written volumes beside it; each tag once per dimension."""
+    named: dict[tuple[int, int], str] = {}
     for name, group in sidecar["physical_groups"].items():
+        where = f"physical group {name!r}"
         yield from index.mistagged(
-            group["dim"], group["ids"], group["native_tags"], f"physical group {name!r}"
+            group["dim"], group["ids"], group["native_tags"], where
         )
+        if group["dim"] == 2:
+            yield from index.unknown(3, group["adjacent_volumes"], where)
+        key = (group["dim"], group["tag"])
+        if key in named:
+            yield f"{where} has the tag {group['tag']} of physical group {named[key]!r}"
+        named.setdefault(key, name)
 
 
 def _mesh_feature_edges(sidecar: Sidecar, index: _Index) -> Iterator[str]:
@@ -139,8 +153,12 @@ def _embeddings(sidecar: Sidecar, index: _Index) -> Iterator[str]:
 
 
 def _planned_faces_and_volumes(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    """``faces`` describes written faces; ``volumes`` every planned volume, the written solids among them."""
+    """``faces`` describes exactly the written faces; ``volumes`` every planned volume, the written solids
+    exactly the emitted ones."""
     yield from index.unknown(2, sidecar["faces"], "faces")
+    for face_id in index.ids[2]:
+        if face_id not in sidecar["faces"]:
+            yield f"binding.ids_by_tag['2'] names {face_id!r}, which faces lacks"
     for face_id, face in sidecar["faces"].items():
         yield from index.unknown_groups(2, [face["group"]], f"faces[{face_id!r}]")
         for side in (face["negative_volume"], face["positive_volume"]):
@@ -151,6 +169,9 @@ def _planned_faces_and_volumes(sidecar: Sidecar, index: _Index) -> Iterator[str]
             yield f"binding.ids_by_tag['3'] names {solid!r}, which volumes lacks"
     for volume_id, volume in sidecar["volumes"].items():
         yield from index.unknown_groups(3, [volume["group"]], f"volumes[{volume_id!r}]")
+        if volume["emitted"] != (volume_id in index.known[3]):
+            state = "emitted" if volume["emitted"] else "not emitted"
+            yield f"volumes[{volume_id!r}] is {state}, which binding.ids_by_tag['3'] contradicts"
 
 
 def _surface_epr_rows(sidecar: Sidecar, index: _Index) -> Iterator[str]:

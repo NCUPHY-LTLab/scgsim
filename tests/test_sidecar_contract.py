@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from importlib import resources
 
 import jsonschema
@@ -249,6 +250,13 @@ def test_a_reference_that_does_not_resolve_is_refused(sidecars):
     good = sidecars["pad_b_bands"]
     surface = _first_group(good, 2)
     volume = _first_group(good, 3)
+    other_tag = next(
+        group["tag"]
+        for name, group in sorted(good["physical_groups"].items())
+        if group["dim"] == 2 and name != surface
+    )
+    emitted = next(name for name, v in sorted(good["volumes"].items()) if v["emitted"])
+    bound_face = good["binding"]["ids_by_tag"]["2"][0]
     edges = good["binding"]["ids_by_tag"]["1"]
     carrier_edge = next(iter(good["lineage"]["edges"]))
     for path, value, message in (
@@ -297,6 +305,26 @@ def test_a_reference_that_does_not_resolve_is_refused(sidecars):
             ("volumes", next(iter(good["volumes"])), "group"),
             surface,
             f"names the group {surface!r}, which is not a volume group",
+        ),
+        (
+            ("faces", bound_face),
+            _REMOVED,
+            rf"binding\.ids_by_tag\['2'\] names '{re.escape(bound_face)}', which faces lacks",
+        ),
+        (
+            ("physical_groups", surface, "adjacent_volumes"),
+            ["v:nowhere"],
+            f"physical group '{re.escape(surface)}' names volume 'v:nowhere'",
+        ),
+        (
+            ("volumes", emitted, "emitted"),
+            False,
+            rf"volumes\['{re.escape(emitted)}'\] is not emitted, which binding",
+        ),
+        (
+            ("physical_groups", surface, "tag"),
+            other_tag,
+            f"has the tag {other_tag} of physical group",
         ),
     ):
         with pytest.raises(
