@@ -1,7 +1,8 @@
 """Normalize authored boundaries, bind them to source rings, and restore them after stack preparation.
 
-This module owns source XY curve identity. Prepared geometry owns its Z,
-materials, and solution-region state.
+This module owns source XY curve identity: it also keeps the source rings that
+reconstruction records name by index valid where the source grid stage nodes
+them. Prepared geometry owns its Z, materials, and solution-region state.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Literal, cast, overload
 
 from scgsim.geometry.models.common import PolygonRing
+from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
@@ -20,11 +22,14 @@ from scgsim.geometry.models.input import (
     SemanticEntitySpec,
     SourceCurveSpec,
 )
+from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.primitives.grid_regions import region_key
 
 _BoundaryRecord = BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec
 _BoundaryInput = _BoundaryRecord | Mapping[str, Any]
 _BoundaryPoint = Callable[[tuple[float, ...], Sequence[float]], Sequence[float]]
+_Ring = Sequence[Sequence[float]]
 # Keep tuple keys so binding errors retain the established source identifier text.
 BoundaryKey = tuple[str, str, str, int | None]
 SourceRings = dict[str, list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]]
@@ -238,6 +243,21 @@ def select_boundary(
     The selector lies in exactly one Entity-owned logical polygon; ``role`` and
     ``hole_index`` then name that polygon's exterior or one of its holes.
     """
+    candidates = _selected_polygons(record, rings, end_pieces)
+    if len(candidates) != 1:
+        raise ValueError(
+            f"{record.boundary_id} selector must bind one Entity-owned logical polygon"
+        )
+    pid, outer, holes = candidates[0]
+    ring = outer if record.role == "outer" else holes[cast(int, record.hole_index)]
+    return (record.entity_id, pid, record.role, record.hole_index), cast(
+        PolygonRing, tuple(tuple(float(x) for x in xy) for xy in ring)
+    )
+
+
+def _selected_polygons(
+    record: _BoundaryRecord, rings: SourceRings, end_pieces: frozenset[str]
+) -> list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]:
     # GDS polygon selection is optional until source boundaries are bound.
     import gdstk  # noqa: PLC0415 - optional native layout dependency
 
@@ -253,15 +273,143 @@ def select_boundary(
             )
         if gdstk.inside([record.selector_point_um], region)[0]:
             candidates.append((pid, outer, holes))
-    if len(candidates) != 1:
-        raise ValueError(
-            f"{record.boundary_id} selector must bind one Entity-owned logical polygon"
-        )
-    pid, outer, holes = candidates[0]
-    ring = outer if record.role == "outer" else holes[cast(int, record.hole_index)]
-    return (record.entity_id, pid, record.role, record.hole_index), cast(
-        PolygonRing, tuple(tuple(float(x) for x in xy) for xy in ring)
+    return candidates
+
+
+def reconstruction_on_noded_rings(
+    records: Sequence[_BoundaryInput],
+    noded: GeometryBuildInput,
+    drawn_rings: Mapping[str, Sequence[_Ring]],
+) -> tuple[_BoundaryInput, ...]:
+    """Carry each reconstruction record from the drawn rings onto the rings the source grid emitted.
+
+    The source grid stage nodes a ring where another operand's boundary crosses it, as a
+    port sheet does where it lands on a pad: the crossing becomes a vertex, and the drawn
+    segment it lies on becomes a chain of noded segments.  A record names drawn segments
+    and drawn vertices by index, so each declared segment is renamed by the chain it became
+    and each anchor by its vertex's place on the noded ring.  The binding stages then check
+    the chain as it was declared, closure included.
+
+    ``drawn_rings`` holds, by polygon ID, the rings the records' indices name.  A record is
+    returned as it is when the grid inserted nothing into its ring, when its ring cannot be
+    matched vertex by vertex to one drawn ring, or when its indices are not indices of the
+    drawn ring; the binding stages then accept or refuse it as before.  A record still in
+    its serialized form is bound, and checked, as declared.
+    """
+    # Without polygons the grid has noded no ring a record could name.
+    if not records or not noded.polygons:
+        return tuple(records)
+    context = geometry_grid_context(noded)
+    if context is None:
+        return tuple(records)
+    scope = _NodedRings(
+        _noded_polygon_rings(noded),
+        frozenset(p.polygon_id for p in noded.polygons if is_junction_end_piece(p)),
+        drawn_rings,
+        context.grid_size_um,
     )
+    return tuple(
+        scope.carry(record)
+        if isinstance(record, GdsBoundaryReconstructionSpec)
+        else record
+        for record in records
+    )
+
+
+def _noded_polygon_rings(build_input: GeometryBuildInput) -> SourceRings:
+    # Only polygon rings are noded by the grid; an Entity without polygons keeps its records.
+    polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
+    return {
+        entity.semantic_id: [
+            (pid, polygons[pid].exterior, polygons[pid].holes)
+            for pid in entity.polygon_ids
+            if pid in polygons
+        ]
+        for entity in build_input.entities
+    }
+
+
+@dataclass(frozen=True)
+class _NodedRings:
+    """The noded rings a record can name, as select_boundary binds them, and their drawn rings."""
+
+    rings: SourceRings
+    end_pieces: frozenset[str]
+    drawn_rings: Mapping[str, Sequence[_Ring]]
+    grid_size_um: float
+
+    def carry(
+        self, record: GdsBoundaryReconstructionSpec
+    ) -> GdsBoundaryReconstructionSpec:
+        """The record with its drawn indices renamed to the noded ring's."""
+        chains = self.segment_chains(record)
+        declared = (*record.segment_indices, *record.anchor_indices)
+        if chains is None or not all(_is_index(i, len(chains)) for i in declared):
+            return record
+        return replace(
+            record,
+            segment_indices=tuple(
+                noded for i in record.segment_indices for noded in chains[i]
+            ),
+            # Drawn vertex i starts the chain of drawn segment i, the one leaving it.
+            anchor_indices=tuple(chains[i][0] for i in record.anchor_indices),
+        )
+
+    def segment_chains(
+        self, record: GdsBoundaryReconstructionSpec
+    ) -> tuple[tuple[int, ...], ...] | None:
+        """The noded chain of each drawn segment of the record's ring, if the grid noded it."""
+        selected = _selected_polygons(record, self.rings, self.end_pieces)
+        # A selection select_boundary refuses is left for it to refuse.
+        if len(selected) != 1:
+            return None
+        polygon_id, outer, holes = selected[0]
+        if record.role == "outer":
+            ring = outer
+        elif _is_index(record.hole_index, len(holes)):
+            ring = holes[cast(int, record.hole_index)]
+        else:
+            return None
+        return _noded_segment_chains(
+            ring, self.drawn_rings.get(polygon_id, ()), self.grid_size_um
+        )
+
+
+def _noded_segment_chains(
+    noded_ring: _Ring, drawn_rings: Sequence[_Ring], grid_size_um: float
+) -> tuple[tuple[int, ...], ...] | None:
+    """The noded segments each drawn segment became, numbered along the noded ring.
+
+    Drawn segment ``i`` runs from the ``i``-th drawn vertex met along the noded ring to the
+    next one.  A ring the grid inserted nothing into would have the identity chains, and its
+    indices keep the meaning they have always had; it gets None, as does a noded ring whose
+    kept vertices are not exactly those of one drawn ring.  Vertices compare on the grid.
+    """
+    keys = [region_key(point, grid_size_um) for point in noded_ring]
+    present = set(keys)
+    matches = [
+        ring
+        for ring in drawn_rings
+        if ring and {region_key(point, grid_size_um) for point in ring} <= present
+    ]
+    if len(matches) != 1:
+        return None
+    (ring,) = matches
+    drawn = {region_key(point, grid_size_um) for point in ring}
+    kept = [index for index, key in enumerate(keys) if key in drawn]
+    # Every drawn vertex once, and at least one vertex inserted.
+    if len(kept) != len(ring) or len(kept) == len(keys):
+        return None
+    count = len(keys)
+    ends = (*kept[1:], kept[0] + count)
+    return tuple(
+        tuple(index % count for index in range(start, end))
+        for start, end in zip(kept, ends, strict=True)
+    )
+
+
+def _is_index(value: object, count: int) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < count
 
 
 def bind_source_curves(

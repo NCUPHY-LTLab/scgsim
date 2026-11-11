@@ -49,6 +49,7 @@ from scgsim.geometry.primitives.grid_regions import (
     contact_changes,
     grid_change_message,
 )
+from scgsim.geometry.source.curves import reconstruction_on_noded_rings
 from scgsim.geometry.source.ports import (
     is_port_sheet_host_entity,
     port_sheet_overlaps,
@@ -187,6 +188,20 @@ def apply_geometry_grid(
     """Project one complete source input inside its grid audit scope."""
     with geometry_grid_scope(context):
         return _apply_geometry_grid(build_input, context)
+
+
+def drawn_polygon_rings(
+    build_input: GeometryBuildInput,
+) -> dict[str, tuple[_SourceRing, ...]]:
+    """Each projected polygon's rings as drawn, exterior first: what this stage rounded and noded.
+
+    Reconstruction records attached after the projection name segments of these rings.
+    """
+    return {
+        polygon.polygon_id: (drawn["exterior"], *drawn["holes"])
+        for polygon in build_input.polygons
+        if (drawn := polygon.metadata.get("unquantized_source_geometry")) is not None
+    }
 
 
 def _validate_bound_context(
@@ -732,12 +747,22 @@ def _apply_geometry_grid(
     source_metadata = _project_metadata(
         build_input, source, context, groups, contact_relations
     )
-    return replace(
+    projected = replace(
         build_input,
         polygons=projected_polygons.records,
         entities=projected_entities,
         port_sheet_regions=projected_ports,
         metadata=source_metadata,
+    )
+    # Reconstruction records name segments of this input's rings by index; noding
+    # has inserted the crossings into them.
+    return replace(
+        projected,
+        boundary_reconstruction=reconstruction_on_noded_rings(
+            build_input.boundary_reconstruction,
+            projected,
+            {p.polygon_id: (p.exterior, *p.holes) for p in build_input.polygons},
+        ),
     )
 
 

@@ -24,8 +24,12 @@ from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.primitives.grid import source_recipe_map
 from scgsim.geometry.primitives.grid_cache import with_grid_work_cache
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
-from scgsim.geometry.source.curves import boundary_binding, transform_boundary
-from scgsim.geometry.source.grid import with_source_grid
+from scgsim.geometry.source.curves import (
+    boundary_binding,
+    reconstruction_on_noded_rings,
+    transform_boundary,
+)
+from scgsim.geometry.source.grid import drawn_polygon_rings, with_source_grid
 from scgsim.geometry.source.normalization import (
     finite_number,
 )
@@ -744,8 +748,14 @@ class GeometryPlan:
             polygons=polygons,
             metadata=metadata,
             boundary_curves=tuple(boundary_curves),
-            boundary_reconstruction=tuple(reconstruction),
             lumped_supports=tuple(lumped_supports),
+        )
+        # The records name segments of the drawn rings, which the source grid has noded.
+        build_input = replace(
+            build_input,
+            boundary_reconstruction=reconstruction_on_noded_rings(
+                reconstruction, build_input, drawn_polygon_rings(build_input)
+            ),
         )
         if self._rectangular_junctions:
             from scgsim.geometry.source.junctions import (  # noqa: PLC0415 - only used when junction requests are present
