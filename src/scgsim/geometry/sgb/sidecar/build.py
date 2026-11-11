@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from scgsim.contracts.sgb_sidecar import SIDECAR_SCHEMA
 from scgsim.geometry.sgb.cutfamilies.inset_plan import TypeExpansion
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
@@ -36,7 +37,6 @@ from scgsim.geometry.sgb.sidecar.groups import (
 )
 from scgsim.geometry.sgb.sidecar.lineage import edge_family, lineage_record
 
-SCHEMA = "scgsim.sgb.sidecar.v2"
 BINDING_RULE = (
     "planned id -> native tag: tag = 1 + position in ids_by_tag[dim] "
     "(TopExp::MapShapes pre-order of the written compound); never by geometry"
@@ -65,7 +65,7 @@ def build_sidecar(
     ports = _ports(model, plan, embedded)
     policy = model.policy
     return {
-        "schema": SCHEMA,
+        "schema": SIDECAR_SCHEMA,
         "route": policy.name,
         "route_policy": {
             "conductor_volumes": "excluded"
