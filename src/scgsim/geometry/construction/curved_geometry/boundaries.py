@@ -16,6 +16,7 @@ from scgsim.geometry.models.input import (
     SemanticEntitySpec,
     SourceCurveSpec,
 )
+from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.source.curves import boundary_binding
 
 # Keep tuple keys so binding errors retain the established source identifier text.
@@ -75,13 +76,18 @@ def source_rings(build_input: GeometryBuildInput) -> SourceRings:
 
 
 def _select_boundary(
-    record: BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec, rings: SourceRings
+    record: BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec,
+    rings: SourceRings,
+    end_pieces: frozenset[str] = frozenset(),
 ) -> tuple[BoundaryKey, PolygonRing]:
     # GDS polygon selection is optional until source boundaries are bound.
     import gdstk  # noqa: PLC0415 - optional native layout dependency
 
     candidates = []
     for pid, outer, holes in rings.get(record.entity_id, ()):
+        # A junction end piece can overlap the terminal the selector names; it is never selected.
+        if pid in end_pieces:
+            continue
         region = [gdstk.Polygon(outer)]
         if holes:
             region = (
@@ -220,9 +226,14 @@ def source_boundaries(
         defaultdict(list)
     )
     provenance: list[dict[str, object]] = []
+    end_pieces = frozenset(
+        polygon.polygon_id
+        for polygon in build_input.polygons
+        if is_junction_end_piece(polygon)
+    )
     for raw in build_input.boundary_curves:
         record = boundary_binding(raw)
-        key, ring = _select_boundary(record, rings)
+        key, ring = _select_boundary(record, rings, end_pieces)
         if key in authored:
             raise ValueError(f"multiple complete authored boundaries claim {key}")
         authored[key] = record.curves
@@ -235,7 +246,7 @@ def source_boundaries(
         )
     for raw in build_input.boundary_reconstruction:
         record = boundary_binding(raw, reconstruction=True)
-        key, ring = _select_boundary(record, rings)
+        key, ring = _select_boundary(record, rings, end_pieces)
         segments, curves, operation = _reconstruct(record, ring)
         reconstructed[key].append((segments, curves, record.boundary_id))
         provenance.append({"operation": "explicit_gds_reconstruction", **operation})

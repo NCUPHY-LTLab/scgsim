@@ -25,6 +25,7 @@ from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
+from .ports import with_rectangular_ports
 from .transforms import (
     RouteAThinFilm,
     apply_airbox_to_stack,
@@ -95,6 +96,9 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
             polygons=(*build_input.polygons, *indium_fill.get("injected_polygons", ())),
             entities=(*build_input.entities, *indium_fill.get("injected_entities", ())),
         )
+    if port_sheet_source_layers is not None:
+        # Every selected sheet is a Lumped Port or RLC; the physical interpretation cuts its rectangle.
+        build_input = with_rectangular_ports(build_input)
     approximation_profile = _resolve_approximation_profile(
         route, route_a_thin_film, approximation_profile
     )

@@ -10,13 +10,16 @@ from decimal import Decimal
 from fractions import Fraction
 from typing import Any
 
-from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.grid import (
+    WALL_COLUMN_LIMIT_STEPS,
+    geometry_grid_context,
+)
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.junctions import JunctionGeometry
+from scgsim.geometry.models.junctions import JunctionGeometry, junction_net_id
 from scgsim.geometry.planning.junction_planning.boolean_geometry import (
     boolean,
     build_polygon_region,
@@ -36,7 +39,7 @@ from scgsim.geometry.planning.junction_planning.core import (
 )
 from scgsim.geometry.planning.junction_planning.exact_geometry import (
     covered,
-    positive_boundary_contact,
+    cross,
     section,
 )
 from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
@@ -45,12 +48,16 @@ from scgsim.geometry.planning.junction_planning.model_checks import (
     emitted_partition_coverage,
 )
 from scgsim.geometry.planning.junction_planning.selection import (
+    BuiltOutline,
     EndSection,
     bound_decimal,
+    built_outline,
     candidate_indices,
     contacts,
     end_candidate,
     grid_cut,
+    own_contact,
+    side_steps,
 )
 from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
 from scgsim.geometry.primitives.grid import polygon_world_frame, with_input_grid
@@ -75,6 +82,17 @@ def partition_junctions(
     return _JunctionPartitionPlanner(
         build_input, junctions, step, output_format
     ).build()
+
+
+@dataclass(frozen=True)
+class _EndSide:
+    """One end of a junction: its side, contact bound, own and foreign metal and side meetings."""
+
+    left: bool
+    bound: int | Fraction
+    own: list[tuple]
+    foreign: list[tuple]
+    outline: BuiltOutline
 
 
 @dataclass
@@ -105,8 +123,11 @@ class _JunctionPartitionPlanner:
     own_a: list[tuple] = field(init=False)
     own_b: list[tuple] = field(init=False)
     other: list[tuple] = field(init=False)
+    outline_a: BuiltOutline = field(init=False)
+    outline_b: BuiltOutline = field(init=False)
     lower: int | Fraction = field(init=False)
     upper: int | Fraction = field(init=False)
+    sheet_region: Sequence[PolygonCoordinates] = field(init=False)
     free: Sequence[PolygonCoordinates] = field(init=False)
     choices: list[tuple] = field(init=False)
     checks: list[dict[str, Any]] = field(init=False)
@@ -149,6 +170,7 @@ class _JunctionPartitionPlanner:
         )
         with polygon_world_frame(transform):
             self.read_conductors()
+            self.read_outline_meetings()
             self.find_corridor()
             self.choose_ends()
             self.check_partition()
@@ -209,7 +231,7 @@ class _JunctionPartitionPlanner:
         }
         by_net = defaultdict(list)
         for eid, polygons in self.by_entity.items():
-            by_net[self.entities[eid].net_id].extend(polygons)
+            by_net[junction_net_id(self.entities[eid])].extend(polygons)
         self.own_a, self.own_b = (
             by_net[self.junction.terminal_a_net],
             by_net[self.junction.terminal_b_net],
@@ -225,6 +247,23 @@ class _JunctionPartitionPlanner:
             for p in polygons
         ]
 
+    def read_outline_meetings(self):
+        """Find where each terminal's built outline meets the two sheet sides."""
+        self.outline_a, self.outline_b = (
+            built_outline(
+                self.build_input,
+                (
+                    eid
+                    for eid in self.by_entity
+                    if junction_net_id(self.entities[eid]) == net
+                ),
+                self.frame,
+                self.span,
+                self.width,
+            )
+            for net in (self.junction.terminal_a_net, self.junction.terminal_b_net)
+        )
+
     def find_corridor(self):
         """Verify terminal ordering and complete clear-corridor containment."""
         if contacts(self.other, self.span, self.width) is not None:
@@ -233,9 +272,18 @@ class _JunctionPartitionPlanner:
             contacts(self.own_a, self.span, self.width),
             contacts(self.own_b, self.span, self.width),
         )
-        if ca is None or cb is None or ca[1] >= cb[0]:
+        if ca is None or cb is None:
             raise ValueError("unsupported junction contact ordering or clear corridor")
-        self.lower, self.upper = (ca[1], cb[0])
+        # An exact arc can reach farther into the sheet than the drawn polygon's chords; the
+        # cuts lie beyond it, so the central rectangle stays clear of the conductor SGB builds.
+        lower, upper = ca[1], cb[0]
+        if self.outline_a.arc_reach is not None:
+            lower = max(lower, self.outline_a.arc_reach[1])
+        if self.outline_b.arc_reach is not None:
+            upper = min(upper, self.outline_b.arc_reach[0])
+        if lower >= upper:
+            raise ValueError("unsupported junction contact ordering or clear corridor")
+        self.lower, self.upper = (lower, upper)
         for polygons in (self.own_a, self.own_b, self.other):
             for rings in polygons:
                 for y in (0, self.width):
@@ -246,9 +294,9 @@ class _JunctionPartitionPlanner:
                         raise ValueError(
                             "unsupported corridor side-boundary metal contact"
                         )
-        sheet_region = build_polygon_region(rectangle(0, 0, self.span, self.width))
+        self.sheet_region = build_polygon_region(rectangle(0, 0, self.span, self.width))
         self.free = boolean(
-            sheet_region, build_polygon_region([*self.own_a, *self.own_b]), "not"
+            self.sheet_region, build_polygon_region([*self.own_a, *self.own_b]), "not"
         )
         corridor = build_polygon_region(
             rectangle(self.lower, 0, self.upper, self.width)
@@ -259,62 +307,116 @@ class _JunctionPartitionPlanner:
             )
 
     def choose_ends(self):
-        """Select the existing verified grid candidates and central span."""
+        """Select each end's grid cut and the central span between them.
+
+        On each side the cut starts at the first verified grid candidate beside the
+        terminal contact (the largest rectangle) and moves one grid step into the gap until
+        the edge its end piece adds along each sheet side is zero or at least the class A
+        wall-column limit, so the terminal the end piece joins keeps no wall shorter than
+        that limit.
+        """
         self.choices = []
         self.checks = []
-        for left, bound, own, foreign in (
-            (True, self.lower, self.own_a, self.own_b + self.other),
-            (False, self.upper, self.own_b, self.own_a + self.other),
+        limit = round(WALL_COLUMN_LIMIT_STEPS * self.step / PRECISION_UM)
+        for side in (
+            _EndSide(
+                True, self.lower, self.own_a, self.own_b + self.other, self.outline_a
+            ),
+            _EndSide(
+                False, self.upper, self.own_b, self.own_a + self.other, self.outline_b
+            ),
         ):
-            chosen = None
-            for index in candidate_indices(bound, self.step, left=left):
-                requested, cut = grid_cut(index, self.step)
-                interior = (
-                    Decimal(index) * Decimal(str(self.step)) > bound_decimal(bound)
-                    if left
-                    else Decimal(index) * Decimal(str(self.step)) < bound_decimal(bound)
-                )
-                if interior and cut == bound:
-                    raise ValueError(
-                        "numerical junction geometry failure: interior grid cut collapses to boundary"
-                    )
-                if (
-                    cut < self.lower
-                    or cut > self.upper
-                    or (interior and (cut <= self.lower or cut >= self.upper))
-                ):
-                    continue
-                end, evidence = end_candidate(
-                    self.free,
-                    own,
-                    foreign,
-                    EndSection(cut, self.span, self.width, left=left),
-                )
-                self.checks.append(
-                    {
-                        "side": "A" if left else "B",
-                        "index": index,
-                        "requested_s_um": requested,
-                        "actual_s_um": cut * PRECISION_UM,
-                        "deviation_um": cut * PRECISION_UM - requested,
-                        **evidence,
-                    }
-                )
-                if end is not None:
-                    chosen = (cut, end, index)
-                    break
-            if chosen is None:
-                raise ValueError(
-                    "unsupported junction end topology on verified corridor/grid"
-                )
-            self.choices.append(chosen)
+            first = self.first_valid_cut(side)
+            self.choices.append(self.step_clear_cut(side, first, limit))
         (self.a, self.end_a, self.ka), (self.b, self.end_b, self.kb) = self.choices
         if self.a >= self.b:
             raise ValueError("junction DBU grid has no positive central span")
         self.central = rectangle(self.a, 0, self.b, self.width)
 
+    def first_valid_cut(self, side: _EndSide):
+        """The first grid candidate beside ``bound`` whose end piece passes every topology check."""
+        left, bound = side.left, side.bound
+        for index in candidate_indices(bound, self.step, left=left):
+            requested, cut = grid_cut(index, self.step)
+            interior = (
+                Decimal(index) * Decimal(str(self.step)) > bound_decimal(bound)
+                if left
+                else Decimal(index) * Decimal(str(self.step)) < bound_decimal(bound)
+            )
+            if interior and cut == bound:
+                raise ValueError(
+                    "numerical junction geometry failure: interior grid cut collapses to boundary"
+                )
+            if (
+                cut < self.lower
+                or cut > self.upper
+                or (interior and (cut <= self.lower or cut >= self.upper))
+            ):
+                continue
+            end = self.check_end(side, index)
+            if end is not None:
+                return (cut, end, index)
+        raise ValueError("unsupported junction end topology on verified corridor/grid")
+
+    def step_clear_cut(self, side: _EndSide, first, limit):
+        """Move a valid cut into the gap, one grid step at a time, until its side steps pass.
+
+        Inside the verified corridor the end piece only gains a clear rectangle, so it keeps
+        the topology ``first`` was accepted with; each step is checked again all the same.
+        """
+        cut, end, index = first
+        left = side.left
+        while not all(
+            step == 0 or step >= limit
+            for step in side_steps(side.outline.meetings, cut, self.span, left=left)
+        ):
+            index += 1 if left else -1
+            cut = grid_cut(index, self.step)[1]
+            if (cut >= self.upper) if left else (cut <= self.lower):
+                raise ValueError(
+                    "junction corridor has no cut whose terminal steps are zero or at "
+                    f"least {WALL_COLUMN_LIMIT_STEPS} grid steps"
+                )
+            end = self.check_end(side, index)
+            if end is None:
+                raise ValueError(
+                    "unsupported junction end topology on verified corridor/grid"
+                )
+        return (cut, end, index)
+
+    def check_end(self, side: _EndSide, index):
+        """Check the end piece of one grid cut and keep the evidence, with its side steps."""
+        requested, cut = grid_cut(index, self.step)
+        left = side.left
+        end, evidence = end_candidate(
+            self.sheet_region if side.outline.rebuilt_arcs else self.free,
+            side.own,
+            side.foreign,
+            EndSection(cut, self.span, self.width, left=left),
+        )
+        if end is not None:
+            evidence["side_steps_um"] = [
+                step * PRECISION_UM
+                for step in side_steps(side.outline.meetings, cut, self.span, left=left)
+            ]
+        self.checks.append(
+            {
+                "side": "A" if left else "B",
+                "index": index,
+                "requested_s_um": requested,
+                "actual_s_um": cut * PRECISION_UM,
+                "deviation_um": cut * PRECISION_UM - requested,
+                **evidence,
+            }
+        )
+        return end
+
     def check_partition(self):
-        """Check closed endpoint contacts, open sides and exact partition coverage."""
+        """Check closed endpoint contacts, open sides and that the three pieces partition the sheet.
+
+        The two end pieces and the central rectangle have disjoint interiors, cover the free
+        part of the sheet between the two terminals, and lie within the drawn sheet.
+        """
         for y in (0, self.width):
             for rings in [
                 *self.own_a,
@@ -342,7 +444,9 @@ class _JunctionPartitionPlanner:
             build_polygon_region(self.end_b),
         ]
         union = boolean([p for part in parts for p in part], [], "or")
-        if boolean(union, self.free, "xor") or any(
+        if (
+            boolean(self.free, union, "not") or boolean(union, self.sheet_region, "not")
+        ) or any(
             (boolean(parts[i], parts[j], "and") for i, j in ((0, 1), (0, 2), (1, 2)))
         ):
             raise ValueError(
@@ -350,18 +454,18 @@ class _JunctionPartitionPlanner:
             )
 
     def record_ends(self):
-        """Bind terminal residuals to their unique source Entity/material lineage."""
+        """Bind each end piece to its unique source Entity/material lineage."""
         self.end_records = []
-        for label, end, _own, cut, net in (
-            ("A", self.end_a, self.own_a, self.a, self.junction.terminal_a_net),
-            ("B", self.end_b, self.own_b, self.b, self.junction.terminal_b_net),
+        for label, end, outline, cut, net in (
+            ("A", self.end_a, self.outline_a, self.a, self.junction.terminal_a_net),
+            ("B", self.end_b, self.outline_b, self.b, self.junction.terminal_b_net),
         ):
             owners = [
                 eid
                 for eid, polygons in self.by_entity.items()
-                if self.entities[eid].net_id == net
+                if junction_net_id(self.entities[eid]) == net
                 and (
-                    positive_boundary_contact(end, polygons)
+                    own_contact(end, polygons)
                     if end
                     else covered(polygons, 0, cut, 0, self.width)
                 )
@@ -386,6 +490,7 @@ class _JunctionPartitionPlanner:
                     "representation": dict(owner.route_representations),
                     "polygon_id": polygon_id,
                     "empty_residual": not end,
+                    "landing": outline.rebuilt_arcs,
                     "local_regions": plain_record(end),
                 }
             )
@@ -407,6 +512,7 @@ class _JunctionPartitionPlanner:
             "width_um": self.width * PRECISION_UM,
             "corridor_um": [self.lower * PRECISION_UM, self.upper * PRECISION_UM],
             "cut_indices": [self.ka, self.kb],
+            "terminal_step_limit_um": WALL_COLUMN_LIMIT_STEPS * self.step,
             "actual_cuts_um": [self.a * PRECISION_UM, self.b * PRECISION_UM],
             "candidate_checks": self.checks,
             "candidate_count": len(self.checks),
@@ -471,7 +577,9 @@ class _JunctionPartitionPlanner:
         if context is not None:
             from scgsim.geometry.source.grid import apply_geometry_grid  # noqa: PLC0415 -- retain the conditional grid-realization dependency and its failure boundary.
 
-            self.result = apply_geometry_grid(self.result, context)
+            self.result = _straight_end_pieces(
+                apply_geometry_grid(self.result, context), self.records
+            )
             actual = {p.polygon_id: p for p in self.result.polygons}
             for junction in self.junctions:
                 record = self.records[junction.junction_id]
@@ -490,7 +598,7 @@ class _JunctionPartitionPlanner:
                     emitted = [(p.exterior, *p.holes) for p in ends]
                     emitted.append((polygon.exterior, *polygon.holes))
                     if not emitted_partition_coverage(
-                        record["free_model_regions"], emitted
+                        record["partition_model_regions"], emitted
                     ):
                         raise ValueError(
                             "junction grid realization changes partition coverage"
@@ -526,3 +634,42 @@ class _JunctionPartitionPlanner:
                         end["model_regions"] = [
                             [list(piece.exterior), *map(list, piece.holes)]
                         ]
+
+
+def _straight_end_pieces(result: GeometryBuildInput, records) -> GeometryBuildInput:
+    """The grid-realized input with every landing end piece cleared of collinear vertices.
+
+    The grid realization nodes a polygon wherever another polygon's vertex lies on its edge.
+    A landing end piece overlaps its terminal, so the drawn terminal's vertices on the sheet
+    sides land on the end piece's side edges.  SGB would keep each as a corner between two
+    carriers and split the side wall standing there; without them the region is the same.
+    """
+    ids = {
+        end["polygon_id"]
+        for record in records.values()
+        for end in record["ends"]
+        if end["polygon_id"] and end["landing"]
+    }
+    return replace(
+        result,
+        polygons=tuple(
+            replace(
+                polygon,
+                exterior=_without_collinear(polygon.exterior),
+                holes=tuple(_without_collinear(hole) for hole in polygon.holes),
+            )
+            if polygon.polygon_id in ids
+            else polygon
+            for polygon in result.polygons
+        ),
+    )
+
+
+def _without_collinear(ring):
+    exact = [tuple(Fraction(str(v)) for v in point) for point in ring]
+    count = len(ring)
+    return tuple(
+        ring[n]
+        for n in range(count)
+        if cross(exact[n - 1], exact[n], exact[(n + 1) % count]) != 0
+    )

@@ -8,6 +8,7 @@ from fractions import Fraction
 from typing import Any
 
 from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
+from scgsim.geometry.models.junctions import junction_net_id
 from scgsim.geometry.models.physical import (
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
@@ -202,7 +203,7 @@ class _ContactInventory:
         contacting = []
         for eid, fact in self.facts.items():
             entity = fact["entity"]
-            if entity.net_id not in {
+            if junction_net_id(entity) not in {
                 self.request.terminal_a_net,
                 self.request.terminal_b_net,
             }:
@@ -224,7 +225,7 @@ class _ContactInventory:
                 (
                     any(
                         (
-                            self.facts[eid]["entity"].net_id == net
+                            junction_net_id(self.facts[eid]["entity"]) == net
                             and self.contains(self.facts[eid]["source_interval_um"], z)
                             and (self.facts[eid]["anchor"] in {None, z})
                             for eid, _ in contacting

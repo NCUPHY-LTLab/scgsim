@@ -81,6 +81,8 @@ scgsim-id: "docs/supported-scope"
 | 埠薄片至少與一個宿主導體重疊，且各宿主共用同一個支撐平面。 | 埠位於宿主下方的表面上；沒有宿主，或宿主位於兩個平面上時，埠的平面就無法確定。 | 建構時 `InputError` | [Eigenmode 契約](specs/palace-eigenmode.qmd) |
 | 埠薄片沒有被宿主完全覆蓋。 | 完全落在金屬上的薄片沒有剩下可激發的部分。 | 建構時 `InputError`（「… has no active remainder」） | [Eigenmode 契約](specs/palace-eigenmode.qmd) |
 | 埠薄片不與其他薄片重疊。 | 薄片上每一點都必須只屬於一個埠。 | 建構時 `OverlapError` | [Eigenmode 契約](specs/palace-eigenmode.qmd) |
+| 集總埠的薄片恰好落在兩個導體上。沒有 Net 的導體自成一個 Net。 | 埠是薄片中央的矩形；兩端各一塊併入該端的導體。 | 建構時 `ValueError`，訊息指出該埠 | [集總埠一律切成矩形](supported-geometry.qmd#lumped-port-rectangle) |
+| 薄片在兩個導體之間跨過一段淨空的 gap：在那裡它整個寬度都不碰金屬，也沒有第三個導體碰到它。 | 矩形與兩個端塊沿這段 gap 切出。 | 建構時由矩形切割回報 `ValueError`，例如「unsupported junction contact ordering or clear corridor」 | [集總埠一律切成矩形](supported-geometry.qmd#lumped-port-rectangle) |
 
 ### Surface-EPR 邊距 {#rules-margins}
 
@@ -100,7 +102,7 @@ Palace 模擬採用的兩種 Route 都支援條帶：Route A 的薄片，以及 
 
 對遵守上述所有規則的版圖，SCGSim 保證：
 
-- **在格點上建出宣告的幾何。** 每個 Entity 都依宣告建出，頂點都在格點上。不新增、不合併、不刪除任何東西。
+- **在格點上建出宣告的幾何。** 每個 Entity 都依宣告建出，頂點都在格點上。不新增、不合併、不刪除任何東西；唯一的例外是每個集總埠薄片在中央矩形以外的空出部分會併入薄片所落的導體，見[集總埠一律切成矩形](supported-geometry.qmd#lumped-port-rectangle)。
 - **條帶與精確幾何相符。** 每個條帶的面積與同一組多邊形的精確侵蝕（erosion）相比，差異在格點的 snap 界限之內，界限的定義見[支援的幾何](supported-geometry.qmd#what-supported-means)。
 - **達到品質門檻的網格，否則附上報告。** `mesh()` 產生網格之前，會先對建好的模型執行網格階段檢查，若有項目拒絕此模型，就拋出 `SimulationDrcError`。之後 `mesh()` 回傳的網格中，每個四面體都達到 `quality_threshold`：最小有號反條件數（minSICN）至少為 0.01，除非您以 `set_mesh` 設定其他數值。它在 `Budgets` 的限制之內完成：預設為 8 輪細化、2,000,000 個四面體，以及 x 乘 y 範圍不超過 4 mm² 的模型 180 秒，範圍更大的模型按比例給予更多時間。否則它拋出附有品質報告的 `MeshRepairError`，不回傳網格。門檻是在線性網格上檢查的。`geometry_order` 大於 1 時，通過檢查的網格會再提升到該階數並寫出，不再檢查第二次；要量測儲存下來的網格，請用[四面體網格品質](mesh-quality.qmd)讀取器。這些控制項與預設值見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 

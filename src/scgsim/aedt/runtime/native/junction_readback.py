@@ -20,12 +20,12 @@ from scgsim.aedt.runtime.native.common import (
 from scgsim.aedt.runtime.native.junction_extrusion import native_extrusion_sides
 from scgsim.aedt.runtime.native.junction_topology import (
     NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
-    native_boundary_contact,
     native_closed_contact,
     native_coordinates_close,
     native_cross_sign,
     native_edge_covered,
     native_edge_section,
+    native_end_contact,
     native_junction_corners,
     native_planar_loops,
     native_polygon_correspondence,
@@ -313,9 +313,9 @@ class JunctionReadback:
                 )
                 for rings in loops
             ]
-            if not native_boundary_contact(end_loops, arms):
+            if not native_end_contact(end_loops, arms):
                 raise RuntimeError(
-                    "native derived end lacks positive-length source-arm contact"
+                    "native derived end lacks positive-length or positive-area source-arm contact"
                 )
             foreign = [
                 rings

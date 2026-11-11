@@ -9,7 +9,11 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.junctions import RectangularJunctionSpec
+from scgsim.geometry.models.junctions import (
+    RectangularJunctionSpec,
+    junction_net_id,
+    junction_occurrence_path,
+)
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.primitives.grid import with_input_grid
 from scgsim.geometry.source.ports import port_sheet_overlaps
@@ -108,8 +112,7 @@ def _validate_sheet_ownership(
 ) -> None:
     if (
         region.source_polygon_id != request.source_polygon_id
-        or region.metadata.get("source_occurrence_path")
-        != request.source_occurrence_path
+        or junction_occurrence_path(region.metadata) != request.source_occurrence_path
     ):
         raise ValueError("rectangular junction source sheet ownership differs")
 
@@ -126,8 +129,8 @@ def _selected_terminal_polygons(
                 "rectangular junction terminal source Entity is missing or not conductor"
             )
         if (
-            entity.net_id != terminal.net_id
-            or entity.metadata.get("source_occurrence_path")
+            junction_net_id(entity) != terminal.net_id
+            or junction_occurrence_path(entity.metadata)
             != terminal.source_occurrence_path
         ):
             raise ValueError(

@@ -1,6 +1,7 @@
 """Keep source port region ownership and dependency direction explicit."""
 
 import ast
+import math
 from dataclasses import asdict
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import pytest
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.primitives.grid import geometry_grid_scope
+from scgsim.geometry.source.plan_assembly import transform_source_direction
 from scgsim.geometry.source.ports import (
     port_sheet_overlaps,
     port_sheet_regions_from_stack_metadata,
@@ -342,3 +344,28 @@ def _assert_acyclic_imports(dependencies: dict[str, set[str]]) -> None:
     finished: set[str] = set()
     for module in dependencies:
         visit(module, set(), finished)
+
+
+@pytest.mark.parametrize(
+    ("angle_degrees", "expected"),
+    [(90.0, (0.0, 1.0)), (180.0, (-1.0, 0.0)), (270.0, (0.0, -1.0))],
+)
+def test_a_quarter_turn_port_points_exactly_along_an_axis(angle_degrees, expected):
+    """A port on a quarter turn has an exact axis direction, also inside a rotated placement.
+
+    The cosine of 90 degrees in floating point is 6e-17, which left a junction's port direction
+    a hair off its axis; the rectangle cut from its sheet must be axis-aligned.
+    """
+    identity = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    assert transform_source_direction(identity, angle_degrees) == [*expected, 0.0]
+    quarter = math.radians(90.0)
+    rotated = (
+        math.cos(quarter),
+        -math.sin(quarter),
+        math.sin(quarter),
+        math.cos(quarter),
+        0.0,
+        0.0,
+    )
+    x, y = expected
+    assert transform_source_direction(rotated, angle_degrees) == [-y, x, 0.0]

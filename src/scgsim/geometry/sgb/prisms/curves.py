@@ -107,7 +107,11 @@ class _BoundaryBinder:
     # -- selecting the ring ------------------------------------------------------------
 
     def select_ring(self, record: BoundaryRecord) -> tuple[RingKey, Ring]:
-        """The one entity-owned footprint the selector point lies in, and the ring the role names."""
+        """The one authored entity-owned footprint the selector point lies in, and the ring the role names.
+
+        A junction end piece is never the selector's polygon: it can overlap the terminal's
+        authored polygon, which the selector names as it did before the partition.
+        """
         selector = fraction_to_rep(
             self.grid.exact_units(record.selector_point_um[0]),
             self.grid.exact_units(record.selector_point_um[1]),
@@ -115,7 +119,9 @@ class _BoundaryBinder:
         matches = [
             footprint
             for footprint in self.footprints.get(record.entity_id, ())
-            if sum(point_in_ring(ring, selector) for ring in footprint.rings()) % 2 == 1
+            if footprint.authored
+            and sum(point_in_ring(ring, selector) for ring in footprint.rings()) % 2
+            == 1
         ]
         if len(matches) != 1:
             raise InputError(

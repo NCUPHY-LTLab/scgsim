@@ -25,6 +25,9 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+# The one geometric constant the meshing stage shares with the geometry layer, which owns it.
+from scgsim.geometry.models.grid import WALL_COLUMN_LIMIT_STEPS
+
 from .built_model import (
     Bounds,
     BuiltModel,
@@ -70,7 +73,7 @@ class FineStructureLimits:
       these at a cost, so the class warns.
     """
 
-    wall_column_gap_steps: float = 10.0
+    wall_column_gap_steps: float = float(WALL_COLUMN_LIMIT_STEPS)
     wall_action: Action = "refuse"
     face_width_steps: float = 10.0
     wedge_angle_deg: float = 1.0

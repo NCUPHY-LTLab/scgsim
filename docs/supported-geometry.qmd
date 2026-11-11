@@ -153,6 +153,56 @@ Cells 14, 15 and 18 contain a few vertices that turn by less than 2.8125°;
 they build with exact bands as drawn (see [Curved outlines drawn as
 polygons](#curve-rule)).
 
+## Lumped ports are made rectangles {#lumped-port-rectangle}
+
+Palace accepts a Lumped Port or Lumped RLC only as a rectangle: it compares the
+port's bounding-box length with its length along the port direction. Each
+lumped port that an `EigenmodeSim` configures is therefore the central
+rectangle of its drawn sheet. The rest of the sheet becomes metal of the
+conductors it lands on: the part before the first cut joins the conductor at
+the start of the port direction, and the part after the second cut joins the
+other conductor. A conductor without a Net is a Net of its own. You draw the
+sheet as before, a rectangle that reaches into both conductors.
+
+Each conductor gains the free part of the sheet up to its cut. Where the sheet
+lands on a conductor edge that SGB builds as an exactly declared arc, the end
+piece is the whole drawn sheet from its start to the cut and overlaps the
+conductor, so it meets the arc also where the arc lies beyond the drawn polygon,
+as on the inside of a round opening. Where the sheet lands on edges SGB builds
+as drawn, the end piece is only the free part, and on a straight edge at right
+angles to the sheet it is empty. An arc elsewhere on the conductor, away from
+the sheet, changes neither.
+
+On each end, SCGSim chooses the cut in two steps:
+
+1. It starts at the first grid step, at or past the conductor's farthest reach
+   into the sheet, that leaves one connected end piece: the largest rectangle
+   the sheet holds.
+2. The end piece adds an edge to its conductor along each long side of the
+   sheet, from where the conductor's outline meets that side to the cut. The
+   cut moves one grid step further into the gap at a time until each such edge
+   is zero or at least 10 grid steps long, so the side wall that stands on it
+   is not narrower than the fine-structure limit for side walls. Where the
+   conductor's own edge already runs along the side, the end piece continues
+   that edge and adds none.
+
+The outline is the one SGB builds: a conductor declared with an exact arc meets
+the side where the arc does, on the grid point SGB rounds the crossing to, not
+where its polygon does, and reaches into the sheet as far as the arc does, also
+where a chord of its polygon faces the sheet. A sheet that ends on straight conductor edges at right
+angles to it keeps the face and the conductors it had: its cuts lie on those
+edges and its end pieces are empty.
+
+For the circular pad coupon (pad radius 100 µm in a ground opening of radius
+120 µm, a 2 µm sheet, 1 nm grid):
+
+| End | The outline meets the sheet sides at | Largest rectangle | Cut taken | Edge added |
+| --- | --- | --- | --- | --- |
+| Pad, arc of radius 100 µm | x = 99.995 µm | x = 100.000 µm, edge 5 nm | x = 100.005 µm | 10 nm |
+| Ground opening, arc of radius 120 µm | x = 119.996 µm | x = 119.988 µm, edge 8 nm | x = 119.986 µm | 10 nm |
+
+The port is 19.981 µm long, 0.007 µm shorter than the largest rectangle.
+
 ## Curved outlines drawn as polygons {#curve-rule}
 
 A curve drawn as a polygon builds with the bands of its exact erosion. SGB sets
