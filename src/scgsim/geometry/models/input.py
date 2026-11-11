@@ -75,7 +75,11 @@ class BoundaryCurveChainSpec:
 class GdsBoundaryReconstructionSpec:
     """Explicit caller selection of a polygon boundary reconstruction.
 
-    Circular reconstruction uses three caller-selected vertex indices. Spline
+    Segment index ``i`` is the edge from vertex ``i`` to vertex ``i + 1`` of the
+    selected ring as drawn in the GDS: the order and direction in which the GDS
+    polygon walks it, from its own first vertex, carried through the occurrence
+    transform.  Anchor indices name drawn vertices in the same order.  Circular
+    reconstruction uses three caller-selected vertex indices. Spline
     reconstruction uses the recorded boundary vertices, or explicit selected
     indices. No polygon-only input is implicitly reconstructed.
     """
@@ -93,6 +97,117 @@ class GdsBoundaryReconstructionSpec:
     parameter_interval: tuple[float, float] | None = None
     source_occurrence_path: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+DRAWN_RING_METADATA = "drawn_ring_um"
+"""The ``GdsBoundaryReconstructionSpec.metadata`` key of the drawn ring its indices name.
+
+The source stage records it where it reads the GDS polygon the record selects: the
+ring's vertices in drawn order, carried through the occurrence transform and placed
+on the model grid as the source stage places them, in assembly micrometres.
+"""
+
+
+RING_WITHOUT_DRAWN_ORDER = (
+    "the ring it selects has no drawn GDS ring recorded for it, so its indices name "
+    "no drawn edge: the record was attached after the source stage, or the ring is "
+    "not one drawn GDS polygon (several fused together, or vertices the source stage "
+    "dropped). Fix the declaration: declare the reconstruction with the layout "
+    "(component semantics, GeometryPlan or the stack file), on a ring drawn as one "
+    "GDS polygon."
+)
+RING_LOST_DRAWN_ORDER = (
+    "the ring it selects no longer holds each vertex of its drawn ring once, in drawn "
+    "order, so its drawn segments cannot be found on it. Fix the layout: draw the "
+    "ring's vertices at least one grid step apart, so the source stage keeps each one."
+)
+
+
+@dataclass(frozen=True)
+class RingChain:
+    """A reconstruction's chain and anchors as indices of the ring one stage holds."""
+
+    segments: tuple[int, ...]
+    anchors: tuple[int, ...]
+
+
+def carried_drawn_ring(
+    record: GdsBoundaryReconstructionSpec,
+) -> tuple[tuple[float, float], ...] | None:
+    """The drawn ring the source stage recorded on the record, if it recorded one."""
+    ring = record.metadata.get(DRAWN_RING_METADATA)
+    return None if ring is None else tuple((float(x), float(y)) for x, y in ring)
+
+
+def emitted_by_source_grid(polygon: LayoutPolygonSpec | None) -> bool:
+    """Whether the source grid stage emitted the polygon, so its ring order is not the drawn one.
+
+    The grid stage records the polygon it rounded and noded under this key; a polygon
+    built without it holds its ring as it was given, which is then its drawn ring.
+    """
+    return polygon is not None and "unquantized_source_geometry" in polygon.metadata
+
+
+def drawn_chain_on_ring[Key](  # noqa: PLR0913 -- the declared chain, its closure, and the two rings it joins
+    segments: Sequence[int],
+    anchors: Sequence[int],
+    closed: bool,
+    drawn: Sequence[Key],
+    ring: Sequence[Key],
+) -> RingChain | None:
+    """Carry drawn segments and anchors onto a ring that holds every drawn vertex once.
+
+    ``drawn`` and ``ring`` are vertex keys on one lattice.  Drawn segment ``i`` joins drawn
+    vertices ``i`` and ``i + 1``; on the ring it is the run of segments between those two
+    vertices, which holds any crossing the grid noded into the drawn segment.  The ring may
+    start at another vertex and may run the other way, as a mirrored occurrence or a
+    re-oriented ring does.  The chain comes back in the ring's own order, as the binding
+    stages walk it, and an open chain's anchors are reordered with it so they still start
+    and end it.  None when the ring lacks a drawn vertex, holds one twice, or meets the
+    drawn vertices in another order.
+    """
+    places = _places_on_ring(drawn, ring)
+    if places is None:
+        return None
+    count = len(ring)
+    step = _walk_direction(places, count)
+    if step is None:
+        return None
+
+    def run(i: int) -> tuple[int, ...]:
+        start, end = places[i], places[(i + 1) % len(places)]
+        if step < 0:
+            start, end = end, start
+        return tuple((start + k) % count for k in range((end - start) % count))
+
+    order = segments if step > 0 else tuple(reversed(segments))
+    ring_anchors = tuple(places[a] for a in anchors)
+    if step < 0 and not closed:
+        ring_anchors = ring_anchors[::-1]
+    return RingChain(tuple(j for i in order for j in run(i)), ring_anchors)
+
+
+def _places_on_ring[Key](
+    drawn: Sequence[Key], ring: Sequence[Key]
+) -> tuple[int, ...] | None:
+    where: dict[Key, list[int]] = {}
+    for index, key in enumerate(ring):
+        where.setdefault(key, []).append(index)
+    places = [where.get(key, []) for key in drawn]
+    if any(len(found) != 1 for found in places):
+        return None
+    return tuple(found[0] for found in places)
+
+
+def _walk_direction(places: Sequence[int], count: int) -> int | None:
+    # The ring meets the drawn vertices in drawn order exactly when the forward gaps
+    # between consecutive drawn vertices add up to one turn of the ring.
+    pairs = list(zip(places, (*places[1:], places[0]), strict=True))
+    if sum((after - before) % count for before, after in pairs) == count:
+        return 1
+    if sum((before - after) % count for before, after in pairs) == count:
+        return -1
+    return None
 
 
 @dataclass(frozen=True)

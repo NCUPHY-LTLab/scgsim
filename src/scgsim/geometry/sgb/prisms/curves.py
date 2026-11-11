@@ -9,7 +9,9 @@ did:
   line and circular-arc curves;
 * a **reconstruction** record replaces selected ordered segments of one ring with a
   circular arc (open chain: three anchors; closed chain: a full circle through three
-  anchors), keeping the unselected straight segments.
+  anchors), keeping the unselected straight segments.  Its indices name the ring as
+  drawn in the GDS, which the source stage records on the record; they are carried
+  onto the footprint's ring by ``drawn_chain_on_ring``.
 
 Lines and circular arcs are the curve classes of this version.  Interpolation
 splines and B-splines fail closed, naming the boundary and the entity: B-spline
@@ -25,10 +27,16 @@ from fractions import Fraction
 
 from scgsim.geometry.models.grid import format_box, format_point
 from scgsim.geometry.models.input import (
+    RING_LOST_DRAWN_ORDER,
+    RING_WITHOUT_DRAWN_ORDER,
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
     GeometryBuildInput,
+    LayoutPolygonSpec,
     SourceCurveSpec,
+    carried_drawn_ring,
+    drawn_chain_on_ring,
+    emitted_by_source_grid,
 )
 from scgsim.geometry.sgb.errors import InputError, UnsupportedCurveError
 from scgsim.geometry.sgb.plane import (
@@ -57,7 +65,9 @@ def bind_boundaries(
     footprints: Mapping[str, Sequence[SourceFootprint]],
 ) -> dict[RingKey, tuple[RingPrimitive, ...]]:
     """Ring primitives for every ring an authored or reconstruction record binds."""
-    binder = _BoundaryBinder(grid, footprints, _entity_layers(build_input))
+    binder = _BoundaryBinder(
+        grid, footprints, _entity_layers(build_input), _footprint_polygons(build_input)
+    )
     bound: dict[RingKey, tuple[RingPrimitive, ...]] = {}
     authored: dict[RingKey, BoundaryRecord] = {}
     for record in build_input.boundary_curves:
@@ -105,10 +115,12 @@ class _BoundaryBinder:
         grid: Grid,
         footprints: Mapping[str, Sequence[SourceFootprint]],
         layers: Mapping[str, str],
+        polygons: Mapping[tuple[str, int], LayoutPolygonSpec],
     ) -> None:
         self.grid = grid
         self.footprints = footprints
         self.layers = layers
+        self.polygons = polygons
 
     def _named(self, record: BoundaryRecord) -> str:
         """The record, its Entity and the Entity's layer, as refusals name them."""
@@ -293,8 +305,12 @@ class _BoundaryBinder:
                 f"{what}: reconstruction kind {record.kind!r} is not supported yet "
                 f"(this version carries {SUPPORTED_CURVES}; use 'circular_arc')"
             )
-        segments = _selected_segments(record, ring, what)
-        vertices = (*segments, (segments[-1] + 1) % len(ring))
+        # The indices name the drawn ring: they are checked there, then carried onto the
+        # ring this footprint holds, which may start elsewhere, run the other way and hold
+        # crossings the grid noded in.
+        drawn = self._drawn_ring(record, key, ring, what)
+        segments = _selected_segments(record, drawn, what)
+        vertices = (*segments, (segments[-1] + 1) % len(drawn))
         anchors = tuple(record.anchor_indices) or vertices
         if any(i not in vertices for i in anchors):
             raise InputError(f"{what} anchors must belong to the selected source chain")
@@ -308,6 +324,10 @@ class _BoundaryBinder:
             raise InputError(
                 f"{what} reconstruction must retain the original chain endpoints"
             )
+        chain = drawn_chain_on_ring(segments, anchors, record.closed, drawn, ring)
+        if chain is None:
+            raise InputError(f"{what}: {RING_LOST_DRAWN_ORDER}")
+        segments, anchors = chain.segments, chain.anchors
         points = tuple(ring[i] for i in anchors)
         arc_id = _arc_id(key, segments[0])
         lineage = Lineage("polygon_edge", key[0], key[1], key[2], segments[0])
@@ -327,6 +347,23 @@ class _BoundaryBinder:
                 arc_id, points[0], through, points[2], lineage, what, grid=self.grid
             )
         return _Selection(segments, tuple(arcs), record.boundary_id)
+
+    def _drawn_ring(
+        self, record: GdsBoundaryReconstructionSpec, key: RingKey, ring: Ring, what: str
+    ) -> Ring:
+        """The ring the record's indices name, on the lattice.
+
+        It is the one the source stage recorded, or the footprint's own ring when no source
+        grid stage emitted the polygon.
+        """
+        carried = carried_drawn_ring(record)
+        if carried is not None:
+            return tuple(
+                self._lattice_point(point, f"{what} drawn ring") for point in carried
+            )
+        if emitted_by_source_grid(self.polygons.get((key[0], key[1]))):
+            raise InputError(f"{what}: {RING_WITHOUT_DRAWN_ORDER}")
+        return ring
 
     # -- coordinates -------------------------------------------------------------------
 
@@ -355,6 +392,19 @@ def _entity_layers(build_input: GeometryBuildInput) -> dict[str, str]:
             sorted({layer_of[i] for i in e.polygon_ids if i in layer_of})
         )
         for e in build_input.entities
+    }
+
+
+def _footprint_polygons(
+    build_input: GeometryBuildInput,
+) -> dict[tuple[str, int], LayoutPolygonSpec]:
+    """Each Entity's source polygons by footprint index, as ``source_footprints`` numbers them."""
+    by_id = {p.polygon_id: p for p in build_input.polygons}
+    return {
+        (entity.semantic_id, index): by_id[polygon_id]
+        for entity in build_input.entities
+        for index, polygon_id in enumerate(entity.polygon_ids)
+        if polygon_id in by_id
     }
 
 

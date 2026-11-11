@@ -9,13 +9,21 @@ from dataclasses import asdict
 from typing import cast
 
 from scgsim.geometry.models.common import Coordinate, PolygonRing
+from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import (
+    RING_LOST_DRAWN_ORDER,
+    RING_WITHOUT_DRAWN_ORDER,
     GdsBoundaryReconstructionSpec,
     GeometryBuildInput,
+    LayoutPolygonSpec,
     SemanticEntitySpec,
     SourceCurveSpec,
+    carried_drawn_ring,
+    drawn_chain_on_ring,
+    emitted_by_source_grid,
 )
 from scgsim.geometry.models.junctions import is_junction_end_piece
+from scgsim.geometry.primitives.grid_regions import region_key
 from scgsim.geometry.source.curves import (
     BoundaryKey,
     SourceRings,
@@ -96,8 +104,31 @@ def circle_through_points(points: Sequence[Coordinate]) -> tuple[Coordinate, flo
     return (ux, uy), math.hypot(ax - ux, ay - uy)
 
 
-def _reconstruct(record: GdsBoundaryReconstructionSpec, ring: PolygonRing):
-    count = len(ring)
+def _drawn_ring(
+    record: GdsBoundaryReconstructionSpec,
+    ring: PolygonRing,
+    polygon: LayoutPolygonSpec | None,
+) -> PolygonRing:
+    # The ring the record's indices name: the one the source stage recorded, or the ring
+    # itself when no source grid stage has emitted it.
+    carried = carried_drawn_ring(record)
+    if carried is not None:
+        return carried
+    if emitted_by_source_grid(polygon):
+        raise ValueError(f"{record.boundary_id}: {RING_WITHOUT_DRAWN_ORDER}")
+    return ring
+
+
+def _reconstruct(
+    record: GdsBoundaryReconstructionSpec,
+    ring: PolygonRing,
+    drawn: PolygonRing,
+    grid_size_um: float | None,
+):
+    # The record's indices name the drawn ring; they are checked there, then carried onto
+    # the ring this stage holds, which may start elsewhere, run the other way and hold
+    # crossings the grid noded in.
+    count = len(drawn)
     segments = tuple(record.segment_indices)
     if not segments or any(
         isinstance(i, bool) or not isinstance(i, int) or not 0 <= i < count
@@ -124,13 +155,24 @@ def _reconstruct(record: GdsBoundaryReconstructionSpec, ring: PolygonRing):
         raise ValueError(
             f"{record.boundary_id} anchors must belong to selected source chain"
         )
-    points = tuple(ring[i] for i in anchors)
     if not record.closed and (
         anchors[0] != vertex_indices[0] or anchors[-1] != vertex_indices[-1]
     ):
         raise ValueError(
             f"{record.boundary_id} reconstruction must retain original chain endpoints"
         )
+    chain = drawn_chain_on_ring(
+        segments,
+        anchors,
+        record.closed,
+        [region_key(point, grid_size_um) for point in drawn],
+        [region_key(point, grid_size_um) for point in ring],
+    )
+    if chain is None:
+        raise ValueError(f"{record.boundary_id}: {RING_LOST_DRAWN_ORDER}")
+    segments, anchors = chain.segments, chain.anchors
+    count = len(ring)
+    points = tuple(ring[i] for i in anchors)
     if record.kind == "circular_arc" and record.closed:
         if len(points) != 3:
             raise ValueError(
@@ -176,6 +218,7 @@ def _reconstruct(record: GdsBoundaryReconstructionSpec, ring: PolygonRing):
         curves,
         {
             "requested": asdict(record),
+            "drawn_ring_um": drawn,
             "original_ring_um": ring,
             "selected_segments": [
                 {"index": i, "start_um": ring[i], "end_um": ring[(i + 1) % count]}
@@ -214,10 +257,14 @@ def source_boundaries(
                 "operation": "authored",
             }
         )
+    polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
+    context = geometry_grid_context(build_input)
+    grid_size_um = None if context is None else context.grid_size_um
     for raw in build_input.boundary_reconstruction:
         record = boundary_binding(raw, reconstruction=True)
         key, ring = select_boundary(record, rings, end_pieces)
-        segments, curves, operation = _reconstruct(record, ring)
+        drawn = _drawn_ring(record, ring, polygons.get(key[1]))
+        segments, curves, operation = _reconstruct(record, ring, drawn, grid_size_um)
         reconstructed[key].append((segments, curves, record.boundary_id))
         provenance.append({"operation": "explicit_gds_reconstruction", **operation})
     result: BoundaryChains = {}

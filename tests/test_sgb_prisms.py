@@ -411,12 +411,31 @@ def test_an_authored_circle_replaces_the_pad_ring_with_exact_arcs(tmp_path):
     assert area_um2 == pytest.approx(math.pi * 100, rel=1e-9)
 
 
+def stack_reconstruction(record: GdsBoundaryReconstructionSpec) -> dict[str, object]:
+    """The stack-file form of a reconstruction record, declared with the layout it names."""
+    return {
+        "boundary_reconstruction": [
+            {
+                "boundary_id": record.boundary_id,
+                "entity_id": record.entity_id,
+                "selector_point_um": list(record.selector_point_um),
+                "kind": record.kind,
+                "closed": record.closed,
+                "segment_indices": list(record.segment_indices),
+                "anchor_indices": list(record.anchor_indices),
+            }
+        ]
+    }
+
+
 def test_a_closed_circular_reconstruction_turns_the_polygon_into_a_circle(tmp_path):
-    """A closed circular reconstruction turns the polygon into a circle."""
+    """A closed circular reconstruction turns the polygon into a circle.
+
+    The indices name the polygon as drawn: every segment of the ellipse gdstk draws, and
+    three of its vertices as anchors.
+    """
     ellipse = gdstk.ellipse((50, 50), 10, tolerance=0.01)
-    pad = gds_pad_in_ground(tmp_path, with_port=False, pad_polygon=ellipse)
-    (polygon,) = [p for p in pad.build_input.polygons if p.object_name == "pad"]
-    count = len(polygon.exterior)
+    count = len(ellipse.points)
     record = GdsBoundaryReconstructionSpec(
         "pad_circle",
         "pad",
@@ -426,7 +445,12 @@ def test_a_closed_circular_reconstruction_turns_the_polygon_into_a_circle(tmp_pa
         segment_indices=tuple(range(count)),
         anchor_indices=(0, count // 3, 2 * count // 3),
     )
-    curved = with_boundaries(pad, boundary_reconstruction=(record,))
+    curved = gds_pad_in_ground(
+        tmp_path,
+        with_port=False,
+        pad_polygon=ellipse,
+        extra_metadata=stack_reconstruction(record),
+    )
     catalogue = build_prism_catalogue(curved.build_input, curved.representation)
     prism = prism_of(catalogue, "pad")
     assert len(prism.arcs) == 4  # a full circle is four quarter arcs
@@ -438,11 +462,11 @@ def test_a_closed_circular_reconstruction_turns_the_polygon_into_a_circle(tmp_pa
 
 
 def test_an_open_reconstruction_keeps_the_unselected_straight_segments(tmp_path):
-    """An open reconstruction keeps the unselected straight segments."""
-    pad = gds_pad_in_ground(tmp_path, with_port=False)
-    (polygon,) = [p for p in pad.build_input.polygons if p.object_name == "pad"]
-    ring = polygon.exterior
-    # replace the first two sides of the square by an arc through the middle corner
+    """An open reconstruction keeps the unselected straight segments.
+
+    gdstk draws the square pad (40, 40), (60, 40), (60, 60), (40, 60); the record replaces
+    its first two drawn sides by an arc through the corner (60, 40) between them.
+    """
     record = GdsBoundaryReconstructionSpec(
         "pad_corner",
         "pad",
@@ -451,15 +475,21 @@ def test_an_open_reconstruction_keeps_the_unselected_straight_segments(tmp_path)
         segment_indices=(0, 1),
         anchor_indices=(0, 1, 2),
     )
-    curved = with_boundaries(pad, boundary_reconstruction=(record,))
+    curved = gds_pad_in_ground(
+        tmp_path, with_port=False, extra_metadata=stack_reconstruction(record)
+    )
+    (polygon,) = [p for p in curved.build_input.polygons if p.object_name == "pad"]
+    assert len(polygon.exterior) == 4
     catalogue = build_prism_catalogue(curved.build_input, curved.representation)
     prism = prism_of(catalogue, "pad")
-    assert {arc.lineage.edge for arc in prism.arcs} == {
-        0
-    }  # numbered by the first claimed segment
+    assert len({arc.lineage.edge for arc in prism.arcs}) == 1
     kept = [c for c in prism.carriers() if "#" not in c.id]
-    assert sorted(c.lineage.edge for c in kept) == [2, 3]  # the other two source sides
-    assert len(ring) == 4
+    # The other two drawn sides stay straight: (60, 60) to (40, 60) and (40, 60) to (40, 40).
+    nm = 1000
+    assert {frozenset((c.p, c.q)) for c in kept} == {
+        frozenset({(60 * nm, 60 * nm), (40 * nm, 60 * nm)}),
+        frozenset({(40 * nm, 60 * nm), (40 * nm, 40 * nm)}),
+    }
 
 
 def test_a_spline_boundary_fails_closed_naming_the_boundary_and_the_entity(tmp_path):

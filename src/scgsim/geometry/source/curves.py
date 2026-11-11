@@ -1,8 +1,8 @@
 """Normalize authored boundaries, bind them to source rings, and restore them after stack preparation.
 
-This module owns source XY curve identity: it also keeps the source rings that
-reconstruction records name by index valid where the source grid stage nodes
-them. Prepared geometry owns its Z, materials, and solution-region state.
+This module owns source XY curve identity, including the drawn GDS ring a
+reconstruction record's indices name. Prepared geometry owns its Z, materials,
+and solution-region state.
 """
 
 from __future__ import annotations
@@ -15,21 +15,29 @@ from typing import Any, Literal, cast, overload
 from scgsim.geometry.models.common import PolygonRing
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import (
+    DRAWN_RING_METADATA,
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
     GeometryBuildInput,
     LayoutPolygonSpec,
     SemanticEntitySpec,
     SourceCurveSpec,
+    carried_drawn_ring,
 )
 from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.models.regions import PortSheetRegionRecord
-from scgsim.geometry.primitives.grid_regions import region_key
+from scgsim.geometry.primitives.grid_regions import canonical_grid_point
+from scgsim.geometry.primitives.planar_loops import cutline_boundary_loops
+from scgsim.geometry.source.occurrence import read_polygons_by_layer
+from scgsim.geometry.source.plan_assembly import transform_source_point
 
 _BoundaryRecord = BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec
 _BoundaryInput = _BoundaryRecord | Mapping[str, Any]
 _BoundaryPoint = Callable[[tuple[float, ...], Sequence[float]], Sequence[float]]
 _Ring = Sequence[Sequence[float]]
+GdsPoint = tuple[float, float]
+# One GDS polygon's vertices in the order the polygon walks them.
+GdsWalk = tuple[GdsPoint, ...]
 # Keep tuple keys so binding errors retain the established source identifier text.
 BoundaryKey = tuple[str, str, str, int | None]
 SourceRings = dict[str, list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]]
@@ -276,48 +284,57 @@ def _selected_polygons(
     return candidates
 
 
-def reconstruction_on_noded_rings(
+def with_drawn_rings(
     records: Sequence[_BoundaryInput],
-    noded: GeometryBuildInput,
-    drawn_rings: Mapping[str, Sequence[_Ring]],
+    emitted: GeometryBuildInput,
+    gds_walks: Callable[[GdsBoundaryReconstructionSpec], Sequence[_Ring]],
 ) -> tuple[_BoundaryInput, ...]:
-    """Carry each reconstruction record from the drawn rings onto the rings the source grid emitted.
+    """Record on each reconstruction record the drawn GDS ring its indices name.
 
-    The source grid stage nodes a ring where another operand's boundary crosses it, as a
-    port sheet does where it lands on a pad: the crossing becomes a vertex, and the drawn
-    segment it lies on becomes a chain of noded segments.  A record names drawn segments
-    and drawn vertices by index, so each declared segment is renamed by the chain it became
-    and each anchor by its vertex's place on the noded ring.  The binding stages then check
-    the chain as it was declared, closure included.
+    The source stage reads each polygon from the GDS walk its author drew, then fuses,
+    rounds and nodes it: the ring it emits may start at another vertex, run the other way,
+    and hold crossings the grid inserted.  A record's indices keep naming the drawn ring,
+    so that ring is found here, among the walks ``gds_walks`` gives for the record's
+    occurrence in assembly coordinates, and stored under ``DRAWN_RING_METADATA``.  Each
+    binding stage carries the indices from it onto the ring it holds.
 
-    ``drawn_rings`` holds, by polygon ID, the rings the records' indices name.  A record is
-    returned as it is when the grid inserted nothing into its ring, when its ring cannot be
-    matched vertex by vertex to one drawn ring, or when its indices are not indices of the
-    drawn ring; the binding stages then accept or refuse it as before.  A record still in
-    its serialized form is bound, and checked, as declared.
+    The drawn ring of the ring a record selects in ``emitted`` is the one loop of a walk
+    whose vertices all lie on that ring, in the order the walk first visits them.  A record
+    whose ring has no such loop, or more than one, is returned as it is, and the binding
+    stages refuse it; so is a record in serialized form or one that carries its ring.
     """
-    # Without polygons the grid has noded no ring a record could name.
-    if not records or not noded.polygons:
+    # Without polygons, or without a grid, the source stage has emitted no ring to bind.
+    context = geometry_grid_context(emitted) if emitted.polygons else None
+    if not records or context is None:
         return tuple(records)
-    context = geometry_grid_context(noded)
-    if context is None:
-        return tuple(records)
-    scope = _NodedRings(
-        _noded_polygon_rings(noded),
-        frozenset(p.polygon_id for p in noded.polygons if is_junction_end_piece(p)),
-        drawn_rings,
-        context.grid_size_um,
+    rings = _polygon_rings(emitted)
+    end_pieces = frozenset(
+        polygon.polygon_id
+        for polygon in emitted.polygons
+        if is_junction_end_piece(polygon)
     )
-    return tuple(
-        scope.carry(record)
-        if isinstance(record, GdsBoundaryReconstructionSpec)
-        else record
-        for record in records
-    )
+    carried: list[_BoundaryInput] = []
+    for record in records:
+        if (
+            isinstance(record, GdsBoundaryReconstructionSpec)
+            and carried_drawn_ring(record) is None
+        ):
+            ring = _named_ring(record, rings, end_pieces)
+            drawn = (
+                None
+                if ring is None
+                else _drawn_ring(ring, gds_walks(record), context.grid_size_um)
+            )
+            if drawn is not None:
+                record = replace(
+                    record, metadata={**record.metadata, DRAWN_RING_METADATA: drawn}
+                )
+        carried.append(record)
+    return tuple(carried)
 
 
-def _noded_polygon_rings(build_input: GeometryBuildInput) -> SourceRings:
-    # Only polygon rings are noded by the grid; an Entity without polygons keeps its records.
+def _polygon_rings(build_input: GeometryBuildInput) -> SourceRings:
+    # Only polygons are read from GDS walks; an Entity without one has no drawn ring.
     polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
     return {
         entity.semantic_id: [
@@ -329,87 +346,126 @@ def _noded_polygon_rings(build_input: GeometryBuildInput) -> SourceRings:
     }
 
 
-@dataclass(frozen=True)
-class _NodedRings:
-    """The noded rings a record can name, as select_boundary binds them, and their drawn rings."""
+def _named_ring(
+    record: GdsBoundaryReconstructionSpec,
+    rings: SourceRings,
+    end_pieces: frozenset[str],
+) -> PolygonRing | None:
+    # The ring select_boundary binds; a selection it refuses is left for it to refuse.
+    selected = _selected_polygons(record, rings, end_pieces)
+    if len(selected) != 1:
+        return None
+    _, outer, holes = selected[0]
+    if record.role == "outer":
+        return outer
+    if _is_index(record.hole_index, len(holes)):
+        return holes[cast(int, record.hole_index)]
+    return None
 
-    rings: SourceRings
-    end_pieces: frozenset[str]
-    drawn_rings: Mapping[str, Sequence[_Ring]]
-    grid_size_um: float
 
-    def carry(
-        self, record: GdsBoundaryReconstructionSpec
-    ) -> GdsBoundaryReconstructionSpec:
-        """The record with its drawn indices renamed to the noded ring's."""
-        chains = self.segment_chains(record)
-        declared = (*record.segment_indices, *record.anchor_indices)
-        if chains is None or not all(_is_index(i, len(chains)) for i in declared):
-            return record
-        return replace(
-            record,
-            segment_indices=tuple(
-                noded for i in record.segment_indices for noded in chains[i]
-            ),
-            # Drawn vertex i starts the chain of drawn segment i, the one leaving it.
-            anchor_indices=tuple(chains[i][0] for i in record.anchor_indices),
+def _drawn_ring(
+    ring: _Ring, walks: Sequence[_Ring], grid_size_um: float
+) -> tuple[tuple[float, float], ...] | None:
+    present = {canonical_grid_point(point, grid_size_um) for point in ring}
+    matches = []
+    for walk in walks:
+        nodes = _walk_nodes(walk, grid_size_um)
+        # Each vertex once, where the walk first reaches it: a walk around a hole comes
+        # back to the cut-line vertex it entered the hole by.
+        visits = tuple(dict.fromkeys(nodes))
+        matches.extend(
+            tuple(node for node in visits if node in loop)
+            for loop in _walk_loops(nodes)
+            if loop <= present
         )
-
-    def segment_chains(
-        self, record: GdsBoundaryReconstructionSpec
-    ) -> tuple[tuple[int, ...], ...] | None:
-        """The noded chain of each drawn segment of the record's ring, if the grid noded it."""
-        selected = _selected_polygons(record, self.rings, self.end_pieces)
-        # A selection select_boundary refuses is left for it to refuse.
-        if len(selected) != 1:
-            return None
-        polygon_id, outer, holes = selected[0]
-        if record.role == "outer":
-            ring = outer
-        elif _is_index(record.hole_index, len(holes)):
-            ring = holes[cast(int, record.hole_index)]
-        else:
-            return None
-        return _noded_segment_chains(
-            ring, self.drawn_rings.get(polygon_id, ()), self.grid_size_um
-        )
+    # The same walk drawn on two layers names one drawn ring; two different walks name none.
+    found = set(matches)
+    return found.pop() if len(found) == 1 else None
 
 
-def _noded_segment_chains(
-    noded_ring: _Ring, drawn_rings: Sequence[_Ring], grid_size_um: float
-) -> tuple[tuple[int, ...], ...] | None:
-    """The noded segments each drawn segment became, numbered along the noded ring.
-
-    Drawn segment ``i`` runs from the ``i``-th drawn vertex met along the noded ring to the
-    next one.  A ring the grid inserted nothing into would have the identity chains, and its
-    indices keep the meaning they have always had; it gets None, as does a noded ring whose
-    kept vertices are not exactly those of one drawn ring.  Vertices compare on the grid.
-    """
-    keys = [region_key(point, grid_size_um) for point in noded_ring]
-    present = set(keys)
-    matches = [
-        ring
-        for ring in drawn_rings
-        if ring and {region_key(point, grid_size_um) for point in ring} <= present
+def _walk_nodes(walk: _Ring, grid_size_um: float) -> list[tuple[float, float]]:
+    # The walk on the grid, each vertex placed as the source stage places it; vertices
+    # the rounding joins in a row are one vertex.
+    nodes = [
+        cast(tuple[float, float], canonical_grid_point(point, grid_size_um))
+        for point in walk
     ]
-    if len(matches) != 1:
-        return None
-    (ring,) = matches
-    drawn = {region_key(point, grid_size_um) for point in ring}
-    kept = [index for index, key in enumerate(keys) if key in drawn]
-    # Every drawn vertex once, and at least one vertex inserted.
-    if len(kept) != len(ring) or len(kept) == len(keys):
-        return None
-    count = len(keys)
-    ends = (*kept[1:], kept[0] + count)
-    return tuple(
-        tuple(index % count for index in range(start, end))
-        for start, end in zip(kept, ends, strict=True)
-    )
+    return [node for index, node in enumerate(nodes) if node != nodes[index - 1]]
+
+
+def _walk_loops(
+    nodes: Sequence[tuple[float, float]],
+) -> list[frozenset[tuple[float, float]]]:
+    # A walk that visits each vertex once is one loop.  A GDS polygon with holes is one
+    # walk joined by cut lines; its loops are those the source reader splits it into.
+    if len(nodes) < 3:
+        return []
+    if len(set(nodes)) == len(nodes):
+        return [frozenset(nodes)]
+    try:
+        outer, holes = cutline_boundary_loops(tuple(nodes))
+    except ValueError:
+        return []
+    return [
+        frozenset((float(x), float(y)) for x, y in loop) for loop in (outer, *holes)
+    ]
 
 
 def _is_index(value: object, count: int) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < count
+
+
+def gds_walks(
+    polygons_by_layer: Mapping[Any, Sequence[Any]],
+    transform: tuple[float, ...] = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+) -> tuple[GdsWalk, ...]:
+    """Each GDS polygon's vertices in the order the polygon walks them, carried through ``transform``.
+
+    Each vertex is moved in its place, so a mirroring transform keeps the drawn sequence
+    and only reverses its direction.
+    """
+    return tuple(
+        tuple(
+            cast(GdsPoint, tuple(transform_source_point(transform, point)))
+            for point in polygon.points
+        )
+        for layer_polygons in polygons_by_layer.values()
+        for polygon in layer_polygons
+    )
+
+
+def occurrence_gds_walks(
+    instances: Mapping[str, tuple[Any, Any, tuple[float, ...]]],
+    source_cells: Mapping[str, Any],
+    child_reference_indexes: Mapping[str, tuple[int, ...]],
+    entities: Sequence[SemanticEntitySpec],
+) -> Callable[[GdsBoundaryReconstructionSpec], tuple[GdsWalk, ...]]:
+    """The GDS polygon walks of a record's occurrence as drawn, in assembled coordinates.
+
+    The occurrence is the record's own, or else that of the Entity it names.  Its cell's
+    polygons are read as occurrence extraction reads them, registered child occurrences
+    left out, and carried through the occurrence transform.
+    """
+    entity_paths = {
+        entity.semantic_id: entity.metadata.get("source_occurrence_path")
+        for entity in entities
+    }
+    walks_by_path: dict[str, tuple[GdsWalk, ...]] = {}
+
+    def walks(record: GdsBoundaryReconstructionSpec) -> tuple[GdsWalk, ...]:
+        path = record.source_occurrence_path or entity_paths.get(record.entity_id)
+        if path is None or path not in instances:
+            return ()
+        if path not in walks_by_path:
+            cell, _, transform = instances[path]
+            polygons = read_polygons_by_layer(
+                source_cells[cell.name],
+                excluded_reference_indexes=child_reference_indexes[path],
+            )
+            walks_by_path[path] = gds_walks(polygons, transform)
+        return walks_by_path[path]
+
+    return walks
 
 
 def bind_source_curves(

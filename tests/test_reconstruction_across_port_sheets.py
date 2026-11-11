@@ -1,11 +1,12 @@
-"""A GDS boundary reconstruction keeps its drawn segments where a lumped-port sheet crosses its ring (Issue #163).
+"""A GDS boundary reconstruction names the ring as drawn in the GDS, whatever the source stage does to it (Issue #163).
 
-A reconstruction record names segments of the drawn ring by index.  The source grid stage nodes the
-ring where the port sheet's boundary crosses it, inserting each crossing as a vertex, so the
-record's segments are carried onto the chains of noded segments they became.  Each GeometryPlan
-layout goes through ``EigenmodeSim``'s preparation and the SGB build that ``simulation_drc`` runs,
-and the arc a build carries is read from the sidecar SGB writes; a record declared in a stack file
-goes through the GDS stack adapter and SGB.  No mesher or solver runs.
+Segment index i is the edge from drawn vertex i to i + 1 of the GDS polygon walk, in its own start
+vertex and direction, through any instance transform.  The source stage emits the ring from another
+start, possibly the other way round, and with the crossings of a port sheet noded into it; the
+records' segments and anchors still land on the drawn ones.  Each GeometryPlan layout goes through
+``EigenmodeSim``'s preparation and the SGB build that ``simulation_drc`` runs, and the arc a build
+carries is read from the sidecar SGB writes; a record declared in a stack file goes through the GDS
+stack adapter and SGB.  No mesher or solver runs.
 """
 
 from __future__ import annotations
@@ -15,10 +16,16 @@ import math
 import gdstk
 import pytest
 from sgb_inputs import gds_pad_in_ground
+from test_lumped_ports_at_any_angle import built_sidecar as built_device_sidecar
+from test_lumped_ports_at_any_angle import plan_snapshot as device_plan_snapshot
 from test_palace_rectangular_ports import built_sidecar, eigenmode_sim, prepared_port
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
 
 from scgsim.geometry import GeometryPlan
+from scgsim.geometry.construction.curved_geometry.boundaries import (
+    circle_through_points,
+)
+from scgsim.geometry.models.input import RingChain, drawn_chain_on_ring
 from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.sgb.model import build_conformal_model
 
@@ -75,19 +82,61 @@ def round_pad_with_port(monkeypatch, sheet_x_um, sheet_y_um):
 
 
 def cornered_pad(monkeypatch, *, port: bool, reconstruction=None):
-    """The square [-100, 100]^2 um pad with its top-right corner rounded, and an electrode above it.
+    """The square [-100, 100]^2 um pad, its top-right corner rounded, its bottom-left one cut off.
 
-    With ``port`` a 2 um sheet runs from 1 um inside the pad's straight top edge to 1 um inside
-    the electrode, whose straight edge lies at y = 120 um.
+    The cut corner, from (-80, -100) to (-100, -80) um, makes the GDS walk start at a vertex
+    the source grid does not start its ring at.  An electrode lies above the pad; with
+    ``port`` a 2 um sheet runs from 1 um inside the pad's straight top edge to 1 um inside the
+    electrode, whose straight edge lies at y = 120 um.
     """
     return pad_layout(
         monkeypatch,
-        [(-100, -100), (100, -100), *CORNER, (-100, 100)],
+        [(-80, -100), (100, -100), *CORNER, (-100, 100), (-100, -80)],
         electrode=[(-30, 120), (30, 120), (30, 150), (-30, 150)],
         sheet=[(-1, 99), (1, 99), (1, 121), (-1, 121)] if port else None,
         port_orientation=90,
         reconstruction=reconstruction,
     )
+
+
+def drawn_pad_ring(component):
+    """The pad polygon as its cell stores it in the GDS: the walk the indices name."""
+    (polygon,) = component.get_polygons(by="tuple")[(1, 0)]
+    dbu = component.kcl.dbu
+    return [(point.x * dbu, point.y * dbu) for point in polygon.each_point_hull()]
+
+
+def corner_reconstruction(drawn):
+    """An open arc over the rounded corner's 16 drawn segments, anchored at its ends and middle."""
+    corner = {grid_key(point) for point in CORNER}
+    count = len(drawn)
+    (start,) = [
+        index
+        for index in range(count)
+        if all(
+            grid_key(drawn[(index + k) % count]) in corner
+            for k in range(CORNER_CHORDS + 1)
+        )
+    ]
+    return {
+        "boundary_id": "PAD_CORNER",
+        "entity_id": "pad",
+        "selector_point_um": (0.0, 0.0),
+        "role": "outer",
+        "kind": "circular_arc",
+        "closed": False,
+        "segment_indices": [(start + k) % count for k in range(CORNER_CHORDS)],
+        "anchor_indices": [
+            start,
+            (start + CORNER_CHORDS // 2) % count,
+            (start + CORNER_CHORDS) % count,
+        ],
+    }
+
+
+def grid_key(point):
+    """A point as whole grid steps."""
+    return (round(point[0] / GRID_UM), round(point[1] / GRID_UM))
 
 
 def pad_layout(  # noqa: PLR0913 -- the drawn pad, its electrode, the sheet and the record
@@ -222,39 +271,110 @@ def test_a_closed_reconstruction_crossed_by_a_port_sheet_builds_its_drawn_circle
     assert all("/arc" in carrier_id for carrier_id in authored_ring)
 
 
-def test_an_open_reconstruction_after_a_port_crossing_keeps_its_drawn_segments(
-    monkeypatch,
+@pytest.mark.parametrize("port", [False, True], ids=["alone", "with-port"])
+def test_an_open_reconstruction_in_drawn_order_lands_on_its_drawn_corner(
+    monkeypatch, port
 ):
-    """The rounded corner keeps its radius when the port's crossings come before it along the ring.
+    """The record names the rounded corner in the GDS walk's order, and SGB builds the 20 um arc there.
 
-    The record's indices are read from the ring the plan emits for the pad alone.  With the port,
-    the two crossings on the pad's top edge are noded in ahead of the corner's chain; the chain
-    and its anchors are still the corner's, so SGB builds a 20 um arc there.
+    The source grid emits the pad ring from another vertex than the walk starts at; with the
+    port it also nodes the two crossings on the top edge into it, ahead of the corner.  Read
+    along the emitted ring, the same indices would name a run one vertex off the corner.
     """
-    ring = emitted_pad_ring(cornered_pad(monkeypatch, port=False))
-    keys = [(round(x / GRID_UM), round(y / GRID_UM)) for x, y in ring]
-    ends = sorted(
-        keys.index((round(x / GRID_UM), round(y / GRID_UM)))
-        for x, y in (CORNER[0], CORNER[-1])
+    drawn = drawn_pad_ring(cornered_pad(monkeypatch, port=False))
+    component = cornered_pad(
+        monkeypatch, port=port, reconstruction=corner_reconstruction(drawn)
     )
-    # The corner is one run of 16 drawn segments along the ring, travelled either way.
-    assert ends[1] - ends[0] == CORNER_CHORDS
-    first = ends[0]
-    reconstruction = {
-        "boundary_id": "PAD_CORNER",
+    emitted = emitted_pad_ring(component)
+    assert grid_key(emitted[0]) != grid_key(drawn[0])
+    assert len(emitted) == len(drawn) + (2 if port else 0)
+    arcs, _ = pad_arcs(built_sidecar(monkeypatch, component, NETS))
+    (arc,) = arcs
+    assert arc["facts"]["radius_um"] == pytest.approx(CORNER_RADIUS_UM, abs=GRID_UM)
+
+
+@pytest.mark.parametrize("port", [False, True], ids=["alone", "with-port"])
+def test_an_open_reconstruction_through_a_mirrored_occurrence_lands_on_its_drawn_corner(
+    monkeypatch, port
+):
+    """A device placed mirrored keeps the corner its record names in the device cell's drawn order.
+
+    The mirror about y = 0 carries each drawn vertex to its place and reverses the walk's
+    direction, and the source grid emits the ring from another vertex than the mirrored walk
+    starts at.  The record's indices still name the device cell's walk, and SGB builds the
+    20 um arc on the mirrored corner.
+    """
+    import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
+
+    drawn = drawn_pad_ring(cornered_pad(monkeypatch, port=False))
+    device = cornered_pad(
+        monkeypatch, port=port, reconstruction=corner_reconstruction(drawn)
+    )
+    chip = gf.Component()
+    reference = chip << device
+    reference.dmirror_y(0)
+    chip.add_polygon(
+        [(-120, -170), (170, -170), (170, 120), (-120, 120)], layer=(50, 0)
+    )
+    chip.info["component_semantics"] = {"schema_version": 2, "conductor_regions": []}
+    (pad,) = [
+        p
+        for p in device_plan_snapshot(chip, reference).geometry_input.polygons
+        if p.layer == "1/0"
+    ]
+    mirrored = [grid_key((x, -y)) for x, y in drawn]
+    assert {grid_key(point) for point in pad.exterior} >= set(mirrored)
+    assert grid_key(pad.exterior[0]) != mirrored[0]
+    sidecar = built_device_sidecar(monkeypatch, chip, reference)
+    (arc,) = [
+        feature
+        for feature in sidecar["mesh_features"]
+        if feature["kind"] == "arc" and feature["source"] == "chip/device/pad"
+    ]
+    assert arc["facts"]["radius_um"] == pytest.approx(CORNER_RADIUS_UM, abs=GRID_UM)
+
+
+def test_a_closed_reconstruction_takes_its_anchors_in_drawn_order(monkeypatch):
+    """The circle passes through the three drawn vertices the record names, not three others.
+
+    The pad is an ellipse of semi-axes 100 and 80 um drawn with 128 points, so three of its
+    vertices fix one circle.  The source grid emits the ring from another vertex than the GDS
+    walk starts at.
+    """
+    count = 128
+    pad = [
+        (
+            100.0 * math.cos(2 * math.pi * i / count),
+            80.0 * math.sin(2 * math.pi * i / count),
+        )
+        for i in range(count)
+    ]
+    anchors = [0, count // 3, 2 * count // 3]
+    record = {
+        "boundary_id": "PAD_CIRCLE",
         "entity_id": "pad",
         "selector_point_um": (0.0, 0.0),
         "role": "outer",
         "kind": "circular_arc",
-        "closed": False,
-        "segment_indices": list(range(first, first + CORNER_CHORDS)),
-        "anchor_indices": [first, first + CORNER_CHORDS // 2, first + CORNER_CHORDS],
+        "closed": True,
+        "segment_indices": list(range(count)),
+        "anchor_indices": anchors,
     }
-    component = cornered_pad(monkeypatch, port=True, reconstruction=reconstruction)
-    assert noded_pad_vertices(eigenmode_sim(component, NETS)) == len(ring) + 2
+    component = pad_layout(
+        monkeypatch,
+        pad,
+        electrode=[(120, -30), (150, -30), (150, 30), (120, 30)],
+        sheet=None,
+        port_orientation=0,
+        reconstruction=record,
+    )
+    drawn = drawn_pad_ring(component)
+    assert len(drawn) == count
+    assert grid_key(emitted_pad_ring(component)[0]) != grid_key(drawn[0])
+    _, radius = circle_through_points([drawn[i] for i in anchors])
     arcs, _ = pad_arcs(built_sidecar(monkeypatch, component, NETS))
     (arc,) = arcs
-    assert arc["facts"]["radius_um"] == pytest.approx(CORNER_RADIUS_UM, abs=GRID_UM)
+    assert arc["facts"]["radius_um"] == pytest.approx(radius, abs=GRID_UM)
 
 
 @pytest.mark.parametrize("route", ["B", "C"])
@@ -291,3 +411,27 @@ def test_a_closed_reconstruction_in_a_stack_file_is_carried_by_the_grid_stage(
     assert model.report.failures == []
     assert "curved_walls_are_single_cylinders" in {c.name for c in model.report.checks}
     assert any(face.curved for face in model.topology.faces.values())
+
+
+def test_drawn_segments_are_found_on_a_ring_that_runs_the_other_way():
+    """The shared mapping reads a ring that starts elsewhere, runs backwards and holds an inserted vertex.
+
+    Drawn a, b, c, d, e; the ring holds them as c, x, b, a, e, d, with x noded in between c
+    and b.  The chain comes back in the ring's order, and an open chain's anchors with it.
+    """
+    drawn = ["a", "b", "c", "d", "e"]
+    ring = ["c", "x", "b", "a", "e", "d"]
+    # Drawn segments b-c and c-d, anchored at b, c and d: on the ring d-c, c-x, x-b.
+    assert drawn_chain_on_ring((1, 2), (1, 2, 3), False, drawn, ring) == RingChain(
+        (5, 0, 1), (5, 0, 2)
+    )
+    # The whole ring, anchored at a, c and e: a closed chain keeps its first anchor first.
+    assert drawn_chain_on_ring(
+        (0, 1, 2, 3, 4), (0, 2, 4), True, drawn, ring
+    ) == RingChain((3, 4, 5, 0, 1, 2), (3, 0, 4))
+    # A ring that meets the drawn vertices out of order, or lacks one, holds no drawn chain.
+    assert (
+        drawn_chain_on_ring((0,), (0, 1), False, drawn, ["a", "c", "b", "d", "e"])
+        is None
+    )
+    assert drawn_chain_on_ring((0,), (0, 1), False, drawn, ["a", "b", "c", "d"]) is None
