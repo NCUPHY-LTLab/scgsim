@@ -70,7 +70,7 @@ scgsim-id: "docs/supported-geometry"
 
 在 cell 10 中，模擬只看到集總薄片與兩條引線。PDK 在 layer 22/0 上畫的 5 × 0.09 µm 十字是製程用的接面，不在模擬的層堆疊中。
 
-測試建置把 disk 的接面引線畫成直的，全長都是 2 µm 寬。margin 為 1.0 µm 時，這條引線會在產生網格之前被拒絕，見 [Surface-EPR 邊距](supported-scope.qmd#rules-margins)。
+測試建置把 disk 的接面引線畫成斜向的直線，全長都是 2 µm 寬。放上格點後，它比 1.0 µm margin 的兩倍寬 0.7 nm，留下 0.7 nm 寬的核心，因此會在產生網格之前被拒絕，見 [Surface-EPR 邊距](supported-scope.qmd#rules-margins)。
 
 ### 線路與彎道 {#lines-and-bends}
 

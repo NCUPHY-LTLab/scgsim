@@ -13,7 +13,14 @@ from __future__ import annotations
 import pytest
 import sgb_supported_cells as disk_qubit
 import sgb_supported_pdk_cells as pdk
-from sgb_supported_kit import Scene, assert_exact_bands, catalogue, type_bands
+from sgb_supported_kit import (
+    Conductor,
+    Scene,
+    assert_exact_bands,
+    catalogue,
+    to_lattice,
+    type_bands,
+)
 from test_sgb_supported_geometry import SCENES, scene_params
 
 from scgsim.geometry.sgb.build import emit_model
@@ -24,6 +31,8 @@ from scgsim.meshing import check_fine_structure
 # Where the core of the straight lead lies, from the disk end to the tip (um): the lead runs at -45 degrees.
 LEAD_CORE_X_UM = (84.670, 165.074)
 LEAD_CORE_Y_UM = (-165.074, -84.670)
+# An isolated lead along x on a 40 x 60 um die, banded at the kit's margins (0.5, 1.0) um on a 1 nm grid.
+LEAD_DIE = (0.0, -30.0, 40.0, 30.0)
 
 
 def sample_model(scene: Scene) -> ConformalModel:
@@ -79,3 +88,30 @@ def test_a_lead_twice_a_margin_wide_is_refused_before_meshing_as_the_erosion(
         assert (y0, y1) == pytest.approx(LEAD_CORE_Y_UM, abs=0.001)
         assert finding.value_steps is not None and finding.value_steps < 1
         assert "change the margins" in finding.fix
+
+
+def straight_lead(width_um: float) -> Scene:
+    """A lead along x from x = 10 to x = 30 um, ``width_um`` wide, on its own on the die."""
+    half = width_um / 2
+    ring = to_lattice([(10.0, -half), (30.0, -half), (30.0, half), (10.0, half)])
+    return Scene("straight_lead", (), LEAD_DIE, [Conductor("lead", "lead", ring)])
+
+
+@pytest.mark.parametrize(
+    ("width_um", "passed"),
+    [(2.0, True), (2.004, False)],
+    ids=["twice_the_margin", "four_steps_wider"],
+)
+def test_a_lead_exactly_twice_the_margin_has_no_core_and_a_little_wider_is_refused(
+    width_um, passed, tmp_path
+):
+    """At exactly twice the 1 um margin the bands meet down the middle of the lead and leave no core.
+
+    The bands are the exact erosion and the meshing stage passes the model.  Four grid steps wider, the
+    core is a face four steps wide, and the meshing stage refuses it, owned by the erosion.
+    """
+    model = assert_exact_bands(straight_lead(width_um))
+    report = check_fine_structure(emit_model(model, tmp_path).sidecar)
+    assert report.passed is passed
+    if not passed:
+        assert {(f.rule, f.owner) for f in report.refusals} == {("B", "erosion")}

@@ -103,7 +103,8 @@ In cell 10 the simulation sees only the lumped sheet and the two leads. The
 it is not in the simulation layer stack.
 
 The test build draws the disk's junction lead straight, 2 µm wide along its whole
-length. With a 1.0 µm margin that lead is refused before meshing; see
+length, on a diagonal. On the grid it is 0.7 nm wider than twice the 1.0 µm
+margin, so it keeps a core 0.7 nm wide and is refused before meshing; see
 [Surface-EPR margins](supported-scope.qmd#rules-margins).
 
 ### Lines and bends {#lines-and-bends}
