@@ -154,12 +154,14 @@ the start of the port direction, and the part after the second cut joins the
 other conductor. A conductor without a Net is a Net of its own. You draw the
 sheet as before, a rectangle that reaches into both conductors.
 
-Each conductor gains the free part of the sheet up to its cut. Where SGB builds
-the conductor's edge as an exactly declared arc, the end piece is the whole
-drawn sheet from its start to the cut and overlaps the conductor, so it meets
-the arc also where the arc lies beyond the drawn polygon, as on the inside of a
-round opening. On a conductor SGB builds as drawn, the end piece is only the
-free part, and on a straight edge at right angles to the sheet it is empty.
+Each conductor gains the free part of the sheet up to its cut. Where the sheet
+lands on a conductor edge that SGB builds as an exactly declared arc, the end
+piece is the whole drawn sheet from its start to the cut and overlaps the
+conductor, so it meets the arc also where the arc lies beyond the drawn polygon,
+as on the inside of a round opening. Where the sheet lands on edges SGB builds
+as drawn, the end piece is only the free part, and on a straight edge at right
+angles to the sheet it is empty. An arc elsewhere on the conductor, away from
+the sheet, changes neither.
 
 On each end, SCGSim chooses the cut in two steps:
 

@@ -177,8 +177,10 @@ class BuiltOutline:
     """The outline SGB builds for a terminal, as the end-piece cut reads it.
 
     ``meetings`` holds, per sheet side line (``0`` and ``width``), where the outline meets
-    it.  ``rebuilt_arcs`` says whether SGB builds any of the terminal's edges as an exact arc
-    instead of its drawn polygon.
+    it.  ``rebuilt_arcs`` says whether the sheet lands on an edge SGB builds as an exact arc
+    instead of its drawn polygon: an arc of the terminal that meets the sheet's rectangle.  An
+    arc elsewhere on the terminal, such as a rounded corner away from the port, leaves a
+    landing on a straight edge as drawn.
     """
 
     meetings: dict[int, tuple[SideMeeting, ...]]
@@ -189,6 +191,7 @@ def built_outline(
     build_input: GeometryBuildInput,
     entity_ids: Iterable[str],
     frame: JunctionLocalFrame,
+    span: int,
     width: int,
 ) -> BuiltOutline:
     """The outline SGB builds for these conductors, where it meets each sheet side line.
@@ -224,12 +227,55 @@ def built_outline(
         for curve in chain:
             for side, found in meetings.items():
                 found.extend(_curve_meetings(curve, frame, side, grid_um))
+    # SGB rounds an arc's crossings to the grid, so an arc within one grid step of the sheet
+    # may touch it once built.
+    reach_um = PRECISION_UM if grid_um is None else grid_um
     return BuiltOutline(
         {side: tuple(found) for side, found in meetings.items()},
         any(
-            curve.kind != "line_segment" for chain in chains.values() for curve in chain
+            curve.kind == "circular_arc"
+            and _arc_meets_sheet(curve, frame, span, width, reach_um)
+            for chain in chains.values()
+            for curve in chain
         ),
     )
+
+
+def _arc_meets_sheet(
+    curve: SourceCurveSpec,
+    frame: JunctionLocalFrame,
+    span: int,
+    width: int,
+    reach_um: float,
+) -> bool:
+    """Whether a circular arc comes within ``reach_um`` of the sheet's rectangle.
+
+    The arc is continuous, so it meets the rectangle exactly when one of its ends lies inside
+    or it crosses one of the rectangle's four edges.
+    """
+    start, through, end = (_local_um(point, frame) for point in curve.points_um)
+    low_u, high_u = -reach_um, span * PRECISION_UM + reach_um
+    low_v, high_v = -reach_um, width * PRECISION_UM + reach_um
+    if any(low_u <= u <= high_u and low_v <= v <= high_v for u, v in (start, end)):
+        return True
+    (cu, cv), radius = circle_through_points((start, through, end))
+    edges = (
+        (True, low_u, low_v, high_v),
+        (True, high_u, low_v, high_v),
+        (False, low_v, low_u, high_u),
+        (False, high_v, low_u, high_u),
+    )
+    for at_u, value, low, high in edges:
+        offset = value - (cu if at_u else cv)
+        if abs(offset) > radius:
+            continue
+        half = math.sqrt(radius * radius - offset * offset)
+        centre = cv if at_u else cu
+        for across in (centre - half, centre + half):
+            point = (value, across) if at_u else (across, value)
+            if low <= across <= high and _on_arc(point, start, through, end):
+                return True
+    return False
 
 
 def _curve_meetings(

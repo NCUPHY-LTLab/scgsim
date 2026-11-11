@@ -30,13 +30,16 @@ STEP_LIMIT_UM = 10 * GRID_UM
 NETS = {"pad": ("chip/pad",), "electrode": ("chip/electrode",)}
 
 
-def pad_and_electrode(monkeypatch, *, round_pad: bool, exact_arc: bool = False):
+def pad_and_electrode(
+    monkeypatch, *, round_pad: bool, exact_arc: bool = False, round_back: bool = False
+):
     """A pad and a straight electrode 20 um away, joined by a 2 um lumped-port sheet.
 
     The round pad is a 1024-sided polygon of radius 100 um; with ``exact_arc`` it also carries
     the authored circle, as the PDK's circular pad does, so SGB builds the exact arc.  The square
-    pad has a straight edge at x = 100 um.  The sheet starts inside the pad and ends 1 um inside
-    the electrode.
+    pad has a straight edge at x = 100 um; with ``round_back`` its back half, away from the
+    port, is a semicircle of radius 100 um declared as an exact arc.  The sheet starts inside
+    the pad and ends 1 um inside the electrode.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
 
@@ -56,6 +59,16 @@ def pad_and_electrode(monkeypatch, *, round_pad: bool, exact_arc: bool = False):
             for i in range(PAD_VERTICES)
         ]
         sheet_start = PAD_RADIUS_UM - 0.1
+    elif round_back:
+        back = [
+            (
+                -PAD_RADIUS_UM * math.sin(math.pi * i / PAD_VERTICES),
+                PAD_RADIUS_UM * math.cos(math.pi * i / PAD_VERTICES),
+            )
+            for i in range(1, PAD_VERTICES)
+        ]
+        pad = [(0, -100), (100, -100), (100, 100), (0, 100), *back]
+        sheet_start = 99.0
     else:
         pad = [(-100, -100), (100, -100), (100, 100), (-100, 100)]
         sheet_start = 99.0
@@ -121,6 +134,22 @@ def pad_and_electrode(monkeypatch, *, round_pad: bool, exact_arc: bool = False):
                 "curves": [
                     {"kind": "circular_arc", "points_um": [[r, 0], [0, r], [-r, 0]]},
                     {"kind": "circular_arc", "points_um": [[-r, 0], [0, -r], [r, 0]]},
+                ],
+            }
+        ]
+    if round_back:
+        r = PAD_RADIUS_UM
+        semantics["boundary_curves"] = [
+            {
+                "boundary_id": "PAD_OUTER",
+                "entity_id": "pad",
+                "selector_point_um": (0.0, 0.0),
+                "role": "outer",
+                "curves": [
+                    {"kind": "line_segment", "points_um": [[0, -r], [r, -r]]},
+                    {"kind": "line_segment", "points_um": [[r, -r], [r, r]]},
+                    {"kind": "line_segment", "points_um": [[r, r], [0, r]]},
+                    {"kind": "circular_arc", "points_um": [[0, r], [-r, 0], [0, -r]]},
                 ],
             }
         ]
@@ -282,9 +311,15 @@ def test_the_cut_on_a_round_pad_is_the_first_whose_steps_reach_the_class_a_limit
         assert start == pytest.approx(99.995 + STEP_LIMIT_UM)
 
 
-def test_a_port_between_straight_edges_keeps_its_face_and_conductors(monkeypatch):
-    """On straight edges the cuts are the conductor edges: the face and the conductors are those built before."""
-    component = pad_and_electrode(monkeypatch, round_pad=False)
+@pytest.mark.parametrize("round_back", [False, True], ids=["square", "round-back"])
+def test_a_port_between_straight_edges_keeps_its_face_and_conductors(
+    monkeypatch, round_back
+):
+    """On straight edges the cuts are the conductor edges: the face and the conductors are those built before.
+
+    An exact arc elsewhere on the pad, away from the port, changes nothing at the port.
+    """
+    component = pad_and_electrode(monkeypatch, round_pad=False, round_back=round_back)
     prepared, region, record = prepared_port(eigenmode_sim(component))
     assert assert_rectangle_along_x(region.exterior) == pytest.approx(
         (100.0, ELECTRODE_X_UM)
@@ -299,7 +334,7 @@ def test_a_port_between_straight_edges_keeps_its_face_and_conductors(monkeypatch
     monkeypatch.setattr(
         workflow, "with_rectangular_ports", lambda build_input: build_input
     )
-    component = pad_and_electrode(monkeypatch, round_pad=False)
+    component = pad_and_electrode(monkeypatch, round_pad=False, round_back=round_back)
     whole = built_sidecar(monkeypatch, component)
 
     def conductors_and_port(sidecar):

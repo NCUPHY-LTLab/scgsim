@@ -258,6 +258,7 @@ class _JunctionPartitionPlanner:
                     if junction_net_id(self.entities[eid]) == net
                 ),
                 self.frame,
+                self.span,
                 self.width,
             )
             for net in (self.junction.terminal_a_net, self.junction.terminal_b_net)
