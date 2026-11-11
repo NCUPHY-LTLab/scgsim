@@ -86,7 +86,7 @@ for case_id, inductance_h in case_parameters:
             contribution_id=record["contribution_id"],
             source_polygon_id=record["source_polygon_ids"][0],
             interface_kind=kind, field_side=record["field_side"],
-            margins_um=(0.01, 0.05, 0.1),
+            margins_um=(0.5, 1.0),
             film_thickness_m=preset["thickness"] * 1e-6,
             film_relative_permittivity=preset["permittivity"],
             loss_tangent=preset["loss_tangent"],

@@ -54,7 +54,7 @@ sim.set_surface_epr(
             "loss_tangent": record["loss_tangent"],
             "source": record["source"],
             "preset": preset_names[kind],
-            "inset_margins_um": (0.01, 0.05, 0.1),
+            "inset_margins_um": (0.5, 1.0),
         }
         for kind, record in interface_presets.items()
     },
@@ -101,7 +101,7 @@ quality threshold described in the
 
 The MA/MS/SA records are the OrPen `LiteratureCentral` modeling presets, not
 material measurements. Replace them only with source-attributed records for
-your study. The three requested margins are separate alternatives to the
+your study. The two requested margins are separate alternatives to the
 baseline row. `bulk_domain_ids=None` selects all configured bulk energy
 entries, and the selection does not remove physical domains or change the
 normalization. Palace's external Region surface remains natural PMC when left
