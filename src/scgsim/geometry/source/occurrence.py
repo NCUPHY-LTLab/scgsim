@@ -556,6 +556,7 @@ def occurrence_ground_polygons_for_entity(  # noqa: PLR0913 -- the uniform occur
         cell_bounds_um={},
         domain_bounds_by_semantic_id={},
         plane_polygons=plane,
+        plane_layer=plane_layer,
     )
     return [_occurrence_polygon_record(polygon, transform) for polygon in derived]
 

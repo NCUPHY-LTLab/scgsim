@@ -142,6 +142,37 @@ def test_a_ground_include_refusal_names_the_include_layer():
     assert on(place, point(10, 0))
 
 
+def test_a_ground_plane_refusal_names_the_plane_layer():
+    """A plane outline on layer 2/0 that meets itself is refused on 2/0, not on the mask layer 1/0."""
+    build, _ = junction_fixture()
+    ground = replace(
+        build.entities[0],
+        semantic_id="chip/ground",
+        net_id="Ground",
+        geometry={"mask_layer": (1, 0)},
+    )
+    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
+        derived_ground_polygons(
+            ground,
+            polygons_by_layer={(1, 0): (gdstk.rectangle((2, 15), (4, 17)),)},
+            cell_bounds_um={
+                "x_min_um": 0,
+                "x_max_um": 20,
+                "y_min_um": 0,
+                "y_max_um": 20,
+            },
+            domain_bounds_by_semantic_id={},
+            plane_polygons=(gdstk.Polygon(HOLE_TOUCHING_THE_OUTLINE),),
+            plane_layer=(2, 0),
+        )
+    message = str(error.value)
+    assert message.startswith(
+        "gdstk cutline boundary is not a simple loop: chip/ground on layer 2/0"
+    )
+    (place,) = places(message)
+    assert on(place, point(10, 0))
+
+
 # The occurrence transform of a component placed at (100, 50) um.
 PLACED = (1, 0, 0, 1, 100, 50)
 

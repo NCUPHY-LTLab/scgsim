@@ -14,6 +14,7 @@ from typing import Any, cast
 
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.primitives.grid import (
+    current_grid_context,
     named_source,
     polygon_boolean,
     polygon_rings,
@@ -57,15 +58,20 @@ def _named_by_mask_layer(
 
 @preserve_declared_source
 @_named_by_mask_layer
-def derived_ground_polygons(
+def derived_ground_polygons(  # noqa: PLR0913 -- the Ground recipe: the entity, three layout inputs, and the plane outline with its layer
     entity: SemanticEntitySpec,
     *,
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
     cell_bounds_um: Mapping[str, float],
     domain_bounds_by_semantic_id: Mapping[str, Mapping[str, Any]],
     plane_polygons: Sequence[Any] | None = None,
+    plane_layer: Sequence[int] | None = None,
 ) -> tuple[LayoutPolygonSpec, ...]:
-    """Derive one positive Ground from its plane, mask and explicit includes."""
+    """Derive one positive Ground from its plane, mask and explicit includes.
+
+    ``plane_layer`` is the GDS layer ``plane_polygons`` were read from; a refusal of the plane
+    outline names it.
+    """
     import gdstk  # noqa: PLC0415 -- Ground construction is the boundary that requires the optional native GDS kernel
 
     mask_key = _mask_key(entity)
@@ -76,6 +82,8 @@ def derived_ground_polygons(
         base = (gdstk.Polygon(exterior),)
     else:
         base = tuple(realized_on_lattice(plane_polygons))
+        if plane_layer is not None:
+            _read_rings_on_layer(entity, plane_layer, base)
     without_mask = polygon_boolean(
         base,
         _merged_gdstk_polygons(
@@ -146,6 +154,22 @@ def derived_ground_polygons(
         )
         for index, (outer, holes) in enumerate(normalized_regions)
     )
+
+
+def _read_rings_on_layer(
+    entity: SemanticEntitySpec, layer: Sequence[int], polygons: Sequence[Any]
+) -> None:
+    """Read each polygon's rings as the grid-bound Boolean that follows will, naming ``layer``.
+
+    The Boolean reads the plane and the mask together under the mask's name; reading the
+    plane's rings first refuses exactly the same outlines, on the layer they are drawn on.
+    Without a bound grid the Boolean runs natively and reads no rings, so neither does this.
+    """
+    if current_grid_context() is None:
+        return
+    with named_source(entity.semantic_id, f"{int(layer[0])}/{int(layer[1])}"):
+        for polygon in polygons:
+            polygon_rings(polygon)
 
 
 def _selected_includes(
