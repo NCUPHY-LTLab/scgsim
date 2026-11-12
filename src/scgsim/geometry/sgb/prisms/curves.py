@@ -16,6 +16,10 @@ did:
 Lines and circular arcs are the curve classes of this version.  Interpolation
 splines and B-splines fail closed, naming the boundary and the entity: B-spline
 carriers are a later stage.
+
+A refusal names the record, its Entity and layer, where the fault lies in micrometres and
+who must act.  The wording of the index and arc refusals lives in ``models.input``, shared
+with the construction binder, which binds a lumped port's terminals before SGB runs.
 """
 
 from __future__ import annotations
@@ -32,10 +36,15 @@ from scgsim.geometry.models.input import (
     GeometryBuildInput,
     LayoutPolygonSpec,
     SourceCurveSpec,
+    arc_without_circle,
+    collinear,
     drawn_chain_on_ring,
     drawn_ring_of,
     drawn_vertices_off_ring,
+    reconstruction_chain_refusal,
+    reconstruction_without_circle,
     ring_lost_drawn_order,
+    ring_runs,
     ring_without_drawn_order,
 )
 from scgsim.geometry.sgb.errors import InputError, UnsupportedCurveError
@@ -94,7 +103,7 @@ def bind_boundaries(
                 "declaration: describe the ring by one authored boundary or by "
                 "reconstruction records, not both."
             )
-        bound[key] = _replace_segments(key, binder.ring_of(key), chosen)
+        bound[key] = binder.replace_segments(key, chosen)
     return bound
 
 
@@ -178,11 +187,16 @@ class _BoundaryBinder:
 
     def claim(self, key: RingKey, records: Sequence[BoundaryRecord]) -> str:
         """The records that claim one ring, and where the ring lies."""
-        names = " and ".join(record.boundary_id for record in records)
         return (
-            f"{names} (Entity {key[0]!r}{self._on(records[0])}) select the ring at "
-            f"{self._place(self.ring_of(key))}"
+            f"{self._claimants(key, [record.boundary_id for record in records])} select "
+            f"the ring at {self._place(self.ring_of(key))}"
         )
+
+    def _claimants(self, key: RingKey, names: Sequence[str]) -> str:
+        """The records that claim one ring, with its Entity and the Entity's layer."""
+        layer = self.layers.get(key[0])
+        on = f" on layer {layer}" if layer else ""
+        return f"{' and '.join(names)} (Entity {key[0]!r}{on})"
 
     def _selector_finding(
         self, record: BoundaryRecord, matches: Sequence[SourceFootprint]
@@ -265,6 +279,13 @@ class _BoundaryBinder:
             start = self._lattice_point(curve.points_um[0], what)
             end = self._lattice_point(curve.points_um[2], what)
             through = self._exact_point(curve.points_um[1])
+            if collinear(start, through, end):
+                size = self.grid.size_um
+                raise InputError(
+                    arc_without_circle(
+                        what, [format_point(x, y, size) for x, y in curve.points_um]
+                    )
+                )
             arc_id = _arc_id(key, index)
             lineage = Lineage("polygon_edge", key[0], key[1], key[2], index)
             return (
@@ -303,56 +324,56 @@ class _BoundaryBinder:
         if record.kind != "circular_arc":
             raise UnsupportedCurveError(
                 f"{what}: reconstruction kind {record.kind!r} is not supported yet "
-                f"(this version carries {SUPPORTED_CURVES}; use 'circular_arc')"
+                f"(this version carries {SUPPORTED_CURVES}); the ring it selects lies at "
+                f"{self._place(ring)}. Fix the declaration: give the record kind "
+                "'circular_arc', or remove it to keep the ring as drawn."
             )
-        # The indices name the drawn ring: they are checked there, then carried onto the
-        # ring this footprint holds, which may start elsewhere, run the other way and hold
-        # crossings the grid noded in.
+        # The indices name the drawn ring: they are checked there, by the rule the
+        # construction binder also states, then carried onto the ring this footprint holds,
+        # which may start elsewhere, run the other way and hold crossings the grid noded in.
         drawn = self._drawn_ring(record, key, ring, what)
-        segments = _selected_segments(record, drawn, what)
-        vertices = (*segments, (segments[-1] + 1) % len(drawn))
-        anchors = tuple(record.anchor_indices) or vertices
-        if any(i not in vertices for i in anchors):
-            raise InputError(f"{what} anchors must belong to the selected source chain")
-        if len(anchors) != 3:
-            raise InputError(
-                f"{what} circular reconstruction requires exactly three anchors"
-            )
-        if not record.closed and (
-            anchors[0] != vertices[0] or anchors[-1] != vertices[-1]
-        ):
-            raise InputError(
-                f"{what} reconstruction must retain the original chain endpoints"
-            )
-        chain = drawn_chain_on_ring(segments, anchors, record.closed, drawn, ring)
+
+        def drawn_place(i: int) -> str:
+            return self._point(drawn[i])
+
+        refusal = reconstruction_chain_refusal(
+            record, what, len(drawn), drawn_place, self._place(drawn)
+        )
+        if refusal is not None:
+            raise InputError(refusal)
+        segments = tuple(record.segment_indices)
+        drawn_anchors = tuple(record.anchor_indices) or (
+            *segments,
+            (segments[-1] + 1) % len(drawn),
+        )
+        chain = drawn_chain_on_ring(segments, drawn_anchors, record.closed, drawn, ring)
         if chain is None:
             raise InputError(
                 ring_lost_drawn_order(
                     what,
                     [
-                        f"drawn vertex {i} at {self._point(drawn[i])} {fault}"
+                        f"drawn vertex {i} at {drawn_place(i)} {fault}"
                         for i, fault in drawn_vertices_off_ring(drawn, ring)
                     ],
                 )
             )
-        segments, anchors = chain.segments, chain.anchors
-        points = tuple(ring[i] for i in anchors)
+        first, middle, last = (ring[i] for i in chain.anchors)
+        if collinear(first, middle, last):
+            raise InputError(
+                reconstruction_without_circle(what, drawn_anchors, drawn_place)
+            )
+        segments = chain.segments
         arc_id = _arc_id(key, segments[0])
         lineage = Lineage("polygon_edge", key[0], key[1], key[2], segments[0])
         if record.closed:
             ccw = ring_twice_area(ring) > 0
             arcs = full_circle(
-                arc_id,
-                (points[0], points[1], points[2]),
-                ccw,
-                lineage,
-                what,
-                grid=self.grid,
+                arc_id, (first, middle, last), ccw, lineage, what, grid=self.grid
             )
         else:
-            through = (Fraction(points[1][0]), Fraction(points[1][1]))
+            through = (Fraction(middle[0]), Fraction(middle[1]))
             arcs = arc_through_points(
-                arc_id, points[0], through, points[2], lineage, what, grid=self.grid
+                arc_id, first, through, last, lineage, what, grid=self.grid
             )
         return _Selection(segments, tuple(arcs), record.boundary_id)
 
@@ -372,6 +393,42 @@ class _BoundaryBinder:
         return tuple(
             self._lattice_point(point, f"{what} drawn ring") for point in drawn
         )
+
+    def replace_segments(
+        self, key: RingKey, selections: Sequence[_Selection]
+    ) -> tuple[RingPrimitive, ...]:
+        """Replace the selected source chains by their arcs and keep the unselected straight segments."""
+        ring = self.ring_of(key)
+        claimed: dict[int, str] = {}
+        starts: dict[int, tuple[RingPrimitive, ...]] = {}
+        for selection in selections:
+            shared = [i for i in selection.segments if i in claimed]
+            if shared:
+                names = tuple(
+                    dict.fromkeys(
+                        (*(claimed[i] for i in shared), selection.boundary_id)
+                    )
+                )
+                runs = ring_runs(shared, len(ring), lambda i: self._point(ring[i]))
+                raise InputError(
+                    f"overlapping reconstruction segment claims on ring {key}: "
+                    f"{self._claimants(key, names)} both replace the ring {runs}. "
+                    "Fix the declaration: give each drawn segment of the ring to one "
+                    "reconstruction record."
+                )
+            claimed.update(dict.fromkeys(selection.segments, selection.boundary_id))
+            starts[selection.segments[0]] = selection.primitives
+        count = len(ring)
+        # Walk from a selection start that crosses original ring index zero, so the chain stays contiguous.
+        first = next((s.segments[0] for s in selections if 0 in s.segments), 0)
+        primitives: list[RingPrimitive] = []
+        for step in range(count):
+            i = (first + step) % count
+            if i in starts:
+                primitives.extend(starts[i])
+            elif i not in claimed and ring[i] != ring[(i + 1) % count]:
+                primitives.append(LineEdge(ring[i], ring[(i + 1) % count], i))
+        return tuple(primitives)
 
     # -- coordinates -------------------------------------------------------------------
 
@@ -418,47 +475,3 @@ def _footprint_polygons(
 
 def _arc_id(key: RingKey, edge: int) -> str:
     return f"{key[0]}/polygon{key[1]}/ring{key[2]}/arc{edge}"
-
-
-def _selected_segments(
-    record: GdsBoundaryReconstructionSpec, ring: Ring, what: str
-) -> tuple[int, ...]:
-    count = len(ring)
-    segments = tuple(record.segment_indices)
-    if not segments or any(
-        isinstance(i, bool) or not isinstance(i, int) or not 0 <= i < count
-        for i in segments
-    ):
-        raise InputError(f"{what} requires explicit original segment indices")
-    if len(set(segments)) != len(segments) or any(
-        b != (a + 1) % count for a, b in zip(segments, segments[1:], strict=False)
-    ):
-        raise InputError(f"{what} segments must form one ordered source chain")
-    closes = len(segments) == count and (segments[-1] + 1) % count == segments[0]
-    if record.closed != closes:
-        raise InputError(f"{what} closure differs from the selected source chain")
-    return segments
-
-
-def _replace_segments(
-    key: RingKey, ring: Ring, selections: Sequence[_Selection]
-) -> tuple[RingPrimitive, ...]:
-    """Replace the selected source chains by their arcs and keep the unselected straight segments."""
-    claimed: set[int] = set()
-    starts: dict[int, tuple[RingPrimitive, ...]] = {}
-    for selection in selections:
-        if claimed & set(selection.segments):
-            raise InputError(f"overlapping reconstruction segment claims on ring {key}")
-        claimed.update(selection.segments)
-        starts[selection.segments[0]] = selection.primitives
-    count = len(ring)
-    # Walk from a selection start that crosses original ring index zero, so the chain stays contiguous.
-    first = next((s.segments[0] for s in selections if 0 in s.segments), 0)
-    primitives: list[RingPrimitive] = []
-    for step in range(count):
-        i = (first + step) % count
-        if i in starts:
-            primitives.extend(starts[i])
-        elif i not in claimed and ring[i] != ring[(i + 1) % count]:
-            primitives.append(LineEdge(ring[i], ring[(i + 1) % count], i))
-    return tuple(primitives)

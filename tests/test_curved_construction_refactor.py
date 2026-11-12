@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from dataclasses import replace
@@ -19,10 +20,17 @@ from scgsim.geometry.models.input import (
     SourceCurveSpec,
 )
 
+# The first arc of the "no_circle" boundary runs along y = 2 um, so no circle passes through it.
+NO_CIRCLE = (
+    "boundary (Entity 'metal', layer metal) curve 0: the three arc points are collinear, "
+    "so they define no circle: its start (0.0, 2.0) um, middle point (2.0, 2.0) um and end "
+    "(4.0, 2.0) um lie on one line. Fix the layout:"
+)
+
 
 @pytest.mark.parametrize("initialized", (False, True))
 @pytest.mark.parametrize(
-    "outcome", ("success", "native_error", "occ_error", "binding_error")
+    "outcome", ("success", "no_circle", "occ_error", "binding_error")
 )
 def test_curved_construction_preserves_native_lifecycle(
     initialized: bool, outcome: str
@@ -59,8 +67,9 @@ def _verify_lifecycle(outcome: str, initialized: bool) -> None:
         terminal = gmsh.option.getNumber("General.Terminal")
         points = gmsh.model.getEntities(0)
     try:
-        if outcome == "native_error":
-            with pytest.raises(ZeroDivisionError):
+        if outcome == "no_circle":
+            # The binding refuses the arc before the native model opens, in SGB's words.
+            with pytest.raises(ValueError, match=re.escape(NO_CIRCLE)):
                 build_route_construction_plan(
                     effective, route="B", representation_context=context
                 )
@@ -104,7 +113,7 @@ def _construction_input(outcome: str):
     else:
         first_arc = (
             ((0, 2), (2, 2), (4, 2))
-            if outcome == "native_error"
+            if outcome == "no_circle"
             else ((0, 2), (2, 0), (4, 2))
         )
         first_curve = (

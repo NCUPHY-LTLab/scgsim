@@ -3,7 +3,9 @@
 The junction partition binds a lumped port's terminal conductors here before SGB's own
 binding (``sgb.prisms.curves``) runs, so for those conductors a refusal here is the one the
 layout author reads.  It names the record, its Entity and the ring's layer, says where in
-micrometres the ring, or the indices at fault, lie, and that the declaration must change.
+micrometres the ring, the indices or the arc points at fault lie, and who must change them:
+the declaration, or the layout for an authored arc.  Where SGB refuses the same fault, the
+refusal is SGB's, word for word.
 """
 
 from __future__ import annotations
@@ -27,12 +29,18 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
     SourceCurveSpec,
+    arc_without_circle,
+    collinear,
     drawn_chain_on_ring,
     drawn_ring_of,
     drawn_vertices_off_ring,
+    exact_point_um,
     reconstruction_chain_refusal,
+    reconstruction_without_circle,
     ring_lost_drawn_order,
+    ring_runs,
     ring_without_drawn_order,
+    twice_area,
 )
 from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.primitives.grid_regions import region_key
@@ -97,30 +105,29 @@ def source_rings(build_input: GeometryBuildInput) -> SourceRings:
 
 
 def circle_through_points(points: Sequence[Coordinate]) -> tuple[Coordinate, float]:
-    """Solve the circle through three supplied arc anchors."""
-    a, b, c = points
-    ax, ay = a
-    bx, by = b
-    cx, cy = c
-    determinant = 2 * _twice_area(a, b, c)
+    """Solve the circle through three supplied arc points, exactly on their decimal values.
+
+    The binding (:func:`source_boundaries`) refuses an arc whose three points lie on one line,
+    read the same way, so the determinant is never zero here for an arc that passed it,
+    however the floats round.
+    """
+    a, b, c = (exact_point_um(point) for point in points)
+    determinant = 2 * twice_area(a, b, c)
+    a_sq, b_sq, c_sq = (p[0] ** 2 + p[1] ** 2 for p in (a, b, c))
     ux = (
-        (ax * ax + ay * ay) * (by - cy)
-        + (bx * bx + by * by) * (cy - ay)
-        + (cx * cx + cy * cy) * (ay - by)
+        a_sq * (b[1] - c[1]) + b_sq * (c[1] - a[1]) + c_sq * (a[1] - b[1])
     ) / determinant
     uy = (
-        (ax * ax + ay * ay) * (cx - bx)
-        + (bx * bx + by * by) * (ax - cx)
-        + (cx * cx + cy * cy) * (bx - ax)
+        a_sq * (c[0] - b[0]) + b_sq * (a[0] - c[0]) + c_sq * (b[0] - a[0])
     ) / determinant
-    return (ux, uy), math.hypot(ax - ux, ay - uy)
+    return (float(ux), float(uy)), math.hypot(float(a[0] - ux), float(a[1] - uy))
 
 
-def _twice_area(a: Coordinate, b: Coordinate, c: Coordinate) -> float:
-    # Twice the signed area of the triangle: zero exactly when no circle runs through
-    # the three points, so circle_through_points would divide by zero.
-    (ax, ay), (bx, by), (cx, cy) = a, b, c
-    return ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)
+def _on_one_line(points: Sequence[Coordinate]) -> bool:
+    # Whether an arc's three points, in micrometres, define no circle, by the exact rule
+    # collinear states, on the values circle_through_points solves on.
+    a, b, c = (exact_point_um(point) for point in points)
+    return collinear(a, b, c)
 
 
 @dataclass(frozen=True)
@@ -169,7 +176,8 @@ class _BindingPlaces:
 
 
 def _named(
-    record: GdsBoundaryReconstructionSpec, polygon: LayoutPolygonSpec | None
+    record: BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec,
+    polygon: LayoutPolygonSpec | None,
 ) -> str:
     """The record, its Entity and the selected polygon's layer, as refusals name them."""
     on = "" if polygon is None else f", layer {polygon.layer}"
@@ -208,12 +216,11 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
     # The record's indices name the drawn ring; they are checked there, then carried onto
     # the ring this stage holds, which may start elsewhere, run the other way and hold
     # crossings the grid noded in.
+    def drawn_place(i: int) -> str:
+        return format_point(*drawn[i], grid_size_um)
+
     refusal = reconstruction_chain_refusal(
-        record,
-        what,
-        len(drawn),
-        lambda i: format_point(*drawn[i], grid_size_um),
-        format_extent(drawn, grid_size_um),
+        record, what, len(drawn), drawn_place, format_extent(drawn, grid_size_um)
     )
     if refusal is not None:
         raise ValueError(refusal)
@@ -232,7 +239,7 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
             ring_lost_drawn_order(
                 what,
                 [
-                    f"drawn vertex {i} at {format_point(*drawn[i], grid_size_um)} {fault}"
+                    f"drawn vertex {i} at {drawn_place(i)} {fault}"
                     for i, fault in drawn_vertices_off_ring(drawn_keys, ring_keys)
                 ],
             )
@@ -240,8 +247,10 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
     segments, anchors = chain.segments, chain.anchors
     count = len(ring)
     points = tuple(ring[i] for i in anchors)
-    if record.kind == "circular_arc" and _twice_area(*points) == 0:
-        raise ValueError(_no_circle(what, drawn_anchors, drawn, grid_size_um))
+    if record.kind == "circular_arc" and _on_one_line(points):
+        raise ValueError(
+            reconstruction_without_circle(what, drawn_anchors, drawn_place)
+        )
     if record.kind == "circular_arc" and record.closed:
         center, radius = circle_through_points(points)
         start = points[0]
@@ -295,26 +304,21 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
     )
 
 
-def _no_circle(
-    what: str,
-    anchors: Sequence[int],
-    drawn: PolygonRing,
-    grid_size_um: float | None,
-) -> str:
-    """The refusal of a circular reconstruction whose three anchors define no circle."""
-    at = ", ".join(
-        f"drawn vertex {a} at {format_point(*drawn[a], grid_size_um)}" for a in anchors
-    )
-    how = (
-        "two of them are one vertex"
-        if len(set(anchors)) < len(anchors)
-        else "they lie on one line"
-    )
-    return (
-        f"{what}: the three arc points are collinear, so they define no circle: its "
-        f"anchors are {at}; {how}. Fix the declaration: choose three anchors of its "
-        "chain that do not lie on one line."
-    )
+def _refuse_arcs_without_circle(
+    record: BoundaryCurveChainSpec, what: str, grid_size_um: float | None
+) -> None:
+    # SGB refuses an authored arc whose three points define no circle, but the junction
+    # partition reads a lumped port's terminal arcs before SGB runs, and the compiler's curve
+    # kernel builds arcs without SGB; both solve the circle with circle_through_points.  The
+    # arc is refused here, in SGB's words, by the exact rule that circle solves on.
+    for index, curve in enumerate(record.curves):
+        if curve.kind == "circular_arc" and _on_one_line(curve.points_um):
+            raise ValueError(
+                arc_without_circle(
+                    f"{what} curve {index}",
+                    [format_point(x, y, grid_size_um) for x, y in curve.points_um],
+                )
+            )
 
 
 def source_boundaries(
@@ -352,6 +356,9 @@ def source_boundaries(
                 f"{places.claim(key, ring, names)}. Fix the declaration: give each ring "
                 "one complete boundary record."
             )
+        _refuse_arcs_without_circle(
+            record, _named(record, places.polygon(key)), places.grid_size_um
+        )
         authored[key] = record
         provenance.append(
             {
@@ -424,11 +431,16 @@ def _replace_segments(
         shared = [i for i in segments if i in claimed]
         if shared:
             names = tuple(dict.fromkeys((*(claimed[i] for i in shared), bid)))
+            runs = ring_runs(
+                shared,
+                len(ring),
+                lambda i: format_point(*ring[i], places.grid_size_um),
+            )
             raise ValueError(
                 f"overlapping reconstruction segment claims on {key}: "
-                f"{places.claimants(key, names)} both replace the ring "
-                f"{_runs(shared, ring, places.grid_size_um)}. Fix the declaration: give "
-                "each drawn segment of the ring to one reconstruction record."
+                f"{places.claimants(key, names)} both replace the ring {runs}. Fix the "
+                "declaration: give each drawn segment of the ring to one reconstruction "
+                "record."
             )
         for i in segments:
             claimed[i] = bid
@@ -451,22 +463,3 @@ def _replace_segments(
                 )
             )
     return tuple(curves)
-
-
-def _runs(indices: Sequence[int], ring: PolygonRing, grid_size_um: float | None) -> str:
-    """Where the ring's segments at these indices run, those that follow each other as one.
-
-    The ring may run the other way from the drawing, so a run is named by its two ends.
-    """
-    count = len(ring)
-    runs: list[list[int]] = []
-    for i in indices:
-        if runs and i == (runs[-1][-1] + 1) % count:
-            runs[-1].append(i)
-        else:
-            runs.append([i])
-    return ", ".join(
-        f"between {format_point(*ring[run[0]], grid_size_um)} and "
-        f"{format_point(*ring[(run[-1] + 1) % count], grid_size_um)}"
-        for run in runs
-    )

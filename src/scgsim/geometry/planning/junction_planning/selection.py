@@ -295,7 +295,7 @@ def _arc_positions(
     """
     low_u, high_u, low_v, high_v = box
     start, through, end = (_local_um(point, frame) for point in curve.points_um)
-    (cu, cv), radius = circle_through_points((start, through, end))
+    (cu, cv), radius = _local_circle(curve, frame)
 
     def in_box(u: float, v: float) -> bool:
         return low_u <= u <= high_u and low_v <= v <= high_v
@@ -343,7 +343,7 @@ def _curve_meetings(
         return [_crossing(float(crossing) * PRECISION_UM, side, frame, grid_um)]
     if curve.kind == "circular_arc":
         start, through, end = (_local_um(point, frame) for point in curve.points_um)
-        (cu, cv), radius = circle_through_points((start, through, end))
+        (cu, cv), radius = _local_circle(curve, frame)
         offset = side * PRECISION_UM - cv
         if abs(offset) > radius:
             return []
@@ -367,6 +367,19 @@ def _curve_meetings(
             "Fix the layout: draw the curve as lines and circular arcs.",
         )
     )
+
+
+def _local_circle(
+    curve: SourceCurveSpec, frame: JunctionLocalFrame
+) -> tuple[tuple[float, float], float]:
+    """A circular arc's circle in the junction's local frame: its centre in micrometres, and its radius.
+
+    The circle is solved on the authored points, the values the binding checked do not lie on
+    one line, and only its centre is moved into the frame, a rotation and a shift that keep the
+    radius.  Solved on the turned points instead, rounding can put three points on one line.
+    """
+    centre, radius = circle_through_points(curve.points_um)
+    return _local_um(centre, frame), radius
 
 
 def _local_um(point, frame: JunctionLocalFrame) -> tuple[float, float]:

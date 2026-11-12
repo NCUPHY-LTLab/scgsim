@@ -18,6 +18,7 @@ from decimal import Decimal
 from fractions import Fraction
 
 from scgsim.geometry.models.grid import format_length, format_point
+from scgsim.geometry.models.input import twice_area
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records import circle_math
@@ -33,10 +34,13 @@ PIECE_ANGLE_SLACK = Decimal("1e-9")
 def circumcircle(
     a: RationalPoint, b: RationalPoint, c: RationalPoint, what: str
 ) -> tuple[RationalPoint, Fraction]:
-    """Exact centre and (high-precision) radius of the circle through three points."""
-    determinant = 2 * (
-        a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1])
-    )
+    """Exact centre and (high-precision) radius of the circle through three points.
+
+    The binding (``prisms.curves``) refuses three points ``collinear`` finds on one line
+    first, on the same exact points, naming where they lie and who must act; this refusal
+    keeps a direct caller fail-closed.
+    """
+    determinant = 2 * twice_area(a, b, c)
     if determinant == 0:
         raise InputError(
             f"{what}: the three arc points are collinear, so they define no circle"
