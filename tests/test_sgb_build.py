@@ -17,7 +17,7 @@ from sgb_inputs import (
 )
 
 import scgsim.geometry.sgb as sgb
-from scgsim.contracts.sgb_sidecar import read_sidecar, views
+from scgsim.contracts.sgb_sidecar import read_sidecar, sidecar_schema, views
 from scgsim.geometry.sgb import SgbArtifacts, build_sgb_geometry
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
@@ -25,8 +25,6 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
     RefinementRequest,
 )
 from scgsim.geometry.sgb.errors import RouteError
-from scgsim.geometry.sgb.sidecar.files import sidecar_schema
-from scgsim.geometry.sgb.verification import ocp
 from scgsim.geometry.sgb.verification.loaded import (
     LoadCheckError,
     apply_sidecar_embeds,
@@ -169,36 +167,6 @@ def test_a_route_error_stops_before_anything_is_written(tmp_path, films):
     with pytest.raises(RouteError):
         build(films, "B", tmp_path / "out")  # sheets are not valid for Route B
     assert not (tmp_path / "out").exists()
-
-
-def test_strict_without_ocp_names_the_dependency_group_and_writes_nothing(
-    tmp_path, monkeypatch, gds_input
-):
-    """Strict without ocp names the dependency group and writes nothing."""
-    monkeypatch.setattr(ocp, "ocp_available", lambda: False)
-    with pytest.raises(ocp.OcctUnavailable, match=r"`occt` dependency group"):
-        build(gds_input, "B", tmp_path / "out", strict=True)
-    assert not (tmp_path / "out").exists()
-
-
-@pytest.mark.occt
-@pytest.mark.parametrize(
-    ("source", "route"), [("gds_input", "B"), ("gds_input", "C"), ("films", "A")]
-)
-def test_strict_mode_checks_the_written_xao_of_every_route_and_returns_the_report(
-    request, tmp_path, source, route
-):
-    """The running examples under Routes A, B and C pass BRepCheck, the argument analyzer and ShapeAnalysis."""
-    pytest.importorskip("OCP")
-    artifacts = build(request.getfixturevalue(source), route, tmp_path, strict=True)
-    assert (
-        artifacts.occt is not None
-        and artifacts.occt.ok
-        and artifacts.occt.counts["solid"] >= 2
-    )
-    assert (
-        build(request.getfixturevalue(source), route, tmp_path / "plain").occt is None
-    )
 
 
 # --------------------------------------------------------------------------- the load-side check catches what it should

@@ -340,41 +340,6 @@ def create_verified_face_list(
     }
 
 
-def evaluate_named_expression(  # noqa: PLR0913 -- preserve the established field-expression keyword API.
-    app: Any,
-    *,
-    purpose: str,
-    operations: Sequence[str],
-    solution: str,
-    phase_degrees: float,
-    dependencies: Mapping[str, str],
-    selection: Mapping[str, Any],
-    evidence_dir: Path,
-) -> dict[str, Any]:
-    """Author and evaluate one immutable named expression in a bound context."""
-
-    authored = author_named_expression(
-        app,
-        purpose=purpose,
-        operations=operations,
-        solution=solution,
-        phase_degrees=phase_degrees,
-        dependencies=dependencies,
-        selection=selection,
-        evidence_dir=evidence_dir,
-    )
-    name = authored["name"]
-    raw = app.post.fields_calculator.evaluate(
-        name,
-        setup=solution,
-        intrinsics={"Phase": f"{phase_degrees:g}deg"},
-    )
-    return {
-        **authored,
-        "scalar": parse_native_scalar(raw),
-    }
-
-
 def author_named_expression(  # noqa: PLR0913 -- preserve the established field-expression keyword API.
     app: Any,
     *,

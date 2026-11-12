@@ -15,7 +15,7 @@ import pytest
 from sgb_emit_cases import CASES, pad_model
 from sgb_scenes import GRID, conductor, footprint, rect_um
 
-from scgsim.contracts.sgb_sidecar import read_sidecar, views
+from scgsim.contracts.sgb_sidecar import read_sidecar, sidecar_schema, views
 from scgsim.geometry.sgb.emission.plan import plan_brep
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.records.grid import exact_z
@@ -23,7 +23,7 @@ from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.routes.naming import FACE_KINDS
 from scgsim.geometry.sgb.sidecar.aedt import aedt_names, sanitise_aedt_name
 from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar
-from scgsim.geometry.sgb.sidecar.files import sidecar_schema, write_sidecar
+from scgsim.geometry.sgb.sidecar.files import write_sidecar
 from scgsim.geometry.sgb.slivers.report import sliver_report
 
 TESTS = Path(__file__).resolve().parent

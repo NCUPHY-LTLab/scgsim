@@ -50,11 +50,10 @@ production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<
 
 ### 如何檢查結果
 
-設計中有三個層次，production 都已實作：
+設計中有兩個層次，production 都已實作：
 
 1. **開發測試**：在 fixture 與隨機 layout 上，以 OCP 綁定執行 OpenCASCADE 自己的檢查（`BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`），並做 Gmsh 載入檢查 `verify_loaded`（數量、邊界、面積、體積、group）。OCP 在 `occt` dependency group（`cadquery-ocp-novtk==7.8.1.1.post1`），相關測試標為 `occt`；目前 CI 還沒有安裝這個 group，所以 `occt` 測試在 CI 中被略過，只在安裝了該 group 的環境執行。
 2. **每一次 production build 都 fail closed**：寫出任何東西之前，先檢查 SGB 自己的 structural invariant（一次 build 記錄 31 項，其中 4 項是不使 build 失敗的警告）。production 中無法關閉驗證。mesher 信任同一次 build 寫出的檔案，不再檢查（見 [Validation](validation.qmd)）。
-3. **Strict mode**（選用）：`build_sgb_geometry(..., strict=True)` 在已安裝 OCP 時，對寫出的 XAO 再執行 OCCT 檢查；沒有 OCP 時，在 build 開始前就以 `OcctUnavailable` 停止，並指出 `occt` dependency group。一般使用者安裝（例如透過 OrcaPen SC PDK）不會安裝 OCP。
 
 production 的 extreme-case catalogue（`tests/sgb_catalogue_report.py`，每個 fixture 與 route 一列）結果如下。
 
@@ -143,7 +142,7 @@ flowchart TB
 | 10 | [Identity、lineage 與對應鏈](identity.qmd) | 兩層 identity，以及一次從頭到尾追蹤的查詢。 |
 | 11 | [Parallel derivation](parallelism.qmd) | 平行化的結構、tiling 規則，以及哪些部分維持循序。 |
 | 12 | [Sliver](slivers.qmd) | 四種 sliver 來源、哪些依構造即被消除，以及 feature size 如何量測。 |
-| 13 | [Validation](validation.qmd) | 各項檢查、三層驗證，以及 fail-closed 的行為。 |
+| 13 | [Validation](validation.qmd) | 各項檢查、兩層驗證，以及 fail-closed 的行為。 |
 | 14 | [Emission](emission.qmd) | direct BREP/XAO writer、sidecar，以及 Gmsh 如何處理它們。 |
 | 16 | [BREP 檔案格式](brep-format.qmd) | direct writer 寫出的 BREP 與 XAO 檔案的結構（給需要讀寫檔案的人）。 |
 | 17 | [SGB 輸出的使用契約](consumer-contract.qmd) | `build_sgb_geometry` 的呼叫與回傳、決定性的保證（測過與論證）、sidecar 的每個欄位，以及 Palace 與 AEDT 讀取端的步驟。 |
@@ -196,7 +195,6 @@ flowchart TB
 | **MA / MS / SA** | interface 種類的縮寫：MA 是 metal–vacuum（金屬與真空之間），MS 是 metal–substrate（金屬與基板之間），SA 是 substrate–vacuum（基板與真空之間，也就是 gap 表面）。它們是 Surface EPR 的 row 所用的分類，也出現在 physical group 名稱中（例如 `MA::pad__top`）。見 [概念：geometry](../../concepts/geometry.qmd) 與 [Inset imprint](inset-imprint.qmd)。 | [Identity](identity.qmd) |
 | **Net / Entity** | Entity 是元件中一個有名字的來源形狀（例如 pad）；Net 是形成同一條電氣導體的一組 Entity。定義見 [概念：geometry](../../concepts/geometry.qmd#entity-occurrence-and-net)。 | [Route](routes.qmd) |
 | **Route A / B / C** | 三種 labelling policy：Route A 把金屬當成零厚度的 sheet；Route B 把有限厚度金屬的 volume 排除，只留下邊界；Route C 保留導體 volume 並在內部做 mesh。見 [Route](routes.qmd)。 | [Route](routes.qmd) |
-| **Strict mode** | 選用的 production 設定：在已安裝 OCP 綁定時，對寫出的檔案執行 OpenCASCADE 的有效性檢查，這是每次 build 都會執行的 structural 檢查之外的額外一層。 | [Validation](validation.qmd) |
 :::
 
 ## 補充：重現資料

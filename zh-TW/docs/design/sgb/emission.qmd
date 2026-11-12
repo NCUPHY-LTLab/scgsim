@@ -230,15 +230,14 @@ for edge, host_face in views.embedded_edges(sidecar):
 
 ## 載入後的檢查 {#validation-after-loading}
 
-SGB 分三層驗證，讓有問題的檔案在成本最低的地方被抓到。三層在 production 都已實作。
+SGB 分兩層驗證，讓有問題的檔案在成本最低的地方被抓到。兩層在 production 都已實作。build 本身只寫出檔案，不執行 OCCT 檢查；OCCT 檢查是對寫出的檔案另外執行的一步，由測試套件（標為 `occt`）以 `scgsim.geometry.sgb.verification.occt.check_file` 執行，需要 OCP。
 
 | 層 | 何時執行 | 檢查內容 |
 |---|---|---|
 | 1. 開發測試 | 在 fixture 與隨機 layout 上（需要 `occt` dependency group；`dev` group 包含它，CI 會執行這些測試） | OpenCASCADE 自己的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`、`ShapeAnalysis_Shell`、與 plan 的面積／volume 比對，加上下列 Gmsh 載入檢查 `verify_loaded`：載入模型的數量、vertex 位置、邊界、面積、volume 與 group |
 | 2. 每一次 production build | 寫出之前 | SGB 的[結構不變量](validation.qmd)（fail closed，無法停用） |
-| 3. Strict mode（選用） | `build_sgb_geometry(…, strict=True)`，需要 OCP | 對剛寫出的 XAO 執行第 1 層的 OCCT 檢查（self-interference 關閉）；沒有 OCP 時在 build 開始前就以 `OcctUnavailable` 停止 |
 
-第 1 層與第 3 層使用 OCP，也就是 OpenCASCADE 的 Python binding（`cadquery-ocp-novtk==7.8.1.1.post1`，建立在 OCCT 7.8.1 之上，與這裡使用的 Gmsh 是同一個 OCCT 版本）。OCP 在 `occt` dependency group（`uv sync --group occt`），不是必要的相依套件：使用者安裝（例如透過 OrcaPen SC PDK）不會安裝它。`BOPAlgo_ArgumentAnalyzer` 開啟 self-interference、small-edge、face-rebuild、tangency、merge-vertex、merge-edge、continuity 與 curve-on-surface 等模式（`scgsim.geometry.sgb.verification.occt`）；merge 模式能找出重合但未共用的 vertex 與 edge，這是 conformity 的缺陷。該模組也會把 kernel 算出的 volume 與 face 面積與 plan 比較。
+第 1 層使用 OCP，也就是 OpenCASCADE 的 Python binding（`cadquery-ocp-novtk==7.8.1.1.post1`，建立在 OCCT 7.8.1 之上，與這裡使用的 Gmsh 是同一個 OCCT 版本）。OCP 在 `occt` dependency group（`uv sync --group occt`），不是必要的相依套件：使用者安裝（例如透過 OrcaPen SC PDK）不會安裝它。`BOPAlgo_ArgumentAnalyzer` 開啟 self-interference、small-edge、face-rebuild、tangency、merge-vertex、merge-edge、continuity 與 curve-on-surface 等模式（`scgsim.geometry.sgb.verification.occt`）；merge 模式能找出重合但未共用的 vertex 與 edge，這是 conformity 的缺陷。該模組也會把 kernel 算出的 volume 與 face 面積與 plan 比較。
 
 ### OCCT 檢查的現況
 

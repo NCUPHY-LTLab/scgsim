@@ -21,6 +21,7 @@ from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     validate_runtime_source,
 )
+from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.specs.common import AedtResources
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
@@ -287,17 +288,6 @@ def _verify_receipt_cohort(
         raise RuntimeError("prepared receipt members are not canonical")
 
     return _PreparedCohort(preparation_cohort, prepared_source)
-
-
-def contained(root: Path, relative: str) -> Path:
-    """Resolve a relative handoff member within its run directory."""
-    requested = Path(relative)
-    if requested.is_absolute():
-        raise RuntimeError(f"handoff path escapes run directory: {relative!r}")
-    path = (root / requested).resolve()
-    if not path.is_relative_to(root.resolve()):
-        raise RuntimeError(f"handoff path escapes run directory: {relative!r}")
-    return path
 
 
 def require_pristine_run(run_dir: Path, spec: AedtSpec) -> None:

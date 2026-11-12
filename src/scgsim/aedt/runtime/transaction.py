@@ -23,6 +23,7 @@ from scgsim.aedt.epr.native_workflow import (
     solve_and_export_epr,
 )
 from scgsim.aedt.io import file_sha256, read_json, write_json
+from scgsim.aedt.preparation.handoff_files import utc_now
 from scgsim.aedt.preparation.planar import (
     validate_geometry_workers,
 )
@@ -33,6 +34,7 @@ from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     record_runtime_source,
 )
+from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.runtime.batch_protocol import (
     CollectionContext,
     collection_source,
@@ -60,7 +62,6 @@ from scgsim.aedt.runtime.families.q3d import (
 )
 from scgsim.aedt.runtime.handoff_validation import (
     canonical_metadata_files,
-    contained,
     execution_resources,
     json_object,
     require_pristine_run,
@@ -298,7 +299,7 @@ class _ExecutionTransaction:
         warn_thin_film_surfaces(self.spec)
 
     def _start_receipt(self) -> None:
-        self.started = _utc_now()
+        self.started = utc_now()
         self.execution_started = time.perf_counter()
         self.receipt.update(
             {
@@ -664,7 +665,7 @@ class _ExecutionTransaction:
                 else "process_terminal_collection_failed"
             )
         self.receipt["status"] = self.status
-        self.receipt["finished_at_utc"] = _utc_now()
+        self.receipt["finished_at_utc"] = utc_now()
         self.receipt["execution_seconds"] = round(
             time.perf_counter() - self.execution_started, 6
         )
@@ -792,7 +793,3 @@ class _ExecutionTransaction:
                     if self.failure is None:
                         self.failure = seal_error
                         self.receipt["error"] = self.failure
-
-
-def _utc_now() -> str:
-    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

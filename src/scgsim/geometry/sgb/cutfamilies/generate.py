@@ -38,15 +38,6 @@ class CutFamilies:
     insets: InsetPlan
 
 
-def with_cut_families(
-    catalogue: PrismCatalogue,
-    insets: tuple[InsetRequest, ...] = (),
-    refinements: tuple[RefinementRequest, ...] = (),
-) -> PrismCatalogue:
-    """The catalogue with the families its requests generate (ids must be unique)."""
-    return build_cut_families(catalogue, insets, refinements).catalogue
-
-
 def build_cut_families(
     catalogue: PrismCatalogue,
     insets: tuple[InsetRequest, ...] = (),

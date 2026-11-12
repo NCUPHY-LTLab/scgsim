@@ -1,23 +1,20 @@
-"""Writing the sidecar file, and its JSON Schema.
+"""Writing the sidecar file.
 
 Owns the byte format: UTF-8 JSON, keys sorted, compact values, one line per top-level field and one line per
 record of each table, so a diff of two sidecars names the record that changed.  The same dictionary always
-gives the same bytes (no timestamps, no absolute paths).  The schema, derived from the contract
-(``scgsim.contracts.sgb_sidecar``), ships as package data next to this module; the contract's
-``read_sidecar`` reads a sidecar back.
+gives the same bytes (no timestamps, no absolute paths).  The schema is derived from the contract
+(``scgsim.contracts.sgb_sidecar``), which also holds ``read_sidecar`` to read a sidecar back.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from importlib import resources
 from pathlib import Path
 from typing import Any, cast
 
 from scgsim.contracts.sgb_sidecar.records import Sidecar
 
-SCHEMA_FILE = "sidecar.schema.json"
 # The fields that are a record or a value, written on one line; every other field is a table.
 _SINGLE_LINE = frozenset({"schema", "model", "binding", "summary"})
 
@@ -46,13 +43,3 @@ def _table(records: Mapping[str, Any]) -> str:
 
 def _compact(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
-
-
-def sidecar_schema() -> dict[str, Any]:
-    """The JSON Schema (draft 2020-12) of the sidecar, as shipped beside this module."""
-    text = (
-        resources.files("scgsim.geometry.sgb.sidecar")
-        .joinpath(SCHEMA_FILE)
-        .read_text(encoding="utf-8")
-    )
-    return json.loads(text)

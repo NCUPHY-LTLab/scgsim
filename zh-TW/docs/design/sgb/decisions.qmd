@@ -207,7 +207,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 - **AMR 的說法**：conformal 的 AMR 讓 band edge 維持為 element edge，masked integral 沒有 indicator 切割的誤差；refinement 是否集中在 band edge 取決於 mesher 的 size field 與 error estimator，在 Palace 實測之前不多作聲稱。
 - **Refinement curve** 是 `refinement_only`；落在沒有輸出 face 的片段是錯誤；`dissolve` edge 政策已移除，tile seam 不是 family（production）。
 - **不同 Net 的接觸**在每個 route 都是錯誤，包含 Route A 的 sheet 共用 edge 或 vertex，以及 snapping 造成的接觸；同一 Net 的有限厚度金屬只在 vertical edge 或 vertex 相接（non-manifold pinch）會被拒絕，sheet 可以在角落相接（production：`ContactError`、`NonManifoldError`）。
-- **Validation 不可在 production 關閉**；關閉開關只存在於 prototype 的測試中。validation 分三層（見 [stage 參考](pipeline-reference.qmd)）。
+- **Validation 不可在 production 關閉**；關閉開關只存在於 prototype 的測試中。validation 分兩層（見 [stage 參考](pipeline-reference.qmd)）。
 - **Pixel 慣例**：pixel 以 grid point 為中心，$[c-g/2, c+g/2)^2$。
 - **Wall coalescing 的完整規則**與 **cut family 的目標 level** 已在 brief 中完整敘述（production）。
 - **Curve class**：v1 支援直線與圓弧（含由 GDS 邊界重建的圓）；`interpolation_spline` 與 B-spline 邊界 fail closed，B-spline carrier 留待之後的階段。
