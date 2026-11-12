@@ -6,7 +6,6 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scgsim.geometry.models.input import SemanticEntitySpec
-from scgsim.geometry.models.topology import CurveRefRecord
 from scgsim.geometry.primitives.constants import (
     TOPOLOGY_EPS_UM,
 )
@@ -227,19 +226,6 @@ def loop_centroid(loop: LoopCoordinates) -> tuple[float, float]:
     )
 
 
-def ordered_loop_signature(
-    curve_refs: tuple[CurveRefRecord, ...],
-) -> tuple[tuple[str, int], ...]:
-    """Return a rotation-stable loop signature without discarding orientation."""
-    signature = tuple((ref.curve_id, ref.orientation) for ref in curve_refs)
-    if not signature:
-        return ()
-    rotations = (
-        signature[index:] + signature[:index] for index in range(len(signature))
-    )
-    return min(rotations)
-
-
 def gdstk_surface_region(
     geometry_ref: Mapping[str, Any],
 ) -> tuple[PolygonCoordinates, ...]:
@@ -279,10 +265,5 @@ def geometry_refs_from_gdstk_region(
     )
 
 
-_clean_loop = clean_loop
 _ring_edges = ring_edges
-_filter_gdstk_polygons = filter_gdstk_polygons
 _polygon_area = polygon_area
-_loop_inside_loop = loop_inside_loop
-_boolean_gdstk_region = boolean_polygon_region
-_split_gdstk_cutline_loop = split_gdstk_cutline_loop

@@ -1296,7 +1296,7 @@ those outcomes require an actual target-run observation.
 `prepare_planar_geometry_input()` requires an explicit `modeling` choice and
 validates/detaches shared source polygons, holes, entities, solution domains,
 junctions, and surface-analysis requests. Any Route A/B choice belongs to the
-upstream geometry compiler; it is not an AEDT preparation argument.
+upstream Palace geometry; it is not an AEDT preparation argument.
 `prepare_hfss_eigenmode_from_geometry()` requires `aedt_version` and `modeling`,
 binds the prepared source request to an HFSS Eigenmode spec, and emits one
 portable handoff. Direct GDS authoring remains available; its 3D spec now also requires
@@ -1304,7 +1304,7 @@ the explicit modeling choice.
 
 For AEDT EPR, the preparation order is source geometry and an explicit
 `modeling` choice, declared junction partition into local PEC ends and the
-central RLC rectangle, then geometry-compiler surface planning and the
+central RLC rectangle, then geometry surface planning and the
 contribution catalogue. Any Route A/B choice belongs to the upstream source.
 Route A adapter-generated sheet footprints are refreshed from that final conductor
 geometry; caller-authored declarations remain present. The catalogue carries
@@ -1325,7 +1325,7 @@ flowchart TB
   INPUT["GeometryBuildInput<br/>normalized polygons, Entities, domains"]
   PALACE["Palace preparation<br/>existing port and junction model"]
   PARTITION["AEDT junction partition<br/>local PEC ends + central RLC rectangle"]
-  PLAN["geometry compiler SurfacePlanRecord + contribution ledger<br/>surface patches and source evidence"]
+  PLAN["geometry planning SurfacePlanRecord + contribution ledger<br/>surface patches and source evidence"]
   PREPARED["PreparedPlanarGeometry<br/>detached source, catalogue, bindings, hashes"]
   NATIVE["PreparedEprHfss<br/>native model, non-model sheets, expressions/cache"]
   RAW["Native raw integrals + evaluation evidence"]
@@ -1345,7 +1345,7 @@ flowchart TB
 |---|---|
 | `GeometryBuildInput` | Shared normalized source polygons, semantic Entities, solution domains, material and provenance facts. It is input to the backend planners. |
 | Final AEDT junction geometry | `prepare_planar_geometry_input()` partitions declared junction sheets before surface planning. Derived PEC ends and the central RLC rectangle retain source-owner and material lineage; original source input remains unchanged. |
-| `SurfacePlanRecord` and `surface_contribution_ledger` | The geometry compiler plans physical surface patches and records owner, interface, side, effective domain, source and aggregation evidence. The ledger is the authority for numeric surface catalog entries; a semantic declaration alone adds none. |
+| `SurfacePlanRecord` and `surface_contribution_ledger` | Geometry surface planning plans physical surface patches and records owner, interface, side, effective domain, source and aggregation evidence. The ledger is the authority for numeric surface catalog entries; a semantic declaration alone adds none. |
 | `PreparedPlanarGeometry` | Detached pre-native AEDT request containing source/junction facts, catalog, selected contributions, surface bindings, and model/source digests. It does not claim that native geometry or a solve was validated. |
 | `PreparedEprHfss` | In-process owner of the active AEDT application handle, prepared geometry and setup records, non-model sheets, expressions/cache, and timing/readback state. It is not a portable result or evidence of a completed solve. |
 | `EprResult` | Detached per-mode or per-mode/pass rows. `raw_integrals` and `raw_integral_evidence` retain observed quantities and evaluation context; the existing combination step computes domain, surface, and junction values with the model-wide normalization. |
@@ -1755,7 +1755,7 @@ split or omit other group members. Each resolved binding keeps its own
 classification, side, adjacent domains, materials and masks remain validated
 for each patch.
 
-The catalogue is built from the geometry compiler's physical
+The catalogue is built from geometry surface planning's physical
 surface-contribution ledger. A generic declaration without physical ledger evidence remains
 semantic metadata and does not add a numeric EPR contribution. For Route B
 finite-shell top and bottom patches, the mask and analysis-sheet plane use the

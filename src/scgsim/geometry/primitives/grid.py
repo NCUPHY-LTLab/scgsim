@@ -614,9 +614,6 @@ def source_place(points: Sequence[Sequence[float]]) -> str:
     )
 
 
-_regions_indexed = regions_indexed
-
-
 def _atomic_grid_faces(cells, vertices, grid):
     with diagnostic_stage(
         "geometry.grid.cell_regions",

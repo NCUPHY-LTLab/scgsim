@@ -43,9 +43,8 @@ the v2 package and the corresponding old-to-new map.
 ## Migration rules
 
 - Keep `scgsim.geometry`, `scgsim.palace`, `scgsim.aedt`, and
-  `scgsim.visualization` as package entrypoints; keep `scgsim.geometry.compiler`
-  as the explicit advanced compiler surface. Palace no longer builds through it:
-  see [Palace meshing and Surface EPR](#palace-mesh-migration).
+  `scgsim.visualization` as package entrypoints. Palace builds its geometry with
+  SGB: see [Palace meshing and Surface EPR](#palace-mesh-migration).
 - Treat documented facades and declared exports as public. A private or
   importable implementation module is not automatically a supported API.
 - Move each supported symbol to its single responsibility owner and re-export
@@ -110,90 +109,63 @@ identity is read with the SCGSim commit that wrote it.
 The AEDT Solid and thin-film contract linked above owns the occurrence-local
 Ground and field-side/thickness distinctions for these modeling paths.
 
-## Geometry and compiler API
+## Geometry API {#geometry-api}
 
-The migration divides the baseline `scgsim.sgb` facade into two deliberate
-surfaces. `scgsim.geometry` owns source-facing planning, snapshots, normalized
-input records, adapters, stack/vacuum/curve preparation and detached summaries.
-`scgsim.geometry.compiler` is the advanced build surface for stage
-orchestration, derived records and validators. Source-facing exports and
-advanced compiler exports remain separate. The compiler surface and
-`scgsim.geometry.sgb` sit below the supported entry: a layout enters through
-`GeometryPlan` and the simulation classes, and a direct call with an input
-built by hand assumes what that entry guarantees; see
-[the supported entry](supported-scope.qmd#supported-entry). The following complete inventories
-record the baseline facade and submodule export sets, including model and
-pipeline-only validator surfaces. Repeated
-names mark a baseline symbol exported by more than one declared surface. Each
-has one current definition, without an old-path compatibility wrapper.
+The baseline `scgsim.sgb` facade maps to two surfaces. `scgsim.geometry` owns
+source-facing planning, snapshots, normalized input records, adapters,
+stack/vacuum/curve preparation and detached summaries. `scgsim.geometry.models`
+holds the canonical input and record definitions. A layout enters through
+`GeometryPlan` and the simulation classes; `build_sgb_geometry` in
+`scgsim.geometry.sgb` builds the model from a prepared input and sits below that
+entry, so a direct call with an input built by hand assumes what the entry
+guarantees (see [the supported entry](supported-scope.qmd#supported-entry)).
+Each name below has one current definition, without an old-path compatibility
+wrapper.
 
 
 - **Baseline `scgsim.sgb` → current owner `scgsim.geometry`.** Declared names: `BoundaryCurveChainSpec`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GeometryPlan`, `GeometryPlanSnapshot`, `InputSummary`, `LayoutPolygonSpec`, `PathInput`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RouteLiteral`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`, `Vector3D`, `apply_vacuum_region_to_stack`, `bind_source_curves`, `build_component_stack`, `build_gds_stack_geometry_input`, `build_gdsfactory_geometry_input`, `summarize_geometry_input`.
-- **Baseline `scgsim.sgb` → current owner `scgsim.geometry.compiler`.** Declared names: `BackendEntityTagRecord`, `ConstructionBodyPlanRecord`, `ConstructionPlanRecord`, `CurvePlanRecord`, `CurveRefRecord`, `CutHostOperationRecord`, `DimensionLiteral`, `FinalPhysicalGroupRecord`, `GmshDimTag`, `InnerPecVoidShellRecord`, `InterfaceKindLiteral`, `InterfacePlanRecord`, `MMContactRecord`, `PointPlanRecord`, `RUN_METADATA_DIR`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SemanticGeometryBuilder`, `SolverUseLiteral`, `SurfaceLoopRecord`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral`, `SurfacePartitionRecord`, `SurfacePlanRecord`, `SurfaceRefRecord`, `TagPlanRecord`, `TagSourceKindLiteral`, `VolumePlanRecord`, `build_route_construction_plan`, `export_physical_group_records`, `plan_conductor_contact_patches`, `plan_cut_host_operations`, `plan_mm_contact_records`, `plan_route_construction_bodies`, `plan_route_surfaces`, `plan_route_tags`, `plan_route_volumes`, `plan_surface_partitions`, `recognize_route_interfaces`, `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_geometry_input`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`.
 - **Baseline `scgsim.sgb.geometry_plan` → current owner `scgsim.geometry`.** Declared names: `GeometryPlan`, `GeometryPlanSnapshot`.
-- **Baseline `scgsim.sgb.models` → current owner `scgsim.geometry.models`.** Declared names: `BackendEntityTagRecord`, `BoundaryCurveChainSpec`, `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `ConstructionBodyPlanRecord`, `ConstructionPlanRecord`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `CurvePlanRecord`, `CurveRefRecord`, `CutHostOperationRecord`, `DEFAULT_INTERFACE_SOLVER_USE`, `DimensionLiteral`, `FinalPhysicalGroupRecord`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GmshDimTag`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `InnerPecVoidShellRecord`, `InterfaceKindLiteral`, `InterfacePlanRecord`, `LayoutPolygonSpec`, `MMContactRecord`, `PathInput`, `PointPlanRecord`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `ROUTE_ALLOWED_REPRESENTATIONS`, `RUN_METADATA_DIR`, `RouteABConstructionPlanRecord`, `RouteABVolumePlanRecord`, `RouteLiteral`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SemanticEntitySpec`, `SolverUseLiteral`, `SourceCurveSpec`, `StructuredFinalPhysicalGroupRecord`, `SurfaceLoopRecord`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral`, `SurfacePartitionRecord`, `SurfacePlanRecord`, `SurfaceRefRecord`, `TagPlanRecord`, `TagSourceKindLiteral`, `VacuumRegionSpec`, `Vector3D`, `VolumePlanRecord`.
-- **Baseline `scgsim.sgb.pipeline` → current owner `scgsim.geometry.compiler`.** Declared names: `SemanticGeometryBuilder`, `build_route_construction_plan`, `export_physical_group_records`, `plan_conductor_contact_patches`, `plan_cut_host_operations`, `plan_mm_contact_records`, `plan_route_construction_bodies`, `plan_route_surfaces`, `plan_route_tags`, `plan_route_volumes`, `plan_surface_partitions`, `recognize_route_interfaces`, `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_geometry_input`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_route_volume_surface_refs`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_sheet_interface_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`.
+- **Baseline `scgsim.sgb.models` → current owner `scgsim.geometry.models`.** Declared names: `BoundaryCurveChainSpec`, `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `ConstructionBodyPlanRecord`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `DEFAULT_INTERFACE_SOLVER_USE`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `InterfaceKindLiteral`, `InterfacePlanRecord`, `LayoutPolygonSpec`, `MMContactRecord`, `PathInput`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RouteLiteral`, `SemanticEntitySpec`, `SolverUseLiteral`, `SourceCurveSpec`, `SurfacePartitionRecord`, `SurfacePlanRecord`, `VacuumRegionSpec`, `Vector3D`.
 - **Baseline `scgsim.sgb.vacuum` → current owner `scgsim.geometry`.** Declared names: `apply_vacuum_region_to_stack`.
+- **Baseline route builder, `scgsim.sgb`, `scgsim.sgb.pipeline`, `scgsim.sgb.planning`, `scgsim.sgb.export` and `scgsim.sgb.validation` → no supported import.** Declared names: `SemanticGeometryBuilder`, `build_route_construction_plan`, `export_physical_group_records`, the stage functions (`plan_conductor_contact_patches`, `plan_cut_host_operations`, `plan_mm_contact_records`, `plan_route_construction_bodies`, `plan_route_surfaces`, `plan_route_tags`, `plan_route_volumes`, `plan_surface_partitions`, `recognize_route_interfaces`), every `validate_*` validator, and the plan records `BackendEntityTagRecord`, `ConstructionPlanRecord`, `CurvePlanRecord`, `CurveRefRecord`, `CutHostOperationRecord`, `FinalPhysicalGroupRecord`, `InnerPecVoidShellRecord`, `PointPlanRecord`, `RouteABConstructionPlanRecord`, `RouteABVolumePlanRecord`, `StructuredFinalPhysicalGroupRecord`, `SurfaceLoopRecord`, `SurfaceRefRecord`, `TagPlanRecord`, `VolumePlanRecord`, with the literals `DimensionLiteral`, `GmshDimTag`, `ROUTE_ALLOWED_REPRESENTATIONS`, `RUN_METADATA_DIR`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral` and `TagSourceKindLiteral`. Build a layout through `GeometryPlan` and `EigenmodeSim` or `ElectrostaticSim` from `scgsim.palace`; build a prepared input of your own with `build_sgb_geometry`.
 
 
 Every defining model keeps one canonical class/type definition under
 `scgsim.geometry.models` and its record modules. The package facades re-export
 those same objects. Direct aliases below enumerate the baseline submodule
-entries, including model aliases, stage functions and validators. Each entry
-records the preferred supported facade; a definition may live in a lower-level
-module to preserve dependency direction.
+entries that have a current owner. Each entry records the preferred supported
+facade; a definition may live in a lower-level module to preserve dependency
+direction.
 
 
 - **Baseline `scgsim.sgb.adapter` → current defining module `scgsim.geometry.source.adapter`.** Declared names: `build_gds_stack_geometry_input`, `build_gdsfactory_geometry_input`. Preferred API: `scgsim.geometry`.
-- **Baseline `scgsim.sgb.export` → current defining module `scgsim.geometry.construction.export`.** Declared names: `export_physical_group_records`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.geometry_plan` → current defining module `scgsim.geometry.source.plan`.** Declared names: `GeometryPlan`, `GeometryPlanSnapshot`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.models.common` → current defining module `scgsim.geometry.models.common`.** Declared names: `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `PathInput`, `PolygonRing`, `RouteLiteral`, `Vector3D`. Preferred API: `scgsim.geometry`.
-- **Baseline `scgsim.sgb.models.common` → current defining module `scgsim.geometry.models.common`.** Declared names: `DimensionLiteral`, `GmshDimTag`, `InterfaceKindLiteral`, `RUN_METADATA_DIR`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SolverUseLiteral`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral`, `TagSourceKindLiteral`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.models.common` → current defining module `scgsim.geometry.models.common`.** Declared names: `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `DEFAULT_INTERFACE_SOLVER_USE`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `ROUTE_ALLOWED_REPRESENTATIONS`. Preferred API: `scgsim.geometry.models`.
-- **Baseline `scgsim.sgb.models.construction` → current defining module `scgsim.geometry.models.construction`.** Declared names: `ConstructionBodyPlanRecord`, `ConstructionPlanRecord`, `CutHostOperationRecord`, `SurfacePartitionRecord`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.models.construction` → current defining module `scgsim.geometry.models.construction`.** Declared names: `RouteABConstructionPlanRecord`. Preferred API: `scgsim.geometry.models`.
+- **Baseline `scgsim.sgb.models.common` → current defining module `scgsim.geometry.models.common`.** Declared names: `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `DEFAULT_INTERFACE_SOLVER_USE`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `InterfaceKindLiteral`, `SolverUseLiteral`. Preferred API: `scgsim.geometry.models`.
+- **Baseline `scgsim.sgb.models.construction` → current defining module `scgsim.geometry.models.construction`.** Declared names: `ConstructionBodyPlanRecord`, `SurfacePartitionRecord`. Preferred API: `scgsim.geometry.models`.
 - **Baseline `scgsim.sgb.models.input` → current defining module `scgsim.geometry.models.input`.** Declared names: `BoundaryCurveChainSpec`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `LayoutPolygonSpec`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.models.regions` → current defining module `scgsim.geometry.models.regions`.** Declared names: `PortSheetOverlapRecord`, `PortSheetRegionRecord`. Preferred API: `scgsim.geometry`.
-- **Baseline `scgsim.sgb.models.tags` → current defining module `scgsim.geometry.models.tags`.** Declared names: `BackendEntityTagRecord`, `FinalPhysicalGroupRecord`, `TagPlanRecord`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.models.tags` → current defining module `scgsim.geometry.models.tags`.** Declared names: `StructuredFinalPhysicalGroupRecord`. Preferred API: `scgsim.geometry.models`.
-- **Baseline `scgsim.sgb.models.topology` → current defining module `scgsim.geometry.models.topology`.** Declared names: `CurvePlanRecord`, `CurveRefRecord`, `InnerPecVoidShellRecord`, `InterfacePlanRecord`, `MMContactRecord`, `PointPlanRecord`, `SurfaceLoopRecord`, `SurfacePlanRecord`, `SurfaceRefRecord`, `VolumePlanRecord`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.models.topology` → current defining module `scgsim.geometry.models.topology`.** Declared names: `RouteABVolumePlanRecord`. Preferred API: `scgsim.geometry.models`.
-- **Baseline `scgsim.sgb.pipeline` → current defining module `scgsim.geometry.compiler.builder`.** Declared names: `SemanticGeometryBuilder`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.compiler.dispatch`.** Declared names: `build_route_construction_plan`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.contact_planning.patches`, `.membership`, and `.intents`.** Declared names: `plan_conductor_contact_patches`, `plan_mm_contact_records`, `recognize_route_interfaces`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.surface_planning.planner` and `.partitions`.** Declared names: `plan_route_surfaces`, `plan_surface_partitions`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.tags`.** Declared names: `plan_route_tags`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.volume_planning.bodies` and `.planner`.** Declared names: `plan_cut_host_operations`, `plan_route_construction_bodies`, `plan_route_volumes`. Preferred API: `scgsim.geometry.compiler`.
+- **Baseline `scgsim.sgb.models.topology` → current defining module `scgsim.geometry.models.topology`.** Declared names: `InterfacePlanRecord`, `MMContactRecord`, `SurfacePlanRecord`. Preferred API: `scgsim.geometry.models`.
 - **Baseline `scgsim.sgb.source_curves` → current defining module `scgsim.geometry.source.curves`.** Declared names: `bind_source_curves`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.stack` → current defining module `scgsim.geometry.source.stack`.** Declared names: `build_component_stack`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.summary` → current defining module `scgsim.geometry.source.summary`.** Declared names: `InputSummary`, `summarize_geometry_input`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.vacuum` → current defining module `scgsim.geometry.source.vacuum`.** Declared names: `apply_vacuum_region_to_stack`. Preferred API: `scgsim.geometry`.
-- **Baseline `scgsim.sgb.validation` → current defining module `scgsim.geometry.compiler.validation`.** Declared names: `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_route_volume_surface_refs`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_sheet_interface_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.validation` → current defining module `scgsim.geometry.source.validation`.** Declared names: `validate_geometry_input`. Preferred API: `scgsim.geometry.compiler`.
 
 
-`validate_geometry_input` is the one input-only validator: its definition
-moves to `scgsim.geometry.source.validation`, below compiler orchestration,
-and `scgsim.geometry.compiler.validate_geometry_input` re-exports it. Other
-stage validators remain in the compiler validation owner. Shared polygon,
-spatial and Entity primitives sit below source and compiler; source code does
-not import planning/compiler. Source identity, snapshot detachment, caller-owned
-final Net membership, native correspondence, stock CAD shell repair, curved
-arrangement and XAO/physical-group behavior remain owned by their current
-responsibilities.
+Shared polygon, spatial and Entity primitives sit below the source stage;
+source code does not import planning. Source identity, snapshot detachment,
+caller-owned final Net membership and native correspondence remain owned by
+their current responsibilities.
 
-The shared implementation modules now use responsibility names. Geometry
+The shared implementation modules use responsibility names. Geometry
 primitives move from `scgsim.geometry._primitives` to
 `scgsim.geometry.primitives`, including `grid_cache` and `tagged_grid`;
 `source._normalization`, `source._occurrence`, and `source._polygon_ops` move to
 `source.normalization`, `source.occurrence`, and `source.polygon_ops`. These
-internal names do not expand the supported API; use the `geometry` and
-`geometry.compiler` facades above. Curved construction remains behind
-`geometry.construction.curved`, with source boundaries, arrangement, native
-kernel, shared surfaces, and canonical records implemented in
-`geometry.construction.curved_geometry`.
+internal names do not expand the supported API; use the `geometry` facade
+above.
 
-Planning and tagged-grid modules now follow the same responsibility boundaries.
+Planning and tagged-grid modules follow the same responsibility boundaries.
 Their supported routes remain the package facades:
 
 | Implementation area | Use this supported import |
@@ -201,38 +173,28 @@ Their supported routes remain the package facades:
 | Source assembly and occurrence preparation | `GeometryPlan` from `scgsim.geometry` |
 | Physical representation preparation | `interpret_physical_geometry` from `scgsim.geometry` |
 | Rectangular junction declaration and derivation | Use `RectangularJunctionSpec` and `with_rectangular_junctions` from `scgsim.geometry`, then call `interpret_physical_geometry` |
-| Contact recognition and contact records | `recognize_route_interfaces`, `plan_conductor_contact_patches`, and `plan_mm_contact_records` from `scgsim.geometry.compiler` |
-| Surface and contribution planning | `plan_route_surfaces`, `plan_surface_contribution_patches`, and `plan_surface_partitions` from `scgsim.geometry.compiler` |
-| Volume and construction-body planning | `plan_route_volumes`, `plan_route_construction_bodies`, and `plan_cut_host_operations` from `scgsim.geometry.compiler` |
-| Canonical topology planning | `plan_canonical_topology` from `scgsim.geometry.compiler` |
-| Route construction plan only | `build_route_construction_plan` from `scgsim.geometry.compiler` |
-| Complete route construction and native lowering | `SemanticGeometryBuilder.build` from `scgsim.geometry.compiler` |
+| Model construction for a Palace study | `EigenmodeSim` or `ElectrostaticSim` from `scgsim.palace`; `build_sgb_geometry` from `scgsim.geometry.sgb` for a prepared input of your own |
 | PDK ground-bump fill preparation | Internal source helper consumed by Palace preparation; no direct geometry-facade export. |
 
 The responsibility modules are `scgsim.geometry.source.plan_assembly`,
 `scgsim.geometry.planning.contact_planning`,
 `scgsim.geometry.planning.junction_planning`,
-`scgsim.geometry.planning.port_planning`,
 `scgsim.geometry.planning.surface_planning`,
 `scgsim.geometry.planning.topology_planning`,
 `scgsim.geometry.primitives.tagged_grid_faces`, and
 `scgsim.geometry.primitives.tagged_grid_operations`. They organize the
 implementation without adding new supported imports.
-
-Volume planning lives in `scgsim.geometry.planning.volume_planning`. Native
-Gmsh/OCC lowering and its topology/conformity records live in
-`scgsim.geometry.construction.native_geometry`; callers reach them through the
-builder facade. `scgsim.geometry.source.ground_bump_geometry` implements audit,
-lattice selection, and source-record creation behind the source helper used by
-Palace preparation.
+`scgsim.geometry.source.ground_bump_geometry` implements audit, lattice
+selection, and source-record creation behind the source helper used by Palace
+preparation.
 
 The junction implementation derives exact partitions for explicitly declared
 rectangular junctions. Source and AEDT preparation share the internal
 `junction_contact_inventory(build_input, request)` service and
 `JunctionContactRequest` record to resolve the source support and incident
-conductors. These bridge names are not exports of `scgsim.geometry` or
-`scgsim.geometry.compiler`; callers declare requests through the geometry
-facade and use the standard physical-interpretation and compiler steps.
+conductors. These bridge names are not exports of `scgsim.geometry`; callers
+declare requests through the geometry facade and use the standard
+physical-interpretation step.
 
 ## AEDT API, transaction and state ownership
 
@@ -322,10 +284,9 @@ compatibility layer, so a script that passes one fails until it is updated.
 
 ### Geometry
 
-`mesh()` calls `build_sgb_geometry` from `scgsim.geometry.sgb` and no longer uses
-`scgsim.geometry.compiler`. `SemanticGeometryBuilder`, `build_route_construction_plan`
-and `export_physical_group_records` remain available for advanced builds; Palace
-neither calls them nor reads their plan and group files.
+`mesh()` builds the model with `build_sgb_geometry` from `scgsim.geometry.sgb`.
+The baseline route builder has no current equivalent; see the
+[Geometry API](#geometry-api).
 
 ### Mesh controls
 

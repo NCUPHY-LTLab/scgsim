@@ -1,8 +1,6 @@
 """Pure call-local subdivision memoization; no native or performance claims."""
 
-import ast
 from dataclasses import replace
-from pathlib import Path
 from threading import Barrier, Lock
 
 import pytest
@@ -160,27 +158,3 @@ def test_concurrent_misses_and_per_call_audits_remain_independent():
         ]
         assert len(calls) == 2
         assert source_grid_audits() == tuple({"recipe": i} for i in range(4))
-
-
-def test_compiler_build_owns_cache_scope_without_executing_geometry():
-    """Verify that compiler build owns cache scope without executing geometry."""
-    path = Path(__file__).parents[1] / "src/scgsim/geometry/compiler/builder.py"
-    module = ast.parse(path.read_text())
-    owner = next(
-        n
-        for n in module.body
-        if isinstance(n, ast.ClassDef) and n.name == "SemanticGeometryBuilder"
-    )
-    build = next(
-        n for n in owner.body if isinstance(n, ast.FunctionDef) and n.name == "build"
-    )
-    assert any(
-        isinstance(n, ast.Name) and n.id == "with_grid_work_cache"
-        for n in build.decorator_list
-    )
-    assert any(
-        isinstance(n, ast.ImportFrom)
-        and n.module == "scgsim.geometry.primitives.grid_cache"
-        and any(a.name == "with_grid_work_cache" for a in n.names)
-        for n in module.body
-    )

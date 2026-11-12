@@ -9,7 +9,7 @@ from typing import Any
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
+from scgsim.geometry.models.topology import InterfacePlanRecord
 from scgsim.geometry.planning.domain_planning.envelope import auto_vacuum_sheet_z
 from scgsim.geometry.planning.domain_planning.hosts import auto_vacuum_host_component_id
 from scgsim.geometry.planning.domain_planning.occupancy import (
@@ -34,13 +34,11 @@ from scgsim.geometry.primitives.loops import (
 )
 from scgsim.geometry.primitives.spatial import (
     bounds_contains_point,
-    geometry_ref_surface_z_um,
     same_coordinate_z,
 )
 from scgsim.geometry.primitives.surface_records import (
     interface_kinds,
     is_route_a_sheet_interface,
-    surface_boundary_volume_ids,
 )
 from scgsim.semantics import (
     EvidenceResult,
@@ -274,48 +272,6 @@ def route_a_sheet_plane_z_um(
         if not is_vacuum_solution_entity(entity_by_id(build_input, boundary_id)):
             return z_um
     return z_min_um
-
-
-def component_is_boundary_attached(
-    build_input: GeometryBuildInput,
-    *,
-    solution: SemanticEntitySpec,
-    surface: SurfacePlanRecord,
-) -> bool:
-    """Whether this PEC surface is on a solution-domain boundary plane.
-
-    Boundary-attached Route-A conductors form part of a solution exterior
-    shell; only a component wholly internal to a solution becomes an inner
-    PEC void shell.
-    """
-    if surface.surface_role not in {
-        "cutout_boundary_shell",
-        "route_a_sheet_contact_cap",
-    }:
-        return False
-    if "quad_points" in surface.geometry_ref:
-        z_values = tuple(
-            (float(point[2]) for point in surface.geometry_ref["quad_points"])
-        )
-        return any(
-            (
-                same_coordinate_z(z_um, float(solution.geometry["z_min_um"]))
-                or same_coordinate_z(z_um, float(solution.geometry["z_max_um"]))
-                for z_um in z_values
-            )
-        )
-    if solution.semantic_id not in surface_boundary_volume_ids(
-        surface,
-        known_entity_ids={entity.semantic_id for entity in build_input.entities},
-    ):
-        return False
-    z_min = float(solution.geometry["z_min_um"])
-    z_max = float(solution.geometry["z_max_um"])
-    try:
-        z_um = geometry_ref_surface_z_um(surface.geometry_ref)
-    except (KeyError, TypeError, ValueError):
-        return False
-    return same_coordinate_z(z_um, z_min) or same_coordinate_z(z_um, z_max)
 
 
 def _conductor_face_adjacent_solution_id(

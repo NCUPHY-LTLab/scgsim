@@ -87,9 +87,8 @@ and historical SGB revision `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`.
 They explain origin, not runtime dependencies, support expansion or API
 compatibility. Current source geometry uses the in-tree `scgsim.geometry` API.
 Palace builds its geometry with `scgsim.geometry.sgb` and meshes it with
-`scgsim.meshing`; `scgsim.geometry.compiler` remains the advanced route-building
-API and Palace no longer uses it. Both sit below the supported entry
-(`GeometryPlan` and the simulation classes): a direct call with an input built
+`scgsim.meshing`. SGB sits below the supported entry (`GeometryPlan` and the
+simulation classes): a direct call with an input built
 by hand assumes what that entry guarantees, as
 [Supported Scope](docs/supported-scope.qmd#supported-entry) states.
 

@@ -42,8 +42,8 @@ The study author chooses physical assumptions and interprets the quantities.
 Historical starting-source identities are listed in the
 [repository maintainer record](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md#implementation-and-project-references).
 They describe origin, not additional supported APIs. Palace builds source
-geometry with the in-tree `scgsim.geometry.sgb`; `scgsim.geometry.compiler` is a
-separate advanced builder. Both sit below the supported entry: a layout enters
+geometry with the in-tree `scgsim.geometry.sgb`, which sits below the supported
+entry: a layout enters
 through `GeometryPlan` and the simulation classes, and a direct call with an
 input built by hand assumes what that entry guarantees; see
 [the supported entry](supported-scope.qmd#supported-entry). No external SGB is

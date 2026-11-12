@@ -24,7 +24,7 @@ standalone solver process, and collection on the requested AEDT version.
 
 ## Current package structure
 
-The package separates source geometry, geometry compilation, solver backends,
+The package separates source geometry, model construction, solver backends,
 result handling, and presentation. The tree below shows shared package
 ownership; Palace and AEDT retain their own preparation, execution, and result
 lifecycles.
@@ -33,11 +33,9 @@ lifecycles.
 scgsim/
 ├── geometry/
 │   ├── source/       # component input, occurrence, stack and normalization
-│   ├── models/       # source and construction records
-│   ├── compiler/     # advanced build API, derived records and validators
+│   ├── models/       # source and planning records
 │   ├── sgb/          # SGB core: arrangement, XAO and sidecar that Palace builds on
-│   ├── planning/     # domain, interface, surface, volume and tag planning
-│   ├── construction/ # native OCC construction, correspondence and export
+│   ├── planning/     # physical interpretation, junction partition and AEDT's surface planning
 │   └── primitives/   # shared Entity, loop, grid and spatial operations
 ├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
 ├── semantics/        # immutable solver-independent facts
@@ -66,11 +64,6 @@ scgsim/
 └── presentation/     # shared physics-neutral notebook formatting
 ```
 
-Curved construction has a facade at `geometry.construction.curved`; its
-focused operations live in `curved_geometry` modules for source boundaries,
-planar arrangement, native kernel operations, shared surfaces, and canonical
-records.
-
 The responsibility correction keeps one definition for every detached AEDT
 request record. `aedt.specs.geometry` owns `PreparedPlanarGeometry`;
 `aedt.specs.epr` owns junction, surface and analysis declarations; shared
@@ -96,9 +89,9 @@ The transaction retains sole Desktop and receipt ownership. General body,
 support, material and enclosure native operations belong to `runtime.native`;
 generic RLC assignment and saved readback belong to the native lumped owner.
 
-Geometry source preparation and compiler planning have separate owners:
-preparation uses shared primitives, planning coordinates specialized owners,
-and construction lowers the resulting plan to native geometry and exports.
+Geometry source preparation, planning and model construction have separate
+owners: preparation uses shared primitives, planning coordinates specialized
+owners, and SGB builds the model from the prepared input.
 Backend families consume the shared geometry without importing one another.
 `semantics` remains a stdlib-only immutable fact boundary. Palace and AEDT keep
 separate mutable simulation state, transaction lifetime, and physical result
@@ -120,43 +113,30 @@ remains supported; it is the AEDT transaction CLI, not a legacy wrapper.
 The `geometry` facade is the source-authoring entrypoint. It exposes
 `GeometryPlan`, detached snapshots, normalized input records, component and
 stack adapters, physical representation interpretation, and input summaries.
-The `geometry.compiler` facade is for advanced builds: it exposes
-`SemanticGeometryBuilder`, route-plan construction, derived records, stage
-operations, and validators. Input validation is defined in
-`geometry.source.validation` and re-exported by `geometry.compiler`. Palace does
-not build through this facade: it calls `build_sgb_geometry` from
-`scgsim.geometry.sgb` and meshes the result with `scgsim.meshing`.
-Both `scgsim.geometry.sgb` and `geometry.compiler` sit below the supported
+Palace calls `build_sgb_geometry` from `scgsim.geometry.sgb` and meshes the
+result with `scgsim.meshing`. `scgsim.geometry.sgb` sits below the supported
 entry: a layout enters through `GeometryPlan` and the simulation classes of
 `scgsim.palace` and `scgsim.aedt`, and a direct call with an input built by
 hand assumes what that entry guarantees; see
 [the supported entry](supported-scope.qmd#supported-entry).
 `interpret_physical_geometry` from `scgsim.geometry` returns the effective
-input, stack, and representation plan. Pass `plan.context` to
-`build_route_construction_plan` from `scgsim.geometry.compiler` when you need
-the plan alone, or to `SemanticGeometryBuilder.build` when the route should
-continue through native construction and physical-group export.
+input, stack, and representation plan.
 
 Internal modules divide work by responsibility. They are implementation
-boundaries; callers use the supported entry, or the two facades above for
-advanced builds.
+boundaries; callers use the supported entry.
 
 | Internal owner | Responsibility |
 |---|---|
 | `scgsim.geometry.source.plan_assembly` | Compose component occurrences, transforms, stack facts, and caller-assigned Nets into source input. |
 | `scgsim.geometry.planning.contact_planning` | Recognize declared interfaces, contact patches, and metal-to-metal contact ownership. |
 | `scgsim.geometry.planning.junction_planning` | Resolve authored support and incident-conductor binding, then derive exact rectangular-junction partitions. |
-| `scgsim.geometry.planning.port_planning` | Lower source-bound port sheets and validate route-specific port geometry. |
 | `scgsim.geometry.planning.surface_planning` | Build solver-facing surfaces, contact coverage, contribution patches, and partitions. |
-| `scgsim.geometry.planning.volume_planning` | Plan retained volumes, construction cutters, host exclusions, and shell orientation. |
-| `scgsim.geometry.planning.topology_planning` | Assign canonical points, curves, loops, and shared surface ownership. |
+| `scgsim.geometry.planning.topology_planning` | Resolve shared surface ownership and ring geometry for surface planning. |
 | `scgsim.geometry.primitives.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
-| `scgsim.geometry.construction.native_geometry` | Lower construction plans through Gmsh/OCC, retain topology bindings, and produce XAO and conformity records. |
 | `scgsim.geometry.source.ground_bump_geometry` | Audit authored bump sites, select fill-lattice sites, and create source geometry records. |
 
 The [API migration reference](api-migration.qmd) lists the supported import
-routes for these operations. Native correspondence, shell repair, curved
-arrangement, and physical-group export remain in construction.
+routes for these operations.
 
 Palace keeps two distinct mutable preparation owners: Electrostatic and
 Eigenmode setup state, invalidation, and failure ordering remain specific to
@@ -203,7 +183,7 @@ moving or deleting a module changes the list instead of breaking AEDT
 ([runtime-source contract](specs/aedt-runtime.qmd#runtime-source)).
 
 The flow below shows the source structure. Geometry source preparation
-and compiler planning have separate owners, and neither backend defines source
+and model construction have separate owners, and neither backend defines source
 identity.
 
 ```{mermaid}
@@ -232,24 +212,12 @@ the Notebook's final `Net -> Entity` map, then prepares one immutable source
 snapshot for the normalized `GeometryBuildInput` boundary. The source model
 includes authored curve declarations and explicit GDS
 reconstruction records in that snapshot while preserving Entity/Net ownership.
-`scgsim.geometry` owns the source-facing plan and snapshot; the
-`scgsim.geometry.compiler` surface owns route planning and derived construction
-records. Palace builds line and circular-arc curves through SGB (`scgsim.geometry.sgb`); AEDT curve
+`scgsim.geometry` owns the source-facing plan and snapshot. Palace builds line and circular-arc curves through SGB (`scgsim.geometry.sgb`); AEDT curve
 lowering is unsupported. The
 [GeometryPlan contract](geometry-sgb.qmd) owns exact curve identity and
 arrangement semantics. Native observations do not replace source identity or
 establish connectivity. AEDT binding evidence retains source members and
 coverage through native aggregation.
-
-On the compiler's OCC path, stock shell AutoFix may replace native face tags while
-correcting shell orientation. Geometry construction maps repaired faces to source surfaces by
-complete native wire/edge correspondence and carries that mapping through
-export and backend construction. Source `SurfaceID`s remain authoritative;
-numeric Gmsh tags may change. In the observed Circle Route B construction,
-shared faces and metal-cutout boundaries remained source-bound, with port
-sheets still separate. That observation is scoped to this geometry case. Construction fails
-when required correspondence cannot be established. The geometry contract
-owns the exact behavior and failure boundary.
 
 ## Contract boundaries
 
@@ -260,7 +228,7 @@ owns the exact behavior and failure boundary.
 | Named occurrences and the final `Net -> Entity` assignment | Notebook `GeometryPlan` |
 | Immutable normalized source geometry | `GeometryPlan` and `GeometryBuildInput` |
 | Revision-bound material, interface, owner, side, and evidence facts | `scgsim.semantics` internal stdlib core |
-| Geometry names, topology, Route A/B surfaces | `scgsim.geometry.sgb` for Palace; `scgsim.geometry.compiler` for the advanced builder |
+| Geometry names, topology, Route A/B surfaces | `scgsim.geometry.sgb` |
 | Tetrahedral meshing of SGB geometry, sizing recipes and the quality threshold | `scgsim.meshing` |
 | Palace and AEDT implementation | `scgsim.palace` and `scgsim.aedt` |
 | Native geometry bindings and derived aggregates | Backend adapters, with source members and coverage retained |
@@ -278,7 +246,7 @@ serialization. Evidence patches retain the snapshot that classified them;
 missing/different revision identity fails rather than silently rebinding facts.
 Native tags remain opaque observations, not sources of guessed contact.
 
-The geometry compiler reuses one source/model projection while planning instead of deep-copying
+Geometry planning reuses one source/model projection instead of deep-copying
 stacks at every adjacency call. Domain ordering, sheet owners and aggregate
 physical-group owners remain separate projections. Contribution multiplicity
 is retained by the semantic ledger even when native geometry aggregates a
@@ -286,7 +254,7 @@ surface. Material identity, approximation and native implementation stay
 separate. The [GeometryPlan/route contract](geometry-sgb.qmd) owns their public
 meaning; this page explains which modules implement it.
 
-AEDT's native construction does not consume Gmsh tags or construction plans.
+AEDT's native construction does not consume Gmsh tags.
 Its binding sidecar retains source members and coverage through native bodies,
 sheets, faces and calculator selections. The [AEDT contract](specs/aedt-runtime.qmd)
 owns exact side-selection and result rules. Display-only helpers live under

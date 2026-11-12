@@ -52,7 +52,6 @@ GdsPoint = tuple[float, float]
 # One GDS polygon's vertices in the order the polygon walks them.
 GdsWalk = tuple[GdsPoint, ...]
 # Keep tuple keys so binding errors retain the established source identifier text.
-BoundaryKey = tuple[str, str, str, int | None]
 SourceRings = dict[str, list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]]
 
 
@@ -305,57 +304,6 @@ def _named(record: _BoundaryRecord, layers: Iterable[str]) -> str:
 def _grid_size_um(emitted: GeometryBuildInput) -> float | None:
     context = geometry_grid_context(emitted)
     return None if context is None else context.grid_size_um
-
-
-def select_boundary(
-    record: _BoundaryRecord,
-    rings: SourceRings,
-    end_pieces: frozenset[str] = frozenset(),
-    *,
-    layers: Mapping[tuple[str, str], str] | None = None,
-    grid_size_um: float | None = None,
-) -> tuple[BoundaryKey, PolygonRing]:
-    """Bind one boundary record to the ring its selector point and role name.
-
-    The selector lies in exactly one Entity-owned logical polygon; ``role`` and
-    ``hole_index`` then name that polygon's exterior or one of its holes.  A refusal
-    places the selector point and the polygons on the grid of ``grid_size_um``, as SGB's
-    binding does, and names the layer of each polygon it places: ``layers`` maps
-    (Entity, polygon ID) to the layer of each polygon an Entity owns.  An Entity's
-    outline ring has no polygon, so it has no layer.
-    """
-    candidates = _selected_polygons(record, rings, end_pieces)
-    drawn = {} if layers is None else layers
-
-    def layer_of(pid: str) -> str | None:
-        return drawn.get((record.entity_id, pid))
-
-    if len(candidates) != 1:
-        owned = [
-            (pid, exterior)
-            for pid, exterior, _ in rings.get(record.entity_id, ())
-            if pid not in end_pieces
-        ]
-        matched = [(pid, exterior) for pid, exterior, _ in candidates]
-        finding = _selector_finding(record, matched, owned, layer_of, grid_size_um)
-        raise ValueError(
-            f"{record.boundary_id} selector must bind one Entity-owned logical polygon "
-            f"of {record.entity_id!r}; it binds {len(candidates)}: {finding}. Fix the "
-            "declaration: put the boundary's selector point inside the one polygon of the "
-            "Entity whose ring it describes, and name the Entity that owns that polygon."
-        )
-    pid, outer, holes = candidates[0]
-    if record.role == "hole" and cast(int, record.hole_index) >= len(holes):
-        raise ValueError(
-            f"{record.boundary_id}: {record.entity_id!r} polygon {pid!r} has no hole "
-            f"{record.hole_index}: the polygon{_on_layers([layer_of(pid)])} at "
-            f"{format_extent(outer, grid_size_um)} has {len(holes)}. Fix the "
-            "declaration: give the hole_index of one of its holes, counted from 0."
-        )
-    ring = outer if record.role == "outer" else holes[cast(int, record.hole_index)]
-    return (record.entity_id, pid, record.role, record.hole_index), cast(
-        PolygonRing, tuple(tuple(float(x) for x in xy) for xy in ring)
-    )
 
 
 def _selector_finding(

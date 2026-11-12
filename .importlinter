@@ -10,24 +10,13 @@ modules =
     scgsim.palace
 
 [importlinter:contract:geometry-source]
-name = Geometry source and models do not depend on planning or construction
+name = Geometry source and models do not depend on planning
 type = forbidden
 source_modules =
     scgsim.geometry.source
     scgsim.geometry.models
 forbidden_modules =
     scgsim.geometry.planning
-    scgsim.geometry.construction
-    scgsim.geometry.compiler
-
-[importlinter:contract:geometry-preparation-does-not-depend-on-compiler]
-name = Geometry planning and construction do not depend on compiler
-type = forbidden
-source_modules =
-    scgsim.geometry.planning
-    scgsim.geometry.construction
-forbidden_modules =
-    scgsim.geometry.compiler
 
 [importlinter:contract:shared-geometry]
 name = Shared geometry does not depend on a solver backend
@@ -78,15 +67,11 @@ type = forbidden
 source_modules =
     scgsim.geometry.sgb
 forbidden_modules =
-    scgsim.geometry.compiler
-    scgsim.geometry.construction
     scgsim.geometry.planning.domain
     scgsim.geometry.planning.domain_planning
     scgsim.geometry.planning.surface_planning
     scgsim.geometry.planning.contact_planning
     scgsim.geometry.planning.topology_planning
-    scgsim.geometry.planning.volume_planning
-    scgsim.geometry.planning.port_planning
     scgsim.geometry.planning.evidence
     scgsim.geometry.planning.tags
     scgsim.geometry.planning.junction_planning

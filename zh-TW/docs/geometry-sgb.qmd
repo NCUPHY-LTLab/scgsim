@@ -11,7 +11,7 @@ lang: zh-TW
 
 樹內 `scgsim.geometry` API 是 SCGSim 目前的來源幾何權威。它使用結構化 PDK 與元件語意，不從求解器產生的標籤重建幾何意義。
 
-`scgsim.geometry` 是面向來源的外觀介面：`GeometryPlan`、獨立快照、正規化輸入模型、轉接器、堆疊／真空／曲線準備及摘要。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立此幾何，並用 `scgsim.meshing` 產生網格。`scgsim.geometry.compiler` 仍是進階路徑建構器，含衍生建構紀錄、階段驗證器及分派；Palace 不使用它。這兩個建構器都位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫它們時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。來源驗證器定義於 `scgsim.geometry.source.validation`，由編譯器外觀介面重新匯出。直接定義模組及模型別名列於 [API 遷移參考](api-migration.qmd#geometry-and-compiler-api)。
+`scgsim.geometry` 是面向來源的外觀介面：`GeometryPlan`、獨立快照、正規化輸入模型、轉接器、堆疊／真空／曲線準備及摘要。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立此幾何，並用 `scgsim.meshing` 產生網格。SGB 位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。來源驗證器定義於 `scgsim.geometry.source.validation`。直接定義模組及模型別名列於 [API 遷移參考](api-migration.qmd#geometry-api)。
 
 `build_component_stack()` 組合兩個明確權威。PDK `LayerStack` 紀錄提供材料、製程層、Z／厚度、導體／求解角色及確切宿主體積。元件註記提供局部實體身分、埠、功能導體區域及拓撲選取器。Notebook 組合具名出現實例並指派最終 Net 映射，不手動指定 PDK 或元件事實。
 
@@ -40,8 +40,6 @@ Palace 所用的幾何建構器（SGB）處理 `line_segment` 與 `circular_arc`
 `GdsBoundaryReconstructionSpec` 要求明確有序的 `segment_indices`。索引 `i` 是所選環上由繪製頂點 `i` 至繪製頂點 `(i + 1) % N` 的邊：也就是 GDS 儲存的多邊形頂點序列，從它走訪起始的頂點開始、依它前進的方向，並經過任何實例轉換。三個錨點若依 GDS 繪製的位置位於同一直線上，就不定義任何圓：計畫在準備時即拒絕該紀錄，元件的紀錄與計畫層級的紀錄皆同，旋轉出現實例也不會改變這項判定。鏡射轉換會反轉環的方向，但保留這個序列。來源階段之後即使把環捨入至格點、改從其他頂點起算，或把連接埠薄片的交點節點化插入環中，索引的意義都不變。gdsfactory 元件以 KLayout 正規化後的形式儲存多邊形，因此請從元件讀取這個序列，例如使用 `component.get_polygons()`，而不是依照傳給 `add_polygon` 的點；完全重複的相鄰頂點只算一次。來源階段會把每個多邊形的 GDS 走訪讀入 `LayoutPolygonSpec.drawn_rings`，每個環一筆，各綁定階段都從這裡取得繪製順序；重建紀錄則保持宣告時的內容。不是以單一 GDS 多邊形繪製的環，例如兩個繪製多邊形融合成的一個環，沒有繪製順序，對它的重建會在該環的位置被拒絕。選定連續鏈可跨越索引零。`closed=True` 選取整個環；部分鏈保留繪製端點，每個未選取直線段維持不變。`anchor_indices` 依同一順序指名繪製頂點，`degree` 及 `parameter_interval` 保留要求的樣條操作。閉合圓重建使用三個明確錨點；開放弧使用起點、弧上點及終點錨點。重疊替換鏈或互相競爭的整體邊界宣告，不能擁有相同來源線段。
 
 SGB 把宣告的線段與圓弧在整數格點上建成單一精確平面排列，沿指定堆疊擠出，並自行寫出 BREP 與 XAO 檔；過程中不執行 OCC 布林運算，也不修復殼。每個面在 sidecar 中保留來源身分；Gmsh 只在產生網格之前開啟寫出的 XAO 加以檢查。建構錯誤會停止建構，沒有直線邊備援，也沒有體積修復。
-
-Palace 不使用的進階建構器 `scgsim.geometry.compiler`，對曲線輸入另有自己的紀錄：OCC 平面排列、型別化的 `MMContactRecord` 接觸，以及 `metadata.curved_arrangement`。它的路徑分派會拒絕 Route C 上啟用的曲線。
 
 幾何階數與有限元素階數是不同選擇。曲面模型幾何不會讓正表面內縮成為精確曲線周界距離；請見 [EPR 解讀](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions)。
 
@@ -187,7 +185,7 @@ Route B 保留有限幾何，並記錄局部頂部、底部及側壁的材料側
 - 產生的網格／設定身分；
 - 從求解器實體回到語意幾何的映射。
 
-外部 SGB 版本仍僅屬衍生歷史。樹內 `scgsim.geometry` API 是目前權威，其面向來源的計畫與編譯器階段維持分開。不隱含直接外部使用端或備援路徑。
+外部 SGB 版本仍僅屬衍生歷史。樹內 `scgsim.geometry` API 是目前權威，其面向來源的計畫與 SGB 的模型建構維持分開。不隱含直接外部使用端或備援路徑。
 
 ## AEDT 共用來源事實 {#shared-source-facts-for-aedt}
 
@@ -216,7 +214,7 @@ with preparation_resources(max_workers=30):
 
 每次來源準備呼叫，也會對同一個新讀取 GDS 儲存格及排除參考清單重用階層擷取。快取隨該次呼叫結束。
 
-在單次準備、轉接器或編譯器呼叫內，完整有序運算元與格點內容相符時，也重用不可變原始多邊形及純分割。選取器、來源紀錄比較及物理／接觸稽核仍於每次呼叫執行。
+在單次準備或轉接器呼叫內，完整有序運算元與格點內容相符時，也重用不可變原始多邊形及純分割。選取器、來源紀錄比較及物理／接觸稽核仍於每次呼叫執行。
 
 重建的已套用格點面，對每個整數格點鍵使用單一座標表示，包含邊界鏈錨點；原始來源座標及非格點局部平面維持分開。
 
