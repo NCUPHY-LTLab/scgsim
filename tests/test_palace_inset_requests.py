@@ -27,7 +27,7 @@ class StopAfterGeometry(Exception):
 
 
 def geometry_builds(monkeypatch, route, directory, specs):
-    """The ``insets`` of every SGB build ``build_route_mesh`` makes for ``specs`` before it would mesh."""
+    """The ``insets`` of every SGB build ``mesh_run`` makes for ``specs`` before it would mesh."""
     builds: list[tuple[InsetRequest, ...]] = []
     real = banded_build.build_sgb_geometry
 

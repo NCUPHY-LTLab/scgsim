@@ -31,7 +31,7 @@ class SiblingRunArchiveTests(unittest.TestCase):
         )
 
     def test_tar_members_are_prefixed_with_the_folder_name(self) -> None:
-        """Round-trip folder-prefixed and legacy archive member names."""
+        """Round-trip folder-prefixed member names and refuse one outside the folder."""
         run_dir = Path("/tmp/runs/Run01")
         path = run_dir / "config.json"
         self.assertEqual(run_archive_arcname(run_dir, path), "Run01/config.json")
@@ -39,7 +39,8 @@ class SiblingRunArchiveTests(unittest.TestCase):
             logical_tar_member_name("Run01/config.json", "Run01"), "config.json"
         )
         self.assertIsNone(logical_tar_member_name("Run01", "Run01"))
-        self.assertEqual(logical_tar_member_name("config.json", "Run01"), "config.json")
+        with self.assertRaises(ValueError):
+            logical_tar_member_name("config.json", "Run01")
 
     def test_resolve_accepts_sibling_path_and_rejects_escape(self) -> None:
         """Accept the run's sibling archive and reject a different sibling."""

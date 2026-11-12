@@ -20,7 +20,7 @@ The intended visible sequence is:
 
 ```text
 prepare shared GeometryPlan snapshot
--> set_plan (or fresh standalone geometry / stack / envelope)
+-> set_plan
 -> add exact-net terminals and physical grounds
 -> configure Electrostatic
 -> mesh / config
@@ -52,9 +52,6 @@ preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
 | Stage | Public method | Intended responsibility |
 |---|---|---|
 | Shared source | `set_plan` | Bind the immutable shared source snapshot. |
-| Standalone geometry | `set_geometry` | Bind the public Component input to the SGB geometry route. |
-| Stack input | `set_stack` | Bind the layer-stack input consumed by SGB. |
-| Airbox | `set_airbox` | Declare the simulation-domain envelope before geometry production. |
 | Terminal binding | `add_terminal` | Select a terminal by exact SGB net identity. |
 | Physical Ground binding | `add_ground` | Select conductor components for Palace Ground by exact SGB net identity. |
 | Problem controls | `set_electrostatic` | Declare Electrostatic-specific config controls. |
@@ -275,10 +272,8 @@ Read the [SGB geometry concept](../concepts/geometry.qmd#source-stage) for the
 source-to-construction explanation. The contracts below define the supported
 preparation paths.
 
-Prefer `set_plan(snapshot)` for the shared source-first course. The standalone
-`set_geometry(component)` / `set_stack(stack)` / explicit envelope APIs remain
-supported on a fresh unbound simulation; do not mix them with a plan snapshot.
-The [GeometryPlan contract](../geometry-sgb.qmd) owns occurrence/Nets, generated
+The simulation takes its source from `set_plan(snapshot)`, a prepared
+`GeometryPlan`. The [GeometryPlan contract](../geometry-sgb.qmd) owns occurrence/Nets, generated
 vacuum, contact and Route-A/B semantics. The current source-facing geometry
 authority is `scgsim.geometry`. Palace builds its geometry with
 `scgsim.geometry.sgb` (`build_sgb_geometry`) and meshes it with

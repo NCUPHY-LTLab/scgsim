@@ -63,7 +63,7 @@ Palace 在 Route A 或 Route B 上透過 SGB 建構宣告的線段與圓弧；�
 
 準備使用選取器，在宣告的來源 GDS 層解析出一個連通的出現實例局部金屬區域。此區域可包含多個融合的原始 GDS 多邊形。根平面與出現實例路徑使用相同局部平面／遮罩／納入幾何配方。GeometryPlan 套用出現實例轉換一次，依配對 GDS 驗證所得外環與孔洞環，並記錄於根平面的 `geometry.source_occurrence_includes`。根平面 `metadata.ground_plane_contribution_sources` 保留出現實例路徑、局部 ID、物理層級及來源層。選定區域若包含同一物理層級另外宣告的局部導體，會遭拒。這些納入區域在多邊形轉換前成為殘餘平面的一部分；它們不是獨立導體 Entity 或 Net 指派，GeometryPlan 不推論連通性或保證分開量測。
 
-計畫負責共用外部真空包絡。在 `prepare()` 之前，以 `plan.set_vacuum_region(padding=...)` 設定，使用既有純量、X／Y／Z 元組，或六面微米映射形式。兩個後端取得相同包絡；`Sim` 使用計畫快照後，嘗試加入獨立 `set_geometry()` 或 `set_stack()` 輸入，或衝突的 Palace `set_vacuum_region()`／`set_airbox()` 值，都會以原子方式失敗。不能只替換部分綁定來源。若要變更元件、堆疊或邊界，請更新計畫並準備新快照，再以新快照呼叫 `set_plan()`。舊式獨立輸入流程使用新的 `Sim`。不推論預設留白。來源指定的 `D0_TO_D1_GAP` 仍是外部區域內獨立真空實體。
+計畫負責共用外部真空包絡。在 `prepare()` 之前，以 `plan.set_vacuum_region(padding=...)` 設定，使用既有純量、X／Y／Z 元組，或六面微米映射形式。兩個後端取得相同包絡；`Sim` 使用帶有自己真空的計畫快照後，Palace 的 `set_vacuum_region()` 值會以原子方式失敗。不能只替換部分綁定來源。若要變更元件、堆疊或邊界，請更新計畫並準備新快照，再以新快照呼叫 `set_plan()`。不推論預設留白。來源指定的 `D0_TO_D1_GAP` 仍是外部區域內獨立真空實體。
 
 元件註記結構 v2 將導體區域身分、層級、層及拓撲選取器保留在元件局部，移除元件層級 Net 及群組指派。選用埠紀錄識別局部來源層及目標邏輯層。計畫準備驗證每個來源埠與薄片，並轉換薄片一次。限定譜系可識別如 `chip/q0/o_junction_lumped` 的項目。Palace 將此限定埠名綁定至目標邏輯層；AEDT 接面使用相同正規化來源薄片及紀錄的重疊。
 
@@ -224,6 +224,6 @@ with preparation_resources(max_workers=30):
 
 ## 求解前輸入摘要 {#pre-solve-input-summary}
 
-`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 回傳 `InputSummary`，具備獨立 `.data` 及供 Notebook 顯示的 HTML 表示。兩個 Eigenmode 外觀介面都提供 `input_summary()`，將此正規化來源與設定的後端選項組合。AEDT 摘要使用正規化建構輸入及堆疊。Palace 要求綁定的 `GeometryPlan`，並摘要 `mesh()` 由該計畫準備出的輸入，因此在模擬上設定的真空區域、airbox 或埠，以及 Route A 或 Route B 的導體表示，都以模型將採用的樣子呈現。傳入未明確正規化的原始元件會失敗，不猜測堆疊。摘要記錄來源、實體、Net、材料、Z／真空、埠、EPR 及執行控制輸入；未設定或未知值保持明確。它不進行檔案 I/O、網格產生、目錄重建或原生求解器檢查，也不宣稱原生幾何或執行資料。來源摘要的 `source.top_cell_name` 優先使用有效轉接器選定的 `selected_cell_name`；選定名稱不可用時，退回舊式 `top_cell_name`，否則為 `None`。此顯示選擇不改動來源中繼資料或重讀 GDS。
+`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 回傳 `InputSummary`，具備獨立 `.data` 及供 Notebook 顯示的 HTML 表示。兩個 Eigenmode 外觀介面都提供 `input_summary()`，將此正規化來源與設定的後端選項組合。AEDT 摘要使用正規化建構輸入及堆疊。Palace 要求綁定的 `GeometryPlan`，並摘要 `mesh()` 由該計畫準備出的輸入，因此在模擬上設定的真空區域或埠，以及 Route A 或 Route B 的導體表示，都以模型將採用的樣子呈現。傳入未明確正規化的原始元件會失敗，不猜測堆疊。摘要記錄來源、實體、Net、材料、Z／真空、埠、EPR 及執行控制輸入；未設定或未知值保持明確。它不進行檔案 I/O、網格產生、目錄重建或原生求解器檢查，也不宣稱原生幾何或執行資料。來源摘要的 `source.top_cell_name` 優先使用有效轉接器選定的 `selected_cell_name`；選定名稱不可用時，退回舊式 `top_cell_name`，否則為 `None`。此顯示選擇不改動來源中繼資料或重讀 GDS。
 
 Notebook HTML 先呈現來源、後端、路徑及數量卡片，接著是 Entity／出現實例／Net／材料／來源 Z、埠／宿主／方向、接面 A／B／L／C、分析選擇、薄膜／損耗／來源／邊距假設，以及求解器／資源表格。原始獨立 JSON 放在收合區。未知值仍與零不同；只有在選取語意中，`None` 才表示全部，空元組表示不選取，缺少要求則標為未要求。HTML 沒有主題引數，繼承前端淺色／深色調色盤；獨立 `.data` 契約不變。

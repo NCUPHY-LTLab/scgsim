@@ -12,13 +12,12 @@ lang: zh-TW
 | 階段 | 公開介面 |
 |---|---|
 | 共用來源 | `set_plan(GeometryPlanSnapshot)` |
-| 獨立來源 | 在新的未綁定模擬上呼叫 `set_geometry(component)` 與 `set_stack(stack)` |
 | 輸出 | `set_output_dir(path)` |
 | 本徵模態 | `set_eigenmode(*, num_modes=10, target=None, tolerance=1e-6, save=0)` |
 | 網格控制 | `set_mesh(...)` 接受共用的尺寸配方、網格器選項、修復預算與品質門檻 |
 | 網格摘要 | `mesh_summary()` 回傳獨立的網格產生資料 |
 | 數值控制 | `set_numerical(...)` 保留明確的階數、線性求解器、AMR 與輸出選擇 |
-| 來源／設定檢視 | `input_summary()` 回傳獨立的 `mesh()` 建模輸入（計畫套用模擬的真空區域或 airbox、所要求的埠，以及所選的 Route A 或 Route B 之後）與設定，不進行檔案或原生 I/O |
+| 來源／設定檢視 | `input_summary()` 回傳獨立的 `mesh()` 建模輸入（計畫套用模擬的真空區域、所要求的埠，以及所選的 Route A 或 Route B 之後）與設定，不進行檔案或原生 I/O |
 | 表面模型 | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`，須在 `mesh()` 之前 |
 | 來源指定的埠 | `add_port(name, *, layer, layout_sheet=True, inductance)`；`layout_sheet` 必須是 `True`（簽章上的預設值 `False` 會被拒絕） |
 | 輸出選取 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
@@ -32,7 +31,7 @@ lang: zh-TW
 
 `mesh_summary()` 回報紀錄的網格控制、原生元素與區域數量及網格身分。其 Nédélec 自由度值是根據主角點四面體及設定的 FEM 階數所做的拓撲估計，不是求解器回報的 DOF 數量。變更 FEM 階數會更新此估計，不重新產生網格。這些網格紀錄不確立數值充分性。
 
-目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫攜帶共用包絡，不能用獨立幾何／堆疊或互相衝突的包絡設定器局部取代。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責共用網格控制與共用設定控制。
+目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫若帶有自己的真空，會拒絕模擬上的 `set_vacuum_region`。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責共用網格控制與共用設定控制。
 
 ## 集總埠 {#lumped-ports}
 

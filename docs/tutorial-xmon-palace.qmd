@@ -111,7 +111,7 @@ for the boundary comparison and interpretation limits.
 ## Review normalized inputs before meshing
 
 `input_summary()` displays the input `mesh()` will build from and the current
-Palace settings: the bound plan with the simulation's vacuum region or airbox,
+Palace settings: the bound plan with the simulation's vacuum region,
 requested ports and route applied. It does not mesh or start a solver.
 
 ```python

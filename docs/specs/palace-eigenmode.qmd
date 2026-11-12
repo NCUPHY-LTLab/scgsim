@@ -14,13 +14,12 @@ ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics
 | Stage | Public surface |
 |---|---|
 | Shared source | `set_plan(GeometryPlanSnapshot)` |
-| Standalone source | `set_geometry(component)` and `set_stack(stack)` on a fresh unbound simulation |
 | Output | `set_output_dir(path)` |
 | Eigenmode | `set_eigenmode(*, num_modes=10, target=None, tolerance=1e-6, save=0)` |
 | Mesh controls | `set_mesh(...)` accepts the shared sizing recipe, mesher options, repair budgets and quality threshold |
 | Mesh summary | `mesh_summary()` returns detached meshing evidence |
 | Numerical controls | `set_numerical(...)` retains explicit order, linear solver, AMR and output choices |
-| Source/settings view | `input_summary()` returns the detached input `mesh()` builds from (the plan with the simulation's vacuum region or airbox, requested ports and route applied) plus settings, no file/native I/O |
+| Source/settings view | `input_summary()` returns the detached input `mesh()` builds from (the plan with the simulation's vacuum region, requested ports and route applied) plus settings, no file/native I/O |
 | Surface model | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`, before `mesh()` |
 | Authored port | `add_port(name, *, layer, layout_sheet=True, inductance)`; `layout_sheet` must be `True` (its signature default `False` is refused) |
 | Output selection | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
@@ -61,8 +60,8 @@ adequacy.
 
 Target frequency is in hertz, mesh lengths in micrometres, inductance in henries.
 Ordinary Eigenmode does not require surface specs, ports or an EPR request.
-A bound plan carries the shared envelope and cannot be partially replaced by
-standalone geometry/stack or conflicting envelope setters. The
+A bound plan that carries its own vacuum refuses `set_vacuum_region` on the
+simulation. The
 [GeometryPlan contract](../geometry-sgb.qmd) owns source identity and route
 preparation. The [Electrostatic/shared Palace contract](palace-electrostatic-sgb.qmd)
 owns the shared mesh controls and config controls.

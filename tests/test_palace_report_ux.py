@@ -22,7 +22,7 @@ from scgsim.palace import (
 )
 from scgsim.palace.execution.returned_receipt import iteration_output_paths
 from scgsim.palace.presentation.surface_figures import surface_ranking_figure
-from scgsim.palace.results.report_data import (
+from scgsim.palace.results.report_models import (
     AmrPassSnapshot,
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
