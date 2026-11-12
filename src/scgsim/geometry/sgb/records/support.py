@@ -109,13 +109,17 @@ class SupportRegion:
 
     ``origin_mask`` says, per ring and primitive, whether the primitive is a distance origin; empty
     means every boundary primitive is one.  ``die_edge_mask`` says, the same way, whether a primitive that is
-    no origin lies on the die edge (the substrate's outer edge); empty means none does.
+    no origin lies on the die edge (the substrate's outer edge); empty means none does.  ``sources`` names, the
+    same way, the source curves each primitive lies on: the carrier ids of the source polygon edges and arcs
+    drawn along it, one per Entity whose outline runs there; a region resolved from a model always records
+    them, and empty means a region drawn directly (in a test), whose primitives come from no source.
     """
 
     rings: tuple[tuple[RingPrimitive, ...], ...]
     margins: tuple[int, ...]  # grid units, strictly increasing
     origin_mask: tuple[tuple[bool, ...], ...] = ()
     die_edge_mask: tuple[tuple[bool, ...], ...] = ()
+    sources: tuple[tuple[tuple[str, ...], ...], ...] = ()
     _witness_cache: list[list[Point]] = field(
         default_factory=list, compare=False, repr=False
     )
