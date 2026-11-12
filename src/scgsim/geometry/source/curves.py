@@ -4,7 +4,10 @@ This module owns source XY curve identity, including each source polygon's
 drawn GDS rings (``LayoutPolygonSpec.drawn_rings``), whose vertices
 reconstruction indices name. Prepared geometry owns its Z, materials, and
 solution-region state.
+
+It also decides, before any occurrence transform, whether a declared arc's points lie on one line.
 """
+# long-file: boundary records, the rings they select and the drawn walks their indices name are read here, and the declaration checks need all three; a new source module would need a new AEDT runtime-source roster.
 
 from __future__ import annotations
 
@@ -27,9 +30,16 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
     SourceCurveSpec,
+    arc_without_circle,
+    collinear,
+    drawn_ring_of,
+    exact_point_um,
+    reconstruction_anchors,
+    reconstruction_chain_refusal,
+    reconstruction_without_circle,
 )
 from scgsim.geometry.models.regions import PortSheetRegionRecord
-from scgsim.geometry.primitives.grid_regions import canonical_grid_point
+from scgsim.geometry.primitives.grid_regions import canonical_grid_point, region_key
 from scgsim.geometry.primitives.planar_loops import cutline_boundary_loops
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
 from scgsim.geometry.source.plan_assembly import transform_source_point
@@ -244,6 +254,59 @@ def transform_boundary(
     )
 
 
+def placed_boundary_curves(
+    values: Iterable[BoundaryCurveChainSpec | Mapping[str, Any]],
+    path: str,
+    transform: tuple[float, ...],
+    emitted: GeometryBuildInput,
+) -> list[BoundaryCurveChainSpec]:
+    """One occurrence's component-authored boundaries in the assembly, an arc with no circle refused.
+
+    Whether an arc's three points lie on one line is a fact of the declaration, in the
+    component's own frame.  The occurrence transform turns each point in floats, where three
+    points on one line seldom stay on one line exactly, so ``collinear`` decides here, on the
+    declared decimals, and the refusal places the arc where the occurrence puts it.
+    """
+    placed = []
+    for value in values:
+        declared = boundary_binding(value)
+        record = transform_boundary(
+            declared, path=path, transform=transform, point=transform_source_point
+        )
+        for index, curve in enumerate(declared.curves):
+            if curve.kind != "circular_arc" or not collinear(
+                *map(exact_point_um, curve.points_um)
+            ):
+                continue
+            owned = {
+                polygon_id
+                for entity in emitted.entities
+                if entity.semantic_id == record.entity_id
+                for polygon_id in entity.polygon_ids
+            }
+            layers = [p.layer for p in emitted.polygons if p.polygon_id in owned]
+            size = _grid_size_um(emitted)
+            where = [
+                format_point(x, y, size) for x, y in record.curves[index].points_um
+            ]
+            raise ValueError(
+                arc_without_circle(f"{_named(record, layers)} curve {index}", where)
+            )
+        placed.append(record)
+    return placed
+
+
+def _named(record: _BoundaryRecord, layers: Iterable[str]) -> str:
+    # The record, its Entity and its layer, as the binding stages' refusals name them.
+    on = ", ".join(sorted(set(layers)))
+    return f"{record.boundary_id} (Entity {record.entity_id!r}{on and ', layer ' + on})"
+
+
+def _grid_size_um(emitted: GeometryBuildInput) -> float | None:
+    context = geometry_grid_context(emitted)
+    return None if context is None else context.grid_size_um
+
+
 def select_boundary(
     record: _BoundaryRecord,
     rings: SourceRings,
@@ -394,10 +457,28 @@ class DrawnWalks:
     loops: tuple[tuple[GdsPoint, ...], ...]
     by_vertex: Mapping[GdsPoint, tuple[int, ...]]
     grid_size_um: float
+    # Each loop vertex as its cell draws it, before the occurrence transform and the grid.
+    cell_vertex: Mapping[GdsPoint, GdsPoint]
 
     @classmethod
-    def read(cls, walks: Sequence[_Ring], grid_size_um: float) -> DrawnWalks:
-        """Split each walk into its loops and index them by vertex."""
+    def read(
+        cls,
+        walks: Sequence[_Ring],
+        grid_size_um: float,
+        cell_walks: Sequence[_Ring] | None = None,
+    ) -> DrawnWalks:
+        """Split each walk into its loops and index them by vertex.
+
+        ``cell_walks`` are the same walks in their cell's own frame, vertex for vertex;
+        walks given without them are already in that frame.
+        """
+        cell_vertex: dict[GdsPoint, GdsPoint] = {}
+        for walk, cell_walk in zip(
+            walks, walks if cell_walks is None else cell_walks, strict=True
+        ):
+            for point, drawn in zip(walk, cell_walk, strict=True):
+                node = cast(GdsPoint, canonical_grid_point(point, grid_size_um))
+                cell_vertex.setdefault(node, (float(drawn[0]), float(drawn[1])))
         loops: list[tuple[GdsPoint, ...]] = []
         for walk in walks:
             nodes = _walk_nodes(walk, grid_size_um)
@@ -415,6 +496,7 @@ class DrawnWalks:
             tuple(loops),
             {node: tuple(found) for node, found in by_vertex.items()},
             grid_size_um,
+            cell_vertex,
         )
 
     def drawn_ring(self, ring: _Ring) -> PolygonRing | None:
@@ -535,11 +617,63 @@ def occurrence_drawn_walks(
                 excluded_reference_indexes=child_reference_indexes[path],
             )
             by_path[path] = DrawnWalks.read(
-                gds_walks(polygons, transform), context.grid_size_um
+                gds_walks(polygons, transform),
+                context.grid_size_um,
+                gds_walks(polygons),
             )
         return by_path[path]
 
     return drawn_walks
+
+
+def refuse_reconstructions_without_circle(
+    emitted: GeometryBuildInput,
+    drawn_walks_of: Callable[[LayoutPolygonSpec], DrawnWalks | None],
+) -> None:
+    """Refuse a circular reconstruction whose three anchors lie on one line as their cell draws them.
+
+    The anchors are drawn GDS vertices, exact in their cell's database units.  An occurrence
+    turns them in floats and the grid rounds them, where three vertices on one line seldom
+    stay on one line, so ``collinear`` decides here, on the vertices as drawn.  A record with
+    another fault (its selector, its ring, its indices) is left to the binding stages, which
+    refuse it located; so is a ring whose walks were not read.
+    """
+    by_id = {polygon.polygon_id: polygon for polygon in emitted.polygons}
+    owned = {entity.semantic_id: entity.polygon_ids for entity in emitted.entities}
+    for record in emitted.boundary_reconstruction:
+        if record.kind != "circular_arc":
+            continue
+        polygons = [by_id[i] for i in owned.get(record.entity_id, ()) if i in by_id]
+        selected = _selected_polygons(
+            record,
+            {record.entity_id: [(p.polygon_id, p.exterior, p.holes) for p in polygons]},
+            frozenset(),
+        )
+        if len(selected) != 1:
+            continue
+        polygon = by_id[selected[0][0]]
+        walks = drawn_walks_of(polygon)
+        ring = drawn_ring_of(
+            polygon, 0 if record.role == "outer" else 1 + cast(int, record.hole_index)
+        )
+        if walks is None or ring is None:
+            continue
+        what = _named(record, [polygon.layer])
+        size = _grid_size_um(emitted)
+        places = [format_point(x, y, size) for x, y in ring]
+        faulty = reconstruction_chain_refusal(
+            record, what, len(ring), places.__getitem__, format_extent(ring, size)
+        )
+        if faulty is not None:
+            continue
+        anchors = reconstruction_anchors(record, len(ring))
+        # Each anchor in its cell's database units, where a drawn vertex is an integer point.
+        dbu_um = emitted.metadata["source_dbu_um"]
+        units = [region_key(walks.cell_vertex[ring[a]], dbu_um) for a in anchors]
+        if collinear(*units):
+            raise ValueError(
+                reconstruction_without_circle(what, anchors, places.__getitem__)
+            )
 
 
 def bind_source_curves(

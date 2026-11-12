@@ -35,6 +35,7 @@ from scgsim.geometry.models.input import (
     drawn_ring_of,
     drawn_vertices_off_ring,
     exact_point_um,
+    reconstruction_anchors,
     reconstruction_chain_refusal,
     reconstruction_without_circle,
     ring_lost_drawn_order,
@@ -225,10 +226,7 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
     if refusal is not None:
         raise ValueError(refusal)
     segments = tuple(record.segment_indices)
-    drawn_anchors = tuple(record.anchor_indices) or (
-        *segments,
-        (segments[-1] + 1) % len(drawn),
-    )
+    drawn_anchors = reconstruction_anchors(record, len(drawn))
     drawn_keys = [region_key(point, grid_size_um) for point in drawn]
     ring_keys = [region_key(point, grid_size_um) for point in ring]
     chain = drawn_chain_on_ring(
@@ -310,7 +308,9 @@ def _refuse_arcs_without_circle(
     # SGB refuses an authored arc whose three points define no circle, but the junction
     # partition reads a lumped port's terminal arcs before SGB runs, and the compiler's curve
     # kernel builds arcs without SGB; both solve the circle with circle_through_points.  The
-    # arc is refused here, in SGB's words, by the exact rule that circle solves on.
+    # arc is refused here, in SGB's words, by the exact rule that circle solves on.  A
+    # component's arc was decided in its own frame by the source stage; this decides an arc
+    # declared in assembly coordinates, and guards the circle those stages solve.
     for index, curve in enumerate(record.curves):
         if curve.kind == "circular_arc" and _on_one_line(curve.points_um):
             raise ValueError(

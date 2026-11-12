@@ -311,6 +311,17 @@ def _listed(findings: Sequence[str], noun: str) -> str:
     return "; ".join(findings[:_LISTED]) + more
 
 
+def reconstruction_anchors(
+    record: GdsBoundaryReconstructionSpec, count: int
+) -> tuple[int, ...]:
+    """A reconstruction's anchors as drawn vertex indices of a ring of ``count`` vertices.
+
+    They are those it gives or, when it gives none, every vertex of its chain.
+    """
+    segments = tuple(record.segment_indices)
+    return tuple(record.anchor_indices) or (*segments, (segments[-1] + 1) % count)
+
+
 def reconstruction_without_circle(
     what: str, anchors: Sequence[int], drawn_place: Callable[[int], str]
 ) -> str:
@@ -353,10 +364,14 @@ def twice_area(a: ExactPoint, b: ExactPoint, c: ExactPoint) -> Fraction | int:
 def collinear(a: ExactPoint, b: ExactPoint, c: ExactPoint) -> bool:
     """Whether three points lie on one line (two of them may be one point), so no circle runs through them.
 
-    This is the one rule for an arc that defines no circle.  It is exact: each stage gives it
-    the exact points it solves the circle on, SGB its lattice and grid units, the construction
-    stages the authored micrometres as :func:`exact_point_um` reads them.  In floats, (0, 0),
-    (0.2, 0.6) and (2, 6) um have an area of 2.2e-16 in one frame and 0 in another.
+    This is the one rule for an arc that defines no circle, and it is exact.  The source stage
+    gives it a declaration in its own frame, before any occurrence transform: a component's
+    arc points as written, a reconstruction's anchors as their cell draws them.  A binding
+    stage gives it the exact points it solves the circle on, SGB its lattice and grid units,
+    the construction stages the micrometres as :func:`exact_point_um` reads them; that decides
+    an arc declared in assembly coordinates and keeps the stage from dividing by zero.  In
+    floats, (0, 0), (0.2, 0.6) and (2, 6) um have an area of 2.2e-16 in one frame and 0 in
+    another.
     """
     return twice_area(a, b, c) == 0
 

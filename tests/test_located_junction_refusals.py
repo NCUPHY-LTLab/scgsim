@@ -70,9 +70,9 @@ def device(monkeypatch, regions, sheet=SHEET, centre=(1.0, 0.0), width_um=1.0):
     return component
 
 
-def refusal(component, nets=NETS) -> str:
-    """The refusal of the port's preparation, the one ``mesh()`` and ``simulation_drc`` run."""
-    chip, reference = placed(component, 0)
+def device_plan(component, nets=NETS, turn_degrees=0.0) -> GeometryPlan:
+    """The plan of a chip that places the device as ``chip/device``, turned by ``turn_degrees``."""
+    chip, reference = placed(component, turn_degrees)
     plan = GeometryPlan(
         chip,
         root_id="chip",
@@ -82,8 +82,13 @@ def refusal(component, nets=NETS) -> str:
     )
     plan.register_instance("chip/device", reference)
     plan.set_nets(nets)
+    return plan
+
+
+def refusal(component, nets=NETS) -> str:
+    """The refusal of the port's preparation, the one ``mesh()`` and ``simulation_drc`` run."""
     sim = EigenmodeSim()
-    sim.set_plan(plan.prepare())
+    sim.set_plan(device_plan(component, nets).prepare())
     sim.add_port(PORT, layer="metal", layout_sheet=True, inductance=1e-9)
     with pytest.raises(ValueError) as error:
         prepared_port(sim)
