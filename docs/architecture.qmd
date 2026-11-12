@@ -127,6 +127,11 @@ operations, and validators. Input validation is defined in
 `geometry.source.validation` and re-exported by `geometry.compiler`. Palace does
 not build through this facade: it calls `build_sgb_geometry` from
 `scgsim.geometry.sgb` and meshes the result with `scgsim.meshing`.
+Both `scgsim.geometry.sgb` and `geometry.compiler` sit below the supported
+entry: a layout enters through `GeometryPlan` and the simulation classes of
+`scgsim.palace` and `scgsim.aedt`, and a direct call with an input built by
+hand assumes what that entry guarantees; see
+[the supported entry](supported-scope.qmd#supported-entry).
 `interpret_physical_geometry` from `scgsim.geometry` returns the effective
 input, stack, and representation plan. Pass `plan.context` to
 `build_route_construction_plan` from `scgsim.geometry.compiler` when you need
@@ -134,7 +139,8 @@ the plan alone, or to `SemanticGeometryBuilder.build` when the route should
 continue through native construction and physical-group export.
 
 Internal modules divide work by responsibility. They are implementation
-boundaries; ordinary callers should use the two facades above.
+boundaries; callers use the supported entry, or the two facades above for
+advanced builds.
 
 | Internal owner | Responsibility |
 |---|---|

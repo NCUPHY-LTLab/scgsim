@@ -21,7 +21,7 @@ SCGSim 不會安裝原生求解器、不會暗中提交已準備的交接工作�
 
 ## 衍生沿革 {#starting-source-identities}
 
-歷史起始來源的識別資訊列於[儲存庫維護者記錄](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md#implementation-and-project-references)。這些資料說明來源沿革，不代表額外支援的 API。Palace 以樹內的 `scgsim.geometry.sgb` 建立來源幾何；`scgsim.geometry.compiler` 是另一個進階建構器。不使用外部 SGB。
+歷史起始來源的識別資訊列於[儲存庫維護者記錄](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md#implementation-and-project-references)。這些資料說明來源沿革，不代表額外支援的 API。Palace 以樹內的 `scgsim.geometry.sgb` 建立來源幾何；`scgsim.geometry.compiler` 是另一個進階建構器。兩者都位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫它們時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。不使用外部 SGB。
 
 ## 貢獻者參考資料 {#v1-acceptance-and-delivery}
 

@@ -9,7 +9,7 @@ scgsim-id: "docs/supported-scope"
 
 只要版圖遵守本頁的規則，SCGSim 就會在同一套固定格點上，完全依照版圖的宣告建出幾何，並切出您要求的 Surface-EPR 條帶。接著它為 Palace 產生網格，讓每個四面體都達到網格品質門檻；做不到時，它會停止並附上報告。SCGSim 從不為了讓版圖能用而修改版圖：違反規則的版圖會被拒絕，錯誤訊息會指出違反的是哪條規則。
 
-為模擬繪製版圖之前，或建構、產生網格失敗時，請先讀本頁。規則依主題分組，每一列都連到記載細節的頁面。
+為模擬繪製版圖之前，或建構、產生網格失敗時，請先讀本頁。規則依主題分組，每一列都連到記載細節的頁面。這些規則是針對經由[支援的入口](#supported-entry)進入的版圖而言，也就是 `GeometryPlan` 與模擬類別。
 
 ## 三個階段，三個負責人 {#stages-and-owners}
 
@@ -33,6 +33,25 @@ scgsim-id: "docs/supported-scope"
 - **條帶**（band）是切進幾何中的一段表面，用來在其上積分 Surface EPR。它的**邊距**（margin）是它與**間隙邊**（gap edge）的距離；間隙邊是導體面向裸露基板的邊。見 [Surface EPR 邊距](specs/palace-eigenmode.qmd#surface-epr-margins)。
 - **Route B** 把每個導體建成有限金屬體，其表面為理想導體；**Route A** 把面金屬建成零厚度薄片。見[選擇幾何近似](concepts/model-and-numerics.qmd#choose-the-geometric-approximation)。**Route C** 把每個導體體積保留在模型中，供會在導體內部求解的後端使用。SGB 三種都能建構；Palace 模擬接受 Route A 與 Route B。
 - **微細結構**是比周圍特徵小得多的幾何：只有幾個格點間距長的邊，或只有奈米寬的尖刺與狹縫，例如 [C2 與 C3](known-geometry-problems.qmd#c2-c3-slits) 的狹縫。
+
+## 支援的入口 {#supported-entry}
+
+版圖經由公開 API 進入 SCGSim：`GeometryPlan`，以及 `scgsim.palace` 與 `scgsim.aedt` 的模擬類別。本頁的規則、保證與負責人，都是針對這樣進入的版圖而言。各項計算接受什麼輸入，列於[支援的計算](backend-support.qmd)。
+
+SCGSim 也為這個入口以下的 API 提供文件，您可以用自行建立的輸入呼叫它們：
+
+- `scgsim.geometry.sgb`（幾何建構器），輸入是您自行組出的 prism catalogue。prism catalogue 是 SGB 自己的清單，每一筆是一塊沿一段高度範圍擠出的平面輪廓。
+- 您自行建構的 `GeometryBuildInput`，用來取代 `GeometryPlan` 快照所帶的那一份。
+- `scgsim.geometry.compiler`，另一個建構器；Palace 模擬不經由它建構。
+
+這屬於內部或進階用法，**它的先決條件就是支援的入口所保證的事項**：這份輸入必須是 `GeometryPlan` 與模擬類別本來就能產生的輸入。這些 API 從那兩者的檢查之後才開始，不會重做那些檢查。例如直接呼叫 `build_sgb_geometry` 時，既不會執行 `GeometryPlan` 的規劃檢查，也不會執行 `mesh()` 與 `simulation_drc()` 的網格階段檢查。
+
+只有這些 API 才建得出來的輸入，不屬於支援的用法。對這樣的輸入，SCGSim 只承諾下列事項：
+
+- 若它在沒有任何錯誤的情況下給出看似合理、實際上卻錯誤的結果，而且在輸入進入之處加一項低成本的檢查就能明確拒絕它，SCGSim 會加上這項檢查。
+- 其他情況下，SCGSim 會在該 API 的文件中把先決條件寫明一次，或者只記錄這個案例，行為維持不變。
+
+直接呼叫失敗，或回傳的結果不如預期時，回報之前請先用 `GeometryPlan` 與模擬類別建構同一份版圖。本頁的規則與負責人適用於那一次建構。
 
 ## 版圖必須保證的事項 {#layout-rules}
 

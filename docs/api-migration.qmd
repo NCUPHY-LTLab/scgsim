@@ -121,7 +121,11 @@ surfaces. `scgsim.geometry` owns source-facing planning, snapshots, normalized
 input records, adapters, stack/vacuum/curve preparation and detached summaries.
 `scgsim.geometry.compiler` is the advanced build surface for stage
 orchestration, derived records and validators. Source-facing exports and
-advanced compiler exports remain separate. The following complete inventories
+advanced compiler exports remain separate. The compiler surface and
+`scgsim.geometry.sgb` sit below the supported entry: a layout enters through
+`GeometryPlan` and the simulation classes, and a direct call with an input
+built by hand assumes what that entry guarantees; see
+[the supported entry](supported-scope.qmd#supported-entry). The following complete inventories
 record the baseline facade and submodule export sets, including model and
 pipeline-only validator surfaces. Repeated
 names mark a baseline symbol exported by more than one declared surface. Each

@@ -20,7 +20,10 @@ snapshots, normalized input models, adapters, stack/vacuum/curve preparation,
 and summaries. Palace builds this geometry with `scgsim.geometry.sgb`
 (`build_sgb_geometry`) and meshes it with `scgsim.meshing`. `scgsim.geometry.compiler`
 remains the advanced route builder, with derived construction records, stage
-validators, and dispatch; Palace does not use it. The source
+validators, and dispatch; Palace does not use it. Both builders sit below the
+supported entry: a layout enters through `GeometryPlan` and the simulation
+classes, and a direct call with an input built by hand assumes what that entry
+guarantees; see [the supported entry](supported-scope.qmd#supported-entry). The source
 validator is defined in `scgsim.geometry.source.validation` and re-exported by
 the compiler facade. Direct defining modules and model aliases are listed in
 the [API migration reference](api-migration.qmd#geometry-and-compiler-api).

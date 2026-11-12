@@ -42,7 +42,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 ## 幾何與編譯器 API {#geometry-and-compiler-api}
 
-此次遷移把基準 `scgsim.sgb` 門面分為兩個明確介面。`scgsim.geometry` 負責來源端規劃、快照、正規化輸入、轉接器、堆疊／真空／曲線準備及獨立摘要。`scgsim.geometry.compiler` 是進階建構介面，負責階段協調、衍生資料與驗證器。來源端與進階編譯器匯出保持分開。下列完整清單記錄基準門面與子模組匯出集合，包含模型與僅限管線的驗證器介面。重複名稱表示同一基準符號由多個已宣告介面匯出；每個符號只有一個現行定義，不保留舊路徑相容包裝。
+此次遷移把基準 `scgsim.sgb` 門面分為兩個明確介面。`scgsim.geometry` 負責來源端規劃、快照、正規化輸入、轉接器、堆疊／真空／曲線準備及獨立摘要。`scgsim.geometry.compiler` 是進階建構介面，負責階段協調、衍生資料與驗證器。來源端與進階編譯器匯出保持分開。編譯器介面與 `scgsim.geometry.sgb` 都位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫它們時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。下列完整清單記錄基準門面與子模組匯出集合，包含模型與僅限管線的驗證器介面。重複名稱表示同一基準符號由多個已宣告介面匯出；每個符號只有一個現行定義，不保留舊路徑相容包裝。
 
 
 - **基準 `scgsim.sgb` → 目前負責模組 `scgsim.geometry`.** 宣告名稱： `BoundaryCurveChainSpec`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GeometryPlan`, `GeometryPlanSnapshot`, `InputSummary`, `LayoutPolygonSpec`, `PathInput`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RouteLiteral`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`, `Vector3D`, `apply_vacuum_region_to_stack`, `bind_source_curves`, `build_component_stack`, `build_gds_stack_geometry_input`, `build_gdsfactory_geometry_input`, `summarize_geometry_input`.
