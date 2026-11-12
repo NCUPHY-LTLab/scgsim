@@ -44,9 +44,11 @@ component-simulation notebooks; SCGSim owns no duplicate notebook source.
   against the Issue, the public docs and the callers you can see.
 - The supported use is a layout that enters through `GeometryPlan` and the
   simulation classes of `scgsim.palace` and `scgsim.aedt`. Inputs built by
-  hand below that entry (a catalogue for `scgsim.geometry.sgb`, a
-  `GeometryBuildInput`, inputs to `scgsim.geometry.compiler`) are internal or
-  advanced use; their precondition is what the entry guarantees. A
+  hand below that entry (a `GeometryBuildInput` built by hand for
+  `build_sgb_geometry`, a prism catalogue for the internal
+  `scgsim.geometry.sgb.model.build_model_from_catalogue`, inputs to
+  `scgsim.geometry.compiler`) are internal or advanced use; their
+  precondition is what the entry guarantees. A
   counterexample only such an input reaches is `fix` when it silently gives a
   plausible but wrong result and a cheap check at the boundary can refuse it;
   otherwise `document` or `observe`. It is not P1 by itself: for such an

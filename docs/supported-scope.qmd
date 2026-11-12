@@ -77,13 +77,15 @@ calculation takes as input.
 SCGSim also documents APIs below that entry, and you can call them with an
 input you build by hand:
 
-- `scgsim.geometry.sgb`, the geometry builder, from a prism catalogue you
-  assemble yourself. A prism catalogue is SGB's own list of footprints, each
-  extruded over a height range.
-- A `GeometryBuildInput` you construct yourself, in place of the one a
+- `scgsim.geometry.sgb.build_sgb_geometry`, the geometry builder, with a
+  `GeometryBuildInput` you construct yourself, in place of the one a
   `GeometryPlan` snapshot carries.
 - `scgsim.geometry.compiler`, a separate builder that the Palace simulations
   do not build through.
+
+Functions inside these packages that take lower-level records, such as a prism
+catalogue (SGB's own list of footprints, each extruded over a height range),
+are internal and are not a documented API.
 
 That is internal or advanced use, and **its precondition is what the supported
 entry guarantees**: the input is one that `GeometryPlan` and a simulation class

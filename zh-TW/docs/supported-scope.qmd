@@ -40,9 +40,10 @@ scgsim-id: "docs/supported-scope"
 
 SCGSim 也為這個入口以下的 API 提供文件，您可以用自行建立的輸入呼叫它們：
 
-- `scgsim.geometry.sgb`（幾何建構器），輸入是您自行組出的 prism catalogue。prism catalogue 是 SGB 自己的清單，每一筆是一塊沿一段高度範圍擠出的平面輪廓。
-- 您自行建構的 `GeometryBuildInput`，用來取代 `GeometryPlan` 快照所帶的那一份。
+- `scgsim.geometry.sgb.build_sgb_geometry`（幾何建構器），搭配您自行建構的 `GeometryBuildInput`，用來取代 `GeometryPlan` 快照所帶的那一份。
 - `scgsim.geometry.compiler`，另一個建構器；Palace 模擬不經由它建構。
+
+這些套件內部接受更低階紀錄的函式，例如接受 prism catalogue（SGB 自己的清單，每一筆是一塊沿一段高度範圍擠出的平面輪廓）的函式，屬於內部實作，不是有文件的 API。
 
 這屬於內部或進階用法，**它的先決條件就是支援的入口所保證的事項**：這份輸入必須是 `GeometryPlan` 與模擬類別本來就能產生的輸入。這些 API 從那兩者的檢查之後才開始，不會重做那些檢查。例如直接呼叫 `build_sgb_geometry` 時，既不會執行 `GeometryPlan` 的規劃檢查，也不會執行 `mesh()` 與 `simulation_drc()` 的網格階段檢查。
 
