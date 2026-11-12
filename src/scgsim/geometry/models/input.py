@@ -7,7 +7,7 @@ planning; compiled geometry records are defined in their own modules.
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -111,8 +111,8 @@ class GdsBoundaryReconstructionSpec:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
-# A refusal lists at most this many drawn vertices, then counts the rest.
-_LISTED_VERTICES = 5
+# A refusal lists at most this many findings, then counts the rest.
+_LISTED = 5
 
 
 def ring_without_drawn_order(what: str, ring_place: str) -> str:
@@ -136,15 +136,178 @@ def ring_lost_drawn_order(what: str, findings: Sequence[str]) -> str:
     ``findings`` say, for each drawn vertex at fault, where it lies and what the ring does
     with it (:func:`drawn_vertices_off_ring` finds them).
     """
-    shown = "; ".join(findings[:_LISTED_VERTICES])
-    rest = len(findings) - _LISTED_VERTICES
-    more = f"; and {rest} more drawn vertices" if rest > 0 else ""
     return (
         f"{what}: the ring it selects no longer holds each vertex of its drawn ring once, "
-        f"in drawn order: {shown}{more}. Its drawn segments cannot be found on it. Fix the "
-        "layout: draw the ring's vertices at least one grid step apart, so the source "
-        "stage keeps each one."
+        f"in drawn order: {_listed(findings, 'drawn vertices')}. Its drawn segments cannot "
+        "be found on it. Fix the layout: draw the ring's vertices at least one grid step "
+        "apart, so the source stage keeps each one."
     )
+
+
+def reconstruction_chain_refusal(
+    record: GdsBoundaryReconstructionSpec,
+    what: str,
+    count: int,
+    drawn_place: Callable[[int], str],
+    ring_place: str,
+) -> str | None:
+    """The refusal of a reconstruction whose indices name no chain of its drawn ring, or None.
+
+    This is the one rule for the indices a reconstruction may give.  ``count`` is the number
+    of vertices of the selected ring as drawn, ``drawn_place(i)`` where drawn vertex ``i``
+    lies and ``ring_place`` where the ring lies, in micrometres; ``what`` names the record,
+    its Entity and its layer.  Its segments are drawn segments, each once, in drawn order,
+    and it is ``closed`` exactly when they run once around the ring.  Its anchors are
+    vertices of that chain, three for a circular arc, and an open chain's first and last
+    anchors are its ends.  A refusal names the indices at fault and where they lie; the
+    declaration must change.
+    """
+    segments = tuple(record.segment_indices)
+    return (
+        _segment_refusal(what, segments, count, drawn_place, ring_place)
+        or _closure_refusal(record, what, count, drawn_place, ring_place)
+        or _anchor_refusal(record, what, count, drawn_place)
+    )
+
+
+def _segment_refusal(
+    what: str,
+    segments: tuple[int, ...],
+    count: int,
+    place: Callable[[int], str],
+    ring_place: str,
+) -> str | None:
+    misnamed = [i for i in segments if not _is_drawn_index(i, count)]
+    if not segments or misnamed:
+        if not segments:
+            given = "it lists none"
+        elif len(misnamed) == 1:
+            given = f"segment index {misnamed[0]!r} names no drawn segment"
+        else:
+            given = f"segment indices {', '.join(map(repr, misnamed))} name no drawn segment"
+        return (
+            f"{what} requires explicit original segment indices: {given}; the ring it "
+            f"selects, at {ring_place}, has {count} drawn segments, numbered 0 to "
+            f"{count - 1}. Fix the declaration: list the drawn segments it replaces; "
+            "segment i runs from drawn vertex i to drawn vertex i + 1 of the ring as drawn."
+        )
+    repeated = [i for i in dict.fromkeys(segments) if segments.count(i) > 1]
+    breaks = [
+        (a, b)
+        for a, b in zip(segments, segments[1:], strict=False)
+        if b != (a + 1) % count
+    ]
+    if not repeated and not breaks:
+        return None
+    findings = (
+        [
+            f"segment {i}, from {place(i)} to {place((i + 1) % count)}, is listed "
+            f"{segments.count(i)} times"
+            for i in repeated
+        ]
+        if repeated
+        else [
+            f"segment {a} ends at {place((a + 1) % count)}, but segment {b}, listed "
+            f"next, starts at {place(b)}"
+            for a, b in breaks
+        ]
+    )
+    return (
+        f"{what} segments must form one ordered source chain: "
+        f"{_listed(findings, 'segments')}. Fix the declaration: list each drawn segment it "
+        "replaces once, in drawn order, each starting where the one before it ends."
+    )
+
+
+def _closure_refusal(
+    record: GdsBoundaryReconstructionSpec,
+    what: str,
+    count: int,
+    place: Callable[[int], str],
+    ring_place: str,
+) -> str | None:
+    segments = record.segment_indices
+    whole = len(segments) == count and (segments[-1] + 1) % count == segments[0]
+    if record.closed == whole:
+        return None
+    finding = (
+        f"it is declared closed, but its segments run from {place(segments[0])} to "
+        f"{place((segments[-1] + 1) % count)}, over {len(segments)} of the {count} drawn "
+        f"segments of the ring at {ring_place}"
+        if record.closed
+        else "it is declared open, but its segments run once around the whole ring at "
+        f"{ring_place}, from and back to {place(segments[0])}"
+    )
+    return (
+        f"{what} closure differs from the selected source chain: {finding}. Fix the "
+        "declaration: declare it closed exactly when its segments run once around the "
+        "whole ring."
+    )
+
+
+def _anchor_refusal(
+    record: GdsBoundaryReconstructionSpec,
+    what: str,
+    count: int,
+    place: Callable[[int], str],
+) -> str | None:
+    segments = record.segment_indices
+    vertices = (*segments, (segments[-1] + 1) % count)
+    anchors = tuple(record.anchor_indices) or vertices
+    chain = (
+        f"its chain runs once around the ring from drawn vertex {segments[0]} at "
+        f"{place(segments[0])}"
+        if record.closed
+        else f"its chain runs from drawn vertex {vertices[0]} at {place(vertices[0])} to "
+        f"drawn vertex {vertices[-1]} at {place(vertices[-1])}"
+    )
+    stray = [a for a in anchors if a not in vertices]
+    if stray:
+        findings = [
+            f"anchor {a}, the drawn vertex at {place(a)}, is not a vertex of its chain"
+            if _is_drawn_index(a, count)
+            else f"anchor {a!r} names no drawn vertex of the ring, which has {count}"
+            for a in stray
+        ]
+        return (
+            f"{what} anchors must belong to the selected source chain: "
+            f"{_listed(findings, 'anchors')}; {chain}. Fix the declaration: choose each "
+            "anchor among the drawn vertices of the segments it replaces."
+        )
+    if record.kind == "circular_arc" and len(anchors) != 3:
+        listed = _listed(
+            [f"drawn vertex {a} at {place(a)}" for a in anchors], "anchors"
+        )
+        given = (
+            f"it gives {len(anchors)}: {listed}"
+            if record.anchor_indices
+            else f"it lists none, so its anchors are every vertex of its chain, "
+            f"{len(anchors)} in all: {listed}"
+        )
+        return (
+            f"{what} circular reconstruction requires exactly three anchors: {given}. Fix "
+            "the declaration: give three drawn vertices of its chain, not on one line, as "
+            "its anchors."
+        )
+    if not record.closed and (anchors[0] != vertices[0] or anchors[-1] != vertices[-1]):
+        return (
+            f"{what} reconstruction must retain the original chain endpoints: {chain}, but "
+            f"its anchors start at drawn vertex {anchors[0]} at {place(anchors[0])} and end "
+            f"at drawn vertex {anchors[-1]} at {place(anchors[-1])}. Fix the declaration: "
+            "give the chain's first and last drawn vertices as its first and last anchors."
+        )
+    return None
+
+
+def _is_drawn_index(index: object, count: int) -> bool:
+    return not isinstance(index, bool) and isinstance(index, int) and 0 <= index < count
+
+
+def _listed(findings: Sequence[str], noun: str) -> str:
+    """The findings of a refusal, at most ``_LISTED`` of them, then how many more ``noun``."""
+    rest = len(findings) - _LISTED
+    more = f"; and {rest} more {noun}" if rest > 0 else ""
+    return "; ".join(findings[:_LISTED]) + more
 
 
 @dataclass(frozen=True)
