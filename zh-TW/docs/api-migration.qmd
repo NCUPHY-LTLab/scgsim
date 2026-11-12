@@ -208,11 +208,9 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 | `surface-mask-Q.csv` 與 `surface-mask-energy.csv` | 邊距列從 `surface-Q.csv` 讀取 |
 :::
 
-`scgsim.palace.check_mesh_quality(mesh_path)` 不變：它仍讀取儲存的求解器網格（MSH 2.2 ASCII）。網格化報告中的最小 SICN 是另一種量測，在升階之前的線性網格上量得。
-
 ## Palace 套件符號 {#palace-package-symbols}
 
-`scgsim.palace` 宣告 33 個套件門面名稱。下列清單依 v2 責任模組分組其中 28 個；AMR 與電容參考名稱（`analyze_amr`、`show_amr_analysis`、`PalaceAmrAnalysis`、`PalaceAmrReport`、`CapacitanceReference`）說明於 [AMR 分析](amr-analysis.qmd)。
+`scgsim.palace` 宣告 26 個套件門面名稱。下列清單依 v2 責任模組分組。
 
 
 - **目前負責模組與責任：** `scgsim.palace.preparation`; 保留分開的可變準備狀態負責者。 **門面匯出：** `ElectrostaticSim`, `EigenmodeSim`.
@@ -222,7 +220,6 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 - **目前負責模組與責任：** `scgsim.palace.presentation`; 依求解器對獨立 EPR 繪圖。 **門面匯出：** `show_epr`.
 - **目前負責模組與責任：** `scgsim.palace.results.report_models`; 供 Palace 呈現使用的獨立資料。 **門面匯出：** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`.
 - **目前負責模組與責任：** `scgsim.palace.presentation.reports`; 根據保留結果證據提供可信度、物理與效能比較檢視。 **門面匯出：** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
-- **目前負責模組與責任：** `scgsim.palace.mesh.quality`; 離線檔案讀取器，與網格建構及求解器執行分開。 **門面匯出：** `MeshQualityReport`, `check_mesh_quality`.
 
 
 ## Palace 直接子模組匯出 {#palace-direct-submodule-exports}
@@ -239,7 +236,7 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 
 目前 `scgsim.palace.results.report_models` 模組定義 `AmrPassSnapshot`、`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceEprRecord`、`SurfaceEprSeriesSnapshot`、`SurfaceMarginEprRecord` 及 `SurfaceMarginEprSeriesSnapshot`。`scgsim.palace.presentation.reports` 保留上列七個直接匯出。
 
-`scgsim.palace._epr_results` 與 `scgsim._mesh_quality` 是基準私有實作路徑，受支援名稱由 `scgsim.palace` 重新匯出。目前分別由 `scgsim.palace.results` 與 `scgsim.palace.mesh.quality` 負責；舊私有匯入路徑不是相容介面。
+`scgsim.palace._epr_results` 是基準私有實作路徑，受支援名稱由 `scgsim.palace` 重新匯出。目前由 `scgsim.palace.results` 負責；舊私有匯入路徑不是相容介面。
 
 ## 視覺化符號 {#visualization-symbols}
 

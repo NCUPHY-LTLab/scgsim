@@ -451,14 +451,12 @@ def _timed_mesh(sim: EigenmodeSim) -> dict[str, Any]:
             "error": f"{type(error).__name__}: {error}",
             "seconds": time.perf_counter() - start,
         }
-    seconds = time.perf_counter() - start
-    quality = sim.check_mesh_quality()
+    # The summary carries the meshing audit: minSICN, bad elements, repair rounds and stop.
     return {
         "status": "ok",
-        "seconds": seconds,
+        "seconds": time.perf_counter() - start,
         "mesh_path": str(mesh_path),
         "summary": sim.mesh_summary(),
-        "quality": _plain(quality.summary),
     }
 
 

@@ -16,7 +16,7 @@ sidebar: contract
 
 ## 網格與自適應 {#mesh-adaptation}
 
-[網格診斷契約](mesh-quality.qmd#input-and-ownership)定義儲存網格讀取器測量的內容。[後端準備教學](course/solver-observations.qmd)示範執行前如何檢視網格與原生模型準備結果。
+[網格品質契約](mesh-quality.qmd#audit)定義 `mesh()` 對每個網格稽核與記錄的內容。[後端準備教學](course/solver-observations.qmd)示範執行前如何檢視網格與原生模型準備結果。
 
 ## 執行與交接 {#execution-handoff}
 

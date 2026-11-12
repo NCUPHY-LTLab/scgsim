@@ -72,22 +72,10 @@ The fixed `show_*` views instead write portable contact sheets and a manifest.
 Producing these before `prepare_handoff()` includes them in the existing Palace
 archive; a later sidecar is not retroactively part of that archive.
 
-Mesh diagnostics answer a different question from the meshing step's quality
-threshold: they measure the stored solver mesh itself, tetrahedron by
-tetrahedron:
-
-```python
-stored = sim.check_mesh_quality()
-print(stored.show_summary())
-print(stored.show_worst_elements(metric="kappa_j", limit=10))
-stored.show_elements(metric="volume", limit=10).show()
-```
-
-Separate exact singularity, numerical unavailability and finite diagnostic
-values. A thin nonzero tetrahedron is not relabeled as exactly coplanar. The
-ranking describes this file and metric; it supplies no scientific pass/fail
-threshold and does not repair the mesh. Units, selected/remainder limits and
-serialization are defined by the [mesh contract](../mesh-quality.qmd).
+The quality of the mesh is the meshing step's audit: minSICN of every
+tetrahedron on the linear mesh before elevation, held to the mesh's quality
+threshold. Its report sits in the run's `mesh/` folder; the fields are defined
+by the [mesh contract](../mesh-quality.qmd#quality-report).
 
 ## AEDT: source preparation and native preparation differ
 

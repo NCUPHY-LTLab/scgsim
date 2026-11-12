@@ -36,7 +36,7 @@ owners.
 | `scgsim.geometry.models` and lower primitives | One canonical model/type definition and shared source/compiler primitives | Duplicate definitions, source-to-planning dependency cycles |
 | `scgsim.semantics` | Stdlib-only immutable, revision-bound facts | Mutable backend objects, solver tags interpreted as source truth |
 | `scgsim.palace.preparation` | Separate Electrostatic and Eigenmode setup objects, mutable state/invalidation, and shared preparation functions | A common Simulation base, Palace submission, or merged state owners |
-| `scgsim.palace.mesh` | The SGB build and meshing call for a run, group lowering to solver attributes, native mesh summaries, and the offline mesh-quality reader | Result receipt custody or physical convergence judgments |
+| `scgsim.palace.mesh` | The SGB build and meshing call for a run, group lowering to solver attributes, and native mesh summaries | Result receipt custody or physical convergence judgments |
 | `scgsim.palace.execution` | Manual handoff packages and standalone host receipt recording | Automatic solver submission or result interpretation |
 | `scgsim.palace.results` | Returned artifact/custody validation, result data, and detached EPR | Solver execution or plotting state |
 | `scgsim.palace.presentation` | Palace trust, physics and cost projections and report figures | A common cross-solver physical quantity model |

@@ -214,7 +214,7 @@ On a layout that follows every rule above, SCGSim guarantees:
   it raises `MeshRepairError` with the quality report and returns no mesh.
   The threshold is checked on the linear mesh. With `geometry_order` above 1,
   the accepted mesh is then raised to that order and written without a second
-  check; the [mesh-quality reader](mesh-quality.qmd) measures the stored mesh.
+  check; what the audit records is in [Tetrahedral Mesh Quality](mesh-quality.qmd).
   The controls and their defaults are in
   [Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 

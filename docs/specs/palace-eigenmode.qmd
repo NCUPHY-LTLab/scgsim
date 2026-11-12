@@ -43,8 +43,7 @@ positive pass limit, also provide `amr_tolerance` and `amr_update_fraction`;
 setting `amr_max_passes=0` disables adaptive refinement and allows those two
 values to remain unset. In later `set_numerical(...)` calls, omitted
 `ksp_type`, `amr_max_passes`, `amr_nonconformal`, `amr_nc_levels`,
-`amr_tolerance`, `amr_update_fraction` and `save_adapt_diagnostics` retain their
-current settings; every other omitted value (`order`, `tolerance`,
+`amr_tolerance` and `amr_update_fraction` retain their current settings; every other omitted value (`order`, `tolerance`,
 `max_iterations`, `solver_type`, `preconditioner`, `device`,
 `save_adapt_iterations`, `save_adapt_mesh`, `estimator_mg`, `output_paraview`
 and `output_grid_function`) takes its default. These are input controls, not adequacy

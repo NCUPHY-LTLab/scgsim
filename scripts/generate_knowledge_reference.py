@@ -22,7 +22,6 @@ NAMESPACES = (
     "geometry.compiler",
     "geometry.models",
     "palace",
-    "palace.mesh.quality",
     "semantics",
     "visualization",
 )

@@ -17,7 +17,6 @@ from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
 from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
-from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
 from ..execution.handoff import HandoffPlan, prepare_handoff
 from ..mesh.build import (
@@ -30,7 +29,6 @@ from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
 from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
 from .config import (
-    MODEL_L0_M,
     LayoutPortBinding,
     build_eigenmode_config,
     configure_numerical_controls,
@@ -374,7 +372,6 @@ class EigenmodeSim:
         amr_update_fraction: float | None = None,
         save_adapt_iterations: bool | None = None,
         save_adapt_mesh: bool | None = None,
-        save_adapt_diagnostics: bool | None = None,
         estimator_mg: bool | None = None,
         output_paraview: bool | None = None,
         output_grid_function: bool | None = None,
@@ -424,11 +421,6 @@ class EigenmodeSim:
             ),
             save_adapt_iterations=save_adapt_iterations,
             save_adapt_mesh=save_adapt_mesh,
-            save_adapt_diagnostics=(
-                self.numerical.get("save_adapt_diagnostics")
-                if save_adapt_diagnostics is None
-                else save_adapt_diagnostics
-            ),
             estimator_mg=estimator_mg,
             output_paraview=output_paraview,
             output_grid_function=output_grid_function,
@@ -564,15 +556,6 @@ class EigenmodeSim:
             self._mesh_result.mesh_manifest_path,
             problem="Eigenmode",
             fem_order=self.numerical["order"],
-        )
-
-    def check_mesh_quality(self) -> MeshQualityReport:
-        """Inspect the current mesh without changing simulation state."""
-
-        if self._mesh_result is None:
-            raise ValueError("mesh() must run before check_mesh_quality().")
-        return check_mesh_quality(
-            self._mesh_result.mesh_path, length_scale_m=MODEL_L0_M
         )
 
     def write_config(self) -> Path:

@@ -109,42 +109,6 @@ def _required_output_paths(
     return paths
 
 
-def amr_diagnostic_output_paths(root: Path, config: dict[str, Any]) -> list[str]:
-    """Inventory opt-in native sidecars from their explicit manifest, never a glob."""
-    refinement = config.get("Model", {}).get("Refinement", {})
-    enabled = refinement.get("SaveAdaptDiagnostics", False)
-    if not isinstance(enabled, bool):
-        raise TypeError("native SaveAdaptDiagnostics must be a boolean")
-    if not enabled:
-        return []
-    base = confined_path(root, "results/palace/amr-diagnostics")
-    manifest_path = confined_path(base, "manifest.json")
-    paths = ["results/palace/amr-diagnostics/manifest.json"]
-    if not manifest_path.is_file():
-        return paths
-    manifest = _read_json(manifest_path)
-    if (
-        manifest.get("schema") != "palace.amr_diagnostics"
-        or manifest.get("record_type") != "manifest"
-        or type(manifest.get("schema_version")) is not int
-        or manifest["schema_version"] != 1
-    ):
-        raise ValueError("unsupported native AMR diagnostics manifest schema")
-    files = manifest.get("files")
-    if not isinstance(files, list) or any(not isinstance(item, str) for item in files):
-        raise TypeError("native AMR diagnostics files must be an explicit path list")
-    for relative in files:
-        candidate = confined_path(base, relative)
-        if candidate == manifest_path or candidate == base:
-            raise ValueError(
-                "native AMR diagnostic inventory contains a non-record path"
-            )
-        paths.append(candidate.relative_to(root.resolve()).as_posix())
-    if len(paths) != len(set(paths)):
-        raise ValueError("native AMR diagnostic inventory contains duplicate paths")
-    return paths
-
-
 def _iteration_directories(root: Path) -> list[Path]:
     results = root / "results/palace"
     if not confined_path(root, "results/palace").is_dir():
@@ -463,7 +427,6 @@ def _receipt_payload(context: _ReceiptContext) -> dict[str, Any]:
             context.problem,
             config=config,
         ),
-        *amr_diagnostic_output_paths(context.root, config),
         *([RUNTIME_COMPATIBILITY_PATH] if compatibility_required is not None else []),
     ]
     if (

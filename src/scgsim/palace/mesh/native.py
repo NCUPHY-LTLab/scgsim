@@ -3,7 +3,7 @@
 The meshing module (``scgsim.meshing``) delivers an MSH 4.1 mesh whose physical groups are SGB's primary
 groups.  Palace's config lists solver attributes instead, so this session opens that mesh, replaces the
 primary groups by the attributes of the group dict, runs the structural checks, writes ``palace.msh``
-(MSH 2.2 ASCII, the format Palace and ``palace.mesh.quality`` read) and reads the written file back.
+(MSH 2.2 ASCII, the format Palace reads) and reads the written file back.
 No CAD is needed: the module has already elevated the order, because that needs the CAD.
 """
 
