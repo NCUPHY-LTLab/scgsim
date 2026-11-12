@@ -118,13 +118,42 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
     )
     face_group = name_faces(topology, emitted)
     faces = {fid: route_face(face) for fid, face in topology.faces.items()}
-    groups: dict[str, PhysicalGroup] = {}
-    # surface group -> its interface type, from the face structure (never from the name)
-    group_types: dict[str, str] = {}
-    epr_rows: dict[str, str] = {}
+    surfaces = _surface_groups(topology, emitted, face_group, faces)
+    groups = _add_volume_groups(topology, emitted, surfaces.groups)
+    _check_refinement_hosts(topology, emitted)
+    return RoutedModel(
+        policy,
+        emitted,
+        face_group,
+        faces,
+        dict(sorted(groups.items())),
+        _unions(surfaces),
+        dict(sorted(surfaces.epr_rows.items())),
+    )
+
+
+@dataclass
+class _Surfaces:
+    """The primary surface groups of a route, with what the unions and the Surface-EPR rows are made of."""
+
+    groups: dict[str, PhysicalGroup] = field(default_factory=dict)
+    types: dict[str, str] = field(default_factory=dict)  # group -> interface type
+    epr_rows: dict[str, str] = field(default_factory=dict)  # row -> group
     # sheet group -> the row types (MA, MS) some face of it has a neighbour for
-    sheet_row_types: dict[str, set[str]] = defaultdict(set)
-    net_groups: dict[str, set[str]] = defaultdict(set)
+    sheet_row_types: dict[str, set[str]] = field(
+        default_factory=lambda: defaultdict(set)
+    )
+    net_groups: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+
+
+def _surface_groups(
+    topology: Topology,
+    emitted: frozenset[str],
+    face_group: dict[str, str | None],
+    faces: dict[str, RoutedFace],
+) -> _Surfaces:
+    """Every named face that bounds an emitted volume, in its group, with its group's facts."""
+    out = _Surfaces()
     for fid, face in sorted(topology.faces.items()):
         group = face_group[fid]
         bounds_emitted = any(
@@ -132,20 +161,27 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
         )
         if group is None or not bounds_emitted:
             continue
-        groups.setdefault(group, PhysicalGroup(2)).ids.append(fid)
+        out.groups.setdefault(group, PhysicalGroup(2)).ids.append(fid)
         routed = faces[fid]
         interface = routed.interface_type
         if interface is not None:
-            group_types[group] = interface
+            out.types[group] = interface
             entity = face.owner.name if face.owner is not None else ""
             band = face.bands[0][1] if face.bands else None
-            sheet_row_types[group].update(routed.sheet_sides)
+            out.sheet_row_types[group].update(routed.sheet_sides)
             for row in surface_epr_row_ids(
                 group, interface, entity, band, routed.sheet_sides
             ):
-                epr_rows[row] = group
+                out.epr_rows[row] = group
         if routed.net is not None:
-            net_groups[f"NET::{routed.net}"].add(group)
+            out.net_groups[f"NET::{routed.net}"].add(group)
+    return out
+
+
+def _add_volume_groups(
+    topology: Topology, emitted: frozenset[str], groups: dict[str, PhysicalGroup]
+) -> dict[str, PhysicalGroup]:
+    """The groups with every emitted volume added to its own (a name may not be both a surface and a volume)."""
     for vid, volume in sorted(topology.volumes.items()):
         if vid in emitted:
             name = volume_group(volume.domain)
@@ -155,33 +191,21 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
                     f"physical-group name {name!r} names both a volume and a surface"
                 )
             group.ids.append(vid)
-    _check_refinement_hosts(topology, emitted)
-    ordered = dict(sorted(groups.items()))
-    return RoutedModel(
-        policy,
-        emitted,
-        face_group,
-        faces,
-        ordered,
-        _unions(group_types, sheet_row_types, net_groups),
-        dict(sorted(epr_rows.items())),
-    )
+    return groups
 
 
-def _unions(
-    group_types: dict[str, str],
-    sheet_row_types: dict[str, set[str]],
-    net_groups: dict[str, set[str]],
-) -> dict[str, list[str]]:
+def _unions(surfaces: _Surfaces) -> dict[str, list[str]]:
     by_type: dict[str, list[str]] = defaultdict(list)
-    for name, interface in group_types.items():
+    for name, interface in surfaces.types.items():
         by_type[interface].append(name)
     # a Route A sheet group belongs to the MA / MS union exactly when it carries that Surface-EPR row
     for sheet in list(by_type.get(SHEET, ())):
-        for row_type in sheet_row_types[sheet]:
+        for row_type in surfaces.sheet_row_types[sheet]:
             by_type[row_type].append(sheet)
     unions = {kind: sorted(names) for kind, names in by_type.items()}
-    unions.update({name: sorted(members) for name, members in net_groups.items()})
+    unions.update(
+        {name: sorted(members) for name, members in surfaces.net_groups.items()}
+    )
     return dict(sorted(unions.items()))
 
 
