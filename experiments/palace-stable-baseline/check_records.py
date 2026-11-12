@@ -55,9 +55,7 @@ def main() -> None:
 def _crashed_rerun(records: Path) -> str:
     out = records / record_file(CASE, True, False)
     out.write_text(json.dumps(EARLIER))
-    line = run_one(
-        CASE, True, False, False, argparse.Namespace(records=records, timeout=300)
-    )
+    line = run_one(CASE, True, False, argparse.Namespace(records=records, timeout=300))
     record = json.loads(out.read_text())
     if record["exit_code"] in (0, "timeout") or record["stages"]:
         raise SystemExit(f"a crashed rerun shows stages it did not run: {record}")

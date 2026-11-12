@@ -20,14 +20,15 @@ from tempfile import TemporaryDirectory
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parents[1] / "scripts"))
 
 import fine_structure  # noqa: E402
-from run_case import (  # noqa: E402
+from roster_cases import (  # noqa: E402
     configured_simulation,
     prepare_plan,
     surface_epr_specs,
-    write_record,
 )
+from run_case import write_record  # noqa: E402
 
 TC_JOGS = [(212.424, 87.9885), (169.0415, 59.289)]
 C1_STEP = [(77.36, -78.78)]

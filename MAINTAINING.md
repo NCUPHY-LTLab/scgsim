@@ -131,7 +131,12 @@ unnoticed.
 The Nightly workflow runs the heavy tier at 18:30 UTC (02:30 in Taiwan) on
 `develop`, and on any branch by manual dispatch. `full-tests` runs the whole
 public suite with the `slow` tests, and `docs-render` runs the Pages render
-without deploying it. A failure fails the run. CI uses public inputs and
+without deploying it. `roster` builds the layouts that define "Palace
+stable" (issue 141) from the PDK `pdk-tests` pins, with Surface-EPR bands, and
+requires each to pass `simulation_drc` and to mesh within the default time
+budget in a vacuum padded 0 µm in x and y and 1000 µm in z
+(`scripts/check_roster.py`); it uploads one record per layout as the
+`roster-records` artifact. A failure fails the run. CI uses public inputs and
 excludes private golden data; it does not invoke AEDT or Palace solvers.
 
 Pages renders the frozen version catalogue, stable pages and history on

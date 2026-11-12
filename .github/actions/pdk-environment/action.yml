@@ -1,0 +1,61 @@
+name: PDK environment
+description: >-
+  Build `.venv-pdk`: the public OrcaPen SC PDK at the commit README.md
+  installs, from that PDK's own frozen lock, with the pinned PDK and the
+  current SCGSim wheel installed on top without dependencies. CI's pdk-tests
+  job and the Nightly roster job call this, so both run against one pinned PDK
+  revision. Run it after checking out SCGSim; it sets UV_PROJECT_ENVIRONMENT
+  and UV_CACHE_DIR for the rest of the job.
+
+runs:
+  using: composite
+  steps:
+    - name: Place the PDK environment and its uv cache in the workspace
+      shell: bash
+      run: |
+        echo "UV_PROJECT_ENVIRONMENT=$GITHUB_WORKSPACE/.venv-pdk" >> "$GITHUB_ENV"
+        echo "UV_CACHE_DIR=$GITHUB_WORKSPACE/.ci/scgsim-pdk-cache" >> "$GITHUB_ENV"
+    - name: Check out the pinned public OrcaPen SC PDK
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: NCUPHY-LTLab/orcapen-sc-pdk
+        ref: 49e539fd59f3224ecda965d777c7ec3aadcc3b85
+        path: .ci/orcapen
+        persist-credentials: false
+    - name: Install the exact test Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: "3.12.14"
+    - name: Set up the PDK toolchain
+      uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+      with:
+        version: "0.11.18"
+        python-version: "3.12.14"
+    - name: Install the Gmsh wheel system runtime
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends -y libglu1-mesa
+    - name: Verify the dependency inputs
+      shell: bash
+      run: |
+        echo '1b41174d8659ae053ea4bb048b7f51268553301b3554afb8329dd3a0517d1f02  .ci/orcapen/pyproject.toml' | sha256sum --check
+        echo '389b5cd37beab1f91fe53cf9fa64a3587337bb4a265fba19f50a401751c1c757  .ci/orcapen/uv.lock' | sha256sum --check
+    - name: Install the PDK's frozen dependencies with its test runner
+      shell: bash
+      run: >-
+        uv sync --project .ci/orcapen --frozen --group dev --group palace-notebooks
+        --no-install-project --no-install-package scgsim --python 3.12.14
+    - name: Build and install the pinned PDK without changing dependencies
+      shell: bash
+      run: |
+        uv build --python 3.12.14 --wheel --out-dir .ci/orcapen-wheel .ci/orcapen
+        uv pip install --python .venv-pdk/bin/python --no-deps .ci/orcapen-wheel/orcapen_sc_pdk-1.0.0-py3-none-any.whl
+    - name: Build and install the current SCGSim wheel after dependency sync
+      shell: bash
+      run: |
+        uv build --python 3.12.14 --wheel --out-dir .ci/scgsim-wheel .
+        uv pip install --python .venv-pdk/bin/python --no-deps .ci/scgsim-wheel/scgsim-*.whl
+    - name: Check that the installed packages' requirements are met
+      shell: bash
+      run: uv pip check --python .venv-pdk/bin/python
