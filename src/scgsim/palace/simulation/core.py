@@ -3,8 +3,8 @@
 ``PalaceSimulation`` is the base of ``EigenmodeSim`` and ``ElectrostaticSim``.  It owns the calls that do
 not depend on the problem: binding a plan, the output folder, the vacuum region, Surface EPR, the mesh
 controls, ``input_summary()``, ``mesh()``, ``simulation_drc``, ``mesh_summary()`` and ``prepare_handoff()``.
-A problem class adds its own setters, its numerical defaults and ``write_config()``, and answers the four
-questions the core asks of it (the methods and class attributes under "What a problem adds" below).
+A problem class adds its own setters, its numerical defaults and ``write_config()``, and answers what the
+core asks of it: the class attributes and methods under "What a problem adds" below.
 
 Which call needs which stage, and how far each call falls back, is the table in ``lifecycle``; this module
 only applies it.

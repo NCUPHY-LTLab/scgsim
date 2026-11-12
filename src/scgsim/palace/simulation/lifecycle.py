@@ -10,6 +10,7 @@ Call                   Needs                  Falls back to before it runs or on
 =====================  =====================  ===========================================
 ``set_plan``           nothing                ``BOUND`` (a new plan; nothing built is kept)
 geometry setters       nothing                ``BOUND``
+``set_surface_epr``    ``BOUND``              ``BOUND`` (its specs are checked against the plan's materials)
 problem setters        nothing                ``MESHED``
 ``input_summary``      ``BOUND``              nothing is discarded
 ``mesh``               ``BOUND``              ``BOUND``
@@ -18,8 +19,8 @@ problem setters        nothing                ``MESHED``
 ``prepare_handoff``    ``CONFIG_WRITTEN``     nothing is discarded
 =====================  =====================  ===========================================
 
-The geometry setters are those whose value ``mesh()`` reads (output folder, vacuum, Surface EPR, mesh
-controls, Eigenmode ports); the problem setters are those only ``write_config()`` reads.  ``CALLS`` is
+The geometry setters are the others whose value ``mesh()`` reads (output folder, vacuum, mesh controls,
+Eigenmode ports); the problem setters are those only ``write_config()`` reads.  ``CALLS`` is
 that table as code; the simulation core reads it and nothing else decides these rules.
 """
 
