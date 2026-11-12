@@ -14,8 +14,7 @@ from pathlib import Path
 from test_aedt_public_preparation import produce_request
 
 from scgsim.aedt import AedtResources, batch
-from scgsim.aedt.results import provenance
-from scgsim.aedt.results.runtime_inventory import runtime_source_paths
+from scgsim.aedt.results.runtime_inventory import current_runtime_source_paths
 from scgsim.aedt.runtime import batch_protocol as protocol
 from scgsim.aedt.runtime import batch_runner
 
@@ -274,19 +273,13 @@ class BatchTypedCodecTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("solver-only", result.stdout)
             self.assertFalse((root / "batch-attempt.json").exists())
-        self.assertEqual(
-            set(runtime_source_paths(provenance.SOURCE_SCHEMA_V24))
-            - set(runtime_source_paths(provenance.SOURCE_SCHEMA_V23)),
+        self.assertLessEqual(
             {
                 "src/scgsim/aedt/epr/evidence.py",
                 "src/scgsim/aedt/runtime/batch_protocol.py",
                 "src/scgsim/aedt/runtime/batch_runner.py",
             },
-        )
-        self.assertTrue(
-            set(runtime_source_paths(provenance.SOURCE_SCHEMA_V23)).issubset(
-                runtime_source_paths(provenance.SOURCE_SCHEMA_V24)
-            )
+            set(current_runtime_source_paths()),
         )
 
     def test_plain_runner_import_preserves_exact_inventory_before_negative_native_boundary(

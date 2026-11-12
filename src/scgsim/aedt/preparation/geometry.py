@@ -25,7 +25,7 @@ from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
     initial_receipt_payload,
-    prepared_runtime_source,
+    record_runtime_source,
 )
 from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
@@ -210,7 +210,7 @@ class _BodyHfssHandoff:
         self.archive_path = self.run_dir / "aedt_handoff.tar.gz"
         self.prepared_at = utc_now()
         self.started = time.perf_counter()
-        self.prepared_source = prepared_runtime_source()
+        self.prepared_source = record_runtime_source("prepared")
         self.payload = self.spec.to_payload()
         self.materials = detached(self.geometry.source)["materials"]
         self.vacuum_ids = sorted(

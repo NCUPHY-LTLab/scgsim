@@ -20,7 +20,7 @@ from scgsim.aedt.results.hfss_readback import (
     validate_lumped_readback,
     validate_modal_native_evidence,
 )
-from scgsim.aedt.results.provenance import RECEIPT_V3, SOURCE_SCHEMA_V19
+from scgsim.aedt.results.provenance import RECEIPT_V3
 from scgsim.aedt.results.q2d_readback import (
     validate_q2d_model_readback,
     validate_q2d_setup,
@@ -301,12 +301,7 @@ def _validate_imported_gds_source(context: PreparedModelContext) -> None:
         if receipt.get("ports") != []:
             raise RuntimeError("Eigenmode prepared receipt must have no ports")
     elif spec.mode == "terminal":
-        validate_terminal_native_evidence(
-            receipt.get("ports"),
-            spec,
-            current=receipt.get("runtime_source", {}).get("schema_version")
-            == SOURCE_SCHEMA_V19,
-        )
+        validate_terminal_native_evidence(receipt.get("ports"), spec)
     else:
         validate_modal_native_evidence(receipt.get("ports"), spec)
 

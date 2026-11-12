@@ -6,30 +6,11 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from scgsim.aedt.results.hfss_readback import validate_lumped_readback
-from scgsim.aedt.results.provenance import (
-    SOURCE_SCHEMA_V19,
-    SOURCE_SCHEMA_V20,
-    SOURCE_SCHEMA_V21,
-    SOURCE_SCHEMA_V22,
-    SOURCE_SCHEMA_V23,
-    SOURCE_SCHEMA_V24,
-    SOURCE_SCHEMA_V25,
-)
 from scgsim.aedt.specs.common import LumpedTerminalPort, TerminalPort
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
     HfssDrivenSpec,
 )
-
-CURRENT_TERMINAL_NATIVE_SCHEMAS = {
-    SOURCE_SCHEMA_V19,
-    SOURCE_SCHEMA_V20,
-    SOURCE_SCHEMA_V21,
-    SOURCE_SCHEMA_V22,
-    SOURCE_SCHEMA_V23,
-    SOURCE_SCHEMA_V24,
-    SOURCE_SCHEMA_V25,
-}
 
 
 @dataclass(frozen=True)
@@ -162,7 +143,7 @@ def _validate_body_terminal_port(
     if [int(value) for value in boundary.get("Faces", ())] != [record.get("face_id")]:
         raise RuntimeError("body-first Terminal native support face differs")
     _validate_body_terminal_assignment(context, record, port, native, terminal)
-    _validate_body_terminal_properties(context, record, port, native, expected_type)
+    _validate_body_terminal_properties(port, native, expected_type)
 
 
 def _validate_body_terminal_assignment(
@@ -263,27 +244,19 @@ def _validate_body_terminal_edges(
 
 
 def _validate_body_terminal_properties(
-    context: BodyTerminalContext,
-    record: dict[str, Any],
-    port: Any,
-    native: dict[str, Any],
-    expected_type: str,
+    port: Any, native: dict[str, Any], expected_type: str
 ) -> None:
     properties = native.get("boundary_properties", {})
     terminal_properties = native.get("terminal_properties", {})
     renorm = port.renormalize if isinstance(port, LumpedTerminalPort) else False
-    current_wave = (
-        not isinstance(port, LumpedTerminalPort)
-        and context.receipt.get("runtime_source", {}).get("schema_version")
-        in CURRENT_TERMINAL_NATIVE_SCHEMAS
-    )
+    wave = not isinstance(port, LumpedTerminalPort)
     if (
         properties.get("Type") != expected_type
         or properties.get("Renorm All Terminals") != renorm
         or (
             properties.get("Deembed") not in (True, False, "true", "false")
-            if current_wave
-            else properties.get("Deembed") != (not isinstance(port, LumpedTerminalPort))
+            if wave
+            else properties.get("Deembed") != wave
         )
         or (
             isinstance(port, LumpedTerminalPort)
@@ -291,23 +264,16 @@ def _validate_body_terminal_properties(
             != f"{port.impedance_ohm:g}ohm"
         )
         or (
-            current_wave
+            wave
             and native.get("inactive_renormalizing_impedance")
             != terminal_properties.get("Terminal Renormalizing Impedance")
         )
-        or (
-            not isinstance(port, LumpedTerminalPort)
-            and not current_wave
-            and terminal_properties.get("Terminal Renormalizing Impedance") != "50ohm"
-        )
-        or (current_wave and properties.get("Deembed Dist") != f"{port.deembed_um:g}um")
+        or (wave and properties.get("Deembed Dist") != f"{port.deembed_um:g}um")
     ):
         raise RuntimeError("body-first Terminal native electrical treatment differs")
 
 
-def validate_terminal_native_evidence(
-    ports: Any, spec: HfssDrivenSpec, *, current: bool = False
-) -> None:
+def validate_terminal_native_evidence(ports: Any, spec: HfssDrivenSpec) -> None:
     """Verify terminal excitation evidence against declared source ports."""
     if not isinstance(ports, list) or len(ports) != 2:
         raise RuntimeError("completed receipt has invalid terminal ports")
@@ -361,7 +327,7 @@ def validate_terminal_native_evidence(
                 "completed receipt has invalid terminal excitation properties"
             )
         expected_boundary = {
-            "Deembed": boundary.get("Deembed") if current else True,
+            "Deembed": boundary.get("Deembed"),
             "Deembed Dist": f"{port.deembed_um:g}um",
             "Name": port.name,
             "Num Terminals": "1",
@@ -372,21 +338,16 @@ def validate_terminal_native_evidence(
         expected_terminal = {
             "Name": terminal_name,
             "Port Name": port.name,
-            "Terminal Renormalizing Impedance": (
-                terminal.get("Terminal Renormalizing Impedance") if current else "50ohm"
+            "Terminal Renormalizing Impedance": terminal.get(
+                "Terminal Renormalizing Impedance"
             ),
             "Type": "Terminal",
         }
         if (
             boundary != expected_boundary
             or terminal != expected_terminal
-            or (
-                current
-                and (
-                    boundary.get("Deembed") not in (True, False, "true", "false")
-                    or native.get("inactive_renormalizing_impedance")
-                    != terminal.get("Terminal Renormalizing Impedance")
-                )
-            )
+            or boundary.get("Deembed") not in (True, False, "true", "false")
+            or native.get("inactive_renormalizing_impedance")
+            != terminal.get("Terminal Renormalizing Impedance")
         ):
             raise RuntimeError("completed receipt terminal native property mismatch")

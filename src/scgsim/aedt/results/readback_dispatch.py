@@ -15,7 +15,6 @@ from scgsim.aedt.results.q2d_readback import validate_q2d_readback
 from scgsim.aedt.results.q3d_readback import validate_q3d_readback
 from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.results.terminal_readback import (
-    CURRENT_TERMINAL_NATIVE_SCHEMAS,
     validate_body_terminal_readback,
     validate_terminal_native_evidence,
 )
@@ -91,12 +90,7 @@ def validate_result_readback(root: Path, receipt: dict[str, Any], spec: Any) -> 
         if isinstance(spec, HfssDrivenGeometrySpec):
             validate_body_terminal_readback(receipt, spec)
         else:
-            validate_terminal_native_evidence(
-                ports,
-                spec,
-                current=receipt.get("runtime_source", {}).get("schema_version")
-                in CURRENT_TERMINAL_NATIVE_SCHEMAS,
-            )
+            validate_terminal_native_evidence(ports, spec)
     else:
         validate_modal_native_evidence(ports, spec)
     validate_hfss_setup_and_convergence(root, receipt, spec)

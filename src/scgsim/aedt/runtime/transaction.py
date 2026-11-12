@@ -31,7 +31,7 @@ from scgsim.aedt.results.provenance import (
     RECEIPT_V1,
     RECEIPT_V2,
     RECEIPT_V3,
-    runtime_source_identity,
+    record_runtime_source,
 )
 from scgsim.aedt.runtime.batch_protocol import (
     CollectionContext,
@@ -382,7 +382,7 @@ class _ExecutionTransaction:
     def _run_native(self) -> None:
         self.receipt["mode"] = self.spec.mode
         verify_prepared_hashes(self.metadata, self.spec_path, self.spec)
-        self.receipt["runtime_source"] = runtime_source_identity()
+        self.receipt["runtime_source"] = record_runtime_source("actual")
         if pyaedt_version() != self.profile.pyaedt_version:
             raise RuntimeError("PyAEDT lock mismatch")
         if isinstance(self.spec, Q3dSpec) and not self.options.prepare_only:
