@@ -180,11 +180,17 @@ def _raise_pinch(
         ]
         names = named_entities(around) or "?"
         nets = ", ".join(sorted({p.net_id or "" for p in around}))
+        # Only a pinch between conductors is named by them; otherwise the regions that fill the slab there.
+        regions = [] if around else _regions_at(catalogue, domain, point, (z_lo, z_hi))
         if domain.kind == "vacuum" and on_model_boundary:
             if around:
                 _raise_edge_pinch(domain, around, names, nets, where)
-            _raise_region_edge_pinch(catalogue, domain, point, (z_lo, z_hi), where)
-        what = f"{domain.name} (pinched between conductors {names} of Net {nets})"
+            _raise_region_edge_pinch(domain, regions, where)
+        what = (
+            f"{domain.name} (pinched between conductors {names} of Net {nets})"
+            if around
+            else f"{domain.name} (pinched between {_region_phrase(regions)[0]})"
+        )
     # A pinch means nothing to most layout authors, so the message ends with the section that explains it.
     raise NonManifoldError(
         f"non-manifold pinch: {what} touches itself along the vertical edge at "
@@ -213,37 +219,48 @@ def _raise_edge_pinch(
 
 
 def _raise_region_edge_pinch(
+    vacuum: Domain, regions: Sequence[PrismRecord], where: str
+) -> None:
+    """The vacuum ends where a region that is not a conductor, such as a dielectric island, meets the boundary at one point."""
+    phrase, one = _region_phrase(regions)
+    raise NonManifoldError(
+        f"non-manifold pinch: {phrase} {'reaches' if one else 'reach'} the edge of {vacuum.name} "
+        f"only at {where}, a point on the model's planar boundary, so {vacuum.name} touches itself "
+        "along that vertical edge. "
+        + _FIX_REGION_AT_THE_EDGE
+        + see_also("docs/known-geometry-problems", "boundary-point-pinch")
+    )
+
+
+def _regions_at(
     catalogue: PrismCatalogue,
-    vacuum: Domain,
+    pinched: Domain,
     point: Point,
     z_range: tuple[Fraction, Fraction],
-    where: str,
-) -> None:
-    """The vacuum ends where a region that is not a conductor, such as a dielectric island, meets the boundary at one point.
+) -> list[PrismRecord]:
+    """The regions that are not conductors, other than the pinched one, that fill the slab at the point.
 
-    The region must fill the slab, not only touch it from below or above, or the substrate under the slab
+    A region must fill the slab, not only touch it from below or above, or the substrate under the slab
     would be named for every pinch at its edge.
     """
     z_lo, z_hi = z_range
-    regions = [
+    return [
         p
         for p in catalogue.prisms
         if p.material_kind != "conductor"
-        and p.entity_id != vacuum.name
+        and p.entity_id != pinched.name
         and p.z0 < z_hi
         and p.z1 > z_lo
         and _footprint_touches(p, point)
     ]
-    names = named_entities(regions) or "?"
-    kinds = ", ".join(sorted({p.material_kind for p in regions})) or "?"
+
+
+def _region_phrase(regions: Sequence[PrismRecord]) -> tuple[str, bool]:
+    """``dielectric region island`` or ``dielectric regions a, b``, and whether it names one region."""
     one = len({p.entity_id for p in regions}) == 1
-    raise NonManifoldError(
-        f"non-manifold pinch: {kinds} {'region' if one else 'regions'} {names} "
-        f"{'reaches' if one else 'reach'} the edge of {vacuum.name} only at {where}, a point on "
-        f"the model's planar boundary, so {vacuum.name} touches itself along that vertical edge. "
-        + _FIX_REGION_AT_THE_EDGE
-        + see_also("docs/known-geometry-problems", "boundary-point-pinch")
-    )
+    kinds = ", ".join(sorted({p.material_kind for p in regions})) or "?"
+    names = named_entities(regions) or "?"
+    return f"{kinds} {'region' if one else 'regions'} {names}", one
 
 
 def _layer_z_range(layer: Layer) -> tuple[Fraction, Fraction]:

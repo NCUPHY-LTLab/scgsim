@@ -448,11 +448,16 @@ def test_a_pad_reaching_the_planar_extent_at_a_point_is_refused_there(
     assert min(math.dist(place, vertex) for vertex in pad) < 0.001
 
 
-def dielectric_island_stack(outline, interval):
-    """``NO_VACUUM_STACK`` with a finite dielectric island: a solution region whose authored outline is ``outline``."""
-    island = level("island", "Si", interval, "solution_region")
-    island.info["geometry"] = {"outer_loop": [list(point) for point in outline]}
-    return SimpleNamespace(layers={**NO_VACUUM_STACK.layers, "island": island})
+def dielectric_island_stack(outline, interval, **more):
+    """``NO_VACUUM_STACK`` with finite dielectric islands: solution regions whose authored outlines are given.
+
+    The island ``island`` has ``outline``; ``more`` adds islands by name, at the same ``interval``.
+    """
+    islands = {}
+    for name, loop in {"island": outline, **more}.items():
+        islands[name] = level(name, "Si", interval, "solution_region")
+        islands[name].info["geometry"] = {"outer_loop": [list(p) for p in loop]}
+    return SimpleNamespace(layers={**NO_VACUUM_STACK.layers, **islands})
 
 
 # Islands in the 10 um gap of ``two_pads``, against the layout's lower edge y = 0: a diamond whose tip is on it,
@@ -513,6 +518,43 @@ def test_a_dielectric_island_along_the_edge_or_clear_of_it_passes(monkeypatch, o
         two_pads(monkeypatch, gap_um=10.0),
         layer_stack=dielectric_island_stack(outline, (0.0, 0.2)),
     ).passed
+
+
+# Two islands in the gap, meeting only at their corner (25, 9) um, well inside the layout's extent.
+ISLAND_BELOW_THE_CORNER = ((21, 5), (25, 5), (25, 9), (21, 9))
+ISLAND_ABOVE_THE_CORNER = ((25, 9), (29, 9), (29, 13), (25, 13))
+REGIONS_INSIDE = re.compile(
+    r"non-manifold pinch: VACUUM_REGION \(pinched between dielectric regions (?P<regions>[^)]+)\) "
+    r"touches itself along the vertical edge at \((?P<x>-?\d+\.\d+), (?P<y>-?\d+\.\d+)\) um, "
+    r"z (?P<z0>-?\d+\.\d+)\.\.(?P<z1>-?\d+\.\d+) um"
+)
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_two_dielectric_islands_meeting_at_a_corner_are_named_as_regions(
+    monkeypatch, simulation
+):
+    """Inside the layout the vacuum between two islands that meet only at a corner is pinched: the refusal names them.
+
+    No conductor is there, so it names the two regions, not "conductors ?", keeps the place and the corner fix,
+    and links to the section on the same rule inside the layout.
+    """
+    stack = dielectric_island_stack(
+        ISLAND_BELOW_THE_CORNER, (0.0, 0.2), island_b=ISLAND_ABOVE_THE_CORNER
+    )
+    with pytest.raises(NonManifoldError) as raised:
+        check(simulation, two_pads(monkeypatch, gap_um=10.0), layer_stack=stack)
+    message = str(raised.value)
+    match = REGIONS_INSIDE.search(message)
+    assert match is not None, message
+    assert match["regions"] == "island, island_b"
+    assert (float(match["x"]), float(match["y"])) == (25.0, 9.0)
+    assert (float(match["z0"]), float(match["z1"])) == (0.0, 0.2)
+    assert "conductor" not in message
+    assert message.endswith(
+        "Fix the layout: give them a shared edge or separate them. See "
+        + page_url("docs/known-geometry-problems", "pinch-inside-the-layout")
+    )
 
 
 @pytest.mark.parametrize(

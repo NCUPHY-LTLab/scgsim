@@ -239,6 +239,8 @@ where two conductors of one Net meet only at a corner. The metal there, or the
 vacuum between the two pieces, touches itself along the vertical line through
 the corner, just as the vacuum does at the round pad above, and the refusal
 reads "… touches itself along the vertical edge at (x, y) um …: two cells of one
-domain meet only at a vertex." Give the two pieces a shared edge, or separate
+domain meet only at a vertex." Two regions that are not conductors, such as two
+dielectric islands meeting at a corner, pinch the vacuum the same way, and the
+refusal then names those regions. Give the two pieces a shared edge, or separate
 them. At the boundary the other piece is the outside of the model, which the
 layout does not draw, so there the fix moves the boundary instead.

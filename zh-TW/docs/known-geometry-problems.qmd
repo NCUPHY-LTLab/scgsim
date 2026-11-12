@@ -125,4 +125,4 @@ See …#boundary-point-pinch
 
 ### layout 內部的同一條規則 {#pinch-inside-the-layout}
 
-這就是[支援範圍](supported-scope.qmd#rules-conductors)上的規則：任何區域都不只沿一條垂直邊與自己接觸。在 layout 內部，它出現在同一 Net 的兩個導體只在一個角點相接之處。那裡的金屬，或兩塊幾何之間的真空，會沿著通過該角點的垂直線與自己接觸，就像上面圓形焊墊旁的真空一樣，拒絕訊息為「… touches itself along the vertical edge at (x, y) um …: two cells of one domain meet only at a vertex.」。請讓兩塊幾何共用一條邊，或把它們分開。在邊界上，另一塊是模型之外，layout 不會畫出它，因此在那裡修正方式改為移動邊界。
+這就是[支援範圍](supported-scope.qmd#rules-conductors)上的規則：任何區域都不只沿一條垂直邊與自己接觸。在 layout 內部，它出現在同一 Net 的兩個導體只在一個角點相接之處。那裡的金屬，或兩塊幾何之間的真空，會沿著通過該角點的垂直線與自己接觸，就像上面圓形焊墊旁的真空一樣，拒絕訊息為「… touches itself along the vertical edge at (x, y) um …: two cells of one domain meet only at a vertex.」。兩個不是導體的區域，例如只在一個角點相接的兩個介電質島，也會以同樣的方式夾斷真空，此時拒絕訊息指出的是這些區域。請讓兩塊幾何共用一條邊，或把它們分開。在邊界上，另一塊是模型之外，layout 不會畫出它，因此在那裡修正方式改為移動邊界。
