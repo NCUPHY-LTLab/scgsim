@@ -12,7 +12,7 @@ A run or report binds, as applicable:
 
 - SCGSim distribution version and measured runtime-source module/content identity;
 - SCGSim Git revision observation when available, and backend revision;
-- Geometry source, compiler and topology identity;
+- Geometry source and topology identity;
 - solver and schema version;
 - machine profile and run receipt;
 - config, mesh, handoff, result, and report artifact identities;

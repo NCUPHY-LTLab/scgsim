@@ -1,7 +1,7 @@
 """Adapter-normalized input records for route-aware geometry construction.
 
-These immutable records preserve source facts and provenance before compiler
-planning; compiled geometry records are defined in their own modules.
+These immutable records preserve source facts and provenance before
+planning; planned geometry records are defined in their own modules.
 """
 
 from __future__ import annotations

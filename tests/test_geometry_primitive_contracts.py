@@ -30,9 +30,6 @@ from scgsim.geometry.primitives.spatial import (  # private-import: lock down sh
     line_key_2d,
     range_within_bounds,
     segment_overlap_interval,
-    undirected_xy_edge,
-    vector_cross,
-    vector_subtract,
 )
 from scgsim.geometry.primitives.surface_records import (
     canonical_face_signature_3d,
@@ -58,15 +55,11 @@ def _entity(
     )
 
 
-def test_spatial_keys_and_vector_operations_keep_coordinate_order():
-    """Keep coordinate rounding, directed math, and undirected edge identity stable."""
+def test_spatial_keys_and_interpolation_keep_coordinate_order():
+    """Keep coordinate rounding and interpolation stable."""
     assert coordinate_key((1.0000000004, -2.0, 3.25)) == (1.0, -2.0, 3.25)
     assert coordinate_2d_key((1.0000000004, -2.0)) == (1.0, -2.0)
     assert coordinate_z_key(2.0000000004) == 2.0
-    assert undirected_xy_edge((2, 1), (0, 3)) == ((0.0, 3.0), (2.0, 1.0))
-    assert undirected_xy_edge((0, 3), (2, 1)) == ((0.0, 3.0), (2.0, 1.0))
-    assert vector_subtract((4, 3, 2), (1, 1, 1)) == (3, 2, 1)
-    assert vector_cross((1, 0, 0), (0, 1, 0)) == (0, 0, 1)
     assert interpolate_2d((0, 2), (4, 6), 0.25) == (1.0, 3.0)
     assert interpolate_3d((0, 2, 4), (4, 6, 8), 0.25) == (1.0, 3.0, 5.0)
 

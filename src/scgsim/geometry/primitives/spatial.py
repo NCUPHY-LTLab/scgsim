@@ -69,40 +69,6 @@ def interpolate_2d(
     )
 
 
-def vector_subtract(
-    left: tuple[float, float, float],
-    right: tuple[float, float, float],
-) -> tuple[float, float, float]:
-    """Return the component-wise difference between two 3D vectors."""
-    return (
-        left[0] - right[0],
-        left[1] - right[1],
-        left[2] - right[2],
-    )
-
-
-def vector_cross(
-    left: tuple[float, float, float],
-    right: tuple[float, float, float],
-) -> tuple[float, float, float]:
-    """Return the right-handed cross product of two 3D vectors."""
-    return (
-        left[1] * right[2] - left[2] * right[1],
-        left[2] * right[0] - left[0] * right[2],
-        left[0] * right[1] - left[1] * right[0],
-    )
-
-
-def undirected_xy_edge(
-    start: Sequence[float], end: Sequence[float]
-) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Return rounded edge endpoints in direction-independent order."""
-    first = coordinate_2d_key((float(start[0]), float(start[1])))
-    second = coordinate_2d_key((float(end[0]), float(end[1])))
-    ordered = sorted((first, second))
-    return ordered[0], ordered[1]
-
-
 def intersect_bounds(
     first: Mapping[str, Any],
     second: Mapping[str, Any],

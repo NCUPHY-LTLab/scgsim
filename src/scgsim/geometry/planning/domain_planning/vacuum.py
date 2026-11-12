@@ -40,7 +40,6 @@ def prepare_auto_vacuum_solution_regions(
     build_input: GeometryBuildInput,
     route: RouteLiteral | None,
     *,
-    native_complement: bool = False,
     representation_context: RepresentationContext | None = None,
 ) -> GeometryBuildInput:
     """Replace auto VACUUM_REGION with planner-side complement components."""
@@ -51,9 +50,7 @@ def prepare_auto_vacuum_solution_regions(
         raise ValueError(
             "auto vacuum region must have vacuum material_kind before planning"
         )
-    return _VacuumSweep(
-        build_input, route, native_complement, representation_context, auto_region
-    ).build()
+    return _VacuumSweep(build_input, route, representation_context, auto_region).build()
 
 
 @dataclass
@@ -62,7 +59,6 @@ class _VacuumSweep:
 
     build_input: GeometryBuildInput
     route: RouteLiteral | None
-    native_complement: bool
     representation_context: RepresentationContext | None
     auto_region: SemanticEntitySpec
     auto_metadata: dict[str, Any] = field(init=False)
@@ -81,20 +77,6 @@ class _VacuumSweep:
     def build(self) -> GeometryBuildInput:
         """Prepare the envelope, sweep its complement and retain source order."""
         self.prepare_envelope()
-        # The curved compiler uses this same authored envelope and padding, then
-        # computes its complement in the shared native planar arrangement.
-        if self.native_complement:
-            return replace(
-                self.build_input,
-                entities=tuple(
-                    (
-                        self.auto_region
-                        if entity.semantic_id == self.auto_region.semantic_id
-                        else entity
-                        for entity in self.build_input.entities
-                    )
-                ),
-            )
         self.prepare_sweep()
         import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 

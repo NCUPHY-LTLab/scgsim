@@ -1,4 +1,4 @@
-"""Route-aware construction plans and temporary cut-operation records."""
+"""Construction-body and surface-partition records read by surface planning."""
 
 from __future__ import annotations
 
@@ -7,17 +7,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from scgsim.geometry.models.common import ConductorRepresentationLiteral, RouteLiteral
-from scgsim.geometry.models.regions import PortSheetRegionRecord
-from scgsim.geometry.models.tags import BackendEntityTagRecord, TagPlanRecord
-from scgsim.geometry.models.topology import (
-    CurvePlanRecord,
-    InterfacePlanRecord,
-    MMContactRecord,
-    PointPlanRecord,
-    SurfaceLoopRecord,
-    SurfacePlanRecord,
-    VolumePlanRecord,
-)
 
 
 @dataclass(frozen=True)
@@ -25,7 +14,7 @@ class SurfacePartitionRecord:
     """Partition intent for a live child of a semantic or construction parent.
 
     ``parent_interface_id`` identifies a semantic interface or a geometric
-    surface parent validated against the compiler's pre-partition inventory.
+    surface parent validated against the planner's pre-partition inventory.
     An exterior surface parent remains an exterior, not an invented interface.
     This record is not backend geometry or a physical group source. The child
     must be directly buildable; overlay masks are not supported.
@@ -56,60 +45,3 @@ class ConstructionBodyPlanRecord:
     expected_surface_ids: tuple[str, ...] = ()
     valid_routes: tuple[RouteLiteral, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class CutHostOperationRecord:
-    """Route A/B operation that cuts one host with construction bodies.
-
-    Compatible operation records may later be batched by the backend, but the
-    semantic operation identity and member construction bodies must remain
-    recoverable for provenance.
-    """
-
-    operation_id: str
-    host_semantic_id: str
-    construction_body_ids: tuple[str, ...]
-    exposed_surface_ids: tuple[str, ...]
-    valid_routes: tuple[RouteLiteral, ...] = ()
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class ConstructionPlanRecord:
-    """Route-aware handoff from semantic planning to bottom-up OCC creation.
-
-    This is the complete input to the backend. `interfaces` explain why shared
-    surfaces exist, `surface_partitions` explain parent-to-child ownership,
-    `points`, `curves`, and `surface_loops` make shared topology canonical,
-    `surfaces` and `volumes` describe geometry to build,
-    `construction_bodies` and `cut_operations` describe Route A/B host cuts,
-    `port_sheet_regions` carry explicit 2D lumped-port overlap intent, and
-    `tags` define physical names before backend dim-tags exist.
-
-    After OCC construction, the backend returns the same plan with
-    `backend_entity_tags` populated. `FinalPhysicalGroupRecord`s are then a
-    deterministic projection of `tags + backend_entity_tags`.
-    """
-
-    route: RouteLiteral
-    interfaces: tuple[InterfacePlanRecord, ...] = ()
-    surface_partitions: tuple[SurfacePartitionRecord, ...] = ()
-    points: tuple[PointPlanRecord, ...] = ()
-    curves: tuple[CurvePlanRecord, ...] = ()
-    surface_loops: tuple[SurfaceLoopRecord, ...] = ()
-    surfaces: tuple[SurfacePlanRecord, ...] = ()
-    volumes: tuple[VolumePlanRecord, ...] = ()
-    construction_bodies: tuple[ConstructionBodyPlanRecord, ...] = ()
-    cut_operations: tuple[CutHostOperationRecord, ...] = ()
-    tags: tuple[TagPlanRecord, ...] = ()
-    backend_entity_tags: tuple[BackendEntityTagRecord, ...] = ()
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-    port_sheet_regions: tuple[PortSheetRegionRecord, ...] = ()
-
-
-@dataclass(frozen=True)
-class RouteABConstructionPlanRecord(ConstructionPlanRecord):
-    """A/B-only extension; base Route-C record remains legacy-shaped."""
-
-    mm_contacts: tuple[MMContactRecord, ...] = ()

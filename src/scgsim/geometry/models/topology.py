@@ -1,4 +1,4 @@
-"""Canonical interfaces, topology, surfaces, and volumes for geometry plans."""
+"""Canonical interfaces, surfaces and metal-to-metal contacts for geometry plans."""
 
 from __future__ import annotations
 
@@ -8,13 +8,9 @@ from typing import Any
 
 from scgsim.geometry.models.common import (
     DEFAULT_INTERFACE_SOLVER_USE,
-    CurveKindLiteral,
-    CurveOrientationLiteral,
     InterfaceKindLiteral,
     RouteLiteral,
     SolverUseLiteral,
-    SurfaceLoopRoleLiteral,
-    SurfaceOrientationLiteral,
     Vector3D,
 )
 
@@ -108,16 +104,6 @@ class SurfacePlanRecord:
 
 
 @dataclass(frozen=True)
-class SurfaceRefRecord:
-    """Reference to one planned surface from a volume surface loop."""
-
-    surface_id: str
-    orientation: SurfaceOrientationLiteral
-    role: str
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class MMContactRecord:
     """Hidden finite-area same-net conductor contact provenance.
 
@@ -147,112 +133,3 @@ class MMContactRecord:
     material_provenance: Mapping[str, Any] = field(default_factory=dict)
     source_provenance: Mapping[str, Any] = field(default_factory=dict)
     geometry_ref: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class InnerPecVoidShellRecord:
-    """One oriented inner PEC shell excluded from a solution volume."""
-
-    shell_id: str
-    surface_refs: tuple[SurfaceRefRecord, ...]
-    conductor_component_id: str
-    owner_semantic_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class PointPlanRecord:
-    """One canonical planned point shared by all touching curves.
-
-    A conformal v1 plan may not contain two live point records at the same
-    coordinate. Points are topology/audit records, not physical groups.
-    """
-
-    point_id: str
-    coordinate: Vector3D
-    owner_semantic_ids: tuple[str, ...] = ()
-    interface_ids: tuple[str, ...] = ()
-    used_by_curve_ids: tuple[str, ...] = ()
-    boundary_volume_ids: tuple[str, ...] = ()
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class CurvePlanRecord:
-    """One canonical planned curve shared by all touching surfaces.
-
-    Curves are topology/audit/mesh-refinement contract records, not physical
-    groups. `used_by_surface_ids`, `interface_ids`, and `boundary_volume_ids`
-    describe how the curve participates in the final topology without forcing a
-    single semantic owner for shared edges.
-    """
-
-    curve_id: str
-    curve_kind: CurveKindLiteral
-    start_point_id: str
-    end_point_id: str
-    owner_semantic_ids: tuple[str, ...] = ()
-    interface_ids: tuple[str, ...] = ()
-    used_by_surface_ids: tuple[str, ...] = ()
-    boundary_volume_ids: tuple[str, ...] = ()
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-    geometry: Mapping[str, Any] = field(default_factory=dict)
-    parameter_interval: tuple[float, float] | None = None
-
-
-@dataclass(frozen=True)
-class CurveRefRecord:
-    """Oriented reference to one canonical curve from a surface loop."""
-
-    curve_id: str
-    orientation: CurveOrientationLiteral
-    role: str
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class SurfaceLoopRecord:
-    """Canonical loop used by a planned surface.
-
-    A surface owns one outer loop and zero or more hole loops by reference.
-    The loop owns ordered `CurveRefRecord`s so shared boundaries are explicit
-    before OCC lowering.
-    """
-
-    loop_id: str
-    curve_refs: tuple[CurveRefRecord, ...]
-    role: SurfaceLoopRoleLiteral
-    surface_id: str | None = None
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class VolumePlanRecord:
-    """One planned volume assembled from already-planned surfaces.
-
-    Backend-live volumes must be created from `surface_refs`: the planner first
-    controls every boundary surface, and the backend then calls
-    `addSurfaceLoop()` plus `addVolume()` on those surfaces. `metadata` may keep
-    domain bounds, material, or stack provenance for audit, but those records
-    are not permission to create a box or extruded fallback volume.
-
-    Route C material volumes are backend-live solver geometry. Route A/B
-    construction cutters are not represented here; they use
-    `ConstructionBodyPlanRecord` so retained material volumes and temporary
-    cutter bodies cannot be confused.
-    """
-
-    volume_id: str
-    owner_semantic_id: str
-    material_id: str
-    surface_refs: tuple[SurfaceRefRecord, ...]
-    valid_routes: tuple[RouteLiteral, ...] = ()
-    construction_only: bool = False
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class RouteABVolumePlanRecord(VolumePlanRecord):
-    """A/B-only solution-shell extension; base Route-C shape is unchanged."""
-
-    exterior_surface_refs: tuple[SurfaceRefRecord, ...] = ()
-    inner_pec_void_shells: tuple[InnerPecVoidShellRecord, ...] = ()

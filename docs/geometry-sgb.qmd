@@ -18,15 +18,13 @@ reconstruct geometry meaning from solver-generated labels.
 `scgsim.geometry` is the source-facing facade: `GeometryPlan`, detached
 snapshots, normalized input models, adapters, stack/vacuum/curve preparation,
 and summaries. Palace builds this geometry with `scgsim.geometry.sgb`
-(`build_sgb_geometry`) and meshes it with `scgsim.meshing`. `scgsim.geometry.compiler`
-remains the advanced route builder, with derived construction records, stage
-validators, and dispatch; Palace does not use it. Both builders sit below the
+(`build_sgb_geometry`) and meshes it with `scgsim.meshing`. SGB sits below the
 supported entry: a layout enters through `GeometryPlan` and the simulation
 classes, and a direct call with an input built by hand assumes what that entry
 guarantees; see [the supported entry](supported-scope.qmd#supported-entry). The source
-validator is defined in `scgsim.geometry.source.validation` and re-exported by
-the compiler facade. Direct defining modules and model aliases are listed in
-the [API migration reference](api-migration.qmd#geometry-and-compiler-api).
+validator is defined in `scgsim.geometry.source.validation`. Direct defining
+modules and model aliases are listed in the
+[API migration reference](api-migration.qmd#geometry-api).
 
 `build_component_stack()` composes two explicit authorities. PDK
 `LayerStack` records supply materials, process layers, Z/thickness,
@@ -149,11 +147,6 @@ the BREP and XAO files itself; it runs no OCC Boolean and no shell repair. Each
 face keeps its source identity in the sidecar, and Gmsh only opens the written
 XAO to check it before meshing. A construction error stops the build; there is
 no straight-edge fallback or volume repair.
-
-The advanced builder `scgsim.geometry.compiler`, which Palace does not use,
-keeps its own records for curved input: an OCC planar arrangement, typed
-`MMContactRecord` contacts and `metadata.curved_arrangement`. Its route dispatch
-refuses active curves on Route C.
 
 Geometry order and finite element order are separate choices. Curved model
 geometry does not make a positive surface inset an exact curved-perimeter
@@ -519,8 +512,8 @@ A handoff preserves:
 
 External SGB revisions remain derivation history only. The in-tree
 `scgsim.geometry` API is the current authority; its source-facing plan and
-compiler stages remain separate. No direct external consumer or fallback path
-is implied.
+SGB's model construction remain separate. No direct external consumer or
+fallback path is implied.
 
 ## Shared source facts for AEDT
 
@@ -586,7 +579,7 @@ freshly read GDS cell and excluded-reference list. The cache ends with that
 call.
 
 Immutable raw polygons and pure subdivisions are also reused within a prepare,
-adapter or compiler call when the complete ordered operands and grid context
+or adapter call when the complete ordered operands and grid context
 match. Selectors,
 source-record comparisons and physical/contact audits still execute on each
 invocation.

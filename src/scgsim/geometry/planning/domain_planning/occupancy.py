@@ -4,18 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
-    LayoutPolygonSpec,
     SemanticEntitySpec,
 )
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.primitives.entities import entity_by_id, entity_z_range_um
+from scgsim.geometry.primitives.entities import entity_by_id
 from scgsim.geometry.primitives.entity_validation import is_solution_entity
 from scgsim.geometry.primitives.grid import (
     boolean_polygon_region,
@@ -28,81 +26,9 @@ from scgsim.geometry.primitives.loops import (
 )
 from scgsim.geometry.primitives.planar_loops import clean_loop, filter_gdstk_polygons
 from scgsim.geometry.primitives.spatial import range_within_bounds, same_coordinate_z
-from scgsim.semantics.route_a import geometry_z_range, record_geometry, same_z
 
 if TYPE_CHECKING:
-    from gdstk import Polygon
-
-
-def verified_route_a_substrate_support(
-    build_input: GeometryBuildInput, stack: Mapping[str, Any]
-) -> dict[str, dict[str, str]]:
-    """Bind each face metal to one positive-area dielectric contact plane.
-
-    The normalized face polygons and modeled substrate region (rectangle or
-    explicit outer/hole loops) are intersected as regions. A metal overhang
-    remains exposed; neither bounds nor a point/edge touch establishes contact.
-    """
-    import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
-
-    layers = stack.get("layers")
-    if isinstance(layers, str | bytes) or not isinstance(layers, Sequence):
-        raise TypeError("Route A requires a sequence of stack layers.")
-    polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
-    substrates = tuple(
-        (
-            entity
-            for entity in build_input.entities
-            if is_solution_entity(entity) and entity.material_kind == "dielectric"
-        )
-    )
-    result: dict[str, dict[str, str]] = {}
-    for record in layers:
-        if not isinstance(record, Mapping):
-            raise TypeError("Route A stack layers must contain mappings.")
-        if record.get("part_role") != "face_metal":
-            continue
-        source_id = record.get("semantic_id")
-        if not isinstance(source_id, str) or not source_id:
-            raise ValueError("face_metal requires semantic_id for substrate support.")
-        face_z_min, face_z_max = geometry_z_range(
-            record_geometry(record, source_id), source_id
-        )
-        if face_z_max <= face_z_min:
-            raise ValueError(f"{source_id} physical face-metal thickness must be > 0.")
-        face_entities = tuple(
-            (
-                entity
-                for entity in build_input.entities
-                if entity.semantic_id == source_id
-                or entity.metadata.get("semantic_group_id") == source_id
-                or entity.metadata.get("source_semantic_id") == source_id
-            )
-        )
-        face_regions = _face_metal_regions(gdstk, polygons, face_entities, source_id)
-        if not face_regions:
-            raise ValueError(
-                f"{source_id} has no normalized face-metal polygon for substrate attachment."
-            )
-        matches: list[tuple[str, str]] = []
-        for substrate in substrates:
-            sub_z_min, sub_z_max = entity_z_range_um(substrate)
-            sides = (
-                *(("lower",) if same_z(sub_z_max, face_z_min) else ()),
-                *(("upper",) if same_z(sub_z_min, face_z_max) else ()),
-            )
-            if not sides:
-                continue
-            substrate_region = solution_entity_xy_region(gdstk, substrate)
-            if boolean_polygon_region(gdstk, face_regions, substrate_region, "and"):
-                matches.extend(((side, substrate.semantic_id) for side in sides))
-        if len(matches) != 1:
-            raise ValueError(
-                f"{source_id} requires exactly one positive-area dielectric substrate contact at its physical face; matched {matches!r} among {tuple((entity.semantic_id for entity in substrates))!r}."
-            )
-        side, substrate_id = matches[0]
-        result[source_id] = {"side": side, "substrate_id": substrate_id}
-    return result
+    pass
 
 
 def solution_entity_xy_region(
@@ -454,24 +380,3 @@ def required_host_solution_id(
             f"{entity.semantic_id} host_void_semantic_id {host_id!r} is not a solution_region"
         )
     return host_id
-
-
-def _face_metal_regions(
-    gdstk: ModuleType,
-    polygons: Mapping[str, LayoutPolygonSpec],
-    face_entities: Sequence[SemanticEntitySpec],
-    source_id: str,
-) -> list[Polygon]:
-    """Collect normalized face-metal regions while retaining source failures."""
-    face_regions: list[Any] = []
-    for entity in face_entities:
-        for polygon_id in entity.polygon_ids:
-            polygon = polygons.get(polygon_id)
-            if polygon is None:
-                raise ValueError(
-                    f"{source_id} references missing normalized polygon {polygon_id!r}."
-                )
-            exterior = (gdstk.Polygon(clean_loop(polygon.exterior)),)
-            holes = tuple((gdstk.Polygon(clean_loop(hole)) for hole in polygon.holes))
-            face_regions.extend(boolean_polygon_region(gdstk, exterior, holes, "not"))
-    return face_regions

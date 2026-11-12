@@ -27,41 +27,9 @@ from scgsim.geometry.planning.interfaces import (
     plan_mm_contact_records_with_components,
     recognize_route_interfaces,
 )
-from scgsim.geometry.planning.representation import (
-    project_native_route_representations,
-    validate_selected_route,
-)
 from scgsim.geometry.planning.surface_planning.partitions import plan_surface_partitions
 from scgsim.geometry.planning.surface_planning.planner import plan_route_surfaces
 from scgsim.geometry.source.intents import route_a_sheet_interfaces
-
-
-def plan_surface_contribution_patches(
-    build_input: GeometryBuildInput,
-    *,
-    route: RouteLiteral,
-    representation_context: RepresentationContext | None = None,
-) -> tuple[GeometryBuildInput, tuple[SurfacePlanRecord, ...]]:
-    """Derive local physical-side evidence without a backend construction plan.
-
-    This non-Gmsh seam reuses the polygon Boolean and Semantic Core
-    classifiers, but does not plan cutter bodies, canonical mesh topology,
-    port lowering, volumes, tags, or backend identifiers.
-    """
-
-    if representation_context is None:
-        raise ValueError(
-            "interpret_physical_geometry() and pass plan.context for current contribution planning"
-        )
-    build_input = project_native_route_representations(
-        build_input, route, representation_context
-    )
-    validate_selected_route(
-        build_input, route, representation_context=representation_context
-    )
-    return _plan_surface_contribution_geometry(
-        build_input, route=route, representation_context=representation_context
-    )
 
 
 def plan_representation_contribution_geometry(

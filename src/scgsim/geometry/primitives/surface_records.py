@@ -1,4 +1,4 @@
-"""Own canonical surface-record facts shared across compiler planning stages."""
+"""Own canonical surface-record facts shared across planning stages."""
 
 from __future__ import annotations
 

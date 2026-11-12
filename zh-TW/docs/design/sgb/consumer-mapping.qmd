@@ -156,11 +156,9 @@ STEP 匯出與 face 順序把關的步驟在[上一頁](consumer-contract.qmd#se
 |---|---|---|
 | **同一個 change set 切換** | Palace 的 sidecar 與 group 契約：`palace/mesh/build.py` 的 SGB 呼叫與三個檔案的讀取，`physical_groups.py`、`record_validation.py`、`refinement.py`、`provenance.py`，以及每個讀取 group 欄位的地方；result reader 驗證的 index-map metadata（`results/surface_readers.py`、`index_contract.py`、`presentation/surface_figures.py`），因為 `surface_contribution_ledger` 今天是 MA／MS／SA record 的必要證據 | 上面的欄位表；production 的 `build_sgb_geometry`、`apply_sidecar_embeds` |
 | | Route B 的 port embedding：XAO transport group 與 `embed_route_b_port_surfaces` 一起改 | volume 的 `embedded_faces` 與 `apply_sidecar_embeds`（port 位於 support plane 時不需要 embedding） |
-| | `geometry/compiler` 公開 facade 與它在 docs、tests、knowledge 來源（`scripts/generate_knowledge_reference.py`、`docs/knowledge-sources.json`、`tests/test_knowledge_generator.py`）中的所有登錄 | 無 |
 | | AEDT 的 contribution ledger（`aedt/preparation/planar.py` 181–215）：保留舊 planning 到 AEDT 階段，或由新 sidecar 導出 ledger 並在同一次改完 | 上面的 ledger 對照表使後者可行；兩者的取捨尚未決定（[open 項目](#open-items)） |
 | **不變（S0 到 S1）** | `build_gds_stack_geometry_input`、`interpret_physical_geometry`、`GeometryBuildInput`、`RepresentationContext`、`GeometryGridContext`、`GeometryPlan`（含 `set_entity_priorities`）、`ApproximationProfile`、`PhysicalLayerDeclaration`；AEDT 目前使用的 S0／S1 符號（`aedt/eigenmode.py`、`aedt/preparation/*`、`aedt/specs/*`、junction partition） | 新入口的輸入就是它們的輸出；不重寫 |
-| **之後移除** | 兩家都切換之後：`geometry/compiler`、`construction`、`volume_planning`、`port_planning`、`models/{construction,tags}`、`primitives/topology_validation`，及 Palace v1 路徑與它們的測試 | 無 |
-| | AEDT 階段之後：`planning/` 其餘部分（surface、contact、domain、topology planning、evidence、tags）與 `primitives/{surface_records,geometry_refs,topology_validation,port_contract}` | 無 |
+| **之後移除** | AEDT 階段之後：`planning/` 其餘部分（surface、contact、domain、topology planning、evidence、tags）、`models/construction` 與 `primitives/{surface_records,geometry_refs}`，及 Palace v1 路徑與它們的測試 | 無 |
 :::
 
 ### Route C 的採用端需求 {#route-c}
