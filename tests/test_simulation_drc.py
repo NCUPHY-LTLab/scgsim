@@ -602,6 +602,31 @@ def test_islands_meeting_at_a_corner_on_a_pad_are_named_not_the_pad(
     assert "chip/pad_0000" not in message
 
 
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+@pytest.mark.parametrize(
+    "tip_x_um", [20.002, 20.001, 20.0], ids=["2-nm-off", "1-nm-off", "on-the-corner"]
+)
+def test_an_island_beside_the_pad_at_the_edge_is_named_not_the_pad(
+    monkeypatch, simulation, tip_x_um
+):
+    """At the metal's height, an island's tip on the lower edge next to the pad's corner (20, 0) um is named.
+
+    The pad runs along the edge up to its corner, so it pinches nothing there; within two grid units of the
+    tip, or touching it at the corner, it is still not what separates the vacuum on the two sides of the tip.
+    """
+    island = ((tip_x_um, 0), (24, 4), (21, 4))
+    stack = dielectric_island_stack(island, (0.0, 0.2))
+    with pytest.raises(NonManifoldError) as raised:
+        check(simulation, two_pads(monkeypatch, gap_um=10.0), layer_stack=stack)
+    message = str(raised.value)
+    match = REGION_AT_THE_EDGE.search(message)
+    assert match is not None, message
+    assert match["region"] == "island"
+    assert (float(match["x"]), float(match["y"])) == (tip_x_um, 0.0)
+    assert "chip/pad_0000" not in message
+    assert FIX_REGION_AT_THE_EDGE in message
+
+
 @pytest.mark.parametrize(
     "installed", ["2.1.0a1", None], ids=["unpublished-version", "no-metadata"]
 )
