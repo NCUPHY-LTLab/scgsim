@@ -98,6 +98,25 @@ layers =
     scgsim.geometry.sgb.sidecar
     scgsim.geometry.sgb.emission
 
+[importlinter:contract:contracts-import-nothing-else]
+name = Stage contracts import nothing else from scgsim and no third-party package
+type = forbidden
+source_modules =
+    scgsim.contracts
+# scgsim.* matches every top-level subpackage; import-linter skips scgsim.contracts itself.
+forbidden_modules =
+    scgsim.*
+    numpy
+    plotly
+    gdsfactory
+    gdstk
+    gmsh
+    shapely
+    pyvista
+    meshio
+    ansys
+
+# The sidecar definition, scgsim.contracts.sgb_sidecar, is the one scgsim import meshing makes besides its own.
 [importlinter:contract:meshing-reads-contracts-only]
 name = The meshing module reads the sidecar JSON and the XAO, never SGB, AEDT or Palace code
 type = forbidden
@@ -107,3 +126,6 @@ forbidden_modules =
     scgsim.geometry
     scgsim.aedt
     scgsim.palace
+# The class A wall-column limit is one number, owned by the geometry layer's grid model.
+ignore_imports =
+    scgsim.meshing.fine_structure -> scgsim.geometry.models.grid

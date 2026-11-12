@@ -20,9 +20,7 @@ The current implementation separates source geometry, solver preparation,
 native execution, result collection, and offline resolution. Palace and AEDT
 retain separate solver lifecycles; one AEDT transaction owns each Desktop and
 receipt. Prepared-native HFSS EPR can run through local preparation, a
-standalone solver process, and collection on the requested AEDT version. Follow
-the [convergence status](convergence-status.qmd) for current implementation and
-delivery state.
+standalone solver process, and collection on the requested AEDT version.
 
 ## Current package structure
 
@@ -111,11 +109,11 @@ calculation. Visualization reads solver-authoritative metadata and artifacts;
 it does not start a solve or determine run status.
 
 Publicness follows explicit package facades, declared submodule exports and
-documented contracts—not mere importability. The accepted v2 source keeps the
+documented contracts—not mere importability. SCGSim 2.0 keeps the
 high-level `scgsim.geometry`, `scgsim.palace`, `scgsim.aedt`, and
 `scgsim.visualization` entrypoints, and supplies an old-to-new submodule and
 symbol map in the [API migration reference](api-migration.qmd). Moved private
-implementations do not gain public status by relocation. There will be one
+implementations do not gain public status by relocation. Each symbol has one
 current implementation, without old `scgsim.sgb` compatibility wrappers or
 revived Q3D input-v1/v2 paths. The formal `python -m scgsim.aedt.run` entrypoint
 remains supported; it is the AEDT transaction CLI, not a legacy wrapper.
@@ -193,18 +191,18 @@ Within Palace, `results.report_data` owns detached report records and snapshot
 readers; `presentation.reports` owns trust/physics views and figures. The
 package facade retains the existing public result and report names.
 
-The accepted v2 starting producer emitted `scgsim.aedt.runtime-source.v13` with 61
+The first SCGSim 2.0 producer emitted `scgsim.aedt.runtime-source.v13` with 61
 canonical declared module paths, including 41 AEDT modules. Its records carry
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; module bytes and their digest are mandatory, while the
 truthful Git observation may be unavailable. V13 has no helper-hash map and
 does not claim exhaustive transitive-source coverage. Historical runtime-source
 inventories continue to interpret their original module paths and identities;
-relocation does not rewrite or reinterpret their receipts. The responsibility
-correction advances the prior v17 producer to runtime-source v18 while retaining
-receipt V3; its declared inventory binds the relocated implementation.
+relocation does not rewrite or reinterpret their receipts. The current producer
+emits runtime-source v30 while retaining receipt V3; its declared inventory
+binds the relocated implementation.
 
-The flow below shows the accepted source structure. Geometry source preparation
+The flow below shows the source structure. Geometry source preparation
 and compiler planning have separate owners, and neither backend defines source
 identity.
 
@@ -231,12 +229,12 @@ flowchart LR
 The current geometry implementation starts from component-local source facts and
 named occurrences. A `GeometryPlan` holds the expanded entity inventory and
 the Notebook's final `Net -> Entity` map, then prepares one immutable source
-snapshot for the normalized `GeometryBuildInput` boundary. The accepted 1.1.0
-source model includes authored curve declarations and explicit GDS
+snapshot for the normalized `GeometryBuildInput` boundary. The source model
+includes authored curve declarations and explicit GDS
 reconstruction records in that snapshot while preserving Entity/Net ownership.
 `scgsim.geometry` owns the source-facing plan and snapshot; the
 `scgsim.geometry.compiler` surface owns route planning and derived construction
-records. Palace consumes curve intent through SGB (`scgsim.geometry.sgb`); AEDT curve
+records. Palace builds line and circular-arc curves through SGB (`scgsim.geometry.sgb`); AEDT curve
 lowering is unsupported. The
 [GeometryPlan contract](geometry-sgb.qmd) owns exact curve identity and
 arrangement semantics. Native observations do not replace source identity or
@@ -320,13 +318,13 @@ only prepares values and persists caller-supplied JSON payloads; it is not a
 base simulation object and does not receive callbacks into simulation state.
 
 Both public `mesh()` methods invalidate derived state before checking
-prerequisites. Geometry preparation then applies the existing vacuum, Route-A,
-and indium-bump transformations in order and returns the prepared component,
-stack, bump-fill record, and optional material mapping before airbox lowering.
-The simulation conditionally stores that mapping at the existing point, so an
-earlier transform failure or a non-mapping `materials` value retains the prior
-mapping, while an airbox or mesh-construction failure retains the newly prepared
-mapping. Eigenmode resolves authored ports before those transformations and
+prerequisites. Geometry preparation then applies the vacuum region, the
+indium-bump fill and the airbox to the stack, then interprets the physical
+geometry and records Route-A metadata, and returns the prepared component,
+stack, bump-fill record, and optional material mapping. The simulation stores
+that mapping only after preparation returns, so a failure during preparation or
+a non-mapping `materials` value retains the prior mapping, while a
+mesh-construction failure retains the newly prepared mapping. Eigenmode resolves authored ports before those transformations and
 caches the resolved ports only after mesh construction succeeds.
 
 Both public `write_config()` methods invalidate config and handoff state before
@@ -373,11 +371,11 @@ family-specific setup translations. Shared Desktop, ACF/resource, and raw
 saved-setup helpers do not define solver-specific setup fields; see the
 [AEDT setup-control contract](specs/aedt-runtime.qmd#aedt-family-setup-controls).
 
-The Q3D user-requested Stop/Abort-and-save scope remains `CONVERGING`; native operations are unobserved. It exposes `request_q3d_stop_and_save(handoff)` for Clean Stop after the current pass and `request_q3d_abort_and_save(handoff)` to interrupt current work, with exclusive CLI flags `--stop-and-save` and `--abort-and-save`. Both use one exact-target local-Linux requester, the owned Desktop and transaction identity/nonce, and the shared control ledger/lock. Repeating the same mode is idempotent; a conflicting committed mode is refused without another native RPC. Raw RPC responses are uninterpreted. Linux stop-managed Q3D refuses PyAEDT documentation mode before Desktop creation because it overrides the close flags needed for exclusive transaction ownership.
+The Q3D user-requested Stop/Abort-and-save path exposes `request_q3d_stop_and_save(handoff)` for Clean Stop after the current pass and `request_q3d_abort_and_save(handoff)` to interrupt current work, with exclusive CLI flags `--stop-and-save` and `--abort-and-save`. Both use one exact-target local-Linux requester, the owned Desktop and transaction identity/nonce, and the shared control ledger/lock. Repeating the same mode is idempotent; a conflicting committed mode is refused without another native RPC. Raw RPC responses are uninterpreted. Linux stop-managed Q3D refuses PyAEDT documentation mode before Desktop creation because it overrides the close flags needed for exclusive transaction ownership.
 
 The recorder retains blocking Analyze, then observes native `odesktop.AreThereSimulationsRunning(True)` once; `True` includes pending simulations and only native `False` confirms inactivity. Active, unknown, or unavailable state, or uncertain control-ledger closure/read/write/readback, fails and preserves the Desktop by non-closing detach with `release.ok=false`, defers Save/export, and writes no post-release seal or success status. With confirmed inactivity and known ledger state, the recorder attempts explicit Save first, independently records requested available completed-result matrix/convergence exports, retains any raw native files actually produced, and records errors separately. It closes/releases the Desktop only if that Save succeeds. Save failure yields `release.ok=false` with reason `save_failed` and a non-closing detach; it leaves the project/Desktop preserved, with no seal or automatic cleanup. Optional artifacts do not promise recovery or completeness for interrupted work, and their errors do not define the Stop/Abort-save workflow status. `normal_stop_saved` and `abort_saved` require the matching committed intent, returned RPC, Analyze true, confirmed inactivity, successful explicit Save/release, and post-release seal. They label finalized workflows, not physics completion or causal proof. Analyze false/exception stays primary with causality unknown; RPC, control-mode, ACF, Save/export, and release errors stay separately visible. Strict completed-result resolution and Report remain unchanged; there is no partial-result surface. Ordinary no-intent Q3D, other solver families, and non-Linux solver flows are unchanged.
 
-### Request-scoped AEDT version selection (CONVERGING)
+### Request-scoped AEDT version selection
 
 The dual-version request requires `aedt_version` explicitly as either
 `"2023.2"` or `"2024.2"`; it has no default or cross-version fallback. The
@@ -450,18 +448,21 @@ carrier and cannot reinterpret a caller spec or workspace.
 
 New preparation keeps the handoff and handoff-manifest schemas at V1 while both
 declare that the mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial
-V3 receipt records a declared `runtime-source.v28` preparation-time SCGSim module
-manifest and content digest for 284 sorted, unique paths. V28 starts from all
-current AEDT modules, both AEDT visualization loaders, and the non-AEDT paths
-retained from V27, then follows AST-resolved imports and package initializers. It
-adds `scgsim/geometry/primitives/topology_validation.py` to the frozen V27
-roster. Before mutation, execution verifies the canonical manifest and binds the
+V3 receipt records a declared `runtime-source.v30` preparation-time SCGSim module
+manifest and content digest for 400 sorted, unique paths. V30 starts from all
+current AEDT modules, both AEDT visualization loaders, and the non-AEDT paths retained from V29 except `scgsim/geometry/models/lumped.py`,
+then follows AST-resolved imports and package initializers.
+Against the frozen 285-path V29 roster it adds the AEDT SGB STEP import
+(`scgsim/aedt/preparation/sgb_model.py`, `scgsim/aedt/runtime/families/sgb_import.py`,
+`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
+drops `scgsim/aedt/runtime/native/hfss_lumped.py`, `scgsim/aedt/specs/support.py`
+and `scgsim/geometry/models/lumped.py`, which issue #67 decision 8 removed. Before mutation, execution verifies the canonical manifest and binds the
 initial-receipt and prepared-manifest hashes. A canonical historical
 V1 `not_run` handoff with neither marker remains executable, but its resulting
 V3 receipt records preparation provenance as `legacy_v1_not_recorded`; it does
 not fabricate history.
 
-Every new completed V3 receipt records a separate declared `runtime-source.v28`
+Every new completed V3 receipt records a separate declared `runtime-source.v30`
 execution-time module manifest and digest. Its measured module bytes and
 content digest are mandatory; it has no helper-hash map. Preparation and
 execution identities are not required to match: their separation records what
@@ -474,7 +475,7 @@ consistency contract is not source authenticity for an actor able
 to rewrite the entire unsigned artifact set.
 
 The [AEDT receipt/provenance contract](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance)
-is the unique authority for the exact current V28 284-path inventory and frozen
+is the unique authority for the exact current V30 400-path inventory and frozen
 historical reader evolution. V1–V12 retain their exact prior path assignments
 and reader interpretations; V13 binds its declared file set, not every
 transitive dependency. One pure, versioned initial-receipt codec owns historical
@@ -489,8 +490,8 @@ also keep source material identity distinct from verified native PEC
 implementation: solids are native `pec` with Solve Inside disabled, while
 sheets receive Perfect E and must have complete native face coverage.
 
-The accepted Eigenmode EPR lifecycle is an explicit additive path under that
-same transaction owner. It does not reinterpret the historical one-shot
+The Eigenmode EPR workflow is an explicit additional path under that same
+transaction owner. It does not reinterpret the historical one-shot
 prepare--solve--export path or broaden the meaning of an ordinary completed
 receipt. Before its one solve, the EPR path declares geometry bindings,
 junctions, contributions, margins, calculator definitions, and native pass
@@ -524,15 +525,3 @@ not invented pass history.
 See [Folder tree and ownership](ownership.qmd) for repository placement and
 [Headless Geometry Preview](geometry-preview.qmd) for the static and connected
 Notebook inspection contract.
-
-## Historical closeout snapshot
-
-An earlier closeout used `develop` slimming successor
-`b46bcc7d64fbb8bab181c0da2b9234a003a20adf` (tree
-`c99c670927e877fb407aa4c73de32793e86a4460`) and migration baseline
-`develop@3a52fb1` (tree `96adcf8672b497a29dd0a6b43043cca11efc3043`). At that
-snapshot, Q3D body-v3 had build-only/readback/save/release evidence, while a
-completed C/G solve was not observed. Xmon Route A, CircularPad Route B, and
-HFSS Eigenmode/saved-field EPR/offline-loss had not yet been observed as full
-native-to-report workflows. These are historical observations for that
-snapshot; current work is tracked on the [convergence status page](convergence-status.qmd).

@@ -92,23 +92,9 @@ ambiguous origin. The reader preserves the raw value but treats its effective
 loss as unknown; the inverse-$Q$ contribution remains unavailable.
 :::
 
-## Inset margins and the withdrawn distance bands {#surface-distance-band-correction}
+## Inset margins {#surface-distance-band-correction}
 
-The GeometryPlan distance-band producer and its Palace aggregation path were withdrawn and are not part of the current package. Palace Surface EPR offers inset margins through `inset_margins_um` instead: each margin $m$ adds a row for the part of a surface at least $m$ from the nearest gap edge, next to the whole-surface baseline row. SGB cuts those parts into the geometry and stock Palace integrates them as ordinary attributes; see the [margin contract](specs/palace-eigenmode.qmd#surface-epr-margins). The baseline row is always present. Margin rows are alternative evaluations of the same surface, not disjoint bands, so do not add them.
-
-### Future Q2D correction (paused)
-
-Q2D follow-up is paused and is not part of the Palace-only band workflow. The
-same-basis relation previously considered for a separate Q2D correction was
-
-$$
-F = \frac{I_{0-1}}{I_{0.5-1}}, \qquad
-p_{\mathrm{corrected}} = p_{\geq 1} + F p_{0.5-1}.
-$$
-
-This relation is not part of the current Palace band results. The Palace
-cutoff totals are direct Palace EPR outputs; they are not converted by this
-Q2D relation.
+Palace Surface EPR offers inset margins through `inset_margins_um`: each margin $m$ adds a row for the part of a surface at least $m$ from the nearest gap edge, next to the whole-surface baseline row. SGB cuts those parts into the geometry and stock Palace integrates them as ordinary attributes; see the [margin contract](specs/palace-eigenmode.qmd#surface-epr-margins). The baseline row is always present. Margin rows are alternative evaluations of the same surface, not disjoint bands, so do not add them.
 
 Margin rows are alternative interface estimates. Read a saved baseline row and
 its requested margins separately; do not add them as disjoint bands. AEDT evaluates horizontal top/bottom
@@ -126,7 +112,7 @@ in the [native Q reference](specs/palace-eigenmode.qmd#native-eigenmode-q).
 
 ## Explore a result
 
-Start with the [resonance/EPR tutorial](tutorials/resonance-epr.qmd), then use
+Start with a resonance/EPR notebook from [Choose a simulation](examples.qmd#getting-started), then use
 [offline EPR](course/offline-epr.qmd) to inspect recorded modes and revise loss
 assumptions. The [examples](examples.qmd) connect the physical model to its
 backend workflow.

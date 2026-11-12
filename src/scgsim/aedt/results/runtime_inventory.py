@@ -93,7 +93,10 @@ SOURCE_SCHEMA_V28 = "scgsim.aedt.runtime-source.v28"
 SOURCE_SCHEMA_V29 = "scgsim.aedt.runtime-source.v29"
 
 
-SOURCE_SCHEMA = SOURCE_SCHEMA_V29
+SOURCE_SCHEMA_V30 = "scgsim.aedt.runtime-source.v30"
+
+
+SOURCE_SCHEMA = SOURCE_SCHEMA_V30
 
 
 _RUNTIME_SOURCE_V1_MODULES = (
@@ -968,9 +971,9 @@ _RUNTIME_SOURCE_V27_PATHS = (
 
 
 def current_runtime_source_closure() -> tuple[str, ...]:
-    """Recompute the current (V29) closure for roster generation and consistency checks.
+    """Recompute the current (V30) closure for roster generation and consistency checks.
 
-    The shared seeds are V28's, less the modules issue #67 decision 8 removed.
+    The shared seeds are V29's, less the modules issue #67 decision 8 removed.
     """
     source_root = Path(__file__).resolve().parents[3]
     aedt_root = source_root / "scgsim/aedt"
@@ -980,7 +983,7 @@ def current_runtime_source_closure() -> tuple[str, ...]:
     )
     retained_shared_seeds = tuple(
         path
-        for path in _RUNTIME_SOURCE_V28_PATHS
+        for path in _RUNTIME_SOURCE_V29_PATHS
         if not path.startswith("src/scgsim/aedt/")
         and path not in _REMOVED_BY_DECISION_8
     )
@@ -1282,9 +1285,19 @@ _RUNTIME_SOURCE_V28_PATHS = (
 )
 
 
+_RUNTIME_SOURCE_V29_PATHS = tuple(
+    sorted(
+        (
+            *_RUNTIME_SOURCE_V28_PATHS,
+            "src/scgsim/geometry/planning/junction_planning/lattice.py",
+        )
+    )
+)
+
+
 _REMOVED_BY_DECISION_8 = ("src/scgsim/geometry/models/lumped.py",)
 
-_RUNTIME_SOURCE_V29_PATHS = (
+_RUNTIME_SOURCE_V30_PATHS = (
     "src/scgsim/__init__.py",
     "src/scgsim/aedt/__init__.py",
     "src/scgsim/aedt/batch.py",
@@ -1406,6 +1419,16 @@ _RUNTIME_SOURCE_V29_PATHS = (
     "src/scgsim/aedt/specs/q3d.py",
     "src/scgsim/aedt/terminal_chain.py",
     "src/scgsim/aedt/versions.py",
+    "src/scgsim/contracts/__init__.py",
+    "src/scgsim/contracts/sgb_sidecar/__init__.py",
+    "src/scgsim/contracts/sgb_sidecar/errors.py",
+    "src/scgsim/contracts/sgb_sidecar/markers.py",
+    "src/scgsim/contracts/sgb_sidecar/read.py",
+    "src/scgsim/contracts/sgb_sidecar/records.py",
+    "src/scgsim/contracts/sgb_sidecar/references.py",
+    "src/scgsim/contracts/sgb_sidecar/schema.py",
+    "src/scgsim/contracts/sgb_sidecar/structure.py",
+    "src/scgsim/contracts/sgb_sidecar/version.py",
     "src/scgsim/diagnostics.py",
     "src/scgsim/geometry/__init__.py",
     "src/scgsim/geometry/compiler/__init__.py",
@@ -1473,6 +1496,7 @@ _RUNTIME_SOURCE_V29_PATHS = (
     "src/scgsim/geometry/planning/junction_planning/emission.py",
     "src/scgsim/geometry/planning/junction_planning/exact_geometry.py",
     "src/scgsim/geometry/planning/junction_planning/incidence.py",
+    "src/scgsim/geometry/planning/junction_planning/lattice.py",
     "src/scgsim/geometry/planning/junction_planning/local_frame.py",
     "src/scgsim/geometry/planning/junction_planning/model.py",
     "src/scgsim/geometry/planning/junction_planning/model_checks.py",
@@ -1544,6 +1568,7 @@ _RUNTIME_SOURCE_V29_PATHS = (
     "src/scgsim/geometry/sgb/assembly/walls.py",
     "src/scgsim/geometry/sgb/build.py",
     "src/scgsim/geometry/sgb/cutfamilies/__init__.py",
+    "src/scgsim/geometry/sgb/cutfamilies/die_cuts.py",
     "src/scgsim/geometry/sgb/cutfamilies/gap_intervals.py",
     "src/scgsim/geometry/sgb/cutfamilies/generate.py",
     "src/scgsim/geometry/sgb/cutfamilies/inset.py",
@@ -1707,9 +1732,10 @@ def runtime_source_paths(schema: Any) -> tuple[str, ...] | None:
         SOURCE_SCHEMA_V27: _RUNTIME_SOURCE_V27_PATHS,
         SOURCE_SCHEMA_V28: _RUNTIME_SOURCE_V28_PATHS,
         SOURCE_SCHEMA_V29: _RUNTIME_SOURCE_V29_PATHS,
+        SOURCE_SCHEMA_V30: _RUNTIME_SOURCE_V30_PATHS,
     }.get(schema)
 
 
 def current_runtime_source_paths() -> tuple[str, ...]:
     """Return the current producer inventory in canonical order."""
-    return _RUNTIME_SOURCE_V29_PATHS
+    return _RUNTIME_SOURCE_V30_PATHS

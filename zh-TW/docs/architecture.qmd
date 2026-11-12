@@ -11,9 +11,9 @@ lang: zh-TW
 
 SCGSim 區分 PDK 事實、元件意圖、語意幾何、求解器準備、執行、結果載入及呈現。求解器後端可以實作自己的物理模型，但不能重新定義幾何身分、執行身分或共用來源資訊。
 
-目前實作分開處理來源幾何、求解器準備、原生執行、結果收集及離線解析。Palace 與 AEDT 保留各自求解器生命週期；每個 Desktop 與憑證由單一 AEDT 交易負責。準備好的原生 HFSS EPR 可依要求的 AEDT 版本，經過本機準備、獨立求解器程序及收集。現行實作與交付狀態請見[收斂狀態](convergence-status.qmd)。
+目前實作分開處理來源幾何、求解器準備、原生執行、結果收集及離線解析。Palace 與 AEDT 保留各自求解器生命週期；每個 Desktop 與憑證由單一 AEDT 交易負責。準備好的原生 HFSS EPR 可依要求的 AEDT 版本，經過本機準備、獨立求解器程序及收集。
 
-## 目前套件結構 {#accepted-scgsim-2.0-structure}
+## 目前套件結構 {#current-package-structure}
 
 套件將來源幾何、幾何編譯、求解器後端、結果處理與呈現分開。下列樹列出共用套件責任；Palace 與 AEDT 各自保有準備、執行與結果生命週期。
 
@@ -65,7 +65,7 @@ HFSS 家族負責一般來源支援的 Eigenmode 準備、求解及匯出。EPR 
 
 幾何來源準備與編譯器規劃各有負責者：來源準備使用共用基本操作，編譯器協調分工明確的規劃模組，建構模組則將規劃結果轉成原生幾何並匯出。後端家族使用共用幾何，不互相匯入。`semantics` 維持只依賴標準函式庫的不可變事實邊界。Palace 與 AEDT 保有各自可變模擬狀態、交易生命週期及物理結果意義。共用呈現模組格式化獨立值，不負責求解器物理或計算。視覺化讀取求解器權威中繼資料與產物，不啟動求解或決定執行狀態。
 
-公開性依據明確套件外觀介面、宣告的子模組匯出及文件契約，不因可匯入就成為公開。已接受 v2 來源保留高階 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 與 `scgsim.visualization` 入口，並在 [API 遷移參考](api-migration.qmd) 提供新舊子模組及符號映射。搬移的私有實作不因位置改變而公開。現行實作只有一套，不保留舊 `scgsim.sgb` 相容包裝器，也不恢復 Q3D input-v1／v2 路徑。正式 `python -m scgsim.aedt.run` 入口仍受支援；它是 AEDT 交易 CLI，不是舊版包裝器。
+公開性依據明確套件外觀介面、宣告的子模組匯出及文件契約，不因可匯入就成為公開。SCGSim 2.0 保留高階 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 與 `scgsim.visualization` 入口，並在 [API 遷移參考](api-migration.qmd) 提供新舊子模組及符號映射。搬移的私有實作不因位置改變而公開。現行實作只有一套，不保留舊 `scgsim.sgb` 相容包裝器，也不恢復 Q3D input-v1／v2 路徑。正式 `python -m scgsim.aedt.run` 入口仍受支援；它是 AEDT 交易 CLI，不是舊版包裝器。
 
 `geometry` 外觀模組是來源建模的入口，提供 `GeometryPlan`、獨立快照、正規化輸入紀錄、元件及堆疊轉接、物理表示解讀與輸入摘要。進階建構使用 `geometry.compiler` 外觀模組，其中提供 `SemanticGeometryBuilder`、路徑建構規劃、衍生紀錄、階段操作及驗證器。輸入驗證定義於 `geometry.source.validation`，並由編譯器外觀模組重新匯出。Palace 不經由這個外觀模組建置：它呼叫 `scgsim.geometry.sgb` 的 `build_sgb_geometry`，再用 `scgsim.meshing` 為結果產生網格。
 
@@ -92,7 +92,7 @@ Palace 保有兩個不同的可變準備負責者：Electrostatic 與 Eigenmode 
 
 Palace 內部由 `results.report_data` 負責獨立報告紀錄與快照讀取器；`presentation.reports` 負責可信度／物理量檢視及圖形。套件外觀介面保留既有公開結果與報告名稱。
 
-已接受 v2 的起始產生器輸出 `scgsim.aedt.runtime-source.v13`，具有 61 個正規宣告模組路徑，包含 41 個 AEDT 模組。紀錄攜帶 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`；模組位元組及其摘要為必要，真實 Git 觀察則可能不可用。V13 沒有輔助函式雜湊映射，也不宣稱涵蓋全部遞移來源。歷史執行期來源清單繼續依原始模組路徑與身分解讀；搬移不重寫或重新解讀憑證。責任修正將先前 v17 產生器推進至 runtime-source v18，同時保留憑證 V3；宣告清單綁定搬移後的實作。
+SCGSim 2.0 的第一個產生器輸出 `scgsim.aedt.runtime-source.v13`，具有 61 個正規宣告模組路徑，包含 41 個 AEDT 模組。紀錄攜帶 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`；模組位元組及其摘要為必要，真實 Git 觀察則可能不可用。V13 沒有輔助函式雜湊映射，也不宣稱涵蓋全部遞移來源。歷史執行期來源清單繼續依原始模組路徑與身分解讀；搬移不重寫或重新解讀憑證。目前的產生器輸出 runtime-source v30，同時保留憑證 V3；宣告清單綁定搬移後的實作。
 
 下圖呈現目前的來源結構。幾何來源準備與編譯器規劃分別負責，兩個後端都不定義來源身分。
 
@@ -116,7 +116,7 @@ flowchart LR
   RESULTS --> REPORT["統一 Plotly 報告外層結構"]
 ```
 
-目前幾何實作由元件局部來源事實與具名出現實例開始。`GeometryPlan` 持有展開的實體清單及 Notebook 最終 `Net -> Entity` 映射，再為正規化 `GeometryBuildInput` 邊界準備單一不可變來源快照。已接受的 1.1.0 來源模型在快照中包含指定曲線宣告及明確 GDS 重建紀錄，同時保留 Entity／Net 歸屬。`scgsim.geometry` 負責面向來源的計畫及快照；`scgsim.geometry.compiler` 負責路徑規劃及衍生建構紀錄。Palace 透過 SGB（`scgsim.geometry.sgb`）使用曲線意圖；AEDT 不支援曲線轉換。[GeometryPlan 契約](geometry-sgb.qmd) 負責確切曲線身分及排列語意。原生觀察不取代來源身分，也不確立連通性。AEDT 綁定資料經過原生彙總後，仍保留來源成員與涵蓋範圍。
+目前幾何實作由元件局部來源事實與具名出現實例開始。`GeometryPlan` 持有展開的實體清單及 Notebook 最終 `Net -> Entity` 映射，再為正規化 `GeometryBuildInput` 邊界準備單一不可變來源快照。來源模型在快照中包含指定曲線宣告及明確 GDS 重建紀錄，同時保留 Entity／Net 歸屬。`scgsim.geometry` 負責面向來源的計畫及快照；`scgsim.geometry.compiler` 負責路徑規劃及衍生建構紀錄。Palace 透過 SGB（`scgsim.geometry.sgb`）建構線段與圓弧曲線；AEDT 不支援曲線轉換。[GeometryPlan 契約](geometry-sgb.qmd) 負責確切曲線身分及排列語意。原生觀察不取代來源身分，也不確立連通性。AEDT 綁定資料經過原生彙總後，仍保留來源成員與涵蓋範圍。
 
 在編譯器的 OCC 路徑，標準殼 AutoFix 修正殼方向時可能替換原生面標記。幾何建構透過完整原生線框／邊對應，將修復後的面映射至來源表面，並將此映射帶入匯出與後端建構。來源 `SurfaceID` 維持權威；數值 Gmsh 標記可以改變。在已觀察的 Circle Route B 建構中，共用面與金屬切口邊界仍綁定來源，埠薄片仍獨立。此觀察限於該幾何案例。若無法建立必要對應，建構會失敗。幾何契約負責確切行為及失敗邊界。
 
@@ -162,7 +162,7 @@ Palace 網格品質檢查是 `scgsim.palace.mesh.quality` 下、讀取產出 MSH
 
 `ElectrostaticSim` 與 `EigenmodeSim` 仍是各自可變網格、設定、已解析埠及交接狀態的公開負責者。共用私有流程只準備值並持久化呼叫端提供的 JSON 酬載；它不是模擬基底物件，也不接收回呼來操作模擬狀態。
 
-兩個公開 `mesh()` 方法都在檢查先決條件前使衍生狀態失效。幾何準備接著依序套用既有真空、Route-A 及銦凸塊轉換，在空氣盒轉換前回傳準備好的元件、堆疊、凸塊填充紀錄及選用材料映射。模擬在既有位置有條件地儲存該映射，因此較早的轉換失敗或非映射 `materials` 值會保留原映射；空氣盒或網格建構失敗則保留新準備的映射。Eigenmode 在這些轉換之前解析來源指定埠，且只有網格建構成功後才快取已解析埠。
+兩個公開 `mesh()` 方法都在檢查先決條件前使衍生狀態失效。幾何準備接著依序對堆疊套用真空區域、銦凸塊填充與空氣盒，再解讀物理幾何並記錄 Route-A 中繼資料，然後回傳準備好的元件、堆疊、凸塊填充紀錄及選用材料映射。模擬只在準備完成後儲存該映射，因此準備過程中的失敗或非映射 `materials` 值會保留原映射；網格建構失敗則保留新準備的映射。Eigenmode 在這些轉換之前解析來源指定埠，且只有網格建構成功後才快取已解析埠。
 
 兩個公開 `write_config()` 方法都在既有先決條件及網格存在檢查前，使設定與交接狀態失效。求解器專屬轉換仍在持久化之前發生。共用私有寫入器依呼叫端順序獨立替換每個中繼資料檔，最後才替換 `config.json`；因此後續寫入失敗時，較早檔案仍保留，只有最終替換成功才快取 `config_path`。記憶體失效處理不刪除磁碟上的舊設定檔，此逐檔行為也不保證整個流程具有交易原子性。
 
@@ -176,13 +176,13 @@ Palace 的網格行為區分 Gmsh 幾何階數與 FEM 階數，並將尺寸配�
 
 HFSS Eigenmode 與 EPR 共用單一私有設定控制映射；EPR 只負責其運算式快取擴充。Driven HFSS 與 Q3D／Q2D 保留家族專屬設定轉換。共用 Desktop、ACF／資源及原始儲存設定輔助函式不定義求解器專屬設定欄位；請見 [AEDT 設定控制契約](specs/aedt-runtime.qmd#aedt-family-setup-controls)。
 
-### Q3D 要求停止／中止並儲存（CONVERGING）
+### Q3D 要求停止／中止並儲存
 
-Q3D 使用者要求的停止／中止並儲存功能仍為 `CONVERGING`；尚未觀察原生操作。它提供 `request_q3d_stop_and_save(handoff)`，在目前通過完成後要求 Clean Stop；也提供 `request_q3d_abort_and_save(handoff)`，中斷目前工作，並使用互斥的 `--stop-and-save` 與 `--abort-and-save` CLI 旗標。兩者都使用精確目標的本機 Linux 請求器、擁有的 Desktop、交易識別／nonce，以及共用控制 ledger／鎖。重複相同模式具冪等性；若已提交模式衝突，會拒絕且不再呼叫原生 RPC。原始 RPC 回應不作解讀。Linux 停止管理型 Q3D 會在建立 Desktop 前拒絕 PyAEDT 文件產生模式，因為該模式會覆寫排他交易擁有權所需的關閉旗標。
+Q3D 使用者要求的停止／中止並儲存功能提供 `request_q3d_stop_and_save(handoff)`，在目前通過完成後要求 Clean Stop；也提供 `request_q3d_abort_and_save(handoff)`，中斷目前工作，並使用互斥的 `--stop-and-save` 與 `--abort-and-save` CLI 旗標。兩者都使用精確目標的本機 Linux 請求器、擁有的 Desktop、交易識別／nonce，以及共用控制 ledger／鎖。重複相同模式具冪等性；若已提交模式衝突，會拒絕且不再呼叫原生 RPC。原始 RPC 回應不作解讀。Linux 停止管理型 Q3D 會在建立 Desktop 前拒絕 PyAEDT 文件產生模式，因為該模式會覆寫排他交易擁有權所需的關閉旗標。
 
 Recorder 會保留阻塞中的 Analyze，之後僅觀察一次原生 `odesktop.AreThereSimulationsRunning(True)`；`True` 包含待執行的模擬，只有原生回傳 `False` 才能確認已停止。若原生狀態為執行中、未知或不可用，或控制 ledger 的關閉／讀取／寫入／回讀結果不確定，流程會失敗，並以非關閉 detach 保留 Desktop（`release.ok=false`），延後 Save／匯出，不寫入執行後封存或成功狀態。若已確認停止且 ledger 狀態明確，recorder 會先嘗試明確的 Save，再獨立記錄所要求且可用的已完成結果矩陣／原生收斂匯出；保留實際產生的原始檔案並分別記錄錯誤。只有 Save 成功才會關閉／釋出 Desktop。Save 失敗時會以 `release.ok=false`、原因 `save_failed` 執行非關閉 detach，保留專案與 Desktop，不寫入封存，也不自動清理。選用產物不保證復原或完整呈現遭中斷的工作，其錯誤也不決定停止／中止並儲存的流程狀態。`normal_stop_saved` 與 `abort_saved` 必須符合相符的已提交意圖、RPC 回傳、Analyze 成功、已確認停止、明確 Save／釋出成功與執行後封存。這些狀態只表示停止／中止並儲存流程完成，不代表物理求解完成，也不證明請求造成終止。Analyze 失敗或例外仍是主要錯誤，因果關係未知；RPC、控制模式、ACF、Save／匯出及釋出錯誤分別保留。完整結果解析與 Report 維持不變，不提供部分結果介面。沒有請求意圖的一般 Q3D、其他求解器家族與非 Linux 流程維持原狀。
 
-### 以要求為範圍的 AEDT 版本選取（CONVERGING） {#request-scoped-aedt-version-selection-converging}
+### 以要求為範圍的 AEDT 版本選取 {#request-scoped-aedt-version-selection}
 
 雙版本要求必須明確提供 `aedt_version` 為 `"2023.2"` 或 `"2024.2"`，沒有預設值或跨版本備援。選定值屬於單一要求及交易，不是程序全域設定。兩個版本使用相同交易負責者、執行設定及固定 PyAEDT 1.3.0。交易的 PyAEDT Desktop 在同一節點本機執行。
 
@@ -210,22 +210,18 @@ AEDT 交易在工作站準備並釋放每個原生 EPR 模型。`scgsim.aedt.bat
 
 進入家族時，單一私有綁定要求固定絕對執行工作區，並分離解析後規格酬載。即使程序工作資料夾後來改變，相對來源路徑仍以該綁定工作區解讀；絕對來源路徑保留指定的詞法身分。進入後，準備階段只讀取此綁定要求。其載體保留可變原生應用程式控制代碼，以及獨立準備讀回；求解與匯出使用該載體，不能重新解讀呼叫端規格或工作區。
 
-新準備維持交接及交接清單結構為 V1，兩者都宣告可變執行憑證使用 `scgsim.aedt.receipt.v3`。初始 V3 憑證記錄宣告的 `runtime-source.v28` 準備期 SCGSim 模組清單與內容摘要，共 284 條路徑。V28 從目前所有 AEDT 模組、兩個 AEDT 視覺化載入器，以及 V27 保留的非 AEDT 路徑開始，再沿 AST 解析的匯入及套件初始化檔閉合；相較凍結的 V27 283 條路徑，新增 `scgsim/geometry/primitives/topology_validation.py`。變更之前，執行會驗證正規清單，並綁定初始憑證及準備清單雜湊。兩種標記都沒有的正規歷史 V1 `not_run` 交接仍可執行，但產生的 V3 憑證將準備來源記為 `legacy_v1_not_recorded`，不虛構歷史。
+新準備維持交接及交接清單結構為 V1，兩者都宣告可變執行憑證使用 `scgsim.aedt.receipt.v3`。初始 V3 憑證記錄宣告的 `runtime-source.v30` 準備期 SCGSim 模組清單與內容摘要，共 400 條路徑。V30 從目前所有 AEDT 模組、兩個 AEDT 視覺化載入器，以及 V29 保留的非 AEDT 路徑（`scgsim/geometry/models/lumped.py` 除外）開始，再沿 AST 解析的匯入及套件初始化檔閉合；相較凍結的 V29 285 條路徑，新增 AEDT SGB STEP 匯入（`scgsim/aedt/preparation/sgb_model.py`、`scgsim/aedt/runtime/families/sgb_import.py`、`scgsim/aedt/runtime/families/sgb_faces.py`、`scgsim/aedt/epr/sgb_surfaces.py`）及其匯入的 SGB 模組，並移除 issue #67 決策 8 刪除的 `scgsim/aedt/runtime/native/hfss_lumped.py`、`scgsim/aedt/specs/support.py` 與 `scgsim/geometry/models/lumped.py`。變更之前，執行會驗證正規清單，並綁定初始憑證及準備清單雜湊。兩種標記都沒有的正規歷史 V1 `not_run` 交接仍可執行，但產生的 V3 憑證將準備來源記為 `legacy_v1_not_recorded`，不虛構歷史。
 
-每份新完成 V3 憑證另外記錄宣告的 `runtime-source.v28` 執行期模組清單與摘要。量測的模組位元組與內容摘要為必要；沒有輔助函式雜湊映射。準備與執行身分不要求相同：分開記錄何者準備、何者實際執行交接。歷史完成 V1 憑證仍依舊解析規則，但 V1 憑證若搭配任一後續版本預期標記，會以同批產物不一致遭拒。歷史完成 V2 憑證保留既有解析規則；新的 V3 專屬原生 PEC 檢查不重新解讀它們。此一致性契約無法對能重寫整組未簽署產物的行為者提供來源真實性保證。
+每份新完成 V3 憑證另外記錄宣告的 `runtime-source.v30` 執行期模組清單與摘要。量測的模組位元組與內容摘要為必要；沒有輔助函式雜湊映射。準備與執行身分不要求相同：分開記錄何者準備、何者實際執行交接。歷史完成 V1 憑證仍依舊解析規則，但 V1 憑證若搭配任一後續版本預期標記，會以同批產物不一致遭拒。歷史完成 V2 憑證保留既有解析規則；新的 V3 專屬原生 PEC 檢查不重新解讀它們。此一致性契約無法對能重寫整組未簽署產物的行為者提供來源真實性保證。
 
-[AEDT 憑證／來源契約](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance) 是目前確切 V28、共 284 條路徑的清單及凍結歷史讀取器演進的唯一依據。V1–V12 保留原有確切路徑分派與讀取器解讀；V13 綁定宣告檔案集，不涵蓋每個遞移依賴。單一純函式、具版本的初始憑證編解碼器，負責歷史 V1／V2 及目前 V3 JSON 成員順序、縮排與結尾換行；交接寫入與初始憑證重建都使用此編解碼器。歷史憑證雜湊不與已安裝來源比較，準備與執行身分維持為獨立資料。
+[AEDT 憑證／來源契約](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance) 是目前確切 V30、共 400 條路徑的清單及凍結歷史讀取器演進的唯一依據。V1–V12 保留原有確切路徑分派與讀取器解讀；V13 綁定宣告檔案集，不涵蓋每個遞移依賴。單一純函式、具版本的初始憑證編解碼器，負責歷史 V1／V2 及目前 V3 JSON 成員順序、縮排與結尾換行；交接寫入與初始憑證重建都使用此編解碼器。歷史憑證雜湊不與已安裝來源比較，準備與執行身分維持為獨立資料。
 
 執行期來源資訊在 PyAEDT 匯入及 Desktop 建構之前，於憑證負責的失敗交易內計算。新 HFSS V3 憑證也區分來源材料身分與已驗證原生 PEC 實作：實體為原生 `pec`，且停用 Solve Inside；薄片接收 Perfect E，並要求完整原生面涵蓋範圍。
 
-已接受的 Eigenmode EPR 生命週期是同一交易負責者之下、明確新增的路徑。它不重新解讀歷史一次性準備—求解—匯出路徑，也不擴大一般完成憑證的意義。在唯一一次求解之前，EPR 路徑宣告幾何綁定、接面、貢獻、邊距、計算器定義及原生迭代快取項目。求解器停止後，匯出紀錄的迭代／模態歷史；若求解引發例外或回傳失敗，交易保留原始錯誤、釋放自行擁有的 Desktop，不自動儲存或復原部分匯出。既有完整收斂讀取器維持不變；成功求解後匯出的歷史記錄自己的完成迭代身分與狀態。
+Eigenmode EPR 工作流程是同一交易負責者之下、明確新增的路徑。它不重新解讀歷史一次性準備—求解—匯出路徑，也不擴大一般完成憑證的意義。在唯一一次求解之前，EPR 路徑宣告幾何綁定、接面、貢獻、邊距、計算器定義及原生迭代快取項目。求解器停止後，匯出紀錄的迭代／模態歷史；若求解引發例外或回傳失敗，交易保留原始錯誤、釋放自行擁有的 Desktop，不自動儲存或復原部分匯出。既有完整收斂讀取器維持不變；成功求解後匯出的歷史記錄自己的完成迭代身分與狀態。
 
 模態選取是後處理狀態，不是物理設計變化。完整 Eigenmode 來源向量以無因次相對控制 `1` 恰好選取一個原生模態，其他模態全部為 `0`，並明確綁定相位與選定解。`EigenPeakElectricField` 指稱原生正規化慣例；此控制不是量測的 `1 V/m` 場。向量順序與持久化原生來源項目是資料依據，繼承的 GUI 狀態及合成 `Mode` 內在參數不是。迭代快取身分另外綁定設定、物理變化、自適應迭代、原生模態、項目定義、依賴、內容及解。項目標題與資料列位置都不是身分。
 
 歷史快取解析與最終已儲存場分析是獨立能力。歷史讀取器只回傳 AEDT 實際紀錄的迭代／模態值，保留軸與缺項。最終分析關閉並封存已求解專案與完整結果資料夾，在安裝求解防護的另一份工作副本重新開啟，評估最後儲存的場，不改動原始資料。缺少最終場時，不退回較早的快取迭代；新的求解後邊距是最終場計算，不是虛構的迭代歷史。
 
 儲存庫位置請見[資料夾樹與責任](ownership.qmd)；靜態及連線 Notebook 檢查契約請見[無顯示幾何預覽](geometry-preview.qmd)。
-
-## 歷史結案快照 {#historical-closeout-snapshot}
-
-較早的結案使用 `develop` 精簡後繼版本 `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`（樹 `c99c670927e877fb407aa4c73de32793e86a4460`），以及遷移基準 `develop@3a52fb1`（樹 `96adcf8672b497a29dd0a6b43043cca11efc3043`）。在該快照中，Q3D body-v3 具有僅建構／讀回／儲存／釋放資料，尚未觀察到完成的 C／G 求解。Xmon Route A、CircularPad Route B，以及 HFSS Eigenmode／已儲存場 EPR／離線損耗，當時尚未觀察到完整原生至報告流程。這些是該快照的歷史觀察；目前工作追蹤於[收斂狀態頁](convergence-status.qmd)。

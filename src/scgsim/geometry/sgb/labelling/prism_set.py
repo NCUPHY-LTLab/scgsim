@@ -100,9 +100,9 @@ def _owning_conductor(
     priority fails closed naming both entities.
     """
     if len({p.net_id for p in conductors}) > 1:
-        names = ", ".join(sorted({p.entity_id for p in conductors}))
         raise OverlapError(
-            f"different-Net conductors overlap near {format_location(where, grid)}: {names}"
+            f"different-Net conductors overlap near {format_location(where, grid)}: "
+            f"{named_entities(conductors)}. {FIX_NETS}"
         )
     top = max(p.priority for p in conductors)
     leaders = sorted({p.entity_id for p in conductors if p.priority == top})
@@ -200,15 +200,27 @@ def resolve_owner(
     if ports:
         landing = _landing_hosts(ports, hit)
         if len(ports) > 1 or len(hit) - len(ports) > len(landing):
-            names = ", ".join(sorted(p.entity_id for p in hit))
             raise OverlapError(
-                f"a port sheet overlaps another sheet near {format_location(where, grid)}: {names}"
+                f"a port sheet overlaps another sheet near {format_location(where, grid)}: "
+                f"{_named_sheets(hit)}. Fix the layout: draw each port sheet clear of every "
+                "other sheet but the conductors it lands on."
             )
         if not landing:
             return SheetOwner("port", ports[0].entity_id)
         hit = landing
     winner = _owning_conductor(hit, where, grid)
     return SheetOwner("conductor", winner.entity_id, winner.net_id or "")
+
+
+def _named_sheets(sheets: Sequence[PrismRecord]) -> str:
+    """The sheets at a point, sorted: each port with its name and drawn layer, each other sheet with its layer."""
+    named = [
+        f"{p.entity_id} (port {p.port.source_name!r}) on layer {p.port.source_layer}"
+        if p.port is not None
+        else named_entities([p])
+        for p in sheets
+    ]
+    return ", ".join(sorted(named))
 
 
 def _landing_hosts(
@@ -247,6 +259,21 @@ def without_landings(
     if owner is not None and owner.kind == "port":
         owner = None
     return owner, kept
+
+
+FIX_NETS = (
+    "Fix the layout or the Net declaration: draw the conductors of different Nets apart, "
+    "or declare them one Net."
+)
+
+
+def named_entities(prisms: Sequence[PrismRecord]) -> str:
+    """The prisms' entities, each with its source layer, sorted, for error messages."""
+    named = {
+        p.entity_id if p.layer is None else f"{p.entity_id} on layer {p.layer}"
+        for p in prisms
+    }
+    return ", ".join(sorted(named))
 
 
 def format_location(where: RepPoint, grid: Grid) -> str:

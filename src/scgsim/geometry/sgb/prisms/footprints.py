@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.plane import Point, Ring
@@ -34,12 +35,18 @@ from scgsim.geometry.sgb.records.grid import Grid
 
 @dataclass(frozen=True)
 class SourceFootprint:
-    """One connected source footprint of an entity: lattice rings in source order."""
+    """One connected source footprint of an entity: lattice rings in source order.
+
+    ``authored`` is false for a junction end piece the partition derived: a boundary
+    selector point binds authored footprints only, so one the end piece overlaps still names
+    the terminal's own polygon.
+    """
 
     entity_id: str
     polygon: int
     outer: Ring
     holes: tuple[Ring, ...] = ()
+    authored: bool = True
 
     def rings(self) -> tuple[Ring, ...]:
         """The outer ring followed by the holes."""
@@ -66,12 +73,13 @@ def source_footprints(
     representation: RepresentationContext,
 ) -> list[SourceFootprint]:
     """The footprints of an entity on the model grid, one per connected source footprint."""
+    authored: list[bool] = []
     if is_auto_vacuum_region(entity):
         loops = [(_envelope_rectangle(entity, representation), ())]
     elif is_solution_region(entity):
         loops = [_solution_loops(entity)]
     else:
-        loops = _conductor_loops(entity, build_input)
+        loops, authored = _conductor_loops(entity, build_input)
     footprints = []
     for polygon, (outer, holes) in enumerate(loops):
         what = f"{entity.semantic_id} polygon {polygon}"
@@ -84,6 +92,7 @@ def source_footprints(
                     lattice_ring(hole, grid, f"{what} hole {k}")
                     for k, hole in enumerate(holes)
                 ),
+                authored[polygon] if authored else True,
             )
         )
     return footprints
@@ -121,9 +130,13 @@ def _solution_loops(
 
 def _conductor_loops(
     entity: SemanticEntitySpec, build_input: GeometryBuildInput
-) -> list[tuple[Sequence[Sequence[float]], Sequence[Sequence[Sequence[float]]]]]:
+) -> tuple[
+    list[tuple[Sequence[Sequence[float]], Sequence[Sequence[Sequence[float]]]]],
+    list[bool],
+]:
+    """The rings of each owned polygon, and whether each is authored (not a junction end piece)."""
     polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
-    loops = []
+    loops, authored = [], []
     for polygon_id in entity.polygon_ids:
         polygon = polygons.get(polygon_id)
         if polygon is None:
@@ -131,11 +144,12 @@ def _conductor_loops(
                 f"{entity.semantic_id} references unknown polygon_id {polygon_id!r}"
             )
         loops.append((polygon.exterior, polygon.holes))
+        authored.append(not is_junction_end_piece(polygon))
     if loops:
-        return loops
+        return loops, authored
     geometry = entity.geometry
     if "outer_loop" in geometry:
-        return [(geometry["outer_loop"], tuple(geometry.get("hole_loops", ())))]
+        return [(geometry["outer_loop"], tuple(geometry.get("hole_loops", ())))], [True]
     raise InputError(
         f"{entity.semantic_id} has no source planar footprint: it needs polygon_ids or outer_loop"
     )

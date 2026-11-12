@@ -25,8 +25,16 @@ from scgsim.aedt.specs.epr import (
 )
 from scgsim.aedt.specs.geometry import NATIVE_LUMPED_REFUSAL, PreparedPlanarGeometry
 from scgsim.aedt.specs.modeling import Modeling
-from scgsim.geometry import GeometryBuildInput
-from scgsim.geometry.planning.junction_partition import junction_terminal_line
+from scgsim.geometry import (
+    GeometryBuildInput,
+    LayoutPolygonSpec,
+    PortSheetRegionRecord,
+)
+from scgsim.geometry.planning.junction_partition import (
+    drawn_exterior,
+    junction_terminal_line,
+    lattice_rectangle,
+)
 from scgsim.geometry.planning.surfaces import plan_representation_contribution_geometry
 from scgsim.geometry.source.validation import validate_geometry_input
 
@@ -141,22 +149,18 @@ class _PlanarPreparation:
                     f"junction {item.junction_id!r} references unknown polygon "
                     f"{item.source_polygon_id!r}"
                 )
-            authored = next(
-                (
-                    p
-                    for p in self.build_input.polygons
-                    if p.polygon_id == item.source_polygon_id
-                ),
-                None,
-            )
-            if authored is None:
-                authored = next(
-                    r
-                    for r in self.build_input.port_sheet_regions
-                    if r.source_polygon_id == item.source_polygon_id
-                )
+            authored, layer = self._authored_sheet(item.source_polygon_id)
+            # The authored sheet as its four corners on the grid, as the partition reads it.
+            corners = lattice_rectangle(
+                authored.exterior,
+                self.dbu_um,
+                item.direction_xy,
+                drawn=drawn_exterior(authored),
+                port=f"junction {item.junction_id!r}",
+                layer=layer,
+            ).corners_um
             junction_terminal_line(
-                {"exterior": authored.exterior, "holes": authored.holes},
+                {"exterior": corners, "holes": authored.holes},
                 junction_geometry(item),
                 0.0,
             )
@@ -175,6 +179,20 @@ class _PlanarPreparation:
                     junction_geometry(junction),
                     0.0,
                 )
+
+    def _authored_sheet(
+        self, polygon_id: str
+    ) -> tuple[LayoutPolygonSpec | PortSheetRegionRecord, str]:
+        """The polygon or port sheet region a junction is drawn on, and its layer."""
+        for polygon in self.build_input.polygons:
+            if polygon.polygon_id == polygon_id:
+                return polygon, polygon.layer
+        region = next(
+            r
+            for r in self.build_input.port_sheet_regions
+            if r.source_polygon_id == polygon_id
+        )
+        return region, region.source_layer
 
     def _plan_surfaces(self) -> None:
         self.build_input, self.planned_surfaces = (

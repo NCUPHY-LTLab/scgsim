@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
@@ -11,11 +12,17 @@ import pytest
 from meshing_support import audit_of, bad_element
 
 from scgsim.meshing import driver
-from scgsim.meshing.driver import WorkerExit, measure_bounding_box, run_round
+from scgsim.meshing.driver import (
+    ProbeTimeLimitError,
+    WorkerExit,
+    launch_worker,
+    measure_bounding_box,
+    run_round,
+)
 from scgsim.meshing.errors import MeshingError
 from scgsim.meshing.job import Elevation, MeshJob
 from scgsim.meshing.mesher import DELAUNAY, HXT, MesherOptions
-from scgsim.meshing.sizing import SizeField, SizeRequests
+from scgsim.meshing.sizing import LocalSize, SizeField, SizeRequests
 
 
 def job_in(tmp_path: Path, **overrides) -> MeshJob:
@@ -42,12 +49,14 @@ class ScriptedWorker:
     def __init__(self, *behaviours: Callable[[Path], WorkerExit]) -> None:
         self.behaviours = list(behaviours)
         self.requests: list[dict] = []
+        self.timeouts: list[float | None] = []
 
-    def __call__(self, arguments) -> WorkerExit:
-        """Run the next scripted behaviour, recording the request of a mesh command."""
+    def __call__(self, arguments, timeout_seconds=None) -> WorkerExit:
+        """Run the next scripted behaviour, recording the request of a mesh command and its time limit."""
         command, source, result = arguments
         if command == "mesh":
             self.requests.append(json.loads(Path(source).read_text(encoding="utf-8")))
+            self.timeouts.append(timeout_seconds)
         return self.behaviours.pop(0)(Path(result))
 
 
@@ -75,6 +84,11 @@ def succeeds(
 def killed_by(signal: int) -> Callable[[Path], WorkerExit]:
     """A worker behaviour that dies from ``signal`` before writing a result."""
     return lambda result: WorkerExit(-signal, "munmap_chunk(): invalid pointer")
+
+
+def runs_out_of_time(result: Path) -> WorkerExit:
+    """A worker behaviour that was killed at its time limit."""
+    return WorkerExit(-9, "", timed_out=True)
 
 
 def reports_error(message: str) -> Callable[[Path], WorkerExit]:
@@ -119,6 +133,7 @@ def test_the_request_carries_the_sizes_and_the_options(tmp_path, monkeypatch):
     assert request["max_size"] == 10.0 and request["gradation"] == 1.0
     assert request["curve_sizes"] == {"3": 2.5, "4": 2.5, "9": 1.25}
     assert request["fields"] == [{"curves": [3, 5], "size": 5.0, "distance": 300.0}]
+    assert request["local_sizes"] == []
     assert request["threshold"] == 0.01 and request["attribute"] is False
     assert MeshJob.from_json(request) == job_in(tmp_path, attribute=False)
 
@@ -147,6 +162,7 @@ def test_the_request_carries_the_two_dimensional_algorithm_and_the_order(
     assert request["elevation"] == {
         "msh": str(tmp_path / "round.elevated.msh"),
         "max_tetrahedra": 1234,
+        "enforce_threshold": True,
     }
     assert MeshJob.from_json(request) == job
 
@@ -249,23 +265,120 @@ def test_a_stale_result_from_an_earlier_attempt_is_not_mistaken_for_the_new_one(
 def test_the_bounding_box_comes_back_from_a_probe_worker(tmp_path, monkeypatch):
     """The bounding box comes back from a probe worker."""
 
-    def probe(arguments):
+    limits = []
+
+    def probe(arguments, timeout_seconds=None):
         command, xao, result = arguments
         assert command == "probe" and xao.endswith("case.xao")
+        limits.append(timeout_seconds)
         Path(result).write_text(
             json.dumps({"minimum": [0, 0, -10], "maximum": [3, 4, 12]})
         )
         return WorkerExit(0, "")
 
     monkeypatch.setattr(driver, "launch_worker", probe)
-    box = measure_bounding_box(tmp_path / "case.xao", tmp_path)
+    box = measure_bounding_box(tmp_path / "case.xao", tmp_path, timeout_seconds=9.0)
     assert box.diagonal == pytest.approx((9 + 16 + 484) ** 0.5)
+    assert limits == [9.0]
 
 
 def test_a_probe_that_fails_names_the_file(tmp_path, monkeypatch):
     """A probe that fails names the file."""
     monkeypatch.setattr(
-        driver, "launch_worker", lambda arguments: WorkerExit(2, "no such file")
+        driver,
+        "launch_worker",
+        lambda arguments, timeout_seconds=None: WorkerExit(2, "no such file"),
     )
     with pytest.raises(MeshingError, match=r"case\.xao.*status 2"):
         measure_bounding_box(tmp_path / "case.xao", tmp_path)
+
+
+def test_a_probe_stopped_at_its_time_limit_raises_the_time_limit_error(
+    tmp_path, monkeypatch
+):
+    """A probe killed at its limit, or given no time at all, raises ``ProbeTimeLimitError``."""
+    started = []
+
+    def overrun(arguments, timeout_seconds=None):
+        started.append(timeout_seconds)
+        return WorkerExit(-9, "", timed_out=True)
+
+    monkeypatch.setattr(driver, "launch_worker", overrun)
+    with pytest.raises(ProbeTimeLimitError, match=r"case\.xao.*0\.5 s"):
+        measure_bounding_box(tmp_path / "case.xao", tmp_path, timeout_seconds=0.5)
+    with pytest.raises(ProbeTimeLimitError, match="no time left"):
+        measure_bounding_box(tmp_path / "case.xao", tmp_path, timeout_seconds=0.0)
+    assert started == [0.5]
+
+
+def test_the_local_sizes_travel_with_the_job(tmp_path, monkeypatch):
+    """The repair loop's local sizes are part of the request and come back unchanged."""
+    worker = ScriptedWorker(succeeds())
+    monkeypatch.setattr(driver, "launch_worker", worker)
+    sizes = SizeRequests(
+        10.0,
+        1.0,
+        MappingProxyType({}),
+        (),
+        (LocalSize((1.0, 2.0, 3.0), 0.625), LocalSize((4.0, 5.0, 6.0), 1.25, 3.0)),
+    )
+    job = job_in(tmp_path, sizes=sizes)
+    run_round(job, tmp_path)
+    (request,) = worker.requests
+    assert request["local_sizes"] == [
+        {"centre": [1.0, 2.0, 3.0], "size": 0.625, "radius": None},
+        {"centre": [4.0, 5.0, 6.0], "size": 1.25, "radius": 3.0},
+    ]
+    assert MeshJob.from_json(request) == job
+
+
+def test_a_round_gets_its_time_limit_and_a_worker_killed_at_it_is_not_retried(
+    tmp_path, monkeypatch
+):
+    """The worker is given the time left; one stopped at the limit ends the round without the fallback."""
+    worker = ScriptedWorker(runs_out_of_time)
+    monkeypatch.setattr(driver, "launch_worker", worker)
+    outcome = run_round(job_in(tmp_path), tmp_path, timeout_seconds=42.0)
+    assert worker.timeouts == [42.0]
+    assert (outcome.audit, outcome.fallback, outcome.timed_out) == (None, None, True)
+    assert outcome.failure is not None and "time limit" in outcome.failure
+
+
+def test_the_fallback_gets_only_the_time_that_is_left(tmp_path, monkeypatch):
+    """The retry with the other algorithm shares the round's limit; without a limit neither attempt has one."""
+    worker = ScriptedWorker(killed_by(6), succeeds())
+    monkeypatch.setattr(driver, "launch_worker", worker)
+    outcome = run_round(job_in(tmp_path), tmp_path, timeout_seconds=42.0)
+    assert outcome.audit is not None and not outcome.timed_out
+    first, second = worker.timeouts
+    assert first == 42.0 and second is not None and 0 < second <= 42.0
+    unlimited = ScriptedWorker(killed_by(6), succeeds())
+    monkeypatch.setattr(driver, "launch_worker", unlimited)
+    run_round(job_in(tmp_path), tmp_path)
+    assert unlimited.timeouts == [None, None]
+
+
+def test_a_round_with_no_time_left_starts_no_worker(tmp_path, monkeypatch):
+    """A limit already spent is a timed-out round, and no process is started for it."""
+    worker = ScriptedWorker()
+    monkeypatch.setattr(driver, "launch_worker", worker)
+    outcome = run_round(job_in(tmp_path), tmp_path, timeout_seconds=0.0)
+    assert outcome.timed_out and outcome.audit is None
+    assert worker.requests == []
+
+
+def test_launch_worker_reports_a_process_stopped_at_its_time_limit(monkeypatch):
+    """``subprocess.run`` kills the worker at the limit; the exit says it timed out and keeps its stderr."""
+    seen = {}
+
+    def expire(command, **options):
+        seen.update(options)
+        raise subprocess.TimeoutExpired(
+            command, options["timeout"], stderr="meshing 3D..."
+        )
+
+    monkeypatch.setattr(driver.subprocess, "run", expire)
+    finished = launch_worker(["mesh", "request.json", "result.json"], 7.5)
+    assert seen["timeout"] == 7.5
+    assert finished.timed_out and finished.returncode < 0
+    assert finished.stderr_tail == "meshing 3D..."

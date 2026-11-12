@@ -16,6 +16,7 @@ from scgsim.aedt.results.runtime_inventory import (
     SOURCE_SCHEMA_V26,
     SOURCE_SCHEMA_V27,
     SOURCE_SCHEMA_V28,
+    SOURCE_SCHEMA_V29,
     current_runtime_source_closure,
     current_runtime_source_paths,
     runtime_import_closure,
@@ -54,9 +55,10 @@ HISTORICAL_INVENTORY_DIGESTS = {
 
 V27_PATH_DIGEST = "304e9c166cc231a33de53bd345743eb6f29a5ca92f54b8b972024182b3ddc37d"
 V28_PATH_DIGEST = "1ea4a853b9d06382d6dcff5659c8863457404a8373e970c6da532d16dc700bf0"
-V29_PATH_DIGEST = "4f19b242dc5b726692432dc1ec3c994268faab5753bb2945b204dacb03bb7b94"
-# Issue #67 decision 8 removed these V28 modules; the AEDT SGB import adds its modules and SGB's closure.
-REMOVED_FROM_V28 = {
+V29_PATH_DIGEST = "0066775548d0e67d447ec80f20a617129e11c84159fc461a38aaf3ce34a0046a"
+V30_PATH_DIGEST = "182f8c4de72238795364311a974eacb09b86ac1428a2037bad2fe6c2d272c482"
+# Issue #67 decision 8 removed these V29 modules; the AEDT SGB import adds its modules and SGB's closure.
+REMOVED_FROM_V29 = {
     "src/scgsim/aedt/runtime/native/hfss_lumped.py",
     "src/scgsim/aedt/specs/support.py",
     "src/scgsim/geometry/models/lumped.py",
@@ -75,8 +77,8 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
     """Bind every AEDT module, preview reader, and retained shared seed."""
     repository = Path(__file__).resolve().parents[1]
     paths = current_runtime_source_paths()
-    assert SOURCE_SCHEMA == "scgsim.aedt.runtime-source.v29"
-    assert len(paths) == 388
+    assert SOURCE_SCHEMA == "scgsim.aedt.runtime-source.v30"
+    assert len(paths) == 400
     assert paths == tuple(sorted(set(paths)))
     assert runtime_source_paths(SOURCE_SCHEMA) == paths
     assert all((repository / path).is_file() for path in paths)
@@ -85,20 +87,14 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
         for path in (repository / "src/scgsim/aedt").rglob("*.py")
     }
     assert all_aedt_modules <= set(paths)
-    v28_paths = runtime_source_paths(SOURCE_SCHEMA_V28)
-    assert v28_paths is not None
-    assert set(v28_paths) - set(paths) == REMOVED_FROM_V28
+    v29_paths = runtime_source_paths(SOURCE_SCHEMA_V29)
+    assert v29_paths is not None
+    assert set(v29_paths) - set(paths) == REMOVED_FROM_V29
     assert {
         "src/scgsim/aedt/preparation/sgb_model.py",
         "src/scgsim/aedt/runtime/families/sgb_import.py",
         "src/scgsim/geometry/sgb/exchange/step.py",
-    } <= set(paths) - set(v28_paths)
-    assert (
-        hashlib.sha256(
-            json.dumps(v28_paths, separators=(",", ":")).encode()
-        ).hexdigest()
-        == V28_PATH_DIGEST
-    )
+    } <= set(paths) - set(v29_paths)
     assert {
         "src/scgsim/visualization/loaders/aedt.py",
         "src/scgsim/visualization/loaders/aedt_receipt.py",
@@ -109,26 +105,48 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
     v26_paths = runtime_source_paths(SOURCE_SCHEMA_V26)
     assert v26_paths is not None
     assert tuple(sorted(set(v26_paths))) == v26_paths
-    assert set(v26_paths) - all_aedt_modules - REMOVED_FROM_V28 <= set(paths)
+    assert set(v26_paths) - all_aedt_modules - REMOVED_FROM_V29 <= set(paths)
 
     v27_paths = runtime_source_paths(SOURCE_SCHEMA_V27)
     assert v27_paths is not None
     assert len(v27_paths) == 283
-    assert set(v27_paths) - REMOVED_FROM_V28 <= set(paths)
+    assert set(v27_paths) - REMOVED_FROM_V29 <= set(paths)
     assert (
         hashlib.sha256(
             json.dumps(v27_paths, separators=(",", ":")).encode()
         ).hexdigest()
         == V27_PATH_DIGEST
     )
+    v28_paths = runtime_source_paths(SOURCE_SCHEMA_V28)
+    assert v28_paths is not None
+    assert len(v28_paths) == 284
+    assert set(v28_paths) - set(v27_paths) == {
+        "src/scgsim/geometry/primitives/topology_validation.py"
+    }
+    assert (
+        hashlib.sha256(
+            json.dumps(v28_paths, separators=(",", ":")).encode()
+        ).hexdigest()
+        == V28_PATH_DIGEST
+    )
+    assert len(v29_paths) == 285
+    assert set(v29_paths) - set(v28_paths) == {
+        "src/scgsim/geometry/planning/junction_planning/lattice.py"
+    }
+    assert (
+        hashlib.sha256(
+            json.dumps(v29_paths, separators=(",", ":")).encode()
+        ).hexdigest()
+        == V29_PATH_DIGEST
+    )
     encoded = json.dumps(paths, separators=(",", ":")).encode()
-    assert hashlib.sha256(encoded).hexdigest() == V29_PATH_DIGEST
+    assert hashlib.sha256(encoded).hexdigest() == V30_PATH_DIGEST
 
     assert current_runtime_source_closure() == paths
 
 
-def test_current_runtime_identity_uses_v29_without_changing_receipt_schema():
-    """Measure V29 while retaining the V3 receipt contract."""
+def test_current_runtime_identity_uses_v30_without_changing_receipt_schema():
+    """Measure V30 while retaining the V3 receipt contract."""
     identity = runtime_source_identity()
     validate_runtime_source(identity, stage="actual")
     assert identity["schema_version"] == SOURCE_SCHEMA

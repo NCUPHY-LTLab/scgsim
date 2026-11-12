@@ -61,7 +61,7 @@ uv sync
 
 ## Next
 
-- [Prepare a pad-capacitance calculation](../tutorials/capacitance.qmd).
+- [Choose a simulation](../examples.qmd) and its PDK notebook.
 - [Run a prepared model](execute.qmd).
 - [Read returned results](returned-results.qmd).
 

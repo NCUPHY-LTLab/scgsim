@@ -19,9 +19,7 @@ scgsim-id: "docs/provenance"
 - 設定、網格、交接、結果與報告產物識別資訊；
 - 驗證與失敗狀態。
 
-使用回傳套件時，請同時參照準備端的來源與模型筆記。單靠發行版本無法識別特定研究實際使用的執行程式碼位元組、版圖、設定或原生結果。目前 AEDT 使用 runtime-source v28，共 284 條排序且唯一的路徑。清單從目前所有 AEDT 模組、兩個 AEDT 視覺化載入器，以及 V27 保留的非 AEDT 路徑開始，再沿 AST 解析的匯入及套件初始化檔閉合；相較凍結的 V27 283 條路徑，V28 新增 `scgsim/geometry/primitives/topology_validation.py`。各模組位元組與正規清單摘要識別執行來源；只有在 Git 修訂版本資訊確實可取得時，才會記錄該資訊。歷史 V1–V27 清單保留原有路徑與解讀。
-
-Human 於 2026-10-09 接受 SCGSim 2.0 實作／API；來源候選版本為 `a932a173edb5c56ae14740ff5177190996255bdd`（tree `2745321736e53e2a4fe8d150f2e9d8bd176669db`）。該候選版本使用 `2.0.0.dev1` 中繼資料；目前採用雙版本的候選版本中繼資料升至 `2.0.0rc3`，不會改寫較早產物的識別資訊。Runtime-source v13 會記錄其宣告的模組位元組與實測內容摘要，但其 Git 修訂版本觀察可能如實標示為無法取得；它不會證明完整的傳遞相依樹。先前六筆完整原生觀察，以及後續僅建置的 Q3D 觀察，仍分別綁定至[API 遷移證據](api-migration.qmd#accepted-scope-and-evidence-status)所述的執行環境識別資訊。
+使用回傳套件時，請同時參照準備端的來源與模型筆記。單靠發行版本無法識別特定研究實際使用的執行程式碼位元組、版圖、設定或原生結果。目前 AEDT 使用 runtime-source v30，共 400 條排序且唯一的路徑。清單從目前所有 AEDT 模組、兩個 AEDT 視覺化載入器，以及 V29 保留的非 AEDT 路徑（`scgsim/geometry/models/lumped.py` 除外）開始，再沿 AST 解析的匯入及套件初始化檔閉合；相較凍結的 V29 285 條路徑，新增 AEDT SGB STEP 匯入（`scgsim/aedt/preparation/sgb_model.py`、`scgsim/aedt/runtime/families/sgb_import.py`、`scgsim/aedt/runtime/families/sgb_faces.py`、`scgsim/aedt/epr/sgb_surfaces.py`）及其匯入的 SGB 模組，並移除 issue #67 決策 8 刪除的 `scgsim/aedt/runtime/native/hfss_lumped.py`、`scgsim/aedt/specs/support.py` 與 `scgsim/geometry/models/lumped.py`。各模組位元組與正規清單摘要識別執行來源；只有在 Git 修訂版本資訊確實可取得時，才會記錄該資訊。歷史 V1–V29 清單保留原有路徑與解讀。
 
 目前 Palace 幾何權威來源為 `scgsim.geometry.sgb`。Palace 仍會序列化既有的 `scgsim_sgb` 欄位，其目前值會指向該權威來源。欄位名稱不會要求從舊套件匯入內容。歷史收據值與 runtime-source 清單會保留其記錄的模組識別資訊，不會改寫為目前路徑。
 

@@ -6,7 +6,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/palace-eigenmode"
 ---
 
-For a complete mode workflow, start with [find a resonant mode](../tutorials/resonance.qmd).
+For a complete mode workflow, use a PDK notebook from [Choose a simulation](../examples.qmd#getting-started).
 This backend reference uses the shared `snapshot` from
 [source observations](source-observations.qmd) and the Palace preparation
 extra. Eigenmode asks for resonances of the configured field model. It does not
@@ -109,7 +109,7 @@ nonnegative junction participation.
 Palace Surface EPR can report, next to each whole-surface baseline row, rows for
 the part of the surface at least a given distance from the gaps. Request them
 with `inset_margins_um` in the `set_surface_epr` spec, for example
-`"inset_margins_um": (0.01, 0.05, 0.1)`, and call `set_surface_epr` before
+`"inset_margins_um": (0.5, 1.0)`, and call `set_surface_epr` before
 `mesh()`, because SGB cuts the margins into the geometry. Omit the key to request
 only the baseline. The rows are ordinary Palace attributes, so a stock Palace
 executable is enough. Keys, face kinds and limits are in the

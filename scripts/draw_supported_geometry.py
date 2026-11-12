@@ -2,10 +2,12 @@
 
 Owns the plan-view SVGs in ``docs/assets/supported-geometry/``: one per supported unit cell (``cell-NN.svg``),
 drawn from the scenes the tests build (``tests/sgb_supported_cells.py`` and ``tests/sgb_supported_pdk_cells.py``),
-and one per known problem (``problem-*.svg``), redrawn here on the 1 nm lattice from the dimensions reported for
-it.  Nothing is drawn from PDK code, and no model is built.  A problem figure marks the problem in red and adds
-zoomed panels where it is too small to see; the figures carry no words, only scale bars, so both language
-editions use the same files.
+one per known problem (``problem-*.svg``), redrawn here on the 1 nm lattice from the dimensions reported for
+it, and one per unsupported case (``unsupported-*.svg``), drawn from the samples the tests pin at their refusal
+(``tests/sgb_unsupported_cells.py``) with their band boundaries constructed exactly here.  Nothing is drawn from
+PDK code, and no model is built.  A problem or unsupported figure marks the problem in red and adds zoomed
+panels where it is too small to see; the figures carry no words, only scale bars, so both language editions use
+the same files.
 
 Run from the repository root: ``python scripts/draw_supported_geometry.py``.
 """
@@ -23,7 +25,9 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import sgb_supported_cells as disk_qubit  # noqa: E402
 import sgb_supported_pdk_cells as pdk  # noqa: E402
+import sgb_unsupported_cells as unsupported  # noqa: E402
 from sgb_supported_kit import (  # noqa: E402
+    MARGINS,
     Conductor,
     Scene,
     Um,
@@ -49,6 +53,7 @@ CONDUCTORS = ("#d9822b", "#3a7ca5", "#7b5ea7", "#4c9a5f", "#c0504d")
 PORT = "#e9c46a"
 INK = "#3d3d3d"
 MARK = "#d62828"
+OFF_DIE = "#ffffff"  # beyond the die edge, where a figure shows it
 SCALE_STEPS = (
     0.001,
     0.002,
@@ -75,20 +80,26 @@ View = tuple[float, float, float, float]
 
 @dataclass(frozen=True)
 class Mark:
-    """A red overlay in micrometres: a polyline (closed or not), or its points as dots."""
+    """An overlay in micrometres: a polyline (closed or not), or its points as dots; red unless ``colour`` is given."""
 
     points: tuple[Um, ...]
     closed: bool = False
     dots: bool = False
     dashed: bool = False
+    colour: str = MARK
+    width: float = 1.6
 
 
 @dataclass
 class Drawing:
-    """A scene to draw with the marks that point at its problem."""
+    """A scene to draw with the marks that point at its problem.
+
+    ``die`` is the die outline, for a figure that shows the die edge: the window is then white beyond it.
+    """
 
     scene: Scene
     marks: list[Mark] = field(default_factory=list)
+    die: tuple[Um, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -103,9 +114,9 @@ class Figure:
 
 
 def main() -> None:
-    """Write one SVG per supported unit cell and per known problem."""
+    """Write one SVG per supported unit cell, per known problem and per unsupported case."""
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    for figure in [*cell_figures(), *problem_figures()]:
+    for figure in [*cell_figures(), *problem_figures(), *unsupported_figures()]:
         drawing = figure.make()
         path = OUTPUT / f"{figure.name}.svg"
         path.write_text(draw(drawing, figure))
@@ -117,7 +128,12 @@ def main() -> None:
 
 def cell_figures() -> list[Figure]:
     """The figure of every unit cell, with a narrower window where the feature is small against its die."""
-    scenes = {**disk_qubit.SCENES, **pdk.SCENES}
+    # Cell 12 is drawn from the test build of the qubit die, off the banded list for its straight lead (Issue #128).
+    scenes = {
+        **disk_qubit.SCENES,
+        **disk_qubit.REFUSED_BEFORE_MESHING,
+        **pdk.SCENES,
+    }
 
     def cell(
         number: int,
@@ -456,6 +472,114 @@ def single_vertex_drawing() -> Drawing:
     )
 
 
+# --------------------------------------------------------------------------- unsupported geometry
+
+
+def unsupported_figures() -> list[Figure]:
+    """One figure per unsupported case: the sample SCGSim refuses, its band boundaries in ink, the problem in red."""
+    outer_cut = unsupported.ARC_OUTER_CUT_UM
+    return [
+        Figure("unsupported-arc-die-cut", arc_die_cut_drawing, (-2.0, -1.5, 18.0, 12.0),
+               zooms=(_around(outer_cut, 1.4),)),
+        Figure("unsupported-notch-beside-cut", notch_drawing, (6.0, 8.0, 30.0, 32.0),
+               zooms=(_around((21.7, 27.2), 1.4),)),
+        Figure("unsupported-lead-core", lead_core_drawing, (8.0, -6.0, 32.0, 6.0),
+               zooms=(_around((20.0, 0.0), 1.4), _around((20.0, 0.0), 0.01))),
+    ]  # fmt: skip
+
+
+def _band_line(points: list[Um]) -> Mark:
+    return Mark(tuple(points), colour=INK, width=1.0)
+
+
+def _arc_points(
+    centre: Um, radius: float, start_deg: float, end_deg: float
+) -> list[Um]:
+    """Points on a circle from one angle to another, every quarter degree or closer."""
+    steps = max(2, math.ceil(abs(end_deg - start_deg) * 4))
+    return [
+        polar(radius, start_deg + (end_deg - start_deg) * k / steps, centre)
+        for k in range(steps + 1)
+    ]
+
+
+def arc_die_cut_drawing() -> Drawing:
+    """The curved strip cut by the die edge, with the bands it would have if it ended there: caps about (0, 8) um.
+
+    Measured from its two arcs and its straight end, the die edge being no origin, the boundary at margin ``m`` is
+    the inner arc's offset (radius r_inner + m) from the die edge round to y = m, the straight end's offset y = m,
+    and the outer arc's offset (radius r_outer - m) up to the ray through the outer cut.  Beyond that ray, nearer
+    the die edge, the nearest point of the outer arc is its end on the die edge, so the boundary turns into the
+    half circle of radius ``m`` about that end until it meets the die edge: the cap in red, which SCGSim does not
+    build.
+    """
+    catalogue = unsupported.arc_cut_by_the_die_edge()
+    strip = next(p for p in catalogue.prisms if p.entity_id == "strip")
+    scene = Scene(
+        "arc_die_cut",
+        (),
+        unsupported.ARC_DIE,
+        [Conductor("strip", "strip", list(strip.footprint.outer))],
+    )
+    centre = unsupported.ARC_CENTRE_UM
+    inner, outer = unsupported.ARC_INNER_R_UM, unsupported.ARC_OUTER_R_UM
+    cut = unsupported.ARC_OUTER_CUT_UM
+    cut_deg = math.degrees(math.atan2(cut[1] - centre[1], cut[0] - centre[0]))
+    marks = []
+    for m in MARGINS:
+        # where the inner offset meets the die edge x = 0, and where each offset meets the straight end's y = m
+        on_die_deg = math.degrees(math.acos((0.0 - centre[0]) / (inner + m)))
+        inner_end_deg = math.degrees(math.asin(m / (inner + m)))
+        outer_start_deg = math.degrees(math.asin(m / (outer - m)))
+        boundary = [
+            *_arc_points(centre, inner + m, on_die_deg, inner_end_deg),
+            *_arc_points(centre, outer - m, outer_start_deg, cut_deg),
+        ]
+        marks.append(_band_line(boundary))
+        # The cap: from the outer offset's end, on the ray from the centre through the cut, down to the die edge.
+        marks.append(
+            Mark(tuple(_arc_points(cut, m, cut_deg - 180.0, -90.0)), dashed=True)
+        )
+    return Drawing(scene, marks, die=tuple(rect(*unsupported.ARC_DIE)))
+
+
+def notch_drawing() -> Drawing:
+    """The strip cut on the notch floor: its right side's continuation past the die edge, and the notch wall beside it.
+
+    The continuation runs on along the side's own line until it lies twice the largest margin past the floor's
+    line, as SGB continues it; the notch wall it comes within the margin of is red.
+    """
+    scene = unsupported.strip_into_notch()
+    # the right side, up to the notch floor at y = 26 um
+    start, vertex = unsupported.NOTCH_STRIP[1:3]
+    rise = 2 * MARGINS[-1] / (vertex[1] - start[1])
+    end = (
+        vertex[0] + rise * (vertex[0] - start[0]),
+        vertex[1] + rise * (vertex[1] - start[1]),
+    )
+    die = tuple((float(x), float(y)) for x, y in unsupported.NOTCH_OUTLINE)
+    wall = die[3:5]  # the notch's right wall, x = 22 um
+    return Drawing(scene, [Mark((vertex, end), dashed=True), Mark(wall)], die=die)
+
+
+LEAD_WIDTH_UM = 2.004  # twice the 1.0 um margin and 4 grid steps more
+
+
+def lead_core_drawing() -> Drawing:
+    """The isolated lead 2.004 um wide: the 0.5 um band boundary in ink, the 1.0 um one in red round the core.
+
+    Every edge of the lead is a gap edge and every corner convex, so the boundary at margin ``m`` is the lead's
+    rectangle moved in by ``m`` on all sides; inside the largest one lies the core, 4 grid steps wide.
+    """
+    scene = unsupported.straight_lead(LEAD_WIDTH_UM)
+    x0, x1 = unsupported.LEAD_X_UM
+    half = LEAD_WIDTH_UM / 2
+    boundaries = [tuple(rect(x0 + m, m - half, x1 - m, half - m)) for m in MARGINS]
+    marks = [Mark(b, closed=True, colour=INK, width=1.0) for b in boundaries[:-1]]
+    marks.append(Mark(boundaries[-1], closed=True))
+    return Drawing(scene, marks)
+
+
 # --------------------------------------------------------------------------- SVG
 
 
@@ -492,6 +616,11 @@ def _panel(
     to_px = _projection(view, scale)
     colours = _colours(drawing.scene)
     body = [f'<rect width="{width}" height="{height}" fill="{SUBSTRATE}"/>']
+    if drawing.die is not None:
+        body = [
+            f'<rect width="{width}" height="{height}" fill="{OFF_DIE}"/>',
+            _die(drawing.die, to_px),
+        ]
     shown = [
         c for c in drawing.scene.conductors if not entities or c.entity in entities
     ]
@@ -553,17 +682,26 @@ def _path(rings, to_px, fill: str, opacity: float) -> str:
     )
 
 
+def _die(outline: tuple[Um, ...], to_px) -> str:
+    """The die as exposed substrate, its edge drawn as a line."""
+    points = " ".join("{:.2f},{:.2f}".format(*to_px(p)) for p in outline)
+    return f'<polygon points="{points}" fill="{SUBSTRATE}" stroke="{INK}" stroke-width="1.2"/>'
+
+
 def _mark(mark: Mark, to_px) -> str:
     pixels = [to_px(p) for p in mark.points]
     if mark.dots:
         return "".join(
-            f'<circle cx="{x:.2f}" cy="{y:.2f}" r="2.2" fill="{MARK}"/>'
+            f'<circle cx="{x:.2f}" cy="{y:.2f}" r="2.2" fill="{mark.colour}"/>'
             for x, y in pixels
         )
     dash = ' stroke-dasharray="5 3"' if mark.dashed else ""
     shape = "polygon" if mark.closed else "polyline"
     points = " ".join(f"{x:.2f},{y:.2f}" for x, y in pixels)
-    return f'<{shape} points="{points}" fill="none" stroke="{MARK}" stroke-width="1.6"{dash}/>'
+    return (
+        f'<{shape} points="{points}" fill="none" stroke="{mark.colour}" '
+        f'stroke-width="{mark.width:g}"{dash}/>'
+    )
 
 
 def _twice_area(ring) -> float:

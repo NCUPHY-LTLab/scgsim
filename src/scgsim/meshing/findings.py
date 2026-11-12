@@ -41,6 +41,8 @@ class BadElement:
     edge_min: float
     edge_max: float
     centroid: tuple[float, float, float]
+    # Midpoint of the element's shortest edge: where it is thinnest, which is where the repair loop refines.
+    shortest_edge_midpoint: tuple[float, float, float]
     location: str  # one of LOCATIONS
     points: tuple[int, ...]  # native tags of the entities the element's nodes sit on
     curves: tuple[int, ...]
@@ -63,6 +65,7 @@ class BadElement:
         """Rebuild an element from its JSON form (``asdict`` of the record)."""
         fields = dict(raw)
         fields["centroid"] = tuple(fields["centroid"])
+        fields["shortest_edge_midpoint"] = tuple(fields["shortest_edge_midpoint"])
         for name in (
             "points",
             "curves",
@@ -92,9 +95,14 @@ class MeshAudit:
     mesh_seconds: float
     audit_seconds: float
 
-    def accepted(self, max_tetrahedra: int) -> bool:
-        """Whether the loop stops with this mesh: no tetrahedron below the threshold, within the budget."""
-        return self.bad_count == 0 and self.tetrahedra <= max_tetrahedra
+    def accepted(self, max_tetrahedra: int, *, enforce_threshold: bool = True) -> bool:
+        """Whether the loop delivers this mesh: no tetrahedron below the threshold, within the budget.
+
+        ``enforce_threshold=False`` (a report-only strategy) drops the threshold condition.
+        """
+        return (
+            self.bad_count == 0 or not enforce_threshold
+        ) and self.tetrahedra <= max_tetrahedra
 
     def to_json(self) -> dict[str, Any]:
         """The JSON form of the audit."""

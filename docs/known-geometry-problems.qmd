@@ -10,7 +10,8 @@ This page lists the geometry known to fail in SCGSim, or to build as something
 other than what the layout means. For each case it shows where the problem is,
 what goes wrong and why, and why SCGSim does not work around it. In each case
 the fix is a change to the layout. What SCGSim does support is on
-[Supported Geometry](supported-geometry.qmd).
+[Supported Geometry](supported-geometry.qmd), and the rules every layout must
+follow, with the owner of each failure, are on [Supported Scope](supported-scope.qmd).
 
 The figures redraw each case from its reported dimensions on SGB's 1 nm grid,
 with no PDK code. The problem is marked in red; the panels to the right zoom in
@@ -20,7 +21,10 @@ SCGSim builds the outline it is given. It does not close nanometre gaps, remove
 short edges or resample curves, because it cannot tell a drawing defect from a
 feature that was meant. A layout check with `EigenmodeSim.simulation_drc` or
 `ElectrostaticSim.simulation_drc` ([layout modeling check](layout-modeling-check.qmd))
-finds the cases that stop the build; the others need a look at the layout.
+finds the cases that stop the build and, in its meshing stage, the fine edges
+and faces the mesher cannot use, each with its location and owner; the others
+need a look at the layout. A fine edge or face that SGB did not cause is a
+layout problem: SCGSim reports it and does not repair it.
 
 ## Drawing defects in the PDK cells {#drawing-defects}
 
@@ -30,6 +34,12 @@ from what the PDK code means to draw. Each is reported to the PDK in
 (C1 to C4) or [orcapen-sc-pdk#58](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/58)
 (A1, A6), with the cause in the PDK code. They are drawing defects, so the fix
 belongs in the PDK.
+
+The OrcaPen SC PDK corrects all six: C1 to C4 in
+[orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64), A1 and A6 in
+[orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61). A layout shows them only when it is built from a
+PDK revision without those pull requests, so build layouts for simulation from
+a PDK revision that includes them.
 
 ### C1: a crack between the disk and its lead fan {#c1-crack}
 
@@ -47,6 +57,9 @@ union leaves the gap (`_radial_taper` and `_disk_and_junction` in the PDK).
 SCGSim keeps it. Make the fan's arc land on the disk's own vertices, or extend
 the fan into the disk before the union, so that the union is one clean outline.
 
+**Corrected in the PDK** by [orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64): the fan's straight
+sides continue into the disk.
+
 ### C2 and C3: zero-width slits in the claw {#c2-c3-slits}
 
 ![A claw with the two slits marked; the zooms show the 1.305 µm slit C2 and its 1 nm base.](assets/supported-geometry/problem-c2-c3-slits.svg){fig-alt="The lower part of a claw with two short red lines where the slits enter the metal, and zoomed views of one slit and its base."}
@@ -63,6 +76,9 @@ and the slit ends on a window vertex (`_claw_segment` in the PDK).
 geometry. Round the corners on the whole claw outline instead of splicing
 rounded pieces in through windows.
 
+**Corrected in the PDK** by [orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64): the claw is drawn as
+one outline and rounded once.
+
 ### C4: a bite at each claw's outer corner {#c4-corner-bite}
 
 ![A claw's outer corner; the zoom shows the bite between the sharp tip and the leftover rounding.](assets/supported-geometry/problem-c4-corner-bite.svg){fig-alt="The outer corner of a claw with a small notch, outlined in red, between a sharp tip and a rounded corner."}
@@ -75,6 +91,9 @@ elements. The cause is in the drawing: the corner is rounded first
 
 **Why SCGSim does not fix it.** The outline is valid geometry. Add the taper
 before rounding, or round only the corners that remain.
+
+**Corrected in the PDK** by [orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64): the taper is part of
+the claw outline before it is rounded.
 
 ### A1: Purcell IDC fingers detached by 1 nm {#a1-detached-fingers}
 
@@ -95,6 +114,9 @@ wrong.
 drawing, and SCGSim cannot know that they were meant to touch. Give the comb its
 own spine and use finger lengths on the grid.
 
+**Corrected in the PDK** by [orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61): each comb has its own
+spine, and the Purcell cell's finger length is on the grid.
+
 ### A6: an etch frame that the ground mask lacks {#a6-etch-frame}
 
 ![A chip with a CPW; the solid red outline is the 2300 × 1000 frame on the etch layer, the dashed one the 2200 × 900 chip edge. The zoom shows a corner.](assets/supported-geometry/problem-a6-etch-frame.svg){fig-alt="A ground plane with a CPW across it, the 50 µm frame round the chip outlined in red, and a zoom of one corner."}
@@ -109,57 +131,10 @@ is more than 400 µm from the CPW, so the effect on the CPW is small.
 less the ground mask; it does not read the etch layer. Put the frame in the
 ground mask too, or take it out of the etch layer, so both give the same metal.
 
-## Curves outside the 128-point scope {#curves-outside-scope}
+**Corrected in the PDK** by [orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61): the frame is drawn on
+the ground mask as well.
 
-The supported scope for curved outlines is at most 128 points per full circle,
-so that every vertex turns by at least 2.8125°
-([the curve rule](supported-geometry.qmd#curve-rule)). The cases below are
-outside it.
-
-### Polygon circles denser than 128 points per circle {#dense-circles}
-
-![A 256-point circle of radius 10 µm; the zoom shows its vertices, 0.245 µm apart and turning 1.41° each.](assets/supported-geometry/problem-dense-circle.svg){fig-alt="A polygon circle and a zoom onto a few of its vertices, marked as red dots."}
-
-**What goes wrong.** Measured on regular polygon circles at margins 0.5 and
-1.0 µm:
-
-| Points per full circle | Turn per vertex | Result |
-| --- | --- | --- |
-| 144 to 224 | 2.5° to 1.6° | depends on the case: 180 and 224 points are refused at r = 10 µm and build at r = 75 µm |
-| 256 | 1.41° | refused at r = 5, 10, 50 and 150 µm |
-
-A refused curve stops the build with
-`the inset curve at m = … um is not closed near (x, y) um`: the offsets of two
-neighbouring edges at a band margin neither meet nor cross, so the band regions
-cannot be told apart. The edge length does not decide it: a 256-point circle of
-radius 150 µm has 3.68 µm edges and is still refused. The suspected cause, from
-the measurements and not tested separately: past a convex vertex the offsets of
-two neighbouring edges overlap by about $m\theta^2/2$ for a turn $\theta$, which
-at small turns is comparable to the rounding of each offset's end point to the
-grid (up to half a grid unit), so the two offsets can miss each other. The PDK's default
-`"fabrication"` profile, 256 points per full circle, is refused this way.
-
-**Why SCGSim does not fix it.** The supported scope is set at 128 points per
-full circle; a fix in SGB's band construction was tried and not adopted.
-Build components for simulation with `curve_sampling="simulation"`.
-
-### Spline strips drawn with 258 points {#spline-258}
-
-![The interpolation spline strip as the PDK draws it; the zoom shows its vertices near the end, where they turn least.](assets/supported-geometry/problem-spline-258.svg){fig-alt="A wavy strip and a zoom onto its end with the vertices marked as red dots."}
-
-**What goes wrong.** `interpolation_spline_strip` and `bspline_strip` draw each
-edge with 129 points, sampled per span rather than by `curve_sampling`. Their
-flattest vertices turn by 0.058° and 0.012°, and the build is refused with the
-same `inset curve … not closed` message as a dense circle.
-
-**Why SCGSim does not fix it.** The strips are outside the 128-point scope.
-Resample each strip so that every vertex turns by at least 2.8125°; the
-resampled strips build with exact bands (cell 21 on
-[Supported Geometry](supported-geometry.qmd#pads-and-parts)). How to resample is
-the PDK's choice
-([orcapen-sc-pdk#52](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/52)).
-
-### Spline curves are not read as curves {#spline-curves}
+## Spline curves are not read as curves {#spline-curves}
 
 ![The B-spline strip and its control polygon (dashed red): the curve a spline boundary declares.](assets/supported-geometry/problem-spline-curve.svg){fig-alt="A curved strip with its five control points joined by a dashed red polygon."}
 
@@ -169,43 +144,5 @@ supported yet (this version carries lines and circular arcs)`, and the same for
 `interpolation_spline`.
 
 **Why SCGSim does not fix it.** SGB offsets lines and circular arcs exactly; the
-offset of a spline has no exact form, so reading splines needs a tolerance that
-has not been decided. This is tracked in
-[scgsim#109](https://github.com/NCUPHY-LTLab/scgsim/issues/109). Until then,
-draw the strip as a polygon that follows the curve rule.
-
-## Runs of vertices that turn less than 2.8125° {#small-turn-runs}
-
-![The Euler U-turn of cell 15; the zoom marks the first centreline vertices, which turn 0.15°, 0.9°, 1.8° and 2.7°.](assets/supported-geometry/problem-small-turn-runs.svg){fig-alt="A CPW U-turn with its first centreline vertices marked as red dots in a zoom."}
-
-The curve rule is stated per vertex, but some supported cells have vertices
-that turn less, and they build with exact bands as drawn:
-
-- the 90° Euler bend (cell 14) turns by 0.30° and 1.8° at its first two
-  vertices, and the 180° U-turn (cell 15) by 0.15°, 0.9°, 1.8° and 2.7° at its
-  first four, with chords of 11 to 14 µm;
-- the tapers (cell 18) kink by 0.86° and 1.72°.
-
-Outside these cells, a run of several consecutive vertices that turn less than
-2.8125° is not verified: it may build, or it may be refused like a dense circle.
-
-![A 16-point circle of radius 50 µm with one added vertex turning 0.3°; the zoom shows it against the original edge (dashed).](assets/supported-geometry/problem-single-vertex.svg){fig-alt="A 16-sided polygon with one extra vertex marked, and a zoom showing the vertex slightly outside the dashed original edge."}
-
-A single vertex that turns less, between longer edges, was also measured: one
-vertex added to a 16-point circle of radius 50 µm, with 9.8 µm edges on both
-sides.
-
-| Turn of the one vertex | Result |
-| --- | --- |
-| 2.9°, 2.7°, 1.41°, 0.3° and 0.01°, convex | builds, bands exact |
-| 2.7° and 0.01°, reflex | builds, bands exact |
-| 0° (a point on a straight edge) | builds, bands exact |
-
-A point on a straight edge leaves an axis-aligned edge's bands unchanged. On an
-oblique edge the bands move by a few 10⁻⁴ µm², within the snap bound, because
-the offsets of the two halves end on a grid point there. These are observations
-at margins 0.5 and 1.0 µm, not guarantees.
-
-**Why SCGSim does not extend the rule.** The supported scope was set from the
-measured circles and the PDK cells; widening it needs measurements of the new
-patterns and a separate decision.
+offset of a spline has no exact form, so SGB does not read splines. Draw the
+strip as a polygon.

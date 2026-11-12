@@ -11,13 +11,11 @@ project:
   - docs/specs/*.qmd
   - docs/api/*.qmd
   - docs/course/*.qmd
-  - docs/tutorials/*.qmd
   - docs/research/*.qmd
   - docs/research/*/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
   - docs/design/sgb/*.qmd
-  - '!docs/concepts/geometry-en.qmd'
 execute:
   enabled: false
 lang: zh-TW
@@ -87,13 +85,6 @@ website:
     contents:
     - docs/examples.qmd
     - docs/course/installation.qmd
-    - section: 依模擬目標
-      contents:
-      - docs/tutorials/capacitance.qmd
-      - docs/tutorials/resonance.qmd
-      - docs/tutorials/resonance-epr.qmd
-      - docs/tutorials/scattering.qmd
-      - docs/tutorials/transmission-line.qmd
     - section: 準備與檢視模型
       contents:
       - docs/course/working-model.qmd
@@ -120,7 +111,6 @@ website:
     - section: 歷史參考
       contents:
       - docs/history/aedt-capacitance-pre-v3.qmd
-      - docs/course/palace-surface-bands.qmd
   - id: concept
     title: 頁面
     style: floating
@@ -157,6 +147,7 @@ website:
     - docs/api/input-index.qmd
     - section: 幾何與物理模型
       contents:
+      - docs/supported-scope.qmd
       - docs/geometry-sgb.qmd
       - docs/supported-geometry.qmd
       - docs/known-geometry-problems.qmd
@@ -186,11 +177,6 @@ website:
       - docs/architecture.qmd
       - docs/goals-and-upstream.qmd
       - docs/provenance.qmd
-      - docs/roadmap.qmd
-    - section: 維護紀錄
-      contents:
-      - docs/errors.qmd
-      - docs/convergence-status.qmd
   - id: sgb-design
     title: SGB 設計
     style: floating
@@ -210,7 +196,6 @@ website:
     - docs/design/sgb/slivers.qmd
     - docs/design/sgb/validation.qmd
     - docs/design/sgb/emission.qmd
-    - docs/design/sgb/aedt-handoff.qmd
     - docs/design/sgb/brep-format.qmd
     - docs/design/sgb/consumer-contract.qmd
     - docs/design/sgb/consumer-mapping.qmd

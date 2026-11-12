@@ -1,4 +1,8 @@
-"""The public entry point: mesh an SGB XAO to a quality threshold, or fail with the quality report."""
+"""The public entry point: mesh an SGB XAO to a quality threshold, or fail with the quality report.
+
+The one exception is :class:`GmshDefaultRecipe`, which is report-only: meshed once and delivered whatever its
+quality.
+"""
 
 from __future__ import annotations
 
@@ -12,27 +16,41 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .driver import measure_bounding_box
+from .driver import ProbeTimeLimitError, measure_bounding_box
 from .errors import MeshRepairError
 from .features import SidecarFeatures, load_features, read_features
+from .fine_structure import check_fine_structure
 from .mesher import MesherOptions
-from .recipes import FeatureRecipe, SizingRecipe
+from .recipes import FeatureRecipe, GmshDefaultRecipe, SizingRecipe
 from .repair import (
-    STOP_CLEAN,
+    DELIVERED_STOPS,
+    STOP_TIME,
     Budgets,
     RepairInputs,
     RepairOutcome,
     RepairPolicy,
     repair_mesh,
+    unmeshed_outcome,
 )
-from .report import QualityReport, RunSettings, build_report, write_report
+from .report import (
+    QualityReport,
+    RunSettings,
+    build_report,
+    place_lines,
+    write_report,
+)
+from .stop_places import StopPlace, stop_places
 
 _WORK_DIR_PREFIX = ".meshing-work-"
 
 
 @dataclass(frozen=True)
 class MeshResult:
-    """A mesh that met the threshold, where it and its report are, and the report itself."""
+    """A delivered mesh, where it and its report are, and the report itself.
+
+    The mesh met the threshold, unless the recipe was the report-only :class:`GmshDefaultRecipe`: the
+    report's ``stop`` is then ``"report_only"`` when tetrahedra are below it.
+    """
 
     mesh: Path  # Gmsh MSH 4.1 with the XAO's physical groups
     report_path: Path  # JSON quality report
@@ -60,9 +78,18 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     The pipeline is the same for every recipe: ``recipe`` chooses the initial sizes, ``repair`` how the
     loop refines around bad elements, ``budgets`` when it gives up (``Budgets(max_rounds=0)`` meshes once
     without repair; the threshold still applies), and ``mesher`` the Gmsh algorithms and the order of the
-    delivered mesh.  The threshold and the report's counts refer to the linear mesh: with
-    ``mesher.geometry_order`` above 1 the accepted mesh is raised to that order afterwards, in the worker
-    that still has the CAD, and the file at ``<xao stem>.msh`` is the elevated one.
+    delivered mesh.  The time budget is measured from the start of this call and scales with the model's
+    footprint (its x by y extent, vacuum included): see :class:`~scgsim.meshing.repair.Budgets`.  Reading
+    that extent must finish within the unscaled limit, since the scaled one is not known before.  The
+    threshold and the report's counts refer to the linear mesh: with ``mesher.geometry_order`` above 1
+    the accepted mesh is raised to that order afterwards, in the worker that still has the CAD, and the
+    file at ``<xao stem>.msh`` is the elevated one.
+
+    ``GmshDefaultRecipe`` is the one report-only recipe, and never the default: no size of SCGSim's own,
+    one mesh without repair whatever ``budgets.max_rounds`` says, and the mesh is delivered whatever its
+    quality.  The report still records the minSICN and the tetrahedra below ``threshold``, with
+    ``stop="report_only"`` when there are any; the threshold refuses nothing, so the mesh has no quality
+    guarantee.  The tetrahedron and time budgets and the order elevation apply as for every recipe.
 
     Two things are the caller's to keep, and are not checked:
 
@@ -73,10 +100,12 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
       beside the report of the other.
 
     Raises :class:`~scgsim.meshing.errors.MeshRepairError` carrying the report when the loop stops
-    without an accepted mesh (rounds spent, a mesh over the tetrahedron budget even when clean, bad
-    elements the repair loop cannot refine, a clean mesh whose order could not be raised, or a mesher
-    crash).  The report is written then too, and the last mesh is kept as ``<stem>.rejected.msh`` when a
-    round made one.
+    without an accepted mesh (rounds spent, a mesh over the tetrahedron budget even when clean, the time
+    limit reached, a bad count that stopped falling, a clean mesh whose order could not be raised, or a
+    mesher crash).  The report is written then too, and the last mesh is kept as ``<stem>.rejected.msh``
+    when a round made one.  The report and the error message then say where the remaining bad elements are,
+    in micrometres, and which fine edges and faces the meshing-stage check (:func:`check_fine_structure`)
+    records at those places, with their owner and fix.
     """
     if not math.isfinite(threshold):
         raise ValueError(f"threshold must be a finite number, got {threshold!r}.")
@@ -89,24 +118,36 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     work_dir = Path(tempfile.mkdtemp(prefix=_WORK_DIR_PREFIX, dir=files.directory))
     try:
         sidecar_path, features = _resolve_sidecar(sidecar, work_dir)
-        outcome = repair_mesh(
-            RepairInputs(
-                xao=xao,
-                sidecar=sidecar_path,
-                initial=recipe.size_requests(
-                    features, measure_bounding_box(xao, work_dir)
-                ),
-                threshold=threshold,
-                policy=repair,
-                budgets=budgets,
-                mesher=mesher,
-                work_dir=work_dir,
+        # The scaled limit needs the footprint the probe reads, so the probe itself gets the unscaled
+        # limit: the smallest any model has.
+        unscaled = budgets.time_budget(None)
+        try:
+            bounding_box = measure_bounding_box(
+                xao, work_dir, started + unscaled.limit_seconds - time.perf_counter()
             )
-        )
+        except ProbeTimeLimitError:
+            time_budget, outcome = unscaled, unmeshed_outcome(STOP_TIME, mesher)
+        else:
+            time_budget = budgets.time_budget(bounding_box.footprint_mm2)
+            outcome = repair_mesh(
+                RepairInputs(
+                    xao=xao,
+                    sidecar=sidecar_path,
+                    initial=recipe.size_requests(features, bounding_box),
+                    threshold=threshold,
+                    policy=repair,
+                    budgets=budgets,
+                    mesher=mesher,
+                    work_dir=work_dir,
+                    deadline=started + time_budget.limit_seconds,
+                    enforce_threshold=not isinstance(recipe, GmshDefaultRecipe),
+                )
+            )
         report = build_report(
             outcome,
-            RunSettings(threshold, recipe, repair, mesher, budgets),
+            RunSettings(threshold, recipe, repair, mesher, budgets, time_budget),
             time.perf_counter() - started,
+            _places_of_stop(outcome, sidecar_path, threshold, repair),
         )
         write_report(report, files.report, files.summary)
         return _deliver(outcome, report, files)
@@ -149,6 +190,25 @@ def _resolve_sidecar(
     return Path(sidecar), load_features(Path(sidecar))
 
 
+def _places_of_stop(
+    outcome: RepairOutcome, sidecar: Path, threshold: float, policy: RepairPolicy
+) -> list[StopPlace]:
+    """Where the bad elements of a stop are, with the fine structure the sidecar records there.
+
+    None for a delivered mesh: the places say who must act on a refused one.
+    """
+    if outcome.stop in DELIVERED_STOPS or outcome.last_audit is None:
+        return []
+    fine = check_fine_structure(sidecar)
+    return stop_places(
+        outcome.last_audit.bad,
+        outcome.local_sizes,
+        threshold,
+        policy,
+        fine.findings,
+    )
+
+
 def _deliver(
     outcome: RepairOutcome, report: QualityReport, files: _Files
 ) -> MeshResult:
@@ -157,17 +217,19 @@ def _deliver(
     The report has just been rewritten, so a mesh an earlier run left under the other name is removed:
     the directory never holds a mesh that the report beside it does not describe.
     """
-    if outcome.stop != STOP_CLEAN:
+    if outcome.stop not in DELIVERED_STOPS:
         files.mesh.unlink(missing_ok=True)
         files.rejected.unlink(missing_ok=True)
         if outcome.last_mesh is not None:
             shutil.move(outcome.last_mesh, files.rejected)
+        where = "\n".join(place_lines(report))
         raise MeshRepairError(
-            f"meshing stopped without a clean mesh ({outcome.stop}); see {files.report}.",
+            f"meshing stopped without a clean mesh ({outcome.stop}); see {files.report}."
+            + (f"\n{where}" if where else ""),
             dict(report),
         )
-    # A clean stop follows a round that made a mesh, and one that also made the elevated mesh when the
-    # mesher options asked for a higher order.
+    # A delivering stop follows a round that made a mesh, and one that also made the elevated mesh when
+    # the mesher options asked for a higher order.
     delivered = outcome.elevated_mesh or outcome.last_mesh
     assert delivered is not None
     files.rejected.unlink(missing_ok=True)

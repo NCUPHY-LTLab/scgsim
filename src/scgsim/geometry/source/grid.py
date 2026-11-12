@@ -44,6 +44,11 @@ from scgsim.geometry.primitives.grid import (
     regions,
     source_grid_audits,
 )
+from scgsim.geometry.primitives.grid_regions import (
+    FIX_CONTACT,
+    contact_changes,
+    grid_change_message,
+)
 from scgsim.geometry.source.ports import (
     is_port_sheet_host_entity,
     port_sheet_overlaps,
@@ -267,7 +272,13 @@ def _source_polygon_inputs(
 
 def _grid_operands(build_input: GeometryBuildInput) -> tuple[GridOperand, ...]:
     operands = [
-        GridOperand(polygon.polygon_id, polygon.exterior, polygon.holes, contact=False)
+        GridOperand(
+            polygon.polygon_id,
+            polygon.exterior,
+            polygon.holes,
+            contact=False,
+            layer=polygon.layer,
+        )
         for polygon in build_input.polygons
     ]
     operands.extend(
@@ -276,6 +287,7 @@ def _grid_operands(build_input: GeometryBuildInput) -> tuple[GridOperand, ...]:
             port.exterior,
             port.holes,
             contact=False,
+            layer=port.source_layer,
         )
         for port in build_input.port_sheet_regions
     )
@@ -445,8 +457,29 @@ def _validate_conductor_contacts(
         )
         if requested != realized:
             raise ValueError(
-                "conductor contact changed at grid: "
-                f"{first.semantic_id}, {second.semantic_id}"
+                grid_change_message(
+                    "conductor contact changed at grid: "
+                    f"{first.semantic_id}, {second.semantic_id}",
+                    [
+                        projected.by_id[polygon_id].layer
+                        for entity in (first, second)
+                        for polygon_id in entity.polygon_ids
+                        if polygon_id in projected.by_id
+                    ],
+                    context.grid_size_um,
+                    contact_changes(
+                        (
+                            raw_geometry[first.semantic_id],
+                            raw_geometry[second.semantic_id],
+                        ),
+                        (
+                            effective_geometry[first.semantic_id],
+                            effective_geometry[second.semantic_id],
+                        ),
+                        context.grid_size_um,
+                    ),
+                    FIX_CONTACT,
+                )
             )
         contact_relations.append(
             {
@@ -468,9 +501,9 @@ def _project_port_regions(
     projected_ports: list[PortSheetRegionRecord] = []
     for port in build_input.port_sheet_regions:
         operand_id = "PORT::" + port.port_sheet_id
-        regions_for_port = groups.arrangement_for(operand_id).operand_regions(
-            operand_id
-        )
+        arrangement = groups.arrangement_for(operand_id)
+        grid_size_um = arrangement.context.grid_size_um
+        regions_for_port = arrangement.operand_regions(operand_id)
         if len(regions_for_port) != 1:
             raise ValueError(
                 f"port sheet component identity changed at grid: {port.port_sheet_id}"
@@ -499,8 +532,26 @@ def _project_port_regions(
             )
             if requested != realized:
                 raise ValueError(
-                    "port contact changed at grid: "
-                    f"{port.port_sheet_id}, {host.semantic_id}, {polygon_id}"
+                    grid_change_message(
+                        "port contact changed at grid: "
+                        f"{port.port_sheet_id}, {host.semantic_id}, {polygon_id}",
+                        [port.source_layer, effective_host.layer],
+                        grid_size_um,
+                        contact_changes(
+                            (
+                                raw_port,
+                                geometry_polygon(raw_host.exterior, raw_host.holes),
+                            ),
+                            (
+                                effective_port,
+                                geometry_polygon(
+                                    effective_host.exterior, effective_host.holes
+                                ),
+                            ),
+                            grid_size_um,
+                        ),
+                        FIX_CONTACT,
+                    )
                 )
             contact_relations.append(
                 {

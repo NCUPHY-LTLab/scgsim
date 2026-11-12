@@ -20,6 +20,7 @@ All return the effective input and the ``RepresentationContext`` S2 consumes.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -97,12 +98,14 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
     extra_metadata: dict[str, Any] | None = None,
     attachment: tuple[str | None, str | None] = ("lower", "lower"),
     die_um: float = 100.0,
+    vacuum_padding: float | Mapping[str, float] | None = None,
 ) -> EffectiveInput:
     """A ``die_um`` (default 100 um) die with a ground plane, a 20 um pad in a 40 um cutout and a lumped port.
 
     The cutout, pad and port keep their size and sit in the middle of the die; the substrate is a tenth
     of the die thick and the vacuum padding a fifth of it (never less than the 10 and 20 um of the
     100 um die), so a larger die scales only the distances the benchmark of ``scgsim.meshing`` varies.
+    ``vacuum_padding`` replaces that padding (any form ``VacuumRegionSpec.from_padding`` reads).
 
     Ground (GDS layer 1) and pad (layer 2) belong to one logical metal layer; the port
     (layer 9) bridges the 10 um gap and lands one micrometre on each host.  The metal is a film
@@ -198,7 +201,10 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
     }
     stack = dict(
         apply_vacuum_region_to_stack(
-            stack, VacuumRegionSpec.from_padding(max(20.0, die_um / 5))
+            stack,
+            VacuumRegionSpec.from_padding(
+                max(20.0, die_um / 5) if vacuum_padding is None else vacuum_padding
+            ),
         )
     )
     stack_file = tmp_path / "pad_in_ground.json"

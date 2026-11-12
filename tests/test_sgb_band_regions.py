@@ -488,14 +488,21 @@ def test_a_narrow_neck_splits_the_inner_band_into_two_islands():
     )  # the neck centre is 0.75 um from its edges
 
 
-def test_a_polygon_circle_whose_neighbouring_offsets_do_not_meet_is_refused():
-    """A 256-gon of radius 20 um: at 0.5 um most neighbouring offsets neither meet nor cross, so R_m and
-    its outside are one cell.  The build refuses instead of labelling that cell from one sample."""
+def test_a_polygon_circle_with_small_turns_erodes_to_one_ring_of_as_many_vertices():
+    """A 256-gon of radius 20 um, 1.41 degrees per vertex: R_m is one 256-gon at both margins.
+
+    Its neighbouring offsets used to miss each other on the lattice at 0.5 um, so R_m and its outside were one
+    cell and the build refused.  The offsets of two lines now end at their crossing, one shared lattice point
+    per vertex (Issue #138), so the curve closes with one vertex per source vertex.
+    """
     points = [
         (20 * math.cos(2 * math.pi * k / 256), 20 * math.sin(2 * math.pi * k / 256))
         for k in range(256)
     ]
-    with pytest.raises(
-        ValidationError, match=r"the inset curve at m = 0\.5 um is not closed near"
-    ):
-        build_model_from_catalogue(route_b_pad(points), "B", insets=type_bands())
+    model = build_model_from_catalogue(route_b_pad(points), "B", insets=type_bands())
+    family = next(
+        f for f in model.labelled.catalogue.families if f.family_id == "ma::pad::top"
+    )
+    assert [
+        (r.margin, [len(ring) for ring in r.rings]) for r in family.regions.regions
+    ] == [(500, [256]), (1000, [256])]

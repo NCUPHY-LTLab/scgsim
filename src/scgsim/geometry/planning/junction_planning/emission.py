@@ -1,14 +1,24 @@
-"""Plan emitted junction geometry and source-bound support checks."""
+"""Plan emitted junction geometry, realize it on the input grid, and check its source-bound support."""
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from dataclasses import replace
 from fractions import Fraction
 from typing import cast
 
-from scgsim.geometry.models.input import LayoutPolygonSpec
-from scgsim.geometry.planning.junction_planning.core import PRECISION_UM, plain_record
+from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
+from scgsim.geometry.models.junctions import (
+    JUNCTION_END_PIECE_PART,
+    junction_net_id,
+)
+from scgsim.geometry.planning.junction_planning.core import (
+    PRECISION_UM,
+    canonical_sha256,
+    plain_record,
+)
 from scgsim.geometry.planning.junction_planning.exact_geometry import (
     closed_contact,
     cross,
@@ -17,12 +27,14 @@ from scgsim.geometry.planning.junction_planning.exact_geometry import (
 )
 from scgsim.geometry.planning.junction_planning.model_checks import (
     emitted_partition_coverage,
+    fraction_area_overlap,
     fraction_boundary_contact,
     model_edge_contacts,
     model_edge_covered,
     model_edge_section,
 )
 from scgsim.geometry.planning.junction_planning.model_state import JunctionModel
+from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
 from scgsim.geometry.primitives.planar_loops import (
     cancel_reversed_planar_edges,
     simple_planar_loops_from_edges,
@@ -65,11 +77,26 @@ def rebuild_original_polygons(state: JunctionModel) -> None:
 
 
 def emit_partitions(state: JunctionModel) -> None:
-    """Emit central and terminal pieces with their exact source provenance."""
+    """Emit central and terminal pieces with their exact source provenance.
+
+    A landing end piece (its terminal is rebuilt with exact arcs) is the drawn sheet beyond
+    its cut; any other end piece is the free part of the sheet there.  The free part is what
+    rebuilds the terminal's support outline: the terminal joined with either is the same region.
+    """
     state.additions, state.appended = ([], defaultdict(list))
     state.physical_ends = defaultdict(list)
+    owners = {entity.semantic_id: entity for entity in state.build_input.entities}
     for jid, record in state.records.items():
         parts = [state.lower(state.refine(part)) for part in state.sliced[jid]]
+        chosen = [
+            state.sheet_sliced[jid][k] if end["landing"] else state.sliced[jid][k]
+            for k, end in ((0, record["ends"][0]), (2, record["ends"][1]))
+        ]
+        ends = [
+            state.lower(state.refine(chosen[0]), simplify=record["ends"][0]["landing"]),
+            None,
+            state.lower(state.refine(chosen[1]), simplify=record["ends"][1]["landing"]),
+        ]
         central = state.lower(state.refine(state.sliced[jid][1]), simplify=True)
         if len(central) != 1 or len(central[0]) != 1 or len(central[0][0]) != 4:
             raise ValueError(
@@ -100,7 +127,7 @@ def emit_partitions(state: JunctionModel) -> None:
                 },
             )
         )
-        for n, part in ((0, parts[0]), (1, parts[2])):
+        for n, part in ((0, ends[0]), (1, ends[2])):
             end = record["ends"][n]
             if len(part) > 1:
                 raise ValueError(
@@ -117,10 +144,11 @@ def emit_partitions(state: JunctionModel) -> None:
                         sheet.layer,
                         part[0][0],
                         tuple(part[0][1:]),
-                        net_name=end["net_id"],
+                        net_name=owners[end["source_entity_id"]].net_id,
                         metadata={
                             state.output_format.junction_metadata_key: jid,
                             "source_entity_id": end["source_entity_id"],
+                            "part": JUNCTION_END_PIECE_PART,
                         },
                     )
                 )
@@ -136,7 +164,17 @@ def emit_partitions(state: JunctionModel) -> None:
             raise ValueError(
                 "numerical junction emitted partition does not cover source free boundary"
             )
+        final_partition = state.lower(
+            state.refine([*chosen[0], *state.sliced[jid][1], *chosen[1]])
+        )
+        if not emitted_partition_coverage(
+            final_partition, [*ends[0], (corners,), *ends[2]]
+        ):
+            raise ValueError(
+                "numerical junction emitted end pieces and rectangle differ from their slices"
+            )
         record["free_model_regions"] = plain_record(final_free)
+        record["partition_model_regions"] = plain_record(final_partition)
         record["central_model_regions"] = [[list(corners)]]
         record["proof_conditions"]["emitted_partition_coverage"] = True
         record["model_coordinate_method"] = "source_edge_incidence_and_two_cuts.v1"
@@ -250,7 +288,7 @@ def check_emitted_partitions(state: JunctionModel) -> None:
     )
     for record in state.records.values():
         conductors = [
-            (e.net_id, pid, state.actual_rings[pid])
+            (junction_net_id(e), pid, state.actual_rings[pid])
             for e in state.entities
             if e.material_kind == "conductor"
             and e.semantic_id in record["support_plane"]["eligible_entity_ids"]
@@ -295,9 +333,12 @@ def check_emitted_partitions(state: JunctionModel) -> None:
                         for part in r["ends"]
                     }
                 ]
-                if not fraction_boundary_contact([piece], arms):
+                if not (
+                    fraction_boundary_contact([piece], arms)
+                    or fraction_area_overlap([piece], arms)
+                ):
                     raise ValueError(
-                        "final model end lacks positive-length source-arm contact"
+                        "final model end lacks positive source-arm contact"
                     )
                 if closed_contact([piece], other):
                     raise ValueError("final cross-junction end contacts another net")
@@ -315,3 +356,107 @@ def check_emitted_partitions(state: JunctionModel) -> None:
                 if intervals or any((0 < point < 1 for point in points)):
                     raise ValueError("final cross-junction open-side contact")
         record["proof_conditions"]["all_derived_junctions_checked"] = True
+
+
+def realized_on_grid(build_input, result, junctions, records):
+    """The emitted input realized on the input grid, each central rectangle and partition checked again.
+
+    Without a grid the input is returned as emitted; a failure keeps the junction and its grid in a note.
+    """
+    context = geometry_grid_context(build_input)
+    if context is not None:
+        from scgsim.geometry.source.grid import apply_geometry_grid  # noqa: PLC0415 -- retain the conditional grid-realization dependency and its failure boundary.
+
+        result = _straight_end_pieces(apply_geometry_grid(result, context), records)
+        actual = {p.polygon_id: p for p in result.polygons}
+        for junction in junctions:
+            record = records[junction.junction_id]
+            polygon = actual[record["central_polygon_id"]]
+            try:
+                junction_terminal_line(
+                    {"exterior": polygon.exterior, "holes": polygon.holes},
+                    junction,
+                    record["z_um"],
+                )
+                ends = [
+                    actual[end["polygon_id"]]
+                    for end in record["ends"]
+                    if end["polygon_id"]
+                ]
+                emitted = [(p.exterior, *p.holes) for p in ends]
+                emitted.append((polygon.exterior, *polygon.holes))
+                if not emitted_partition_coverage(
+                    record["partition_model_regions"], emitted
+                ):
+                    raise ValueError(
+                        "junction grid realization changes partition coverage"
+                    )
+            except ValueError as error:
+                error.add_note(
+                    json.dumps(
+                        {
+                            "junction_id": junction.junction_id,
+                            "geometry_grid": context.to_payload(),
+                            "requested_direction_xy": list(junction.direction_xy),
+                            "requested_width_um": junction.width_um,
+                            "realization_status": "incompatible_with_existing_shape_contract",
+                        },
+                        sort_keys=True,
+                    )
+                )
+                raise
+            record["geometry_grid"] = context.to_payload()
+            record["requested_central_model_regions"] = record["central_model_regions"]
+            record["central_model_regions"] = [
+                [list(polygon.exterior), *map(list, polygon.holes)]
+            ]
+            record["realized_central_geometry_sha256"] = canonical_sha256(
+                {"exterior": polygon.exterior, "holes": polygon.holes}
+            )
+            for end in record["ends"]:
+                if end["polygon_id"]:
+                    piece = actual[end["polygon_id"]]
+                    end["requested_model_regions"] = end["model_regions"]
+                    end["model_regions"] = [
+                        [list(piece.exterior), *map(list, piece.holes)]
+                    ]
+    return result
+
+
+def _straight_end_pieces(result: GeometryBuildInput, records) -> GeometryBuildInput:
+    """The grid-realized input with every landing end piece cleared of collinear vertices.
+
+    The grid realization nodes a polygon wherever another polygon's vertex lies on its edge.
+    A landing end piece overlaps its terminal, so the drawn terminal's vertices on the sheet
+    sides land on the end piece's side edges.  SGB would keep each as a corner between two
+    carriers and split the side wall standing there; without them the region is the same.
+    """
+    ids = {
+        end["polygon_id"]
+        for record in records.values()
+        for end in record["ends"]
+        if end["polygon_id"] and end["landing"]
+    }
+    return replace(
+        result,
+        polygons=tuple(
+            replace(
+                polygon,
+                exterior=_without_collinear(polygon.exterior),
+                holes=tuple(_without_collinear(hole) for hole in polygon.holes),
+            )
+            if polygon.polygon_id in ids
+            else polygon
+            for polygon in result.polygons
+        ),
+    )
+
+
+def _without_collinear(ring):
+    exact = [tuple(Fraction(str(v)) for v in point) for point in ring]
+    count = len(ring)
+    return tuple(
+        ring[n]
+        for n in range(count)
+        if cross(exact[n - 1], exact[n], exact[(n + 1) % count]) != 0
+    )

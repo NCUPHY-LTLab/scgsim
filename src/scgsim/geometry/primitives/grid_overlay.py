@@ -19,8 +19,13 @@ from scgsim.diagnostics import (
     progress,
 )
 from scgsim.geometry.primitives.grid_regions import (
+    FIX_CONTACT,
+    FIX_SHAPE,
     GridOperandAudit,
+    contact_changes,
+    grid_change_message,
     polygon_components,
+    topology_changes,
 )
 from scgsim.preparation import (
     current_preparation_workers,
@@ -590,10 +595,22 @@ class GridAuditor:
                         self.effective[second.operand_id]
                     )
                     if before != after:
-                        raise ValueError(
-                            f"physical contact changed at grid: {first.operand_id}, {second.operand_id}"
-                        )
+                        raise ValueError(self._contact_message(first, second))
                 progress(i + 1, len(contacts))
+
+    def _contact_message(self, first: GridOperand, second: GridOperand) -> str:
+        operands = (first.operand_id, second.operand_id)
+        return grid_change_message(
+            f"physical contact changed at grid: {first.operand_id}, {second.operand_id}",
+            [v.layer for v in (first, second) if v.layer is not None],
+            self.grid,
+            contact_changes(
+                (self.geometries[operands[0]], self.geometries[operands[1]]),
+                (self.effective[operands[0]], self.effective[operands[1]]),
+                self.grid,
+            ),
+            FIX_CONTACT,
+        )
 
     def _topology_error(
         self,
@@ -605,7 +622,14 @@ class GridAuditor:
         from shapely import Polygon, union_all  # noqa: PLC0415 - defer native geometry loading until this operation requires it
 
         error = ValueError(
-            f"physical geometry collapsed or changed component/hole topology at grid: {value.operand_id}"
+            grid_change_message(
+                "physical geometry collapsed or changed component/hole topology at grid: "
+                f"{value.operand_id}",
+                [] if value.layer is None else [value.layer],
+                self.grid,
+                topology_changes(raw, final, self.grid),
+                FIX_SHAPE,
+            )
         )
         try:
 

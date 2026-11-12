@@ -55,6 +55,7 @@ class JunctionModel:
     affected_owners: set[str] = field(init=False)
     raw_free: dict[str, list[TracedEdge]] = field(init=False)
     sliced: dict[str, list[list[TracedEdge]]] = field(init=False)
+    sheet_sliced: dict[str, list[list[TracedEdge]]] = field(init=False)
     free_edges: dict[str, list[TracedEdge]] = field(init=False)
     registry: dict[RationalPoint, FloatPoint] = field(init=False)
     reverse: dict[FloatPoint, RationalPoint] = field(init=False)

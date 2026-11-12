@@ -54,18 +54,42 @@ def transform_source_point(
     return result
 
 
+# A direction component within this of zero, beside a unit one, is float noise from a rotation's
+# cosine and sine (cos(pi/2) is 6e-17), never an angle a layout draws.
+_DIRECTION_FLOAT_NOISE = 1e-12
+_QUARTER_TURN_DIRECTIONS = ((1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0))
+
+
 def transform_source_direction(
     transform: tuple[float, ...], angle_degrees: float
 ) -> list[float]:
-    """Transform an outward port angle into a normalized XY direction."""
-    angle = math.radians(float(angle_degrees))
-    x, y = math.cos(angle), math.sin(angle)
+    """Transform an outward port angle into a normalized XY direction.
+
+    A port angle that is a whole number of quarter turns uses its exact cosine and sine, and a
+    component the transform leaves within float noise of zero is zero, so a port on a quarter
+    turn points exactly along an axis: the rectangle cut from its sheet is then axis-aligned.
+    """
+    x, y = _port_unit_direction(float(angle_degrees))
     a, b, c, d, _, _ = transform
     result = [a * x + b * y, c * x + d * y]
     magnitude = math.hypot(*result)
     if not math.isfinite(magnitude) or magnitude == 0:
         raise ValueError("transformed port direction is invalid")
+    result = [
+        0.0 if abs(value / magnitude) <= _DIRECTION_FLOAT_NOISE else value
+        for value in result
+    ]
+    magnitude = math.hypot(*result)
     return [result[0] / magnitude, result[1] / magnitude, 0.0]
+
+
+def _port_unit_direction(angle_degrees: float) -> tuple[float, float]:
+    """The unit vector of a port angle, exact on the quarter turns."""
+    turns, remainder = divmod(angle_degrees, 90.0)
+    if remainder == 0.0:
+        return _QUARTER_TURN_DIRECTIONS[int(turns) % 4]
+    angle = math.radians(angle_degrees)
+    return math.cos(angle), math.sin(angle)
 
 
 def component_semantics(component: Any, path: str) -> Mapping[str, Any]:

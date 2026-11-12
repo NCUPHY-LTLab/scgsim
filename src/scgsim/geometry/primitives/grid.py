@@ -24,7 +24,11 @@ from scgsim.diagnostics import (
     diagnostic_stage,
     progress,
 )
-from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
+from scgsim.geometry.models.grid import (
+    GeometryGridContext,
+    format_box,
+    geometry_grid_context,
+)
 from scgsim.geometry.primitives.constants import (
     TOPOLOGY_EPS_UM,
 )
@@ -56,6 +60,7 @@ from scgsim.geometry.primitives.grid_overlay import (
     parts_overlay as parts_overlay,
 )
 from scgsim.geometry.primitives.grid_regions import (
+    FIX_SHAPE,
     GridArrangement,
     GridFace,
     GridOperand,
@@ -63,10 +68,12 @@ from scgsim.geometry.primitives.grid_regions import (
     GridRegion,
     GridRing,
     PolygonRegion,
+    grid_change_message,
     polygon_components,
     region_vertex_index,
     regions,
     regions_indexed,
+    topology_changes,
 )
 from scgsim.geometry.primitives.grid_regions import (
     GridOperandAudit as GridOperandAudit,
@@ -78,10 +85,13 @@ from scgsim.geometry.primitives.planar_loops import (
     LoopCoordinates,
     PlanarLoop,
     PolygonCoordinates,
+    boundary_meeting_points,
     clean_loop,
+    cutline_boundary_edges,
     cutline_boundary_loops,
     filter_gdstk_polygons,
     polygon_area,
+    repeated_boundary_edges,
 )
 from scgsim.geometry.primitives.tagged_grid import (
     build_tagged_subdivision,
@@ -141,6 +151,21 @@ SOURCE_INTENT: ContextVar[bool] = ContextVar(
 SOURCE_AUDITS: ContextVar[list[SourceGridAudit] | None] = ContextVar(
     "scgsim_source_grid_audits", default=None
 )
+# The declared object and source layer a recipe is reading, as (object id, layer); named only
+# by refusals, so a polygon converted deep inside a Boolean still says whose it is.
+_NAMED_SOURCE: ContextVar[tuple[str, str] | None] = ContextVar(
+    "scgsim_named_source", default=None
+)
+
+
+@contextmanager
+def named_source(object_id: str, layer: str):
+    """Name the declared object and source layer that refusals raised inside report."""
+    token = _NAMED_SOURCE.set((object_id, layer))
+    try:
+        yield
+    finally:
+        _NAMED_SOURCE.reset(token)
 
 
 def current_grid_context() -> GeometryGridContext | None:
@@ -511,10 +536,82 @@ def split_gdstk_cutline_loop(
     tuple[tuple[float, float], ...], tuple[tuple[tuple[float, float], ...], ...]
 ]:
     """Rebuild cutline boundaries and verify holes under the active grid scope."""
-    outer, holes = cutline_boundary_loops(loop)
-    if any(not loop_inside_loop(hole, outer) for hole in holes):
-        raise ValueError("gdstk cutline polygon has a non-interior boundary loop")
+    try:
+        outer, holes = cutline_boundary_loops(loop)
+    except ValueError as error:
+        # Every refusal of the walk is about the drawn boundary: keep its lead phrase
+        # and locate it on the same walk, in the assembled layout frame.
+        raise ValueError(_boundary_walk_refusal(str(error), loop)) from error
+    stray = next((hole for hole in holes if not loop_inside_loop(hole, outer)), None)
+    if stray is not None:
+        raise ValueError(
+            source_refusal(
+                "gdstk cutline polygon has a non-interior boundary loop",
+                [
+                    f"its boundary loop at {source_place(stray)} lies outside its outer loop"
+                ],
+                _FIX_DISJOINT,
+            )
+        )
     return outer, holes
+
+
+FIX_EMPTY = "Fix the layout: draw the polygon with a positive area, or remove it."
+_FIX_MEETING = (
+    "Fix the layout: where two parts of one region meet only at a point, "
+    "give them a shared edge or separate them."
+)
+_FIX_RETRACED = "Fix the layout: draw the outline so that it runs along each edge once."
+_FIX_DISJOINT = (
+    "Fix the layout: draw separate parts as separate polygons, "
+    "or join them by a shared edge."
+)
+
+
+def _boundary_walk_refusal(lead: str, loop: PlanarLoop) -> str:
+    """The refusal of a drawn boundary that is not simple loops, at the edges or points that break it."""
+    edges = cutline_boundary_edges(loop)
+    if retraced := repeated_boundary_edges(edges):
+        findings = [
+            f"its boundary runs twice along {source_place(e)}" for e in retraced
+        ]
+        return source_refusal(lead, findings, _FIX_RETRACED)
+    if meeting := boundary_meeting_points(edges):
+        findings = [
+            f"its boundary meets itself at {source_place((p,))}" for p in meeting
+        ]
+        return source_refusal(lead, findings, _FIX_MEETING)
+    return source_refusal(
+        lead, [f"its boundary at {source_place(loop)} encloses no area"], FIX_EMPTY
+    )
+
+
+def source_refusal(lead: str, findings: list[str], action: str) -> str:
+    """A drawn-polygon refusal naming the source being read (:func:`named_source`), where and who acts."""
+    named = _NAMED_SOURCE.get()
+    context = current_grid_context()
+    return grid_change_message(
+        lead if named is None else f"{lead}: {named[0]}",
+        [] if named is None else [named[1]],
+        None if context is None else context.grid_size_um,
+        findings,
+        action,
+    )
+
+
+def source_place(points: Sequence[Sequence[float]]) -> str:
+    """Where points of the polygon frame lie in the assembled layout, in micrometres."""
+    world = [frame_point(point) for point in points]
+    context = current_grid_context()
+    return format_box(
+        (
+            min(x for x, _ in world),
+            min(y for _, y in world),
+            max(x for x, _ in world),
+            max(y for _, y in world),
+        ),
+        None if context is None else context.grid_size_um,
+    )
 
 
 _regions_indexed = regions_indexed
@@ -641,7 +738,14 @@ def _audit_declared_source(
         )
         if before != after:
             raise ValueError(
-                f"declared physical source component/hole topology changed at grid: {entity.semantic_id}"
+                grid_change_message(
+                    "declared physical source component/hole topology changed at grid: "
+                    f"{entity.semantic_id}",
+                    [p.layer for p in requested],
+                    context.grid_size_um,
+                    topology_changes(raw, final, context.grid_size_um),
+                    FIX_SHAPE,
+                )
             )
         raw_regions = regions(raw)
         requested_by_id = {p.polygon_id: p for p in requested}

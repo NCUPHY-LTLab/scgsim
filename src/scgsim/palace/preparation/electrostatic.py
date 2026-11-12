@@ -6,10 +6,9 @@ This class prepares geometry and manual handoff files; it never runs Palace.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
 from scgsim.geometry.models.input import VacuumRegionSpec
@@ -24,7 +23,7 @@ from ..mesh.build import (
     MeshBuildResult,
     RouteGeometry,
     build_route_geometry,
-    build_route_mesh,
+    mesh_route_geometry,
 )
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
@@ -35,6 +34,7 @@ from .config import (
     build_electrostatic_config,
     configure_numerical_controls,
 )
+from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .inputs import (
     load_stack,
     non_negative_number,
@@ -316,11 +316,13 @@ class ElectrostaticSim:
         """Set geometry-mesh controls; every omitted value retains its setting.
 
         These are the controls of ``scgsim.meshing.mesh_sgb``: ``recipe`` (``FeatureRecipe``,
-        ``GlobalSizeRecipe`` or ``UniformBoundaryRecipe``) chooses the initial element sizes, ``mesher``
-        (``MesherOptions``) the Gmsh algorithms and the geometry order, ``budgets`` when the repair loop
-        gives up, and ``quality_threshold`` the minimum signed inverse condition number (minSICN) of every tetrahedron (default
-        0.01).  A mesh that cannot reach the threshold raises ``MeshRepairError`` from ``mesh()``.
-        Geometry order is independent of ``set_numerical(order=...)``.
+        ``GlobalSizeRecipe``, ``UniformBoundaryRecipe`` or the report-only ``GmshDefaultRecipe``) chooses
+        the initial element sizes, ``mesher`` (``MesherOptions``) the Gmsh algorithms and the geometry
+        order, ``budgets`` when the repair loop gives up, and ``quality_threshold`` the minimum signed
+        inverse condition number (minSICN) of every tetrahedron (default 0.01).  A mesh that cannot reach
+        the threshold raises ``MeshRepairError`` from ``mesh()``, except with ``GmshDefaultRecipe``, whose
+        mesh is delivered with its quality reported, not enforced.  Geometry order is independent of
+        ``set_numerical(order=...)``.
         """
         controls = self.mesh_controls.updated(
             recipe=recipe,
@@ -394,10 +396,14 @@ class ElectrostaticSim:
         self._invalidate_config()
 
     def mesh(self) -> Path:
-        """Invalidate prior derived state, prepare the source, and build a new mesh.
+        """Invalidate prior derived state, prepare the source, build the geometry, check it, and mesh it.
 
         Surface EPR is geometry: ``set_surface_epr`` runs before ``mesh()``, which cuts the inset
         margins of its specs into the model as bands.
+
+        Before the mesher starts, the built model goes through the meshing stage of ``simulation_drc``: a
+        refusing fine edge or face raises :class:`~scgsim.palace.SimulationDrcError` carrying the same
+        report, and the geometry stays in the output folder; warnings do not stop the mesh.
         """
         self._invalidate_mesh()
         if (
@@ -410,36 +416,42 @@ class ElectrostaticSim:
             )
         if self.surface_epr_specs is None:
             raise ValueError("set_surface_epr() must run before mesh().")
-        self._mesh_result = build_route_mesh(
-            **self._geometry_source(self.stack),
-            output_dir=self.output_dir,
-            recipe=self.mesh_controls.recipe,
-            mesher=self.mesh_controls.mesher,
-            budgets=self.mesh_controls.budgets,
-            quality_threshold=self.mesh_controls.quality_threshold,
+        geometry = build_route_geometry(
+            **self._geometry_source(self.stack), output_dir=self.output_dir
         )
+        check_meshing_stage(geometry)
+        self._mesh_result = mesh_route_geometry(geometry, self.mesh_controls)
         return self._mesh_result.mesh_path
 
     @classmethod
-    def simulation_drc(
+    def simulation_drc(  # noqa: PLR0913 -- the layout, its PDK data, and the plan settings the simulation takes
         cls,
         component: Any,
         *,
         layer_stack: Any,
         material_records: Mapping[str, Mapping[str, Any]],
         instances: Mapping[str, Any] | None = None,
+        nets: Mapping[str, Sequence[str]] | None = None,
         surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
-    ) -> None:
-        """Return ``None`` when an ``ElectrostaticSim`` can model ``component``; otherwise raise the error ``mesh()`` raises.
+    ) -> SimulationDrcReport:
+        """Check that an ``ElectrostaticSim`` can model and mesh ``component``, in two stages, and return their report.
 
-        This runs the preparation and SGB geometry build of ``mesh()`` and stops before meshing, with fixed
-        settings: Route B, Palace's default airbox, a 1 um vacuum region when the layout has none of its own, zero coupon padding and no terminals (they are not needed before meshing).  The
-        error is the stage's own, unchanged.  The geometry is written to a temporary folder that is removed.
-        With ``surface_epr_specs`` the bands are cut as ``set_surface_epr(representation="B", specs=...)``
-        would cut them; ``ElectrostaticSim`` requires Surface EPR, so none given means ``{}``.
+        The geometry stage runs the preparation and SGB geometry build of ``mesh()``, with fixed settings:
+        Route B, Palace's default airbox, a 1 um vacuum region when the layout has none of its own, zero
+        coupon padding and no terminals (they are not needed before meshing).  A layout it refuses raises the
+        error ``mesh()`` raises, unchanged.  With ``surface_epr_specs`` the bands are cut as
+        ``set_surface_epr(representation="B", specs=...)`` would cut them; ``ElectrostaticSim`` requires
+        Surface EPR, so none given means ``{}``.
+
+        Only a model that built goes to the meshing stage, ``scgsim.meshing.check_fine_structure``: the fine
+        edges and faces the mesher cannot use, each with its location, size, owner and fix.  A refusal there
+        raises :class:`~scgsim.palace.SimulationDrcError` carrying both stages; otherwise the
+        :class:`~scgsim.palace.SimulationDrcReport` is returned, warnings included.  Nothing is meshed, and
+        the geometry is written to a temporary folder that is removed.  ``mesh()`` runs the same meshing
+        stage on the model it builds, before the mesher starts.
 
         A pass means the layout can be modeled with these settings.  It does not promise that other
-        settings (Route A, nets, terminals, junctions, lumped supports, another vacuum region) will model; run that
+        settings (Route A, terminals, junctions, lumped supports, another vacuum region) will model; run that
         simulation's own ``mesh()`` for that.
 
         Args:
@@ -447,6 +459,9 @@ class ElectrostaticSim:
             layer_stack: The PDK layer stack, as ``GeometryPlan`` takes it.
             material_records: The PDK material records, as ``GeometryPlan`` takes them.
             instances: ``{"chip/device": reference, ...}`` for an assembly, as ``GeometryPlan.register_instance``.
+            nets: ``{"Ground": ("chip/plane", ...), ...}``, the Net assignment the simulation's plan is given, as
+                ``GeometryPlan.set_nets`` takes it.  Without it no conductor has a Net, so any two conductors
+                that touch are refused as a different-Net contact.
             surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
         """
         snapshot = prepare_layout_snapshot(
@@ -454,6 +469,7 @@ class ElectrostaticSim:
             layer_stack=layer_stack,
             material_records=material_records,
             instances=instances,
+            nets=nets,
         )
         sim = cls()
         sim.set_plan(snapshot)
@@ -465,9 +481,7 @@ class ElectrostaticSim:
             representation="B",
             specs={} if surface_epr_specs is None else surface_epr_specs,
         )
-        with TemporaryDirectory(prefix="scgsim-simulation-drc-") as folder:
-            # The geometry build requires an empty folder; the temporary one is, and goes away with the check.
-            sim._build_geometry(folder)  # noqa: SLF001 -- the check is a classmethod of the same class
+        return run_stages(sim._build_geometry)  # noqa: SLF001 -- the check is a classmethod of the same class
 
     def _build_geometry(self, output_dir: str | Path) -> RouteGeometry:
         """Run the preparation and SGB geometry build of ``mesh()`` into ``output_dir``, then stop.

@@ -286,8 +286,8 @@ def _run_method(
         "status": "accepted" if report["stop"] == "clean" else "rejected",
         "seconds": round(report["timing"]["total_seconds"], 2),
         "fallback": mesh.get("fallback"),
-        "refined_curves": mesh.get("refined_curves"),
-        "smallest_size_um": mesh.get("smallest_size_um"),
+        "local_sizes": mesh.get("local_sizes"),
+        "smallest_local_size_um": mesh.get("smallest_local_size_um"),
         "mesh_sha256": _sha256(mesh_file) if mesh_file.is_file() else None,
         "report": {key: value for key, value in report.items() if key != "timing"},
     }
@@ -334,8 +334,8 @@ def compact(results: dict[str, Any]) -> dict[str, Any]:
         "status",
         "seconds",
         "fallback",
-        "refined_curves",
-        "smallest_size_um",
+        "local_sizes",
+        "smallest_local_size_um",
     )
     cases = {}
     for name, case in results["cases"].items():

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Protocol
 
@@ -61,34 +62,15 @@ def junction_terminal_line(
         )
     dx, dy = junction.direction_xy
     px, py = (-dy, dx)
-    along = tuple((x * dx + y * dy for x, y in exterior))
-    across = tuple((x * px + y * py for x, y in exterior))
-    along_min, along_max = (min(along), max(along))
-    across_min, across_max = (min(across), max(across))
-    tolerance = 1e-09 * max(
-        1.0, abs(along_min), abs(along_max), abs(across_min), abs(across_max)
-    )
+    projected = _Projection.of(exterior, junction.direction_xy)
+    along_min, along_max = (min(projected.along), max(projected.along))
+    across_min, across_max = (min(projected.across), max(projected.across))
+    tolerance = projected.tolerance
     if along_max - along_min <= tolerance or across_max - across_min <= tolerance:
         raise ValueError(
             f"junction {junction.junction_id!r} polygon has empty projected extent"
         )
-    expected = {
-        (along_min, across_min),
-        (along_min, across_max),
-        (along_max, across_min),
-        (along_max, across_max),
-    }
-    if any(
-        (
-            not any(
-                (
-                    abs(u - eu) <= tolerance and abs(v - ev) <= tolerance
-                    for eu, ev in expected
-                )
-            )
-            for u, v in zip(along, across, strict=False)
-        )
-    ):
+    if not projected.corners_on_extent():
         raise ValueError(
             f"junction {junction.junction_id!r} polygon is not rectangular in its declared direction"
         )
@@ -103,3 +85,46 @@ def junction_terminal_line(
         [along_max * dx + across_mid * px, along_max * dy + across_mid * py, z_um],
     ]
     return (line, along_max - along_min)
+
+
+def rectangle_along(
+    corners: Sequence[Sequence[float]], direction_xy: tuple[float, float]
+) -> bool:
+    """Whether four corners are a rectangle with its sides along and across ``direction_xy``.
+
+    This is the comparison ``junction_terminal_line`` refuses a sheet by, with its tolerance.
+    """
+    return _Projection.of(corners, direction_xy).corners_on_extent()
+
+
+@dataclass(frozen=True)
+class _Projection:
+    """Points measured along a direction and across it, with the rectangle check's tolerance."""
+
+    along: tuple[float, ...]
+    across: tuple[float, ...]
+    tolerance: float
+
+    @classmethod
+    def of(cls, points, direction_xy) -> _Projection:
+        dx, dy = direction_xy
+        along = tuple(x * dx + y * dy for x, y in points)
+        across = tuple(-x * dy + y * dx for x, y in points)
+        # Relative to the coordinates' magnitude, so a sheet far from the origin is judged alike.
+        tolerance = 1e-09 * max(1.0, *(abs(v) for v in (*along, *across)))
+        return cls(along, across, tolerance)
+
+    def corners_on_extent(self) -> bool:
+        """Whether every point lies on a corner of the extent, within the tolerance."""
+        expected = [
+            (u, v)
+            for u in (min(self.along), max(self.along))
+            for v in (min(self.across), max(self.across))
+        ]
+        return all(
+            any(
+                abs(u - eu) <= self.tolerance and abs(v - ev) <= self.tolerance
+                for eu, ev in expected
+            )
+            for u, v in zip(self.along, self.across, strict=False)
+        )

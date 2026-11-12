@@ -39,6 +39,18 @@ from scgsim.geometry.planning.junction_planning.exact_geometry import (
 from scgsim.geometry.planning.junction_planning.exact_geometry import (
     section as section,
 )
+from scgsim.geometry.planning.junction_planning.lattice import (
+    LatticeRectangle as LatticeRectangle,
+)
+from scgsim.geometry.planning.junction_planning.lattice import (
+    drawn_exterior as drawn_exterior,
+)
+from scgsim.geometry.planning.junction_planning.lattice import (
+    lattice_rectangle as lattice_rectangle,
+)
+from scgsim.geometry.planning.junction_planning.model_checks import (
+    fraction_overlap as fraction_overlap,
+)
 from scgsim.geometry.planning.junction_planning.partition import (
     partition_junctions as partition_junctions,
 )

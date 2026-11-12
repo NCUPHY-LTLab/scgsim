@@ -22,7 +22,7 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git, t
 uv init --python 3.12 scgsim-study
 cd scgsim-study
 uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@fb8cbe199386bbe6d81cc9c58817fbe7d339573f' \
-  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c'
+  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
 `uv` creates `.venv` and records resolved versions in `uv.lock`. Keep `pyproject.toml` and `uv.lock` with the study; run `uv sync` on another computer to recreate the environment.
@@ -142,13 +142,10 @@ Each invocation creates a new run folder under `.artifacts/simplepad-q3d/`. Prin
 
 To inspect the inputs first, run `uv run simplepad_q3d.py --handoff-only`. This option prepares the inputs and portable archive without opening AEDT. The complete mode runs and reads results on the same host.
 
-Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground_nets` records the physical Ground role separately. Continue with the [capacitance tutorial](docs/tutorials/capacitance.qmd) for dimensions, boundary choices and interpretation. Each full tutorial retains the environment and source versions listed on its own page.
+Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground_nets` records the physical Ground role separately. The [Q3D lesson](docs/course/aedt-q3d.qmd) explains the body, Net and extraction choices, and [returned results](docs/course/returned-results.qmd) explains how to read the matrix.
 
 ## Choose your next simulation
 
-| Goal | Start here |
-|---|---|
-| Capacitance | [Palace Electrostatic or AEDT Q3D](docs/tutorials/capacitance.qmd) |
-| Resonance and EPR | [Palace or HFSS modes](docs/tutorials/resonance.qmd) · [Energy participation](docs/tutorials/resonance-epr.qmd) |
-| Driven S-parameters | [HFSS Modal or Terminal](docs/tutorials/scattering.qmd) |
-| Transmission-line parameters | [AEDT Q2D](docs/tutorials/transmission-line.qmd) |
+The [simulation chooser](docs/examples.qmd#getting-started) links the complete OrcaPen SC PDK notebook for capacitance, resonant modes and energy participation, and per-unit-length transmission-line parameters. For driven S-parameters, start from the [Driven Modal](docs/course/aedt-driven-modal.qmd) or [Driven Terminal](docs/course/aedt-driven-terminal.qmd) lesson.
+
+Before you simulate a layout of your own, read the [supported scope](docs/supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.

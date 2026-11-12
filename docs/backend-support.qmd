@@ -7,7 +7,7 @@ scgsim-id: "docs/backend-support"
 ---
 
 SCGSim exposes the workflows below. A solver can support additional problem
-types that SCGSim has not implemented. Select the calculation by the quantity
+types that SCGSim does not implement. Select the calculation by the quantity
 you need, then choose the appropriate source and boundary model.
 
 ::: {.table-responsive}
@@ -27,10 +27,9 @@ you need, then choose the appropriate source and boundary model.
 Every new Q3D and HFSS 3D request must select its modeling representation
 explicitly; there is no default. AEDT requests also require an explicit
 `aedt_version` of `"2023.2"` or `"2024.2"`; both use PyAEDT 1.3.0, with the
-selected AEDT Desktop running on the same host as SCGSim. The Solid/Thin-Film
-extension is **CONVERGING**. The table describes supported request families
-and intended returned quantities, not solver results observed for the new
-representation.
+selected AEDT Desktop running on the same host as SCGSim. The table describes
+supported request families and intended returned quantities, not solver
+results observed for the new representation.
 
 Prepared-native BatchSolve is a separate execution route for the existing
 HFSS EPR workflow. Prepare and collect the native model in Desktop transactions
@@ -41,7 +40,7 @@ session. This route does not change the HFSS model or EPR request and does not
 submit a scheduler job. The [HPC EPR sweep guide](course/aedt-hpc-sweep.qmd)
 shows how to transfer independent packages together; the
 [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
-records the current native-verification status and complete-return rules.
+gives the complete-return rules.
 
 Palace Driven and Magnetostatic are not implemented; Meep is outside SCGSim's
 scope. Palace's [native problem types](https://awslabs.github.io/palace/stable/guide/problem/)
@@ -78,8 +77,9 @@ not equalize boundary conditions or make lumped capacitance, resonance,
 S-parameters and per-length matrices interchangeable. Use each result's units
 and native conductor/port/mode order.
 
-The 1.1.0 Palace source path supports explicitly authored
-curves and caller-selected GDS boundary reconstruction. These inputs retain
+The Palace source path supports authored line segments and circular arcs, and
+caller-selected circular-arc GDS boundary reconstruction; `interpolation_spline`
+and `bspline` curves raise `UnsupportedCurveError`. These inputs retain
 their source Entity and occurrence identity and are built by
 `scgsim.geometry.sgb`.
 AEDT curve intent is unsupported. Palace `MesherOptions.geometry_order` controls the

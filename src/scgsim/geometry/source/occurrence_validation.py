@@ -12,8 +12,11 @@ from typing import TYPE_CHECKING, Any
 from scgsim.geometry.models.input import LayoutPolygonSpec
 from scgsim.geometry.primitives.grid import (
     current_grid_size_um,
+    named_source,
     polygon_boolean,
+    source_place,
     source_recipe_map,
+    source_refusal,
 )
 from scgsim.geometry.source.adapter_records import AdapterSource, record_sequence
 from scgsim.geometry.source.ground import layout_polygon_region
@@ -403,13 +406,33 @@ def validate_ground_contribution_ownership(
                             holes=polygon["holes"],
                         ),
                     )
-                    if polygon_boolean(
+                    overlap = polygon_boolean(
                         included, claimed, "and", precision=current_grid_size_um()
-                    ):
+                    )
+                    if overlap:
                         raise ValueError(
-                            f"ground contribution {contribution['source_local_id']!r} "
-                            f"also contains local Entity {other['semantic_id']!r}"
+                            _contribution_overlap(contribution, other, overlap)
                         )
+
+
+def _contribution_overlap(
+    contribution: Mapping[str, Any], other: Mapping[str, Any], overlap: Sequence[Any]
+) -> str:
+    """The refusal of a Ground contribution whose include region overlaps a named conductor, at the overlap."""
+    layer = contribution["layer"]
+    with named_source(
+        str(contribution["source_local_id"]), f"{int(layer[0])}/{int(layer[1])}"
+    ):
+        return source_refusal(
+            f"ground contribution {contribution['source_local_id']!r} "
+            f"also contains local Entity {other['semantic_id']!r}",
+            [
+                f"its include region overlaps {other['semantic_id']} at "
+                f"{source_place([point for part in overlap for point in part.points])}"
+            ],
+            "Fix the layout or the declaration: select an include region clear of the "
+            "named conductors, or draw them apart.",
+        )
 
 
 def _reference_transform(

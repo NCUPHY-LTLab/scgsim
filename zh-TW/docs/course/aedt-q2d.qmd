@@ -9,10 +9,12 @@ scgsim-id: "docs/course/aedt-q2d"
 
 請在[安裝](installation.qmd)後開始。Q2D 使用明確指定的橫截面矩形；它不會匯入 GDS、不會從 Xmon 快照切出截面，也不會從 3D 圖片推斷傳輸線。公開的 [OrPen 橫截面來源](../examples.qmd#public-inputs)提供此樣本：訊號寬 10 µm、間隙 10 µm、接地寬 40 µm、金屬厚 0.2 µm，基板寬 200 µm、厚 500 µm。這些都是模型輸入值。
 
+![宣告的 Q2D CPW 橫截面：矽基板、訊號線與兩個參考接地矩形。為呈現 0.2 µm 金屬厚度，圖中放大垂直比例；這是來源幾何，不是求解結果。](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
+
 ```python
 from pathlib import Path
-import orpen_sc_pdk
-from orpen_sc_pdk.materials import get_material_records
+import orcapen_sc_pdk
+from orcapen_sc_pdk.materials import get_material_records
 from scgsim.aedt import (
     MatrixRunControl, PdkMaterial, Q2dConductorSpec,
     Q2dRectangleSpec, Q2dSpec, prepare_handoff,
@@ -20,7 +22,7 @@ from scgsim.aedt import (
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 
-orpen_sc_pdk.activate()
+orcapen_sc_pdk.activate()
 records = get_material_records()
 materials = {
     name: PdkMaterial(name, records[name]["material_kind"],
@@ -54,6 +56,16 @@ print(handoff.spec_path, handoff.archive_path)
 矩形原點與尺寸的單位是微米。請核對每個左下角位置與尺寸是否符合預期間隙；依賴原生幾何前，先列印來源規格。真空屬於 Region，不是自行建立的真空矩形。單一 `ReferenceGround` 群組涵蓋兩個接地矩形，且至少有一個 `SignalLine`；每個超導矩形都必須且只能屬於一個群組。Region 的四值補距順序是 **(-X, +X, -Y, +Y)**，與 3D 輸入教學中的原生六值順序不同。
 
 在[執行](execute.qmd)後，請[解析完整回傳資料](returned-results.qmd)。Q2D 會寫入一份原生 `results/q2d/rlgc_matrix.csv`，其中包含主要的 C、G、L、R 區塊。`resolved.physics_results()` 會讀取這些區塊，不會另建正規化檔案。原生耦合或 Spice 區塊可同時存在，但不會成為額外的主要矩陣。解析器會綁定頻率、`LastAdaptive` 解、導體順序及每單位長度單位。
+請保留各區塊的原生單位：
+
+| 矩陣區塊 | 原生單位 |
+| --- | --- |
+| 電容 C | pF/meter |
+| 電導 G | mho/meter |
+| 電感 L | nH/meter |
+| 電阻 R | ohm/meter |
+
+SCGSim 不會將 RLGC 轉換為阻抗、傳播常數或相速度。
 
 依[矩陣觀測契約](../specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)所述，請將原生狀態、回報差值與實際控制項連同矩陣結果保存。請依該數值及可取得的變化量，判斷精度是否符合預期研究需求。
 

@@ -40,7 +40,7 @@ junction = planar_junction_from_port(
 對此固定版本的 Xmon 範例，選取目錄保留的第一個來源 ID，即可綁定每個要求的貢獻，包括 SA 拓撲列。這是受修訂版本限制的樣本選擇，不是適用所有元件的規則。其他研究應檢查完整資料列，並依契約選取該貢獻保留的來源識別資訊。薄膜厚度、介電率、損耗與來源來自 OrPen 合成的 `LiteratureCentral` 預設值；遮罩／內縮邊距則是相對於另行保留的未遮罩基準值所做的替代評估。
 
 ```python
-from orpen_sc_pdk.materials import validate_interface_preset_records
+from orcapen_sc_pdk.materials import validate_interface_preset_records
 from scgsim.aedt import SurfaceEprSpec, prepare_planar_geometry_input
 
 prepared = prepare_planar_geometry_input(
@@ -51,7 +51,7 @@ prepared = prepare_planar_geometry_input(
 )
 catalogue = prepared.contribution_catalog
 presets = validate_interface_preset_records()
-margins_um = (0.01, 0.05, 0.1)
+margins_um = (0.5, 1.0)
 surface_specs = []
 
 for record in catalogue:

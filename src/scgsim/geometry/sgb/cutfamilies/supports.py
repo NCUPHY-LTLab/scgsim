@@ -24,6 +24,18 @@ each of its boundary edges is cut where a gap edge of the attachment plane that 
 begins or ends (``cutfamilies.gap_intervals``), and only the pieces a gap edge covers are origins.  A source edge
 that faces a gap along part of its length is thus an origin along that part only.
 
+The die edge.  A boundary piece that is no origin lies on the die edge when, on the attachment plane, the cell
+across it lies beyond the die: it holds no conductor and no dielectric (it is outside the model, or only vacuum
+lies on either side of the plane there), and such cells connect it to the unbounded face of the level.  That is
+the substrate's outer edge, a dicing line, and a gap edge that runs onto it belongs to a conductor the dicing
+cut: its distance origin continues straight past the die edge (``SupportRegion.die_cuts``).  The rim of a
+vacuum bore, trench or cavity that the die encloses is no dicing line, so a gap edge that ends there keeps the
+half circle of its bands.  A solution interface is read the same way on its own level.  The face of a finite
+conductor on its other plane takes the die edges of the attachment plane along the same source edges, as it
+takes the gap edges.  A support whose continuation the die outline comes back to is refused
+(``cutfamilies.die_cuts``), and so is one whose gap edge runs onto the die edge as an arc, which has no single
+way on.
+
 Arc edges of the boundary are expressed on the exact circle of their source arc (centre and radius of the
 carrier) through the snapped end points, so offsets stay concentric with the source circle.
 
@@ -42,6 +54,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from fractions import Fraction
 
+from scgsim.geometry.models.grid import format_box
+from scgsim.geometry.sgb.cutfamilies.die_cuts import (
+    cells_beyond_the_die,
+    check_die_cuts,
+)
 from scgsim.geometry.sgb.cutfamilies.gap_intervals import (
     ArcSpan,
     LineSpan,
@@ -76,7 +93,7 @@ from scgsim.geometry.sgb.records.carriers import (
 from scgsim.geometry.sgb.records.grid import Grid, exact_z
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
-from scgsim.geometry.sgb.records.support import SupportRegion
+from scgsim.geometry.sgb.records.support import SupportRegion, primitive_ends
 from scgsim.geometry.sgb.routes.naming import (
     SHEET,
     interface_type_of,
@@ -147,18 +164,33 @@ def resolve_support(
     layer, selected = _select_cells(request, support, catalogue, labelled)
     if request.interface is not None:
         _check_interface(request, layer, selected)
-    pieces_of = _origin_pieces(support, catalogue, labelled, layer)
-    rings, origin_mask = _boundary_rings(
+    # The die edge is read on the plane the gap edges are: the attachment plane of a conductor face.
+    plane = (
+        layer
+        if isinstance(support, SolutionInterface)
+        else labelled.level_layers[
+            _attach_level(support.entity_id, catalogue, labelled)
+        ]
+    )
+    beyond = cells_beyond_the_die(plane)
+    pieces_of = _origin_pieces(support, labelled, layer, plane, beyond)
+    rings, origin_mask, die_edge_mask = _boundary_rings(
         request.request_id, layer, selected, labelled, pieces_of
     )
     if not any(any(ring) for ring in origin_mask):
         raise NoGapEdgeError(
             f"inset request {request.request_id!r}: {_describe(support)} has no gap edge to "
-            "measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)"
+            "measure the bands from (a conductor edge counts only where exposed dielectric lies next to it); "
+            f"{_face_place(support, catalogue, layer, rings)}. Fix the declaration or the layout: "
+            "drop the band margins asked for this face, or draw exposed dielectric beside one of "
+            "its edges."
         )
-    return ResolvedSupport(
-        request, layer.level_z, SupportRegion(rings, margins, origin_mask)
+    region = SupportRegion(rings, margins, origin_mask, die_edge_mask)
+    conductor = support.entity_id if isinstance(support, ConductorSurface) else None
+    check_die_cuts(
+        request.request_id, region, plane, beyond, conductor, catalogue.grid.size_um
     )
+    return ResolvedSupport(request, layer.level_z, region)
 
 
 def concrete_support(request: InsetRequest) -> ConcreteSupport:
@@ -178,20 +210,48 @@ def _describe(support: ConcreteSupport) -> str:
     )
 
 
+def _face_place(
+    support: ConcreteSupport,
+    catalogue: PrismCatalogue,
+    layer: Layer,
+    rings: tuple[tuple[RingPrimitive, ...], ...],
+) -> str:
+    """Where a support face lies: its source layers, its level and the box of its boundary's vertices."""
+    entities = (
+        {support.entity_id}
+        if isinstance(support, ConductorSurface)
+        else {support.first_entity_id, support.second_entity_id}
+    )
+    layers = {p.layer for p in catalogue.prisms if p.entity_id in entities and p.layer}
+    on = f" on layer {', '.join(sorted(layers))}" if layers else ""
+    ends = [end for ring in rings for prim in ring for end in primitive_ends(prim)]
+    xs, ys = (
+        [catalogue.grid.to_um(x) for x, _ in ends],
+        [catalogue.grid.to_um(y) for _, y in ends],
+    )
+    box = format_box((min(xs), min(ys), max(xs), max(ys)), catalogue.grid.size_um)
+    return f"the face{on} lies at z = {float(layer.level_z):g} um within {box}"
+
+
 # --------------------------------------------------------------------------- gap edges
 
 
 def _origin_pieces(
     support: ConcreteSupport,
-    catalogue: PrismCatalogue,
     labelled: LabelledArrangements,
     layer: Layer,
+    plane: Layer,
+    beyond: frozenset[int],
 ) -> Callable[[int], list[Piece]]:
-    """The pieces of a boundary half-edge of the support face, each saying whether it is a distance origin (a gap edge)."""
+    """The pieces of a boundary half-edge of the support face: each a distance origin (a gap edge) or not, and on the die edge or not.
+
+    ``plane`` is the level the gap edges and the die edge are read on, and ``beyond`` its cells beyond the die.
+    """
     arr = layer.arr
 
     def whole(h: int, *, origin: bool) -> list[Piece]:
-        return [Piece(arr.origin(h), arr.target(h), origin)]
+        on_die_edge = not origin and arr.he_face[h ^ 1] in beyond
+        return [Piece(arr.origin(h), arr.target(h), origin, on_die_edge)]
 
     if isinstance(support, SolutionInterface):
         return lambda h: whole(
@@ -199,14 +259,16 @@ def _origin_pieces(
             origin=_is_exposed_dielectric(layer.labels[arr.he_face[h]])
             and _is_conductor_cell(layer.labels[arr.he_face[h ^ 1]]),
         )
-    attach = labelled.level_layers[
-        _attach_level(support.entity_id, catalogue, labelled)
-    ]
-    if attach is not layer:
-        gaps = _gap_edges_by_source(attach, labelled)
-        return lambda h: _pieces_along_gaps(layer, h, labelled, gaps)
+    if plane is not layer:
+        gaps = _conductor_edges_by_source(
+            plane, labelled, lambda face: _is_exposed_dielectric(plane.labels[face])
+        )
+        die_edges = _conductor_edges_by_source(
+            plane, labelled, lambda face: face in beyond
+        )
+        return lambda h: _pieces_along_gaps(layer, h, labelled, gaps, die_edges)
     # The support is on its own plane, whose arrangement is cut wherever the cell across a boundary edge
-    # changes: a boundary edge is a gap edge as a whole, or not at all.
+    # changes: a boundary edge is a gap edge as a whole, or not at all, and the same for the die edge.
     return lambda h: whole(
         h, origin=_is_exposed_dielectric(layer.labels[arr.he_face[h ^ 1]])
     )
@@ -243,20 +305,24 @@ def _lies_on_dielectric(layer: Layer, surface: ConductorSurface) -> bool:
     )
 
 
-def _gap_edges_by_source(
-    layer: Layer, labelled: LabelledArrangements
+def _conductor_edges_by_source(
+    layer: Layer,
+    labelled: LabelledArrangements,
+    across: Callable[[int], bool],
 ) -> dict[str, list[Span]]:
-    """The gap edges of a level, each travelled with its conductor on the left, by source edge.
+    """The edges of a level with a conductor on one side and a cell ``across`` accepts on the other, by source edge.
 
-    A gap edge has a conductor on one side and an exposed dielectric surface on the other.
+    ``across`` takes the index of the cell.  Each edge is travelled with its conductor on the left.  With an
+    exposed dielectric across they are the gap edges; with a cell beyond the die, the conductor's edges on the
+    die edge.
     """
     arr = layer.arr
     by_source: dict[str, list[Span]] = {}
     for edge in range(len(arr.edges)):
         for h in (2 * edge, 2 * edge + 1):
-            if _is_conductor_cell(
-                layer.labels[arr.he_face[h]]
-            ) and _is_exposed_dielectric(layer.labels[arr.he_face[h ^ 1]]):
+            if _is_conductor_cell(layer.labels[arr.he_face[h]]) and across(
+                arr.he_face[h ^ 1]
+            ):
                 span = _span_of(layer, h, labelled)
                 for source in layer.edge_sources[edge]:
                     by_source.setdefault(source, []).append(span)
@@ -268,14 +334,15 @@ def _pieces_along_gaps(
     half_edge: int,
     labelled: LabelledArrangements,
     gaps: dict[str, list[Span]],
+    die_edges: dict[str, list[Span]],
 ) -> list[Piece]:
-    """A boundary half-edge cut at the gap edges of another level along the same source edges."""
-    along = [
-        gap
-        for source in layer.edge_sources[half_edge >> 1]
-        for gap in gaps.get(source, ())
-    ]
-    return split_at_gaps(_span_of(layer, half_edge, labelled), along)
+    """A boundary half-edge cut at the gap edges and die edges of another level along the same source edges."""
+    sources = layer.edge_sources[half_edge >> 1]
+    return split_at_gaps(
+        _span_of(layer, half_edge, labelled),
+        [gap for source in sources for gap in gaps.get(source, ())],
+        [edge for source in sources for edge in die_edges.get(source, ())],
+    )
 
 
 def _span_of(layer: Layer, half_edge: int, labelled: LabelledArrangements) -> Span:
@@ -495,8 +562,12 @@ def _boundary_rings(
     selected: set[int],
     labelled: LabelledArrangements,
     pieces_of: Callable[[int], list[Piece]],
-) -> tuple[tuple[tuple[RingPrimitive, ...], ...], tuple[tuple[bool, ...], ...]]:
-    """The boundary rings of the selected cells, and per primitive whether it is a distance origin.
+) -> tuple[
+    tuple[tuple[RingPrimitive, ...], ...],
+    tuple[tuple[bool, ...], ...],
+    tuple[tuple[bool, ...], ...],
+]:
+    """The boundary rings of the selected cells, and per primitive whether it is a distance origin and whether it lies on the die edge.
 
     A boundary half-edge becomes one primitive, or several where it is a gap edge along part of its length.
     """
@@ -539,7 +610,10 @@ def _boundary_rings(
     origin_mask = tuple(
         tuple(piece.faces_gap for _, piece in ring_pieces) for ring_pieces in pieces
     )
-    return primitives, origin_mask
+    die_edge_mask = tuple(
+        tuple(piece.on_die_edge for _, piece in ring_pieces) for ring_pieces in pieces
+    )
+    return primitives, origin_mask, die_edge_mask
 
 
 def _from_smallest_vertex(arr, ring: list[int]) -> list[int]:  # noqa: ANN001 - the arrangement of a layer

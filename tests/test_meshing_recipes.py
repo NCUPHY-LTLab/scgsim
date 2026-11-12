@@ -1,4 +1,4 @@
-"""The three sizing recipes, on the cases the benchmark measured."""
+"""The sizing recipes, on the cases the benchmark measured."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from meshing_support import feature, features_of, film
 from scgsim.meshing import (
     FeatureRecipe,
     GlobalSizeRecipe,
+    GmshDefaultRecipe,
     UniformBoundaryRecipe,
 )
 from scgsim.meshing.recipes.feature import conductor_outline_curves
@@ -26,9 +27,10 @@ def test_the_default_feature_recipe_is_the_measured_one():
     """The default feature recipe is the measured one."""
     recipe = FeatureRecipe()
     assert recipe.name == "features"
-    assert recipe.version == "scgsim.meshing.features/1"
+    assert recipe.version == "scgsim.meshing.features/2"
     assert (recipe.max_size_divisor, recipe.gradation) == (20.0, 1.0)
     assert recipe.film_sidewall_thickness_multiple == 25.0
+    assert recipe.band_mesh_size_multiple == 4.0
     with pytest.raises(dataclasses.FrozenInstanceError):
         recipe.gradation = 2.0  # type: ignore[misc]
 
@@ -36,13 +38,14 @@ def test_the_default_feature_recipe_is_the_measured_one():
 @pytest.mark.parametrize(
     ("recipe", "name", "version"),
     [
-        (FeatureRecipe(), "features", "scgsim.meshing.features/1"),
+        (FeatureRecipe(), "features", "scgsim.meshing.features/2"),
         (GlobalSizeRecipe(), "global-size", "scgsim.meshing.global-size/1"),
         (
             UniformBoundaryRecipe(),
             "uniform-boundary",
             "scgsim.meshing.uniform-boundary/1",
         ),
+        (GmshDefaultRecipe(), "gmsh-default", "scgsim.meshing.gmsh-default/1"),
     ],
 )
 def test_every_recipe_has_its_own_name_and_version_that_are_not_parameters(
@@ -140,9 +143,6 @@ def test_a_curve_covered_by_two_films_takes_the_finer_size():
 def test_kinds_without_an_a_priori_rule_ask_for_no_size():
     """Kinds without an a priori rule ask for no size."""
     kinds = features_of(
-        feature(
-            "band_boundary", [1], {"margins_um": [0.5, 1.0], "narrowest_band_um": 0.5}
-        ),
         feature("arc", [2], {"radius_um": 10.0}, source=None),
         feature("refinement_curve", [3]),
         feature("port_edge", [4]),
@@ -153,18 +153,94 @@ def test_kinds_without_an_a_priori_rule_ask_for_no_size():
     )
 
 
-def test_a_film_curve_that_is_also_a_band_edge_keeps_the_film_size():
-    """A film curve that is also a band edge keeps the film size."""
+def band(tags, narrowest_um=0.5, margins_um=(0.5, 1.0)):
+    """A ``band_boundary`` entry: the edges of one banded face."""
+    facts = {"margins_um": list(margins_um), "narrowest_band_um": narrowest_um}
+    return feature("band_boundary", tags, facts)
+
+
+def unbanded():
+    """Every kind but band edges: two film walls, an arc, a refinement curve and a port edge."""
+    return features_of(
+        film([1, 2]),
+        film([3], 0.05),
+        feature("arc", [4], {"radius_um": 10.0}, source=None),
+        feature("refinement_curve", [5]),
+        feature("port_edge", [6]),
+    )
+
+
+def test_a_band_edge_gets_four_times_its_narrowest_band_on_the_ladder():
+    """Coarse size 100: 4 x 0.5 um = 2 um, rounded down the ladder to 100 / 64."""
+    requests = FeatureRecipe().size_requests(
+        features_of(band([1, 2, 3])), box_with_diagonal(2000.0)
+    )
+    assert dict(requests.curve_sizes) == {tag: 100.0 / 64 for tag in (1, 2, 3)}
+    assert requests.max_size == pytest.approx(100.0)
+    assert (requests.gradation, requests.fields) == (1.0, ())
+
+
+@pytest.mark.parametrize(
+    ("multiple", "expected"),
+    [(2.0, 100.0 / 128), (4.0, 100.0 / 64), (8.0, 100.0 / 32), (1000.0, 50.0)],
+)
+def test_the_band_edge_multiple_is_a_parameter(multiple, expected):
+    """A finer or coarser multiple moves the size along the same ladder; it never exceeds half the coarse size."""
+    requests = FeatureRecipe(band_mesh_size_multiple=multiple).size_requests(
+        features_of(band([1])), box_with_diagonal(2000.0)
+    )
+    assert dict(requests.curve_sizes) == {1: expected}
+
+
+def test_each_banded_face_takes_the_size_of_its_own_narrowest_band():
+    """Faces with 0.5 um and 2 um bands; a curve on both takes the finer size."""
     requests = FeatureRecipe().size_requests(
         features_of(
-            film([1]),
-            feature(
-                "band_boundary", [1], {"margins_um": [0.5], "narrowest_band_um": 0.5}
-            ),
+            band([1, 2]), band([2, 3], narrowest_um=2.0, margins_um=(2.0, 4.0))
         ),
         box_with_diagonal(2000.0),
     )
-    assert set(requests.curve_sizes) == {1}
+    assert dict(requests.curve_sizes) == {
+        1: 100.0 / 64,
+        2: 100.0 / 64,
+        3: 100.0 / 16,  # 4 x 2 um = 8 um -> 6.25
+    }
+
+
+def test_a_curve_on_a_film_wall_and_a_band_takes_the_finer_of_the_two_sizes():
+    """Coarse size 100: a 0.2 um wall asks for 3.125 um, a 0.5 um band edge for 1.5625 um, a 0.05 um wall for 0.78 um."""
+    requests = FeatureRecipe().size_requests(
+        features_of(film([1, 2]), film([3], 0.05), band([1, 3])),
+        box_with_diagonal(2000.0),
+    )
+    assert dict(requests.curve_sizes) == {
+        1: 100.0 / 64,  # the band edge is finer than the 0.2 um wall
+        2: 100.0 / 32,
+        3: 100.0 / 128,  # the 0.05 um wall is finer than the band edge
+    }
+
+
+@pytest.mark.parametrize("multiple", [0.5, 2.0, 4.0, 100.0])
+def test_a_model_without_bands_gets_the_film_sizes_whatever_the_band_multiple(multiple):
+    """Without band edges the requests are the film-wall sizes alone, as before the band-edge rule."""
+    requests = FeatureRecipe(band_mesh_size_multiple=multiple).size_requests(
+        unbanded(), box_with_diagonal(2000.0)
+    )
+    assert dict(requests.curve_sizes) == {1: 100.0 / 32, 2: 100.0 / 32, 3: 100.0 / 128}
+    assert (requests.max_size, requests.gradation, requests.fields) == (
+        pytest.approx(100.0),
+        1.0,
+        (),
+    )
+
+
+@pytest.mark.parametrize(
+    "multiple", [0.0, -4.0, math.nan, math.inf, -math.inf, True, "4"]
+)
+def test_the_band_edge_multiple_must_be_a_finite_positive_number(multiple):
+    """Zero, negative, infinite, NaN, a bool and a string are refused when the recipe is made."""
+    with pytest.raises(ValueError, match="band_mesh_size_multiple"):
+        FeatureRecipe(band_mesh_size_multiple=multiple)
 
 
 def test_ladder_size_is_the_largest_rung_not_above_the_target():
@@ -261,6 +337,18 @@ def test_the_global_size_divisor_is_a_parameter():
         features_of(), box_with_diagonal(2000.0)
     )
     assert requests.max_size == pytest.approx(200.0)
+
+
+def test_the_gmsh_default_recipe_asks_for_nothing_and_leaves_gmsh_its_own_maximum_size():
+    """No curve size, no field, no local size, and Gmsh's own default Mesh.MeshSizeMax, whatever the model."""
+    small = GmshDefaultRecipe().size_requests(features_of(), box_with_diagonal(10.0))
+    large = GmshDefaultRecipe().size_requests(
+        features_of(film([1, 2, 3])), box_with_diagonal(9000.0)
+    )
+    assert small == large
+    assert small.max_size == 1e22
+    assert (dict(small.curve_sizes), small.fields, small.local_sizes) == ({}, (), ())
+    assert dataclasses.asdict(GmshDefaultRecipe()) == {}
 
 
 def test_the_uniform_boundary_recipe_sizes_every_curve_of_the_model_alike():

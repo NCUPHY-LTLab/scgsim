@@ -23,6 +23,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
 
+from scgsim.geometry.models.grid import format_box, format_point
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
@@ -56,21 +57,32 @@ def bind_boundaries(
     footprints: Mapping[str, Sequence[SourceFootprint]],
 ) -> dict[RingKey, tuple[RingPrimitive, ...]]:
     """Ring primitives for every ring an authored or reconstruction record binds."""
-    binder = _BoundaryBinder(grid, footprints)
+    binder = _BoundaryBinder(grid, footprints, _entity_layers(build_input))
     bound: dict[RingKey, tuple[RingPrimitive, ...]] = {}
+    authored: dict[RingKey, BoundaryRecord] = {}
     for record in build_input.boundary_curves:
         key, _ = binder.select_ring(record)
         if key in bound:
-            raise InputError(f"multiple complete authored boundaries claim ring {key}")
+            raise InputError(
+                f"multiple complete authored boundaries claim ring {key}: "
+                f"{binder.claim(key, (authored[key], record))}. Fix the declaration: give "
+                "each ring one complete boundary record."
+            )
+        authored[key] = record
         bound[key] = binder.authored_primitives(record, key)
     selections: dict[RingKey, list[_Selection]] = defaultdict(list)
+    reconstructions: dict[RingKey, list[BoundaryRecord]] = defaultdict(list)
     for reconstruction in build_input.boundary_reconstruction:
         key, ring = binder.select_ring(reconstruction)
         selections[key].append(binder.reconstruction(reconstruction, key, ring))
+        reconstructions[key].append(reconstruction)
     for key, chosen in selections.items():
         if key in bound:
             raise InputError(
-                f"authored and reconstructed boundaries both claim ring {key}"
+                f"authored and reconstructed boundaries both claim ring {key}: "
+                f"{binder.claim(key, (authored[key], *reconstructions[key]))}. Fix the "
+                "declaration: describe the ring by one authored boundary or by "
+                "reconstruction records, not both."
             )
         bound[key] = _replace_segments(key, binder.ring_of(key), chosen)
     return bound
@@ -89,15 +101,29 @@ class _BoundaryBinder:
     """Selects the ring a record addresses and builds its primitives on the grid."""
 
     def __init__(
-        self, grid: Grid, footprints: Mapping[str, Sequence[SourceFootprint]]
+        self,
+        grid: Grid,
+        footprints: Mapping[str, Sequence[SourceFootprint]],
+        layers: Mapping[str, str],
     ) -> None:
         self.grid = grid
         self.footprints = footprints
+        self.layers = layers
+
+    def _named(self, record: BoundaryRecord) -> str:
+        """The record, its Entity and the Entity's layer, as refusals name them."""
+        layer = self.layers.get(record.entity_id)
+        on = f", layer {layer}" if layer else ""
+        return f"{record.boundary_id} (Entity {record.entity_id!r}{on})"
 
     # -- selecting the ring ------------------------------------------------------------
 
     def select_ring(self, record: BoundaryRecord) -> tuple[RingKey, Ring]:
-        """The one entity-owned footprint the selector point lies in, and the ring the role names."""
+        """The one authored entity-owned footprint the selector point lies in, and the ring the role names.
+
+        A junction end piece is never the selector's polygon: it can overlap the terminal's
+        authored polygon, which the selector names as it did before the partition.
+        """
         selector = fraction_to_rep(
             self.grid.exact_units(record.selector_point_um[0]),
             self.grid.exact_units(record.selector_point_um[1]),
@@ -105,12 +131,17 @@ class _BoundaryBinder:
         matches = [
             footprint
             for footprint in self.footprints.get(record.entity_id, ())
-            if sum(point_in_ring(ring, selector) for ring in footprint.rings()) % 2 == 1
+            if footprint.authored
+            and sum(point_in_ring(ring, selector) for ring in footprint.rings()) % 2
+            == 1
         ]
         if len(matches) != 1:
             raise InputError(
                 f"{record.boundary_id} selector must bind one Entity-owned logical polygon "
-                f"of {record.entity_id!r}; it binds {len(matches)}"
+                f"of {record.entity_id!r}; it binds {len(matches)}: "
+                f"{self._selector_finding(record, matches)}. Fix the declaration: put the "
+                "boundary's selector point inside the one polygon of the Entity whose ring "
+                "it describes, and name the Entity that owns that polygon."
             )
         footprint = matches[0]
         if record.role == "outer":
@@ -120,7 +151,9 @@ class _BoundaryBinder:
             if ring_index > len(footprint.holes):
                 raise InputError(
                     f"{record.boundary_id}: {record.entity_id!r} polygon {footprint.polygon} "
-                    f"has no hole {record.hole_index}"
+                    f"has no hole {record.hole_index}: the polygon{self._on(record)} at "
+                    f"{self._place(footprint.outer)} has {len(footprint.holes)}. Fix the "
+                    "declaration: give the hole_index of one of its holes, counted from 0."
                 )
         key = (record.entity_id, footprint.polygon, ring_index)
         return key, footprint.rings()[ring_index]
@@ -130,6 +163,49 @@ class _BoundaryBinder:
         entity_id, polygon, ring_index = key
         footprint = next(f for f in self.footprints[entity_id] if f.polygon == polygon)
         return footprint.rings()[ring_index]
+
+    def claim(self, key: RingKey, records: Sequence[BoundaryRecord]) -> str:
+        """The records that claim one ring, and where the ring lies."""
+        names = " and ".join(record.boundary_id for record in records)
+        return (
+            f"{names} (Entity {key[0]!r}{self._on(records[0])}) select the ring at "
+            f"{self._place(self.ring_of(key))}"
+        )
+
+    def _selector_finding(
+        self, record: BoundaryRecord, matches: Sequence[SourceFootprint]
+    ) -> str:
+        """Where a boundary's selector point lies, and the authored polygons of its Entity."""
+        x, y = record.selector_point_um
+        point = format_point(x, y, self.grid.size_um)
+        authored = [f for f in self.footprints.get(record.entity_id, ()) if f.authored]
+        if not authored:
+            return f"the Entity owns no polygon; the selector point lies at {point}"
+        if not matches:
+            extent = self._place(tuple(p for f in authored for p in f.outer))
+            return (
+                f"the selector point lies at {point}, outside every polygon of the Entity"
+                f"{self._on(record)}, which lie within {extent}"
+            )
+        where = ", ".join(self._place(f.outer) for f in matches)
+        return f"the selector point lies at {point}, inside each of its polygons at {where}"
+
+    def _on(self, record: BoundaryRecord) -> str:
+        layer = self.layers.get(record.entity_id)
+        return f" on layer {layer}" if layer else ""
+
+    def _place(self, ring: Ring) -> str:
+        """Where a lattice ring lies, as the box around it in micrometres."""
+        xs, ys = (
+            [self.grid.to_um(x) for x, _ in ring],
+            [self.grid.to_um(y) for _, y in ring],
+        )
+        return format_box((min(xs), min(ys), max(xs), max(ys)), self.grid.size_um)
+
+    def _point(self, point: Point) -> str:
+        return format_point(
+            self.grid.to_um(point[0]), self.grid.to_um(point[1]), self.grid.size_um
+        )
 
     # -- authored chains ---------------------------------------------------------------
 
@@ -141,16 +217,29 @@ class _BoundaryBinder:
         first_start: Point | None = None
         previous_end: Point | None = None
         for index, curve in enumerate(record.curves):
-            what = f"{record.boundary_id} (Entity {record.entity_id!r}) curve {index}"
+            what = f"{self._named(record)} curve {index}"
             start, end, new = self._curve_primitives(curve, key, index, what)
             if previous_end is not None and start != previous_end:
-                raise InputError(f"{what} does not start where the previous curve ends")
+                raise InputError(
+                    f"{what} does not start where the previous curve ends: it starts at "
+                    f"{self._point(start)}, the previous curve ends at "
+                    f"{self._point(previous_end)}. Fix the layout: start each curve where "
+                    "the one before it ends."
+                )
             first_start = start if first_start is None else first_start
             previous_end = end
             primitives.extend(new)
         if first_start is None or previous_end != first_start:
+            ends = (
+                "it has no curve"
+                if first_start is None or previous_end is None
+                else f"the chain{self._on(record)} starts at {self._point(first_start)} "
+                f"and ends at {self._point(previous_end)}"
+            )
             raise InputError(
-                f"{record.boundary_id} (Entity {record.entity_id!r}) curves do not form one closed chain"
+                f"{record.boundary_id} (Entity {record.entity_id!r}) curves do not form one "
+                f"closed chain: {ends}. Fix the layout: end the last curve where the first "
+                "starts."
             )
         return tuple(primitives)
 
@@ -169,11 +258,27 @@ class _BoundaryBinder:
             return (
                 start,
                 end,
-                list(arc_through_points(arc_id, start, through, end, lineage, what)),
+                list(
+                    arc_through_points(
+                        arc_id, start, through, end, lineage, what, grid=self.grid
+                    )
+                ),
             )
         raise UnsupportedCurveError(
             f"{what}: {curve.kind!r} curves are not supported yet "
-            f"(this version carries {SUPPORTED_CURVES})"
+            f"(this version carries {SUPPORTED_CURVES}){self._runs(curve)}. "
+            "Fix the layout: draw the curve as lines and circular arcs."
+        )
+
+    def _runs(self, curve: SourceCurveSpec) -> str:
+        """Where an authored curve starts and ends, as the layout author wrote it."""
+        if not curve.points_um:
+            return ""
+        (x0, y0), (x1, y1) = curve.points_um[0], curve.points_um[-1]
+        size = self.grid.size_um
+        return (
+            f"; the curve runs from {format_point(x0, y0, size)} "
+            f"to {format_point(x1, y1, size)}"
         )
 
     # -- reconstruction ----------------------------------------------------------------
@@ -182,7 +287,7 @@ class _BoundaryBinder:
         self, record: GdsBoundaryReconstructionSpec, key: RingKey, ring: Ring
     ) -> _Selection:
         """The segments a reconstruction record replaces and the circular arc that replaces them."""
-        what = f"{record.boundary_id} (Entity {record.entity_id!r})"
+        what = self._named(record)
         if record.kind != "circular_arc":
             raise UnsupportedCurveError(
                 f"{what}: reconstruction kind {record.kind!r} is not supported yet "
@@ -209,12 +314,17 @@ class _BoundaryBinder:
         if record.closed:
             ccw = ring_twice_area(ring) > 0
             arcs = full_circle(
-                arc_id, (points[0], points[1], points[2]), ccw, lineage, what
+                arc_id,
+                (points[0], points[1], points[2]),
+                ccw,
+                lineage,
+                what,
+                grid=self.grid,
             )
         else:
             through = (Fraction(points[1][0]), Fraction(points[1][1]))
             arcs = arc_through_points(
-                arc_id, points[0], through, points[2], lineage, what
+                arc_id, points[0], through, points[2], lineage, what, grid=self.grid
             )
         return _Selection(segments, tuple(arcs), record.boundary_id)
 
@@ -228,12 +338,24 @@ class _BoundaryBinder:
         if x is None or y is None:
             raise InputError(
                 f"{what}: end point ({point_um[0]}, {point_um[1]}) um is off the "
-                f"{self.grid.size_um} um model grid"
+                f"{self.grid.size_um} um model grid. Fix the layout: draw the ends of each "
+                "curve on the grid."
             )
         return (x, y)
 
     def _exact_point(self, point_um: Sequence[float]) -> tuple[Fraction, Fraction]:
         return (self.grid.exact_units(point_um[0]), self.grid.exact_units(point_um[1]))
+
+
+def _entity_layers(build_input: GeometryBuildInput) -> dict[str, str]:
+    """The source layer(s) of each Entity's polygons, joined for a refusal."""
+    layer_of = {p.polygon_id: p.layer for p in build_input.polygons}
+    return {
+        e.semantic_id: ", ".join(
+            sorted({layer_of[i] for i in e.polygon_ids if i in layer_of})
+        )
+        for e in build_input.entities
+    }
 
 
 def _arc_id(key: RingKey, edge: int) -> str:

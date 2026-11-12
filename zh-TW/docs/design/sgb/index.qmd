@@ -11,8 +11,8 @@ scgsim-id: "docs/design/sgb/index"
 
 重新設計的 semantic geometry builder（SGB）把順序倒過來。它把晶片描述成有限個 **prism**，**在任何 CAD kernel 介入之前**就推導出完整的 topology 與每個 cell 的意義，再自己把結果寫成 BREP/XAO 檔案。Gmsh 不建立幾何：它載入檔案並對其產生 **mesh**，測試中也把它當作 oracle。模型上不執行任何三維 Boolean 運算。
 
-::: {.callout-note title="實作狀態"}
-這個設計已有 production 實作：`scgsim.geometry.sgb`（階段 1，1a 到 1e）。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band 與 refinement curve、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 與 AEDT 尚未切換過來：舊的幾何路徑保留到兩個 adopter 都改接之後（階段 3），移除在階段 4（[D6](decisions.qmd#d6)）。要接 Palace 或 AEDT，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)與[欄位對應](consumer-mapping.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
+::: {.callout-note title="SGB 的實作"}
+這個設計的 production 實作是 `scgsim.geometry.sgb`。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band 與 refinement curve、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 以 SGB 建立幾何、以 `scgsim.meshing` 產生網格，並只接受 Route A 與 Route B。AEDT 目前經由自己的平面路徑準備幾何，方向是使用同一份 SGB 輸出；舊的幾何路徑因此仍在（[D6](decisions.qmd#d6)）。要使用 SGB 的輸出，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
 :::
 
 ## 執行範例：輸入與輸出
@@ -44,7 +44,7 @@ SGB 從這五個 prism 推導出下面的實體模型（Route B）。為了讓�
 3. **Identity**：每個實體有一個 semantic 名稱（例如 `MA::pad__top::band=2`）與一個依內容定址的 atomic id，並附有回到產生它的來源曲線的 lineage。
 4. **CAD 檔案與 sidecar**：直接由 topology 寫出的 BREP 與 XAO 檔案，不經任何 Boolean 運算；以及一個 JSON **sidecar**，記錄每個 native 實體對應的規劃 id、physical group、lineage 與依面積加權的 membership。
 
-無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見 [Emission](emission.qmd)）。
+無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見[交給 AEDT](emission.qmd#handing-the-solids-to-aedt)）。
 
 production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<entity>__<face kind>[::band=k]`（例如 pad 的頂面是 `MA::pad__top`，有 inset band 時是 `MA::pad__top::band=2`；face kind 以雙底線接在 entity 後面，命名規則見 [identity](identity.qmd#band-group-names)），完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。
 
@@ -64,7 +64,7 @@ production 的 extreme-case catalogue（`tests/sgb_catalogue_report.py`，每個
 - **隨機 layout 與注入缺陷。** 測試在 $N = 100$ 的隨機 layout（三種 route）上跑完整的 OCCT 檢查，在 $N = 1000$（Route B，標為 `slow`）上跑 self-interference 關閉的便宜檢查，皆通過。五種注入的缺陷（內環反向、共用 face 在一個 shell 中翻面、vertex 偏離曲線 $10^{-4}$ µm、缺一個 face、wire 有缺口）每一種都被 `BRepCheck_Analyzer` 抓到，其餘檢查的涵蓋範圍見 [Validation](validation.qmd)。
 - **Runtime validator 的成本（production 量測）。** 在 $N = 1000$、5 000、20 000、seed 2 的 polygon-only layout 上（14 215、71 969、285 871 個 face，一個 tile、一個 worker），31 項檢查合計的時間是 0.33 s、2.20 s、10.59 s，對 face 數的局部斜率是 1.16 與 1.14，也就是近乎線性。逐項看，除了 `cylinders` 之外，每一項 validator 的局部斜率介於 0.97 與 1.31；`cylinders` 的 1.6 只出現在 $N = 1000$ 到 5 000，這些 layout 沒有 cylinder wall，那項檢查在這兩個 $N$ 都不到 0.01 s，近乎雜訊（`figures/why-validator-scaling.json`，`python why_scaling.py validators`）。這是單次執行，不含圓弧與 band。
 
-還有三件事要說清楚。第一，AEDT 端：`export_aedt_step` 只做匯出，production 的輸出尚未實際匯入 AEDT 測試過；匯入的證據仍是原型時期的 E4 實驗（[交給 AEDT](aedt-handoff.qmd)）。第二，catalogue 的 fixture 都很小（不到 100 個 face），所以以上的檢查成本與 mesh 數字不代表大型 layout。第三，決定性（逐位元組相同）在同一台機器上測過；跨平台只是論證，尚未實測（見[使用契約](consumer-contract.qmd#determinism)）。各項檢查的細節見 [Validation](validation.qmd)。
+還有三件事要說清楚。第一，AEDT 端：`export_aedt_step` 只做匯出，production 的輸出尚未實際匯入 AEDT 測試過；匯入的證據仍是原型時期的 E4 實驗（[交給 AEDT](emission.qmd#handing-the-solids-to-aedt)）。第二，catalogue 的 fixture 都很小（不到 100 個 face），所以以上的檢查成本與 mesh 數字不代表大型 layout。第三，決定性（逐位元組相同）在同一台機器上測過；跨平台只是論證，尚未實測（見[使用契約](consumer-contract.qmd#determinism)）。各項檢查的細節見 [Validation](validation.qmd)。
 
 ## Pipeline 全貌
 
@@ -145,7 +145,6 @@ flowchart TB
 | 12 | [Sliver](slivers.qmd) | 四種 sliver 來源、哪些依構造即被消除，以及 feature size 如何量測。 |
 | 13 | [Validation](validation.qmd) | 各項檢查、三層驗證，以及 fail-closed 的行為。 |
 | 14 | [Emission](emission.qmd) | direct BREP/XAO writer、sidecar，以及 Gmsh 如何處理它們。 |
-| 15 | [交給 AEDT](aedt-handoff.qmd) | SGB 的 solid 如何以帶名稱的 solid 進入 AEDT，以及 face identity 如何把關。 |
 | 16 | [BREP 檔案格式](brep-format.qmd) | direct writer 寫出的 BREP 與 XAO 檔案的結構（給需要讀寫檔案的人）。 |
 | 17 | [SGB 輸出的使用契約](consumer-contract.qmd) | `build_sgb_geometry` 的呼叫與回傳、決定性的保證（測過與論證）、sidecar 的每個欄位，以及 Palace 與 AEDT 讀取端的步驟。 |
 | 18 | [Palace 與 AEDT 的欄位對應](consumer-mapping.qmd) | 今天的 Palace group dict 與 record 欄位、AEDT ledger、Electrostatic 的 Net 各對到新 sidecar 的哪裡；哪些要同時切換；開放項目。 |

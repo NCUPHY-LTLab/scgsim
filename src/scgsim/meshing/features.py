@@ -19,9 +19,9 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from .errors import SidecarError
+from scgsim.contracts.sgb_sidecar import SIDECAR_SCHEMA
 
-SIDECAR_SCHEMA = "scgsim.sgb.sidecar.v2"
+from .errors import SidecarError
 
 # Facts every entry of a kind must carry; a sidecar may add facts later, never drop one of these.
 _REQUIRED_FACTS: Mapping[str, tuple[str, ...]] = MappingProxyType(

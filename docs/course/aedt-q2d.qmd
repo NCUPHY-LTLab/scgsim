@@ -6,18 +6,20 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-q2d"
 ---
 
-Start from the complete [CPW transmission-line tutorial](../tutorials/transmission-line.qmd).
-This page retains the backend-specific Q2D reference. Q2D takes explicit cross-section
+For the complete workflow, use the PDK's Q2D notebook from [Choose a simulation](../examples.qmd#getting-started).
+This page is the backend-specific Q2D reference. Q2D takes explicit cross-section
 rectangles; it does not import a GDS, derive a slice from the Xmon snapshot or
 infer a transmission line from a 3D picture. The public
 [OrPen cross-section source](../examples.qmd#public-inputs) supplies this
 specimen: 10 µm signal width, 10 µm gaps, 40 µm grounds, 0.2 µm metal thickness,
 and a 200 µm wide, 500 µm thick substrate. These are model inputs.
 
+![Declared Q2D CPW cross-section: silicon substrate, signal, and two reference-ground rectangles. Vertical scale is enlarged to show the 0.2 µm metal thickness; this is source geometry, not a solver result.](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
+
 ```python
 from pathlib import Path
-import orpen_sc_pdk
-from orpen_sc_pdk.materials import get_material_records
+import orcapen_sc_pdk
+from orcapen_sc_pdk.materials import get_material_records
 from scgsim.aedt import (
     MatrixRunControl, PdkMaterial, Q2dConductorSpec,
     Q2dRectangleSpec, Q2dSpec, prepare_handoff,
@@ -25,7 +27,7 @@ from scgsim.aedt import (
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 
-orpen_sc_pdk.activate()
+orcapen_sc_pdk.activate()
 records = get_material_records()
 materials = {
     name: PdkMaterial(name, records[name]["material_kind"],
@@ -71,6 +73,17 @@ containing primary C, G, L and R blocks. `resolved.physics_results()` reads thos
 blocks without creating another normalized file. Native coupling or Spice
 blocks can coexist without becoming extra primary matrices. The resolver binds
 frequency, `LastAdaptive` solution, conductor order and per-unit-length units.
+Preserve the native units of each block:
+
+| Block | Native unit |
+| --- | --- |
+| Capacitance, C | pF/meter |
+| Conductance, G | mho/meter |
+| Inductance, L | nH/meter |
+| Resistance, R | ohm/meter |
+
+SCGSim does not convert RLGC into impedance, propagation constant or phase
+velocity.
 
 Keep native status, reported delta and actual controls with the matrix result,
 as described by the [matrix observation contract](../specs/aedt-runtime.qmd#q2d-q3d-convergence-observations).
