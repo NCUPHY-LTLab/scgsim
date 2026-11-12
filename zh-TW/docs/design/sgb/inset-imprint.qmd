@@ -194,7 +194,7 @@ insets = tuple(
 build_sgb_geometry(build_input, representation, route="B", insets=insets, output_dir=out)
 ```
 
-SGB 在 [physical pre-pass](cut-families.qmd) 的 label 上找 face，用的是替 sidecar 的 `surface_epr_rows` 決定 row 的同一套 interface 種類規則，所以「要求的 face」與「結果裡有 row 的 face」不會不一致：
+SGB 在 [physical pre-pass](cut-families.qmd) 的 label 上找 face，用的是替 sidecar 的 `surface_epr_row` 決定 row 的同一套 interface 種類規則，所以「要求的 face」與「結果裡有 row 的 face」不會不一致：
 
 ::: {.askr-table-compact}
 | 種類 | 展開成的 face |
@@ -219,9 +219,9 @@ insets = (
 )
 ```
 
-**一個 face 只有一個 family。**多個請求選到同一個 face 時，它們共用一個 family，所以必須要求相同的 margin（以模型格點比較，`0.3` 與 `0.1 + 0.2` 視為相同）；margin 不同是 `InputError`，訊息指出兩個請求的 id、各自的 margin 與那個 face，SGB 不會取聯集，也不會悄悄選一組。上面的寫法讓指定 face 的請求與按種類的請求不落在同一個 face。一個指定 face 的請求保有自己的 `request_id`，只由按種類的請求選到的 face 則是 `<request_id>::<entity>::<side>`（介面是 <code>&lt;request_id&gt;::&lt;first&gt;&#124;&lt;second&gt;::z=&lt;z&gt;</code>）；多個請求共用時取 id 排序最前的請求。這些 id 是 lineage（`<id>/ring<r>/edge<k>`）、`mesh_features` 的 `band_boundary` 來源與 `insets` 的鍵，它們只由請求和 face 決定，不隨 `workers`、`tiles` 或執行次數改變。兩個指定 face 的請求選到同一個 face 時，兩者不會合併：兩個 family 的 band 會落進同名的 group，band 編號只在各自的 family 內有意義，所以 SGB 在規劃 band 時就以 `InputError` 停止，訊息指出兩個請求的 id 與那個 face。即使之後有 port 蓋滿這個 face、最後沒有任何 band，也一樣停止。每個 face 只寫一次請求，把所有 margin 放在同一個請求裡。
+**一個 face 只有一個 family。**多個請求選到同一個 face 時，它們共用一個 family，所以必須要求相同的 margin（以模型格點比較，`0.3` 與 `0.1 + 0.2` 視為相同）；margin 不同是 `InputError`，訊息指出兩個請求的 id、各自的 margin 與那個 face，SGB 不會取聯集，也不會悄悄選一組。上面的寫法讓指定 face 的請求與按種類的請求不落在同一個 face。一個指定 face 的請求保有自己的 `request_id`，只由按種類的請求選到的 face 則是 `<request_id>::<entity>::<side>`（介面是 <code>&lt;request_id&gt;::&lt;first&gt;&#124;&lt;second&gt;::z=&lt;z&gt;</code>）；多個請求共用時取 id 排序最前的請求。這些 id 是 sidecar 中 `band_family` 的鍵、`mesh_feature` 的 `band_boundary` 來源，也是 support ring 所屬的 family，它們只由請求和 face 決定，不隨 `workers`、`tiles` 或執行次數改變。兩個指定 face 的請求選到同一個 face 時，兩者不會合併：兩個 family 的 band 會落進同名的 group，band 編號只在各自的 family 內有意義，所以 SGB 在規劃 band 時就以 `InputError` 停止，訊息指出兩個請求的 id 與那個 face。即使之後有 port 蓋滿這個 face、最後沒有任何 band，也一樣停止。每個 face 只寫一次請求，把所有 margin 放在同一個請求裡。
 
-**沒有 gap edge 的 face 會被略過。**「某種類的每個 face」也包含量不出 band 的 face：基板下方的 SA 介面（旁邊沒有附著導體）、整片蓋住 die 的 ground plane、懸空的導體，都沒有 gap edge（定義見[上一節](#band-measure)）。按種類要求時 SGB 略過這些 face，把每一個記在 sidecar 該請求的 `expansion.skipped`（原因 `no_gap_edge`），build 不失敗。所以要確認某個導體真的有 band，看 `expansion.banded` 與 `expansion.skipped`，不要只看 build 有沒有成功。`expansion.banded` 列的是 physical pre-pass 建出的 family；family 有沒有可積分的 band，要讀那個 family 自己的 `bands`，以及最後的 `surface_epr_rows`，因為 port 是之後才放上去的，可以把一個 family 的 face 整個蓋住（例如矩形 port 蓋住整個 SA gap，只在兩塊 sheet 上各留 0.5 µm 的 landing）：該 family 仍列在 `expansion.banded`，`bands` 是 `{}`，`expansion.skipped` 是空的，`surface_epr_rows` 也沒有該 SA 的 row。指定 face 的寫法維持失敗，因為你點名的 face 沒有 gap edge 是輸入錯誤。
+**沒有 gap edge 的 face 會被略過。**「某種類的每個 face」也包含量不出 band 的 face：基板下方的 SA 介面（旁邊沒有附著導體）、整片蓋住 die 的 ground plane、懸空的導體，都沒有 gap edge（定義見[上一節](#band-measure)）。按種類要求時 SGB 略過這些 face，把每一個記在 sidecar 中該請求（`inset_request`）的 `skipped`（原因 `no_gap_edge`），build 不失敗。所以要確認某個導體真的有 band，看請求的 `families` 與 `skipped`，不要只看 build 有沒有成功。`families` 列的是 physical pre-pass 建出的 band family；family 有沒有可積分的 band，要讀它在 `band_family` 中自己的 `bands`，以及最後的 `surface_epr_row`，因為 port 是之後才放上去的，可以把一個 family 的 face 整個蓋住（例如矩形 port 蓋住整個 SA gap，只在兩塊 sheet 上各留 0.5 µm 的 landing）：該 family 仍列在 `families`，它的 `bands` 是 `{}`，`skipped` 是空的，`surface_epr_row` 也沒有該 SA 的 row。指定 face 的寫法維持失敗，因為你點名的 face 沒有 gap edge 是輸入錯誤。
 
 下表是兩個真實輸入各以 MA、MS、SA 三個請求（margin 0.5 與 1 µm）展開的結果，最後一列是整片被 ground 蓋住的 die（`InterfaceSurfaces("MA")` 略過它的 top，同一個 face 以 `ConductorSurface` 要求則失敗）。pad-in-ground 的基板下方有一層 vacuum，所以 z = −10 µm 的 SA 介面被略過；thin-film pair 的 sheet 一側是 vacuum、另一側是 substrate，MA 與 MS 的請求共用同一個 family：
 
@@ -254,7 +254,7 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 | gap | B3 | 2 | 11633.9694 | 11633.9694 |
 :::
 
-同一個 surface 的 band 互不重疊，且加起來等於該 surface（pad top 的 B0 到 B3 總和為 5421.5730 µm²，等於 sidecar `insets` 記錄的 support 面積）。gap 的 support 是整個 substrate–vacuum 介面，包含 pad 的圓形 hole（support 面積 13 778.4270 µm²）；Route A 的 port footprint（300 µm²）是 `PORT::p1` 的 face，所以 gap band 加起來是 13 478.4270 µm²，少了 port 的面積。一個 band 可以不只一個 face：pad top 的 band 是沿外框的一圈加上繞 hole 的一圈，而 port footprint 從 gap band 中挖出一個缺口，band 的 face 繞著它。同一個 band 的所有 face 共用一個 group 名稱。
+同一個 surface 的 band 互不重疊，且加起來等於該 surface（pad top 的 B0 到 B3 總和為 5421.5730 µm²，等於 sidecar 中 `band_family` 記錄的 `support_area_um2`）。gap 的 support 是整個 substrate–vacuum 介面，包含 pad 的圓形 hole（support 面積 13 778.4270 µm²）；Route A 的 port footprint（300 µm²）是 `PORT::p1` 的 face，所以 gap band 加起來是 13 478.4270 µm²，少了 port 的面積。一個 band 可以不只一個 face：pad top 的 band 是沿外框的一圈加上繞 hole 的一圈，而 port footprint 從 gap band 中挖出一個缺口，band 的 face 繞著它。同一個 band 的所有 face 共用一個 group 名稱。
 
 group 依 D5 以 Entity 歸屬（band 曲線不受影響，見 [D5](decisions.qmd#d5)）：volume 與 Route A 的 sheet 以 entity id 命名，介面前綴（`MA`、`MS`、`SA`、`PORT`、`EXT`）保留。
 
@@ -324,7 +324,7 @@ $Q(\ge m_1)$、$Q(\ge m_2)$、$Q(\ge m_3)$ 是累積且巢狀的：每一個都�
 | $\ge m_3$ | 2 µm | `band=3`（14） |
 :::
 
-Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad__sheet::band=k` 與 `MS::pad__sheet::band=k` 都對到 `pad::band=k`（pad 上方是 vacuum、下方是 substrate，所以兩個 row 都存在；兩列的 `shared_face_group` 相同，`face_sides` 逐 face 列出積分的一側，`side` 分別是 `above` 與 `below`。sheet 兩側都是 vacuum 時只有 MA row），其他有 band 的 group 則對到它自己。`unions.nets.pad` 列出四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
+Sidecar 的 `surface_epr_row` 把 sheet 的 Surface EPR row `MA::pad__sheet::band=k` 與 `MS::pad__sheet::band=k` 都對到 `pad::band=k`（pad 上方是 vacuum、下方是 substrate，所以兩個 row 都存在；兩列的 `shared_face_group` 相同，`face_sides` 逐 face 列出積分的一側，`side` 分別是 `above` 與 `below`。sheet 兩側都是 vacuum 時只有 MA row），其他有 band 的 group 則對到它自己。Net `pad` 的導體表面（`net` 為 `pad` 的 `SHEET` group）正是這四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
 
 ## Port 不移動 band
 
@@ -354,7 +354,7 @@ Band **逐 support face** 產生：
 
 ![Band 的位置。Route A 每個 band 一個 sheet face。Route B 的有限厚度金屬 prism，其 top face（MA）與 bottom face（MS）各自獨立切 band；side wall 在 v1 不切 band。Conceptual 示意圖。](figures/inset-routes-section.svg){#fig-routes fig-alt="剖面圖：Route A 是基板上的一層有 band 的薄 sheet；Route B 是上下表面都有 band 的金屬塊。"}
 
-- **Route A。** sheet 的 face 依兩側的鄰居可同時是 metal–vacuum 與 metal–substrate。它承載 band，並以 face 命名為 `<entity>::band=k`；Surface EPR 的 MA row（某個 face 的某一側是 vacuum 時才有）與 MS row（某個 face 的某一側是 dielectric 時才有）都參照這一個 group（`surface_epr_rows`）。
+- **Route A。** sheet 的 face 依兩側的鄰居可同時是 metal–vacuum 與 metal–substrate。它承載 band，並以 face 命名為 `<entity>::band=k`；Surface EPR 的 MA row（某個 face 的某一側是 vacuum 時才有）與 MS row（某個 face 的某一側是 dielectric 時才有）都參照這一個 group（`surface_epr_row`）。
 - **Route B，top face。** 位於 $z = 0.2$ µm 的 family `band_pad_top` 產生 `MA::pad__top::band=k`。
 - **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad__bottom::band=k`。Route B 的範例兩個 face 都切 band：規劃 60 個 face、274 條 edge、321 個 vertex，23 個 group，validation 通過（31 項），`unions.nets.pad` 列出八個 band group 與 `MA::pad__sidewall`（side wall，不切 band）；port 在 z = 0 的 support plane，是 substrate 與 vacuum 之間的一個 face，不在金屬的 top 或 bottom face 上，也不移動任何 band。
 - **Side wall** 不在 v1 範圍：side wall 的 band 會是 wall face 上的第三個 family，目前不產生。
@@ -420,7 +420,7 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 
 ## 補充：重現資料
 
-本頁的圖與數字由 `docs/design/sgb/_figures/inset.py` 與 `inset_origin.py` 對 production 計算（「Inset band 怎麼量」一節的圖與數字由 `inset_origin.py` 產生，輸入是 `tests/sgb_inputs.py` 的 `gds_pad_in_ground` 與 `thin_film_pair`，以 `build_sgb_geometry` 建出，數字在 `figures/inset-origin-numbers.json`；以下說明 `inset.py` 的部分）：以 `SGB_CORE` 指向含 `scgsim.geometry.sgb` 與其 `tests/` 的 checkout，並用該 checkout 的 Python 執行。running example 是測試端的 stage-level scene `tests/sgb_scenes.py::pad_in_ground`（ground 的 cutout，pad 有 chamfer、20 × 15 µm 的 notch、5 µm 的 rounded corner 與半徑 8 µm 的圓 hole），以 `build_model_from_catalogue` 配上 `InsetRequest` 建出，band 請求與 `tests/sgb_emit_cases.py` 的 `pad_requests` 相同（三個 margin 0.1、0.5、2 µm，pad 與 substrate–vacuum 的 gap）。這個 scene 把 Route B 的 port 放在金屬的中間平面（為了測試 embedded sheet），compiler 不會這樣放：port 位於 host 的 support plane，所以 `inset.py` 把它換成同一片 sheet 放在 z = 0，Route A 的 port 本來就在那裡。所有 band 面積、arc 偏差、edge 數與 Route B 的數量都從 production 的 `ConformalModel` 與 sidecar 讀出；KLayout 交叉檢查用測試端的 oracle `tests/sgb_klayout.py`，mesh 檢查用 production 的 direct writer 寫出 XAO 再以 Gmsh 做 mesh（`tests/sgb_gmsh_oracle.py` 的 `refine_near`、`mesh_coarsely`、`band_mesh_report`）。產生的表格另存於 `figures/inset-tables.md`，其餘數字在 `figures/inset-numbers.json` 與 `figures/inset-klayout-comparison.json`；production 的 KLayout 交叉檢查也在 `tests/test_sgb_inset.py`（需要 KLayout，沒有安裝時略過）。2-D 的 mask 對 imprint 示意只用 Gmsh，與 SGB 無關。
+本頁的圖與數字由 `zh-TW/docs/design/sgb/_figures/inset.py` 與 `inset_origin.py` 對 production 計算（「Inset band 怎麼量」一節的圖與數字由 `inset_origin.py` 產生，輸入是 `tests/sgb_inputs.py` 的 `gds_pad_in_ground` 與 `thin_film_pair`，以 `build_sgb_geometry` 建出，數字在 `figures/inset-origin-numbers.json`；以下說明 `inset.py` 的部分）：以 `SGB_CORE` 指向含 `scgsim.geometry.sgb` 與其 `tests/` 的 checkout，並用該 checkout 的 Python 執行。running example 是測試端的 stage-level scene `tests/sgb_scenes.py::pad_in_ground`（ground 的 cutout，pad 有 chamfer、20 × 15 µm 的 notch、5 µm 的 rounded corner 與半徑 8 µm 的圓 hole），以 `build_model_from_catalogue` 配上 `InsetRequest` 建出，band 請求與 `tests/sgb_emit_cases.py` 的 `pad_requests` 相同（三個 margin 0.1、0.5、2 µm，pad 與 substrate–vacuum 的 gap）。這個 scene 把 Route B 的 port 放在金屬的中間平面（為了測試 embedded sheet），compiler 不會這樣放：port 位於 host 的 support plane，所以 `inset.py` 把它換成同一片 sheet 放在 z = 0，Route A 的 port 本來就在那裡。所有 band 面積、arc 偏差、edge 數與 Route B 的數量都從 production 的 `ConformalModel` 與 sidecar 讀出；KLayout 交叉檢查用測試端的 oracle `tests/sgb_klayout.py`，mesh 檢查用 production 的 direct writer 寫出 XAO 再以 Gmsh 做 mesh（`tests/sgb_gmsh_oracle.py` 的 `refine_near`、`mesh_coarsely`、`band_mesh_report`）。產生的表格另存於 `figures/inset-tables.md`，其餘數字在 `figures/inset-numbers.json` 與 `figures/inset-klayout-comparison.json`；production 的 KLayout 交叉檢查也在 `tests/test_sgb_inset.py`（需要 KLayout，沒有安裝時略過）。2-D 的 mask 對 imprint 示意只用 Gmsh，與 SGB 無關。
 
 mesh 檢查（含 band 的 Route A 模型；最大 40 µm，band 曲線附近 1 µm 的 size field，13 377 個 node、71 994 個 tetrahedron，無重複 node，conformal）：
 

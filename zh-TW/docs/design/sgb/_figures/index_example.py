@@ -42,10 +42,10 @@ from sgb_emit_cases import CASES, pad_requests
 from sgb_gmsh_oracle import gmsh_session, mesh_quality, mesh_with_cheap_recipe
 from sgb_scenes import airbridge
 
+from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.prisms.levels import build_levels
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
 
 GROUP_COLOURS = {
@@ -424,7 +424,7 @@ def counts() -> dict:
             artifacts = emit_model(model, Path(tmp))
             sidecar = read_sidecar(artifacts.sidecar)
             gap = unwritten(model)
-        written = sidecar["counts"]
+        written = sidecar["summary"]["counts"]
         assert (
             written["vertices"]
             == model.counts["vertices"] - gap["arc_centre_vertices"]

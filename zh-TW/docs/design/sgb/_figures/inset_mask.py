@@ -25,10 +25,10 @@ from sgb_gmsh_oracle import (  # noqa: E402
     refine_near,
 )
 
+from scgsim.contracts.sgb_sidecar import read_sidecar, views  # noqa: E402
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area  # noqa: E402
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
 from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
-from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.verification.loaded import verify_loaded  # noqa: E402
 
 # --------------------------------------------------------------------------- 5. mask vs imprint (2-D gmsh illustration)
@@ -376,12 +376,14 @@ def mesh_check(model, size: float) -> dict:
         with gmsh_session(artifacts.xao):
             loaded = verify_loaded(sidecar)
             assert loaded.ok, loaded
+            members = views.group_members(sidecar)
             for name, group in sidecar[
-                "physical_groups"
+                "group"
             ].items():  # the loaded area of every band group equals the plan
                 if group.get("band") is not None:
                     area = sum(
-                        gmsh.model.occ.getMass(2, t) for t in group["native_tags"]
+                        gmsh.model.occ.getMass(2, t)
+                        for t in views.native_tags(sidecar, 2, members[name])
                     )
                     assert abs(area - group["area_um2"]) <= 1e-9 * group["area_um2"], (
                         name

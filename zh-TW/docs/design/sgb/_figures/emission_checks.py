@@ -25,6 +25,7 @@ from sgb_gmsh_oracle import (  # noqa: E402
     refine_near,
 )
 
+from scgsim.contracts.sgb_sidecar import views  # noqa: E402
 from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_loaded  # noqa: E402
 from scgsim.geometry.sgb.verification.occt import check_file, check_shape, read_brep  # noqa: E402
 
@@ -79,8 +80,12 @@ def _oracle_agrees(model, plan, sidecar) -> dict:
         name: sorted(g.ids) for name, g in model.routed.groups.items() if name in groups
     } and set(groups) == set(model.routed.groups)
     want = {
-        pid: sidecar["expected"]["face_area_um2"][i]
-        for i, pid in enumerate(sidecar["binding"]["ids_by_tag"]["2"])
+        pid: area
+        for pid, area in zip(
+            sidecar["binding"]["ids_by_tag"]["2"],
+            views.expected(sidecar)["face_area_um2"],
+            strict=True,
+        )
     }
     worst = {"planar": 0.0, "curved": 0.0}
     for pid, area in want.items():

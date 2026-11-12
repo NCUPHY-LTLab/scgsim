@@ -20,7 +20,6 @@ Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/des
 
 from __future__ import annotations
 
-import json
 import tempfile
 from collections import Counter
 from fractions import Fraction
@@ -50,6 +49,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from plotly.subplots import make_subplots
 from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
+from scgsim.contracts.sgb_sidecar import read_sidecar, views
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
@@ -288,15 +288,33 @@ def emitted(model) -> dict:
     """The model's counts, the emitted counts of its BREP plan, and the sidecar facts the page quotes."""
     with tempfile.TemporaryDirectory() as tmp:
         artifacts = emit_model(model, Path(tmp))
-        sidecar = json.loads(artifacts.sidecar.read_text())
+        sidecar = read_sidecar(artifacts.sidecar)
     return {
         "counts": artifacts.counts,
-        "embedded_faces": sidecar["embedded_faces"],
-        "refinement_edges": sidecar["refinement_edges"],
-        "ports": [
-            {k: p[k] for k in ("group", "host_volumes", "adjacent_volumes", "z_um")}
-            for p in sidecar["ports"]
+        "embedded_faces": [
+            {"face": face, "host_volume": host}
+            for face, host in views.embedded_faces(sidecar)
         ],
+        "embedded_edges": [
+            {
+                "edge": edge,
+                "host_face": host,
+                "requests": [
+                    sidecar["carrier"][c]["request"]
+                    for c in sidecar["edge"][edge]["carriers"]
+                    if sidecar["carrier"][c]["kind"] == "refinement"
+                ],
+                "written_as_free_edge": sidecar["edge"][edge]["written_as_free_edge"],
+            }
+            for edge, host in views.embedded_edges(sidecar)
+        ],
+        "ports": {
+            port_id: {
+                k: port[k]
+                for k in ("group", "host_volumes", "adjacent_volumes", "z_um")
+            }
+            for port_id, port in views.ports(sidecar)
+        },
     }
 
 

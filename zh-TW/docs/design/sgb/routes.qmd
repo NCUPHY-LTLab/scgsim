@@ -83,26 +83,27 @@ Route A 的 slab 與 level 比較少，因為金屬層沒有厚度：沒有 $z =
 
 每個輸出的表面與 volume 都屬於**恰好一個 primary physical group**。名稱依 D5 以 Entity 歸屬：`<kind>::<entity>__<face kind>[::band=k]`，face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface`（face kind 以雙底線接在 entity 後面，命名規則見 [identity](identity.qmd#band-group-names)）。Route A 的 group 是 `ground_0000`、`pad`（兩個 sheet）、`PORT::PORT_SHEET__P1__0000`、`SA::substrate|VACUUM_REGION__interface`、`SA::substrate|VACUUM_REGION__sidewall`、`EXT::VACUUM_REGION__bottom`、`EXT::VACUUM_REGION__sidewall`、`EXT::VACUUM_REGION__top`、`substrate`、`VACUUM_REGION`（兩個 volume；共 10 個）。裸的 entity id 指物件本身，Gmsh 的 Type 欄位標示它是 surface 或 volume。Route B 以 `MA::ground_0000__top`、`MA::ground_0000__sidewall`、`MS::ground_0000__bottom` 與 pad 的三個對應 group 取代兩個 sheet group（共 14 個）。Route C 再加上 volume group `ground_0000` 與 `pad`（共 16 個）；這個真實輸入的 ground 不碰模型外邊界（vacuum region 把它包在裡面），所以沒有 `EXT::ground_0000__sidewall`。
 
-solver 常想要的是 *union*，例如「Net `pad` 的所有導體表面」或「所有 MA 表面」。它在 sidecar 中是 primary group 的清單，絕不是第二個重疊的 Gmsh group，因為 MSH 輸出會為每個包含某元素的 group 各複製一次該元素，solver 可能把這些複本讀成兩個表面。執行範例（真實輸入，Net 的 id 是 `G` 與 `P`）的 sidecar 為 Route B 記錄（節錄）：
+solver 常想要的是 *union*，例如「Net `pad` 的所有導體表面」或「所有 MA 表面」。它永遠是 primary group 名稱的清單，絕不是第二個重疊的 Gmsh group，因為 MSH 輸出會為每個包含某元素的 group 各複製一次該元素，solver 可能把這些複本讀成兩個表面。sidecar 不另存這些清單：每個 group 記錄自己的 `interface_type` 與 `net`，讀取端依欄位篩出。執行範例（真實輸入，Net 的 id 是 `G` 與 `P`）的 Route B sidecar 中，導體表面的 group 是（節錄）：
 
 ```json
-"unions": {
-  "interface_types": { "MA": ["MA::ground_0000__sidewall", "MA::ground_0000__top",
-                              "MA::pad__sidewall", "MA::pad__top"],
-                       "MS": ["MS::ground_0000__bottom", "MS::pad__bottom"], "…": ["…"] },
-  "nets": { "G": ["MA::ground_0000__sidewall", "MA::ground_0000__top", "MS::ground_0000__bottom"],
-            "P": ["MA::pad__sidewall",         "MA::pad__top",         "MS::pad__bottom"] }
+"group": {
+  "MA::ground_0000__sidewall": { "interface_type": "MA", "net": "G", "…": "…" },
+  "MA::ground_0000__top":      { "interface_type": "MA", "net": "G", "…": "…" },
+  "MA::pad__sidewall":         { "interface_type": "MA", "net": "P", "…": "…" },
+  "MA::pad__top":              { "interface_type": "MA", "net": "P", "…": "…" },
+  "MS::ground_0000__bottom":   { "interface_type": "MS", "net": "G", "…": "…" },
+  "MS::pad__bottom":           { "interface_type": "MS", "net": "P", "…": "…" }
 }
 ```
 
-Route A 的 sheet group（以 `<entity>` 命名）承載它所具有的 MA 與 MS Surface EPR row（有 face 的某一側是 vacuum 才有 MA，是 dielectric 才有 MS），所以它也列在 `interface_types` 中對應的 `MA` 與 `MS` 之下，Net 的聯集則是 `"P": ["pad"]`。同一份 solver 設定兩者都能讀：union 永遠是 primary group 名稱的清單，驗證器檢查每個成員都存在（`unions_reference_primary_groups`），也檢查沒有任何 entity 位於兩個 group（`groups_partition_each_dimension`）。physical tag 不是 identity：tag 依 group 名稱排序，新增 group 時會位移，所以使用者應儲存 group 名稱。
+所以「所有 MA 表面」是前四個，「Net `P` 的所有導體表面」是 `net` 為 `P`、`interface_type` 為 `MA`、`MS` 或 `SHEET` 的 group：`MA::pad__sidewall`、`MA::pad__top` 與 `MS::pad__bottom`。Route A 的 sheet group（以 `<entity>` 命名）的 `interface_type` 是 `SHEET`，它承載它所具有的 MA 與 MS Surface EPR row（有 face 的某一側是 vacuum 才有 MA，是 dielectric 才有 MS），所以依種類篩選時，它依 `surface_epr_row` 也算作 `MA` 與 `MS`；Net `P` 的導體表面則是 `pad`。同一份 solver 設定兩者都能讀。SGB 在 build 內部也保留這些清單，驗證器檢查每個成員都是存在的 primary group（`unions_reference_primary_groups`），也檢查沒有任何 entity 位於兩個 group（`groups_partition_each_dimension`）。physical tag 不是 identity：tag 依 group 名稱排序，新增 group 時會位移，所以使用者應儲存 group 名稱。
 
 ::: {.callout-important title="保證：一個 face，一個 group（依據：測試）"}
-沒有任何輸出的 face 或 volume 位於兩個 physical group，也沒有任何一個不在任何 group 中。union 只是 sidecar 與 solver 設定中的簿記。
+沒有任何輸出的 face 或 volume 位於兩個 physical group，也沒有任何一個不在任何 group 中。union 只是 solver 設定中的簿記：一份 group 名稱的清單。
 :::
 
 ::: {.callout-important title="D5：表面依 Entity 歸屬"}
-表面**預設依 Entity 歸屬**：不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；報告依 interface type（MA、MS、SA）彙總，這些總和是 sidecar 中的 union；Net 層級的 union 只用於 Electrostatic 等需要電性身分的後端。同一個 Net 的重疊區域屬於宣告 priority 較高的 Entity；priority 相同或缺少時 build 以 `OverlapError` 失敗，並指出該由 layer stack 的 `mesh_order`、元件標註的 `priority` 或 `GeometryPlan` 的 assembly-level priority 中的哪一個補上（priority 的慣例與三個來源見[設計決議 D5](decisions.qmd#d5)）。在執行範例中每個 Net 只有一個 Entity，所以依 Net 與依 Entity 得到的 face 完全相同，改變的只有 group 的名稱。
+表面**預設依 Entity 歸屬**：不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；報告依 interface type（MA、MS、SA）彙總，這些總和依 group 的 `interface_type` 加總；Net 層級的 union 只用於 Electrostatic 等需要電性身分的後端。同一個 Net 的重疊區域屬於宣告 priority 較高的 Entity；priority 相同或缺少時 build 以 `OverlapError` 失敗，並指出該由 layer stack 的 `mesh_order`、元件標註的 `priority` 或 `GeometryPlan` 的 assembly-level priority 中的哪一個補上（priority 的慣例與三個來源見[設計決議 D5](decisions.qmd#d5)）。在執行範例中每個 Net 只有一個 Entity，所以依 Net 與依 Entity 得到的 face 完全相同，改變的只有 group 的名稱。
 :::
 
 ## Port 位於 support plane {#port-support-plane}
@@ -117,7 +118,7 @@ lumped port 的 sheet 放在 host 導體的**物理 support plane**：導體貼�
 
 效果有三個。
 
-1. **port 是兩個 volume 之間的 face。** 在 gap 內，這個平面上方是 vacuum、下方是 substrate，所以 Route B 與 C 的 port 與 Route A 一樣，是兩個 volume 之間的一般 face：`embedded_faces` 沒有它，`ports[*].host_volumes` 為空，`adjacent_volumes` 有兩個。它的邊與相鄰金屬的 wall 和底面共用。
+1. **port 是兩個 volume 之間的 face。** 在 gap 內，這個平面上方是 vacuum、下方是 substrate，所以 Route B 與 C 的 port 與 Route A 一樣，是兩個 volume 之間的一般 face：沒有任何 volume 的 `embedded_faces` 含有它，`port[*].host_volumes` 為空，`adjacent_volumes` 有兩個。它的邊與相鄰金屬的 wall 和底面共用。
 2. **port 佔去它在 SA 平面上的面積。** 同一個平面的 substrate–vacuum 介面減去 port footprint，所以 SA band 的 face 不含 port 蓋住的部分；band 的 seam 在 port 的邊界停下，所以 port 是一個 face，group `PORT::<id>` 就是這個 face（規則見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)）。
 3. **band 不動。** band 的 distance origin 是 gap edge，判斷時 port 當作不存在（見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)）；port 只拿走它蓋住的面積，不移動任何 band 的邊界。
 
@@ -136,25 +137,25 @@ lumped port 的 sheet 放在 host 導體的**物理 support plane**：導體貼�
 
 ## volume 內部的 sheet 仍是 embedded face {#the-route-b-port-is-an-embedded-face}
 
-production 的 port 因為上面的規則，不會出現在 volume 內部：真實輸入的 sidecar 中 `embedded_faces` 為空，`ports[*].host_volumes` 為空，`adjacent_volumes` 有兩個。但 arrangement 與 assembly 對一般的 sheet 不做這個假設，所以兩側是同一個 volume 的 sheet 仍然是合法的。真實輸入沒有這種 face；下面用 **stage 層的 scene**（`tests/sgb_scenes.py` 的 `pad_in_ground("B")`，它的 `lumped_port` 刻意把 port 放在金屬的中間平面 $z = 0.1$，用來走 embedded sheet 的路徑）說明這個機制。這個 scene 不是真實輸入，也不是本頁其他圖與數字的來源。
+production 的 port 因為上面的規則，不會出現在 volume 內部：真實輸入的 sidecar 中每個 volume 的 `embedded_faces` 都是空的，`port[*].host_volumes` 為空，`adjacent_volumes` 有兩個。但 arrangement 與 assembly 對一般的 sheet 不做這個假設，所以兩側是同一個 volume 的 sheet 仍然是合法的。真實輸入沒有這種 face；下面用 **stage 層的 scene**（`tests/sgb_scenes.py` 的 `pad_in_ground("B")`，它的 `lumped_port` 刻意把 port 放在金屬的中間平面 $z = 0.1$，用來走 embedded sheet 的路徑）說明這個機制。這個 scene 不是真實輸入，也不是本頁其他圖與數字的來源。
 
 在那個 scene 中，pad 的 wall 與 ground cutout 的 wall 之間是 vacuum，port 矩形位於 vacuum volume *內部*：它上下方的 volume 是同一個。兩側為同一個 volume 的 face 不圍出任何 volume；它是 **embedded** 於 host，且它有自由邊界，**不屬於任何 volume 的 shell**：
 
 - 這個 face 列在 volume 上作為 embedded face（scene 中有一個，`PORT::p1`，host 是 `vacuum`），不在該 volume 的 shell 之內；
 - 它在 pad 與 ground wall 上的兩條 edge 與 wall 片段共用（這就是這兩面 wall 在 $z = 0.1$ 被切開的原因，見[從 arrangement 到實體](assembly.qmd#coalescing)）；其他兩條 edge 是自由 edge，驗證器把它們計為自由 edge（scene 中為 2 條，沒有任何 dangling edge）；
-- XAO 檔案無法攜帶「face embedded 於 volume」這種資訊，所以 sidecar 記錄這組配對，由 mesher 重新套用。sidecar 中是 `"embedded_faces": [{"face": "<face id>", "host_volume": "<volume id>", "group": "PORT::p1"}]`，mesher 對每一組呼叫 Gmsh 的 embedding（`gmsh.model.mesh.embed(2, [face], 3, volume)`；`verify_loaded` 之後由 `apply_sidecar_embeds` 重新套用）。
+- XAO 檔案無法攜帶「face embedded 於 volume」這種資訊，所以 sidecar 記錄這組配對，由 mesher 重新套用。sidecar 中是 host volume 的記錄 `"embedded_faces": ["<face id>"]`（`views.embedded_faces` 把它算成 `(face, host volume)` 的配對；face 自己的 `group` 是 `PORT::p1`），mesher 對每一組呼叫 Gmsh 的 embedding（`gmsh.model.mesh.embed(2, [face], 3, volume)`；`verify_loaded` 之後由 `apply_sidecar_embeds` 重新套用）。
 
-**真實輸入今天用到 embedding 的是 dangling refinement curve。** 在真實輸入的 gap 內（$z = 0$）加一條從 $(32, 55)$ 到 $(38, 55)$ µm 的 refinement curve（`RefinementRequest`），模型多出 2 個 vertex 與 1 條 `refinement` edge，face 數不變（34 個）。它是 `refinement_only`：不切開 gap 的 cell；sidecar 的 `embedded_faces` 仍為空，`refinement_edges` 多一筆 `{"edge": "<edge id>", "family": "ref", "host_face": "<face id>", "written_as_free_edge": true}`，`apply_sidecar_embeds` 對每個 host face 呼叫 `gmsh.model.mesh.embed(1, edges, 2, face)`。`mesh.embed` 適用的其他地方見 [Cut family](cut-families.qmd#embed-or-edge)。
+**真實輸入今天用到 embedding 的是 dangling refinement curve。** 在真實輸入的 gap 內（$z = 0$）加一條從 $(32, 55)$ 到 $(38, 55)$ µm 的 refinement curve（`RefinementRequest`），模型多出 2 個 vertex 與 1 條 `refinement` edge，face 數不變（34 個）。它是 `refinement_only`：不切開 gap 的 cell；sidecar 中每個 volume 的 `embedded_faces` 仍是空的，含有這條 edge 的 face 在 `embedded_edges` 列出它，edge 的 carrier 是 `refinement` 種、指向請求 `ref`，`written_as_free_edge` 為 true；`apply_sidecar_embeds` 對每個 host face 呼叫 `gmsh.model.mesh.embed(1, edges, 2, face)`。`mesh.embed` 適用的其他地方見 [Cut family](cut-families.qmd#embed-or-edge)。
 
 ## Route C：保留導體 volume
 
 D1 已決定 **Route C 屬於 v1**，production 已實作。導體 volume 保留在模型中並在內部 mesh，導體內部是 solution domain；導體與 dielectric、導體與 vacuum 的介面是共用 face。目的是現在能處理有限導電率，未來能接上超導材料模型。它是 S7 的第三種 labelling policy，不是另一條 pipeline：arrangement、label 與 assembly 本來就為導體建立 volume 與它的 shell，Route C 只是不把它排除。
 
-在 Route C 中，每個導體 Entity 的 volume 都被輸出，volume group 為 `<entity>`；導體的表面仍用 `MA::`、`MS::` 的 face 名稱，只是 face 兩側的 volume 都存在；兩個導體 Entity 之間的 face 是 `MM::<a>|<b>__interface`（Net 的聯集只列暴露的導體表面，不含 `MM`）。碰到模型邊界的導體有自己的 `EXT::<entity>__sidewall`（真實輸入的 vacuum region 把 ground 包在裡面，所以沒有；stage 層 scene `pad_in_ground("C")` 的 ground 貼著晶片外緣，有 `EXT::ground__sidewall`）。導體 sheet 被拒絕；lumped port 與 Route B 相同，位於 host 的 support plane。「Net X 的 PEC」在 Route C 不再是一組 PEC face，Palace 端如何把導體 volume 當成 material domain、如何 lower Surface EPR，是階段 3 的工作（見[欄位對應](consumer-mapping.qmd)）。
+在 Route C 中，每個導體 Entity 的 volume 都被輸出，volume group 為 `<entity>`；導體的表面仍用 `MA::`、`MS::` 的 face 名稱，只是 face 兩側的 volume 都存在；兩個導體 Entity 之間的 face 是 `MM::<a>|<b>__interface`（它不是某個 Net 暴露的導體表面，所以 group 的 `net` 是 `null`）。碰到模型邊界的導體有自己的 `EXT::<entity>__sidewall`（真實輸入的 vacuum region 把 ground 包在裡面，所以沒有；stage 層 scene `pad_in_ground("C")` 的 ground 貼著晶片外緣，有 `EXT::ground__sidewall`）。導體 sheet 被拒絕；lumped port 與 Route B 相同，位於 host 的 support plane。「Net X 的 PEC」在 Route C 不再是一組 PEC face，Palace 端如何把導體 volume 當成 material domain、如何 lower Surface EPR，是階段 3 的工作（見[欄位對應](consumer-mapping.qmd)）。
 
 ## 邊界情形
 
-- **Route A with Surface EPR band。** sheet face 同時是 metal-vacuum 與 metal-substrate 表面。有 inset band 時，它以 face 命名：`<entity>::band=k`（例如 `pad::band=2`）；sidecar 的 `surface_epr_rows` 在 group 中有 face 的某一側是 vacuum 時才有 MA 列、有某一側是 dielectric 時才有 MS 列；存在的列都對應到同一個 group，`shared_face_group` 指向這個 sheet group，`face_sides` 逐 face 列出積分的是哪一側，`side` 是它們共同的值（例如 MA 為 `above`、MS 為 `below`），不一致時為 `mixed`（[Inset imprint](inset-imprint.qmd)）。
+- **Route A with Surface EPR band。** sheet face 同時是 metal-vacuum 與 metal-substrate 表面。有 inset band 時，它以 face 命名：`<entity>::band=k`（例如 `pad::band=2`）；sidecar 的 `surface_epr_row` 在 group 中有 face 的某一側是 vacuum 時才有 MA 列、有某一側是 dielectric 時才有 MS 列；存在的列都對應到同一個 group，`shared_face_group` 指向這個 sheet group，`face_sides` 逐 face 列出積分的是哪一側，`side` 是它們共同的值（例如 MA 為 `above`、MS 為 `below`），不一致時為 `mixed`（[Inset imprint](inset-imprint.qmd)）。
 - **Route B 的 band。** 同一個 band family 對金屬的頂面（`MA::pad__top::band=k`）與底面（`MS::pad__bottom::band=k`）各產生一次；側壁不切 band。band 版本的執行範例（真實輸入，Route B；pad 的頂面與底面、substrate 與 vacuum 之間的 gap 各取 margin 0.1、0.5、2 µm）規劃 46 個 face、163 條 edge、142 個 vertex，24 個 group（`figures/routes-numbers.json` 的 `route_B_bands`）。
 - **不同 Net 的導體接觸**在每種 route 中都是錯誤，包括共用 edge 或 vertex 的兩個 Route A sheet，以及因 snap 而產生的接觸；`ContactError` 指出兩個 Entity 與位置（見 [label 頁](labels-and-dissolution.qmd)）。
 
@@ -163,14 +164,14 @@ D1 已決定 **Route C 屬於 v1**，production 已實作。導體 volume 保留
 - route 決定存在哪些 prism 以及輸出哪些 volume；同樣的 arrangement、labelling、assembly 與驗證同時服務所有 route。
 - 一個 cell 是否成為 face，取決於它上下的 domain 是否相同；同一個金屬 cell，在 A 中是上下 domain 不同的 sheet face，在 B 中是金屬底面與頂面的 `MS`、`MA` face，金屬內部不輸出 face。
 - Route A 的 sheet 來自 S1 對有限厚度來源的近似；production 的 Route A 只拒絕 S1 之後仍是有限厚度的 film。
-- 每個輸出的 face 與 volume 有一個 primary group；union 是 sidecar 中的清單。
+- 每個輸出的 face 與 volume 有一個 primary group；依 Net 或種類的 group 清單由 group 的欄位篩出，不是另一個 Gmsh group。
 - lumped port 位於 host 的 support plane（PDK 宣告的 film attachment face）；它佔去該處的 SA 面積，但不移動任何 band。
 - Route A 只拒絕仍有限厚度的 film，保留有限厚度本體（bump 等）；Route B 與 C 拒絕導體 sheet；Route C 保留並 mesh 導體 volume。
 - 下一步：route 之外的分割，例如 port、band 與 refinement curve，見 [Cut family](cut-families.qmd)。
 
 ## 補充：重現資料
 
-圖與數字由 `zh-TW/docs/design/sgb/_figures/routes.py` 以 production 套件 `scgsim.geometry.sgb` 產生（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行），記錄在 `figures/routes-numbers.json`。Route B 與 C 是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`；Route A 是同一份 GDS 與 stack 以 `thin_film` profile 詮釋（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）。數量是 `build_model_from_catalogue` 得到的 `ConformalModel.counts`，輸出數量取自 `emit_model` 寫出的 BREP plan（`SgbArtifacts.counts`）與 sidecar。兩個不是真實輸入的例子：stage 層的 scene `tests/sgb_scenes.py` 的 `pad_in_ground("B")`（port 在中間平面，embedded face）與真實輸入加一條 dangling refinement curve。Brief 對應第 7 節（group、embedded face）、第 8 節（S7）與第 14 節（naming、contact）；production 模組為 `routes`、`assembly`、`emission`。
+圖與數字由 `zh-TW/docs/design/sgb/_figures/routes.py` 以 production 套件 `scgsim.geometry.sgb` 產生（用本 repository 的環境執行；sidecar 以 `read_sidecar` 讀回，embedding 與 port 取自 `views`），記錄在 `figures/routes-numbers.json`。Route B 與 C 是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`；Route A 是同一份 GDS 與 stack 以 `thin_film` profile 詮釋（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）。數量是 `build_model_from_catalogue` 得到的 `ConformalModel.counts`，輸出數量取自 `emit_model` 寫出的 BREP plan（`SgbArtifacts.counts`）與 sidecar。兩個不是真實輸入的例子：stage 層的 scene `tests/sgb_scenes.py` 的 `pad_in_ground("B")`（port 在中間平面，embedded face）與真實輸入加一條 dangling refinement curve。Brief 對應第 7 節（group、embedded face）、第 8 節（S7）與第 14 節（naming、contact）；production 模組為 `routes`、`assembly`、`emission`。
 
 Port 的 SA 面積表來自真實輸入：`experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 的 `all_interfaces` 組（每個 entity 的每個表面與 SA 都要求 band，margin 0.5 與 1 µm）寫在 `out/all_interfaces/route_{a,b,c}/`，摘要在 `out/all_interfaces/summary.json`；「沒有 port」的欄位用 `gds_pad_in_ground(with_port=False)` 以同樣的 band 要求建出。
 
