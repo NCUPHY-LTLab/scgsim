@@ -485,7 +485,7 @@ def test_random_layouts_of_a_hundred_features_pass_every_official_check(
 def test_a_random_layout_of_a_thousand_features_passes_the_cheap_official_checks(
     tmp_path,
 ):
-    """The cheap checks (self-interference off, as the strict mode runs them) at N = 1000."""
+    """The cheap checks (self-interference off, the cheap form) at N = 1000."""
     model = build_model_from_catalogue(
         random_layout(1000, seed=1, route="B"), "B", workers=2, tiles=2
     )

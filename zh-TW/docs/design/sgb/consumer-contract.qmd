@@ -26,7 +26,6 @@ artifacts: SgbArtifacts = build_sgb_geometry(
     refinements=(RefinementRequest(...),),   # mesh 尺寸曲線；預設空
     output_dir=run_dir / "geometry",
     workers=1, tiles=1,               # 只改變推導與寫檔的方式，不改變任何一個 byte
-    strict=False,                     # True：寫出後以 OCCT 再檢查一次（需要 OCP）
 )
 ```
 
@@ -39,7 +38,6 @@ artifacts: SgbArtifacts = build_sgb_geometry(
 | `refinements` | `RefinementRequest` 的 tuple | 只放進 sidecar 與 BREP，不改變任何 label。 |
 | `output_dir` | 輸出資料夾 | 不存在會建立；檔名由 route 決定（見下）。 |
 | `workers`、`tiles` | worker process 數、每個方向的 tile 數（`tiles=3` 是 3 × 3） | 預設 1 與 1；沒有 `fork` 的平台以單一 process 寫檔。 |
-| `strict` | 是否在寫出後執行 OCCT 檢查 | 需要 `occt` dependency group；沒有安裝時在 build 開始前就丟出 `OcctUnavailable`（測過）。 |
 :::
 
 Overlap 的優先權不在這個函式的引數裡：同一個 Net 的兩個 Entity 重疊時，由較高的 priority 擁有重疊區；priority 相同或缺少則 build 失敗並指名兩個 Entity。priority 有三個來源：layer stack 的 `mesh_order`（層之間，**較低者勝**，gdsfactory 慣例）、元件標註的 `priority`（同一個元件、同一層之內），以及 `GeometryPlan.set_entity_priorities`（不同 occurrence 之間；數值**較高者勝**，整個 mapping 一次取代，任何一項無效則維持原狀）。三者的錯誤訊息會指出該由哪個來源補上（測過）。
@@ -79,8 +77,6 @@ band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd
 | `RouteError` | route 不認得，或 prism 不適用該 route | 否；`output_dir` 也不會被建立（測過） |
 | `OverlapError`、`ContactError`、`NonManifoldError` | 重疊無法決定、不同 Net 的導體接觸（包含 snapping 造成的接觸）、volume 沿垂直 edge 碰到自己 | 否 |
 | `ValidationError` | 任一條結構 invariant 失敗；production 無法關閉驗證 | 否（驗證在 emission 之前；由程式順序論證） |
-| `OcctUnavailable` | `strict=True` 但沒有 OCP | 否，build 開始前即丟出（測過） |
-| `OcctCheckError` | `strict=True` 且寫出的 XAO 有 finding | 是，檔案已寫出 |
 | `SgbError`（writer） | direct writer 拒絕不能精確寫出的曲面 | 視拒絕發生的階段而定；此時 `output_dir` 已建立，部分檔案可能已存在 |
 :::
 
@@ -88,7 +84,7 @@ band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd
 
 ### 回傳的 `SgbArtifacts` {#artifacts}
 
-`SgbArtifacts` 是 frozen dataclass：`xao`、`brep`、`sidecar`、`sliver_report`、`validation_report`（五個 `Path`）、`route`、`counts`（規劃與寫出的數量）、`timings`（各步驟秒數）與 `occt`（strict 模式的報告，否則 `None`）。`counts` 與 `timings` 只存在於回傳值，不寫進任何檔案。五個檔案名稱由 route 決定，都以 `semantic_geometry_route_<a|b|c>` 開頭：
+`SgbArtifacts` 是 frozen dataclass：`xao`、`brep`、`sidecar`、`sliver_report`、`validation_report`（五個 `Path`）、`route`、`counts`（規劃與寫出的數量）、`timings`（各步驟秒數）。`counts` 與 `timings` 只存在於回傳值，不寫進任何檔案。五個檔案名稱由 route 決定，都以 `semantic_geometry_route_<a|b|c>` 開頭：
 
 ::: {.askr-table-compact .askr-table-numeric}
 {{< include figures/consumer-files-table.md >}}

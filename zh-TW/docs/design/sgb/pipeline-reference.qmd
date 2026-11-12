@@ -167,7 +167,7 @@ production 依 D5 以 Entity 歸屬命名 group，見 [D5](decisions.qmd#d5)。
 | 失敗 | `ValidationError`，列出失敗的 invariant；warning（arc 偏差、非平面 wall、薄於 $g$ 的 slab 與垂直 edge）不會停止 build。production build 無法關閉 validation；關閉開關只存在於原型的測試中 |
 :::
 
-Validation 分三層，production 都已實作：（1）開發階段的測試以 OCP 執行 OCCT 的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`，並做 Gmsh 載入檢查（OCP 在 `occt` dependency group；`dev` group 包含它，CI 以 `dev` group 安裝，所以 PR 的測試會執行 `occt` 測試，標為 `slow` 的則在每晚的完整測試執行）；（2）每個 production build 在寫出前以 SGB 自己的結構 invariant 失敗即停，mesher 信任寫出的檔案，不再檢查（Gmsh 載入檢查 `verify_loaded` 屬於第 1 層的測試）；（3）`strict=True` 時對寫出的 XAO 執行 OCCT 檢查。終端使用者的安裝（例如經由 OrcaPen SC PDK）不會裝 OCP。
+Validation 分兩層，production 都已實作：（1）開發階段的測試以 OCP 執行 OCCT 的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`，並做 Gmsh 載入檢查（OCP 在 `occt` dependency group；`dev` group 包含它，CI 以 `dev` group 安裝，所以 PR 的測試會執行 `occt` 測試，標為 `slow` 的則在每晚的完整測試執行）；（2）每個 production build 在寫出前以 SGB 自己的結構 invariant 失敗即停，mesher 信任寫出的檔案，不再檢查（Gmsh 載入檢查 `verify_loaded` 屬於第 1 層的測試）；build 本身不執行 OCCT 檢查；OCCT 檢查是對寫出的檔案另外執行的一步（`verification.occt.check_file`，需要 OCP），由標為 `occt` 的測試執行。終端使用者的安裝（例如經由 OrcaPen SC PDK）不會裝 OCP。
 
 production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C 下共 63 列：54 列建出並通過每一項檢查（建構加 31 項結構檢查、直接寫出、Gmsh 載入、conformal mesh、`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer` 的所有模式、`ShapeAnalysis`、與計畫的交叉核對）；9 列是預期的拒絕（6 個 `NonManifoldError`、3 個 `ContactError`）。原型時期 direct writer 對 5-edge wall 的兩個拒絕，現在由曲面 wall 的切開消除。每一列也記錄粗略 mesh 的品質（`minSICN`、`gamma`）與 snap drift、arc 偏離，作為 D2 與 D7 重新評估的依據（見 [Validation](validation.qmd#catalogue)）。五個刻意注入的缺陷各被 `BRepCheck_Analyzer` 抓到。執行期的 validator 耗時對 face 數近乎線性（production 量測：31 項檢查合計的局部斜率 1.16 與 1.14，N = 1 000 到 20 000，polygon-only，單次執行；見 [Validation](validation.qmd)）。
 
@@ -180,7 +180,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | 輸出 | `semantic_geometry_route_<a\|b\|c>.brep`、`.xao`、`.sidecar.json`（`scgsim.sgb.sidecar.v3`）、`.slivers.json`、`.validation.json`；Gmsh 只用來做 meshing（與作為測試 oracle） |
 | Record | 直接 writer 的計畫（`BrepPlan`：vertex、edge、wire、face、shell、solid 與 pcurve）；`SgbArtifacts`（五個路徑、route、counts、timings） |
 | 平行單位 | writer 可分 chunk 平行寫出，輸出對任何 worker 數逐位元相同 |
-| 失敗 | 直接 writer 明確寫出每個 orientation；writer 拒絕不能精確寫出的曲面（不是平面、不是單一圓的圓柱、帶洞的曲面 wall 等）時 `SgbError`；strict mode 的 OCCT finding 為 `OcctCheckError`，缺 OCP 為 `OcctUnavailable`；寫出的檔案不依賴 Gmsh 的 healing，需要 fix 就是規劃缺陷 |
+| 失敗 | 直接 writer 明確寫出每個 orientation；writer 拒絕不能精確寫出的曲面（不是平面、不是單一圓的圓柱、帶洞的曲面 wall 等）時 `SgbError`；對寫出的檔案執行 `check_file(strict=True)` 時，OCCT finding 為 `OcctCheckError`，缺 OCP 為 `OcctUnavailable`；寫出的檔案不依賴 Gmsh 的 healing，需要 fix 就是規劃缺陷 |
 :::
 
 ## Source 與規劃 record
@@ -290,7 +290,7 @@ production 對含 band 的 Route B 模型執行 31 項檢查（`validation_repor
 | `vertex_ids_unique`、`edge_ids_unique`、`face_ids_unique`、`topology_keyed_by_entity_id`、`every_cell_in_exactly_one_volume` | atomic id 唯一：一個 id 只對應一個 entity，topology 以 record 自己的 id 為 key，每個有 label 的 slab cell 恰好在一個 volume |
 :::
 
-此外有 fail-closed 的檢查不在上表中：route check（`RouteError`，在任何 arrangement 之前）、`refinement_only` 片段的放置檢查（`SgbError`），以及 strict mode 的 OCCT 檢查中 planned ID 與 native entity 的比對。
+此外有 fail-closed 的檢查不在上表中：route check（`RouteError`，在任何 arrangement 之前）、`refinement_only` 片段的放置檢查（`SgbError`），以及 `check_file` 對寫出的檔案做 OCCT 檢查時，planned ID 與 native entity 的比對。
 
 ## 錯誤類別
 
@@ -301,7 +301,7 @@ production 對含 band 的 Route B 模型執行 31 項檢查（`validation_repor
 | `OverlapError` | 不同 Net 的 conductor 重疊；同一個 Net 的兩個 Entity 以相同 priority 重疊；同 priority 的 dielectric 材料不同 |
 | `NonManifoldError` | `SgbError` 的子類別：同一個 domain 的兩個 cell 只在 vertex 相接（non-manifold pinch），在 assembly 之前由 `check_manifold` 丟出 |
 | `InputError`、`UnsupportedCurveError` | `SgbError` 的子類別：effective 輸入無法變成 prism（沒有格點資訊、頂點不在格點上、port 沒有 host、host 沒有宣告 attachment face、重建紀錄不合法）；`UnsupportedCurveError` 是 spline 邊界 |
-| `OcctUnavailable`、`OcctCheckError` | `SgbError` 的子類別：`strict=True` 但沒有 OCP；OCCT 檢查有 finding |
+| `OcctUnavailable`、`OcctCheckError` | `SgbError` 的子類別：執行 OCCT 檢查（`check_file`）但沒有 OCP；`check_file(strict=True)` 的 OCCT 檢查有 finding |
 | `ContactError` | `OverlapError` 的子類別：不同 Net 的 conductor 接觸（共用 edge 或 vertex），包含只因 snapping 才出現的接觸；訊息指名兩個 Net、各自的 entity、位置（µm）、plane 與 grid |
 | `RouteError` | route 不認得，或 prism 對該 route 不合法（Route A 的仍有限厚度的 film；Route B 與 C 的導體 sheet） |
 | `ValidationError` | 結構 invariant 失敗 |
