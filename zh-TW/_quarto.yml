@@ -132,7 +132,6 @@ website:
       - docs/research/geometry-build/scaling.qmd
       - docs/research/geometry-build/emission-and-load.qmd
       - docs/research/geometry-build/validation-cost.qmd
-      - docs/research/geometry-build/parallelism.qmd
       - docs/research/geometry-build/reproduction.qmd
     - docs/history/curved-source-installation.qmd
   - id: contract
@@ -192,7 +191,6 @@ website:
     - docs/design/sgb/cut-families.qmd
     - docs/design/sgb/inset-imprint.qmd
     - docs/design/sgb/identity.qmd
-    - docs/design/sgb/parallelism.qmd
     - docs/design/sgb/slivers.qmd
     - docs/design/sgb/validation.qmd
     - docs/design/sgb/emission.qmd

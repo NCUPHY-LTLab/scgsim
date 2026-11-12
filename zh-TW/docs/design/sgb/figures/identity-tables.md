@@ -1,19 +1,10 @@
 ## Determinism (identity-determinism.json)
 
-| tiles | workers | PYTHONHASHSEED | pad_in_ground B with bands | random layout (60 features, seed 5, Route B) |
-|---|---|---|---|---|
-| 1x1 | 1 | 0 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 1x1 | 1 | 1 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 1x1 | 1 | 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 2x2 | 1 | 0 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 2x2 | 1 | 1 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 2x2 | 1 | 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 3x3 | 2 | 0 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 3x3 | 2 | 1 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 3x3 | 2 | 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 4x4 | 4 | 0 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 4x4 | 4 | 1 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 4x4 | 4 | 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| PYTHONHASHSEED | pad_in_ground B with bands | random layout (60 features, seed 5, Route B) |
+|---|---|---|
+| 0 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 1 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
 
 distinct digests per model: 1 and 1
 

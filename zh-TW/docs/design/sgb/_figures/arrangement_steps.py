@@ -2,7 +2,7 @@
 
 The input is five exact integer carriers on a 12 x 12 grid (a triangle c1-c3, a long crossing segment c4 and a short
 segment c5). The script re-runs the production kernels of ``scgsim.geometry.sgb.noding.snap_rounding``
-(``crossing_pixels_kernel``, ``hits_kernel``, ``assemble_chain``, through ``SerialEngine``) round by round, records
+(``crossing_pixels_kernel``, ``hits_kernel``, ``assemble_chain``) round by round, records
 every state, checks that the result equals ``snap_round`` and then builds the DCEL faces with
 ``scgsim.geometry.sgb.arrangement.dcel.build_arrangement``.
 
@@ -24,8 +24,9 @@ from scgsim.geometry.sgb.arrangement.dcel import build_arrangement, interior_poi
 from scgsim.geometry.sgb.noding.snap_rounding import (
     NodedEdge,
     Segment,
-    SerialEngine,
     assemble_chain,
+    crossing_pixels_kernel,
+    hits_kernel,
     snap_round,
 )
 from scgsim.geometry.sgb.noding.snap_rounding import (
@@ -54,7 +55,6 @@ def _trace(carriers):
     segments = [
         Segment(a, b, frozenset([n])) for (a, b), n in zip(carriers, NAMES, strict=True)
     ]
-    engine = SerialEngine()
     edges: dict = {}
     for seg in segments:
         edges.setdefault(canonical(seg.a, seg.b), set()).update(seg.carriers)
@@ -65,10 +65,10 @@ def _trace(carriers):
     while changed or delta:
         keys = sorted(edges)
         flags = [k in changed for k in keys]
-        new_hot = engine.crossing_pixels(keys, flags) - hot
+        new_hot = crossing_pixels_kernel(keys, flags) - hot
         hot |= new_hot
         delta |= new_hot
-        hits = engine.hits(keys, flags, hot, delta)
+        hits = hits_kernel(keys, flags, hot, delta)
         new_edges: dict = {}
         verified = set()
         routes = {}

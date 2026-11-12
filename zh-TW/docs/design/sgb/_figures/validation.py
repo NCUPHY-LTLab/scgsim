@@ -62,10 +62,10 @@ from scgsim.geometry.sgb.errors import (
     SgbError,
     ValidationError,
 )
-from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismRecord
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.validation.validate import validate_model
 from scgsim.geometry.sgb.verification.occt import check_file
 
@@ -74,7 +74,7 @@ MARGINS = (0.1, 0.5, 2.0)
 
 
 def _revalidate(model):
-    return validate_model(model.labelled, model.topology, model.routed, Runtime())
+    return validate_model(model.labelled, model.topology, model.routed, Stopwatch())
 
 
 def _fresh():

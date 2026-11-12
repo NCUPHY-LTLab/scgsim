@@ -34,7 +34,7 @@ STAGE_COLOURS = {  # one colour per named stage, shared by the plotly and matplo
     "physical groups": "#F0E442",
     "write XAO": "#CC79A7",
     "plan (serial)": "#0072B2",
-    "render (16 workers)": "#56B4E9",
+    "render": "#56B4E9",
     "load into Gmsh": "#444444",
 }
 GROUP_COLOURS = {

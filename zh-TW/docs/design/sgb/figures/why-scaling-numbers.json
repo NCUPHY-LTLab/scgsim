@@ -1,57 +1,4 @@
 {
- "identity": {
-  "1000": {
-   "all_validation_passed": true,
-   "configurations": 9,
-   "distinct_identity_digests": 1,
-   "identity_digest": "model:9095ca2ad1603d63",
-   "tiles_per_side": [
-    1,
-    4,
-    8
-   ],
-   "workers": [
-    1,
-    8,
-    16,
-    32
-   ]
-  },
-  "20000": {
-   "all_validation_passed": true,
-   "configurations": 9,
-   "distinct_identity_digests": 1,
-   "identity_digest": "model:f1c080e474d97bfc",
-   "tiles_per_side": [
-    1,
-    4,
-    8
-   ],
-   "workers": [
-    1,
-    8,
-    16,
-    32
-   ]
-  },
-  "5000": {
-   "all_validation_passed": true,
-   "configurations": 9,
-   "distinct_identity_digests": 1,
-   "identity_digest": "model:69a7ed793ef3730b",
-   "tiles_per_side": [
-    1,
-    4,
-    8
-   ],
-   "workers": [
-    1,
-    8,
-    16,
-    32
-   ]
-  }
- },
  "local_log_slope": {
   "brep_write_s": [
    1.08,
@@ -77,10 +24,6 @@
    0.85,
    0.95
   ],
-  "rss_tiled_mb": [
-   0.82,
-   0.94
-  ],
   "sidecar_s": [
    1.09,
    1.04
@@ -93,35 +36,18 @@
  "machine": {
   "cpu_count": 64,
   "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
-  "python": "3.12.14",
-  "total_wall_s": 970.3
+  "python": "3.12.14"
  },
  "oracle_local_log_slope": [
   1.96,
   2.83
  ],
  "oracle_ratio_to_direct_write_at_1000": 18.0,
- "schedules": [
-  "T1w1",
-  "T4w1",
-  "T4w8",
-  "T4w16",
-  "T4w32",
-  "T8w1",
-  "T8w8",
-  "T8w16",
-  "T8w32"
- ],
  "series": {
   "brep_write_s": [
    0.492,
    2.81,
    13.799
-  ],
-  "brep_write_w16_s": [
-   0.443,
-   2.193,
-   9.138
   ],
   "derive_s": [
    2.332,
@@ -194,11 +120,6 @@
    534.3,
    2000.5
   ],
-  "rss_tiled_mb": [
-   142.8,
-   536.3,
-   1978.8
-  ],
   "sidecar_s": [
    0.804,
    4.622,
@@ -240,67 +161,8 @@
   ]
  },
  "source": "figures/why-scaling-measured.json (python why_scaling.py measure), figures/why-scaling-oracle.json (python why_scaling.py oracle)",
- "speedups": {
-  "1000": {
-   "all": {
-    "T1w1": 1.0,
-    "T4w1": 1.02,
-    "T4w16": 1.19,
-    "T4w32": 1.22,
-    "T4w8": 1.15,
-    "T8w1": 1.03,
-    "T8w16": 1.15,
-    "T8w32": 1.06,
-    "T8w8": 1.21
-   },
-   "best_speedup": 1.22,
-   "tiles_per_side": 4,
-   "workers": 32
-  },
-  "20000": {
-   "all": {
-    "T1w1": 1.0,
-    "T4w1": 0.92,
-    "T4w16": 1.16,
-    "T4w32": 1.16,
-    "T4w8": 1.15,
-    "T8w1": 0.89,
-    "T8w16": 1.16,
-    "T8w32": 1.14,
-    "T8w8": 1.17
-   },
-   "best_speedup": 1.17,
-   "tiles_per_side": 8,
-   "workers": 8
-  },
-  "5000": {
-   "all": {
-    "T1w1": 1.0,
-    "T4w1": 0.96,
-    "T4w16": 1.24,
-    "T4w32": 1.25,
-    "T4w8": 1.22,
-    "T8w1": 0.97,
-    "T8w16": 1.26,
-    "T8w32": 1.22,
-    "T8w8": 1.26
-   },
-   "best_speedup": 1.26,
-   "tiles_per_side": 8,
-   "workers": 8
-  }
- },
  "stack_n20000": {
-  "direct BREP/XAO, 16 workers": {
-   "derive_s": 61.6,
-   "gmsh_load_s": 49.7,
-   "reports_s": 49.7,
-   "sidecar_s": 19.6,
-   "total_s": 205.1,
-   "verify_loaded_s": 15.3,
-   "write_s": 9.1
-  },
-  "direct BREP/XAO, one process": {
+  "direct BREP/XAO": {
    "derive_s": 61.6,
    "gmsh_load_s": 49.7,
    "reports_s": 49.7,

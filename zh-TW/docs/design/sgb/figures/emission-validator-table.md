@@ -1,8 +1,8 @@
 | 檢查 | 做什麼 | N = 1,000 (F = 14,215) | N = 5,000 (F = 71,969) | N = 20,000 (F = 285,871) | 每個 face 的 µs（首項到末項） | 對 F 的 slope |
 |:---|:---|---:|---:|---:|---:|---:|
-| `planarity` | S9：各 arrangement 的 edge，用 noding kernel（逐 tile 平行） | 0.145 s | 0.978 s | 4.542 s | 10.17 -> 15.89 | 1.15 |
+| `planarity` | S9：各 arrangement 的 edge，用 noding kernel | 0.145 s | 0.978 s | 4.542 s | 10.17 -> 15.89 | 1.15 |
 | `face_areas` | 載入側：每個 face 一次 gmsh mass 呼叫，O(F) | 0.192 s | 0.998 s | 3.993 s | 13.49 -> 13.97 | 1.01 |
-| `shells` | S9：每個 shell 的 face（逐 shell 平行） | 0.095 s | 0.770 s | 3.925 s | 6.70 -> 13.73 | 1.24 |
+| `shells` | S9：每個 shell 的 face | 0.095 s | 0.770 s | 3.925 s | 6.70 -> 13.73 | 1.24 |
 | `counts_and_vertex_placement` | 載入側：每個 vertex 一次 gmsh 呼叫，O(V) | 0.059 s | 0.938 s | 3.408 s | 4.15 -> 11.92 | 1.35 |
 | `boundaries` | 載入側：每個 edge、face、solid 一次 getBoundary，O(E + F) | 0.152 s | 0.775 s | 3.078 s | 10.67 -> 10.77 | 1.00 |
 | `volumes` | 載入側：每個 solid 一次 mass 積分，O(solid) | 0.115 s | 0.634 s | 2.501 s | 8.12 -> 8.75 | 1.03 |

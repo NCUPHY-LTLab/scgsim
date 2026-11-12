@@ -13,7 +13,7 @@ scgsim-id: "docs/research/geometry-build/emission-and-load"
 
 - 在 500、1,000 與 2,000 個特徵時，direct writer 需要 0.20 s、0.35 s 與 0.77 s；Gmsh API 需要 2.35 s、8.48 s 與 64.7 s，分別是前者的 12、24 與 84 倍。Gmsh API 在 5,000 個特徵時跑了 10 分鐘仍未完成而被中止，direct writer 只要 2.2 到 2.8 s。
 - Gmsh API 建出的 solid 還帶有錯誤的質量正負號（substrate 的質量是負的）。
-- 推導之後的其餘路徑，在 20,000 個特徵、單一行程時要 148 s，是推導本身 61.6 s 的兩倍以上；每一步的 scaling 都近乎線性。
+- 推導之後的其餘路徑，在 20,000 個特徵時要 148 s，是推導本身 61.6 s 的兩倍以上；每一步的 scaling 都近乎線性。
 
 ## Direct writer 對 Gmsh API
 
@@ -27,7 +27,7 @@ scgsim-id: "docs/research/geometry-build/emission-and-load"
 {{< include figures/api-table.md >}}
 :::
 
-「直接寫出」是以 16 個 worker 規劃並算繪 BREP 與 XAO 的時間；「寫出的 face 數」是寫入 BREP 的 face 數。這些時間來自它們自己的一次執行。下方「推導之後」的表格在 scaling 的那次執行中也量了同一個直接寫出的步驟：1,000 個特徵時，那裡是 0.44 s，這裡是 0.35 s。
+「直接寫出」是規劃並算繪 BREP 與 XAO 的時間，這次執行把算繪分給 16 個行程；「寫出的 face 數」是寫入 BREP 的 face 數。這些時間來自它們自己的一次執行。下方「推導之後」的表格在 scaling 的那次執行中也量了同一個直接寫出的步驟：1,000 個特徵時，那裡是 0.44 s，這裡是 0.35 s。
 
 ### Solid 的質量不對
 
@@ -43,13 +43,13 @@ substrate 的質量是負的，vacuum 為正，兩者都與 direct writer 的 so
 
 推導完成後，pipeline 會寫出檔案、寫出報告與 sidecar，讓 Gmsh 載入 XAO，再對載入後的模型執行 `verify_loaded`。**sidecar** 是與 BREP、XAO 並存的 JSON 檔，記錄每個 entity 的 lineage 與 group 歸屬。**報告**是與檔案一起寫出的 sliver 報告與 validation 報告。`verify_loaded` 是把載入的 Gmsh 模型與規劃相比對的檢查。
 
-![左：20,000 個特徵時，從通過驗證的模型到載入並檢查完畢的模型所需的時間，分別為 direct writer 單一行程與 16 個 worker。右：推導之後的每一步對特徵數的關係，並附一條從 N = 1,000 的推導出發、斜率為 1 的線。](figures/tail.svg){#fig-tail fig-alt="左：20,000 個特徵時的兩條水平堆疊長條。單一行程：推導 61.6 秒、寫出 13.8、報告 49.7、sidecar 19.6、Gmsh 載入 49.7、verify_loaded 15.3，合計 210 秒。16 個 worker：寫出 9.1 秒，合計 205 秒。右：推導之後五個步驟的雙對數折線，各自靠近斜率 1 的參考線。"}
+![左：20,000 個特徵時，從通過驗證的模型到載入並檢查完畢的模型所需的時間。右：推導之後的每一步對特徵數的關係，並附一條從 N = 1,000 的推導出發、斜率為 1 的線。](figures/tail.svg){#fig-tail fig-alt="左：20,000 個特徵時的一條水平堆疊長條：推導 61.6 秒、寫出 13.8、報告 49.7、sidecar 19.6、Gmsh 載入 49.7、verify_loaded 15.3，合計 210 秒。右：推導之後五個步驟的雙對數折線，各自靠近斜率 1 的參考線。"}
 
 ::: {.askr-table-compact .askr-table-numeric}
 {{< include figures/tail-table.md >}}
 :::
 
-在 20,000 個特徵、單一行程時，推導之後的各步驟合計 148 s，推導本身是 61.6 s。從 1,000 到 20,000 個特徵，各步驟的斜率是：寫出 1.08 到 1.15、報告 1.00 到 1.12、sidecar 1.04 到 1.09、Gmsh 載入 1.13 與 1.19、`verify_loaded` 0.99（精確值在圖表旁的 `numbers.json`）。以 16 個 worker 算繪 BREP 與 XAO，把寫出的時間從 13.8 s 縮短為 9.1 s，總時間只差 5 s。
+在 20,000 個特徵時，推導之後的各步驟合計 148 s，推導本身是 61.6 s。從 1,000 到 20,000 個特徵，各步驟的斜率是：寫出 1.08 到 1.15、報告 1.00 到 1.12、sidecar 1.04 到 1.09、Gmsh 載入 1.13 與 1.19、`verify_loaded` 0.99（精確值在圖表旁的 `numbers.json`）。
 
 最大的兩個步驟是報告（49.7 s）與 Gmsh 載入（49.7 s）。報告花這麼久，產生的檔案卻很小（12.6 kB 與 4.9 kB）。在 2,000 個特徵時，Gmsh 載入 Gmsh API 寫出的 XAO 要 3.46 s，載入 direct writer 的要 3.06 s，所以寫出者讓載入時間差約 13%，遠小於模型大小造成的差異：
 
@@ -67,4 +67,4 @@ substrate 的質量是負的，vacuum 為正，兩者都與 direct writer 的 so
 
 ## 解讀
 
-直接寫出幾何，去除了 Gmsh API 路徑中成長得比線性快的部分。推導之後剩下的是一串近乎線性的步驟，其中最大的兩個，報告與 Gmsh 載入，與推導無關，平行推導也無法縮短它們；對整條路徑的影響見[平行推導](parallelism.qmd#end-to-end)。
+直接寫出幾何，去除了 Gmsh API 路徑中成長得比線性快的部分。推導之後剩下的是一串近乎線性的步驟，其中最大的兩個，報告與 Gmsh 載入，與推導無關，所以更快的推導也無法縮短它們。
