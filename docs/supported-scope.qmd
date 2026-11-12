@@ -87,9 +87,10 @@ Functions inside these packages that take lower-level records, such as a prism
 catalogue (SGB's own list of footprints, each extruded over a height range),
 are internal and are not a documented API.
 
-That is internal or advanced use, and **its precondition is what the supported
-entry guarantees**: the input is one that `GeometryPlan` and a simulation class
-could have produced. These APIs start after the checks those two make and do
+Calling these two APIs with an input you build is internal or advanced use,
+and **its precondition is what the supported entry guarantees**: the input is
+one that `GeometryPlan` and a simulation class could have produced. These APIs
+start after the checks those two make and do
 not repeat them. A direct call to `build_sgb_geometry`, for example, runs
 neither the plan checks of `GeometryPlan` nor the meshing-stage check of
 `mesh()` and `simulation_drc()`.
