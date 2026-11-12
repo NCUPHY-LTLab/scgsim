@@ -17,9 +17,11 @@ in micrometres, the plane and who must act.
 A non-manifold pinch is the same-Net counterpart: finite metal (or the vacuum
 between metal) that meets itself only along a vertical edge.  Sheets of one Net
 may meet at a corner; only slab arrangements are examined.  The vacuum also
-pinches where a conductor reaches the model's planar boundary at a single point
-(a polygon circle or a diamond with nothing drawn around it, when the vacuum
-ends at the layout's extent); that error says so and names what to draw.
+pinches where a conductor, or a region that is not one such as a finite
+dielectric, reaches the model's planar boundary at a single point (a polygon
+circle or a diamond with nothing drawn around it, when the vacuum ends at the
+layout's extent); that error says so, names what reaches the boundary and what
+to change.
 """
 
 from __future__ import annotations
@@ -39,6 +41,12 @@ NEAR_GRID_UNITS_SQ = 4  # a prism "reaches" a point within two grid units (squar
 # Who must act when a conductor reaches the vacuum's edge at one point: something drawn around the conductor
 # moves the model's planar boundary away from it, and a vacuum region with planar padding does the same.
 _FIX_AT_THE_EDGE = "Fix the layout: draw the die outline or a ground plane around it, or set a vacuum region."
+# A region that is not a conductor, such as a dielectric island, can instead meet the boundary along an edge or
+# keep clear of it; a ground plane is no fix for it.
+_FIX_REGION_AT_THE_EDGE = (
+    "Fix the layout: draw the die outline around it, or change that region's outline so it meets "
+    "the boundary along an edge or not at all."
+)
 
 
 def check_contacts(catalogue: PrismCatalogue, layers: Sequence[Layer]) -> None:
@@ -173,7 +181,9 @@ def _raise_pinch(
         names = named_entities(around) or "?"
         nets = ", ".join(sorted({p.net_id or "" for p in around}))
         if domain.kind == "vacuum" and on_model_boundary:
-            _raise_edge_pinch(domain, around, names, nets, where)
+            if around:
+                _raise_edge_pinch(domain, around, names, nets, where)
+            _raise_region_edge_pinch(catalogue, domain, point, (z_lo, z_hi), where)
         what = f"{domain.name} (pinched between conductors {names} of Net {nets})"
     # A pinch means nothing to most layout authors, so the message ends with the section that explains it.
     raise NonManifoldError(
@@ -202,6 +212,40 @@ def _raise_edge_pinch(
     )
 
 
+def _raise_region_edge_pinch(
+    catalogue: PrismCatalogue,
+    vacuum: Domain,
+    point: Point,
+    z_range: tuple[Fraction, Fraction],
+    where: str,
+) -> None:
+    """The vacuum ends where a region that is not a conductor, such as a dielectric island, meets the boundary at one point.
+
+    The region must fill the slab, not only touch it from below or above, or the substrate under the slab
+    would be named for every pinch at its edge.
+    """
+    z_lo, z_hi = z_range
+    regions = [
+        p
+        for p in catalogue.prisms
+        if p.material_kind != "conductor"
+        and p.entity_id != vacuum.name
+        and p.z0 < z_hi
+        and p.z1 > z_lo
+        and _footprint_touches(p, point)
+    ]
+    names = named_entities(regions) or "?"
+    kinds = ", ".join(sorted({p.material_kind for p in regions})) or "?"
+    one = len({p.entity_id for p in regions}) == 1
+    raise NonManifoldError(
+        f"non-manifold pinch: {kinds} {'region' if one else 'regions'} {names} "
+        f"{'reaches' if one else 'reach'} the edge of {vacuum.name} only at {where}, a point on "
+        f"the model's planar boundary, so {vacuum.name} touches itself along that vertical edge. "
+        + _FIX_REGION_AT_THE_EDGE
+        + see_also("docs/known-geometry-problems", "boundary-point-pinch")
+    )
+
+
 def _layer_z_range(layer: Layer) -> tuple[Fraction, Fraction]:
     if isinstance(layer.z, tuple):
         return layer.z
@@ -219,6 +263,11 @@ def _reaches(
         or prism.z1 < z_lo
     ):
         return False
+    return _footprint_touches(prism, point)
+
+
+def _footprint_touches(prism: PrismRecord, point: Point) -> bool:
+    """Whether the prism's footprint holds the point or passes within two grid units of it."""
     for ring in prism.footprint.rings():
         for i in range(len(ring)):
             distance_sq = segment_point_distance_sq(

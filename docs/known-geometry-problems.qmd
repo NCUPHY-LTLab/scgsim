@@ -225,6 +225,12 @@ region you set, a vacuum region with planar padding also moves the boundary away
 from the pad; `simulation_drc` keeps its vacuum fixed, so for the check, draw the
 outline.
 
+A region that is not a conductor pinches the vacuum the same way: a finite
+dielectric island whose outline touches the boundary at one point is refused,
+and the refusal names that region instead of a conductor. Draw the die outline
+around it, or change the island's outline so that it meets the boundary along an
+edge or keeps clear of it; both of those pass.
+
 ### The same rule inside the layout {#pinch-inside-the-layout}
 
 This is the rule on [Supported Scope](supported-scope.qmd#rules-conductors): no

@@ -448,6 +448,73 @@ def test_a_pad_reaching_the_planar_extent_at_a_point_is_refused_there(
     assert min(math.dist(place, vertex) for vertex in pad) < 0.001
 
 
+def dielectric_island_stack(outline, interval):
+    """``NO_VACUUM_STACK`` with a finite dielectric island: a solution region whose authored outline is ``outline``."""
+    island = level("island", "Si", interval, "solution_region")
+    island.info["geometry"] = {"outer_loop": [list(point) for point in outline]}
+    return SimpleNamespace(layers={**NO_VACUUM_STACK.layers, "island": island})
+
+
+# Islands in the 10 um gap of ``two_pads``, against the layout's lower edge y = 0: a diamond whose tip is on it,
+# a square whose edge lies along it, and a diamond 1 um clear of it.
+ISLAND_TIP_ON_THE_EDGE = ((25, 0), (28, 3), (25, 6), (22, 3))
+ISLAND_ALONG_THE_EDGE = ((22, 0), (28, 0), (28, 6), (22, 6))
+ISLAND_CLEAR_OF_THE_EDGE = ((25, 1), (28, 4), (25, 7), (22, 4))
+REGION_AT_THE_EDGE = re.compile(
+    r"non-manifold pinch: dielectric region (?P<region>\S+) reaches the edge of VACUUM_REGION only at "
+    r"\((?P<x>-?\d+\.\d+), (?P<y>-?\d+\.\d+)\) um, z (?P<z0>-?\d+\.\d+)\.\.(?P<z1>-?\d+\.\d+) um"
+)
+FIX_REGION_AT_THE_EDGE = (
+    "Fix the layout: draw the die outline around it, or change that region's outline so it meets "
+    "the boundary along an edge or not at all."
+)
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+@pytest.mark.parametrize(
+    "interval", [(0.0, 0.2), (0.2, 1.0)], ids=["metal-height", "above-the-metal"]
+)
+def test_a_dielectric_island_reaching_the_planar_extent_at_a_point_is_named_as_itself(
+    monkeypatch, simulation, interval
+):
+    """A dielectric island, not a conductor, pinches the vacuum at the boundary: the refusal names the island.
+
+    No conductor reaches the point, so the refusal names the island, the place and a fix that fits a region
+    (draw the die outline, or change its outline), and still links to the section that explains the pinch.
+    """
+    with pytest.raises(NonManifoldError) as raised:
+        check(
+            simulation,
+            two_pads(monkeypatch, gap_um=10.0),
+            layer_stack=dielectric_island_stack(ISLAND_TIP_ON_THE_EDGE, interval),
+        )
+    message = str(raised.value)
+    match = REGION_AT_THE_EDGE.search(message)
+    assert match is not None, message
+    assert match["region"] == "island"
+    assert (float(match["x"]), float(match["y"])) == (25.0, 0.0)
+    assert (float(match["z0"]), float(match["z1"])) == interval
+    assert "conductor" not in message
+    assert message.endswith(
+        f"{FIX_REGION_AT_THE_EDGE} See "
+        + page_url("docs/known-geometry-problems", "boundary-point-pinch")
+    )
+
+
+@pytest.mark.parametrize(
+    "outline",
+    [ISLAND_ALONG_THE_EDGE, ISLAND_CLEAR_OF_THE_EDGE],
+    ids=["along-the-edge", "clear-of-the-edge"],
+)
+def test_a_dielectric_island_along_the_edge_or_clear_of_it_passes(monkeypatch, outline):
+    """The refusal's fix holds: the island meeting the boundary along an edge, or not at all, models."""
+    assert check(
+        EigenmodeSim,
+        two_pads(monkeypatch, gap_um=10.0),
+        layer_stack=dielectric_island_stack(outline, (0.0, 0.2)),
+    ).passed
+
+
 @pytest.mark.parametrize(
     "installed", ["2.1.0a1", None], ids=["unpublished-version", "no-metadata"]
 )
