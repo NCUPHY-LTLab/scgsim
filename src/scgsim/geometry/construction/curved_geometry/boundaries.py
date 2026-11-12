@@ -279,13 +279,20 @@ def source_boundaries(
                 "operation": "authored",
             }
         )
-    polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
+    # A ring's polygon is one its Entity owns; an outline ring, keyed by the Entity's own
+    # semantic ID, has none, whatever polygon happens to carry that ID.
+    by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
+    owned = {
+        (entity.semantic_id, polygon_id): by_id[polygon_id]
+        for entity in build_input.entities
+        for polygon_id in entity.polygon_ids
+    }
     context = geometry_grid_context(build_input)
     grid_size_um = None if context is None else context.grid_size_um
     for raw in build_input.boundary_reconstruction:
         record = boundary_binding(raw, reconstruction=True)
         key, ring = select_boundary(record, rings, end_pieces)
-        polygon = polygons.get(key[1])
+        polygon = owned.get((key[0], key[1]))
         drawn = _drawn_ring(record, key, ring, polygon, grid_size_um)
         segments, curves, operation = _reconstruct(
             record, ring, drawn, _named(record, polygon), grid_size_um
