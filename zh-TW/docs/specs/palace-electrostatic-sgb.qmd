@@ -40,6 +40,7 @@ prepare shared GeometryPlan snapshot
 | 輸出身分 | `set_output_dir` | 綁定網格／設定／交接輸出位置。 |
 | 表面膜 | `set_surface_epr` | 宣告表面膜及其內縮邊距；須在 `mesh()` 之前執行。 |
 | 網格控制 | `set_mesh(...)` | 選取尺寸配方、網格器選項、修復預算與品質門檻。 |
+| 來源／設定檢視 | `input_summary()` | 回傳獨立的 `mesh()` 建模輸入（計畫套用模擬的真空區域與所選 Route 之後）與設定，不進行檔案或原生 I/O。 |
 | 網格 | `mesh` | 以 SGB 建立幾何，檢查其中的細微結構，用 `scgsim.meshing` 產生網格，並把群組降階為 Palace 屬性。 |
 | 設定 | `write_config` | 為已審閱網格身分寫入 Palace Electrostatic 設定。 |
 

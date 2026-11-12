@@ -42,7 +42,8 @@ scgsim/
 ├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
 ├── semantics/        # immutable solver-independent facts
 ├── palace/
-│   ├── preparation/  # distinct Electrostatic and Eigenmode input state owners
+│   ├── simulation/   # EigenmodeSim and ElectrostaticSim on one shared core and lifecycle
+│   ├── preparation/  # ports, stack transforms, Surface EPR rows and config the simulations call
 │   ├── mesh/         # SGB build, meshing call, group lowering and summaries
 │   ├── execution/    # manual handoff and host receipt recorder
 │   ├── results/      # custody-aware result and EPR reading
@@ -157,9 +158,10 @@ The [API migration reference](api-migration.qmd) lists the supported import
 routes for these operations. Native correspondence, shell repair, curved
 arrangement, and physical-group export remain in construction.
 
-Palace keeps two distinct mutable preparation owners: Electrostatic and
-Eigenmode setup state, invalidation, and failure ordering remain specific to
-each facade. Mesh construction keeps its worker boundary: the meshing module runs Gmsh in
+Palace's two simulations, Electrostatic and Eigenmode, share one core in
+`scgsim.palace.simulation`: binding, geometry settings, meshing, summaries,
+handoff and the lifecycle are written once, and each problem class adds its own
+setters and config. Mesh construction keeps its worker boundary: the meshing module runs Gmsh in
 child processes, and Palace lowers the groups to solver attributes in one more
 worker. Manual
 handoff and its standalone host recorder remain execution-owned, while strict
@@ -306,13 +308,27 @@ that report. See [Tetrahedral Mesh Quality](mesh-quality.qmd).
 
 ## Palace preparation lifecycle
 
-`ElectrostaticSim` and `EigenmodeSim` remain the public owners of their mutable
-mesh, config, resolved-port, and handoff state. Their shared private workflow
-only prepares values and persists caller-supplied JSON payloads; it is not a
-base simulation object and does not receive callbacks into simulation state.
+`ElectrostaticSim` and `EigenmodeSim` are the public owners of their mutable
+mesh, config, resolved-port, and handoff state. Both are subclasses of one
+private base, `scgsim.palace.simulation.core.PalaceSimulation`, which holds
+everything they share: `set_plan`, `set_output_dir`, `set_vacuum_region`,
+`set_surface_epr`, `set_mesh`, `input_summary()`, `mesh()`, `simulation_drc`,
+`mesh_summary()` and `prepare_handoff()`. Each problem file,
+`simulation/eigenmode.py` and `simulation/electrostatic.py`, shows only what its
+problem adds: its setters, its numerical defaults and its `write_config()`.
 
-Both public `mesh()` methods invalidate derived state before checking
-prerequisites. Geometry preparation then applies the vacuum region to the
+The lifecycle is one table, `scgsim.palace.simulation.lifecycle`. A
+simulation is `UNBOUND`, `BOUND` (`set_plan`), `MESHED` (`mesh()`),
+`CONFIG_WRITTEN` (`write_config()`) or `HANDED_OFF` (`prepare_handoff()`). The
+table says which stage each call needs and how far each call falls back:
+setters whose value `mesh()` reads (output folder, vacuum, Surface EPR, mesh
+controls, Eigenmode ports) fall back to `BOUND`, setters only `write_config()`
+reads fall back to `MESHED`. A call made before the stage it needs is refused
+with a message that names the call to make first. One rule differs by problem
+and is stated on each class: `ElectrostaticSim.mesh()` requires
+`set_surface_epr`, `EigenmodeSim.mesh()` does not.
+
+`mesh()` discards derived state before checking prerequisites. Geometry preparation then applies the vacuum region to the
 stack, interprets the physical geometry, records Route-A metadata, and returns
 the prepared stack, geometry input, physical plan and optional material
 mapping. The simulation stores
@@ -321,8 +337,8 @@ a non-mapping `materials` value retains the prior mapping, while a
 mesh-construction failure retains the newly prepared mapping. Eigenmode resolves authored ports before those transformations and
 caches the resolved ports only after mesh construction succeeds.
 
-Both public `write_config()` methods invalidate config and handoff state before
-their existing prerequisite and mesh-existence checks. Solver-specific lowering
+Each `write_config()` discards config and handoff state before its
+prerequisite and mesh-file checks. Solver-specific lowering
 still occurs before persistence. A shared private writer replaces each
 caller-ordered metadata file independently and replaces `config.json` last;
 earlier files therefore remain after a later write failure, and `config_path` is
@@ -332,10 +348,8 @@ whole-workflow transaction guarantee.
 
 `scgsim.palace.preparation.inputs` reads the explicit materials of a plan's
 stack and checks each material's kind against the regions and layers that use
-it. Electrostatic and Eigenmode call it when a plan is bound, and each keeps
-its own public methods, invalidation timing and problem-specific
-orchestration. The simulations are defined in `preparation.electrostatic` and
-`preparation.eigenmode`.
+it. The shared core calls it when a plan is bound. The simulations are defined
+in `simulation.electrostatic` and `simulation.eigenmode`.
 
 Palace's mesh behavior separates Gmsh geometric order from FEM order and keeps
 the sizing recipe, algorithm choice, quality threshold and result, and
