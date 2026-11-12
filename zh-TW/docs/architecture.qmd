@@ -163,7 +163,7 @@ OrPen SC PDK 負責公開元件範例，直接呼叫共用執行期。SCGSim 負
 
 兩個公開 `write_config()` 方法都在既有先決條件及網格存在檢查前，使設定與交接狀態失效。求解器專屬轉換仍在持久化之前發生。共用私有寫入器依呼叫端順序獨立替換每個中繼資料檔，最後才替換 `config.json`；因此後續寫入失敗時，較早檔案仍保留，只有最終替換成功才快取 `config_path`。記憶體失效處理不刪除磁碟上的舊設定檔，此逐檔行為也不保證整個流程具有交易原子性。
 
-共用堆疊載入器、非負數驗證器及堆疊材料種類驗證器位於 `scgsim.palace.preparation.inputs`。Electrostatic 與 Eigenmode 直接呼叫此模組，同時保留公開方法、失效時間點、淺層頂層堆疊複製、巢狀別名及問題專屬協調。舊的直接問題模組路徑已移除；目前定義模組為 `preparation.electrostatic` 與 `preparation.eigenmode`。
+`scgsim.palace.preparation.inputs` 讀取 plan 堆疊中明確宣告的材料，並依使用各材料的區域與層檢查其種類。Electrostatic 與 Eigenmode 在綁定 plan 時呼叫它，各自保留自己的公開方法、失效時間點與問題專屬的協調。兩個模擬分別定義於 `preparation.electrostatic` 與 `preparation.eigenmode`。
 
 Palace 的網格行為區分 Gmsh 幾何階數與 FEM 階數，並將尺寸配方、演算法選擇、品質門檻與結果，以及高階最佳化結果與產生網格一同保留。`mesh_summary()` 回傳綁定網格與清單身分的獨立網格資料；Palace 報告及已解析結果檢視讀取相同紀錄依據。Eigenmode 摘要的拓撲自由度估計不是實際求解器自由度數量，Electrostatic 也不宣稱不可用的 H1 估計。
 
