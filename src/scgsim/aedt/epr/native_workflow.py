@@ -304,7 +304,6 @@ class _SavedFieldAnalysis:
             result_kind="saved_field",
             setup_name=self.spec.run_control.setup_name,
             rows=tuple(self.rows),
-            _legacy_payload=self.spec.legacy_payload,
             provenance=self.result_provenance,
         )
         self.result_path = self.output_dir / "epr-result.json"
@@ -334,7 +333,6 @@ class _SavedFieldAnalysis:
                 result_kind="saved_field",
                 setup_name=self.spec.run_control.setup_name,
                 rows=tuple(self.rows),
-                _legacy_payload=self.spec.legacy_payload,
                 provenance=self.result_provenance,
             )
             started = time.perf_counter()

@@ -31,13 +31,7 @@ class PreparedPlanarGeometry:
     source_sha256: str
     route: Route | None = None
     _historical_modeling: bool = field(default=False, repr=False, compare=False)
-    _legacy_payload: bool = field(default=False, repr=False, compare=False)
     lumped_rlcs: tuple[LumpedRlc, ...] = ()
-
-    @property
-    def legacy_payload(self) -> bool:
-        """Report whether this geometry came from a legacy payload schema."""
-        return self._legacy_payload
 
     def __post_init__(self) -> None:
         self._validate_modeling_identity()
@@ -228,11 +222,7 @@ class PreparedPlanarGeometry:
     def to_payload(self) -> dict[str, Any]:
         """Return the canonical PreparedPlanarGeometry payload."""
         return {
-            "schema_version": (
-                "scgsim.aedt.epr-planar.v1"
-                if self._legacy_payload
-                else "scgsim.aedt.epr-planar.v2"
-            ),
+            "schema_version": "scgsim.aedt.epr-planar.v2",
             **self._modeling_identity,
             "source": detached(self.source),
             "junctions": [item.to_payload() for item in self.junctions],
@@ -268,10 +258,7 @@ class PreparedPlanarGeometry:
         if "lumped_rlcs" in value:
             expected.add("lumped_rlcs")
         schema = value.get("schema_version")
-        if set(value) != expected or schema not in {
-            "scgsim.aedt.epr-planar.v1",
-            "scgsim.aedt.epr-planar.v2",
-        }:
+        if set(value) != expected or schema != "scgsim.aedt.epr-planar.v2":
             raise ValueError("prepared planar payload is not canonical")
         return cls(
             lumped_rlcs=tuple(
@@ -291,5 +278,4 @@ class PreparedPlanarGeometry:
             surface_bindings=tuple(value["surface_bindings"]),
             model_sha256=value["model_sha256"],
             source_sha256=value["source_sha256"],
-            _legacy_payload=schema.endswith(".v1"),
         )

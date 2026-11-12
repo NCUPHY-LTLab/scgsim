@@ -50,14 +50,10 @@ def validate_hfss_pec_bindings(
         spec,
         dict(spec.materials),
         {layer.layer: layer for layer in spec.layer_imports},
-        (
-            {}
-            if spec.modeling is None
-            else {
-                (record["layer"], record["datatype"]): record
-                for record in spec.effective_layer_imports
-            }
-        ),
+        {
+            (record["layer"], record["datatype"]): record
+            for record in spec.effective_layer_imports
+        },
         [],
         [],
     )
@@ -72,8 +68,6 @@ def validate_hfss_pec_bindings(
 def _validate_hfss_pec_region(
     receipt: dict[str, Any], spec: HfssDrivenSpec | HfssEigenmodeSpec
 ) -> None:
-    if spec.historical_physical or spec.historical_modeling:
-        return
     envelope = cast(Any, spec.effective_region)
     region = receipt.get("region")
     keys = (
@@ -484,28 +478,8 @@ def validate_hfss_setup_and_convergence(
 ) -> None:
     """Verify HFSS setup and convergence artifacts against the completed receipt."""
     validate_hfss_setup(receipt, spec)
-    historical_profile = (
-        eigenmode_convergence_source(receipt) == "profile"
-        if isinstance(spec, HfssEigenmodeSpec)
-        else False
-    )
-    if receipt.get("convergence") != read_hfss_convergence(
-        root, spec, historical_profile=historical_profile
-    ):
+    if receipt.get("convergence") != read_hfss_convergence(root, spec):
         raise RuntimeError("HFSS native convergence evidence is invalid")
-
-
-def eigenmode_convergence_source(receipt: dict[str, Any]) -> str:
-    """Read the canonical source variant for Eigenmode convergence evidence."""
-    convergence = receipt.get("convergence")
-    sources = convergence.get("sources") if isinstance(convergence, dict) else None
-    if not isinstance(sources, dict):
-        raise RuntimeError("Eigenmode convergence sources are invalid")
-    if set(sources) == {"export_convergence"}:
-        return "export_convergence"
-    if set(sources) == {"asol", "profile"}:
-        return "profile"
-    raise RuntimeError("Eigenmode convergence sources are not canonical")
 
 
 def validate_eigenmode_readback(
@@ -554,7 +528,7 @@ def validate_modal_native_evidence(ports: Any, spec: HfssDrivenSpec) -> None:
     """Bind the native modal ports to the requested source ports."""
     if not isinstance(ports, list) or len(ports) != 2:
         raise RuntimeError("completed receipt has invalid modal ports")
-    native_ports = spec.ports if spec.modeling is None else spec.effective_ports
+    native_ports = spec.effective_ports
     for record, port, native_port in zip(ports, spec.ports, native_ports, strict=True):
         if not isinstance(port, ModalPort) or not isinstance(record, dict):
             raise TypeError("completed receipt has invalid modal port identity")

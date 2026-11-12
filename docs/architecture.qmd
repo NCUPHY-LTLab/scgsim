@@ -453,30 +453,28 @@ only this bound request after entry. Its carrier retains the mutable native app
 handle together with detached preparation readback; solve and export consume the
 carrier and cannot reinterpret a caller spec or workspace.
 
-New preparation keeps the handoff and handoff-manifest schemas at V1 while both
-declare that the mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial
-V3 receipt records the preparation-time runtime source: the module bytes and
-content digest of the computed AEDT import closure. Before mutation, execution verifies the canonical manifest and binds the
-initial-receipt and prepared-manifest hashes. A canonical historical
-V1 `not_run` handoff with neither marker remains executable, but its resulting
-V3 receipt records preparation provenance as `legacy_v1_not_recorded`; it does
-not fabricate history.
+Preparation writes handoff and handoff-manifest records that declare the
+mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial V3 receipt
+records the preparation-time runtime source: the module bytes and content
+digest of the computed AEDT import closure. Before mutation, execution verifies
+the canonical manifest and binds the initial-receipt and prepared-manifest
+hashes.
 
 Every new completed V3 receipt records a separate execution-time runtime
 source. Its measured module bytes and content digest are mandatory.
 Preparation and execution identities are not required to match: their
 separation records what prepared and what actually executed the handoff.
-Historical completed V1 and V2 receipts carry an earlier runtime-source schema
-and are refused; read them with the SCGSim commit that wrote them. This
+SCGSim reads only the formats it writes: a receipt, or a runtime source inside
+it, of an earlier schema is refused before anything it binds is read; read it
+with the SCGSim commit that wrote it. This
 consistency contract is not source authenticity for an actor able
 to rewrite the entire unsigned artifact set.
 
-The [AEDT receipt/provenance contract](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance)
-is the unique authority for the runtime-source rule. One pure, versioned
-initial-receipt codec owns historical V1/V2 and current V3 JSON member order,
-indentation and final newline; handoff
-writing and initial-receipt reconstruction use that codec. Historical receipt
-hashes are never compared with installed source, and preparation and execution
+The [AEDT current-formats contract](specs/aedt-runtime.qmd#current-formats)
+is the unique authority for the receipt and runtime-source rules. One pure
+initial-receipt codec owns the V3 JSON member order, indentation and final
+newline; handoff writing and initial-receipt reconstruction use that codec.
+Recorded receipt hashes are never compared with installed source, and preparation and execution
 identities remain independent evidence.
 
 Runtime-source provenance is computed inside the receipt-owned failure

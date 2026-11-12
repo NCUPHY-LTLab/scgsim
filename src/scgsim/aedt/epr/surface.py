@@ -231,15 +231,9 @@ def _grouped_surface_rows(
                 ),
                 "energy_j": energy,
                 "participation": energy / normalization_j,
-                **(
-                    {
-                        "assumptions": assumptions,
-                        "inverse_q": inverse_quality_factor(
-                            energy / normalization_j, loss_tangent
-                        ),
-                    }
-                    if not prepared.legacy_payload
-                    else {}
+                "assumptions": assumptions,
+                "inverse_q": inverse_quality_factor(
+                    energy / normalization_j, loss_tangent
                 ),
             }
         )
@@ -374,23 +368,17 @@ def _per_binding_surface_rows(
                     ),
                     "energy_j": energy,
                     "participation": energy / normalization_j,
-                    **(
+                    "assumptions": film_assumptions(
                         {
-                            "assumptions": film_assumptions(
-                                {
-                                    "film_thickness_m": spec.film_thickness_m,
-                                    "film_relative_permittivity": spec.film_relative_permittivity,
-                                    "loss_tangent": spec.loss_tangent,
-                                    "source": spec.source,
-                                    "preset": spec.preset,
-                                }
-                            ),
-                            "inverse_q": inverse_quality_factor(
-                                energy / normalization_j, spec.loss_tangent
-                            ),
+                            "film_thickness_m": spec.film_thickness_m,
+                            "film_relative_permittivity": spec.film_relative_permittivity,
+                            "loss_tangent": spec.loss_tangent,
+                            "source": spec.source,
+                            "preset": spec.preset,
                         }
-                        if not context.prepared.legacy_payload
-                        else {}
+                    ),
+                    "inverse_q": inverse_quality_factor(
+                        energy / normalization_j, spec.loss_tangent
                     ),
                 }
             )

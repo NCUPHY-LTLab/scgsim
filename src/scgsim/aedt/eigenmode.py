@@ -205,7 +205,6 @@ class EigenmodeSim:
                     if name in {"loss_tangent", "source", "preset"}
                     and getattr(item, name) is None
                 },
-                _legacy_payload=False,
             )
             for item in selected
         )

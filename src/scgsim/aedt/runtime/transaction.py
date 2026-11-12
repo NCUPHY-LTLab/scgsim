@@ -29,10 +29,9 @@ from scgsim.aedt.preparation.planar import (
 )
 from scgsim.aedt.results.epr import seal_saved_solution
 from scgsim.aedt.results.provenance import (
-    RECEIPT_V1,
-    RECEIPT_V2,
     RECEIPT_V3,
     record_runtime_source,
+    require_current_receipt,
 )
 from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.runtime.batch_protocol import (
@@ -242,12 +241,7 @@ class _ExecutionTransaction:
         )
         self.receipt_path = self.run_dir / self.files["receipt"]
         self.receipt = json_object(read_json(self.receipt_path), "receipt")
-        if self.receipt.get("schema_version") not in {
-            RECEIPT_V1,
-            RECEIPT_V2,
-            RECEIPT_V3,
-        }:
-            raise RuntimeError("handoff receipt schema is invalid")
+        require_current_receipt(self.receipt)
         if self.receipt.get("status") != "not_run":
             raise RuntimeError("one-shot handoff is not in not_run state")
         self.spec_path = self.run_dir / self.files["spec"]

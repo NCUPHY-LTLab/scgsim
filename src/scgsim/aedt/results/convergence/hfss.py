@@ -21,12 +21,10 @@ from scgsim.aedt.specs.hfss import (
 )
 
 
-def read_hfss_convergence(
-    run_dir: Path, spec: HfssSpec, *, historical_profile: bool = False
-) -> dict[str, Any]:
+def read_hfss_convergence(run_dir: Path, spec: HfssSpec) -> dict[str, Any]:
     """Parse and bind HFSS Driven or Eigenmode adaptive convergence."""
     root = run_dir.resolve()
-    if isinstance(spec, (HfssEigenmodeSpec, HfssEprSpec)) and not historical_profile:
+    if isinstance(spec, (HfssEigenmodeSpec, HfssEprSpec)):
         return _read_eigenmode_convergence(root, spec)
     solver = f"HFSS {spec.mode}"
     results_dir = contained_evidence_path(

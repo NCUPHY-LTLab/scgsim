@@ -69,4 +69,4 @@ SCGSim 不會將 RLGC 轉換為阻抗、傳播常數或相速度。
 
 依[矩陣觀測契約](../specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)所述，請將原生狀態、回報差值與實際控制項連同矩陣結果保存。請依該數值及可取得的變化量，判斷精度是否符合預期研究需求。
 
-每單位長度電容不是集總 Electrostatic 電容；Q2D 橫截面也不是有限尺寸的 3D Q3D 實驗。解讀結果時，請保留其單位與適用範圍。新請求不會輸出歷史上分開的 CG／RL 檔案與正規化 Q2D 檔案。[AEDT 契約](../specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)說明精確匯出格式、歷史讀取器與失敗行為。
+每單位長度電容不是集總 Electrostatic 電容；Q2D 橫截面也不是有限尺寸的 3D Q3D 實驗。解讀結果時，請保留其單位與適用範圍。新請求不會輸出歷史上分開的 CG／RL 檔案與正規化 Q2D 檔案。[AEDT 契約](../specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)說明精確匯出格式與失敗行為。
