@@ -31,7 +31,7 @@ lang: zh-TW
 
 `mesh_summary()` 回報紀錄的網格控制、原生元素與區域數量及網格身分。其 Nédélec 自由度值是根據主角點四面體及設定的 FEM 階數所做的拓撲估計，不是求解器回報的 DOF 數量。變更 FEM 階數會更新此估計，不重新產生網格。這些網格紀錄不確立數值充分性。
 
-目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫若帶有自己的真空，會拒絕模擬上的 `set_vacuum_region`。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責共用網格控制與共用設定控制。
+目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫若帶有自己的真空，會拒絕模擬上的 `set_vacuum_region`。模型需要真空區域：計畫沒有宣告、模擬也沒有呼叫 `set_vacuum_region` 時（或在 `prepare()` 之前呼叫 `plan.set_vacuum_region(...)`），`mesh()` 與 `input_summary()` 會拒絕。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責共用網格控制與共用設定控制。
 
 ## 集總埠 {#lumped-ports}
 

@@ -113,6 +113,8 @@ for the boundary comparison and interpretation limits.
 `input_summary()` displays the input `mesh()` will build from and the current
 Palace settings: the bound plan with the simulation's vacuum region,
 requested ports and route applied. It does not mesh or start a solver.
+A model needs a vacuum region: this call and `mesh()` refuse a plan with none
+unless `sim.set_vacuum_region(...)` was called.
 
 ```python
 from IPython.display import display
