@@ -72,10 +72,10 @@ applicable. Existing Object, Net, port, connected
 outline and hole identities remain the request's source of truth.
 
 This selection uses the existing Q3D body-v3 and HFSS family schema
-identifiers. A supported historical Q3D/HFSS result payload without `modeling`
-can only be read through its original versioned result reader; its raw payload
-and hash are preserved, and it cannot start a new execution. The new execution
-path never infers or supplies a missing mode. Fresh requests declare layers
+identifiers. A Q3D/HFSS request or result payload without `modeling` and its
+tagged `physical_representation` was written by an earlier SCGSim and is
+refused; read it with the SCGSim commit that wrote it. The execution path never
+infers or supplies a missing mode. Fresh requests declare layers
 with `PhysicalLayerDeclaration` records in the single authored `LayerStack`
 coordinate system; the
 [physical representation contract](specs/physical-representation.qmd) lists
@@ -83,9 +83,8 @@ their fields. A film declaration carries its original normal thickness in
 `physical_dimensions["normal_thickness_um"]`, and film physical-thickness
 output reports that value without recomputing it from endpoints. The earlier
 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side,
-source_thickness_um=None)` record is decoded only by historical readers: a
-fresh request that passes one raises `TypeError` and asks for
-`PhysicalLayerDeclaration`. In solid mode the `physical_layers` collection may
+source_thickness_um=None)` record is not a request declaration: a request
+that passes one raises `TypeError` and asks for `PhysicalLayerDeclaration`. In solid mode the `physical_layers` collection may
 be empty; source body and `LayerImport` records may identify a layer with
 `physical_layer_id`. Preparation exposes source and mapped intervals in
 `effective_bodies` and `effective_layer_imports`. The physical layer ID is
@@ -269,7 +268,7 @@ The new responsibility tree follows the existing boundaries:
   coordinator. Family runtimes own their native prepare/solve/export/readback;
   the narrow shared native helper owns neither a family nor Desktop.
 - `aedt.epr` owns EPR models, source geometry, fields/cache and workflow.
-  `aedt.results` owns strict handoff/result resolution, historical provenance,
+  `aedt.results` owns strict handoff/result resolution, provenance,
   convergence, matrices and sealed EPR readers. Results do not start a solve.
 - `aedt.presentation` owns display-only projections and plotting, with lazy
   imports kept out of strict result resolution.

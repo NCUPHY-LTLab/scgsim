@@ -39,19 +39,14 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
     manifest = exact_mapping(read_json(manifest_source), "saved-solution manifest")
     aedt_version = _manifest_aedt_version(manifest)
     payload = {
-        "schema_version": (
-            "scgsim.aedt.saved-solution.v1"
-            if aedt_version is None
-            else "scgsim.aedt.saved-solution.v2"
-        ),
+        "schema_version": "scgsim.aedt.saved-solution.v2",
         "project": manifest["project"],
         "results": manifest["results"],
         "members": manifest["members"],
         "content_sha256": manifest["content_sha256"],
         "identity": manifest["identity"],
+        "aedt_version": aedt_version,
     }
-    if aedt_version is not None:
-        payload["aedt_version"] = aedt_version
     saved = SavedSolution.from_payload(base, payload)
     _validate_saved_paths(saved)
     _verify_saved_receipt(base, manifest, saved, aedt_version)
@@ -184,8 +179,8 @@ def resolve_epr_result(path: str | Path) -> EprResult:
     return EprResult.from_payload(read_json(source))
 
 
-def _manifest_aedt_version(manifest: Mapping[str, Any]) -> str | None:
-    """Validate the exact historical or current manifest keys before construction."""
+def _manifest_aedt_version(manifest: Mapping[str, Any]) -> str:
+    """Validate the exact manifest keys before construction."""
     expected = {
         "schema_version",
         "project",
@@ -198,16 +193,17 @@ def _manifest_aedt_version(manifest: Mapping[str, Any]) -> str | None:
     }
     schema = manifest.get("schema_version")
     if schema == "scgsim.aedt.saved-solution-manifest.v1":
-        if set(manifest) != expected:
-            raise ValueError("saved-solution manifest members are not canonical")
-        aedt_version = None
-    elif schema == "scgsim.aedt.saved-solution-manifest.v2":
-        if set(manifest) != expected | {"aedt_version"}:
-            raise ValueError("saved-solution manifest members are not canonical")
-        aedt_version = normalize_aedt_version(manifest["aedt_version"])
-    else:
+        raise RuntimeError(
+            f"saved-solution manifest {schema} was written by an earlier SCGSim, "
+            "which this version does not read (it reads "
+            "scgsim.aedt.saved-solution-manifest.v2); read this saved solution "
+            "with the SCGSim commit that wrote it"
+        )
+    if schema != "scgsim.aedt.saved-solution-manifest.v2" or set(
+        manifest
+    ) != expected | {"aedt_version"}:
         raise ValueError("saved-solution manifest members are not canonical")
-    return aedt_version
+    return normalize_aedt_version(manifest["aedt_version"])
 
 
 def _validate_saved_paths(saved: SavedSolution) -> None:
@@ -227,7 +223,7 @@ def _verify_saved_receipt(
     base: Path,
     manifest: Mapping[str, Any],
     saved: SavedSolution,
-    aedt_version: str | None,
+    aedt_version: str,
 ) -> None:
     """Verify the receipt hash, completed fields, version and saved identity in order."""
     receipt_relative = _safe_relative(manifest["receipt"], "receipt")
@@ -240,17 +236,12 @@ def _verify_saved_receipt(
         raise RuntimeError("saved-solution receipt hash mismatch")
     receipt_payload = exact_mapping(read_json(receipt), "saved-solution receipt")
     if (
-        receipt_payload.get("schema_version")
-        != (
-            "scgsim.aedt.saved-solution-receipt.v1"
-            if aedt_version is None
-            else "scgsim.aedt.saved-solution-receipt.v2"
-        )
+        receipt_payload.get("schema_version") != "scgsim.aedt.saved-solution-receipt.v2"
         or receipt_payload.get("status") != "completed"
         or receipt_payload.get("saved_fields") is not True
     ):
         raise RuntimeError("saved-solution receipt does not attest completed fields")
-    if aedt_version is not None and receipt_payload.get("aedt_version") != aedt_version:
+    if receipt_payload.get("aedt_version") != aedt_version:
         raise RuntimeError("saved-solution receipt AEDT version mismatch")
     if receipt_payload.get("identity") != detached(saved.identity):
         raise RuntimeError("saved-solution receipt identity mismatch")

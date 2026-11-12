@@ -17,6 +17,7 @@ from scgsim.aedt import (
 )
 from scgsim.aedt.io import file_sha256, write_json
 from scgsim.aedt.results.matrices import parse_matrix_export, read_q2d_rlgc_matrix
+from scgsim.aedt.results.provenance import RECEIPT_V3
 from scgsim.aedt.runtime.families.q2d import export_q2d_matrices
 
 
@@ -219,7 +220,7 @@ Signal,2.0
             write_json(
                 receipt_path,
                 {
-                    "schema_version": "scgsim.aedt.receipt.v1",
+                    "schema_version": RECEIPT_V3,
                     "status": "completed",
                     "mode": "q2d",
                     "connected": {
@@ -243,7 +244,11 @@ Signal,2.0
                     },
                 },
             )
-            with patch("scgsim.aedt.results.resolve._validate_readback"):
+            # The preparation cohort and native readback have their own tests.
+            with (
+                patch("scgsim.aedt.results.resolve.validate_completion_cohort"),
+                patch("scgsim.aedt.results.resolve._validate_readback"),
+            ):
                 result = resolve_results(root)
                 self.assertEqual(result.primary_csv, matrix_path)
                 before = sorted(path.relative_to(root) for path in root.rglob("*"))

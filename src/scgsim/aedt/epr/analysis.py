@@ -337,7 +337,6 @@ def _complete_mode_energy_record(
     inputs: CompleteModeEnergyInputs,
 ) -> dict[str, Any]:
     """Assemble the canonical complete mode-energy row after all validation."""
-    prepared = inputs.prepared
     granularity = inputs.granularity
     frequency_hz = inputs.frequency_hz
     electric_energy_j = inputs.electric_energy_j
@@ -350,11 +349,7 @@ def _complete_mode_energy_record(
     surface_rows = inputs.surface_rows
     junction_rows = inputs.junction_rows
     result = {
-        "schema_version": (
-            "scgsim.aedt.epr-mode-energy.v1"
-            if prepared.legacy_payload
-            else "scgsim.aedt.epr-mode-energy.v2"
-        ),
+        "schema_version": "scgsim.aedt.epr-mode-energy.v2",
         "surface_granularity": granularity or "per_binding.v1",
         "frequency_hz": frequency_hz,
         "electric_energy_j": electric_energy_j,

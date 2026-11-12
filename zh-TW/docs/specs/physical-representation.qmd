@@ -64,7 +64,7 @@ body = read_plan.map_body(
 
 ## 新宣告與歷史紀錄 {#fresh-and-historical-layer-records}
 
-新的物理來源準備使用中性 `PhysicalLayerDeclaration` 紀錄及明確的 `ApproximationProfile`。新的 `aedt_modeling` 中繼資料及由角色推導的路徑分類不是轉接器。既有 `PhysicalLayerSpec` 紀錄僅供綁定版本的歷史讀取器保留原始序列化及座標意義；新物理來源執行若要使用它們，必須先換成中性宣告。沒有層宣告的明確 Solid 本體，透過共用恆等映射計畫保留有限來源幾何，不產生新的物理 ID。
+新的物理來源準備使用中性 `PhysicalLayerDeclaration` 紀錄及明確的 `ApproximationProfile`。新的 `aedt_modeling` 中繼資料及由角色推導的路徑分類不是轉接器。帶 `PhysicalLayerSpec` 紀錄而沒有帶標記表示的要求酬載，由較早的 SCGSim 寫入而遭拒；新物理來源執行需要中性宣告。沒有層宣告的明確 Solid 本體，透過共用恆等映射計畫保留有限來源幾何，不產生新的物理 ID。
 
 選定計畫的帶標記酬載是目前準備好的物理追蹤。歷史上未帶標記的追蹤依原契約保持可讀，並保留原始雜湊；它們不授權新執行。
 

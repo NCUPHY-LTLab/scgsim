@@ -326,11 +326,6 @@ def _validate_run_control(spec: Q3dSpec) -> None:
         raise TypeError("run_control must be MatrixRunControl or None")
 
 
-def _validate_historical_run_control(spec: Q3dSpec) -> None:
-    if spec.run_control is None and spec.historical_modeling:
-        raise ValueError("historical Q3D requests require run_control")
-
-
 def _validated_bodies(
     records: tuple[Q3dBodySpec, ...], materials: Mapping[str, PdkMaterial]
 ) -> tuple[Q3dBodySpec, ...]:
@@ -432,8 +427,6 @@ class Q3dSpec:
     region_padding_um: tuple[float, float, float, float, float, float]
     physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    _historical_modeling: bool = False
     solve_ac_rl: bool = True
     grounded_region_net: str | None = None
     aedt_version: str = dataclass_field(kw_only=True)
@@ -446,23 +439,12 @@ class Q3dSpec:
         """Return the solver family represented by this request."""
         return "q3d"
 
-    @property
-    def historical_physical(self) -> bool:
-        """Report whether this request decodes historical physical data."""
-        return self._historical_physical
-
-    @property
-    def historical_modeling(self) -> bool:
-        """Report whether this request decodes historical modeling data."""
-        return self._historical_modeling
-
     def __post_init__(self) -> None:
         request_modeling(self)
         if self.schema_version != Q3D_SCHEMA_VERSION:
             raise ValueError("unsupported Q3D schema")
         materials = normalize_common_spec(self)
         _validate_run_control(self)
-        _validate_historical_run_control(self)
         bodies = _validated_bodies(self.bodies, materials)
         object.__setattr__(self, "bodies", bodies)
         object.__setattr__(
@@ -478,16 +460,12 @@ class Q3dSpec:
     def effective_bodies(self) -> tuple[dict[str, Any], ...]:
         """Return source bodies projected through the declared physical model."""
         mapping = request_modeling(self)
-        if mapping is None:
-            raise ValueError("historical requests have no new execution modeling map")
         return tuple(effective_record(item, mapping) for item in self.bodies)
 
     @property
     def effective_region(self) -> dict[str, Any] | None:
         """Project the complete originally requested envelope with the common plan."""
-        if self.historical_physical or self.historical_modeling:
-            return None
-        mapping = cast(PhysicalRepresentationPlan, request_modeling(self))
+        mapping = request_modeling(self)
 
         def bounds(records):
             """Describe the bounds represented by this request."""
@@ -558,11 +536,7 @@ class Q3dSpec:
                 key: item.to_payload() for key, item in self.materials.items()
             },
             "vacuum_material_id": self.vacuum_material_id,
-            "bodies": (
-                list(self.effective_bodies)
-                if self.modeling is not None
-                else [body.to_payload() for body in self.bodies]
-            ),
+            "bodies": (list(self.effective_bodies)),
             "nets": [net.to_payload() for net in self.nets],
             "run_control": None
             if self.run_control is None
@@ -581,7 +555,6 @@ class Q3dSpec:
         payload: dict[str, Any],
         *,
         base_dir: Path | None = None,
-        allow_historical_modeling: bool = False,
     ) -> Q3dSpec:
         """Construct this request record from its serialized payload."""
         if payload.get("schema_version") != Q3D_SCHEMA_VERSION:
@@ -590,9 +563,7 @@ class Q3dSpec:
             raise ValueError("Q3D v3 does not accept GDS-piece inputs")
         result = cls(
             modeling=cast(Modeling, payload.get("modeling")),
-            physical_layers=physical_layers_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
+            physical_layers=physical_layers_from_payload(payload),
             physical_representation=(
                 PhysicalRepresentationPlan.from_payload(
                     payload["physical_representation"]
@@ -600,10 +571,6 @@ class Q3dSpec:
                 if "physical_representation" in payload
                 else None
             ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling
-            and "modeling" not in payload,
             project_name=project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
@@ -630,6 +597,5 @@ class Q3dSpec:
             pyaedt_version=payload["pyaedt"]["locked_version"],
             geometry_source=payload.get("geometry_source"),
         )
-        if result.modeling is not None:
-            verify_effective_records(payload["bodies"], result.effective_bodies)
+        verify_effective_records(payload["bodies"], result.effective_bodies)
         return result

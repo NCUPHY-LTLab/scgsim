@@ -20,7 +20,7 @@ from scgsim.aedt.results.hfss_readback import (
     validate_lumped_readback,
     validate_modal_native_evidence,
 )
-from scgsim.aedt.results.provenance import RECEIPT_V3
+from scgsim.aedt.results.provenance import require_current_receipt
 from scgsim.aedt.results.q2d_readback import (
     validate_q2d_model_readback,
     validate_q2d_setup,
@@ -94,10 +94,9 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
         root = path
     receipt_path = contained(root, "metadata/aedt_run_receipt.json")
     receipt = read_json(receipt_path)
+    require_current_receipt(receipt)
     if (
-        not isinstance(receipt, dict)
-        or receipt.get("schema_version") != RECEIPT_V3
-        or receipt.get("status") != "native_preparation_only"
+        receipt.get("status") != "native_preparation_only"
         or receipt.get("solver_invoked") is not False
     ):
         raise RuntimeError("receipt is not a successful native prepared-model stage")
@@ -118,9 +117,7 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
     ):
         raise RuntimeError("prepared model source paths are not canonical")
     spec_path = verified(root, "aedt_spec.json", source_binding, "spec_sha256")
-    spec = parse_aedt_spec(
-        read_json(spec_path), base_dir=root, allow_historical_modeling=True
-    )
+    spec = parse_aedt_spec(read_json(spec_path), base_dir=root)
     context = PreparedModelContext(
         root, receipt_path, receipt, save, source_binding, spec
     )

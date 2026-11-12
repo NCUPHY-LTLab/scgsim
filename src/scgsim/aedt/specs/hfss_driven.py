@@ -81,21 +81,9 @@ class HfssDrivenSpec:
     region_padding_um: tuple[float, float, float, float, float, float]
     physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    _historical_modeling: bool = False
     length_mesh: LengthMeshSpec | None = None
     aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
-
-    @property
-    def historical_physical(self) -> bool:
-        """Report whether this request decodes historical physical data."""
-        return self._historical_physical
-
-    @property
-    def historical_modeling(self) -> bool:
-        """Report whether this request decodes historical modeling data."""
-        return self._historical_modeling
 
     def __post_init__(self) -> None:
         request_modeling(self)
@@ -154,8 +142,6 @@ class HfssDrivenSpec:
     def effective_ports(self) -> tuple[TerminalPort, ...] | tuple[ModalPort, ...]:
         """Native port coordinates derived from immutable authored endpoints."""
         mapping = request_modeling(self)
-        if mapping is None:
-            raise ValueError("historical requests have no new execution modeling map")
         ports = tuple(
             replace(
                 port,
@@ -178,8 +164,6 @@ class HfssDrivenSpec:
     def effective_layer_imports(self) -> tuple[dict[str, Any], ...]:
         """Return effective layer imports derived from the source model."""
         mapping = request_modeling(self)
-        if mapping is None:
-            raise ValueError("historical requests have no new execution modeling map")
         pairs = {
             pair: index + 1
             for index, pair in enumerate(
@@ -226,22 +210,10 @@ class HfssDrivenSpec:
             },
             "vacuum_material_id": self.vacuum_material_id,
             "gds": {"path": Path(self.gds_path).as_posix()},
-            "layer_imports": (
-                list(self.effective_layer_imports)
-                if self.modeling is not None
-                else [item.to_payload() for item in self.layer_imports]
-            ),
+            "layer_imports": (list(self.effective_layer_imports)),
             "object_bindings": [item.to_payload() for item in self.object_bindings],
             "ports": [item.to_payload() for item in self.ports],
-            **(
-                {
-                    "effective_ports": [
-                        item.to_payload() for item in self.effective_ports
-                    ]
-                }
-                if self.modeling is not None
-                else {}
-            ),
+            "effective_ports": [item.to_payload() for item in self.effective_ports],
             "run_control": self.run_control.to_payload(),
             "region_padding_um": list(self.region_padding_um),
             "length_mesh": self.length_mesh.to_payload() if self.length_mesh else None,
@@ -253,7 +225,6 @@ class HfssDrivenSpec:
         payload: dict[str, Any],
         *,
         base_dir: Path | None = None,
-        allow_historical_modeling: bool = False,
     ) -> HfssDrivenSpec:
         """Decode a HfssDrivenSpec from its canonical payload."""
         if payload.get("schema_version") != SCHEMA_VERSION:
@@ -270,9 +241,7 @@ class HfssDrivenSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=cast(Modeling, payload.get("modeling")),
-            physical_layers=physical_layers_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
+            physical_layers=physical_layers_from_payload(payload),
             physical_representation=(
                 PhysicalRepresentationPlan.from_payload(
                     payload["physical_representation"]
@@ -280,10 +249,6 @@ class HfssDrivenSpec:
                 if "physical_representation" in payload
                 else None
             ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling
-            and "modeling" not in payload,
             mode=mode,  # type: ignore[arg-type]
             gds_path=gds,
             project_name=project_name_from_payload(
@@ -316,14 +281,13 @@ class HfssDrivenSpec:
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )
-        if result.modeling is not None:
-            verify_effective_records(
-                payload["layer_imports"], result.effective_layer_imports
-            )
-            verify_effective_records(
-                payload["effective_ports"],
-                [item.to_payload() for item in result.effective_ports],
-            )
+        verify_effective_records(
+            payload["layer_imports"], result.effective_layer_imports
+        )
+        verify_effective_records(
+            payload["effective_ports"],
+            [item.to_payload() for item in result.effective_ports],
+        )
         return result
 
 
@@ -357,20 +321,8 @@ class HfssDrivenGeometrySpec:
     run_control: HfssRunControl | None = None
     physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
     aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
-    _historical_modeling: bool = False
-
-    @property
-    def historical_physical(self) -> bool:
-        """Report whether this request decodes historical physical data."""
-        return self._historical_physical
-
-    @property
-    def historical_modeling(self) -> bool:
-        """Report whether this request decodes historical modeling data."""
-        return self._historical_modeling
 
     @property
     def mode(self) -> Literal["terminal"]:
@@ -434,9 +386,7 @@ class HfssDrivenGeometrySpec:
         }
 
     @classmethod
-    def from_payload(
-        cls, payload: Mapping[str, Any], *, allow_historical_modeling: bool = False
-    ) -> HfssDrivenGeometrySpec:
+    def from_payload(cls, payload: Mapping[str, Any]) -> HfssDrivenGeometrySpec:
         """Decode a HfssDrivenGeometrySpec from its canonical payload."""
         if (
             payload.get("schema_version") != DRIVEN_GEOMETRY_SCHEMA_VERSION
@@ -475,9 +425,7 @@ class HfssDrivenGeometrySpec:
                 for item in payload["ports"]
             ),
             run_control=None if run is None else HfssRunControl(**run),
-            physical_layers=physical_layers_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
+            physical_layers=physical_layers_from_payload(payload),
             physical_representation=(
                 PhysicalRepresentationPlan.from_payload(
                     payload["physical_representation"]
@@ -485,8 +433,6 @@ class HfssDrivenGeometrySpec:
                 if "physical_representation" in payload
                 else None
             ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
             aedt_version=payload["aedt"]["requested_version"],
             pyaedt_version=payload["pyaedt"]["locked_version"],
         )

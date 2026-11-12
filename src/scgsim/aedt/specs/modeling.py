@@ -191,18 +191,15 @@ def native_physical_record(value: Any) -> dict[str, Any]:
     }
 
 
-def physical_layers_from_payload(payload: Any, *, allow_historical: bool):
-    """Decode the recorded declaration era without converting its meaning."""
-    if "physical_representation" not in payload and not allow_historical:
+def physical_layers_from_payload(payload: Any) -> tuple[PhysicalLayerDeclaration, ...]:
+    """Decode the neutral physical layer declarations of a request payload."""
+    if "physical_representation" not in payload:
         raise ValueError(
             "fresh AEDT physical requests require a tagged neutral physical_representation; reprepare the source with PhysicalLayerDeclaration"
         )
-    declaration = (
-        PhysicalLayerDeclaration
-        if "physical_representation" in payload
-        else PhysicalLayerSpec
+    return tuple(
+        PhysicalLayerDeclaration(**item) for item in payload.get("physical_layers", ())
     )
-    return tuple(declaration(**item) for item in payload.get("physical_layers", ()))
 
 
 def source_plan_layers(source: Any):
@@ -213,12 +210,8 @@ def source_plan_layers(source: Any):
     return tuple(PhysicalLayerSpec(**item) for item in trace["source_layers"])
 
 
-def request_modeling(spec: Any):
-    """Use one fresh neutral plan; old maps are reader-only recorded meaning."""
-    if spec.modeling is None and spec.historical_modeling:
-        return None
-    if spec.historical_physical:
-        return ZMap(cast(Modeling, spec.modeling), spec.physical_layers)
+def request_modeling(spec: Any) -> PhysicalRepresentationPlan:
+    """Bind the request's one neutral physical representation plan."""
     layers = tuple(spec.physical_layers)
     if any(not isinstance(item, PhysicalLayerDeclaration) for item in layers):
         raise TypeError(
@@ -249,19 +242,11 @@ def request_modeling(spec: Any):
 
 def modeling_payload(spec: Any) -> dict[str, Any]:
     """Serialize the request physical modeling fields."""
-    if spec.modeling is None:
-        return {}
     payload = {
         "modeling": spec.modeling,
         "physical_layers": [layer.to_payload() for layer in spec.physical_layers],
     }
-    if not getattr(spec, "_historical_physical", False):
-        plan = request_modeling(spec)
-        if plan is None:
-            raise RuntimeError(
-                "fresh physical modeling request did not produce a representation plan"
-            )
-        payload["physical_representation"] = plan.to_payload()
+    payload["physical_representation"] = request_modeling(spec).to_payload()
     return payload
 
 
