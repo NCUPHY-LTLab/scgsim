@@ -49,7 +49,9 @@ component-simulation notebooks; SCGSim owns no duplicate notebook source.
   advanced use; their precondition is what the entry guarantees. A
   counterexample only such an input reaches is `fix` when it silently gives a
   plausible but wrong result and a cheap check at the boundary can refuse it;
-  otherwise `document` or `observe`. It is not P1 by itself.
+  otherwise `document` or `observe`. It is not P1 by itself: for such an
+  input, the P1 clause on silently wrong results applies only where a cheap
+  check at the boundary could refuse it.
 - Each finding states the condition that reproduces it, what the code does,
   the code or assumption that causes it, and a proposed disposition with its
   basis: `fix` (a supported use breaks a promised behavior), `document` (the
