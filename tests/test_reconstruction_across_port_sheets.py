@@ -740,3 +740,57 @@ def test_a_ring_that_lost_its_drawn_order_is_located_at_the_drawn_vertex(
     for (x, y), fault in faults.items():
         assert any(on(place, (x, y, x, y)) for place in found)
         assert f" um {fault}" in message
+
+
+def test_an_outline_ring_is_drawn_as_given_when_another_entity_owns_a_polygon_of_its_id(
+    tmp_path,
+):
+    """An Entity's outline ring has no polygon, even when a polygon elsewhere shares its ID.
+
+    The substrate Entity owns no polygon, so its outline is keyed by its own semantic ID,
+    ``substrate``.  Semantic and polygon IDs are separate namespaces: the pad polygon is
+    renamed ``substrate`` here.  A reconstruction on the substrate's outline names that
+    outline's own vertices; it binds, and the pad's drawn square is not read for it.
+    """
+    effective = gds_pad_in_ground(tmp_path, with_port=False)
+    build_input = effective.build_input
+    entities = tuple(
+        replace(entity, polygon_ids=("substrate",))
+        if entity.semantic_id == "pad"
+        else entity
+        for entity in build_input.entities
+    )
+    polygons = tuple(
+        replace(polygon, polygon_id="substrate")
+        if polygon.object_name == "pad"
+        else polygon
+        for polygon in build_input.polygons
+    )
+    (substrate,) = [e for e in entities if e.semantic_id == "substrate"]
+    bounds = substrate.geometry["domain_bounds_um"]
+    record = GdsBoundaryReconstructionSpec(
+        "substrate_corner",
+        "substrate",
+        (
+            (bounds["x_min_um"] + bounds["x_max_um"]) / 2,
+            (bounds["y_min_um"] + bounds["y_max_um"]) / 2,
+        ),
+        "circular_arc",
+        segment_indices=(0, 1),
+        anchor_indices=(0, 1, 2),
+    )
+    build_input = replace(
+        build_input,
+        entities=entities,
+        polygons=polygons,
+        boundary_reconstruction=(record,),
+    )
+    _, provenance = source_boundaries(build_input, source_rings(build_input))
+    (bound,) = [
+        entry
+        for entry in provenance
+        if entry["operation"] == "explicit_gds_reconstruction"
+    ]
+    assert bound["requested"]["entity_id"] == "substrate"
+    assert bound["drawn_ring"] == bound["original_ring_um"]
+    assert (40.0, 40.0) not in bound["drawn_ring"]
