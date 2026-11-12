@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass
 
 import pytest
-from test_palace_rectangular_ports import port_group, prepared_port
+from test_palace_rectangular_ports import VACUUM_PADDING_UM, port_group, prepared_port
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
 
 from scgsim.geometry import GeometryPlan
@@ -256,6 +256,7 @@ def eigenmode_sim(chip, reference):
     """An ``EigenmodeSim`` on the chip's plan with its one lumped port, as a user sets it up."""
     sim = EigenmodeSim()
     sim.set_plan(plan_snapshot(chip, reference))
+    sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port(PORT, layer="metal", layout_sheet=True, inductance=1e-9)
     return sim
 

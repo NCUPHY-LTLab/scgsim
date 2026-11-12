@@ -61,7 +61,9 @@ adequacy.
 Target frequency is in hertz, mesh lengths in micrometres, inductance in henries.
 Ordinary Eigenmode does not require surface specs, ports or an EPR request.
 A bound plan that carries its own vacuum refuses `set_vacuum_region` on the
-simulation. The
+simulation. A model needs a vacuum region: `mesh()` and
+`input_summary()` refuse a plan with none unless `set_vacuum_region` was called
+on the simulation (or `plan.set_vacuum_region(...)` before `prepare()`). The
 [GeometryPlan contract](../geometry-sgb.qmd) owns source identity and route
 preparation. The [Electrostatic/shared Palace contract](palace-electrostatic-sgb.qmd)
 owns the shared mesh controls and config controls.
