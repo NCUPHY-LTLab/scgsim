@@ -30,7 +30,12 @@ from scgsim.geometry.source.adapter_records import (
     record_sequence,
     solution_region_entity,
 )
-from scgsim.geometry.source.curves import boundary_binding
+from scgsim.geometry.source.curves import (
+    DrawnWalks,
+    boundary_binding,
+    gds_walks,
+    with_drawn_rings,
+)
 from scgsim.geometry.source.grid import apply_geometry_grid, source_grid_context
 from scgsim.geometry.source.intents import route_a_sheet_interfaces
 from scgsim.geometry.source.occurrence import (
@@ -235,9 +240,16 @@ class _SourceLowering:
             host_entities=self.entities,
             host_polygons=self.polygons,
         )
-        return apply_geometry_grid(
+        gridded = apply_geometry_grid(
             self.geometry_input(metadata, ports), self.source.grid_context
         )
+        # Reconstruction indices name rings as drawn in the top cell's GDS; the grid
+        # has since rounded and noded them, so each polygon keeps its drawn rings.
+        drawn = DrawnWalks.read(
+            gds_walks(self.source.polygons_by_layer),
+            self.source.grid_context.grid_size_um,
+        )
+        return with_drawn_rings(gridded, lambda _polygon: drawn)
 
     def lower_solution_regions(self) -> None:
         self.entities = [

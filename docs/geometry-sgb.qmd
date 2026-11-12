@@ -113,12 +113,25 @@ inputs, use `plan.set_boundary_curves(records)` or
 snapshot retains source polygons, declarations and occurrence provenance;
 there is no live Gmsh model in the source snapshot.
 
-`GdsBoundaryReconstructionSpec` requires explicit ordered `segment_indices`:
-index `i` denotes the original edge from vertex `i` to `(i + 1) % N`.
-The selected consecutive chain can cross index zero. `closed=True` selects
-an entire ring; a partial chain keeps its original endpoints and leaves every
-unselected straight segment unchanged. `anchor_indices` identify original
-vertices used by the reconstruction, and `degree` and `parameter_interval`
+`GdsBoundaryReconstructionSpec` requires explicit ordered `segment_indices`.
+Index `i` is the edge from drawn vertex `i` to drawn vertex `(i + 1) % N` of
+the selected ring: the polygon's vertex sequence as the GDS stores it, from the
+vertex its walk starts at and in the direction it runs, carried through any
+instance transform. A mirroring transform reverses the ring's orientation and
+keeps the sequence. The indices keep this meaning when the source stage later
+rounds the ring, starts it elsewhere or nodes into it the crossings of a port
+sheet. A gdsfactory component stores a polygon as KLayout normalizes it, so read
+the sequence from the component, for example with `component.get_polygons()`,
+rather than from the points given to `add_polygon`; exactly repeated
+consecutive vertices count once. The source stage reads each polygon's GDS walk
+into `LayoutPolygonSpec.drawn_rings`, one entry per ring, and every binding
+stage takes the drawn order from there; the records stay as declared. A ring
+that is not one drawn GDS polygon, such as two drawn polygons fused into one,
+has no drawn order, and a reconstruction on it is refused at the ring. The
+selected consecutive chain can cross index zero.
+`closed=True` selects an entire ring; a partial chain keeps its drawn endpoints
+and leaves every unselected straight segment unchanged. `anchor_indices` name
+drawn vertices in the same order, and `degree` and `parameter_interval`
 retain the requested spline operation. A closed circular reconstruction uses
 three explicit anchors; an open arc uses start, on-arc and end anchors.
 Overlapping replacement chains or competing whole-boundary declarations

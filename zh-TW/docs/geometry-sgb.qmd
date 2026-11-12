@@ -37,7 +37,7 @@ Palace 所用的幾何建構器（SGB）處理 `line_segment` 與 `circular_arc`
 
 元件語意的 `boundary_curves` 與 `boundary_reconstruction` 紀錄使用局部 Entity 及邊界 ID。GeometryPlan 以已註冊出現實例限定它們，並將剛體 XY 轉換套用一次。組裝輸入請使用帶限定 ID 的 `plan.set_boundary_curves(records)` 或 `plan.set_boundary_reconstruction(records)`。獨立快照保留來源多邊形、宣告及出現實例來源資訊；來源快照沒有即時 Gmsh 模型。
 
-`GdsBoundaryReconstructionSpec` 要求明確有序的 `segment_indices`：索引 `i` 表示由頂點 `i` 至 `(i + 1) % N` 的原始邊。選定連續鏈可跨越索引零。`closed=True` 選取整個環；部分鏈保留原端點，每個未選取直線段維持不變。`anchor_indices` 識別重建使用的原始頂點，`degree` 及 `parameter_interval` 保留要求的樣條操作。閉合圓重建使用三個明確錨點；開放弧使用起點、弧上點及終點錨點。重疊替換鏈或互相競爭的整體邊界宣告，不能擁有相同來源線段。
+`GdsBoundaryReconstructionSpec` 要求明確有序的 `segment_indices`。索引 `i` 是所選環上由繪製頂點 `i` 至繪製頂點 `(i + 1) % N` 的邊：也就是 GDS 儲存的多邊形頂點序列，從它走訪起始的頂點開始、依它前進的方向，並經過任何實例轉換。鏡射轉換會反轉環的方向，但保留這個序列。來源階段之後即使把環捨入至格點、改從其他頂點起算，或把連接埠薄片的交點節點化插入環中，索引的意義都不變。gdsfactory 元件以 KLayout 正規化後的形式儲存多邊形，因此請從元件讀取這個序列，例如使用 `component.get_polygons()`，而不是依照傳給 `add_polygon` 的點；完全重複的相鄰頂點只算一次。來源階段會把每個多邊形的 GDS 走訪讀入 `LayoutPolygonSpec.drawn_rings`，每個環一筆，各綁定階段都從這裡取得繪製順序；重建紀錄則保持宣告時的內容。不是以單一 GDS 多邊形繪製的環，例如兩個繪製多邊形融合成的一個環，沒有繪製順序，對它的重建會在該環的位置被拒絕。選定連續鏈可跨越索引零。`closed=True` 選取整個環；部分鏈保留繪製端點，每個未選取直線段維持不變。`anchor_indices` 依同一順序指名繪製頂點，`degree` 及 `parameter_interval` 保留要求的樣條操作。閉合圓重建使用三個明確錨點；開放弧使用起點、弧上點及終點錨點。重疊替換鏈或互相競爭的整體邊界宣告，不能擁有相同來源線段。
 
 SGB 把宣告的線段與圓弧在整數格點上建成單一精確平面排列，沿指定堆疊擠出，並自行寫出 BREP 與 XAO 檔；過程中不執行 OCC 布林運算，也不修復殼。每個面在 sidecar 中保留來源身分；Gmsh 只在產生網格之前開啟寫出的 XAO 加以檢查。建構錯誤會停止建構，沒有直線邊備援，也沒有體積修復。
 

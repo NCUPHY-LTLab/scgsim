@@ -15,7 +15,6 @@ import pytest
 from sgb_inputs import gds_pad_in_ground
 from test_sgb_band_labels import PORT_CASES, all_interface_insets
 
-from scgsim.geometry.models.input import GdsBoundaryReconstructionSpec
 from scgsim.geometry.sgb.cutfamilies.requests import RefinementRequest
 from scgsim.geometry.sgb.emission.measures import planned_face_area_um2
 from scgsim.geometry.sgb.model import build_conformal_model
@@ -35,24 +34,28 @@ AREA_TOLERANCE_UM2 = (
 
 
 def circular_pad_input(directory):
-    """The pad-in-ground input with the pad's GDS polyline reconstructed as one exact circle."""
+    """The pad-in-ground input with the pad's GDS polyline reconstructed as one exact circle.
+
+    The stack file declares the reconstruction on the polygon as gdstk draws it: every drawn
+    segment, and drawn vertices 0, n/3 and 2n/3 as anchors.
+    """
+    drawn = gdstk.ellipse(PAD_CENTRE_UM, PAD_RADIUS_UM, tolerance=0.01)
+    count = len(drawn.points)
+    reconstruction = {
+        "boundary_id": "pad_circle",
+        "entity_id": "pad",
+        "selector_point_um": list(PAD_CENTRE_UM),
+        "kind": "circular_arc",
+        "closed": True,
+        "segment_indices": list(range(count)),
+        "anchor_indices": [0, count // 3, 2 * count // 3],
+    }
     effective = gds_pad_in_ground(
         directory,
-        pad_polygon=gdstk.ellipse(PAD_CENTRE_UM, PAD_RADIUS_UM, tolerance=0.01),
+        pad_polygon=drawn,
+        extra_metadata={"boundary_reconstruction": [reconstruction]},
     )
-    (polygon,) = [p for p in effective.build_input.polygons if p.object_name == "pad"]
-    count = len(polygon.exterior)
-    reconstruction = GdsBoundaryReconstructionSpec(
-        "pad_circle",
-        "pad",
-        PAD_CENTRE_UM,
-        "circular_arc",
-        closed=True,
-        segment_indices=tuple(range(count)),
-        anchor_indices=(0, count // 3, 2 * count // 3),
-    )
-    curved = replace(effective.build_input, boundary_reconstruction=(reconstruction,))
-    return effective, curved
+    return effective, effective.build_input
 
 
 def pad_landing_area_um2() -> float:
