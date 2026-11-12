@@ -557,6 +557,51 @@ def test_two_dielectric_islands_meeting_at_a_corner_are_named_as_regions(
     )
 
 
+# Islands on top of the square pad of ``two_pads`` (z 0.2 to 1.0 um, the pad ends at 0.2 um): a diamond whose tip
+# is on the layout's lower edge, which the pad runs along, and two squares meeting only at the corner (10, 10) um.
+ISLAND_ON_THE_PAD_AT_THE_EDGE = ((10, 0), (13, 3), (10, 6), (7, 3))
+ISLANDS_ON_THE_PAD_AT_A_CORNER = (((5, 5), (10, 5), (10, 10), (5, 10)), ((10, 10), (15, 10), (15, 15), (10, 15)))  # fmt: skip
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_an_island_on_a_pad_along_the_edge_is_named_not_the_pad(
+    monkeypatch, simulation
+):
+    """The pinch is in the island's slab; the pad below ends where that slab begins, so the island is named.
+
+    The pad runs along the boundary under the island's tip, so it touches the pinched point from below.
+    """
+    stack = dielectric_island_stack(ISLAND_ON_THE_PAD_AT_THE_EDGE, (0.2, 1.0))
+    with pytest.raises(NonManifoldError) as raised:
+        check(simulation, two_pads(monkeypatch, gap_um=10.0), layer_stack=stack)
+    message = str(raised.value)
+    match = REGION_AT_THE_EDGE.search(message)
+    assert match is not None, message
+    assert match["region"] == "island"
+    assert (float(match["x"]), float(match["y"])) == (10.0, 0.0)
+    assert (float(match["z0"]), float(match["z1"])) == (0.2, 1.0)
+    assert "chip/pad_0000" not in message
+    assert FIX_REGION_AT_THE_EDGE in message
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_islands_meeting_at_a_corner_on_a_pad_are_named_not_the_pad(
+    monkeypatch, simulation
+):
+    """Inside the layout too: the pad under the corner ends where the islands' slab begins, so they are named."""
+    below, above = ISLANDS_ON_THE_PAD_AT_A_CORNER
+    stack = dielectric_island_stack(below, (0.2, 1.0), island_b=above)
+    with pytest.raises(NonManifoldError) as raised:
+        check(simulation, two_pads(monkeypatch, gap_um=10.0), layer_stack=stack)
+    message = str(raised.value)
+    match = REGIONS_INSIDE.search(message)
+    assert match is not None, message
+    assert match["regions"] == "island, island_b"
+    assert (float(match["x"]), float(match["y"])) == (10.0, 10.0)
+    assert (float(match["z0"]), float(match["z1"])) == (0.2, 1.0)
+    assert "chip/pad_0000" not in message
+
+
 @pytest.mark.parametrize(
     "installed", ["2.1.0a1", None], ids=["unpublished-version", "no-metadata"]
 )

@@ -166,22 +166,33 @@ def _raise_pinch(
         f"({grid.to_um(point[0]):.4f}, {grid.to_um(point[1]):.4f}) um, "
         f"z {float(z_lo)}..{float(z_hi)} um ({layer.plane})"
     )
+    # A pinch lies in this slab, so only prisms that fill it are named, not one that ends where it begins.
+    in_slab = [
+        p
+        for p in catalogue.prisms
+        if _fills_slab(p, (z_lo, z_hi)) and _footprint_touches(p, point)
+    ]
     if domain.kind == "conductor":
         reaching = [
-            p for p in catalogue.prisms if _reaches(p, domain.net, point, z_lo, z_hi)
+            p
+            for p in in_slab
+            if p.material_kind == "conductor" and p.net_id == domain.net
         ]
         what = f"Net {domain.net} (entities {named_entities(reaching) or '?'})"
     else:
-        around = [
-            p
-            for p in catalogue.prisms
-            if p.material_kind == "conductor"
-            and _reaches(p, p.net_id or "", point, z_lo, z_hi)
-        ]
+        around = [p for p in in_slab if p.material_kind == "conductor"]
         names = named_entities(around) or "?"
         nets = ", ".join(sorted({p.net_id or "" for p in around}))
         # Only a pinch between conductors is named by them; otherwise the regions that fill the slab there.
-        regions = [] if around else _regions_at(catalogue, domain, point, (z_lo, z_hi))
+        regions = (
+            []
+            if around
+            else [
+                p
+                for p in in_slab
+                if p.material_kind != "conductor" and p.entity_id != domain.name
+            ]
+        )
         if domain.kind == "vacuum" and on_model_boundary:
             if around:
                 _raise_edge_pinch(domain, around, names, nets, where)
@@ -232,27 +243,14 @@ def _raise_region_edge_pinch(
     )
 
 
-def _regions_at(
-    catalogue: PrismCatalogue,
-    pinched: Domain,
-    point: Point,
-    z_range: tuple[Fraction, Fraction],
-) -> list[PrismRecord]:
-    """The regions that are not conductors, other than the pinched one, that fill the slab at the point.
+def _fills_slab(prism: PrismRecord, z_range: tuple[Fraction, Fraction]) -> bool:
+    """Whether the prism spans the slab's height, not only touching it from below or above.
 
-    A region must fill the slab, not only touch it from below or above, or the substrate under the slab
-    would be named for every pinch at its edge.
+    A prism that ends where the slab begins (a pad under a dielectric island, the substrate under the metal)
+    plays no part in a pinch inside the slab; naming it would blame the wrong object.
     """
     z_lo, z_hi = z_range
-    return [
-        p
-        for p in catalogue.prisms
-        if p.material_kind != "conductor"
-        and p.entity_id != pinched.name
-        and p.z0 < z_hi
-        and p.z1 > z_lo
-        and _footprint_touches(p, point)
-    ]
+    return prism.z0 < z_hi and prism.z1 > z_lo
 
 
 def _region_phrase(regions: Sequence[PrismRecord]) -> tuple[str, bool]:
@@ -272,7 +270,10 @@ def _layer_z_range(layer: Layer) -> tuple[Fraction, Fraction]:
 def _reaches(
     prism: PrismRecord, net: str, point: Point, z_lo: Fraction, z_hi: Fraction
 ) -> bool:
-    """Whether the footprint of a conductor prism of ``net`` touches the point at that Z."""
+    """Whether the footprint of a conductor prism of ``net`` touches the point at that Z.
+
+    The Z test is inclusive: a contact found on a level plane is between prisms that end and begin there.
+    """
     if (
         prism.material_kind != "conductor"
         or prism.net_id != net
