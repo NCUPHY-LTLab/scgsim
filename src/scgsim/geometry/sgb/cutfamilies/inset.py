@@ -62,8 +62,10 @@ are snapped to the lattice like every other vertex, so the carriers are exact up
 angle and normal is computed in fixed-precision decimals, so the end points -- and the ids built from them --
 are identical on every platform.
 
-Members keep their generating primitive in the lineage: ``<support>/ring<r>/edge<k>``, for straight members
-and arcs alike; reflex arcs ``<support>/ring<r>/corner<k>``, end caps ``<support>/ring<r>/capstart<k>`` and ``capend<k>``.
+Each member's lineage records where on the support it comes from and its margin as a ``BandMember``: the
+ring, the primitive (or the junction after it), the role (``edge`` for the offset of a primitive, straight or
+arc; ``corner`` for a reflex arc; ``capstart`` and ``capend`` for an end cap) and the margin.  Its id and member
+name, ``<support>/ring<r>/<role><k>``, are written from those and are never read back.
 """
 
 from __future__ import annotations
@@ -91,6 +93,8 @@ from scgsim.geometry.sgb.records.band_regions import (
 )
 from scgsim.geometry.sgb.records.carriers import (
     ArcCarrier,
+    BandMember,
+    BandMemberRole,
     Lineage,
     LineCarrier,
     LineEdge,
@@ -198,48 +202,63 @@ def _offset_point(
 
 
 class _Candidates:
-    """The candidate offset curves of one margin: lines and arcs, each with the id it will carry."""
+    """The candidate offset curves of one margin: lines and arcs, each with the id and lineage it will carry."""
 
     def __init__(self, family_id: str, margin: int) -> None:
         self.family_id = family_id
         self.margin = margin
-        # A member's id is ``<support>/ring<r>/edge<k>@m<margin>``: the generating primitive plus the
-        # margin.  Its lineage keeps the primitive alone, for straight members and arcs alike.
-        self.tag = f"@m{margin}"
         self.lines: list[tuple[str, Point, Point]] = []
+        self.line_lineages: dict[str, Lineage] = {}
         self.arcs: dict[str, ArcCarrier] = {}
 
-    def add_line(self, name: str, p: Point, q: Point) -> None:
+    def member(self, ring: int, index: int, role: BandMemberRole) -> BandMember:
+        """The place on the support a candidate of this margin comes from."""
+        return BandMember(ring, index, role, self.margin)
+
+    def add_line(self, member: BandMember, p: Point, q: Point) -> None:
         """A straight candidate (nothing when its end points coincide after snapping)."""
         if p != q:
-            self.lines.append((f"{self.family_id}/{name}{self.tag}", p, q))
+            candidate_id, lineage = self._named(member, None)
+            self.lines.append((candidate_id, p, q))
+            self.line_lineages[candidate_id] = lineage
 
-    def add_arc(  # noqa: PLR0913 - an arc is its centre, radius, sense and two end points
+    def add_arc(  # noqa: PLR0913 - an arc is its place, centre, radius, sense, two end points and piece
         self,
-        name: str,
+        member: BandMember,
         centre: tuple[Fraction, Fraction],
         radius: Fraction,
         ccw: bool,
         start: Point,
         end: Point,
+        piece: int | None = None,
     ) -> None:
-        """An arc candidate (nothing when its end points coincide after snapping)."""
+        """An arc candidate, ``piece`` of a cap or corner cut into several (nothing when its end points coincide)."""
         if start == end:
             return
+        candidate_id, lineage = self._named(member, piece)
         arc = ArcCarrier(
-            f"{self.family_id}/{name}{self.tag}",
+            candidate_id,
             centre,
             radius,
             ccw,
             (Fraction(start[0]), Fraction(start[1])),
             (Fraction(end[0]), Fraction(end[1])),
-            Lineage(
-                "family_member",
-                family_id=self.family_id,
-                member=f"{self.family_id}/{name}",
-            ),
+            lineage,
         )
         self.arcs[arc.id] = arc
+
+    def _named(self, member: BandMember, piece: int | None) -> tuple[str, Lineage]:
+        """A candidate's id ``<support>/ring<r>/<role><k>[.<piece>]@m<margin>`` and its lineage.
+
+        The lineage keeps the member name (the id without the margin) and, as :class:`BandMember`, the place and
+        the margin; the id and the name are written from the member, and nothing reads them back.
+        """
+        suffix = "" if piece is None else f".{piece}"
+        name = f"{self.family_id}/ring{member.ring}/{member.role}{member.index}{suffix}"
+        lineage = Lineage(
+            "family_member", family_id=self.family_id, member=name, band_member=member
+        )
+        return f"{name}@m{self.margin}", lineage
 
 
 def _generate_candidates(
@@ -254,7 +273,7 @@ def _generate_candidates(
             for pi, prim in enumerate(ring):
                 if not region.is_origin(ri, pi):
                     continue
-                name = f"ring{ri}/edge{pi}"
+                offset = candidates.member(ri, pi, "edge")
                 # The ends the die edge cuts are those of the line continued past it; joins lie at the others.
                 first, last = _ends(region.origin(ri, pi))
                 cut_first, cut_last = first != _ends(prim)[0], last != _ends(prim)[1]
@@ -265,18 +284,18 @@ def _generate_candidates(
                     prim, margin, at_end=True, vertex=last
                 )
                 if isinstance(prim, LineEdge):
-                    candidates.add_line(name, start, end)
+                    candidates.add_line(offset, start, end)
                 else:
                     radius = prim.radius - margin if prim.ccw else prim.radius + margin
                     if radius >= 1:
                         candidates.add_arc(
-                            name, prim.centre, radius, prim.ccw, start, end
+                            offset, prim.centre, radius, prim.ccw, start, end
                         )
                 following = (pi + 1) % count
                 if not region.is_origin(ri, following):
                     if not cut_last:
                         _cap_arcs(
-                            f"ring{ri}/capend{pi}",
+                            candidates.member(ri, pi, "capend"),
                             prim,
                             margin,
                             candidates,
@@ -286,7 +305,7 @@ def _generate_candidates(
                     pi not in joins
                 ):  # a joined junction has its two offsets meet: no arc
                     _corner_arcs(
-                        f"ring{ri}/corner{pi}",
+                        candidates.member(ri, pi, "corner"),
                         prim,
                         ring[following],
                         margin,
@@ -294,7 +313,11 @@ def _generate_candidates(
                     )
                 if not region.is_origin(ri, (pi - 1) % count) and not cut_first:
                     _cap_arcs(
-                        f"ring{ri}/capstart{pi}", prim, margin, candidates, at_end=False
+                        candidates.member(ri, pi, "capstart"),
+                        prim,
+                        margin,
+                        candidates,
+                        at_end=False,
                     )
     return candidates
 
@@ -473,7 +496,7 @@ def _line_length(prim: RingPrimitive) -> Decimal:
 
 
 def _cap_arcs(
-    name: str,
+    member: BandMember,
     prim: RingPrimitive,
     margin: int,
     candidates: _Candidates,
@@ -504,13 +527,13 @@ def _cap_arcs(
             circle_math.round_half_up(vertex[1] + vector[1]),
         )
         candidates.add_arc(
-            f"{name}.{k}", centre, Fraction(margin), not at_end, previous, end
+            member, centre, Fraction(margin), not at_end, previous, end, piece=k
         )
         previous = end
 
 
 def _corner_arcs(
-    name: str,
+    member: BandMember,
     prim: RingPrimitive,
     following: RingPrimitive,
     margin: int,
@@ -544,14 +567,14 @@ def _corner_arcs(
         )
         if k == pieces - 1:
             end = last_offset
-        piece_name = name if pieces == 1 else f"{name}.{k}"
         candidates.add_arc(
-            piece_name,
+            member,
             (Fraction(centre_point[0]), Fraction(centre_point[1])),
             Fraction(margin),
             False,
             previous,
             end,
+            piece=None if pieces == 1 else k,
         )
         previous = end
 
@@ -589,7 +612,7 @@ def _margin_seams(  # noqa: PLR0913 - one margin of one support, with its ports 
             for k, (p, q) in enumerate(zip(points, points[1:], strict=False))
         )
     cells = margin_cells(family_id, segments, region, margin, ports, grid_um)
-    lines, line_seams = _lines_of(family_id, cells.required, band)
+    lines, line_seams = _lines_of(cells.required, candidates.line_lineages, band)
     arcs, arc_seams = _arcs_of(cells.required, arc_pieces, band)
     return _MarginSeams(
         lines, arcs, line_seams + arc_seams, MarginRegion(margin, cells.region_rings)
@@ -597,9 +620,12 @@ def _margin_seams(  # noqa: PLR0913 - one margin of one support, with its ports 
 
 
 def _lines_of(
-    family_id: str, required: list[RequiredEdge], band: int
+    required: list[RequiredEdge], lineages: dict[str, Lineage], band: int
 ) -> tuple[list[LineCarrier], list[BandSeam]]:
-    """Straight members: the seams that carry no arc witness chord, each with the side of ``R_m``."""
+    """Straight members: the seams that carry no arc witness chord, each with the side of ``R_m``.
+
+    ``lineages`` is the lineage of every straight candidate, by candidate id; a seam piece keeps its candidate's.
+    """
     lines: list[LineCarrier] = []
     seams: list[BandSeam] = []
     pieces_of_line: dict[str, int] = {}
@@ -608,17 +634,11 @@ def _lines_of(
         if any("#" in c for c in e.carriers):
             continue
         # Coincident offsets of one margin from several primitives: the carrier is named after one of them
-        # for its lineage; which side is R_m was read from the cells, never from that name.
+        # and keeps its lineage; which side is R_m was read from the cells, never from that name.
         source = sorted(e.carriers)[0]
         n = pieces_of_line.get(source, 0)
         pieces_of_line[source] = n + 1
-        member = source.split("@", 1)[0]
-        carrier = LineCarrier(
-            f"{source}.{n}",
-            e.a,
-            e.b,
-            Lineage("family_member", family_id=family_id, member=member),
-        )
+        carrier = LineCarrier(f"{source}.{n}", e.a, e.b, lineages[source])
         lines.append(carrier)
         seams.append(BandSeam(carrier.id, band, seam.inside_left))
     return lines, seams

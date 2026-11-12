@@ -189,13 +189,14 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | Record | 欄位 | 備註 |
 |---|---|---|
 | `Grid` | `size_um`（每個 grid unit 的 µm） | 取自輸入的 `GeometryGridContext`，每個模型宣告一次，並記錄在 handoff 與 sidecar 的 `grid_um` |
-| `Lineage` | `kind`（`polygon_edge`、`family_member`）、`entity_id`、`polygon`、`ring`、`edge`、`family_id`、`member` | `describe()` 回傳 `pad/polygon0/ring0/edge8` 或 `family/member`；直線 inset member 的 `member` 是 `<support>/ring<r>/edge<k>` |
+| `Lineage` | `kind`（`polygon_edge`、`family_member`）、`entity_id`、`polygon`、`ring`、`edge`、`family_id`、`member`、`band_member` | `describe()` 回傳 `pad/polygon0/ring0/edge8` 或 `family/member`；直線 inset member 的 `member` 是 `<support>/ring<r>/edge<k>`；只有 inset band 的成員有 `band_member` |
+| `BandMember` | `ring`、`index`、`role`（`edge`、`corner`、`capstart`、`capend`）、`margin`（grid unit） | band 曲線來自 support 的哪個位置：`edge` 是 primitive `index` 的 offset，`corner` 是 primitive `index` 與下一個 primitive 之間 reflex 頂點的 arc，`capstart`、`capend` 是 primitive `index` 起點或終點的半圓；曲線兩側的 band 編號在它的 `BandSeam`。讀者讀這些欄位，不解析 carrier id 或 `member` |
 | `LineCarrier` | `id`、`p`、`q`（整數 grid point）、`lineage` | 端點精確的直線曲線 |
 | `ArcCarrier` | `id`、`centre`、`radius`（精確分數）、`ccw`、`start`、`end`、`lineage`、`root` | 小於 360° 的 arc；circle 是四段 quarter arc；`root` 是 derived arc 偏差所對照的 source carrier |
 | `Footprint` | `outer`（CCW ring）、`holes`（CW ring）、`arc_runs` | 整數 grid 座標；arc 以 chord run 加 `arc_runs` 表示 |
 | `PrismRecord` | `entity_id`、`footprint`、`z0`、`z1`（精確分數）、`material`、`material_kind`（`conductor`、`dielectric`、`vacuum`、`port`）、`net_id`、`priority`、`polygon`、`arcs`、`port`（`PortIdentity`）、`feature_kind`、`occurrence`、`layer` | `z0 == z1` 是 sheet（`is_sheet`）；conductor 必須有 `net_id`；port prism 一定是 sheet 且帶 `PortIdentity`；`feature_kind`（`stack_film`、`local_film`、`finite_volume`）供 Route A 的規則使用，`occurrence` 與 `layer` 供 priority 錯誤訊息指出來源 |
 | `CurveFamilyRecord` | `family_id`、`role`、`carriers`、`target_levels`、`edge_policy`（`required`、`refinement_only`）、`arcs`、`support` | inset band 的 `support` 是 `SupportRegion`；carrier id 形如 `band_pad_top/ring0/edge8@m100.0`（primitive、margin、片段），reflex arc 是 `…/corner<k>@m<margin>` |
-| `SupportRegion` | `rings`（精確 primitive，內部在左側）、`margins`（grid unit，遞增）、`origin_mask`（每個 primitive 是否為 gap edge） | inset family 的 support；`origins` 是 distance origin（gap edge，見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)），其餘邊界是 `free_boundary` |
+| `SupportRegion` | `rings`（精確 primitive，內部在左側）、`margins`（grid unit，遞增）、`origin_mask`（每個 primitive 是否為 gap edge）、`sources`（每個 primitive 所在的 source edge 或 arc 的 carrier id，同一條邊上有幾個 Entity 的外框就有幾個） | inset family 的 support；`origins` 是 distance origin（gap edge，見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)），其餘邊界是 `free_boundary` |
 | `PrismCatalogue` | `grid`、`prisms`、`families`、`name` | arrangement 階段的輸入；route 是 build 函式的引數，不在 catalogue 內 |
 | `LevelStructure` | `levels`、`slab_active`、`level_sheets`、`level_families` | level 是排序後相異的 Z 值；slab $i$ 是 $(z_i, z_{i+1})$ |
 | `Domain` | `kind`、`material`、`net`、`owner` | 佔據 slab cell 的東西；`name` 是擁有它的 Entity（D5） |

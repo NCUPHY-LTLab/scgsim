@@ -39,9 +39,35 @@ arc, and a banded die has a few thousand distinct arcs."""
 RationalPoint = tuple[Fraction, Fraction]
 
 
+BandMemberRole = Literal["edge", "corner", "capstart", "capend"]
+"""How a band curve follows its support: ``edge`` offsets one primitive, ``corner`` turns round the reflex
+vertex after it, ``capstart`` and ``capend`` close round the start or end of a run of distance origins."""
+
+
+@dataclass(frozen=True)
+class BandMember:
+    """Where on its support an inset band curve comes from, and by which margin it is offset.
+
+    ``ring`` and ``index`` locate it among the rings of the family's support region
+    (``CurveFamilyRecord.support``).  ``edge`` is the offset of primitive ``index`` of that ring; ``corner`` the
+    arc about the reflex vertex between primitives ``index`` and ``index + 1`` (the first one after the last);
+    ``capstart`` and ``capend`` the half circle about the start or end of primitive ``index``.  ``margin`` is
+    the offset, in grid units.  The band numbers on the two sides of the curve are its seam's
+    (``BandSeam``), and a carrier's id or member name is never read for any of this.
+    """
+
+    ring: int
+    index: int
+    role: BandMemberRole
+    margin: int
+
+
 @dataclass(frozen=True)
 class Lineage:
-    """Where a carrier came from: a source polygon edge or a curve-family member."""
+    """Where a carrier came from: a source polygon edge or a curve-family member.
+
+    ``band_member`` is set on the members of an inset band family only.
+    """
 
     kind: Literal["polygon_edge", "family_member"]
     entity_id: str = ""
@@ -50,6 +76,7 @@ class Lineage:
     edge: int = 0
     family_id: str = ""
     member: str = ""
+    band_member: BandMember | None = None
 
     def describe(self) -> str:
         """Stable text form; for polygon edges it is the carrier id of a straight edge."""

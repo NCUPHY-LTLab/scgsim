@@ -174,18 +174,17 @@ def resolve_support(
     )
     beyond = cells_beyond_the_die(plane)
     pieces_of = _origin_pieces(support, labelled, layer, plane, beyond)
-    rings, origin_mask, die_edge_mask = _boundary_rings(
-        request.request_id, layer, selected, labelled, pieces_of
+    region = _bounded_region(
+        request.request_id, margins, layer, selected, labelled, pieces_of
     )
-    if not any(any(ring) for ring in origin_mask):
+    if not any(any(ring) for ring in region.origin_mask):
         raise NoGapEdgeError(
             f"inset request {request.request_id!r}: {_describe(support)} has no gap edge to "
             "measure the bands from (a conductor edge counts only where exposed dielectric lies next to it); "
-            f"{_face_place(support, catalogue, layer, rings)}. Fix the declaration or the layout: "
+            f"{_face_place(support, catalogue, layer, region.rings)}. Fix the declaration or the layout: "
             "drop the band margins asked for this face, or draw exposed dielectric beside one of "
             "its edges."
         )
-    region = SupportRegion(rings, margins, origin_mask, die_edge_mask)
     conductor = support.entity_id if isinstance(support, ConductorSurface) else None
     check_die_cuts(
         request.request_id, region, plane, beyond, conductor, catalogue.grid.size_um
@@ -556,20 +555,18 @@ def _check_interface(request: InsetRequest, layer: Layer, selected: set[int]) ->
 # --------------------------------------------------------------------------- boundary rings
 
 
-def _boundary_rings(
+def _bounded_region(  # noqa: PLR0913 - the request, its margins, the selected cells of a level and how to cut its edges
     request_id: str,
+    margins: tuple[int, ...],
     layer: Layer,
     selected: set[int],
     labelled: LabelledArrangements,
     pieces_of: Callable[[int], list[Piece]],
-) -> tuple[
-    tuple[tuple[RingPrimitive, ...], ...],
-    tuple[tuple[bool, ...], ...],
-    tuple[tuple[bool, ...], ...],
-]:
-    """The boundary rings of the selected cells, and per primitive whether it is a distance origin and whether it lies on the die edge.
+) -> SupportRegion:
+    """The region the selected cells make: its boundary rings and, per primitive, whether it is a distance origin, whether it lies on the die edge and which source curves it lies on.
 
-    A boundary half-edge becomes one primitive, or several where it is a gap edge along part of its length.
+    A boundary half-edge becomes one primitive, or several where it is a gap edge along part of its length; each
+    piece lies on the source curves of its edge in the pre-pass (every source edge or arc drawn along it).
     """
     arr = layer.arr
     next_half_edge: dict[int, int] = {}
@@ -613,7 +610,11 @@ def _boundary_rings(
     die_edge_mask = tuple(
         tuple(piece.on_die_edge for _, piece in ring_pieces) for ring_pieces in pieces
     )
-    return primitives, origin_mask, die_edge_mask
+    sources = tuple(
+        tuple(layer.edge_sources[h >> 1] for h, _ in ring_pieces)
+        for ring_pieces in pieces
+    )
+    return SupportRegion(primitives, margins, origin_mask, die_edge_mask, sources)
 
 
 def _from_smallest_vertex(arr, ring: list[int]) -> list[int]:  # noqa: ANN001 - the arrangement of a layer
