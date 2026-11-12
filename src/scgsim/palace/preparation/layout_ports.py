@@ -3,9 +3,11 @@
 ``layout_geometry_request`` is everything before the SGB build of a simulation whose layout sheets are
 lumped ports: it binds each requested port to an authored sheet of the plan or the Component, then
 prepares the geometry input with exactly the sheets requested.  ``EigenmodeSim`` builds its model from
-it in ``mesh()`` and in ``simulation_drc``.  The request holds no simulation state: the simulation passes
-its settings in and keeps the materials the preparation returns.  A port's circuit is carried through
-unread; the geometry reads only the sheet, its target layer and its direction.
+it in ``mesh()`` and in ``simulation_drc``, and ``input_summary()`` summarises the same prepared input, so
+the summary shows the vacuum, ports and conductors the model is built from.  The request holds no
+simulation state: the simulation passes its settings in, and ``mesh()`` keeps the materials the
+preparation returns.  A port's circuit is carried through unread; the geometry reads only the sheet, its
+target layer and its direction.
 """
 
 from __future__ import annotations
@@ -41,8 +43,9 @@ class GeometrySettings:
 class LayoutGeometryRequest:
     """The resolved ports, the keywords of the SGB geometry build, and the materials the preparation found.
 
-    ``mesh()`` and the modeling check both build from ``source``; ``materials`` is None when the
-    preparation left the simulation's materials as they were.
+    ``mesh()`` and the modeling check both build from ``source``, and ``input_summary()`` summarises its
+    prepared ``source_geometry_input`` and ``stack``; ``materials`` is None when the preparation left the
+    simulation's materials as they were.
     """
 
     ports: list[LayoutPortBinding]
