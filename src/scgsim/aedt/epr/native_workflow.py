@@ -60,7 +60,6 @@ from scgsim.aedt.runtime.native.common import (
 from scgsim.aedt.runtime.native.hfss_geometry import (
     bind_saved_planar_geometry,
 )
-from scgsim.aedt.runtime.native.hfss_lumped import bind_saved_generic_rlcs
 from scgsim.aedt.runtime.native.saved_geometry import read_saved_junction_lines
 from scgsim.aedt.specs.common import AedtResources
 from scgsim.aedt.specs.hfss import (
@@ -181,7 +180,6 @@ class _SavedFieldAnalysis:
             self.geometry,
             surface_field_selectors=self.spec.surface_field_selectors,
         )
-        bind_saved_generic_rlcs(self.app, self.spec.geometry, self.geometry)
         read_saved_junction_lines(
             self.app,
             self.project_path,
@@ -574,7 +572,6 @@ def collect_batch_epr(Hfss, run_dir, spec, prepared_receipt):
         raise RuntimeError("returned batch design identity differs")
     geometry = bind_saved_planar_geometry(app, spec.geometry)
     bind_saved_analysis_surfaces(app, spec.geometry, geometry)
-    bind_saved_generic_rlcs(app, spec.geometry, geometry)
     read_saved_junction_lines(
         app, project_path, spec.design_name, spec.geometry, geometry
     )

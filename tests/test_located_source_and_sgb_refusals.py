@@ -39,7 +39,6 @@ from scgsim.geometry.source.occurrence import (
     gds_polygons_for_entity,
     occurrence_ground_polygons_for_entity,
     occurrence_include_polygon,
-    occurrence_lumped_polygon,
 )
 from scgsim.geometry.source.occurrence_validation import (
     validate_ground_contribution_ownership,
@@ -209,31 +208,6 @@ def test_a_stack_port_selector_that_misses_is_located():
     assert "Fix the layout or the declaration: draw the port's sheet" in message
     at, extent = places(message)
     assert on(at, point(10, 10)) and on(extent, (1, 1, 3, 3))
-
-
-# ------------------------------------------------------------------ lumped supports
-
-
-def test_a_lumped_support_no_drawn_polygon_matches_is_located_in_the_layout():
-    """The authored ring (0, 0)..(2, 1) um of a component placed at (100, 50) um matches no polygon."""
-    cell = gdstk.Cell("device")
-    cell.add(gdstk.rectangle((0, 0), (2, 2), layer=9))
-    support = SimpleNamespace(
-        support_id="jj",
-        exterior=rectangle(0, 0, 2, 1),
-        holes=(),
-        source_layer=(9, 0),
-        source_polygon_id="jj_sheet",
-    )
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
-        occurrence_lumped_polygon(support, cell=cell, transform=PLACED)
-    message = str(error.value)
-    assert message.startswith(
-        "lumped support 'jj' matched 0 source polygons: jj on layer 9/0"
-    )
-    assert "Fix the declaration or the layout: give the lumped support" in message
-    (place,) = places(message)
-    assert on(place, (100, 50, 102, 51)) and on((100, 50, 102, 51), place)
 
 
 # -------------------------------------------------------------------------- Grounds

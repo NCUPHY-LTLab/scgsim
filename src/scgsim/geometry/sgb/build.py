@@ -28,6 +28,7 @@ from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, RefinementReq
 from scgsim.geometry.sgb.emission.plan import BrepPlan, plan_brep
 from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file
 from scgsim.geometry.sgb.model import ConformalModel, build_conformal_model
+from scgsim.geometry.sgb.routes.policy import RoutePolicy
 from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar
 from scgsim.geometry.sgb.sidecar.files import write_sidecar
 from scgsim.geometry.sgb.slivers.report import sliver_report
@@ -57,7 +58,7 @@ def build_sgb_geometry(  # noqa: PLR0913 - the effective input, the route and th
     build_input: GeometryBuildInput,
     representation: RepresentationContext,
     *,
-    route: str,
+    route: str | RoutePolicy,
     insets: tuple[InsetRequest, ...] = (),
     refinements: tuple[RefinementRequest, ...] = (),
     output_dir: Path,

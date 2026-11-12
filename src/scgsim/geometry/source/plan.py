@@ -20,7 +20,6 @@ from scgsim.geometry.models.input import (
     VacuumRegionSpec,
 )
 from scgsim.geometry.models.junctions import RectangularJunctionSpec
-from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.primitives.grid import source_recipe_map
 from scgsim.geometry.primitives.grid_cache import with_grid_work_cache
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
@@ -39,7 +38,6 @@ from scgsim.geometry.source.occurrence import (
     failed_source_recipe,
     occurrence_ground_polygons_for_entity,
     occurrence_include_polygon,
-    occurrence_lumped_polygon,
     occurrence_polygons_for_entity,
     occurrence_port_polygon,
     run_source_recipe,
@@ -136,11 +134,6 @@ class GeometryPlanSnapshot:
         """Return detached occurrence identity and transform records."""
         return copy.deepcopy(self._source_occurrences)
 
-    @property
-    def lumped_supports(self) -> tuple[LumpedSupport, ...]:
-        """Return the snapshot's detached lumped-support records."""
-        return copy.deepcopy(self._geometry_input.lumped_supports)
-
 
 @dataclass(frozen=True)
 class _WrittenGeometrySource:
@@ -192,7 +185,6 @@ class GeometryPlan:
         self._vacuum_region: VacuumRegionSpec | None = None
         self._boundary_curves = ()
         self._boundary_reconstruction = ()
-        self._lumped_supports = ()
         self._rectangular_junctions = ()
 
     def set_rectangular_junctions(self, specs) -> None:
@@ -205,15 +197,6 @@ class GeometryPlan:
             if len(set(identities)) != len(identities):
                 raise ValueError(f"duplicate rectangular junction {field}")
         self._rectangular_junctions = requests
-
-    def set_lumped_supports(self, supports: Sequence[LumpedSupport]) -> None:
-        """Bind caller-declared local nonmetal supports; no excitation is inferred."""
-        records = tuple(supports)
-        if any(not isinstance(record, LumpedSupport) for record in records):
-            raise TypeError("lumped supports must be LumpedSupport records")
-        if len({record.support_id for record in records}) != len(records):
-            raise ValueError("lumped support IDs must be unique")
-        self._lumped_supports = records
 
     def set_boundary_curves(self, boundaries) -> None:
         """Bind explicitly authored curves in assembled source coordinates."""
@@ -405,8 +388,7 @@ class GeometryPlan:
             with diagnostic_stage("geometry.source.extract_ports"):
                 self._extract_source_ports(stack, source)
             build_input = self._lower_stack(stack, source)
-            lumped_supports = self._resolve_lumped_supports(build_input, source)
-        return self._assemble_snapshot(build_input, stack, source, lumped_supports)
+        return self._assemble_snapshot(build_input, stack, source)
 
     def _validated_stack(self) -> dict[str, Any]:
         stack = self._stack()
@@ -622,72 +604,11 @@ class GeometryPlan:
                 grid_size_um=self._grid_size_um,
             )
 
-    def _resolve_lumped_supports(
-        self, build_input: GeometryBuildInput, source: _WrittenGeometrySource
-    ) -> list[LumpedSupport]:
-        lumped_supports = []
-        entities = {entity.semantic_id: entity for entity in build_input.entities}
-        for support in self._lumped_supports:
-            path = support.source_occurrence_path
-            if path not in self._instances:
-                raise ValueError(
-                    f"lumped support occurrence {path!r} is not registered"
-                )
-            cell, _, transform = self._instances[path]
-            if support.source_level not in self._layer_stack.layers:
-                raise ValueError(
-                    f"lumped support level {support.source_level!r} is not declared"
-                )
-            level = self._layer_stack.layers[support.source_level]
-            from gdsfactory.pdk import get_layer_tuple  # noqa: PLC0415 - needed only for authored lumped supports
-
-            if get_layer_tuple(level.layer.layer) != support.source_layer:
-                raise ValueError("lumped support source level/layer binding differs")
-            source_z_um = float(level.zmin)
-            if support.source_z_um is not None and support.source_z_um != source_z_um:
-                raise ValueError(
-                    "lumped support source plane differs from locator Level"
-                )
-            if any(point[2] != source_z_um for point in support.contact_points_um):
-                raise ValueError("lumped support contacts differ from locator plane")
-            for entity_id in (
-                *support.terminal_a_entity_ids,
-                *support.terminal_b_entity_ids,
-            ):
-                if (
-                    entity_id not in entities
-                    or entities[entity_id].material_kind != "conductor"
-                ):
-                    raise ValueError(
-                        f"lumped support terminal Entity {entity_id!r} is not a conductor"
-                    )
-                if entities[entity_id].net_id is None:
-                    raise ValueError(
-                        f"lumped support terminal Entity {entity_id!r} lacks final Net ownership"
-                    )
-            polygon = occurrence_lumped_polygon(
-                support,
-                cell=source.source_cells[cell.name],
-                excluded_reference_indexes=source.child_reference_indexes[path],
-                transform=transform,
-            )
-            lumped_supports.append(
-                replace(
-                    support,
-                    exterior=polygon.exterior,
-                    holes=polygon.holes,
-                    source_transform=transform,
-                    source_z_um=source_z_um,
-                )
-            )
-        return lumped_supports
-
     def _assemble_snapshot(
         self,
         build_input: GeometryBuildInput,
         stack: dict[str, Any],
         source: _WrittenGeometrySource,
-        lumped_supports: list[LumpedSupport],
     ) -> GeometryPlanSnapshot:
         # The source remains self-contained after its temporary files disappear.
         metadata = dict(build_input.metadata)
@@ -751,7 +672,6 @@ class GeometryPlan:
             metadata=metadata,
             boundary_curves=tuple(boundary_curves),
             boundary_reconstruction=tuple(reconstruction),
-            lumped_supports=tuple(lumped_supports),
         )
         # Reconstruction indices name rings as drawn in the GDS; the source stage has
         # since fused, rounded and noded them, so each polygon keeps its drawn rings.

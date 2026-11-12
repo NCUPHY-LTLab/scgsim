@@ -21,7 +21,6 @@ from scgsim.geometry.primitives.grid import (
     preserve_declared_source,
     source_place,
     source_refusal,
-    split_gdstk_cutline_loop,
 )
 from scgsim.geometry.source.ground import derived_ground_polygons
 from scgsim.geometry.source.normalization import gds_layer
@@ -652,61 +651,6 @@ def occurrence_port_polygon(
         exterior=ring_from_gdstk_polygon(selected[0]),
     )
     return _occurrence_polygon_record(local, transform)
-
-
-def _lumped_ring_identity(ring):
-    """Exact source ring identity, independent only of start and traversal."""
-    points = tuple(tuple(point) for point in ring)
-    if points[0] == points[-1]:
-        points = points[:-1]
-    reverse = tuple(reversed(points))
-    return min(
-        order[index:] + order[:index]
-        for order in (points, reverse)
-        for index in range(len(order))
-    )
-
-
-def occurrence_lumped_polygon(
-    support, *, cell, excluded_reference_indexes=(), transform=(1, 0, 0, 1, 0, 0)
-):
-    """Bind the complete authored local ring to actual original GDS geometry.
-
-    ``transform`` places the occurrence in the layout, where a refusal locates the ring.
-    """
-
-    declared = (
-        _lumped_ring_identity(support.exterior),
-        sorted(_lumped_ring_identity(ring) for ring in support.holes),
-    )
-    selected = []
-    for polygon in read_polygons_by_layer(
-        cell, excluded_reference_indexes=excluded_reference_indexes
-    ).get(support.source_layer, ()):
-        exterior, holes = split_gdstk_cutline_loop(ring_from_gdstk_polygon(polygon))
-        local = LayoutPolygonSpec(support.source_polygon_id, "", exterior, holes)
-        actual = (
-            _lumped_ring_identity(exterior),
-            sorted(_lumped_ring_identity(ring) for ring in holes),
-        )
-        if actual == declared:
-            selected.append(local)
-    if len(selected) != 1:
-        layer = f"{support.source_layer[0]}/{support.source_layer[1]}"
-        with polygon_world_frame(transform), named_source(support.support_id, layer):
-            raise ValueError(
-                source_refusal(
-                    f"lumped support {support.support_id!r} matched {len(selected)} "
-                    "source polygons",
-                    [
-                        f"its authored ring lies at {source_place(support.exterior)}, and "
-                        f"{len(selected)} polygons drawn on the layer have exactly that outline"
-                    ],
-                    "Fix the declaration or the layout: give the lumped support the exact "
-                    "outline and holes of one polygon drawn on its layer.",
-                )
-            )
-    return selected[0]
 
 
 def occurrence_include_polygon(

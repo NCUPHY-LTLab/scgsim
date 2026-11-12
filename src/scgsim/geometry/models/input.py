@@ -17,7 +17,6 @@ from scgsim.geometry.models.common import (
     PolygonRing,
     RouteLiteral,
 )
-from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 
 
@@ -406,4 +405,3 @@ class GeometryBuildInput:
     port_sheet_regions: tuple[PortSheetRegionRecord, ...] = ()
     boundary_curves: tuple[BoundaryCurveChainSpec, ...] = ()
     boundary_reconstruction: tuple[GdsBoundaryReconstructionSpec, ...] = ()
-    lumped_supports: tuple[LumpedSupport, ...] = ()

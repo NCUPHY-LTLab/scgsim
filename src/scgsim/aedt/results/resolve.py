@@ -35,7 +35,6 @@ from scgsim.aedt.results.receipt_validation import (
     validate_completion_cohort,
     verified,
 )
-from scgsim.aedt.results.terminal_readback import validate_lumped_readback
 from scgsim.aedt.runtime.batch_protocol import CollectionContext, collection_source
 from scgsim.aedt.runtime.benchmark import BENCHMARK_RELATIVE
 from scgsim.aedt.specs.common import MatrixRunControl
@@ -439,7 +438,6 @@ def _validate_result_family(
         raise RuntimeError("AEDT receipt mode is invalid")
     result_mode = cast(Literal["terminal", "modal", "eigenmode", "q3d", "q2d"], mode)
     if isinstance(spec, HfssEprSpec):
-        validate_lumped_readback(receipt, spec.geometry)
         if spec.lumped_rlcs:
             validate_eigenmode_readback(receipt, spec)
         if receipt.get("workflow_status") != "completed":

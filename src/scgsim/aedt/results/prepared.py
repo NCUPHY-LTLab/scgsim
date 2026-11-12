@@ -17,7 +17,6 @@ from scgsim.aedt.preparation.cohort import validate_geometry_source
 from scgsim.aedt.results.hfss_readback import (
     validate_hfss_pec_bindings,
     validate_hfss_setup,
-    validate_lumped_readback,
     validate_modal_native_evidence,
 )
 from scgsim.aedt.results.provenance import RECEIPT_V3, SOURCE_SCHEMA_V19
@@ -260,7 +259,6 @@ def _validate_body_first_source(context: PreparedModelContext) -> None:
     ):
         raise RuntimeError("prepared model planar source identity differs")
     _validate_planar_model(receipt, spec.geometry)
-    validate_lumped_readback(receipt, spec.geometry)
     if isinstance(spec, HfssDrivenGeometrySpec):
         ports = receipt.get("ports")
         if not isinstance(ports, list) or len(ports) != len(spec.ports):

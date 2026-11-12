@@ -23,6 +23,13 @@ today's contract, ``planning.representation.validate_selected_route`` with
   sheets are rejected.  Lumped-port sheets are accepted and represented as in Route B: a face of
   the interface in the gap at the support plane whose edges are shared with the conductor walls.
 
+A fourth policy, :data:`ROUTE_A_RETAINED_BODIES`, is Route A for AEDT (issue #67 decision 8): films are
+sheets as in Route A, and the finite bodies are *retained* as conductor volumes, as in Route C, so AEDT
+imports them as PEC solids.  Physically a PEC solid is the same as an excluded volume with a PEC surface.
+Its route name stays ``A``; the sidecar's ``route_policy.conductor_volumes`` record says ``retained``.  The
+faces and their groups are those of Route A: labelling reads only the face structure, and emitting a
+volume changes which faces bound an emitted volume, never their names.
+
 Route is an early input: it changes which volumes are emitted and which primary group a face
 joins, never the arrangement or assembly algorithms.
 """
@@ -65,11 +72,16 @@ ROUTE_C = RoutePolicy(
     allows_sheets=False,
     rejects_finite_films=False,
 )
+ROUTE_A_RETAINED_BODIES = RoutePolicy(
+    "A", exclude_conductor_volumes=False, allows_sheets=True, rejects_finite_films=True
+)
 ROUTES = {"A": ROUTE_A, "B": ROUTE_B, "C": ROUTE_C}
 
 
-def route_policy(name: str) -> RoutePolicy:
-    """The policy of a route name; an unknown route is an error."""
+def route_policy(name: str | RoutePolicy) -> RoutePolicy:
+    """The policy of a route name, or ``name`` itself when it is a policy; an unknown route is an error."""
+    if isinstance(name, RoutePolicy):
+        return name
     try:
         return ROUTES[name]
     except KeyError:

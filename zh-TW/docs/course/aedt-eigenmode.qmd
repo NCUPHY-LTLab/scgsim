@@ -7,7 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-eigenmode"
 ---
 
-在同一工作階段接續[CPW 輸入](aedt-inputs.qmd)。一般 HFSS Eigenmode 不使用驅動激發埠，而是透過明確的自適應設定搜尋指定模態；名稱中有 Eigenmode，不代表它會建立 source-first Surface-EPR 目錄或儲存場分析請求。Eigenmode API 可透過 `EigenmodeSim.add_lumped_rlc()` 加入一般線性 RLC 模型元件。這與 Josephson 接面不同：它不會建立 `PlanarJunction`、接面參與量或 EPR 貢獻。負載儲存在 `PreparedPlanarGeometry.lumped_rlcs`；`HfssEprSpec` 會投影已準備的值，不會成為第二個可編輯來源。EPR 接面契約仍獨立處理。輸入頁面的等 Z M1 對應是歷史上的薄片請求。目前的 Thin Film 範例新增 CPW 來源擁有者明確指定的 `NB_FILM` 區間與下方接觸側，以保留既有薄片平面；這不表示 c997 已包含此宣告。
+在同一工作階段接續[CPW 輸入](aedt-inputs.qmd)。一般 HFSS Eigenmode 不使用驅動激發埠，而是透過明確的自適應設定搜尋指定模態；名稱中有 Eigenmode，不代表它會建立 source-first Surface-EPR 目錄或儲存場分析請求。Eigenmode API 可透過 `EigenmodeSim.add_lumped_rlc()` 加入一般線性 RLC 模型元件。這與 Josephson 接面不同：它不會建立 `PlanarJunction`、接面參與量或 EPR 貢獻。每個負載指名它所在的埠片（`port_sheet_id`），儲存在模型的 `lumped_rlcs`；`HfssEprSpec` 會投影已準備的值，不會成為第二個可編輯來源。EPR 接面契約仍獨立處理。輸入頁面的等 Z M1 對應是歷史上的薄片請求。目前的 Thin Film 範例新增 CPW 來源擁有者明確指定的 `NB_FILM` 區間與下方接觸側，以保留既有薄片平面；這不表示 c997 已包含此宣告。
 
 ```python
 from pathlib import Path

@@ -136,7 +136,7 @@ Tile seam 不是 family，所以沒有 `dissolve` edge 政策；`dissolve` 這�
 |---|---|
 | 輸入 | topology、route 政策 |
 | 輸出 | 哪些 volume 要輸出（Route A 與 B 排除 conductor volume；Route C 保留它們）、每個 face 與 volume 的 primary group（`RoutedModel`） |
-| Record | `RoutePolicy`（`name`、`exclude_conductor_volumes`、`allows_sheets`、`rejects_finite_films`）；Route A、B、C 各是一個常數 |
+| Record | `RoutePolicy`（`name`、`exclude_conductor_volumes`、`allows_sheets`、`rejects_finite_films`）；Route A、B、C 各是一個常數，另有 AEDT 用的 `ROUTE_A_RETAINED_BODIES`（Route A 的 sheet，有限導體 body 保留為 volume，issue #67 decision 8） |
 | 平行單位 | face 或 volume（label 規則） |
 | 失敗 | `RouteError`（route check，在任何 arrangement 之前）；refinement curve 落在沒有輸出 volume 的 face 時 `SgbError` |
 :::

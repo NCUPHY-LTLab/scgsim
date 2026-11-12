@@ -245,11 +245,14 @@ New handoffs retain `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`. Both records add
 `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
 V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v29` manifest for the current source, with 285 sorted, unique
-paths. V29 starts from all current AEDT modules, both AEDT visualization loaders,
-and the non-AEDT paths retained from V28, then follows AST-resolved imports and
-package initializers. It adds `scgsim/geometry/planning/junction_planning/lattice.py`
-to the frozen 284-path V28 roster. The fields are `schema_version`, `stage`,
+`runtime-source.v30` manifest for the current source, with 401 sorted, unique
+paths. V30 starts from all current AEDT modules, both AEDT visualization loaders,
+and the non-AEDT paths retained from V29 except `scgsim/geometry/models/lumped.py`, then follows AST-resolved imports and
+package initializers. Against the frozen 285-path V29 roster it adds the AEDT SGB STEP import
+(`scgsim/aedt/preparation/sgb_model.py`, `scgsim/aedt/runtime/families/sgb_import.py`,
+`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/runtime/families/sgb_boundaries.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
+drops `scgsim/aedt/runtime/native/hfss_lumped.py`, `scgsim/aedt/specs/support.py`
+and `scgsim/geometry/models/lumped.py`, which issue #67 decision 8 removed. The fields are `schema_version`, `stage`,
 `modules`, `content_sha256`, and `revision_observation`; there is no helper-hash
 map. Each declared module has measured bytes and the content digest binds that
 inventory. The Git observation is either available with the actual 40-hex
@@ -281,8 +284,8 @@ partial markers, noncanonical members, and hash mismatches reject before
 receipt mutation.
 
 Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v29` and a content digest for the code that actually executed
-it. Declared module bytes and the digest are mandatory; V29 has no redundant
+`runtime-source.v30` and a content digest for the code that actually executed
+it. Declared module bytes and the digest are mandatory; V30 has no redundant
 helper-hash fields. `revision_observation` carries the actual 40-hex commit
 when available and records `unavailable` truthfully for an immutable wheel
 without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
@@ -301,7 +304,7 @@ These unsigned consistency checks do not authenticate an artifact set against
 an actor able to rewrite every member.
 
 `runtime-source.v1` is a frozen thirteen-module reader contract, not a live
-enumeration rule. The V2–V28 inventories retain their original module paths as well. V4 added
+enumeration rule. The V2–V29 inventories retain their original module paths as well. V4 added
 `scgsim/aedt/_presentation.py`; V5 added `scgsim/sgb/geometry_plan.py` and
 `scgsim/sgb/__init__.py`. V7 added
 `scgsim/_notebook_presentation.py` to V6. V8 added
@@ -330,9 +333,11 @@ EPR-expression, result-reader, and shared geometry modules after responsibility
 splits. V27 freezes 283 sorted, unique paths, seeded by 118 AEDT modules, both
 AEDT visualization loaders, and the retained non-AEDT paths, then closed over
 AST-resolved imports and package initializers. V28 freezes 284 paths; it
-adds `scgsim/geometry/primitives/topology_validation.py` to V27. V29 is current
-with 285 paths; it adds `scgsim/geometry/planning/junction_planning/lattice.py` to V28.
-V23–V29 use the
+adds `scgsim/geometry/primitives/topology_validation.py` to V27. V29 freezes
+285 paths; it adds `scgsim/geometry/planning/junction_planning/lattice.py` to V28.
+V30 is current with 401 paths; it adds the AEDT SGB STEP import and the SGB
+modules it imports to V29, and drops the three modules issue #67 decision 8
+removed. V23–V30 use the
 same five record fields described above, with no helper-hash map. Each
 version's exact path list is its declared implementation inventory. These
 manifests bind their declared file inventories, not an exhaustive transitive
@@ -346,7 +351,7 @@ historical hashes with the installed package.
 
 Execution computes mandatory runtime-source provenance inside the receipt-bound
 failure transaction, before importing PyAEDT or constructing Desktop. Current
-V29 may record `revision_observation` as unavailable; that alone does not fail
+V30 may record `revision_observation` as unavailable; that alone does not fail
 byte-bound identity or prevent execution. Missing or corrupt declared module
 bytes, digest, schema, or cohort still yield a failed V3 receipt without a
 Desktop launch rather than escaping receipt finalization. V1–V17 retain their
@@ -373,31 +378,48 @@ uses the separate `run_control=None` path described above.
 | Q3D | explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; real Signal source/sink pairs for AC/RL; terminal-free C/G is supported; optional exact six-face Region ground seal; complete family controls for solving | native capacitance and, when enabled, resistance/inductance matrices |
 | Q2D | explicit cross-section geometry and conductor/reference assignments | per-unit-length capacitance/conductance and resistance/inductance matrices |
 
-### Shared lumped support and terminal RLC {#hfss-shared-lumped-support}
+### Lumped port sheets and terminal RLC {#hfss-shared-lumped-support}
 
 This HFSS lumped-element support adds generic circuit
 elements while preserving the existing Wave Terminal and Josephson-junction
 contracts.
 
-`LumpedSupport` and `set_lumped_supports()` declare source-backed support
-geometry in the caller's model snapshot. The body-first workflow uses
-`HfssDrivenGeometrySpec` with `mode="terminal"` and schema
-`hfss-driven-geometry.v1`, through `prepare_hfss_driven_from_geometry()`.
-`body_first_driven_terminal` names the preparation workflow, not the spec mode.
-The geometry request carries no RLC field. Existing Wave
-`TerminalPort.signal_entity_ids` remains optional in
+`LumpedRlc` and `LumpedTerminalPort` name a `port_sheet_id`: a port sheet of
+the plan, which the SGB model carries as the `PORT::<port_sheet_id>` group, as
+Palace's lumped elements do (issue #67 decision 8). There is no separate
+support record. `prepare_sgb_model()` binds each one to its group and refuses
+a name the model has no group for, and a port sheet that a junction, an RLC
+or a lumped port share. The native planar builder has no port sheets, so it
+refuses both records. The body-first workflow uses `HfssDrivenGeometrySpec`
+with `mode="terminal"` and schema `hfss-driven-geometry.v1`, through
+`prepare_hfss_driven_from_geometry()`. `body_first_driven_terminal` names the
+preparation workflow, not the spec mode. The geometry request carries no RLC
+field. Existing Wave `TerminalPort.signal_entity_ids` remains optional in
 legacy payloads; it is required when using the body-first route, whose
 frontend declares the Signal and references explicitly. The legacy GDS
 reference binding is unchanged.
 
-Keep a source metal body distinct from a nonmetal support/locator sheet. The
-locator's actual nonmetal `source_level` determines its plane; the separate
-`contact_physical_layer_id` binds the M1 physical contact and effective Z. Do
-not infer a film thickness from a material name or hard-code 100 nm.
+In the SGB flow, the HFSS import puts each `LumpedRlc` on its port face the
+same way as a junction: one Lumped RLC on the imported face, with the current
+line joining the midpoints of that face's own edges at both ends along the
+sidecar `direction`. Every port sheet must carry a junction or an RLC. The
+SGB flow refuses a Driven wave `TerminalPort` and a Driven Modal port, with a
+message naming NCUPHY-LTLab/scgsim#135; until that Issue lands, AEDT Driven
+wave and modal runs are not available once the native builder is removed. The
+import also refuses lumped Terminal ports until the SGB flow sets up a Driven
+Terminal design.
+
+In AEDT, `modeling="thin_film"` builds Route A with its finite bodies (bumps,
+posts) retained as conductor solids (`ROUTE_A_RETAINED_BODIES`; the sidecar's
+`route_policy.conductor_volumes` is `retained`), and the import makes them
+PEC, the same way a Route B request is built as Route C. A sheet face that
+such a body stands on imports on the body and on the substrate; its
+Surface-EPR rows read the substrate's copy, the copy it has when the body is
+excluded.
 
 `TerminalPort` remains the existing Wave-port input. `LumpedTerminalPort` is a
-separate Driven Terminal input with explicit support, terminal and reference
-assignment and a required `impedance_ohm`. It has no RLC-network field. A value
+separate Driven Terminal input with an explicit port sheet, terminal and
+reference assignment and a required `impedance_ohm`. It has no RLC-network field. A value
 such as 50 ohm is an operation input, not a package default. There is no
 conversion from a Lumped request to a Wave port.
 
@@ -431,9 +453,8 @@ conversion. Zero remains enabled, and finite negative values are preserved.
 Historical generic RLC payloads containing nonfinite values are rejected by
 current constructors, including payload decoding. This restriction applies
 only to these generic RLC components, not to other circuit or EPR quantities.
-The single source of these loads is
-`PreparedPlanarGeometry.lumped_rlcs`. `EigenmodeSim.add_lumped_rlc()` adds to
-that model-owned collection; `HfssEprSpec` only projects the prepared list and
+`EigenmodeSim.add_lumped_rlc()` adds to the model-owned collection, one
+treatment per port sheet; `HfssEprSpec` only projects the prepared list and
 does not introduce a second editable copy. The model-source hash includes the
 RLC records. This generic linear network is not a Josephson junction and does
 not create a `PlanarJunction`, junction participation, or an EPR contribution.

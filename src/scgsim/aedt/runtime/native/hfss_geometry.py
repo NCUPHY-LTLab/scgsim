@@ -38,28 +38,6 @@ from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 from scgsim.geometry.planning.junction_partition import junction_terminal_line
 
 
-def _native_lumped_supports(
-    app: Any, prepared: PreparedPlanarGeometry, *, saved: bool = False
-) -> list[dict[str, Any]]:
-    """Bind neutral authored supports without inventing conductor electrodes."""
-    records = []
-    for support in prepared.source.get("lumped_supports", ()):
-        value = detached(support)
-        effective = value["effective"]
-        name = native_name("lumped_support", value["support_id"])
-        if saved:
-            obj = app.modeler[name]
-        else:
-            obj = polygon_sheet(app, effective, name=name, z_um=effective["z_um"])
-        evidence = native_object_evidence(app, name)
-        if evidence["native_object_type"] != "Sheet" or len(obj.faces) != 1:
-            raise RuntimeError(
-                f"neutral support is not one native Sheet face: {value['support_id']!r}"
-            )
-        records.append({**value, **evidence, "object_name": obj.name})
-    return records
-
-
 def native_conductor_objects(
     prepared: PreparedPlanarGeometry,
     native: Mapping[str, Any],
@@ -162,11 +140,6 @@ def prepare_native_planar_geometry(
         **prepared_modeling_identity(prepared),
         "source_sha256": prepared.source_sha256,
         "objects": bindings,
-        **(
-            {"lumped_supports": _native_lumped_supports(app, prepared)}
-            if source.get("lumped_supports")
-            else {}
-        ),
         "junctions": junction_bindings,
         "surface_selections": surface_selections,
         "material_readback": material_readback,
@@ -246,11 +219,6 @@ def bind_saved_planar_geometry(
         **prepared_modeling_identity(prepared),
         "source_sha256": prepared.source_sha256,
         "objects": objects,
-        **(
-            {"lumped_supports": _native_lumped_supports(app, prepared, saved=True)}
-            if source.get("lumped_supports")
-            else {}
-        ),
         "junctions": junctions,
         "surface_selections": selections,
         "material_readback": material_readback(app, native_solution_materials(source)),

@@ -22,7 +22,6 @@ from scgsim.geometry.models.junctions import (
     JunctionTerminalBinding,
     RectangularJunctionSpec,
 )
-from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalLayerDeclaration,
@@ -61,7 +60,6 @@ __all__ = [
     "GeometryPlanSnapshot",
     "InputSummary",
     "LayoutPolygonSpec",
-    "LumpedSupport",
     "PathInput",
     "PolygonRing",
     "PortSheetOverlapRecord",

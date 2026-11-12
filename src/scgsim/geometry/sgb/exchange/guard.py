@@ -12,8 +12,9 @@ writes, beside the STEP, a guard file the importer reads again before it assigns
   face is identified by centre, area and vertices; a curved one by its vertices, because PyAEDT reports a
   vertex centroid, not a centre of mass, for a curved face.  Both centres are kept so neither stands in for
   the other.
-* **Free faces.**  Faces of the model that bound no exported solid (a Route A sheet with no solid on either
-  side, a port sheet that is not on a support plane).  STEP cannot carry them at micrometre scale (E4), so
+* **Free faces.**  Conductor-sheet and lumped-port faces that bound no exported solid (a Route A sheet with
+  vacuum on both sides, a port sheet that is not on a support plane; the vacuum itself is not exported).
+  STEP cannot carry them at micrometre scale (E4), so
   the guard keeps their loops as read from the written BREP -- lines and three-point circular arcs -- for the
   importer to rebuild them from SGB output, never from the layout source.
 
@@ -176,7 +177,7 @@ def guard_mismatches(
 ) -> list[str]:
     """How the guarded solids and free faces disagree with the sidecar they were exported from; empty when they agree.
 
-    The solids must be distinct planned solids in tag order, each with its sidecar ``aedt_name`` and exactly
+    The solids must be exactly :func:`exported_solid_ids`, distinct and in tag order, each with its sidecar ``aedt_name`` and exactly
     its planned faces (``expected.solid_faces``), each face listed once and flagged ``curved`` exactly when it
     is one of the sidecar's ``curved_wall_faces``.  The free faces must be exactly :func:`free_face_ids` of
     those solids, in tag order, each with its sidecar group.
@@ -200,6 +201,12 @@ def guard_mismatches(
     mismatches = []
     if tags != sorted(set(tags)):
         mismatches.append("the solids are not distinct planned solids in tag order")
+    listed = [s["solid"] for s in solids]
+    if sorted(listed) != sorted(exported_solid_ids(sidecar)):
+        mismatches.append(
+            f"the solids are {listed}, the solids AEDT imports (all but the vacuum) are "
+            f"{exported_solid_ids(sidecar)}"
+        )
     planned = _PlannedFaces.of(sidecar)
     for solid in solids:
         mismatches += _solid_mismatches(solid, sidecar, planned)
@@ -209,13 +216,45 @@ def guard_mismatches(
     return mismatches
 
 
+def exported_solid_ids(sidecar: dict[str, Any]) -> list[str]:
+    """The planned solids the STEP carries, in tag order: every emitted solid but the vacuum.
+
+    AEDT creates its own Region from the same vacuum declaration, so the vacuum solid is not exported.
+    """
+    return [
+        vid
+        for vid in sidecar["binding"]["ids_by_tag"]["3"]
+        if sidecar["volumes"][vid]["kind"] != "vacuum"
+    ]
+
+
 def free_face_ids(sidecar: dict[str, Any], solid_ids: Sequence[str]) -> list[str]:
-    """The faces of the model that bound none of ``solid_ids``, in tag order: the faces the guard keeps as loops."""
+    """The faces the guard keeps as loops, in tag order: conductor-sheet and lumped-port faces bounding none of ``solid_ids``.
+
+    Such a face (a sheet with vacuum on both sides) must be rebuilt by the importer.  Every other face that
+    bounds no exported solid lies between vacuum and vacuum or on the vacuum's outer boundary, which the
+    importer's native Region replaces, so it is not kept.
+    """
     tag_of = _tags(sidecar["binding"]["ids_by_tag"]["3"])
     solid_faces = sidecar["expected"]["solid_faces"]
     bounding = {tag for vid in solid_ids for tag in solid_faces[tag_of[vid] - 1]}
     face_ids = sidecar["binding"]["ids_by_tag"]["2"]
-    return [fid for tag, fid in enumerate(face_ids, start=1) if tag not in bounding]
+    rebuilt = _rebuilt_groups(sidecar)
+    return [
+        fid
+        for tag, fid in enumerate(face_ids, start=1)
+        if tag not in bounding and sidecar["faces"][fid]["group"] in rebuilt
+    ]
+
+
+def _rebuilt_groups(sidecar: dict[str, Any]) -> set[str]:
+    """The groups whose faces AEDT needs as objects: conductor sheets and lumped-port sheets."""
+    sheets = {
+        name
+        for name, group in sidecar["physical_groups"].items()
+        if group.get("interface_type") == "SHEET"
+    }
+    return sheets | {port["group"] for port in sidecar["ports"]}
 
 
 def _solid_mismatches(

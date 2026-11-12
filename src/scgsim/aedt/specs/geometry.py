@@ -10,11 +10,14 @@ from scgsim.aedt.data import canonical_sha256, detached, freeze
 from scgsim.aedt.specs.common import LumpedRlc
 from scgsim.aedt.specs.epr import PlanarJunction, SurfaceEprSpec
 from scgsim.aedt.specs.modeling import native_physical_record
-from scgsim.aedt.specs.support import prepared_lumped_supports
-from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import PLAN_SCHEMA, PhysicalRepresentationPlan
 
 Route = Literal["A", "B"]
+
+NATIVE_LUMPED_REFUSAL = (
+    "LumpedRlc and LumpedTerminalPort name a port sheet, which only the SGB model "
+    "(prepare_sgb_model) realizes; the native planar builder has none (issue #67 decision 8)"
+)
 
 
 @dataclass(frozen=True)
@@ -116,25 +119,16 @@ class PreparedPlanarGeometry:
                         "prepared conductor representation differs from the neutral plan"
                     )
         if "lumped_supports" in source:
-            supports = tuple(
-                LumpedSupport.from_payload(item["source"])
-                for item in source["lumped_supports"]
+            raise ValueError(
+                "lumped supports were removed by issue #67 decision 8; prepare the model again"
             )
-            derived = prepared_lumped_supports(supports, source)
-            if detached(source["lumped_supports"]) != derived:
-                raise ValueError(
-                    "serialized effective support geometry differs from its source map"
-                )
         return source
 
     def _validate_support_links(
         self, source: Mapping[str, Any], rlcs: tuple[LumpedRlc, ...]
     ) -> None:
-        support_ids = {item["support_id"] for item in source.get("lumped_supports", ())}
-        if any(item.support_id not in support_ids for item in rlcs):
-            raise ValueError("RLC treatment references an undeclared neutral support")
-        if len({item.support_id for item in rlcs}) != len(rlcs):
-            raise ValueError("one support cannot own multiple RLC treatments")
+        if rlcs:
+            raise ValueError(NATIVE_LUMPED_REFUSAL)
 
     def _store_normalized_records(
         self,

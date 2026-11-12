@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -533,6 +533,7 @@ def geometry_plan_electrodes(monkeypatch, *, gap_um: float = 10.0) -> EffectiveI
 JUNCTION_SHEET = ((0, 0), (10, 0), (10, 2), (0, 2))
 JUNCTION_LEFT = ((-2, 0), (3, 0), (3, 1), (2, 1), (2, 2), (-2, 2))
 JUNCTION_RIGHT = ((7, 0), (12, 0), (12, 2), (8, 2), (8, 1), (7, 1))
+JUNCTION_BUMP_LOOP = ((-1.5, 0.5), (0.5, 0.5), (0.5, 1.5), (-1.5, 1.5))
 JUNCTION_GRID_UM = 0.5
 
 
@@ -541,6 +542,22 @@ def rectangular_junction_pair() -> EffectiveInput:
 
     The junction partition replaces the authored sheet by its central rectangle, which touches the
     two terminal-owned end polygons; the thin-film profile makes both terminals Route-A sheets.
+    """
+    source, stack = rectangular_junction_source()
+    effective, _, plan = interpret_physical_geometry(
+        source, stack, ApproximationProfile("thin_film", "v1", {})
+    )
+    return EffectiveInput(effective, plan.context)
+
+
+def rectangular_junction_source(
+    vacuum: str = "upper_air", *, bump: bool = False
+) -> tuple[GeometryBuildInput, dict[str, Any]]:
+    """The source and stack of :func:`rectangular_junction_pair` before physical interpretation.
+
+    ``vacuum`` names the vacuum region above the metals (``VACUUM_REGION`` for an AEDT model, whose
+    Region is that box).  With ``bump`` a 2.75 um tall ``finite_volume`` body of Net ``A`` stands on the
+    left film (:data:`JUNCTION_BUMP_LOOP`): a finite body that is not a film.
     """
     declaration = PhysicalLayerDeclaration(
         "film",
@@ -564,7 +581,7 @@ def rectangular_junction_pair() -> EffectiveInput:
             part_role="face_metal",
             net_id=net,
             polygon_ids=(name,),
-            host_void_semantic_id="upper_air",
+            host_void_semantic_id=vacuum,
             geometry={
                 "geometry_source": "gds_polygon",
                 "z_um": 0,
@@ -579,6 +596,18 @@ def rectangular_junction_pair() -> EffectiveInput:
         )
         for name, net, loop in terminals
     )
+    if bump:
+        body = _bump_entity()
+        metals = (
+            *metals,
+            replace(
+                body,
+                net_id="A",
+                host_void_semantic_id=vacuum,
+                geometry={**body.geometry, "outer_loop": JUNCTION_BUMP_LOOP},
+                metadata={**body.metadata, "source_occurrence_path": "chip"},
+            ),
+        )
     region = PortSheetRegionRecord(
         "sheet",
         "junction",
@@ -600,7 +629,12 @@ def rectangular_junction_pair() -> EffectiveInput:
     substrate = _solution_region(
         "substrate", "dielectric", "Si", (-4, 14, -2, 4, -2, 0)
     )
-    upper = _solution_region("upper_air", "vacuum", "air", (-4, 14, -2, 4, 0, 4.25))
+    upper = _solution_region(
+        vacuum,
+        "vacuum",
+        "air",
+        (-4, 14, -2, 4, -2 if vacuum == "VACUUM_REGION" else 0, 4.25),
+    )
     regions = {
         item.semantic_id: {
             "semantic_id": item.semantic_id,
@@ -627,7 +661,10 @@ def rectangular_junction_pair() -> EffectiveInput:
         "metadata": {},
     }
     source = GeometryBuildInput(
-        tuple(LayoutPolygonSpec(name, "metal", loop) for name, _, loop in terminals),
+        (
+            *(LayoutPolygonSpec(name, "metal", loop) for name, _, loop in terminals),
+            *((LayoutPolygonSpec("bump", "bump", JUNCTION_BUMP_LOOP),) if bump else ()),
+        ),
         (*metals, substrate, upper),
         solution_regions=regions,
         metadata={
@@ -644,9 +681,4 @@ def rectangular_junction_pair() -> EffectiveInput:
         JunctionTerminalBinding("chip/left", "chip", "A"),
         JunctionTerminalBinding("chip/right", "chip", "B"),
     )
-    effective, _, plan = interpret_physical_geometry(
-        with_rectangular_junctions(source, (request,)),
-        stack,
-        ApproximationProfile("thin_film", "v1", {}),
-    )
-    return EffectiveInput(effective, plan.context)
+    return with_rectangular_junctions(source, (request,)), stack

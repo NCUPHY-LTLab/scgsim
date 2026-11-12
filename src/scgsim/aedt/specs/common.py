@@ -14,9 +14,13 @@ from scgsim.aedt.versions import normalize_aedt_version
 
 @dataclass(frozen=True)
 class LumpedRlc:
-    """Electrical treatment of a neutral support; None disables a component."""
+    """Electrical treatment of one lumped-port sheet; None disables a component.
 
-    support_id: str
+    ``port_sheet_id`` names the plan's port sheet, the ``PORT::<port_sheet_id>`` group of the SGB model,
+    as Palace's lumped elements do (issue #67 decision 8).
+    """
+
+    port_sheet_id: str
     topology: Literal["series", "parallel"]
     resistance_ohm: float | None = None
     inductance_h: float | None = None
@@ -24,7 +28,7 @@ class LumpedRlc:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "support_id", text_value(self.support_id, "support_id")
+            self, "port_sheet_id", text_value(self.port_sheet_id, "port_sheet_id")
         )
         if self.topology not in {"series", "parallel"}:
             raise ValueError("lumped topology must be series or parallel")
@@ -46,7 +50,7 @@ class LumpedRlc:
     def to_payload(self) -> dict[str, Any]:
         """Return this request record in its canonical payload shape."""
         return {
-            "support_id": self.support_id,
+            "port_sheet_id": self.port_sheet_id,
             "topology": self.topology,
             "resistance_ohm": self.resistance_ohm,
             "inductance_h": self.inductance_h,
@@ -307,11 +311,15 @@ class ObjectBinding:
 
 @dataclass(frozen=True)
 class LumpedTerminalPort:
-    """Driven Terminal excitation on an explicit source support, not Region."""
+    """Driven Terminal excitation on one lumped-port sheet, not on the Region.
+
+    ``port_sheet_id`` names the plan's port sheet, the ``PORT::<port_sheet_id>`` group of the SGB model
+    (issue #67 decision 8).
+    """
 
     index: int
     name: str
-    support_id: str
+    port_sheet_id: str
     signal_entity_ids: tuple[str, ...]
     reference_entity_ids: tuple[str, ...]
     impedance_ohm: float
@@ -321,7 +329,7 @@ class LumpedTerminalPort:
     def __post_init__(self) -> None:
         if self.index not in {1, 2}:
             raise ValueError("two-port V1 uses port indices 1 and 2")
-        for key in ("name", "support_id"):
+        for key in ("name", "port_sheet_id"):
             object.__setattr__(self, key, text_value(getattr(self, key), key))
         for key in ("signal_entity_ids", "reference_entity_ids"):
             values = tuple(text_value(value, key) for value in getattr(self, key))
@@ -343,7 +351,7 @@ class LumpedTerminalPort:
             "kind": "lumped",
             "index": self.index,
             "name": self.name,
-            "support_id": self.support_id,
+            "port_sheet_id": self.port_sheet_id,
             "signal_entity_ids": list(self.signal_entity_ids),
             "reference_entity_ids": list(self.reference_entity_ids),
             "impedance_ohm": self.impedance_ohm,

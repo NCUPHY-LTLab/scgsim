@@ -72,4 +72,4 @@ print(handoff.spec_path, handoff.archive_path)
 
 ### Wave 與 Lumped Terminal 埠 {#wave-and-lumped-terminal-ports}
 
-上方範例使用 Wave `TerminalPort` 輸入。Lumped 激發使用另一種 `LumpedTerminalPort` 宣告，並明確指定有來源依據的支撐、端子與參考指派，且必須提供 `impedance_ohm`。兩種埠有不同的原生模型，因此 Lumped 請求不會退回建立 Wave 埠。一般 Series／Parallel RLC 模型元件屬於 Eigenmode 模型的 `PreparedPlanarGeometry.lumped_rlcs` 集合；它們不同於 Driven Terminal 的純量埠阻抗，也不同於 Josephson 接面／EPR 模型。執行階段參考說明有來源依據的支撐識別與 body-first 路徑。在該路徑中，必須提供 `TerminalPort.signal_entity_ids`，明確列出宣告的 Signal 與其參考；既有 GDS 參考綁定維持不變。
+上方範例使用 Wave `TerminalPort` 輸入。Lumped 激發使用另一種 `LumpedTerminalPort` 宣告，並明確指定埠片（`port_sheet_id`）、端子與參考指派，且必須提供 `impedance_ohm`。兩種埠有不同的原生模型，因此 Lumped 請求不會退回建立 Wave 埠。一般 Series／Parallel RLC 模型元件屬於 Eigenmode 模型的 `lumped_rlcs` 集合，各自位於所指名的埠片上；它們不同於 Driven Terminal 的純量埠阻抗，也不同於 Josephson 接面／EPR 模型。執行階段參考說明埠片識別與 body-first 路徑。在該路徑中，必須提供 `TerminalPort.signal_entity_ids`，明確列出宣告的 Signal 與其參考；既有 GDS 參考綁定維持不變。

@@ -23,9 +23,8 @@ from scgsim.aedt.specs.epr import (
     PlanarJunction,
     SurfaceEprSpec,
 )
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
+from scgsim.aedt.specs.geometry import NATIVE_LUMPED_REFUSAL, PreparedPlanarGeometry
 from scgsim.aedt.specs.modeling import Modeling
-from scgsim.aedt.specs.support import prepared_lumped_supports
 from scgsim.geometry import (
     GeometryBuildInput,
     LayoutPolygonSpec,
@@ -117,8 +116,8 @@ class _PlanarPreparation:
         self.rlc_tuple = tuple(self.lumped_rlcs)
         if any(not isinstance(item, LumpedRlc) for item in self.rlc_tuple):
             raise TypeError("lumped_rlcs must contain LumpedRlc records")
-        if len({item.support_id for item in self.rlc_tuple}) != len(self.rlc_tuple):
-            raise ValueError("one support cannot own multiple RLC treatments")
+        if self.rlc_tuple:
+            raise ValueError(NATIVE_LUMPED_REFUSAL)
         self.junction_tuple = tuple(self.junctions)
         self.contribution_tuple = tuple(self.contributions)
         if any(not isinstance(item, PlanarJunction) for item in self.junction_tuple):
@@ -280,15 +279,6 @@ class _PlanarPreparation:
         self.source = source_payload(
             self.build_input, self.prepared_stack, source_dbu_um=self.dbu_um
         )
-        if self.build_input.lumped_supports:
-            self.source["lumped_supports"] = prepared_lumped_supports(
-                self.build_input.lumped_supports, self.source
-            )
-        support_ids = {
-            item["support_id"] for item in self.source.get("lumped_supports", ())
-        }
-        if any(item.support_id not in support_ids for item in self.rlc_tuple):
-            raise ValueError("RLC treatment references an undeclared neutral support")
         self.regions_by_id = {
             item["semantic_id"]: item for item in self.source["solution_regions"]
         }

@@ -28,7 +28,8 @@ def test_projection_preserves_complete_public_payload_hash():
     # The typed Route B fixture uses cutout_boundary_shell.  Its polygons are built by
     # hand, so their drawn_rings stay empty.
     assert _payload_sha256(projected) == (
-        "0630af5ea6e2ed878094543d184d1cae1b1a9e37ca64b68063583bcc1ec4e038"
+        # Issue #67 decision 8 removed the empty lumped_supports field; nothing else changed.
+        "33849a6cd2861fb625e30835b40923b8f0f7778c2b195ada136c79f4380a1f84"
     )
 
 

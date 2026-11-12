@@ -526,7 +526,7 @@ class _ResolvedRunDisplay:
                 treatment = f"Lumped Terminal {request['impedance_ohm']} ohm; renormalize={request['renormalize']}; deembed={request['deembed_um']} um"
             summaries.append(
                 (
-                    record.get("support_id", request.get("support_id")),
+                    record.get("port_sheet_id", request.get("port_sheet_id")),
                     record["boundary"],
                     treatment,
                 )
@@ -536,7 +536,8 @@ class _ResolvedRunDisplay:
                 section(
                     "Source-bound lumped elements",
                     table(
-                        ("Support", "Native boundary", "Authored treatment"), summaries
+                        ("Port sheet", "Native boundary", "Authored treatment"),
+                        summaries,
                     )
                     + json_details(
                         "Source and native assignment evidence",
