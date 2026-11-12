@@ -264,6 +264,3 @@ def geometry_refs_from_gdstk_region(
         for polygon in filter_gdstk_polygons(region)
     )
 
-
-_ring_edges = ring_edges
-_polygon_area = polygon_area

@@ -41,9 +41,19 @@ if TYPE_CHECKING:
 def validate_occurrence_sources(
     source: AdapterSource, metadata: Mapping[str, Any] | None
 ) -> Mapping[str, Any] | None:
-    """Validate schema-two source lineage in source order before lowering records."""
-    if source.stack.metadata.get("component_semantics_schema_version") != 2:
+    """Validate schema-two source lineage in source order before lowering records.
+
+    A stack written by hand carries no component-semantics version and has no
+    occurrence lineage to validate; any version other than 2 is refused.
+    """
+    if "component_semantics_schema_version" not in source.stack.metadata:
         return metadata
+    version = source.stack.metadata["component_semantics_schema_version"]
+    if version != 2:
+        raise ValueError(
+            f"stack metadata component_semantics_schema_version is {version!r}; "
+            "only 2, which GeometryPlan writes, is supported"
+        )
     if (
         source.stack.metadata.get("gds_sha256")
         != hashlib.sha256(source.stack.gds_path.read_bytes()).hexdigest()

@@ -2,8 +2,8 @@
 
 ``specs`` normalizes the ``MA``/``MS``/``SA`` specs and says which margins a face takes, ``insets`` turns
 their margins into SGB inset requests, and ``build`` builds a route's geometry with those bands (with the
-unbanded first build that ``inset_margins_by_entity_um`` needs).  Palace and AEDT import these from here;
-which faces a backend integrates and how stay with the backend.
+unbanded first build that ``inset_margins_by_entity_um`` needs).  Palace imports these from here;
+which faces it integrates and how stay with Palace.
 """
 
 from scgsim.geometry.surface_epr.build import build_banded_geometry

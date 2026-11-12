@@ -15,7 +15,6 @@ NAMESPACES = (
     "aedt",
     "aedt.specs",
     "geometry",
-    "geometry.models",
     "palace",
     "semantics",
     "visualization",
@@ -87,7 +86,7 @@ def test_render_reads_ast_and_authored_text_without_importing_facades(source_tre
         "zh-TW/docs/api/analyze_epr.qmd",
     }
     index = outputs["docs/api/input-index.qmd"]
-    assert "### scgsim.geometry.models" in index
+    assert "### scgsim.geometry" in index
     assert "`PublicName`" in index
     detail = outputs["docs/api/analyze_epr.qmd"]
     assert "Minimal call." in detail
