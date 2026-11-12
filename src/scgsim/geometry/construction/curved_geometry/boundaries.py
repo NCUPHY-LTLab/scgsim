@@ -131,12 +131,10 @@ class _BindingPlaces:
     # A ring's polygon is one its Entity owns; an outline ring, keyed by the Entity's own
     # semantic ID, has none, whatever polygon happens to carry that ID.
     owned: Mapping[tuple[str, str], LayoutPolygonSpec]
-    # The layers of each Entity's polygons, joined, as SGB's selector refusal names them.
-    entity_layers: Mapping[str, str]
 
     @classmethod
     def read(cls, build_input: GeometryBuildInput) -> _BindingPlaces:
-        """The grid, the owned polygons and the Entity layers of an input."""
+        """The grid and the owned polygons of an input."""
         by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
         context = geometry_grid_context(build_input)
         return cls(
@@ -146,13 +144,11 @@ class _BindingPlaces:
                 for entity in build_input.entities
                 for polygon_id in entity.polygon_ids
             },
-            {
-                entity.semantic_id: ", ".join(
-                    sorted({by_id[p].layer for p in entity.polygon_ids if p in by_id})
-                )
-                for entity in build_input.entities
-            },
         )
+
+    def layers(self) -> dict[tuple[str, str], str]:
+        """The layer of each owned polygon, by (Entity, polygon ID)."""
+        return {key: polygon.layer for key, polygon in self.owned.items()}
 
     def polygon(self, key: BoundaryKey) -> LayoutPolygonSpec | None:
         """The polygon whose ring a key names, or None for an Entity's outline ring."""
@@ -331,6 +327,7 @@ def source_boundaries(
         for polygon in build_input.polygons
         if is_junction_end_piece(polygon)
     )
+    layers = places.layers()
 
     def select(
         record: BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec,
@@ -339,7 +336,7 @@ def source_boundaries(
             record,
             rings,
             end_pieces,
-            layer=places.entity_layers.get(record.entity_id),
+            layers=layers,
             grid_size_um=places.grid_size_um,
         )
 

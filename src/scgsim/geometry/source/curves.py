@@ -249,26 +249,32 @@ def select_boundary(
     rings: SourceRings,
     end_pieces: frozenset[str] = frozenset(),
     *,
-    layer: str | None = None,
+    layers: Mapping[tuple[str, str], str] | None = None,
     grid_size_um: float | None = None,
 ) -> tuple[BoundaryKey, PolygonRing]:
     """Bind one boundary record to the ring its selector point and role name.
 
     The selector lies in exactly one Entity-owned logical polygon; ``role`` and
     ``hole_index`` then name that polygon's exterior or one of its holes.  A refusal
-    names the Entity's ``layer`` and places the selector point and the polygons on the
-    grid of ``grid_size_um``, as SGB's binding does.
+    places the selector point and the polygons on the grid of ``grid_size_um``, as SGB's
+    binding does, and names the layer of each polygon it places: ``layers`` maps
+    (Entity, polygon ID) to the layer of each polygon an Entity owns.  An Entity's
+    outline ring has no polygon, so it has no layer.
     """
     candidates = _selected_polygons(record, rings, end_pieces)
-    on = f" on layer {layer}" if layer else ""
+    drawn = {} if layers is None else layers
+
+    def layer_of(pid: str) -> str | None:
+        return drawn.get((record.entity_id, pid))
+
     if len(candidates) != 1:
         owned = [
-            exterior
+            (pid, exterior)
             for pid, exterior, _ in rings.get(record.entity_id, ())
             if pid not in end_pieces
         ]
-        matched = [exterior for _, exterior, _ in candidates]
-        finding = _selector_finding(record, matched, owned, on, grid_size_um)
+        matched = [(pid, exterior) for pid, exterior, _ in candidates]
+        finding = _selector_finding(record, matched, owned, layer_of, grid_size_um)
         raise ValueError(
             f"{record.boundary_id} selector must bind one Entity-owned logical polygon "
             f"of {record.entity_id!r}; it binds {len(candidates)}: {finding}. Fix the "
@@ -279,7 +285,7 @@ def select_boundary(
     if record.role == "hole" and cast(int, record.hole_index) >= len(holes):
         raise ValueError(
             f"{record.boundary_id}: {record.entity_id!r} polygon {pid!r} has no hole "
-            f"{record.hole_index}: the polygon{on} at "
+            f"{record.hole_index}: the polygon{_on_layers([layer_of(pid)])} at "
             f"{format_extent(outer, grid_size_um)} has {len(holes)}. Fix the "
             "declaration: give the hole_index of one of its holes, counted from 0."
         )
@@ -291,24 +297,39 @@ def select_boundary(
 
 def _selector_finding(
     record: _BoundaryRecord,
-    matched: Sequence[PolygonRing],
-    owned: Sequence[PolygonRing],
-    on: str,
+    matched: Sequence[tuple[str, PolygonRing]],
+    owned: Sequence[tuple[str, PolygonRing]],
+    layer_of: Callable[[str], str | None],
     grid_size_um: float | None,
 ) -> str:
-    """Where a boundary's selector point lies, and the polygons of its Entity."""
+    """Where a boundary's selector point lies, and the polygons of its Entity with their layers.
+
+    An Entity that owns no polygon has no layer to name: the record names no Entity of
+    the input, or one without geometry.
+    """
     x, y = record.selector_point_um
     point = format_point(x, y, grid_size_um)
     if not owned:
         return f"the Entity owns no polygon; the selector point lies at {point}"
     if not matched:
-        extent = format_extent([p for ring in owned for p in ring], grid_size_um)
+        extent = format_extent([p for _, ring in owned for p in ring], grid_size_um)
         return (
             f"the selector point lies at {point}, outside every polygon of the Entity"
-            f"{on}, which lie within {extent}"
+            f"{_on_layers([layer_of(pid) for pid, _ in owned])}, which lie within {extent}"
         )
-    where = ", ".join(format_extent(ring, grid_size_um) for ring in matched)
-    return f"the selector point lies at {point}, inside each of its polygons at {where}"
+    where = ", ".join(
+        f"{format_extent(ring, grid_size_um)}{_on_layers([layer_of(pid)])}"
+        for pid, ring in matched
+    )
+    return f"the selector point lies at {point}, inside each of its polygons: {where}"
+
+
+def _on_layers(layers: Sequence[str | None]) -> str:
+    """`` on layer L`` or `` on layers L1, L2`` for the layers named, or nothing."""
+    named = sorted({layer for layer in layers if layer})
+    if not named:
+        return ""
+    return f" on layer{'s' if len(named) > 1 else ''} {', '.join(named)}"
 
 
 def _selected_polygons(

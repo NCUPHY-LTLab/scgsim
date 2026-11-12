@@ -23,6 +23,12 @@ from test_located_refusals import GRID, on, places
 from test_rectangular_junction_geometry import fixture as junction_fixture
 from test_simulation_drc import check
 
+from scgsim.geometry import with_rectangular_junctions
+from scgsim.geometry.models.input import (
+    GdsBoundaryReconstructionSpec,
+    LayoutPolygonSpec,
+)
+from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
 from scgsim.geometry.source.grid import apply_geometry_grid
 from scgsim.palace import EigenmodeSim
 
@@ -346,6 +352,87 @@ def test_simulation_drc_reports_the_located_binding_refusal(monkeypatch):
     )
     end, start = places(message)
     assert on(end, vertex(1)) and on(start, vertex(2))
+
+
+# ------------------------------------------------------------ an Entity drawn on two layers
+
+# The left terminal of the junction fixture, (-2, 0)..(3, 2) um on layer metal, and a cap
+# (-2, 0)..(-1, 2) um over its left end on layer metal_b, both owned by chip/left.  A layout
+# read through GeometryPlan never gives one Entity two overlapping polygons (each Entity is
+# one conductor region, fused on its one layer), so the input is built by hand and goes
+# through the junction partition, which binds the terminal's boundary records.
+LEFT_BOX = (-2.0, 0.0, 3.0, 2.0)
+CAP_BOX = (-2.0, 0.0, -1.0, 2.0)
+
+
+def two_layer_terminal_refusal(selector_point_um, **fields):
+    """The partition's refusal of a reconstruction on chip/left, drawn on two layers."""
+    build, spec = junction_fixture()
+    cap = LayoutPolygonSpec("left_cap", "metal_b", ((-2, 0), (-1, 0), (-1, 2), (-2, 2)))
+    entities = tuple(
+        replace(e, polygon_ids=(*e.polygon_ids, "left_cap"))
+        if e.semantic_id == "chip/left"
+        else e
+        for e in build.entities
+    )
+    record = GdsBoundaryReconstructionSpec(
+        "chip/LEFT_ARC",
+        "chip/left",
+        selector_point_um,
+        "circular_arc",
+        segment_indices=(0, 1),
+        anchor_indices=(0, 1, 2),
+        **fields,
+    )
+    build = replace(
+        build,
+        polygons=(*build.polygons, cap),
+        entities=entities,
+        boundary_reconstruction=(record,),
+    )
+    with pytest.raises(ValueError) as error:
+        derive_rectangular_junctions(with_rectangular_junctions(build, (spec,)))
+    return str(error.value)
+
+
+def test_a_selector_in_two_polygons_names_the_layer_of_each():
+    """The point (-1.5, 1) um lies in the terminal on metal and in its cap on metal_b."""
+    message = two_layer_terminal_refusal((-1.5, 1.0))
+    assert message.startswith(
+        "chip/LEFT_ARC selector must bind one Entity-owned logical polygon of "
+        "'chip/left'; it binds 2: the selector point lies at "
+    )
+    point, left, cap = places(message)
+    assert on(point, (-1.5, 1.0, -1.5, 1.0))
+    assert on(left, LEFT_BOX) and on(LEFT_BOX, left)
+    assert on(cap, CAP_BOX) and on(CAP_BOX, cap)
+    assert (
+        "inside each of its polygons: (-2.0, 0.0)..(3.0, 2.0) um on layer metal, "
+        "(-2.0, 0.0)..(-1.0, 2.0) um on layer metal_b. Fix the declaration"
+    ) in message
+
+
+def test_a_selector_off_an_entity_on_two_layers_names_both_layers():
+    """The point (5, 5) um lies outside both; the refusal names both layers and their extent."""
+    message = two_layer_terminal_refusal((5.0, 5.0))
+    assert (
+        "it binds 0: the selector point lies at (5.0, 5.0) um, outside every polygon of "
+        "the Entity on layers metal, metal_b, which lie within "
+    ) in message
+    point, extent = places(message)
+    assert on(point, (5.0, 5.0, 5.0, 5.0)) and on(extent, LEFT_BOX)
+    assert on(LEFT_BOX, extent)
+
+
+def test_a_missing_hole_names_the_layer_of_the_selected_polygon():
+    """A hole record whose selector (1, 0.5) um picks the terminal on metal names metal alone."""
+    message = two_layer_terminal_refusal((1.0, 0.5), role="hole", hole_index=0)
+    assert message.startswith(
+        "chip/LEFT_ARC: 'chip/left' polygon 'left' has no hole 0: the polygon on layer "
+        "metal at "
+    )
+    (place,) = places(message)
+    assert on(place, LEFT_BOX) and on(LEFT_BOX, place)
 
 
 # ------------------------------------------------- a hole with no drawn ring of its own
