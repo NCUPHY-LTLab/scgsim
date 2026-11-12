@@ -7,10 +7,9 @@ fourth).  Three stages refuse a boundary record:
   defines a circle: a component's arc on the points as the component writes them, a
   reconstruction's anchors on the vertices as their cell draws them.  An occurrence transform
   turns both in floats, where three points on one line seldom stay on one line.
-* SGB (``sgb.prisms.curves``) binds the records of a conductor that is not a lumped port's
-  terminal.
-* The construction binder binds a terminal's records first, for the junction partition, and
-  gives SGB's refusal for the same fault, word for word.
+* SGB (``sgb.prisms.curves``) binds the records of every conductor.  The junction partition
+  reads a lumped port's terminal through that binding, so a record on a terminal is refused
+  there first, with the same ``InputError`` and message as off a port.
 
 Each test declares a record on a pad, runs ``simulation_drc``, the plan's preparation or
 ``mesh()``'s, and reads every coordinate back out of the refusal: each must lie on the ring,
@@ -40,10 +39,6 @@ from test_simulation_drc import (
 
 import scgsim.palace.mesh.build as build_module
 from scgsim.geometry import GeometryPlan
-from scgsim.geometry.construction.curved_geometry.boundaries import (
-    source_boundaries,
-    source_rings,
-)
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
@@ -101,14 +96,14 @@ def sgb_refusal(monkeypatch, **records):
 
 
 def terminal_refusal(monkeypatch, **records):
-    """The construction binder's refusal of the records, with the pad a lumped port's terminal."""
-    with pytest.raises(ValueError) as error:
+    """SGB's refusal of the records with the pad a lumped port's terminal, raised in the junction partition."""
+    with pytest.raises(InputError) as error:
         check(EigenmodeSim, pads_with(monkeypatch, port=True, **records))
     return str(error.value)
 
 
 def one_refusal(monkeypatch, **records):
-    """SGB's refusal, checked to be the construction binder's for the same records."""
+    """SGB's refusal, checked to be the same with the pad a lumped port's terminal."""
     message = sgb_refusal(monkeypatch, **records)
     assert terminal_refusal(monkeypatch, **records) == message
     return message
@@ -118,7 +113,8 @@ def declared_refusal(monkeypatch, **records):
     """The source stage's refusal of the records, the same with the pad off and on a lumped port.
 
     ``simulation_drc`` raises it while it prepares the plan, before a binding stage sees the
-    record.  Off a port only SGB would bind it, and SGB's refusals are no ``ValueError``.
+    record.  On and off a port only SGB would bind it, and SGB's refusals are no
+    ``ValueError``.
     """
     messages = []
     for port in (False, True):
@@ -297,11 +293,11 @@ def test_a_reconstruction_of_a_kind_sgb_does_not_carry_is_refused_at_the_ring(
 ):
     """A spline reconstruction of the pad names the ring it selects, at (0, 0)..(20, 20) um.
 
-    On a lumped port's terminal the construction binder accepts the record, because the
-    compiler builds spline reconstructions; the junction partition then refuses the spline
-    on the terminal's outline, located (``test_located_junction_refusals.py``).
+    The refusal is the same with the pad a lumped port's terminal (before: the junction
+    partition accepted the record and refused the spline on the terminal's outline, in its
+    own words).
     """
-    message = sgb_refusal(monkeypatch, reconstruction=[pad_arc(kind=kind)])
+    message = one_refusal(monkeypatch, reconstruction=[pad_arc(kind=kind)])
     assert message.startswith(
         f"{RECORD}: reconstruction kind {kind!r} is not supported yet (this version "
         "carries lines and circular arcs); the ring it selects lies at "
@@ -315,15 +311,11 @@ def test_a_reconstruction_of_a_kind_sgb_does_not_carry_is_refused_at_the_ring(
 
 
 def test_two_reconstructions_of_one_drawn_segment_are_refused_on_it(monkeypatch):
-    """Both records replace drawn segment 1, the pad's top side from (0, 20) to (20, 20) um.
-
-    Each stage names the ring by its own key; the words after it are the same.
-    """
+    """Both records replace drawn segment 1, the pad's top side from (0, 20) to (20, 20) um."""
     second = pad_arc(
         boundary_id="PAD_ARC_2", segment_indices=[1, 2], anchor_indices=[1, 2, 3]
     )
-    records = {"reconstruction": [pad_arc(), second]}
-    message = sgb_refusal(monkeypatch, **records)
+    message = one_refusal(monkeypatch, reconstruction=[pad_arc(), second])
     assert message.startswith(
         "overlapping reconstruction segment claims on ring ('chip/pad', 0, 0): "
         "chip/PAD_ARC and chip/PAD_ARC_2 (Entity 'chip/pad' on layer 1/0) both replace "
@@ -336,8 +328,6 @@ def test_two_reconstructions_of_one_drawn_segment_are_refused_on_it(monkeypatch)
     found = places(message)
     assert len(found) == 2
     assert {next(i for i in (1, 2) if on(p, vertex(i))) for p in found} == {1, 2}
-    terminal = terminal_refusal(monkeypatch, **records)
-    assert terminal.split(": ", 1)[1] == message.split(": ", 1)[1]
 
 
 # --------------------------------------------------------------- an authored arc on one line
@@ -503,10 +493,10 @@ def test_a_components_arc_on_one_line_is_refused_in_a_turned_occurrence(
 def test_a_terminals_arc_on_one_line_is_refused_in_a_turned_occurrence(monkeypatch):
     """The same arc on a lumped port's terminal, its device turned by 36.9 degrees.
 
-    The port runs along (4, 3) in the device, so the turn keeps its sheet on the grid and
-    the construction binder is reached (before: it read the turned points, found them off
-    the line and passed the arc on; SGB then failed ``arc_edges_do_not_cross``).  At 6
-    degrees the sheet leaves the grid and the port is refused before any binding.
+    The port runs along (4, 3) in the device, so the turn keeps its sheet on the grid
+    (before: the partition's binding read the turned points, found them off the line and
+    passed the arc on; SGB then failed ``arc_edges_do_not_cross``).  At 6 degrees the sheet
+    leaves the grid and the port is refused before any binding.
     """
     device = slanted_terminal(monkeypatch, (4, 3), 1360, declared=True)
     message = occurrence_refusal(device, ON_GRID_TURN, DEVICE_NETS)
@@ -695,11 +685,11 @@ def test_an_arc_declared_on_the_plan_is_refused_by_the_binding_on_a_slanted_term
 ):
     """The arc from (0, 0) through (0.2, 0.6) to (2, 6) um, declared on the plan, on a port along (19, 2) or (4, 3).
 
-    No occurrence transform touches a plan's own declaration, so the binding stages decide
-    it; a terminal's is the construction binder, in ``mesh()``'s preparation.  Each sheet
-    starts where the junction's local frame, 6.0 or 36.9 degrees, turns the three points
-    onto one line in floats, where the partition once divided by zero.  The binder finds
-    them on one line exactly, as SGB does, and refuses the arc at its points.
+    No occurrence transform touches a plan's own declaration, so the binding decides it: on
+    a terminal, SGB's binding as the junction partition reads it in ``mesh()``'s
+    preparation.  Each sheet starts where the junction's local frame, 6.0 or 36.9 degrees,
+    turns the three points onto one line in floats, where the partition once divided by
+    zero.  The binding finds them on one line exactly and refuses the arc at its points.
     """
     component = slanted_terminal(monkeypatch, direction, sheet_start, declared=False)
     plan = GeometryPlan(
@@ -715,7 +705,7 @@ def test_an_arc_declared_on_the_plan_is_refused_by_the_binding_on_a_slanted_term
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
-    with pytest.raises(ValueError) as error:
+    with pytest.raises(InputError) as error:
         prepared_port(sim)
     message = str(error.value)
     assert message.startswith(
@@ -728,29 +718,26 @@ def test_an_arc_declared_on_the_plan_is_refused_by_the_binding_on_a_slanted_term
     assert on(end, (2, 6, 2, 6))
 
 
-# ----------------------------------- an input built by hand: the binding stages decide
+# ----------------------------------------- an input built by hand: the binding decides
 
 
 def stage_refusals(tmp_path, **records):
-    """SGB's refusal of records put by hand on the pad of ``gds_pad_in_ground``, checked to be the construction binder's.
+    """SGB's refusal of records put by hand on the pad of ``gds_pad_in_ground``.
 
-    No source stage reads records attached to an effective input, so each binding stage
-    decides them, on the points it solves the circle on.  The pad is drawn (40, 40),
-    (60, 40), (60, 60), (40, 60) um.
+    No source stage reads records attached to an effective input, so the binding decides
+    them, on the points it solves the circle on.  The pad is drawn (40, 40), (60, 40),
+    (60, 60), (40, 60) um.
     """
     pad = with_boundaries(gds_pad_in_ground(tmp_path, with_port=False), **records)
     build = pad.build_input
     with pytest.raises(InputError) as sgb:
         build_prism_catalogue(build, pad.representation)
-    with pytest.raises(ValueError) as binder:
-        source_boundaries(build, source_rings(build))
-    assert str(binder.value) == str(sgb.value)
     owned = next(e.polygon_ids for e in build.entities if e.semantic_id == "pad")
     layer = next(p.layer for p in build.polygons if p.polygon_id in owned)
     return str(sgb.value), layer
 
 
-def test_an_arc_on_one_line_put_on_an_input_by_hand_is_refused_by_each_binding_stage(
+def test_an_arc_on_one_line_put_on_an_input_by_hand_is_refused_by_the_binding(
     tmp_path,
 ):
     """The pad's bottom side as an arc from (40, 40) through (50, 40) to (60, 40) um."""
@@ -776,7 +763,7 @@ def test_an_arc_on_one_line_put_on_an_input_by_hand_is_refused_by_each_binding_s
     assert on(end, (60, 40, 60, 40))
 
 
-def test_anchors_with_no_circle_put_on_an_input_by_hand_are_refused_by_each_binding_stage(
+def test_anchors_with_no_circle_put_on_an_input_by_hand_are_refused_by_the_binding(
     tmp_path,
 ):
     """Anchors 0, 0, 2 of the pad's first two drawn sides, from (40, 40) to (60, 60) um."""

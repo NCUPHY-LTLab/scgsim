@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
+from fractions import Fraction
 
 import gdstk
 import pytest
@@ -30,11 +31,6 @@ from test_palace_rectangular_ports import (
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
 
 from scgsim.geometry import GeometryPlan
-from scgsim.geometry.construction.curved_geometry.boundaries import (
-    circle_through_points,
-    source_boundaries,
-    source_rings,
-)
 from scgsim.geometry.models.input import (
     GdsBoundaryReconstructionSpec,
     RingChain,
@@ -43,6 +39,7 @@ from scgsim.geometry.models.input import (
 from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import build_conformal_model
+from scgsim.geometry.sgb.prisms.arcs import circumcircle
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.palace import EigenmodeSim
 
@@ -392,7 +389,10 @@ def test_a_closed_reconstruction_takes_its_anchors_in_drawn_order(monkeypatch):
     drawn = drawn_pad_ring(component)
     assert len(drawn) == count
     assert grid_key(emitted_pad_ring(component)[0]) != grid_key(drawn[0])
-    _, radius = circle_through_points([drawn[i] for i in anchors])
+    a, b, c = (
+        (Fraction(repr(x)), Fraction(repr(y))) for x, y in (drawn[i] for i in anchors)
+    )
+    _, radius = circumcircle(a, b, c, "the drawn anchors")
     arcs, _ = pad_arcs(built_sidecar(monkeypatch, component, NETS))
     (arc,) = arcs
     assert arc["facts"]["radius_um"] == pytest.approx(radius, abs=GRID_UM)
@@ -668,28 +668,21 @@ def with_pad_drawn_rings(effective, drawn_rings):
     return replace(effective, build_input=replace(build_input, polygons=polygons))
 
 
-def refusal(stage, effective, record):
-    """The refusal of the binding stage that binds the record on the effective input."""
+def refusal(effective, record):
+    """SGB's refusal of the record on the effective input."""
     build_input = replace(effective.build_input, boundary_reconstruction=(record,))
-    if stage == "sgb":
-        with pytest.raises(InputError) as error:
-            build_prism_catalogue(build_input, effective.representation)
-    else:
-        with pytest.raises(ValueError) as error:
-            source_boundaries(build_input, source_rings(build_input))
+    with pytest.raises(InputError) as error:
+        build_prism_catalogue(build_input, effective.representation)
     return str(error.value)
 
 
-@pytest.mark.parametrize("stage", ["construction", "sgb"])
-def test_a_grid_emitted_ring_without_drawn_rings_is_located_at_the_ring(
-    tmp_path, stage
-):
+def test_a_grid_emitted_ring_without_drawn_rings_is_located_at_the_ring(tmp_path):
     """A polygon the source grid emitted, stripped of ``drawn_rings``, has lost its drawn order.
 
     The refusal names the ring, (40, 40)..(60, 60) um on layer 2/0.
     """
     effective = with_pad_drawn_rings(gds_pad_in_ground(tmp_path, with_port=False), ())
-    message = refusal(stage, effective, square_pad_corner())
+    message = refusal(effective, square_pad_corner())
     assert message.startswith(
         f"pad_corner (Entity 'pad', layer {PAD_LAYER}): the ring it selects has no "
         "drawn GDS ring recorded for it: the ring at "
@@ -701,7 +694,6 @@ def test_a_grid_emitted_ring_without_drawn_rings_is_located_at_the_ring(
     assert on(place, SQUARE_PAD) and on(SQUARE_PAD, place)
 
 
-@pytest.mark.parametrize("stage", ["construction", "sgb"])
 @pytest.mark.parametrize(
     ("drawn", "faults"),
     [
@@ -723,13 +715,13 @@ def test_a_grid_emitted_ring_without_drawn_rings_is_located_at_the_ring(
     ids=["missing-vertex", "out-of-order"],
 )
 def test_a_ring_that_lost_its_drawn_order_is_located_at_the_drawn_vertex(
-    tmp_path, stage, drawn, faults
+    tmp_path, drawn, faults
 ):
     """The refusal names each drawn vertex the ring lacks or meets out of order, where it was drawn."""
     effective = with_pad_drawn_rings(
         gds_pad_in_ground(tmp_path, with_port=False), (drawn,)
     )
-    message = refusal(stage, effective, square_pad_corner())
+    message = refusal(effective, square_pad_corner())
     assert message.startswith(
         f"pad_corner (Entity 'pad', layer {PAD_LAYER}): the ring it selects no longer "
         "holds each vertex of its drawn ring once, in drawn order: "
@@ -749,10 +741,10 @@ def test_an_outline_ring_is_drawn_as_given_when_another_entity_owns_a_polygon_of
 ):
     """An Entity's outline ring has no polygon, even when a polygon elsewhere shares its ID.
 
-    The substrate Entity owns no polygon, so its outline is keyed by its own semantic ID,
-    ``substrate``.  Semantic and polygon IDs are separate namespaces: the pad polygon is
-    renamed ``substrate`` here.  A reconstruction on the substrate's outline names that
-    outline's own vertices; it binds, and the pad's drawn square is not read for it.
+    The substrate Entity owns no polygon, so its footprint is its outline.  Semantic and
+    polygon IDs are separate namespaces: the pad polygon is renamed ``substrate`` here.  A
+    reconstruction on the substrate's outline names that outline's own vertices; it binds,
+    and its arc runs between the outline's corners, not the pad's.
     """
     effective = gds_pad_in_ground(tmp_path, with_port=False)
     build_input = effective.build_input
@@ -787,12 +779,19 @@ def test_an_outline_ring_is_drawn_as_given_when_another_entity_owns_a_polygon_of
         polygons=polygons,
         boundary_reconstruction=(record,),
     )
-    _, provenance = source_boundaries(build_input, source_rings(build_input))
-    (bound,) = [
-        entry
-        for entry in provenance
-        if entry["operation"] == "explicit_gds_reconstruction"
+    catalogue = build_prism_catalogue(build_input, effective.representation)
+    arcs = [
+        arc
+        for prism in catalogue.prisms
+        if prism.entity_id == "substrate"
+        for arc in prism.arcs
     ]
-    assert bound["requested"]["entity_id"] == "substrate"
-    assert bound["drawn_ring"] == bound["original_ring_um"]
-    assert (40.0, 40.0) not in bound["drawn_ring"]
+    xs, ys = (
+        [
+            catalogue.grid.lattice_units(bounds[f"{axis}_{end}_um"])
+            for end in ("min", "max")
+        ]
+        for axis in "xy"
+    )
+    corners = {(x, y) for x in xs for y in ys}
+    assert arcs and {arcs[0].start, arcs[-1].end} <= corners

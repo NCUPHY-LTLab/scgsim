@@ -1,11 +1,10 @@
 """Bind authored boundaries and explicit reconstruction to original source rings.
 
-The junction partition binds a lumped port's terminal conductors here before SGB's own
-binding (``sgb.prisms.curves``) runs, so for those conductors a refusal here is the one the
-layout author reads.  It names the record, its Entity and the ring's layer, says where in
-micrometres the ring, the indices or the arc points at fault lie, and who must change them:
-the declaration, or the layout for an authored arc.  Where SGB refuses the same fault, the
-refusal is SGB's, word for word.
+The compiler's construction path binds records here; the SGB route, the junction partition
+included, binds them with ``sgb.prisms.curves``.  A refusal names the record, its Entity and
+the ring's layer, says where in micrometres the ring, the indices or the arc points at fault
+lie, and who must change them: the declaration, or the layout for an authored arc.  Where SGB
+refuses the same fault, the refusal is SGB's, word for word.
 """
 
 from __future__ import annotations
@@ -305,12 +304,11 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
 def _refuse_arcs_without_circle(
     record: BoundaryCurveChainSpec, what: str, grid_size_um: float | None
 ) -> None:
-    # SGB refuses an authored arc whose three points define no circle, but the junction
-    # partition reads a lumped port's terminal arcs before SGB runs, and the compiler's curve
-    # kernel builds arcs without SGB; both solve the circle with circle_through_points.  The
-    # arc is refused here, in SGB's words, by the exact rule that circle solves on.  A
+    # SGB refuses an authored arc whose three points define no circle, but the compiler's
+    # curve kernel builds arcs without SGB and solves the circle with circle_through_points.
+    # The arc is refused here, in SGB's words, by the exact rule that circle solves on.  A
     # component's arc was decided in its own frame by the source stage; this decides an arc
-    # declared in assembly coordinates, and guards the circle those stages solve.
+    # declared in assembly coordinates, and guards the circle the kernel solves.
     for index, curve in enumerate(record.curves):
         if curve.kind == "circular_arc" and _on_one_line(curve.points_um):
             raise ValueError(

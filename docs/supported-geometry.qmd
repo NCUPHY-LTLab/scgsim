@@ -285,7 +285,11 @@ spacing.
 The outline is the one SGB builds: a conductor declared with an exact arc meets
 the side where the arc does, on the grid point SGB rounds the crossing to, not
 where its polygon does, and reaches into the sheet as far as the arc does, also
-where a chord of its polygon faces the sheet. A sheet that ends on straight conductor edges at right
+where a chord of its polygon faces the sheet. SCGSim reads that outline from
+SGB's own binding of the conductor's boundary records, so a record on a port's
+conductor is refused as it is on any other conductor: with the same
+`InputError` and the same message. Binding a record needs the model grid the
+input declares, which `GeometryPlan` always declares. A sheet that ends on straight conductor edges at right
 angles to it keeps the face and the conductors it had: its cuts lie on those
 edges and its end pieces are empty.
 

@@ -19,7 +19,8 @@ carriers are a later stage.
 
 A refusal names the record, its Entity and layer, where the fault lies in micrometres and
 who must act.  The wording of the index and arc refusals lives in ``models.input``, shared
-with the construction binder, which binds a lumped port's terminals before SGB runs.
+with the compiler's construction binder.  The junction partition reads a lumped port's
+terminals through this binding (``bound_rings``), so a terminal's record is refused here too.
 """
 
 from __future__ import annotations

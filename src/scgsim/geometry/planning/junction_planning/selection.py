@@ -1,7 +1,7 @@
 """Select terminal-owned end pieces on the authored corridor and grid.
 
 Besides the topology of each end piece, this module owns the steps an end piece leaves on its
-terminal: where the terminal's built outline meets a sheet side (``built_outline_meetings``)
+terminal: where the terminal's built outline meets a sheet side (``built_outline``)
 and how long the edge is that the end piece adds along that side up to the cut
 (``side_steps``).
 """
