@@ -3,7 +3,9 @@
 AEDT models the geometry Palace meshes (issue #67).  :func:`import_sgb_model` runs, in order, and fails
 before any assignment when what AEDT imported is not the guarded model:
 
-1. check the prepared files again and read the guard (:meth:`PreparedSgbModel.verify_files`);
+1. check the prepared files again and read the guard (:meth:`PreparedSgbModel.verify_files`); plan every
+   boundary and Net name from the sidecar and the guard (:mod:`.sgb_boundaries`), so a model the import
+   cannot realize is refused before AEDT is touched;
 2. import the STEP into the empty design; the objects must be exactly the guard's solids;
 3. match every imported face to its planned face by geometry (:func:`.sgb_faces.match_solid_faces`);
 4. rebuild the guard's free faces (sheets with no imported solid on either side) as sheet objects from
@@ -12,9 +14,9 @@ before any assignment when what AEDT imported is not the guarded model:
 6. create the Region from the plan's ``VACUUM_REGION`` box with the vacuum's material.  HFSS gets Perfect H
    on the Region's faces: Palace assigns nothing to its exterior, which is its natural PMC condition, and
    the two realizations must have the same outer boundary condition;
-7. HFSS: one Perfect E per Net over the Route A sheet faces, and a Lumped RLC on the port face of each
-   junction and of each generic ``LumpedRlc`` (issue #67 decision 8).  Q3D: one Net per sidecar Net over its
-   conductor solids.
+7. HFSS: one Perfect E per Net over the Route A sheet faces, and a Lumped RLC over the port-sheet faces of
+   each junction and of each generic ``LumpedRlc`` (issue #67 decision 8).  Q3D: one Net per sidecar Net
+   over its conductor solids.  Each assignment and its readback use the planned name.
 
 Every port sheet must carry a junction or an RLC.  Lumped Terminal ports wait for the SGB flow's Driven
 Terminal design, and a model that has them is refused, not approximated.
@@ -27,12 +29,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from scgsim.aedt.preparation.sgb_model import (
-    PreparedSgbModel,
-    SgbJunction,
-    port_group,
+from scgsim.aedt.preparation.sgb_model import PreparedSgbModel, port_group
+from scgsim.aedt.runtime.families.sgb_boundaries import (
+    HfssBoundaryPlan,
+    PortRlc,
+    plan_hfss_boundaries,
+    q3d_net_names,
 )
-from scgsim.aedt.rlc import rlc_native_topology
 from scgsim.aedt.runtime.families.sgb_faces import (
     ImportedFace,
     area_tolerance_um2,
@@ -45,14 +48,13 @@ from scgsim.aedt.runtime.native.common import (
     native_object_property,
     realize_source_material,
 )
-from scgsim.aedt.specs.common import LumpedRlc
 from scgsim.geometry.sgb.exchange.guard import (
     FreeFace,
     LoopSegment,
     StepGuard,
     read_step_guard,
 )
-from scgsim.geometry.sgb.sidecar.aedt import aedt_names, sanitise_aedt_name
+from scgsim.geometry.sgb.sidecar.aedt import aedt_names
 from scgsim.geometry.sgb.sidecar.files import read_sidecar
 
 Family = Literal["hfss", "q3d"]
@@ -90,7 +92,13 @@ def import_sgb_model(
     guard = read_step_guard(model.path("guard"))
     sidecar = read_sidecar(model.path("sidecar"))
     _check_ports(model, sidecar, family)
+    hfss = (
+        plan_hfss_boundaries(sidecar, guard, model.junctions, model.lumped_rlcs)
+        if family == "hfss"
+        else None
+    )
     roles = q3d_net_roles(model, sidecar) if family == "q3d" else {}
+    net_names = q3d_net_names(roles)
     # AEDT's readback is coarser than the sidecar's tolerance_um (decision 9), so every comparison with what
     # AEDT reports uses a thousandth of the bound model's own grid.
     tolerance_um = import_tolerance_um(float(sidecar["grid_um"]))
@@ -107,20 +115,20 @@ def import_sgb_model(
     imported.record["region"] = _create_region(
         app, model, sidecar, family, tolerance_um
     )
-    if family == "hfss":
-        imported.record["perfect_e"] = _assign_sheet_perfect_e(
-            app, sidecar, face_copies
-        )
+    if hfss is not None:
+        imported.record["perfect_e"] = assign_sheet_perfect_e(app, hfss, face_copies)
         imported.record["junctions"] = [
-            _assign_junction_rlc(app, sidecar, face_copies, item, tolerance_um)
-            for item in model.junctions
+            assign_port_rlc(app, rlc, face_copies, tolerance_um)
+            for rlc in hfss.junctions
         ]
         imported.record["lumped_rlcs"] = [
-            _assign_generic_rlc(app, sidecar, face_copies, item, tolerance_um)
-            for item in model.lumped_rlcs
+            assign_port_rlc(app, rlc, face_copies, tolerance_um)
+            for rlc in hfss.lumped_rlcs
         ]
     else:
-        imported.record["nets"] = _assign_q3d_nets(app, sidecar, objects, roles)
+        imported.record["nets"] = assign_q3d_nets(
+            app, sidecar, objects, roles, net_names
+        )
     imported.record["readback_tolerance_um"] = tolerance_um
     imported.record["model_identity_sha256"] = model.identity_sha256
     return imported
@@ -419,23 +427,17 @@ def _assign_outer_perfect_h(app: Any, region: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------- HFSS conductors and junctions
 
 
-def _assign_sheet_perfect_e(
-    app: Any, sidecar: Mapping[str, Any], face_copies: Mapping[str, Mapping[str, int]]
+def assign_sheet_perfect_e(
+    app: Any, plan: HfssBoundaryPlan, face_copies: Mapping[str, Mapping[str, int]]
 ) -> list[dict[str, Any]]:
-    """One Perfect E per Net over every copy of its Route A sheet faces; a Route C model has none."""
-    groups = sidecar["physical_groups"]
+    """One Perfect E per Net over every copy of its Route A sheet faces, under the plan's name; Route C has none."""
     records = []
-    for net, net_groups in sorted(sidecar["unions"]["nets"].items()):
+    for net, (name, planned_faces) in plan.perfect_e.items():
         faces = sorted(
             face_id
-            for group in net_groups
-            if groups[group]["interface_type"] == "SHEET"
-            for planned in groups[group]["ids"]
+            for planned in planned_faces
             for face_id in face_copies[planned].values()
         )
-        if not faces:
-            continue
-        name = f"perfect_e_{sanitise_aedt_name(net)}"
         boundary = app.assign_perfect_e(faces, name=name)
         if not boundary or native_boundary_type(app, name) != "Perfect E":
             raise SgbImportError(f"AEDT did not assign Perfect E for Net {net!r}")
@@ -443,133 +445,54 @@ def _assign_sheet_perfect_e(
     return records
 
 
-def _assign_junction_rlc(
+def assign_port_rlc(
     app: Any,
-    sidecar: Mapping[str, Any],
+    rlc: PortRlc,
     face_copies: Mapping[str, Mapping[str, int]],
-    item: SgbJunction,
     tolerance_um: float,
 ) -> dict[str, Any]:
-    """The junction's parallel Lumped RLC (its inductance and capacitance) on its port face."""
-    junction = item.junction
-    port = _sidecar_port(sidecar, item.port_group)
-    declared = _unit((*junction.direction_xy, 0.0))
-    if math.dist(_unit(port["direction"]), declared) > 1e-9:
-        raise SgbImportError(
-            f"junction {junction.junction_id!r} runs along {junction.direction_xy}, its port sheet "
-            f"along {port['direction']}"
-        )
-    branches: dict[str, Any] = {
-        "RLC Type": "Parallel",
-        "UseResist": False,
-        "UseInduct": True,
-        "Inductance": f"{junction.inductance_h}H",
-        "UseCap": bool(junction.capacitance_f),
-    }
-    if junction.capacitance_f:
-        branches["Capacitance"] = f"{junction.capacitance_f}F"
-    name = f"junction_rlc_{sanitise_aedt_name(junction.junction_id)}"
-    record = _assign_port_rlc(app, port, face_copies, name, branches, tolerance_um)
-    return {
-        "junction_id": junction.junction_id,
-        **record,
-        "inductance_h": junction.inductance_h,
-        "capacitance_f": junction.capacitance_f,
-    }
+    """One Lumped RLC over every face of its port sheet, its current line read from those faces' own edges.
 
-
-def _assign_generic_rlc(
-    app: Any,
-    sidecar: Mapping[str, Any],
-    face_copies: Mapping[str, Mapping[str, int]],
-    treatment: LumpedRlc,
-    tolerance_um: float,
-) -> dict[str, Any]:
-    """A ``LumpedRlc`` on the port face it names: exactly its enabled branches, in its topology."""
-    port = _sidecar_port(sidecar, port_group(treatment.port_sheet_id))
-    name = f"rlc_{sanitise_aedt_name(treatment.port_sheet_id)}"
-    branches = rlc_branches(treatment)
-    record = _assign_port_rlc(app, port, face_copies, name, branches, tolerance_um)
-    return {
-        "port_sheet_id": treatment.port_sheet_id,
-        **record,
-        "requested": treatment.to_payload(),
-    }
-
-
-def rlc_branches(treatment: LumpedRlc) -> dict[str, Any]:
-    """The native Lumped RLC properties of ``treatment``: its topology and exactly its enabled branches.
-
-    ``None`` alone disables a branch, so an authored zero stays an enabled branch of value zero.
+    SGB partitions a port sheet where another face meets it (a pad wall, a band), so the RLC takes all of
+    its faces and the current line crosses their union along the port's ``direction``.  A face two solids
+    share imports twice, about 4e-5 um apart on arcs (E4), so the line ends come from the imported faces
+    themselves, never from the sidecar's coordinates.
     """
-    branches: dict[str, Any] = {"RLC Type": rlc_native_topology(treatment.topology)}
-    for enabled, key, value, unit in (
-        ("UseResist", "Resistance", treatment.resistance_ohm, "ohm"),
-        ("UseInduct", "Inductance", treatment.inductance_h, "H"),
-        ("UseCap", "Capacitance", treatment.capacitance_f, "F"),
-    ):
-        branches[enabled] = value is not None
-        if value is not None:
-            branches[key] = f"{value}{unit}"
-    return branches
-
-
-def _sidecar_port(sidecar: Mapping[str, Any], group: str) -> Mapping[str, Any]:
-    ports = [p for p in sidecar["ports"] if p["group"] == group]
-    if len(ports) != 1:
-        raise SgbImportError(
-            f"the sidecar has {len(ports)} lumped ports {group!r}, not one"
-        )
-    return ports[0]
-
-
-def _assign_port_rlc(  # noqa: PLR0913 -- the port, its face copies, the boundary name and its branches
-    app: Any,
-    port: Mapping[str, Any],
-    face_copies: Mapping[str, Mapping[str, int]],
-    name: str,
-    branches: Mapping[str, Any],
-    tolerance_um: float,
-) -> dict[str, Any]:
-    """One Lumped RLC on a port's face, its current line read from that face's own edges along ``direction``.
-
-    A face two solids share imports twice, about 4e-5 um apart on arcs (E4), so the line ends come from the
-    imported face itself, never from the sidecar's coordinates.
-    """
-    (planned,) = port["faces"]
-    copies = face_copies[planned]
-    if len(copies) != 1:
-        raise SgbImportError(
-            f"port face {planned} has {len(copies)} imported copies, not one"
-        )
-    ((object_name, face_id),) = copies.items()
-    face = next(f for f in app.modeler[object_name].faces if int(f.id) == face_id)
-    edges = [
-        tuple(_point(vertex.position) for vertex in edge.vertices)
-        for edge in face.edges
-    ]
-    start, end = current_line_um(edges, _unit(port["direction"]), tolerance_um)
+    faces: list[tuple[str, int]] = []
+    edges: list[tuple[Point, ...]] = []
+    for planned in rlc.port["faces"]:
+        ((object_name, face_id),) = face_copies[planned].items()
+        face = next(f for f in app.modeler[object_name].faces if int(f.id) == face_id)
+        faces.append((object_name, face_id))
+        edges += [
+            tuple(_point(vertex.position) for vertex in edge.vertices)
+            for edge in face.edges
+        ]
+    start, end = current_line_um(edges, rlc.direction, tolerance_um)
     props = {
-        "Faces": [face_id],
+        "Faces": [face_id for _, face_id in faces],
         "CurrentLine": {
             "Start": [f"{value}um" for value in start],
             "End": [f"{value}um" for value in end],
         },
-        **branches,
+        **rlc.branches,
     }
     # PyAEDT's Lumped RLC helpers take sheet names only and refuse all-falsy values; the native writer takes
-    # the face id (E4) and keeps an authored zero branch.
-    boundary = app._create_boundary(name, props, "Lumped RLC")  # noqa: SLF001 -- the pinned native writer is the only face-id route.
-    if not boundary or native_boundary_type(app, name) != "Lumped RLC":
-        raise SgbImportError(f"AEDT did not assign the Lumped RLC {name!r}")
+    # the face ids (E4) and keeps an authored zero branch.
+    boundary = app._create_boundary(rlc.name, props, "Lumped RLC")  # noqa: SLF001 -- the pinned native writer is the only face-id route.
+    if not boundary or native_boundary_type(app, rlc.name) != "Lumped RLC":
+        raise SgbImportError(f"AEDT did not assign the Lumped RLC {rlc.name!r}")
     return {
-        "boundary": name,
-        "port_group": port["group"],
-        "object_name": object_name,
-        "face_id": face_id,
-        "host_entity_ids": list(port["host_entity_ids"]),
+        **rlc.evidence,
+        "boundary": rlc.name,
+        "port_group": rlc.port["group"],
+        "faces": [
+            {"object_name": object_name, "face_id": face_id}
+            for object_name, face_id in faces
+        ],
+        "host_entity_ids": list(rlc.port["host_entity_ids"]),
         "current_line_um": [list(start), list(end)],
-        "branches": dict(branches),
+        "branches": dict(rlc.branches),
     }
 
 
@@ -649,13 +572,17 @@ def q3d_net_roles(
     }
 
 
-def _assign_q3d_nets(
+def assign_q3d_nets(
     app: Any,
     sidecar: Mapping[str, Any],
     objects: Mapping[str, str],
     roles: Mapping[str, Literal["Signal", "Ground"]],
+    net_names: Mapping[str, str],
 ) -> list[dict[str, Any]]:
-    """One Net per sidecar Net over its conductor solids, in Net order, with its declared role."""
+    """One Net per sidecar Net over its conductor solids, in Net order, with its declared role.
+
+    Each Net is assigned and read back under its name in ``net_names`` (:func:`q3d_net_names`).
+    """
     by_net: dict[str, list[str]] = {}
     for solid_id, name in objects.items():
         volume = sidecar["volumes"][solid_id]
@@ -665,7 +592,7 @@ def _assign_q3d_nets(
             by_net.setdefault(volume["net"], []).append(name)
     records = []
     for net, names in sorted(by_net.items()):
-        net_name = sanitise_aedt_name(net)
+        net_name = net_names[net]
         boundary = app.assign_net(names, net_name, roles[net])
         assigned = sorted(
             int(value) for value in app.oboundary.GetExcitationAssignment(net_name)
@@ -693,11 +620,3 @@ def _mean(points: Sequence[Point]) -> Point:
 
 def _dot(a: Sequence[float], b: Sequence[float]) -> float:
     return sum(x * y for x, y in zip(a, b, strict=True))
-
-
-def _unit(values: Sequence[float]) -> Point:
-    vector = _point(values)
-    length = math.sqrt(_dot(vector, vector))
-    if length == 0:
-        raise ValueError("a direction must not be zero")
-    return _point([value / length for value in vector])

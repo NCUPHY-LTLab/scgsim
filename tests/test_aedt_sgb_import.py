@@ -3,6 +3,8 @@
 * the free-face loop drawn as one closed AEDT polyline, and its segment lengths;
 * the junction current line read from a port face's own edges, and a generic RLC's native branches;
 * the refusal of a port sheet with no treatment, and of lumped ports, before AEDT is touched;
+* a port treatment over every face of a port sheet SGB partitions, checked before AEDT is touched;
+* boundary and Net names unique across Net IDs that sanitise alike, assigned and read back under one name;
 * which imported copy of a face each Surface-EPR row integrates, and the ``surface``/``adjacent`` choice by
   sidecar group, on the guard and sidecar of real SGB builds (``occt``).
 
@@ -14,7 +16,9 @@ from __future__ import annotations
 
 import json
 import math
+from collections import Counter
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -22,22 +26,34 @@ pytest.importorskip(
     "OCP"
 )  # the AEDT SGB modules import the SGB exporter, which needs OCP
 
+from sgb_extreme_cases import FIXTURES, build_model  # noqa: E402
 from sgb_inputs import rectangular_junction_source  # noqa: E402
+from test_sgb_step_guard import export  # noqa: E402
 
+import scgsim.aedt.runtime.families.sgb_import as sgb_import  # noqa: E402
 from scgsim.aedt.epr.sgb_surfaces import (  # noqa: E402
     SurfaceBindingError,
     surface_face_bindings,
     surface_field_selections,
 )
 from scgsim.aedt.preparation.sgb_model import prepare_sgb_model  # noqa: E402
+from scgsim.aedt.runtime.families.sgb_boundaries import (  # noqa: E402
+    BoundaryPlanError,
+    plan_hfss_boundaries,
+    q3d_net_names,
+    rlc_branches,
+)
+from scgsim.aedt.runtime.families.sgb_faces import import_tolerance_um  # noqa: E402
 from scgsim.aedt.runtime.families.sgb_import import (  # noqa: E402
     ImportedSgbModel,
     SgbImportError,
+    assign_port_rlc,
+    assign_q3d_nets,
+    assign_sheet_perfect_e,
     current_line_um,
     import_sgb_model,
     polyline_of_loop,
     q3d_net_roles,
-    rlc_branches,
     segment_length_um,
 )
 from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort  # noqa: E402
@@ -318,3 +334,182 @@ def test_route_a_bump_rows_read_the_body_as_route_c_reads_a_conductor(models):
     for binding in bindings.values():
         planned = sidecar["physical_groups"][binding.group]["ids"]
         assert len(binding.faces) == len(planned) == len(set(binding.faces))
+
+
+# ---------------------------------------------------------------- boundary assignments on a fake design
+
+
+class _Native:
+    """The fake design's ``oboundary``: its boundary list and Net assignments, as AEDT returns them."""
+
+    def __init__(self, design):
+        self._design = design
+
+    def GetBoundaries(self):  # noqa: N802 -- the AEDT method name
+        """Name, type, name, type ... of every boundary."""
+        return [
+            v
+            for name, (kind, _) in self._design.boundaries.items()
+            for v in (name, kind)
+        ]
+
+    def GetExcitationAssignment(self, name):  # noqa: N802 -- the AEDT method name
+        """The object ids the Net ``name`` holds."""
+        return [self._design.modeler[obj].id for obj in self._design.nets[name]]
+
+
+class _FakeDesign:
+    """The AEDT calls the boundary assignments make, on named objects.
+
+    A name already taken gets a new one, so a second claim never replaces the first one silently; what
+    each name holds at the end is what the design holds.
+    """
+
+    def __init__(self, objects):
+        self.modeler = objects
+        self.boundaries = {}
+        self.nets = {}
+        self.oboundary = _Native(self)
+
+    @staticmethod
+    def _free(name, taken):
+        while name in taken:
+            name += "_1"
+        return name
+
+    def _create_boundary(self, name, props, kind):
+        self.boundaries[self._free(name, self.boundaries)] = (kind, props)
+        return True
+
+    def assign_perfect_e(self, faces, name):
+        """Perfect E over ``faces``."""
+        self.boundaries[self._free(name, self.boundaries)] = (
+            "Perfect E",
+            {"Faces": list(faces)},
+        )
+        return True
+
+    def assign_net(self, names, net_name, role):
+        """A Q3D Net over the objects ``names``."""
+        self.nets[self._free(net_name, self.nets)] = list(names)
+        return True
+
+
+def _vertex(point):
+    return SimpleNamespace(position=list(point))
+
+
+def _rebuilt_sheets(guard):
+    """Each guarded free face as the sheet AEDT rebuilds from its loops, and the face copies that names."""
+    objects, copies = {}, {}
+    for k, free in enumerate(guard["free_faces"]):
+        edges = [
+            SimpleNamespace(
+                vertices=[_vertex(s["points_um"][0]), _vertex(s["points_um"][-1])]
+            )
+            for loop in free["loops"]
+            for s in loop
+        ]
+        face = SimpleNamespace(id=1000 + k, edges=edges)
+        objects[f"sheet{k}"] = SimpleNamespace(faces=[face])
+        copies[free["face"]] = {f"sheet{k}": 1000 + k}
+    return objects, copies
+
+
+def test_a_port_sheet_split_into_several_faces_takes_one_rlc_over_all_of_them(tmp_path):
+    """The round pad's wall cuts port p1 into two free faces; the RLC holds both, its line crosses their union."""
+    sidecar, exported = export(
+        build_model(FIXTURES["port_crossing_round_pad"], "C"), tmp_path
+    )
+    rlc = LumpedRlc("p1", "parallel", inductance_h=1e-8)
+    plan = plan_hfss_boundaries(sidecar, exported.guard, (), (rlc,))
+    (planned,) = plan.lumped_rlcs
+    assert len(planned.port["faces"]) == 2
+    objects, copies = _rebuilt_sheets(exported.guard)
+    design = _FakeDesign(objects)
+    tolerance_um = import_tolerance_um(float(sidecar["grid_um"]))
+    record = assign_port_rlc(design, planned, copies, tolerance_um)
+    kind, props = design.boundaries["rlc_p1"]
+    assert kind == "Lumped RLC" and list(design.boundaries) == ["rlc_p1"]
+    port_faces = [
+        face_id for face in planned.port["faces"] for face_id in copies[face].values()
+    ]
+    assert sorted(props["Faces"]) == sorted(port_faces) == [1000, 1001]
+    assert [f["face_id"] for f in record["faces"]] == props["Faces"]
+    # x = 4 is split between the two faces at (4, 3); x = 9 lies on the larger face only.
+    assert record["current_line_um"] == [[4.0, 3.0, 0.1], [9.0, 3.0, 0.1]]
+    assert props["CurrentLine"] == {
+        "Start": ["4.0um", "3.0um", "0.1um"],
+        "End": ["9.0um", "3.0um", "0.1um"],
+    }
+
+
+def test_a_port_face_that_does_not_import_once_is_refused_before_aedt_is_touched(
+    tmp_path, monkeypatch
+):
+    """A port face two solids share has two copies; the import refuses it before it touches the design."""
+    model = _bare_model(
+        tmp_path, lumped_rlcs=(LumpedRlc("sheet", "parallel", inductance_h=1e-8),)
+    )
+    sidecar = json.loads(model.path("sidecar").read_text(encoding="utf-8"))
+    guard = json.loads(model.path("guard").read_text(encoding="utf-8"))
+    owners = Counter(f["face"] for solid in guard["solids"] for f in solid["faces"])
+    shared = min(face for face, count in owners.items() if count == 2)
+    (port,) = sidecar["ports"]
+    port["faces"] = [*port["faces"], shared]
+    monkeypatch.setattr(sgb_import, "read_sidecar", lambda _: sidecar)
+    # ``app`` is None: any use of the design raises AttributeError instead of the refusal.
+    with pytest.raises(
+        BoundaryPlanError, match=f"port face {shared} .* 2 copies, not one"
+    ):
+        import_sgb_model(None, model, family="hfss")
+
+
+def _renamed_nets(sidecar, renames):
+    """``sidecar`` with its Nets renamed, in its Net union and on its volumes."""
+    out = json.loads(json.dumps(sidecar))
+    nets = out["unions"]["nets"]
+    out["unions"]["nets"] = {
+        renames.get(net, net): groups for net, groups in nets.items()
+    }
+    for volume in out["volumes"].values():
+        if volume["net"] in renames:
+            volume["net"] = renames[volume["net"]]
+    return out
+
+
+def test_nets_whose_ids_sanitise_alike_get_a_perfect_e_each(models):
+    """``chip/A`` and ``chip_A`` both sanitise to ``chip_A``; each Net gets its own Perfect E, on its own faces."""
+    sidecar, imported = _as_imported(models["thin_film"])
+    renamed = _renamed_nets(sidecar, {"A": "chip/A", "B": "chip_A"})
+    guard = json.loads(models["thin_film"].path("guard").read_text(encoding="utf-8"))
+    plan = plan_hfss_boundaries(renamed, guard, (), ())
+    assert {net: name for net, (name, _) in plan.perfect_e.items()} == {
+        "chip/A": "perfect_e_chip_A",
+        "chip_A": "perfect_e_chip_A__2",
+    }
+    design = _FakeDesign({})
+    records = assign_sheet_perfect_e(design, plan, imported.face_copies)
+    assert len(records) == 2
+    for record in records:
+        kind, props = design.boundaries[record["boundary"]]
+        assert kind == "Perfect E" and props["Faces"] == record["faces"]
+    assert set(design.boundaries) == {r["boundary"] for r in records}
+
+
+def test_q3d_nets_whose_ids_sanitise_alike_are_assigned_and_read_back_apart(models):
+    """Each Net is assigned and read back under its own unique name, never one Net under the other's."""
+    sidecar, imported = _as_imported(models["solid"])
+    renamed = _renamed_nets(sidecar, {"A": "chip/A", "B": "chip_A"})
+    roles = {"chip/A": "Signal", "chip_A": "Ground"}
+    names = q3d_net_names(roles)
+    assert names == {"chip/A": "chip_A", "chip_A": "chip_A__2"}
+    design = _FakeDesign(
+        {
+            name: SimpleNamespace(id=k)
+            for k, name in enumerate(imported.objects.values())
+        }
+    )
+    records = assign_q3d_nets(design, renamed, imported.objects, roles, names)
+    assert design.nets == {r["name"]: r["objects"] for r in records}
+    assert {r["net"]: r["name"] for r in records} == names

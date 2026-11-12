@@ -449,12 +449,12 @@ carrier and cannot reinterpret a caller spec or workspace.
 New preparation keeps the handoff and handoff-manifest schemas at V1 while both
 declare that the mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial
 V3 receipt records a declared `runtime-source.v30` preparation-time SCGSim module
-manifest and content digest for 400 sorted, unique paths. V30 starts from all
+manifest and content digest for 401 sorted, unique paths. V30 starts from all
 current AEDT modules, both AEDT visualization loaders, and the non-AEDT paths retained from V29 except `scgsim/geometry/models/lumped.py`,
 then follows AST-resolved imports and package initializers.
 Against the frozen 285-path V29 roster it adds the AEDT SGB STEP import
 (`scgsim/aedt/preparation/sgb_model.py`, `scgsim/aedt/runtime/families/sgb_import.py`,
-`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
+`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/runtime/families/sgb_boundaries.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
 drops `scgsim/aedt/runtime/native/hfss_lumped.py`, `scgsim/aedt/specs/support.py`
 and `scgsim/geometry/models/lumped.py`, which issue #67 decision 8 removed. Before mutation, execution verifies the canonical manifest and binds the
 initial-receipt and prepared-manifest hashes. A canonical historical
@@ -475,7 +475,7 @@ consistency contract is not source authenticity for an actor able
 to rewrite the entire unsigned artifact set.
 
 The [AEDT receipt/provenance contract](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance)
-is the unique authority for the exact current V30 400-path inventory and frozen
+is the unique authority for the exact current V30 401-path inventory and frozen
 historical reader evolution. V1–V12 retain their exact prior path assignments
 and reader interpretations; V13 binds its declared file set, not every
 transitive dependency. One pure, versioned initial-receipt codec owns historical

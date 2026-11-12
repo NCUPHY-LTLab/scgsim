@@ -1386,6 +1386,7 @@ _RUNTIME_SOURCE_V30_PATHS = (
     "src/scgsim/aedt/runtime/families/q3d_setup.py",
     "src/scgsim/aedt/runtime/families/q3d_terminals.py",
     "src/scgsim/aedt/runtime/families/q3d_termination.py",
+    "src/scgsim/aedt/runtime/families/sgb_boundaries.py",
     "src/scgsim/aedt/runtime/families/sgb_faces.py",
     "src/scgsim/aedt/runtime/families/sgb_import.py",
     "src/scgsim/aedt/runtime/handoff_validation.py",

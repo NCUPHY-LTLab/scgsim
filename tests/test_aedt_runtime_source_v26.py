@@ -56,7 +56,7 @@ HISTORICAL_INVENTORY_DIGESTS = {
 V27_PATH_DIGEST = "304e9c166cc231a33de53bd345743eb6f29a5ca92f54b8b972024182b3ddc37d"
 V28_PATH_DIGEST = "1ea4a853b9d06382d6dcff5659c8863457404a8373e970c6da532d16dc700bf0"
 V29_PATH_DIGEST = "0066775548d0e67d447ec80f20a617129e11c84159fc461a38aaf3ce34a0046a"
-V30_PATH_DIGEST = "182f8c4de72238795364311a974eacb09b86ac1428a2037bad2fe6c2d272c482"
+V30_PATH_DIGEST = "9b867fd40fbba3739ced60b58c3a8f78801ac97cc82d7e09edca7b44207c0914"
 # Issue #67 decision 8 removed these V29 modules; the AEDT SGB import adds its modules and SGB's closure.
 REMOVED_FROM_V29 = {
     "src/scgsim/aedt/runtime/native/hfss_lumped.py",
@@ -78,7 +78,7 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
     repository = Path(__file__).resolve().parents[1]
     paths = current_runtime_source_paths()
     assert SOURCE_SCHEMA == "scgsim.aedt.runtime-source.v30"
-    assert len(paths) == 400
+    assert len(paths) == 401
     assert paths == tuple(sorted(set(paths)))
     assert runtime_source_paths(SOURCE_SCHEMA) == paths
     assert all((repository / path).is_file() for path in paths)

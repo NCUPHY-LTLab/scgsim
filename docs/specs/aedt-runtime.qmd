@@ -245,12 +245,12 @@ New handoffs retain `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`. Both records add
 `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
 V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v30` manifest for the current source, with 400 sorted, unique
+`runtime-source.v30` manifest for the current source, with 401 sorted, unique
 paths. V30 starts from all current AEDT modules, both AEDT visualization loaders,
 and the non-AEDT paths retained from V29 except `scgsim/geometry/models/lumped.py`, then follows AST-resolved imports and
 package initializers. Against the frozen 285-path V29 roster it adds the AEDT SGB STEP import
 (`scgsim/aedt/preparation/sgb_model.py`, `scgsim/aedt/runtime/families/sgb_import.py`,
-`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
+`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/runtime/families/sgb_boundaries.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
 drops `scgsim/aedt/runtime/native/hfss_lumped.py`, `scgsim/aedt/specs/support.py`
 and `scgsim/geometry/models/lumped.py`, which issue #67 decision 8 removed. The fields are `schema_version`, `stage`,
 `modules`, `content_sha256`, and `revision_observation`; there is no helper-hash
@@ -335,7 +335,7 @@ AEDT visualization loaders, and the retained non-AEDT paths, then closed over
 AST-resolved imports and package initializers. V28 freezes 284 paths; it
 adds `scgsim/geometry/primitives/topology_validation.py` to V27. V29 freezes
 285 paths; it adds `scgsim/geometry/planning/junction_planning/lattice.py` to V28.
-V30 is current with 400 paths; it adds the AEDT SGB STEP import and the SGB
+V30 is current with 401 paths; it adds the AEDT SGB STEP import and the SGB
 modules it imports to V29, and drops the three modules issue #67 decision 8
 removed. V23–V30 use the
 same five record fields described above, with no helper-hash map. Each

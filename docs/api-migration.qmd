@@ -304,12 +304,12 @@ export/readback dependency becomes an explicit internal service. Visualization
 imports current PyAEDT constants from the canonical spec owner without making
 them public exports.
 
-The current producer uses runtime-source v30 with 400 sorted, unique declared
+The current producer uses runtime-source v30 with 401 sorted, unique declared
 paths. Its inventory starts with all current AEDT modules, both AEDT
 visualization loaders, and the non-AEDT paths retained from V29 except `scgsim/geometry/models/lumped.py`, then follows
 AST-resolved imports and package initializers. Against the frozen 285-path V29 roster it adds the AEDT SGB STEP import
 (`scgsim/aedt/preparation/sgb_model.py`, `scgsim/aedt/runtime/families/sgb_import.py`,
-`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
+`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/runtime/families/sgb_boundaries.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
 drops `scgsim/aedt/runtime/native/hfss_lumped.py`, `scgsim/aedt/specs/support.py`
 and `scgsim/geometry/models/lumped.py`, which issue #67 decision 8 removed.
 Per-module hashes bind the declared files, and the canonical manifest digest
