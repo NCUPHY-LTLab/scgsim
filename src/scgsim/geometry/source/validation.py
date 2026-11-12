@@ -16,6 +16,11 @@ from scgsim.geometry.primitives.entity_validation import (
 )
 
 
+def has_vacuum_solution_region(build_input: GeometryBuildInput) -> bool:
+    """Whether the input holds a vacuum solution region: the one rule validation and Palace preparation share."""
+    return any(is_vacuum_solution_entity(entity) for entity in build_input.entities)
+
+
 def validate_geometry_input(build_input: GeometryBuildInput) -> GeometryBuildInput:
     """Validate adapter-normalized input before route-aware planning."""
     state = _InputValidation(build_input)
@@ -23,7 +28,7 @@ def validate_geometry_input(build_input: GeometryBuildInput) -> GeometryBuildInp
     _validate_entities(state)
     _validate_attachments(state)
     _validate_port_regions(state)
-    if not any(is_vacuum_solution_entity(entity) for entity in build_input.entities):
+    if not has_vacuum_solution_region(build_input):
         state.errors.append("GeometryBuildInput requires a vacuum solution_region")
     if state.errors:
         raise ValueError("Invalid GeometryBuildInput: " + "; ".join(state.errors))

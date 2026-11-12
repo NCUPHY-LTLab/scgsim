@@ -73,6 +73,10 @@ boundary; this does not change operational failures inside `mesh()` or
 
 ## Palace mesh controls {#palace-mesh-controls}
 
+A model needs a vacuum region: `mesh()` raises `ValueError` before writing any
+file when the plan declares none and `set_vacuum_region` was not called on the
+simulation (or `plan.set_vacuum_region(...)` before `prepare()`).
+
 `mesh()` builds the geometry with SGB, meshes it with `scgsim.meshing` and
 writes the Palace mesh, so the mesh controls are the controls of that module.
 Both Palace facades accept them through `set_mesh(...)`, with the same defaults.

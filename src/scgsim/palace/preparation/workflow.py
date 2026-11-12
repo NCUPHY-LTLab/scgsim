@@ -23,6 +23,7 @@ from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.ground_bumps import prepare_indium_ground_bump_fill
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
+from scgsim.geometry.source.validation import has_vacuum_solution_region
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports
@@ -97,6 +98,11 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
         build_input, prepared_stack, approximation_profile
     )
     prepared_stack = effective_stack
+    if not has_vacuum_solution_region(effective_input):
+        raise ValueError(
+            "the model has no vacuum region: the plan declares none and none was set on the simulation; "
+            "call plan.set_vacuum_region(...) before prepare() or sim.set_vacuum_region(...) before mesh()"
+        )
     if route == "A":
         source_hash = canonical_sha256(to_plain(stack))
         prepared_stack["metadata"]["route_a_thin_film"] = {

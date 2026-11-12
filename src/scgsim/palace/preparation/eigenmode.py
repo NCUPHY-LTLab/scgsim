@@ -124,8 +124,8 @@ class EigenmodeSim:
 
         The source half is the geometry input and stack ``mesh()`` prepares from the bound plan, so it holds the
         vacuum region, the requested ports and the route's conductors as the simulation was given them.
-        A setup ``mesh()`` refuses while preparing is refused here with the same error; an input with no vacuum,
-        planned or set, is refused here only.  Nothing is built or written, and the simulation is left as it was.
+        A setup ``mesh()`` refuses while preparing is refused here with the same error, an input with no vacuum,
+        planned or set, included.  Nothing is built or written, and the simulation is left as it was.
         """
         if self._plan_snapshot is None:
             raise ValueError("input_summary requires a bound GeometryPlan snapshot")

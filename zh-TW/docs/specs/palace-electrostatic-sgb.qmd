@@ -49,6 +49,8 @@ prepare shared GeometryPlan snapshot
 
 ## Palace 網格控制 {#palace-mesh-controls}
 
+模型需要真空區域：計畫沒有宣告、模擬也沒有呼叫 `set_vacuum_region` 時（或在 `prepare()` 之前呼叫 `plan.set_vacuum_region(...)`），`mesh()` 會在寫出任何檔案之前拋出 `ValueError`。
+
 `mesh()` 以 SGB 建立幾何、用 `scgsim.meshing` 產生網格，再寫出 Palace 網格，因此網格控制就是該模組的控制。兩個 Palace 外觀介面都透過 `set_mesh(...)` 接受這些控制，預設值相同。省略的引數保留目前設定。實際改變任何設定的更新會使網格、設定檔及交接失效；無效的更新提案則保留原狀態。
 
 ::: {.callout-note title="不一定要使用 SCGSim 的網格化"}
