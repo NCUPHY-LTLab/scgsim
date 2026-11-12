@@ -216,6 +216,7 @@ def problem_figures() -> list[Figure]:
                zooms=((-5, -12, 45, 12),)),
         Figure("problem-single-vertex", single_vertex_drawing, (-55, -55, 55, 55),
                zooms=(_around(_added_vertex(), 0.1),)),
+        *boundary_figures(),
     ]  # fmt: skip
 
 
@@ -470,6 +471,73 @@ def single_vertex_drawing() -> Drawing:
     return Drawing(
         scene, [Mark((points[0], points[1]), dashed=True), Mark((added,), dots=True)]
     )
+
+
+# A conductor on the model's planar boundary.  The die is 60 x 40 um; ground strips run across it, cut off at
+# x = 0 and x = 60, and a centre conductor sits on the left boundary x = 0, where the vacuum ends.  The CPW's
+# strip and the square pad occupy a segment of that boundary; the 64-gon and the diamond touch it at one vertex.
+BOUNDARY_DIE = (0.0, 0.0, 60.0, 40.0)
+BOUNDARY_VIEW = (-8.0, -4.0, 64.0, 44.0)
+BOUNDARY_POINT = (0.0, 20.0)
+BOUNDARY_GROUNDS = (rect(0, 0, 60, 12), rect(0, 28, 60, 40))
+BOUNDARY_CENTRES: dict[str, tuple[list[Um], View]] = {
+    "cpw": (rect(0, 18, 60, 22), _around(BOUNDARY_POINT, 4.0)),
+    "square": (rect(0, 14, 12, 26), _around((0.0, 14.0), 4.0)),
+    "round": (ngon(6.0, 64, (6.0, 20.0)), _around(BOUNDARY_POINT, 3.0)),
+    "diamond": ([(0, 20), (6, 14), (12, 20), (6, 26)], _around(BOUNDARY_POINT, 3.0)),
+}
+# The fix: the ground drawn round the pad's left side, 4 um from it, so the ground sets the boundary x = -10.
+BOUNDARY_FIXED_GROUNDS = (rect(-10, 0, 60, 12), rect(-10, 28, 60, 40), rect(-10, 12, -4, 28))  # fmt: skip
+
+
+def boundary_figures() -> list[Figure]:
+    """The four conductors on the boundary, each zoomed where it meets it, and the round pad with the fix."""
+    return [
+        *(Figure(f"problem-boundary-{name}", lambda name=name: boundary_drawing(name), BOUNDARY_VIEW,
+                 zooms=(zoom,)) for name, (_, zoom) in BOUNDARY_CENTRES.items()),
+        Figure("problem-boundary-fixed", boundary_fixed_drawing, (-18.0, -4.0, 64.0, 44.0),
+               zooms=(_around(BOUNDARY_POINT, 6.0),)),
+    ]  # fmt: skip
+
+
+def boundary_drawing(name: str) -> Drawing:
+    """One centre conductor between the ground strips; the stretches of boundary metal occupies in ink, a point in red."""
+    outline, _ = BOUNDARY_CENTRES[name]
+    conductors = [
+        _metal(f"ground_{k}", ground, "Ground")
+        for k, ground in enumerate(BOUNDARY_GROUNDS)
+    ]
+    conductors.append(_metal(name, outline))
+    scene = Scene(f"boundary_{name}", (), BOUNDARY_DIE, conductors)
+    occupied = [((0.0, 0.0), (0.0, 12.0)), ((0.0, 28.0), (0.0, 40.0))]
+    if name == "cpw":
+        occupied.append(((0.0, 18.0), (0.0, 22.0)))
+    if name == "square":
+        occupied.append(((0.0, 14.0), (0.0, 26.0)))
+    marks = [_occupied(segment) for segment in occupied]
+    if name in ("round", "diamond"):
+        marks.append(Mark((BOUNDARY_POINT,), dots=True))
+    return Drawing(scene, marks, die=tuple(rect(*BOUNDARY_DIE)))
+
+
+def boundary_fixed_drawing() -> Drawing:
+    """The round pad with the ground drawn round its left side: the ground occupies the whole boundary x = -10."""
+    outline, _ = BOUNDARY_CENTRES["round"]
+    conductors = [
+        _metal(f"ground_{k}", ground, "Ground")
+        for k, ground in enumerate(BOUNDARY_FIXED_GROUNDS)
+    ]
+    conductors.append(_metal("round", outline))
+    die = (-10.0, 0.0, 60.0, 40.0)
+    scene = Scene("boundary_fixed", (), die, conductors)
+    return Drawing(
+        scene, [_occupied(((-10.0, 0.0), (-10.0, 40.0)))], die=tuple(rect(*die))
+    )
+
+
+def _occupied(segment: tuple[Um, Um]) -> Mark:
+    """A stretch of the boundary that metal occupies: a heavy ink line along the die edge."""
+    return Mark(segment, colour=INK, width=4.0)
 
 
 # --------------------------------------------------------------------------- unsupported geometry

@@ -9,6 +9,7 @@ follow the grid audits are internal invariants: the located audit refuses first.
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
 import gdstk
@@ -19,6 +20,7 @@ from test_rectangular_junction_geometry import fixture as junction_fixture
 from test_sgb_prisms import with_boundaries
 from test_simulation_drc import check, two_pads
 
+from scgsim.documentation import page_url
 from scgsim.geometry.models.input import BoundaryCurveChainSpec, SourceCurveSpec
 from scgsim.geometry.primitives.grid import (
     PolygonRegion,
@@ -272,7 +274,17 @@ def test_conductors_of_one_net_meeting_at_a_corner_are_a_located_pinch(monkeypat
     message = str(error.value)
     assert message.startswith("non-manifold pinch:")
     assert "chip/pad_0000 on layer metal" in message
-    assert "Fix the layout" in message
+    # The corner is inside the planar extent: a pinch between two conductors, not one at the vacuum's edge.
+    assert "pinched between conductors" in message
+    assert message.endswith(
+        "Fix the layout: give them a shared edge or separate them. See "
+        + page_url("docs/known-geometry-problems", "pinch-inside-the-layout")
+    )
+    assert re.search(
+        r" See https://ncuphy-ltlab\.github\.io/scgsim/v\d+\.\d+\.\d+(-dev)?/"
+        r"docs/known-geometry-problems\.html#pinch-inside-the-layout$",
+        message,
+    )
     (place,) = places(message)
     assert on(place, point(20, 0))
 

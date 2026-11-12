@@ -76,3 +76,53 @@ OrcaPen SC PDK 已修正全部六項：C1 至 C4 由 [orcapen-sc-pdk#64](https:/
 **出了什麼錯。** cell 把邊宣告為 spline 邊界曲線時，建構以 `UnsupportedCurveError: … 'bspline' curves are not supported yet (this version carries lines and circular arcs)` 停止，`interpolation_spline` 也一樣。
 
 **SCGSim 為何不修正。** SGB 能精確地為直線與圓弧做 offset；spline 的 offset 沒有精確形式，因此 SGB 不讀取 spline。請把條帶畫成多邊形。
+
+## 只在一點碰到邊界的導體 {#boundary-point-pinch}
+
+導體的輪廓若只在一點碰到建模區域的邊緣，例如貼著 layout 邊緣畫、周圍什麼都沒有的圓形焊墊或菱形焊墊，會被 `NonManifoldError` 拒絕。請畫出 die 外框或接地平面，讓它而不是焊墊決定這個邊緣。
+
+::: {layout-ncol=2}
+![**在邊界被截斷的 CPW：通過。** 中心導線與兩條接地條都止於邊界 x = 0，各占邊界的一段（粗線）。](assets/supported-geometry/problem-boundary-cpw.svg){fig-alt="三條導線都止於 die 左緣的 CPW，每條導線與左緣相接處有一段粗線，以及中心導線末端的放大圖。"}
+
+![**沿著邊界的方形焊墊：通過。** 焊墊的左邊沿著邊界，長 12 µm。](assets/supported-geometry/problem-boundary-square.svg){fig-alt="兩條接地條之間的方形焊墊，左邊位於 die 的左緣，以及其下方角落的放大圖。"}
+
+![**只在一個頂點碰到邊界的圓形焊墊：拒絕。** 64 邊形焊墊只在 x = 0、y = 20 µm 這一點碰到邊界（紅色）。](assets/supported-geometry/problem-boundary-round.svg){fig-alt="兩條接地條之間的圓形焊墊，在一個紅點碰到 die 的左緣，以及該點上下兩側真空相接處的放大圖。"}
+
+![**以尖端碰到邊界的菱形焊墊：拒絕。** 尖端是菱形唯一位於邊界上的點（紅色）。](assets/supported-geometry/problem-boundary-diamond.svg){fig-alt="兩條接地條之間的菱形焊墊，以紅色標示的尖端碰到 die 的左緣，以及尖端的放大圖。"}
+:::
+
+**邊界在哪裡。** 在平面上，模型止於 layout 的邊緣。`simulation_drc` 為沒有自己真空的 layout 加上的真空，填充為 (x, y, z) = (0, 0, 1000) µm，因此止於 layout 的平面範圍；任何沒有平面填充的真空區域也是如此。圖中的 die 為 60 × 40 µm，左緣 x = 0 就是邊界；淺色區域是金屬高度上的真空，白色是模型之外。
+
+**出了什麼錯。** 在金屬的高度上沿著邊界走一遍。導體穿過邊界或止於邊界（例如 CPW 的導線），或沿著邊界（例如方形焊墊的邊）時，金屬會占去邊界的一段。這一段兩側的真空彼此分開，並各自沿著一個面與金屬相接。圓形焊墊或菱形焊墊碰到邊界時，金屬完全不占長度，只占 (0, 20) µm 這一點。這一點下方的真空與上方的真空既沒有分開，也沒有以面相連：在金屬的整個高度上，它們只沿著通過這一點的垂直線相接，如放大圖所示。這樣的位置稱為夾點（pinch），帶有夾點的實體稱為非流形（non-manifold）。網格產生器需要每個面的兩側各屬於一個區域，而在夾點，通過它的那條線沒有明確的拓撲，因此 SCGSim 在產生網格之前就拒絕這個 layout。拒絕訊息會指出導體、所在層與位置，並以連到本節的連結結尾：
+
+```
+non-manifold pinch: conductor chip/centre_0000 on layer metal
+of Net chip/centre_0000 reaches the edge of VACUUM_REGION only
+at (0.0000, 20.0000) um, z 0.0..0.2 um (slab[0,1/5]), a point
+on the model's planar boundary, … Fix the layout: draw the die
+outline or a ground plane around it, or set a vacuum region.
+See …#boundary-point-pinch
+```
+
+以 `EigenmodeSim.simulation_drc` 與 `ElectrostaticSim.simulation_drc` 量測圖中的 layout（接地條 60 × 12 µm，焊墊寬 12 µm，CPW 中心導線寬 4 µm），分別不切條帶，以及切邊距 0.5 與 1.0 µm 的 `MA` 條帶：
+
+| Layout | 不切條帶 | `MA` 條帶 |
+|---|---|---|
+| 在邊界被截斷的 CPW | 通過 | 通過 |
+| 邊沿著邊界的方形焊墊 | 通過 | 通過 |
+| 一個頂點在邊界上的 64 邊形圓形焊墊 | 在 (0, 20) µm 拒絕 | 在 (0, 20) µm 拒絕 |
+| 尖端在邊界上的菱形焊墊 | 在 (0, 20) µm 拒絕 | 在 (0, 20) µm 拒絕 |
+
+條帶與此無關：拒絕發生在切出任何條帶之前，而會通過的 layout 切了條帶也照樣通過。
+
+**SCGSim 為何不遷就它。** SCGSim 以 layout 測試與模擬時所用的真空檢查它，而這個真空止於 layout 的邊緣；若 SCGSim 自行加上平面填充，檢查的就是與您所模擬不同的模型。SCGSim 也依照收到的輪廓建立幾何，因此不會把頂點移離邊界。
+
+![修正方式：在焊墊左側距它 4 µm 處畫上接地，使邊界移到 x = −10 µm，並由接地占滿整條邊界（粗線）。](assets/supported-geometry/problem-boundary-fixed.svg){fig-alt="圓形焊墊位於兩條接地條之間，左側再以第三條接地條相連，使接地沿著 die 的整個左緣，以及焊墊與該接地條之間真空的放大圖。"}
+
+**layout 的修正方式。** 請畫出 die 外框或接地平面，讓它而不是焊墊決定平面邊界，就像實際的晶片一樣。在圓形焊墊或菱形焊墊左側距它 4 µm 處畫上接地後，兩者不切條帶與切 `MA` 條帶時都能通過。對模擬而言，`mesh()` 使用您設定的真空區域，因此帶平面填充的真空區域也能讓邊界離開焊墊；`simulation_drc` 的真空是固定的，所以對這項檢查請畫出外框。
+
+不是導體的區域也會以同樣的方式夾斷真空：輪廓只在一點碰到邊界的有限介電質島會被拒絕，拒絕訊息指出的是該區域，而不是導體。請在它周圍畫出 die 外框，或修改介電質島的輪廓，讓它沿著一條邊碰到邊界，或完全不碰到邊界；這兩種做法都能通過。
+
+### layout 內部的同一條規則 {#pinch-inside-the-layout}
+
+這就是[支援範圍](supported-scope.qmd#rules-conductors)上的規則：任何區域都不只沿一條垂直邊與自己接觸。在 layout 內部，它出現在同一 Net 的兩個導體只在一個角點相接之處。那裡的金屬，或兩塊幾何之間的真空，會沿著通過該角點的垂直線與自己接觸，就像上面圓形焊墊旁的真空一樣，拒絕訊息為「… touches itself along the vertical edge at (x, y) um …: two cells of one domain meet only at a vertex.」。兩個不是導體的區域，例如只在一個角點相接的兩個介電質島，也會以同樣的方式夾斷真空，此時拒絕訊息指出的是這些區域。請讓兩塊幾何共用一條邊，或把它們分開。在邊界上，另一塊是模型之外，layout 不會畫出它，因此在那裡修正方式改為移動邊界。

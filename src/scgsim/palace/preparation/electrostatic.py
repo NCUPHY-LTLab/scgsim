@@ -437,9 +437,12 @@ class ElectrostaticSim:
         """Check that an ``ElectrostaticSim`` can model and mesh ``component``, in two stages, and return their report.
 
         The geometry stage runs the preparation and SGB geometry build of ``mesh()``, with fixed settings:
-        Route B, Palace's default airbox, a 1 um vacuum region when the layout has none of its own, zero
-        coupon padding and no terminals (they are not needed before meshing).  A layout it refuses raises the
-        error ``mesh()`` raises, unchanged.  With ``surface_epr_specs`` the bands are cut as
+        Route B, Palace's default airbox, zero coupon padding, no terminals (they are not needed before
+        meshing) and, when the layout has no vacuum of its own, a vacuum region padded by (x, y, z) =
+        (0, 0, 1000) um: it ends at the layout's planar extent and reaches 1000 um below and above.  A
+        conductor that reaches that extent only at a point, such as a lone round pad with no die outline or
+        ground plane around it, pinches this vacuum and is refused.  A layout it refuses raises the error
+        ``mesh()`` raises, unchanged.  With ``surface_epr_specs`` the bands are cut as
         ``set_surface_epr(representation="B", specs=...)`` would cut them; ``ElectrostaticSim`` requires
         Surface EPR, so none given means ``{}``.
 

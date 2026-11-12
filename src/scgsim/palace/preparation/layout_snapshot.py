@@ -9,10 +9,10 @@ from scgsim.geometry.source.plan import GeometryPlan, GeometryPlanSnapshot
 
 _ROOT_ID = "chip"
 
-# The check wraps a layout that has no vacuum of its own in this padding on all six faces.  The vacuum must be
-# strictly larger than the geometry: a flush vacuum leaves no air above the metal and pinches at any conductor
-# that touches the boundary at a single point (a polygon circle, a diamond).
-DRC_VACUUM_PADDING_UM = 1.0
+# The check wraps a layout that has no vacuum of its own in this (x, y, z) padding, as ``set_vacuum_region``
+# takes it: the Human's setting for testing and use (Issue #182).  None in the plane, so the vacuum ends at the
+# layout's own planar extent, and 1000 um below and above, so the metal has air above it to band.
+DRC_VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
 
 
 def prepare_layout_snapshot(
