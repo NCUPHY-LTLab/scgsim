@@ -5,8 +5,12 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
-from test_geometry_context_propagation import conductor_input
 
+from scgsim.geometry import (
+    GeometryBuildInput,
+    LayoutPolygonSpec,
+    SemanticEntitySpec,
+)
 from scgsim.geometry.models.representation import (
     EntityRepresentation,
     RepresentationContext,
@@ -16,6 +20,71 @@ from scgsim.geometry.planning.surfaces import (
     plan_representation_contribution_geometry,
     with_surface_contract_metadata,
 )
+
+
+def conductor_input():
+    """Build one conductor with its vacuum host and source stack."""
+    metal_loop = ((0, 0), (4, 0), (4, 4), (0, 4))
+    vacuum_loop = ((-2, -2), (6, -2), (6, 6), (-2, 6))
+    polygon = LayoutPolygonSpec("metal_polygon", "metal", metal_loop)
+    metal = SemanticEntitySpec(
+        "metal",
+        "conductor",
+        "metal_material",
+        "conductor",
+        1,
+        "polygon",
+        net_id="signal",
+        polygon_ids=(polygon.polygon_id,),
+        host_void_semantic_id="vacuum",
+        geometry={
+            "outer_loop": metal_loop,
+            "z_min_um": 0,
+            "z_max_um": 1,
+            "z_um": 0,
+            "thickness_um": 1,
+        },
+    )
+    vacuum = SemanticEntitySpec(
+        "vacuum",
+        "solution_region",
+        "vacuum_material",
+        "vacuum",
+        0,
+        "polygon",
+        geometry={
+            "outer_loop": vacuum_loop,
+            "z_min_um": -2,
+            "z_max_um": 6,
+            "thickness_um": 8,
+            "domain_bounds_um": {
+                "x_min_um": -2,
+                "x_max_um": 6,
+                "y_min_um": -2,
+                "y_max_um": 6,
+                "z_min_um": -2,
+                "z_max_um": 6,
+            },
+        },
+    )
+    stack = {
+        "layers": [
+            {"semantic_id": "metal", "geometry": dict(metal.geometry), "metadata": {}}
+        ],
+        "solution_regions": {
+            "vacuum": {
+                "semantic_id": "vacuum",
+                "geometry": dict(vacuum.geometry),
+                "metadata": {},
+            }
+        },
+        "materials": {
+            "metal_material": {"kind": "conductor"},
+            "vacuum_material": {"kind": "vacuum", "permittivity": 1},
+        },
+        "metadata": {},
+    }
+    return GeometryBuildInput((polygon,), (metal, vacuum)), stack
 
 
 @pytest.mark.parametrize("same_material_sides", (False, True))

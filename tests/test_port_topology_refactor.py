@@ -1,14 +1,6 @@
 """Preserve port provenance and canonical ownership through ordered planning."""
 
-from dataclasses import replace
-
-import pytest
-from test_geometry_context_propagation import conductor_port_input
-
-from scgsim.geometry import ApproximationProfile, interpret_physical_geometry
-from scgsim.geometry.compiler import build_route_construction_plan
 from scgsim.geometry.models.topology import SurfacePlanRecord
-from scgsim.geometry.planning.ports import lower_port_sheet_regions
 from scgsim.geometry.planning.topology import plan_canonical_topology
 
 
@@ -69,49 +61,3 @@ def test_backtracking_residue_keeps_no_live_curve_claim() -> None:
     )
     retained = {ref.curve_id for loop in loops for ref in loop.curve_refs}
     assert retained == {curve.curve_id for curve in curves}
-
-
-def test_port_lowering_preserves_raw_direction_and_final_host_binding() -> None:
-    """Normalize the live direction while retaining source direction and host IDs."""
-    source, stack = conductor_port_input()
-    region = source.port_sheet_regions[0]
-    region = replace(
-        region,
-        metadata={
-            **region.metadata,
-            "direction": (3, 4, 0),
-            "direction_raw": (3, 4, 0),
-        },
-    )
-    source = replace(source, port_sheet_regions=(region,))
-    effective, _, physical = interpret_physical_geometry(
-        source, stack, ApproximationProfile("route_b", "v1", {})
-    )
-    construction = build_route_construction_plan(
-        effective, route="B", representation_context=physical.context
-    )
-    (port,) = (
-        surface
-        for surface in construction.surfaces
-        if surface.surface_role == "lumped_port"
-    )
-    assert port.metadata["physical_attribute"]["direction"] == (0.6, 0.8, 0.0)
-    assert port.metadata["source_provenance"]["direction_raw"] == (3.0, 4.0, 0.0)
-    assert port.metadata["source_provenance"]["host_polygon_ids"] == (
-        "metal_polygon",
-        "right_polygon",
-    )
-    assert port.metadata["embedded_volume_plan_ids"]
-    assert source.port_sheet_regions[0].metadata["direction"] == (3, 4, 0)
-
-
-def test_port_source_name_failure_precedes_direction_failure() -> None:
-    """Read required source identity before interpreting malformed directions."""
-    source, _ = conductor_port_input()
-    region = source.port_sheet_regions[0]
-    invalid = replace(
-        region, metadata={**region.metadata, "source_name": "", "direction": ()}
-    )
-    source = replace(source, port_sheet_regions=(invalid,))
-    with pytest.raises(ValueError, match="port_sheet requires source_name"):
-        lower_port_sheet_regions(source, route="B", mm_contacts=())

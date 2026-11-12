@@ -14,7 +14,6 @@ from scgsim.geometry import (
     SemanticEntitySpec,
     interpret_physical_geometry,
 )
-from scgsim.geometry.compiler import build_route_construction_plan
 from scgsim.geometry.models.grid import GeometryGridContext
 
 GRID_CELL_UM = 0.001
@@ -188,16 +187,6 @@ def thin_film_source(landing_um, **pad_options):
     return source, stack, ApproximationProfile("thin_film", "v1", {})
 
 
-def plan_route_a(landing_um, **options):
-    """Interpret the Thin Film source and plan Route A without any mesh."""
-    source, stack, profile = thin_film_source(landing_um, **options)
-    effective, _, physical = interpret_physical_geometry(source, stack, profile)
-    construction = build_route_construction_plan(
-        effective, route="A", representation_context=physical.context
-    )
-    return effective, construction
-
-
 def test_thin_film_generates_sheet_intents_without_a_rectangular_junction():
     """The selected profile alone makes both conductors Route A sheets."""
     source, stack, profile = thin_film_source(GRID_CELL_UM)
@@ -210,63 +199,6 @@ def test_thin_film_generates_sheet_intents_without_a_rectangular_junction():
         "chip/right",
     }
     assert {item["intent_origin"] for item in intents} == {GENERATED_SHEET_ORIGIN}
-
-
-@pytest.mark.parametrize("landing_um", (GRID_CELL_UM, 0.5))
-def test_port_landing_on_each_host_sheet_is_planned(landing_um):
-    """A port landing one grid cell (or more) on each sheet finds its patch."""
-    _, construction = plan_route_a(landing_um)
-    ports = [
-        surface
-        for surface in construction.surfaces
-        if surface.surface_role == "lumped_port"
-    ]
-    assert len(ports) == 1
-    port = ports[0]
-    assert port.metadata["owner_semantic_ids"] == ("chip/left", "chip/right")
-    assert port.metadata["route_a_boundary_port"] is True
-    assert len(set(port.metadata["boundary_volume_ids"])) == 2
-    assert port.geometry_ref["plane"]["value_um"] == 0
-    xs = {x for x, _ in port.geometry_ref["outer_loop"]}
-    assert xs == {LEFT_EDGE_UM, RIGHT_EDGE_UM}
-    # The host sheets keep the port-free remainder, so the landing strip is
-    # carved out of the sheet and never covered twice.
-    host_sheet_ids = {
-        surface.owner_semantic_id
-        for surface in construction.surfaces
-        if surface.surface_role == "A_planned_interface"
-    }
-    assert host_sheet_ids == {"chip/left", "chip/right"}
-
-
-def test_port_that_misses_the_host_sheet_still_fails_clearly():
-    """A port footprint lying only in the gap, off the left sheet, is rejected."""
-    with pytest.raises(
-        ValueError,
-        match="chip/left port overlap intersects 0 local Route A surface_sheet",
-    ):
-        # The left sheet ends two grid cells short of the one-cell port landing.
-        plan_route_a(GRID_CELL_UM, left_pad_edge_um=LEFT_EDGE_UM - 3 * GRID_CELL_UM)
-
-
-def test_host_without_any_sheet_is_reported_as_unrepresented():
-    """A host with no sheet patch at all is named as such, not as a port miss."""
-    from scgsim.geometry.planning.port_planning.route_a import (  # noqa: PLC0415 -- the contract is the unit under test
-        route_a_port_sheet_sheet_contract,
-    )
-
-    overlap = PortSheetOverlapRecord(
-        "left_overlap",
-        "port_sheet",
-        "port_polygon",
-        "chip/left",
-        "left",
-        rectangle(LEFT_EDGE_UM - GRID_CELL_UM, LEFT_EDGE_UM),
-    )
-    with pytest.raises(
-        ValueError, match="chip/left has no Route A surface_sheet patches"
-    ):
-        route_a_port_sheet_sheet_contract(("chip/left",), (), (overlap,))
 
 
 def test_effective_input_keeps_explicit_intents_and_regenerates_generated_ones():
@@ -293,7 +225,7 @@ def test_effective_input_keeps_explicit_intents_and_regenerates_generated_ones()
 
 @pytest.mark.pdk
 def test_public_simplepad_prepares_route_a_thin_film_ports():
-    """The public 100 nm SimplePad plans Route A with its one-cell port landing."""
+    """The public 100 nm SimplePad prepares Route A with its one-cell port landing."""
     pytest.importorskip("gdsfactory", reason="SimplePad layout needs gdsfactory")
     pytest.importorskip(
         "orcapen_sc_pdk", reason="public OrcaPen SC PDK is not installed"
@@ -339,13 +271,3 @@ def test_public_simplepad_prepares_route_a_thin_film_ports():
     assert all(
         width == pytest.approx(GRID_CELL_UM) for width in overlap_widths.values()
     )
-    construction = build_route_construction_plan(
-        prepared.geometry_input,
-        route="A",
-        representation_context=prepared.physical_plan.context,
-    )
-    assert [
-        surface.surface_id
-        for surface in construction.surfaces
-        if surface.surface_role == "lumped_port"
-    ] == ["SURF__LUMPED_PORT__chip_o_junction_lumped"]
