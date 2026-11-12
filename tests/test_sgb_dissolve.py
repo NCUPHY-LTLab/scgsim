@@ -141,6 +141,33 @@ def test_dielectric_priority_resolves_overlap_and_equal_priority_raises():
     assert label([substrate, higher])[1][1].material == "oxide"
 
 
+@pytest.mark.parametrize(("order_a", "order_b", "winner"), ((1, 2, "a"), (2, 1, "b")))
+def test_the_lower_mesh_order_dielectric_owns_the_overlap_and_beats_a_ranked_vacuum(
+    order_a, order_b, winner
+):
+    """Priority is the negated PDK ``mesh_order``: the lower order wins, and vacuum loses even when ranked first."""
+    # The vacuum carries the lowest mesh_order (highest priority); material kind decides first.
+    air = prism(
+        "air", rect(0, 0, 100, 100), kind="vacuum", material="vacuum", priority=0
+    )
+    a = prism(
+        "a",
+        rect(0, 0, 100, 100),
+        kind="dielectric",
+        material="silicon",
+        priority=-order_a,
+    )
+    b = prism(
+        "b",
+        rect(0, 0, 100, 100),
+        kind="dielectric",
+        material="sapphire",
+        priority=-order_b,
+    )
+    _, labels = label([air, a, b])
+    assert labels[1].owner == winner
+
+
 def test_required_family_edge_survives_dissolution_but_plain_edges_do_not():
     """Required family edge survives dissolution but plain edges do not."""
     prisms = [
