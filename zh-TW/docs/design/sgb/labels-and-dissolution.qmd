@@ -142,7 +142,7 @@ dissolution 改變的是數量，不是面積。驗證器（[驗證](validation.
 **Attribution policy** 決定輸出中一個表面被區分得多細，也就是 solver 看得到哪些 label 差異。D5 已決定，production 已實作：
 
 - 表面**預設依 Entity 歸屬**。不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；primary group 的命名規則是 `<kind>::<qualified entity id>__<face kind>[::band=k]`（例如 `MA::chip/q0/pad__top::band=2`；Route A 的 sheet 與 volume 一樣以裸的 entity id 命名，sheet 為 `<entity>[::band=k]`）；
-- 報告依 **interface type**（MA／MS／SA）彙總並可顯示總和，這些總和是 sidecar 中的 union；
+- 報告依 **interface type**（MA／MS／SA）彙總並可顯示總和，這些總和依 sidecar 中 group 的 `interface_type` 加總；
 - Net 只在後端需要電性身分時使用（例如 Electrostatic 的 terminal 與 ground），Net 層級的 union 也只用於這種情形；
 - 同一個 Net 的重疊區域，屬於宣告 priority 較高的 Entity；priority 相同或缺少時 fail closed（Lead 的預設，可改）。
 

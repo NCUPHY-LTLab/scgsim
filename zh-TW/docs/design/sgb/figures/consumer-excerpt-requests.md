@@ -1,7 +1,7 @@
 ```{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}
 {
- "insets": [
-  {
+ "band_family": {
+  "pad_top": {
    "band_count": 3,
    "bands": {
     "0": ["MA::pad__top::band=0"],
@@ -11,15 +11,53 @@
    "interface": null,
    "margins_grid": [500, 1000],
    "margins_um": [0.5, 1.0],
-   "request_id": "pad_top",
    "support": {
     "entity": "pad",
     "side": "top"
    },
    "support_area_um2": 400.0
   }
- ],
- "surface_epr_rows": {
+ },
+ "cut_family": {
+  "pad_top": {
+   "edge_policy": "required",
+   "levels_um": [0.2],
+   "role": "inset_band"
+  },
+  "ref": {
+   "edge_policy": "refinement_only",
+   "levels_um": [0.2],
+   "role": "refinement"
+  }
+ },
+ "inset_request": {
+  "pad_top": {
+   "families": ["pad_top"],
+   "interface": null,
+   "margins_um": [0.5, 1.0],
+   "scope": "face",
+   "skipped": [],
+   "support": {
+    "entity": "pad",
+    "side": "top"
+   }
+  }
+ },
+ "refinement_request": {
+  "ref": {
+   "points_um": [
+    [45.0, 45.0],
+    [55.0, 45.0]
+   ],
+   "segments_um": [
+    [
+     [45.0, 45.0],
+     [55.0, 45.0]
+    ]
+   ]
+  }
+ },
+ "surface_epr_row": {
   "MA::pad__top::band=0": {
    "band": 0,
    "entities": ["pad"],
@@ -37,19 +75,6 @@
    "interface_type": "SA",
    "shared_face_group": null,
    "side": null
-  }
- },
- "unions": {
-  "interface_types": {
-   "EXT": ["EXT::VACUUM_REGION__bottom", "EXT::VACUUM_REGION__sidewall", "EXT::VACUUM_REGION__top"],
-   "MA": ["MA::ground_0000__sidewall", "MA::ground_0000__top", "MA::pad__sidewall", "MA::pad__top::band=0", "MA::pad__top::band=1", "MA::pad__top::band=2"],
-   "MS": ["MS::ground_0000__bottom", "MS::pad__bottom"],
-   "PORT": ["PORT::PORT_SHEET__P1__0000"],
-   "SA": ["SA::substrate|VACUUM_REGION__interface", "SA::substrate|VACUUM_REGION__sidewall"]
-  },
-  "nets": {
-   "G": ["MA::ground_0000__sidewall", "MA::ground_0000__top", "MS::ground_0000__bottom"],
-   "P": ["MA::pad__sidewall", "MA::pad__top::band=0", "MA::pad__top::band=1", "MA::pad__top::band=2", "MS::pad__bottom"]
   }
  }
 }

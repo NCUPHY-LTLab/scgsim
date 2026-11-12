@@ -6,11 +6,11 @@
   0.5,
   2.0
  ],
- "schema": "scgsim.sgb.sidecar.v2",
+ "schema": "scgsim.sgb.sidecar.v3",
  "step1_palace_attribute": {
   "attribute": 10,
   "resolved_name": "MA::pad__top::band=2",
-  "source": "sidecar: physical_groups[*].tag"
+  "source": "sidecar: group[*].tag"
  },
  "step2_physical_group": {
   "name": "MA::pad__top::band=2",
@@ -35,32 +35,30 @@
     "pad"
    ],
    "face_kind": "top",
-   "ids": [
-    "f:a9b66997fc195ff6",
-    "f:ea12025c6c95ba52"
-   ],
    "interface_type": "MA",
-   "native_tags": [
-    32,
-    39
-   ],
    "net": "pad",
    "tag": 10
   },
-  "union_membership": [
-   "interface_types.MA",
-   "nets.pad"
+  "faces": [
+   "f:a9b66997fc195ff6",
+   "f:ea12025c6c95ba52"
   ],
-  "surface_epr_row": {
-   "band": 2,
-   "entities": [
-    "pad"
-   ],
-   "face_sides": null,
-   "group": "MA::pad__top::band=2",
-   "interface_type": "MA",
-   "shared_face_group": null,
-   "side": null
+  "native_tags": [
+   32,
+   39
+  ],
+  "surface_epr_rows": {
+   "MA::pad__top::band=2": {
+    "band": 2,
+    "entities": [
+     "pad"
+    ],
+    "face_sides": null,
+    "group": "MA::pad__top::band=2",
+    "interface_type": "MA",
+    "shared_face_group": null,
+    "side": null
+   }
   }
  },
  "step3_atomic_faces": [
@@ -68,69 +66,38 @@
    "face": "f:a9b66997fc195ff6",
    "native_tag": 32,
    "record": {
+    "area_um2": 496.060375564,
+    "bands": [
+     {
+      "family": "band_pad_top",
+      "index": 2
+     }
+    ],
+    "curved": false,
+    "cut_families": [],
+    "embedded_edges": [],
+    "entities": [],
     "face_kind": "top",
+    "families": [
+     "band_pad_top"
+    ],
     "group": "MA::pad__top::band=2",
     "kind": "horizontal",
+    "membership": {
+     "pad": 1.0,
+     "vacuum": 1.0
+    },
     "negative_volume": "vol:d78b0b17d727ed12",
+    "outer_boundary": null,
     "positive_volume": "vol:89bd58ad80d63355",
+    "refinements": [],
     "z_um": [
      0.2,
      0.2
     ]
    },
    "plane": "level[1/5]",
-   "label_bands": [
-    [
-     "band_pad_top",
-     2
-    ]
-   ],
-   "sources_lineage": [
-    "band_pad_top"
-   ],
-   "membership": {
-    "pad": 1.0,
-    "vacuum": 1.0
-   },
-   "edge_tags": [
-    41,
-    42,
-    43,
-    44,
-    45,
-    46,
-    47,
-    48,
-    49,
-    50,
-    51,
-    52,
-    186,
-    187,
-    188,
-    189,
-    190,
-    191,
-    192,
-    193,
-    194,
-    195,
-    196,
-    197
-   ],
    "edge_ids": [
-    "e:517f4168eb525f24",
-    "e:75a8366fd6cabf72",
-    "e:523e42c4dbe5c616",
-    "e:78704422a8419e67",
-    "e:d37f375d597d9d4b",
-    "e:fdfeab50097563fe",
-    "e:3a4a65a5b3fb4434",
-    "e:65024cee7987afa8",
-    "e:82236ae7dfb46c04",
-    "e:a6b4673755f34b43",
-    "e:789b673b12ce241b",
-    "e:8e37066ffd4c635a",
     "e:1d75defe0ba93f10",
     "e:91c3feb3af63b6b0",
     "e:1ba65ab001fe1e5a",
@@ -142,569 +109,1729 @@
     "e:0f1fe6eb941bdfde",
     "e:f9df312ea459c8d1",
     "e:1c2e782f8a3e17f3",
-    "e:9c6ed53779848fbe"
+    "e:9c6ed53779848fbe",
+    "e:517f4168eb525f24",
+    "e:8e37066ffd4c635a",
+    "e:789b673b12ce241b",
+    "e:a6b4673755f34b43",
+    "e:82236ae7dfb46c04",
+    "e:65024cee7987afa8",
+    "e:3a4a65a5b3fb4434",
+    "e:fdfeab50097563fe",
+    "e:d37f375d597d9d4b",
+    "e:78704422a8419e67",
+    "e:523e42c4dbe5c616",
+    "e:75a8366fd6cabf72"
+   ],
+   "edge_tags": [
+    186,
+    187,
+    188,
+    189,
+    190,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    41,
+    52,
+    51,
+    50,
+    49,
+    48,
+    47,
+    46,
+    45,
+    44,
+    43,
+    42
    ],
    "loops": [
     [
      {
       "edge": "e:1d75defe0ba93f10",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge9@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge9"
+        "carrier": "band_pad_top/ring0/edge9@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive9",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge9",
-        "support_curve": "straight edge",
-        "support_primitive": 9
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -50.0,
+           -25.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -50.0,
+           30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 55.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge8"
+         ]
+        },
+        "position_in_ring": 9,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge8": {
+          "curve": {
+           "end_um": [
+            -50.0,
+            -25.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -50.0,
+            30.0
+           ]
+          },
+          "edge": 8,
+          "entity": "pad",
+          "length_um": 55.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:91c3feb3af63b6b0",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge0@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge0"
+        "carrier": "band_pad_top/ring0/edge0@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive0",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge0",
-        "support_curve": "band_pad_top/ring0/edge0",
-        "source": "band_pad_top/band_pad_top/ring0/edge0",
-        "centre_um": [
-         -45.0,
-         -25.0
-        ],
-        "radius_um": 5.0
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "ccw": true,
+          "centre_um": [
+           -45.0,
+           -25.0
+          ],
+          "end_um": [
+           -45.0,
+           -30.0
+          ],
+          "kind": "arc",
+          "radius_um": 5.0,
+          "start_um": [
+           -50.0,
+           -25.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 7.85398163397,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/corner"
+         ]
+        },
+        "position_in_ring": 0,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/corner": {
+          "curve": {
+           "ccw": true,
+           "centre_um": [
+            -45.0,
+            -25.0
+           ],
+           "end_um": [
+            -45.0,
+            -30.0
+           ],
+           "kind": "arc",
+           "radius_um": 5.0,
+           "start_um": [
+            -50.0,
+            -25.0
+           ]
+          },
+          "edge": 9,
+          "entity": "pad",
+          "length_um": 7.85398163397,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:1ba65ab001fe1e5a",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge1@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge1"
+        "carrier": "band_pad_top/ring0/edge1@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive1",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge1",
-        "support_curve": "straight edge",
-        "support_primitive": 1
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -10.0,
+           -30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -45.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 35.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge0"
+         ]
+        },
+        "position_in_ring": 1,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge0": {
+          "curve": {
+           "end_um": [
+            -10.0,
+            -30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -45.0,
+            -30.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 35.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:32f2352649d0b6b7",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge2@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge2"
+        "carrier": "band_pad_top/ring0/edge2@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive2",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge2",
-        "support_curve": "straight edge",
-        "support_primitive": 2
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 15.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge1"
+         ]
+        },
+        "position_in_ring": 2,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge1": {
+          "curve": {
+           "end_um": [
+            -10.0,
+            -15.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -10.0,
+            -30.0
+           ]
+          },
+          "edge": 1,
+          "entity": "pad",
+          "length_um": 15.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:5fb1b0339a885717",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/corner2@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/corner2"
+        "carrier": "band_pad_top/ring0/corner2@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive2",
+         "role": "corner"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/corner2",
-        "support_curve": "reflex-corner arc 2 of ring 0"
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 15.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge1"
+         ]
+        },
+        "position_in_ring": 2,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge1": {
+          "curve": {
+           "end_um": [
+            -10.0,
+            -15.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -10.0,
+            -30.0
+           ]
+          },
+          "edge": 1,
+          "entity": "pad",
+          "length_um": 15.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:72b93f3bad4085fd",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge3@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge3"
+        "carrier": "band_pad_top/ring0/edge3@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive3",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge3",
-        "support_curve": "straight edge",
-        "support_primitive": 3
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -15.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 20.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge2"
+         ]
+        },
+        "position_in_ring": 3,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge2": {
+          "curve": {
+           "end_um": [
+            10.0,
+            -15.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -10.0,
+            -15.0
+           ]
+          },
+          "edge": 2,
+          "entity": "pad",
+          "length_um": 20.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:67ad608948d7a581",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/corner3@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/corner3"
+        "carrier": "band_pad_top/ring0/corner3@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive3",
+         "role": "corner"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/corner3",
-        "support_curve": "reflex-corner arc 3 of ring 0"
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -15.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 20.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge2"
+         ]
+        },
+        "position_in_ring": 3,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge2": {
+          "curve": {
+           "end_um": [
+            10.0,
+            -15.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -10.0,
+            -15.0
+           ]
+          },
+          "edge": 2,
+          "entity": "pad",
+          "length_um": 20.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:2406afef43ba7c0e",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge4@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge4"
+        "carrier": "band_pad_top/ring0/edge4@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive4",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge4",
-        "support_curve": "straight edge",
-        "support_primitive": 4
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           10.0,
+           -30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           10.0,
+           -15.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 15.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge3"
+         ]
+        },
+        "position_in_ring": 4,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge3": {
+          "curve": {
+           "end_um": [
+            10.0,
+            -30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            10.0,
+            -15.0
+           ]
+          },
+          "edge": 3,
+          "entity": "pad",
+          "length_um": 15.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:0f1fe6eb941bdfde",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge5@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge5"
+        "carrier": "band_pad_top/ring0/edge5@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive5",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge5",
-        "support_curve": "straight edge",
-        "support_primitive": 5
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           50.0,
+           -30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           10.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 40.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge4"
+         ]
+        },
+        "position_in_ring": 5,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge4": {
+          "curve": {
+           "end_um": [
+            50.0,
+            -30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            10.0,
+            -30.0
+           ]
+          },
+          "edge": 4,
+          "entity": "pad",
+          "length_um": 40.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:f9df312ea459c8d1",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge6@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge6"
+        "carrier": "band_pad_top/ring0/edge6@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive6",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge6",
-        "support_curve": "straight edge",
-        "support_primitive": 6
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           50.0,
+           18.0
+          ],
+          "kind": "line",
+          "start_um": [
+           50.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 48.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge5"
+         ]
+        },
+        "position_in_ring": 6,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge5": {
+          "curve": {
+           "end_um": [
+            50.0,
+            18.0
+           ],
+           "kind": "line",
+           "start_um": [
+            50.0,
+            -30.0
+           ]
+          },
+          "edge": 5,
+          "entity": "pad",
+          "length_um": 48.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:1c2e782f8a3e17f3",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge7@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge7"
+        "carrier": "band_pad_top/ring0/edge7@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive7",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge7",
-        "support_curve": "straight edge",
-        "support_primitive": 7
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           38.0,
+           30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           50.0,
+           18.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 16.9705627485,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge6"
+         ]
+        },
+        "position_in_ring": 7,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge6": {
+          "curve": {
+           "end_um": [
+            38.0,
+            30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            50.0,
+            18.0
+           ]
+          },
+          "edge": 6,
+          "entity": "pad",
+          "length_um": 16.9705627485,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:9c6ed53779848fbe",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge8@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge8"
+        "carrier": "band_pad_top/ring0/edge8@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive8",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge8",
-        "support_curve": "straight edge",
-        "support_primitive": 8
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -50.0,
+           30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           38.0,
+           30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 88.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge7"
+         ]
+        },
+        "position_in_ring": 8,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge7": {
+          "curve": {
+           "end_um": [
+            -50.0,
+            30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            38.0,
+            30.0
+           ]
+          },
+          "edge": 7,
+          "entity": "pad",
+          "length_um": 88.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      }
     ],
     [
      {
       "edge": "e:517f4168eb525f24",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge9@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge9"
+        "carrier": "band_pad_top/ring0/edge9@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive9",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge9",
-        "support_curve": "straight edge",
-        "support_primitive": 9
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -50.0,
+           -25.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -50.0,
+           30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 55.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge8"
+         ]
+        },
+        "position_in_ring": 9,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge8": {
+          "curve": {
+           "end_um": [
+            -50.0,
+            -25.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -50.0,
+            30.0
+           ]
+          },
+          "edge": 8,
+          "entity": "pad",
+          "length_um": 55.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:8e37066ffd4c635a",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge8@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge8"
+        "carrier": "band_pad_top/ring0/edge8@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive8",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge8",
-        "support_curve": "straight edge",
-        "support_primitive": 8
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -50.0,
+           30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           38.0,
+           30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 88.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge7"
+         ]
+        },
+        "position_in_ring": 8,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge7": {
+          "curve": {
+           "end_um": [
+            -50.0,
+            30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            38.0,
+            30.0
+           ]
+          },
+          "edge": 7,
+          "entity": "pad",
+          "length_um": 88.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:789b673b12ce241b",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge7@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge7"
+        "carrier": "band_pad_top/ring0/edge7@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive7",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge7",
-        "support_curve": "straight edge",
-        "support_primitive": 7
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           38.0,
+           30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           50.0,
+           18.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 16.9705627485,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge6"
+         ]
+        },
+        "position_in_ring": 7,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge6": {
+          "curve": {
+           "end_um": [
+            38.0,
+            30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            50.0,
+            18.0
+           ]
+          },
+          "edge": 6,
+          "entity": "pad",
+          "length_um": 16.9705627485,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:a6b4673755f34b43",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge6@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge6"
+        "carrier": "band_pad_top/ring0/edge6@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive6",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge6",
-        "support_curve": "straight edge",
-        "support_primitive": 6
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           50.0,
+           18.0
+          ],
+          "kind": "line",
+          "start_um": [
+           50.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 48.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge5"
+         ]
+        },
+        "position_in_ring": 6,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge5": {
+          "curve": {
+           "end_um": [
+            50.0,
+            18.0
+           ],
+           "kind": "line",
+           "start_um": [
+            50.0,
+            -30.0
+           ]
+          },
+          "edge": 5,
+          "entity": "pad",
+          "length_um": 48.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:82236ae7dfb46c04",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge5@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge5"
+        "carrier": "band_pad_top/ring0/edge5@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive5",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge5",
-        "support_curve": "straight edge",
-        "support_primitive": 5
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           50.0,
+           -30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           10.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 40.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge4"
+         ]
+        },
+        "position_in_ring": 5,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge4": {
+          "curve": {
+           "end_um": [
+            50.0,
+            -30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            10.0,
+            -30.0
+           ]
+          },
+          "edge": 4,
+          "entity": "pad",
+          "length_um": 40.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:65024cee7987afa8",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge4@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge4"
+        "carrier": "band_pad_top/ring0/edge4@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive4",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge4",
-        "support_curve": "straight edge",
-        "support_primitive": 4
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           10.0,
+           -30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           10.0,
+           -15.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 15.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge3"
+         ]
+        },
+        "position_in_ring": 4,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge3": {
+          "curve": {
+           "end_um": [
+            10.0,
+            -30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            10.0,
+            -15.0
+           ]
+          },
+          "edge": 3,
+          "entity": "pad",
+          "length_um": 15.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:3a4a65a5b3fb4434",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/corner3@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/corner3"
+        "carrier": "band_pad_top/ring0/corner3@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive3",
+         "role": "corner"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/corner3",
-        "support_curve": "reflex-corner arc 3 of ring 0"
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -15.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 20.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge2"
+         ]
+        },
+        "position_in_ring": 3,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge2": {
+          "curve": {
+           "end_um": [
+            10.0,
+            -15.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -10.0,
+            -15.0
+           ]
+          },
+          "edge": 2,
+          "entity": "pad",
+          "length_um": 20.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:fdfeab50097563fe",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge3@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge3"
+        "carrier": "band_pad_top/ring0/edge3@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive3",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge3",
-        "support_curve": "straight edge",
-        "support_primitive": 3
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -15.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 20.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge2"
+         ]
+        },
+        "position_in_ring": 3,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge2": {
+          "curve": {
+           "end_um": [
+            10.0,
+            -15.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -10.0,
+            -15.0
+           ]
+          },
+          "edge": 2,
+          "entity": "pad",
+          "length_um": 20.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:d37f375d597d9d4b",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/corner2@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/corner2"
+        "carrier": "band_pad_top/ring0/corner2@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive2",
+         "role": "corner"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/corner2",
-        "support_curve": "reflex-corner arc 2 of ring 0"
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 15.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge1"
+         ]
+        },
+        "position_in_ring": 2,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge1": {
+          "curve": {
+           "end_um": [
+            -10.0,
+            -15.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -10.0,
+            -30.0
+           ]
+          },
+          "edge": 1,
+          "entity": "pad",
+          "length_um": 15.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:78704422a8419e67",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge2@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge2"
+        "carrier": "band_pad_top/ring0/edge2@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive2",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge2",
-        "support_curve": "straight edge",
-        "support_primitive": 2
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 15.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge1"
+         ]
+        },
+        "position_in_ring": 2,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge1": {
+          "curve": {
+           "end_um": [
+            -10.0,
+            -15.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -10.0,
+            -30.0
+           ]
+          },
+          "edge": 1,
+          "entity": "pad",
+          "length_um": 15.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:523e42c4dbe5c616",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge1@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge1"
+        "carrier": "band_pad_top/ring0/edge1@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive1",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge1",
-        "support_curve": "straight edge",
-        "support_primitive": 1
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "end_um": [
+           -10.0,
+           -30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -45.0,
+           -30.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 35.0,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/polygon0/ring0/edge0"
+         ]
+        },
+        "position_in_ring": 1,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/polygon0/ring0/edge0": {
+          "curve": {
+           "end_um": [
+            -10.0,
+            -30.0
+           ],
+           "kind": "line",
+           "start_um": [
+            -45.0,
+            -30.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 35.0,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:75a8366fd6cabf72",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring0/edge0@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring0/edge0"
+        "carrier": "band_pad_top/ring0/edge0@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring0/primitive0",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 0,
-        "member": "band_pad_top/ring0/edge0",
-        "support_curve": "band_pad_top/ring0/edge0",
-        "source": "band_pad_top/band_pad_top/ring0/edge0",
-        "centre_um": [
-         -45.0,
-         -25.0
-        ],
-        "radius_um": 5.0
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "ccw": true,
+          "centre_um": [
+           -45.0,
+           -25.0
+          ],
+          "end_um": [
+           -45.0,
+           -30.0
+          ],
+          "kind": "arc",
+          "radius_um": 5.0,
+          "start_um": [
+           -50.0,
+           -25.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 7.85398163397,
+         "origin": true,
+         "ring": "band_pad_top/ring0",
+         "sources": [
+          "pad/corner"
+         ]
+        },
+        "position_in_ring": 0,
+        "ring_size": 10,
+        "support_ring": {
+         "id": "band_pad_top/ring0",
+         "family": "band_pad_top",
+         "index": 0
+        },
+        "source_curves": {
+         "pad/corner": {
+          "curve": {
+           "ccw": true,
+           "centre_um": [
+            -45.0,
+            -25.0
+           ],
+           "end_um": [
+            -45.0,
+            -30.0
+           ],
+           "kind": "arc",
+           "radius_um": 5.0,
+           "start_um": [
+            -50.0,
+            -25.0
+           ]
+          },
+          "edge": 9,
+          "entity": "pad",
+          "length_um": 7.85398163397,
+          "polygon": 0,
+          "ring": 0
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      }
     ]
    ]
@@ -713,277 +1840,708 @@
    "face": "f:ea12025c6c95ba52",
    "native_tag": 39,
    "record": {
+    "area_um2": 87.1791961371,
+    "bands": [
+     {
+      "family": "band_pad_top",
+      "index": 2
+     }
+    ],
+    "curved": false,
+    "cut_families": [],
+    "embedded_edges": [],
+    "entities": [],
     "face_kind": "top",
+    "families": [
+     "band_pad_top"
+    ],
     "group": "MA::pad__top::band=2",
     "kind": "horizontal",
+    "membership": {
+     "pad": 1.0,
+     "vacuum": 1.0
+    },
     "negative_volume": "vol:d78b0b17d727ed12",
+    "outer_boundary": null,
     "positive_volume": "vol:89bd58ad80d63355",
+    "refinements": [],
     "z_um": [
      0.2,
      0.2
     ]
    },
    "plane": "level[1/5]",
-   "label_bands": [
-    [
-     "band_pad_top",
-     2
-    ]
-   ],
-   "sources_lineage": [
-    "band_pad_top"
-   ],
-   "membership": {
-    "pad": 1.0,
-    "vacuum": 1.0
-   },
-   "edge_tags": [
-    53,
-    54,
-    55,
-    56,
-    198,
-    199,
-    200,
-    201
-   ],
    "edge_ids": [
     "e:9107a426266c6dc5",
-    "e:24a8ae617bccaefc",
-    "e:99cbbb324f02449b",
     "e:f9e3218d05011231",
+    "e:99cbbb324f02449b",
+    "e:24a8ae617bccaefc",
     "e:80e42c5358928cb0",
-    "e:9c10eab8b016a833",
+    "e:5c4e6e843bd25142",
     "e:ef1cc37d8ab0cc60",
-    "e:5c4e6e843bd25142"
+    "e:9c10eab8b016a833"
+   ],
+   "edge_tags": [
+    53,
+    56,
+    55,
+    54,
+    198,
+    201,
+    200,
+    199
    ],
    "loops": [
     [
      {
       "edge": "e:9107a426266c6dc5",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring1/edge3@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring1/edge3"
+        "carrier": "band_pad_top/ring1/edge3@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring1/primitive3",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 1,
-        "member": "band_pad_top/ring1/edge3",
-        "support_curve": "band_pad_top/ring1/edge3",
-        "source": "band_pad_top/band_pad_top/ring1/edge3",
-        "centre_um": [
-         -25.0,
-         4.999999999999999
-        ],
-        "radius_um": 8.0
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "ccw": false,
+          "centre_um": [
+           -25.0,
+           5.0
+          ],
+          "end_um": [
+           -33.0,
+           5.0
+          ],
+          "kind": "arc",
+          "radius_um": 8.0,
+          "start_um": [
+           -25.0,
+           -3.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 12.5663706144,
+         "origin": true,
+         "ring": "band_pad_top/ring1",
+         "sources": [
+          "pad/hole/q1"
+         ]
+        },
+        "position_in_ring": 3,
+        "ring_size": 4,
+        "support_ring": {
+         "id": "band_pad_top/ring1",
+         "family": "band_pad_top",
+         "index": 1
+        },
+        "source_curves": {
+         "pad/hole/q1": {
+          "curve": {
+           "ccw": false,
+           "centre_um": [
+            -25.0,
+            5.0
+           ],
+           "end_um": [
+            -33.0,
+            5.0
+           ],
+           "kind": "arc",
+           "radius_um": 8.0,
+           "start_um": [
+            -25.0,
+            -3.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 12.5663706144,
+          "polygon": 0,
+          "ring": 1
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:f9e3218d05011231",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring1/edge2@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring1/edge2"
+        "carrier": "band_pad_top/ring1/edge2@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring1/primitive2",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 1,
-        "member": "band_pad_top/ring1/edge2",
-        "support_curve": "band_pad_top/ring1/edge2",
-        "source": "band_pad_top/band_pad_top/ring1/edge2",
-        "centre_um": [
-         -25.0,
-         4.999999999999999
-        ],
-        "radius_um": 8.0
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "ccw": false,
+          "centre_um": [
+           -25.0,
+           5.0
+          ],
+          "end_um": [
+           -25.0,
+           -3.0
+          ],
+          "kind": "arc",
+          "radius_um": 8.0,
+          "start_um": [
+           -17.0,
+           5.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 12.5663706144,
+         "origin": true,
+         "ring": "band_pad_top/ring1",
+         "sources": [
+          "pad/hole/q0"
+         ]
+        },
+        "position_in_ring": 2,
+        "ring_size": 4,
+        "support_ring": {
+         "id": "band_pad_top/ring1",
+         "family": "band_pad_top",
+         "index": 1
+        },
+        "source_curves": {
+         "pad/hole/q0": {
+          "curve": {
+           "ccw": false,
+           "centre_um": [
+            -25.0,
+            5.0
+           ],
+           "end_um": [
+            -25.0,
+            -3.0
+           ],
+           "kind": "arc",
+           "radius_um": 8.0,
+           "start_um": [
+            -17.0,
+            5.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 12.5663706144,
+          "polygon": 0,
+          "ring": 1
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:99cbbb324f02449b",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring1/edge1@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring1/edge1"
+        "carrier": "band_pad_top/ring1/edge1@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring1/primitive1",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 1,
-        "member": "band_pad_top/ring1/edge1",
-        "support_curve": "band_pad_top/ring1/edge1",
-        "source": "band_pad_top/band_pad_top/ring1/edge1",
-        "centre_um": [
-         -25.0,
-         5.000000000000001
-        ],
-        "radius_um": 8.0
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "ccw": false,
+          "centre_um": [
+           -25.0,
+           5.0
+          ],
+          "end_um": [
+           -17.0,
+           5.0
+          ],
+          "kind": "arc",
+          "radius_um": 8.0,
+          "start_um": [
+           -25.0,
+           13.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 12.5663706144,
+         "origin": true,
+         "ring": "band_pad_top/ring1",
+         "sources": [
+          "pad/hole/q3"
+         ]
+        },
+        "position_in_ring": 1,
+        "ring_size": 4,
+        "support_ring": {
+         "id": "band_pad_top/ring1",
+         "family": "band_pad_top",
+         "index": 1
+        },
+        "source_curves": {
+         "pad/hole/q3": {
+          "curve": {
+           "ccw": false,
+           "centre_um": [
+            -25.0,
+            5.0
+           ],
+           "end_um": [
+            -17.0,
+            5.0
+           ],
+           "kind": "arc",
+           "radius_um": 8.0,
+           "start_um": [
+            -25.0,
+            13.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 12.5663706144,
+          "polygon": 0,
+          "ring": 1
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:24a8ae617bccaefc",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring1/edge0@m2000.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring1/edge0"
+        "carrier": "band_pad_top/ring1/edge0@m2000.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 2000,
+         "piece": null,
+         "primitive": "band_pad_top/ring1/primitive0",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 2000,
-        "support_ring": 1,
-        "member": "band_pad_top/ring1/edge0",
-        "support_curve": "band_pad_top/ring1/edge0",
-        "source": "band_pad_top/band_pad_top/ring1/edge0",
-        "centre_um": [
-         -25.0,
-         5.000000000000001
-        ],
-        "radius_um": 8.0
+        "margin_um": 2.0,
+        "support_primitive": {
+         "curve": {
+          "ccw": false,
+          "centre_um": [
+           -25.0,
+           5.0
+          ],
+          "end_um": [
+           -25.0,
+           13.0
+          ],
+          "kind": "arc",
+          "radius_um": 8.0,
+          "start_um": [
+           -33.0,
+           5.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 12.5663706144,
+         "origin": true,
+         "ring": "band_pad_top/ring1",
+         "sources": [
+          "pad/hole/q2"
+         ]
+        },
+        "position_in_ring": 0,
+        "ring_size": 4,
+        "support_ring": {
+         "id": "band_pad_top/ring1",
+         "family": "band_pad_top",
+         "index": 1
+        },
+        "source_curves": {
+         "pad/hole/q2": {
+          "curve": {
+           "ccw": false,
+           "centre_um": [
+            -25.0,
+            5.0
+           ],
+           "end_um": [
+            -25.0,
+            13.0
+           ],
+           "kind": "arc",
+           "radius_um": 8.0,
+           "start_um": [
+            -33.0,
+            5.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 12.5663706144,
+          "polygon": 0,
+          "ring": 1
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      }
     ],
     [
      {
       "edge": "e:80e42c5358928cb0",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring1/edge3@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring1/edge3"
+        "carrier": "band_pad_top/ring1/edge3@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring1/primitive3",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 1,
-        "member": "band_pad_top/ring1/edge3",
-        "support_curve": "band_pad_top/ring1/edge3",
-        "source": "band_pad_top/band_pad_top/ring1/edge3",
-        "centre_um": [
-         -25.0,
-         4.999999999999999
-        ],
-        "radius_um": 8.0
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "ccw": false,
+          "centre_um": [
+           -25.0,
+           5.0
+          ],
+          "end_um": [
+           -33.0,
+           5.0
+          ],
+          "kind": "arc",
+          "radius_um": 8.0,
+          "start_um": [
+           -25.0,
+           -3.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 12.5663706144,
+         "origin": true,
+         "ring": "band_pad_top/ring1",
+         "sources": [
+          "pad/hole/q1"
+         ]
+        },
+        "position_in_ring": 3,
+        "ring_size": 4,
+        "support_ring": {
+         "id": "band_pad_top/ring1",
+         "family": "band_pad_top",
+         "index": 1
+        },
+        "source_curves": {
+         "pad/hole/q1": {
+          "curve": {
+           "ccw": false,
+           "centre_um": [
+            -25.0,
+            5.0
+           ],
+           "end_um": [
+            -33.0,
+            5.0
+           ],
+           "kind": "arc",
+           "radius_um": 8.0,
+           "start_um": [
+            -25.0,
+            -3.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 12.5663706144,
+          "polygon": 0,
+          "ring": 1
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      },
      {
       "edge": "e:5c4e6e843bd25142",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring1/edge0@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring1/edge0"
+        "carrier": "band_pad_top/ring1/edge0@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring1/primitive0",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 1,
-        "member": "band_pad_top/ring1/edge0",
-        "support_curve": "band_pad_top/ring1/edge0",
-        "source": "band_pad_top/band_pad_top/ring1/edge0",
-        "centre_um": [
-         -25.0,
-         5.000000000000001
-        ],
-        "radius_um": 8.0
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "ccw": false,
+          "centre_um": [
+           -25.0,
+           5.0
+          ],
+          "end_um": [
+           -25.0,
+           13.0
+          ],
+          "kind": "arc",
+          "radius_um": 8.0,
+          "start_um": [
+           -33.0,
+           5.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 12.5663706144,
+         "origin": true,
+         "ring": "band_pad_top/ring1",
+         "sources": [
+          "pad/hole/q2"
+         ]
+        },
+        "position_in_ring": 0,
+        "ring_size": 4,
+        "support_ring": {
+         "id": "band_pad_top/ring1",
+         "family": "band_pad_top",
+         "index": 1
+        },
+        "source_curves": {
+         "pad/hole/q2": {
+          "curve": {
+           "ccw": false,
+           "centre_um": [
+            -25.0,
+            5.0
+           ],
+           "end_um": [
+            -25.0,
+            13.0
+           ],
+           "kind": "arc",
+           "radius_um": 8.0,
+           "start_um": [
+            -33.0,
+            5.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 12.5663706144,
+          "polygon": 0,
+          "ring": 1
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:ef1cc37d8ab0cc60",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring1/edge1@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring1/edge1"
+        "carrier": "band_pad_top/ring1/edge1@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring1/primitive1",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 1,
-        "member": "band_pad_top/ring1/edge1",
-        "support_curve": "band_pad_top/ring1/edge1",
-        "source": "band_pad_top/band_pad_top/ring1/edge1",
-        "centre_um": [
-         -25.0,
-         5.000000000000001
-        ],
-        "radius_um": 8.0
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "ccw": false,
+          "centre_um": [
+           -25.0,
+           5.0
+          ],
+          "end_um": [
+           -17.0,
+           5.0
+          ],
+          "kind": "arc",
+          "radius_um": 8.0,
+          "start_um": [
+           -25.0,
+           13.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 12.5663706144,
+         "origin": true,
+         "ring": "band_pad_top/ring1",
+         "sources": [
+          "pad/hole/q3"
+         ]
+        },
+        "position_in_ring": 1,
+        "ring_size": 4,
+        "support_ring": {
+         "id": "band_pad_top/ring1",
+         "family": "band_pad_top",
+         "index": 1
+        },
+        "source_curves": {
+         "pad/hole/q3": {
+          "curve": {
+           "ccw": false,
+           "centre_um": [
+            -25.0,
+            5.0
+           ],
+           "end_um": [
+            -17.0,
+            5.0
+           ],
+           "kind": "arc",
+           "radius_um": 8.0,
+           "start_um": [
+            -25.0,
+            13.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 12.5663706144,
+          "polygon": 0,
+          "ring": 1
+         }
+        }
        }
       ],
-      "orientation": 1
+      "reversed": false
      },
      {
       "edge": "e:9c10eab8b016a833",
+      "kind": "horizontal",
       "carriers": [
        "band_pad_top/ring1/edge2@m500.0"
       ],
+      "wall_entities": [],
       "resolved": [
        {
-        "kind": "family member",
-        "lineage_record": {
-         "family": "band_pad_top",
-         "kind": "family_member",
-         "member": "band_pad_top/ring1/edge2"
+        "carrier": "band_pad_top/ring1/edge2@m500.0",
+        "record": {
+         "kind": "band_member",
+         "margin_grid": 500,
+         "piece": null,
+         "primitive": "band_pad_top/ring1/primitive2",
+         "role": "edge"
         },
-        "family": "band_pad_top",
-        "margin_nm": 500,
-        "support_ring": 1,
-        "member": "band_pad_top/ring1/edge2",
-        "support_curve": "band_pad_top/ring1/edge2",
-        "source": "band_pad_top/band_pad_top/ring1/edge2",
-        "centre_um": [
-         -25.0,
-         4.999999999999999
-        ],
-        "radius_um": 8.0
+        "margin_um": 0.5,
+        "support_primitive": {
+         "curve": {
+          "ccw": false,
+          "centre_um": [
+           -25.0,
+           5.0
+          ],
+          "end_um": [
+           -25.0,
+           -3.0
+          ],
+          "kind": "arc",
+          "radius_um": 8.0,
+          "start_um": [
+           -17.0,
+           5.0
+          ]
+         },
+         "die_edge": false,
+         "length_um": 12.5663706144,
+         "origin": true,
+         "ring": "band_pad_top/ring1",
+         "sources": [
+          "pad/hole/q0"
+         ]
+        },
+        "position_in_ring": 2,
+        "ring_size": 4,
+        "support_ring": {
+         "id": "band_pad_top/ring1",
+         "family": "band_pad_top",
+         "index": 1
+        },
+        "source_curves": {
+         "pad/hole/q0": {
+          "curve": {
+           "ccw": false,
+           "centre_um": [
+            -25.0,
+            5.0
+           ],
+           "end_um": [
+            -25.0,
+            -3.0
+           ],
+           "kind": "arc",
+           "radius_um": 8.0,
+           "start_um": [
+            -17.0,
+            5.0
+           ]
+          },
+          "edge": 0,
+          "entity": "pad",
+          "length_um": 12.5663706144,
+          "polygon": 0,
+          "ring": 1
+         }
+        }
        }
       ],
-      "orientation": -1
+      "reversed": true
      }
     ]
    ]
@@ -992,9 +2550,11 @@
  "alt_group": {
   "name": "MA::pad__top::band=0",
   "face": "f:44fd2887758ead3c",
-  "sources_lineage": [
-   "band_pad_top",
+  "entities": [
    "pad"
+  ],
+  "families": [
+   "band_pad_top"
   ],
   "membership": {
    "pad": 1.0,
@@ -1004,456 +2564,1211 @@
    [
     {
      "edge": "e:8f219246ec532f03",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge8"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge8",
-       "carrier": "pad/polygon0/ring0/edge8"
+       "carrier": "pad/polygon0/ring0/edge8",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge8"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          -50.0,
+          -25.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -50.0,
+          30.0
+         ]
+        },
+        "edge": 8,
+        "entity": "pad",
+        "length_um": 55.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:a7d4cdddfc4ca4d6",
+     "kind": "horizontal",
      "carriers": [
       "pad/corner"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source arc carrier",
        "carrier": "pad/corner",
-       "source": "pad/polygon0/ring0/edge9",
-       "centre_um": [
-        -45.0,
-        -25.0
-       ],
-       "radius_um": 5.0
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/corner"
+       },
+       "source_curve": {
+        "curve": {
+         "ccw": true,
+         "centre_um": [
+          -45.0,
+          -25.0
+         ],
+         "end_um": [
+          -45.0,
+          -30.0
+         ],
+         "kind": "arc",
+         "radius_um": 5.0,
+         "start_um": [
+          -50.0,
+          -25.0
+         ]
+        },
+        "edge": 9,
+        "entity": "pad",
+        "length_um": 7.85398163397,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:43951ca46ec4db01",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge0",
-       "carrier": "pad/polygon0/ring0/edge0"
+       "carrier": "pad/polygon0/ring0/edge0",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge0"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          -10.0,
+          -30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -45.0,
+          -30.0
+         ]
+        },
+        "edge": 0,
+        "entity": "pad",
+        "length_um": 35.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:8443f1d91795ed79",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge1"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge1",
-       "carrier": "pad/polygon0/ring0/edge1"
+       "carrier": "pad/polygon0/ring0/edge1",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge1"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          -10.0,
+          -15.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -10.0,
+          -30.0
+         ]
+        },
+        "edge": 1,
+        "entity": "pad",
+        "length_um": 15.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:0da2febfa86166ce",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge2"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge2",
-       "carrier": "pad/polygon0/ring0/edge2"
+       "carrier": "pad/polygon0/ring0/edge2",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge2"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          10.0,
+          -15.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -10.0,
+          -15.0
+         ]
+        },
+        "edge": 2,
+        "entity": "pad",
+        "length_um": 20.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:7e1296754e403a43",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge3"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge3",
-       "carrier": "pad/polygon0/ring0/edge3"
+       "carrier": "pad/polygon0/ring0/edge3",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge3"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          10.0,
+          -30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          10.0,
+          -15.0
+         ]
+        },
+        "edge": 3,
+        "entity": "pad",
+        "length_um": 15.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:df3747244baf0730",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge4"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge4",
-       "carrier": "pad/polygon0/ring0/edge4"
+       "carrier": "pad/polygon0/ring0/edge4",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge4"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          50.0,
+          -30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          10.0,
+          -30.0
+         ]
+        },
+        "edge": 4,
+        "entity": "pad",
+        "length_um": 40.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:c69009e9efc5c27b",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge5"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge5",
-       "carrier": "pad/polygon0/ring0/edge5"
+       "carrier": "pad/polygon0/ring0/edge5",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge5"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          50.0,
+          18.0
+         ],
+         "kind": "line",
+         "start_um": [
+          50.0,
+          -30.0
+         ]
+        },
+        "edge": 5,
+        "entity": "pad",
+        "length_um": 48.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:3e69b369a6f3238e",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge6"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge6",
-       "carrier": "pad/polygon0/ring0/edge6"
+       "carrier": "pad/polygon0/ring0/edge6",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge6"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          38.0,
+          30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          50.0,
+          18.0
+         ]
+        },
+        "edge": 6,
+        "entity": "pad",
+        "length_um": 16.9705627485,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:86db5ea7826428b0",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge7"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge7",
-       "carrier": "pad/polygon0/ring0/edge7"
+       "carrier": "pad/polygon0/ring0/edge7",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge7"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          -50.0,
+          30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          38.0,
+          30.0
+         ]
+        },
+        "edge": 7,
+        "entity": "pad",
+        "length_um": 88.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     }
    ],
    [
     {
      "edge": "e:0c7f9a6e534f0281",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge9@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge9"
+       "carrier": "band_pad_top/ring0/edge9@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive9",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge9",
-       "support_curve": "straight edge",
-       "support_primitive": 9
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          -50.0,
+          -25.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -50.0,
+          30.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 55.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge8"
+        ]
+       },
+       "position_in_ring": 9,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge8": {
+         "curve": {
+          "end_um": [
+           -50.0,
+           -25.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -50.0,
+           30.0
+          ]
+         },
+         "edge": 8,
+         "entity": "pad",
+         "length_um": 55.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:3d6c7f411f769ade",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge8@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge8"
+       "carrier": "band_pad_top/ring0/edge8@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive8",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge8",
-       "support_curve": "straight edge",
-       "support_primitive": 8
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          -50.0,
+          30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          38.0,
+          30.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 88.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge7"
+        ]
+       },
+       "position_in_ring": 8,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge7": {
+         "curve": {
+          "end_um": [
+           -50.0,
+           30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           38.0,
+           30.0
+          ]
+         },
+         "edge": 7,
+         "entity": "pad",
+         "length_um": 88.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:960da506e800e788",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge7@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge7"
+       "carrier": "band_pad_top/ring0/edge7@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive7",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge7",
-       "support_curve": "straight edge",
-       "support_primitive": 7
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          38.0,
+          30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          50.0,
+          18.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 16.9705627485,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge6"
+        ]
+       },
+       "position_in_ring": 7,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge6": {
+         "curve": {
+          "end_um": [
+           38.0,
+           30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           50.0,
+           18.0
+          ]
+         },
+         "edge": 6,
+         "entity": "pad",
+         "length_um": 16.9705627485,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:b46f7331d0272ddc",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge6@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge6"
+       "carrier": "band_pad_top/ring0/edge6@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive6",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge6",
-       "support_curve": "straight edge",
-       "support_primitive": 6
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          50.0,
+          18.0
+         ],
+         "kind": "line",
+         "start_um": [
+          50.0,
+          -30.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 48.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge5"
+        ]
+       },
+       "position_in_ring": 6,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge5": {
+         "curve": {
+          "end_um": [
+           50.0,
+           18.0
+          ],
+          "kind": "line",
+          "start_um": [
+           50.0,
+           -30.0
+          ]
+         },
+         "edge": 5,
+         "entity": "pad",
+         "length_um": 48.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:d84c9a0c6590e340",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge5@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge5"
+       "carrier": "band_pad_top/ring0/edge5@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive5",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge5",
-       "support_curve": "straight edge",
-       "support_primitive": 5
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          50.0,
+          -30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          10.0,
+          -30.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 40.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge4"
+        ]
+       },
+       "position_in_ring": 5,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge4": {
+         "curve": {
+          "end_um": [
+           50.0,
+           -30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           10.0,
+           -30.0
+          ]
+         },
+         "edge": 4,
+         "entity": "pad",
+         "length_um": 40.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:f0840d4eeb2eb6d6",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge4@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge4"
+       "carrier": "band_pad_top/ring0/edge4@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive4",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge4",
-       "support_curve": "straight edge",
-       "support_primitive": 4
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          10.0,
+          -30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          10.0,
+          -15.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 15.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge3"
+        ]
+       },
+       "position_in_ring": 4,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge3": {
+         "curve": {
+          "end_um": [
+           10.0,
+           -30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           10.0,
+           -15.0
+          ]
+         },
+         "edge": 3,
+         "entity": "pad",
+         "length_um": 15.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "e:e7f9d66c42a7f63e",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/corner3@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/corner3"
+       "carrier": "band_pad_top/ring0/corner3@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive3",
+        "role": "corner"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/corner3",
-       "support_curve": "reflex-corner arc 3 of ring 0"
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          10.0,
+          -15.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -10.0,
+          -15.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 20.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge2"
+        ]
+       },
+       "position_in_ring": 3,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge2": {
+         "curve": {
+          "end_um": [
+           10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -15.0
+          ]
+         },
+         "edge": 2,
+         "entity": "pad",
+         "length_um": 20.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:9c7d5cd7b3beb841",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge3@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge3"
+       "carrier": "band_pad_top/ring0/edge3@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive3",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge3",
-       "support_curve": "straight edge",
-       "support_primitive": 3
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          10.0,
+          -15.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -10.0,
+          -15.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 20.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge2"
+        ]
+       },
+       "position_in_ring": 3,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge2": {
+         "curve": {
+          "end_um": [
+           10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -15.0
+          ]
+         },
+         "edge": 2,
+         "entity": "pad",
+         "length_um": 20.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:897829afa845833e",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/corner2@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/corner2"
+       "carrier": "band_pad_top/ring0/corner2@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive2",
+        "role": "corner"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/corner2",
-       "support_curve": "reflex-corner arc 2 of ring 0"
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          -10.0,
+          -15.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -10.0,
+          -30.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 15.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge1"
+        ]
+       },
+       "position_in_ring": 2,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge1": {
+         "curve": {
+          "end_um": [
+           -10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -30.0
+          ]
+         },
+         "edge": 1,
+         "entity": "pad",
+         "length_um": 15.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:bea72965114126f3",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge2@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge2"
+       "carrier": "band_pad_top/ring0/edge2@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive2",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge2",
-       "support_curve": "straight edge",
-       "support_primitive": 2
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          -10.0,
+          -15.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -10.0,
+          -30.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 15.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge1"
+        ]
+       },
+       "position_in_ring": 2,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge1": {
+         "curve": {
+          "end_um": [
+           -10.0,
+           -15.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -10.0,
+           -30.0
+          ]
+         },
+         "edge": 1,
+         "entity": "pad",
+         "length_um": 15.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:3648eef0d8cafcf4",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge1@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge1"
+       "carrier": "band_pad_top/ring0/edge1@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive1",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge1",
-       "support_curve": "straight edge",
-       "support_primitive": 1
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "end_um": [
+          -10.0,
+          -30.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -45.0,
+          -30.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 35.0,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/polygon0/ring0/edge0"
+        ]
+       },
+       "position_in_ring": 1,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/polygon0/ring0/edge0": {
+         "curve": {
+          "end_um": [
+           -10.0,
+           -30.0
+          ],
+          "kind": "line",
+          "start_um": [
+           -45.0,
+           -30.0
+          ]
+         },
+         "edge": 0,
+         "entity": "pad",
+         "length_um": 35.0,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     },
     {
      "edge": "e:73709f74e83f27da",
+     "kind": "horizontal",
      "carriers": [
       "band_pad_top/ring0/edge0@m100.0"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "family member",
-       "lineage_record": {
-        "family": "band_pad_top",
-        "kind": "family_member",
-        "member": "band_pad_top/ring0/edge0"
+       "carrier": "band_pad_top/ring0/edge0@m100.0",
+       "record": {
+        "kind": "band_member",
+        "margin_grid": 100,
+        "piece": null,
+        "primitive": "band_pad_top/ring0/primitive0",
+        "role": "edge"
        },
-       "family": "band_pad_top",
-       "margin_nm": 100,
-       "support_ring": 0,
-       "member": "band_pad_top/ring0/edge0",
-       "support_curve": "band_pad_top/ring0/edge0",
-       "source": "band_pad_top/band_pad_top/ring0/edge0",
-       "centre_um": [
-        -45.0,
-        -25.0
-       ],
-       "radius_um": 5.0
+       "margin_um": 0.1,
+       "support_primitive": {
+        "curve": {
+         "ccw": true,
+         "centre_um": [
+          -45.0,
+          -25.0
+         ],
+         "end_um": [
+          -45.0,
+          -30.0
+         ],
+         "kind": "arc",
+         "radius_um": 5.0,
+         "start_um": [
+          -50.0,
+          -25.0
+         ]
+        },
+        "die_edge": false,
+        "length_um": 7.85398163397,
+        "origin": true,
+        "ring": "band_pad_top/ring0",
+        "sources": [
+         "pad/corner"
+        ]
+       },
+       "position_in_ring": 0,
+       "ring_size": 10,
+       "support_ring": {
+        "id": "band_pad_top/ring0",
+        "family": "band_pad_top",
+        "index": 0
+       },
+       "source_curves": {
+        "pad/corner": {
+         "curve": {
+          "ccw": true,
+          "centre_um": [
+           -45.0,
+           -25.0
+          ],
+          "end_um": [
+           -45.0,
+           -30.0
+          ],
+          "kind": "arc",
+          "radius_um": 5.0,
+          "start_um": [
+           -50.0,
+           -25.0
+          ]
+         },
+         "edge": 9,
+         "entity": "pad",
+         "length_um": 7.85398163397,
+         "polygon": 0,
+         "ring": 0
+        }
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     }
    ]
   ]
@@ -1461,11 +3776,11 @@
  "wall": {
   "name": "MA::pad__sidewall",
   "face": "f:26d14ad67f1ad69b",
-  "z_range": [
-   "0",
-   "1/5"
+  "z_um": [
+   0.0,
+   0.2
   ],
-  "sources_lineage": [
+  "entities": [
    "pad"
   ],
   "membership": {
@@ -1475,63 +3790,95 @@
    [
     {
      "edge": "ve:2ceb878a40cbefd5",
-     "carriers": [
+     "kind": "vertical",
+     "carriers": [],
+     "wall_entities": [
       "pad"
      ],
-     "resolved": [
-      {
-       "kind": "source entity (vertical edge)",
-       "entity": "pad"
-      }
-     ],
-     "orientation": 1
+     "resolved": [],
+     "reversed": false
     },
     {
      "edge": "e:0da2febfa86166ce",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge2"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge2",
-       "carrier": "pad/polygon0/ring0/edge2"
+       "carrier": "pad/polygon0/ring0/edge2",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge2"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          10.0,
+          -15.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -10.0,
+          -15.0
+         ]
+        },
+        "edge": 2,
+        "entity": "pad",
+        "length_um": 20.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": 1
+     "reversed": false
     },
     {
      "edge": "ve:86f934585e954169",
-     "carriers": [
+     "kind": "vertical",
+     "carriers": [],
+     "wall_entities": [
       "pad"
      ],
-     "resolved": [
-      {
-       "kind": "source entity (vertical edge)",
-       "entity": "pad"
-      }
-     ],
-     "orientation": -1
+     "resolved": [],
+     "reversed": true
     },
     {
      "edge": "e:c214f60a8194ec04",
+     "kind": "horizontal",
      "carriers": [
       "pad/polygon0/ring0/edge2"
      ],
+     "wall_entities": [],
      "resolved": [
       {
-       "kind": "source edge",
-       "entity": "pad",
-       "polygon": "polygon0",
-       "ring": "ring0",
-       "edge": "edge2",
-       "carrier": "pad/polygon0/ring0/edge2"
+       "carrier": "pad/polygon0/ring0/edge2",
+       "record": {
+        "kind": "source",
+        "source_curve": "pad/polygon0/ring0/edge2"
+       },
+       "source_curve": {
+        "curve": {
+         "end_um": [
+          10.0,
+          -15.0
+         ],
+         "kind": "line",
+         "start_um": [
+          -10.0,
+          -15.0
+         ]
+        },
+        "edge": 2,
+        "entity": "pad",
+        "length_um": 20.0,
+        "polygon": 0,
+        "ring": 0
+       }
       }
      ],
-     "orientation": -1
+     "reversed": true
     }
    ]
   ]
@@ -1554,24 +3901,120 @@
    }
   }
  ],
- "step7_inset_request": {
-  "request_id": "band_pad_top",
-  "support": {
-   "entity": "pad",
-   "side": "top"
+ "step7_band_family": {
+  "band_family": {
+   "band_count": 4,
+   "bands": {
+    "0": [
+     "MA::pad__top::band=0"
+    ],
+    "1": [
+     "MA::pad__top::band=1"
+    ],
+    "2": [
+     "MA::pad__top::band=2"
+    ],
+    "3": [
+     "MA::pad__top::band=3"
+    ]
+   },
+   "interface": null,
+   "margins_grid": [
+    100,
+    500,
+    2000
+   ],
+   "margins_um": [
+    0.1,
+    0.5,
+    2.0
+   ],
+   "support": {
+    "entity": "pad",
+    "side": "top"
+   },
+   "support_area_um2": 5421.57302426
   },
-  "margins_um": [
-   0.1,
-   0.5,
-   2.0
-  ],
-  "support_area_um2": 5421.57302426
+  "inset_request": {
+   "families": [
+    "band_pad_top"
+   ],
+   "interface": null,
+   "margins_um": [
+    0.1,
+    0.5,
+    2.0
+   ],
+   "scope": "face",
+   "skipped": [],
+   "support": {
+    "entity": "pad",
+    "side": "top"
+   }
+  }
  },
  "traced_edge": {
   "edge": "e:91c3feb3af63b6b0",
   "carrier": "band_pad_top/ring0/edge0@m500.0",
-  "distance_to_support_um_at_midpoint": 0.5,
-  "support_curve": "band_pad_top/ring0/edge0"
+  "carrier_record": {
+   "kind": "band_member",
+   "margin_grid": 500,
+   "piece": null,
+   "primitive": "band_pad_top/ring0/primitive0",
+   "role": "edge"
+  },
+  "margin_um": 0.5,
+  "support_primitive": "band_pad_top/ring0/primitive0",
+  "support_ring": {
+   "id": "band_pad_top/ring0",
+   "family": "band_pad_top",
+   "index": 0
+  },
+  "position_in_ring": 0,
+  "support_curve": {
+   "ccw": true,
+   "centre_um": [
+    -45.0,
+    -25.0
+   ],
+   "end_um": [
+    -45.0,
+    -30.0
+   ],
+   "kind": "arc",
+   "radius_um": 5.0,
+   "start_um": [
+    -50.0,
+    -25.0
+   ]
+  },
+  "source_curves": {
+   "pad/corner": {
+    "curve": {
+     "ccw": true,
+     "centre_um": [
+      -45.0,
+      -25.0
+     ],
+     "end_um": [
+      -45.0,
+      -30.0
+     ],
+     "kind": "arc",
+     "radius_um": 5.0,
+     "start_um": [
+      -50.0,
+      -25.0
+     ]
+    },
+    "edge": 9,
+    "entity": "pad",
+    "length_um": 7.85398163397,
+    "polygon": 0,
+    "ring": 0
+   }
+  },
+  "distance_to_support_um_at_midpoint": 0.5
  },
  "model_digest": "model:ea7f893fddc6733c",
  "counts": {

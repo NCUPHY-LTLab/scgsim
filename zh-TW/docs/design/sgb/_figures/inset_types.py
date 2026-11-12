@@ -15,7 +15,8 @@ repeated with the concrete requests that name the same faces (and the ids SGB gi
 identity digest.  Outputs go to ``docs/design/sgb/figures/`` with the prefix ``inset-types-``:
 
 * ``inset-types-table.md``    which faces each type expanded into, and which it skipped
-* ``inset-types-record.md``   the ``insets`` record of the substrate-air request of the pad-in-ground sidecar
+* ``inset-types-record.md``   the ``inset_request`` record of the substrate-air request of the pad-in-ground sidecar and the
+  ``band_family`` records it became
 * ``inset-types-numbers.json``  the same facts as numbers, and the identity check
 """
 
@@ -32,6 +33,7 @@ import inset_kit as kit  # noqa: E402  (also puts the production core's tests on
 from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
 from sgb_scenes import slab_model  # noqa: E402
 
+from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.build import build_sgb_geometry, emit_model  # noqa: E402
 from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
     ConductorSurface,
@@ -41,7 +43,6 @@ from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
 )
 from scgsim.geometry.sgb.errors import InputError  # noqa: E402
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
 
 MARGINS = (0.5, 1.0)
 TYPES = ("MA", "MS", "SA")
@@ -65,13 +66,16 @@ def describe(support: dict) -> str:
 
 
 def concrete_equivalent(sidecar: dict) -> tuple[InsetRequest, ...]:
-    """The concrete requests for the faces the type-level requests banded, with the ids SGB gave them."""
-    families: dict[str, dict] = {}
-    for record in sidecar["insets"]:
-        for face in record["expansion"]["banded"]:
-            families[face["request_id"]] = face
+    """The concrete requests for the faces the type-level requests banded (their ``families``), with the ids SGB gave
+    the families."""
+    families = {
+        family_id
+        for request in sidecar["inset_request"].values()
+        for family_id in request["families"]
+    }
     requests = []
-    for family_id, face in sorted(families.items()):
+    for family_id in sorted(families):
+        face = sidecar["band_family"][family_id]
         support = face["support"]
         concrete = (
             ConductorSurface(support["entity"], support["side"])
@@ -109,18 +113,23 @@ def build_both(effective, route: str, scratch: Path) -> tuple[dict, bool]:
 def rows_of(label: str, sidecar: dict) -> list[str]:
     """Table rows of one build: a row per request with its banded and skipped faces."""
     rows = []
-    for record in sidecar["insets"]:
-        expansion = record["expansion"]
-        banded = "<br>".join(code(face["request_id"]) for face in expansion["banded"])
-        skipped = "<br>".join(
-            describe(item["support"]) for item in expansion["skipped"]
-        )
+    for record in sidecar["inset_request"].values():
+        banded = "<br>".join(code(family_id) for family_id in record["families"])
+        skipped = "<br>".join(describe(item["support"]) for item in record["skipped"])
         asked = f'InterfaceSurfaces("{record["support"]["interface_type"]}")'
         rows.append(
             f"| {label} | {code(asked)} | {banded or '無'} | {skipped or '無'} |"
         )
         label = ""
     return rows
+
+
+def requests_and_families(sidecar: dict) -> dict:
+    """The inset requests of a sidecar and the band families they became."""
+    return {
+        "inset_request": sidecar["inset_request"],
+        "band_family": sidecar["band_family"],
+    }
 
 
 def covered_die_sidecar() -> dict:
@@ -160,12 +169,20 @@ def main() -> None:
     if not (same_a and same_b):
         raise SystemExit("a type-level build differs from its concrete equivalent")
     numbers["requests"] = {
-        "pad_in_ground_route_b": sidecar_b["insets"],
-        "thin_film_pair_route_a": sidecar_a["insets"],
-        "covered_die_route_b": sidecar_c["insets"],
+        "pad_in_ground_route_b": requests_and_families(sidecar_b),
+        "thin_film_pair_route_a": requests_and_families(sidecar_a),
+        "covered_die_route_b": requests_and_families(sidecar_c),
     }
-    sa = next(r for r in sidecar_b["insets"] if r["request_id"] == "sa")
-    excerpt = "```json\n" + json.dumps(sa, indent=1, ensure_ascii=False) + "\n```\n"
+    sa = sidecar_b["inset_request"]["sa"]
+    record = {
+        "inset_request": {"sa": sa},
+        "band_family": {f: sidecar_b["band_family"][f] for f in sa["families"]},
+    }
+    excerpt = (
+        '```{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}\n'
+        + json.dumps(record, indent=1, ensure_ascii=False)
+        + "\n```\n"
+    )
     kit.FIGURES.mkdir(parents=True, exist_ok=True)
     (kit.FIGURES / "inset-types-table.md").write_text("\n".join(rows) + "\n")
     (kit.FIGURES / "inset-types-record.md").write_text(excerpt)

@@ -78,7 +78,7 @@ window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它�
 | distance origin | `support` | 對 offset family 而言，是產生這些曲線所依據的 support region 與它的 gap edge（`SupportRegion.origins`），距離只從 gap edge 量起 |
 :::
 
-每個成員 carrier 都有 lineage record（family id 與成員名稱）；inset 的直線成員保留它的產生 primitive（`<support>/ring<r>/edge<k>`），和圓弧成員一樣。所以存活下來的 edge 永遠可以追溯到切出它的 family（[Identity](identity.qmd)）。
+每個成員 carrier 都有 lineage record（family id 與成員名稱）；inset 的成員另外以欄位記下它的產生 primitive（support 的第幾個 ring、ring 中的第幾個 primitive）、role（`edge`、`corner`、`capstart`、`capend`）與 margin，直線成員與圓弧成員一樣。sidecar 把這些寫成 `carrier` 表的記錄，指向 `support_primitive` 與它的 ring 和 family，所以存活下來的 edge 永遠可以追溯到切出它的 family，不必解析任何 id（[Identity](identity.qmd#lineage)）。
 
 目標 Z 若沒有任何 prism 定義，family 會加入該 level：它是一般的 level，active set 沒有任何變化（production 已實作並有專屬的測試）。
 
@@ -179,7 +179,7 @@ flowchart TD
 關於 embedding 的兩點：
 
 - refinement curve 的某一段若落在**沒有 face 的 cell**（level 兩側是同一個 domain，那裡不輸出任何東西），或落在沒有任何輸出 volume 的 face 中，就沒有東西可以 embed。這是**錯誤**，不會被默默丟棄：build 以 `SgbError` 中止（以真實輸入的 Route B 在 $z = 0.2$ 的 gap 內加一條 refinement curve 計算：`refinement curve r/seg0 at (32.0000, 55.0000) um on level[1/5] lies in a cell that has no face (inside a volume): it cannot be embedded and is not dropped silently`）。要把 `refinement_only` family 指向其 cell 有 face 的 level。
-- XAO 不攜帶 mesh embedding。sidecar 同時記錄 face-in-volume 的配對（`embedded_faces`，volume 內部的 sheet；真實輸入的 port 不在其中）與 curve-in-face 的配對（`refinement_edges`，refinement curve），使 mesher 能由 sidecar 重新套用（[Emission](emission.qmd)）。
+- XAO 不攜帶 mesh embedding。sidecar 同時記錄 face-in-volume 的配對（host volume 的 `embedded_faces`，volume 內部的 sheet；真實輸入的 port 不在其中）與 curve-in-face 的配對（host face 的 `embedded_edges`，refinement curve），使 mesher 能由 sidecar 重新套用（[Emission](emission.qmd)）。
 
 ## 小結
 

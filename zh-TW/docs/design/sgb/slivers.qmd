@@ -116,7 +116,7 @@ SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人�
 
 ## Sliver report
 
-report 是已完成 build 的函式（`sliver_report(model)`）。它讀取 topology 與 arrangement，且**不改變任何東西**：build 的 identity digest 在前後完全相同（`tests/test_sgb_slivers.py` 測試）。`build_sgb_geometry` 每次 build 都把它寫成 `<stem>.slivers.json`，摘要也放在 sidecar 的 `slivers` 欄位。
+report 是已完成 build 的函式（`sliver_report(model)`）。它讀取 topology 與 arrangement，且**不改變任何東西**：build 的 identity digest 在前後完全相同（`tests/test_sgb_slivers.py` 測試）。`build_sgb_geometry` 每次 build 都把它寫成 `<stem>.slivers.json`，摘要也放在 sidecar 的 `summary.slivers` 欄位。
 
 ::: {.askr-table-compact}
 | 欄位 | 內容 |

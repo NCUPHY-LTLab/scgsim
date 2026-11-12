@@ -10,10 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import inset_kit as kit  # noqa: E402  (also puts the production core's tests on sys.path)
 from sgb_scenes import airbridge  # noqa: E402
 
+from scgsim.contracts.sgb_sidecar import read_sidecar, views  # noqa: E402
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
 from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
 
 FIGURES = kit.FIGURES
 DATA = FIGURES / "emission-timing-data.json"
@@ -156,6 +156,7 @@ def example_numbers(model, plan, sidecar) -> dict:
     for shell in plan.found.shells:
         for ref in shell:
             uses[abs(ref)] = uses.get(abs(ref), 0) + 1
+    members = views.group_members(sidecar)
     numbers = {
         "planned": model.topology.counts(),
         "emitted": plan.counts,
@@ -163,14 +164,14 @@ def example_numbers(model, plan, sidecar) -> dict:
         "faces_used_by_two_shells": sum(1 for n in uses.values() if n == 2),
         "faces_used_by_one_shell": sum(1 for n in uses.values() if n == 1),
         "groups": {
-            name: {"dim": g["dim"], "tag": g["tag"], "members": len(g["ids"])}
-            for name, g in sidecar["physical_groups"].items()
+            name: {"dim": g["dim"], "tag": g["tag"], "members": len(members[name])}
+            for name, g in sidecar["group"].items()
         },
         "ids_by_tag": {
             dim: len(ids) for dim, ids in sidecar["binding"]["ids_by_tag"].items()
         },
         "sidecar_bytes": None,
-        "embedded_faces": len(sidecar["embedded_faces"]),
+        "embedded_faces": len(views.embedded_faces(sidecar)),
         "free_faces": plan.counts["free_faces"],
     }
     return numbers

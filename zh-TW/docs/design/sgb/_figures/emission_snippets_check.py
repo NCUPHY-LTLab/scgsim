@@ -1,20 +1,21 @@
 """Check that the file excerpts quoted in ``docs/design/sgb/emission.qmd`` and ``brep-format.qmd`` are real.
 
-Run (from anywhere; the production SGB core is found through ``SGB_CORE``, which defaults to this checkout)::
+Run from the repository root with the package's environment::
 
-    SGB_CORE=<sgb-core> python3 docs/design/sgb/_figures/emission_snippets_check.py
+    uv run --extra palace --group dev python zh-TW/docs/design/sgb/_figures/emission_snippets_check.py
 
 The running example (the pad-in-ground scene of ``tests/sgb_scenes.py`` under Route B, its lumped port on the support plane
-z = 0; see ``inset_kit.pad_catalogue``) is written by ``emit_model`` of the production core into scratch folders, with the Python
-of that checkout, and every quoted block is compared with what was written.  Two kinds of block are checked:
+z = 0; see ``inset_kit.pad_catalogue``) is written by ``emit_model`` into scratch folders, in a child process of the same
+interpreter, and every quoted block is compared with what was written.  Two kinds of block are checked:
 
 * **File blocks** have a header like ``{.text filename="semantic_geometry_route_b.brep, lines 1170-1178"}`` (or ``line 205``).
   The file name selects the written file; the lines are compared with the block, ignoring trailing spaces.
 * **Sidecar blocks** have a header like ``{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}``.  The sidecar is
   read from the example; a header ``（節錄，加上 refinement curve）`` selects the example built with one refinement curve
-  (``RefinementRequest("ref", 0.0, ((-40.0, 55.0), (40.0, 55.0)))`` on the substrate-vacuum interface).  The excerpt is parsed as
-  JSON (a ``"…"`` key or item stands for omitted content) and every value in it must equal the sidecar's, found under the same
-  key at the top level or among the ``physical_groups``.
+  (``RefinementRequest("ref", 0.0, ((-40.0, 55.0), (40.0, 55.0)))`` on the substrate-vacuum interface).  The sidecar is read
+  with the contract's ``read_sidecar``.  The excerpt is parsed as JSON (a ``"…"`` key or item stands for omitted content) and
+  every value in it must equal the sidecar's, found under the same key: a table of ``scgsim.sgb.sidecar.v3`` (``group``,
+  ``face``, ``edge`` ...) or another top-level field.
 
 Exit status 1 lists every mismatch.
 """
@@ -22,18 +23,17 @@ Exit status 1 lists every mismatch.
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+from scgsim.contracts.sgb_sidecar import read_sidecar
+
 HERE = Path(__file__).resolve().parent
 PAGES = (HERE.parent / "emission.qmd", HERE.parent / "brep-format.qmd")
-SGB_CORE = Path(
-    os.environ.get("SGB_CORE", HERE.parents[4])
-)  # checkout with scgsim.geometry.sgb
+ROOT = HERE.parents[4]
 STEM = "semantic_geometry_route_b"
 SIDECAR_BLOCK = re.compile(
     rf'^```\{{\.json filename="(?P<name>{STEM}\.sidecar\.json)（節錄(?P<variant>[^）]*)）"\}}\n(?P<body>.*?)^```',
@@ -65,13 +65,11 @@ def _quoted_blocks(text: str):
 
 
 def _write_example(scratch: Path) -> None:
-    """Write the example (plain, and with one refinement curve) with the production core into ``scratch``."""
-    python = SGB_CORE / ".artifacts" / "env" / "bin" / "python"
+    """Write the example (plain, and with one refinement curve) into ``scratch``, in a fresh interpreter."""
     subprocess.run(
-        [str(python), "-c", GENERATE, str(HERE), str(scratch)],
-        cwd=SGB_CORE,
+        [sys.executable, "-c", GENERATE, str(HERE), str(scratch)],
+        cwd=ROOT,
         check=True,
-        env={**os.environ, "SGB_CORE": str(SGB_CORE)},
     )
 
 
@@ -105,17 +103,14 @@ def _check_sidecar_blocks(scratch: Path, problems: list[str]) -> int:
     for match in blocks:
         variant = "refinement" if "refinement" in match["variant"] else "plain"
         sidecar = sidecars.setdefault(
-            variant,
-            json.loads((scratch / variant / f"{STEM}.sidecar.json").read_text()),
+            variant, read_sidecar(scratch / variant / f"{STEM}.sidecar.json")
         )
         body = match["body"].strip().rstrip(",")
         excerpt = json.loads("{" + body + "}")
-        for key, value in excerpt.items():  # a top-level key, or a group name
-            actual = sidecar.get(key, sidecar["physical_groups"].get(key))
+        for key, value in excerpt.items():  # a table or another top-level field
+            actual = sidecar.get(key)
             if actual is None:
-                problems.append(
-                    f"sidecar block: {key!r} is neither a sidecar key nor a physical group"
-                )
+                problems.append(f"sidecar block: {key!r} is not a sidecar field")
             else:
                 problems += [
                     f"sidecar block {key}{d}" for d in _differences(value, actual, "")

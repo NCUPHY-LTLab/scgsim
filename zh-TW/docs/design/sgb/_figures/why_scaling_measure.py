@@ -78,13 +78,13 @@ def emit_and_load(model) -> dict:
     # loaded here, after the build's peak memory was recorded, so the emission modules and Gmsh stay out of that number
     from sgb_gmsh_oracle import gmsh_session  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
 
+    from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
     from scgsim.geometry.sgb.build import emit_model  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
     from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
     from scgsim.geometry.sgb.emission.writer import (  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
         write_brep_file,
         write_xao_file,
     )
-    from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
     from scgsim.geometry.sgb.verification.loaded import verify_loaded  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
 
     out: dict = {}

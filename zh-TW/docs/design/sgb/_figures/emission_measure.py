@@ -19,11 +19,11 @@ from sgb_gmsh_oracle import OracleResult, gmsh_session  # noqa: E402
 from sgb_gmsh_oracle import _build_entities as oracle_build_entities  # noqa: E402  # private-import: the timing figure needs the oracle's entity build apart from its synchronize and physical-group steps, which emit_with_gmsh_api does not expose
 from sgb_scenes import random_layout  # noqa: E402
 
+from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
 from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.verification.loaded import verify_loaded  # noqa: E402
 
 # the children run through ``emission.py`` itself, so each starts with every import of the full script, as a figure run does

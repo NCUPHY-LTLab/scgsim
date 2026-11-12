@@ -177,7 +177,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | | |
 |---|---|
 | 輸入 | topology、route |
-| 輸出 | `semantic_geometry_route_<a\|b\|c>.brep`、`.xao`、`.sidecar.json`（`scgsim.sgb.sidecar.v2`）、`.slivers.json`、`.validation.json`；Gmsh 只用來做 meshing（與作為測試 oracle） |
+| 輸出 | `semantic_geometry_route_<a\|b\|c>.brep`、`.xao`、`.sidecar.json`（`scgsim.sgb.sidecar.v3`）、`.slivers.json`、`.validation.json`；Gmsh 只用來做 meshing（與作為測試 oracle） |
 | Record | 直接 writer 的計畫（`BrepPlan`：vertex、edge、wire、face、shell、solid 與 pcurve）；`SgbArtifacts`（五個路徑、route、counts、timings、strict 模式的 `OcctReport`） |
 | 平行單位 | writer 可分 chunk 平行寫出，輸出對任何 worker 數逐位元相同 |
 | 失敗 | 直接 writer 明確寫出每個 orientation；writer 拒絕不能精確寫出的曲面（不是平面、不是單一圓的圓柱、帶洞的曲面 wall 等）時 `SgbError`；strict mode 的 OCCT finding 為 `OcctCheckError`，缺 OCP 為 `OcctUnavailable`；寫出的檔案不依賴 Gmsh 的 healing，需要 fix 就是規劃缺陷 |
@@ -188,7 +188,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 ::: {.askr-table-compact}
 | Record | 欄位 | 備註 |
 |---|---|---|
-| `Grid` | `size_um`（每個 grid unit 的 µm） | 取自輸入的 `GeometryGridContext`，每個模型宣告一次，並記錄在 handoff 與 sidecar 的 `grid_um` |
+| `Grid` | `size_um`（每個 grid unit 的 µm） | 取自輸入的 `GeometryGridContext`，每個模型宣告一次，並記錄在 handoff 與 sidecar 的 `model.grid_um` |
 | `Lineage` | `kind`（`polygon_edge`、`family_member`）、`entity_id`、`polygon`、`ring`、`edge`、`family_id`、`member`、`band_member` | `describe()` 回傳 `pad/polygon0/ring0/edge8` 或 `family/member`；直線 inset member 的 `member` 是 `<support>/ring<r>/edge<k>`；只有 inset band 的成員有 `band_member` |
 | `BandMember` | `ring`、`index`、`role`（`edge`、`corner`、`capstart`、`capend`）、`margin`（grid unit）、`piece`（cap 或 corner 切成多段時的段號，整段為 `None`） | band 曲線來自 support 的哪個位置：`edge` 是 primitive `index` 的 offset，`corner` 是 primitive `index` 與下一個 primitive 之間 reflex 頂點的 arc，`capstart`、`capend` 是 primitive `index` 起點或終點的半圓；曲線兩側的 band 編號在它的 `BandSeam`。讀者讀這些欄位，不解析 carrier id 或 `member` |
 | `LineCarrier` | `id`、`p`、`q`（整數 grid point）、`lineage` | 端點精確的直線曲線 |
@@ -243,7 +243,7 @@ primary group 命名為 `<kind>::<qualified entity id>__<face kind>[::band=k]`�
 | `<name>::band=k` | 同一種 face 位於其 support region 的 inset band $k$ 內（Route A：`pad::band=k`；Route B 與 C：`MA::pad__top::band=k` 與 `MS::pad__bottom::band=k`；介面：<code>SA::&lt;a&gt;&#124;&lt;b&gt;__interface::band=k</code>，兩個 family 共用時，這兩個 family 的所有 band 都是 <code>SA::&lt;a&gt;&#124;&lt;b&gt;__interface__top::band=k</code> 或 <code>…__interface__bottom::band=k</code>） |
 :::
 
-裸的 entity id 指物件本身，帶界面前綴的名稱指兩個東西之間的 face（見 [Identity](identity.qmd)）。Net 的 PEC 不是一組 face：它由 `unions.nets` 列出該 Net 所有導體表面的 group。
+裸的 entity id 指物件本身，帶界面前綴的名稱指兩個東西之間的 face（見 [Identity](identity.qmd)）。Net 的 PEC 不是一組 face：它是該 Net 所有導體表面的 group，也就是 sidecar 中 `net` 等於它、`interface_type` 為 `MA`、`MS` 或 `SHEET` 的 group。
 
 ## 每個模型寫出的檔案
 
@@ -253,7 +253,7 @@ primary group 命名為 `<kind>::<qualified entity id>__<face kind>[::band=k]`�
 | 檔案 | 內容 |
 |---|---|
 | `….brep`、`….xao` | 直接 writer 輸出的幾何（XAO 帶 physical group）；BREP 為 OCCT `CASCADE Topology V1` 文字，並寫出 pcurve（容差 $10^{-7}$ µm） |
-| `….sidecar.json`（`scgsim.sgb.sidecar.v2`） | `binding`（tag = 1 + 在 `ids_by_tag[dim]` 的位置，依 `TopExp::MapShapes` 前序）、`counts`、`physical_groups`、`unions`、`surface_epr_rows`、`volumes`、`faces`、`embedded_faces`、`refinement_edges`、`mesh_features`、`ports`、`lineage`（edge → carrier、carrier 描述、face → entity、`membership`、vertical edge）、`insets`、`refinements`、`slivers`、`arrangement`、`curved_wall_faces`、`surface_kinds`、`expected`、`grid_um`、`tolerance_um`、`route`、`route_policy` |
+| `….sidecar.json`（`scgsim.sgb.sidecar.v3`） | `schema`；`model`（名稱、identity digest、`route`、`route_policy`、`grid_um`、`tolerance_um`、檔名）；`binding`（tag = 1 + 在 `ids_by_tag[dim]` 的位置，依 `TopExp::MapShapes` 前序）；`summary`（寫出的數量、sliver 摘要、圓弧 edge 數）；以及以 id 為鍵、以 id 互相指向的三層表：來源 `entity`、`source_curve`、`inset_request`、`refinement_request`、`port`，推導 `cut_family`、`band_family`、`support_ring`、`support_primitive`、`carrier`，寫出 `vertex`、`edge`、`face`、`volume`、`group`、`surface_epr_row`、`mesh_feature`。group 成員、依 native tag 的預期值與 embedding 配對由 `scgsim.contracts.sgb_sidecar.views` 算出 |
 | `….slivers.json` | 最短 edge、最窄 face、最小角度、薄 slab、snap drift、arc edge 偏差，各自帶位置、plane 與 lineage；最窄 face 的 `value_um` 是 feature size，`width_2a_over_p_um` 是 chord polygon 的 $2A/P$ |
 | `….validation.json` | `passed`、檢查清單（不含時間）與 `counts` |
 :::

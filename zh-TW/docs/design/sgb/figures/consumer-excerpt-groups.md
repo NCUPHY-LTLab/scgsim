@@ -1,6 +1,6 @@
 ```{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}
 {
- "physical_groups": {
+ "group": {
   "MA::pad__top::band=0": {
    "adjacent_domains": [
     {
@@ -18,9 +18,7 @@
    "dim": 2,
    "entities": ["pad"],
    "face_kind": "top",
-   "ids": ["f:32215dfca2e5b36e"],
    "interface_type": "MA",
-   "native_tags": [19],
    "net": "P",
    "tag": 7
   },
@@ -38,9 +36,7 @@
    "dim": 2,
    "entities": ["pad"],
    "face_kind": "bottom",
-   "ids": ["f:487ca41cd08e5769"],
    "interface_type": "MS",
-   "native_tags": [3],
    "net": "P",
    "tag": 11
   },
@@ -63,20 +59,16 @@
    "dim": 2,
    "entities": ["PORT_SHEET__P1__0000"],
    "face_kind": "port",
-   "ids": ["f:60d2e963bf0b88ab"],
    "interface_type": "PORT",
-   "native_tags": [5],
    "net": null,
    "tag": 12
   },
   "substrate": {
    "dim": 3,
    "entities": ["substrate"],
-   "ids": ["vol:1a3729bef5cef625"],
    "interface_type": null,
    "kind": "dielectric",
    "material": "Si",
-   "native_tags": [1],
    "net": null,
    "tag": 2
   }
