@@ -332,11 +332,11 @@ def test_every_band_member_of_the_sidecar_names_its_place_as_the_model_does(
 # SHA-256 of each model's ``scgsim.sgb.sidecar.v3`` file.  Slice C re-pinned these (v2 became v3); a change meant
 # to change the file re-pins the digests it changes and says why.
 SIDECAR_SHA256 = {
-    "pad_a_bands": "b36e2dc9a68ccbe6fab1a7e185bd22e9a7cb5eabc56031e3439747c0a291d4ad",
-    "pad_b_bands": "e505455f88fa463dd5c316187ce6a2ca2528c2215883fd441e836840c98a283d",
-    "junction_fan": "d87e91073dfb08b4c93d15a0dc6c5007f34ab27f867ea0185005c24ceba92ce9",
-    "cell13_circular_bend": "28e64c0010551e907415c40b38b45f5752b08314548076d8e7eb24b822dc55b8",
-    "strip_into_pad": "9f783af1564227cf97e017437ebb61638ccaa8eb628fde84899b9b94bb2f0e61",
+    "pad_a_bands": "7fe9bcc29bc8ee09f6ea146a3cd37deb2e74b8b55435aef11d407ed7580d816f",
+    "pad_b_bands": "131c0e45eb0c27cc51573babe0b01ecc8ac8c6b6e3d7133ce27724496dacf177",
+    "junction_fan": "947a9858c07e66a0da7331ab8e24031f3b1ddee381be0b24c811b030691bdac5",
+    "cell13_circular_bend": "9b30c52d9165cbb9de8e4a351dcf26254325ba450ee4b9a8b4badc4581e5928c",
+    "strip_into_pad": "f8575530493caf605ce8956754e96b056a274ab6b748c51a5a32f1409ca70a8f",
 }
 
 

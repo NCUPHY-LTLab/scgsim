@@ -74,10 +74,7 @@ class CarrierLineage:
             f"internal: the source carrier {carrier_id!r} lies on no source curve of the catalogue"
         )
 
-    def role(self, family_id: str) -> str:
-        """The role of the cut family ``family_id`` (``inset_band`` or ``refinement``)."""
-        if family_id not in self.roles:
-            raise SgbError(
-                f"internal: the cut family {family_id!r} is not in the catalogue"
-            )
-        return self.roles[family_id]
+    def role(self, family_id: str) -> str | None:
+        """The role of the cut family ``family_id`` (``inset_band``, ``refinement`` or any other the catalogue
+        gives); ``None`` for a family a lineage names that the catalogue does not hold."""
+        return self.roles.get(family_id)

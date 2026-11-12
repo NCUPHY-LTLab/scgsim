@@ -1,7 +1,7 @@
 """The sources layer of the sidecar: what the layout drew and asked for (design brief section 7, #170).
 
-Owns the tables a consumer follows lineage back to: ``entity`` (each Entity's kind, material, Net, layer, z
-range and feature kind), ``source_curve`` (each straight edge and arc of each Entity outline, with its exact
+Owns the tables a consumer follows lineage back to: ``entity`` (each Entity's prisms, each with its kind,
+material, Net, layer, z range and feature kind), ``source_curve`` (each straight edge and arc of each Entity outline, with its exact
 curve and length), ``inset_request`` and ``refinement_request`` (the requests as given; a refinement
 family also with the segments drawn from it) and ``port`` (each
 lumped-port sheet with the faces and volumes that carry it).  Lengths and coordinates are micrometres, rounded
@@ -18,6 +18,7 @@ from scgsim.contracts.sgb_sidecar.records import (
     ArcCurve,
     BandedFaceKind,
     Entity,
+    EntityPrism,
     FaceSupport,
     InsetRequest,
     InterfaceSupport,
@@ -49,27 +50,18 @@ from scgsim.geometry.sgb.sidecar.lineage import REFINEMENT_FAMILY_ROLE
 
 
 def entity_records(model: ConformalModel) -> dict[str, Entity]:
-    """Every Entity of the catalogue; the prisms (polygons) of one Entity share all but their z range."""
+    """Every Entity of the catalogue, with each of its prisms (polygons) as the catalogue gives it."""
     out: dict[str, Entity] = {}
     for prism in model.labelled.catalogue.prisms:
-        record = _entity(prism)
-        known = out.get(prism.entity_id)
-        if known is None:
-            out[prism.entity_id] = record
-            continue
-        if {**known, "z_um": None} != {**record, "z_um": None}:
-            raise SgbError(
-                f"internal: the polygons of Entity {prism.entity_id!r} disagree on what the Entity is"
-            )
-        known["z_um"] = [
-            min(known["z_um"][0], record["z_um"][0]),
-            max(known["z_um"][1], record["z_um"][1]),
-        ]
+        out.setdefault(prism.entity_id, Entity(prisms=[]))["prisms"].append(
+            _entity_prism(prism)
+        )
     return dict(sorted(out.items()))
 
 
-def _entity(prism: PrismRecord) -> Entity:
-    return Entity(
+def _entity_prism(prism: PrismRecord) -> EntityPrism:
+    return EntityPrism(
+        polygon=prism.polygon,
         kind=prism.material_kind,
         material=prism.material,
         net=prism.net_id or None,
@@ -212,6 +204,8 @@ def concrete_support(
 def refinement_request_records(model: ConformalModel) -> dict[str, RefinementRequest]:
     """Every refinement family: the request as given, and the segments SGB drew, each carrier as it is.
 
+    The levels the segments are drawn at are the family's, in ``cut_family``.
+
     A refinement family is the cut family of one request (``cutfamilies.generate``); a catalogue may also carry
     one directly, with no request, which has no polyline as given.  Its segments are kept one by one, never
     joined into a polyline, because they need not touch nor follow one another.
@@ -224,8 +218,6 @@ def refinement_request_records(model: ConformalModel) -> dict[str, RefinementReq
             continue
         request = given.get(family.family_id)
         out[family.family_id] = RefinementRequest(
-            # The level builder draws the family at every one of its target levels.
-            levels_um=[float(level) for level in family.target_levels],
             points_um=None if request is None else [list(p) for p in request.points_um],
             segments_um=[
                 [_point_um(c.p, grid), _point_um(c.q, grid)] for c in family.carriers

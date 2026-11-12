@@ -62,7 +62,9 @@ def layered_junction_sidecar(tmp_path):
 def test_each_finding_names_the_layers_of_its_entities_from_the_entity_table(tmp_path):
     """The layers are those the ``entity`` table gives the finding's Entities; change the table, change the text."""
     sidecar = layered_junction_sidecar(tmp_path)
-    assert {e: sidecar["entity"][e]["layer"] for e in LAYERS} == LAYERS
+    assert {
+        e: {p["layer"] for p in sidecar["entity"][e]["prisms"]} for e in LAYERS
+    } == {e: {layer} for e, layer in LAYERS.items()}
     report = check_fine_structure(sidecar)
     assert report.findings
     for finding in report.findings:
@@ -76,7 +78,8 @@ def test_each_finding_names_the_layers_of_its_entities_from_the_entity_table(tmp
         else:
             assert " on layer" not in finding.describe()
     renamed = copy.deepcopy(sidecar)
-    renamed["entity"]["ground"]["layer"] = "D0_GROUND"
+    for prism in renamed["entity"]["ground"]["prisms"]:
+        prism["layer"] = "D0_GROUND"
     for before, after in zip(
         report.findings, check_fine_structure(renamed).findings, strict=True
     ):

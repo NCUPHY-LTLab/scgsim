@@ -5,7 +5,7 @@
   "description": "Sidecar of the SGB XAO/BREP: the model, the binding of planned ids to native tags, a summary, and the tables of sources, derived curves and emitted shapes, linked by typed ids.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "model", "binding", "summary", "entity", "source_curve", "inset_request", "refinement_request", "port", "band_family", "support_ring", "support_primitive", "carrier", "vertex", "edge", "face", "volume", "group", "surface_epr_row", "mesh_feature"],
+  "required": ["schema", "model", "binding", "summary", "entity", "source_curve", "inset_request", "refinement_request", "port", "cut_family", "band_family", "support_ring", "support_primitive", "carrier", "vertex", "edge", "face", "volume", "group", "surface_epr_row", "mesh_feature"],
   "properties": {
     "schema": {"const": "scgsim.sgb.sidecar.v3"},
     "model": {"$ref": "#/$defs/Model"},
@@ -36,6 +36,11 @@
       "type": "object",
       "additionalProperties": {"$ref": "#/$defs/Port"}
     },
+    "cut_family": {
+      "description": "Derived: every cut family by id (band, refinement and any other role), with every family a carrier names.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/CutFamily"}
+    },
     "band_family": {
       "description": "Derived: one band family per banded face, by family id.",
       "type": "object",
@@ -59,6 +64,7 @@
           {"$ref": "#/$defs/SourceCarrier"},
           {"$ref": "#/$defs/BandMemberCarrier"},
           {"$ref": "#/$defs/RefinementCarrier"},
+          {"$ref": "#/$defs/FamilyMemberCarrier"},
           {"$ref": "#/$defs/UnknownCarrier"}
         ]
       }
@@ -295,6 +301,21 @@
         "volumes_total": {"type": "integer", "minimum": 0}
       }
     },
+    "CutFamily": {
+      "description": "A named set of curves SGB adds to the arrangement: its semantic role, whether its curves split cells (``required``) or are only embedded (``refinement_only``), and every level they are drawn at.  A family that a carrier names but the catalogue does not hold has no role, policy or levels.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "edge_policy", "levels_um"],
+      "properties": {
+        "role": {"type": ["string", "null"]},
+        "edge_policy": {"enum": ["required", "refinement_only", null]},
+        "levels_um": {
+          "description": "Every height the family's curves are drawn at, in the family's order.",
+          "type": "array",
+          "items": {"type": "number"}
+        }
+      }
+    },
     "Edge": {
       "description": "One written edge: its kind, its two vertices, its arc (null for a line), its length, and what it comes from: the carriers of a horizontal or refinement edge, the Entities whose walls stand on a vertical one.",
       "type": "object",
@@ -343,15 +364,29 @@
       }
     },
     "Entity": {
-      "description": "One Entity of the layout: what it is made of, its Net, the layer it was drawn on and its z range.",
+      "description": "One Entity of the layout: the prisms it is drawn as, one per polygon, in catalogue order.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "material", "net", "layer", "z_um", "feature_kind"],
+      "required": ["prisms"],
       "properties": {
+        "prisms": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/EntityPrism"},
+          "minItems": 1
+        }
+      }
+    },
+    "EntityPrism": {
+      "description": "One prism (polygon) of an Entity: what it is made of, its Net, the layer it was drawn on, its z range and feature kind.  The prisms of one Entity may differ in any of these.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["polygon", "kind", "material", "net", "layer", "z_um", "feature_kind"],
+      "properties": {
+        "polygon": {"type": "integer", "minimum": 0},
         "kind": {"enum": ["conductor", "dielectric", "vacuum", "port"]},
         "material": {"type": "string"},
         "net": {"type": ["string", "null"]},
-        "layer": {"description": "The source layer: its logical level id, else its GDS layer/datatype; null when the Entity has none (the vacuum, a substrate, a scene drawn directly as SGB records).", "type": ["string", "null"]},
+        "layer": {"description": "The source layer: its logical level id, else its GDS layer/datatype; null when the prism has none (the vacuum, a substrate, a scene drawn directly as SGB records).", "type": ["string", "null"]},
         "z_um": {
           "type": "array",
           "items": {"type": "number"},
@@ -365,7 +400,7 @@
       "description": "One written face: its group, kind, face kind, z range, the volumes on its two sides, its written loops and area, and what it comes from.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume", "loops", "area_um2", "curved", "entities", "families", "refinements", "membership", "bands", "embedded_edges", "outer_boundary"],
+      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume", "loops", "area_um2", "curved", "entities", "families", "refinements", "cut_families", "membership", "bands", "embedded_edges", "outer_boundary"],
       "properties": {
         "group": {"type": ["string", "null"], "x-references": "group", "x-dimension": 2},
         "kind": {"enum": ["horizontal", "wall"]},
@@ -401,6 +436,11 @@
           "type": "array",
           "items": {"type": "string", "x-references": "refinement_request"}
         },
+        "cut_families": {
+          "description": "The other cut families whose members lie on its boundary edges.",
+          "type": "array",
+          "items": {"type": "string", "x-references": "cut_family"}
+        },
         "membership": {
           "description": "Entity -> covered fraction of the face area; non-exclusive, may sum to more than 1 (walls use the share of their bottom boundary length).",
           "type": "object",
@@ -434,6 +474,17 @@
       "properties": {
         "entity": {"type": "string", "x-references": "entity"},
         "side": {"enum": ["sheet", "top", "bottom"]}
+      }
+    },
+    "FamilyMemberCarrier": {
+      "description": "A curve of a cut family that is neither a band curve on a support primitive nor a refinement segment: the family its lineage names and the member name it was given (an opaque label).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "family", "member"],
+      "properties": {
+        "kind": {"const": "family_member"},
+        "family": {"type": "string", "x-references": "cut_family"},
+        "member": {"type": "string"}
       }
     },
     "FilmSidewall": {
@@ -683,17 +734,11 @@
       }
     },
     "RefinementRequest": {
-      "description": "A refinement family: the request as given (a polyline along which the mesher refines), the heights its segments are drawn at, and the segments SGB drew from it, which are its carriers.",
+      "description": "A refinement family: the request as given (a polyline along which the mesher refines) and the segments SGB drew from it, which are its carriers.  The heights they are drawn at are the family's levels (``cut_family``).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["levels_um", "points_um", "segments_um"],
+      "required": ["points_um", "segments_um"],
       "properties": {
-        "levels_um": {
-          "description": "Every height the family's segments are drawn at, in the family's order: a request's one height, or each target level of a family a catalogue declares.",
-          "type": "array",
-          "items": {"type": "number"},
-          "minItems": 1
-        },
         "points_um": {
           "description": "The polyline as the request gave it; null for a family a catalogue declares directly, with no request.",
           "type": ["array", "null"],

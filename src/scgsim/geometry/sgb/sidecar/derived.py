@@ -1,10 +1,12 @@
 """The derived layer of the sidecar: what SGB computed from the sources (design brief sections 5 to 7, #170).
 
-Owns ``band_family`` (one per banded face: its margins, support area and band groups), ``support_ring`` and
+Owns ``cut_family`` (every cut family: role, edge policy, levels), ``band_family`` (one per banded face: its
+margins, support area and band groups), ``support_ring`` and
 ``support_primitive`` (the exact boundary of each family's support region: per primitive its curve, length,
 whether it is a distance origin or on the die edge, and the source curves it lies on), and ``carrier`` (every
 carrier on an emitted horizontal or refinement edge: the source curve it lies on, the support primitive a band
-curve follows with its role, margin and piece, or the refinement request it draws).  A band member names its
+curve follows with its role, margin and piece, the refinement request it draws, or the family and member
+name of a curve of any other cut family).  A band member names its
 primitive, which names its ring, which names its family: each link is stated once.
 """
 
@@ -16,6 +18,8 @@ from scgsim.contracts.sgb_sidecar.records import (
     BandFamily,
     BandMemberCarrier,
     Carrier,
+    CutFamily,
+    FamilyMemberCarrier,
     RefinementCarrier,
     SourceCarrier,
     SupportPrimitive,
@@ -24,7 +28,6 @@ from scgsim.contracts.sgb_sidecar.records import (
 )
 from scgsim.geometry.sgb.emission.measures import rounded
 from scgsim.geometry.sgb.emission.plan import BrepPlan
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.records.carriers import LineEdge, RingPrimitive
 from scgsim.geometry.sgb.records.support import SupportRegion
@@ -145,9 +148,15 @@ def _primitive(
 
 
 def carrier_records(
-    model: ConformalModel, plan: BrepPlan, lineage: CarrierLineage
+    model: ConformalModel,
+    plan: BrepPlan,
+    lineage: CarrierLineage,
+    primitives: dict[str, SupportPrimitive],
 ) -> dict[str, Carrier]:
-    """Every carrier that an emitted horizontal or refinement edge lies on, and what it comes from."""
+    """Every carrier that an emitted horizontal or refinement edge lies on, and what it comes from.
+
+    ``primitives`` are the written support primitives a band member can name.
+    """
     topology = model.topology
     on_edges = {
         carrier
@@ -155,7 +164,29 @@ def carrier_records(
         if topology.edges[edge_id].kind != "vertical"
         for carrier in edge_sources(model, edge_id)
     }
-    return {cid: _carrier(cid, lineage) for cid in sorted(on_edges)}
+    return {cid: carrier_record(cid, lineage, primitives) for cid in sorted(on_edges)}
+
+
+def cut_family_records(
+    model: ConformalModel, carriers: dict[str, Carrier]
+) -> dict[str, CutFamily]:
+    """Every cut family of the catalogue, and every family a carrier names that the catalogue does not hold."""
+    out: dict[str, CutFamily] = {}
+    for family in model.labelled.catalogue.families:
+        out.setdefault(
+            family.family_id,
+            CutFamily(
+                role=family.role,
+                edge_policy=family.edge_policy,
+                levels_um=[float(level) for level in family.target_levels],
+            ),
+        )
+    for carrier in carriers.values():
+        if carrier["kind"] == "family_member" and carrier["family"] not in out:
+            out[carrier["family"]] = CutFamily(
+                role=None, edge_policy=None, levels_um=[]
+            )
+    return dict(sorted(out.items()))
 
 
 def edge_sources(model: ConformalModel, edge_id: str) -> tuple[str, ...]:
@@ -164,7 +195,15 @@ def edge_sources(model: ConformalModel, edge_id: str) -> tuple[str, ...]:
     return tuple(topology.lineage.get(edge_id) or topology.edges[edge_id].sources)
 
 
-def _carrier(carrier_id: str, lineage: CarrierLineage) -> Carrier:
+def carrier_record(
+    carrier_id: str, lineage: CarrierLineage, primitives: dict[str, SupportPrimitive]
+) -> Carrier:
+    """What one carrier comes from, by its lineage.
+
+    A source carrier lies on a source curve.  A member of a refinement family is a refinement segment.  A member
+    of a band family that SGB placed on a written support primitive is a band member.  Every other family
+    member -- a family of another role, or one the catalogue does not hold -- is a member of that family.
+    """
     found = lineage.lineage(carrier_id)
     if found is None:
         return UnknownCarrier(kind="unknown")
@@ -176,14 +215,16 @@ def _carrier(carrier_id: str, lineage: CarrierLineage) -> Carrier:
     if role == REFINEMENT_FAMILY_ROLE:
         return RefinementCarrier(kind="refinement", request=found.family_id)
     member = found.band_member
-    if role != BAND_FAMILY_ROLE or member is None:
-        raise SgbError(
-            f"internal: the carrier {carrier_id!r} of family {found.family_id!r} ({role}) has no band member"
-        )
-    return BandMemberCarrier(
-        kind="band_member",
-        primitive=primitive_id(found.family_id, member.ring, member.index),
-        role=member.role,
-        margin_grid=member.margin,
-        piece=member.piece,
+    if role == BAND_FAMILY_ROLE and member is not None:
+        place = primitive_id(found.family_id, member.ring, member.index)
+        if place in primitives:
+            return BandMemberCarrier(
+                kind="band_member",
+                primitive=place,
+                role=member.role,
+                margin_grid=member.margin,
+                piece=member.piece,
+            )
+    return FamilyMemberCarrier(
+        kind="family_member", family=found.family_id, member=found.member
     )

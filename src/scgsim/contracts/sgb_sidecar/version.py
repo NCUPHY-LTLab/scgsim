@@ -13,5 +13,5 @@ SidecarVersion = Literal["scgsim.sgb.sidecar.v3"]
 
 SIDECAR_SCHEMA: Final[SidecarVersion] = "scgsim.sgb.sidecar.v3"
 SCHEMA_DIGEST: Final = (
-    "sha256:193bf1141e100c1d812e3225096a0a3598342e9c76e69da0fb5c1b1bbcf472c1"
+    "sha256:90920bae7c3a2182e700b1ce339b8f75c5fc7ebd7870ebb4103af5579f458481"
 )

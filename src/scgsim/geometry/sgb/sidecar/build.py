@@ -30,6 +30,7 @@ from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.sidecar.derived import (
     band_family_records,
     carrier_records,
+    cut_family_records,
     support_records,
 )
 from scgsim.geometry.sgb.sidecar.emitted import (
@@ -79,7 +80,8 @@ def build_sidecar(
     members = group_members(plan)
     ports = port_records(model, plan)
     rings, primitives = support_records(model, lineage)
-    faces = face_records(model, plan, lineage)
+    carriers = carrier_records(model, plan, lineage, primitives)
+    faces = face_records(model, plan, lineage, carriers)
     volumes = volume_records(model, plan, volume_groups)
     _require_named_members(members, faces, volumes)
     return Sidecar(
@@ -100,10 +102,11 @@ def build_sidecar(
         inset_request=inset_request_records(model),
         refinement_request=refinement_request_records(model),
         port=ports,
+        cut_family=cut_family_records(model, carriers),
         band_family=band_family_records(model),
         support_ring=rings,
         support_primitive=primitives,
-        carrier=carrier_records(model, plan, lineage),
+        carrier=carriers,
         vertex=vertex_records(plan),
         edge=edge_records(model, plan),
         face=faces,

@@ -27,8 +27,8 @@ parses one; every fact a reader needs is a field.
 Sources -- what the layout drew and asked for
 ---------------------------------------------
 ``entity``
-    each Entity: kind (conductor, dielectric, vacuum, port), material, Net, the source layer it was drawn on,
-    z range and feature kind.
+    each Entity's prisms (one per polygon): kind (conductor, dielectric, vacuum, port), material, Net, the source
+    layer it was drawn on, z range and feature kind.
 ``source_curve``
     each straight edge and circular arc of each Entity outline: its Entity, polygon, ring and edge number, its
     exact curve (line ends, or arc centre, radius, sense and ends) and length.
@@ -45,6 +45,10 @@ Sources -- what the layout drew and asked for
 
 Derived -- what SGB computed from the sources
 ---------------------------------------------
+``cut_family``
+    every cut family (inset bands, refinement curves and any other role a catalogue gives): its role, edge
+    policy (``required`` or ``refinement_only``) and every level its curves are drawn at; a family a carrier
+    names that the catalogue lacks is listed with none.
 ``band_family``
     one per banded face: its face, margins (also in model-grid units, the identity a margin is looked up by),
     band count, support area, and band index -> the groups of its faces.
@@ -55,7 +59,8 @@ Derived -- what SGB computed from the sources
 ``carrier``
     every carrier an emitted horizontal or refinement edge lies on: a source curve (or a witness chord of
     one), a band curve with the support primitive it follows, its role (edge, corner, capstart, capend), margin
-    and piece, or a segment of a refinement request.
+    and piece, a segment of a refinement request, or a member of another cut family (its family and member
+    name).
 
 Emitted -- the shapes that entered the model
 --------------------------------------------

@@ -1,13 +1,15 @@
 """The definition of the SGB sidecar ``scgsim.sgb.sidecar.v3``: every table and record, as a ``TypedDict``.
 
 Owns the shape of the file: its tables, the fields of each record, their types, enums and bounds, the table
-each id names, and which records accept more keys.  It is the one definition the JSON Schema is derived from
+each id names, and which records accept more keys.  The value types and the ids of each table are in :mod:`.values`, and the
+mesh-feature records in :mod:`.features`.  It is the one definition the JSON Schema is derived from
 (:mod:`.schema`) and the shared reader checks against (:mod:`.read`, :mod:`.references`).  The writer is
 ``scgsim.geometry.sgb.sidecar``; what each table means for SGB and for its readers is documented there.
 
 The sidecar has three layers, each a set of tables ``{id: record}``.  *Sources* are what the layout drew and
 asked for (``entity``, ``source_curve``, ``inset_request``, ``refinement_request``, ``port``).  *Derived* are
-what SGB computed from them (``band_family``, ``support_ring``, ``support_primitive``, ``carrier``).  *Emitted*
+what SGB computed from them (``cut_family``, ``band_family``, ``support_ring``, ``support_primitive``,
+``carrier``).  *Emitted*
 are the shapes that entered the model and what is said about them (``vertex``, ``edge``, ``face``, ``volume``,
 ``group``, ``surface_epr_row``, ``mesh_feature``).  A record names a record of another table by its id, and the
 field's type says which table (``Ref``, :mod:`.markers`); the shared reader checks that every such id is a key
@@ -32,63 +34,55 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, TypedDict
 
+from .features import MeshFeature
 from .markers import (
     Doc,
-    ExclusiveMinimum,
     Length,
-    Minimum,
     MinProperties,
     Pattern,
-    Ref,
     open_record,
 )
+from .values import (
+    BandedFaceKind,
+    BandFamilyRef,
+    BandMemberRole,
+    BoxSide,
+    CarrierRef,
+    ConductorSide,
+    Count,
+    CutFamilyRef,
+    EdgeRef,
+    EntityKind,
+    EntityRef,
+    FaceKind,
+    FaceRef,
+    IdList,
+    InterfaceType,
+    NonNegative,
+    PlanePoint,
+    Positive,
+    PositiveInt,
+    RefinementRequestRef,
+    Route,
+    RowSide,
+    Segment,
+    SheetSide,
+    SidecarFile,
+    SolutionKind,
+    SourceCurveRef,
+    SpacePoint,
+    SupportPrimitiveRef,
+    SupportRingRef,
+    SurfaceEprType,
+    SurfaceGroupRef,
+    Tag,
+    VertexRef,
+    VolumeGroupRef,
+    VolumeKind,
+    VolumeRef,
+    ZRange,
+)
 from .version import SidecarVersion
-
-# --------------------------------------------------------------------------- values
-
-IdList = list[
-    str
-]  # names the sidecar keeps no table of (requests as a caller gave them)
-PositiveInt = Annotated[int, Minimum(1)]
-Tag = PositiveInt  # a native tag (or a physical-group tag): never 0
-Count = Annotated[int, Minimum(0)]
-Positive = Annotated[float, ExclusiveMinimum(0)]
-NonNegative = Annotated[float, Minimum(0)]
-PlanePoint = Annotated[list[float], Length(2, 2)]  # (x, y) um
-SpacePoint = Annotated[list[float], Length(3, 3)]  # (x, y, z) um
-ZRange = Annotated[list[float], Length(2, 2)]  # (lowest, highest) z um
-Segment = Annotated[list[PlanePoint], Length(2, 2)]  # (start, end) um
-
-EntityRef = Annotated[str, Ref("entity")]
-SourceCurveRef = Annotated[str, Ref("source_curve")]
-BandFamilyRef = Annotated[str, Ref("band_family")]
-RefinementRequestRef = Annotated[str, Ref("refinement_request")]
-PortRef = Annotated[str, Ref("port")]
-SupportRingRef = Annotated[str, Ref("support_ring")]
-SupportPrimitiveRef = Annotated[str, Ref("support_primitive")]
-CarrierRef = Annotated[str, Ref("carrier")]
-VertexRef = Annotated[str, Ref("vertex")]
-EdgeRef = Annotated[str, Ref("edge")]
-FaceRef = Annotated[str, Ref("face")]
-VolumeRef = Annotated[str, Ref("volume")]
-SurfaceGroupRef = Annotated[str, Ref("group", dimension=2)]
-VolumeGroupRef = Annotated[str, Ref("group", dimension=3)]
-
-Route = Literal["A", "B", "C"]
-EntityKind = Literal["conductor", "dielectric", "vacuum", "port"]
-VolumeKind = Literal["vacuum", "dielectric", "conductor"]
-SolutionKind = Literal["vacuum", "dielectric"]
-FaceKind = Literal["top", "bottom", "sidewall", "sheet", "port", "interface"]
-InterfaceType = Literal["MA", "MS", "MM", "SA", "AA", "SS", "SHEET", "PORT", "EXT"]
-SurfaceEprType = Literal["MA", "MS", "SA"]
-SheetSide = Literal["above", "below", "both"]
-RowSide = Literal["above", "below", "both", "mixed"]
-SidecarFile = Literal["xao", "brep", "sidecar", "sliver_report", "validation_report"]
-BandedFaceKind = Literal["sheet", "top", "bottom", "interface"]
-ConductorSide = Literal["sheet", "top", "bottom"]
-BandMemberRole = Literal["edge", "corner", "capstart", "capend"]
-BoxSide = Literal["-x", "+x", "-y", "+y", "bottom", "top"]
-
 
 # --------------------------------------------------------------------------- the document
 
@@ -118,6 +112,13 @@ class Sidecar(TypedDict):
     ]
     port: Annotated[
         dict[str, Port], Doc("Sources: the lumped-port sheets, by port sheet id.")
+    ]
+    cut_family: Annotated[
+        dict[str, CutFamily],
+        Doc(
+            "Derived: every cut family by id (band, refinement and any other role), with every family a carrier"
+            " names."
+        ),
     ]
     band_family: Annotated[
         dict[str, BandFamily],
@@ -256,15 +257,23 @@ class SliverSummary(TypedDict, total=False):
 
 
 class Entity(TypedDict):
-    """One Entity of the layout: what it is made of, its Net, the layer it was drawn on and its z range."""
+    """One Entity of the layout: the prisms it is drawn as, one per polygon, in catalogue order."""
 
+    prisms: Annotated[list[EntityPrism], Length(min_items=1)]
+
+
+class EntityPrism(TypedDict):
+    """One prism (polygon) of an Entity: what it is made of, its Net, the layer it was drawn on, its z range and
+    feature kind.  The prisms of one Entity may differ in any of these."""
+
+    polygon: Count
     kind: EntityKind
     material: str
     net: str | None
     layer: Annotated[
         str | None,
         Doc(
-            "The source layer: its logical level id, else its GDS layer/datatype; null when the Entity has"
+            "The source layer: its logical level id, else its GDS layer/datatype; null when the prism has"
             " none (the vacuum, a substrate, a scene drawn directly as SGB records)."
         ),
     ]
@@ -362,17 +371,9 @@ class SkippedFace(TypedDict):
 
 
 class RefinementRequest(TypedDict):
-    """A refinement family: the request as given (a polyline along which the mesher refines), the heights its
-    segments are drawn at, and the segments SGB drew from it, which are its carriers."""
+    """A refinement family: the request as given (a polyline along which the mesher refines) and the segments SGB
+    drew from it, which are its carriers.  The heights they are drawn at are the family's levels (``cut_family``)."""
 
-    levels_um: Annotated[
-        list[float],
-        Length(min_items=1),
-        Doc(
-            "Every height the family's segments are drawn at, in the family's order: a request's one height, or"
-            " each target level of a family a catalogue declares."
-        ),
-    ]
     points_um: Annotated[
         list[PlanePoint] | None,
         Doc(
@@ -406,6 +407,19 @@ class Port(TypedDict):
 
 
 # --------------------------------------------------------------------------- derived
+
+
+class CutFamily(TypedDict):
+    """A named set of curves SGB adds to the arrangement: its semantic role, whether its curves split cells
+    (``required``) or are only embedded (``refinement_only``), and every level they are drawn at.  A family that a
+    carrier names but the catalogue does not hold has no role, policy or levels."""
+
+    role: str | None
+    edge_policy: Literal["required", "refinement_only"] | None
+    levels_um: Annotated[
+        list[float],
+        Doc("Every height the family's curves are drawn at, in the family's order."),
+    ]
 
 
 class BandFamily(TypedDict):
@@ -482,13 +496,28 @@ class RefinementCarrier(TypedDict):
     request: RefinementRequestRef
 
 
+class FamilyMemberCarrier(TypedDict):
+    """A curve of a cut family that is neither a band curve on a support primitive nor a refinement segment: the
+    family its lineage names and the member name it was given (an opaque label)."""
+
+    kind: Literal["family_member"]
+    family: CutFamilyRef
+    member: str
+
+
 class UnknownCarrier(TypedDict):
     """A carrier whose origin SGB does not know."""
 
     kind: Literal["unknown"]
 
 
-Carrier = SourceCarrier | BandMemberCarrier | RefinementCarrier | UnknownCarrier
+Carrier = (
+    SourceCarrier
+    | BandMemberCarrier
+    | RefinementCarrier
+    | FamilyMemberCarrier
+    | UnknownCarrier
+)
 
 
 # --------------------------------------------------------------------------- emitted
@@ -553,6 +582,10 @@ class Face(TypedDict):
     refinements: Annotated[
         list[RefinementRequestRef],
         Doc("The refinement requests whose segments lie on its boundary edges."),
+    ]
+    cut_families: Annotated[
+        list[CutFamilyRef],
+        Doc("The other cut families whose members lie on its boundary edges."),
     ]
     membership: Annotated[
         dict[EntityRef, NonNegative],
@@ -711,82 +744,3 @@ class SurfaceEprRow(TypedDict):
             "The sheet group for a sheet row (its MA and MS rows integrate the same two-sided face), else null."
         ),
     ]
-
-
-# --------------------------------------------------------------------------- mesh features
-
-
-class _MeshFeatureEdges(TypedDict):
-    """The edges every mesh feature covers."""
-
-    edges: Annotated[list[EdgeRef], Length(min_items=1)]
-
-
-class FilmSidewall(_MeshFeatureEdges):
-    """Every edge of the sidewall faces of a finite body; thickness_um is the z extent of the sidewall column."""
-
-    kind: Literal["film_sidewall"]
-    source: Annotated[EntityRef, Doc("The body.")]
-    facts: FilmSidewallFacts
-
-
-class FilmSidewallFacts(TypedDict):
-    """The facts of a film sidewall."""
-
-    thickness_um: Positive
-
-
-class BandBoundary(_MeshFeatureEdges):
-    """The edges of an inset family; margins_um are the request's margins, ascending, and narrowest_band_um the
-    smallest difference between consecutive margins with 0 prepended."""
-
-    kind: Literal["band_boundary"]
-    source: Annotated[BandFamilyRef, Doc("The band family.")]
-    facts: BandBoundaryFacts
-
-
-class BandBoundaryFacts(TypedDict):
-    """The facts of a band boundary."""
-
-    margins_um: Annotated[list[Positive], Length(min_items=1)]
-    narrowest_band_um: Positive
-
-
-class ArcFeature(_MeshFeatureEdges):
-    """The circular-arc edges of one carrier radius."""
-
-    kind: Literal["arc"]
-    source: Annotated[
-        EntityRef | None,
-        Doc("The one Entity that owns the arcs; null when no single Entity does."),
-    ]
-    facts: ArcFacts
-
-
-class ArcFacts(TypedDict):
-    """The facts of an arc feature."""
-
-    radius_um: Positive
-
-
-class RefinementCurve(_MeshFeatureEdges):
-    """The refinement-only curves of a refinement request."""
-
-    kind: Literal["refinement_curve"]
-    source: Annotated[RefinementRequestRef, Doc("The refinement request.")]
-    facts: NoFacts
-
-
-class PortEdge(_MeshFeatureEdges):
-    """The boundary edges of the faces of a lumped-port sheet."""
-
-    kind: Literal["port_edge"]
-    source: Annotated[PortRef, Doc("The port sheet.")]
-    facts: NoFacts
-
-
-class NoFacts(TypedDict):
-    """The facts of a feature kind that has none: an empty object."""
-
-
-MeshFeature = FilmSidewall | BandBoundary | ArcFeature | RefinementCurve | PortEdge

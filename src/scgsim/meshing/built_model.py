@@ -86,7 +86,9 @@ class BuiltModel:
     band_margins: Mapping[
         str, tuple[float, ...]
     ]  # band family id -> margins, micrometres
-    entity_layers: Mapping[str, str | None]  # Entity id -> the layer it was drawn on
+    entity_layers: Mapping[
+        str, tuple[str, ...]
+    ]  # Entity id -> the layers its prisms were drawn on
 
     def point(self, vertex: int) -> Point3:
         """Where native vertex ``vertex`` sits."""
@@ -166,7 +168,14 @@ def read_built_model(sidecar: Sidecar) -> BuiltModel:
         # The sources by name, whatever their kind (an Entity may be named like a request).
         face_sources={
             fid: tuple(
-                sorted({*face["entities"], *face["families"], *face["refinements"]})
+                sorted(
+                    {
+                        *face["entities"],
+                        *face["families"],
+                        *face["refinements"],
+                        *face["cut_families"],
+                    }
+                )
             )
             for fid, face in faces.items()
         },
@@ -188,7 +197,8 @@ def read_built_model(sidecar: Sidecar) -> BuiltModel:
             if feature["kind"] == "band_boundary"
         },
         entity_layers={
-            eid: entity["layer"] for eid, entity in sidecar["entity"].items()
+            eid: tuple(sorted({p["layer"] for p in entity["prisms"] if p["layer"]}))
+            for eid, entity in sidecar["entity"].items()
         },
     )
 
@@ -211,6 +221,10 @@ def _carrier(
     sidecar: Sidecar,
     place: Mapping[str, tuple[str, int]],
 ) -> Carrier:
+    if record["kind"] == "refinement":
+        return Carrier(cid, record["kind"], family=record["request"])
+    if record["kind"] == "family_member":
+        return Carrier(cid, record["kind"], family=record["family"])
     if record["kind"] != "band_member":
         return Carrier(cid, record["kind"])
     ring, index = place[record["primitive"]]

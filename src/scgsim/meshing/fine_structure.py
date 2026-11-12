@@ -305,7 +305,7 @@ class _Lineage:
         return [
             c
             for c in self.carriers(edges)
-            if c.kind == _BAND_MEMBER and c.family in self.model.band_margins
+            if c.family is not None and c.family in self.model.band_margins
         ]
 
     def meeting_edges(self, measured: Measured) -> tuple[int, ...]:
@@ -509,7 +509,7 @@ def _layers(model: BuiltModel, face_ids: list[str]) -> tuple[str, ...]:
                 layer
                 for face in face_ids
                 for entity in model.face_entities.get(face, ())
-                if (layer := model.entity_layers.get(entity))
+                for layer in model.entity_layers.get(entity, ())
             }
         )
     )

@@ -86,6 +86,7 @@ def sidecar_with(
         "inset_request": {},
         "refinement_request": {},
         "port": {},
+        "cut_family": {},
         "band_family": {},
         "support_ring": {},
         "support_primitive": {},
@@ -140,7 +141,8 @@ def sidecar_with(
 
 
 def _entity(kind: str, net: str | None = None) -> dict[str, Any]:
-    return {
+    prism = {
+        "polygon": 0,
         "kind": kind,
         "material": kind,
         "net": net,
@@ -148,6 +150,7 @@ def _entity(kind: str, net: str | None = None) -> dict[str, Any]:
         "z_um": [0.0, 0.2],
         "feature_kind": None,
     }
+    return {"prisms": [prism]}
 
 
 def _face(group: str, edges: Sequence[str]) -> dict[str, Any]:
@@ -164,6 +167,7 @@ def _face(group: str, edges: Sequence[str]) -> dict[str, Any]:
         "entities": [],
         "families": [],
         "refinements": [],
+        "cut_families": [],
         "membership": {},
         "bands": [],
         "embedded_edges": [],
@@ -241,7 +245,6 @@ def _add_feature(
         }
     elif table == "refinement_request":
         document["refinement_request"][source] = {
-            "levels_um": [0.0],
             "points_um": [[0.0, 0.0], [1.0, 0.0]],
             "segments_um": [[[0.0, 0.0], [1.0, 0.0]]],
         }

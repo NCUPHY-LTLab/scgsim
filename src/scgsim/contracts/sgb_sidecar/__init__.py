@@ -5,7 +5,7 @@
     for.  Any change to the definition raises the version.
 ``records``
     every table and record of the sidecar as a ``TypedDict``, with its enums, bounds and the table each id
-    names (``markers``).
+    names (``markers``).  ``values`` holds the value types and ids, ``features`` the mesh-feature records.
 ``schema``
     the JSON Schema derived from the records; ``scripts/generate_sidecar_schema.py`` writes it to
     ``scgsim/geometry/sgb/sidecar/sidecar.schema.json``.

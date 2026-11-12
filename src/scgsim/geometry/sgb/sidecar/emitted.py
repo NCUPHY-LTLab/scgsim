@@ -21,6 +21,7 @@ from typing import cast
 from scgsim.contracts.sgb_sidecar.records import (
     BandLabel,
     BoxSide,
+    Carrier,
     Edge,
     EdgeArc,
     Face,
@@ -42,7 +43,7 @@ from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.sidecar.aedt import aedt_names
 from scgsim.geometry.sgb.sidecar.derived import edge_sources
 from scgsim.geometry.sgb.sidecar.groups import face_kind
-from scgsim.geometry.sgb.sidecar.lineage import REFINEMENT_FAMILY_ROLE, CarrierLineage
+from scgsim.geometry.sgb.sidecar.lineage import CarrierLineage
 
 
 def vertex_records(plan: BrepPlan) -> dict[str, Vertex]:
@@ -97,9 +98,15 @@ def _length_um(plan: BrepPlan, number: int) -> float:
 
 
 def face_records(
-    model: ConformalModel, plan: BrepPlan, lineage: CarrierLineage
+    model: ConformalModel,
+    plan: BrepPlan,
+    lineage: CarrierLineage,
+    carriers: dict[str, Carrier],
 ) -> dict[str, Face]:
-    """Every written face: group, kind, side volumes, written wires, area and what it comes from."""
+    """Every written face: group, kind, side volumes, written wires, area and what it comes from.
+
+    ``carriers`` are the carrier records of the written edges (``derived.carrier_records``).
+    """
     topology = model.topology
     found = plan.found
     box = _Box.of(plan)
@@ -108,7 +115,7 @@ def face_records(
         face = topology.faces[face_id]
         first = found.face_first_wire[number]
         wires = found.wires[first : first + found.face_wire_count[number]]
-        sources = _face_sources(model, lineage, face)
+        sources = _face_sources(model, lineage, carriers, face)
         out[face_id] = Face(
             group=model.routed.face_group.get(face_id),
             kind=face.kind,
@@ -122,6 +129,7 @@ def face_records(
             entities=sources.entities,
             families=sources.families,
             refinements=sources.refinements,
+            cut_families=sources.cut_families,
             membership={
                 entity: rounded(share)
                 for entity, share in sorted(face.membership.items())
@@ -200,36 +208,48 @@ class _Sources:
     entities: list[str]
     families: list[str]
     refinements: list[str]
+    cut_families: list[str]
 
 
 def _face_sources(
-    model: ConformalModel, lineage: CarrierLineage, face: TopoFace
+    model: ConformalModel,
+    lineage: CarrierLineage,
+    carriers: dict[str, Carrier],
+    face: TopoFace,
 ) -> _Sources:
-    """The Entities, band families and refinement requests of the carriers on a face's horizontal edges.
+    """The Entities, band families, refinement requests and other cut families of the carriers on a face's
+    horizontal edges.
 
-    These are the sources SGB gave the face (``TopoFace.sources``), classified by each carrier's lineage: an id of
-    one kind may equal an id of another (an Entity named like a request), so the kind is never read from the id.
-    A wall column carries the Entities of its walls, not carriers, and an unknown carrier comes from none.
+    These are the sources SGB gave the face (``TopoFace.sources``), each classified by the carrier's record
+    (``derived.carrier_record``): an id of one kind may equal an id of another (an Entity named like a request),
+    so the kind is never read from the id.  A wall column carries the Entities of its walls, not carriers, and
+    an unknown carrier comes from none.
     """
     topology = model.topology
-    entities: set[str] = set()
-    families: set[str] = set()
-    refinements: set[str] = set()
+    found: dict[str, set[str]] = {
+        "source": set(),
+        "band_member": set(),
+        "refinement": set(),
+        "family_member": set(),
+    }
     for loop in face.loops:
         for edge_id, _ in loop:
             if topology.edges[edge_id].kind == "vertical":
                 continue
             for carrier in topology.lineage.get(edge_id, ()):
-                found = lineage.lineage(carrier)
-                if found is None:
+                record = carriers[carrier]
+                origin = lineage.lineage(carrier)
+                if record["kind"] == "unknown" or origin is None:
                     continue
-                if found.kind == "polygon_edge":
-                    entities.add(found.entity_id)
-                elif lineage.role(found.family_id) == REFINEMENT_FAMILY_ROLE:
-                    refinements.add(found.family_id)
-                else:
-                    families.add(found.family_id)
-    return _Sources(sorted(entities), sorted(families), sorted(refinements))
+                found[record["kind"]].add(
+                    origin.entity_id if record["kind"] == "source" else origin.family_id
+                )
+    return _Sources(
+        sorted(found["source"]),
+        sorted(found["band_member"]),
+        sorted(found["refinement"]),
+        sorted(found["family_member"]),
+    )
 
 
 def _loop(plan: BrepPlan, wire: list[int]) -> Loop:
