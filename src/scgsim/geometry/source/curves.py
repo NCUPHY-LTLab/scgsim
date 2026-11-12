@@ -6,7 +6,6 @@ reconstruction indices name.
 
 It also decides, before any occurrence transform, whether a declared arc's points lie on one line.
 """
-# long-file: boundary records, the rings they select and the drawn walks their indices name are read here, and the declaration checks need all three.
 
 from __future__ import annotations
 
@@ -27,7 +26,6 @@ from scgsim.geometry.models.input import (
     GdsBoundaryReconstructionSpec,
     GeometryBuildInput,
     LayoutPolygonSpec,
-    SemanticEntitySpec,
     SourceCurveSpec,
     arc_without_circle,
     collinear,
@@ -37,7 +35,6 @@ from scgsim.geometry.models.input import (
     reconstruction_chain_refusal,
     reconstruction_without_circle,
 )
-from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.primitives.grid_regions import canonical_grid_point, region_key
 from scgsim.geometry.primitives.planar_loops import cutline_boundary_loops
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
@@ -606,4 +603,3 @@ def refuse_reconstructions_without_circle(
             raise ValueError(
                 reconstruction_without_circle(what, anchors, places.__getitem__)
             )
-

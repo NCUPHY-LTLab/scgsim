@@ -111,8 +111,8 @@ revived Q3D input-v1/v2 paths. The formal `python -m scgsim.aedt.run` entrypoint
 remains supported; it is the AEDT transaction CLI, not a legacy wrapper.
 
 The `geometry` facade is the source-authoring entrypoint. It exposes
-`GeometryPlan`, detached snapshots, normalized input records, component and
-stack adapters, physical representation interpretation, and input summaries.
+`GeometryPlan`, detached snapshots, normalized input records, the GDS and
+stack-file adapter, physical representation interpretation, and input summaries.
 Palace calls `build_sgb_geometry` from `scgsim.geometry.sgb` and meshes the
 result with `scgsim.meshing`. `scgsim.geometry.sgb` sits below the supported
 entry: a layout enters through `GeometryPlan` and the simulation classes of

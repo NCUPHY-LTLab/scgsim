@@ -1,6 +1,5 @@
 """Protect source-record normalization and handoff contracts."""
 
-from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -10,15 +9,10 @@ from scgsim.geometry import with_rectangular_junctions
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
-    GeometryBuildInput,
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
-from scgsim.geometry.models.regions import (
-    PortSheetOverlapRecord,
-    PortSheetRegionRecord,
-)
 from scgsim.geometry.source.curves import (
     boundary_binding,
     source_curve,

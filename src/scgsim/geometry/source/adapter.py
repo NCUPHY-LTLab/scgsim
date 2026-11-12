@@ -351,4 +351,3 @@ def _cell_bounds_um(cell: Cell) -> dict[str, float]:
         "x_max_um": float(x_max),
         "y_max_um": float(y_max),
     }
-
