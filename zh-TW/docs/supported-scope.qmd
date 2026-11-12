@@ -71,7 +71,7 @@ scgsim-id: "docs/supported-scope"
 | 不同 Net 的導體互不接觸，包括版圖對齊格點後才閉合的縫隙。 | 兩個 Net 之間的接觸就是短路；SCGSim 不替您決定哪個 Net 才對。 | 建構時 `ContactError`，附位置 | [版圖建模檢查](layout-modeling-check.qmd) |
 | 不同 Net 的導體互不重疊。 | 同上：兩個 Net 重疊的金屬沒有單一歸屬。 | 建構時 `OverlapError`，附位置 | [版圖建模檢查](layout-modeling-check.qmd) |
 | 同一 Net 中互相重疊的導體具有不同的優先序，由其中一個擁有重疊區。 | 同一 Net 的兩個 Entity 可以重疊，但重疊區必須恰好屬於其中一個。 | 建構時 `OverlapError`（「… overlap … with equal priority」） | [幾何契約](geometry-sgb.qmd) |
-| 任何區域都不只沿一條垂直邊與自己接觸。例如同一 Net 的兩塊金屬只在一個角點相接。 | 同一體積的兩個區塊只共用一個頂點時，會形成無法產生網格的非流形實體。 | 建構時 `NonManifoldError`，附位置 | 本頁 |
+| 任何區域都不只沿一條垂直邊與自己接觸。例如同一 Net 的兩塊金屬只在一個角點相接；或導體只在一點碰到版圖的平面範圍，也就是 `simulation_drc` 所加真空的邊界。 | 同一體積的兩個區塊只共用一個頂點時，會形成無法產生網格的非流形實體。 | 建構時 `NonManifoldError`，附位置 | 本頁 |
 | 每個 Entity 不是薄片（經物理解讀後厚度為零），就是 Z 範圍為正的實體。 | 有厚度的薄片或沒有厚度的實體，在堆疊中都沒有一致的位置。 | 建構時 `InputError`（「… is a sheet but its effective Z interval is …」、「… has a non-positive Z extent …」） | [物理表示](specs/physical-representation.qmd) |
 
 ### 埠 {#rules-ports}
@@ -147,7 +147,7 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 | `ValidationError`「the inset curve … is not closed near (x, y)」 | SCGSim | 該點附近兩條相鄰的條帶偏移既不相接也不相交。請把版圖回報給 SCGSim。 |
 | 不同 Net 之間的 `ContactError` 或 `OverlapError` | 版圖，或 Net 宣告 | 若兩個導體應為同一導體，就把它們放進同一個 Net；否則在圖面上把它們分開，間距大於一個格點間距。使用 `simulation_drc` 時，傳入模擬所用的 `nets`。 |
 | `OverlapError`「… with equal priority」 | 宣告 | 為同一 Net 中互相重疊的 Entity 指定不同的優先序。 |
-| `NonManifoldError` | 版圖 | 在回報的位置讓兩塊幾何共用一條邊，或把它們分開。 |
+| `NonManifoldError` | 版圖 | 在回報的位置讓兩塊幾何共用一條邊，或把它們分開。位置在版圖的平面範圍上時，請在訊息指出的導體周圍畫出 die 外框或接地平面。 |
 | 關於埠薄片、Entity id、圓弧或邊距的 `InputError` | 版圖及其宣告 | 閱讀訊息，它會指出埠、Entity 或請求。修正它指出的圖形或設定。 |
 | `ValueError`「Surface EPR bands narrower than the meshing stage's face-width limit …」 | 宣告 | 加大訊息所指的邊距，讓每條條帶至少 10 個格點間距寬。 |
 | `NoGapEdgeError` | 宣告 | 在 `inset_margins_by_entity_um` 中指名的導體，在該面上沒有間隙邊。把它從該處移除，或改以類型切條帶。 |

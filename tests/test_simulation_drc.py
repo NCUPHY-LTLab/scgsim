@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -16,7 +17,7 @@ import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
-from scgsim.geometry.sgb.errors import ContactError
+from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
 MATERIALS = {
@@ -89,14 +90,31 @@ CIRCLE_PAD = tuple(
 )
 DIAMOND_PAD = ((10, 0), (20, 10), (10, 20), (0, 10))
 
+
+def ground_around(low, high):
+    """A ground plane 5 um wide, drawn 5 um around the box ``low``..``high`` and open towards +x."""
+    (x0, y0), (x1, y1) = low, high
+    return (
+        (x0 - 10, y0 - 10),
+        (x1 + 20, y0 - 10),
+        (x1 + 20, y0 - 5),
+        (x0 - 5, y0 - 5),
+        (x0 - 5, y1 + 5),
+        (x1 + 20, y1 + 5),
+        (x1 + 20, y1 + 10),
+        (x0 - 10, y1 + 10),
+    )
+
+
 SIMULATIONS = [EigenmodeSim, ElectrostaticSim]
 
 
-def two_pads(monkeypatch, *, gap_um, port=False, pad=None):
+def two_pads(monkeypatch, *, gap_um, port=False, pad=None, electrode=None):
     """A 20 um pad and a 30 um electrode ``gap_um`` apart; a negative gap makes them overlap.
 
     With ``port`` a lumped-port sheet bridges the gap, as an authored port of the component.
-    ``pad`` replaces the square pad's outline, drawn inside the same 20 um square.
+    ``pad`` replaces the square pad's outline, drawn inside the same 20 um square; ``electrode`` replaces
+    the electrode's outline.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
 
@@ -111,9 +129,8 @@ def two_pads(monkeypatch, *, gap_um, port=False, pad=None):
     far = 20.0 + gap_um
     pad = pad or ((0, 0), (20, 0), (20, 20), (0, 20))
     component.add_polygon(pad, layer=(1, 0))
-    component.add_polygon(
-        ((far, 0), (far + 30, 0), (far + 30, 20), (far, 20)), layer=(2, 0)
-    )
+    electrode = electrode or ((far, 0), (far + 30, 0), (far + 30, 20), (far, 20))
+    component.add_polygon(electrode, layer=(2, 0))
     component.info["component_semantics"] = {
         "schema_version": 2,
         "conductor_regions": [
@@ -302,11 +319,125 @@ def test_a_layout_with_no_vacuum_is_wrapped_so_ma_bands_are_cut(
     assert ma_band_groups(sidecar)
 
 
+def built_bounds(sidecar):
+    """The bounds in um of the built vacuum, and of every face not on the vacuum's outer boundary (the layout).
+
+    Read from the sidecar's expected topology of the written model: solid, face, edge, vertex.
+    """
+    expected = sidecar["expected"]
+    groups = sidecar["physical_groups"]
+
+    def bounds(faces):
+        vertices = {
+            vertex
+            for face in faces
+            for edge in expected["face_edges"][face - 1]
+            for vertex in expected["edge_vertices"][abs(edge) - 1]
+        }
+        axes = list(
+            zip(
+                *(expected["vertices_um"][vertex - 1] for vertex in vertices),
+                strict=True,
+            )
+        )
+        return tuple(map(min, axes)), tuple(map(max, axes))
+
+    vacuum = {
+        face
+        for solid in groups["VACUUM_REGION"]["native_tags"]
+        for face in expected["solid_faces"][solid - 1]
+    }
+    outer = {
+        face
+        for name, group in groups.items()
+        if name.startswith("EXT::VACUUM_REGION__")
+        for face in group["native_tags"]
+    }
+    every = set(range(1, len(expected["face_edges"]) + 1))
+    return bounds(vacuum), bounds(every - outer)
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_a_layout_with_no_vacuum_is_wrapped_in_the_decided_padding(
+    monkeypatch, simulation
+):
+    """The built vacuum ends at the layout's planar extent and reaches 1000 um below and above it (Issue #182).
+
+    The layout is the two pads on their substrate: x 0 to 60 um, y 0 to 20 um, z from the substrate's
+    bottom at -5 um to the metal's top at 0.2 um.
+    """
+    (sidecar,) = check_sidecars(
+        monkeypatch,
+        simulation,
+        two_pads(monkeypatch, gap_um=10.0),
+        layer_stack=NO_VACUUM_STACK,
+    )
+    vacuum, layout = built_bounds(sidecar)
+    assert layout == (
+        pytest.approx((0.0, 0.0, -5.0)),
+        pytest.approx((60.0, 20.0, 0.2)),
+    )
+    below = [edge - wall for edge, wall in zip(layout[0], vacuum[0], strict=True)]
+    above = [wall - edge for edge, wall in zip(layout[1], vacuum[1], strict=True)]
+    assert below == pytest.approx([0.0, 0.0, 1000.0])
+    assert above == pytest.approx([0.0, 0.0, 1000.0])
+
+
+PINCH = re.compile(
+    r"non-manifold pinch: VACUUM_REGION \(pinched between conductors (?P<conductor>\S+) on layer "
+    r"(?P<layer>\S+) of Net \S+\) touches itself along the vertical edge at "
+    r"\((?P<x>-?\d+\.\d+), (?P<y>-?\d+\.\d+)\) um, z (?P<z0>-?\d+\.\d+)\.\.(?P<z1>-?\d+\.\d+) um"
+)
+
+
+def pinch_of(error):
+    """The conductor, layer, place in um and film height that a vacuum pinch refusal names."""
+    match = PINCH.search(str(error))
+    assert match is not None, str(error)
+    return (
+        match["conductor"],
+        match["layer"],
+        (float(match["x"]), float(match["y"])),
+        (float(match["z0"]), float(match["z1"])),
+    )
+
+
 @pytest.mark.parametrize("simulation", SIMULATIONS)
 @pytest.mark.parametrize("pad", [CIRCLE_PAD, DIAMOND_PAD], ids=["circle", "diamond"])
-def test_pads_touching_the_vacuum_at_a_point_pass(monkeypatch, simulation, pad):
-    """The 1 um wrap leaves air around a polygon circle and a diamond, which a flush vacuum pinches."""
+def test_a_pad_reaching_the_planar_extent_at_a_point_is_refused_there(
+    monkeypatch, simulation, pad
+):
+    """The vacuum ends at the layout's planar extent, so a pad that reaches it only at a vertex pinches it there.
+
+    The refusal names the pad, its layer and the place: the pad's vertex on the extent's left edge, x = 0,
+    across the film's height.
+    """
     component = two_pads(monkeypatch, gap_um=10.0, pad=pad)
+    with pytest.raises(NonManifoldError) as raised:
+        check(
+            simulation,
+            component,
+            layer_stack=NO_VACUUM_STACK,
+            surface_epr_specs=BANDED,
+        )
+    conductor, layer, place, film = pinch_of(raised.value)
+    assert (conductor, layer, film) == ("chip/pad_0000", "metal", (0.0, 0.2))
+    assert place == (0.0, 10.0)
+    assert min(math.dist(place, vertex) for vertex in pad) < 0.001
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+@pytest.mark.parametrize("pad", [CIRCLE_PAD, DIAMOND_PAD], ids=["circle", "diamond"])
+def test_a_ground_plane_drawn_around_the_pad_removes_the_pinch(
+    monkeypatch, simulation, pad
+):
+    """With a ground plane setting the planar extent, the circle and the diamond no longer reach it."""
+    component = two_pads(
+        monkeypatch,
+        gap_um=10.0,
+        pad=pad,
+        electrode=ground_around((0, 0), (20, 20)),
+    )
     assert check(
         simulation,
         component,
@@ -322,6 +453,9 @@ def test_a_gdsfactory_circle_conductor_prepares_and_passes(monkeypatch, radius_u
     gdsfactory stores the circle's closing point too, so the polygon repeats a
     vertex; before the source reader dropped the repeat (Issue #107) its
     zero-length edge reached the cutline split and ``prepare()`` divided by zero.
+    Alone, the circle sets the layout's planar extent and reaches it only at its
+    vertices, so the check refuses the vacuum it pinches at its leftmost vertex;
+    with a ground plane drawn around it, it models.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
 
@@ -347,6 +481,17 @@ def test_a_gdsfactory_circle_conductor_prepares_and_passes(monkeypatch, radius_u
         coupon_padding_um=0.0,
     ).prepare()
     assert len(snapshot.geometry_input.polygons) == 1
+    with pytest.raises(NonManifoldError) as raised:
+        check(EigenmodeSim, component, layer_stack=NO_VACUUM_STACK)
+    conductor, layer, place, _film = pinch_of(raised.value)
+    assert (conductor, layer, place) == ("chip/disk_0000", "metal", (-radius_um, 0.0))
+
+    component.add_polygon(
+        ground_around((-radius_um, -radius_um), (radius_um, radius_um)), layer=(2, 0)
+    )
+    component.info["component_semantics"]["conductor_regions"].append(
+        {"semantic_id": "ground", "level": "metal", "gds_layer": [2, 0]}
+    )
     assert check(EigenmodeSim, component, layer_stack=NO_VACUUM_STACK).passed
 
 
@@ -365,7 +510,7 @@ def test_a_layout_with_its_own_vacuum_gets_no_vacuum_region(monkeypatch, simulat
     assert check(simulation, component, surface_epr_specs=BANDED).passed
     assert added == []
     assert check(simulation, component, layer_stack=NO_VACUUM_STACK).passed
-    assert added == [1.0]
+    assert added == [(0.0, 0.0, 1000.0)]
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)

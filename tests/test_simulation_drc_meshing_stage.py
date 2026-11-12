@@ -1,7 +1,8 @@
 """The meshing stage of ``simulation_drc``: fine edges and faces of the built model, located and attributed by lineage.
 
 Every scene is a small synthetic layout built by the real SGB build: a 20 um pad beside a 30 um electrode, on a
-substrate wrapped in the check's 1 um vacuum.  What changes is the pad's outline:
+substrate, in the vacuum the check adds (padding (x, y, z) = (0, 0, 1000) um).  What changes is the pad's
+outline:
 
 * ``clean`` -- a square;
 * ``jog`` -- a 1 nm step in the edge facing the electrode (layout fine structure: a wall face 1 grid step
@@ -122,7 +123,7 @@ def scene(monkeypatch, pad, electrode=ELECTRODE):
 
 
 def check(simulation, component, **options):
-    """``simulation.simulation_drc`` on a layout with no vacuum of its own, so the check wraps it in 1 um."""
+    """``simulation.simulation_drc`` on a layout with no vacuum of its own, so the check adds its vacuum."""
     return simulation.simulation_drc(
         component,
         layer_stack=NO_VACUUM_STACK,
@@ -168,7 +169,9 @@ def test_the_bands_of_a_layout_jog_belong_to_the_layout(monkeypatch):
     """Band offsets that repeat a layout jog are the layout's: they lie within the band margin of the jog.
 
     The jog sits on the pad's top edge, which the 20 um electrode leaves flush with the model's edge, so the
-    bands along it repeat the 1 nm step as seam pieces of one grid step.
+    bands along it repeat the 1 nm step as seam pieces of one grid step.  That edge is the layout's planar
+    extent, where the vacuum ends, so the step also leaves a wall 1 nm wide in the model's side at the
+    electrode's far corner: both walls are the layout's.
     """
     top_jog = ((0, 0), (20, 0), (20, 20), (10, 20), (10, 20.001), (0, 20.001))
     flush = ((30, 0), (60, 0), (60, 20), (30, 20))
@@ -177,7 +180,15 @@ def test_the_bands_of_a_layout_jog_belong_to_the_layout(monkeypatch):
     )
     refusals = [f for f in error.report.meshing.findings if f.action == "refuse"]
     warnings = [f for f in error.report.meshing.findings if f.action == "warn"]
-    assert [(f.rule, f.owner) for f in refusals] == [("A", "layout")]
+    assert [(f.rule, f.owner) for f in refusals] == [("A", "layout"), ("A", "layout")]
+    assert [f.location_um for f in refusals] == [
+        pytest.approx((10.0, 20.0005, 0.1)),
+        pytest.approx((60.0, 20.0005, 0.1)),
+    ]
+    assert [f.groups for f in refusals] == [
+        ("MA::chip/pad_0000__sidewall",),
+        ("EXT::VACUUM_REGION__sidewall",),
+    ]
     assert warnings
     assert {(f.rule, f.owner) for f in warnings} == {("C", "layout")}
     assert all(f.value_steps == pytest.approx(1) for f in warnings)
@@ -379,7 +390,7 @@ def built_jog(monkeypatch, tmp_path, pad="jog"):
     )
     sim = EigenmodeSim()
     sim.set_plan(snapshot)
-    sim.set_vacuum_region(1.0)
+    sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
     return sim._build_geometry(tmp_path / "run").artifacts  # noqa: SLF001 -- the geometry half simulation_drc runs
 
 
@@ -563,7 +574,7 @@ def test_a_meshing_stop_names_where_and_who_must_act(monkeypatch, tmp_path):
     monkeypatch.setattr(
         meshing_entry,
         "measure_bounding_box",
-        lambda *_args, **_kwargs: BoundingBox((-1, -1, -6), (61, 26, 1.2)),
+        lambda *_args, **_kwargs: BoundingBox((0, 0, -1005), (60, 25, 1000.2)),
     )
 
     def round_with_bad_elements(job, *_args, **_kwargs):

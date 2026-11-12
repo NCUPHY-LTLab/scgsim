@@ -109,7 +109,7 @@ run on the built model; its error is `SimulationDrcError`, from
 | Conductors of different Nets do not touch, including across a gap that closes when the layout snaps to the grid. | A contact between two Nets is a short circuit; SCGSim does not decide which Net is right. | `ContactError` at build, with the location | [Layout modeling check](layout-modeling-check.qmd) |
 | Conductors of different Nets do not overlap. | The same: overlapping metal of two Nets has no single owner. | `OverlapError` at build, with the location | [Layout modeling check](layout-modeling-check.qmd) |
 | Overlapping conductors of one Net carry different priorities, so one owns the overlap. | Two Entities of one Net may overlap, but the overlap must belong to exactly one of them. | `OverlapError` at build ("… overlap … with equal priority") | [Geometry contract](geometry-sgb.qmd) |
-| No region touches itself along a single vertical edge. Example: two pieces of one Net that meet only at a corner. | Two cells of one volume that share only a vertex give a non-manifold solid that cannot be meshed. | `NonManifoldError` at build, with the location | This page |
+| No region touches itself along a single vertical edge. Examples: two pieces of one Net that meet only at a corner; a conductor that reaches the layout's planar extent only at a point, where the vacuum `simulation_drc` adds ends. | Two cells of one volume that share only a vertex give a non-manifold solid that cannot be meshed. | `NonManifoldError` at build, with the location | This page |
 | Each Entity is either a sheet, with zero thickness after the physical interpretation, or a body with a positive Z extent. | A sheet with thickness, or a body with none, has no consistent place in the stack. | `InputError` at build ("… is a sheet but its effective Z interval is …", "… has a non-positive Z extent …") | [Physical representation](specs/physical-representation.qmd) |
 
 ### Ports {#rules-ports}
@@ -225,7 +225,7 @@ Find the error you see, then follow the owner's next action.
 | `ValidationError` "the inset curve … is not closed near (x, y)" | SCGSim | Two neighbouring band offsets near that point neither meet nor cross. Report it to SCGSim with the layout. |
 | `ContactError` or `OverlapError` between different Nets | Layout, or the Net declaration | If the two conductors should be one, put them in one Net. Otherwise separate them in the drawing, by more than one grid step. In `simulation_drc`, pass the `nets` the simulation uses. |
 | `OverlapError` "… with equal priority" | Declarations | Give the overlapping Entities of one Net different priorities. |
-| `NonManifoldError` | Layout | At the reported point, give the two pieces a shared edge or separate them. |
+| `NonManifoldError` | Layout | At the reported point, give the two pieces a shared edge or separate them. When the point is on the layout's planar extent, draw the die outline or a ground plane around the conductor it names. |
 | `InputError` about a port sheet, an Entity id, an arc or a margin | Layout and declarations | Read the message: it names the port, Entity or request. Fix the drawing or the setting it names. |
 | `ValueError` "Surface EPR bands narrower than the meshing stage's face-width limit …" | Declarations | Widen the margins it names so that every band is at least 10 grid steps wide. |
 | `NoGapEdgeError` | Declarations | The conductor named in `inset_margins_by_entity_um` has no gap edge on that face. Remove it there, or band the face by type. |
