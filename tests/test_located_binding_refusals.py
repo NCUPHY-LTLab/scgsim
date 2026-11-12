@@ -18,7 +18,13 @@ from dataclasses import replace
 
 import gdstk
 import pytest
-from test_located_junction_refusals import ELECTRODE, PAD, device, refusal
+from test_located_junction_refusals import (
+    ELECTRODE,
+    PAD,
+    device,
+    device_plan,
+    refusal,
+)
 from test_located_refusals import GRID, on, places
 from test_rectangular_junction_geometry import fixture as junction_fixture
 from test_simulation_drc import check
@@ -88,6 +94,13 @@ def device_with(monkeypatch, *, reconstruction=(), curves=()):
 def binding_refusal(monkeypatch, **records):
     """The refusal of the port's preparation, the one ``mesh()`` and ``simulation_drc`` run."""
     return refusal(device_with(monkeypatch, **records))
+
+
+def declaration_refusal(monkeypatch, **records):
+    """The refusal of the plan's own preparation, where the source stage reads the records."""
+    with pytest.raises(ValueError) as error:
+        device_plan(device_with(monkeypatch, **records)).prepare()
+    return str(error.value)
 
 
 # ------------------------------------------------------------- the reconstruction's indices
@@ -241,8 +254,12 @@ def test_a_circular_reconstruction_without_three_anchors_is_refused_at_them(
 def test_anchors_that_define_no_circle_are_refused_at_them(
     monkeypatch, record, anchors
 ):
-    """A drawn vertex given twice leaves three points on one line, so no circle runs through them."""
-    message = binding_refusal(monkeypatch, reconstruction=[record])
+    """A drawn vertex given twice leaves three points on one line, so no circle runs through them.
+
+    The source stage decides it when the plan is prepared, on the vertices as the pad's cell
+    draws them, before any stage binds the record.
+    """
+    message = declaration_refusal(monkeypatch, reconstruction=[record])
     assert message.startswith(
         f"{RECORD}: the three arc points are collinear, so they define no circle: its "
         "anchors are drawn vertex "
@@ -380,9 +397,7 @@ def two_layer_terminal_refusal(selector_point_um, **fields):
         "chip/left",
         selector_point_um,
         "circular_arc",
-        segment_indices=(0, 1),
-        anchor_indices=(0, 1, 2),
-        **fields,
+        **{"segment_indices": (0, 1), "anchor_indices": (0, 1, 2), **fields},
     )
     build = replace(
         build,
@@ -433,6 +448,23 @@ def test_a_missing_hole_names_the_layer_of_the_selected_polygon():
     )
     (place,) = places(message)
     assert on(place, LEFT_BOX) and on(LEFT_BOX, place)
+
+
+def test_anchors_that_define_no_circle_on_an_input_built_by_hand_are_refused_by_the_binding():
+    """Anchors 0, 0, 2 of the terminal drawn from (-2, 0) through (3, 0) to (3, 1) um.
+
+    An input built by hand never passes the source stage, which decides the anchors of a
+    layout it reads, so the binding decides here, on the ring it holds.
+    """
+    message = two_layer_terminal_refusal((1.0, 0.5), anchor_indices=(0, 0, 2))
+    assert message.startswith(
+        "chip/LEFT_ARC (Entity 'chip/left', layer metal): the three arc points are "
+        "collinear, so they define no circle: its anchors are drawn vertex "
+    )
+    assert "two of them are one vertex. Fix the declaration" in message
+    first, again, last = places(message)
+    assert on(first, (-2, 0, -2, 0)) and on(again, (-2, 0, -2, 0))
+    assert on(last, (3, 1, 3, 1))
 
 
 # ------------------------------------------------- a hole with no drawn ring of its own

@@ -41,6 +41,7 @@ from scgsim.geometry.models.input import (
     drawn_chain_on_ring,
     drawn_ring_of,
     drawn_vertices_off_ring,
+    reconstruction_anchors,
     reconstruction_chain_refusal,
     reconstruction_without_circle,
     ring_lost_drawn_order,
@@ -279,6 +280,9 @@ class _BoundaryBinder:
             start = self._lattice_point(curve.points_um[0], what)
             end = self._lattice_point(curve.points_um[2], what)
             through = self._exact_point(curve.points_um[1])
+            # A component's arc was decided in its own frame by the source stage.  This
+            # decides an arc declared in assembly coordinates, and it is the last guard:
+            # SGB solves the circle on these three points.
             if collinear(start, through, end):
                 size = self.grid.size_um
                 raise InputError(
@@ -342,10 +346,7 @@ class _BoundaryBinder:
         if refusal is not None:
             raise InputError(refusal)
         segments = tuple(record.segment_indices)
-        drawn_anchors = tuple(record.anchor_indices) or (
-            *segments,
-            (segments[-1] + 1) % len(drawn),
-        )
+        drawn_anchors = reconstruction_anchors(record, len(drawn))
         chain = drawn_chain_on_ring(segments, drawn_anchors, record.closed, drawn, ring)
         if chain is None:
             raise InputError(
@@ -358,6 +359,9 @@ class _BoundaryBinder:
                 )
             )
         first, middle, last = (ring[i] for i in chain.anchors)
+        # The source stage decided anchors whose cell it read, on the vertices as drawn.
+        # This decides the rest, an input built by hand, and it is the last guard: SGB
+        # solves the circle on these three lattice points.
         if collinear(first, middle, last):
             raise InputError(
                 reconstruction_without_circle(what, drawn_anchors, drawn_place)

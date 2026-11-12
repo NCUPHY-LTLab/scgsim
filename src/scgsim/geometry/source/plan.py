@@ -27,6 +27,8 @@ from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
 from scgsim.geometry.source.curves import (
     boundary_binding,
     occurrence_drawn_walks,
+    placed_boundary_curves,
+    refuse_reconstructions_without_circle,
     transform_boundary,
     with_drawn_rings,
 )
@@ -726,14 +728,9 @@ class GeometryPlan:
         for path, (cell, _, transform) in self._instances.items():
             semantics = component_semantics(cell, path)
             boundary_curves.extend(
-                transform_boundary(
-                    value,
-                    path=path,
-                    transform=transform,
-                    point=transform_source_point,
-                    reconstruction=False,
+                placed_boundary_curves(
+                    semantics.get("boundary_curves", ()), path, transform, build_input
                 )
-                for value in semantics.get("boundary_curves", ())
             )
             reconstruction.extend(
                 transform_boundary(
@@ -755,15 +752,14 @@ class GeometryPlan:
         )
         # Reconstruction indices name rings as drawn in the GDS; the source stage has
         # since fused, rounded and noded them, so each polygon keeps its drawn rings.
-        build_input = with_drawn_rings(
+        drawn_walks = occurrence_drawn_walks(
+            self._instances,
+            source.source_cells,
+            source.child_reference_indexes,
             build_input,
-            occurrence_drawn_walks(
-                self._instances,
-                source.source_cells,
-                source.child_reference_indexes,
-                build_input,
-            ),
         )
+        build_input = with_drawn_rings(build_input, drawn_walks)
+        refuse_reconstructions_without_circle(build_input, drawn_walks)
         if self._rectangular_junctions:
             from scgsim.geometry.source.junctions import (  # noqa: PLC0415 - only used when junction requests are present
                 with_rectangular_junctions,

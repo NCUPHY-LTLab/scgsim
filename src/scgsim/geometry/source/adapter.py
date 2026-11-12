@@ -34,6 +34,7 @@ from scgsim.geometry.source.curves import (
     DrawnWalks,
     boundary_binding,
     gds_walks,
+    refuse_reconstructions_without_circle,
     with_drawn_rings,
 )
 from scgsim.geometry.source.grid import apply_geometry_grid, source_grid_context
@@ -249,7 +250,9 @@ class _SourceLowering:
             gds_walks(self.source.polygons_by_layer),
             self.source.grid_context.grid_size_um,
         )
-        return with_drawn_rings(gridded, lambda _polygon: drawn)
+        built = with_drawn_rings(gridded, lambda _polygon: drawn)
+        refuse_reconstructions_without_circle(built, lambda _polygon: drawn)
+        return built
 
     def lower_solution_regions(self) -> None:
         self.entities = [
