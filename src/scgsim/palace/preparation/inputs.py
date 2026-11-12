@@ -2,19 +2,8 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from typing import Any
-
-
-def non_negative_number(value: Any, name: str) -> float:
-    """Validate the finite nonnegative scalar used by problem inputs."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"{name} must be a finite non-negative number.")
-    result = float(value)
-    if not math.isfinite(result) or result < 0.0:
-        raise ValueError(f"{name} must be a finite non-negative number.")
-    return result
 
 
 def stack_materials(stack: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
@@ -71,4 +60,4 @@ def _validate_stack_material_kinds(
             raise ValueError("metal layer material must have conductor kind.")
 
 
-__all__ = ["non_negative_number", "stack_materials"]
+__all__ = ["stack_materials"]

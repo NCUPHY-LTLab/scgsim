@@ -152,7 +152,6 @@ advanced builds.
 | `scgsim.geometry.planning.topology_planning` | Assign canonical points, curves, loops, and shared surface ownership. |
 | `scgsim.geometry.primitives.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
 | `scgsim.geometry.construction.native_geometry` | Lower construction plans through Gmsh/OCC, retain topology bindings, and produce XAO and conformity records. |
-| `scgsim.geometry.source.ground_bump_geometry` | Audit authored bump sites, select fill-lattice sites, and create source geometry records. |
 
 The [API migration reference](api-migration.qmd) lists the supported import
 routes for these operations. Native correspondence, shell repair, curved
@@ -313,10 +312,10 @@ only prepares values and persists caller-supplied JSON payloads; it is not a
 base simulation object and does not receive callbacks into simulation state.
 
 Both public `mesh()` methods invalidate derived state before checking
-prerequisites. Geometry preparation then applies the vacuum region, the
-indium-bump fill to the stack, then interprets the physical
-geometry and records Route-A metadata, and returns the prepared component,
-stack, bump-fill record, and optional material mapping. The simulation stores
+prerequisites. Geometry preparation then applies the vacuum region to the
+stack, interprets the physical geometry, records Route-A metadata, and returns
+the prepared stack, geometry input, physical plan and optional material
+mapping. The simulation stores
 that mapping only after preparation returns, so a failure during preparation or
 a non-mapping `materials` value retains the prior mapping, while a
 mesh-construction failure retains the newly prepared mapping. Eigenmode resolves authored ports before those transformations and

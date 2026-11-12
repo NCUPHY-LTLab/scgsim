@@ -1,9 +1,8 @@
-"""Write paired mesh records (JSON, receipts) and validate the declared Route-A film provenance."""
+"""Write paired mesh records as JSON and validate the declared Route-A film provenance."""
 
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 from collections.abc import Mapping
 from importlib.metadata import PackageNotFoundError
@@ -20,18 +19,6 @@ def scgsim_version() -> str:
         return package_version("scgsim")
     except PackageNotFoundError as exc:
         raise RuntimeError("Unable to determine installed scgsim version.") from exc
-
-
-def write_indium_ground_bump_receipt(
-    *, run_dir: Path, gds_path: Path, receipt: Mapping[str, Any]
-) -> None:
-    """Persist public fill provenance before the generic handoff archive is made."""
-    payload = copy.deepcopy(dict(receipt))
-    payload["design_gds"] = {
-        "path": gds_path.relative_to(run_dir).as_posix(),
-        "sha256": hashlib.sha256(gds_path.read_bytes()).hexdigest(),
-    }
-    write_json(run_dir / "metadata" / "indium_ground_bumps.json", payload)
 
 
 def write_json(path: Path, payload: Mapping[str, Any]) -> None:

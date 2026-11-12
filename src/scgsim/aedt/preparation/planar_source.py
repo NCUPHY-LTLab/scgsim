@@ -126,7 +126,6 @@ class _PlanarSource:
                             "source_occurrence_path",
                             "source_local_entity_id",
                             "split_polygon_index",
-                            "ground_bump_id",
                         )
                         if key in item.metadata
                     },
