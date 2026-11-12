@@ -1,48 +1,67 @@
-"""The references of a v2 sidecar that resolve against a table in the same file, checked after its structure.
+"""The references of a sidecar, checked after its structure: every id names a record that exists, of the kind
+it needs, and the binding names exactly the written shapes.
 
-Owns the cross-section checks v2 allows: every reference names a record that exists, of the kind it
-needs, and every table v2 keys by written shape covers them all.  ``binding.ids_by_tag`` is the table of
-planned ids: every planned id a section names must be in it, in its dimension, and every native tag must
-name the id written beside it.  ``physical_groups`` is the table of groups by dimension, each tag once per
-dimension: a reference to a surface group must name a group of dimension 2, one to a volume group a group
-of dimension 3.  ``faces`` describes exactly the written faces, and ``volumes`` every planned volume, the
-written solids exactly those it marks emitted.  ``lineage.carriers`` is the table of carriers; ``counts``
-and ``expected`` must have the binding's sizes.
+Owns two kinds of rule.  *Typed references* come from the definition itself: a field whose type carries a
+``Ref`` (:mod:`.markers`) holds the id of a record of that table, or for a group of that dimension, and
+:func:`require_references` walks every record with the types of :mod:`.records` and checks each one, keys of
+an object included.  *Table rules* are the facts that tie tables together:
 
-v2 states some facts twice (a face's group and the group's members, a port's faces and its group's), and
-the two copies are not compared here: v3 writes each fact once (#170).
+* ``binding.ids_by_tag`` names each planned id once per dimension, exactly the vertex, edge and face tables and
+  the emitted volumes, as many as ``summary.counts`` says were written; ``counts.volumes_total`` is the number of
+  planned volumes;
+* a group's tag is used once per dimension, and every group has a member (a face or emitted volume names it);
+* a support ring lists exactly the primitives that name it;
+* a face loop marks the direction of each of its edges, and a feature names each edge once;
+* a face is on the outer boundary exactly when one of its side volumes is null, and the domain it bounds is
+  the Entity of the other.
 
-v2 also refers to things it keeps no table of, so these stay unchecked until slice C of #170 gives each one
-a table: Entity ids (volume entities, face sources and membership, group and row entities, port hosts,
-mesh-feature sources, wall columns), cut-family ids (group bands, refinement-edge and carrier families) and
-members, and request ids.  The band groups of an inset family are unchecked too, because v2 writes groups
-there that do not exist (see :func:`_group_lists`).
+Not checked, because the sidecar keeps no table of them: an inset family's ``bands`` (in Route B they also name
+the ``MM`` group of a metal-metal contact, which is no physical group), and the Entities a caller excluded from a
+type-level request, which are the request as given.
 """
 
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+import functools
+import types
+from collections.abc import Callable, Iterator
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+    is_typeddict,
+)
 
 from .errors import SidecarError
+from .markers import Ref
 from .records import Sidecar
 
 _DIMENSIONS = ("vertex", "edge", "face", "volume")
+_EMITTED_TABLES = ("vertex", "edge", "face")
 _SHOWN = 5  # unresolved references named in the error; the rest are counted
+_KEY = "<key>"  # the place of an object's keys in a path
+
+Path = tuple[str | int, ...]
+Problems = list[str]
+# A compiled check of one annotation: the value, where it is, the tables, and the list problems are added to.
+_Check = Callable[[Any, Path, "_Tables", Problems], None]
 
 
 def require_references(sidecar: Sidecar) -> None:
     """Raise :class:`SidecarError` naming the first references of ``sidecar`` that do not resolve."""
-    index = _Index.of(sidecar)
-    problems = [
-        *_binding_sizes(sidecar, index),
-        *_group_members(sidecar, index),
-        *_mesh_feature_edges(sidecar, index),
-        *_embeddings(sidecar, index),
-        *_planned_faces_and_volumes(sidecar, index),
-        *_surface_epr_rows(sidecar, index),
-        *_ports(sidecar, index),
-        *_lineage(sidecar, index),
-        *_group_lists(sidecar, index),
-        *_expected(sidecar, index),
+    tables = _Tables(sidecar)
+    problems: Problems = []
+    check = _compiled(Sidecar)
+    if check is not None:
+        check(sidecar, (), tables, problems)
+    problems += [
+        *_binding(sidecar),
+        *_groups(sidecar),
+        *_rings(sidecar),
+        *_loops_and_features(sidecar),
+        *_outer_boundaries(sidecar),
     ]
     if problems:
         more = f" (and {len(problems) - _SHOWN} more)" if len(problems) > _SHOWN else ""
@@ -51,197 +70,266 @@ def require_references(sidecar: Sidecar) -> None:
         )
 
 
-@dataclass(frozen=True)
-class _Index:
-    """The tables of one sidecar that references resolve against."""
+class _Tables:
+    """The tables of one sidecar that ids resolve against, and the dimension of each group."""
 
-    ids: tuple[list[str], ...]  # planned ids by dimension, in native-tag order
-    known: tuple[frozenset[str], ...]
-    groups: dict[int, frozenset[str]]  # primary group names by dimension, 2 and 3
-    volumes: frozenset[str]
+    def __init__(self, sidecar: Sidecar) -> None:
+        self.sidecar: Any = sidecar
+        self.dimension = {
+            name: group["dim"] for name, group in sidecar["group"].items()
+        }
+
+    def problem(self, ref: Ref, value: str, path: Path) -> str | None:
+        """Why ``value`` at ``path`` does not resolve as ``ref`` says, or ``None`` when it does."""
+        if value not in self.sidecar[ref.table]:
+            return f"{_place(path)} names {value!r}, which {ref.table} lacks"
+        if ref.dimension is not None and self.dimension[value] != ref.dimension:
+            return f"{_place(path)} names the group {value!r}, which is not a {_DIMENSIONS[ref.dimension]} group"
+        return None
+
+
+# --------------------------------------------------------------------------- typed references
+
+
+@functools.cache
+def _compiled(annotation: Any) -> _Check | None:
+    """The check of every reference a value of ``annotation`` holds, or ``None`` when it can hold none."""
+    origin = get_origin(annotation)
+    if origin is Annotated:
+        base, *markers = get_args(annotation)
+        refs = [m for m in markers if isinstance(m, Ref)]
+        return _reference(refs[0]) if refs else _compiled(base)
+    if origin is Union or origin is types.UnionType:
+        return _union(get_args(annotation))
+    if origin is list:
+        return _items(_compiled(get_args(annotation)[0]))
+    if origin is dict:
+        key, value = get_args(annotation)
+        return _entries(_compiled(key), _compiled(value))
+    if is_typeddict(annotation):
+        return _record(annotation)
+    return None
+
+
+def _reference(ref: Ref) -> _Check:
+    def check(value: Any, path: Path, tables: _Tables, problems: Problems) -> None:
+        if value is not None and (problem := tables.problem(ref, value, path)):
+            problems.append(problem)
+
+    return check
+
+
+def _union(members: tuple[Any, ...]) -> _Check | None:
+    """A union of scalars, ``None`` or one type; or of records, each value checked as the one record it is."""
+    options = [m for m in members if m is not type(None)]
+    if len(options) == 1:
+        return _unless_null(_compiled(options[0]))
+    if not all(is_typeddict(o) for o in options):
+        return None  # a union of scalar types holds no reference
+    branches = [(_Shape.of(o), _compiled(o)) for o in options]
+    if all(check is None for _, check in branches):
+        return None
+
+    def check(value: Any, path: Path, tables: _Tables, problems: Problems) -> None:
+        if not isinstance(value, dict):
+            return
+        for shape, branch in branches:
+            if shape.matches(value):
+                if branch is not None:
+                    branch(value, path, tables, problems)
+                return
+
+    return check
+
+
+def _unless_null(inner: _Check | None) -> _Check | None:
+    """``inner``, for a value that may be null instead (a null holds no reference)."""
+    if inner is None:
+        return None
+
+    def check(value: Any, path: Path, tables: _Tables, problems: Problems) -> None:
+        if value is not None:
+            inner(value, path, tables, problems)
+
+    return check
+
+
+class _Shape:
+    """What tells one closed record of a union from the others: its constant fields (a ``kind`` or ``dim``),
+    the fields it requires and the fields it allows.  The structure check already proved exactly one matches."""
+
+    def __init__(
+        self,
+        constants: dict[str, Any],
+        required: frozenset[str],
+        allowed: frozenset[str],
+    ) -> None:
+        self.constants = constants
+        self.required = required
+        self.allowed = allowed
 
     @classmethod
-    def of(cls, sidecar: Sidecar) -> "_Index":
-        """The tables of ``sidecar``."""
-        by_tag = sidecar["binding"]["ids_by_tag"]
-        ids = (by_tag["0"], by_tag["1"], by_tag["2"], by_tag["3"])
-        groups = sidecar["physical_groups"]
-        return cls(
-            ids,
-            tuple(frozenset(dimension) for dimension in ids),
-            {
-                dim: frozenset(n for n, g in groups.items() if g["dim"] == dim)
-                for dim in (2, 3)
-            },
-            frozenset(sidecar["volumes"]),
+    def of(cls, record: Any) -> "_Shape":
+        """The shape of the ``TypedDict`` ``record``."""
+        hints = get_type_hints(record, include_extras=True)
+        constants = {}
+        for name, annotation in hints.items():
+            base = (
+                get_args(annotation)[0]
+                if get_origin(annotation) is Annotated
+                else annotation
+            )
+            if get_origin(base) is Literal and len(get_args(base)) == 1:
+                constants[name] = get_args(base)[0]
+        return cls(constants, frozenset(record.__required_keys__), frozenset(hints))
+
+    def matches(self, value: dict[str, Any]) -> bool:
+        """Whether ``value`` is this record."""
+        keys = value.keys()
+        return (
+            self.required <= keys
+            and keys <= self.allowed
+            and all(value.get(k) == v for k, v in self.constants.items())
         )
 
-    def unknown(self, dimension: int, ids: Iterable[str], where: str) -> Iterator[str]:
-        """A problem for each of ``ids`` that is no planned id of ``dimension``."""
-        for planned in ids:
-            if planned not in self.known[dimension]:
-                yield f"{where} names {_DIMENSIONS[dimension]} {planned!r}, which binding.ids_by_tag lacks"
 
-    def mistagged(
-        self, dimension: int, ids: list[str], tags: list[int], where: str
-    ) -> Iterator[str]:
-        """A problem for each native tag that does not name the planned id beside it."""
-        if len(ids) != len(tags):
-            yield f"{where} has {len(ids)} ids but {len(tags)} native tags"
-            return
-        table = self.ids[dimension]
-        for planned, tag in zip(ids, tags, strict=True):
-            if not (1 <= tag <= len(table)) or table[tag - 1] != planned:
-                yield f"{where}: native tag {tag} is not {_DIMENSIONS[dimension]} {planned!r}"
+def _items(item: _Check | None) -> _Check | None:
+    if item is None:
+        return None
 
-    def unknown_groups(
-        self, dimension: int, names: Iterable[str | None], where: str
-    ) -> Iterator[str]:
-        """A problem for each name that is no primary group of ``dimension`` (``None`` is no group, and resolves)."""
-        for name in names:
-            if name is None or name in self.groups[dimension]:
-                continue
-            if any(name in groups for groups in self.groups.values()):
-                yield f"{where} names the group {name!r}, which is not a {_DIMENSIONS[dimension]} group"
-            else:
-                yield f"{where} names the group {name!r}, which physical_groups lacks"
+    def check(value: Any, path: Path, tables: _Tables, problems: Problems) -> None:
+        for index, entry in enumerate(value):
+            item(entry, (*path, index), tables, problems)
+
+    return check
 
 
-def _binding_sizes(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    """Each planned id once per dimension, as many as ``counts`` says were written, and as many planned
-    volumes as ``counts.volumes_total``."""
-    counts = sidecar["counts"]
-    if counts["volumes_total"] != len(sidecar["volumes"]):
-        yield f"counts.volumes_total is {counts['volumes_total']}, volumes has {len(sidecar['volumes'])}"
+def _entries(key: _Check | None, item: _Check | None) -> _Check | None:
+    if key is None and item is None:
+        return None
+
+    def check(value: Any, path: Path, tables: _Tables, problems: Problems) -> None:
+        for name, entry in value.items():
+            if key is not None:
+                key(name, (*path, _KEY), tables, problems)
+            if item is not None:
+                item(entry, (*path, name), tables, problems)
+
+    return check
+
+
+def _record(record: Any) -> _Check | None:
+    fields = [
+        (name, field_check)
+        for name, annotation in get_type_hints(record, include_extras=True).items()
+        if (field_check := _compiled(annotation)) is not None
+    ]
+    if not fields:
+        return None
+
+    def check(value: Any, path: Path, tables: _Tables, problems: Problems) -> None:
+        for name, field in fields:
+            if name in value:
+                field(value[name], (*path, name), tables, problems)
+
+    return check
+
+
+# --------------------------------------------------------------------------- table rules
+
+
+def _binding(sidecar: Sidecar) -> Iterator[str]:
+    """The binding names each written shape once, exactly the shape tables, as many as ``counts`` says."""
+    by_tag = sidecar["binding"]["ids_by_tag"]
+    counts = sidecar["summary"]["counts"]
+    volumes = sidecar["volume"]
+    if counts["volumes_total"] != len(volumes):
+        yield f"summary.counts.volumes_total is {counts['volumes_total']}, volume has {len(volumes)}"
     written = (counts["vertices"], counts["edges"], counts["faces"], counts["solids"])
-    for dimension, (ids, count) in enumerate(zip(index.ids, written, strict=True)):
-        if len(index.known[dimension]) != len(ids):
+    emitted = {v for v, volume in volumes.items() if volume["emitted"]}
+    tables = (*(set(sidecar[t]) for t in _EMITTED_TABLES), emitted)
+    for dimension, (count, table) in enumerate(zip(written, tables, strict=True)):
+        ids = by_tag[str(dimension)]
+        if len(set(ids)) != len(ids):
             yield f"binding.ids_by_tag['{dimension}'] names a planned id more than once"
         if count != len(ids):
-            yield f"counts has {count} of dimension {dimension}, binding.ids_by_tag['{dimension}'] {len(ids)}"
+            yield f"summary.counts has {count} of dimension {dimension}, binding.ids_by_tag['{dimension}'] {len(ids)}"
+        if set(ids) != table:
+            what = (
+                "the emitted volumes"
+                if dimension == 3
+                else f"the {_DIMENSIONS[dimension]} table"
+            )
+            yield f"binding.ids_by_tag['{dimension}'] does not name exactly {what}"
 
 
-def _group_members(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    """Each group's members and, for a surface group, the written volumes beside it; each tag once per dimension."""
+def _groups(sidecar: Sidecar) -> Iterator[str]:
+    """Each group's tag once per dimension, and every group with a member of its dimension."""
     named: dict[tuple[int, int], str] = {}
-    for name, group in sidecar["physical_groups"].items():
-        where = f"physical group {name!r}"
-        yield from index.mistagged(
-            group["dim"], group["ids"], group["native_tags"], where
-        )
-        if group["dim"] == 2:
-            yield from index.unknown(3, group["adjacent_volumes"], where)
+    for name, group in sidecar["group"].items():
         key = (group["dim"], group["tag"])
         if key in named:
-            yield f"{where} has the tag {group['tag']} of physical group {named[key]!r}"
+            yield f"group {name!r} has the tag {group['tag']} of group {named[key]!r}"
         named.setdefault(key, name)
-
-
-def _mesh_feature_edges(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    for position, feature in enumerate(sidecar["mesh_features"]):
-        where = f"mesh_features[{position}] ({feature['kind']})"
-        yield from index.mistagged(1, feature["edges"], feature["native_tags"], where)
-
-
-def _embeddings(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    for position, face in enumerate(sidecar["embedded_faces"]):
-        where = f"embedded_faces[{position}]"
-        yield from index.unknown(2, [face["face"]], where)
-        yield from index.unknown(3, [face["host_volume"]], where)
-        yield from index.unknown_groups(2, [face["group"]], where)
-    for position, edge in enumerate(sidecar["refinement_edges"]):
-        where = f"refinement_edges[{position}]"
-        yield from index.unknown(1, [edge["edge"]], where)
-        yield from index.unknown(2, [edge["host_face"]], where)
-
-
-def _planned_faces_and_volumes(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    """``faces`` describes exactly the written faces; ``volumes`` every planned volume, the written solids
-    exactly the emitted ones."""
-    yield from index.unknown(2, sidecar["faces"], "faces")
-    for face_id in index.ids[2]:
-        if face_id not in sidecar["faces"]:
-            yield f"binding.ids_by_tag['2'] names {face_id!r}, which faces lacks"
-    for face_id, face in sidecar["faces"].items():
-        yield from index.unknown_groups(2, [face["group"]], f"faces[{face_id!r}]")
-        for side in (face["negative_volume"], face["positive_volume"]):
-            if side is not None and side not in index.volumes:
-                yield f"faces[{face_id!r}] names the volume {side!r}, which volumes lacks"
-    for solid in index.ids[3]:
-        if solid not in index.volumes:
-            yield f"binding.ids_by_tag['3'] names {solid!r}, which volumes lacks"
-    for volume_id, volume in sidecar["volumes"].items():
-        yield from index.unknown_groups(3, [volume["group"]], f"volumes[{volume_id!r}]")
-        if volume["emitted"] != (volume_id in index.known[3]):
-            state = "emitted" if volume["emitted"] else "not emitted"
-            yield f"volumes[{volume_id!r}] is {state}, which binding.ids_by_tag['3'] contradicts"
-
-
-def _surface_epr_rows(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    for row_id, row in sidecar["surface_epr_rows"].items():
-        where = f"surface_epr_rows[{row_id!r}]"
-        yield from index.unknown_groups(
-            2, [row["group"], row["shared_face_group"]], where
-        )
-        yield from index.unknown(2, row["face_sides"] or {}, where)
-
-
-def _ports(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    for port in sidecar["ports"]:
-        where = f"port {port['port_sheet_id']!r}"
-        yield from index.unknown_groups(2, [port["group"]], where)
-        yield from index.unknown(2, port["faces"], where)
-        yield from index.unknown(
-            3, [*port["host_volumes"], *port["adjacent_volumes"]], where
-        )
-
-
-def _lineage(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    lineage = sidecar["lineage"]
-    yield from index.unknown(1, lineage["edges"], "lineage.edges")
-    yield from index.unknown(1, lineage["vertical_edges"], "lineage.vertical_edges")
-    yield from index.unknown(2, lineage["faces"], "lineage.faces")
-    yield from index.unknown(2, lineage["membership"], "lineage.membership")
-    carriers = lineage["carriers"]
-    for edge_id, sources in lineage["edges"].items():
-        for carrier in sources:
-            if carrier not in carriers:
-                yield f"lineage.edges[{edge_id!r}] names the carrier {carrier!r}, which lineage.carriers lacks"
-    for position, refinement in enumerate(sidecar["refinements"]):
-        yield from index.unknown(1, refinement["edges"], f"refinements[{position}]")
-    yield from index.unknown(2, sidecar["curved_wall_faces"], "curved_wall_faces")
-
-
-def _group_lists(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    """Unions name primary surface groups: interface types are surface types, and a Net's union lists its
-    exposed conductor surfaces.
-
-    The ``bands`` of an inset family do not always: SGB lists the band group of every face that carries the
-    band, emitted or not, so in Route B a family also names the ``MM`` group of a metal-metal contact, which
-    has no physical group (``cell11_bumps_flip_chip``, ``cell22_tsv_signal``, ``cell23_airbridge``).
-    """
-    unions = sidecar["unions"]
-    for kind in ("interface_types", "nets"):
-        for key, names in unions[kind].items():
-            yield from index.unknown_groups(2, names, f"unions.{kind}[{key!r}]")
-
-
-def _expected(sidecar: Sidecar, index: _Index) -> Iterator[str]:
-    """One expectation per written shape, and boundaries that name written shapes."""
-    expected = sidecar["expected"]
-    sizes = {
-        "vertices_um": 0,
-        "edge_vertices": 1,
-        "face_edges": 2,
-        "face_area_um2": 2,
-        "solid_faces": 3,
-        "solid_volume_um3": 3,
+    members = {f["group"] for f in sidecar["face"].values()} | {
+        v["group"] for v in sidecar["volume"].values() if v["emitted"]
     }
-    for name, dimension in sizes.items():
-        if len(expected[name]) != len(index.ids[dimension]):
-            yield f"expected.{name} has {len(expected[name])} entries for {len(index.ids[dimension])} shapes"
-    boundaries = {"edge_vertices": 0, "face_edges": 1, "solid_faces": 2}
-    for name, dimension in boundaries.items():
-        written = len(index.ids[dimension])
-        if any(tag > written for tags in expected[name] for tag in tags):
-            yield f"expected.{name} names a tag beyond the {written} written shapes of dimension {dimension}"
+    for name in sidecar["group"]:
+        if name not in members:
+            yield f"group {name!r} has no member"
+    for volume_id, volume in sidecar["volume"].items():
+        if volume["group"] is not None and not volume["emitted"]:
+            yield f"volume[{volume_id!r}] is not emitted but names the group {volume['group']!r}"
+
+
+def _rings(sidecar: Sidecar) -> Iterator[str]:
+    """A support ring lists exactly the primitives that name it, each once."""
+    listed: dict[str, str] = {}
+    for ring_id, ring in sidecar["support_ring"].items():
+        for primitive in ring["primitives"]:
+            if primitive in listed:
+                yield f"support_primitive {primitive!r} is listed by two rings"
+            listed[primitive] = ring_id
+    for primitive_id, primitive in sidecar["support_primitive"].items():
+        if listed.get(primitive_id) != primitive["ring"]:
+            yield f"support_primitive {primitive_id!r} names the ring {primitive['ring']!r}, which does not list it"
+
+
+def _outer_boundaries(sidecar: Sidecar) -> Iterator[str]:
+    """``outer_boundary`` exactly on the faces with one side volume null, naming the Entity of the other side."""
+    volumes = sidecar["volume"]
+    for face_id, face in sidecar["face"].items():
+        sides = (face["negative_volume"], face["positive_volume"])
+        outer = face["outer_boundary"]
+        if (outer is not None) != (sides.count(None) == 1):
+            yield f"face[{face_id!r}] has outer_boundary {outer!r} with side volumes {list(sides)}"
+            continue
+        inside = sides[0] or sides[1]
+        if outer is not None and inside in volumes:
+            entity = volumes[inside]["entity"]
+            if outer["domain"] != entity:
+                yield f"face[{face_id!r}].outer_boundary names the domain {outer['domain']!r}, its volume is {entity!r}"
+
+
+def _loops_and_features(sidecar: Sidecar) -> Iterator[str]:
+    """Every loop marks the direction of each edge; every mesh feature names each edge once."""
+    for face_id, face in sidecar["face"].items():
+        for position, loop in enumerate(face["loops"]):
+            if len(loop["edges"]) != len(loop["reversed"]):
+                yield f"face[{face_id!r}].loops[{position}] has {len(loop['edges'])} edges and {len(loop['reversed'])} directions"
+    for feature_id, feature in sidecar["mesh_feature"].items():
+        if len(set(feature["edges"])) != len(feature["edges"]):
+            yield f"mesh_feature[{feature_id!r}] names an edge more than once"
+
+
+def _place(path: Path) -> str:
+    """``face['f:1'].loops[0].edges[2]`` from the path of keys and indices (``membership key``: its keys)."""
+    parts = []
+    for part in path:
+        if part == _KEY:
+            parts.append(" key")
+        elif isinstance(part, int):
+            parts.append(f"[{part}]")
+        else:
+            parts.append(f".{part}" if part.isidentifier() else f"[{part!r}]")
+    return "".join(parts).removeprefix(".") or "document"

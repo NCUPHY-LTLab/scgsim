@@ -589,7 +589,7 @@ def test_a_45_degree_port_on_a_round_pad_keeps_every_band_boundary(monkeypatch):
     sidecar = built_sidecar(monkeypatch, chip, reference, surface_epr_specs=SA_BANDS)
     bands = {
         name.rsplit("::band=", 1)[1]
-        for name in sidecar["physical_groups"]
+        for name in sidecar["group"]
         if name.startswith("SA::") and "::band=" in name
     }
     assert bands == {"0", "1", "2"}

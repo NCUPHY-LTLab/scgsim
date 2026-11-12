@@ -1,15 +1,19 @@
 """The built model as the sidecar records it, and the sizes of its fine edges and faces.
 
-Owns reading the geometry and lineage that the meshing-stage check needs from an SGB sidecar, by native tag
-(tag = 1 + position in ``binding.ids_by_tag``):
+Owns reading the geometry and lineage that the meshing-stage check needs from an SGB sidecar the shared reader
+accepted, by native tag (tag = 1 + position in ``binding.ids_by_tag``):
 
-* ``expected``: where every vertex sits, the two vertices of every edge, the edges of every face and the face
-  areas.  These are the shapes the XAO holds, so measuring them measures the model the mesher receives;
-* ``mesh_features``: the radius of every circular-arc edge (``arc``) and the margins of every band family
-  (``band_boundary``);
-* ``faces``: each face's kind (``horizontal`` or ``wall``) and physical group;
-* ``lineage``: the carriers of every horizontal edge and what each carrier comes from (a source polygon edge
-  or a member of a cut family), the Entities a wall column stands under, and the sources of every face.
+* the load-side view of the emitted tables (``views.expected``): where every vertex sits, the two vertices of
+  every edge, the edges of every face and the face areas.  These are the shapes the XAO holds, so measuring
+  them measures the model the mesher receives;
+* ``edge``: the radius of every circular-arc edge, the carriers of every horizontal edge and the Entities a
+  wall column stands under; ``mesh_feature``: the margins of every band family (``band_boundary``);
+* ``face``: each face's kind (``horizontal`` or ``wall``), physical group and the Entities and band families it
+  comes from;
+* ``carrier``: what each carrier comes from (a source curve, a band curve offset from a support primitive, a
+  refinement request), with a band member's family, ring, place on the ring, role and piece read from the
+  support records it names;
+* ``entity``: the layer each Entity was drawn on.
 
 It measures the four sizes the meshing-stage classes are stated in: the column gap of a wall face, the
 width ``2 A / P`` of a horizontal face, the corner (wedge) angle of a horizontal face, and the length of a
@@ -23,9 +27,9 @@ import math
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
 
-from .errors import SidecarError
+from scgsim.contracts.sgb_sidecar import Sidecar, views
+from scgsim.contracts.sgb_sidecar.records import Carrier as CarrierRecord
 
 Point3 = tuple[float, float, float]
 Bounds = tuple[Point3, Point3]
@@ -33,22 +37,28 @@ Bounds = tuple[Point3, Point3]
 _EDGE_DIM = 1
 _FACE_DIM = 2
 _HORIZONTAL = "horizontal"
+_VERTICAL = "vertical"
 _FULL_TURN_DEG = 360.0
 
 
 @dataclass(frozen=True)
 class Carrier:
-    """What one carrier of a horizontal edge comes from, as ``lineage.carriers`` records it.
+    """What one carrier of a horizontal edge comes from, as the sidecar's ``carrier`` table records it.
 
-    ``kind`` is ``polygon_edge`` (a source polygon edge of ``entity``), ``family_member`` (a curve that
-    SGB generated for the cut family ``family``, named ``member``) or ``unknown``.
+    ``kind`` is ``source`` (a source curve of the layout, or a witness chord of one), ``band_member`` (a band
+    curve of the inset family ``family``), ``refinement`` (a segment of a refinement request) or ``unknown``.
+    A band member offsets the primitive at ``index`` of the support ring ``ring`` (an opaque id) in the way
+    ``role`` says; ``piece`` numbers the parts of a cap or corner cut into several, and is ``None`` for a whole
+    member.
     """
 
     id: str
     kind: str
-    entity: str | None = None
     family: str | None = None
-    member: str | None = None
+    ring: str | None = None
+    index: int | None = None
+    role: str | None = None
+    piece: int | None = None
 
 
 @dataclass(frozen=True)
@@ -67,13 +77,18 @@ class BuiltModel:
     ]  # native edge tag -> radius of its circle, micrometres
     face_kind: Mapping[str, str]  # face id -> "horizontal" or "wall"
     face_group: Mapping[str, str | None]
+    # face id -> the names of its Entities, band families and refinement requests
     face_sources: Mapping[str, tuple[str, ...]]
+    face_entities: Mapping[str, tuple[str, ...]]  # face id -> its Entities
     edge_carriers: Mapping[str, tuple[str, ...]]  # horizontal edge id -> carrier ids
     vertical_edges: Mapping[str, tuple[str, ...]]  # wall column id -> Entities
     carriers: Mapping[str, Carrier]
     band_margins: Mapping[
         str, tuple[float, ...]
     ]  # band family id -> margins, micrometres
+    entity_layers: Mapping[
+        str, tuple[str, ...]
+    ]  # Entity id -> the layers its prisms were drawn on
 
     def point(self, vertex: int) -> Point3:
         """Where native vertex ``vertex`` sits."""
@@ -127,75 +142,100 @@ class BuiltModel:
         )
 
 
-def read_built_model(sidecar: Mapping[str, Any]) -> BuiltModel:
-    """The built model recorded in a decoded ``scgsim.sgb.sidecar.v2`` sidecar."""
-    expected = _mapping(sidecar.get("expected"), "expected")
-    ids_by_tag = _mapping(
-        _mapping(sidecar.get("binding"), "binding").get("ids_by_tag"),
-        "binding.ids_by_tag",
-    )
-    lineage = _mapping(sidecar.get("lineage"), "lineage")
-    faces = _mapping(sidecar.get("faces"), "faces")
-    features = _list(sidecar.get("mesh_features"), "mesh_features")
+def read_built_model(sidecar: Sidecar) -> BuiltModel:
+    """The built model recorded in a sidecar the shared reader accepted (``features.read_features``)."""
+    expected = views.expected(sidecar)
+    by_tag = sidecar["binding"]["ids_by_tag"]
+    edges, faces = sidecar["edge"], sidecar["face"]
     return BuiltModel(
-        grid_um=float(sidecar["grid_um"]),
+        grid_um=float(sidecar["model"]["grid_um"]),
         vertices=tuple(
-            (float(x), float(y), float(z))
-            for x, y, z in _list(expected.get("vertices_um"), "expected.vertices_um")
+            (float(x), float(y), float(z)) for x, y, z in expected["vertices_um"]
         ),
-        edge_vertices=tuple(
-            (int(a), int(b))
-            for a, b in _list(expected.get("edge_vertices"), "expected.edge_vertices")
-        ),
-        face_edges=tuple(
-            tuple(int(e) for e in edges)
-            for edges in _list(expected.get("face_edges"), "expected.face_edges")
-        ),
-        face_areas=tuple(
-            float(a)
-            for a in _list(expected.get("face_area_um2"), "expected.face_area_um2")
-        ),
-        edge_ids=tuple(_list(ids_by_tag.get(str(_EDGE_DIM)), "edge ids")),
-        face_ids=tuple(_list(ids_by_tag.get(str(_FACE_DIM)), "face ids")),
+        edge_vertices=tuple((a, b) for a, b in expected["edge_vertices"]),
+        face_edges=tuple(tuple(edges_) for edges_ in expected["face_edges"]),
+        face_areas=tuple(float(a) for a in expected["face_area_um2"]),
+        edge_ids=tuple(by_tag["1"]),
+        face_ids=tuple(by_tag["2"]),
         arc_radius={
-            int(tag): float(entry["facts"]["radius_um"])
-            for entry in features
-            if entry.get("kind") == "arc"
-            for tag in entry["native_tags"]
+            tag: float(arc["radius_um"])
+            for tag, edge_id in enumerate(by_tag["1"], start=1)
+            if (arc := edges[edge_id]["arc"]) is not None
         },
-        face_kind={fid: str(record.get("kind")) for fid, record in faces.items()},
-        face_group={fid: record.get("group") for fid, record in faces.items()},
+        face_kind={fid: face["kind"] for fid, face in faces.items()},
+        face_group={fid: face["group"] for fid, face in faces.items()},
+        # The Entities and band families are two disjoint id sets; the face's sources are both, sorted.
+        # The sources by name, whatever their kind (an Entity may be named like a request).
         face_sources={
-            fid: tuple(sources)
-            for fid, sources in _mapping(lineage.get("faces"), "lineage.faces").items()
+            fid: tuple(
+                sorted(
+                    {
+                        *face["entities"],
+                        *face["families"],
+                        *face["refinements"],
+                        *face["cut_families"],
+                    }
+                )
+            )
+            for fid, face in faces.items()
         },
+        face_entities={fid: tuple(face["entities"]) for fid, face in faces.items()},
         edge_carriers={
-            eid: tuple(carriers)
-            for eid, carriers in _mapping(lineage.get("edges"), "lineage.edges").items()
+            eid: tuple(edge["carriers"])
+            for eid, edge in edges.items()
+            if edge["kind"] != _VERTICAL
         },
         vertical_edges={
-            eid: tuple(entities)
-            for eid, entities in _mapping(
-                lineage.get("vertical_edges"), "lineage.vertical_edges"
-            ).items()
+            eid: tuple(edge["entities"])
+            for eid, edge in edges.items()
+            if edge["kind"] == _VERTICAL
         },
-        carriers={
-            cid: Carrier(
-                cid,
-                str(record.get("kind")),
-                record.get("entity"),
-                record.get("family"),
-                record.get("member"),
-            )
-            for cid, record in _mapping(
-                lineage.get("carriers"), "lineage.carriers"
-            ).items()
-        },
+        carriers=_carriers(sidecar),
         band_margins={
-            str(entry["source"]): tuple(float(m) for m in entry["facts"]["margins_um"])
-            for entry in features
-            if entry.get("kind") == "band_boundary"
+            feature["source"]: tuple(float(m) for m in feature["facts"]["margins_um"])
+            for feature in views.mesh_features(sidecar)
+            if feature["kind"] == "band_boundary"
         },
+        entity_layers={
+            eid: tuple(sorted({p["layer"] for p in entity["prisms"] if p["layer"]}))
+            for eid, entity in sidecar["entity"].items()
+        },
+    )
+
+
+def _carriers(sidecar: Sidecar) -> dict[str, Carrier]:
+    """Every carrier of the sidecar; a band member's family, ring and place read from the support it names."""
+    place: dict[str, tuple[str, int]] = {}
+    for ring_id, ring in sidecar["support_ring"].items():
+        for index, primitive in enumerate(ring["primitives"]):
+            place[primitive] = (ring_id, index)
+    return {
+        cid: _carrier(cid, record, sidecar, place)
+        for cid, record in sidecar["carrier"].items()
+    }
+
+
+def _carrier(
+    cid: str,
+    record: CarrierRecord,
+    sidecar: Sidecar,
+    place: Mapping[str, tuple[str, int]],
+) -> Carrier:
+    if record["kind"] == "refinement":
+        return Carrier(cid, record["kind"], family=record["request"])
+    if record["kind"] == "family_member":
+        return Carrier(cid, record["kind"], family=record["family"])
+    if record["kind"] != "band_member":
+        return Carrier(cid, record["kind"])
+    ring, index = place[record["primitive"]]
+    return Carrier(
+        cid,
+        record["kind"],
+        family=sidecar["support_ring"][ring]["family"],
+        ring=ring,
+        index=index,
+        role=record["role"],
+        piece=record["piece"],
     )
 
 
@@ -457,15 +497,3 @@ def _centre(bounds: Bounds) -> Point3:
         (low[1] + high[1]) / 2,
         (low[2] + high[2]) / 2,
     )
-
-
-def _mapping(value: Any, what: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise SidecarError(f"sidecar {what} must be an object.")
-    return value
-
-
-def _list(value: Any, what: str) -> list[Any]:
-    if not isinstance(value, list):
-        raise SidecarError(f"sidecar {what} must be a list.")
-    return value

@@ -17,6 +17,7 @@ from sgb_inputs import (
 )
 
 import scgsim.geometry.sgb as sgb
+from scgsim.contracts.sgb_sidecar import read_sidecar, views
 from scgsim.geometry.sgb import SgbArtifacts, build_sgb_geometry
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
@@ -24,7 +25,7 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
     RefinementRequest,
 )
 from scgsim.geometry.sgb.errors import RouteError
-from scgsim.geometry.sgb.sidecar.files import read_sidecar, sidecar_schema
+from scgsim.geometry.sgb.sidecar.files import sidecar_schema
 from scgsim.geometry.sgb.verification import ocp
 from scgsim.geometry.sgb.verification.loaded import (
     LoadCheckError,
@@ -84,13 +85,13 @@ def test_a_real_input_gives_all_five_files_and_a_model_gmsh_accepts(
     assert not list(
         jsonschema.Draft202012Validator(sidecar_schema()).iter_errors(sidecar)
     )
-    assert sidecar["files"] == {
+    assert sidecar["model"]["files"] == {
         name: getattr(artifacts, name).name for name in ARTIFACT_NAMES
     }
     report = verify_xao(artifacts.xao, sidecar)
     assert report.ok, report.problems
     assert (
-        artifacts.counts["faces"] == sidecar["counts"]["faces"]
+        artifacts.counts["faces"] == sidecar["summary"]["counts"]["faces"]
         and artifacts.timings["write_xao"] >= 0
     )
     with gmsh_session(artifacts.xao):
@@ -103,15 +104,16 @@ def test_the_port_of_a_real_input_is_a_face_between_volumes_in_every_route(
 ):
     """The port of a real input is a face between two volumes in every route: it lies on a support plane."""
     b = read_sidecar(build(gds_input, "B", tmp_path / "b").sidecar)
-    (port,) = b["ports"]
+    (port,) = b["port"].values()
     assert port["port_index"] == 1 and port["direction"] == pytest.approx(
         [1.0, 0.0, 0.0]
     )
     # the port lies on the substrate top: a face between two volumes, never a free face
-    assert b["embedded_faces"] == [] and len(port["adjacent_volumes"]) == 2
+    assert views.embedded_faces(b) == [] and len(port["adjacent_volumes"]) == 2
     assert port["z_um"] == 0.0
     a = read_sidecar(build(films, "A", tmp_path / "a").sidecar)
-    assert a["embedded_faces"] == [] and len(a["ports"][0]["adjacent_volumes"]) == 2
+    (a_port,) = a["port"].values()
+    assert views.embedded_faces(a) == [] and len(a_port["adjacent_volumes"]) == 2
 
 
 def test_a_junction_input_builds_under_route_a(tmp_path):
@@ -132,10 +134,9 @@ def test_requests_for_bands_and_refinement_curves_reach_the_files(tmp_path, film
     except Exception as error:  # noqa: BLE001 -- name of the entity depends on the fixture; show it
         pytest.skip(f"fixture entity ids differ: {error}")
     sidecar = read_sidecar(artifacts.sidecar)
-    assert [i["request_id"] for i in sidecar["insets"]] == ["band_left"]
-    assert any(
-        name.startswith("chip/left::band=") for name in sidecar["physical_groups"]
-    )
+    assert list(sidecar["inset_request"]) == ["band_left"]
+    assert list(sidecar["refinement_request"]) == ["ref"]
+    assert any(name.startswith("chip/left::band=") for name in sidecar["group"])
     assert verify_xao(artifacts.xao, sidecar).ok
     assert MARGINS  # the shared margins are used by the other tests
 
@@ -224,7 +225,8 @@ def test_a_moved_vertex_is_found(loaded_pad):
     """A moved vertex is found."""
     artifacts, sidecar = loaded_pad
     tampered = copy.deepcopy(sidecar)
-    tampered["expected"]["vertices_um"][0][0] += 0.01
+    first_vertex = tampered["binding"]["ids_by_tag"]["0"][0]
+    tampered["vertex"][first_vertex]["position_um"][0] += 0.01
     assert any("vertex tags" in p for p in problems_with(artifacts, tampered))
 
 
@@ -232,8 +234,10 @@ def test_a_wrong_face_area_and_a_wrong_volume_are_found(loaded_pad):
     """A wrong face area and a wrong volume are found."""
     artifacts, sidecar = loaded_pad
     tampered = copy.deepcopy(sidecar)
-    tampered["expected"]["face_area_um2"][3] *= 1.001
-    tampered["expected"]["solid_volume_um3"][0] *= 0.99
+    fourth_face = tampered["binding"]["ids_by_tag"]["2"][3]
+    first_solid = tampered["binding"]["ids_by_tag"]["3"][0]
+    tampered["face"][fourth_face]["area_um2"] *= 1.001
+    tampered["volume"][first_solid]["volume_um3"] *= 0.99
     found = problems_with(artifacts, tampered)
     assert any("face area" in p for p in found) and any("volume" in p for p in found)
 
@@ -242,7 +246,9 @@ def test_a_wrong_boundary_is_found(loaded_pad):
     """A wrong boundary is found."""
     artifacts, sidecar = loaded_pad
     tampered = copy.deepcopy(sidecar)
-    tampered["expected"]["face_edges"][0] = tampered["expected"]["face_edges"][0][:-1]
+    loop = tampered["face"][tampered["binding"]["ids_by_tag"]["2"][0]]["loops"][0]
+    loop["edges"].pop()
+    loop["reversed"].pop()
     assert any("boundary mismatch" in p for p in problems_with(artifacts, tampered))
 
 
@@ -250,27 +256,33 @@ def test_a_group_with_the_wrong_member_or_tag_is_found(loaded_pad):
     """A group with the wrong member or tag is found."""
     artifacts, sidecar = loaded_pad
     tampered = copy.deepcopy(sidecar)
+    members = views.group_members(tampered)
     name = next(
-        n
-        for n, g in tampered["physical_groups"].items()
-        if g["dim"] == 2 and len(g["native_tags"]) > 1
+        n for n, g in tampered["group"].items() if g["dim"] == 2 and len(members[n]) > 1
     )
-    tampered["physical_groups"][name]["native_tags"].pop()
+    tampered["face"][members[name][-1]]["group"] = None
     assert any(
         "physical groups differ" in p for p in problems_with(artifacts, tampered)
     )
     tampered = copy.deepcopy(sidecar)
-    tampered["physical_groups"][name]["tag"] += 50
+    tampered["group"][name]["tag"] += 50
     assert any(
         "physical groups differ" in p for p in problems_with(artifacts, tampered)
     )
 
 
 def test_a_count_mismatch_is_found_and_raise_if_failed_stops_the_build(loaded_pad):
-    """A count mismatch is found and raise if failed stops the build."""
+    """A count mismatch is found and raise if failed stops the build.
+
+    The sidecar plans one face fewer than the XAO holds: its last face is gone from the binding, the face table
+    and the solids it bounds, as in the sidecar of a build that did not write it.
+    """
     artifacts, sidecar = loaded_pad
     tampered = copy.deepcopy(sidecar)
-    tampered["binding"]["ids_by_tag"]["2"] = tampered["binding"]["ids_by_tag"]["2"][:-1]
+    last = tampered["binding"]["ids_by_tag"]["2"].pop()
+    del tampered["face"][last]
+    for volume in tampered["volume"].values():
+        volume["faces"] = [f for f in volume["faces"] if f != last]
     report = verify_xao(artifacts.xao, tampered)
     assert any("entity counts" in p for p in report.problems)
     with pytest.raises(LoadCheckError, match="difference"):

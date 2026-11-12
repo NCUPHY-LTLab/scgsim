@@ -60,6 +60,7 @@ from OCP.TopTools import TopTools_IndexedMapOfShape
 from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
+from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
 from scgsim.geometry.sgb.emission.measures import rounded
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.exchange.guard import (
@@ -71,11 +72,11 @@ from scgsim.geometry.sgb.exchange.guard import (
     StepGuard,
     free_face_ids,
     guard_mismatches,
+    guard_model,
     guard_path_for,
     guarded_file,
     write_step_guard,
 )
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.sgb.verification.occt import read_shape, sidecar_mismatches
 from scgsim.geometry.sgb.verification.ocp import require_ocp
 
@@ -120,7 +121,7 @@ def export_aedt_step(
 
     Solids are matched to the sidecar in ``sidecar_file`` by tag order (the ``TopExp::MapShapes`` order of
     the file), so each gets the ``aedt_name`` of its planned volume.  A file that does not belong to the
-    sidecar (counts, vertex positions, face areas or solid volumes differ from its ``expected`` block) raises
+    sidecar (counts, vertex positions, face areas or solid volumes differ from its load-side view) raises
     :class:`StepExportError` before any name, STEP or guard is written, and so does a file whose solids do
     not carry exactly their planned faces (:func:`~scgsim.geometry.sgb.exchange.guard.guard_mismatches`,
     the check the reader repeats).  The guard ``<STEP file name>.guard.json``
@@ -141,7 +142,7 @@ def export_aedt_step(
         )
     solids = _indexed(shape, TopAbs_SOLID)
     solid_ids = sidecar["binding"]["ids_by_tag"]["3"]
-    names = [sidecar["volumes"][vid]["aedt_name"] for vid in solid_ids]
+    names = [_aedt_name(sidecar, vid) for vid in solid_ids]
     faces = _FaceIndex(
         _indexed(shape, TopAbs_FACE), sidecar["binding"]["ids_by_tag"]["2"]
     )
@@ -155,7 +156,7 @@ def export_aedt_step(
     ]
     free_ids = set(free_face_ids(sidecar, solid_ids))
     free_faces = [
-        faces.free_face(face, sidecar["faces"][fid]["group"])
+        faces.free_face(face, sidecar["face"][fid]["group"])
         for face, fid in faces.in_tag_order()
         if fid in free_ids
     ]
@@ -172,8 +173,8 @@ def export_aedt_step(
     guard: StepGuard = {
         "schema": GUARD_SCHEMA,
         "unit": LENGTH_UNIT,
-        "route": sidecar["route"],
-        "model": sidecar["model"],
+        "route": sidecar["model"]["route"],
+        "model": guard_model(sidecar),
         "files": {
             "step": guarded_file(step_path, guard_path.parent),
             "geometry": guarded_file(geometry_file, guard_path.parent),
@@ -184,6 +185,14 @@ def export_aedt_step(
     }
     write_step_guard(guard_path, guard)
     return StepExport(step_path, guard_path, guard)
+
+
+def _aedt_name(sidecar: Sidecar, solid: str) -> str:
+    """The AEDT name the sidecar gives an emitted solid (only an unemitted volume has none)."""
+    name = sidecar["volume"][solid]["aedt_name"]
+    if name is None:
+        raise StepExportError(f"the sidecar gives the solid {solid} no AEDT name")
+    return name
 
 
 def _indexed(shape: Any, kind: Any) -> Any:

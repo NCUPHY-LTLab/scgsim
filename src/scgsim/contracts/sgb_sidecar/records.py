@@ -1,124 +1,183 @@
-"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v2``: every section and record, as a ``TypedDict``.
+"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v3``: every table and record, as a ``TypedDict``.
 
-Owns the shape of the file: its sections, the fields of each record, their types, enums and bounds, and
-which records accept more keys.  It is the one definition the JSON Schema is derived from (:mod:`.schema`)
-and the shared reader checks against (:mod:`.read`).  The writer is ``scgsim.geometry.sgb.sidecar``; what
-each section means for SGB and for its readers is documented there.
+Owns the shape of the file: its tables, the fields of each record, their types, enums and bounds, the table
+each id names, and which records accept more keys.  The value types and the ids of each table are in :mod:`.values`, and the
+mesh-feature records in :mod:`.features`.  It is the one definition the JSON Schema is derived from
+(:mod:`.schema`) and the shared reader checks against (:mod:`.read`, :mod:`.references`).  The writer is
+``scgsim.geometry.sgb.sidecar``; what each table means for SGB and for its readers is documented there.
+
+The sidecar has three layers, each a set of tables ``{id: record}``.  *Sources* are what the layout drew and
+asked for (``entity``, ``source_curve``, ``inset_request``, ``refinement_request``, ``port``).  *Derived* are
+what SGB computed from them (``cut_family``, ``band_family``, ``support_ring``, ``support_primitive``,
+``carrier``).  *Emitted*
+are the shapes that entered the model and what is said about them (``vertex``, ``edge``, ``face``, ``volume``,
+``group``, ``surface_epr_row``, ``mesh_feature``).  A record names a record of another table by its id, and the
+field's type says which table (``Ref``, :mod:`.markers`); the shared reader checks that every such id is a key
+of that table.  Ids are opaque: a reader compares them and looks them up, and never reads anything out of one.
+Each fact is stored once; orderings and copies a reader needs, such as anything by native tag, are computed
+from the tables by :mod:`.views`.
 
 Every record is closed (a key it does not declare makes the sidecar invalid) except the two marked
 ``@open_record``: ``counts`` and ``slivers``.  A record's docstring is its description in the schema, and
 ``Doc`` describes a field.  The module uses no ``Required``: Python does not see it in a postponed annotation,
 so a record with optional fields declares its required ones in a base and the rest in a ``total=False``
-subclass (``Carrier``).
+subclass.
 
 Terms.  A *planned id* is SGB's id of a vertex, edge, face or volume; its *native tag* is the Gmsh tag of that
-shape in the written XAO, 1 + the id's position in ``binding.ids_by_tag``.  Interface types: ``MA``
-metal-air, ``MS`` metal-substrate, ``MM`` metal-metal, ``SA`` substrate-air, ``AA`` air-air, ``SS``
-substrate-substrate, ``SHEET`` a Route A conductor sheet, ``PORT`` a lumped-port sheet, ``EXT`` the model
-boundary.
+shape in the written XAO, 1 + the id's position in ``binding.ids_by_tag``.  An *Entity* is one object of the
+layout (a conductor, a dielectric, the vacuum, a lumped-port sheet).  Interface types: ``MA`` metal-air, ``MS``
+metal-substrate, ``MM`` metal-metal, ``SA`` substrate-air, ``AA`` air-air, ``SS`` substrate-substrate, ``SHEET``
+a Route A conductor sheet, ``PORT`` a lumped-port sheet, ``EXT`` the model boundary.
 """
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Literal, TypedDict
 
+from .features import MeshFeature
 from .markers import (
     Doc,
-    ExclusiveMinimum,
     Length,
-    Minimum,
     MinProperties,
     Pattern,
     open_record,
 )
+from .values import (
+    BandedFaceKind,
+    BandFamilyRef,
+    BandMemberRole,
+    BoxSide,
+    CarrierRef,
+    ConductorSide,
+    Count,
+    CutFamilyRef,
+    EdgeRef,
+    EntityKind,
+    EntityRef,
+    FaceKind,
+    FaceRef,
+    IdList,
+    InterfaceType,
+    NonNegative,
+    PlanePoint,
+    Positive,
+    PositiveInt,
+    RefinementRequestRef,
+    Route,
+    RowSide,
+    Segment,
+    SheetSide,
+    SidecarFile,
+    SolutionKind,
+    SourceCurveRef,
+    SpacePoint,
+    SupportPrimitiveRef,
+    SupportRingRef,
+    SurfaceEprType,
+    SurfaceGroupRef,
+    Tag,
+    VertexRef,
+    VolumeGroupRef,
+    VolumeKind,
+    VolumeRef,
+    ZRange,
+)
 from .version import SidecarVersion
-
-# --------------------------------------------------------------------------- values
-
-IdList = list[str]  # planned ids, or group or Entity names
-PositiveInt = Annotated[int, Minimum(1)]
-Tag = PositiveInt  # a native tag (or a physical-group tag): never 0
-TagList = list[Tag]
-Count = Annotated[int, Minimum(0)]
-Positive = Annotated[float, ExclusiveMinimum(0)]
-NonNegative = Annotated[float, Minimum(0)]
-PlanePoint = Annotated[list[float], Length(2, 2)]  # (x, y) um
-SpacePoint = Annotated[list[float], Length(3, 3)]  # (x, y, z) um
-ZRange = Annotated[list[float], Length(2, 2)]  # (lowest, highest) z um
-GroupLists = dict[str, IdList]  # a key -> primary group names
-
-Route = Literal["A", "B", "C"]
-VolumeKind = Literal["vacuum", "dielectric", "conductor"]
-SolutionKind = Literal["vacuum", "dielectric"]
-FaceKind = Literal["top", "bottom", "sidewall", "sheet", "port", "interface"]
-InterfaceType = Literal["MA", "MS", "MM", "SA", "AA", "SS", "SHEET", "PORT", "EXT"]
-SurfaceEprType = Literal["MA", "MS", "SA"]
-SheetSide = Literal["above", "below", "both"]
-RowSide = Literal["above", "below", "both", "mixed"]
-SidecarFile = Literal["xao", "brep", "sidecar", "sliver_report", "validation_report"]
-CarrierKind = Literal["polygon_edge", "family_member", "unknown"]
-BandedFaceKind = Literal["sheet", "top", "bottom", "interface"]
-
 
 # --------------------------------------------------------------------------- the document
 
 
 class Sidecar(TypedDict):
-    """Sidecar of the SGB XAO/BREP: planned ids bound to native tags by construction order, primary physical
-    groups with their semantic facts, unions, embeddings, lineage and the load-side expectations."""
+    """Sidecar of the SGB XAO/BREP: the model, the binding of planned ids to native tags, a summary, and the
+    tables of sources, derived curves and emitted shapes, linked by typed ids."""
 
     schema: SidecarVersion
+    model: Model
+    binding: Binding
+    summary: Summary
+    entity: Annotated[dict[str, Entity], Doc("Sources: every Entity, by Entity id.")]
+    source_curve: Annotated[
+        dict[str, SourceCurve],
+        Doc(
+            "Sources: every straight edge and circular arc of every Entity outline, by carrier id."
+        ),
+    ]
+    inset_request: Annotated[
+        dict[str, InsetRequest],
+        Doc("Sources: the inset requests as given, by request id."),
+    ]
+    refinement_request: Annotated[
+        dict[str, RefinementRequest],
+        Doc("Sources: the refinement requests as given, by request id."),
+    ]
+    port: Annotated[
+        dict[str, Port], Doc("Sources: the lumped-port sheets, by port sheet id.")
+    ]
+    cut_family: Annotated[
+        dict[str, CutFamily],
+        Doc(
+            "Derived: every cut family by id (band, refinement and any other role), with every family a carrier"
+            " names."
+        ),
+    ]
+    band_family: Annotated[
+        dict[str, BandFamily],
+        Doc("Derived: one band family per banded face, by family id."),
+    ]
+    support_ring: Annotated[
+        dict[str, SupportRing],
+        Doc("Derived: the boundary rings of each band family's support region."),
+    ]
+    support_primitive: Annotated[
+        dict[str, SupportPrimitive],
+        Doc("Derived: the exact primitives (lines and arcs) of each support ring."),
+    ]
+    carrier: Annotated[
+        dict[str, Carrier],
+        Doc(
+            "Derived: every carrier an emitted horizontal or refinement edge lies on, and what it comes from."
+        ),
+    ]
+    vertex: Annotated[dict[str, Vertex], Doc("Emitted: every written vertex.")]
+    edge: Annotated[dict[str, Edge], Doc("Emitted: every written edge.")]
+    face: Annotated[dict[str, Face], Doc("Emitted: every written face.")]
+    volume: Annotated[
+        dict[str, Volume],
+        Doc("Emitted: every planned volume, the written solids marked emitted."),
+    ]
+    group: Annotated[
+        dict[str, SurfaceGroup | VolumeGroup],
+        Doc(
+            "Emitted: the primary physical groups by name; they partition each dimension.  A face or volume"
+            " names its group; the members of a group are computed from them."
+        ),
+    ]
+    surface_epr_row: Annotated[
+        dict[str, SurfaceEprRow],
+        Doc("Emitted: every Surface-EPR row and the group that carries it, by row id."),
+    ]
+    mesh_feature: Annotated[
+        dict[str, MeshFeature],
+        Doc(
+            "Emitted: facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs,"
+            " refinement curves, port edges.  Their order is computed (by kind, source and facts)."
+        ),
+    ]
+
+
+# --------------------------------------------------------------------------- the model, binding and summary
+
+
+class Model(TypedDict):
+    """The model's name and identity digest, its route, grid and tolerance, and the files written beside it."""
+
+    name: str
+    identity_digest: Annotated[str, Pattern("^model:[0-9a-f]{16}$")]
     route: Route
     route_policy: RoutePolicy
     grid_um: Positive
     tolerance_um: Positive
-    model: ModelIdentity
     files: Annotated[dict[SidecarFile, str], Doc("File names relative to the sidecar.")]
-    binding: Binding
-    counts: Counts
-    physical_groups: Annotated[
-        dict[str, SurfaceGroup | VolumeGroup],
-        Doc("Primary physical groups by name; they partition each dimension."),
-    ]
-    unions: Unions
-    surface_epr_rows: dict[str, SurfaceEprRow]
-    volumes: dict[str, Volume]
-    faces: dict[str, Face]
-    embedded_faces: Annotated[
-        list[EmbeddedFace],
-        Doc(
-            "Sheets inside an emitted volume; the mesher embeds each face in its host volume."
-        ),
-    ]
-    refinement_edges: Annotated[
-        list[RefinementEdge],
-        Doc("Refinement-only curves; the mesher embeds each edge in its host face."),
-    ]
-    mesh_features: Annotated[
-        list[MeshFeature],
-        Doc(
-            "Facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs, refinement"
-            " curves, port edges. Sorted by kind, source and canonical JSON of the facts."
-        ),
-    ]
-    ports: list[Port]
-    lineage: Lineage
-    insets: Annotated[
-        list[InsetFace | InsetType],
-        Doc(
-            "The inset requests as given, by request id.  A concrete request is the record of its face; a"
-            " type-level request lists the faces it was expanded into and the faces it skipped."
-        ),
-    ]
-    refinements: list[Refinement]
-    slivers: SliverSummary
-    arrangement: Arrangement
-    curved_wall_faces: IdList
-    surface_kinds: SurfaceKinds
-    expected: Expected
-
-
-# --------------------------------------------------------------------------- provenance and binding
 
 
 class RoutePolicy(TypedDict):
@@ -128,24 +187,38 @@ class RoutePolicy(TypedDict):
     conductor_sheets: bool
 
 
-class ModelIdentity(TypedDict):
-    """The model's name and identity digest."""
-
-    name: str
-    identity_digest: Annotated[str, Pattern("^model:[0-9a-f]{16}$")]
-
-
 class Binding(TypedDict):
     """Planned id <-> native tag per dimension, and the rule that relates them."""
 
     rule: str
     ids_by_tag: Annotated[
         IdsByTag,
-        Doc("Planned ids per dimension in native-tag order: tag = 1 + position."),
+        Doc(
+            "Planned ids per dimension in native-tag order: tag = 1 + position.  They are exactly the ids of"
+            " the vertex, edge and face tables and of the emitted volumes."
+        ),
     ]
 
 
-IdsByTag = TypedDict("IdsByTag", {"0": IdList, "1": IdList, "2": IdList, "3": IdList})
+IdsByTag = TypedDict(
+    "IdsByTag",
+    {
+        "0": list[VertexRef],
+        "1": list[EdgeRef],
+        "2": list[FaceRef],
+        "3": list[VolumeRef],
+    },
+)
+
+
+class Summary(TypedDict):
+    """Counts of the written file, the sliver report's summary and the number of arc edges, each once."""
+
+    counts: Counts
+    slivers: SliverSummary
+    arc_edges: Annotated[
+        Count, Doc("The arc edges of the planned topology, written or not.")
+    ]
 
 
 @open_record(Count)
@@ -167,7 +240,428 @@ class Counts(TypedDict):
     volumes_total: Count
 
 
-# --------------------------------------------------------------------------- groups and Surface EPR
+@open_record()
+class SliverSummary(TypedDict, total=False):
+    """Summary of the sliver report (measurements only; decision D2), with the snap drift and arc deviation of
+    the arrangement in grid units."""
+
+    shortest_edge_um: float | None
+    narrowest_face_um: float | None
+    smallest_angle_deg: float | None
+    thin_slab_count: int
+    max_snap_drift_grid: float | None
+    max_arc_deviation_grid: float | None
+
+
+# --------------------------------------------------------------------------- sources
+
+
+class Entity(TypedDict):
+    """One Entity of the layout: the prisms it is drawn as, one per polygon, in catalogue order."""
+
+    prisms: Annotated[list[EntityPrism], Length(min_items=1)]
+
+
+class EntityPrism(TypedDict):
+    """One prism (polygon) of an Entity: what it is made of, its Net, the layer it was drawn on, its z range and
+    feature kind.  The prisms of one Entity may differ in any of these."""
+
+    polygon: Count
+    kind: EntityKind
+    material: str
+    net: str | None
+    layer: Annotated[
+        str | None,
+        Doc(
+            "The source layer: its logical level id, else its GDS layer/datatype; null when the prism has"
+            " none (the vacuum, a substrate, a scene drawn directly as SGB records)."
+        ),
+    ]
+    z_um: ZRange
+    feature_kind: Annotated[
+        str | None,
+        Doc(
+            "The physical declaration's feature kind (stack_film, local_film, finite_volume); null without one."
+        ),
+    ]
+
+
+class SourceCurve(TypedDict):
+    """One straight edge or circular arc of an Entity outline as the layout drew it: where it lies in the
+    outline (polygon, ring, edge number), its exact curve and its length."""
+
+    entity: EntityRef
+    polygon: Count
+    ring: Count
+    edge: Count
+    curve: LineCurve | ArcCurve
+    length_um: NonNegative
+
+
+class LineCurve(TypedDict):
+    """A straight curve from start to end."""
+
+    kind: Literal["line"]
+    start_um: PlanePoint
+    end_um: PlanePoint
+
+
+class ArcCurve(TypedDict):
+    """A circular arc from start to end about a centre, counter-clockwise or not."""
+
+    kind: Literal["arc"]
+    centre_um: PlanePoint
+    radius_um: Positive
+    ccw: bool
+    start_um: PlanePoint
+    end_um: PlanePoint
+
+
+class InsetRequest(TypedDict):
+    """An inset request as given: the face it names (scope face) or the Surface-EPR type it asks for (scope
+    type), its margins, the band families it became and the faces it left unbanded."""
+
+    scope: Literal["face", "type"]
+    support: FaceSupport | InterfaceSupport | TypeSupport
+    interface: str | None
+    margins_um: list[Positive]
+    families: Annotated[
+        list[BandFamilyRef],
+        Doc(
+            "The band families the request became: a face request's own family, or the families the physical"
+            " pre-pass created for a type-level request, in face order.  A port placed later can cover a whole"
+            " face: read whether a family has bands from its own bands and from surface_epr_row."
+        ),
+    ]
+    skipped: Annotated[
+        list[SkippedFace],
+        Doc("The faces a type-level request left unbanded (empty for a face request)."),
+    ]
+
+
+class FaceSupport(TypedDict):
+    """A conductor face: the Entity and its side."""
+
+    entity: EntityRef
+    side: ConductorSide
+
+
+class InterfaceSupport(TypedDict):
+    """The interface between two solution regions, at one height or (null) wherever they meet."""
+
+    first_entity: EntityRef
+    second_entity: EntityRef
+    z_um: float | None
+
+
+class TypeSupport(TypedDict):
+    """The faces a type-level request asks for: a Surface-EPR type, optionally only some face kinds, without
+    the excluded Entities."""
+
+    interface_type: SurfaceEprType
+    face_kinds: list[BandedFaceKind] | None
+    exclude_entity_ids: IdList
+
+
+class SkippedFace(TypedDict):
+    """A face a type-level request left unbanded, and why."""
+
+    support: FaceSupport | InterfaceSupport
+    reason: Literal["no_gap_edge"]
+
+
+class RefinementRequest(TypedDict):
+    """A refinement family: the request as given (a polyline along which the mesher refines) and the segments SGB
+    drew from it, which are its carriers.  The heights they are drawn at are the family's levels (``cut_family``)."""
+
+    points_um: Annotated[
+        list[PlanePoint] | None,
+        Doc(
+            "The polyline as the request gave it; null for a family a catalogue declares directly, with no request."
+        ),
+    ]
+    segments_um: Annotated[
+        list[Segment],
+        Doc(
+            "Each segment of the family, start and end, in carrier order: a repeated point draws none, and"
+            " segments a catalogue declares are kept as they are, joined or not."
+        ),
+    ]
+
+
+class Port(TypedDict):
+    """A lumped-port sheet: the authored identity, its Entity, and the faces and volumes that carry it."""
+
+    entity: EntityRef
+    group: SurfaceGroupRef
+    source_name: str
+    port_index: int
+    direction: list[float]
+    host_entity_ids: list[EntityRef]
+    source_layer: str
+    target_layer: str
+    z_um: float
+    faces: list[FaceRef]
+    host_volumes: list[VolumeRef]
+    adjacent_volumes: list[VolumeRef]
+
+
+# --------------------------------------------------------------------------- derived
+
+
+class CutFamily(TypedDict):
+    """A named set of curves SGB adds to the arrangement: its semantic role, whether its curves split cells
+    (``required``) or are only embedded (``refinement_only``), and every level they are drawn at.  A family that a
+    carrier names but the catalogue does not hold has no role, policy or levels."""
+
+    role: str | None
+    edge_policy: Literal["required", "refinement_only"] | None
+    levels_um: Annotated[
+        list[float],
+        Doc("Every height the family's curves are drawn at, in the family's order."),
+    ]
+
+
+class BandFamily(TypedDict):
+    """One band family: the face an inset request bands, its margins (also in model-grid units, the identity a
+    margin is looked up by), the area of its support region and the groups of each band."""
+
+    support: FaceSupport | InterfaceSupport
+    interface: str | None
+    margins_um: list[Positive]
+    margins_grid: list[PositiveInt]
+    band_count: PositiveInt
+    support_area_um2: float | None
+    bands: Annotated[
+        dict[str, IdList],
+        Doc(
+            "Band index -> the primary groups of the faces in that band.  In Route B a family also names the"
+            " MM group of a metal-metal contact, which is not a physical group, so these names are not checked."
+        ),
+    ]
+
+
+class SupportRing(TypedDict):
+    """One boundary ring of a band family's support region (interior on the left): its primitives in order, so
+    their count is the ring's size."""
+
+    family: BandFamilyRef
+    index: Annotated[Count, Doc("The ring's position among the region's rings.")]
+    primitives: list[SupportPrimitiveRef]
+
+
+class SupportPrimitive(TypedDict):
+    """One exact primitive of a support ring: its curve and length, whether bands are measured from it (a
+    distance origin), whether it lies on the die edge, and the source curves it lies on."""
+
+    ring: SupportRingRef
+    curve: LineCurve | ArcCurve
+    length_um: NonNegative
+    origin: bool
+    die_edge: bool
+    sources: Annotated[
+        list[SourceCurveRef],
+        Doc(
+            "The source curves drawn along the primitive, one per Entity whose outline runs there (a ground"
+            " edge on the die outline also carries the substrate and vacuum edges)."
+        ),
+    ]
+
+
+class SourceCarrier(TypedDict):
+    """A carrier that is a source curve, or a witness chord of one."""
+
+    kind: Literal["source"]
+    source_curve: SourceCurveRef
+
+
+class BandMemberCarrier(TypedDict):
+    """A band curve of an inset family: the support primitive it follows, how, and at which margin.
+
+    ``edge`` offsets the primitive; ``corner`` turns round the reflex vertex after it (to the next primitive of
+    its ring); ``capstart`` and ``capend`` close round its start or end.  ``piece`` numbers the parts of a cap or
+    corner cut into several, and is null for a member in one piece."""
+
+    kind: Literal["band_member"]
+    primitive: SupportPrimitiveRef
+    role: BandMemberRole
+    margin_grid: PositiveInt
+    piece: Count | None
+
+
+class RefinementCarrier(TypedDict):
+    """A segment of a refinement request's polyline."""
+
+    kind: Literal["refinement"]
+    request: RefinementRequestRef
+
+
+class FamilyMemberCarrier(TypedDict):
+    """A curve of a cut family that is neither a band curve on a support primitive nor a refinement segment: the
+    family its lineage names and the member name it was given (an opaque label)."""
+
+    kind: Literal["family_member"]
+    family: CutFamilyRef
+    member: str
+
+
+class UnknownCarrier(TypedDict):
+    """A carrier whose origin SGB does not know."""
+
+    kind: Literal["unknown"]
+
+
+Carrier = (
+    SourceCarrier
+    | BandMemberCarrier
+    | RefinementCarrier
+    | FamilyMemberCarrier
+    | UnknownCarrier
+)
+
+
+# --------------------------------------------------------------------------- emitted
+
+
+class Vertex(TypedDict):
+    """One written vertex."""
+
+    position_um: SpacePoint
+
+
+class Edge(TypedDict):
+    """One written edge: its kind, its two vertices, its arc (null for a line), its length, and what it comes
+    from: the carriers of a horizontal or refinement edge, the Entities whose walls stand on a vertical one."""
+
+    kind: Literal["horizontal", "vertical", "refinement"]
+    vertices: Annotated[list[VertexRef], Length(2, 2)]
+    arc: EdgeArc | None
+    length_um: NonNegative
+    carriers: list[CarrierRef]
+    entities: list[EntityRef]
+    written_as_free_edge: bool
+
+
+class EdgeArc(TypedDict):
+    """The circle an arc edge was written on."""
+
+    centre_um: PlanePoint
+    radius_um: Positive
+    ccw: Annotated[
+        bool, Doc("The direction of travel from the first vertex to the second.")
+    ]
+
+
+class Face(TypedDict):
+    """One written face: its group, kind, face kind, z range, the volumes on its two sides, its written loops and
+    area, and what it comes from."""
+
+    group: SurfaceGroupRef | None
+    kind: Literal["horizontal", "wall"]
+    face_kind: FaceKind
+    z_um: ZRange
+    negative_volume: VolumeRef | None
+    positive_volume: VolumeRef | None
+    loops: Annotated[
+        list[Loop], Length(min_items=1), Doc("The written wires of the face.")
+    ]
+    area_um2: Positive
+    curved: Annotated[bool, Doc("A wall on a cylinder.")]
+    entities: Annotated[
+        list[EntityRef],
+        Doc(
+            "The Entities whose outlines bound the face, from the source carriers of its edges."
+        ),
+    ]
+    families: Annotated[
+        list[BandFamilyRef],
+        Doc(
+            "The band families whose curves bound the face, from its band-member carriers."
+        ),
+    ]
+    refinements: Annotated[
+        list[RefinementRequestRef],
+        Doc("The refinement requests whose segments lie on its boundary edges."),
+    ]
+    cut_families: Annotated[
+        list[CutFamilyRef],
+        Doc("The other cut families whose members lie on its boundary edges."),
+    ]
+    membership: Annotated[
+        dict[EntityRef, NonNegative],
+        Doc(
+            "Entity -> covered fraction of the face area; non-exclusive, may sum to more than 1 (walls use the"
+            " share of their bottom boundary length)."
+        ),
+    ]
+    bands: Annotated[
+        list[BandLabel], Doc("The inset band labels of the face, in label order.")
+    ]
+    embedded_edges: Annotated[
+        list[EdgeRef],
+        Doc("Refinement-only curves the mesher embeds in this face, in order."),
+    ]
+    outer_boundary: Annotated[
+        OuterBoundary | None,
+        Doc(
+            "For a face on the model's outer boundary (one side volume is null): where it lies; null for every"
+            " other face."
+        ),
+    ]
+
+
+class OuterBoundary(TypedDict):
+    """Where a face on the model's outer boundary lies: the side of the model's box and the domain it bounds.
+
+    The box is the extent of the written vertices.  A planar face whose vertices all lie on one of its six
+    planes is on that side: ``-x`` and ``+x`` the lowest and highest x, ``-y`` and ``+y`` likewise, ``bottom``
+    and ``top`` the lowest and highest z.  A face on none of them (a curved wall, or a die edge that is not
+    parallel to an axis) has no side."""
+
+    side: BoxSide | None
+    domain: Annotated[
+        EntityRef,
+        Doc("The Entity of the volume on the face's other side, inside the model."),
+    ]
+
+
+class Loop(TypedDict):
+    """One written wire: its edges in order, and whether each is travelled against its own direction."""
+
+    edges: Annotated[list[EdgeRef], Length(min_items=1)]
+    reversed: list[bool]
+
+
+class BandLabel(TypedDict):
+    """An inset band: the band family and the band index."""
+
+    family: BandFamilyRef
+    index: Count
+
+
+class Volume(TypedDict):
+    """One planned volume: its Entity and domain, whether it is emitted, its group, shells, planned volume and
+    AEDT name, the faces of the written solid and the sheets embedded in it."""
+
+    entity: EntityRef
+    kind: VolumeKind
+    material: str
+    net: str | None
+    emitted: bool
+    group: VolumeGroupRef | None
+    shells: PositiveInt
+    volume_um3: float
+    aedt_name: Annotated[str, Pattern("^[A-Za-z0-9_]+$")] | None
+    faces: Annotated[
+        list[FaceRef],
+        Doc("The faces of the written solid in tag order; empty when not emitted."),
+    ]
+    embedded_faces: Annotated[
+        list[FaceRef],
+        Doc(
+            "Sheets inside the emitted volume that bound no shell; the mesher embeds each, in order."
+        ),
+    ]
 
 
 class SurfaceGroup(TypedDict):
@@ -182,9 +676,7 @@ class SurfaceGroup(TypedDict):
             " sheet, whose group is named by the bare entity id."
         ),
     ]
-    ids: IdList
-    native_tags: TagList
-    entities: IdList
+    entities: list[EntityRef]
     net: str | None
     face_kind: Annotated[
         FaceKind,
@@ -193,23 +685,23 @@ class SurfaceGroup(TypedDict):
         ),
     ]
     adjacent_domains: list[AdjacentDomain]
-    adjacent_volumes: IdList
-    band: BandLabel | None
+    adjacent_volumes: list[VolumeRef]
+    band: GroupBand | None
     area_um2: NonNegative
 
 
 class AdjacentDomain(TypedDict):
     """A solution region (vacuum or dielectric) on a side of the group's faces."""
 
-    name: str
+    name: EntityRef
     kind: SolutionKind
     material: str
 
 
-class BandLabel(TypedDict):
+class GroupBand(TypedDict):
     """The inset band a group's faces lie in: the band family and the band index."""
 
-    family: str
+    family: BandFamilyRef
     index: Count
 
 
@@ -219,27 +711,18 @@ class VolumeGroup(TypedDict):
     dim: Literal[3]
     tag: Tag
     interface_type: None
-    ids: IdList
-    native_tags: TagList
-    entities: IdList
+    entities: list[EntityRef]
     kind: VolumeKind
     material: str
     net: str | None
 
 
-class Unions(TypedDict):
-    """Unions of primary groups as lists of group names: by interface type, and by Net (exposed conductor surfaces)."""
-
-    interface_types: GroupLists
-    nets: GroupLists
-
-
 class SurfaceEprRow(TypedDict):
     """One Surface-EPR row and the primary group that carries it."""
 
-    group: str
+    group: SurfaceGroupRef
     interface_type: SurfaceEprType
-    entities: IdList
+    entities: list[EntityRef]
     band: Count | None
     side: Annotated[
         RowSide | None,
@@ -249,304 +732,15 @@ class SurfaceEprRow(TypedDict):
         ),
     ]
     face_sides: Annotated[
-        Annotated[dict[str, SheetSide], MinProperties(1)] | None,
+        Annotated[dict[FaceRef, SheetSide], MinProperties(1)] | None,
         Doc(
             "A sheet row: face id -> the side of that face whose neighbour (vacuum for MA, dielectric for MS) the"
             " row integrates, listing exactly the faces that have such a neighbour; null for any other row."
         ),
     ]
     shared_face_group: Annotated[
-        str | None,
+        SurfaceGroupRef | None,
         Doc(
             "The sheet group for a sheet row (its MA and MS rows integrate the same two-sided face), else null."
         ),
     ]
-
-
-# --------------------------------------------------------------------------- planned volumes and faces
-
-
-class Volume(TypedDict):
-    """One planned volume: its domain, whether it is emitted, its group, shells, planned volume and AEDT name."""
-
-    entity: str
-    kind: VolumeKind
-    material: str
-    net: str | None
-    emitted: bool
-    group: str | None
-    shells: PositiveInt
-    volume_um3: float
-    aedt_name: Annotated[str, Pattern("^[A-Za-z0-9_]+$")] | None
-
-
-class Face(TypedDict):
-    """One planned face: its group, kind, face kind, z range and the volumes on its two sides."""
-
-    group: str | None
-    kind: Literal["horizontal", "wall"]
-    face_kind: FaceKind
-    z_um: ZRange
-    negative_volume: str | None
-    positive_volume: str | None
-
-
-class EmbeddedFace(TypedDict):
-    """A sheet face inside an emitted volume, and its group."""
-
-    face: str
-    host_volume: str
-    group: str | None
-
-
-class RefinementEdge(TypedDict):
-    """A refinement-only edge in its host face, its cut family, and whether it is written as a free edge."""
-
-    edge: str
-    host_face: str
-    family: str | None
-    written_as_free_edge: bool
-
-
-# --------------------------------------------------------------------------- mesh features
-
-
-class _MeshFeatureEdges(TypedDict):
-    """The edges every mesh feature covers, by planned id and by native tag."""
-
-    edges: Annotated[IdList, Length(min_items=1)]
-    native_tags: Annotated[TagList, Length(min_items=1)]
-
-
-class FilmSidewall(_MeshFeatureEdges):
-    """Every edge of the sidewall faces of a finite body; thickness_um is the z extent of the sidewall column."""
-
-    kind: Literal["film_sidewall"]
-    source: Annotated[str, Doc("The entity id of the body.")]
-    facts: FilmSidewallFacts
-
-
-class FilmSidewallFacts(TypedDict):
-    """The facts of a film sidewall."""
-
-    thickness_um: Positive
-
-
-class BandBoundary(_MeshFeatureEdges):
-    """The edges of an inset family; margins_um are the request's margins, ascending, and narrowest_band_um the
-    smallest difference between consecutive margins with 0 prepended."""
-
-    kind: Literal["band_boundary"]
-    source: Annotated[str, Doc("The inset request id.")]
-    facts: BandBoundaryFacts
-
-
-class BandBoundaryFacts(TypedDict):
-    """The facts of a band boundary."""
-
-    margins_um: Annotated[list[Positive], Length(min_items=1)]
-    narrowest_band_um: Positive
-
-
-class ArcFeature(_MeshFeatureEdges):
-    """The circular-arc edges of one carrier radius."""
-
-    kind: Literal["arc"]
-    source: Annotated[
-        str | None,
-        Doc("The one entity that owns the arcs; null when no single entity does."),
-    ]
-    facts: ArcFacts
-
-
-class ArcFacts(TypedDict):
-    """The facts of an arc feature."""
-
-    radius_um: Positive
-
-
-class RefinementCurve(_MeshFeatureEdges):
-    """The refinement-only curves of a refinement request."""
-
-    kind: Literal["refinement_curve"]
-    source: Annotated[str, Doc("The refinement request id.")]
-    facts: NoFacts
-
-
-class PortEdge(_MeshFeatureEdges):
-    """The boundary edges of the faces of a lumped-port sheet."""
-
-    kind: Literal["port_edge"]
-    source: Annotated[str, Doc("The port sheet id.")]
-    facts: NoFacts
-
-
-class NoFacts(TypedDict):
-    """The facts of a feature kind that has none: an empty object."""
-
-
-MeshFeature = FilmSidewall | BandBoundary | ArcFeature | RefinementCurve | PortEdge
-
-
-# --------------------------------------------------------------------------- ports
-
-
-class Port(TypedDict):
-    """A lumped-port sheet: the authored identity, and the faces and volumes that carry it in the model."""
-
-    port_sheet_id: str
-    group: str
-    source_name: str
-    port_index: int
-    direction: list[float]
-    host_entity_ids: IdList
-    source_layer: str
-    target_layer: str
-    z_um: float
-    faces: IdList
-    host_volumes: IdList
-    adjacent_volumes: IdList
-
-
-# --------------------------------------------------------------------------- lineage
-
-
-class Lineage(TypedDict):
-    """Every edge and face back to its source: edge carriers, carrier descriptions, wall columns, face sources
-    and the area each Entity covers."""
-
-    edges: dict[str, IdList]
-    carriers: dict[str, Carrier]
-    vertical_edges: dict[str, IdList]
-    faces: dict[str, IdList]
-    membership: Annotated[
-        dict[str, dict[str, NonNegative]],
-        Doc(
-            "Face -> {Entity: covered fraction of the face area}; non-exclusive, may sum to more than 1."
-        ),
-    ]
-
-
-class _CarrierKind(TypedDict):
-    """The one field every carrier has."""
-
-    kind: CarrierKind
-
-
-class Carrier(_CarrierKind, total=False):
-    """A carrier: a source polygon edge (entity, polygon, ring, edge), a cut-family member (family, member), or
-    unknown."""
-
-    entity: str
-    polygon: int
-    ring: int
-    edge: int
-    family: str
-    member: str
-
-
-# --------------------------------------------------------------------------- requests
-
-
-class InsetFace(TypedDict):
-    """One band family: the request of a face.  Every request that landed on the face asks these margins."""
-
-    request_id: str
-    support: dict[str, Any]
-    interface: str | None
-    margins_um: list[Positive]
-    margins_grid: list[PositiveInt]
-    band_count: PositiveInt
-    support_area_um2: float | None
-    bands: Annotated[dict[str, IdList], Doc("Band index -> primary groups.")]
-
-
-class InsetType(TypedDict):
-    """A type-level request (every face of a Surface-EPR type) with the families that carry its bands and the
-    faces it left unbanded."""
-
-    request_id: str
-    support: TypeSupport
-    interface: None
-    margins_um: list[Positive]
-    expansion: TypeExpansion
-
-
-class TypeSupport(TypedDict):
-    """The faces a type-level request asks for: a Surface-EPR type, optionally only some face kinds, without
-    the excluded Entities."""
-
-    interface_type: SurfaceEprType
-    face_kinds: list[BandedFaceKind] | None
-    exclude_entity_ids: IdList
-
-
-class TypeExpansion(TypedDict):
-    """The families a type-level request was expanded into, and the faces it skipped."""
-
-    banded: Annotated[
-        list[InsetFace],
-        Doc(
-            "The families the physical pre-pass created, each as the record of its family (ids <request"
-            " id>::<entity>::<side>, or of the first request on a shared face).  A port placed later can cover a"
-            " whole face: read whether a family has bands from its own bands and from surface_epr_rows."
-        ),
-    ]
-    skipped: list[SkippedFace]
-
-
-class SkippedFace(TypedDict):
-    """A face a type-level request left unbanded, and why."""
-
-    support: dict[str, Any]
-    reason: Literal["no_gap_edge"]
-
-
-class Refinement(TypedDict):
-    """A refinement request as given, and the edges it produced."""
-
-    request_id: str
-    z_um: float
-    points_um: list[PlanePoint]
-    edges: IdList
-
-
-# --------------------------------------------------------------------------- reports and expectations
-
-
-@open_record()
-class SliverSummary(TypedDict, total=False):
-    """Summary of the sliver report (measurements only; decision D2)."""
-
-    shortest_edge_um: float | None
-    narrowest_face_um: float | None
-    smallest_angle_deg: float | None
-    thin_slab_count: int
-    max_snap_drift_grid: float | None
-    max_arc_deviation_grid: float | None
-
-
-class Arrangement(TypedDict):
-    """The measured snap drift and arc deviation of the arrangement (grid units), and the number of arc edges."""
-
-    max_snap_drift_grid: float | None
-    max_arc_deviation_grid: float | None
-    arc_edges: Count
-
-
-class SurfaceKinds(TypedDict):
-    """The number of planar and of cylindrical surfaces written."""
-
-    plane: Count
-    cylinder: Count
-
-
-class Expected(TypedDict):
-    """What verify_loaded compares, by native tag (tag = 1 + position)."""
-
-    vertices_um: list[SpacePoint]
-    edge_vertices: list[Annotated[TagList, Length(2, 2)]]
-    face_edges: list[TagList]
-    solid_faces: list[TagList]
-    face_area_um2: list[Positive]
-    solid_volume_um3: list[Positive]

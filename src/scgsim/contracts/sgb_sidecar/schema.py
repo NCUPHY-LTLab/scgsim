@@ -9,7 +9,7 @@ Owns the translation of the record definitions to JSON Schema draft 2020-12:
   ``null``; ``Any`` is the empty schema (any value);
 * ``Literal`` is a ``const`` for one value and an ``enum`` for several;
 * ``list[T]`` is an array of ``T``; ``dict[K, V]`` an object whose values are ``V``, and whose keys are the
-  values of ``K`` when ``K`` is a ``Literal``;
+  values of ``K`` when ``K`` is a ``Literal``, or ids of a table when ``K`` carries a ``Ref``;
 * ``T | None`` adds ``null`` to the type of ``T`` or to its enum, and is a ``oneOf`` with ``null`` for a record;
   a union of records is a ``oneOf``;
 * a marker inside ``Annotated`` adds its keyword (:mod:`.markers`).
@@ -170,6 +170,10 @@ class _Deriver:
             schema["additionalProperties"] = self.schema_of(value)
         if get_origin(key) is Literal:
             schema["propertyNames"] = {"enum": list(get_args(key))}
+        elif get_origin(key) is Annotated and get_args(key)[0] is str:
+            # Keys that are ids of a table: the marker's annotation, which every string key passes.
+            schema["propertyNames"] = self._annotated(key)
+            schema["propertyNames"].pop("type")
         elif key is not str:
             raise TypeError(f"a JSON object's keys are strings, not {key!r}")
         return schema

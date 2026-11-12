@@ -25,10 +25,11 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import gmsh
 
+from scgsim.contracts.sgb_sidecar import Sidecar, views
+from scgsim.contracts.sgb_sidecar.records import IdsByTag
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.stopwatch import elapsed_seconds
 from scgsim.geometry.sgb.verification.tolerances import (
@@ -73,7 +74,7 @@ class LoadReport:
             )
 
 
-def verify_xao(xao_path: Path, sidecar: Mapping[str, Any]) -> LoadReport:
+def verify_xao(xao_path: Path, sidecar: Sidecar) -> LoadReport:
     """Open ``xao_path`` in a fresh Gmsh session, check it against the sidecar and close the session."""
     gmsh.initialize(["-noenv"])
     try:
@@ -88,14 +89,14 @@ def verify_xao(xao_path: Path, sidecar: Mapping[str, Any]) -> LoadReport:
         gmsh.finalize()
 
 
-def verify_loaded(sidecar: Mapping[str, Any], *, groups: bool = True) -> LoadReport:
+def verify_loaded(sidecar: Sidecar, *, groups: bool = True) -> LoadReport:
     """Check the model currently loaded in Gmsh against the sidecar; see the module docstring.
 
     ``groups=False`` skips the physical-group comparison, for a model loaded from the BREP file, which
     carries no groups (only the XAO does).
     """
     report = LoadReport()
-    expected = sidecar["expected"]
+    expected = views.expected(sidecar)
     ids = sidecar["binding"]["ids_by_tag"]
     clock = _Clock(report)
     _check_counts(report, ids)
@@ -111,7 +112,7 @@ def verify_loaded(sidecar: Mapping[str, Any], *, groups: bool = True) -> LoadRep
         report.problems.append(f"boundary mismatch: {boundaries}")
     clock.lap("boundaries")
     if groups:
-        _check_groups(report, sidecar["physical_groups"])
+        _check_groups(report, _planned_groups(sidecar))
     clock.lap("physical_groups")
     report.max_relative_volume_error = _worst_relative_error(
         3, expected["solid_volume_um3"], "volume", report
@@ -124,31 +125,23 @@ def verify_loaded(sidecar: Mapping[str, Any], *, groups: bool = True) -> LoadRep
     return report
 
 
-def apply_sidecar_embeds(sidecar: Mapping[str, Any]) -> dict[str, int]:
+def apply_sidecar_embeds(sidecar: Sidecar) -> dict[str, int]:
     """Embed the sidecar's sheets in their host volumes and refinement curves in their host faces.
 
     Neither the BREP nor the XAO can carry mesh embedding, so the mesher calls this once after loading
     and before meshing.  Returns how many faces and edges were embedded.
     """
-    tag = {
-        pid: i + 1
-        for dim in ("2", "3")
-        for i, pid in enumerate(sidecar["binding"]["ids_by_tag"][dim])
-    }
-    edge_tag = {
-        pid: i + 1 for i, pid in enumerate(sidecar["binding"]["ids_by_tag"]["1"])
-    }
-    for pair in sidecar["embedded_faces"]:
-        gmsh.model.mesh.embed(2, [tag[pair["face"]]], 3, tag[pair["host_volume"]])
+    index = views.TagIndex.of(sidecar)
+    sheets = views.embedded_faces(sidecar)
+    curves = views.embedded_edges(sidecar)
+    for face, host in sheets:
+        gmsh.model.mesh.embed(2, [index.tag(2, face)], 3, index.tag(3, host))
     by_host: dict[str, list[int]] = {}
-    for pair in sidecar["refinement_edges"]:
-        by_host.setdefault(pair["host_face"], []).append(edge_tag[pair["edge"]])
+    for edge, host in curves:
+        by_host.setdefault(host, []).append(index.tag(1, edge))
     for host_face, edges in sorted(by_host.items()):
-        gmsh.model.mesh.embed(1, edges, 2, tag[host_face])
-    return {
-        "faces": len(sidecar["embedded_faces"]),
-        "edges": len(sidecar["refinement_edges"]),
-    }
+        gmsh.model.mesh.embed(1, edges, 2, index.tag(2, host_face))
+    return {"faces": len(sheets), "edges": len(curves)}
 
 
 class _Clock:
@@ -161,9 +154,14 @@ class _Clock:
         self.mark = time.perf_counter()
 
 
-def _check_counts(report: LoadReport, ids: Mapping[str, list[str]]) -> None:
+def _check_counts(report: LoadReport, ids: IdsByTag) -> None:
     native = {d: len(gmsh.model.getEntities(int(d))) for d in DIMENSIONS}
-    planned = {d: len(ids[d]) for d in DIMENSIONS}
+    planned = {
+        "0": len(ids["0"]),
+        "1": len(ids["1"]),
+        "2": len(ids["2"]),
+        "3": len(ids["3"]),
+    }
     report.counts = {"native": native, "planned": planned}
     if native != planned:
         report.problems.append(f"entity counts {native} != planned {planned}")
@@ -198,7 +196,19 @@ def _count_wrong_boundaries(
     return wrong
 
 
-def _check_groups(report: LoadReport, planned: Mapping[str, Any]) -> None:
+def _planned_groups(sidecar: Sidecar) -> dict[str, tuple[int, int, list[int]]]:
+    """Each planned group's dimension, tag and member tags, sorted."""
+    index = views.TagIndex.of(sidecar)
+    members = views.group_members(sidecar)
+    return {
+        name: (g["dim"], g["tag"], sorted(index.tags_of(g["dim"], members[name])))
+        for name, g in sidecar["group"].items()
+    }
+
+
+def _check_groups(
+    report: LoadReport, expect: Mapping[str, tuple[int, int, list[int]]]
+) -> None:
     # ``getEntitiesForPhysicalGroup`` scans every entity of the dimension per group (groups x entities:
     # quadratic); asking each entity for its groups touches every entity once.
     members: dict[tuple[int, int], list[int]] = {}
@@ -209,10 +219,6 @@ def _check_groups(report: LoadReport, planned: Mapping[str, Any]) -> None:
     loaded = {
         gmsh.model.getPhysicalName(d, t): (d, t, sorted(members.get((d, t), [])))
         for d, t in gmsh.model.getPhysicalGroups()
-    }
-    expect = {
-        name: (g["dim"], g["tag"], sorted(g["native_tags"]))
-        for name, g in planned.items()
     }
     report.groups = {"planned": len(expect), "loaded": len(loaded)}
     if expect != loaded:

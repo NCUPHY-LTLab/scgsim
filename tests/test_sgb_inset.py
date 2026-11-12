@@ -27,6 +27,7 @@ from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.sidecar.lineage import CarrierLineage
 from scgsim.geometry.sgb.validation.validate import validate_model
 
 MARGINS = (0.1, 0.5, 2.0)
@@ -256,19 +257,26 @@ def test_route_b_and_c_band_the_pad_top_as_ma_and_the_pad_bottom_as_ms():
 
 
 def test_straight_inset_members_keep_their_generating_primitive_in_the_lineage(banded):
-    """Straight and arc members both name ``<support>/ring<r>/edge<k>``; reflex arcs name their corner."""
+    """Straight members offset a primitive of the support (role ``edge``); arc members offset one or turn round
+    a reflex corner; the emitted edges carry members of the family's outer ring."""
     pad = family(banded, "band_pad_top")
+    rings = pad.support.rings
     for carrier in pad.carriers:
-        ring_edge = carrier.id.split("@")[0]
-        assert ring_edge.startswith("band_pad_top/ring") and "/edge" in ring_edge
-        assert (
-            carrier.lineage.member == ring_edge
-            and carrier.lineage.family_id == "band_pad_top"
-        )
-    members = {a.lineage.member for a in pad.arcs}
-    assert any("/corner" in m for m in members) and any("/edge" in m for m in members)
-    sources = {s for srcs in banded.topology.lineage.values() for s in srcs}
-    assert any(s.startswith("band_pad_top/ring0/edge") for s in sources)
+        member = carrier.lineage.band_member
+        assert carrier.lineage.family_id == "band_pad_top" and member is not None
+        assert member.role == "edge" and member.index < len(rings[member.ring])
+    roles = {a.lineage.band_member.role for a in pad.arcs if a.lineage.band_member}
+    assert {"corner", "edge"} <= roles
+    lineage = CarrierLineage.of(banded)
+    members = [
+        found.band_member
+        for sources in banded.topology.lineage.values()
+        for s in sources
+        if (found := lineage.lineage(s)) is not None
+        and found.family_id == "band_pad_top"
+        and found.band_member is not None
+    ]
+    assert any(m.ring == 0 and m.role == "edge" for m in members)
 
 
 def test_band_area_monotonicity_is_validated_and_a_broken_partition_fails_closed(
@@ -493,7 +501,10 @@ def test_bands_on_a_real_thin_film_sheet_use_the_qualified_entity_id():
         == "chip/left::band=2"
     )
     fam = family(model, "bands/left")
-    assert all(c.lineage.member.startswith("bands/left/ring") for c in fam.carriers)
+    assert all(
+        c.lineage.family_id == "bands/left" and c.lineage.band_member is not None
+        for c in fam.carriers
+    )
     assert not model.report.failures
 
 

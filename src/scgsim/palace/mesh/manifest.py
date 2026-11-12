@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.contracts.sgb_sidecar import Sidecar, views
+from scgsim.contracts.sgb_sidecar.records import InsetRequest
+
 from .physical_groups import Groups
 from .provenance import SGB_RUNTIME_AUTHORITY
 
@@ -24,7 +27,7 @@ _ATTRIBUTE_FIELDS = (
 def build_mesh_manifest(  # noqa: PLR0913 -- the manifest records each independent identity of the run
     *,
     groups: Groups,
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
     sidecar_file: Mapping[str, Any],
     mesh_name: str,
     route: str,
@@ -40,7 +43,7 @@ def build_mesh_manifest(  # noqa: PLR0913 -- the manifest records each independe
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "route": route,
-        "route_policy": dict(sidecar["route_policy"]),
+        "route_policy": dict(sidecar["model"]["route_policy"]),
         **(
             {"route_a_thin_film": dict(route_a_thin_film)}
             if route_a_thin_film is not None
@@ -53,26 +56,27 @@ def build_mesh_manifest(  # noqa: PLR0913 -- the manifest records each independe
             "model_identity_digest": sidecar["model"]["identity_digest"],
             "sidecar": dict(sidecar_file),
         },
-        "arrangement": dict(sidecar["arrangement"]),
-        "curved_wall_faces": len(sidecar["curved_wall_faces"]),
-        "insets": [_inset_record(inset) for inset in sidecar["insets"]],
+        "arrangement": dict(views.arrangement(sidecar)),
+        "curved_wall_faces": len(views.curved_wall_faces(sidecar)),
+        "insets": [
+            _inset_record(request_id, request)
+            for request_id, request in sorted(sidecar["inset_request"].items())
+        ],
         "meshing": dict(meshing),
         "groups": attribute_entries(groups),
     }
 
 
-def _inset_record(inset: Mapping[str, Any]) -> dict[str, Any]:
+def _inset_record(request_id: str, request: InsetRequest) -> dict[str, Any]:
     """One inset request as given; a type-level request also lists the families it banded and the faces it skipped."""
-    record = {
-        "request_id": inset["request_id"],
-        "support": inset["support"],
-        "margins_um": inset["margins_um"],
+    record: dict[str, Any] = {
+        "request_id": request_id,
+        "support": dict(request["support"]),
+        "margins_um": request["margins_um"],
     }
-    if "expansion" in inset:
-        record["banded"] = [
-            family["request_id"] for family in inset["expansion"]["banded"]
-        ]
-        record["skipped"] = inset["expansion"]["skipped"]
+    if request["scope"] == "type":
+        record["banded"] = list(request["families"])
+        record["skipped"] = request["skipped"]
     return record
 
 

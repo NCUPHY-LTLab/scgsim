@@ -24,6 +24,7 @@ from sgb_extreme_cases import (  # noqa: E402
     port,
 )
 
+from scgsim.contracts.sgb_sidecar import views  # noqa: E402
 from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.emission.writer import write_brep_file  # noqa: E402
 from scgsim.geometry.sgb.exchange.guard import (  # noqa: E402
@@ -65,9 +66,14 @@ def banded(tmp_path_factory, emit_models):
     return folder, sidecar, exported
 
 
+def copy_of(sidecar):
+    """A deep copy of a sidecar, to change."""
+    return json.loads(json.dumps(sidecar))
+
+
 def planned_vertices(sidecar, face_id):
-    """The planned positions of a face's vertices, from the sidecar's ``expected`` block (tags are 1-based)."""
-    expected = sidecar["expected"]
+    """The planned positions of a face's vertices, from the sidecar's load-side view (tags are 1-based)."""
+    expected = views.expected(sidecar)
     tag = sidecar["binding"]["ids_by_tag"]["2"].index(face_id)
     vertex_tags = {
         v for e in expected["face_edges"][tag] for v in expected["edge_vertices"][e - 1]
@@ -95,8 +101,11 @@ def test_the_guard_binds_the_step_the_geometry_and_the_sidecar_by_hash(banded):
     }
     for record in files.values():
         assert record["sha256"] == file_sha256(folder / record["path"])
-    assert exported.guard["model"] == sidecar["model"]
-    assert exported.guard["route"] == sidecar["route"] == "B"
+    assert exported.guard["model"] == {
+        "name": sidecar["model"]["name"],
+        "identity_digest": sidecar["model"]["identity_digest"],
+    }
+    assert exported.guard["route"] == sidecar["model"]["route"] == "B"
 
 
 def test_every_guard_face_lists_the_planned_vertices_of_its_face(banded):
@@ -112,7 +121,7 @@ def test_every_guard_face_lists_the_planned_vertices_of_its_face(banded):
 def test_curved_faces_are_flagged_and_keep_the_vertex_centroid_apart(banded):
     """A face is curved exactly when SGB planned it as a curved wall; its two centres are recorded separately."""
     _, sidecar, exported = banded
-    curved = set(sidecar["curved_wall_faces"])
+    curved = set(views.curved_wall_faces(sidecar))
     faces = [face for solid in exported.solids for face in solid["faces"]]
     assert curved and {f["face"] for f in faces if f["curved"]} == curved
     for face in faces:
@@ -156,7 +165,10 @@ def test_a_sidecar_of_another_model_is_refused_even_with_its_own_hash(tmp_path, 
     folder, sidecar, _ = banded
     copy = tmp_path / "copy"
     shutil.copytree(folder, copy)
-    other = {**sidecar, "model": {**sidecar["model"], "identity_digest": "0" * 64}}
+    other = {
+        **sidecar,
+        "model": {**sidecar["model"], "identity_digest": "model:" + "0" * 16},
+    }
     write_sidecar(copy / "m.sidecar.json", other)
     guard = json.loads((copy / "m.step.guard.json").read_text())
     guard["files"]["sidecar"]["sha256"] = file_sha256(copy / "m.sidecar.json")
@@ -364,12 +376,12 @@ def test_the_halves_of_a_round_pad_split_along_a_diameter_keep_their_ids(tmp_pat
     (index, pad), *_ = [
         (i, s)
         for i, s in enumerate(exported.solids)
-        if sidecar["volumes"][s["solid"]]["kind"] == "conductor"
+        if sidecar["volume"][s["solid"]]["kind"] == "conductor"
     ]
     halves = [
         f
         for f in pad["faces"]
-        if sidecar["faces"][f["face"]]["face_kind"] in ("top", "port")
+        if sidecar["face"][f["face"]]["face_kind"] in ("top", "port")
     ]
     assert len(halves) == 2
     assert halves[0]["area_um2"] == pytest.approx(halves[1]["area_um2"], rel=1e-9)
@@ -393,20 +405,10 @@ def test_faces_the_sidecar_cannot_tell_apart_are_refused(tmp_path, banded):
     copy = tmp_path / "copy"
     shutil.copytree(folder, copy)
     a, b = (f["face"] for f in exported.solids[0]["faces"][:2])
-    tag = sidecar["binding"]["ids_by_tag"]["2"].index
-    expected = sidecar["expected"]
-    twin = {
-        **expected,
-        "face_edges": [
-            expected["face_edges"][tag(a)] if i == tag(b) else edges
-            for i, edges in enumerate(expected["face_edges"])
-        ],
-        "face_area_um2": [
-            expected["face_area_um2"][tag(a)] if i == tag(b) else area
-            for i, area in enumerate(expected["face_area_um2"])
-        ],
-    }
-    write_sidecar(copy / "m.sidecar.json", {**sidecar, "expected": twin})
+    twin = copy_of(sidecar)
+    twin["face"][b]["loops"] = twin["face"][a]["loops"]
+    twin["face"][b]["area_um2"] = twin["face"][a]["area_um2"]
+    write_sidecar(copy / "m.sidecar.json", twin)
     guard = json.loads((copy / "m.step.guard.json").read_text())
     guard["files"]["sidecar"]["sha256"] = file_sha256(copy / "m.sidecar.json")
     write_step_guard(copy / "m.step.guard.json", guard)
@@ -477,7 +479,8 @@ def test_a_free_port_sheet_is_recorded_with_its_loop_and_plane(banded):
     _, sidecar, exported = banded
     (free,) = exported.guard["free_faces"]
     assert free["group"] == "PORT::p1"
-    assert free["face"] in sidecar["ports"][0]["faces"]
+    (port,) = sidecar["port"].values()
+    assert free["face"] in port["faces"]
     assert free["normal"] == [0.0, 0.0, 1.0]
     assert all(s["kind"] == "line" for loop in free["loops"] for s in loop)
     check_loops(free)
@@ -509,8 +512,8 @@ def test_a_route_a_floating_sheet_is_a_free_face(tmp_path):
         build_model(FIXTURES["floating_conductor"], "A"), tmp_path
     )
     assert read_step_guard(exported.guard_path) == exported.guard
-    embedded = {e["face"] for e in sidecar["embedded_faces"]}
+    embedded = {face for face, _ in views.embedded_faces(sidecar)}
     assert {f["face"] for f in exported.guard["free_faces"]} == embedded
     for free in exported.guard["free_faces"]:
-        assert free["group"] == sidecar["faces"][free["face"]]["group"]
+        assert free["group"] == sidecar["face"][free["face"]]["group"]
         check_loops(free)

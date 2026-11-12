@@ -18,6 +18,7 @@ from sgb_extreme_cases import FIXTURES, chip
 from sgb_scenes import GRID, conductor, pad_in_ground, rect_um, slab_model
 from test_sgb_sidecar import sidecar_of
 
+from scgsim.contracts.sgb_sidecar import views
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
@@ -166,7 +167,7 @@ def test_excluded_entities_are_left_out_and_their_own_requests_band_them():
     assert family_margins(model) == {"a_top": (0.25,), "ma::b::top": MARGINS}
     assert "MA::a__top::band=1" in model.routed.groups
     assert "MA::a__top::band=2" not in model.routed.groups
-    record = {r["request_id"]: r for r in sidecar_of(model)["insets"]}
+    record = sidecar_of(model)["inset_request"]
     assert record["ma"]["support"]["exclude_entity_ids"] == ["a"]
     assert record["a_top"]["margins_um"] == [0.25]
     for side in ("substrate", "vacuum"):
@@ -243,8 +244,11 @@ def test_margins_equal_on_the_grid_are_the_same_margins_however_they_are_written
         InsetRequest("ms", InterfaceSurfaces("MS"), (0.1 + 0.2,)),
     )
     assert family_margins(model) == {"ma::a::sheet": (0.3,), "ma::b::sheet": (0.3,)}
-    record = sidecar_of(model)["insets"]
-    assert all(i["margins_grid"] == [300] for i in record[0]["expansion"]["banded"])
+    side = sidecar_of(model)
+    banded = side["inset_request"]["ma"]["families"]
+    assert banded and all(
+        side["band_family"][f]["margins_grid"] == [300] for f in banded
+    )
 
 
 def test_requests_on_one_face_asking_different_margins_are_refused():
@@ -273,7 +277,7 @@ def test_a_concrete_request_keeps_its_id_and_must_ask_the_margins_of_a_type_requ
         "ma::b::sheet": (0.5, 1.0),
     }
     assert expansion_of(model, "ma")[0] == ["a_sheet", "ma::b::sheet"]
-    record = {r["request_id"]: r for r in sidecar_of(model)["insets"]}
+    record = sidecar_of(model)["inset_request"]
     assert record["a_sheet"]["margins_um"] == [0.5, 1.0]
     differing = InsetRequest("a_sheet", ConductorSurface("a", "sheet"), (0.25, 0.5))
     with pytest.raises(InputError, match="'a_sheet' and 'ma' ask different margins"):
@@ -361,14 +365,10 @@ def concrete_equivalent(
 
 def face_records(side):
     """The band families of a sidecar by support, dropping ids: the facts a solver reads."""
-    families = {r["request_id"]: r for r in side["insets"] if "expansion" not in r}
-    for r in side["insets"]:
-        families.update(
-            {f["request_id"]: f for f in r.get("expansion", {}).get("banded", [])}
-        )
+    families = side["band_family"]
     return {
         json.dumps(f["support"], sort_keys=True): {
-            k: v for k, v in f.items() if k not in ("request_id", "support")
+            k: v for k, v in f.items() if k != "support"
         }
         for f in families.values()
     }, {fid: json.dumps(f["support"], sort_keys=True) for fid, f in families.items()}
@@ -378,7 +378,7 @@ def face_records(side):
 def test_a_type_request_gives_the_model_of_the_equivalent_concrete_requests(
     route, scene
 ):
-    """With the ids SGB gives the faces the two models are identical, down to the sidecar apart from its insets."""
+    """With the ids SGB gives the faces the two models are identical, down to the sidecar apart from its requests."""
     margins = (0.1, 0.5, 2.0)
     typed = build(
         pad_in_ground(scene), route, *by_type("MA", "MS", "SA", margins=margins)
@@ -391,13 +391,13 @@ def test_a_type_request_gives_the_model_of_the_equivalent_concrete_requests(
     assert typed.identity_digest() == written.identity_digest()
     side_typed, side_written = sidecar_of(typed), sidecar_of(written)
     for key in side_typed:
-        if key != "insets":
+        if key != "inset_request":
             assert side_typed[key] == side_written[key], key
     records_typed, _ = face_records(side_typed)
     records_written, _ = face_records(side_written)
     assert records_typed == records_written
     assert len(records_typed) == len(typed.inset_plan.supports) > 0
-    assert [r["request_id"] for r in side_typed["insets"]] == ["ma", "ms", "sa"]
+    assert list(side_typed["inset_request"]) == ["ma", "ms", "sa"]
 
 
 @pytest.mark.parametrize(("route", "scene"), [("A", "A"), ("B", "B"), ("C", "B")])
@@ -415,7 +415,9 @@ def test_the_band_groups_do_not_depend_on_the_ids_of_the_requests(route, scene):
     assert set(typed.routed.groups) == set(written.routed.groups)
     assert typed.routed.surface_epr_rows == written.routed.surface_epr_rows
     side_typed, side_written = sidecar_of(typed), sidecar_of(written)
-    assert side_typed["unions"] == side_written["unions"]
+    assert {
+        n: (g["interface_type"], g["net"]) for n, g in side_typed["group"].items()
+    } == {n: (g["interface_type"], g["net"]) for n, g in side_written["group"].items()}
     records_typed, ids_typed = face_records(side_typed)
     records_written, ids_written = face_records(side_written)
     assert records_typed == records_written
@@ -428,7 +430,7 @@ def _features_by_support(side, support_of):
     """The band boundaries of a sidecar with the family replaced by its support (facts only; the edge ids follow the ids)."""
     return sorted(
         (support_of[f["source"]], len(f["edges"]), f["facts"])
-        for f in side["mesh_features"]
+        for f in views.mesh_features(side)
         if f["kind"] == "band_boundary"
     )
 
@@ -441,18 +443,18 @@ def test_the_sidecar_records_the_request_as_given_its_banded_faces_and_its_skipp
     catalogue = vacuum_below_substrate()
     side = sidecar_of(build(catalogue, "A", *by_type("SA", "MA", face_kinds=None)))
     assert not list(jsonschema.Draft202012Validator(sidecar_schema()).iter_errors(side))
-    sa = next(r for r in side["insets"] if r["request_id"] == "sa")
-    assert sa["support"] == {
+    sa = side["inset_request"]["sa"]
+    assert sa["scope"] == "type" and sa["support"] == {
         "interface_type": "SA",
         "face_kinds": None,
         "exclude_entity_ids": [],
     }
     assert sa["interface"] is None and sa["margins_um"] == [0.5, 1.0]
-    assert [f["request_id"] for f in sa["expansion"]["banded"]] == [f"sa::{GAP}"]
-    assert sa["expansion"]["banded"][0]["bands"]["0"] == [
+    assert sa["families"] == [f"sa::{GAP}"]
+    assert side["band_family"][f"sa::{GAP}"]["bands"]["0"] == [
         "SA::substrate|vacuum__interface::band=0"
     ]
-    assert sa["expansion"]["skipped"] == [
+    assert sa["skipped"] == [
         {
             "support": {
                 "first_entity": "substrate",
@@ -463,12 +465,14 @@ def test_the_sidecar_records_the_request_as_given_its_banded_faces_and_its_skipp
         }
     ]
     sources = {
-        f["source"] for f in side["mesh_features"] if f["kind"] == "band_boundary"
+        f["source"]
+        for f in side["mesh_feature"].values()
+        if f["kind"] == "band_boundary"
     }
     assert f"sa::{GAP}" in sources and "ma::pad::sheet" in sources
     assert {
         g["band"]["family"]
-        for g in side["physical_groups"].values()
+        for g in side["group"].values()
         if g["dim"] == 2 and g["band"]
     } <= sources
 
@@ -480,21 +484,28 @@ def test_a_build_without_type_requests_writes_the_records_it_wrote_before():
     )
     side = sidecar_of(model)
     assert not list(jsonschema.Draft202012Validator(sidecar_schema()).iter_errors(side))
-    assert all("expansion" not in r for r in side["insets"])
-    assert set(side["insets"][0]) == {
-        "request_id", "support", "interface", "margins_um", "margins_grid", "band_count",
-        "support_area_um2", "bands",
+    requests = side["inset_request"]
+    assert all(
+        r["scope"] == "face" and r["families"] == [i] and not r["skipped"]
+        for i, r in requests.items()
+    )
+    assert set(side["band_family"]) == set(requests)
+    assert set(next(iter(side["band_family"].values()))) == {
+        "support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands",
     }  # fmt: skip
 
 
 def test_the_schema_refuses_a_type_record_without_its_expansion():
-    """Negative control: a record that is neither a face record nor a complete type record."""
+    """Negative control: a request record without the families it became."""
     side = sidecar_of(build(slab_model("A", TWO_PADS, half=20), "A", *by_type("MA")))
     validator = jsonschema.Draft202012Validator(sidecar_schema())
     assert not list(validator.iter_errors(side))
     broken = {
         **side,
-        "insets": [{k: v for k, v in side["insets"][0].items() if k != "expansion"}],
+        "inset_request": {
+            i: {k: v for k, v in r.items() if k != "families"}
+            for i, r in side["inset_request"].items()
+        },
     }
     assert list(validator.iter_errors(broken))
 
@@ -541,7 +552,7 @@ def test_a_type_request_gives_one_sidecar_for_every_hash_seed():
         "from test_sgb_inset_types import build, by_type, sidecar_of, slab_model, TWO_PADS\n"
         "import json\n"
         "m = build(slab_model('B', TWO_PADS, half=20), 'B', *by_type('MA', 'MS', 'SA'))\n"
-        "print(json.dumps(sidecar_of(m)['insets'], sort_keys=True))\n"
+        "print(json.dumps([sidecar_of(m)[k] for k in ('inset_request', 'band_family')], sort_keys=True))\n"
     )
     outputs = {
         subprocess.run(

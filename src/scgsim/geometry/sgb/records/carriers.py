@@ -52,14 +52,16 @@ class BandMember:
     (``CurveFamilyRecord.support``).  ``edge`` is the offset of primitive ``index`` of that ring; ``corner`` the
     arc about the reflex vertex between primitives ``index`` and ``index + 1`` (the first one after the last);
     ``capstart`` and ``capend`` the half circle about the start or end of primitive ``index``.  ``margin`` is
-    the offset, in grid units.  The band numbers on the two sides of the curve are its seam's
-    (``BandSeam``), and a carrier's id or member name is never read for any of this.
+    the offset, in grid units.  ``piece`` numbers the parts of a cap or corner cut into several (an arc is at
+    most a quarter turn), and is ``None`` for a member in one piece.  The band numbers on the two sides of the
+    curve are its seam's (``BandSeam``), and a carrier's id or member name is never read for any of this.
     """
 
     ring: int
     index: int
     role: BandMemberRole
     margin: int
+    piece: int | None = None
 
 
 @dataclass(frozen=True)

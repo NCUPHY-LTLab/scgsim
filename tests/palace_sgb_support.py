@@ -8,7 +8,6 @@ insets and configs run on real v2 sidecars of Routes A and B.  ``mesh_run`` goes
 from __future__ import annotations
 
 import hashlib
-import json
 import shutil
 from collections.abc import Mapping
 from pathlib import Path
@@ -16,6 +15,7 @@ from typing import Any
 
 from sgb_inputs import EffectiveInput, gds_pad_in_ground, thin_film_pair
 
+from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb import build_sgb_geometry
 from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest
 from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
@@ -48,7 +48,7 @@ def sidecar_of(
         insets=insets,
         output_dir=directory / f"sgb_{route}",
     )
-    return json.loads(artifacts.sidecar.read_text(encoding="utf-8"))
+    return read_sidecar(artifacts.sidecar)
 
 
 def surface_epr_specs(**margins: list[float] | None) -> dict[str, dict[str, Any]]:

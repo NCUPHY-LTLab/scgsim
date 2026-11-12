@@ -1,23 +1,25 @@
 """Mesh features of the sidecar: facts about the geometry that a mesher needs, never a mesh size (design brief section 12).
 
-Owns the ``mesh_features`` list.  SGB knows the exact topology, so it states what is true of an edge set
+Owns the ``mesh_feature`` table.  SGB knows the exact topology, so it states what is true of an edge set
 (this edge set is the outline of a 0.2 um film wall; these are the boundaries of bands 0.5 and 1 um wide)
-and leaves every size to the mesher.  Each entry names a ``kind``, its ``source``, the edges by planned id
-and by native tag (tag = 1 + position in ``ids_by_tag["1"]``), and the ``facts`` of that kind:
+and leaves every size to the mesher.  Each feature names a ``kind``, its ``source``, the edges by planned id
+(in tag order; readers compute the native tags), and the ``facts`` of that kind:
 
 * ``film_sidewall`` -- every edge of the sidewall faces of a finite body (``source`` = the entity id; facts
   ``thickness_um``).  A body is a conductor, in Route B too where its volume is not emitted, or a dielectric
   that does not reach the model boundary; vacuum and the walls on the model boundary are not films;
-* ``band_boundary`` -- the edges of an inset family (``source`` = the request id; facts ``margins_um`` and
+* ``band_boundary`` -- the edges of an inset family (``source`` = the band family; facts ``margins_um`` and
   ``narrowest_band_um``);
 * ``arc`` -- the circular-arc edges of one radius (``source`` = the entity that owns them, or ``None``; facts
   ``radius_um``);
 * ``refinement_curve`` -- the refinement-only curves of a refinement request (``source`` = the request id);
 * ``port_edge`` -- the boundary edges of the faces of a lumped port (``source`` = the port sheet id).
 
-Entries are sorted by ``(kind, source or "", canonical JSON of facts)`` and the edges of an entry by tag, so
-the block is byte-identical for any worker count and tile layout.  Lengths are rounded like every other
-micrometre value of the sidecar (``emission.measures.rounded``).
+A feature's id is a digest of its kind, source and facts, which no two features share; readers take the
+features in the order of ``(kind, source or "", canonical JSON of facts)``
+(``scgsim.contracts.sgb_sidecar.views.mesh_features``).  The table is byte-identical for any worker count and
+tile layout.  Lengths are rounded like every other micrometre value of the sidecar
+(``emission.measures.rounded``).
 
 A wall of a film can be split in z by a level that crosses it (a port plane in the middle of a conductor).  The
 thickness is that of the whole *column*: emitted walls of one body that stand on the same horizontal edge, one
@@ -28,19 +30,27 @@ the wall between two touching conductors is not emitted, and the wall above it i
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from fractions import Fraction
-from typing import Any
+from typing import Any, cast
 
+from scgsim.contracts.sgb_sidecar.records import MeshFeature, Port
 from scgsim.geometry.sgb.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.cutfamilies.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.emission.measures import rounded
 from scgsim.geometry.sgb.emission.plan import BrepPlan
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
+from scgsim.geometry.sgb.sidecar.derived import edge_sources
 from scgsim.geometry.sgb.sidecar.groups import face_kind
+from scgsim.geometry.sgb.sidecar.lineage import (
+    BAND_FAMILY_ROLE,
+    REFINEMENT_FAMILY_ROLE,
+    CarrierLineage,
+)
 
 FEATURE_KINDS = (
     "film_sidewall",
@@ -49,33 +59,32 @@ FEATURE_KINDS = (
     "refinement_curve",
     "port_edge",
 )
-BAND_FAMILY_ROLE = "inset_band"
-REFINEMENT_FAMILY_ROLE = "refinement"
 
-Feature = dict[str, Any]
+# A feature as a producer below states it: kind, source, edges and facts.
+_Stated = tuple[str, str | None, set[str], dict[str, Any]]
 
 
 def mesh_features(
     model: ConformalModel,
     plan: BrepPlan,
-    carriers: dict[str, dict[str, Any]],
-    ports: list[dict[str, Any]],
-) -> list[Feature]:
-    """The mesh features of the emitted edges, sorted by kind, source and facts."""
+    lineage: CarrierLineage,
+    ports: dict[str, Port],
+) -> dict[str, MeshFeature]:
+    """The mesh features of the emitted edges, by id."""
     tag_of = {edge_id: tag for tag, edge_id in enumerate(plan.edge_ids, start=1)}
-    features = [
+    stated: list[_Stated] = [
         *_film_sidewalls(model.topology, plan),
-        *_family_features(model, plan, carriers),
-        *_arcs(model, plan, carriers),
+        *_family_features(model, plan, lineage),
+        *_arcs(model, plan, lineage),
         *_port_edges(model.topology, ports),
     ]
-    return sorted(
-        (
-            _feature(kind, source, edges, facts, tag_of)
-            for kind, source, edges, facts in features
-        ),
-        key=_sort_key,
-    )
+    out: dict[str, MeshFeature] = {}
+    for kind, source, edges, facts in stated:
+        feature_id = _feature_id(kind, source, facts)
+        if feature_id in out:
+            raise SgbError(f"internal: two {kind} features of {source!r} state {facts}")
+        out[feature_id] = _feature(kind, source, edges, facts, tag_of)
+    return dict(sorted(out.items()))
 
 
 def _feature(
@@ -84,28 +93,24 @@ def _feature(
     edge_ids: Iterable[str],
     facts: dict[str, Any],
     tag_of: dict[str, int],
-) -> Feature:
+) -> MeshFeature:
     edges = sorted(set(edge_ids), key=tag_of.__getitem__)
-    return {
-        "kind": kind,
-        "source": source,
-        "edges": edges,
-        "native_tags": [tag_of[edge_id] for edge_id in edges],
-        "facts": facts,
-    }
+    # Each producer states the source and facts its kind has in the contract.
+    return cast(
+        MeshFeature, {"kind": kind, "source": source, "edges": edges, "facts": facts}
+    )
 
 
-def _sort_key(feature: Feature) -> tuple[str, str, str]:
-    facts = json.dumps(feature["facts"], sort_keys=True, separators=(",", ":"))
-    return feature["kind"], feature["source"] or "", facts
+def _feature_id(kind: str, source: str | None, facts: dict[str, Any]) -> str:
+    """An id from what the feature states, so it does not change when another feature is added."""
+    canonical = json.dumps([kind, source, facts], sort_keys=True, separators=(",", ":"))
+    return "mf:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
 # --------------------------------------------------------------------------- film sidewalls
 
 
-def _film_sidewalls(
-    topology: Topology, plan: BrepPlan
-) -> Iterator[tuple[str, str, set[str], dict[str, Any]]]:
+def _film_sidewalls(topology: Topology, plan: BrepPlan) -> Iterator[_Stated]:
     """One feature per (body, column thickness): all edges of the sidewall faces of that body's columns."""
     walls_of_body: dict[str, list[TopoFace]] = defaultdict(list)
     for face_id in plan.face_ids:
@@ -178,28 +183,23 @@ def _edges_at(topology: Topology, wall: TopoFace, z: Fraction) -> Iterator[str]:
 
 
 def _family_features(
-    model: ConformalModel, plan: BrepPlan, carriers: dict[str, dict[str, Any]]
-) -> Iterator[tuple[str, str, set[str], dict[str, Any]]]:
+    model: ConformalModel, plan: BrepPlan, lineage: CarrierLineage
+) -> Iterator[_Stated]:
     """Band boundaries (with the margins of their request) and refinement curves, by family."""
-    roles = {f.family_id: f.role for f in model.labelled.catalogue.families}
     edges_of_family: dict[str, set[str]] = defaultdict(set)
     for edge_id in plan.edge_ids:
-        sources = (
-            model.topology.lineage.get(edge_id) or model.topology.edges[edge_id].sources
-        )
-        for carrier in sources:
-            record = carriers.get(carrier)
-            if (
-                record
-                and record["kind"] == "family_member"
-                and record["family"] in roles
-            ):
-                edges_of_family[str(record["family"])].add(edge_id)
+        if model.topology.edges[edge_id].kind == "vertical":
+            continue  # a wall column carries Entities, not carriers
+        for carrier in edge_sources(model, edge_id):
+            found = lineage.lineage(carrier)
+            if found is not None and found.kind == "family_member":
+                edges_of_family[found.family_id].add(edge_id)
     requests = {request.request_id: request for request in model.inset_plan.requests}
     for family, edge_ids in sorted(edges_of_family.items()):
-        if roles[family] == BAND_FAMILY_ROLE:
+        role = lineage.role(family)
+        if role == BAND_FAMILY_ROLE:
             yield "band_boundary", family, edge_ids, _band_facts(requests, family)
-        elif roles[family] == REFINEMENT_FAMILY_ROLE:
+        elif role == REFINEMENT_FAMILY_ROLE:
             yield "refinement_curve", family, edge_ids, {}
 
 
@@ -221,8 +221,8 @@ def _band_facts(requests: dict[str, InsetRequest], family: str) -> dict[str, Any
 
 
 def _arcs(
-    model: ConformalModel, plan: BrepPlan, carriers: dict[str, dict[str, Any]]
-) -> Iterator[tuple[str, str | None, set[str], dict[str, Any]]]:
+    model: ConformalModel, plan: BrepPlan, lineage: CarrierLineage
+) -> Iterator[_Stated]:
     """Arc edges grouped by (owning entity if unique, exact carrier radius)."""
     topology = model.topology
     band_entity = {
@@ -234,39 +234,37 @@ def _arcs(
     for edge_id in plan.edge_ids:
         curve = topology.edges[edge_id].curve
         if curve is not None:
-            owner = _arc_owner(topology, edge_id, carriers, band_entity)
+            owner = _arc_owner(model, edge_id, lineage, band_entity)
             edges_of_arc[owner, rounded(curve.radius * topology.grid_um)].add(edge_id)
     for (owner, radius), edge_ids in edges_of_arc.items():
         yield "arc", owner, edge_ids, {"radius_um": radius}
 
 
 def _arc_owner(
-    topology: Topology,
+    model: ConformalModel,
     edge_id: str,
-    carriers: dict[str, dict[str, Any]],
+    lineage: CarrierLineage,
     band_entity: dict[str, str],
 ) -> str | None:
     """The one entity whose outline (or whose band) carries the arc, or ``None`` when no single entity does."""
     owners: set[str | None] = set()
-    for carrier in topology.lineage.get(edge_id) or topology.edges[edge_id].sources:
-        record = carriers.get(carrier, {"kind": "unknown"})
-        if record["kind"] == "polygon_edge":
-            owners.add(record["entity"])
-        elif record["kind"] == "family_member":
-            owners.add(band_entity.get(record["family"]))
-        else:
+    for carrier in edge_sources(model, edge_id):
+        found = lineage.lineage(carrier)
+        if found is None:
             owners.add(None)
+        elif found.kind == "polygon_edge":
+            owners.add(found.entity_id)
+        else:
+            owners.add(band_entity.get(found.family_id))
     return owners.pop() if len(owners) == 1 else None
 
 
 # --------------------------------------------------------------------------- ports
 
 
-def _port_edges(
-    topology: Topology, ports: list[dict[str, Any]]
-) -> Iterator[tuple[str, str, set[str], dict[str, Any]]]:
+def _port_edges(topology: Topology, ports: dict[str, Port]) -> Iterator[_Stated]:
     """The boundary edges of the faces of each lumped-port sheet."""
-    for port in ports:
+    for port_id, port in ports.items():
         edge_ids = {
             edge_id
             for face_id in port["faces"]
@@ -274,4 +272,4 @@ def _port_edges(
             for edge_id, _ in loop
         }
         if edge_ids:
-            yield "port_edge", port["port_sheet_id"], edge_ids, {}
+            yield "port_edge", port_id, edge_ids, {}

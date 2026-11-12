@@ -1,102 +1,80 @@
-"""Lineage records of the sidecar (design brief section 7): every edge and face back to its source.
+"""Where each carrier of a model comes from (design brief section 7), for the sidecar's ``carrier`` table.
 
-Owns the pointers that let a consumer answer "which source curve is this edge" and "which Entities
-cover this face" without geometry: ``edges`` maps a horizontal or refinement edge id to the carrier ids that produced it,
-``carriers`` describes each such carrier (source polygon edge, or cut-family member),
-``vertical_edges`` maps a wall column to the Entities whose walls stand on it, ``faces`` lists the
-source Entities of a face and ``membership`` the area fraction each covers (non-exclusive, so the
-fractions of a face may sum to more than 1; walls use the share of their bottom boundary length).
-
-Carriers that exist only to cut cells for the membership computation never appear on an emitted edge.
+Owns the one lookup the writer needs to describe a carrier id that lies on an emitted edge: its lineage (a
+source polygon edge or arc, or a member of a cut family) and, for a source carrier, the source curve it lies
+on.  SGB names carriers itself, so this is the one place that knows how a witness chord's id (``<arc id>#k``)
+or a derived arc relates to the curve it comes from; the sidecar states the relation as a field, and no
+reader reads it from an id.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
 
-from scgsim.geometry.sgb.assembly.records import Topology
-from scgsim.geometry.sgb.emission.measures import rounded
-from scgsim.geometry.sgb.emission.plan import BrepPlan
+from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
-from scgsim.geometry.sgb.records.carriers import Lineage, base_carrier_id
+from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage, base_carrier_id
+
+BAND_FAMILY_ROLE = "inset_band"
+REFINEMENT_FAMILY_ROLE = "refinement"
 
 
-def lineage_record(model: ConformalModel, plan: BrepPlan) -> dict[str, Any]:
-    """The ``lineage`` block: edge carriers, carrier descriptions, face sources and area-weighted membership."""
-    topology = model.topology
-    sources = {
-        eid: list(topology.lineage.get(eid) or topology.edges[eid].sources)
-        for eid in plan.edge_ids
-    }
-    edges = {
-        eid: s for eid, s in sources.items() if topology.edges[eid].kind != "vertical"
-    }
-    vertical = {
-        eid: s for eid, s in sources.items() if topology.edges[eid].kind == "vertical"
-    }
-    known = _carrier_lineages(model)
-    carriers = {
-        cid: _describe(known.get(cid) or known.get(base_carrier_id(cid)))
-        for cid in sorted({c for sources in edges.values() for c in sources})
-    }
-    return {
-        "edges": edges,
-        "carriers": carriers,
-        "vertical_edges": vertical,
-        "faces": {fid: list(topology.faces[fid].sources) for fid in plan.face_ids},
-        "membership": {
-            fid: {
-                entity: rounded(share)
-                for entity, share in sorted(topology.faces[fid].membership.items())
-            }
-            for fid in plan.face_ids
-        },
-    }
+@dataclass(frozen=True)
+class CarrierLineage:
+    """The lineage of every carrier id a model knows, the source curves, and the role of each cut family."""
 
+    known: dict[str, Lineage]
+    source_curves: frozenset[str]
+    derived_arcs: dict[str, ArcCarrier]
+    roles: dict[str, str]
 
-def edge_family(
-    topology: Topology, edge_id: str, carriers: dict[str, dict[str, Any]]
-) -> str | None:
-    """The cut family a refinement or band edge belongs to, from the first family-member carrier on it."""
-    for carrier_id in topology.lineage.get(edge_id) or topology.edges[edge_id].sources:
-        record = carriers.get(carrier_id)
-        if record and record["kind"] == "family_member":
-            return str(record["family"])
-    return None
+    @classmethod
+    def of(cls, model: ConformalModel) -> CarrierLineage:
+        """The carriers of ``model``: source line carriers and arcs, family members, derived arcs."""
+        catalogue = model.labelled.catalogue
+        known: dict[str, Lineage] = {}
+        sources: set[str] = set()
+        for prism in catalogue.prisms:
+            for carrier in prism.carriers():
+                known[carrier.id] = carrier.lineage
+                # A straight source edge is named by its lineage; a witness chord of an arc is not.
+                if carrier.id == carrier.lineage.describe():
+                    sources.add(carrier.id)
+            for arc in prism.arcs:
+                known[arc.id] = arc.lineage
+                sources.add(arc.id)
+        for family in catalogue.families:
+            for carrier in family.carriers:
+                known[carrier.id] = carrier.lineage
+            for arc in family.arcs:
+                known[arc.id] = arc.lineage
+        for arc_id, arc in model.labelled.arcs.items():
+            known.setdefault(arc_id, arc.lineage)
+        return cls(
+            known,
+            frozenset(sources),
+            dict(model.labelled.arcs),
+            {f.family_id: f.role for f in catalogue.families},
+        )
 
+    def lineage(self, carrier_id: str) -> Lineage | None:
+        """The lineage of a carrier id, a witness chord's included; ``None`` for a carrier SGB does not know."""
+        return self.known.get(carrier_id) or self.known.get(base_carrier_id(carrier_id))
 
-def _carrier_lineages(model: ConformalModel) -> dict[str, Lineage]:
-    """Lineage of every carrier id the model knows: source line carriers and arcs, family members, derived arcs."""
-    catalogue = model.labelled.catalogue
-    known: dict[str, Lineage] = {}
-    for prism in catalogue.prisms:
-        for carrier in prism.carriers():
-            known[carrier.id] = carrier.lineage
-        for arc in prism.arcs:
-            known[arc.id] = arc.lineage
-    for family in catalogue.families:
-        for carrier in family.carriers:
-            known[carrier.id] = carrier.lineage
-        for arc in family.arcs:
-            known[arc.id] = arc.lineage
-    for arc_id, arc in model.labelled.arcs.items():
-        known.setdefault(arc_id, arc.lineage)
-    return known
+    def source_curve(self, carrier_id: str) -> str:
+        """The source curve a source carrier lies on: itself, the arc of a witness chord, or the root of a
+        derived arc."""
+        for candidate in (carrier_id, base_carrier_id(carrier_id)):
+            if candidate in self.source_curves:
+                return candidate
+            arc = self.derived_arcs.get(candidate)
+            if arc is not None and arc.root_id in self.source_curves:
+                return arc.root_id
+        raise SgbError(
+            f"internal: the source carrier {carrier_id!r} lies on no source curve of the catalogue"
+        )
 
-
-def _describe(lineage: Lineage | None) -> dict[str, Any]:
-    if lineage is None:
-        return {"kind": "unknown"}
-    if lineage.kind == "polygon_edge":
-        return {
-            "kind": "polygon_edge",
-            "entity": lineage.entity_id,
-            "polygon": lineage.polygon,
-            "ring": lineage.ring,
-            "edge": lineage.edge,
-        }
-    return {
-        "kind": "family_member",
-        "family": lineage.family_id,
-        "member": lineage.member,
-    }
+    def role(self, family_id: str) -> str | None:
+        """The role of the cut family ``family_id`` (``inset_band``, ``refinement`` or any other the catalogue
+        gives); ``None`` for a family a lineage names that the catalogue does not hold."""
+        return self.roles.get(family_id)

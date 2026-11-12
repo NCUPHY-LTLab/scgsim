@@ -28,7 +28,7 @@ representation does not fit.
 
 *Type-level* support names no face.  ``InterfaceSurfaces(interface_type)`` asks for "every face of this
 Surface-EPR type" (``"MA"``, ``"MS"`` or ``"SA"``) and SGB finds the faces itself, from the same labels and
-interface-type rules that give the sidecar its ``surface_epr_rows``:
+interface-type rules that give the sidecar its ``surface_epr_row`` table:
 
 * ``"MA"`` / ``"MS"`` -- the sheet of a Route A conductor that has a row of that type (a sheet with vacuum on
   one side and a dielectric on the other carries both), and the top and bottom faces of a finite conductor that

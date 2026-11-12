@@ -15,6 +15,7 @@ import pytest
 from sgb_scenes import GRID, conductor, footprint, rect_um
 from test_sgb_sidecar import sidecar_of
 
+from scgsim.contracts.sgb_sidecar import views
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
     InsetRequest,
@@ -149,34 +150,32 @@ def test_each_level_has_its_own_families_margins_and_band_groups(two_level_model
     """The sidecar gives a family its own margins and bands, each family on its own qualified groups."""
     side = sidecar_of(two_level_model)
     assert not list(jsonschema.Draft202012Validator(sidecar_schema()).iter_errors(side))
-    insets = {r["request_id"]: r for r in side["insets"]}
-    top, bottom = insets["top_sa"], insets["bottom_sa"]
+    families = side["band_family"]
+    top, bottom = families["top_sa"], families["bottom_sa"]
+    members = views.group_members(side)
     assert top["margins_um"] == [0.5, 1.0] and bottom["margins_um"] == [0.5]
     assert top["bands"] == {str(k): [f"{TOP}::band={k}"] for k in range(3)}
     assert bottom["bands"] == {str(k): [f"{BOTTOM}::band={k}"] for k in range(2)}
-    for name, group in side["physical_groups"].items():
+    for name, group in side["group"].items():
         if "__interface" not in name or "::band=" not in name:
             continue
-        family = bottom if name.startswith(BOTTOM) else top
+        family = "bottom_sa" if name.startswith(BOTTOM) else "top_sa"
         assert group["face_kind"] == "interface"
-        assert group["band"] == {
-            "family": family["request_id"],
-            "index": group["band"]["index"],
+        assert group["band"] == {"family": family, "index": group["band"]["index"]}
+        assert {side["face"][fid]["z_um"][0] for fid in members[name]} == {
+            0.0 if family == "top_sa" else -100.0
         }
-        assert {side["faces"][fid]["z_um"][0] for fid in group["ids"]} == {
-            0.0 if family is top else -100.0
-        }
-        assert {side["faces"][fid]["face_kind"] for fid in group["ids"]} == {
+        assert {side["face"][fid]["face_kind"] for fid in members[name]} == {
             "interface"
         }
-        assert side["surface_epr_rows"][name]["group"] == name
-        assert side["surface_epr_rows"][name]["band"] == group["band"]["index"]
-    assert {n for n in side["surface_epr_rows"] if n.startswith("SA::")} == {
-        n for n in side["physical_groups"] if n.startswith("SA::") and "::band=" in n
+        assert side["surface_epr_row"][name]["group"] == name
+        assert side["surface_epr_row"][name]["band"] == group["band"]["index"]
+    assert {n for n in side["surface_epr_row"] if n.startswith("SA::")} == {
+        n for n in side["group"] if n.startswith("SA::") and "::band=" in n
     }
-    assert side["unions"]["interface_types"]["SA"] == sorted(
-        n for n in side["physical_groups"] if n.startswith("SA::")
-    )
+    assert sorted(
+        n for n, g in side["group"].items() if g["interface_type"] == "SA"
+    ) == sorted(n for n in side["group"] if n.startswith("SA::"))
 
 
 def test_the_qualified_names_do_not_depend_on_workers_or_tiles(two_level_model):
@@ -186,8 +185,8 @@ def test_the_qualified_names_do_not_depend_on_workers_or_tiles(two_level_model):
     )
     assert other.routed.face_group == two_level_model.routed.face_group
     assert (
-        sidecar_of(other)["surface_epr_rows"]
-        == sidecar_of(two_level_model)["surface_epr_rows"]
+        sidecar_of(other)["surface_epr_row"]
+        == sidecar_of(two_level_model)["surface_epr_row"]
     )
 
 
@@ -263,16 +262,15 @@ def test_a_family_the_pre_pass_banded_may_have_no_band_once_a_port_covers_its_fa
     model = build_model_from_catalogue(covered_gap_catalogue(), "A", insets=(request,))
     side = sidecar_of(model)
     assert not list(jsonschema.Draft202012Validator(sidecar_schema()).iter_errors(side))
-    (record,) = side["insets"]
-    (family,) = record["expansion"]["banded"]
-    assert family["request_id"] == "sa::substrate|vacuum::z=0.0"
+    (record,) = side["inset_request"].values()
+    (family_id,) = record["families"]
+    family = side["band_family"][family_id]
+    assert family_id == "sa::substrate|vacuum::z=0.0"
     assert family["margins_um"] == [0.5, 1.0]
     assert family["bands"] == {}
-    assert record["expansion"]["skipped"] == []
+    assert record["skipped"] == []
     assert not [
-        row
-        for row in side["surface_epr_rows"].values()
-        if row["interface_type"] == "SA"
+        row for row in side["surface_epr_row"].values() if row["interface_type"] == "SA"
     ]
 
 

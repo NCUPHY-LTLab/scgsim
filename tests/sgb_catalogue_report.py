@@ -29,10 +29,10 @@ from sgb_extreme_cases import build_model, cases
 from sgb_gmsh_oracle import gmsh_session, mesh_quality
 from sgb_scenes import pad_in_ground, random_layout
 
+from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.emission.plan import plan_brep
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_loaded
 from scgsim.geometry.sgb.verification.ocp import ocp_available
 
@@ -51,14 +51,15 @@ def measure(
     started = time.perf_counter()
     artifacts = emit_model(model, workdir)
     sidecar = read_sidecar(artifacts.sidecar)
+    summary = sidecar["summary"]
     row: dict = {
-        "route": sidecar["route"],
-        "faces": sidecar["counts"]["faces"],
-        "solids": sidecar["counts"]["solids"],
-        "max_snap_drift_grid": sidecar["arrangement"]["max_snap_drift_grid"],
-        "max_arc_deviation_grid": sidecar["arrangement"]["max_arc_deviation_grid"],
-        "narrowest_face_um": sidecar["slivers"]["narrowest_face_um"],
-        "shortest_edge_um": sidecar["slivers"]["shortest_edge_um"],
+        "route": sidecar["model"]["route"],
+        "faces": summary["counts"]["faces"],
+        "solids": summary["counts"]["solids"],
+        "max_snap_drift_grid": summary["slivers"].get("max_snap_drift_grid"),
+        "max_arc_deviation_grid": summary["slivers"].get("max_arc_deviation_grid"),
+        "narrowest_face_um": summary["slivers"].get("narrowest_face_um"),
+        "shortest_edge_um": summary["slivers"].get("shortest_edge_um"),
     }
     with gmsh_session(artifacts.xao):
         load = verify_loaded(sidecar)

@@ -13,7 +13,7 @@ from typing import Any, Literal
 class SurfaceEprRecord:
     """One solver-native Surface-EPR row over a whole surface, bound to the sidecar rows it integrates.
 
-    ``rows`` are the sidecar ``surface_epr_rows`` ids; ``entities`` are the SGB Entities whose surfaces they
+    ``rows`` are the sidecar ``surface_epr_row`` ids; ``entities`` are the SGB Entities whose surfaces they
     are and ``nets`` their exact Nets.  ``lineage`` maps each face to the Entities that share it, as
     attribution only: it weights nothing.
     """

@@ -29,7 +29,10 @@ KEYWORDS = frozenset(
         *("items", "minItems", "maxItems", "minimum", "exclusiveMinimum", "pattern"),
     }
 )
-ANNOTATIONS = frozenset({"$schema", "$id", "title", "description", "$defs"})
+# ``x-references`` and ``x-dimension`` name the table an id refers to; :mod:`.references` checks them.
+ANNOTATIONS = frozenset(
+    {"$schema", "$id", "title", "description", "$defs", "x-references", "x-dimension"}
+)
 
 
 def require_structure(value: object, schema: dict[str, Any]) -> None:

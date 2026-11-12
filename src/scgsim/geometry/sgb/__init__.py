@@ -32,7 +32,7 @@ Sub-packages follow the stages of the design brief, lowest layer first:
 * ``model``        the validated model :func:`~scgsim.geometry.sgb.model.build_conformal_model`
 * ``emission``     S10: numbering of the shapes in ``TopExp::MapShapes`` order and the direct, byte-deterministic
                    BREP/XAO writer (no CAD kernel, no Boolean)
-* ``sidecar``      the versioned JSON sidecar ``scgsim.sgb.sidecar.v2`` and its JSON Schema
+* ``sidecar``      the versioned JSON sidecar ``scgsim.sgb.sidecar.v3`` and its JSON Schema
 * ``verification`` the load-side check the mesher runs on the opened XAO (Gmsh) and the official OCCT checks (OCP)
 * ``exchange``     the AEDT STEP export of the emitted solids (OCP)
 * ``build``        the public entry :func:`build_sgb_geometry`, exported here

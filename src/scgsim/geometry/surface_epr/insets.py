@@ -27,6 +27,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from scgsim.contracts.sgb_sidecar import Sidecar
+from scgsim.contracts.sgb_sidecar.records import SurfaceGroup
 from scgsim.geometry.sgb.cutfamilies.requests import (
     FACE_KINDS,
     ConductorSurface,
@@ -72,7 +74,7 @@ def needs_unbanded_build(specs: Mapping[str, Mapping[str, Any]] | None) -> bool:
 
 def inset_requests(
     specs: Mapping[str, Mapping[str, Any]],
-    unbanded_sidecar: Mapping[str, Any] | None = None,
+    unbanded_sidecar: Sidecar | None = None,
 ) -> tuple[InsetRequest, ...]:
     """The inset requests of ``specs``.
 
@@ -110,7 +112,7 @@ def _type_request(interface_type: str, spec: Mapping[str, Any]) -> InsetRequest:
 
 
 def _named_conductor_requests(
-    specs: Mapping[str, Mapping[str, Any]], sidecar: Mapping[str, Any]
+    specs: Mapping[str, Mapping[str, Any]], sidecar: Sidecar
 ) -> list[InsetRequest]:
     """One concrete request per face of a customised conductor, with the one set of margins the face takes.
 
@@ -118,7 +120,7 @@ def _named_conductor_requests(
     that reaches it must give it the same margins: the customised ones by entity, the others by type.  Two
     concrete requests may not name one face, so the specs' margins become one request.
     """
-    grid = Grid(sidecar["grid_um"])
+    grid = Grid(sidecar["model"]["grid_um"])
     asks_by_face: dict[ConductorSurface, list[_Ask]] = defaultdict(list)
     for interface_type, spec in sorted(specs.items()):
         for entity in sorted(spec.get("inset_margins_by_entity_um") or ()):
@@ -162,7 +164,7 @@ def _ask_for(interface_type: str, spec: Mapping[str, Any], entity: str) -> _Ask:
 def _add_type_level_asks(
     asks_by_face: dict[ConductorSurface, list[_Ask]],
     specs: Mapping[str, Mapping[str, Any]],
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
 ) -> None:
     """Add the type-level margins of the specs that reach a customised face without customising it.
 
@@ -220,14 +222,15 @@ def _conductor_faces(
     interface_type: str,
     spec: Mapping[str, Any],
     entity: str,
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
 ) -> set[ConductorSurface]:
     """The faces of ``entity`` that carry a Surface-EPR row of ``interface_type``, within the spec's face kinds."""
     face_kinds = spec.get("face_kinds")
-    groups = sidecar["physical_groups"]
+    groups = sidecar["group"]
     faces: set[ConductorSurface] = set()
-    for row in sidecar["surface_epr_rows"].values():
-        group = groups[row["group"]]
+    for row in sidecar["surface_epr_row"].values():
+        # A row names a surface group: the shared reader checked the group's dimension.
+        group = cast(SurfaceGroup, groups[row["group"]])
         kind = group["face_kind"]
         if (
             row["interface_type"] == interface_type

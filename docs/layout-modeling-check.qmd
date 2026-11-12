@@ -127,8 +127,9 @@ refuses; see [Surface-EPR margins](supported-scope.qmd#rules-margins).
 :::
 
 Each finding names its stage, class, measure and size, the SGB entity and its
-physical group, the layout objects and band requests it comes from, its
-location and box in µm, why the mesher fails on it, and the fix. Its owner
+physical group, the layout objects and band requests it comes from and the
+layers those objects were drawn on, its location and box in µm, why the mesher
+fails on it, and the fix. Its owner
 comes from the lineage the sidecar records:
 
 - **layout**: the feature is bounded only by source curves, or it is a band
@@ -142,9 +143,8 @@ comes from the lineage the sidecar records:
 - **sgb**: a band curve where the source has no fine structure. This is an SGB
   defect; report it to SCGSim with the finding. The layout needs no change.
 
-The sidecar does not record how many edges a band's support ring has, so a
-pair of offsets from a ring's first and last edges counts as neighbours, and
-such a feature is attributed to SGB.
+The rule counts the offsets of a ring's first and last edges as neighbours,
+so such a feature is attributed to SGB.
 
 ## The same check inside `mesh()` {#the-same-check-inside-mesh}
 
