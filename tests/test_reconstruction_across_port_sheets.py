@@ -518,6 +518,49 @@ def test_a_pad_drawn_as_two_polygons_has_no_drawn_ring_and_is_refused_at_it(
     assert on(place, box) and on(box, place)
 
 
+def test_a_pad_fused_with_a_protruding_polygon_keeps_no_drawn_ring(monkeypatch):
+    """A square whose every corner stays on the fused ring is still not the ring drawn.
+
+    A 40 um wide rectangle drawn on the pad's layer protrudes through the square's top
+    side to y = 140 um.  The fused ring holds all four corners of the square, but also
+    the rectangle's two outer corners, which lie on no side of the square, so
+    ``drawn_rings`` holds None and the reconstruction is refused at the fused ring,
+    (-100, -100)..(100, 140) um.
+    """
+    component = pad_layout(
+        monkeypatch,
+        [(-100, -100), (100, -100), (100, 100), (-100, 100)],
+        electrode=[(120, -30), (150, -30), (150, 30), (120, 30)],
+        sheet=None,
+        port_orientation=0,
+        reconstruction={
+            "boundary_id": "PAD_CORNER",
+            "entity_id": "pad",
+            "selector_point_um": (-50.0, 0.0),
+            "role": "outer",
+            "kind": "circular_arc",
+            "closed": False,
+            "segment_indices": [1, 2],
+            "anchor_indices": [1, 2, 3],
+        },
+    )
+    component.add_polygon([(-20, 50), (20, 50), (20, 140), (-20, 140)], layer=(1, 0))
+    (pad,) = [p for p in plan_polygons(component).values() if p.layer == "1/0"]
+    assert pad.drawn_rings == (None,)
+    with pytest.raises(InputError) as error:
+        EigenmodeSim.simulation_drc(
+            component,
+            layer_stack=NO_VACUUM_STACK,
+            material_records=MATERIALS,
+            nets=NETS,
+        )
+    message = str(error.value)
+    assert "the ring it selects has no drawn GDS ring recorded for it" in message
+    (place,) = places(message)
+    box = (-100.0, -100.0, 100.0, 140.0)
+    assert on(place, box) and on(box, place)
+
+
 def test_a_mirrored_occurrence_carries_the_mirrored_drawn_walk(monkeypatch):
     """The pad's drawn ring is the device cell's walk, each vertex mirrored in its place.
 

@@ -9,7 +9,8 @@ solution-region state.
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable, Mapping, Sequence
+import math
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Literal, cast, overload
 
@@ -322,6 +323,7 @@ class DrawnWalks:
 
     loops: tuple[tuple[GdsPoint, ...], ...]
     by_vertex: Mapping[GdsPoint, tuple[int, ...]]
+    grid_size_um: float
 
     @classmethod
     def read(cls, walks: Sequence[_Ring], grid_size_um: float) -> DrawnWalks:
@@ -340,20 +342,52 @@ class DrawnWalks:
             for node in loop:
                 by_vertex.setdefault(node, []).append(index)
         return cls(
-            tuple(loops), {node: tuple(found) for node, found in by_vertex.items()}
+            tuple(loops),
+            {node: tuple(found) for node, found in by_vertex.items()},
+            grid_size_um,
         )
 
     def drawn_ring(self, ring: _Ring) -> PolygonRing | None:
         """The drawn order of an emitted ring, or None when it is not one drawn loop.
 
-        It is the one loop whose vertices all lie on the ring; the ring may hold more,
-        the crossings the grid noded into it.  The same loop drawn on two layers is one
-        drawn ring; two different loops, or none, leave the ring without one.
+        It is the one loop whose vertices all lie on the ring and whose sides hold every
+        other vertex of the ring, the crossings the grid noded into it, each within one
+        grid step of a side.  A ring fused from this loop and another polygon also holds
+        the other polygon's corners, off the loop's sides, so the loop does not draw it.
+        The same loop drawn on two layers is one drawn ring; two different loops, or
+        none, leave the ring without one.
         """
         present = {cast(GdsPoint, tuple(map(float, point))) for point in ring}
         candidates = {i for node in present for i in self.by_vertex.get(node, ())}
-        found = {self.loops[i] for i in candidates if set(self.loops[i]) <= present}
+        found = {
+            self.loops[i]
+            for i in candidates
+            if set(self.loops[i]) <= present
+            and _sides_hold(self.loops[i], present, self.grid_size_um)
+        }
         return found.pop() if len(found) == 1 else None
+
+
+def _sides_hold(
+    loop: Sequence[GdsPoint], points: Iterable[GdsPoint], tolerance_um: float
+) -> bool:
+    # Whether every point that is not a vertex of the loop lies on one of its sides.
+    sides = list(zip(loop, (*loop[1:], loop[0]), strict=True))
+    vertices = set(loop)
+    return all(
+        any(_on_side(point, a, b, tolerance_um) for a, b in sides)
+        for point in points
+        if point not in vertices
+    )
+
+
+def _on_side(point: GdsPoint, a: GdsPoint, b: GdsPoint, tolerance_um: float) -> bool:
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    px, py = point[0] - a[0], point[1] - a[1]
+    length_sq = dx * dx + dy * dy
+    if not 0.0 <= px * dx + py * dy <= length_sq:
+        return False
+    return abs(px * dy - py * dx) <= tolerance_um * math.sqrt(length_sq)
 
 
 def _walk_nodes(walk: _Ring, grid_size_um: float) -> list[GdsPoint]:
