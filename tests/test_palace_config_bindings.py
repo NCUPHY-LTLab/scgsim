@@ -27,9 +27,9 @@ from scgsim.palace.results.surface_contract import validate_surface_epr_config
 NETS = {"A": ("left", "right"), "B": ("P", "G")}
 PORTS = {
     "A": LayoutPortBinding(
-        1, "chip/o_junction_lumped", "metal", "port", (1.0, 0.0, 0.0), 1e-9
+        1, "chip/o_junction_lumped", "metal", "port", (1.0, 0.0, 0.0), {"L": 1e-9}
     ),
-    "B": LayoutPortBinding(1, "P1", "metal", "9/0", (1.0, 0.0, 0.0), 1e-9),
+    "B": LayoutPortBinding(1, "P1", "metal", "9/0", (1.0, 0.0, 0.0), {"L": 1e-9}),
 }
 
 
@@ -248,7 +248,7 @@ def test_eigenmode_port_identity_must_match_the_sidecar(case):
     """A binding whose name or layers differ from the authored port is refused."""
     route, groups = case
     wrong = LayoutPortBinding(
-        1, "other", "metal", PORTS[route].source_layer, (1.0, 0.0, 0.0), 1e-9
+        1, "other", "metal", PORTS[route].source_layer, (1.0, 0.0, 0.0), {"L": 1e-9}
     )
     with pytest.raises(ValueError, match="does not match SGB-authored identity"):
         eigenmode(groups, [wrong])
@@ -257,7 +257,7 @@ def test_eigenmode_port_identity_must_match_the_sidecar(case):
             groups,
             [
                 PORTS[route],
-                LayoutPortBinding(2, "x", "metal", "9/0", (1.0, 0.0, 0.0), 1e-9),
+                LayoutPortBinding(2, "x", "metal", "9/0", (1.0, 0.0, 0.0), {"L": 1e-9}),
             ],
         )
 

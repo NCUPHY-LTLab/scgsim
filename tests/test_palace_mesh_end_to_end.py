@@ -382,7 +382,7 @@ def test_a_junction_support_plane_port_meshes_on_route_a(tmp_path):
             port["target_layer"],
             port["source_layer"],
             tuple(port["direction"]),
-            1e-9,
+            {"L": 1e-9},
         )
     ]
     config = build_eigenmode_config(

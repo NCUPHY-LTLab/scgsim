@@ -170,7 +170,7 @@ def build_eigenmode_config(  # noqa: PLR0913 - config builder preserves its name
     epr_rows, epr_index = build_surface_epr_postprocessing(
         groups, surface_epr_specs, model_l0_m=MODEL_L0_M
     )
-    lumped_ports, port_info, port_index = _eigenmode_lumped_ports(groups, ports)
+    lumped_ports, port_info, port_index = _lumped_ports(groups, ports)
     epr_attributes = {
         int(value) for row in epr_rows for value in row.get("Attributes", ())
     }
@@ -300,10 +300,14 @@ def _material_resolution(
     ]
 
 
-def _eigenmode_lumped_ports(
+def _lumped_ports(
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
     ports: Sequence[LayoutPortBinding],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """The ``LumpedPort`` rows, port information and index entries of ``ports``, each bound to its SGB group ``P<index>``.
+
+    A row's circuit keys are the port's ``circuit``, written unchanged; no port is excited.
+    """
     rows: list[dict[str, Any]] = []
     information: list[dict[str, Any]] = []
     index_rows: list[dict[str, Any]] = []
@@ -333,7 +337,7 @@ def _eigenmode_lumped_ports(
                 "Direction": list(direction),
                 "Excitation": False,
                 "Attributes": attributes,
-                "L": port.inductance,
+                **port.circuit,
             }
         )
         info = {
