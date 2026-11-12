@@ -57,6 +57,7 @@ NonNegative = Annotated[float, Minimum(0)]
 PlanePoint = Annotated[list[float], Length(2, 2)]  # (x, y) um
 SpacePoint = Annotated[list[float], Length(3, 3)]  # (x, y, z) um
 ZRange = Annotated[list[float], Length(2, 2)]  # (lowest, highest) z um
+Segment = Annotated[list[PlanePoint], Length(2, 2)]  # (start, end) um
 
 EntityRef = Annotated[str, Ref("entity")]
 SourceCurveRef = Annotated[str, Ref("source_curve")]
@@ -361,11 +362,23 @@ class SkippedFace(TypedDict):
 
 
 class RefinementRequest(TypedDict):
-    """A refinement request as given: the polyline, at one height, along which the mesher refines.  A refinement
-    family a catalogue declares directly, with no request, is recorded by the polyline of its segments."""
+    """A refinement family: the request as given (a polyline at one height along which the mesher refines), and
+    the segments SGB drew from it, which are its carriers."""
 
     z_um: float
-    points_um: list[PlanePoint]
+    points_um: Annotated[
+        list[PlanePoint] | None,
+        Doc(
+            "The polyline as the request gave it; null for a family a catalogue declares directly, with no request."
+        ),
+    ]
+    segments_um: Annotated[
+        list[Segment],
+        Doc(
+            "Each segment of the family, start and end, in carrier order: a repeated point draws none, and"
+            " segments a catalogue declares are kept as they are, joined or not."
+        ),
+    ]
 
 
 class Port(TypedDict):
@@ -519,10 +532,20 @@ class Face(TypedDict):
     area_um2: Positive
     curved: Annotated[bool, Doc("A wall on a cylinder.")]
     entities: Annotated[
-        list[EntityRef], Doc("The Entities whose outlines bound the face.")
+        list[EntityRef],
+        Doc(
+            "The Entities whose outlines bound the face, from the source carriers of its edges."
+        ),
     ]
     families: Annotated[
-        list[BandFamilyRef], Doc("The band families whose curves bound the face.")
+        list[BandFamilyRef],
+        Doc(
+            "The band families whose curves bound the face, from its band-member carriers."
+        ),
+    ]
+    refinements: Annotated[
+        list[RefinementRequestRef],
+        Doc("The refinement requests whose segments lie on its boundary edges."),
     ]
     membership: Annotated[
         dict[EntityRef, NonNegative],

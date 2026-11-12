@@ -79,7 +79,7 @@ def build_sidecar(
     members = group_members(plan)
     ports = port_records(model, plan)
     rings, primitives = support_records(model, lineage)
-    faces = face_records(model, plan)
+    faces = face_records(model, plan, lineage)
     volumes = volume_records(model, plan, volume_groups)
     _require_named_members(members, faces, volumes)
     return Sidecar(

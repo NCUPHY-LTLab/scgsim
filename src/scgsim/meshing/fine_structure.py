@@ -431,9 +431,7 @@ def _finding(model: BuiltModel, item: _Found, owner: Owner) -> FineFeature:
         native_tag=measured.tag,
         groups=tuple(sorted({g for f in face_ids if (g := model.face_group.get(f))})),
         entities=tuple(entities),
-        layers=tuple(
-            sorted({layer for e in entities if (layer := model.entity_layers.get(e))})
-        ),
+        layers=_layers(model, face_ids),
         sources=tuple(carriers),
         location_um=_rounded_point(measured.location),
         bounds_um=(
@@ -501,6 +499,20 @@ def _cause_and_fix(measure: str, owner: Owner) -> tuple[str, str]:
     if owner == "erosion":
         return _CAUSE[measure], _EROSION_FIX
     return _CAUSE[measure], _SGB_FIX
+
+
+def _layers(model: BuiltModel, face_ids: list[str]) -> tuple[str, ...]:
+    """The layers of the faces' Entities, sorted; a band family or request named like an Entity draws none."""
+    return tuple(
+        sorted(
+            {
+                layer
+                for face in face_ids
+                for entity in model.face_entities.get(face, ())
+                if (layer := model.entity_layers.get(entity))
+            }
+        )
+    )
 
 
 def _on_layers(layers: tuple[str, ...]) -> str:

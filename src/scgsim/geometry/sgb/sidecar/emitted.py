@@ -3,9 +3,9 @@
 Owns the ``vertex``, ``edge``, ``face`` and ``volume`` tables.  They describe what the XAO holds, as the plan
 numbered it: a vertex's position; an edge's kind, two vertices in written order, arc, length and what it comes
 from (carriers, or the Entities of a wall column); a face's group, kind, side volumes, written wires as oriented
-edges, planned area, the Entities and band families it comes from, the area each Entity covers, its band labels
-and the refinement curves embedded in it, and for a face on the model's outer boundary the side of the model's
-box it lies on and the domain it bounds; a volume's domain, group, planned volume, AEDT name, the faces of the
+edges, planned area, the Entities, band families and refinement requests it comes from, the area each Entity
+covers, its band labels and the refinement curves embedded in it, and for a face on the model's outer boundary
+the side of the model's box it lies on and the domain it bounds; a volume's domain, group, planned volume, AEDT name, the faces of the
 written solid and the sheets embedded in it.  The load-side expectations by native tag are computed from these
 tables (``scgsim.contracts.sgb_sidecar.views.expected``), so every planned measure is stored once.
 
@@ -42,6 +42,7 @@ from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.sidecar.aedt import aedt_names
 from scgsim.geometry.sgb.sidecar.derived import edge_sources
 from scgsim.geometry.sgb.sidecar.groups import face_kind
+from scgsim.geometry.sgb.sidecar.lineage import REFINEMENT_FAMILY_ROLE, CarrierLineage
 
 
 def vertex_records(plan: BrepPlan) -> dict[str, Vertex]:
@@ -95,10 +96,11 @@ def _length_um(plan: BrepPlan, number: int) -> float:
     return rounded(span)
 
 
-def face_records(model: ConformalModel, plan: BrepPlan) -> dict[str, Face]:
+def face_records(
+    model: ConformalModel, plan: BrepPlan, lineage: CarrierLineage
+) -> dict[str, Face]:
     """Every written face: group, kind, side volumes, written wires, area and what it comes from."""
     topology = model.topology
-    families = {f.family_id for f in model.labelled.catalogue.families}
     found = plan.found
     box = _Box.of(plan)
     out: dict[str, Face] = {}
@@ -106,6 +108,7 @@ def face_records(model: ConformalModel, plan: BrepPlan) -> dict[str, Face]:
         face = topology.faces[face_id]
         first = found.face_first_wire[number]
         wires = found.wires[first : first + found.face_wire_count[number]]
+        sources = _face_sources(model, lineage, face)
         out[face_id] = Face(
             group=model.routed.face_group.get(face_id),
             kind=face.kind,
@@ -116,9 +119,9 @@ def face_records(model: ConformalModel, plan: BrepPlan) -> dict[str, Face]:
             loops=[_loop(plan, wire) for wire in wires],
             area_um2=rounded(planned_face_area_um2(topology, face)),
             curved=face.curved,
-            # A face's sources are the Entities and the band families of the carriers that bound it.
-            entities=[s for s in face.sources if s not in families],
-            families=[s for s in face.sources if s in families],
+            entities=sources.entities,
+            families=sources.families,
+            refinements=sources.refinements,
             membership={
                 entity: rounded(share)
                 for entity, share in sorted(face.membership.items())
@@ -188,6 +191,45 @@ def _box_side(
         if bool((points[:, axis] == bound).all()):
             return side
     return None
+
+
+@dataclass(frozen=True)
+class _Sources:
+    """What the carriers that bound a face come from, by kind."""
+
+    entities: list[str]
+    families: list[str]
+    refinements: list[str]
+
+
+def _face_sources(
+    model: ConformalModel, lineage: CarrierLineage, face: TopoFace
+) -> _Sources:
+    """The Entities, band families and refinement requests of the carriers on a face's horizontal edges.
+
+    These are the sources SGB gave the face (``TopoFace.sources``), classified by each carrier's lineage: an id of
+    one kind may equal an id of another (an Entity named like a request), so the kind is never read from the id.
+    A wall column carries the Entities of its walls, not carriers, and an unknown carrier comes from none.
+    """
+    topology = model.topology
+    entities: set[str] = set()
+    families: set[str] = set()
+    refinements: set[str] = set()
+    for loop in face.loops:
+        for edge_id, _ in loop:
+            if topology.edges[edge_id].kind == "vertical":
+                continue
+            for carrier in topology.lineage.get(edge_id, ()):
+                found = lineage.lineage(carrier)
+                if found is None:
+                    continue
+                if found.kind == "polygon_edge":
+                    entities.add(found.entity_id)
+                elif lineage.role(found.family_id) == REFINEMENT_FAMILY_ROLE:
+                    refinements.add(found.family_id)
+                else:
+                    families.add(found.family_id)
+    return _Sources(sorted(entities), sorted(families), sorted(refinements))
 
 
 def _loop(plan: BrepPlan, wire: list[int]) -> Loop:

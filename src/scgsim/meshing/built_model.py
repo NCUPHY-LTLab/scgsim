@@ -77,9 +77,9 @@ class BuiltModel:
     ]  # native edge tag -> radius of its circle, micrometres
     face_kind: Mapping[str, str]  # face id -> "horizontal" or "wall"
     face_group: Mapping[str, str | None]
-    face_sources: Mapping[
-        str, tuple[str, ...]
-    ]  # face id -> its Entities and band families
+    # face id -> the names of its Entities, band families and refinement requests
+    face_sources: Mapping[str, tuple[str, ...]]
+    face_entities: Mapping[str, tuple[str, ...]]  # face id -> its Entities
     edge_carriers: Mapping[str, tuple[str, ...]]  # horizontal edge id -> carrier ids
     vertical_edges: Mapping[str, tuple[str, ...]]  # wall column id -> Entities
     carriers: Mapping[str, Carrier]
@@ -163,10 +163,14 @@ def read_built_model(sidecar: Sidecar) -> BuiltModel:
         face_kind={fid: face["kind"] for fid, face in faces.items()},
         face_group={fid: face["group"] for fid, face in faces.items()},
         # The Entities and band families are two disjoint id sets; the face's sources are both, sorted.
+        # The sources by name, whatever their kind (an Entity may be named like a request).
         face_sources={
-            fid: tuple(sorted([*face["entities"], *face["families"]]))
+            fid: tuple(
+                sorted({*face["entities"], *face["families"], *face["refinements"]})
+            )
             for fid, face in faces.items()
         },
+        face_entities={fid: tuple(face["entities"]) for fid, face in faces.items()},
         edge_carriers={
             eid: tuple(edge["carriers"])
             for eid, edge in edges.items()

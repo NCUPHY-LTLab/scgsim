@@ -2,7 +2,8 @@
 
 Owns the tables a consumer follows lineage back to: ``entity`` (each Entity's kind, material, Net, layer, z
 range and feature kind), ``source_curve`` (each straight edge and arc of each Entity outline, with its exact
-curve and length), ``inset_request`` and ``refinement_request`` (the requests as given) and ``port`` (each
+curve and length), ``inset_request`` and ``refinement_request`` (the requests as given; a refinement
+family also with the segments drawn from it) and ``port`` (each
 lumped-port sheet with the faces and volumes that carry it).  Lengths and coordinates are micrometres, rounded
 like every value of the sidecar (``emission.measures.rounded``).
 """
@@ -209,10 +210,11 @@ def concrete_support(
 
 
 def refinement_request_records(model: ConformalModel) -> dict[str, RefinementRequest]:
-    """Every refinement family: the request as given, or the segments of a family the catalogue declares itself.
+    """Every refinement family: the request as given, and the segments SGB drew, each carrier as it is.
 
     A refinement family is the cut family of one request (``cutfamilies.generate``); a catalogue may also carry
-    one directly, with no request, and its record is then its polyline as SGB holds it.
+    one directly, with no request, which has no polyline as given.  Its segments are kept one by one, never
+    joined into a polyline, because they need not touch nor follow one another.
     """
     given = {r.request_id: r for r in model.refinements}
     grid = model.topology.grid_um
@@ -221,15 +223,12 @@ def refinement_request_records(model: ConformalModel) -> dict[str, RefinementReq
         if family.role != REFINEMENT_FAMILY_ROLE:
             continue
         request = given.get(family.family_id)
-        if request is not None:
-            out[family.family_id] = RefinementRequest(
-                z_um=request.z_um, points_um=[list(p) for p in request.points_um]
-            )
-            continue
-        ends = [family.carriers[0].p, *(c.q for c in family.carriers)]
         out[family.family_id] = RefinementRequest(
-            z_um=float(family.target_levels[0]),
-            points_um=[_point_um(p, grid) for p in ends],
+            z_um=float(family.target_levels[0]) if request is None else request.z_um,
+            points_um=None if request is None else [list(p) for p in request.points_um],
+            segments_um=[
+                [_point_um(c.p, grid), _point_um(c.q, grid)] for c in family.carriers
+            ],
         )
     return dict(sorted(out.items()))
 

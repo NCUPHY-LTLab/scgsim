@@ -163,6 +163,7 @@ def _face(group: str, edges: Sequence[str]) -> dict[str, Any]:
         "curved": False,
         "entities": [],
         "families": [],
+        "refinements": [],
         "membership": {},
         "bands": [],
         "embedded_edges": [],
@@ -242,6 +243,7 @@ def _add_feature(
         document["refinement_request"][source] = {
             "z_um": 0.0,
             "points_um": [[0.0, 0.0], [1.0, 0.0]],
+            "segments_um": [[[0.0, 0.0], [1.0, 0.0]]],
         }
     else:
         document["port"][source] = {

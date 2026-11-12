@@ -365,7 +365,7 @@
       "description": "One written face: its group, kind, face kind, z range, the volumes on its two sides, its written loops and area, and what it comes from.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume", "loops", "area_um2", "curved", "entities", "families", "membership", "bands", "embedded_edges", "outer_boundary"],
+      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume", "loops", "area_um2", "curved", "entities", "families", "refinements", "membership", "bands", "embedded_edges", "outer_boundary"],
       "properties": {
         "group": {"type": ["string", "null"], "x-references": "group", "x-dimension": 2},
         "kind": {"enum": ["horizontal", "wall"]},
@@ -387,14 +387,19 @@
         "area_um2": {"type": "number", "exclusiveMinimum": 0},
         "curved": {"description": "A wall on a cylinder.", "type": "boolean"},
         "entities": {
-          "description": "The Entities whose outlines bound the face.",
+          "description": "The Entities whose outlines bound the face, from the source carriers of its edges.",
           "type": "array",
           "items": {"type": "string", "x-references": "entity"}
         },
         "families": {
-          "description": "The band families whose curves bound the face.",
+          "description": "The band families whose curves bound the face, from its band-member carriers.",
           "type": "array",
           "items": {"type": "string", "x-references": "band_family"}
+        },
+        "refinements": {
+          "description": "The refinement requests whose segments lie on its boundary edges.",
+          "type": "array",
+          "items": {"type": "string", "x-references": "refinement_request"}
         },
         "membership": {
           "description": "Entity -> covered fraction of the face area; non-exclusive, may sum to more than 1 (walls use the share of their bottom boundary length).",
@@ -678,17 +683,33 @@
       }
     },
     "RefinementRequest": {
-      "description": "A refinement request as given: the polyline, at one height, along which the mesher refines.  A refinement family a catalogue declares directly, with no request, is recorded by the polyline of its segments.",
+      "description": "A refinement family: the request as given (a polyline at one height along which the mesher refines), and the segments SGB drew from it, which are its carriers.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["z_um", "points_um"],
+      "required": ["z_um", "points_um", "segments_um"],
       "properties": {
         "z_um": {"type": "number"},
         "points_um": {
-          "type": "array",
+          "description": "The polyline as the request gave it; null for a family a catalogue declares directly, with no request.",
+          "type": ["array", "null"],
           "items": {
             "type": "array",
             "items": {"type": "number"},
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "segments_um": {
+          "description": "Each segment of the family, start and end, in carrier order: a repeated point draws none, and segments a catalogue declares are kept as they are, joined or not.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 2,
+              "maxItems": 2
+            },
             "minItems": 2,
             "maxItems": 2
           }

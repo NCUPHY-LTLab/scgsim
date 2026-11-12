@@ -33,7 +33,8 @@ Sources -- what the layout drew and asked for
     each straight edge and circular arc of each Entity outline: its Entity, polygon, ring and edge number, its
     exact curve (line ends, or arc centre, radius, sense and ends) and length.
 ``inset_request`` / ``refinement_request``
-    the requests as given.  A face request (``scope`` face) names one face and is its own band family; a
+    the requests as given; a refinement family also lists its segments one by one (a catalogue may declare
+    one with no request).  A face request (``scope`` face) names one face and is its own band family; a
     type-level request (``scope`` type: every face of a Surface-EPR type, optionally only some face kinds,
     without the excluded Entities) lists the ``families`` the physical pre-pass created, in face order, and the
     faces it ``skipped`` with the reason (``no_gap_edge``).  A port can cover a family's whole face, so whether
@@ -61,8 +62,8 @@ Emitted -- the shapes that entered the model
 ``vertex`` / ``edge`` / ``face`` / ``volume``
     every written vertex's position; every written edge's kind, vertices, arc, length, carriers (or, for a wall
     column, the Entities whose walls stand on it) and whether it is written free; every written face's group,
-    kind, face kind, z range, side volumes, written wires, planned area, whether it is curved, the Entities and
-    band families it comes from, the area each Entity covers (non-exclusive), its band labels and the
+    kind, face kind, z range, side volumes, written wires, planned area, whether it is curved, the Entities,
+    band families and refinement requests of its boundary carriers (classified by lineage, never by id), the area each Entity covers (non-exclusive), its band labels and the
     refinement curves embedded in it; every planned volume's Entity and domain, ``emitted``, group, shells,
     planned volume, ``aedt_name``, the faces of its written solid and the sheets embedded in it.  The load-side
     expectations by native tag (``views.expected``, which ``verify_loaded`` and the OCCT and STEP checks
