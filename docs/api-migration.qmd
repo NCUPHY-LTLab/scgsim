@@ -358,8 +358,8 @@ old-name aliases.
 their v2 responsibility owner.
 
 
-- **Current owner and responsibility:** `scgsim.palace.preparation`; keep separate mutable preparation state owners. **Facade exports:** `ElectrostaticSim`, `EigenmodeSim`.
-- **Current owner and responsibility:** `scgsim.palace.preparation.drc`; the two-stage `simulation_drc` report and its refusal, also raised by `mesh()` before meshing. **Facade exports:** `SimulationDrcError`, `SimulationDrcReport`, `StageResult`.
+- **Current owner and responsibility:** `scgsim.palace.simulation`; the two simulation classes on one shared core and lifecycle. **Facade exports:** `ElectrostaticSim`, `EigenmodeSim`.
+- **Current owner and responsibility:** `scgsim.palace.simulation.drc`; the two-stage `simulation_drc` report and its refusal, also raised by `mesh()` before meshing. **Facade exports:** `SimulationDrcError`, `SimulationDrcReport`, `StageResult`.
 - **Current owner and responsibility:** `scgsim.palace.results`; custody-aware result loading. **Facade exports:** `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
 - **Current owner and responsibility:** `scgsim.palace.results`; detached EPR values and offline reanalysis. **Facade exports:** `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`.
 - **Current owner and responsibility:** `scgsim.palace.presentation`; solver-specific plot over detached EPR. **Facade exports:** `show_epr`.
@@ -373,8 +373,8 @@ These non-underscored modules declare their own `__all__` and therefore need
 explicit migration entries in addition to the package facade.
 
 
-- **Baseline direct import `scgsim.palace.electrostatic` → current owner `scgsim.palace.preparation.electrostatic`.** Declared symbols: `ElectrostaticSim`.
-- **Baseline direct import `scgsim.palace.eigenmode` → current owner `scgsim.palace.preparation.eigenmode`.** Declared symbols: `EigenmodeSim`.
+- **Baseline direct import `scgsim.palace.electrostatic` → current owner `scgsim.palace.simulation.electrostatic`.** Declared symbols: `ElectrostaticSim`.
+- **Baseline direct import `scgsim.palace.eigenmode` → current owner `scgsim.palace.simulation.eigenmode`.** Declared symbols: `EigenmodeSim`.
 - **Baseline direct import `scgsim.palace.handoff` → current owner `scgsim.palace.execution.handoff`.** Declared symbols: `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
 - **Baseline direct import `scgsim.palace.resolve` → current owner `scgsim.palace.results.resolve`.** Declared symbols: `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
 - **Baseline direct import `scgsim.palace.report`.** Declared symbols: `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. Current owner: `scgsim.palace.presentation.reports` retains this direct export list; data records are defined in `scgsim.palace.results.report_models`. The package facade retains the other report exports, including `SimulationBenchmarkReport` and surface-margin records.

@@ -1,8 +1,9 @@
-"""The geometry request of a Palace simulation with lumped ports: its ports resolved and its geometry input prepared.
+"""The geometry request of a Palace simulation: its lumped ports resolved and its geometry input prepared.
 
-``layout_geometry_request`` is everything before the SGB build of a simulation whose layout sheets are
-lumped ports: it binds each requested port to an authored sheet of the plan, then
-prepares the geometry input with exactly the sheets requested.  ``EigenmodeSim`` builds its model from
+``layout_geometry_request`` is everything before the SGB build.  For a problem whose layout sheets are
+lumped ports (Eigenmode) it binds each requested port to an authored sheet of the plan, then prepares the
+geometry input with exactly the sheets requested; for a problem with no lumped ports (Electrostatic) it
+prepares the plan's geometry input with its sheets as authored.  The simulation core builds its model from
 it in ``mesh()`` and in ``simulation_drc``, and ``input_summary()`` summarises the same prepared input, so
 the summary shows the vacuum, ports and conductors the model is built from.  The request holds no
 simulation state: the simulation passes its settings in, and ``mesh()`` keeps the materials the
@@ -54,11 +55,16 @@ class LayoutGeometryRequest:
 def layout_geometry_request(
     *,
     plan: GeometryPlanSnapshot,
-    ports: list[RequestedPort],
+    ports: list[RequestedPort] | None,
     settings: GeometrySettings,
 ) -> LayoutGeometryRequest:
-    """Resolve ``ports`` to the plan's authored sheets and prepare the plan's own geometry input and stack."""
-    resolved, source_records = _resolve_plan_ports(plan, ports)
+    """Resolve ``ports`` to the plan's authored sheets and prepare the plan's own geometry input and stack.
+
+    ``ports`` is None for a problem with no lumped ports: no sheet is selected or cut as a port.
+    """
+    resolved, source_records = (
+        ([], None) if ports is None else _resolve_plan_ports(plan, ports)
+    )
     source_stack = plan.stack
     prepared = prepare_mesh_input(
         stack=source_stack,

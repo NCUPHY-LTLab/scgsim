@@ -22,7 +22,7 @@ source_data = summary.data
 
 請依最終指派核對 Entity／occurrence／Net 表，再檢查材料、Z 與真空紀錄。埠表會標示編寫的薄片及其承載物／方向。未知值仍維持未知；未設定的請求不等於已知的零。`.data` 是分離資料，因此修改回傳字典不會改變保留的來源快照。
 
-設定完成後，兩種 Eigenmode 外觀介面也提供 `sim.input_summary()`。此檢視會在正規化來源資訊中加入後端設定。Palace 的檢視呈現 `mesh()` 將用來建模的來源，因此包含在模擬上設定的真空區域，且只列出模擬所要求的埠。Electrostatic 沒有此介面方法：請使用上方獨立來源摘要，再檢查寫出的設定檔及確切端子／接地索引。
+設定完成後，兩種 Eigenmode 外觀介面也提供 `sim.input_summary()`。此檢視會在正規化來源資訊中加入後端設定。Palace 的檢視呈現 `mesh()` 將用來建模的來源，因此包含在模擬上設定的真空區域，且只列出模擬所要求的埠。`ElectrostaticSim` 也提供相同的 `sim.input_summary()`，以端子、接地與政策取代埠；`write_config()` 之後，再檢查確切的端子／接地索引。
 
 ## 保留可攜式配對來源 {#retain-a-portable-paired-source}
 

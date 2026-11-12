@@ -84,8 +84,10 @@ After meshing, `sim.mesh_summary()` exposes detached native generation
 observations, including mesh controls, element/region counts and exact mesh
 identities. Those records describe the mesh; they do not decide whether its
 discretization is adequate for a study.
-The [source summary](source-observations.qmd) remains a separate input view;
-`ElectrostaticSim` has no `input_summary()` method.
+Before meshing, `sim.input_summary()` shows the input `mesh()` builds from (the
+plan with the simulation's vacuum region applied) with the terminals, grounds
+and policies; the [source summary](source-observations.qmd) is the view of the
+plan alone.
 
 Next [inspect the prepared mesh](solver-observations.qmd) if useful, then
 [prepare and execute the handoff](execute.qmd). On return,

@@ -45,7 +45,7 @@ import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.meshing.entry as meshing_entry
 import scgsim.meshing.repair as meshing_repair
 import scgsim.palace.mesh.build as build_module
-import scgsim.palace.preparation.drc as drc_module
+import scgsim.palace.simulation.drc as drc_module
 from scgsim.geometry.models.input import BoundaryCurveChainSpec, SourceCurveSpec
 from scgsim.geometry.sgb.errors import OverlapError
 from scgsim.meshing import (
@@ -337,7 +337,7 @@ def test_mesh_refuses_layout_fine_structure_before_the_mesher_starts(
     assert started == []
     assert raised.value.report == expected
     assert "(20.0005, 10.0000, 0.1000) um" in str(raised.value)
-    with pytest.raises(RuntimeError, match="requires a generated mesh"):
+    with pytest.raises(RuntimeError, match=r"No mesh to summarise: call mesh\(\)"):
         sim.mesh_summary()
 
 

@@ -222,6 +222,6 @@ with preparation_resources(max_workers=30):
 
 ## 求解前輸入摘要 {#pre-solve-input-summary}
 
-`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 回傳 `InputSummary`，具備獨立 `.data` 及供 Notebook 顯示的 HTML 表示。兩個 Eigenmode 外觀介面都提供 `input_summary()`，將此正規化來源與設定的後端選項組合。AEDT 摘要使用正規化建構輸入及堆疊。Palace 要求綁定的 `GeometryPlan`，並摘要 `mesh()` 由該計畫準備出的輸入，因此在模擬上設定的真空區域或埠，以及 Route A 或 Route B 的導體表示，都以模型將採用的樣子呈現。傳入未明確正規化的原始元件會失敗，不猜測堆疊。摘要記錄來源、實體、Net、材料、Z／真空、埠、EPR 及執行控制輸入；未設定或未知值保持明確。它不進行檔案 I/O、網格產生、目錄重建或原生求解器檢查，也不宣稱原生幾何或執行資料。來源摘要的 `source.top_cell_name` 優先使用有效轉接器選定的 `selected_cell_name`；選定名稱不可用時，退回舊式 `top_cell_name`，否則為 `None`。此顯示選擇不改動來源中繼資料或重讀 GDS。
+`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 回傳 `InputSummary`，具備獨立 `.data` 及供 Notebook 顯示的 HTML 表示。兩個 Eigenmode 外觀介面與 `ElectrostaticSim` 都提供 `input_summary()`，將此正規化來源與設定的後端選項組合。AEDT 摘要使用正規化建構輸入及堆疊。Palace 要求綁定的 `GeometryPlan`，並摘要 `mesh()` 由該計畫準備出的輸入，因此在模擬上設定的真空區域或埠，以及 Route A 或 Route B 的導體表示，都以模型將採用的樣子呈現。傳入未明確正規化的原始元件會失敗，不猜測堆疊。摘要記錄來源、實體、Net、材料、Z／真空、埠、EPR 及執行控制輸入；未設定或未知值保持明確。它不進行檔案 I/O、網格產生、目錄重建或原生求解器檢查，也不宣稱原生幾何或執行資料。來源摘要的 `source.top_cell_name` 優先使用有效轉接器選定的 `selected_cell_name`；選定名稱不可用時，退回舊式 `top_cell_name`，否則為 `None`。此顯示選擇不改動來源中繼資料或重讀 GDS。
 
 Notebook HTML 先呈現來源、後端、路徑及數量卡片，接著是 Entity／出現實例／Net／材料／來源 Z、埠／宿主／方向、接面 A／B／L／C、分析選擇、薄膜／損耗／來源／邊距假設，以及求解器／資源表格。原始獨立 JSON 放在收合區。未知值仍與零不同；只有在選取語意中，`None` 才表示全部，空元組表示不選取，缺少要求則標為未要求。HTML 沒有主題引數，繼承前端淺色／深色調色盤；獨立 `.data` 契約不變。

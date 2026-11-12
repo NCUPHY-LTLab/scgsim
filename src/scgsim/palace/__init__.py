@@ -5,9 +5,6 @@ Failure intent: all public entrypoints are fail-closed and reject incomplete
 state without silently changing behavior.
 """
 
-from .preparation.drc import SimulationDrcError, SimulationDrcReport, StageResult
-from .preparation.eigenmode import EigenmodeSim
-from .preparation.electrostatic import ElectrostaticSim
 from .presentation.reports import (
     PalaceTrustReport,
     PhysicsQuantitiesReport,
@@ -37,6 +34,9 @@ from .results.resolve import (
     ResolvedPalaceResult,
     resolve_palace_result,
 )
+from .simulation.drc import SimulationDrcError, SimulationDrcReport, StageResult
+from .simulation.eigenmode import EigenmodeSim
+from .simulation.electrostatic import ElectrostaticSim
 
 __all__ = [
     "EigenmodeSim",

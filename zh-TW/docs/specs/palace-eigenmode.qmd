@@ -7,7 +7,7 @@ scgsim-id: "docs/specs/palace-eigenmode"
 lang: zh-TW
 ---
 
-`scgsim.palace.EigenmodeSim` 負責可變的網格、設定、已解析埠及交接狀態。它與 Electrostatic、AEDT 分開，沒有共用的模擬基底物件。[Palace 課程](../course/palace-eigenmode.qmd) 說明一般流程；[Xmon EPR](../tutorial-xmon-palace.qmd) 補充選用的物理分析。
+`scgsim.palace.EigenmodeSim` 負責可變的網格、設定、已解析埠及交接狀態。它與 `ElectrostaticSim` 共用同一個私有核心（綁定、幾何設定、`mesh()`、摘要、交接與生命週期），只加上本徵模態專屬的設定方法與設定檔；它與 AEDT 不共用任何部分。[Palace 課程](../course/palace-eigenmode.qmd) 說明一般流程；[Xmon EPR](../tutorial-xmon-palace.qmd) 補充選用的物理分析。
 
 | 階段 | 公開介面 |
 |---|---|
