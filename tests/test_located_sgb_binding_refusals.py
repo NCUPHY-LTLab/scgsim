@@ -20,6 +20,7 @@ segment, vertex or arc point at fault.
 from __future__ import annotations
 
 import math
+import re
 
 import pytest
 from sgb_inputs import gds_pad_in_ground
@@ -28,8 +29,16 @@ from test_located_source_and_sgb_refusals import pads_with_selectors
 from test_lumped_ports_at_any_angle import device_with_port, placed, turned
 from test_palace_rectangular_ports import prepared_port
 from test_sgb_prisms import with_boundaries
-from test_simulation_drc import LAYER_STACK, MATERIALS, NO_VACUUM_STACK, check
+from test_simulation_drc import (
+    LAYER_STACK,
+    MATERIALS,
+    NO_VACUUM_STACK,
+    MeshingReached,
+    check,
+    configured,
+)
 
+import scgsim.palace.mesh.build as build_module
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.construction.curved_geometry.boundaries import (
     source_boundaries,
@@ -435,8 +444,8 @@ def pad_device(monkeypatch, pad, *, curves=(), reconstruction=()):
     return device
 
 
-def occurrence_refusal(device, turn, nets=None):
-    """The refusal of a chip that places ``device`` turned by ``turn`` degrees, from its plan and from ``simulation_drc``."""
+def turned_plan(device, turn):
+    """The plan of a chip that places ``device`` as ``chip/device`` turned by ``turn`` degrees, and the chip and reference."""
     chip, reference = placed(device, turn)
     plan = GeometryPlan(
         chip,
@@ -446,6 +455,12 @@ def occurrence_refusal(device, turn, nets=None):
         coupon_padding_um=0.0,
     )
     plan.register_instance("chip/device", reference)
+    return plan, chip, reference
+
+
+def occurrence_refusal(device, turn, nets=None):
+    """The refusal of a chip that places ``device`` turned by ``turn`` degrees, from its plan and from ``simulation_drc``."""
+    plan, chip, reference = turned_plan(device, turn)
     with pytest.raises(ValueError) as planned:
         plan.prepare()
     with pytest.raises(ValueError) as checked:
@@ -565,6 +580,61 @@ def test_anchors_on_one_line_in_their_cell_are_refused_in_a_turned_occurrence(
     for place, index in zip(found, ON_THE_LINE, strict=True):
         x, y = turned(ZIGZAG_DRAWN[index], turn)
         assert on(place, (x, y, x, y))
+
+
+def zigzag_plan(monkeypatch, anchors, turn):
+    """A chip that turns the zigzag's device by ``turn`` degrees, its arc over drawn segments 1 to 4 declared on the plan."""
+    plan, _, _ = turned_plan(pad_device(monkeypatch, ZIGZAG), turn)
+    plan.set_boundary_reconstruction(
+        [
+            {
+                "boundary_id": "chip/device/PAD_ARC",
+                "entity_id": "chip/device/pad",
+                "selector_point_um": turned((3.5, -1.5), turn),
+                "kind": "circular_arc",
+                "segment_indices": [1, 2, 3, 4],
+                "anchor_indices": list(anchors),
+            }
+        ]
+    )
+    return plan
+
+
+@pytest.mark.parametrize("turn", [6.0, 20.0], ids=["6-degrees", "20-degrees"])
+def test_anchors_on_one_line_in_their_cell_are_refused_on_the_plan_in_a_turned_occurrence(
+    monkeypatch, turn
+):
+    """The zigzag's anchors (0, 0), (3, 0) and (7, 0) um on the plan: refused as unturned (before: SGB built an arc)."""
+    messages = []
+    for angle in (0.0, turn):
+        with pytest.raises(ValueError) as error:
+            zigzag_plan(monkeypatch, ON_THE_LINE, angle).prepare()
+        messages.append(str(error.value))
+    assert messages[1].startswith(
+        "chip/device/PAD_ARC (Entity 'chip/device/pad', layer 1/0): the three arc points "
+        "are collinear, so they define no circle: its anchors are drawn vertex 1 at "
+    )
+    unplaced = [re.sub(r"\([^()]*\) um", "", message) for message in messages]
+    assert unplaced[0] == unplaced[1]
+    for place, index in zip(places(messages[1]), ON_THE_LINE, strict=True):
+        x, y = turned(ZIGZAG_DRAWN[index], turn)
+        assert on(place, (x, y, x, y))
+
+
+def test_anchors_that_define_a_circle_on_the_plan_build_in_a_turned_occurrence(
+    monkeypatch, tmp_path
+):
+    """The zigzag's anchors (0, 0), (1, 1) and (7, 0) um on the plan, turned by 20 degrees: SGB builds the arc."""
+    snapshot = zigzag_plan(monkeypatch, (1, 2, 5), 20.0).prepare()
+    sim = configured(EigenmodeSim, snapshot, None)
+    sim.set_output_dir(tmp_path / "run")
+
+    def meshing_reached(*_args, **_kwargs):
+        raise MeshingReached
+
+    monkeypatch.setattr(build_module, "mesh_sgb", meshing_reached)
+    with pytest.raises(MeshingReached):
+        sim.mesh()
 
 
 # --------------------------------- an arc declared on the plan, in assembly coordinates

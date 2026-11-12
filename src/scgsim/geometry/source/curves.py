@@ -634,7 +634,10 @@ def refuse_reconstructions_without_circle(
 
     The anchors are drawn GDS vertices, exact in their cell's database units.  An occurrence
     turns them in floats and the grid rounds them, where three vertices on one line seldom
-    stay on one line, so ``collinear`` decides here, on the vertices as drawn.  A record with
+    stay on one line, so ``collinear`` decides here, on the vertices as drawn.  It decides
+    every record, a component's and one set on the plan alike: either names drawn vertices
+    by index and carries no point of its own, and a rigid transform keeps three points on one
+    line, so a circle through them after the turn is rounding, not the declared arc.  A record with
     another fault (its selector, its ring, its indices) is left to the binding stages, which
     refuse it located; so is a ring whose walks were not read.
     """
