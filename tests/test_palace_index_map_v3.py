@@ -57,9 +57,9 @@ from scgsim.palace.results.tables import count_index_entries
 NETS = {"A": ("left", "right"), "B": ("P", "G")}
 PORTS = {
     "A": LayoutPortBinding(
-        1, "chip/o_junction_lumped", "metal", "port", (1.0, 0.0, 0.0), 1e-9
+        1, "chip/o_junction_lumped", "metal", "port", (1.0, 0.0, 0.0), {"L": 1e-9}
     ),
-    "B": LayoutPortBinding(1, "P1", "metal", "9/0", (1.0, 0.0, 0.0), 1e-9),
+    "B": LayoutPortBinding(1, "P1", "metal", "9/0", (1.0, 0.0, 0.0), {"L": 1e-9}),
 }
 THIN_FILM = {
     "schema_version": 1,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from numbers import Real
 from typing import Any
@@ -33,14 +34,18 @@ class ConfigBuildResult:
 
 @dataclass(frozen=True)
 class LayoutPortBinding:
-    """One authored GDSFactory junction port resolved for SGB lowering."""
+    """One authored GDSFactory junction port resolved for SGB lowering.
+
+    ``circuit`` holds the port's Palace ``LumpedPort`` circuit keys with their SI values, such as
+    ``{"L": 1e-8}`` (henry) for an Eigenmode port; the port's ``LumpedPort`` row carries them unchanged.
+    """
 
     index: int
     name: str
     target_layer: str
     source_layer: str
     direction: tuple[float, float, float]
-    inductance: float
+    circuit: Mapping[str, float]
 
 
 @dataclass(frozen=True)

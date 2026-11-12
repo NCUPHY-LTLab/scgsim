@@ -32,11 +32,11 @@ from .config import LayoutPortBinding
 
 @dataclass(frozen=True)
 class RequestedPort:
-    """One caller-selected authored port with its target layer and inductance."""
+    """One caller-selected authored port with its target layer and its circuit, as ``LayoutPortBinding.circuit``."""
 
     name: str
     layer: str
-    inductance: float
+    circuit: Mapping[str, float]
 
 
 def resolve_layout_ports(
@@ -81,7 +81,7 @@ def resolve_layout_ports(
                 target_layer=requested.layer,
                 source_layer=source_layer,
                 direction=direction,
-                inductance=requested.inductance,
+                circuit=requested.circuit,
             )
         )
         records.append(

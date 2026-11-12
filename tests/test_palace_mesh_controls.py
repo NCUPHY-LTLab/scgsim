@@ -16,7 +16,7 @@ from scgsim.meshing import (
 )
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.mesh.controls import DEFAULT_QUALITY_THRESHOLD, MeshControls
-from scgsim.palace.preparation import eigenmode, electrostatic
+from scgsim.palace.preparation import eigenmode, electrostatic, layout_ports
 
 STACK = {
     "materials": {"Si": {"kind": "dielectric", "permittivity": 11.45}},
@@ -155,6 +155,8 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     The meshing-stage check runs between the two.
     """
     module = electrostatic if sim_type is ElectrostaticSim else eigenmode
+    # Eigenmode prepares its geometry input through the shared port-resolving request.
+    preparation = electrostatic if sim_type is ElectrostaticSim else layout_ports
     calls = stand_in_mesh_stages(monkeypatch, module, tmp_path)
     prepared = SimpleNamespace(
         component=object(),
@@ -164,7 +166,7 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
         geometry_input=object(),
         physical_plan=SimpleNamespace(context=object()),
     )
-    monkeypatch.setattr(module, "prepare_mesh_input", lambda **kwargs: prepared)
+    monkeypatch.setattr(preparation, "prepare_mesh_input", lambda **kwargs: prepared)
     sim = sim_type()
     sim.set_stack(STACK)
     sim.set_geometry(SimpleNamespace(write_gds=lambda path: None))
@@ -204,7 +206,7 @@ def test_eigenmode_without_surface_epr_requests_no_insets(monkeypatch, tmp_path)
         geometry_input=object(),
         physical_plan=SimpleNamespace(context=object()),
     )
-    monkeypatch.setattr(eigenmode, "prepare_mesh_input", lambda **kwargs: prepared)
+    monkeypatch.setattr(layout_ports, "prepare_mesh_input", lambda **kwargs: prepared)
     sim = EigenmodeSim()
     sim.set_stack(STACK)
     sim.set_geometry(SimpleNamespace(write_gds=lambda path: None))
