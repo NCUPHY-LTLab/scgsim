@@ -23,15 +23,10 @@ from scgsim.aedt.results.hfss_readback import (
     validate_hfss_pec_bindings,
 )
 from scgsim.aedt.results.matrices import parse_matrix_export, read_q2d_rlgc_matrix
-from scgsim.aedt.results.provenance import (
-    RECEIPT_V1,
-    RECEIPT_V2,
-    RECEIPT_V3,
-)
+from scgsim.aedt.results.provenance import require_current_receipt
 from scgsim.aedt.results.readback_dispatch import validate_result_readback
 from scgsim.aedt.results.receipt_validation import (
     contained,
-    reject_legacy_v2_markers,
     validate_completion_cohort,
     verified,
 )
@@ -229,7 +224,6 @@ class CompletedRun:
     root: Path
     receipt: dict[str, Any]
     receipt_path: Path
-    receipt_schema: str
     spec: Any
     mode: Literal["terminal", "modal", "eigenmode", "q3d", "q2d"]
     save: dict[str, Any]
@@ -328,9 +322,6 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
     """Resolve results after each receipt, source, and native-readback check."""
     root = Path(run_dir).resolve()
     receipt_path, receipt = _read_completed_receipt(root)
-    receipt_schema = receipt["schema_version"]
-    if receipt_schema == RECEIPT_V1:
-        reject_legacy_v2_markers(root, receipt)
 
     save = receipt.get("save")
     if (
@@ -347,15 +338,12 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
     if not isinstance(source, dict) or source.get("spec") != "aedt_spec.json":
         raise RuntimeError("receipt source paths are not canonical")
     spec_path = verified(root, "aedt_spec.json", source, "spec_sha256")
-    spec = parse_aedt_spec(
-        read_json(spec_path), base_dir=root, allow_historical_modeling=True
-    )
-    if receipt_schema in {RECEIPT_V2, RECEIPT_V3}:
-        validate_completion_cohort(root, receipt, spec)
+    spec = parse_aedt_spec(read_json(spec_path), base_dir=root)
+    validate_completion_cohort(root, receipt, spec)
     _validate_source_binding(root, source, spec)
-    mode = _validate_result_family(root, receipt, receipt_schema, mode, spec)
+    mode = _validate_result_family(root, receipt, mode, spec)
     return _resolve_mode_outputs(
-        CompletedRun(root, receipt, receipt_path, receipt_schema, spec, mode, save)
+        CompletedRun(root, receipt, receipt_path, spec, mode, save)
     )
 
 
@@ -365,12 +353,7 @@ def _read_completed_receipt(root: Path) -> tuple[Path, dict[str, Any]]:
     if not receipt_path.is_file():
         raise FileNotFoundError(f"run receipt is missing: {receipt_path}")
     receipt = read_json(receipt_path)
-    if not isinstance(receipt, dict) or receipt.get("schema_version") not in {
-        RECEIPT_V1,
-        RECEIPT_V2,
-        RECEIPT_V3,
-    }:
-        raise RuntimeError("handoff receipt schema is invalid")
+    require_current_receipt(receipt)
     if receipt.get("status") != "completed":
         raise RuntimeError("handoff has not completed successfully")
     if "native_batch" in receipt:
@@ -427,7 +410,6 @@ def _validate_source_binding(root: Path, source: dict[str, Any], spec: Any) -> N
 def _validate_result_family(
     root: Path,
     receipt: dict[str, Any],
-    receipt_schema: str,
     mode: Any,
     spec: Any,
 ) -> Literal["terminal", "modal", "eigenmode", "q3d", "q2d"]:
@@ -450,9 +432,7 @@ def _validate_result_family(
             raise RuntimeError("body-first Eigenmode native readback is incomplete")
     else:
         _validate_readback(root, receipt, spec)
-    if receipt_schema == RECEIPT_V3 and isinstance(
-        spec, (HfssDrivenSpec, HfssEigenmodeSpec)
-    ):
+    if isinstance(spec, (HfssDrivenSpec, HfssEigenmodeSpec)):
         validate_hfss_pec_bindings(receipt, spec)
     return result_mode
 

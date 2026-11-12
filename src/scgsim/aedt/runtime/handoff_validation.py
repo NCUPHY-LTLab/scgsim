@@ -16,9 +16,8 @@ from scgsim.aedt.preparation.cohort import (
     validate_hfss_import_source,
 )
 from scgsim.aedt.results.provenance import (
-    RECEIPT_V1,
-    RECEIPT_V2,
     RECEIPT_V3,
+    require_current_receipt,
     validate_runtime_source,
 )
 from scgsim.aedt.results.receipt_validation import contained
@@ -240,15 +239,13 @@ def _verify_receipt_cohort(
     receipt: dict[str, Any],
     spec: AedtSpec,
 ) -> _PreparedCohort:
-    metadata_has = "expected_receipt_schema" in metadata
-    manifest_has = "expected_receipt_schema" in manifest
     markers = (
         metadata.get("expected_receipt_schema"),
         manifest.get("expected_receipt_schema"),
     )
-    schema = receipt.get("schema_version")
     if receipt.get("mode") != spec.mode:
         raise RuntimeError("prepared receipt mode does not match the spec")
+    require_current_receipt(receipt)
     initial_keys = {
         "schema_version",
         "status",
@@ -257,37 +254,17 @@ def _verify_receipt_cohort(
         "pdk_materials",
         "vacuum_material_id",
         "source",
+        "prepared_runtime_source",
         "outputs",
         "prepared_at_utc",
     }
-    if schema in {RECEIPT_V2, RECEIPT_V3}:
-        initial_keys.add("prepared_runtime_source")
-        if markers != (schema, schema):
-            raise RuntimeError("prepared receipt cohort markers are inconsistent")
-        validate_runtime_source(
-            receipt.get("prepared_runtime_source"), stage="prepared"
-        )
-        preparation_cohort = "prepared_v3" if schema == RECEIPT_V3 else "prepared_v2"
-        prepared_source = receipt["prepared_runtime_source"]
-    elif schema == RECEIPT_V1:
-        if metadata_has or manifest_has:
-            if RECEIPT_V2 in markers:
-                raise RuntimeError(
-                    "legacy receipt conflicts with v2 expectation markers"
-                )
-            raise RuntimeError(
-                "legacy receipt conflicts with later expectation markers"
-            )
-        if "prepared_runtime_source" in receipt or "expected_receipt_schema" in receipt:
-            raise RuntimeError("legacy receipt contains mixed preparation provenance")
-        preparation_cohort = "verified_legacy_v1"
-        prepared_source = {"status": "legacy_v1_not_recorded"}
-    else:
-        raise RuntimeError("handoff receipt schema is invalid")
+    if markers != (RECEIPT_V3, RECEIPT_V3):
+        raise RuntimeError("prepared receipt cohort markers are inconsistent")
+    validate_runtime_source(receipt.get("prepared_runtime_source"), stage="prepared")
     if set(receipt) != initial_keys or receipt.get("outputs") != {}:
         raise RuntimeError("prepared receipt members are not canonical")
 
-    return _PreparedCohort(preparation_cohort, prepared_source)
+    return _PreparedCohort("prepared_v3", receipt["prepared_runtime_source"])
 
 
 def require_pristine_run(run_dir: Path, spec: AedtSpec) -> None:

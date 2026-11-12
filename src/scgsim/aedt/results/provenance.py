@@ -17,11 +17,11 @@ from scgsim.aedt.results.runtime_inventory import (
     current_runtime_source_paths,
 )
 
-RECEIPT_V1 = "scgsim.aedt.receipt.v1"
+_RECEIPT_SCHEMA_PREFIX = "scgsim.aedt.receipt.v"
+_RECEIPT_SCHEMA_NUMBER = 3
 
-RECEIPT_V2 = "scgsim.aedt.receipt.v2"
-
-RECEIPT_V3 = "scgsim.aedt.receipt.v3"
+RECEIPT_V3 = f"{_RECEIPT_SCHEMA_PREFIX}{_RECEIPT_SCHEMA_NUMBER}"
+"""The receipt schema every handoff and completed run is written with."""
 
 _SOURCE_SCHEMA_PREFIX = "scgsim.aedt.runtime-source.v"
 _SOURCE_SCHEMA_NUMBER = 30
@@ -207,7 +207,37 @@ def _validate_revision_observation(value: Any, *, stage: str) -> None:
         raise RuntimeError(f"{stage} runtime source revision observation is invalid")
 
 
-def initial_receipt_payload(  # noqa: PLR0913 -- retain the versioned codec's explicit keyword interface.
+def require_current_receipt(receipt: Any) -> None:
+    """Refuse a receipt an earlier SCGSim wrote before reading anything it binds.
+
+    The receipt schema and the schema of each runtime-source record it carries
+    are checked first, so an old result is refused with how to read it rather
+    than by whichever older request or result format it reaches next.
+    """
+    schema = receipt.get("schema_version") if isinstance(receipt, dict) else None
+    if schema != RECEIPT_V3:
+        number = (
+            schema.removeprefix(_RECEIPT_SCHEMA_PREFIX)
+            if isinstance(schema, str) and schema.startswith(_RECEIPT_SCHEMA_PREFIX)
+            else ""
+        )
+        if number.isdigit() and int(number) < _RECEIPT_SCHEMA_NUMBER:
+            raise RuntimeError(
+                f"receipt {schema} was written by an earlier SCGSim, which this "
+                f"version does not read (it reads {RECEIPT_V3}); read this result "
+                "with the SCGSim commit that wrote it"
+            )
+        raise RuntimeError("handoff receipt schema is invalid")
+    for key, stage in (
+        ("prepared_runtime_source", "prepared"),
+        ("runtime_source", "actual"),
+    ):
+        record = receipt.get(key)
+        if isinstance(record, dict):
+            _validate_schema(record.get("schema_version"), stage)
+
+
+def initial_receipt_payload(  # noqa: PLR0913 -- retain the codec's explicit keyword interface.
     *,
     schema_version: str,
     mode: Any,
@@ -217,14 +247,16 @@ def initial_receipt_payload(  # noqa: PLR0913 -- retain the versioned codec's ex
     source: Any,
     outputs: Any,
     prepared_at_utc: Any,
-    prepared_runtime_source_value: Any = None,
+    prepared_runtime_source_value: Any,
 ) -> dict[str, Any]:
-    """Build the canonical field order for an initial v1, v2, or v3 receipt."""
-    if schema_version not in {RECEIPT_V1, RECEIPT_V2, RECEIPT_V3}:
+    """Build the canonical field order for an initial receipt."""
+    if schema_version != RECEIPT_V3:
         raise ValueError("initial receipt schema is unsupported")
     if outputs != {}:
         raise ValueError("initial receipt outputs must be empty")
-    result = {
+    if prepared_runtime_source_value is None:
+        raise ValueError("v3 initial receipt requires prepared runtime source")
+    return {
         "schema_version": schema_version,
         "status": "not_run",
         "mode": mode,
@@ -232,23 +264,14 @@ def initial_receipt_payload(  # noqa: PLR0913 -- retain the versioned codec's ex
         "pdk_materials": pdk_materials,
         "vacuum_material_id": vacuum_material_id,
         "source": source,
+        "prepared_runtime_source": prepared_runtime_source_value,
+        "outputs": outputs,
+        "prepared_at_utc": prepared_at_utc,
     }
-    if schema_version in {RECEIPT_V2, RECEIPT_V3}:
-        if prepared_runtime_source_value is None:
-            version = schema_version.rsplit(".", 1)[-1]
-            raise ValueError(
-                f"{version} initial receipt requires prepared runtime source"
-            )
-        result["prepared_runtime_source"] = prepared_runtime_source_value
-    elif prepared_runtime_source_value is not None:
-        raise ValueError("v1 initial receipt excludes prepared runtime source")
-    result["outputs"] = outputs
-    result["prepared_at_utc"] = prepared_at_utc
-    return result
 
 
 def encode_initial_receipt(value: Mapping[str, Any]) -> bytes:
-    """Encode exact historical initial-receipt bytes with fixed indentation."""
+    """Encode exact initial-receipt bytes with fixed indentation."""
     canonical = initial_receipt_payload(
         schema_version=cast(str, value.get("schema_version")),
         mode=value.get("mode"),

@@ -13,8 +13,6 @@ from scgsim.aedt.preparation.cohort import (
     validate_hfss_import_source,
 )
 from scgsim.aedt.results.provenance import (
-    RECEIPT_V1,
-    RECEIPT_V2,
     RECEIPT_V3,
     initial_receipt_payload,
     initial_receipt_sha256,
@@ -37,32 +35,11 @@ def contained(root: Path, relative: str) -> Path:
     return resolved
 
 
-def reject_legacy_v2_markers(root: Path, receipt: dict[str, Any]) -> None:
-    """Reject partial receipt downgrades without burdening historical v1 runs."""
-    if "expected_receipt_schema" in receipt or "prepared_runtime_source" in receipt:
-        raise RuntimeError("legacy receipt conflicts with v2 expectation markers")
-    for relative in (
-        "metadata/aedt_handoff_metadata.json",
-        "metadata/aedt_handoff_manifest.json",
-    ):
-        path = contained(root, relative)
-        if not path.is_file():
-            continue
-        try:
-            candidate = read_json(path)
-        except (OSError, TypeError, ValueError):
-            # Historical v1 resolution never required either preparation file.
-            continue
-        if isinstance(candidate, dict) and "expected_receipt_schema" in candidate:
-            raise RuntimeError("legacy receipt conflicts with v2 expectation markers")
-
-
 @dataclass(frozen=True)
 class CompletionCohort:
     """Preparation metadata and manifest read from a completed receipt."""
 
     version: str
-    receipt_schema: str
     mode: str
     metadata: dict[str, Any]
     manifest: dict[str, Any]
@@ -83,11 +60,10 @@ def validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) -
 def _read_completion_cohort(
     root: Path, receipt: dict[str, Any], spec: Any
 ) -> CompletionCohort:
-    receipt_schema = receipt.get("schema_version")
-    if receipt_schema not in {RECEIPT_V2, RECEIPT_V3}:
+    if receipt.get("schema_version") != RECEIPT_V3:
         raise RuntimeError("completed receipt cohort schema is invalid")
-    version = receipt_schema.rsplit(".", 1)[-1]
-    if receipt.get("expected_receipt_schema") != receipt_schema:
+    version = RECEIPT_V3.rsplit(".", 1)[-1]
+    if receipt.get("expected_receipt_schema") != RECEIPT_V3:
         raise RuntimeError(f"completed {version} receipt expectation marker is invalid")
     mode = receipt.get("mode")
     if mode not in {"terminal", "modal", "eigenmode", "q3d", "q2d"}:
@@ -116,7 +92,6 @@ def _read_completion_cohort(
         raise RuntimeError(f"completed {version} preparation cohort is invalid")
     return CompletionCohort(
         version,
-        receipt_schema,
         mode,
         metadata,
         manifest,
@@ -157,35 +132,14 @@ def _validate_cohort_provenance(
 ) -> str:
     metadata = cohort.metadata
     manifest = cohort.manifest
-    preparation_cohort = receipt.get("preparation_cohort")
-    prepared_source = receipt.get("prepared_runtime_source")
-    if preparation_cohort == "prepared_v3" and cohort.receipt_schema == RECEIPT_V3:
-        if (
-            metadata.get("expected_receipt_schema") != RECEIPT_V3
-            or manifest.get("expected_receipt_schema") != RECEIPT_V3
-        ):
-            raise RuntimeError("completed v3 preparation markers are inconsistent")
-        validate_runtime_source(prepared_source, stage="prepared")
-    elif preparation_cohort == "prepared_v2":
-        if (
-            metadata.get("expected_receipt_schema") != RECEIPT_V2
-            or manifest.get("expected_receipt_schema") != RECEIPT_V2
-        ):
-            raise RuntimeError("completed v2 preparation markers are inconsistent")
-        validate_runtime_source(prepared_source, stage="prepared")
-    elif preparation_cohort == "verified_legacy_v1":
-        if (
-            "expected_receipt_schema" in metadata
-            or "expected_receipt_schema" in manifest
-        ):
-            raise RuntimeError(
-                f"verified legacy cohort contains {cohort.version} preparation markers"
-            )
-        if prepared_source != {"status": "legacy_v1_not_recorded"}:
-            raise RuntimeError("verified legacy preparation provenance is invalid")
-    else:
+    if receipt.get("preparation_cohort") != "prepared_v3":
         raise RuntimeError(f"completed {cohort.version} preparation cohort is invalid")
-
+    if (
+        metadata.get("expected_receipt_schema") != RECEIPT_V3
+        or manifest.get("expected_receipt_schema") != RECEIPT_V3
+    ):
+        raise RuntimeError("completed v3 preparation markers are inconsistent")
+    validate_runtime_source(receipt.get("prepared_runtime_source"), stage="prepared")
     validate_runtime_source(receipt.get("runtime_source"), stage="actual")
     prepared_receipt_sha = receipt.get("prepared_receipt_sha256")
     verified_manifest_sha = receipt.get("verified_prepared_manifest_sha256")
@@ -195,7 +149,7 @@ def _validate_cohort_provenance(
         or not isinstance(verified_manifest_sha, str)
         or not is_sha256_text(verified_manifest_sha)
         or file_sha256(cohort.manifest_path) != verified_manifest_sha
-        or _initial_receipt_sha256(receipt, preparation_cohort) != prepared_receipt_sha
+        or _initial_receipt_sha256(receipt) != prepared_receipt_sha
     ):
         raise RuntimeError(
             f"completed {cohort.version} preparation hash bindings are invalid"
@@ -267,24 +221,15 @@ def is_sha256_text(value: str) -> bool:
     )
 
 
-def _initial_receipt_sha256(receipt: dict[str, Any], preparation_cohort: Any) -> str:
-    schema_by_cohort = {
-        "prepared_v3": RECEIPT_V3,
-        "prepared_v2": RECEIPT_V2,
-        "verified_legacy_v1": RECEIPT_V1,
-    }
+def _initial_receipt_sha256(receipt: dict[str, Any]) -> str:
     initial = initial_receipt_payload(
-        schema_version=schema_by_cohort.get(preparation_cohort, ""),
+        schema_version=RECEIPT_V3,
         mode=receipt.get("mode"),
         requested=receipt.get("requested"),
         pdk_materials=receipt.get("pdk_materials"),
         vacuum_material_id=receipt.get("vacuum_material_id"),
         source=receipt.get("source"),
-        prepared_runtime_source_value=(
-            receipt.get("prepared_runtime_source")
-            if preparation_cohort in {"prepared_v2", "prepared_v3"}
-            else None
-        ),
+        prepared_runtime_source_value=receipt.get("prepared_runtime_source"),
         outputs={},
         prepared_at_utc=receipt.get("prepared_at_utc"),
     )
