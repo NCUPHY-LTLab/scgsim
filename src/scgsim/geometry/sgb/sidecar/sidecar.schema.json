@@ -683,12 +683,17 @@
       }
     },
     "RefinementRequest": {
-      "description": "A refinement family: the request as given (a polyline at one height along which the mesher refines), and the segments SGB drew from it, which are its carriers.",
+      "description": "A refinement family: the request as given (a polyline along which the mesher refines), the heights its segments are drawn at, and the segments SGB drew from it, which are its carriers.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["z_um", "points_um", "segments_um"],
+      "required": ["levels_um", "points_um", "segments_um"],
       "properties": {
-        "z_um": {"type": "number"},
+        "levels_um": {
+          "description": "Every height the family's segments are drawn at, in the family's order: a request's one height, or each target level of a family a catalogue declares.",
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 1
+        },
         "points_um": {
           "description": "The polyline as the request gave it; null for a family a catalogue declares directly, with no request.",
           "type": ["array", "null"],

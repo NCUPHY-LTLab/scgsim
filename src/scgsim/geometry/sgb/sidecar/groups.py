@@ -277,7 +277,7 @@ def _band(faces: list[TopoFace]) -> GroupBand | None:
 def band_groups(
     topology: Topology, face_group: dict[str, str | None]
 ) -> dict[str, dict[int, list[str]]]:
-    """Family id -> band index -> sorted primary groups, over every face that carries a band label."""
+    """Family id -> band index -> sorted primary groups, over every band label of every face that carries one."""
     out: dict[str, dict[int, set[str]]] = {}
     for fid, face in topology.faces.items():
         group = face_group.get(fid)
@@ -287,8 +287,8 @@ def band_groups(
             or (face.owner and face.owner.kind == "port")
         ):
             continue
-        family, index = face.bands[0]
-        out.setdefault(family, {}).setdefault(index, set()).add(group)
+        for family, index in face.bands:
+            out.setdefault(family, {}).setdefault(index, set()).add(group)
     return {
         family: {index: sorted(names) for index, names in sorted(bands.items())}
         for family, bands in sorted(out.items())

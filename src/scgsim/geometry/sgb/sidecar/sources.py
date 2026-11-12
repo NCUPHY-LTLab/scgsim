@@ -224,7 +224,8 @@ def refinement_request_records(model: ConformalModel) -> dict[str, RefinementReq
             continue
         request = given.get(family.family_id)
         out[family.family_id] = RefinementRequest(
-            z_um=float(family.target_levels[0]) if request is None else request.z_um,
+            # The level builder draws the family at every one of its target levels.
+            levels_um=[float(level) for level in family.target_levels],
             points_um=None if request is None else [list(p) for p in request.points_um],
             segments_um=[
                 [_point_um(c.p, grid), _point_um(c.q, grid)] for c in family.carriers

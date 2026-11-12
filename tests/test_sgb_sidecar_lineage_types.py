@@ -144,7 +144,28 @@ def test_a_declared_refinement_family_is_recorded_segment_by_segment(
         [[p[0] * GRID_UM, p[1] * GRID_UM], [q[0] * GRID_UM, q[1] * GRID_UM]]
         for p, q in carriers
     ]
-    assert record["z_um"] == 0.0
+    assert record["levels_um"] == [0.0]
+
+
+def test_a_declared_refinement_family_on_two_levels_records_both_heights(tmp_path):
+    """The builder draws a family at every one of its target levels, so the sidecar lists every height."""
+    family = CurveFamilyRecord(
+        "drawn",
+        "refinement",
+        (segment("drawn", 0, (-12_000, 2_000), (-8_000, 2_000)),),
+        (Fraction(0), Fraction(-10)),
+        "refinement_only",
+    )
+    model = build_model_from_catalogue(
+        catalogue_of("two_levels", "A", two_sheets("other"), (family,)), "A"
+    )
+    sidecar = sidecar_of(model, tmp_path)
+    assert sidecar["refinement_request"]["drawn"]["levels_um"] == [0.0, -10.0]
+    drawn_at = sorted(
+        sidecar["vertex"][sidecar["edge"][edge]["vertices"][0]]["position_um"][2]
+        for edge, _ in views.embedded_edges(sidecar)
+    )
+    assert drawn_at == [-10.0, 0.0]  # one refinement edge on each level
 
 
 def test_a_requested_refinement_keeps_its_polyline_and_its_segments(tmp_path):

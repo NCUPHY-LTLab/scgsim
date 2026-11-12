@@ -362,10 +362,17 @@ class SkippedFace(TypedDict):
 
 
 class RefinementRequest(TypedDict):
-    """A refinement family: the request as given (a polyline at one height along which the mesher refines), and
-    the segments SGB drew from it, which are its carriers."""
+    """A refinement family: the request as given (a polyline along which the mesher refines), the heights its
+    segments are drawn at, and the segments SGB drew from it, which are its carriers."""
 
-    z_um: float
+    levels_um: Annotated[
+        list[float],
+        Length(min_items=1),
+        Doc(
+            "Every height the family's segments are drawn at, in the family's order: a request's one height, or"
+            " each target level of a family a catalogue declares."
+        ),
+    ]
     points_um: Annotated[
         list[PlanePoint] | None,
         Doc(

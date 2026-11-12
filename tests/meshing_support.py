@@ -241,7 +241,7 @@ def _add_feature(
         }
     elif table == "refinement_request":
         document["refinement_request"][source] = {
-            "z_um": 0.0,
+            "levels_um": [0.0],
             "points_um": [[0.0, 0.0], [1.0, 0.0]],
             "segments_um": [[[0.0, 0.0], [1.0, 0.0]]],
         }
