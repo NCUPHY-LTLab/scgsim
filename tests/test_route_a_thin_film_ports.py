@@ -254,13 +254,11 @@ def test_public_simplepad_prepares_route_a_thin_film_ports():
     plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
     snapshot = plan.prepare()
     prepared = prepare_mesh_input(
-        component=None,
         stack=snapshot.stack,
         route="A",
         route_a_thin_film=None,
         approximation_profile=ApproximationProfile("thin_film", "v1", {}),
         vacuum_region=None,
-        indium_ground_bumps=None,
         build_input=snapshot.geometry_input,
     )
     overlap_widths = {

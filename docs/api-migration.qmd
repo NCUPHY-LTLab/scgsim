@@ -174,7 +174,6 @@ Their supported routes remain the package facades:
 | Physical representation preparation | `interpret_physical_geometry` from `scgsim.geometry` |
 | Rectangular junction declaration and derivation | Use `RectangularJunctionSpec` and `with_rectangular_junctions` from `scgsim.geometry`, then call `interpret_physical_geometry` |
 | Model construction for a Palace study | `EigenmodeSim` or `ElectrostaticSim` from `scgsim.palace`; `build_sgb_geometry` from `scgsim.geometry.sgb` for a prepared input of your own |
-| PDK ground-bump fill preparation | Internal source helper consumed by Palace preparation; no direct geometry-facade export. |
 
 The responsibility modules are `scgsim.geometry.source.plan_assembly`,
 `scgsim.geometry.planning.contact_planning`,
@@ -184,9 +183,6 @@ The responsibility modules are `scgsim.geometry.source.plan_assembly`,
 `scgsim.geometry.primitives.tagged_grid_faces`, and
 `scgsim.geometry.primitives.tagged_grid_operations`. They organize the
 implementation without adding new supported imports.
-`scgsim.geometry.source.ground_bump_geometry` implements audit, lattice
-selection, and source-record creation behind the source helper used by Palace
-preparation.
 
 The junction implementation derives exact partitions for explicitly declared
 rectangular junctions. Source and AEDT preparation share the internal

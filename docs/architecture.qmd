@@ -133,7 +133,6 @@ boundaries; callers use the supported entry.
 | `scgsim.geometry.planning.surface_planning` | Build solver-facing surfaces, contact coverage, contribution patches, and partitions. |
 | `scgsim.geometry.planning.topology_planning` | Resolve shared surface ownership and ring geometry for surface planning. |
 | `scgsim.geometry.primitives.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
-| `scgsim.geometry.source.ground_bump_geometry` | Audit authored bump sites, select fill-lattice sites, and create source geometry records. |
 
 The [API migration reference](api-migration.qmd) lists the supported import
 routes for these operations.
@@ -281,10 +280,10 @@ only prepares values and persists caller-supplied JSON payloads; it is not a
 base simulation object and does not receive callbacks into simulation state.
 
 Both public `mesh()` methods invalidate derived state before checking
-prerequisites. Geometry preparation then applies the vacuum region, the
-indium-bump fill to the stack, then interprets the physical
-geometry and records Route-A metadata, and returns the prepared component,
-stack, bump-fill record, and optional material mapping. The simulation stores
+prerequisites. Geometry preparation then applies the vacuum region to the
+stack, interprets the physical geometry, records Route-A metadata, and returns
+the prepared stack, geometry input, physical plan and optional material
+mapping. The simulation stores
 that mapping only after preparation returns, so a failure during preparation or
 a non-mapping `materials` value retains the prior mapping, while a
 mesh-construction failure retains the newly prepared mapping. Eigenmode resolves authored ports before those transformations and
@@ -299,12 +298,11 @@ cached only after the final replacement succeeds. In-memory invalidation does
 not remove an older config file from disk, and this per-file behavior is not a
 whole-workflow transaction guarantee.
 
-The shared stack loader, non-negative-number validator, and stack-material-kind
-validator live in `scgsim.palace.preparation.inputs`. Electrostatic and
-Eigenmode call that module directly while retaining their public methods,
-invalidation timing, shallow top-level stack copy, nested aliases, and
-problem-specific orchestration. The old direct problem-module paths were
-removed; their current defining modules are `preparation.electrostatic` and
+`scgsim.palace.preparation.inputs` reads the explicit materials of a plan's
+stack and checks each material's kind against the regions and layers that use
+it. Electrostatic and Eigenmode call it when a plan is bound, and each keeps
+its own public methods, invalidation timing and problem-specific
+orchestration. The simulations are defined in `preparation.electrostatic` and
 `preparation.eigenmode`.
 
 Palace's mesh behavior separates Gmsh geometric order from FEM order and keeps

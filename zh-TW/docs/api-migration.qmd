@@ -81,9 +81,8 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 | 物理表示準備 | 從 `scgsim.geometry` 匯入 `interpret_physical_geometry` |
 | 矩形接面宣告與推導 | 從 `scgsim.geometry` 使用 `RectangularJunctionSpec` 與 `with_rectangular_junctions`，再呼叫 `interpret_physical_geometry` |
 | Palace 研究的模型建構 | 從 `scgsim.palace` 使用 `EigenmodeSim` 或 `ElectrostaticSim`；自行準備的輸入使用 `scgsim.geometry.sgb` 的 `build_sgb_geometry` |
-| PDK 接地凸塊填充準備 | Palace 準備流程呼叫的內部來源輔助函式，不由幾何外觀模組直接匯出。 |
 
-負責模組包括 `scgsim.geometry.source.plan_assembly`、`scgsim.geometry.planning.contact_planning`、`scgsim.geometry.planning.junction_planning`、`scgsim.geometry.planning.surface_planning`、`scgsim.geometry.planning.topology_planning`、`scgsim.geometry.primitives.tagged_grid_faces` 及 `scgsim.geometry.primitives.tagged_grid_operations`。這些模組整理內部實作，不新增支援的匯入路徑。`scgsim.geometry.source.ground_bump_geometry` 負責稽核、晶格位置選取及來源紀錄建立，由 Palace 準備流程透過來源輔助函式呼叫。
+負責模組包括 `scgsim.geometry.source.plan_assembly`、`scgsim.geometry.planning.contact_planning`、`scgsim.geometry.planning.junction_planning`、`scgsim.geometry.planning.surface_planning`、`scgsim.geometry.planning.topology_planning`、`scgsim.geometry.primitives.tagged_grid_faces` 及 `scgsim.geometry.primitives.tagged_grid_operations`。這些模組整理內部實作，不新增支援的匯入路徑。
 
 接面規劃會為明確宣告的矩形接面推導精確分區。來源與 AEDT 準備共用內部服務 `junction_contact_inventory(build_input, request)` 及 `JunctionContactRequest`，以解析來源支撐面與相鄰導體。這些橋接名稱不是 `scgsim.geometry` 的匯出；呼叫端透過幾何外觀模組宣告要求，再使用標準物理解讀步驟。
 

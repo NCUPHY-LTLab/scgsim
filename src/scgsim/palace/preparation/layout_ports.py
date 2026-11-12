@@ -34,7 +34,6 @@ class GeometrySettings:
     route_a_thin_film: RouteAThinFilm | None
     approximation_profile: ApproximationProfile | None
     vacuum_region: VacuumRegionSpec | None
-    indium_ground_bumps: Mapping[str, Any] | None
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None
 
 
@@ -59,17 +58,9 @@ def layout_geometry_request(
     settings: GeometrySettings,
 ) -> LayoutGeometryRequest:
     """Resolve ``ports`` to the plan's authored sheets and prepare the plan's own geometry input and stack."""
-    if (
-        settings.indium_ground_bumps is not None
-        and settings.indium_ground_bumps["fill"]
-    ):
-        raise ValueError(
-            "GeometryPlan source already owns its geometry; add authored bumps before prepare()"
-        )
     resolved, source_records = _resolve_plan_ports(plan, ports)
     source_stack = plan.stack
     prepared = prepare_mesh_input(
-        component=None,
         stack=source_stack,
         route=settings.route,
         route_a_thin_film=settings.route_a_thin_film,
@@ -79,7 +70,6 @@ def layout_geometry_request(
             if "VACUUM_REGION" in source_stack["solution_regions"]
             else settings.vacuum_region
         ),
-        indium_ground_bumps=None,
         build_input=plan.geometry_input,
         port_sheet_source_layers=source_records,
     )

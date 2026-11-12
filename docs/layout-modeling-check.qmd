@@ -202,8 +202,8 @@ classes above.
 A pass means the model built with the fixed settings above was accepted and
 has no edge or face that a meshing-stage class refuses; it does not say how
 many bands were cut. It does not promise that other settings will model: Route A,
-Electrostatic terminals, junctions, lumped supports, indium bumps or a
-different vacuum region. To check a specific set-up, run that simulation's own `mesh()`.
+Electrostatic terminals, junctions, lumped supports or a different vacuum
+region. To check a specific set-up, run that simulation's own `mesh()`.
 Nor does a pass promise a clean mesh: the meshing-stage classes guard against
 fine structure, and `mesh()` can still stop with `MeshRepairError`, which then
 names the places where it stopped.
