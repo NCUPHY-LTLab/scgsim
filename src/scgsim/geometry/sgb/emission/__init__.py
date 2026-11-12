@@ -7,6 +7,6 @@ wrapper -- no Gmsh/OCC API call, no Boolean, no healing.  The modules follow the
 * ``surfaces``  the plane or cylinder each face lies on
 * ``plan``      the numbered arrays (:class:`~scgsim.geometry.sgb.emission.plan.BrepPlan`) and their checks
 * ``records``   the text of every section, pure over the plan
-* ``writer``    the file layout, chunked and optionally parallel rendering; bytes never depend on the workers
+* ``writer``    the file layout and the chunked rendering; bytes never depend on the chunk size
 * ``numbers``   the platform-independent number policy; ``measures`` the planned areas and volumes
 """

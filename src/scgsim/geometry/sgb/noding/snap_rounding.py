@@ -19,19 +19,17 @@ Algorithm (Hobby 1999; Guibas and Marimont 1998; Halperin and Packer 2002):
   produced it; coincident output edges merge their carrier sets.
 
 The two heavy kernels (crossing detection, hot-pixel hit search) are pure
-functions over lists, so ``noding.tiling`` can run them per tile and union the
-results without changing the answer.
+functions over lists; ``labelling.dissolve`` reuses them on its own edge sets.
 
 Does not own face extraction (``arrangement``) or any labelling.
 """
 
 from __future__ import annotations
 
-import time
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import NamedTuple, Protocol
+from typing import NamedTuple
 
 from scgsim.geometry.sgb.noding.spatial_hash import (
     HotGrid,
@@ -40,17 +38,11 @@ from scgsim.geometry.sgb.noding.spatial_hash import (
     points_extent,
 )
 from scgsim.geometry.sgb.plane import Point
-from scgsim.geometry.sgb.stopwatch import Stopwatch, elapsed_seconds
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 EdgeKey = tuple[Point, Point]  # canonical: a < b lexicographically
 Crossing = tuple[int, int, int]  # exact point (X / den, Y / den) stored as (X, Y, den)
-TileBox = tuple[
-    int, int, int, int
-]  # x_lo, y_lo, x_hi, y_hi; pixel centres with lo <= c < hi
 MAX_ROUNDS = 500
-COORDINATE_LIMIT = (
-    1 << 40
-)  # clamp for the hash-cell index of a crossing, whatever its magnitude
 
 
 class Segment(NamedTuple):
@@ -76,24 +68,6 @@ class SnapResult:
     edges: list[NodedEdge]
     hot_pixels: int
     rounds: int
-
-
-class RoundEngine(Protocol):
-    """Where the two kernels run: in-process or tile-parallel (see ``noding.tiling``)."""
-
-    def crossing_pixels(self, keys: list[EdgeKey], changed: list[bool]) -> set[Point]:
-        """Pixels containing proper crossings of pairs with at least one changed edge."""
-        ...
-
-    def hits(
-        self,
-        keys: list[EdgeKey],
-        changed: list[bool],
-        hot: set[Point],
-        delta: set[Point],
-    ) -> list[list[Point]]:
-        """Hot pixel centres each edge touches."""
-        ...
 
 
 # --------------------------------------------------------------------------- kernels
@@ -122,41 +96,22 @@ def crossing_pixel(crossing: Crossing) -> Point:
     return (2 * x_num + den) // (2 * den), (2 * y_num + den) // (2 * den)
 
 
-def _clamped_cell(value: int, size: int) -> int:
-    return max(-COORDINATE_LIMIT, min(COORDINATE_LIMIT, value)) // size
-
-
 def crossing_pixels_kernel(
-    keys: Sequence[EdgeKey],
-    changed: Sequence[bool],
-    box: TileBox | None = None,
+    keys: Sequence[EdgeKey], changed: Sequence[bool]
 ) -> set[Point]:
-    """Pixels containing proper crossings of pairs with at least one changed edge.
-
-    ``box`` keeps only pixels whose centre satisfies ``x_lo <= x < x_hi`` and
-    ``y_lo <= y < y_hi`` (tile ownership); ``None`` keeps all.
-    """
+    """Pixels containing proper crossings of pairs with at least one changed edge."""
     count = len(keys)
     if count < 2:
         return set()
     size = cell_size_for(points_extent(p for key in keys for p in key), count)
-    bounds = None
-    if box is not None:
-        # One cell of slack: a crossing may lie up to half a pixel outside its pixel's tile.
-        bounds = (
-            _clamped_cell(box[0], size) - 1,
-            _clamped_cell(box[1], size) - 1,
-            _clamped_cell(box[2], size) + 1,
-            _clamped_cell(box[3], size) + 1,
-        )
     grid: dict[tuple[int, int], list[int]] = defaultdict(list)
     for i, (a, b) in enumerate(keys):
-        for cell in cells_along(a, b, size, bounds):
+        for cell in cells_along(a, b, size):
             grid[cell].append(i)
     found: set[Point] = set()
     for cell, members in grid.items():
         if len(members) >= 2:
-            found |= _crossings_in_cell(keys, changed, members, (cell, size), box)
+            found |= _crossings_in_cell(keys, changed, members, (cell, size))
     return found
 
 
@@ -165,7 +120,6 @@ def _crossings_in_cell(
     changed: Sequence[bool],
     members: list[int],
     hash_cell: tuple[tuple[int, int], int],
-    box: TileBox | None,
 ) -> set[Point]:
     """Crossing pixels of the pairs whose crossing point lies in this hash cell."""
     cell, size = hash_cell
@@ -183,11 +137,7 @@ def _crossings_in_cell(
             # Each pair is processed only in the hash cell that contains its crossing point.
             if (x_num // (den * size), y_num // (den * size)) != cell:
                 continue
-            pixel = crossing_pixel(hit)
-            if box is None or (
-                box[0] <= pixel[0] < box[2] and box[1] <= pixel[1] < box[3]
-            ):
-                found.add(pixel)
+            found.add(crossing_pixel(hit))
     return found
 
 
@@ -223,39 +173,6 @@ def assemble_chain(a: Point, b: Point, hits: Iterable[Point]) -> tuple[Point, ..
     )
 
 
-class SerialEngine:
-    """Runs the kernels in the calling process (optionally booking their time on a stopwatch)."""
-
-    def __init__(self, watch: Stopwatch | None = None) -> None:
-        self.watch = watch
-
-    def crossing_pixels(self, keys: list[EdgeKey], changed: list[bool]) -> set[Point]:
-        """Run the crossing kernel over all edges."""
-        started = time.perf_counter()
-        pixels = crossing_pixels_kernel(keys, changed)
-        self._book(started)
-        return pixels
-
-    def hits(
-        self,
-        keys: list[EdgeKey],
-        changed: list[bool],
-        hot: set[Point],
-        delta: set[Point],
-    ) -> list[list[Point]]:
-        """Run the hit kernel over all edges."""
-        started = time.perf_counter()
-        hits = hits_kernel(keys, changed, hot, delta)
-        self._book(started)
-        return hits
-
-    def _book(self, started: float) -> None:
-        if self.watch is not None:
-            seconds = elapsed_seconds(started)
-            self.watch.add("noding_kernels", seconds, parallel=True)
-            self.watch.add_work("noding_kernels", seconds)
-
-
 # --------------------------------------------------------------------------- driver
 
 
@@ -266,20 +183,24 @@ def canonical_key(a: Point, b: Point) -> EdgeKey:
 
 def snap_round(
     segments: Iterable[Segment],
-    engine: RoundEngine | None = None,
     max_rounds: int = MAX_ROUNDS,
+    *,
+    watch: Stopwatch | None = None,
 ) -> SnapResult:
-    """Iterated snap rounding of integer segments; see the module docstring."""
-    return _IteratedRounding(segments, engine or SerialEngine(), max_rounds).run()
+    """Iterated snap rounding of integer segments; see the module docstring.
+
+    ``watch`` receives the time of the two kernels as the stage ``noding_kernels``.
+    """
+    return _IteratedRounding(segments, max_rounds, watch or Stopwatch()).run()
 
 
 class _IteratedRounding:
     """The state that travels through the rounds: edges, hot pixels, what changed."""
 
     def __init__(
-        self, segments: Iterable[Segment], engine: RoundEngine, max_rounds: int
+        self, segments: Iterable[Segment], max_rounds: int, watch: Stopwatch
     ) -> None:
-        self.engine = engine
+        self.watch = watch
         self.max_rounds = max_rounds
         self.edges: dict[EdgeKey, set[str]] = {}
         for seg in segments:
@@ -308,10 +229,12 @@ class _IteratedRounding:
     def _round(self) -> None:
         keys = sorted(self.edges)
         flags = [key in self.changed for key in keys]
-        new_hot = self.engine.crossing_pixels(keys, flags) - self.hot
+        with self.watch.stage("noding_kernels"):
+            new_hot = crossing_pixels_kernel(keys, flags) - self.hot
         self.hot |= new_hot
         self.delta |= new_hot
-        chain_hits = self.engine.hits(keys, flags, self.hot, self.delta)
+        with self.watch.stage("noding_kernels"):
+            chain_hits = hits_kernel(keys, flags, self.hot, self.delta)
         rerouted: dict[EdgeKey, set[str]] = {}
         verified: set[EdgeKey] = (
             set()

@@ -341,21 +341,6 @@ def test_thin_film_sheets_label_their_level_by_entity_and_port(thin_film):
     assert len(result.slabs) == 2
 
 
-def test_real_inputs_have_the_same_identity_for_every_tile_and_worker_count(
-    pad, thin_film
-):
-    """Real inputs have the same identity for every tile and worker count."""
-    for effective in (pad, thin_film):
-        reference = derive_labelled_arrangements(
-            effective.build_input, effective.representation
-        )
-        tiled = derive_labelled_arrangements(
-            effective.build_input, effective.representation, tiles=3, workers=2
-        )
-        assert tiled.identity_sets() == reference.identity_sets()
-        assert tiled.identity_digest() == reference.identity_digest()
-
-
 # --------------------------------------------------------------------------- boundary curves
 
 

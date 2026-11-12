@@ -2,7 +2,7 @@
 
 Owns the hashing rules: every vertex, edge, face, cell and volume id is the
 SHA-256 of a canonical JSON payload, so the same input yields the same ids
-regardless of worker count, tile layout or iteration order.
+regardless of iteration order.
 
 * vertex = H(plane, grid coordinate)
 * edge   = H(plane, sorted endpoint vertex ids, sorted source carrier ids)

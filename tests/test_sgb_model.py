@@ -28,10 +28,10 @@ from scgsim.geometry.sgb.errors import (
     ValidationError,
 )
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.validation.validate import validate_model
 
 
@@ -236,7 +236,9 @@ def test_a_tampered_shell_is_rejected_by_validation(pad_b):
     saved = volume.shells[0].faces
     volume.shells[0].faces = saved[1:]
     try:
-        report = validate_model(pad_b.labelled, pad_b.topology, pad_b.routed, Runtime())
+        report = validate_model(
+            pad_b.labelled, pad_b.topology, pad_b.routed, Stopwatch()
+        )
         assert any(c.name == "shells_closed_and_oriented" for c in report.failures)
         with pytest.raises(ValidationError):
             report.raise_if_failed()
@@ -414,3 +416,17 @@ def test_wall_coalescing_reduces_the_polygon_pad_and_the_arc_pad_face_counts(pad
     )
     assert polygon_pad.counts["faces"] == 68
     assert pad_b.counts["faces"] == 41
+
+
+# --------------------------------------------------------------------------- stage timings
+
+
+def test_every_stage_is_timed_by_name_and_excludes_the_stages_timed_inside_it(pad_b):
+    """The model books each stage under its name; the noding driver's time excludes its kernels."""
+    stages = {"levels", "noding_driver", "noding_kernels", "labelling", "atomic_ids"}
+    assert stages | {"shells", "routes", "validation_shells"} <= set(pad_b.timings)
+    assert all(seconds >= 0 for seconds in pad_b.timings.values())
+    watch = Stopwatch()
+    with watch.stage("outer"), watch.stage("inner"):
+        sum(range(100_000))
+    assert watch.seconds["outer"] < watch.seconds["inner"]

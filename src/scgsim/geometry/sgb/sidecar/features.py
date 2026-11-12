@@ -17,8 +17,7 @@ and leaves every size to the mesher.  Each feature names a ``kind``, its ``sourc
 
 A feature's id is a digest of its kind, source and facts, which no two features share; readers take the
 features in the order of ``(kind, source or "", canonical JSON of facts)``
-(``scgsim.contracts.sgb_sidecar.views.mesh_features``).  The table is byte-identical for any worker count and
-tile layout.  Lengths are rounded like every other micrometre value of the sidecar
+(``scgsim.contracts.sgb_sidecar.views.mesh_features``).  Lengths are rounded like every other micrometre value of the sidecar
 (``emission.measures.rounded``).
 
 A wall of a film can be split in z by a level that crosses it (a port plane in the middle of a conductor).  The

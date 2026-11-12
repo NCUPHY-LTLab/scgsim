@@ -1,14 +1,13 @@
-"""Stage timing split into serial and parallel stages (the Amdahl accounting).
+"""Wall time of the named stages of one build.
 
-Owns the record of how long each named stage of a build took and whether it ran
-serially or as a per-tile fork/join.  The split is how the parallel fraction and
-the speed-up limit of a build are measured.  It never influences a result.
+Owns the record of how long each named stage of a build took.  A stage's seconds exclude the stages
+timed inside it (the noding driver excludes its kernels), and a stage timed twice adds up.  A timing
+never influences a result.
 """
 
 from __future__ import annotations
 
 import time
-from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -21,48 +20,23 @@ def elapsed_seconds(started: float) -> float:
 
 @dataclass
 class Stopwatch:
-    """Seconds per named stage, split into serial and parallel stages."""
+    """Seconds per named stage, each without the stages timed inside it."""
 
-    serial: dict[str, float] = field(default_factory=lambda: defaultdict(float))
-    parallel: dict[str, float] = field(default_factory=lambda: defaultdict(float))
-    work: dict[str, float] = field(
-        default_factory=lambda: defaultdict(float)
-    )  # summed worker compute per parallel stage
-
-    def add(self, name: str, seconds: float, *, parallel: bool) -> None:
-        """Book wall seconds on a stage."""
-        (self.parallel if parallel else self.serial)[name] += seconds
-
-    def add_work(self, name: str, seconds: float) -> None:
-        """Book compute seconds spent inside tile jobs of a parallel stage."""
-        self.work[name] += seconds
+    seconds: dict[str, float] = field(default_factory=dict)
+    _inner: list[float] = field(
+        default_factory=list, repr=False
+    )  # seconds of the stages timed inside each open stage
 
     @contextmanager
-    def serial_stage(self, name: str) -> Iterator[None]:
-        """Time a block as a serial stage."""
+    def stage(self, name: str) -> Iterator[None]:
+        """Time a block under ``name``."""
         started = time.perf_counter()
-        yield
-        self.add(name, elapsed_seconds(started), parallel=False)
-
-    def totals(self) -> dict[str, float]:
-        """Wall split plus the Amdahl estimate.
-
-        ``work`` is compute inside tile jobs; the rest of a parallel stage's wall
-        time is marshalling (partitioning, pickling, merging) that stays serial.
-        """
-        serial = sum(self.serial.values())
-        parallel = sum(self.parallel.values())
-        work = sum(self.work.values())
-        overhead = max(0.0, parallel - work) if work else 0.0
-        return {
-            "serial_stages_s": serial,
-            "parallel_stages_wall_s": parallel,
-            "parallel_stages_work_s": work,
-            "marshalling_s": overhead,
-            "amdahl_parallel_fraction": work / (serial + max(parallel, work))
-            if serial + parallel
-            else 0.0,
-            "amdahl_speedup_limit": (serial + max(parallel, work)) / (serial + overhead)
-            if serial + overhead
-            else 0.0,
-        }
+        self._inner.append(0.0)
+        try:
+            yield
+        finally:
+            inner = self._inner.pop()
+            total = elapsed_seconds(started)
+            self.seconds[name] = self.seconds.get(name, 0.0) + total - inner
+            if self._inner:
+                self._inner[-1] += total

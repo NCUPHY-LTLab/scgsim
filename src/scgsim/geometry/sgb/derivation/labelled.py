@@ -6,10 +6,6 @@ catalogue) it returns every slab arrangement and every level arrangement, snap
 rounded, labelled, dissolved and content-addressed, after the different-Net contact
 and non-manifold checks.  Assembly of faces, walls, shells and volumes, route
 policies, cut families and emission build on this result in later sub-stages.
-
-``tiles`` (``T x T``) and ``workers`` configure the per-tile runtime: every parallel
-stage is a fork/join over items owned by a tile, and the result is identical for
-every ``tiles`` and ``workers`` value.
 """
 
 from __future__ import annotations
@@ -24,11 +20,11 @@ from scgsim.geometry.sgb.derivation.contacts import check_contacts, check_manifo
 from scgsim.geometry.sgb.derivation.layer import Layer
 from scgsim.geometry.sgb.derivation.level_layers import build_level_layers
 from scgsim.geometry.sgb.derivation.slabs import build_slab_layers
-from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.sgb.prisms.levels import LevelStructure, build_levels
 from scgsim.geometry.sgb.records.carriers import ArcCarrier
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 
 @dataclass
@@ -43,12 +39,6 @@ class LabelledArrangements:
         str, ArcCarrier
     ]  # every arc carrier by id: source arcs and realised slab-edge arcs
     timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds
-    stage_kind: dict[str, str] = field(
-        default_factory=dict
-    )  # stage -> "serial" | "parallel"
-    amdahl: dict[str, float] = field(
-        default_factory=dict
-    )  # serial/parallel wall, worker work, Amdahl limit
     counts: dict[str, int] = field(default_factory=dict)
     structural_checks: list[str] = field(
         default_factory=list
@@ -71,23 +61,15 @@ class LabelledArrangements:
 
 
 def derive_labelled_arrangements(
-    build_input: GeometryBuildInput,
-    representation: RepresentationContext,
-    *,
-    tiles: int = 1,
-    workers: int = 1,
+    build_input: GeometryBuildInput, representation: RepresentationContext
 ) -> LabelledArrangements:
     """The labelled arrangements of an effective input (stages S2 to S5)."""
     catalogue = build_prism_catalogue(build_input, representation)
-    return derive_from_catalogue(catalogue, tiles=tiles, workers=workers)
+    return derive_from_catalogue(catalogue)
 
 
 def derive_from_catalogue(
-    catalogue: PrismCatalogue,
-    *,
-    tiles: int = 1,
-    workers: int = 1,
-    keep_raw: bool = False,
+    catalogue: PrismCatalogue, *, keep_raw: bool = False
 ) -> LabelledArrangements:
     """The labelled arrangements of a prism catalogue (stages S4 and S5).
 
@@ -98,39 +80,37 @@ def derive_from_catalogue(
     was_enabled = gc.isenabled()
     gc.disable()
     try:
-        with Runtime(tiles, workers, model_bbox(catalogue)) as rt:
-            rt.keep_raw = keep_raw
-            return derive_with_runtime(catalogue, rt)
+        return derive_arrangements(catalogue, keep_raw=keep_raw, watch=Stopwatch())
     finally:
         if was_enabled:
             gc.enable()
 
 
-def derive_with_runtime(catalogue: PrismCatalogue, rt: Runtime) -> LabelledArrangements:
-    """The labelled arrangements of a catalogue on a caller-owned runtime (later stages reuse its tiles and workers)."""
-    with rt.serial("levels"):
+def derive_arrangements(
+    catalogue: PrismCatalogue, *, keep_raw: bool, watch: Stopwatch
+) -> LabelledArrangements:
+    """The labelled arrangements of a catalogue, for a caller that already paused the cyclic collector.
+
+    ``watch`` receives the time of every stage; the caller's later stages book on the same watch.
+    """
+    with watch.stage("levels"):
         levels = build_levels(catalogue.prisms, catalogue.families)
     arcs = catalogue.arc_registry()
-    slabs = build_slab_layers(catalogue, levels, rt, arcs)
-    level_layers = build_level_layers(catalogue, levels, slabs, rt, arcs)
-    with rt.serial("contact_check"):
+    slabs = build_slab_layers(catalogue, levels, arcs, keep_raw=keep_raw, watch=watch)
+    level_layers = build_level_layers(
+        catalogue, levels, slabs, arcs, keep_raw=keep_raw, watch=watch
+    )
+    with watch.stage("contact_check"):
         check_contacts(catalogue, (*slabs, *level_layers))
-    with rt.serial("manifold_check"):
+    with watch.stage("manifold_check"):
         check_manifold(catalogue, slabs)
-    timings = {**rt.watch.serial, **rt.watch.parallel}
-    kinds = {
-        **{name: "serial" for name in rt.watch.serial},
-        **{name: "parallel" for name in rt.watch.parallel},
-    }
     return LabelledArrangements(
         catalogue,
         levels,
         slabs,
         level_layers,
         arcs,
-        dict(timings),
-        kinds,
-        rt.watch.totals(),
+        dict(watch.seconds),
         _counts(catalogue, slabs, level_layers),
         ["no_different_net_contact", "no_non_manifold_pinch"],
     )
@@ -149,15 +129,3 @@ def _counts(
         "level_cells": sum(len(a.arr.faces) - 1 for a in level_layers),
         "hot_pixels": sum(s.stats["hot_pixels"] for s in (*slabs, *level_layers)),
     }
-
-
-def model_bbox(catalogue: PrismCatalogue) -> tuple[int, int, int, int]:
-    """(xmin, ymin, xmax, ymax) of every prism footprint, in grid units."""
-    points = [
-        p
-        for prism in catalogue.prisms
-        for ring in prism.footprint.rings()
-        for p in ring
-    ]
-    xs, ys = [p[0] for p in points], [p[1] for p in points]
-    return min(xs), min(ys), max(xs), max(ys)

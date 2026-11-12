@@ -44,9 +44,9 @@ def by_type(*types: str, margins=MARGINS, **filters) -> tuple[InsetRequest, ...]
     )
 
 
-def build(catalogue, route, *requests, **options):
+def build(catalogue, route, *requests):
     """The model of a catalogue under a route with the given inset requests."""
-    return build_model_from_catalogue(catalogue, route, insets=requests, **options)
+    return build_model_from_catalogue(catalogue, route, insets=requests)
 
 
 def expansion_of(model, request_id):
@@ -510,37 +510,6 @@ def test_the_schema_refuses_a_type_record_without_its_expansion():
 
 
 # --------------------------------------------------------------------------- determinism
-
-
-def written_bytes(model, folder: Path) -> dict[str, bytes]:
-    """Every file of a model written to a folder, by name."""
-    artifacts = emit_model(model, folder)
-    return {
-        path.name: path.read_bytes()
-        for path in (
-            artifacts.xao,
-            artifacts.brep,
-            artifacts.sidecar,
-            artifacts.sliver_report,
-            artifacts.validation_report,
-        )
-    }
-
-
-@pytest.mark.slow
-def test_a_type_request_gives_byte_identical_files_for_every_worker_and_tile_count(
-    tmp_path,
-):
-    """Ids, lineage, band groups and records do not depend on how the model was derived."""
-    requests = by_type("MA", "MS", "SA", margins=(0.1, 0.5, 2.0))
-    reference = written_bytes(
-        build(pad_in_ground("B"), "B", *requests), tmp_path / "one"
-    )
-    many = written_bytes(
-        build(pad_in_ground("B"), "B", *requests, tiles=3, workers=2), tmp_path / "many"
-    )
-    assert reference == many
-    assert b"ma::pad::top" in reference["semantic_geometry_route_b.sidecar.json"]
 
 
 @pytest.mark.slow

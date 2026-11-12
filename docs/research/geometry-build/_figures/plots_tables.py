@@ -32,10 +32,7 @@ def emission_tables(
     zh = language == "zh-TW"
     header = [
         "N",
-        "寫出 BREP 與 XAO，單一行程（s）"
-        if zh
-        else "Write BREP and XAO, one process (s)",
-        "寫出，16 個 worker（s）" if zh else "Write, 16 workers (s)",
+        "寫出 BREP 與 XAO（s）" if zh else "Write BREP and XAO (s)",
         "報告（s）" if zh else "Reports (s)",
         "Sidecar（s）",
         "Gmsh 載入 XAO（s）" if zh else "Gmsh load of the XAO (s)",
@@ -49,8 +46,7 @@ def emission_tables(
             + [
                 seconds_text(tail[k])
                 for k in (
-                    "write_w1",
-                    "write_w16",
+                    "write",
                     "reports",
                     "sidecar",
                     "load",
@@ -58,7 +54,7 @@ def emission_tables(
                 )
             ]
         )
-    write_table(folder, "tail-table", table(header, rows, "rrrrrrr"), language)
+    write_table(folder, "tail-table", table(header, rows, "rrrrrr"), language)
 
     runs = {r["n"]: r for r in timing["validator"]}
     header = [

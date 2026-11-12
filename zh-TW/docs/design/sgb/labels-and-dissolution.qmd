@@ -134,7 +134,6 @@ dissolution 改變的是數量，不是面積。驗證器（[驗證](validation.
 ### 邊界情形
 
 - **你想要的 seam。** `required` family 的 edge 即使兩側 label 相同也會留下。inset band 的邊界或明確加入的 required family（例如 window）就是這樣把 label 相同的 cell 切成數個 face。
-- **Tile seam。** 平行排程器會把 level 切成 tile（[平行化推導](parallelism.qmd)），但沒有任何 seam 幾何進入 arrangement；tile 邊界從不是 edge，也不是 cut family，所以沒有東西需要 dissolve。
 - **合併後的 cell 保有 lineage。** 合併後的 pad cell 仍可透過其 edge 的 carrier 追溯到兩個來源 prism（[Identity 與 lineage](identity.qmd)）。
 
 ## Attribution policy

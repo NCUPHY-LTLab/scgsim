@@ -210,14 +210,13 @@ def _shared_load_rows(shared: dict) -> list:
 
 
 def _direct_writer_rows(shared: dict):
-    """The direct writer with 1 and 16 workers and the sidecar tail, by N."""
+    """The direct writer and the sidecar tail, by N."""
     direct_rows, sidecar_rows = [], []
     tail_numbers: dict = {}
     for n, row in sorted(shared.items()):
         e = row["emission"]
-        one, wide = e["direct_w1"], e["direct_w16"]
-        total1 = one["plan"] + one["write_brep"] + one["write_xao"]
-        total16 = wide["plan"] + wide["write_brep"] + wide["write_xao"]
+        one = e["direct"]
+        total = one["plan"] + one["write_brep"] + one["write_xao"]
         entities = (
             e["written_counts"]["vertices"]
             + e["written_counts"]["edges"]
@@ -229,11 +228,7 @@ def _direct_writer_rows(shared: dict):
                 f"{e['written_counts']['faces']:,}",
                 seconds_text(one["plan"]),
                 seconds_text(one["write_brep"] + one["write_xao"]),
-                seconds_text(total1),
-                seconds_text(wide["plan"]),
-                seconds_text(wide["write_brep"] + wide["write_xao"]),
-                seconds_text(total16),
-                f"{total1 / total16:.2f}x",
+                seconds_text(total),
             ]
         )
         sidecar_rows.append(
@@ -248,20 +243,17 @@ def _direct_writer_rows(shared: dict):
             ]
         )
         tail_numbers[n] = {
-            "write_w1_s": total1,
-            "write_w16_s": total16,
-            "write_speedup": total1 / total16,
-            "plan_w1_s": one["plan"],
-            "plan_share_w16": wide["plan"] / total16,
-            "render_w1_s": one["write_brep"] + one["write_xao"],
-            "render_w16_s": wide["write_brep"] + wide["write_xao"],
+            "write_s": total,
+            "plan_s": one["plan"],
+            "plan_share": one["plan"] / total,
+            "render_s": one["write_brep"] + one["write_xao"],
             "reports_s": one["reports"],
             "sidecar_s": one["sidecar"],
             "gmsh_load_s": e["gmsh_load_s"],
             "verify_loaded_s": e["verify_loaded_s"],
             "file_mb": {k: v / 1e6 for k, v in e["file_bytes"].items()},
             "build_s": shared[n]["build_wall_s"],
-            "per_entity_us_w16": total16 / entities * 1e6,
+            "per_entity_us": total / entities * 1e6,
             "written_counts": e["written_counts"],
         }
     return direct_rows, sidecar_rows, tail_numbers
@@ -307,12 +299,8 @@ def _write_timing_tables(api_rows, load_rows, direct_rows, sidecar_rows) -> None
                 "N",
                 "寫出的 face 數",
                 "plan (s)",
-                "算繪，1 worker (s)",
-                "合計，1 worker (s)",
-                "plan，16 worker 的那次 (s)",
-                "算繪，16 worker (s)",
-                "合計，16 worker (s)",
-                "1 worker 對 16 worker",
+                "算繪 (s)",
+                "合計 (s)",
             ],
             direct_rows,
         ),
@@ -336,8 +324,8 @@ def _write_timing_tables(api_rows, load_rows, direct_rows, sidecar_rows) -> None
 
 VALIDATOR_ABOUT = {  # what each timed check or load-side phase loops over (checks of validation/ and verification/loaded.py)
     "face_areas": "載入側：每個 face 一次 gmsh mass 呼叫，O(F)",
-    "planarity": "S9：各 arrangement 的 edge，用 noding kernel（逐 tile 平行）",
-    "shells": "S9：每個 shell 的 face（逐 shell 平行）",
+    "planarity": "S9：各 arrangement 的 edge，用 noding kernel",
+    "shells": "S9：每個 shell 的 face",
     "boundaries": "載入側：每個 edge、face、solid 一次 getBoundary，O(E + F)",
     "volumes": "載入側：每個 solid 一次 mass 積分，O(solid)",
     "counts_and_vertex_placement": "載入側：每個 vertex 一次 gmsh 呼叫，O(V)",

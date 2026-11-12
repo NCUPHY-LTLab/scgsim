@@ -43,8 +43,8 @@ def cells_along(
 ) -> Iterator[tuple[int, int]]:
     """Hash cells covered by a segment, with a one-unit safety margin on the minor axis.
 
-    ``bounds`` clips the walk, so a tile that only owns a part of a long edge
-    does not traverse the rest of it.
+    ``bounds`` clips the walk, so a segment that leaves the occupied cells
+    does not traverse the empty rest of it.
     """
     x_bounds = None if bounds is None else (bounds[0], bounds[2])
     y_bounds = None if bounds is None else (bounds[1], bounds[3])

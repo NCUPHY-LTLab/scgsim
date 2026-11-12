@@ -23,9 +23,6 @@ CHINESE_FONTS = (
     "'Noto Sans CJK TC', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans CJK JP'"
 )
 SIZES = (1000, 5000, 20000)
-SCHEDULES = [(1, 1)] + [
-    (tiles, workers) for tiles in (4, 8) for workers in (1, 8, 16, 32)
-]  # (tiles per side, workers)
 COLOUR = {
     "derive": "#2a6f9e",
     "api": "#c0392b",
@@ -36,8 +33,6 @@ COLOUR = {
     "sidecar": "#2a8f5a",
     "verify": "#b8a76a",
     "reference": "#999999",
-    "serial": "#d55e00",
-    "parallel": "#0072b2",
 }
 
 # --------------------------------------------------------------------------- reading the data
@@ -48,21 +43,9 @@ def read(name: str) -> dict:
     return json.loads((DATA / name).read_text())
 
 
-def one_process_rows(measured: dict) -> dict[int, dict]:
-    """The measured rows of the one-tile, one-worker schedule, by N."""
-    return {
-        r["n_features"]: r
-        for r in measured["rows"]
-        if (r["tiles_per_side"], r["workers"]) == (1, 1)
-    }
-
-
-def schedule_rows(measured: dict) -> dict[tuple[int, int, int], dict]:
-    """Every measured row, by (N, tiles per side, workers)."""
-    return {
-        (r["n_features"], r["tiles_per_side"], r["workers"]): r
-        for r in measured["rows"]
-    }
+def measured_rows(measured: dict) -> dict[int, dict]:
+    """The measured rows, by N."""
+    return {r["n_features"]: r for r in measured["rows"]}
 
 
 def slope(x1: float, y1: float, x2: float, y2: float) -> float:
@@ -98,15 +81,12 @@ def validator_checks(timing: dict) -> dict[str, list[float]]:
 
 
 def tail_steps(row: dict) -> dict[str, float]:
-    """The steps after the derivation, for one size, one process (reports, sidecar and load are the same in both stacks)."""
+    """The steps after the derivation, for one size."""
     e = row["emission"]
     return {
-        "write_w1": sum(e["direct_w1"][k] for k in ("plan", "write_brep", "write_xao")),
-        "write_w16": sum(
-            e["direct_w16"][k] for k in ("plan", "write_brep", "write_xao")
-        ),
-        "reports": e["direct_w1"]["reports"],
-        "sidecar": e["direct_w1"]["sidecar"],
+        "write": sum(e["direct"][k] for k in ("plan", "write_brep", "write_xao")),
+        "reports": e["direct"]["reports"],
+        "sidecar": e["direct"]["sidecar"],
         "load": e["gmsh_load_s"],
         "verify": e["verify_loaded_s"],
     }
@@ -117,7 +97,7 @@ def end_to_end(row: dict, derive_seconds: float) -> float:
     tail = tail_steps(row)
     return (
         derive_seconds
-        + tail["write_w1"]
+        + tail["write"]
         + tail["reports"]
         + tail["sidecar"]
         + tail["load"]

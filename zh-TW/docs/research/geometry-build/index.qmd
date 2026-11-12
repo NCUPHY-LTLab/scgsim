@@ -1,20 +1,19 @@
 ---
 lang: zh-TW
 title: "幾何建構效能"
-description: "SGB 幾何建構的時間如何隨晶片變大而增加、推導之後還要做什麼、檢查花多少成本，以及是否需要平行推導。"
+description: "SGB 幾何建構的時間如何隨晶片變大而增加、推導之後還要做什麼，以及檢查花多少成本。"
 scgsim-kind: "research"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/research/geometry-build/index"
 ---
 
-**結論。**即使沒有平行加速，SGB 的幾何建構也已經夠快：時間與記憶體隨晶片上的特徵數近乎線性成長，而且在 2,000 個特徵時，寫出幾何比透過 Gmsh API 建構同一份幾何快約 80 倍，差距還隨規模擴大。因此，平行推導不是這個設計的目標。
+**結論。**SGB 的幾何建構以單一序列行程執行就已經夠快：時間與記憶體隨晶片上的特徵數近乎線性成長，而且在 2,000 個特徵時，寫出幾何比透過 Gmsh API 建構同一份幾何快約 80 倍，差距還隨規模擴大。
 
 證據依各頁出現的順序如下：
 
 - 在含 1,000 到 20,000 個特徵的隨機 layout 上，推導與驗證模型分別花 2.3 s、14.5 s 與 61.6 s；相鄰尺寸之間的局部斜率是 1.13 與 1.05（斜率 1 代表完全線性）。見[隨晶片大小的 scaling](scaling.qmd)。
 - 直接把同一個模型寫成 BREP，在 2,000 個特徵時只要 0.77 s，Gmsh API 則要 64.7 s；Gmsh API 在 5,000 個特徵時，10 分鐘內沒有跑完。見 [Direct writer 與 Gmsh 載入](emission-and-load.qmd)。
 - 結構檢查約佔建構時間的五分之一，scaling 斜率約為 1.15。見[檢查的成本](validation-cost.qmd)。
-- 推導的最佳平行加速是 1.17 到 1.26 倍，從推導到可載入模型的整條路徑最多只快 1.04 倍。見[平行推導](parallelism.qmd)。
 
 ## 各頁回答的問題
 
@@ -23,7 +22,6 @@ scgsim-id: "docs/research/geometry-build/index"
 | [隨晶片大小的 scaling](scaling.qmd) | 推導時間、模型大小與 peak memory 如何隨特徵數成長？ |
 | [Direct writer 與 Gmsh 載入](emission-and-load.qmd) | direct BREP writer 比透過 Gmsh API 建構快多少？推導之後，其餘步驟要花多少時間？ |
 | [檢查的成本](validation-cost.qmd) | 結構檢查與 OCCT 檢查花多少成本，成本如何 scaling？ |
-| [平行推導](parallelism.qmd) | tile 與 worker 帶來什麼、受什麼限制，序列推導是否足夠？ |
 | [重現方式](reproduction.qmd) | 這些數字是在哪台機器、哪些版本上量到的，要如何重現？ |
 
 ## 量測的範圍 {#what-was-measured}

@@ -20,7 +20,7 @@ scgsim-id: "docs/research/geometry-build/scaling"
 
 ## 時間與記憶體對 N
 
-![推導與驗證的時間（左）與建構行程的 peak memory（右）對特徵數的關係，座標軸為對數。虛線是從 N = 1,000 那一點出發、斜率為 1 的參考線。](figures/scaling.svg){#fig-scaling fig-alt="N = 1,000、5,000、20,000 的兩張雙對數圖。左：推導與驗證時間從 2.3 秒上升到 61.6 秒，略比斜率 1 的虛線參考線陡。右：單一 tile 與 4 × 4 tile 的 peak memory 從 135 MB 上升到 2,000 MB，略比參考線平緩。"}
+![推導與驗證的時間（左）與建構行程的 peak memory（右）對特徵數的關係，座標軸為對數。虛線是從 N = 1,000 那一點出發、斜率為 1 的參考線。](figures/scaling.svg){#fig-scaling fig-alt="N = 1,000、5,000、20,000 的兩張雙對數圖。左：推導與驗證時間從 2.3 秒上升到 61.6 秒，略比斜率 1 的虛線參考線陡。右：peak memory 從 135 MB 上升到 2,000 MB，略比參考線平緩。"}
 
 在 @fig-scaling 中，時間曲線略高於斜率 1 的虛線，記憶體曲線略低於它。
 
@@ -38,6 +38,6 @@ scgsim-id: "docs/research/geometry-build/scaling"
 
 在量測範圍內，建構時間與模型大小近乎線性。從 1,000 到 5,000、再從 5,000 到 20,000 個特徵，每一步時間的倍數都略大於尺寸的倍數，所以整個範圍內每個 face 的成本上升約三分之一。量測沒有超過 20,000 個特徵，因此趨勢不外推到更大的尺寸。
 
-記憶體的成長比模型略慢。把推導切成 4 × 4 個 tile，並沒有改變 parent process 的 peak memory（見[平行推導](parallelism.qmd#memory)）。
+記憶體的成長比模型略慢。
 
 推導之後發生什麼事、要花多少時間，見 [Direct writer 與 Gmsh 載入](emission-and-load.qmd)。

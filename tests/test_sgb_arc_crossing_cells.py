@@ -26,7 +26,7 @@ from scgsim.geometry.sgb.arrangement.dcel import Arrangement
 from scgsim.geometry.sgb.derivation.layer import Layer, RawMeasurements
 from scgsim.geometry.sgb.labelling.dissolve import Dissolved
 from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge
-from scgsim.geometry.sgb.parallel import Runtime
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.validation.arrangements import check_arcs, check_planar
 from scgsim.geometry.sgb.validation.report import ValidationReport
 
@@ -218,6 +218,6 @@ def test_two_crossing_straight_edges_are_refused_by_the_planarity_check():
     layer = layer_of([((0, 0), (512, 512)), ((0, 512), (512, 0))], [None, None])
     report = ValidationReport()
     check_arcs(report, [layer])
-    check_planar(report, [layer], Runtime())
+    check_planar(report, [layer], Stopwatch())
     assert outcome(report, "arc_edges_do_not_cross")
     assert not outcome(report, "arrangements_planar")

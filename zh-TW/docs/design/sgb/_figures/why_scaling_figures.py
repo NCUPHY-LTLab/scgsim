@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from intro_common import save_plotly, save_svg, write_numbers
 from plotly.subplots import make_subplots
-from why_scaling_measure import SCHEDULES, exponent
+from why_scaling_measure import exponent
 
 # --------------------------------------------------------------------------- figures (from the measured file)
 
@@ -25,17 +25,8 @@ def load_measured(path: Path) -> list[dict]:
 
 def _series(rows: list[dict], oracle: dict) -> dict:
     ns = sorted({r["n_features"] for r in rows})
-    base = {
-        r["n_features"]: r
-        for r in rows
-        if (r["tiles_per_side"], r["workers"]) == (1, 1)
-    }
-    tiled = {
-        r["n_features"]: r
-        for r in rows
-        if (r["tiles_per_side"], r["workers"]) == (4, 1)
-    }
-    direct = {n: base[n]["emission"]["direct_w1"] for n in ns}
+    base = {r["n_features"]: r for r in rows}
+    direct = {n: base[n]["emission"]["direct"] for n in ns}
     return {
         "n": ns,
         "faces": [base[n]["counts"]["faces"] for n in ns],
@@ -43,16 +34,6 @@ def _series(rows: list[dict], oracle: dict) -> dict:
         "brep_write_s": [
             round(
                 direct[n]["plan"] + direct[n]["write_brep"] + direct[n]["write_xao"], 3
-            )
-            for n in ns
-        ],
-        "brep_write_w16_s": [
-            round(
-                sum(
-                    base[n]["emission"]["direct_w16"][k]
-                    for k in ("plan", "write_brep", "write_xao")
-                ),
-                3,
             )
             for n in ns
         ],
@@ -75,49 +56,12 @@ def _series(rows: list[dict], oracle: dict) -> dict:
             "timed_out_at_n": [n for n in sorted(oracle) if "timeout_s" in oracle[n]],
         },
         "rss_mb": [base[n]["peak_rss_mb"] for n in ns],
-        "rss_tiled_mb": [tiled[n]["peak_rss_mb"] for n in ns],
         "file_mb": [
             {k: round(v / 1e6, 1) for k, v in base[n]["emission"]["file_bytes"].items()}
             for n in ns
         ],
         "written_counts": [base[n]["emission"]["written_counts"] for n in ns],
     }
-
-
-def speedups(rows: list[dict]) -> dict:
-    """Best tiled/parallel derivation speed-up over the serial one-tile run, per N (all schedules measured)."""
-    out = {}
-    for n in sorted({r["n_features"] for r in rows}):
-        subset = [r for r in rows if r["n_features"] == n]
-        base = next(r for r in subset if r["tiles_per_side"] == 1)["build_wall_s"]
-        best = max(subset, key=lambda r: base / r["build_wall_s"])
-        out[str(n)] = {
-            "best_speedup": round(base / best["build_wall_s"], 2),
-            "tiles_per_side": best["tiles_per_side"],
-            "workers": best["workers"],
-            "all": {
-                f"T{r['tiles_per_side']}w{r['workers']}": round(
-                    base / r["build_wall_s"], 2
-                )
-                for r in subset
-            },
-        }
-    return out
-
-
-def _identity(rows: list[dict]) -> dict:
-    out = {}
-    for n in sorted({r["n_features"] for r in rows}):
-        subset = [r for r in rows if r["n_features"] == n]
-        out[str(n)] = {
-            "configurations": len(subset),
-            "tiles_per_side": sorted({r["tiles_per_side"] for r in subset}),
-            "workers": sorted({r["workers"] for r in subset}),
-            "distinct_identity_digests": len({r["identity_digest"] for r in subset}),
-            "identity_digest": subset[0]["identity_digest"],
-            "all_validation_passed": all(r["validation_passed"] for r in subset),
-        }
-    return out
 
 
 COLOUR = {
@@ -129,8 +73,8 @@ COLOUR = {
     "ref": "#999999",
 }
 LINES = (
-    ("derive_s", "derivation and validation S2-S9 (serial, T = 1)", "derive", "solid"),
-    ("brep_write_s", "direct BREP/XAO writer (D8, one process)", "write", "solid"),
+    ("derive_s", "derivation and validation S2-S9", "derive", "solid"),
+    ("brep_write_s", "direct BREP/XAO writer (D8)", "write", "solid"),
     ("gmsh_load_s", "Gmsh loading the XAO (outside SGB)", "load", "dash"),
 )
 
@@ -202,21 +146,9 @@ def _scaling_html(s: dict) -> None:
             x=ns,
             y=s["rss_mb"],
             mode="lines+markers",
-            name="peak RSS after the build, one tile (T = 1)",
+            name="peak RSS after the build",
             line=dict(color=COLOUR["rss"]),
-            hovertemplate="N = %{x}<br>%{y:.0f} MB<extra>T = 1</extra>",
-        ),
-        row=1,
-        col=2,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=ns,
-            y=s["rss_tiled_mb"],
-            mode="lines+markers",
-            name="peak RSS after the build, 4 × 4 tiles, one worker",
-            line=dict(color=COLOUR["rss"], dash="dash"),
-            hovertemplate="N = %{x}<br>%{y:.0f} MB<extra>4 x 4 tiles</extra>",
+            hovertemplate="N = %{x}<br>%{y:.0f} MB<extra></extra>",
         ),
         row=1,
         col=2,
@@ -226,7 +158,7 @@ def _scaling_html(s: dict) -> None:
             x=ns,
             y=[s["rss_mb"][0] * n / ns[0] for n in ns],
             mode="lines",
-            name="slope 1 from T = 1 at N = 1000",
+            name="slope 1 from N = 1000",
             line=dict(color=COLOUR["ref"], dash="dot"),
             showlegend=False,
         ),
@@ -277,23 +209,13 @@ def _scaling_svg(s: dict) -> None:
         ls=":",
         label="slope 1 from the derivation at N = 1000",
     )
-    a2.loglog(
-        ns, s["rss_mb"], marker="o", color=COLOUR["rss"], label="one tile (T = 1)"
-    )
-    a2.loglog(
-        ns,
-        s["rss_tiled_mb"],
-        marker="s",
-        color=COLOUR["rss"],
-        ls="--",
-        label="4 × 4 tiles, one worker",
-    )
+    a2.loglog(ns, s["rss_mb"], marker="o", color=COLOUR["rss"], label="peak RSS")
     a2.loglog(
         ns,
         [s["rss_mb"][0] * n / ns[0] for n in ns],
         color=COLOUR["ref"],
         ls=":",
-        label="slope 1 from T = 1 at N = 1000",
+        label="slope 1 from N = 1000",
     )
     for ax, ylabel, title in (
         (a1, "seconds", "Wall time against model size"),
@@ -313,31 +235,18 @@ def _scaling_svg(s: dict) -> None:
 
 
 def _tail_figure(rows: list[dict]) -> dict:
-    base = next(
-        r
-        for r in rows
-        if r["n_features"] == 20000 and (r["tiles_per_side"], r["workers"]) == (1, 1)
-    )
+    base = next(r for r in rows if r["n_features"] == 20000)
     e = base["emission"]
-    derive = base["build_wall_s"]
-
-    def direct(workers: int) -> tuple[float, ...]:
-        t = e[f"direct_w{workers}"]
-        same = e[
-            "direct_w1"
-        ]  # reports and sidecar are written by the one-process run in both stacks
-        return (
-            derive,
+    t = e["direct"]
+    stacks = {
+        "direct BREP/XAO": (
+            base["build_wall_s"],
             t["plan"] + t["write_brep"] + t["write_xao"],
-            same["reports"],
-            same["sidecar"],
+            t["reports"],
+            t["sidecar"],
             e["gmsh_load_s"],
             e["verify_loaded_s"],
-        )
-
-    stacks = {
-        "direct BREP/XAO, one process": direct(1),
-        "direct BREP/XAO, 16 workers": direct(16),
+        ),
     }
     labels = [
         "derivation and validation S2-S9",
@@ -459,12 +368,9 @@ def plot(rows: list[dict], oracle: dict, machine: dict) -> None:
                 "reports_s",
                 "sidecar_s",
                 "rss_mb",
-                "rss_tiled_mb",
                 "faces",
             )
         },
-        "identity": _identity(rows),
-        "speedups": speedups(rows),
         "stack_n20000": tails,
         "oracle_local_log_slope": exponent(s["oracle"]["n"], s["oracle"]["emit_s"])
         if len(s["oracle"]["n"]) > 1
@@ -474,7 +380,6 @@ def plot(rows: list[dict], oracle: dict, machine: dict) -> None:
             / _series_value(s, "brep_write_s", 1000),
             1,
         ),
-        "schedules": [f"T{t}w{w}" for t, w in SCHEDULES],
         "machine": machine,
         "source": "figures/why-scaling-measured.json (python why_scaling.py measure), figures/why-scaling-oracle.json (python why_scaling.py oracle)",
     }

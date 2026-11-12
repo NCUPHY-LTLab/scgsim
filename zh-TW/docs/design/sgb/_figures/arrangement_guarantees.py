@@ -41,8 +41,9 @@ from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.noding.snap_rounding import (
     Segment,
-    SerialEngine,
     assemble_chain,
+    crossing_pixels_kernel,
+    hits_kernel,
     snap_round,
 )
 from scgsim.geometry.sgb.noding.snap_rounding import canonical_key as canonical
@@ -58,7 +59,6 @@ SQRT_HALF = math.sqrt(2) / 2
 
 def snap_state(segments, max_rounds=None):
     """Edges (a, b) -> carrier names after ``max_rounds`` rounds (``None``: until nothing changes), and the round count."""
-    engine = SerialEngine()
     edges: dict = {}
     for seg in segments:
         if seg.a != seg.b:
@@ -69,10 +69,10 @@ def snap_state(segments, max_rounds=None):
         rounds += 1
         keys = sorted(edges)
         flags = [k in changed for k in keys]
-        new_hot = engine.crossing_pixels(keys, flags) - hot
+        new_hot = crossing_pixels_kernel(keys, flags) - hot
         hot |= new_hot
         delta |= new_hot
-        hits = engine.hits(keys, flags, hot, delta)
+        hits = hits_kernel(keys, flags, hot, delta)
         new_edges, verified = {}, set()
         for key, h in zip(keys, hits, strict=True):
             chain = assemble_chain(key[0], key[1], h)
@@ -342,9 +342,8 @@ def timed_snap(n: int, seed=7) -> dict:
 
 
 def scaling_rows():
-    """Arrangement sizes and stage times of the one-tile, one-worker production runs of ``why_scaling.py measure``."""
-    measured = json.loads((FIG / "why-scaling-measured.json").read_text())["rows"]
-    rows = [r for r in measured if r["tiles_per_side"] == 1 and r["workers"] == 1]
+    """Arrangement sizes and stage times of the production runs of ``why_scaling.py measure``."""
+    rows = json.loads((FIG / "why-scaling-measured.json").read_text())["rows"]
     return [
         {
             "N": r["n_features"],

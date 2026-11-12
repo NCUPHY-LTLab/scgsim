@@ -463,7 +463,7 @@ def timing_figures(head: list[dict]) -> None:
                 },
                 "direct": {
                     "plan (serial)": d["plan_s"],
-                    "render (16 workers)": d["render_brep_s"] + d["render_xao_s"],
+                    "render": d["render_brep_s"] + d["render_xao_s"],
                     "load into Gmsh": ld["direct_xao_s"],
                 },
             }

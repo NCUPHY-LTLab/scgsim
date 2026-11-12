@@ -59,7 +59,7 @@ flowchart LR
 ::: {.askr-table-compact}
 | 層 | 例子 | 對什麼穩定 | 用途 |
 |---|---|---|---|
-| **Semantic identity** | `MA::pad__top::band=2`、<code>SA::substrate&#124;vacuum__interface::band=0</code>、`vacuum` | 不相關的修改、worker 數、tile 配置 | physical group、Surface EPR row、報告 |
+| **Semantic identity** | `MA::pad__top::band=2`、<code>SA::substrate&#124;vacuum__interface::band=0</code>、`vacuum` | 不相關的修改、執行次數 | physical group、Surface EPR row、報告 |
 | **Atomic topology identity** | `f:5cba27a49e17b07e`、`e:3814641e4355b553` | 同樣的輸入得到同樣的 ID；只有 entity 自己的內容改變時才改變 | 每個輸出 entity 的計畫、lineage、sidecar |
 :::
 
@@ -92,7 +92,7 @@ flowchart LR
 
 上表面 family 的 `band=2` 沒有和下表面撞名，仍然帶 `__top`。
 
-限定詞不改變 `face_kind`：這些 group 的 `face_kind` 仍是 `interface`，依 face 種類過濾照舊可用。從不碰撞的 family 與沒有 band 的介面（`SA::substrate|vacuum__interface`）維持原本的形式；要找一個 family 的 band group，讀 `band_family[*].bands`，不要從名稱推測；這份清單的名稱不經 `read_sidecar` 檢查，查 `group` 表之前先確認名稱在表中（見[使用契約](consumer-contract.qmd#reader-checks)）。限定詞在第一次命名之後、依排序後的拓樸決定，與 `workers`、`tiles` 無關；`surface_epr_row`、group 的 `band`、`band_family`、`mesh_feature` 與 AEDT 相關欄位讀到的都是最後的名稱。
+限定詞不改變 `face_kind`：這些 group 的 `face_kind` 仍是 `interface`，依 face 種類過濾照舊可用。從不碰撞的 family 與沒有 band 的介面（`SA::substrate|vacuum__interface`）維持原本的形式；要找一個 family 的 band group，讀 `band_family[*].bands`，不要從名稱推測；這份清單的名稱不經 `read_sidecar` 檢查，查 `group` 表之前先確認名稱在表中（見[使用契約](consumer-contract.qmd#reader-checks)）。限定詞在第一次命名之後、依排序後的拓樸決定，與 hash seed 無關；`surface_epr_row`、group 的 `band`、`band_family`、`mesh_feature` 與 AEDT 相關欄位讀到的都是最後的名稱。
 
 加上限定詞之後，若一個 group 仍會收進兩個 family 的 band label，build 以 `InputError` 停止，訊息指出 group 名稱與兩個 family。兩個指定 face 的請求選到同一個 face 的情形更早就被擋下：SGB 在規劃 band 時依請求解析出的 face 拒收（見 [Inset band](inset-imprint.qmd#request-forms)）。
 
@@ -108,7 +108,7 @@ D5 的 per-Entity 命名已在 production 實作，MA、MS、SA 的總和是依 
 
 ## Hash 規則
 
-每個 ID 的形式是 `<kind>:<16 位十六進位>`，是 canonical JSON payload 的 SHA-256 的前 64 bit（key 排序、Z 用精確分數）。沒有任何東西依賴列舉順序、worker 或 Python 的 hash seed。
+每個 ID 的形式是 `<kind>:<16 位十六進位>`，是 canonical JSON payload 的 SHA-256 的前 64 bit（key 排序、Z 用精確分數）。沒有任何東西依賴列舉順序或 Python 的 hash seed。
 
 ::: {.askr-table-compact}
 | Entity | Hash 的 payload |
@@ -162,11 +162,11 @@ production 的測試以 Gmsh API 的 oracle（依建構順序把同一個 topolo
 
 ## 決定性
 
-不論 worker 數、tile 配置或 Python hash seed，同樣的輸入得到同樣的 ID。production 的測試涵蓋：同一個輸入兩次推導得到相同的 ID 與 model digest；三個 `PYTHONHASHSEED` 下相同；wall 的 ID 不隨旁邊的 vertical edge 改變（`test_wall_ids_do_not_depend_on_the_vertical_edges_next_to_them`）；tile 與 worker 數不同時，ID 與五個輸出檔相同（同一台機器上）。逐項的狀態（測過、實測、只是論證）見[使用契約的決定性一節](consumer-contract.qmd#determinism)。
+不論執行幾次或 Python hash seed 為何，同樣的輸入得到同樣的 ID。production 的測試涵蓋：同一個輸入兩次推導得到相同的 ID 與 model digest；三個 `PYTHONHASHSEED` 下相同；wall 的 ID 不隨旁邊的 vertical edge 改變（`test_wall_ids_do_not_depend_on_the_vertical_edges_next_to_them`）。逐項的狀態（測過、實測、只是論證）見[使用契約的決定性一節](consumer-contract.qmd#determinism)。
 
-實測（production）：`identity.py` 在全新的 interpreter 中，以四種（tile grid、worker）設定與三個 `PYTHONHASHSEED` 值重建兩個模型，並把 `ConformalModel.identity_digest()`（每一個 vertex、edge、face、volume 與 group 成員的 ID 的 hash）印出來。結果：十二次執行，每個模型都只有一個 digest（本頁的 Route B 含 band 範例為 `model:ea7f893fddc6733c`，60 個 feature 的隨機 layout 為 `model:c10a91b4661ff323`；完整表格見補充）。
+實測（production）：`identity.py` 在全新的 interpreter 中，以三個 `PYTHONHASHSEED` 值重建兩個模型，並把 `ConformalModel.identity_digest()`（每一個 vertex、edge、face、volume 與 group 成員的 ID 的 hash）印出來。結果：三次執行，每個模型都只有一個 digest（本頁的 Route B 含 band 範例為 `model:ea7f893fddc6733c`，60 個 feature 的隨機 layout 為 `model:c10a91b4661ff323`；完整表格見補充）。
 
-成立的原因：topology 是整數（grid point 與精確分數），ID 是對內容 hash，tile 切線落在 pixel 欄之間所以每個 hot pixel 只有一個 owner，合併結果依 item index 放回（見[平行化的 derivation](parallelism.qmd)）。直接 writer 的輸出對任何 worker 數逐位元相同。
+成立的原因：topology 是整數（grid point 與精確分數），ID 是對內容的 canonical JSON（key 排序）做 hash，所以不依 Python 的 set 或 dict 順序。
 
 ## 不相關的修改會改變什麼
 
@@ -187,15 +187,12 @@ Vertex、edge、face、volume 的數量與有多少 ID 在兩次 build 之間保
 
 本頁所有數字與圖都由 `zh-TW/docs/design/sgb/_figures/identity.py` 對 production 計算（從 repository 根目錄以 `uv run --extra palace --group dev python` 執行）：範例是 `tests/sgb_scenes.py` 的 `pad_in_ground("B")`，lumped port 換成同一片 sheet 放在 z = 0（support plane；scene 本身為了測試 embedded sheet 把 Route B 的 port 放在金屬的中間平面，compiler 不會這樣放），band 請求與 `tests/sgb_emit_cases.py` 的 `pad_requests("B")` 相同；以 `emit_model` 寫出後以 `read_sidecar` 讀回，查詢只走 sidecar 的表與 `views`（`group`、`face`、`edge`、`carrier`、`support_primitive`、`support_ring`、`source_curve`、`band_family`、`inset_request`），不解析任何 id；port 比較各 build 一次有與沒有 port 的模型，比較 `Topology` 的 ID 集合與各 group 的成員。原始資料另存於 `figures/identity-trace.json`、`figures/identity-determinism.json`、`figures/identity-stability.json`，表格在 `figures/identity-tables.md`。
 
-決定性（production；四種 tile 與 worker 設定，各三個 `PYTHONHASHSEED`；每個格子是 `ConformalModel.identity_digest()`）：
+決定性（production；三個 `PYTHONHASHSEED`；每個格子是 `ConformalModel.identity_digest()`）：
 
 ::: {.askr-table-compact}
-| Tiles | Workers | Hash seed | Digest，pad-in-ground B 含 band | Digest，隨機 layout（60 個 feature，seed 5） |
-|---|---|---|---|---|
-| 1×1 | 1 | 0, 1, 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 2×2 | 1 | 0, 1, 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 3×3 | 2 | 0, 1, 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
-| 4×4 | 4 | 0, 1, 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| Hash seed | Digest，pad-in-ground B 含 band | Digest，隨機 layout（60 個 feature，seed 5） |
+|---|---|---|
+| 0, 1, 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
 :::
 
 有與沒有 port 的 ID 比較（production；`figures/identity-stability.json`）：

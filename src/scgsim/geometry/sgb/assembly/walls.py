@@ -13,8 +13,7 @@ Otherwise the stacked walls merge into one face.  The bottom boundary of a run i
 of level edges covering the slab edge at the lowest level of the run, the top boundary the
 chain at the highest.  Levels are global in Z but their effect is local in XY.
 
-Runs of different wall keys (the end points of the slab edge) are independent, so they are
-computed as one parallel stage, each owned by the tile of its first end point.
+Runs of different wall keys (the end points of the slab edge) are independent of each other.
 """
 
 from __future__ import annotations
@@ -25,9 +24,9 @@ from typing import Any
 
 from scgsim.geometry.sgb.derivation.layer import Layer
 from scgsim.geometry.sgb.labelling.linking import TAG, walk_chain
-from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records.labels import Domain
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 
 @dataclass(frozen=True)
@@ -49,10 +48,10 @@ class WallRun:
 
 
 def find_wall_runs(
-    slabs: list[Layer], level_layers: list[Layer], rt: Runtime
+    slabs: list[Layer], level_layers: list[Layer], watch: Stopwatch
 ) -> list[WallRun]:
-    """Every wall run of the model (a parallel stage, one item per wall key)."""
-    with rt.serial("wall_prep"):
+    """Every wall run of the model, by wall key."""
+    with watch.stage("wall_prep"):
         members = [_tag_members(layer) for layer in level_layers]
         keys: dict[tuple[Point, Point], list[tuple[int, int]]] = defaultdict(list)
         for k, slab in enumerate(slabs):
@@ -60,11 +59,14 @@ def find_wall_runs(
                 left, right = slab.arr.he_face[2 * si], slab.arr.he_face[2 * si + 1]
                 if slab.labels[left] != slab.labels[right]:
                     keys[(edge.a, edge.b)].append((k, si))
-        key_list = sorted(keys)
-        owners = [rt.owner(key[0]) for key in key_list]
-    shared = (slabs, level_layers, members, [keys[k] for k in key_list], key_list)
-    out = rt.run("wall_runs", _wall_run_job, shared, owners)
-    return [run for runs in out for run in runs]
+    with watch.stage("wall_runs"):
+        return [
+            run
+            for key in sorted(keys)
+            for run in _runs_of_key(
+                slabs, level_layers, members, key, sorted(keys[key])
+            )
+        ]
 
 
 def _tag_members(layer: Layer) -> dict[str, Any]:
@@ -100,16 +102,6 @@ def _level_cuts_wall(
         if any(label is not None and label.needs_face() for label in sides):
             return True  # rule (b): a sheet face lies along the wall line
     return False
-
-
-def _wall_run_job(shared: Any, items: list[int]) -> list[list[WallRun]]:
-    slabs, level_layers, members, entries_by_key, key_list = shared
-    return [
-        _runs_of_key(
-            slabs, level_layers, members, key_list[i], sorted(entries_by_key[i])
-        )
-        for i in items
-    ]
 
 
 def _runs_of_key(

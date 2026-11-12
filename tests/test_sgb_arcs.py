@@ -168,17 +168,9 @@ def test_arc_edges_keep_the_lineage_of_the_source_arc():
     assert lineage == Lineage("polygon_edge", "pad", 0, 1, 0)
 
 
-def test_arc_example_ids_are_identical_for_every_tile_and_worker_count_and_hash_seed():
-    """Arc example ids are identical for every tile and worker count and hash seed."""
+def test_arc_example_ids_are_identical_for_every_hash_seed():
+    """Arc example ids are identical for every hash seed."""
     catalogue = pad_in_ground("B")
-    reference = derive_from_catalogue(catalogue).identity_sets()
-    for tiles, workers in ((2, 1), (3, 1), (4, 2)):
-        assert (
-            derive_from_catalogue(
-                catalogue, tiles=tiles, workers=workers
-            ).identity_sets()
-            == reference
-        )
     code = (
         f"import sys; sys.path.insert(0, {str(TESTS)!r})\n"
         "from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue\n"

@@ -12,7 +12,7 @@ typed reference of one record to another, and no id is parsed.  Outputs go to ``
 
 * ``identity-trace.json``        every step of the lookup  Palace attribute -> source curve (also quoted in the page)
 * ``identity-trace-plan.html``   the traced faces and edge in the plan view (+ ``.svg``)
-* ``identity-determinism.json``  one model digest per (tile grid, workers, PYTHONHASHSEED); all must agree
+* ``identity-determinism.json``  one model digest per PYTHONHASHSEED; all must agree
 * ``identity-stability.json``    which atomic ids survive an unrelated edit (removing the lumped port)
 * ``identity-tables.md``         markdown tables quoted by the page
 """
@@ -376,40 +376,32 @@ DIGEST_SCRIPT = (
     "import inset_kit as kit\n"
     "from sgb_scenes import random_layout\n"
     "from scgsim.geometry.sgb.model import build_model_from_catalogue\n"
-    "tiles, workers = {tiles}, {workers}\n"
-    "a = kit.pad_model('B', kit.MARGINS, tiles=tiles, workers=workers).identity_digest()\n"
-    "b = build_model_from_catalogue(random_layout(60, seed=5, route='B'), 'B', tiles=tiles, workers=workers).identity_digest()\n"
+    "a = kit.pad_model('B', kit.MARGINS).identity_digest()\n"
+    "b = build_model_from_catalogue(random_layout(60, seed=5, route='B'), 'B').identity_digest()\n"
     "print(a, b)\n"
 )
 
 
 def determinism() -> list[dict]:
-    """The model digest of two models in a fresh interpreter for several tile grids, worker counts and hash seeds."""
+    """The model digest of two models in a fresh interpreter for several hash seeds."""
     rows = []
-    for tiles, workers in ((1, 1), (2, 1), (3, 2), (4, 4)):
-        for hashseed in ("0", "1", "12345"):
-            code = DIGEST_SCRIPT.format(
-                kit_dir=str(Path(__file__).resolve().parent),
-                tiles=tiles,
-                workers=workers,
-            )
-            env = {**os.environ, "PYTHONHASHSEED": hashseed}
-            out = subprocess.run(
-                [sys.executable, "-c", code],
-                env=env,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.split()
-            rows.append(
-                {
-                    "tiles": f"{tiles}x{tiles}",
-                    "workers": workers,
-                    "pythonhashseed": hashseed,
-                    "pad_in_ground_B_bands": out[0],
-                    "random_layout_60_seed5_B": out[1],
-                }
-            )
+    for hashseed in ("0", "1", "12345"):
+        code = DIGEST_SCRIPT.format(kit_dir=str(Path(__file__).resolve().parent))
+        env = {**os.environ, "PYTHONHASHSEED": hashseed}
+        out = subprocess.run(
+            [sys.executable, "-c", code],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+        rows.append(
+            {
+                "pythonhashseed": hashseed,
+                "pad_in_ground_B_bands": out[0],
+                "random_layout_60_seed5_B": out[1],
+            }
+        )
     return rows
 
 
@@ -453,11 +445,11 @@ def _tables(rows, stab) -> str:
     out = [
         "## Determinism (identity-determinism.json)",
         "",
-        "| tiles | workers | PYTHONHASHSEED | pad_in_ground B with bands | random layout (60 features, seed 5, Route B) |",
-        "|---|---|---|---|---|",
+        "| PYTHONHASHSEED | pad_in_ground B with bands | random layout (60 features, seed 5, Route B) |",
+        "|---|---|---|",
     ]
     out += [
-        f"| {r['tiles']} | {r['workers']} | {r['pythonhashseed']} | `{r['pad_in_ground_B_bands']}` | `{r['random_layout_60_seed5_B']}` |"
+        f"| {r['pythonhashseed']} | `{r['pad_in_ground_B_bands']}` | `{r['random_layout_60_seed5_B']}` |"
         for r in rows
     ]
     out += [

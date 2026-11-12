@@ -360,7 +360,7 @@ def errors(numbers: dict) -> None:
     try:
         CurveFamilyRecord("t", "tile_seam", (carrier,), (Fraction(0),), "dissolve")
         numbers["dissolve_policy"] = "accepted"
-    except ValueError as e:  # the policy was removed: tile seams are not a family
+    except ValueError as e:  # dissolve is not an edge policy
         numbers["dissolve_policy"] = {"error": type(e).__name__, "message": str(e)}
 
 

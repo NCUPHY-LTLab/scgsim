@@ -1,84 +1,15 @@
 [
  {
-  "tiles": "1x1",
-  "workers": 1,
   "pythonhashseed": "0",
   "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
   "random_layout_60_seed5_B": "model:c10a91b4661ff323"
  },
  {
-  "tiles": "1x1",
-  "workers": 1,
   "pythonhashseed": "1",
   "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
   "random_layout_60_seed5_B": "model:c10a91b4661ff323"
  },
  {
-  "tiles": "1x1",
-  "workers": 1,
-  "pythonhashseed": "12345",
-  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
-  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
- },
- {
-  "tiles": "2x2",
-  "workers": 1,
-  "pythonhashseed": "0",
-  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
-  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
- },
- {
-  "tiles": "2x2",
-  "workers": 1,
-  "pythonhashseed": "1",
-  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
-  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
- },
- {
-  "tiles": "2x2",
-  "workers": 1,
-  "pythonhashseed": "12345",
-  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
-  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
- },
- {
-  "tiles": "3x3",
-  "workers": 2,
-  "pythonhashseed": "0",
-  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
-  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
- },
- {
-  "tiles": "3x3",
-  "workers": 2,
-  "pythonhashseed": "1",
-  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
-  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
- },
- {
-  "tiles": "3x3",
-  "workers": 2,
-  "pythonhashseed": "12345",
-  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
-  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
- },
- {
-  "tiles": "4x4",
-  "workers": 4,
-  "pythonhashseed": "0",
-  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
-  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
- },
- {
-  "tiles": "4x4",
-  "workers": 4,
-  "pythonhashseed": "1",
-  "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
-  "random_layout_60_seed5_B": "model:c10a91b4661ff323"
- },
- {
-  "tiles": "4x4",
-  "workers": 4,
   "pythonhashseed": "12345",
   "pad_in_ground_B_bands": "model:ea7f893fddc6733c",
   "random_layout_60_seed5_B": "model:c10a91b4661ff323"

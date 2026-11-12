@@ -76,20 +76,20 @@ Gmsh API 還有第二個弱點，是任何計時都看不出來的：`addSurface
 
 在隨機的 Route B layout（seed 2）上對兩條路徑計時。每個儲存格只跑一次；請讀比值，不要讀最後一位數字。Gmsh-API 路徑只量到 N = 2,000，因為它隨 N 超線性成長：N = 5,000 的試跑在 10 分鐘內沒有完成。direct writer 量到 N = 20,000。@fig-timing 與 @tbl-api 是同一個 N 的並排比較（寫出，加上載入）。
 
-![Gmsh-API oracle 與 direct writer 的寫出加載入時間（堆疊各 stage，每個 N 一個 panel；direct writer 用 16 個 worker）。黃色是 oracle 的 `addPhysicalGroup`，深色區段是載入 Gmsh 的時間。](figures/emission-timing.svg){#fig-timing fig-alt="三個 panel，分別是 500、1000 與 2000 個 feature。每個 panel 有一根堆疊長條代表 Gmsh API，一根代表 direct writer。N 愈大，Gmsh API 長條中的 physical groups 區段愈佔大宗，N = 2000 時約 59 秒；direct writer 的長條在三個 panel 都不到 4 秒，主要是載入。"}
+![Gmsh-API oracle 與 direct writer 的寫出加載入時間（堆疊各 stage，每個 N 一個 panel；這次量測的 direct writer 把算繪分給 16 個行程）。黃色是 oracle 的 `addPhysicalGroup`，深色區段是載入 Gmsh 的時間。](figures/emission-timing.svg){#fig-timing fig-alt="三個 panel，分別是 500、1000 與 2000 個 feature。每個 panel 有一根堆疊長條代表 Gmsh API，一根代表 direct writer。N 愈大，Gmsh API 長條中的 physical groups 區段愈佔大宗，N = 2000 時約 59 秒；direct writer 的長條在三個 panel 都不到 4 秒，主要是載入。"}
 
 {{< askr-chart-view src="figures/emission-timing.html" label="檢視計時圖表" >}}
 
 這些計時全部來自只含 polygon 的隨機 layout：沒有 arc、沒有 polyline witness、沒有 cylinder wall，也沒有 band。arc 與 band 在大規模下的成本沒有量測過，不能由這裡外推。這些計時的完整整理與重現方式，見研究頁 [Direct writer 與 Gmsh 載入](../../research/geometry-build/emission-and-load.qmd)；檢查的成本見[檢查的成本](../../research/geometry-build/validation-cost.qmd)。
 
 - **Oracle 的成本集中在 physical group，而且超線性。**N = 500、1,000、2,000 時，oracle 的合計是 2.35 s、8.48 s、64.7 s，direct writer（plan 加算繪）是 0.20 s、0.35 s、0.77 s，差 12 倍、24 倍、84 倍。oracle 的 `addPhysicalGroup` 一階段是 1.19 s、6.07 s、59.3 s（佔 51%、72%、92%），而 group 數只是 1,875、3,691、7,484 個（約 3.7 N）：group 數每加倍，這個 stage 的時間是 5.1 倍與 9.8 倍。其餘三個 stage（OCC build、`synchronize`、寫出 XAO）加起來是 1.16 s、2.41 s、5.46 s，N 每加倍約為 2.1 倍與 2.3 倍。direct writer 不經過 Gmsh 的 group 登記，group 資訊寫在 XAO 的 `<groups>` 與 sidecar 裡。
-- **Direct writer 隨 N 大致線性。**N = 1,000、5,000、20,000 時，plan 加算繪（16 個 worker）是 0.44 s、2.19 s、9.14 s，每個寫出的元素（vertex、edge、face）約 6.7 到 7.0 µs。
-- **Planning 主導 direct 寫出。**算繪可以平行化（N = 20,000 時，1 個 worker 為 6.93 s，16 個為 1.90 s），但序列的 plan 佔了 16 個 worker 合計 9.14 s 中的 7.24 s（79%）。所以 16 個 worker 對整個寫出只有 1.51 倍（13.8 s 變 9.14 s；N = 1,000 是 1.11 倍，N = 5,000 是 1.28 倍），@tbl-direct。
-- **載入是下限。**Gmsh 讀取並 synchronize 同樣的 414,156 個 vertex、620,297 條 edge 與 267,635 個 face（N = 20,000 的 direct XAO）需要 49.7 s，比寫出本身（9.1 到 13.8 s）長；沒有任何 writer 能消除這個成本。載入 API 產生的 XAO 比載入 direct XAO 慢 13% 到 23%（@tbl-load），載入不含 group 的 BREP 比載入 XAO 快 5% 到 10%。
+- **Direct writer 隨 N 大致線性。**N = 1,000、5,000、20,000 時，plan 加算繪是 0.49 s、2.81 s、13.8 s，每個寫出的元素（vertex、edge、face）約 7.6 到 10.6 µs。
+- **Planning 約佔 direct 寫出的一半。**N = 20,000 時，plan 是 6.87 s，BREP 與 XAO 的算繪是 6.93 s，合計 13.8 s；N = 1,000 與 5,000 時 plan 佔 51% 與 58%（@tbl-direct）。
+- **載入是下限。**Gmsh 讀取並 synchronize 同樣的 414,156 個 vertex、620,297 條 edge 與 267,635 個 face（N = 20,000 的 direct XAO）需要 49.7 s，比寫出本身（13.8 s）長；沒有任何 writer 能消除這個成本。載入 API 產生的 XAO 比載入 direct XAO 慢 13% 到 23%（@tbl-load），載入不含 group 的 BREP 比載入 XAO 快 5% 到 10%。
 - **報告與 sidecar 比檔案本身貴。**N = 20,000 時，sliver 與 validation report 要 49.7 s、sidecar 要 19.6 s（以前一版格式 v2 量得；v3 記錄得更多，見[下文](#physical-groups-and-the-sidecar)），合計比寫出 BREP 與 XAO 的 13.8 s 長得多（@tbl-sidecar）；本頁沒有把報告再拆成 sliver 與 validation 兩項。
 - **不需要 healing。**本頁所有載入都把 `Geometry.OCCAutoFix` 關閉，元素數量與規劃相同，`verify_loaded` 與 OCCT 檢查都通過，所以這些檔案並不依賴 Gmsh 修復。
 
-輸出不受 worker 數影響。文字以 chunk 為單位算繪，再依檔案順序串接；單元測試以三個 hash seed、forked pool 與刻意很小的 chunk 寫出 XAO，每個 route 只得到一個 digest（`test_the_xao_bytes_do_not_depend_on_python_hash_randomisation_or_the_pool`）。這讓序列的 emission stage 能保持 deterministic，而 pipeline 其餘部分可以[平行執行](parallelism.qmd)。
+輸出不受 chunk 大小影響。文字以 chunk 為單位算繪，再依檔案順序寫出；單元測試以三個 hash seed 與刻意很小的 chunk 寫出 XAO，每個 route 只得到一個 digest（`test_the_xao_bytes_do_not_depend_on_python_hash_randomisation`）。
 
 ## XAO 與 planned id 到 tag 的對應 {#xao-groups-and-the-planned-id-to-tag-map}
 
@@ -194,7 +194,7 @@ group 的記錄給出名稱與 physical `tag`；它的成員是 `group` 欄位�
  },
 ```
 
-sidecar 的大小：running example（`pad_in_ground_B`）為 64.9 kB（64,925 bytes）。@tbl-sidecar 中大型 layout 的時間與大小是以前一版格式 v2 量得的：N = 1,000、5,000、20,000 時是 11.2、57.3、232 MB，隨規模大致線性成長，比同一個 layout 的 XAO（13.1、68.7、282 MB）小。v3 另外記錄每條來源曲線、support primitive 與每個 face 的 loop，在 PDK 元件上約是 v2 的 2.1 倍，大型 layout 的 v3 時間與大小尚未重新量測。它以固定順序寫出，所以對任何 worker 數都是 byte-identical（測試）。
+sidecar 的大小：running example（`pad_in_ground_B`）為 64.9 kB（64,925 bytes）。@tbl-sidecar 中大型 layout 的時間與大小是以前一版格式 v2 量得的：N = 1,000、5,000、20,000 時是 11.2、57.3、232 MB，隨規模大致線性成長，比同一個 layout 的 XAO（13.1、68.7、282 MB）小。v3 另外記錄每條來源曲線、support primitive 與每個 face 的 loop，在 PDK 元件上約是 v2 的 2.1 倍，大型 layout 的 v3 時間與大小尚未重新量測。它以固定順序寫出，所以不受 Python 的 hash 隨機化影響（測試）。
 
 group 名稱的規則（D5，production 已實作 per-Entity）見 [D5](decisions.qmd#d5)。在執行範例中每個 Net 只有一個 Entity，所以 per-Net 與 per-Entity 得到相同的 face，只有名稱不同。Route C 由 production 實作，導體內部成為輸出的 solid，並有以 `<entity>` 命名的 volume group。
 
@@ -283,7 +283,7 @@ SGB 只知道精確的 topology，所以 sidecar 的 `mesh_feature` 陳述關於
 - **Refinement-only curve。**採用 `refinement_only` policy 的 cut family 會把它的 curve 保留為 free edge，且不改變任何 label；落在沒有輸出 face 的 curve 是錯誤。writer 把它們放在 compound 之下，sidecar 在含有它的 face 以 `embedded_edges` 記錄它（`views.embedded_edges` 給出 `(edge, host face)`），mesher 以 `mesh.embed(1, curves, 2, face)` embed 它們，讓 mesh node 落在該 curve 上。
 - **薄膜的 sidewall 與圓弧。**這兩種 edge 的事實（z 方向的厚度、圓弧的半徑）直接取自 slab 的 level 與 arc 的 carrier，不必再從 mesh 量。
 
-`mesh_feature` 是一張以 feature id 為鍵的表，每筆有 `kind`、`source`、`edges`（planned id）與 `facts`；`source` 依種類指向 `entity`、`band_family`、`refinement_request` 或 `port` 表，edge 的 native tag 由 `views.native_tags` 算出。`views.mesh_features` 依 `(kind, source, facts 的標準 JSON)` 排出 mesher 讀取的順序，每筆內的 edge 依 tag 排序；數字與 sidecar 的其他 µm 數值用同一個 12 位有效數字的寫法，所以對任何 worker 數與 tile 配置都是 byte-identical（測試）。
+`mesh_feature` 是一張以 feature id 為鍵的表，每筆有 `kind`、`source`、`edges`（planned id）與 `facts`；`source` 依種類指向 `entity`、`band_family`、`refinement_request` 或 `port` 表，edge 的 native tag 由 `views.native_tags` 算出。`views.mesh_features` 依 `(kind, source, facts 的標準 JSON)` 排出 mesher 讀取的順序，每筆內的 edge 依 tag 排序；數字與 sidecar 的其他 µm 數值用同一個 12 位有效數字的寫法，所以不受 Python 的 hash 隨機化影響（測試）。
 
 ::: {.askr-table-compact}
 | `kind` | `source` | `facts` | edge |
@@ -353,7 +353,7 @@ SGB 以 `export_aedt_step` 把具名 solid 匯出成 XDE assembly 的 STEP：ban
 | 內容 | 來源 |
 |---|---|
 | Gmsh-API oracle 逐 stage 與 direct writer 的並排計時、載入時間 | `figures/emission-timing-data.json` 的 `head`（`emission.py --measure-only`；隨機 layout `random_layout(n, seed=2, route="B")`，N = 500、1,000、2,000，每個 N 一個 subprocess） |
-| direct writer 的 plan 與算繪（1 與 16 個 worker）、報告、sidecar、檔案大小、Gmsh 載入 | `figures/why-scaling-measured.json`（`_figures/why_scaling.py measure`；同一種 layout，N = 1,000、5,000、20,000，seed 2） |
+| direct writer 的 plan 與算繪、報告、sidecar、檔案大小、Gmsh 載入 | `figures/why-scaling-measured.json`（`_figures/why_scaling.py measure`；同一種 layout，N = 1,000、5,000、20,000，seed 2） |
 | 每項檢查的耗時 | `figures/emission-timing-data.json` 的 `validator`（N = 1,000、5,000、20,000；每個 N 一個 subprocess，寫出全部檔案、開啟 XAO、執行 `verify_loaded`） |
 | Oracle 的 solid mass | `figures/why-scaling-oracle.json`（`_figures/why_scaling.py oracle`） |
 | 各 case 的載入後檢查、band | `verify_loaded` 與 `band_mesh_report`（`tests/sgb_gmsh_oracle.py`） |
@@ -366,7 +366,7 @@ seed 2：seed 1 的隨機 layout 在 N = 20,000 時有兩個同 Net 的形狀只
 ::: {#tbl-api .askr-table-compact .askr-table-numeric}
 {{< include figures/emission-timing-api-table.md >}}
 
-Gmsh-API oracle 逐 stage，與同一個 layout 的 direct writer（plan 加 BREP 與 XAO 的算繪，16 個 worker）。oracle 不做 sewing。「physical group 數」是 oracle 登記的 group 數，每個 group 一次 `addPhysicalGroup`。
+Gmsh-API oracle 逐 stage，與同一個 layout 的 direct writer（plan 加 BREP 與 XAO 的算繪；這次量測把算繪分給 16 個行程）。oracle 不做 sewing。「physical group 數」是 oracle 登記的 group 數，每個 group 一次 `addPhysicalGroup`。
 :::
 
 ::: {#tbl-load .askr-table-compact .askr-table-numeric}
@@ -378,13 +378,13 @@ Gmsh-API oracle 逐 stage，與同一個 layout 的 direct writer（plan 加 BRE
 ::: {#tbl-direct .askr-table-compact .askr-table-numeric}
 {{< include figures/emission-timing-direct-table.md >}}
 
-Direct writer 的 plan 與算繪，1 個 worker 與 16 個 worker（`why-scaling-measured.json`）。planning 是序列的，只有算繪使用 worker；兩次執行各自量測 plan，所以 plan 的兩欄略有差異。
+Direct writer 的 plan 與算繪（`why-scaling-measured.json`）。
 :::
 
 ::: {#tbl-sidecar .askr-table-compact .askr-table-numeric}
 {{< include figures/emission-sidecar-table.md >}}
 
-`emit_model` 在寫完 BREP 與 XAO 之後的步驟：sliver 與 validation report、sidecar（前一版格式 v2，含 lineage 與 membership）的時間與大小（1 個 worker），以及 Gmsh 載入 XAO 的時間（`why-scaling-measured.json`）。@tbl-direct 與 @tbl-load 的寫出時間只包含幾何檔案。
+`emit_model` 在寫完 BREP 與 XAO 之後的步驟：sliver 與 validation report、sidecar（前一版格式 v2，含 lineage 與 membership）的時間與大小，以及 Gmsh 載入 XAO 的時間（`why-scaling-measured.json`）。@tbl-direct 與 @tbl-load 的寫出時間只包含幾何檔案。
 :::
 
 ### 極端案例目錄與 validator 規模

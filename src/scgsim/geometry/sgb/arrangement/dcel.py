@@ -113,7 +113,7 @@ class Arrangement:
         return -sum(self.cycles[c].twice_area for c in self.faces[0].holes)
 
     def face_anchor(self, face_index: int) -> Point:
-        """The point that decides which tile owns a face: the origin of its outer cycle's first half-edge."""
+        """A point on the face's boundary that locates it in a message: the origin of its outer cycle's first half-edge."""
         outer = self.faces[face_index].outer
         assert outer is not None
         return self.origin(self.cycles[outer].half_edges[0])

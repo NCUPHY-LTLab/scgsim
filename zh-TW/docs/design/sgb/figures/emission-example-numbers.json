@@ -171,13 +171,10 @@
   },
   "tail": {
    "1000": {
-    "write_w1_s": 0.492,
-    "write_w16_s": 0.443,
-    "write_speedup": 1.110609480812641,
-    "plan_w1_s": 0.253,
-    "plan_share_w16": 0.6072234762979685,
-    "render_w1_s": 0.239,
-    "render_w16_s": 0.174,
+    "write_s": 0.492,
+    "plan_s": 0.253,
+    "plan_share": 0.5142276422764228,
+    "render_s": 0.239,
     "reports_s": 2.052,
     "sidecar_s": 0.804,
     "gmsh_load_s": 1.559,
@@ -190,7 +187,7 @@
      "validation": 0.004896
     },
     "build_s": 2.332,
-    "per_entity_us_w16": 6.8442357012637896,
+    "per_entity_us": 7.601273058739919,
     "written_counts": {
      "vertices": 20552,
      "edges": 30829,
@@ -202,13 +199,10 @@
     }
    },
    "5000": {
-    "write_w1_s": 2.81,
-    "write_w16_s": 2.193,
-    "write_speedup": 1.2813497492020063,
-    "plan_w1_s": 1.632,
-    "plan_share_w16": 0.7533059735522115,
-    "render_w1_s": 1.1780000000000002,
-    "render_w16_s": 0.541,
+    "write_s": 2.81,
+    "plan_s": 1.632,
+    "plan_share": 0.5807829181494661,
+    "render_s": 1.1780000000000002,
     "reports_s": 12.432,
     "sidecar_s": 4.622,
     "gmsh_load_s": 9.553,
@@ -221,7 +215,7 @@
      "validation": 0.004903
     },
     "build_s": 14.459,
-    "per_entity_us_w16": 6.700561588335584,
+    "per_entity_us": 8.585762910726398,
     "written_counts": {
      "vertices": 104098,
      "edges": 155947,
@@ -233,13 +227,10 @@
     }
    },
    "20000": {
-    "write_w1_s": 13.799,
-    "write_w16_s": 9.138,
-    "write_speedup": 1.5100678485445393,
-    "plan_w1_s": 6.87,
-    "plan_share_w16": 0.7925147734734077,
-    "render_w1_s": 6.928999999999999,
-    "render_w16_s": 1.8960000000000001,
+    "write_s": 13.799,
+    "plan_s": 6.87,
+    "plan_share": 0.4978621639249221,
+    "render_s": 6.928999999999999,
     "reports_s": 49.74,
     "sidecar_s": 19.636,
     "gmsh_load_s": 49.67,
@@ -252,7 +243,7 @@
      "validation": 0.00491
     },
     "build_s": 61.644,
-    "per_entity_us_w16": 7.01795884763549,
+    "per_entity_us": 10.597594018223038,
     "written_counts": {
      "vertices": 414156,
      "edges": 620297,

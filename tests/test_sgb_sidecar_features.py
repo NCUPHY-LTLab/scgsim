@@ -7,7 +7,7 @@ from collections import Counter
 
 import jsonschema
 import pytest
-from sgb_emit_cases import CASES, pad_requests
+from sgb_emit_cases import CASES
 from sgb_extreme_cases import catalogue_of, chip, disk
 from sgb_scenes import GRID, chip_prisms, conductor, footprint, pad_in_ground, rect_um
 
@@ -427,27 +427,3 @@ def test_port_edge_is_the_boundary_of_the_lumped_port_faces(sidecars, name):
 def test_a_model_without_a_port_has_no_port_edge(sidecars):
     """Only the ports of the ports block."""
     assert not features_of(sidecars["bridge_b"], "port_edge")
-
-
-# --------------------------------------------------------------------------- determinism
-
-
-@pytest.mark.parametrize("route", ["A", "B", "C"])
-def test_the_block_is_byte_identical_for_every_worker_and_tile_layout(route):
-    """Tiles and workers change how the model is derived, never what the features say."""
-    blocks = {
-        json.dumps(
-            sidecar_of(
-                build_model_from_catalogue(
-                    pad_in_ground("A" if route == "A" else "B"),
-                    route,
-                    insets=pad_requests(route),
-                    tiles=tiles,
-                    workers=workers,
-                )
-            )["mesh_feature"]
-        )
-        for tiles, workers in [(1, 1), (3, 2), (2, 1)]
-    }
-    (block,) = blocks
-    assert len(json.loads(block)) > 3  # not a comparison of empty blocks

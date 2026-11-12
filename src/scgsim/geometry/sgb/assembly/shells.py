@@ -6,7 +6,7 @@ classifying each as an outer shell or an inner void by its exact signed volume
 polyhedron is exact; the cylinder patches of curved walls add or remove
 ``segment area x height`` through each wall's ``bulge_volume``.
 
-Shells are computed per volume, one parallel stage.  The same module offers
+Shells are computed per volume.  The same module offers
 ``shell_checks``, which recomputes closure, orientation and the Euler characteristic of a
 shell from its faces, independently of how the shell was built (used by validation).
 """
@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from fractions import Fraction
-from typing import Any
 
 from scgsim.geometry.sgb.assembly.records import Shell, TopoEdge, TopoFace, TopoVertex
 
@@ -65,15 +64,6 @@ def volume_shells(
         )
     shells.sort(key=lambda shell: (shell.role != "outer", shell.faces))
     return shells
-
-
-def shell_job(shared: Any, items: list[int]) -> list[list[Shell]]:
-    """Parallel stage function: the shells of the volumes at ``items``."""
-    faces, edges, vertices, zden, entries_per_volume = shared
-    return [
-        volume_shells(faces, edges, vertices, zden, entries_per_volume[i])
-        for i in items
-    ]
 
 
 def _six_volume(
