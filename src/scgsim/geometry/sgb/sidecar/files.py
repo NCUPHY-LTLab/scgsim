@@ -43,4 +43,3 @@ def _table(records: Mapping[str, Any]) -> str:
 
 def _compact(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
-

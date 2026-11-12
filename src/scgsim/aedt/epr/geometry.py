@@ -232,32 +232,6 @@ def _klayout_inset(support: Any, radius: int, k: Any) -> Any:
     return (support - complement.minkowski_sum(circle).merged()).merged()
 
 
-def inset_surface_regions(
-    binding: Mapping[str, Any],
-    margin_um: float,
-    support_insets: dict[tuple[str, int], Any],
-) -> list[dict[str, Any]]:
-    """Inset complete physical support, then attribute its surviving pieces."""
-
-    import klayout.db as k  # noqa: PLC0415 -- optional KLayout is required only when calculating a requested source-support inset.
-
-    if not math.isfinite(margin_um) or margin_um < 0.0:
-        raise ValueError("surface EPR margin must be finite and nonnegative")
-    support = binding["mask_support"]
-    if support["klayout_version"] != version("klayout"):
-        raise RuntimeError("prepared EPR KLayout version differs from runtime")
-    dbu_um = float(support["source_dbu_um"])
-    if margin_um / dbu_um >= _KLAYOUT_COORD_MAX:
-        raise OverflowError("EPR margin exceeds KLayout integer range")
-    radius = k.DPoint(margin_um, 0).to_itype(dbu_um).x
-    key = (str(support["group_identity_sha256"]), radius)
-    if key not in support_insets:
-        physical = klayout_region(support["support_regions"], dbu_um, k)
-        support_insets[key] = _klayout_inset(physical, radius, k)
-    attribution = klayout_region(support["attribution_regions"], dbu_um, k)
-    return regions_from_klayout(support_insets[key] & attribution, dbu_um)
-
-
 def _inset_group_task(
     task: tuple[dict[str, Any], list[dict[str, Any]]],
 ) -> dict[tuple[str, float], dict[str, Any]]:

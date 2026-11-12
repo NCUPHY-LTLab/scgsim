@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.aedt.io import file_sha256
-from scgsim.aedt.runtime.handoff_validation import contained
+from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
     HfssDrivenSpec,

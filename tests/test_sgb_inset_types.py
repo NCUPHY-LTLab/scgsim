@@ -572,6 +572,7 @@ def test_a_type_request_model_passes_the_official_occt_checks(tmp_path):
     pytest.importorskip("OCP")
     from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
     from scgsim.geometry.sgb.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
+
     model = build(
         pad_in_ground("B"), "B", *by_type("MA", "MS", "SA", margins=(0.5, 2.0))
     )

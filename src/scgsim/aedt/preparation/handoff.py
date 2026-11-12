@@ -22,7 +22,6 @@ from scgsim.aedt.preparation.gds import GdsPreflight, gds_preflight, write_impor
 from scgsim.aedt.preparation.handoff_files import (
     handoff_member,
     utc_now,
-    write_analysis_script,
     write_script,
 )
 from scgsim.aedt.preparation.planar import validate_geometry_workers
@@ -427,7 +426,7 @@ class _SavedAnalysisHandoff:
             )
 
     def _write_metadata(self) -> None:
-        write_analysis_script(self.script_path)
+        write_script(self.script_path, analyze_epr=True)
         write_json(self.spec_path, self.payload)
         self.files = {
             "spec": self.spec_path.name,

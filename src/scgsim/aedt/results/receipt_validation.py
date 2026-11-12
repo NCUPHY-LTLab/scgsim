@@ -27,13 +27,13 @@ from scgsim.aedt.specs.hfss import (
 
 
 def contained(root: Path, relative: str) -> Path:
-    """Resolve a receipt-relative path without allowing root escape."""
+    """Resolve a handoff- or receipt-relative path without allowing root escape."""
     requested = Path(relative)
     if requested.is_absolute():
-        raise RuntimeError(f"receipt path escapes handoff root: {relative!r}")
+        raise RuntimeError(f"path escapes its root directory: {relative!r}")
     resolved = (root / requested).resolve()
-    if not resolved.is_relative_to(root):
-        raise RuntimeError(f"receipt path escapes handoff root: {relative!r}")
+    if not resolved.is_relative_to(root.resolve()):
+        raise RuntimeError(f"path escapes its root directory: {relative!r}")
     return resolved
 
 

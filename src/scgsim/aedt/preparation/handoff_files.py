@@ -8,23 +8,16 @@ from pathlib import Path
 from scgsim.aedt.io import file_sha256
 
 
-def write_script(path: Path) -> None:
-    """Write the portable one-shot launcher with its preserved CLI arguments."""
+def write_script(path: Path, *, analyze_epr: bool = False) -> None:
+    """Write the portable launcher with its preserved CLI arguments.
+
+    ``analyze_epr`` adds the saved-field analysis flag.
+    """
+    flag = " --analyze-epr" if analyze_epr else ""
     path.write_text(
         "#!/usr/bin/env bash\nset -euo pipefail\n"
         'run_dir="$(cd "$(dirname "$0")" && pwd)"\n'
-        'python -m scgsim.aedt.run --handoff "$run_dir/metadata/aedt_handoff_metadata.json" --execute "$@"\n',
-        encoding="utf-8",
-    )
-    path.chmod(0o755)
-
-
-def write_analysis_script(path: Path) -> None:
-    """Write the saved-field analysis launcher with its fixed analysis flag."""
-    path.write_text(
-        "#!/usr/bin/env bash\nset -euo pipefail\n"
-        'run_dir="$(cd "$(dirname "$0")" && pwd)"\n'
-        'python -m scgsim.aedt.run --handoff "$run_dir/metadata/aedt_handoff_metadata.json" --execute --analyze-epr "$@"\n',
+        f'python -m scgsim.aedt.run --handoff "$run_dir/metadata/aedt_handoff_metadata.json" --execute{flag} "$@"\n',
         encoding="utf-8",
     )
     path.chmod(0o755)
