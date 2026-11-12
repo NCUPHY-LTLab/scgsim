@@ -123,16 +123,39 @@ band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd
 
 ## Sidecar `scgsim.sgb.sidecar.v3` {#sidecar}
 
-sidecar 是 SGB 對這個模型的完整記錄：版面畫了什麼、SGB 由此推導出什麼、最後寫進模型的又是什麼。建模用到的、mesher 與 meshing stage 需要的，都在這裡有一個欄位，讀取端只讀，不重建、不近似，也不猜 SGB 當時知道什麼。格式只有一個定義：`scgsim.contracts.sgb_sidecar` 中的 `TypedDict`。writer 依它寫出，每個讀取端都用它的 `read_sidecar` 讀入，套件內的 `sidecar.schema.json`（JSON Schema draft 2020-12）也由它產生，測試讓三者保持一致（測過）。`read_sidecar(path)` 依序檢查版本、結構，以及每一個 id 都指到存在的記錄，任何一項不成立就丟出 `SidecarError`，所以讀取端拿到的 sidecar 不必再自己驗證。
+sidecar 是 SGB 對這個模型的完整記錄：版面畫了什麼、SGB 由此推導出什麼、最後寫進模型的又是什麼。建模用到的、mesher 與 meshing stage 需要的，都在這裡有一個欄位，讀取端只讀，不重建、不近似，也不猜 SGB 當時知道什麼。格式只有一個定義：`scgsim.contracts.sgb_sidecar` 中的 `TypedDict`。writer 依它寫出，每個讀取端都用它的 `read_sidecar` 讀入，套件內的 `sidecar.schema.json`（JSON Schema draft 2020-12）也由它產生，測試讓三者保持一致（測過）。`read_sidecar(path)` 在任何讀取端使用之前檢查這個檔案；它檢查什麼、不檢查什麼，見[下文](#reader-checks)。
 
 檔案是一個 JSON 物件：頂層的鍵依字母排序，`schema`、`model`、`binding`、`summary` 各佔一行，其餘每張表的每一筆記錄各佔一行，所以兩個 sidecar 的 diff 會直接指出變動的那一筆記錄。貫穿所有表的規則：
 
-- **每張表以 id 為鍵，記錄之間以 id 互相指向。**每個存放 id 的欄位都在定義中寫明它指向哪一張表（例如 `face.group` 指向 `group`，`edge.carriers` 指向 `carrier`），`read_sidecar` 檢查每一個這樣的 id。
+- **每張表以 id 為鍵，記錄之間以 id 互相指向。**指向另一筆記錄的欄位在定義中標為 typed reference，寫明它指向哪一張表（例如 `face.group` 指向 `group`，`edge.carriers` 指向 `carrier`），`read_sidecar` 檢查每一個 typed reference。少數名稱清單不是 typed reference，[不經檢查](#reader-checks)。
 - **id 不透明。**讀取端只比較與查詢 id，不從 id 字串讀出任何資訊；需要的事實（ring、margin、role、長度、位置）都是欄位。
 - **每個事實只存一次。**能由其他欄位得到的反向對照與排序（group 的成員、依 native tag 排列的規劃值、embedding 的配對）不寫在檔案裡，而是由共用模組 `scgsim.contracts.sgb_sidecar.views` 算出，所有讀取端用同一份程式。
 - **綁定靠建構順序，不靠幾何。**native tag 等於「規劃 id 在 `binding.ids_by_tag[dim]` 中的位置加 1」（也就是寫出的 compound 的 `TopExp::MapShapes` 順序）。
 - **primary group 分割每個維度。**每個已 emit 的 face 與 volume 恰好屬於一個 primary group（`face.group`、`volume.group`）；「某 Net 的所有導體表面」這類集合是由 group 的欄位篩出的名稱清單，絕不是互相重疊的 Gmsh group。
 - **使用端儲存名稱。**group 的 `tag` 是 physical tag，依排序後的名稱編號，加入新 group 就會位移；名稱與 sidecar 的欄位才是 identity。
+
+### `read_sidecar` 檢查什麼 {#reader-checks}
+
+`read_sidecar(path)` 依序做四項檢查，第一個不成立的就丟出 `SidecarError`，並指出位置：
+
+1. **是 JSON。**`NaN` 與 `Infinity` 不算。
+2. **版本。**`schema` 必須是 `scgsim.sgb.sidecar.v3`；其他版本以版本不符拒絕，不會被當成結構錯誤。
+3. **結構。**每筆記錄的欄位、型別、列舉值與數值範圍符合定義。記錄是封閉的，多出的鍵是錯誤；只有 `summary.counts` 與 `summary.slivers` 可以多帶鍵。
+4. **typed reference 與表之間的規則。**每個在定義中標為 typed reference 的欄位，都指到它那張表中存在的記錄（指向 group 的還要是對的維度）；以 id 為鍵的物件也算，例如 `face.membership` 與 `surface_epr_row.face_sides` 的鍵。另外有五條表之間的規則：`binding.ids_by_tag` 在每個維度恰好列出寫出的 vertex、edge、face 與已 emit 的 volume，各一次，數量等於 `summary.counts`，`summary.counts.volumes_total` 等於 `volume` 表的筆數；group 的 `tag` 在同一維度不重複，每個 group 至少有一個成員，未 emit 的 volume 不指向 group；support ring 恰好列出指向它的 primitive；face 的每個 loop 為每條 edge 標出方向，mesh feature 的每條 edge 只列一次；`outer_boundary` 恰好出現在一側 volume 為 `null` 的 face 上，它的 `domain` 是另一側 volume 的 Entity。
+
+通過之後，讀取端可以直接沿 typed reference 查表。reader 不檢查上面沒有列出的事：不同表的內容是否互相一致由 writer 與它的測試負責，下列名稱也**不經檢查**，因為它們不是 typed reference。讀取端用到它們時要照最後一欄處理：
+
+::: {.askr-table-compact}
+| 欄位 | 內容 | 為什麼不檢查 | 讀取端怎麼用 |
+|---|---|---|---|
+| `band_family[*].bands` 的值 | 每個 band index 的 group 名稱清單 | Route B 中，一個 family 的 band 也會蓋到兩個導體接觸的 `MM` face；那個 face 不寫出，所以它的名稱不是 `group` 表中的 physical group。例如 airbridge 的 ground 上表面有一塊被 post 蓋住，ground top 的 family 在 `bands` 中除了 `MA::ground_left__top::band=1`，還列出不在 `group` 表中的 <code>MM::ground_left&#124;post_left__interface::band=1</code> | 拿名稱查 `group` 之前先確認它在表中；不在表中的名稱沒有寫出的 face，略過。要選出某個 band 可積分的 group，從 `surface_epr_row` 出發，它的 `group` 是檢查過的 reference |
+| `inset_request[*].support.exclude_entity_ids`（`scope` 為 `type` 的請求） | 按種類的請求要略過的 Entity | 它是呼叫端給的請求原樣。SGB 建模時會拒絕模型沒有的 Entity，所以 SGB 寫出的檔案中它們都是 `entity` 表的鍵，但 reader 不檢查這一點 | 當作請求的記錄；要拿它查 `entity` 表時先確認名稱在表中 |
+| `net`（`entity[*].prisms[*]`、`volume`、`group`） | Net 的名稱 | sidecar 沒有 Net 的表 | 只用來比較兩個名稱是否相同 |
+| `material`（`entity[*].prisms[*]`、`volume`、`group`、`group[*].adjacent_domains[*]`） | material id | 材料參數在 stack 的 `materials`，不在 sidecar | 到 stack 查；查不到時由讀取端回報 |
+| `entity[*].prisms[*].layer`，`port[*]` 的 `source_layer`、`target_layer`、`source_name` | 來源 layer 與 port 的名稱 | 它們指向版面與 stack，不在 sidecar | 當作標示用的文字，不拿來查 sidecar 的表 |
+| `model.files` 的值 | 五個檔名 | reader 只讀 sidecar 自己，不開其他檔案 | 開檔時自行處理檔案不存在；XAO 與 sidecar 必須來自同一次 build（見 [Validation](validation.qmd)） |
+| `carrier[*].member`、`cut_family[*].role`、`inset_request` 與 `band_family` 的 `interface`、`entity[*].prisms[*].feature_kind`、`volume[*].aedt_name`、`model.name` | 成員名稱、role、請求聲明的 interface 種類、feature kind、AEDT 名稱與模型名稱 | 它們是標籤，不是任何表的鍵 | 不拿來查表 |
+:::
 
 ### 欄位一覽 {#fields}
 
@@ -148,7 +171,7 @@ sidecar 是 SGB 對這個模型的完整記錄：版面畫了什麼、SGB 由此
 | 來源 | `inset_request`、`refinement_request` | 呼叫端給的請求。inset 請求有 `scope`（`face` 是指定 face，`type` 是按種類）、`support`、`margins_um`、它變成的 band family（`families`）與略過的 face（`skipped`，原因 `no_gap_edge`）；refinement 請求有原本的折線 `points_um`（catalogue 直接宣告、沒有請求的 family 為 `null`）與 SGB 依序畫出的每一段 `segments_um` | Palace 的 band 選取 |
 | 來源 | `port` | 每個 lumped-port sheet（以 sheet id 為鍵）：`port_index`、`source_name`、`direction`、`entity`、`host_entity_ids`、`source_layer`、`target_layer`、`z_um`、`group`、`faces`、`host_volumes`、`adjacent_volumes` | 兩者 |
 | 推導 | `cut_family` | 每個 cut family（inset band、refinement 與其他 role）：`role`、`edge_policy`（`required` 會切開 cell，`refinement_only` 只嵌入）與它畫在哪些高度（`levels_um`） | 追溯 |
-| 推導 | `band_family` | 每個加 band 的 face 一個 family：`support`、`margins_um` 與 `margins_grid`（以模型格點表示，是查詢 margin 用的 identity）、`band_count`、`support_area_um2`、`bands`（band index → 該 band 的 group 清單） | Palace 的 band 選取；index map |
+| 推導 | `band_family` | 每個加 band 的 face 一個 family：`support`、`margins_um` 與 `margins_grid`（以模型格點表示，是查詢 margin 用的 identity）、`band_count`、`support_area_um2`、`bands`（band index → 該 band 的 group 名稱清單；名稱[不經檢查](#reader-checks)） | Palace 的 band 選取；index map |
 | 推導 | `support_ring`、`support_primitive` | 每個 band family 的 support region 的精確邊界。ring 依序列出它的 primitive，個數就是 ring 的大小；primitive 有精確曲線、`length_um`、是否為量 band 的距離起點（`origin`）、是否在 die 邊上（`die_edge`），以及沿著它畫的來源曲線（`sources`） | meshing stage 的 lineage 規則 |
 | 推導 | `carrier` | 每條已 emit 的 horizontal 或 refinement edge 所在的 carrier 與它的來源：`source`（一條來源曲線，或它的 witness chord）、`band_member`（它 offset 的 support primitive、`role` 為 `edge`、`corner`、`capstart` 或 `capend`、`margin_grid` 與 `piece`）、`refinement`（refinement 請求的一段）、`family_member`（其他 cut family 的成員）或 `unknown` | meshing stage；追溯 |
 | 寫出 | `vertex`、`edge` | 每個寫出的 vertex 的位置；每條寫出的 edge 的 `kind`（`horizontal`、`vertical`、`refinement`）、兩個 vertex、`arc`（直線為 `null`）、`length_um`、它所在的 `carriers`（vertical edge 則是牆立在它上面的 Entity，`entities`），以及 `written_as_free_edge` | 載入檢查；meshing stage |
@@ -156,7 +179,7 @@ sidecar 是 SGB 對這個模型的完整記錄：版面畫了什麼、SGB 由此
 | 寫出 | `volume` | 每個規劃的 volume：`entity`、`kind`、`material`、`net`、是否 `emitted`、`group`、`shells`、`volume_um3`、`aedt_name`、寫出的 solid 的 `faces`，以及嵌在其中、不圍成 shell 的 sheet（`embedded_faces`） | AEDT 的名稱與 material；Palace 的相鄰關係 |
 | 寫出 | `group` | 每個 primary group（名稱為鍵）：`dim`、`tag`、`interface_type`、`entities`、`net`；surface 另有 `face_kind`（單一值）、`adjacent_domains`、`adjacent_volumes`、`band`、`area_um2`；volume 另有 `kind`（`vacuum`、`dielectric`、`conductor`）與 `material` | 兩者；最重要的表 |
 | 寫出 | `surface_epr_row` | 每個 Surface-EPR row（例如 `MA::pad__top::band=2`）與承載它的 `group`、`entities`、`band`，以及 `side`、`face_sides` 與 `shared_face_group`（sheet 的 row 才有值，其他 row 為 `null`；`face_sides` 是 face id 對 `above`、`below` 或 `both` 的對照，只列出該 row 實際積分的 face，`side` 是它們共同的值，不一致時為 `mixed`） | Palace 的 band 選取；internal boundary 的 crack 決定 |
-| 寫出 | `mesh_feature` | `film_sidewall`、`band_boundary`、`arc`、`refinement_curve`、`port_edge` 五種幾何事實：edge id、來源（entity、family、request 或 port 的 id），以及該種的 `facts`（薄膜厚度、band 的 margin、圓弧半徑）；沒有尺寸 | mesher 的尺寸決定（Palace） |
+| 寫出 | `mesh_feature` | `film_sidewall`、`band_boundary`、`arc`、`refinement_curve`、`port_edge` 五種幾何事實：edge id、來源 `source`（依種類指向 `entity`、`band_family`、`refinement_request` 或 `port` 的記錄；`arc` 沒有唯一的 Entity 時為 `null`），以及該種的 `facts`（薄膜厚度、band 的 margin、圓弧半徑）；沒有尺寸 | mesher 的尺寸決定（Palace） |
 :::
 
 檔案只存一次的事實，讀取端需要的其他方向與順序由 `views` 算出：
@@ -196,7 +219,7 @@ Surface-EPR row、請求與它們推導出的 family：
 
 {{< include figures/consumer-excerpt-requests.md >}}
 
-`surface_epr_row` 以 row 名稱為鍵，`group` 指向承載它的 primary group；做 band 選取要用 `surface_epr_row` 與 `band_family[*].bands`，不要從 group 名稱推測。`inset_request.pad_top` 是呼叫端給的請求，它變成同名的 band family；`cut_family` 同時列出這個 band family 與 refinement family `ref` 的 role、edge policy 與高度（兩者都在 pad 的上表面 0.2 µm）。
+`surface_epr_row` 以 row 名稱為鍵，`group` 指向承載它的 primary group；做 band 選取要從 `surface_epr_row` 出發，不要從 group 名稱推測。`band_family[*].bands` 列出每個 band 的 group 名稱，但其中的名稱[不保證都在 `group` 表中](#reader-checks)。`inset_request.pad_top` 是呼叫端給的請求，它變成同名的 band family；`cut_family` 同時列出這個 band family 與 refinement family `ref` 的 role、edge policy 與高度（兩者都在 pad 的上表面 0.2 µm）。
 
 按種類要求的 `inset_request` 記錄長這樣。這是 pad-in-ground（Route B）對 `InterfaceSurfaces("SA")`、margin 0.5 與 1 µm 的記錄：`scope` 是 `type`，`families` 列出它變成的 band family（id 是 `<request id>::<first>|<second>::z=<z>`），`skipped` 是基板下方 z = −10 µm 的 SA 介面，它旁邊沒有導體，所以量不出 band。`families` 不保證每個 family 都有可積分的 band，因為 port 是之後才放上去的，可以把一個 family 的 face 整個蓋住；family 有沒有 band，要看它在 `band_family` 中的 `bands`（這個例子都有）與最後的 `surface_epr_row`：
 
@@ -206,7 +229,7 @@ port、嵌入的 refinement curve 與 mesh feature（每種節錄一筆）：
 
 {{< include figures/consumer-excerpt-embeds.md >}}
 
-Route B 的 port 位於 support plane $z = 0$，是 substrate 與 vacuum 之間的 face：沒有任何 volume 的 `embedded_faces` 含有它，`port[*].host_volumes` 為空，`adjacent_volumes` 有兩個，`z_um` 是 0。只有 refinement curve 是 free edge（`written_as_free_edge`）：含有它的 face 在 `embedded_edges` 列出它，它的 carrier 是 `refinement` 種，指向請求 `ref`。`mesh_feature` 列出 mesher 決定尺寸時需要知道的 edge 與它們的幾何事實：`film_sidewall` 是導體（或不貼著模型外界的 dielectric）sidewall face 的所有 edge，`facts.thickness_um` 是有輸出的 sidewall 疊成的柱高（`ground_0000` 與 `pad` 是 0.2 µm，substrate 是 10 µm；它為什麼會隨 route 改變，見 [Mesh feature](emission.qmd#mesh-features)）；`band_boundary` 是 inset family 的 band 邊界，`source` 為 family 的 id（按種類要求時是展開後的 id），`facts` 帶 request 的 `margins_um`（0.5 與 1 µm）與 `narrowest_band_um`（相鄰 margin 的最小差，從 0 起算，這裡是 0.5 µm）；`port_edge` 是 lumped-port face 的邊界 edge；`refinement_curve` 是 refinement request 的曲線；`arc` 是同一個 `(entity, 半徑)` 的圓弧 edge，`facts.radius_um` 是 carrier 的半徑（範例是方形 pad，沒有圓弧，所以沒有 `arc` 這一種）。`views.mesh_features` 依種類、來源與 `facts` 排出 mesher 讀取的順序；**任何欄位都不是尺寸**，尺寸由 mesher 決定。某一筆的 `kind` 若在上述五種之外，或缺少該種的 `facts`，都是 schema 錯誤。
+Route B 的 port 位於 support plane $z = 0$，是 substrate 與 vacuum 之間的 face：沒有任何 volume 的 `embedded_faces` 含有它，`port[*].host_volumes` 為空，`adjacent_volumes` 有兩個，`z_um` 是 0。只有 refinement curve 是 free edge（`written_as_free_edge`）：含有它的 face 在 `embedded_edges` 列出它，它的 carrier 是 `refinement` 種，指向請求 `ref`。`mesh_feature` 列出 mesher 決定尺寸時需要知道的 edge 與它們的幾何事實：`film_sidewall` 是導體（或不貼著模型外界的 dielectric）sidewall face 的所有 edge，`facts.thickness_um` 是有輸出的 sidewall 疊成的柱高（`ground_0000` 與 `pad` 是 0.2 µm，substrate 是 10 µm；它為什麼會隨 route 改變，見 [Mesh feature](emission.qmd#mesh-features)）；`band_boundary` 是 inset family 的 band 邊界，`source` 指向 `band_family` 的記錄（指定 face 的請求是與它同名的 family；按種類的請求展開成幾個 family，就有幾筆），`facts` 帶這個 family 的 `margins_um`（0.5 與 1 µm）與 `narrowest_band_um`（相鄰 margin 的最小差，從 0 起算，這裡是 0.5 µm）；`port_edge` 是 lumped-port face 的邊界 edge；`refinement_curve` 是 refinement request 的曲線；`arc` 是同一個 `(entity, 半徑)` 的圓弧 edge，`facts.radius_um` 是 carrier 的半徑（範例是方形 pad，沒有圓弧，所以沒有 `arc` 這一種）。`views.mesh_features` 依種類、來源與 `facts` 排出 mesher 讀取的順序；**任何欄位都不是尺寸**，尺寸由 mesher 決定。某一筆的 `kind` 若在上述五種之外，或缺少該種的 `facts`，都是 schema 錯誤。
 
 最後是綁定、一個 volume、一個 face，以及它的一條 edge 一路追到來源（`ids_by_tag` 與 volume 的 `faces` 被截短）：
 
@@ -232,7 +255,7 @@ sidecar 給的是 material **id**（`Al`、`Si`）與 `kind`，不含 permittivi
 
 ### Palace mesher
 
-1. 取得 `SgbArtifacts`，以 `scgsim.contracts.sgb_sidecar` 的 `read_sidecar` 讀入 sidecar（它檢查版本、結構與每一個 id）。XAO 與 sidecar 一律取自同一個 `SgbArtifacts`：mesher 信任這一對檔案，不再比對（見 [Validation](validation.qmd)）。
+1. 取得 `SgbArtifacts`，以 `scgsim.contracts.sgb_sidecar` 的 `read_sidecar` 讀入 sidecar（它檢查版本、結構與每一個 typed reference，見[`read_sidecar` 檢查什麼](#reader-checks)）。XAO 與 sidecar 一律取自同一個 `SgbArtifacts`：mesher 信任這一對檔案，不再比對（見 [Validation](validation.qmd)）。
 2. 在 Gmsh 中開啟 XAO，關閉 `Geometry.OCCAutoFix`（需要修補表示規劃有缺陷，不該被悄悄修掉），執行 `gmsh.model.occ.synchronize()`。
 3. `apply_sidecar_embeds(sidecar)`：把 `views.embedded_edges` 與 `views.embedded_faces` 算出的配對重新套用：refinement curve 嵌進宿主 face，volume 的 `embedded_faces` 若有項目則把 face 嵌進宿主 volume（port 位於 support plane 時沒有），回傳嵌入的 face 與 edge 數。
 4. 設定 mesh 尺寸：`mesh_feature` 給出要解析的 edge 與它們的幾何事實（沒有尺寸，數值由 mesher 決定；測試用的配方見 [測試用的 mesh 配方](emission.qmd#mesh-recipe)）。
@@ -286,4 +309,4 @@ uv run --extra palace --group dev --group occt python zh-TW/docs/design/sgb/_fig
 
 按種類要求的 `inset_request` 節錄與展開表另由 `_figures/inset_types.py` 產生（它自己建 `gds_pad_in_ground` 與 `thin_film_pair`）。
 
-決定性的測試出自 `test_sgb_determinism.py`、`test_sgb_build.py`、`test_sgb_emission.py`、`test_sgb_sidecar.py` 與 `test_sgb_tiling.py`；sidecar 契約本身（版本、結構與每一個 id 的檢查）的測試在 `test_sidecar_contract.py`；STEP 的測試在 `test_sgb_occt.py` 與 `test_sgb_step_guard.py`。
+決定性的測試出自 `test_sgb_determinism.py`、`test_sgb_build.py`、`test_sgb_emission.py`、`test_sgb_sidecar.py` 與 `test_sgb_tiling.py`；sidecar 契約本身（版本、結構、typed reference 與表之間規則的檢查）的測試在 `test_sidecar_contract.py`；STEP 的測試在 `test_sgb_occt.py` 與 `test_sgb_step_guard.py`。
