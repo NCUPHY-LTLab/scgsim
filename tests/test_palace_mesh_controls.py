@@ -18,7 +18,7 @@ from scgsim.meshing import (
 )
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.mesh.controls import DEFAULT_QUALITY_THRESHOLD, MeshControls
-from scgsim.palace.preparation import layout_ports
+from scgsim.palace.source import layout_ports
 from scgsim.palace.simulation import core
 from scgsim.palace.simulation.lifecycle import Stage
 

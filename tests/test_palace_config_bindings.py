@@ -15,7 +15,7 @@ from palace_sgb_support import (
 
 from scgsim.palace import EigenmodeSim
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
-from scgsim.palace.preparation.config import (
+from scgsim.palace.config.config import (
     LayoutPortBinding,
     TerminalBinding,
     build_eigenmode_config,

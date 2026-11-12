@@ -20,8 +20,8 @@ from scgsim.palace import (
     ResolvedPalaceResult,
     inspect_run_trustworthiness,
 )
-from scgsim.palace.execution.returned_receipt import iteration_output_paths
-from scgsim.palace.presentation.surface_figures import surface_ranking_figure
+from scgsim.palace.run.returned_receipt import iteration_output_paths
+from scgsim.palace.reports.surface_figures import surface_ranking_figure
 from scgsim.palace.results.report_models import (
     AmrPassSnapshot,
     SurfaceEprRecord,
@@ -332,18 +332,18 @@ class PalaceReportUxTests(unittest.TestCase):
                 return_value=["numerical"],
             ),
             patch(
-                "scgsim.palace.presentation.trust.surface_total_figure",
+                "scgsim.palace.reports.trust.surface_total_figure",
                 return_value=total,
             ),
             patch(
-                "scgsim.palace.presentation.trust.surface_percentage_figure",
+                "scgsim.palace.reports.trust.surface_percentage_figure",
                 return_value=percentage,
             ),
             patch(
-                "scgsim.palace.presentation.views.surface_ranking_figure",
+                "scgsim.palace.reports.views.surface_ranking_figure",
                 side_effect=AssertionError("trust must not render physics ranking"),
             ),
-            patch("scgsim.palace.presentation.trust.show_figure", trust_figures.append),
+            patch("scgsim.palace.reports.trust.show_figure", trust_figures.append),
             _captured_notebook_display(),
         ):
             trust._ipython_display_()
@@ -353,19 +353,19 @@ class PalaceReportUxTests(unittest.TestCase):
         physics = trust.show_physics_quantities(ranking_limit=1)
         with (
             patch(
-                "scgsim.palace.presentation.trust.surface_total_figure",
+                "scgsim.palace.reports.trust.surface_total_figure",
                 side_effect=AssertionError("physics must not redraw convergence"),
             ),
             patch(
-                "scgsim.palace.presentation.trust.surface_percentage_figure",
+                "scgsim.palace.reports.trust.surface_percentage_figure",
                 side_effect=AssertionError("physics must not redraw convergence"),
             ),
             patch(
-                "scgsim.palace.presentation.views.surface_ranking_figure",
+                "scgsim.palace.reports.views.surface_ranking_figure",
                 return_value=ranking,
             ),
             patch(
-                "scgsim.palace.presentation.views.show_figure", physics_figures.append
+                "scgsim.palace.reports.views.show_figure", physics_figures.append
             ),
             _captured_notebook_display() as displayed,
         ):

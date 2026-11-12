@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from scgsim.palace.presentation.epr import show_epr as render
+from scgsim.palace.reports.epr import show_epr as render
 from scgsim.palace.results.artifacts import confined_path, sha256
 from scgsim.palace.results.epr_model import (
     PalaceEprResult,

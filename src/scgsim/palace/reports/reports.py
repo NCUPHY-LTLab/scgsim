@@ -7,13 +7,13 @@ from pathlib import Path
 from typing import Any, Literal
 
 from scgsim.palace.mesh.summary import mesh_summary
-from scgsim.palace.presentation.observations import (
+from scgsim.palace.reports.observations import (
     configured_refinement,
     cost_cards,
     latest_palace_json,
     recorded_durations,
 )
-from scgsim.palace.presentation.plotting import (
+from scgsim.palace.reports.plotting import (
     ReportTheme,
     checked_show_details,
     checked_theme,

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scgsim.palace.execution.archive import (
+from scgsim.palace.run.archive import (
     logical_tar_member_name,
     resolve_run_archive_path,
 )

@@ -12,12 +12,12 @@ from typing import Any, ClassVar, Literal
 
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
-from ..preparation.config import (
+from ..config.config import (
     TerminalBinding,
     build_electrostatic_config,
     configure_numerical_controls,
 )
-from ..preparation.transforms import validate_non_negative_int, validate_nonempty_string
+from ..source.transforms import validate_non_negative_int, validate_nonempty_string
 from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
 from .core import PalaceSimulation
 

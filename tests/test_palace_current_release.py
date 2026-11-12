@@ -5,8 +5,8 @@ import subprocess
 
 import pytest
 
-from scgsim.palace.execution import returned_receipt
-from scgsim.palace.execution.handoff import prepare_handoff
+from scgsim.palace.run import returned_receipt
+from scgsim.palace.run.handoff import prepare_handoff
 from scgsim.palace.mesh.build import MeshBuildResult
 from scgsim.palace.results.receipt_contract import validate_palace_identity
 

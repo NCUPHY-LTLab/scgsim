@@ -25,7 +25,7 @@ from scgsim.aedt import (
 )
 from scgsim.geometry import ApproximationProfile
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
-from scgsim.palace.preparation.config import configure_numerical_controls
+from scgsim.palace.config.config import configure_numerical_controls
 
 VERSIONS = ("2023.2", "2024.2")
 

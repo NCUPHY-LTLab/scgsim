@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scgsim.palace.execution import returned_receipt
+from scgsim.palace.run import returned_receipt
 from scgsim.palace.results import resolve
 
 _ES_TABLES = {

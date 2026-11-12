@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scgsim.palace.execution.returned_receipt import adapted_mesh_output_paths
+from scgsim.palace.run.returned_receipt import adapted_mesh_output_paths
 from scgsim.palace.results.artifacts import (
     compute_hash_entry,
     compute_input_hash_entry,

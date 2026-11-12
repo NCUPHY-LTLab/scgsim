@@ -13,9 +13,9 @@ from typing import Any, ClassVar
 
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
-from ..preparation.config import build_eigenmode_config, configure_numerical_controls
-from ..preparation.ports import RequestedPort
-from ..preparation.transforms import (
+from ..config.config import build_eigenmode_config, configure_numerical_controls
+from ..source.ports import RequestedPort
+from ..source.transforms import (
     validate_non_negative_int,
     validate_nonempty_string,
     validate_positive_number,

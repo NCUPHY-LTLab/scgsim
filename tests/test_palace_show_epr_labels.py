@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from scgsim.palace.presentation.epr import show_epr
+from scgsim.palace.reports.epr import show_epr
 
 
 def surface_item(name, index, *, evaluation_kind, margin_um):

@@ -21,7 +21,7 @@ from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
-from .config import LayoutPortBinding
+from ..config.config import LayoutPortBinding
 from .ports import RequestedPort
 from .transforms import RouteAThinFilm
 from .workflow import prepare_mesh_input

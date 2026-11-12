@@ -60,7 +60,7 @@ from scgsim.meshing.repair import RepairPolicy
 from scgsim.meshing.sizing import BoundingBox
 from scgsim.meshing.stop_places import stop_places
 from scgsim.palace import EigenmodeSim, ElectrostaticSim, SimulationDrcError
-from scgsim.palace.preparation.layout_snapshot import (
+from scgsim.palace.source.layout_snapshot import (
     DRC_VACUUM_PADDING_UM,
     prepare_layout_snapshot,
 )

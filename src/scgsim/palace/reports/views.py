@@ -7,11 +7,11 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from scgsim.palace.presentation.plotting import (
+from scgsim.palace.reports.plotting import (
     mesh_summary_html,
     show_figure,
 )
-from scgsim.palace.presentation.surface_figures import (
+from scgsim.palace.reports.surface_figures import (
     SURFACE_TYPES,
     latest_margin_snapshot,
     series_label,

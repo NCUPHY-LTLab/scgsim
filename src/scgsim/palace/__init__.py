@@ -1,11 +1,21 @@
 """Palace workflow contracts, result views, and handoff utilities.
 
+One folder per stage, in the order the work flows:
+
+- ``simulation``: the stage a user drives, the two simulation classes and their lifecycle.
+- ``source``: from a bound plan to the input of the geometry build.
+- ``mesh``: from that input to ``palace.msh`` with its physical groups and manifest.
+- ``config``: from the mesh's groups and the problem's settings to ``config.json`` and the index map.
+- ``run``: the run folder handed to Palace, and what Palace returns.
+- ``results``: from a finished run folder to a resolved result.
+- ``reports``: from a resolved result to notebook views.
+
 Ownership: SCGSim Development.
 Failure intent: all public entrypoints are fail-closed and reject incomplete
 state without silently changing behavior.
 """
 
-from .presentation.reports import (
+from .reports.reports import (
     PalaceTrustReport,
     PhysicsQuantitiesReport,
     SimulationBenchmarkReport,
