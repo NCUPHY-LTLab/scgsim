@@ -9,7 +9,9 @@ limits of :class:`FineStructureLimits`, and attributes each to its owner by line
   author fixes it; SCGSim reports it and never repairs it.
 * ``erosion`` -- band curves offset from two source edges that are not neighbours meet here: the exact
   erosion has this structure, because the band margin meets the conductor's local width.  The fix is the
-  margin or the layout width.
+  margin or the layout width.  Also a short band edge that offsets a straight source edge shorter than its
+  margin: the exact erosion of that edge is this short (#138 (c)).  The message names that source edge, and the
+  fix is to declare the arc it is a chord of exactly or to draw longer chords.
 * ``sgb`` -- a band curve where the source has no fine structure: an SGB defect, fixed in SCGSim.
 
 The check reports; it never edits geometry.
@@ -213,7 +215,9 @@ def check_fine_structure(
     found = _below_limits(model, limits)
     lineage = _Lineage(model)
     layout = [item for item in found if not lineage.band_carriers(item.measured.edges)]
-    findings = [_finding(model, item, _owner(lineage, item, layout)) for item in found]
+    findings = [
+        _finding(model, item, _attribution(lineage, item, layout)) for item in found
+    ]
     findings.sort(
         key=lambda f: (f.action != "refuse", f.rule, f.value, f.entity, f.native_tag)
     )
@@ -280,16 +284,6 @@ class _Lineage:
         for edge, ends in enumerate(model.edge_vertices, start=1):
             for vertex in ends:
                 self.edges_at.setdefault(vertex, []).append(edge)
-        # The last position any member of a band family names on each ring of its support: the ring has
-        # at least one more primitive than that, which bounds how far around the ring two positions can wrap.
-        self.last_position: dict[tuple[str, str], int] = {}
-        for carrier in model.carriers.values():
-            position = _member_position(carrier)
-            if position is not None:
-                key = (position.family, position.ring)
-                self.last_position[key] = max(
-                    self.last_position.get(key, 0), position.index
-                )
 
     def carriers(self, edges: tuple[int, ...]) -> list[Carrier]:
         """The carriers of ``edges``, in edge order."""
@@ -330,64 +324,113 @@ class _Lineage:
         return measured.edges
 
     def offsets_of_far_edges(self, carriers: list[Carrier]) -> bool:
-        """Whether two band curves of one family are offsets of source primitives that are certainly not neighbours.
+        """Whether two band curves of one family are offsets of source primitives that are not neighbours.
 
-        A member names a position on a ring of the band's support (see :func:`_member_position`).  Two
-        members on different rings are apart.  On one ring of at least ``P + 1`` primitives, where ``P`` is the
-        last position any member of the family names there, positions ``a`` and ``b`` are certainly apart when
-        ``1 < |a - b| < P``: not neighbours along the ring, nor across its first and last primitive.  This rule
-        does not use the ring's size, which the sidecar records (#147 decides that use), so a pair that might be
-        neighbours across the ring's start counts as neighbours, and the feature stays with SGB.
+        A member names the primitives it touches on a ring of the band's support (see :meth:`place`).  Two
+        members on different rings are apart.  On one ring of ``N`` primitives, as many as its ``support_ring``
+        record lists, primitives ``a`` and ``b`` are neighbours exactly when ``(a - b) mod N`` is 0, 1 or
+        ``N - 1``: the same primitive, or two that share a vertex, the ring's last and first included.  Two
+        members are apart when no primitive one touches is a neighbour of one the other touches.
         """
-        members = [p for c in carriers if (p := _member_position(c)) is not None]
+        members = [p for c in carriers if (p := self.place(c)) is not None]
         for i, a in enumerate(members):
             for b in members[i + 1 :]:
                 if a.family != b.family:
                     continue
                 if a.ring != b.ring:
                     return True
-                last = self.last_position[(a.family, a.ring)]
-                if all(1 < abs(p - q) < last for p in a.touched for q in b.touched):
+                if all(
+                    _steps_around(p, q, a.ring_size) > 1
+                    for p in a.touched
+                    for q in b.touched
+                ):
                     return True
         return False
 
+    def short_sources(self, measured: Measured) -> tuple[_ShortSource, ...]:
+        """The straight source edges shorter than their band margin that a short band edge offsets (#138 (c)).
+
+        Only an edge-length finding has them.  Each of its band curves of role ``edge`` offsets one support
+        primitive by that curve's own margin, and the primitive lies on source curves; a straight one shorter
+        than the margin is such an edge.  An arc source is left out: the rule and its fix are about chords.
+        """
+        if measured.measure != "edge length":
+            return ()
+        model = self.model
+        found = {
+            _ShortSource(source, carrier.margin_grid)
+            for carrier in self.band_carriers(measured.edges)
+            if carrier.role == "edge" and carrier.margin_grid is not None
+            for source in carrier.primitive_sources
+            if (curve := model.source_curves[source]).kind == "line"
+            and below_steps(curve.length_um, carrier.margin_grid, model.grid_um)
+        }
+        return tuple(sorted(found, key=lambda s: (s.source, s.margin_grid)))
+
+    def place(self, carrier: Carrier) -> _MemberPlace | None:
+        """The ring primitives a band member offsets or turns round, or ``None`` for another kind of carrier.
+
+        An ``edge`` member is the offset of primitive ``k`` of its ring, a ``corner`` the arc about the vertex
+        between primitives ``k`` and ``k + 1`` (the ring's first primitive after its last), and a ``capstart``
+        or ``capend`` the cap about an end of primitive ``k``.  A cap or corner cut into pieces (each at most a
+        quarter turn) is placed as the whole member: every piece is an arc of the member's margin about the
+        same vertex, so it touches the same primitives.
+        """
+        if (
+            carrier.kind != _BAND_MEMBER
+            or carrier.family is None
+            or carrier.ring is None
+            or carrier.index is None
+        ):
+            return None
+        size = self.model.ring_sizes[carrier.ring]
+        index = carrier.index
+        touched = (index, (index + 1) % size) if carrier.role == "corner" else (index,)
+        return _MemberPlace(carrier.family, carrier.ring, size, touched)
+
 
 @dataclass(frozen=True)
-class _MemberPosition:
-    """Where on its support a band member comes from: the family, the ring and the primitives it touches."""
+class _MemberPlace:
+    """Where on its support a band member comes from: the family, the ring, its size and the primitives touched."""
 
     family: str
     ring: str
-    index: int
+    ring_size: int
     touched: tuple[int, ...]
 
 
-def _member_position(carrier: Carrier) -> _MemberPosition | None:
-    """The ring position a band member offsets, or ``None`` for another kind of carrier.
+def _steps_around(a: int, b: int, ring_size: int) -> int:
+    """How many primitives apart places ``a`` and ``b`` lie on a closed ring, the shorter way round."""
+    forward = (a - b) % ring_size
+    return min(forward, ring_size - forward)
 
-    An ``edge`` member is the offset of primitive ``k`` of its ring, a ``corner`` the arc between primitives
-    ``k`` and ``k + 1``, and a ``capstart`` or ``capend`` the cap at an end of primitive ``k``.  A cap or corner
-    cut into pieces (a piece is at most a quarter turn) is not placed: the rule has placed whole members only,
-    and placing their pieces is #147's decision.
+
+@dataclass(frozen=True)
+class _ShortSource:
+    """A source curve a band curve offsets, shorter than that curve's margin (grid steps)."""
+
+    source: str
+    margin_grid: int
+
+
+@dataclass(frozen=True)
+class _Attribution:
+    """Who owns a found feature; for the erosion of a source edge shorter than its margin, those source edges."""
+
+    owner: Owner
+    short_sources: tuple[_ShortSource, ...] = ()
+
+
+def _attribution(lineage: _Lineage, item: _Found, layout: list[_Found]) -> _Attribution:
+    """Who owns a found feature, by lineage (see the module docstring).
+
+    The two erosion rules are tried in this order: where offsets of far source edges meet, the margin meets the
+    conductor's width whatever its edges' lengths, so that finding keeps its fix; only a short edge no such
+    meeting explains is laid to a source edge shorter than its margin.
     """
-    if (
-        carrier.kind != _BAND_MEMBER
-        or carrier.family is None
-        or carrier.ring is None
-        or carrier.index is None
-        or carrier.piece is not None
-    ):
-        return None
-    index = carrier.index
-    touched = (index, index + 1) if carrier.role == "corner" else (index,)
-    return _MemberPosition(carrier.family, carrier.ring, index, touched)
-
-
-def _owner(lineage: _Lineage, item: _Found, layout: list[_Found]) -> Owner:
-    """Who owns a found feature, by lineage (see the module docstring)."""
     band = lineage.band_carriers(item.measured.edges)
     if not band:
-        return "layout"
+        return _Attribution("layout")
     reach = max(
         max(lineage.model.band_margins[c.family or ""], default=0.0) for c in band
     )
@@ -395,14 +438,18 @@ def _owner(lineage: _Lineage, item: _Found, layout: list[_Found]) -> Owner:
         _box_distance(item.measured.bounds, other.measured.bounds) <= reach
         for other in layout
     ):
-        return "layout"  # the band's offset of a fine structure the layout drew
+        # The band's offset of a fine structure the layout drew.
+        return _Attribution("layout")
     meeting = lineage.band_carriers(lineage.meeting_edges(item.measured))
     if lineage.offsets_of_far_edges(meeting):
-        return "erosion"
-    return "sgb"
+        return _Attribution("erosion")
+    short = lineage.short_sources(item.measured)
+    if short:
+        return _Attribution("erosion", short)
+    return _Attribution("sgb")
 
 
-def _finding(model: BuiltModel, item: _Found, owner: Owner) -> FineFeature:
+def _finding(model: BuiltModel, item: _Found, attribution: _Attribution) -> FineFeature:
     measured = item.measured
     faces = _faces_of(model, measured)
     face_ids = [model.face_id(face) for face in faces]
@@ -419,7 +466,8 @@ def _finding(model: BuiltModel, item: _Found, owner: Owner) -> FineFeature:
         if measured.dimension == 1
         else model.face_id(measured.tag)
     )
-    cause, fix = _cause_and_fix(measured.measure, owner)
+    owner = attribution.owner
+    cause, fix = _cause_and_fix(model, measured.measure, attribution)
     entities = sorted({s for f in face_ids for s in model.face_sources.get(f, ())})
     return FineFeature(
         rule=item.rule,
@@ -493,12 +541,33 @@ _SGB_FIX = (
 )
 
 
-def _cause_and_fix(measure: str, owner: Owner) -> tuple[str, str]:
-    if owner == "layout":
+def _cause_and_fix(
+    model: BuiltModel, measure: str, attribution: _Attribution
+) -> tuple[str, str]:
+    if attribution.owner == "layout":
         return _CAUSE[measure], _LAYOUT_FIX[measure]
-    if owner == "erosion":
+    if attribution.short_sources:
+        return _CAUSE[measure], _short_source_fix(model, attribution.short_sources)
+    if attribution.owner == "erosion":
         return _CAUSE[measure], _EROSION_FIX
     return _CAUSE[measure], _SGB_FIX
+
+
+def _short_source_fix(model: BuiltModel, short: tuple[_ShortSource, ...]) -> str:
+    """The fix for a band edge the exact erosion of a short source edge leaves: name each edge, where and how long."""
+    named = []
+    for item in short:
+        curve = model.source_curves[item.source]
+        (x0, y0), (x1, y1) = curve.start_um, curve.end_um
+        named.append(
+            f"the source edge {item.source}, {curve.length_um:.6g} um long from ({x0:.4f}, {y0:.4f}) to "
+            f"({x1:.4f}, {y1:.4f}) um, is shorter than the {item.margin_grid * model.grid_um:g} um band "
+            "margin it is offset by"
+        )
+    return (
+        f"{'; '.join(named)}, so the exact erosion leaves an edge this short. Declare the arc that edge "
+        "is a chord of exactly, or draw it with longer chords."
+    )
 
 
 def _layers(model: BuiltModel, face_ids: list[str]) -> tuple[str, ...]:

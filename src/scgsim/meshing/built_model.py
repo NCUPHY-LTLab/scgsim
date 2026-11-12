@@ -11,8 +11,11 @@ accepted, by native tag (tag = 1 + position in ``binding.ids_by_tag``):
 * ``face``: each face's kind (``horizontal`` or ``wall``), physical group and the Entities and band families it
   comes from;
 * ``carrier``: what each carrier comes from (a source curve, a band curve offset from a support primitive, a
-  refinement request), with a band member's family, ring, place on the ring, role and piece read from the
-  support records it names;
+  refinement request), with a band member's family, ring, place on the ring, role, margin and piece, and the
+  source curves its primitive lies on, read from the support records it names;
+* ``support_ring``: how many primitives each ring of a band's support has, so places on a ring can be compared
+  across its start;
+* ``source_curve``: where each source curve of the layout runs and how long it is;
 * ``entity``: the layer each Entity was drawn on.
 
 It measures the four sizes the meshing-stage classes are stated in: the column gap of a wall face, the
@@ -48,8 +51,9 @@ class Carrier:
     ``kind`` is ``source`` (a source curve of the layout, or a witness chord of one), ``band_member`` (a band
     curve of the inset family ``family``), ``refinement`` (a segment of a refinement request) or ``unknown``.
     A band member offsets the primitive at ``index`` of the support ring ``ring`` (an opaque id) in the way
-    ``role`` says; ``piece`` numbers the parts of a cap or corner cut into several, and is ``None`` for a whole
-    member.
+    ``role`` says, at ``margin_grid`` grid steps; ``piece`` numbers the parts of a cap or corner cut into several,
+    and is ``None`` for a whole member.  ``primitive_sources`` are the source curves (``source_curve`` ids) that
+    primitive lies on.
     """
 
     id: str
@@ -59,6 +63,22 @@ class Carrier:
     index: int | None = None
     role: str | None = None
     piece: int | None = None
+    margin_grid: int | None = None
+    primitive_sources: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SourceCurve:
+    """Where one source curve of the layout runs, as the sidecar's ``source_curve`` table records it.
+
+    ``kind`` is ``line`` or ``arc``; ``start_um`` and ``end_um`` are its end points in plan and ``length_um`` its
+    length along the curve.
+    """
+
+    kind: str
+    start_um: tuple[float, float]
+    end_um: tuple[float, float]
+    length_um: float
 
 
 @dataclass(frozen=True)
@@ -86,6 +106,8 @@ class BuiltModel:
     band_margins: Mapping[
         str, tuple[float, ...]
     ]  # band family id -> margins, micrometres
+    ring_sizes: Mapping[str, int]  # support ring id -> how many primitives it has
+    source_curves: Mapping[str, SourceCurve]  # source curve id -> where it runs
     entity_layers: Mapping[
         str, tuple[str, ...]
     ]  # Entity id -> the layers its prisms were drawn on
@@ -196,6 +218,19 @@ def read_built_model(sidecar: Sidecar) -> BuiltModel:
             for feature in views.mesh_features(sidecar)
             if feature["kind"] == "band_boundary"
         },
+        ring_sizes={
+            rid: len(ring["primitives"])
+            for rid, ring in sidecar["support_ring"].items()
+        },
+        source_curves={
+            cid: SourceCurve(
+                kind=record["curve"]["kind"],
+                start_um=_plane_point(record["curve"]["start_um"]),
+                end_um=_plane_point(record["curve"]["end_um"]),
+                length_um=float(record["length_um"]),
+            )
+            for cid, record in sidecar["source_curve"].items()
+        },
         entity_layers={
             eid: tuple(sorted({p["layer"] for p in entity["prisms"] if p["layer"]}))
             for eid, entity in sidecar["entity"].items()
@@ -236,7 +271,16 @@ def _carrier(
         index=index,
         role=record["role"],
         piece=record["piece"],
+        margin_grid=record["margin_grid"],
+        primitive_sources=tuple(
+            sidecar["support_primitive"][record["primitive"]]["sources"]
+        ),
     )
+
+
+def _plane_point(point: list[float]) -> tuple[float, float]:
+    x, y = point
+    return float(x), float(y)
 
 
 @dataclass(frozen=True)
