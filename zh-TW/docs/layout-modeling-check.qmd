@@ -87,7 +87,7 @@ def test_the_layout_can_be_modeled():
 
 設定是固定的：
 
-- Route B 與 Palace 預設的 airbox；
+- Route B；
 - 版圖本身沒有真空時，加上 (x, y, z) = (0, 0, 1000) µm 填充的真空區域，這是測試與使用版圖時的設定：它止於版圖的平面範圍，並向下、向上各延伸 1000 µm，使金屬有空氣面可供切出 `MA` 與 `SA` 條帶。版圖有自己的真空時，檢查使用該真空；
 - coupon 填充為零；
 - 以 `nets` 傳入的 Net 指派；未給時不設任何 Net；

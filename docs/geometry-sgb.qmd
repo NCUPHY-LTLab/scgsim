@@ -262,12 +262,10 @@ not infer connectivity or promise separate measurements.
 The plan owns the shared outer vacuum envelope. Set it before `prepare()` with
 `plan.set_vacuum_region(padding=...)`, using the existing scalar, X/Y/Z tuple,
 or six-face micrometre mapping forms. Both backends receive that same envelope;
-once a `Sim` consumes a plan snapshot, attempts to add standalone
-`set_geometry()` or `set_stack()` input, or a conflicting Palace
-`set_vacuum_region()` / `set_airbox()` value, fail atomically. They cannot
-replace only part of the bound source. To change the component, stack, or
-boundary, update the plan and prepare a new snapshot, then call `set_plan()`
-with it. A legacy standalone-input workflow uses a fresh `Sim`. No default
+once a `Sim` consumes a plan snapshot with its own vacuum, a Palace
+`set_vacuum_region()` value fails atomically. It cannot replace only part of
+the bound source. To change the component, stack, or boundary, update the plan
+and prepare a new snapshot, then call `set_plan()` with it. No default
 padding is inferred. Authored `D0_TO_D1_GAP` remains a separate vacuum entity
 inside the outer region.
 
@@ -611,8 +609,8 @@ its checks.
 display. Both Eigenmode facades expose `input_summary()` to combine this
 normalized source with their configured backend settings. AEDT summarizes its
 normalized build input and stack. Palace requires its bound `GeometryPlan` and
-summarizes the input its `mesh()` prepares from that plan, so a vacuum region,
-airbox or port set on the simulation and the route's conductor representation
+summarizes the input its `mesh()` prepares from that plan, so a vacuum region
+or port set on the simulation and the route's conductor representation
 appear as the model will have them.
 Passing a raw component without explicit normalization fails rather than
 guessing a stack. The summary records source, entity, Net, material, Z/vacuum,

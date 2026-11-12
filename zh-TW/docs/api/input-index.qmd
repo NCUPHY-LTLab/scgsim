@@ -62,7 +62,7 @@ scgsim-status: "CONVERGING"
 | `src/scgsim/geometry/__init__.py` | `592524fe7659e8a336af03a3544270e996ccbbd510ea9e7cd16b0ae0bd668a35` |
 | `src/scgsim/geometry/compiler/__init__.py` | `5483f9a15796f25576abba930e87c08690961d64a5ba748261e2c24bdb880a69` |
 | `src/scgsim/geometry/models/__init__.py` | `2fec191dd1d7708d1f7effe40cd01882d86d71a8263b1f2008cef33dccf692ad` |
-| `src/scgsim/palace/__init__.py` | `dc87a772952ac2ddf4b65b4480daf80dcfc32c144cd4179c6f1e067a86af2b70` |
+| `src/scgsim/palace/__init__.py` | `8febe584028aca6cbc73ab06b459338205df9b5e8184d8808e6f2bcdf4a68ec2` |
 | `src/scgsim/palace/mesh/quality/__init__.py` | `f8ba7cc897bbba9dda491709e1189dab2709ff82357759cc98f882f3c65ca5d7` |
 | `src/scgsim/semantics/__init__.py` | `a1902da7627ee76ba95283fc2861b6d785400c303a09e6e875375f55a056e39c` |
 | `src/scgsim/visualization/__init__.py` | `181a1bf3c38a632bc163c6ac9ee55dcbc6ca1bcc85bc6bca3e16afbe43e21ad1` |

@@ -281,7 +281,7 @@ def test_eigenmode_epr_request_is_checked_against_the_rows_of_the_index(case, tm
     manifest = tmp_path / "metadata" / "mesh_manifest.json"
     manifest.write_text("{}")
     sim = EigenmodeSim()
-    sim._materials = MATERIALS  # noqa: SLF001 -- stands for set_stack()
+    sim._materials = MATERIALS  # noqa: SLF001 -- stands for set_plan()
     sim._resolved_ports = [PORTS[route]]  # noqa: SLF001 -- stands for mesh()
     sim._mesh_result = SimpleNamespace(  # noqa: SLF001 -- stands for mesh()
         groups=groups,

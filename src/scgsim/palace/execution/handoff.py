@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from ..mesh.build import MeshBuildResult
-from ..mesh.provenance import SGB_RUNTIME_AUTHORITY
+from ..mesh.manifest import SGB_RUNTIME_AUTHORITY
 from ..preparation.transforms import SCHEMA_VERSION
 from .archive import (
     run_archive_arcname,
@@ -142,7 +142,6 @@ def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
 
     resource_record_path.unlink(missing_ok=True)
     archive_path.unlink(missing_ok=True)
-    (run_dir / "palace_handoff.tar.gz").unlink(missing_ok=True)
 
     _create_archive(
         run_dir=run_dir,
@@ -342,7 +341,7 @@ def _create_archive(  # noqa: PLR0913 -- archive paths and identities stay expli
     resources: Mapping[str, Any],
 ) -> None:
     """Create the archive and record its digest after all archived inputs settle."""
-    excluded = {resource_record_path, run_dir / "palace_handoff.tar.gz"}
+    excluded = {resource_record_path}
     members = _members(run_dir, exclude=excluded | {manifest_path})
     _write_json(
         manifest_path,

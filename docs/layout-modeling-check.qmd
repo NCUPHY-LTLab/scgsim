@@ -173,7 +173,7 @@ the loop applied there. A place with no finding is SCGSim's to answer for.
 
 The settings are fixed:
 
-- Route B and Palace's default airbox;
+- Route B;
 - when the layout has no vacuum of its own, a vacuum region padded by
   (x, y, z) = (0, 0, 1000) µm, the setting layouts are tested and used with:
   it ends at the layout's planar extent and reaches 1000 µm below and above,

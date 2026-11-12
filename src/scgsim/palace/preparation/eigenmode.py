@@ -28,7 +28,6 @@ from ..mesh.build import (
 )
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
-from ..results.epr import PalaceEprResult, reanalyze_epr, show_epr
 from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
 from .config import (
     MODEL_L0_M,
@@ -37,11 +36,7 @@ from .config import (
     configure_numerical_controls,
 )
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
-from .inputs import (
-    load_stack,
-    non_negative_number,
-    validate_stack_material_kinds,
-)
+from .inputs import non_negative_number, stack_materials
 from .layout_ports import (
     GeometrySettings,
     LayoutGeometryRequest,
@@ -70,10 +65,8 @@ _PORT_INDUCTANCE_H = 1.0e-9
 class EigenmodeSim:
     """Prepare an SGB-authored Eigenmode mesh, config, and manual handoff."""
 
-    component: Any | None = None
     stack: Mapping[str, Any] | None = None
     output_dir: Path | None = None
-    airbox: dict[str, float] = field(default_factory=dict)
     route: Literal["A", "B"] = "B"
     route_a_thin_film: RouteAThinFilm | None = None
     approximation_profile: ApproximationProfile | None = None
@@ -104,23 +97,6 @@ class EigenmodeSim:
         default=None, init=False, repr=False
     )
 
-    @staticmethod
-    def reanalyze_epr(
-        result: PalaceEprResult,
-        *,
-        surface_defaults: Mapping[str, Mapping[str, Any]] | None = None,
-        group_overrides: Mapping[str, Mapping[str, Any]] | None = None,
-    ) -> PalaceEprResult:
-        """Recompute detached EPR loss values with explicit overrides."""
-        return reanalyze_epr(
-            result, surface_defaults=surface_defaults, group_overrides=group_overrides
-        )
-
-    @staticmethod
-    def show_epr(result: PalaceEprResult, *, mode: int | None = None) -> Any:
-        """Display detached EPR values without opening the solver."""
-        return show_epr(result, mode=mode)
-
     def _invalidate_mesh(self) -> None:
         self._mesh_result = None
         self._resolved_ports = []
@@ -131,31 +107,17 @@ class EigenmodeSim:
         self.config_path = None
         self.handoff_plan = None
 
-    def set_geometry(self, component: Any) -> None:
-        """Bind standalone authored geometry and invalidate derived mesh state."""
-        if self._plan_snapshot is not None:
-            raise ValueError(
-                "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
-            )
-        if component is None or not callable(getattr(component, "write_gds", None)):
-            raise TypeError("component must provide write_gds(path).")
-        self.component = component
-        self._plan_snapshot = None
-        self._invalidate_mesh()
-
     def set_plan(self, snapshot: GeometryPlanSnapshot) -> None:
         """Consume one detached source/stack pair from a notebook GeometryPlan."""
         if not isinstance(snapshot, GeometryPlanSnapshot):
             raise TypeError("set_plan requires a GeometryPlanSnapshot")
-        if "VACUUM_REGION" in snapshot.stack["solution_regions"] and (
-            self.vacuum_region is not None or self.airbox
+        if (
+            "VACUUM_REGION" in snapshot.stack["solution_regions"]
+            and self.vacuum_region is not None
         ):
             raise ValueError("GeometryPlan owns the outer vacuum envelope")
-        trial = EigenmodeSim()
-        trial.set_stack(snapshot.stack)
-        self.component = None
-        self.stack = trial.stack
-        self._materials = trial._materials
+        self.stack = snapshot.stack
+        self._materials = stack_materials(self.stack)
         self._plan_snapshot = snapshot
         self._invalidate_mesh()
 
@@ -163,16 +125,13 @@ class EigenmodeSim:
         """Show the input ``mesh()`` builds from, and the Palace settings, before mesh work.
 
         The source half is the geometry input and stack ``mesh()`` prepares from the bound plan, so it holds the
-        vacuum region or airbox, the requested ports and the route's conductors as the simulation was given them.
+        vacuum region, the requested ports and the route's conductors as the simulation was given them.
         A setup ``mesh()`` refuses while preparing is refused here with the same error; an input with no vacuum,
         planned or set, is refused here only.  Nothing is built or written, and the simulation is left as it was.
         """
         if self._plan_snapshot is None:
-            raise ValueError(
-                "input_summary requires a bound GeometryPlan snapshot; normalize "
-                "a raw Component explicitly first"
-            )
-        prepared = self._geometry_request(self._plan_snapshot.stack).source
+            raise ValueError("input_summary requires a bound GeometryPlan snapshot")
+        prepared = self._geometry_request().source
         data = summarize_geometry_input(
             prepared["source_geometry_input"], prepared_stack=prepared["stack"]
         ).data
@@ -183,7 +142,6 @@ class EigenmodeSim:
             "approximation_profile": self.approximation_profile.to_payload()
             if self.approximation_profile is not None
             else None,
-            "airbox": self.airbox,
             "ports": [
                 {
                     "name": item.name,
@@ -204,65 +162,11 @@ class EigenmodeSim:
         }
         return InputSummary(data)
 
-    def set_stack(self, stack: Mapping[str, Any] | str | Path) -> None:
-        """Validate standalone stack materials before replacing the source state."""
-        if self._plan_snapshot is not None:
-            raise ValueError(
-                "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
-            )
-        payload = load_stack(stack)
-        materials = payload.get("materials")
-        if not isinstance(materials, Mapping) or not materials:
-            raise ValueError(
-                "stack must define a non-empty explicit materials mapping."
-            )
-        resolved = {
-            str(key): value
-            for key, value in materials.items()
-            if isinstance(value, Mapping)
-        }
-        if len(resolved) != len(materials):
-            raise TypeError("every explicit stack material must be a mapping.")
-        validate_stack_material_kinds(payload, resolved)
-        self.stack = payload
-        self._materials = resolved
-        self._plan_snapshot = None
-        self._invalidate_mesh()
-
     def set_output_dir(self, path: str | Path) -> None:
         """Select the output directory and invalidate derived artifacts."""
         if not isinstance(path, (str, Path)):
             raise TypeError("output path must be a path string or Path.")
         self.output_dir = Path(path).expanduser().resolve()
-        self._invalidate_mesh()
-
-    def set_airbox(
-        self,
-        *,
-        margin_x: float,
-        margin_y: float,
-        z_above: float | None = None,
-        z_below: float | None = None,
-    ) -> None:
-        """Validate all envelope controls before updating mesh-dependent state."""
-        if (
-            self._plan_snapshot is not None
-            and "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
-        ):
-            raise ValueError("GeometryPlan owns the outer vacuum envelope")
-        if self.vacuum_region is not None:
-            raise ValueError(
-                "set_airbox is mutually exclusive with set_vacuum_region()."
-            )
-        airbox = {
-            "margin_x": validate_positive_number(margin_x, "margin_x"),
-            "margin_y": validate_positive_number(margin_y, "margin_y"),
-        }
-        if z_above is not None:
-            airbox["z_above"] = validate_positive_number(z_above, "z_above")
-        if z_below is not None:
-            airbox["z_below"] = validate_positive_number(z_below, "z_below")
-        self.airbox = airbox
         self._invalidate_mesh()
 
     def set_vacuum_region(
@@ -274,10 +178,6 @@ class EigenmodeSim:
             self._plan_snapshot
         ):
             raise ValueError("GeometryPlan owns the outer vacuum envelope")
-        if self.airbox:
-            raise ValueError(
-                "set_vacuum_region is mutually exclusive with set_airbox()."
-            )
         self.vacuum_region = VacuumRegionSpec.from_padding(padding)
         self._invalidate_mesh()
 
@@ -329,7 +229,7 @@ class EigenmodeSim:
         if route not in {"A", "B"}:
             raise ValueError("Surface EPR representation must be 'A' or 'B'.")
         if self._materials is None:
-            raise ValueError("set_stack() must run before set_surface_epr().")
+            raise ValueError("set_plan() must run before set_surface_epr().")
         normalized_thin_film = (
             normalize_route_a_thin_film(route, route_a_thin_film)
             if route_a_thin_film is not None
@@ -546,15 +446,9 @@ class EigenmodeSim:
         report, and the geometry stays in the output folder; warnings do not stop the mesh.
         """
         self._invalidate_mesh()
-        if (
-            (self.component is None and self._plan_snapshot is None)
-            or self.stack is None
-            or self.output_dir is None
-        ):
-            raise ValueError(
-                "set_geometry(), set_stack(), and set_output_dir() must run before mesh()."
-            )
-        request = self._geometry_request(self.stack)
+        if self._plan_snapshot is None or self.output_dir is None:
+            raise ValueError("set_plan() and set_output_dir() must run before mesh().")
+        request = self._geometry_request()
         if request.materials is not None:
             # The prepared stack can hold a material the bound one lacks (a set vacuum region adds its vacuum).
             self._materials = request.materials
@@ -578,7 +472,7 @@ class EigenmodeSim:
         """Check that an ``EigenmodeSim`` can model and mesh ``component``, in two stages, and return their report.
 
         The geometry stage runs the preparation and SGB geometry build of ``mesh()``, with fixed settings:
-        Route B, Palace's default airbox, zero coupon padding, every authored port with a fixed inductance
+        Route B, zero coupon padding, every authored port with a fixed inductance
         (the geometry never reads it) and, when the layout has no vacuum of its own, a vacuum region padded by
         (x, y, z) = (0, 0, 1000) um: it ends at the layout's planar extent and reaches 1000 um below and above.
         A conductor that reaches that extent only at a point, such as a lone round pad with no die outline or
@@ -635,31 +529,26 @@ class EigenmodeSim:
 
         This is the modeling path ``mesh()`` shares, used by ``simulation_drc``.  The simulation's own output folder and mesh state are left as they were.
         """
-        if (
-            self.component is None and self._plan_snapshot is None
-        ) or self.stack is None:
-            raise ValueError(
-                "set_geometry() or set_plan(), and set_stack(), must run before the geometry build."
-            )
+        if self._plan_snapshot is None:
+            raise ValueError("set_plan() must run before the geometry build.")
         return build_route_geometry(
-            **self._geometry_request(self.stack).source, output_dir=output_dir
+            **self._geometry_request().source, output_dir=output_dir
         )
 
-    def _geometry_request(self, stack: Mapping[str, Any]) -> LayoutGeometryRequest:
-        """Resolve ports and prepare the geometry input, everything before the SGB build, for a plan or a Component.
+    def _geometry_request(self) -> LayoutGeometryRequest:
+        """Resolve ports and prepare the geometry input of the bound plan, everything before the SGB build.
 
         ``mesh()``, ``simulation_drc`` and ``input_summary()`` read this one request; it changes no simulation state.
         """
+        if self._plan_snapshot is None:
+            raise ValueError("set_plan() must run before the geometry is prepared.")
         return layout_geometry_request(
             plan=self._plan_snapshot,
-            component=self.component,
-            stack=stack,
             ports=self.ports,
             settings=GeometrySettings(
                 route=self.route,
                 route_a_thin_film=self.route_a_thin_film,
                 approximation_profile=self.approximation_profile,
-                airbox=self.airbox,
                 vacuum_region=self.vacuum_region,
                 indium_ground_bumps=self.indium_ground_bumps,
                 surface_epr_specs=self.surface_epr_specs,
@@ -690,7 +579,7 @@ class EigenmodeSim:
         """Validate current mesh bindings and persist metadata before config."""
         self._invalidate_config()
         if self._mesh_result is None or self._materials is None:
-            raise ValueError("set_stack() and mesh() are required.")
+            raise ValueError("set_plan() and mesh() are required.")
         if not self._mesh_result.mesh_path.is_file():
             raise FileNotFoundError(
                 "current palace.msh is missing; mesh() must be rerun."

@@ -176,8 +176,7 @@ def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_
     }
     with preparation_resources(max_workers=2):
         with pytest.raises(StopBeforeNative):
-            mesh_build.build_route_mesh(
-                component=None,
+            mesh_build.build_route_geometry(
                 stack=stack,
                 route="B",
                 output_dir=tmp_path / "run",

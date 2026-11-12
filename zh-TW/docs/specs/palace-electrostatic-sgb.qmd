@@ -17,7 +17,7 @@ lang: zh-TW
 
 ```text
 prepare shared GeometryPlan snapshot
--> set_plan (or fresh standalone geometry / stack / envelope)
+-> set_plan
 -> add exact-net terminals and physical grounds
 -> configure Electrostatic
 -> mesh / config
@@ -34,9 +34,6 @@ prepare shared GeometryPlan snapshot
 | 階段 | 公開方法 | 預定責任 |
 |---|---|---|
 | 共用來源 | `set_plan` | 綁定不可變的共用來源快照。 |
-| 獨立幾何 | `set_geometry` | 將公開 Component 輸入綁定至 SGB 幾何路徑。 |
-| 堆疊輸入 | `set_stack` | 綁定 SGB 使用的層堆疊輸入。 |
-| 空氣盒 | `set_airbox` | 在幾何產生前宣告模擬域包絡。 |
 | 端子綁定 | `add_terminal` | 依確切 SGB Net 身分選取端子。 |
 | 物理 Ground 綁定 | `add_ground` | 依確切 SGB Net 身分選取 Palace Ground 的導體分量。 |
 | 問題控制 | `set_electrostatic` | 宣告 Electrostatic 專屬設定控制。 |
@@ -142,7 +139,7 @@ Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_
 
 來源至建構的說明請見 [SGB 幾何概念](../concepts/geometry.qmd#source-stage)。下列契約定義支援的準備路徑。
 
-共用的來源優先課程建議使用 `set_plan(snapshot)`。獨立的 `set_geometry(component)`／`set_stack(stack)`／明確包絡 API，仍支援新的未綁定模擬；請將此路徑與計畫快照分開。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Route A／B 語意。目前面向來源的幾何權威為 `scgsim.geometry`。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立幾何，並用 `scgsim.meshing` 產生網格。外部 SGB 與 gsim 僅屬衍生歷史。
+模擬由 `set_plan(snapshot)` 取得來源，即一個已準備的 `GeometryPlan`。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Route A／B 語意。目前面向來源的幾何權威為 `scgsim.geometry`。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立幾何，並用 `scgsim.meshing` 產生網格。外部 SGB 與 gsim 僅屬衍生歷史。
 
 [Electrostatic 課程](../course/palace-electrostatic.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。共用私有狀態的失效處理／持久化實作位於[架構](../architecture.qmd#palace-preparation-lifecycle)。
 

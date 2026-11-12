@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import math
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Any
 
 
@@ -19,39 +17,23 @@ def non_negative_number(value: Any, name: str) -> float:
     return result
 
 
-def load_stack(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
-    """Read a stack mapping from an explicit mapping, JSON text, or file."""
-    if isinstance(stack, Mapping):
-        return dict(stack)
-    if isinstance(stack, Path):
-        if not stack.is_file():
-            raise FileNotFoundError(f"stack JSON path does not exist: {stack}")
-        payload = json.loads(stack.read_text(encoding="utf-8"))
-    elif isinstance(stack, str):
-        stripped = stack.strip()
-        if stripped.startswith(("{", "[")):
-            payload = json.loads(stripped)
-        else:
-            path = Path(stack)
-            try:
-                exists = path.is_file()
-            except OSError as exc:
-                raise ValueError(
-                    "stack string must be JSON text or an existing JSON path."
-                ) from exc
-            if not exists:
-                raise FileNotFoundError(
-                    "stack string must be JSON text or an existing JSON path."
-                )
-            payload = json.loads(path.read_text(encoding="utf-8"))
-    else:
-        raise TypeError("stack must be a mapping, JSON string, or JSON path.")
-    if not isinstance(payload, Mapping):
-        raise TypeError("stack payload must be a mapping.")
-    return dict(payload)
+def stack_materials(stack: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    """The explicit materials of a plan's stack, each kind checked against the regions and layers that use it."""
+    materials = stack.get("materials")
+    if not isinstance(materials, Mapping) or not materials:
+        raise ValueError("stack must define a non-empty explicit materials mapping.")
+    resolved = {
+        str(key): value
+        for key, value in materials.items()
+        if isinstance(value, Mapping)
+    }
+    if len(resolved) != len(materials):
+        raise TypeError("every explicit stack material must be a mapping.")
+    _validate_stack_material_kinds(stack, resolved)
+    return resolved
 
 
-def validate_stack_material_kinds(
+def _validate_stack_material_kinds(
     stack: Mapping[str, Any], materials: Mapping[str, Mapping[str, Any]]
 ) -> None:
     """Require explicit material kinds for solution regions and metal layers."""
@@ -89,4 +71,4 @@ def validate_stack_material_kinds(
             raise ValueError("metal layer material must have conductor kind.")
 
 
-__all__ = ["load_stack", "non_negative_number", "validate_stack_material_kinds"]
+__all__ = ["non_negative_number", "stack_materials"]

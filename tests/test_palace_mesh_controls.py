@@ -6,7 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 from palace_sgb_support import FILM
+from test_simulation_drc import LAYER_STACK, MATERIALS, two_pads
 
+from scgsim.geometry import GeometryPlan
 from scgsim.meshing import (
     Budgets,
     FeatureRecipe,
@@ -23,6 +25,17 @@ STACK = {
     "solution_regions": {"substrate": {"material_id": "Si"}},
     "layers": [{"semantic_id": "chip"}],
 }
+
+
+def two_pad_snapshot(monkeypatch):
+    """The prepared plan of two pads in the stand-in PDK's vacuum, as a user binds it with ``set_plan``."""
+    return GeometryPlan(
+        two_pads(monkeypatch, gap_um=10.0),
+        root_id="chip",
+        layer_stack=LAYER_STACK,
+        material_records=MATERIALS,
+        coupon_padding_um=0.0,
+    ).prepare()
 
 
 @pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
@@ -168,8 +181,7 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     )
     monkeypatch.setattr(preparation, "prepare_mesh_input", lambda **kwargs: prepared)
     sim = sim_type()
-    sim.set_stack(STACK)
-    sim.set_geometry(SimpleNamespace(write_gds=lambda path: None))
+    sim.set_plan(two_pad_snapshot(monkeypatch))
     sim.set_output_dir(tmp_path / "run")
     sim.set_surface_epr(
         representation="B", specs={"MA": {**FILM, "inset_margins_um": [0.5]}}
@@ -187,7 +199,7 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
 def test_surface_epr_set_after_mesh_invalidates_it():
     """Surface EPR is geometry: calling ``set_surface_epr`` again discards the mesh, config and handoff."""
     sim = ElectrostaticSim()
-    sim.set_stack(STACK)
+    sim._materials = STACK["materials"]  # noqa: SLF001 -- stands for set_plan()
     sim._mesh_result = object()  # noqa: SLF001 -- stands for a generated mesh
     sim.config_path = "config.json"  # type: ignore[assignment]
     sim.set_surface_epr(representation="B", specs={"MA": {**FILM}})
@@ -208,8 +220,7 @@ def test_eigenmode_without_surface_epr_requests_no_insets(monkeypatch, tmp_path)
     )
     monkeypatch.setattr(layout_ports, "prepare_mesh_input", lambda **kwargs: prepared)
     sim = EigenmodeSim()
-    sim.set_stack(STACK)
-    sim.set_geometry(SimpleNamespace(write_gds=lambda path: None))
+    sim.set_plan(two_pad_snapshot(monkeypatch))
     sim.set_output_dir(tmp_path)
     sim.mesh()
     (_, geometry), *_ = calls

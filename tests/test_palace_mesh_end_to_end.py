@@ -1,6 +1,6 @@
 """Component to ``palace.msh`` and config through SGB, the meshing module and Palace's lowering (needs Gmsh).
 
-Every case runs ``build_route_mesh`` for real and then builds the config from the groups it returned.  No
+Every case runs ``build_route_geometry`` and ``mesh_route_geometry`` for real and then builds the config from the groups it returned.  No
 Palace binary runs.
 """
 

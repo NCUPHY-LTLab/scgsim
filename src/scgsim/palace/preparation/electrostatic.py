@@ -35,11 +35,7 @@ from .config import (
     configure_numerical_controls,
 )
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
-from .inputs import (
-    load_stack,
-    non_negative_number,
-    validate_stack_material_kinds,
-)
+from .inputs import non_negative_number, stack_materials
 from .layout_snapshot import (
     DRC_VACUUM_PADDING_UM,
     prepare_layout_snapshot,
@@ -59,10 +55,8 @@ from .workflow import persist_problem_files, prepare_mesh_input
 class ElectrostaticSim:
     """Prepare explicit SGB geometry and manual Palace electrostatic handoff files."""
 
-    component: Any | None = None
     stack: Mapping[str, Any] | None = None
     output_dir: Path | None = None
-    airbox: dict[str, float] = field(default_factory=dict)
     route: Literal["A", "B"] = "B"
     route_a_thin_film: RouteAThinFilm | None = None
     approximation_profile: ApproximationProfile | None = None
@@ -93,57 +87,18 @@ class ElectrostaticSim:
         self.config_path = None
         self.handoff_plan = None
 
-    def set_geometry(self, component: Any) -> None:
-        """Bind standalone authored geometry and invalidate derived mesh state."""
-        if self._plan_snapshot is not None:
-            raise ValueError(
-                "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
-            )
-        if component is None or not callable(getattr(component, "write_gds", None)):
-            raise TypeError("component must provide write_gds(path).")
-        self.component = component
-        self._plan_snapshot = None
-        self._invalidate_mesh()
-
     def set_plan(self, snapshot: GeometryPlanSnapshot) -> None:
         """Consume one detached notebook geometry and stack source."""
         if not isinstance(snapshot, GeometryPlanSnapshot):
             raise TypeError("set_plan requires a GeometryPlanSnapshot")
-        if "VACUUM_REGION" in snapshot.stack["solution_regions"] and (
-            self.vacuum_region is not None or self.airbox
+        if (
+            "VACUUM_REGION" in snapshot.stack["solution_regions"]
+            and self.vacuum_region is not None
         ):
             raise ValueError("GeometryPlan owns the outer vacuum envelope")
-        trial = ElectrostaticSim()
-        trial.set_stack(snapshot.stack)
-        self.component = None
-        self.stack = trial.stack
-        self._materials = trial._materials
+        self.stack = snapshot.stack
+        self._materials = stack_materials(self.stack)
         self._plan_snapshot = snapshot
-        self._invalidate_mesh()
-
-    def set_stack(self, stack: Mapping[str, Any] | str | Path) -> None:
-        """Validate standalone stack materials before replacing the source state."""
-        if self._plan_snapshot is not None:
-            raise ValueError(
-                "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
-            )
-        payload = load_stack(stack)
-        materials = payload.get("materials")
-        if not isinstance(materials, Mapping) or not materials:
-            raise ValueError(
-                "stack must define a non-empty explicit materials mapping."
-            )
-        resolved = {
-            str(key): value
-            for key, value in materials.items()
-            if isinstance(value, Mapping)
-        }
-        if len(resolved) != len(materials):
-            raise TypeError("every explicit stack material must be a mapping.")
-        validate_stack_material_kinds(payload, resolved)
-        self.stack = payload
-        self._materials = resolved
-        self._plan_snapshot = None
         self._invalidate_mesh()
 
     def set_output_dir(self, path: str | Path) -> None:
@@ -151,35 +106,6 @@ class ElectrostaticSim:
         if not isinstance(path, (str, Path)):
             raise TypeError("output path must be a path string or Path.")
         self.output_dir = Path(path).expanduser().resolve()
-        self._invalidate_mesh()
-
-    def set_airbox(
-        self,
-        *,
-        margin_x: float,
-        margin_y: float,
-        z_above: float | None = None,
-        z_below: float | None = None,
-    ) -> None:
-        """Validate all envelope controls before updating mesh-dependent state."""
-        if (
-            self._plan_snapshot is not None
-            and "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
-        ):
-            raise ValueError("GeometryPlan owns the outer vacuum envelope")
-        if self.vacuum_region is not None:
-            raise ValueError(
-                "set_airbox is mutually exclusive with set_vacuum_region()."
-            )
-        airbox = {
-            "margin_x": validate_positive_number(margin_x, "margin_x"),
-            "margin_y": validate_positive_number(margin_y, "margin_y"),
-        }
-        if z_above is not None:
-            airbox["z_above"] = validate_positive_number(z_above, "z_above")
-        if z_below is not None:
-            airbox["z_below"] = validate_positive_number(z_below, "z_below")
-        self.airbox = airbox
         self._invalidate_mesh()
 
     def set_vacuum_region(
@@ -191,10 +117,6 @@ class ElectrostaticSim:
             self._plan_snapshot
         ):
             raise ValueError("GeometryPlan owns the outer vacuum envelope")
-        if self.airbox:
-            raise ValueError(
-                "set_vacuum_region is mutually exclusive with set_airbox()."
-            )
         self.vacuum_region = VacuumRegionSpec.from_padding(padding)
         self._invalidate_mesh()
 
@@ -263,7 +185,7 @@ class ElectrostaticSim:
         if route not in {"A", "B"}:
             raise ValueError("Surface EPR representation must be 'A' or 'B'.")
         if self._materials is None:
-            raise ValueError("set_stack() must run before set_surface_epr().")
+            raise ValueError("set_plan() must run before set_surface_epr().")
         normalized_thin_film = (
             normalize_route_a_thin_film(route, route_a_thin_film)
             if route_a_thin_film is not None
@@ -406,18 +328,12 @@ class ElectrostaticSim:
         report, and the geometry stays in the output folder; warnings do not stop the mesh.
         """
         self._invalidate_mesh()
-        if (
-            (self.component is None and self._plan_snapshot is None)
-            or self.stack is None
-            or self.output_dir is None
-        ):
-            raise ValueError(
-                "set_geometry(), set_stack(), and set_output_dir() must run before mesh()."
-            )
+        if self._plan_snapshot is None or self.output_dir is None:
+            raise ValueError("set_plan() and set_output_dir() must run before mesh().")
         if self.surface_epr_specs is None:
             raise ValueError("set_surface_epr() must run before mesh().")
         geometry = build_route_geometry(
-            **self._geometry_source(self.stack), output_dir=self.output_dir
+            **self._geometry_source(), output_dir=self.output_dir
         )
         check_meshing_stage(geometry)
         self._mesh_result = mesh_route_geometry(geometry, self.mesh_controls)
@@ -437,7 +353,7 @@ class ElectrostaticSim:
         """Check that an ``ElectrostaticSim`` can model and mesh ``component``, in two stages, and return their report.
 
         The geometry stage runs the preparation and SGB geometry build of ``mesh()``, with fixed settings:
-        Route B, Palace's default airbox, zero coupon padding, no terminals (they are not needed before
+        Route B, zero coupon padding, no terminals (they are not needed before
         meshing) and, when the layout has no vacuum of its own, a vacuum region padded by (x, y, z) =
         (0, 0, 1000) um: it ends at the layout's planar extent and reaches 1000 um below and above.  A
         conductor that reaches that extent only at a point, such as a lone round pad with no die outline or
@@ -492,72 +408,41 @@ class ElectrostaticSim:
         This is the modeling path ``mesh()`` shares, used by ``simulation_drc``.  The simulation's own
         output folder and mesh state are left as they were.
         """
-        if (
-            self.component is None and self._plan_snapshot is None
-        ) or self.stack is None:
-            raise ValueError(
-                "set_geometry() or set_plan(), and set_stack(), must run before the geometry build."
-            )
+        if self._plan_snapshot is None:
+            raise ValueError("set_plan() must run before the geometry build.")
         if self.surface_epr_specs is None:
             raise ValueError("set_surface_epr() must run before the geometry build.")
-        return build_route_geometry(
-            **self._geometry_source(self.stack), output_dir=output_dir
-        )
+        return build_route_geometry(**self._geometry_source(), output_dir=output_dir)
 
-    def _geometry_source(self, stack: Mapping[str, Any]) -> dict[str, Any]:
-        """Prepare the geometry input, everything in ``mesh()`` before the SGB build, for a plan or a Component."""
-        if self._plan_snapshot is not None:
-            if (
-                self.indium_ground_bumps is not None
-                and self.indium_ground_bumps["fill"]
-            ):
-                raise ValueError(
-                    "GeometryPlan source already owns its geometry; add authored bumps before prepare()"
-                )
-            prepared = prepare_mesh_input(
-                component=None,
-                stack=self._plan_snapshot.stack,
-                route=self.route,
-                route_a_thin_film=self.route_a_thin_film,
-                approximation_profile=self.approximation_profile,
-                airbox=self.airbox,
-                vacuum_region=(
-                    None
-                    if "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
-                    else self.vacuum_region
-                ),
-                indium_ground_bumps=None,
-                build_input=self._plan_snapshot.geometry_input,
+    def _geometry_source(self) -> dict[str, Any]:
+        """Prepare the geometry input of the bound plan, everything in ``mesh()`` before the SGB build."""
+        if self._plan_snapshot is None:
+            raise ValueError("set_plan() must run before the geometry is prepared.")
+        if self.indium_ground_bumps is not None and self.indium_ground_bumps["fill"]:
+            raise ValueError(
+                "GeometryPlan source already owns its geometry; add authored bumps before prepare()"
             )
-            if prepared.materials is not None:
-                self._materials = prepared.materials
-            return {
-                "component": None,
-                "stack": prepared.stack,
-                "route": self.route,
-                "surface_epr_specs": self.surface_epr_specs,
-                "source_gds_bytes": self._plan_snapshot.gds_bytes,
-                "source_geometry_input": prepared.geometry_input,
-                "representation_context": prepared.physical_plan.context,
-            }
         prepared = prepare_mesh_input(
-            component=self.component,
-            stack=stack,
+            component=None,
+            stack=self._plan_snapshot.stack,
             route=self.route,
             route_a_thin_film=self.route_a_thin_film,
             approximation_profile=self.approximation_profile,
-            airbox=self.airbox,
-            vacuum_region=self.vacuum_region,
-            indium_ground_bumps=self.indium_ground_bumps,
+            vacuum_region=(
+                None
+                if "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
+                else self.vacuum_region
+            ),
+            indium_ground_bumps=None,
+            build_input=self._plan_snapshot.geometry_input,
         )
         if prepared.materials is not None:
             self._materials = prepared.materials
         return {
-            "component": prepared.component,
             "stack": prepared.stack,
             "route": self.route,
             "surface_epr_specs": self.surface_epr_specs,
-            "indium_ground_bump_fill": prepared.indium_ground_bump_fill,
+            "source_gds_bytes": self._plan_snapshot.gds_bytes,
             "source_geometry_input": prepared.geometry_input,
             "representation_context": prepared.physical_plan.context,
         }
@@ -591,7 +476,7 @@ class ElectrostaticSim:
             or self.surface_epr_specs is None
         ):
             raise ValueError(
-                "set_stack(), set_surface_epr(), and mesh() must run before write_config()."
+                "set_plan(), set_surface_epr(), and mesh() must run before write_config()."
             )
         if not self._mesh_result.mesh_path.is_file():
             raise FileNotFoundError(

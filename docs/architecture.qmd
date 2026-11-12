@@ -193,8 +193,8 @@ mapping remains empirical, not a generally validated native side query; the
 call emits a warning about that limitation. See the
 [field-side contract](specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction).
 
-Within Palace, `results.report_data` owns detached report records and snapshot
-readers; `presentation.reports` owns trust/physics views and figures. The
+Within Palace, `results.report_models` owns detached report records and
+`results.snapshots` their readers; `presentation.reports` owns trust/physics views and figures. The
 package facade retains the existing public result and report names.
 
 The first SCGSim 2.0 producer emitted `scgsim.aedt.runtime-source.v13` with 61
@@ -325,7 +325,7 @@ base simulation object and does not receive callbacks into simulation state.
 
 Both public `mesh()` methods invalidate derived state before checking
 prerequisites. Geometry preparation then applies the vacuum region, the
-indium-bump fill and the airbox to the stack, then interprets the physical
+indium-bump fill to the stack, then interprets the physical
 geometry and records Route-A metadata, and returns the prepared component,
 stack, bump-fill record, and optional material mapping. The simulation stores
 that mapping only after preparation returns, so a failure during preparation or
