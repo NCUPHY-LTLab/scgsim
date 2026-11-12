@@ -7,8 +7,9 @@ scgsim-id: "docs/specs/palace-eigenmode"
 ---
 
 `scgsim.palace.EigenmodeSim` owns mutable mesh, config, resolved-port and handoff
-state. It is separate from Electrostatic and AEDT, with no common simulation
-base object. The [Palace lesson](../course/palace-eigenmode.qmd) teaches the
+state. It shares one private core with `ElectrostaticSim` (binding, geometry
+settings, `mesh()`, summaries, handoff and the lifecycle) and adds only its
+Eigenmode setters and config; it shares nothing with AEDT. The [Palace lesson](../course/palace-eigenmode.qmd) teaches the
 ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics.
 
 | Stage | Public surface |

@@ -599,8 +599,8 @@ its checks.
 
 `scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` returns an
 `InputSummary` with detached `.data` and an HTML representation for notebook
-display. Both Eigenmode facades expose `input_summary()` to combine this
-normalized source with their configured backend settings. AEDT summarizes its
+display. Both Eigenmode facades and `ElectrostaticSim` expose `input_summary()`
+to combine this normalized source with their configured backend settings. AEDT summarizes its
 normalized build input and stack. Palace requires its bound `GeometryPlan` and
 summarizes the input its `mesh()` prepares from that plan, so a vacuum region
 or port set on the simulation and the route's conductor representation

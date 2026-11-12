@@ -66,7 +66,7 @@ def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
     resources: Mapping[str, Any] | None = None,
     setup_commands: Sequence[str] = (),
     petsc_options: Sequence[str] = (),
-    problem: Literal["Electrostatic", "Eigenmode"] = "Electrostatic",
+    problem: Literal["Electrostatic", "Eigenmode"],
 ) -> HandoffPlan:
     """Create only portable handoff artifacts; caller owns executable and resources."""
     if profile not in _PROFILES:

@@ -23,6 +23,7 @@ from scgsim.palace.preparation.config import (
     configure_numerical_controls,
 )
 from scgsim.palace.results.surface_contract import validate_surface_epr_config
+from scgsim.palace.simulation.lifecycle import Stage
 
 NETS = {"A": ("left", "right"), "B": ("P", "G")}
 PORTS = {
@@ -289,6 +290,7 @@ def test_eigenmode_epr_request_is_checked_against_the_rows_of_the_index(case, tm
         output_dir=tmp_path,
         mesh_manifest_path=manifest,
     )
+    sim._stage = Stage.MESHED  # noqa: SLF001 -- stands for set_plan() and mesh()
     sim.surface_epr_specs = surface_epr_specs(MA=None)
     sim.set_numerical(amr_max_passes=0)
     sim.set_epr_request(surface_interfaces=["MA"])

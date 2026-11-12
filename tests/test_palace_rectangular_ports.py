@@ -190,7 +190,7 @@ def eigenmode_sim(component, nets=NETS):
 
 def prepared_port(sim):
     """The prepared geometry input of the simulation, with its one port region and partition record."""
-    request = sim._geometry_request()  # noqa: SLF001 -- the preparation mesh() runs
+    request = sim._geometry_request(sim._plan)  # noqa: SLF001 -- the preparation mesh() runs
     prepared = request.source["source_geometry_input"]
     (region,) = prepared.port_sheet_regions
     record = prepared.metadata["junction_partitions"][
