@@ -21,6 +21,7 @@ from test_simulation_drc import LAYER_STACK, MATERIALS, NO_VACUUM_STACK, check, 
 
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
+from scgsim.geometry.sgb.errors import UnsupportedCurveError
 from scgsim.palace import EigenmodeSim
 
 PORT = "chip/device/P1"
@@ -260,7 +261,11 @@ def test_an_end_piece_two_conductors_of_its_net_meet_is_located(monkeypatch):
 
 
 def test_a_terminal_outline_with_a_spline_is_located_by_its_ends(monkeypatch):
-    """The pad's authored outline holds a B-spline from (0, -10) um to (0, 10) um under the sheet."""
+    """The pad's authored outline holds a B-spline from (0, -10) um to (0, 10) um under the sheet.
+
+    SGB's binding refuses it as it refuses a spline off a port, before the partition reads the
+    outline (before: the partition refused it, in its own words, as a ``ValueError``).
+    """
     component = device(monkeypatch, [PAD, ELECTRODE])
     component.info["component_semantics"]["boundary_curves"] = [
         {
@@ -280,10 +285,16 @@ def test_a_terminal_outline_with_a_spline_is_located_by_its_ends(monkeypatch):
             ],
         }
     ]
-    message = refusal(component)
+    sim = EigenmodeSim()
+    sim.set_plan(device_plan(component).prepare())
+    sim.add_port(PORT, layer="metal", layout_sheet=True, inductance=1e-9)
+    with pytest.raises(UnsupportedCurveError) as error:
+        prepared_port(sim)
+    message = str(error.value)
     assert message.startswith(
-        "junction terminal outline curve 'bspline' is not supported; a terminal is built "
-        "from lines and circular arcs: chip/device/pad on layer 1/0 (grid g = 0.001 um)"
+        "chip/device/PAD_OUTER (Entity 'chip/device/pad', layer 1/0) curve 1: 'bspline' "
+        "curves are not supported yet (this version carries lines and circular arcs); "
+        "the curve runs from "
     )
     assert message.endswith(
         "Fix the layout: draw the curve as lines and circular arcs."

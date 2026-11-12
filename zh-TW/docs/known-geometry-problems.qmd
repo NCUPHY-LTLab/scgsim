@@ -73,7 +73,7 @@ OrcaPen SC PDK 已修正全部六項：C1 至 C4 由 [orcapen-sc-pdk#64](https:/
 
 ![B-spline 條帶及其控制多邊形（紅色虛線）：spline 邊界所宣告的曲線。](assets/supported-geometry/problem-spline-curve.svg){fig-alt="一條彎曲條帶，五個控制點以紅色虛線多邊形相連。"}
 
-**出了什麼錯。** cell 把邊宣告為 spline 邊界曲線時，建構以 `UnsupportedCurveError: … 'bspline' curves are not supported yet (this version carries lines and circular arcs)` 停止，`interpolation_spline` 也一樣。
+**出了什麼錯。** cell 把邊宣告為 spline 邊界曲線時，建構以 `UnsupportedCurveError: … 'bspline' curves are not supported yet (this version carries lines and circular arcs)` 停止，`interpolation_spline` 也一樣。集總埠所在導體上的 spline，也以同一個錯誤停止建構。
 
 **SCGSim 為何不修正。** SGB 能精確地為直線與圓弧做 offset；spline 的 offset 沒有精確形式，因此 SGB 不讀取 spline。請把條帶畫成多邊形。
 
