@@ -27,6 +27,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from fractions import Fraction
 
+from scgsim.documentation import page_url
 from scgsim.geometry.sgb.derivation.layer import Layer
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
 from scgsim.geometry.sgb.labelling.prism_set import FIX_NETS, named_entities
@@ -38,6 +39,14 @@ NEAR_GRID_UNITS_SQ = 4  # a prism "reaches" a point within two grid units (squar
 # Who must act when a conductor reaches the vacuum's edge at one point: something drawn around the conductor
 # moves the model's planar boundary away from it, and a vacuum region with planar padding does the same.
 _FIX_AT_THE_EDGE = "Fix the layout: draw the die outline or a ground plane around it, or set a vacuum region."
+# A pinch means nothing to most layout authors, so each message ends with the section that explains it.  No
+# full stop follows the URL, so that a terminal or a copy does not take it into the link.
+_SEE_EDGE_PINCH = "See " + page_url(
+    "docs/known-geometry-problems", "boundary-point-pinch"
+)
+_SEE_PINCH = "See " + page_url(
+    "docs/known-geometry-problems", "pinch-inside-the-layout"
+)
 
 
 def check_contacts(catalogue: PrismCatalogue, layers: Sequence[Layer]) -> None:
@@ -177,7 +186,7 @@ def _raise_pinch(
     raise NonManifoldError(
         f"non-manifold pinch: {what} touches itself along the vertical edge at "
         f"{where}: two cells of one domain meet only at a vertex. "
-        "Fix the layout: give them a shared edge or separate them."
+        f"Fix the layout: give them a shared edge or separate them. {_SEE_PINCH}"
     )
 
 
@@ -194,7 +203,7 @@ def _raise_edge_pinch(
         f"non-manifold pinch: {'conductor' if one else 'conductors'} {names} of Net {nets} "
         f"{'reaches' if one else 'reach'} the edge of {vacuum.name} only at {where}, a point on "
         f"the model's planar boundary, so {vacuum.name} touches itself along that vertical edge. "
-        f"{_FIX_AT_THE_EDGE}"
+        f"{_FIX_AT_THE_EDGE} {_SEE_EDGE_PINCH}"
     )
 
 

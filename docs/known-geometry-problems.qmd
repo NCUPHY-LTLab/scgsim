@@ -146,3 +146,93 @@ supported yet (this version carries lines and circular arcs)`, and the same for
 **Why SCGSim does not fix it.** SGB offsets lines and circular arcs exactly; the
 offset of a spline has no exact form, so SGB does not read splines. Draw the
 strip as a polygon.
+
+## A conductor that touches the boundary at one point {#boundary-point-pinch}
+
+A conductor whose outline reaches the edge of the modelled region at a single
+point, such as a round pad or a diamond drawn against the edge of the layout
+with nothing around it, is refused with `NonManifoldError`. Draw the die outline
+or a ground plane so that it, not the pad, sets that edge.
+
+::: {layout-ncol=2}
+![**CPW cut off at the boundary: passes.** The centre strip and both ground strips end on the boundary x = 0, each over a stretch of it (heavy line).](assets/supported-geometry/problem-boundary-cpw.svg){fig-alt="A CPW whose three strips end on the left edge of the die, with a heavy line where each strip meets the edge, and a zoom on the centre strip's end."}
+
+![**Square pad along the boundary: passes.** The pad's left edge lies along the boundary over 12 µm.](assets/supported-geometry/problem-boundary-square.svg){fig-alt="A square pad between two ground strips, its left edge on the left edge of the die, and a zoom on its lower corner."}
+
+![**Round pad touching the boundary at one vertex: refused.** The 64-sided pad meets the boundary only at x = 0, y = 20 µm (red).](assets/supported-geometry/problem-boundary-round.svg){fig-alt="A round pad between two ground strips touching the left edge of the die at one red point, and a zoom where the vacuum above and below the point meets."}
+
+![**Diamond touching the boundary at its tip: refused.** The tip is the only point of the diamond on the boundary (red).](assets/supported-geometry/problem-boundary-diamond.svg){fig-alt="A diamond between two ground strips touching the left edge of the die with its tip, marked red, and a zoom on the tip."}
+:::
+
+**Where the boundary is.** In the plane, the model ends where the layout ends.
+The vacuum that `simulation_drc` adds to a layout with no vacuum of its own is
+padded by (x, y, z) = (0, 0, 1000) µm, so it stops at the layout's planar extent,
+and so does any vacuum region with no planar padding. In the figures the die is
+60 × 40 µm, its left edge x = 0 is the boundary, the light area is the vacuum at
+the height of the metal, and white is outside the model.
+
+**What goes wrong.** Walk along the boundary at the height of the metal. Where
+a conductor crosses it or ends on it, like the CPW's strips, or lies along it,
+like the square pad's edge, the metal takes up a stretch of the boundary. The
+vacuum on one side of that stretch is separated from the vacuum on the other
+side, and each meets the metal along a face. Where the round pad or the diamond
+touches the boundary, the metal takes up no length at all, only the point
+(0, 20) µm. The vacuum below that point and the vacuum above it are neither
+separated nor joined by a face: across the height of the metal they touch only
+along the vertical line through that point, as the zooms show. Such a place is
+called a pinch, and a solid with one is called non-manifold. The mesher needs
+each face to have one region on each side, and at a pinch the line through it
+has no defined topology, so SCGSim refuses the layout before it meshes. The
+refusal names the conductor, its layer and the point, and ends with a link to
+this section:
+
+```
+non-manifold pinch: conductor chip/centre_0000 on layer metal
+of Net chip/centre_0000 reaches the edge of VACUUM_REGION only
+at (0.0000, 20.0000) um, z 0.0..0.2 um (slab[0,1/5]), a point
+on the model's planar boundary, … Fix the layout: draw the die
+outline or a ground plane around it, or set a vacuum region.
+See …#boundary-point-pinch
+```
+
+Measured with `EigenmodeSim.simulation_drc` and `ElectrostaticSim.simulation_drc`
+on the layouts of the figures (ground strips 60 × 12 µm, pads 12 µm across, the
+CPW's centre strip 4 µm wide), without bands and with `MA` bands at margins 0.5
+and 1.0 µm:
+
+| Layout | No bands | `MA` bands |
+|---|---|---|
+| CPW cut off at the boundary | passes | passes |
+| Square pad, edge along the boundary | passes | passes |
+| 64-sided round pad, one vertex on the boundary | refused at (0, 20) µm | refused at (0, 20) µm |
+| Diamond, tip on the boundary | refused at (0, 20) µm | refused at (0, 20) µm |
+
+Bands play no part: the refusal comes before any band is cut, and the layouts
+that pass also pass with bands.
+
+**Why SCGSim does not work around it.** SCGSim checks a layout in the vacuum it
+is tested and simulated in, which ends at the layout's edge; a planar padding of
+its own would check a different model from the one you simulate. SCGSim also
+builds the outline it is given, so it does not move the vertex off the boundary.
+
+![The fix: the ground drawn round the pad's left side, 4 µm from it, moves the boundary to x = −10 µm, and the ground takes up all of it (heavy line).](assets/supported-geometry/problem-boundary-fixed.svg){fig-alt="The round pad between two ground strips joined by a third strip on its left, so the ground runs along the whole left edge of the die, and a zoom showing the vacuum between the pad and that strip."}
+
+**The layout fix.** Draw the die outline or a ground plane so that it, not the
+pad, sets the planar boundary, as on a real chip. With the ground drawn round
+the left side of the round pad or the diamond, 4 µm from it, both pass, without
+bands and with `MA` bands. For a simulation, whose `mesh()` uses the vacuum
+region you set, a vacuum region with planar padding also moves the boundary away
+from the pad; `simulation_drc` keeps its vacuum fixed, so for the check, draw the
+outline.
+
+### The same rule inside the layout {#pinch-inside-the-layout}
+
+This is the rule on [Supported Scope](supported-scope.qmd#rules-conductors): no
+region touches itself along a single vertical edge. Inside the layout it shows
+where two conductors of one Net meet only at a corner. The metal there, or the
+vacuum between the two pieces, touches itself along the vertical line through
+the corner, just as the vacuum does at the round pad above, and the refusal
+reads "… touches itself along the vertical edge at (x, y) um …: two cells of one
+domain meet only at a vertex." Give the two pieces a shared edge, or separate
+them. At the boundary the other piece is the outside of the model, which the
+layout does not draw, so there the fix moves the boundary instead.

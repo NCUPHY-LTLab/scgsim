@@ -185,14 +185,10 @@ The settings are fixed:
 
 Because that vacuum ends at the layout's planar extent, draw what sets the
 extent: the die outline or a ground plane. A conductor that reaches the extent
-only at a point, such as a lone round pad or a diamond with nothing drawn around
-it, pinches the vacuum there. The check refuses it with `NonManifoldError`,
-which says that the conductor reaches the vacuum's edge only at that point,
-names the conductor, its layer and the place in µm, and ends "Fix the layout:
-draw the die outline or a ground plane around it, or set a vacuum region."
-For the check, draw the die outline or a ground plane: its vacuum is fixed. To
-simulate such a layout as it is, give that simulation's `mesh()` a vacuum
-region with planar padding.
+only at a point, such as a lone round pad with nothing drawn around it, is
+refused with `NonManifoldError`;
+[A conductor that touches the boundary at one point](known-geometry-problems.qmd#boundary-point-pinch)
+explains why and what to draw.
 
 `simulation_drc()` writes into a temporary folder and removes it. The geometry
 stage adds no rules of its own, so its error is the one that class's `mesh()`

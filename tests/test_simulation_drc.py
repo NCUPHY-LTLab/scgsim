@@ -15,6 +15,7 @@ import pytest
 
 import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
+from scgsim.documentation import page_url
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
@@ -390,17 +391,28 @@ PINCH_AT_THE_EDGE = re.compile(
     r"boundary"
 )
 FIX_AT_THE_EDGE = "Fix the layout: draw the die outline or a ground plane around it, or set a vacuum region."
+# The section that explains the refusal, on the published documentation root of the running version.
+SEE_THE_EDGE_SECTION = re.compile(
+    r" See https://ncuphy-ltlab\.github\.io/scgsim/v\d+\.\d+\.\d+(-dev)?/"
+    r"docs/known-geometry-problems\.html#boundary-point-pinch$"
+)
 
 
 def pinch_of(error):
     """The conductor, layer, place in um and film height that a pinch at the vacuum's edge names.
 
-    The refusal also says who must act: draw around the conductor, or set a vacuum region.
+    The refusal also says who must act, draw around the conductor or set a vacuum region, and ends with the
+    link to the section that explains it.
     """
     message = str(error)
     match = PINCH_AT_THE_EDGE.search(message)
     assert match is not None, message
-    assert message.endswith(FIX_AT_THE_EDGE)
+    link = SEE_THE_EDGE_SECTION.search(message)
+    assert link is not None, message
+    assert message[: link.start()].endswith(FIX_AT_THE_EDGE)
+    assert link.group(0) == " See " + page_url(
+        "docs/known-geometry-problems", "boundary-point-pinch"
+    )
     return (
         match["conductor"],
         match["layer"],
