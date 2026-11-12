@@ -7,7 +7,7 @@ solution-region state.
 
 It also decides, before any occurrence transform, whether a declared arc's points lie on one line.
 """
-# long-file: boundary records, the rings they select and the drawn walks their indices name are read here, and the declaration checks need all three; a new source module would need a new AEDT runtime-source roster.
+# long-file: boundary records, the rings they select and the drawn walks their indices name are read here, and the declaration checks need all three.
 
 from __future__ import annotations
 

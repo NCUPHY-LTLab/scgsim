@@ -24,19 +24,18 @@ layout, settings or native result of a particular study. The current
 runtime-source manifest and content digest identify the module bytes used for
 execution; a Git revision is recorded only when truthfully available.
 
-Current AEDT manifests use `runtime-source.v29` with 285 sorted, unique paths.
-V29 starts from all current AEDT modules, both AEDT visualization loaders, and
-the non-AEDT paths retained from V28, then closes over AST-resolved imports and
-package initializers. It adds `scgsim/geometry/planning/junction_planning/lattice.py`
-to the frozen 284-path V28 roster. Preparation and execution record their
-declared module bytes and content digest separately. Historical V1–V28 manifests
-keep their original paths and interpretation.
+AEDT computes its runtime source on each use: the import closure of every
+module under `scgsim/aedt` and the two AEDT visualization loaders, recorded
+under `runtime-source.v30`. Preparation and execution record their module
+bytes and content digest separately. A result whose runtime source has an
+earlier schema is refused; read it with the SCGSim commit that wrote it
+([AEDT runtime source](specs/aedt-runtime.qmd#runtime-source)).
 
 The current Palace geometry authority is `scgsim.geometry.sgb`. Palace
 continues to serialize the established `scgsim_sgb` field, whose current value
 names that authority. The field name does not request an import from the former
-package. Historical receipt values and runtime-source inventories retain the
-module identities they recorded and are not rewritten to the current paths.
+package. Historical receipt values retain the module identities they recorded
+and are not rewritten to the current paths.
 
 ## Publication boundary
 

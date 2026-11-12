@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from scgsim.aedt.results import provenance
-from scgsim.aedt.results.runtime_inventory import runtime_source_paths
+from scgsim.aedt.results.runtime_inventory import current_runtime_source_paths
 from scgsim.aedt.runtime import control
 from scgsim.aedt.runtime.desktop_lifecycle import release_owned_desktop
 from scgsim.aedt.runtime.families import q3d, q3d_prepared, q3d_termination
@@ -54,7 +54,7 @@ def stored_control(tmp_path, monkeypatch):
     metadata.parent.mkdir()
     metadata.write_text("{}")
     monkeypatch.setattr(provenance, "_observed_revision", lambda: None)
-    source = provenance.runtime_source_identity()
+    source = provenance.record_runtime_source("actual")
     inputs = {
         "metadata_sha256": "a" * 64,
         "spec_sha256": "b" * 64,
@@ -62,7 +62,7 @@ def stored_control(tmp_path, monkeypatch):
     }
     spec = _spec()
     monkeypatch.setattr(control, "_inputs", lambda path: (inputs, spec))
-    monkeypatch.setattr(control, "runtime_source_identity", lambda: source)
+    monkeypatch.setattr(control, "record_runtime_source", lambda stage: source)
     (metadata.parent / "aedt_run_receipt.json").write_text(
         json.dumps({"status": "running", "runtime_source": source})
     )
@@ -266,18 +266,13 @@ def test_analyze_hook_wraps_one_actual_callback_and_retains_false():
     assert calls == ["enter", {"name": "Setup1", "blocking": True}, ("returned", False)]
 
 
-def test_current_inventory_enrolls_control_without_changing_v24(monkeypatch):
-    """Enroll stop control while preserving the exact historical inventory delta."""
+def test_current_runtime_source_enrolls_control(monkeypatch):
+    """Record the stop-control module in the runtime source."""
     monkeypatch.setattr(provenance, "_observed_revision", lambda: None)
-    source = provenance.runtime_source_identity()
+    source = provenance.record_runtime_source("actual")
     provenance.validate_runtime_source(source, stage="actual")
     assert source["schema_version"] == provenance.SOURCE_SCHEMA
-    assert set(runtime_source_paths(provenance.SOURCE_SCHEMA_V25)) - set(
-        runtime_source_paths(provenance.SOURCE_SCHEMA_V24)
-    ) == {"src/scgsim/aedt/runtime/control.py"}
-    assert "src/scgsim/aedt/runtime/control.py" not in runtime_source_paths(
-        provenance.SOURCE_SCHEMA_V24
-    )
+    assert "src/scgsim/aedt/runtime/control.py" in current_runtime_source_paths()
     damaged = copy.deepcopy(source)
     damaged["modules"][0]["sha256"] = "0" * 64
     with pytest.raises(RuntimeError, match="content digest"):

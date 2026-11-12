@@ -21,7 +21,7 @@ from typing import Any, cast
 from scgsim.aedt.io import file_sha256, read_json
 from scgsim.aedt.preparation.handoff import HandoffPlan
 from scgsim.aedt.results.provenance import (
-    runtime_source_identity,
+    record_runtime_source,
     validate_runtime_source,
 )
 from scgsim.aedt.runtime.native.common import pyaedt_version
@@ -325,7 +325,7 @@ def _read_admitted_state(
     if state["inputs"] != request.inputs:
         raise RuntimeError("Q3D stop handoff input bytes changed")
     validate_runtime_source(state["runtime_source"], stage="actual")
-    actual = runtime_source_identity()
+    actual = record_runtime_source("actual")
     if any(
         actual[key] != state["runtime_source"][key]
         for key in ("schema_version", "modules", "content_sha256")

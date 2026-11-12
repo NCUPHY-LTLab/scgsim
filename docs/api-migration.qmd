@@ -55,14 +55,11 @@ the v2 package and the corresponding old-to-new map.
   contract.
 - Preserve the formal `python -m scgsim.aedt.run` command as the AEDT
   transaction entrypoint. It is a supported CLI, not a legacy wrapper.
-- The first SCGSim 2.0 AEDT producer emitted
-  `scgsim.aedt.runtime-source.v13`. That frozen manifest has 61 declared paths,
-  including 41 AEDT modules, and records `schema_version`, `stage`, `modules`,
-  `content_sha256`, and `revision_observation`; module bytes and digest are
-  required while the Git observation may truthfully be unavailable. V13 adds
-  no helper-hash map. Its declared files are not a transitive dependency
-  attestation. V1–V13 retain their exact historical path and identity rules;
-  migration does not rewrite or reinterpret their receipts.
+- AEDT receipts record a generated runtime source,
+  `scgsim.aedt.runtime-source.v30`: the import closure of the AEDT modules,
+  with the SHA-256 of each file. A result recorded under an earlier
+  runtime-source schema is refused; read it with the SCGSim commit that wrote
+  it. Migration does not rewrite or reinterpret old receipts.
 
 ## Solid/Thin-Film request migration
 
@@ -106,10 +103,9 @@ paths does not restore those Q3D request schemas or bypass the explicit-mode
 requirement.
 
 This extension introduced AEDT runtime-source identity
-`scgsim.aedt.runtime-source.v15`; the current producer emits v29, and earlier
-identities keep their existing contracts. Each identity binds the implemented
-module bytes and digest without claiming exhaustive transitive dependency coverage;
-its precise path list is owned by the frozen implementation inventory.
+`scgsim.aedt.runtime-source.v15`. The current producer computes its list from
+the AEDT import closure under v30, and a result recorded under an earlier
+identity is read with the SCGSim commit that wrote it.
 
 The AEDT Solid and thin-film contract linked above owns the occurrence-local
 Ground and field-side/thickness distinctions for these modeling paths.
@@ -308,16 +304,13 @@ export/readback dependency becomes an explicit internal service. Visualization
 imports current PyAEDT constants from the canonical spec owner without making
 them public exports.
 
-The current producer uses runtime-source v29 with 285 sorted, unique declared
-paths. Its inventory starts with all current AEDT modules, both AEDT
-visualization loaders, and the non-AEDT paths retained from V28, then follows
-AST-resolved imports and package initializers. It adds
-`scgsim/geometry/planning/junction_planning/lattice.py` to the frozen V28 roster.
-Per-module hashes bind the declared files, and the canonical manifest digest
-identifies that source snapshot; neither is a permanent code value. Historical
-V1–V28 readers retain their original paths, hashes, revision rules, and schema
-meanings. Do not map old module strings onto new paths while resolving old
-receipts. Handoff and receipt histories remain separate from Q3D request
+The current producer records runtime-source v30, computed on each use as the
+import closure of every AEDT module and both AEDT visualization loaders; see
+the [runtime-source contract](specs/aedt-runtime.qmd#runtime-source). Per-module
+hashes bind the listed files, and the canonical manifest digest identifies that
+source snapshot; neither is a permanent code value. Results recorded under an
+earlier runtime-source schema are read with the SCGSim commit that wrote them;
+old module strings are not mapped onto new paths. Handoff and receipt histories remain separate from Q3D request
 versioning; Q3D remains v3 only. This map does not claim native Q3D completion.
 
 ## Palace meshing and Surface EPR {#palace-mesh-migration}
