@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from scgsim.palace.presentation.amr import PalaceAmrReport, show_amr_analysis
 from scgsim.palace.presentation.plotting import ReportTheme
 from scgsim.palace.presentation.reports import (
     show_all_results,
@@ -17,8 +16,6 @@ from scgsim.palace.presentation.reports import (
     show_run_trustworthiness,
     show_simulation_benchmark,
 )
-from scgsim.palace.results.amr_analysis import analyze_amr
-from scgsim.palace.results.amr_models import CapacitanceReference, PalaceAmrAnalysis
 from scgsim.palace.results.artifacts import (
     as_float_map,
     expect_int,
@@ -95,21 +92,6 @@ def _require_file(path: Path) -> None:
 class ResolvedPalaceResult(ResolvedRunData):
     """Complete resolved view of one Palace run directory."""
 
-    def analyze_amr(
-        self, reference: CapacitanceReference | None = None
-    ) -> PalaceAmrAnalysis:
-        """Detach native refinement metrics and optional identified reference errors."""
-        return analyze_amr(self, reference)
-
-    def show_amr_analysis(
-        self,
-        *,
-        reference: CapacitanceReference | None = None,
-        theme: ReportTheme = "light",
-    ) -> PalaceAmrReport:
-        """Display the offline AMR analysis without changing its source observations."""
-        return show_amr_analysis(analyze_amr(self, reference), theme=theme)
-
     def epr_result(self):
         """Detach the verified final Eigenmode EPR quantities for offline work."""
 
@@ -131,7 +113,6 @@ class ResolvedPalaceResult(ResolvedRunData):
         theme: str = "light",
         ranking_limit: int | None = 20,
         show_details: bool = False,
-        amr_analysis: PalaceAmrAnalysis | None = None,
     ) -> None:
         """Display identity, benchmark and physics views in the established notebook sequence."""
         show_all_results(
@@ -139,7 +120,6 @@ class ResolvedPalaceResult(ResolvedRunData):
             theme=cast(ReportTheme, theme),
             ranking_limit=ranking_limit,
             show_details=show_details,
-            amr_analysis=amr_analysis,
         )
 
     def show_physics_quantities(
@@ -154,12 +134,9 @@ class ResolvedPalaceResult(ResolvedRunData):
         self,
         *,
         show_details: bool = False,
-        amr_analysis: PalaceAmrAnalysis | None = None,
     ):
         """Project recorded run cost and timing while retaining complete benchmark metadata."""
-        return show_simulation_benchmark(
-            self, show_details=show_details, amr_analysis=amr_analysis
-        )
+        return show_simulation_benchmark(self, show_details=show_details)
 
 
 def resolve_palace_result(

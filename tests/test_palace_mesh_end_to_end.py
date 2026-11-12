@@ -22,7 +22,6 @@ from test_sgb_curved_port_landing import circular_pad_input
 
 from scgsim.meshing import Budgets, MesherOptions, MeshRepairError
 from scgsim.palace.mesh.native import lower_mesh_in_current_process
-from scgsim.palace.mesh.quality.reader import read_msh22
 from scgsim.palace.mesh.summary import mesh_summary
 from scgsim.palace.preparation.config import (
     LayoutPortBinding,
@@ -45,6 +44,22 @@ pytestmark = pytest.mark.slow
 SPECS = surface_epr_specs(MA=[0.5, 1.0], MS=[0.5, 1.0], SA=[0.5])
 
 
+def physical_names(mesh_path):
+    """(dimension, tag) -> name of every physical group of a written mesh, read by Gmsh."""
+    import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only where a native mesh is checked.
+
+    gmsh.initialize(["-noenv"])
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        gmsh.open(str(mesh_path))
+        return {
+            (dim, tag): gmsh.model.getPhysicalName(dim, tag)
+            for dim, tag in gmsh.model.getPhysicalGroups()
+        }
+    finally:
+        gmsh.finalize()
+
+
 def check_run(result, route):
     """Everything every run must satisfy: layout, MSH 2.2, attributes in the mesh, manifest, PEC and Terminal."""
     run = result.output_dir
@@ -61,8 +76,8 @@ def check_run(result, route):
     ]
     assert not (run / "metadata" / "semantic_geometry").exists()
     assert not (run / "geometry" / ".unbanded").exists()
-    mesh = read_msh22(run / "palace.msh")
-    assert mesh.physical_names
+    names = physical_names(run / "palace.msh")
+    assert names
     manifest = json.loads(result.mesh_manifest_path.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 2
     assert manifest["source"]["scgsim_sgb"] == "scgsim.geometry.sgb"
@@ -80,9 +95,9 @@ def check_run(result, route):
     listed = {
         (e["dimension"], e["attributes"][0]): e["name"] for e in manifest["groups"]
     }
-    assert listed == {key: name for key, name in mesh.physical_names.items()}
+    assert listed == names
     assert {e["group"] for e in manifest["groups"]} >= set(result.groups["volumes"])
-    return manifest, mesh
+    return manifest, names
 
 
 def config_of(result, route, specs=None):
@@ -118,10 +133,10 @@ def config_attributes(config):
     return {(2, a) for a in boundary}, {(3, a) for a in domains}
 
 
-def assert_config_binds_the_mesh(config, mesh):
+def assert_config_binds_the_mesh(config, names):
     """Every attribute of the config is a physical group of the mesh, in its dimension."""
     surfaces, volumes = config_attributes(config)
-    assert (surfaces | volumes) <= set(mesh.physical_names)
+    assert (surfaces | volumes) <= set(names)
 
 
 @pytest.fixture(scope="module")
@@ -144,8 +159,7 @@ def test_a_component_meshes_to_a_palace_mesh_and_a_config(route, route_a, route_
     """Routes A and B: mesh, manifest and config agree, with bands as separate groups."""
     result = {"A": route_a, "B": route_b}[route]
     manifest, mesh = check_run(result, route)
-    names = set(mesh.physical_names.values())
-    assert banded_groups_of(result) and banded_groups_of(result) <= names
+    assert banded_groups_of(result) and banded_groups_of(result) <= set(mesh.values())
     config = config_of(result, route, SPECS)
     assert_config_binds_the_mesh(config.config, mesh)
     assert manifest["route"] == route
@@ -511,7 +525,7 @@ def test_the_custom_path_bands_one_conductor_with_its_own_margins(route, tmp_pat
     other_rows = [m for n, m in ma_margins.items() if entity not in n]
     assert own_rows == [own]
     assert other_rows and all(m == rest for m in other_rows)
-    assert_config_binds_the_mesh(config.config, read_msh22(result.mesh_path))
+    assert_config_binds_the_mesh(config.config, physical_names(result.mesh_path))
 
 
 def test_a_sheet_asked_the_same_margins_in_different_spellings_by_ma_and_ms_meshes(
@@ -533,4 +547,4 @@ def test_a_sheet_asked_the_same_margins_in_different_spellings_by_ma_and_ms_mesh
     config = config_of(result, "A", specs)
     margins = assert_margin_rows_select_the_bands_of_their_families(result, config)
     assert {name.split("::")[0] for name in margins} == {"MA", "MS"}
-    assert_config_binds_the_mesh(config.config, read_msh22(result.mesh_path))
+    assert_config_binds_the_mesh(config.config, physical_names(result.mesh_path))

@@ -8,10 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scgsim.palace.execution.returned_receipt import (
-    adapted_mesh_output_paths,
-    amr_diagnostic_output_paths,
-)
+from scgsim.palace.execution.returned_receipt import adapted_mesh_output_paths
 from scgsim.palace.results.artifacts import (
     compute_hash_entry,
     compute_input_hash_entry,
@@ -375,9 +372,6 @@ def _validate_returned_outputs(
         index_counts=count_index_entries(index_map),
     )
     config = read_json(root / "config.json")
-    required_outputs += tuple(
-        {"path": relative} for relative in amr_diagnostic_output_paths(root, config)
-    )
     if handoff_metadata.get("palace_identity", {}).get("config_schema") == "1-7-0":
         required_outputs += tuple(
             {"path": relative} for relative in adapted_mesh_output_paths(root, config)

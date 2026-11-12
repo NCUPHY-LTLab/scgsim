@@ -31,7 +31,6 @@ class _AmrSettings:
     update_fraction: float | None
     save_iterations: bool | None
     save_mesh: bool | None
-    save_diagnostics: bool | None
     estimator_mg: bool | None
     output_paraview: bool | None
     output_grid_function: bool | None
@@ -59,7 +58,6 @@ def configure_numerical_controls(  # noqa: PLR0913 - stable named notebook contr
     amr_update_fraction: float | None = None,
     save_adapt_iterations: bool | None = None,
     save_adapt_mesh: bool | None = None,
-    save_adapt_diagnostics: bool | None = None,
     estimator_mg: bool | None = None,
     output_paraview: bool | None = None,
     output_grid_function: bool | None = None,
@@ -91,7 +89,6 @@ def configure_numerical_controls(  # noqa: PLR0913 - stable named notebook contr
         amr_update_fraction,
         save_adapt_iterations,
         save_adapt_mesh,
-        save_adapt_diagnostics,
         estimator_mg,
         output_paraview,
         output_grid_function,
@@ -159,7 +156,6 @@ def _validate_amr_controls(
     _validate_update_fraction(update_fraction)
     _validate_optional_boolean(settings.save_iterations, "save_adapt_iterations")
     _validate_optional_boolean(settings.save_mesh, "save_adapt_mesh")
-    _validate_optional_boolean(settings.save_diagnostics, "save_adapt_diagnostics")
     _validate_optional_boolean(settings.estimator_mg, "estimator_mg")
     _validate_optional_boolean(settings.output_paraview, "output_paraview")
     _validate_optional_boolean(settings.output_grid_function, "output_grid_function")
@@ -218,8 +214,6 @@ def _assemble_controls(
         controls["ksp_type"] = solver.ksp_type
     if amr.nc_levels is not None:
         controls["amr_nc_levels"] = amr.nc_levels
-    if amr.save_diagnostics is not None:
-        controls["save_adapt_diagnostics"] = amr.save_diagnostics
     if amr.save_mesh is not None:
         controls["save_adapt_mesh"] = amr.save_mesh
     return controls
@@ -286,8 +280,6 @@ def build_refinement(numerical: Mapping[str, Any]) -> dict[str, Any]:
         refinement["Tol"] = float(numerical["amr_tolerance"])
     if numerical.get("save_adapt_iterations") is not None:
         refinement["SaveAdaptIterations"] = bool(numerical["save_adapt_iterations"])
-    if numerical.get("save_adapt_diagnostics") is not None:
-        refinement["SaveAdaptDiagnostics"] = bool(numerical["save_adapt_diagnostics"])
     if numerical.get("save_adapt_mesh") is not None:
         refinement["SaveAdaptMesh"] = bool(numerical["save_adapt_mesh"])
     if numerical.get("amr_update_fraction") is not None:

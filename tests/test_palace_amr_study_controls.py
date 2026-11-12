@@ -67,7 +67,6 @@ def test_electrostatic_defaults_use_cg_boomeramg_without_changing_case_controls(
     assert config["Solver"]["Device"] == "CPU"
     assert config["Solver"]["Electrostatic"]["Save"] == 0
     assert "MaxNCLevels" not in config["Model"]["Refinement"]
-    assert "SaveAdaptDiagnostics" not in config["Model"]["Refinement"]
 
 
 def test_explicit_study_settings_lower_from_public_setters_without_json_edits() -> None:
@@ -84,7 +83,6 @@ def test_explicit_study_settings_lower_from_public_setters_without_json_edits() 
         amr_nc_levels=1,
         save_adapt_iterations=True,
         save_adapt_mesh=True,
-        save_adapt_diagnostics=True,
         output_paraview=True,
         output_grid_function=False,
         device="CPU",
@@ -100,7 +98,6 @@ def test_explicit_study_settings_lower_from_public_setters_without_json_edits() 
         "UpdateFraction": 0.7,
         "SaveAdaptIterations": True,
         "SaveAdaptMesh": True,
-        "SaveAdaptDiagnostics": True,
     }
     assert config["Solver"] == {
         "Order": 2,
@@ -173,17 +170,13 @@ def test_direct_mumps_solver_controls_remain_explicit() -> None:
 def test_new_optional_controls_retain_choices_across_later_setters(
     sim_type: Any,
 ) -> None:
-    """Keep explicit native-default Krylov, unlimited NC levels and diagnostics opt-out."""
+    """Keep explicit native-default Krylov and unlimited NC levels."""
     sim = sim_type()
-    sim.set_numerical(ksp_type="Default", amr_nc_levels=0, save_adapt_diagnostics=False)
+    sim.set_numerical(ksp_type="Default", amr_nc_levels=0)
     sim.set_numerical(order=2)
     sim.set_mesh(quality_threshold=0.02)
     assert sim.numerical["ksp_type"] == "Default"
     assert build_refinement({**sim.numerical, "amr_max_passes": 0})["MaxNCLevels"] == 0
-    assert (
-        build_refinement({**sim.numerical, "amr_max_passes": 0})["SaveAdaptDiagnostics"]
-        is False
-    )
 
 
 @pytest.mark.parametrize(
@@ -193,7 +186,6 @@ def test_new_optional_controls_retain_choices_across_later_setters(
         {"amr_nc_levels": True},
         {"amr_nc_levels": 1.5},
         {"ksp_type": "unknown"},
-        {"save_adapt_diagnostics": 1},
     ),
 )
 @pytest.mark.parametrize("sim_type", (ElectrostaticSim, EigenmodeSim))
