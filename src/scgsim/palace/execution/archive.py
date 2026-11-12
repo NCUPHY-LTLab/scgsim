@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_LEGACY_INNER_ARCHIVE = "palace_handoff.tar.gz"
-
 
 def sibling_run_archive_path(run_dir: Path) -> Path:
     """Return `{run_dir.name}.tar.gz` beside the run folder."""
@@ -26,17 +24,16 @@ def run_archive_arcname(run_dir: Path, path: Path) -> str:
 def logical_tar_member_name(member_name: str, folder: str) -> str | None:
     """Map a tar member name onto a path inside the run folder.
 
-    New archives prefix members with the run folder name. Legacy archives store
-    run-folder-relative paths at the tar root. The top-level folder member has
-    no logical path.
+    Every member is prefixed with the run folder name; the top-level folder member has no logical path,
+    and a member outside the folder is refused.
     """
     name = member_name.replace("\\", "/").rstrip("/")
     prefix = f"{folder}/"
     if name == folder:
         return None
-    if name.startswith(prefix):
-        return name[len(prefix) :]
-    return name
+    if not name.startswith(prefix):
+        raise ValueError(f"archive member {member_name!r} is outside the run folder.")
+    return name[len(prefix) :]
 
 
 def resolve_run_archive_path(root: Path, relative: str) -> Path:
@@ -48,11 +45,6 @@ def resolve_run_archive_path(root: Path, relative: str) -> Path:
     if relative == expected:
         candidate = sibling_run_archive_path(root).resolve()
         if candidate.parent != root.parent:
-            raise ValueError("artifact path escapes the run directory.")
-        return candidate
-    if relative == _LEGACY_INNER_ARCHIVE:
-        candidate = (root / relative).resolve()
-        if not candidate.is_relative_to(root):
             raise ValueError("artifact path escapes the run directory.")
         return candidate
     raise ValueError(

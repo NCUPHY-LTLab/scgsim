@@ -9,9 +9,10 @@ from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.contracts.sgb_sidecar.records import InsetRequest
 
 from .physical_groups import Groups
-from .provenance import SGB_RUNTIME_AUTHORITY
 
 MANIFEST_SCHEMA_VERSION = 2
+# The geometry producer the manifest, the route provenance and the handoff record.
+SGB_RUNTIME_AUTHORITY = "scgsim.geometry.sgb"
 
 _ATTRIBUTE_FIELDS = (
     "interface_type",

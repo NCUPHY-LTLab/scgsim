@@ -26,16 +26,12 @@ from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports
-from .transforms import (
-    RouteAThinFilm,
-    apply_airbox_to_stack,
-    normalized_component_input,
-)
+from .transforms import RouteAThinFilm
 
 
 @dataclass(frozen=True)
 class PreparedMeshInput:
-    """Values prepared before a simulation applies its airbox and builds a mesh."""
+    """Values prepared before a simulation builds a mesh."""
 
     component: Any
     stack: Mapping[str, Any]
@@ -53,9 +49,8 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
     route_a_thin_film: RouteAThinFilm | None,
     vacuum_region: VacuumRegionSpec | None,
     indium_ground_bumps: Mapping[str, Any] | None,
-    build_input: GeometryBuildInput | None = None,
+    build_input: GeometryBuildInput,
     approximation_profile: ApproximationProfile | None = None,
-    airbox: Mapping[str, Any] | None = None,
     port_sheet_source_layers: Sequence[Mapping[str, Any]] | None = None,
 ) -> PreparedMeshInput:
     """Apply the common transforms while preserving their established order."""
@@ -72,7 +67,6 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
         )
         prepared_component = indium_fill["component"]
         prepared_stack = indium_fill["stack"]
-    prepared_stack = apply_airbox_to_stack(prepared_stack, airbox or {})
     if port_sheet_source_layers is not None:
         prepared_stack = {
             **prepared_stack,
@@ -84,12 +78,9 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
         prepared_stack = with_port_sheet_metadata(
             prepared_stack, port_sheet_source_layers
         )
-    if build_input is None:
-        build_input = normalized_component_input(prepared_component, prepared_stack)
-    else:
-        # Synchronize source selections before the single physical interpretation.
-        build_input = _synchronize_solution_regions(build_input, prepared_stack)
-        build_input = _select_authored_ports(build_input, port_sheet_source_layers)
+    # Synchronize source selections before the single physical interpretation.
+    build_input = _synchronize_solution_regions(build_input, prepared_stack)
+    build_input = _select_authored_ports(build_input, port_sheet_source_layers)
     if indium_fill is not None:
         build_input = replace(
             build_input,

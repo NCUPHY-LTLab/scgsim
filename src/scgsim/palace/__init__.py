@@ -27,7 +27,7 @@ from .results.epr import (
     resolve_epr_result,
     show_epr,
 )
-from .results.report_data import (
+from .results.report_models import (
     PalaceFailureDiagnosis,
     PalaceResultSelection,
     PassCostRecord,

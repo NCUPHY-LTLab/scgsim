@@ -1,7 +1,7 @@
 """The geometry request of a Palace simulation with lumped ports: its ports resolved and its geometry input prepared.
 
 ``layout_geometry_request`` is everything before the SGB build of a simulation whose layout sheets are
-lumped ports: it binds each requested port to an authored sheet of the plan or the Component, then
+lumped ports: it binds each requested port to an authored sheet of the plan, then
 prepares the geometry input with exactly the sheets requested.  ``EigenmodeSim`` builds its model from
 it in ``mesh()`` and in ``simulation_drc``, and ``input_summary()`` summarises the same prepared input, so
 the summary shows the vacuum, ports and conductors the model is built from.  The request holds no
@@ -21,7 +21,7 @@ from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
 from .config import LayoutPortBinding
-from .ports import RequestedPort, resolve_layout_ports
+from .ports import RequestedPort
 from .transforms import RouteAThinFilm
 from .workflow import prepare_mesh_input
 
@@ -33,7 +33,6 @@ class GeometrySettings:
     route: str
     route_a_thin_film: RouteAThinFilm | None
     approximation_profile: ApproximationProfile | None
-    airbox: Mapping[str, Any]
     vacuum_region: VacuumRegionSpec | None
     indium_ground_bumps: Mapping[str, Any] | None
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None
@@ -55,24 +54,11 @@ class LayoutGeometryRequest:
 
 def layout_geometry_request(
     *,
-    plan: GeometryPlanSnapshot | None,
-    component: Any,
-    stack: Mapping[str, Any],
-    ports: list[RequestedPort],
-    settings: GeometrySettings,
-) -> LayoutGeometryRequest:
-    """Resolve ``ports`` and prepare the geometry input, for a bound plan or else a standalone Component and ``stack``."""
-    if plan is None:
-        return _component_request(component, stack, ports, settings)
-    return _plan_request(plan, ports, settings)
-
-
-def _plan_request(
     plan: GeometryPlanSnapshot,
     ports: list[RequestedPort],
     settings: GeometrySettings,
 ) -> LayoutGeometryRequest:
-    """The request of a plan: ports bound to its authored sheets, its own geometry input and stack."""
+    """Resolve ``ports`` to the plan's authored sheets and prepare the plan's own geometry input and stack."""
     if (
         settings.indium_ground_bumps is not None
         and settings.indium_ground_bumps["fill"]
@@ -88,7 +74,6 @@ def _plan_request(
         route=settings.route,
         route_a_thin_film=settings.route_a_thin_film,
         approximation_profile=settings.approximation_profile,
-        airbox=settings.airbox,
         vacuum_region=(
             None
             if "VACUUM_REGION" in source_stack["solution_regions"]
@@ -101,7 +86,6 @@ def _plan_request(
     return LayoutGeometryRequest(
         resolved,
         {
-            "component": None,
             "stack": prepared.stack,
             "route": settings.route,
             "surface_epr_specs": settings.surface_epr_specs,
@@ -144,42 +128,6 @@ def _resolve_plan_ports(
         )
         source_records.append({**record, "port_index": len(resolved)})
     return resolved, source_records
-
-
-def _component_request(
-    component: Any,
-    stack: Mapping[str, Any],
-    ports: list[RequestedPort],
-    settings: GeometrySettings,
-) -> LayoutGeometryRequest:
-    """The request of a standalone Component: ports bound to its authored ports, its input normalized from ``stack``."""
-    resolved, source_records = (
-        resolve_layout_ports(component, ports) if ports else ([], [])
-    )
-    prepared = prepare_mesh_input(
-        component=component,
-        stack=stack,
-        route=settings.route,
-        route_a_thin_film=settings.route_a_thin_film,
-        approximation_profile=settings.approximation_profile,
-        airbox=settings.airbox,
-        vacuum_region=settings.vacuum_region,
-        indium_ground_bumps=settings.indium_ground_bumps,
-        port_sheet_source_layers=source_records,
-    )
-    return LayoutGeometryRequest(
-        resolved,
-        {
-            "component": prepared.component,
-            "stack": prepared.stack,
-            "route": settings.route,
-            "surface_epr_specs": settings.surface_epr_specs,
-            "indium_ground_bump_fill": prepared.indium_ground_bump_fill,
-            "source_geometry_input": prepared.geometry_input,
-            "representation_context": prepared.physical_plan.context,
-        },
-        prepared.materials,
-    )
 
 
 __all__ = [

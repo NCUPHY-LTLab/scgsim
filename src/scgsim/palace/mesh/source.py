@@ -1,4 +1,4 @@
-"""Write paired mesh source artifacts (GDS, stack, receipts) and validate the declared Route-A film provenance."""
+"""Write paired mesh records (JSON, receipts) and validate the declared Route-A film provenance."""
 
 from __future__ import annotations
 
@@ -88,51 +88,3 @@ def route_a_thin_film_provenance(
     ):
         raise ValueError("Route A thin-film source-stack identity is invalid.")
     return result
-
-
-def write_component_gds(component: Any, path: Path) -> None:
-    """Write the component's GDS, supporting both string and pathlib styles."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_gds = getattr(component, "write_gds", None)
-    if write_gds is None or not callable(write_gds):
-        raise TypeError("component must provide write_gds(path)")
-
-    try:
-        write_gds(path)
-    except TypeError:
-        write_gds(str(path))
-
-
-def component_gds_top_cell_name(*, component: Any, gds_path: Path) -> str:
-    """Select a deterministic top cell name for SGB input."""
-    try:
-        import gdstk  # noqa: PLC0415 -- GDS validation needs the optional Palace extra.
-    except ImportError as exc:  # pragma: no cover - optional
-        raise ImportError("gdstk is required for SGB input validation") from exc
-
-    library = gdstk.read_gds(str(gds_path))
-    cells_by_name = {cell.name: cell for cell in library.cells}
-
-    component_name = str(getattr(component, "name", "component"))
-    candidates = [
-        component_name,
-        component_name.split("$", 1)[0],
-        "component",
-    ]
-    for candidate in candidates:
-        if not candidate:
-            continue
-        if candidate in cells_by_name:
-            return candidate
-
-    top_cells = sorted(
-        (cell for cell in library.top_level() if not str(cell.name).startswith("$$$")),
-        key=lambda item: str(item.name),
-    )
-    if len(top_cells) != 1:
-        names = ", ".join(sorted(cell.name for cell in top_cells))
-        raise ValueError(
-            "SGB GDS export needs deterministic top-level cell selection. "
-            f"Candidates: {names}"
-        )
-    return top_cells[0].name

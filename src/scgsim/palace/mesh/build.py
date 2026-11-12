@@ -25,26 +25,20 @@ from scgsim.geometry.sgb import SgbArtifacts
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.surface_epr.build import build_banded_geometry
 from scgsim.meshing import (
-    Budgets,
     FineStructureLimits,
-    MesherOptions,
     MeshResult,
-    SizingRecipe,
     mesh_sgb,
 )
 from scgsim.meshing.fine_structure import below_steps
 from scgsim.preparation import native_preparation
 
 from .controls import MeshControls
-from .manifest import build_mesh_manifest
+from .manifest import SGB_RUNTIME_AUTHORITY, build_mesh_manifest
 from .physical_groups import Groups, groups_from_sidecar
 from .process import lower_mesh_in_worker
-from .provenance import SGB_RUNTIME_AUTHORITY
 from .source import (
-    component_gds_top_cell_name,
     route_a_thin_film_provenance,
     scgsim_version,
-    write_component_gds,
     write_indium_ground_bump_receipt,
     write_json,
 )
@@ -63,51 +57,6 @@ class MeshBuildResult:
     xao_path: Path
     sidecar_path: Path
     quality_report_path: Path
-
-
-def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparation API.
-    *,
-    component: Any,
-    stack: Mapping[str, Any],
-    route: str,
-    output_dir: str | Path,
-    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
-    recipe: SizingRecipe | None = None,
-    mesher: MesherOptions | None = None,
-    budgets: Budgets | None = None,
-    quality_threshold: float | None = None,
-    port_sheet_source_layers: Sequence[Mapping[str, Any]] = (),
-    indium_ground_bump_fill: Mapping[str, Any] | None = None,
-    source_gds_bytes: bytes | None = None,
-    source_geometry_input: GeometryBuildInput | None = None,
-    representation_context: RepresentationContext | None = None,
-) -> MeshBuildResult:
-    """Build Route-A/Route-B SGB geometry, mesh it to the quality threshold, and emit artifacts.
-
-    ``surface_epr_specs`` supply the inset margins that SGB cuts into the geometry as bands.  A mesh the
-    meshing module cannot bring to ``quality_threshold`` raises :class:`scgsim.meshing.MeshRepairError`
-    carrying the quality report.  This is :func:`build_route_geometry` then :func:`mesh_route_geometry`;
-    the simulations' ``mesh()`` calls the two itself, so that its meshing-stage check runs between them.
-    """
-    controls = MeshControls().updated(
-        recipe=recipe,
-        mesher=mesher,
-        budgets=budgets,
-        quality_threshold=quality_threshold,
-    )
-    built = build_route_geometry(
-        component=component,
-        stack=stack,
-        route=route,
-        output_dir=output_dir,
-        surface_epr_specs=surface_epr_specs,
-        port_sheet_source_layers=port_sheet_source_layers,
-        indium_ground_bump_fill=indium_ground_bump_fill,
-        source_gds_bytes=source_gds_bytes,
-        source_geometry_input=source_geometry_input,
-        representation_context=representation_context,
-    )
-    return mesh_route_geometry(built, controls)
 
 
 @diagnostic_stage("palace.mesh.prepare")
@@ -214,22 +163,21 @@ class RouteGeometry:
 
 
 @diagnostic_stage("palace.mesh.geometry")
-def build_route_geometry(  # noqa: PLR0913 -- the keyword set of build_route_mesh, minus the mesh controls.
+def build_route_geometry(  # noqa: PLR0913 -- the plan's sources, its prepared input, and the route and bands
     *,
-    component: Any,
     stack: Mapping[str, Any],
     route: str,
     output_dir: str | Path,
+    source_gds_bytes: bytes,
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
     port_sheet_source_layers: Sequence[Mapping[str, Any]] = (),
     indium_ground_bump_fill: Mapping[str, Any] | None = None,
-    source_gds_bytes: bytes | None = None,
     source_geometry_input: GeometryBuildInput | None = None,
     representation_context: RepresentationContext | None = None,
 ) -> RouteGeometry:
     """Write the sources and build the Route-A/Route-B SGB geometry, the stages of a mesh before meshing.
 
-    This is the modeling path ``build_route_mesh`` and the layout modeling check share: a layout SGB
+    This is the modeling path ``mesh()`` and the layout modeling check share: a layout SGB
     cannot model is refused here, with the error SGB raises.  A Surface-EPR band narrower than the
     meshing stage's face-width limit is refused first, before anything is written or built.
     """
@@ -238,14 +186,14 @@ def build_route_geometry(  # noqa: PLR0913 -- the keyword set of build_route_mes
             "fresh Palace mesh requires neutral effective geometry input and representation_context from preparation"
         )
     if not isinstance(stack, Mapping):
-        raise TypeError("stack must be a mapping after set_stack processing.")
+        raise TypeError("stack must be a mapping.")
     if route not in {"A", "B"}:
         raise ValueError("route must be either 'A' or 'B'.")
     _refuse_bands_narrower_than_a_face(surface_epr_specs, source_geometry_input)
     thin_film = route_a_thin_film_provenance(stack, route)
     stack = with_port_sheet_metadata(stack, port_sheet_source_layers)
     paths = _prepare_paths(output_dir, route)
-    top_cell = _write_sources(component, stack, source_gds_bytes, paths)
+    top_cell = _write_sources(stack, source_gds_bytes, paths)
     _write_optional_bump_receipt(indium_ground_bump_fill, paths)
     artifacts = build_banded_geometry(
         source_geometry_input,
@@ -343,29 +291,19 @@ def _prepare_paths(output_dir: str | Path, route: str) -> BuildPaths:
 
 
 def _write_sources(
-    component: Any,
-    stack: Mapping[str, Any],
-    source_gds_bytes: bytes | None,
-    paths: BuildPaths,
+    stack: Mapping[str, Any], source_gds_bytes: bytes, paths: BuildPaths
 ) -> str:
-    if source_gds_bytes is None:
-        if component is None:
-            raise ValueError("component or immutable plan GDS source is required")
-        write_component_gds(component=component, path=paths.gds_path)
-        top_cell = component_gds_top_cell_name(
-            component=component, gds_path=paths.gds_path
-        )
-    else:
-        if component is not None or not isinstance(source_gds_bytes, bytes):
-            raise TypeError("plan GDS bytes cannot be mixed with a live component")
-        wanted = stack.get("metadata", {}).get("gds_sha256")
-        observed = hashlib.sha256(source_gds_bytes).hexdigest()
-        if wanted != observed:
-            raise ValueError("plan GDS bytes differ from paired stack source")
-        top_cell = stack.get("metadata", {}).get("top_cell_name")
-        if not isinstance(top_cell, str) or not top_cell:
-            raise ValueError("plan stack requires top_cell_name")
-        paths.gds_path.write_bytes(source_gds_bytes)
+    """Write the plan's GDS bytes and the stack paired with them; return the plan's top cell."""
+    if not isinstance(source_gds_bytes, bytes):
+        raise TypeError("plan GDS source must be bytes")
+    wanted = stack.get("metadata", {}).get("gds_sha256")
+    observed = hashlib.sha256(source_gds_bytes).hexdigest()
+    if wanted != observed:
+        raise ValueError("plan GDS bytes differ from paired stack source")
+    top_cell = stack.get("metadata", {}).get("top_cell_name")
+    if not isinstance(top_cell, str) or not top_cell:
+        raise ValueError("plan stack requires top_cell_name")
+    paths.gds_path.write_bytes(source_gds_bytes)
     paths.stack_path.write_text(
         json.dumps(dict(stack), indent=2) + "\n", encoding="utf-8"
     )
