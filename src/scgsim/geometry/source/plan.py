@@ -23,7 +23,12 @@ from scgsim.geometry.models.junctions import RectangularJunctionSpec
 from scgsim.geometry.primitives.grid import source_recipe_map
 from scgsim.geometry.primitives.grid_cache import with_grid_work_cache
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
-from scgsim.geometry.source.curves import boundary_binding, transform_boundary
+from scgsim.geometry.source.curves import (
+    boundary_binding,
+    occurrence_drawn_walks,
+    transform_boundary,
+    with_drawn_rings,
+)
 from scgsim.geometry.source.grid import with_source_grid
 from scgsim.geometry.source.normalization import (
     finite_number,
@@ -667,6 +672,17 @@ class GeometryPlan:
             metadata=metadata,
             boundary_curves=tuple(boundary_curves),
             boundary_reconstruction=tuple(reconstruction),
+        )
+        # Reconstruction indices name rings as drawn in the GDS; the source stage has
+        # since fused, rounded and noded them, so each polygon keeps its drawn rings.
+        build_input = with_drawn_rings(
+            build_input,
+            occurrence_drawn_walks(
+                self._instances,
+                source.source_cells,
+                source.child_reference_indexes,
+                build_input,
+            ),
         )
         if self._rectangular_junctions:
             from scgsim.geometry.source.junctions import (  # noqa: PLC0415 - only used when junction requests are present

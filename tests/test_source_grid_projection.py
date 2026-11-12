@@ -25,10 +25,11 @@ def test_projection_preserves_complete_public_payload_hash():
     build = replace(build, metadata={**build.metadata, "source_dbu_um": 0.001})
     projected = apply_geometry_grid(build, GeometryGridContext(0.001))
 
-    # The typed Route B fixture uses cutout_boundary_shell.
+    # The typed Route B fixture uses cutout_boundary_shell.  Its polygons are built by
+    # hand, so their drawn_rings stay empty.
     assert _payload_sha256(projected) == (
         # Issue #67 decision 8 removed the empty lumped_supports field; nothing else changed.
-        "990e2bef8cf54fc912a38e2c7ae4927cc192fd48383cc9730bb8a9502e5344db"
+        "33849a6cd2861fb625e30835b40923b8f0f7778c2b195ada136c79f4380a1f84"
     )
 
 

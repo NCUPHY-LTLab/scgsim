@@ -24,7 +24,6 @@ from test_simulation_drc import LAYER_STACK, MATERIALS, check, level, two_pads
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
-    GdsBoundaryReconstructionSpec,
     SourceCurveSpec,
 )
 from scgsim.geometry.primitives.grid import geometry_grid_scope
@@ -481,21 +480,24 @@ def square_chain(boundary_id, role="outer", hole_index=None):
 
 
 def test_an_authored_and_a_reconstructed_boundary_of_one_ring_are_located(tmp_path):
-    """An authored chain and a reconstruction both select the pad's ring (40, 40)..(60, 60) um."""
-    pad = gds_pad_in_ground(tmp_path, with_port=False)
-    reconstruction = GdsBoundaryReconstructionSpec(
-        "pad_corner",
-        "pad",
-        (50.0, 50.0),
-        "circular_arc",
-        segment_indices=(0, 1),
-        anchor_indices=(0, 1, 2),
+    """An authored chain and a reconstruction both select the pad's ring (40, 40)..(60, 60) um.
+
+    The reconstruction is declared in the stack file, on the pad as drawn: its first two sides.
+    """
+    reconstruction = {
+        "boundary_id": "pad_corner",
+        "entity_id": "pad",
+        "selector_point_um": [50.0, 50.0],
+        "kind": "circular_arc",
+        "segment_indices": [0, 1],
+        "anchor_indices": [0, 1, 2],
+    }
+    pad = gds_pad_in_ground(
+        tmp_path,
+        with_port=False,
+        extra_metadata={"boundary_reconstruction": [reconstruction]},
     )
-    curved = with_boundaries(
-        pad,
-        boundary_curves=(square_chain("pad_outline"),),
-        boundary_reconstruction=(reconstruction,),
-    )
+    curved = with_boundaries(pad, boundary_curves=(square_chain("pad_outline"),))
     with pytest.raises(InputError) as error:
         build_prism_catalogue(curved.build_input, curved.representation)
     message = str(error.value)
