@@ -16,6 +16,8 @@ one -- so the unions are lists of primary group names, never overlapping Gmsh gr
 
 The face names, with the qualifier a band collision needs, come from
 :func:`~scgsim.geometry.sgb.routes.face_names.name_faces`; everything below reads those final names.
+What routing decides about each face besides its name -- interface type, Net, face kind and the sides
+of a sheet's Surface-EPR rows -- is a :class:`RoutedFace`, decided here once; the sidecar reads it.
 
 Native tags are never part of this plan; they follow sorted group names and are only
 recorded by emission.
@@ -26,11 +28,12 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from scgsim.geometry.sgb.assembly.records import Topology
+from scgsim.geometry.sgb.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.routes.face_names import name_faces
 from scgsim.geometry.sgb.routes.naming import (
     SHEET,
+    face_kind,
     interface_type_of,
     net_of_surface,
     sheet_face_sides,
@@ -48,6 +51,41 @@ class PhysicalGroup:
     ids: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class RoutedFace:
+    """What routing decides about one face, from the domains on its sides and its sheet owner.
+
+    ``interface_type`` is ``MA``, ``MS``, ``MM``, ``SA``, ``AA``, ``SS``, ``EXT``, ``PORT`` or ``SHEET``
+    (``None`` for a face without a name); ``net`` the Net whose exposed conductor surface the face is;
+    ``face_kind`` ``top``, ``bottom``, ``sidewall``, ``sheet``, ``interface`` or ``port``; ``sheet_sides``, for
+    a ``SHEET`` face, the Surface-EPR row types of the face and the side each integrates
+    (:func:`~scgsim.geometry.sgb.routes.naming.sheet_face_sides`), empty for every other face.  The face's
+    group is ``RoutedModel.face_group``.
+    """
+
+    interface_type: str | None
+    net: str | None
+    face_kind: str
+    sheet_sides: dict[str, str]
+
+
+def route_face(face: TopoFace) -> RoutedFace:
+    """The facts of one face (:class:`RoutedFace`)."""
+    interface = interface_type_of(face.neg_domain, face.pos_domain, face.owner)
+    return RoutedFace(
+        interface_type=interface,
+        net=net_of_surface(face.neg_domain, face.pos_domain, face.owner),
+        face_kind=face_kind(
+            face.neg_domain, face.pos_domain, face.owner, vertical=face.kind == "wall"
+        ),
+        sheet_sides=(
+            sheet_face_sides(face.neg_domain, face.pos_domain)
+            if interface == SHEET
+            else {}
+        ),
+    )
+
+
 @dataclass
 class RoutedModel:
     """The topology seen through one route."""
@@ -57,6 +95,7 @@ class RoutedModel:
     face_group: dict[
         str, str | None
     ]  # every face -> its primary group (None for a face without a name)
+    faces: dict[str, RoutedFace]  # every face -> what routing decided about it
     groups: dict[
         str, PhysicalGroup
     ]  # primary groups of emitted entities; they partition each dimension
@@ -78,6 +117,7 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
         vid for vid, v in topology.volumes.items() if policy.is_emitted(v.domain)
     )
     face_group = name_faces(topology, emitted)
+    faces = {fid: route_face(face) for fid, face in topology.faces.items()}
     groups: dict[str, PhysicalGroup] = {}
     # surface group -> its interface type, from the face structure (never from the name)
     group_types: dict[str, str] = {}
@@ -93,23 +133,19 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
         if group is None or not bounds_emitted:
             continue
         groups.setdefault(group, PhysicalGroup(2)).ids.append(fid)
-        interface = interface_type_of(face.neg_domain, face.pos_domain, face.owner)
+        routed = faces[fid]
+        interface = routed.interface_type
         if interface is not None:
             group_types[group] = interface
             entity = face.owner.name if face.owner is not None else ""
             band = face.bands[0][1] if face.bands else None
-            sheet_sides = (
-                sheet_face_sides(face.neg_domain, face.pos_domain)
-                if interface == SHEET
-                else None
-            )
-            if sheet_sides is not None:
-                sheet_row_types[group].update(sheet_sides)
-            for row in surface_epr_row_ids(group, interface, entity, band, sheet_sides):
+            sheet_row_types[group].update(routed.sheet_sides)
+            for row in surface_epr_row_ids(
+                group, interface, entity, band, routed.sheet_sides
+            ):
                 epr_rows[row] = group
-        net = net_of_surface(face.neg_domain, face.pos_domain, face.owner)
-        if net is not None:
-            net_groups[f"NET::{net}"].add(group)
+        if routed.net is not None:
+            net_groups[f"NET::{routed.net}"].add(group)
     for vid, volume in sorted(topology.volumes.items()):
         if vid in emitted:
             name = volume_group(volume.domain)
@@ -125,6 +161,7 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
         policy,
         emitted,
         face_group,
+        faces,
         ordered,
         _unions(group_types, sheet_row_types, net_groups),
         dict(sorted(epr_rows.items())),

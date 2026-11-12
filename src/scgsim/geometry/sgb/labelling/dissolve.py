@@ -32,7 +32,7 @@ from scgsim.geometry.sgb.noding.snap_rounding import (
     hits_kernel,
 )
 from scgsim.geometry.sgb.plane import Point, point_in_ring
-from scgsim.geometry.sgb.records.carriers import MEMBER_ONLY, base_carrier_id
+from scgsim.geometry.sgb.records.carriers import CarrierRole
 
 EdgeSides = tuple[
     Any, Any
@@ -99,12 +99,12 @@ def _classify_edges(
     refinement: list[int] = []
     for ei, edge in enumerate(arr.edges):
         left, right = labels[arr.he_face[2 * ei]], labels[arr.he_face[2 * ei + 1]]
-        base = {
-            base_carrier_id(c) for c in edge.carriers if not c.startswith(MEMBER_ONLY)
+        curves = {
+            c.curve_id for c in edge.carriers if c.role is not CarrierRole.MEMBERSHIP
         }
-        if left != right or (base & policies.required):
+        if left != right or (curves & policies.required):
             kept.append(ei)
-        elif base & policies.refinement_only:
+        elif curves & policies.refinement_only:
             refinement.append(ei)
     return kept, refinement
 
@@ -145,11 +145,11 @@ def _merge_degree_two(
     for ei in kept:
         e = arr.edges[ei]
         sides = (labels[arr.he_face[2 * ei]], labels[arr.he_face[2 * ei + 1]])
-        # Witness pieces ``<arc>#k`` of one arc carry the same normalised id, so consecutive pieces can merge.
-        real = [c for c in e.carriers if not c.startswith(MEMBER_ONLY)] or list(
+        # The witness pieces of one arc carry the same whole carrier, so consecutive pieces can merge.
+        real = [c for c in e.carriers if c.role is not CarrierRole.MEMBERSHIP] or list(
             e.carriers
         )
-        normalised = NodedEdge(e.a, e.b, frozenset(base_carrier_id(c) for c in real))
+        normalised = NodedEdge(e.a, e.b, frozenset(c.whole() for c in real))
         live[(e.a, e.b)] = _Chain(normalised, sides, [(ei, 1)])
     incident: dict[Point, set[tuple[Point, Point]]] = defaultdict(set)
     for key in live:

@@ -39,14 +39,21 @@ from scgsim.geometry.sgb.arrangement.dcel import (
 from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge, Segment, snap_round
 from scgsim.geometry.sgb.plane import Point, RepPoint, point_in_ring
-from scgsim.geometry.sgb.records.carriers import LineEdge
+from scgsim.geometry.sgb.records.carriers import (
+    CarrierRole,
+    EdgeCarrier,
+    LineEdge,
+    piece_carriers,
+)
 from scgsim.geometry.sgb.records.prisms import Footprint
 from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
 
-SUPPORT_BOUNDARY = (
-    "~support"  # carrier id prefix of the support boundary (never a seam)
-)
-PORT_BOUNDARY = "~port"  # carrier id prefix of a port footprint boundary (a clip boundary, never an origin)
+SUPPORT_BOUNDARY = "~support"
+"""Prefix of the carrier ids of the support boundary (written, never read: the role is ``SUPPORT_BOUNDARY``)."""
+PORT_BOUNDARY = "~port"
+"""Prefix of the carrier ids of a port footprint boundary (written, never read: the role is ``PORT_BOUNDARY``)."""
+CLIP_ROLES = (CarrierRole.SUPPORT_BOUNDARY, CarrierRole.PORT_BOUNDARY)
+"""The roles of the boundaries a seam chain may end on."""
 
 
 @dataclass(frozen=True)
@@ -92,7 +99,7 @@ def margin_cells(  # noqa: PLR0913 - one margin of one support, with its ports a
     grid_um: float,
 ) -> MarginCells:
     """Build the arrangement of one margin's candidates and read ``R_m`` and its required seams from its cells."""
-    directions: dict[str, tuple[Point, Point]] = {}
+    directions: dict[EdgeCarrier, tuple[Point, Point]] = {}
     segments = [
         *candidates,
         *_support_segments(region, directions),
@@ -118,7 +125,7 @@ def margin_cells(  # noqa: PLR0913 - one margin of one support, with its ports a
 
 
 def _support_segments(
-    region: SupportRegion, directions: dict[str, tuple[Point, Point]]
+    region: SupportRegion, directions: dict[EdgeCarrier, tuple[Point, Point]]
 ) -> list[Segment]:
     """Every boundary primitive of the support, as noding input, recording each piece's direction of travel."""
     segments = []
@@ -129,8 +136,12 @@ def _support_segments(
                 if isinstance(prim, LineEdge)
                 else prim.witness_points()
             )
-            for j, (p, q) in enumerate(zip(points, points[1:], strict=False)):
-                carrier = f"{SUPPORT_BOUNDARY}{ri}.{pi}#{j}"
+            pieces = piece_carriers(
+                f"{SUPPORT_BOUNDARY}{ri}.{pi}",
+                len(points) - 1,
+                CarrierRole.SUPPORT_BOUNDARY,
+            )
+            for carrier, p, q in zip(pieces, points, points[1:], strict=False):
                 directions[carrier] = (p, q)
                 segments.append(Segment(p, q, frozenset([carrier])))
     return segments
@@ -139,7 +150,13 @@ def _support_segments(
 def _port_boundary_segments(ports: tuple[PortClip, ...]) -> list[Segment]:
     """The port footprint boundaries, as noding input only: they split the candidates where they cross them."""
     return [
-        Segment(p, q, frozenset([f"{PORT_BOUNDARY}{k}.{r}.{j}"]))
+        Segment(
+            p,
+            q,
+            frozenset(
+                [EdgeCarrier(f"{PORT_BOUNDARY}{k}.{r}.{j}", CarrierRole.PORT_BOUNDARY)]
+            ),
+        )
         for k, clip in enumerate(ports)
         for r, ring in enumerate(clip.footprint.rings())
         for j, (p, q) in enumerate(zip(ring, (*ring[1:], ring[0]), strict=True))
@@ -147,7 +164,7 @@ def _port_boundary_segments(ports: tuple[PortClip, ...]) -> list[Segment]:
 
 
 def _cells_in_support(
-    arr: Arrangement, directions: dict[str, tuple[Point, Point]]
+    arr: Arrangement, directions: dict[EdgeCarrier, tuple[Point, Point]]
 ) -> list[bool]:
     """Per face, whether it lies in the support: seeded across the boundary, then spread across every other edge.
 
@@ -164,7 +181,7 @@ def _cells_in_support(
         along = [
             _dot(edge, directions[c])
             for c in edge.carriers
-            if c.startswith(SUPPORT_BOUNDARY)
+            if c.role is CarrierRole.SUPPORT_BOUNDARY
         ]
         if not along:
             neighbours[left].append(right)
@@ -224,8 +241,8 @@ def _check_curve_closed(  # noqa: PLR0913 - one margin's cells, its support and 
         face = arr.he_face[2 * ei]
         if face != arr.he_face[2 * ei + 1] or not in_support[face]:
             continue
-        if all(c.startswith("~") for c in edge.carriers):
-            continue
+        if all(c.role is not CarrierRole.CURVE for c in edge.carriers):
+            continue  # no candidate lies here
         x, y = (edge.a[0] + edge.b[0]) / 2, (edge.a[1] + edge.b[1]) / 2
         if abs(region.distance((x, y)) - margin) > DISTANCE_SLACK:
             continue
@@ -291,10 +308,10 @@ def _required_edges(
         left, right = arr.he_face[2 * ei], arr.he_face[2 * ei + 1]
         if left not in inside or right not in inside or inside[left] == inside[right]:
             continue
-        candidates = frozenset(c for c in edge.carriers if not c.startswith("~"))
+        candidates = frozenset(c for c in edge.carriers if c.role is CarrierRole.CURVE)
         if not candidates:
             continue  # a port boundary between two cells too thin to tell apart: no offset lies here
-        on_port = any(c.startswith(PORT_BOUNDARY) for c in edge.carriers)
+        on_port = any(c.role is CarrierRole.PORT_BOUNDARY for c in edge.carriers)
         if not on_port and _in_a_port(edge, ports):
             continue
         required.append(
@@ -323,7 +340,7 @@ def _check_seam_ends(
     clipping = {
         v
         for edge in arr.edges
-        if any(c.startswith((SUPPORT_BOUNDARY, PORT_BOUNDARY)) for c in edge.carriers)
+        if any(c.role in CLIP_ROLES for c in edge.carriers)
         for v in (edge.a, edge.b)
     }
     lost = sorted(open_ends - clipping)

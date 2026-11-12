@@ -3,9 +3,10 @@
 Owns two derived facts needed by labelling and assembly:
 
 * **chains** -- the path of level edges that covers each slab edge.  A level
-  arrangement is built from slab edges tagged ``~<edge id>``, so the level edges
-  carrying a tag form a simple path from one slab-edge endpoint to the other
-  (the bottom or top boundary of that edge's wall).
+  arrangement is built from slab edges carried with the role ``SLAB_EDGE`` under
+  the id ``~<edge id>``, so the level edges carrying one form a simple path from
+  one slab-edge endpoint to the other (the bottom or top boundary of that edge's
+  wall).
 * **links** -- which slab cell each level cell lies in.  Level cells are joined
   across every edge that is *not* part of a slab-edge chain (those edges do not
   separate slab cells); each resulting group borders at least one chain, whose
@@ -22,10 +23,11 @@ from dataclasses import dataclass
 from scgsim.geometry.sgb.arrangement.dcel import Arrangement
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.plane import Point
-from scgsim.geometry.sgb.records.carriers import base_carrier_id
+from scgsim.geometry.sgb.records.carriers import CarrierRole
 
 TAG = "~"
-"""Prefix of the carrier id a slab edge gets when it enters a level arrangement."""
+"""Prefix of the carrier id a slab edge gets when it enters a level arrangement; the id is written with it,
+and the carrier's role (``CarrierRole.SLAB_EDGE``) says what it is."""
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,9 @@ def trace_chains(level_arr: Arrangement, slab: SlabEdges) -> dict[int, list[int]
     members: dict[int, list[int]] = defaultdict(list)
     for ei, edge in enumerate(level_arr.edges):
         for carrier in edge.carriers:
-            slab_edge = tag_to_slab_edge.get(base_carrier_id(carrier))
+            if carrier.role is not CarrierRole.SLAB_EDGE:
+                continue
+            slab_edge = tag_to_slab_edge.get(carrier.curve_id)
             if slab_edge is not None:
                 members[slab_edge].append(ei)
     chains: dict[int, list[int]] = {}

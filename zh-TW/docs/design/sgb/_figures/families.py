@@ -134,13 +134,18 @@ def _level0(model):
     return model.labelled.level_layers[model.labelled.levels.levels.index(Fraction(0))]
 
 
-def family_of(sources) -> str:
-    """Name of the family (or source entity) an edge's carriers belong to."""
-    names = {s.split("/")[0] for s in sources}
+def family_of(catalogue, known, sources) -> str:
+    """Name of the family (or source entity) an edge's carriers belong to, from the carriers' lineage.
+
+    ``known`` is ``catalogue.known_carriers()``.
+    """
+    ports = {p.entity_id for p in catalogue.prisms if p.material_kind == "port"}
+    lineages = [known[s].lineage for s in sources if s in known]
+    families = {ln.family_id for ln in lineages if ln.kind == "family_member"}
     for tag in ("window", "band_pad", "band_gap", "refine"):
-        if tag in names:
+        if tag in families:
             return tag
-    if any(n.startswith("PORT_SHEET") for n in names):
+    if any(ln.entity_id in ports for ln in lineages if ln.kind == "polygon_edge"):
         return "port"
     return "physical boundary"
 
@@ -211,8 +216,11 @@ def _figure_level(model, numbers: dict) -> None:
         )
     used = {}
     by_family: dict[str, list] = {}
+    catalogue = model.labelled.catalogue
+    known = catalogue.known_carriers()
     for ei in range(len(arr.edges)):
-        by_family.setdefault(family_of(layer.edge_sources[ei]), []).append(
+        family = family_of(catalogue, known, layer.edge_sources[ei])
+        by_family.setdefault(family, []).append(
             edge_polyline_um(arr, layer.edge_curve, ei)
         )
     for fam, polys in by_family.items():
@@ -307,7 +315,9 @@ def counts(model) -> dict:
         "refinement_pieces": len(layer.dissolved.refinement),
         "topology": {k: model.counts[k] for k in ("vertices", "edges", "faces")},
         "face_groups": len(groups),
-        "faces_in_SA_groups": sum(n for g, n in groups.items() if g.startswith("SA")),
+        "faces_in_SA_groups": sum(
+            n for g, n in groups.items() if g in model.routed.unions.get("SA", ())
+        ),
         "faces_in_pad_sheet_band_groups": sum(
             n
             for g, n in groups.items()

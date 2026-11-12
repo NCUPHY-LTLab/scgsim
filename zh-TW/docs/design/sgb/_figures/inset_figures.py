@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import re
 import sys
 from pathlib import Path
 
@@ -18,7 +17,6 @@ from sgb_klayout import eroded_klayout, region_of_rings  # noqa: E402
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area  # noqa: E402
 
 LEVEL_Z0 = kit.LEVEL_Z0
-MEMBER_MARGIN = re.compile(r"@m(\d+(?:\.\d+)?)$")
 
 VIEWS = {
     "whole chip": ((-155, 155), (-155, 155)),
@@ -50,10 +48,13 @@ def region_boundary_lines(region, width: float = 2.2) -> list[Line]:
     return out
 
 
-def member_margin(carrier: str) -> float | None:
-    """The margin (grid units) a family-member carrier id ends with (``band_pad_top/ring0/edge9@m500.0``), else None."""
-    match = MEMBER_MARGIN.search(carrier)
-    return float(match[1]) if match else None
+def band_curves(model, family_id: str):
+    """Carrier id -> margin (grid units) of every band curve of one family, read from the carriers' lineage."""
+    return {
+        carrier_id: known.lineage.band_member.margin
+        for carrier_id, known in model.labelled.catalogue.known_carriers().items()
+        if known.lineage.family_id == family_id and known.lineage.band_member
+    }
 
 
 def clip_runs(points, xr, yr, pad: float = 1.0):
@@ -121,6 +122,8 @@ def figure_construction() -> None:
     colours = {1500: "#1b7837", 3000: "#e08214", 6000: "#762a83"}
     names = {1500: "m = 1.5 um", 3000: "m = 3 um", 6000: "m = 6 um"}
 
+    margin_of = band_curves(model, "band_pad_top")
+
     def curves(m: int) -> list[Line]:
         return [
             Line(
@@ -132,9 +135,7 @@ def figure_construction() -> None:
             )
             for poly in kit.layer_edge_polylines(
                 layer,
-                lambda src, m=m: any(
-                    s.startswith("band_pad_top/") and member_margin(s) == m for s in src
-                ),
+                lambda src, m=m: any(margin_of.get(s) == m for s in src),
             )
         ]
 
@@ -343,8 +344,9 @@ def figure_arcs(model_a) -> None:
     """Exact arcs against a KLayout 512-gon, and the radial deviation of both (``inset-arcs-vs-polygon``)."""
     layer = model_a.labelled.level_layers[LEVEL_Z0]
     region = support_of(model_a, "band_pad_top")
+    band = band_curves(model_a, "band_pad_top")
     exact_curves = kit.layer_edge_polylines(
-        layer, lambda src: any(s.startswith("band_pad_top/") for s in src)
+        layer, lambda src: any(s in band for s in src)
     )
     rings = {m: _klayout_rings(region, m) for m in MARGINS}
     features = [

@@ -133,8 +133,9 @@ def check_seams_kept(  # noqa: PLR0913 - a level, its labels and the families it
     wanted = {piece.carrier_id for found in pieces.values() for piece in found}
     edges_of: dict[str, list[int]] = defaultdict(list)
     for ei, edge in enumerate(arr.edges):
-        for carrier in edge.carriers & wanted:
-            edges_of[carrier].append(ei)
+        for carrier in edge.carriers:
+            if carrier.id in wanted:
+                edges_of[carrier.id].append(ei)
     level = _LevelView(arr, edges_of, bands, port_faces, grid)
     lost: list[str] = []
     mislabelled: list[str] = []
@@ -172,10 +173,8 @@ def _pieces_of(family: CurveFamilyRecord) -> dict[tuple[str, str], list[_Piece]]
             arc = arcs[seam.carrier_id]
             points = arc.witness_points()
             out[seam_key] = [
-                _Piece(piece, p, q)
-                for piece, p, q in zip(
-                    arc.piece_ids(), points, points[1:], strict=False
-                )
+                _Piece(piece.id, p, q)
+                for piece, p, q in zip(arc.pieces(), points, points[1:], strict=False)
             ]
         else:
             raise ValidationError(

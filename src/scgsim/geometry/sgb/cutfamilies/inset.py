@@ -95,6 +95,7 @@ from scgsim.geometry.sgb.records.carriers import (
     ArcCarrier,
     BandMember,
     BandMemberRole,
+    EdgeCarrier,
     Lineage,
     LineCarrier,
     LineEdge,
@@ -605,14 +606,16 @@ def _margin_seams(  # noqa: PLR0913 - one margin of one support, with its ports 
 ) -> _MarginSeams:
     """The required seams of ``R_m`` as carriers, each recording the side band ``band`` lies on."""
     candidates = _generate_candidates(family_id, region, margin)
-    segments = [Segment(p, q, frozenset([cid])) for cid, p, q in candidates.lines]
+    segments = [
+        Segment(p, q, frozenset([EdgeCarrier(cid)])) for cid, p, q in candidates.lines
+    ]
     arc_pieces: dict[str, tuple[ArcCarrier, list[Point]]] = {}
     for arc in candidates.arcs.values():
         points = arc.witness_points()
         arc_pieces[arc.id] = (arc, points)
         segments.extend(
-            Segment(p, q, frozenset([f"{arc.id}#{k}"]))
-            for k, (p, q) in enumerate(zip(points, points[1:], strict=False))
+            Segment(p, q, frozenset([piece]))
+            for piece, p, q in zip(arc.pieces(), points, points[1:], strict=False)
         )
     cells = margin_cells(family_id, segments, region, margin, ports, grid_um)
     lines, line_seams = _lines_of(cells.required, candidates.line_lineages, band)
@@ -625,7 +628,7 @@ def _margin_seams(  # noqa: PLR0913 - one margin of one support, with its ports 
 def _lines_of(
     required: list[RequiredEdge], lineages: dict[str, Lineage], band: int
 ) -> tuple[list[LineCarrier], list[BandSeam]]:
-    """Straight members: the seams that carry no arc witness chord, each with the side of ``R_m``.
+    """Straight members: the seams that carry no piece of an arc, each with the side of ``R_m``.
 
     ``lineages`` is the lineage of every straight candidate, by candidate id; a seam piece keeps its candidate's.
     """
@@ -634,11 +637,11 @@ def _lines_of(
     pieces_of_line: dict[str, int] = {}
     for seam in required:
         e = seam.edge
-        if any("#" in c for c in e.carriers):
+        if any(c.piece is not None for c in e.carriers):
             continue
         # Coincident offsets of one margin from several primitives: the carrier is named after one of them
         # and keeps its lineage; which side is R_m was read from the cells, never from that name.
-        source = sorted(e.carriers)[0]
+        source = min(e.carriers).id
         n = pieces_of_line.get(source, 0)
         pieces_of_line[source] = n + 1
         carrier = LineCarrier(f"{source}.{n}", e.a, e.b, lineages[source])
@@ -666,15 +669,14 @@ def _arcs_of(
     ] = {}  # end points of the seam (possibly trimmed) part of each chord
     for seam in required:
         e = seam.edge
-        arcs = {c.partition("#")[0] for c in e.carriers if "#" in c}
+        arcs = {c.curve for c in e.carriers if c.piece is not None}
         if not arcs:
             continue
         owner = min(arcs)
         for c in e.carriers:
-            base, _, k = c.partition("#")
-            if not k or base != owner:
+            if c.piece is None or c.curve != owner:
                 continue
-            chord = int(k)
+            base, chord = c.curve, c.piece
             points = arc_pieces[base][1]
             along = _along((points[chord], points[chord + 1]), e.b) >= _along(
                 (points[chord], points[chord + 1]), e.a
