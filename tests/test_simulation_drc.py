@@ -9,10 +9,12 @@ from __future__ import annotations
 import json
 import math
 import re
+from importlib.metadata import PackageNotFoundError
 from types import SimpleNamespace
 
 import pytest
 
+import scgsim.documentation as documentation
 import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
 from scgsim.documentation import page_url
@@ -444,6 +446,42 @@ def test_a_pad_reaching_the_planar_extent_at_a_point_is_refused_there(
     assert (conductor, layer, film) == ("chip/pad_0000", "metal", (0.0, 0.2))
     assert place == (0.0, 10.0)
     assert min(math.dist(place, vertex) for vertex in pad) < 0.001
+
+
+@pytest.mark.parametrize(
+    "installed", ["2.1.0a1", None], ids=["unpublished-version", "no-metadata"]
+)
+def test_without_a_published_root_the_refusal_stays_and_leaves_the_link_out(
+    monkeypatch, installed
+):
+    """A running SCGSim whose documentation the site does not publish still refuses the pinch, as before.
+
+    Only the closing "See <URL>" is left out; the conductor, layer, place and who must act stay.
+    """
+
+    def running_version(_package):
+        if installed is None:
+            raise PackageNotFoundError("scgsim")
+        return installed
+
+    monkeypatch.setattr(documentation, "version", running_version)
+    with pytest.raises(NonManifoldError) as raised:
+        check(
+            EigenmodeSim,
+            two_pads(monkeypatch, gap_um=10.0, pad=CIRCLE_PAD),
+            layer_stack=NO_VACUUM_STACK,
+        )
+    message = str(raised.value)
+    match = PINCH_AT_THE_EDGE.search(message)
+    assert match is not None, message
+    assert (match["conductor"], match["layer"], match["x"], match["y"]) == (
+        "chip/pad_0000",
+        "metal",
+        "0.0000",
+        "10.0000",
+    )
+    assert message.endswith(FIX_AT_THE_EDGE)
+    assert "See " not in message
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)

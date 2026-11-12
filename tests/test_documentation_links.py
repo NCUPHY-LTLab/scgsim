@@ -1,13 +1,15 @@
 """The documentation links SCGSim's messages carry point at the published root of the running version.
 
-The roots must be the ones ``scripts/build_docs_site.py`` publishes, and every page and section a message links
-to must exist in both language editions, or the link a user follows lands nowhere.
+The roots must be the ones ``scripts/build_docs_site.py`` publishes, the package's own version must have one,
+and every page and section a message links to must exist in both language editions, or the link a user follows
+lands nowhere.
 """
 
 from __future__ import annotations
 
 import re
 import runpy
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -18,8 +20,24 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE_BUILD = runpy.run_path(str(ROOT / "scripts" / "build_docs_site.py"))
 
 
+def published_root(package_version: str) -> str:
+    """The root the site build publishes ``package_version`` under, by its own rule.
+
+    ``develop`` publishes ``v<version_line>-dev``, and ``main``, whose version must be a release, publishes
+    ``v<version>``; ``version_line`` refuses a version the site cannot publish.
+    """
+    line = SITE_BUILD["version_line"](package_version)
+    slug = f"v{line}-dev" if line != package_version else f"v{package_version}"
+    return SITE_BUILD["SITE_URL"] + slug + "/"
+
+
+def test_the_package_version_has_a_published_root():
+    """A version bump the site cannot publish fails here, as the documentation build would fail on it."""
+    assert documentation_root(version("scgsim")) == published_root(version("scgsim"))
+
+
 @pytest.mark.parametrize(
-    ("version", "root"),
+    ("package_version", "root"),
     [
         ("2.0.0rc15", "v2.0.0-dev/"),
         ("2.1.0.dev3", "v2.1.0-dev/"),
@@ -27,35 +45,28 @@ SITE_BUILD = runpy.run_path(str(ROOT / "scripts" / "build_docs_site.py"))
         ("1.1.0", "v1.1.0/"),
     ],
 )
-def test_a_version_links_to_the_root_the_site_publishes_it_under(version, root):
-    """A prerelease is published from ``develop`` under its release line's ``-dev`` root, a release under its own.
-
-    The slugs repeat the site build's rule: ``develop`` publishes ``v<version_line>-dev``, and ``main``, whose
-    version must be a release, publishes ``v<version>``.
-    """
-    line = SITE_BUILD["version_line"](version)
-    published = f"v{line}-dev/" if line != version else f"v{version}/"
-    assert published == root
-    assert documentation_root(version) == SITE_BUILD["SITE_URL"] + root
+def test_a_version_links_to_the_root_the_site_publishes_it_under(package_version, root):
+    """A prerelease is published from ``develop`` under its release line's ``-dev`` root, a release under its own."""
+    assert published_root(package_version) == SITE_URL + root
+    assert documentation_root(package_version) == SITE_URL + root
     assert SITE_URL == SITE_BUILD["SITE_URL"]
 
 
-@pytest.mark.parametrize("version", ["2.0", "2.0.0.post1", "2.0.0+local"])
-def test_a_version_the_site_cannot_publish_is_refused_as_the_site_build_refuses_it(
-    version,
-):
-    """The site build has no root for these versions, so no link is made for them either."""
+@pytest.mark.parametrize(
+    "package_version", ["2.0", "2.1.0a1", "2.0.0.post1", "2.0.0+local"]
+)
+def test_a_version_the_site_cannot_publish_has_no_root(package_version):
+    """The site build refuses these versions, so they have no root and no link is made for them."""
     with pytest.raises(ValueError, match="unsupported documentation package version"):
-        SITE_BUILD["version_line"](version)
-    with pytest.raises(ValueError, match="unsupported documentation package version"):
-        documentation_root(version)
+        SITE_BUILD["version_line"](package_version)
+    assert documentation_root(package_version) is None
 
 
-LINK = re.compile(r'page_url\(\s*"(?P<page>[^"]+)",\s*"(?P<anchor>[^"]+)"\s*\)')
+LINK = re.compile(r'see_also\(\s*"(?P<page>[^"]+)",\s*"(?P<anchor>[^"]+)"\s*\)')
 
 
 def linked_sections():
-    """Every ``(page, anchor)`` that ``page_url`` is called with in the package source."""
+    """Every ``(page, anchor)`` that ``see_also`` is called with in the package source."""
     found = set()
     for path in (ROOT / "src").rglob("*.py"):
         found.update((m["page"], m["anchor"]) for m in LINK.finditer(path.read_text()))
