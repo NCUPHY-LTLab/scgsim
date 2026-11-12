@@ -261,7 +261,7 @@ def d0_band_areas(monkeypatch, component):
     (sidecar,) = sidecars
     return {
         name: group["area_um2"]
-        for name, group in sidecar["physical_groups"].items()
+        for name, group in sidecar["group"].items()
         if "band=" in name and ("D0_0000" in name or "D0_SUBSTRATE" in name)
     }
 

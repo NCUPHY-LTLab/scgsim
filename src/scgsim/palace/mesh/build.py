@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
@@ -121,7 +122,9 @@ def mesh_route_geometry(
     """
     paths, artifacts = built.paths, built.artifacts
     sidecar_bytes = artifacts.sidecar.read_bytes()
-    sidecar = json.loads(sidecar_bytes)
+    sidecar = read_sidecar(
+        artifacts.sidecar
+    )  # the bytes above are what the manifest pins
     groups = groups_from_sidecar(sidecar)
 
     # The mesh and the lowering run in processes of their own; the preparation budget is reserved

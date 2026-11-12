@@ -70,7 +70,7 @@ name, ``<support>/ring<r>/<role><k>``, are written from those and are never read
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from fractions import Fraction
 
@@ -250,13 +250,16 @@ class _Candidates:
     def _named(self, member: BandMember, piece: int | None) -> tuple[str, Lineage]:
         """A candidate's id ``<support>/ring<r>/<role><k>[.<piece>]@m<margin>`` and its lineage.
 
-        The lineage keeps the member name (the id without the margin) and, as :class:`BandMember`, the place and
-        the margin; the id and the name are written from the member, and nothing reads them back.
+        The lineage keeps the member name (the id without the margin) and, as :class:`BandMember`, the place, the
+        margin and the piece; the id and the name are written from the member, and nothing reads them back.
         """
         suffix = "" if piece is None else f".{piece}"
         name = f"{self.family_id}/ring{member.ring}/{member.role}{member.index}{suffix}"
         lineage = Lineage(
-            "family_member", family_id=self.family_id, member=name, band_member=member
+            "family_member",
+            family_id=self.family_id,
+            member=name,
+            band_member=replace(member, piece=piece),
         )
         return f"{name}@m{self.margin}", lineage
 

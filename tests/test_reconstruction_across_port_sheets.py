@@ -238,15 +238,17 @@ def pad_arcs(sidecar):
     """The pad's arc features and the carriers on its authored ring (polygon 0, outer ring)."""
     arcs = [
         feature
-        for feature in sidecar["mesh_features"]
+        for feature in sidecar["mesh_feature"].values()
         if feature["kind"] == "arc" and feature["source"] == "chip/pad"
     ]
-    authored_ring = [
-        carrier_id
-        for carrier_id, carrier in sidecar["lineage"]["carriers"].items()
-        if (carrier.get("entity"), carrier.get("polygon"), carrier.get("ring"))
-        == ("chip/pad", 0, 0)
-    ]
+    curves = sidecar["source_curve"]
+    on_ring = {
+        i
+        for i, c in curves.items()
+        if (c["entity"], c["polygon"], c["ring"]) == ("chip/pad", 0, 0)
+    }
+    carriers = sidecar["carrier"].items()
+    authored_ring = [i for i, c in carriers if c.get("source_curve") in on_ring]
     return arcs, authored_ring
 
 
@@ -347,7 +349,7 @@ def test_an_open_reconstruction_through_a_mirrored_occurrence_lands_on_its_drawn
     sidecar = built_device_sidecar(monkeypatch, chip, reference)
     (arc,) = [
         feature
-        for feature in sidecar["mesh_features"]
+        for feature in sidecar["mesh_feature"].values()
         if feature["kind"] == "arc" and feature["source"] == "chip/device/pad"
     ]
     assert arc["facts"]["radius_um"] == pytest.approx(CORNER_RADIUS_UM, abs=GRID_UM)
@@ -631,7 +633,7 @@ def test_a_hole_ring_has_its_own_drawn_ring_and_a_reconstruction_on_it_builds(
     sidecar = built_sidecar(monkeypatch, component, nets)
     (arc,) = [
         feature
-        for feature in sidecar["mesh_features"]
+        for feature in sidecar["mesh_feature"].values()
         if feature["kind"] == "arc" and feature["source"] == "chip/ground"
     ]
     assert arc["facts"]["radius_um"] == pytest.approx(OPENING_RADIUS_UM, abs=GRID_UM)

@@ -121,7 +121,12 @@ def cap_arcs(model: ConformalModel, family_id: str) -> list:
     (family,) = [
         f for f in model.labelled.catalogue.families if f.family_id == family_id
     ]
-    return [arc for arc in family.arcs if "/cap" in arc.id]
+    return [
+        arc
+        for arc in family.arcs
+        if arc.lineage.band_member is not None
+        and arc.lineage.band_member.role in ("capstart", "capend")
+    ]
 
 
 @pytest.mark.parametrize(

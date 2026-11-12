@@ -8,12 +8,12 @@ is built once without bands, in a scratch folder that is removed, to read them f
 
 from __future__ import annotations
 
-import json
 import shutil
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb import SgbArtifacts, build_sgb_geometry
@@ -56,13 +56,13 @@ def _unbanded_sidecar(
     representation: RepresentationContext,
     route: str,
     output_dir: Path,
-) -> dict[str, Any]:
+) -> Sidecar:
     """The sidecar of a build without bands; the build itself is a scratch folder that is removed."""
     scratch = output_dir / _UNBANDED_DIR
     try:
         unbanded = build_sgb_geometry(
             build_input, representation, route=route, output_dir=scratch
         )
-        return json.loads(unbanded.sidecar.read_text(encoding="utf-8"))
+        return read_sidecar(unbanded.sidecar)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)

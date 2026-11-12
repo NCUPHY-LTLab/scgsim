@@ -19,12 +19,12 @@ from sgb_inputs import (
     thin_film_pair,
 )
 
+from scgsim.contracts.sgb_sidecar import read_sidecar, views
 from scgsim.geometry.sgb import build_sgb_geometry
 from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, SolutionInterface
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import build_conformal_model
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.sgb.verification.loaded import verify_xao
 
 PORT_GROUP = "PORT::PORT_SHEET__P1__0000"
@@ -44,7 +44,7 @@ def sa_band_areas(sidecar: dict) -> dict[int, float]:
     """The area of every SA band group at z = 0, by band index."""
     return {
         int(name.removeprefix(SA_BANDS)): group["area_um2"]
-        for name, group in sidecar["physical_groups"].items()
+        for name, group in sidecar["group"].items()
         if name.startswith(SA_BANDS)
     }
 
@@ -86,9 +86,9 @@ def test_the_files_agree_the_port_is_on_the_interface(tmp_path, route):
         output_dir=tmp_path / "out",
     )
     sidecar = read_sidecar(artifacts.sidecar)
-    (port,) = sidecar["ports"]
+    (port,) = sidecar["port"].values()
     assert port["z_um"] == 0.0 and len(port["adjacent_volumes"]) == 2
-    assert sidecar["embedded_faces"] == [] and port["host_volumes"] == []
+    assert views.embedded_faces(sidecar) == [] and port["host_volumes"] == []
     assert verify_xao(artifacts.xao, sidecar).ok
 
 
@@ -115,7 +115,7 @@ def test_a_port_removes_its_footprint_from_the_sa_bands_without_moving_a_band(
     with_port, without = sidecar_of(True), sidecar_of(False)
     bands_with, bands_without = sa_band_areas(with_port), sa_band_areas(without)
     assert set(bands_with) == set(bands_without) == {0, 1, 2}
-    port_area = with_port["physical_groups"][PORT_GROUP]["area_um2"]
+    port_area = with_port["group"][PORT_GROUP]["area_um2"]
     assert port_area == pytest.approx(PORT_AREA_UM2)
     assert sum(bands_with.values()) + port_area == pytest.approx(
         sum(bands_without.values()), rel=1e-9
@@ -127,14 +127,14 @@ def test_a_port_removes_its_footprint_from_the_sa_bands_without_moving_a_band(
     ) in bands_with:  # the port only ever takes area away, in every band it touches
         assert bands_with[index] <= bands_without[index] + 1e-9
     # the bands are measured from the metal edges, so the port moved none of them
-    assert with_port["insets"][0]["support_area_um2"] == pytest.approx(
-        without["insets"][0]["support_area_um2"]
+    (family_with,) = with_port["band_family"].values()
+    (family_without,) = without["band_family"].values()
+    assert family_with["support_area_um2"] == pytest.approx(
+        family_without["support_area_um2"]
     )
-    assert with_port["insets"][0]["margins_um"] == [0.5, 1.0]
+    assert family_with["margins_um"] == [0.5, 1.0]
     # one PORT group of one face: the band seams stop at the port boundary
-    assert [n for n in with_port["physical_groups"] if n.startswith("PORT::")] == [
-        PORT_GROUP
-    ]
+    assert [n for n in with_port["group"] if n.startswith("PORT::")] == [PORT_GROUP]
 
 
 def test_a_host_attached_at_its_upper_face_puts_the_port_on_the_metal_top():

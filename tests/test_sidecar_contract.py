@@ -1,11 +1,10 @@
-"""The sidecar contract ``scgsim.contracts.sgb_sidecar`` (#170, slice A): one definition gives the schema file, the
-pinned digest beside the version, and the shared reader, and they describe ``scgsim.sgb.sidecar.v2`` as written."""
+"""The sidecar contract ``scgsim.contracts.sgb_sidecar`` (#170): one definition gives the schema file, the pinned
+digest beside the version, and the shared reader, and they describe ``scgsim.sgb.sidecar.v3`` as SGB writes it."""
 
 from __future__ import annotations
 
 import copy
 import json
-import re
 from importlib import resources
 
 import jsonschema
@@ -119,9 +118,9 @@ def test_read_sidecar_returns_the_written_file_as_decoded(tmp_path, sidecars):
 def test_another_version_is_refused_by_name(sidecars):
     """A sidecar of another version is named as such, before its structure is looked at."""
     with pytest.raises(
-        SidecarError, match=r"'scgsim\.sgb\.sidecar\.v1' is not supported.*sidecar\.v2"
+        SidecarError, match=r"'scgsim\.sgb\.sidecar\.v2' is not supported.*sidecar\.v3"
     ):
-        check_sidecar({"schema": "scgsim.sgb.sidecar.v1"})
+        check_sidecar({"schema": "scgsim.sgb.sidecar.v2"})
     with pytest.raises(SidecarError, match="a sidecar is a JSON object, not list"):
         check_sidecar([sidecars["pad_b"]])
 
@@ -138,10 +137,10 @@ def test_a_file_that_is_not_json_is_refused(tmp_path, text):
 def test_a_number_beyond_the_float_range_is_refused_where_it_is(tmp_path, sidecars):
     """JSON allows ``1e400``, which Python decodes as an infinity; no sidecar number is infinite."""
     path = tmp_path / "huge.sidecar.json"
-    marked = json.dumps(_with(sidecars["pad_b"], ("grid_um",), "HUGE"))
+    marked = json.dumps(_with(sidecars["pad_b"], ("model", "grid_um"), "HUGE"))
     path.write_text(marked.replace('"HUGE"', "1e400"), encoding="utf-8")
     with pytest.raises(
-        SidecarError, match=r"sidecar grid_um: inf is not a finite number"
+        SidecarError, match=r"sidecar model\.grid_um: inf is not a finite number"
     ):
         read_sidecar(path)
 
@@ -167,8 +166,12 @@ def _at(document, path):
 
 
 def _with(document, path, value):
-    """A copy of ``document`` with the value at ``path`` replaced, or removed when ``value`` is ``_REMOVED``."""
+    """A copy of ``document`` with the value at ``path`` replaced, or removed when ``value`` is ``_REMOVED``.
+
+    A ``FIRST`` in ``path`` stands for the first key, in sorted order, of the table at that place.
+    """
     changed = copy.deepcopy(document)
+    path = _resolved(changed, path)
     parent = changed
     for key in path[:-1]:
         parent = parent[key]
@@ -180,19 +183,36 @@ def _with(document, path, value):
 
 
 _REMOVED = object()
+FIRST = "<first>"
+
+
+def _resolved(document, path):
+    """``path`` with each ``FIRST`` replaced by the first key of the table it stands in."""
+    out, place = [], document
+    for key in path:
+        if key == FIRST:
+            key = min(place)
+        out.append(key)
+        if isinstance(place, dict) and key in place or isinstance(place, list):
+            place = place[key]
+    return tuple(out)
 
 
 @pytest.mark.parametrize(
     ("path", "value", "message"),
     [
         (
-            ("mesh_features",),
+            ("mesh_feature",),
             _REMOVED,
-            r"sidecar document: lacks the field 'mesh_features'",
+            r"sidecar document: lacks the field 'mesh_feature'",
         ),
         (("mesh_hints",), [], r"sidecar document: has the unknown field 'mesh_hints'"),
-        (("route",), "D", r"sidecar route: 'D' is not one of \['A', 'B', 'C'\]"),
-        (("grid_um",), 0, r"sidecar grid_um: 0 is not greater than 0"),
+        (
+            ("model", "route"),
+            "D",
+            r"sidecar model\.route: 'D' is not one of \['A', 'B', 'C'\]",
+        ),
+        (("model", "grid_um"), 0, r"sidecar model\.grid_um: 0 is not greater than 0"),
         (
             ("model", "identity_digest"),
             "model:xyz",
@@ -203,28 +223,45 @@ _REMOVED = object()
             "vol",
             r"sidecar binding\.ids_by_tag\['3'\]: 'vol' is not array",
         ),
-        (("counts", "edges"), -1, r"sidecar counts\.edges: -1 is less than 0"),
-        (("counts", "later"), 2.5, r"sidecar counts\.later: 2\.5 is not integer"),
-        (("files", "mesh"), "x.msh", r"sidecar files: the key 'mesh' is not one of"),
         (
-            ("expected", "vertices_um", 0),
+            ("summary", "counts", "edges"),
+            -1,
+            r"sidecar summary\.counts\.edges: -1 is less than 0",
+        ),
+        (
+            ("summary", "counts", "later"),
+            2.5,
+            r"sidecar summary\.counts\.later: 2\.5 is not integer",
+        ),
+        (
+            ("model", "files", "mesh"),
+            "x.msh",
+            r"sidecar model\.files: the key 'mesh' is not one of",
+        ),
+        (
+            ("vertex", FIRST, "position_um"),
             [0.0, 0.0],
-            r"sidecar expected\.vertices_um\[0\]: has 2 items, fewer than 3",
+            r"sidecar vertex\[.*\]\.position_um: has 2 items, fewer than 3",
         ),
         (
-            ("mesh_features", 0, "kind"),
+            ("mesh_feature", FIRST, "kind"),
             "curved_edge",
-            r"sidecar mesh_features\[0\]\.kind: 'curved_edge' is not",
+            r"sidecar mesh_feature\[.*\]\.kind: 'curved_edge' is not 'film_sidewall'",
         ),
         (
-            ("mesh_features", 0, "facts", "column_count"),
+            ("mesh_feature", FIRST, "facts", "column_count"),
             3,
-            r"mesh_features\[0\]\.facts: has the unknown field",
+            r"mesh_feature\[.*\]\.facts: has the unknown field",
         ),
         (
-            ("lineage", "membership", "f:x"),
-            {"pad": -0.5},
-            r"sidecar lineage\.membership\['f:x'\]\.pad: -0\.5 is less",
+            ("face", FIRST, "membership", "pad"),
+            -0.5,
+            r"sidecar face\[.*\]\.membership\.pad: -0\.5 is less",
+        ),
+        (
+            ("carrier", FIRST, "kind"),
+            "polygon_edge",
+            r"sidecar carrier\[.*\]: lacks the field 'source_curve'",
         ),
     ],
 )
@@ -238,104 +275,136 @@ def test_a_structure_that_does_not_hold_is_refused_where_it_fails(
 
 def _first_group(sidecar, dim):
     return next(
-        name
-        for name, group in sorted(sidecar["physical_groups"].items())
-        if group["dim"] == dim
+        name for name, group in sorted(sidecar["group"].items()) if group["dim"] == dim
     )
 
 
 def test_a_reference_that_does_not_resolve_is_refused(sidecars):
-    """Planned ids, native tags, groups of the right dimension, volumes, carriers and the binding's sizes are
-    checked across sections."""
+    """Every typed id names a record of its table (a group of its dimension), and the binding, the groups, the
+    support rings and the outer boundary hold across tables."""
     good = sidecars["pad_b_bands"]
     surface = _first_group(good, 2)
     volume = _first_group(good, 3)
     other_tag = next(
         group["tag"]
-        for name, group in sorted(good["physical_groups"].items())
+        for name, group in sorted(good["group"].items())
         if group["dim"] == 2 and name != surface
     )
-    emitted = next(name for name, v in sorted(good["volumes"].items()) if v["emitted"])
+    emitted = next(name for name, v in sorted(good["volume"].items()) if v["emitted"])
     bound_face = good["binding"]["ids_by_tag"]["2"][0]
     edges = good["binding"]["ids_by_tag"]["1"]
-    carrier_edge = next(iter(good["lineage"]["edges"]))
+    carrier_edge = next(
+        e for e, edge in sorted(good["edge"].items()) if edge["carriers"]
+    )
+    member = next(
+        c for c, r in sorted(good["carrier"].items()) if r["kind"] == "band_member"
+    )
+    primitive = min(good["support_primitive"])
     for path, value, message in (
         (
-            ("physical_groups", surface, "ids", 0),
-            "f:nowhere",
-            r"native tag \d+ is not face 'f:nowhere'",
-        ),
-        (
-            ("mesh_features", 0, "native_tags", 0),
-            len(edges) + 1,
-            r"mesh_features\[0\] \(\w+\): native tag",
-        ),
-        (
-            ("embedded_faces",),
-            [{"face": "f:nowhere", "host_volume": "v", "group": None}],
-            "names face 'f:nowhere'",
-        ),
-        (
-            ("faces", good["binding"]["ids_by_tag"]["2"][0], "group"),
+            ("face", bound_face, "group"),
             "MA::nowhere",
-            "names the group 'MA::nowhere'",
+            "names 'MA::nowhere', which group lacks",
         ),
         (
-            ("lineage", "edges", carrier_edge),
+            ("mesh_feature", FIRST, "edges", 0),
+            "e:nowhere",
+            "names 'e:nowhere', which edge lacks",
+        ),
+        (
+            ("volume", emitted, "embedded_faces"),
+            ["f:nowhere"],
+            "names 'f:nowhere', which face lacks",
+        ),
+        (
+            ("edge", carrier_edge, "carriers"),
             ["c:nowhere"],
-            "names the carrier 'c:nowhere'",
-        ),
-        (("counts", "edges"), len(edges) + 1, "counts has"),
-        (
-            ("counts", "volumes_total"),
-            len(good["volumes"]) + 1,
-            r"counts\.volumes_total is \d+, volumes has",
+            "names 'c:nowhere', which carrier lacks",
         ),
         (
-            ("expected", "face_area_um2"),
-            [1.0],
-            r"expected\.face_area_um2 has 1 entries",
+            ("edge", edges[0], "vertices", 0),
+            "v:nowhere",
+            "names 'v:nowhere', which vertex lacks",
         ),
         (
-            ("unions", "nets", "GND"),
-            ["MA::nowhere"],
-            r"unions\.nets\['GND'\] names the group",
+            ("carrier", member, "primitive"),
+            "p:nowhere",
+            "which support_primitive lacks",
         ),
         (
-            ("surface_epr_rows", next(iter(good["surface_epr_rows"])), "group"),
+            ("support_primitive", primitive, "sources"),
+            ["s:nowhere"],
+            "which source_curve lacks",
+        ),
+        (
+            ("face", bound_face, "membership"),
+            {"nobody": 1.0},
+            r"membership key names 'nobody', which entity lacks",
+        ),
+        (("summary", "counts", "edges"), len(edges) + 1, "summary.counts has"),
+        (
+            ("summary", "counts", "volumes_total"),
+            len(good["volume"]) + 1,
+            r"summary\.counts\.volumes_total is \d+, volume has",
+        ),
+        (
+            ("surface_epr_row", FIRST, "group"),
             volume,
             f"names the group {volume!r}, which is not a face group",
         ),
         (
-            ("volumes", next(iter(good["volumes"])), "group"),
+            ("volume", emitted, "group"),
             surface,
             f"names the group {surface!r}, which is not a volume group",
         ),
         (
-            ("faces", bound_face),
+            ("face", bound_face),
             _REMOVED,
-            rf"binding\.ids_by_tag\['2'\] names '{re.escape(bound_face)}', which faces lacks",
+            r"binding\.ids_by_tag\['2'\] does not name exactly the face table",
         ),
         (
-            ("physical_groups", surface, "adjacent_volumes"),
+            ("group", surface, "adjacent_volumes"),
             ["v:nowhere"],
-            f"physical group '{re.escape(surface)}' names volume 'v:nowhere'",
+            "names 'v:nowhere', which volume lacks",
         ),
         (
-            ("volumes", emitted, "emitted"),
+            ("volume", emitted, "emitted"),
             False,
-            rf"volumes\['{re.escape(emitted)}'\] is not emitted, which binding",
+            r"binding\.ids_by_tag\['3'\] does not name exactly the emitted volumes",
         ),
+        (("group", surface, "tag"), other_tag, f"has the tag {other_tag} of group"),
         (
-            ("physical_groups", surface, "tag"),
-            other_tag,
-            f"has the tag {other_tag} of physical group",
+            ("support_primitive", primitive, "ring"),
+            min(good["support_ring"])[:-1],
+            "which support_ring lacks",
         ),
     ):
         with pytest.raises(
             SidecarError, match=f"references do not resolve: .*{message}"
         ):
             check_sidecar(_with(good, path, value))
+
+
+def test_a_group_with_no_member_and_a_ring_that_does_not_list_its_primitive_are_refused(
+    sidecars,
+):
+    """A group no face or volume names, and a primitive its ring does not list, break the tables' agreement."""
+    good = sidecars["pad_b_bands"]
+    lonely = _with(
+        good,
+        ("group", "MA::lonely"),
+        dict(good["group"][_first_group(good, 2)], tag=999),
+    )
+    with pytest.raises(SidecarError, match="group 'MA::lonely' has no member"):
+        check_sidecar(lonely)
+    ring = min(good["support_ring"])
+    unlisted = _with(
+        good,
+        ("support_ring", ring, "primitives"),
+        good["support_ring"][ring]["primitives"][1:],
+    )
+    with pytest.raises(SidecarError, match="which does not list it"):
+        check_sidecar(unlisted)
 
 
 # --------------------------------------------------------------------------- the reader means what JSON Schema means

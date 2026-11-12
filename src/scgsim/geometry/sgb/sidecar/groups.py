@@ -1,19 +1,32 @@
-"""Physical groups, unions and volumes as the sidecar describes them (design brief sections 7 and 14).
+"""Physical groups and Surface-EPR rows as the sidecar describes them (design brief sections 7 and 14).
 
 Owns the facts a solver adapter needs about each primary physical group beyond its members: which
 Entity or Entities it belongs to, the Net, whether it is a top, bottom, sidewall or sheet surface,
 the volumes and solution regions on its sides, its inset band, its area -- so today's group record
 (owner ids, adjacent solution volumes, face kind, Net) can be rebuilt without reading geometry.
 
-Primary groups partition each dimension.  Unions are lists of primary group names and are written
-as ``interface_types`` (``MA``, ``MS``, ``SA`` ... -> groups) and ``nets`` (Net -> groups of its
-exposed conductor surfaces); they are never overlapping Gmsh groups.
+Primary groups partition each dimension.  A face or volume names its group in its own record, so a group
+record lists no members: readers compute them (``scgsim.contracts.sgb_sidecar.views.group_members``).
 """
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import cast
 
+from scgsim.contracts.sgb_sidecar.records import (
+    AdjacentDomain,
+    FaceKind,
+    GroupBand,
+    InterfaceType,
+    RowSide,
+    SheetSide,
+    SolutionKind,
+    SurfaceEprRow,
+    SurfaceEprType,
+    SurfaceGroup,
+    VolumeGroup,
+    VolumeKind,
+)
 from scgsim.geometry.sgb.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.emission.measures import planned_face_area_um2, rounded
 from scgsim.geometry.sgb.emission.plan import BrepPlan
@@ -36,70 +49,39 @@ SURFACE_EPR_TYPES = (
 )  # interface types that are Surface-EPR contributions
 
 
-class DomainRecord(TypedDict):
-    """A solution region or conductor on one side of a surface."""
-
-    name: str
-    kind: str
-    material: str
-
-
-class SurfaceGroupRecord(TypedDict):
-    """One primary surface group (dimension 2)."""
-
-    dim: int
-    tag: int
-    interface_type: str
-    ids: list[str]
-    native_tags: list[int]
-    entities: list[str]
-    net: str | None
-    face_kind: str
-    adjacent_domains: list[DomainRecord]
-    adjacent_volumes: list[str]
-    band: dict[str, Any] | None
-    area_um2: float
-
-
-class VolumeGroupRecord(TypedDict):
-    """One primary volume group (dimension 3), named by the bare entity id."""
-
-    dim: int
-    tag: int
-    interface_type: None
-    ids: list[str]
-    native_tags: list[int]
-    entities: list[str]
-    kind: str
-    material: str
-    net: str | None
-
-
-def face_kind(face: TopoFace) -> str:
+def face_kind(face: TopoFace) -> FaceKind:
     """The face kind of a planned face (``routes.naming.face_kind``): the one a group name carries, or ``port``."""
-    return naming_face_kind(
-        face.neg_domain, face.pos_domain, face.owner, vertical=face.kind == "wall"
+    return cast(
+        FaceKind,
+        naming_face_kind(
+            face.neg_domain, face.pos_domain, face.owner, vertical=face.kind == "wall"
+        ),
     )
+
+
+def group_members(plan: BrepPlan) -> dict[str, list[str]]:
+    """The written faces or solids of each primary group, by planned id, in the plan's order."""
+    ids = {2: plan.face_ids, 3: plan.solid_ids}
+    return {
+        group.name: [ids[group.dim][i] for i in group.elements] for group in plan.groups
+    }
 
 
 def surface_group_records(
     model: ConformalModel, plan: BrepPlan
-) -> dict[str, SurfaceGroupRecord]:
+) -> dict[str, SurfaceGroup]:
     """Every primary surface group of the plan with the facts derived from its member faces."""
     topology = model.topology
-    face_tag = {fid: i + 1 for i, fid in enumerate(plan.face_ids)}
-    records: dict[str, SurfaceGroupRecord] = {}
+    records: dict[str, SurfaceGroup] = {}
     for group in plan.groups:
         if group.dim != 2:
             continue
         faces = [topology.faces[plan.face_ids[i]] for i in group.elements]
         interface = _group_interface_type(group.name, faces)
-        records[group.name] = SurfaceGroupRecord(
+        records[group.name] = SurfaceGroup(
             dim=2,
             tag=group.tag,
             interface_type=interface,
-            ids=[f.id for f in faces],
-            native_tags=[face_tag[f.id] for f in faces],
             entities=_owners(interface, faces),
             net=_net(faces),
             face_kind=_group_face_kind(group.name, faces),
@@ -113,44 +95,31 @@ def surface_group_records(
 
 def volume_group_records(
     model: ConformalModel, plan: BrepPlan
-) -> dict[str, VolumeGroupRecord]:
+) -> dict[str, VolumeGroup]:
     """Every primary volume group: the kind (vacuum, dielectric, conductor) and material of its domain."""
-    solid_tag = {vid: i + 1 for i, vid in enumerate(plan.solid_ids)}
-    records: dict[str, VolumeGroupRecord] = {}
+    records: dict[str, VolumeGroup] = {}
     for group in plan.groups:
         if group.dim != 3:
             continue
         volumes = [model.topology.volumes[plan.solid_ids[i]] for i in group.elements]
         domain = volumes[0].domain
-        records[group.name] = VolumeGroupRecord(
+        records[group.name] = VolumeGroup(
             dim=3,
             tag=group.tag,
             interface_type=None,
-            ids=[v.id for v in volumes],
-            native_tags=[solid_tag[v.id] for v in volumes],
             entities=[domain.name],
-            kind=domain.kind,
+            kind=cast(VolumeKind, domain.kind),
             material=domain.material,
             net=domain.net or None,
         )
     return records
 
 
-def unions(model: ConformalModel) -> dict[str, dict[str, list[str]]]:
-    """Interface-type unions and Net unions as lists of primary group names."""
-    by_type: dict[str, list[str]] = {}
-    by_net: dict[str, list[str]] = {}
-    for name, members in model.routed.unions.items():
-        if name.startswith("NET::"):
-            by_net[name.removeprefix("NET::")] = list(members)
-        else:
-            by_type[name] = list(members)
-    return {"interface_types": by_type, "nets": by_net}
-
-
 def surface_epr_rows(
-    model: ConformalModel, surface_groups: dict[str, SurfaceGroupRecord]
-) -> dict[str, dict[str, Any]]:
+    model: ConformalModel,
+    surface_groups: dict[str, SurfaceGroup],
+    members: dict[str, list[str]],
+) -> dict[str, SurfaceEprRow]:
     """Every Surface-EPR row and the primary group that carries it.
 
     ``MA``, ``MS`` and ``SA`` groups carry their own row.  A Route A sheet group carries the metal-air
@@ -168,69 +137,75 @@ def surface_epr_rows(
       an internal two-sided face (cracking it, or counting the face once) decides from this field and
       ``face_sides``;
     * ``band`` -- the band index, or ``None`` for an unbanded group.
+
+    ``members`` are the faces of each group (:func:`group_members`).
     """
-    rows: dict[str, dict[str, Any]] = {}
+    rows: dict[str, SurfaceEprRow] = {}
     for name, record in sorted(surface_groups.items()):
         kind = record["interface_type"]
         band = record["band"]["index"] if record["band"] else None
         if kind == SHEET:
             (entity,) = record["entities"]  # a sheet group is the sheet of one Entity
-            for row_type, face_sides in _face_sides_by_row_type(model, record).items():
+            for row_type, face_sides in _face_sides_by_row_type(
+                model, members[name]
+            ).items():
                 rows[sheet_row_id(row_type, entity, band)] = _row(
                     name, row_type, record, band, face_sides
                 )
         elif kind in SURFACE_EPR_TYPES:
-            rows[name] = _row(name, kind, record, band, None)
+            rows[name] = _row(name, cast(SurfaceEprType, kind), record, band, None)
     return rows
 
 
 def _face_sides_by_row_type(
-    model: ConformalModel, record: SurfaceGroupRecord
-) -> dict[str, dict[str, str]]:
+    model: ConformalModel, faces: list[str]
+) -> dict[SurfaceEprType, dict[str, SheetSide]]:
     """Row type -> face id -> side, over the faces of a sheet group; a row type no face has a neighbour for is absent."""
-    out: dict[str, dict[str, str]] = {}
-    for face_id in record["ids"]:
+    out: dict[SurfaceEprType, dict[str, SheetSide]] = {}
+    for face_id in faces:
         face = model.topology.faces[face_id]
         for row_type, side in sheet_face_sides(
             face.neg_domain, face.pos_domain
         ).items():
-            out.setdefault(row_type, {})[face_id] = side
+            out.setdefault(cast(SurfaceEprType, row_type), {})[face_id] = cast(
+                SheetSide, side
+            )
     return out
 
 
 def _row(
     group: str,
-    row_type: str,
-    record: SurfaceGroupRecord,
+    row_type: SurfaceEprType,
+    record: SurfaceGroup,
     band: int | None,
-    face_sides: dict[str, str] | None,
-) -> dict[str, Any]:
-    return {
-        "group": group,
-        "interface_type": row_type,
-        "entities": record["entities"],
-        "band": band,
-        "side": None if face_sides is None else _common_side(face_sides),
-        "face_sides": face_sides,
-        "shared_face_group": None if face_sides is None else group,
-    }
+    face_sides: dict[str, SheetSide] | None,
+) -> SurfaceEprRow:
+    return SurfaceEprRow(
+        group=group,
+        interface_type=row_type,
+        entities=record["entities"],
+        band=band,
+        side=None if face_sides is None else _common_side(face_sides),
+        face_sides=face_sides,
+        shared_face_group=None if face_sides is None else group,
+    )
 
 
-def _common_side(face_sides: dict[str, str]) -> str:
+def _common_side(face_sides: dict[str, SheetSide]) -> RowSide:
     """The side every face agrees on, else ``mixed``."""
-    sides = set(face_sides.values())
+    sides: set[RowSide] = set(face_sides.values())
     return sides.pop() if len(sides) == 1 else "mixed"
 
 
-def _group_face_kind(name: str, faces: list[TopoFace]) -> str:
+def _group_face_kind(name: str, faces: list[TopoFace]) -> FaceKind:
     """The one face kind of a group; a group that mixed two would be a naming defect, so it stops the build."""
-    kinds = {face_kind(f) for f in faces}
+    kinds: set[FaceKind] = {face_kind(f) for f in faces}
     if len(kinds) != 1:
         raise SgbError(f"physical group {name} mixes face kinds {sorted(kinds)}")
     return kinds.pop()
 
 
-def _group_interface_type(name: str, faces: list[TopoFace]) -> str:
+def _group_interface_type(name: str, faces: list[TopoFace]) -> InterfaceType:
     """The one interface type of a group, from the structure of its faces (never from the name)."""
     types = {interface_type_of(f.neg_domain, f.pos_domain, f.owner) for f in faces}
     found = sorted(t for t in types if t is not None)
@@ -238,7 +213,7 @@ def _group_interface_type(name: str, faces: list[TopoFace]) -> str:
         raise SgbError(
             f"physical group {name} mixes interface types {sorted(map(str, types))}"
         )
-    return found[0]
+    return cast(InterfaceType, found[0])
 
 
 def _owners(kind: str, faces: list[TopoFace]) -> list[str]:
@@ -266,7 +241,7 @@ def _net(faces: list[TopoFace]) -> str | None:
     return min(nets) if len(nets) == 1 else None
 
 
-def _adjacent_domains(faces: list[TopoFace]) -> list[DomainRecord]:
+def _adjacent_domains(faces: list[TopoFace]) -> list[AdjacentDomain]:
     """The solution regions (vacuum or dielectric) on any side of the group's faces."""
     found: dict[str, Domain] = {}
     for face in faces:
@@ -274,7 +249,7 @@ def _adjacent_domains(faces: list[TopoFace]) -> list[DomainRecord]:
             if domain is not None and domain.kind != "conductor":
                 found[domain.name] = domain
     return [
-        DomainRecord(name=name, kind=d.kind, material=d.material)
+        AdjacentDomain(name=name, kind=cast(SolutionKind, d.kind), material=d.material)
         for name, d in sorted(found.items())
     ]
 
@@ -291,12 +266,12 @@ def _adjacent_volumes(model: ConformalModel, faces: list[TopoFace]) -> list[str]
     )
 
 
-def _band(faces: list[TopoFace]) -> dict[str, Any] | None:
+def _band(faces: list[TopoFace]) -> GroupBand | None:
     labels = {f.bands[0] for f in faces if f.bands}
     if not labels:
         return None
     family, index = min(labels)
-    return {"family": family, "index": index}
+    return GroupBand(family=family, index=index)
 
 
 def band_groups(

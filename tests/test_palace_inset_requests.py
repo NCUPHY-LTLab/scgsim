@@ -192,7 +192,10 @@ def test_an_off_grid_customised_margin_is_refused_before_comparing(
     route_a_sidecar, ma, ms
 ):
     """On a 0.003 um grid, 1.0 um is off the lattice; compared raw it would pass for grid index 1."""
-    sidecar = {**route_a_sidecar, "grid_um": 0.003}
+    sidecar = {
+        **route_a_sidecar,
+        "model": {**route_a_sidecar["model"], "grid_um": 0.003},
+    }
     specs = customised({"chip/left": ma}, MA=None, MS=None)
     if ms is not None:
         specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": ms}

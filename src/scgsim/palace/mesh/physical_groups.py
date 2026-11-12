@@ -11,15 +11,15 @@ mapping from a name to a JSON-serialisable record:
     (``source == "domain_boundary"``).  ``surface_epr`` is true when the group carries a Surface-EPR row, and
     ``rows`` holds those rows.  A row on a band names its band family and carries the family's ``margins_um``,
     ``margins_grid`` (the same margins in model-grid units, the identity a margin is looked up by), ``grid_um``
-    and ``family_bands`` (band index to groups), read from the sidecar's ``insets`` -- from ``bands`` for a
-    concrete request, from ``expansion.banded[*].bands`` for a type-level one;
+    and ``family_bands`` (band index to groups), read from the sidecar's ``band_family`` table;
 ``pec_surfaces``
     the groups of interface type ``MA``, ``MS`` or ``SHEET`` that have a Net: the conductor surfaces;
 ``port_surfaces``
     ``P<port_index>`` for each lumped port, joined to its ``PORT::`` group.
 
 Every record carries ``attributes`` (the solver attributes of the group, see :mod:`.attributes`) and ``tags``
-(the native entity tags the group covers).  A record keeps nothing of the old compiler records (role,
+(the native entity tags the group covers: the tags of the faces or volumes that name the group, in id order,
+from the contract's views).  A record keeps nothing of the old compiler records (role,
 representation, provenance, equipotential id): the route policy is recorded once in the mesh manifest, and
 electrical identity is the Net.
 """
@@ -30,7 +30,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from typing import Any
 
-from scgsim.contracts.sgb_sidecar import SIDECAR_SCHEMA
+from scgsim.contracts.sgb_sidecar import SIDECAR_SCHEMA, Sidecar, views
 
 from .attributes import SurfacePart, lower_surface_group
 
@@ -40,8 +40,8 @@ SOLUTION_KINDS = ("vacuum", "dielectric")
 Groups = Mapping[str, Mapping[str, Mapping[str, Any]]]
 
 
-def groups_from_sidecar(sidecar: Mapping[str, Any]) -> Groups:
-    """The group dict of one decoded ``scgsim.sgb.sidecar.v2`` sidecar, with attributes assigned.
+def groups_from_sidecar(sidecar: Sidecar) -> Groups:
+    """The group dict of one ``scgsim.sgb.sidecar.v3`` sidecar the shared reader accepted, with attributes assigned.
 
     Attributes are numbered per dimension from 1 in sorted group-name order (the parts of a split group in
     signature order), the numbering SGB itself uses for physical tags.
@@ -50,9 +50,9 @@ def groups_from_sidecar(sidecar: Mapping[str, Any]) -> Groups:
         raise ValueError(
             f"Palace reads sidecar schema {SIDECAR_SCHEMA!r}, got {sidecar.get('schema')!r}."
         )
-    physical = sidecar["physical_groups"]
-    volumes = _volume_groups(physical)
-    surfaces, ports = _surface_groups(sidecar)
+    members = _Members(views.group_members(sidecar), views.TagIndex.of(sidecar))
+    volumes = _volume_groups(sidecar["group"], members)
+    surfaces, ports = _surface_groups(sidecar, members)
     boundary_surfaces = {
         name: record for name, record in surfaces.items() if name not in ports
     }
@@ -71,7 +71,21 @@ def groups_from_sidecar(sidecar: Mapping[str, Any]) -> Groups:
     }
 
 
-def _volume_groups(physical: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+class _Members:
+    """The members of each group by planned id, and their native tags."""
+
+    def __init__(self, ids: dict[str, list[str]], index: views.TagIndex) -> None:
+        self.ids = ids
+        self.index = index
+
+    def tags(self, name: str, dimension: int) -> list[int]:
+        """The native tags of the members of group ``name``, in member order."""
+        return self.index.tags_of(dimension, self.ids[name])
+
+
+def _volume_groups(
+    physical: Mapping[str, Any], members: _Members
+) -> dict[str, dict[str, Any]]:
     volumes: dict[str, dict[str, Any]] = {}
     for attribute, name in enumerate(
         sorted(n for n, g in physical.items() if g["dim"] == 3), start=1
@@ -86,7 +100,7 @@ def _volume_groups(physical: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
             "dim": 3,
             "group": name,
             "attributes": [attribute],
-            "tags": list(record["native_tags"]),
+            "tags": members.tags(name, 3),
             "kind": record["kind"],
             "material": record["material"],
             "entities": list(record["entities"]),
@@ -96,20 +110,23 @@ def _volume_groups(physical: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _surface_groups(
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar, members: _Members
 ) -> tuple[dict[str, dict[str, Any]], set[str]]:
     """Every dim-2 group lowered to attributes, and the names of the port groups among them."""
-    physical = sidecar["physical_groups"]
+    physical = sidecar["group"]
     rows_by_group = _rows_by_group(sidecar)
-    port_groups = {port["group"] for port in sidecar["ports"]}
+    port_groups = {port["group"] for port in sidecar["port"].values()}
     records: dict[str, dict[str, Any]] = {}
     next_attribute = 1
     for name in sorted(n for n, g in physical.items() if g["dim"] == 2):
         record = physical[name]
-        parts = lower_surface_group(name, record, rows_by_group[name], next_attribute)
+        tags = members.tags(name, 2)
+        parts = lower_surface_group(
+            name, members.ids[name], tags, rows_by_group[name], next_attribute
+        )
         next_attribute += len(parts)
         records[name] = _surface_record(
-            name, record, parts, rows_by_group[name], sidecar["lineage"]["membership"]
+            name, record, tags, parts, rows_by_group[name], sidecar["face"]
         )
     return records, port_groups
 
@@ -120,10 +137,10 @@ def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any
     A banded row names its band family and carries the family's margins (in micrometres and in model-grid
     units, with the grid) and bands (band index to the groups that carry it), all read from the sidecar.
     """
-    families = band_families(sidecar)
-    physical = sidecar["physical_groups"]
+    families = sidecar["band_family"]
+    physical = sidecar["group"]
     by_group: defaultdict[str, dict[str, Any]] = defaultdict(dict)
-    for row_id, row in sidecar["surface_epr_rows"].items():
+    for row_id, row in sidecar["surface_epr_row"].items():
         group = physical[row["group"]]
         family = group["band"]["family"] if group["band"] else None
         record = {**row, "net": group["net"], "face_kind": group["face_kind"]}
@@ -134,13 +151,13 @@ def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any
         else:
             if family not in families:
                 raise ValueError(
-                    f"group {row['group']!r} is a band of {family!r}, which no sidecar inset lists."
+                    f"group {row['group']!r} is a band of {family!r}, which the sidecar lists no band family of."
                 )
             record.update(
                 family=family,
                 margins_um=list(families[family]["margins_um"]),
                 margins_grid=list(families[family]["margins_grid"]),
-                grid_um=sidecar["grid_um"],
+                grid_um=sidecar["model"]["grid_um"],
                 family_bands={
                     index: list(names)
                     for index, names in families[family]["bands"].items()
@@ -150,32 +167,13 @@ def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any
     return by_group
 
 
-def band_families(sidecar: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
-    """Every band family of the sidecar by family id, each with its ``margins_um`` and ``bands``.
-
-    A concrete inset request is its own family.  A type-level request (``expansion``) lists the families it
-    was expanded into under ``expansion.banded``; a family there with ``bands == {}`` has no band left to
-    integrate (a lumped port covers the whole face), and the faces under ``expansion.skipped`` have no
-    family at all.
-    """
-    families: dict[str, Mapping[str, Any]] = {}
-    for inset in sidecar["insets"]:
-        if "expansion" in inset:
-            families.update(
-                (family["request_id"], family)
-                for family in inset["expansion"]["banded"]
-            )
-        else:
-            families[inset["request_id"]] = inset
-    return families
-
-
-def _surface_record(
+def _surface_record(  # noqa: PLR0913 -- a group, its tags and parts, its rows and the faces they cover
     name: str,
     record: Mapping[str, Any],
+    tags: list[int],
     parts: list[SurfacePart],
     rows: Mapping[str, Mapping[str, Any]],
-    membership: Mapping[str, Mapping[str, float]],
+    faces: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
     return {
         "dim": 2,
@@ -194,12 +192,14 @@ def _surface_record(
         "adjacent_volumes": list(record["adjacent_volumes"]),
         "area_um2": record["area_um2"],
         "attributes": [part.attribute for part in parts],
-        "tags": list(record["native_tags"]),
+        "tags": tags,
         "parts": [
             {
                 **part.to_payload(),
                 # Lineage membership is attribution only: it weights nothing.
-                "membership": {face: membership.get(face, {}) for face in part.faces},
+                "membership": {
+                    face: dict(faces[face]["membership"]) for face in part.faces
+                },
             }
             for part in parts
         ],
@@ -222,10 +222,10 @@ def _pec_record(record: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _port_records(
-    sidecar: Mapping[str, Any], surfaces: Mapping[str, Mapping[str, Any]]
+    sidecar: Sidecar, surfaces: Mapping[str, Mapping[str, Any]]
 ) -> dict[str, dict[str, Any]]:
     ports: dict[str, dict[str, Any]] = {}
-    for port in sidecar["ports"]:
+    for port_sheet_id, port in views.ports(sidecar):
         key = f"P{port['port_index']}"
         if key in ports:
             raise ValueError(f"duplicate lumped-port index {port['port_index']}.")
@@ -233,7 +233,7 @@ def _port_records(
         ports[key] = {
             "dim": 2,
             "group": port["group"],
-            "port_sheet_id": port["port_sheet_id"],
+            "port_sheet_id": port_sheet_id,
             "port_index": port["port_index"],
             "source_name": port["source_name"],
             "source_layer": port["source_layer"],

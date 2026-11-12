@@ -1,28 +1,90 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v2.json",
-  "title": "scgsim.sgb.sidecar.v2",
-  "description": "Sidecar of the SGB XAO/BREP: planned ids bound to native tags by construction order, primary physical groups with their semantic facts, unions, embeddings, lineage and the load-side expectations.",
+  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v3.json",
+  "title": "scgsim.sgb.sidecar.v3",
+  "description": "Sidecar of the SGB XAO/BREP: the model, the binding of planned ids to native tags, a summary, and the tables of sources, derived curves and emitted shapes, linked by typed ids.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "route", "route_policy", "grid_um", "tolerance_um", "model", "files", "binding", "counts", "physical_groups", "unions", "surface_epr_rows", "volumes", "faces", "embedded_faces", "refinement_edges", "mesh_features", "ports", "lineage", "insets", "refinements", "slivers", "arrangement", "curved_wall_faces", "surface_kinds", "expected"],
+  "required": ["schema", "model", "binding", "summary", "entity", "source_curve", "inset_request", "refinement_request", "port", "band_family", "support_ring", "support_primitive", "carrier", "vertex", "edge", "face", "volume", "group", "surface_epr_row", "mesh_feature"],
   "properties": {
-    "schema": {"const": "scgsim.sgb.sidecar.v2"},
-    "route": {"enum": ["A", "B", "C"]},
-    "route_policy": {"$ref": "#/$defs/RoutePolicy"},
-    "grid_um": {"type": "number", "exclusiveMinimum": 0},
-    "tolerance_um": {"type": "number", "exclusiveMinimum": 0},
-    "model": {"$ref": "#/$defs/ModelIdentity"},
-    "files": {
-      "description": "File names relative to the sidecar.",
-      "type": "object",
-      "additionalProperties": {"type": "string"},
-      "propertyNames": {"enum": ["xao", "brep", "sidecar", "sliver_report", "validation_report"]}
-    },
+    "schema": {"const": "scgsim.sgb.sidecar.v3"},
+    "model": {"$ref": "#/$defs/Model"},
     "binding": {"$ref": "#/$defs/Binding"},
-    "counts": {"$ref": "#/$defs/Counts"},
-    "physical_groups": {
-      "description": "Primary physical groups by name; they partition each dimension.",
+    "summary": {"$ref": "#/$defs/Summary"},
+    "entity": {
+      "description": "Sources: every Entity, by Entity id.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/Entity"}
+    },
+    "source_curve": {
+      "description": "Sources: every straight edge and circular arc of every Entity outline, by carrier id.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/SourceCurve"}
+    },
+    "inset_request": {
+      "description": "Sources: the inset requests as given, by request id.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/InsetRequest"}
+    },
+    "refinement_request": {
+      "description": "Sources: the refinement requests as given, by request id.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/RefinementRequest"}
+    },
+    "port": {
+      "description": "Sources: the lumped-port sheets, by port sheet id.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/Port"}
+    },
+    "band_family": {
+      "description": "Derived: one band family per banded face, by family id.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/BandFamily"}
+    },
+    "support_ring": {
+      "description": "Derived: the boundary rings of each band family's support region.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/SupportRing"}
+    },
+    "support_primitive": {
+      "description": "Derived: the exact primitives (lines and arcs) of each support ring.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/SupportPrimitive"}
+    },
+    "carrier": {
+      "description": "Derived: every carrier an emitted horizontal or refinement edge lies on, and what it comes from.",
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {"$ref": "#/$defs/SourceCarrier"},
+          {"$ref": "#/$defs/BandMemberCarrier"},
+          {"$ref": "#/$defs/RefinementCarrier"},
+          {"$ref": "#/$defs/UnknownCarrier"}
+        ]
+      }
+    },
+    "vertex": {
+      "description": "Emitted: every written vertex.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/Vertex"}
+    },
+    "edge": {
+      "description": "Emitted: every written edge.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/Edge"}
+    },
+    "face": {
+      "description": "Emitted: every written face.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/Face"}
+    },
+    "volume": {
+      "description": "Emitted: every planned volume, the written solids marked emitted.",
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/Volume"}
+    },
+    "group": {
+      "description": "Emitted: the primary physical groups by name; they partition each dimension.  A face or volume names its group; the members of a group are computed from them.",
       "type": "object",
       "additionalProperties": {
         "oneOf": [
@@ -31,33 +93,15 @@
         ]
       }
     },
-    "unions": {"$ref": "#/$defs/Unions"},
-    "surface_epr_rows": {
+    "surface_epr_row": {
+      "description": "Emitted: every Surface-EPR row and the group that carries it, by row id.",
       "type": "object",
       "additionalProperties": {"$ref": "#/$defs/SurfaceEprRow"}
     },
-    "volumes": {
+    "mesh_feature": {
+      "description": "Emitted: facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs, refinement curves, port edges.  Their order is computed (by kind, source and facts).",
       "type": "object",
-      "additionalProperties": {"$ref": "#/$defs/Volume"}
-    },
-    "faces": {
-      "type": "object",
-      "additionalProperties": {"$ref": "#/$defs/Face"}
-    },
-    "embedded_faces": {
-      "description": "Sheets inside an emitted volume; the mesher embeds each face in its host volume.",
-      "type": "array",
-      "items": {"$ref": "#/$defs/EmbeddedFace"}
-    },
-    "refinement_edges": {
-      "description": "Refinement-only curves; the mesher embeds each edge in its host face.",
-      "type": "array",
-      "items": {"$ref": "#/$defs/RefinementEdge"}
-    },
-    "mesh_features": {
-      "description": "Facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs, refinement curves, port edges. Sorted by kind, source and canonical JSON of the facts.",
-      "type": "array",
-      "items": {
+      "additionalProperties": {
         "oneOf": [
           {"$ref": "#/$defs/FilmSidewall"},
           {"$ref": "#/$defs/BandBoundary"},
@@ -66,34 +110,7 @@
           {"$ref": "#/$defs/PortEdge"}
         ]
       }
-    },
-    "ports": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/Port"}
-    },
-    "lineage": {"$ref": "#/$defs/Lineage"},
-    "insets": {
-      "description": "The inset requests as given, by request id.  A concrete request is the record of its face; a type-level request lists the faces it was expanded into and the faces it skipped.",
-      "type": "array",
-      "items": {
-        "oneOf": [
-          {"$ref": "#/$defs/InsetFace"},
-          {"$ref": "#/$defs/InsetType"}
-        ]
-      }
-    },
-    "refinements": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/Refinement"}
-    },
-    "slivers": {"$ref": "#/$defs/SliverSummary"},
-    "arrangement": {"$ref": "#/$defs/Arrangement"},
-    "curved_wall_faces": {
-      "type": "array",
-      "items": {"type": "string"}
-    },
-    "surface_kinds": {"$ref": "#/$defs/SurfaceKinds"},
-    "expected": {"$ref": "#/$defs/Expected"}
+    }
   },
   "$defs": {
     "AdjacentDomain": {
@@ -102,9 +119,38 @@
       "additionalProperties": false,
       "required": ["name", "kind", "material"],
       "properties": {
-        "name": {"type": "string"},
+        "name": {"type": "string", "x-references": "entity"},
         "kind": {"enum": ["vacuum", "dielectric"]},
         "material": {"type": "string"}
+      }
+    },
+    "ArcCurve": {
+      "description": "A circular arc from start to end about a centre, counter-clockwise or not.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "centre_um", "radius_um", "ccw", "start_um", "end_um"],
+      "properties": {
+        "kind": {"const": "arc"},
+        "centre_um": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "radius_um": {"type": "number", "exclusiveMinimum": 0},
+        "ccw": {"type": "boolean"},
+        "start_um": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "end_um": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
+        }
       }
     },
     "ArcFacts": {
@@ -120,52 +166,31 @@
       "description": "The circular-arc edges of one carrier radius.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["edges", "native_tags", "kind", "source", "facts"],
+      "required": ["edges", "kind", "source", "facts"],
       "properties": {
         "edges": {
           "type": "array",
-          "items": {"type": "string"},
-          "minItems": 1
-        },
-        "native_tags": {
-          "type": "array",
-          "items": {"type": "integer", "minimum": 1},
+          "items": {"type": "string", "x-references": "edge"},
           "minItems": 1
         },
         "kind": {"const": "arc"},
-        "source": {"description": "The one entity that owns the arcs; null when no single entity does.", "type": ["string", "null"]},
+        "source": {"description": "The one Entity that owns the arcs; null when no single Entity does.", "type": ["string", "null"], "x-references": "entity"},
         "facts": {"$ref": "#/$defs/ArcFacts"}
-      }
-    },
-    "Arrangement": {
-      "description": "The measured snap drift and arc deviation of the arrangement (grid units), and the number of arc edges.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["max_snap_drift_grid", "max_arc_deviation_grid", "arc_edges"],
-      "properties": {
-        "max_snap_drift_grid": {"type": ["number", "null"]},
-        "max_arc_deviation_grid": {"type": ["number", "null"]},
-        "arc_edges": {"type": "integer", "minimum": 0}
       }
     },
     "BandBoundary": {
       "description": "The edges of an inset family; margins_um are the request's margins, ascending, and narrowest_band_um the smallest difference between consecutive margins with 0 prepended.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["edges", "native_tags", "kind", "source", "facts"],
+      "required": ["edges", "kind", "source", "facts"],
       "properties": {
         "edges": {
           "type": "array",
-          "items": {"type": "string"},
-          "minItems": 1
-        },
-        "native_tags": {
-          "type": "array",
-          "items": {"type": "integer", "minimum": 1},
+          "items": {"type": "string", "x-references": "edge"},
           "minItems": 1
         },
         "kind": {"const": "band_boundary"},
-        "source": {"description": "The inset request id.", "type": "string"},
+        "source": {"description": "The band family.", "type": "string", "x-references": "band_family"},
         "facts": {"$ref": "#/$defs/BandBoundaryFacts"}
       }
     },
@@ -183,14 +208,60 @@
         "narrowest_band_um": {"type": "number", "exclusiveMinimum": 0}
       }
     },
+    "BandFamily": {
+      "description": "One band family: the face an inset request bands, its margins (also in model-grid units, the identity a margin is looked up by), the area of its support region and the groups of each band.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands"],
+      "properties": {
+        "support": {
+          "oneOf": [
+            {"$ref": "#/$defs/FaceSupport"},
+            {"$ref": "#/$defs/InterfaceSupport"}
+          ]
+        },
+        "interface": {"type": ["string", "null"]},
+        "margins_um": {
+          "type": "array",
+          "items": {"type": "number", "exclusiveMinimum": 0}
+        },
+        "margins_grid": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "band_count": {"type": "integer", "minimum": 1},
+        "support_area_um2": {"type": ["number", "null"]},
+        "bands": {
+          "description": "Band index -> the primary groups of the faces in that band.  In Route B a family also names the MM group of a metal-metal contact, which is not a physical group, so these names are not checked.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
     "BandLabel": {
-      "description": "The inset band a group's faces lie in: the band family and the band index.",
+      "description": "An inset band: the band family and the band index.",
       "type": "object",
       "additionalProperties": false,
       "required": ["family", "index"],
       "properties": {
-        "family": {"type": "string"},
+        "family": {"type": "string", "x-references": "band_family"},
         "index": {"type": "integer", "minimum": 0}
+      }
+    },
+    "BandMemberCarrier": {
+      "description": "A band curve of an inset family: the support primitive it follows, how, and at which margin.\n\n``edge`` offsets the primitive; ``corner`` turns round the reflex vertex after it (to the next primitive of its ring); ``capstart`` and ``capend`` close round its start or end.  ``piece`` numbers the parts of a cap or corner cut into several, and is null for a member in one piece.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "primitive", "role", "margin_grid", "piece"],
+      "properties": {
+        "kind": {"const": "band_member"},
+        "primitive": {"type": "string", "x-references": "support_primitive"},
+        "role": {"enum": ["edge", "corner", "capstart", "capend"]},
+        "margin_grid": {"type": "integer", "minimum": 1},
+        "piece": {"type": ["integer", "null"], "minimum": 0}
       }
     },
     "Binding": {
@@ -200,22 +271,7 @@
       "required": ["rule", "ids_by_tag"],
       "properties": {
         "rule": {"type": "string"},
-        "ids_by_tag": {"description": "Planned ids per dimension in native-tag order: tag = 1 + position.", "$ref": "#/$defs/IdsByTag"}
-      }
-    },
-    "Carrier": {
-      "description": "A carrier: a source polygon edge (entity, polygon, ring, edge), a cut-family member (family, member), or unknown.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind"],
-      "properties": {
-        "kind": {"enum": ["polygon_edge", "family_member", "unknown"]},
-        "entity": {"type": "string"},
-        "polygon": {"type": "integer"},
-        "ring": {"type": "integer"},
-        "edge": {"type": "integer"},
-        "family": {"type": "string"},
-        "member": {"type": "string"}
+        "ids_by_tag": {"description": "Planned ids per dimension in native-tag order: tag = 1 + position.  They are exactly the ids of the vertex, edge and face tables and of the emitted volumes.", "$ref": "#/$defs/IdsByTag"}
       }
     },
     "Counts": {
@@ -239,72 +295,79 @@
         "volumes_total": {"type": "integer", "minimum": 0}
       }
     },
-    "EmbeddedFace": {
-      "description": "A sheet face inside an emitted volume, and its group.",
+    "Edge": {
+      "description": "One written edge: its kind, its two vertices, its arc (null for a line), its length, and what it comes from: the carriers of a horizontal or refinement edge, the Entities whose walls stand on a vertical one.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["face", "host_volume", "group"],
+      "required": ["kind", "vertices", "arc", "length_um", "carriers", "entities", "written_as_free_edge"],
       "properties": {
-        "face": {"type": "string"},
-        "host_volume": {"type": "string"},
-        "group": {"type": ["string", "null"]}
+        "kind": {"enum": ["horizontal", "vertical", "refinement"]},
+        "vertices": {
+          "type": "array",
+          "items": {"type": "string", "x-references": "vertex"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "arc": {
+          "oneOf": [
+            {"$ref": "#/$defs/EdgeArc"},
+            {"type": "null"}
+          ]
+        },
+        "length_um": {"type": "number", "minimum": 0},
+        "carriers": {
+          "type": "array",
+          "items": {"type": "string", "x-references": "carrier"}
+        },
+        "entities": {
+          "type": "array",
+          "items": {"type": "string", "x-references": "entity"}
+        },
+        "written_as_free_edge": {"type": "boolean"}
       }
     },
-    "Expected": {
-      "description": "What verify_loaded compares, by native tag (tag = 1 + position).",
+    "EdgeArc": {
+      "description": "The circle an arc edge was written on.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["vertices_um", "edge_vertices", "face_edges", "solid_faces", "face_area_um2", "solid_volume_um3"],
+      "required": ["centre_um", "radius_um", "ccw"],
       "properties": {
-        "vertices_um": {
+        "centre_um": {
           "type": "array",
-          "items": {
-            "type": "array",
-            "items": {"type": "number"},
-            "minItems": 3,
-            "maxItems": 3
-          }
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
         },
-        "edge_vertices": {
+        "radius_um": {"type": "number", "exclusiveMinimum": 0},
+        "ccw": {"description": "The direction of travel from the first vertex to the second.", "type": "boolean"}
+      }
+    },
+    "Entity": {
+      "description": "One Entity of the layout: what it is made of, its Net, the layer it was drawn on and its z range.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "material", "net", "layer", "z_um", "feature_kind"],
+      "properties": {
+        "kind": {"enum": ["conductor", "dielectric", "vacuum", "port"]},
+        "material": {"type": "string"},
+        "net": {"type": ["string", "null"]},
+        "layer": {"description": "The source layer: its logical level id, else its GDS layer/datatype; null when the Entity has none (the vacuum, a substrate, a scene drawn directly as SGB records).", "type": ["string", "null"]},
+        "z_um": {
           "type": "array",
-          "items": {
-            "type": "array",
-            "items": {"type": "integer", "minimum": 1},
-            "minItems": 2,
-            "maxItems": 2
-          }
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
         },
-        "face_edges": {
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": {"type": "integer", "minimum": 1}
-          }
-        },
-        "solid_faces": {
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": {"type": "integer", "minimum": 1}
-          }
-        },
-        "face_area_um2": {
-          "type": "array",
-          "items": {"type": "number", "exclusiveMinimum": 0}
-        },
-        "solid_volume_um3": {
-          "type": "array",
-          "items": {"type": "number", "exclusiveMinimum": 0}
-        }
+        "feature_kind": {"description": "The physical declaration's feature kind (stack_film, local_film, finite_volume); null without one.", "type": ["string", "null"]}
       }
     },
     "Face": {
-      "description": "One planned face: its group, kind, face kind, z range and the volumes on its two sides.",
+      "description": "One written face: its group, kind, face kind, z range, the volumes on its two sides, its written loops and area, and what it comes from.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume"],
+      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume", "loops", "area_um2", "curved", "entities", "families", "membership", "bands", "embedded_edges", "outer_boundary"],
       "properties": {
-        "group": {"type": ["string", "null"]},
+        "group": {"type": ["string", "null"], "x-references": "group", "x-dimension": 2},
         "kind": {"enum": ["horizontal", "wall"]},
         "face_kind": {"enum": ["top", "bottom", "sidewall", "sheet", "port", "interface"]},
         "z_um": {
@@ -313,28 +376,74 @@
           "minItems": 2,
           "maxItems": 2
         },
-        "negative_volume": {"type": ["string", "null"]},
-        "positive_volume": {"type": ["string", "null"]}
+        "negative_volume": {"type": ["string", "null"], "x-references": "volume"},
+        "positive_volume": {"type": ["string", "null"], "x-references": "volume"},
+        "loops": {
+          "description": "The written wires of the face.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/Loop"},
+          "minItems": 1
+        },
+        "area_um2": {"type": "number", "exclusiveMinimum": 0},
+        "curved": {"description": "A wall on a cylinder.", "type": "boolean"},
+        "entities": {
+          "description": "The Entities whose outlines bound the face.",
+          "type": "array",
+          "items": {"type": "string", "x-references": "entity"}
+        },
+        "families": {
+          "description": "The band families whose curves bound the face.",
+          "type": "array",
+          "items": {"type": "string", "x-references": "band_family"}
+        },
+        "membership": {
+          "description": "Entity -> covered fraction of the face area; non-exclusive, may sum to more than 1 (walls use the share of their bottom boundary length).",
+          "type": "object",
+          "additionalProperties": {"type": "number", "minimum": 0},
+          "propertyNames": {"x-references": "entity"}
+        },
+        "bands": {
+          "description": "The inset band labels of the face, in label order.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/BandLabel"}
+        },
+        "embedded_edges": {
+          "description": "Refinement-only curves the mesher embeds in this face, in order.",
+          "type": "array",
+          "items": {"type": "string", "x-references": "edge"}
+        },
+        "outer_boundary": {
+          "description": "For a face on the model's outer boundary (one side volume is null): where it lies; null for every other face.",
+          "oneOf": [
+            {"$ref": "#/$defs/OuterBoundary"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "FaceSupport": {
+      "description": "A conductor face: the Entity and its side.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "side"],
+      "properties": {
+        "entity": {"type": "string", "x-references": "entity"},
+        "side": {"enum": ["sheet", "top", "bottom"]}
       }
     },
     "FilmSidewall": {
       "description": "Every edge of the sidewall faces of a finite body; thickness_um is the z extent of the sidewall column.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["edges", "native_tags", "kind", "source", "facts"],
+      "required": ["edges", "kind", "source", "facts"],
       "properties": {
         "edges": {
           "type": "array",
-          "items": {"type": "string"},
-          "minItems": 1
-        },
-        "native_tags": {
-          "type": "array",
-          "items": {"type": "integer", "minimum": 1},
+          "items": {"type": "string", "x-references": "edge"},
           "minItems": 1
         },
         "kind": {"const": "film_sidewall"},
-        "source": {"description": "The entity id of the body.", "type": "string"},
+        "source": {"description": "The body.", "type": "string", "x-references": "entity"},
         "facts": {"$ref": "#/$defs/FilmSidewallFacts"}
       }
     },
@@ -347,6 +456,16 @@
         "thickness_um": {"type": "number", "exclusiveMinimum": 0}
       }
     },
+    "GroupBand": {
+      "description": "The inset band a group's faces lie in: the band family and the band index.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "index"],
+      "properties": {
+        "family": {"type": "string", "x-references": "band_family"},
+        "index": {"type": "integer", "minimum": 0}
+      }
+    },
     "IdsByTag": {
       "type": "object",
       "additionalProperties": false,
@@ -354,127 +473,141 @@
       "properties": {
         "0": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "vertex"}
         },
         "1": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "edge"}
         },
         "2": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "face"}
         },
         "3": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "volume"}
         }
       }
     },
-    "InsetFace": {
-      "description": "One band family: the request of a face.  Every request that landed on the face asks these margins.",
+    "InsetRequest": {
+      "description": "An inset request as given: the face it names (scope face) or the Surface-EPR type it asks for (scope type), its margins, the band families it became and the faces it left unbanded.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["request_id", "support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands"],
+      "required": ["scope", "support", "interface", "margins_um", "families", "skipped"],
       "properties": {
-        "request_id": {"type": "string"},
-        "support": {"type": "object"},
+        "scope": {"enum": ["face", "type"]},
+        "support": {
+          "oneOf": [
+            {"$ref": "#/$defs/FaceSupport"},
+            {"$ref": "#/$defs/InterfaceSupport"},
+            {"$ref": "#/$defs/TypeSupport"}
+          ]
+        },
         "interface": {"type": ["string", "null"]},
         "margins_um": {
           "type": "array",
           "items": {"type": "number", "exclusiveMinimum": 0}
         },
-        "margins_grid": {
+        "families": {
+          "description": "The band families the request became: a face request's own family, or the families the physical pre-pass created for a type-level request, in face order.  A port placed later can cover a whole face: read whether a family has bands from its own bands and from surface_epr_row.",
           "type": "array",
-          "items": {"type": "integer", "minimum": 1}
+          "items": {"type": "string", "x-references": "band_family"}
         },
-        "band_count": {"type": "integer", "minimum": 1},
-        "support_area_um2": {"type": ["number", "null"]},
-        "bands": {
-          "description": "Band index -> primary groups.",
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {"type": "string"}
-          }
+        "skipped": {
+          "description": "The faces a type-level request left unbanded (empty for a face request).",
+          "type": "array",
+          "items": {"$ref": "#/$defs/SkippedFace"}
         }
       }
     },
-    "InsetType": {
-      "description": "A type-level request (every face of a Surface-EPR type) with the families that carry its bands and the faces it left unbanded.",
+    "InterfaceSupport": {
+      "description": "The interface between two solution regions, at one height or (null) wherever they meet.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["request_id", "support", "interface", "margins_um", "expansion"],
+      "required": ["first_entity", "second_entity", "z_um"],
       "properties": {
-        "request_id": {"type": "string"},
-        "support": {"$ref": "#/$defs/TypeSupport"},
-        "interface": {"type": "null"},
-        "margins_um": {
-          "type": "array",
-          "items": {"type": "number", "exclusiveMinimum": 0}
-        },
-        "expansion": {"$ref": "#/$defs/TypeExpansion"}
+        "first_entity": {"type": "string", "x-references": "entity"},
+        "second_entity": {"type": "string", "x-references": "entity"},
+        "z_um": {"type": ["number", "null"]}
       }
     },
-    "Lineage": {
-      "description": "Every edge and face back to its source: edge carriers, carrier descriptions, wall columns, face sources and the area each Entity covers.",
+    "LineCurve": {
+      "description": "A straight curve from start to end.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["edges", "carriers", "vertical_edges", "faces", "membership"],
+      "required": ["kind", "start_um", "end_um"],
+      "properties": {
+        "kind": {"const": "line"},
+        "start_um": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "end_um": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "Loop": {
+      "description": "One written wire: its edges in order, and whether each is travelled against its own direction.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edges", "reversed"],
       "properties": {
         "edges": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {"type": "string"}
-          }
+          "type": "array",
+          "items": {"type": "string", "x-references": "edge"},
+          "minItems": 1
         },
-        "carriers": {
-          "type": "object",
-          "additionalProperties": {"$ref": "#/$defs/Carrier"}
-        },
-        "vertical_edges": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {"type": "string"}
-          }
-        },
-        "faces": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {"type": "string"}
-          }
-        },
-        "membership": {
-          "description": "Face -> {Entity: covered fraction of the face area}; non-exclusive, may sum to more than 1.",
-          "type": "object",
-          "additionalProperties": {
-            "type": "object",
-            "additionalProperties": {"type": "number", "minimum": 0}
-          }
+        "reversed": {
+          "type": "array",
+          "items": {"type": "boolean"}
         }
       }
     },
-    "ModelIdentity": {
-      "description": "The model's name and identity digest.",
+    "Model": {
+      "description": "The model's name and identity digest, its route, grid and tolerance, and the files written beside it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "identity_digest"],
+      "required": ["name", "identity_digest", "route", "route_policy", "grid_um", "tolerance_um", "files"],
       "properties": {
         "name": {"type": "string"},
-        "identity_digest": {"type": "string", "pattern": "^model:[0-9a-f]{16}$"}
+        "identity_digest": {"type": "string", "pattern": "^model:[0-9a-f]{16}$"},
+        "route": {"enum": ["A", "B", "C"]},
+        "route_policy": {"$ref": "#/$defs/RoutePolicy"},
+        "grid_um": {"type": "number", "exclusiveMinimum": 0},
+        "tolerance_um": {"type": "number", "exclusiveMinimum": 0},
+        "files": {
+          "description": "File names relative to the sidecar.",
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "propertyNames": {"enum": ["xao", "brep", "sidecar", "sliver_report", "validation_report"]}
+        }
       }
     },
     "NoFacts": {"description": "The facts of a feature kind that has none: an empty object.", "type": "object", "additionalProperties": false},
-    "Port": {
-      "description": "A lumped-port sheet: the authored identity, and the faces and volumes that carry it in the model.",
+    "OuterBoundary": {
+      "description": "Where a face on the model's outer boundary lies: the side of the model's box and the domain it bounds.\n\nThe box is the extent of the written vertices.  A planar face whose vertices all lie on one of its six planes is on that side: ``-x`` and ``+x`` the lowest and highest x, ``-y`` and ``+y`` likewise, ``bottom`` and ``top`` the lowest and highest z.  A face on none of them (a curved wall, or a die edge that is not parallel to an axis) has no side.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["port_sheet_id", "group", "source_name", "port_index", "direction", "host_entity_ids", "source_layer", "target_layer", "z_um", "faces", "host_volumes", "adjacent_volumes"],
+      "required": ["side", "domain"],
       "properties": {
-        "port_sheet_id": {"type": "string"},
-        "group": {"type": "string"},
+        "side": {"enum": ["-x", "+x", "-y", "+y", "bottom", "top", null]},
+        "domain": {"description": "The Entity of the volume on the face's other side, inside the model.", "type": "string", "x-references": "entity"}
+      }
+    },
+    "Port": {
+      "description": "A lumped-port sheet: the authored identity, its Entity, and the faces and volumes that carry it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "group", "source_name", "port_index", "direction", "host_entity_ids", "source_layer", "target_layer", "z_um", "faces", "host_volumes", "adjacent_volumes"],
+      "properties": {
+        "entity": {"type": "string", "x-references": "entity"},
+        "group": {"type": "string", "x-references": "group", "x-dimension": 2},
         "source_name": {"type": "string"},
         "port_index": {"type": "integer"},
         "direction": {
@@ -483,22 +616,22 @@
         },
         "host_entity_ids": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "entity"}
         },
         "source_layer": {"type": "string"},
         "target_layer": {"type": "string"},
         "z_um": {"type": "number"},
         "faces": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "face"}
         },
         "host_volumes": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "volume"}
         },
         "adjacent_volumes": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "volume"}
         }
       }
     },
@@ -506,30 +639,50 @@
       "description": "The boundary edges of the faces of a lumped-port sheet.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["edges", "native_tags", "kind", "source", "facts"],
+      "required": ["edges", "kind", "source", "facts"],
       "properties": {
         "edges": {
           "type": "array",
-          "items": {"type": "string"},
-          "minItems": 1
-        },
-        "native_tags": {
-          "type": "array",
-          "items": {"type": "integer", "minimum": 1},
+          "items": {"type": "string", "x-references": "edge"},
           "minItems": 1
         },
         "kind": {"const": "port_edge"},
-        "source": {"description": "The port sheet id.", "type": "string"},
+        "source": {"description": "The port sheet.", "type": "string", "x-references": "port"},
         "facts": {"$ref": "#/$defs/NoFacts"}
       }
     },
-    "Refinement": {
-      "description": "A refinement request as given, and the edges it produced.",
+    "RefinementCarrier": {
+      "description": "A segment of a refinement request's polyline.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["request_id", "z_um", "points_um", "edges"],
+      "required": ["kind", "request"],
       "properties": {
-        "request_id": {"type": "string"},
+        "kind": {"const": "refinement"},
+        "request": {"type": "string", "x-references": "refinement_request"}
+      }
+    },
+    "RefinementCurve": {
+      "description": "The refinement-only curves of a refinement request.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edges", "kind", "source", "facts"],
+      "properties": {
+        "edges": {
+          "type": "array",
+          "items": {"type": "string", "x-references": "edge"},
+          "minItems": 1
+        },
+        "kind": {"const": "refinement_curve"},
+        "source": {"description": "The refinement request.", "type": "string", "x-references": "refinement_request"},
+        "facts": {"$ref": "#/$defs/NoFacts"}
+      }
+    },
+    "RefinementRequest": {
+      "description": "A refinement request as given: the polyline, at one height, along which the mesher refines.  A refinement family a catalogue declares directly, with no request, is recorded by the polyline of its segments.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["z_um", "points_um"],
+      "properties": {
         "z_um": {"type": "number"},
         "points_um": {
           "type": "array",
@@ -539,44 +692,7 @@
             "minItems": 2,
             "maxItems": 2
           }
-        },
-        "edges": {
-          "type": "array",
-          "items": {"type": "string"}
         }
-      }
-    },
-    "RefinementCurve": {
-      "description": "The refinement-only curves of a refinement request.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["edges", "native_tags", "kind", "source", "facts"],
-      "properties": {
-        "edges": {
-          "type": "array",
-          "items": {"type": "string"},
-          "minItems": 1
-        },
-        "native_tags": {
-          "type": "array",
-          "items": {"type": "integer", "minimum": 1},
-          "minItems": 1
-        },
-        "kind": {"const": "refinement_curve"},
-        "source": {"description": "The refinement request id.", "type": "string"},
-        "facts": {"$ref": "#/$defs/NoFacts"}
-      }
-    },
-    "RefinementEdge": {
-      "description": "A refinement-only edge in its host face, its cut family, and whether it is written as a free edge.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["edge", "host_face", "family", "written_as_free_edge"],
-      "properties": {
-        "edge": {"type": "string"},
-        "host_face": {"type": "string"},
-        "family": {"type": ["string", "null"]},
-        "written_as_free_edge": {"type": "boolean"}
       }
     },
     "RoutePolicy": {
@@ -595,12 +711,17 @@
       "additionalProperties": false,
       "required": ["support", "reason"],
       "properties": {
-        "support": {"type": "object"},
+        "support": {
+          "oneOf": [
+            {"$ref": "#/$defs/FaceSupport"},
+            {"$ref": "#/$defs/InterfaceSupport"}
+          ]
+        },
         "reason": {"const": "no_gap_edge"}
       }
     },
     "SliverSummary": {
-      "description": "Summary of the sliver report (measurements only; decision D2).",
+      "description": "Summary of the sliver report (measurements only; decision D2), with the snap drift and arc deviation of the arrangement in grid units.",
       "type": "object",
       "properties": {
         "shortest_edge_um": {"type": ["number", "null"]},
@@ -611,17 +732,94 @@
         "max_arc_deviation_grid": {"type": ["number", "null"]}
       }
     },
+    "SourceCarrier": {
+      "description": "A carrier that is a source curve, or a witness chord of one.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "source_curve"],
+      "properties": {
+        "kind": {"const": "source"},
+        "source_curve": {"type": "string", "x-references": "source_curve"}
+      }
+    },
+    "SourceCurve": {
+      "description": "One straight edge or circular arc of an Entity outline as the layout drew it: where it lies in the outline (polygon, ring, edge number), its exact curve and its length.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity", "polygon", "ring", "edge", "curve", "length_um"],
+      "properties": {
+        "entity": {"type": "string", "x-references": "entity"},
+        "polygon": {"type": "integer", "minimum": 0},
+        "ring": {"type": "integer", "minimum": 0},
+        "edge": {"type": "integer", "minimum": 0},
+        "curve": {
+          "oneOf": [
+            {"$ref": "#/$defs/LineCurve"},
+            {"$ref": "#/$defs/ArcCurve"}
+          ]
+        },
+        "length_um": {"type": "number", "minimum": 0}
+      }
+    },
+    "Summary": {
+      "description": "Counts of the written file, the sliver report's summary and the number of arc edges, each once.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["counts", "slivers", "arc_edges"],
+      "properties": {
+        "counts": {"$ref": "#/$defs/Counts"},
+        "slivers": {"$ref": "#/$defs/SliverSummary"},
+        "arc_edges": {"description": "The arc edges of the planned topology, written or not.", "type": "integer", "minimum": 0}
+      }
+    },
+    "SupportPrimitive": {
+      "description": "One exact primitive of a support ring: its curve and length, whether bands are measured from it (a distance origin), whether it lies on the die edge, and the source curves it lies on.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ring", "curve", "length_um", "origin", "die_edge", "sources"],
+      "properties": {
+        "ring": {"type": "string", "x-references": "support_ring"},
+        "curve": {
+          "oneOf": [
+            {"$ref": "#/$defs/LineCurve"},
+            {"$ref": "#/$defs/ArcCurve"}
+          ]
+        },
+        "length_um": {"type": "number", "minimum": 0},
+        "origin": {"type": "boolean"},
+        "die_edge": {"type": "boolean"},
+        "sources": {
+          "description": "The source curves drawn along the primitive, one per Entity whose outline runs there (a ground edge on the die outline also carries the substrate and vacuum edges).",
+          "type": "array",
+          "items": {"type": "string", "x-references": "source_curve"}
+        }
+      }
+    },
+    "SupportRing": {
+      "description": "One boundary ring of a band family's support region (interior on the left): its primitives in order, so their count is the ring's size.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["family", "index", "primitives"],
+      "properties": {
+        "family": {"type": "string", "x-references": "band_family"},
+        "index": {"description": "The ring's position among the region's rings.", "type": "integer", "minimum": 0},
+        "primitives": {
+          "type": "array",
+          "items": {"type": "string", "x-references": "support_primitive"}
+        }
+      }
+    },
     "SurfaceEprRow": {
       "description": "One Surface-EPR row and the primary group that carries it.",
       "type": "object",
       "additionalProperties": false,
       "required": ["group", "interface_type", "entities", "band", "side", "face_sides", "shared_face_group"],
       "properties": {
-        "group": {"type": "string"},
+        "group": {"type": "string", "x-references": "group", "x-dimension": 2},
         "interface_type": {"enum": ["MA", "MS", "SA"]},
         "entities": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "entity"}
         },
         "band": {"type": ["integer", "null"], "minimum": 0},
         "side": {"description": "A sheet row: the side every face in face_sides agrees on, or mixed when they disagree; null for any other row.", "enum": ["above", "below", "both", "mixed", null]},
@@ -629,31 +827,24 @@
           "description": "A sheet row: face id -> the side of that face whose neighbour (vacuum for MA, dielectric for MS) the row integrates, listing exactly the faces that have such a neighbour; null for any other row.",
           "type": ["object", "null"],
           "additionalProperties": {"enum": ["above", "below", "both"]},
+          "propertyNames": {"x-references": "face"},
           "minProperties": 1
         },
-        "shared_face_group": {"description": "The sheet group for a sheet row (its MA and MS rows integrate the same two-sided face), else null.", "type": ["string", "null"]}
+        "shared_face_group": {"description": "The sheet group for a sheet row (its MA and MS rows integrate the same two-sided face), else null.", "type": ["string", "null"], "x-references": "group", "x-dimension": 2}
       }
     },
     "SurfaceGroup": {
       "description": "One primary surface group (dimension 2) and the facts derived from its member faces.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["dim", "tag", "interface_type", "ids", "native_tags", "entities", "net", "face_kind", "adjacent_domains", "adjacent_volumes", "band", "area_um2"],
+      "required": ["dim", "tag", "interface_type", "entities", "net", "face_kind", "adjacent_domains", "adjacent_volumes", "band", "area_um2"],
       "properties": {
         "dim": {"const": 2},
         "tag": {"type": "integer", "minimum": 1},
         "interface_type": {"description": "Derived from the face structure, never parsed from the group name; SHEET is a Route A conductor sheet, whose group is named by the bare entity id.", "enum": ["MA", "MS", "MM", "SA", "AA", "SS", "SHEET", "PORT", "EXT"]},
-        "ids": {
-          "type": "array",
-          "items": {"type": "string"}
-        },
-        "native_tags": {
-          "type": "array",
-          "items": {"type": "integer", "minimum": 1}
-        },
         "entities": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "entity"}
         },
         "net": {"type": ["string", "null"]},
         "face_kind": {"description": "The one face kind every face of the group has; it is part of the group name (PORT groups: port).", "enum": ["top", "bottom", "sidewall", "sheet", "port", "interface"]},
@@ -663,42 +854,15 @@
         },
         "adjacent_volumes": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "volume"}
         },
         "band": {
           "oneOf": [
-            {"$ref": "#/$defs/BandLabel"},
+            {"$ref": "#/$defs/GroupBand"},
             {"type": "null"}
           ]
         },
         "area_um2": {"type": "number", "minimum": 0}
-      }
-    },
-    "SurfaceKinds": {
-      "description": "The number of planar and of cylindrical surfaces written.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["plane", "cylinder"],
-      "properties": {
-        "plane": {"type": "integer", "minimum": 0},
-        "cylinder": {"type": "integer", "minimum": 0}
-      }
-    },
-    "TypeExpansion": {
-      "description": "The families a type-level request was expanded into, and the faces it skipped.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["banded", "skipped"],
-      "properties": {
-        "banded": {
-          "description": "The families the physical pre-pass created, each as the record of its family (ids <request id>::<entity>::<side>, or of the first request on a shared face).  A port placed later can cover a whole face: read whether a family has bands from its own bands and from surface_epr_rows.",
-          "type": "array",
-          "items": {"$ref": "#/$defs/InsetFace"}
-        },
-        "skipped": {
-          "type": "array",
-          "items": {"$ref": "#/$defs/SkippedFace"}
-        }
       }
     },
     "TypeSupport": {
@@ -718,65 +882,68 @@
         }
       }
     },
-    "Unions": {
-      "description": "Unions of primary groups as lists of group names: by interface type, and by Net (exposed conductor surfaces).",
+    "UnknownCarrier": {
+      "description": "A carrier whose origin SGB does not know.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["interface_types", "nets"],
+      "required": ["kind"],
       "properties": {
-        "interface_types": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {"type": "string"}
-          }
-        },
-        "nets": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {"type": "string"}
-          }
+        "kind": {"const": "unknown"}
+      }
+    },
+    "Vertex": {
+      "description": "One written vertex.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position_um"],
+      "properties": {
+        "position_um": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 3,
+          "maxItems": 3
         }
       }
     },
     "Volume": {
-      "description": "One planned volume: its domain, whether it is emitted, its group, shells, planned volume and AEDT name.",
+      "description": "One planned volume: its Entity and domain, whether it is emitted, its group, shells, planned volume and AEDT name, the faces of the written solid and the sheets embedded in it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["entity", "kind", "material", "net", "emitted", "group", "shells", "volume_um3", "aedt_name"],
+      "required": ["entity", "kind", "material", "net", "emitted", "group", "shells", "volume_um3", "aedt_name", "faces", "embedded_faces"],
       "properties": {
-        "entity": {"type": "string"},
+        "entity": {"type": "string", "x-references": "entity"},
         "kind": {"enum": ["vacuum", "dielectric", "conductor"]},
         "material": {"type": "string"},
         "net": {"type": ["string", "null"]},
         "emitted": {"type": "boolean"},
-        "group": {"type": ["string", "null"]},
+        "group": {"type": ["string", "null"], "x-references": "group", "x-dimension": 3},
         "shells": {"type": "integer", "minimum": 1},
         "volume_um3": {"type": "number"},
-        "aedt_name": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_]+$"}
+        "aedt_name": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_]+$"},
+        "faces": {
+          "description": "The faces of the written solid in tag order; empty when not emitted.",
+          "type": "array",
+          "items": {"type": "string", "x-references": "face"}
+        },
+        "embedded_faces": {
+          "description": "Sheets inside the emitted volume that bound no shell; the mesher embeds each, in order.",
+          "type": "array",
+          "items": {"type": "string", "x-references": "face"}
+        }
       }
     },
     "VolumeGroup": {
       "description": "One primary volume group (dimension 3), named by the bare entity id.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["dim", "tag", "interface_type", "ids", "native_tags", "entities", "kind", "material", "net"],
+      "required": ["dim", "tag", "interface_type", "entities", "kind", "material", "net"],
       "properties": {
         "dim": {"const": 3},
         "tag": {"type": "integer", "minimum": 1},
         "interface_type": {"type": "null"},
-        "ids": {
-          "type": "array",
-          "items": {"type": "string"}
-        },
-        "native_tags": {
-          "type": "array",
-          "items": {"type": "integer", "minimum": 1}
-        },
         "entities": {
           "type": "array",
-          "items": {"type": "string"}
+          "items": {"type": "string", "x-references": "entity"}
         },
         "kind": {"enum": ["vacuum", "dielectric", "conductor"]},
         "material": {"type": "string"},

@@ -301,7 +301,7 @@ def test_the_step_is_an_assembly_of_named_solids_in_micrometres(exported):
     _, _, sidecar, folder, export = exported
     text = (folder / "m.step").read_text()
     products = re.findall(r"PRODUCT\('([^']*)'", text)
-    expected = {v["aedt_name"] for v in sidecar["volumes"].values() if v["emitted"]}
+    expected = {v["aedt_name"] for v in sidecar["volume"].values() if v["emitted"]}
     assert export.object_names == expected == {"substrate", "vacuum"}
     assert set(products) == expected | {"SGB_MODEL"}
     assert export.unit == "UM" and "SI_UNIT(.MICRO.,.METRE.)" in text
@@ -343,7 +343,7 @@ def test_the_step_reads_back_with_the_planned_volumes(exported):
         for i in range(1, solids.Extent() + 1)
     )
     planned = sorted(
-        v["volume_um3"] for v in sidecar["volumes"].values() if v["emitted"]
+        v["volume_um3"] for v in sidecar["volume"].values() if v["emitted"]
     )
     assert volumes == pytest.approx(planned, rel=1e-7)
 
@@ -354,11 +354,11 @@ def test_the_guard_lists_every_face_of_each_solid_in_occ_order_with_area_and_cen
     """The guard lists every face of each solid in occ order with area and centre."""
     model, plan, sidecar, _, export = exported
     ids = {s["solid"] for s in export.solids}
-    assert ids == {v for v, rec in sidecar["volumes"].items() if rec["emitted"]}
+    assert ids == {v for v, rec in sidecar["volume"].items() if rec["emitted"]}
     for solid in export.solids:
         planned_faces = {
             fid
-            for fid, f in sidecar["faces"].items()
+            for fid, f in sidecar["face"].items()
             if solid["solid"] in (f["negative_volume"], f["positive_volume"])
             and f["negative_volume"] != f["positive_volume"]
         }  # an embedded sheet has the same volume on both sides and bounds no shell

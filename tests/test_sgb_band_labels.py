@@ -15,6 +15,7 @@ from sgb_gmsh_oracle import gmsh_session, mesh_coarsely
 from sgb_inputs import gds_pad_in_ground, thin_film_pair
 from sgb_scenes import slab_model
 
+from scgsim.contracts.sgb_sidecar import read_sidecar, views
 from scgsim.geometry.sgb import build_sgb_geometry
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.arrangement.dcel import (
@@ -46,7 +47,6 @@ from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.sgb.records.grid import Grid
 from scgsim.geometry.sgb.records.prisms import LineEdge
 from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_xao
 
 MARGINS = (0.5, 1.0)
@@ -480,9 +480,9 @@ def test_the_files_of_a_banded_port_load_and_mesh(banded_port_model, tmp_path):
         output_dir=tmp_path / "out",
     )
     sidecar = read_sidecar(artifacts.sidecar)
-    assert len(sidecar["physical_groups"][group]["ids"]) == 1
-    assert sidecar["physical_groups"][group]["area_um2"] == pytest.approx(area)
-    sa = sidecar["physical_groups"]
+    assert len(views.group_members(sidecar)[group]) == 1
+    assert sidecar["group"][group]["area_um2"] == pytest.approx(area)
+    sa = sidecar["group"]
     found = [
         sa[n]["area_um2"]
         for n in sorted(sa)

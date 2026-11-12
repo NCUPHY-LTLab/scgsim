@@ -26,6 +26,7 @@ from sgb_gmsh_oracle import (
 )
 from sgb_scenes import random_layout
 
+from scgsim.contracts.sgb_sidecar import read_sidecar, views
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.emission.numbers import angle_of
 from scgsim.geometry.sgb.emission.plan import check_one_tag_per_id, plan_brep
@@ -33,7 +34,6 @@ from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.sgb.slivers.report import sliver_report
 from scgsim.geometry.sgb.verification.loaded import (
     apply_sidecar_embeds,
@@ -543,14 +543,12 @@ def test_refinement_only_curve_is_a_free_edge_and_is_reembedded_from_the_sidecar
         assert (
             gmsh.model.mesh.getElements(1, edge_tag)[1][0].size > 1
         )  # meshed, embedded in the host face
-    assert sidecar["refinement_edges"] == [
-        {
-            "edge": host[0].refinement_edges[0],
-            "host_face": host[0].id,
-            "family": "ref",
-            "written_as_free_edge": True,
-        }
-    ]
+    edge = host[0].refinement_edges[0]
+    assert views.embedded_edges(sidecar) == [(edge, host[0].id)]
+    assert sidecar["edge"][edge]["written_as_free_edge"]
+    assert {
+        sidecar["carrier"][c]["request"] for c in sidecar["edge"][edge]["carriers"]
+    } == {"ref"}
 
 
 # --------------------------------------------------------------------------- inset bands through the direct writer
@@ -567,10 +565,10 @@ def test_band_faces_through_the_direct_writer(tmp_path, emit_models, name):
     with gmsh_session(path):
         assert verify_loaded(sidecar).ok
         for group in band_groups:
-            native = sidecar["physical_groups"][group]["native_tags"]
+            native = views.native_tags(sidecar, 2, views.group_members(sidecar)[group])
             loaded = sum(gmsh.model.occ.getMass(2, t) for t in native)
             assert loaded == pytest.approx(
-                sidecar["physical_groups"][group]["area_um2"], rel=1e-9
+                sidecar["group"][group]["area_um2"], rel=1e-9
             )
         tags = plan.tags()
         refine_near(

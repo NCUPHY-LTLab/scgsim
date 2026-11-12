@@ -221,9 +221,7 @@ def built_sidecar(monkeypatch, component, nets=NETS):
 def port_group(sidecar):
     """The one lumped-port physical group of a sidecar."""
     (group,) = [
-        group
-        for name, group in sidecar["physical_groups"].items()
-        if name.startswith("PORT::")
+        group for name, group in sidecar["group"].items() if name.startswith("PORT::")
     ]
     return group
 
@@ -377,11 +375,11 @@ def test_a_port_between_straight_edges_keeps_its_face_and_conductors(
     def conductors_and_port(sidecar):
         return {
             name: (group.get("area_um2"), group.get("entities"), group.get("face_kind"))
-            for name, group in sidecar["physical_groups"].items()
+            for name, group in sidecar["group"].items()
         }
 
     assert conductors_and_port(partitioned) == conductors_and_port(whole)
-    assert partitioned["counts"] == whole["counts"]
+    assert partitioned["summary"]["counts"] == whole["summary"]["counts"]
 
 
 def test_a_port_on_a_standalone_layout_is_a_rectangle(monkeypatch, tmp_path):
@@ -599,7 +597,7 @@ def test_a_boundary_selector_inside_a_landing_end_binds_the_authored_ring(monkey
     nets = {"pad": ("chip/pad",), "ground": ("chip/ground",)}
     _, _, record = prepared_port(eigenmode_sim(component, nets))
     assert all(end["landing"] for end in record["ends"])
-    carriers = json.dumps(built_sidecar(monkeypatch, component, nets)["lineage"])
+    carriers = json.dumps(built_sidecar(monkeypatch, component, nets)["carrier"])
     assert "chip/pad/polygon0/ring0/arc" in carriers
     assert "chip/ground/polygon0/ring1/arc" in carriers
     assert "/polygon1/ring0/arc" not in carriers

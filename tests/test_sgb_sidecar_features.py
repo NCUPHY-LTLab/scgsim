@@ -11,6 +11,7 @@ from sgb_emit_cases import CASES, pad_requests
 from sgb_extreme_cases import catalogue_of, chip, disk
 from sgb_scenes import GRID, chip_prisms, conductor, footprint, pad_in_ground, rect_um
 
+from scgsim.contracts.sgb_sidecar import views
 from scgsim.geometry.sgb.cutfamilies.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.emission.plan import plan_brep
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
@@ -39,29 +40,46 @@ def sidecar_of(model: ConformalModel) -> dict:
     )
 
 
+def features(side: dict) -> list[dict]:
+    """The mesh features in reading order, each with the native tags of its edges."""
+    return [
+        {**f, "native_tags": views.native_tags(side, 1, f["edges"])}
+        for f in views.mesh_features(side)
+    ]
+
+
 def features_of(side: dict, kind: str) -> list[dict]:
-    """The features of one kind, in sidecar order."""
-    return [f for f in side["mesh_features"] if f["kind"] == kind]
+    """The features of one kind, in reading order."""
+    return [f for f in features(side) if f["kind"] == kind]
 
 
 def edge_tags_of_faces(side: dict, face_ids: list[str]) -> set[int]:
     """The native tags of every edge on the boundary of the given faces (from the sidecar alone)."""
     face_tag = {fid: i for i, fid in enumerate(side["binding"]["ids_by_tag"]["2"])}
-    return {
-        t for fid in face_ids for t in side["expected"]["face_edges"][face_tag[fid]]
-    }
+    face_edges = views.expected(side)["face_edges"]
+    return {t for fid in face_ids for t in face_edges[face_tag[fid]]}
+
+
+def band_family(side: dict, carrier: str) -> str | None:
+    """The band family a carrier is a band curve of, through the primitive and ring it names; else ``None``."""
+    record = side["carrier"][carrier]
+    if record["kind"] != "band_member":
+        return None
+    ring = side["support_primitive"][record["primitive"]]["ring"]
+    return side["support_ring"][ring]["family"]
 
 
 def sidewall_faces_of(side: dict, body: str) -> list[str]:
     """The sidewall faces that have the conductor ``body`` on one side (or on the model boundary), read from the groups."""
+    members = views.group_members(side)
     return sorted(
         fid
-        for group in side["physical_groups"].values()
+        for name, group in side["group"].items()
         if group["dim"] == 2
         and group["face_kind"] == "sidewall"
         and group["interface_type"] in ("MA", "MS", "MM", "EXT")
         and body in group["entities"]
-        for fid in group["ids"]
+        for fid in members[name]
     )
 
 
@@ -104,29 +122,26 @@ def sidecars(emit_models) -> dict[str, dict]:
 def test_every_feature_has_a_known_kind_the_facts_of_that_kind_and_no_size(
     sidecars, name
 ):
-    """Each entry names a kind of the list, only the facts of that kind, and its tags are its edges' positions."""
+    """Each feature names a kind of the list, only the facts of that kind, and its edges in tag order."""
     side = sidecars[name]
-    ids = side["binding"]["ids_by_tag"]["1"]
-    for feature in side["mesh_features"]:
-        assert set(feature) == {"kind", "source", "edges", "native_tags", "facts"}
+    for feature in side["mesh_feature"].values():
+        assert set(feature) == {"kind", "source", "edges", "facts"}
         assert feature["kind"] in FEATURE_KINDS
         assert set(feature["facts"]) == FACTS_OF_KIND[feature["kind"]]
-        assert feature["edges"] and feature["native_tags"] == sorted(
-            feature["native_tags"]
-        )
-        assert [ids[t - 1] for t in feature["native_tags"]] == feature["edges"]
+        tags = views.native_tags(side, 1, feature["edges"])
+        assert feature["edges"] and tags == sorted(set(tags))
 
 
 @pytest.mark.parametrize("name", sorted(CASES))
 def test_features_are_sorted_by_kind_source_and_canonical_facts(sidecars, name):
-    """The block is a list sorted by (kind, source or "", canonical JSON of the facts), with no duplicate key."""
+    """The features read in the order of (kind, source or "", canonical JSON of the facts), with no duplicate key."""
     keys = [
         (
             f["kind"],
             f["source"] or "",
             json.dumps(f["facts"], sort_keys=True, separators=(",", ":")),
         )
-        for f in sidecars[name]["mesh_features"]
+        for f in features(sidecars[name])
     ]
     assert keys == sorted(keys) and len(set(keys)) == len(keys)
 
@@ -137,11 +152,11 @@ def test_the_schema_accepts_every_kind_and_rejects_an_unknown_kind_a_size_and_a_
     """A kind outside the list, a stowaway size, a missing fact and a wrong source type are schema errors."""
     validator = jsonschema.Draft202012Validator(sidecar_schema())
     good = sidecars["pad_b_bands"]
-    assert {f["kind"] for f in good["mesh_features"]} == set(FEATURE_KINDS) - {
+    assert {f["kind"] for f in good["mesh_feature"].values()} == set(FEATURE_KINDS) - {
         "refinement_curve"
     }
     assert not list(validator.iter_errors(good))
-    by_kind = {f["kind"]: f for f in good["mesh_features"]}
+    by_kind = {f["kind"]: f for f in good["mesh_feature"].values()}
     broken_features = [
         {**by_kind["arc"], "kind": "gap"},
         {**by_kind["arc"], "size": 1.0},
@@ -151,10 +166,10 @@ def test_the_schema_accepts_every_kind_and_rejects_an_unknown_kind_a_size_and_a_
         {**by_kind["band_boundary"], "facts": {"margins_um": [0.1]}},
         {**by_kind["band_boundary"], "source": None},
         {**by_kind["port_edge"], "facts": {"thickness_um": 0.2}},
-        {**by_kind["port_edge"], "edges": [], "native_tags": []},
+        {**by_kind["port_edge"], "edges": []},
     ]
     for broken in broken_features:
-        side = {**good, "mesh_features": [*good["mesh_features"], broken]}
+        side = {**good, "mesh_feature": {**good["mesh_feature"], "mf:broken": broken}}
         assert list(validator.iter_errors(side)), broken["kind"]
 
 
@@ -180,7 +195,7 @@ def test_a_level_that_splits_a_wall_does_not_make_it_a_thinner_film(sidecars):
     side = sidecars["pad_b_bands"]
     halves = [
         f
-        for f in side["faces"].values()
+        for f in side["face"].values()
         if f["face_kind"] == "sidewall" and f["z_um"] == [0.0, 0.1]
     ]
     assert halves  # walls were split by the port plane
@@ -292,16 +307,13 @@ def test_band_boundary_keeps_the_edges_of_the_inset_family_and_adds_its_margins(
     side = sidecars["pad_b_bands"]
     bands = {f["source"]: f for f in features_of(side, "band_boundary")}
     assert set(bands) == {"band_pad_top", "band_pad_bottom", "band_gap"}
-    carriers = side["lineage"]["carriers"]
     for family, feature in bands.items():
         assert feature["facts"] == {
             "margins_um": [0.1, 0.5, 2.0],
             "narrowest_band_um": 0.1,
         }
         assert all(
-            any(
-                carriers[c].get("family") == family for c in side["lineage"]["edges"][e]
-            )
+            any(band_family(side, c) == family for c in side["edge"][e]["carriers"])
             for e in feature["edges"]
         )
 
@@ -343,9 +355,7 @@ def test_arc_covers_every_arc_edge_once_grouped_by_owner_and_exact_radius(sideca
         2,
         8,
     )  # top and bottom outline
-    assert (
-        sum(len(f["edges"]) for f in arcs.values()) == side["arrangement"]["arc_edges"]
-    )
+    assert sum(len(f["edges"]) for f in arcs.values()) == side["summary"]["arc_edges"]
 
 
 def test_band_arcs_have_the_radius_of_their_offset_circle_and_the_owner_of_a_conductor_band(
@@ -355,7 +365,7 @@ def test_band_arcs_have_the_radius_of_their_offset_circle_and_the_owner_of_a_con
     side = sidecars["pad_b_bands"]
     arcs = features_of(side, "arc")
     all_edges = [e for f in arcs for e in f["edges"]]
-    assert len(all_edges) == len(set(all_edges)) == side["arrangement"]["arc_edges"]
+    assert len(all_edges) == len(set(all_edges)) == side["summary"]["arc_edges"]
     radii = {(f["source"], f["facts"]["radius_um"]) for f in arcs}
     assert ("pad", 8.1) in radii and (None, 7.9) in radii
     assert all(source in ("pad", None) for source, _ in radii)
@@ -391,7 +401,16 @@ def test_refinement_curve_keeps_the_edges_of_its_request_and_has_no_facts(sideca
     side = sidecars["pad_a_refinement"]
     (curve,) = features_of(side, "refinement_curve")
     assert curve["source"] == "ref" and curve["facts"] == {}
-    assert curve["edges"] == side["refinements"][0]["edges"]
+    carriers = side["carrier"]
+    drawn = {
+        e
+        for e, edge in side["edge"].items()
+        if any(
+            carriers[c]["kind"] == "refinement" and carriers[c]["request"] == "ref"
+            for c in edge["carriers"]
+        )
+    }
+    assert set(curve["edges"]) == drawn
     assert not features_of(sidecars["pad_a"], "refinement_curve")
 
 
@@ -399,9 +418,9 @@ def test_refinement_curve_keeps_the_edges_of_its_request_and_has_no_facts(sideca
 def test_port_edge_is_the_boundary_of_the_lumped_port_faces(sidecars, name):
     """One feature per port sheet: the four edges of its face."""
     side = sidecars[name]
-    (port,) = side["ports"]
+    ((port_id, port),) = side["port"].items()
     (feature,) = features_of(side, "port_edge")
-    assert feature["source"] == port["port_sheet_id"] and feature["facts"] == {}
+    assert feature["source"] == port_id and feature["facts"] == {}
     assert set(feature["native_tags"]) == edge_tags_of_faces(side, port["faces"])
     assert len(feature["edges"]) == 4
 
@@ -427,7 +446,7 @@ def test_the_block_is_byte_identical_for_every_worker_and_tile_layout(route):
                     tiles=tiles,
                     workers=workers,
                 )
-            )["mesh_features"]
+            )["mesh_feature"]
         )
         for tiles, workers in [(1, 1), (3, 2), (2, 1)]
     }

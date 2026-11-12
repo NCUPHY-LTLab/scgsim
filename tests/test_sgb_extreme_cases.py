@@ -23,11 +23,12 @@ from sgb_extreme_cases import (
 )
 from sgb_scenes import rect_um
 
+from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.sidecar.files import read_sidecar, sidecar_schema
+from scgsim.geometry.sgb.sidecar.files import sidecar_schema
 from scgsim.geometry.sgb.slivers.report import sliver_report
 from scgsim.geometry.sgb.verification.loaded import verify_xao
 
@@ -220,7 +221,9 @@ def test_every_fixture_emits_files_gmsh_loads_and_a_sidecar_that_validates(
     )
     report = verify_xao(artifacts.xao, sidecar)
     assert report.ok, report.problems
-    assert sidecar["counts"]["faces"] == model.counts["faces"] - _unemitted_faces(model)
+    assert sidecar["summary"]["counts"]["faces"] == model.counts[
+        "faces"
+    ] - _unemitted_faces(model)
 
 
 def _unemitted_faces(model) -> int:

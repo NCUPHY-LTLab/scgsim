@@ -17,6 +17,7 @@ import pytest
 import scgsim.documentation as documentation
 import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
+from scgsim.contracts.sgb_sidecar import views
 from scgsim.documentation import page_url
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
@@ -300,9 +301,7 @@ def check_sidecars(monkeypatch, simulation, component, **options):
 def ma_band_groups(sidecar):
     """The MA band physical groups of a sidecar."""
     return [
-        name
-        for name in sidecar["physical_groups"]
-        if name.startswith("MA") and "band=" in name
+        name for name in sidecar["group"] if name.startswith("MA") and "band=" in name
     ]
 
 
@@ -325,10 +324,15 @@ def test_a_layout_with_no_vacuum_is_wrapped_so_ma_bands_are_cut(
 def built_bounds(sidecar):
     """The bounds in um of the built vacuum, and of every face not on the vacuum's outer boundary (the layout).
 
-    Read from the sidecar's expected topology of the written model: solid, face, edge, vertex.
+    Read from the sidecar's load-side view of the written model: solid, face, edge, vertex.
     """
-    expected = sidecar["expected"]
-    groups = sidecar["physical_groups"]
+    expected = views.expected(sidecar)
+    groups = sidecar["group"]
+
+    def tags(name):
+        return views.native_tags(
+            sidecar, groups[name]["dim"], views.group_members(sidecar)[name]
+        )
 
     def bounds(faces):
         vertices = {
@@ -347,14 +351,14 @@ def built_bounds(sidecar):
 
     vacuum = {
         face
-        for solid in groups["VACUUM_REGION"]["native_tags"]
+        for solid in tags("VACUUM_REGION")
         for face in expected["solid_faces"][solid - 1]
     }
     outer = {
         face
-        for name, group in groups.items()
+        for name in groups
         if name.startswith("EXT::VACUUM_REGION__")
-        for face in group["native_tags"]
+        for face in tags(name)
     }
     every = set(range(1, len(expected["face_edges"]) + 1))
     return bounds(vacuum), bounds(every - outer)

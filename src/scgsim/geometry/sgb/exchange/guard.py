@@ -21,7 +21,7 @@ The guard is plain JSON: keys sorted, numbers rounded to twelve significant digi
 paths relative to the guard's folder, no timestamps.  Reading it needs no OCP.  :func:`read_step_guard`
 checks the whole structure and then the solids and free faces against the bound sidecar
 (:func:`guard_mismatches`), down to each face record being the record of the face its id names (its
-vertices and area are that planned face's, from the sidecar's ``expected`` block), and each free-face loop
+vertices and area are that planned face's, from the sidecar's load-side view, ``views.expected``), and each free-face loop
 being connected.  The exporter runs the same check before it writes anything, so it never writes a guard the
 reader would refuse.
 
@@ -48,8 +48,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
+from scgsim.contracts.sgb_sidecar import Sidecar, SidecarError, read_sidecar, views
 from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
 
 GUARD_SCHEMA = "scgsim.sgb.aedt-step-guard.v1"
 GUARD_SUFFIX = ".guard.json"
@@ -151,9 +151,10 @@ def read_step_guard(path: Path) -> StepGuard:
     for role, record in sorted(guard["files"].items()):
         _check_bound_file(path, role, record)
     sidecar = _load_bound_sidecar(path, guard)
-    if sidecar.get("model") != guard["model"] or sidecar.get("route") != guard["route"]:
+    model, route = guard_model(sidecar), sidecar["model"]["route"]
+    if model != guard["model"] or route != guard["route"]:
         raise StepGuardError(
-            f"{path}: the sidecar's model {sidecar.get('model')!r} (route {sidecar.get('route')!r}) is not "
+            f"{path}: the sidecar's model {model!r} (route {route!r}) is not "
             f"the guarded {guard['model']!r} (route {guard['route']!r})"
         )
     try:
@@ -172,13 +173,13 @@ def read_step_guard(path: Path) -> StepGuard:
 def guard_mismatches(
     solids: Sequence[SolidGuard],
     free_faces: Sequence[FreeFace],
-    sidecar: dict[str, Any],
+    sidecar: Sidecar,
 ) -> list[str]:
     """How the guarded solids and free faces disagree with the sidecar they were exported from; empty when they agree.
 
     The solids must be distinct planned solids in tag order, each with its sidecar ``aedt_name`` and exactly
-    its planned faces (``expected.solid_faces``), each face listed once and flagged ``curved`` exactly when it
-    is one of the sidecar's ``curved_wall_faces``.  The free faces must be exactly :func:`free_face_ids` of
+    the faces of its written solid (``volume[...].faces``), each face listed once and flagged ``curved`` exactly
+    when the sidecar's face is curved.  The free faces must be exactly :func:`free_face_ids` of
     those solids, in tag order, each with its sidecar group.
 
     Each face record must also be the record *of the face its id names*: its vertices (for a free face, the
@@ -209,36 +210,31 @@ def guard_mismatches(
     return mismatches
 
 
-def free_face_ids(sidecar: dict[str, Any], solid_ids: Sequence[str]) -> list[str]:
+def free_face_ids(sidecar: Sidecar, solid_ids: Sequence[str]) -> list[str]:
     """The faces of the model that bound none of ``solid_ids``, in tag order: the faces the guard keeps as loops."""
-    tag_of = _tags(sidecar["binding"]["ids_by_tag"]["3"])
-    solid_faces = sidecar["expected"]["solid_faces"]
-    bounding = {tag for vid in solid_ids for tag in solid_faces[tag_of[vid] - 1]}
-    face_ids = sidecar["binding"]["ids_by_tag"]["2"]
-    return [fid for tag, fid in enumerate(face_ids, start=1) if tag not in bounding]
+    bounding = {face for vid in solid_ids for face in sidecar["volume"][vid]["faces"]}
+    return [fid for fid in sidecar["binding"]["ids_by_tag"]["2"] if fid not in bounding]
 
 
 def _solid_mismatches(
-    solid: SolidGuard, sidecar: dict[str, Any], planned_faces: _PlannedFaces
+    solid: SolidGuard, sidecar: Sidecar, planned_faces: _PlannedFaces
 ) -> list[str]:
     vid = solid["solid"]
     mismatches = []
-    planned_name = sidecar["volumes"][vid]["aedt_name"]
+    planned_name = sidecar["volume"][vid]["aedt_name"]
     if solid["aedt_name"] != planned_name:
         mismatches.append(
             f"solid {vid} is named {solid['aedt_name']!r}, the sidecar names it {planned_name!r}"
         )
-    face_ids = sidecar["binding"]["ids_by_tag"]["2"]
-    tag = _tags(sidecar["binding"]["ids_by_tag"]["3"])[vid]
-    planned = {face_ids[t - 1] for t in sidecar["expected"]["solid_faces"][tag - 1]}
+    planned = set(sidecar["volume"][vid]["faces"])
     listed = [f["face"] for f in solid["faces"]]
     if len(set(listed)) != len(listed) or set(listed) != planned:
         return mismatches + [
             f"solid {vid} lists faces {sorted(listed)}, the sidecar plans {sorted(planned)}, each once"
         ]
-    curved = set(sidecar["curved_wall_faces"])
+    faces = sidecar["face"]
     misflagged = sorted(
-        f["face"] for f in solid["faces"] if f["curved"] != (f["face"] in curved)
+        f["face"] for f in solid["faces"] if f["curved"] != faces[f["face"]]["curved"]
     )
     if misflagged:
         mismatches.append(f"solid {vid} flags curved wrongly on faces {misflagged}")
@@ -265,7 +261,7 @@ def _solid_mismatches(
 def _free_face_mismatches(
     free_faces: Sequence[FreeFace],
     solid_ids: Sequence[str],
-    sidecar: dict[str, Any],
+    sidecar: Sidecar,
     planned_faces: _PlannedFaces,
 ) -> list[str]:
     expected = free_face_ids(sidecar, solid_ids)
@@ -274,7 +270,7 @@ def _free_face_mismatches(
         return [
             f"the free faces are {listed}, the faces bounding no guarded solid are {expected}"
         ]
-    planned = sidecar["faces"]
+    planned = sidecar["face"]
     mismatches = [
         f"free face {f['face']} has group {f['group']!r}, the sidecar gives {planned[f['face']]['group']!r}"
         for f in free_faces
@@ -315,7 +311,7 @@ def _loop_gaps(
 
 @dataclass(frozen=True)
 class _PlannedFaces:
-    """The planned vertices and area of every face, from the sidecar's ``expected`` block, to bind face records to."""
+    """The planned vertices and area of every face, from the sidecar's load-side view, to bind face records to."""
 
     tag_of: dict[str, int]  # planned face id -> face tag
     face_vertices: list[frozenset[int]]  # per face tag - 1: its vertex tags
@@ -325,8 +321,9 @@ class _PlannedFaces:
     tolerance_um: float
 
     @classmethod
-    def of(cls, sidecar: dict[str, Any]) -> _PlannedFaces:
-        expected = sidecar["expected"]
+    def of(cls, sidecar: Sidecar) -> _PlannedFaces:
+        """The planned faces of ``sidecar``."""
+        expected = views.expected(sidecar)
         positions = expected["vertices_um"]
         ends = expected["edge_vertices"]
         chords = [math.dist(positions[a - 1], positions[b - 1]) for a, b in ends]
@@ -341,7 +338,7 @@ class _PlannedFaces:
             chord_perimeters=[
                 sum(chords[e - 1] for e in edges) for edges in expected["face_edges"]
             ],
-            tolerance_um=sidecar["tolerance_um"],
+            tolerance_um=sidecar["model"]["tolerance_um"],
         )
 
     def binding_mismatches(
@@ -418,6 +415,12 @@ def _mean(points: list[list[float]]) -> list[float]:
     return [sum(p[k] for p in points) / len(points) for k in range(3)]
 
 
+def guard_model(sidecar: Sidecar) -> dict[str, str]:
+    """The model identity a guard binds: the sidecar's model name and identity digest."""
+    model = sidecar["model"]
+    return {"name": model["name"], "identity_digest": model["identity_digest"]}
+
+
 def _tags(ids: list[str]) -> dict[str, int]:
     """Planned id to native tag (1 + position in ``ids_by_tag``)."""
     return {planned_id: tag for tag, planned_id in enumerate(ids, start=1)}
@@ -439,16 +442,13 @@ def _load_guard(path: Path) -> StepGuard:
     return cast(StepGuard, guard)
 
 
-def _load_bound_sidecar(path: Path, guard: StepGuard) -> dict[str, Any]:
+def _load_bound_sidecar(path: Path, guard: StepGuard) -> Sidecar:
     try:
-        sidecar = read_sidecar(path.parent / guard["files"]["sidecar"]["path"])
-    except ValueError as error:
+        return read_sidecar(path.parent / guard["files"]["sidecar"]["path"])
+    except SidecarError as error:
         raise StepGuardError(
-            f"{path}: the bound sidecar is not readable JSON: {error}"
+            f"{path}: the bound sidecar is not a readable sidecar: {error}"
         ) from error
-    if not isinstance(sidecar, dict):
-        raise StepGuardError(f"{path}: the bound sidecar is not a JSON object")
-    return sidecar
 
 
 def _check_bound_file(guard_path: Path, role: str, record: Any) -> None:

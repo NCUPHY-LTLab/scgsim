@@ -21,6 +21,7 @@ import sgb_supported_cells as disk_qubit
 import sgb_supported_pdk_cells as pdk
 from sgb_supported_kit import Conductor, Scene, catalogue, to_lattice, type_bands
 
+from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.records.carriers import (
@@ -35,6 +36,7 @@ from scgsim.geometry.sgb.records.support import (
     SupportRegion,
     distance_to_primitive,
 )
+from scgsim.geometry.sgb.sidecar.lineage import CarrierLineage
 
 # A source edge is noded by snap rounding: the arrangement edges along it end within half a grid diagonal of it.
 SOURCE_SNAP_STEPS = math.sqrt(2) / 2
@@ -258,22 +260,89 @@ def test_a_short_band_edge_leads_to_its_source_edge_through_recorded_fields():
     )
 
 
-# --------------------------------------------------------------------------- the file is unchanged
+# --------------------------------------------------------------------------- the sidecar writes them as fields
 
-# SHA-256 of each model's sidecar, as written before slice B and after it.  A change meant to change the file
-# (slice C writes these facts, as ``scgsim.sgb.sidecar.v3``) re-pins the digests it changes and says why.
+
+def test_the_sidecar_leads_a_short_band_edge_to_the_source_edge_it_offsets(tmp_path):
+    """The #138 (c) chain read from ``scgsim.sgb.sidecar.v3`` alone, by following typed ids and reading fields.
+
+    Edge ``e:9509e27bdf7e2d28`` of ``junction_fan`` -> its carrier, a band member of role ``edge`` at margin 1000
+    grid steps -> the support primitive it offsets, place 13 on its ring, a 0.1954 um line -> the source curve it
+    lies on, the ground's 0.1954 um edge, shorter than the margin.
+    """
+    sidecar = read_sidecar(emit_model(MODELS["junction_fan"](), tmp_path).sidecar)
+    (carrier_id,) = sidecar["edge"]["e:9509e27bdf7e2d28"]["carriers"]
+    member = sidecar["carrier"][carrier_id]
+    assert (member["kind"], member["role"], member["margin_grid"], member["piece"]) == (
+        "band_member",
+        "edge",
+        1000,
+        None,
+    )
+    primitive = sidecar["support_primitive"][member["primitive"]]
+    ring = sidecar["support_ring"][primitive["ring"]]
+    assert ring["primitives"].index(member["primitive"]) == 13 and ring["index"] == 0
+    assert primitive["curve"]["kind"] == "line"
+    assert primitive["length_um"] == pytest.approx(0.1954, abs=5e-5)
+    (source,) = primitive["sources"]
+    curve = sidecar["source_curve"][source]
+    assert (curve["entity"], curve["polygon"], curve["ring"], curve["edge"]) == (
+        "ground",
+        0,
+        1,
+        29,
+    )
+    assert curve["length_um"] == pytest.approx(primitive["length_um"], abs=1e-9)
+    margin_um = member["margin_grid"] * sidecar["model"]["grid_um"]
+    assert curve["length_um"] < margin_um
+    assert sidecar["band_family"][ring["family"]]["margins_grid"][-1] == 1000
+
+
+@pytest.mark.parametrize("name", sorted(MODELS))
+def test_every_band_member_of_the_sidecar_names_its_place_as_the_model_does(
+    name, tmp_path
+):
+    """Each band-member carrier names the primitive, role, margin and piece of its in-memory ``BandMember``."""
+    model = MODELS[name]()
+    sidecar = read_sidecar(emit_model(model, tmp_path).sidecar)
+    lineage = CarrierLineage.of(model)
+    members = 0
+    for carrier_id, record in sidecar["carrier"].items():
+        member = lineage.lineage(carrier_id).band_member
+        if record["kind"] != "band_member":
+            assert member is None, carrier_id
+            continue
+        members += 1
+        primitive = sidecar["support_primitive"][record["primitive"]]
+        ring = sidecar["support_ring"][primitive["ring"]]
+        assert (ring["index"], ring["primitives"].index(record["primitive"])) == (
+            member.ring,
+            member.index,
+        )
+        assert (record["role"], record["margin_grid"], record["piece"]) == (
+            member.role,
+            member.margin,
+            member.piece,
+        )
+    assert members
+
+
+# --------------------------------------------------------------------------- the file is pinned
+
+# SHA-256 of each model's ``scgsim.sgb.sidecar.v3`` file.  Slice C re-pinned these (v2 became v3); a change meant
+# to change the file re-pins the digests it changes and says why.
 SIDECAR_SHA256 = {
-    "pad_a_bands": "fc3eadc144f30a93b49dda1bc8f5464f6884ee504948b716c7a017ac92550f1f",
-    "pad_b_bands": "437e01cfd8c2b2252b0fe8ef179b36f715c1760089a69ece7e0d58ee2357faa3",
-    "junction_fan": "f8b473a8950eb656c4f342b6135b4ee453e95302f5ecd66dddd5d8aff87ee389",
-    "cell13_circular_bend": "64c6e6c7ae095958dbe2b80b023605233fcc53ce918590fbcf01812bd3554262",
-    "strip_into_pad": "e94008ee5faa17cc1fc57b1792f0629d13508f2bbb87fad71c268d2936f423d1",
+    "pad_a_bands": "5bfd500dc83e96598b90b4950a3dbbc0ed75c819726f4aa21beea8278ae6b982",
+    "pad_b_bands": "6d52108be5b228b026b3339954042a95c1e635a1ee2a50248661d34dca34bbf6",
+    "junction_fan": "d0afc9da4f651d590e69abb57ba8868fbb62069866842db89b67bfc226c09055",
+    "cell13_circular_bend": "10ed19c76923512d3bd94fd9752774b3cfe13cbe679f1242e05f2af389625e41",
+    "strip_into_pad": "2e646da038be3bcca2cea407601d4d750a24fa2ae4d58c4bb28fb85857cd530d",
 }
 
 
 @pytest.mark.parametrize("name", sorted(SIDECAR_SHA256))
-def test_keeping_band_lineage_in_memory_leaves_the_sidecar_unchanged(name, tmp_path):
-    """The sidecar of each banded model is the same file, byte for byte, as before SGB kept these fields."""
+def test_the_sidecar_of_each_banded_model_is_the_pinned_file(name, tmp_path):
+    """The sidecar of each banded model is the pinned file, byte for byte."""
     artifacts = emit_model(MODELS[name](), tmp_path)
     digest = hashlib.sha256(artifacts.sidecar.read_bytes()).hexdigest()
     assert digest == SIDECAR_SHA256[name]

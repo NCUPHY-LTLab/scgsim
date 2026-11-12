@@ -2,8 +2,7 @@
 
 Owns the order of the checks: the file is JSON (``NaN`` and ``Infinity`` are not), the version is the one
 this definition describes, the document has the structure of :class:`.records.Sidecar` (checked against the
-schema derived from it, :mod:`.structure`), and the references v2 can resolve point at what exists
-(:mod:`.references`).  The first check that fails raises :class:`.errors.SidecarError` saying what failed and
+schema derived from it, :mod:`.structure`), and every id names a record that exists (:mod:`.references`).  The first check that fails raises :class:`.errors.SidecarError` saying what failed and
 where.  The document is returned as decoded, unchanged, typed as a :class:`.records.Sidecar`.
 """
 

@@ -28,7 +28,6 @@ from __future__ import annotations
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -52,6 +51,7 @@ from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopoDS import TopoDS, TopoDS_Compound, TopoDS_Iterator, TopoDS_Shape
 from OCP.TopTools import TopTools_IndexedMapOfShape
 
+from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.geometry.sgb.assembly.records import Topology
 from scgsim.geometry.sgb.emission.measures import (
     planned_face_area_um2,
@@ -451,10 +451,8 @@ def plan_properties(
     return out
 
 
-def sidecar_mismatches(
-    shape: Any, sidecar: Mapping[str, Any], *, limit: int = 3
-) -> list[str]:
-    """Where a loaded shape differs from the sidecar's ``expected`` block, by tag order; empty when it belongs to it.
+def sidecar_mismatches(shape: Any, sidecar: Sidecar, *, limit: int = 3) -> list[str]:
+    """Where a loaded shape differs from the sidecar's load-side view (``views.expected``), by tag order; empty when it belongs to it.
 
     The OCP twin of :func:`~scgsim.geometry.sgb.verification.loaded.verify_loaded`'s counts, vertex
     placement, face-area and solid-volume checks, with the same tolerances
@@ -463,7 +461,7 @@ def sidecar_mismatches(
     other quantity lists at most ``limit`` of its mismatches, named by planned id.
     """
     require_ocp()
-    ids, expected = sidecar["binding"]["ids_by_tag"], sidecar["expected"]
+    ids, expected = sidecar["binding"]["ids_by_tag"], views.expected(sidecar)
     kinds = (
         ("0", TopAbs_VERTEX),
         ("1", TopAbs_EDGE),

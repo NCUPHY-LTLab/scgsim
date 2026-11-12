@@ -38,6 +38,7 @@ from scgsim.geometry.sgb.records.prisms import (
     PrismRecord,
 )
 from scgsim.geometry.sgb.routes.naming import interface_type_of
+from scgsim.geometry.sgb.sidecar.lineage import CarrierLineage
 
 GRID = Grid(0.001)
 MARGINS = (0.5, 1.0)
@@ -491,13 +492,18 @@ def short_band_edges(model: ConformalModel, steps: int) -> list[str]:
     """The emitted horizontal edges that carry a band seam and are shorter than ``steps`` grid steps.
 
     Each is given as its length in grid steps, its two end points in um and the carriers it comes from.  An arc
-    edge is measured along its arc.
+    edge is measured along its arc.  A band seam is a carrier whose lineage is a band member.
     """
     topology = model.topology
     um = topology.grid_um
+    lineage = CarrierLineage.of(model)
     found = []
     for edge in topology.edges.values():
-        if edge.kind != "horizontal" or not any("@m" in s for s in edge.sources):
+        if edge.kind != "horizontal" or not any(
+            (found_lineage := lineage.lineage(s)) is not None
+            and found_lineage.band_member is not None
+            for s in edge.sources
+        ):
             continue
         a, b = topology.vertices[edge.v0], topology.vertices[edge.v1]
         length = math.hypot(a.x - b.x, a.y - b.y)

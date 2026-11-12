@@ -190,7 +190,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 |---|---|---|
 | `Grid` | `size_um`（每個 grid unit 的 µm） | 取自輸入的 `GeometryGridContext`，每個模型宣告一次，並記錄在 handoff 與 sidecar 的 `grid_um` |
 | `Lineage` | `kind`（`polygon_edge`、`family_member`）、`entity_id`、`polygon`、`ring`、`edge`、`family_id`、`member`、`band_member` | `describe()` 回傳 `pad/polygon0/ring0/edge8` 或 `family/member`；直線 inset member 的 `member` 是 `<support>/ring<r>/edge<k>`；只有 inset band 的成員有 `band_member` |
-| `BandMember` | `ring`、`index`、`role`（`edge`、`corner`、`capstart`、`capend`）、`margin`（grid unit） | band 曲線來自 support 的哪個位置：`edge` 是 primitive `index` 的 offset，`corner` 是 primitive `index` 與下一個 primitive 之間 reflex 頂點的 arc，`capstart`、`capend` 是 primitive `index` 起點或終點的半圓；曲線兩側的 band 編號在它的 `BandSeam`。讀者讀這些欄位，不解析 carrier id 或 `member` |
+| `BandMember` | `ring`、`index`、`role`（`edge`、`corner`、`capstart`、`capend`）、`margin`（grid unit）、`piece`（cap 或 corner 切成多段時的段號，整段為 `None`） | band 曲線來自 support 的哪個位置：`edge` 是 primitive `index` 的 offset，`corner` 是 primitive `index` 與下一個 primitive 之間 reflex 頂點的 arc，`capstart`、`capend` 是 primitive `index` 起點或終點的半圓；曲線兩側的 band 編號在它的 `BandSeam`。讀者讀這些欄位，不解析 carrier id 或 `member` |
 | `LineCarrier` | `id`、`p`、`q`（整數 grid point）、`lineage` | 端點精確的直線曲線 |
 | `ArcCarrier` | `id`、`centre`、`radius`（精確分數）、`ccw`、`start`、`end`、`lineage`、`root` | 小於 360° 的 arc；circle 是四段 quarter arc；`root` 是 derived arc 偏差所對照的 source carrier |
 | `Footprint` | `outer`（CCW ring）、`holes`（CW ring）、`arc_runs` | 整數 grid 座標；arc 以 chord run 加 `arc_runs` 表示 |

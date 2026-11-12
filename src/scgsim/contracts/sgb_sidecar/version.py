@@ -8,10 +8,10 @@ field, enum or bound fails until the version is raised here and the new digest p
 
 from typing import Final, Literal
 
-SidecarVersion = Literal["scgsim.sgb.sidecar.v2"]
+SidecarVersion = Literal["scgsim.sgb.sidecar.v3"]
 """The type of a sidecar's ``schema`` field: the one value a sidecar of this definition carries."""
 
-SIDECAR_SCHEMA: Final[SidecarVersion] = "scgsim.sgb.sidecar.v2"
+SIDECAR_SCHEMA: Final[SidecarVersion] = "scgsim.sgb.sidecar.v3"
 SCHEMA_DIGEST: Final = (
-    "sha256:787b0532727c890482497dc014cc9e44c1815bd702ad0f5b7a88d6ea77f65321"
+    "sha256:2b915f5a2b5b065464b78dd0514ddfbbd8ab9eb74f4aca0eece6d2f3a47ed07f"
 )

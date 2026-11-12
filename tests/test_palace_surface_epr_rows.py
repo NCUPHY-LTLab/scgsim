@@ -171,10 +171,11 @@ def test_the_type_level_requests_band_the_supports_of_the_all_interface_requests
         if hasattr(r.support, "entity_id")
     }
     sidecar = banded_sidecar("B", tmp_path, surface_epr_specs(MA=[0.5], MS=[0.5]))
+    families = sidecar["band_family"]
     expanded = {
-        (family["support"]["entity"], family["support"]["side"])
-        for inset in sidecar["insets"]
-        for family in inset["expansion"]["banded"]
+        (families[f]["support"]["entity"], families[f]["support"]["side"])
+        for request in sidecar["inset_request"].values()
+        for f in request["families"]
     }
     assert expanded == reference
 
@@ -187,14 +188,14 @@ def band_attributes(groups, bands):
 
 
 def test_margin_rows_take_their_bands_from_the_expanded_families(tmp_path):
-    """A type-level request lists its families in ``expansion.banded``; margin ``m_k`` unions bands k..K of each."""
+    """A type-level request lists the families it became; margin ``m_k`` unions bands k..K of each."""
     specs = surface_epr_specs(MA=[0.5, 1.0])
     sidecar = banded_sidecar("B", tmp_path, specs)
     groups = groups_from_sidecar(sidecar)
     _, entries = build_surface_epr_postprocessing(groups, specs)
     by_name = {entry["entry_name"]: entry for entry in entries}
-    (request,) = sidecar["insets"]
-    for family in request["expansion"]["banded"]:
+    (request,) = sidecar["inset_request"].values()
+    for family in (sidecar["band_family"][f] for f in request["families"]):
         (entity,) = [family["support"]["entity"]]
         for margin_index, first in enumerate((1, 2)):
             wanted = [
@@ -215,16 +216,16 @@ def test_margin_rows_take_their_bands_from_the_bands_of_concrete_requests(tmp_pa
     sidecar = sidecar_of(
         effective, "B", tmp_path, all_interface_insets(effective, "B", sa_pair)
     )
-    assert not any("expansion" in inset for inset in sidecar["insets"])
+    assert all(r["scope"] == "face" for r in sidecar["inset_request"].values())
     groups = groups_from_sidecar(sidecar)
     specs = surface_epr_specs(MA=[0.5, 1.0], SA=[0.5])
     _, entries = build_surface_epr_postprocessing(groups, specs)
     by_name = {entry["entry_name"]: entry for entry in entries}
-    pad = next(i for i in sidecar["insets"] if i["request_id"] == "band_pad_top")
+    pad = sidecar["band_family"]["band_pad_top"]
     assert by_name["MA::pad__top__inset_1"]["physical_names"] == sorted(
         pad["bands"]["2"]
     )
-    sa = next(i for i in sidecar["insets"] if i["request_id"] == "band_sa")
+    sa = sidecar["band_family"]["band_sa"]
     assert by_name["SA::substrate|VACUUM_REGION__interface__inset_0"][
         "physical_names"
     ] == sorted(sa["bands"]["1"] + sa["bands"]["2"])
@@ -235,12 +236,10 @@ def test_a_family_with_no_bands_contributes_nothing(tmp_path):
     specs = surface_epr_specs(MA=[0.5, 1.0])
     sidecar = banded_sidecar("B", tmp_path, specs)
     reference = build_surface_epr_postprocessing(groups_from_sidecar(sidecar), specs)
-    covered = {
-        **sidecar["insets"][0]["expansion"]["banded"][0],
-        "request_id": "epr_MA::covered::top",
-        "bands": {},
-    }
-    sidecar["insets"][0]["expansion"]["banded"].append(covered)
+    (request,) = sidecar["inset_request"].values()
+    first = sidecar["band_family"][request["families"][0]]
+    sidecar["band_family"]["epr_MA::covered::top"] = {**first, "bands": {}}
+    request["families"].append("epr_MA::covered::top")
     assert (
         build_surface_epr_postprocessing(groups_from_sidecar(sidecar), specs)
         == reference
@@ -251,8 +250,8 @@ def test_faces_sgb_skipped_have_a_baseline_row_and_no_margin_rows(tmp_path):
     """The substrate underside has no gap edge: SGB skips it, so only the baseline row covers it."""
     specs = surface_epr_specs(SA=[0.5])
     sidecar = banded_sidecar("B", tmp_path, specs)
-    (request,) = sidecar["insets"]
-    assert [s["support"]["z_um"] for s in request["expansion"]["skipped"]] == [-10.0]
+    (request,) = sidecar["inset_request"].values()
+    assert [s["support"]["z_um"] for s in request["skipped"]] == [-10.0]
     _, entries = build_surface_epr_postprocessing(groups_from_sidecar(sidecar), specs)
     names = [entry["entry_name"] for entry in entries]
     # Two interfaces of one pair share a name; the unbanded one keeps its baseline row and says so.
@@ -269,7 +268,7 @@ def test_the_custom_path_gives_a_conductor_its_own_margin_rows(tmp_path):
     specs = surface_epr_specs(MA=[0.5, 1.0])
     specs["MA"]["inset_margins_by_entity_um"] = {"pad": [0.25, 0.5, 0.75]}
     sidecar = banded_sidecar("B", tmp_path, specs)
-    assert {i["request_id"] for i in sidecar["insets"]} == {"epr::pad::top", "epr_MA"}
+    assert set(sidecar["inset_request"]) == {"epr::pad::top", "epr_MA"}
     _, entries = build_surface_epr_postprocessing(groups_from_sidecar(sidecar), specs)
     insets = {e["entry_name"]: e["inset"] for e in entries if "inset" in e}
     assert [

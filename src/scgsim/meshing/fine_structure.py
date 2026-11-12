@@ -17,9 +17,7 @@ The check reports; it never edits geometry.
 
 from __future__ import annotations
 
-import json
 import math
-import re
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -41,14 +39,13 @@ from .built_model import (
     wall_gaps,
     wedge_angles,
 )
-from .features import read_features
+from .features import checked, load_checked
 
 Action = Literal["refuse", "warn"]
 Owner = Literal["layout", "erosion", "sgb"]
 _ACTIONS = ("refuse", "warn")
 STAGE = "meshing"
-_FAMILY_MEMBER = "family_member"
-_MEMBER_POSITION = re.compile(r"/ring(\d+)/(edge|corner|capend|capstart)(\d+)$")
+_BAND_MEMBER = "band_member"
 
 
 @dataclass(frozen=True)
@@ -200,17 +197,14 @@ def check_fine_structure(
 ) -> FineStructureReport:
     """The meshing-stage findings of the SGB model a sidecar describes.
 
-    ``sidecar`` is the ``scgsim.sgb.sidecar.v2`` file of one build, or its decoded content.  Every wall
-    face, horizontal face and free horizontal edge of the built model is measured; those below ``limits``
-    are found, located in micrometres and attributed to the layout, to the exact erosion or to SGB (see the
-    module docstring).  The model is not changed.
+    ``sidecar`` is the ``scgsim.sgb.sidecar.v3`` file of one build, or its decoded content; the shared reader
+    checks it as the mesher does.  Every wall face, horizontal face and free horizontal edge of the built model
+    is measured; those below ``limits`` are found, located in micrometres and attributed to the layout, to the
+    exact erosion or to SGB (see the module docstring).  The model is not changed.
     """
     document = (
-        sidecar
-        if isinstance(sidecar, Mapping)
-        else json.loads(Path(sidecar).read_text(encoding="utf-8"))
+        checked(sidecar) if isinstance(sidecar, Mapping) else load_checked(sidecar)
     )
-    read_features(document)  # the same schema and binding checks the mesher applies
     model = read_built_model(document)
     found = _below_limits(model, limits)
     lineage = _Lineage(model)
@@ -284,7 +278,7 @@ class _Lineage:
                 self.edges_at.setdefault(vertex, []).append(edge)
         # The last position any member of a band family names on each ring of its support: the ring has
         # at least one more primitive than that, which bounds how far around the ring two positions can wrap.
-        self.last_position: dict[tuple[str, int], int] = {}
+        self.last_position: dict[tuple[str, str], int] = {}
         for carrier in model.carriers.values():
             position = _member_position(carrier)
             if position is not None:
@@ -307,7 +301,7 @@ class _Lineage:
         return [
             c
             for c in self.carriers(edges)
-            if c.kind == _FAMILY_MEMBER and c.family in self.model.band_margins
+            if c.kind == _BAND_MEMBER and c.family in self.model.band_margins
         ]
 
     def meeting_edges(self, measured: Measured) -> tuple[int, ...]:
@@ -337,9 +331,9 @@ class _Lineage:
         A member names a position on a ring of the band's support (see :func:`_member_position`).  Two
         members on different rings are apart.  On one ring of at least ``P + 1`` primitives, where ``P`` is the
         last position any member of the family names there, positions ``a`` and ``b`` are certainly apart when
-        ``1 < |a - b| < P``: not neighbours along the ring, nor across its first and last primitive.  The
-        sidecar does not record how many primitives a ring has, so a pair that might be neighbours across the
-        ring's start counts as neighbours, and the feature stays with SGB.
+        ``1 < |a - b| < P``: not neighbours along the ring, nor across its first and last primitive.  This rule
+        does not use the ring's size, which the sidecar records (#147 decides that use), so a pair that might be
+        neighbours across the ring's start counts as neighbours, and the feature stays with SGB.
         """
         members = [p for c in carriers if (p := _member_position(c)) is not None]
         for i, a in enumerate(members):
@@ -359,26 +353,30 @@ class _MemberPosition:
     """Where on its support a band member comes from: the family, the ring and the primitives it touches."""
 
     family: str
-    ring: int
+    ring: str
     index: int
     touched: tuple[int, ...]
 
 
 def _member_position(carrier: Carrier) -> _MemberPosition | None:
-    """The ring position a band member is named after, or ``None`` for another kind of carrier.
+    """The ring position a band member offsets, or ``None`` for another kind of carrier.
 
-    A member is named ``<family>/ring<r>/<kind><k>``: ``edge<k>`` is the offset of primitive ``k`` of ring
-    ``r``, ``corner<k>`` the arc between primitives ``k`` and ``k + 1``, and ``capstart<k>`` / ``capend<k>`` the
-    caps at the ends of primitive ``k``.
+    An ``edge`` member is the offset of primitive ``k`` of its ring, a ``corner`` the arc between primitives
+    ``k`` and ``k + 1``, and a ``capstart`` or ``capend`` the cap at an end of primitive ``k``.  A cap or corner
+    cut into pieces (a piece is at most a quarter turn) is not placed: the rule has placed whole members only,
+    and placing their pieces is #147's decision.
     """
-    if carrier.kind != _FAMILY_MEMBER or carrier.family is None:
+    if (
+        carrier.kind != _BAND_MEMBER
+        or carrier.family is None
+        or carrier.ring is None
+        or carrier.index is None
+        or carrier.piece is not None
+    ):
         return None
-    match = _MEMBER_POSITION.search(carrier.member or "")
-    if match is None:
-        return None
-    ring, kind, index = int(match[1]), match[2], int(match[3])
-    touched = (index, index + 1) if kind == "corner" else (index,)
-    return _MemberPosition(carrier.family, ring, index, touched)
+    index = carrier.index
+    touched = (index, index + 1) if carrier.role == "corner" else (index,)
+    return _MemberPosition(carrier.family, carrier.ring, index, touched)
 
 
 def _owner(lineage: _Lineage, item: _Found, layout: list[_Found]) -> Owner:
