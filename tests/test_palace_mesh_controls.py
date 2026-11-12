@@ -172,9 +172,7 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     preparation = electrostatic if sim_type is ElectrostaticSim else layout_ports
     calls = stand_in_mesh_stages(monkeypatch, module, tmp_path)
     prepared = SimpleNamespace(
-        component=object(),
         stack=STACK,
-        indium_ground_bump_fill=None,
         materials=None,
         geometry_input=object(),
         physical_plan=SimpleNamespace(context=object()),
@@ -211,9 +209,7 @@ def test_eigenmode_without_surface_epr_requests_no_insets(monkeypatch, tmp_path)
     """Eigenmode may skip Surface EPR: ``mesh()`` then passes no specs, so no bands are requested."""
     calls = stand_in_mesh_stages(monkeypatch, eigenmode, tmp_path)
     prepared = SimpleNamespace(
-        component=object(),
         stack=STACK,
-        indium_ground_bump_fill=None,
         materials=None,
         geometry_input=object(),
         physical_plan=SimpleNamespace(context=object()),

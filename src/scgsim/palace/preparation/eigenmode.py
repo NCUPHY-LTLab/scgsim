@@ -34,7 +34,7 @@ from .config import (
     configure_numerical_controls,
 )
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
-from .inputs import non_negative_number, stack_materials
+from .inputs import stack_materials
 from .layout_ports import (
     GeometrySettings,
     LayoutGeometryRequest,
@@ -87,7 +87,6 @@ class EigenmodeSim:
     _materials: dict[str, Mapping[str, Any]] | None = field(default=None, init=False)
     _resolved_ports: list[LayoutPortBinding] = field(default_factory=list, init=False)
     vacuum_region: VacuumRegionSpec | None = None
-    indium_ground_bumps: dict[str, Any] | None = None
     _mesh_result: MeshBuildResult | None = field(default=None, init=False)
     config_path: Path | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
@@ -156,7 +155,6 @@ class EigenmodeSim:
             "save_fields": self.save_fields,
             "numerical": self.numerical,
             "mesh": self.mesh_controls.to_payload(),
-            "indium_ground_bumps": self.indium_ground_bumps,
         }
         return InputSummary(data)
 
@@ -177,21 +175,6 @@ class EigenmodeSim:
         ):
             raise ValueError("GeometryPlan owns the outer vacuum envelope")
         self.vacuum_region = VacuumRegionSpec.from_padding(padding)
-        self._invalidate_mesh()
-
-    def set_indium_ground_bumps(
-        self, *, fill: bool, fill_pitch_um: float, fill_clearance_um: float
-    ) -> None:
-        """Request public-PDK authored-plus-ground-fill bumps for the next mesh."""
-        if not isinstance(fill, bool):
-            raise TypeError("fill must be a bool.")
-        self.indium_ground_bumps = {
-            "fill": fill,
-            "fill_pitch_um": validate_positive_number(fill_pitch_um, "fill_pitch_um"),
-            "fill_clearance_um": non_negative_number(
-                fill_clearance_um, "fill_clearance_um"
-            ),
-        }
         self._invalidate_mesh()
 
     def set_surface_epr(
@@ -542,7 +525,6 @@ class EigenmodeSim:
                 route_a_thin_film=self.route_a_thin_film,
                 approximation_profile=self.approximation_profile,
                 vacuum_region=self.vacuum_region,
-                indium_ground_bumps=self.indium_ground_bumps,
                 surface_epr_specs=self.surface_epr_specs,
             ),
         )

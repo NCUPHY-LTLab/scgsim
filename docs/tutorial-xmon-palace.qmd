@@ -17,8 +17,7 @@ meshing. The documentation build does not mesh or run Palace.
 
 The immutable snapshot already contains the GDS, prepared stack, final Net
 map, and shared outer vacuum envelope. Palace uses that envelope as supplied.
-This coupon already contains eight authored ground shorts, so this example
-does not add a second fill lattice. The source port is the prepared
+The coupon's eight ground shorts are bumps drawn in its layout. The source port is the prepared
 `chip/device/o_junction_lumped` sheet; its qualified name and target layer come
 from the component annotation.
 

@@ -13,7 +13,7 @@ execute:
 
 ## 設定本徵模與 EPR 輸出 {#configure-eigenmode-and-epr-outputs}
 
-不可變的 snapshot 已包含 GDS、準備好的堆疊、最終 Net 對應，以及共用的外部真空範圍。Palace 會直接使用此真空範圍。此 coupon 已包含八個定義好的接地短路凸塊，因此本範例不會再加入第二組填充陣列。來源端口是已準備的 `chip/device/o_junction_lumped` 薄片；其限定名稱與目標層來自元件註記。
+不可變的 snapshot 已包含 GDS、準備好的堆疊、最終 Net 對應，以及共用的外部真空範圍。Palace 會直接使用此真空範圍。此 coupon 的八個接地短路凸塊是其版圖中繪製的凸塊。來源端口是已準備的 `chip/device/o_junction_lumped` 薄片；其限定名稱與目標層來自元件註記。
 
 ```python
 from pathlib import Path

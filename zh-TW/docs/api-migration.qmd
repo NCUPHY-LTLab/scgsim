@@ -101,11 +101,10 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 | 標準拓撲規劃 | 從 `scgsim.geometry.compiler` 匯入 `plan_canonical_topology` |
 | 只產生路徑建構規劃 | 從 `scgsim.geometry.compiler` 匯入 `build_route_construction_plan` |
 | 完整路徑建構與原生降階 | 從 `scgsim.geometry.compiler` 使用 `SemanticGeometryBuilder.build` |
-| PDK 接地凸塊填充準備 | Palace 準備流程呼叫的內部來源輔助函式，不由幾何外觀模組直接匯出。 |
 
 負責模組包括 `scgsim.geometry.source.plan_assembly`、`scgsim.geometry.planning.contact_planning`、`scgsim.geometry.planning.junction_planning`、`scgsim.geometry.planning.port_planning`、`scgsim.geometry.planning.surface_planning`、`scgsim.geometry.planning.topology_planning`、`scgsim.geometry.primitives.tagged_grid_faces` 及 `scgsim.geometry.primitives.tagged_grid_operations`。這些模組整理內部實作，不新增支援的匯入路徑。
 
-體積規劃實作位於 `scgsim.geometry.planning.volume_planning`。Gmsh/OCC 原生降階及其拓撲／符合性紀錄位於 `scgsim.geometry.construction.native_geometry`；呼叫端透過建構器外觀模組使用這些功能。`scgsim.geometry.source.ground_bump_geometry` 負責稽核、晶格位置選取及來源紀錄建立，由 Palace 準備流程透過來源輔助函式呼叫。
+體積規劃實作位於 `scgsim.geometry.planning.volume_planning`。Gmsh/OCC 原生降階及其拓撲／符合性紀錄位於 `scgsim.geometry.construction.native_geometry`；呼叫端透過建構器外觀模組使用這些功能。
 
 接面規劃會為明確宣告的矩形接面推導精確分區。來源與 AEDT 準備共用內部服務 `junction_contact_inventory(build_input, request)` 及 `JunctionContactRequest`，以解析來源支撐面與相鄰導體。這些橋接名稱不是 `scgsim.geometry` 或 `scgsim.geometry.compiler` 的匯出；呼叫端透過幾何外觀模組宣告要求，再使用標準物理解讀與編譯步驟。
 

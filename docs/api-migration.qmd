@@ -206,7 +206,6 @@ Their supported routes remain the package facades:
 | Canonical topology planning | `plan_canonical_topology` from `scgsim.geometry.compiler` |
 | Route construction plan only | `build_route_construction_plan` from `scgsim.geometry.compiler` |
 | Complete route construction and native lowering | `SemanticGeometryBuilder.build` from `scgsim.geometry.compiler` |
-| PDK ground-bump fill preparation | Internal source helper consumed by Palace preparation; no direct geometry-facade export. |
 
 The responsibility modules are `scgsim.geometry.source.plan_assembly`,
 `scgsim.geometry.planning.contact_planning`,
@@ -221,9 +220,7 @@ implementation without adding new supported imports.
 Volume planning lives in `scgsim.geometry.planning.volume_planning`. Native
 Gmsh/OCC lowering and its topology/conformity records live in
 `scgsim.geometry.construction.native_geometry`; callers reach them through the
-builder facade. `scgsim.geometry.source.ground_bump_geometry` implements audit,
-lattice selection, and source-record creation behind the source helper used by
-Palace preparation.
+builder facade.
 
 The junction implementation derives exact partitions for explicitly declared
 rectangular junctions. Source and AEDT preparation share the internal
