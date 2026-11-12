@@ -17,8 +17,8 @@ from ..config.config import (
     build_electrostatic_config,
     configure_numerical_controls,
 )
-from ..source.transforms import validate_non_negative_int, validate_nonempty_string
 from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
+from ..source.transforms import validate_non_negative_int, validate_nonempty_string
 from .core import PalaceSimulation
 
 

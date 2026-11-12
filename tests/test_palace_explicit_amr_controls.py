@@ -11,11 +11,11 @@ import pytest
 
 from scgsim.meshing import HXT, Budgets, MesherOptions
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
-from scgsim.palace.mesh.controls import MeshControls
 from scgsim.palace.config.config import (
     build_eigenmode_config,
     configure_numerical_controls,
 )
+from scgsim.palace.mesh.controls import MeshControls
 
 
 def _config(sim):

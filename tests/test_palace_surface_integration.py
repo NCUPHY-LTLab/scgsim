@@ -5,8 +5,8 @@ from copy import deepcopy
 import pytest
 from palace_sgb_support import effective_input, sidecar_of, surface_epr_specs
 
-from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 from scgsim.palace.config.surface_epr import build_surface_epr_postprocessing
+from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 from scgsim.palace.results.surface_contract import validate_surface_epr_config
 
 

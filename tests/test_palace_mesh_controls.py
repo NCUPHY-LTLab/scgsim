@@ -18,9 +18,9 @@ from scgsim.meshing import (
 )
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.mesh.controls import DEFAULT_QUALITY_THRESHOLD, MeshControls
-from scgsim.palace.source import layout_ports
 from scgsim.palace.simulation import core
 from scgsim.palace.simulation.lifecycle import Stage
+from scgsim.palace.source import layout_ports
 
 STACK = {
     "materials": {"Si": {"kind": "dielectric", "permittivity": 11.45}},

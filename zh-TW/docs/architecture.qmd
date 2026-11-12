@@ -29,11 +29,12 @@ scgsim/
 ├── semantics/        # immutable solver-independent facts
 ├── palace/
 │   ├── simulation/   # EigenmodeSim and ElectrostaticSim on one shared core and lifecycle
-│   ├── preparation/  # ports, stack transforms, Surface EPR rows and config the simulations call
+│   ├── source/       # from a bound plan to the input of the geometry build
 │   ├── mesh/         # SGB build, meshing call, group lowering and summaries
-│   ├── execution/    # manual handoff and host receipt recorder
+│   ├── config/       # from the mesh's groups and the problem's settings to config.json and the index map
+│   ├── run/          # the run folder handed to Palace: script, receipt recorder, archive, returned receipt
 │   ├── results/      # custody-aware result and EPR reading
-│   └── presentation/ # Palace-specific reports and figures
+│   └── reports/      # notebook views of a resolved result
 ├── aedt/
 │   ├── eigenmode.py  # retained mutable high-level state facade
 │   ├── specs/        # detached requests, prepared geometry and parsing
@@ -157,7 +158,7 @@ OrPen SC PDK 負責公開元件範例，直接呼叫共用執行期。SCGSim 負
 
 每個 `write_config()` 都在先決條件及網格檔案檢查前，捨棄設定與交接狀態。求解器專屬轉換仍在持久化之前發生。共用私有寫入器依呼叫端順序獨立替換每個中繼資料檔，最後才替換 `config.json`；因此後續寫入失敗時，較早檔案仍保留，只有最終替換成功才快取 `config_path`。記憶體失效處理不刪除磁碟上的舊設定檔，此逐檔行為也不保證整個流程具有交易原子性。
 
-`scgsim.palace.preparation.inputs` 讀取 plan 堆疊中明確宣告的材料，並依使用各材料的區域與層檢查其種類。共用核心在綁定 plan 時呼叫它。兩個模擬分別定義於 `simulation.electrostatic` 與 `simulation.eigenmode`。
+`scgsim.palace.source.inputs` 讀取 plan 堆疊中明確宣告的材料，並依使用各材料的區域與層檢查其種類。共用核心在綁定 plan 時呼叫它。兩個模擬分別定義於 `simulation.electrostatic` 與 `simulation.eigenmode`。
 
 Palace 的網格行為區分 Gmsh 幾何階數與 FEM 階數，並將尺寸配方、演算法選擇、品質門檻與結果，以及高階最佳化結果與產生網格一同保留。`mesh_summary()` 回傳綁定網格與清單身分的獨立網格資料；Palace 報告及已解析結果檢視讀取相同紀錄依據。Eigenmode 摘要的拓撲自由度估計不是實際求解器自由度數量，Electrostatic 也不宣稱不可用的 H1 估計。
 

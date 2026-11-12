@@ -26,7 +26,7 @@ from scgsim.geometry.source.summary import InputSummary, summarize_geometry_inpu
 from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 
-from ..run.handoff import HandoffPlan, prepare_handoff
+from ..config.config import LayoutPortBinding
 from ..mesh.build import (
     MeshBuildResult,
     RouteGeometry,
@@ -35,7 +35,7 @@ from ..mesh.build import (
 )
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
-from ..config.config import LayoutPortBinding
+from ..run.handoff import HandoffPlan, prepare_handoff
 from ..source.inputs import stack_materials
 from ..source.layout_ports import (
     GeometrySettings,

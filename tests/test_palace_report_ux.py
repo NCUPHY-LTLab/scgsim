@@ -20,7 +20,6 @@ from scgsim.palace import (
     ResolvedPalaceResult,
     inspect_run_trustworthiness,
 )
-from scgsim.palace.run.returned_receipt import iteration_output_paths
 from scgsim.palace.reports.surface_figures import surface_ranking_figure
 from scgsim.palace.results.report_models import (
     AmrPassSnapshot,
@@ -28,6 +27,7 @@ from scgsim.palace.results.report_models import (
     SurfaceEprSeriesSnapshot,
 )
 from scgsim.palace.results.surface_readers import SurfaceEprReader
+from scgsim.palace.run.returned_receipt import iteration_output_paths
 
 
 class _Html:
@@ -364,9 +364,7 @@ class PalaceReportUxTests(unittest.TestCase):
                 "scgsim.palace.reports.views.surface_ranking_figure",
                 return_value=ranking,
             ),
-            patch(
-                "scgsim.palace.reports.views.show_figure", physics_figures.append
-            ),
+            patch("scgsim.palace.reports.views.show_figure", physics_figures.append),
             _captured_notebook_display() as displayed,
         ):
             physics._ipython_display_()

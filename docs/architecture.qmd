@@ -41,11 +41,12 @@ scgsim/
 ├── semantics/        # immutable solver-independent facts
 ├── palace/
 │   ├── simulation/   # EigenmodeSim and ElectrostaticSim on one shared core and lifecycle
-│   ├── preparation/  # ports, stack transforms, Surface EPR rows and config the simulations call
+│   ├── source/       # from a bound plan to the input of the geometry build
 │   ├── mesh/         # SGB build, meshing call, group lowering and summaries
-│   ├── execution/    # manual handoff and host receipt recorder
+│   ├── config/       # from the mesh's groups and the problem's settings to config.json and the index map
+│   ├── run/          # the run folder handed to Palace: script, receipt recorder, archive, returned receipt
 │   ├── results/      # custody-aware result and EPR reading
-│   └── presentation/ # Palace-specific reports and figures
+│   └── reports/      # notebook views of a resolved result
 ├── aedt/
 │   ├── eigenmode.py  # retained mutable high-level state facade
 │   ├── specs/        # detached requests, prepared geometry and parsing
@@ -314,7 +315,7 @@ cached only after the final replacement succeeds. In-memory invalidation does
 not remove an older config file from disk, and this per-file behavior is not a
 whole-workflow transaction guarantee.
 
-`scgsim.palace.preparation.inputs` reads the explicit materials of a plan's
+`scgsim.palace.source.inputs` reads the explicit materials of a plan's
 stack and checks each material's kind against the regions and layers that use
 it. The shared core calls it when a plan is bound. The simulations are defined
 in `simulation.electrostatic` and `simulation.eigenmode`.
