@@ -1,7 +1,8 @@
 """Synthesize electrostatic Terminal and Ground boundaries from the attributes of SGB groups.
 
-A Terminal is the attributes of the conductor surfaces of one exact Net (the sidecar's ``unions.nets``), the
-exterior Ground is the attributes of the ``EXT`` groups, and a physical Ground is chosen by Net.
+A Terminal is the attributes of the conductor surfaces of one exact Net (the ``net`` field of the sidecar's
+conductor surface groups), the exterior Ground is the attributes of the ``EXT`` groups, and a physical Ground
+is chosen by Net.
 """
 
 from __future__ import annotations

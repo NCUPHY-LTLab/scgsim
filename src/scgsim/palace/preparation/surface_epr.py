@@ -3,9 +3,9 @@
 ``inset_margins_um`` and ``inset_margins_by_entity_um`` are geometry: SGB cuts them into the model as bands
 (``mesh()`` requests them from these specs), and a margin ``m_k`` is the union of the attributes of bands
 ``k`` to ``K`` of every band family that serves the spec, listed as plain attributes.  The bands of a family
-come from the sidecar (``insets[*].bands``, or ``expansion.banded[*].bands`` of a type-level request), never
-from group names.  Stock Palace integrates plain attributes; native Mask/Inset is neither written nor
-accepted.  Omit both margin keys for baseline rows only.
+come from the sidecar's tables (``band_family[*].bands``, the family a ``surface_epr_row``'s group is a band
+of), never from group names.  Stock Palace integrates plain attributes; native Mask/Inset is neither written
+nor accepted.  Omit both margin keys for baseline rows only.
 """
 
 from __future__ import annotations
