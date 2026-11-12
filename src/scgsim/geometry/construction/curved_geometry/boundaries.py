@@ -30,14 +30,17 @@ from scgsim.geometry.models.input import (
     SemanticEntitySpec,
     SourceCurveSpec,
     arc_without_circle,
+    collinear,
     drawn_chain_on_ring,
     drawn_ring_of,
     drawn_vertices_off_ring,
+    exact_point_um,
     reconstruction_chain_refusal,
     reconstruction_without_circle,
     ring_lost_drawn_order,
     ring_runs,
     ring_without_drawn_order,
+    twice_area,
 )
 from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.primitives.grid_regions import region_key
@@ -102,30 +105,29 @@ def source_rings(build_input: GeometryBuildInput) -> SourceRings:
 
 
 def circle_through_points(points: Sequence[Coordinate]) -> tuple[Coordinate, float]:
-    """Solve the circle through three supplied arc anchors."""
-    a, b, c = points
-    ax, ay = a
-    bx, by = b
-    cx, cy = c
-    determinant = 2 * _twice_area(a, b, c)
+    """Solve the circle through three supplied arc points, exactly on their decimal values.
+
+    The binding (:func:`source_boundaries`) refuses an arc whose three points lie on one line,
+    read the same way, so the determinant is never zero here for an arc that passed it,
+    however the floats round.
+    """
+    a, b, c = (exact_point_um(point) for point in points)
+    determinant = 2 * twice_area(a, b, c)
+    a_sq, b_sq, c_sq = (p[0] ** 2 + p[1] ** 2 for p in (a, b, c))
     ux = (
-        (ax * ax + ay * ay) * (by - cy)
-        + (bx * bx + by * by) * (cy - ay)
-        + (cx * cx + cy * cy) * (ay - by)
+        a_sq * (b[1] - c[1]) + b_sq * (c[1] - a[1]) + c_sq * (a[1] - b[1])
     ) / determinant
     uy = (
-        (ax * ax + ay * ay) * (cx - bx)
-        + (bx * bx + by * by) * (ax - cx)
-        + (cx * cx + cy * cy) * (bx - ax)
+        a_sq * (c[0] - b[0]) + b_sq * (a[0] - c[0]) + c_sq * (b[0] - a[0])
     ) / determinant
-    return (ux, uy), math.hypot(ax - ux, ay - uy)
+    return (float(ux), float(uy)), math.hypot(float(a[0] - ux), float(a[1] - uy))
 
 
-def _twice_area(a: Coordinate, b: Coordinate, c: Coordinate) -> float:
-    # Twice the signed area of the triangle: zero exactly when no circle runs through
-    # the three points, so circle_through_points would divide by zero.
-    (ax, ay), (bx, by), (cx, cy) = a, b, c
-    return ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)
+def _on_one_line(points: Sequence[Coordinate]) -> bool:
+    # Whether an arc's three points, in micrometres, define no circle, by the exact rule
+    # collinear states, on the values circle_through_points solves on.
+    a, b, c = (exact_point_um(point) for point in points)
+    return collinear(a, b, c)
 
 
 @dataclass(frozen=True)
@@ -245,7 +247,7 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
     segments, anchors = chain.segments, chain.anchors
     count = len(ring)
     points = tuple(ring[i] for i in anchors)
-    if record.kind == "circular_arc" and _twice_area(*points) == 0:
+    if record.kind == "circular_arc" and _on_one_line(points):
         raise ValueError(
             reconstruction_without_circle(what, drawn_anchors, drawn_place)
         )
@@ -307,10 +309,10 @@ def _refuse_arcs_without_circle(
 ) -> None:
     # SGB refuses an authored arc whose three points define no circle, but the junction
     # partition reads a lumped port's terminal arcs before SGB runs, and the compiler's curve
-    # kernel builds arcs without SGB; both divide by zero in circle_through_points on them.
-    # The rule is that zero, so exactly the arcs that crashed are refused, in SGB's words.
+    # kernel builds arcs without SGB; both solve the circle with circle_through_points.  The
+    # arc is refused here, in SGB's words, by the exact rule that circle solves on.
     for index, curve in enumerate(record.curves):
-        if curve.kind == "circular_arc" and _twice_area(*curve.points_um) == 0:
+        if curve.kind == "circular_arc" and _on_one_line(curve.points_um):
             raise ValueError(
                 arc_without_circle(
                     f"{what} curve {index}",

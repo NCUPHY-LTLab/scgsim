@@ -11,9 +11,12 @@ refusal: each must lie on the ring, segment, vertex or arc point at fault.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 from test_located_refusals import on, places
 from test_located_source_and_sgb_refusals import pads_with_selectors
+from test_lumped_ports_at_any_angle import device_with_port
 from test_simulation_drc import check
 
 from scgsim.geometry.sgb.errors import InputError
@@ -324,3 +327,85 @@ def test_an_authored_arc_on_one_line_is_refused_at_its_points(monkeypatch):
     start, middle, end = places(message)
     assert on(start, (0, 0, 0, 0)) and on(middle, (10, 0, 10, 0))
     assert on(end, (20, 0, 20, 0))
+
+
+# ------------------------------------------ an arc on one line exactly, on a slanted terminal
+
+# On one line exactly, but in floats their area is 2.2e-16, and 0 in some turned frames.
+SLANT_ARC = ((0.0, 0.0), (0.2, 0.6), (2.0, 6.0))
+
+
+def along(direction, s, t):
+    """The grid point s v + t w in micrometres, for v = ``direction`` and w = v turned a quarter."""
+    p, q = direction
+    return ((s * p - t * q) / 1000, (s * q + t * p) / 1000)
+
+
+def slanted_terminal(monkeypatch, direction, sheet_start):
+    """A pad whose side from (0, 0) to (2, 6) um is authored as SLANT_ARC, on a lumped port along ``direction``.
+
+    In grid steps of v = ``direction`` along the port and of w across it, the pad ends at
+    s = 1500 with a side square to the port, the electrode runs from s = 1600 to 2600, both
+    across t = -150..150, and the sheet runs from s = ``sheet_start`` to 1700, t = -20..20.
+    """
+
+    def box(s0, s1, t0, t1):
+        corners = ((s0, t0), (s1, t0), (s1, t1), (s0, t1))
+        return [along(direction, s, t) for s, t in corners]
+
+    pad = [
+        SLANT_ARC[0],
+        SLANT_ARC[2],
+        along(direction, 1500, 150),
+        along(direction, 1500, -150),
+    ]
+    component = device_with_port(
+        monkeypatch,
+        pad=pad,
+        electrode=box(1600, 2600, -150, 150),
+        sheet=box(sheet_start, 1700, -20, 20),
+        port_centre=along(direction, (sheet_start + 1700) / 2, 0),
+        port_width_um=40 * math.hypot(*direction) / 1000,
+        direction=direction,
+    )
+    sides = zip(pad[1:], (*pad[2:], pad[0]), strict=True)
+    outline = {
+        "boundary_id": "PAD_OUTER",
+        "entity_id": "pad",
+        "selector_point_um": tuple(sum(c) / len(pad) for c in zip(*pad, strict=True)),
+        "curves": [
+            {"kind": "circular_arc", "points_um": SLANT_ARC},
+            *({"kind": "line_segment", "points_um": side} for side in sides),
+        ],
+    }
+    semantics = component.info["component_semantics"]
+    semantics["boundary_curves"] = [outline]
+    component.info["component_semantics"] = semantics
+    return component
+
+
+@pytest.mark.parametrize(
+    ("direction", "sheet_start"),
+    [((19, 2), 1312), ((4, 3), 1360)],
+    ids=["6-degrees", "37-degrees"],
+)
+def test_an_arc_on_one_line_only_exactly_is_refused_on_a_slanted_terminal(
+    monkeypatch, direction, sheet_start
+):
+    """The arc from (0, 0) through (0.2, 0.6) to (2, 6) um, on a port along (19, 2) or (4, 3).
+
+    Each sheet starts where the junction's local frame, 6.0 or 36.9 degrees, turns the three
+    points onto one line in floats, so the partition divided by zero (before:
+    ``ZeroDivisionError: float division by zero`` from ``simulation_drc``).  The binding now
+    finds them on one line exactly, as SGB does, and refuses the arc at its points.
+    """
+    with pytest.raises(ValueError) as error:
+        check(EigenmodeSim, slanted_terminal(monkeypatch, direction, sheet_start))
+    message = str(error.value)
+    assert message.startswith(
+        "chip/PAD_OUTER (Entity 'chip/pad', layer 1/0) curve 0: the three arc points "
+        "are collinear, so they define no circle: its start "
+    )
+    start, middle, end = places(message)
+    assert on(start, (0, 0, 0, 0)) and on(middle, (0.2, 0.6, 0.2, 0.6))
+    assert on(end, (2, 6, 2, 6))

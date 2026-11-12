@@ -37,6 +37,7 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SourceCurveSpec,
     arc_without_circle,
+    collinear,
     drawn_chain_on_ring,
     drawn_ring_of,
     drawn_vertices_off_ring,
@@ -54,11 +55,7 @@ from scgsim.geometry.sgb.plane import (
     point_in_ring,
     ring_twice_area,
 )
-from scgsim.geometry.sgb.prisms.arcs import (
-    arc_through_points,
-    collinear,
-    full_circle,
-)
+from scgsim.geometry.sgb.prisms.arcs import arc_through_points, full_circle
 from scgsim.geometry.sgb.prisms.footprints import SourceFootprint
 from scgsim.geometry.sgb.records.carriers import Lineage
 from scgsim.geometry.sgb.records.grid import Grid

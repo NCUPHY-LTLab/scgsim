@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import Any
 
 from scgsim.geometry.models.common import (
@@ -330,6 +331,34 @@ def reconstruction_without_circle(
         f"anchors are {at}; {how}. Fix the declaration: choose three anchors of its "
         "chain that do not lie on one line."
     )
+
+
+ExactPoint = tuple[Fraction | int, Fraction | int]
+
+
+def exact_point_um(point: Sequence[float]) -> tuple[Fraction, Fraction]:
+    """A point in micrometres, exactly as the decimals it is written with.
+
+    Each coordinate is read from its shortest decimal text, not its binary expansion, as SGB's
+    grid reads a declared length: ``0.2`` is exactly 1/5.
+    """
+    return (Fraction(repr(float(point[0]))), Fraction(repr(float(point[1]))))
+
+
+def twice_area(a: ExactPoint, b: ExactPoint, c: ExactPoint) -> Fraction | int:
+    """Twice the signed area of the triangle ``a b c``, exactly; a circle through them divides by it."""
+    return a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1])
+
+
+def collinear(a: ExactPoint, b: ExactPoint, c: ExactPoint) -> bool:
+    """Whether three points lie on one line (two of them may be one point), so no circle runs through them.
+
+    This is the one rule for an arc that defines no circle.  It is exact: each stage gives it
+    the exact points it solves the circle on, SGB its lattice and grid units, the construction
+    stages the authored micrometres as :func:`exact_point_um` reads them.  In floats, (0, 0),
+    (0.2, 0.6) and (2, 6) um have an area of 2.2e-16 in one frame and 0 in another.
+    """
+    return twice_area(a, b, c) == 0
 
 
 def arc_without_circle(what: str, places: Sequence[str]) -> str:

@@ -18,6 +18,7 @@ from decimal import Decimal
 from fractions import Fraction
 
 from scgsim.geometry.models.grid import format_length, format_point
+from scgsim.geometry.models.input import twice_area
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records import circle_math
@@ -30,29 +31,16 @@ QUARTER_TURN = circle_math.HALF_PI
 PIECE_ANGLE_SLACK = Decimal("1e-9")
 
 
-def collinear(
-    a: Point | RationalPoint, b: Point | RationalPoint, c: Point | RationalPoint
-) -> bool:
-    """Whether three points lie on one line (two of them may be one point), so no circle runs through them."""
-    return _twice_area(a, b, c) == 0
-
-
-def _twice_area(
-    a: Point | RationalPoint, b: Point | RationalPoint, c: Point | RationalPoint
-) -> Fraction | int:
-    # Twice the signed area of the triangle, exactly; the circle's centre divides by it.
-    return a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1])
-
-
 def circumcircle(
     a: RationalPoint, b: RationalPoint, c: RationalPoint, what: str
 ) -> tuple[RationalPoint, Fraction]:
     """Exact centre and (high-precision) radius of the circle through three points.
 
-    The binding (``prisms.curves``) refuses three points on one line first, naming where
-    they lie and who must act; this refusal keeps a direct caller fail-closed.
+    The binding (``prisms.curves``) refuses three points ``collinear`` finds on one line
+    first, on the same exact points, naming where they lie and who must act; this refusal
+    keeps a direct caller fail-closed.
     """
-    determinant = 2 * _twice_area(a, b, c)
+    determinant = 2 * twice_area(a, b, c)
     if determinant == 0:
         raise InputError(
             f"{what}: the three arc points are collinear, so they define no circle"
