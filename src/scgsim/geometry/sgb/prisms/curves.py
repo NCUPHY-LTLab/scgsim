@@ -327,7 +327,9 @@ class _BoundaryBinder:
         if record.kind != "circular_arc":
             raise UnsupportedCurveError(
                 f"{what}: reconstruction kind {record.kind!r} is not supported yet "
-                f"(this version carries {SUPPORTED_CURVES}; use 'circular_arc')"
+                f"(this version carries {SUPPORTED_CURVES}); the ring it selects lies at "
+                f"{self._place(ring)}. Fix the declaration: give the record kind "
+                "'circular_arc', or remove it to keep the ring as drawn."
             )
         # The indices name the drawn ring: they are checked there, by the rule the
         # construction binder also states, then carried onto the ring this footprint holds,

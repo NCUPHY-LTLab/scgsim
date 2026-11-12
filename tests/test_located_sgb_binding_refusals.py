@@ -239,6 +239,29 @@ def test_anchors_that_define_no_circle_are_refused_at_them(
     assert all(on(p, vertex(a)) for p, a in zip(found, anchors, strict=True))
 
 
+@pytest.mark.parametrize("kind", ["bspline", "interpolation_spline"])
+def test_a_reconstruction_of_a_kind_sgb_does_not_carry_is_refused_at_the_ring(
+    monkeypatch, kind
+):
+    """A spline reconstruction of the pad names the ring it selects, at (0, 0)..(20, 20) um.
+
+    On a lumped port's terminal the construction binder accepts the record, because the
+    compiler builds spline reconstructions; the junction partition then refuses the spline
+    on the terminal's outline, located (``test_located_junction_refusals.py``).
+    """
+    message = sgb_refusal(monkeypatch, reconstruction=[pad_arc(kind=kind)])
+    assert message.startswith(
+        f"{RECORD}: reconstruction kind {kind!r} is not supported yet (this version "
+        "carries lines and circular arcs); the ring it selects lies at "
+    )
+    assert message.endswith(
+        "Fix the declaration: give the record kind 'circular_arc', or remove it to keep "
+        "the ring as drawn."
+    )
+    (place,) = places(message)
+    assert on(place, PAD_RING) and on(PAD_RING, place)
+
+
 def test_two_reconstructions_of_one_drawn_segment_are_refused_on_it(monkeypatch):
     """Both records replace drawn segment 1, the pad's top side from (0, 20) to (20, 20) um.
 
