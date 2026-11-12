@@ -14,7 +14,7 @@ from scgsim.geometry import build_gds_stack_geometry_input
 
 
 def _native_source(
-    folder: Path, *, plane_count: int, schema: int = 2
+    folder: Path, *, plane_count: int, schema: int | None = 2
 ) -> tuple[Path, Path]:
     folder.mkdir(parents=True, exist_ok=True)
     library = gdstk.Library(unit=1e-6, precision=1e-9)
@@ -37,7 +37,9 @@ def _native_source(
             }
         },
         "metadata": {
-            "component_semantics_schema_version": schema,
+            **(
+                {} if schema is None else {"component_semantics_schema_version": schema}
+            ),
             "top_cell_name": cell.name,
             "same_key": "stack",
             "stack_note": {"authored": [1, 2]},
@@ -120,9 +122,11 @@ def test_derived_planes_preserve_global_metadata_precedence(
         assert plane.metadata["plane_note"] == index
 
 
-@pytest.mark.parametrize(("schema", "plane_count"), ((1, 1), (1, 0), (2, 0), (2, 2)))
+@pytest.mark.parametrize(
+    ("schema", "plane_count"), ((None, 1), (None, 0), (2, 0), (2, 2))
+)
 def test_fixed_fields_win_and_benign_metadata_preserves_geometry(
-    tmp_path: Path, schema: int, plane_count: int
+    tmp_path: Path, schema: int | None, plane_count: int
 ) -> None:
     """Keep fixed adapter facts authoritative and geometry independent of caller notes."""
     gds, stack = _native_source(tmp_path, plane_count=plane_count, schema=schema)
