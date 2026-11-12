@@ -40,16 +40,7 @@ quality = meshing["linear_mesh"]
 
 請依已準備來源核對圖例中的確切語意 ID 與數量。不可用模式會明確標示。在 Notebook 中互動檢視時，`preview.explore("materials")` 會顯示已綁定場景，並可旋轉與縮放。固定的 `show_*` 檢視則會寫出可攜式聯絡圖與 manifest。在 `prepare_handoff()` 前產生這些檔案，會將它們納入既有 Palace 封存檔；事後建立的 sidecar 不會追溯納入該封存檔。
 
-網格診斷回答的問題與網格化步驟的品質門檻不同：它們逐一量測儲存的求解器網格本身的四面體：
-
-```python
-stored = sim.check_mesh_quality()
-print(stored.show_summary())
-print(stored.show_worst_elements(metric="kappa_j", limit=10))
-stored.show_elements(metric="volume", limit=10).show()
-```
-
-請區分精確奇異、數值不可用與有限診斷值。厚度很薄但非零的四面體不會被重新標記為完全共平面。排序結果描述此檔案與指標，不會提供科學通過／失敗門檻，也不會修復網格。單位、選取／其餘項目限制與序列化方式由[網格契約](../mesh-quality.qmd)定義。
+網格品質就是網格化步驟的稽核：在升階之前的線性網格上量測每個四面體的 minSICN，並以網格的品質門檻檢查。其報告位於執行資料夾的 `mesh/`；欄位由[網格契約](../mesh-quality.qmd#quality-report)定義。
 
 ## AEDT：來源準備與原生準備不同 {#aedt-source-preparation-and-native-preparation-differ}
 

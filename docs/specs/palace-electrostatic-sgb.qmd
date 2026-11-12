@@ -234,8 +234,8 @@ Ground bindings use the exact Net of the sidecar.
 
 The meshing report states that minSICN and the count of tetrahedra below the
 threshold were measured on the linear mesh before any elevation, and records
-the order of the delivered mesh. To measure the stored solver mesh itself, use
-the [mesh-quality reader](../mesh-quality.qmd).
+the order of the delivered mesh. Its fields are listed in
+[The quality report](../mesh-quality.qmd#quality-report).
 
 ## Mesh manifest and detached summary {#mesh-manifest-and-detached-summary}
 
@@ -255,8 +255,8 @@ reads this same summary authority. Eigenmode includes an Nédélec topological
 degree-of-freedom estimate based on primary-corner tetrahedron topology and the
 configured FEM order. It is not an actual solver degree-of-freedom count;
 changing FEM order updates the estimate without remeshing. Electrostatic's
-H1 estimate is unavailable. The [mesh-quality reader](../mesh-quality.qmd) does
-not calculate curved-element quality.
+H1 estimate is unavailable. No SCGSim record measures the quality of curved
+high-order elements.
 
 ## Surface-EPR margins {#surface-epr-margins}
 

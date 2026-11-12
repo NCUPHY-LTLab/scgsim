@@ -43,8 +43,7 @@ scgsim/
 ├── semantics/        # immutable solver-independent facts
 ├── palace/
 │   ├── preparation/  # distinct Electrostatic and Eigenmode input state owners
-│   ├── mesh/         # SGB build, meshing call, group lowering, summaries and offline quality
-│   │   └── quality/  # detached offline MSH reader and report
+│   ├── mesh/         # SGB build, meshing call, group lowering and summaries
 │   ├── execution/    # manual handoff and host receipt recorder
 │   ├── results/      # custody-aware result and EPR reading
 │   └── presentation/ # Palace-specific reports and figures
@@ -163,7 +162,7 @@ Palace keeps two distinct mutable preparation owners: Electrostatic and
 Eigenmode setup state, invalidation, and failure ordering remain specific to
 each facade. Mesh construction keeps its worker boundary: the meshing module runs Gmsh in
 child processes, and Palace lowers the groups to solver attributes in one more
-worker. Offline mesh-quality reading stays separate. Manual
+worker. Manual
 handoff and its standalone host recorder remain execution-owned, while strict
 result/EPR resolution remains offline and Palace reports remain
 solver-specific. AEDT likewise keeps its `EigenmodeSim` state facade, but one
@@ -269,7 +268,6 @@ owns the exact behavior and failure boundary.
 | Run identity, handoff, profiles, receipts | One common SCGSim contract |
 | Physical result meaning | Solver-specific, never flattened into a false common quantity |
 | Report navigation, provenance, cost presentation | SCGSim report/resolver surfaces |
-| Offline tetrahedral mesh diagnostics | `scgsim.palace.mesh.quality`, exposed through `scgsim.palace` |
 | Public component-simulation notebook source | OrPen SC PDK |
 
 ## Internal semantic facts
@@ -303,13 +301,9 @@ directly. SCGSim owns the reusable package APIs, not a duplicate notebook source
 The per-family supported calculations and current limits
 are maintained in the [Backend Support Matrix](backend-support.qmd).
 
-Palace mesh-quality inspection is an offline reader under
-`scgsim.palace.mesh.quality` over the emitted MSH file.
-It neither owns mesh construction (the `scgsim.meshing` audit holds the
-threshold) nor starts a native backend. The reader binds
-one immutable parsed snapshot to the file bytes and leaves mesh acceptance and
-scientific convergence outside the report contract. See
-[Tetrahedral Mesh Quality](mesh-quality.qmd).
+Mesh quality is the `scgsim.meshing` audit that `mesh()` runs: it holds the
+threshold and writes the quality report. Scientific convergence stays outside
+that report. See [Tetrahedral Mesh Quality](mesh-quality.qmd).
 
 ## Palace preparation lifecycle
 

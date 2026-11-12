@@ -26,7 +26,7 @@ SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域
 | `scgsim.geometry.models` 與較低層原語 | 單一標準模型／型別定義，以及共用來源／編譯器原語 | 重複定義、來源至規劃的相依循環 |
 | `scgsim.semantics` | 僅使用標準函式庫、不可變且受修訂版本約束的事實 | 可變後端物件、將求解器標記解讀為來源真實資料 |
 | `scgsim.palace.preparation` | 分開的 Electrostatic 與 Eigenmode 設定物件、可變狀態／失效處理，以及共用準備函式 | 共用 Simulation 基底、Palace 提交，或合併狀態擁有者 |
-| `scgsim.palace.mesh` | 一次執行的 SGB 建置與網格化呼叫、把群組降階為求解器屬性、原生網格摘要，以及離線網格品質讀取器 | 結果收據保管或物理收斂判定 |
+| `scgsim.palace.mesh` | 一次執行的 SGB 建置與網格化呼叫、把群組降階為求解器屬性，以及原生網格摘要 | 結果收據保管或物理收斂判定 |
 | `scgsim.palace.execution` | 手動交接套件及獨立主機收據記錄 | 自動提交求解器或解讀結果 |
 | `scgsim.palace.results` | 回傳產物／保管驗證、結果資料及脫離原物件的 EPR | 求解器執行或繪圖狀態 |
 | `scgsim.palace.presentation` | Palace 信任度、物理與成本投影，以及報告圖表 | 共用的跨求解器物理量模型 |

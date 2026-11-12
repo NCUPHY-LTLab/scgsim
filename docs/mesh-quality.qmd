@@ -1,46 +1,61 @@
 ---
 title: "Tetrahedral Mesh Quality"
-description: "Stored tetrahedron diagnostics, numerical status, units, strict serialization and the version identities of a mesh."
+description: "The quality audit that mesh() runs, the report it writes, edge statistics and the version identities of a mesh."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/mesh-quality"
 ---
 
-For the preparation-stage reading sequence, use [solver observations](course/solver-observations.qmd). This page owns the stored-mesh diagnostic contract.
+For the preparation-stage reading sequence, use [solver observations](course/solver-observations.qmd). This page owns what a Palace run records about the quality of its mesh.
 
-`scgsim.palace.check_mesh_quality()` reads a solver-bound Gmsh MSH 2.2 ASCII
-file without starting Gmsh or Palace. It returns an immutable
-`MeshQualityReport` for the linear four-node tetrahedra that are actually in
-that file. This is a diagnostic reading surface, not a mesh repair step and not
-a scientific acceptance gate.
+## What `mesh()` audits {#audit}
 
-Palace meshes can store curved high-order elements. This reader computes quality
-metrics only for native Gmsh type-4 four-node tetrahedra.
-Higher-order elements are counted separately and excluded from these metrics,
-so a mesh containing only higher-order tetrahedra has no 3D quality metric.
-Use the Palace
-[mesh summary](specs/palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)
-for recorded geometric order, native element types, and generation statistics.
-
-This reader is separate from the quality audit that `mesh()` runs. That audit
-measures the minimum signed inverse condition number (minSICN) on the linear mesh before any
-elevation to the geometry order, holds it to the mesh's quality threshold and
-writes its own report; see the
+`mesh()` meshes the SGB model with `scgsim.meshing`, which audits every
+tetrahedron of each round's mesh. The measure is the minimum signed inverse
+condition number (minSICN) of each element, taken on the linear mesh before
+any elevation to the geometry order. Every tetrahedron must reach the mesh's
+`quality_threshold` (default `0.01`); elements below it are refined in the next
+round of the repair loop, within the budgets of
 [Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
-The sizes the audited mesh starts from, including those at film walls and on
-Surface-EPR band boundary curves, are the sizing recipe's
-([Sizing recipes](specs/palace-electrostatic-sgb.qmd#palace-mesh-recipes)).
-`check_mesh_quality()` measures the stored solver mesh after elevation, with
-different metrics, and applies no threshold. The two reports do not replace each
-other.
+A mesh that cannot be brought to the threshold stops `mesh()`, and no
+`palace.msh` is delivered. The sizes the audited mesh starts from, including
+those at film walls and on Surface-EPR band boundary curves, are the sizing
+recipe's ([Sizing recipes](specs/palace-electrostatic-sgb.qmd#palace-mesh-recipes)).
 
-Generation edge statistics are separate from `MeshQualityReport`. The Palace
-summary records each physical region's unique primary-corner edge count and
-minimum, mean, and maximum straight chord lengths in micrometres. These remain
-chords on curved high-order elements; they are not curved arc lengths or a
-higher-order quality metric. Point regions have zero edges and no length
-extrema. Missing historical statistics remain `not_recorded` rather than
-being inferred by this tetrahedron reader.
+The threshold is the meshing module's acceptance check for a valid element. It
+is not a scientific acceptance gate: convergence of a result is read from the
+solver's own outputs.
+
+## The quality report {#quality-report}
+
+Each run writes the report to the run's `mesh/` folder as JSON
+(`<model>.quality.json`) and as a short text summary (`<model>.quality.txt`).
+The mesh manifest records the report's path and SHA-256.
+
+::: {.askr-table-compact}
+| Field | Records |
+|---|---|
+| `quality_measure`, `threshold` | `minSICN` and the threshold the run was held to. |
+| `stop`, `rounds`, `history` | How the repair loop ended and what each round changed. |
+| `mesh` | Tetrahedron and node counts, `min_quality`, `bad_count` below the threshold, `measured_on` (`linear mesh before elevation`), the delivered `geometry_order` and the 3D algorithm. `null` when no round produced a mesh. |
+| `remaining_bad`, `stop_places` | The elements still below the threshold, with location, groups and feature kinds, and where they cluster in micrometres with the fine edges or faces found there. Empty for a clean stop. |
+| `recipe`, `repair`, `mesher`, `budgets`, `time_budget` | The settings the run used. |
+| `timing` | Total, per-round, meshing and audit seconds. Kept under one key, so two runs of the same input compare equal without it. |
+:::
+
+minSICN is measured before elevation, so the report does not describe curved
+high-order elements of the delivered `palace.msh`. The manifest records the
+order and the native element types of the mesh that was written.
+
+## Edge statistics {#edge-statistics}
+
+The Palace
+[mesh summary](specs/palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)
+records each physical region's unique primary-corner edge count and minimum,
+mean, and maximum straight chord lengths in micrometres. These remain chords on
+curved high-order elements; they are not curved arc lengths or a higher-order
+quality metric. Point regions have zero edges and no length extrema. Missing
+historical statistics remain `not_recorded`.
 
 ## Version identities of a mesh {#version-identities}
 
@@ -83,159 +98,3 @@ planes, Route B) gives two different meshes under the two versions:
 
 The two quality reports name different recipe versions, so the different mesh
 comes from the sizing rules, not from anything else in the run.
-
-## Input and ownership
-
-The reader accepts only MSH 2.2 ASCII files and preserves node and element IDs,
-element order, original binary64 coordinates, raw tag order, and
-dimension-qualified physical names. Other element types are counted but are
-not silently reinterpreted as linear tetrahedra. Known public MSH element codes
-must have their standard node arity; future unknown codes remain counted as
-unknown rather than acquiring a guessed dimension. Missing node references and
-nonfinite coordinates stay attached to their element IDs as unavailable
-records; malformed sections and duplicate IDs fail closed.
-
-Reading is sequential. The report binds the parsed byte count, SHA-256, and
-before/after file identity, and does not retain an open file or reread the mesh
-for later summaries, export, or visualization. A report owns read-only compact
-arrays. Returned dictionaries and Plotly figures are detached presentation
-objects and cannot mutate retained measurements.
-
-## Numerical meaning
-
-For authored tetrahedron vertices \(p_0,p_1,p_2,p_3\), the edge matrix is
-
-\[
-B = [p_1-p_0\; p_2-p_0\; p_3-p_0].
-\]
-
-The signed mesh-unit volume is \(\det(B)/6\); the reported volume magnitude is
-\(|\det(B)|/6\). Orientation and magnitude are separate: a positive,
-negative, or exact-zero orientation is never inferred from a rounded absolute
-volume.
-
-The fast orientation path first applies one exactly reversible power-of-two
-scale to all twelve coordinates of the element, before subtraction. It uses a
-Shewchuk-style determinant error bound \(E=(7+56u)uP\), with binary64 unit
-roundoff \(u=2^{-53}\) and \(P\) formed in the matching triple-product order,
-only for the sign decision. A bound
-that is inconclusive, a scale that loses a finite nonzero value, or a
-representation-boundary ambiguity takes the exact fallback based on
-`float.as_integer_ratio()` values from the original coordinates. Nonfinite
-coordinates remain locatable but numerically unavailable. The report
-retains the determinant estimate, absolute sign bound, and the selected
-method. The exact fallback computes mesh-unit and optional SI volume
-independently before either result is rounded to binary64, so mesh and SI
-underflow or overflow remain distinct statuses rather than false zero or
-infinity.
-
-The condition metric uses
-
-\[
-J = B W^{-1},\qquad
-W = \begin{bmatrix}
-1 & 1/2 & 1/2 \\
-0 & \sqrt{3}/2 & \sqrt{3}/6 \\
-0 & 0 & \sqrt{2/3}
-\end{bmatrix},
-\qquad \kappa(J)=\sigma_{max}/\sigma_{min}.
-\]
-
-A regular reference tetrahedron therefore has \(\kappa=1\). Exact zero
-determinants are singular. A nonzero exact determinant whose smallest singular
-value is below the numerical-resolution threshold is reported as numerically
-unresolved, not relabeled geometrically singular.
-The threshold is \(\sigma_{min}\leq3\epsilon\sigma_{max}\), with binary64
-spacing \(\epsilon=2^{-52}\). It is a reporting status, not a scientific
-quality gate.
-
-## Units, summaries, and ranking
-
-`length_scale_m` is optional. Without it, mesh-unit volume is available and SI
-volume is explicitly unavailable. Palace simulation wrappers pass their
-existing micrometre model scale (`1e-6`) after a mesh has been built. A direct
-call may supply another finite positive scale but does not infer one from the
-file.
-
-Summaries keep available values, exact singularities, numerical-resolution
-failures, missing nodes, nonfinite coordinates, and representation failures in
-separate counts. Volume and condition statistics state their units, sample
-count, and excluded count; a metric with no comparable samples says so
-explicitly. The median, 95th percentile, and 99th percentile use the binary64
-position \((n-1)q\) with rational interpolation between the two selected
-binary64 endpoints. Statistics and worst-element ranks use only values whose
-status makes them comparable.
-
-Condition-number ranking places exact singularities first, then finite values
-in descending order; volume ranking is ascending. Element ID breaks ties
-deterministically. Each display has a ranked group and a separately visible
-unavailable/remainder group. `limit=10` can therefore show up to ten rows from
-each group, while `limit=0` shows none. An element that lacks the *other*
-metric remains eligible when its selected metric is comparable. These ranks
-describe the selected diagnostic metric only and do not impose a pass/fail
-threshold.
-
-`show_summary()` and `show_worst_elements()` provide text displays.
-`show_elements()` imports Plotly lazily and draws the six authored edges for
-each selected tetrahedron as lines and its four vertices once as markers, with
-`aspectmode="data"`. Degenerate vertices remain visible without rewriting
-coordinates or inflating a tiny nonzero dimension. The figure title reports
-selected and drawn counts for each group, and undrawable IDs and reasons are
-visible annotations. Explicit `element_ids` preserve caller order, ignore the
-ranking limit, accept Python and NumPy integers other than booleans, and reject
-other types. Unknown requested element IDs fail instead of being dropped.
-
-These inert coordinate sets illustrate three distinct outcomes; they are not
-executed by the documentation build and do not define acceptance thresholds:
-
-```python
-# p0, p1, p2, p3 in authored mesh units
-regular = ((0, 0, 0), (1, 0, 0), (0.5, 3**0.5 / 2, 0),
-           (0.5, 3**0.5 / 6, (2 / 3)**0.5))
-coplanar = ((0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0))
-thin_nonzero = ((0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 2**-100))
-```
-
-The regular set uses the documented reference matrix and has
-\(\kappa(J)=1\). The coplanar set is exactly singular. With the shown
-`2**-100` height, the thin set has a nonzero orientation and volume but a
-numerically unresolved condition number; the report keeps those facts
-separate.
-
-## Serialization and limitations
-
-`to_dict()` returns detached plain containers. `save_json()` validates and
-strictly serializes the complete header before exclusively creating the output,
-then streams nodes and elements without materializing the complete report. It
-refuses to overwrite either an existing path or the mesh itself. Nonfinite or
-unavailable numerical values are serialized as `null` with an explicit reason.
-Exact-singular condition number is the distinct JSON string `"+inf"`; JSON
-never contains bare `NaN` or `Infinity` tokens. A later operating-system write
-failure can leave a partial newly created output file; this is streaming output,
-not an atomic replacement protocol.
-
-Text summaries use `+inf` for an exact-singular condition number. Strict JSON
-cannot encode infinity as a number, so the corresponding value is the string
-`"+inf"`; its status retains the distinction from missing or unresolved data.
-
-For an actual Palace mesh, the [solver-observation lesson](course/solver-observations.qmd) shows the source-bound summary and figures. Direct callers may use `check_mesh_quality(mesh_path, length_scale_m=...)` and the same report methods.
-
-
-The two-group limit applies independently to comparable ranked elements and
-the visible unavailable/remainder group, so `limit=10` can display as many as
-twenty rows or elements. `save_json()` refuses an existing destination; choose
-a new path for each diagnostic capture.
-
-This V1 surface does not reorder tetrahedra to match solver orientation, repair
-connectivity, evaluate higher-order tetrahedra, infer solver-side acceptance,
-or prove convergence. It reads the stored mesh exactly once and reports its
-own numerical evidence.
-
-The numerical design follows Shewchuk's
-[adaptive-predicate guidance](https://www.cs.cmu.edu/~quake/robust.html) for
-sign decisions and uses NumPy's documented
-[SVD rank-resolution model](https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html)
-only as a numerical-resolution indicator. The
-[MFEM mesh implementation](https://docs.mfem.org/4.9/mesh_8cpp_source.html) may
-reorder elements in its own workflow; that does not redefine the orientation
-of the original MSH connectivity inspected here.

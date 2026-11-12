@@ -65,8 +65,6 @@ AEDT `ResolvedRun` 以 `epr_result()` 提供綁定的 EPR 紀錄，以 `show_all
 
 僅對 Palace，報告保留原生本徵模態 `eig.csv` 的 `Q` 欄位中正無窮大，並明確標為**原生回報的無窮大 Q**。該值無法提供有限 Q 檢視；報告不推論物理無損模型，也不以有限數字或零取代。其他有效頻率／能量資料不僅因此 Q 值而被拒絕。[Palace 原生 Q 契約](specs/palace-eigenmode.qmd#native-eigenmode-q) 負責限縮的原始值允許範圍，以及維持不變的其他欄位／NaN／負無窮大政策。EPR 正規化及未知損耗解讀維持分開。
 
-獨立的[四面體網格品質](mesh-quality.qmd) 報告綁定單次 MSH 檔案讀取。其體積、方向及條件資料是幾何診斷，不是求解器結果，自己不套用品質門檻，也不產生收斂結論。
-
 ## Palace Surface EPR 的邊距列 {#palace-margin-rows}
 
 既有的檢查與嚴格解析區分，也適用於 Palace 邊距列。邊距列是涵蓋 SGB 在該邊距及更外側切出之各帶的 `Dielectric` 列，因此和基準列放在同一張 `surface-Q.csv` 表。`inspect_run_trustworthiness()` 可檢查完成、失敗或部分套件，並將不可用的邊距資料標為不可用，不改變憑證狀態。每個來源把它的邊距列當成一個全有或全無的快照讀取：若其表格無法讀取，或與索引映射不符，該來源就沒有邊距快照。對要求表面列的執行進行嚴格完成解析時，需要同一必要結果來源中已封存的 `surface-Q.csv`；缺少檔案會阻止嚴格解析，既有憑證或產物 SHA-256 不符仍為致命錯誤。

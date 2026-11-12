@@ -123,13 +123,13 @@ SGB 寫出的 XAO（位於 `geometry/`）也可以交給其他工具產生網格
 
 執行資料夾包含 SGB 模型（`geometry/`，內有 XAO 與其 sidecar）、網格化報告（`mesh/`，有 JSON 與文字兩種）、`palace.msh`，以及網格清單（`metadata/`）。`palace.msh` 是 Gmsh MSH 2.2 ASCII 檔，即 Palace 讀取的格式。Palace 只根據 sidecar，把 SGB 的具名群組降階為求解器屬性：只有當同一個表面群組的面被不同的 Surface EPR 列或側邊積分時才會拆開，因此屬性會分割這些面，不會重複計算。電氣身分是 Net；Terminal 與 Ground 綁定使用 sidecar 中確切的 Net。
 
-網格化報告說明，minSICN 與低於門檻的四面體數量，是在升階之前的線性網格上量得，並記錄輸出網格的階數。若要量測儲存的求解器網格本身，請使用[網格品質讀取器](../mesh-quality.qmd)。
+網格化報告說明，minSICN 與低於門檻的四面體數量，是在升階之前的線性網格上量得，並記錄輸出網格的階數。其欄位列於[品質報告](../mesh-quality.qmd#quality-report)。
 
 ## 網格清單與獨立摘要 {#mesh-manifest-and-detached-summary}
 
 網格清單（`schema_version` 2）記錄路徑及其策略、sidecar 結構與模型身分摘要、Surface EPR 內縮請求及其產生的帶族與 SGB 略過的面、配方（名稱、版本與參數）、修復策略、網格器選項、預算與門檻、品質報告的路徑與 SHA-256，以及每個求解器屬性一筆、註明來源 SGB 群組的項目。它也記錄 Gmsh 版本、節點與元素類型、物理區域元素數量及邊長統計。高階網格的邊長會明確標為主角點弦長，以微米回報；它們不是曲邊弧長。
 
-兩個 Palace 外觀介面及已解析的 Palace 執行都提供 `mesh_summary()`。它回傳綁定網格與清單身分的獨立值。Palace 報告讀取相同摘要依據。Eigenmode 包含根據主角點四面體拓撲與設定 FEM 階數計算的 Nédélec 拓撲自由度估計。這不是實際求解器自由度數量；變更 FEM 階數會更新估計，不重新產生網格。Electrostatic 的 H1 估計不可用。[網格品質讀取器](../mesh-quality.qmd) 不計算曲面元素品質。
+兩個 Palace 外觀介面及已解析的 Palace 執行都提供 `mesh_summary()`。它回傳綁定網格與清單身分的獨立值。Palace 報告讀取相同摘要依據。Eigenmode 包含根據主角點四面體拓撲與設定 FEM 階數計算的 Nédélec 拓撲自由度估計。這不是實際求解器自由度數量；變更 FEM 階數會更新估計，不重新產生網格。Electrostatic 的 H1 估計不可用。SCGSim 沒有任何紀錄量測彎曲高階元素的品質。
 
 ## Surface EPR 邊距 {#surface-epr-margins}
 

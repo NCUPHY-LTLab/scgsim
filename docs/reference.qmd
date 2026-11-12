@@ -26,8 +26,8 @@ choices enter a selected case; the [Driven Modal](course/aedt-driven-modal.qmd) 
 
 ## Mesh and adaptation {#mesh-adaptation}
 
-The [mesh diagnostic contract](mesh-quality.qmd#input-and-ownership) defines
-what the stored-mesh reader measures. The [prepared-backend tutorial](course/solver-observations.qmd)
+The [mesh quality contract](mesh-quality.qmd#audit) defines
+what `mesh()` audits and records about each mesh. The [prepared-backend tutorial](course/solver-observations.qmd)
 shows where to inspect the mesh and native preparation before execution.
 
 ## Execution and handoff {#execution-handoff}

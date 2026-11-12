@@ -29,11 +29,9 @@ source uses the version recorded in its bound spec and accepts no version
 override. Both paths use the selected same-node AEDT compatibility context and
 the owned-Desktop cleanup lifecycle.
 Palace previews retain high-order connectivity and curved boundary
-representation. The preview does not compute mesh quality. The separate
-[tetrahedron diagnostic](mesh-quality.qmd) computes
-metrics only for stored native type-4 four-node tetrahedra; higher-order
-elements are counted separately and excluded, so a mesh containing only
-higher-order tetrahedra has no 3D quality metric.
+representation. The preview does not compute mesh quality; the
+[meshing audit](mesh-quality.qmd) measures it on the linear mesh before
+elevation.
 
 ## Public surface
 

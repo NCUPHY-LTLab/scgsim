@@ -19,6 +19,6 @@ scgsim-id: "docs/research/index"
 
 ## 研究與工具文件
 
-特定模型的數值比較與觀察放在這個 Area。SCGSim 支援的行為、輸入、輸出與實作檢查，整理在[契約總覽](../reference.qmd)。例如，[四面體網格品質](../mesh-quality.qmd)說明儲存 Mesh 的讀取器會測量什麼，仍保留在「契約」。
+特定模型的數值比較與觀察放在這個 Area。SCGSim 支援的行為、輸入、輸出與實作檢查，整理在[契約總覽](../reference.qmd)。例如，[四面體網格品質](../mesh-quality.qmd)說明網格化稽核會測量什麼，仍保留在「契約」。
 
 兩個 Area 使用的專有名詞，見 [Convention](../conventions.qmd)。

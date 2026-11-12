@@ -395,16 +395,10 @@ old-name aliases.
 | `surface-mask-Q.csv` and `surface-mask-energy.csv` | Margin rows are read from `surface-Q.csv` |
 :::
 
-`scgsim.palace.check_mesh_quality(mesh_path)` is unchanged: it still reads the
-stored solver mesh (MSH 2.2 ASCII). The minimum SICN in the meshing report is a
-different measurement, taken on the linear mesh before any elevation.
-
 ## Palace package symbols
 
-`scgsim.palace` declares 33 package-facade names. The inventory groups 28 of
-them by their v2 responsibility owner; the AMR and capacitance-reference names
-(`analyze_amr`, `show_amr_analysis`, `PalaceAmrAnalysis`, `PalaceAmrReport`,
-`CapacitanceReference`) are described on [AMR analysis](amr-analysis.qmd).
+`scgsim.palace` declares 26 package-facade names. The inventory groups them by
+their v2 responsibility owner.
 
 
 - **Current owner and responsibility:** `scgsim.palace.preparation`; keep separate mutable preparation state owners. **Facade exports:** `ElectrostaticSim`, `EigenmodeSim`.
@@ -414,7 +408,6 @@ them by their v2 responsibility owner; the AMR and capacitance-reference names
 - **Current owner and responsibility:** `scgsim.palace.presentation`; solver-specific plot over detached EPR. **Facade exports:** `show_epr`.
 - **Current owner and responsibility:** `scgsim.palace.results.report_models`; detached data records consumed by Palace presentation. **Facade exports:** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`.
 - **Current owner and responsibility:** `scgsim.palace.presentation.reports`; trust, physics and benchmark views over retained result evidence. **Facade exports:** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
-- **Current owner and responsibility:** `scgsim.palace.mesh.quality`; offline file reader, separate from mesh construction and solver execution. **Facade exports:** `MeshQualityReport`, `check_mesh_quality`.
 
 
 ## Palace direct submodule exports
@@ -437,11 +430,10 @@ The current `scgsim.palace.results.report_models` module defines
 `scgsim.palace.presentation.reports` module retains the seven direct exports
 listed above.
 
-`scgsim.palace._epr_results` and `scgsim._mesh_quality` are baseline private
-implementation paths whose supported names are re-exported by `scgsim.palace`.
-Their current owners are `scgsim.palace.results` and
-`scgsim.palace.mesh.quality`, respectively; the old private import paths are
-not compatibility surfaces.
+`scgsim.palace._epr_results` is a baseline private implementation path whose
+supported names are re-exported by `scgsim.palace`. Its current owner is
+`scgsim.palace.results`; the old private import path is not a compatibility
+surface.
 
 ## Visualization symbols
 

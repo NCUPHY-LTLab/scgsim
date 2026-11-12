@@ -129,7 +129,7 @@ Palace 模擬採用的兩種 Route 都支援條帶：Route A 的薄片，以及 
 
 - **在格點上建出宣告的幾何。** 每個 Entity 都依宣告建出，頂點都在格點上。不新增、不合併、不刪除任何東西；唯一的例外是每個集總埠薄片在中央矩形以外的空出部分會併入薄片所落的導體，見[集總埠一律切成矩形](supported-geometry.qmd#lumped-port-rectangle)。
 - **條帶與精確幾何相符。** 每個條帶的面積與同一組多邊形的精確侵蝕（erosion）相比，差異在格點的 snap 界限之內，界限的定義見[支援的幾何](supported-geometry.qmd#what-supported-means)。
-- **達到品質門檻的網格，否則附上報告。** `mesh()` 產生網格之前，會先對建好的模型執行網格階段檢查，若有項目拒絕此模型，就拋出 `SimulationDrcError`。之後 `mesh()` 回傳的網格中，每個四面體都達到 `quality_threshold`：最小有號反條件數（minSICN）至少為 0.01，除非您以 `set_mesh` 設定其他數值。它在 `Budgets` 的限制之內完成：預設為 8 輪細化、2,000,000 個四面體，以及 x 乘 y 範圍不超過 4 mm² 的模型 180 秒，範圍更大的模型按比例給予更多時間。否則它拋出附有品質報告的 `MeshRepairError`，不回傳網格。門檻是在線性網格上檢查的。`geometry_order` 大於 1 時，通過檢查的網格會再提升到該階數並寫出，不再檢查第二次；要量測儲存下來的網格，請用[四面體網格品質](mesh-quality.qmd)讀取器。這些控制項與預設值見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
+- **達到品質門檻的網格，否則附上報告。** `mesh()` 產生網格之前，會先對建好的模型執行網格階段檢查，若有項目拒絕此模型，就拋出 `SimulationDrcError`。之後 `mesh()` 回傳的網格中，每個四面體都達到 `quality_threshold`：最小有號反條件數（minSICN）至少為 0.01，除非您以 `set_mesh` 設定其他數值。它在 `Budgets` 的限制之內完成：預設為 8 輪細化、2,000,000 個四面體，以及 x 乘 y 範圍不超過 4 mm² 的模型 180 秒，範圍更大的模型按比例給予更多時間。否則它拋出附有品質報告的 `MeshRepairError`，不回傳網格。門檻是在線性網格上檢查的。`geometry_order` 大於 1 時，通過檢查的網格會再提升到該階數並寫出，不再檢查第二次；稽核記錄的內容見[四面體網格品質](mesh-quality.qmd)。這些控制項與預設值見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
 [支援的幾何](supported-geometry.qmd)列出 SCGSim 測試過的版圖圖形。這份清單驗證的是每個圖形都能建構，且條帶與精確幾何相符；它本身並不表示版圖能產生網格或完成求解。
 
