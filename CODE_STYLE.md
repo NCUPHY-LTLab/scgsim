@@ -36,6 +36,14 @@ def build(self) -> ConstructionPlanRecord:
 - Keep imports at module scope. Use a lazy import only when it avoids loading an optional heavy dependency on a path that does not need it; explain that reason beside the import.
 - Shared names use ordinary names and docstrings. File-local helpers use a leading underscore. Do not reach into another object's private attributes.
 
+## Design principles
+
+These three principles decide where a rule, a fact and a refusal live. Each is shown with one case from this repository.
+
+1. **One implementation per rule.** Decide a rule in one place and call that place from everywhere that needs it. After the source stage, decide geometry on the model grid in exact arithmetic, never in floating point. *Example:* #185 found the rule "three arc points on one line define no circle" in two places: the construction binder (`scgsim.geometry.construction.curved_geometry.boundaries`) tests it on floats and SGB (`scgsim.geometry.sgb.prisms.arcs`) on exact fractions, so three points on one line could pass the first and be refused by the second.
+2. **Carry facts forward as typed fields.** A later stage reads what an earlier stage knew from a field. It never derives the fact again, never guesses it, and never parses an id. *Example:* before sidecar v3 (#170), the meshing stage took a band member's ring and position out of its id with a regular expression. Sidecar v3 states them as typed references, `carrier.primitive` → `support_primitive.ring` → `support_ring`, and no reader parses an id.
+3. **The check that detects a problem writes the refusal.** The refusal names the object, its layer, the place in µm and who must act, and links to its explanation, all from the same data the check detected the problem with. *Example:* since #184, `check_manifold` (`scgsim.geometry.sgb.derivation.contacts`) finds a pinch at a vertex of the slab arrangement and names the conductor or region from the wedges around that same vertex, not from a search of the footprints near it.
+
 ## Refactoring and compatibility
 
 An internal readability refactor preserves behavior, call order, data formats and algorithms. Keep bug fixes separate from refactoring so each change has a clear review purpose.

@@ -41,6 +41,8 @@ SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域
 | `scgsim.visualization` | 綁定後端的來源／收據載入器、脫離原物件的場景／預覽物件及呈現 | 求解器狀態、模擬狀態或物理驗收 |
 | `scgsim.presentation` | 與求解器物理中立的共用 Notebook 格式化 | 領域投影或科學計算 |
 
+`scgsim.geometry.sgb` 與 `scgsim.geometry.compiler` 都位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫它們時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。
+
 以來源為基礎的本徵模準備、求解與匯出，屬於 HFSS 家族，即使沒有要求 EPR 分析也一樣。已宣告的接面與一般 RLC 負載會獨立於該請求建構。EPR 會將分析選擇與場／快取工作加入同一個原生模型及求解生命週期。純 RLC 單位／拓撲解讀與 Q3D 來源外部鏈選擇，由僅使用標準函式庫的私有輔助工具供原生寫入器與離線讀取器共用；共用解讀方式不會取代各自獨立的原生收據與來源歸屬檢查。
 
 幾何、AEDT、Palace 與 visualization 的基準 facade 和直接子模組符號對應，以及目前的負責模組，列於 [API 遷移參考](api-migration.qmd)。公開性取決於文件所述的 facade／契約與宣告的匯出項目，不取決於 Python 模組是否剛好可匯入。v2 刻意不保留 `scgsim.sgb` 相容包裝器或 Q3D 輸入 v1／v2 路徑；公開 AEDT 指令 `python -m scgsim.aedt.run` 仍受支援，並會交由交易擁有者處理。

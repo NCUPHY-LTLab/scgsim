@@ -67,11 +67,11 @@ HFSS 家族負責一般來源支援的 Eigenmode 準備、求解及匯出。EPR 
 
 公開性依據明確套件外觀介面、宣告的子模組匯出及文件契約，不因可匯入就成為公開。SCGSim 2.0 保留高階 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 與 `scgsim.visualization` 入口，並在 [API 遷移參考](api-migration.qmd) 提供新舊子模組及符號映射。搬移的私有實作不因位置改變而公開。現行實作只有一套，不保留舊 `scgsim.sgb` 相容包裝器，也不恢復 Q3D input-v1／v2 路徑。正式 `python -m scgsim.aedt.run` 入口仍受支援；它是 AEDT 交易 CLI，不是舊版包裝器。
 
-`geometry` 外觀模組是來源建模的入口，提供 `GeometryPlan`、獨立快照、正規化輸入紀錄、元件及堆疊轉接、物理表示解讀與輸入摘要。進階建構使用 `geometry.compiler` 外觀模組，其中提供 `SemanticGeometryBuilder`、路徑建構規劃、衍生紀錄、階段操作及驗證器。輸入驗證定義於 `geometry.source.validation`，並由編譯器外觀模組重新匯出。Palace 不經由這個外觀模組建置：它呼叫 `scgsim.geometry.sgb` 的 `build_sgb_geometry`，再用 `scgsim.meshing` 為結果產生網格。
+`geometry` 外觀模組是來源建模的入口，提供 `GeometryPlan`、獨立快照、正規化輸入紀錄、元件及堆疊轉接、物理表示解讀與輸入摘要。進階建構使用 `geometry.compiler` 外觀模組，其中提供 `SemanticGeometryBuilder`、路徑建構規劃、衍生紀錄、階段操作及驗證器。輸入驗證定義於 `geometry.source.validation`，並由編譯器外觀模組重新匯出。Palace 不經由這個外觀模組建置：它呼叫 `scgsim.geometry.sgb` 的 `build_sgb_geometry`，再用 `scgsim.meshing` 為結果產生網格。`scgsim.geometry.sgb` 與 `geometry.compiler` 都位於支援的入口以下：版圖經由 `GeometryPlan`，以及 `scgsim.palace` 與 `scgsim.aedt` 的模擬類別進入；以自行建立的輸入直接呼叫它們時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。
 
 `scgsim.geometry.interpret_physical_geometry` 會回傳有效輸入、堆疊及表示規劃。若只需要建構規劃，將 `plan.context` 傳給 `scgsim.geometry.compiler.build_route_construction_plan`；若要繼續執行原生建構並匯出實體群組，則傳給 `SemanticGeometryBuilder.build`。
 
-內部模組依責任分工；一般使用者應透過上述兩個外觀模組操作。
+內部模組依責任分工；使用者經由支援的入口操作，進階建構才使用上述兩個外觀模組。
 
 | 內部負責模組 | 責任 |
 |---|---|

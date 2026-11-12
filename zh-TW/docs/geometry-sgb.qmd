@@ -11,7 +11,7 @@ lang: zh-TW
 
 樹內 `scgsim.geometry` API 是 SCGSim 目前的來源幾何權威。它使用結構化 PDK 與元件語意，不從求解器產生的標籤重建幾何意義。
 
-`scgsim.geometry` 是面向來源的外觀介面：`GeometryPlan`、獨立快照、正規化輸入模型、轉接器、堆疊／真空／曲線準備及摘要。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立此幾何，並用 `scgsim.meshing` 產生網格。`scgsim.geometry.compiler` 仍是進階路徑建構器，含衍生建構紀錄、階段驗證器及分派；Palace 不使用它。來源驗證器定義於 `scgsim.geometry.source.validation`，由編譯器外觀介面重新匯出。直接定義模組及模型別名列於 [API 遷移參考](api-migration.qmd#geometry-and-compiler-api)。
+`scgsim.geometry` 是面向來源的外觀介面：`GeometryPlan`、獨立快照、正規化輸入模型、轉接器、堆疊／真空／曲線準備及摘要。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立此幾何，並用 `scgsim.meshing` 產生網格。`scgsim.geometry.compiler` 仍是進階路徑建構器，含衍生建構紀錄、階段驗證器及分派；Palace 不使用它。這兩個建構器都位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫它們時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。來源驗證器定義於 `scgsim.geometry.source.validation`，由編譯器外觀介面重新匯出。直接定義模組及模型別名列於 [API 遷移參考](api-migration.qmd#geometry-and-compiler-api)。
 
 `build_component_stack()` 組合兩個明確權威。PDK `LayerStack` 紀錄提供材料、製程層、Z／厚度、導體／求解角色及確切宿主體積。元件註記提供局部實體身分、埠、功能導體區域及拓撲選取器。Notebook 組合具名出現實例並指派最終 Net 映射，不手動指定 PDK 或元件事實。
 

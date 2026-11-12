@@ -15,7 +15,9 @@ says which rule.
 
 Read this page before you draw a layout for simulation or when a build or a
 mesh fails. The rules are grouped by what they are about; each row links to the
-page that holds the detail.
+page that holds the detail. They are stated for a layout that enters through
+[the supported entry](#supported-entry): `GeometryPlan` and the simulation
+classes.
 
 ## Three stages, three owners {#stages-and-owners}
 
@@ -63,6 +65,52 @@ The words this page uses:
 - **Fine structure** is geometry far smaller than the features around it: edges
   only a few grid steps long, or spikes and slits only nanometres wide, such as
   the slits of [C2 and C3](known-geometry-problems.qmd#c2-c3-slits).
+
+## The supported entry {#supported-entry}
+
+A layout enters SCGSim through the public API: `GeometryPlan` and the
+simulation classes of `scgsim.palace` and `scgsim.aedt`. The rules, the
+guarantees and the owners on this page are stated for a layout that enters
+this way.
+
+The AEDT calculations that take a request spec and `prepare_handoff` (a GDS
+mapping, Q3D bodies or a Q2D cross-section) are public API and supported as
+well. Their rules are in the [AEDT runtime families](specs/aedt-runtime.qmd),
+not on this page. [Supported calculations](backend-support.qmd) lists what
+each calculation takes as input.
+
+SCGSim also documents APIs below that entry, and you can call them with an
+input you build by hand:
+
+- `scgsim.geometry.sgb.build_sgb_geometry`, the geometry builder, with a
+  `GeometryBuildInput` you construct yourself, in place of the one a
+  `GeometryPlan` snapshot carries.
+- `scgsim.geometry.compiler`, a separate builder that the Palace simulations
+  do not build through.
+
+Functions inside these packages that take lower-level records, such as a prism
+catalogue (SGB's own list of footprints, each extruded over a height range),
+are internal and are not a documented API.
+
+Calling these two APIs with an input you build is internal or advanced use,
+and **its precondition is what the supported entry guarantees**: the input is
+one that `GeometryPlan` and a simulation class could have produced. These APIs
+start after the checks those two make and do
+not repeat them. A direct call to `build_sgb_geometry`, for example, runs
+neither the plan checks of `GeometryPlan` nor the meshing-stage check of
+`mesh()` and `simulation_drc()`.
+
+An input that only these APIs can build is not a supported use. For such an
+input SCGSim promises only this:
+
+- If it gives a plausible but wrong result without an error, and a cheap check
+  where the input enters can refuse it clearly, SCGSim adds that check.
+- Otherwise SCGSim states the precondition once, where the API is documented,
+  or records the case and leaves the behavior as it is.
+
+When a direct call fails or returns something you did not expect, build the
+same layout through `GeometryPlan` and a simulation class before you report
+it. The rules and owners on this page apply to that build.
 
 ## What a layout must guarantee {#layout-rules}
 

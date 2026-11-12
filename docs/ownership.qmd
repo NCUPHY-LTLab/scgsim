@@ -51,6 +51,11 @@ owners.
 | `scgsim.visualization` | Backend-bound source/receipt loaders, detached scene/preview objects, and rendering | Solver state, simulation status or physical acceptance |
 | `scgsim.presentation` | Shared, solver-physics-neutral notebook formatting | Domain projections or scientific calculations |
 
+`scgsim.geometry.sgb` and `scgsim.geometry.compiler` sit below the supported
+entry: a layout enters through `GeometryPlan` and the simulation classes, and a
+direct call with an input built by hand assumes what that entry guarantees; see
+[the supported entry](supported-scope.qmd#supported-entry).
+
 Source-backed Eigenmode preparation, solve and export belong to the HFSS
 family even when no EPR analysis is requested. Declared junctions and generic
 RLC loads are constructed independently of that request. EPR adds its analysis

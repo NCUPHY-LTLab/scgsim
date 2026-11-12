@@ -28,9 +28,10 @@ in the locked quality environment for the complete maintained Python scope;
 readability and responsibility boundaries also require review.
 
 External gsim and historical SGB are derivation provenance only: new work uses
-in-tree `scgsim.geometry` and advanced `scgsim.geometry.compiler` APIs, never
-an external consumer or fallback. OrcaPen SC PDK owns public component-simulation
-notebooks; SCGSim owns no duplicate notebook source.
+the in-tree `scgsim.geometry` APIs, never an external consumer or fallback.
+`scgsim.geometry.sgb` and `scgsim.geometry.compiler` are lower-level APIs below
+the supported entry (Code Review Rules). OrcaPen SC PDK owns public
+component-simulation notebooks; SCGSim owns no duplicate notebook source.
 
 ## Code Review Rules
 
@@ -41,6 +42,20 @@ notebooks; SCGSim owns no duplicate notebook source.
   valid inputs paired wrongly, two calls writing one output target, a result
   that passes quality but exceeds a limit the caller set). Then weigh each
   against the Issue, the public docs and the callers you can see.
+- The supported use is a calculation `docs/backend-support.qmd` lists, entered
+  through the public API with the input listed there: `GeometryPlan` and the
+  simulation classes of `scgsim.palace` and `scgsim.aedt`, or an AEDT request
+  spec passed to `prepare_handoff`. Inputs built by hand below that entry (a
+  `GeometryBuildInput` built by hand for `build_sgb_geometry`, a prism
+  catalogue for the internal
+  `scgsim.geometry.sgb.model.build_model_from_catalogue`, inputs to
+  `scgsim.geometry.compiler`) are internal or advanced use; their
+  precondition is what the entry guarantees. A
+  counterexample only such an input reaches is `fix` when it silently gives a
+  plausible but wrong result and a cheap check at the boundary can refuse it;
+  otherwise `document` or `observe`. It is not P1 by itself: for such an
+  input, the P1 clause on silently wrong results applies only where a cheap
+  check at the boundary could refuse it.
 - Each finding states the condition that reproduces it, what the code does,
   the code or assumption that causes it, and a proposed disposition with its
   basis: `fix` (a supported use breaks a promised behavior), `document` (the

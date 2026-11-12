@@ -69,7 +69,7 @@ component = gf.get_component(
 接續上方 plan 流程：註冊來源中的實際參照、檢查 `plan.entities`、使用 `plan.set_nets(net_membership)` 指派預期的最終 Net ID、設定真空區域，再呼叫 `plan.prepare()`。快照會保留選定的曲線宣告及其 Entity 和 occurrence 識別。SGB 在每種路徑上都會建構線段與圓弧曲線；Palace 接受 Route A 與 B，AEDT 平面準備流程則拒絕啟用的曲線宣告。未宣告曲線時，既有的純多邊形行為維持不變。
 
 ::: {.callout-note title="已編寫曲線與 GDS 重建是不同輸入"}
-兩個 `GeometryPlan` setter 只會替換呼叫端擁有的清單；`prepare()` 也會加入元件宣告。因此，`plan.set_boundary_curves([])` 不會移除 OrPen 編寫的曲線；若 GDS 重建結果與已編寫的完整環重疊，系統會拒絕而非將其視為覆寫。若要從多邊形資料重建，請建立分離的原始 `GeometryBuildInput`，其中包含選定的重建紀錄且不含已編寫曲線宣告，連同 `interpret_physical_geometry` 給出的表示脈絡，傳給 `scgsim.geometry.sgb` 的 `build_sgb_geometry`。`set_plan(snapshot)` 會繼續遵循快照宣告。曲線紀錄與邊界歸屬請參閱 [GeometryPlan 與幾何來源曲線契約](../geometry-sgb.qmd#source-curves)。這不會變更元件或其快照。
+兩個 `GeometryPlan` setter 只會替換呼叫端擁有的清單；`prepare()` 也會加入元件宣告。因此，`plan.set_boundary_curves([])` 不會移除 OrPen 編寫的曲線；若 GDS 重建結果與已編寫的完整環重疊，系統會拒絕而非將其視為覆寫。若要從多邊形資料重建，請建立分離的原始 `GeometryBuildInput`，其中包含選定的重建紀錄且不含已編寫曲線宣告，連同 `interpret_physical_geometry` 給出的表示脈絡，傳給 `scgsim.geometry.sgb` 的 `build_sgb_geometry`。這個呼叫位於[支援的入口](../supported-scope.qmd#supported-entry)以下：SGB 不會重做 `GeometryPlan` 的檢查，所以您建立的輸入仍須滿足那些檢查。`set_plan(snapshot)` 會繼續遵循快照宣告。曲線紀錄與邊界歸屬請參閱 [GeometryPlan 與幾何來源曲線契約](../geometry-sgb.qmd#source-curves)。這不會變更元件或其快照。
 :::
 
 ## 變更物理模型 {#change-the-physical-model}
