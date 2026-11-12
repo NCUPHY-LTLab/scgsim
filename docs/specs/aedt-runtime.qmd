@@ -309,7 +309,7 @@ A record has five fields:
 | `stage` | `prepared` when the handoff is written, `actual` when execution starts |
 | `modules` | one `module`, `path` and `sha256` per file, in path order |
 | `content_sha256` | SHA-256 of the canonical JSON of `modules` |
-| `revision_observation` | the actual 40-hex Git commit, or `unavailable` (for example a wheel without VCS metadata) |
+| `revision_observation` | an object: `{"status": "available", "revision": "<40-hex Git commit>"}`, or `{"status": "unavailable"}` (for example a wheel without VCS metadata) |
 
 A reader accepts a record when all of these hold:
 
@@ -321,7 +321,7 @@ A reader accepts a record when all of these hold:
   either is not an AEDT closure, and they stay in place when modules move
   inside `scgsim/aedt`;
 - `content_sha256` matches the recorded `modules`;
-- `revision_observation` is a 40-hex commit or `unavailable`.
+- `revision_observation` is exactly `{"status": "unavailable"}`, or an object with the two keys `status` (`"available"`) and `revision` (a 40-hex commit).
 
 The reader does not compare the recorded hashes with the installed package:
 they state which bytes ran, and the installed code may since differ. An

@@ -147,7 +147,7 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 | `stage` | 寫入交接時為 `prepared`，開始執行時為 `actual` |
 | `modules` | 每個檔案一筆 `module`、`path` 與 `sha256`，依路徑排序 |
 | `content_sha256` | `modules` 標準 JSON 的 SHA-256 |
-| `revision_observation` | 實際 40 位十六進位 Git commit，或 `unavailable`（例如沒有 VCS 中繼資料的 wheel） |
+| `revision_observation` | 一個物件：`{"status": "available", "revision": "<40 位十六進位 Git commit>"}`，或 `{"status": "unavailable"}`（例如沒有 VCS 中繼資料的 wheel） |
 
 讀取器在下列條件全部成立時接受一筆記錄：
 
@@ -155,9 +155,9 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 - 路徑排序且不重複，每條都位於 `src/scgsim/` 之下且不含 `..`，每個 `module` 都是其路徑的點分名稱；
 - 路徑包含 `src/scgsim/__init__.py` 與 `src/scgsim/aedt/__init__.py`。每個 AEDT 匯入都經過這兩個套件初始化檔，缺少其一的清單就不是 AEDT 閉包；模組在 `scgsim/aedt` 內移動時，它們也不會移動；
 - `content_sha256` 與記錄的 `modules` 相符；
-- `revision_observation` 為 40 位十六進位 commit 或 `unavailable`。
+- `revision_observation` 必須恰為 `{"status": "unavailable"}`，或是只含 `status`（`"available"`）與 `revision`（40 位十六進位 commit）兩個鍵的物件。
 
-讀取器不把記錄的雜湊與已安裝套件比較：它們陳述實際執行的位元組，而已安裝的程式碼之後可能不同。`revision_observation` 為 `unavailable` 本身不會使記錄失敗。
+讀取器不把記錄的雜湊與已安裝套件比較：它們陳述實際執行的位元組，而已安裝的程式碼之後可能不同。`revision_observation` 的狀態為 `unavailable` 本身不會使記錄失敗。
 
 結構版本較早（`runtime-source.v1` 至 `v29`）的記錄會遭拒，訊息說明它由較早的 SCGSim 寫入。請以寫入該結果的 SCGSim commit 讀取它；Git 可用時，`revision_observation` 會記下該 commit。每份 V2 收據，以及 `runtime-source.v30` 之前寫入的每份收據或交接，都帶有較早的結構版本。
 
