@@ -117,10 +117,10 @@ authority; this physical-source contract does not admit native jobs.
 
 Fresh physical-source preparation consumes neutral `PhysicalLayerDeclaration`
 records and an explicit `ApproximationProfile`. Fresh `aedt_modeling` metadata
-and role-derived route classification are not adapters. Existing
-`PhysicalLayerSpec` records retain their original serialization and coordinate
-meaning for version-bound historical readers only; using them for a new
-physical-source execution requires replacing them with neutral declarations.
+and role-derived route classification are not adapters. A request
+payload with `PhysicalLayerSpec` records and no tagged representation was
+written by an earlier SCGSim and is refused; a new physical-source execution
+requires neutral declarations.
 Explicit Solid bodies without layer declarations retain their finite source
 geometry through the shared identity plan, without minted physical IDs.
 

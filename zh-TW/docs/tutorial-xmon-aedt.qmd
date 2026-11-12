@@ -165,4 +165,4 @@ print(handoff.run_dir, handoff.script_path, handoff.archive_path)
 
 請在 AEDT 主機明確[執行完整套件](course/execute.qmd)，接著[重新啟動並解析回傳資料](course/returned-results.qmd)。報告會先讀取封存的識別資訊、數值／歷程與基準證據，再呈現物理結果。對本研究選取的模態與表面貢獻，除頻率外也請檢視參與率及其變化；只依頻率停止，不能說明另一項 EPR 物理量是否足夠。請將記錄的準則與原生狀態做為證據，不要將其轉化為通用驗收規則。此處的準備只會建立 Python 來源／目錄／請求記錄，不會建立原生 CAD，也不會確認計算器的場側準確度。
 
-自適應歷程與最終儲存場評估分開。使用[儲存場分析課程](course/aedt-saved-fields.qmd)，驗證已釋出的 cohort，並在原生工作複本中以相符的幾何／請求評估場，無須再次求解。完成後，才將最終的 `epr-result.json` 用於[離線 EPR](course/offline-epr.qmd)。新評估的遮罩／內縮邊距不會插入舊的自適應曲線。確切原生綁定、內縮建構與歷史收據規則，請參閱 [AEDT 契約](specs/aedt-runtime.qmd)。
+自適應歷程與最終儲存場評估分開。使用[儲存場分析課程](course/aedt-saved-fields.qmd)，驗證已釋出的 cohort，並在原生工作複本中以相符的幾何／請求評估場，無須再次求解。完成後，才將最終的 `epr-result.json` 用於[離線 EPR](course/offline-epr.qmd)。新評估的遮罩／內縮邊距不會插入舊的自適應曲線。確切原生綁定、內縮建構與收據規則，請參閱 [AEDT 契約](specs/aedt-runtime.qmd)。

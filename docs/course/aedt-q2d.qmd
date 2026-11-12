@@ -95,4 +95,4 @@ Q2D cross-section is not the finite 3D Q3D experiment. Preserve those units and
 scope when interpreting the result. Historical separate CG/RL and normalized
 Q2D files are not emitted for new requests. The
 [AEDT contract](../specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)
-owns the exact export, historical readers and failure behavior.
+owns the exact export and failure behavior.

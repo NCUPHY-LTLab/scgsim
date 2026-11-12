@@ -6,11 +6,11 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/aedt-runtime"
 ---
 
-The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications, failure rules and historical reader contracts.
+The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications and failure rules, and the [current formats](#current-formats) this version reads.
 
 The Solid/Thin-Film modeling extension below does not revise the v2
-transaction, historical-reader, or Q3D body-v3 contracts except where this
-page explicitly describes the required 3D modeling selection.
+transaction or Q3D body-v3 contracts except where this page explicitly
+describes the required 3D modeling selection.
 
 ## One shared lifecycle
 
@@ -239,56 +239,65 @@ preparation copies that canonical name unchanged and binds only the copied GDS
 path in its independent payload. It does not reinterpret old truncated names,
 rewrite existing artifacts, or provide a legacy-name fallback.
 
-## Receipt cohorts and source provenance
+## Current formats and older results {#current-formats}
 
-New handoffs retain `scgsim.aedt.handoff.v1` and
-`scgsim.aedt.handoff-manifest.v1`. Both records add
-`expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
-V3. It contains `prepared_runtime_source`, the
-[runtime source](#runtime-source) of the code that prepared the handoff.
+SCGSim reads only the formats it writes. A handoff, receipt, request or result
+written by an earlier SCGSim is read with the SCGSim commit that wrote it; this
+version does not convert or migrate it.
 
-Before writing `running`, the shared transaction accepts its established
-initial-receipt cohorts: a V3 receipt with both V3 expectation markers and a
-canonical manifest; a V2 receipt with both V2 markers and a canonical
-manifest; or an exact V1 `not_run` receipt with both markers absent and the
-canonical historical manifest. A historical handoff may continue through its
-supported family path under those cohort rules; this does not bypass family
-request requirements. A V2 or V3 handoff whose prepared runtime source has an
-earlier schema is refused by the [runtime-source rule](#runtime-source).
+| Record | Current format |
+|---|---|
+| Handoff metadata | `scgsim.aedt.handoff.v1` for the GDS-import and Q2D/Q3D families; `scgsim.aedt.handoff.v2` for the body-first and EPR families |
+| Handoff manifest | `scgsim.aedt.handoff-manifest.v1` and `.v2`, paired with the handoff above |
+| Receipt | `scgsim.aedt.receipt.v3`, initial and completed |
+| Runtime source | `scgsim.aedt.runtime-source.v30` ([rule](#runtime-source)) |
+| HFSS EPR request | `scgsim.aedt.hfss-eigenmode-epr.v2`; `.v3` with one expression-cache convergence control, `.v4` with a collection |
+| Saved-field analysis request | `scgsim.aedt.hfss-eigenmode-epr-analysis.v2`; `.v3` with surface field selectors |
+| Prepared planar geometry | `scgsim.aedt.epr-planar.v2` |
+| EPR result and mode-energy row | `scgsim.aedt.epr-result.v2` and `scgsim.aedt.epr-mode-energy.v2` |
+| Saved-solution manifest and receipt | `scgsim.aedt.saved-solution-manifest.v2` and `scgsim.aedt.saved-solution-receipt.v2` |
 
-Every new Q3D or HFSS 3D execution requires explicit `modeling`; a
-`thin_film` request also needs its corresponding source declarations before
-receipt mutation. A previously supported Q3D/HFSS result payload without
-`modeling` remains under its original reader and hash interpretation and cannot
-start a new execution. The shared V1/V2 handoff compatibility remains
-available to unchanged families such as Q2D, but does not bypass the current
-Q3D/HFSS request requirement. Q3D input-v1 and input-v2 request schemas remain
-removed.
+Every HFSS 3D and Q3D request carries explicit `modeling` and its neutral
+`physical_representation`; a request payload without the representation is
+refused. A surface contribution always records `loss_tangent`, `source` and
+`preset`, and an EPR analysis request always records `bulk_domain_ids`.
+
+Every receipt reader (execution, `resolve_results()` and the prepared-model
+reader) first checks the receipt schema and the schema of each runtime-source
+record it carries. A receipt `scgsim.aedt.receipt.v1` or `.v2`, or a V3 receipt
+whose runtime source has an earlier schema, is refused with a message saying
+it was written by an earlier SCGSim and naming how to read it. This check comes
+before any request or result is read, so an old result is refused by this one
+rule rather than by whichever older format it would reach next. A v1 EPR
+result or a v1 saved-solution manifest read on its own is refused with the same
+message.
+
+A new handoff writes `expected_receipt_schema: scgsim.aedt.receipt.v3` into its
+metadata and manifest, and its initial V3 receipt contains
+`prepared_runtime_source`, the [runtime source](#runtime-source) of the code
+that prepared it. Before writing `running`, the shared transaction requires a
+V3 receipt with both V3 expectation markers, a canonical manifest and the
+current runtime source. Every new Q3D or HFSS 3D execution requires explicit
+`modeling`; a `thin_film` request also needs its corresponding source
+declarations before receipt mutation.
 
 The verified initial-receipt hash and prepared-manifest hash are copied into
-the mutable V3 receipt. The final receipt is intentionally not compared with
-its initial hash because execution must mutate it. Unknown versions, mixed or
-partial markers, noncanonical members, and hash mismatches reject before
-receipt mutation.
+the mutable V3 receipt as `preparation_cohort: prepared_v3`. The final receipt
+is intentionally not compared with its initial hash because execution must
+mutate it. Unknown versions, mixed or partial markers, noncanonical members,
+and hash mismatches reject before receipt mutation.
 
-Every new completed V3 receipt has a separate `runtime_source` record, with
-stage `actual`, for the code that executed it.
+Every completed receipt has a separate `runtime_source` record, with stage
+`actual`, for the code that executed it. `resolve_results()` verifies the exact
+cohort, markers, canonical prepared manifest, initial-receipt binding and
+complete actual runtime manifest before applying the family result checks;
+HFSS completion requires sealed native PEC binding evidence. These unsigned
+consistency checks do not authenticate an artifact set against an actor able
+to rewrite every member.
 
-`resolve_results()` preserves the existing rules for genuine historical
-completed V1 and V2 receipts. A receipt relabeled below its preparation markers
-is an inconsistent downgrade and rejects. V2 and V3 resolution verify their
-exact cohorts, markers, canonical prepared manifest, initial-receipt binding,
-and complete actual runtime manifest before applying their version-specific
-family result checks. Only V3 HFSS completion requires sealed native PEC binding
-evidence; this requirement is never projected onto historical V1/V2 receipts.
-Every completed receipt also passes the [runtime-source rule](#runtime-source),
-so a receipt whose runtime source has an earlier schema is refused there.
-These unsigned consistency checks do not authenticate an artifact set against
-an actor able to rewrite every member.
-
-A pure initial-receipt codec owns exact V1/V2/V3 member order, two-space JSON
-indentation, and the trailing newline. V1 omits prepared provenance; V2 and V3
-insert it between `source` and `outputs`.
+A pure initial-receipt codec owns the exact V3 member order, two-space JSON
+indentation, and the trailing newline; prepared provenance sits between
+`source` and `outputs`.
 
 ### Runtime source {#runtime-source}
 
@@ -330,8 +339,8 @@ they state which bytes ran, and the installed code may since differ. An
 A record with an earlier schema, `runtime-source.v1` to `v29`, is refused with
 a message saying it was written by an earlier SCGSim. Read such a result with
 the SCGSim commit that wrote it; its `revision_observation` names that commit
-when Git was available. Every V2 receipt and every receipt or handoff written
-before `runtime-source.v30` carries an earlier schema.
+when Git was available. Every receipt or handoff written before
+`runtime-source.v30` carries an earlier schema.
 
 Execution computes the `actual` record inside the receipt-bound failure
 transaction, before importing PyAEDT or constructing Desktop. A missing source
@@ -496,12 +505,11 @@ normal thickness. A TSV wall's radial thickness is not its axial span.
 Explicit Solid geometry without layer declarations can use the common
 identity plan without inventing physical IDs.
 
-Historical `PhysicalLayerSpec` payloads and untagged coordinate traces retain
-their original interpretation and hash meaning through reader-only,
-version-bound decoding. They are not silently converted into fresh neutral
-declarations. Fresh execution of an old physical-source request fails before
-Desktop creation with a replacement preparation instruction. Existing pinned
-source and sealed artifacts are unchanged. Historical zero-width conductor
+A request payload without a tagged neutral `physical_representation`, whose
+physical layers are `PhysicalLayerSpec` records, was written by an earlier
+SCGSim. It is refused with a replacement preparation instruction and is not
+converted into fresh neutral declarations; read it with the SCGSim commit that
+wrote it ([current formats](#current-formats)). Historical zero-width conductor
 imports remain their recorded Sheet representation and are not relabeled as
 Solid volumes.
 
@@ -717,10 +725,7 @@ its native value with unknown scope; no host-capacity or usage meaning is inferr
 Stage memory peaks include only qualified task rows and remain unavailable when
 none exist. They are maxima of observed task peaks, not a whole-host peak or sum.
 One pure detached projection serves capture, verified offline reading, and direct
-Report display. Historical receipt-bound files stay unchanged; their returned
-interpretation corrects prior unconditional scope and descendant aggregates.
-Runtime source V21 adds this shared attribution leaf while preserving V1–V20
-inventories and readers. Receipt V3 and benchmark v1 remain unchanged.
+Report display. Receipt V3 and benchmark v1 carry this shared attribution leaf.
 
 `ResolvedRun.simulation_benchmark()` retains its four existing summary keys and
 adds the verified benchmark record.
@@ -1006,7 +1011,7 @@ records, while source-backed v3 has eight allowed paths and seven records.
 ## Eigenmode saved fields and Surface-EPR direction
 
 The Eigenmode Surface-EPR path is an additive lifecycle, not a
-reinterpretation of a completed V1/V2/V3 receipt. It starts from shared source
+reinterpretation of a completed V3 receipt. It starts from shared source
 polygons, holes, material/domain facts, route profile, and declared junction
 intent, then records a separate AEDT binding from those facts to native bodies,
 sheets, faces, material sides, and calculator selections. Native adjacency is
@@ -1133,8 +1138,8 @@ native face list or an explicit sum of individually bound faces.
 `ExpressionCacheConvergenceSet(controls=(...))` carries a nonempty ordered
 collection of unit `ExpressionCacheConvergence` controls. The public setter and
 preparation helper accept either a unit or a collection. A collection serializes
-as `scgsim.aedt.hfss-eigenmode-epr.v4`; singleton V3 and historical V1/V2 payloads
-retain their existing serialization. Duplicate target/mode pairs are rejected.
+as `scgsim.aedt.hfss-eigenmode-epr.v4`; a unit control serializes as V3 and a
+request without one as V2. Duplicate target/mode pairs are rejected.
 
 ```python
 from scgsim.aedt import (
@@ -1193,8 +1198,7 @@ Each selected control's mode must also be selected by the configured
 For the singleton case, the setter enables one expression-cache item for a
 caller-selected mode and explicit criterion, and the handoff records that
 setting in `scgsim.aedt.hfss-eigenmode-epr.v3`. A collection uses V4 as described
-above. V1/V2 handoffs remain readable and retain their prior schema on round
-trip. With no control selected, SCGSim authors no auxiliary expression and
+above; a request without a control uses V2. With no control selected, SCGSim authors no auxiliary expression and
 submits the same non-converging primitive cache items as before. The low-level
 `prepare_hfss_eigenmode_from_geometry()` requires both `aedt_version` and
 `modeling`, and accepts the same `expression_convergence` argument.

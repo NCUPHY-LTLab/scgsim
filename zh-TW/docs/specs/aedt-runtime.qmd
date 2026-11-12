@@ -7,9 +7,9 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/aedt-runtime"
 ---
 
-[課程地圖](../examples.qmd)連結所有已實作的 AEDT 系列課程。本頁定義精確規格、失敗規則與歷史讀取器契約。
+[課程地圖](../examples.qmd)連結所有已實作的 AEDT 系列課程。本頁定義精確規格、失敗規則，以及此版本讀取的[目前格式](#current-formats)。
 
-下方實體／薄膜建模擴充除本頁明列的必要三維建模選擇外，不修訂 v2 交易、歷史讀取器或 Q3D body-v3 契約。
+下方實體／薄膜建模擴充除本頁明列的必要三維建模選擇外，不修訂 v2 交易或 Q3D body-v3 契約。
 
 ## 共用生命週期 {#one-shared-lifecycle}
 
@@ -119,21 +119,33 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 專案名稱有兩種明確表示。直接 Python 編寫沿用檔名正規化：移除所提供檔名最後的副檔名。標準 JSON 酬載保存已正規化專案名稱，因此反覆解析與序列化時保持逐位元組一致，包含名稱內的句點及本身以 `.aedt` 結尾的文字。交接準備原樣複製標準名稱，只在獨立酬載中綁定複製的 GDS 路徑；不重新解釋舊截短名稱、不重寫既有產物，也不提供舊名稱備援。
 
-## 收據相容群組與來源資訊 {#receipt-cohorts-and-source-provenance}
+## 目前格式與較早的結果 {#current-formats}
 
-新交接沿用 `scgsim.aedt.handoff.v1` 與 `scgsim.aedt.handoff-manifest.v1`。兩份記錄都新增 `expected_receipt_schema: scgsim.aedt.receipt.v3`，初始收據為 V3。它包含 `prepared_runtime_source`，即準備此交接之程式碼的[執行期來源](#runtime-source)。
+SCGSim 只讀取它自己寫出的格式。較早的 SCGSim 寫出的交接、收據、要求或結果，請以寫入它的 SCGSim commit 讀取；此版本不轉換也不遷移它們。
 
-寫入 `running` 前，共用交易接受既有初始收據相容群組：具兩個 V3 預期標記與標準清單的 V3 收據；具兩個 V2 標記與標準清單的 V2 收據；或兩個標記皆不存在、且具有標準歷史清單的精確 V1 `not_run` 收據。歷史交接可依上述群組規則延續受支援系列路徑，但不能略過該系列的要求條件。V2 或 V3 交接的準備期執行期來源若為較早的結構版本，會依[執行期來源規則](#runtime-source)遭拒。
+| 記錄 | 目前格式 |
+|---|---|
+| 交接中繼資料 | GDS 匯入與 Q2D／Q3D 系列為 `scgsim.aedt.handoff.v1`；本體優先與 EPR 系列為 `scgsim.aedt.handoff.v2` |
+| 交接清單 | `scgsim.aedt.handoff-manifest.v1` 與 `.v2`，與上列交接配對 |
+| 收據 | `scgsim.aedt.receipt.v3`，初始與完成皆同 |
+| 執行期來源 | `scgsim.aedt.runtime-source.v30`（[規則](#runtime-source)） |
+| HFSS EPR 要求 | `scgsim.aedt.hfss-eigenmode-epr.v2`；帶一個運算式快取收斂控制時為 `.v3`，帶一組時為 `.v4` |
+| 儲存場分析要求 | `scgsim.aedt.hfss-eigenmode-epr-analysis.v2`；帶表面場選擇器時為 `.v3` |
+| 已準備平面幾何 | `scgsim.aedt.epr-planar.v2` |
+| EPR 結果與模態能量列 | `scgsim.aedt.epr-result.v2` 與 `scgsim.aedt.epr-mode-energy.v2` |
+| 儲存解清單與收據 | `scgsim.aedt.saved-solution-manifest.v2` 與 `scgsim.aedt.saved-solution-receipt.v2` |
 
-每次新的 Q3D 或 HFSS 三維執行都需明確 `modeling`；`thin_film` 還必須在修改收據前提供對應來源宣告。先前受支援但沒有 `modeling` 的 Q3D／HFSS 結果，仍依原讀取器與雜湊解釋，不能啟動新執行。共用 V1/V2 交接相容性仍供 Q2D 等未變更系列使用，但不會略過目前 Q3D／HFSS 要求。Q3D input-v1 與 input-v2 要求結構仍已移除。
+每個 HFSS 三維與 Q3D 要求都帶明確的 `modeling` 及其中性 `physical_representation`；缺少表示的要求酬載會遭拒。表面貢獻一律記錄 `loss_tangent`、`source` 與 `preset`，EPR 分析要求一律記錄 `bulk_domain_ids`。
 
-驗證過的初始收據雜湊及準備清單雜湊，會複製到可變 V3 收據。最終收據刻意不與初始雜湊比較，因為執行本來就必須修改收據。未知版本、混合或不完整標記、非標準成員與雜湊不符，都在修改收據前拒絕。
+每個收據讀取器（執行、`resolve_results()` 與已準備模型讀取器）都先檢查收據結構版本，以及其中每筆執行期來源記錄的結構版本。`scgsim.aedt.receipt.v1` 或 `.v2` 收據，或執行期來源為較早結構版本的 V3 收據，會遭拒，訊息說明它由較早的 SCGSim 寫入並指出如何讀取。此檢查在讀取任何要求或結果之前進行，因此舊結果由這一條規則拒絕，而不是由它接著碰到的某個較舊格式拒絕。單獨讀取的 v1 EPR 結果或 v1 儲存解清單，也以相同訊息遭拒。
 
-每份新完成的 V3 收據都有另外的 `runtime_source` 記錄，`stage` 為 `actual`，識別實際執行它的程式碼。
+新交接在中繼資料與清單寫入 `expected_receipt_schema: scgsim.aedt.receipt.v3`，其初始 V3 收據包含 `prepared_runtime_source`，即準備它之程式碼的[執行期來源](#runtime-source)。寫入 `running` 前，共用交易要求具兩個 V3 預期標記、標準清單及目前執行期來源的 V3 收據。每次新的 Q3D 或 HFSS 三維執行都需明確 `modeling`；`thin_film` 還必須在修改收據前提供對應來源宣告。
 
-`resolve_results()` 保留真實歷史 V1、V2 完成收據的既有規則。若收據被重新標示為比準備標記更舊的版本，屬不一致降版，會拒絕。V2、V3 解析先驗證精確相容群組、標記、標準準備清單、初始收據綁定及完整實際執行期清單，再套用各版本系列結果檢查。只有 V3 HFSS 完成要求封存的原生 PEC 綁定證據，不會把此要求投射到歷史 V1/V2 收據。每份完成收據也須通過[執行期來源規則](#runtime-source)，因此執行期來源為較早結構版本的收據會在該處遭拒。這些無簽章的一致性檢查，無法對抗能重寫所有成員的行為者以驗證產物真偽。
+驗證過的初始收據雜湊及準備清單雜湊，會以 `preparation_cohort: prepared_v3` 複製到可變 V3 收據。最終收據刻意不與初始雜湊比較，因為執行本來就必須修改收據。未知版本、混合或不完整標記、非標準成員與雜湊不符，都在修改收據前拒絕。
 
-純初始收據編解碼器負責精確 V1/V2/V3 成員順序、兩個空白的 JSON 縮排與結尾換行。V1 省略準備來源資訊；V2、V3 將它放在 `source` 與 `outputs` 之間。
+每份完成收據都有另外的 `runtime_source` 記錄，`stage` 為 `actual`，識別實際執行它的程式碼。`resolve_results()` 先驗證精確相容群組、標記、標準準備清單、初始收據綁定及完整實際執行期清單，再套用系列結果檢查；HFSS 完成要求封存的原生 PEC 綁定證據。這些無簽章的一致性檢查，無法對抗能重寫所有成員的行為者以驗證產物真偽。
+
+純初始收據編解碼器負責精確 V3 成員順序、兩個空白的 JSON 縮排與結尾換行；準備來源資訊位於 `source` 與 `outputs` 之間。
 
 ### 執行期來源 {#runtime-source}
 
@@ -159,7 +171,7 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 讀取器不把記錄的雜湊與已安裝套件比較：它們陳述實際執行的位元組，而已安裝的程式碼之後可能不同。`revision_observation` 的狀態為 `unavailable` 本身不會使記錄失敗。
 
-結構版本較早（`runtime-source.v1` 至 `v29`）的記錄會遭拒，訊息說明它由較早的 SCGSim 寫入。請以寫入該結果的 SCGSim commit 讀取它；Git 可用時，`revision_observation` 會記下該 commit。每份 V2 收據，以及 `runtime-source.v30` 之前寫入的每份收據或交接，都帶有較早的結構版本。
+結構版本較早（`runtime-source.v1` 至 `v29`）的記錄會遭拒，訊息說明它由較早的 SCGSim 寫入。請以寫入該結果的 SCGSim commit 讀取它；Git 可用時，`revision_observation` 會記下該 commit。`runtime-source.v30` 之前寫入的每份收據或交接，都帶有較早的結構版本。
 
 執行在收據綁定的失敗交易內、匯入 PyAEDT 或建立 Desktop 前，計算 `actual` 記錄。缺少原始碼檔案或記錄損壞時，會在不啟動 Desktop 的情況下產生失敗 V3 收據，而不是逸出收據收尾。`prepared` 與 `actual` 記錄是不同時間的證據，不要求兩者相等。
 
@@ -218,7 +230,7 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 明確 `ApproximationProfile` 與共用 `PhysicalRepresentationPlan` 負責座標映射、逐本體解讀、層綁定支撐投影，以及完整要求的包絡。來源本體與 `LayerImport` 保留原端點和物理層綁定，`effective_bodies`、`effective_layer_imports` 則揭露衍生原生區間。有限體積映射自己的實際本體端點，不直接採用整個名目層跨度。膜物理厚度仍是來源法向厚度；TSV 壁的徑向厚度不是軸向跨度。沒有層宣告的明確 Solid 幾何，可使用共用恆等計畫，不編造物理 ID。
 
-歷史 `PhysicalLayerSpec` 酬載與無標記座標軌跡，透過唯讀、版本綁定解碼保留原解讀及雜湊意義，不默默轉成新中立宣告。以舊物理來源要求啟動新執行，會在建立 Desktop 前失敗並指示重新準備。既有釘選來源與封存產物不變。歷史零寬導體匯入保持原記錄的 Sheet 表示，不重新標為 Solid 體積。
+缺少帶標記之中性 `physical_representation`、物理層為 `PhysicalLayerSpec` 記錄的要求酬載，由較早的 SCGSim 寫入。它會遭拒並指示重新準備，不會轉成新的中性宣告；請以寫入它的 SCGSim commit 讀取（[目前格式](#current-formats)）。歷史零寬導體匯入保持原記錄的 Sheet 表示，不重新標為 Solid 體積。
 
 `solid` 模式保留來源物理 Z 區間；`thin_film` 把承載堆疊的膜表示為片，並從累積堆疊高度移除其宣告厚度。產生的有效 Z 映射套用到該堆疊上方各層。局部 film／deck 在套用堆疊映射後，於宣告接觸側成為片；其自身厚度不壓縮堆疊。有限體積保持三維，映射實際本體端點。柱與 bump 保持實體並映射端點，不推定延長。這些映射來自編寫的宣告，不寫死層身份或膜厚。
 
@@ -279,7 +291,7 @@ Q2D／Q3D 契約將原生觀察方向套用到下列兩項額外資格，和先�
 
 效能資料保留精確原生設定、variation、求解程序群組、自適應 pass 與階段身份。只記錄可取得的原生 real／elapsed 與 CPU 時間、原生 Memory 的格式化字串和 PyAEDT 轉換，以及明確標示的四面體、求解元素或線性矩陣大小。終端結果矩陣維度不稱為求解器矩陣大小。階段峰值取最大值而不相加；父子時間可能重疊，不累加。缺少指標及 Q3D 自適應效能限制保留為無法提供，不填零。SCGSim 收據 wall time 與原生作業時間分開。擷取直接走訪原生 `results/profile` OO 樹，使原生讀取失敗成為效能資料錯誤，而非默默略過群組；也保留帶原生 variation 身份的設定根節點純量屬性。
 
-記憶體單位轉換不代表量的適用範圍。[v242 HFSS 作業效能定義](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/ReportsandPostProc/ViewingaSolutionProfile.htm)將 Memory 定義為執行該作業之執行檔使用的實體 RAM 峰值。SCGSim 只在以下情況把擷取的 `results/profile` 列認定為合格作業列：原生 `Name` 符合列身份、`Real time`／`Cpu time`／`Memory` 作業欄存在且可解析時間指標，並且不在明確 HPC 資源子樹內。不合格的 Memory（含 HPC Machine 資訊）保留原生值並標示範圍未知，不推定為主機容量或用量。階段記憶體峰值只納入合格作業列，沒有時維持無法提供；它是觀察到的作業峰值最大值，不是整台主機峰值或總和。唯一純獨立投影同時供擷取、驗證過的離線讀取及直接 Report 顯示使用。歷史收據綁定檔案不變；回傳解讀修正先前無條件的範圍與後代彙總。Runtime source V21 新增此共用歸屬葉節點，保留 V1–V20 清單及讀取器；Receipt V3 與 benchmark v1 不變。
+記憶體單位轉換不代表量的適用範圍。[v242 HFSS 作業效能定義](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/ReportsandPostProc/ViewingaSolutionProfile.htm)將 Memory 定義為執行該作業之執行檔使用的實體 RAM 峰值。SCGSim 只在以下情況把擷取的 `results/profile` 列認定為合格作業列：原生 `Name` 符合列身份、`Real time`／`Cpu time`／`Memory` 作業欄存在且可解析時間指標，並且不在明確 HPC 資源子樹內。不合格的 Memory（含 HPC Machine 資訊）保留原生值並標示範圍未知，不推定為主機容量或用量。階段記憶體峰值只納入合格作業列，沒有時維持無法提供；它是觀察到的作業峰值最大值，不是整台主機峰值或總和。唯一純獨立投影同時供擷取、驗證過的離線讀取及直接 Report 顯示使用。Receipt V3 與 benchmark v1 帶有此共用歸屬葉節點。
 
 `ResolvedRun.simulation_benchmark()` 保留既有四個摘要鍵，並加入驗證過的效能資料。`show_simulation_benchmark(show_details=False, theme="light")` 回傳可在 Notebook 顯示的報告，具有相同 `.data`、摘要卡片、原生階段／pass 表格；原生數值存在時，顯示 Plotly 自適應階段曲線。只有原生 elapsed 時間時，表格與曲線標為 `elapsed`，不當作 real time。Eigenmode 自適應 pass、Driven 自適應／掃描範圍，以及 Q3D／Q2D 原生子問題與元素標籤分開；系列未回報自適應值時，不編造 pass 曲線。Details 可選擇顯示階段與精確來源資訊。繪製及離線解析不開啟 AEDT。AEDT 報告方法接受僅關鍵字的 `theme="light"` 或 `theme="dark"`，預設 light，其他值拒絕。`AedtBenchmarkReport` 保留 `.data` 並攜帶所選主題。
 
@@ -358,7 +370,7 @@ Analyze 結束後，recorder 關閉新請求並觀察一次原生 `odesktop.AreT
 
 ## Eigenmode 已儲存場與 Surface-EPR 方向 {#eigenmode-saved-fields-and-surface-epr-direction}
 
-Eigenmode Surface-EPR 路徑是新增生命週期，不重新解釋已完成 V1/V2/V3 收據。它從共用來源多邊形、孔洞、材料／區域事實、路徑設定檔與宣告接面意圖開始，再另外記錄這些事實到原生本體、片、面、材料側與計算器選取的 AEDT 綁定。原生相鄰關係是幾何觀察證據，不是來源接觸意圖的證明。
+Eigenmode Surface-EPR 路徑是新增生命週期，不重新解釋已完成 V3 收據。它從共用來源多邊形、孔洞、材料／區域事實、路徑設定檔與宣告接面意圖開始，再另外記錄這些事實到原生本體、片、面、材料側與計算器選取的 AEDT 綁定。原生相鄰關係是幾何觀察證據，不是來源接觸意圖的證明。
 
 原生建構目標為平面 Solid 或 Thin Film 建模，採實數等向性介電材料與 PEC 導體。允許覆蓋多邊形片、局部扣孔、掃掠／加厚及明確盒體，不允許全面幾何聯集或扣除。曲線或傾斜幾何、異向性或色散材料、開放輻射模型、Driven EPR 及多片接面仍排除。
 
@@ -384,7 +396,7 @@ Eigenmode 後處理使用完整原生順序來源向量。數值控制向量以�
 
 #### 獨立運算式快取收斂目標 {#independent-expression-cache-convergence-targets}
 
-`ExpressionCacheConvergenceSet(controls=(...))` 攜帶非空、有順序的單一 `ExpressionCacheConvergence` 控制集合。公開 setter 與準備函式都接受單一控制或集合。集合序列化為 `scgsim.aedt.hfss-eigenmode-epr.v4`；單一 V3 及歷史 V1/V2 酬載保留原序列化。同目標／模式的重複配對會拒絕。
+`ExpressionCacheConvergenceSet(controls=(...))` 攜帶非空、有順序的單一 `ExpressionCacheConvergence` 控制集合。公開 setter 與準備函式都接受單一控制或集合。集合序列化為 `scgsim.aedt.hfss-eigenmode-epr.v4`；單一控制序列化為 V3，沒有控制的要求為 V2。同目標／模式的重複配對會拒絕。
 
 ```python
 from scgsim.aedt import (
@@ -412,7 +424,7 @@ sim.set_expression_cache_convergence(ExpressionCacheConvergenceSet(controls=tupl
 
 `EigenmodeSim.set_expression_cache_convergence(control)` 取代目前選取，重複呼叫不累積控制。省略或傳 `None` 表示不選運算式收斂準則；傳一個 `ExpressionCacheConvergence` 選單一目標，或傳含所選目標子集的 `ExpressionCacheConvergenceSet`。一般 EPR 計算及報告不會自動啟用收斂準則；各控制的模式也必須由已設定 `EprAnalysisRequest` 選取。
 
-單一目標時，setter 為呼叫者選取的模式及明確準則啟用一個快取項目，交接以 `scgsim.aedt.hfss-eigenmode-epr.v3` 記錄；集合則如前述使用 V4。V1/V2 交接仍可讀，來回序列化保留原結構。沒有控制時，不編寫輔助運算式，仍提交原本不參與收斂的基元快取項目。低階 `prepare_hfss_eigenmode_from_geometry()` 必須提供 `aedt_version` 與 `modeling`，並接受同一個 `expression_convergence` 引數。
+單一目標時，setter 為呼叫者選取的模式及明確準則啟用一個快取項目，交接以 `scgsim.aedt.hfss-eigenmode-epr.v3` 記錄；集合則如前述使用 V4；沒有控制的要求使用 V2。沒有控制時，不編寫輔助運算式，仍提交原本不參與收斂的基元快取項目。低階 `prepare_hfss_eigenmode_from_geometry()` 必須提供 `aedt_version` 與 `modeling`，並接受同一個 `expression_convergence` 引數。
 
 原生頻率收斂控制獨立且不變。AEDT 要求頻率準則和明確選取、啟用的運算式準則同時成立；未選取但有計算的 EPR 量不加入此聯合條件。
 
