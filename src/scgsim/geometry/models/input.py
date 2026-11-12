@@ -310,6 +310,61 @@ def _listed(findings: Sequence[str], noun: str) -> str:
     return "; ".join(findings[:_LISTED]) + more
 
 
+def reconstruction_without_circle(
+    what: str, anchors: Sequence[int], drawn_place: Callable[[int], str]
+) -> str:
+    """The refusal of a circular reconstruction whose three anchors define no circle, at them.
+
+    ``anchors`` are the record's anchors as drawn vertex indices, after
+    :func:`reconstruction_chain_refusal` found none at fault, and ``drawn_place(i)`` is where
+    drawn vertex ``i`` lies, in micrometres; the declaration must change.
+    """
+    at = ", ".join(f"drawn vertex {a} at {drawn_place(a)}" for a in anchors)
+    how = (
+        "two of them are one vertex"
+        if len(set(anchors)) < len(anchors)
+        else "they lie on one line"
+    )
+    return (
+        f"{what}: the three arc points are collinear, so they define no circle: its "
+        f"anchors are {at}; {how}. Fix the declaration: choose three anchors of its "
+        "chain that do not lie on one line."
+    )
+
+
+def arc_without_circle(what: str, places: Sequence[str]) -> str:
+    """The refusal of an authored circular arc whose three points define no circle, at them.
+
+    ``what`` names the record, its Entity, its layer and the curve; ``places`` are where the
+    arc's start, middle and end points lie, in micrometres, as the layout author wrote them.
+    """
+    start, middle, end = places
+    return (
+        f"{what}: the three arc points are collinear, so they define no circle: its start "
+        f"{start}, middle point {middle} and end {end} lie on one line. Fix the layout: "
+        "draw the arc through three points that do not lie on one line, or draw it as a "
+        "line segment."
+    )
+
+
+def ring_runs(indices: Sequence[int], count: int, place: Callable[[int], str]) -> str:
+    """Where a ring's segments at these indices run, those that follow each other as one.
+
+    The ring has ``count`` vertices; segment ``i`` runs from vertex ``i`` to vertex
+    ``i + 1`` and ``place(i)`` is where vertex ``i`` lies, in micrometres.  A stage's ring may
+    run the other way from the drawing, so a run is named by its two ends.
+    """
+    runs: list[list[int]] = []
+    for i in indices:
+        if runs and i == (runs[-1][-1] + 1) % count:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+    return ", ".join(
+        f"between {place(run[0])} and {place((run[-1] + 1) % count)}" for run in runs
+    )
+
+
 @dataclass(frozen=True)
 class RingChain:
     """A reconstruction's chain and anchors as indices of the ring one stage holds."""
