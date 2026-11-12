@@ -12,6 +12,7 @@ from scgsim.geometry.sgb.assembly.records import Topology
 from scgsim.geometry.sgb.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.routes.groups import RoutedModel
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.validation import arrangements, ids
 from scgsim.geometry.sgb.validation import topology as topology_checks
 from scgsim.geometry.sgb.validation.report import ValidationReport
@@ -21,48 +22,57 @@ def validate_model(
     labelled: LabelledArrangements,
     topology: Topology,
     routed: RoutedModel,
+    watch: Stopwatch,
 ) -> ValidationReport:
-    """Run every invariant and return the report (call :meth:`ValidationReport.raise_if_failed` to stop)."""
+    """Run every invariant and return the report (call :meth:`ValidationReport.raise_if_failed` to stop).
+
+    ``watch`` receives the build-stage time of the checks; the report keeps the time of each check.
+    """
     report = ValidationReport()
     layers = [*labelled.slabs, *labelled.level_layers]
     catalogue = labelled.catalogue
-    with report.timed("grid_and_lengths"):
-        arrangements.check_grid_and_lengths(
-            report, layers, labelled.levels, catalogue.grid
-        )
-    for name in labelled.structural_checks:
-        report.add(
-            name,
-            True,
-            "checked while labelling; a violation stops the build before this point",
-        )
+    with watch.stage("validation_serial"):
+        with report.timed("grid_and_lengths"):
+            arrangements.check_grid_and_lengths(
+                report, layers, labelled.levels, catalogue.grid
+            )
+        for name in labelled.structural_checks:
+            report.add(
+                name,
+                True,
+                "checked while labelling; a violation stops the build before this point",
+            )
     with report.timed("atomic_ids"):
         ids.check_atomic_ids_unique(report, layers, topology)
     with report.timed("planarity"):
-        arrangements.check_planar(report, layers)
-    with report.timed("arcs"):
-        arrangements.check_arcs(report, layers)
-    with report.timed("bands"):
-        arrangements.check_band_areas(
-            report, labelled.level_layers, _support_areas(catalogue)
-        )
-    with report.timed("areas"):
-        arrangements.check_areas(report, layers)
-    with report.timed("prism_areas"):
-        arrangements.check_prism_areas(
-            report, catalogue, labelled.levels, labelled.slabs
-        )
+        arrangements.check_planar(report, layers, watch)
+    with watch.stage("validation_serial"):
+        with report.timed("arcs"):
+            arrangements.check_arcs(report, layers)
+        with report.timed("bands"):
+            arrangements.check_band_areas(
+                report, labelled.level_layers, _support_areas(catalogue)
+            )
+        with report.timed("areas"):
+            arrangements.check_areas(report, layers)
+        with report.timed("prism_areas"):
+            arrangements.check_prism_areas(
+                report, catalogue, labelled.levels, labelled.slabs
+            )
     with report.timed("shells"):
-        topology_checks.check_shells(report, topology)
-    with report.timed("face_sides"):
-        topology_checks.check_face_sides(report, topology)
-    with report.timed("cylinders"):
-        topology_checks.check_cylinders(report, topology)
-    with report.timed("groups"):
-        topology_checks.check_groups(report, topology, routed)
-    with report.timed("edges_in_faces"):
-        topology_checks.check_edges_in_faces(report, topology)
-        topology_checks.check_vertical_edges(report, topology, catalogue.grid.size_um)
+        topology_checks.check_shells(report, topology, watch)
+    with watch.stage("validation_serial"):
+        with report.timed("face_sides"):
+            topology_checks.check_face_sides(report, topology)
+        with report.timed("cylinders"):
+            topology_checks.check_cylinders(report, topology)
+        with report.timed("groups"):
+            topology_checks.check_groups(report, topology, routed)
+        with report.timed("edges_in_faces"):
+            topology_checks.check_edges_in_faces(report, topology)
+            topology_checks.check_vertical_edges(
+                report, topology, catalogue.grid.size_um
+            )
     return report
 
 

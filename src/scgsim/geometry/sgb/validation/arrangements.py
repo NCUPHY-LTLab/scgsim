@@ -21,6 +21,7 @@ from scgsim.geometry.sgb.noding.snap_rounding import crossing_pixels_kernel, hit
 from scgsim.geometry.sgb.prisms.levels import LevelStructure
 from scgsim.geometry.sgb.records.grid import Grid
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.validation.report import ValidationReport
 
 SNAP_BOUND_GRID_UNITS = 1.0  # iterated snap rounding on layout inputs stays below this
@@ -65,17 +66,21 @@ def check_grid_and_lengths(
     )
 
 
-def check_planar(report: ValidationReport, layers: Sequence[Layer]) -> None:
-    """No crossing edge and no vertex inside an edge, using the noding kernels."""
+def check_planar(
+    report: ValidationReport, layers: Sequence[Layer], watch: Stopwatch
+) -> None:
+    """No crossing edge and no vertex inside an edge, using the noding kernels (booked on ``watch``)."""
     bad = []
     for layer in layers:
         keys = [(e.a, e.b) for e in layer.arr.edges]
         if len(keys) < 2:
             continue
         flags = [True] * len(keys)
-        crossings = crossing_pixels_kernel(keys, flags)
+        with watch.stage("noding_kernels"):
+            crossings = crossing_pixels_kernel(keys, flags)
         vertices = {p for key in keys for p in key}
-        hits = hits_kernel(keys, flags, vertices, set())
+        with watch.stage("noding_kernels"):
+            hits = hits_kernel(keys, flags, vertices, set())
         pass_through = sum(
             1
             for (a, b), found in zip(keys, hits, strict=True)

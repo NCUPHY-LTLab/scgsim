@@ -54,6 +54,7 @@ from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records.carriers import ArcCarrier
 from scgsim.geometry.sgb.records.labels import Domain, LevelLabel
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 Entry = tuple[str, int]  # (edge id, +1 / -1 relative to the edge's v0 -> v1 direction)
 Record = TypeVar("Record", TopoVertex, TopoEdge, TopoFace, TopoVolume)
@@ -84,16 +85,17 @@ class Link:
     end: Point
 
 
-def assemble_topology(labelled: LabelledArrangements) -> Topology:
+def assemble_topology(labelled: LabelledArrangements, watch: Stopwatch) -> Topology:
     """Build the full shared topology from the labelled arrangements."""
-    return _Assembly(labelled).run()
+    return _Assembly(labelled, watch).run()
 
 
 class _Assembly:
     """The state that travels through the assembly steps."""
 
-    def __init__(self, labelled: LabelledArrangements) -> None:
+    def __init__(self, labelled: LabelledArrangements, watch: Stopwatch) -> None:
         self.labelled = labelled
+        self.watch = watch
         self.levels = labelled.levels
         self.slabs = labelled.slabs
         self.A = labelled.level_layers
@@ -119,14 +121,18 @@ class _Assembly:
 
     def run(self) -> Topology:
         """Run the assembly steps in order."""
-        self._register_level_geometry()
-        volumes = self._volumes()
-        runs = find_wall_runs(self.slabs, self.A)
-        self._register_splits(plan_curved_splits(self.A, runs))
-        self._horizontal_faces()
-        self._wall_faces(runs)
-        self._refinement_curves()
-        self._prune_unused()
+        watch = self.watch
+        with watch.stage("assembly_registry"):
+            self._register_level_geometry()
+        with watch.stage("volume_connectivity"):
+            volumes = self._volumes()
+        runs = find_wall_runs(self.slabs, self.A, watch)
+        with watch.stage("assembly_faces"):
+            self._register_splits(plan_curved_splits(self.A, runs))
+            self._horizontal_faces()
+            self._wall_faces(runs)
+            self._refinement_curves()
+            self._prune_unused()
         self._shells(volumes)
         return Topology(
             self.grid.size_um,
@@ -587,19 +593,21 @@ class _Assembly:
     # -- shells ------------------------------------------------------------------------
 
     def _shells(self, volumes: dict[str, TopoVolume]) -> None:
-        incident: dict[str, list[Entry]] = defaultdict(list)
-        for fid, face in sorted(self.faces.items()):
-            if face.neg_volume is not None and face.neg_volume == face.pos_volume:
-                volumes[face.neg_volume].embedded_faces.append(fid)
-                continue
-            if face.neg_volume is not None:
-                incident[face.neg_volume].append((fid, 1))
-            if face.pos_volume is not None:
-                incident[face.pos_volume].append((fid, -1))
-        for vid in sorted(incident):
-            volumes[vid].shells = volume_shells(
-                self.faces, self.edges, self.vertices, self.zden, incident[vid]
-            )
+        with self.watch.stage("shell_prep"):
+            incident: dict[str, list[Entry]] = defaultdict(list)
+            for fid, face in sorted(self.faces.items()):
+                if face.neg_volume is not None and face.neg_volume == face.pos_volume:
+                    volumes[face.neg_volume].embedded_faces.append(fid)
+                    continue
+                if face.neg_volume is not None:
+                    incident[face.neg_volume].append((fid, 1))
+                if face.pos_volume is not None:
+                    incident[face.pos_volume].append((fid, -1))
+        with self.watch.stage("shells"):
+            for vid in sorted(incident):
+                volumes[vid].shells = volume_shells(
+                    self.faces, self.edges, self.vertices, self.zden, incident[vid]
+                )
 
 
 @dataclass

@@ -29,6 +29,7 @@ from scgsim.geometry.sgb.prisms.levels import LevelStructure
 from scgsim.geometry.sgb.records.carriers import ArcCarrier
 from scgsim.geometry.sgb.records.labels import Domain
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 
 def build_slab_layers(
@@ -37,6 +38,7 @@ def build_slab_layers(
     arcs: dict[str, ArcCarrier],
     *,
     keep_raw: bool,
+    watch: Stopwatch,
 ) -> list[Layer]:
     """All slab layers; slab arcs are registered in ``arcs`` as derived carriers."""
     prisms = catalogue.prisms
@@ -50,8 +52,10 @@ def build_slab_layers(
             for i in active
             for c in prisms[i].carriers()
         ]
-        snapped = snap_round(segments)
-        raw_arrangements.append(build_arrangement(snapped.edges))
+        with watch.stage("noding_driver"):
+            snapped = snap_round(segments, watch=watch)
+        with watch.stage("dcel_faces"):
+            raw_arrangements.append(build_arrangement(snapped.edges))
         noding_stats.append(
             {
                 "segments": len(segments),
@@ -61,20 +65,24 @@ def build_slab_layers(
         )
         prism_sets.append(PrismSet(prisms, active, catalogue.grid))
 
-    labels, hits = _label_slab_cells(raw_arrangements, prism_sets, prisms)
-    layers = _dissolve_slabs(
-        catalogue,
-        levels,
-        raw_arrangements,
-        labels,
-        hits,
-        noding_stats,
-        prism_sets,
-        keep_raw=keep_raw,
-    )
-    assign_ids(layers, [{} for _ in layers])
-    for layer in layers:
-        realise_arc_edges(layer, arcs, register=True)
+    with watch.stage("labelling"):
+        labels, hits = _label_slab_cells(raw_arrangements, prism_sets, prisms)
+    with watch.stage("dissolution"):
+        layers = _dissolve_slabs(
+            catalogue,
+            levels,
+            raw_arrangements,
+            labels,
+            hits,
+            noding_stats,
+            prism_sets,
+            keep_raw=keep_raw,
+        )
+    with watch.stage("atomic_ids"):
+        assign_ids(layers, [{} for _ in layers])
+    with watch.stage("arc_realisation"):
+        for layer in layers:
+            realise_arc_edges(layer, arcs, register=True)
     return layers
 
 

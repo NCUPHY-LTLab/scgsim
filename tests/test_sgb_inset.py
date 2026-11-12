@@ -24,10 +24,10 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
 )
 from scgsim.geometry.sgb.errors import InputError, ValidationError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.sidecar.lineage import CarrierLineage
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.validation.validate import validate_model
 
 MARGINS = (0.1, 0.5, 2.0)
@@ -298,7 +298,7 @@ def test_band_area_monotonicity_is_validated_and_a_broken_partition_fails_closed
     )
     try:
         report = validate_model(
-            banded.labelled, banded.topology, banded.routed, Runtime()
+            banded.labelled, banded.topology, banded.routed, Stopwatch()
         )
         assert any(c.name == "band_area_monotone" for c in report.failures)
         with pytest.raises(ValidationError):
@@ -321,16 +321,6 @@ def test_face_membership_is_area_weighted_and_non_exclusive(banded):
         for f in faces.values()
         if banded.routed.face_group[f.id] == "PORT::p1"
     )
-
-
-def test_band_models_have_one_identity_for_every_tile_count():
-    """Bands, their families and the pre-pass are tile-independent."""
-    catalogue = pad_in_ground("B")
-    reference = build_model_from_catalogue(catalogue, "B", insets=pad_requests("B"))
-    tiled = build_model_from_catalogue(
-        catalogue, "B", insets=pad_requests("B"), tiles=3
-    )
-    assert tiled.identity_digest() == reference.identity_digest()
 
 
 # --------------------------------------------------------------------------- requests fail closed

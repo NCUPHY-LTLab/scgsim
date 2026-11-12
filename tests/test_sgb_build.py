@@ -139,18 +139,6 @@ def test_requests_for_bands_and_refinement_curves_reach_the_files(tmp_path, film
     assert MARGINS  # the shared margins are used by the other tests
 
 
-def test_every_file_is_byte_identical_for_every_worker_and_tile_count(
-    tmp_path, gds_input
-):
-    """Workers and tiles change how a model is derived and written, never one byte of it."""
-    first = build(gds_input, "B", tmp_path / "one")
-    second = build(gds_input, "B", tmp_path / "many", workers=3, tiles=3)
-    for name in ARTIFACT_NAMES:
-        assert (
-            getattr(first, name).read_bytes() == getattr(second, name).read_bytes()
-        ), name
-
-
 def test_the_validation_report_is_written_and_lists_every_check(tmp_path, gds_input):
     """The validation report is written and lists every check."""
     artifacts = build(gds_input, "B", tmp_path)

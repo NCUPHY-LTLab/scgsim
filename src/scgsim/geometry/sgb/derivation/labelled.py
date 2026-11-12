@@ -24,6 +24,7 @@ from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.sgb.prisms.levels import LevelStructure, build_levels
 from scgsim.geometry.sgb.records.carriers import ArcCarrier
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 
 @dataclass
@@ -37,6 +38,7 @@ class LabelledArrangements:
     arcs: dict[
         str, ArcCarrier
     ]  # every arc carrier by id: source arcs and realised slab-edge arcs
+    timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds
     counts: dict[str, int] = field(default_factory=dict)
     structural_checks: list[str] = field(
         default_factory=list
@@ -78,28 +80,37 @@ def derive_from_catalogue(
     was_enabled = gc.isenabled()
     gc.disable()
     try:
-        return derive_arrangements(catalogue, keep_raw=keep_raw)
+        return derive_arrangements(catalogue, keep_raw=keep_raw, watch=Stopwatch())
     finally:
         if was_enabled:
             gc.enable()
 
 
 def derive_arrangements(
-    catalogue: PrismCatalogue, *, keep_raw: bool
+    catalogue: PrismCatalogue, *, keep_raw: bool, watch: Stopwatch
 ) -> LabelledArrangements:
-    """The labelled arrangements of a catalogue, for a caller that already paused the cyclic collector."""
-    levels = build_levels(catalogue.prisms, catalogue.families)
+    """The labelled arrangements of a catalogue, for a caller that already paused the cyclic collector.
+
+    ``watch`` receives the time of every stage; the caller's later stages book on the same watch.
+    """
+    with watch.stage("levels"):
+        levels = build_levels(catalogue.prisms, catalogue.families)
     arcs = catalogue.arc_registry()
-    slabs = build_slab_layers(catalogue, levels, arcs, keep_raw=keep_raw)
-    level_layers = build_level_layers(catalogue, levels, slabs, arcs, keep_raw=keep_raw)
-    check_contacts(catalogue, (*slabs, *level_layers))
-    check_manifold(catalogue, slabs)
+    slabs = build_slab_layers(catalogue, levels, arcs, keep_raw=keep_raw, watch=watch)
+    level_layers = build_level_layers(
+        catalogue, levels, slabs, arcs, keep_raw=keep_raw, watch=watch
+    )
+    with watch.stage("contact_check"):
+        check_contacts(catalogue, (*slabs, *level_layers))
+    with watch.stage("manifold_check"):
+        check_manifold(catalogue, slabs)
     return LabelledArrangements(
         catalogue,
         levels,
         slabs,
         level_layers,
         arcs,
+        dict(watch.seconds),
         _counts(catalogue, slabs, level_layers),
         ["no_different_net_contact", "no_non_manifold_pinch"],
     )

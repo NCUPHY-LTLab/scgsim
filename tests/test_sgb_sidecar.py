@@ -12,7 +12,7 @@ from pathlib import Path
 
 import jsonschema
 import pytest
-from sgb_emit_cases import CASES, pad_model
+from sgb_emit_cases import CASES
 from sgb_scenes import GRID, conductor, footprint, rect_um
 
 from scgsim.contracts.sgb_sidecar import read_sidecar, sidecar_schema, views
@@ -680,19 +680,3 @@ def test_the_sidecar_bytes_do_not_depend_on_python_hash_randomisation():
         )
         outputs.add(result.stdout.strip())
     assert len(outputs) == 1
-
-
-def test_the_sidecar_is_the_same_for_every_tile_layout(tmp_path):
-    """Tiles and workers change how the model is derived, never what it is."""
-    one = pad_model("B", bands=True)
-    from sgb_emit_cases import pad_requests  # noqa: PLC0415 -- used by this test only
-    from sgb_scenes import pad_in_ground  # noqa: PLC0415 -- used by this test only
-
-    from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: PLC0415 -- used by this test only
-
-    tiled = build_model_from_catalogue(
-        pad_in_ground("B"), "B", insets=pad_requests("B"), tiles=3, workers=2
-    )
-    assert json.dumps(sidecar_of(one), sort_keys=True) == json.dumps(
-        sidecar_of(tiled), sort_keys=True
-    )

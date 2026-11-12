@@ -361,21 +361,15 @@ def test_every_pcurve_lifts_onto_its_3d_curve(tmp_path, emit_models, name):
 # --------------------------------------------------------------------------- determinism
 
 
-def test_output_is_byte_identical_for_every_worker_count_and_chunk_size(
-    tmp_path, emit_models
-):
-    """Many tiny chunks so the pool really interleaves; the bytes never change."""
+def test_output_is_byte_identical_for_every_chunk_size(tmp_path, emit_models):
+    """Many tiny chunks and one large one; the bytes never change."""
     model = emit_models["pad_b"]
     plan = plan_brep(model.topology, model.routed)
     blobs = set()
-    for workers, chunk in ((1, 40_000), (1, 7), (2, 7), (4, 3), (4, 40_000)):
-        base = tmp_path / f"w{workers}c{chunk}"
-        write_brep_file(
-            plan, base.with_suffix(".brep"), workers=workers, chunk_items=chunk
-        )
-        write_xao_file(
-            plan, base.with_suffix(".xao"), name="m", workers=workers, chunk_items=chunk
-        )
+    for chunk in (40_000, 7, 3):
+        base = tmp_path / f"c{chunk}"
+        write_brep_file(plan, base.with_suffix(".brep"), chunk_items=chunk)
+        write_xao_file(plan, base.with_suffix(".xao"), name="m", chunk_items=chunk)
         blobs.add(
             (
                 base.with_suffix(".brep").read_bytes(),
@@ -653,14 +647,14 @@ SCRIPT = (
     "for route in 'ABC':\n"
     "    model = pad_model(route, bands=True, refine=route != 'C')\n"
     "    path = pathlib.Path(tempfile.mkdtemp()) / 'm.xao'\n"
-    "    write_xao_file(plan_brep(model.topology, model.routed), path, name='m', workers=2, chunk_items=50)\n"
+    "    write_xao_file(plan_brep(model.topology, model.routed), path, name='m', chunk_items=50)\n"
     "    digests.append(hashlib.sha256(path.read_bytes()).hexdigest())\n"
     "print(*digests)\n"
 )
 
 
-def test_the_xao_bytes_do_not_depend_on_python_hash_randomisation_or_the_pool():
-    """Three hash seeds, a forked pool and tiny chunks: one digest per route."""
+def test_the_xao_bytes_do_not_depend_on_python_hash_randomisation():
+    """Three hash seeds and tiny chunks: one digest per route."""
     outputs = set()
     for hash_seed in ("0", "7", "31337"):
         result = subprocess.run(
@@ -676,9 +670,9 @@ def test_the_xao_bytes_do_not_depend_on_python_hash_randomisation_or_the_pool():
 
 @pytest.mark.slow
 @pytest.mark.parametrize("route", ["A", "B", "C"])
-def test_a_random_layout_round_trips_with_workers(tmp_path, route):
-    """150 random features: written with a pool, loaded in Gmsh, checked against the sidecar alone."""
+def test_a_random_layout_round_trips(tmp_path, route):
+    """150 random features: written, loaded in Gmsh, checked against the sidecar alone."""
     catalogue = random_layout(150, seed=2, route="A" if route == "A" else "B")
-    model = build_model_from_catalogue(catalogue, route, tiles=2, workers=2)
-    artifacts = emit_model(model, tmp_path, workers=2)
+    model = build_model_from_catalogue(catalogue, route)
+    artifacts = emit_model(model, tmp_path)
     assert verify_xao(artifacts.xao, read_sidecar(artifacts.sidecar)).ok

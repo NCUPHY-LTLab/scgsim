@@ -177,18 +177,6 @@ def test_each_level_has_its_own_families_margins_and_band_groups(two_level_model
     ) == sorted(n for n in side["group"] if n.startswith("SA::"))
 
 
-def test_the_qualified_names_do_not_depend_on_workers_or_tiles(two_level_model):
-    """The qualifier pass reads the sorted topology only."""
-    other = build_model_from_catalogue(
-        two_level_catalogue(), "A", insets=two_level_requests(), tiles=2, workers=2
-    )
-    assert other.routed.face_group == two_level_model.routed.face_group
-    assert (
-        sidecar_of(other)["surface_epr_row"]
-        == sidecar_of(two_level_model)["surface_epr_row"]
-    )
-
-
 def test_two_concrete_requests_on_one_face_are_refused():
     """A face has one band family: two concrete requests naming it are refused at planning, naming both."""
     pad = ConductorSurface("top_pad", "sheet")

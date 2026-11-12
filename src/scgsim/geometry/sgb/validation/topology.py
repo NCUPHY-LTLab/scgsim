@@ -19,21 +19,28 @@ from collections import Counter
 from scgsim.geometry.sgb.assembly.records import TopoEdge, Topology
 from scgsim.geometry.sgb.assembly.shells import shell_checks
 from scgsim.geometry.sgb.routes.groups import RoutedModel
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.validation.report import ValidationReport
 
 CYLINDER_TOLERANCE = 1e-6  # grid units: the same circle within floating-point noise
 
 
-def check_shells(report: ValidationReport, topology: Topology) -> None:
-    """Closure, orientation and Euler characteristic of every shell."""
+def check_shells(
+    report: ValidationReport, topology: Topology, watch: Stopwatch
+) -> None:
+    """Closure, orientation and Euler characteristic of every shell (timed as ``validation_shells``)."""
     shells = [
         (vid, si, shell)
         for vid, volume in sorted(topology.volumes.items())
         for si, shell in enumerate(volume.shells)
     ]
+    with watch.stage("validation_shells"):
+        results = [
+            shell_checks(topology.faces, topology.edges, list(shell.faces))
+            for _, _, shell in shells
+        ]
     problems, euler_bad = [], []
-    for vid, si, shell in shells:
-        issues, chi = shell_checks(topology.faces, topology.edges, list(shell.faces))
+    for (vid, si, shell), (issues, chi) in zip(shells, results, strict=True):
         problems.extend(f"{vid}/{si}: {message}" for message in issues)
         if chi % 2 != 0 or (shell.role == "outer" and chi > 2):
             euler_bad.append(f"{vid}/{si}: chi={chi}")

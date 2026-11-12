@@ -38,6 +38,7 @@ from scgsim.geometry.sgb.noding.spatial_hash import (
     points_extent,
 )
 from scgsim.geometry.sgb.plane import Point
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 EdgeKey = tuple[Point, Point]  # canonical: a < b lexicographically
 Crossing = tuple[int, int, int]  # exact point (X / den, Y / den) stored as (X, Y, den)
@@ -180,15 +181,26 @@ def canonical_key(a: Point, b: Point) -> EdgeKey:
     return (a, b) if a < b else (b, a)
 
 
-def snap_round(segments: Iterable[Segment], max_rounds: int = MAX_ROUNDS) -> SnapResult:
-    """Iterated snap rounding of integer segments; see the module docstring."""
-    return _IteratedRounding(segments, max_rounds).run()
+def snap_round(
+    segments: Iterable[Segment],
+    max_rounds: int = MAX_ROUNDS,
+    *,
+    watch: Stopwatch | None = None,
+) -> SnapResult:
+    """Iterated snap rounding of integer segments; see the module docstring.
+
+    ``watch`` receives the time of the two kernels as the stage ``noding_kernels``.
+    """
+    return _IteratedRounding(segments, max_rounds, watch or Stopwatch()).run()
 
 
 class _IteratedRounding:
     """The state that travels through the rounds: edges, hot pixels, what changed."""
 
-    def __init__(self, segments: Iterable[Segment], max_rounds: int) -> None:
+    def __init__(
+        self, segments: Iterable[Segment], max_rounds: int, watch: Stopwatch
+    ) -> None:
+        self.watch = watch
         self.max_rounds = max_rounds
         self.edges: dict[EdgeKey, set[str]] = {}
         for seg in segments:
@@ -217,10 +229,12 @@ class _IteratedRounding:
     def _round(self) -> None:
         keys = sorted(self.edges)
         flags = [key in self.changed for key in keys]
-        new_hot = crossing_pixels_kernel(keys, flags) - self.hot
+        with self.watch.stage("noding_kernels"):
+            new_hot = crossing_pixels_kernel(keys, flags) - self.hot
         self.hot |= new_hot
         self.delta |= new_hot
-        chain_hits = hits_kernel(keys, flags, self.hot, self.delta)
+        with self.watch.stage("noding_kernels"):
+            chain_hits = hits_kernel(keys, flags, self.hot, self.delta)
         rerouted: dict[EdgeKey, set[str]] = {}
         verified: set[EdgeKey] = (
             set()

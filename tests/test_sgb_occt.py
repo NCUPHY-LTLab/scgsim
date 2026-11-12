@@ -486,11 +486,9 @@ def test_a_random_layout_of_a_thousand_features_passes_the_cheap_official_checks
     tmp_path,
 ):
     """The cheap checks (self-interference off, the cheap form) at N = 1000."""
-    model = build_model_from_catalogue(
-        random_layout(1000, seed=1, route="B"), "B", workers=2, tiles=2
-    )
+    model = build_model_from_catalogue(random_layout(1000, seed=1, route="B"), "B")
     plan = plan_brep(model.topology, model.routed)
-    write_brep_file(plan, tmp_path / "m.brep", workers=2)
+    write_brep_file(plan, tmp_path / "m.brep")
     report = check_file(
         tmp_path / "m.brep", model.topology, plan, self_interference=False
     )

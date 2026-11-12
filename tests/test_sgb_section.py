@@ -3,7 +3,7 @@
 Synthetic catalogues in grid units (``sgb_scenes``) are built in 3D and cut.  A coplanar waveguide (CPW) is
 checked exactly: every edge's group and place, the levels, the faces and their areas, the groups, unions,
 Surface-EPR rows and band families.  Each cut rule is broken once at a known place, and the place is read back
-out of the refusal.  The section is the same for every ``workers`` and ``tiles`` the 3D model is built with.
+out of the refusal.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def by_type(*types: str) -> tuple[InsetRequest, ...]:
     return tuple(InsetRequest(t.lower(), InterfaceSurfaces(t), MARGINS) for t in types)
 
 
-def cpw(*, along_y: bool = False, **options):
+def cpw(*, along_y: bool = False):
     """A Route B CPW 100 um long on 500 um of substrate, MA, MS and SA banded: the acceptance cross-section.
 
     Grounds 80 um, gaps 6 um, signal 10 um, film 0.1 um; it runs along x (``along_y``: along y) and spans the
@@ -66,9 +66,7 @@ def cpw(*, along_y: bool = False, **options):
         conductor("gnd_plus", box(-50, 11, 50, 91), 0, "0.1", "ground"),
     ]
     catalogue = PrismCatalogue(GRID, tuple(prisms), name="cpw")
-    return build_model_from_catalogue(
-        catalogue, "B", insets=by_type("MA", "MS", "SA"), **options
-    )
+    return build_model_from_catalogue(catalogue, "B", insets=by_type("MA", "MS", "SA"))
 
 
 @pytest.fixture(scope="module")
@@ -318,14 +316,6 @@ def test_a_cut_drawn_the_other_way_mirrors_u(cpw_model):
         (g, length - b, length - a, z0, z1) for g, a, b, z0, z1 in expected_cpw_edges()
     )
     assert edges_by_place(section) == mirrored
-
-
-def test_the_section_is_the_same_for_any_workers_and_tiles(cpw_section):
-    """The 3D model is identical for every runtime, and the section is a function of it alone."""
-    for tiles, workers in ((2, 2), (3, 1)):
-        model = cpw(tiles=tiles, workers=workers)
-        section = build_section_model(model, CPW_CUT)
-        assert section.identity_digest() == cpw_section.identity_digest()
 
 
 # --------------------------------------------------------------------------- faces, holes and a route A sheet

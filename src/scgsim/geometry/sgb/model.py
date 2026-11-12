@@ -32,6 +32,7 @@ from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.routes.groups import RoutedModel, apply_route
 from scgsim.geometry.sgb.routes.naming import check_entity_names
 from scgsim.geometry.sgb.routes.policy import RoutePolicy, check_route, route_policy
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.validation.report import ValidationReport
 from scgsim.geometry.sgb.validation.validate import validate_model
 
@@ -47,6 +48,7 @@ class ConformalModel:
     topology: Topology
     routed: RoutedModel
     report: ValidationReport
+    timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds
     counts: dict[str, int] = field(default_factory=dict)
     insets: tuple[
         InsetRequest, ...
@@ -150,10 +152,14 @@ def build_model_from_catalogue(
 def _build(
     catalogue: PrismCatalogue, policy: RoutePolicy, *, keep_raw: bool
 ) -> ConformalModel:
-    labelled = derive_arrangements(catalogue, keep_raw=keep_raw)
-    topology = assemble_topology(labelled)
-    routed = apply_route(topology, policy)
-    report = validate_model(labelled, topology, routed)
+    watch = Stopwatch()
+    labelled = derive_arrangements(catalogue, keep_raw=keep_raw, watch=watch)
+    topology = assemble_topology(labelled, watch)
+    with watch.stage("routes"):
+        routed = apply_route(topology, policy)
+    report = validate_model(labelled, topology, routed, watch)
     report.raise_if_failed()
     counts = {**labelled.counts, **topology.counts(), "groups": len(routed.groups)}
-    return ConformalModel(labelled, topology, routed, report, counts)
+    return ConformalModel(
+        labelled, topology, routed, report, dict(watch.seconds), counts
+    )

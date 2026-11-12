@@ -47,6 +47,7 @@ from scgsim.geometry.sgb.records.carriers import (
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 from scgsim.geometry.sgb.records.labels import LevelLabel, SheetOwner
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 
 @dataclass
@@ -62,22 +63,28 @@ class _RawLevel:
     stats: dict[str, int]
 
 
-def build_level_layers(
+def build_level_layers(  # noqa: PLR0913 - the finished slabs, the arc registry and the build options
     catalogue: PrismCatalogue,
     levels: LevelStructure,
     slabs: list[Layer],
     arcs: dict[str, ArcCarrier],
     *,
     keep_raw: bool,
+    watch: Stopwatch,
 ) -> list[Layer]:
     """All level layers, given the finished slab layers (slab arcs are already registered in ``arcs``)."""
     raw_levels = []
     for level in range(len(levels.levels)):
         segments, policies = _level_segments(catalogue, levels, slabs, level, arcs)
-        snapped = snap_round(segments)
-        arrangement = build_arrangement(snapped.edges)
-        below = _link_to_slab(arrangement, slabs[level - 1]) if level > 0 else None
-        above = _link_to_slab(arrangement, slabs[level]) if level < len(slabs) else None
+        with watch.stage("noding_driver"):
+            snapped = snap_round(segments, watch=watch)
+        with watch.stage("dcel_faces"):
+            arrangement = build_arrangement(snapped.edges)
+        with watch.stage("linking"):
+            below = _link_to_slab(arrangement, slabs[level - 1]) if level > 0 else None
+            above = (
+                _link_to_slab(arrangement, slabs[level]) if level < len(slabs) else None
+            )
         sheet_indices = levels.level_sheets[level]
         sheets = (
             PrismSet(catalogue.prisms, sheet_indices, catalogue.grid)
@@ -96,13 +103,18 @@ def build_level_layers(
             _RawLevel(arrangement, below, above, sheets, policies, supports, stats)
         )
 
-    extras = _label_level_cells(catalogue, slabs, raw_levels)
-    _check_band_seams(catalogue, levels, raw_levels, extras)
-    layers = _dissolve_levels(levels, slabs, raw_levels, extras, keep_raw=keep_raw)
+    with watch.stage("labelling"):
+        extras = _label_level_cells(catalogue, slabs, raw_levels)
+    with watch.stage("band_seam_check"):
+        _check_band_seams(catalogue, levels, raw_levels, extras)
+    with watch.stage("dissolution"):
+        layers = _dissolve_levels(levels, slabs, raw_levels, extras, keep_raw=keep_raw)
     tag_sources = [_tag_sources(slabs, level) for level in range(len(levels.levels))]
-    assign_ids(layers, tag_sources)
-    for layer in layers:
-        realise_arc_edges(layer, arcs, register=False)
+    with watch.stage("atomic_ids"):
+        assign_ids(layers, tag_sources)
+    with watch.stage("arc_realisation"):
+        for layer in layers:
+            realise_arc_edges(layer, arcs, register=False)
     _check_ports_keep_a_face(catalogue, layers)
     return layers
 

@@ -26,6 +26,7 @@ from scgsim.geometry.sgb.derivation.layer import Layer
 from scgsim.geometry.sgb.labelling.linking import TAG, walk_chain
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records.labels import Domain
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 
 @dataclass(frozen=True)
@@ -46,20 +47,26 @@ class WallRun:
     top: tuple[int, ...]  # half-edges of level k1 + 1 from u to v
 
 
-def find_wall_runs(slabs: list[Layer], level_layers: list[Layer]) -> list[WallRun]:
+def find_wall_runs(
+    slabs: list[Layer], level_layers: list[Layer], watch: Stopwatch
+) -> list[WallRun]:
     """Every wall run of the model, by wall key."""
-    members = [_tag_members(layer) for layer in level_layers]
-    keys: dict[tuple[Point, Point], list[tuple[int, int]]] = defaultdict(list)
-    for k, slab in enumerate(slabs):
-        for si, edge in enumerate(slab.arr.edges):
-            left, right = slab.arr.he_face[2 * si], slab.arr.he_face[2 * si + 1]
-            if slab.labels[left] != slab.labels[right]:
-                keys[(edge.a, edge.b)].append((k, si))
-    return [
-        run
-        for key in sorted(keys)
-        for run in _runs_of_key(slabs, level_layers, members, key, sorted(keys[key]))
-    ]
+    with watch.stage("wall_prep"):
+        members = [_tag_members(layer) for layer in level_layers]
+        keys: dict[tuple[Point, Point], list[tuple[int, int]]] = defaultdict(list)
+        for k, slab in enumerate(slabs):
+            for si, edge in enumerate(slab.arr.edges):
+                left, right = slab.arr.he_face[2 * si], slab.arr.he_face[2 * si + 1]
+                if slab.labels[left] != slab.labels[right]:
+                    keys[(edge.a, edge.b)].append((k, si))
+    with watch.stage("wall_runs"):
+        return [
+            run
+            for key in sorted(keys)
+            for run in _runs_of_key(
+                slabs, level_layers, members, key, sorted(keys[key])
+            )
+        ]
 
 
 def _tag_members(layer: Layer) -> dict[str, Any]:
