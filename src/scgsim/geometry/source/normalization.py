@@ -197,11 +197,6 @@ def semantic_layer_records(
                 else None
             ),
         }
-        if "ground_bump_fill_spec" in level_info:
-            record["metadata"]["ground_bump_fill_spec"] = mapping(
-                level_info["ground_bump_fill_spec"],
-                f"PDK level {level_name!r} ground_bump_fill_spec",
-            )
         result.append(record)
     return result
 

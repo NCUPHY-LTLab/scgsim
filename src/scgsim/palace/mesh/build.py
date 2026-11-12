@@ -39,7 +39,6 @@ from .process import lower_mesh_in_worker
 from .source import (
     route_a_thin_film_provenance,
     scgsim_version,
-    write_indium_ground_bump_receipt,
     write_json,
 )
 
@@ -171,7 +170,6 @@ def build_route_geometry(  # noqa: PLR0913 -- the plan's sources, its prepared i
     source_gds_bytes: bytes,
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
     port_sheet_source_layers: Sequence[Mapping[str, Any]] = (),
-    indium_ground_bump_fill: Mapping[str, Any] | None = None,
     source_geometry_input: GeometryBuildInput | None = None,
     representation_context: RepresentationContext | None = None,
 ) -> RouteGeometry:
@@ -194,7 +192,6 @@ def build_route_geometry(  # noqa: PLR0913 -- the plan's sources, its prepared i
     stack = with_port_sheet_metadata(stack, port_sheet_source_layers)
     paths = _prepare_paths(output_dir, route)
     top_cell = _write_sources(stack, source_gds_bytes, paths)
-    _write_optional_bump_receipt(indium_ground_bump_fill, paths)
     artifacts = build_banded_geometry(
         source_geometry_input,
         representation_context,
@@ -309,20 +306,6 @@ def _write_sources(
     )
 
     return top_cell
-
-
-def _write_optional_bump_receipt(
-    indium_ground_bump_fill: Mapping[str, Any] | None, paths: BuildPaths
-) -> None:
-    if indium_ground_bump_fill is not None:
-        receipt = indium_ground_bump_fill.get("receipt")
-        if not isinstance(receipt, Mapping):
-            raise TypeError("indium ground bump fill requires a structured receipt.")
-        write_indium_ground_bump_receipt(
-            run_dir=paths.run_dir,
-            gds_path=paths.gds_path,
-            receipt=receipt,
-        )
 
 
 @diagnostic_stage("palace.mesh.module")

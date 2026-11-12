@@ -20,7 +20,6 @@ from scgsim.geometry.models.physical import (
 )
 from scgsim.geometry.planning.physical import interpret_physical_geometry
 from scgsim.geometry.source.adapter_records import solution_region_entity
-from scgsim.geometry.source.ground_bumps import prepare_indium_ground_bump_fill
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.geometry.source.validation import has_vacuum_solution_region
@@ -34,9 +33,7 @@ from .transforms import RouteAThinFilm
 class PreparedMeshInput:
     """Values prepared before a simulation builds a mesh."""
 
-    component: Any
     stack: Mapping[str, Any]
-    indium_ground_bump_fill: Mapping[str, Any] | None
     materials: dict[str, Mapping[str, Any]] | None
     geometry_input: GeometryBuildInput
     physical_plan: PhysicalRepresentationPlan
@@ -44,12 +41,10 @@ class PreparedMeshInput:
 
 def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserve the existing caller contract.
     *,
-    component: Any,
     stack: Mapping[str, Any],
     route: str,
     route_a_thin_film: RouteAThinFilm | None,
     vacuum_region: VacuumRegionSpec | None,
-    indium_ground_bumps: Mapping[str, Any] | None,
     build_input: GeometryBuildInput,
     approximation_profile: ApproximationProfile | None = None,
     port_sheet_source_layers: Sequence[Mapping[str, Any]] | None = None,
@@ -58,16 +53,6 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
     prepared_stack = stack
     if vacuum_region is not None:
         prepared_stack = apply_vacuum_region_to_stack(stack, vacuum_region)
-    indium_fill = None
-    prepared_component = component
-    if indium_ground_bumps is not None:
-        indium_fill = prepare_indium_ground_bump_fill(
-            component=component,
-            stack=prepared_stack,
-            **indium_ground_bumps,
-        )
-        prepared_component = indium_fill["component"]
-        prepared_stack = indium_fill["stack"]
     if port_sheet_source_layers is not None:
         prepared_stack = {
             **prepared_stack,
@@ -82,12 +67,6 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
     # Synchronize source selections before the single physical interpretation.
     build_input = _synchronize_solution_regions(build_input, prepared_stack)
     build_input = _select_authored_ports(build_input, port_sheet_source_layers)
-    if indium_fill is not None:
-        build_input = replace(
-            build_input,
-            polygons=(*build_input.polygons, *indium_fill.get("injected_polygons", ())),
-            entities=(*build_input.entities, *indium_fill.get("injected_entities", ())),
-        )
     if port_sheet_source_layers is not None:
         # Every selected sheet is a Lumped Port or RLC; the physical interpretation cuts its rectangle.
         build_input = with_rectangular_ports(build_input)
@@ -125,9 +104,7 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
             if isinstance(material, Mapping)
         }
     return PreparedMeshInput(
-        component=prepared_component,
         stack=prepared_stack,
-        indium_ground_bump_fill=indium_fill,
         materials=materials,
         geometry_input=effective_input,
         physical_plan=plan,

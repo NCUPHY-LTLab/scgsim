@@ -33,7 +33,7 @@ from .config import (
     configure_numerical_controls,
 )
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
-from .inputs import non_negative_number, stack_materials
+from .inputs import stack_materials
 from .layout_snapshot import (
     DRC_VACUUM_PADDING_UM,
     prepare_layout_snapshot,
@@ -44,7 +44,6 @@ from .transforms import (
     normalize_route_a_thin_film,
     validate_non_negative_int,
     validate_nonempty_string,
-    validate_positive_number,
 )
 from .workflow import persist_problem_files, prepare_mesh_input
 
@@ -68,7 +67,6 @@ class ElectrostaticSim:
     mesh_controls: MeshControls = field(default_factory=MeshControls)
     _materials: dict[str, Mapping[str, Any]] | None = field(default=None, init=False)
     vacuum_region: VacuumRegionSpec | None = None
-    indium_ground_bumps: dict[str, Any] | None = None
     _mesh_result: MeshBuildResult | None = field(default=None, init=False)
     config_path: Path | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
@@ -116,21 +114,6 @@ class ElectrostaticSim:
         ):
             raise ValueError("GeometryPlan owns the outer vacuum envelope")
         self.vacuum_region = VacuumRegionSpec.from_padding(padding)
-        self._invalidate_mesh()
-
-    def set_indium_ground_bumps(
-        self, *, fill: bool, fill_pitch_um: float, fill_clearance_um: float
-    ) -> None:
-        """Request public-PDK authored-plus-ground-fill bumps for the next mesh."""
-        if not isinstance(fill, bool):
-            raise TypeError("fill must be a bool.")
-        self.indium_ground_bumps = {
-            "fill": fill,
-            "fill_pitch_um": validate_positive_number(fill_pitch_um, "fill_pitch_um"),
-            "fill_clearance_um": non_negative_number(
-                fill_clearance_um, "fill_clearance_um"
-            ),
-        }
         self._invalidate_mesh()
 
     def add_terminal(self, name: str, *, net_id: str) -> None:
@@ -410,12 +393,7 @@ class ElectrostaticSim:
         """Prepare the geometry input of the bound plan, everything in ``mesh()`` before the SGB build."""
         if self._plan_snapshot is None:
             raise ValueError("set_plan() must run before the geometry is prepared.")
-        if self.indium_ground_bumps is not None and self.indium_ground_bumps["fill"]:
-            raise ValueError(
-                "GeometryPlan source already owns its geometry; add authored bumps before prepare()"
-            )
         prepared = prepare_mesh_input(
-            component=None,
             stack=self._plan_snapshot.stack,
             route=self.route,
             route_a_thin_film=self.route_a_thin_film,
@@ -425,7 +403,6 @@ class ElectrostaticSim:
                 if "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
                 else self.vacuum_region
             ),
-            indium_ground_bumps=None,
             build_input=self._plan_snapshot.geometry_input,
         )
         if prepared.materials is not None:
