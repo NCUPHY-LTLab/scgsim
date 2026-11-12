@@ -67,6 +67,27 @@ def test_a_current_receipt_from_an_earlier_runtime_source_is_refused_first(key, 
         require_current_receipt({"schema_version": RECEIPT_V3, key: record})
 
 
+@pytest.mark.parametrize(
+    ("actual_schema", "message"),
+    [
+        ("v29", r"actual runtime source scgsim\.aedt\.runtime-source\.v29 was written"),
+        ("v30", "cohort verified_legacy_v1 was executed from a handoff an earlier"),
+    ],
+)
+def test_a_receipt_run_from_a_v1_handoff_is_refused_as_earlier(actual_schema, message):
+    """The v1 sentinel never hides the earlier-SCGSim refusal, whatever the order."""
+    actual = record_runtime_source("actual")
+    actual["schema_version"] = f"scgsim.aedt.runtime-source.{actual_schema}"
+    receipt = {
+        "schema_version": RECEIPT_V3,
+        "preparation_cohort": "verified_legacy_v1",
+        "prepared_runtime_source": {"status": "legacy_v1_not_recorded"},
+        "runtime_source": actual,
+    }
+    with pytest.raises(RuntimeError, match=message):
+        require_current_receipt(receipt)
+
+
 def _epr_request_payload(tmp_path):
     plan = produce_request(tmp_path / "request")
     return json.loads(plan.spec_path.read_text())
