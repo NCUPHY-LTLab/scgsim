@@ -70,6 +70,8 @@ forbidden_modules =
     scgsim.aedt
     scgsim.palace
 
+# The junction partition reads SGB's boundary binding (sgb.prisms.bound_rings); SGB reads the
+# partition's record from its input, never the partition's code.
 [importlinter:contract:sgb-core-independence]
 name = SGB core does not depend on the replaced geometry paths
 type = forbidden
@@ -87,6 +89,8 @@ forbidden_modules =
     scgsim.geometry.planning.port_planning
     scgsim.geometry.planning.evidence
     scgsim.geometry.planning.tags
+    scgsim.geometry.planning.junction_planning
+    scgsim.geometry.planning.junction_partition
 
 [importlinter:contract:sgb-emission-layers]
 name = SGB emission layers point one way (entry, exchange, verification, sidecar, writer)

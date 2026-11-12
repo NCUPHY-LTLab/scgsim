@@ -79,7 +79,7 @@ def source_footprints(
     elif is_solution_region(entity):
         loops = [_solution_loops(entity)]
     else:
-        loops, authored = _conductor_loops(entity, build_input)
+        loops, authored = conductor_loops(entity, build_input)
     footprints = []
     for polygon, (outer, holes) in enumerate(loops):
         what = f"{entity.semantic_id} polygon {polygon}"
@@ -128,13 +128,17 @@ def _solution_loops(
     return _rectangle(bounds, entity.semantic_id), ()
 
 
-def _conductor_loops(
+def conductor_loops(
     entity: SemanticEntitySpec, build_input: GeometryBuildInput
 ) -> tuple[
     list[tuple[Sequence[Sequence[float]], Sequence[Sequence[Sequence[float]]]]],
     list[bool],
 ]:
-    """The rings of each owned polygon, and whether each is authored (not a junction end piece)."""
+    """The rings of each owned polygon in micrometres, and whether each is authored (not a junction end piece).
+
+    The list is in footprint order: ``source_footprints`` numbers a conductor's footprints by
+    it, and boundary bindings name a ring by that number.
+    """
     polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
     loops, authored = [], []
     for polygon_id in entity.polygon_ids:

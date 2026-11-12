@@ -10,17 +10,12 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from decimal import ROUND_FLOOR, Decimal
 from fractions import Fraction
 
-from scgsim.geometry.construction.curved_geometry.boundaries import (
-    circle_through_points,
-    source_boundaries,
-    source_rings,
-)
-from scgsim.geometry.models.grid import format_point, geometry_grid_context
-from scgsim.geometry.models.input import GeometryBuildInput, SourceCurveSpec
+from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.planning.junction_planning.boolean_geometry import (
     boolean,
     build_polygon_region,
@@ -35,8 +30,10 @@ from scgsim.geometry.planning.junction_planning.exact_geometry import (
     section,
 )
 from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
-from scgsim.geometry.primitives.grid_regions import grid_change_message
-from scgsim.geometry.source.curves import boundary_binding
+from scgsim.geometry.sgb.prisms.bound_rings import bound_ring_primitives
+from scgsim.geometry.sgb.prisms.footprints import conductor_loops
+from scgsim.geometry.sgb.records.carriers import ArcCarrier, LineEdge, RingPrimitive
+from scgsim.geometry.sgb.records.grid import Grid
 
 
 @dataclass(frozen=True)
@@ -225,54 +222,31 @@ def built_outline(
 ) -> BuiltOutline:
     """The outline SGB builds for these conductors, where it meets each sheet side line.
 
-    A ring with an authored boundary or an arc reconstruction is built from its exact lines and
-    circular arcs, bound here as the construction path binds them; any other ring is its drawn
-    polyline.  So a round terminal meets a side where its arc does, not where its polyline
-    chord does.  SGB rounds a crossing to the model grid point whose cell holds it, so a meeting
-    is taken at that grid point.
+    A ring with an authored boundary or an arc reconstruction is built from the lines and
+    circular arcs SGB's own binding gives it (``sgb.prisms.bound_rings``), so a record on a
+    terminal is bound, and refused, by the one rule the full build uses; any other ring is its
+    drawn polyline.  So a round terminal meets a side where its arc does, not where its
+    polyline chord does.  SGB rounds a crossing to the model grid point whose cell holds it,
+    so a meeting is taken at that grid point.
     """
     context = geometry_grid_context(build_input)
     grid_um = None if context is None else context.grid_size_um
-    selected = set(entity_ids)
-    curves = tuple(
-        item
-        for item in build_input.boundary_curves
-        if boundary_binding(item).entity_id in selected
-    )
-    reconstructions = tuple(
-        item
-        for item in build_input.boundary_reconstruction
-        if boundary_binding(item, reconstruction=True).entity_id in selected
-    )
-    terminals = replace(
-        build_input,
-        entities=tuple(e for e in build_input.entities if e.semantic_id in selected),
-        boundary_curves=curves,
-        boundary_reconstruction=reconstructions,
-    )
-    chains, _ = source_boundaries(terminals, source_rings(terminals))
-    layers = {p.polygon_id: p.layer for p in build_input.polygons}
+    lines, arcs = _outline_edges(build_input, set(entity_ids), frame)
     meetings: dict[int, list[SideMeeting]] = {0: [], width: []}
-    for (entity_id, polygon_id, *_), chain in chains.items():
-        drawn = _DrawnRing(entity_id, layers.get(polygon_id), grid_um)
-        for curve in chain:
-            for side, found in meetings.items():
-                found.extend(_curve_meetings(curve, frame, side, drawn))
-    arcs = [
-        curve
-        for chain in chains.values()
-        for curve in chain
-        if curve.kind == "circular_arc"
-    ]
+    for side, found in meetings.items():
+        for line in lines:
+            found.extend(_line_meetings(line, frame, side, grid_um))
+        for arc in arcs:
+            found.extend(_arc_meetings(arc, frame, side, grid_um))
     # SGB rounds an arc's crossings to the grid, so an arc within one grid step of the sheet
     # may touch it once built.
     near = PRECISION_UM if grid_um is None else grid_um
     sheet = (0.0, span * PRECISION_UM, 0.0, width * PRECISION_UM)
     widened = (-near, sheet[1] + near, -near, sheet[3] + near)
-    inside = [u for curve in arcs for u in _arc_positions(curve, frame, sheet)]
+    inside = [u for arc in arcs for u in _arc_positions(arc, sheet)]
     return BuiltOutline(
         {side: tuple(found) for side, found in meetings.items()},
-        any(_arc_positions(curve, frame, widened) for curve in arcs),
+        any(_arc_positions(arc, widened) for arc in arcs),
         (
             (round(min(inside) / PRECISION_UM), round(max(inside) / PRECISION_UM))
             if inside
@@ -281,11 +255,119 @@ def built_outline(
     )
 
 
-def _arc_positions(
-    curve: SourceCurveSpec,
-    frame: JunctionLocalFrame,
-    box: tuple[float, float, float, float],
-) -> list[float]:
+Line = tuple[tuple[float, float], tuple[float, float]]
+"""A straight outline edge: its two end points in model XY, in micrometres."""
+
+
+@dataclass(frozen=True)
+class _Arc:
+    """A circular arc of a terminal's built outline, in the junction's local frame, in micrometres.
+
+    ``sweep`` is the signed angle from ``start`` to ``end`` about ``centre``: positive when the
+    arc runs counter-clockwise in the local frame.  A full circle has ``start`` equal to
+    ``end`` and a sweep of a whole turn.
+    """
+
+    centre: tuple[float, float]
+    radius: float
+    start: tuple[float, float]
+    end: tuple[float, float]
+    sweep: float
+
+    def holds(self, point: tuple[float, float]) -> bool:
+        """Whether a point of the arc's circle lies on the arc."""
+        if (
+            math.dist(point, self.start) <= PRECISION_UM
+            or math.dist(point, self.end) <= PRECISION_UM
+        ):
+            return True
+        turned = _angle(point, self.centre) - _angle(self.start, self.centre)
+        return (turned if self.sweep > 0 else -turned) % math.tau <= abs(self.sweep)
+
+
+def _angle(point: tuple[float, float], centre: tuple[float, float]) -> float:
+    return math.atan2(point[1] - centre[1], point[0] - centre[0])
+
+
+def _outline_edges(
+    build_input: GeometryBuildInput, selected: set[str], frame: JunctionLocalFrame
+) -> tuple[list[Line], list[_Arc]]:
+    """The straight edges, in model XY, and the circular arcs, in the local frame, of these conductors' outline.
+
+    A ring a boundary record binds is read from SGB's binding; every other ring from its drawn
+    vertices, which needs no grid.
+    """
+    records = (*build_input.boundary_curves, *build_input.boundary_reconstruction)
+    grid, bound = (
+        bound_ring_primitives(build_input, selected)
+        if any(record.entity_id in selected for record in records)
+        else (None, {})
+    )
+    lines: list[Line] = []
+    arcs: list[_Arc] = []
+    for entity in build_input.entities:
+        if entity.semantic_id not in selected:
+            continue
+        loops, _ = conductor_loops(entity, build_input)
+        for polygon, (outer, holes) in enumerate(loops):
+            for ring_index, ring in enumerate((outer, *holes)):
+                primitives = bound.get((entity.semantic_id, polygon, ring_index))
+                if grid is None or primitives is None:
+                    lines.extend(_drawn_edges(ring))
+                    continue
+                lines.extend(
+                    (_um_point(p.p, grid), _um_point(p.q, grid))
+                    for p in primitives
+                    if isinstance(p, LineEdge)
+                )
+                arcs.extend(_bound_arcs(primitives, grid, frame))
+    return lines, arcs
+
+
+def _drawn_edges(ring) -> list[Line]:
+    """The edges of a drawn ring in micrometres, the last one closing it."""
+    points = [(float(x), float(y)) for x, y in ring]
+    return list(zip(points, (*points[1:], points[0]), strict=True))
+
+
+def _bound_arcs(
+    primitives: Iterable[RingPrimitive], grid: Grid, frame: JunctionLocalFrame
+) -> list[_Arc]:
+    """The source arcs of a bound ring, each joined from the pieces SGB cuts it into.
+
+    SGB cuts a source arc into pieces of at most a quarter turn at lattice points, and a
+    piece's inner ends are rounded onto the lattice; so an arc is read from its own two ends,
+    its exact circle and the sum of its pieces' sweeps, never from an inner end.
+    """
+    pieces: dict[str, list[ArcCarrier]] = {}
+    for primitive in primitives:
+        if isinstance(primitive, ArcCarrier):
+            pieces.setdefault(primitive.root_id, []).append(primitive)
+    # A mirroring frame turns the arc's sense of travel round.
+    keeps_sense = frame.dx * frame.py - frame.dy * frame.px > 0
+    arcs = []
+    for chain in pieces.values():
+        first = chain[0]
+        turn = float(sum(abs(piece.sweep()[1]) for piece in chain))
+        arcs.append(
+            _Arc(
+                _local_um(_um_point(first.centre, grid), frame),
+                float(first.radius * Fraction(repr(grid.size_um))),
+                _local_um(_um_point(first.start, grid), frame),
+                _local_um(_um_point(chain[-1].end, grid), frame),
+                turn if first.ccw == keeps_sense else -turn,
+            )
+        )
+    return arcs
+
+
+def _um_point(point, grid: Grid) -> tuple[float, float]:
+    """A grid-unit point in micrometres: the float nearest its exact value."""
+    size = Fraction(repr(grid.size_um))
+    return (float(Fraction(point[0]) * size), float(Fraction(point[1]) * size))
+
+
+def _arc_positions(arc: _Arc, box: tuple[float, float, float, float]) -> list[float]:
     """Where a circular arc inside the box ``(low u, high u, low v, high v)`` reaches farthest along u.
 
     These are the arc's ends inside the box, its crossings with the box's four edges and its
@@ -294,17 +376,14 @@ def _arc_positions(
     empty exactly when the arc misses the box, and its extremes are the arc's reach inside it.
     """
     low_u, high_u, low_v, high_v = box
-    start, through, end = (_local_um(point, frame) for point in curve.points_um)
-    (cu, cv), radius = _local_circle(curve, frame)
+    (cu, cv), radius = arc.centre, arc.radius
 
     def in_box(u: float, v: float) -> bool:
         return low_u <= u <= high_u and low_v <= v <= high_v
 
-    found = [u for u, v in (start, end) if in_box(u, v)]
+    found = [u for u, v in (arc.start, arc.end) if in_box(u, v)]
     found.extend(
-        u
-        for u in (cu - radius, cu + radius)
-        if in_box(u, cv) and _on_arc((u, cv), start, through, end)
+        u for u in (cu - radius, cu + radius) if in_box(u, cv) and arc.holds((u, cv))
     )
     for at_u, value in ((True, low_u), (True, high_u), (False, low_v), (False, high_v)):
         offset = value - (cu if at_u else cv)
@@ -314,72 +393,38 @@ def _arc_positions(
         centre = cv if at_u else cu
         for across in (centre - half, centre + half):
             point = (value, across) if at_u else (across, value)
-            if in_box(*point) and _on_arc(point, start, through, end):
+            if in_box(*point) and arc.holds(point):
                 found.append(point[0])
     return found
 
 
-@dataclass(frozen=True)
-class _DrawnRing:
-    """The terminal ring a curve outlines: its Entity and source layer, and the model grid, for a refusal."""
-
-    entity_id: str
-    layer: str | None
-    grid_um: float | None
-
-
-def _curve_meetings(
-    curve: SourceCurveSpec, frame: JunctionLocalFrame, side: int, drawn: _DrawnRing
+def _line_meetings(
+    line: Line, frame: JunctionLocalFrame, side: int, grid_um: float | None
 ) -> list[SideMeeting]:
-    """The meetings of one line or circular arc with the side line ``v = side``."""
-    grid_um = drawn.grid_um
-    if curve.kind == "line_segment":
-        (u0, v0), (u1, v1) = (_local_units(point, frame) for point in curve.points_um)
-        if v0 == v1 == side:
-            return [SideMeeting(u0, True), SideMeeting(u1, True)]
-        if v0 == v1 or (v0 - side) * (v1 - side) > 0:
-            return []
-        crossing = u0 + Fraction(side - v0, v1 - v0) * (u1 - u0)
-        return [_crossing(float(crossing) * PRECISION_UM, side, frame, grid_um)]
-    if curve.kind == "circular_arc":
-        start, through, end = (_local_um(point, frame) for point in curve.points_um)
-        (cu, cv), radius = _local_circle(curve, frame)
-        offset = side * PRECISION_UM - cv
-        if abs(offset) > radius:
-            return []
-        half = math.sqrt(radius * radius - offset * offset)
-        return [
-            _crossing(u, side, frame, grid_um)
-            for u in sorted({cu - half, cu + half})
-            if _on_arc((u, side * PRECISION_UM), start, through, end)
-        ]
-    (x0, y0), (x1, y1) = curve.points_um[0], curve.points_um[-1]
-    raise ValueError(
-        grid_change_message(
-            f"junction terminal outline curve {curve.kind!r} is not supported; "
-            f"a terminal is built from lines and circular arcs: {drawn.entity_id}",
-            [] if drawn.layer is None else [drawn.layer],
-            grid_um,
-            [
-                f"its outline runs the curve from {format_point(x0, y0, grid_um)} "
-                f"to {format_point(x1, y1, grid_um)}"
-            ],
-            "Fix the layout: draw the curve as lines and circular arcs.",
-        )
-    )
+    """The meetings of one straight outline edge with the side line ``v = side``."""
+    (u0, v0), (u1, v1) = (_local_units(point, frame) for point in line)
+    if v0 == v1 == side:
+        return [SideMeeting(u0, True), SideMeeting(u1, True)]
+    if v0 == v1 or (v0 - side) * (v1 - side) > 0:
+        return []
+    crossing = u0 + Fraction(side - v0, v1 - v0) * (u1 - u0)
+    return [_crossing(float(crossing) * PRECISION_UM, side, frame, grid_um)]
 
 
-def _local_circle(
-    curve: SourceCurveSpec, frame: JunctionLocalFrame
-) -> tuple[tuple[float, float], float]:
-    """A circular arc's circle in the junction's local frame: its centre in micrometres, and its radius.
-
-    The circle is solved on the authored points, the values the binding checked do not lie on
-    one line, and only its centre is moved into the frame, a rotation and a shift that keep the
-    radius.  Solved on the turned points instead, rounding can put three points on one line.
-    """
-    centre, radius = circle_through_points(curve.points_um)
-    return _local_um(centre, frame), radius
+def _arc_meetings(
+    arc: _Arc, frame: JunctionLocalFrame, side: int, grid_um: float | None
+) -> list[SideMeeting]:
+    """The meetings of one circular arc with the side line ``v = side``."""
+    (cu, cv), radius = arc.centre, arc.radius
+    offset = side * PRECISION_UM - cv
+    if abs(offset) > radius:
+        return []
+    half = math.sqrt(radius * radius - offset * offset)
+    return [
+        _crossing(u, side, frame, grid_um)
+        for u in sorted({cu - half, cu + half})
+        if arc.holds((u, side * PRECISION_UM))
+    ]
 
 
 def _local_um(point, frame: JunctionLocalFrame) -> tuple[float, float]:
@@ -408,20 +453,6 @@ def _local_units(point, frame: JunctionLocalFrame) -> tuple[int, int]:
     """A model point in the local frame, rounded to Boolean units as polygons are."""
     u, v = _local_um(point, frame)
     return (round(u / PRECISION_UM), round(v / PRECISION_UM))
-
-
-def _on_arc(point, start, through, end) -> bool:
-    """Whether a point of the arc's circle lies on the arc from ``start`` through ``through`` to ``end``."""
-    # The chord from start to end splits the circle in two; the arc is the half holding ``through``.
-    if math.dist(point, start) <= PRECISION_UM or math.dist(point, end) <= PRECISION_UM:
-        return True
-
-    def side_of_chord(p) -> float:
-        return (end[0] - start[0]) * (p[1] - start[1]) - (end[1] - start[1]) * (
-            p[0] - start[0]
-        )
-
-    return side_of_chord(point) * side_of_chord(through) > 0
 
 
 def side_steps(
