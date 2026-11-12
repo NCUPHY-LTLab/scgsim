@@ -88,6 +88,12 @@ def format_box(bounds: Sequence[float], grid_um: float | None) -> str:
     return corner if corner == other else f"{corner.removesuffix(' um')}..{other}"
 
 
+def format_extent(points: Sequence[Sequence[float]], grid_um: float | None) -> str:
+    """Where points of the plane lie: the box around them, as :func:`format_box` prints it."""
+    xs, ys = [x for x, _ in points], [y for _, y in points]
+    return format_box((min(xs), min(ys), max(xs), max(ys)), grid_um)
+
+
 def format_length(length_um: float, grid_um: float | None) -> str:
     """A length in nanometres, and in grid steps when there is a grid."""
     if grid_um is None:

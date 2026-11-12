@@ -1,16 +1,27 @@
-"""Bind authored boundaries and explicit reconstruction to original source rings."""
+"""Bind authored boundaries and explicit reconstruction to original source rings.
+
+The junction partition binds a lumped port's terminal conductors here before SGB's own
+binding (``sgb.prisms.curves``) runs, so for those conductors a refusal here is the one the
+layout author reads.  It names the record, its Entity and the ring's layer, says where in
+micrometres the ring, or the indices at fault, lie, and that the declaration must change.
+"""
 
 from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Sequence
-from dataclasses import asdict
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass
 from typing import cast
 
 from scgsim.geometry.models.common import Coordinate, PolygonRing
-from scgsim.geometry.models.grid import format_box, format_point, geometry_grid_context
+from scgsim.geometry.models.grid import (
+    format_extent,
+    format_point,
+    geometry_grid_context,
+)
 from scgsim.geometry.models.input import (
+    BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
     GeometryBuildInput,
     LayoutPolygonSpec,
@@ -19,6 +30,7 @@ from scgsim.geometry.models.input import (
     drawn_chain_on_ring,
     drawn_ring_of,
     drawn_vertices_off_ring,
+    reconstruction_chain_refusal,
     ring_lost_drawn_order,
     ring_without_drawn_order,
 )
@@ -90,7 +102,7 @@ def circle_through_points(points: Sequence[Coordinate]) -> tuple[Coordinate, flo
     ax, ay = a
     bx, by = b
     cx, cy = c
-    determinant = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
+    determinant = 2 * _twice_area(a, b, c)
     ux = (
         (ax * ax + ay * ay) * (by - cy)
         + (bx * bx + by * by) * (cy - ay)
@@ -102,6 +114,62 @@ def circle_through_points(points: Sequence[Coordinate]) -> tuple[Coordinate, flo
         + (cx * cx + cy * cy) * (bx - ax)
     ) / determinant
     return (ux, uy), math.hypot(ax - ux, ay - uy)
+
+
+def _twice_area(a: Coordinate, b: Coordinate, c: Coordinate) -> float:
+    # Twice the signed area of the triangle: zero exactly when no circle runs through
+    # the three points, so circle_through_points would divide by zero.
+    (ax, ay), (bx, by), (cx, cy) = a, b, c
+    return ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)
+
+
+@dataclass(frozen=True)
+class _BindingPlaces:
+    """What the binding's refusals call a ring, and the grid they place it on."""
+
+    grid_size_um: float | None
+    # A ring's polygon is one its Entity owns; an outline ring, keyed by the Entity's own
+    # semantic ID, has none, whatever polygon happens to carry that ID.
+    owned: Mapping[tuple[str, str], LayoutPolygonSpec]
+    # The layers of each Entity's polygons, joined, as SGB's selector refusal names them.
+    entity_layers: Mapping[str, str]
+
+    @classmethod
+    def read(cls, build_input: GeometryBuildInput) -> _BindingPlaces:
+        """The grid, the owned polygons and the Entity layers of an input."""
+        by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
+        context = geometry_grid_context(build_input)
+        return cls(
+            None if context is None else context.grid_size_um,
+            {
+                (entity.semantic_id, polygon_id): by_id[polygon_id]
+                for entity in build_input.entities
+                for polygon_id in entity.polygon_ids
+            },
+            {
+                entity.semantic_id: ", ".join(
+                    sorted({by_id[p].layer for p in entity.polygon_ids if p in by_id})
+                )
+                for entity in build_input.entities
+            },
+        )
+
+    def polygon(self, key: BoundaryKey) -> LayoutPolygonSpec | None:
+        """The polygon whose ring a key names, or None for an Entity's outline ring."""
+        return self.owned.get((key[0], key[1]))
+
+    def claimants(self, key: BoundaryKey, names: Sequence[str]) -> str:
+        """The records that claim one ring, with its Entity and layer."""
+        polygon = self.polygon(key)
+        on = "" if polygon is None else f" on layer {polygon.layer}"
+        return f"{' and '.join(names)} (Entity {key[0]!r}{on})"
+
+    def claim(self, key: BoundaryKey, ring: PolygonRing, names: Sequence[str]) -> str:
+        """The records that claim one ring, and where the ring lies."""
+        return (
+            f"{self.claimants(key, names)} select the ring at "
+            f"{format_extent(ring, self.grid_size_um)}"
+        )
 
 
 def _named(
@@ -126,11 +194,9 @@ def _drawn_ring(
     _, _, role, hole_index = key
     drawn = drawn_ring_of(polygon, 0 if role == "outer" else 1 + cast(int, hole_index))
     if drawn is None:
-        xs, ys = [x for x, _ in ring], [y for _, y in ring]
         raise ValueError(
             ring_without_drawn_order(
-                _named(record, polygon),
-                format_box((min(xs), min(ys), max(xs), max(ys)), grid_size_um),
+                _named(record, polygon), format_extent(ring, grid_size_um)
             )
         )
     return drawn
@@ -146,42 +212,25 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
     # The record's indices name the drawn ring; they are checked there, then carried onto
     # the ring this stage holds, which may start elsewhere, run the other way and hold
     # crossings the grid noded in.
-    count = len(drawn)
+    refusal = reconstruction_chain_refusal(
+        record,
+        what,
+        len(drawn),
+        lambda i: format_point(*drawn[i], grid_size_um),
+        format_extent(drawn, grid_size_um),
+    )
+    if refusal is not None:
+        raise ValueError(refusal)
     segments = tuple(record.segment_indices)
-    if not segments or any(
-        isinstance(i, bool) or not isinstance(i, int) or not 0 <= i < count
-        for i in segments
-    ):
-        raise ValueError(
-            f"{record.boundary_id} requires explicit original segment indices"
-        )
-    if len(set(segments)) != len(segments) or any(
-        b != (a + 1) % count for a, b in zip(segments, segments[1:], strict=False)
-    ):
-        raise ValueError(
-            f"{record.boundary_id} segments must form one ordered source chain"
-        )
-    if record.closed != (
-        len(segments) == count and (segments[-1] + 1) % count == segments[0]
-    ):
-        raise ValueError(
-            f"{record.boundary_id} closure differs from selected source chain"
-        )
-    vertex_indices = (*segments, (segments[-1] + 1) % count)
-    anchors = tuple(record.anchor_indices) or vertex_indices
-    if any(i not in vertex_indices for i in anchors):
-        raise ValueError(
-            f"{record.boundary_id} anchors must belong to selected source chain"
-        )
-    if not record.closed and (
-        anchors[0] != vertex_indices[0] or anchors[-1] != vertex_indices[-1]
-    ):
-        raise ValueError(
-            f"{record.boundary_id} reconstruction must retain original chain endpoints"
-        )
+    drawn_anchors = tuple(record.anchor_indices) or (
+        *segments,
+        (segments[-1] + 1) % len(drawn),
+    )
     drawn_keys = [region_key(point, grid_size_um) for point in drawn]
     ring_keys = [region_key(point, grid_size_um) for point in ring]
-    chain = drawn_chain_on_ring(segments, anchors, record.closed, drawn_keys, ring_keys)
+    chain = drawn_chain_on_ring(
+        segments, drawn_anchors, record.closed, drawn_keys, ring_keys
+    )
     if chain is None:
         raise ValueError(
             ring_lost_drawn_order(
@@ -195,11 +244,9 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
     segments, anchors = chain.segments, chain.anchors
     count = len(ring)
     points = tuple(ring[i] for i in anchors)
+    if record.kind == "circular_arc" and _twice_area(*points) == 0:
+        raise ValueError(_no_circle(what, drawn_anchors, drawn, grid_size_um))
     if record.kind == "circular_arc" and record.closed:
-        if len(points) != 3:
-            raise ValueError(
-                "closed circular reconstruction requires three explicit distinct anchors"
-            )
         center, radius = circle_through_points(points)
         start = points[0]
         angle = math.atan2(start[1] - center[1], start[0] - center[0])
@@ -252,26 +299,63 @@ def _reconstruct(  # noqa: PLR0913 -- the record, its two rings, how refusals na
     )
 
 
+def _no_circle(
+    what: str,
+    anchors: Sequence[int],
+    drawn: PolygonRing,
+    grid_size_um: float | None,
+) -> str:
+    """The refusal of a circular reconstruction whose three anchors define no circle."""
+    at = ", ".join(
+        f"drawn vertex {a} at {format_point(*drawn[a], grid_size_um)}" for a in anchors
+    )
+    how = (
+        "two of them are one vertex"
+        if len(set(anchors)) < len(anchors)
+        else "they lie on one line"
+    )
+    return (
+        f"{what}: the three arc points are collinear, so they define no circle: its "
+        f"anchors are {at}; {how}. Fix the declaration: choose three anchors of its "
+        "chain that do not lie on one line."
+    )
+
+
 def source_boundaries(
     build_input: GeometryBuildInput, rings: SourceRings
 ) -> tuple[BoundaryChains, list[dict[str, object]]]:
     """Bind authored and reconstructed curves in original source-ring order."""
-    authored: BoundaryChains = {}
-    reconstructed: defaultdict[BoundaryKey, list[ReconstructionSelection]] = (
-        defaultdict(list)
-    )
-    provenance: list[dict[str, object]] = []
+    places = _BindingPlaces.read(build_input)
     end_pieces = frozenset(
         polygon.polygon_id
         for polygon in build_input.polygons
         if is_junction_end_piece(polygon)
     )
+
+    def select(
+        record: BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec,
+    ) -> tuple[BoundaryKey, PolygonRing]:
+        return select_boundary(
+            record,
+            rings,
+            end_pieces,
+            layer=places.entity_layers.get(record.entity_id),
+            grid_size_um=places.grid_size_um,
+        )
+
+    authored: dict[BoundaryKey, BoundaryCurveChainSpec] = {}
+    provenance: list[dict[str, object]] = []
     for raw in build_input.boundary_curves:
         record = boundary_binding(raw)
-        key, ring = select_boundary(record, rings, end_pieces)
+        key, ring = select(record)
         if key in authored:
-            raise ValueError(f"multiple complete authored boundaries claim {key}")
-        authored[key] = record.curves
+            names = (authored[key].boundary_id, record.boundary_id)
+            raise ValueError(
+                f"multiple complete authored boundaries claim {key}: "
+                f"{places.claim(key, ring, names)}. Fix the declaration: give each ring "
+                "one complete boundary record."
+            )
+        authored[key] = record
         provenance.append(
             {
                 "source": asdict(record),
@@ -279,26 +363,29 @@ def source_boundaries(
                 "operation": "authored",
             }
         )
-    # A ring's polygon is one its Entity owns; an outline ring, keyed by the Entity's own
-    # semantic ID, has none, whatever polygon happens to carry that ID.
-    by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
-    owned = {
-        (entity.semantic_id, polygon_id): by_id[polygon_id]
-        for entity in build_input.entities
-        for polygon_id in entity.polygon_ids
-    }
-    context = geometry_grid_context(build_input)
-    grid_size_um = None if context is None else context.grid_size_um
+    reconstructed: defaultdict[BoundaryKey, list[ReconstructionSelection]] = (
+        defaultdict(list)
+    )
     for raw in build_input.boundary_reconstruction:
         record = boundary_binding(raw, reconstruction=True)
-        key, ring = select_boundary(record, rings, end_pieces)
-        polygon = owned.get((key[0], key[1]))
-        drawn = _drawn_ring(record, key, ring, polygon, grid_size_um)
+        key, ring = select(record)
+        polygon = places.polygon(key)
+        drawn = _drawn_ring(record, key, ring, polygon, places.grid_size_um)
         segments, curves, operation = _reconstruct(
-            record, ring, drawn, _named(record, polygon), grid_size_um
+            record, ring, drawn, _named(record, polygon), places.grid_size_um
         )
         reconstructed[key].append((segments, curves, record.boundary_id))
         provenance.append({"operation": "explicit_gds_reconstruction", **operation})
+    return _ring_chains(rings, authored, reconstructed, places), provenance
+
+
+def _ring_chains(
+    rings: SourceRings,
+    authored: Mapping[BoundaryKey, BoundaryCurveChainSpec],
+    reconstructed: Mapping[BoundaryKey, Sequence[ReconstructionSelection]],
+    places: _BindingPlaces,
+) -> BoundaryChains:
+    """Each source ring as its authored curves, or its segments with reconstructions put in."""
     result: BoundaryChains = {}
     for entity_id, records in rings.items():
         for pid, outer, holes in records:
@@ -309,24 +396,43 @@ def source_boundaries(
                 key = (entity_id, pid, role, index)
                 if key in authored:
                     if key in reconstructed:
-                        raise ValueError(
-                            f"authored and reconstructed boundaries both claim {key}"
+                        names = (
+                            authored[key].boundary_id,
+                            *(bid for _, _, bid in reconstructed[key]),
                         )
-                    result[key] = authored[key]
+                        raise ValueError(
+                            f"authored and reconstructed boundaries both claim {key}: "
+                            f"{places.claim(key, ring, names)}. Fix the declaration: "
+                            "describe the ring by one authored boundary or by "
+                            "reconstruction records, not both."
+                        )
+                    result[key] = authored[key].curves
                     continue
-                result[key] = _replace_segments(key, ring, reconstructed.get(key, ()))
-    return result, provenance
+                result[key] = _replace_segments(
+                    key, ring, reconstructed.get(key, ()), places
+                )
+    return result
 
 
 def _replace_segments(
-    key: BoundaryKey, ring: PolygonRing, operations: Sequence[ReconstructionSelection]
+    key: BoundaryKey,
+    ring: PolygonRing,
+    operations: Sequence[ReconstructionSelection],
+    places: _BindingPlaces,
 ) -> tuple[SourceCurveSpec, ...]:
     """Replace selected source chains while retaining unselected straight segments."""
     claimed = {}
     starts = {}
     for segments, curves, bid in operations:
-        if any(i in claimed for i in segments):
-            raise ValueError(f"overlapping reconstruction segment claims on {key}")
+        shared = [i for i in segments if i in claimed]
+        if shared:
+            names = tuple(dict.fromkeys((*(claimed[i] for i in shared), bid)))
+            raise ValueError(
+                f"overlapping reconstruction segment claims on {key}: "
+                f"{places.claimants(key, names)} both replace the ring "
+                f"{_runs(shared, ring, places.grid_size_um)}. Fix the declaration: give "
+                "each drawn segment of the ring to one reconstruction record."
+            )
         for i in segments:
             claimed[i] = bid
         starts[segments[0]] = curves
@@ -348,3 +454,22 @@ def _replace_segments(
                 )
             )
     return tuple(curves)
+
+
+def _runs(indices: Sequence[int], ring: PolygonRing, grid_size_um: float | None) -> str:
+    """Where the ring's segments at these indices run, those that follow each other as one.
+
+    The ring may run the other way from the drawing, so a run is named by its two ends.
+    """
+    count = len(ring)
+    runs: list[list[int]] = []
+    for i in indices:
+        if runs and i == (runs[-1][-1] + 1) % count:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+    return ", ".join(
+        f"between {format_point(*ring[run[0]], grid_size_um)} and "
+        f"{format_point(*ring[(run[-1] + 1) % count], grid_size_um)}"
+        for run in runs
+    )

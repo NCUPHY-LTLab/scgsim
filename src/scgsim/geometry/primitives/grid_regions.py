@@ -615,8 +615,8 @@ def _matching_changes(
         if i not in image
     )
     findings.extend(
-        f"a {kind} that is not drawn appears at {format_place(after[j], grid_um)} "
-        f"({_size(after[j], grid_um)})"
+        f"a {kind} with no drawn ring of its own appears at "
+        f"{format_place(after[j], grid_um)} ({_size(after[j], grid_um)})"
         for j in range(len(after))
         if j not in origin
     )
