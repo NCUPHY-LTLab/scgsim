@@ -120,7 +120,10 @@ there is no live Gmsh model in the source snapshot.
 Index `i` is the edge from drawn vertex `i` to drawn vertex `(i + 1) % N` of
 the selected ring: the polygon's vertex sequence as the GDS stores it, from the
 vertex its walk starts at and in the direction it runs, carried through any
-instance transform. A mirroring transform reverses the ring's orientation and
+instance transform. Three anchors that lie on one line as the GDS draws them
+define no circle: the plan refuses the record when it is prepared, a
+component's record and a plan-level record alike, and turning the occurrence
+does not change this. A mirroring transform reverses the ring's orientation and
 keeps the sequence. The indices keep this meaning when the source stage later
 rounds the ring, starts it elsewhere or nodes into it the crossings of a port
 sheet. A gdsfactory component stores a polygon as KLayout normalizes it, so read
