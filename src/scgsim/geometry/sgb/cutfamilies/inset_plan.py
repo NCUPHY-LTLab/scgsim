@@ -11,7 +11,7 @@ to read the faces from the sidecar.
   ``MA`` and an ``MS`` request with one family, and two requests that differ on one face are refused.  A concrete
   request keeps its own id; a face asked for only by type is a family with the id ``<id of the first request in id order>::<entity>::<side>``
   (``<first>|<second>::z=<z>`` for an interface), so ids, lineage and band group names (up to the collision qualifier) depend on the requests and
-  the faces only, never on ``workers`` or ``tiles``.  Two concrete requests on one face are not merged: they
+  the faces only.  Two concrete requests on one face are not merged: they
   are refused here, by the face they resolve to, because both families would put their bands into the same
   physical groups.  Refusing them before any partition also covers a face a port later covers entirely, where
   no band group is left to collide.

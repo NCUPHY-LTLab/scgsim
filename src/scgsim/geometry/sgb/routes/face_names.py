@@ -8,7 +8,7 @@ group of those families* again with the side of the dielectric they lie on (``..
 requests on one face cannot both be banded.
 
 Both passes read the sorted faces of the topology and nothing else, so the final names do not depend on
-``workers``, ``tiles`` or hash seeds, and every consumer (the routed model, the sidecar, the inset records)
+hash seeds, and every consumer (the routed model, the sidecar, the inset records)
 reads the final names from the one :func:`name_faces` result.
 """
 

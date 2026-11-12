@@ -3,7 +3,7 @@
 Owns turning a support selection into a :class:`SupportRegion`.  The face is found in a *physical
 pre-pass*: the level arrangement of the catalogue's prisms alone -- no ports, no cut families -- labelled
 as usual.  The cells whose label matches the selection are the support face; the edges that separate them
-from other cells are its boundary rings.  Because the pre-pass contains only physical prisms, ports, contact caps, other bands and tile seams cannot
+from other cells are its boundary rings.  Because the pre-pass contains only physical prisms, ports, contact caps and other bands cannot
 move a band, by construction (a port lying on the substrate surface counts as the exposed surface it covers).
 
 Distance origins.  Bands are measured only from *gap edges*: the parts of a conductor footprint's boundary

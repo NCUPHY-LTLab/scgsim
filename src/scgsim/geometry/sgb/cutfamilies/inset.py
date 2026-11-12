@@ -42,7 +42,7 @@ continued past the die edge (``SupportRegion.continued_origins``), its offsets r
 edge clips them, and no half circle is drawn round that end.  Otherwise the part of the half circle inside the
 die would be a short arc, the margin times the angle's deviation from a right angle, at every oblique cut.  A
 run that ends on the die edge in an arc never reaches this module: the support is refused when it is resolved.
-Contact caps, other bands and tile seams are never origins -- they are not inputs of this module.  Ports are
+Contact caps and other bands are never origins -- they are not inputs of this module.  Ports are
 never origins either: a port footprint on the support's level is no origin
 and moves no band, but it keeps the band seams out of itself (below).  Topology changes (a neck that splits, a
 band that vanishes) are ordinary outcomes: the bands that survive are the ones the regions hold.

@@ -13,7 +13,7 @@ Sub-packages follow the stages of the design brief, lowest layer first:
                    prisms, labels, cut families)
 * ``prisms``       S2: effective input to a prism catalogue, levels, slabs and
                    active sets
-* ``noding``       S4: iterated snap rounding on the integer grid, tile-parallel
+* ``noding``       S4: iterated snap rounding on the integer grid
 * ``arrangement``  S4: half-edge structure, faces with holes, arc realisation
 * ``labelling``    S5: cell labels, dissolution, membership, slab/level links
 * ``derivation``   the slab and level arrangements as one labelled, content-addressed
@@ -37,8 +37,8 @@ Sub-packages follow the stages of the design brief, lowest layer first:
 * ``exchange``     the AEDT STEP export of the emitted solids (OCP)
 * ``build``        the public entry :func:`build_sgb_geometry`, exported here
 
-with ``parallel`` (per-tile runtime), ``identity`` (content-addressed ids),
-``plane`` (exact integer geometry) and ``errors`` beside them.
+with ``identity`` (content-addressed ids), ``plane`` (exact integer geometry),
+``stopwatch`` (wall-time readings) and ``errors`` beside them.
 
 Importing this package needs neither Gmsh nor OCP: ``verification.loaded`` imports Gmsh and
 ``verification.occt`` / ``exchange.step`` import OCP only when they are themselves imported or called.

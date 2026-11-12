@@ -17,7 +17,7 @@ from collections.abc import Mapping, Sequence
 
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area, sampled_crossings
 from scgsim.geometry.sgb.derivation.layer import Layer
-from scgsim.geometry.sgb.parallel import Runtime
+from scgsim.geometry.sgb.noding.snap_rounding import crossing_pixels_kernel, hits_kernel
 from scgsim.geometry.sgb.prisms.levels import LevelStructure
 from scgsim.geometry.sgb.records.grid import Grid
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
@@ -65,20 +65,17 @@ def check_grid_and_lengths(
     )
 
 
-def check_planar(
-    report: ValidationReport, layers: Sequence[Layer], rt: Runtime
-) -> None:
-    """No crossing edge and no vertex inside an edge, using the (tile-parallel) noding kernels."""
-    engine = rt.engine()
+def check_planar(report: ValidationReport, layers: Sequence[Layer]) -> None:
+    """No crossing edge and no vertex inside an edge, using the noding kernels."""
     bad = []
     for layer in layers:
         keys = [(e.a, e.b) for e in layer.arr.edges]
         if len(keys) < 2:
             continue
         flags = [True] * len(keys)
-        crossings = engine.crossing_pixels(keys, flags)
+        crossings = crossing_pixels_kernel(keys, flags)
         vertices = {p for key in keys for p in key}
-        hits = engine.hits(keys, flags, vertices, set())
+        hits = hits_kernel(keys, flags, vertices, set())
         pass_through = sum(
             1
             for (a, b), found in zip(keys, hits, strict=True)

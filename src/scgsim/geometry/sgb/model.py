@@ -6,8 +6,7 @@ validation report.  Validation always runs and a failed invariant raises
 :class:`ValidationError`: no model that failed an invariant is ever returned.
 
 Emission (S10), the sidecar and the cut-family generators build on this result in later
-sub-stages.  ``tiles`` and ``workers`` configure the per-tile runtime; the model is
-identical for every value (property-tested).
+sub-stages.
 """
 
 from __future__ import annotations
@@ -26,10 +25,8 @@ from scgsim.geometry.sgb.cutfamilies.inset_plan import InsetPlan
 from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, RefinementRequest
 from scgsim.geometry.sgb.derivation.labelled import (
     LabelledArrangements,
-    derive_with_runtime,
-    model_bbox,
+    derive_arrangements,
 )
-from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.routes.groups import RoutedModel, apply_route
@@ -50,13 +47,6 @@ class ConformalModel:
     topology: Topology
     routed: RoutedModel
     report: ValidationReport
-    timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds
-    stage_kind: dict[str, str] = field(
-        default_factory=dict
-    )  # stage -> "serial" | "parallel"
-    amdahl: dict[str, float] = field(
-        default_factory=dict
-    )  # serial/parallel wall, worker work, Amdahl limit
     counts: dict[str, int] = field(default_factory=dict)
     insets: tuple[
         InsetRequest, ...
@@ -106,36 +96,27 @@ class ConformalModel:
         )
 
 
-def build_conformal_model(  # noqa: PLR0913 - the effective input, the route and its options
+def build_conformal_model(
     build_input: GeometryBuildInput,
     representation: RepresentationContext,
     route: str,
     *,
     insets: tuple[InsetRequest, ...] = (),
     refinements: tuple[RefinementRequest, ...] = (),
-    tiles: int = 1,
-    workers: int = 1,
 ) -> ConformalModel:
     """The validated conformal model of an effective input under a route, with the requested cut families."""
     catalogue = build_prism_catalogue(build_input, representation)
     return build_model_from_catalogue(
-        catalogue,
-        route,
-        insets=insets,
-        refinements=refinements,
-        tiles=tiles,
-        workers=workers,
+        catalogue, route, insets=insets, refinements=refinements
     )
 
 
-def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and its options
+def build_model_from_catalogue(
     catalogue: PrismCatalogue,
     route: str,
     *,
     insets: tuple[InsetRequest, ...] = (),
     refinements: tuple[RefinementRequest, ...] = (),
-    tiles: int = 1,
-    workers: int = 1,
     keep_raw: bool = False,
 ) -> ConformalModel:
     """The validated conformal model of a prism catalogue under a route, with the requested cut families.
@@ -157,39 +138,22 @@ def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and 
     was_enabled = gc.isenabled()
     gc.disable()
     try:
-        with Runtime(tiles, workers, model_bbox(catalogue)) as rt:
-            rt.keep_raw = keep_raw
-            model = _build(catalogue, policy, rt)
-            model.insets, model.refinements = insets, refinements
-            model.inset_plan = cut_families.insets
-            return model
+        model = _build(catalogue, policy, keep_raw=keep_raw)
+        model.insets, model.refinements = insets, refinements
+        model.inset_plan = cut_families.insets
+        return model
     finally:
         if was_enabled:
             gc.enable()
 
 
 def _build(
-    catalogue: PrismCatalogue, policy: RoutePolicy, rt: Runtime
+    catalogue: PrismCatalogue, policy: RoutePolicy, *, keep_raw: bool
 ) -> ConformalModel:
-    labelled = derive_with_runtime(catalogue, rt)
-    topology = assemble_topology(labelled, rt)
-    with rt.serial("routes"):
-        routed = apply_route(topology, policy)
-    report = validate_model(labelled, topology, routed, rt)
+    labelled = derive_arrangements(catalogue, keep_raw=keep_raw)
+    topology = assemble_topology(labelled)
+    routed = apply_route(topology, policy)
+    report = validate_model(labelled, topology, routed)
     report.raise_if_failed()
-    timings = {**rt.watch.serial, **rt.watch.parallel}
-    kinds = {
-        **{name: "serial" for name in rt.watch.serial},
-        **{name: "parallel" for name in rt.watch.parallel},
-    }
     counts = {**labelled.counts, **topology.counts(), "groups": len(routed.groups)}
-    return ConformalModel(
-        labelled,
-        topology,
-        routed,
-        report,
-        dict(timings),
-        kinds,
-        rt.watch.totals(),
-        counts,
-    )
+    return ConformalModel(labelled, topology, routed, report, counts)

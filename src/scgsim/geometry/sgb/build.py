@@ -9,8 +9,6 @@ sliver report and the validation report.
 The mesher takes it from there: open the XAO in Gmsh, re-apply the sidecar's embeddings, mesh.  It trusts
 the XAO and sidecar of one build and does not check them again; the tests do that with ``verify_loaded``
 (``scgsim.geometry.sgb.verification.loaded``), which also serves to diagnose a file suspected to be wrong.
-
-Every file is byte-identical for any ``workers`` and ``tiles`` value.
 """
 
 from __future__ import annotations
@@ -55,8 +53,6 @@ def build_sgb_geometry(  # noqa: PLR0913 - the effective input, the route and th
     insets: tuple[InsetRequest, ...] = (),
     refinements: tuple[RefinementRequest, ...] = (),
     output_dir: Path,
-    workers: int = 1,
-    tiles: int = 1,
 ) -> SgbArtifacts:
     """Build the conformal solid model of an effective input under ``route`` and write its files to ``output_dir``.
 
@@ -72,18 +68,15 @@ def build_sgb_geometry(  # noqa: PLR0913 - the effective input, the route and th
         route,
         insets=insets,
         refinements=refinements,
-        tiles=tiles,
-        workers=workers,
     )
     timings["derive_and_validate"] = elapsed_seconds(started)
-    return emit_model(model, output_dir, workers=workers, timings=timings)
+    return emit_model(model, output_dir, timings=timings)
 
 
 def emit_model(
     model: ConformalModel,
     output_dir: Path,
     *,
-    workers: int = 1,
     timings: dict[str, float] | None = None,
 ) -> SgbArtifacts:
     """Write the files of an already built and validated model (the second half of :func:`build_sgb_geometry`).
@@ -104,9 +97,9 @@ def emit_model(
     started = time.perf_counter()
     plan = plan_brep(model.topology, model.routed)
     timings["plan"] = elapsed_seconds(started)
-    timings["write_brep"] = write_brep_file(plan, paths["brep"], workers=workers)
+    timings["write_brep"] = write_brep_file(plan, paths["brep"])
     timings["write_xao"] = write_xao_file(
-        plan, paths["xao"], name=stem, workers=workers, brep=paths["brep"]
+        plan, paths["xao"], name=stem, brep=paths["brep"]
     )
     started = time.perf_counter()
     slivers = sliver_report(model)

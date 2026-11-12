@@ -15,33 +15,25 @@ Everything is recomputed from the faces, independently of how the topology was b
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any
 
 from scgsim.geometry.sgb.assembly.records import TopoEdge, Topology
 from scgsim.geometry.sgb.assembly.shells import shell_checks
-from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.routes.groups import RoutedModel
 from scgsim.geometry.sgb.validation.report import ValidationReport
 
 CYLINDER_TOLERANCE = 1e-6  # grid units: the same circle within floating-point noise
 
 
-def check_shells(report: ValidationReport, topology: Topology, rt: Runtime) -> None:
-    """Closure, orientation and Euler characteristic of every shell (a parallel stage per shell)."""
+def check_shells(report: ValidationReport, topology: Topology) -> None:
+    """Closure, orientation and Euler characteristic of every shell."""
     shells = [
         (vid, si, shell)
         for vid, volume in sorted(topology.volumes.items())
         for si, shell in enumerate(volume.shells)
     ]
-    owners = [i % (rt.tiles * rt.tiles) for i in range(len(shells))]
-    results = rt.run(
-        "validation_shells",
-        _shell_check_job,
-        (topology.faces, topology.edges, [s[2] for s in shells]),
-        owners,
-    )
     problems, euler_bad = [], []
-    for (vid, si, shell), (issues, chi) in zip(shells, results, strict=True):
+    for vid, si, shell in shells:
+        issues, chi = shell_checks(topology.faces, topology.edges, list(shell.faces))
         problems.extend(f"{vid}/{si}: {message}" for message in issues)
         if chi % 2 != 0 or (shell.role == "outer" and chi > 2):
             euler_bad.append(f"{vid}/{si}: chi={chi}")
@@ -66,11 +58,6 @@ def check_shells(report: ValidationReport, topology: Topology, rt: Runtime) -> N
         not no_outer,
         f"{len(no_outer)} volumes without positive-volume shell",
     )
-
-
-def _shell_check_job(shared: Any, items: list[int]) -> list[tuple[list[str], int]]:
-    faces, edges, shells = shared
-    return [shell_checks(faces, edges, list(shells[i].faces)) for i in items]
 
 
 def check_face_sides(report: ValidationReport, topology: Topology) -> None:

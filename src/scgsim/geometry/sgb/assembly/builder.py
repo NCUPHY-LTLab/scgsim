@@ -46,12 +46,11 @@ from scgsim.geometry.sgb.assembly.records import (
     TopoVertex,
     TopoVolume,
 )
-from scgsim.geometry.sgb.assembly.shells import is_planar, shell_job
+from scgsim.geometry.sgb.assembly.shells import is_planar, volume_shells
 from scgsim.geometry.sgb.assembly.walls import WallRun, find_wall_runs
 from scgsim.geometry.sgb.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.derivation.layer import Layer
 from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records.carriers import ArcCarrier
 from scgsim.geometry.sgb.records.labels import Domain, LevelLabel
@@ -85,17 +84,16 @@ class Link:
     end: Point
 
 
-def assemble_topology(labelled: LabelledArrangements, rt: Runtime) -> Topology:
+def assemble_topology(labelled: LabelledArrangements) -> Topology:
     """Build the full shared topology from the labelled arrangements."""
-    return _Assembly(labelled, rt).run()
+    return _Assembly(labelled).run()
 
 
 class _Assembly:
     """The state that travels through the assembly steps."""
 
-    def __init__(self, labelled: LabelledArrangements, rt: Runtime) -> None:
+    def __init__(self, labelled: LabelledArrangements) -> None:
         self.labelled = labelled
-        self.rt = rt
         self.levels = labelled.levels
         self.slabs = labelled.slabs
         self.A = labelled.level_layers
@@ -121,18 +119,14 @@ class _Assembly:
 
     def run(self) -> Topology:
         """Run the assembly steps in order."""
-        rt = self.rt
-        with rt.serial("assembly_registry"):
-            self._register_level_geometry()
-        with rt.serial("volume_connectivity"):
-            volumes = self._volumes()
-        runs = find_wall_runs(self.slabs, self.A, rt)
-        with rt.serial("assembly_faces"):
-            self._register_splits(plan_curved_splits(self.A, runs))
-            self._horizontal_faces()
-            self._wall_faces(runs)
-            self._refinement_curves()
-            self._prune_unused()
+        self._register_level_geometry()
+        volumes = self._volumes()
+        runs = find_wall_runs(self.slabs, self.A)
+        self._register_splits(plan_curved_splits(self.A, runs))
+        self._horizontal_faces()
+        self._wall_faces(runs)
+        self._refinement_curves()
+        self._prune_unused()
         self._shells(volumes)
         return Topology(
             self.grid.size_um,
@@ -593,34 +587,19 @@ class _Assembly:
     # -- shells ------------------------------------------------------------------------
 
     def _shells(self, volumes: dict[str, TopoVolume]) -> None:
-        rt = self.rt
-        with rt.serial("shell_prep"):
-            incident: dict[str, list[Entry]] = defaultdict(list)
-            for fid, face in sorted(self.faces.items()):
-                if face.neg_volume is not None and face.neg_volume == face.pos_volume:
-                    volumes[face.neg_volume].embedded_faces.append(fid)
-                    continue
-                if face.neg_volume is not None:
-                    incident[face.neg_volume].append((fid, 1))
-                if face.pos_volume is not None:
-                    incident[face.pos_volume].append((fid, -1))
-            vids = sorted(incident)
-            owners = [self._volume_owner(incident[v]) for v in vids]
-        shared = (
-            self.faces,
-            self.edges,
-            self.vertices,
-            self.zden,
-            [incident[v] for v in vids],
-        )
-        out = rt.run("shells", shell_job, shared, owners)
-        for vid, shells in zip(vids, out, strict=True):
-            volumes[vid].shells = shells
-
-    def _volume_owner(self, entries: list[Entry]) -> int:
-        face = self.faces[entries[0][0]]
-        vertex = self.vertices[self.edges[face.loops[0][0][0]].v0]
-        return self.rt.owner((int(vertex.x), int(vertex.y)))
+        incident: dict[str, list[Entry]] = defaultdict(list)
+        for fid, face in sorted(self.faces.items()):
+            if face.neg_volume is not None and face.neg_volume == face.pos_volume:
+                volumes[face.neg_volume].embedded_faces.append(fid)
+                continue
+            if face.neg_volume is not None:
+                incident[face.neg_volume].append((fid, 1))
+            if face.pos_volume is not None:
+                incident[face.pos_volume].append((fid, -1))
+        for vid in sorted(incident):
+            volumes[vid].shells = volume_shells(
+                self.faces, self.edges, self.vertices, self.zden, incident[vid]
+            )
 
 
 @dataclass
