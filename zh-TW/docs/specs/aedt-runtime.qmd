@@ -487,9 +487,9 @@ sim.set_expression_cache_convergence(
 
 ### 公開 EPR 介面 {#public-epr-candidate-surface}
 
-`prepare_planar_geometry_input()` 要求明確 `modeling`，並驗證／分離共用來源多邊形、孔洞、Entity、求解區域、接面與表面分析要求。Route A/B 選擇屬於上游幾何編譯器，不是 AEDT 準備引數。`prepare_hfss_eigenmode_from_geometry()` 要求 `aedt_version`、`modeling`，將已準備來源要求綁至 HFSS Eigenmode 規格，輸出單一可攜式交接。仍可直接編寫 GDS，但三維規格現在也必須明確選擇建模模式。
+`prepare_planar_geometry_input()` 要求明確 `modeling`，並驗證／分離共用來源多邊形、孔洞、Entity、求解區域、接面與表面分析要求。Route A/B 選擇屬於上游 Palace 幾何，不是 AEDT 準備引數。`prepare_hfss_eigenmode_from_geometry()` 要求 `aedt_version`、`modeling`，將已準備來源要求綁至 HFSS Eigenmode 規格，輸出單一可攜式交接。仍可直接編寫 GDS，但三維規格現在也必須明確選擇建模模式。
 
-AEDT EPR 準備順序為來源幾何與明確 `modeling`，將宣告接面分成局部 PEC 端點及中央 RLC 矩形，再由幾何編譯器規劃表面與貢獻目錄。Route A/B 選擇屬於上游來源。Route A 轉接器產生的片足跡從最終導體幾何更新，呼叫者編寫的宣告仍保留。目錄只攜帶物理規劃 ledger 證據，沒有物理 ledger 項目的一般宣告不新增數值貢獻。Palace 保留既有接面模型；AEDT 局部分區不是跨後端幾何轉換。
+AEDT EPR 準備順序為來源幾何與明確 `modeling`，將宣告接面分成局部 PEC 端點及中央 RLC 矩形，再由幾何表面規劃規劃表面與貢獻目錄。Route A/B 選擇屬於上游來源。Route A 轉接器產生的片足跡從最終導體幾何更新，呼叫者編寫的宣告仍保留。目錄只攜帶物理規劃 ledger 證據，沒有物理 ledger 項目的一般宣告不新增數值貢獻。Palace 保留既有接面模型；AEDT 局部分區不是跨後端幾何轉換。
 
 #### 資料流與後端責任 {#data-flow-and-backend-responsibility}
 
@@ -500,7 +500,7 @@ flowchart TB
   INPUT["GeometryBuildInput<br/>正規化多邊形、Entity 與區域"]
   PALACE["Palace 準備<br/>既有埠與接面模型"]
   PARTITION["AEDT 接面分割<br/>局部 PEC 端部＋中央 RLC 矩形"]
-  PLAN["幾何編譯器 SurfacePlanRecord＋貢獻帳本<br/>表面面片與來源資訊"]
+  PLAN["幾何規劃 SurfacePlanRecord＋貢獻帳本<br/>表面面片與來源資訊"]
   PREPARED["PreparedPlanarGeometry<br/>分離來源、目錄、綁定與雜湊"]
   NATIVE["PreparedEprHfss<br/>原生模型、非模型片、運算式／快取"]
   RAW["原生原始積分＋評估資訊"]
@@ -520,7 +520,7 @@ flowchart TB
 |---|---|
 | `GeometryBuildInput` | 共用正規化來源多邊形、語意 Entity、求解區域、材料與來源資訊，作為後端規劃器輸入。 |
 | 最終 AEDT 接面幾何 | `prepare_planar_geometry_input()` 在表面規劃前分割宣告接面片；衍生 PEC 端點與中央 RLC 矩形保留來源所有者與材料關係，原始來源輸入不變。 |
-| `SurfacePlanRecord` 與 `surface_contribution_ledger` | 幾何編譯器規劃物理表面區塊，記錄所有者、介面、側別、有效區域、來源及彙總證據。ledger 是數值表面目錄項目的依據，只有語意宣告不會新增項目。 |
+| `SurfacePlanRecord` 與 `surface_contribution_ledger` | 幾何表面規劃建立物理表面區塊，記錄所有者、介面、側別、有效區域、來源及彙總證據。ledger 是數值表面目錄項目的依據，只有語意宣告不會新增項目。 |
 | `PreparedPlanarGeometry` | 獨立的原生前 AEDT 要求，含來源／接面事實、目錄、所選貢獻、表面綁定及模型／來源摘要；不宣稱原生幾何或求解已驗證。 |
 | `PreparedEprHfss` | 程序內負責者，持有啟用 AEDT 應用程式控制代碼、已準備幾何與設定、非模型片、運算式／快取及計時／讀回狀態；不是可攜式結果，也不是完成求解證據。 |
 | `EprResult` | 獨立的逐模式或逐模式／pass 列。`raw_integrals`、`raw_integral_evidence` 保留觀察量與評估脈絡；既有合併步驟以模型整體正規化計算區域、表面及接面量。 |
@@ -604,7 +604,7 @@ flowchart TB
 
 `contribution_id` 選取目錄群組內每個既有面片。`SurfaceEprSpec.source_polygon_id` 是群組來源錨點，必須由選定群組目錄聯集的至少一個成員保留，包含既有已規劃 SA 表面 ID 備用來源。它不篩選、分割或省略其他群組成員。每個解析綁定保留自己的 `contribution` 資訊與 `geometry_ref`，作為真正逐面片來源；每個面片仍驗證分類、側別、相鄰區域、材料與遮罩。
 
-目錄來自幾何編譯器的實體表面貢獻帳本。沒有實體帳本資訊的一般宣告仍是語意中繼資料，不增加數值 EPR 貢獻。Route B 有限殼層頂／底面片的遮罩與分析片平面使用同一解析來源 Z：頂面為 `z_max_um`（或 `z_min_um + thickness_um`），底面為 `z_min_um`。如此非模型場片位於實體表面，不是殼層下平面。
+目錄來自幾何表面規劃的實體表面貢獻帳本。沒有實體帳本資訊的一般宣告仍是語意中繼資料，不增加數值 EPR 貢獻。Route B 有限殼層頂／底面片的遮罩與分析片平面使用同一解析來源 Z：頂面為 `z_max_um`（或 `z_min_um + thickness_um`），底面為 `z_min_um`。如此非模型場片位於實體表面，不是殼層下平面。
 
 ```python
 from collections.abc import Mapping

@@ -13,7 +13,6 @@ from scgsim.geometry.planning.surface_planning.contracts import (
 )
 from scgsim.geometry.planning.surface_planning.contributions import (
     plan_representation_contribution_geometry,
-    plan_surface_contribution_patches,
 )
 from scgsim.geometry.planning.surface_planning.partitions import plan_surface_partitions
 from scgsim.geometry.planning.surface_planning.planner import plan_route_surfaces
@@ -24,7 +23,6 @@ from scgsim.geometry.planning.surface_planning.sidewalls import (
 
 __all__ = [
     "plan_route_surfaces",
-    "plan_surface_contribution_patches",
     "plan_representation_contribution_geometry",
     "plan_surface_partitions",
     "with_surface_contract_metadata",

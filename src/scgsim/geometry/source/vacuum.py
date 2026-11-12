@@ -1,4 +1,4 @@
-"""Prepare a detached declared vacuum stack. Compiler domain construction and simulation state remain downstream."""
+"""Prepare a detached declared vacuum stack. Domain planning and simulation state remain downstream."""
 
 from __future__ import annotations
 

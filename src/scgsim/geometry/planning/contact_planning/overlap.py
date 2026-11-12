@@ -134,26 +134,3 @@ def _has_explicit_volumetric_normalization(
             for pad, face in ((lower, upper), (upper, lower))
         )
     )
-
-
-def is_fully_normalized_face_metal(
-    build_input: GeometryBuildInput, entity: SemanticEntitySpec
-) -> bool:
-    """Test whether attached contact pads cover the complete face-metal region."""
-    if entity.part_role != "face_metal":
-        return False
-    import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
-
-    face = entity_occupied_region(gdstk, entity)
-    pads = tuple(
-        (
-            entity_occupied_region(gdstk, pad)
-            for pad in build_input.entities
-            if pad.part_role == "contact_pad"
-            and resolve_contact_pad_attachment(pad, build_input.entities) is entity
-        )
-    )
-    covered = boolean_polygon_region(
-        gdstk, face, tuple((polygon for region in pads for polygon in region)), "not"
-    )
-    return not covered

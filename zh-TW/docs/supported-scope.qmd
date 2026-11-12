@@ -40,16 +40,13 @@ scgsim-id: "docs/supported-scope"
 
 以請求規格搭配 `prepare_handoff` 進入的 AEDT 計算（GDS 對應、Q3D 實體或 Q2D 截面），同樣屬於公開 API，也在支援範圍內。它們的規則列於 [AEDT 執行期系列](specs/aedt-runtime.qmd)，不在本頁。各項計算接受什麼輸入，列於[支援的計算](backend-support.qmd)。
 
-SCGSim 也為這個入口以下的 API 提供文件，您可以用自行建立的輸入呼叫它們：
+SCGSim 也為這個入口以下的一個 API 提供文件，您可以用自行建立的輸入呼叫它：`scgsim.geometry.sgb.build_sgb_geometry`（幾何建構器），搭配您自行建構的 `GeometryBuildInput`，用來取代 `GeometryPlan` 快照所帶的那一份。
 
-- `scgsim.geometry.sgb.build_sgb_geometry`（幾何建構器），搭配您自行建構的 `GeometryBuildInput`，用來取代 `GeometryPlan` 快照所帶的那一份。
-- `scgsim.geometry.compiler`，另一個建構器；Palace 模擬不經由它建構。
+這個套件內部接受更低階紀錄的函式，例如接受 prism catalogue（SGB 自己的清單，每一筆是一塊沿一段高度範圍擠出的平面輪廓）的函式，屬於內部實作，不是有文件的 API。
 
-這些套件內部接受更低階紀錄的函式，例如接受 prism catalogue（SGB 自己的清單，每一筆是一塊沿一段高度範圍擠出的平面輪廓）的函式，屬於內部實作，不是有文件的 API。
+用自行建立的輸入呼叫這個 API，屬於內部或進階用法，**它的先決條件就是支援的入口所保證的事項**：這份輸入必須是 `GeometryPlan` 與模擬類別本來就能產生的輸入。它從那兩者的檢查之後才開始，不會重做那些檢查。直接呼叫 `build_sgb_geometry` 時，既不會執行 `GeometryPlan` 的規劃檢查，也不會執行 `mesh()` 與 `simulation_drc()` 的網格階段檢查。
 
-用自行建立的輸入呼叫這兩個 API，屬於內部或進階用法，**它的先決條件就是支援的入口所保證的事項**：這份輸入必須是 `GeometryPlan` 與模擬類別本來就能產生的輸入。這些 API 從那兩者的檢查之後才開始，不會重做那些檢查。例如直接呼叫 `build_sgb_geometry` 時，既不會執行 `GeometryPlan` 的規劃檢查，也不會執行 `mesh()` 與 `simulation_drc()` 的網格階段檢查。
-
-只有這些 API 才建得出來的輸入，不屬於支援的用法。對這樣的輸入，SCGSim 只承諾下列事項：
+只有這個 API 才建得出來的輸入，不屬於支援的用法。對這樣的輸入，SCGSim 只承諾下列事項：
 
 - 若它在沒有任何錯誤的情況下給出看似合理、實際上卻錯誤的結果，而且在輸入進入之處加一項低成本的檢查就能明確拒絕它，SCGSim 會加上這項檢查。
 - 其他情況下，SCGSim 會在該 API 的文件中把先決條件寫明一次，或者只記錄這個案例，行為維持不變。

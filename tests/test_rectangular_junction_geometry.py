@@ -18,7 +18,6 @@ from scgsim.geometry import (
     interpret_physical_geometry,
     with_rectangular_junctions,
 )
-from scgsim.geometry.compiler import build_route_construction_plan
 from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
 
 SHEET = ((0, 0), (10, 0), (10, 2), (0, 2))
@@ -346,30 +345,13 @@ def physical_fixture():
     return (with_rectangular_junctions(source, (spec,)), stack, profile)
 
 
-def test_physical_attachment_then_full_construction_uses_same_derived_rectangle():
-    """Check physical attachment then full construction uses same derived rectangle."""
+def test_physical_attachment_places_the_derived_rectangle_on_the_support_plane():
+    """The derived rectangle sits on the film's attachment face at its source interval."""
     source, stack, profile = physical_fixture()
-    effective, _, physical = interpret_physical_geometry(source, stack, profile)
+    effective, _, _ = interpret_physical_geometry(source, stack, profile)
     record = effective.metadata["junction_partitions"]["junction"]
     assert record["support_plane"]["source_z_um"] == record["z_um"] == 0
     assert record["support_plane"]["source_hosts"][0]["source_interval_um"] == [0, 0.25]
-    construction = build_route_construction_plan(
-        effective, route="A", representation_context=physical.context
-    )
-    port = next(
-        (item for item in construction.surfaces if item.surface_role == "lumped_port")
-    )
-    central = next(
-        (
-            item
-            for item in effective.polygons
-            if item.polygon_id == record["central_polygon_id"]
-        )
-    )
-    assert port.geometry_ref["outer_loop"] == central.exterior
-    assert port.geometry_ref["plane"]["value_um"] == 0
-    assert len(port.metadata["boundary_volume_ids"]) == 2
-    assert construction.surfaces
 
 
 def test_aedt_consumes_common_geometry_without_partitioning_twice():

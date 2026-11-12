@@ -19,11 +19,10 @@ SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域
 
 | 目標區域 | 負責範圍 | 不得接管的範圍 |
 |---|---|---|
-| `scgsim.geometry` | 面向來源的元件／出現位置與堆疊調適、GeometryPlan／snapshot、正規化輸入、真空／曲線準備及脫離原物件的摘要 | 編譯器階段協調、Palace／AEDT 物理或執行狀態 |
-| `scgsim.geometry.compiler` | 進階建構器、衍生記錄、管線驗證器與建構派送 | 元件來源所有權、求解器狀態或 Palace 的幾何 |
+| `scgsim.geometry` | 面向來源的元件／出現位置與堆疊調適、GeometryPlan／snapshot、正規化輸入、真空／曲線準備及脫離原物件的摘要 | 模型建構、Palace／AEDT 物理或執行狀態 |
 | `scgsim.geometry.sgb` | Palace 用來建立幾何的 SGB 核心：arrangement、XAO 與 sidecar、帶 | 網格化、求解器狀態或元件來源所有權 |
 | `scgsim.meshing` | 針對 SGB 的 XAO 提供尺寸配方、品質稽核、修復迴圈與網格化報告 | Palace 屬性、求解器狀態或物理收斂判定 |
-| `scgsim.geometry.models` 與較低層原語 | 單一標準模型／型別定義，以及共用來源／編譯器原語 | 重複定義、來源至規劃的相依循環 |
+| `scgsim.geometry.models` 與較低層原語 | 單一標準模型／型別定義，以及共用來源與規劃原語 | 重複定義、來源至規劃的相依循環 |
 | `scgsim.semantics` | 僅使用標準函式庫、不可變且受修訂版本約束的事實 | 可變後端物件、將求解器標記解讀為來源真實資料 |
 | `scgsim.palace.preparation` | 分開的 Electrostatic 與 Eigenmode 設定物件、可變狀態／失效處理，以及共用準備函式 | 共用 Simulation 基底、Palace 提交，或合併狀態擁有者 |
 | `scgsim.palace.mesh` | 一次執行的 SGB 建置與網格化呼叫、把群組降階為求解器屬性，以及原生網格摘要 | 結果收據保管或物理收斂判定 |
@@ -41,13 +40,13 @@ SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域
 | `scgsim.visualization` | 綁定後端的來源／收據載入器、脫離原物件的場景／預覽物件及呈現 | 求解器狀態、模擬狀態或物理驗收 |
 | `scgsim.presentation` | 與求解器物理中立的共用 Notebook 格式化 | 領域投影或科學計算 |
 
-`scgsim.geometry.sgb` 與 `scgsim.geometry.compiler` 都位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫它們時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。
+`scgsim.geometry.sgb` 位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。
 
 以來源為基礎的本徵模準備、求解與匯出，屬於 HFSS 家族，即使沒有要求 EPR 分析也一樣。已宣告的接面與一般 RLC 負載會獨立於該請求建構。EPR 會將分析選擇與場／快取工作加入同一個原生模型及求解生命週期。純 RLC 單位／拓撲解讀與 Q3D 來源外部鏈選擇，由僅使用標準函式庫的私有輔助工具供原生寫入器與離線讀取器共用；共用解讀方式不會取代各自獨立的原生收據與來源歸屬檢查。
 
 幾何、AEDT、Palace 與 visualization 的基準 facade 和直接子模組符號對應，以及目前的負責模組，列於 [API 遷移參考](api-migration.qmd)。公開性取決於文件所述的 facade／契約與宣告的匯出項目，不取決於 Python 模組是否剛好可匯入。v2 刻意不保留 `scgsim.sgb` 相容包裝器或 Q3D 輸入 v1／v2 路徑；公開 AEDT 指令 `python -m scgsim.aedt.run` 仍受支援，並會交由交易擁有者處理。
 
-狀態界線必須保持可觀察。Palace Electrostatic 與 Eigenmode 準備流程各自保留可變狀態及失效／失敗順序；Gmsh 工作程序是程序界線，其網格觀察器不是離線品質讀取器。AEDT `EigenmodeSim` 保留可變設定與失效狀態；單一交易則負責收據狀態轉換與 Desktop 釋放優先順序。幾何 snapshot 保持脫離原物件；編譯器記錄是衍生輸出；後端標記是觀察資料，不是來源權威。搬移程式碼時必須保留這些所有權與失敗契約。
+狀態界線必須保持可觀察。Palace Electrostatic 與 Eigenmode 準備流程各自保留可變狀態及失效／失敗順序；Gmsh 工作程序是程序界線，其網格觀察器不是離線品質讀取器。AEDT `EigenmodeSim` 保留可變設定與失效狀態；單一交易則負責收據狀態轉換與 Desktop 釋放優先順序。幾何 snapshot 保持脫離原物件；規劃記錄是衍生輸出；後端標記是觀察資料，不是來源權威。搬移程式碼時必須保留這些所有權與失敗契約。
 
 Palace 與 AEDT 後端實作、測試及技術文件仍屬不同來源責任，詳見[儲存庫根目錄指南](../../AGENTS.md)。原生觀察與求解器專屬結果解讀仍維持各自的技術界線；目錄重整不代表這些工作已完成。貢獻者協調與交付請遵循共用的 [$github-flow](https://github.com/arfiligol/agent-skills/tree/main/github-flow)。
 

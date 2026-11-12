@@ -1,1 +1,1 @@
-"""Plan canonical geometry identity and retained ownership."""
+"""Shared surface ownership and ring geometry for the retained planning stages."""

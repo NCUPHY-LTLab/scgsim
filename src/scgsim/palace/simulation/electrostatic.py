@@ -50,8 +50,7 @@ class ElectrostaticSim(PalaceSimulation):
     numerical: dict[str, Any] = field(default_factory=configure_numerical_controls)
 
     problem = "Electrostatic"
-    # TODO(human): why Electrostatic refuses a mesh with no set_surface_epr() while Eigenmode accepts one
-    # (Issue #199 keeps both rules as they are).
+    # Electrostatic needs its Surface-EPR specs before mesh(); Eigenmode does not.
     mesh_requires_surface_epr: ClassVar[bool] = True
 
     def add_terminal(self, name: str, *, net_id: str) -> None:

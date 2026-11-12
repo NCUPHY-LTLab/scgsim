@@ -10,9 +10,6 @@ from scgsim.geometry.planning.domain_planning.faces import (
     ConductorFaceRequest as ConductorFaceRequest,
 )
 from scgsim.geometry.planning.domain_planning.faces import (
-    component_is_boundary_attached as component_is_boundary_attached,
-)
-from scgsim.geometry.planning.domain_planning.faces import (
     conductor_face_solution_pieces as conductor_face_solution_pieces,
 )
 from scgsim.geometry.planning.domain_planning.faces import (
@@ -71,9 +68,6 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
 )
 from scgsim.geometry.planning.domain_planning.occupancy import (
     solution_region_entities as solution_region_entities,
-)
-from scgsim.geometry.planning.domain_planning.occupancy import (
-    verified_route_a_substrate_support as verified_route_a_substrate_support,
 )
 from scgsim.geometry.planning.domain_planning.reconciliation import (
     merge_solution_sidewall_interfaces as merge_solution_sidewall_interfaces,

@@ -29,8 +29,8 @@ readability and responsibility boundaries also require review.
 
 External gsim and historical SGB are derivation provenance only: new work uses
 the in-tree `scgsim.geometry` APIs, never an external consumer or fallback.
-`scgsim.geometry.sgb` and `scgsim.geometry.compiler` are lower-level APIs below
-the supported entry (Code Review Rules). OrcaPen SC PDK owns public
+`scgsim.geometry.sgb` is a lower-level API below the supported entry (Code
+Review Rules). OrcaPen SC PDK owns public
 component-simulation notebooks; SCGSim owns no duplicate notebook source.
 
 ## Code Review Rules
@@ -48,8 +48,7 @@ component-simulation notebooks; SCGSim owns no duplicate notebook source.
   spec passed to `prepare_handoff`. Inputs built by hand below that entry (a
   `GeometryBuildInput` built by hand for `build_sgb_geometry`, a prism
   catalogue for the internal
-  `scgsim.geometry.sgb.model.build_model_from_catalogue`, inputs to
-  `scgsim.geometry.compiler`) are internal or advanced use; their
+  `scgsim.geometry.sgb.model.build_model_from_catalogue`) are internal or advanced use; their
   precondition is what the entry guarantees. A
   counterexample only such an input reaches is `fix` when it silently gives a
   plausible but wrong result and a cheap check at the boundary can refuse it;

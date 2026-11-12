@@ -66,12 +66,3 @@ def _clean_ring3d(ring: Any) -> tuple[tuple[float, float, float], ...]:
     if len(points) < 3:
         raise ValueError("3D loop requires at least 3 unique points")
     return points
-
-
-def ring3d_edges(
-    ring: tuple[tuple[float, float, float], ...],
-) -> tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...]:
-    """Read the cyclic directed edges of a three-dimensional ring."""
-    return tuple(
-        (ring[index], ring[(index + 1) % len(ring)]) for index in range(len(ring))
-    )
