@@ -139,12 +139,15 @@ comes from the lineage the sidecar records:
 - **erosion**: band offsets of two source edges that are not neighbours meet
   here, as when a conductor is barely wider than twice the margin. The exact
   erosion has this structure. Change the margins in `surface_epr_specs` or the
-  conductor's width.
+  conductor's width. Also a short band edge that offsets a straight source
+  edge shorter than its band margin, such as one chord of a curve drawn as a
+  polygon: the fix names that source edge, where it runs and how long it is.
+  Declare the arc exactly, or draw it with longer chords.
 - **sgb**: a band curve where the source has no fine structure. This is an SGB
   defect; report it to SCGSim with the finding. The layout needs no change.
 
-The rule counts the offsets of a ring's first and last edges as neighbours,
-so such a feature is attributed to SGB.
+Two source edges are neighbours when they share a vertex, including the last
+and first edges of a closed outline.
 
 ## The same check inside `mesh()` {#the-same-check-inside-mesh}
 
