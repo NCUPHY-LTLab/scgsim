@@ -127,8 +127,9 @@ refuses; see [Surface-EPR margins](supported-scope.qmd#rules-margins).
 :::
 
 Each finding names its stage, class, measure and size, the SGB entity and its
-physical group, the layout objects and band requests it comes from, its
-location and box in µm, why the mesher fails on it, and the fix. Its owner
+physical group, the layout objects and band requests it comes from and the
+layers those objects were drawn on, its location and box in µm, why the mesher
+fails on it, and the fix. Its owner
 comes from the lineage the sidecar records:
 
 - **layout**: the feature is bounded only by source curves, or it is a band

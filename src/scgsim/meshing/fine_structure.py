@@ -106,8 +106,10 @@ class FineFeature:
     micrometres, or degrees for a wedge angle, and ``value_steps`` the same length in grid steps.
     ``entity`` is the SGB planned id (``dimension`` 1 for an edge, 2 for a face) and ``native_tag`` its tag
     in the XAO.  ``groups`` are the physical groups of the faces it belongs to, ``entities`` the layout
-    objects and band requests those faces come from, and ``sources`` the carriers of its edges (a source
-    polygon edge ``<entity>/polygon<p>/ring<r>/edge<e>``, or a band offset).  ``bounds_um`` is its box.
+    objects and band requests those faces come from, ``layers`` the layers those objects were drawn on (the
+    sidecar's ``entity`` table; an object drawn on no layer, such as the vacuum, adds none), and ``sources``
+    the carriers of its edges (a source polygon edge ``<entity>/polygon<p>/ring<r>/edge<e>``, or a band
+    offset).  ``bounds_um`` is its box.
     """
 
     rule: str
@@ -119,6 +121,7 @@ class FineFeature:
     native_tag: int
     groups: tuple[str, ...]
     entities: tuple[str, ...]
+    layers: tuple[str, ...]
     sources: tuple[str, ...]
     location_um: Point3
     bounds_um: Bounds
@@ -131,7 +134,7 @@ class FineFeature:
     stage: str = STAGE
 
     def describe(self) -> str:
-        """The finding as one paragraph of text: stage, rule, place, size, source, owner, cause and fix."""
+        """The finding as one paragraph of text: stage, rule, place, layer, size, source, owner, cause and fix."""
         x, y, z = self.location_um
         size = (
             f"{self.value:.4g} deg"
@@ -141,7 +144,8 @@ class FineFeature:
         groups = ", ".join(self.groups) or "-"
         return (
             f"{self.stage} stage, {self.action} {self.rule}: {self.measure} {size} < {self.limit:g} "
-            f"{self.limit_unit} at ({x:.4f}, {y:.4f}, {z:.4f}) um, {self.entity} in {groups}; "
+            f"{self.limit_unit} at ({x:.4f}, {y:.4f}, {z:.4f}) um, {self.entity} in {groups}"
+            f"{_on_layers(self.layers)}; "
             f"from {', '.join(self.sources) or '-'}; owner {self.owner}. {self.cause} Fix: {self.fix}"
         )
 
@@ -416,6 +420,7 @@ def _finding(model: BuiltModel, item: _Found, owner: Owner) -> FineFeature:
         else model.face_id(measured.tag)
     )
     cause, fix = _cause_and_fix(measured.measure, owner)
+    entities = sorted({s for f in face_ids for s in model.face_sources.get(f, ())})
     return FineFeature(
         rule=item.rule,
         measure=measured.measure,
@@ -425,8 +430,9 @@ def _finding(model: BuiltModel, item: _Found, owner: Owner) -> FineFeature:
         dimension=measured.dimension,
         native_tag=measured.tag,
         groups=tuple(sorted({g for f in face_ids if (g := model.face_group.get(f))})),
-        entities=tuple(
-            sorted({s for f in face_ids for s in model.face_sources.get(f, ())})
+        entities=tuple(entities),
+        layers=tuple(
+            sorted({layer for e in entities if (layer := model.entity_layers.get(e))})
         ),
         sources=tuple(carriers),
         location_um=_rounded_point(measured.location),
@@ -495,6 +501,13 @@ def _cause_and_fix(measure: str, owner: Owner) -> tuple[str, str]:
     if owner == "erosion":
         return _CAUSE[measure], _EROSION_FIX
     return _CAUSE[measure], _SGB_FIX
+
+
+def _on_layers(layers: tuple[str, ...]) -> str:
+    """`` on layer L`` or `` on layers L1, L2``, as every located refusal names its layers; nothing for none."""
+    if not layers:
+        return ""
+    return f" on layer{'s' if len(layers) > 1 else ''} {', '.join(layers)}"
 
 
 def _box_distance(a: Bounds, b: Bounds) -> float:

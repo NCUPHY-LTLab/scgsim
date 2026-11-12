@@ -90,7 +90,7 @@ def test_the_module_meshes_the_pad_in_ground_clean_and_keeps_the_xao_groups(
         result.report["mesh"]["sized_curves"] > 0
     )  # the 0.2 um film walls are sized a priori
     assert result.report["mesh"]["local_sizes"] == 0
-    assert physical_names(result.mesh) >= set(sidecar["physical_groups"])
+    assert physical_names(result.mesh) >= set(sidecar["group"])
     assert json.loads(result.report_path.read_text(encoding="utf-8")) == result.report
     assert "clean after 0 refinement rounds" in result.summary_path.read_text(
         encoding="utf-8"
@@ -420,7 +420,7 @@ def test_a_second_order_mesh_is_elevated_after_the_linear_audit_and_keeps_its_gr
     delivered = read_element_types(curved.mesh)
     assert delivered["types"]["3"] == [QUADRATIC_TETRAHEDRON]
     assert QUADRATIC_TRIANGLE in delivered["types"]["2"]
-    assert set(delivered["names"]) >= set(sidecar["physical_groups"])
+    assert set(delivered["names"]) >= set(sidecar["group"])
     assert read_element_types(linear.mesh)["types"]["3"] == [LINEAR_TETRAHEDRON]
     # The audit and the threshold are those of the linear mesh, which the elevation does not change.
     assert curved.report["mesh"]["measured_on"] == "linear mesh before elevation"
@@ -501,7 +501,7 @@ def test_the_gmsh_default_recipe_meshes_once_with_gmsh_s_sizes_and_reports_witho
     assert result.mesh == tmp_path / f"{stem}.msh"
     assert not (tmp_path / f"{stem}.rejected.msh").exists()
     sidecar = json.loads(pad_in_ground_b.sidecar.read_text(encoding="utf-8"))
-    assert physical_names(result.mesh) >= set(sidecar["physical_groups"])
+    assert physical_names(result.mesh) >= set(sidecar["group"])
     assert "report-only" in result.summary_path.read_text(encoding="utf-8")
 
 

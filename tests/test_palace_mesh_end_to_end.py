@@ -66,7 +66,7 @@ def check_run(result, route):
     manifest = json.loads(result.mesh_manifest_path.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 2
     assert manifest["source"]["scgsim_sgb"] == "scgsim.geometry.sgb"
-    assert manifest["source"]["sidecar_schema"] == "scgsim.sgb.sidecar.v2"
+    assert manifest["source"]["sidecar_schema"] == "scgsim.sgb.sidecar.v3"
     assert manifest["source"]["model_identity_digest"].startswith("model:")
     meshing = manifest["meshing"]
     assert meshing["recipe"]["name"] == "features"
@@ -164,21 +164,20 @@ def banded_groups_of(result):
     """The surface groups SGB cut into bands, read from the sidecar's ``band`` field."""
     return {
         name
-        for name, group in sidecar_of_run(result)["physical_groups"].items()
+        for name, group in sidecar_of_run(result)["group"].items()
         if group.get("band") is not None
     }
 
 
 def band_families(sidecar):
-    """Every band family of a sidecar once: concrete requests, and the families of type-level expansions.
+    """Every band family of a sidecar once, each with its id as ``request_id``.
 
-    A Route A sheet serves an MA and an MS request, so both expansions list the same family.
+    A Route A sheet serves an MA and an MS request, so both requests list the same family.
     """
-    families = {}
-    for inset in sidecar["insets"]:
-        for family in inset["expansion"]["banded"] if "expansion" in inset else [inset]:
-            families[family["request_id"]] = family
-    return list(families.values())
+    return [
+        {**family, "request_id": family_id}
+        for family_id, family in sidecar["band_family"].items()
+    ]
 
 
 def expected_margin_attributes(result, entry):
@@ -259,8 +258,8 @@ def test_route_b_sends_one_request_per_spec_and_gets_a_band_family_per_support(
     route_b,
 ):
     """The bands requested from the specs: one type-level request each, expanded to MA tops, MS bottoms and the SA gap."""
-    insets = sidecar_of_run(route_b)["insets"]
-    assert {i["request_id"] for i in insets} == {"epr_MA", "epr_MS", "epr_SA"}
+    insets = sidecar_of_run(route_b)["inset_request"]
+    assert set(insets) == {"epr_MA", "epr_MS", "epr_SA"}
     families = band_families(sidecar_of_run(route_b))
     assert len(families) == 5
     assert any("VACUUM_REGION" in f["request_id"] for f in families)
@@ -449,7 +448,7 @@ def test_the_unbanded_build_is_skipped_without_margins(tmp_path):
     result = mesh_run(
         effective_input("B", tmp_path), "B", tmp_path, specs=surface_epr_specs(MA=None)
     )
-    assert json.loads(result.sidecar_path.read_text())["insets"] == []
+    assert json.loads(result.sidecar_path.read_text())["inset_request"] == {}
     assert not banded_groups_of(result)
 
 
@@ -491,12 +490,13 @@ def test_the_custom_path_bands_one_conductor_with_its_own_margins(route, tmp_pat
     result = mesh_run(effective_input(route, tmp_path), route, tmp_path, specs=specs)
     check_run(result, route)
     sidecar = sidecar_of_run(result)
-    concrete = [i for i in sidecar["insets"] if "expansion" not in i]
-    assert [i["support"]["entity"] for i in concrete] == [entity]
-    (type_ma,) = (i for i in sidecar["insets"] if i["request_id"] == "epr_MA")
+    requests = sidecar["inset_request"]
+    concrete = [r for r in requests.values() if r["scope"] == "face"]
+    assert [r["support"]["entity"] for r in concrete] == [entity]
+    type_ma = requests["epr_MA"]
     assert type_ma["support"]["exclude_entity_ids"] == [entity]
     assert entity not in {
-        f["support"]["entity"] for f in type_ma["expansion"]["banded"]
+        sidecar["band_family"][f]["support"]["entity"] for f in type_ma["families"]
     }
 
     config = config_of(result, route, specs)
@@ -523,7 +523,11 @@ def test_a_sheet_asked_the_same_margins_in_different_spellings_by_ma_and_ms_mesh
     specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": [0.1 + 0.2]}
     result = mesh_run(effective_input("A", tmp_path), "A", tmp_path, specs=specs)
     check_run(result, "A")
-    (family,) = (i for i in sidecar_of_run(result)["insets"] if "expansion" not in i)
+    sidecar = sidecar_of_run(result)
+    ((family_id,),) = (
+        r["families"] for r in sidecar["inset_request"].values() if r["scope"] == "face"
+    )
+    family = sidecar["band_family"][family_id]
     assert family["support"]["entity"] == "chip/left"
     assert family["margins_grid"] == [300]
     config = config_of(result, "A", specs)
