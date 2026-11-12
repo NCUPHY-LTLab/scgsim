@@ -71,8 +71,13 @@ The words this page uses:
 A layout enters SCGSim through the public API: `GeometryPlan` and the
 simulation classes of `scgsim.palace` and `scgsim.aedt`. The rules, the
 guarantees and the owners on this page are stated for a layout that enters
-this way. [Supported calculations](backend-support.qmd) lists what each
-calculation takes as input.
+this way.
+
+The AEDT calculations that take a request spec and `prepare_handoff` (a GDS
+mapping, Q3D bodies or a Q2D cross-section) are public API and supported as
+well. Their rules are in the [AEDT runtime families](specs/aedt-runtime.qmd),
+not on this page. [Supported calculations](backend-support.qmd) lists what
+each calculation takes as input.
 
 SCGSim also documents APIs below that entry, and you can call them with an
 input you build by hand:

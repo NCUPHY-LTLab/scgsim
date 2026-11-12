@@ -36,7 +36,9 @@ scgsim-id: "docs/supported-scope"
 
 ## 支援的入口 {#supported-entry}
 
-版圖經由公開 API 進入 SCGSim：`GeometryPlan`，以及 `scgsim.palace` 與 `scgsim.aedt` 的模擬類別。本頁的規則、保證與負責人，都是針對這樣進入的版圖而言。各項計算接受什麼輸入，列於[支援的計算](backend-support.qmd)。
+版圖經由公開 API 進入 SCGSim：`GeometryPlan`，以及 `scgsim.palace` 與 `scgsim.aedt` 的模擬類別。本頁的規則、保證與負責人，都是針對這樣進入的版圖而言。
+
+以請求規格搭配 `prepare_handoff` 進入的 AEDT 計算（GDS 對應、Q3D 實體或 Q2D 截面），同樣屬於公開 API，也在支援範圍內。它們的規則列於 [AEDT 執行期系列](specs/aedt-runtime.qmd)，不在本頁。各項計算接受什麼輸入，列於[支援的計算](backend-support.qmd)。
 
 SCGSim 也為這個入口以下的 API 提供文件，您可以用自行建立的輸入呼叫它們：
 
