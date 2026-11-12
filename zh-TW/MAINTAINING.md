@@ -28,7 +28,7 @@ CI 會先判定事件差異的類型。草稿拉取請求只執行分類，並�
 
 非草稿產品變更、推送至 `develop` 或 `main`，以及手動派送，會執行快速層。`build-and-import` 在 Python 3.12 與 3.13 檢查套件版本、發行套件建置、可編輯匯入與隔離 wheel 匯入。`fast-tests` 執行公開離線測試套件，但不含 `slow`、`pdk` 與 `private_golden` 測試。`quality` 執行完整品質入口 `scripts/check_quality.py`，涵蓋 Ruff 格式與程式檢查、可讀性、標準及原有嚴格 Pyright 設定，以及六條匯入層契約。兩者都安裝 `occt` 相依群組，所以 Pyright 能解析 OCP，標記為 `occt` 的 OCCT 檢查也會執行。`docs-smoke` 使用固定版本的公開 PDK，以純檔案準備流程執行目前來源範例。`pdk-tests` 以 `README.md` 安裝的公開 OrcaPen SC PDK 修訂版本，依該 PDK 凍結的鎖定檔建立環境並安裝目前的 SCGSim wheel，執行標記為 `pdk` 的測試。測試工作都會加上 `--fail-on-skip`：它們已安裝測試所需的全部相依套件，因此任何略過都會使執行失敗，不會無聲通過。
 
-Nightly 工作流程在 UTC 18:30（台灣時間 02:30）於 `develop` 執行重型層，也可手動派送到任何分支。`full-tests` 執行含 `slow` 測試的完整公開套件，`docs-render` 執行 Pages 渲染但不部署。任何失敗都會使該次執行失敗。CI 只使用公開輸入並排除私有基準資料，不會呼叫 AEDT 或 Palace 求解器。
+Nightly 工作流程在 UTC 18:30（台灣時間 02:30）於 `develop` 執行重型層，也可手動派送到任何分支。`full-tests` 執行含 `slow` 測試的完整公開套件，`docs-render` 執行 Pages 渲染但不部署。`roster` 以 `pdk-tests` 固定的 PDK 版本建立定義「Palace 穩定」的版圖（issue 141），切出 Surface-EPR 條帶，並要求每個版圖都通過 `simulation_drc`，且在 x、y 方向不加、z 方向各加 1000 µm 的真空區中於預設時間預算內完成網格化（`scripts/check_roster.py`）；每個版圖的紀錄會上傳為 `roster-records` 成品。任何失敗都會使該次執行失敗。CI 只使用公開輸入並排除私有基準資料，不會呼叫 AEDT 或 Palace 求解器。
 
 ## 產生 API 參考頁 {#generated-api-references}
 

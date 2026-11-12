@@ -269,8 +269,9 @@ jobs:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The same PDK commit as pdk-tests and README.md, so the documented
-      # examples run against the PDK a reader installs.
+      # The same PDK commit as .github/actions/pdk-environment (which pdk-tests
+      # and the Nightly roster job use) and README.md, so the documented examples
+      # run against the PDK a reader installs.
       - name: Check out the pinned public PDK dependency
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -309,55 +310,19 @@ jobs:
   # Tests marked `pdk` import the public OrcaPen SC PDK (`orcapen_sc_pdk`). They
   # run against the PDK's own frozen lock at the commit README.md installs, with
   # the current SCGSim wheel on top, pinned and verified the way docs-smoke is.
+  # The environment comes from .github/actions/pdk-environment, which the
+  # Nightly roster job uses too, so both name the PDK commit once.
   pdk-tests:
     needs: change-scope
     if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.change-scope.outputs.lane == 'product'
     name: pdk-tests
     runs-on: ubuntu-latest
     env:
-      UV_PROJECT_ENVIRONMENT: ${{ github.workspace }}/.venv-pdk
-      UV_CACHE_DIR: ${{ github.workspace }}/.ci/scgsim-pdk-cache
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Check out the pinned public OrcaPen SC PDK
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: NCUPHY-LTLab/orcapen-sc-pdk
-          ref: 49e539fd59f3224ecda965d777c7ec3aadcc3b85
-          path: .ci/orcapen
-          persist-credentials: false
-      - name: Install the exact test Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12.14"
-      - name: Set up the PDK toolchain
-        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
-        with:
-          version: "0.11.18"
-          python-version: "3.12.14"
-      - name: Install the Gmsh wheel system runtime
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y libglu1-mesa
-      - name: Verify the dependency inputs
-        run: |
-          echo '1b41174d8659ae053ea4bb048b7f51268553301b3554afb8329dd3a0517d1f02  .ci/orcapen/pyproject.toml' | sha256sum --check
-          echo '389b5cd37beab1f91fe53cf9fa64a3587337bb4a265fba19f50a401751c1c757  .ci/orcapen/uv.lock' | sha256sum --check
-      - name: Install the PDK's frozen dependencies with its test runner
-        run: >-
-          uv sync --project .ci/orcapen --frozen --group dev --group palace-notebooks
-          --no-install-project --no-install-package scgsim --python 3.12.14
-      - name: Build and install the pinned PDK without changing dependencies
-        run: |
-          uv build --python 3.12.14 --wheel --out-dir .ci/orcapen-wheel .ci/orcapen
-          uv pip install --python .venv-pdk/bin/python --no-deps .ci/orcapen-wheel/orcapen_sc_pdk-1.0.0-py3-none-any.whl
-      - name: Build and install the current SCGSim wheel after dependency sync
-        run: |
-          uv build --python 3.12.14 --wheel --out-dir .ci/scgsim-wheel .
-          uv pip install --python .venv-pdk/bin/python --no-deps .ci/scgsim-wheel/scgsim-*.whl
-      - name: Check that the installed packages' requirements are met
-        run: uv pip check --python .venv-pdk/bin/python
+      - name: Build the pinned PDK environment with the current SCGSim wheel
+        uses: ./.github/actions/pdk-environment
       # Only the files holding `pdk` tests are collected: the other modules need
       # SCGSim's own dev environment and run in fast-tests.
       - name: Run the PDK tests against the installed SCGSim wheel

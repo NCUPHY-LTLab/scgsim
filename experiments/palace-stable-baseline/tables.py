@@ -59,13 +59,13 @@ def _mesh_cell(stage) -> str:
 def stage_table(layouts) -> str:
     """One row per layout run: each stage's outcome and the mesh summary."""
     rows = [
-        "| Layout | Bands | Vacuum | Simulation | Plan | SGB build | simulation_drc | mesh() |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Layout | Bands | Simulation | Plan | SGB build | simulation_drc | mesh() |",
+        "|---|---|---|---|---|---|---|",
     ]
     for record in layouts.values():
         stages = record["stages"]
         rows.append(
-            f"| {record['case']} | {'yes' if record['bands'] else 'no'} | {_vacuum(record)} | "
+            f"| {record['case']} | {'yes' if record['bands'] else 'no'} | "
             f"{record.get('simulation', '–')} | "
             + " | ".join(
                 _cell(stages.get(s)) if s != "mesh" else _mesh_cell(stages.get(s))
@@ -74,10 +74,6 @@ def stage_table(layouts) -> str:
             + " |"
         )
     return "\n".join(rows)
-
-
-def _vacuum(record) -> str:
-    return "notebook" if record.get("notebook_vacuum") else "1 um"
 
 
 def _pair(block, cutoff) -> str:
@@ -107,7 +103,7 @@ def fine_table(records) -> str:
     ]
     for record in records.values():
         fs = (record["stages"].get("sgb_build") or {}).get("fine_structure")
-        if fs is None or record.get("notebook_vacuum"):
+        if fs is None:
             continue
         e, f, a = fs["edges"], fs["faces"], fs["angles"]
         angle_smallest = (
@@ -127,15 +123,12 @@ def class_table(records) -> str:
     """The classes of issue 125 at 2, 10 and 25 grid steps, beside each mesh outcome."""
     rows = [
         "| Case | Bands | A wall gap < 2 / 10 / 25 g | B 2A/P < 2 / 10 / 25 g | B angle < 1° | C free edge < 2 / 10 / 25 g "
-        "| mesh, 1 um vacuum | mesh, notebook vacuum |",
-        "|---|---|---|---|---|---|---|---|",
+        "| mesh() |",
+        "|---|---|---|---|---|---|---|",
     ]
-    notebook = {
-        (r["case"], r["bands"]): r for r in records.values() if r.get("notebook_vacuum")
-    }
     for record in records.values():
         fs = (record["stages"].get("sgb_build") or {}).get("fine_structure")
-        if fs is None or record.get("notebook_vacuum"):
+        if fs is None:
             continue
         c = fs["issue125_classes"]
 
@@ -158,8 +151,7 @@ def class_table(records) -> str:
             f"| {'scene ' if record.get('scene') else ''}{record['case']} | {'yes' if record['bands'] else 'no'} | "
             f"{triple(c['A_wall_gap_below_steps'])} | {triple(c['B_face_2a_over_p_below_steps'])} | "
             f"{c['B_angle_below_1_degree']['source'] + c['B_angle_below_1_degree']['band']} | "
-            f"{triple(c['C_free_edge_below_steps'])} | {mesh_text(record)} | "
-            f"{mesh_text(notebook.get((record['case'], record['bands'])))} |"
+            f"{triple(c['C_free_edge_below_steps'])} | {mesh_text(record)} |"
         )
     return "\n".join(rows)
 

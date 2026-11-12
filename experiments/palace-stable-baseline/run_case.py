@@ -1,7 +1,7 @@
 # ruff: noqa: PLC0415 -- the PDK and SCGSim are imported where used, after the PDK is activated
 """Run one layout through plan, SGB build, simulation_drc and mesh(), and write its record as JSON.
 
-    python run_case.py CASE OUT.json [--no-bands] [--notebook-vacuum]
+    python run_case.py CASE OUT.json [--no-bands]
     python run_case.py --scene SCENE OUT.json        # a supported test scene: SGB build and fine structure
 
 Each stage records ``pass`` or the exact error class and message, and its wall time.  The SGB build stage
@@ -11,7 +11,9 @@ stage records the findings of its meshing stage: the warnings of a pass, or the 
 mesh stage records either that refusal or the recipe, tetrahedra, minSICN, rounds, stop reason and stop
 places of the quality report.  A stage runs only when the stage before it passed.  ``simulation_drc`` and
 ``mesh()`` are public; the SGB build stage calls the geometry build those two share (``_build_geometry``),
-because no public call keeps the built files.
+because no public call keeps the built files.  The SGB build and ``mesh()`` use the settings of
+``scripts/roster_cases.py``, as the nightly roster check (``scripts/check_roster.py``) does: among them
+the vacuum padding (0, 0, 1000) um of issue 182.  ``simulation_drc`` sets its own vacuum.
 """
 
 from __future__ import annotations
@@ -28,38 +30,20 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parents[1] / "scripts"))
 
 import fine_structure  # noqa: E402
-
-MARGINS_UM = [0.5, 1.0]
-PORT_INDUCTANCE_H = 10e-9
-VACUUM_PADDING_UM = (
-    1.0  # what simulation_drc uses when the layout has no vacuum of its own
+from roster_cases import (  # noqa: E402
+    configured_simulation,
+    prepare_plan,
+    simulation_class,
+    surface_epr_specs,
 )
+
 OUT: list[Path] = []
 
 
-def surface_epr_specs(bands: bool) -> dict[str, dict[str, Any]]:
-    """MA, MS and SA from the PDK's literature-central presets; with bands, margins (0.5, 1.0) um by type."""
-    from orcapen_sc_pdk import (
-        get_interface_preset_records,
-        validate_interface_preset_records,
-    )
-
-    records = validate_interface_preset_records(get_interface_preset_records())
-    specs = {}
-    for kind in ("MA", "MS", "SA"):
-        record = records[f"LiteratureCentral_{kind}"]
-        specs[kind] = {
-            key: record[key]
-            for key in ("thickness", "permittivity", "loss_tangent", "source")
-        }
-        if bands:
-            specs[kind]["inset_margins_um"] = list(MARGINS_UM)
-    return specs
-
-
-def run_layout(name: str, bands: bool, notebook_vacuum: bool = False) -> dict[str, Any]:
+def run_layout(name: str, bands: bool) -> dict[str, Any]:
     """The four stages of one layout."""
     import gdsfactory as gf
     import orcapen_sc_pdk
@@ -68,12 +52,7 @@ def run_layout(name: str, bands: bool, notebook_vacuum: bool = False) -> dict[st
 
     orcapen_sc_pdk.activate()
     gf.clear_cache()
-    record: dict[str, Any] = {
-        "case": name,
-        "bands": bands,
-        "notebook_vacuum": notebook_vacuum,
-        "stages": {},
-    }
+    record: dict[str, Any] = {"case": name, "bands": bands, "stages": {}}
     _CHECKPOINT[:] = [OUT[0], record]
     stages = record["stages"]
     specs = surface_epr_specs(bands)
@@ -85,7 +64,7 @@ def run_layout(name: str, bands: bool, notebook_vacuum: bool = False) -> dict[st
     snapshot = _stage(
         stages,
         "plan",
-        lambda: prepare_plan(layout, get_material_records(), notebook_vacuum),
+        lambda: prepare_plan(layout, get_material_records()),
     )
     if snapshot is None:
         return record
@@ -104,7 +83,7 @@ def run_layout(name: str, bands: bool, notebook_vacuum: bool = False) -> dict[st
             )
     if built is None:
         return record
-    drc_class = _simulation_class(layout)
+    drc_class = simulation_class(layout)
     drc_report = _stage(
         stages,
         "simulation_drc",
@@ -164,51 +143,6 @@ def run_scene(name: str) -> dict[str, Any]:
 def _sgb_build(layout, snapshot, specs, folder):
     # The geometry build mesh() and simulation_drc share; no public call keeps its files.
     return configured_simulation(layout, snapshot, specs)._build_geometry(folder)  # noqa: SLF001
-
-
-def prepare_plan(layout, material_records, notebook_vacuum: bool = False):
-    """The prepared plan as ``simulation_drc`` builds it (root ``chip``, no coupon padding), or with the notebook vacuum."""
-    from scgsim.geometry import GeometryPlan
-
-    plan = GeometryPlan(
-        layout.component,
-        root_id="chip",
-        layer_stack=layout.layer_stack,
-        material_records=material_records,
-        coupon_padding_um=0.0,
-    )
-    for path, reference in layout.instances.items():
-        plan.register_instance(path, reference)
-    if layout.nets is not None:
-        plan.set_nets(layout.nets)
-    if notebook_vacuum:
-        # The vacuum the PDK's Palace notebooks give the plan, instead of simulation_drc's 1 um shell.
-        plan.set_vacuum_region(padding=layout.notebook_vacuum_padding_um)
-    return plan.prepare()
-
-
-def _simulation_class(layout):
-    from scgsim.palace import EigenmodeSim, ElectrostaticSim
-
-    return EigenmodeSim if layout.simulation == "eigenmode" else ElectrostaticSim
-
-
-def configured_simulation(layout, snapshot, specs):
-    """The simulation as simulation_drc sets it up: 1 um vacuum, every authored port, Route B Surface EPR."""
-    sim = _simulation_class(layout)()
-    sim.set_plan(snapshot)
-    if "VACUUM_REGION" not in snapshot.stack["solution_regions"]:
-        sim.set_vacuum_region(VACUUM_PADDING_UM)
-    if layout.simulation == "eigenmode":
-        for port in snapshot.stack["metadata"].get("port_sheet_source_layers", ()):
-            sim.add_port(
-                port["name"],
-                layer=port["target_layer"],
-                layout_sheet=True,
-                inductance=PORT_INDUCTANCE_H,
-            )
-    sim.set_surface_epr(representation="B", specs=specs)
-    return sim
 
 
 _CHECKPOINT: list[
@@ -315,20 +249,16 @@ def main() -> None:
     parser.add_argument("case")
     parser.add_argument("out", type=Path)
     parser.add_argument("--no-bands", action="store_true")
-    parser.add_argument("--notebook-vacuum", action="store_true")
     parser.add_argument("--scene", action="store_true")
     args = parser.parse_args()
-    if args.scene and (args.no_bands or args.notebook_vacuum):
-        # A scene is measured with its type bands and has no plan vacuum: the record would claim a setting
-        # that never ran.
-        parser.error("--scene takes neither --no-bands nor --notebook-vacuum")
+    if args.scene and args.no_bands:
+        # A scene is measured with its type bands: the record would claim a setting that never ran.
+        parser.error("--scene takes no --no-bands")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     OUT[:] = [args.out]
     started = time.perf_counter()
     record = (
-        run_scene(args.case)
-        if args.scene
-        else run_layout(args.case, not args.no_bands, args.notebook_vacuum)
+        run_scene(args.case) if args.scene else run_layout(args.case, not args.no_bands)
     )
     record["seconds"] = round(time.perf_counter() - started, 2)
     write_record(args.out, record)
