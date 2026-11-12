@@ -383,17 +383,24 @@ def test_a_layout_with_no_vacuum_is_wrapped_in_the_decided_padding(
     assert above == pytest.approx([0.0, 0.0, 1000.0])
 
 
-PINCH = re.compile(
-    r"non-manifold pinch: VACUUM_REGION \(pinched between conductors (?P<conductor>\S+) on layer "
-    r"(?P<layer>\S+) of Net \S+\) touches itself along the vertical edge at "
-    r"\((?P<x>-?\d+\.\d+), (?P<y>-?\d+\.\d+)\) um, z (?P<z0>-?\d+\.\d+)\.\.(?P<z1>-?\d+\.\d+) um"
+PINCH_AT_THE_EDGE = re.compile(
+    r"non-manifold pinch: conductor (?P<conductor>\S+) on layer (?P<layer>\S+) of Net \S+ reaches the "
+    r"edge of VACUUM_REGION only at \((?P<x>-?\d+\.\d+), (?P<y>-?\d+\.\d+)\) um, "
+    r"z (?P<z0>-?\d+\.\d+)\.\.(?P<z1>-?\d+\.\d+) um \(slab\[[^]]*\]\), a point on the model's planar "
+    r"boundary"
 )
+FIX_AT_THE_EDGE = "Fix the layout: draw the die outline or a ground plane around it, or set a vacuum region."
 
 
 def pinch_of(error):
-    """The conductor, layer, place in um and film height that a vacuum pinch refusal names."""
-    match = PINCH.search(str(error))
-    assert match is not None, str(error)
+    """The conductor, layer, place in um and film height that a pinch at the vacuum's edge names.
+
+    The refusal also says who must act: draw around the conductor, or set a vacuum region.
+    """
+    message = str(error)
+    match = PINCH_AT_THE_EDGE.search(message)
+    assert match is not None, message
+    assert message.endswith(FIX_AT_THE_EDGE)
     return (
         match["conductor"],
         match["layer"],
@@ -409,8 +416,9 @@ def test_a_pad_reaching_the_planar_extent_at_a_point_is_refused_there(
 ):
     """The vacuum ends at the layout's planar extent, so a pad that reaches it only at a vertex pinches it there.
 
-    The refusal names the pad, its layer and the place: the pad's vertex on the extent's left edge, x = 0,
-    across the film's height.
+    The refusal says that the pad reaches the vacuum's edge only there, names the pad, its layer and the
+    place (the pad's vertex on the extent's left edge, x = 0, across the film's height), and says that the
+    layout must draw the die outline or a ground plane around it, or set a vacuum region.
     """
     component = two_pads(monkeypatch, gap_um=10.0, pad=pad)
     with pytest.raises(NonManifoldError) as raised:

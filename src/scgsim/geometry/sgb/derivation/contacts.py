@@ -16,7 +16,10 @@ in micrometres, the plane and who must act.
 
 A non-manifold pinch is the same-Net counterpart: finite metal (or the vacuum
 between metal) that meets itself only along a vertical edge.  Sheets of one Net
-may meet at a corner; only slab arrangements are examined.
+may meet at a corner; only slab arrangements are examined.  The vacuum also
+pinches where a conductor reaches the model's planar boundary at a single point
+(a polygon circle or a diamond with nothing drawn around it, when the vacuum
+ends at the layout's extent); that error says so and names what to draw.
 """
 
 from __future__ import annotations
@@ -32,6 +35,9 @@ from scgsim.geometry.sgb.records.labels import Domain, LevelLabel, SheetOwner
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 
 NEAR_GRID_UNITS_SQ = 4  # a prism "reaches" a point within two grid units (squared)
+# Who must act when a conductor reaches the vacuum's edge at one point: something drawn around the conductor
+# moves the model's planar boundary away from it, and a vacuum region with planar padding does the same.
+_FIX_AT_THE_EDGE = "Fix the layout: draw the die outline or a ground plane around it, or set a vacuum region."
 
 
 def check_contacts(catalogue: PrismCatalogue, layers: Sequence[Layer]) -> None:
@@ -67,18 +73,22 @@ def check_manifold(catalogue: PrismCatalogue, slabs: Sequence[Layer]) -> None:
     domain, that volume touches itself at the vertex: two cells of one Net meeting
     at a corner, a hole touching its outer boundary, or the vacuum pinched
     between them.  This runs before shell assembly, which would report the same
-    defect as an edge "used 4 times".
+    defect as an edge "used 4 times".  A vertex with a wedge of no domain lies on
+    the model's planar boundary: outside it nothing is modeled at that Z.
     """
     for layer in slabs:
         arr = layer.arr
         wedges: dict[int, dict[Domain, list[int]]] = {}
+        on_boundary: set[int] = set()
         for ei, (a, b) in enumerate(arr.edge_ends):
             for half_edge, vertex in (
                 (2 * ei, a),
                 (2 * ei + 1, b),
             ):  # half-edge leaves `vertex`
                 domain = layer.labels[arr.he_face[half_edge]]
-                if domain is not None:
+                if domain is None:
+                    on_boundary.add(vertex)
+                else:
                     wedges.setdefault(vertex, {}).setdefault(domain, []).append(
                         arr.he_face[half_edge]
                     )
@@ -88,7 +98,13 @@ def check_manifold(catalogue: PrismCatalogue, slabs: Sequence[Layer]) -> None:
             )
             for domain, faces in by_domain:
                 if len(faces) > 1:
-                    _raise_pinch(catalogue, layer, domain, arr.vertices[vi])
+                    _raise_pinch(
+                        catalogue,
+                        layer,
+                        domain,
+                        arr.vertices[vi],
+                        on_model_boundary=vi in on_boundary,
+                    )
 
 
 def _conductor_nets(label: object) -> frozenset[str]:
@@ -128,10 +144,19 @@ def _raise_contact(
 
 
 def _raise_pinch(
-    catalogue: PrismCatalogue, layer: Layer, domain: Domain, point: Point
+    catalogue: PrismCatalogue,
+    layer: Layer,
+    domain: Domain,
+    point: Point,
+    *,
+    on_model_boundary: bool,
 ) -> None:
     grid = catalogue.grid
     z_lo, z_hi = _layer_z_range(layer)
+    where = (
+        f"({grid.to_um(point[0]):.4f}, {grid.to_um(point[1]):.4f}) um, "
+        f"z {float(z_lo)}..{float(z_hi)} um ({layer.plane})"
+    )
     if domain.kind == "conductor":
         reaching = [
             p for p in catalogue.prisms if _reaches(p, domain.net, point, z_lo, z_hi)
@@ -146,12 +171,30 @@ def _raise_pinch(
         ]
         names = named_entities(around) or "?"
         nets = ", ".join(sorted({p.net_id or "" for p in around}))
+        if domain.kind == "vacuum" and on_model_boundary:
+            _raise_edge_pinch(domain, around, names, nets, where)
         what = f"{domain.name} (pinched between conductors {names} of Net {nets})"
     raise NonManifoldError(
         f"non-manifold pinch: {what} touches itself along the vertical edge at "
-        f"({grid.to_um(point[0]):.4f}, {grid.to_um(point[1]):.4f}) um, "
-        f"z {float(z_lo)}..{float(z_hi)} um ({layer.plane}): two cells of one domain "
-        "meet only at a vertex. Fix the layout: give them a shared edge or separate them."
+        f"{where}: two cells of one domain meet only at a vertex. "
+        "Fix the layout: give them a shared edge or separate them."
+    )
+
+
+def _raise_edge_pinch(
+    vacuum: Domain,
+    around: Sequence[PrismRecord],
+    names: str,
+    nets: str,
+    where: str,
+) -> None:
+    """The vacuum ends where the conductors ``around`` reach the model's planar boundary at one point."""
+    one = len({p.entity_id for p in around}) == 1
+    raise NonManifoldError(
+        f"non-manifold pinch: {'conductor' if one else 'conductors'} {names} of Net {nets} "
+        f"{'reaches' if one else 'reach'} the edge of {vacuum.name} only at {where}, a point on "
+        f"the model's planar boundary, so {vacuum.name} touches itself along that vertical edge. "
+        f"{_FIX_AT_THE_EDGE}"
     )
 
 

@@ -225,7 +225,7 @@ Find the error you see, then follow the owner's next action.
 | `ValidationError` "the inset curve … is not closed near (x, y)" | SCGSim | Two neighbouring band offsets near that point neither meet nor cross. Report it to SCGSim with the layout. |
 | `ContactError` or `OverlapError` between different Nets | Layout, or the Net declaration | If the two conductors should be one, put them in one Net. Otherwise separate them in the drawing, by more than one grid step. In `simulation_drc`, pass the `nets` the simulation uses. |
 | `OverlapError` "… with equal priority" | Declarations | Give the overlapping Entities of one Net different priorities. |
-| `NonManifoldError` | Layout | At the reported point, give the two pieces a shared edge or separate them. When the point is on the layout's planar extent, draw the die outline or a ground plane around the conductor it names. |
+| `NonManifoldError` | Layout | At the reported point, give the two pieces a shared edge or separate them. When it says a conductor "reaches the edge of" the vacuum only at that point, draw the die outline or a ground plane around that conductor; for a simulation's `mesh()`, a vacuum region with planar padding also removes it. |
 | `InputError` about a port sheet, an Entity id, an arc or a margin | Layout and declarations | Read the message: it names the port, Entity or request. Fix the drawing or the setting it names. |
 | `ValueError` "Surface EPR bands narrower than the meshing stage's face-width limit …" | Declarations | Widen the margins it names so that every band is at least 10 grid steps wide. |
 | `NoGapEdgeError` | Declarations | The conductor named in `inset_margins_by_entity_um` has no gap edge on that face. Remove it there, or band the face by type. |

@@ -272,7 +272,9 @@ def test_conductors_of_one_net_meeting_at_a_corner_are_a_located_pinch(monkeypat
     message = str(error.value)
     assert message.startswith("non-manifold pinch:")
     assert "chip/pad_0000 on layer metal" in message
-    assert "Fix the layout" in message
+    # The corner is inside the planar extent: a pinch between two conductors, not one at the vacuum's edge.
+    assert "pinched between conductors" in message
+    assert message.endswith("Fix the layout: give them a shared edge or separate them.")
     (place,) = places(message)
     assert on(place, point(20, 0))
 
