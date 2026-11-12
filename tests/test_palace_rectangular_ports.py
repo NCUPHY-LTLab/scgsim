@@ -21,6 +21,8 @@ from scgsim.geometry import (
 )
 from scgsim.palace import EigenmodeSim
 
+# (x, y, z) padding in um for the vacuum a model needs; the tests read ports, not the air around them.
+VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
 PAD_RADIUS_UM = 100.0
 PAD_VERTICES = 1024
 # The PDK's circular pad draws its circles with 256 points.
@@ -181,6 +183,7 @@ def eigenmode_sim(component, nets=NETS):
     plan.set_nets(nets)
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
+    sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     return sim
 
@@ -395,6 +398,7 @@ def test_a_port_on_conductors_without_a_net_joins_each_end_to_its_own_conductor(
     )
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
+    sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     _, _, record = prepared_port(sim)
     assert [(end["source_entity_id"], end["net_id"]) for end in record["ends"]] == [
