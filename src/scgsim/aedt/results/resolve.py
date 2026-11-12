@@ -18,7 +18,6 @@ from scgsim.aedt.results.benchmark import read_simulation_benchmark
 from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
 from scgsim.aedt.results.epr import resolve_epr_result, resolve_saved_solution
 from scgsim.aedt.results.hfss_readback import (
-    eigenmode_convergence_source,
     validate_eigenmode_readback,
     validate_hfss_pec_bindings,
 )
@@ -150,11 +149,7 @@ class ResolvedRun:
 
         if self.mode == "q2d":
             root = self.receipt_path.parent.parent
-            spec = parse_aedt_spec(
-                read_json(self._verified_spec()),
-                base_dir=root,
-                allow_historical_modeling=True,
-            )
+            spec = parse_aedt_spec(read_json(self._verified_spec()), base_dir=root)
             if not isinstance(spec, Q2dSpec):
                 raise RuntimeError("resolved Q2D result has a non-Q2D spec")
             rows, _ = read_q2d_rlgc_matrix(self.primary_csv, spec)
@@ -164,11 +159,7 @@ class ResolvedRun:
 
         if self.mode == "q3d":
             root = self.receipt_path.parent.parent
-            spec = parse_aedt_spec(
-                read_json(self._verified_spec()),
-                base_dir=root,
-                allow_historical_modeling=True,
-            )
+            spec = parse_aedt_spec(read_json(self._verified_spec()), base_dir=root)
             if not isinstance(spec, Q3dSpec):
                 raise RuntimeError("resolved Q3D result has a non-Q3D spec")
             run_control = cast(MatrixRunControl, spec.run_control)
@@ -599,9 +590,7 @@ def _resolve_epr_outputs(context: OutputContext) -> ResolvedRun:
     verified(context.root, "results/epr/adaptive-convergence.prop", context.outputs)
     verified(context.root, "results/epr/adaptive-mode-history.json", context.outputs)
     if context.receipt.get("convergence") != read_hfss_convergence(
-        context.root,
-        context.spec,
-        historical_profile=eigenmode_convergence_source(context.receipt) == "profile",
+        context.root, context.spec
     ):
         raise RuntimeError("body-first Eigenmode convergence evidence is invalid")
     adaptive_result = (
@@ -645,14 +634,12 @@ def _resolve_standard_eigenmode_outputs(context: OutputContext) -> ResolvedRun:
     }
     if context.benchmark_path is not None:
         expected.add(BENCHMARK_RELATIVE)
-    if eigenmode_convergence_source(context.receipt) == "export_convergence":
-        expected.add("results/eigenmode/adaptive-convergence.prop")
+    expected.add("results/eigenmode/adaptive-convergence.prop")
     if set(context.outputs) != expected:
         raise RuntimeError("Eigenmode output manifest is not canonical")
-    if "results/eigenmode/adaptive-convergence.prop" in expected:
-        verified(
-            context.root, "results/eigenmode/adaptive-convergence.prop", context.outputs
-        )
+    verified(
+        context.root, "results/eigenmode/adaptive-convergence.prop", context.outputs
+    )
     return ResolvedRun(
         "eigenmode",
         context.project,

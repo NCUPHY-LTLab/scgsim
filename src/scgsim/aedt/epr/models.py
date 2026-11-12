@@ -61,6 +61,9 @@ from scgsim.semantics.epr import film_assumptions
 
 Route = Literal["A", "B"]
 
+EPR_RESULT_SCHEMA = "scgsim.aedt.epr-result.v2"
+_EARLIER_RESULT_SCHEMAS = {"scgsim.aedt.epr-result.v1"}
+
 
 @dataclass(frozen=True)
 class EprResult:
@@ -70,7 +73,6 @@ class EprResult:
     setup_name: str
     rows: tuple[Mapping[str, Any], ...]
     provenance: Mapping[str, Any]
-    _legacy_payload: bool = field(default=False, repr=False, compare=False)
     _verified_source: EprResult | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -177,10 +179,10 @@ class EprResult:
         }
         if row.get("status") != "complete":
             return
-        if not complete_members.issubset(row) or row.get("schema_version") not in {
-            "scgsim.aedt.epr-mode-energy.v1",
-            "scgsim.aedt.epr-mode-energy.v2",
-        }:
+        if (
+            not complete_members.issubset(row)
+            or row.get("schema_version") != "scgsim.aedt.epr-mode-energy.v2"
+        ):
             raise ValueError("complete EPR result row lacks canonical energy members")
         for name in (
             "frequency_hz",
@@ -205,8 +207,7 @@ class EprResult:
                 surface.get("participation"),
                 "surface contribution participation",
             )
-            if row["schema_version"].endswith(".v2"):
-                film_assumptions(surface.get("assumptions"), allow_unknown=True)
+            film_assumptions(surface.get("assumptions"), allow_unknown=True)
         for junction in row["junctions"]:
             number_value(
                 junction.get("inductive_participation"),
@@ -315,13 +316,9 @@ class EprResult:
         return provenance
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize the result using its retained result schema version."""
+        """Serialize the result in the current result schema."""
         return {
-            "schema_version": (
-                "scgsim.aedt.epr-result.v1"
-                if self._legacy_payload
-                else "scgsim.aedt.epr-result.v2"
-            ),
+            "schema_version": EPR_RESULT_SCHEMA,
             "result_kind": self.result_kind,
             "setup_name": self.setup_name,
             "rows": [detached(row) for row in self.rows],
@@ -341,15 +338,17 @@ class EprResult:
             "provenance",
         }
         schema = value.get("schema_version")
-        if set(value) != expected or schema not in {
-            "scgsim.aedt.epr-result.v1",
-            "scgsim.aedt.epr-result.v2",
-        }:
+        if schema in _EARLIER_RESULT_SCHEMAS:
+            raise RuntimeError(
+                f"EPR result {schema} was written by an earlier SCGSim, which this "
+                f"version does not read (it reads {EPR_RESULT_SCHEMA}); read this "
+                "result with the SCGSim commit that wrote it"
+            )
+        if set(value) != expected or schema != EPR_RESULT_SCHEMA:
             raise ValueError("EPR result payload is not canonical")
         return cls(
             result_kind=value["result_kind"],
             setup_name=value["setup_name"],
             rows=tuple(value["rows"]),
             provenance=value["provenance"],
-            _legacy_payload=schema.endswith(".v1"),
         )

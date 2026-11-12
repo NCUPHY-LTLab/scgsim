@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from scgsim.aedt.io import read_json
 from scgsim.aedt.results.convergence.q3d import read_q3d_convergence
 from scgsim.aedt.results.matrices import parse_matrix_export
 from scgsim.aedt.results.readback_common import positive_unique_ids
@@ -54,11 +53,7 @@ def validate_q3d_model_readback(
                     or terminal.get("side") != side
                 ):
                     raise RuntimeError("Q3D native terminal evidence is invalid")
-                effective = (
-                    {}
-                    if spec.modeling is None
-                    else {body["body_id"]: body for body in spec.effective_bodies}
-                )
+                effective = {body["body_id"]: body for body in spec.effective_bodies}
                 if effective and effective[object_name]["representation"] == "sheet":
                     body = next(
                         body for body in spec.bodies if body.body_id == object_name
@@ -92,7 +87,7 @@ def validate_q3d_model_readback(
     ]
     if len(set(net_object_ids)) != len(net_object_ids):
         raise RuntimeError("Q3D native object IDs must be unique across nets")
-    _validate_q3d_body_bindings(receipt, spec, nets, root)
+    _validate_q3d_body_bindings(receipt, spec, nets)
     _validate_q3d_region_ground(receipt, spec, nets)
 
 
@@ -206,14 +201,13 @@ class Q3dBodyBindingContext:
     """Source and native inventories shared across Q3D body checks."""
 
     spec: Q3dSpec
-    raw_bodies: dict[str, Any]
     effective_bodies: dict[str, Any]
     net_object_ids: dict[str, int]
     seen_native_ids: set[int]
 
 
 def _validate_q3d_body_bindings(
-    receipt: dict[str, Any], spec: Q3dSpec, nets: list[dict[str, Any]], root: Path
+    receipt: dict[str, Any], spec: Q3dSpec, nets: list[dict[str, Any]]
 ) -> None:
     """Bind every created body to its declared geometry and final native identity."""
     materials = receipt.get("materials")
@@ -235,16 +229,8 @@ def _validate_q3d_body_bindings(
         body.body_id for body in spec.bodies
     }:
         raise RuntimeError("Q3D native body inventory differs from the spec")
-    historical = spec.modeling is None
-    raw_bodies = {
-        body["body_id"]: body for body in read_json(root / "aedt_spec.json")["bodies"]
-    }
-    effective_bodies = (
-        {} if historical else {body["body_id"]: body for body in spec.effective_bodies}
-    )
-    context = Q3dBodyBindingContext(
-        spec, raw_bodies, effective_bodies, net_object_ids, set()
-    )
+    effective_bodies = {body["body_id"]: body for body in spec.effective_bodies}
+    context = Q3dBodyBindingContext(spec, effective_bodies, net_object_ids, set())
     for body in spec.bodies:
         record = records[body.body_id]
         material = spec.materials[body.material_id]
@@ -253,8 +239,7 @@ def _validate_q3d_body_bindings(
         if not isinstance(evidence, dict):
             raise RuntimeError("Q3D native body binding is absent")
         native_id, faces = _validate_q3d_body_identity(context, body, record, evidence)
-        if not historical:
-            _validate_q3d_effective_body(context, body, record, evidence)
+        _validate_q3d_effective_body(context, body, record, evidence)
         context.seen_native_ids.add(native_id)
         _validate_q3d_body_incidence(evidence, faces)
 
@@ -263,11 +248,7 @@ def _validate_q3d_body_material(
     context: Q3dBodyBindingContext, body: Any, material: Any, record: dict[str, Any]
 ) -> None:
     observed = record.get("observed")
-    historical = context.spec.modeling is None
-    sheet = (
-        not historical
-        and context.effective_bodies[body.body_id]["representation"] == "sheet"
-    )
+    sheet = context.effective_bodies[body.body_id]["representation"] == "sheet"
     observed_key = "native_boundary_material_name" if sheet else "native_material_name"
     expected_native_material = (
         "pec" if material.is_superconducting else material.library_name
@@ -296,13 +277,11 @@ def _validate_q3d_body_identity(
     record: dict[str, Any],
     evidence: dict[str, Any],
 ) -> tuple[int, list[int]]:
-    historical = context.spec.modeling is None
     effective = context.effective_bodies.get(body.body_id)
     native_id = evidence.get("native_object_id")
     faces = evidence.get("native_face_ids")
     if (
-        evidence.get("body")
-        != (context.raw_bodies[body.body_id] if historical else body.to_payload())
+        evidence.get("body") != body.to_payload()
         or evidence.get("object_name") != body.body_id
         or evidence.get("native_object_type")
         != (

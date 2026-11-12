@@ -1,8 +1,7 @@
 """Bind fresh AEDT preparation to the neutral physical representation owner.
 
 Geometry planning owns classification, endpoint mapping and enclosure projection.
-This consumer only selects the explicit AEDT profile and returns its context;
-historical coordinate maps remain in the version-bound request reader.
+This consumer only selects the explicit AEDT profile and returns its context.
 """
 
 from __future__ import annotations
