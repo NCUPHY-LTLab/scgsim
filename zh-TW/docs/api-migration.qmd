@@ -26,7 +26,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 - 將每個受支援符號移至單一責任模組，從套件門面重新匯出核准的高階符號；不保留可呼叫的第二份舊實作或相容包裝。
 - 不恢復 Q3D input-v1 或 input-v2；具本體支援的 input-v3 是 Q3D 契約。
 - 保留正式命令 `python -m scgsim.aedt.run` 作為 AEDT 交易入口；它是受支援 CLI，不是舊版包裝。
-- SCGSim 2.0 的第一個 AEDT 產生端輸出 `scgsim.aedt.runtime-source.v13`。該固定清單宣告 61 條路徑，其中有 41 個 AEDT 模組，並記錄 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`；模組位元組與摘要為必填，Git 觀察可如實記為無法提供。V13 不新增輔助雜湊對照，所列檔案也不是傳遞相依性認證。V1–V13 保留精確的歷史路徑與身份規則；遷移不重寫或重新解釋收據。
+- AEDT 收據記錄產生的執行期來源 `scgsim.aedt.runtime-source.v30`：AEDT 模組的匯入閉包，以及每個檔案的 SHA-256。以較早執行期來源結構版本記錄的結果會遭拒，請以寫入它的 SCGSim commit 讀取。遷移不重寫或重新解釋舊收據。
 
 ## 實體／薄膜要求遷移 {#solidthin-film-request-migration}
 
@@ -36,7 +36,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 模式選擇決定幾何表示，不選擇求解器系列或公開 A/B/C 執行路徑。完整的座標轉換、材料、終端、僅建構與失敗行為，定義於 [AEDT 實體與薄膜契約](specs/aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 與 Palace 不在這次遷移範圍。Q3D input-v1/v2 要求結構仍已移除；其他受支援系列路徑的共用 V1/V2 交接相容性，不會恢復這些 Q3D 要求結構，也不會略過明確模式要求。
 
-此擴充引入 AEDT 執行期來源身份 `scgsim.aedt.runtime-source.v15`；目前的產生器輸出 v29，較早的身份維持既有契約。每個身份都綁定實作模組的位元組與摘要，不宣稱涵蓋完整傳遞相依性；精確路徑清單由固定實作清單負責。
+此擴充引入 AEDT 執行期來源身份 `scgsim.aedt.runtime-source.v15`。目前的產生器以 v30 從 AEDT 匯入閉包計算清單；以較早身份記錄的結果，請以寫入它的 SCGSim commit 讀取。
 
 上方連結的 AEDT 實體與薄膜契約定義這些建模路徑中，元件實例局部 Ground、場側與厚度的區別。
 
@@ -148,7 +148,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 保留 `python -m scgsim.aedt.run`、`main(argv)` 及 `__main__` 行為。產生的交接與 EPR 腳本繼續以既有引數呼叫此命令，交易實作移至 CLI 薄層之後。動態 EPR 工作流程匯入會呼叫唯一的交易負責者；EPR 對 HFSS 匯出／讀回的相依性成為明確內部服務。視覺化從標準規格負責模組匯入現行 PyAEDT 常數，而不把它們變成公開匯出。
 
-目前產生端使用 runtime-source v29，共 285 條排序且唯一的路徑。清單從目前所有 AEDT 模組、兩個 AEDT 視覺化載入器，以及 V28 保留的非 AEDT 路徑開始，再沿 AST 解析的匯入及套件初始化檔閉合；相較凍結的 V28 284 條路徑，新增 `scgsim/geometry/planning/junction_planning/lattice.py`。各模組雜湊及正規化清單摘要識別其來源。歷史 V1–V28 讀取器保留原本的路徑、雜湊、修訂規則與結構意義。解析舊收據時，不把舊模組字串映射到新路徑。交接與收據歷史和 Q3D 要求版本分開；Q3D 仍只支援 v3。此對照不宣稱原生 Q3D 已完成。
+目前產生端記錄 runtime-source v30，於每次使用時計算為每個 AEDT 模組與兩個 AEDT 視覺化載入器的匯入閉包；見[執行期來源契約](specs/aedt-runtime.qmd#runtime-source)。各模組雜湊綁定所列檔案，正規清單摘要識別該來源快照；兩者都不是永久的程式碼值。以較早執行期來源結構版本記錄的結果，請以寫入它的 SCGSim commit 讀取；舊模組字串不會映射到新路徑。交接與收據歷史和 Q3D 要求版本分開；Q3D 仍只支援 v3。此對照不宣稱原生 Q3D 已完成。
 
 ## Palace 網格化與 Surface EPR {#palace-mesh-migration}
 

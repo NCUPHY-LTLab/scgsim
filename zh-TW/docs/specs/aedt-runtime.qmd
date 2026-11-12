@@ -121,21 +121,47 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 ## 收據相容群組與來源資訊 {#receipt-cohorts-and-source-provenance}
 
-新交接沿用 `scgsim.aedt.handoff.v1` 與 `scgsim.aedt.handoff-manifest.v1`。兩份記錄都新增 `expected_receipt_schema: scgsim.aedt.receipt.v3`，初始收據為 V3。它包含 `prepared_runtime_source`：針對目前來源建立、具確定順序且排序過的 `runtime-source.v29` 清單，共 285 條路徑。V29 從目前所有 AEDT 模組、兩個 AEDT 視覺化載入器，以及 V28 保留的非 AEDT 路徑開始，再沿 AST 解析的匯入及套件初始化檔閉合；相較凍結的 V28 284 條路徑，新增 `scgsim/geometry/planning/junction_planning/lattice.py`。欄位為 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`，沒有輔助雜湊對照。每個宣告模組都有實測位元組，內容摘要綁定該清單。Git 觀察可提供實際 40 位十六進位 commit，或明確記為無法提供；逐位元組綁定身份不要求來源工作目錄，更不編造修訂。
+新交接沿用 `scgsim.aedt.handoff.v1` 與 `scgsim.aedt.handoff-manifest.v1`。兩份記錄都新增 `expected_receipt_schema: scgsim.aedt.receipt.v3`，初始收據為 V3。它包含 `prepared_runtime_source`，即準備此交接之程式碼的[執行期來源](#runtime-source)。
 
-寫入 `running` 前，共用交易接受既有初始收據相容群組：具兩個 V3 預期標記與標準清單的 V3 收據；具兩個 V2 標記與標準清單的 V2 收據；或兩個標記皆不存在、且具有標準歷史清單的精確 V1 `not_run` 收據。歷史交接可依上述群組規則延續受支援系列路徑，但不能略過該系列的要求條件。
+寫入 `running` 前，共用交易接受既有初始收據相容群組：具兩個 V3 預期標記與標準清單的 V3 收據；具兩個 V2 標記與標準清單的 V2 收據；或兩個標記皆不存在、且具有標準歷史清單的精確 V1 `not_run` 收據。歷史交接可依上述群組規則延續受支援系列路徑，但不能略過該系列的要求條件。V2 或 V3 交接的準備期執行期來源若為較早的結構版本，會依[執行期來源規則](#runtime-source)遭拒。
 
 每次新的 Q3D 或 HFSS 三維執行都需明確 `modeling`；`thin_film` 還必須在修改收據前提供對應來源宣告。先前受支援但沒有 `modeling` 的 Q3D／HFSS 結果，仍依原讀取器與雜湊解釋，不能啟動新執行。共用 V1/V2 交接相容性仍供 Q2D 等未變更系列使用，但不會略過目前 Q3D／HFSS 要求。Q3D input-v1 與 input-v2 要求結構仍已移除。
 
 驗證過的初始收據雜湊及準備清單雜湊，會複製到可變 V3 收據。最終收據刻意不與初始雜湊比較，因為執行本來就必須修改收據。未知版本、混合或不完整標記、非標準成員與雜湊不符，都在修改收據前拒絕。
 
-每份新完成的 V3 收據都有另外的 `runtime_source` 清單，以 `runtime-source.v29` 與內容摘要識別實際執行程式。宣告模組位元組與摘要為必填；V29 沒有重複的輔助雜湊欄位。有 Git 資訊時，`revision_observation` 帶入實際 40 位十六進位 commit；沒有 VCS 中繼資料的不可變 wheel 則如實記錄 `unavailable`。宣告模組位元組、摘要、結構或相容群組缺少／損壞時，仍明確失敗。準備與執行雜湊代表不同時間的證據，不要求兩者相等，也不把歷史雜湊與目前安裝套件比較。
+每份新完成的 V3 收據都有另外的 `runtime_source` 記錄，`stage` 為 `actual`，識別實際執行它的程式碼。
 
-`resolve_results()` 保留真實歷史 V1、V2 完成收據的既有規則。若收據被重新標示為比準備標記更舊的版本，屬不一致降版，會拒絕。V2、V3 解析先驗證精確相容群組、標記、標準準備清單、初始收據綁定及完整實際執行期清單，再套用各版本系列結果檢查。只有 V3 HFSS 完成要求封存的原生 PEC 綁定證據，不會把此要求投射到歷史 V1/V2 收據。這些無簽章的一致性檢查，無法對抗能重寫所有成員的行為者以驗證產物真偽。
+`resolve_results()` 保留真實歷史 V1、V2 完成收據的既有規則。若收據被重新標示為比準備標記更舊的版本，屬不一致降版，會拒絕。V2、V3 解析先驗證精確相容群組、標記、標準準備清單、初始收據綁定及完整實際執行期清單，再套用各版本系列結果檢查。只有 V3 HFSS 完成要求封存的原生 PEC 綁定證據，不會把此要求投射到歷史 V1/V2 收據。每份完成收據也須通過[執行期來源規則](#runtime-source)，因此執行期來源為較早結構版本的收據會在該處遭拒。這些無簽章的一致性檢查，無法對抗能重寫所有成員的行為者以驗證產物真偽。
 
-`runtime-source.v1` 是固定的十三模組讀取器契約，不是即時列舉規則。V2–V28 清單也已固定。V4 新增 `scgsim/aedt/_presentation.py`；V5 新增 `scgsim/sgb/geometry_plan.py` 與 `scgsim/sgb/__init__.py`。V7 在 V6 基礎新增 `scgsim/_notebook_presentation.py`。V8 在 V7 基礎新增 `scgsim/aedt/_junction_partition.py`。V9 在 V8 基礎新增 `scgsim/aedt/__init__.py`、`scgsim/aedt/_q3d_geometry.py`、`scgsim/sgb/adapter.py` 及 `scgsim/sgb/stack.py`。V10 在 V9 基礎新增共用 `scgsim/aedt/_handoff_cohort.py`；V11 在 V10 基礎新增 `scgsim/aedt/_q3d_bodies.py`。V12 固定保留 V11 的精確路徑成員。V13 保留固定清單、必要宣告模組位元組與摘要，以及可選 `revision_observation`；V1–V17 保留各自固定路徑、欄位意義與版本專屬讀取器規則。V14 未使用，SCGSim 沒有 V14 清單。V16 在 V15 清單新增 HFSS Eigenmode 原生實作模組。V17 在 V16 基礎新增共用集總模型、HFSS 集總原生模組與 AEDT specs 套件初始化模組。V18 移除原 EPR 私有路徑 `epr/junction_partition.py`，納入 `preparation/junction_partition.py`、移動後的 AEDT 資料／RLC／終端輔助函式、幾何／EPR／支撐規格、建模／平面準備、HFSS 幾何執行期、中立幾何表示模組，以及含多邊形操作葉節點的共用來源 Ground 建構輔助函式。V19 新增僅模型的已準備模型讀取器；V20–V22 保留各自宣告的歷史清單。V23 是 V24 的固定基礎清單。V24 在 V23 清單新增 `scgsim/aedt/runtime/batch_protocol.py`、`scgsim/aedt/runtime/batch_runner.py` 與 `scgsim/aedt/epr/evidence.py`；V25 新增矩陣執行控制實作。V26 凍結 167 條路徑；V27 凍結 283 條路徑，包含 118 個 AEDT 模組、兩個 AEDT 視覺化載入器、既有的非 AEDT 路徑，以及 AST 匯入與套件初始化檔閉合結果。V28 凍結 284 條路徑；相較 V27 新增 `scgsim/geometry/primitives/topology_validation.py`。V29 是目前版本，共 285 條路徑；相較 V28 新增 `scgsim/geometry/planning/junction_planning/lattice.py`。V23–V29 均使用上述五個欄位，沒有輔助雜湊對照。各版本精確路徑清單是其宣告實作清單，綁定已宣告檔案而非認證完整傳遞相依性。例如固定 V12 清單不另外雜湊 `scgsim/sgb/engine_gates.py`；這些清單也不改變 V3 收據結構。純初始收據編解碼器負責精確 V1/V2/V3 成員順序、兩個空白的 JSON 縮排與結尾換行。V1 省略準備來源資訊；V2、V3 將它放在 `source` 與 `outputs` 之間。讀取歷史證據使用已宣告固定結構，不把歷史雜湊與已安裝套件比較。
+純初始收據編解碼器負責精確 V1/V2/V3 成員順序、兩個空白的 JSON 縮排與結尾換行。V1 省略準備來源資訊；V2、V3 將它放在 `source` 與 `outputs` 之間。
 
-執行在收據綁定的失敗交易內、匯入 PyAEDT 或建立 Desktop 前，計算必要執行期來源資訊。目前 V29 可將 `revision_observation` 記為無法提供；單憑此點不會使逐位元組身份失敗或阻止執行。宣告模組位元組、摘要、結構或相容群組缺少／損壞，仍會在不啟動 Desktop 的情況下產生失敗 V3 收據，而不是逸出收據收尾。V1–V17 保留各版本歷史驗證規則，包含已宣告的修訂要求。
+### 執行期來源 {#runtime-source}
+
+執行期來源列出組成一次 AEDT 執行的 SCGSim 原始碼檔案，以及每個檔案的 SHA-256。它在每次使用時計算，而不是凍結的清單：從 `scgsim/aedt` 下的每個模組，以及兩個 AEDT 視覺化載入器 `scgsim/visualization/loaders/aedt.py` 與 `aedt_receipt.py` 出發的靜態匯入閉包。走訪會跟隨每個指向 `scgsim` 模組的 `import` 與 `from ... import`（包含函式內的匯入），並加入沿途的每個套件初始化檔。`src` 中 AEDT 沒有匯入的檔案不會列入，因此移動、更名或刪除這類檔案不影響 AEDT 的準備或執行。
+
+每筆記錄有五個欄位：
+
+| 欄位 | 意義 |
+|---|---|
+| `schema_version` | `scgsim.aedt.runtime-source.v30` |
+| `stage` | 寫入交接時為 `prepared`，開始執行時為 `actual` |
+| `modules` | 每個檔案一筆 `module`、`path` 與 `sha256`，依路徑排序 |
+| `content_sha256` | `modules` 標準 JSON 的 SHA-256 |
+| `revision_observation` | 實際 40 位十六進位 Git commit，或 `unavailable`（例如沒有 VCS 中繼資料的 wheel） |
+
+讀取器在下列條件全部成立時接受一筆記錄：
+
+- `schema_version` 為目前版本，`stage` 為預期的階段；
+- 路徑排序且不重複，每條都位於 `src/scgsim/` 之下且不含 `..`，每個 `module` 都是其路徑的點分名稱；
+- 路徑包含 `src/scgsim/__init__.py` 與 `src/scgsim/aedt/__init__.py`。每個 AEDT 匯入都經過這兩個套件初始化檔，缺少其一的清單就不是 AEDT 閉包；模組在 `scgsim/aedt` 內移動時，它們也不會移動；
+- `content_sha256` 與記錄的 `modules` 相符；
+- `revision_observation` 為 40 位十六進位 commit 或 `unavailable`。
+
+讀取器不把記錄的雜湊與已安裝套件比較：它們陳述實際執行的位元組，而已安裝的程式碼之後可能不同。`revision_observation` 為 `unavailable` 本身不會使記錄失敗。
+
+結構版本較早（`runtime-source.v1` 至 `v29`）的記錄會遭拒，訊息說明它由較早的 SCGSim 寫入。請以寫入該結果的 SCGSim commit 讀取它；Git 可用時，`revision_observation` 會記下該 commit。每份 V2 收據，以及 `runtime-source.v30` 之前寫入的每份收據或交接，都帶有較早的結構版本。
+
+執行在收據綁定的失敗交易內、匯入 PyAEDT 或建立 Desktop 前，計算 `actual` 記錄。缺少原始碼檔案或記錄損壞時，會在不啟動 Desktop 的情況下產生失敗 V3 收據，而不是逸出收據收尾。`prepared` 與 `actual` 記錄是不同時間的證據，不要求兩者相等。
 
 系列儲存契約維持明確失敗原則。求解前 `save_project()` 回傳 false，會在原生執行前中止；匯出後回傳 false，則在報告完成前中止。SCGSim 不把任何一種狀態改成部分成功收據，也不推定原生專案位元組可用。
 
