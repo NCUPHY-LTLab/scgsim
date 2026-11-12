@@ -15,7 +15,7 @@ import pytest
 from sgb_scenes import GRID, conductor, footprint, rect_um
 from test_sgb_sidecar import sidecar_of
 
-from scgsim.contracts.sgb_sidecar import views
+from scgsim.contracts.sgb_sidecar import sidecar_schema, views
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
     InsetRequest,
@@ -30,7 +30,6 @@ from scgsim.geometry.sgb.records.prisms import (
     PrismCatalogue,
     PrismRecord,
 )
-from scgsim.geometry.sgb.sidecar.files import sidecar_schema
 
 HALF = 20.0
 

@@ -235,18 +235,14 @@ def text_edges(plan: BrepPlan, lo: int, hi: int) -> str:
     ref_v, tolerance = plan.section_bases()["V"], _tolerance(plan)
     spans = [UNIT % x for x in plan.edge_span[lo:hi].tolist()]
     starts, ends = plan.edge_v[lo:hi, 0].tolist(), plan.edge_v[lo:hi, 1].tolist()
-    pc_surf, with_pcurves = plan.pc_surf, plan.write_pcurves
+    pc_surf = plan.pc_surf
     head = "Ed\n " + tolerance + " 1 1 0\n1  %d 0 0 %s\n"
     tail = "0\n\n" + FLAGS["Ed"] + "\n-%d 0 +%d 0 *\n"
     out = []
     for k, i in enumerate(range(lo, hi)):
-        representations = (
-            "".join(
-                "2  %d %d 0 0 %s\n" % (pc + 1, pc_surf[pc] + 1, spans[k])
-                for pc in plan.edge_pcs[i]
-            )
-            if with_pcurves
-            else ""
+        representations = "".join(
+            "2  %d %d 0 0 %s\n" % (pc + 1, pc_surf[pc] + 1, spans[k])
+            for pc in plan.edge_pcs[i]
         )
         out.append(
             head % (i + 1, spans[k])

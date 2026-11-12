@@ -75,7 +75,6 @@ class BrepPlan:
     pc_surf: np.ndarray  # (nPC,)
     edge_pcs: list[list[int]]  # per edge: the pcurves it carries
     groups: list[GroupPlan]
-    write_pcurves: bool = True
     timings: dict[str, float] = field(default_factory=dict)
 
     @property
@@ -112,7 +111,7 @@ class BrepPlan:
             "surfaces": len(self.surf_kind),
             "cylinders": int((self.surf_kind == CYLINDER).sum()),
             "arcs": int((self.edge_kind == ARC).sum()),
-            "pcurves": len(self.pc_edge) if self.write_pcurves else 0,
+            "pcurves": len(self.pc_edge),
             "free_faces": len(f.free_faces),
             "free_edges": len(f.free_edges),
         }
@@ -161,8 +160,6 @@ def plan_brep(
     topology: Topology,
     routed: RoutedModel,
     tolerance: float = TOLERANCE,
-    *,
-    pcurves: bool = True,
 ) -> BrepPlan:
     """Number every shape of the emitted volumes in ``TopExp::MapShapes`` order and collect surfaces and pcurves.
 
@@ -174,7 +171,7 @@ def plan_brep(
     try:
         surfaces = SurfaceBuilder(topology)
         found = walk_emitted_volumes(topology, routed, surfaces)
-        return _finish(topology, routed, surfaces, found, tolerance, pcurves)
+        return _finish(topology, routed, surfaces, found, tolerance)
     finally:
         if was_enabled:
             gc.enable()
@@ -186,7 +183,6 @@ def _finish(  # noqa: PLR0913 - the walk's products travel together
     surfaces: SurfaceBuilder,
     found: Numbering,
     tolerance: float,
-    pcurves: bool,
 ) -> BrepPlan:
     verts = np.array(
         [surfaces.point(v) for v in found.vertex_ids], dtype=float
@@ -237,7 +233,7 @@ def _finish(  # noqa: PLR0913 - the walk's products travel together
     check_one_tag_per_id(found)
     return BrepPlan(
         tolerance, found, verts, edge_v, kind, direction, span, centre, radius, sense, surf_kind, surf_geom,
-        surf_radius, pc_edge, pc_surf, edge_pcs, _group_plans(routed, found), write_pcurves=pcurves,
+        surf_radius, pc_edge, pc_surf, edge_pcs, _group_plans(routed, found),
     )  # fmt: skip
 
 

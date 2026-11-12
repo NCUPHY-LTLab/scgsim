@@ -6,7 +6,7 @@
   It needs Gmsh only (the ``palace`` extra).
 * ``occt``    -- the official OpenCASCADE checks (``BRepCheck_Analyzer``, ``BOPAlgo_ArgumentAnalyzer``,
   ``ShapeAnalysis``) of a written file, through OCP.  OCP is the optional ``occt`` dependency group: tests
-  and the optional strict mode use it; end-user installs do not pull it.  ``sidecar_mismatches`` there is
+  use it; end-user installs do not pull it.  ``sidecar_mismatches`` there is
   the OCP twin of the load-side comparison, used by the STEP export to refuse a file that does not
   belong to its sidecar.
 * ``tolerances`` -- the one set of tolerances both comparisons use (vertex position, relative area and volume).

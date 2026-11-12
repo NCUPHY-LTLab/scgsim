@@ -358,22 +358,6 @@ def test_every_pcurve_lifts_onto_its_3d_curve(tmp_path, emit_models, name):
     assert checked > 0 and worst < 1e-9
 
 
-def test_pcurves_are_not_needed_for_planes_but_are_for_cylinders(tmp_path, emit_models):
-    """Measured on OCCT 7.8.1 / Gmsh 4.15.2: without pcurves planar models load and mesh, a cylinder wall fails at merge."""
-    for name, expect_ok in (("bridge_b", True), ("pad_b", False)):
-        model = emit_models[name]
-        plan = plan_brep(model.topology, model.routed, pcurves=False)
-        path = tmp_path / f"{name}.brep"
-        write_brep_file(plan, path)
-        try:
-            with gmsh_session(path):
-                mesh_coarsely(60.0)
-            ok = True
-        except Exception:  # noqa: BLE001 -- any Gmsh failure is the measured outcome
-            ok = False
-        assert ok is expect_ok, name
-
-
 # --------------------------------------------------------------------------- determinism
 
 

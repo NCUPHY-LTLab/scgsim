@@ -11,7 +11,7 @@ from sgb_emit_cases import CASES, pad_requests
 from sgb_extreme_cases import catalogue_of, chip, disk
 from sgb_scenes import GRID, chip_prisms, conductor, footprint, pad_in_ground, rect_um
 
-from scgsim.contracts.sgb_sidecar import views
+from scgsim.contracts.sgb_sidecar import sidecar_schema, views
 from scgsim.geometry.sgb.cutfamilies.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.emission.plan import plan_brep
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
@@ -19,7 +19,6 @@ from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar
 from scgsim.geometry.sgb.sidecar.features import FEATURE_KINDS
-from scgsim.geometry.sgb.sidecar.files import sidecar_schema
 from scgsim.geometry.sgb.slivers.report import sliver_report
 
 FACTS_OF_KIND = {

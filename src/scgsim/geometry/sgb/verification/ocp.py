@@ -1,7 +1,7 @@
 """Whether OCP is installed, and the readable error when it is not.
 
 Owns the one place that knows OCP (``cadquery-ocp``, the OpenCASCADE binding) is an *optional* dependency, the
-``occt`` dependency group: nothing in a normal build needs it, the strict mode of ``build_sgb_geometry``, the OCCT
+``occt`` dependency group: nothing in a normal build needs it, the OCCT
 checks (``occt``) and the STEP export (``exchange.step``) do.  This module imports without OCP; the two that use it
 import it at module level, so reach them only after :func:`require_ocp` has said yes.
 """

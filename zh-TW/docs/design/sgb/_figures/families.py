@@ -47,7 +47,7 @@ from matplotlib.patches import Patch, PathPatch
 from plotly.subplots import make_subplots
 
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
-from scgsim.geometry.sgb.cutfamilies.generate import with_cut_families
+from scgsim.geometry.sgb.cutfamilies.generate import build_cut_families
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
     InsetRequest,
@@ -124,7 +124,7 @@ def scene(catalogue, window: bool, refine: bool, bands: bool, reverse: bool = Fa
     cat = with_extra_families(catalogue, _window_family()) if window else catalogue
     if not reverse:
         return build_model(cat, "A", insets=insets, refinements=refinements)
-    full = with_cut_families(cat, insets, refinements)
+    full = build_cut_families(cat, insets, refinements).catalogue
     return build_model_from_catalogue(
         replace(full, families=tuple(reversed(full.families))), "A"
     )
