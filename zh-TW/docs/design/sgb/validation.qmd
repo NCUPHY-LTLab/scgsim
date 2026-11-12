@@ -133,7 +133,7 @@ SGB 各頁使用的「保證」並不都是同一種強度。本頁與其他頁�
 
 ## Invariant
 
-驗證器（`validate`）是 S9 階段。它從完成的 record 重新推導每一條陳述，而不是信任本來應該保證它的 assembly 步驟。這些 check 在每次 build 中，於 assembly 之後、emission 之前執行一次：planarity 測試使用 tile 平行的 noding kernel，shell 測試依 volume 平行執行，其餘是對 record 的序列掃描。
+驗證器（`validate`）是 S9 階段。它從完成的 record 重新推導每一條陳述，而不是信任本來應該保證它的 assembly 步驟。這些 check 在每次 build 中，於 assembly 之後、emission 之前執行一次：planarity 測試使用 noding kernel，shell 測試逐 volume 執行，其餘是對 record 的掃描。
 
 ### Arrangement
 

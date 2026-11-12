@@ -7,7 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/arrangement"
 ---
 
-SGB 把一組精確的曲線變成一個 **arrangement**：一個 planar graph，它的 vertex 全都落在同一個格點上、edge 彼此不交叉，而每條 edge 仍記得它所來自的精確曲線。做法是帶 exact carrier 的 snap rounding，production 實作在 `scgsim.geometry.sgb.noding` 與 `arrangement`（整數運算的 iterated snap rounding、tile 平行、half-edge 結構與圓弧的 realisation）。本頁先在一個小範例上走完每一步（以 production 的 noding kernel 逐 round 執行），再說明哪些性質是保證的、哪些是量測的、成本多少，以及圓弧如何納入。
+SGB 把一組精確的曲線變成一個 **arrangement**：一個 planar graph，它的 vertex 全都落在同一個格點上、edge 彼此不交叉，而每條 edge 仍記得它所來自的精確曲線。做法是帶 exact carrier 的 snap rounding，production 實作在 `scgsim.geometry.sgb.noding` 與 `arrangement`（整數運算的 iterated snap rounding、half-edge 結構與圓弧的 realisation）。本頁先在一個小範例上走完每一步（以 production 的 noding kernel 逐 round 執行），再說明哪些性質是保證的、哪些是量測的、成本多少，以及圓弧如何納入。
 
 **Arrangement** 是由一組曲線對 XY 平面做的 planar 分割，以 vertex、edge 與 cell 儲存（見[詞彙表](index.qmd#glossary)）。輸入是一個 level 或一個 slab 的曲線（見 [2.5D layered model](layered-model.qmd)），輸出是帶有 cell 的 noded graph。cell 是 arrangement 中的平面區域，之後寫出的 BREP face 則是另一個東西。
 
@@ -63,7 +63,7 @@ Snapping 只有在曲線於非格點的位置**交叉**，或彼此距離小於�
 
 格點 $c$ 的 **pixel** 是 half-open 正方形 $[c_x - g/2,\ c_x + g/2) \times [c_y - g/2,\ c_y + g/2)$。只碰到 pixel 一個角的 segment 不會使它變成 hot，唯一的例外是左下角屬於該 pixel。production 的判斷式對這四個角的處理列在本頁最後的補充。
 
-這個慣例讓 pixel 鋪滿平面而不重疊，所以在 pixel 邊界上的一個點或一條 segment 恰好屬於一個 pixel。這也讓 tile 的切線可以落在 pixel 欄列之間（見 [Parallel derivation](parallelism.qmd)）。判斷式是整數比較：當 $c$ 位於 segment 的 bounding box 內，且 $2\,\lvert (b-a)\times(c-a)\rvert < \lvert b_x-a_x\rvert + \lvert b_y-a_y\rvert$ 時，segment $ab$ 碰到 $c$ 的 pixel；兩邊相等的情況依上面的角規則決定。
+這個慣例讓 pixel 鋪滿平面而不重疊，所以在 pixel 邊界上的一個點或一條 segment 恰好屬於一個 pixel。判斷式是整數比較：當 $c$ 位於 segment 的 bounding box 內，且 $2\,\lvert (b-a)\times(c-a)\rvert < \lvert b_x-a_x\rvert + \lvert b_y-a_y\rvert$ 時，segment $ab$ 碰到 $c$ 的 pixel；兩邊相等的情況依上面的角規則決定。
 
 ### Iterated snap rounding
 
@@ -77,7 +77,7 @@ Snapping 只有在曲線於非格點的位置**交叉**，或彼此距離小於�
 Hobby（1999）與 Guibas 和 Marimont（1998）把 snap rounding 定義為這個程序的第一個 round。Halperin 和 Packer（2002）則如上所述加以反覆。production 實作的是反覆的形式，且只使用整數運算，以 500 輪為上限，不收斂時丟出 `RuntimeError`。
 
 ::: {.callout-important title="設計決策：exact 運算決定 topology"}
-交點、pixel 判定與排序使用精確的整數運算；輸出頂點仍經 snapping，與原 carrier 的幾何偏離另外記錄。arrangement 的 topology 因此與 edge 或 tile 的處理順序無關，tile 可以被確定性地合併。「exact」說的是這些判定，不是說輸出頂點恰好在 carrier 上。
+交點、pixel 判定與排序使用精確的整數運算；輸出頂點仍經 snapping，與原 carrier 的幾何偏離另外記錄。arrangement 的 topology 因此與 edge 的處理順序無關。「exact」說的是這些判定，不是說輸出頂點恰好在 carrier 上。
 :::
 
 整個 pipeline 仍有三個浮點步驟，它們不改變 arrangement 的 topology，但會影響別處的結果：inset band 的 band 歸屬（以 face 的面積與其中取樣點到 gap edge 的浮點距離分類）、圓弧 footprint 的點測試（使用 witness 的弦），以及驗證時取樣的圓弧交叉檢查。只有直線 footprint 的 slab label 是完全以整數判定的。
@@ -140,8 +140,6 @@ production 把 edge 與 hot pixel 放進均勻的空間 hash，大約每個格�
 - **時間近乎線性。** 對於一個固定密度的短 segment 合成 arrangement，時間（snap rounding 加 DCEL，取三次最佳）從 2 000 到 64 000 條 segment，局部斜率介於 0.97 與 1.52 之間。最後一步用了四個 round（snap rounding 約 3.8 s、DCEL 約 0.7 s），其他步驟用了三個。在完整 pipeline 的 $N = 20000$ 時，noding 的 kernel 與 driver 花 12.8 s（推導與驗證總共 61.6 s），DCEL 花 3.9 s。這些計時是單次執行，同一台機器上重複量測會有明顯起伏（見[為什麼先規劃](why-plan-first.qmd)）。
 - **Round 很少。** 隨機集合需要兩到五個 round，200 個特徵的 layout 其每層 arrangement 需要一到兩個，範例則是一到兩個（`level_stats` 與 `layout_like`：`snap_rounds`）。
 
-Noding 不能是每個 tile 各自獨立的工作，因為改道後的弦可能終止在另一個 tile：每個 round 都是對 hot pixel 聯集的 barrier（見 [Parallel derivation](parallelism.qmd)）。
-
 ## 曲線類別 {#curve-classes}
 
 - **直線與圓弧**是第一版的類別。兩者對 offset 都是封閉的，所以 inset 曲線仍留在這個類別中。
@@ -176,11 +174,10 @@ witness 的代價是大小。半徑為 $r$ 的 quarter arc 約需要 $\sqrt{r/g}
 - **困難的曲線組合。** 極端案例目錄中，近乎相切的圓弧與直線（secant 深 2 nm）、夾角 1.6 度的兩段圓弧、共線重疊的 edge，以及 0.6 度窄縫的 reflex vertex，在 Route A 與 Route B 都通過全部檢查。
 - **來源曲線絕不移動。** 衍生曲線（inset、refinement curve）之後也許會被允許在某個容許值內 snap 到來源曲線上。那是經 Human 把關的 policy，不在本頁範圍內（見 [Sliver](slivers.qmd)）。
 - **Z。** arrangement 是 planar 的。Level 是精確的，從不被 snap。
-- **Tile seam。** tile 的切線落在 pixel 欄列之間，所以沒有任何 seam 幾何進入 arrangement，也就沒有 seam 需要在之後移除；合併後的結果與單一 tile 的結果相同（見 [Parallel derivation](parallelism.qmd)）。
 
 ## 補充：重現資料
 
-本頁的圖與數字是**計算所得**，全部來自 production `scgsim.geometry.sgb`。scaling 與 pipeline 大小的數字取自 `why_scaling.py measure` 的結果 `figures/why-scaling-measured.json`（seed 2 的隨機 layout，一個 tile、一個 worker）。逐步範例由 `docs/design/sgb/_figures/arrangement_steps.py` 產生，數字在 `figures/arrangement-steps-numbers.json`；腳本逐個 round 執行 production 的 noding kernel，並檢查最後的 edge 集合等於 `snap_round` 的結果。保證、drift、成本與圓弧 witness 由 `arrangement_guarantees.py` 產生，數字在 `figures/arrangement-guarantees-numbers.json`；執行範例的數字由該腳本對 production 模型建立 sliver report 與 level 統計得到。
+本頁的圖與數字是**計算所得**，全部來自 production `scgsim.geometry.sgb`。scaling 與 pipeline 大小的數字取自 `why_scaling.py measure` 的結果 `figures/why-scaling-measured.json`（seed 2 的隨機 layout）。逐步範例由 `docs/design/sgb/_figures/arrangement_steps.py` 產生，數字在 `figures/arrangement-steps-numbers.json`；腳本逐個 round 執行 production 的 noding kernel，並檢查最後的 edge 集合等於 `snap_round` 的結果。保證、drift、成本與圓弧 witness 由 `arrangement_guarantees.py` 產生，數字在 `figures/arrangement-guarantees-numbers.json`；執行範例的數字由該腳本對 production 模型建立 sliver report 與 level 統計得到。
 
 ::: {.askr-table-compact .askr-table-numeric}
 | N | Hot pixel 數 | Level arrangement 的 edge 數 | Slab arrangement 的 edge 數 | noding kernel（階段 wall time，s） | noding driver（s） | DCEL（s） |

@@ -94,7 +94,7 @@ window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它�
 | mesh refinement curve | 使用者或自動 | 任何表面 | `refinement_only` | 有（`RefinementRequest`） |
 :::
 
-**Tile seam 不是 family。** 以 pixel 之間的切線做 tiling 時，沒有任何 seam 幾何進入 arrangement（[平行化推導](parallelism.qmd)），所以不需要為它設一種 edge policy；`dissolve` 這個 edge policy 因此已移除，`CurveFamilyRecord` 拒絕 `required` 與 `refinement_only` 以外的任何 policy（以 `dissolve` 建構會得到 `ValueError: t: unknown edge policy 'dissolve'`，由 script 產生）。
+**只有兩種 edge policy。** 進入 arrangement 的曲線不是切開 cell，就是被 embed；沒有曲線是加入後又要再移除的，所以沒有 `dissolve` 這種 edge policy，`CurveFamilyRecord` 拒絕 `required` 與 `refinement_only` 以外的任何 policy（以 `dissolve` 建構會得到 `ValueError: t: unknown edge policy 'dissolve'`，由 script 產生）。
 
 ## Edge policy {#edge-policies}
 
@@ -184,7 +184,7 @@ flowchart TD
 ## 小結
 
 - family 是 `(id, role, curves, target levels, edge policy, support)`；arrangement 只讀 policy。
-- `required` 切開 cell，`refinement_only` embed 曲線；沒有 `dissolve`，tile seam 不是 family。
+- `required` 切開 cell，`refinement_only` embed 曲線；沒有 `dissolve`。
 - band 只從 gap edge 量距離（規則見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)）；其他 family 永遠不會移動它們。
 - 新的分割是一個 generator、一個 target 與一個 policy；沒有新的程式路徑。
 - 只有 dangling 的 refinement curve 與 volume 內部的 sheet 可以被 embed；其他都是 edge。port 位於 support plane 時是一般的 face。

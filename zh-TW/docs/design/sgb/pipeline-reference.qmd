@@ -1,6 +1,6 @@
 ---
 title: "Stage 與 record 參考"
-description: "SGB 每個 stage S0 到 S10 的查詢表（輸入、輸出、record、平行單位、失敗行為），以及 stage 之間傳遞模型的 record 與檔案。"
+description: "SGB 每個 stage S0 到 S10 的查詢表（輸入、輸出、record、工作單位、失敗行為），以及 stage 之間傳遞模型的 record 與檔案。"
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
@@ -16,26 +16,26 @@ scgsim-id: "docs/design/sgb/pipeline-reference"
 ## Stage 總覽
 
 ::: {.askr-table-compact}
-| Stage | 名稱 | 輸入 → 輸出 | 平行單位 | Production 的計時 stage（`ConformalModel.timings`） |
+| Stage | 名稱 | 輸入 → 輸出 | 工作單位 | Production 的計時 stage（`ConformalModel.timings`） |
 |---|---|---|---|---|
 | S0 | Source snapshot | `GeometryPlan` → normalized source（沿用 develop 的 fixed-grid source preparation） | occurrence | 不在 package 中（develop） |
 | S1 | Physical interpretation | source → effective input（含 Route A 的零厚度 sheet） | entity | 不在 package 中（develop） |
-| S2 | Prism catalogue | effective input → `PrismCatalogue`（`PrismRecord`）、`LevelStructure` | entity | `levels`（serial） |
+| S2 | Prism catalogue | effective input → `PrismCatalogue`（`PrismRecord`）、`LevelStructure` | entity | `levels` |
 | S3 | Cut families | prism + 請求（`InsetRequest`、`RefinementRequest`）→ `CurveFamilyRecord` | region × margin | 不單獨計時（在 arrangement 之前的 pre-pass） |
-| S4 | Arrangement | curve → snap-rounded $S_i$、$A_i$ | level 或 slab × tile | `noding_kernels`（parallel）、`noding_driver`、`dcel_faces`、`linking`、`arc_realisation` |
-| S5 | Labelling 與 dissolution | arrangement + prism → 帶 label 的最小 cell | cell | `labelling`（parallel）、`dissolution`（serial） |
-| S6 | Topology assembly | cell → vertex、edge、face、wall、shell、volume | slab、volume | `wall_runs`、`shells`（parallel）；`assembly_registry`、`assembly_faces`、`wall_prep`、`shell_prep`、`volume_connectivity`、`contact_check`、`manifold_check`（serial） |
-| S7 | Route representation | topology → 輸出或排除的 volume、導體 face | face 或 volume（label 規則） | `routes`（serial） |
-| S8 | Identity 與 group | topology → 語意名稱、group 計畫、lineage | face | `atomic_ids`（parallel） |
-| S9 | Validation | 所有 record → invariant 報告、sliver 報告 | 彼此獨立的檢查 | `validation_shells`（parallel）、`validation_serial` |
-| S10 | Emission | 計畫 → BREP/XAO 直接序列化 | 逐 chunk 平行寫出；其餘序列 | `SgbArtifacts.timings`：`plan`、`write_brep`、`write_xao`、`reports`、`sidecar` |
+| S4 | Arrangement | curve → snap-rounded $S_i$、$A_i$ | level 或 slab | `noding_kernels`、`noding_driver`、`dcel_faces`、`linking`、`arc_realisation` |
+| S5 | Labelling 與 dissolution | arrangement + prism → 帶 label 的最小 cell | cell | `labelling`、`dissolution` |
+| S6 | Topology assembly | cell → vertex、edge、face、wall、shell、volume | slab、volume | `wall_runs`、`shells`、`assembly_registry`、`assembly_faces`、`wall_prep`、`shell_prep`、`volume_connectivity`、`contact_check`、`manifold_check` |
+| S7 | Route representation | topology → 輸出或排除的 volume、導體 face | face 或 volume（label 規則） | `routes` |
+| S8 | Identity 與 group | topology → 語意名稱、group 計畫、lineage | face | `atomic_ids` |
+| S9 | Validation | 所有 record → invariant 報告、sliver 報告 | 彼此獨立的檢查 | `validation_shells`、`validation_serial` |
+| S10 | Emission | 計畫 → BREP/XAO 直接序列化 | chunk | `SgbArtifacts.timings`：`plan`、`write_brep`、`write_xao`、`reports`、`sidecar` |
 :::
 
 Route A、Route B 與 Route C 是 S7 的 labelling 政策（以及 S1 的 prism 詮釋），不是不同的 pipeline。Route C 保留 conductor volume 並在內部做 mesh（D1，納入 v1），production 已實作並有測試。
 
 ## Stage 細節
 
-每個表列出該 stage 讀什麼、寫什麼、使用哪些 record、平行單位，以及失敗時的行為。任何失敗都會停止 build；絕不產生 fallback 幾何。
+每個表列出該 stage 讀什麼、寫什麼、使用哪些 record、工作單位，以及失敗時的行為。任何失敗都會停止 build；絕不產生 fallback 幾何。
 
 ### S0 Source snapshot
 
@@ -47,7 +47,7 @@ S0 與 S1 沿用 develop 中已有的 fixed-grid source preparation：source 的
 | 輸入 | `GeometryPlan`（occurrence、Net、產生的 vacuum、contact 與 route 宣告） |
 | 輸出 | normalized source：帶有 source identity 的 polygon，以及 `GeometryGridContext`（`grid_size_um`、`coordinate_frame`） |
 | Record | 既有的 source contract |
-| 平行單位 | occurrence |
+| 工作單位 | occurrence |
 | 失敗 | 既有 contract 的 source 驗證 |
 :::
 
@@ -61,7 +61,7 @@ S0 與 S1 沿用 develop 中已有的 fixed-grid source preparation：source 的
 | 輸入 | normalized source、stack、approximation profile |
 | 輸出 | effective prism：材料、Net、Z 區間、role；source 的物理宣告仍保留 |
 | Record | 餵給 `PrismRecord`；`PhysicalLayerDeclaration` 是 source 端的 record |
-| 平行單位 | entity |
+| 工作單位 | entity |
 | 失敗 | 既有 contract 的錯誤（缺少物理宣告、材料無法解析、幾何與 route 不相容） |
 :::
 
@@ -73,7 +73,7 @@ S0 與 S1 沿用 develop 中已有的 fixed-grid source preparation：source 的
 | 輸入 | effective `GeometryBuildInput`、`RepresentationContext`（含 `GeometryGridContext`）、curve family |
 | 輸出 | `PrismCatalogue`（`Grid`、`PrismRecord` 清單、`CurveFamilyRecord`）與 `LevelStructure`（level、slab、active set、每個 level 的 sheet、family 目標；family 目標的 Z 若沒有任何 prism 定義，會加入一個一般 level） |
 | Record | `Grid`、`Lineage`、`LineCarrier`、`ArcCarrier`、`Footprint`、`PrismRecord`、`PortIdentity`、`PrismCatalogue`、`LevelStructure` |
-| 平行單位 | entity |
+| 工作單位 | entity |
 | 失敗 | `InputError`：沒有格點資訊、頂點不在宣告的格點上、conductor 不在 representation context 中、port 沒有 host、host 沒有宣告 `layer_attachment_face`、host 的宣告平面彼此不同、重建紀錄不合法；`UnsupportedCurveError`：spline 邊界；`ValueError`：$z_1 < z_0$ 的 prism、沒有 Net 的 conductor；`RouteError`：route 不認得，或 prism 不適用該 route |
 :::
 
@@ -87,7 +87,7 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 | 輸入 | prism 與 family 請求：`InsetRequest`（support 為 `ConductorSurface`、`SolutionInterface` 或按 Surface EPR 種類選出所有 face 的 `InterfaceSurfaces`，margin 序列）、`RefinementRequest`（折線）；port footprint 是 port prism，不經過請求 |
 | 輸出 | `CurveFamilyRecord`：carrier（line）、arc、目標 level、edge 政策、support region |
 | Record | `CurveFamilyRecord`、`SupportRegion`（由精確 line 與 arc primitive 組成的 ring，加上 margin）、`InsetRequest`、`ConductorSurface`、`SolutionInterface`、`InterfaceSurfaces`、`RefinementRequest` |
-| 平行單位 | region × margin |
+| 工作單位 | region × margin |
 | 失敗 | `InputError`：請求找不到對應的 face、margin 不是遞增的正整數格點倍數、request id 重複、宣告的 interface 種類與 cell 的 label 不符；v1 拒絕對 B-spline carrier 做 inset；空的 band 是結果，不是失敗；edge 政策只有 `required` 與 `refinement_only`，其他值會被 `CurveFamilyRecord` 拒絕 |
 :::
 
@@ -99,7 +99,7 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 | 輸入 | prism 邊界 carrier、family carrier、sheet，逐 slab 與逐 level |
 | 輸出 | 每個 slab $S_i$ 與 level $A_i$ 的 `Layer`：附 carrier 集合的 snap-rounded edge、half-edge 結構、帶 hole 的 face、經由 snapped 端點實現的 arc edge |
 | Record | `Segment`、`NodedEdge`、`Arrangement`（`Cycle`、`FaceRec`）、`RealisedArc`、`Layer` |
-| 平行單位 | （level 或 slab）× tile；每一輪 snap rounding 一次 fork/join，driver 與 half-edge 結構是序列的 |
+| 工作單位 | level 或 slab；每一輪 snap rounding 對整個 arrangement 執行一次 |
 | 失敗 | 迭代 snap rounding 不收斂時 `RuntimeError`（500 輪）；覆蓋某條 slab edge 的 level edge chain 缺失、不明確或斷裂，或 level cell 對所在 slab cell 意見不一時 `SgbError`；後續檢查：沒有交叉 edge、沒有 vertex 落在 edge 內、arc edge 彼此不交叉、arc 偏差在 snap bound 內 |
 :::
 
@@ -111,11 +111,11 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 | 輸入 | arrangement、prism、family 的 edge 政策 |
 | 輸出 | slab label（`Domain`）、level label（`LevelLabel`），然後是 dissolve 後的 arrangement：移除非 required 的 edge、合併 cell、移除同一 carrier 上的 degree-2 vertex；`refinement_only` 曲線保留為內嵌 edge |
 | Record | `Domain`、`SheetOwner`、`LevelLabel`、`FamilyPolicies`、`Dissolved` |
-| 平行單位 | cell（labelling）；dissolution 是序列的 |
+| 工作單位 | cell（labelling）；dissolution 逐 layer |
 | 失敗 | `OverlapError`：不同 Net 的 conductor 重疊、同一個 Net 的兩個 Entity 以相同 priority 重疊（訊息指出該補哪個 priority 來源）、不同 owner 的 sheet 重疊、同 priority 但材料不同的 dielectric；`SgbError`：落在沒有 face 的 cell 或不輸出之 volume 的 `refinement_only` 片段（refinement 片段不會被默默丟棄） |
 :::
 
-Tile seam 不是 family，所以沒有 `dissolve` edge 政策；`dissolve` 這個 edge 政策已不存在。
+沒有 `dissolve` edge 政策：進入 arrangement 的曲線不是切開 cell，就是被 embed。
 
 ### S6 Topology assembly
 
@@ -125,7 +125,7 @@ Tile seam 不是 family，所以沒有 `dissolve` edge 政策；`dissolve` 這�
 | 輸入 | dissolve 後的 slab 與 level arrangement、level cell 與 slab cell 之間的連結 |
 | 輸出 | `Topology`：vertex、edge（horizontal、vertical、refinement）、horizontal face、**coalesced** wall（曲面 wall 在外來 vertex 處切成精確圓柱）、vertical edge column、volume、shell |
 | Record | `TopoVertex`、`TopoEdge`、`TopoFace`、`Shell`、`TopoVolume`、`Topology` |
-| 平行單位 | slab（wall）、volume（shell）；volume connectivity 是全域 reduction |
+| 工作單位 | slab（wall）、volume（shell）；volume connectivity 是全域 reduction |
 | 失敗 | `ContactError`（`contact_check`）：不同 Net 的 conductor 在 slab 或 level arrangement 的 vertex、edge 或疊合的 face 上接觸（包含 Route A sheet 共用 edge 或 vertex，以及只在 grid 上因 snapping 才出現的接觸，例如 4 nm 間隙在 g = 1 nm 通過、在 g = 10 nm 失敗）；`SgbError`：wall 連接不同 volume 的 cell，或 slab edge chain 不明確或斷裂。`NonManifoldError`（`check_manifold`）：同一個 domain 的兩個 cell 只在 slab 的一個 vertex 相接，也就是 volume 會把一條 vertical edge 使用四次（non-manifold pinch；也包含 Route B 中 hole 碰到自己的外邊界）；它在 shell assembly 之前就丟出，訊息指名 Net、entity、位置與「vertical edge」。Route A 的 sheet 可以在角落相接，不受影響。`shells_closed_and_oriented` 保留為第二道防線 |
 :::
 
@@ -137,7 +137,7 @@ Tile seam 不是 family，所以沒有 `dissolve` edge 政策；`dissolve` 這�
 | 輸入 | topology、route 政策 |
 | 輸出 | 哪些 volume 要輸出（Route A 與 B 排除 conductor volume；Route C 保留它們）、每個 face 與 volume 的 primary group（`RoutedModel`） |
 | Record | `RoutePolicy`（`name`、`exclude_conductor_volumes`、`allows_sheets`、`rejects_finite_films`）；Route A、B、C 各是一個常數 |
-| 平行單位 | face 或 volume（label 規則） |
+| 工作單位 | face 或 volume（label 規則） |
 | 失敗 | `RouteError`（route check，在任何 arrangement 之前）；refinement curve 落在沒有輸出 volume 的 face 時 `SgbError` |
 :::
 
@@ -151,7 +151,7 @@ production 依 D5 以 Entity 歸屬命名 group，見 [D5](decisions.qmd#d5)。
 | 輸入 | topology |
 | 輸出 | content-addressed ID、每個 face 與 volume 恰好一個 primary physical group、union、`surface_epr_rows`、edge lineage、face source、membership |
 | Record | `RoutedModel.groups`、`RoutedModel.unions`、`RoutedModel.surface_epr_rows`、`RoutedModel.face_group`、`Topology.lineage`、`TopoFace.sources`、`TopoFace.membership`、`TopoFace.bands` |
-| 平行單位 | face |
+| 工作單位 | face |
 | 失敗 | 空的 physical group、同一 entity 屬於兩個 group、沒有名稱的輸出 face、union 指到不存在的 group（由 S9 檢查） |
 :::
 
@@ -163,7 +163,7 @@ production 依 D5 以 Entity 歸屬命名 group，見 [D5](decisions.qmd#d5)。
 | 輸入 | 以上所有 record |
 | 輸出 | `ValidationReport`（`Check`：name、passed、warning、detail；一次 build 31 項，4 項是警告）與 sliver 報告 |
 | Record | `Check`、`ValidationReport`；sliver 報告是普通 mapping |
-| 平行單位 | 彼此獨立的檢查；shell 檢查逐 volume |
+| 工作單位 | 彼此獨立的檢查；shell 檢查逐 volume |
 | 失敗 | `ValidationError`，列出失敗的 invariant；warning（arc 偏差、非平面 wall、薄於 $g$ 的 slab 與垂直 edge）不會停止 build。production build 無法關閉 validation；關閉開關只存在於原型的測試中 |
 :::
 
@@ -179,7 +179,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | 輸入 | topology、route |
 | 輸出 | `semantic_geometry_route_<a\|b\|c>.brep`、`.xao`、`.sidecar.json`（`scgsim.sgb.sidecar.v3`）、`.slivers.json`、`.validation.json`；Gmsh 只用來做 meshing（與作為測試 oracle） |
 | Record | 直接 writer 的計畫（`BrepPlan`：vertex、edge、wire、face、shell、solid 與 pcurve）；`SgbArtifacts`（五個路徑、route、counts、timings） |
-| 平行單位 | writer 可分 chunk 平行寫出，輸出對任何 worker 數逐位元相同 |
+| 工作單位 | writer 以 chunk 依檔案順序算繪，輸出對任何 chunk 大小逐位元相同 |
 | 失敗 | 直接 writer 明確寫出每個 orientation；writer 拒絕不能精確寫出的曲面（不是平面、不是單一圓的圓柱、帶洞的曲面 wall 等）時 `SgbError`；對寫出的檔案執行 `check_file(strict=True)` 時，OCCT finding 為 `OcctCheckError`，缺 OCP 為 `OcctUnavailable`；寫出的檔案不依賴 Gmsh 的 healing，需要 fix 就是規劃缺陷 |
 :::
 

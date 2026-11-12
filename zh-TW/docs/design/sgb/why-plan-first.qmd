@@ -98,29 +98,29 @@ flowchart TB
 
 ## 規劃能換來什麼：實測
 
-本節的數字另有[幾何建構效能](../../research/geometry-build/index.qmd)研究逐頁整理：scaling、direct writer 與載入、檢查成本、平行化，以及機器、版本與重現指令。
+本節的數字另有[幾何建構效能](../../research/geometry-build/index.qmd)研究逐頁整理：scaling、direct writer 與載入、檢查成本，以及機器、版本與重現指令。
 
-這一節是 production `scgsim.geometry.sgb` 的量測。scaling 執行建立 Route B 的隨機 layout（`tests/sgb_scenes.py` 的 `random_layout`，間距 260 µm），特徵數為 $N = 1000, 5000, 20000$，每個都有三個 slab 與四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 14 215 成長到 285 871。每個 $N$ 都在九種排程下各自以一個新的 Python 行程建立（一個 tile 配一個 worker，以及 $4 \times 4$ 與 $8 \times 8$ 個 tile，各搭配 1、8、16、32 個 worker），所以記憶體是該次執行自己的。整個重跑在一台 64 核心的機器上共 970 s（約 16 分鐘）。**這些 scaling 執行全是 polygon-only 的 layout：沒有圓弧、沒有 witness 的弦、沒有圓柱 wall，也沒有 band。** 因此圓弧與 band 在大規模下的成本與 exactness 並沒有量測，本頁不外推。數字的來源列在本頁最後的補充。
+這一節是 production `scgsim.geometry.sgb` 的量測。scaling 執行建立 Route B 的隨機 layout（`tests/sgb_scenes.py` 的 `random_layout`，間距 260 µm），特徵數為 $N = 1000, 5000, 20000$，每個都有三個 slab 與四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 14 215 成長到 285 871。每個 $N$ 都以一個新的 Python 行程建立，所以記憶體是該次執行自己的；量測在一台 64 核心的機器上執行。**這些 scaling 執行全是 polygon-only 的 layout：沒有圓弧、沒有 witness 的弦、沒有圓柱 wall，也沒有 band。** 因此圓弧與 band 在大規模下的成本與 exactness 並沒有量測，本頁不外推。數字的來源列在本頁最後的補充。
 
 **隨機 layout 的 seed。** 先前原型的量測用 seed 1。production 對 seed 1、$N = 20000$ 的 layout 以 `NonManifoldError` 拒絕：同一個 Net 的兩個形狀（`f5879` 與 `f5879b`）只在一個 vertex 相接，這是 production fail closed 的輸入，原型當時沒有檢查而建得出來。所以本頁所有 $N$ 都改用 seed 2（seed 2 到 9 在 $N = 20000$ 都建得出來）；上面的結構計數也用同一個 seed。
 
-![規劃後 pipeline 的 wall time（左）與 peak memory（右）對特徵數 N 的關係，座標軸為對數。虛線的斜率為 1。紅線是測試用的 Gmsh-API oracle，只量到 N = 2000。](figures/why-scaling.svg){#fig-scaling fig-alt="N = 500 到 20000 的兩張對數-對數圖。左：推導、direct BREP writer 與 Gmsh 載入 XAO 三條上升的線，N = 1000、5000、20000，各自靠近斜率為 1 的虛線參考線；另一條紅色的 Gmsh API test oracle 只有 N = 500、1000、2000 三點，斜率明顯大於 1。右：父行程的 peak memory，單一 tile 與 4 × 4 tile 兩條線幾乎重合，略低於斜率為 1 的參考線。"}
+![規劃後 pipeline 的 wall time（左）與 peak memory（右）對特徵數 N 的關係，座標軸為對數。虛線的斜率為 1。紅線是測試用的 Gmsh-API oracle，只量到 N = 2000。](figures/why-scaling.svg){#fig-scaling fig-alt="N = 500 到 20000 的兩張對數-對數圖。左：推導、direct BREP writer 與 Gmsh 載入 XAO 三條上升的線，N = 1000、5000、20000，各自靠近斜率為 1 的虛線參考線；另一條紅色的 Gmsh API test oracle 只有 N = 500、1000、2000 三點，斜率明顯大於 1。右：建構行程的 peak memory，略低於斜率為 1 的參考線。"}
 
 {{< askr-chart-view src="figures/why-scaling.html" label="檢視 scaling 資料" >}}
 
 看 @fig-scaling 時請注意：推導、direct writer 與載入的曲線都靠近斜率為 1 的虛線。$N = 1000$ 到 $5000$ 之間，推導的局部斜率是 1.13；$5000$ 到 $20000$ 之間是 1.05；模型的 face 數斜率為 1.01 與 0.99，peak memory 為 0.85 與 0.95。這些斜率是單次執行的結果，同一台機器上重複量測的時間會有起伏（見下），所以請把推導的斜率讀成 1.0 到 1.15 的範圍。在這個範圍內，規劃後的 pipeline 對模型大小是**近乎線性**的。紅色的 Gmsh-API oracle 則不是：$N = 500$、1000、2000 的時間是 2.3 s、8.9 s、63.3 s，局部斜率 2.0 與 2.8。
 
 ::: {.askr-table-compact .askr-table-numeric}
-| N | Face 數 | 推導與驗證 S2-S9（s） | direct BREP/XAO write，單一行程（s） | direct write，16 個 worker（s） | Gmsh 載入 XAO（s） | Peak RSS，單一 tile（MB） | Peak RSS，4 × 4 tile（MB） |
-|---|---|---|---|---|---|---|---|
-| 1 000 | 14 215 | 2.33 | 0.49 | 0.44 | 1.56 | 135 | 143 |
-| 5 000 | 71 969 | 14.46 | 2.81 | 2.19 | 9.55 | 534 | 536 |
-| 20 000 | 285 871 | 61.64 | 13.80 | 9.14 | 49.67 | 2 001 | 1 979 |
+| N | Face 數 | 推導與驗證 S2-S9（s） | direct BREP/XAO write（s） | Gmsh 載入 XAO（s） | Peak RSS（MB） |
+|---|---|---|---|---|---|
+| 1 000 | 14 215 | 2.33 | 0.49 | 1.56 | 135 |
+| 5 000 | 71 969 | 14.46 | 2.81 | 9.55 | 534 |
+| 20 000 | 285 871 | 61.64 | 13.80 | 49.67 | 2 001 |
 :::
 
-「推導與驗證」是 `build_model_from_catalogue` 的整段 wall time，包含結構驗證，且驗證在 production 中不能關閉。「direct write」是 emission 的規劃（`plan_brep`）加上寫出 BREP 與 XAO；16 個 worker 那一欄只重做這三步。Gmsh 載入是 `gmsh.open` 加 `synchronize`。Peak RSS 是 build 完成時父行程的最大常駐記憶體；**與原型不同，tile 沒有讓父行程的記憶體下降**（$N = 20000$ 時 2 001 MB 對 1 979 MB；我們沒有追查原因）；使用 worker 時父行程約 2 200 MB，每個 worker 約 2 000 MB。
+「推導與驗證」是 `build_model_from_catalogue` 的整段 wall time，包含結構驗證，且驗證在 production 中不能關閉。「direct write」是 emission 的規劃（`plan_brep`）加上寫出 BREP 與 XAO。Gmsh 載入是 `gmsh.open` 加 `synchronize`。Peak RSS 是 build 完成時建構行程的最大常駐記憶體。
 
-**單次執行的起伏。** 這台機器上沒有對同一個 layout 重複量測。唯一可比較的是中途被中止的那次重跑：它用 seed 1 的 $N = 1000$ layout，同一個一個 tile 的推導在三次不同的呼叫中量到 1.95 s、2.02 s 與 2.15 s，起伏約 10%。推導的最佳加速是 1.22 倍（$N = 1000$，$4 \times 4$ tile 與 32 個 worker）、1.26 倍（$N = 5000$，$8 \times 8$ tile 與 8 個 worker）與 1.17 倍（$N = 20000$，$8 \times 8$ tile 與 8 個 worker），而一個 worker 的 $4 \times 4$ 與 $8 \times 8$ tile 比一個 tile 還慢（$N = 20000$ 時 0.92 與 0.89 倍），所以這些加速的差距大多在起伏之內。本頁的數字用來看量級與斜率，不是用來比較兩次執行之間的小差距。
+**單次執行的起伏。** 這台機器上沒有對同一個 layout 重複量測。唯一可比較的是中途被中止的那次重跑：它用 seed 1 的 $N = 1000$ layout，同一個推導在三次不同的呼叫中量到 1.95 s、2.02 s 與 2.15 s，起伏約 10%。本頁的數字用來看量級與斜率，不是用來比較兩次執行之間的小差距。
 
 ### Emission 是尾巴
 
@@ -128,18 +128,18 @@ flowchart TB
 
 推導完成之後，必須寫出 CAD 檔案與 sidecar，再由 Gmsh 載入；量測還包含測試用的載入檢查 `verify_loaded`。這些步驟是循序的，在 $N = 20000$ 時合計比推導還長。逐一呼叫來建立幾何的 Gmsh API，只保留作為**測試用 oracle**（`tests/sgb_gmsh_oracle.py`）；這裡的比較就是決策 D8 的證據，D8 讓 direct writer 成為 emission 的路徑。
 
-![N = 20000 時，從驗證過的模型到 Gmsh 可以 mesh 的模型所需的時間：direct BREP/XAO writer 的每一步（一個行程與 16 個 worker；兩者的 reports、sidecar、載入與載入檢查是同一次量測）。Gmsh-API oracle 在這個規模跑不完，所以不在圖中。](figures/why-tail.svg){#fig-tail fig-alt="兩條水平堆疊長條。第一條 direct BREP/XAO（單一行程）：推導與驗證 61.6 秒、寫出 CAD 檔案 13.8 秒、sliver 與 validation 報告 49.7 秒、sidecar 19.6 秒、Gmsh 載入 49.7 秒、載入檢查 15.3 秒，合計 210 秒。第二條使用 16 個 worker，寫出 CAD 檔案為 9.1 秒，合計 205 秒。"}
+![N = 20000 時，從驗證過的模型到 Gmsh 可以 mesh 的模型所需的時間：direct BREP/XAO writer 的每一步。Gmsh-API oracle 在這個規模跑不完，所以不在圖中。](figures/why-tail.svg){#fig-tail fig-alt="一條水平堆疊長條 direct BREP/XAO：推導與驗證 61.6 秒、寫出 CAD 檔案 13.8 秒、sliver 與 validation 報告 49.7 秒、sidecar 19.6 秒、Gmsh 載入 49.7 秒、載入檢查 15.3 秒，合計 210 秒。"}
 
 {{< askr-chart-view src="figures/why-tail.html" label="檢視端到端的堆疊" >}}
 
 看 @fig-tail 時請注意：
 
-- **直接寫出 BREP/XAO 本身很便宜。** 規劃好的階層以文字寫出，沒有任何東西透過 API 建立：單一行程 13.8 s，16 個 worker 9.1 s（寫出 BREP 的部分從 6.5 s 降到 1.1 s，規劃 `plan_brep` 的 6.9 s 仍是循序的）。三個檔案共 $190 + 282 + 232 = 704$ MB（BREP 190 MB、XAO 282 MB、sidecar 232 MB）。
+- **直接寫出 BREP/XAO 本身很便宜。** 規劃好的階層以文字寫出，沒有任何東西透過 API 建立：13.8 s，其中規劃 `plan_brep` 佔 6.9 s。三個檔案共 $190 + 282 + 232 = 704$ MB（BREP 190 MB、XAO 282 MB、sidecar 232 MB）。
 - **sidecar 與報告不便宜。** 附有 lineage 與 membership 的 sidecar 在 $N = 20000$ 時要 19.6 s（這裡的 sidecar 時間與大小都以前一版格式 v2 量得；目前的 v3 記錄得更多，見 [Emission](emission.qmd#physical-groups-and-the-sidecar)），sliver 與 validation 報告要 49.7 s。這兩項合計 69 s，比寫出 CAD 檔案本身多得多；它們與 CAD 檔案一起寫出，所以屬於 emission 的成本。
 - **載入不屬於 SGB。** Gmsh 解析 267 635 個 face 在 $N = 20000$ 時要 49.7 s，這是 Gmsh 讀取任何格式的下限，而且它和其他一切一樣，隨 face 數成長（局部斜率 1.13 與 1.19）。載入之後的 `verify_loaded` 再花 15.3 s。
 - **Gmsh API 的 oracle 比 direct writer 慢得多，而且不是線性成長。** 同一個 layout 在 $N = 1000$ 時 oracle 要 8.9 s，direct writer 要 0.49 s（約 18 倍）；$N = 2000$ 時 oracle 要 63.3 s。oracle 與主要的 scaling 重跑同時執行時更慢（同樣三個 $N$ 量到 2.6 s、9.7 s、107.7 s），所以它的時間對機器負載很敏感，請只看量級。一次 $N = 5000$ 的試跑超過 10 分鐘仍未完成，已中止，所以 oracle 沒有 $N = 5000$ 與 $N = 20000$ 的數字，也不外推。
 
-讀這張圖的結論：規劃去除了全域 fragment，並讓推導近乎線性；但在大 $N$ 時，端到端的時間仍由數個循序步驟決定，其中一個還在 SGB 之外：寫出、報告、sidecar、Gmsh 載入與載入檢查合計 148 s（單一行程）或 143 s（16 個 worker），相對於 62 s 的推導。平行化無法解決它們（見 [Parallel derivation](parallelism.qmd)）。推導本身的加速在 $N = 20000$ 最多約 1.2 倍，這是 CPython 的限制，不是演算法的限制（見[設計決議](decisions.qmd#d9)）。
+讀這張圖的結論：規劃去除了全域 fragment，並讓推導近乎線性；但在大 $N$ 時，端到端的時間仍由數個循序步驟決定，其中一個還在 SGB 之外：寫出、報告、sidecar、Gmsh 載入與載入檢查合計 148 s，相對於 62 s 的推導；更快的推導也無法縮短它們。推導本身的成本主要來自純 Python 的 half-edge 結構與 dissolution，這是 CPython 的限制，不是演算法的限制（見[設計決議](decisions.qmd#d9)）。
 
 ### 為什麼不透過 Gmsh API 建立 solid
 
@@ -152,18 +152,10 @@ direct writer 逐 face 明確寫出每一個方向，所以事後沒有任何東
 
 ### Identity 性質
 
-Identity 是結果的性質，不是排程的性質。scaling 執行以九種排程建立每個模型：一個 tile 配一個 worker，以及 $4 \times 4$ 與 $8 \times 8$ 個 tile，各搭配 1、8、16、32 個 worker。接著把結果中每個 vertex、edge、face、volume、slab cell、level cell 與 physical group 成員的 id，雜湊成一個 digest（`ConformalModel.identity_digest`）。
+Identity 是結果的性質，不是執行的性質。把結果中每個 vertex、edge、face、volume、slab cell、level cell 與 physical group 成員的 id 雜湊成一個 digest（`ConformalModel.identity_digest`），同一個輸入每次都得到同一個 digest。
 
-::: {.askr-table-compact}
-| N | 建立的排程數 | 不同的 id digest 數 | Digest | 驗證通過 |
-|---|---|---|---|---|
-| 1 000 | 9 | **1** | `model:9095ca2ad1603d63` | 9 個全部 |
-| 5 000 | 9 | **1** | `model:69a7ed793ef3730b` | 9 個全部 |
-| 20 000 | 9 | **1** | `model:f1c080e474d97bfc` | 9 個全部 |
-:::
-
-::: {.callout-note title="性質：相同輸入得到相同 id（依構造成立；以 27 次執行量測）"}
-依構造，id 與 tile 配置及 worker 數無關；量測上，在 27 次 production 執行（3 種 $N$ 乘上 9 種排程）中，每個實體的 id 在每一種排程下都相同；production 的測試（`tests/test_sgb_tiling.py`）對執行範例、隨機 layout 與一個大型 layout，在不同的 tile 數與 worker 數下檢查 id 相同。理由：id 是內容的雜湊（level、格點座標、carrier、label）；edge 的 id 是 H(plane key、排序後的端點 vertex id、排序後的 carrier id 集合)；tile 的切線落在 pixel 欄列之間，所以沒有任何 tile 會產生幾何（見 [Parallel derivation](parallelism.qmd)、[Identity](identity.qmd)）。
+::: {.callout-note title="性質：相同輸入得到相同 id（依構造成立；以測試檢查）"}
+依構造，id 只由輸入的內容決定；production 的測試（`tests/test_sgb_determinism.py`）對執行範例與隨機 layout 推導兩次、並在不同的 `PYTHONHASHSEED` 下檢查 digest 相同。理由：id 是內容的雜湊（level、格點座標、carrier、label）；edge 的 id 是 H(plane key、排序後的端點 vertex id、排序後的 carrier id 集合)（見 [Identity](identity.qmd)）。
 :::
 
 solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序，以及模糊的 face 被歸給哪個輸入，都取決於 kernel 的走訪順序。
@@ -189,5 +181,5 @@ solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序
 本頁的圖與數字是**計算所得**，全部來自 production `scgsim.geometry.sgb`。Gmsh sewing 的成本與 vacuum 內外顛倒在大型 layout 上的情形沒有用 production 量測，主文只用 production oracle 的 solid 質量說明方向問題。
 
 - `docs/design/sgb/_figures/why_structure.py` 對測試 scene 的隨機 layout 產生器（`tests/sgb_scenes.py` 的 `random_layout`，Route B，間距 260 µm，seed 2）計數 box pair、wire 與 coplanar face，數字在 `figures/why-structure-numbers.json`；它不執行任何 Boolean 運算。
-- `docs/design/sgb/_figures/why_scaling.py measure` 對 $N = 1000, 5000, 20000$ 與九種排程各在一個新行程中建立模型並量測，一個 tile 的案例還寫出 BREP/XAO（1 與 16 個 worker）、以 Gmsh 載入並執行 `verify_loaded`，原始資料在 `figures/why-scaling-measured.json`（共 970 s，機器為 64 核心，Python 3.12）。`why_scaling.py oracle` 量測測試用的 Gmsh-API oracle（$N = 500, 1000, 2000$，含 solid 質量），`why_scaling.py validators` 量測每一項結構驗證的時間（`figures/why-validator-scaling.json`）。不帶參數執行時，腳本由這三個檔案畫出 `why-scaling` 與 `why-tail` 的圖，並寫出 `figures/why-scaling-numbers.json`。
+- `docs/design/sgb/_figures/why_scaling.py measure` 對 $N = 1000, 5000, 20000$ 各在一個新行程中建立模型並量測，寫出 BREP/XAO、以 Gmsh 載入並執行 `verify_loaded`，原始資料在 `figures/why-scaling-measured.json`（機器為 64 核心，Python 3.12）。`why_scaling.py oracle` 量測測試用的 Gmsh-API oracle（$N = 500, 1000, 2000$，含 solid 質量），`why_scaling.py validators` 量測每一項結構驗證的時間（`figures/why-validator-scaling.json`）。不帶參數執行時，腳本由這三個檔案畫出 `why-scaling` 與 `why-tail` 的圖，並寫出 `figures/why-scaling-numbers.json`。
 - 以 Python 3.12 與 `sgb-core` 分支的環境執行：`SGB_CORE=<sgb-core 工作樹> $SGB_CORE/.artifacts/env/bin/python docs/design/sgb/_figures/why_scaling.py measure`。

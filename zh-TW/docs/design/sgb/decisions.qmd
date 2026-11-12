@@ -161,22 +161,22 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | | |
 |---|---|
 | 問題 | 模型是由 Gmsh/OCC API 由下而上呼叫建構，還是直接從 planned topology 寫成 BREP/XAO？ |
-| 選項 | （a）Gmsh API 建構：序列的，受 `synchronize`、平面 face 建構與 XAO 寫出所限。（b）直接 BREP/XAO 序列化：可分 chunk 平行寫出、mesher 只載入一次、明確寫出每個 orientation。 |
+| 選項 | （a）Gmsh API 建構：序列的，受 `synchronize`、平面 face 建構與 XAO 寫出所限。（b）直接 BREP/XAO 序列化：mesher 只載入一次、明確寫出每個 orientation。 |
 | Lead 的決定 | （b），architecture review 中。emission 把 planned topology 直接寫成 OCCT `CASCADE Topology V1` 文字；Gmsh 只用來做 *mesh*（與作為測試 oracle），絕不用來建構幾何。 |
 | 理由 | （a）的成本隨規模成長得比線性快：同一個 Route B 隨機 layout，Gmsh API 的 oracle 在 N = 500、1 000、2 000 要 2.3 s、8.9 s、63.3 s（局部斜率 2.0 與 2.8），N = 5 000 超過 10 分鐘仍未完成；直接 writer 在 N = 1 000 要 0.49 s，N = 20 000 也只要 13.8 s。Gmsh API 也無法指定 solid 的 sense：oracle 重播出的 substrate solid 質量是負的（N = 500、1 000、2 000 都是，`figures/why-scaling-oracle.json`），也就是 solid 的內外顛倒。直接 writer 明確寫出每個 orientation。 |
 | 原型的限制 | **直接 writer 對 cylinder wall 並非「任意邊數都精確」。** 當一條宣告的 arc 帶著外來的 vertex（例如 port 的邊落在圓形 pad 上，或有一個 post 站在彎曲的邊上），wall 變成 5 條 boundary edge；arc 被切開的兩段各自經由 snapped 端點實現，落在略有不同的圓上，wall 的底邊與頂邊不在同一個圓柱面上，原型的直接 writer 因此拒絕這種 wall（Route B/C；Route A 的 sheet 沒有這個問題）。Gmsh API oracle 可以寫出它。 |
 | 修正（已實作） | 在外來 vertex 處以一條 vertical edge 把 wall 切開（頂部的 arc 在同一處切開）；每一段在自己的 realised 圓上是精確的圓柱，兩段共用那條 vertical edge。production 的 assembly 對 arc 上的每個外來 vertex 都加入這條垂直 edge，並反覆計算直到沒有新的 vertex 被迫加入；上下兩側的 horizontal face 與疊在上下的 wall 也看到同樣的切點，所以共用的 edge 仍然完整共用。驗證檢查 `curved_walls_are_single_cylinders` 斷言每面曲面 wall 都由同一個圓上的一條下 arc 與一條上 arc 圍成。 |
 | 範圍 | 只有宣告的 arc 會產生 cylinder wall；直線 wall 是平面，可以有任意多條邊界 edge，不需要切開。以 polygon 表示的圓（GDS 中以多邊形近似的圓）永遠不會產生 cylinder wall，它們的 wall 是平面（見 [Assembly](assembly.qmd)）。 |
 | 後果 | 去掉大部分寫出成本，但不去掉載入成本；writer 成為 topology contract 的第二個實作，必須與 API 路徑保持一致（E3 的檢查比對 group 內容與體積）。planned ID 對 native tag 的綁定由 writer 的建構順序決定，並記錄在 sidecar。 |
-| 實作狀態 | 已實作（1d）：直接寫出 BREP 與 XAO（含 pcurve、圓柱與明確的 orientation），輸出對 `workers`、`tiles` 與 hash seed 逐位元組相同（同一台機器上測過；跨作業系統、CPU 或 libm 相同只是論證，尚未在第二個平台比較，見[使用契約](consumer-contract.qmd#determinism)）。 |
+| 實作狀態 | 已實作（1d）：直接寫出 BREP 與 XAO（含 pcurve、圓柱與明確的 orientation），輸出對 hash seed 逐位元組相同（同一台機器上測過；跨作業系統、CPU 或 libm 相同只是論證，尚未在第二個平台比較，見[使用契約](consumer-contract.qmd#determinism)）。 |
 | 決定者 | Lead 決定，architecture review 中。 |
 :::
 
-證據（production，`figures/why-scaling-measured.json`）：Route B 隨機 layout（seed 2）N = 20 000 時，直接 writer 寫出 BREP 與 XAO 在單一 worker 為 13.8 s、16 個 worker 為 9.1 s；載入到新的 Gmsh process 仍需 49.7 s，再做載入檢查 `verify_loaded` 15.3 s。Gmsh API 的 oracle 在這個規模跑不完（N = 2 000 就要 63.3 s）。輸出對任何 worker 數與 tile 配置逐位元相同。（原型的 E3 另外檢查過：直接 writer 重現解析體積的相對誤差為 0，airbridge 為 $2 \times 10^{-16}$，group 內容與 API 路徑相同。）Human 提出的採用條件，也就是 AEDT 能帶著語意消費直接寫出的幾何，已由 E4 滿足（見 [D4](#d4)）。
+證據（production，`figures/why-scaling-measured.json`）：Route B 隨機 layout（seed 2）N = 20 000 時，直接 writer 寫出 BREP 與 XAO 為 13.8 s；載入到新的 Gmsh process 仍需 49.7 s，再做載入檢查 `verify_loaded` 15.3 s。Gmsh API 的 oracle 在這個規模跑不完（N = 2 000 就要 63.3 s）。（原型的 E3 另外檢查過：直接 writer 重現解析體積的相對誤差為 0，airbridge 為 $2 \times 10^{-16}$，group 內容與 API 路徑相同。）Human 提出的採用條件，也就是 AEDT 能帶著語意消費直接寫出的幾何，已由 E4 滿足（見 [D4](#d4)）。
 
 這些時間來自 **polygon-only 的 layout：沒有 arc、沒有 cylinder wall、沒有 band**，所以大規模的 cylinder 精確性與 arc 的成本沒有量測，不應外推。
 
-證據（production）：catalogue 的 `arc_with_foreign_vertex`（Route A、B、C）與 `arc_with_foreign_vertex_from_post`（Route B、C）現在都建得出來，通過建構、寫出、Gmsh 載入、粗略 mesh 與全部 OCCT 檢查，原型時期被拒絕的兩個組合不再被拒絕（見 [Validation](validation.qmd#catalogue)）。測試另外檢查：外來 vertex 把 wall 變成兩個圓柱而不是 5-edge wall；兩片共用經過外來 vertex 的垂直 edge；圓盤的體積在切開後仍與封閉形式相符；port 兩次穿過圓形 pad 時，每個疊起來的 wall run 一致地切開；Route C 的切法相同；以多邊形近似的圓永遠不產生圓柱 wall；直線 wall 的邊界 edge 超過四條時不切開。production 的單次量測（`tests/sgb_catalogue_report.py --timings`，一個 1 000 個 feature 的 Route B 隨機 layout，14 284 個 face，只有 polygon，單一 worker）：推導加驗證 1.87 s，寫出 BREP 0.13 s、XAO 0.02 s，sidecar 0.56 s，產生 sliver 與 validation 報告 1.84 s，三個檔案共 33 MB。這是單次量測，時間四捨五入到 0.01 s，不是 scaling 結論。
+證據（production）：catalogue 的 `arc_with_foreign_vertex`（Route A、B、C）與 `arc_with_foreign_vertex_from_post`（Route B、C）現在都建得出來，通過建構、寫出、Gmsh 載入、粗略 mesh 與全部 OCCT 檢查，原型時期被拒絕的兩個組合不再被拒絕（見 [Validation](validation.qmd#catalogue)）。測試另外檢查：外來 vertex 把 wall 變成兩個圓柱而不是 5-edge wall；兩片共用經過外來 vertex 的垂直 edge；圓盤的體積在切開後仍與封閉形式相符；port 兩次穿過圓形 pad 時，每個疊起來的 wall run 一致地切開；Route C 的切法相同；以多邊形近似的圓永遠不產生圓柱 wall；直線 wall 的邊界 edge 超過四條時不切開。production 的單次量測（`tests/sgb_catalogue_report.py --timings`，一個 1 000 個 feature 的 Route B 隨機 layout，14 284 個 face，只有 polygon）：推導加驗證 1.87 s，寫出 BREP 0.13 s、XAO 0.02 s，sidecar 0.56 s，產生 sliver 與 validation 報告 1.84 s，三個檔案共 33 MB。這是單次量測，時間四捨五入到 0.01 s，不是 scaling 結論。
 
 ## D9 Production kernel 語言 {#d9}
 
@@ -186,12 +186,12 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 問題 | production pipeline 的 noding、half-edge 與 dissolution 核心用什麼語言撰寫？ |
 | 選項 | （a）純 Python，搭配更粗的 job 與 flat array。（b）Python orchestration，加上負責 noding、half-edge 結構與 dissolution 的 compiled kernel。 |
 | Lead 的建議 | （b）。 |
-| 理由 | 平行化量到的 Python 上限約 2×（N = 20 000、單一 process 為 1.98×），序列比例約 50%，而實測最好的 derivation 加速只有 1.17×（N = 20 000）到 1.26×（N = 5 000，見[平行化的 derivation](parallelism.qmd)）。序列的 stage 正是 half-edge 結構、dissolution、face assembly 與 noding driver。單是暫停 garbage collector 就有 30% 的改善，所以每條 edge 一個 Python 物件本身就是成本。 |
+| 理由 | 純 Python 的推導在 N = 20 000 要 61.6 s，時間主要花在 half-edge 結構、dissolution、face assembly 與 noding driver。單是暫停 garbage collector 就有 30% 的改善，所以每條 edge 一個 Python 物件本身就是成本。 |
 | 後果 | packaging 與 release 多一個 compiled dependency；kernel 的語言（以及 KLayout 的整數 region engine 能否涵蓋 rectilinear 的情況）是 review 的一部分。收益應表述為第一個 compiled 實作的目標，不是 prototype 的結果。 |
 | 決定者 | Architecture review；packaging 的影響告知 Human。 |
 :::
 
-證據（production，`figures/why-scaling-measured.json`）：N = 20 000、單一 process 時，所有 stage 的時間加起來是 58.8 s（build wall time 為 61.6 s），其中 serial stage 為 29.7 s（50%）；Amdahl parallel fraction 單一 process 為 0.49–0.52，有 worker 時為 0.51–0.61（被 worker 的總計算量變大墊高，見[平行化的 derivation](parallelism.qmd)）。這是單次執行的結果，同一個 layout 的同一個推導在三次呼叫間差約 10%，所以這些數字只有量級的意義；它們全部來自 polygon-only 的 layout。原型的教訓（`experiments/sgb-redesign/PROTOTYPE_LESSONS.md`）把不足歸因於原型使用的語言，而不是演算法；compiled kernel 尚未量測。production 的階段 1 仍是純 Python，沒有開始 compiled kernel 的工作，這一項維持建議狀態。
+證據（production，`figures/why-scaling-measured.json`）：N = 20 000 時，所有 stage 的時間加起來是 58.8 s（build wall time 為 61.6 s）。這是單次執行的結果，同一個 layout 的同一個推導在三次呼叫間差約 10%，所以這些數字只有量級的意義；它們全部來自 polygon-only 的 layout。原型的教訓（`experiments/sgb-redesign/PROTOTYPE_LESSONS.md`）把不足歸因於原型使用的語言，而不是演算法；compiled kernel 尚未量測。production 的階段 1 仍是純 Python，沒有開始 compiled kernel 的工作，這一項維持建議狀態。
 
 ## 已解決的事項
 
@@ -205,7 +205,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 - **Edge ID**：H(plane key、排序後的端點 vertex ID、排序後的 carrier 集合)。
 - **Physical tag 不是 identity**：tag 依排序後的 group 名稱，加入 group 就會位移；consumer 儲存 group 名稱。
 - **AMR 的說法**：conformal 的 AMR 讓 band edge 維持為 element edge，masked integral 沒有 indicator 切割的誤差；refinement 是否集中在 band edge 取決於 mesher 的 size field 與 error estimator，在 Palace 實測之前不多作聲稱。
-- **Refinement curve** 是 `refinement_only`；落在沒有輸出 face 的片段是錯誤；`dissolve` edge 政策已移除，tile seam 不是 family（production）。
+- **Refinement curve** 是 `refinement_only`；落在沒有輸出 face 的片段是錯誤；沒有 `dissolve` edge 政策（production）。
 - **不同 Net 的接觸**在每個 route 都是錯誤，包含 Route A 的 sheet 共用 edge 或 vertex，以及 snapping 造成的接觸；同一 Net 的有限厚度金屬只在 vertical edge 或 vertex 相接（non-manifold pinch）會被拒絕，sheet 可以在角落相接（production：`ContactError`、`NonManifoldError`）。
 - **Validation 不可在 production 關閉**；關閉開關只存在於 prototype 的測試中。validation 分兩層（見 [stage 參考](pipeline-reference.qmd)）。
 - **Pixel 慣例**：pixel 以 grid point 為中心，$[c-g/2, c+g/2)^2$。

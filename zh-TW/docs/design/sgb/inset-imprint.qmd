@@ -219,7 +219,7 @@ insets = (
 )
 ```
 
-**一個 face 只有一個 family。**多個請求選到同一個 face 時，它們共用一個 family，所以必須要求相同的 margin（以模型格點比較，`0.3` 與 `0.1 + 0.2` 視為相同）；margin 不同是 `InputError`，訊息指出兩個請求的 id、各自的 margin 與那個 face，SGB 不會取聯集，也不會悄悄選一組。上面的寫法讓指定 face 的請求與按種類的請求不落在同一個 face。一個指定 face 的請求保有自己的 `request_id`，只由按種類的請求選到的 face 則是 `<request_id>::<entity>::<side>`（介面是 <code>&lt;request_id&gt;::&lt;first&gt;&#124;&lt;second&gt;::z=&lt;z&gt;</code>）；多個請求共用時取 id 排序最前的請求。這些 id 是 sidecar 中 `band_family` 的鍵、`mesh_feature` 的 `band_boundary` 來源，也是 support ring 所屬的 family，它們只由請求和 face 決定，不隨 `workers`、`tiles` 或執行次數改變。兩個指定 face 的請求選到同一個 face 時，兩者不會合併：兩個 family 的 band 會落進同名的 group，band 編號只在各自的 family 內有意義，所以 SGB 在規劃 band 時就以 `InputError` 停止，訊息指出兩個請求的 id 與那個 face。即使之後有 port 蓋滿這個 face、最後沒有任何 band，也一樣停止。每個 face 只寫一次請求，把所有 margin 放在同一個請求裡。
+**一個 face 只有一個 family。**多個請求選到同一個 face 時，它們共用一個 family，所以必須要求相同的 margin（以模型格點比較，`0.3` 與 `0.1 + 0.2` 視為相同）；margin 不同是 `InputError`，訊息指出兩個請求的 id、各自的 margin 與那個 face，SGB 不會取聯集，也不會悄悄選一組。上面的寫法讓指定 face 的請求與按種類的請求不落在同一個 face。一個指定 face 的請求保有自己的 `request_id`，只由按種類的請求選到的 face 則是 `<request_id>::<entity>::<side>`（介面是 <code>&lt;request_id&gt;::&lt;first&gt;&#124;&lt;second&gt;::z=&lt;z&gt;</code>）；多個請求共用時取 id 排序最前的請求。這些 id 是 sidecar 中 `band_family` 的鍵、`mesh_feature` 的 `band_boundary` 來源，也是 support ring 所屬的 family，它們只由請求和 face 決定，不隨執行次數改變。兩個指定 face 的請求選到同一個 face 時，兩者不會合併：兩個 family 的 band 會落進同名的 group，band 編號只在各自的 family 內有意義，所以 SGB 在規劃 band 時就以 `InputError` 停止，訊息指出兩個請求的 id 與那個 face。即使之後有 port 蓋滿這個 face、最後沒有任何 band，也一樣停止。每個 face 只寫一次請求，把所有 margin 放在同一個請求裡。
 
 **沒有 gap edge 的 face 會被略過。**「某種類的每個 face」也包含量不出 band 的 face：基板下方的 SA 介面（旁邊沒有附著導體）、整片蓋住 die 的 ground plane、懸空的導體，都沒有 gap edge（定義見[上一節](#band-measure)）。按種類要求時 SGB 略過這些 face，把每一個記在 sidecar 中該請求（`inset_request`）的 `skipped`（原因 `no_gap_edge`），build 不失敗。所以要確認某個導體真的有 band，看請求的 `families` 與 `skipped`，不要只看 build 有沒有成功。`families` 列的是 physical pre-pass 建出的 band family；family 有沒有可積分的 band，要讀它在 `band_family` 中自己的 `bands`，以及最後的 `surface_epr_row`，因為 port 是之後才放上去的，可以把一個 family 的 face 整個蓋住（例如矩形 port 蓋住整個 SA gap，只在兩塊 sheet 上各留 0.5 µm 的 landing）：該 family 仍列在 `families`，它的 `bands` 是 `{}`，`skipped` 是空的，`surface_epr_row` 也沒有該 SA 的 row。指定 face 的寫法維持失敗，因為你點名的 face 沒有 gap edge 是輸入錯誤。
 
@@ -330,7 +330,7 @@ Sidecar 的 `surface_epr_row` 把 sheet 的 Surface EPR row `MA::pad__sheet::ban
 
 port 在 host 的 support plane 上，佔去 SA 的一塊面積，但不移動任何 band（規則見 [Inset band 怎麼量](#band-measure)）。這個結果由 production 驗證（測試 `test_adding_the_port_changes_no_band_but_keeps_the_seams_out_of_it`；`inset.py` 對 running example 做同樣的比較）：把 lumped port 從範例中移除，每個 family 的 support 完全相同，pad 的 band 面積完全相同，沒有任何 gap band 的面積增加，gap band 合計只少掉 port 蓋住的 300 µm²。在有 port 的 Route A 模型中，port 仍是一個 face、一個 group `PORT::p1`（band 的 seam 在它的邊界停下，見上面「Support plane 與 port」），因為 port 不屬於 Surface EPR 的 surface。
 
-band 曲線在 surface 被分成 group 之前，就由 support region 的 gap edge 產生，所以 port、contact cap 或 tile seam 不可能成為 distance origin。這也是在 CAD 中解決 inset 的好處之一：距離的定義在幾何中寫死，不依賴 solver 如何解讀 patch 的周長。
+band 曲線在 surface 被分成 group 之前，就由 support region 的 gap edge 產生，所以 port 或 contact cap 不可能成為 distance origin。這也是在 CAD 中解決 inset 的好處之一：距離的定義在幾何中寫死，不依賴 solver 如何解讀 patch 的周長。
 
 ## Topology 變化是一般的結果
 

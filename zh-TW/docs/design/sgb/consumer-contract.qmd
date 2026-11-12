@@ -25,7 +25,6 @@ artifacts: SgbArtifacts = build_sgb_geometry(
     insets=(InsetRequest(...),),      # Surface-EPR band；預設空
     refinements=(RefinementRequest(...),),   # mesh 尺寸曲線；預設空
     output_dir=run_dir / "geometry",
-    workers=1, tiles=1,               # 只改變推導與寫檔的方式，不改變任何一個 byte
 )
 ```
 
@@ -37,7 +36,6 @@ artifacts: SgbArtifacts = build_sgb_geometry(
 | `insets` | `InsetRequest` 的 tuple | 每個 request 是一個 cut family，結果是 band 的 primary group。 |
 | `refinements` | `RefinementRequest` 的 tuple | 只放進 sidecar 與 BREP，不改變任何 label。 |
 | `output_dir` | 輸出資料夾 | 不存在會建立；檔名由 route 決定（見下）。 |
-| `workers`、`tiles` | worker process 數、每個方向的 tile 數（`tiles=3` 是 3 × 3） | 預設 1 與 1；沒有 `fork` 的平台以單一 process 寫檔。 |
 :::
 
 Overlap 的優先權不在這個函式的引數裡：同一個 Net 的兩個 Entity 重疊時，由較高的 priority 擁有重疊區；priority 相同或缺少則 build 失敗並指名兩個 Entity。priority 有三個來源：layer stack 的 `mesh_order`（層之間，**較低者勝**，gdsfactory 慣例）、元件標註的 `priority`（同一個元件、同一層之內），以及 `GeometryPlan.set_entity_priorities`（不同 occurrence 之間；數值**較高者勝**，整個 mapping 一次取代，任何一項無效則維持原狀）。三者的錯誤訊息會指出該由哪個來源補上（測過）。
@@ -106,14 +104,12 @@ band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd
 |---|---|---|
 | 同一個輸入兩次推導得到相同的 id 與 model digest | 測過 | `test_sgb_determinism`；隨機 layout 與 pad-in-ground |
 | id 不受 Python hash 隨機化影響 | 測過 | 三個 `PYTHONHASHSEED`（0、1、12345）各一個 digest |
-| 五個檔案的每一個 byte 都不受 `workers` 與 `tiles` 影響 | 測過 | `workers=3, tiles=3` 與 `1, 1` 比較全部五個檔案；僅 Route B 的 GDS 範例 |
-| BREP 與 XAO 不受 worker 數與 chunk 大小影響 | 測過 | 數種 `workers` × `chunk_items` 組合 |
-| sidecar 的 bytes 不受 hash 隨機化影響；不受 tile 配置影響 | 測過 | 三個 seed、Route A／B／C；`tiles=3, workers=2` 與單 tile 的 sidecar 相同 |
-| 按種類要求 band（`InterfaceSurfaces`）時，展開的 family id、band group 名稱與 sidecar 固定：五個檔案不受 `workers` 與 `tiles` 影響，sidecar 不受 hash 隨機化影響 | 測過 | `test_sgb_inset_types`：Route B 的 pad-in-ground，`workers=2, tiles=3` 與單一 tile 的五個檔案相同；兩個 `PYTHONHASHSEED` 的 sidecar 相同 |
+| BREP 與 XAO 不受 chunk 大小影響 | 測過 | 數種 `chunk_items` |
+| sidecar 的 bytes 不受 hash 隨機化影響 | 測過 | 三個 seed、Route A／B／C |
+| 按種類要求 band（`InterfaceSurfaces`）時，展開的 family id、band group 名稱與 sidecar 固定：sidecar 不受 hash 隨機化影響 | 測過 | `test_sgb_inset_types`：兩個 `PYTHONHASHSEED` 的 sidecar 相同 |
 | BREP 的 bytes 固定 | 測過（單一環境） | 兩個案例（`pad_a`、`pad_b`）的 SHA-256 釘住在測試裡 |
 | 兩次獨立執行得到相同的檔案 | 實測 | 本頁範例的 Route A、B、C 各五個檔案，兩次執行逐位元組相同 |
 | **不同作業系統、CPU 或 libm 之間 bytes 相同** | **論證，未實測** | number policy 只用 IEEE `+ - * /`、`sqrt` 與 Python `%` 格式化，不呼叫 `sin`、`cos`、`atan2`；尚未在第二個平台上比較 |
-| 沒有 `fork` 的平台輸出相同 | 論證 | writer 改為單一 process 渲染同樣的函式；未在該平台測過 |
 | Gmsh 的 mesh 與 Palace 的結果相同 | **不保證** | 本頁不作此宣稱；physical tag 依排序後的名稱編號，不是 identity，使用端應儲存名稱 |
 :::
 
@@ -305,4 +301,4 @@ uv run --extra palace --group dev --group occt python zh-TW/docs/design/sgb/_fig
 
 按種類要求的 `inset_request` 節錄與展開表另由 `_figures/inset_types.py` 產生（它自己建 `gds_pad_in_ground` 與 `thin_film_pair`）。
 
-決定性的測試出自 `test_sgb_determinism.py`、`test_sgb_build.py`、`test_sgb_emission.py`、`test_sgb_sidecar.py` 與 `test_sgb_tiling.py`；sidecar 契約本身（版本、結構、typed reference 與表之間規則的檢查）的測試在 `test_sidecar_contract.py`；STEP 的測試在 `test_sgb_occt.py` 與 `test_sgb_step_guard.py`。
+決定性的測試出自 `test_sgb_determinism.py`、`test_sgb_build.py`、`test_sgb_emission.py` 與 `test_sgb_sidecar.py`；sidecar 契約本身（版本、結構、typed reference 與表之間規則的檢查）的測試在 `test_sidecar_contract.py`；STEP 的測試在 `test_sgb_occt.py` 與 `test_sgb_step_guard.py`。
