@@ -604,7 +604,10 @@ its checks.
 `InputSummary` with detached `.data` and an HTML representation for notebook
 display. Both Eigenmode facades expose `input_summary()` to combine this
 normalized source with their configured backend settings. AEDT summarizes its
-normalized build input and stack; Palace requires its bound `GeometryPlan`.
+normalized build input and stack. Palace requires its bound `GeometryPlan` and
+summarizes the input its `mesh()` prepares from that plan, so a vacuum region,
+airbox or port set on the simulation and the route's conductor representation
+appear as the model will have them.
 Passing a raw component without explicit normalization fails rather than
 guessing a stack. The summary records source, entity, Net, material, Z/vacuum,
 port, EPR, and run-control inputs; unset or unknown values stay explicit. It

@@ -160,16 +160,21 @@ class EigenmodeSim:
         self._invalidate_mesh()
 
     def input_summary(self) -> InputSummary:
-        """Show the bound Plan source and Palace settings before mesh work."""
+        """Show the input ``mesh()`` builds from, and the Palace settings, before mesh work.
 
+        The source half is the geometry input and stack ``mesh()`` prepares from the bound plan, so it holds the
+        vacuum region or airbox, the requested ports and the route's conductors as the simulation was given them.
+        A setup ``mesh()`` refuses while preparing is refused here with the same error; an input with no vacuum,
+        planned or set, is refused here only.  Nothing is built or written, and the simulation is left as it was.
+        """
         if self._plan_snapshot is None:
             raise ValueError(
                 "input_summary requires a bound GeometryPlan snapshot; normalize "
                 "a raw Component explicitly first"
             )
+        prepared = self._geometry_request(self._plan_snapshot.stack).source
         data = summarize_geometry_input(
-            self._plan_snapshot.geometry_input,
-            prepared_stack=self._plan_snapshot.stack,
+            prepared["source_geometry_input"], prepared_stack=prepared["stack"]
         ).data
         data["backend"] = {
             "name": "palace",
@@ -550,6 +555,9 @@ class EigenmodeSim:
                 "set_geometry(), set_stack(), and set_output_dir() must run before mesh()."
             )
         request = self._geometry_request(self.stack)
+        if request.materials is not None:
+            # The prepared stack can hold a material the bound one lacks (a set vacuum region adds its vacuum).
+            self._materials = request.materials
         geometry = build_route_geometry(**request.source, output_dir=self.output_dir)
         check_meshing_stage(geometry)
         self._mesh_result = mesh_route_geometry(geometry, self.mesh_controls)
@@ -638,8 +646,11 @@ class EigenmodeSim:
         )
 
     def _geometry_request(self, stack: Mapping[str, Any]) -> LayoutGeometryRequest:
-        """Resolve ports and prepare the geometry input, everything before the SGB build, for a plan or a Component."""
-        request = layout_geometry_request(
+        """Resolve ports and prepare the geometry input, everything before the SGB build, for a plan or a Component.
+
+        ``mesh()``, ``simulation_drc`` and ``input_summary()`` read this one request; it changes no simulation state.
+        """
+        return layout_geometry_request(
             plan=self._plan_snapshot,
             component=self.component,
             stack=stack,
@@ -654,9 +665,6 @@ class EigenmodeSim:
                 surface_epr_specs=self.surface_epr_specs,
             ),
         )
-        if request.materials is not None:
-            self._materials = request.materials
-        return request
 
     def mesh_summary(self) -> dict[str, Any]:
         """Detach actual mesh observations and the current FEM topology estimate."""

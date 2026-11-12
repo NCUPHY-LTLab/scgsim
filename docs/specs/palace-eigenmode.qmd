@@ -20,7 +20,7 @@ ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics
 | Mesh controls | `set_mesh(...)` accepts the shared sizing recipe, mesher options, repair budgets and quality threshold |
 | Mesh summary | `mesh_summary()` returns detached meshing evidence |
 | Numerical controls | `set_numerical(...)` retains explicit order, linear solver, AMR and output choices |
-| Source/settings view | `input_summary()` returns detached source plus settings, no file/native I/O |
+| Source/settings view | `input_summary()` returns the detached input `mesh()` builds from (the plan with the simulation's vacuum region or airbox, requested ports and route applied) plus settings, no file/native I/O |
 | Surface model | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`, before `mesh()` |
 | Authored port | `add_port(name, *, layer, layout_sheet=True, inductance)`; `layout_sheet` must be `True` (its signature default `False` is refused) |
 | Output selection | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |

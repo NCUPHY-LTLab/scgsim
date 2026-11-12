@@ -30,7 +30,9 @@ the same as a known zero. `.data` is detached, so editing the returned dictionar
 does not change the retained source snapshot.
 
 Both Eigenmode facades also offer `sim.input_summary()` after configuration.
-That view adds the backend settings to the normalized source. Electrostatic has
+That view adds the backend settings to the normalized source. The Palace view
+shows the source as `mesh()` will build it, so it includes a vacuum region set
+on the simulation and lists only the ports the simulation requested. Electrostatic has
 no such facade method: use the standalone source summary above, then inspect
 its written config and exact terminal/ground index.
 
