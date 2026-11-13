@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import shutil
 import tarfile
 from collections.abc import Mapping, Sequence
@@ -30,6 +28,7 @@ from scgsim.contracts.palace_run_folder import (
     RUNTIME_COMPATIBILITY,
     SLURM_SCRIPT,
     SOLVER_LOG_PREFIX,
+    HandoffIdentity,
     read_json,
     script_name,
     sha256,
@@ -234,18 +233,16 @@ def _prepare_artifacts(
     paths.script.chmod(paths.script.stat().st_mode | 0o755)
 
     execution_identity = _execution_identity(execution, paths)
-    handoff_id = _canonical_sha256(
-        {
-            "route": route,
-            "problem": problem,
-            "profile": execution.profile,
-            "source_revisions": source_revisions,
-            "palace_identity": palace_identity,
-            "hashes": list(hashes),
-            "execution_identity": execution_identity,
-            **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
-        }
-    )
+    handoff_id = HandoffIdentity(
+        profile=execution.profile,
+        route=route,
+        problem=problem,
+        source_revisions=source_revisions,
+        palace_identity=palace_identity,
+        hashes=list(hashes),
+        execution_identity=execution_identity,
+        route_a_thin_film=thin_film,
+    ).digest()
     return _PreparedArtifacts(
         route,
         thin_film,
@@ -433,12 +430,6 @@ def _identity() -> dict[str, Any]:
         "gsim_portable_handoff": PORTABLE_HANDOFF_SHA,
         "scgsim_sgb": SGB_RUNTIME_AUTHORITY,
     }
-
-
-def _canonical_sha256(payload: Mapping[str, Any]) -> str:
-    """The SHA-256 of ``payload`` as compact JSON with sorted keys: the handoff id of its identities."""
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _execution_identity(

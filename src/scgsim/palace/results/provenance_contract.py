@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import tarfile
-from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +12,7 @@ from scgsim.contracts.palace_run_folder import (
     RUN_METADATA,
     RUN_RECORD_SCHEMA_VERSION,
     SEALED_INPUTS,
+    HandoffIdentity,
 )
 from scgsim.palace.results.artifacts import (
     confined_path,
@@ -86,7 +84,7 @@ def validate_handoff_id(
 ) -> None:
     """Recompute the identity; colocated copied IDs are not evidence."""
 
-    computed = _HandoffIdentity(
+    computed = HandoffIdentity(
         profile=expect_scalar(handoff_metadata, "profile", str),
         route=expect_scalar(handoff_metadata, "route", str),
         problem=expect_scalar(handoff_metadata, "problem", str),
@@ -182,39 +180,6 @@ def validate_resource_identity(
         raise ValueError("resource record status must be completed for a returned run.")
     if expect_int(resource_record.get("exit_code")) != 0:
         raise ValueError("resource record exit_code must be zero for a returned run.")
-
-
-@dataclass(frozen=True)
-class _HandoffIdentity:
-    """Canonical handoff fields whose serialized bytes determine the handoff digest."""
-
-    profile: str
-    route: str
-    problem: str
-    source_revisions: Mapping[str, Any]
-    palace_identity: Mapping[str, Any]
-    hashes: list[Any]
-    execution_identity: Mapping[str, Any]
-    route_a_thin_film: Mapping[str, Any] | None = None
-
-    def digest(self) -> str:
-        """Hash the canonical JSON identity, preserving optional thin-film inclusion."""
-        payload = {
-            "route": self.route,
-            "problem": self.problem,
-            "profile": self.profile,
-            "source_revisions": self.source_revisions,
-            "palace_identity": self.palace_identity,
-            "hashes": self.hashes,
-            "execution_identity": self.execution_identity,
-            **(
-                {"route_a_thin_film": self.route_a_thin_film}
-                if self.route_a_thin_film is not None
-                else {}
-            ),
-        }
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:

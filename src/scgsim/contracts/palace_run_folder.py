@@ -225,6 +225,52 @@ def palace_problem(name: Any) -> PalaceProblem:
     return problem
 
 
+# ---- The handoff id -----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class HandoffIdentity:
+    """The identities a handoff id is the hash of; the handoff writes the id and ``resolve`` checks it.
+
+    ``hashes`` are the sealed inputs' path, size and SHA-256 records; ``route_a_thin_film`` is None on
+    Route B and then left out of the hashed record.
+    """
+
+    profile: str
+    route: str
+    problem: str
+    source_revisions: Any
+    palace_identity: Any
+    hashes: list[Any]
+    execution_identity: Any
+    route_a_thin_film: Any = None
+
+    def digest(self) -> str:
+        """The handoff id: the canonical SHA-256 of these identities."""
+        return canonical_sha256(
+            {
+                "route": self.route,
+                "problem": self.problem,
+                "profile": self.profile,
+                "source_revisions": self.source_revisions,
+                "palace_identity": self.palace_identity,
+                "hashes": self.hashes,
+                "execution_identity": self.execution_identity,
+                **(
+                    {"route_a_thin_film": self.route_a_thin_film}
+                    if self.route_a_thin_film is not None
+                    else {}
+                ),
+            }
+        )
+
+
+def canonical_sha256(payload: Any) -> str:
+    """The SHA-256 of ``payload`` as compact JSON with sorted keys."""
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 # ---- Reading and writing run-folder files ------------------------------------------------------------
 
 

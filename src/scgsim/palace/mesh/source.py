@@ -1,13 +1,11 @@
-"""Write paired mesh records as JSON and validate the declared Route-A film provenance."""
+"""The installed SCGSim version and the declared Route-A film provenance of a mesh's stack."""
 
 from __future__ import annotations
 
 import copy
-import json
 from collections.abc import Mapping
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
-from pathlib import Path
 from typing import Any
 
 from scgsim.geometry.models.physical import PhysicalRepresentationPlan
@@ -19,12 +17,6 @@ def scgsim_version() -> str:
         return package_version("scgsim")
     except PackageNotFoundError as exc:
         raise RuntimeError("Unable to determine installed scgsim version.") from exc
-
-
-def write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    """Write a paired UTF-8 JSON artifact with the established formatting."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def route_a_thin_film_provenance(

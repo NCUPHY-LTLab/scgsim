@@ -17,6 +17,7 @@ from typing import Any
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
 from scgsim.geometry.surface_epr.specs import margins_of
 from scgsim.palace.results.artifacts import (
+    checked_number,
     expect_list,
     expect_mapping,
     expect_scalar,
@@ -98,7 +99,7 @@ def validate_surface_epr_config(
     }:
         raise ValueError("config and index evidence disagree on dielectric rows.")
     model = expect_mapping(config.get("Model"), "config.Model")
-    model_l0_m = _positive_number(model.get("L0"), "config Model.L0")
+    model_l0_m = checked_number(model.get("L0"), "config Model.L0", positive=True)
     for entry in entries:
         _match_configured_row(configured[entry["index"]], entry, model_l0_m)
     _validate_internal_boundary_cracking(model, entries)
@@ -162,14 +163,18 @@ def _validate_film(spec: dict[str, Any]) -> None:
     """The film values, the Model.L0 they were converted with, and their SI thickness."""
     if spec.get("schema_version") != SURFACE_FILM_SCHEMA:
         raise ValueError(f"surface EPR spec schema must be {SURFACE_FILM_SCHEMA!r}.")
-    thickness = _positive_number(spec.get("thickness"), "surface EPR thickness")
-    _positive_number(spec.get("permittivity"), "surface EPR permittivity")
+    thickness = checked_number(
+        spec.get("thickness"), "surface EPR thickness", positive=True
+    )
+    checked_number(spec.get("permittivity"), "surface EPR permittivity", positive=True)
     loss = spec.get("loss_tangent")
     if loss is not None and (_finite(loss) is None or loss < 0):
         raise ValueError("surface EPR loss_tangent has an invalid value.")
-    scale = _positive_number(spec.get("model_l0_m"), "surface EPR model_l0_m")
-    physical = _positive_number(
-        spec.get("film_thickness_m"), "surface EPR SI thickness"
+    scale = checked_number(
+        spec.get("model_l0_m"), "surface EPR model_l0_m", positive=True
+    )
+    physical = checked_number(
+        spec.get("film_thickness_m"), "surface EPR SI thickness", positive=True
     )
     if not math.isclose(physical, thickness * scale, rel_tol=1e-12):
         raise ValueError("surface EPR SI thickness conflicts with recorded Model.L0")
@@ -187,7 +192,7 @@ def _validate_film(spec: dict[str, Any]) -> None:
 
 def _validate_margin_sequence(margins: Any) -> None:
     values = [
-        _positive_number(margin, "surface EPR inset margin")
+        checked_number(margin, "surface EPR inset margin", positive=True)
         for margin in expect_list(margins, "surface EPR inset margins")
     ]
     if any(b <= a for a, b in zip(values, values[1:], strict=False)):
@@ -223,7 +228,9 @@ def _validate_margins(
         if baseline is None or baseline not in wholes:
             raise ValueError("a margin entry must bind one whole-surface entry.")
         margin_index = expect_scalar(inset, "margin_index", int)
-        margin_um = _positive_number(inset.get("margin_um"), "surface EPR margin_um")
+        margin_um = checked_number(
+            inset.get("margin_um"), "surface EPR margin_um", positive=True
+        )
         first_band = expect_scalar(inset, "first_band", int)
         bands = expect_list(inset.get("bands"), "surface EPR inset bands")
         rows = entry_rows(entry)
@@ -303,13 +310,6 @@ def _finite(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value) if math.isfinite(value) else None
-
-
-def _positive_number(value: Any, label: str) -> float:
-    number = _finite(value)
-    if number is None or number <= 0:
-        raise ValueError(f"{label} must be a finite positive number.")
-    return number
 
 
 def _positive_ints(value: Any, label: str) -> list[int]:

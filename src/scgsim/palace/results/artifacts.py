@@ -6,6 +6,7 @@ receipt recorder uses too; this module adds the typed field readers ``results`` 
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal, overload
@@ -135,6 +136,21 @@ def expect_int(value: Any, *, optional: bool = False) -> int | None:
     raise TypeError("value must be integer-compatible.")
 
 
+def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
+    """Require a finite non-negative recorded number (not a boolean), and above zero when ``positive``."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+        or (positive and value == 0)
+    ):
+        raise ValueError(
+            f"{name} must be finite and {'positive' if positive else 'non-negative'}"
+        )
+    return float(value)
+
+
 def to_float(value: Any) -> float:
     """Convert a recorded real number without accepting booleans."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -161,6 +177,7 @@ def optional_dict(value: Any) -> dict[str, Any] | None:
 
 __all__ = [
     "as_float_map",
+    "checked_number",
     "compute_hash_entry",
     "compute_input_hash_entry",
     "confined_path",

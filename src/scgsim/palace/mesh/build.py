@@ -27,6 +27,7 @@ from scgsim.contracts.palace_run_folder import (
     SOURCE_STACK,
     json_text,
     route_provenance,
+    write_json,
 )
 from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.diagnostics import diagnostic_stage
@@ -48,11 +49,7 @@ from .controls import MeshControls
 from .manifest import SGB_RUNTIME_AUTHORITY, build_mesh_manifest
 from .physical_groups import Groups, groups_from_sidecar
 from .process import lower_mesh_in_worker
-from .source import (
-    route_a_thin_film_provenance,
-    scgsim_version,
-    write_json,
-)
+from .source import route_a_thin_film_provenance, scgsim_version
 
 
 @dataclass(frozen=True)

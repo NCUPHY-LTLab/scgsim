@@ -9,8 +9,6 @@ folder carries that contract's text in place of the import, so the copy imports 
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import os
 import re
 import shutil
@@ -35,6 +33,7 @@ from scgsim.contracts.palace_run_folder import (
     RUN_METADATA,
     RUNTIME_COMPATIBILITY,
     RUNTIME_COMPATIBILITY_SCHEMA,
+    canonical_sha256,
     collects_adapted_meshes,
     confined_path,
     json_text,
@@ -187,12 +186,9 @@ def _diagnostic_handoff_id(
 ) -> str:
     """Mark after-the-fact parser diagnostics as deliberately non-production."""
 
-    canonical = json.dumps(
-        {"route": route, "problem": problem, "input_hashes": input_hashes},
-        sort_keys=True,
-        separators=(",", ":"),
+    return "diagnostic-" + canonical_sha256(
+        {"route": route, "problem": problem, "input_hashes": input_hashes}
     )
-    return "diagnostic-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _solver_identity(root: Path) -> dict[str, Any]:
