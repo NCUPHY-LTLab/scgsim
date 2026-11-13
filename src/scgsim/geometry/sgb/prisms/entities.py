@@ -187,7 +187,10 @@ def _footprint(
     source: SourceFootprint, ring_primitives: RingPrimitives
 ) -> tuple[Footprint, tuple[ArcCarrier, ...]]:
     """The oriented footprint of a source polygon; rings with bound curves go through their primitives."""
-    keys = [(source.entity_id, source.polygon, i) for i in range(len(source.rings()))]
+    keys = [
+        RingKey(entity_id=source.entity_id, polygon=source.polygon, ring=i)
+        for i in range(len(source.rings()))
+    ]
     if not any(key in ring_primitives for key in keys):
         return Footprint.from_rings(source.outer, source.holes), ()
     rings = [

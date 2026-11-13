@@ -15,7 +15,7 @@ from decimal import ROUND_FLOOR, Decimal
 from fractions import Fraction
 from typing import NamedTuple
 
-from scgsim.geometry.exact.boundaries import bound_ring_primitives
+from scgsim.geometry.exact.boundaries import RingKey, bound_ring_primitives
 from scgsim.geometry.exact.carriers import ArcCarrier, LineEdge, RingPrimitive
 from scgsim.geometry.exact.footprints import conductor_loops
 from scgsim.geometry.exact.grid import Grid
@@ -324,7 +324,11 @@ def _outline_edges(
         loops, _ = conductor_loops(entity, build_input)
         for polygon, (outer, holes) in enumerate(loops):
             for ring_index, ring in enumerate((outer, *holes)):
-                primitives = bound.get((entity.semantic_id, polygon, ring_index))
+                primitives = bound.get(
+                    RingKey(
+                        entity_id=entity.semantic_id, polygon=polygon, ring=ring_index
+                    )
+                )
                 if grid is None or primitives is None:
                     lines.extend(_drawn_edges(ring))
                     continue

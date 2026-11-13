@@ -106,6 +106,43 @@ from an earlier stage to a later one:
 | `aedt/preparation` | `aedt/results` | The receipt schema and the initial receipt (`results.provenance`). |
 | `aedt/results` | `aedt/runtime`, `aedt/epr`, `aedt/presentation` | The batch collection context and benchmark path, the `EprResult` record, and the display a `ResolvedRun` calls. |
 
+## The order CI checks {#checked-order}
+
+A folder reads only the folders before it in its list. The quality gate checks
+each list (`.importlinter`), and each list is complete: a new folder has to be
+given its place in the order before CI passes.
+
+| Where | The order, earliest first |
+| --- | --- |
+| The package | `contracts`, `refusal`, `documentation` → `preparation`, `diagnostics` → `semantics` → `presentation` → `geometry` → `meshing` → `palace` and `aedt` → `visualization` |
+| `geometry` | `models` → `exact` → `grid` → `source` → `junctions` → `interpretation` → `planning` (AEDT only) |
+| `geometry/sgb` | `errors`, `stopwatch` → `records` → `prisms` → `arrangement` → `bands` → `topology` → `checks` → `model` → `output` → `section` → `build` |
+| `palace` | `source` → `mesh` → `config` → `run` → `results` → `reports`; the `simulation` classes are the entry |
+
+Folders written with a comma or "and" in one step do not read each other.
+Four statements are stricter than an order, and CI checks them too:
+
+- SGB reads `geometry/models` and `geometry/exact` and no other geometry folder,
+  and no folder before SGB reads it. The stages hand SGB data, not code;
+  `geometry/surface_epr` and the Palace backend call it.
+- `geometry/exact` reads `geometry/models` only, so exact arithmetic never rests
+  on the float grid operations of `geometry/grid`.
+- `meshing` reads the sidecar and the XAO through `contracts`, never SGB or a
+  backend (one constant of `geometry/models/grid` is the stated exception);
+  `visualization` reads a Palace run folder the same way.
+- `contracts` imports nothing else from `scgsim`, and none of the third-party
+  libraries the rule names (the numeric, layout, plotting, meshing and solver
+  libraries).
+
+SGB's list is the order of dependency, not of time. In time the arrangement
+runs twice: on the physical prisms alone, where `bands` finds its support
+faces, then with the cut families `bands` produces. The step list of
+`geometry/sgb/model.py` is the order in time.
+
+AEDT's stage folders are not in a checked order; the table under
+[How to read a folder](#read-a-folder) lists the imports that point against
+the flow there.
+
 ## Stage tables {#stage-tables}
 
 Each area has one table, its rows in the order the work flows through it. A
@@ -170,7 +207,7 @@ change a result.
 - `geometry/models` imports no other geometry code, and `contracts` imports
   nothing else from `scgsim` and no third-party package, so every stage can
   import them. The import-linter contract `contracts-import-nothing-else`
-  checks `contracts`.
+  checks this for `scgsim` and for the third-party libraries it names.
 - A new package folder goes into `AREAS` in `scripts/generate_code_map.py`
   where the work reaches it, with the sentence and, for a stage, the three
   lines in its `__init__.py`, and their translation in

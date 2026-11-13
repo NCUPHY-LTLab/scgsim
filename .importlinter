@@ -2,12 +2,25 @@
 root_package = scgsim
 include_external_packages = True
 
-[importlinter:contract:backend-independence]
-name = Solver backends remain independent
-type = independence
-modules =
-    scgsim.aedt
-    scgsim.palace
+# The packages of scgsim in the order they import: a package reads the packages before it, never one
+# after it; import-linter lists the last first. The two solver backends read neither each other nor
+# visualization, which a notebook displays. The contracts below state what is stricter than this order.
+[importlinter:contract:package-layers]
+name = Packages import only the packages before them (base, semantics, presentation, geometry, meshing, backends, visualization)
+type = layers
+containers =
+    scgsim
+layers =
+    visualization
+    aedt | palace
+    meshing
+    geometry
+    presentation
+    semantics
+    preparation | diagnostics
+    contracts | refusal | documentation
+# Every package and module of scgsim is in this list: a new one has to take its place in the order.
+exhaustive = true
 
 # The folders a layout passes through before SGB, in the order they import: the shared records, the exact
 # kernel (exact arithmetic on the model grid and the binding of boundary records), the float grid
@@ -34,15 +47,6 @@ exhaustive_ignores =
     sgb
     surface_epr
 
-[importlinter:contract:shared-geometry]
-name = Shared geometry does not depend on a solver backend
-type = forbidden
-source_modules =
-    scgsim.geometry
-forbidden_modules =
-    scgsim.aedt
-    scgsim.palace
-
 [importlinter:contract:semantics]
 name = Semantic facts remain independent of geometry solvers and presentation
 type = forbidden
@@ -65,15 +69,6 @@ forbidden_modules =
     pyvista
     meshio
     ansys
-
-[importlinter:contract:shared-presentation]
-name = Shared presentation formats values without solver dependencies
-type = forbidden
-source_modules =
-    scgsim.presentation
-forbidden_modules =
-    scgsim.aedt
-    scgsim.palace
 
 # The exact kernel reads the shared records and no other geometry folder, so it never rests on the float
 # grid operations. scgsim.geometry.* matches every folder of the geometry package, present or added later;
@@ -203,17 +198,6 @@ layers =
     source
 # Every folder of scgsim.palace is in this list: a new one has to take its place in the order.
 exhaustive = true
-
-# A notebook displays what scgsim.visualization loads; no other package reads it.
-# scgsim.* matches every top-level subpackage and module, present or added later; import-linter skips
-# scgsim.visualization itself.
-[importlinter:contract:nothing-reads-visualization]
-name = No other package reads visualization
-type = forbidden
-source_modules =
-    scgsim.*
-forbidden_modules =
-    scgsim.visualization
 
 # AEDT records the sources its run can import, and that record includes the visualization loaders. They
 # read a Palace run folder through scgsim.contracts alone, so a Palace change never alters AEDT provenance.
