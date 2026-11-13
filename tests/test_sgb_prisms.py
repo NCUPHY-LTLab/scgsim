@@ -22,7 +22,7 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
-from scgsim.geometry.sgb.derivation.labelled import (
+from scgsim.geometry.sgb.arrangement.derivation.labelled import (
     derive_from_catalogue,
     derive_labelled_arrangements,
 )

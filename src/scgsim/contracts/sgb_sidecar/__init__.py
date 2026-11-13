@@ -8,7 +8,7 @@
     names (``markers``).  ``values`` holds the value types and ids, ``features`` the mesh-feature records.
 ``schema``
     the JSON Schema derived from the records; ``scripts/generate_sidecar_schema.py`` writes it to
-    ``scgsim/geometry/sgb/sidecar/sidecar.schema.json``.
+    ``scgsim/geometry/sgb/output/sidecar/sidecar.schema.json``.
 ``read``
     ``read_sidecar`` and ``check_sidecar``: version, structure (``structure``) and references
     (``references``), raising ``SidecarError``.

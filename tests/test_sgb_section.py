@@ -25,15 +25,15 @@ from sgb_scenes import (
 from test_located_refusals import on, places
 
 from scgsim.geometry.models.section import CutLine
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     InsetRequest,
     InterfaceSurfaces,
     RefinementRequest,
 )
 from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.section import SectionModel, build_section_model
 
 MARGINS = (0.5, 1.0)

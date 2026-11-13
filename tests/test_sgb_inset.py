@@ -16,19 +16,19 @@ from sgb_scenes import (
     rect_um,
 )
 
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     RefinementRequest,
     SolutionInterface,
 )
+from scgsim.geometry.sgb.checks.validation.validate import validate_model
 from scgsim.geometry.sgb.errors import InputError, ValidationError
+from scgsim.geometry.sgb.exact.labels import LevelLabel
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
+from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records.labels import LevelLabel
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue
-from scgsim.geometry.sgb.sidecar.lineage import CarrierLineage
-from scgsim.geometry.sgb.stopwatch import Stopwatch
-from scgsim.geometry.sgb.validation.validate import validate_model
+from scgsim.geometry.sgb.output.sidecar.lineage import CarrierLineage
 
 MARGINS = (0.1, 0.5, 2.0)
 PAD_AREA_UM2 = 100 * 60 - 20 * 15 - 12 * 12 / 2 - 25 * (1 - math.pi / 4) - math.pi * 64
@@ -520,8 +520,8 @@ def test_bands_on_the_top_of_a_real_finite_conductor(tmp_path):
 
 def test_a_family_at_a_z_no_prism_defines_adds_an_ordinary_level():
     """A required family at z = 0.1 um in a Route A model: a new level, no active-set change, a valid model."""
-    from scgsim.geometry.sgb.records.carriers import Lineage, LineCarrier  # noqa: PLC0415 -- used by this test only
-    from scgsim.geometry.sgb.records.families import CurveFamilyRecord  # noqa: PLC0415 -- used by this test only
+    from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier  # noqa: PLC0415 -- used by this test only
+    from scgsim.geometry.sgb.exact.families import CurveFamilyRecord  # noqa: PLC0415 -- used by this test only
 
     base = pad_in_ground("A")
     carrier = LineCarrier(

@@ -14,7 +14,7 @@ Owns the translation of the record definitions to JSON Schema draft 2020-12:
   a union of records is a ``oneOf``;
 * a marker inside ``Annotated`` adds its keyword (:mod:`.markers`).
 
-The file ``scgsim/geometry/sgb/sidecar/sidecar.schema.json`` is :func:`schema_text` of this schema, written by
+The file ``scgsim/geometry/sgb/output/sidecar/sidecar.schema.json`` is :func:`schema_text` of this schema, written by
 ``scripts/generate_sidecar_schema.py``.
 """
 

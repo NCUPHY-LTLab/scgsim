@@ -49,7 +49,7 @@ sys.path.insert(0, sys.argv[1])
 from pathlib import Path
 import inset_kit as kit
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.cutfamilies.requests import RefinementRequest
+from scgsim.geometry.sgb.bands.requests import RefinementRequest
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 emit_model(kit.pad_model("B", None), Path(sys.argv[2]) / "plain")
 refinement = RefinementRequest("ref", 0.0, ((-40.0, 55.0), (40.0, 55.0)))

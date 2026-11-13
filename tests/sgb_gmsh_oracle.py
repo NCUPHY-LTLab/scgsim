@@ -257,7 +257,7 @@ def _hxt_survives(path: Path, sidecar: dict) -> bool:
 
 def mesh_with_hxt_in_new_session(path: Path, sidecar: dict) -> None:
     """Open ``path`` in a fresh session, re-apply the sidecar's embeddings and mesh with HXT (run in a child process)."""
-    from scgsim.geometry.sgb.verification.loaded import (  # noqa: PLC0415 -- used here only
+    from scgsim.geometry.sgb.checks.verification.loaded import (  # noqa: PLC0415 -- used here only
         apply_sidecar_embeds,
     )
 

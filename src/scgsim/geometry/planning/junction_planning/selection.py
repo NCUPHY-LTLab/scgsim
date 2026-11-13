@@ -30,10 +30,10 @@ from scgsim.geometry.planning.junction_planning.exact_geometry import (
     section,
 )
 from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
+from scgsim.geometry.sgb.exact.carriers import ArcCarrier, LineEdge, RingPrimitive
+from scgsim.geometry.sgb.exact.grid import Grid
 from scgsim.geometry.sgb.prisms.bound_rings import bound_ring_primitives
 from scgsim.geometry.sgb.prisms.footprints import conductor_loops
-from scgsim.geometry.sgb.records.carriers import ArcCarrier, LineEdge, RingPrimitive
-from scgsim.geometry.sgb.records.grid import Grid
 
 
 @dataclass(frozen=True)

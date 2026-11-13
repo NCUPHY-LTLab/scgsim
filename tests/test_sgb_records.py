@@ -11,16 +11,16 @@ from fractions import Fraction
 import pytest
 
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.prisms.arcs import arc_through_points, full_circle
-from scgsim.geometry.sgb.records import circle_math
-from scgsim.geometry.sgb.records.carriers import CarrierRole, Lineage, circle_arcs
-from scgsim.geometry.sgb.records.grid import Grid, exact_z
-from scgsim.geometry.sgb.records.prisms import (
+from scgsim.geometry.sgb.exact import circle_math
+from scgsim.geometry.sgb.exact.carriers import CarrierRole, Lineage, circle_arcs
+from scgsim.geometry.sgb.exact.grid import Grid, exact_z
+from scgsim.geometry.sgb.exact.prisms import (
     Footprint,
     PortIdentity,
     PrismRecord,
     oriented_ring,
 )
+from scgsim.geometry.sgb.prisms.arcs import arc_through_points, full_circle
 
 LINEAGE = Lineage("polygon_edge", "e", 0, 0, 3)
 GRID = Grid(0.001)

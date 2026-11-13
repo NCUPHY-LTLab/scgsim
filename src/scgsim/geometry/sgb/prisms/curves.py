@@ -50,18 +50,18 @@ from scgsim.geometry.models.input import (
     ring_without_drawn_order,
 )
 from scgsim.geometry.sgb.errors import InputError, UnsupportedCurveError
-from scgsim.geometry.sgb.plane import (
+from scgsim.geometry.sgb.exact.carriers import Lineage
+from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.plane import (
     Point,
     Ring,
     fraction_to_rep,
     point_in_ring,
     ring_twice_area,
 )
+from scgsim.geometry.sgb.exact.prisms import LineEdge, RingPrimitive
 from scgsim.geometry.sgb.prisms.arcs import arc_through_points, full_circle
 from scgsim.geometry.sgb.prisms.footprints import SourceFootprint
-from scgsim.geometry.sgb.records.carriers import Lineage
-from scgsim.geometry.sgb.records.grid import Grid
-from scgsim.geometry.sgb.records.prisms import LineEdge, RingPrimitive
 
 RingKey = tuple[
     str, int, int

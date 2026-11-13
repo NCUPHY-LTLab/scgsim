@@ -20,14 +20,14 @@ from fractions import Fraction
 from typing import Literal
 
 from scgsim.geometry.models.section import CutLine
-from scgsim.geometry.sgb import identity
-from scgsim.geometry.sgb.assembly.records import Loop
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest
+from scgsim.geometry.sgb.bands.requests import InsetRequest
+from scgsim.geometry.sgb.checks.validation.report import ValidationReport
+from scgsim.geometry.sgb.exact import identity
+from scgsim.geometry.sgb.exact.labels import Domain, SheetOwner
 from scgsim.geometry.sgb.model import ConformalModel
-from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
-from scgsim.geometry.sgb.routes.groups import PhysicalGroup
 from scgsim.geometry.sgb.section.frame import CutFrame
-from scgsim.geometry.sgb.validation.report import ValidationReport
+from scgsim.geometry.sgb.topology.assembly.records import Loop
+from scgsim.geometry.sgb.topology.routes.groups import PhysicalGroup
 
 
 @dataclass(frozen=True)

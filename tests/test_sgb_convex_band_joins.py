@@ -28,7 +28,7 @@ from sgb_supported_kit import (
     to_lattice,
 )
 
-from scgsim.geometry.sgb.cutfamilies.inset import SHORT_ARC_GRID_STEPS
+from scgsim.geometry.sgb.bands.inset import SHORT_ARC_GRID_STEPS
 
 HALF_WIDTH_UM = 20.0
 MARGINS_GRID = (500, 1000)
