@@ -32,6 +32,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from fractions import Fraction
+from typing import NamedTuple
 
 from scgsim.geometry.exact.carriers import Lineage, LineEdge, RingPrimitive
 from scgsim.geometry.exact.errors import InputError, UnsupportedCurveError
@@ -66,19 +67,23 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.representation import RepresentationContext
 
-RingKey = tuple[str, int, int]
-"""One source ring: ``(Entity id, polygon index, ring index)``.
 
-The polygon index counts the Entity's ``polygon_ids`` (its footprints, in source order); the ring index is 0
-for the outer ring and ``1 + k`` for hole ``k``.  The junction partition looks rings up by the same key.
-"""
+class RingKey(NamedTuple):
+    """One source ring of an Entity.
+
+    ``polygon`` counts the Entity's ``polygon_ids`` (its footprints, in source order); ``ring`` is 0 for the
+    outer ring and ``1 + k`` for hole ``k``.  The junction partition looks rings up by the same key.
+    """
+
+    entity_id: str
+    polygon: int
+    ring: int
 
 
 def describe_ring(key: RingKey) -> str:
     """The ring in words, as a refusal names it (the refusal names the Entity with the records)."""
-    _, polygon, ring = key
-    which = "the outer ring" if ring == 0 else f"hole {ring - 1}"
-    return f"{which} of polygon {polygon}"
+    which = "the outer ring" if key.ring == 0 else f"hole {key.ring - 1}"
+    return f"{which} of polygon {key.polygon}"
 
 
 BoundaryRecord = BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec
@@ -223,14 +228,17 @@ class _BoundaryBinder:
                     f"{self._place(footprint.outer)} has {len(footprint.holes)}. Fix the "
                     "declaration: give the hole_index of one of its holes, counted from 0."
                 )
-        key = (record.entity_id, footprint.polygon, ring_index)
+        key = RingKey(
+            entity_id=record.entity_id, polygon=footprint.polygon, ring=ring_index
+        )
         return key, footprint.rings()[ring_index]
 
     def ring_of(self, key: RingKey) -> Ring:
         """The source ring of a key."""
-        entity_id, polygon, ring_index = key
-        footprint = next(f for f in self.footprints[entity_id] if f.polygon == polygon)
-        return footprint.rings()[ring_index]
+        footprint = next(
+            f for f in self.footprints[key.entity_id] if f.polygon == key.polygon
+        )
+        return footprint.rings()[key.ring]
 
     def claim(self, key: RingKey, records: Sequence[BoundaryRecord]) -> str:
         """The records that claim one ring, and where the ring lies."""
@@ -241,9 +249,9 @@ class _BoundaryBinder:
 
     def _claimants(self, key: RingKey, names: Sequence[str]) -> str:
         """The records that claim one ring, with its Entity and the Entity's layer."""
-        layer = self.layers.get(key[0])
+        layer = self.layers.get(key.entity_id)
         on = f" on layer {layer}" if layer else ""
-        return f"{' and '.join(names)} (Entity {key[0]!r}{on})"
+        return f"{' and '.join(names)} (Entity {key.entity_id!r}{on})"
 
     def _selector_finding(
         self, record: BoundaryRecord, matches: Sequence[SourceFootprint]
@@ -337,7 +345,9 @@ class _BoundaryBinder:
                     )
                 )
             arc_id = _arc_id(key, index)
-            lineage = Lineage("polygon_edge", key[0], key[1], key[2], index)
+            lineage = Lineage(
+                "polygon_edge", key.entity_id, key.polygon, key.ring, index
+            )
             return (
                 start,
                 end,
@@ -414,7 +424,9 @@ class _BoundaryBinder:
             )
         segments = chain.segments
         arc_id = _arc_id(key, segments[0])
-        lineage = Lineage("polygon_edge", key[0], key[1], key[2], segments[0])
+        lineage = Lineage(
+            "polygon_edge", key.entity_id, key.polygon, key.ring, segments[0]
+        )
         if record.closed:
             ccw = ring_twice_area(ring) > 0
             arcs = full_circle(
@@ -434,10 +446,10 @@ class _BoundaryBinder:
 
         A footprint no polygon backs, as an Entity's outline loop, is given as drawn.
         """
-        polygon = self.polygons.get((key[0], key[1]))
+        polygon = self.polygons.get((key.entity_id, key.polygon))
         if polygon is None:
             return ring
-        drawn = drawn_ring_of(polygon, key[2])
+        drawn = drawn_ring_of(polygon, key.ring)
         if drawn is None:
             raise InputError(ring_without_drawn_order(what, self._place(ring)))
         return tuple(
@@ -524,4 +536,4 @@ def _footprint_polygons(
 
 
 def _arc_id(key: RingKey, edge: int) -> str:
-    return f"{key[0]}/polygon{key[1]}/ring{key[2]}/arc{edge}"
+    return f"{key.entity_id}/polygon{key.polygon}/ring{key.ring}/arc{edge}"
