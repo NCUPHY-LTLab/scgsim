@@ -183,9 +183,7 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     sim = sim_type()
     sim.set_plan(two_pad_snapshot(monkeypatch))
     sim.set_output_dir(tmp_path / "run")
-    sim.set_surface_epr(
-        representation="B", specs={"MA": {**FILM, "inset_margins_um": [0.5]}}
-    )
+    sim.set_surface_epr({"MA": {**FILM, "inset_margins_um": [0.5]}})
     sim.set_mesh(quality_threshold=0.02, budgets=Budgets(max_rounds=1))
     sim.mesh()
     assert [stage for stage, _ in calls] == ["geometry", "check", "mesh"]
@@ -203,7 +201,7 @@ def test_surface_epr_set_after_mesh_invalidates_it():
     sim._mesh_result = object()  # noqa: SLF001 -- stands for a generated mesh
     sim.config_path = "config.json"  # type: ignore[assignment]
     sim._stage = Stage.CONFIG_WRITTEN  # noqa: SLF001 -- stands for set_plan(), mesh() and write_config()
-    sim.set_surface_epr(representation="B", specs={"MA": {**FILM}})
+    sim.set_surface_epr({"MA": {**FILM}})
     assert sim._mesh_result is None  # noqa: SLF001
     assert sim.config_path is None
     assert sim._stage is Stage.BOUND  # noqa: SLF001

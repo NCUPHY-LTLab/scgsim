@@ -59,7 +59,7 @@ from scgsim.meshing.findings import BadElement
 from scgsim.meshing.repair import RepairPolicy
 from scgsim.meshing.sizing import BoundingBox
 from scgsim.meshing.stop_places import stop_places
-from scgsim.palace import EigenmodeSim, ElectrostaticSim, SimulationDrcError
+from scgsim.palace import EigenmodeSim, SimulationDrcError
 from scgsim.palace.source.layout_snapshot import (
     DRC_VACUUM_PADDING_UM,
     prepare_layout_snapshot,
@@ -316,8 +316,8 @@ def set_up_as_the_check(simulation, component, run_dir, specs=None, nets=None):
     sim = simulation()
     sim.set_plan(snapshot)
     sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
-    if specs is not None or simulation is ElectrostaticSim:
-        sim.set_surface_epr(representation="B", specs=specs or {})
+    if specs is not None:
+        sim.set_surface_epr(specs)
     sim.set_output_dir(run_dir)
     return sim
 

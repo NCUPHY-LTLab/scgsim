@@ -202,6 +202,11 @@ def _surface_table(
         for item in backend.get("surface_contributions", [])
     ]
     palace_surfaces = backend.get("surface_epr_specs")
+    if "surface_epr_specs" in backend and palace_surfaces is None:
+        # A Palace simulation on which set_surface_epr was not called: no film and no band.
+        surface_rows.append(
+            ("Surface EPR", "not requested", None, None, None, None, None, None, None)
+        )
     if isinstance(palace_surfaces, Mapping):
         surface_rows.extend(
             (

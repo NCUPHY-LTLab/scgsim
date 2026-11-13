@@ -1,6 +1,6 @@
 """The Electrostatic problem: terminals, grounds, the boundary policies and the Electrostatic config.
 
-Everything else (plan, vacuum, Surface EPR, mesh controls, ``mesh()``, ``simulation_drc``, the summaries and
+Everything else (plan, vacuum, route, Surface EPR, mesh controls, ``mesh()``, ``simulation_drc``, the summaries and
 the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what the Electrostatic problem adds.
 """
 
@@ -37,7 +37,8 @@ class ElectrostaticSim(PalaceSimulation):
         sim = ElectrostaticSim()
         sim.set_plan(plan.prepare())
         sim.set_output_dir("runs/pads")
-        sim.set_surface_epr(representation="B", specs={})  # required before mesh()
+        sim.set_route("B")  # optional: Route B is the default
+        sim.set_surface_epr(specs)  # optional: without it, no Surface EPR
         sim.add_terminal("pad", net_id="pad")
         sim.add_ground(net_id="ground")
         sim.set_electrostatic(save_fields=1)
@@ -59,8 +60,6 @@ class ElectrostaticSim(PalaceSimulation):
     numerical_defaults: ClassVar[ProblemDefaults] = ProblemDefaults(
         amr_max_passes=0, amr_nonconformal=False, amr_tolerance=1e-2
     )
-    # Electrostatic needs its Surface-EPR specs before mesh(); Eigenmode does not.
-    mesh_requires_surface_epr: ClassVar[bool] = True
 
     def add_terminal(self, name: str, *, net_id: str) -> None:
         """Bind one exact conductor net to a named Electrostatic terminal; a repeated name replaces it.

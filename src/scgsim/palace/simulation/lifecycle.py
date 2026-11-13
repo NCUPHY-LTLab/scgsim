@@ -19,8 +19,8 @@ problem setters        nothing                ``MESHED``
 ``prepare_handoff``    ``CONFIG_WRITTEN``     nothing is discarded
 =====================  =====================  ===========================================
 
-The geometry setters are the others whose value ``mesh()`` reads (output folder, vacuum, mesh controls,
-Eigenmode ports); the problem setters are those only ``write_config()`` reads.  ``CALLS`` is
+The geometry setters are the others whose value ``mesh()`` reads (output folder, vacuum, route, mesh
+controls, Eigenmode ports); the problem setters are those only ``write_config()`` reads.  ``CALLS`` is
 that table as code; the simulation core reads it and nothing else decides these rules.
 """
 
@@ -45,6 +45,7 @@ Call = Literal[
     "set_plan",
     "set_output_dir",
     "set_vacuum_region",
+    "set_route",
     "set_surface_epr",
     "set_mesh",
     "add_port",
@@ -82,6 +83,7 @@ CALLS: dict[Call, CallRule] = {
     "set_plan": _GEOMETRY_CHANGE,
     "set_output_dir": _GEOMETRY_CHANGE,
     "set_vacuum_region": _GEOMETRY_CHANGE,
+    "set_route": _GEOMETRY_CHANGE,
     "set_surface_epr": CallRule(
         needs=Stage.BOUND,
         falls_back_to=Stage.BOUND,

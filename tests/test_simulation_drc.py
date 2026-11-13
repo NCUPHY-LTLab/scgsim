@@ -179,8 +179,8 @@ def configured(simulation, snapshot, specs):
                 layout_sheet=True,
                 inductance=1e-9,
             )
-    if specs is not None or simulation is ElectrostaticSim:
-        sim.set_surface_epr(representation="B", specs=specs or {})
+    if specs is not None:
+        sim.set_surface_epr(specs)
     return sim
 
 
