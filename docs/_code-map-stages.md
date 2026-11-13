@@ -36,9 +36,9 @@
 | `geometry/sgb/checks/validation` | S9: the structural invariants of the arrangements, the topology and the ids; a failure raises. | Part of `geometry/sgb/checks`; read it with that row. |  |  |
 | `geometry/sgb/checks/slivers` | S9: the sliver report, the local feature size of the faces on their exact carriers; measurements only. | Part of `geometry/sgb/checks`; read it with that row. |  |  |
 | `geometry/sgb/checks/verification` | Checks of the written geometry: the Gmsh load check and what the OCCT checks add. | Part of `geometry/sgb/checks`; read it with that row. |  |  |
-| `geometry/sgb/output` | S10: the files of a validated model: BREP and XAO, the sidecar and the AEDT STEP export. | the validated `ConformalModel`. | the byte-deterministic BREP and XAO, the `scgsim.sgb.sidecar.v4` JSON that binds every planned id to its native tag, and the STEP of the emitted solids with its guard. | the mesher and the solver adapters read the files; `checks.verification` checks them. |
+| `geometry/sgb/output` | S10: the files of a validated model: BREP and XAO, the sidecar and the AEDT STEP export. | the validated `ConformalModel`. | the byte-deterministic BREP and XAO, the `scgsim.sgb.sidecar.v5` JSON that binds every planned id to its native tag, and the STEP of the emitted solids with its guard. | the mesher and the solver adapters read the files; `checks.verification` checks them. |
 | `geometry/sgb/output/emission` | Stage S10: the direct BREP / XAO writer (design brief decision D8). | Part of `geometry/sgb/output`; read it with that row. |  |  |
-| `geometry/sgb/output/sidecar` | The production sidecar `scgsim.sgb.sidecar.v4` (design brief sections 7 and 12, decision D8). | Part of `geometry/sgb/output`; read it with that row. |  |  |
+| `geometry/sgb/output/sidecar` | The production sidecar `scgsim.sgb.sidecar.v5` (design brief sections 7 and 12, decision D8). | Part of `geometry/sgb/output`; read it with that row. |  |  |
 | `geometry/sgb/output/exchange` | Exchange of the emitted solids with other tools: the AEDT STEP export and its import guard (design brief decision D4, experiment E4). | Part of `geometry/sgb/output`; read it with that row. |  |  |
 | `geometry/sgb/section` | SGB's 2D models: the plane section of a validated 3D model along a cut line. | Its docstring names its modules instead of In, Out and Next. |  |  |
 
