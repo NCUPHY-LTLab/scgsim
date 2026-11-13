@@ -102,9 +102,7 @@ from an earlier stage to a later one:
 
 | Importing folder | Imports | What it takes from there |
 | --- | --- | --- |
-| `geometry/junctions` | `geometry/sgb` | SGB's boundary binder (`prisms.bound_rings`) and exact records, so the partition cuts the rings SGB builds. |
-| `geometry/sgb/bands` | `geometry/sgb/arrangement`, `geometry/sgb/topology` | The arrangement and the surface naming of the physical pre-pass that finds each inset band's support face. |
-| `geometry/sgb/checks` | `geometry/sgb/output` | The emission plan and its planned areas and volumes, which the OCCT checks compare a written file with. |
+| `geometry/junctions` | `geometry/sgb/exact` | SGB's shared vocabulary, below every SGB stage: the exact records and the boundary binder (`exact.boundaries`), so the partition cuts the rings SGB builds. |
 | `palace/results` | `palace/reports` | The report views a resolved result's display methods return. |
 | `aedt/specs` | `aedt/epr` | The grouping of surface integrals (`epr.selection`). |
 | `aedt/preparation` | `aedt/results` | The receipt schema and the initial receipt (`results.provenance`). |
@@ -115,8 +113,8 @@ from an earlier stage to a later one:
 Each area has one table, its rows in the order the work flows through it. A
 row's text is the folder's docstring: *What it is* is the first sentence, and
 In, Out and Next are the three lines. A folder that is not a stage says in
-its In cell what it is instead: an area's own folder, a part of the stage in
-the row it names, or a stage whose docstring names its modules.
+its In cell what it is instead: an area's own folder, or a part of the stage
+in the row it names.
 
 To change a row, edit the folder's docstring, translate the changed text in
 `scripts/code_map_zh_tw.toml`, and run `python scripts/generate_code_map.py`;

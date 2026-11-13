@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 
 # Counting cut-offs.  They are measurement bins, not proposed limits.
@@ -41,8 +42,11 @@ def capture():
     original = sgb_build.sliver_report
     captured: list[dict[str, Any]] = []
 
-    def full_then_written(model, top: int = 10, *, drift: bool = True):
-        full = original(model, top=10**9, drift=drift)
+    def full_then_written(
+        labelled, topology, routed, top: int = 10, *, drift: bool = True
+    ):
+        full = original(labelled, topology, routed, top=10**9, drift=drift)
+        model = SimpleNamespace(labelled=labelled, topology=topology)
         captured.append({"report": full, "facts": _topology_facts(model)})
         return _as_written(full, top)
 
@@ -57,7 +61,12 @@ def capture_model(model) -> dict[str, Any]:
     """The same measurements for a model built in this process (the test scenes)."""
     from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 
-    return {"report": sliver_report(model, top=10**9), "facts": _topology_facts(model)}
+    return {
+        "report": sliver_report(
+            model.labelled, model.topology, model.routed, top=10**9
+        ),
+        "facts": _topology_facts(model),
+    }
 
 
 def summarize(captured: dict[str, Any]) -> dict[str, Any]:

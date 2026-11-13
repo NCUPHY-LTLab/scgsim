@@ -20,7 +20,7 @@ from scgsim.geometry.sgb.exact.prisms import (
     PrismRecord,
     oriented_ring,
 )
-from scgsim.geometry.sgb.prisms.arcs import arc_through_points, full_circle
+from scgsim.geometry.sgb.exact.source_arcs import arc_through_points, full_circle
 
 LINEAGE = Lineage("polygon_edge", "e", 0, 0, 3)
 GRID = Grid(0.001)

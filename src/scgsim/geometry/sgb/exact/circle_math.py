@@ -99,7 +99,7 @@ def _absorbed(term: Decimal, total: Decimal) -> bool:
 def atan2(y: Decimal, x: Decimal) -> Decimal:
     """Angle of the vector (x, y) in (-pi, pi]."""
     if x == 0 and y == 0:
-        raise ValueError("atan2 of the zero vector")
+        raise ValueError("internal: atan2 of the zero vector")
     if x == 0:
         return HALF_PI if y > 0 else _CONTEXT.minus(HALF_PI)
     angle = _atan(_CONTEXT.divide(y, x))

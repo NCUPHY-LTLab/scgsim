@@ -29,15 +29,17 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.exact.interfaces import (
+    SHEET,
+    interface_type_of,
+    sheet_face_sides,
+)
 from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.topology.routes.face_names import FaceNames, name_faces
 from scgsim.geometry.sgb.topology.routes.naming import (
-    SHEET,
     banded_rows,
     face_kind,
-    interface_type_of,
     net_of_surface,
-    sheet_face_sides,
     volume_group,
 )
 from scgsim.geometry.sgb.topology.routes.policy import RoutePolicy
@@ -59,7 +61,7 @@ class RoutedFace:
     (``None`` for a face without a name); ``net`` the Net whose exposed conductor surface the face is;
     ``face_kind`` ``top``, ``bottom``, ``sidewall``, ``sheet``, ``interface`` or ``port``; ``sheet_sides``, for
     a ``SHEET`` face, the Surface-EPR row types of the face and the side each integrates
-    (:func:`~scgsim.geometry.sgb.topology.routes.naming.sheet_face_sides`), empty for every other face.  The face's
+    (:func:`~scgsim.geometry.sgb.exact.interfaces.sheet_face_sides`), empty for every other face.  The face's
     group is ``RoutedModel.face_group``.
     """
 
@@ -197,7 +199,7 @@ def _add_volume_groups(
             group = groups.setdefault(name, PhysicalGroup(3))
             if group.dim != 3:
                 raise SgbError(
-                    f"physical-group name {name!r} names both a volume and a surface"
+                    f"internal: physical-group name {name!r} names both a volume and a surface"
                 )
             group.ids.append(vid)
     return groups

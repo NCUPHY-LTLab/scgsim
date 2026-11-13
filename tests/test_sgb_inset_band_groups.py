@@ -212,7 +212,7 @@ def test_two_concrete_interface_requests_on_one_face_are_refused():
     assert "'one'" in message and "'two'" in message and "'below'" not in message
 
 
-# --------------------------------------------------------------------------- expansion.banded
+# --------------------------------------------------------------------------- expansion.families
 
 
 def covered_gap_catalogue() -> PrismCatalogue:
@@ -248,7 +248,7 @@ def covered_gap_catalogue() -> PrismCatalogue:
 
 
 def test_a_family_the_pre_pass_banded_may_have_no_band_once_a_port_covers_its_face():
-    """``expansion.banded`` lists the families the physical pre-pass created; ports placed later may cover one."""
+    """``expansion.families`` lists the families the physical pre-pass created; ports placed later may cover one."""
     request = InsetRequest("sa", InterfaceSurfaces("SA"), (0.5, 1.0))
     model = build_model_from_catalogue(covered_gap_catalogue(), "A", insets=(request,))
     side = sidecar_of(model)

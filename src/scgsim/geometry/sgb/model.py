@@ -5,8 +5,11 @@ the labelled arrangements, the assembled topology, the route's group plan and th
 validation report.  Validation always runs and a failed invariant raises
 :class:`ValidationError`: no model that failed an invariant is ever returned.
 
-Emission (S10), the sidecar and the cut-family generators build on this result in later
-sub-stages.
+The steps, in order: the prism catalogue (S2); the route and entity-name checks; the cut
+families of the inset requests (S3, measured on the physical pre-pass, S4 and S5 of the
+physical prisms alone); the labelled arrangements with those families (S4 and S5); the
+topology (S6); the route plan (S7 and S8); the validation (S9).  ``build`` writes the files
+of the result (S10).
 """
 
 from __future__ import annotations
@@ -20,9 +23,14 @@ from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.arrangement.derivation.labelled import (
     LabelledArrangements,
     derive_arrangements,
+    derive_physical_arrangements,
 )
-from scgsim.geometry.sgb.bands.generate import build_cut_families
-from scgsim.geometry.sgb.bands.inset_plan import InsetPlan
+from scgsim.geometry.sgb.bands.generate import (
+    CutFamilies,
+    build_cut_families,
+    check_request_ids,
+)
+from scgsim.geometry.sgb.bands.inset_plan import InsetPlan, plan_insets
 from scgsim.geometry.sgb.bands.requests import InsetRequest
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
 from scgsim.geometry.sgb.checks.validation.validate import validate_model
@@ -52,14 +60,12 @@ class ConformalModel:
     topology: Topology
     routed: RoutedModel
     report: ValidationReport
-    timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds
-    counts: dict[str, int] = field(default_factory=dict)
     insets: tuple[
         InsetRequest, ...
-    ] = ()  # the inset requests the model was built with, as given
-    inset_plan: InsetPlan = field(
-        default_factory=InsetPlan
-    )  # the band families the inset requests became
+    ]  # the inset requests the model was built with, as given
+    inset_plan: InsetPlan  # the band families the inset requests became
+    timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds
+    counts: dict[str, int] = field(default_factory=dict)
 
     @property
     def policy(self) -> RoutePolicy:
@@ -132,27 +138,45 @@ def build_model_from_catalogue(
     check_entity_names(
         p.entity_id for p in catalogue.prisms if p.material_kind != "port"
     )
-    cut_families = build_cut_families(catalogue, insets)
-    catalogue = cut_families.catalogue
+    cut_families = _cut_families(catalogue, insets)
     # The pipeline allocates millions of small acyclic objects; the cyclic collector would only
     # re-scan them, so it is paused for the build.
     was_enabled = gc.isenabled()
     gc.disable()
     try:
-        model = _build(catalogue, policy, keep_raw=keep_raw)
-        model.insets = insets
-        model.inset_plan = cut_families.insets
-        return model
+        return _build(cut_families, insets, policy, keep_raw=keep_raw)
     finally:
         if was_enabled:
             gc.enable()
 
 
+def _cut_families(
+    catalogue: PrismCatalogue, insets: tuple[InsetRequest, ...]
+) -> CutFamilies:
+    """S3 on its pre-pass: the arrangements of the physical prisms alone, the faces the requests land on, the families.
+
+    Without requests there is no pre-pass and no band family.
+    """
+    check_request_ids(insets, catalogue)
+    plan = InsetPlan()
+    if insets:
+        physical = derive_physical_arrangements(catalogue)
+        plan = plan_insets(catalogue, insets, physical)
+    return build_cut_families(catalogue, plan)
+
+
 def _build(
-    catalogue: PrismCatalogue, policy: RoutePolicy, *, keep_raw: bool
+    cut_families: CutFamilies,
+    insets: tuple[InsetRequest, ...],
+    policy: RoutePolicy,
+    *,
+    keep_raw: bool,
 ) -> ConformalModel:
+    """S4 to S9 on the catalogue with its cut families."""
     watch = Stopwatch()
-    labelled = derive_arrangements(catalogue, keep_raw=keep_raw, watch=watch)
+    labelled = derive_arrangements(
+        cut_families.catalogue, keep_raw=keep_raw, watch=watch
+    )
     topology = assemble_topology(labelled, watch)
     with watch.stage("routes"):
         routed = apply_route(topology, policy)
@@ -160,5 +184,12 @@ def _build(
     report.raise_if_failed()
     counts = {**labelled.counts, **topology.counts(), "groups": len(routed.groups)}
     return ConformalModel(
-        labelled, topology, routed, report, dict(watch.seconds), counts
+        labelled,
+        topology,
+        routed,
+        report,
+        insets,
+        cut_families.plan,
+        dict(watch.seconds),
+        counts,
     )

@@ -218,7 +218,7 @@ def _dot(edge: NodedEdge, direction: tuple[Point, Point]) -> int:
 
 def _inconsistent_support(arr: Arrangement, face: int) -> ValidationError:
     return ValidationError(
-        f"inset cell at {arr.face_anchor(face)} (grid units) lies both inside and outside its support "
+        f"internal: inset cell at {arr.face_anchor(face)} (grid units) lies both inside and outside its support "
         "region: the support boundary is not a set of oriented rings"
     )
 
@@ -351,6 +351,6 @@ def _check_seam_ends(
     if lost:
         x, y = lost[0]
         raise ValidationError(
-            f"a band seam ends at ({x * grid_um:.4f}, {y * grid_um:.4f}) um, on neither the support "
+            f"internal: a band seam ends at ({x * grid_um:.4f}, {y * grid_um:.4f}) um, on neither the support "
             "boundary nor a port boundary: part of the band boundary was lost"
         )

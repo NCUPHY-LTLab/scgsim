@@ -322,7 +322,7 @@ def _write_timing_tables(api_rows, load_rows, direct_rows, sidecar_rows) -> None
     )
 
 
-VALIDATOR_ABOUT = {  # what each timed check or load-side phase loops over (checks of checks/validation/ and checks/verification/loaded.py)
+VALIDATOR_ABOUT = {  # what each timed check or load-side phase loops over (checks of checks/validation/ and output/verification/loaded.py)
     "face_areas": "載入側：每個 face 一次 gmsh mass 呼叫，O(F)",
     "planarity": "S9：各 arrangement 的 edge，用 noding kernel",
     "shells": "S9：每個 shell 的 face",

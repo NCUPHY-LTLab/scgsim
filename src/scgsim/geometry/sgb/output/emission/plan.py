@@ -251,7 +251,7 @@ def check_one_tag_per_id(found: Numbering) -> None:
     repeated = sorted(i for i, n in Counter(listed).items() if n > 1)
     if repeated:
         raise SgbError(
-            f"{len(repeated)} planned ids map to more than one native tag: {repeated[:3]}"
+            f"internal: {len(repeated)} planned ids map to more than one native tag: {repeated[:3]}"
         )
 
 
@@ -281,7 +281,7 @@ def _arc_records(  # noqa: PLR0913 - the edge arrays travel together
             > tolerance / 10
         ):
             raise SgbError(
-                f"arc edge {edge_id}: end points are not on its circle within {tolerance / 10:g} um"
+                f"internal: arc edge {edge_id}: end points are not on its circle within {tolerance / 10:g} um"
             )
         s = 1.0 if arc.ccw else -1.0
         cross = s * (rel0[0] * rel1[1] - rel0[1] * rel1[0])

@@ -63,21 +63,15 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.exact.interfaces import (
+    SHEET,
+    interface_type_of,
+    ordered_pair,
+)
 from scgsim.geometry.sgb.exact.labels import Domain, SheetOwner
 
 RESERVED_PREFIXES = ("MA", "MS", "MM", "SA", "AA", "SS", "EXT", "PORT")
 """The interface prefixes of a prefixed group name; no entity id may equal one of them."""
-SHEET = "SHEET"
-"""Interface type of a Route A conductor sheet (a record field and a union key, never part of a group name)."""
-INTERFACE_TYPES = ("MA", "MS", "MM", "SA", "AA", "SS", SHEET)
-"""The interface types of a face between two regions or of a conductor sheet: what an inset request may state
-it expects its face to be (a port and the model boundary are not)."""
-SURFACE_EPR_TYPES = ("MA", "MS", "SA")
-"""The interface types that are Surface-EPR contributions: metal-air, metal-substrate and substrate-air.  They are
-also the types a band can be asked for by: an ``AA`` surface has no conductor next to it, so it never has a gap
-edge, and ``MM`` and ``SS`` are not Surface-EPR contributions."""
-SHEET_ROW_NEIGHBOURS = {"MA": "vacuum", "MS": "dielectric"}
-"""The Surface-EPR row types of a sheet face and the kind of neighbour each one integrates."""
 FACE_KINDS = ("top", "bottom", "sidewall", "sheet", "interface")
 """The face kinds a primary surface group name can carry (a port face is ``port`` and is not in a name)."""
 FACE_KIND_SEPARATOR = "__"
@@ -126,8 +120,8 @@ def interface_side(neg: Domain | None, pos: Domain | None) -> str:
     ``bottom`` when it is above.  Both domains must exist.
     """
     if neg is None or pos is None:
-        raise ValueError("an interface face has a domain on each side")
-    first, _ = _ordered_pair(neg, pos)
+        raise ValueError("internal: an interface face has a domain on each side")
+    first, _ = ordered_pair(neg, pos)
     return "top" if first == neg else "bottom"
 
 
@@ -162,60 +156,27 @@ def _prefix_and_entity(
 ) -> tuple[str, str] | None:
     """The interface type of a face and the entity part of its name (``("MA", "D1_pad")``), or ``None`` for no name.
 
-    A Route A conductor sheet is ``("SHEET", <entity>)`` and a port ``("PORT", <port sheet id>)``.
+    A Route A conductor sheet is ``("SHEET", <entity>)`` and a port ``("PORT", <port sheet id>)``; an interface
+    between two regions names both, in :func:`~scgsim.geometry.sgb.exact.interfaces.ordered_pair` order.
     """
+    interface = interface_type_of(neg, pos, owner)
+    if interface is None:
+        return None
     if owner is not None:
-        return ("PORT" if owner.kind == "port" else SHEET, owner.name)
-    if neg is None:
-        return None if pos is None else ("EXT", pos.name)
-    if pos is None:
-        return ("EXT", neg.name)
-    conductors = [d for d in (neg, pos) if d.kind == "conductor"]
-    if len(conductors) == 2:
-        first, second = _ordered_pair(neg, pos)
-        return ("MM", f"{first.name}|{second.name}")
-    if conductors:
-        metal = conductors[0]
-        other = pos if metal == neg else neg
-        return ("MA" if other.kind == "vacuum" else "MS", metal.name)
-    return _solution_interface(neg, pos)
-
-
-def _ordered_pair(a: Domain, b: Domain) -> tuple[Domain, Domain]:
-    """The two domains of an interface in the order of its name: dielectric before vacuum, then by name."""
-    first, second = sorted((a, b), key=lambda d: (d.kind == "vacuum", d.name))
-    return first, second
-
-
-def _solution_interface(a: Domain, b: Domain) -> tuple[str, str]:
-    """Substrate-air, air-air or substrate-substrate, dielectric first."""
-    first, second = _ordered_pair(a, b)
-    kinds = {a.kind, b.kind}
-    kind = (
-        "SA"
-        if kinds == {"dielectric", "vacuum"}
-        else "AA"
-        if kinds == {"vacuum"}
-        else "SS"
-    )
-    return kind, f"{first.name}|{second.name}"
+        return interface, owner.name
+    sides = [domain for domain in (neg, pos) if domain is not None]
+    if len(sides) == 1:
+        return interface, sides[0].name
+    a, b = sides
+    if interface in ("MA", "MS"):
+        return interface, (a if a.kind == "conductor" else b).name
+    first, second = ordered_pair(a, b)
+    return interface, f"{first.name}|{second.name}"
 
 
 def volume_group(domain: Domain) -> str:
     """The primary group of a volume: the entity id itself."""
     return domain.name
-
-
-def interface_type_of(
-    neg: Domain | None, pos: Domain | None, owner: SheetOwner | None
-) -> str | None:
-    """The interface type of a face (``MA``, ``MS`` ... ``PORT``, ``EXT``, or ``SHEET``), from its structure.
-
-    A Route A conductor sheet is ``SHEET`` (its ``MA`` and ``MS`` rows follow the neighbours of its faces,
-    see :func:`sheet_face_sides`); a face with no name is ``None``.  Nothing is parsed from a group name.
-    """
-    named = _prefix_and_entity(neg, pos, owner)
-    return None if named is None else named[0]
 
 
 def sheet_row_id(row_type: str, entity: str, band: int | None) -> str:
@@ -260,22 +221,6 @@ def net_of_surface(
         return None
     conductors = [d for d in (neg, pos) if d.kind == "conductor"]
     return conductors[0].net if len(conductors) == 1 else None
-
-
-def sheet_face_sides(neg: Domain | None, pos: Domain | None) -> dict[str, str]:
-    """The Surface-EPR row types of one sheet face and the side of the face each one integrates.
-
-    ``MA`` is the neighbour of kind vacuum, ``MS`` the one of kind dielectric (:data:`SHEET_ROW_NEIGHBOURS`).
-    A side is ``above`` (the neighbour is the ``pos`` domain), ``below`` (the ``neg`` domain) or ``both``.
-    A row type the face has no neighbour for is absent.
-    """
-    out: dict[str, str] = {}
-    for row_type, kind in SHEET_ROW_NEIGHBOURS.items():
-        above = pos is not None and pos.kind == kind
-        below = neg is not None and neg.kind == kind
-        if above or below:
-            out[row_type] = "both" if above and below else "above" if above else "below"
-    return out
 
 
 def banded_rows(  # noqa: PLR0913 - the group's two names, its type and Entity, the band and the sheet sides

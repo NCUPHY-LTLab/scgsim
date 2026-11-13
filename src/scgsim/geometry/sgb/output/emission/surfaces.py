@@ -69,7 +69,7 @@ class SurfaceBuilder:
             return self._cylinder_of(face)
         if not face.planar:
             raise SgbError(
-                f"face {face.id}: non-planar, non-cylindrical face (needs a B-spline record; not implemented)"
+                f"internal: face {face.id}: non-planar, non-cylindrical face (needs a B-spline record; not implemented)"
             )
         if face.kind == "horizontal":
             return self._level_plane_of(face), False
@@ -85,7 +85,7 @@ class SurfaceBuilder:
         topology = self.topology
         if face.twice_xy_area <= 0:
             raise SgbError(
-                f"horizontal face {face.id} is not counter-clockwise about +z"
+                f"internal: horizontal face {face.id} is not counter-clockwise about +z"
             )
         zs = topology.vertices[topology.edges[face.loops[0][0][0]].v0].zs
         plane = self._level_plane.get(zs)
@@ -111,7 +111,7 @@ class SurfaceBuilder:
         """
         topology, g = self.topology, self.grid_um
         if len(face.loops) != 1:
-            raise SgbError(f"curved wall {face.id} has holes")
+            raise SgbError(f"internal: curved wall {face.id} has holes")
         arcs = self._wall_arcs(face)
         circle = arcs[0][0].curve
         assert circle is not None  # _wall_arcs keeps arc edges only
@@ -124,7 +124,7 @@ class SurfaceBuilder:
         dot = reference[0] * radial[:, 0] + reference[1] * radial[:, 1]
         offsets = angle_of(cross, dot)
         if offsets.max() - offsets.min() > 2 * PI - FULL_TURN_MARGIN:
-            raise SgbError(f"curved wall {face.id} wraps the whole cylinder")
+            raise SgbError(f"internal: curved wall {face.id} wraps the whole cylinder")
         start = radial[int(np.argmin(offsets))]
         length = math.sqrt(start[0] * start[0] + start[1] * start[1])
         x_axis = (start[0] / length, start[1] / length, 0.0)
@@ -136,7 +136,9 @@ class SurfaceBuilder:
             if edge.curve is not None and topology.vertices[edge.v0].zs == top
         }
         if len(senses) != 1:
-            raise SgbError(f"curved wall {face.id}: top arcs run in different senses")
+            raise SgbError(
+                f"internal: curved wall {face.id}: top arcs run in different senses"
+            )
         self.records.append(
             SurfaceRecord(
                 CYLINDER, ((cx, cy, 0.0), (0.0, 0.0, 1.0), x_axis, y_axis), radius
@@ -152,7 +154,7 @@ class SurfaceBuilder:
                 continue
             if edge.curve is None:
                 raise SgbError(
-                    f"curved wall {face.id} has a straight horizontal edge (not a cylinder patch)"
+                    f"internal: curved wall {face.id} has a straight horizontal edge (not a cylinder patch)"
                 )
             arcs.append((edge, sign))
         return arcs
@@ -176,7 +178,7 @@ def _check_one_circle(
     )
     if spread > CIRCLE_SPREAD_LIMIT_UM:
         raise SgbError(
-            f"curved wall {face.id}: its {len(arcs)} horizontal arcs lie on different circles (centres differ by "
+            f"internal: curved wall {face.id}: its {len(arcs)} horizontal arcs lie on different circles (centres differ by "
             f"{spread * 1000:.3g} nm); a single cylinder cannot carry the wall, and assembly should have split "
             "the arc at the foreign vertex"
         )
@@ -193,7 +195,7 @@ def plane_through(points: list[Vec3], face_id: str) -> Frame:
         nz += (ax - bx) * (ay + by)
     norm = math.sqrt(nx * nx + ny * ny + nz * nz)
     if norm == 0.0:
-        raise SgbError(f"face {face_id}: degenerate loop")
+        raise SgbError(f"internal: face {face_id}: degenerate loop")
     nx, ny, nz = nx / norm, ny / norm, nz / norm
     if (
         abs(nz) < 1e-9
@@ -261,5 +263,5 @@ def check_edges_lie_on_surfaces(  # noqa: PLR0913 - the edge and surface tables 
         )
     if worst > limit:
         raise SgbError(
-            f"an edge leaves its surface by {worst:.3g} um (limit {limit:g})"
+            f"internal: an edge leaves its surface by {worst:.3g} um (limit {limit:g})"
         )

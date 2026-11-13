@@ -54,7 +54,7 @@ def trace_chains(level_arr: Arrangement, slab: SlabEdges) -> dict[int, list[int]
         edge_indices = members.get(si)
         if not edge_indices:
             raise SgbError(
-                f"slab edge {slab.edge_ids[si]} has no chain in the level arrangement"
+                f"internal: slab edge {slab.edge_ids[si]} has no chain in the level arrangement"
             )
         chains[si] = walk_chain(
             level_arr, edge_indices, slab_edge.a, slab_edge.b, slab.edge_ids[si]
@@ -83,7 +83,7 @@ def walk_chain(
         options = [ei for ei in at[current] if ei not in used]
         if len(options) != 1:
             raise SgbError(
-                f"slab edge {slab_edge_id}: ambiguous or broken chain at {current}"
+                f"internal: slab edge {slab_edge_id}: ambiguous or broken chain at {current}"
             )
         ei = options[0]
         used.add(ei)
@@ -91,7 +91,9 @@ def walk_chain(
         path.append(2 * ei if e.a == current else 2 * ei + 1)
         current = e.b if e.a == current else e.a
     if len(used) != len(edge_indices):
-        raise SgbError(f"slab edge {slab_edge_id}: chain does not use all tagged edges")
+        raise SgbError(
+            f"internal: slab edge {slab_edge_id}: chain does not use all tagged edges"
+        )
     return path
 
 
@@ -121,7 +123,9 @@ def link_faces(
     def assign(level_face: int, slab_face: int) -> None:
         root = find(level_face)
         if assigned.setdefault(root, slab_face) != slab_face:
-            raise SgbError("level cells disagree on the slab cell they lie in")
+            raise SgbError(
+                "internal: level cells disagree on the slab cell they lie in"
+            )
 
     for si, path in chains.items():
         left, right = slab.arr.he_face[2 * si], slab.arr.he_face[2 * si + 1]

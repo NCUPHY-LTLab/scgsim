@@ -199,7 +199,9 @@ def _family_features(
 def _band_facts(requests: dict[str, InsetRequest], family: str) -> dict[str, Any]:
     """The margins of an inset request, ascending, and the narrowest band they leave (the first one starts at 0)."""
     if family not in requests:
-        raise SgbError(f"band family {family!r} has no inset request in the model")
+        raise SgbError(
+            f"internal: band family {family!r} has no inset request in the model"
+        )
     margins = sorted(requests[family].margins_um)
     widths = [
         upper - lower for lower, upper in zip((0.0, *margins), margins, strict=False)

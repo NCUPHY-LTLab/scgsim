@@ -23,28 +23,36 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.checks.slivers.feature_size import Prim, feature_size
 from scgsim.geometry.sgb.exact.plane import segment_point_distance_sq
-from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
+from scgsim.geometry.sgb.topology.routes.groups import RoutedModel
 
 Entry = dict[str, Any]
 
 
-def sliver_report(model: ConformalModel, top: int = 10, *, drift: bool = True) -> Entry:
-    """The sliver measurements of a model, worst first."""
-    g = model.labelled.catalogue.grid.size_um
+def sliver_report(
+    labelled: LabelledArrangements,
+    topology: Topology,
+    routed: RoutedModel,
+    top: int = 10,
+    *,
+    drift: bool = True,
+) -> Entry:
+    """The sliver measurements of a validated model (its arrangements, topology and route plan), worst first."""
+    g = labelled.catalogue.grid.size_um
     report: Entry = {
         "grid_um": g,
         "top": top,
-        "shortest_edges": _shortest_edges(model, top, g),
-        "narrowest_faces": _narrowest_faces(model, top, g),
-        "smallest_angles": _smallest_angles(model, top, g),
-        "thin_slabs": _thin_slabs(model, g),
+        "shortest_edges": _shortest_edges(topology, top, g),
+        "narrowest_faces": _narrowest_faces(topology, routed, top, g),
+        "smallest_angles": _smallest_angles(labelled, top, g),
+        "thin_slabs": _thin_slabs(labelled, g),
     }
     if drift:
-        report["snap_drift"] = _snap_drift(model, top, g)
-        report["arc_edges"] = _arc_edges(model, top, g)
+        report["snap_drift"] = _snap_drift(labelled, top, g)
+        report["arc_edges"] = _arc_edges(labelled, top, g)
     report["summary"] = {
         "shortest_edge_um": report["shortest_edges"][0]["value_um"]
         if report["shortest_edges"]
@@ -62,8 +70,8 @@ def sliver_report(model: ConformalModel, top: int = 10, *, drift: bool = True) -
     return report
 
 
-def _thin_slabs(model: ConformalModel, g: float) -> list[Entry]:
-    levels = model.labelled.levels.levels
+def _thin_slabs(labelled: LabelledArrangements, g: float) -> list[Entry]:
+    levels = labelled.levels.levels
     rows = [
         {
             "z_um": [float(lo), float(hi)],
@@ -76,8 +84,8 @@ def _thin_slabs(model: ConformalModel, g: float) -> list[Entry]:
     return sorted(rows, key=lambda r: r["thickness_um"])
 
 
-def _shortest_edges(model: ConformalModel, top: int, g: float) -> list[Entry]:
-    topo = model.topology
+def _shortest_edges(topology: Topology, top: int, g: float) -> list[Entry]:
+    topo = topology
     rows = []
     for eid, e in topo.edges.items():
         a, b = topo.vertices[e.v0], topo.vertices[e.v1]
@@ -103,9 +111,11 @@ def _shortest_edges(model: ConformalModel, top: int, g: float) -> list[Entry]:
     ]
 
 
-def _narrowest_faces(model: ConformalModel, top: int, g: float) -> list[Entry]:
+def _narrowest_faces(
+    topology: Topology, routed: RoutedModel, top: int, g: float
+) -> list[Entry]:
     """Faces by local feature size (minimum distance between non-incident boundary edges, arcs exact)."""
-    topo = model.topology
+    topo = topology
     rows = []
     for fid, face in topo.faces.items():
         size_um, location, bounded = _face_feature(topo, face, g)
@@ -121,7 +131,7 @@ def _narrowest_faces(model: ConformalModel, top: int, g: float) -> list[Entry]:
         {
             "id": fid,
             "kind": face.kind,
-            "group": model.routed.face_group.get(fid),
+            "group": routed.face_group.get(fid),
             "value_um": round(size, 6),
             "measure": "local feature size",
             "bounded": bounded,
@@ -225,9 +235,9 @@ def _polygon_area_3d(points: list[tuple[float, float, float]]) -> float:
     return 0.5 * math.sqrt(sx * sx + sy * sy + sz * sz)
 
 
-def _smallest_angles(model: ConformalModel, top: int, g: float) -> list[Entry]:
+def _smallest_angles(labelled: LabelledArrangements, top: int, g: float) -> list[Entry]:
     rows = []
-    for layer in model.labelled.level_layers:
+    for layer in labelled.level_layers:
         arr = layer.arr
         around: dict[int, list[tuple[float, int]]] = {}
         for ei, (a, b) in enumerate(arr.edge_ends):
@@ -267,9 +277,9 @@ def _smallest_angles(model: ConformalModel, top: int, g: float) -> list[Entry]:
 
 
 def _carrier_ends(
-    model: ConformalModel,
+    labelled: LabelledArrangements,
 ) -> dict[str, tuple[tuple[int, int], tuple[int, int]]]:
-    catalogue = model.labelled.catalogue
+    catalogue = labelled.catalogue
     carriers = {
         c.id: (c.p, c.q) for prism in catalogue.prisms for c in prism.carriers()
     }
@@ -279,10 +289,10 @@ def _carrier_ends(
     return carriers
 
 
-def _snap_drift(model: ConformalModel, top: int, g: float) -> Entry:
-    carriers = _carrier_ends(model)
+def _snap_drift(labelled: LabelledArrangements, top: int, g: float) -> Entry:
+    carriers = _carrier_ends(labelled)
     rows = []
-    for layer in (*model.labelled.slabs, *model.labelled.level_layers):
+    for layer in (*labelled.slabs, *labelled.level_layers):
         for e, eid, sources in zip(
             layer.arr.edges, layer.edge_ids, layer.edge_sources, strict=True
         ):
@@ -319,10 +329,10 @@ def _snap_drift(model: ConformalModel, top: int, g: float) -> Entry:
     }
 
 
-def _arc_edges(model: ConformalModel, top: int, g: float) -> Entry:
+def _arc_edges(labelled: LabelledArrangements, top: int, g: float) -> Entry:
     """Realised arc edges: deviation from the exact carrier circle (grid units), worst first."""
     rows = []
-    for layer in (*model.labelled.slabs, *model.labelled.level_layers):
+    for layer in (*labelled.slabs, *labelled.level_layers):
         for e, eid, sources, curve in zip(
             layer.arr.edges,
             layer.edge_ids,

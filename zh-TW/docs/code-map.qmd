@@ -88,9 +88,7 @@ Next: 哪個階段讀取它
 
 | 匯入的資料夾 | 匯入 | 從那裡取得什麼 |
 | --- | --- | --- |
-| `geometry/junctions` | `geometry/sgb` | SGB 的邊界綁定（`prisms.bound_rings`）與精確紀錄，讓分割切在 SGB 建立的環上。 |
-| `geometry/sgb/bands` | `geometry/sgb/arrangement`、`geometry/sgb/topology` | 物理預先處理所用的排列與表面命名，用來找出每條內縮帶的支撐面。 |
-| `geometry/sgb/checks` | `geometry/sgb/output` | 輸出計畫及其預計的面積與體積，OCCT 檢查用它們比對寫出的檔案。 |
+| `geometry/junctions` | `geometry/sgb/exact` | SGB 共用的詞彙，位於 SGB 每個階段之下：精確紀錄與邊界綁定（`exact.boundaries`），讓分割切在 SGB 建立的環上。 |
 | `palace/results` | `palace/reports` | 已解析結果的顯示方法所回傳的報表視圖。 |
 | `aedt/specs` | `aedt/epr` | 表面積分的分組（`epr.selection`）。 |
 | `aedt/preparation` | `aedt/results` | 收據結構描述與初始收據（`results.provenance`）。 |
@@ -100,8 +98,7 @@ Next: 哪個階段讀取它
 
 每一區有一個表格，各列依工作經過的順序排列。每列的文字是該資料夾 docstring 的翻譯：
 「它是什麼」是第一句話，In、Out、Next 是那三行；英文原文在英文版的同一頁。
-不是階段的資料夾會在 In 欄說明它是什麼：一區本身的資料夾、某一列所列階段的一部分，
-或 docstring 列出模組而非三行的階段。
+不是階段的資料夾會在 In 欄說明它是什麼：一區本身的資料夾，或某一列所列階段的一部分。
 
 要修改某一列，請編輯該資料夾的 docstring，在 `scripts/code_map_zh_tw.toml` 翻譯改動的文字，
 再執行 `python scripts/generate_code_map.py`；各列的順序只在這個腳本中寫一次。

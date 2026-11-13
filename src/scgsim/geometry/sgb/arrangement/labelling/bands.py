@@ -150,7 +150,7 @@ def check_seams_kept(  # noqa: PLR0913 - a level, its labels and the families it
         shown = "; ".join(problems[:MAX_REPORTED])
         more = len(problems) - MAX_REPORTED
         raise ValidationError(
-            f"Imprint lost band boundaries on {plane}: {shown}"
+            f"internal: Imprint lost band boundaries on {plane}: {shown}"
             + (f" (and {more} more)" if more > 0 else "")
         )
 
@@ -178,7 +178,7 @@ def _pieces_of(family: CurveFamilyRecord) -> dict[tuple[str, str], list[_Piece]]
             ]
         else:
             raise ValidationError(
-                f"band seam {seam.carrier_id!r} of {family.family_id!r} is not a carrier of its family"
+                f"internal: band seam {seam.carrier_id!r} of {family.family_id!r} is not a carrier of its family"
             )
     return out
 
