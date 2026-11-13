@@ -10,7 +10,7 @@ See NOTICE and LICENSES/gsim-LICENSE.txt for retained upstream notices.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,7 +32,6 @@ from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb import SgbArtifacts
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.surface_epr.build import build_banded_geometry
@@ -44,6 +43,7 @@ from scgsim.meshing import (
 from scgsim.meshing.fine_structure import below_steps
 from scgsim.preparation import native_preparation
 
+from ..source.layout_ports import GeometryBuildRequest
 from .controls import MeshControls
 from .manifest import SGB_RUNTIME_AUTHORITY, build_mesh_manifest
 from .physical_groups import Groups, groups_from_sidecar
@@ -174,16 +174,8 @@ class RouteGeometry:
 
 
 @diagnostic_stage("palace.mesh.geometry")
-def build_route_geometry(  # noqa: PLR0913 -- the plan's sources, its prepared input, and the route and bands
-    *,
-    stack: Mapping[str, Any],
-    route: str,
-    output_dir: str | Path,
-    source_gds_bytes: bytes,
-    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
-    port_sheet_source_layers: Sequence[Mapping[str, Any]] = (),
-    source_geometry_input: GeometryBuildInput | None = None,
-    representation_context: RepresentationContext | None = None,
+def build_route_geometry(
+    request: GeometryBuildRequest, *, output_dir: str | Path
 ) -> RouteGeometry:
     """Write the sources and build the Route-A/Route-B SGB geometry, the stages of a mesh before meshing.
 
@@ -191,24 +183,24 @@ def build_route_geometry(  # noqa: PLR0913 -- the plan's sources, its prepared i
     cannot model is refused here, with the error SGB raises.  A Surface-EPR band narrower than the
     meshing stage's face-width limit is refused first, before anything is written or built.
     """
-    if representation_context is None or source_geometry_input is None:
-        raise ValueError(
-            "fresh Palace mesh requires neutral effective geometry input and representation_context from preparation"
-        )
-    if not isinstance(stack, Mapping):
+    route = request.route
+    if not isinstance(request.stack, Mapping):
         raise TypeError("stack must be a mapping.")
     if route not in {"A", "B"}:
         raise ValueError("route must be either 'A' or 'B'.")
-    _refuse_bands_narrower_than_a_face(surface_epr_specs, source_geometry_input)
-    thin_film = route_a_thin_film_provenance(stack, route)
-    stack = with_port_sheet_metadata(stack, port_sheet_source_layers)
+    _refuse_bands_narrower_than_a_face(
+        request.surface_epr_specs, request.geometry_input
+    )
+    thin_film = route_a_thin_film_provenance(request.stack, route)
+    # The source stage attached the port sheets; this copies the stack with its port-sheet records as a list.
+    stack = with_port_sheet_metadata(request.stack, ())
     paths = _prepare_paths(output_dir, route)
-    top_cell = _write_sources(stack, source_gds_bytes, paths)
+    top_cell = _write_sources(stack, request.gds_bytes, paths)
     artifacts = build_banded_geometry(
-        source_geometry_input,
-        representation_context,
+        request.geometry_input,
+        request.representation,
         route=route,
-        surface_epr_specs=surface_epr_specs,
+        surface_epr_specs=request.surface_epr_specs,
         output_dir=paths.geometry_dir,
     )
     return RouteGeometry(paths, artifacts, route, top_cell, thin_film)

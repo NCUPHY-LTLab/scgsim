@@ -66,9 +66,9 @@ def built_by_mesh(monkeypatch, sim, output_dir):
     builds = []
     real = core_module.build_route_geometry
 
-    def recording(**source):
-        geometry = real(**source)
-        builds.append((source, json.loads(geometry.artifacts.sidecar.read_bytes())))
+    def recording(request, *, output_dir):
+        geometry = real(request, output_dir=output_dir)
+        builds.append((request, json.loads(geometry.artifacts.sidecar.read_bytes())))
         return geometry
 
     def meshing_reached(*_args, **_kwargs):
@@ -116,7 +116,7 @@ def test_the_summary_shows_the_vacuum_mesh_builds(
     (vacuum_low, vacuum_high), _layout = built_bounds(sidecar)
     assert (vacuum_low[2], vacuum_high[2]) == pytest.approx(vacuum_z_um)
     built_from = summarize_geometry_input(
-        source["source_geometry_input"], prepared_stack=source["stack"]
+        source.geometry_input, prepared_stack=source.stack
     ).data
     assert {key: summary[key] for key in built_from} == built_from
     assert [port["source_name"] for port in summary["ports"]] == ["chip/P1"]
@@ -170,7 +170,7 @@ def test_the_electrostatic_summary_shows_the_vacuum_mesh_builds_and_its_settings
     assert "ports" not in backend
     source, _sidecar = built_by_mesh(monkeypatch, sim, tmp_path / "run")
     built_from = summarize_geometry_input(
-        source["source_geometry_input"], prepared_stack=source["stack"]
+        source.geometry_input, prepared_stack=source.stack
     ).data
     assert {key: summary[key] for key in built_from} == built_from
 

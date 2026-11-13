@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from scgsim.contracts.palace_run_folder import CONFIG_SCHEMA
 from scgsim.palace.results.receipt_contract import (
     validate_palace_identity,
     validate_runtime_compatibility,
@@ -13,7 +14,6 @@ from scgsim.palace.run.returned_receipt import (
     adapted_mesh_output_paths,
     record_for_path,
 )
-from scgsim.contracts.palace_run_folder import CONFIG_SCHEMA
 
 
 def config(enabled=True):

@@ -17,6 +17,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Any
 
+from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
 from .ports import LayoutPortBinding, RequestedPort
@@ -24,16 +26,34 @@ from .workflow import GeometrySettings, prepare_mesh_input
 
 
 @dataclass(frozen=True)
+class GeometryBuildRequest:
+    """What the SGB geometry build of one run reads (``mesh.build.build_route_geometry``), as prepared here.
+
+    ``stack`` is the prepared stack and ``gds_bytes`` the plan's GDS it is paired with; ``geometry_input``
+    is the prepared geometry input and ``representation`` its representation context.  ``route`` is the
+    Surface-EPR representation and ``surface_epr_specs`` the normalized specs as the build reads them, a
+    mapping by interface type, None when the simulation set none.
+    """
+
+    stack: Mapping[str, Any]
+    route: str
+    gds_bytes: bytes
+    geometry_input: GeometryBuildInput
+    representation: RepresentationContext
+    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None
+
+
+@dataclass(frozen=True)
 class LayoutGeometryRequest:
-    """The resolved ports, the keywords of the SGB geometry build, and the materials the preparation found.
+    """The resolved ports, the request of the SGB geometry build, and the materials the preparation found.
 
     ``mesh()`` and the modeling check both build from ``source``, and ``input_summary()`` summarises its
-    prepared ``source_geometry_input`` and ``stack``; ``materials`` is None when the preparation left the
+    prepared ``geometry_input`` and ``stack``; ``materials`` is None when the preparation left the
     simulation's materials as they were.
     """
 
     ports: list[LayoutPortBinding]
-    source: dict[str, Any]
+    source: GeometryBuildRequest
     materials: dict[str, Mapping[str, Any]] | None
 
 
@@ -62,15 +82,14 @@ def layout_geometry_request(
     specs = settings.surface_epr_specs
     return LayoutGeometryRequest(
         resolved,
-        {
-            "stack": prepared.stack,
-            "route": settings.route,
-            # The geometry build reads the normalized specs as a mapping.
-            "surface_epr_specs": None if specs is None else specs.to_payload(),
-            "source_gds_bytes": plan.gds_bytes,
-            "source_geometry_input": prepared.geometry_input,
-            "representation_context": prepared.physical_plan.context,
-        },
+        GeometryBuildRequest(
+            stack=prepared.stack,
+            route=settings.route,
+            gds_bytes=plan.gds_bytes,
+            geometry_input=prepared.geometry_input,
+            representation=prepared.physical_plan.context,
+            surface_epr_specs=None if specs is None else specs.to_payload(),
+        ),
         prepared.materials,
     )
 
@@ -109,6 +128,7 @@ def _resolve_plan_ports(
 
 
 __all__ = [
+    "GeometryBuildRequest",
     "LayoutGeometryRequest",
     "layout_geometry_request",
 ]

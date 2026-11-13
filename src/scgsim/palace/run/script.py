@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from scgsim.contracts.palace_run_folder import (
@@ -23,23 +24,48 @@ from scgsim.contracts.palace_run_folder import (
 )
 
 
-def render_script(  # noqa: PLR0913 -- separate handoff settings feed script text
-    profile: str,
-    executable: str,
-    resources: Mapping[str, Any],
-    setup: Sequence[str],
-    petsc: Sequence[str],
-    *,
-    palace_identity: Mapping[str, Any],
-) -> str:
-    """Render a dependency-free script for a manual Palace handoff."""
-    style = str(resources.get("command_style", "binary"))
-    threads = positive_int(
-        resources.get("threads", resources.get("cpus_per_task", 1)), "threads"
-    )
-    processes = positive_int(
-        resources.get("processes", resources.get("ntasks", 1)), "processes"
-    )
+@dataclass(frozen=True)
+class ExecutionSettings:
+    """How the run script starts Palace: the caller's profile, executable, resources and commands, checked.
+
+    ``prepare_handoff`` builds it after checking each value; the script and the handoff's execution identity
+    are rendered from it.
+    """
+
+    profile: str
+    executable: str
+    resources: Mapping[str, Any]
+    setup_commands: tuple[str, ...]
+    petsc_options: tuple[str, ...]
+
+    @property
+    def command_style(self) -> str:
+        """``binary`` (Palace's own executable) or ``wrapper`` (the ``palace`` launcher script)."""
+        return str(self.resources.get("command_style", "binary"))
+
+    def threads(self) -> int:
+        """The OpenMP threads per process: ``threads``, else Slurm's ``cpus_per_task``, else 1."""
+        resources = self.resources
+        return positive_int(
+            resources.get("threads", resources.get("cpus_per_task", 1)), "threads"
+        )
+
+    def processes(self) -> int:
+        """The MPI processes: ``processes``, else Slurm's ``ntasks``, else 1."""
+        resources = self.resources
+        return positive_int(
+            resources.get("processes", resources.get("ntasks", 1)), "processes"
+        )
+
+
+def render_script(execution: ExecutionSettings, *, config_schema: str) -> str:
+    """Render a dependency-free script for a manual Palace handoff whose config has ``config_schema``."""
+    profile = execution.profile
+    resources = execution.resources
+    style = execution.command_style
+    # The thread and process counts are refused before any line is rendered.
+    execution.threads()
+    execution.processes()
     directives: list[str] = []
     if profile != "direct-local":
         for key, value in resources.items():
@@ -78,9 +104,7 @@ def render_script(  # noqa: PLR0913 -- separate handoff settings feed script tex
         arguments.extend(["-np", '"$PALACE_PROCESSES"', "-nt", '"$PALACE_THREADS"'])
     arguments.append('"$PALACE_CONFIG"')
     command = " ".join([*(shlex.quote(item) for item in launcher), *arguments])
-    config_schema = single_line(
-        str(palace_identity["config_schema"]), "palace_identity.config_schema"
-    )
+    config_schema = single_line(str(config_schema), "palace_identity.config_schema")
     receipt_command = (
         f'python3 {RECORDER} "$(pwd)" '
         '"$PIPELINE_EXIT_CODE" --log-path "$PALACE_LOG" '
@@ -111,23 +135,16 @@ def render_script(  # noqa: PLR0913 -- separate handoff settings feed script tex
         ]
     )
 
-    lines = _script_start_lines(
-        profile=profile,
-        directives=directives,
-        run_directory_lines=run_directory_lines,
-        executable=executable,
-        processes=processes,
-        threads=threads,
-        style=style,
-    )
-    if petsc:
+    lines = _script_start_lines(execution, directives, run_directory_lines)
+    if execution.petsc_options:
+        petsc = " ".join(execution.petsc_options)
         lines.extend(
             [
-                f"PALACE_PETSC_OPTIONS={shlex.quote(' '.join(petsc))}",
+                f"PALACE_PETSC_OPTIONS={shlex.quote(petsc)}",
                 'export PETSC_OPTIONS="${PETSC_OPTIONS:-} ${PALACE_PETSC_OPTIONS}"',
             ]
         )
-    lines.extend(_setup_lines(setup))
+    lines.extend(_setup_lines(execution.setup_commands))
 
     compatibility_probe = (
         f"python3 {RECORDER} verify-config "
@@ -152,17 +169,13 @@ def render_script(  # noqa: PLR0913 -- separate handoff settings feed script tex
     return "\n".join(lines)
 
 
-def _script_start_lines(  # noqa: PLR0913 -- renders distinct script variables
-    *,
-    profile: str,
+def _script_start_lines(
+    execution: ExecutionSettings,
     directives: Sequence[str],
     run_directory_lines: Sequence[str],
-    executable: str,
-    processes: int,
-    threads: int,
-    style: str,
 ) -> list[str]:
     """Set run-directory, cleanup, and solver variables in the generated script."""
+    profile = execution.profile
     return [
         "#!/usr/bin/env bash",
         *directives,
@@ -188,10 +201,10 @@ def _script_start_lines(  # noqa: PLR0913 -- renders distinct script variables
         f"mkdir -p {OUTPUT_DIR}",
         f'PALACE_CONFIG="{CONFIG}"',
         f'PALACE_MESH="{MESH}"',
-        f"PALACE_EXECUTABLE={shlex.quote(executable)}",
-        f"PALACE_PROCESSES={processes}",
-        f"PALACE_THREADS={threads}",
-        f"PALACE_COMMAND_STYLE={shlex.quote(style)}",
+        f"PALACE_EXECUTABLE={shlex.quote(execution.executable)}",
+        f"PALACE_PROCESSES={execution.processes()}",
+        f"PALACE_THREADS={execution.threads()}",
+        f"PALACE_COMMAND_STYLE={shlex.quote(execution.command_style)}",
         'export OMP_NUM_THREADS="$PALACE_THREADS"',
         f'PALACE_LOG="{SOLVER_LOG_PREFIX}${{SLURM_JOB_ID:-manual}}.log"',
         f'PALACE_RUNTIME_COMPATIBILITY="{RUNTIME_COMPATIBILITY}"',

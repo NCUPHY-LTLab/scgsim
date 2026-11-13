@@ -139,13 +139,13 @@ def test_invalid_mesh_controls_are_refused():
 def stand_in_mesh_stages(monkeypatch, module, tmp_path):
     """Replace the geometry build, the meshing-stage check and the mesher ``mesh()`` calls; record their order.
 
-    The record holds the geometry build's keywords, then the check, then the mesher with its controls.
+    The record holds the geometry build's request, then the check, then the mesher with its controls.
     """
     calls = []
     geometry = object()
 
-    def build(**kwargs):
-        calls.append(("geometry", kwargs))
+    def build(request, *, output_dir):
+        calls.append(("geometry", request))
         return geometry
 
     def check(built):
@@ -190,7 +190,7 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     sim.mesh()
     assert [stage for stage, _ in calls] == ["geometry", "check", "mesh"]
     (_, geometry), _, (_, controls) = calls
-    assert geometry["surface_epr_specs"]["MA"]["inset_margins_um"] == [0.5]
+    assert geometry.surface_epr_specs["MA"]["inset_margins_um"] == [0.5]
     assert controls == MeshControls(
         FeatureRecipe(), MesherOptions(), Budgets(max_rounds=1), 0.02
     )
@@ -224,4 +224,4 @@ def test_eigenmode_without_surface_epr_requests_no_insets(monkeypatch, tmp_path)
     sim.set_output_dir(tmp_path)
     sim.mesh()
     (_, geometry), *_ = calls
-    assert geometry["surface_epr_specs"] is None
+    assert geometry.surface_epr_specs is None

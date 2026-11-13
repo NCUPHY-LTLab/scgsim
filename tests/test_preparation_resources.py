@@ -150,6 +150,9 @@ def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_
     from scgsim.palace.mesh import (  # noqa: PLC0415 -- the module is needed only in this mesh orchestration test
         build as mesh_build,
     )
+    from scgsim.palace.source.layout_ports import (  # noqa: PLC0415 -- the request type of the same build
+        GeometryBuildRequest,
+    )
 
     class StopBeforeNative(Exception):
         pass
@@ -177,12 +180,15 @@ def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_
     with preparation_resources(max_workers=2):
         with pytest.raises(StopBeforeNative):
             mesh_build.build_route_geometry(
-                stack=stack,
-                route="B",
+                GeometryBuildRequest(
+                    stack=stack,
+                    route="B",
+                    gds_bytes=source,
+                    geometry_input=SimpleNamespace(),  # pyright: ignore[reportArgumentType] -- stops before the input is read
+                    representation=object(),  # pyright: ignore[reportArgumentType] -- stops before it is read
+                    surface_epr_specs=None,
+                ),
                 output_dir=tmp_path / "run",
-                source_gds_bytes=source,
-                representation_context=object(),
-                source_geometry_input=SimpleNamespace(),
             )
     assert [row[0] for row in observed] == [0, 1]
     assert len({row[1] for row in observed}) == 2

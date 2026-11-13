@@ -267,7 +267,7 @@ class PalaceSimulation(ABC):
         plan = self._require("input_summary", self._plan)
         prepared = self._geometry_request(plan).source
         data = summarize_geometry_input(
-            prepared["source_geometry_input"], prepared_stack=prepared["stack"]
+            prepared.geometry_input, prepared_stack=prepared.stack
         ).data
         data["backend"] = {
             "name": "palace",
@@ -315,7 +315,7 @@ class PalaceSimulation(ABC):
         request = self._geometry_request(plan)
         if request.materials is not None:
             self._materials = request.materials
-        geometry = build_route_geometry(**request.source, output_dir=self.output_dir)
+        geometry = build_route_geometry(request.source, output_dir=self.output_dir)
         check_meshing_stage(geometry)
         self._mesh_result = mesh_route_geometry(geometry, self.mesh_controls)
         self._resolved_ports = request.ports
@@ -407,7 +407,7 @@ class PalaceSimulation(ABC):
         plan = self._require("mesh", self._plan)
         self._require_surface_epr_for_mesh()
         return build_route_geometry(
-            **self._geometry_request(plan).source, output_dir=output_dir
+            self._geometry_request(plan).source, output_dir=output_dir
         )
 
     def _require_surface_epr_for_mesh(self) -> None:
