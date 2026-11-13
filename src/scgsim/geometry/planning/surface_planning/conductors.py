@@ -138,7 +138,6 @@ class ConductorSurfacePlanner:
                         geometry_refs=subtract_contact_patches_from_face(
                             {
                                 **route_entity_geometry_ref(
-                                    self.scope.build_input,
                                     self.scope.route,
                                     geometry_entity,
                                     representation=self.representation,

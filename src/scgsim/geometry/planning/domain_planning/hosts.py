@@ -233,7 +233,7 @@ def _auto_vacuum_sidewall_is_exterior_only(
     if z_max <= z_min:
         raise ValueError(f"{entity.semantic_id} has non-positive sidewall extent.")
     base_ref = route_entity_geometry_ref(
-        build_input, "B", entity, representation="cutout_boundary_shell"
+        "B", entity, representation="cutout_boundary_shell"
     )
     sidewalls = sidewall_geometry_refs(base_ref)
     if not sidewalls:

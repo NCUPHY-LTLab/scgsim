@@ -124,9 +124,10 @@ requires neutral declarations.
 Explicit Solid bodies without layer declarations retain their finite source
 geometry through the shared identity plan, without minted physical IDs.
 
-The selected plan's tagged payload is the current prepared physical trace.
-Historical untagged traces remain readable under their original contract and
-retain their original hashes; they do not authorize fresh execution.
+The selected plan's tagged payload is the current prepared physical trace. A
+prepared geometry whose trace is untagged (a `PhysicalLayerSpec` layer map) was
+written by an earlier SCGSim and is refused with a replacement preparation
+instruction; read it with the SCGSim commit that wrote it.
 
 ## Palace caller profile
 

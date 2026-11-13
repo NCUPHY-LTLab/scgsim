@@ -8,7 +8,7 @@ from scgsim.geometry.models.entities import (
     is_vacuum_solution_entity,
     requires_route_representation,
 )
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.input import SemanticEntitySpec
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
 from scgsim.geometry.planning.geometry_refs import (
     entity_geometry_ref,
@@ -188,7 +188,6 @@ def test_route_a_cutout_ref_uses_recognized_contact_planes_only():
     )
 
     projected = route_entity_geometry_ref(
-        build_input=GeometryBuildInput((), (entity,)),
         route="A",
         entity=entity,
         representation="cutout_boundary_shell",
