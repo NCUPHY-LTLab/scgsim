@@ -26,7 +26,7 @@ def interpret_geometry(build_input: Any, stack: Any, modeling: Modeling):
 
 
 def effective_geometry_input(build_input: Any, stack: Any, modeling: Modeling):
-    """Return common effective geometry, stack and its planner projection."""
+    """Return the effective geometry input, the effective stack and the plan's context."""
     effective_input, effective_stack, plan = interpret_geometry(
         build_input, stack, modeling
     )

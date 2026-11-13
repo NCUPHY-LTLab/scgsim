@@ -167,7 +167,7 @@ class PreparedEprEvidence:
         )
 
     def to_payload(self) -> dict[str, object]:
-        """Return the established setup, cache and expression payload."""
+        """Return the setup, cache and expression payloads as one record."""
         return {
             "setup": _payload(self.setup),
             "cache": self.cache_payload(),

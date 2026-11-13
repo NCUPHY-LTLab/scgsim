@@ -268,7 +268,7 @@ class _SurfaceReferences:
 def verify_saved_native_surface_references(
     project_path, design_name, references
 ) -> list[dict[str, Any]]:
-    """Bind reference membership to the existing pre-Analyze native save.
+    """Bind reference membership to the native save made before Analyze.
 
     Created PyAEDT List properties hold the authored assignment. Only the saved
     GeometryEntityListOperation supplies native serialization membership here;

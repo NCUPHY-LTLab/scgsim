@@ -11,7 +11,7 @@ from typing import Any
 
 
 def text_value(value: Any, name: str) -> str:
-    """Read a nonempty text value using the request's existing rules."""
+    """Read a stripped, nonempty text value."""
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be non-empty text")
     return value.strip()

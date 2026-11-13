@@ -75,7 +75,7 @@ def create_eigenmode_setup(app: Any, control: EigenmodeRunControl) -> None:
 
 
 def read_eigenmode_setup(app: Any, control: EigenmodeRunControl) -> dict[str, Any]:
-    """Preserve the existing saved seven-control projection; never re-author."""
+    """Read the seven saved Eigenmode controls from the setup; never re-author the setup."""
     raw = saved_setup_properties(app, control.setup_name)
     keys = {
         "minimum_frequency": "MinimumFrequency",

@@ -104,7 +104,7 @@ def cache_items(
 
 
 def native_expression_cache(items: list[dict[str, Any]]) -> list[Any]:
-    """Encode the native cache request with its established convergence fields."""
+    """Encode the native ``ExpressionCache`` request, with each item's convergence fields."""
     result: list[Any] = ["NAME:ExpressionCache"]
     for item in items:
         result.append(

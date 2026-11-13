@@ -63,7 +63,7 @@ def surface_energy_coefficients(
     film_epsilon: float,
     substrate_epsilon: float,
 ) -> tuple[float, float]:
-    """Return the existing normal and tangential peak-phasor energy factors."""
+    """Return the normal and tangential peak-phasor energy factors of one interface."""
     if interface_kind == "MA":
         return VACUUM_PERMITTIVITY_F_PER_M * thickness_m / (2.0 * film_epsilon), 0.0
     if interface_kind == "MS":

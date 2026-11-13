@@ -150,7 +150,7 @@ def _validate_prepared_identity(context: PreparedModelContext) -> str:
     }:
         raise RuntimeError("prepared model connected family/version differs")
     expected_stage = "model_only" if spec.run_control is None else "model_with_setup"
-    # Older prepared-with-setup receipts omit the marker but still bind controls.
+    # A prepared-with-setup receipt may omit the marker; only a model-only receipt must carry it.
     if "model_stage" in receipt:
         if receipt["model_stage"] != expected_stage:
             raise RuntimeError("prepared model stage differs from its declaration")

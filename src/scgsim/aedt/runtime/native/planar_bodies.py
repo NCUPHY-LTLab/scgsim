@@ -159,7 +159,7 @@ def prepared_modeling_identity(prepared: PreparedPlanarGeometry) -> dict[str, An
 def validate_native_modeling_source(
     prepared: PreparedPlanarGeometry, source: Mapping[str, Any]
 ) -> None:
-    """Keep current effective-layer provenance separate from legacy route reads."""
+    """Require the source to carry effective-layer ``modeling`` exactly when the prepared geometry has a modeling."""
     if prepared.modeling is None:
         if "modeling" in source:
             raise ValueError("historical EPR geometry has current modeling provenance")
