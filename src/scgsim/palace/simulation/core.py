@@ -167,7 +167,7 @@ class PalaceSimulation(ABC):
         *,
         approximation_profile: ApproximationProfile | None = None,
     ) -> None:
-        """Choose how the conductors are modelled: Route ``"A"`` (zero-thickness sheets) or ``"B"`` (3D volumes).
+        """Choose how the conductors are modelled: Route ``"A"`` (films as zero-thickness sheets) or ``"B"`` (3D volumes).
 
         A simulation that never calls ``set_route`` is Route B.  One call states the whole route setting: it
         replaces the route and ``approximation_profile`` together, so nothing survives from an earlier call or
@@ -574,7 +574,7 @@ def _checked_route(route: Any) -> Literal["A", "B"]:
             "Call set_route('A') or set_route('B')."
         )
     raise ValueError(
-        f"Unknown route {route!r}: call set_route('A') for zero-thickness sheets "
+        f"Unknown route {route!r}: call set_route('A') for films as zero-thickness sheets "
         "or set_route('B') for 3D conductors."
     )
 

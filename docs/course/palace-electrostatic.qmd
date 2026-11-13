@@ -64,8 +64,8 @@ print(mesh_path, config_path)
 ```
 
 For a Route-A study, call `sim.set_route("A")` before meshing. Route A makes the
-conductors zero-thickness sheets, and the approximation profile says what happens to
-the thickness the film had: without one, `set_route("A")` uses `thin_film`, which
+film conductors zero-thickness sheets, while finite bodies such as bumps keep their
+volume. The approximation profile says what happens to the thickness a film had: without one, `set_route("A")` uses `thin_film`, which
 removes the thickness and takes no parameters. For `substrate_face`, which
 preserves physical face coordinates, or `metal_gap_equivalent`, the separate
 supported two-face normalization, pass the profile with its explicit
