@@ -51,7 +51,7 @@ def _preflight(  # noqa: PLR0913 -- controls cover independent native probe outc
         )
 
     monkeypatch.setattr(returned_receipt.subprocess, "run", synthetic_subprocess)
-    rc = returned_receipt._verify_config_main(  # noqa: SLF001 -- probe native dry-run CLI directly
+    rc = returned_receipt._verify_config(  # noqa: SLF001 -- probe native dry-run CLI directly
         [
             "palace",
             "wrapper",
@@ -179,7 +179,7 @@ def test_new_handoff_uses_explicit_native_compatibility_and_records_identity(tmp
     assert not plan.returned_receipt_path.exists()
     assert "verify-config" in plan.script_path.read_text()
     assert (
-        returned_receipt._compatibility_required(  # noqa: SLF001 -- verify persisted probe semantics
+        returned_receipt._compatibility_schema(  # noqa: SLF001 -- verify persisted probe semantics
             handoff
         )
         == identity["config_schema"]
@@ -196,7 +196,7 @@ def test_new_handoff_uses_explicit_native_compatibility_and_records_identity(tmp
     }
     validate_palace_identity(historical)
     assert (
-        returned_receipt._compatibility_required(  # noqa: SLF001 -- verify historical metadata compatibility
+        returned_receipt._compatibility_schema(  # noqa: SLF001 -- verify historical metadata compatibility
             {"palace_identity": historical}
         )
         == identity["config_schema"]

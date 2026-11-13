@@ -13,7 +13,7 @@ outputs from here.  A path is relative to the run folder, in POSIX form::
     run_palace.sh | run_palace.sbatch   script_name(profile) (run)
     metadata/palace_handoff_*.json ...  HANDOFF_METADATA, RUN_METADATA, RESOURCE_RECORD, ARCHIVE_MANIFEST (run)
     metadata/record_palace_return.py    RECORDER: the receipt recorder (run)
-    logs/palace-<job>.log               the solver log the run script writes
+    logs/palace-<job>.log               solver_log(job): the solver log the run script writes
     results/palace/                     OUTPUT_DIR: what Palace writes, see ``PalaceProblem``
     metadata/palace_returned_run_receipt.json  RETURNED_RECEIPT, written by the recorder after the solve
 
@@ -21,14 +21,16 @@ The receipt recorder (``scgsim.palace.run.returned_receipt``) runs in the run fo
 interpreter.  When ``prepare_handoff`` copies it there, the text of this module takes the place of the
 recorder's import of it (``scgsim.palace.run.recorder_copy``), so the copy carries the same layout, problems and
 helpers, and nothing in the run folder imports SCGSim.  For that reason this module imports only the
-standard library (``.importlinter``: ``contracts-import-nothing-else``) and has no ``__future__`` import.
+standard library (``.importlinter``: ``contracts-import-nothing-else``) and has no ``__future__`` import,
+and it words its refusals with its own ``refused``, the sentence ``scgsim.refusal`` words for every other
+stage.
 """
 
 import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 # ---- Paths, relative to the run folder ----------------------------------------------------------------
 
@@ -58,14 +60,13 @@ RUNTIME_COMPATIBILITY = "metadata/palace_runtime_compatibility.json"
 
 DIRECT_LOCAL_SCRIPT = "run_palace.sh"
 SLURM_SCRIPT = "run_palace.sbatch"
-SOLVER_LOG_PREFIX = "logs/palace-"
-"""The run script writes the solver log to ``logs/palace-<job id>.log`` (``manual`` outside Slurm)."""
 
 OUTPUT_DIR = "results/palace"
 NATIVE_METADATA_NAME = "palace.json"
 """The record Palace writes beside its tables, in ``OUTPUT_DIR`` and in each ``iteration<N>`` folder."""
 NATIVE_METADATA = f"{OUTPUT_DIR}/{NATIVE_METADATA_NAME}"
 ITERATION_PREFIX = "iteration"
+"""Palace names the output folder of adaptive pass ``N`` ``iteration<N>`` (``iteration_number`` reads it)."""
 
 SEALED_INPUTS = (MESH, CONFIG, MESH_MANIFEST, INDEX_MAP)
 """The inputs the handoff hashes, in the order it records them; the receipt and ``resolve`` check each."""
@@ -74,6 +75,14 @@ SEALED_INPUTS = (MESH, CONFIG, MESH_MANIFEST, INDEX_MAP)
 def route_provenance(route: str) -> str:
     """The provenance record of the mesh built on Surface-EPR representation ``route`` (``"A"`` or ``"B"``)."""
     return f"metadata/route_{route.lower()}_provenance.json"
+
+
+def solver_log(job: str) -> str:
+    """The solver log the run script writes for Slurm job ``job`` (``manual`` outside Slurm).
+
+    The run script passes a shell or Slurm pattern as ``job`` (``*``, ``%j``, ``${SLURM_JOB_ID:-manual}``).
+    """
+    return f"{LOGS_DIR}/palace-{job}.log"
 
 
 def script_name(profile: str) -> str:
@@ -91,7 +100,7 @@ def output_table(family: str, directory: str = OUTPUT_DIR) -> str:
     return f"{directory}/{table_name(family)}"
 
 
-def iteration_dir(directory_name: str) -> int | None:
+def iteration_number(directory_name: str) -> int | None:
     """The pass number of an ``iteration<N>`` output folder name, None for any other name."""
     number = directory_name.removeprefix(ITERATION_PREFIX)
     if directory_name.startswith(ITERATION_PREFIX) and number.isdigit():
@@ -125,6 +134,88 @@ def collects_adapted_meshes(palace_identity: Any) -> bool:
         isinstance(palace_identity, dict)
         and palace_identity.get("config_schema") == CONFIG_SCHEMA
     )
+
+
+# ---- Refusals -----------------------------------------------------------------------------------------
+
+WHERE_RUN_FOLDER = (
+    "the run folder: write it again with mesh(), write_config() and prepare_handoff(), "
+    "or fetch the returned run again"
+)
+"""Where a refused file of a run folder is set right: every file in it is written by one of those steps."""
+
+
+def refused(subject: str, problem: str, where: str) -> str:
+    """The refusal of ``problem`` on ``subject``, which is changed in ``where``.
+
+    The sentence of ``scgsim.refusal.refused``, written again here because a run folder has no SCGSim.
+    """
+    return f"{subject}: {problem}. Change it in {where}."
+
+
+# ---- The records the recorder writes -----------------------------------------------------------------
+
+ReceiptStatus = Literal["completed", "failed", "diagnostic_unverified"]
+"""``completed`` only when every exit code is 0, the sealed inputs match and every output is present;
+``diagnostic_unverified`` for a receipt written after the fact, which ``resolve`` never accepts."""
+
+
+class FileRecord(TypedDict):
+    """One run-folder file in a record: its path, and its size and SHA-256 when it is present."""
+
+    path: str
+    bytes: int | None
+    sha256: str | None
+    present: bool
+
+
+class JobIdentity(TypedDict):
+    """The Slurm job the run ran as; the run script passes ``manual`` outside Slurm."""
+
+    job_id: str | None
+    job_name: str | None
+
+
+class _ReceiptFields(TypedDict):
+    """The fields every returned-run receipt has, in the order the receipt writes them."""
+
+    schema: str
+    schema_version: int
+    handoff_id: str
+    route: str
+    problem: str
+    status: ReceiptStatus
+    exit_code: int
+    execution_stage: str
+    solver_invoked: bool
+    preflight_exit_code: int
+    solver_exit_code: int | None
+    tee_exit_code: int | None
+    identity_verified: bool
+    timestamp_utc: str
+    job_identity: JobIdentity
+    input_hashes: list[dict[str, Any]]
+    output_files: list[FileRecord]
+    log: FileRecord
+    solver_identity: dict[str, Any]
+
+
+class ReturnedReceipt(_ReceiptFields, total=False):
+    """The returned-run receipt; the two fields at its end are written only when the handoff has them."""
+
+    runtime_compatibility: dict[str, Any]
+    route_a_thin_film: Any
+
+
+class ObservedIdentity(TypedDict):
+    """The Palace the dry run met, as ``verify-config`` records it: observed, never required."""
+
+    native_git_tag: str | None
+    supported_upstream_release: str | None
+    native_schema_version: str | None
+    version_probe_exit_code: int | None
+    runtime_binary_identity: str | None
+    runtime_binary_sha256: str | None
 
 
 # ---- Problems -----------------------------------------------------------------------------------------
@@ -220,7 +311,11 @@ def palace_problem(name: Any) -> PalaceProblem:
     problem = PROBLEMS.get(name) if isinstance(name, str) else None
     if problem is None:
         raise ValueError(
-            f"unsupported problem {name!r}; expected one of {tuple(PROBLEMS)}."
+            refused(
+                f"Palace problem {name!r}",
+                f"is not one SCGSim writes; expected one of {tuple(PROBLEMS)}",
+                "the problem passed to prepare_handoff, or the run folder's handoff metadata",
+            )
         )
     return problem
 
@@ -283,11 +378,26 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def record_for_path(root: Path, relative_path: str) -> FileRecord:
+    """The record of run-folder file ``relative_path``: its size and SHA-256, or that it is not present."""
+    path = confined_path(root, relative_path)
+    if not path.is_file():
+        return {"path": relative_path, "bytes": None, "sha256": None, "present": False}
+    return {
+        "path": relative_path,
+        "bytes": path.stat().st_size,
+        "sha256": sha256(path),
+        "present": True,
+    }
+
+
 def read_json(path: Path) -> dict[str, Any]:
     """The JSON object in the file at ``path``; a file holding any other JSON value is refused."""
     parsed = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(parsed, dict):
-        raise TypeError(f"{path} must contain a JSON object.")
+        raise TypeError(
+            refused(str(path), "must contain a JSON object", WHERE_RUN_FOLDER)
+        )
     return parsed
 
 
@@ -305,8 +415,20 @@ def write_json(path: Path, payload: Any) -> None:
 def confined_path(root: Path, relative: str) -> Path:
     """Resolve ``relative`` beneath run folder ``root``; an absolute path or one that escapes it is refused."""
     if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
-        raise ValueError("artifact paths must be non-empty relative paths.")
+        raise ValueError(
+            refused(
+                f"run-folder path {relative!r}",
+                f"must be a non-empty path relative to the run folder {root}",
+                WHERE_RUN_FOLDER,
+            )
+        )
     candidate = (root / relative).resolve()
     if not candidate.is_relative_to(root.resolve()):
-        raise ValueError("artifact path escapes the run directory.")
+        raise ValueError(
+            refused(
+                f"run-folder path {relative!r}",
+                f"escapes the run folder {root}",
+                WHERE_RUN_FOLDER,
+            )
+        )
     return candidate

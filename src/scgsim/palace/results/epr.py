@@ -25,7 +25,7 @@ from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA_NAME,
     OUTPUT_DIR,
     confined_path,
-    iteration_dir,
+    iteration_number,
     sha256,
     table_name,
 )
@@ -142,7 +142,7 @@ def _iteration_prefix(records: dict[str, Any], iteration: int) -> str:
             or parts[3] != NATIVE_METADATA_NAME
         ):
             continue
-        if iteration_dir(parts[2]) == iteration:
+        if iteration_number(parts[2]) == iteration:
             prefixes.add("/".join(parts[:3]))
     if len(prefixes) != 1:
         raise ValueError(

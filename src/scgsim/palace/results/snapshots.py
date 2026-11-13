@@ -10,7 +10,7 @@ from typing import Any, NamedTuple
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA_NAME,
     OUTPUT_DIR,
-    iteration_dir,
+    iteration_number,
     palace_problem,
     table_name,
 )
@@ -119,7 +119,7 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
         return CollectedSnapshots((), "missing")
     iteration_dirs = []
     for child in results.iterdir():
-        number = iteration_dir(child.name)
+        number = iteration_number(child.name)
         if number is not None and child.is_dir():
             iteration_dirs.append((number, child))
     iteration_dirs.sort()
