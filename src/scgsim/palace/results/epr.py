@@ -519,7 +519,26 @@ def _mode_surface_items(
         interface_type = rows[0]["interface_type"]
         if interface_type not in selected["surface_interfaces"]:
             continue
-        spec = entry["epr_spec"]
+        film = _RecordedFilm.checked(entry["epr_spec"], l0, number)
+        participation = checked_number(
+            surface_row[f"p_surf[{number}]"], "surface participation"
+        )
+        surface_items.append(_surface_item(surfaces, number, rows, film, participation))
+    return surface_items
+
+
+@dataclass(frozen=True)
+class _RecordedFilm:
+    """The film one Surface-EPR entry was solved with: its native thickness, its loss and its SI snapshot."""
+
+    spec: Mapping[str, Any]
+    l0: float
+    native_thickness: float
+    assumption: dict[str, Any]
+
+    @classmethod
+    def checked(cls, spec: Mapping[str, Any], l0: float, number: int) -> _RecordedFilm:
+        """Check the entry's recorded length unit and SI thickness against the config before reading the film."""
         native_thickness = checked_number(
             spec["thickness"], "native film thickness", positive=True
         )
@@ -527,68 +546,85 @@ def _mode_surface_items(
             spec.get("model_l0_m", l0), "film Model.L0", positive=True
         )
         if recorded_l0 != l0:
-            raise ValueError("film Model.L0 disagrees with resolved config")
+            raise ValueError(
+                f"film Model.L0 disagrees with resolved config: Surface-EPR entry {number} records "
+                f"{recorded_l0} m, config.json Model.L0 is {l0} m."
+            )
         physical = checked_number(
             spec.get("film_thickness_m", native_thickness * l0),
             "SI film thickness",
             positive=True,
         )
         if not math.isclose(physical, native_thickness * l0, rel_tol=1e-12):
-            raise ValueError("film SI/native thickness mismatch")
-        loss = spec.get("loss_tangent")
+            raise ValueError(
+                f"film SI/native thickness mismatch: Surface-EPR entry {number} records "
+                f"{physical} m, but {native_thickness} x Model.L0 {l0} m is {native_thickness * l0} m."
+            )
         assumption = film_assumptions(
             {
                 "film_thickness_m": physical,
                 "film_relative_permittivity": spec["permittivity"],
-                "loss_tangent": loss,
+                "loss_tangent": spec.get("loss_tangent"),
                 "source": spec.get("source", "recorded"),
                 "preset": spec.get("preset"),
             }
         )
-        inset = entry.get("inset")
-        # A margin row is named and attributed by the whole surface it is part of.
-        whole = entry_rows(surfaces[entry["baseline_index"]])
-        participation = checked_number(
-            surface_row[f"p_surf[{number}]"], "surface participation"
-        )
-        surface_items.append(
-            {
-                "group_id": f"palace_surface_{entry['baseline_index']}",
-                "index": number,
-                "baseline_index": entry["baseline_index"],
-                "interface_kind": interface_type,
-                "name": surfaces[entry["baseline_index"]]["entry_name"],
-                "rows": [row["row"] for row in rows],
-                "face_kinds": sorted({row["face_kind"] for row in whole}),
-                "entities": sorted({e for row in whole for e in row["entities"]}),
-                "nets": sorted({row["net"] for row in whole if row["net"] is not None}),
-                "attributes": list(entry["attributes"]),
-                # Lineage membership is attribution only: it weights nothing.
-                "lineage": {
-                    face: dict(owners)
-                    for row in rows
-                    for face, owners in row["lineage"]["membership"].items()
-                },
-                "evaluation_kind": "requested_margin"
-                if inset is not None
-                else "unmasked_baseline",
-                "margin_um": 0.0 if inset is None else float(inset["margin_um"]),
-                "margin_index": None if inset is None else inset["margin_index"],
-                **({"bands": list(inset["bands"])} if inset is not None else {}),
-                "original_participation": participation,
-                "participation": participation,
-                "original_assumptions": assumption,
-                "assumptions": assumption,
-                "recorded_native_assumptions": {
-                    "schema_version": spec.get("schema_version"),
-                    "thickness_model_l0_units": native_thickness,
-                    "model_l0_m": l0,
-                    "relative_permittivity": spec["permittivity"],
-                    "loss_tangent": loss,
-                    "source": spec.get("source"),
-                    "preset": spec.get("preset"),
-                },
-                "inverse_q": inverse_quality_factor(participation, loss),
-            }
-        )
-    return surface_items
+        return cls(spec, l0, native_thickness, assumption)
+
+    def native_record(self) -> dict[str, Any]:
+        """The film as the native spec recorded it, in Model.L0 units."""
+        return {
+            "schema_version": self.spec.get("schema_version"),
+            "thickness_model_l0_units": self.native_thickness,
+            "model_l0_m": self.l0,
+            "relative_permittivity": self.spec["permittivity"],
+            "loss_tangent": self.spec.get("loss_tangent"),
+            "source": self.spec.get("source"),
+            "preset": self.spec.get("preset"),
+        }
+
+
+def _surface_item(
+    surfaces: Mapping[int, Mapping[str, Any]],
+    number: int,
+    rows: list[dict[str, Any]],
+    film: _RecordedFilm,
+    participation: float,
+) -> dict[str, Any]:
+    """One surface row of a mode: its identity from the whole surface, its margin, film and participation."""
+    entry = surfaces[number]
+    inset = entry.get("inset")
+    # A margin row is named and attributed by the whole surface it is part of.
+    whole = entry_rows(surfaces[entry["baseline_index"]])
+    return {
+        "group_id": f"palace_surface_{entry['baseline_index']}",
+        "index": number,
+        "baseline_index": entry["baseline_index"],
+        "interface_kind": rows[0]["interface_type"],
+        "name": surfaces[entry["baseline_index"]]["entry_name"],
+        "rows": [row["row"] for row in rows],
+        "face_kinds": sorted({row["face_kind"] for row in whole}),
+        "entities": sorted({e for row in whole for e in row["entities"]}),
+        "nets": sorted({row["net"] for row in whole if row["net"] is not None}),
+        "attributes": list(entry["attributes"]),
+        # Lineage membership is attribution only: it weights nothing.
+        "lineage": {
+            face: dict(owners)
+            for row in rows
+            for face, owners in row["lineage"]["membership"].items()
+        },
+        "evaluation_kind": "requested_margin"
+        if inset is not None
+        else "unmasked_baseline",
+        "margin_um": 0.0 if inset is None else float(inset["margin_um"]),
+        "margin_index": None if inset is None else inset["margin_index"],
+        **({"bands": list(inset["bands"])} if inset is not None else {}),
+        "original_participation": participation,
+        "participation": participation,
+        "original_assumptions": film.assumption,
+        "assumptions": film.assumption,
+        "recorded_native_assumptions": film.native_record(),
+        "inverse_q": inverse_quality_factor(
+            participation, film.spec.get("loss_tangent")
+        ),
+    }
