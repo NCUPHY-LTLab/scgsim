@@ -14,7 +14,7 @@ from pathlib import Path
 from scgsim.contracts.sgb_sidecar.schema import schema_text, sidecar_schema
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = Path("src/scgsim/geometry/sgb/sidecar/sidecar.schema.json")
+SCHEMA_PATH = Path("src/scgsim/geometry/sgb/output/sidecar/sidecar.schema.json")
 
 
 def main(argv: list[str] | None = None) -> int:

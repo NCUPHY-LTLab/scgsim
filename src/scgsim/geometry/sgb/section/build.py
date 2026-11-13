@@ -19,11 +19,9 @@ files is a later stage.  The section is a function of the 3D model alone, so it 
 from __future__ import annotations
 
 from scgsim.geometry.models.section import CutLine
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest
+from scgsim.geometry.sgb.bands.requests import InsetRequest
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import ConformalModel
-from scgsim.geometry.sgb.routes.groups import PhysicalGroup
-from scgsim.geometry.sgb.routes.naming import volume_group
 from scgsim.geometry.sgb.section.assembly import (
     AssembledSection,
     assemble_section,
@@ -39,6 +37,8 @@ from scgsim.geometry.sgb.section.rules import (
 )
 from scgsim.geometry.sgb.section.traces import trace_faces
 from scgsim.geometry.sgb.section.validation import validate_section
+from scgsim.geometry.sgb.topology.routes.groups import PhysicalGroup
+from scgsim.geometry.sgb.topology.routes.naming import volume_group
 
 
 def build_section_model(model: ConformalModel, cut: CutLine) -> SectionModel:

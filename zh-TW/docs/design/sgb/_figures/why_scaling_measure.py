@@ -69,7 +69,7 @@ def emit_and_load(model) -> dict:
 
     from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
     from scgsim.geometry.sgb.build import emit_model  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
-    from scgsim.geometry.sgb.verification.loaded import verify_loaded  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
+    from scgsim.geometry.sgb.checks.verification.loaded import verify_loaded  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
 
     out: dict = {}
     with tempfile.TemporaryDirectory() as tmp:

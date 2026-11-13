@@ -16,7 +16,7 @@ from sgb_inputs import EffectiveInput, gds_pad_in_ground, thin_film_pair
 
 from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb import build_sgb_geometry
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest
+from scgsim.geometry.sgb.bands.requests import InsetRequest
 from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.palace.config.surface_epr import build_surface_epr_postprocessing
 from scgsim.palace.mesh.build import (

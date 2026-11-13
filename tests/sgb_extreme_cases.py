@@ -17,22 +17,22 @@ from fractions import Fraction
 
 from sgb_scenes import GRID, rect_um, to_grid
 
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     RefinementRequest,
 )
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.records.carriers import Lineage, LineCarrier, circle_arcs
-from scgsim.geometry.sgb.records.families import CurveFamilyRecord
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import (
+from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier, circle_arcs
+from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.prisms import (
     Footprint,
     PortIdentity,
     PrismCatalogue,
     PrismRecord,
 )
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 
 METAL_THICKNESS = "0.2"
 Point = tuple[float, float]

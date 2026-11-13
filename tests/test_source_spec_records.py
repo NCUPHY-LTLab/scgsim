@@ -1,6 +1,5 @@
 """Protect source-record normalization and handoff contracts."""
 
-from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -10,17 +9,11 @@ from scgsim.geometry import with_rectangular_junctions
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
-    GeometryBuildInput,
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
-from scgsim.geometry.models.regions import (
-    PortSheetOverlapRecord,
-    PortSheetRegionRecord,
-)
 from scgsim.geometry.source.curves import (
-    bind_source_curves,
     boundary_binding,
     source_curve,
     transform_boundary,
@@ -28,7 +21,6 @@ from scgsim.geometry.source.curves import (
 from scgsim.geometry.source.intents import (  # private-import: exercise the current plan-shared sheet projection.
     route_a_sheet_interfaces,
 )
-from scgsim.geometry.source.stack import build_component_stack
 
 
 def test_curve_and_boundary_normalization_preserves_detached_metadata():
@@ -132,94 +124,6 @@ def test_transform_boundary_preserves_selector_and_metadata_error_order():
         )
 
 
-def test_bind_source_curves_rejoins_only_explicit_split_children():
-    """Restore authored polygon and host records through explicit adapter lineage."""
-    source_polygon = LayoutPolygonSpec("source", "metal", ((0, 0), (2, 0), (2, 1)))
-    second_polygon = LayoutPolygonSpec("source-2", "metal", ((3, 0), (5, 0), (5, 1)))
-    source_entity = SemanticEntitySpec(
-        "root/metal",
-        "conductor",
-        "PEC",
-        "conductor",
-        1,
-        "polygon",
-        net_id="N1",
-        polygon_ids=("source", "source-2"),
-        geometry={"z_um": 0, "outer_loop": source_polygon.exterior},
-        metadata={"source_occurrence_path": "root"},
-    )
-    curve = BoundaryCurveChainSpec("edge", "root/metal", (0, 0), ())
-    source_overlap = PortSheetOverlapRecord(
-        "overlap",
-        "port",
-        "port-polygon",
-        "root/metal",
-        "source",
-        ((0, 0), (1, 0), (1, 1)),
-    )
-    source_port = PortSheetRegionRecord(
-        "port",
-        "metal",
-        "port-polygon",
-        ((0, 0), (1, 0), (1, 1)),
-        overlaps=(source_overlap,),
-    )
-    source = GeometryBuildInput(
-        (source_polygon, second_polygon),
-        (source_entity,),
-        port_sheet_regions=(source_port,),
-        boundary_curves=(curve,),
-    )
-    prepared_children = tuple(
-        replace(
-            source_entity,
-            semantic_id=f"prepared/metal-{index}",
-            polygon_ids=(f"prepared-{index}",),
-            geometry={"z_um": 2, "outer_loop": source_polygon.exterior},
-            metadata={
-                "source_occurrence_path": "root",
-                "source_semantic_id": "root/metal",
-                "split_polygon_index": index,
-            },
-        )
-        for index in range(2)
-    )
-    prepared_port = replace(
-        source_port,
-        overlaps=tuple(
-            replace(
-                source_overlap,
-                overlap_id=f"prepared-{index}",
-                host_semantic_id=child.semantic_id,
-            )
-            for index, child in enumerate(prepared_children)
-        ),
-    )
-    prepared = GeometryBuildInput(
-        tuple(
-            LayoutPolygonSpec(f"prepared-{index}", "metal", source_polygon.exterior)
-            for index in range(2)
-        ),
-        prepared_children,
-        port_sheet_regions=(prepared_port,),
-    )
-
-    restored = bind_source_curves(prepared, source)
-
-    assert [entity.semantic_id for entity in restored.entities] == ["root/metal"]
-    assert restored.entities[0].polygon_ids == ("source", "source-2")
-    assert "split_polygon_index" not in restored.entities[0].metadata
-    assert [polygon.polygon_id for polygon in restored.polygons] == [
-        "prepared-0",
-        "prepared-1",
-        "source",
-        "source-2",
-    ]
-    assert restored.port_sheet_regions[0].overlaps == (source_overlap,)
-    assert restored.boundary_curves == (curve,)
-    assert restored.boundary_curves[0] is not source.boundary_curves[0]
-
-
 def test_generated_sheet_intent_keeps_source_identity_and_plane():
     """Emit one Route A sheet intent from its declared source polygon."""
     polygon = LayoutPolygonSpec("sheet", "metal", ((0, 0), (2, 0), (2, 1)))
@@ -270,8 +174,11 @@ def test_generated_sheet_intent_keeps_source_identity_and_plane():
     )
 
 
-def test_stack_builder_keeps_pdk_authority_and_component_metadata():
+def test_plan_stack_keeps_pdk_authority_and_sizes_the_coupon(monkeypatch):
     """Build solution and conductor records from their owning source declarations."""
+    import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
+
+    from scgsim.geometry import GeometryPlan  # noqa: PLC0415 -- the plan needs the optional layout stack above
 
     def physical_layer(name: str, material: str, interval: tuple[float, float]):
         return PhysicalLayerDeclaration(
@@ -285,24 +192,21 @@ def test_stack_builder_keeps_pdk_authority_and_component_metadata():
             {},
         ).to_payload()
 
-    component = SimpleNamespace(
-        dbbox=lambda: SimpleNamespace(left=0, bottom=0, right=4, top=2),
-        info={
-            "component_semantics": {
-                "schema_version": 1,
-                "conductor_regions": [
-                    {
-                        "semantic_id": "signal",
-                        "level": "metal",
-                        "gds_layer": [1, 0],
-                        "net_id": "N1",
-                    }
-                ],
-                "metadata": {"owner": "component"},
-                "boundary_curves": [{"boundary_id": "edge"}],
-            }
-        },
+    # Restore process-local PDK state after this test.
+    monkeypatch.setattr(
+        gf.pdk,
+        "_ACTIVE_PDK",
+        gf.pdk._ACTIVE_PDK,  # noqa: SLF001 -- preserve the active PDK during test setup
     )
+    gf.gpdk.PDK.activate()
+    component = gf.Component()
+    component.add_polygon(((0, 0), (4, 0), (4, 2), (0, 2)), layer=(1, 0))
+    component.info["component_semantics"] = {
+        "schema_version": 2,
+        "conductor_regions": [
+            {"semantic_id": "signal", "level": "metal", "gds_layer": [1, 0]}
+        ],
+    }
     levels = {
         "vacuum": SimpleNamespace(
             material="vacuum",
@@ -327,21 +231,23 @@ def test_stack_builder_keeps_pdk_authority_and_component_metadata():
             },
         ),
     }
-
-    stack = build_component_stack(
-        component=component,
+    plan = GeometryPlan(
+        component,
+        root_id="chip",
         layer_stack=SimpleNamespace(layers=levels),
         material_records={"PEC": {"kind": "conductor"}, "vacuum": {"kind": "vacuum"}},
         coupon_padding_um=1,
+        grid_size_um=0.001,
     )
+    plan.set_nets({"N1": ("chip/signal",)})
 
-    assert stack["layers"][0]["semantic_id"] == "signal"
+    stack = plan.prepare().stack
+
+    assert [record["semantic_id"] for record in stack["layers"]] == ["chip/signal"]
     assert (
         stack["solution_regions"]["vacuum"]["metadata"]["pdk_semantic_authority"]
         == "layer_stack"
     )
-    assert stack["metadata"]["owner"] == "component"
-    assert stack["metadata"]["boundary_curves"] == [{"boundary_id": "edge"}]
     assert stack["metadata"]["coupon_domain_bounds_um"] == {
         "x_min_um": -1.0,
         "y_min_um": -1.0,

@@ -19,18 +19,18 @@ from sgb_inputs import (
 import scgsim.geometry.sgb as sgb
 from scgsim.contracts.sgb_sidecar import read_sidecar, sidecar_schema, views
 from scgsim.geometry.sgb import SgbArtifacts, build_sgb_geometry
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     RefinementRequest,
 )
-from scgsim.geometry.sgb.errors import RouteError
-from scgsim.geometry.sgb.verification.loaded import (
+from scgsim.geometry.sgb.checks.verification.loaded import (
     LoadCheckError,
     apply_sidecar_embeds,
     verify_loaded,
     verify_xao,
 )
+from scgsim.geometry.sgb.errors import RouteError
 
 ARTIFACT_NAMES = ("xao", "brep", "sidecar", "sliver_report", "validation_report")
 

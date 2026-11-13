@@ -3,7 +3,7 @@
 The cut crosses a face where it crosses the face's boundary curves (``rules.cross_curves`` returns them, each
 crossed at a right angle).  In a face's loop the face lies on the left of every edge in its travel direction,
 and a wall's positive side lies on the left of its top chain, which its loop travels from the run's start to
-its end (``assembly.builder``).  So each crossing says on which side of it, along the cut, the face or the
+its end (``topology.assembly.builder``).  So each crossing says on which side of it, along the cut, the face or the
 volume lies: a horizontal face's stretches begin and end at crossings, and a wall's two volumes stand on the
 two sides of its point.
 
@@ -18,10 +18,10 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from fractions import Fraction
 
-from scgsim.geometry.sgb.assembly.records import TopoEdge, TopoFace, Topology
+from scgsim.geometry.sgb.exact.plane import Point
 from scgsim.geometry.sgb.model import ConformalModel
-from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.section.frame import CutFrame
+from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, TopoFace, Topology
 
 
 @dataclass(frozen=True)

@@ -20,19 +20,19 @@ from sgb_scenes import (
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
-from scgsim.geometry.sgb.assembly.lineage import CarrierEntities
+from scgsim.geometry.sgb.checks.validation.validate import validate_model
 from scgsim.geometry.sgb.errors import (
     OverlapError,
     RouteError,
     SgbError,
     ValidationError,
 )
+from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
+from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records.families import CurveFamilyRecord
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
-from scgsim.geometry.sgb.stopwatch import Stopwatch
-from scgsim.geometry.sgb.validation.validate import validate_model
+from scgsim.geometry.sgb.topology.assembly.lineage import CarrierEntities
 
 
 @pytest.fixture(scope="module")
@@ -310,7 +310,7 @@ def test_curve_families_required_and_refinement_only():
 
 
 def _family_segment(name, p, q):
-    from scgsim.geometry.sgb.records.carriers import Lineage, LineCarrier  # noqa: PLC0415 -- used once
+    from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier  # noqa: PLC0415 -- used once
 
     return LineCarrier(
         name, p, q, Lineage("family_member", family_id="fam", member=name)

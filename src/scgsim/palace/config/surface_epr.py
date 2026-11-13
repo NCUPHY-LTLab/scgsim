@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from scgsim.geometry.sgb.records.grid import Grid
+from scgsim.geometry.sgb.exact.grid import Grid
 from scgsim.geometry.surface_epr.specs import positive_real
 
 from ..mesh.physical_groups import Groups, rows_of

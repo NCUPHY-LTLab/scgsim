@@ -11,7 +11,7 @@ from collections.abc import Callable
 from sgb_extreme_cases import FIXTURES, build_model
 from sgb_scenes import airbridge, pad_in_ground, random_layout
 
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     RefinementRequest,

@@ -29,8 +29,8 @@ from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.plane import Point, Ring
-from scgsim.geometry.sgb.records.grid import Grid
+from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.plane import Point, Ring
 
 
 @dataclass(frozen=True)

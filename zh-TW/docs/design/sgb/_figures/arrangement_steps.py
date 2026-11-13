@@ -1,7 +1,7 @@
 """Figures of arrangement.qmd: iterated snap rounding on a tiny input, step by step.
 
 The input is five exact integer carriers on a 12 x 12 grid (a triangle c1-c3, a long crossing segment c4 and a short
-segment c5). The script re-runs the production kernels of ``scgsim.geometry.sgb.noding.snap_rounding``
+segment c5). The script re-runs the production kernels of ``scgsim.geometry.sgb.arrangement.noding.snap_rounding``
 (``crossing_pixels_kernel``, ``hits_kernel``, ``assemble_chain``) round by round, records
 every state, checks that the result equals ``snap_round`` and then builds the DCEL faces with
 ``scgsim.geometry.sgb.arrangement.dcel.build_arrangement``.
@@ -21,7 +21,7 @@ import plotly.graph_objects as go
 from intro_common import save_plotly, save_svg, write_numbers
 
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement, interior_point
-from scgsim.geometry.sgb.noding.snap_rounding import (
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     NodedEdge,
     Segment,
     assemble_chain,
@@ -29,10 +29,10 @@ from scgsim.geometry.sgb.noding.snap_rounding import (
     hits_kernel,
     snap_round,
 )
-from scgsim.geometry.sgb.noding.snap_rounding import (
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     canonical_key as canonical,
 )
-from scgsim.geometry.sgb.noding.snap_rounding import (
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     proper_crossing as _crossing,
 )
 

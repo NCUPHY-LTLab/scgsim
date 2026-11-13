@@ -34,7 +34,15 @@ scgsim/
 ├── geometry/
 │   ├── source/       # component input, occurrence, stack and normalization
 │   ├── models/       # source and planning records
-│   ├── sgb/          # SGB core: arrangement, XAO and sidecar that Palace builds on
+│   ├── sgb/          # SGB core that Palace builds on; one folder per stage of the build
+│   │   ├── exact/        # the exact vocabulary every stage shares
+│   │   ├── prisms/       # S2: the effective input as prisms, levels and slabs
+│   │   ├── bands/        # S3: inset bands and refinement curves as cut families
+│   │   ├── arrangement/  # S4 and S5: noding, planar arrangement, cell labels
+│   │   ├── topology/     # S6 to S8: vertices to volumes, routes and groups
+│   │   ├── checks/       # S9: structural validation, slivers, file checks
+│   │   ├── output/       # S10: BREP and XAO, sidecar, STEP export
+│   │   └── section/      # the 2D section model
 │   ├── planning/     # physical interpretation, junction partition and AEDT's surface planning
 │   └── primitives/   # shared Entity, loop, grid and spatial operations
 ├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
@@ -113,8 +121,8 @@ revived Q3D input-v1/v2 paths. The formal `python -m scgsim.aedt.run` entrypoint
 remains supported; it is the AEDT transaction CLI, not a legacy wrapper.
 
 The `geometry` facade is the source-authoring entrypoint. It exposes
-`GeometryPlan`, detached snapshots, normalized input records, component and
-stack adapters, physical representation interpretation, and input summaries.
+`GeometryPlan`, detached snapshots, normalized input records, the GDS and
+stack-file adapter, physical representation interpretation, and input summaries.
 Palace calls `build_sgb_geometry` from `scgsim.geometry.sgb` and meshes the
 result with `scgsim.meshing`. `scgsim.geometry.sgb` sits below the supported
 entry: a layout enters through `GeometryPlan` and the simulation classes of

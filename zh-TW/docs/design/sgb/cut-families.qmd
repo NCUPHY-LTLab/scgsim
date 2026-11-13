@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/cut-families"
 
 SGB 中分割一個表面的方式，都共用同一個機制：**把曲線放進 arrangement，再由 labelling 決定這些曲線兩側的 cell 意味著什麼、哪些 edge 要保留**。材料邊界、port、inset band、refinement curve 都是如此。但它們不是每一種都需要同一種 record：有些分割直接來自 prism 的 footprint 與 label，不需要任何額外紀錄；只有無法從 prism 推出的特徵，才需要明確的 `CurveFamilyRecord`。本頁先分清這三類，再說明 family record、兩種 edge policy、band 距離的 distance-origin 規則、新增 family 的做法，以及曲線何時可以 embed 而不必成為 edge。
 
-[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 是本頁的基礎；第一個完整的使用者是 [inset imprint](inset-imprint.qmd)。production（`scgsim.geometry.sgb.cutfamilies`）以兩種有型別的請求產生 family：`InsetRequest`（inset band，support 是 `ConductorSurface`、`SolutionInterface` 或 `InterfaceSurfaces`）與 `RefinementRequest`（refinement curve）；請求的欄位見[使用契約](consumer-contract.qmd#requests)。下面執行範例中的 window family（`partition` role）是本頁為了展示 `required` policy 直接加進 prism catalogue 的 family，production 的請求 API 沒有它。
+[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 是本頁的基礎；第一個完整的使用者是 [inset imprint](inset-imprint.qmd)。production（`scgsim.geometry.sgb.bands`）以兩種有型別的請求產生 family：`InsetRequest`（inset band，support 是 `ConductorSurface`、`SolutionInterface` 或 `InterfaceSurfaces`）與 `RefinementRequest`（refinement curve）；請求的欄位見[使用契約](consumer-contract.qmd#requests)。下面執行範例中的 window family（`partition` role）是本頁為了展示 `required` policy 直接加進 prism catalogue 的 family，production 的請求 API 沒有它。
 
 ## 執行範例的觀點
 
@@ -192,4 +192,4 @@ flowchart TD
 
 ## 補充：重現資料
 
-本頁的圖與數字由 `zh-TW/docs/design/sgb/_figures/families.py` 以 production 套件 `scgsim.geometry.sgb` 產生（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行），數字取自 `figures/families-numbers.json`。執行範例是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`，以 `thin_film` profile 詮釋成 Route A（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）；band 與 refinement curve 是 `InsetRequest` 與 `RefinementRequest`，window 是 script 中直接附加到 catalogue 的 `CurveFamilyRecord`。Family 順序反轉的 identity 以 `ConformalModel.identity_digest()` 比較。Brief 對應第 4–6 節與第 14 節（policy、family、inset、refinement、target level）；production 模組為 `records/families`、`cutfamilies`（`requests`、`supports`、`inset`、`generate`）、`labelling/dissolve`；測試 `tests/test_sgb_inset.py`。
+本頁的圖與數字由 `zh-TW/docs/design/sgb/_figures/families.py` 以 production 套件 `scgsim.geometry.sgb` 產生（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行），數字取自 `figures/families-numbers.json`。執行範例是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`，以 `thin_film` profile 詮釋成 Route A（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）；band 與 refinement curve 是 `InsetRequest` 與 `RefinementRequest`，window 是 script 中直接附加到 catalogue 的 `CurveFamilyRecord`。Family 順序反轉的 identity 以 `ConformalModel.identity_digest()` 比較。Brief 對應第 4–6 節與第 14 節（policy、family、inset、refinement、target level）；production 模組為 `exact/families`、`bands`（`requests`、`supports`、`inset`、`generate`）、`arrangement/labelling/dissolve`；測試 `tests/test_sgb_inset.py`。

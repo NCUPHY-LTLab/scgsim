@@ -28,17 +28,17 @@ from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, InterfaceSurfaces
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.records.grid import Grid, exact_z
-from scgsim.geometry.sgb.records.prisms import (
+from scgsim.geometry.sgb.bands.requests import InsetRequest, InterfaceSurfaces
+from scgsim.geometry.sgb.exact.grid import Grid, exact_z
+from scgsim.geometry.sgb.exact.prisms import (
     Footprint,
     PortIdentity,
     PrismCatalogue,
     PrismRecord,
 )
-from scgsim.geometry.sgb.routes.naming import interface_type_of
-from scgsim.geometry.sgb.sidecar.lineage import CarrierLineage
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
+from scgsim.geometry.sgb.output.sidecar.lineage import CarrierLineage
+from scgsim.geometry.sgb.topology.routes.naming import interface_type_of
 
 GRID = Grid(0.001)
 MARGINS = (0.5, 1.0)
