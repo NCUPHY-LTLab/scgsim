@@ -15,56 +15,7 @@ SCGSim 區分 PDK 事實、元件意圖、語意幾何、求解器準備、執�
 
 ## 目前套件結構 {#current-package-structure}
 
-套件將來源幾何、模型建構、求解器後端、結果處理與呈現分開。下列樹列出共用套件責任；Palace 與 AEDT 各自保有準備、執行與結果生命週期。
-
-```text
-scgsim/
-├── geometry/
-│   ├── models/       # typed records that cross stages
-│   ├── source/       # from a layout and a stack to a prepared snapshot
-│   ├── grid/         # the grid engine the stages call: noding, tagged regions, overlays, loops
-│   ├── interpretation/ # from a prepared input to its physical representation and vacuum enclosure
-│   ├── junctions/    # the rectangular partition around a lumped port
-│   ├── surface_epr/  # from Surface-EPR specs to the inset requests of the SGB build
-│   ├── sgb/          # SGB core that Palace builds on; one folder per stage of the build
-│   │   ├── exact/        # the exact vocabulary every stage shares
-│   │   ├── prisms/       # S2: the effective input as prisms, levels and slabs
-│   │   ├── bands/        # S3: inset bands as cut families
-│   │   ├── arrangement/  # S4 and S5: noding, planar arrangement, cell labels
-│   │   ├── topology/     # S6 to S8: vertices to volumes, routes and groups
-│   │   ├── checks/       # S9: structural validation, slivers, file checks
-│   │   ├── output/       # S10: BREP and XAO, sidecar, STEP export
-│   │   └── section/      # the 2D section model
-│   └── planning/     # what only AEDT's native construction uses: surface, contact, domain, topology planning
-├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
-├── contracts/        # file definitions shared across stages: the SGB sidecar and the Palace run folder
-├── semantics/        # immutable solver-independent facts
-├── palace/
-│   ├── simulation/   # EigenmodeSim and ElectrostaticSim on one shared core and lifecycle
-│   ├── source/       # from a bound plan to the input of the geometry build
-│   ├── mesh/         # SGB build, meshing call, group lowering and summaries
-│   ├── config/       # from the mesh's groups and the problem's settings to config.json and the index map
-│   ├── run/          # the run folder handed to Palace: script, receipt recorder, archive, returned receipt
-│   ├── results/      # custody-aware result and EPR reading
-│   └── reports/      # notebook views of a resolved result
-├── aedt/
-│   ├── eigenmode.py  # retained mutable high-level state facade
-│   ├── specs/        # detached requests, prepared geometry and parsing
-│   ├── preparation/ # source binding, effective geometry, handoff and cohorts
-│   ├── runtime/     # transaction, family-native and batch owners
-│   │   ├── batch_protocol.py # stdlib package/file protocol
-│   │   └── batch_runner.py   # standalone process and CLI
-│   ├── epr/         # EPR surface support, fields/cache and analysis composition
-│   ├── results/     # strict readers and convergence observations
-│   ├── presentation/
-│   └── run.py       # supported CLI, delegates to transaction owner
-├── visualization/
-│   ├── loaders/      # 後端產物讀取及共用檔案檢查
-│   ├── scene.py
-│   ├── preview.py
-│   └── rendering.py
-└── presentation/     # shared physics-neutral notebook formatting
-```
+[程式碼地圖](code-map.qmd)列出套件的每個資料夾、各自是哪個階段，以及 Palace 與 AEDT 路線中工作依序經過哪些階段。Palace 與 AEDT 各自保有準備、執行與結果生命週期。
 
 責任修正讓每個獨立 AEDT 要求紀錄只有一個定義。`aedt.specs.geometry` 負責 `PreparedPlanarGeometry`；`aedt.specs.epr` 負責接面、表面及分析宣告；共用要求基本型別負責一般 `LumpedRlc`。既有公開匯入重新匯出相同類別。酬載成員、歷史標記及模型／來源雜湊規則維持不變。私有標準函式庫資料輔助函式負責凍結、分離及正規雜湊；準備與要求解碼共用純支撐投影，不匯入準備或原生流程。
 

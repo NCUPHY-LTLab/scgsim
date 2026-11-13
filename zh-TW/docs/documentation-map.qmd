@@ -16,7 +16,7 @@ sidebar: contribution
 | `docs/tutorial-xmon-input.qmd`、`docs/tutorial-xmon-palace.qmd`、`docs/tutorial-xmon-aedt.qmd` | 「教學」中的覆晶 Xmon 範例。 |
 | `docs/concepts/*.qmd`、`docs/eigenmode-epr.qmd` | 保留於「概念」。 |
 | `docs/backend-support.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/layout-modeling-check.qmd`、`docs/supported-scope.qmd`、`docs/supported-geometry.qmd`、`docs/known-geometry-problems.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd`、`docs/geometry-sgb.qmd`、`docs/geometry-preview.qmd`、`docs/conventions.qmd`、`docs/knowledge-guide.qmd`、`docs/api/*.qmd` | 保留於「契約」，作為支援行為與詳細介面的依據。 |
-| `docs/contributing.qmd`、`docs/documentation-map.qmd`、`docs/architecture.qmd`、`docs/goals-and-upstream.qmd`、`docs/provenance.qmd`、`docs/ownership.qmd` | 保留原網址，並歸入「貢獻」中的專案參考。 |
+| `docs/contributing.qmd`、`docs/code-map.qmd`、`docs/documentation-map.qmd`、`docs/architecture.qmd`、`docs/goals-and-upstream.qmd`、`docs/provenance.qmd`、`docs/ownership.qmd` | 保留原網址，並歸入「貢獻」中的專案參考。 |
 | `docs/research/index.qmd`、`docs/research/geometry-build/*.qmd` | 保留於「研究」，作為量測研究。 |
 | `docs/history/aedt-capacitance-pre-v3.qmd` | 保留於「教學」的歷史參考。 |
 | `docs/history/curved-source-installation.qmd` | 保留於「研究」，作為 Circular Pad 研究所固定的歷史環境與 Palace 原生設定。 |
