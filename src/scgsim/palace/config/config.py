@@ -11,7 +11,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from numbers import Real
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC, OUTPUT_DIR
 from scgsim.refusal import refusal
@@ -285,31 +285,13 @@ def _lumped_ports(groups: Groups, ports: Sequence[LayoutPortBinding]) -> LumpedP
     information: list[dict[str, Any]] = []
     entries: list[PortEntry] = []
     for port in ports:
-        key = f"P{port.index}"
-        group = groups.get("port_surfaces", {}).get(key)
-        if group is None:
-            raise ValueError(f"layout_sheet port {port.name!r} has no SGB group {key}.")
-        direction = _direction_tuple(group.get("direction"), port.name)
-        if (
-            group["port_index"] != port.index
-            or group["source_name"] != port.name
-            or group["source_layer"] != port.source_layer
-            or group["target_layer"] != port.target_layer
-            or not all(
-                math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
-                for a, b in zip(direction, port.direction, strict=True)
-            )
-        ):
-            raise ValueError(
-                f"layout_sheet port {port.name!r} does not match SGB-authored identity."
-            )
-        attributes = sorted(int(value) for value in group["attributes"])
+        bound = _bound_port_group(groups, port)
         rows.append(
             {
                 "Index": port.index,
-                "Direction": list(direction),
+                "Direction": list(bound.direction),
                 "Excitation": False,
-                "Attributes": attributes,
+                "Attributes": bound.attributes,
                 **port.circuit,
             }
         )
@@ -318,31 +300,14 @@ def _lumped_ports(groups: Groups, ports: Sequence[LayoutPortBinding]) -> LumpedP
                 "portnumber": port.index,
                 "name": port.name,
                 "type": "lumped_sheet",
-                "direction": list(direction),
-                "physical_name": group["group"],
-                "attributes": attributes,
+                "direction": list(bound.direction),
+                "physical_name": bound.group["group"],
+                "attributes": bound.attributes,
                 "source_layer": port.source_layer,
                 "target_layer": port.target_layer,
             }
         )
-        entries.append(
-            PortEntry(
-                index=port.index,
-                entry_name=key,
-                attributes=attributes,
-                physical_names=[group["group"]],
-                port_name=port.name,
-                sheet={
-                    field: group[field]
-                    for field in (
-                        "port_sheet_id",
-                        "host_entity_ids",
-                        "adjacent_volumes",
-                        "host_volumes",
-                    )
-                },
-            )
-        )
+        entries.append(_port_entry(port, bound))
     if len(groups.get("port_surfaces", {})) != len(ports):
         raise ValueError(
             refusal(
@@ -352,6 +317,80 @@ def _lumped_ports(groups: Groups, ports: Sequence[LayoutPortBinding]) -> LumpedP
             )
         )
     return LumpedPortRows(rows, entries, information)
+
+
+class _BoundPortGroup(NamedTuple):
+    """The SGB group a layout-sheet port binds to, with its checked direction and its attributes."""
+
+    key: str
+    group: Mapping[str, Any]
+    direction: tuple[float, float, float]
+    attributes: list[int]
+
+
+def _bound_port_group(groups: Groups, port: LayoutPortBinding) -> _BoundPortGroup:
+    """Find the port's group ``P<index>`` and require it to carry the port's name, layers and direction."""
+    key = f"P{port.index}"
+    group = groups.get("port_surfaces", {}).get(key)
+    if group is None:
+        raise ValueError(
+            refusal(
+                f"layout_sheet port {port.name!r} has no SGB group {key}",
+                found=sorted(groups.get("port_surfaces", {})),
+            )
+        )
+    direction = _direction_tuple(group.get("direction"), port.name)
+    if (
+        group["port_index"] != port.index
+        or group["source_name"] != port.name
+        or group["source_layer"] != port.source_layer
+        or group["target_layer"] != port.target_layer
+        or not all(
+            math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
+            for a, b in zip(direction, port.direction, strict=True)
+        )
+    ):
+        raise ValueError(
+            refusal(
+                f"layout_sheet port {port.name!r} does not match SGB-authored identity",
+                found={
+                    "port_index": group["port_index"],
+                    "source_name": group["source_name"],
+                    "source_layer": group["source_layer"],
+                    "target_layer": group["target_layer"],
+                    "direction": direction,
+                },
+                expected={
+                    "port_index": port.index,
+                    "source_name": port.name,
+                    "source_layer": port.source_layer,
+                    "target_layer": port.target_layer,
+                    "direction": port.direction,
+                },
+            )
+        )
+    attributes = sorted(int(value) for value in group["attributes"])
+    return _BoundPortGroup(key, group, direction, attributes)
+
+
+def _port_entry(port: LayoutPortBinding, bound: _BoundPortGroup) -> PortEntry:
+    """The index-map entry of one lumped port: its row, its group and the sheet SGB cut for it."""
+    return PortEntry(
+        index=port.index,
+        entry_name=bound.key,
+        attributes=bound.attributes,
+        physical_names=[bound.group["group"]],
+        port_name=port.name,
+        sheet={
+            field: bound.group[field]
+            for field in (
+                "port_sheet_id",
+                "host_entity_ids",
+                "adjacent_volumes",
+                "host_volumes",
+            )
+        },
+    )
 
 
 def _direction_tuple(value: Any, name: str) -> tuple[float, float, float]:
@@ -396,37 +435,12 @@ def _materials_from_solution_volumes(
         material_id = optional_string(volume.get("material"))
         if not material_id:
             raise ValueError(
-                f"SGB solution volume {name!r} must define a non-empty material id."
+                refusal(
+                    f"SGB solution volume {name!r} must define a non-empty material id",
+                    found=volume.get("material"),
+                )
             )
-        material = materials.get(material_id)
-        if material is None:
-            raise ValueError(
-                f"SGB solution volume {name!r} references unknown material id {material_id!r}."
-            )
-        if not isinstance(material, Mapping):
-            raise TypeError(f"SGB material record {material_id!r} must be a mapping.")
-        if material.get("kind") not in {"vacuum", "dielectric"}:
-            raise ValueError(
-                f"SGB solution material {material_id!r} must have vacuum or dielectric kind."
-            )
-        permittivity = material.get("permittivity")
-        loss_tangent = material.get("loss_tangent")
-        if (
-            not isinstance(permittivity, Real)
-            or not math.isfinite(float(permittivity))
-            or float(permittivity) <= 0.0
-        ):
-            raise ValueError(
-                f"Material {material_id!r} requires finite positive permittivity."
-            )
-        if (
-            not isinstance(loss_tangent, Real)
-            or not math.isfinite(float(loss_tangent))
-            or float(loss_tangent) < 0.0
-        ):
-            raise ValueError(
-                f"Material {material_id!r} requires finite non-negative loss_tangent."
-            )
+        constants = _dielectric_constants(materials, material_id, name)
         if seen_attributes.intersection(attrs):
             raise ValueError(
                 f"SGB solution volume {name!r} duplicates physical attributes {attrs}."
@@ -435,12 +449,72 @@ def _materials_from_solution_volumes(
         material_rows.append(
             {
                 "Attributes": attrs,
-                "Permittivity": float(permittivity),
-                "LossTan": float(loss_tangent),
+                "Permittivity": constants.permittivity,
+                "LossTan": constants.loss_tangent,
             }
         )
-
     return material_rows
+
+
+class _DielectricConstants(NamedTuple):
+    """The relative permittivity and loss tangent a solution volume's material gives Palace."""
+
+    permittivity: float
+    loss_tangent: float
+
+
+def _dielectric_constants(
+    materials: Mapping[str, Mapping[str, Any]], material_id: str, volume: str
+) -> _DielectricConstants:
+    """Read a solution material's constants, refusing an unknown, non-dielectric or out-of-range record."""
+    material = materials.get(material_id)
+    if material is None:
+        raise ValueError(
+            refusal(
+                f"SGB solution volume {volume!r} references unknown material id {material_id!r}",
+                found=material_id,
+                expected=sorted(materials),
+            )
+        )
+    if not isinstance(material, Mapping):
+        raise TypeError(
+            refusal(
+                f"SGB material record {material_id!r} must be a mapping",
+                found=type(material).__name__,
+            )
+        )
+    if material.get("kind") not in {"vacuum", "dielectric"}:
+        raise ValueError(
+            refusal(
+                f"SGB solution material {material_id!r} must have vacuum or dielectric kind",
+                found=material.get("kind"),
+            )
+        )
+    permittivity = material.get("permittivity")
+    loss_tangent = material.get("loss_tangent")
+    if (
+        not isinstance(permittivity, Real)
+        or not math.isfinite(float(permittivity))
+        or float(permittivity) <= 0.0
+    ):
+        raise ValueError(
+            refusal(
+                f"Material {material_id!r} requires finite positive permittivity",
+                found=permittivity,
+            )
+        )
+    if (
+        not isinstance(loss_tangent, Real)
+        or not math.isfinite(float(loss_tangent))
+        or float(loss_tangent) < 0.0
+    ):
+        raise ValueError(
+            refusal(
+                f"Material {material_id!r} requires finite non-negative loss_tangent",
+                found=loss_tangent,
+            )
+        )
+    return _DielectricConstants(float(permittivity), float(loss_tangent))
 
 
 def _material_identity(

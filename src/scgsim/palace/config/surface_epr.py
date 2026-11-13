@@ -11,7 +11,7 @@ nor accepted.  Omit both margin keys for baseline rows only.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
@@ -43,11 +43,8 @@ def build_surface_epr_postprocessing(
                 "Model.L0 must be a finite positive length in metres", found=model_l0_m
             )
         )
-    rows: list[dict[str, Any]] = []
-    entries: list[SurfaceEprEntry] = []
-    margin_requests: list[_MarginRequest] = []
+    built = _DielectricRows()
     all_rows = rows_of(groups)
-    members: set[tuple[str, int]] = set()
     for interface_type, spec in sorted(specs.by_type.items(), key=lambda item: item[0]):
         units = _units(all_rows, spec)
         if not units and spec.required:
@@ -57,44 +54,69 @@ def build_surface_epr_postprocessing(
             )
         snapshot = _spec_snapshot(spec, model_l0_m)
         for unit in units:
-            attributes = _unit_attributes(unit.rows)
-            for attribute in attributes:
-                if (interface_type, attribute) in members:
-                    raise ValueError(
-                        refusal(
-                            f"Surface EPR physical attribute is duplicated for {interface_type}",
-                            found=attribute,
-                        )
-                    )
-                members.add((interface_type, attribute))
-            index = len(rows) + 1
-            rows.append(_dielectric_row(index, interface_type, attributes, snapshot))
-            entries.append(
-                SurfaceEprEntry(
-                    index=index,
-                    entry_name=unit.name,
-                    attributes=attributes,
-                    physical_names=sorted({row["group"] for row in unit.rows}),
-                    rows=tuple(_surface_row(row) for row in unit.rows),
-                    epr_spec=snapshot,
-                    baseline_index=index,
-                )
-            )
-            margin_requests.extend(
-                _MarginRequest(index, unit, margin_index, margin)
-                for margin_index, margin in enumerate(unit.margins_um)
-            )
+            built.add_baseline(interface_type, unit, snapshot)
+    for request in built.margin_requests:
+        interface_type = request.unit.interface_type
+        built.add_margin(
+            request, _spec_snapshot(specs.by_type[interface_type], model_l0_m)
+        )
+    return IndexedRows(built.rows, built.entries)
 
-    for request in margin_requests:
+
+@dataclass
+class _DielectricRows:
+    """The ``Dielectric`` rows built so far, their entries, and the margins still to add after every baseline.
+
+    Rows are numbered in the order they are added, so every baseline row precedes every margin row.
+    """
+
+    rows: list[dict[str, Any]] = field(default_factory=list)
+    entries: list[SurfaceEprEntry] = field(default_factory=list)
+    margin_requests: list[_MarginRequest] = field(default_factory=list)
+    members: set[tuple[str, int]] = field(default_factory=set)
+
+    def add_baseline(
+        self, interface_type: str, unit: _Unit, snapshot: dict[str, Any]
+    ) -> None:
+        """Add the whole-surface row of one unit and queue a margin row for each of its margins."""
+        attributes = _unit_attributes(unit.rows)
+        for attribute in attributes:
+            if (interface_type, attribute) in self.members:
+                raise ValueError(
+                    refusal(
+                        f"Surface EPR physical attribute is duplicated for {interface_type}",
+                        found=attribute,
+                    )
+                )
+            self.members.add((interface_type, attribute))
+        index = len(self.rows) + 1
+        self.rows.append(_dielectric_row(index, interface_type, attributes, snapshot))
+        self.entries.append(
+            SurfaceEprEntry(
+                index=index,
+                entry_name=unit.name,
+                attributes=attributes,
+                physical_names=sorted({row["group"] for row in unit.rows}),
+                rows=tuple(_surface_row(row) for row in unit.rows),
+                epr_spec=snapshot,
+                baseline_index=index,
+            )
+        )
+        self.margin_requests.extend(
+            _MarginRequest(index, unit, margin_index, margin)
+            for margin_index, margin in enumerate(unit.margins_um)
+        )
+
+    def add_margin(self, request: _MarginRequest, snapshot: dict[str, Any]) -> None:
+        """Add the row of one margin, the unit's bands from the margin's band on; none when it selects none."""
         selected = request.selected_rows()
         if not selected:
-            continue  # nothing of this unit lies that far from a gap edge (unbanded, or a sidewall)
+            return  # nothing of this unit lies that far from a gap edge (unbanded, or a sidewall)
         attributes = _unit_attributes(selected)
-        index = len(rows) + 1
+        index = len(self.rows) + 1
         interface_type = request.unit.interface_type
-        snapshot = _spec_snapshot(specs.by_type[interface_type], model_l0_m)
-        rows.append(_dielectric_row(index, interface_type, attributes, snapshot))
-        entries.append(
+        self.rows.append(_dielectric_row(index, interface_type, attributes, snapshot))
+        self.entries.append(
             SurfaceEprEntry(
                 index=index,
                 entry_name=f"{request.unit.name}__inset_{request.margin_index}",
@@ -106,7 +128,6 @@ def build_surface_epr_postprocessing(
                 inset=request.description(selected),
             )
         )
-    return IndexedRows(rows, entries)
 
 
 @dataclass(frozen=True)

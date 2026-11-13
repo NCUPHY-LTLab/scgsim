@@ -7,6 +7,7 @@ import hashlib
 import itertools
 import json
 import math
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Mapping, TypedDict
 
@@ -43,8 +44,30 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
         int(tag): tuple(float(x) for x in coordinates[3 * i : 3 * i + 3])
         for i, tag in enumerate(node_tags)
     }
-    types = []
     element_types, element_tags, _ = gmsh.model.mesh.getElements()
+    types = _element_type_records(element_types, element_tags)
+    regions = _observe_physical_regions(points)
+    topology = _TetrahedralTopology()
+    volumes = {int(t) for v in groups["volumes"].values() for t in v["tags"]}
+    for volume in volumes:
+        topology.add_volume(volume)
+    return dict(
+        node_count=len(node_tags),
+        element_count=sum(len(t) for t in element_tags),
+        element_types=types,
+        physical_regions=regions,
+        tetrahedral_topology=topology.counts(),
+        corner_chord_edge_lengths=_corner_chord_statistics(topology.edges, points),
+    )
+
+
+def _element_type_records(
+    element_types: Any, element_tags: Any
+) -> list[dict[str, Any]]:
+    """One record per Gmsh element type in the mesh: its properties and how many elements it has."""
+    import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
+
+    types = []
     for code, tags in zip(element_types, element_tags, strict=True):
         name, dimension, order, nodes, reference, primary = (
             gmsh.model.mesh.getElementProperties(code)
@@ -61,67 +84,80 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
                 reference_coordinates=[float(x) for x in reference],
             )
         )
-    regions = _observe_physical_regions(points)
-    edges: set[tuple[int, ...]] = set()
-    faces: set[tuple[int, ...]] = set()
-    tetrahedra: set[int] = set()
-    vertices: set[int] = set()
-    shared: dict[tuple[int, ...], tuple[int, ...]] = {}
-    volumes = {int(t) for v in groups["volumes"].values() for t in v["tags"]}
-    for volume in volumes:
+    return types
+
+
+@dataclass
+class _TetrahedralTopology:
+    """The corner vertices, edges, faces and tetrahedra of the solution volumes, gathered volume by volume.
+
+    ``shared`` keeps the high-order nodes of each corner face, so a face two tetrahedra share must carry the
+    same nodes on both sides.
+    """
+
+    vertices: set[int] = field(default_factory=set)
+    edges: set[tuple[int, ...]] = field(default_factory=set)
+    faces: set[tuple[int, ...]] = field(default_factory=set)
+    tetrahedra: set[int] = field(default_factory=set)
+    shared: dict[tuple[int, ...], tuple[int, ...]] = field(default_factory=dict)
+
+    def add_volume(self, volume: int) -> None:
+        """Add the tetrahedra of one volume and check its faces against those already seen."""
+        import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
+
         ts, ids, connectivity = gmsh.model.mesh.getElements(3, volume)
         for code, tags, nodes in zip(ts, ids, connectivity, strict=True):
-            name, dim, order, count, _, primary = gmsh.model.mesh.getElementProperties(
+            name, _dim, order, count, _, primary = gmsh.model.mesh.getElementProperties(
                 code
             )
             if "tetrahedron" not in name.lower():
                 continue
-            for i, tag in enumerate(tags):
-                if int(tag) in tetrahedra:
-                    continue
-                tetrahedra.add(int(tag))
-                corners = tuple(int(n) for n in nodes[i * count : i * count + primary])
-                vertices.update(corners)
-                edges.update(
-                    tuple(sorted(e)) for e in itertools.combinations(corners, 2)
-                )
-                faces.update(
-                    tuple(sorted(f)) for f in itertools.combinations(corners, 3)
-                )
-            full = gmsh.model.mesh.getElementFaceNodes(
-                int(code), 3, volume, primary=False
+            self._add_corners(tags, nodes, count, primary)
+            self._check_shared_faces(int(code), volume, order)
+
+    def _add_corners(self, tags: Any, nodes: Any, count: int, primary: int) -> None:
+        for i, tag in enumerate(tags):
+            if int(tag) in self.tetrahedra:
+                continue
+            self.tetrahedra.add(int(tag))
+            corners = tuple(int(n) for n in nodes[i * count : i * count + primary])
+            self.vertices.update(corners)
+            self.edges.update(
+                tuple(sorted(e)) for e in itertools.combinations(corners, 2)
             )
-            corners = gmsh.model.mesh.getElementFaceNodes(
-                int(code), 3, volume, primary=True
+            self.faces.update(
+                tuple(sorted(f)) for f in itertools.combinations(corners, 3)
             )
-            face_size = (order + 1) * (order + 2) // 2
-            for i in range(len(corners) // 3):
-                key = tuple(sorted(int(n) for n in corners[3 * i : 3 * i + 3]))
-                value = tuple(
-                    sorted(int(n) for n in full[face_size * i : face_size * (i + 1)])
-                )
-                if key in shared and shared[key] != value:
-                    raise ValueError(
-                        refusal(
-                            "shared tetrahedral face has different high-order nodes",
-                            found={"face": key, "nodes": value},
-                            expected=shared[key],
-                        )
+
+    def _check_shared_faces(self, code: int, volume: int, order: int) -> None:
+        import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
+
+        full = gmsh.model.mesh.getElementFaceNodes(code, 3, volume, primary=False)
+        corners = gmsh.model.mesh.getElementFaceNodes(code, 3, volume, primary=True)
+        face_size = (order + 1) * (order + 2) // 2
+        for i in range(len(corners) // 3):
+            key = tuple(sorted(int(n) for n in corners[3 * i : 3 * i + 3]))
+            value = tuple(
+                sorted(int(n) for n in full[face_size * i : face_size * (i + 1)])
+            )
+            if key in self.shared and self.shared[key] != value:
+                raise ValueError(
+                    refusal(
+                        "shared tetrahedral face has different high-order nodes",
+                        found={"face": key, "nodes": value},
+                        expected=self.shared[key],
                     )
-                shared[key] = value
-    return dict(
-        node_count=len(node_tags),
-        element_count=sum(len(t) for t in element_tags),
-        element_types=types,
-        physical_regions=regions,
-        tetrahedral_topology=dict(
-            vertices=len(vertices),
-            edges=len(edges),
-            faces=len(faces),
-            tetrahedra=len(tetrahedra),
-        ),
-        corner_chord_edge_lengths=_corner_chord_statistics(edges, points),
-    )
+                )
+            self.shared[key] = value
+
+    def counts(self) -> dict[str, int]:
+        """The number of each kind of corner element, as the mesh manifest records them."""
+        return dict(
+            vertices=len(self.vertices),
+            edges=len(self.edges),
+            faces=len(self.faces),
+            tetrahedra=len(self.tetrahedra),
+        )
 
 
 class DofEstimate(TypedDict, total=False):

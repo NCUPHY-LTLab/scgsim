@@ -127,6 +127,25 @@ def validate_port_tetrahedron_face_conformality(
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
 ) -> None:
     """Require every full-node port triangle to be a two-sided tetrahedron face."""
+    port_triangles = _port_triangles(groups)
+    tetrahedron_faces = _tetrahedron_face_counts(groups, port_triangles)
+    for key, triangles in port_triangles.items():
+        multiplicities = Counter(tetrahedron_faces[triangle] for triangle in triangles)
+        invalid = {
+            count: amount for count, amount in multiplicities.items() if count != 2
+        }
+        if not triangles or invalid:
+            raise ValueError(
+                f"SGB lumped-port sheet {key!r} is non-conformal to the tetrahedron mesh: "
+                f"{len(triangles)} triangle(s), invalid tetra-face multiplicities {invalid}; "
+                "every internal port triangle must be shared by exactly two tetrahedra."
+            )
+
+
+def _port_triangles(
+    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
+) -> dict[str, list[tuple[int, ...]]]:
+    """The full-node triangles of each lumped-port sheet, refusing a sheet meshed with anything else."""
     import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
 
     port_triangles: dict[str, list[tuple[int, ...]]] = {}
@@ -155,6 +174,15 @@ def validate_port_tetrahedron_face_conformality(
                     for index in range(0, len(nodes), node_count)
                 )
         port_triangles[key] = triangles
+    return port_triangles
+
+
+def _tetrahedron_face_counts(
+    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    port_triangles: dict[str, list[tuple[int, ...]]],
+) -> Counter[tuple[int, ...]]:
+    """How many tetrahedra of the solution volumes have each port triangle as a full-node face."""
+    import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
 
     tetrahedron_faces: Counter[tuple[int, ...]] = Counter(
         {triangle: 0 for triangles in port_triangles.values() for triangle in triangles}
@@ -190,18 +218,7 @@ def validate_port_tetrahedron_face_conformality(
                 )
                 if face in tetrahedron_faces:
                     tetrahedron_faces[face] += 1
-
-    for key, triangles in port_triangles.items():
-        multiplicities = Counter(tetrahedron_faces[triangle] for triangle in triangles)
-        invalid = {
-            count: amount for count, amount in multiplicities.items() if count != 2
-        }
-        if not triangles or invalid:
-            raise ValueError(
-                f"SGB lumped-port sheet {key!r} is non-conformal to the tetrahedron mesh: "
-                f"{len(triangles)} triangle(s), invalid tetra-face multiplicities {invalid}; "
-                "every internal port triangle must be shared by exactly two tetrahedra."
-            )
+    return tetrahedron_faces
 
 
 def _surface_mesh_edges(tags: Iterable[Any]) -> set[tuple[int, ...]]:
