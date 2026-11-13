@@ -12,7 +12,6 @@ from scgsim.contracts.palace_run_folder import (
     palace_problem,
     table_name,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
     FileHash,
     compute_hash_entry,
@@ -25,7 +24,7 @@ from scgsim.palace.results.inspection_records import (
     PalaceResultSelection,
 )
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 
 def validate_inspection_receipt(

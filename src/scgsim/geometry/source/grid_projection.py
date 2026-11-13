@@ -37,7 +37,6 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.source.ports import (
     PortSheetHost,
@@ -51,6 +50,7 @@ from scgsim.geometry.source.preimages import (
     source_polygon_inputs,
 )
 from scgsim.geometry.source.recipes import SourceGridAudit
+from scgsim.refusal import internal
 from scgsim.semantics.route_a import geometry_z_range, same_z
 
 if TYPE_CHECKING:

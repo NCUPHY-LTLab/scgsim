@@ -9,7 +9,6 @@ from dataclasses import dataclass, replace
 from typing import Any, NamedTuple
 
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.normalization import (
     coupon_domain_bounds,
     gds_layer,
@@ -17,6 +16,7 @@ from scgsim.geometry.source.normalization import (
     semantic_layer_records,
     solution_regions,
 )
+from scgsim.refusal import Declared
 
 _PATH_SEGMENT = re.compile(r"[A-Za-z][A-Za-z0-9_.-]*\Z")
 

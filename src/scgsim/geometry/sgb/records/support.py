@@ -31,7 +31,7 @@ from scgsim.geometry.exact.carriers import (
     round_to_lattice,
 )
 from scgsim.geometry.exact.plane import Point, RepPoint, point_in_ring
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 ORIGIN_CELL = 64.0
 """Smallest cell, in grid units, of the grid that finds the nearest distance origin of a point."""

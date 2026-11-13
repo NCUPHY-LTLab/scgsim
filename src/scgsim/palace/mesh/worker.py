@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.diagnostics import worker_diagnostics
-from scgsim.geometry.models.refusals import internal
 from scgsim.palace.mesh.native import lower_mesh_in_current_process
-from scgsim.refusal import found_text
+from scgsim.refusal import found_text, internal
 
 
 def main(arguments: list[str] | None = None) -> int:

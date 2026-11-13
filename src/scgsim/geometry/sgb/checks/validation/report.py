@@ -8,9 +8,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.stopwatch import elapsed_seconds
+from scgsim.refusal import internal
 
 
 @dataclass

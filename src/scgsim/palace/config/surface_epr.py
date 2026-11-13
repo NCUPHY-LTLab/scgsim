@@ -16,9 +16,8 @@ from typing import Any
 
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
 from scgsim.geometry.exact.grid import Grid
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.surface_epr.specs import positive_real
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text, internal
 
 from ..mesh.physical_groups import Groups, rows_of
 from ..source.surface_epr import SurfaceEprSpec, SurfaceEprSpecs

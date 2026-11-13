@@ -6,8 +6,8 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.epr_records import PalaceEprResult
+from scgsim.refusal import Declared
 
 _WHERE_SHOW_EPR = "the call to show_epr"
 

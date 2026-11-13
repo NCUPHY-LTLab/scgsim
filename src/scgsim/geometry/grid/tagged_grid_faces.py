@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, cast
 
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.grid.tagged_grid_operations import ShapelyGridOperations
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 if TYPE_CHECKING:
     from shapely.geometry import Polygon

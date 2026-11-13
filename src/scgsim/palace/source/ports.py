@@ -23,7 +23,7 @@ from scgsim.geometry.models.junctions import (
     junction_net_id,
     junction_occurrence_path,
 )
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 _WHERE_LAYOUT = "the layout"
 

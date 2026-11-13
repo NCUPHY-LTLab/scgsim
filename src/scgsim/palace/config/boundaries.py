@@ -11,8 +11,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, cast
 
-from scgsim.geometry.models.refusals import Declared, internal
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text, internal
 
 from .config_records import (
     ElectrostaticSettings,

@@ -9,8 +9,7 @@ from importlib.metadata import version as package_version
 from typing import Any
 
 from scgsim.geometry.models.physical import PhysicalRepresentationPlan
-from scgsim.geometry.models.refusals import Declared, internal
-from scgsim.refusal import ENVIRONMENT, found_text
+from scgsim.refusal import ENVIRONMENT, Declared, found_text, internal
 
 
 def scgsim_version() -> str:

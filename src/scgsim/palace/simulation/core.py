@@ -22,11 +22,10 @@ from typing import Any, ClassVar, Literal, TypeVar
 from scgsim.contracts.palace_run_folder import CONFIG, INDEX_MAP_SCHEMA_VERSION
 from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 from ..config.config_records import ConfigInput
 from ..config.files import MetadataFile, persist_problem_files

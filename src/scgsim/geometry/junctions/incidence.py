@@ -20,7 +20,7 @@ from scgsim.geometry.junctions.exact_geometry import (
     region_edges,
 )
 from scgsim.geometry.junctions.model_state import IntegerPoint, JunctionModel
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 
 def initialize_source(state: JunctionModel) -> None:

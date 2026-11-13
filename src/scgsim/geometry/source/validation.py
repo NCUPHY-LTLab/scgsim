@@ -15,9 +15,9 @@ from scgsim.geometry.models.entities import (
     requires_route_representation,
 )
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.source.contact_pads import resolve_contact_pad_attachment
+from scgsim.refusal import Declared
 
 
 def has_vacuum_solution_region(build_input: GeometryBuildInput) -> bool:

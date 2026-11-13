@@ -19,7 +19,6 @@ from scgsim.contracts.palace_run_folder import (
     output_table,
     read_json,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
     FileHash,
     compute_hash_entry,
@@ -38,7 +37,7 @@ from scgsim.palace.results.runtime_contract import (
 from scgsim.palace.results.tables import count_index_entries, output_families
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.palace.run.returned_receipt import adapted_mesh_output_paths
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 
 @dataclass(frozen=True)

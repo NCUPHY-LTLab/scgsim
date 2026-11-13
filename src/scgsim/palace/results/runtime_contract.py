@@ -16,10 +16,9 @@ from scgsim.contracts.palace_run_folder import (
     RUNTIME_COMPATIBILITY_SCHEMA,
     sha256,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import expect_mapping, expect_scalar
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 
 def validate_palace_identity(payload: Mapping[str, Any]) -> None:

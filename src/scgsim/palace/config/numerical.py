@@ -19,8 +19,7 @@ from numbers import Real
 from typing import Any, Literal
 
 from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC
-from scgsim.geometry.models.refusals import Declared
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 _WHERE_NUMERICAL = "the call to set_numerical"
 

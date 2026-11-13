@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 _WHERE_PREVIEW_RUN = "the run folder the preview reads"
 

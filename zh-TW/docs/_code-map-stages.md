@@ -5,7 +5,7 @@
 | 資料夾 | 它是什麼 | In | Out | Next |
 | --- | --- | --- | --- | --- |
 | `geometry` | 幾何 API：從版圖與堆疊建立準備好的輸入，並為建構做物理解讀。 | 這一區本身的資料夾：docstring 描述整個區。 |  |  |
-| `geometry/models` | 跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面與區域，以及拒絕訊息的措辭（`refusals`）。 | 沒有；這個資料夾不匯入其他幾何程式碼，因此每個階段都能建立與讀取這些紀錄。 | 一個階段交給下一個階段的值，每個都從定義它的模組匯入。 | `source` 建立它們；`interpretation`、`junctions` 與 `sgb` 讀取它們。 |
+| `geometry/models` | 跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面與區域。 | 沒有；這個資料夾不匯入其他幾何程式碼，因此每個階段都能建立與讀取這些紀錄。 | 一個階段交給下一個階段的值，每個都從定義它的模組匯入。 | `source` 建立它們；`interpretation`、`junctions` 與 `sgb` 讀取它們。 |
 | `geometry/exact` | 模型格點上的精確算術與邊界紀錄的綁定：各幾何階段共用的核心。 | 有效的 `GeometryBuildInput`（來自 `models`），供宣告的格點、輪廓與邊界綁定使用；這個資料夾只讀取 `models`。 | 模型格點、精確的平面判定、圓的算術、載體與其來歷、每個 Entity 在格點上的輪廓及其綁定到精確直線與圓弧的邊界紀錄，以及這個核心的拒絕。 | junction 分割（`junctions`）讀取集總埠端子的綁定環，`surface_epr` 與 Palace 的 Surface-EPR 設定讀取 `Grid`，SGB 的每個階段讀取全部內容。 |
 | `geometry/grid` | 共用的格點運算：在模型格點上切點、多邊形布林運算、帶標記的區域、疊加、環與多邊形運算。 | 多邊形環，以及讀取它們的 `GridScope`（`scope`）：模型格點、實例座標系、是否計算未取整的參考，以及拒絕訊息要指名的宣告來源。 | 在該格點上切好點的環（`arrangement`）、布林運算結果（`booleans`），以及保留來源出處的環運算；任何運算無法證明的變更，都在發生處以該 scope 的用語被拒絕。 | `source` 用它們建立 snapshot；`interpretation`、`junctions` 與 `planning` 呼叫同樣的運算，`planning` 不在格點上運算（`UNGRIDDED`）。各階段共用的紀錄在 `models`。 |
 | `geometry/source` | 來源階段：從版圖與堆疊到準備好的 snapshot。 | 版圖（元件、GDS）與堆疊，加上宣告的格點、真空區域與埠面。 | `GeometryPlan` 與它的 snapshot；其中的 `GeometryBuildInput` 與堆疊保留每個輸入身分，並帶有後續階段記錄的雜湊值與來源稽核。每個宣告的 recipe 連同它的稽核一起傳回結果（`recipes`）；`grid_projection` 把讀到的多邊形放上版圖的格點。 | `interpretation` 讀取準備好的輸入。`contact_pads` 找出每個接觸墊所附著的面金屬；`planning` 也會呼叫它。 |

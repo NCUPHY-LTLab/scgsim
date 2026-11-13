@@ -9,7 +9,7 @@ from fractions import Fraction
 from typing import Any, Protocol
 
 from scgsim.geometry.junctions.exact_geometry import cross
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 
 def _junction(junction: object) -> Declared:

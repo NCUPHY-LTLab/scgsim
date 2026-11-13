@@ -33,7 +33,6 @@ from typing import NamedTuple
 
 from scgsim.geometry.exact.carriers import EdgeCarrier
 from scgsim.geometry.exact.plane import Point
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.noding.spatial_hash import (
     HotGrid,
     cell_size_for,
@@ -41,6 +40,7 @@ from scgsim.geometry.sgb.arrangement.noding.spatial_hash import (
     points_extent,
 )
 from scgsim.geometry.sgb.stopwatch import Stopwatch
+from scgsim.refusal import internal
 
 EdgeKey = tuple[Point, Point]  # canonical: a < b lexicographically
 Crossing = tuple[int, int, int]  # exact point (X / den, Y / den) stored as (X, Y, den)

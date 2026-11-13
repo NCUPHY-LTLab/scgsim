@@ -63,13 +63,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from scgsim.geometry.exact.errors import InputError
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.records.interfaces import (
     SHEET,
     interface_type_of,
     ordered_pair,
 )
 from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
+from scgsim.refusal import internal
 
 RESERVED_PREFIXES = ("MA", "MS", "MM", "SA", "AA", "SS", "EXT", "PORT")
 """The interface prefixes of a prefixed group name; no entity id may equal one of them."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 _WHERE_PLACEMENT = "the component placement in the layout"
 

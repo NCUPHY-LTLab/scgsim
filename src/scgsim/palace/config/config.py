@@ -14,8 +14,7 @@ from numbers import Real
 from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC, OUTPUT_DIR
-from scgsim.geometry.models.refusals import Declared, internal
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text, internal
 
 from ..mesh.physical_groups import Groups
 from ..source.ports import LayoutPortBinding

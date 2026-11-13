@@ -13,8 +13,8 @@ from scgsim.geometry.interpretation.representation import (
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.entities import entity_z_range_um, is_solution_entity
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.models.representation import RepresentationContext
+from scgsim.refusal import Declared, internal
 
 
 def _body(entity: object) -> Declared:

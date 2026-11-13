@@ -2,7 +2,7 @@
 
 Every one stops the build (fail closed): no fallback geometry is ever produced.  A refusal names the
 entities and the location involved and says who must change what.  An invariant the code itself broke on
-an input it accepted is worded by ``internal`` in ``scgsim.geometry.models.refusals``, which owns that
+an input it accepted is worded by ``internal`` in ``scgsim.refusal``, which owns that
 wording.  SGB's own refusals (``scgsim.geometry.sgb.errors``) derive from these classes.
 """
 

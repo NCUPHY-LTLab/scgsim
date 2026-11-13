@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
 from scgsim.geometry.models.input import VacuumRegionSpec
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 from scgsim.semantics.route_a import geometry_z_range, record_geometry
 
 _CALL = Declared(

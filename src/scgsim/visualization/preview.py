@@ -8,8 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, cast
 
-from scgsim.geometry.models.refusals import Declared, internal
-from scgsim.refusal import ENVIRONMENT, found_text
+from scgsim.refusal import ENVIRONMENT, Declared, found_text, internal
 from scgsim.visualization.loaders.common import AEDT_RUN_FOLDER
 
 from .loaders.common import (

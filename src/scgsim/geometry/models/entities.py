@@ -5,7 +5,7 @@ from __future__ import annotations
 from math import isfinite
 
 from scgsim.geometry.models.input import SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 
 def entity_z_range_um(entity: SemanticEntitySpec) -> tuple[float, float]:

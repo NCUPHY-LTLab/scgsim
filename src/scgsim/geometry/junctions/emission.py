@@ -35,8 +35,8 @@ from scgsim.geometry.models.junctions import (
     JUNCTION_END_PIECE_PART,
     junction_net_id,
 )
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.source.grid_projection import apply_geometry_grid
+from scgsim.refusal import internal
 
 
 def initialize_registry(state: JunctionModel) -> None:

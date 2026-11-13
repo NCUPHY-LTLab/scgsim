@@ -25,7 +25,6 @@ from scgsim.contracts.sgb_sidecar.records import (
     Volume,
 )
 from scgsim.geometry.exact.errors import SgbError
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.output.sidecar.derived import (
@@ -54,6 +53,7 @@ from scgsim.geometry.sgb.output.sidecar.sources import (
     port_records,
     source_curve_records,
 )
+from scgsim.refusal import internal
 
 BINDING_RULE = (
     "planned id -> native tag: tag = 1 + position in ids_by_tag[dim] "

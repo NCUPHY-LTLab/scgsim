@@ -13,7 +13,7 @@ import ast
 from pathlib import Path
 
 from scgsim.contracts import palace_run_folder
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 from . import returned_receipt
 

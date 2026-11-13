@@ -9,7 +9,7 @@ from scgsim.geometry.grid.booleans import polygon_boolean
 from scgsim.geometry.grid.planar_loops import LoopCoordinates
 from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.models.input import SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 BOOLEAN_AREA_EPS_UM2 = 1e-8
 

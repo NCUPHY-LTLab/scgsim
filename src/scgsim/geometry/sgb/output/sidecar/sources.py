@@ -31,7 +31,6 @@ from scgsim.contracts.sgb_sidecar.records import (
 from scgsim.geometry.exact.carriers import ArcCarrier, Lineage
 from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.exact.plane import Point
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.bands.inset_plan import TypeExpansion
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
@@ -46,6 +45,7 @@ from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.records.prisms import PrismRecord
 from scgsim.geometry.sgb.topology.routes.naming import port_group
+from scgsim.refusal import internal
 
 
 def entity_records(model: ConformalModel) -> dict[str, Entity]:

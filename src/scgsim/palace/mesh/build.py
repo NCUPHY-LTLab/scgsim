@@ -33,7 +33,6 @@ from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.sgb import SgbArtifacts
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.surface_epr.build import build_banded_geometry
@@ -44,7 +43,7 @@ from scgsim.meshing import (
 )
 from scgsim.meshing.fine_structure import below_steps
 from scgsim.preparation import native_preparation
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text, internal
 
 from ..source.layout_ports import GeometryBuildRequest
 from .controls import MeshControls

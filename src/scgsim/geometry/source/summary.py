@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.validation import validate_geometry_input
+from scgsim.refusal import Declared, internal
 from scgsim.semantics.route_a import geometry_z_range
 
 _SUMMARY_CALL = Declared(

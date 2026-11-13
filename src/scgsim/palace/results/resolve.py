@@ -24,7 +24,6 @@ from scgsim.contracts.palace_run_folder import (
     palace_problem,
     read_json,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
     as_float_map,
     expect_int,
@@ -66,7 +65,7 @@ from scgsim.palace.results.tables import (
     read_result_table,
 )
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 _WHERE_RESOLVE_CALL = "the call to resolve_palace_result"
 

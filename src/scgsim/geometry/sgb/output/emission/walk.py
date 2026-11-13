@@ -17,10 +17,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from scgsim.geometry.exact.errors import SgbError
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.output.emission.surfaces import SurfaceBuilder
 from scgsim.geometry.sgb.topology.assembly.records import Loop, TopoFace, Topology
 from scgsim.geometry.sgb.topology.routes.groups import RoutedModel
+from scgsim.refusal import internal
 
 EdgeUse = tuple[
     str, int

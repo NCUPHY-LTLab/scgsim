@@ -29,7 +29,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from scgsim.geometry.exact.errors import SgbError
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.records.interfaces import (
     SHEET,
     interface_type_of,
@@ -44,6 +43,7 @@ from scgsim.geometry.sgb.topology.routes.naming import (
     volume_group,
 )
 from scgsim.geometry.sgb.topology.routes.policy import RoutePolicy
+from scgsim.refusal import internal
 
 
 @dataclass

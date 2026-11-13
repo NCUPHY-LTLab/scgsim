@@ -8,7 +8,7 @@ The base class and the two refusals of the exact kernel (``SgbError``, ``InputEr
 ``UnsupportedCurveError``) are defined in ``scgsim.geometry.exact.errors``, the earliest
 folder that raises them, and listed here for the caller; code inside ``scgsim`` imports
 each class from the module that defines it.  An invariant SGB itself broke on an input it
-accepted is worded by ``internal`` in ``scgsim.geometry.models.refusals``, which owns that wording.
+accepted is worded by ``internal`` in ``scgsim.refusal``, which owns that wording.
 """
 
 from __future__ import annotations

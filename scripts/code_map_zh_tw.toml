@@ -9,8 +9,8 @@ summary.en = "The geometry API: build a prepared input from a layout and a stack
 summary.zh = "幾何 API：從版圖與堆疊建立準備好的輸入，並為建構做物理解讀。"
 
 ["geometry/models"]
-summary.en = "Typed records that cross stages, and the reads of them that more than one stage makes: the build input and its entities, the grid context, physical layers, representation, junctions and regions, and the wording of a refusal (``refusals``)."
-summary.zh = "跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面與區域，以及拒絕訊息的措辭（``refusals``）。"
+summary.en = "Typed records that cross stages, and the reads of them that more than one stage makes: the build input and its entities, the grid context, physical layers, representation, junctions and regions."
+summary.zh = "跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面與區域。"
 In.en = "nothing; this folder imports no other geometry code, so every stage can build and read these records."
 In.zh = "沒有；這個資料夾不匯入其他幾何程式碼，因此每個階段都能建立與讀取這些紀錄。"
 Out.en = "the values one stage hands to the next, each imported from its defining module."

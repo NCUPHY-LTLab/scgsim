@@ -11,7 +11,7 @@ from scgsim.geometry.junctions.core import PRECISION_UM
 from scgsim.geometry.junctions.exact_geometry import inside_ring, region_edges
 from scgsim.geometry.models.grid import format_box, format_length
 from scgsim.geometry.models.input import LayoutPolygonSpec
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 
 @dataclass(frozen=True)

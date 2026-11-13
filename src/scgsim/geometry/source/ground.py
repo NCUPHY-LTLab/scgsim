@@ -25,7 +25,7 @@ from scgsim.geometry.grid.polygon_ops import (
 )
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 
 def _ground(entity: SemanticEntitySpec) -> Declared:

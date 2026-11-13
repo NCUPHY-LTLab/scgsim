@@ -15,7 +15,6 @@ from scgsim.contracts.palace_run_folder import (
     RETURNED_RECEIPT,
     read_json,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.mesh.summary import recorded_mesh_summary
 from scgsim.palace.reports.observations import (
     CostCards,
@@ -67,6 +66,7 @@ from scgsim.palace.results.surface_readers import (
 )
 from scgsim.palace.results.tables import configured_mode_count
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
+from scgsim.refusal import Declared
 
 _WHERE_REPORT_VIEW = "the call to the report view"
 

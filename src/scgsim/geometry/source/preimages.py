@@ -14,8 +14,8 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.source.recipes import SourceGridAudit, SourcePolygonAudit
+from scgsim.refusal import internal
 
 
 class _SourcePolygonIdentity(TypedDict):

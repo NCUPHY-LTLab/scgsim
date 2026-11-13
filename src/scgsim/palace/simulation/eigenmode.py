@@ -17,9 +17,8 @@ from scgsim.contracts.palace_run_folder import (
     NUMERICAL_CONTROLS,
     PORT_INFORMATION,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 from ..config.config import build_eigenmode_config
 from ..config.config_records import EigenmodeConfigBuildResult, EigenmodeSettings

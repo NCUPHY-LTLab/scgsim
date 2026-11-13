@@ -11,8 +11,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Literal, Protocol, TypeVar, cast
 
-from scgsim.geometry.models.refusals import Declared
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 _WHERE_THEME = "the call that received the theme"
 

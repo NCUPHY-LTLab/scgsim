@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scgsim.geometry.models.input import SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 
 def _stack_layer(record: object) -> Declared:

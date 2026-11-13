@@ -10,8 +10,8 @@ from scgsim.geometry.grid.polygon_ops import ring_from_gdstk_polygon
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec
 from scgsim.geometry.models.lumped import LumpedSupport
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
+from scgsim.refusal import Declared
 
 
 def _lumped_ring_identity(ring):

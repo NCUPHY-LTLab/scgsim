@@ -16,7 +16,6 @@ from scgsim.contracts.palace_index_map import (
     TERMINAL_SECTION,
 )
 from scgsim.contracts.palace_run_folder import EIGENMODE, palace_problem
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.palace.results.artifacts import (
     expect_int,
     expect_list,
@@ -25,7 +24,7 @@ from scgsim.palace.results.artifacts import (
 )
 from scgsim.palace.results.resolved_records import ParsedTable
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text, internal
 
 
 def output_families(problem: str, index_counts: dict[str, int]) -> tuple[str, ...]:

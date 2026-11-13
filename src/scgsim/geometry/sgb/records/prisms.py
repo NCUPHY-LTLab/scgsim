@@ -27,8 +27,8 @@ from scgsim.geometry.exact.carriers import (
 )
 from scgsim.geometry.exact.grid import Grid
 from scgsim.geometry.exact.plane import Point, Ring, ring_twice_area
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
+from scgsim.refusal import internal
 
 MaterialKind = Literal["conductor", "dielectric", "vacuum", "port"]
 FILM_FEATURE_KINDS = frozenset({"stack_film", "local_film"})

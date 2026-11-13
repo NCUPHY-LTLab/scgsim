@@ -21,8 +21,8 @@ from scgsim.geometry.models.physical import (
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
 )
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.refusal import Declared, internal
 from scgsim.semantics.route_a import geometry_z_range
 
 

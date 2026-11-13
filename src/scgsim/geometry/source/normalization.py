@@ -12,7 +12,7 @@ from scgsim.geometry.models.physical import (
     PHYSICAL_LAYER_FIELD,
     PhysicalLayerDeclaration,
 )
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 
 def solution_regions(

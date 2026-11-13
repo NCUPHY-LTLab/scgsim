@@ -69,7 +69,7 @@ from scgsim.geometry.models.input import (
     SemanticEntitySpec,
 )
 from scgsim.geometry.models.junctions import JunctionGeometry, junction_net_id
-from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import Declared, internal
 
 
 def partition_junctions(

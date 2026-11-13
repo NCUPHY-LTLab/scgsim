@@ -9,7 +9,7 @@ from math import isfinite
 from typing import Any, Mapping
 
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 # The class A wall-column limit, in grid steps (decided on issue 125): a side wall standing on an
 # outline edge shorter than this is refused by the meshing stage, and a junction partition keeps

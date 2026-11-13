@@ -13,8 +13,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.surface_epr.specs import margins_of, normalize_surface_epr_specs
+from scgsim.refusal import internal
 
 
 @dataclass(frozen=True)

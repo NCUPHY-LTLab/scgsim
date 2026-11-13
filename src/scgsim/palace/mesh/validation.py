@@ -6,8 +6,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import Any, NamedTuple
 
-from scgsim.geometry.models.refusals import internal
-from scgsim.refusal import found_text
+from scgsim.refusal import found_text, internal
 
 
 class LiveGroup(NamedTuple):

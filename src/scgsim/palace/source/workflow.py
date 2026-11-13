@@ -17,12 +17,11 @@ from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalRepresentationPlan,
 )
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.geometry.source.validation import has_vacuum_solution_region
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text, internal
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports

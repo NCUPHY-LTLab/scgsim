@@ -12,8 +12,7 @@ from typing import Any
 
 from scgsim.contracts.palace_run_folder import LOGS_DIR, json_text
 from scgsim.diagnostics import diagnostic_stage, worker_config
-from scgsim.geometry.models.refusals import internal
-from scgsim.refusal import found_text
+from scgsim.refusal import found_text, internal
 
 from .physical_groups import Groups
 
