@@ -130,7 +130,9 @@ Four statements are stricter than an order, and CI checks them too:
 - `meshing` reads the sidecar and the XAO through `contracts`, never SGB or a
   backend (one constant of `geometry/models/grid` is the stated exception);
   `visualization` reads a Palace run folder the same way.
-- `contracts` imports nothing else from `scgsim` and no third-party package.
+- `contracts` imports nothing else from `scgsim`, and none of the third-party
+  libraries the rule names (the numeric, layout, plotting, meshing and solver
+  libraries).
 
 SGB's list is the order of dependency, not of time. In time the arrangement
 runs twice: on the physical prisms alone, where `bands` finds its support
@@ -205,7 +207,7 @@ change a result.
 - `geometry/models` imports no other geometry code, and `contracts` imports
   nothing else from `scgsim` and no third-party package, so every stage can
   import them. The import-linter contract `contracts-import-nothing-else`
-  checks `contracts`.
+  checks this for `scgsim` and for the third-party libraries it names.
 - A new package folder goes into `AREAS` in `scripts/generate_code_map.py`
   where the work reaches it, with the sentence and, for a stage, the three
   lines in its `__init__.py`, and their translation in

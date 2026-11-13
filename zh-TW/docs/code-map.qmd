@@ -116,7 +116,8 @@ CI 才會通過。
 - `meshing` 透過 `contracts` 讀取 sidecar 與 XAO，不讀取 SGB 或任何後端
   （唯一明列的例外是 `geometry/models/grid` 的一個常數）；
   `visualization` 也以同樣方式讀取 Palace 的 run folder。
-- `contracts` 不匯入 `scgsim` 的其他部分，也不匯入第三方套件。
+- `contracts` 不匯入 `scgsim` 的其他部分，也不匯入規則列出的第三方函式庫
+  （數值、佈局、繪圖、網格與求解器的函式庫）。
 
 SGB 的清單是依賴的順序，不是時間的順序。依時間來看，arrangement 會執行兩次：
 先只用實體的 prism 執行一次，讓 `bands` 找到它的支撐面；再帶著 `bands` 產生的
@@ -173,7 +174,7 @@ AEDT 的階段資料夾沒有受檢查的順序；[如何閱讀一個資料夾](
 - 只有 AEDT 原生建構會呼叫的內容放在 `geometry/planning`；Palace 路線上沒有任何資料夾匯入它。
 - `geometry/models` 不匯入其他幾何程式碼，`contracts` 不匯入 `scgsim` 的其他部分，
   也不匯入第三方套件，因此每個階段都能匯入它們。import-linter 契約
-  `contracts-import-nothing-else` 會檢查 `contracts`。
+  `contracts-import-nothing-else` 會就 `scgsim` 與它列出的第三方函式庫檢查這一點。
 - 新的套件資料夾要加入 `scripts/generate_code_map.py` 的 `AREAS`，放在工作抵達它的位置；
   它的 `__init__.py` 要有那一句話，若是階段，還要有那三行，並在
   `scripts/code_map_zh_tw.toml` 加入它們的翻譯。
