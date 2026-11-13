@@ -1,4 +1,4 @@
-"""SGB's 2D models: the plane section of a validated 3D model along a cut line (issue 188).
+"""SGB's 2D models: the plane section of a validated 3D model along a cut line.
 
 A 2D model stands for an infinitely long, uniform line with one cross-section.  SGB builds it as the exact
 plane section of its own validated 3D model, held in memory, so the Entities, Nets, materials, surface kinds and

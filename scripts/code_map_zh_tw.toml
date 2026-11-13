@@ -1,0 +1,445 @@
+# Traditional Chinese (Taiwan) text of the code map's stage tables, one entry per package folder.
+#
+# ``en`` records the docstring text an entry translates; ``zh`` is the translation, with folder, module and
+# API names unchanged. scripts/generate_code_map.py refuses an entry whose ``en`` is no longer the docstring:
+# copy the new English it prints into ``en`` and translate it again in ``zh``.
+
+["geometry"]
+summary.en = "The geometry API: build a prepared input from a layout and a stack, and interpret it physically for a build."
+summary.zh = "幾何 API：從版圖與堆疊建立準備好的輸入，並為建構做物理解讀。"
+
+["geometry/models"]
+summary.en = "Typed records that cross stages, and the reads of them that more than one stage makes: the build input and its entities, the grid context, physical layers, representation, junctions and regions."
+summary.zh = "跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面與區域。"
+In.en = "nothing; this folder imports no other geometry code, so every stage can build and read these records."
+In.zh = "沒有；這個資料夾不匯入其他幾何程式碼，因此每個階段都能建立與讀取這些紀錄。"
+Out.en = "the values one stage hands to the next, each imported from its defining module."
+Out.zh = "一個階段交給下一個階段的值，每個都從定義它的模組匯入。"
+Next.en = "``source`` builds them; ``interpretation``, ``junctions`` and ``sgb`` read them."
+Next.zh = "``source`` 建立它們；``interpretation``、``junctions`` 與 ``sgb`` 讀取它們。"
+
+["geometry/source"]
+summary.en = "The source stage: from a layout and a stack to a prepared snapshot."
+summary.zh = "來源階段：從版圖與堆疊到準備好的 snapshot。"
+In.en = "a layout (components, GDS) and a stack, with the declared grid, vacuum region and port sheets."
+In.zh = "版圖（元件、GDS）與堆疊，加上宣告的格點、真空區域與埠面。"
+Out.en = "a ``GeometryPlan`` and its snapshot, whose ``GeometryBuildInput`` and stack keep every input identity and carry the hashes the later stages record."
+Out.zh = "``GeometryPlan`` 與它的 snapshot；其中的 ``GeometryBuildInput`` 與堆疊保留每個輸入身分，並帶有後續階段記錄的雜湊值。"
+Next.en = "``interpretation`` reads the prepared input. ``contact_pads`` resolves the face metal each contact pad attaches to; ``planning`` calls it too."
+Next.zh = "``interpretation`` 讀取準備好的輸入。``contact_pads`` 找出每個接觸墊所附著的面金屬；``planning`` 也會呼叫它。"
+
+["geometry/grid"]
+summary.en = "The grid engine the stages call: noding on the model grid, tagged regions, overlays, loops and polygon operations."
+summary.zh = "各階段呼叫的格點引擎：在模型格點上切點、帶標記的區域、疊加、環與多邊形運算。"
+In.en = "polygon rings with the build's ``GeometryGridContext``."
+In.zh = "多邊形環，以及這次建構的 ``GeometryGridContext``。"
+Out.en = "rings noded on that grid, tagged regions and loop operations that keep source provenance; a change no operation can certify is refused where it happens."
+Out.zh = "在該格點上切好點的環、帶標記的區域，以及保留來源出處的環運算；任何運算無法證明的變更，都在發生處被拒絕。"
+Next.en = "``source`` assembles its snapshot from them; ``interpretation``, ``junctions`` and ``planning`` call the same operations. The records the stages share are in ``models``, not here."
+Next.zh = "``source`` 用它們組出 snapshot；``interpretation``、``junctions`` 與 ``planning`` 呼叫同樣的運算。各階段共用的紀錄在 ``models``，不在這裡。"
+
+["geometry/interpretation"]
+summary.en = "The physical interpretation of a prepared input and its vacuum enclosure."
+summary.zh = "準備好的輸入的物理解讀，以及它的真空包絡。"
+In.en = "the prepared ``GeometryBuildInput`` and stack, and the selected approximation profile."
+In.zh = "準備好的 ``GeometryBuildInput`` 與堆疊，以及選定的近似設定。"
+Out.en = "the effective input and stack, which carry the physical representation plan and the automatic vacuum enclosure, with the rectangular junctions derived as its last step."
+Out.zh = "有效輸入與堆疊，帶有物理表示計畫與自動真空包絡；最後一步會導出矩形接面。"
+Next.en = "``junctions`` (called at the end of the interpretation), then ``sgb`` builds from the effective input."
+Next.zh = "``junctions``（在解讀結束時呼叫），接著 ``sgb`` 從有效輸入建構。"
+
+["geometry/junctions"]
+summary.en = "The rectangular partition around a lumped port: its cut rule, exact emission and checks."
+summary.zh = "集總埠周圍的矩形分割：切割規則、精確輸出與檢查。"
+In.en = "the effective input and its rectangular-junction requests, each naming a source polygon and its two terminal nets."
+In.zh = "有效輸入與其矩形接面請求，每個請求指明一個來源多邊形與它的兩個端子網路。"
+Out.en = "the input with each requested polygon cut into a central rectangle and the end pieces that belong to its terminals, and a ``junction_partitions`` record of the cut."
+Out.zh = "每個被請求的多邊形切成中央矩形與屬於兩端端子的端塊後的輸入，以及記錄這次切割的 ``junction_partitions``。"
+Next.en = "``sgb`` builds from that input and reads the record; it never imports this folder."
+Next.zh = "``sgb`` 從這個輸入建構並讀取該紀錄；它從不匯入這個資料夾。"
+
+["geometry/surface_epr"]
+summary.en = "Backend-neutral Surface-EPR geometry: normalized specs, their SGB band requests and the banded build."
+summary.zh = "不依賴後端的 Surface-EPR 幾何：正規化的規格、對應的 SGB 帶狀請求，以及帶有內縮帶的建構。"
+In.en = "the ``MA``/``MS``/``SA`` specs of a Palace simulation (from ``palace/source``); for the banded build, the effective ``GeometryBuildInput``, its ``RepresentationContext`` and the route (from ``palace/mesh``)."
+In.zh = "Palace 模擬的 ``MA``／``MS``／``SA`` 規格（來自 ``palace/source``）；帶狀建構另外需要有效的 ``GeometryBuildInput``、它的 ``RepresentationContext`` 與路線（來自 ``palace/mesh``）。"
+Out.en = "the normalized specs and the margins each face takes, the SGB inset requests, and the banded build's files (``SgbArtifacts``: XAO, BREP and sidecar)."
+Out.zh = "正規化的規格與每個面採用的邊距、SGB 內縮請求，以及帶狀建構的檔案（``SgbArtifacts``：XAO、BREP 與 sidecar）。"
+Next.en = "``sgb`` builds the geometry with the inset requests; ``palace/mesh`` meshes the banded build, and ``palace/source``, ``palace/config`` and ``palace/results`` read the specs and their margins."
+Next.zh = "``sgb`` 依內縮請求建構幾何；``palace/mesh`` 為帶狀建構產生網格，``palace/source``、``palace/config`` 與 ``palace/results`` 讀取規格與其邊距。"
+
+["geometry/planning"]
+summary.en = "Planning that only AEDT's native construction uses: surface, contact, domain and topology planning, evidence and tags."
+summary.zh = "只有 AEDT 原生建構使用的規劃：表面、接觸、區域與拓樸規劃，以及證據與標記。"
+In.en = "the effective input from ``interpretation``."
+In.zh = "來自 ``interpretation`` 的有效輸入。"
+Out.en = "the surface, contact, domain and topology plans, the tag and evidence records that AEDT builds from, and the entity lookups and coordinate and bounds operations those plans share. The surface-partition and construction-body records live in ``surface_planning``, the only stage that reads them."
+Out.zh = "表面、接觸、區域與拓樸計畫，AEDT 據以建構的標記與證據紀錄，以及這些計畫共用的實體查詢、座標與邊界運算。表面分割與建構本體的紀錄放在 ``surface_planning``，因為只有它讀取。"
+Next.en = "``scgsim.aedt``. Nothing on the Palace route (``scgsim.palace``, ``sgb``, ``surface_epr``) imports this folder."
+Next.zh = "``scgsim.aedt``。Palace 路線上（``scgsim.palace``、``sgb``、``surface_epr``）沒有任何程式匯入這個資料夾。"
+
+["geometry/planning/contact_planning"]
+summary.en = "Plan conductor contacts, overlap ownership and same-net membership."
+summary.zh = "規劃導體接觸、重疊歸屬與同網路成員。"
+
+["geometry/planning/domain_planning"]
+summary.en = "Plan exact physical domain occupancy, adjacency and boundary geometry."
+summary.zh = "規劃精確的物理區域占用、相鄰關係與邊界幾何。"
+
+["geometry/planning/surface_planning"]
+summary.en = "Plan the surfaces of a build input: coverage, contact masks and the ownership each final surface carries."
+summary.zh = "規劃建構輸入的表面：覆蓋、接觸遮罩，以及每個最終表面帶有的歸屬。"
+
+["geometry/planning/topology_planning"]
+summary.en = "Surface ownership and boundary-ring geometry that surface and domain planning and tag resolution share."
+summary.zh = "表面規劃、區域規劃與標記解析共用的表面歸屬與邊界環幾何。"
+
+["geometry/sgb"]
+summary.en = "Semantic geometry builder (SGB) core: the prism-based, Boolean-free pipeline."
+summary.zh = "語意幾何建構器（SGB）核心：以稜柱為基礎、不使用布林運算的流程。"
+
+["geometry/sgb/exact"]
+summary.en = "The exact vocabulary every stage shares: integer geometry and the records the stages hand to one another."
+summary.zh = "每個階段共用的精確詞彙：整數幾何，以及各階段互相交接的紀錄。"
+In.en = "nothing; this folder imports no other part of SGB."
+In.zh = "沒有；這個資料夾不匯入 SGB 的其他部分。"
+Out.en = "the model grid, plane predicates, circle arithmetic, carriers and their lineage, labels, prisms, cut-family, band-region and support records, content-addressed ids and the stage stopwatch."
+Out.zh = "模型格點、平面判定、圓的算術、載體與其來歷、標籤、稜柱、切割族、帶區域與支撐紀錄、內容定址的 id，以及階段計時器。"
+Next.en = "every stage imports it."
+Next.zh = "每個階段都匯入它。"
+
+["geometry/sgb/prisms"]
+summary.en = "S2: the effective input as prisms (planar footprints extruded over Z intervals), levels and slabs."
+summary.zh = "S2：把有效輸入表示成稜柱（沿 Z 區間擠出的平面輪廓）、層級與厚片。"
+In.en = "the effective ``GeometryBuildInput`` and ``RepresentationContext``."
+In.zh = "有效的 ``GeometryBuildInput`` 與 ``RepresentationContext``。"
+Out.en = "the ``PrismCatalogue`` (sources, ports and the declared grid as prisms), the ``LevelStructure`` (levels, slabs and active sets) and the bound rings of chosen conductors."
+Out.zh = "``PrismCatalogue``（以稜柱表示的來源、埠與宣告的格點）、``LevelStructure``（層級、厚片與作用集合），以及選定導體的綁定環。"
+Next.en = "``bands`` adds the cut families the requests ask for."
+Next.zh = "``bands`` 加入請求要求的切割族。"
+
+["geometry/sgb/bands"]
+summary.en = "S3: the inset bands a caller requests, as cut families."
+summary.zh = "S3：呼叫者請求的內縮帶，以切割族表示。"
+In.en = "the ``PrismCatalogue`` and the typed ``InsetRequest`` values."
+In.zh = "``PrismCatalogue`` 與有型別的 ``InsetRequest`` 值。"
+Out.en = "the catalogue carrying one ``CurveFamilyRecord`` per family, and the inset plan that says which faces were banded."
+Out.zh = "每個族帶有一筆 ``CurveFamilyRecord`` 的目錄，以及說明哪些面已加上內縮帶的內縮計畫。"
+Next.en = "``arrangement`` nodes the families together with the source curves."
+Next.zh = "``arrangement`` 把這些族與來源曲線一起切點。"
+
+["geometry/sgb/arrangement"]
+summary.en = "S4 and S5: the planar arrangement of the curves on the grid, its cells labelled and dissolved."
+summary.zh = "S4 與 S5：曲線在格點上的平面排列，其單元已標記並合併。"
+In.en = "the ``PrismCatalogue`` with its cut families (the ``LevelStructure`` is built from it)."
+In.zh = "帶有切割族的 ``PrismCatalogue``（``LevelStructure`` 由它建立）。"
+Out.en = "the ``LabelledArrangements``: every slab and level arrangement, dissolved, labelled and content-addressed."
+Out.zh = "``LabelledArrangements``：每個厚片與層級的排列，已合併、已標記且內容定址。"
+Next.en = "``topology`` stacks them into vertices, edges, faces and volumes."
+Next.zh = "``topology`` 把它們堆疊成頂點、邊、面與體積。"
+
+["geometry/sgb/arrangement/noding"]
+summary.en = "S4: snap rounding of the curves onto the integer grid."
+summary.zh = "S4：把曲線以捨入對齊到整數格點。"
+
+["geometry/sgb/arrangement/labelling"]
+summary.en = "S5: cell labels, dissolution, membership and the links between slab and level arrangements."
+summary.zh = "S5：單元標籤、合併、成員關係，以及厚片排列與層級排列之間的連結。"
+
+["geometry/sgb/arrangement/derivation"]
+summary.en = "S4 and S5 run for every slab and level: the labelled arrangements as one content-addressed result."
+summary.zh = "S4 與 S5 對每個厚片與層級執行：標記好的排列作為一個內容定址的結果。"
+
+["geometry/sgb/topology"]
+summary.en = "S6 to S8: the shared boundary representation and what each route makes of it."
+summary.zh = "S6 到 S8：共用的邊界表示，以及每條路線如何使用它。"
+In.en = "the ``LabelledArrangements``."
+In.zh = "``LabelledArrangements``。"
+Out.en = "the ``Topology`` (vertices, edges, faces, walls and volumes with content-addressed ids) and the ``RoutedModel`` (emitted volumes and faces, decision-D5 names and the primary groups of one route)."
+Out.zh = "``Topology``（帶有內容定址 id 的頂點、邊、面、牆與體積）與 ``RoutedModel``（輸出的體積與面、決策 D5 的名稱，以及一條路線的主要群組）。"
+Next.en = "``checks`` validates it and ``output`` writes it."
+Next.zh = "``checks`` 驗證它，``output`` 寫出它。"
+
+["geometry/sgb/topology/assembly"]
+summary.en = "S6: vertices, edges, horizontal faces, walls, vertical edges, volumes and shells from the labelled arrangements."
+summary.zh = "S6：從標記好的排列建立頂點、邊、水平面、牆、垂直邊、體積與殼。"
+
+["geometry/sgb/topology/routes"]
+summary.en = "S7 and S8: Route A, B and C as labelling policies, decision-D5 names and the primary physical groups."
+summary.zh = "S7 與 S8：以標記策略表示的 Route A、B、C，決策 D5 的名稱，以及主要物理群組。"
+
+["geometry/sgb/checks"]
+summary.en = "S9: the checks of the model and of the files written from it."
+summary.zh = "S9：模型的檢查，以及由模型寫出之檔案的檢查。"
+In.en = "the model (``LabelledArrangements``, ``Topology``, ``RoutedModel``) and, for the file checks, a written XAO or BREP with its sidecar."
+In.zh = "模型（``LabelledArrangements``、``Topology``、``RoutedModel``）；檔案檢查另外需要寫出的 XAO 或 BREP 與其 sidecar。"
+Out.en = "the ``ValidationReport`` (a failed invariant raises, so no failing model is returned), the sliver report, and the load-side and OCCT mismatches of a written file."
+Out.zh = "``ValidationReport``（不變量失敗時會丟出例外，因此不會回傳失敗的模型）、細長面報告，以及寫出檔案在載入端與 OCCT 檢查中的不一致。"
+Next.en = "``output`` writes the files of a model that passed; the file checks run on what it wrote."
+Next.zh = "``output`` 寫出通過檢查之模型的檔案；檔案檢查針對它寫出的內容執行。"
+
+["geometry/sgb/checks/validation"]
+summary.en = "S9: the structural invariants of the arrangements, the topology and the ids; a failure raises."
+summary.zh = "S9：排列、拓樸與 id 的結構不變量；失敗時丟出例外。"
+
+["geometry/sgb/checks/slivers"]
+summary.en = "S9: the sliver report, the local feature size of the faces on their exact carriers; measurements only."
+summary.zh = "S9：細長面報告，即各面在其精確載體上的局部特徵尺寸；只做量測。"
+
+["geometry/sgb/checks/verification"]
+summary.en = "Checks of the written geometry: the Gmsh load check and what the OCCT checks add."
+summary.zh = "寫出之幾何的檢查：Gmsh 載入檢查，以及 OCCT 檢查額外涵蓋的部分。"
+
+["geometry/sgb/output"]
+summary.en = "S10: the files of a validated model: BREP and XAO, the sidecar and the AEDT STEP export."
+summary.zh = "S10：已驗證模型的檔案：BREP 與 XAO、sidecar，以及 AEDT 用的 STEP 匯出。"
+In.en = "the validated ``ConformalModel``."
+In.zh = "已驗證的 ``ConformalModel``。"
+Out.en = "the byte-deterministic BREP and XAO, the ``scgsim.sgb.sidecar.v5`` JSON that binds every planned id to its native tag, and the STEP of the emitted solids with its guard."
+Out.zh = "位元組確定的 BREP 與 XAO、把每個規劃 id 綁定到原生標記的 ``scgsim.sgb.sidecar.v5`` JSON，以及輸出實體的 STEP 與其防護紀錄。"
+Next.en = "the mesher and the solver adapters read the files; ``checks.verification`` checks them."
+Next.zh = "網格器與求解器轉接層讀取這些檔案；``checks.verification`` 檢查它們。"
+
+["geometry/sgb/output/emission"]
+summary.en = "Stage S10: the direct BREP / XAO writer (design brief decision D8)."
+summary.zh = "S10 階段：直接寫出 BREP／XAO 的寫入器（設計簡報決策 D8）。"
+
+["geometry/sgb/output/sidecar"]
+summary.en = "The production sidecar ``scgsim.sgb.sidecar.v5`` (design brief sections 7 and 12, decision D8)."
+summary.zh = "正式的 sidecar ``scgsim.sgb.sidecar.v5``（設計簡報第 7 與 12 節，決策 D8）。"
+
+["geometry/sgb/output/exchange"]
+summary.en = "Exchange of the emitted solids with other tools: the AEDT STEP export and its import guard (design brief decision D4, experiment E4)."
+summary.zh = "輸出實體與其他工具的交換：AEDT 用的 STEP 匯出與其匯入防護（設計簡報決策 D4，實驗 E4）。"
+
+["geometry/sgb/section"]
+summary.en = "SGB's 2D models: the plane section of a validated 3D model along a cut line."
+summary.zh = "SGB 的 2D 模型：已驗證 3D 模型沿一條切線的平面截面。"
+
+["meshing"]
+summary.en = "Standalone meshing of SGB geometry: sizes from a recipe, a quality audit and a repair loop."
+summary.zh = "SGB 幾何的獨立網格產生：依配方決定尺寸、品質稽核與修補迴圈。"
+In.en = "the XAO and the ``scgsim.sgb.sidecar.v5`` sidecar of one SGB build, with the quality threshold, the sizing recipe and the mesher options (from ``palace/mesh``; ``palace/simulation`` calls the fine-structure check)."
+In.zh = "一次 SGB 建構的 XAO 與 ``scgsim.sgb.sidecar.v5`` sidecar，加上品質門檻、尺寸配方與網格器選項（來自 ``palace/mesh``；``palace/simulation`` 呼叫細微結構檢查）。"
+Out.en = "a Gmsh mesh with the XAO's physical groups and its quality report (``MeshResult``): no tetrahedron is below the threshold, except with the report-only ``GmshDefaultRecipe``, whose mesh is delivered with its quality reported, not enforced; for ``simulation_drc``, the fine edges and faces below the limits (``FineStructureReport``)."
+Out.zh = "帶有 XAO 物理群組的 Gmsh 網格與它的品質報告（``MeshResult``）：沒有任何四面體低於門檻，例外是只回報的 ``GmshDefaultRecipe``，它的網格只回報品質、不強制門檻；為 ``simulation_drc`` 則產生低於限制的細微邊與面（``FineStructureReport``）。"
+Next.en = "``palace/mesh`` turns the mesh into ``palace.msh`` and records the report in the mesh manifest."
+Next.zh = "``palace/mesh`` 把網格轉成 ``palace.msh``，並在網格清單中記錄報告。"
+
+["meshing/recipes"]
+summary.en = "Sizing recipes: each one decides the initial element sizes of a model, and nothing else."
+summary.zh = "尺寸配方：每個配方只決定模型的初始元素尺寸，不做其他事。"
+
+["palace"]
+summary.en = "Run a Palace simulation from a prepared plan to a run folder, and read the run Palace returns."
+summary.zh = "從準備好的計畫執行 Palace 模擬到執行資料夾，並讀取 Palace 回傳的執行結果。"
+
+["palace/simulation"]
+summary.en = "The stage a user drives: bind a prepared plan, set the problem, then mesh, write the config and hand off."
+summary.zh = "使用者操作的階段：綁定準備好的計畫、設定問題，接著產生網格、寫出設定並交接。"
+In.en = "a ``GeometryPlanSnapshot`` and the problem's settings."
+In.zh = "``GeometryPlanSnapshot`` 與問題的設定。"
+Out.en = "a run folder with ``palace.msh``, ``config.json`` and the run script (``HandoffPlan``)."
+Out.zh = "包含 ``palace.msh``、``config.json`` 與執行腳本的執行資料夾（``HandoffPlan``）。"
+Next.en = "the user runs Palace; ``results`` reads the folder it returns. ``core`` holds what both problems share, ``lifecycle`` which call needs which stage, ``eigenmode`` and ``electrostatic`` what each problem adds, and ``drc`` the modeling check."
+Next.zh = "使用者執行 Palace；``results`` 讀取回傳的資料夾。``core`` 放兩種問題共用的部分，``lifecycle`` 說明每個呼叫需要哪個階段，``eigenmode`` 與 ``electrostatic`` 放各問題額外的部分，``drc`` 是建模檢查。"
+
+["palace/source"]
+summary.en = "From a bound plan to the input of the geometry build."
+summary.zh = "從綁定的計畫到幾何建構的輸入。"
+In.en = "a ``GeometryPlanSnapshot`` and the simulation's vacuum region, ports and Surface-EPR specs."
+In.zh = "``GeometryPlanSnapshot``，以及模擬的真空區域、埠與 Surface-EPR 規格。"
+Out.en = "the prepared geometry request."
+Out.zh = "準備好的幾何請求。"
+Next.en = "``mesh``."
+Next.zh = "``mesh``。"
+
+["palace/mesh"]
+summary.en = "From the prepared geometry request to the mesh Palace reads."
+summary.zh = "從準備好的幾何請求到 Palace 讀取的網格。"
+In.en = "the prepared geometry request from ``source`` and the mesh controls."
+In.zh = "來自 ``source`` 的準備好的幾何請求，以及網格控制。"
+Out.en = "``palace.msh``, its physical groups and the mesh manifest."
+Out.zh = "``palace.msh``、它的物理群組與網格清單。"
+Next.en = "``config``."
+Next.zh = "``config``。"
+
+["palace/config"]
+summary.en = "From the mesh's physical groups and the problem's settings to Palace's input."
+summary.zh = "從網格的物理群組與問題的設定到 Palace 的輸入。"
+In.en = "the groups, the ports or terminals, the materials, the Surface-EPR specs and the numerical controls."
+In.zh = "群組、埠或端子、材料、Surface-EPR 規格與數值控制。"
+Out.en = "``config.json`` and the index map."
+Out.zh = "``config.json`` 與索引對照表。"
+Next.en = "``run``."
+Next.zh = "``run``。"
+
+["palace/run"]
+summary.en = "The run folder handed to Palace and what comes back."
+summary.zh = "交給 Palace 的執行資料夾，以及回傳的內容。"
+In.en = "the folder with the mesh and the config."
+In.zh = "包含網格與設定的資料夾。"
+Out.en = "the run script, the receipt recorder and the archive; after Palace ran, the returned receipt."
+Out.zh = "執行腳本、收據記錄器與封存檔；Palace 執行後則是回傳的收據。"
+Next.en = "``results``."
+Next.zh = "``results``。"
+
+["palace/results"]
+summary.en = "From a finished run folder to a resolved result."
+summary.zh = "從完成的執行資料夾到已解析的結果。"
+In.en = "the folder and the handoff it must match."
+In.zh = "資料夾，以及它必須相符的交接紀錄。"
+Out.en = "the checked result with its tables and EPR."
+Out.zh = "經過檢查的結果，含其表格與 EPR。"
+Next.en = "``reports``."
+Next.zh = "``reports``。"
+
+["palace/reports"]
+summary.en = "Notebook views of a resolved result."
+summary.zh = "已解析結果的筆記本視圖。"
+In.en = "a resolved result."
+In.zh = "已解析的結果。"
+Out.en = "tables and figures for a person."
+Out.zh = "給人閱讀的表格與圖。"
+Next.en = "nothing; a notebook displays them."
+Next.zh = "沒有；由筆記本顯示它們。"
+
+["aedt"]
+summary.en = "Prepare, run and read back AEDT (HFSS, Q3D, Q2D) calculations."
+summary.zh = "準備、執行並讀回 AEDT（HFSS、Q3D、Q2D）計算。"
+In.en = "an AEDT request spec for ``prepare_handoff``, with the request's controls. HFSS Eigenmode and the Q3D C/G preparation can also start from a ``GeometryPlan`` snapshot; Q2D starts from a ``Q2dSpec`` of explicit rectangles and conductor groups."
+In.zh = "給 ``prepare_handoff`` 的 AEDT 請求規格，以及請求的控制項。HFSS Eigenmode 與 Q3D C/G 準備也可以從 ``GeometryPlan`` snapshot 開始；Q2D 則從由明確矩形與導體群組構成的 ``Q2dSpec`` 開始。"
+Out.en = "a portable handoff that an AEDT run reads; from a finished run the detached results (``ResolvedRun``, ``EprResult``); from a preparation-only run, which never invokes the solver, the ``PreparedModel``."
+Out.zh = "AEDT 執行所讀取的可攜交接套件；完成的執行產生獨立的結果（``ResolvedRun``、``EprResult``）；只做準備、從不呼叫求解器的執行則產生 ``PreparedModel``。"
+Next.en = "``python -m scgsim.aedt.run`` executes the handoff; notebooks read a finished run through ``resolve_results``, a preparation-only run through ``resolve_prepared_model``, and plot with the plot helpers."
+Next.zh = "``python -m scgsim.aedt.run`` 執行交接套件；筆記本透過 ``resolve_results`` 讀取完成的執行、透過 ``resolve_prepared_model`` 讀取只做準備的執行，並用繪圖輔助函式繪圖。"
+
+["aedt/specs"]
+summary.en = "The AEDT request records for HFSS, Q3D and Q2D runs, with their payload decoders."
+summary.zh = "HFSS、Q3D 與 Q2D 執行的 AEDT 請求紀錄，以及它們的酬載解碼器。"
+In.en = "a caller's request values, or a stored request payload."
+In.zh = "呼叫者的請求值，或已儲存的請求酬載。"
+Out.en = "immutable spec records and their canonical payloads (``parse_aedt_spec`` picks the family); this file re-exports the lumped terminal records and ``HfssDrivenGeometrySpec``."
+Out.zh = "不可變的規格紀錄與其正規酬載（``parse_aedt_spec`` 選出家族）；這個檔案另外重新匯出集總端子紀錄與 ``HfssDrivenGeometrySpec``。"
+Next.en = "``preparation`` writes the specs into a handoff, ``runtime`` executes them and ``results`` checks a run's receipt against them."
+Next.zh = "``preparation`` 把規格寫入交接套件，``runtime`` 執行它們，``results`` 依它們檢查執行的收據。"
+
+["aedt/preparation"]
+summary.en = "Write one portable AEDT handoff from a request spec or a geometry plan, without opening AEDT."
+summary.zh = "不開啟 AEDT，從請求規格或幾何計畫寫出一份可攜的 AEDT 交接套件。"
+In.en = "an AEDT request spec (``specs``) for ``prepare_handoff``, or a ``GeometryPlan`` snapshot from ``scgsim.geometry`` for the HFSS and Q3D geometry adapters and ``EigenmodeSim``."
+In.zh = "給 ``prepare_handoff`` 的 AEDT 請求規格（``specs``），或給 HFSS 與 Q3D 幾何轉接層及 ``EigenmodeSim`` 的、來自 ``scgsim.geometry`` 的 ``GeometryPlan`` snapshot。"
+Out.en = "a handoff folder (``HandoffPlan``) holding the request payload, the prepared planar geometry and the hash cohort that binds its files, plus the native object names (``planar_source``) every later stage gives the same source entity."
+Out.zh = "交接資料夾（``HandoffPlan``），內含請求酬載、準備好的平面幾何與綁定其檔案的雜湊群組，以及每個後續階段為同一來源實體使用的原生物件名稱（``planar_source``）。"
+Next.en = "``runtime`` executes the handoff; ``runtime/native`` and ``epr`` name native objects through ``planar_source``; ``results`` checks a run against the cohort."
+Next.zh = "``runtime`` 執行交接套件；``runtime/native`` 與 ``epr`` 透過 ``planar_source`` 命名原生物件；``results`` 依雜湊群組檢查執行。"
+
+["aedt/runtime"]
+summary.en = "Execute one prepared handoff inside AEDT and record what it produced."
+summary.zh = "在 AEDT 中執行一份準備好的交接套件，並記錄它產生的內容。"
+In.en = "a handoff folder from ``preparation``, started by ``python -m scgsim.aedt.run`` or a native batch (``scgsim.aedt.batch``)."
+In.zh = "來自 ``preparation`` 的交接資料夾，由 ``python -m scgsim.aedt.run`` 或原生批次（``scgsim.aedt.batch``）啟動。"
+Out.en = "the run folder: the saved AEDT project, the native exports and the run receipt, which binds them to the handoff and the runtime source; also the Q3D stop and save requests a notebook sends to a running solve (``control``)."
+Out.zh = "執行資料夾：儲存的 AEDT 專案、原生匯出檔與執行收據，收據把它們綁定到交接套件與執行時的原始碼；另外還有筆記本送給執行中求解的 Q3D 停止並儲存請求（``control``）。"
+Next.en = "``results`` reads the receipt and the run folder offline."
+Next.zh = "``results`` 離線讀取收據與執行資料夾。"
+
+["aedt/runtime/families"]
+summary.en = "Build, solve and export one request family (HFSS, Q3D, Q2D) in the AEDT application the transaction owns."
+summary.zh = "在交易所擁有的 AEDT 應用程式中，為一個請求家族（HFSS、Q3D、Q2D）建構、求解並匯出。"
+In.en = "the validated request spec and prepared geometry, with the open AEDT application, from ``runtime.transaction``; ``epr.native_workflow`` and ``epr.adaptive`` call the HFSS Eigenmode setup, export and history steps."
+In.zh = "來自 ``runtime.transaction`` 的已驗證請求規格與準備好的幾何，以及開啟的 AEDT 應用程式；``epr.native_workflow`` 與 ``epr.adaptive`` 呼叫 HFSS Eigenmode 的設定、匯出與歷程步驟。"
+Out.en = "the solved native design, its exported files in the run folder and the native evidence the receipt records."
+Out.zh = "求解完成的原生設計、它在執行資料夾中的匯出檔，以及收據記錄的原生證據。"
+Next.en = "``runtime.transaction`` writes the receipt; ``results`` reads the exported files."
+Next.zh = "``runtime.transaction`` 寫出收據；``results`` 讀取匯出檔。"
+
+["aedt/runtime/native"]
+summary.en = "The PyAEDT calls that create, assign and read back native objects, below the request families."
+summary.zh = "在請求家族之下，建立、指派並讀回原生物件的 PyAEDT 呼叫。"
+In.en = "PyAEDT application objects and the prepared records, from ``runtime/families``, ``epr`` and ``runtime.transaction``."
+In.zh = "來自 ``runtime/families``、``epr`` 與 ``runtime.transaction`` 的 PyAEDT 應用程式物件與準備好的紀錄。"
+Out.en = "native bodies, sheets, boundaries, setups and the solver resources around one solve, each with the read-back evidence that checks it."
+Out.zh = "原生本體、面片、邊界、設定，以及一次求解周圍的求解器資源，每項都附有檢查它的讀回證據。"
+Next.en = "``runtime/families`` and ``epr`` put that evidence into their results; ``scgsim.visualization`` reads ``compatibility`` for the pinned PyAEDT transport."
+Next.zh = "``runtime/families`` 與 ``epr`` 把這些證據放進它們的結果；``scgsim.visualization`` 讀取 ``compatibility`` 取得固定版本的 PyAEDT 傳輸設定。"
+
+["aedt/results"]
+summary.en = "Read a finished or preparation-only AEDT run offline, and hold the receipt checks its writers share."
+summary.zh = "離線讀取完成或只做準備的 AEDT 執行，並保存寫入端共用的收據檢查。"
+In.en = "a run folder with its receipt (written by ``runtime``) and the handoff it ran (written by ``preparation``)."
+In.zh = "帶有收據的執行資料夾（由 ``runtime`` 寫出），以及它執行的交接套件（由 ``preparation`` 寫出）。"
+Out.en = "``ResolvedRun``, ``PreparedModel`` and ``EprResult``, read only from a current receipt; also the receipt schema and runtime-source record (``provenance``, ``runtime_inventory``), the contained-path check and the matrix export parsers that ``preparation`` and ``runtime`` call while writing."
+Out.zh = "只從現行收據讀出的 ``ResolvedRun``、``PreparedModel`` 與 ``EprResult``；另外還有收據結構描述與執行時原始碼紀錄（``provenance``、``runtime_inventory``）、路徑包含檢查，以及 ``preparation`` 與 ``runtime`` 寫入時呼叫的矩陣匯出解析器。"
+Next.en = "notebooks through the ``scgsim.aedt`` facade, ``presentation``, ``scgsim.aedt.batch_stages`` and the AEDT loaders of ``scgsim.visualization``."
+Next.zh = "透過 ``scgsim.aedt`` 外觀介面的筆記本、``presentation``、``scgsim.aedt.batch_stages``，以及 ``scgsim.visualization`` 的 AEDT 載入器。"
+
+["aedt/results/convergence"]
+summary.en = "Parse the native convergence reports of HFSS, Q3D and Q2D runs."
+summary.zh = "解析 HFSS、Q3D 與 Q2D 執行的原生收斂報告。"
+In.en = "the convergence report files a run exported into its run folder."
+In.zh = "執行匯出到其執行資料夾的收斂報告檔。"
+Out.en = "strict per-pass convergence records, refused when a report does not match its family's format."
+Out.zh = "嚴格的逐輪收斂紀錄；報告不符合其家族的格式時會被拒絕。"
+Next.en = "``runtime/families`` binds them into the result the receipt records; the ``results`` readback reads them again offline."
+Next.zh = "``runtime/families`` 把它們綁定到收據記錄的結果；``results`` 的讀回流程會再離線讀取一次。"
+
+["aedt/epr"]
+summary.en = "Energy participation ratio (EPR) analysis of an HFSS Eigenmode solution, at each stage it passes through."
+summary.zh = "HFSS Eigenmode 解的能量參與比（EPR）分析，涵蓋它經過的每個階段。"
+In.en = "an EPR request (``specs.epr``) with the prepared planar geometry from ``preparation``; in AEDT, the solved design from ``runtime/families``; offline, the stored result rows of a run."
+In.zh = "EPR 請求（``specs.epr``）與來自 ``preparation`` 的準備好的平面幾何；在 AEDT 中，則是來自 ``runtime/families`` 的已求解設計；離線時，則是一次執行儲存的結果列。"
+Out.en = "the analysis-sheet and inset plan computed when a run starts, the field expressions, caches and integrals evaluated in AEDT, and the detached ``EprResult`` with its offline reanalysis."
+Out.zh = "執行開始時計算的分析面片與內縮計畫、在 AEDT 中求值的場運算式、快取與積分，以及獨立的 ``EprResult`` 與其離線重新分析。"
+Next.en = "``runtime.transaction`` runs the in-AEDT part; ``results.epr`` resolves the result; ``presentation`` plots it."
+Next.zh = "``runtime.transaction`` 執行在 AEDT 內的部分；``results.epr`` 解析結果；``presentation`` 繪製它。"
+
+["aedt/presentation"]
+summary.en = "Show a resolved AEDT run or an EPR result in a notebook."
+summary.zh = "在筆記本中顯示已解析的 AEDT 執行或 EPR 結果。"
+In.en = "a ``ResolvedRun`` or ``EprResult`` from ``results``, or a recorded benchmark."
+In.zh = "來自 ``results`` 的 ``ResolvedRun`` 或 ``EprResult``，或一份記錄下來的效能紀錄。"
+Out.en = "notebook tables and Plotly figures; nothing is written back to the run."
+Out.zh = "筆記本表格與 Plotly 圖；不會寫回執行。"
+Next.en = "the notebook reader; the ``ResolvedRun`` display methods and the ``scgsim.aedt`` plot helpers call it."
+Next.zh = "筆記本讀者；``ResolvedRun`` 的顯示方法與 ``scgsim.aedt`` 的繪圖輔助函式會呼叫它。"
+
+["contracts"]
+summary.en = "Neutral contracts between SCGSim stages: the definitions of the files one stage writes and another reads."
+summary.zh = "SCGSim 各階段之間的中立契約：一個階段寫出、另一個階段讀取的檔案定義。"
+
+["contracts/sgb_sidecar"]
+summary.en = "The SGB sidecar contract: one definition shared by the writer, every reader and the JSON Schema."
+summary.zh = "SGB sidecar 契約：寫入端、每個讀取端與 JSON Schema 共用的單一定義。"
+
+["visualization"]
+summary.en = "Geometry previews of a Palace run folder or an AEDT project, drawn from the solver's own records."
+summary.zh = "Palace 執行資料夾或 AEDT 專案的幾何預覽，依求解器自己的紀錄繪製。"
+In.en = "a Palace run folder holding ``palace.msh``, ``config.json``, the mesh manifest and the index map, or an AEDT project."
+In.zh = "包含 ``palace.msh``、``config.json``、網格清單與索引對照表的 Palace 執行資料夾，或 AEDT 專案。"
+Out.en = "a ``GeometryPreview`` with four modes (materials, boundaries, Surface EPR, mesh). A mode renders as a contact-sheet image or as an interactive scene, or reports why it is unavailable: an AEDT project has no Surface-EPR and no mesh mode."
+Out.zh = "具有四種模式（材料、邊界、Surface EPR、網格）的 ``GeometryPreview``。每種模式可繪成縮圖總覽圖或互動場景，或說明為何無法使用：AEDT 專案沒有 Surface-EPR 模式與網格模式。"
+Next.en = "a notebook displays it."
+Next.zh = "由筆記本顯示它。"
+
+["visualization/loaders"]
+summary.en = "From a Palace run folder or an AEDT project to the four scene modes of a ``GeometryPreview``."
+summary.zh = "從 Palace 執行資料夾或 AEDT 專案到 ``GeometryPreview`` 的四種場景模式。"
+In.en = "a Palace run folder; or an AEDT source, which is a sealed AEDT run folder with its receipt or a raw ``.aedt`` project given with an explicit ``design`` and ``aedt_version``."
+In.zh = "Palace 執行資料夾；或 AEDT 來源，即帶有收據的密封 AEDT 執行資料夾，或明確指定 ``design`` 與 ``aedt_version`` 的原始 ``.aedt`` 專案。"
+Out.en = "a ``GeometryPreview``."
+Out.zh = "``GeometryPreview``。"
+Next.en = "``preview`` and ``rendering`` draw it."
+Next.zh = "``preview`` 與 ``rendering`` 繪製它。"
+
+["scgsim"]
+summary.en = "Public package interface for scgsim."
+summary.zh = "scgsim 的公開套件介面。"
+
+["semantics"]
+summary.en = "Solver-independent, revision-bound semantic facts."
+summary.zh = "不依賴求解器、綁定修訂版本的語意事實。"
+
+["presentation"]
+summary.en = "Shared physics-neutral notebook formatting."
+summary.zh = "共用、與物理無關的筆記本格式化。"

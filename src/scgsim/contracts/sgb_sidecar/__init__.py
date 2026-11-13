@@ -1,4 +1,4 @@
-"""The SGB sidecar contract: one definition shared by the writer, every reader and the JSON Schema (#170).
+"""The SGB sidecar contract: one definition shared by the writer, every reader and the JSON Schema.
 
 ``version``
     ``SIDECAR_SCHEMA``, the one version constant, and ``SCHEMA_DIGEST``, the digest of the schema it stands

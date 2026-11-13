@@ -22,7 +22,8 @@ release procedures belong to the secondary
 ## SCGSim 2.0 ownership
 
 Each SCGSim 2.0 package area owns the responsibilities below and must not take
-over those of another area. Existing consumers stay on their recorded pins
+over those of another area. The [code map](code-map.qmd) shows which stage each
+folder is and the order the work flows through them. Existing consumers stay on their recorded pins
 until they choose to migrate; the
 [migration reference](api-migration.qmd) maps the v1 names to their 2.0
 owners.

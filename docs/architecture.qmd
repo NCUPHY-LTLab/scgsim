@@ -24,59 +24,10 @@ standalone solver process, and collection on the requested AEDT version.
 
 ## Current package structure
 
-The package separates source geometry, model construction, solver backends,
-result handling, and presentation. The tree below shows shared package
-ownership; Palace and AEDT retain their own preparation, execution, and result
+The [code map](code-map.qmd) shows every folder of the package, which stage
+each one is and the order the work flows through them on the Palace and AEDT
+routes. Palace and AEDT retain their own preparation, execution, and result
 lifecycles.
-
-```text
-scgsim/
-├── geometry/
-│   ├── models/       # typed records that cross stages
-│   ├── source/       # from a layout and a stack to a prepared snapshot
-│   ├── grid/         # the grid engine the stages call: noding, tagged regions, overlays, loops
-│   ├── interpretation/ # from a prepared input to its physical representation and vacuum enclosure
-│   ├── junctions/    # the rectangular partition around a lumped port
-│   ├── surface_epr/  # from Surface-EPR specs to the inset requests of the SGB build
-│   ├── sgb/          # SGB core that Palace builds on; one folder per stage of the build
-│   │   ├── exact/        # the exact vocabulary every stage shares
-│   │   ├── prisms/       # S2: the effective input as prisms, levels and slabs
-│   │   ├── bands/        # S3: inset bands as cut families
-│   │   ├── arrangement/  # S4 and S5: noding, planar arrangement, cell labels
-│   │   ├── topology/     # S6 to S8: vertices to volumes, routes and groups
-│   │   ├── checks/       # S9: structural validation, slivers, file checks
-│   │   ├── output/       # S10: BREP and XAO, sidecar, STEP export
-│   │   └── section/      # the 2D section model
-│   └── planning/     # what only AEDT's native construction uses: surface, contact, domain, topology planning
-├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
-├── contracts/        # file definitions shared across stages: the SGB sidecar and the Palace run folder
-├── semantics/        # immutable solver-independent facts
-├── palace/
-│   ├── simulation/   # EigenmodeSim and ElectrostaticSim on one shared core and lifecycle
-│   ├── source/       # from a bound plan to the input of the geometry build
-│   ├── mesh/         # SGB build, meshing call, group lowering and summaries
-│   ├── config/       # from the mesh's groups and the problem's settings to config.json and the index map
-│   ├── run/          # the run folder handed to Palace: script, receipt recorder, archive, returned receipt
-│   ├── results/      # custody-aware result and EPR reading
-│   └── reports/      # notebook views of a resolved result
-├── aedt/
-│   ├── eigenmode.py  # retained mutable high-level state facade
-│   ├── specs/        # detached requests, prepared geometry and parsing
-│   ├── preparation/ # source binding, effective geometry, handoff and cohorts
-│   ├── runtime/     # transaction, family-native and batch owners
-│   │   ├── batch_protocol.py # stdlib package/file protocol
-│   │   └── batch_runner.py   # standalone process and CLI
-│   ├── epr/         # EPR surface support, fields/cache and analysis composition
-│   ├── results/     # strict readers and convergence observations
-│   ├── presentation/
-│   └── run.py       # supported CLI, delegates to transaction owner
-├── visualization/
-│   ├── loaders/      # backend artifact readers and common file checks
-│   ├── scene.py
-│   ├── preview.py
-│   └── rendering.py
-└── presentation/     # shared physics-neutral notebook formatting
-```
 
 The responsibility correction keeps one definition for every detached AEDT
 request record. `aedt.specs.geometry` owns `PreparedPlanarGeometry`;

@@ -1,0 +1,133 @@
+---
+title: "程式碼地圖"
+description: "src/scgsim 有哪些階段、每條路線中工作依序經過哪些階段、階段之間傳遞什麼，以及哪個資料夾是哪個階段。"
+sidebar: contribution
+---
+
+本頁讓你從一個地方重建 `src/scgsim` 的結構：有哪些階段、Palace 路線與 AEDT
+路線中工作依序經過哪些階段、每個階段交給下一個階段什麼，以及哪個資料夾是哪個階段。
+*階段*（stage）是一個資料夾：它接收較早階段的產出，產生較晚階段要讀取的內容。
+本頁的表格由各資料夾自己的 docstring 產生，因此內容與程式碼一致。
+
+## 兩條路線 {#routes}
+
+這兩條路線就是[後端支援矩陣](backend-support.qmd)中的兩條路線，都以使用者閱讀的結果為終點。
+Palace 路線從版圖與堆疊開始。AEDT 路線有兩個入口：每種 AEDT 計算都接受傳給 `prepare_handoff`
+的 AEDT 請求規格，由呼叫者建立 `aedt/specs` 的規格紀錄，而 Q2D 與不使用來源的 Q3D 只能從這裡進入；
+source-first 的 HFSS Eigenmode 與 Q3D C/G 準備也可以改從 `GeometryPlan` 開始，它的 snapshot
+會先經過共用幾何階段與 `geometry/planning`，再進入 `aedt/preparation`。每個方框都是 `src/scgsim`
+底下的資料夾，名稱與資料夾相同；圓角框則在 SCGSim 之外。實線箭頭代表匯入：
+箭頭終點的階段匯入起點的階段；標示「呼叫」的箭頭則代表起點的階段呼叫終點的階段。
+虛線箭頭代表交接的檔案或數值，標示交接的內容；若檔案由契約模組定義，也標示該模組。
+Palace 內層框是筆記本呼叫 `mesh()`、`write_config()` 與 `prepare_handoff()` 時，
+`palace/simulation` 依序執行的階段。
+
+```{mermaid}
+%%| column: screen-inset
+flowchart TB
+  layout(["版圖與堆疊"]) -. "元件或 GDS、堆疊" .-> gsource
+  subgraph shared["共用幾何"]
+    gsource["geometry/source"] --> ginterp["geometry/interpretation"]
+    ginterp -- "最後一步呼叫" --> gjunc["geometry/junctions"]
+  end
+  ginterp --> psource
+  ginterp --> gplan
+  subgraph palace_route["Palace 路線"]
+    subgraph simulation["由 palace/simulation 執行"]
+      psource["palace/source"] --> pmesh["palace/mesh"]
+      pmesh -- "呼叫" --> gsepr["geometry/surface_epr"]
+      gsepr -- "呼叫" --> gsgb["geometry/sgb"]
+      gsgb -. "XAO 與 sidecar<br/>contracts/sgb_sidecar" .-> meshing["meshing"]
+      pmesh -- "呼叫" --> meshing
+      pmesh --> pconfig["palace/config"]
+      pconfig -. "config.json<br/>contracts/palace_run_folder" .-> prun["palace/run"]
+    end
+    prun -. "執行資料夾" .-> palace_solver(["Palace"])
+    palace_solver -. "回傳的執行資料夾<br/>contracts/palace_run_folder" .-> presults["palace/results"]
+    presults --> preports["palace/reports"]
+  end
+  subgraph aedt_route["AEDT 路線"]
+    subgraph plan_backed["GeometryPlan 入口"]
+      gplan["geometry/planning"]
+    end
+    request(["請求值"]) -. "AEDT 請求規格<br/>每種家族皆可；Q2D 與不使用來源的 Q3D 只能從這裡進入" .-> aspecs
+    gplan --> aprep
+    aspecs["aedt/specs"] --> aprep["aedt/preparation"]
+    aprep -. "交接資料夾" .-> aruntime["aedt/runtime"]
+    aruntime -- "呼叫" --> aepr["aedt/epr"]
+    gplan --> aepr
+    aruntime -. "執行資料夾與收據" .-> aresults["aedt/results"]
+    aepr --> aresults
+    aresults -- "呼叫" --> apres["aedt/presentation"]
+  end
+```
+
+圖中省略了一區內每個階段都會使用的資料夾：幾何的 `geometry/models` 與
+`geometry/grid`、SGB 的 `geometry/sgb/exact`，以及整個套件共用的 `semantics` 與
+`presentation`。AEDT 的交接與收據格式定義在 `aedt/specs` 與 `aedt/results`，
+而不在 `contracts`。`visualization` 讀取 Palace 執行資料夾或 AEDT 專案來繪製幾何預覽，
+不是任何一條路線的步驟。下方的階段表格列出所有資料夾。
+
+## 如何閱讀一個資料夾 {#read-a-folder}
+
+每個套件資料夾的 `__init__.py` 都以一句話開頭，說明這個資料夾是什麼。
+階段資料夾另外加上三行：
+
+```text
+<一句話：這個資料夾是什麼>
+
+In: 這個階段接收什麼，來自哪個階段
+Out: 這個階段產生什麼
+Next: 哪個階段讀取它
+```
+
+匯入方向與工作流向相反：較晚的階段匯入較早的階段，較早的階段不匯入較晚的階段。
+例外是驅動其他階段的階段：`palace/simulation` 匯入它執行的每個 Palace 階段，
+`geometry/interpretation` 在最後一步呼叫 `geometry/junctions`，`aedt/runtime`
+則呼叫 `aedt/epr` 在 AEDT 內執行的部分。下列匯入同樣由較早的階段指向較晚的階段：
+
+| 匯入的資料夾 | 匯入 | 從那裡取得什麼 |
+| --- | --- | --- |
+| `geometry/junctions` | `geometry/sgb` | SGB 的邊界綁定（`prisms.bound_rings`）與精確紀錄，讓分割切在 SGB 建立的環上。 |
+| `geometry/sgb/bands` | `geometry/sgb/arrangement`、`geometry/sgb/topology` | 物理預先處理所用的排列與表面命名，用來找出每條內縮帶的支撐面。 |
+| `geometry/sgb/checks` | `geometry/sgb/output` | 輸出計畫及其預計的面積與體積，OCCT 檢查用它們比對寫出的檔案。 |
+| `palace/results` | `palace/reports` | 已解析結果的顯示方法所回傳的報表視圖。 |
+| `aedt/specs` | `aedt/epr` | 表面積分的分組（`epr.selection`）。 |
+| `aedt/preparation` | `aedt/results` | 收據結構描述與初始收據（`results.provenance`）。 |
+| `aedt/results` | `aedt/runtime`、`aedt/epr`、`aedt/presentation` | 批次收集的情境與效能紀錄路徑、`EprResult` 紀錄，以及 `ResolvedRun` 呼叫的顯示功能。 |
+
+## 階段表格 {#stage-tables}
+
+每一區有一個表格，各列依工作經過的順序排列。每列的文字是該資料夾 docstring 的翻譯：
+「它是什麼」是第一句話，In、Out、Next 是那三行；英文原文在英文版的同一頁。
+不是階段的資料夾會在 In 欄說明它是什麼：一區本身的資料夾、某一列所列階段的一部分，
+或 docstring 列出模組而非三行的階段。
+
+要修改某一列，請編輯該資料夾的 docstring，在 `scripts/code_map_zh_tw.toml` 翻譯改動的文字，
+再執行 `python scripts/generate_code_map.py`；各列的順序只在這個腳本中寫一次。
+翻譯檔的每一筆都記錄它所翻譯的英文。腳本會拒絕它沒有列出的套件資料夾、缺少三行之一的階段、
+沒有翻譯的資料夾、對應資料夾已不存在的翻譯，以及所記錄的英文已不等於 docstring 的翻譯；
+最後這種情況會印出需要記錄並重新翻譯的新英文。表格與 docstring 或翻譯不一致時，
+`tests/test_code_map.py` 會失敗。
+
+{{< include _code-map-stages.md >}}
+
+## 新程式碼放在哪裡 {#new-code}
+
+- 輔助函式放在最早呼叫它的階段，較晚的階段從那裡匯入。
+- 只有 AEDT 原生建構會呼叫的內容放在 `geometry/planning`；Palace 路線上沒有任何資料夾匯入它。
+- `geometry/models` 不匯入其他幾何程式碼，`contracts` 不匯入 `scgsim` 的其他部分，
+  也不匯入第三方套件，因此每個階段都能匯入它們。import-linter 契約
+  `contracts-import-nothing-else` 會檢查 `contracts`。
+- 新的套件資料夾要加入 `scripts/generate_code_map.py` 的 `AREAS`，放在工作抵達它的位置；
+  它的 `__init__.py` 要有那一句話，若是階段，還要有那三行，並在
+  `scripts/code_map_zh_tw.toml` 加入它們的翻譯。
+
+## 契約與設計 {#contracts-and-design}
+
+本頁列出各階段與它們的順序；各階段承諾的內容在下列頁面：
+
+- [架構與資料流程](architecture.qmd)：模組與狀態邊界，以及 Palace 與 AEDT 的生命週期。
+- [GeometryPlan 與 SGB](geometry-sgb.qmd)：從版圖到後端幾何的幾何契約。
+- [支援範圍](supported-scope.qmd#supported-entry)：支援的入口，以及直接呼叫其下層時所假設的條件。
+- [後端支援矩陣](backend-support.qmd)：每條路線支援的計算。

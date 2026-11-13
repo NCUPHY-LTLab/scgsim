@@ -1,5 +1,13 @@
 """Standalone meshing of SGB geometry: sizes from a recipe, a quality audit and a repair loop.
 
+In: the XAO and the ``scgsim.sgb.sidecar.v5`` sidecar of one SGB build, with the quality threshold, the sizing
+recipe and the mesher options (from ``palace/mesh``; ``palace/simulation`` calls the fine-structure check).
+Out: a Gmsh mesh with the XAO's physical groups and its quality report (``MeshResult``): no tetrahedron is
+below the threshold, except with the report-only ``GmshDefaultRecipe``, whose mesh is delivered with its quality
+reported, not enforced; for ``simulation_drc``, the fine edges and faces below the limits
+(``FineStructureReport``).
+Next: ``palace/mesh`` turns the mesh into ``palace.msh`` and records the report in the mesh manifest.
+
 ``mesh_sgb(xao, sidecar, output_dir, threshold=...)`` meshes an SGB XAO with Gmsh so that no tetrahedron
 is below the quality threshold, or raises :class:`MeshRepairError` carrying the quality report.  One
 pipeline serves every sizing recipe: a recipe (:class:`FeatureRecipe`, :class:`GlobalSizeRecipe`,

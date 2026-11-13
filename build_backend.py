@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -24,6 +26,9 @@ _PAGE_FIELDS = {
     "description": "summary",
     "scgsim-status": "status",
 }
+
+
+_INCLUDE_SHORTCODE = re.compile(r"\{\{<\s*include\s+(\S+?)\s*>\}\}")
 
 
 class _ProjectMetadata(TypedDict):
@@ -127,9 +132,11 @@ def _collect_documentation(
     pages = sorted(
         docs.rglob("*.qmd"), key=lambda path: path.relative_to(root).as_posix()
     )
+    page_contents: dict[Path, bytes] = {}
     for source in pages:
         source_ref = source.relative_to(root).as_posix()
         content = _source_bytes(source, source_ref)
+        page_contents[source] = content
         frontmatter = _frontmatter(content, source_ref, tuple(_PAGE_FIELDS))
         metadata = {
             manifest_field: frontmatter[field]
@@ -158,6 +165,31 @@ def _collect_documentation(
     for source in assets:
         source_ref = source.relative_to(root).as_posix()
         outputs[source_ref] = _source_bytes(source, source_ref)
+
+    # A page's include targets are auxiliary files too, or the page installs broken.
+    for page, content in page_contents.items():
+        for target in _include_targets(root, page, content):
+            source_ref = target.relative_to(root).as_posix()
+            outputs[source_ref] = _source_bytes(target, source_ref)
+
+
+def _include_targets(root: Path, page: Path, content: bytes) -> list[Path]:
+    page_ref = page.relative_to(root).as_posix()
+    docs = root / "docs"
+    targets = []
+    for name in _INCLUDE_SHORTCODE.findall(content.decode("utf-8")):
+        target = Path(os.path.normpath(page.parent / name))
+        if not target.is_relative_to(docs):  # lexical, so symlinks reach _source_bytes
+            raise ValueError(
+                f"Knowledge page {page_ref} includes a target outside docs/: {name}"
+            )
+        if not target.is_file():
+            raise ValueError(
+                f"Knowledge page {page_ref} includes a missing or non-regular "
+                f"target: {name}"
+            )
+        targets.append(target)
+    return targets
 
 
 def _manifest_bytes(
