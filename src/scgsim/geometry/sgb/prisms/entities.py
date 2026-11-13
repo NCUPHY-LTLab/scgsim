@@ -1,14 +1,13 @@
 """Effective source entities as prisms (stage S2).
 
 Owns the rules that give each entity of an effective ``GeometryBuildInput`` its Z
-interval, Net, material and priority, and builds its prisms.  They follow what the
-compiler's planning read:
+interval, Net, material and priority, and builds its prisms:
 
 * **Z interval.**  The prepared representation (``RepresentationContext.entities``)
   carries the effective interval and whether the conductor is a *sheet* (a zero
   thickness interval) or a *solid*; solution regions fall back to their effective
-  geometry (``z_min_um``/``z_max_um``, else ``z_um`` + ``thickness_um``), the same
-  fields ``primitives.entities.entity_z_range_um`` read.  The automatic vacuum
+  geometry (``z_min_um``/``z_max_um``, else ``z_um`` + ``thickness_um``), the fields
+  ``primitives.entities.entity_z_range_um`` reads.  The automatic vacuum
   envelope takes the Z of its prepared enclosure.  Levels are exactly these values:
   no Z threshold merges or drops any of them.
 * **Net.**  A conductor without a declared Net is its own Net (a floating

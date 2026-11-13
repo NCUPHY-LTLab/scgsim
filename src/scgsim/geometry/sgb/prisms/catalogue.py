@@ -6,8 +6,7 @@ input's metadata -- to the prisms, carriers and Z structure the arrangement stag
 consume.  The catalogue is route-independent: Route A, B and C are labelling
 policies applied after the arrangement exists.
 
-Design decisions (each with the compiler code it follows) are in the modules of this
-package: ``footprints`` (where an entity's rings come from), ``entities`` (Z interval,
+The decisions are in the modules of this package: ``footprints`` (where an entity's rings come from), ``entities`` (Z interval,
 Net, priority), ``curves`` (authored boundaries and reconstruction), ``ports``
 (lumped-port sheets), ``arcs`` (circles on the grid).
 """
