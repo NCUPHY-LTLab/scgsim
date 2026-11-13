@@ -37,7 +37,7 @@ from ..mesh.build import (
     mesh_route_geometry,
 )
 from ..mesh.controls import MeshControls
-from ..mesh.summary import summary_from_files
+from ..mesh.summary import MeshSummary, summary_from_files
 from ..run.handoff import HandoffPlan, prepare_handoff
 from ..source.inputs import stack_materials
 from ..source.layout_ports import LayoutGeometryRequest, layout_geometry_request
@@ -432,7 +432,7 @@ class PalaceSimulation(ABC):
             ),
         )
 
-    def mesh_summary(self) -> dict[str, Any]:
+    def mesh_summary(self) -> MeshSummary:
         """Detach actual mesh observations and the current FEM topology estimate.
 
         Raises:

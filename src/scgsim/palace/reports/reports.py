@@ -19,6 +19,7 @@ from scgsim.contracts.palace_run_folder import (
 )
 from scgsim.palace.mesh.summary import mesh_summary
 from scgsim.palace.reports.observations import (
+    CostCards,
     configured_refinement,
     cost_cards,
     latest_palace_json,
@@ -29,7 +30,7 @@ from scgsim.palace.reports.plotting import (
     checked_show_details,
     checked_theme,
 )
-from scgsim.palace.reports.trust import PalaceTrustReport
+from scgsim.palace.reports.trust import PalaceTrustReport, ReportIdentity
 from scgsim.palace.reports.views import (
     PhysicsQuantitiesReport,
     SimulationBenchmarkReport,
@@ -397,11 +398,11 @@ def _report_provenance(
 
 
 def _report_identity(
-    cost: dict[str, Any],
+    cost: CostCards,
     handoff: dict[str, Any],
     receipt: dict[str, Any] | None,
     resolved: ResolvedRunData | None,
-) -> dict[str, Any]:
+) -> ReportIdentity:
     """Project handoff, receipt status, solver tag and parallel resources into identity cards."""
     mpi = cost.get("mpi_size")
     omp = cost.get("openmp_threads")
@@ -416,11 +417,10 @@ def _report_identity(
     elif resolved is not None:
         receipt_status = f"{resolved.returned_receipt.status} / exit {resolved.returned_receipt.exit_code}"
     handoff_id = str(handoff.get("handoff_id") or "")
-    identity = {
+    return {
         "handoff_id": handoff_id,
         "handoff_id_short": handoff_id[:12] if handoff_id else None,
         "resources": resources,
         "receipt": receipt_status,
         "git_tag": cost.get("git_tag"),
     }
-    return identity

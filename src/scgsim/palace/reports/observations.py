@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, TypedDict
 
 from scgsim.contracts.palace_run_folder import NATIVE_METADATA_NAME, palace_problem
 from scgsim.palace.results.artifacts import (
@@ -87,9 +87,21 @@ def recorded_durations(palace_payload: dict[str, Any] | None) -> dict[str, float
     }
 
 
+class CostCards(TypedDict, total=False):
+    """The solver sizes, peak memory and parallel resources a report shows; empty when Palace recorded none."""
+
+    problem_degrees_of_freedom: int | None
+    mesh_elements: int | None
+    mpi_size: int | None
+    openmp_threads: int | None
+    peak_memory_megabytes: float | None
+    peak_node_memory_megabytes: float | None
+    git_tag: str | None
+
+
 def cost_cards(
     palace_payload: dict[str, Any] | None, resolved: ResolvedRunData | None
-) -> dict[str, Any]:
+) -> CostCards:
     """Project native solver sizes, memory and parallel resources for readable cost cards."""
     if resolved is not None:
         return {

@@ -7,6 +7,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from scgsim.palace.mesh.summary import MeshSummary
+
 COLORWAY = (
     "#56B4E9",
     "#E69F00",
@@ -363,14 +365,17 @@ def fmt_mb(value: Any) -> str:
 
 
 def mesh_summary_html(
-    summary: Mapping[str, Any], *, card_html: Callable[[str, Any], str]
+    summary: MeshSummary, *, card_html: Callable[[str, Any], str]
 ) -> str:
     """Keep the meshing record (recipe, mesher, quality) distinct from native solver measurements."""
-    if summary["status"] == "not_recorded":
-        return "<section><h4>Geometry mesh</h4><p>Mesh observations were not recorded in this manifest.</p></section>"
     meshing = summary["meshing"]
+    # The status is "recorded" exactly when the manifest has a meshing record.
+    if summary["status"] == "not_recorded" or meshing is None:
+        return "<section><h4>Geometry mesh</h4><p>Mesh observations were not recorded in this manifest.</p></section>"
     stats, recipe = meshing["statistics"], meshing["recipe"]
-    items = "".join(card_html(label, value) for label, value in _mesh_cards(summary))
+    items = "".join(
+        card_html(label, value) for label, value in _mesh_cards(summary, meshing)
+    )
     rows = _region_rows(stats["physical_regions"])
     header = "".join(html_cell("th", label) for label in _REGION_COLUMNS)
     types = ", ".join(
@@ -393,9 +398,10 @@ def mesh_summary_html(
     )
 
 
-def _mesh_cards(summary: Mapping[str, Any]) -> list[tuple[str, str]]:
+def _mesh_cards(
+    summary: MeshSummary, meshing: Mapping[str, Any]
+) -> list[tuple[str, str]]:
     """The (label, value) cards of a recorded mesh: recipe, orders, sizes, algorithms, quality and repair."""
-    meshing = summary["meshing"]
     estimate = summary["dof_estimate"]
     stats, mesher = meshing["statistics"], meshing["mesher"]
     linear = meshing["linear_mesh"]

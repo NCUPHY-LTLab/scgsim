@@ -8,17 +8,19 @@ import json
 import math
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA,
     OUTPUT_DIR,
     palace_problem,
 )
+from scgsim.palace.mesh.summary import MeshSummary
 from scgsim.palace.reports.observations import (
     ERROR_INDICATOR_TRACES,
     FREQ_HEADER,
     SKIP_EIG_COLUMNS,
+    CostCards,
     capacitance_traces,
     cost_cards,
     delta_traces,
@@ -120,6 +122,16 @@ def _elapsed_pass_cost(
     return elapsed_total - previous_elapsed, None
 
 
+class ReportIdentity(TypedDict):
+    """The identity cards of a trust report: the handoff, the parallel resources, the receipt and Palace's tag."""
+
+    handoff_id: str
+    handoff_id_short: str | None
+    resources: str | None
+    receipt: str | None
+    git_tag: str | None
+
+
 @dataclass(frozen=True)
 class PalaceTrustReport:
     """Run-identity, AMR evidence, and cost for one returned Palace run folder."""
@@ -132,17 +144,17 @@ class PalaceTrustReport:
     latest_source: str
     selection: PalaceResultSelection
     failure: PalaceFailureDiagnosis | None
-    identity: dict[str, Any]
+    identity: ReportIdentity
     passes: tuple[AmrPassSnapshot, ...]
     amr_tolerance: float | None
     amr_max_passes: int | None
     durations: dict[str, float]
-    cost: dict[str, Any]
+    cost: CostCards
     provenance: dict[str, Any]
     theme: ReportTheme = "light"
     show_details: bool = False
 
-    def mesh_summary(self) -> dict[str, Any]:
+    def mesh_summary(self) -> MeshSummary:
         """Read the same detached mesh authority used by resolved results."""
 
         return copy.deepcopy(self.provenance["mesh_summary"])

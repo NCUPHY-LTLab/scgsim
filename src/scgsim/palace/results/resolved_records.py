@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.contracts.palace_run_folder import MESH, MESH_MANIFEST
-from scgsim.palace.mesh.summary import mesh_summary
+from scgsim.palace.mesh.summary import MeshSummary, mesh_summary
 
 
 @dataclass(frozen=True)
@@ -97,7 +97,7 @@ class ResolvedRunData:
     returned_receipt: PalaceReturnedReceipt
     provenance: PalaceProvenance
 
-    def mesh_summary(self) -> dict[str, Any]:
+    def mesh_summary(self) -> MeshSummary:
         """Detach sealed mesh observations; estimates are not native solver DOF."""
 
         hashes = {

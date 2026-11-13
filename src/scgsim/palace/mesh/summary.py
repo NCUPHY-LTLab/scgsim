@@ -8,7 +8,7 @@ import itertools
 import json
 import math
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping, TypedDict
 
 from scgsim.contracts.palace_run_folder import palace_problem, sha256
 
@@ -114,6 +114,28 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
+class DofEstimate(TypedDict, total=False):
+    """The topological estimate of the solver's degrees of freedom, or why there is none."""
+
+    status: Literal["available", "unavailable"]
+    actual_solver_dof: bool
+    reason: str
+    space: str
+    value: int
+    basis: str
+
+
+class MeshSummary(TypedDict):
+    """What a person reads about a mesh: the manifest's meshing record, the hashes and a DOF estimate."""
+
+    status: Literal["recorded", "not_recorded"]
+    mesh_sha256: str | None
+    manifest_sha256: str | None
+    meshing: dict[str, Any] | None
+    finite_element_order: int | None
+    dof_estimate: DofEstimate
+
+
 def mesh_summary(
     manifest: Mapping[str, Any],
     *,
@@ -121,17 +143,17 @@ def mesh_summary(
     fem_order: int | None,
     mesh_sha256: str | None = None,
     manifest_sha256: str | None = None,
-) -> dict[str, Any]:
+) -> MeshSummary:
     """Detach recorded observations and a separately labeled FEM topology estimate."""
     observed = manifest.get("meshing")
     fem_space = palace_problem(problem).fem_space
-    result: dict[str, Any] = dict(
+    result = MeshSummary(
         status="recorded" if observed is not None else "not_recorded",
         mesh_sha256=mesh_sha256,
         manifest_sha256=manifest_sha256,
         meshing=copy.deepcopy(observed),
         finite_element_order=fem_order,
-        dof_estimate=dict(
+        dof_estimate=DofEstimate(
             status="unavailable",
             actual_solver_dof=False,
             reason="H1 estimate not implemented"
@@ -147,7 +169,7 @@ def mesh_summary(
             + p * (p - 1) * topology["faces"]
             + p * (p - 1) * (p - 2) * topology["tetrahedra"] // 2
         )
-        result["dof_estimate"] = dict(
+        result["dof_estimate"] = DofEstimate(
             status="available",
             space="ND",
             value=estimate,
@@ -159,7 +181,7 @@ def mesh_summary(
 
 def summary_from_files(
     mesh_path: Path, manifest_path: Path, *, problem: str, fem_order: int
-) -> dict[str, Any]:
+) -> MeshSummary:
     """Detach current facade artifacts without changing solver or mesh state."""
     payload = manifest_path.read_bytes()
     return mesh_summary(
