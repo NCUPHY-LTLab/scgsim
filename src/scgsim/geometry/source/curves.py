@@ -15,6 +15,8 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Literal, cast, overload
 
+from scgsim.geometry.grid.grid_regions import canonical_grid_point, region_key
+from scgsim.geometry.grid.planar_loops import cutline_boundary_loops
 from scgsim.geometry.models.common import PolygonRing
 from scgsim.geometry.models.grid import (
     format_extent,
@@ -35,8 +37,6 @@ from scgsim.geometry.models.input import (
     reconstruction_chain_refusal,
     reconstruction_without_circle,
 )
-from scgsim.geometry.primitives.grid_regions import canonical_grid_point, region_key
-from scgsim.geometry.primitives.planar_loops import cutline_boundary_loops
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
 from scgsim.geometry.source.plan_assembly import transform_source_point
 

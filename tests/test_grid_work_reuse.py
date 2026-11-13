@@ -5,19 +5,19 @@ from threading import Barrier, Lock
 
 import pytest
 
-from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry.primitives.grid import (
+from scgsim.geometry.grid.grid import (
     SOURCE_AUDITS,
     GridOperand,
     geometry_grid_scope,
     source_grid_audits,
     source_recipe_map,
 )
-from scgsim.geometry.primitives.grid_cache import (
+from scgsim.geometry.grid.grid_cache import (
     cached_subdivision,
     grid_work_cache_scope,
     with_grid_work_cache,
 )
+from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.preparation import preparation_resources
 
 BASE = GridOperand("A", ((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)))

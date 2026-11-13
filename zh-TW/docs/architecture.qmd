@@ -20,8 +20,12 @@ SCGSim 區分 PDK 事實、元件意圖、語意幾何、求解器準備、執�
 ```text
 scgsim/
 ├── geometry/
-│   ├── source/       # component input, occurrence, stack and normalization
-│   ├── models/       # source and planning records
+│   ├── models/       # typed records that cross stages
+│   ├── source/       # from a layout and a stack to a prepared snapshot
+│   ├── grid/         # the source stage's grid engine: noding, tagged regions, overlays, loops
+│   ├── interpretation/ # from a prepared input to its physical representation and vacuum enclosure
+│   ├── junctions/    # the rectangular partition around a lumped port
+│   ├── surface_epr/  # from Surface-EPR specs to the inset requests of the SGB build
 │   ├── sgb/          # SGB core that Palace builds on; one folder per stage of the build
 │   │   ├── exact/        # the exact vocabulary every stage shares
 │   │   ├── prisms/       # S2: the effective input as prisms, levels and slabs
@@ -31,8 +35,7 @@ scgsim/
 │   │   ├── checks/       # S9: structural validation, slivers, file checks
 │   │   ├── output/       # S10: BREP and XAO, sidecar, STEP export
 │   │   └── section/      # the 2D section model
-│   ├── planning/     # physical interpretation, junction partition and AEDT's surface planning
-│   └── primitives/   # 共用 Entity、環線、網格及空間操作
+│   └── planning/     # what only AEDT's native construction uses: surface, contact, domain, topology planning
 ├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
 ├── semantics/        # immutable solver-independent facts
 ├── palace/
@@ -68,7 +71,7 @@ scgsim/
 
 HFSS 家族負責一般來源支援的 Eigenmode 準備、求解及匯出。EPR 將此流程與積分表面、場、快取及分析組合。接面宣告獨立於 EPR 分析要求控制接面建構：省略分析不會移除已宣告接面。交易保留唯一 Desktop 與憑證責任。一般本體、支撐、材料及包絡原生操作屬於 `runtime.native`；一般 RLC 指派及儲存後讀回屬於原生集總元件模組。
 
-幾何來源準備、規劃與模型建構各有負責者：來源準備使用共用基本操作，規劃協調分工明確的模組，SGB 則從準備好的輸入建立模型。後端家族使用共用幾何，不互相匯入。`semantics` 維持只依賴標準函式庫的不可變事實邊界。Palace 與 AEDT 保有各自可變模擬狀態、交易生命週期及物理結果意義。共用呈現模組格式化獨立值，不負責求解器物理或計算。視覺化讀取求解器權威中繼資料與產物，不啟動求解或決定執行狀態。
+幾何來源準備、解讀與模型建構各有負責者：來源階段使用網格引擎，解讀與接面分區把它準備好的輸入轉成有效輸入，SGB 則從該輸入建立模型；只有 AEDT 的原生建構使用 `scgsim.geometry.planning`。後端家族使用共用幾何，不互相匯入。`semantics` 維持只依賴標準函式庫的不可變事實邊界。Palace 與 AEDT 保有各自可變模擬狀態、交易生命週期及物理結果意義。共用呈現模組格式化獨立值，不負責求解器物理或計算。視覺化讀取求解器權威中繼資料與產物，不啟動求解或決定執行狀態。
 
 公開性依據明確套件外觀介面、宣告的子模組匯出及文件契約，不因可匯入就成為公開。SCGSim 2.0 保留高階 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 與 `scgsim.visualization` 入口，並在 [API 遷移參考](api-migration.qmd) 提供新舊子模組及符號映射。搬移的私有實作不因位置改變而公開。現行實作只有一套，不保留舊 `scgsim.sgb` 相容包裝器，也不恢復 Q3D input-v1／v2 路徑。正式 `python -m scgsim.aedt.run` 入口仍受支援；它是 AEDT 交易 CLI，不是舊版包裝器。
 
@@ -82,10 +85,10 @@ HFSS 家族負責一般來源支援的 Eigenmode 準備、求解及匯出。EPR 
 |---|---|
 | `scgsim.geometry.source.plan_assembly` | 組合元件實例、座標變換、堆疊事實與呼叫者指定的 Net，形成來源輸入。 |
 | `scgsim.geometry.planning.contact_planning` | 辨認宣告的介面、接觸區域及金屬間接觸歸屬。 |
-| `scgsim.geometry.planning.junction_planning` | 解析指定支撐面與相鄰導體歸屬，再推導精確矩形接面分區。 |
+| `scgsim.geometry.junctions` | 解析指定支撐面與相鄰導體歸屬，再推導精確矩形接面分區。 |
 | `scgsim.geometry.planning.surface_planning` | 建立求解器使用的表面、接觸涵蓋、貢獻區域及分區。 |
 | `scgsim.geometry.planning.topology_planning` | 為表面規劃解析共用表面歸屬與環線幾何。 |
-| `scgsim.geometry.primitives.tagged_grid_faces` 與 `tagged_grid_operations` | 分開處理面與邊界來源資訊，以及 Shapely 網格操作轉接。 |
+| `scgsim.geometry.grid.tagged_grid_faces` 與 `tagged_grid_operations` | 分開處理面與邊界來源資訊，以及 Shapely 網格操作轉接。 |
 
 這些模組是內部實作邊界；支援的匯入路徑見[API 遷移參考](api-migration.qmd)。
 

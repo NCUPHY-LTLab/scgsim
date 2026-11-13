@@ -31,7 +31,7 @@ def build(self) -> ConstructionPlanRecord:
 
 ## Package boundaries
 
-- Let import paths show responsibility, for example `scgsim.geometry.planning.conductors`.
+- Let import paths show responsibility, for example `scgsim.geometry.junctions.lattice`.
 - Keep dependencies genuinely one-way: higher-level orchestration may use lower-level models and operations; lower layers must not import their callers. Avoid sibling cycles.
 - Keep imports at module scope. Use a lazy import only when it avoids loading an optional heavy dependency on a path that does not need it; explain that reason beside the import.
 - Shared names use ordinary names and docstrings. File-local helpers use a leading underscore. Do not reach into another object's private attributes.

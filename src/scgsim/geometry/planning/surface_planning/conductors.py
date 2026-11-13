@@ -5,6 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from scgsim.geometry.grid.entity_validation import is_solution_entity
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import (
     PolygonRing,
     RouteLiteral,
@@ -27,9 +31,7 @@ from scgsim.geometry.planning.evidence import (
     conductor_solution_evidence,
     metal_metal_evidence,
 )
-from scgsim.geometry.planning.representation import (
-    planned_conductor_representation,
-)
+from scgsim.geometry.planning.geometry_refs import route_entity_geometry_ref
 from scgsim.geometry.planning.surface_planning.contacts import (
     sheet_contact_loops_by_pad,
     subtract_contact_patches_from_face,
@@ -39,16 +41,12 @@ from scgsim.geometry.planning.surface_planning.sidewalls import (
     ConductorSidewallRequest,
     conductor_sidewall_geometry_refs,
 )
-from scgsim.geometry.planning.tags import (
-    physical_group_owner_ids,
-)
-from scgsim.geometry.primitives.entity_validation import is_solution_entity
-from scgsim.geometry.primitives.geometry_refs import (
-    route_entity_geometry_ref,
-)
-from scgsim.geometry.primitives.surface_records import (
+from scgsim.geometry.planning.surface_records import (
     conductor_boundary_surface_id,
     surface_contribution_provenance,
+)
+from scgsim.geometry.planning.tags import (
+    physical_group_owner_ids,
 )
 
 

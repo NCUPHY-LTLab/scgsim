@@ -22,7 +22,7 @@ SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域
 | `scgsim.geometry` | 面向來源的元件／出現位置與堆疊調適、GeometryPlan／snapshot、正規化輸入、真空／曲線準備及脫離原物件的摘要 | 模型建構、Palace／AEDT 物理或執行狀態 |
 | `scgsim.geometry.sgb` | Palace 用來建立幾何的 SGB 核心：arrangement、XAO 與 sidecar、帶 | 網格化、求解器狀態或元件來源所有權 |
 | `scgsim.meshing` | 針對 SGB 的 XAO 提供尺寸配方、品質稽核、修復迴圈與網格化報告 | Palace 屬性、求解器狀態或物理收斂判定 |
-| `scgsim.geometry.models` 與較低層原語 | 單一標準模型／型別定義，以及共用來源與規劃原語 | 重複定義、來源至規劃的相依循環 |
+| `scgsim.geometry.models` 與 `scgsim.geometry.grid` | 單一標準模型／型別定義，以及來源、解讀與規劃共用的網格引擎和 Entity、環線、座標輔助函式 | 重複定義、來源至規劃的相依循環 |
 | `scgsim.semantics` | 僅使用標準函式庫、不可變且受修訂版本約束的事實 | 可變後端物件、將求解器標記解讀為來源真實資料 |
 | `scgsim.palace.simulation` | 兩個模擬類別共用一個核心；分開的 Electrostatic 與 Eigenmode 設定物件、可變狀態／失效處理及生命週期 | Palace 提交或合併狀態擁有者 |
 | `scgsim.palace.source` | 幾何請求：把綁定 plan 的埠、真空區域與 Surface-EPR 規格準備成幾何建置的輸入 | 網格化、`config.json` 或求解器狀態 |

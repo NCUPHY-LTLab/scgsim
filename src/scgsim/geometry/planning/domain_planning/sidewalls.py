@@ -7,25 +7,27 @@ from itertools import pairwise
 from math import hypot
 from typing import Any
 
+from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.grid.entities import entity_z_range_um
+from scgsim.geometry.grid.entity_validation import (
+    is_solution_entity,
+    is_vacuum_solution_entity,
+)
+from scgsim.geometry.grid.loops import edge_is_covered_by_loop_edge
+from scgsim.geometry.grid.planar_loops import clean_loop, ring_edges
+from scgsim.geometry.grid.spatial import (
+    interpolate_2d,
+    same_coordinate_z,
+    segment_overlap_interval,
+)
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.planning.domain_planning.occupancy import (
     active_route_conductor_entities,
-)
-from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.primitives.constants import TOPOLOGY_EPS_UM
-from scgsim.geometry.primitives.entities import entity_z_range_um
-from scgsim.geometry.primitives.entity_validation import (
-    is_solution_entity,
-    is_vacuum_solution_entity,
-)
-from scgsim.geometry.primitives.loops import edge_is_covered_by_loop_edge
-from scgsim.geometry.primitives.planar_loops import clean_loop, ring_edges
-from scgsim.geometry.primitives.spatial import (
-    interpolate_2d,
-    same_coordinate_z,
-    segment_overlap_interval,
 )
 
 

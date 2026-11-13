@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
+from scgsim.geometry.grid.entities import component_metadata, unique_ids
+from scgsim.geometry.grid.entity_validation import is_solution_entity
 from scgsim.geometry.models.common import (
     RouteLiteral,
 )
@@ -20,11 +22,6 @@ from scgsim.geometry.planning.tags import (
     surface_physical_owner_ids,
 )
 from scgsim.geometry.planning.topology_planning.ownership import surface_owner_ids
-from scgsim.geometry.primitives.entities import (
-    component_metadata,
-    unique_ids,
-)
-from scgsim.geometry.primitives.entity_validation import is_solution_entity
 
 
 def with_surface_contract_metadata(

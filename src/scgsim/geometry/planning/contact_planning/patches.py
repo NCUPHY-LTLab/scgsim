@@ -6,6 +6,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import ModuleType
 
+from scgsim.geometry.grid.entities import entity_z_range_um
+from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.loops import loop_signature, loops_touch_without_area
+from scgsim.geometry.grid.planar_loops import PolygonCoordinates, clean_loop
+from scgsim.geometry.grid.spatial import bounds_overlap, coordinate_z_key
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
@@ -29,11 +34,6 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
     route_conductor_contact_footprints,
     solution_region_entities,
 )
-from scgsim.geometry.primitives.entities import entity_z_range_um
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import loop_signature, loops_touch_without_area
-from scgsim.geometry.primitives.planar_loops import PolygonCoordinates, clean_loop
-from scgsim.geometry.primitives.spatial import bounds_overlap, coordinate_z_key
 
 
 def plan_conductor_contact_patches(

@@ -20,15 +20,7 @@ from typing import (
     cast,
 )
 
-from scgsim.geometry.models.common import PolygonRing
-from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
-from scgsim.geometry.models.input import (
-    GeometryBuildInput,
-    LayoutPolygonSpec,
-    SemanticEntitySpec,
-)
-from scgsim.geometry.models.regions import PortSheetRegionRecord
-from scgsim.geometry.primitives.grid import (
+from scgsim.geometry.grid.grid import (
     GridArrangement,
     GridOperand,
     SourceGridAudit,
@@ -38,11 +30,19 @@ from scgsim.geometry.primitives.grid import (
     regions,
     source_grid_audits,
 )
-from scgsim.geometry.primitives.grid_regions import (
+from scgsim.geometry.grid.grid_regions import (
     FIX_CONTACT,
     contact_changes,
     grid_change_message,
 )
+from scgsim.geometry.models.common import PolygonRing
+from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
+from scgsim.geometry.models.input import (
+    GeometryBuildInput,
+    LayoutPolygonSpec,
+    SemanticEntitySpec,
+)
+from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.source.ports import (
     is_port_sheet_host_entity,
     port_sheet_overlaps,

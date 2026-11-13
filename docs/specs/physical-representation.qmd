@@ -58,7 +58,7 @@ from gdsfactory.technology import LayerLevel
 from scgsim.geometry.models.physical import (
     ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
 )
-from scgsim.geometry.planning.physical import interpret_physical_geometry
+from scgsim.geometry.interpretation.physical import interpret_physical_geometry
 
 declaration = PhysicalLayerDeclaration.from_payload(authored_declaration)
 level = LayerLevel(

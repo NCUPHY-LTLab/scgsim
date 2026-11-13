@@ -5,14 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.geometry.models.input import LayoutPolygonSpec
-from scgsim.geometry.primitives.grid import (
+from scgsim.geometry.grid.grid import (
     bound_grid_context,
     named_source,
     polygon_boolean,
     source_place,
     source_refusal,
 )
+from scgsim.geometry.models.input import LayoutPolygonSpec
 from scgsim.geometry.source.ground import layout_polygon_region
 
 

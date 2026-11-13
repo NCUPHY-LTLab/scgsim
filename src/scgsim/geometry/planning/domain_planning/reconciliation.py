@@ -5,27 +5,24 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, cast
 
-from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.models.topology import SurfacePlanRecord
-from scgsim.geometry.planning.evidence import solution_solution_evidence
-from scgsim.geometry.planning.topology_planning.rings import surface_ring3d_specs
-from scgsim.geometry.primitives.entities import unique_ids
-from scgsim.geometry.primitives.entity_validation import is_solution_entity
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import (
+from scgsim.geometry.grid.entities import unique_ids
+from scgsim.geometry.grid.entity_validation import is_solution_entity
+from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
     loop_signature,
 )
-from scgsim.geometry.primitives.spatial import (
-    geometry_ref_surface_z_um,
-    same_coordinate_z,
-)
-from scgsim.geometry.primitives.surface_records import (
+from scgsim.geometry.grid.spatial import geometry_ref_surface_z_um, same_coordinate_z
+from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.topology import SurfacePlanRecord
+from scgsim.geometry.planning.evidence import solution_solution_evidence
+from scgsim.geometry.planning.surface_records import (
     canonical_face_signature_3d,
     surface_boundary_volume_ids,
     surface_contribution_provenance,
 )
+from scgsim.geometry.planning.topology_planning.rings import surface_ring3d_specs
 from scgsim.semantics import SemanticEvidenceFacade
 
 

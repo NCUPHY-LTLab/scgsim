@@ -22,11 +22,11 @@ from test_sgb_prisms import with_boundaries
 from test_simulation_drc import LAYER_STACK, MATERIALS, check, level, two_pads
 
 from scgsim.geometry import GeometryPlan
+from scgsim.geometry.grid.grid import geometry_grid_scope
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     SourceCurveSpec,
 )
-from scgsim.geometry.primitives.grid import geometry_grid_scope
 from scgsim.geometry.sgb.errors import (
     InputError,
     NoGapEdgeError,

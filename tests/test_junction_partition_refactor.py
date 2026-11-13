@@ -10,25 +10,23 @@ import pytest
 from test_rectangular_junction_geometry import fixture
 
 from scgsim.geometry import with_rectangular_junctions
-from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
-from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
-from scgsim.geometry.planning.junction_planning.contact import (
+from scgsim.geometry.grid.grid import current_grid_context, geometry_grid_scope
+from scgsim.geometry.junctions.contact import (
     JunctionContactRequest,
     junction_contact_inventory,
     junction_source_binding,
 )
-from scgsim.geometry.planning.junction_planning.core import (
+from scgsim.geometry.junctions.core import (
     DEFAULT_FORMAT,
     canonical_sha256,
     plain_record,
 )
-from scgsim.geometry.planning.junction_planning.derivation import (
-    derive_rectangular_junctions,
-)
-from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
-from scgsim.geometry.planning.junction_planning.model_state import JunctionModel
-from scgsim.geometry.planning.junction_planning.partition import partition_junctions
-from scgsim.geometry.primitives.grid import current_grid_context, geometry_grid_scope
+from scgsim.geometry.junctions.derivation import derive_rectangular_junctions
+from scgsim.geometry.junctions.local_frame import JunctionLocalFrame
+from scgsim.geometry.junctions.model_state import JunctionModel
+from scgsim.geometry.junctions.partition import partition_junctions
+from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
+from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
 
 
 def test_contact_request_keeps_source_binding_distinct_from_effective_fields() -> None:
@@ -130,7 +128,7 @@ def test_empty_partition_looks_up_and_restores_one_real_grid_scope() -> None:
         elif (
             event == "c_call"
             and frame.f_code.co_name == "geometry_grid_scope"
-            and frame.f_globals.get("__name__") == "scgsim.geometry.primitives.grid"
+            and frame.f_globals.get("__name__") == "scgsim.geometry.grid.grid"
             and getattr(getattr(argument, "__self__", None), "name", None)
             == "scgsim_geometry_grid"
         ):

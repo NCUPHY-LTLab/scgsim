@@ -12,8 +12,7 @@ from functools import wraps
 from types import ModuleType
 from typing import Any, cast
 
-from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.primitives.grid import (
+from scgsim.geometry.grid.grid import (
     named_source,
     polygon_boolean,
     polygon_rings,
@@ -21,18 +20,17 @@ from scgsim.geometry.primitives.grid import (
     source_place,
     source_refusal,
 )
-from scgsim.geometry.primitives.loops import canonical_loop_sort_key
-from scgsim.geometry.primitives.planar_loops import PlanarLoop
-from scgsim.geometry.source.polygon_ops import (
+from scgsim.geometry.grid.loops import canonical_loop_sort_key
+from scgsim.geometry.grid.planar_loops import PlanarLoop
+from scgsim.geometry.grid.polygon_ops import (
     FIX_SELECTOR,
     fused_gdstk_components,
+    layout_polygon_region,
     point_in_layout_polygon,
     realized_on_lattice,
     selector_place,
 )
-from scgsim.geometry.source.polygon_ops import (
-    layout_polygon_region as layout_polygon_region,
-)
+from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 
 
 def _mask_key(entity: SemanticEntitySpec) -> tuple[int, int]:

@@ -15,13 +15,10 @@ from scgsim.aedt.specs.epr import (
     PlanarJunction,
 )
 from scgsim.geometry import GeometryBuildInput
-from scgsim.geometry.planning.junction_planning.contact import junction_source_binding
-from scgsim.geometry.planning.junction_planning.exact_geometry import closed_contact
-from scgsim.geometry.planning.junction_planning.lattice import (
-    drawn_exterior,
-    lattice_rectangle,
-)
-from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
+from scgsim.geometry.junctions.contact import junction_source_binding
+from scgsim.geometry.junctions.exact_geometry import closed_contact
+from scgsim.geometry.junctions.lattice import drawn_exterior, lattice_rectangle
+from scgsim.geometry.junctions.terminal import junction_terminal_line
 from scgsim.geometry.source.validation import validate_geometry_input
 
 
