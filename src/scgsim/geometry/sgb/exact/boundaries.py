@@ -17,15 +17,20 @@ splines and B-splines fail closed, naming the boundary and the entity: B-spline
 carriers are a later stage.
 
 A refusal names the record, its Entity and layer, where the fault lies in micrometres and
-who must act.  The wording of the index and arc refusals lives in ``models.input``.  The junction partition reads a lumped port's
-terminals through this binding (``bound_rings``), so a terminal's record is refused here too.
+who must act.  The wording of the index and arc refusals lives in ``models.input``.
+
+Two stages bind: S2 (``prisms.catalogue``) binds the records of every Entity, and the junction partition
+(``geometry.junctions``), which runs before SGB, reads a lumped port's terminals through
+:func:`bound_ring_primitives`.  The binder lives here, in the vocabulary both import, so a terminal's record
+is bound, and refused, by the one rule and wording the full build uses, and SGB imports nothing from the
+partition.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from fractions import Fraction
 
 from scgsim.geometry.models.grid import format_box, format_point
@@ -47,9 +52,11 @@ from scgsim.geometry.models.input import (
     ring_runs,
     ring_without_drawn_order,
 )
+from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError, UnsupportedCurveError
 from scgsim.geometry.sgb.exact.carriers import Lineage
-from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.footprints import SourceFootprint, source_footprints
+from scgsim.geometry.sgb.exact.grid import Grid, declared_grid
 from scgsim.geometry.sgb.exact.plane import (
     Point,
     Ring,
@@ -58,12 +65,23 @@ from scgsim.geometry.sgb.exact.plane import (
     ring_twice_area,
 )
 from scgsim.geometry.sgb.exact.prisms import LineEdge, RingPrimitive
-from scgsim.geometry.sgb.prisms.arcs import arc_through_points, full_circle
-from scgsim.geometry.sgb.prisms.footprints import SourceFootprint
+from scgsim.geometry.sgb.exact.source_arcs import arc_through_points, full_circle
 
-RingKey = tuple[
-    str, int, int
-]  # (entity id, polygon index, ring index: 0 outer, 1 + k for hole k)
+RingKey = tuple[str, int, int]
+"""One source ring: ``(Entity id, polygon index, ring index)``.
+
+The polygon index counts the Entity's ``polygon_ids`` (its footprints, in source order); the ring index is 0
+for the outer ring and ``1 + k`` for hole ``k``.  The junction partition looks rings up by the same key.
+"""
+
+
+def describe_ring(key: RingKey) -> str:
+    """The ring in words, as a refusal names it (the refusal names the Entity with the records)."""
+    _, polygon, ring = key
+    which = "the outer ring" if ring == 0 else f"hole {ring - 1}"
+    return f"{which} of polygon {polygon}"
+
+
 BoundaryRecord = BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec
 SUPPORTED_CURVES = "lines and circular arcs"
 
@@ -83,7 +101,7 @@ def bind_boundaries(
         key, _ = binder.select_ring(record)
         if key in bound:
             raise InputError(
-                f"multiple complete authored boundaries claim ring {key}: "
+                f"multiple complete authored boundaries claim {describe_ring(key)}: "
                 f"{binder.claim(key, (authored[key], record))}. Fix the declaration: give "
                 "each ring one complete boundary record."
             )
@@ -98,13 +116,43 @@ def bind_boundaries(
     for key, chosen in selections.items():
         if key in bound:
             raise InputError(
-                f"authored and reconstructed boundaries both claim ring {key}: "
+                f"authored and reconstructed boundaries both claim {describe_ring(key)}: "
                 f"{binder.claim(key, (authored[key], *reconstructions[key]))}. Fix the "
                 "declaration: describe the ring by one authored boundary or by "
                 "reconstruction records, not both."
             )
         bound[key] = binder.replace_segments(key, chosen)
     return bound
+
+
+def bound_ring_primitives(
+    build_input: GeometryBuildInput, entity_ids: Iterable[str]
+) -> tuple[Grid, dict[RingKey, tuple[RingPrimitive, ...]]]:
+    """The declared grid, and the ring primitives of every ring a record of these conductors binds.
+
+    The junction partition's read of the binding.  The input is narrowed to the chosen Entities and the
+    records that name them; a ring no record binds is absent, as in :func:`bind_boundaries`.  The Entities
+    are conductors, whose footprints read no prepared enclosure.  An input that declares no grid is refused
+    with ``InputError``, as the full build refuses it.
+    """
+    selected = set(entity_ids)
+    narrowed = replace(
+        build_input,
+        entities=tuple(e for e in build_input.entities if e.semantic_id in selected),
+        boundary_curves=tuple(
+            r for r in build_input.boundary_curves if r.entity_id in selected
+        ),
+        boundary_reconstruction=tuple(
+            r for r in build_input.boundary_reconstruction if r.entity_id in selected
+        ),
+    )
+    grid = declared_grid(narrowed)
+    no_enclosures = RepresentationContext(entities={})
+    footprints = {
+        entity.semantic_id: source_footprints(entity, narrowed, grid, no_enclosures)
+        for entity in narrowed.entities
+    }
+    return grid, bind_boundaries(narrowed, grid, footprints)
 
 
 @dataclass(frozen=True)
@@ -414,7 +462,7 @@ class _BoundaryBinder:
                 )
                 runs = ring_runs(shared, len(ring), lambda i: self._point(ring[i]))
                 raise InputError(
-                    f"overlapping reconstruction segment claims on ring {key}: "
+                    f"overlapping reconstruction segment claims on {describe_ring(key)}: "
                     f"{self._claimants(key, names)} both replace the ring {runs}. "
                     "Fix the declaration: give each drawn segment of the ring to one "
                     "reconstruction record."

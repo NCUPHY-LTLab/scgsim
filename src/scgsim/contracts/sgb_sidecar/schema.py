@@ -125,7 +125,7 @@ class _Deriver:
             return self._mapping(key, value)
         if origin is Required or origin is NotRequired:
             raise TypeError(
-                "a postponed Required/NotRequired is invisible at run time; declare the optional fields "
+                "internal: a postponed Required/NotRequired is invisible at run time; declare the optional fields "
                 "in a total=False subclass instead"
             )
         if is_typeddict(annotation):
@@ -135,7 +135,7 @@ class _Deriver:
         if annotation in _SCALAR_TYPES:
             return {"type": _SCALAR_TYPES[annotation]}
         raise TypeError(
-            f"the sidecar definition uses {annotation!r}, which has no schema here"
+            f"internal: the sidecar definition uses {annotation!r}, which has no schema here"
         )
 
     def _annotated(self, annotation: Any) -> dict[str, Any]:
@@ -144,7 +144,7 @@ class _Deriver:
         for marker in markers:
             if not isinstance(marker, Marker):
                 raise TypeError(
-                    f"{marker!r} is not a sidecar marker (scgsim.contracts.sgb_sidecar.markers)"
+                    f"internal: {marker!r} is not a sidecar marker (scgsim.contracts.sgb_sidecar.markers)"
                 )
             schema = _with_keywords(schema, marker.keywords())
         return schema
@@ -160,7 +160,7 @@ class _Deriver:
             return _or_null(schema) if nullable else schema
         if nullable:
             raise TypeError(
-                f"a union of several types and None ({members!r}) has no schema here"
+                f"internal: a union of several types and None ({members!r}) has no schema here"
             )
         return {"oneOf": [self.schema_of(option) for option in options]}
 
@@ -175,13 +175,13 @@ class _Deriver:
             schema["propertyNames"] = self._annotated(key)
             schema["propertyNames"].pop("type")
         elif key is not str:
-            raise TypeError(f"a JSON object's keys are strings, not {key!r}")
+            raise TypeError(f"internal: a JSON object's keys are strings, not {key!r}")
         return schema
 
     def _record_ref(self, record: Any) -> dict[str, Any]:
         name = record.__name__
         if self._records.setdefault(name, record) is not record:
-            raise TypeError(f"two sidecar records are named {name}")
+            raise TypeError(f"internal: two sidecar records are named {name}")
         if name not in self.defs:
             self.defs[
                 name

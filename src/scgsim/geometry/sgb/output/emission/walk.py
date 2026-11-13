@@ -67,7 +67,10 @@ def walk_emitted_volumes(
         if vid in routed.emitted_volumes
     ]
     if not emitted:
-        raise SgbError("no emitted volume to serialise")
+        raise SgbError(
+            f"Route {routed.policy.name} emits no volume of this model, so there is no solid to write; "
+            "give the input a solution region (vacuum or dielectric), or choose Route C to keep the conductors"
+        )
     walk = _Walk(topology, surfaces)
     for vid, volume in emitted:
         walk.solid(vid, [list(shell.faces) for shell in volume.shells])
@@ -138,7 +141,7 @@ class _Walk:
             signed = [sign * (self._edge(eid) + 1) for eid, sign in loop]
             if len({abs(s) for s in signed}) != len(signed):
                 raise SgbError(
-                    f"face {face_id}: an edge occurs twice in one wire (seam/bridge edges are not written)"
+                    f"internal: face {face_id}: an edge occurs twice in one wire (seam/bridge edges are not written)"
                 )
             for s in signed:
                 found.pcurves.setdefault(

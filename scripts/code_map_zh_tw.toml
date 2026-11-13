@@ -61,12 +61,12 @@ Next.zh = "``sgb`` 從這個輸入建構並讀取該紀錄；它從不匯入這�
 ["geometry/surface_epr"]
 summary.en = "Backend-neutral Surface-EPR geometry: normalized specs, their SGB band requests and the banded build."
 summary.zh = "不依賴後端的 Surface-EPR 幾何：正規化的規格、對應的 SGB 帶狀請求，以及帶有內縮帶的建構。"
-In.en = "the ``MA``/``MS``/``SA`` specs of a Palace simulation (from ``palace/source``); for the banded build, the effective ``GeometryBuildInput``, its ``RepresentationContext`` and the route (from ``palace/mesh``)."
-In.zh = "Palace 模擬的 ``MA``／``MS``／``SA`` 規格（來自 ``palace/source``）；帶狀建構另外需要有效的 ``GeometryBuildInput``、它的 ``RepresentationContext`` 與路線（來自 ``palace/mesh``）。"
-Out.en = "the normalized specs and the margins each face takes, the SGB inset requests, and the banded build's files (``SgbArtifacts``: XAO, BREP and sidecar)."
-Out.zh = "正規化的規格與每個面採用的邊距、SGB 內縮請求，以及帶狀建構的檔案（``SgbArtifacts``：XAO、BREP 與 sidecar）。"
-Next.en = "``sgb`` builds the geometry with the inset requests; ``palace/mesh`` meshes the banded build, and ``palace/source``, ``palace/config`` and ``palace/results`` read the specs and their margins."
-Next.zh = "``sgb`` 依內縮請求建構幾何；``palace/mesh`` 為帶狀建構產生網格，``palace/source``、``palace/config`` 與 ``palace/results`` 讀取規格與其邊距。"
+In.en = "the ``MA``/``MS``/``SA`` specs of a Palace simulation (from ``palace/source``); for the banded build, the effective ``GeometryBuildInput``, its ``RepresentationContext`` and the route (from ``palace/mesh``, which calls it)."
+In.zh = "Palace 模擬的 ``MA``／``MS``／``SA`` 規格（來自 ``palace/source``）；帶狀建構另外需要有效的 ``GeometryBuildInput``、它的 ``RepresentationContext`` 與路線（來自呼叫它的 ``palace/mesh``）。"
+Out.en = "the normalized specs and the margins each face takes, the SGB inset requests, and the banded build's files (``SgbArtifacts``: XAO, BREP and sidecar), which it builds by calling ``sgb.build_sgb_geometry`` with those requests."
+Out.zh = "正規化的規格與每個面採用的邊距、SGB 內縮請求，以及帶狀建構的檔案（``SgbArtifacts``：XAO、BREP 與 sidecar），由它以這些請求呼叫 ``sgb.build_sgb_geometry`` 建構。"
+Next.en = "``palace/mesh`` meshes the banded build, and ``palace/source``, ``palace/config`` and ``palace/results`` read the specs and their margins."
+Next.zh = "``palace/mesh`` 為帶狀建構產生網格；``palace/source``、``palace/config`` 與 ``palace/results`` 讀取規格與其邊距。"
 
 ["geometry/planning"]
 summary.en = "Planning that only AEDT's native construction uses: surface, contact, domain and topology planning, evidence and tags."
@@ -99,44 +99,44 @@ summary.en = "Semantic geometry builder (SGB) core: the prism-based, Boolean-fre
 summary.zh = "語意幾何建構器（SGB）核心：以稜柱為基礎、不使用布林運算的流程。"
 
 ["geometry/sgb/exact"]
-summary.en = "The exact vocabulary every stage shares: integer geometry and the records the stages hand to one another."
-summary.zh = "每個階段共用的精確詞彙：整數幾何，以及各階段互相交接的紀錄。"
-In.en = "nothing; this folder imports no other part of SGB."
-In.zh = "沒有；這個資料夾不匯入 SGB 的其他部分。"
-Out.en = "the model grid, plane predicates, circle arithmetic, carriers and their lineage, labels, prisms, cut-family, band-region and support records, content-addressed ids and the stage stopwatch."
-Out.zh = "模型格點、平面判定、圓的算術、載體與其來歷、標籤、稜柱、切割族、帶區域與支撐紀錄、內容定址的 id，以及階段計時器。"
-Next.en = "every stage imports it."
-Next.zh = "每個階段都匯入它。"
+summary.en = "The exact vocabulary every stage shares: integer geometry, the records the stages hand to one another, and the boundary binding."
+summary.zh = "每個階段共用的精確詞彙：整數幾何、各階段互相交接的紀錄，以及邊界綁定。"
+In.en = "the effective ``GeometryBuildInput``, for the footprints and the boundary binding; this folder imports no other part of SGB but ``errors``."
+In.zh = "有效的 ``GeometryBuildInput``，供輪廓與邊界綁定使用；這個資料夾除了 ``errors`` 之外不匯入 SGB 的其他部分。"
+Out.en = "the model grid, plane predicates, circle arithmetic, carriers and their lineage, labels and the interface type of a face, prisms, cut-family, band-region and support records, content-addressed ids, the stage stopwatch, and the footprints of the input with their boundary records bound to exact lines and arcs."
+Out.zh = "模型格點、平面判定、圓的算術、載體與其來歷、標籤與面的介面類型、稜柱、切割族、帶區域與支撐紀錄、內容定址的 id、階段計時器，以及輸入的輪廓與其綁定到精確直線與圓弧的邊界紀錄。"
+Next.en = "every stage of SGB imports it; the junction partition (``geometry.junctions``) reads the bound rings of a lumped port's terminals from it."
+Next.zh = "SGB 的每個階段都匯入它；junction 分割（``geometry.junctions``）從這裡讀取集總埠端子的綁定環。"
 
 ["geometry/sgb/prisms"]
 summary.en = "S2: the effective input as prisms (planar footprints extruded over Z intervals), levels and slabs."
 summary.zh = "S2：把有效輸入表示成稜柱（沿 Z 區間擠出的平面輪廓）、層級與厚片。"
 In.en = "the effective ``GeometryBuildInput`` and ``RepresentationContext``."
 In.zh = "有效的 ``GeometryBuildInput`` 與 ``RepresentationContext``。"
-Out.en = "the ``PrismCatalogue`` (sources, ports and the declared grid as prisms), the ``LevelStructure`` (levels, slabs and active sets) and the bound rings of chosen conductors."
-Out.zh = "``PrismCatalogue``（以稜柱表示的來源、埠與宣告的格點）、``LevelStructure``（層級、厚片與作用集合），以及選定導體的綁定環。"
-Next.en = "``bands`` adds the cut families the requests ask for."
-Next.zh = "``bands`` 加入請求要求的切割族。"
+Out.en = "the ``PrismCatalogue`` (sources, ports and the declared grid as prisms) and the ``LevelStructure`` (levels, slabs and active sets)."
+Out.zh = "``PrismCatalogue``（以稜柱表示的來源、埠與宣告的格點）與 ``LevelStructure``（層級、厚片與作用集合）。"
+Next.en = "``arrangement`` derives the arrangements of the catalogue (its physical prisms alone first, for ``bands``)."
+Next.zh = "``arrangement`` 推導目錄的排列（先只用物理稜柱，供 ``bands`` 使用）。"
 
 ["geometry/sgb/bands"]
 summary.en = "S3: the inset bands a caller requests, as cut families."
 summary.zh = "S3：呼叫者請求的內縮帶，以切割族表示。"
-In.en = "the ``PrismCatalogue`` and the typed ``InsetRequest`` values."
-In.zh = "``PrismCatalogue`` 與有型別的 ``InsetRequest`` 值。"
-Out.en = "the catalogue carrying one ``CurveFamilyRecord`` per family, and the inset plan that says which faces were banded."
-Out.zh = "每個族帶有一筆 ``CurveFamilyRecord`` 的目錄，以及說明哪些面已加上內縮帶的內縮計畫。"
-Next.en = "``arrangement`` nodes the families together with the source curves."
-Next.zh = "``arrangement`` 把這些族與來源曲線一起切點。"
+In.en = "the ``PrismCatalogue``, the typed ``InsetRequest`` values and the physical pre-pass (``LabelledArrangements`` of the physical prisms, from ``arrangement``)."
+In.zh = "``PrismCatalogue``、有型別的 ``InsetRequest`` 值，以及物理預先處理的結果（物理稜柱的 ``LabelledArrangements``，來自 ``arrangement``）。"
+Out.en = "the catalogue carrying one ``CurveFamilyRecord`` per band family, and the ``InsetPlan`` that says which faces were banded."
+Out.zh = "每個帶族帶有一筆 ``CurveFamilyRecord`` 的目錄，以及說明哪些面已加上內縮帶的 ``InsetPlan``。"
+Next.en = "``arrangement`` derives the arrangements again, the families noded together with the source curves."
+Next.zh = "``arrangement`` 再推導一次排列，把這些族與來源曲線一起切點。"
 
 ["geometry/sgb/arrangement"]
 summary.en = "S4 and S5: the planar arrangement of the curves on the grid, its cells labelled and dissolved."
 summary.zh = "S4 與 S5：曲線在格點上的平面排列，其單元已標記並合併。"
-In.en = "the ``PrismCatalogue`` with its cut families (the ``LevelStructure`` is built from it)."
-In.zh = "帶有切割族的 ``PrismCatalogue``（``LevelStructure`` 由它建立）。"
+In.en = "a ``PrismCatalogue`` (the ``LevelStructure`` is built from it): the physical prisms alone for the pre-pass, then the whole catalogue with the cut families of ``bands``."
+In.zh = "一個 ``PrismCatalogue``（``LevelStructure`` 由它建立）：預先處理時只用物理稜柱，之後是帶有 ``bands`` 切割族的完整目錄。"
 Out.en = "the ``LabelledArrangements``: every slab and level arrangement, dissolved, labelled and content-addressed."
 Out.zh = "``LabelledArrangements``：每個厚片與層級的排列，已合併、已標記且內容定址。"
-Next.en = "``topology`` stacks them into vertices, edges, faces and volumes."
-Next.zh = "``topology`` 把它們堆疊成頂點、邊、面與體積。"
+Next.en = "``bands`` finds the inset support faces on the pre-pass; ``topology`` stacks the final arrangements into vertices, edges, faces and volumes."
+Next.zh = "``bands`` 在預先處理的結果上找出內縮支撐面；``topology`` 把最終的排列堆疊成頂點、邊、面與體積。"
 
 ["geometry/sgb/arrangement/noding"]
 summary.en = "S4: snap rounding of the curves onto the integer grid."
@@ -169,14 +169,14 @@ summary.en = "S7 and S8: Route A, B and C as labelling policies, decision-D5 nam
 summary.zh = "S7 與 S8：以標記策略表示的 Route A、B、C，決策 D5 的名稱，以及主要物理群組。"
 
 ["geometry/sgb/checks"]
-summary.en = "S9: the checks of the model and of the files written from it."
-summary.zh = "S9：模型的檢查，以及由模型寫出之檔案的檢查。"
-In.en = "the model (``LabelledArrangements``, ``Topology``, ``RoutedModel``) and, for the file checks, a written XAO or BREP with its sidecar."
-In.zh = "模型（``LabelledArrangements``、``Topology``、``RoutedModel``）；檔案檢查另外需要寫出的 XAO 或 BREP 與其 sidecar。"
-Out.en = "the ``ValidationReport`` (a failed invariant raises, so no failing model is returned), the sliver report, and the load-side and OCCT mismatches of a written file."
-Out.zh = "``ValidationReport``（不變量失敗時會丟出例外，因此不會回傳失敗的模型）、細長面報告，以及寫出檔案在載入端與 OCCT 檢查中的不一致。"
-Next.en = "``output`` writes the files of a model that passed; the file checks run on what it wrote."
-Next.zh = "``output`` 寫出通過檢查之模型的檔案；檔案檢查針對它寫出的內容執行。"
+summary.en = "S9: the checks of the model before any file is written."
+summary.zh = "S9：寫出任何檔案之前對模型的檢查。"
+In.en = "the model (``LabelledArrangements``, ``Topology``, ``RoutedModel``)."
+In.zh = "模型（``LabelledArrangements``、``Topology``、``RoutedModel``）。"
+Out.en = "the ``ValidationReport`` (a failed invariant raises, so no failing model is returned) and the sliver report."
+Out.zh = "``ValidationReport``（不變量失敗時會丟出例外，因此不會回傳失敗的模型）與細長面報告。"
+Next.en = "``model`` returns the model that passed; ``output`` writes its files and the sliver report beside them."
+Next.zh = "``model`` 回傳通過檢查的模型；``output`` 寫出它的檔案，並把細長面報告放在旁邊。"
 
 ["geometry/sgb/checks/validation"]
 summary.en = "S9: the structural invariants of the arrangements, the topology and the ids; a failure raises."
@@ -186,7 +186,7 @@ summary.zh = "S9：排列、拓樸與 id 的結構不變量；失敗時丟出例
 summary.en = "S9: the sliver report, the local feature size of the faces on their exact carriers; measurements only."
 summary.zh = "S9：細長面報告，即各面在其精確載體上的局部特徵尺寸；只做量測。"
 
-["geometry/sgb/checks/verification"]
+["geometry/sgb/output/verification"]
 summary.en = "Checks of the written geometry: the Gmsh load check and what the OCCT checks add."
 summary.zh = "寫出之幾何的檢查：Gmsh 載入檢查，以及 OCCT 檢查額外涵蓋的部分。"
 
@@ -195,10 +195,10 @@ summary.en = "S10: the files of a validated model: BREP and XAO, the sidecar and
 summary.zh = "S10：已驗證模型的檔案：BREP 與 XAO、sidecar，以及 AEDT 用的 STEP 匯出。"
 In.en = "the validated ``ConformalModel``."
 In.zh = "已驗證的 ``ConformalModel``。"
-Out.en = "the byte-deterministic BREP and XAO, the ``scgsim.sgb.sidecar.v5`` JSON that binds every planned id to its native tag, and the STEP of the emitted solids with its guard."
-Out.zh = "位元組確定的 BREP 與 XAO、把每個規劃 id 綁定到原生標記的 ``scgsim.sgb.sidecar.v5`` JSON，以及輸出實體的 STEP 與其防護紀錄。"
-Next.en = "the mesher and the solver adapters read the files; ``checks.verification`` checks them."
-Next.zh = "網格器與求解器轉接層讀取這些檔案；``checks.verification`` 檢查它們。"
+Out.en = "the byte-deterministic BREP and XAO, the ``scgsim.sgb.sidecar.v5`` JSON that binds every planned id to its native tag, the load-side and OCCT mismatches of a written file, and the STEP of the emitted solids with its guard."
+Out.zh = "位元組確定的 BREP 與 XAO、把每個規劃 id 綁定到原生標記的 ``scgsim.sgb.sidecar.v5`` JSON、寫出檔案在載入端與 OCCT 檢查中的不一致，以及輸出實體的 STEP 與其防護紀錄。"
+Next.en = "the mesher and the solver adapters read the files."
+Next.zh = "網格器與求解器轉接層讀取這些檔案。"
 
 ["geometry/sgb/output/emission"]
 summary.en = "Stage S10: the direct BREP / XAO writer (design brief decision D8)."
@@ -215,6 +215,12 @@ summary.zh = "輸出實體與其他工具的交換：AEDT 用的 STEP 匯出與�
 ["geometry/sgb/section"]
 summary.en = "SGB's 2D models: the plane section of a validated 3D model along a cut line."
 summary.zh = "SGB 的 2D 模型：已驗證 3D 模型沿一條切線的平面截面。"
+In.en = "the validated ``ConformalModel`` (from ``model``) and a ``CutLine``."
+In.zh = "已驗證的 ``ConformalModel``（來自 ``model``）與一條 ``CutLine``。"
+Out.en = "the ``SectionModel``: the section's vertices, edges and faces with the 3D groups, Surface-EPR rows and band families the cut crosses, validated in 2D; nothing is written."
+Out.zh = "``SectionModel``：截面的頂點、邊與面，加上切線穿過的 3D 群組、Surface-EPR 列與帶族，並已在 2D 驗證；不寫出任何檔案。"
+Next.en = "the caller reads it in memory; no stage of the package reads it."
+Next.zh = "呼叫者在記憶體中讀取它；套件中沒有階段讀取它。"
 
 ["meshing"]
 summary.en = "Standalone meshing of SGB geometry: sizes from a recipe, a quality audit and a repair loop."

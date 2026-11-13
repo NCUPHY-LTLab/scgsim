@@ -72,7 +72,7 @@ def build_section_model(model: ConformalModel, cut: CutLine) -> SectionModel:
         groups,
         unions,
         rows,
-        _band_families(model, assembled),
+        _band_family_requests(model, assembled),
         report,
     )
 
@@ -89,7 +89,7 @@ def _groups(assembled: AssembledSection) -> dict[str, PhysicalGroup]:
     return dict(sorted(groups.items()))
 
 
-def _band_families(
+def _band_family_requests(
     model: ConformalModel, assembled: AssembledSection
 ) -> tuple[InsetRequest, ...]:
     """The band families the cut crosses, as their concrete requests (with their margins), in family order."""

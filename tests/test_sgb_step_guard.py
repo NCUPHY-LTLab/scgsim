@@ -50,7 +50,11 @@ def export(model, folder):
     plan = plan_brep(model.topology, model.routed)
     write_brep_file(plan, folder / "m.brep")
     sidecar = build_sidecar(
-        model, plan, SidecarContext(sliver_report(model)["summary"])
+        model,
+        plan,
+        SidecarContext(
+            sliver_report(model.labelled, model.topology, model.routed)["summary"]
+        ),
     )
     write_sidecar(folder / "m.sidecar.json", sidecar)
     return sidecar, export_aedt_step(

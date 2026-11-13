@@ -10,7 +10,7 @@
 | `geometry/grid` | 各階段呼叫的格點引擎：在模型格點上切點、帶標記的區域、疊加、環與多邊形運算。 | 多邊形環，以及這次建構的 `GeometryGridContext`。 | 在該格點上切好點的環、帶標記的區域，以及保留來源出處的環運算；任何運算無法證明的變更，都在發生處被拒絕。 | `source` 用它們組出 snapshot；`interpretation`、`junctions` 與 `planning` 呼叫同樣的運算。各階段共用的紀錄在 `models`，不在這裡。 |
 | `geometry/interpretation` | 準備好的輸入的物理解讀，以及它的真空包絡。 | 準備好的 `GeometryBuildInput` 與堆疊，以及選定的近似設定。 | 有效輸入與堆疊，帶有物理表示計畫與自動真空包絡；最後一步會導出矩形接面。 | `junctions`（在解讀結束時呼叫），接著 `sgb` 從有效輸入建構。 |
 | `geometry/junctions` | 集總埠周圍的矩形分割：切割規則、精確輸出與檢查。 | 有效輸入與其矩形接面請求，每個請求指明一個來源多邊形與它的兩個端子網路。 | 每個被請求的多邊形切成中央矩形與屬於兩端端子的端塊後的輸入，以及記錄這次切割的 `junction_partitions`。 | `sgb` 從這個輸入建構並讀取該紀錄；它從不匯入這個資料夾。 |
-| `geometry/surface_epr` | 不依賴後端的 Surface-EPR 幾何：正規化的規格、對應的 SGB 帶狀請求，以及帶有內縮帶的建構。 | Palace 模擬的 `MA`／`MS`／`SA` 規格（來自 `palace/source`）；帶狀建構另外需要有效的 `GeometryBuildInput`、它的 `RepresentationContext` 與路線（來自 `palace/mesh`）。 | 正規化的規格與每個面採用的邊距、SGB 內縮請求，以及帶狀建構的檔案（`SgbArtifacts`：XAO、BREP 與 sidecar）。 | `sgb` 依內縮請求建構幾何；`palace/mesh` 為帶狀建構產生網格，`palace/source`、`palace/config` 與 `palace/results` 讀取規格與其邊距。 |
+| `geometry/surface_epr` | 不依賴後端的 Surface-EPR 幾何：正規化的規格、對應的 SGB 帶狀請求，以及帶有內縮帶的建構。 | Palace 模擬的 `MA`／`MS`／`SA` 規格（來自 `palace/source`）；帶狀建構另外需要有效的 `GeometryBuildInput`、它的 `RepresentationContext` 與路線（來自呼叫它的 `palace/mesh`）。 | 正規化的規格與每個面採用的邊距、SGB 內縮請求，以及帶狀建構的檔案（`SgbArtifacts`：XAO、BREP 與 sidecar），由它以這些請求呼叫 `sgb.build_sgb_geometry` 建構。 | `palace/mesh` 為帶狀建構產生網格；`palace/source`、`palace/config` 與 `palace/results` 讀取規格與其邊距。 |
 | `geometry/planning` | 只有 AEDT 原生建構使用的規劃：表面、接觸、區域與拓樸規劃，以及證據與標記。 | 來自 `interpretation` 的有效輸入。 | 表面、接觸、區域與拓樸計畫，AEDT 據以建構的標記與證據紀錄，以及這些計畫共用的實體查詢、座標與邊界運算。表面分割與建構本體的紀錄放在 `surface_planning`，因為只有它讀取。 | `scgsim.aedt`。Palace 路線上（`scgsim.palace`、`sgb`、`surface_epr`）沒有任何程式匯入這個資料夾。 |
 | `geometry/planning/contact_planning` | 規劃導體接觸、重疊歸屬與同網路成員。 | 屬於 `geometry/planning`，請與那一列一起閱讀。 |  |  |
 | `geometry/planning/domain_planning` | 規劃精確的物理區域占用、相鄰關係與邊界幾何。 | 屬於 `geometry/planning`，請與那一列一起閱讀。 |  |  |
@@ -22,25 +22,25 @@
 | 資料夾 | 它是什麼 | In | Out | Next |
 | --- | --- | --- | --- | --- |
 | `geometry/sgb` | 語意幾何建構器（SGB）核心：以稜柱為基礎、不使用布林運算的流程。 | 這一區本身的資料夾：docstring 描述整個區。 |  |  |
-| `geometry/sgb/exact` | 每個階段共用的精確詞彙：整數幾何，以及各階段互相交接的紀錄。 | 沒有；這個資料夾不匯入 SGB 的其他部分。 | 模型格點、平面判定、圓的算術、載體與其來歷、標籤、稜柱、切割族、帶區域與支撐紀錄、內容定址的 id，以及階段計時器。 | 每個階段都匯入它。 |
-| `geometry/sgb/prisms` | S2：把有效輸入表示成稜柱（沿 Z 區間擠出的平面輪廓）、層級與厚片。 | 有效的 `GeometryBuildInput` 與 `RepresentationContext`。 | `PrismCatalogue`（以稜柱表示的來源、埠與宣告的格點）、`LevelStructure`（層級、厚片與作用集合），以及選定導體的綁定環。 | `bands` 加入請求要求的切割族。 |
-| `geometry/sgb/bands` | S3：呼叫者請求的內縮帶，以切割族表示。 | `PrismCatalogue` 與有型別的 `InsetRequest` 值。 | 每個族帶有一筆 `CurveFamilyRecord` 的目錄，以及說明哪些面已加上內縮帶的內縮計畫。 | `arrangement` 把這些族與來源曲線一起切點。 |
-| `geometry/sgb/arrangement` | S4 與 S5：曲線在格點上的平面排列，其單元已標記並合併。 | 帶有切割族的 `PrismCatalogue`（`LevelStructure` 由它建立）。 | `LabelledArrangements`：每個厚片與層級的排列，已合併、已標記且內容定址。 | `topology` 把它們堆疊成頂點、邊、面與體積。 |
+| `geometry/sgb/exact` | 每個階段共用的精確詞彙：整數幾何、各階段互相交接的紀錄，以及邊界綁定。 | 有效的 `GeometryBuildInput`，供輪廓與邊界綁定使用；這個資料夾除了 `errors` 之外不匯入 SGB 的其他部分。 | 模型格點、平面判定、圓的算術、載體與其來歷、標籤與面的介面類型、稜柱、切割族、帶區域與支撐紀錄、內容定址的 id、階段計時器，以及輸入的輪廓與其綁定到精確直線與圓弧的邊界紀錄。 | SGB 的每個階段都匯入它；junction 分割（`geometry.junctions`）從這裡讀取集總埠端子的綁定環。 |
+| `geometry/sgb/prisms` | S2：把有效輸入表示成稜柱（沿 Z 區間擠出的平面輪廓）、層級與厚片。 | 有效的 `GeometryBuildInput` 與 `RepresentationContext`。 | `PrismCatalogue`（以稜柱表示的來源、埠與宣告的格點）與 `LevelStructure`（層級、厚片與作用集合）。 | `arrangement` 推導目錄的排列（先只用物理稜柱，供 `bands` 使用）。 |
+| `geometry/sgb/arrangement` | S4 與 S5：曲線在格點上的平面排列，其單元已標記並合併。 | 一個 `PrismCatalogue`（`LevelStructure` 由它建立）：預先處理時只用物理稜柱，之後是帶有 `bands` 切割族的完整目錄。 | `LabelledArrangements`：每個厚片與層級的排列，已合併、已標記且內容定址。 | `bands` 在預先處理的結果上找出內縮支撐面；`topology` 把最終的排列堆疊成頂點、邊、面與體積。 |
 | `geometry/sgb/arrangement/noding` | S4：把曲線以捨入對齊到整數格點。 | 屬於 `geometry/sgb/arrangement`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/arrangement/labelling` | S5：單元標籤、合併、成員關係，以及厚片排列與層級排列之間的連結。 | 屬於 `geometry/sgb/arrangement`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/arrangement/derivation` | S4 與 S5 對每個厚片與層級執行：標記好的排列作為一個內容定址的結果。 | 屬於 `geometry/sgb/arrangement`，請與那一列一起閱讀。 |  |  |
+| `geometry/sgb/bands` | S3：呼叫者請求的內縮帶，以切割族表示。 | `PrismCatalogue`、有型別的 `InsetRequest` 值，以及物理預先處理的結果（物理稜柱的 `LabelledArrangements`，來自 `arrangement`）。 | 每個帶族帶有一筆 `CurveFamilyRecord` 的目錄，以及說明哪些面已加上內縮帶的 `InsetPlan`。 | `arrangement` 再推導一次排列，把這些族與來源曲線一起切點。 |
 | `geometry/sgb/topology` | S6 到 S8：共用的邊界表示，以及每條路線如何使用它。 | `LabelledArrangements`。 | `Topology`（帶有內容定址 id 的頂點、邊、面、牆與體積）與 `RoutedModel`（輸出的體積與面、決策 D5 的名稱，以及一條路線的主要群組）。 | `checks` 驗證它，`output` 寫出它。 |
 | `geometry/sgb/topology/assembly` | S6：從標記好的排列建立頂點、邊、水平面、牆、垂直邊、體積與殼。 | 屬於 `geometry/sgb/topology`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/topology/routes` | S7 與 S8：以標記策略表示的 Route A、B、C，決策 D5 的名稱，以及主要物理群組。 | 屬於 `geometry/sgb/topology`，請與那一列一起閱讀。 |  |  |
-| `geometry/sgb/checks` | S9：模型的檢查，以及由模型寫出之檔案的檢查。 | 模型（`LabelledArrangements`、`Topology`、`RoutedModel`）；檔案檢查另外需要寫出的 XAO 或 BREP 與其 sidecar。 | `ValidationReport`（不變量失敗時會丟出例外，因此不會回傳失敗的模型）、細長面報告，以及寫出檔案在載入端與 OCCT 檢查中的不一致。 | `output` 寫出通過檢查之模型的檔案；檔案檢查針對它寫出的內容執行。 |
+| `geometry/sgb/checks` | S9：寫出任何檔案之前對模型的檢查。 | 模型（`LabelledArrangements`、`Topology`、`RoutedModel`）。 | `ValidationReport`（不變量失敗時會丟出例外，因此不會回傳失敗的模型）與細長面報告。 | `model` 回傳通過檢查的模型；`output` 寫出它的檔案，並把細長面報告放在旁邊。 |
 | `geometry/sgb/checks/validation` | S9：排列、拓樸與 id 的結構不變量；失敗時丟出例外。 | 屬於 `geometry/sgb/checks`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/checks/slivers` | S9：細長面報告，即各面在其精確載體上的局部特徵尺寸；只做量測。 | 屬於 `geometry/sgb/checks`，請與那一列一起閱讀。 |  |  |
-| `geometry/sgb/checks/verification` | 寫出之幾何的檢查：Gmsh 載入檢查，以及 OCCT 檢查額外涵蓋的部分。 | 屬於 `geometry/sgb/checks`，請與那一列一起閱讀。 |  |  |
-| `geometry/sgb/output` | S10：已驗證模型的檔案：BREP 與 XAO、sidecar，以及 AEDT 用的 STEP 匯出。 | 已驗證的 `ConformalModel`。 | 位元組確定的 BREP 與 XAO、把每個規劃 id 綁定到原生標記的 `scgsim.sgb.sidecar.v5` JSON，以及輸出實體的 STEP 與其防護紀錄。 | 網格器與求解器轉接層讀取這些檔案；`checks.verification` 檢查它們。 |
+| `geometry/sgb/output` | S10：已驗證模型的檔案：BREP 與 XAO、sidecar，以及 AEDT 用的 STEP 匯出。 | 已驗證的 `ConformalModel`。 | 位元組確定的 BREP 與 XAO、把每個規劃 id 綁定到原生標記的 `scgsim.sgb.sidecar.v5` JSON、寫出檔案在載入端與 OCCT 檢查中的不一致，以及輸出實體的 STEP 與其防護紀錄。 | 網格器與求解器轉接層讀取這些檔案。 |
 | `geometry/sgb/output/emission` | S10 階段：直接寫出 BREP／XAO 的寫入器（設計簡報決策 D8）。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/output/sidecar` | 正式的 sidecar `scgsim.sgb.sidecar.v5`（設計簡報第 7 與 12 節，決策 D8）。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
+| `geometry/sgb/output/verification` | 寫出之幾何的檢查：Gmsh 載入檢查，以及 OCCT 檢查額外涵蓋的部分。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/output/exchange` | 輸出實體與其他工具的交換：AEDT 用的 STEP 匯出與其匯入防護（設計簡報決策 D4，實驗 E4）。 | 屬於 `geometry/sgb/output`，請與那一列一起閱讀。 |  |  |
-| `geometry/sgb/section` | SGB 的 2D 模型：已驗證 3D 模型沿一條切線的平面截面。 | docstring 列出它的模組，而沒有 In、Out、Next 三行。 |  |  |
+| `geometry/sgb/section` | SGB 的 2D 模型：已驗證 3D 模型沿一條切線的平面截面。 | 已驗證的 `ConformalModel`（來自 `model`）與一條 `CutLine`。 | `SectionModel`：截面的頂點、邊與面，加上切線穿過的 3D 群組、Surface-EPR 列與帶族，並已在 2D 驗證；不寫出任何檔案。 | 呼叫者在記憶體中讀取它；套件中沒有階段讀取它。 |
 
 ### `meshing`
 

@@ -1,7 +1,7 @@
 """The tolerances with which a loaded model is compared with the sidecar's ``expected`` block.
 
-One set for every loader: Gmsh (:func:`~scgsim.geometry.sgb.checks.verification.loaded.verify_loaded`) and OCP
-(:func:`~scgsim.geometry.sgb.checks.verification.occt.sidecar_mismatches`) accept the same difference, so a file
+One set for every loader: Gmsh (:func:`~scgsim.geometry.sgb.output.verification.loaded.verify_loaded`) and OCP
+(:func:`~scgsim.geometry.sgb.output.verification.occt.sidecar_mismatches`) accept the same difference, so a file
 that passes one passes the other.  This module imports neither, so each can use it without the other's
 optional dependency.
 """

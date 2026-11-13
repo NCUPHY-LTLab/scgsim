@@ -33,17 +33,14 @@ from scgsim.contracts.sgb_sidecar.records import (
     VolumeKind,
 )
 from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.exact.interfaces import SHEET, SURFACE_EPR_TYPES
 from scgsim.geometry.sgb.exact.labels import Domain
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import planned_face_area_um2, rounded
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.topology.routes.groups import RoutedFace, RoutedModel
-from scgsim.geometry.sgb.topology.routes.naming import (
-    SHEET,
-    SURFACE_EPR_TYPES,
-    sheet_row_id,
-)
+from scgsim.geometry.sgb.topology.routes.naming import sheet_row_id
 
 
 def group_members(plan: BrepPlan) -> dict[str, list[str]]:
@@ -207,7 +204,9 @@ def _group_face_kind(name: str, faces: list[RoutedFace]) -> FaceKind:
     """The one face kind of a group; a group that mixed two would be a naming defect, so it stops the build."""
     kinds = {f.face_kind for f in faces}
     if len(kinds) != 1:
-        raise SgbError(f"physical group {name} mixes face kinds {sorted(kinds)}")
+        raise SgbError(
+            f"internal: physical group {name} mixes face kinds {sorted(kinds)}"
+        )
     return cast(FaceKind, kinds.pop())
 
 
@@ -217,7 +216,7 @@ def _group_interface_type(name: str, faces: list[RoutedFace]) -> InterfaceType:
     found = sorted(t for t in types if t is not None)
     if len(types) != 1 or len(found) != 1:
         raise SgbError(
-            f"physical group {name} mixes interface types {sorted(map(str, types))}"
+            f"internal: physical group {name} mixes interface types {sorted(map(str, types))}"
         )
     return cast(InterfaceType, found[0])
 

@@ -4,6 +4,11 @@ A 2D model stands for an infinitely long, uniform line with one cross-section.  
 plane section of its own validated 3D model, held in memory, so the Entities, Nets, materials, surface kinds and
 Surface-EPR bands of the 2D model are the 3D model's by construction.
 
+In: the validated ``ConformalModel`` (from ``model``) and a ``CutLine``.
+Out: the ``SectionModel``: the section's vertices, edges and faces with the 3D groups, Surface-EPR rows and band
+families the cut crosses, validated in 2D; nothing is written.
+Next: the caller reads it in memory; no stage of the package reads it.
+
 * ``frame``      the cut line on the model grid and the section's frame (``u`` along the cut, ``z`` up)
 * ``rules``      the cut rules and their located refusals
 * ``traces``     the traces of the emitted faces and walls on the cut

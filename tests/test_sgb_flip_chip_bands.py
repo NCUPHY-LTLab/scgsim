@@ -21,9 +21,9 @@ from scgsim.geometry.sgb.bands.requests import (
     InterfaceSurfaces,
 )
 from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.interfaces import interface_type_of
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.topology.routes.naming import interface_type_of
 
 MARGINS = (0.5, 1.0)
 HALF = 20.0  # the die is 40 x 40 um
@@ -93,7 +93,7 @@ def expansion_of(model: ConformalModel, request_id: str):
     (found,) = (
         e for e in model.inset_plan.expansions if e.request.request_id == request_id
     )
-    return list(found.banded), [s.support for s in found.skipped]
+    return list(found.families), [s.support for s in found.skipped]
 
 
 def band_areas(model: ConformalModel, family_id: str, row_type: str) -> list[float]:

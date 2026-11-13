@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
@@ -36,7 +37,6 @@ from scgsim.geometry.sgb.bands.supports import (
     faces_of_type,
     lattice_margins,
     locate_face,
-    physical_labelling,
     resolve_support,
 )
 from scgsim.geometry.sgb.errors import InputError, NoGapEdgeError
@@ -60,7 +60,9 @@ class TypeExpansion:
     """What one type-level request became: the families that carry its bands and the faces it skipped."""
 
     request: InsetRequest
-    banded: tuple[str, ...]  # family ids, in face order
+    families: tuple[
+        str, ...
+    ]  # the band families that carry its bands, by id, in face order
     skipped: tuple[SkippedFace, ...]
 
 
@@ -96,12 +98,16 @@ class _NamedFace:
 
 
 def plan_insets(
-    catalogue: PrismCatalogue, requests: tuple[InsetRequest, ...]
+    catalogue: PrismCatalogue,
+    requests: tuple[InsetRequest, ...],
+    labelled: LabelledArrangements,
 ) -> InsetPlan:
-    """Expand the type-level requests, merge what lands on one face and resolve every family's support."""
-    if not requests:
-        return InsetPlan()
-    labelled = physical_labelling(catalogue)
+    """Expand the type-level requests, merge what lands on one face and resolve every family's support.
+
+    ``labelled`` is the physical pre-pass of ``catalogue``
+    (:func:`~scgsim.geometry.sgb.arrangement.derivation.labelled.derive_physical_arrangements`): every face is
+    found on it, so ports, contact caps and other bands never move a band.
+    """
     named: list[_NamedFace] = []
     typed: dict[FaceId, list[InsetRequest]] = {}
     type_requests: list[InsetRequest] = []
@@ -116,7 +122,7 @@ def plan_insets(
                 typed.setdefault(face, []).append(request)
         else:
             named.append(_NamedFace(request, locate_face(request, catalogue, labelled)))
-    banded: dict[str, list[str]] = {r.request_id: [] for r in type_requests}
+    families: dict[str, list[str]] = {r.request_id: [] for r in type_requests}
     skipped: dict[str, list[SkippedFace]] = {r.request_id: [] for r in type_requests}
     supports: list[ResolvedSupport] = []
     for job in _jobs(named, typed, catalogue.grid):
@@ -129,9 +135,9 @@ def plan_insets(
                 skipped[ask.request_id].append(SkippedFace(job.face.support()))
             continue
         for ask in job.typed:
-            banded[ask.request_id].append(job.request.request_id)
+            families[ask.request_id].append(job.request.request_id)
     expansions = tuple(
-        TypeExpansion(r, tuple(banded[r.request_id]), tuple(skipped[r.request_id]))
+        TypeExpansion(r, tuple(families[r.request_id]), tuple(skipped[r.request_id]))
         for r in type_requests
     )
     return InsetPlan(tuple(supports), expansions)

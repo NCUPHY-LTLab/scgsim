@@ -54,7 +54,7 @@ def expansion_of(model, request_id):
     (found,) = (
         e for e in model.inset_plan.expansions if e.request.request_id == request_id
     )
-    return list(found.banded), [s.support for s in found.skipped]
+    return list(found.families), [s.support for s in found.skipped]
 
 
 def family_margins(model):
@@ -540,8 +540,8 @@ def test_a_type_request_gives_one_sidecar_for_every_hash_seed():
 def test_a_type_request_model_passes_the_official_occt_checks(tmp_path):
     """A model banded by type: the written XAO is read back and checked by OpenCASCADE."""
     pytest.importorskip("OCP")
-    from scgsim.geometry.sgb.checks.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
     from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
+    from scgsim.geometry.sgb.output.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
 
     model = build(
         pad_in_ground("B"), "B", *by_type("MA", "MS", "SA", margins=(0.5, 2.0))

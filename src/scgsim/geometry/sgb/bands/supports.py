@@ -51,14 +51,11 @@ has a gap edge is only known when it is resolved (:class:`NoGapEdgeError`).
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from fractions import Fraction
 
 from scgsim.geometry.models.grid import format_box
-from scgsim.geometry.sgb.arrangement.derivation.labelled import (
-    LabelledArrangements,
-    derive_from_catalogue,
-)
+from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.bands.die_cuts import (
     cells_beyond_the_die,
@@ -72,13 +69,13 @@ from scgsim.geometry.sgb.bands.gap_intervals import (
     split_at_gaps,
 )
 from scgsim.geometry.sgb.bands.requests import (
-    FACE_KINDS,
+    BANDED_FACE_KINDS,
+    BandedFaceKind,
     ConcreteSupport,
+    ConductorSide,
     ConductorSurface,
-    FaceKind,
     InsetRequest,
     InterfaceSurfaces,
-    Side,
     SolutionInterface,
 )
 from scgsim.geometry.sgb.errors import InputError, NoGapEdgeError
@@ -89,16 +86,16 @@ from scgsim.geometry.sgb.exact.carriers import (
     RingPrimitive,
 )
 from scgsim.geometry.sgb.exact.grid import Grid, exact_z
-from scgsim.geometry.sgb.exact.labels import LevelLabel
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.exact.support import SupportRegion, primitive_ends
-from scgsim.geometry.sgb.topology.routes.naming import (
+from scgsim.geometry.sgb.exact.interfaces import (
     INTERFACE_TYPES,
     SHEET,
     SURFACE_EPR_TYPES,
     interface_type_of,
     sheet_face_sides,
 )
+from scgsim.geometry.sgb.exact.labels import LevelLabel
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
+from scgsim.geometry.sgb.exact.support import SupportRegion, primitive_ends
 
 
 @dataclass(frozen=True)
@@ -114,12 +111,12 @@ class ResolvedSupport:
 class FaceId:
     """One bandable face, whoever asked for it: its kind, the entities it belongs to and the level it lies on.
 
-    ``kind`` is one of :data:`~scgsim.geometry.sgb.bands.requests.FACE_KINDS`.  A conductor face has its one
+    ``kind`` is one of :data:`~scgsim.geometry.sgb.bands.requests.BANDED_FACE_KINDS`.  A conductor face has its one
     entity; an interface has its two solution regions, the dielectric first (the order of its group name).
     Two requests land on the same face exactly when their :class:`FaceId` s are equal.
     """
 
-    kind: FaceKind
+    kind: BandedFaceKind
     entities: tuple[str, ...]
     level: Fraction
 
@@ -140,16 +137,6 @@ class FaceId:
 def level_label(level: Fraction) -> str:
     """The level of an interface as it appears in request ids: ``z=<z>`` with ``<z>`` a float in micrometres."""
     return f"z={float(level)}"
-
-
-def physical_labelling(catalogue: PrismCatalogue) -> LabelledArrangements:
-    """The physical pre-pass: the catalogue's prisms without ports or cut families, labelled."""
-    physical = replace(
-        catalogue,
-        prisms=tuple(p for p in catalogue.prisms if p.material_kind != "port"),
-        families=(),
-    )
-    return derive_from_catalogue(physical)
 
 
 def resolve_support(
@@ -196,7 +183,7 @@ def concrete_support(request: InsetRequest) -> ConcreteSupport:
     """The face a request names; a type-level request names none (``inset_plan`` expands it into faces first)."""
     if isinstance(request.support, InterfaceSurfaces):
         raise InputError(
-            f"inset request {request.request_id!r}: a type-level support names no single face"
+            f"internal: inset request {request.request_id!r}: a type-level support names no single face"
         )
     return request.support
 
@@ -398,7 +385,7 @@ def lattice_margins(request: InsetRequest, grid: Grid) -> tuple[int, ...]:
     """The margins of a request as positive, strictly increasing multiples of the model grid (grid units)."""
     if not request.margins_um:
         raise InputError(
-            f"inset request {request.request_id!r} needs at least one margin"
+            f"inset request {request.request_id!r} needs at least one margin; give it margins_um"
         )
     margins: list[int] = []
     for value in request.margins_um:
@@ -411,7 +398,8 @@ def lattice_margins(request: InsetRequest, grid: Grid) -> tuple[int, ...]:
         margins.append(units)
     if any(b <= a for a, b in zip(margins, margins[1:], strict=False)):
         raise InputError(
-            f"inset request {request.request_id!r}: margins must be strictly increasing"
+            f"inset request {request.request_id!r}: margins must be strictly increasing, "
+            f"not {list(request.margins_um)} um; list them from the innermost out"
         )
     return tuple(margins)
 
@@ -457,7 +445,8 @@ def _conductor_level(
     prisms = [p for p in catalogue.prisms if p.entity_id == support.entity_id]
     if not prisms or prisms[0].material_kind != "conductor":
         raise InputError(
-            f"inset request {request.request_id!r}: {support.entity_id!r} is not a conductor entity"
+            f"inset request {request.request_id!r}: {support.entity_id!r} is not a conductor entity; "
+            "a ConductorSurface names a conductor (use SolutionInterface for a solution region)"
         )
     is_sheet = prisms[0].is_sheet
     if support.side == "sheet" and not is_sheet:
@@ -509,7 +498,8 @@ def _interface_level(
     for entity in (support.first_entity_id, support.second_entity_id):
         if entity not in solutions:
             raise InputError(
-                f"inset request {request.request_id!r}: {entity!r} is not a solution region"
+                f"inset request {request.request_id!r}: {entity!r} is not a solution region; a SolutionInterface "
+                "names two solution regions (use ConductorSurface for a conductor)"
             )
     levels = [
         k
@@ -533,7 +523,8 @@ def _interface_level(
 def _check_interface(request: InsetRequest, layer: Layer, selected: set[int]) -> None:
     if request.interface not in INTERFACE_TYPES:
         raise InputError(
-            f"inset request {request.request_id!r}: unknown interface type {request.interface!r}"
+            f"inset request {request.request_id!r}: unknown interface type {request.interface!r}; "
+            f"expect one of {', '.join(INTERFACE_TYPES)}, or leave interface unset"
         )
     found = {
         kind
@@ -548,7 +539,8 @@ def _check_interface(request: InsetRequest, layer: Layer, selected: set[int]) ->
     if request.interface not in found:
         raise InputError(
             f"inset request {request.request_id!r}: expected a {request.interface} face, "
-            f"the selected face is {', '.join(sorted(found)) or 'unnamed'}"
+            f"the selected face is {', '.join(sorted(found)) or 'unnamed'}; fix the request's support or "
+            "its interface"
         )
 
 
@@ -713,11 +705,11 @@ def _checked_kinds(request_id: str, support: InterfaceSurfaces) -> tuple[str, ..
             f"not {support.interface_type!r}"
         )
     if support.face_kinds is None:
-        return FACE_KINDS
-    unknown = sorted(set(support.face_kinds) - set(FACE_KINDS))
+        return BANDED_FACE_KINDS
+    unknown = sorted(set(support.face_kinds) - set(BANDED_FACE_KINDS))
     if unknown or not support.face_kinds:
         raise InputError(
-            f"inset request {request_id!r}: face_kinds must name some of {', '.join(FACE_KINDS)} "
+            f"inset request {request_id!r}: face_kinds must name some of {', '.join(BANDED_FACE_KINDS)} "
             f"(sidewalls are not banded), got {list(support.face_kinds)}"
         )
     return support.face_kinds
@@ -730,7 +722,8 @@ def _checked_exclusions(
     unknown = sorted(set(support.exclude_entity_ids) - entities)
     if unknown:
         raise InputError(
-            f"inset request {request_id!r}: exclude_entity_ids names no entity of the model: {', '.join(unknown)}"
+            f"inset request {request_id!r}: exclude_entity_ids names no entity of the model: {', '.join(unknown)}; "
+            "remove them or name Entities of the input"
         )
     return frozenset(support.exclude_entity_ids)
 
@@ -749,7 +742,9 @@ def _conductor_faces_of_type(
     }
     for entity in sorted(conductors - excluded):
         prism = next(p for p in catalogue.prisms if p.entity_id == entity)
-        sides: tuple[Side, ...] = ("sheet",) if prism.is_sheet else ("top", "bottom")
+        sides: tuple[ConductorSide, ...] = (
+            ("sheet",) if prism.is_sheet else ("top", "bottom")
+        )
         for side in sides:
             level = prism.z1 if side == "top" else prism.z0
             layer = labelled.level_layers[labelled.levels.levels.index(level)]

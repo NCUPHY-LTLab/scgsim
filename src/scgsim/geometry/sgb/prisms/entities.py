@@ -31,7 +31,9 @@ from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.physical import PHYSICAL_LAYER_FIELD
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.exact.boundaries import RingKey
 from scgsim.geometry.sgb.exact.carriers import ArcCarrier
+from scgsim.geometry.sgb.exact.footprints import SourceFootprint, is_auto_vacuum_region
 from scgsim.geometry.sgb.exact.grid import exact_z
 from scgsim.geometry.sgb.exact.plane import Ring
 from scgsim.geometry.sgb.exact.prisms import (
@@ -41,8 +43,6 @@ from scgsim.geometry.sgb.exact.prisms import (
     PrismRecord,
     RingPrimitive,
 )
-from scgsim.geometry.sgb.prisms.curves import RingKey
-from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, is_auto_vacuum_region
 
 ZInterval = tuple[Fraction, Fraction]
 RingPrimitives = dict[RingKey, tuple[RingPrimitive, ...]]

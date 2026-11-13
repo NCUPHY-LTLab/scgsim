@@ -53,7 +53,9 @@ class ValidationReport:
         """Fail closed: any failed invariant stops the build."""
         if self.failures:
             lines = "; ".join(f"{c.name}: {c.detail}" for c in self.failures)
-            raise ValidationError(f"{len(self.failures)} invariant(s) failed: {lines}")
+            raise ValidationError(
+                f"internal: {len(self.failures)} invariant(s) failed: {lines}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         """A JSON-ready form for the validation report file."""

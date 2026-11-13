@@ -30,10 +30,10 @@ from scgsim.geometry.junctions.exact_geometry import (
 from scgsim.geometry.junctions.local_frame import JunctionLocalFrame
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.sgb.exact.boundaries import bound_ring_primitives
 from scgsim.geometry.sgb.exact.carriers import ArcCarrier, LineEdge, RingPrimitive
+from scgsim.geometry.sgb.exact.footprints import conductor_loops
 from scgsim.geometry.sgb.exact.grid import Grid
-from scgsim.geometry.sgb.prisms.bound_rings import bound_ring_primitives
-from scgsim.geometry.sgb.prisms.footprints import conductor_loops
 
 
 @dataclass(frozen=True)
@@ -223,7 +223,7 @@ def built_outline(
     """The outline SGB builds for these conductors, where it meets each sheet side line.
 
     A ring with an authored boundary or an arc reconstruction is built from the lines and
-    circular arcs SGB's own binding gives it (``sgb.prisms.bound_rings``), so a record on a
+    circular arcs SGB's own binding gives it (``sgb.exact.boundaries``), so a record on a
     terminal is bound, and refused, by the one rule the full build uses; any other ring is its
     drawn polyline.  So a round terminal meets a side where its arc does, not where its
     polyline chord does.  SGB rounds a crossing to the model grid point whose cell holds it,

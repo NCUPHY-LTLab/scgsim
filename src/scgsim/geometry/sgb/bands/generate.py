@@ -18,7 +18,7 @@ from dataclasses import dataclass, replace
 from fractions import Fraction
 
 from scgsim.geometry.sgb.bands.inset import inset_family
-from scgsim.geometry.sgb.bands.inset_plan import InsetPlan, plan_insets
+from scgsim.geometry.sgb.bands.inset_plan import InsetPlan
 from scgsim.geometry.sgb.bands.inset_regions import PortClip
 from scgsim.geometry.sgb.bands.requests import InsetRequest
 from scgsim.geometry.sgb.errors import InputError
@@ -30,16 +30,18 @@ class CutFamilies:
     """A catalogue with its requested cut families, and how the inset requests became band families."""
 
     catalogue: PrismCatalogue
-    insets: InsetPlan
+    plan: InsetPlan
 
 
-def build_cut_families(
-    catalogue: PrismCatalogue,
-    insets: tuple[InsetRequest, ...] = (),
-) -> CutFamilies:
-    """The catalogue with the families its requests generate, and the plan the inset requests became."""
+def check_request_ids(
+    insets: tuple[InsetRequest, ...], catalogue: PrismCatalogue
+) -> None:
+    """Refuse inset requests whose ids repeat, or repeat a cut family the catalogue already carries."""
     _check_unique_ids([r.request_id for r in insets], catalogue)
-    plan = plan_insets(catalogue, insets)
+
+
+def build_cut_families(catalogue: PrismCatalogue, plan: InsetPlan) -> CutFamilies:
+    """The catalogue with one band family per resolved support of ``plan``, and the plan itself."""
     _check_unique_ids([r.request_id for r in plan.requests], catalogue)
     families = [
         inset_family(
@@ -61,7 +63,8 @@ def _check_unique_ids(request_ids: list[str], catalogue: PrismCatalogue) -> None
     duplicates = sorted({i for i in ids if ids.count(i) > 1})
     if duplicates:
         raise InputError(
-            f"cut-family request ids must be unique, repeated: {', '.join(duplicates)}"
+            f"inset request ids must be unique and differ from the cut families the catalogue already "
+            f"carries; repeated: {', '.join(duplicates)}. Fix the requests: give each its own request_id"
         )
 
 

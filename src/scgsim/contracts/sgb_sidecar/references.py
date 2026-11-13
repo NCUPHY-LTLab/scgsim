@@ -65,7 +65,8 @@ def require_references(sidecar: Sidecar) -> None:
     if problems:
         more = f" (and {len(problems) - _SHOWN} more)" if len(problems) > _SHOWN else ""
         raise SidecarError(
-            f"sidecar references do not resolve: {'; '.join(problems[:_SHOWN])}{more}"
+            f"sidecar references do not resolve: {'; '.join(problems[:_SHOWN])}{more}. "
+            "A sidecar SGB wrote always resolves: rebuild the geometry, or report it if SGB wrote it unchanged"
         )
 
 
