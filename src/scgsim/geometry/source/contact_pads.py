@@ -9,10 +9,19 @@ from scgsim.geometry.grid.booleans import polygon_boolean
 from scgsim.geometry.grid.planar_loops import LoopCoordinates
 from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.models.input import SemanticEntitySpec
+from scgsim.geometry.models.refusals import Declared
 
 BOOLEAN_AREA_EPS_UM2 = 1e-8
 
 BOOLEAN_RELATIVE_AREA_EPS = 1e-12
+
+
+def _pad(pad: SemanticEntitySpec) -> Declared:
+    """A contact pad, whose attachment its stack layer declares."""
+    return Declared(
+        f"contact pad {pad.semantic_id!r}",
+        "its stack layer: attached_face_metal_semantic_id, Z and Net",
+    )
 
 
 class _PolygonWithArea(Protocol):
@@ -49,11 +58,11 @@ def resolve_contact_pad_attachment(
     )
     if not candidates:
         raise ValueError(
-            f"{pad.semantic_id} contact_pad requires attached face metal id"
+            _pad(pad).refusal("its attached face metal id names no Entity")
         )
     if any(candidate.part_role != "face_metal" for candidate in candidates):
         raise ValueError(
-            f"{pad.semantic_id} contact_pad attachment must resolve face_metal"
+            _pad(pad).refusal("its attachment must be a face_metal Entity")
         )
     matches = tuple(
         candidate
@@ -66,8 +75,9 @@ def resolve_contact_pad_attachment(
     )
     if not matches:
         raise ValueError(
-            f"{pad.semantic_id} contact_pad requires finite same-z overlap "
-            "with attached face_metal"
+            _pad(pad).refusal(
+                "it needs a finite overlap, at the same Z, with its attached face_metal"
+            )
         )
     if defer_overlap:
         # Actual curved overlap selects the attachment and proves uniqueness
@@ -76,15 +86,23 @@ def resolve_contact_pad_attachment(
             candidate.net_id == pad.net_id for candidate in matches
         ):
             raise ValueError(
-                f"{pad.semantic_id} contact_pad and attached M1 require one equal net"
+                _pad(pad).refusal(
+                    "the contact_pad and its attached M1 require one equal net"
+                )
             )
         return None
     if len(matches) != 1:
-        raise ValueError(f"{pad.semantic_id} contact_pad attachment is ambiguous")
+        raise ValueError(
+            _pad(pad).refusal(
+                "its attachment is ambiguous: it overlaps several face metals at its Z"
+            )
+        )
     attached = matches[0]
     if not pad.net_id or not attached.net_id or attached.net_id != pad.net_id:
         raise ValueError(
-            f"{pad.semantic_id} contact_pad and attached M1 require one equal net"
+            _pad(pad).refusal(
+                "the contact_pad and its attached M1 require one equal net"
+            )
         )
     return attached
 

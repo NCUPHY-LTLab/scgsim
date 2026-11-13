@@ -87,13 +87,25 @@ def solution_region_entity(
 ) -> SemanticEntitySpec:
     """Lower one solution record with the original material and bounds validation."""
     if not isinstance(semantic_id, str):
-        raise TypeError("solution region ids must be strings")
+        raise TypeError(
+            Declared("the stack file's solution_regions", "the stack file").expected(
+                "region id", "a string", semantic_id
+            )
+        )
     if not isinstance(record, Mapping):
-        raise TypeError("stack_file 'solution_regions' values must be mappings")
+        raise TypeError(
+            Declared(
+                f"solution region {semantic_id!r}", "the stack file's solution_regions"
+            ).expected("record", "a mapping", record)
+        )
 
     geometry = record.get("geometry", record)
     if not isinstance(geometry, Mapping):
-        raise TypeError("solution region 'geometry' must be a mapping")
+        raise TypeError(
+            Declared(
+                f"solution region {semantic_id!r}", "the stack file's solution_regions"
+            ).expected("geometry", "a mapping", geometry)
+        )
 
     geometry = dict(geometry)
     padding_um = float(geometry.get("padding_um", 0.0))

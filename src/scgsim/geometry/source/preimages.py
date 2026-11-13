@@ -14,6 +14,7 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.source.recipes import SourceGridAudit, SourcePolygonAudit
 
 
@@ -134,7 +135,9 @@ def _polygon_preimage(
         and saved_preimage is None
     ):
         raise ValueError(
-            f"declared physical source preimage is unavailable: {polygon.polygon_id}"
+            internal(
+                f"the declared source polygon {polygon.polygon_id!r} has no audited preimage"
+            )
         )
     if saved_preimage:
         # JSON audit payloads may contain lists; preserve those public metadata values.

@@ -36,6 +36,7 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.source.ports import (
     PortSheetHost,
@@ -196,7 +197,11 @@ def _validate_bound_context(
         return None
     bound_context = geometry_grid_context(build_input)
     if bound_context != context:
-        raise ValueError("geometry grid context differs from the bound input policy")
+        raise ValueError(
+            internal(
+                f"an input on grid {bound_context.grid_size_um} um was projected on grid {context.grid_size_um} um"
+            )
+        )
     return bound_context
 
 
@@ -307,8 +312,9 @@ def _project_layout_polygons(
         ).operand_regions(polygon.polygon_id)
         if len(regions_for_polygon) != 1:
             raise ValueError(
-                "source polygon component identity changed at grid: "
-                f"{polygon.polygon_id}"
+                internal(
+                    f"source polygon {polygon.polygon_id!r} changed component identity at grid after its audits passed"
+                )
             )
         oriented_exterior, oriented_holes = _oriented_region(
             regions_for_polygon[0], polygon.exterior
@@ -498,7 +504,9 @@ def _project_port_region(
     regions_for_port = arrangement.operand_regions(operand_id)
     if len(regions_for_port) != 1:
         raise ValueError(
-            f"port sheet component identity changed at grid: {port.port_sheet_id}"
+            internal(
+                f"port sheet {port.port_sheet_id!r} changed component identity at grid after its audits passed"
+            )
         )
     projected = _oriented_region(regions_for_port[0], port.exterior)
     hosts = [
@@ -602,7 +610,11 @@ def _port_terminal_overlaps(
     if {
         (overlap.host_semantic_id, overlap.host_polygon_id) for overlap in overlaps
     } != authored_host_bindings:
-        raise ValueError(f"port terminal overlap changed at grid: {port.port_sheet_id}")
+        raise ValueError(
+            internal(
+                f"port terminal overlap of {port.port_sheet_id!r} changed at grid after its contacts passed"
+            )
+        )
     return overlaps
 
 
@@ -629,8 +641,9 @@ def _project_entities(
             )
             if combined.geom_type != "Polygon":
                 raise ValueError(
-                    "source Entity support changed component identity at grid: "
-                    f"{entity.semantic_id}"
+                    internal(
+                        f"source Entity {entity.semantic_id!r} support changed component identity at grid after its audits passed"
+                    )
                 )
             # An Entity's polygons share its Z range, so they share one arrangement.
             arrangement = groups.arrangement_for(entity.polygon_ids[0])

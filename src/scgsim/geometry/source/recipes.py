@@ -27,6 +27,7 @@ from scgsim.geometry.grid.grid_regions import (
 )
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.refusals import internal
 from scgsim.preparation import ordered_map
 
 
@@ -139,7 +140,9 @@ def _declared_source_audit(
     raw_regions = regions(raw)
     if {p.polygon_id for p in requested} != {p.polygon_id for p in realized}:
         raise ValueError(
-            f"declared source polygon identity changed at grid: {entity.semantic_id}"
+            internal(
+                f"the declared source recipe of {entity.semantic_id!r} gave other polygons on the grid than as authored"
+            )
         )
     requested_polygons: list[SourcePolygonAudit] = [
         {
