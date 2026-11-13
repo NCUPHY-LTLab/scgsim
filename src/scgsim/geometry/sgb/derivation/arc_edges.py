@@ -20,7 +20,7 @@ def realise_arc_edges(
     """Give every arc edge its realised arc; with ``register``, slab arcs become carriers of ``arcs``."""
     layer.edge_curve = []
     for edge, edge_id in zip(layer.arr.edges, layer.edge_ids, strict=False):
-        carriers = sorted(edge.carriers)
+        carriers = sorted(c.id for c in edge.carriers)
         roots = {arcs[c].root_id for c in carriers if c in arcs}
         if not carriers or not all(c in arcs for c in carriers) or len(roots) != 1:
             layer.edge_curve.append(None)

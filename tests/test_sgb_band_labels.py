@@ -44,6 +44,7 @@ from scgsim.geometry.sgb.model import (
 )
 from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
+from scgsim.geometry.sgb.records.carriers import EdgeCarrier
 from scgsim.geometry.sgb.records.grid import Grid
 from scgsim.geometry.sgb.records.prisms import LineEdge
 from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
@@ -62,7 +63,7 @@ def arrange(ring: list[tuple[int, int]]) -> Arrangement:
     """The arrangement of one closed ring: a single bounded face."""
     count = len(ring)
     segments = [
-        Segment(ring[i], ring[(i + 1) % count], frozenset([f"e{i}"]))
+        Segment(ring[i], ring[(i + 1) % count], frozenset([EdgeCarrier(f"e{i}")]))
         for i in range(count)
     ]
     return build_arrangement(snap_round(segments).edges)

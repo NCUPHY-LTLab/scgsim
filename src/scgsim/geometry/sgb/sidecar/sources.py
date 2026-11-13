@@ -46,6 +46,7 @@ from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage
 from scgsim.geometry.sgb.records.prisms import PrismRecord
+from scgsim.geometry.sgb.routes.naming import port_group
 from scgsim.geometry.sgb.sidecar.lineage import REFINEMENT_FAMILY_ROLE
 
 
@@ -239,7 +240,7 @@ def port_records(model: ConformalModel, plan: BrepPlan) -> dict[str, Port]:
         identity = prism.port
         if identity is None:
             continue
-        group = f"PORT::{prism.entity_id}"
+        group = port_group(prism.entity_id)
         faces = sorted(
             fid for fid in plan.face_ids if model.routed.face_group.get(fid) == group
         )

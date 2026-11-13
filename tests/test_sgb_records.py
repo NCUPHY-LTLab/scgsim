@@ -13,7 +13,7 @@ import pytest
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.prisms.arcs import arc_through_points, full_circle
 from scgsim.geometry.sgb.records import circle_math
-from scgsim.geometry.sgb.records.carriers import Lineage, base_carrier_id, circle_arcs
+from scgsim.geometry.sgb.records.carriers import CarrierRole, Lineage, circle_arcs
 from scgsim.geometry.sgb.records.grid import Grid, exact_z
 from scgsim.geometry.sgb.records.prisms import (
     Footprint,
@@ -112,10 +112,31 @@ def test_prism_invariants_fail_closed():
         )
 
 
-def test_witness_piece_ids_name_their_arc():
-    """A witness chord id shortens back to the arc carrier id."""
-    assert base_carrier_id("pad/hole/q0#12") == "pad/hole/q0"
-    assert base_carrier_id("pad/polygon0/ring0/edge3") == "pad/polygon0/ring0/edge3"
+def test_witness_pieces_name_their_arc_in_fields():
+    """A witness chord states its arc and number as fields, and its whole carrier is the arc's."""
+    (arc, *_) = circle_arcs(
+        "pad/hole", (0, 0), 1000, True, Lineage("polygon_edge", "pad")
+    )
+    pieces = arc.pieces()
+    assert [p.id for p in pieces[:2]] == ["pad/hole/q0#0", "pad/hole/q0#1"]
+    assert {(p.curve, p.role) for p in pieces} == {("pad/hole/q0", CarrierRole.CURVE)}
+    assert [p.piece for p in pieces] == list(range(len(pieces)))
+    assert pieces[3].whole().id == "pad/hole/q0" and pieces[3].whole().piece is None
+    slab = arc.pieces(CarrierRole.SLAB_EDGE)[0]
+    assert (
+        slab.role is CarrierRole.SLAB_EDGE
+        and slab.whole().role is CarrierRole.SLAB_EDGE
+    )
+
+
+def test_an_entity_id_with_a_hash_keeps_its_whole_id():
+    """A ``#`` in an entity id is part of the id: a straight carrier is a whole curve whatever its id holds."""
+    footprint = Footprint.from_rings(((0, 0), (10, 0), (10, 10), (0, 10)))
+    prism = PrismRecord(
+        "pad#1", footprint, Fraction(0), Fraction(0), "PEC", "conductor", net_id="n"
+    )
+    first = prism.carriers()[0]
+    assert first.edge_carrier().curve_id == first.id == "pad#1/polygon0/ring0/edge0"
 
 
 def test_a_three_point_arc_is_cut_into_pieces_of_at_most_a_quarter_turn():

@@ -49,7 +49,7 @@ from scgsim.geometry.sgb.sidecar.sources import (
 def band_family_records(model: ConformalModel) -> dict[str, BandFamily]:
     """Every band family: its face (the request every request on the face agrees with), margins, area and bands."""
     grid = model.topology.grid_um
-    bands = band_groups(model.topology, model.routed.face_group)
+    bands = band_groups(model.topology, model.routed)
     regions = support_regions(model)
     out: dict[str, BandFamily] = {}
     for request in model.inset_plan.requests:

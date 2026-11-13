@@ -25,6 +25,7 @@ from typing import Any
 from scgsim.geometry.sgb.derivation.layer import Layer
 from scgsim.geometry.sgb.labelling.linking import TAG, walk_chain
 from scgsim.geometry.sgb.plane import Point
+from scgsim.geometry.sgb.records.carriers import CarrierRole
 from scgsim.geometry.sgb.records.labels import Domain
 from scgsim.geometry.sgb.stopwatch import Stopwatch
 
@@ -78,8 +79,8 @@ def _tag_members(layer: Layer) -> dict[str, Any]:
         degree[a] += 1
         degree[b] += 1
         for carrier in edge.carriers:
-            if carrier.startswith(TAG):
-                tags[carrier].append(ei)
+            if carrier.role is CarrierRole.SLAB_EDGE:
+                tags[carrier.id].append(ei)
     return {"tags": tags, "degree": degree}
 
 

@@ -67,9 +67,7 @@ from scgsim.geometry.sgb.cutfamilies.gap_intervals import (
     split_at_gaps,
 )
 from scgsim.geometry.sgb.cutfamilies.requests import (
-    BAND_TYPES,
     FACE_KINDS,
-    INTERFACE_TYPES,
     ConcreteSupport,
     ConductorSurface,
     FaceKind,
@@ -95,7 +93,9 @@ from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.records.support import SupportRegion, primitive_ends
 from scgsim.geometry.sgb.routes.naming import (
+    INTERFACE_TYPES,
     SHEET,
+    SURFACE_EPR_TYPES,
     interface_type_of,
     sheet_face_sides,
 )
@@ -359,8 +359,8 @@ def _root_arc(
     layer: Layer, half_edge: int, labelled: LabelledArrangements
 ) -> ArcCarrier:
     """The source arc whose exact circle an arc half-edge lies on."""
-    carrier_id = sorted(layer.arr.edges[half_edge >> 1].carriers)[0]
-    arc = labelled.arcs[carrier_id]
+    carrier = min(layer.arr.edges[half_edge >> 1].carriers)
+    arc = labelled.arcs[carrier.id]
     return labelled.arcs.get(arc.root_id, arc)
 
 
@@ -599,7 +599,7 @@ def _bounded_region(  # noqa: PLR0913 - the request, its margins, the selected c
     pieces = [[(h, piece) for h in ring for piece in pieces_of(h)] for ring in rings]
     primitives = tuple(
         tuple(
-            _primitive(f"{request_id}/ring{ri}", k, layer, h, piece, labelled)
+            _primitive(request_id, ri, k, layer, h, piece, labelled)
             for k, (h, piece) in enumerate(ring_pieces)
         )
         for ri, ring_pieces in enumerate(pieces)
@@ -623,7 +623,8 @@ def _from_smallest_vertex(arr, ring: list[int]) -> list[int]:  # noqa: ANN001 - 
 
 
 def _primitive(  # noqa: PLR0913 - a primitive is a ring position, a half-edge and the piece of it
-    ring_id: str,
+    request_id: str,
+    ring: int,
     index: int,
     layer: Layer,
     half_edge: int,
@@ -632,14 +633,15 @@ def _primitive(  # noqa: PLR0913 - a primitive is a ring position, a half-edge a
 ) -> RingPrimitive:
     """A piece of a boundary half-edge as a straight edge or an arc on the exact circle of its source arc.
 
-    ``ring_id`` is ``<support>/ring<r>``; the primitive's lineage member is ``<ring_id>/edge<index>``.
+    The primitive is number ``index`` of ring ``ring`` of the support of ``request_id``; its lineage member is
+    ``<request id>/ring<ring>/edge<index>``.
     """
     curve = layer.edge_curve[half_edge >> 1]
     a, b = piece.start, piece.end
     if curve is None:
         return LineEdge(a, b, index)
     root = _root_arc(layer, half_edge, labelled)
-    member = f"{ring_id}/edge{index}"
+    member = f"{request_id}/ring{ring}/edge{index}"
     return ArcCarrier(
         member,
         root.centre,
@@ -647,9 +649,7 @@ def _primitive(  # noqa: PLR0913 - a primitive is a ring position, a half-edge a
         _is_ccw(curve.ccw, half_edge),
         (Fraction(a[0]), Fraction(a[1])),
         (Fraction(b[0]), Fraction(b[1])),
-        Lineage(
-            "family_member", family_id=ring_id.rsplit("/ring", 1)[0], member=member
-        ),
+        Lineage("family_member", family_id=request_id, member=member),
         root.root_id,
     )
 
@@ -707,9 +707,9 @@ def faces_of_type(
 
 
 def _checked_kinds(request_id: str, support: InterfaceSurfaces) -> tuple[str, ...]:
-    if support.interface_type not in BAND_TYPES:
+    if support.interface_type not in SURFACE_EPR_TYPES:
         raise InputError(
-            f"inset request {request_id!r}: bands are asked for by Surface-EPR type {', '.join(BAND_TYPES)}, "
+            f"inset request {request_id!r}: bands are asked for by Surface-EPR type {', '.join(SURFACE_EPR_TYPES)}, "
             f"not {support.interface_type!r}"
         )
     if support.face_kinds is None:
@@ -770,7 +770,7 @@ def _surface_epr_types(label: LevelLabel) -> set[str]:
     kind = interface_type_of(label.below, label.above, label.sheet)
     if kind == SHEET:
         return set(sheet_face_sides(label.below, label.above))
-    return {kind} if kind in BAND_TYPES else set()
+    return {kind} if kind in SURFACE_EPR_TYPES else set()
 
 
 def _solution_faces_of_type(

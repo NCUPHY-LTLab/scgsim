@@ -70,7 +70,7 @@ Snapping 只有在曲線於非格點的位置**交叉**，或彼此距離小於�
 1. **初始化。** 每個 segment 端點都是 hot pixel。所有 edge 標為 changed。
 2. **找交點。** 對每一對至少有一條是 changed 的 edge，以有理數計算精確的交點，並四捨五入到一個 pixel（剛好一半時進位）。新的 pixel 變成 hot。
 3. **改道。** 每條 changed 的 edge，以及每條未改變的 edge（只對*新近*變成 hot 的 pixel 檢查），被換成它所碰到的所有 hot pixel 中心的串列，順序沿著該 edge。
-4. **合併。** 端點相同的 edge 合併成一條 edge，帶有它們 carrier id 的聯集。
+4. **合併。** 端點相同的 edge 合併成一條 edge，帶有它們 carrier 的聯集。
 5. 只要有任何改道後的 edge 碰到它先前沒被穿過的 hot pixel，就**反覆**。結果就是 **noded** edge 集合。
 6. **Cell。** 建立 half-edge 結構，並抽取帶孔洞的有界 cell。
 
@@ -84,7 +84,9 @@ Hobby（1999）與 Guibas 和 Marimont（1998）把 snap rounding 定義為這�
 
 ### Carrier 與 lineage
 
-每條輸出的 edge 保有產生它的 **carrier id 集合**，每個 carrier id 都指向它的來源（entity、polygon、ring、edge 序號，或 family 成員）。arrangement 對每條 edge 記錄 carrier 的參數區間與實測的偏離量。直線 edge 就是它兩個 snap 後 vertex 之間的 segment。圓弧 edge 如何實現，見[曲線類別](#curve-classes)。
+每條輸出的 edge 保有產生它的 **carrier 集合**，每個 carrier 的 id 都指向它的來源（entity、polygon、ring、edge 序號，或 family 成員）。arrangement 對每條 edge 記錄 carrier 的參數區間與實測的偏離量。直線 edge 就是它兩個 snap 後 vertex 之間的 segment。圓弧 edge 如何實現，見[曲線類別](#curve-classes)。
+
+edge 上的 carrier 是一筆記錄（`records.carriers.EdgeCarrier`），不只是一個 id：除了 id，它還帶著 **role**，以及它若是某條曲線的一段，**那條曲線的 id 與它是第幾段**。role 有五種：來源或 family 的曲線（`CURVE`）；進入 level arrangement 的 slab edge（`SLAB_EDGE`，assembly 靠它找出覆蓋 slab edge 的 level edge 鏈）；已 dissolve、只為了讓面積 membership 精確而切 cell 的 slab edge（`MEMBERSHIP`，從不 required）；以及 inset 單一 margin 的 arrangement 中，support 的邊界（`SUPPORT_BOUNDARY`）與 port footprint 的邊界（`PORT_BOUNDARY`）。這些 carrier 的 id 仍以 `~`、`~m:`、`~support`、`~port` 開頭，id 照舊、逐 byte 不變，但那只是為了讓 id 唯一：後面的每一個 stage 都讀 role 這個欄位，沒有任何地方以 id 的前綴決定行為。同樣地，assembly、2D section 與 sidecar 要知道一個寫在 edge 上的 carrier id 從哪裡來時，讀的是 catalogue 的已知 carrier 表（`PrismCatalogue.known_carriers`：lineage，以及它所在的曲線），不拆 id。
 
 直線的 inset 成員保留產生它的 primitive：carrier id 形如 `band_pad_top/ring0/edge8@m100.0`（support、ring、edge 序號，以及 margin）；reflex 圓弧則是 `…/corner<k>`。
 
@@ -150,9 +152,9 @@ production 把 edge 與 hot pixel 放進均勻的空間 hash，大約每個格�
 
 未決的決策 D3 問的是：圓弧要原生地 node，還是透過 polyline。暫定的決策（原型與 production 都已實作）是 **polyline witness**：
 
-1. 為了 noding，圓弧被換成弦，其 sagitta（弦與弧之間的間隙）至多為 $g/4$。每條弦帶有 id `<arc id>#<k>` 與弧的一段參數區間。
+1. 為了 noding，圓弧被換成弦，其 sagitta（弦與弧之間的間隙）至多為 $g/4$。每條弦帶有 id `<arc id>#<k>` 與弧的一段參數區間；它屬於哪條圓弧、是第幾條弦，記在 carrier 的 `curve` 與 `piece` 欄位，id 只寫出、從不拆回。
 2. Snap rounding 把這些弦當作一般的 segment。
-3. 之後，同一條圓弧的連續弦，若它們之間**沒有外來的 hot pixel**，就合併回一條圓弧 edge。與其他曲線的交叉會在該處把圓弧切開。
+3. 之後，同一條圓弧的連續弦，若它們之間**沒有外來的 hot pixel**，就合併回一條圓弧 edge（dissolution 把每條弦換成整條圓弧的 carrier，`EdgeCarrier.whole()`，carrier 集合相同的相鄰 edge 才合併）。與其他曲線的交叉會在該處把圓弧切開。
 4. 圓弧 edge 由它的 carrier 實現：取 carrier 的半徑，通過兩個 snap 後的端點的圓，圓心在 carrier 的那一側。它偏離精確圓的量會被記錄。
 
 ![半徑 24 g 的圓弧與一條外來 segment：witness 的弦（左）、弦尚未合併時 snap rounding 的結果（中），以及由 carrier 實現的合併後圓弧 edge（右）。](figures/arrangement-arc-witness.svg){#fig-arc fig-alt="半徑 24 grid unit 的四分之一圓，被一條垂直紅線段穿過的三張圖。左：圓弧被六條藍色弦近似。中：snap rounding 之後有九條 edge 與十個 hot pixel，圓弧在紅線段處被截斷。右：兩條平滑的藍色圓弧 edge，在紅線段上的一個紅色方塊處相接。"}

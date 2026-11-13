@@ -48,7 +48,7 @@ from scgsim.geometry.sgb.noding.snap_rounding import (
 )
 from scgsim.geometry.sgb.noding.snap_rounding import canonical_key as canonical
 from scgsim.geometry.sgb.noding.spatial_hash import HotGrid
-from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage
+from scgsim.geometry.sgb.records.carriers import ArcCarrier, EdgeCarrier, Lineage
 from scgsim.geometry.sgb.slivers.report import sliver_report
 
 SQRT_HALF = math.sqrt(2) / 2
@@ -387,24 +387,25 @@ def _chord_counts(radii) -> list[int]:
     return [len(_quarter(r).witness_points()) - 1 for r in radii]
 
 
+FOREIGN = EdgeCarrier("line")  # the foreign segment of the arc example
+
+
 def _arc_example():
     arc = _quarter(24)
     pts = arc.witness_points()
-    pieces = arc.piece_ids()
+    pieces = arc.pieces()
     segs = [
-        Segment(a, b, frozenset([pid]))
-        for pid, a, b in zip(pieces, pts, pts[1:], strict=False)
+        Segment(a, b, frozenset([piece]))
+        for piece, a, b in zip(pieces, pts, pts[1:], strict=False)
     ]
     segs.append(
-        Segment((14, -2), (14, 26), frozenset(["line"]))
+        Segment((14, -2), (14, 26), frozenset([FOREIGN]))
     )  # a foreign vertical segment crossing the arc
     result = snap_round(segs)
     edges = {(e.a, e.b): set(e.carriers) for e in result.edges}
     # merge runs of witness pieces with no foreign vertex between them (what dissolution does)
     degree = Counter(p for k in edges for p in k)
-    arc_edges = [
-        (k, v) for k, v in edges.items() if all(c.startswith("arc#") for c in v)
-    ]
+    arc_edges = [(k, v) for k, v in edges.items() if all(c.curve == arc.id for c in v)]
     nxt: dict = {}
     for (a, b), _ in arc_edges:
         nxt.setdefault(a, []).append(b)
@@ -465,9 +466,9 @@ def _arc_figure(radii, counts) -> dict:
     )
     b = axes[1]
     for (u, v), names in sorted(edges.items()):
-        colour = COLOURS["bad"] if "line" in names else COLOURS["pad"]
+        colour = COLOURS["bad"] if FOREIGN in names else COLOURS["pad"]
         b.plot([u[0], v[0]], [u[1], v[1]], color=colour, lw=1.8, marker="o", ms=3)
-    foreign = sorted({p for (u, v), n in edges.items() if "line" in n for p in (u, v)})
+    foreign = sorted({p for (u, v), n in edges.items() if FOREIGN in n for p in (u, v)})
     b.set_title(
         f"2  After snap rounding: {len(edges)} edges, {result.hot_pixels} hot pixels, {result.rounds} rounds",
         fontsize=9,

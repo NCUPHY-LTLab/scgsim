@@ -7,6 +7,9 @@ the volumes and solution regions on its sides, its inset band, its area -- so to
 
 Primary groups partition each dimension.  A face or volume names its group in its own record, so a group
 record lists no members: readers compute them (``scgsim.contracts.sgb_sidecar.views.group_members``).
+
+Routing decided each face's interface type, Net, face kind and sheet sides (``routes.groups.RoutedFace``);
+a group's facts are read from those of its faces, never derived again from the domains or the name.
 """
 
 from __future__ import annotations
@@ -33,30 +36,8 @@ from scgsim.geometry.sgb.emission.plan import BrepPlan
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.records.labels import Domain
-from scgsim.geometry.sgb.routes.naming import (
-    SHEET,
-    interface_type_of,
-    net_of_surface,
-    sheet_face_sides,
-    sheet_row_id,
-)
-from scgsim.geometry.sgb.routes.naming import face_kind as naming_face_kind
-
-SURFACE_EPR_TYPES = (
-    "MA",
-    "MS",
-    "SA",
-)  # interface types that are Surface-EPR contributions
-
-
-def face_kind(face: TopoFace) -> FaceKind:
-    """The face kind of a planned face (``routes.naming.face_kind``): the one a group name carries, or ``port``."""
-    return cast(
-        FaceKind,
-        naming_face_kind(
-            face.neg_domain, face.pos_domain, face.owner, vertical=face.kind == "wall"
-        ),
-    )
+from scgsim.geometry.sgb.routes.groups import RoutedFace, RoutedModel
+from scgsim.geometry.sgb.routes.naming import SHEET, SURFACE_EPR_TYPES, sheet_row_id
 
 
 def group_members(plan: BrepPlan) -> dict[str, list[str]]:
@@ -77,14 +58,15 @@ def surface_group_records(
         if group.dim != 2:
             continue
         faces = [topology.faces[plan.face_ids[i]] for i in group.elements]
-        interface = _group_interface_type(group.name, faces)
+        routed = [model.routed.faces[f.id] for f in faces]
+        interface = _group_interface_type(group.name, routed)
         records[group.name] = SurfaceGroup(
             dim=2,
             tag=group.tag,
             interface_type=interface,
             entities=_owners(interface, faces),
-            net=_net(faces),
-            face_kind=_group_face_kind(group.name, faces),
+            net=_net(routed),
+            face_kind=_group_face_kind(group.name, routed),
             adjacent_domains=_adjacent_domains(faces),
             adjacent_volumes=_adjacent_volumes(model, faces),
             band=_band(faces),
@@ -163,10 +145,7 @@ def _face_sides_by_row_type(
     """Row type -> face id -> side, over the faces of a sheet group; a row type no face has a neighbour for is absent."""
     out: dict[SurfaceEprType, dict[str, SheetSide]] = {}
     for face_id in faces:
-        face = model.topology.faces[face_id]
-        for row_type, side in sheet_face_sides(
-            face.neg_domain, face.pos_domain
-        ).items():
+        for row_type, side in model.routed.faces[face_id].sheet_sides.items():
             out.setdefault(cast(SurfaceEprType, row_type), {})[face_id] = cast(
                 SheetSide, side
             )
@@ -197,17 +176,17 @@ def _common_side(face_sides: dict[str, SheetSide]) -> RowSide:
     return sides.pop() if len(sides) == 1 else "mixed"
 
 
-def _group_face_kind(name: str, faces: list[TopoFace]) -> FaceKind:
+def _group_face_kind(name: str, faces: list[RoutedFace]) -> FaceKind:
     """The one face kind of a group; a group that mixed two would be a naming defect, so it stops the build."""
-    kinds: set[FaceKind] = {face_kind(f) for f in faces}
+    kinds = {f.face_kind for f in faces}
     if len(kinds) != 1:
         raise SgbError(f"physical group {name} mixes face kinds {sorted(kinds)}")
-    return kinds.pop()
+    return cast(FaceKind, kinds.pop())
 
 
-def _group_interface_type(name: str, faces: list[TopoFace]) -> InterfaceType:
-    """The one interface type of a group, from the structure of its faces (never from the name)."""
-    types = {interface_type_of(f.neg_domain, f.pos_domain, f.owner) for f in faces}
+def _group_interface_type(name: str, faces: list[RoutedFace]) -> InterfaceType:
+    """The one interface type of a group, from the routed facts of its faces (never from the name)."""
+    types = {f.interface_type for f in faces}
     found = sorted(t for t in types if t is not None)
     if len(types) != 1 or len(found) != 1:
         raise SgbError(
@@ -232,12 +211,8 @@ def _owners(kind: str, faces: list[TopoFace]) -> list[str]:
     return sorted(names)
 
 
-def _net(faces: list[TopoFace]) -> str | None:
-    nets = {
-        net
-        for f in faces
-        if (net := net_of_surface(f.neg_domain, f.pos_domain, f.owner)) is not None
-    }
+def _net(faces: list[RoutedFace]) -> str | None:
+    nets = {f.net for f in faces if f.net is not None}
     return min(nets) if len(nets) == 1 else None
 
 
@@ -275,17 +250,16 @@ def _band(faces: list[TopoFace]) -> GroupBand | None:
 
 
 def band_groups(
-    topology: Topology, face_group: dict[str, str | None]
+    topology: Topology, routed: RoutedModel
 ) -> dict[str, dict[int, list[str]]]:
-    """Family id -> band index -> sorted primary groups, over every band label of every face that carries one."""
+    """Family id -> band index -> sorted primary groups, over every band label of every face that carries one.
+
+    A port face carries the nominal bands of the place it lies in, and is in no band group.
+    """
     out: dict[str, dict[int, set[str]]] = {}
     for fid, face in topology.faces.items():
-        group = face_group.get(fid)
-        if (
-            group is None
-            or not face.bands
-            or (face.owner and face.owner.kind == "port")
-        ):
+        group = routed.face_group.get(fid)
+        if group is None or not face.bands or routed.faces[fid].face_kind == "port":
             continue
         for family, index in face.bands:
             out.setdefault(family, {}).setdefault(index, set()).add(group)
