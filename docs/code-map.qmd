@@ -130,7 +130,7 @@ their translations.
 
 ## Top-level modules {#top-level-modules}
 
-Three modules sit directly in `src/scgsim`, outside every area's folders. They
+Four modules sit directly in `src/scgsim`, outside every area's folders. They
 are not stages; a stage calls them.
 
 | Module | What it is | Called by |
@@ -138,6 +138,16 @@ are not stages; a stage calls them.
 | `preparation.py` | The worker budget of geometry preparation: one thread pool shared by the preparation calls in a `preparation_resources` scope. | `geometry` and `palace/mesh` |
 | `diagnostics.py` | Opt-in timing, progress, memory and profile records of a preparation, written beside the result. | `geometry` and `palace/mesh` |
 | `documentation.py` | Links from a message to the published documentation of the version that raised it. | `geometry` |
+| `refusal.py` | The two sentence shapes of a refusal, for the folders that may not import `geometry`, and the text of a value found. | `meshing`, `semantics`, `preparation.py`, `diagnostics.py`; `palace`, `visualization` and `presentation` for the value found only |
+
+A refusal takes one of two shapes: "{object}: {problem}. Change it in
+{where}." for input the caller can change, and "internal: {invariant}.
+Nothing in the input is to blame: report it to SCGSim with the input that
+produced it." for a broken promise of SCGSim's own. `palace`,
+`visualization` and `presentation` write them with
+`geometry/models/refusals.py`; `meshing`, `semantics`, `preparation.py` and
+`diagnostics.py` may not import `geometry`, so `refusal.py` gives them the
+same two sentences.
 
 ## Ambient state {#ambient-state}
 

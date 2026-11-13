@@ -110,13 +110,16 @@ Next: 哪個階段讀取它
 
 ## 最上層模組 {#top-level-modules}
 
-有三個模組直接位於 `src/scgsim`，不在任何一區的資料夾內。它們不是階段，而是由階段呼叫。
+有四個模組直接位於 `src/scgsim`，不在任何一區的資料夾內。它們不是階段，而是由階段呼叫。
 
 | 模組 | 它是什麼 | 呼叫者 |
 | --- | --- | --- |
 | `preparation.py` | 幾何準備的 worker 預算：在 `preparation_resources` 範圍內的準備呼叫共用一個執行緒池。 | `geometry` 與 `palace/mesh` |
 | `diagnostics.py` | 選用的準備計時、進度、記憶體與 profile 紀錄，寫在結果旁邊。 | `geometry` 與 `palace/mesh` |
 | `documentation.py` | 從訊息連到引發它的版本所發布的文件。 | `geometry` |
+| `refusal.py` | 拒絕訊息的兩種句型，給不能匯入 `geometry` 的資料夾使用，以及所見值的文字。 | `meshing`、`semantics`、`preparation.py`、`diagnostics.py`；`palace`、`visualization` 與 `presentation` 只用所見值 |
+
+拒絕訊息只有兩種句型：呼叫者可以修改的輸入用「{object}: {problem}. Change it in {where}.」；SCGSim 自身的承諾被破壞時用「internal: {invariant}. Nothing in the input is to blame: report it to SCGSim with the input that produced it.」。`palace`、`visualization` 與 `presentation` 以 `geometry/models/refusals.py` 寫出；`meshing`、`semantics`、`preparation.py` 與 `diagnostics.py` 不能匯入 `geometry`，由 `refusal.py` 給出相同的兩句。
 
 ## 隱性狀態 {#ambient-state}
 
