@@ -79,7 +79,6 @@ def _plan(monkeypatch, layers):
         layer_stack=SimpleNamespace(layers=layers),
         material_records=MATERIALS,
         coupon_padding_um=1,
-        grid_size_um=0.001,
     )
     plan.set_nets({"N1": ("chip/metal",)})
     return plan

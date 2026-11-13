@@ -12,7 +12,6 @@ import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
-from decimal import Decimal
 from functools import wraps
 from itertools import combinations
 from typing import (
@@ -143,24 +142,13 @@ class _SourceGridPlan(Protocol):
     @property
     def _component(self) -> _PlanComponent: ...
 
-    @property
-    def _grid_size_um(self) -> float | None: ...
-
 
 _PlanT = TypeVar("_PlanT", bound=_SourceGridPlan)
 
 
-def source_grid_context(
-    source_dbu_um: float, requested: float | None
-) -> GeometryGridContext:
-    """Bind projection spacing to the database unit of emitted source GDS."""
-    context = GeometryGridContext(source_dbu_um if requested is None else requested)
-    if Decimal(str(context.grid_size_um)) != Decimal(str(source_dbu_um)):
-        raise ValueError(
-            f"grid_size_um={context.grid_size_um} differs from emitted "
-            f"source_dbu_um={source_dbu_um}"
-        )
-    return context
+def source_grid_context(source_dbu_um: float) -> GeometryGridContext:
+    """The model grid: the database unit of the emitted source GDS."""
+    return GeometryGridContext(source_dbu_um)
 
 
 def _signed_area_twice(ring: Sequence[Sequence[float]]) -> float:
@@ -778,8 +766,7 @@ def with_source_grid(
         source_dbu_um = float(
             plan._component.kcl.dbu  # noqa: SLF001 — GeometryPlan owns the native source DBU.
         )
-        requested_grid = plan._grid_size_um  # noqa: SLF001 — preserve its native grid request.
-        context = source_grid_context(source_dbu_um, requested_grid)
+        context = source_grid_context(source_dbu_um)
         with geometry_grid_scope(context):
             return function(plan, *args, **kwargs)
 

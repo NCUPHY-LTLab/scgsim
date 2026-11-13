@@ -171,11 +171,9 @@ class GeometryPlan:
         layer_stack: Any,
         material_records: Mapping[str, Mapping[str, Any]],
         coupon_padding_um: float,
-        grid_size_um: float | None = None,
     ) -> None:
         if not callable(getattr(component, "write_gds", None)):
             raise TypeError("component must be an assembled GDSFactory Component")
-        self._grid_size_um = grid_size_um
         self.root_id = source_path(root_id)
         if "/" in self.root_id:
             raise ValueError("root_id must be one path segment")
@@ -621,7 +619,6 @@ class GeometryPlan:
                 gds_file=source.gds_file,
                 stack_file=source.stack_file,
                 top_cell_name=self._component.name,
-                grid_size_um=self._grid_size_um,
             )
 
     def _resolve_lumped_supports(

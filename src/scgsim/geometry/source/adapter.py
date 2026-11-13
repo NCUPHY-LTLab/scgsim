@@ -63,7 +63,6 @@ def build_gds_stack_geometry_input(
     stack_file: PathInput,
     top_cell_name: str | None = None,
     metadata: Mapping[str, Any] | None = None,
-    grid_size_um: float | None = None,
 ) -> GeometryBuildInput:
     """Level 0 adapter: build GeometryBuildInput from GDS plus stack JSON.
 
@@ -124,7 +123,7 @@ def build_gds_stack_geometry_input(
     # inserted by callers, which this freshly loaded source never contains.
     library = cast("LoadedLibrary", gdstk.read_gds(str(stack.gds_path)))
     source_dbu_um = float(Decimal(str(library.precision)) * Decimal("1000000"))
-    context = source_grid_context(source_dbu_um, grid_size_um)
+    context = source_grid_context(source_dbu_um)
     with geometry_grid_scope(context):
         source = _read_selected_source(
             stack, library, source_dbu_um, context, effective_top_cell_name

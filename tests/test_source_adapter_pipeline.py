@@ -255,7 +255,6 @@ def test_public_adapter_wrappers_keep_introspection() -> None:
         "stack_file",
         "top_cell_name",
         "metadata",
-        "grid_size_um",
     }
 
 

@@ -20,10 +20,9 @@ from scgsim.geometry.primitives.grid import GridOperand, build_grid_arrangement
 from scgsim.geometry.source.grid import apply_geometry_grid, source_grid_context
 
 
-@pytest.mark.parametrize("requested", (None, 0.001))
-def test_context_codec_and_source_propagation(requested):
+def test_context_codec_and_source_propagation():
     """Verify that context codec and source propagation."""
-    context = source_grid_context(0.001, requested)
+    context = source_grid_context(0.001)
     assert (
         GeometryGridContext.from_payload(json.loads(json.dumps(context.to_payload())))
         == GRID
@@ -46,8 +45,6 @@ def test_context_codec_and_source_propagation(requested):
     assert bound.polygons[0].polygon_id == build.polygons[0].polygon_id
     assert bound.entities == build.entities
     assert apply_geometry_grid(bound, context).polygons == bound.polygons
-    with pytest.raises(ValueError, match="source_dbu_um"):
-        source_grid_context(0.005, 0.001)
 
 
 @pytest.mark.parametrize("angle", (0, 0.37))
@@ -171,9 +168,8 @@ def test_junction_keeps_declared_terminal_identity_and_central_rectangle():
     assert geometry_grid_context(partitioned) == GRID
 
 
-@pytest.mark.parametrize("requested", (None, 0.001))
-def test_public_gds_adapter_derives_and_checks_emitted_dbu(tmp_path, requested):
-    """Verify that public gds adapter derives and checks emitted dbu."""
+def test_public_gds_adapter_takes_the_grid_from_the_emitted_dbu(tmp_path):
+    """The adapter's grid is the database unit the GDS is written in."""
     import gdstk  # noqa: PLC0415 -- optional GDS dependency is needed only by this adapter test
 
     from scgsim.geometry import build_gds_stack_geometry_input  # noqa: PLC0415 -- keep this test-specific dependency scoped to its contract test
@@ -203,14 +199,8 @@ def test_public_gds_adapter_derives_and_checks_emitted_dbu(tmp_path, requested):
             }
         )
     )
-    result = build_gds_stack_geometry_input(
-        gds_file=gds, stack_file=stack, grid_size_um=requested
-    )
+    result = build_gds_stack_geometry_input(gds_file=gds, stack_file=stack)
     assert result.polygons
     assert result.metadata["source_dbu_um"] == 0.001
     assert geometry_grid_context(result) == GRID
     assert_lattice(p for polygon in result.polygons for p in polygon.exterior)
-    with pytest.raises(ValueError, match="source_dbu_um"):
-        build_gds_stack_geometry_input(
-            gds_file=gds, stack_file=stack, grid_size_um=0.002
-        )

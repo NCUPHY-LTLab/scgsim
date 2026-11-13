@@ -25,7 +25,6 @@ def _make_plan(monkeypatch, semantics_by_path):
     vars(plan).update(
         {
             "_component": root,
-            "_grid_size_um": None,
             "_nets": {},
             "_vacuum_region": None,
             "_instances": {

@@ -237,7 +237,6 @@ def test_plan_stack_keeps_pdk_authority_and_sizes_the_coupon(monkeypatch):
         layer_stack=SimpleNamespace(layers=levels),
         material_records={"PEC": {"kind": "conductor"}, "vacuum": {"kind": "vacuum"}},
         coupon_padding_um=1,
-        grid_size_um=0.001,
     )
     plan.set_nets({"N1": ("chip/signal",)})
 

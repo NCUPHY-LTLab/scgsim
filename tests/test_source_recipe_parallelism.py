@@ -353,7 +353,6 @@ def _build_plan_fixture(tmp_path, monkeypatch):
         layer_stack=stack,
         material_records={"PEC": {"kind": "conductor"}, "vacuum": {"kind": "vacuum"}},
         coupon_padding_um=1,
-        grid_size_um=0.001,
     )
     # Freeze genuine fixture emission bytes/path for full metadata equality;
     # this does not normalize timestamps or substitute geometry in product code.
