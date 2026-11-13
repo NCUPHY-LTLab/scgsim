@@ -48,9 +48,9 @@ scgsim-status: "CONVERGING"
 | `src/scgsim/aedt/__init__.py` | `1d20fc7d3445d2d436050dc56f2a1121d9d6cad40157213a631461792757c510` |
 | `src/scgsim/aedt/specs/__init__.py` | `2dce2baa961727dac9e6253167d4448ef8b4e11958e5fb7bdf0d2f571d05300e` |
 | `src/scgsim/geometry/__init__.py` | `d46e2845853f8fe2681896c561101d5934afbd80960c57acdb5383883dae6165` |
-| `src/scgsim/palace/__init__.py` | `4b22a92965efe38e0c1fa6d97abfec9d9395420a679019e783eb726e2d43e130` |
+| `src/scgsim/palace/__init__.py` | `a1a5808d249f33f1069471023c651b25c05b695819a8894657d72a56ffc6b687` |
 | `src/scgsim/semantics/__init__.py` | `a1902da7627ee76ba95283fc2861b6d785400c303a09e6e875375f55a056e39c` |
-| `src/scgsim/visualization/__init__.py` | `181a1bf3c38a632bc163c6ac9ee55dcbc6ca1bcc85bc6bca3e16afbe43e21ad1` |
+| `src/scgsim/visualization/__init__.py` | `2c4349c8caeaeca7c4e4f62eb1b7a67c24917f829e9beaecae68e3c6d6aa6ab4` |
 
 ## 未收錄於離線套件的公開文件
 

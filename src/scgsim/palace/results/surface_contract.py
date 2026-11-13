@@ -1,7 +1,7 @@
 """Validate Surface-EPR index entries and match them to the config's ``Dielectric`` rows.
 
-MA, MS and SA denote metal-air, metal-substrate and substrate-air interfaces.  An index entry of index-map
-schema 3 is one Palace ``Dielectric`` row.  It lists the sidecar rows it integrates (``metadata.rows``, each
+MA, MS and SA denote metal-air, metal-substrate and substrate-air interfaces.  An index entry of the index map
+(``INDEX_MAP_SCHEMA_VERSION``) is one Palace ``Dielectric`` row.  It lists the sidecar rows it integrates (``metadata.rows``, each
 with its group, band, side, entities, Net and attributes) and the film it applies (``epr_spec``).  A
 whole-surface entry has ``baseline_index == index``.  A margin entry carries ``inset`` and is the union of
 the bands of a whole-surface entry from the margin's band inwards; its margins are those of the spec, or of

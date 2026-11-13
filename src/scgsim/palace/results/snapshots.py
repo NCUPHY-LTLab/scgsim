@@ -92,7 +92,10 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
     failed_attempt: bool,
     mode_count: int | None = None,
 ) -> CollectedSnapshots:
-    """Read ordered native iterations and retain the existing final-snapshot replacement rules.
+    """Read the native AMR iterations in order, then the final result of the run folder.
+
+    The final result replaces the last iteration when both are the same native iteration with the same
+    margin physics, and is appended after it otherwise.
 
     ``mode_count`` is the requested Eigenmode count when the run's config is known.
     Each pass then keeps those modes of the tables Palace wrote for every converged
