@@ -121,7 +121,8 @@ def line_family(family_id, role, points_um, closed):
     pts = [(um(x), um(y)) for x, y in points_um]
     pairs = list(zip(pts, pts[1:])) + ([(pts[-1], pts[0])] if closed else [])
     carriers = tuple(LineCarrier(f"{family_id}/{i}", p, q,
-                                 Lineage("family_member", family_id=family_id, member=f"{family_id}/{i}"))
+                                 Lineage("family_member", family_id=family_id, member=f"{family_id}/{i}"),
+                                 "family_line")
                      for i, (p, q) in enumerate(pairs))
     return CurveFamilyRecord(family_id, role, carriers, (Fraction(0),))
 

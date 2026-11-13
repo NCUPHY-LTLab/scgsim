@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v4`` (design brief sections 7 and 12, decision D8, #170).
+"""The production sidecar ``scgsim.sgb.sidecar.v5`` (design brief sections 7 and 12, decision D8, #170).
 
 The sidecar is the JSON companion of the XAO/BREP and SGB's complete record of the model: everything the build
 used, and everything the mesher, the meshing-stage check and the solver adapters need, so a reader reads and
@@ -50,7 +50,9 @@ Derived -- what SGB computed from the sources
     curve of a family is a cell boundary.
 ``band_family``
     one per banded face: its face, margins (also in model-grid units, the identity a margin is looked up by),
-    band count, support area, and band index -> the groups of its faces.
+    band count, support area, band index -> the surface groups of its faces (each a key of ``group``), and band
+    index -> the metal-metal contacts in that band that no group carries (``hidden_contacts``: Route B writes no
+    conductor volume, so a contact between two conductors is no written face).
 ``support_ring`` / ``support_primitive``
     the exact boundary of each family's support region: each ring's primitives in order (their count is the
     ring's size), and per primitive its curve, length, whether bands are measured from it (a distance origin),
@@ -65,9 +67,10 @@ Emitted -- the shapes that entered the model
 ``vertex`` / ``edge`` / ``face`` / ``volume``
     every written vertex's position; every written edge's kind (horizontal or vertical), vertices, arc, length
     and carriers (or, for a wall column, the Entities whose walls stand on it); every written face's group,
-    kind, face kind, z range, side volumes, written wires, planned area, whether it is curved, the Entities,
-    band families and other cut families of its boundary carriers (classified by lineage, never by id), the
-    area each Entity covers (non-exclusive) and its band labels; every planned volume's Entity and domain,
+    kind, face kind, z range, side volumes, written wires, planned area, whether it is curved, what the curves
+    on its boundary come from (``entities``, ``band_families``, ``other_cut_families``: classified by the
+    carrier record, never by id), the fraction of its area each Entity covers (``entity_coverage``,
+    non-exclusive) and the bands it lies in (``bands``); every planned volume's Entity and domain,
     ``emitted``, group, shells, planned volume, ``aedt_name``, the faces of its written solid and the sheets
     embedded in it.  The load-side expectations by native tag (``views.expected``, which ``verify_loaded`` and
     the OCCT and STEP checks compare) and the sheets the mesher re-embeds with ``gmsh.model.mesh.embed``
@@ -91,8 +94,8 @@ Emitted -- the shapes that entered the model
     name), ``conductor_component_id`` / ``net_id`` = ``entities`` / ``net``, PEC surfaces = the groups of
     interface type ``MA``/``MS``/``SHEET`` of a conductor.
 ``surface_epr_row``
-    every Surface-EPR row (``MA::pad__top::band=2`` ...) and the group that carries it, with entities and
-    band: Palace's cumulative band selection.  A band row names the surface it is a band of
+    every Surface-EPR row (``MA::pad__top::band=2`` ...) and the group that carries it (whose ``entities``
+    are the row's), with its band: Palace's cumulative band selection.  A band row names the surface it is a band of
     (``banded_surface``: ``MA::pad__top``, the row's name without its band), so the bands of one surface are
     found by a field, never by cutting a row id; an unbanded row has ``None``.  A Route A sheet group (``pad::band=2``) carries
     ``MA::pad__sheet::band=2`` when a face of it has vacuum on some side and ``MS::pad__sheet::band=2``

@@ -8,8 +8,8 @@ accepted, by native tag (tag = 1 + position in ``binding.ids_by_tag``):
   them measures the model the mesher receives;
 * ``edge``: the radius of every circular-arc edge, the carriers of every horizontal edge and the Entities a
   wall column stands under; ``mesh_feature``: the margins of every band family (``band_boundary``);
-* ``face``: each face's kind (``horizontal`` or ``wall``), physical group and the Entities and band families it
-  comes from;
+* ``face``: each face's kind (``horizontal`` or ``wall``), physical group and the Entities, band families and
+  other cut families whose curves lie on its boundary;
 * ``carrier``: what each carrier comes from (a source curve, a band curve offset from a support primitive, a
   member of another cut family), with a band member's family, ring, place on the ring, role, margin and piece, and the
   source curves its primitive lies on, read from the support records it names;
@@ -98,9 +98,10 @@ class BuiltModel:
     ]  # native edge tag -> radius of its circle, micrometres
     face_kind: Mapping[str, str]  # face id -> "horizontal" or "wall"
     face_group: Mapping[str, str | None]
-    # face id -> the names of its Entities, band families and other cut families
+    # face id -> the names of the Entities, band families and other cut families whose curves bound it
     face_sources: Mapping[str, tuple[str, ...]]
-    face_entities: Mapping[str, tuple[str, ...]]  # face id -> its Entities
+    # face id -> the Entities whose curves bound it
+    face_entities: Mapping[str, tuple[str, ...]]
     edge_carriers: Mapping[str, tuple[str, ...]]  # horizontal edge id -> carrier ids
     vertical_edges: Mapping[str, tuple[str, ...]]  # wall column id -> Entities
     carriers: Mapping[str, Carrier]
@@ -187,15 +188,14 @@ def read_built_model(sidecar: Sidecar) -> BuiltModel:
         },
         face_kind={fid: face["kind"] for fid, face in faces.items()},
         face_group={fid: face["group"] for fid, face in faces.items()},
-        # The Entities and band families are two disjoint id sets; the face's sources are both, sorted.
-        # The sources by name, whatever their kind (an Entity may be named like a request).
+        # The sources by name, whatever their kind (an Entity may be named like a request), sorted.
         face_sources={
             fid: tuple(
                 sorted(
                     {
                         *face["entities"],
-                        *face["families"],
-                        *face["cut_families"],
+                        *face["band_families"],
+                        *face["other_cut_families"],
                     }
                 )
             )

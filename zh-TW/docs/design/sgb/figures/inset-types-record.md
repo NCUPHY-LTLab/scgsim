@@ -42,6 +42,7 @@
      "SA::substrate|VACUUM_REGION__interface::band=2"
     ]
    },
+   "hidden_contacts": {},
    "interface": null,
    "margins_grid": [
     500,

@@ -43,12 +43,15 @@
  "face": {
   "f:179b3dd8d7bb9c70": {
    "area_um2": 6.0,
+   "band_families": [],
    "bands": [],
    "curved": false,
-   "cut_families": [],
    "entities": ["ground_0000", "substrate"],
+   "entity_coverage": {
+    "ground_0000": 1.0,
+    "substrate": 1.0
+   },
    "face_kind": "sidewall",
-   "families": [],
    "group": "MA::ground_0000__sidewall",
    "kind": "wall",
    "loops": [
@@ -57,11 +60,8 @@
      "reversed": [false, false, true, true]
     }
    ],
-   "membership": {
-    "ground_0000": 1.0,
-    "substrate": 1.0
-   },
    "negative_volume": "vol:739993ecf3919fb3",
+   "other_cut_families": [],
    "outer_boundary": null,
    "positive_volume": "vol:7346ec1a4ff1ccf9",
    "z_um": [0.0, 0.2]

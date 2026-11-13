@@ -293,6 +293,7 @@ def _phantom_catalogue(global_projection: bool) -> PrismCatalogue:
                         c.p,
                         c.q,
                         Lineage("family_member", family_id="gp", member=c.id),
+                        "family_line",
                     )
                     for c in carriers
                 ),
@@ -532,6 +533,7 @@ def derived_catalogue(edge_um: float):
             ip[i],
             ip[(i + 1) % 4],
             Lineage("family_member", family_id="window", member=f"window/{i}"),
+            "family_line",
         )
         for i in range(4)
     )

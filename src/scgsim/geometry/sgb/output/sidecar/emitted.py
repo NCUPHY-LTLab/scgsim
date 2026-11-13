@@ -3,8 +3,8 @@
 Owns the ``vertex``, ``edge``, ``face`` and ``volume`` tables.  They describe what the XAO holds, as the plan
 numbered it: a vertex's position; an edge's kind, two vertices in written order, arc, length and what it comes
 from (carriers, or the Entities of a wall column); a face's group, kind, side volumes, written wires as oriented
-edges, planned area, the Entities, band families and other cut families it comes from, the area each Entity
-covers, its band labels, and for a face on the model's outer boundary
+edges, planned area, the Entities, band families and other cut families whose curves lie on its boundary, the
+fraction of its area each Entity covers, the bands it lies in, and for a face on the model's outer boundary
 the side of the model's box it lies on and the domain it bounds; a volume's domain, group, planned volume, AEDT name, the faces of the
 written solid and the sheets embedded in it.  The load-side expectations by native tag are computed from these
 tables (``scgsim.contracts.sgb_sidecar.views.expected``), so every planned measure is stored once.
@@ -125,9 +125,9 @@ def face_records(
             area_um2=rounded(planned_face_area_um2(topology, face)),
             curved=face.curved,
             entities=sources.entities,
-            families=sources.families,
-            cut_families=sources.cut_families,
-            membership={
+            band_families=sources.band_families,
+            other_cut_families=sources.other_cut_families,
+            entity_coverage={
                 entity: rounded(share)
                 for entity, share in sorted(face.membership.items())
             },
@@ -202,8 +202,8 @@ class _Sources:
     """What the carriers that bound a face come from, by kind."""
 
     entities: list[str]
-    families: list[str]
-    cut_families: list[str]
+    band_families: list[str]
+    other_cut_families: list[str]
 
 
 def _face_sources(

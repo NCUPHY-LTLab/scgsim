@@ -1,4 +1,4 @@
-"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v4``: every table and record, as a ``TypedDict``.
+"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v5``: every table and record, as a ``TypedDict``.
 
 Owns the shape of the file: its tables, the fields of each record, their types, enums and bounds, the table
 each id names, and which records accept more keys.  The value types and the ids of each table are in :mod:`.values`, and the
@@ -396,7 +396,8 @@ class CutFamily(TypedDict):
 
 class BandFamily(TypedDict):
     """One band family: the face an inset request bands, its margins (also in model-grid units, the identity a
-    margin is looked up by), the area of its support region and the groups of each band."""
+    margin is looked up by), the area of its support region, the groups of each band and the contacts of each
+    band that no group carries."""
 
     support: FaceSupport | InterfaceSupport
     interface: str | None
@@ -405,12 +406,29 @@ class BandFamily(TypedDict):
     band_count: PositiveInt
     support_area_um2: float | None
     bands: Annotated[
-        dict[str, IdList],
+        dict[str, list[SurfaceGroupRef]],
         Doc(
-            "Band index -> the primary groups of the faces in that band.  In Route B a family also names the"
-            " MM group of a metal-metal contact, which is not a physical group, so these names are not checked."
+            "Band index -> the surface groups whose faces lie in that band; a band no written face lies in is"
+            " absent."
         ),
     ]
+    hidden_contacts: Annotated[
+        dict[str, list[HiddenContact]],
+        Doc(
+            "Band index -> the metal-metal contacts that lie in that band but bound no written volume (Route B"
+            " excludes conductor volumes), so no group carries them; a band without one is absent."
+        ),
+    ]
+
+
+class HiddenContact(TypedDict):
+    """A metal-metal contact inside a band that is not written: the two conductors that meet there and the face
+    kind of the contact."""
+
+    entities: Annotated[
+        list[EntityRef], Length(2, 2), Doc("The two conductors, by id.")
+    ]
+    face_kind: FaceKind
 
 
 class SupportRing(TypedDict):
@@ -528,28 +546,37 @@ class Face(TypedDict):
     entities: Annotated[
         list[EntityRef],
         Doc(
-            "The Entities whose outlines bound the face, from the source carriers of its edges."
+            "The Entities whose outline curves lie on the face's boundary, from the source carriers of its"
+            " horizontal edges.  Which Entities cover the face is entity_coverage."
         ),
     ]
-    families: Annotated[
+    band_families: Annotated[
         list[BandFamilyRef],
         Doc(
-            "The band families whose curves bound the face, from its band-member carriers."
+            "The band families whose band curves lie on the face's boundary, from the band-member carriers of"
+            " its edges.  Which bands the face lies in is bands: a face inside a band need not touch its curves."
         ),
     ]
-    cut_families: Annotated[
+    other_cut_families: Annotated[
         list[CutFamilyRef],
-        Doc("The other cut families whose members lie on its boundary edges."),
+        Doc(
+            "The cut families other than the band families whose curves lie on the face's boundary, from the"
+            " family-member carriers of its edges."
+        ),
     ]
-    membership: Annotated[
+    entity_coverage: Annotated[
         dict[EntityRef, NonNegative],
         Doc(
-            "Entity -> covered fraction of the face area; non-exclusive, may sum to more than 1 (walls use the"
-            " share of their bottom boundary length)."
+            "Entity -> the fraction of the face's area that Entity covers (a wall: of its bottom boundary"
+            " length); non-exclusive, may sum to more than 1."
         ),
     ]
     bands: Annotated[
-        list[BandLabel], Doc("The inset band labels of the face, in label order.")
+        list[BandLabel],
+        Doc(
+            "The inset bands the face lies in (family and index), in label order; which band curves bound it"
+            " is band_families."
+        ),
     ]
     outer_boundary: Annotated[
         OuterBoundary | None,
@@ -668,11 +695,10 @@ class VolumeGroup(TypedDict):
 
 
 class SurfaceEprRow(TypedDict):
-    """One Surface-EPR row and the primary group that carries it."""
+    """One Surface-EPR row and the primary group that carries it; the row's Entities are its group's."""
 
     group: SurfaceGroupRef
     interface_type: SurfaceEprType
-    entities: list[EntityRef]
     band: Count | None
     banded_surface: Annotated[
         str | None,

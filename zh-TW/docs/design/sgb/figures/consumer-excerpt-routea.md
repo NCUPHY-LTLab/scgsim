@@ -47,7 +47,6 @@
   "MA::chip/left__sheet::band=0": {
    "band": 0,
    "banded_surface": "MA::chip/left__sheet",
-   "entities": ["chip/left"],
    "face_sides": {
     "f:5d1f74bc23d16ca3": "above"
    },
@@ -59,7 +58,6 @@
   "MS::chip/left__sheet::band=0": {
    "band": 0,
    "banded_surface": "MS::chip/left__sheet",
-   "entities": ["chip/left"],
    "face_sides": {
     "f:5d1f74bc23d16ca3": "below"
    },

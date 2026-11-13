@@ -491,6 +491,7 @@ def test_a_build_without_type_requests_writes_the_records_it_wrote_before():
     assert set(side["band_family"]) == set(requests)
     assert set(next(iter(side["band_family"].values()))) == {
         "support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands",
+        "hidden_contacts",
     }  # fmt: skip
 
 
