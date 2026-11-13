@@ -169,6 +169,7 @@ website:
     collapse-level: 1
     contents:
     - docs/contributing.qmd
+    - docs/code-map.qmd
     - docs/documentation-map.qmd
     - docs/ownership.qmd
     - section: 專案背景

@@ -1,0 +1,142 @@
+---
+title: "Code map"
+description: "The stages of src/scgsim, the order the work flows through them on each route, what crosses between them and which folder is which stage."
+sidebar: contribution
+scgsim-id: "docs/code-map"
+scgsim-kind: "contribution"
+scgsim-status: "CONVERGING"
+---
+
+This page lets you rebuild the structure of `src/scgsim` from one place: which
+stages exist, the order the work flows through them on the Palace route and on
+the AEDT route, what crosses from one stage to the next, and which folder is
+which stage. A *stage* is a folder that takes what an earlier stage produced
+and produces what a later stage reads. The tables on this page are generated
+from the folders' own docstrings, so they say what the code says.
+
+## The two routes {#routes}
+
+Both routes start from a layout and a stack and end at a result a person reads;
+they are the two routes of the [backend support matrix](backend-support.qmd).
+Every square box is a folder below `src/scgsim`, named as the folder is; a
+rounded box is outside SCGSim. A solid
+arrow is an import: the stage at its head imports the stage at its tail, or,
+where the arrow says *calls*, the stage at its tail calls the one at its head.
+A dashed arrow is a file or a value handed over, labelled with what it is and,
+where a contract module defines the file, with that module.
+
+```{mermaid}
+%%| column: screen-inset
+flowchart TB
+  layout(["layout and stack"]) -. "components or GDS, stack" .-> gsource
+  subgraph shared["shared geometry"]
+    gsource["geometry/source"] --> ginterp["geometry/interpretation"]
+    ginterp -- "calls as its last step" --> gjunc["geometry/junctions"]
+  end
+  ginterp --> psource
+  ginterp --> gplan
+  subgraph palace_route["Palace route"]
+    subgraph simulation["palace/simulation calls"]
+      psource["palace/source"] --> pmesh["palace/mesh"]
+      pmesh -- "calls" --> gsepr["geometry/surface_epr"]
+      gsepr -- "calls" --> gsgb["geometry/sgb"]
+      gsgb -. "XAO and sidecar<br/>contracts/sgb_sidecar" .-> meshing["meshing"]
+      pmesh -- "calls" --> meshing
+      pmesh --> pconfig["palace/config"]
+      pconfig -. "config.json<br/>contracts/palace_run_folder" .-> prun["palace/run"]
+    end
+    prun -. "run folder" .-> palace_solver(["Palace"])
+    palace_solver -. "returned run folder<br/>contracts/palace_run_folder" .-> presults["palace/results"]
+    presults --> preports["palace/reports"]
+  end
+  subgraph aedt_route["AEDT route"]
+    gplan["geometry/planning"] --> aprep
+    aspecs["aedt/specs"] --> aprep["aedt/preparation"]
+    aprep -. "handoff folder" .-> aruntime["aedt/runtime"]
+    aruntime -- "calls" --> aepr["aedt/epr"]
+    gplan --> aepr
+    aruntime -. "run folder and receipt" .-> aresults["aedt/results"]
+    aepr --> aresults
+    aresults -- "calls" --> apres["aedt/presentation"]
+  end
+```
+
+The diagram leaves out the folders every stage of an area uses:
+`geometry/models` and `geometry/grid` in geometry, `geometry/sgb/exact` in SGB,
+and `semantics` and `presentation` across the package. AEDT's handoff and
+receipt formats are defined in `aedt/specs` and `aedt/results`, not in
+`contracts`. `visualization` reads a Palace run folder or an AEDT project to
+draw a geometry preview; it is not a step of either route. The stage tables
+below list every folder.
+
+## How to read a folder {#read-a-folder}
+
+Every package folder's `__init__.py` opens with one sentence that says what the
+folder is. A stage folder adds three lines:
+
+```text
+<one sentence: what the folder is>
+
+In: what the stage takes, and from which stage
+Out: what the stage produces
+Next: which stage reads that
+```
+
+Imports point against the flow: a later stage imports an earlier one, and an
+earlier stage does not import a later one. A stage that drives others is the
+one exception by design: `palace/simulation` imports each Palace stage it runs,
+`geometry/interpretation` calls `geometry/junctions` as its last step, and
+`aedt/runtime` calls the in-AEDT part of `aedt/epr`. These imports also point
+from an earlier stage to a later one:
+
+| Importing folder | Imports | What it takes from there |
+| --- | --- | --- |
+| `geometry/junctions` | `geometry/sgb` | SGB's boundary binder (`prisms.bound_rings`) and exact records, so the partition cuts the rings SGB builds. |
+| `palace/results` | `palace/reports` | The report views a resolved result's display methods return. |
+| `aedt/specs` | `aedt/epr` | The grouping of surface integrals (`epr.selection`). |
+| `aedt/preparation` | `aedt/results` | The receipt schema and the initial receipt (`results.provenance`). |
+| `aedt/results` | `aedt/runtime`, `aedt/epr`, `aedt/presentation` | The batch collection context and benchmark path, the `EprResult` record, and the display a `ResolvedRun` calls. |
+
+## Stage tables {#stage-tables}
+
+Each area has one table, its rows in the order the work flows through it. A
+row's text is the folder's docstring: *What it is* is the first sentence, and
+In, Out and Next are the three lines. A folder that is not a stage says in
+its In cell what it is instead: an area's own folder, a part of the stage in
+the row it names, or a stage whose docstring names its modules.
+
+To change a row, edit the folder's docstring and run
+`python scripts/generate_code_map.py`; the order of the rows is stated once, in
+that script. The script refuses a package folder it does not list and a stage
+whose docstring lacks one of the three lines, and
+`tests/test_code_map.py` fails while the tables differ from the docstrings.
+
+{{< include _code-map-stages.md >}}
+
+## Where to put new code {#new-code}
+
+- A helper lives in the earliest stage that calls it, and later stages import
+  it from there.
+- What only AEDT's native construction calls lives in `geometry/planning`;
+  nothing on the Palace route imports that folder.
+- `geometry/models` imports no other geometry code, and `contracts` imports
+  nothing else from `scgsim` and no third-party package, so every stage can
+  import them. The import-linter contract `contracts-import-nothing-else`
+  checks `contracts`.
+- A new package folder goes into `AREAS` in `scripts/generate_code_map.py`
+  where the work reaches it, with the sentence and, for a stage, the three
+  lines in its `__init__.py`.
+
+## Contracts and design {#contracts-and-design}
+
+This page names the stages and their order; the pages below hold what each
+stage promises:
+
+- [Architecture and data flow](architecture.qmd): module and state boundaries
+  and the Palace and AEDT lifecycles.
+- [GeometryPlan and SGB](geometry-sgb.qmd): the geometry contract from a layout
+  to the backend geometry.
+- [Supported scope](supported-scope.qmd#supported-entry): the supported entry
+  and what a direct call below it assumes.
+- [Backend support matrix](backend-support.qmd): the calculations each route
+  supports.
