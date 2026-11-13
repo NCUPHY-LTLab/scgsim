@@ -171,7 +171,7 @@ class GeometryPlan:
                     "component", "an assembled GDSFactory Component", component
                 )
             )
-        self.root_id = source_path(root_id)
+        self.root_id = source_path(root_id, _call("__init__", "root_id"), "root_id")
         if "/" in self.root_id:
             raise ValueError(
                 _call("__init__", "root_id").expected(
@@ -261,7 +261,7 @@ class GeometryPlan:
 
     def register_instance(self, path: str, reference: Any) -> None:
         """Register one authored child occurrence and its composed transform."""
-        path = source_path(path)
+        path = source_path(path, _call("register_instance", "path"), "path")
         parent_path, _, _ = path.rpartition("/")
         if (
             not parent_path

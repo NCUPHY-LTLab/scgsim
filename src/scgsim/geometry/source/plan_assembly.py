@@ -28,15 +28,31 @@ _FORBIDDEN_AUTHOR_KEYS = {
 }
 
 
-def source_path(value: Any) -> str:
-    """Validate one slash-separated component or occurrence identity."""
+def _semantics(path: str, part: str = "") -> Declared:
+    """A part of a component's ``component_semantics``, which the component declares."""
+    return Declared(
+        f"component_semantics of {path!r}" + (f" {part}" if part else ""),
+        f"the component at {path!r}: its info['component_semantics']",
+    )
+
+
+_SOURCE_POINT = Declared(
+    "a selector or port point", "the component_semantics that declares it"
+)
+_PLAN_STACK = Declared(
+    "the plan's layer stack", "the layer_stack passed to GeometryPlan"
+)
+
+
+def source_path(value: Any, owner: Declared, field: str) -> str:
+    """Validate one slash-separated component or occurrence identity, ``field`` of ``owner``."""
     if (
         not isinstance(value, str)
         or not value
         or any(_PATH_SEGMENT.fullmatch(part) is None for part in value.split("/"))
     ):
         raise ValueError(
-            "instance and entity paths need non-empty slash-separated names"
+            owner.expected(field, "non-empty slash-separated names", value)
         )
     return value
 
@@ -60,10 +76,24 @@ def occurrence_transform(
         float(origin.y),
     )
     if not all(math.isfinite(item) for item in values):
-        raise ValueError("instance transform must be finite")
+        raise ValueError(
+            Declared(
+                "an instance reference",
+                "the instance's placement in its parent component",
+            ).expected("transform", "finite", values)
+        )
     a, b, c, d, _, _ = values
     if not math.isclose(abs(a * d - b * c), 1.0, rel_tol=0.0, abs_tol=1e-9):
-        raise ValueError("GeometryPlan supports rigid rotation and mirror only")
+        raise ValueError(
+            Declared(
+                "an instance reference",
+                "the instance's placement in its parent component",
+            ).expected(
+                "transform",
+                "a rigid rotation or mirror (GeometryPlan supports no scaling)",
+                values,
+            )
+        )
     return values
 
 
@@ -84,16 +114,18 @@ def composed_transform(
 
 
 def transform_source_point(
-    transform: tuple[float, ...], value: Sequence[float]
+    transform: tuple[float, ...],
+    value: Sequence[float],
+    owner: Declared = _SOURCE_POINT,
 ) -> list[float]:
-    """Transform one local XY selector into its assembled source position."""
+    """Transform one local XY selector into its assembled source position; ``owner`` declares it."""
     if isinstance(value, (str, bytes)) or len(value) != 2:
-        raise ValueError("selector and port point must be a two-item coordinate")
+        raise ValueError(owner.expected("point", "an (x, y) coordinate", value))
     x, y = float(value[0]), float(value[1])
     a, b, c, d, u, v = transform
     result = [a * x + b * y + u, c * x + d * y + v]
     if not all(math.isfinite(item) for item in result):
-        raise ValueError("transformed point is not finite")
+        raise ValueError(owner.expected("point", "finite once placed", value))
     return result
 
 
@@ -117,7 +149,11 @@ def transform_source_direction(
     result = [a * x + b * y, c * x + d * y]
     magnitude = math.hypot(*result)
     if not math.isfinite(magnitude) or magnitude == 0:
-        raise ValueError("transformed port direction is invalid")
+        raise ValueError(
+            Declared("a port", "the component's port orientation").expected(
+                "orientation", "a finite angle", angle_degrees
+            )
+        )
     result = [
         0.0 if abs(value / magnitude) <= _DIRECTION_FLOAT_NOISE else value
         for value in result
@@ -140,9 +176,17 @@ def component_semantics(component: Any, path: str) -> Mapping[str, Any]:
     try:
         raw = component.info["component_semantics"]
     except (AttributeError, KeyError) as exc:
-        raise ValueError(f"{path} has no component_semantics v2 declaration") from exc
+        raise ValueError(
+            _semantics(path).refusal("the component declares no component_semantics v2")
+        ) from exc
     if not isinstance(raw, Mapping) or raw.get("schema_version") != 2:
-        raise ValueError(f"{path} requires component_semantics schema_version=2")
+        raise ValueError(
+            _semantics(path).expected(
+                "schema_version",
+                "2",
+                raw.get("schema_version") if isinstance(raw, Mapping) else raw,
+            )
+        )
     if set(raw) - {
         "schema_version",
         "conductor_regions",
@@ -152,12 +196,18 @@ def component_semantics(component: Any, path: str) -> Mapping[str, Any]:
         "boundary_reconstruction",
         "metadata",
     }:
-        raise ValueError(f"{path} has unknown component_semantics v2 fields")
+        raise ValueError(
+            _semantics(path).refusal("it has unknown component_semantics v2 fields")
+        )
     metadata = raw.get("metadata", {})
     if not isinstance(metadata, Mapping):
-        raise TypeError(f"{path} component metadata must be a mapping")
+        raise TypeError(
+            _semantics(path, "metadata").expected("metadata", "a mapping", metadata)
+        )
     if "signal_group" in metadata:
-        raise ValueError(f"{path} cannot author a public Group ID")
+        raise ValueError(
+            _semantics(path).refusal("a component cannot author a public Group ID")
+        )
     records = raw.get("conductor_regions", ())
     ports = raw.get("ports", ())
     contributions = raw.get("ground_plane_contributions", ())
@@ -166,7 +216,9 @@ def component_semantics(component: Any, path: str) -> Mapping[str, Any]:
         for value in (records, ports, contributions)
     ):
         raise TypeError(
-            f"{path} conductor_regions, ports, and ground_plane_contributions must be sequences"
+            _semantics(path).refusal(
+                "conductor_regions, ports, and ground_plane_contributions must be sequences"
+            )
         )
     return raw
 
@@ -187,12 +239,14 @@ class GeometryPlanStackAssembler:
         """Resolve PDK regions, transform source records, and attach provenance."""
         levels = getattr(self.layer_stack, "layers", None)
         if not isinstance(levels, Mapping):
-            raise TypeError("layer_stack must expose layers")
+            raise TypeError(_PLAN_STACK.refusal("layer_stack must expose layers"))
         bounds = coupon_domain_bounds(self.component, self.coupon_padding_um)
         materials = normalize_material_records(self.material_records)
         regions = solution_regions(levels, materials=materials, bounds=bounds)
         if not regions:
-            raise ValueError("plan needs at least one PDK solution region")
+            raise ValueError(
+                _PLAN_STACK.refusal("plan needs at least one PDK solution region")
+            )
 
         net_owners = {
             entity_id: net
@@ -209,7 +263,12 @@ class GeometryPlanStackAssembler:
         )
         by_id = {record["semantic_id"]: record for record in layers}
         if len(by_id) != len(layers):
-            raise ValueError("GeometryPlan Entity IDs must be unique")
+            raise ValueError(
+                Declared(
+                    "the plan's Entity IDs",
+                    "the components' component_semantics conductor_regions",
+                ).refusal("GeometryPlan Entity IDs must be unique")
+            )
         self._validate_physical_planes(layers, regions, levels)
         self._apply_ground_contributions(contributions, by_id)
         return {
@@ -273,12 +332,25 @@ class GeometryPlanStackAssembler:
                 bounds_ref = record["geometry"].get("plane_bounds_ref")
                 if bounds_ref not in regions or bounds_ref not in levels:
                     raise ValueError(
-                        "occurrence Ground requires its declared plane_bounds_ref"
+                        Declared(
+                            f"occurrence Ground {record['semantic_id']!r}",
+                            "its PDK level's geometry",
+                        ).expected(
+                            "plane_bounds_ref",
+                            "a solution region of the layer stack",
+                            bounds_ref,
+                        )
                     )
                 source_layer = levels[bounds_ref].layer
                 if not isinstance(source_layer, LogicalLayer):
                     raise ValueError(
-                        "occurrence Ground bounds require a source logical layer"
+                        Declared(
+                            f"PDK level {bounds_ref!r}", "the PDK layer stack"
+                        ).expected(
+                            "layer",
+                            "a LogicalLayer (the occurrence Ground reads its plane from it)",
+                            source_layer,
+                        )
                     )
                 regions[bounds_ref]["metadata"]["source_layer_datatype"] = list(
                     get_layer_tuple(source_layer.layer)
@@ -286,7 +358,10 @@ class GeometryPlanStackAssembler:
             level = record["metadata"]["logical_layer_id"]
             if level in physical_planes:
                 raise ValueError(
-                    f"multiple ground planes claim physical level {level!r}"
+                    Declared(
+                        f"physical level {level!r}",
+                        "the components' component_semantics conductor_regions",
+                    ).refusal("multiple ground planes claim it")
                 )
             physical_planes.add(level)
 
@@ -303,16 +378,31 @@ class GeometryPlanStackAssembler:
                 != "die_face_minus_ground_mask"
             ):
                 raise ValueError(
-                    f"ground contribution targets no root derived plane {plane_id!r}"
+                    Declared(
+                        f"ground contribution {contribution['source_local_id']!r}",
+                        "the component's component_semantics ground_plane_contributions",
+                    ).expected(
+                        "plane_id", "a die-face Ground of the root component", plane_id
+                    )
                 )
             if target["metadata"]["logical_layer_id"] != contribution["level"]:
                 raise ValueError(
-                    f"ground contribution {contribution['source_local_id']!r} level differs from target plane"
+                    Declared(
+                        f"ground contribution {contribution['source_local_id']!r}",
+                        "the component's component_semantics ground_plane_contributions",
+                    ).expected(
+                        "level",
+                        f"the target plane's level {target['metadata']['logical_layer_id']!r}",
+                        contribution["level"],
+                    )
                 )
             geometry = target["geometry"]
             if "include_layer" in geometry or "include_selector_points_um" in geometry:
                 raise ValueError(
-                    "root ground plane cannot mix global includes with source contributions"
+                    Declared(
+                        f"root ground plane {plane_id!r}",
+                        "the root component's component_semantics",
+                    ).refusal("it cannot mix global includes with source contributions")
                 )
             geometry.setdefault("source_occurrence_includes", []).append(contribution)
             target["metadata"].setdefault(
@@ -334,15 +424,31 @@ def _entity_declaration(
     net_owners: Mapping[str, str],
 ) -> dict[str, Any]:
     if not isinstance(raw, Mapping):
-        raise TypeError(f"{path} conductor records must be mappings")
+        raise TypeError(
+            _semantics(path, "conductor_regions").expected("record", "a mapping", raw)
+        )
     if set(raw) & _FORBIDDEN_AUTHOR_KEYS:
-        raise ValueError(f"{path} v2 entity cannot author Net or Group")
+        raise ValueError(
+            _semantics(path, "conductor_regions").refusal(
+                "a v2 entity cannot author Net or Group"
+            )
+        )
     metadata = raw.get("metadata", {})
     if not isinstance(metadata, Mapping) or set(metadata) & _FORBIDDEN_AUTHOR_KEYS:
-        raise ValueError(f"{path} v2 entity metadata cannot author Net or Group")
-    local_id = source_path(raw.get("semantic_id"))
+        raise ValueError(
+            _semantics(path, "conductor_regions").refusal(
+                "a v2 entity's metadata cannot author Net or Group"
+            )
+        )
+    local_id = source_path(
+        raw.get("semantic_id"), _semantics(path, "conductor_regions"), "semantic_id"
+    )
     if "/" in local_id:
-        raise ValueError("component-local entity ID must be one segment")
+        raise ValueError(
+            _semantics(path, "conductor_regions").expected(
+                "semantic_id", "one component-local segment", local_id
+            )
+        )
     entity_id = f"{path}/{local_id}"
     geometry = dict(raw.get("geometry", {}))
     for key in ("selector_point_um",):
@@ -381,16 +487,31 @@ def _ground_contribution(
         "selector_point_um",
     }:
         raise ValueError(
-            f"{path} ground contribution needs local_id, plane_id, level, layer, selector_point_um"
+            _semantics(path, "ground_plane_contributions").expected(
+                "record",
+                "exactly local_id, plane_id, level, layer, selector_point_um",
+                raw,
+            )
         )
     local_id, plane_id, level = (
-        source_path(raw[key]) for key in ("local_id", "plane_id", "level")
+        source_path(raw[key], _semantics(path, "ground_plane_contributions"), key)
+        for key in ("local_id", "plane_id", "level")
     )
     if any("/" in value for value in (local_id, plane_id, level)):
-        raise ValueError("ground contribution IDs must be component-local names")
+        raise ValueError(
+            _semantics(path, "ground_plane_contributions").expected(
+                "local_id, plane_id and level",
+                "component-local names",
+                (local_id, plane_id, level),
+            )
+        )
     key = (path, local_id)
     if key in contribution_ids:
-        raise ValueError(f"duplicate ground contribution {path}/{local_id}")
+        raise ValueError(
+            _semantics(path, "ground_plane_contributions").refusal(
+                f"duplicate ground contribution {path}/{local_id}"
+            )
+        )
     contribution_ids.add(key)
     layer = gds_layer(
         raw["layer"],
@@ -423,10 +544,18 @@ def _source_port(
         "layer",
         "target_layer",
     }:
-        raise ValueError(f"{path} port requires name, layer, target_layer")
-    name = source_path(raw["name"])
+        raise ValueError(
+            _semantics(path, "ports").expected(
+                "record", "exactly name, layer and target_layer", raw
+            )
+        )
+    name = source_path(raw["name"], _semantics(path, "ports"), "name")
     if "/" in name:
-        raise ValueError("component-local port name must be one segment")
+        raise ValueError(
+            _semantics(path, "ports").expected(
+                "name", "one component-local segment", name
+            )
+        )
     port = cell.ports[name]
     layer = gds_layer(
         raw["layer"],
@@ -439,7 +568,13 @@ def _source_port(
     else:
         port_layer = port.kcl.layout.get_info(int(str(raw_port_layer)))
     if (int(port_layer.layer), int(port_layer.datatype)) != layer:
-        raise ValueError(f"{path}/{name} authored port layer differs")
+        raise ValueError(
+            _semantics(path, f"port {name!r}").expected(
+                "layer",
+                f"the component port's layer {(int(port_layer.layer), int(port_layer.datatype))}",
+                layer,
+            )
+        )
     return {
         "layer": layer[0],
         "datatype": layer[1],
