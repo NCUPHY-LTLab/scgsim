@@ -14,11 +14,31 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Generic, TypeVar
 
+from scgsim.contracts.palace_index_map import (
+    DIELECTRIC_SECTION,
+    ENERGY_SECTION,
+    LUMPED_PORT_SECTION,
+    TERMINAL_SECTION,
+)
 from scgsim.contracts.palace_run_folder import EPR_SELECTION_SCHEMA
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
+
+_WHERE_EPR_REQUEST = "the call to set_epr_request"
 
 SURFACE_INTERFACES = ("MA", "MS", "SA")
+
+EntryT = TypeVar("EntryT")
+
+
+@dataclass(frozen=True)
+class IndexedRows(Generic[EntryT]):
+    """Rows one builder writes into ``config.json`` and the index-map entries that describe them, in one order."""
+
+    rows: list[dict[str, Any]]
+    entries: list[EntryT]
 
 
 @dataclass(frozen=True)
@@ -28,7 +48,7 @@ class PortEntry:
     ``sheet`` is the sheet's identity in the mesh: its id, the conductors it lands on and the volumes around it.
     """
 
-    section: ClassVar[str] = "Boundaries.LumpedPort"
+    section: ClassVar[str] = LUMPED_PORT_SECTION
 
     index: int
     entry_name: str
@@ -55,7 +75,7 @@ class PortEntry:
 class TerminalEntry:
     """The ``Terminal`` row of one Electrostatic terminal: the conductor surfaces of one exact Net."""
 
-    section: ClassVar[str] = "Boundaries.Terminal"
+    section: ClassVar[str] = TERMINAL_SECTION
 
     index: int
     name: str
@@ -88,7 +108,7 @@ class TerminalEntry:
 class EnergyEntry:
     """The ``Energy`` row of one solution volume: a bulk domain named by its group, with its material."""
 
-    section: ClassVar[str] = "Domains.Postprocessing.Energy"
+    section: ClassVar[str] = ENERGY_SECTION
 
     index: int
     name: str
@@ -176,7 +196,7 @@ class SurfaceEprEntry:
     own ``baseline_index``; an inset row names its baseline and carries its ``inset`` selection.
     """
 
-    section: ClassVar[str] = "Boundaries.Postprocessing.Dielectric"
+    section: ClassVar[str] = DIELECTRIC_SECTION
 
     index: int
     entry_name: str
@@ -237,8 +257,11 @@ class EprRequest:
         surfaces = _selection(surface_interfaces, "surface_interfaces")
         if surfaces is not None and set(surfaces) - set(SURFACE_INTERFACES):
             raise ValueError(
-                "surface_interfaces supports only MA, MS, and SA: call "
-                "set_epr_request(surface_interfaces=...) with those."
+                Declared(
+                    "surface_interfaces supports only MA, MS, and SA: call "
+                    "set_epr_request(surface_interfaces=...) with those",
+                    _WHERE_EPR_REQUEST,
+                ).refusal(found_text(sorted(set(surfaces) - set(SURFACE_INTERFACES))))
             )
         return cls(
             surfaces,
@@ -262,16 +285,22 @@ def _selection(values: Sequence[str] | None, name: str) -> tuple[str, ...] | Non
         return None
     if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
         raise TypeError(
-            f"{name} must be a sequence of IDs or None: call set_epr_request({name}=[...])."
+            Declared(f"{name}", _WHERE_EPR_REQUEST).refusal(
+                f"must be a sequence of IDs or None: call set_epr_request({name}=[...])"
+            )
         )
     normalized = tuple(values)
     if any(not isinstance(value, str) or not value for value in normalized):
         raise ValueError(
-            f"{name} must contain non-empty text IDs: call set_epr_request({name}=[...])."
+            Declared(f"{name}", _WHERE_EPR_REQUEST).refusal(
+                f"must contain non-empty text IDs: call set_epr_request({name}=[...])"
+            )
         )
     if len(normalized) != len(set(normalized)):
         raise ValueError(
-            f"{name} must not repeat IDs: call set_epr_request({name}=[...]) with each once."
+            Declared(f"{name}", _WHERE_EPR_REQUEST).refusal(
+                f"must not repeat IDs: call set_epr_request({name}=[...]) with each once"
+            )
         )
     return normalized
 
@@ -313,12 +342,22 @@ def check_epr_request(
         unknown = sorted(set(chosen or ()) - configured)
         if unknown:
             raise ValueError(
-                f"EPR request selects an unknown {name} binding {unknown}; the config has "
-                f"{sorted(configured)}: call set_epr_request() with those, then write_config()."
+                Declared("EPR request", _WHERE_EPR_REQUEST).refusal(
+                    f"selects an unknown {name} binding {unknown}; the config has {sorted(configured)}: call set_epr_request() with those, then write_config()"
+                )
             )
 
 
+@dataclass(frozen=True)
+class LumpedPortRows(IndexedRows[PortEntry]):
+    """The ``LumpedPort`` rows and entries, with the port information file's record of each port."""
+
+    information: list[dict[str, Any]]
+
+
 __all__ = [
+    "IndexedRows",
+    "LumpedPortRows",
     "SURFACE_INTERFACES",
     "EnergyEntry",
     "EprRequest",

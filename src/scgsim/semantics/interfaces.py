@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
+from scgsim.refusal import found_text, internal
+
 from .materials import is_supported_material_kind, is_vacuum_material_kind
 
 
@@ -9,7 +13,11 @@ def conductor_solution_interface_kind(solution_material_kind: str) -> str:
     """Return ``MA`` for vacuum and ``MS`` for other supported solution material."""
     if not is_supported_material_kind(solution_material_kind):
         raise ValueError(
-            "solution material kind must be vacuum, dielectric, or conductor"
+            internal(
+                "solution material kind must be vacuum, dielectric, or conductor"
+                + ": "
+                + found_text(solution_material_kind)
+            )
         )
     return "MA" if is_vacuum_material_kind(solution_material_kind) else "MS"
 
@@ -20,7 +28,13 @@ def solution_interface_kind(lower_material_kind: str, upper_material_kind: str) 
         lower_material_kind
     ) or not is_supported_material_kind(upper_material_kind):
         raise ValueError(
-            "solution material kinds must be vacuum, dielectric, or conductor"
+            internal(
+                "solution material kinds must be vacuum, dielectric, or conductor"
+                + ": "
+                + found_text(
+                    {"lower": lower_material_kind, "upper": upper_material_kind}
+                )
+            )
         )
     lower_vacuum = is_vacuum_material_kind(lower_material_kind)
     upper_vacuum = is_vacuum_material_kind(upper_material_kind)
@@ -30,14 +44,25 @@ def solution_interface_kind(lower_material_kind: str, upper_material_kind: str) 
     return "SS"
 
 
+class InterfaceOwners(NamedTuple):
+    """The two owners of a solution-solution interface, in the order its kind names them.
+
+    For ``SA`` the solid owner comes first and the vacuum second, whichever lies below; otherwise the lower
+    owner comes first.
+    """
+
+    first: str
+    second: str
+
+
 def solution_interface_owner_ids(
     kind: str,
     lower_id: str,
     upper_id: str,
     *,
     lower_is_vacuum: bool,
-) -> tuple[str, str]:
+) -> InterfaceOwners:
     """Return the established owner order, reversing vacuum-lower SA pairs."""
     if kind == "SA" and lower_is_vacuum:
-        return (upper_id, lower_id)
-    return (lower_id, upper_id)
+        return InterfaceOwners(upper_id, lower_id)
+    return InterfaceOwners(lower_id, upper_id)

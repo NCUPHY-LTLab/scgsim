@@ -6,7 +6,7 @@ import json
 import pytest
 
 from scgsim.contracts.palace_run_folder import CONFIG_SCHEMA
-from scgsim.palace.results.receipt_contract import (
+from scgsim.palace.results.runtime_contract import (
     validate_palace_identity,
     validate_runtime_compatibility,
 )

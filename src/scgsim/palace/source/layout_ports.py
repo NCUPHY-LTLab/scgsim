@@ -18,11 +18,17 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
+from scgsim.refusal import found_text
 
 from .ports import LayoutPortBinding, RequestedPort
 from .workflow import GeometrySettings, prepare_mesh_input
+
+_WHERE_ADD_PORT = "the call to add_port"
+
+_WHERE_PLAN_PORTS = "the GeometryPlan's port sheets"
 
 
 @dataclass(frozen=True)
@@ -104,14 +110,28 @@ def _resolve_plan_ports(
     available_records = plan.stack["metadata"].get("port_sheet_source_layers", ())
     available = {record["name"]: record for record in available_records}
     if len(available) != len(available_records):
-        raise ValueError("GeometryPlan port names must be unique")
+        raise ValueError(
+            Declared(
+                "GeometryPlan port names must be unique", _WHERE_PLAN_PORTS
+            ).refusal(
+                found_text(
+                    sorted(
+                        name
+                        for name in available
+                        if [r["name"] for r in available_records].count(name) > 1
+                    )
+                )
+            )
+        )
     resolved: list[LayoutPortBinding] = []
     source_records: list[dict[str, Any]] = []
     for requested in ports:
         record = available.get(requested.name)
         if record is None or record["target_layer"] != requested.layer:
             raise ValueError(
-                f"GeometryPlan has no matching authored port {requested.name!r}"
+                Declared("GeometryPlan", _WHERE_ADD_PORT).refusal(
+                    f"has no matching authored port {requested.name!r}"
+                )
             )
         resolved.append(
             LayoutPortBinding(

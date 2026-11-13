@@ -10,8 +10,13 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
+from scgsim.contracts.palace_index_map import (
+    DIELECTRIC_SECTION,
+    ENERGY_SECTION,
+    LUMPED_PORT_SECTION,
+)
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
     EIGENMODE,
@@ -19,23 +24,38 @@ from scgsim.contracts.palace_run_folder import (
     INDEX_MAP,
     NATIVE_METADATA_NAME,
     OUTPUT_DIR,
+    confined_path,
     iteration_dir,
+    sha256,
     table_name,
 )
-from scgsim.palace.reports.epr import show_epr as render
-from scgsim.palace.results.artifacts import confined_path, sha256
-from scgsim.palace.results.epr_model import (
+from scgsim.geometry.models.refusals import Declared
+from scgsim.palace.results.artifacts import RETURNED_RUN_FOLDER
+from scgsim.palace.results.epr_records import (
     PalaceEprResult,
     checked_number,
 )
-from scgsim.palace.results.models import ResolvedRunData
+from scgsim.palace.results.resolved_records import ResolvedRunData
 from scgsim.palace.results.surface_contract import entry_rows
 from scgsim.palace.results.tables import (
     count_index_entries,
     output_families,
     read_result_table,
 )
-from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
+from scgsim.refusal import found_text
+from scgsim.semantics.epr import (
+    FilmAssumptions,
+    FilmUpdate,
+    film_assumptions,
+    inverse_quality_factor,
+)
+
+_WHERE_REANALYZE = "the call to reanalyze_epr"
+
+_WHERE_EPR_RESULT_CALL = "the call to epr_result"
+
+
+_WHERE_EPR_FILE_PATH = "the path passed to resolve_epr_result"
 
 
 def resolve_epr_result(path: str | Path) -> PalaceEprResult:
@@ -43,18 +63,77 @@ def resolve_epr_result(path: str | Path) -> PalaceEprResult:
 
     source = Path(path).expanduser().resolve()
     if not source.is_file() or source.is_symlink():
-        raise FileNotFoundError(source)
+        raise FileNotFoundError(
+            Declared(f"EPR result file {source}", _WHERE_EPR_FILE_PATH).refusal(
+                "does not exist, or is a link"
+            )
+        )
     return PalaceEprResult.from_payload(json.loads(source.read_text(encoding="utf-8")))
 
 
-def _iteration_result(
-    result: ResolvedRunData, iteration: int
-) -> tuple[ResolvedRunData, str]:
+class _IterationRun(NamedTuple):
+    """A resolved run read at one sealed AMR iteration, and the folder of that iteration's outputs."""
+
+    run: ResolvedRunData
+    output_prefix: str
+
+
+def _iteration_result(result: ResolvedRunData, iteration: int) -> _IterationRun:
     """Read one sealed native iteration with the table validators of ``results.tables``."""
 
     if type(iteration) is not int or iteration <= 0:
-        raise ValueError("palace_iteration must be a positive integer")
+        raise ValueError(
+            Declared(
+                "palace_iteration must be a positive integer", _WHERE_EPR_RESULT_CALL
+            ).refusal(found_text(iteration))
+        )
     records = {item["path"]: item for item in result.returned_receipt.output_files}
+    prefix = _iteration_prefix(records, iteration)
+    native = json.loads(
+        _verified_artifact(result, records, prefix, NATIVE_METADATA_NAME).read_text(
+            encoding="utf-8"
+        )
+    )
+    if (
+        not isinstance(native, dict)
+        or not isinstance(native.get("Problem"), dict)
+        or native["Problem"].get("Iteration") != iteration
+    ):
+        raise ValueError(
+            Declared(
+                f"native iteration metadata in {prefix}/{NATIVE_METADATA_NAME} disagrees with selected directory",
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    native.get("Problem", {}).get("Iteration")
+                    if isinstance(native, dict)
+                    and isinstance(native.get("Problem"), dict)
+                    else None,
+                    iteration,
+                )
+            )
+        )
+    counts = count_index_entries(result.provenance.index_map)
+    tables = {}
+    for family in output_families(result.problem, counts):
+        tables[family] = read_result_table(
+            _verified_artifact(result, records, prefix, table_name(family)),
+            result.problem,
+            counts,
+            result.provenance.config,
+        )
+    return _IterationRun(
+        replace(
+            result,
+            tables=tables,
+            provenance=replace(result.provenance, palace_json=native),
+        ),
+        prefix,
+    )
+
+
+def _iteration_prefix(records: dict[str, Any], iteration: int) -> str:
+    """The one receipt-bound output folder of ``iteration``."""
     prefixes = set()
     for path in records:
         parts = Path(path).parts
@@ -67,45 +146,36 @@ def _iteration_result(
         if iteration_dir(parts[2]) == iteration:
             prefixes.add("/".join(parts[:3]))
     if len(prefixes) != 1:
-        raise ValueError("requested native iteration lacks one receipt-bound directory")
-    prefix = prefixes.pop()
-
-    def verified(name: str) -> Path:
-        """Return an iteration artifact only when its receipt size and hash still match."""
-        relative = f"{prefix}/{name}"
-        record = records.get(relative)
-        path = confined_path(result.run_dir, relative)
-        if (
-            record is None
-            or record.get("present") is not True
-            or not path.is_file()
-            or path.stat().st_size != record.get("bytes")
-            or sha256(path) != record.get("sha256")
-        ):
-            raise ValueError(
-                f"native iteration artifact is missing or changed: {relative}"
-            )
-        return path
-
-    native = json.loads(verified(NATIVE_METADATA_NAME).read_text(encoding="utf-8"))
-    if (
-        not isinstance(native, dict)
-        or not isinstance(native.get("Problem"), dict)
-        or native["Problem"].get("Iteration") != iteration
-    ):
-        raise ValueError("native iteration metadata disagrees with selected directory")
-    counts = count_index_entries(result.provenance.index_map)
-    tables = {}
-    for family in output_families(result.problem, counts):
-        tables[family] = read_result_table(
-            verified(table_name(family)),
-            result.problem,
-            counts,
-            result.provenance.config,
+        raise ValueError(
+            Declared(
+                f"requested native iteration {iteration} lacks one receipt-bound directory",
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(sorted(prefixes)))
         )
-    return replace(
-        result, tables=tables, provenance=replace(result.provenance, palace_json=native)
-    ), prefix
+    return prefixes.pop()
+
+
+def _verified_artifact(
+    result: ResolvedRunData, records: dict[str, Any], prefix: str, name: str
+) -> Path:
+    """An iteration artifact, only when its receipt size and hash still match the file."""
+    relative = f"{prefix}/{name}"
+    record = records.get(relative)
+    path = confined_path(result.run_dir, relative)
+    if (
+        record is None
+        or record.get("present") is not True
+        or not path.is_file()
+        or path.stat().st_size != record.get("bytes")
+        or sha256(path) != record.get("sha256")
+    ):
+        raise ValueError(
+            Declared(
+                f"native iteration artifact {relative} is missing or changed",
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(record))
+        )
+    return path
 
 
 def epr_result(
@@ -114,29 +184,25 @@ def epr_result(
     """Extract final or explicitly selected sealed-iteration Eigenmode EPR."""
 
     if not isinstance(result, ResolvedRunData) or result.problem != EIGENMODE.name:
-        raise TypeError("a resolved Palace Eigenmode run is required")
+        raise TypeError(
+            Declared(
+                "epr_result requires a resolved Palace Eigenmode run",
+                _WHERE_EPR_RESULT_CALL,
+            ).refusal(
+                found_text(
+                    getattr(result, "problem", type(result).__name__), EIGENMODE.name
+                )
+            )
+        )
     output_prefix = OUTPUT_DIR
     if palace_iteration is not None:
         result, output_prefix = _iteration_result(result, palace_iteration)
     index = result.provenance.index_map
     config = result.provenance.config
     l0 = checked_number(config["Model"]["L0"], "Model.L0", positive=True)
-    entries = index["entries"]
-    surfaces = {
-        item["index"]: item
-        for item in entries
-        if item["section"] == "Boundaries.Postprocessing.Dielectric"
-    }
-    domains = {
-        item["index"]: item
-        for item in entries
-        if item["section"] == "Domains.Postprocessing.Energy"
-    }
-    junctions = {
-        item["index"]: item
-        for item in entries
-        if item["section"] == "Boundaries.LumpedPort"
-    }
+    surfaces = _entries_in(index, DIELECTRIC_SECTION)
+    domains = _entries_in(index, ENERGY_SECTION)
+    junctions = _entries_in(index, LUMPED_PORT_SECTION)
     request, selected = _selected_outputs(domains, index, junctions, surfaces)
     eig = result.tables["eig"].rows
     surface_table = (
@@ -167,6 +233,13 @@ def epr_result(
     return PalaceEprResult(tuple(rows), provenance)
 
 
+def _entries_in(index: Mapping[str, Any], section: str) -> dict[int, Mapping[str, Any]]:
+    """The index-map entries of one config section, keyed by their Palace index."""
+    return {
+        item["index"]: item for item in index["entries"] if item["section"] == section
+    }
+
+
 def reanalyze_epr(
     result: PalaceEprResult,
     *,
@@ -176,94 +249,139 @@ def reanalyze_epr(
     """Apply a new whole-group film snapshot to stored native participation."""
 
     if not isinstance(result, PalaceEprResult):
-        raise TypeError("result must be PalaceEprResult")
-    defaults = (
-        {}
-        if surface_defaults is None
-        else {
-            key: film_assumptions(value, partial=True)
-            for key, value in surface_defaults.items()
-        }
-    )
-    overrides = (
-        {}
-        if group_overrides is None
-        else {
-            key: film_assumptions(value, partial=True)
-            for key, value in group_overrides.items()
-        }
-    )
-    if set(defaults) - {"MA", "MS", "SA"}:
-        raise ValueError("surface_defaults supports only MA, MS, and SA")
-    known = {item["group_id"] for row in result.rows for item in row["surface"]}
-    if set(overrides) - known:
-        raise ValueError("group_overrides contains an unknown group")
-    rows: list[dict[str, Any]] = []
-    for row in result.rows:
-        surfaces: list[dict[str, Any]] = []
-        for item in row["surface"]:
-            original = film_assumptions(item["original_assumptions"])
-            current = film_assumptions(item["assumptions"])
-            interface_update = defaults.get(item["interface_kind"], {})
-            group_update = overrides.get(item["group_id"], {})
-            applied = {**interface_update, **group_update}
-            candidate = {**current, **applied}
-            if any(
-                name in applied
-                for name in (
-                    "film_thickness_m",
-                    "film_relative_permittivity",
-                    "loss_tangent",
-                )
-            ):
-                if "source" not in applied:
-                    candidate["source"] = (
-                        "offline_group_override"
-                        if group_update
-                        else "offline_interface_default"
-                    )
-                if "preset" not in applied:
-                    candidate["preset"] = None
-            updated = film_assumptions(candidate)
-            ratio = updated["film_thickness_m"] / original["film_thickness_m"]
-            if item["interface_kind"] in {"MA", "MS"}:
-                ratio *= (
-                    original["film_relative_permittivity"]
-                    / updated["film_relative_permittivity"]
-                )
-            elif (
-                updated["film_relative_permittivity"]
-                != original["film_relative_permittivity"]
-            ):
-                raise ValueError(
-                    "SA epsilon change requires stored normal/tangential integrals"
-                )
-            participation = item["original_participation"] * ratio
-            surfaces.append(
-                {
-                    **item,
-                    "assumptions": updated,
-                    **(
-                        {
-                            "assumption_update": {
-                                "scope": "group_override"
-                                if group_update
-                                else "interface_default",
-                                "fields": sorted(applied),
-                                "original_source": original["source"],
-                                "original_preset": original["preset"],
-                            }
-                        }
-                        if applied
-                        else {}
-                    ),
-                    "participation": participation,
-                    "inverse_q": inverse_quality_factor(
-                        participation, updated["loss_tangent"]
-                    ),
-                }
+        raise TypeError(
+            Declared("reanalyze_epr", _WHERE_REANALYZE).refusal(
+                f"requires a PalaceEprResult; got {type(result).__name__}"
             )
-        rows.append({**row, "surface": surfaces})
+        )
+    updates = _FilmUpdates.checked(result, surface_defaults, group_overrides)
+    rows = tuple(
+        {
+            **row,
+            "surface": [_reanalyzed_surface(item, updates) for item in row["surface"]],
+        }
+        for row in result.rows
+    )
+    return PalaceEprResult(
+        rows, _reanalysis_provenance(result, updates), _verified_source=result
+    )
+
+
+@dataclass(frozen=True)
+class _FilmUpdates:
+    """The checked film changes of one reanalysis: by interface type, and by group over those."""
+
+    defaults: dict[str, FilmUpdate]
+    overrides: dict[str, FilmUpdate]
+
+    @classmethod
+    def checked(
+        cls,
+        result: PalaceEprResult,
+        surface_defaults: Mapping[str, Mapping[str, Any]] | None,
+        group_overrides: Mapping[str, Mapping[str, Any]] | None,
+    ) -> _FilmUpdates:
+        """Read both mappings as partial film snapshots, refusing an unknown interface type or group."""
+        defaults = {
+            key: film_assumptions(value, partial=True)
+            for key, value in (surface_defaults or {}).items()
+        }
+        overrides = {
+            key: film_assumptions(value, partial=True)
+            for key, value in (group_overrides or {}).items()
+        }
+        unknown_types = set(defaults) - {"MA", "MS", "SA"}
+        if unknown_types:
+            raise ValueError(
+                Declared("surface_defaults", _WHERE_REANALYZE).refusal(
+                    f"supports only MA, MS, and SA; got {sorted(unknown_types)}"
+                )
+            )
+        known = {item["group_id"] for row in result.rows for item in row["surface"]}
+        unknown_groups = set(overrides) - known
+        if unknown_groups:
+            raise ValueError(
+                Declared("group_overrides", _WHERE_REANALYZE).refusal(
+                    f"contains an unknown group: {sorted(unknown_groups)}; this result's groups are {sorted(known)}"
+                )
+            )
+        return cls(defaults, overrides)
+
+
+def _reanalyzed_surface(
+    item: Mapping[str, Any], updates: _FilmUpdates
+) -> dict[str, Any]:
+    """One surface row with its film snapshot updated and its participation and 1/Q rescaled."""
+    original = film_assumptions(item["original_assumptions"])
+    current = film_assumptions(item["assumptions"])
+    group_update = updates.overrides.get(item["group_id"], {})
+    applied = {**updates.defaults.get(item["interface_kind"], {}), **group_update}
+    candidate = {**current, **applied}
+    if any(
+        name in applied
+        for name in ("film_thickness_m", "film_relative_permittivity", "loss_tangent")
+    ):
+        if "source" not in applied:
+            candidate["source"] = (
+                "offline_group_override"
+                if group_update
+                else "offline_interface_default"
+            )
+        if "preset" not in applied:
+            candidate["preset"] = None
+    updated = film_assumptions(candidate)
+    participation = item["original_participation"] * _participation_ratio(
+        item, original, updated
+    )
+    return {
+        **item,
+        "assumptions": updated,
+        **(
+            {
+                "assumption_update": {
+                    "scope": "group_override" if group_update else "interface_default",
+                    "fields": sorted(applied),
+                    "original_source": original["source"],
+                    "original_preset": original["preset"],
+                }
+            }
+            if applied
+            else {}
+        ),
+        "participation": participation,
+        "inverse_q": inverse_quality_factor(participation, updated["loss_tangent"]),
+    }
+
+
+def _participation_ratio(
+    item: Mapping[str, Any], original: Mapping[str, Any], updated: Mapping[str, Any]
+) -> float:
+    """Scale a thin-film participation by thickness, and for MA and MS by the inverse film permittivity.
+
+    An SA film's participation splits into normal and tangential field integrals that the result does not
+    store, so its permittivity cannot change offline.
+    """
+    ratio = updated["film_thickness_m"] / original["film_thickness_m"]
+    if item["interface_kind"] in {"MA", "MS"}:
+        ratio *= (
+            original["film_relative_permittivity"]
+            / updated["film_relative_permittivity"]
+        )
+    elif (
+        updated["film_relative_permittivity"] != original["film_relative_permittivity"]
+    ):
+        raise ValueError(
+            Declared("SA epsilon change", _WHERE_REANALYZE).refusal(
+                f"requires stored normal/tangential integrals: surface {item['name']!r} (group {item['group_id']!r}) is SA, whose result stores no such integrals; change only film_thickness_m or loss_tangent for SA surfaces"
+            )
+        )
+    return ratio
+
+
+def _reanalysis_provenance(
+    result: PalaceEprResult, updates: _FilmUpdates
+) -> dict[str, Any]:
+    """The source provenance with the hash of the first, unreanalyzed result and the applied film change."""
     original_hash = result.provenance.get("original_result_sha256")
     if original_hash is None:
         original_hash = hashlib.sha256(
@@ -271,29 +389,16 @@ def reanalyze_epr(
                 result.to_payload(), sort_keys=True, separators=(",", ":")
             ).encode()
         ).hexdigest()
-    return PalaceEprResult(
-        tuple(rows),
-        {
-            **result.provenance,
-            "original_result_sha256": original_hash,
-            "film_analysis": {
-                "schema_version": "scgsim.epr.film-analysis.v1",
-                "surface_defaults": defaults,
-                "group_overrides": overrides,
-                "status": "derived_offline",
-            },
+    return {
+        **result.provenance,
+        "original_result_sha256": original_hash,
+        "film_analysis": {
+            "schema_version": "scgsim.epr.film-analysis.v1",
+            "surface_defaults": updates.defaults,
+            "group_overrides": updates.overrides,
+            "status": "derived_offline",
         },
-        _verified_source=result,
-    )
-
-
-def show_epr(result: PalaceEprResult, *, mode: int | None = None) -> Any:
-    """Plot one mode with separate surface, bulk, and signed Palace port axes."""
-
-    if not isinstance(result, PalaceEprResult):
-        raise TypeError("result must be PalaceEprResult")
-
-    return render(result, mode=mode)
+    }
 
 
 def _source_provenance(
@@ -380,7 +485,20 @@ class _ModeExtraction:
             if any(
                 _row_index(row) != mode for row in (surface_row, domain_row, port_row)
             ):
-                raise ValueError("Palace EPR mode tables do not align")
+                raise ValueError(
+                    Declared(
+                        "Palace EPR mode tables do not align", RETURNED_RUN_FOLDER
+                    ).refusal(
+                        found_text(
+                            {
+                                "surface-Q": _row_index(surface_row),
+                                "domain-E": _row_index(domain_row),
+                                "port-EPR": _row_index(port_row),
+                            },
+                            mode,
+                        )
+                    )
+                )
             normalization = checked_number(
                 domain_row["E_elec (J)"], "electric energy"
             ) + checked_number(domain_row["E_cap (J)"], "capacitive energy")
@@ -390,29 +508,8 @@ class _ModeExtraction:
             surface_items = _mode_surface_items(
                 self.surfaces, self.selected, self.l0, surface_row
             )
-            bulk = [
-                {
-                    "domain_id": item["entry_name"],
-                    "index": number,
-                    "material": item["metadata"]["material"],
-                    "participation": checked_number(
-                        domain_row[f"p_elec[{number}]"], "bulk participation"
-                    ),
-                }
-                for number, item in sorted(self.domains.items())
-                if item["entry_name"] in self.selected["bulk_domain_ids"]
-            ]
-            port = [
-                {
-                    "port_name": item["port_name"],
-                    "host_entity_ids": item["metadata"]["host_entity_ids"],
-                    "index": number,
-                    "participation": float(port_row[f"p[{number}]"]),
-                    "signed_palace": True,
-                }
-                for number, item in sorted(self.junctions.items())
-                if item["port_name"] in self.selected["port_names"]
-            ]
+            bulk = self._bulk_items(domain_row)
+            port = self._port_items(port_row)
             self.rows.append(
                 {
                     "mode": mode,
@@ -426,6 +523,35 @@ class _ModeExtraction:
                     "junction": port,
                 }
             )
+
+    def _bulk_items(self, domain_row: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """The selected bulk domains' participation in one mode, by their energy-table index."""
+        return [
+            {
+                "domain_id": item["entry_name"],
+                "index": number,
+                "material": item["metadata"]["material"],
+                "participation": checked_number(
+                    domain_row[f"p_elec[{number}]"], "bulk participation"
+                ),
+            }
+            for number, item in sorted(self.domains.items())
+            if item["entry_name"] in self.selected["bulk_domain_ids"]
+        ]
+
+    def _port_items(self, port_row: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """The selected lumped ports' signed participation in one mode, as Palace reports it."""
+        return [
+            {
+                "port_name": item["port_name"],
+                "host_entity_ids": item["metadata"]["host_entity_ids"],
+                "index": number,
+                "participation": float(port_row[f"p[{number}]"]),
+                "signed_palace": True,
+            }
+            for number, item in sorted(self.junctions.items())
+            if item["port_name"] in self.selected["port_names"]
+        ]
 
 
 def _row_index(row: Mapping[str, Any]) -> int:
@@ -455,7 +581,18 @@ def _selected_outputs(
         != {"schema_version", "surface_interfaces", "bulk_domain_ids", "port_names"}
         or request["schema_version"] != EPR_SELECTION_SCHEMA
     ):
-        raise ValueError("Palace EPR selection payload is invalid")
+        raise ValueError(
+            Declared(
+                f"Palace EPR selection payload in {INDEX_MAP} is invalid",
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    request,
+                    f"keys schema_version ({EPR_SELECTION_SCHEMA}), surface_interfaces, "
+                    "bulk_domain_ids and port_names",
+                )
+            )
+        )
     available = {
         "surface_interfaces": {
             entry_rows(item)[0]["interface_type"] for item in surfaces.values()
@@ -474,7 +611,11 @@ def _selected_outputs(
             or len(values) != len(set(values))
             or not set(values) <= configured
         ):
-            raise ValueError(f"Palace EPR selection has unknown or invalid {name}")
+            raise ValueError(
+                Declared("Palace EPR selection", RETURNED_RUN_FOLDER).refusal(
+                    f"has unknown or invalid {name}"
+                )
+            )
         else:
             selected[name] = set(values)
     return request, selected
@@ -493,7 +634,26 @@ def _mode_surface_items(
         interface_type = rows[0]["interface_type"]
         if interface_type not in selected["surface_interfaces"]:
             continue
-        spec = entry["epr_spec"]
+        film = _RecordedFilm.checked(entry["epr_spec"], l0, number)
+        participation = checked_number(
+            surface_row[f"p_surf[{number}]"], "surface participation"
+        )
+        surface_items.append(_surface_item(surfaces, number, rows, film, participation))
+    return surface_items
+
+
+@dataclass(frozen=True)
+class _RecordedFilm:
+    """The film one Surface-EPR entry was solved with: its native thickness, its loss and its SI snapshot."""
+
+    spec: Mapping[str, Any]
+    l0: float
+    native_thickness: float
+    assumption: FilmAssumptions
+
+    @classmethod
+    def checked(cls, spec: Mapping[str, Any], l0: float, number: int) -> _RecordedFilm:
+        """Check the entry's recorded length unit and SI thickness against the config before reading the film."""
         native_thickness = checked_number(
             spec["thickness"], "native film thickness", positive=True
         )
@@ -501,68 +661,87 @@ def _mode_surface_items(
             spec.get("model_l0_m", l0), "film Model.L0", positive=True
         )
         if recorded_l0 != l0:
-            raise ValueError("film Model.L0 disagrees with resolved config")
+            raise ValueError(
+                Declared("film Model.L0", RETURNED_RUN_FOLDER).refusal(
+                    f"disagrees with resolved config: Surface-EPR entry {number} records {recorded_l0} m, config.json Model.L0 is {l0} m"
+                )
+            )
         physical = checked_number(
             spec.get("film_thickness_m", native_thickness * l0),
             "SI film thickness",
             positive=True,
         )
         if not math.isclose(physical, native_thickness * l0, rel_tol=1e-12):
-            raise ValueError("film SI/native thickness mismatch")
-        loss = spec.get("loss_tangent")
+            raise ValueError(
+                Declared("film SI/native thickness", RETURNED_RUN_FOLDER).refusal(
+                    f"mismatch: Surface-EPR entry {number} records {physical} m, but {native_thickness} x Model.L0 {l0} m is {native_thickness * l0} m"
+                )
+            )
         assumption = film_assumptions(
             {
                 "film_thickness_m": physical,
                 "film_relative_permittivity": spec["permittivity"],
-                "loss_tangent": loss,
+                "loss_tangent": spec.get("loss_tangent"),
                 "source": spec.get("source", "recorded"),
                 "preset": spec.get("preset"),
             }
         )
-        inset = entry.get("inset")
-        # A margin row is named and attributed by the whole surface it is part of.
-        whole = entry_rows(surfaces[entry["baseline_index"]])
-        participation = checked_number(
-            surface_row[f"p_surf[{number}]"], "surface participation"
-        )
-        surface_items.append(
-            {
-                "group_id": f"palace_surface_{entry['baseline_index']}",
-                "index": number,
-                "baseline_index": entry["baseline_index"],
-                "interface_kind": interface_type,
-                "name": surfaces[entry["baseline_index"]]["entry_name"],
-                "rows": [row["row"] for row in rows],
-                "face_kinds": sorted({row["face_kind"] for row in whole}),
-                "entities": sorted({e for row in whole for e in row["entities"]}),
-                "nets": sorted({row["net"] for row in whole if row["net"] is not None}),
-                "attributes": list(entry["attributes"]),
-                # Lineage membership is attribution only: it weights nothing.
-                "lineage": {
-                    face: dict(owners)
-                    for row in rows
-                    for face, owners in row["lineage"]["membership"].items()
-                },
-                "evaluation_kind": "requested_margin"
-                if inset is not None
-                else "unmasked_baseline",
-                "margin_um": 0.0 if inset is None else float(inset["margin_um"]),
-                "margin_index": None if inset is None else inset["margin_index"],
-                **({"bands": list(inset["bands"])} if inset is not None else {}),
-                "original_participation": participation,
-                "participation": participation,
-                "original_assumptions": assumption,
-                "assumptions": assumption,
-                "recorded_native_assumptions": {
-                    "schema_version": spec.get("schema_version"),
-                    "thickness_model_l0_units": native_thickness,
-                    "model_l0_m": l0,
-                    "relative_permittivity": spec["permittivity"],
-                    "loss_tangent": loss,
-                    "source": spec.get("source"),
-                    "preset": spec.get("preset"),
-                },
-                "inverse_q": inverse_quality_factor(participation, loss),
-            }
-        )
-    return surface_items
+        return cls(spec, l0, native_thickness, assumption)
+
+    def native_record(self) -> dict[str, Any]:
+        """The film as the native spec recorded it, in Model.L0 units."""
+        return {
+            "schema_version": self.spec.get("schema_version"),
+            "thickness_model_l0_units": self.native_thickness,
+            "model_l0_m": self.l0,
+            "relative_permittivity": self.spec["permittivity"],
+            "loss_tangent": self.spec.get("loss_tangent"),
+            "source": self.spec.get("source"),
+            "preset": self.spec.get("preset"),
+        }
+
+
+def _surface_item(
+    surfaces: Mapping[int, Mapping[str, Any]],
+    number: int,
+    rows: list[dict[str, Any]],
+    film: _RecordedFilm,
+    participation: float,
+) -> dict[str, Any]:
+    """One surface row of a mode: its identity from the whole surface, its margin, film and participation."""
+    entry = surfaces[number]
+    inset = entry.get("inset")
+    # A margin row is named and attributed by the whole surface it is part of.
+    whole = entry_rows(surfaces[entry["baseline_index"]])
+    return {
+        "group_id": f"palace_surface_{entry['baseline_index']}",
+        "index": number,
+        "baseline_index": entry["baseline_index"],
+        "interface_kind": rows[0]["interface_type"],
+        "name": surfaces[entry["baseline_index"]]["entry_name"],
+        "rows": [row["row"] for row in rows],
+        "face_kinds": sorted({row["face_kind"] for row in whole}),
+        "entities": sorted({e for row in whole for e in row["entities"]}),
+        "nets": sorted({row["net"] for row in whole if row["net"] is not None}),
+        "attributes": list(entry["attributes"]),
+        # Lineage membership is attribution only: it weights nothing.
+        "lineage": {
+            face: dict(owners)
+            for row in rows
+            for face, owners in row["lineage"]["membership"].items()
+        },
+        "evaluation_kind": "requested_margin"
+        if inset is not None
+        else "unmasked_baseline",
+        "margin_um": 0.0 if inset is None else float(inset["margin_um"]),
+        "margin_index": None if inset is None else inset["margin_index"],
+        **({"bands": list(inset["bands"])} if inset is not None else {}),
+        "original_participation": participation,
+        "participation": participation,
+        "original_assumptions": film.assumption,
+        "assumptions": film.assumption,
+        "recorded_native_assumptions": film.native_record(),
+        "inverse_q": inverse_quality_factor(
+            participation, film.spec.get("loss_tangent")
+        ),
+    }

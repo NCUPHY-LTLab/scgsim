@@ -10,10 +10,15 @@ import tempfile
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
+
+from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import ENVIRONMENT, found_text
 
 from .loaders.common import file_sha256
 from .scene import MODE_TITLES, VIEWS, ScenePart
+
+_WHERE_EGL = "this host's VTK EGL setup"
 
 
 @dataclass(frozen=True)
@@ -25,18 +30,31 @@ class _ImageTools:
     font: Any
 
 
+class RenderedMode(NamedTuple):
+    """One rendered preview mode: its contact sheet and a record (path, size, SHA-256) of every image."""
+
+    contact_sheet: Path
+    artifacts: list[dict[str, Any]]
+
+
 def render_mode(
     *, root: Path, mode_name: str, parts: tuple[ScenePart, ...]
-) -> tuple[Path, list[dict[str, Any]]]:
+) -> RenderedMode:
     """Render all fixed views, build their contact sheet and record artifacts."""
     if not parts:
-        raise ValueError(f"available preview mode {mode_name} has no geometry")
+        raise ValueError(
+            internal(f"available preview mode {mode_name} has no geometry")
+        )
     try:
         # PyVista and Pillow are optional until a preview is actually rendered.
         import pyvista as pv  # noqa: PLC0415 - optional renderer, loaded on demand
         from PIL import Image, ImageDraw, ImageFont  # noqa: PLC0415 - optional renderer
     except ImportError as exc:
-        raise RuntimeError("geometry rendering requires scgsim[visualization]") from exc
+        raise RuntimeError(
+            Declared("geometry rendering", ENVIRONMENT).refusal(
+                "requires scgsim[visualization]"
+            )
+        ) from exc
 
     final_dir = root / "previews/geometry" / mode_name
     final_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -63,7 +81,7 @@ def render_mode(
                 "sha256": file_sha256(path),
             }
         )
-    return final_dir / "contact-sheet.png", artifacts
+    return RenderedMode(final_dir / "contact-sheet.png", artifacts)
 
 
 def _scene_camera(
@@ -180,7 +198,13 @@ def add_parts(
         dataset = part.dataset
         if clip is not None:
             if center is None:
-                raise ValueError("visualization clip requires a scene center")
+                raise ValueError(
+                    internal(
+                        "visualization clip requires a scene center"
+                        + ": "
+                        + found_text(clip)
+                    )
+                )
             normal = (1.0, 0.0, 0.0) if clip[0] == "x" else (0.0, 1.0, 0.0)
             dataset = dataset.clip(normal=normal, origin=center, invert=False)
         if dataset.n_cells:
@@ -241,7 +265,13 @@ def legend(parts: tuple[ScenePart, ...] | list[ScenePart]) -> list[dict[str, Any
 def _combined_bounds(parts: tuple[ScenePart, ...]) -> tuple[float, ...]:
     bounds = [part.dataset.bounds for part in parts if part.dataset.n_points]
     if not bounds:
-        raise ValueError("preview geometry has no points")
+        raise ValueError(
+            internal(
+                "preview geometry has no points"
+                + ": "
+                + found_text([part.label for part in parts])
+            )
+        )
     result = (
         min(item[0] for item in bounds),
         max(item[1] for item in bounds),
@@ -251,7 +281,11 @@ def _combined_bounds(parts: tuple[ScenePart, ...]) -> tuple[float, ...]:
         max(item[5] for item in bounds),
     )
     if not all(math.isfinite(value) for value in result):
-        raise ValueError("preview geometry bounds are non-finite")
+        raise ValueError(
+            internal(
+                "preview geometry bounds are non-finite" + ": " + found_text(result)
+            )
+        )
     return result
 
 
@@ -270,11 +304,17 @@ def configure_headless_rendering() -> None:
         from vtkmodules.vtkRenderingOpenGL2 import vtkEGLRenderWindow  # noqa: PLC0415 - EGL is optional until headless rendering
     except ImportError as exc:
         raise RuntimeError(
-            "headless geometry preview requires VTK EGL support"
+            Declared("headless geometry preview", _WHERE_EGL).refusal(
+                "requires VTK EGL support"
+            )
         ) from exc
     device_count = vtkEGLRenderWindow().GetNumberOfDevices()
     if device_count < 1:
-        raise RuntimeError("headless geometry preview found no EGL rendering device")
+        raise RuntimeError(
+            Declared(
+                "headless geometry preview found no EGL rendering device", _WHERE_EGL
+            ).refusal(found_text(device_count))
+        )
     os.environ["VTK_DEFAULT_EGL_DEVICE_INDEX"] = str(device_count - 1)
 
 

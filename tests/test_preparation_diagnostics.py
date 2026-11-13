@@ -120,7 +120,7 @@ def test_cleanup_failure_preserves_primary_error_and_resets_context(
 
     assert observed.value is failure
     assert any(
-        "Preparation diagnostics failed: OSError" in note for note in failure.__notes__
+        "Preparation diagnostics: failed: OSError" in note for note in failure.__notes__
     )
     with preparation_diagnostics(tmp_path):
         with diagnostic_stage("preparation.after_cleanup_failure"):

@@ -5,14 +5,22 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from scgsim.geometry.models.refusals import Declared
+
+_WHERE_PLACEMENT = "the component placement in the layout"
+
 
 def validate_nonempty_string(value: Any, field: str) -> str:
     """Return a non-empty trimmed string."""
     if not isinstance(value, str):
-        raise TypeError(f"{field} must be a string.")
+        raise TypeError(
+            Declared(f"{field}", _WHERE_PLACEMENT).refusal("must be a string")
+        )
     text = value.strip()
     if not text:
-        raise ValueError(f"{field} must be non-empty.")
+        raise ValueError(
+            Declared(f"{field}", _WHERE_PLACEMENT).refusal("must be non-empty")
+        )
     return text
 
 
@@ -23,16 +31,20 @@ def validate_positive_number(value: Any, field: str) -> float:
         or isinstance(value, bool)
         or not math.isfinite(float(value))
     ):
-        raise ValueError(f"{field} must be a finite number.")
+        raise ValueError(
+            Declared(f"{field}", _WHERE_PLACEMENT).refusal("must be a finite number")
+        )
     if float(value) <= 0.0:
-        raise ValueError(f"{field} must be > 0.")
+        raise ValueError(Declared(f"{field}", _WHERE_PLACEMENT).refusal("must be > 0"))
     return float(value)
 
 
 def validate_non_negative_int(value: Any, field: str) -> int:
     """Validate a non-negative integer control."""
     if not isinstance(value, int) or isinstance(value, bool):
-        raise TypeError(f"{field} must be an int.")
+        raise TypeError(
+            Declared(f"{field}", _WHERE_PLACEMENT).refusal("must be an int")
+        )
     if value < 0:
-        raise ValueError(f"{field} must be >= 0.")
+        raise ValueError(Declared(f"{field}", _WHERE_PLACEMENT).refusal("must be >= 0"))
     return int(value)

@@ -19,6 +19,10 @@ from numbers import Real
 from typing import Any, Literal
 
 from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
+
+_WHERE_NUMERICAL = "the call to set_numerical"
 
 _KSP_TYPES = {"Default", "CG", "MINRES", "GMRES", "FGMRES", "BiCGSTAB"}
 _SOLVER_TYPES = {"Default", "SuperLU", "STRUMPACK", "MUMPS"}
@@ -114,8 +118,9 @@ class NumericalControls:
         _refuse_problem_defaults(self)
         if self.amr_max_passes is None:
             raise ValueError(
-                f"{problem} requires explicit amr_max_passes before config generation: call "
-                "set_numerical(amr_max_passes=...) before write_config(); 0 disables AMR."
+                Declared(f"{problem}", _WHERE_NUMERICAL).refusal(
+                    "requires explicit amr_max_passes before config generation: call set_numerical(amr_max_passes=...) before write_config(); 0 disables AMR"
+                )
             )
         if (
             problem == EIGENMODE.name
@@ -124,8 +129,18 @@ class NumericalControls:
             and (self.amr_tolerance is None or self.amr_update_fraction is None)
         ):
             raise ValueError(
-                "Enabled Eigenmode AMR requires explicit amr_tolerance and amr_update_fraction: call "
-                "set_numerical(amr_tolerance=..., amr_update_fraction=...) before write_config()."
+                Declared(
+                    "Enabled Eigenmode AMR requires explicit amr_tolerance and amr_update_fraction: call "
+                    "set_numerical(amr_tolerance=..., amr_update_fraction=...) before write_config()",
+                    _WHERE_NUMERICAL,
+                ).refusal(
+                    found_text(
+                        {
+                            "amr_tolerance": self.amr_tolerance,
+                            "amr_update_fraction": self.amr_update_fraction,
+                        }
+                    )
+                )
             )
 
     def to_payload(self) -> dict[str, Any]:
@@ -165,8 +180,9 @@ def _refuse_problem_defaults(controls: NumericalControls) -> None:
     ]
     if open_names:
         raise ValueError(
-            f"NumericalControls {open_names} still wait for the problem's defaults: hand the record to "
-            "EigenmodeSim(numerical=...) or ElectrostaticSim(numerical=...), which fill them, or set them."
+            Declared(f"NumericalControls {open_names}", _WHERE_NUMERICAL).refusal(
+                "still wait for the problem's defaults: hand the record to EigenmodeSim(numerical=...) or ElectrostaticSim(numerical=...), which fill them, or set them"
+            )
         )
 
 
@@ -185,11 +201,17 @@ def _check_solver_controls(controls: NumericalControls) -> None:
     order = controls.order
     if not isinstance(order, int) or isinstance(order, bool) or not 1 <= order <= 4:
         raise ValueError(
-            "order must be an integer from 1 through 4: call set_numerical(order=1..4)."
+            Declared(
+                "order must be an integer from 1 through 4: call set_numerical(order=1..4)",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(order))
         )
     if not _positive_finite(controls.tolerance):
         raise ValueError(
-            "tolerance must be finite and positive: call set_numerical(tolerance=...)."
+            Declared(
+                "tolerance must be finite and positive: call set_numerical(tolerance=...)",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(controls.tolerance))
         )
     if (
         not isinstance(controls.max_iterations, int)
@@ -197,7 +219,10 @@ def _check_solver_controls(controls: NumericalControls) -> None:
         or controls.max_iterations <= 0
     ):
         raise ValueError(
-            "max_iterations must be a positive integer: call set_numerical(max_iterations=...)."
+            Declared(
+                "max_iterations must be a positive integer: call set_numerical(max_iterations=...)",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(controls.max_iterations))
         )
     _check_choice("ksp_type", controls.ksp_type, _KSP_TYPES, optional=True)
     _check_choice("solver_type", controls.solver_type, _SOLVER_TYPES)
@@ -205,8 +230,18 @@ def _check_solver_controls(controls: NumericalControls) -> None:
     _check_choice("device", controls.device, {"CPU", "GPU"})
     if controls.solver_type != "Default" and controls.preconditioner != "Default":
         raise ValueError(
-            "non-default preconditioner requires Default solver: call set_numerical() with "
-            "solver_type='Default' or preconditioner='Default'."
+            Declared(
+                "non-default preconditioner requires Default solver: call set_numerical() with "
+                "solver_type='Default' or preconditioner='Default'",
+                _WHERE_NUMERICAL,
+            ).refusal(
+                found_text(
+                    {
+                        "solver_type": controls.solver_type,
+                        "preconditioner": controls.preconditioner,
+                    }
+                )
+            )
         )
 
 
@@ -218,7 +253,9 @@ def _check_choice(
         return
     if value not in choices:
         raise ValueError(
-            f"unsupported {name}: call set_numerical({name}=...) with one of {sorted(choices)}."
+            Declared(f"unsupported {name}", _WHERE_NUMERICAL).refusal(
+                f"call set_numerical({name}=...) with one of {sorted(choices)}"
+            )
         )
 
 
@@ -228,23 +265,35 @@ def _check_amr_controls(controls: NumericalControls) -> None:
     if max_passes is not None and max_passes is not PROBLEM_DEFAULT:
         if not isinstance(max_passes, int) or isinstance(max_passes, bool):
             raise TypeError(
-                "amr_max_passes must be an integer: call set_numerical(amr_max_passes=...)."
+                Declared(
+                    "amr_max_passes must be an integer: call set_numerical(amr_max_passes=...)",
+                    _WHERE_NUMERICAL,
+                ).refusal(found_text(max_passes))
             )
         if max_passes < 0:
             raise ValueError(
-                "amr_max_passes must be >= 0: call set_numerical(amr_max_passes=...)."
+                Declared(
+                    "amr_max_passes must be >= 0: call set_numerical(amr_max_passes=...)",
+                    _WHERE_NUMERICAL,
+                ).refusal(found_text(max_passes))
             )
     if controls.amr_nonconformal is not PROBLEM_DEFAULT and not isinstance(
         controls.amr_nonconformal, bool
     ):
         raise TypeError(
-            "amr_nonconformal must be a bool: call set_numerical(amr_nonconformal=True or False)."
+            Declared(
+                "amr_nonconformal must be a bool: call set_numerical(amr_nonconformal=True or False)",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(controls.amr_nonconformal))
         )
     if controls.amr_tolerance not in (None, PROBLEM_DEFAULT) and not _positive_finite(
         controls.amr_tolerance
     ):
         raise ValueError(
-            "amr_tolerance must be finite and positive: call set_numerical(amr_tolerance=...)."
+            Declared(
+                "amr_tolerance must be finite and positive: call set_numerical(amr_tolerance=...)",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(controls.amr_tolerance))
         )
     _check_nc_levels(controls.amr_nc_levels)
     _check_update_fraction(controls.amr_update_fraction)
@@ -258,7 +307,9 @@ def _check_amr_controls(controls: NumericalControls) -> None:
         value = getattr(controls, name)
         if value is not None and not isinstance(value, bool):
             raise TypeError(
-                f"{name} must be bool or None: call set_numerical({name}=True, False or None)."
+                Declared(f"{name}", _WHERE_NUMERICAL).refusal(
+                    f"must be bool or None: call set_numerical({name}=True, False or None)"
+                )
             )
 
 
@@ -267,11 +318,17 @@ def _check_nc_levels(value: int | None) -> None:
         return
     if not isinstance(value, int) or isinstance(value, bool):
         raise TypeError(
-            "amr_nc_levels must be an integer or None: call set_numerical(amr_nc_levels=...)."
+            Declared(
+                "amr_nc_levels must be an integer or None: call set_numerical(amr_nc_levels=...)",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(value))
         )
     if value < 0:
         raise ValueError(
-            "amr_nc_levels must be >= 0; zero selects no native limit: call set_numerical(amr_nc_levels=...)."
+            Declared(
+                "amr_nc_levels must be >= 0; zero selects no native limit: call set_numerical(amr_nc_levels=...)",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(value))
         )
 
 
@@ -280,13 +337,19 @@ def _check_update_fraction(value: float | None) -> None:
         return
     if not isinstance(value, Real) or isinstance(value, bool):
         raise TypeError(
-            "amr_update_fraction must be a real number: call set_numerical(amr_update_fraction=...)."
+            Declared(
+                "amr_update_fraction must be a real number: call set_numerical(amr_update_fraction=...)",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(value))
         )
     fraction = float(value)
     if not math.isfinite(fraction) or not 0.0 < fraction < 1.0:
         raise ValueError(
-            "amr_update_fraction must be finite and strictly between 0 and 1: call "
-            "set_numerical(amr_update_fraction=...)."
+            Declared(
+                "amr_update_fraction must be finite and strictly between 0 and 1: call "
+                "set_numerical(amr_update_fraction=...)",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(value))
         )
 
 
@@ -338,8 +401,11 @@ def build_refinement(numerical: NumericalControls) -> dict[str, Any]:
     _refuse_problem_defaults(numerical)
     if numerical.amr_max_passes is None:
         raise ValueError(
-            "amr_max_passes must be explicitly set before config generation: call "
-            "set_numerical(amr_max_passes=...) before write_config()."
+            Declared(
+                "amr_max_passes must be explicitly set before config generation: call "
+                "set_numerical(amr_max_passes=...) before write_config()",
+                _WHERE_NUMERICAL,
+            ).refusal(found_text(numerical.amr_max_passes))
         )
     refinement: dict[str, Any] = {
         "UniformLevels": 0,

@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_args
 
 from scgsim.contracts.palace_run_folder import (
     ARCHIVE_MANIFEST,
@@ -37,6 +37,8 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     write_json,
 )
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import ENVIRONMENT, found_text
 
 from ..mesh.build import MeshBuildResult
 from ..mesh.manifest import SGB_RUNTIME_AUTHORITY
@@ -47,6 +49,12 @@ from .archive import (
 )
 from .recorder_copy import write_standalone_recorder
 from .script import ExecutionSettings, positive_int, render_script, single_line
+
+_WHERE_MESH_THEN_CONFIG = (
+    "the run folder: call mesh() and write_config() before prepare_handoff()"
+)
+
+_WHERE_HANDOFF_CALL = "the call to prepare_handoff"
 
 HandoffProfile = Literal["direct-local", "slurm-single-node", "slurm-multi-node"]
 _PROFILES = {"direct-local", "slurm-single-node", "slurm-multi-node"}
@@ -148,10 +156,16 @@ def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
     Nothing here starts Palace.
     """
     if profile not in _PROFILES:
-        raise ValueError(f"Unsupported handoff profile {profile!r}.")
+        raise ValueError(
+            Declared(f"handoff profile {profile!r}", _WHERE_HANDOFF_CALL).refusal(
+                f"is not supported: use one of {list(get_args(HandoffProfile))}"
+            )
+        )
     if not config_path.is_file() or not mesh_result.mesh_path.is_file():
         raise FileNotFoundError(
-            f"handoff requires existing {CONFIG} and {mesh_result.mesh_path.name}."
+            Declared("handoff", _WHERE_MESH_THEN_CONFIG).refusal(
+                f"requires existing {CONFIG} and {mesh_result.mesh_path.name}"
+            )
         )
     executable = single_line(executable, "executable")
     setup = tuple(single_line(command, "setup command") for command in setup_commands)
@@ -215,7 +229,11 @@ def _prepare_artifacts(
 ) -> _PreparedArtifacts:
     """Bind inputs and prepare the standalone script and recorder before metadata."""
     if not paths.index_map.is_file():
-        raise FileNotFoundError(f"handoff requires {INDEX_MAP}.")
+        raise FileNotFoundError(
+            Declared("handoff", _WHERE_MESH_THEN_CONFIG).refusal(
+                f"requires {INDEX_MAP}"
+            )
+        )
 
     route = _route(mesh_result)
     thin_film = _route_a_thin_film(mesh_result, route)
@@ -376,7 +394,11 @@ def _validate_resources(
     profile: str, resources: Mapping[str, Any] | None
 ) -> dict[str, Any]:
     if not isinstance(resources, Mapping) or not resources:
-        raise ValueError("handoff requires caller-supplied resources.")
+        raise ValueError(
+            Declared(
+                "handoff requires caller-supplied resources", _WHERE_HANDOFF_CALL
+            ).refusal(found_text(resources))
+        )
     result = dict(resources)
     if profile == "direct-local":
         positive_int(result.get("threads", 1), "resources.threads")
@@ -387,24 +409,39 @@ def _validate_resources(
         nodes = positive_int(result.get("nodes"), "resources.nodes")
         if profile == "slurm-single-node" and nodes != 1:
             raise ValueError(
-                "slurm-single-node is a single-node profile and requires resources.nodes=1."
+                Declared(
+                    "slurm-single-node is a single-node profile and requires resources.nodes=1",
+                    _WHERE_HANDOFF_CALL,
+                ).refusal(found_text(nodes))
             )
         if profile == "slurm-multi-node":
             if nodes < 2:
                 raise ValueError(
-                    "slurm-multi-node is a multi-node profile and requires resources.nodes >= 2."
+                    Declared(
+                        "slurm-multi-node is a multi-node profile and requires resources.nodes >= 2",
+                        _WHERE_HANDOFF_CALL,
+                    ).refusal(found_text(nodes))
                 )
             if not any(key in result for key in ("mem", "mem_per_cpu")):
                 raise ValueError(
-                    "slurm-multi-node requires caller-supplied high-memory resource (mem or mem_per_cpu)."
+                    Declared(
+                        "slurm-multi-node requires caller-supplied high-memory resource (mem or mem_per_cpu)",
+                        _WHERE_HANDOFF_CALL,
+                    ).refusal(found_text(sorted(result)))
                 )
     style = result.get("command_style", "binary")
     if style not in {"binary", "wrapper"}:
-        raise ValueError("resources.command_style must be 'binary' or 'wrapper'.")
+        raise ValueError(
+            Declared(
+                "resources.command_style must be 'binary' or 'wrapper'",
+                _WHERE_HANDOFF_CALL,
+            ).refusal(found_text(style))
+        )
     if profile != "direct-local" and style == "wrapper":
         raise ValueError(
-            "resources.command_style='wrapper' is supported only for direct-local; "
-            "Slurm profiles require 'binary'."
+            Declared("resources.command_style='wrapper'", _WHERE_HANDOFF_CALL).refusal(
+                f"is supported only for direct-local; profile {profile!r} requires 'binary'"
+            )
         )
     return result
 
@@ -428,7 +465,12 @@ def _identity() -> dict[str, Any]:
         scgsim = version("scgsim")
     except PackageNotFoundError as exc:
         raise RuntimeError(
-            "Cannot prepare handoff without installed scgsim package metadata."
+            Declared(
+                "Cannot prepare handoff without installed scgsim package metadata",
+                ENVIRONMENT,
+            ).refusal(
+                "install SCGSim (uv sync, or pip install -e .) rather than running it from a source tree"
+            )
         ) from exc
     return {
         "scgsim": scgsim,
@@ -488,7 +530,11 @@ def _hashes(paths: _HandoffPaths, files: Sequence[Path]) -> list[dict[str, str |
 def _route(mesh_result: MeshBuildResult) -> str:
     route = read_json(mesh_result.provenance_path).get("route")
     if route not in {"A", "B"}:
-        raise ValueError("mesh provenance must carry Route A or B.")
+        raise ValueError(
+            Declared(
+                "mesh provenance must carry Route A or B", _WHERE_HANDOFF_CALL
+            ).refusal(found_text(route))
+        )
     return route
 
 
@@ -501,11 +547,23 @@ def _route_a_thin_film(
     manifest_value = manifest.get("route_a_thin_film")
     if route == "B":
         if provenance_value is not None or manifest_value is not None:
-            raise ValueError("Route B mesh metadata must not define route_a_thin_film.")
+            raise ValueError(
+                Declared(
+                    "Route B mesh metadata must not define route_a_thin_film",
+                    _WHERE_HANDOFF_CALL,
+                ).refusal(
+                    found_text(
+                        {"provenance": provenance_value, "manifest": manifest_value}
+                    )
+                )
+            )
         return None
     if not isinstance(provenance_value, Mapping) or provenance_value != manifest_value:
         raise ValueError(
-            "Route A mesh provenance and manifest require identical thin-film identity."
+            Declared(
+                "Route A mesh provenance and manifest require identical thin-film identity",
+                _WHERE_HANDOFF_CALL,
+            ).refusal(found_text(provenance_value, manifest_value))
         )
     return dict(provenance_value)
 

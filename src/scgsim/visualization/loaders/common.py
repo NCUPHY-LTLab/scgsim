@@ -8,12 +8,24 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from scgsim.geometry.models.refusals import Declared
+
+_WHERE_PREVIEW_RUN = "the run folder the preview reads"
+
+
+AEDT_RUN_FOLDER = "the AEDT run folder: fetch it again, or run the AEDT handoff again"
+"""Where a refused record of an AEDT run folder is set right."""
+
 
 def read_json_record(path: Path) -> dict[str, Any]:
     """Read a JSON object from one preview input file."""
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise TypeError(f"{path.name} must contain a JSON object")
+        raise TypeError(
+            Declared(f"{path.name}", _WHERE_PREVIEW_RUN).refusal(
+                "must contain a JSON object"
+            )
+        )
     return payload
 
 
@@ -27,13 +39,21 @@ def write_json_atomically(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def confined_artifact_path(root: Path, relative: str) -> Path:
-    """Resolve one relative artifact path within its run directory."""
+    """Resolve one relative artifact path within its run folder."""
     path = Path(relative)
     if path.is_absolute():
-        raise ValueError("preview artifact identity must be relative")
+        raise ValueError(
+            Declared("preview artifact identity", _WHERE_PREVIEW_RUN).refusal(
+                f"must be relative to the run folder {root}; got {relative!r}"
+            )
+        )
     resolved = (root / path).resolve()
     if not resolved.is_relative_to(root):
-        raise ValueError("preview artifact identity escapes the run directory")
+        raise ValueError(
+            Declared(
+                f"preview artifact identity {relative!r}", _WHERE_PREVIEW_RUN
+            ).refusal(f"escapes the run folder {root}")
+        )
     return resolved
 
 

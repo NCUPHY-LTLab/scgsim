@@ -5,9 +5,11 @@ from __future__ import annotations
 import html
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 from scgsim.contracts.palace_run_folder import INDEX_MAP
+from scgsim.palace.mesh.summary import MeshSummary
+from scgsim.palace.reports.observations import CostCards
 from scgsim.palace.reports.plotting import (
     mesh_summary_html,
     show_figure,
@@ -21,8 +23,8 @@ from scgsim.palace.reports.surface_figures import (
     surface_margin_participation_figure,
     surface_ranking_figure,
 )
-from scgsim.palace.results.observations import read_optional_json
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.artifacts import read_optional_json
+from scgsim.palace.results.inspection_records import (
     SurfaceEprSeriesSnapshot,
     SurfaceMarginEprSeriesSnapshot,
 )
@@ -33,12 +35,109 @@ from scgsim.palace.results.snapshots import (
 from scgsim.palace.results.surface_readers import read_surface_margin_bindings
 
 
+class BenchmarkPerformance(TypedDict):
+    """Palace's elapsed-time counts and durations, by timer name."""
+
+    counts: dict[str, int | float]
+    durations: dict[str, float]
+
+
+class BenchmarkResources(TypedDict):
+    """The resources the handoff requested and the ones the run resolved."""
+
+    requested_resources: dict[str, Any]
+    resolved_resources: dict[str, Any]
+
+
+class ResolvedCost(TypedDict):
+    """The solver sizes, memory and parallel resources of a resolved run, as Palace recorded them."""
+
+    problem_degrees_of_freedom: int | None
+    mesh_elements: int | None
+    mpi_size: int | None
+    openmp_threads: int | None
+    peak_memory_megabytes: dict[str, float | None]
+    peak_node_memory_megabytes: dict[str, float | None]
+    linear_solver: dict[str, float | int]
+    git_tag: str | None
+
+
+class ResolvedRunState(TypedDict):
+    """The route, problem and outcome of a resolved run."""
+
+    route: str
+    problem: str
+    status: str
+    has_returned_outputs: bool
+    receipt_status: str
+    receipt_exit_code: int
+
+
+class ErrorIndicatorShape(TypedDict):
+    """How many rows and which columns the final error-indicator table has."""
+
+    rows: int
+    headers: tuple[str, ...]
+
+
+class ResolvedBenchmarkData(TypedDict):
+    """The machine data of a resolved run's benchmark."""
+
+    cost: ResolvedCost
+    performance: BenchmarkPerformance
+    resources: BenchmarkResources
+    performance_metadata: ResolvedRunState
+    mesh_summary: MeshSummary
+    error_indicators: ErrorIndicatorShape
+    pass_cost_records: list[dict[str, Any]]
+
+
+class AttemptedRun(TypedDict):
+    """The cost and timing Palace recorded for the attempted run as a whole."""
+
+    cost: CostCards
+    durations: dict[str, float]
+
+
+class SelectedSnapshotCost(TypedDict):
+    """The cost and timing of the snapshot the report selected."""
+
+    source: str | None
+    cost: CostCards
+    durations: dict[str, float]
+
+
+class InspectedRunState(TypedDict):
+    """The route, problem and state of an inspected run: complete or partial, and which snapshot was read."""
+
+    route: str
+    problem: str
+    status: str | None
+    completeness: Literal["complete", "partial"]
+    latest_source: str
+    selection: dict[str, Any]
+    failure: dict[str, Any] | None
+
+
+class InspectedBenchmarkData(TypedDict):
+    """The machine data of the benchmark of a returned run folder, complete or partial."""
+
+    cost: CostCards
+    mesh_summary: MeshSummary
+    performance: BenchmarkPerformance
+    attempted_run: AttemptedRun
+    selected_snapshot: SelectedSnapshotCost
+    resources: BenchmarkResources
+    performance_metadata: InspectedRunState
+    pass_cost_records: list[dict[str, Any]]
+
+
 @dataclass(frozen=True)
 class SimulationBenchmarkReport:
     """Human-readable simulation cost with complete machine data in ``data``."""
 
     trust: Any
-    data: dict[str, Any]
+    data: ResolvedBenchmarkData | InspectedBenchmarkData
     show_details: bool = False
 
     def _ipython_display_(self) -> None:

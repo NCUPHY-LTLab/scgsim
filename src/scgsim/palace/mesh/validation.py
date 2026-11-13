@@ -4,19 +4,29 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, NamedTuple
+
+from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import found_text
 
 
-def live_physical_groups() -> dict[tuple[int, str], tuple[int, tuple[int, ...]]]:
-    """Map live gmsh (dimension, physical name) -> (physical-group, entity tags)."""
+class LiveGroup(NamedTuple):
+    """One physical group in the live Gmsh model: its physical tag and its sorted entity tags."""
+
+    physical_tag: int
+    entity_tags: tuple[int, ...]
+
+
+def live_physical_groups() -> dict[tuple[int, str], LiveGroup]:
+    """Map live gmsh (dimension, physical name) to the group's physical tag and entity tags."""
     import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
 
-    live: dict[tuple[int, str], tuple[int, tuple[int, ...]]] = {}
+    live: dict[tuple[int, str], LiveGroup] = {}
     for dim, phys_group in gmsh.model.getPhysicalGroups():
         name = gmsh.model.getPhysicalName(dim, phys_group)
         if not name:
             continue
-        live[(int(dim), str(name))] = (
+        live[(int(dim), str(name))] = LiveGroup(
             int(phys_group),
             tuple(
                 sorted(
@@ -30,7 +40,7 @@ def live_physical_groups() -> dict[tuple[int, str], tuple[int, tuple[int, ...]]]
 
 def validate_mesh_matches_groups(
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
-    live: Mapping[tuple[int, str], tuple[int, tuple[int, ...]]],
+    live: Mapping[tuple[int, str], LiveGroup],
 ) -> None:
     """Require every primary group of the sidecar to be a physical group of the mesh on the same entities.
 
@@ -42,18 +52,24 @@ def validate_mesh_matches_groups(
             key = (int(record["dim"]), record["group"])
             if key not in live:
                 raise ValueError(
-                    f"mesh has no physical group {record['group']!r} of dimension {key[0]}."
+                    internal(
+                        f"mesh has no physical group {record['group']!r} of dimension {key[0]}"
+                    )
                 )
-            if live[key][1] != tuple(sorted(int(tag) for tag in record["tags"])):
+            if live[key].entity_tags != tuple(
+                sorted(int(tag) for tag in record["tags"])
+            ):
                 raise ValueError(
-                    f"physical group {record['group']!r} covers other entities in the mesh than in the sidecar."
+                    internal(
+                        f"physical group {record['group']!r} covers other entities in the mesh than in the sidecar"
+                    )
                 )
 
 
 def validate_tetrahedral_solution_groups(
     *,
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
-    live: Mapping[tuple[int, str], tuple[int, tuple[int, ...]]],
+    live: Mapping[tuple[int, str], LiveGroup],
 ) -> None:
     """Require exact live solver volume ownership and at least one 3D element each."""
     import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
@@ -62,8 +78,9 @@ def validate_tetrahedral_solution_groups(
     live_volume_names = {name for (dim, name) in live if dim == 3}
     if live_volume_names != expected:
         raise ValueError(
-            "live 3D physical groups differ from the solution volumes of the sidecar: "
-            f"live={sorted(live_volume_names)}, solution={sorted(expected)}."
+            internal(
+                f"live 3D physical groups differ from the solution volumes of the sidecar: live={sorted(live_volume_names)}, solution={sorted(expected)}"
+            )
         )
     for name, info in groups.get("volumes", {}).items():
         has_elements = False
@@ -75,12 +92,14 @@ def validate_tetrahedral_solution_groups(
                 )
                 if dimension != 3 or "tetrahedron" not in element_name.lower():
                     raise ValueError(
-                        f"Solver solution volume {name!r} has non-tetrahedral 3D element {element_name!r}."
+                        internal(
+                            f"Solver solution volume {name!r} has non-tetrahedral 3D element {element_name!r}"
+                        )
                     )
             has_elements = has_elements or any(len(items) for items in element_tags)
         if not has_elements:
             raise ValueError(
-                f"Solver solution volume {name!r} has no 3D mesh elements."
+                internal(f"Solver solution volume {name!r} has no 3D mesh elements")
             )
 
 
@@ -94,7 +113,9 @@ def validate_port_pec_node_intersections(
     for key, port in groups.get("port_surfaces", {}).items():
         port_edges = _surface_mesh_edges(port.get("tags", ()))
         if not port_edges:
-            raise ValueError(f"SGB lumped-port sheet {key!r} has no mesh nodes.")
+            raise ValueError(
+                internal(f"SGB lumped-port sheet {key!r} has no mesh nodes")
+            )
         for owner_id in port["host_entity_ids"]:
             owner_tags = {
                 int(tag)
@@ -104,11 +125,15 @@ def validate_port_pec_node_intersections(
             }
             if not owner_tags:
                 raise ValueError(
-                    f"SGB lumped-port sheet {key!r} owner {owner_id!r} has no PEC surface."
+                    internal(
+                        f"SGB lumped-port sheet {key!r} owner {owner_id!r} has no PEC surface"
+                    )
                 )
             if not port_edges.intersection(_surface_mesh_edges(owner_tags)):
                 raise ValueError(
-                    f"SGB lumped-port sheet {key!r} owner {owner_id!r} does not share a mesh edge."
+                    internal(
+                        f"SGB lumped-port sheet {key!r} owner {owner_id!r} does not share a mesh edge"
+                    )
                 )
 
 
@@ -116,6 +141,25 @@ def validate_port_tetrahedron_face_conformality(
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
 ) -> None:
     """Require every full-node port triangle to be a two-sided tetrahedron face."""
+    port_triangles = _port_triangles(groups)
+    tetrahedron_faces = _tetrahedron_face_counts(groups, port_triangles)
+    for key, triangles in port_triangles.items():
+        multiplicities = Counter(tetrahedron_faces[triangle] for triangle in triangles)
+        invalid = {
+            count: amount for count, amount in multiplicities.items() if count != 2
+        }
+        if not triangles or invalid:
+            raise ValueError(
+                internal(
+                    f"SGB lumped-port sheet {key!r} is non-conformal to the tetrahedron mesh: {len(triangles)} triangle(s), invalid tetra-face multiplicities {invalid}; every internal port triangle must be shared by exactly two tetrahedra"
+                )
+            )
+
+
+def _port_triangles(
+    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
+) -> dict[str, list[tuple[int, ...]]]:
+    """The full-node triangles of each lumped-port sheet, refusing a sheet meshed with anything else."""
     import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
 
     port_triangles: dict[str, list[tuple[int, ...]]] = {}
@@ -135,7 +179,9 @@ def validate_port_tetrahedron_face_conformality(
                     or primary_count != 3
                 ):
                     raise ValueError(
-                        f"SGB lumped-port sheet {key!r} has unsupported element {name!r}."
+                        internal(
+                            f"SGB lumped-port sheet {key!r} has unsupported element {name!r}"
+                        )
                     )
                 triangles.extend(
                     tuple(
@@ -144,6 +190,15 @@ def validate_port_tetrahedron_face_conformality(
                     for index in range(0, len(nodes), node_count)
                 )
         port_triangles[key] = triangles
+    return port_triangles
+
+
+def _tetrahedron_face_counts(
+    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    port_triangles: dict[str, list[tuple[int, ...]]],
+) -> Counter[tuple[int, ...]]:
+    """How many tetrahedra of the solution volumes have each port triangle as a full-node face."""
+    import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
 
     tetrahedron_faces: Counter[tuple[int, ...]] = Counter(
         {triangle: 0 for triangles in port_triangles.values() for triangle in triangles}
@@ -166,25 +221,20 @@ def validate_port_tetrahedron_face_conformality(
             )
             face_size = (order + 1) * (order + 2) // 2
             if len(face_nodes) % face_size:
-                raise ValueError("Gmsh returned an incomplete tetrahedron face list.")
+                raise ValueError(
+                    internal(
+                        "Gmsh returned an incomplete tetrahedron face list"
+                        + ": "
+                        + found_text(len(face_nodes), f"a multiple of {face_size}")
+                    )
+                )
             for index in range(0, len(face_nodes), face_size):
                 face = tuple(
                     sorted(int(node) for node in face_nodes[index : index + face_size])
                 )
                 if face in tetrahedron_faces:
                     tetrahedron_faces[face] += 1
-
-    for key, triangles in port_triangles.items():
-        multiplicities = Counter(tetrahedron_faces[triangle] for triangle in triangles)
-        invalid = {
-            count: amount for count, amount in multiplicities.items() if count != 2
-        }
-        if not triangles or invalid:
-            raise ValueError(
-                f"SGB lumped-port sheet {key!r} is non-conformal to the tetrahedron mesh: "
-                f"{len(triangles)} triangle(s), invalid tetra-face multiplicities {invalid}; "
-                "every internal port triangle must be shared by exactly two tetrahedra."
-            )
+    return tetrahedron_faces
 
 
 def _surface_mesh_edges(tags: Iterable[Any]) -> set[tuple[int, ...]]:

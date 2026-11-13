@@ -6,6 +6,9 @@ reader can import it whatever their own layer (``.importlinter``: ``contracts-im
 ``palace_run_folder``
     the Palace run folder: the path of each file, the schema of each record, the problem records
     (``EIGENMODE``, ``ELECTROSTATIC``) and the file helpers the receipt recorder carries into the folder.
+``palace_index_map``
+    the sections of the Palace index map, which ``palace/config`` writes and ``palace/results`` and the
+    Palace preview loader read.
 ``sgb_sidecar``
     the SGB sidecar: its record definitions, the JSON Schema derived from them, its version and the shared
     reader.

@@ -33,6 +33,7 @@ from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.sgb import SgbArtifacts
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.surface_epr.build import build_banded_geometry
@@ -43,6 +44,7 @@ from scgsim.meshing import (
 )
 from scgsim.meshing.fine_structure import below_steps
 from scgsim.preparation import native_preparation
+from scgsim.refusal import found_text
 
 from ..source.layout_ports import GeometryBuildRequest
 from .controls import MeshControls
@@ -50,6 +52,9 @@ from .manifest import SGB_RUNTIME_AUTHORITY, build_mesh_manifest
 from .physical_groups import Groups, groups_from_sidecar
 from .process import lower_mesh_in_worker
 from .source import route_a_thin_film_provenance, scgsim_version
+
+_WHERE_OUTPUT_FOLDER = "the folder passed to set_output_dir"
+_WHERE_SURFACE_EPR = "the call to set_surface_epr"
 
 
 @dataclass(frozen=True)
@@ -110,24 +115,7 @@ def mesh_route_geometry(
         meshing=_meshing_record(meshed, observed, paths),
     )
     write_json(paths.manifest_path, manifest)
-    write_json(
-        paths.provenance_path,
-        {
-            "scgsim_version": scgsim_version(),
-            "route": built.route,
-            **(
-                {"route_a_thin_film": built.route_a_thin_film}
-                if built.route_a_thin_film is not None
-                else {}
-            ),
-            "geometry_authority": SGB_RUNTIME_AUTHORITY,
-            "component_top_cell": built.top_cell,
-            "run_dir": ".",
-            "stack_path": paths.relative(paths.stack_path),
-            "xao_path": paths.relative(artifacts.xao),
-            "sidecar_path": paths.relative(artifacts.sidecar),
-        },
-    )
+    write_json(paths.provenance_path, _route_provenance(built))
     return MeshBuildResult(
         output_dir=paths.run_dir,
         mesh_path=paths.mesh_path,
@@ -182,9 +170,17 @@ def build_route_geometry(
     """
     route = request.route
     if not isinstance(request.stack, Mapping):
-        raise TypeError("stack must be a mapping.")
+        raise TypeError(
+            internal(
+                "stack must be a mapping"
+                + ": "
+                + found_text(type(request.stack).__name__)
+            )
+        )
     if route not in {"A", "B"}:
-        raise ValueError("route must be either 'A' or 'B'.")
+        raise ValueError(
+            internal("route must be either 'A' or 'B'" + ": " + found_text(route))
+        )
     _refuse_bands_narrower_than_a_face(
         request.surface_epr_specs, request.geometry_input
     )
@@ -230,10 +226,12 @@ def _refuse_bands_narrower_than_a_face(
     ]
     if narrow:
         raise ValueError(
-            "Surface EPR bands narrower than the meshing stage's face-width limit of "
-            f"{limit:g} grid steps ({limit * grid_um:g} um): {'; '.join(narrow)}. A band this narrow is a "
-            "face the mesher cannot use. Widen the margins in surface_epr_specs so that every band is at "
-            f"least {limit:g} grid steps wide."
+            Declared(
+                f"Surface EPR bands narrower than the meshing stage's face-width limit of {limit:g} grid steps ({limit * grid_um:g} um)",
+                _WHERE_SURFACE_EPR,
+            ).refusal(
+                f"{'; '.join(narrow)}. A band this narrow is a face the mesher cannot use. Widen the margins in surface_epr_specs so that every band is at least {limit:g} grid steps wide"
+            )
         )
 
 
@@ -260,7 +258,11 @@ def _margin_lists(
 def _prepare_paths(output_dir: str | Path, route: str) -> BuildPaths:
     run_dir = Path(output_dir).expanduser().resolve()
     if run_dir.exists() and any(run_dir.iterdir()):
-        raise ValueError(f"output_dir must be empty before mesh: {run_dir}")
+        raise ValueError(
+            Declared("output_dir", _WHERE_OUTPUT_FOLDER).refusal(
+                f"must be empty before mesh: {run_dir}"
+            )
+        )
     run_dir.mkdir(parents=True, exist_ok=True)
     for folder in (GEOMETRY_DIR, MESH_DIR, METADATA_DIR, LOGS_DIR, OUTPUT_DIR):
         (run_dir / folder).mkdir(parents=True, exist_ok=True)
@@ -282,18 +284,52 @@ def _write_sources(
 ) -> str:
     """Write the plan's GDS bytes and the stack paired with them; return the plan's top cell."""
     if not isinstance(source_gds_bytes, bytes):
-        raise TypeError("plan GDS source must be bytes")
+        raise TypeError(
+            internal(
+                "plan GDS source must be bytes"
+                + ": "
+                + found_text(type(source_gds_bytes).__name__)
+            )
+        )
     wanted = stack.get("metadata", {}).get("gds_sha256")
     observed = hashlib.sha256(source_gds_bytes).hexdigest()
     if wanted != observed:
-        raise ValueError("plan GDS bytes differ from paired stack source")
+        raise ValueError(
+            internal(
+                "plan GDS bytes differ from paired stack source"
+                + ": "
+                + found_text(observed, wanted)
+            )
+        )
     top_cell = stack.get("metadata", {}).get("top_cell_name")
     if not isinstance(top_cell, str) or not top_cell:
-        raise ValueError("plan stack requires top_cell_name")
+        raise ValueError(
+            internal("plan stack requires top_cell_name" + ": " + found_text(top_cell))
+        )
     paths.gds_path.write_bytes(source_gds_bytes)
     paths.stack_path.write_text(json_text(dict(stack)), encoding="utf-8")
 
     return top_cell
+
+
+def _route_provenance(built: RouteGeometry) -> dict[str, Any]:
+    """The route provenance record: the version, route and authority that built the mesh, and its inputs."""
+    paths, artifacts = built.paths, built.artifacts
+    return {
+        "scgsim_version": scgsim_version(),
+        "route": built.route,
+        **(
+            {"route_a_thin_film": built.route_a_thin_film}
+            if built.route_a_thin_film is not None
+            else {}
+        ),
+        "geometry_authority": SGB_RUNTIME_AUTHORITY,
+        "component_top_cell": built.top_cell,
+        "run_dir": ".",
+        "stack_path": paths.relative(paths.stack_path),
+        "xao_path": paths.relative(artifacts.xao),
+        "sidecar_path": paths.relative(artifacts.sidecar),
+    }
 
 
 @diagnostic_stage("palace.mesh.module")

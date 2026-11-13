@@ -59,8 +59,8 @@
 | `palace/mesh` | From the prepared geometry request to the mesh Palace reads. | the prepared geometry request from `source` and the mesh controls. | `palace.msh`, its physical groups and the mesh manifest. | `config`. |
 | `palace/config` | From the mesh's physical groups and the problem's settings to Palace's input. | the groups, the ports or terminals, the materials, the Surface-EPR specs and the numerical controls. | `config.json` and the index map. | `run`. |
 | `palace/run` | The run folder handed to Palace and what comes back. | the folder with the mesh and the config. | the run script, the receipt recorder and the archive; after Palace ran, the returned receipt. | `results`. |
-| `palace/results` | From a finished run folder to a resolved result. | the folder and the handoff it must match. | the checked result with its tables and EPR. | `reports`. |
-| `palace/reports` | Notebook views of a resolved result. | a resolved result. | tables and figures for a person. | nothing; a notebook displays them. |
+| `palace/results` | From a returned run folder to the checked records of the run. | the folder and the handoff it must match; for the trust report, also a folder an incomplete run returned. | `ResolvedRunData` with its tables and EPR, and the AMR snapshots, result selection and failure diagnosis of an inspection. | `reports`. |
+| `palace/reports` | The result a user holds and the notebook views of it. | the checked records from `results`. | `ResolvedPalaceResult` (what `resolve_palace_result` returns), the trust report, and the tables and figures a person reads. | nothing; a notebook displays them. |
 
 ### `aedt`
 

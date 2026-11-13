@@ -89,7 +89,6 @@ Next: 哪個階段讀取它
 | 匯入的資料夾 | 匯入 | 從那裡取得什麼 |
 | --- | --- | --- |
 | `geometry/junctions` | `geometry/sgb/exact` | SGB 共用的詞彙，位於 SGB 每個階段之下：精確紀錄與邊界綁定（`exact.boundaries`），讓分割切在 SGB 建立的環上。 |
-| `palace/results` | `palace/reports` | 已解析結果的顯示方法所回傳的報表視圖。 |
 | `aedt/specs` | `aedt/epr` | 表面積分的分組（`epr.selection`）。 |
 | `aedt/preparation` | `aedt/results` | 收據結構描述與初始收據（`results.provenance`）。 |
 | `aedt/results` | `aedt/runtime`、`aedt/epr`、`aedt/presentation` | 批次收集的情境與效能紀錄路徑、`EprResult` 紀錄，以及 `ResolvedRun` 呼叫的顯示功能。 |
@@ -108,6 +107,33 @@ Next: 哪個階段讀取它
 `tests/test_code_map.py` 會失敗。
 
 {{< include _code-map-stages.md >}}
+
+## 最上層模組 {#top-level-modules}
+
+有四個模組直接位於 `src/scgsim`，不在任何一區的資料夾內。它們不是階段，而是由階段呼叫。
+
+| 模組 | 它是什麼 | 呼叫者 |
+| --- | --- | --- |
+| `preparation.py` | 幾何準備的 worker 預算：在 `preparation_resources` 範圍內的準備呼叫共用一個執行緒池。 | `geometry` 與 `palace/mesh` |
+| `diagnostics.py` | 選用的準備計時、進度、記憶體與 profile 紀錄，寫在結果旁邊。 | `geometry` 與 `palace/mesh` |
+| `documentation.py` | 從訊息連到引發它的版本所發布的文件。 | `geometry` |
+| `refusal.py` | 拒絕訊息的兩種句型，給不能匯入 `geometry` 的資料夾使用，以及所見值的文字。 | `meshing`、`semantics`、`preparation.py`、`diagnostics.py`；`palace`、`visualization` 與 `presentation` 只用所見值 |
+
+拒絕訊息只有兩種句型：呼叫者可以修改的輸入用「{object}: {problem}. Change it in {where}.」；SCGSim 自身的承諾被破壞時用「internal: {invariant}. Nothing in the input is to blame: report it to SCGSim with the input that produced it.」。`palace`、`visualization` 與 `presentation` 以 `geometry/models/refusals.py` 寫出；`meshing`、`semantics`、`preparation.py` 與 `diagnostics.py` 不能匯入 `geometry`，由 `refusal.py` 給出相同的兩句。
+
+## 隱性狀態 {#ambient-state}
+
+結果或訊息所依賴的一切都是引數或回傳值。改放在 context variable 中的內容列在下表；
+它們都不會改變結果。
+
+| 位置 | 內容 | 為什麼可以是隱性的 |
+| --- | --- | --- |
+| `preparation.py` `_state` | worker 預算與其執行緒池。 | map 保持輸入順序，預算只改變由幾個執行緒執行。 |
+| `preparation.py` `_worker_depth` | map 在 worker 內的巢狀深度。 | 只讓巢狀的 map 依序執行。 |
+| `diagnostics.py` `_recorder` | 開啟中的診斷紀錄器。 | 它在結果旁寫出計時與記憶體檔案，沒有任何程式讀回。 |
+| `diagnostics.py` `_span` | 開啟中的計時區段。 | 只用來標示下一筆計時紀錄的上層。 |
+| `geometry/grid/grid_cache.py` `ACTIVE` | 這次呼叫中已完成的純細分工作。 | 快取：命中時回傳的就是重算的結果。 |
+| `geometry/source/occurrence.py` `_EXTRACTION_CACHE` | 已從一個來源資料庫擷取的多邊形。 | 快取：命中時回傳的就是重新擷取的結果。 |
 
 ## 新程式碼放在哪裡 {#new-code}
 

@@ -11,7 +11,7 @@ import pytest
 from scgsim.meshing import HXT, Budgets, MesherOptions
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.config.config import build_eigenmode_config
-from scgsim.palace.config.config_models import ConfigInput, EigenmodeSettings
+from scgsim.palace.config.config_records import ConfigInput, EigenmodeSettings
 from scgsim.palace.config.numerical import NumericalControls
 from scgsim.palace.mesh.controls import MeshControls
 from scgsim.palace.source.surface_epr import SurfaceEprSpecs

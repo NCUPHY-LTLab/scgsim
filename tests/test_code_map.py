@@ -67,7 +67,8 @@ def test_a_docstring_changed_without_its_translation_is_refused(package_copy):
     init = package_copy / "src/scgsim/palace/reports/__init__.py"
     init.write_text(
         init.read_text().replace(
-            "Notebook views of a resolved result.", "Views of a resolved result."
+            "The result a user holds and the notebook views of it.",
+            "Views of a resolved result.",
         )
     )
     with pytest.raises(

@@ -8,17 +8,19 @@ import json
 import math
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA,
     OUTPUT_DIR,
     palace_problem,
 )
+from scgsim.palace.mesh.summary import MeshSummary
 from scgsim.palace.reports.observations import (
     ERROR_INDICATOR_TRACES,
     FREQ_HEADER,
     SKIP_EIG_COLUMNS,
+    CostCards,
     capacitance_traces,
     cost_cards,
     delta_traces,
@@ -35,7 +37,9 @@ from scgsim.palace.reports.plotting import (
     FigureStyle,
     LinePlot,
     PlotTheme,
+    ReferenceLine,
     ReportTheme,
+    Trace,
     axis_title,
     checked_ranking_limit,
     checked_show_details,
@@ -54,12 +58,13 @@ from scgsim.palace.reports.surface_figures import (
     surface_percentage_figure,
     surface_total_figure,
 )
+from scgsim.palace.reports.trust_records import ReportIdentity, ReportProvenance
+from scgsim.palace.results.artifacts import read_optional_json
 from scgsim.palace.results.inspection import (
     failure_payload,
     selection_payload,
 )
-from scgsim.palace.results.observations import read_optional_json
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.inspection_records import (
     AmrPassSnapshot,
     PalaceFailureDiagnosis,
     PalaceResultSelection,
@@ -69,7 +74,11 @@ from scgsim.palace.results.snapshots import (
     surface_snapshots,
 )
 
-from .views import PhysicsQuantitiesReport, SimulationBenchmarkReport
+from .views import (
+    InspectedBenchmarkData,
+    PhysicsQuantitiesReport,
+    SimulationBenchmarkReport,
+)
 
 _DURATION_BARS = (
     "MeshPreprocessing",
@@ -89,40 +98,47 @@ _DURATION_BARS = (
 )
 
 
+class PassDelta(NamedTuple):
+    """The solver time one AMR pass added, or why it cannot be told from the recorded cumulative timer."""
+
+    seconds: float | None
+    reason: str | None
+
+
 def _elapsed_pass_cost(
     iteration: int | None,
     elapsed_total: float | None,
     previous_iteration: int | None,
     previous_elapsed: float | None,
-) -> tuple[float | None, str | None]:
+) -> PassDelta:
     """Return a pass delta only when native iteration and cumulative timer are continuous."""
     if iteration is None:
-        return None, "native_iteration_unavailable"
+        return PassDelta(None, "native_iteration_unavailable")
     if previous_iteration is None:
         if iteration != 1:
-            return None, "missing_previous_native_iteration"
+            return PassDelta(None, "missing_previous_native_iteration")
     elif iteration <= previous_iteration:
-        return None, "native_iteration_not_increasing"
+        return PassDelta(None, "native_iteration_not_increasing")
     elif iteration != previous_iteration + 1:
-        return None, "native_iteration_gap"
+        return PassDelta(None, "native_iteration_gap")
     if elapsed_total is None:
-        return None, "cumulative_elapsed_unavailable"
+        return PassDelta(None, "cumulative_elapsed_unavailable")
     if not math.isfinite(elapsed_total):
-        return None, "nonfinite_cumulative_elapsed"
+        return PassDelta(None, "nonfinite_cumulative_elapsed")
     if previous_iteration is None:
-        return elapsed_total, None
+        return PassDelta(elapsed_total, None)
     if previous_elapsed is None:
-        return None, "previous_cumulative_elapsed_unavailable"
+        return PassDelta(None, "previous_cumulative_elapsed_unavailable")
     if not math.isfinite(previous_elapsed):
-        return None, "previous_cumulative_elapsed_nonfinite"
+        return PassDelta(None, "previous_cumulative_elapsed_nonfinite")
     if elapsed_total < previous_elapsed:
-        return None, "cumulative_elapsed_reset"
-    return elapsed_total - previous_elapsed, None
+        return PassDelta(None, "cumulative_elapsed_reset")
+    return PassDelta(elapsed_total - previous_elapsed, None)
 
 
 @dataclass(frozen=True)
 class PalaceTrustReport:
-    """Run-identity, AMR evidence, and cost for one Palace package folder."""
+    """Run-identity, AMR evidence, and cost for one returned Palace run folder."""
 
     run_dir: Path
     problem: str
@@ -132,17 +148,17 @@ class PalaceTrustReport:
     latest_source: str
     selection: PalaceResultSelection
     failure: PalaceFailureDiagnosis | None
-    identity: dict[str, Any]
+    identity: ReportIdentity
     passes: tuple[AmrPassSnapshot, ...]
     amr_tolerance: float | None
     amr_max_passes: int | None
     durations: dict[str, float]
-    cost: dict[str, Any]
-    provenance: dict[str, Any]
+    cost: CostCards
+    provenance: ReportProvenance
     theme: ReportTheme = "light"
     show_details: bool = False
 
-    def mesh_summary(self) -> dict[str, Any]:
+    def mesh_summary(self) -> MeshSummary:
         """Read the same detached mesh authority used by resolved results."""
 
         return copy.deepcopy(self.provenance["mesh_summary"])
@@ -173,8 +189,8 @@ class PalaceTrustReport:
         """Return the readable benchmark while retaining every machine field."""
         attempted = read_optional_json(self.run_dir / NATIVE_METADATA)
         pass_cost_records = self.pass_cost_records()
-        data = {
-            "cost": dict(self.cost),
+        data: InspectedBenchmarkData = {
+            "cost": CostCards(**self.cost),
             "mesh_summary": self.mesh_summary(),
             "performance": {"counts": {}, "durations": dict(self.durations)},
             "attempted_run": {
@@ -183,7 +199,7 @@ class PalaceTrustReport:
             },
             "selected_snapshot": {
                 "source": self.selection.selected_source,
-                "cost": dict(self.cost),
+                "cost": CostCards(**self.cost),
                 "durations": dict(self.durations),
             },
             "resources": {
@@ -367,6 +383,14 @@ class PalaceTrustReport:
         xs = tuple(pass_.pass_index for pass_ in self.passes)
         items: list[Any] = []
         items.extend(self._eigenmode_convergence_items(xs))
+        items.extend(self._port_epr_figures(xs))
+        items.extend(self._capacitance_figures(xs))
+        items.extend(self._error_indicator_figures(xs))
+        return items
+
+    def _port_epr_figures(self, xs: tuple[int, ...]) -> list[Any]:
+        """One figure per recorded port-EPR column, each mode a trace across the AMR passes."""
+        items: list[Any] = []
         for header in union_mapping_keys(self.passes, "port_epr"):
             traces = mode_traces(
                 self.passes,
@@ -384,6 +408,11 @@ class PalaceTrustReport:
             ).figure()
             if figure is not None:
                 items.append(figure)
+        return items
+
+    def _capacitance_figures(self, xs: tuple[int, ...]) -> list[Any]:
+        """The Maxwell capacitance coefficients across the AMR passes, with their pass-to-pass changes."""
+        items: list[Any] = []
         for label, traces in capacitance_traces(self.passes):
             figure = LinePlot(
                 title=f"{label} vs AMR pass",
@@ -408,8 +437,13 @@ class PalaceTrustReport:
             ).figure()
             if delta is not None:
                 items.append(delta)
+        return items
+
+    def _error_indicator_figures(self, xs: tuple[int, ...]) -> list[Any]:
+        """The AMR error indicators across the passes, against the configured tolerance."""
+        items: list[Any] = []
         traces = [
-            (
+            Trace(
                 name,
                 [
                     None
@@ -422,7 +456,7 @@ class PalaceTrustReport:
         ]
         hline = None
         if self.amr_tolerance is not None:
-            hline = (self.amr_tolerance, "configured AMR Tol")
+            hline = ReferenceLine(self.amr_tolerance, "configured AMR Tol")
         figure = LinePlot(
             title="AMR error indicator vs AMR pass",
             xlabel="AMR pass",
@@ -687,7 +721,7 @@ class PalaceTrustReport:
             xlabel="DOFs",
             ylabel="seconds this pass",
             xs=dofs,
-            traces=[("this pass", this_pass)],
+            traces=[Trace("this pass", this_pass)],
             point_labels=labels,
             theme=self.theme,
         ).figure()

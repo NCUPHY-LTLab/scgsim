@@ -5,7 +5,14 @@ from __future__ import annotations
 import html
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
+
+from scgsim.geometry.models.refusals import Declared
+from scgsim.palace.mesh.summary import MeshSummary
+from scgsim.presentation.notebook import Card
+from scgsim.refusal import ENVIRONMENT, found_text
+
+_WHERE_SHOW_CALL = "the arguments of the show_ call"
 
 COLORWAY = (
     "#56B4E9",
@@ -95,6 +102,27 @@ def yaxis_type(name: str) -> str:
     return "linear"
 
 
+class Trace(NamedTuple):
+    """One plotted series: its legend label and one value per x position, None where nothing was recorded."""
+
+    label: str
+    values: Sequence[float | None]
+
+
+class TraceGroup(NamedTuple):
+    """The traces one figure draws, under the label the figure is named after."""
+
+    label: str
+    traces: list[Trace]
+
+
+class ReferenceLine(NamedTuple):
+    """A horizontal line drawn across a figure at ``value``, with the label it is annotated with."""
+
+    value: float
+    label: str
+
+
 @dataclass(frozen=True)
 class LinePlot:
     """Trace data and axis/theme choices that travel together into a convergence figure."""
@@ -103,10 +131,10 @@ class LinePlot:
     xlabel: str
     ylabel: str
     xs: Sequence[int | float | None]
-    traces: Sequence[tuple[str, Sequence[float | None]]]
+    traces: Sequence[Trace]
     point_labels: Sequence[str] | None = None
     yaxis_type: str = "linear"
-    hline: tuple[float, str] | None = None
+    hline: ReferenceLine | None = None
     theme: ReportTheme = "light"
 
     def figure(self) -> Any | None:
@@ -287,7 +315,9 @@ def plotly() -> Any:
         import plotly.graph_objects as go  # noqa: PLC0415 -- Defer heavy Plotly loading until a figure is requested.
     except ImportError as exc:
         raise RuntimeError(
-            "plotly is not available; install plotly to render Palace trustworthiness figures."
+            Declared("plotly", ENVIRONMENT).refusal(
+                "is not available; install plotly to render Palace trustworthiness figures"
+            )
         ) from exc
     return go
 
@@ -304,7 +334,11 @@ def checked_theme(theme: str) -> ReportTheme:
     """Accept the supported light/dark display choices without changing report data."""
     if theme == "light" or theme == "dark":
         return theme
-    raise ValueError("theme must be 'light' or 'dark'.")
+    raise ValueError(
+        Declared("theme must be 'light' or 'dark'", _WHERE_SHOW_CALL).refusal(
+            found_text(theme)
+        )
+    )
 
 
 def checked_ranking_limit(value: int | None) -> int | None:
@@ -312,14 +346,22 @@ def checked_ranking_limit(value: int | None) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError("ranking_limit must be a positive integer or None.")
+        raise ValueError(
+            Declared(
+                "ranking_limit must be a positive integer or None", _WHERE_SHOW_CALL
+            ).refusal(found_text(value))
+        )
     return value
 
 
 def checked_show_details(value: bool) -> bool:
     """Require an explicit boolean choice for expanded report metadata."""
     if not isinstance(value, bool):
-        raise TypeError("show_details must be a bool.")
+        raise TypeError(
+            Declared("show_details must be a bool", _WHERE_SHOW_CALL).refusal(
+                found_text(value)
+            )
+        )
     return value
 
 
@@ -363,17 +405,46 @@ def fmt_mb(value: Any) -> str:
 
 
 def mesh_summary_html(
-    summary: Mapping[str, Any], *, card_html: Callable[[str, Any], str]
+    summary: MeshSummary, *, card_html: Callable[[str, Any], str]
 ) -> str:
     """Keep the meshing record (recipe, mesher, quality) distinct from native solver measurements."""
-    if summary["status"] == "not_recorded":
-        return "<section><h4>Geometry mesh</h4><p>Mesh observations were not recorded in this manifest.</p></section>"
     meshing = summary["meshing"]
+    # The status is "recorded" exactly when the manifest has a meshing record.
+    if summary["status"] == "not_recorded" or meshing is None:
+        return "<section><h4>Geometry mesh</h4><p>Mesh observations were not recorded in this manifest.</p></section>"
+    stats, recipe = meshing["statistics"], meshing["recipe"]
+    items = "".join(
+        card_html(label, value) for label, value in _mesh_cards(summary, meshing)
+    )
+    rows = _region_rows(stats["physical_regions"])
+    header = "".join(html_cell("th", label) for label in _REGION_COLUMNS)
+    types = ", ".join(
+        f"{record['name']}: {record['count']}" for record in stats["element_types"]
+    )
+    parameters = ", ".join(
+        f"{key}={value}" for key, value in recipe["parameters"].items()
+    )
+    return (
+        "<section><h4>Geometry mesh</h4>"
+        f'<div style="display:flex;flex-wrap:wrap">{items}</div>'
+        "<p>The ND estimate uses the configured FEM order and tetrahedral primary-corner topology before boundary constraints; it is not actual solver DOF. Electrostatic H1 estimation is unavailable. Quality is measured on the linear mesh, before any elevation to the geometry order.</p>"
+        "<details><summary>Physical regions and mesh discretization</summary>"
+        f"<p>Gmsh {html.escape(str(meshing['gmsh_version']))}. {html.escape(types)}.</p>"
+        f"<p>Recipe {html.escape(recipe['name'])} v{html.escape(str(recipe['version']))}: {html.escape(parameters or 'no parameters')}.</p>"
+        "<p>Edge statistics count unique PRIMARY CORNER CHORDS within each region, not curved arc lengths. Point regions have no edges.</p>"
+        f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+        "<p>Full controls, repair policy, the quality report hash and the provenance remain available in mesh_summary() and report data.</p>"
+        "</details></section>"
+    )
+
+
+def _mesh_cards(summary: MeshSummary, meshing: Mapping[str, Any]) -> list[Card]:
+    """The (label, value) cards of a recorded mesh: recipe, orders, sizes, algorithms, quality and repair."""
     estimate = summary["dof_estimate"]
     stats, mesher = meshing["statistics"], meshing["mesher"]
     linear = meshing["linear_mesh"]
     recipe, budgets = meshing["recipe"], meshing["budgets"]
-    cards = [
+    return [
         ("Sizing recipe", f"{recipe['name']} v{recipe['version']}"),
         (
             "Geometry / FEM order",
@@ -411,9 +482,25 @@ def mesh_summary_html(
         ),
         ("ND topological DOF estimate", fmt(estimate.get("value"))),
     ]
-    items = "".join(card_html(label, value) for label, value in cards)
+
+
+_REGION_COLUMNS = (
+    "Region",
+    "Dim",
+    "Elements",
+    "Gmsh type: count",
+    "Edges",
+    "Min",
+    "Mean",
+    "Max",
+    "Unit",
+)
+
+
+def _region_rows(regions: Sequence[Mapping[str, Any]]) -> list[str]:
+    """One table row per physical region: its element counts and its corner-chord edge statistics."""
     rows = []
-    for region in stats["physical_regions"]:
+    for region in regions:
         chords = region.get("corner_chord_edge_lengths")
         values = [
             region["name"],
@@ -435,35 +522,4 @@ def mesh_summary_html(
         rows.append(
             "<tr>" + "".join(html_cell("td", str(value)) for value in values) + "</tr>"
         )
-    header = "".join(
-        html_cell("th", label)
-        for label in (
-            "Region",
-            "Dim",
-            "Elements",
-            "Gmsh type: count",
-            "Edges",
-            "Min",
-            "Mean",
-            "Max",
-            "Unit",
-        )
-    )
-    types = ", ".join(
-        f"{record['name']}: {record['count']}" for record in stats["element_types"]
-    )
-    parameters = ", ".join(
-        f"{key}={value}" for key, value in recipe["parameters"].items()
-    )
-    return (
-        "<section><h4>Geometry mesh</h4>"
-        f'<div style="display:flex;flex-wrap:wrap">{items}</div>'
-        "<p>The ND estimate uses the configured FEM order and tetrahedral primary-corner topology before boundary constraints; it is not actual solver DOF. Electrostatic H1 estimation is unavailable. Quality is measured on the linear mesh, before any elevation to the geometry order.</p>"
-        "<details><summary>Physical regions and mesh discretization</summary>"
-        f"<p>Gmsh {html.escape(str(meshing['gmsh_version']))}. {html.escape(types)}.</p>"
-        f"<p>Recipe {html.escape(recipe['name'])} v{html.escape(str(recipe['version']))}: {html.escape(parameters or 'no parameters')}.</p>"
-        "<p>Edge statistics count unique PRIMARY CORNER CHORDS within each region, not curved arc lengths. Point regions have no edges.</p>"
-        f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
-        "<p>Full controls, repair policy, the quality report hash and the provenance remain available in mesh_summary() and report data.</p>"
-        "</details></section>"
-    )
+    return rows

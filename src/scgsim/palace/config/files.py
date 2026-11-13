@@ -4,14 +4,22 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_run_folder import json_text
 
 
+class MetadataFile(NamedTuple):
+    """One metadata file written with ``config.json``: its path in the run folder and its JSON payload."""
+
+    relative: str
+    payload: Mapping[str, Any]
+
+
 def persist_problem_files(
     *,
-    metadata_files: Sequence[tuple[Path, Mapping[str, Any]]],
+    run_folder: Path,
+    metadata_files: Sequence[MetadataFile],
     config_path: Path,
     config: Mapping[str, Any],
 ) -> Path:
@@ -19,8 +27,8 @@ def persist_problem_files(
 
     Writing the config last means a run folder whose ``config.json`` is new has every metadata file it needs.
     """
-    for path, payload in metadata_files:
-        _atomic_json(path, payload)
+    for metadata in metadata_files:
+        _atomic_json(run_folder / metadata.relative, metadata.payload)
     _atomic_json(config_path, config)
     return config_path
 
@@ -32,4 +40,4 @@ def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
     temporary.replace(path)
 
 
-__all__ = ["persist_problem_files"]
+__all__ = ["MetadataFile", "persist_problem_files"]

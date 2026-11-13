@@ -22,6 +22,7 @@ from typing import Any
 from scgsim.contracts.sgb_sidecar import Sidecar, check_sidecar, read_sidecar, views
 from scgsim.contracts.sgb_sidecar import SidecarError as ContractError
 from scgsim.contracts.sgb_sidecar.records import MeshFeature
+from scgsim.refusal import internal
 
 from .errors import SidecarError
 
@@ -174,5 +175,7 @@ def _require_ascending(margins: list[float]) -> None:
     """The band recipes size each band from the margin below it, so the margins must ascend."""
     if any(a >= b for a, b in zip(margins, margins[1:], strict=False)):
         raise SidecarError(
-            f"sidecar band_boundary margins_um {margins} must be an ascending list."
+            internal(
+                f"sidecar band_boundary margins_um {margins} must be an ascending list"
+            )
         )

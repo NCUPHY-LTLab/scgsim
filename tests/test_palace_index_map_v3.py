@@ -19,13 +19,14 @@ from palace_sgb_support import (
     surface_epr_specs,
 )
 
+from scgsim.contracts.palace_run_folder import read_json
 from scgsim.geometry.surface_epr.insets import inset_requests
 from scgsim.palace import EigenmodeSim, ElectrostaticSim, resolve_palace_result
 from scgsim.palace.config.config import (
     build_eigenmode_config,
     build_electrostatic_config,
 )
-from scgsim.palace.config.config_models import (
+from scgsim.palace.config.config_records import (
     ConfigInput,
     EigenmodeSettings,
     ElectrostaticSettings,
@@ -39,9 +40,8 @@ from scgsim.palace.reports.surface_figures import (
     surface_margin_participation_figure,
     surface_ranking_figure,
 )
-from scgsim.palace.results.artifacts import read_json
 from scgsim.palace.results.epr import epr_result, reanalyze_epr
-from scgsim.palace.results.epr_model import PalaceEprResult
+from scgsim.palace.results.epr_records import PalaceEprResult
 from scgsim.palace.results.index_contract import (
     INDEX_MAP_SCHEMA_VERSION,
     RouteConsistency,
@@ -49,7 +49,7 @@ from scgsim.palace.results.index_contract import (
     require_manifest_schema,
     validate_config_index_correspondence,
 )
-from scgsim.palace.results.models import ParsedTable, ResolvedRunData
+from scgsim.palace.results.resolved_records import ParsedTable, ResolvedRunData
 from scgsim.palace.results.surface_readers import (
     SurfaceEprReader,
     SurfaceMarginEprReader,
@@ -218,10 +218,10 @@ def test_a_producer_made_index_map_round_trips_through_the_readers(run, tmp_path
     wholes = read_surface_bindings(run.index)
     margins = read_surface_margin_bindings(run.index)
     assert wholes and margins
-    assert {b["interface_type"] for b in wholes} == {"MA", "MS", "SA"}
-    assert all(b["baseline_index"] in {w["index"] for w in wholes} for b in margins)
-    assert {m["margin_um"] for m in margins} == {0.5, 1.0}
-    assert all(m["bands"] for m in margins)
+    assert {b.interface_type for b in wholes} == {"MA", "MS", "SA"}
+    assert all(b.baseline_index in {w.index for w in wholes} for b in margins)
+    assert {m.margin_um for m in margins} == {0.5, 1.0}
+    assert all(m.bands for m in margins)
 
     table = tmp_path / "surface-Q.csv"
     _surface_q(run, table)
@@ -236,8 +236,8 @@ def test_a_producer_made_index_map_round_trips_through_the_readers(run, tmp_path
         table, frequencies_ghz=None, bindings=wholes, **kwargs
     ).read()
     (margin_series,) = SurfaceMarginEprReader(table, bindings=margins, **kwargs).read()
-    assert [r.index for r in series.records] == [b["index"] for b in wholes]
-    assert [r.index for r in margin_series.records] == [b["index"] for b in margins]
+    assert [r.index for r in series.records] == [b.index for b in wholes]
+    assert [r.index for r in margin_series.records] == [b.index for b in margins]
     assert all(r.entities and r.rows and r.attributes for r in series.records)
     assert all(r.participation == 0.01 * r.index for r in series.records)
 
@@ -278,7 +278,7 @@ def test_surface_readers_keep_the_requested_modes_of_a_longer_table(run, tmp_pat
         return
     assert [item.series_index for item in series] == [1]
     assert [item.series_index for item in margin_series] == [1]
-    assert [r.index for r in series[0].records] == [b["index"] for b in wholes]
+    assert [r.index for r in series[0].records] == [b.index for b in wholes]
 
 
 def test_the_electrostatic_index_map_keeps_the_ground_evidence(tmp_path):
@@ -302,7 +302,7 @@ def test_old_index_maps_are_rejected_naming_the_recorded_schema(tmp_path, record
     run = Run("B", "Electrostatic", tmp_path)
     old = {**run.index, "schema_version": recorded}
     with pytest.raises(
-        ValueError, match=rf"schema_version {recorded!r} is not readable"
+        ValueError, match=rf"schema_version {recorded!r}: is not readable"
     ):
         require_index_map_schema(old)
     with pytest.raises(ValueError, match=rf"schema_version {recorded!r}"):
@@ -315,7 +315,7 @@ def test_old_manifests_are_rejected_naming_the_recorded_schema(tmp_path, recorde
     run = Run("B", "Eigenmode", tmp_path)
     old = {**run.manifest, "schema_version": recorded}
     with pytest.raises(
-        ValueError, match=rf"schema_version {recorded!r} is not readable"
+        ValueError, match=rf"schema_version {recorded!r}: is not readable"
     ):
         require_manifest_schema(old)
     with pytest.raises(ValueError, match=rf"schema_version {recorded!r}"):

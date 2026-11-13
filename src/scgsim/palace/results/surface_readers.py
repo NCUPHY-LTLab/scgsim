@@ -4,25 +4,68 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, cast
 
 from scgsim.contracts.palace_run_folder import palace_problem
 from scgsim.palace.results.index_contract import validate_index_entries
-from scgsim.palace.results.models import ParsedTable
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.inspection_records import (
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
     SurfaceMarginEprRecord,
     SurfaceMarginEprSeriesSnapshot,
 )
+from scgsim.palace.results.resolved_records import ParsedTable
 from scgsim.palace.results.surface_contract import entry_rows, surface_epr_entries
 from scgsim.palace.results.tables import (
     read_csv_table,
     requested_modes,
     validate_surface_table,
 )
+
+
+@dataclass(frozen=True)
+class SurfaceBinding:
+    """What one whole-surface Dielectric column integrates: its sidecar rows, Entities, Nets and film loss."""
+
+    index: int
+    interface_type: str
+    name: str
+    rows: tuple[str, ...]
+    face_kinds: tuple[str, ...]
+    entities: tuple[str, ...]
+    nets: tuple[str, ...]
+    attributes: tuple[int, ...]
+    loss_tangent: float | None
+    lineage: dict[str, dict[str, float]]
+
+    def record_fields(self) -> dict[str, Any]:
+        """The binding's fields by name, as a result record of its column takes them."""
+        return {field.name: getattr(self, field.name) for field in fields(self)}
+
+
+@dataclass(frozen=True)
+class SurfaceMarginBinding:
+    """What one margin Dielectric column integrates: its rows, its whole surface and the bands it unions."""
+
+    index: int
+    interface_type: str
+    name: str
+    rows: tuple[str, ...]
+    face_kinds: tuple[str, ...]
+    entities: tuple[str, ...]
+    nets: tuple[str, ...]
+    attributes: tuple[int, ...]
+    loss_tangent: float | None
+    baseline_index: int
+    margin_index: int
+    margin_um: float
+    bands: tuple[int, ...]
+
+    def record_fields(self) -> dict[str, Any]:
+        """The binding's fields by name, as a result record of its column takes them."""
+        return {field.name: getattr(self, field.name) for field in fields(self)}
 
 
 def _surface_inverse_loss(records: Sequence[SurfaceEprRecord]) -> float | None:
@@ -38,11 +81,11 @@ def _surface_inverse_loss(records: Sequence[SurfaceEprRecord]) -> float | None:
 
 def read_surface_bindings(
     index_map: dict[str, Any] | None,
-) -> tuple[dict[str, Any], ...] | None:
+) -> tuple[SurfaceBinding, ...] | None:
     """Bind each whole-surface Dielectric index to the sidecar rows, Entities and Nets it integrates."""
     entries = _entries(index_map)
     bindings = tuple(
-        _identity(entry) | {"lineage": _lineage(entry)}
+        SurfaceBinding(**_identity(entry), lineage=_lineage(entry))
         for entry in entries
         if "inset" not in entry
     )
@@ -51,17 +94,17 @@ def read_surface_bindings(
 
 def read_surface_margin_bindings(
     index_map: dict[str, Any] | None,
-) -> tuple[dict[str, Any], ...] | None:
+) -> tuple[SurfaceMarginBinding, ...] | None:
     """Bind each margin Dielectric index to its whole surface and the bands it unions."""
     entries = _entries(index_map)
     bindings = tuple(
-        _identity(entry)
-        | {
-            "baseline_index": entry["baseline_index"],
-            "margin_index": entry["inset"]["margin_index"],
-            "margin_um": float(entry["inset"]["margin_um"]),
-            "bands": tuple(entry["inset"]["bands"]),
-        }
+        SurfaceMarginBinding(
+            **_identity(entry),
+            baseline_index=entry["baseline_index"],
+            margin_index=entry["inset"]["margin_index"],
+            margin_um=float(entry["inset"]["margin_um"]),
+            bands=tuple(entry["inset"]["bands"]),
+        )
         for entry in entries
         if "inset" in entry
     )
@@ -120,7 +163,7 @@ class SurfaceEprReader:
     source: str
     frequencies_ghz: tuple[float, ...] | None
     expected_rows: int
-    bindings: tuple[dict[str, Any], ...] | None
+    bindings: tuple[SurfaceBinding, ...] | None
     surface_count: int
     mode_count: int | None = None
 
@@ -137,9 +180,9 @@ class SurfaceEprReader:
                 series_index = int(row[problem.series_index])
                 records = tuple(
                     SurfaceEprRecord(
-                        **binding,
-                        participation=float(row[f"p_surf[{binding['index']}]"]),
-                        quality_factor=float(row[f"Q_surf[{binding['index']}]"]),
+                        **binding.record_fields(),
+                        participation=float(row[f"p_surf[{binding.index}]"]),
+                        quality_factor=float(row[f"Q_surf[{binding.index}]"]),
                     )
                     for binding in self.bindings
                 )
@@ -193,7 +236,7 @@ class SurfaceMarginEprReader:
     pass_index: int
     source: str
     expected_rows: int
-    bindings: tuple[dict[str, Any], ...] | None
+    bindings: tuple[SurfaceMarginBinding, ...] | None
     surface_count: int
     mode_count: int | None = None
 
@@ -213,9 +256,9 @@ class SurfaceMarginEprReader:
                     series_kind=problem.series,
                     records=tuple(
                         SurfaceMarginEprRecord(
-                            **binding,
-                            participation=float(row[f"p_surf[{binding['index']}]"]),
-                            quality_factor=float(row[f"Q_surf[{binding['index']}]"]),
+                            **binding.record_fields(),
+                            participation=float(row[f"p_surf[{binding.index}]"]),
+                            quality_factor=float(row[f"Q_surf[{binding.index}]"]),
                         )
                         for binding in self.bindings
                     ),

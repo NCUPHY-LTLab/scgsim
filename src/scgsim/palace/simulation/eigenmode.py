@@ -17,15 +17,20 @@ from scgsim.contracts.palace_run_folder import (
     NUMERICAL_CONTROLS,
     PORT_INFORMATION,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
+from scgsim.refusal import found_text
 
 from ..config.config import build_eigenmode_config
-from ..config.config_models import EigenmodeConfigBuildResult, EigenmodeSettings
+from ..config.config_records import EigenmodeConfigBuildResult, EigenmodeSettings
+from ..config.files import MetadataFile
 from ..config.index import EprRequest, check_epr_request
 from ..config.numerical import NumericalControls, ProblemDefaults
 from ..source.ports import RequestedPort
 from ..source.transforms import validate_nonempty_string, validate_positive_number
 from .core import PalaceSimulation, index_map
+
+_WHERE_ADD_PORT = "the call to add_port"
 
 # The geometry build never reads a port's inductance, but ``add_port`` requires a positive one.
 _PORT_INDUCTANCE_H = 1.0e-9
@@ -83,12 +88,19 @@ class EigenmodeSim(PalaceSimulation):
         """
         if layout_sheet is not True:
             raise ValueError(
-                "Eigenmode supports only authored sheet ports: pass layout_sheet=True."
+                Declared(
+                    f"Eigenmode supports only authored sheet ports: pass layout_sheet=True for {name!r}",
+                    _WHERE_ADD_PORT,
+                ).refusal(found_text(layout_sheet))
             )
         name = validate_nonempty_string(name, "port name")
         layer = validate_nonempty_string(layer, "port target layer")
         if any(port.name == name for port in self.ports):
-            raise ValueError(f"layout_sheet port {name!r} is already added.")
+            raise ValueError(
+                Declared(f"layout_sheet port {name!r}", _WHERE_ADD_PORT).refusal(
+                    "is already added"
+                )
+            )
         self.ports.append(
             RequestedPort(
                 name=name,
@@ -220,12 +232,12 @@ class EigenmodeSim(PalaceSimulation):
                 bindings, or the EPR request names a binding the config does not have.
             FileNotFoundError: a file of the current mesh is gone from the run folder.
         """
-        mesh, common = self._start_config()
+        common = self._start_config()
         result = build_eigenmode_config(
             common, ports=self._resolved_ports, eigenmode=self._eigenmode_settings()
         )
         check_epr_request(self.epr_request, result.index_entries)
-        return self._finish_config(mesh, result.config, self._metadata(result))
+        return self._finish_config(result.config, self._metadata(result))
 
     def _eigenmode_settings(self) -> EigenmodeSettings:
         """The mode controls as the config reads them, checked again in case an attribute was assigned."""
@@ -236,9 +248,7 @@ class EigenmodeSim(PalaceSimulation):
             save_fields=self.save_fields,
         )
 
-    def _metadata(
-        self, result: EigenmodeConfigBuildResult
-    ) -> tuple[tuple[str, dict[str, Any]], ...]:
+    def _metadata(self, result: EigenmodeConfigBuildResult) -> tuple[MetadataFile, ...]:
         """The metadata files written with ``config.json``, by run-folder path, in the order they are written."""
         extra = (
             {}
@@ -246,13 +256,16 @@ class EigenmodeSim(PalaceSimulation):
             else {"epr_request": self.epr_request.to_payload()}
         )
         return (
-            (INDEX_MAP, index_map(result.index_entries, **extra)),
-            (
+            MetadataFile(INDEX_MAP, index_map(result.index_entries, **extra)),
+            MetadataFile(
                 MATERIAL_RESOLUTION,
                 {"schema_version": 1, "solution_volumes": result.material_resolution},
             ),
-            (PORT_INFORMATION, {"schema_version": 1, "ports": result.port_information}),
-            (NUMERICAL_CONTROLS, self.numerical.to_payload()),
+            MetadataFile(
+                PORT_INFORMATION,
+                {"schema_version": 1, "ports": result.port_information},
+            ),
+            MetadataFile(NUMERICAL_CONTROLS, self.numerical.to_payload()),
         )
 
     # ---- The core's questions ------------------------------------------------------------------------

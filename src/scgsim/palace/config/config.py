@@ -9,15 +9,18 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from numbers import Real
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC, OUTPUT_DIR
+from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import found_text
 
 from ..mesh.physical_groups import Groups
 from ..source.ports import LayoutPortBinding
 from .boundaries import build_electrostatic_boundaries
-from .config_models import (
+from .config_records import (
     MODEL_L0_M,
     ConfigInput,
     EigenmodeConfigBuildResult,
@@ -27,9 +30,13 @@ from .config_models import (
     TerminalBinding,
     optional_string,
 )
-from .index import EnergyEntry, PortEntry, SurfaceEprEntry
+from .index import EnergyEntry, IndexedRows, LumpedPortRows, PortEntry, SurfaceEprEntry
 from .numerical import build_output_formats, build_refinement, linear_solver
 from .surface_epr import build_surface_epr_postprocessing
+
+_WHERE_PLAN_CONDUCTORS = "the GeometryPlan's conductors"
+_WHERE_PORTS_ON_LOSS = "the calls to add_port and set_surface_epr"
+_WHERE_STACK_MATERIALS = "the stack file's materials"
 
 __all__ = [
     "build_eigenmode_config",
@@ -50,7 +57,7 @@ def build_electrostatic_config(
         ValueError: a terminal or ground Net does not match the mesh, a material is invalid, or a required
             Surface-EPR spec has no face.
     """
-    boundaries, terminal_entries, ground_resolution = build_electrostatic_boundaries(
+    boundaries = build_electrostatic_boundaries(
         groups=common.groups,
         terminals=terminals,
         ground_net_ids=ground_net_ids,
@@ -58,20 +65,20 @@ def build_electrostatic_config(
     )
     domain_volumes = _domains_from_solution_volumes(common.groups.get("volumes", {}))
     material_rows = _materials_from_solution_volumes(domain_volumes, common.materials)
-    epr_rows, epr_entries = _surface_epr_rows(common)
-    energy_rows, energy_entries = _domain_energy_rows(domain_volumes, common.materials)
+    epr = _surface_epr_rows(common)
+    energy = _domain_energy_rows(domain_volumes, common.materials)
     config = _config(
         common,
         solver={ELECTROSTATIC.name: {"Save": electrostatic.save_fields}},
-        boundaries=boundaries,
-        domains=(material_rows, energy_rows),
-        epr=(epr_rows, epr_entries),
+        boundaries=boundaries.boundaries,
+        domains=_Domains(material_rows, energy),
+        epr=epr,
     )
     return ElectrostaticConfigBuildResult(
         config=config,
-        index_entries=[*terminal_entries, *energy_entries, *epr_entries],
+        index_entries=[*boundaries.terminals, *energy.entries, *epr.entries],
         material_resolution=_material_resolution(domain_volumes, common.materials),
-        ground_boundary_resolution=ground_resolution,
+        ground_boundary_resolution=boundaries.ground_resolution,
     )
 
 
@@ -90,37 +97,43 @@ def build_eigenmode_config(
     groups = common.groups
     domain_volumes = _domains_from_solution_volumes(groups.get("volumes", {}))
     material_rows = _materials_from_solution_volumes(domain_volumes, common.materials)
-    energy_rows, energy_entries = _domain_energy_rows(domain_volumes, common.materials)
-    epr_rows, epr_entries = _surface_epr_rows(common)
-    port_rows, port_info, port_entries = _lumped_ports(groups, ports)
-    _refuse_ports_on_loss_groups(port_rows, epr_rows)
+    energy = _domain_energy_rows(domain_volumes, common.materials)
+    epr = _surface_epr_rows(common)
+    ports_rows = _lumped_ports(groups, ports)
+    _refuse_ports_on_loss_groups(ports_rows.rows, epr.rows)
     boundaries: dict[str, Any] = {"PEC": {"Attributes": _pec_attributes(groups)}}
-    if port_rows:
-        boundaries["LumpedPort"] = port_rows
+    if ports_rows.rows:
+        boundaries["LumpedPort"] = ports_rows.rows
     config = _config(
         common,
         solver={EIGENMODE.name: _eigenmode_block(eigenmode)},
         boundaries=boundaries,
-        domains=(material_rows, energy_rows),
-        epr=(epr_rows, epr_entries),
+        domains=_Domains(material_rows, energy),
+        epr=epr,
     )
     return EigenmodeConfigBuildResult(
         config=config,
-        port_information=port_info,
-        index_entries=[*port_entries, *energy_entries, *epr_entries],
+        port_information=ports_rows.information,
+        index_entries=[*ports_rows.entries, *energy.entries, *epr.entries],
         material_resolution=_material_resolution(domain_volumes, common.materials),
     )
 
 
-def _surface_epr_rows(
-    common: ConfigInput,
-) -> tuple[list[dict[str, Any]], list[SurfaceEprEntry]]:
+def _surface_epr_rows(common: ConfigInput) -> IndexedRows[SurfaceEprEntry]:
     """The Surface-EPR ``Dielectric`` rows and their index entries; none when Surface EPR was not requested."""
     if common.surface_epr_specs is None:
-        return [], []
+        return IndexedRows([], [])
     return build_surface_epr_postprocessing(
         common.groups, common.surface_epr_specs, model_l0_m=MODEL_L0_M
     )
+
+
+@dataclass(frozen=True)
+class _Domains:
+    """The ``Domains`` of a config: one material row per solution volume, and the energy rows and entries."""
+
+    materials: list[dict[str, Any]]
+    energy: IndexedRows[EnergyEntry]
 
 
 def _config(
@@ -128,15 +141,13 @@ def _config(
     *,
     solver: dict[str, Any],
     boundaries: dict[str, Any],
-    domains: tuple[list[dict[str, Any]], list[dict[str, Any]]],
-    epr: tuple[list[dict[str, Any]], list[SurfaceEprEntry]],
+    domains: _Domains,
+    epr: IndexedRows[SurfaceEprEntry],
 ) -> dict[str, Any]:
     """The config both problems write, in Palace's section order, around the problem's solver block."""
     numerical = common.numerical
-    material_rows, energy_rows = domains
-    epr_rows, epr_entries = epr
-    if epr_rows:
-        boundaries["Postprocessing"] = {"Dielectric": epr_rows}
+    if epr.rows:
+        boundaries["Postprocessing"] = {"Dielectric": epr.rows}
     config: dict[str, Any] = {
         "Problem": {
             "Type": common.problem,
@@ -157,11 +168,11 @@ def _config(
         },
         "Boundaries": boundaries,
         "Domains": {
-            "Materials": material_rows,
-            "Postprocessing": {"Energy": energy_rows, "Probe": []},
+            "Materials": domains.materials,
+            "Postprocessing": {"Energy": domains.energy.rows, "Probe": []},
         },
     }
-    if _requires_internal_boundary_cracking(epr_entries):
+    if _requires_internal_boundary_cracking(epr.entries):
         config["Model"]["CrackInternalBoundaryElements"] = True
     return config
 
@@ -188,7 +199,12 @@ def _pec_attributes(groups: Groups) -> list[int]:
         }
     )
     if not attributes:
-        raise ValueError("Eigenmode config requires SGB-authored PEC surfaces.")
+        raise ValueError(
+            Declared(
+                "Eigenmode config requires SGB-authored PEC surfaces; the plan's conductors produced none",
+                _WHERE_PLAN_CONDUCTORS,
+            ).refusal(found_text(sorted(groups.get("pec_surfaces", {}))))
+        )
     return attributes
 
 
@@ -204,7 +220,10 @@ def _refuse_ports_on_loss_groups(
     }
     if epr_attributes.intersection(port_attributes):
         raise ValueError(
-            "LumpedPort attributes must not also be Surface-EPR loss groups."
+            Declared(
+                "LumpedPort attributes must not also be Surface-EPR loss groups",
+                _WHERE_PORTS_ON_LOSS,
+            ).refusal(found_text(sorted(epr_attributes.intersection(port_attributes))))
         )
 
 
@@ -225,13 +244,13 @@ def _requires_internal_boundary_cracking(
 
 
 def _domain_energy_rows(
-    domain_volumes: list[tuple[str, Mapping[str, Any]]],
+    domain_volumes: Mapping[str, Mapping[str, Any]],
     materials: Mapping[str, Mapping[str, Any]],
-) -> tuple[list[dict[str, Any]], list[EnergyEntry]]:
+) -> IndexedRows[EnergyEntry]:
     """The ``Domains.Postprocessing.Energy`` rows, one per solution volume, and their index entries."""
     rows = [
         {"Index": index, "Attributes": sorted(info["attributes"])}
-        for index, (_, info) in enumerate(domain_volumes, start=1)
+        for index, info in enumerate(domain_volumes.values(), start=1)
     ]
     entries = [
         EnergyEntry(
@@ -242,14 +261,14 @@ def _domain_energy_rows(
             entities=list(info["entities"]),
         )
         for index, ((name, info), row) in enumerate(
-            zip(domain_volumes, rows, strict=True), start=1
+            zip(domain_volumes.items(), rows, strict=True), start=1
         )
     ]
-    return rows, entries
+    return IndexedRows(rows, entries)
 
 
 def _material_resolution(
-    domain_volumes: list[tuple[str, Mapping[str, Any]]],
+    domain_volumes: Mapping[str, Mapping[str, Any]],
     materials: Mapping[str, Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     return [
@@ -258,13 +277,11 @@ def _material_resolution(
             "attributes": sorted(volume["attributes"]),
             "material": _material_identity(volume, materials),
         }
-        for name, volume in domain_volumes
+        for name, volume in domain_volumes.items()
     ]
 
 
-def _lumped_ports(
-    groups: Groups, ports: Sequence[LayoutPortBinding]
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[PortEntry]]:
+def _lumped_ports(groups: Groups, ports: Sequence[LayoutPortBinding]) -> LumpedPortRows:
     """The ``LumpedPort`` rows, port information and index entries of ``ports``, each bound to its SGB group ``P<index>``.
 
     A row's circuit keys are the port's ``circuit``, written unchanged; no port is excited.
@@ -273,31 +290,13 @@ def _lumped_ports(
     information: list[dict[str, Any]] = []
     entries: list[PortEntry] = []
     for port in ports:
-        key = f"P{port.index}"
-        group = groups.get("port_surfaces", {}).get(key)
-        if group is None:
-            raise ValueError(f"layout_sheet port {port.name!r} has no SGB group {key}.")
-        direction = _direction_tuple(group.get("direction"), port.name)
-        if (
-            group["port_index"] != port.index
-            or group["source_name"] != port.name
-            or group["source_layer"] != port.source_layer
-            or group["target_layer"] != port.target_layer
-            or not all(
-                math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
-                for a, b in zip(direction, port.direction, strict=True)
-            )
-        ):
-            raise ValueError(
-                f"layout_sheet port {port.name!r} does not match SGB-authored identity."
-            )
-        attributes = sorted(int(value) for value in group["attributes"])
+        bound = _bound_port_group(groups, port)
         rows.append(
             {
                 "Index": port.index,
-                "Direction": list(direction),
+                "Direction": list(bound.direction),
                 "Excitation": False,
-                "Attributes": attributes,
+                "Attributes": bound.attributes,
                 **port.circuit,
             }
         )
@@ -306,36 +305,103 @@ def _lumped_ports(
                 "portnumber": port.index,
                 "name": port.name,
                 "type": "lumped_sheet",
-                "direction": list(direction),
-                "physical_name": group["group"],
-                "attributes": attributes,
+                "direction": list(bound.direction),
+                "physical_name": bound.group["group"],
+                "attributes": bound.attributes,
                 "source_layer": port.source_layer,
                 "target_layer": port.target_layer,
             }
         )
-        entries.append(
-            PortEntry(
-                index=port.index,
-                entry_name=key,
-                attributes=attributes,
-                physical_names=[group["group"]],
-                port_name=port.name,
-                sheet={
-                    field: group[field]
-                    for field in (
-                        "port_sheet_id",
-                        "host_entity_ids",
-                        "adjacent_volumes",
-                        "host_volumes",
-                    )
-                },
-            )
-        )
+        entries.append(_port_entry(port, bound))
     if len(groups.get("port_surfaces", {})) != len(ports):
         raise ValueError(
-            "SGB produced unconfigured or missing layout-sheet port groups."
+            internal(
+                "SGB produced unconfigured or missing layout-sheet port groups"
+                + ": "
+                + found_text(
+                    sorted(groups.get("port_surfaces", {})), f"{len(ports)} port groups"
+                )
+            )
         )
-    return rows, information, entries
+    return LumpedPortRows(rows, entries, information)
+
+
+class _BoundPortGroup(NamedTuple):
+    """The SGB group a layout-sheet port binds to, with its checked direction and its attributes."""
+
+    key: str
+    group: Mapping[str, Any]
+    direction: tuple[float, float, float]
+    attributes: list[int]
+
+
+def _bound_port_group(groups: Groups, port: LayoutPortBinding) -> _BoundPortGroup:
+    """Find the port's group ``P<index>`` and require it to carry the port's name, layers and direction."""
+    key = f"P{port.index}"
+    group = groups.get("port_surfaces", {}).get(key)
+    if group is None:
+        raise ValueError(
+            internal(
+                f"layout_sheet port {port.name!r} has no SGB group {key}"
+                + ": "
+                + found_text(sorted(groups.get("port_surfaces", {})))
+            )
+        )
+    direction = _direction_tuple(group.get("direction"), port.name)
+    if (
+        group["port_index"] != port.index
+        or group["source_name"] != port.name
+        or group["source_layer"] != port.source_layer
+        or group["target_layer"] != port.target_layer
+        or not all(
+            math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
+            for a, b in zip(direction, port.direction, strict=True)
+        )
+    ):
+        raise ValueError(
+            internal(
+                f"layout_sheet port {port.name!r} does not match SGB-authored identity"
+                + ": "
+                + found_text(
+                    {
+                        "port_index": group["port_index"],
+                        "source_name": group["source_name"],
+                        "source_layer": group["source_layer"],
+                        "target_layer": group["target_layer"],
+                        "direction": direction,
+                    },
+                    {
+                        "port_index": port.index,
+                        "source_name": port.name,
+                        "source_layer": port.source_layer,
+                        "target_layer": port.target_layer,
+                        "direction": port.direction,
+                    },
+                )
+            )
+        )
+    attributes = sorted(int(value) for value in group["attributes"])
+    return _BoundPortGroup(key, group, direction, attributes)
+
+
+def _port_entry(port: LayoutPortBinding, bound: _BoundPortGroup) -> PortEntry:
+    """The index-map entry of one lumped port: its row, its group and the sheet SGB cut for it."""
+    return PortEntry(
+        index=port.index,
+        entry_name=bound.key,
+        attributes=bound.attributes,
+        physical_names=[bound.group["group"]],
+        port_name=port.name,
+        sheet={
+            field: bound.group[field]
+            for field in (
+                "port_sheet_id",
+                "host_entity_ids",
+                "adjacent_volumes",
+                "host_volumes",
+            )
+        },
+    )
 
 
 def _direction_tuple(value: Any, name: str) -> tuple[float, float, float]:
@@ -344,84 +410,129 @@ def _direction_tuple(value: Any, name: str) -> tuple[float, float, float]:
         or not isinstance(value, (list, tuple))
         or len(value) != 3
     ):
-        raise ValueError(f"layout_sheet port {name!r} requires a 3D direction.")
+        raise ValueError(
+            internal(f"layout_sheet port {name!r} requires a 3D direction")
+        )
     direction = tuple(float(item) for item in value)
     if not all(math.isfinite(item) for item in direction):
-        raise ValueError(f"layout_sheet port {name!r} direction must be finite.")
+        raise ValueError(
+            internal(f"layout_sheet port {name!r} direction must be finite")
+        )
     return direction[0], direction[1], direction[2]
 
 
 def _domains_from_solution_volumes(
     groups: Mapping[str, Mapping[str, Any]],
-) -> list[tuple[str, Mapping[str, Any]]]:
-    """Sort solver volumes as deterministic domains."""
-    return sorted(
-        ((name, dict(info)) for name, info in groups.items()), key=lambda item: item[0]
-    )
+) -> dict[str, Mapping[str, Any]]:
+    """The solver volumes by group name, in name order: the order the domains are numbered in."""
+    return {name: dict(groups[name]) for name in sorted(groups)}
 
 
 def _materials_from_solution_volumes(
-    domain_volumes: list[tuple[str, Mapping[str, Any]]],
+    domain_volumes: Mapping[str, Mapping[str, Any]],
     materials: Mapping[str, Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     """Build Palace-domain material rows from explicit material records."""
     if not isinstance(materials, Mapping) or not materials:
         raise ValueError(
-            "stack must include top-level materials mapping for config generation."
+            Declared(
+                "stack must include a non-empty top-level materials mapping for config generation",
+                _WHERE_STACK_MATERIALS,
+            ).refusal(
+                found_text(
+                    materials if not isinstance(materials, Mapping) else dict(materials)
+                )
+            )
         )
 
     material_rows: list[dict[str, Any]] = []
     seen_attributes: set[int] = set()
-    for name, volume in domain_volumes:
+    for name, volume in domain_volumes.items():
         attrs = sorted(int(item) for item in volume["attributes"])
         material_id = optional_string(volume.get("material"))
         if not material_id:
             raise ValueError(
-                f"SGB solution volume {name!r} must define a non-empty material id."
+                Declared(
+                    f"SGB solution volume {name!r} must define a non-empty material id",
+                    _WHERE_STACK_MATERIALS,
+                ).refusal(found_text(volume.get("material")))
             )
-        material = materials.get(material_id)
-        if material is None:
-            raise ValueError(
-                f"SGB solution volume {name!r} references unknown material id {material_id!r}."
-            )
-        if not isinstance(material, Mapping):
-            raise TypeError(f"SGB material record {material_id!r} must be a mapping.")
-        if material.get("kind") not in {"vacuum", "dielectric"}:
-            raise ValueError(
-                f"SGB solution material {material_id!r} must have vacuum or dielectric kind."
-            )
-        permittivity = material.get("permittivity")
-        loss_tangent = material.get("loss_tangent")
-        if (
-            not isinstance(permittivity, Real)
-            or not math.isfinite(float(permittivity))
-            or float(permittivity) <= 0.0
-        ):
-            raise ValueError(
-                f"Material {material_id!r} requires finite positive permittivity."
-            )
-        if (
-            not isinstance(loss_tangent, Real)
-            or not math.isfinite(float(loss_tangent))
-            or float(loss_tangent) < 0.0
-        ):
-            raise ValueError(
-                f"Material {material_id!r} requires finite non-negative loss_tangent."
-            )
+        constants = _dielectric_constants(materials, material_id, name)
         if seen_attributes.intersection(attrs):
             raise ValueError(
-                f"SGB solution volume {name!r} duplicates physical attributes {attrs}."
+                internal(
+                    f"SGB solution volume {name!r} duplicates physical attributes {attrs}"
+                )
             )
         seen_attributes.update(attrs)
         material_rows.append(
             {
                 "Attributes": attrs,
-                "Permittivity": float(permittivity),
-                "LossTan": float(loss_tangent),
+                "Permittivity": constants.permittivity,
+                "LossTan": constants.loss_tangent,
             }
         )
-
     return material_rows
+
+
+class _DielectricConstants(NamedTuple):
+    """The relative permittivity and loss tangent a solution volume's material gives Palace."""
+
+    permittivity: float
+    loss_tangent: float
+
+
+def _dielectric_constants(
+    materials: Mapping[str, Mapping[str, Any]], material_id: str, volume: str
+) -> _DielectricConstants:
+    """Read a solution material's constants, refusing an unknown, non-dielectric or out-of-range record."""
+    material = materials.get(material_id)
+    if material is None:
+        raise ValueError(
+            Declared(
+                f"SGB solution volume {volume!r} references unknown material id {material_id!r}",
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(material_id, sorted(materials)))
+        )
+    if not isinstance(material, Mapping):
+        raise TypeError(
+            Declared(
+                f"SGB material record {material_id!r} must be a mapping",
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(type(material).__name__))
+        )
+    if material.get("kind") not in {"vacuum", "dielectric"}:
+        raise ValueError(
+            Declared(
+                f"SGB solution material {material_id!r} must have vacuum or dielectric kind",
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(material.get("kind")))
+        )
+    permittivity = material.get("permittivity")
+    loss_tangent = material.get("loss_tangent")
+    if (
+        not isinstance(permittivity, Real)
+        or not math.isfinite(float(permittivity))
+        or float(permittivity) <= 0.0
+    ):
+        raise ValueError(
+            Declared(
+                f"Material {material_id!r} requires finite positive permittivity",
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(permittivity))
+        )
+    if (
+        not isinstance(loss_tangent, Real)
+        or not math.isfinite(float(loss_tangent))
+        or float(loss_tangent) < 0.0
+    ):
+        raise ValueError(
+            Declared(
+                f"Material {material_id!r} requires finite non-negative loss_tangent",
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(loss_tangent))
+        )
+    return _DielectricConstants(float(permittivity), float(loss_tangent))
 
 
 def _material_identity(
@@ -429,13 +540,20 @@ def _material_identity(
 ) -> dict[str, str]:
     material_id = volume.get("material")
     if not isinstance(material_id, str) or not material_id:
-        raise ValueError("solution volume must carry one explicit material id.")
+        raise ValueError(
+            Declared(
+                f"solution volume {volume.get('group')!r} must carry one explicit material id",
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(material_id))
+        )
     material = materials.get(material_id)
     if not isinstance(material, Mapping) or material.get("kind") not in {
         "vacuum",
         "dielectric",
     }:
         raise ValueError(
-            f"solution material {material_id!r} must carry vacuum or dielectric kind."
+            Declared(
+                f"solution material {material_id!r}", _WHERE_STACK_MATERIALS
+            ).refusal("must carry vacuum or dielectric kind")
         )
     return {"material_id": material_id, "kind": str(material["kind"])}

@@ -26,7 +26,7 @@ from scgsim.palace.config.config import (
     build_eigenmode_config,
     build_electrostatic_config,
 )
-from scgsim.palace.config.config_models import (
+from scgsim.palace.config.config_records import (
     ConfigInput,
     EigenmodeSettings,
     ElectrostaticSettings,

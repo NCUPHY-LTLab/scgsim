@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, TypedDict
 
 from scgsim.contracts.palace_run_folder import NATIVE_METADATA_NAME, palace_problem
-from scgsim.palace.results.models import ResolvedRunData
-from scgsim.palace.results.observations import as_int, mapping_max, read_optional_json
-from scgsim.palace.results.report_models import AmrPassSnapshot
+from scgsim.palace.reports.plotting import Trace, TraceGroup
+from scgsim.palace.results.artifacts import (
+    as_int,
+    mapping_max,
+    read_optional_json,
+)
+from scgsim.palace.results.inspection_records import AmrPassSnapshot
+from scgsim.palace.results.resolved_records import ResolvedRunData
 
 FREQ_HEADER = "Re{f} (GHz)"
 
@@ -83,9 +88,21 @@ def recorded_durations(palace_payload: dict[str, Any] | None) -> dict[str, float
     }
 
 
+class CostCards(TypedDict, total=False):
+    """The solver sizes, peak memory and parallel resources a report shows; empty when Palace recorded none."""
+
+    problem_degrees_of_freedom: int | None
+    mesh_elements: int | None
+    mpi_size: int | None
+    openmp_threads: int | None
+    peak_memory_megabytes: float | None
+    peak_node_memory_megabytes: float | None
+    git_tag: str | None
+
+
 def cost_cards(
     palace_payload: dict[str, Any] | None, resolved: ResolvedRunData | None
-) -> dict[str, Any]:
+) -> CostCards:
     """Project native solver sizes, memory and parallel resources for readable cost cards."""
     if resolved is not None:
         return {
@@ -138,10 +155,10 @@ def union_mapping_keys(
 def mode_traces(
     passes: Sequence[AmrPassSnapshot],
     getter: Callable[[AmrPassSnapshot], Sequence[float] | None],
-) -> list[tuple[str, list[float | None]]]:
+) -> list[Trace]:
     """Align each mode column across passes while retaining unavailable pass values."""
     mode_count = max((len(getter(pass_) or ()) for pass_ in passes), default=0)
-    traces: list[tuple[str, list[float | None]]] = []
+    traces: list[Trace] = []
     for mode in range(mode_count):
         values = []
         for pass_ in passes:
@@ -150,11 +167,11 @@ def mode_traces(
                 values.append(None)
             else:
                 values.append(column[mode])
-        traces.append((f"Mode {mode + 1}", values))
+        traces.append(Trace(f"Mode {mode + 1}", values))
     return traces
 
 
-def traces_are_finite(traces: Sequence[tuple[str, Sequence[float | None]]]) -> bool:
+def traces_are_finite(traces: Sequence[Trace]) -> bool:
     """Check whether every plotted trace value is available and finite."""
     numbers = [
         value
@@ -166,7 +183,7 @@ def traces_are_finite(traces: Sequence[tuple[str, Sequence[float | None]]]) -> b
 
 
 def native_positive_infinity_q_notice(
-    traces: Sequence[tuple[str, Sequence[float | None]]],
+    traces: Sequence[Trace],
 ) -> str | None:
     """Describe native lossless positive-infinity Q without attempting a finite convergence plot."""
     values = [value for _name, ys in traces for value in ys]
@@ -194,10 +211,10 @@ def native_positive_infinity_q_notice(
 
 
 def delta_traces(
-    traces: Sequence[tuple[str, Sequence[float | None]]],
-) -> list[tuple[str, list[float | None]]]:
+    traces: Sequence[Trace],
+) -> list[Trace]:
     """Compute successive absolute trace differences for the convergence view."""
-    deltas: list[tuple[str, list[float | None]]] = []
+    deltas: list[Trace] = []
     for name, ys in traces:
         series: list[float | None] = []
         previous: float | None = None
@@ -208,13 +225,13 @@ def delta_traces(
                 series.append(abs(value - previous))
             if value is not None:
                 previous = value
-        deltas.append((name, series[1:]))
+        deltas.append(Trace(name, series[1:]))
     return deltas
 
 
 def capacitance_traces(
     passes: Sequence[AmrPassSnapshot],
-) -> list[tuple[str, list[tuple[str, list[float | None]]]]]:
+) -> list[TraceGroup]:
     """Project individual Maxwell coefficients and their diagonal scale in femtofarads."""
     rows = max(
         (
@@ -235,8 +252,8 @@ def capacitance_traces(
     )
     if rows == 0 or cols == 0:
         return []
-    all_traces: list[tuple[str, list[float | None]]] = []
-    per_element: list[tuple[str, list[tuple[str, list[float | None]]]]] = []
+    all_traces: list[Trace] = []
+    per_element: list[TraceGroup] = []
     for row in range(rows):
         for col in range(cols):
             name = f"C[{row + 1}][{col + 1}]"
@@ -247,9 +264,9 @@ def capacitance_traces(
                     values.append(None)
                 else:
                     values.append(matrix[row][col] * 1e15)
-            trace = (name, values)
+            trace = Trace(name, values)
             all_traces.append(trace)
-            per_element.append((name, [trace]))
+            per_element.append(TraceGroup(name, [trace]))
     if len(all_traces) > 9:
-        return [("Maxwell C_ij", all_traces)]
+        return [TraceGroup("Maxwell C_ij", all_traces)]
     return per_element

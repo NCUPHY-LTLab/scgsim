@@ -50,7 +50,7 @@ def test_mesh_refuses_a_model_with_no_vacuum(monkeypatch, tmp_path, simulation):
     output_dir = tmp_path / "run"
     sim = mesh_sim(monkeypatch, simulation, NO_VACUUM_STACK, output_dir)
 
-    with pytest.raises(ValueError, match="the model has no vacuum region") as raised:
+    with pytest.raises(ValueError, match="the model: has no vacuum region") as raised:
         sim.mesh()
 
     assert "sim.set_vacuum_region(...) before mesh()" in str(raised.value)
@@ -80,7 +80,7 @@ def test_input_summary_refuses_a_model_with_no_vacuum(monkeypatch, tmp_path):
     """``input_summary()`` meets the refusal in the preparation it shares with ``mesh()``."""
     sim = mesh_sim(monkeypatch, EigenmodeSim, NO_VACUUM_STACK, tmp_path / "run")
 
-    with pytest.raises(ValueError, match="the model has no vacuum region"):
+    with pytest.raises(ValueError, match="the model: has no vacuum region"):
         sim.input_summary()
 
 
