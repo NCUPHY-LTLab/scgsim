@@ -1,4 +1,4 @@
-"""The installed SCGSim version and the declared Route-A film provenance of a mesh's stack."""
+"""The installed SCGSim version, and the Route A film provenance a mesh's stack declares."""
 
 from __future__ import annotations
 

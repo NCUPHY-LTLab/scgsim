@@ -10,7 +10,7 @@ from scgsim.geometry.source.plan import GeometryPlan, GeometryPlanSnapshot
 _ROOT_ID = "chip"
 
 # The check wraps a layout that has no vacuum of its own in this (x, y, z) padding, as ``set_vacuum_region``
-# takes it: the Human's setting for testing and use (Issue #182).  None in the plane, so the vacuum ends at the
+# takes it (Issue #182).  None in the plane, so the vacuum ends at the
 # layout's own planar extent, and 1000 um below and above, so the metal has air above it to band.
 DRC_VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
 
