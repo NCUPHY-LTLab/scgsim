@@ -4,7 +4,7 @@
 
 ## Minimal call
 
-This block resolves the retained saved-field solution and parses its matching EPR specification before calling `analyze_epr`. Replace the example directory with the returned run directory for your study.
+This block resolves the retained saved-field solution and parses its matching EPR specification before calling `analyze_epr`. Replace the example directory with the returned run folder for your study.
 
 ```python
 import json

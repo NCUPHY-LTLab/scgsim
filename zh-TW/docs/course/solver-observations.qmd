@@ -60,7 +60,7 @@ from pathlib import Path
 from scgsim.aedt import parse_aedt_spec
 from scgsim.visualization import inspect_aedt_geometry
 
-native_run_dir = Path.cwd()  # Start this session in the prepared-only run directory.
+native_run_dir = Path.cwd()  # Start this session in the prepared-only run folder.
 native_spec = parse_aedt_spec(json.loads(
     (native_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
 ))

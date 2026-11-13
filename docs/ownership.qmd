@@ -39,7 +39,7 @@ owners.
 | `scgsim.palace.source` | The geometry request: a bound plan's ports, vacuum region and Surface-EPR specs prepared as the input of the geometry build | Meshing, `config.json` or solver state |
 | `scgsim.palace.mesh` | The SGB build and meshing call for a run, group lowering to solver attributes, and native mesh summaries | Result receipt custody or physical convergence judgments |
 | `scgsim.palace.config` | `config.json` and the index map built from the mesh's physical groups, ports or terminals, materials and numerical controls | Meshing or result interpretation |
-| `scgsim.palace.run` | Manual handoff packages and standalone host receipt recording | Automatic solver submission or result interpretation |
+| `scgsim.palace.run` | Manual handoffs (the run script, metadata and archive of a run folder) and standalone host receipt recording | Automatic solver submission or result interpretation |
 | `scgsim.palace.results` | Returned artifact/custody validation, result data, and detached EPR | Solver execution or plotting state |
 | `scgsim.palace.reports` | Palace trust, physics and cost projections and report figures | A common cross-solver physical quantity model |
 | `scgsim.aedt.specs` | Canonical request and prepared-geometry declarations, shared electrical records, and explicit parser dispatch | Runtime/Desktop state or Q3D input-v1/v2 |

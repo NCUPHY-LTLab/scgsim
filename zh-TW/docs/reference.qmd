@@ -24,7 +24,7 @@ sidebar: contract
 
 ## 結果與報表 {#results-reports}
 
-[報表契約](report-model.qmd#common-envelope)說明結果識別、可用性與呈現方式。[回收結果教學](course/returned-results.qmd#interpret-for-scq-use)示範如何依預定用途讀取完整套件。
+[報表契約](report-model.qmd#common-envelope)說明結果識別、可用性與呈現方式。[回收結果教學](course/returned-results.qmd#interpret-for-scq-use)示範如何依預定用途讀取完成的執行資料夾。
 
 ## 儲存場與離線損耗 {#saved-fields-offline-loss}
 

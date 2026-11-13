@@ -19,7 +19,7 @@ SCGSim 是獨立的下游工具套件，不是官方 gsim。它提供嚴格的�
 2. 數值資料與模擬成本／資源基準；
 3. 可用的求解器專屬物理量。
 
-`inspect_run_trustworthiness()` 支援完成、失敗及部分回傳套件。它保留紀錄的憑證狀態，可揭露最新可讀資料，但不將未完成執行提升為完成。嚴格的 `resolve_palace_result(..., expected_handoff_id=...)` 路徑只接受交接、憑證、求解器及產物雜湊均驗證通過的完成套件。
+`inspect_run_trustworthiness()` 支援完成、失敗及只回傳一部分的執行資料夾。它保留紀錄的憑證狀態，可揭露最新可讀資料，但不將未完成執行提升為完成。嚴格的 `resolve_palace_result(..., expected_handoff_id=...)` 路徑只接受交接、憑證、求解器及產物雜湊均驗證通過的完成執行資料夾。
 
 AEDT `ResolvedRun.show_all_results()` 的順序為身分、數值資料、基準、物理量，最後是詳細資料。身分使用紀錄的專案、後端、設定、要求模態、實際最終迭代及完成狀態。正規相對憑證路徑及產物雜湊只出現在詳細資料；不顯示主機絕對路徑。例如 `resolved.show_all_results(show_details=False, theme="light")` 會收合原始來源與長表格；`show_details=True` 展開它們，不改變結果選取。若 Plotly 不可用，HTML 表格仍可使用，並會標示不可用的圖形。
 
@@ -61,13 +61,13 @@ AEDT `ResolvedRun` 以 `epr_result()` 提供綁定的 EPR 紀錄，以 `show_all
 
 顯示的逆 Q 小計僅包含已知、未遮罩的基準表面項。未知基準損耗計為未知；要求的遮罩邊距是替代檢視，不加入小計。未評估的側壁能量維持標示為未計算。圖形呈現可用資料，不宣稱裝置總損耗或壽命。
 
-從原始執行套件解析的 Palace 與 AEDT 物理量，仍綁定至各自適用的憑證、產物雜湊、交接及求解器身分。獨立 Palace EPR 結果保留原始產物身分及雜湊參照，但這些參照不驗證該獨立 JSON 本身。呈現不弱化來源綁定，也不宣稱數值收斂或跨求解器一致。
+從原始執行資料夾解析的 Palace 與 AEDT 物理量，仍綁定至各自適用的憑證、產物雜湊、交接及求解器身分。獨立 Palace EPR 結果保留原始產物身分及雜湊參照，但這些參照不驗證該獨立 JSON 本身。呈現不弱化來源綁定，也不宣稱數值收斂或跨求解器一致。
 
 僅對 Palace，報告保留原生本徵模態 `eig.csv` 的 `Q` 欄位中正無窮大，並明確標為**原生回報的無窮大 Q**。該值無法提供有限 Q 檢視；報告不推論物理無損模型，也不以有限數字或零取代。其他有效頻率／能量資料不僅因此 Q 值而被拒絕。[Palace 原生 Q 契約](specs/palace-eigenmode.qmd#native-eigenmode-q) 負責限縮的原始值允許範圍，以及維持不變的其他欄位／NaN／負無窮大政策。EPR 正規化及未知損耗解讀維持分開。
 
 ## Palace Surface EPR 的邊距列 {#palace-margin-rows}
 
-既有的檢查與嚴格解析區分，也適用於 Palace 邊距列。邊距列是涵蓋 SGB 在該邊距及更外側切出之各帶的 `Dielectric` 列，因此和基準列放在同一張 `surface-Q.csv` 表。`inspect_run_trustworthiness()` 可檢查完成、失敗或部分套件，並將不可用的邊距資料標為不可用，不改變憑證狀態。每個來源把它的邊距列當成一個全有或全無的快照讀取：若其表格無法讀取，或與索引映射不符，該來源就沒有邊距快照。對要求表面列的執行進行嚴格完成解析時，需要同一必要結果來源中已封存的 `surface-Q.csv`；缺少檔案會阻止嚴格解析，既有憑證或產物 SHA-256 不符仍為致命錯誤。
+既有的檢查與嚴格解析區分，也適用於 Palace 邊距列。邊距列是涵蓋 SGB 在該邊距及更外側切出之各帶的 `Dielectric` 列，因此和基準列放在同一張 `surface-Q.csv` 表。`inspect_run_trustworthiness()` 可檢查完成、失敗或只回傳一部分的執行資料夾，並將不可用的邊距資料標為不可用，不改變憑證狀態。每個來源把它的邊距列當成一個全有或全無的快照讀取：若其表格無法讀取，或與索引映射不符，該來源就沒有邊距快照。對要求表面列的執行進行嚴格完成解析時，需要同一必要結果來源中已封存的 `surface-Q.csv`；缺少檔案會阻止嚴格解析，既有憑證或產物 SHA-256 不符仍為致命錯誤。
 
 `PhysicsQuantitiesReport.snapshots` 保持只含基準的介面。型別化的 `PhysicsQuantitiesReport.margin_snapshots` 提供 `SurfaceMarginEprSeriesSnapshot` 值，每個值含 `SurfaceMarginEprRecord` 資料列，記錄介面、邊距值（`margin_um`）與序號（`margin_index`）、所屬基準列（`baseline_index`）、涵蓋的帶、其 entity 與 Net、模態或激發、細化迭代、原生索引及來源身分。每個邊距列都是其基準列的替代評估之一；重複要求的邊距仍可分別追溯，不是損耗總量中的重複貢獻。
 

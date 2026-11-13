@@ -69,7 +69,7 @@ configure model -> inspect input summary -> prepare handoff
 ```
 
 For Palace, retain `handoff.handoff_id` in preparation-side notes outside the
-transferred package. After the full returned run directory is retrieved,
+transferred package. After the full returned run folder is retrieved,
 `resolve_palace_result(run_dir, expected_handoff_id=...)` checks it against
 that independently retained identity before showing results. Do not learn the
 expected identity from files that arrived with the returned package.
@@ -89,12 +89,12 @@ operation sequence; the [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-
 defines its package and completion requirements. Copying only an EPR JSON or
 frequency export does not replace the full return.
 
-For the direct AEDT path, transfer the prepared run directory to the AEDT host
-and retrieve the complete returned run directory.
+For the direct AEDT path, transfer the prepared run folder to the AEDT host
+and retrieve the complete returned run folder.
 `resolve_results(run_dir)` verifies the receipt-bound artifacts;
 `ResolvedRun.show_all_results()` displays the verified primary, benchmark, and
 requested EPR evidence. Copying only an EPR JSON file is not a substitute for
-resolving the returned package.
+resolving the returned run folder.
 
 External gdsfactory/cloud execution is unsupported and is never a fallback.
 Palace preparation does not silently submit a scheduler job or open AEDT. The

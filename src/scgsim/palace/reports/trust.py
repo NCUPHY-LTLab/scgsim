@@ -318,7 +318,7 @@ class PalaceTrustReport:
         )
         return (
             "<section><h3>Run Identity</h3>"
-            "<p style='opacity:0.75;margin-top:0'>Package folder and solver identity. "
+            "<p style='opacity:0.75;margin-top:0'>Run folder and solver identity. "
             "This is not a physics result.</p>"
             f"<div style='display:flex;flex-wrap:wrap'>{items}</div>"
             f"{self._run_state_html()}</section>"
@@ -583,7 +583,7 @@ class PalaceTrustReport:
         if not labels:
             return (
                 "<p style='opacity:0.75'>Palace elapsed-time timers are unavailable "
-                "in this package.</p>"
+                "in this run folder.</p>"
             )
         tokens = self._tokens()
         go = plotly()
@@ -734,7 +734,7 @@ class PalaceTrustReport:
         return (
             "<section><h3>Provenance</h3>"
             "<p style='opacity:0.75;margin-top:0'>Exact source, Palace, input, and "
-            "returned-run identities recorded by the handoff package.</p>"
+            "returned-run identities recorded in the run folder.</p>"
             f"<pre style='white-space:pre-wrap'>{payload}</pre></section>"
         )
 

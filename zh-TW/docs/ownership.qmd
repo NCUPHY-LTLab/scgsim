@@ -28,7 +28,7 @@ SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域
 | `scgsim.palace.source` | 幾何請求：把綁定 plan 的埠、真空區域與 Surface-EPR 規格準備成幾何建置的輸入 | 網格化、`config.json` 或求解器狀態 |
 | `scgsim.palace.mesh` | 一次執行的 SGB 建置與網格化呼叫、把群組降階為求解器屬性，以及原生網格摘要 | 結果收據保管或物理收斂判定 |
 | `scgsim.palace.config` | 依網格的物理群組、埠或端子、材料與數值控制建立 `config.json` 與索引對照 | 網格化或結果解讀 |
-| `scgsim.palace.run` | 手動交接套件及獨立主機收據記錄 | 自動提交求解器或解讀結果 |
+| `scgsim.palace.run` | 手動交接（執行資料夾的執行腳本、中繼資料與封存檔）及獨立主機收據記錄 | 自動提交求解器或解讀結果 |
 | `scgsim.palace.results` | 回傳產物／保管驗證、結果資料及脫離原物件的 EPR | 求解器執行或繪圖狀態 |
 | `scgsim.palace.reports` | Palace 信任度、物理與成本投影，以及報告圖表 | 共用的跨求解器物理量模型 |
 | `scgsim.aedt.specs` | 標準請求與已準備幾何宣告、共用電性記錄及明確解析器派送 | 執行階段／Desktop 狀態，或 Q3D 輸入 v1／v2 |

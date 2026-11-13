@@ -15,7 +15,7 @@ to disagree. It needs the [visualization extra](installation.qmd).
 ## Palace: inspect the mesh that will be transferred
 
 After the Palace lesson's `mesh()` and `write_config()` calls, bind the actual
-run directory. The preview reads the mesh tags, manifest and index mapping;
+run folder. The preview reads the mesh tags, manifest and index mapping;
 it does not infer semantic assignment from colors or object names.
 
 ```python
@@ -88,14 +88,14 @@ python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execut
 ```
 
 Use the handoff's actual metadata path (`handoff.metadata_path`), relative to the
-prepared run directory as in the command above. This operation requires the
+prepared run folder as in the command above. This operation requires the
 native runtime, builds and verifies the EPR model, saves and releases Desktop,
 and records `native_preparation_only` with `solver_invoked=false`. It is not a
 completed solve and it consumes the prepared run's execution state. Prepare a
 **separate new handoff** for the later solve; do not assume the prepared-only
 receipt can be executed again as pristine input.
 
-Inspect the sealed run directory; its bound spec supplies the requested AEDT
+Inspect the sealed run folder; its bound spec supplies the requested AEDT
 version, so the preview does not accept a separate version override:
 
 ```python
@@ -104,7 +104,7 @@ from pathlib import Path
 from scgsim.aedt import parse_aedt_spec
 from scgsim.visualization import inspect_aedt_geometry
 
-native_run_dir = Path.cwd()  # Start this session in the prepared-only run directory.
+native_run_dir = Path.cwd()  # Start this session in the prepared-only run folder.
 native_spec = parse_aedt_spec(json.loads(
     (native_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
 ))
@@ -118,7 +118,7 @@ preview.show_boundaries()
 ```
 
 `project_path` above identifies the actual saved `.aedt` file for reference.
-Passing the sealed run directory binds preview readback to its recorded spec
+Passing the sealed run folder binds preview readback to its recorded spec
 and opens native AEDT; Surface-EPR or mesh views can remain unavailable. If you
 instead pass `project_path` directly, supply its design and an explicit
 `aedt_version` matching the target Desktop. It does not turn a screenshot into a

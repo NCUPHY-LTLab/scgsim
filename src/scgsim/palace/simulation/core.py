@@ -526,7 +526,7 @@ class PalaceSimulation(ABC):
         setup_commands: tuple[str, ...] = (),
         petsc_options: tuple[str, ...] = (),
     ) -> HandoffPlan:
-        """Package the current mesh and config for explicit manual execution.
+        """Write the run script, metadata and ``.tar.gz`` archive that hand the run folder to a manual Palace run.
 
         Raises:
             ValueError: ``write_config()`` has not written the config of the current mesh, or a handoff
