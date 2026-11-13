@@ -1,5 +1,5 @@
 """Views of a sidecar that readers need and the file stores only once: anything by native tag, the members of
-each group, and the orders of the lists v2 wrote.
+each group, and the order in which its lists are iterated.
 
 Owns the computations every reader shares, so no reader rebuilds them its own way.  The tables hold each fact
 once (a face names its group, an edge its vertices); a view computes the other direction or order from them:

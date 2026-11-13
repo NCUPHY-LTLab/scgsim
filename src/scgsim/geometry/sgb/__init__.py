@@ -1,11 +1,16 @@
 """Semantic geometry builder (SGB) core: the prism-based, Boolean-free pipeline.
 
 The package derives a complete conformal solid model from prisms (a planar
-footprint extruded over a Z interval) before any CAD kernel is involved.  It sits
-beside the older ``compiler``, ``construction`` and ``planning`` packages; nothing
-in those packages imports it and it imports nothing from them.  Its inputs are the
-stable outputs of the source and physical-interpretation stages: the effective
+footprint extruded over a Z interval) before any CAD kernel is involved.  Its inputs
+are the stable outputs of the source and physical-interpretation stages: the effective
 ``GeometryBuildInput``, the ``RepresentationContext`` and the declared grid.
+
+The Palace mesh stage and ``geometry.surface_epr`` (which builds the geometry with the
+Surface-EPR bands its specs ask for) call it through :func:`build_sgb_geometry`.  The
+junction partition of ``geometry.planning.junction_planning`` reads its boundary binder,
+``prisms.bound_rings``.  SGB imports nothing from the ``geometry.planning`` modules that
+derive domains, surfaces, contacts, topology, tags or the junction partition; the
+partition's record reaches it through the input.
 
 The folders are the stages of the build, in the order the work flows; each folder's
 docstring says what comes in, what goes out and which stage is next.  ``exact`` is
@@ -29,7 +34,7 @@ the vocabulary all of them share:
 * ``output``       S10: numbering of the shapes in ``TopExp::MapShapes`` order and the direct,
                    byte-deterministic BREP/XAO writer (no CAD kernel, no Boolean); the versioned JSON
                    sidecar ``scgsim.sgb.sidecar.v3`` and its JSON Schema; the AEDT STEP export (OCP)
-* ``section``      the 2D section model of a validated model (waits for a paused feature)
+* ``section``      the 2D section model of a validated model, cut along a line
 
 Beside them: ``model`` runs the stages and returns the validated model
 :func:`~scgsim.geometry.sgb.model.build_conformal_model`, ``build`` is the public entry

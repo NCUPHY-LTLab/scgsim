@@ -1,8 +1,7 @@
 """Route A, B and C as labelling policies (design brief sections 8 and 14, stage S7).
 
-Owns the decisions that differ between routes and nothing else.  The acceptance rules follow
-today's contract, ``planning.representation.validate_selected_route`` with
-``models.common.ROUTE_ALLOWED_REPRESENTATIONS`` (Route A: ``surface_sheet`` and
+Owns the decisions that differ between routes and nothing else.  The representation each route
+accepts is (Route A: ``surface_sheet`` and
 ``cutout_boundary_shell``; Route B: ``cutout_boundary_shell``; Route C: ``material_volume``):
 
 * **Route A** -- face-metal *films* are zero-thickness sheets and the finite *bodies* (bumps,
@@ -10,16 +9,16 @@ today's contract, ``planning.representation.validate_selected_route`` with
   a level becomes a PEC face between the volumes below and above.  A conductor whose physical
   declaration is a film (``stack_film`` or ``local_film``) and that is still finite after the
   physical interpretation is rejected: the selected profile did not collapse it.  A finite
-  conductor with a ``finite_volume`` declaration -- or with no declaration at all, as today's
+  conductor with a ``finite_volume`` declaration -- or with no declaration at all, as the
   ``cutout_boundary_shell`` representation allows -- is accepted.
 * **Route B** -- every conductor is a finite prism whose volume is *excluded* from the emitted
   model; its boundary faces become faces of the neighbouring volumes.  Conductor sheets are
-  rejected (today's ``cutout_boundary_shell`` is the only representation).  Lumped-port sheets
+  rejected (``cutout_boundary_shell`` is the only representation).  Lumped-port sheets
   are accepted: a port lies on the support plane of its hosts (the surface under the metal), so
   it is a face of the interface there, never a free face.
 * **Route C** -- every conductor is a finite prism whose volume is *retained and meshed*:
   conductor-dielectric and conductor-vacuum interfaces are shared faces, the interior is a
-  solution domain (finite conductivity today, superconducting material models later).  Conductor
+  solution domain (finite conductivity now, superconducting material models later).  Conductor
   sheets are rejected.  Lumped-port sheets are accepted and represented as in Route B: a face of
   the interface in the gap at the support plane whose edges are shared with the conductor walls.
 
