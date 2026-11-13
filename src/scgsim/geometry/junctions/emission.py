@@ -35,6 +35,7 @@ from scgsim.geometry.models.junctions import (
     JUNCTION_END_PIECE_PART,
     junction_net_id,
 )
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
 
 
 def initialize_registry(state: JunctionModel) -> None:
@@ -331,7 +332,7 @@ def check_emitted_partitions(state: JunctionModel) -> None:
                 ]
                 if not (
                     fraction_boundary_contact([piece], arms)
-                    or fraction_area_overlap([piece], arms)
+                    or fraction_area_overlap(state.scope, [piece], arms)
                 ):
                     raise ValueError(
                         "final model end lacks positive source-arm contact"
@@ -360,9 +361,10 @@ def realized_on_grid(build_input, result, junctions, records):
     A failure keeps the junction and its grid in a note.
     """
     context = geometry_grid_context(build_input)
-    from scgsim.geometry.source.grid import apply_geometry_grid  # noqa: PLC0415 -- the source-stage grid realization loads only when a junction partition is realized.
-
-    result = _straight_end_pieces(apply_geometry_grid(result, context), records)
+    # The emitted input was never read from a layout here, so it brings no source audits.
+    result = _straight_end_pieces(
+        apply_geometry_grid(result, context, source_audits=()), records
+    )
     actual = {p.polygon_id: p for p in result.polygons}
     for junction in junctions:
         record = records[junction.junction_id]

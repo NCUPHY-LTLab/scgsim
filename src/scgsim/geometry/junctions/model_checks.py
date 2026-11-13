@@ -9,8 +9,9 @@ from itertools import pairwise
 
 import gdstk
 
-from scgsim.geometry.grid.grid import polygon_boolean
+from scgsim.geometry.grid.booleans import polygon_boolean
 from scgsim.geometry.grid.planar_loops import cancel_reversed_planar_edges
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.junctions.core import PRECISION_UM
 from scgsim.geometry.junctions.exact_geometry import covered, on, region_edges, section
 
@@ -41,8 +42,8 @@ def fraction_boundary_contact(left, right):
     )
 
 
-def fraction_overlap(left, right):
-    """The overlap of two region collections (rings of model points), as Boolean polygons."""
+def fraction_overlap(scope: GridScope, left, right):
+    """The overlap of two region collections (rings of model points), as Boolean polygons in ``scope``."""
 
     def native(regions):
         polygons = []
@@ -52,19 +53,22 @@ def fraction_overlap(left, right):
                 for ring in region
             )
             polygons.extend(
-                polygon_boolean([outer], holes, "not", precision=PRECISION_UM) or ()
+                polygon_boolean(scope, [outer], holes, "not", precision=PRECISION_UM)
+                or ()
             )
         return polygons
 
     return tuple(
-        polygon_boolean(native(left), native(right), "and", precision=PRECISION_UM)
+        polygon_boolean(
+            scope, native(left), native(right), "and", precision=PRECISION_UM
+        )
         or ()
     )
 
 
-def fraction_area_overlap(left, right):
+def fraction_area_overlap(scope: GridScope, left, right):
     """Test whether emitted regions overlap over a positive area (an end piece on its terminal)."""
-    return bool(fraction_overlap(left, right))
+    return bool(fraction_overlap(scope, left, right))
 
 
 def emitted_partition_coverage(free, parts):

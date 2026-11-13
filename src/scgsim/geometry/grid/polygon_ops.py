@@ -8,24 +8,34 @@ recipe and occurrence selectors.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from math import degrees, isfinite
 from typing import Any, cast
 
-from scgsim.geometry.grid.grid import (
+from scgsim.geometry.grid.booleans import (
     FIX_EMPTY,
-    SOURCE_INTENT,
-    bound_grid_context,
-    frame_point,
     polygon_boolean,
-    source_place,
-    source_refusal,
     split_gdstk_cutline_loop,
 )
 from scgsim.geometry.grid.grid_regions import GridPoint, canonical_grid_point
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec
 
 
-def _fused_boolean_candidates(candidates):
+@dataclass(frozen=True)
+class FusedComponent:
+    """One connected region of a layer's drawn polygons, as the selectors pick it.
+
+    ``source_indexes`` are the positions of the drawn polygons it fuses, and
+    ``source_area_um2`` the sum of their own areas.
+    """
+
+    polygon: LayoutPolygonSpec
+    source_indexes: tuple[int, ...]
+    source_area_um2: float
+
+
+def _fused_boolean_candidates(scope: GridScope, candidates):
     """Conservative world-frame broad phase for the expensive overlap test.
 
     Raw shared-edge recognition still runs in original local coordinates for
@@ -36,10 +46,10 @@ def _fused_boolean_candidates(candidates):
     # Native near-vertex insertion is within grid/100 and node rounding within
     # half a grid step. A full step on EACH bound is a conservative candidate
     # envelope, never an overlap/contact acceptance rule.
-    padding = 0.0 if SOURCE_INTENT.get() else bound_grid_context().grid_size_um
+    padding = 0.0 if scope.reference else scope.bound_grid().grid_size_um
     envelopes = []
     for polygon in candidates:
-        points = tuple(frame_point(tuple(map(float, p))) for p in polygon.points)
+        points = tuple(scope.to_layout(tuple(map(float, p))) for p in polygon.points)
         if not points:
             return None
         # Each comprehension enumerates exactly the X and Y axes.
@@ -63,11 +73,11 @@ def _fused_boolean_candidates(candidates):
 
 
 def fused_gdstk_components(
-    candidates: Sequence[Any],
-) -> tuple[tuple[LayoutPolygonSpec, tuple[int, ...], float], ...]:
+    scope: GridScope, candidates: Sequence[Any]
+) -> tuple[FusedComponent, ...]:
     """Return stable occupied components for explicit source selectors."""
 
-    overlap_candidates = _fused_boolean_candidates(candidates)
+    overlap_candidates = _fused_boolean_candidates(scope, candidates)
     parents = list(range(len(candidates)))
 
     def find(index: int) -> int:
@@ -86,33 +96,38 @@ def fused_gdstk_components(
             overlap = ()
             if overlap_candidates is None or other_index in overlap_candidates[index]:
                 overlap = polygon_boolean(
+                    scope,
                     (polygon,),
                     (other,),
                     "and",
-                    precision=bound_grid_context().grid_size_um,
+                    precision=scope.bound_grid().grid_size_um,
                 )
             if overlap or _rings_share_edge(
-                ring_from_gdstk_polygon(polygon), ring_from_gdstk_polygon(other)
+                ring_from_gdstk_polygon(scope, polygon),
+                ring_from_gdstk_polygon(scope, other),
             ):
                 union(index, other_index)
 
     members: dict[int, list[int]] = {}
     for index in range(len(candidates)):
         members.setdefault(find(index), []).append(index)
-    result: list[tuple[LayoutPolygonSpec, tuple[int, ...], float]] = []
+    result: list[FusedComponent] = []
     for indexes in members.values():
         regions = polygon_boolean(
+            scope,
             tuple(candidates[index] for index in indexes),
             (),
             "or",
-            precision=bound_grid_context().grid_size_um,
+            precision=scope.bound_grid().grid_size_um,
         )
         if not regions or len(regions) != 1:
             raise ValueError("fused selector component must lower to one polygon")
-        outer, holes = split_gdstk_cutline_loop(ring_from_gdstk_polygon(regions[0]))
+        outer, holes = split_gdstk_cutline_loop(
+            scope, ring_from_gdstk_polygon(scope, regions[0])
+        )
         source_indexes = tuple(indexes)
         result.append(
-            (
+            FusedComponent(
                 LayoutPolygonSpec(
                     polygon_id="",
                     layer="",
@@ -126,10 +141,10 @@ def fused_gdstk_components(
     return tuple(
         sorted(
             result,
-            key=lambda record: (
-                min(point[0] for point in record[0].exterior),
-                min(point[1] for point in record[0].exterior),
-                record[2],
+            key=lambda component: (
+                min(point[0] for point in component.polygon.exterior),
+                min(point[1] for point in component.polygon.exterior),
+                component.source_area_um2,
             ),
         )
     )
@@ -248,16 +263,18 @@ def without_repeated_vertices(polygons: Iterable[Any]) -> list[Any]:
     return result
 
 
-def ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
-    """Read an open coordinate ring from a GDS polygon."""
+def ring_from_gdstk_polygon(
+    scope: GridScope, polygon: Any
+) -> tuple[tuple[float, float], ...]:
+    """Read an open coordinate ring from a GDS polygon; ``scope`` locates and names a refusal."""
     points = tuple((float(x), float(y)) for x, y in polygon.points)
     if len(points) > 1 and points[0] == points[-1]:
         points = points[:-1]
     if len(points) < 3:
         raise ValueError(
-            source_refusal(
+            scope.refusal(
                 "GDS polygon requires at least 3 unique points",
-                [f"the polygon at {source_place(points)} has only {len(points)} points"]
+                [f"the polygon at {scope.place(points)} has only {len(points)} points"]
                 if points
                 else [],
                 FIX_EMPTY,
@@ -266,7 +283,7 @@ def ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
     return points
 
 
-def realized_on_lattice(polygons: Sequence[Any]) -> Sequence[Any]:
+def realized_on_lattice(scope: GridScope, polygons: Sequence[Any]) -> Sequence[Any]:
     """Round a source recipe's flattened polygons to the bound grid when realizing it.
 
     gdstk applies a reference's rotation in floating point, so a rotated
@@ -285,21 +302,21 @@ def realized_on_lattice(polygons: Sequence[Any]) -> Sequence[Any]:
     recipe keeps working in local coordinates; rounding the local point instead
     would land on a different assembly node whenever the frame rotates.
     """
-    if SOURCE_INTENT.get():
+    if scope.reference:
         return polygons
-    context = bound_grid_context()
+    context = scope.bound_grid()
     import gdstk  # noqa: PLC0415 -- the optional native GDS kernel, needed only when realizing a bound source recipe
 
     def on_lattice(polygon: Any) -> list[tuple[float, float]]:
         nodes: list[GridPoint] = []
         for point in polygon.points:
-            node = canonical_grid_point(frame_point(point), context.grid_size_um)
+            node = canonical_grid_point(scope.to_layout(point), context.grid_size_um)
             # Two points that round to one node become one vertex, not a zero-length edge.
             if not nodes or nodes[-1] != node:
                 nodes.append(node)
         if len(nodes) > 1 and nodes[0] == nodes[-1]:
             nodes.pop()
-        local = (frame_point(node, inverse=True) for node in nodes)
+        local = (scope.from_layout(node) for node in nodes)
         return [(x, y) for x, y in local]
 
     rounded = (
@@ -309,13 +326,15 @@ def realized_on_lattice(polygons: Sequence[Any]) -> Sequence[Any]:
     return tuple(polygon for polygon in rounded if polygon.area() > 0)
 
 
-def layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
-    """Convert a layout polygon and its holes into GDS polygon pieces."""
+def layout_polygon_region(
+    scope: GridScope, gdstk: Any, polygon: LayoutPolygonSpec
+) -> tuple[Any, ...]:
+    """Convert a layout polygon and its holes into GDS polygon pieces, subtracting in ``scope``."""
     outer = gdstk.Polygon(polygon.exterior)
     holes = tuple(gdstk.Polygon(hole) for hole in polygon.holes)
     if not holes:
         return (outer,)
-    return tuple(polygon_boolean((outer,), holes, "not", precision=1e-9) or ())
+    return tuple(polygon_boolean(scope, (outer,), holes, "not", precision=1e-9) or ())
 
 
 def _ring_edges(
@@ -406,6 +425,7 @@ FIX_SELECTOR = (
 
 
 def selector_place(
+    scope: GridScope,
     point: Sequence[float],
     matched: Sequence[Sequence[Sequence[float]]],
     drawn: Sequence[Sequence[Sequence[float]]],
@@ -415,15 +435,15 @@ def selector_place(
     """Where a selector point lies in the layout and which drawn regions hold it, for its refusal.
 
     ``matched`` and ``drawn`` are the outer rings of the regions that hold the point and of
-    every region on the layer, in the polygon frame (``source_place`` maps them to the layout).
+    every region on the layer, in the polygon frame (``scope`` maps them to the layout).
     """
-    at = source_place([point])
+    at = scope.place([point])
     if matched:
-        boxes = ", ".join(source_place(ring) for ring in matched)
+        boxes = ", ".join(scope.place(ring) for ring in matched)
         return f"{what} lies at {at}, inside each of the regions at {boxes}"
     if not drawn:
         return f"{what} lies at {at}, and nothing is drawn on the layer"
-    extent = source_place([p for ring in drawn for p in ring])
+    extent = scope.place([p for ring in drawn for p in ring])
     return (
         f"{what} lies at {at}, outside every region drawn on the layer, "
         f"which lie within {extent}"

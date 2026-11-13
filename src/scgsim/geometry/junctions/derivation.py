@@ -6,7 +6,6 @@ import json
 import math
 from dataclasses import replace
 
-from scgsim.geometry.grid.grid import with_input_grid
 from scgsim.geometry.junctions.lattice import drawn_exterior, lattice_rectangle
 from scgsim.geometry.junctions.partition import partition_junctions
 from scgsim.geometry.junctions.terminal import junction_terminal_line
@@ -14,9 +13,11 @@ from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.junctions import JunctionGeometry, RectangularJunctionSpec
 
 
-@with_input_grid
 def derive_rectangular_junctions(build_input):
     """Derive once after the single physical interpretation, before any surfaces."""
+    geometry_grid_context(
+        build_input
+    )  # an input without a declared grid is refused first
     requests = tuple(
         (
             RectangularJunctionSpec.from_payload(item)

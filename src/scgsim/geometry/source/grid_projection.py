@@ -20,21 +20,16 @@ from typing import (
     cast,
 )
 
-from scgsim.geometry.grid.grid import (
-    GridArrangement,
-    GridOperand,
-    SourceGridAudit,
-    SourcePolygonAudit,
-    build_grid_arrangement,
-    geometry_grid_scope,
-    regions,
-    source_grid_audits,
-)
+from scgsim.geometry.grid.arrangement import build_grid_arrangement
 from scgsim.geometry.grid.grid_regions import (
     FIX_CONTACT,
+    GridArrangement,
+    GridOperand,
     contact_changes,
     grid_change_message,
+    regions,
 )
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.common import PolygonRing
 from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
 from scgsim.geometry.models.input import (
@@ -42,12 +37,14 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.source.ports import (
+    PortSheetHost,
     is_port_sheet_host_entity,
     port_sheet_overlaps,
     port_sheet_target_layer_matches,
 )
+from scgsim.geometry.source.recipes import SourceGridAudit, SourcePolygonAudit
 from scgsim.semantics.route_a import geometry_z_range, same_z
 
 if TYPE_CHECKING:
@@ -74,10 +71,15 @@ class _PolygonPreimage:
 
 @dataclass(frozen=True)
 class _SourcePolygonInputs:
-    """Entity ownership and physical source preimages for layout polygons."""
+    """Entity ownership and physical source preimages for layout polygons.
+
+    ``recorded_audits`` are the source audits the projected input records: the ones
+    handed to this projection, else the ones the input already carries.
+    """
 
     owners: Mapping[str, SemanticEntitySpec]
     preimages: Mapping[str, _PolygonPreimage]
+    recorded_audits: Sequence[SourceGridAudit]
 
 
 @dataclass(frozen=True)
@@ -137,12 +139,76 @@ def _oriented_like(ring: Sequence[Sequence[float]], source: PolygonRing) -> Poly
     return source_ring
 
 
+def _oriented_region(
+    region: tuple[Sequence[Sequence[float]], Sequence[Sequence[Sequence[float]]]],
+    source_exterior: PolygonRing,
+) -> tuple[PolygonRing, tuple[PolygonRing, ...]]:
+    """A gridded region turned like its source: the exterior as the source's, each hole against it."""
+    exterior, holes = region
+    oriented_exterior = _oriented_like(exterior, source_exterior)
+    oriented_holes = tuple(
+        _oriented_like(ring, tuple(reversed(oriented_exterior))) for ring in holes
+    )
+    return oriented_exterior, oriented_holes
+
+
+def _port_operand_id(port: PortSheetRegionRecord) -> str:
+    """The grid operand id of a port sheet, apart from every layout polygon id."""
+    return "PORT::" + port.port_sheet_id
+
+
 def apply_geometry_grid(
-    build_input: GeometryBuildInput, context: GeometryGridContext
+    build_input: GeometryBuildInput,
+    context: GeometryGridContext,
+    *,
+    source_audits: tuple[SourceGridAudit, ...] = (),
 ) -> GeometryBuildInput:
-    """Project one complete source input inside its grid audit scope."""
-    with geometry_grid_scope(context):
-        return _apply_geometry_grid(build_input, context)
+    """Project one complete source input onto ``context``, retaining each raw input role.
+
+    ``source_audits`` are the audits of the declared source recipes that read this
+    input from its layout, in reading order; an input projected again on its own
+    grid has none and keeps the audits it carries.
+    """
+    bound_context = _validate_bound_context(build_input, context)
+    source = _source_polygon_inputs(
+        build_input,
+        source_audits,
+        use_source_preimage=bound_context is None or bool(source_audits),
+    )
+    groups = _noding_groups(build_input, source, context)
+    projected_polygons = _project_layout_polygons(build_input, source, groups)
+
+    from shapely import Polygon, union_all  # noqa: PLC0415 — native geometry is needed only after source projection.
+
+    geometry_operations = _GeometryOperations(Polygon, union_all)
+
+    contact_relations = _validate_conductor_contacts(
+        build_input, source, projected_polygons, context
+    )
+    projected_ports = _project_port_regions(
+        build_input,
+        source,
+        projected_polygons,
+        groups,
+        geometry_operations.polygon,
+    )
+    projected_entities = _project_entities(
+        build_input,
+        projected_polygons,
+        groups,
+        context,
+        geometry_operations,
+    )
+    source_metadata = _project_metadata(
+        build_input, source, context, groups, contact_relations
+    )
+    return replace(
+        build_input,
+        polygons=projected_polygons.records,
+        entities=projected_entities,
+        port_sheet_regions=projected_ports,
+        metadata=source_metadata,
+    )
 
 
 def _validate_bound_context(
@@ -226,7 +292,11 @@ def _source_polygon_inputs(
                 exterior=polygon.exterior,
                 holes=polygon.holes,
             )
-    return _SourcePolygonInputs(owners=owners, preimages=preimages)
+    return _SourcePolygonInputs(
+        owners=owners,
+        preimages=preimages,
+        recorded_audits=fresh_audits or stored_audits,
+    )
 
 
 def _grid_operands(build_input: GeometryBuildInput) -> tuple[GridOperand, ...]:
@@ -242,7 +312,7 @@ def _grid_operands(build_input: GeometryBuildInput) -> tuple[GridOperand, ...]:
     ]
     operands.extend(
         GridOperand(
-            "PORT::" + port.port_sheet_id,
+            _port_operand_id(port),
             port.exterior,
             port.holes,
             contact=False,
@@ -288,7 +358,7 @@ def _operand_z_ranges(
         ]
         # A port sheet lies on its hosts' layer; spanning every host keeps it
         # noded with each conductor it may overlap.
-        z_ranges["PORT::" + port.port_sheet_id] = (
+        z_ranges[_port_operand_id(port)] = (
             (min(low for low, _ in host_ranges), max(high for _, high in host_ranges))
             if host_ranges
             else _EVERY_Z
@@ -339,10 +409,8 @@ def _project_layout_polygons(
                 "source polygon component identity changed at grid: "
                 f"{polygon.polygon_id}"
             )
-        exterior, holes = regions_for_polygon[0]
-        oriented_exterior = _oriented_like(exterior, polygon.exterior)
-        oriented_holes = tuple(
-            _oriented_like(ring, tuple(reversed(oriented_exterior))) for ring in holes
+        oriented_exterior, oriented_holes = _oriented_region(
+            regions_for_polygon[0], polygon.exterior
         )
         projected.append(
             replace(
@@ -482,113 +550,141 @@ def _project_port_regions(
     groups: _NodingGroups,
     geometry_polygon: Callable[..., BaseGeometry],
 ) -> tuple[PortSheetRegionRecord, ...]:
-    projected_ports: list[PortSheetRegionRecord] = []
-    for port in build_input.port_sheet_regions:
-        operand_id = "PORT::" + port.port_sheet_id
-        arrangement = groups.arrangement_for(operand_id)
-        grid_size_um = arrangement.context.grid_size_um
-        regions_for_port = arrangement.operand_regions(operand_id)
-        if len(regions_for_port) != 1:
-            raise ValueError(
-                f"port sheet component identity changed at grid: {port.port_sheet_id}"
-            )
-        exterior, holes = regions_for_port[0]
-        oriented_exterior = _oriented_like(exterior, port.exterior)
-        oriented_holes = tuple(
-            _oriented_like(ring, tuple(reversed(oriented_exterior))) for ring in holes
-        )
-        authored_host_bindings = {
-            (overlap.host_semantic_id, overlap.host_polygon_id)
-            for overlap in port.overlaps
-        }
-        eligible_hosts = _port_sheet_hosts(port, source)
-        raw_port = geometry_polygon(port.exterior, port.holes)
-        effective_port = geometry_polygon(oriented_exterior, oriented_holes)
-        contact_relations: list[dict[str, str]] = []
-        for polygon_id, host in eligible_hosts.items():
-            raw_host = source.preimages[polygon_id]
-            effective_host = projected_polygons.by_id[polygon_id]
-            requested = raw_port.relate(
-                geometry_polygon(raw_host.exterior, raw_host.holes)
-            )
-            realized = effective_port.relate(
-                geometry_polygon(effective_host.exterior, effective_host.holes)
-            )
-            if requested != realized:
-                raise ValueError(
-                    grid_change_message(
-                        "port contact changed at grid: "
-                        f"{port.port_sheet_id}, {host.semantic_id}, {polygon_id}",
-                        [port.source_layer, effective_host.layer],
-                        grid_size_um,
-                        contact_changes(
-                            (
-                                raw_port,
-                                geometry_polygon(raw_host.exterior, raw_host.holes),
-                            ),
-                            (
-                                effective_port,
-                                geometry_polygon(
-                                    effective_host.exterior, effective_host.holes
-                                ),
-                            ),
-                            grid_size_um,
-                        ),
-                        FIX_CONTACT,
-                    )
-                )
-            contact_relations.append(
-                {
-                    "host_entity_id": host.semantic_id,
-                    "host_polygon_id": polygon_id,
-                    "requested_de9im": requested,
-                    "realized_de9im": realized,
-                }
-            )
+    return tuple(
+        _project_port_region(port, source, projected_polygons, groups, geometry_polygon)
+        for port in build_input.port_sheet_regions
+    )
 
-        authored_hosts = {
-            polygon_id: entity
-            for polygon_id, entity in eligible_hosts.items()
-            if (entity.semantic_id, polygon_id) in authored_host_bindings
-        }
-        overlaps = port_sheet_overlaps(
-            port_sheet_id=port.port_sheet_id,
-            port_polygon=LayoutPolygonSpec(
-                port.source_polygon_id,
-                port.source_layer,
-                oriented_exterior,
-                oriented_holes,
-            ),
-            target_layer=cast(str, port.metadata["target_layer"]),
-            host_entity_by_polygon_id=authored_hosts,
-            host_polygons_by_id={
-                polygon_id: projected_polygons.by_id[polygon_id]
-                for polygon_id in authored_hosts
+
+@dataclass(frozen=True)
+class _HostOnGrid:
+    """A conductor polygon a port sheet may touch: its Entity, as requested and as the grid realized it."""
+
+    polygon_id: str
+    entity: SemanticEntitySpec
+    requested: _PolygonPreimage
+    realized: LayoutPolygonSpec
+
+
+def _project_port_region(
+    port: PortSheetRegionRecord,
+    source: _SourcePolygonInputs,
+    projected_polygons: _ProjectedPolygons,
+    groups: _NodingGroups,
+    geometry_polygon: Callable[..., BaseGeometry],
+) -> PortSheetRegionRecord:
+    """One port sheet on the grid, with the contacts and terminal overlaps the grid kept."""
+    operand_id = _port_operand_id(port)
+    arrangement = groups.arrangement_for(operand_id)
+    regions_for_port = arrangement.operand_regions(operand_id)
+    if len(regions_for_port) != 1:
+        raise ValueError(
+            f"port sheet component identity changed at grid: {port.port_sheet_id}"
+        )
+    projected = _oriented_region(regions_for_port[0], port.exterior)
+    hosts = [
+        _HostOnGrid(
+            polygon_id,
+            entity,
+            source.preimages[polygon_id],
+            projected_polygons.by_id[polygon_id],
+        )
+        for polygon_id, entity in _port_sheet_hosts(port, source).items()
+    ]
+    contact_relations = _port_contact_relations(
+        port, projected, hosts, arrangement.context.grid_size_um, geometry_polygon
+    )
+    overlaps = _port_terminal_overlaps(
+        GridScope(arrangement.context), port, projected, hosts
+    )
+    return replace(
+        port,
+        exterior=projected[0],
+        holes=projected[1],
+        overlaps=overlaps,
+        metadata={
+            **port.metadata,
+            "geometry_grid_contact_relations": contact_relations,
+            "unquantized_source_geometry": {
+                "exterior": port.exterior,
+                "holes": port.holes,
             },
-        )
-        if {
-            (overlap.host_semantic_id, overlap.host_polygon_id) for overlap in overlaps
-        } != authored_host_bindings:
+        },
+    )
+
+
+def _port_contact_relations(
+    port: PortSheetRegionRecord,
+    projected: tuple[PolygonRing, tuple[PolygonRing, ...]],
+    hosts: Sequence[_HostOnGrid],
+    grid_size_um: float,
+    geometry_polygon: Callable[..., BaseGeometry],
+) -> list[dict[str, str]]:
+    """The contact of the port with each host it may touch, refused where the grid changed it."""
+    raw_port = geometry_polygon(port.exterior, port.holes)
+    effective_port = geometry_polygon(*projected)
+    contact_relations: list[dict[str, str]] = []
+    for host in hosts:
+        raw_host = geometry_polygon(host.requested.exterior, host.requested.holes)
+        effective_host = geometry_polygon(host.realized.exterior, host.realized.holes)
+        requested = raw_port.relate(raw_host)
+        realized = effective_port.relate(effective_host)
+        if requested != realized:
             raise ValueError(
-                f"port terminal overlap changed at grid: {port.port_sheet_id}"
+                grid_change_message(
+                    "port contact changed at grid: "
+                    f"{port.port_sheet_id}, {host.entity.semantic_id}, {host.polygon_id}",
+                    [port.source_layer, host.realized.layer],
+                    grid_size_um,
+                    contact_changes(
+                        (raw_port, raw_host),
+                        (effective_port, effective_host),
+                        grid_size_um,
+                    ),
+                    FIX_CONTACT,
+                )
             )
-        projected_ports.append(
-            replace(
-                port,
-                exterior=oriented_exterior,
-                holes=oriented_holes,
-                overlaps=overlaps,
-                metadata={
-                    **port.metadata,
-                    "geometry_grid_contact_relations": contact_relations,
-                    "unquantized_source_geometry": {
-                        "exterior": port.exterior,
-                        "holes": port.holes,
-                    },
-                },
-            )
+        contact_relations.append(
+            {
+                "host_entity_id": host.entity.semantic_id,
+                "host_polygon_id": host.polygon_id,
+                "requested_de9im": requested,
+                "realized_de9im": realized,
+            }
         )
-    return tuple(projected_ports)
+    return contact_relations
+
+
+def _port_terminal_overlaps(
+    scope: GridScope,
+    port: PortSheetRegionRecord,
+    projected: tuple[PolygonRing, tuple[PolygonRing, ...]],
+    hosts: Sequence[_HostOnGrid],
+) -> tuple[PortSheetOverlapRecord, ...]:
+    """The port's overlaps with its authored terminals on the grid, which must be the authored ones."""
+    authored_host_bindings = {
+        (overlap.host_semantic_id, overlap.host_polygon_id) for overlap in port.overlaps
+    }
+    overlaps = port_sheet_overlaps(
+        scope,
+        port_sheet_id=port.port_sheet_id,
+        port_polygon=LayoutPolygonSpec(
+            port.source_polygon_id,
+            port.source_layer,
+            *projected,
+        ),
+        target_layer=cast(str, port.metadata["target_layer"]),
+        hosts={
+            host.polygon_id: PortSheetHost(host.entity, host.realized)
+            for host in hosts
+            if (host.entity.semantic_id, host.polygon_id) in authored_host_bindings
+        },
+    )
+    if {
+        (overlap.host_semantic_id, overlap.host_polygon_id) for overlap in overlaps
+    } != authored_host_bindings:
+        raise ValueError(f"port terminal overlap changed at grid: {port.port_sheet_id}")
+    return overlaps
 
 
 def _project_entities(
@@ -672,54 +768,6 @@ def _project_metadata(
             ).encode()
         ).hexdigest(),
         "geometry_grid_arrangement": groups.metadata,
-        "geometry_grid_source_audits": source_grid_audits()
-        or build_input.metadata.get("geometry_grid_source_audits", ()),
+        "geometry_grid_source_audits": source.recorded_audits,
         "geometry_grid_contact_relations": contact_relations,
     }
-
-
-def _apply_geometry_grid(
-    build_input: GeometryBuildInput, context: GeometryGridContext
-) -> GeometryBuildInput:
-    """Run named source projection steps while retaining each raw input role."""
-    bound_context = _validate_bound_context(build_input, context)
-    fresh_audits = source_grid_audits()
-    source = _source_polygon_inputs(
-        build_input,
-        fresh_audits,
-        use_source_preimage=bound_context is None or bool(fresh_audits),
-    )
-    groups = _noding_groups(build_input, source, context)
-    projected_polygons = _project_layout_polygons(build_input, source, groups)
-
-    from shapely import Polygon, union_all  # noqa: PLC0415 — native geometry is needed only after source projection.
-
-    geometry_operations = _GeometryOperations(Polygon, union_all)
-
-    contact_relations = _validate_conductor_contacts(
-        build_input, source, projected_polygons, context
-    )
-    projected_ports = _project_port_regions(
-        build_input,
-        source,
-        projected_polygons,
-        groups,
-        geometry_operations.polygon,
-    )
-    projected_entities = _project_entities(
-        build_input,
-        projected_polygons,
-        groups,
-        context,
-        geometry_operations,
-    )
-    source_metadata = _project_metadata(
-        build_input, source, context, groups, contact_relations
-    )
-    return replace(
-        build_input,
-        polygons=projected_polygons.records,
-        entities=projected_entities,
-        port_sheet_regions=projected_ports,
-        metadata=source_metadata,
-    )

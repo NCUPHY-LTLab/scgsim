@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import cast
 
-from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.booleans import boolean_polygon_region
 from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
 )
 from scgsim.geometry.grid.planar_loops import clean_loop
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.interpretation.representation import (
     planned_conductor_representation,
 )
@@ -111,7 +112,7 @@ def effective_contact_sheet_surfaces(
         "plane": {"axis": "z", "value_um": plane_z_um},
         "representation": "surface_sheet",
     }
-    sheet_region = gdstk_surface_region(parent_ref)
+    sheet_region = gdstk_surface_region(UNGRIDDED, parent_ref)
     side_regions = {}
     records = []
     contributions = []
@@ -122,7 +123,9 @@ def effective_contact_sheet_surfaces(
             for contact in contacts
         )
         exposed = (
-            boolean_polygon_region(gdstk, sheet_region, contact_region, "not")
+            boolean_polygon_region(
+                UNGRIDDED, gdstk, sheet_region, contact_region, "not"
+            )
             if contact_region
             else sheet_region
         )
@@ -140,7 +143,7 @@ def effective_contact_sheet_surfaces(
         side_regions[side] = adjacency
         for solution_id, region in adjacency:
             for index, geometry_ref in enumerate(
-                geometry_refs_from_gdstk_region(parent_ref, region)
+                geometry_refs_from_gdstk_region(UNGRIDDED, parent_ref, region)
             ):
                 patch_id = (
                     f"effective-local:{interface.interface_id}:{side}:"
@@ -188,8 +191,12 @@ def effective_contact_sheet_surfaces(
     paired = []
     for bottom_id, bottom_region in side_regions["bottom"]:
         for top_id, top_region in side_regions["top"]:
-            overlap = boolean_polygon_region(gdstk, bottom_region, top_region, "and")
-            for geometry_ref in geometry_refs_from_gdstk_region(parent_ref, overlap):
+            overlap = boolean_polygon_region(
+                UNGRIDDED, gdstk, bottom_region, top_region, "and"
+            )
+            for geometry_ref in geometry_refs_from_gdstk_region(
+                UNGRIDDED, parent_ref, overlap
+            ):
                 patch_id = f"effective-mask:{interface.interface_id}:{len(paired):04d}"
                 paired.append(
                     RouteASheetPatch(

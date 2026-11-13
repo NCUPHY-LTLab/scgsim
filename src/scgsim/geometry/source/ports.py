@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from math import isfinite, sqrt
 from typing import Any, Protocol, TypeGuard, cast
 
-from scgsim.geometry.grid.grid import (
-    bound_grid_context,
-    named_source,
-    polygon_boolean,
-    source_refusal,
-)
+from scgsim.geometry.grid.booleans import polygon_boolean
 from scgsim.geometry.grid.polygon_ops import (
     layout_polygon_region,
+    point_in_ring,
     ring_from_gdstk_polygon,
     selector_place,
 )
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 
@@ -24,6 +22,7 @@ SOURCE_OCCURRENCE_POLYGON_METADATA_KEY = "source_occurrence_polygon_um"
 
 
 def port_sheet_regions_from_stack_metadata(
+    scope: GridScope,
     stack_metadata: Mapping[str, Any],
     *,
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
@@ -45,38 +44,26 @@ def port_sheet_regions_from_stack_metadata(
     host_polygons_by_id = {polygon.polygon_id: polygon for polygon in host_polygons}
     regions: list[PortSheetRegionRecord] = []
     for source_index, record in enumerate(raw_records):
-        (
-            source_name,
-            port_index,
-            target_layer,
-            direction,
-            raw_direction,
-            sign_convention,
-            layer,
-            datatype,
-        ) = _validated_port_metadata(record)
+        declared = _validated_port_metadata(record)
+        layer, datatype = declared.layer, declared.datatype
         source_polygons = _selected_port_polygons(
-            record,
-            layer=layer,
-            datatype=datatype,
-            source_name=source_name,
-            polygons_by_layer=polygons_by_layer,
+            scope, record, declared, polygons_by_layer
         )
         if not source_polygons:
             raise ValueError(
                 f"port_sheet_source_layers entry {layer}/{datatype} has no polygons"
             )
         for polygon_index, source_polygon in source_polygons:
-            port_sheet_id = f"PORT_SHEET__{source_name}__{polygon_index:04d}"
+            port_sheet_id = f"PORT_SHEET__{declared.source_name}__{polygon_index:04d}"
             scoped_hosts = _hosts_for_source_occurrence(
-                host_entity_by_polygon_id, record, target_layer
+                host_entity_by_polygon_id, record, declared.target_layer
             )
             overlaps = port_sheet_overlaps(
+                scope,
                 port_sheet_id=port_sheet_id,
                 port_polygon=source_polygon,
-                target_layer=target_layer,
-                host_entity_by_polygon_id=scoped_hosts,
-                host_polygons_by_id=host_polygons_by_id,
+                target_layer=declared.target_layer,
+                hosts=port_sheet_hosts(scoped_hosts, host_polygons_by_id),
             )
             regions.append(
                 PortSheetRegionRecord(
@@ -88,12 +75,12 @@ def port_sheet_regions_from_stack_metadata(
                     overlaps=overlaps,
                     metadata={
                         "source_index": source_index,
-                        "source_name": source_name,
-                        "port_index": port_index,
-                        "target_layer": target_layer,
-                        "direction": direction,
-                        "direction_raw": raw_direction,
-                        "direction_sign_convention": sign_convention,
+                        "source_name": declared.source_name,
+                        "port_index": declared.port_index,
+                        "target_layer": declared.target_layer,
+                        "direction": declared.direction,
+                        "direction_raw": declared.raw_direction,
+                        "direction_sign_convention": declared.sign_convention,
                         "source": "palace_lumped_port_sheet",
                         **(
                             {"source_occurrence_path": record["source_occurrence_path"]}
@@ -134,18 +121,21 @@ def _is_source_record_sequence(value: Any) -> TypeGuard[Sequence[Any]]:
     return isinstance(value, Sequence) and not isinstance(value, str | bytes)
 
 
-def _validated_port_metadata(
-    record: Any,
-) -> tuple[
-    str,
-    int,
-    str,
-    tuple[float, float, float],
-    tuple[float, float, float],
-    str,
-    int,
-    int,
-]:
+@dataclass(frozen=True)
+class _PortSheetDeclaration:
+    """One validated ``port_sheet_source_layers`` entry: the port, its layer and its direction."""
+
+    source_name: str
+    port_index: int
+    target_layer: str
+    direction: tuple[float, float, float]
+    raw_direction: tuple[float, float, float]
+    sign_convention: str
+    layer: int
+    datatype: int
+
+
+def _validated_port_metadata(record: Any) -> _PortSheetDeclaration:
     if not isinstance(record, Mapping):
         raise TypeError("metadata.port_sheet_source_layers items must be mappings")
     if record.get("source") != "palace_lumped_port_sheet":
@@ -179,7 +169,7 @@ def _validated_port_metadata(
         raise ValueError(
             "port_sheet_source_layers direction_sign_convention must be non-empty"
         )
-    return (
+    return _PortSheetDeclaration(
         source_name,
         port_index,
         target_layer,
@@ -192,13 +182,17 @@ def _validated_port_metadata(
 
 
 def _selected_port_polygons(
+    scope: GridScope,
     record: Mapping[str, Any],
-    *,
-    layer: int,
-    datatype: int,
-    source_name: str,
+    declared: _PortSheetDeclaration,
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
 ) -> tuple[tuple[int, LayoutPolygonSpec], ...]:
+    """The port's sheet polygons, each with its index among the polygons drawn on its layer."""
+    layer, datatype, source_name = (
+        declared.layer,
+        declared.datatype,
+        declared.source_name,
+    )
     occurrence_polygon = record.get(SOURCE_OCCURRENCE_POLYGON_METADATA_KEY)
     if occurrence_polygon is not None:
         polygon = LayoutPolygonSpec(
@@ -230,33 +224,37 @@ def _selected_port_polygons(
         selected = tuple(
             (index, polygon)
             for index, polygon in enumerate(source_polygons)
-            if _point_in_ring(point, ring_from_gdstk_polygon(polygon))
+            if point_in_ring(point, ring_from_gdstk_polygon(scope, polygon))
         )
         if len(selected) != 1:
-            with named_source(source_name, f"{layer}/{datatype}"):
-                raise ValueError(
-                    source_refusal(
-                        f"port sheet {source_name!r} selector matched {len(selected)} "
-                        "polygons",
-                        [
-                            selector_place(
-                                point,
-                                [ring_from_gdstk_polygon(p) for _, p in selected],
-                                [ring_from_gdstk_polygon(p) for p in source_polygons],
-                            )
-                        ],
-                        "Fix the layout or the declaration: draw the port's sheet as one "
-                        "polygon on its layer under the selector point, or move the point "
-                        "onto it.",
-                    )
+            named = scope.naming(source_name, f"{layer}/{datatype}")
+            raise ValueError(
+                named.refusal(
+                    f"port sheet {source_name!r} selector matched {len(selected)} "
+                    "polygons",
+                    [
+                        selector_place(
+                            named,
+                            point,
+                            [ring_from_gdstk_polygon(named, p) for _, p in selected],
+                            [
+                                ring_from_gdstk_polygon(named, p)
+                                for p in source_polygons
+                            ],
+                        )
+                    ],
+                    "Fix the layout or the declaration: draw the port's sheet as one "
+                    "polygon on its layer under the selector point, or move the point "
+                    "onto it.",
                 )
+            )
     return tuple(
         (
             index,
             LayoutPolygonSpec(
                 polygon_id=f"PORT_SHEET_{layer}_{datatype}__P{index:04d}",
                 layer=f"{layer}/{datatype}",
-                exterior=ring_from_gdstk_polygon(polygon),
+                exterior=ring_from_gdstk_polygon(scope, polygon),
                 metadata={
                     "gds_layer": layer,
                     "gds_datatype": datatype,
@@ -297,32 +295,51 @@ def _hosts_for_source_occurrence(
     }
 
 
+@dataclass(frozen=True)
+class PortSheetHost:
+    """A conductor polygon a port sheet may overlap, and the Entity that owns it."""
+
+    entity: SemanticEntitySpec
+    polygon: LayoutPolygonSpec
+
+
+def port_sheet_hosts(
+    entity_by_polygon_id: Mapping[str, SemanticEntitySpec],
+    polygons_by_id: Mapping[str, LayoutPolygonSpec],
+) -> dict[str, PortSheetHost]:
+    """The polygons that have an owning Entity, by polygon id, in the order of ``polygons_by_id``."""
+    return {
+        polygon_id: PortSheetHost(entity_by_polygon_id[polygon_id], polygon)
+        for polygon_id, polygon in polygons_by_id.items()
+        if polygon_id in entity_by_polygon_id
+    }
+
+
 def port_sheet_overlaps(
+    scope: GridScope,
     *,
     port_sheet_id: str,
     port_polygon: LayoutPolygonSpec,
     target_layer: str,
-    host_entity_by_polygon_id: Mapping[str, SemanticEntitySpec],
-    host_polygons_by_id: Mapping[str, LayoutPolygonSpec],
+    hosts: Mapping[str, PortSheetHost],
 ) -> tuple[PortSheetOverlapRecord, ...]:
-    """Intersect a port polygon with eligible source host polygons."""
+    """Intersect a port polygon with eligible source host polygons, keyed by polygon id."""
     import gdstk  # noqa: PLC0415 — keep the optional geometry dependency lazy.
 
-    port_region = layout_polygon_region(gdstk, port_polygon)
+    port_region = layout_polygon_region(scope, gdstk, port_polygon)
     overlaps: list[PortSheetOverlapRecord] = []
-    for host_polygon_id, host_polygon in host_polygons_by_id.items():
-        host_entity = host_entity_by_polygon_id.get(host_polygon_id)
-        if (
-            host_entity is None
-            or not is_port_sheet_host_entity(host_entity)
-            or not port_sheet_target_layer_matches(host_entity, target_layer)
-        ):
+    for host_polygon_id, host in hosts.items():
+        host_entity = host.entity
+        if not is_port_sheet_host_entity(
+            host_entity
+        ) or not port_sheet_target_layer_matches(host_entity, target_layer):
             continue
         overlap_region = polygon_boolean(
+            scope,
             port_region,
-            layout_polygon_region(gdstk, host_polygon),
+            layout_polygon_region(scope, gdstk, host.polygon),
             "and",
-            precision=bound_grid_context().grid_size_um,
+            precision=scope.bound_grid().grid_size_um,
         )
         for index, overlap_polygon in enumerate(overlap_region or ()):
             area_polygon = cast(_AreaPolygon, overlap_polygon)
@@ -338,7 +355,7 @@ def port_sheet_overlaps(
                     port_polygon_id=port_polygon.polygon_id,
                     host_semantic_id=host_entity.semantic_id,
                     host_polygon_id=host_polygon_id,
-                    overlap_loop=ring_from_gdstk_polygon(overlap_polygon),
+                    overlap_loop=ring_from_gdstk_polygon(scope, overlap_polygon),
                     metadata={"overlap_polygon_index": index},
                 )
             )
@@ -366,25 +383,6 @@ def is_port_sheet_host_entity(entity: SemanticEntitySpec) -> bool:
         return False
     geometry_source = str(entity.geometry.get("geometry_source", "gds_polygon"))
     return geometry_source in {"gds_polygon", "die_face_minus_ground_mask"}
-
-
-def _point_in_ring(
-    point: tuple[float, float], ring: Sequence[tuple[float, float]]
-) -> bool:
-    x, y = point
-    inside = False
-    previous_index = len(ring) - 1
-    for index, (current_x, current_y) in enumerate(ring):
-        previous_x, previous_y = ring[previous_index]
-        crosses = (current_y > y) != (previous_y > y)
-        if crosses:
-            intersection_x = (previous_x - current_x) * (y - current_y) / (
-                previous_y - current_y
-            ) + current_x
-            if x < intersection_x:
-                inside = not inside
-        previous_index = index
-    return inside
 
 
 class _AreaPolygon(Protocol):

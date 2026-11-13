@@ -7,17 +7,19 @@ from itertools import pairwise
 
 import gdstk
 
-from scgsim.geometry.grid.grid import PolygonRegion, polygon_boolean
+from scgsim.geometry.grid.booleans import polygon_boolean
+from scgsim.geometry.grid.grid_regions import PolygonRegion
 from scgsim.geometry.grid.planar_loops import (
     cancel_reversed_planar_edges,
     simple_planar_loops_from_edges,
 )
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.junctions.core import PRECISION_UM
 from scgsim.geometry.junctions.exact_geometry import inside_ring, on, region_edges
 
 
-def build_polygon_region(polygons):
-    """Construct native polygon regions while subtracting their authored holes."""
+def build_polygon_region(scope: GridScope, polygons):
+    """Construct native polygon regions while subtracting their authored holes in ``scope``."""
     result = []
     for rings in polygons:
         exterior = gdstk.Polygon(
@@ -27,13 +29,15 @@ def build_polygon_region(polygons):
             gdstk.Polygon([(x * PRECISION_UM, y * PRECISION_UM) for x, y in ring])
             for ring in rings[1:]
         ]
-        result.extend(boolean([exterior], holes, "not"))
+        result.extend(boolean(scope, [exterior], holes, "not"))
     return result
 
 
-def boolean(left, right, operation):
-    """Apply the existing integer-coordinate native junction Boolean operation."""
-    return list(polygon_boolean(left, right, operation, precision=PRECISION_UM) or ())
+def boolean(scope: GridScope, left, right, operation):
+    """Apply the integer-coordinate junction Boolean operation in ``scope``."""
+    return list(
+        polygon_boolean(scope, left, right, operation, precision=PRECISION_UM) or ()
+    )
 
 
 def read_boolean_rings(region):

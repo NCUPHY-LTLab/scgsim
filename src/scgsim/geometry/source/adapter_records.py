@@ -6,15 +6,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypeGuard
 
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.source.ground import derived_ground_polygons
+from scgsim.geometry.source.ground import PlaneBounds, derived_ground_polygons
 from scgsim.geometry.source.occurrence import (
     entity_from_layer_record,
     gds_polygons_for_entity,
     is_record_sequence,
     resolve_material_kind,
 )
+from scgsim.geometry.source.recipes import Audited, audited_declared_source
 
 if TYPE_CHECKING:
     from gdstk import Cell, Polygon
@@ -122,18 +124,22 @@ def solution_region_entity(
 
 
 def lower_layer_record(
+    scope: GridScope,
     record: Any,
     *,
     materials: Mapping[str, Any],
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
-    cell_bounds_um: Mapping[str, float],
-    domain_bounds_by_semantic_id: Mapping[str, Mapping[str, Any]],
-) -> tuple[LoweredEntity, ...]:
-    """Lower a worker-private layer record through the existing source recipes."""
+    plane_bounds: PlaneBounds,
+) -> Audited[tuple[LoweredEntity, ...]]:
+    """Lower a worker-private layer record through the existing source recipes.
+
+    ``plane_bounds`` is where a Ground's plane lies when the layout draws none.
+    """
     entity = entity_from_layer_record(record, materials=materials)
     geometry_source = str(entity.geometry.get("geometry_source", "gds_polygon"))
     if geometry_source == "die_face_minus_ground_mask":
         occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
+        audits = ()
         if occurrence_polygons is not None:
             entity_polygons = tuple(
                 LayoutPolygonSpec(
@@ -148,40 +154,55 @@ def lower_layer_record(
                 for index, region in enumerate(occurrence_polygons)
             )
         else:
-            entity_polygons = derived_ground_polygons(
+            derived = audited_declared_source(
+                derived_ground_polygons,
+                scope,
                 entity,
                 polygons_by_layer=polygons_by_layer,
-                cell_bounds_um=cell_bounds_um,
-                domain_bounds_by_semantic_id=domain_bounds_by_semantic_id,
+                plane=plane_bounds,
             )
+            entity_polygons, audits = derived.value, derived.audits
         if len(entity_polygons) > 1:
-            return tuple(
-                _split_polygon_entity(entity, polygon, index)
-                for index, polygon in enumerate(entity_polygons)
+            return Audited(
+                tuple(
+                    _split_polygon_entity(entity, polygon, index)
+                    for index, polygon in enumerate(entity_polygons)
+                ),
+                audits,
             )
-        return (
-            LoweredEntity(
-                _entity_with_polygon_geometry(entity, entity_polygons), entity_polygons
+        return Audited(
+            (
+                LoweredEntity(
+                    _entity_with_polygon_geometry(entity, entity_polygons),
+                    entity_polygons,
+                ),
             ),
+            audits,
         )
-    elif geometry_source == "gds_polygon":
-        entity_polygons = gds_polygons_for_entity(
+    if geometry_source == "gds_polygon":
+        read = audited_declared_source(
+            gds_polygons_for_entity,
+            scope,
             entity,
             polygons_by_layer=polygons_by_layer,
         )
+        entity_polygons, audits = read.value, read.audits
     else:
-        entity_polygons = ()
+        entity_polygons, audits = (), ()
 
     if entity.geometry.get("split_polygons_as_entities") or (
         entity.geometry.get("route_ab_fused_selector_mode", False)
         and entity.geometry.get("selector_point_um") is None
     ):
-        return tuple(
-            _split_polygon_entity(entity, polygon, index)
-            for index, polygon in enumerate(entity_polygons)
+        return Audited(
+            tuple(
+                _split_polygon_entity(entity, polygon, index)
+                for index, polygon in enumerate(entity_polygons)
+            ),
+            audits,
         )
     entity = _entity_with_polygon_geometry(entity, entity_polygons)
-    return (LoweredEntity(entity, entity_polygons),)
+    return Audited((LoweredEntity(entity, entity_polygons),), audits)
 
 
 def _split_polygon_entity(

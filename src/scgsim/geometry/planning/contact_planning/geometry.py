@@ -6,9 +6,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
-from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.booleans import boolean_polygon_region
 from scgsim.geometry.grid.loops import canonical_loop_sort_key, loop_signature
 from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area, ring_edges
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.interpretation.representation import (
     planned_conductor_representation,
 )
@@ -176,7 +177,7 @@ def contact_patch_loops(
     """Extract and deterministically order finite conductor contact loops."""
     import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
-    polygons = boolean_polygon_region(gdstk, overlap_region, (), "or")
+    polygons = boolean_polygon_region(UNGRIDDED, gdstk, overlap_region, (), "or")
     if not polygons:
         raise ValueError(
             f"{lower_id} and {upper_id} contact must produce at least one polygon, got {len(polygons)}"
@@ -194,7 +195,7 @@ def single_rectangular_contact_loop(
     """Return the one axis-aligned rectangle an overlap forms, or refuse an overlap that is not one."""
     import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
-    polygons = boolean_polygon_region(gdstk, overlap_region, (), "or")
+    polygons = boolean_polygon_region(UNGRIDDED, gdstk, overlap_region, (), "or")
     if len(polygons) != 1:
         raise ValueError(
             f"{lower_id} and {upper_id} contact must produce one polygon, got {len(polygons)}"

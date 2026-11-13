@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from scgsim.geometry.grid.grid import (
+from scgsim.geometry.grid.booleans import (
     boolean_polygon_region,
     polygon_boolean,
     split_gdstk_cutline_loop,
@@ -16,6 +16,7 @@ from scgsim.geometry.grid.loops import (
     loops_share_edge_overlap,
 )
 from scgsim.geometry.grid.planar_loops import clean_loop, filter_gdstk_polygons
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.interpretation.representation import (
     planned_conductor_representation,
 )
@@ -65,7 +66,7 @@ def auto_vacuum_subtractor_xy_region(
         region = (
             polygon_region
             if not region
-            else boolean_polygon_region(gdstk, region, polygon_region, "or")
+            else boolean_polygon_region(UNGRIDDED, gdstk, region, polygon_region, "or")
         )
     if not entity.polygon_ids:
         return solution_entity_xy_region(gdstk, entity)
@@ -76,7 +77,7 @@ def _xy_region_from_loops(
     gdstk: Any, outer_loop: Any, hole_loops: Sequence[Any]
 ) -> tuple[Any, ...]:
     outer = clean_loop(outer_loop)
-    split_outer, *split_holes = split_gdstk_cutline_loop(outer)
+    split_outer, *split_holes = split_gdstk_cutline_loop(UNGRIDDED, outer)
     holes = tuple(
         (
             clean_loop(loop)
@@ -88,6 +89,7 @@ def _xy_region_from_loops(
         return (gdstk.Polygon(split_outer),)
     return filter_gdstk_polygons(
         polygon_boolean(
+            UNGRIDDED,
             (gdstk.Polygon(split_outer),),
             tuple((gdstk.Polygon(hole_loop) for hole_loop in holes)),
             "not",
@@ -206,7 +208,7 @@ def auto_vacuum_component_contacts_subtractor(
     subtractor_region = auto_vacuum_subtractor_xy_region(gdstk, build_input, subtractor)
     if not subtractor_region:
         return False
-    subtractor_refs = geometry_refs_from_gdstk_region({}, subtractor_region)
+    subtractor_refs = geometry_refs_from_gdstk_region(UNGRIDDED, {}, subtractor_region)
     component_loops = (
         clean_loop(component_geometry_ref["outer_loop"]),
         *(clean_loop(loop) for loop in component_geometry_ref.get("hole_loops", ())),
@@ -244,7 +246,7 @@ def entity_occupied_region(
     )
     if not holes:
         return filter_gdstk_polygons((outer,))
-    return boolean_polygon_region(gdstk, (outer,), holes, "not")
+    return boolean_polygon_region(UNGRIDDED, gdstk, (outer,), holes, "not")
 
 
 def domain_bounds_loop(bounds: Mapping[str, Any]) -> tuple[tuple[float, float], ...]:
@@ -298,7 +300,11 @@ def solution_id_for_entity_coverage(
         if not matches:
             continue
         uncovered_region = boolean_polygon_region(
-            gdstk, occupied_region, solution_entity_xy_region(gdstk, solution), "not"
+            UNGRIDDED,
+            gdstk,
+            occupied_region,
+            solution_entity_xy_region(gdstk, solution),
+            "not",
         )
         if not uncovered_region:
             candidates.append(solution.semantic_id)

@@ -9,13 +9,14 @@ from math import isfinite
 from types import ModuleType
 from typing import Any
 
+from scgsim.geometry.grid.booleans import boolean_polygon_region
 from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
-from scgsim.geometry.grid.grid import boolean_polygon_region
 from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
     loop_signature,
 )
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.interpretation.envelope import (
     auto_vacuum_envelope_bounds,
     auto_vacuum_padding,
@@ -224,14 +225,19 @@ class _VacuumSweep:
             active_subtractors.append(entity)
             if active_subtractor_region:
                 active_subtractor_region = boolean_polygon_region(
-                    self.gdstk, active_subtractor_region, subtractor_regions, "or"
+                    UNGRIDDED,
+                    self.gdstk,
+                    active_subtractor_region,
+                    subtractor_regions,
+                    "or",
                 )
             else:
                 active_subtractor_region = subtractor_regions
         vacuum_region_refs = geometry_refs_from_gdstk_region(
+            UNGRIDDED,
             {"outer_loop": self.envelope_loop},
             boolean_polygon_region(
-                self.gdstk, base_region, active_subtractor_region, "not"
+                UNGRIDDED, self.gdstk, base_region, active_subtractor_region, "not"
             ),
         )
         if not vacuum_region_refs:
@@ -249,7 +255,7 @@ class _VacuumSweep:
         active_subtractors: list[SemanticEntitySpec],
     ) -> None:
         """Append one complement component with exact source boundary ledgers."""
-        component_region = gdstk_surface_region(geometry_ref)
+        component_region = gdstk_surface_region(UNGRIDDED, geometry_ref)
         component_subtractor_ids = tuple(
             sorted(
                 (
@@ -278,7 +284,7 @@ class _VacuumSweep:
                 self.gdstk, self.build_input, entity
             )
             if boolean_polygon_region(
-                self.gdstk, component_region, entity_region, "and"
+                UNGRIDDED, self.gdstk, component_region, entity_region, "and"
             ):
                 boundary_entity_ids[boundary_key].append(entity.semantic_id)
         self.component_index += 1

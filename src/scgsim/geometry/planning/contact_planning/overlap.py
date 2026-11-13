@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+from scgsim.geometry.grid.booleans import boolean_polygon_region
 from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
-from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.entities import entity_z_range_um
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
@@ -66,7 +67,11 @@ def validate_volumetric_conductor_contacts(
             if min(lower_max, upper_max) - max(lower_min, upper_min) <= TOPOLOGY_EPS_UM:
                 continue
             overlap = boolean_polygon_region(
-                gdstk, lower_region, tuple(footprint_regions[upper.semantic_id]), "and"
+                UNGRIDDED,
+                gdstk,
+                lower_region,
+                tuple(footprint_regions[upper.semantic_id]),
+                "and",
             )
             if not overlap:
                 continue

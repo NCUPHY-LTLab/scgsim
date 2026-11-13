@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
-from scgsim.geometry.grid.coordinates import coordinate_2d_key, segment_overlap_interval
-from scgsim.geometry.grid.grid import (
+from scgsim.geometry.grid.booleans import (
     boolean_polygon_region,
     loop_inside_loop,
     split_gdstk_cutline_loop,
 )
+from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.grid.coordinates import coordinate_2d_key, segment_overlap_interval
 from scgsim.geometry.grid.planar_loops import (
     LoopCoordinates,
     PlanarLoop,
@@ -21,12 +21,7 @@ from scgsim.geometry.grid.planar_loops import (
     point_on_planar_segment,
     ring_edges,
 )
-from scgsim.geometry.grid.planar_loops import (
-    cancel_reversed_planar_edges as cancel_reversed_planar_edges,
-)
-from scgsim.geometry.grid.planar_loops import (
-    simple_planar_loops_from_edges as simple_planar_loops_from_edges,
-)
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import SemanticEntitySpec
 
 
@@ -71,12 +66,13 @@ def same_loop_geometry(left: LoopCoordinates, right: LoopCoordinates) -> bool:
 
 
 def contact_holes_are_simple(
+    scope: GridScope,
     outer_loop: tuple[tuple[float, float], ...],
     hole_loops: Sequence[tuple[tuple[float, float], ...]],
 ) -> bool:
     """Check interior holes and reject shared retained boundary support."""
     for hole_loop in hole_loops:
-        if not _loop_strictly_inside_loop(hole_loop, outer_loop):
+        if not _loop_strictly_inside_loop(scope, hole_loop, outer_loop):
             return False
     hole_records = tuple(
         (_loop_bounds_tuple(hole_loop), hole_loop) for hole_loop in hole_loops
@@ -91,10 +87,10 @@ def contact_holes_are_simple(
 
 
 def _loop_strictly_inside_loop(
-    loop: LoopCoordinates, container: LoopCoordinates
+    scope: GridScope, loop: LoopCoordinates, container: LoopCoordinates
 ) -> bool:
     """Require a real interior hole, excluding any boundary touch."""
-    if not loop_inside_loop(loop, container):
+    if not loop_inside_loop(scope, loop, container):
         return False
     loop_points = clean_loop(loop)
     container_points = clean_loop(container)
@@ -132,6 +128,7 @@ def _bounds_tuple_may_overlap(
 
 
 def simple_interior_hole_loops(
+    scope: GridScope,
     parent_geometry_ref: Mapping[str, Any],
     plane_conductors: Sequence[SemanticEntitySpec],
     *,
@@ -159,7 +156,9 @@ def simple_interior_hole_loops(
     )
     if len(hole_loops) != len(plane_conductors) + len(conductor_geometry_refs):
         return None
-    if any(not loop_inside_loop(hole_loop, base_loop) for hole_loop in hole_loops):
+    if any(
+        not loop_inside_loop(scope, hole_loop, base_loop) for hole_loop in hole_loops
+    ):
         return None
     # Overlapping conductor footprints must be unioned before they become
     # solution-interface holes; separate overlapping holes create a third
@@ -169,6 +168,7 @@ def simple_interior_hole_loops(
     for index, left in enumerate(hole_loops):
         for right in hole_loops[index + 1 :]:
             if boolean_polygon_region(
+                scope,
                 gdstk,
                 (gdstk.Polygon(left),),
                 (gdstk.Polygon(right),),
@@ -221,9 +221,10 @@ def loop_centroid(loop: LoopCoordinates) -> tuple[float, float]:
 
 
 def gdstk_surface_region(
+    scope: GridScope,
     geometry_ref: Mapping[str, Any],
 ) -> tuple[PolygonCoordinates, ...]:
-    """Lower exterior and holes through the existing scoped native Boolean path."""
+    """Lower exterior and holes to native polygons, subtracting the holes in ``scope``."""
     import gdstk  # noqa: PLC0415 - defer native geometry loading until this operation requires it
 
     outer = gdstk.Polygon(clean_loop(geometry_ref["outer_loop"]))
@@ -233,27 +234,29 @@ def gdstk_surface_region(
     )
     if not holes:
         return (outer,)
-    return boolean_polygon_region(gdstk, (outer,), holes, "not")
+    return boolean_polygon_region(scope, gdstk, (outer,), holes, "not")
 
 
 def geometry_ref_from_gdstk_polygon(
+    scope: GridScope,
     parent_geometry_ref: Mapping[str, Any],
     polygon: PolygonCoordinates,
 ) -> dict[str, Any]:
     """Copy metadata and replace boundaries using the cleaned native polygon walk."""
     geometry_ref = dict(parent_geometry_ref)
-    outer_loop, hole_loops = split_gdstk_cutline_loop(clean_loop(polygon.points))
+    outer_loop, hole_loops = split_gdstk_cutline_loop(scope, clean_loop(polygon.points))
     geometry_ref["outer_loop"] = outer_loop
     geometry_ref["hole_loops"] = hole_loops
     return geometry_ref
 
 
 def geometry_refs_from_gdstk_region(
+    scope: GridScope,
     parent_geometry_ref: Mapping[str, Any],
     region: tuple[PolygonCoordinates, ...],
 ) -> tuple[dict[str, Any], ...]:
     """Lower each retained polygon while preserving the parent metadata."""
     return tuple(
-        geometry_ref_from_gdstk_polygon(parent_geometry_ref, polygon)
+        geometry_ref_from_gdstk_polygon(scope, parent_geometry_ref, polygon)
         for polygon in filter_gdstk_polygons(region)
     )
