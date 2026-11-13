@@ -53,6 +53,36 @@ class ReceiptValidation:
 
     def validate(self) -> None:
         """Verify receipt binding, success, artifacts, compatibility and logs in their original order."""
+        self._validate_header()
+        _validate_receipt_binding(
+            self.expected_handoff_id,
+            self.handoff_metadata,
+            self.receipt_payload,
+            self.run_metadata,
+        )
+
+        _validate_success_and_job(self.receipt_payload)
+
+        _validate_returned_inputs(
+            self.handoff_metadata,
+            self.receipt_payload,
+            self.root,
+            self.route,
+            self.run_metadata,
+        )
+
+        output_map = _validate_returned_outputs(
+            self.handoff_metadata, self.problem, self.receipt_payload, self.root
+        )
+
+        _validate_completed_runtime(
+            self.handoff_metadata, output_map, self.receipt_payload, self.root
+        )
+
+        _validate_log_and_solver_identity(self.receipt_payload, self.root)
+
+    def _validate_header(self) -> None:
+        """The receipt has the current schema, says completed, and names the route and problem of the run."""
         schema = expect_scalar(self.receipt_payload, "schema", str)
         if schema != RETURNED_RECEIPT_SCHEMA:
             raise ValueError(
@@ -112,33 +142,6 @@ class ReceiptValidation:
                     expected=self.handoff_metadata.get("route_a_thin_film"),
                 )
             )
-
-        _validate_receipt_binding(
-            self.expected_handoff_id,
-            self.handoff_metadata,
-            self.receipt_payload,
-            self.run_metadata,
-        )
-
-        _validate_success_and_job(self.receipt_payload)
-
-        _validate_returned_inputs(
-            self.handoff_metadata,
-            self.receipt_payload,
-            self.root,
-            self.route,
-            self.run_metadata,
-        )
-
-        output_map = _validate_returned_outputs(
-            self.handoff_metadata, self.problem, self.receipt_payload, self.root
-        )
-
-        _validate_completed_runtime(
-            self.handoff_metadata, output_map, self.receipt_payload, self.root
-        )
-
-        _validate_log_and_solver_identity(self.receipt_payload, self.root)
 
 
 def build_returned_receipt(payload: dict[str, Any]) -> PalaceReturnedReceipt:

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_index_map import DIELECTRIC_SECTION
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
@@ -328,16 +328,48 @@ def _validate_margins(
     """Bind each margin to its whole surface, its bands and its place in the spec's margin sequence."""
     seen: dict[int, list[int]] = {entry["index"]: [] for entry in wholes}
     for entry in margins:
-        inset = expect_mapping(entry.get("inset"), "surface EPR inset")
-        baseline = by_index.get(expect_scalar(entry, "baseline_index", int))
-        if baseline is None or baseline not in wholes:
+        baseline = _margin_baseline(entry, by_index, wholes)
+        inset = _MarginInset.checked(entry)
+        _validate_margin_ordinal(entry, baseline, inset)
+        if inset.margin_index in seen[baseline["index"]]:
             raise ValueError(
                 refusal(
-                    f"margin entry {entry.get('index')} must bind one whole-surface entry",
-                    found=entry.get("baseline_index"),
-                    expected=[whole["index"] for whole in wholes],
+                    f"surface EPR margin ordinal is duplicated for whole surface {baseline['index']}",
+                    found=inset.margin_index,
                 )
             )
+        seen[baseline["index"]].append(inset.margin_index)
+        _validate_margin_film(entry, baseline)
+
+
+def _margin_baseline(
+    entry: dict[str, Any],
+    by_index: dict[int, dict[str, Any]],
+    wholes: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """The whole-surface entry a margin entry names as its baseline."""
+    baseline = by_index.get(expect_scalar(entry, "baseline_index", int))
+    if baseline is None or baseline not in wholes:
+        raise ValueError(
+            refusal(
+                f"margin entry {entry.get('index')} must bind one whole-surface entry",
+                found=entry.get("baseline_index"),
+                expected=[whole["index"] for whole in wholes],
+            )
+        )
+    return baseline
+
+
+class _MarginInset(NamedTuple):
+    """A margin entry's checked inset: its place in the margin sequence and its margin in micrometres."""
+
+    margin_index: int
+    margin_um: float
+
+    @classmethod
+    def checked(cls, entry: dict[str, Any]) -> _MarginInset:
+        """Read the inset and require its bands to be the band rows of the entry, from the first band on."""
+        inset = expect_mapping(entry.get("inset"), "surface EPR inset")
         margin_index = expect_scalar(inset, "margin_index", int)
         margin_um = checked_number(
             inset.get("margin_um"), "surface EPR margin_um", positive=True
@@ -365,48 +397,58 @@ def _validate_margins(
                     ),
                 )
             )
-        configured = margins_of(
-            baseline["epr_spec"],
-            {entity for row in entry_rows(baseline) for entity in row["entities"]},
+        return cls(margin_index, margin_um)
+
+
+def _validate_margin_ordinal(
+    entry: dict[str, Any], baseline: dict[str, Any], inset: _MarginInset
+) -> None:
+    """The margin is the one its ordinal names in the baseline spec's configured margin sequence."""
+    configured = margins_of(
+        baseline["epr_spec"],
+        {entity for row in entry_rows(baseline) for entity in row["entities"]},
+    )
+    if (
+        inset.margin_index >= len(configured)
+        or configured[inset.margin_index] != inset.margin_um
+    ):
+        raise ValueError(
+            refusal(
+                f"surface EPR margin of entry {entry.get('index')} disagrees with the configured "
+                f"margin sequence {configured}",
+                found={
+                    "margin_index": inset.margin_index,
+                    "margin_um": inset.margin_um,
+                },
+            )
         )
-        if margin_index >= len(configured) or configured[margin_index] != margin_um:
-            raise ValueError(
-                refusal(
-                    f"surface EPR margin of entry {entry.get('index')} disagrees with the configured "
-                    f"margin sequence {configured}",
-                    found={"margin_index": margin_index, "margin_um": margin_um},
-                )
+
+
+def _validate_margin_film(entry: dict[str, Any], baseline: dict[str, Any]) -> None:
+    """A margin entry lies inside its whole surface and integrates it with the same film."""
+    rows = entry_rows(entry)
+    if (
+        entry["epr_spec"] != baseline["epr_spec"]
+        or entry_rows(entry)[0]["interface_type"]
+        != entry_rows(baseline)[0]["interface_type"]
+        or not set(entry["attributes"]) <= set(baseline["attributes"])
+        or not {row["row"] for row in rows}
+        <= {row["row"] for row in entry_rows(baseline)}
+    ):
+        raise ValueError(
+            refusal(
+                f"margin entry {entry.get('index')} must be part of whole surface "
+                f"{baseline['index']} and share its film",
+                found={
+                    "attributes": entry["attributes"],
+                    "epr_spec": entry["epr_spec"],
+                },
+                expected={
+                    "attributes": baseline["attributes"],
+                    "epr_spec": baseline["epr_spec"],
+                },
             )
-        if margin_index in seen[baseline["index"]]:
-            raise ValueError(
-                refusal(
-                    f"surface EPR margin ordinal is duplicated for whole surface {baseline['index']}",
-                    found=margin_index,
-                )
-            )
-        seen[baseline["index"]].append(margin_index)
-        if (
-            entry["epr_spec"] != baseline["epr_spec"]
-            or entry_rows(entry)[0]["interface_type"]
-            != entry_rows(baseline)[0]["interface_type"]
-            or not set(entry["attributes"]) <= set(baseline["attributes"])
-            or not {row["row"] for row in rows}
-            <= {row["row"] for row in entry_rows(baseline)}
-        ):
-            raise ValueError(
-                refusal(
-                    f"margin entry {entry.get('index')} must be part of whole surface "
-                    f"{baseline['index']} and share its film",
-                    found={
-                        "attributes": entry["attributes"],
-                        "epr_spec": entry["epr_spec"],
-                    },
-                    expected={
-                        "attributes": baseline["attributes"],
-                        "epr_spec": baseline["epr_spec"],
-                    },
-                )
-            )
+        )
 
 
 def _match_configured_row(

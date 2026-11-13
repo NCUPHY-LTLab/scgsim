@@ -79,6 +79,15 @@ def validate_runtime_compatibility(
     payload: Mapping[str, Any], palace_identity: Mapping[str, Any], *, root: Path
 ) -> None:
     """Bind successful native dry-run observations to the exact sealed config bytes."""
+    _validate_dry_run(payload, palace_identity, root)
+    runtime_binary_identity = _observed_binary_identity(payload)
+    _validate_probe_command_record(payload, runtime_binary_identity)
+
+
+def _validate_dry_run(
+    payload: Mapping[str, Any], palace_identity: Mapping[str, Any], root: Path
+) -> None:
+    """The record has the current schema, names the sealed config bytes, and says Palace accepted them."""
     if payload.get("schema") != RUNTIME_COMPATIBILITY_SCHEMA:
         raise ValueError(
             refusal(
@@ -117,6 +126,10 @@ def validate_runtime_compatibility(
                 found=compatibility,
             )
         )
+
+
+def _observed_binary_identity(payload: Mapping[str, Any]) -> str | None:
+    """The observed Palace version, and the binary identity: a basename and its SHA-256, both or neither."""
     observed = expect_mapping(
         payload.get("observed_identity"), "runtime observed identity"
     )
@@ -155,6 +168,13 @@ def validate_runtime_compatibility(
                     found=runtime_binary_sha256,
                 )
             )
+    return runtime_binary_identity
+
+
+def _validate_probe_command_record(
+    payload: Mapping[str, Any], runtime_binary_identity: str | None
+) -> None:
+    """The probe's command: a known style, a basename executable, and a binary hash only for a binary."""
     command = expect_mapping(payload.get("command"), "runtime compatibility command")
     if command.get("command_style") not in {"binary", "wrapper"}:
         raise ValueError(
