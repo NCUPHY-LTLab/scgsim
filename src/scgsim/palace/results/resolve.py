@@ -348,6 +348,12 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
             else None
         ),
     )
+    _check_cost(cost)
+    return cost
+
+
+def _check_cost(cost: PalaceCost) -> None:
+    """Refuse a cost record that lacks a size, a positive size, the tag, or readable memory and solver figures."""
     sizes = {
         "Problem.DegreesOfFreedom": cost.problem_degrees_of_freedom,
         "Problem.MeshElements": cost.mesh_elements,
@@ -394,7 +400,6 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
             f"{NATIVE_METADATA_NAME} is missing required resource cost metadata: {unreadable} "
             "are absent, negative or not finite."
         )
-    return cost
 
 
 __all__ = ["read_resolved_run"]

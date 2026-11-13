@@ -219,7 +219,15 @@ def _build_trust_report(
     theme: ReportTheme = "light",
 ) -> PalaceTrustReport:
     """Bind source identity, readable snapshots and failure state into the Palace trust view."""
-    run = _InspectedRun.read(root, resolved)
+    try:
+        run = _InspectedRun.read(root, resolved)
+    except (FileNotFoundError, TypeError, ValueError) as error:
+        # Each check names what disagrees; every one of them is acted on the same way.
+        error.add_note(
+            f"Run folder {root}: the trust report reads the folder Palace returned, complete or partial, as "
+            "the run left it. Fetch the folder again from the host that ran Palace."
+        )
+        raise
     collected = collect_amr_passes(
         root,
         run.problem,
