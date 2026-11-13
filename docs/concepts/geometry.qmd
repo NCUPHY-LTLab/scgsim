@@ -91,7 +91,7 @@ SCGSim preserves the caller's Net assignments. Under the current contact rules, 
 :::
 
 ::: {.callout-note title="The source DBU and the shared XY grid"}
-The GDS database unit (DBU) determines the coordinate step the source can express. For an assembled layout, SGB uses one fixed-precision grid in assembly XY; when `grid_size_um=None`, it takes the actual emitted source DBU. An explicitly different grid is rejected instead of rewriting a shared PDK or global GDSFactory setting. The public example recorded in the [case index](../images/sgb-concept/public-case-binding.json) uses `0.001 µm`, or `1 nm`.
+The GDS database unit (DBU) determines the coordinate step the source can express. For an assembled layout, SGB uses one fixed-precision grid in assembly XY: the DBU of the emitted source GDS. SCGSim reads it from the GDS and never rewrites a shared PDK or global GDSFactory setting. The public example recorded in the [case index](../images/sgb-concept/public-case-binding.json) uses `0.001 µm`, or `1 nm`.
 
 A grid controls how assembled XY boundaries are noded and represented; it does not make every later calculation exact. For example, a segment from $(0,0)$ to $(3,1)$ nm meets $x=1$ nm at $(1,\frac13)$ nm. That intersection is off the 1 nm lattice and must be resolved as part of the shared arrangement. Z, film thickness and finite-element mesh size are separate quantities.
 :::

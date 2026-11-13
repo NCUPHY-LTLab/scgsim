@@ -79,7 +79,7 @@ SCGSim 也為這個入口以下的一個 API 提供文件，您可以用自行�
 
 | 規則 | SCGSim 為何需要它 | 回報方式 | 細節 |
 |---|---|---|---|
-| 規劃的 `grid_size_um` 等於版圖的資料庫單位，或設為 `None` 直接採用它。精確曲線的端點落在格點上。 | SCGSim 以整數格點座標計算；第二套格點會移動版圖沒有移動的點。 | 規劃時 `ValueError`；曲線端點不在格點上時，建構時 `InputError` | [幾何契約](geometry-sgb.qmd#component-to-backend-geometry-contract) |
+| 格點就是版圖的資料庫單位；SCGSim 從 GDS 讀取它。精確曲線的端點落在格點上。 | SCGSim 以整數格點座標計算；第二套格點會移動版圖沒有移動的點。 | 曲線端點不在格點上時，建構時 `InputError` | [幾何契約](geometry-sgb.qmd#component-to-backend-geometry-contract) |
 | 對齊格點不改變任何拓撲：沒有等於或小於一個格點間距的頸部、縫隙、孔洞或狹縫。 | SCGSim 把每個頂點放到格點上。在 1 nm 格點上，兩個導體間 0.4 nm 的縫隙會閉合，兩塊分開的金屬就變成一塊。 | 規劃時 `ValueError`：「… topology changed at grid」、「… contact changed at grid」 | [幾何契約](geometry-sgb.qmd#component-to-backend-geometry-contract) |
 | 輪廓中沒有微細結構：側壁下方沒有短於 10 個格點間距的外框邊，也沒有窄於 10 個格點間距、或有小於 1° 尖角的水平面。SCGSim 會照原樣保留這類結構，不會刪除。 | 1 nm 的邊或狹縫是合法幾何，但網格產生器必須以同樣尺寸的元素解析它。 | 網格產生前，在 `mesh()` 與 `simulation_drc()` 中以 `SimulationDrcError` 拒絕，並附上位置；短於 25 個格點間距的自由水平邊則只發出警告 | [網格階段回報什麼](layout-modeling-check.qmd#what-the-meshing-stage-reports) |
 

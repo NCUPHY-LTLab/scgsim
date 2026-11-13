@@ -48,6 +48,6 @@ print(snapshot.gds_sha256)
 print(tuple(entity.semantic_id for entity in reloaded.entities))
 ```
 
-保留先前的來源配對時，請選擇新的研究位置並將兩個檔案放在一起：堆疊讀取器會檢查紀錄中的 GDS 識別與已註冊的 occurrence 幾何。列印出的 Entity ID 表示來源脈絡，不代表每個 Entity 都有一筆場量測，也不代表求解器連通性。
+保留先前的來源配對時，請選擇新的研究位置並將兩個檔案放在一起：堆疊帶有 `prepare()` 從該 GDS 讀出的多邊形，因此堆疊讀取器會拒絕其他 GDS，並列出兩者的 SHA-256 摘要。列印出的 Entity ID 表示來源脈絡，不代表每個 Entity 都有一筆場量測，也不代表求解器連通性。
 
 來源摘要與配對來源讀取可確認正規化輸入資訊；它們不會產生網格、不會查詢原生 AEDT，也無法證明已完成求解。下一階段需選擇物理模型：[Palace Electrostatic](palace-electrostatic.qmd)、[Palace Eigenmode](palace-eigenmode.qmd) 或 [AEDT source-first Eigenmode/EPR](../tutorial-xmon-aedt.qmd)。[幾何概念](../concepts/geometry.qmd)說明這些後端如何共用來源識別，同時採用不同原生表示法。
