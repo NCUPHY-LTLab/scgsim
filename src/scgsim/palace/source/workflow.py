@@ -2,14 +2,15 @@
 
 The simulation holds the settings and the lifecycle; this module takes them as ``GeometrySettings`` and
 holds no state.  It applies them in a fixed order: vacuum, port sheets, solution regions, authored ports,
-the physical interpretation of the route.
+the physical interpretation of the route.  The route rule is here too: ``set_route`` and ``simulation_drc``
+both state a route setting, and ``checked_route_setting`` checks it for either, naming the call it was given in.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Literal
 
 from scgsim.geometry.interpretation.physical import interpret_physical_geometry
 from scgsim.geometry.models.input import GeometryBuildInput, VacuumRegionSpec
@@ -29,7 +30,30 @@ from .surface_epr import SurfaceEprSpecs
 
 _WHERE_VACUUM = "the GeometryPlan, or the call to set_vacuum_region"
 
-_WHERE_SET_ROUTE = "the call to set_route"
+
+@dataclass(frozen=True)
+class RouteCall:
+    """The call that states a route setting, which a refusal of that setting names.
+
+    ``name`` is the call (``set_route`` or ``simulation_drc``); ``route_argument`` spells how it takes the
+    route, with ``{route}`` standing for the route as Python writes it.
+    """
+
+    name: str
+    route_argument: str
+
+    @property
+    def where(self) -> str:
+        """Where a refused route setting is changed: this call."""
+        return f"the call to {self.name}"
+
+    def with_route(self, route: str) -> str:
+        """This call, spelled with ``route``."""
+        return f"{self.name}({self.route_argument.format(route=repr(route))})"
+
+
+SET_ROUTE = RouteCall("set_route", "{route}")
+SIMULATION_DRC = RouteCall("simulation_drc", "..., route={route}")
 
 
 @dataclass(frozen=True)
@@ -227,6 +251,52 @@ def _select_authored_ports(
     return build_input
 
 
+def checked_route_setting(
+    route: Any, approximation_profile: Any, call: RouteCall
+) -> tuple[Literal["A", "B"], ApproximationProfile | None]:
+    """The route setting ``call`` states, checked: ``route`` as ``"A"`` or ``"B"``, and the profile as given.
+
+    Whether a profile suits the route depends on the plan's films, so SGB's route check refuses a
+    mismatch when the geometry is built; this check refuses only what no plan can use.
+
+    Raises:
+        ValueError: ``route`` is not ``"A"`` or ``"B"``.
+        TypeError: ``approximation_profile`` is neither None nor an ``ApproximationProfile``.
+    """
+    chosen = _checked_route(route, call)
+    if approximation_profile is not None and not isinstance(
+        approximation_profile, ApproximationProfile
+    ):
+        raise TypeError(
+            Declared(
+                "approximation_profile must be an ApproximationProfile: pass "
+                f"{call.name}(..., approximation_profile=ApproximationProfile(name, 'v1', parameters))",
+                call.where,
+            ).refusal(found_text(type(approximation_profile).__name__))
+        )
+    return chosen, approximation_profile
+
+
+def _checked_route(route: Any, call: RouteCall) -> Literal["A", "B"]:
+    """``route`` as ``"A"`` or ``"B"``; any other route is refused with the two a Palace simulation takes."""
+    chosen = route.strip().upper() if isinstance(route, str) else route
+    if chosen == "A" or chosen == "B":
+        return chosen
+    if chosen == "C":
+        raise ValueError(
+            Declared("Route C", call.where).refusal(
+                "is not a Palace route: SGB builds Route C for backends that keep conductor volumes. "
+                f"Call {call.with_route('A')} or {call.with_route('B')}"
+            )
+        )
+    raise ValueError(
+        Declared(f"Unknown route {route!r}", call.where).refusal(
+            f"call {call.with_route('A')} for films as zero-thickness sheets or "
+            f"{call.with_route('B')} for 3D conductors"
+        )
+    )
+
+
 def route_profile(
     route: str, approximation_profile: ApproximationProfile | None
 ) -> ApproximationProfile:
@@ -234,29 +304,21 @@ def route_profile(
 
     The given profile is used as given.  Without one, each route has its default: Route A lowers the films
     with ``thin_film`` and Route B keeps the conductors finite with the identity profile ``route_b``.
-    ``set_route`` calls this when the setting is made, and the preparation and ``input_summary()`` again for
-    the profile they use, so the three agree.
-
-    Raises:
-        TypeError: ``approximation_profile`` is neither None nor an ``ApproximationProfile``.
+    The preparation and ``input_summary()`` both call this for the profile they use, so the two agree.
     """
     if approximation_profile is None:
         name = "thin_film" if route == "A" else "route_b"
         return ApproximationProfile(name, "v1", {})
-    if not isinstance(approximation_profile, ApproximationProfile):
-        raise TypeError(
-            Declared(
-                "approximation_profile must be an ApproximationProfile: pass "
-                "set_route(..., approximation_profile=ApproximationProfile(name, 'v1', parameters))",
-                _WHERE_SET_ROUTE,
-            ).refusal(found_text(type(approximation_profile).__name__))
-        )
     return approximation_profile
 
 
 __all__ = [
+    "SET_ROUTE",
+    "SIMULATION_DRC",
     "GeometrySettings",
     "PreparedMeshInput",
+    "RouteCall",
+    "checked_route_setting",
     "prepare_mesh_input",
     "route_profile",
 ]

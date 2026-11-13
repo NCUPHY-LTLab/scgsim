@@ -238,13 +238,15 @@ These are not supported today:
 
 Call `EigenmodeSim.simulation_drc`, `ElectrostaticSim.simulation_drc`, or both,
 from the layout's tests and while you draw. Each runs the plan and the geometry
-build that its class's `mesh()` runs, with your Nets and Surface-EPR margins,
-and then the meshing-stage check that `mesh()` also runs first; it raises the
-same errors. The [layout modeling check](layout-modeling-check.qmd) shows the
+build that its class's `mesh()` runs, on the route you pass and with your Nets
+and Surface-EPR margins, and then the meshing-stage check that `mesh()` also
+runs first; it raises the same errors. The route is Route A or Route B, given
+as `set_route` takes it (`route` and `approximation_profile`), and Route B when
+not given. The [layout modeling check](layout-modeling-check.qmd) shows the
 call.
 
-A pass means that the model built for that check was accepted: Route B, the
-Nets and margins you passed, and the fixed settings listed under
+A pass means that the model built for that check was accepted: the route and
+profile, the Nets and margins you passed, and the fixed settings listed under
 [What the check uses](layout-modeling-check.qmd#what-the-check-uses). It
 establishes the rules that build checks, and no others:
 
@@ -254,8 +256,8 @@ establishes the rules that build checks, and no others:
 
 The check stops before meshing. Its meshing stage finds the fine structure of
 the [meshing-stage classes](layout-modeling-check.qmd#what-the-meshing-stage-reports),
-but a pass does not promise that the model meshes. It does not check Route A,
-other settings or AEDT.
+but a pass does not promise that the model meshes. It does not check another
+route or profile than the one passed, other settings, Route C or AEDT.
 
 ## When something fails {#when-something-fails}
 
