@@ -2,7 +2,7 @@
 
 Owns the facts a solver adapter needs about each primary physical group beyond its members: which
 Entity or Entities it belongs to, the Net, whether it is a top, bottom, sidewall or sheet surface,
-the volumes and solution regions on its sides, its inset band, its area -- so today's group record
+the volumes and solution regions on its sides, its inset band, its area -- so a group's record
 (owner ids, adjacent solution volumes, face kind, Net) can be rebuilt without reading geometry.
 
 Primary groups partition each dimension.  A face or volume names its group in its own record, so a group

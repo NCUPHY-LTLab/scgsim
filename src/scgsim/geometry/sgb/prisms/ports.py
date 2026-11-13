@@ -1,8 +1,7 @@
 """Lumped-port sheet regions as sheet prisms (stage S2).
 
 Owns turning each adapter-authored ``PortSheetRegionRecord`` into a sheet prism that
-carries the port identity.  The semantics follow the compiler's port lowering
-(``planning.port_planning.lowering`` and the curved arrangement's ``port_planes``):
+carries the port identity:
 
 * **Plane.**  The port sheet lies on the *physical support plane* of its host conductors:
   the plane the source authored for them, projected through the common
@@ -13,7 +12,7 @@ carries the port identity.  The semantics follow the compiler's port lowering
   host must project to one effective plane.  A host without a declaration or an
   attachment face fails closed: nothing is guessed from the body's interval, so a 0.2 um
   metal on a substrate puts its port on the substrate surface, never in the vacuum above
-  it (the same rule as the AEDT junction preparation's source support plane).  A port
+  it.  A port
   therefore lies in the plane of the surface under it and occupies part of that surface
   instead of floating over it.  One rule for every route, because the prism catalogue
   does not know the route.
@@ -24,8 +23,7 @@ carries the port identity.  The semantics follow the compiler's port lowering
   host footprint SGB built: a port-sheet cell over a host is the host
   (``arrangement.labelling.prism_set.without_landings``), so the port keeps only its *active remainder*
   and shares the host's own edges.  A region bound to a rectangular junction partition is
-  already the junction's central rectangle and keeps its full footprint
-  (``lowering._PortSheetLowerer.read_geometry``), so it has no landing.
+  already the junction's central rectangle and keeps its full footprint, so it has no landing.
 * **Identity.**  Port sheet id, source name, 1-based port index, normalised XY
   direction, host entity ids and source/target layers.
 """

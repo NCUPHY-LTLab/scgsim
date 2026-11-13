@@ -5,7 +5,7 @@ of every arrangement cell.  A cell is labelled by an exact interior point and
 exact point-in-footprint tests against the prisms active there; no floating
 point is involved.
 
-Slab label rule (the same precedence the curved arrangement of the compiler used):
+Slab label rule:
 
 * a conductor wins over any solution region; conductors of different Nets that
   overlap raise :class:`OverlapError`;

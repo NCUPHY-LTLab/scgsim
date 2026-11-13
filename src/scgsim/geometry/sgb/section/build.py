@@ -12,8 +12,7 @@ curve of an emitted face (each refused where it breaks a cut rule), the traces o
 section's cells and regions with the rules read on them, the records, the groups, and the 2D validation.  A
 broken cut rule raises :class:`~scgsim.geometry.sgb.errors.InputError` with its place; a failed invariant
 raises :class:`~scgsim.geometry.sgb.errors.ValidationError`.  Nothing is written: emitting the 2D model to
-files is a later stage.  The section is a function of the 3D model alone, so it is the same for every
-``workers`` and ``tiles`` value the 3D model was built with.
+files is a later stage.  The section is a function of the 3D model alone.
 """
 
 from __future__ import annotations

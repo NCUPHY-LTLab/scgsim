@@ -15,7 +15,7 @@ not pull it), over the shape the direct writer produced, and returning a structu
 4. A cross-check against the plan: the volume of every solid and the area of every face against the planned
    values, matched by the writer's ``TopExp::MapShapes`` numbering.
 
-In strict mode any finding raises :class:`OcctCheckError`.  This module needs OCP at import: call
+With ``strict=True`` any finding raises :class:`OcctCheckError`.  This module needs OCP at import: call
 :func:`~scgsim.geometry.sgb.checks.verification.ocp.require_ocp` first to get the readable error naming the dependency group.
 
 Does not own writing (``output.emission``) or SGB's own structural invariants (``validation``).
@@ -74,7 +74,7 @@ SHORT_EDGE_TOLERANCES = 10
 
 
 class OcctCheckError(SgbError):
-    """The official OCCT checks found a problem (strict mode)."""
+    """The official OCCT checks found a problem (``strict=True``)."""
 
 
 @dataclass
