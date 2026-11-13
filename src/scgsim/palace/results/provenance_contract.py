@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import tarfile
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_run_folder import (
     HANDOFF_METADATA,
@@ -373,13 +373,57 @@ def validate_archive_manifest(
     handoff_metadata: dict[str, Any],
 ) -> None:
     """Validate the archive inventory before comparing its members and exact file bytes."""
-    if (
-        expect_scalar(manifest, "schema_version", int, fallback=0)
-        != RUN_RECORD_SCHEMA_VERSION
-    ):
+    archive = _validate_manifest_header(manifest, resource_record, handoff_metadata)
+    members = _manifest_members(manifest)
+    required = {*SEALED_INPUTS, HANDOFF_METADATA, RUN_METADATA}
+    if missing := required - members.paths:
         raise ValueError(
-            "handoff archive manifest schema_version must be integer "
-            f"{RUN_RECORD_SCHEMA_VERSION}."
+            "handoff archive manifest lacks required members: "
+            + ", ".join(sorted(missing))
+        )
+    if non_files := required - set(members.files):
+        raise ValueError(
+            "handoff archive manifest requires regular-file members: "
+            + ", ".join(sorted(non_files))
+        )
+    _validate_manifest_inputs(members.files, handoff_metadata, manifest)
+    archive_path = resolve_run_archive_path(root, expect_scalar(archive, "path", str))
+    with tarfile.open(archive_path, "r:gz") as bundle:
+        bundled = _bundled_members(bundle, root)
+        allowed_extra = {
+            path.rstrip("/")
+            for path in expect_list(
+                manifest.get("archive_members_excluded_from_self_listing"),
+                "archive manifest excluded self members",
+            )
+        }
+        manifest_member_paths = {path.rstrip("/") for path in members.paths}
+        if set(bundled) != manifest_member_paths | allowed_extra:
+            raise ValueError(
+                refusal(
+                    "archive members do not match the archive manifest",
+                    found=sorted(bundled),
+                    expected=sorted(manifest_member_paths | allowed_extra),
+                )
+            )
+        _validate_bundled_types(bundle, bundled, members.types)
+        _validate_bundled_hashes(bundle, bundled, members.files)
+
+
+def _validate_manifest_header(
+    manifest: dict[str, Any],
+    resource_record: dict[str, Any],
+    handoff_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Check the manifest's schema, input hashes and archive path; return the resource record's archive."""
+    schema_version = expect_scalar(manifest, "schema_version", int, fallback=0)
+    if schema_version != RUN_RECORD_SCHEMA_VERSION:
+        raise ValueError(
+            refusal(
+                "handoff archive manifest schema_version must be integer "
+                f"{RUN_RECORD_SCHEMA_VERSION}",
+                found=schema_version,
+            )
         )
     archive = expect_mapping(resource_record.get("archive"), "resource_record.archive")
     manifest_hashes = extract_hash_map(
@@ -406,48 +450,29 @@ def validate_archive_manifest(
                 expected=record_archive,
             )
         )
-    file_members, member_paths, member_types = _manifest_members(manifest)
-    required = {*SEALED_INPUTS, HANDOFF_METADATA, RUN_METADATA}
-    if missing := required - member_paths:
-        raise ValueError(
-            "handoff archive manifest lacks required members: "
-            + ", ".join(sorted(missing))
-        )
-    if non_files := required - set(file_members):
-        raise ValueError(
-            "handoff archive manifest requires regular-file members: "
-            + ", ".join(sorted(non_files))
-        )
-    _validate_manifest_inputs(file_members, handoff_metadata, manifest)
-    archive_path = resolve_run_archive_path(root, expect_scalar(archive, "path", str))
-    with tarfile.open(archive_path, "r:gz") as bundle:
-        bundled: dict[str, tarfile.TarInfo] = {}
-        for member in bundle.getmembers():
-            logical = logical_tar_member_name(member.name, root.name)
-            if logical is None:
-                continue
-            bundled[logical.rstrip("/")] = member
-        allowed_extra = {
-            path.rstrip("/")
-            for path in expect_list(
-                manifest.get("archive_members_excluded_from_self_listing"),
-                "archive manifest excluded self members",
-            )
-        }
-        manifest_member_paths = {path.rstrip("/") for path in member_paths}
-        if set(bundled) != manifest_member_paths | allowed_extra:
-            raise ValueError(
-                refusal(
-                    "archive members do not match the archive manifest",
-                    found=sorted(bundled),
-                    expected=sorted(manifest_member_paths | allowed_extra),
-                )
-            )
-        _validate_bundled_types(bundle, bundled, member_types)
-        _validate_bundled_hashes(bundle, bundled, file_members)
+    return archive
 
 
-def _manifest_members(manifest: Any) -> Any:
+def _bundled_members(bundle: tarfile.TarFile, root: Path) -> dict[str, tarfile.TarInfo]:
+    """The archive's members by their path inside the run folder; the folder's own entry is left out."""
+    bundled: dict[str, tarfile.TarInfo] = {}
+    for member in bundle.getmembers():
+        logical = logical_tar_member_name(member.name, root.name)
+        if logical is None:
+            continue
+        bundled[logical.rstrip("/")] = member
+    return bundled
+
+
+class _ManifestMembers(NamedTuple):
+    """The archive manifest's members: each regular file's size and SHA-256, every path, and its type."""
+
+    files: dict[str, tuple[int, str]]
+    paths: set[str]
+    types: dict[str, str]
+
+
+def _manifest_members(manifest: Any) -> _ManifestMembers:
     """Read unique archive-member paths, declared types and regular-file identities."""
     members = expect_list(manifest.get("members"), "handoff archive manifest members")
     member_paths: set[str] = set()
@@ -478,7 +503,7 @@ def _manifest_members(manifest: Any) -> Any:
             bytes_value = expect_scalar(data, "bytes", int)
             sha_value = expect_scalar(data, "sha256", str)
             file_members[path] = (bytes_value, sha_value)
-    return file_members, member_paths, member_types
+    return _ManifestMembers(file_members, member_paths, member_types)
 
 
 def _validate_manifest_inputs(
