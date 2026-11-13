@@ -1,4 +1,4 @@
-"""Own canonical surface-record facts shared across planning stages."""
+"""Surface-record facts that the planning stages share."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-# Surface provenance remains an extensible JSON-shaped metadata payload.
+# Surface provenance is JSON-shaped metadata given as it is, so its values are typed Any.
 from scgsim.geometry.models.common import INTERFACE_KIND_ORDER, RouteLiteral
 from scgsim.geometry.models.input import SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
@@ -76,8 +76,8 @@ def surface_contribution_provenance(
         for classification in classifications
         if classification in {"MA", "MS", "SA"}
     )
-    # These established labels mean metal-air (MA), metal-substrate (MS), and
-    # substrate-air (SA) surface participation in the Surface EPR model.
+    # The labels are metal-air (MA), metal-substrate (MS) and substrate-air (SA)
+    # surface participation in the Surface EPR model.
     unique_surface_epr = tuple(dict.fromkeys(surface_epr_classifications))
     aggregate_once = (
         len(surface_epr_classifications) > 1 and len(unique_surface_epr) == 1

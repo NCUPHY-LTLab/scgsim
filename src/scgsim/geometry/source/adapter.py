@@ -63,21 +63,15 @@ def build_gds_stack_geometry_input(
     top_cell_name: str | None = None,
     metadata: Mapping[str, Any] | None = None,
 ) -> GeometryBuildInput:
-    """Level 0 adapter: build GeometryBuildInput from GDS plus stack JSON.
+    """Build a ``GeometryBuildInput`` from a GDS file and a stack JSON file.
 
-    This is the canonical frontend contract for v1. Tool-specific adapters
-    such as GDSFactory, gsim, or direct KLayout support should
-    lower into this same semantic stack shape instead of inventing their own
-    geometry semantics.
+    `gds_file` is the layout. It is read with gdstk, and its database unit is the
+    model grid.
 
-    `gds_file` is the layout source path. The adapter must load this file,
-    select `top_cell_name` when provided, apply an explicit hierarchy/flattening
-    policy, and convert layer/datatype shapes to `LayoutPolygonSpec` records
-    without leaking raw KLayout objects.
-
-    `top_cell_name` optionally selects the GDS cell to adapt. If it is omitted
-    and a later KLayout-backed extraction sees multiple plausible top cells, it
-    should fail fast rather than guessing silently.
+    `top_cell_name` selects the GDS cell to adapt (the stack's own
+    `top_cell_name` metadata applies when it is omitted). Without either, the
+    one cell that holds polygons is used; when several cells do, the call
+    refuses and names them.
 
     `stack_file` is a path to a project stackup JSON file. It is the reviewed
     semantic contract for layer/datatype, material, z-range, route
@@ -86,7 +80,7 @@ def build_gds_stack_geometry_input(
     is read only with the GDS it was written for (the snapshot's `gds_bytes`);
     another GDS is refused, naming both digests.
 
-    Minimal JSON schema for this first slice:
+    The stack JSON holds:
 
     - `layers`: sequence of layer records. Each record maps one GDS
       `layer`/`datatype` pair to a semantic entity using `semantic_id`, `role`,
@@ -99,21 +93,20 @@ def build_gds_stack_geometry_input(
       `AIR` or `substrate`, to metadata. Each region may define `material_id`,
       `priority`, `geometry_kind`, and `geometry`; missing values default to
       the semantic id, `0`, `domain`, and the metadata mapping itself.
+    - `materials`: mapping from material id to its record.
     - `metadata.port_sheet_source_layers`: optional sequence of Palace
       lumped-port sheet source layers. These become `PortSheetRegionRecord`s,
       not backend-live `SurfacePlanRecord`s.
     - `metadata`: optional mapping copied into `GeometryBuildInput.metadata`.
 
-    `metadata` is copied to `GeometryBuildInput.metadata` for adapter version,
-    source GDS/stack file paths, selected top cell, unit convention, KLayout
-    database unit, flattening policy, and stack-file dialect/provenance.
+    `metadata` is copied to `GeometryBuildInput.metadata` together with the
+    source GDS and stack file paths, the selected cell name, its bounds and the
+    database unit.
 
-    The implementation must return a fully frontend-normalized
-    `GeometryBuildInput`: `polygons` from KLayout geometry, `entities` from the
-    resolved stack-file material semantics, and `solution_regions` from
-    solver-domain definitions such as AIR, substrate, dielectric, or enclosure
-    boxes. It must not emit solver config or assume Ansys physical names are the
-    final semantic ids.
+    The result holds `polygons` read from the GDS cell, `entities` from the
+    stack's layers and solution regions, and `solution_regions` from the stack's
+    solution regions. It carries no solver configuration and takes no Ansys
+    physical name as a final semantic id.
     """
 
     import gdstk  # noqa: PLC0415 - optional native loader runs before path validation.
@@ -320,7 +313,7 @@ class _SourceLowering:
         self, metadata: Mapping[str, Any], ports: tuple[PortSheetRegionRecord, ...]
     ) -> GeometryBuildInput:
         # boundary_binding's reconstruction flag selects the actual record class;
-        # these casts retain its existing validation without duplicate checks.
+        # these casts rely on that validation and check nothing twice.
         return GeometryBuildInput(
             polygons=tuple(self.polygons),
             entities=tuple(self.entities),

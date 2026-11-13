@@ -1,4 +1,4 @@
-"""Compose contact and geometry-reference operations from planar and grid primitives."""
+"""Loop comparisons, contact-hole checks and the geometry references of gdstk regions, built on the planar-loop and grid operations."""
 
 from __future__ import annotations
 

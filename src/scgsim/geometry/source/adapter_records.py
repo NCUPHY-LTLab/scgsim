@@ -1,4 +1,4 @@
-"""Carry loaded adapter facts and lower stack/entity records without source-file policy."""
+"""Carry the facts a loaded layout gives the adapter, and lower stack and entity records; it applies no file policy."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from scgsim.geometry.source.occurrence import (
 if TYPE_CHECKING:
     from gdstk import Cell, Polygon
 
-# Stack geometry and metadata are extensible JSON supplied to their existing
-# source validators. Any preserves that payload boundary and its error order.
+# Stack geometry and metadata are JSON given as it is and checked by the source
+# validators, so their values are typed Any.
 
 
 @dataclass(frozen=True)

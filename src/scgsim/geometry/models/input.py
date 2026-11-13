@@ -1,7 +1,6 @@
-"""Adapter-normalized input records for route-aware geometry construction.
+"""The build input: layout polygons, curves, semantic entities, the vacuum region, and the ``GeometryBuildInput`` that holds them.
 
-These immutable records preserve source facts and provenance before
-planning; planned geometry records are defined in their own modules.
+The records are immutable and keep the source facts and provenance as the source stage read them.
 """
 
 from __future__ import annotations

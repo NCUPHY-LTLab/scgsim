@@ -42,7 +42,7 @@ def _string_tuple(value: object) -> tuple[str, ...] | None:
 
 
 def _upstream_plain(value: Any) -> Any:
-    """Preserve legacy source fingerprinting outside strict core mappings."""
+    """Reduce a value to plain mappings, lists and sorted sets, so its SHA-256 does not depend on the container types."""
     if isinstance(value, Mapping):
         return {str(key): _upstream_plain(item) for key, item in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):

@@ -1,4 +1,4 @@
-"""Resolve authored support planes and exact source/effective incident conductors."""
+"""Resolve authored support planes and the conductors incident to a junction, in the source and in the effective input."""
 
 from __future__ import annotations
 

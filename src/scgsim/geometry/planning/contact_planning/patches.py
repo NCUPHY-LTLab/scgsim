@@ -225,7 +225,7 @@ def _plan_route_c_conductor_contact_patches(
     interfaces: tuple[InterfacePlanRecord, ...],
     representation_context: RepresentationContext | None = None,
 ) -> tuple[InterfacePlanRecord, ...]:
-    """Preserve the pre-A/B Route-C rectangular-contact behavior exactly."""
+    """Plan Route C contacts: where a conductor's top face meets another's bottom face at one Z, the overlap is one rectangle."""
     import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
     generated: list[InterfacePlanRecord] = []

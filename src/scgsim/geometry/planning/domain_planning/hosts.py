@@ -108,8 +108,8 @@ def conductor_sidewall_ref_solution_id(
     every wall. Its outer wall can coincide with an authored dielectric bore;
     its inner wall remains adjacent to a ledger-bound vacuum component. Both
     use complete canonical segment coverage and the declared Z interval, not
-    a point, name, bounds proxy, or a guessed conductor role. The boolean result
-    distinguishes this exact binding from legacy whole-footprint coverage.
+    a point, name, bounds proxy, or a guessed conductor role. The boolean says
+    whether a cavity or child was bound this way at all.
     """
     host_id = entity.host_void_semantic_id
     if not isinstance(host_id, str) or not host_id:

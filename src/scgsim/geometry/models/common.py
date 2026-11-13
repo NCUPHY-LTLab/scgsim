@@ -1,7 +1,6 @@
-"""Shared geometry vocabulary and constants used by source and planning records.
+"""Type aliases and constants that the geometry records share: routes, interface kinds and their order, conductor roles, and the metadata keys of a geometry reference.
 
-This module owns common type aliases and policy constants, not the records that
-carry source facts or compiled geometry.
+The records themselves are in the neighbouring modules.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Pre-planning records for adapter-owned regions and their explicit overlaps."""
+"""Records of the port-sheet regions of a layout and the overlaps they declare."""
 
 from __future__ import annotations
 

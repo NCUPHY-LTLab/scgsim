@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-# Geometry references carry extensible source metadata; Any preserves its
-# existing payload contract rather than imposing a new metadata schema.
+# Geometry references carry the entity's metadata as it is given, so their values are
+# typed Any.
 from typing import Any
 
 from scgsim.geometry.grid.planar_loops import clean_loop, ring_edges
@@ -46,7 +46,7 @@ def route_entity_geometry_ref(
     interfaces: tuple[InterfacePlanRecord, ...] = (),
 ) -> dict[str, Any]:
     """Extend Route A cutout bounds only from recognized conductor contacts."""
-    # Keep the established caller signature; this projection reads entity-owned data.
+    # ``build_input`` is part of the signature but not read: the projection uses only the entity's own data.
     del build_input
     geometry_ref = entity_geometry_ref(entity, representation=representation)
     if route != "A" or representation != "cutout_boundary_shell":

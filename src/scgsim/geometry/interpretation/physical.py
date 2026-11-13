@@ -1,8 +1,8 @@
-"""One neutral selected-profile interpretation before backend construction.
+"""Interpret a prepared input under the selected approximation profile.
 
-Placement is already source-normalized. This interpreter changes only declared
-representation/Z, preserving polygon sets, ownership, materials and source
-contact evidence. Specific missing contact graphs are not fabricated here.
+Placement is already normalized by the source stage. The interpretation changes only
+the declared representation and Z, and keeps the polygon sets, ownership, materials and
+source contact evidence. It adds no contact graph that the source did not declare.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Low-level polygon conversion and selection shared by source owners.
+"""Polygon conversion and selection that the source stage's Ground recipe and occurrence selectors share.
 
 This leaf has no adapter, occurrence, planning, or backend dependency. Keep one
 implementation of source-ring and connected-polygon mechanics for the Ground
@@ -52,7 +52,7 @@ def _fused_boolean_candidates(candidates):
             tuple(max(p[axis] for p in points) + padding for axis in (0, 1)),
         )
         if not all(isfinite(v) for v in (*low, *high)):
-            # No new input rejection; uncertain envelopes use the original path.
+            # An envelope that cannot be bounded takes the unfiltered path; no input is refused here.
             return None
         envelopes.append(box(*low, *high))
     tree = STRtree(envelopes)

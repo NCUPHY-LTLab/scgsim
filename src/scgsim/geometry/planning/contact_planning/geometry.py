@@ -191,7 +191,7 @@ def contact_patch_loops(
 def single_rectangular_contact_loop(
     overlap_region: Sequence[Any], lower_id: str, upper_id: str
 ) -> tuple[tuple[float, float], ...]:
-    """Route-C legacy contact recognizer: exactly one rectangular patch."""
+    """Return the one axis-aligned rectangle an overlap forms, or refuse an overlap that is not one."""
     import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
     polygons = boolean_polygon_region(gdstk, overlap_region, (), "or")

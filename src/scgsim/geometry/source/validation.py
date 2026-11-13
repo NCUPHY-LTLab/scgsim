@@ -1,4 +1,7 @@
-"""Own existing input-only validation before compilation. Shared Entity predicates are lower operations, not duplicate validators."""
+"""Validate a ``GeometryBuildInput`` from its own contents: polygons, entities, attachments and port regions.
+
+The entity predicates it uses are in ``models.entities``; the contact-pad attachment is in ``source.contact_pads``.
+"""
 
 from __future__ import annotations
 
