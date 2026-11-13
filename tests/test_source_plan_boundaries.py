@@ -167,5 +167,5 @@ def test_prepare_preserves_per_instance_boundary_error_priority(monkeypatch):
     }
     plan = _make_plan(monkeypatch, semantics)
 
-    with pytest.raises(ValueError, match="source boundary role"):
+    with pytest.raises(ValueError, match="role must be outer or hole"):
         plan.prepare()

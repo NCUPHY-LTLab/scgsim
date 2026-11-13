@@ -8,6 +8,7 @@ from typing import Any, NotRequired, TypedDict, cast
 
 from scgsim.geometry.models.common import PolygonRing, RouteLiteral
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.models.representation import RepresentationContext
 
 
@@ -126,7 +127,9 @@ def _sheet_supports(
         polygon = polygons_by_id.get(polygon_id)
         if polygon is None:
             raise ValueError(
-                f"{entity.semantic_id} sheet intent references missing polygon {polygon_id!r}"
+                internal(
+                    f"the sheet intent of {entity.semantic_id!r} names polygon {polygon_id!r}, which the input does not hold"
+                )
             )
         supports.append(_SheetSupport((polygon_id,), polygon.exterior, polygon.holes))
     return tuple(supports)

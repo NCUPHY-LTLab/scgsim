@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from scgsim.diagnostics import diagnostic_stage, progress
 from scgsim.geometry.grid.grid_cache import with_grid_work_cache
@@ -22,6 +22,7 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.source.adapter_records import (
     AdapterSource,
@@ -57,6 +58,14 @@ from scgsim.geometry.source.recipes import (
 
 if TYPE_CHECKING:
     from gdstk import Cell
+
+
+_STACK_FILE = Declared(
+    "the stack file", "the stack_file passed to build_gds_stack_geometry_input"
+)
+_CALL = Declared(
+    "build_gds_stack_geometry_input", "the call to build_gds_stack_geometry_input"
+)
 
 
 @with_grid_work_cache
@@ -119,7 +128,9 @@ def build_gds_stack_geometry_input(
 
     gds_path = Path(gds_file)
     if not gds_path.is_file():
-        raise FileNotFoundError(gds_path)
+        raise FileNotFoundError(
+            _CALL.refusal(f"its gds_file {str(gds_path)!r} does not exist")
+        )
     stack_mapping, stack_path = _load_stack_mapping(stack_file)
     stack = stack_records(stack_mapping, metadata)
     check_plan_pair(stack, gds_path.read_bytes())
@@ -143,18 +154,22 @@ def stack_records(
     """The stack's containers, each checked to have the shape the lowering reads."""
     raw_layers = stack_mapping.get("layers")
     if not record_sequence(raw_layers):
-        raise TypeError("stack_file must define sequence 'layers'")
+        raise TypeError(_STACK_FILE.expected("layers", "a sequence", raw_layers))
     solution_regions = stack_mapping.get("solution_regions")
     if not isinstance(solution_regions, Mapping):
-        raise TypeError("stack_file must define mapping 'solution_regions'")
+        raise TypeError(
+            _STACK_FILE.expected("solution_regions", "a mapping", solution_regions)
+        )
     materials = stack_mapping.get("materials")
     if not isinstance(materials, Mapping):
-        raise TypeError("stack_file must define mapping 'materials'")
+        raise TypeError(_STACK_FILE.expected("materials", "a mapping", materials))
     stack_metadata = stack_mapping.get("metadata", {})
     if not isinstance(stack_metadata, Mapping):
-        raise TypeError("stack_file 'metadata' must be a mapping when provided")
+        raise TypeError(
+            _STACK_FILE.expected("metadata", "a mapping when given", stack_metadata)
+        )
     if metadata is not None and not isinstance(metadata, Mapping):
-        raise TypeError("metadata must be a mapping when provided")
+        raise TypeError(_CALL.expected("metadata", "a mapping when given", metadata))
     return StackRecords(raw_layers, solution_regions, materials, stack_metadata)
 
 
@@ -171,8 +186,11 @@ def check_plan_pair(stack: StackRecords, gds_bytes: bytes) -> None:
     version = stack.metadata["component_semantics_schema_version"]
     if version != 2:
         raise ValueError(
-            f"stack metadata component_semantics_schema_version is {version!r}; "
-            "only 2, which GeometryPlan writes, is supported"
+            _STACK_FILE.expected(
+                "metadata component_semantics_schema_version",
+                "2, which GeometryPlan writes",
+                version,
+            )
         )
     recorded = stack.metadata.get("gds_sha256")
     actual = hashlib.sha256(gds_bytes).hexdigest()
@@ -368,22 +386,36 @@ class _SourceLowering:
         )
 
 
+class _LoadedStack(NamedTuple):
+    """A stack file's JSON mapping and the path it was read from."""
+
+    mapping: Mapping[str, Any]
+    path: Path
+
+
 def _load_stack_mapping(
     stack_file: PathInput,
-) -> tuple[Mapping[str, Any], Path]:
+) -> _LoadedStack:
     stack_path = Path(stack_file)
     if not stack_path.is_file():
-        raise FileNotFoundError(stack_path)
+        raise FileNotFoundError(
+            _CALL.refusal(f"its stack_file {str(stack_path)!r} does not exist")
+        )
     if stack_path.suffix.lower() != ".json":
         raise ValueError(
-            "unsupported stack_file suffix "
-            f"{stack_path.suffix!r}; only JSON is supported for now"
+            _CALL.expected(
+                "stack_file suffix",
+                ".json (only JSON is supported for now)",
+                stack_path.suffix,
+            )
         )
 
     data = json.loads(stack_path.read_text(encoding="utf-8"))
     if not isinstance(data, Mapping):
-        raise TypeError("JSON stack_file root must be a mapping")
-    return data, stack_path
+        raise TypeError(
+            _STACK_FILE.expected("JSON root", "a mapping", type(data).__name__)
+        )
+    return _LoadedStack(data, stack_path)
 
 
 def _select_gds_cell(library: LoadedLibrary, top_cell_name: str | None) -> Cell:
@@ -391,7 +423,9 @@ def _select_gds_cell(library: LoadedLibrary, top_cell_name: str | None) -> Cell:
         for cell in library.cells:
             if cell.name == top_cell_name:
                 return cell
-        raise ValueError(f"GDS top_cell_name not found: {top_cell_name!r}")
+        raise ValueError(
+            _CALL.expected("top_cell_name", "a cell of the GDS", top_cell_name)
+        )
 
     candidates = [
         cell
@@ -403,7 +437,9 @@ def _select_gds_cell(library: LoadedLibrary, top_cell_name: str | None) -> Cell:
         return candidates[0]
     if candidates:
         names = ", ".join(sorted(cell.name for cell in candidates))
-        raise ValueError(f"top_cell_name is required; candidates: {names}")
+        raise ValueError(
+            _CALL.refusal(f"top_cell_name is required; candidates: {names}")
+        )
 
     top_cells = [
         cell
@@ -413,13 +449,17 @@ def _select_gds_cell(library: LoadedLibrary, top_cell_name: str | None) -> Cell:
     if len(top_cells) == 1:
         return top_cells[0]
     names = ", ".join(sorted(cell.name for cell in top_cells))
-    raise ValueError(f"top_cell_name is required; candidates: {names}")
+    raise ValueError(_CALL.refusal(f"top_cell_name is required; candidates: {names}"))
 
 
 def _cell_bounds_um(cell: Cell) -> dict[str, float]:
     bbox = cell.bounding_box()
     if bbox is None:
-        raise ValueError(f"GDS cell {cell.name!r} has no bounding box")
+        raise ValueError(
+            Declared(f"GDS cell {cell.name!r}", "the GDS file").refusal(
+                "it has no bounding box: it draws nothing"
+            )
+        )
     (x_min, y_min), (x_max, y_max) = bbox
     return {
         "x_min_um": float(x_min),

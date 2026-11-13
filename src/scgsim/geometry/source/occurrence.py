@@ -17,7 +17,6 @@ from threading import get_ident
 from types import MappingProxyType
 from typing import Any
 
-from scgsim.geometry.grid.booleans import split_gdstk_cutline_loop
 from scgsim.geometry.grid.polygon_ops import (
     FIX_SELECTOR,
     FusedComponent,
@@ -32,48 +31,16 @@ from scgsim.geometry.grid.polygon_ops import (
 )
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
 from scgsim.geometry.source.normalization import gds_layer
 from scgsim.geometry.source.recipes import Audited, audited_declared_source
+from scgsim.geometry.source.stack_layers import is_record_sequence
 
 
-def resolve_material_kind(
-    record: Mapping[str, Any],
-    *,
-    material_id: Any,
-    materials: Mapping[str, Any],
-    context: str,
-) -> str:
-    """Resolve one entity kind from explicit record and stack material facts."""
-    if not isinstance(material_id, str) or not material_id:
-        raise ValueError(f"{context} needs a non-empty material_id")
-    material = materials.get(material_id)
-    if not isinstance(material, Mapping):
-        raise TypeError(f"{context} material_id {material_id!r} is not in materials")
-    stack_kind = material.get("kind")
-    if stack_kind not in {"vacuum", "dielectric", "conductor"}:
-        raise ValueError(
-            f"{context} material {material_id!r} needs kind vacuum, dielectric, or conductor"
-        )
-    record_kind = record.get("material_kind")
-    if record_kind is not None and record_kind not in {
-        "vacuum",
-        "dielectric",
-        "conductor",
-    }:
-        raise ValueError(
-            f"{context} material_kind must be vacuum, dielectric, or conductor"
-        )
-    if record_kind is not None and record_kind != stack_kind:
-        raise ValueError(
-            f"{context} material_kind disagrees with materials[{material_id!r}].kind"
-        )
-    return str(stack_kind)
-
-
-def is_record_sequence(value: Any) -> bool:
-    """Identify record sequences while excluding strings and bytes."""
-    return isinstance(value, Sequence) and not isinstance(value, str | bytes)
+def _entity(entity: SemanticEntitySpec) -> Declared:
+    """An Entity's stack layer, which declares its selector points and occurrence polygons."""
+    return Declared(f"Entity {entity.semantic_id!r}", "its stack layer's geometry")
 
 
 @dataclass
@@ -152,79 +119,6 @@ def _extract_polygons_by_layer(
     return {key: tuple(value) for key, value in result.items()}
 
 
-def entity_from_layer_record(
-    record: Any, *, materials: Mapping[str, Any]
-) -> SemanticEntitySpec:
-    """Build a semantic entity from one stack layer and its material record."""
-    if not isinstance(record, Mapping):
-        raise TypeError("stack_file 'layers' items must be mappings")
-
-    layer = record.get("layer")
-    datatype = record.get("datatype")
-    if layer is None or datatype is None:
-        raise ValueError("stack_file layer records must define 'layer' and 'datatype'")
-
-    for required_field in ("semantic_id", "role", "material_id"):
-        if required_field not in record:
-            raise ValueError(f"stack_file layer records must define {required_field!r}")
-    geometry = _layer_record_geometry(record)
-    geometry.setdefault("gds_layer", layer)
-    geometry.setdefault("gds_datatype", datatype)
-
-    polygon_ids = record.get("polygon_ids", ())
-    labels = record.get("labels", ())
-    if isinstance(polygon_ids, str | bytes) or not isinstance(polygon_ids, Sequence):
-        raise TypeError("stack_file layer record 'polygon_ids' must be a sequence")
-    if isinstance(labels, str | bytes) or not isinstance(labels, Sequence):
-        raise TypeError("stack_file layer record 'labels' must be a sequence")
-
-    return SemanticEntitySpec(
-        semantic_id=record["semantic_id"],
-        role=record["role"],
-        material_id=record["material_id"],
-        material_kind=resolve_material_kind(
-            record,
-            material_id=record["material_id"],
-            materials=materials,
-            context=f"layer {record['semantic_id']!r}",
-        ),
-        priority=record.get("priority", 0),
-        geometry_kind=record.get("geometry_kind", "layout_extrusion"),
-        part_role=record.get("part_role"),
-        attached_face_metal_semantic_id=record.get("attached_face_metal_semantic_id"),
-        net_id=record.get("net_id"),
-        polygon_ids=tuple(polygon_ids),
-        labels=tuple(labels),
-        host_void_semantic_id=record.get("host_void_semantic_id"),
-        requires_construction_body=record.get("requires_construction_body", False),
-        route_representations=record.get("route_representations", {}),
-        geometry=geometry,
-        metadata=record.get("metadata", {}),
-    )
-
-
-def _layer_record_geometry(record: Mapping[str, Any]) -> dict[str, Any]:
-    """A stack layer's geometry: its ``geometry`` mapping, with ``z_um`` and ``thickness_um`` given beside it."""
-    raw_geometry = record.get("geometry", {})
-    if not isinstance(raw_geometry, Mapping):
-        raise TypeError("stack_file layer record 'geometry' must be a mapping")
-    geometry = dict(raw_geometry)
-    if "z_um" in record or "thickness_um" in record:
-        if "z_um" not in record or "thickness_um" not in record:
-            raise ValueError(
-                "stack_file layer records must define both 'z_um' and "
-                "'thickness_um', or use 'geometry'"
-            )
-        geometry.setdefault("z_um", record["z_um"])
-        geometry.setdefault("thickness_um", record["thickness_um"])
-    if not geometry:
-        raise ValueError(
-            "stack_file layer records must define 'geometry' or "
-            "'z_um' plus 'thickness_um'"
-        )
-    return geometry
-
-
 def gds_polygons_for_entity(
     scope: GridScope,
     entity: SemanticEntitySpec,
@@ -288,7 +182,9 @@ def _excluded_selector_points(entity: SemanticEntitySpec) -> Sequence[Any]:
         excluded = ()
     if isinstance(excluded, str | bytes) or not isinstance(excluded, Sequence):
         raise TypeError(
-            f"{entity.semantic_id} exclude_selector_points_um must be a point sequence"
+            _entity(entity).expected(
+                "exclude_selector_points_um", "a point sequence", excluded
+            )
         )
     return excluded
 
@@ -391,7 +287,11 @@ def _source_occurrence_polygons(
     entity: SemanticEntitySpec, records: Any
 ) -> tuple[LayoutPolygonSpec, ...]:
     if not is_record_sequence(records):
-        raise TypeError(f"{entity.semantic_id} occurrence polygons must be a sequence")
+        raise TypeError(
+            _entity(entity).expected(
+                "source_occurrence_polygons_um", "a sequence", records
+            )
+        )
     return tuple(
         LayoutPolygonSpec(
             polygon_id=f"{entity.semantic_id}__P{index:04d}",
@@ -468,7 +368,7 @@ def _selector_point(
         or isinstance(value, str | bytes)
         or len(value) != 2
     ):
-        raise ValueError(f"{entity.semantic_id} {name} must be a 2D point")
+        raise ValueError(_entity(entity).expected(name, "a 2D point", value))
     return (float(value[0]), float(value[1]))
 
 
@@ -501,7 +401,9 @@ def _occurrence_inverse_point(
     a, b, c, d, x, y = (float(value) for value in transform)
     determinant = a * d - b * c
     if not isfinite(determinant) or abs(determinant) < 1e-12:
-        raise ValueError("GeometryPlan occurrence transform is singular")
+        raise ValueError(
+            internal(f"an occurrence transform {tuple(transform)} is singular")
+        )
     px, py = float(point[0]) - x, float(point[1]) - y
     return [(d * px - b * py) / determinant, (-c * px + a * py) / determinant]
 
@@ -575,7 +477,11 @@ def occurrence_ground_polygons_for_entity(
     """
     placed = scope.placed(transform)
     geometry = _local_selector_geometry(entity, transform)
-    plane_key = gds_layer(plane_layer, entity.semantic_id)
+    plane_key = gds_layer(
+        plane_layer,
+        Declared(f"plane of Ground {entity.semantic_id!r}", "the PDK layer stack"),
+        "source_layer_datatype",
+    )
     plane = polygons_by_layer.get(plane_key, ())
     if not plane:
         named = placed.naming(entity.semantic_id, f"{plane_key[0]}/{plane_key[1]}")
@@ -650,69 +556,6 @@ def occurrence_port_polygon(
     return Audited(_occurrence_polygon_record(local, transform))
 
 
-def _lumped_ring_identity(ring):
-    """Exact source ring identity, independent only of start and traversal."""
-    points = tuple(tuple(point) for point in ring)
-    if points[0] == points[-1]:
-        points = points[:-1]
-    reverse = tuple(reversed(points))
-    return min(
-        order[index:] + order[:index]
-        for order in (points, reverse)
-        for index in range(len(order))
-    )
-
-
-def occurrence_lumped_polygon(
-    scope: GridScope,
-    support,
-    *,
-    cell,
-    excluded_reference_indexes=(),
-    transform=(1, 0, 0, 1, 0, 0),
-):
-    """Bind the complete authored local ring to actual original GDS geometry.
-
-    The rings are read in the cell's own coordinates; ``transform`` places the
-    occurrence in the layout, where a refusal locates the ring.
-    """
-
-    declared = (
-        _lumped_ring_identity(support.exterior),
-        sorted(_lumped_ring_identity(ring) for ring in support.holes),
-    )
-    selected = []
-    for polygon in read_polygons_by_layer(
-        cell, excluded_reference_indexes=excluded_reference_indexes
-    ).get(support.source_layer, ()):
-        exterior, holes = split_gdstk_cutline_loop(
-            scope, ring_from_gdstk_polygon(scope, polygon)
-        )
-        local = LayoutPolygonSpec(support.source_polygon_id, "", exterior, holes)
-        actual = (
-            _lumped_ring_identity(exterior),
-            sorted(_lumped_ring_identity(ring) for ring in holes),
-        )
-        if actual == declared:
-            selected.append(local)
-    if len(selected) != 1:
-        layer = f"{support.source_layer[0]}/{support.source_layer[1]}"
-        named = scope.placed(transform).naming(support.support_id, layer)
-        raise ValueError(
-            named.refusal(
-                f"lumped support {support.support_id!r} matched {len(selected)} "
-                "source polygons",
-                [
-                    f"its authored ring lies at {named.place(support.exterior)}, and "
-                    f"{len(selected)} polygons drawn on the layer have exactly that outline"
-                ],
-                "Fix the declaration or the layout: give the lumped support the exact "
-                "outline and holes of one polygon drawn on its layer.",
-            )
-        )
-    return selected[0]
-
-
 def occurrence_include_polygon(
     scope: GridScope,
     record: Mapping[str, Any],
@@ -725,7 +568,12 @@ def occurrence_include_polygon(
     The region is selected in the cell's own coordinates; a refusal locates it in the layout.
     """
     layer = gds_layer(
-        record.get("layer"), str(record.get("source_local_id", "ground contribution"))
+        record.get("layer"),
+        Declared(
+            f"ground contribution {record.get('source_local_id')!r}",
+            "the component's component_semantics ground_plane_contributions",
+        ),
+        "layer",
     )
     point = _occurrence_inverse_point(transform, record["selector_point_um"])
     components = fused_gdstk_components(scope, polygons_by_layer.get(layer, ()))

@@ -55,7 +55,7 @@ def test_missing_physical_plan_fails_before_stored_binding_comparison() -> None:
     first = replace(first, metadata={**first.metadata, "physical_representation": {}})
     invalid = replace(source, entities=(first, *source.entities[1:]))
     with pytest.raises(
-        ValueError, match="junction lowered source requires its common physical plan"
+        ValueError, match="internal: a junction was lowered without its common physical"
     ):
         junction_contact_inventory(
             invalid,

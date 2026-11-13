@@ -20,12 +20,28 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
+from scgsim.geometry.models.refusals import internal
 
 type IntegerPoint = tuple[int, int]
 type RationalPoint = tuple[int | Fraction, int | Fraction]
 type FloatPoint = tuple[float, float]
 type EdgeKey = tuple[str, int, int]
 type TracedEdge = tuple[RationalPoint, RationalPoint, tuple[EdgeKey, ...]]
+
+
+def _direct_holes(ring, loops) -> list:
+    """The loops inside ``ring``; a hole inside another hole is not supported."""
+    holes = [
+        hole for hole in loops if hole is not ring and inside_ring(hole[0], ring) == 1
+    ]
+    if any(
+        any(inside_ring(hole[0], other) == 1 for other in holes if other is not hole)
+        for hole in holes
+    ):
+        raise ValueError(
+            internal("junction residual has unsupported nested components")
+        )
+    return holes
 
 
 @dataclass
@@ -70,7 +86,9 @@ class JunctionModel:
         prior = self.events[edge].get(point)
         if prior is not None and prior != parameter:
             raise ValueError(
-                "numerical junction incidence collapses distinct source parameters"
+                internal(
+                    "numerical junction incidence collapses distinct source parameters"
+                )
             )
         self.events[edge][point] = parameter
         self.members[point].add(edge)
@@ -84,14 +102,18 @@ class JunctionModel:
                 ta, tb = (self.events[source][a], self.events[source][b])
                 if ta == tb:
                     raise ValueError(
-                        "numerical junction source edge has collapsed parameter span"
+                        internal(
+                            "numerical junction source edge has collapsed parameter span"
+                        )
                     )
                 for point, t in self.events[source].items():
                     u = (t - ta) / (tb - ta)
                     if 0 < u < 1:
                         if u in split and split[u] != point:
                             raise ValueError(
-                                "numerical junction source incidences disagree"
+                                internal(
+                                    "numerical junction source incidences disagree"
+                                )
                             )
                         split[u] = point
             ordered = [point for _, point in sorted(split.items())]
@@ -107,11 +129,28 @@ class JunctionModel:
             )
             if result in self.reverse and self.reverse[result] != point:
                 raise ValueError(
-                    "numerical junction shared vertices collapse on serialization"
+                    internal(
+                        "numerical junction shared vertices collapse on serialization"
+                    )
                 )
             self.reverse[result] = point
             self.registry[point] = result
         return self.registry[point]
+
+    def _emitted_ring(self, index: int, loop, simplify: bool):
+        """One ring of a lowered region, turned outward for the exterior and inward for a hole, as emitted points."""
+        if simplify:
+            loop = tuple(
+                (
+                    point
+                    for n, point in enumerate(loop)
+                    if cross(loop[n - 1], point, loop[(n + 1) % len(loop)]) != 0
+                )
+            )
+        area = sum((a[0] * b[1] - b[0] * a[1] for a, b in region_edges((loop,))))
+        if (area > 0) != (index == 0):
+            loop = tuple(reversed(loop))
+        return tuple((self.emit(point) for point in loop))
 
     def lower(self, traced, *, simplify=False):
         """Lower directed residual edges into emitted outer and hole rings."""
@@ -133,41 +172,15 @@ class JunctionModel:
         ]
         regions = []
         for ring in outer:
-            holes = [
-                hole
-                for hole in loops
-                if hole is not ring and inside_ring(hole[0], ring) == 1
-            ]
-            if any(
-                (
-                    any(
-                        (
-                            inside_ring(hole[0], other) == 1
-                            for other in holes
-                            if other is not hole
-                        )
-                    )
-                    for hole in holes
+            holes = _direct_holes(ring, loops)
+            regions.append(
+                tuple(
+                    self._emitted_ring(index, loop, simplify)
+                    for index, loop in enumerate((ring, *holes))
                 )
-            ):
-                raise ValueError("junction residual has unsupported nested components")
-            region = []
-            for index, loop in enumerate((ring, *holes)):
-                if simplify:
-                    loop = tuple(
-                        (
-                            point
-                            for n, point in enumerate(loop)
-                            if cross(loop[n - 1], point, loop[(n + 1) % len(loop)]) != 0
-                        )
-                    )
-                area = sum(
-                    (a[0] * b[1] - b[0] * a[1] for a, b in region_edges((loop,)))
-                )
-                if (area > 0) != (index == 0):
-                    loop = tuple(reversed(loop))
-                region.append(tuple((self.emit(point) for point in loop)))
-            regions.append(tuple(region))
+            )
         if sum((len(region) for region in regions)) != len(loops):
-            raise ValueError("junction residual has point-connected components")
+            raise ValueError(
+                internal("junction residual has point-connected components")
+            )
         return regions

@@ -5,11 +5,16 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.validation import validate_geometry_input
 from scgsim.semantics.route_a import geometry_z_range
+
+_SUMMARY_CALL = Declared(
+    "summarize_geometry_input", "the call to summarize_geometry_input"
+)
 
 
 def _plain(value: Any) -> Any:
@@ -19,7 +24,11 @@ def _plain(value: Any) -> Any:
         return [_plain(item) for item in value]
     if value is None or isinstance(value, (str, bool, int, float)):
         return value
-    raise TypeError(f"input summary cannot detach {type(value).__name__}")
+    raise TypeError(
+        internal(
+            f"an input summary holds a {type(value).__name__}, which JSON cannot carry"
+        )
+    )
 
 
 @dataclass(frozen=True, init=False)
@@ -30,7 +39,7 @@ class InputSummary:
 
     def __init__(self, data: Mapping[str, Any]) -> None:
         if not isinstance(data, Mapping):
-            raise TypeError("InputSummary data must be a mapping")
+            raise TypeError(internal("an InputSummary was built from a non-mapping"))
         object.__setattr__(
             self,
             "_payload_json",
@@ -345,33 +354,60 @@ def _checked_summary_pair(
 ) -> Mapping[str, Any]:
     """The stack's materials, once the input is valid, both name one GDS and every material is known."""
     if not isinstance(build_input, GeometryBuildInput):
-        raise TypeError("build_input must be GeometryBuildInput")
+        raise TypeError(
+            _SUMMARY_CALL.expected(
+                "build_input", "a GeometryBuildInput", type(build_input).__name__
+            )
+        )
     if not isinstance(prepared_stack, Mapping):
-        raise TypeError("prepared_stack must be a mapping")
+        raise TypeError(
+            _SUMMARY_CALL.expected(
+                "prepared_stack", "a mapping", type(prepared_stack).__name__
+            )
+        )
     validate_geometry_input(build_input)
     stack_metadata = prepared_stack.get("metadata", {})
     if not isinstance(stack_metadata, Mapping):
-        raise TypeError("prepared_stack metadata must be a mapping")
+        raise TypeError(
+            _SUMMARY_CALL.expected(
+                "prepared_stack metadata", "a mapping", stack_metadata
+            )
+        )
     source_hash = build_input.metadata.get("gds_sha256")
     stack_hash = stack_metadata.get("gds_sha256")
     if (source_hash is not None or stack_hash is not None) and (
         not isinstance(source_hash, str) or source_hash != stack_hash
     ):
-        raise ValueError("normalized input and prepared stack GDS identities differ")
+        raise ValueError(
+            _SUMMARY_CALL.refusal(
+                f"the normalized input and prepared stack GDS identities differ ({source_hash!r}, {stack_hash!r}); pass the stack prepared with this input"
+            )
+        )
     materials = prepared_stack.get("materials")
     if not isinstance(materials, Mapping):
-        raise ValueError("prepared_stack requires a materials mapping")
+        raise ValueError(
+            _SUMMARY_CALL.expected("prepared_stack materials", "a mapping", materials)
+        )
     missing = {entity.material_id for entity in build_input.entities} - set(materials)
     if missing:
         raise ValueError(
-            f"source entities reference unknown materials: {sorted(missing)!r}"
+            _SUMMARY_CALL.refusal(
+                f"source entities reference unknown materials: {sorted(missing)!r}; pass the stack prepared with this input"
+            )
         )
     return materials
 
 
+class _EntityRows(NamedTuple):
+    """One summary row per Entity, and the Entities of each Net."""
+
+    entities: list[dict[str, Any]]
+    nets: dict[str, list[str]]
+
+
 def _entity_rows(
     build_input: GeometryBuildInput,
-) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+) -> _EntityRows:
     """One summary row per Entity, and the Entities of each Net in input order."""
     nets: dict[str, list[str]] = {}
     entities = []
@@ -393,7 +429,7 @@ def _entity_rows(
                 "source_occurrence_path": entity.metadata.get("source_occurrence_path"),
             }
         )
-    return entities, nets
+    return _EntityRows(entities, nets)
 
 
 def _port_rows(build_input: GeometryBuildInput) -> list[dict[str, Any]]:

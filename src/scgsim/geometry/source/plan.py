@@ -26,6 +26,7 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.junctions import RectangularJunctionSpec
 from scgsim.geometry.models.lumped import LumpedSupport
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.adapter import (
     LayoutOrigin,
     layout_grid,
@@ -42,14 +43,17 @@ from scgsim.geometry.source.curves import (
     with_drawn_rings,
 )
 from scgsim.geometry.source.junctions import with_rectangular_junctions
+from scgsim.geometry.source.lumped_supports import (
+    check_lumped_terminals,
+    lumped_support_plane,
+    occurrence_lumped_polygon,
+)
 from scgsim.geometry.source.normalization import (
     finite_number,
 )
 from scgsim.geometry.source.occurrence import (
-    entity_from_layer_record,
     occurrence_ground_polygons_for_entity,
     occurrence_include_polygon,
-    occurrence_lumped_polygon,
     occurrence_polygons_for_entity,
     occurrence_port_polygon,
     read_polygons_by_layer,
@@ -63,8 +67,15 @@ from scgsim.geometry.source.plan_assembly import (
     component_semantics,
     composed_transform,
     occurrence_transform,
+    polygons_with_owners,
     source_path,
     transform_source_point,
+)
+from scgsim.geometry.source.plan_bindings import (
+    check_bindings_still_hold,
+    plan_call,
+    validated_nets,
+    validated_priorities,
 )
 from scgsim.geometry.source.recipes import (
     SourceGridAudit,
@@ -74,6 +85,7 @@ from scgsim.geometry.source.recipes import (
     source_recipe_job,
     source_recipe_map,
 )
+from scgsim.geometry.source.stack_layers import entity_from_layer_record
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
 
@@ -94,7 +106,11 @@ class GeometryPlanSnapshot:
 
     def __post_init__(self) -> None:
         if not isinstance(self._geometry_input, GeometryBuildInput):
-            raise TypeError("snapshot requires GeometryBuildInput")
+            raise TypeError(
+                internal(
+                    "a GeometryPlanSnapshot was built without a GeometryBuildInput"
+                )
+            )
         object.__setattr__(self, "_geometry_input", copy.deepcopy(self._geometry_input))
         object.__setattr__(
             self, "_source_occurrences", copy.deepcopy(self._source_occurrences)
@@ -156,17 +172,33 @@ class GeometryPlan:
         coupon_padding_um: float,
     ) -> None:
         if not callable(getattr(component, "write_gds", None)):
-            raise TypeError("component must be an assembled GDSFactory Component")
-        self.root_id = source_path(root_id)
+            raise TypeError(
+                plan_call("__init__", "GeometryPlan").expected(
+                    "component", "an assembled GDSFactory Component", component
+                )
+            )
+        self.root_id = source_path(root_id, plan_call("__init__", "root_id"), "root_id")
         if "/" in self.root_id:
-            raise ValueError("root_id must be one path segment")
+            raise ValueError(
+                plan_call("__init__", "GeometryPlan").expected(
+                    "root_id", "one path segment", self.root_id
+                )
+            )
         component_semantics(component, self.root_id)
         self._component = component
         self._layer_stack = layer_stack
         self._material_records = material_records
-        self._coupon_padding_um = finite_number(coupon_padding_um, "coupon_padding_um")
+        self._coupon_padding_um = finite_number(
+            coupon_padding_um,
+            plan_call("__init__", "coupon_padding_um"),
+            "coupon_padding_um",
+        )
         if self._coupon_padding_um < 0:
-            raise ValueError("coupon_padding_um must be nonnegative")
+            raise ValueError(
+                plan_call("__init__", "GeometryPlan").expected(
+                    "coupon_padding_um", "nonnegative", self._coupon_padding_um
+                )
+            )
         self._instances: dict[str, tuple[Any, Any, tuple[float, ...]]] = {
             self.root_id: (component, None, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
         }
@@ -182,20 +214,36 @@ class GeometryPlan:
         """Replace explicit source-sheet/terminal bindings for subsequent snapshots."""
         requests = tuple(specs)
         if any(not isinstance(item, RectangularJunctionSpec) for item in requests):
-            raise TypeError("rectangular junctions require RectangularJunctionSpec")
+            raise TypeError(
+                plan_call(
+                    "set_rectangular_junctions", "rectangular junctions"
+                ).expected("every request", "a RectangularJunctionSpec", requests)
+            )
         for field in ("junction_id", "port_sheet_id"):
             identities = [getattr(item, field) for item in requests]
             if len(set(identities)) != len(identities):
-                raise ValueError(f"duplicate rectangular junction {field}")
+                raise ValueError(
+                    plan_call(
+                        "set_rectangular_junctions", "rectangular junctions"
+                    ).refusal(f"duplicate rectangular junction {field}")
+                )
         self._rectangular_junctions = requests
 
     def set_lumped_supports(self, supports: Sequence[LumpedSupport]) -> None:
         """Bind caller-declared local nonmetal supports; no excitation is inferred."""
         records = tuple(supports)
         if any(not isinstance(record, LumpedSupport) for record in records):
-            raise TypeError("lumped supports must be LumpedSupport records")
+            raise TypeError(
+                plan_call("set_lumped_supports", "lumped supports").expected(
+                    "every support", "a LumpedSupport record", records
+                )
+            )
         if len({record.support_id for record in records}) != len(records):
-            raise ValueError("lumped support IDs must be unique")
+            raise ValueError(
+                plan_call("set_lumped_supports", "lumped supports").refusal(
+                    "lumped support IDs must be unique"
+                )
+            )
         self._lumped_supports = records
 
     def set_boundary_curves(self, boundaries) -> None:
@@ -219,7 +267,7 @@ class GeometryPlan:
 
     def register_instance(self, path: str, reference: Any) -> None:
         """Register one authored child occurrence and its composed transform."""
-        path = source_path(path)
+        path = source_path(path, plan_call("register_instance", "path"), "path")
         parent_path, _, _ = path.rpartition("/")
         if (
             not parent_path
@@ -227,18 +275,28 @@ class GeometryPlan:
             or path in self._instances
         ):
             raise ValueError(
-                "instance path needs a registered parent and must be unique"
+                plan_call("register_instance", f"instance path {path!r}").refusal(
+                    "it needs a registered parent and must be unique"
+                )
             )
         parent_component, _, parent_transform = self._instances[parent_path]
         if getattr(reference, "parent_cell", None) != parent_component:
-            raise ValueError("reference is not an occurrence in its declared parent")
+            raise ValueError(
+                plan_call("register_instance", f"reference for {path!r}").refusal(
+                    "reference is not an occurrence in its declared parent"
+                )
+            )
         matches = [
             item
             for item in parent_component.insts
             if item.instance == reference.instance
         ]
         if len(matches) != 1:
-            raise ValueError("reference must resolve to exactly one parent occurrence")
+            raise ValueError(
+                plan_call("register_instance", f"reference for {path!r}").refusal(
+                    "reference must resolve to exactly one parent occurrence"
+                )
+            )
         if any(
             other_parent == parent_path
             and other_ref is not None
@@ -246,7 +304,11 @@ class GeometryPlan:
             for key, (_, other_ref, _) in self._instances.items()
             if (other_parent := key.rpartition("/")[0])
         ):
-            raise ValueError("the same source occurrence is already registered")
+            raise ValueError(
+                plan_call("register_instance", f"reference for {path!r}").refusal(
+                    "the same source occurrence is already registered"
+                )
+            )
         child = reference.cell
         component_semantics(child, path)
         transform = composed_transform(
@@ -266,26 +328,14 @@ class GeometryPlan:
     def set_nets(self, nets: Mapping[str, Sequence[str]]) -> None:
         """Replace final Net membership after validating all Entity references."""
         if not isinstance(nets, Mapping):
-            raise TypeError("nets must map final Net IDs to qualified Entity IDs")
-        available = {entity.semantic_id for entity in self.entities}
-        owners: dict[str, str] = {}
-        prepared: dict[str, tuple[str, ...]] = {}
-        for net, members in nets.items():
-            if not isinstance(net, str) or not net:
-                raise ValueError("Net ID must be nonempty text")
-            if isinstance(members, (str, bytes)) or not isinstance(members, Sequence):
-                raise TypeError(f"Net {net!r} members must be Entity IDs")
-            unique = tuple(dict.fromkeys(members))
-            if not unique:
-                raise ValueError(f"Net {net!r} needs at least one Entity ID")
-            for entity_id in unique:
-                if not isinstance(entity_id, str) or entity_id not in available:
-                    raise ValueError(f"Net {net!r} has unknown Entity ID {entity_id!r}")
-                prior = owners.setdefault(entity_id, net)
-                if prior != net:
-                    raise ValueError(f"Entity {entity_id!r} belongs to two Nets")
-            prepared[net] = unique
-        self._nets = prepared
+            raise TypeError(
+                plan_call("set_nets", "GeometryPlan.set_nets").expected(
+                    "nets", "a mapping of final Net IDs to qualified Entity IDs", nets
+                )
+            )
+        self._nets = validated_nets(
+            nets, {entity.semantic_id for entity in self.entities}
+        )
 
     def set_entity_priorities(self, priorities: Mapping[str, int]) -> None:
         """Replace the assembly-level overlap priority of Entities after validating every reference.
@@ -301,16 +351,20 @@ class GeometryPlan:
         when any entry is invalid.
         """
         if not isinstance(priorities, Mapping):
-            raise TypeError("priorities must map qualified Entity IDs to integers")
-        available = {entity.semantic_id for entity in self.entities}
-        prepared: dict[str, int] = {}
-        for entity_id, value in priorities.items():
-            if not isinstance(entity_id, str) or entity_id not in available:
-                raise ValueError(f"priority has unknown Entity ID {entity_id!r}")
-            if isinstance(value, bool) or not isinstance(value, int):
-                raise TypeError(f"priority of Entity {entity_id!r} must be an integer")
-            prepared[entity_id] = value
-        self._entity_priorities = MappingProxyType(prepared)
+            raise TypeError(
+                plan_call(
+                    "set_entity_priorities", "GeometryPlan.set_entity_priorities"
+                ).expected(
+                    "priorities",
+                    "a mapping of qualified Entity IDs to integers",
+                    priorities,
+                )
+            )
+        self._entity_priorities = MappingProxyType(
+            validated_priorities(
+                priorities, {entity.semantic_id for entity in self.entities}
+            )
+        )
 
     def _validate_registered_sources(self) -> None:
         """Reject authored descendants that would disappear during GDS flattening."""
@@ -329,7 +383,10 @@ class GeometryPlan:
                 != transform
             ):
                 raise ValueError(
-                    f"registered occurrence {path!r} changed before prepare"
+                    Declared(
+                        f"registered occurrence {path!r}",
+                        "the component, or register the occurrence again with GeometryPlan.register_instance",
+                    ).refusal("it changed before prepare")
                 )
 
         def visit(cell: Any, path: str) -> None:
@@ -351,8 +408,10 @@ class GeometryPlan:
                 )
                 if child_path is None and "component_semantics" in child.info:
                     raise ValueError(
-                        f"authored source occurrence in {path!r} is not registered: "
-                        f"{child.name!r}"
+                        Declared(
+                            f"authored source occurrence {child.name!r} in {path!r}",
+                            "the plan: register it with GeometryPlan.register_instance",
+                        ).refusal("it is not registered")
                     )
                 visit(child, child_path or f"{path}/<unregistered>")
 
@@ -402,18 +461,11 @@ class GeometryPlan:
 
     def _validated_stack(self) -> dict[str, Any]:
         stack = self._stack()
-        available = {record["semantic_id"] for record in stack["layers"]}
-        for net, members in self._nets.items():
-            if not members or any(member not in available for member in members):
-                raise ValueError(
-                    f"Net {net!r} changed after set_nets; call set_nets again"
-                )
-        for entity_id in self._entity_priorities:
-            if entity_id not in available:
-                raise ValueError(
-                    f"priority of Entity {entity_id!r} changed after set_entity_priorities; "
-                    "call set_entity_priorities again"
-                )
+        check_bindings_still_hold(
+            self._nets,
+            self._entity_priorities,
+            {record["semantic_id"] for record in stack["layers"]},
+        )
         if self._vacuum_region is not None:
             stack = dict(apply_vacuum_region_to_stack(stack, self._vacuum_region))
         return stack
@@ -498,7 +550,9 @@ class GeometryPlan:
                     cell, _, transform = self._instances[path]
                     if cell.name not in source.source_cells:
                         raise ValueError(
-                            f"source occurrence {path!r} is absent from written GDS"
+                            internal(
+                                f"source occurrence {path!r} is absent from the GDS the plan wrote"
+                            )
                         )
                     selector = (
                         occurrence_ground_polygons_for_entity
@@ -547,7 +601,9 @@ class GeometryPlan:
                         cell, _, transform = self._instances[path]
                         if cell.name not in source.source_cells:
                             raise ValueError(
-                                f"ground contribution source {path!r} is absent from GDS"
+                                internal(
+                                    f"ground contribution source {path!r} is absent from the GDS the plan wrote"
+                                )
                             )
                         job = source_recipe_job(
                             occurrence_include_polygon,
@@ -579,7 +635,9 @@ class GeometryPlan:
                     cell, _, transform = self._instances[path]
                     if cell.name not in source.source_cells:
                         raise ValueError(
-                            f"source port occurrence {path!r} is absent from written GDS"
+                            internal(
+                                f"source port occurrence {path!r} is absent from the GDS the plan wrote"
+                            )
                         )
                     job = source_recipe_job(
                         occurrence_port_polygon,
@@ -624,42 +682,16 @@ class GeometryPlan:
         entities = {entity.semantic_id: entity for entity in build_input.entities}
         for support in self._lumped_supports:
             path = support.source_occurrence_path
+            owner = plan_call(
+                "set_lumped_supports", f"lumped support {support.support_id!r}"
+            )
             if path not in self._instances:
                 raise ValueError(
-                    f"lumped support occurrence {path!r} is not registered"
+                    owner.refusal(f"its occurrence {path!r} is not registered")
                 )
             cell, _, transform = self._instances[path]
-            if support.source_level not in self._layer_stack.layers:
-                raise ValueError(
-                    f"lumped support level {support.source_level!r} is not declared"
-                )
-            level = self._layer_stack.layers[support.source_level]
-            from gdsfactory.pdk import get_layer_tuple  # noqa: PLC0415 - needed only for authored lumped supports
-
-            if get_layer_tuple(level.layer.layer) != support.source_layer:
-                raise ValueError("lumped support source level/layer binding differs")
-            source_z_um = float(level.zmin)
-            if support.source_z_um is not None and support.source_z_um != source_z_um:
-                raise ValueError(
-                    "lumped support source plane differs from locator Level"
-                )
-            if any(point[2] != source_z_um for point in support.contact_points_um):
-                raise ValueError("lumped support contacts differ from locator plane")
-            for entity_id in (
-                *support.terminal_a_entity_ids,
-                *support.terminal_b_entity_ids,
-            ):
-                if (
-                    entity_id not in entities
-                    or entities[entity_id].material_kind != "conductor"
-                ):
-                    raise ValueError(
-                        f"lumped support terminal Entity {entity_id!r} is not a conductor"
-                    )
-                if entities[entity_id].net_id is None:
-                    raise ValueError(
-                        f"lumped support terminal Entity {entity_id!r} lacks final Net ownership"
-                    )
+            source_z_um = lumped_support_plane(support, self._layer_stack, owner)
+            check_lumped_terminals(support, entities, owner)
             polygon = occurrence_lumped_polygon(
                 scope,
                 support,
@@ -690,7 +722,7 @@ class GeometryPlan:
         metadata = dict(build_input.metadata)
         metadata["gds_sha256"] = source.gds_sha256
         metadata["geometry_plan_root_id"] = self.root_id
-        polygons = _polygons_with_owners(build_input)
+        polygons = polygons_with_owners(build_input)
         boundary_curves, reconstruction = self._placed_boundaries(build_input)
         build_input = replace(
             build_input,
@@ -757,33 +789,3 @@ class GeometryPlan:
                 for value in semantics.get("boundary_reconstruction", ())
             )
         return tuple(boundary_curves), tuple(reconstruction)
-
-
-def _polygons_with_owners(build_input: GeometryBuildInput) -> tuple[Any, ...]:
-    """Each polygon an Entity owns, with that Entity and its occurrence path in its metadata."""
-    polygon_owners = {
-        polygon_id: entity
-        for entity in build_input.entities
-        for polygon_id in entity.polygon_ids
-    }
-    return tuple(
-        replace(
-            polygon,
-            metadata={
-                **polygon.metadata,
-                **(
-                    {
-                        "source_entity_id": polygon_owners[
-                            polygon.polygon_id
-                        ].semantic_id,
-                        "source_occurrence_path": polygon_owners[
-                            polygon.polygon_id
-                        ].metadata["source_occurrence_path"],
-                    }
-                    if polygon.polygon_id in polygon_owners
-                    else {}
-                ),
-            },
-        )
-        for polygon in build_input.polygons
-    )

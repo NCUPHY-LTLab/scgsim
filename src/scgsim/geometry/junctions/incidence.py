@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from fractions import Fraction
 from itertools import pairwise
-from typing import cast
+from typing import NamedTuple, cast
 
 from scgsim.geometry.junctions.boolean_geometry import (
     boolean,
@@ -20,6 +20,7 @@ from scgsim.geometry.junctions.exact_geometry import (
     region_edges,
 )
 from scgsim.geometry.junctions.model_state import IntegerPoint, JunctionModel
+from scgsim.geometry.models.refusals import internal
 
 
 def initialize_source(state: JunctionModel) -> None:
@@ -73,11 +74,15 @@ def register_source_edges(state: JunctionModel) -> None:
             area = sum((a[0] * b[1] - b[0] * a[1] for a, b in region_edges((ring,))))
             if len(set(ring)) < 3 or not area:
                 raise ValueError(
-                    "numerical junction source polygon/hole collapses in model coordinates"
+                    internal(
+                        "numerical junction source polygon/hole collapses in model coordinates"
+                    )
                 )
             if index and any((inside_ring(point, region[0]) != 1 for point in ring)):
                 raise ValueError(
-                    "numerical junction source hole loses model interior topology"
+                    internal(
+                        "numerical junction source hole loses model interior topology"
+                    )
                 )
             for n, (a, b) in enumerate(region_edges((ring,))):
                 key = (pid, index, n)
@@ -201,7 +206,9 @@ def trace_free_boundaries(state: JunctionModel) -> None:
                     )
                     if not nodes or nodes[0] != a or nodes[-1] != b:
                         raise ValueError(
-                            "numerical junction Boolean boundary has untraceable source incidence"
+                            internal(
+                                "numerical junction Boolean boundary has untraceable source incidence"
+                            )
                         )
                     for start, finish in pairwise(nodes):
                         source = {
@@ -211,7 +218,9 @@ def trace_free_boundaries(state: JunctionModel) -> None:
                         }
                         if not source:
                             raise ValueError(
-                                "numerical junction Boolean boundary has untraceable source incidence"
+                                internal(
+                                    "numerical junction Boolean boundary has untraceable source incidence"
+                                )
                             )
                         traced.append((start, finish, tuple(sorted(source))))
         state.raw_free[jid] = traced
@@ -236,7 +245,14 @@ def slice_free_boundaries(state: JunctionModel) -> None:
         )
 
 
-def _lattice_cut_planes(record) -> tuple[tuple[int, int], list[Fraction]]:
+class _CutPlanes(NamedTuple):
+    """The lattice direction v and each cut's position along it."""
+
+    direction: tuple[int, int]
+    cuts: list[Fraction]
+
+
+def _lattice_cut_planes(record) -> _CutPlanes:
     """The lattice direction v and each cut's position along it, v . P for its lattice point P.
 
     Model units are Boolean units; along x or y these are the cut positions the slicing has
@@ -247,7 +263,7 @@ def _lattice_cut_planes(record) -> tuple[tuple[int, int], list[Fraction]]:
     x, y = lattice["corners_grid"][0]
     units = Fraction(str(lattice["grid_um"])) / Fraction(str(PRECISION_UM))
     cuts = [((x + n * p) * p + (y + n * q) * q) * units for n in record["cut_indices"]]
-    return (p, q), cuts
+    return _CutPlanes((p, q), cuts)
 
 
 def sheet_boundary(state: JunctionModel, sheet_id: str) -> list:
@@ -307,11 +323,13 @@ def _close_cut_caps(cap, parts, dx, dy) -> None:
         ordered = sorted(points, key=lambda p: -p[0] * dy + p[1] * dx)
         if len(ordered) < 2:
             raise ValueError(
-                "numerical junction selected cut has no full source section"
+                internal("numerical junction selected cut has no full source section")
             )
         if any((cross(ordered[0], ordered[-1], point) for point in ordered)):
             raise ValueError(
-                "numerical junction selected cut has inconsistent section nodes"
+                internal(
+                    "numerical junction selected cut has inconsistent section nodes"
+                )
             )
         for bottom, top in pairwise(ordered):
             if (bottom, top) not in [(a, b) for a, b, _ in parts[k]] and (

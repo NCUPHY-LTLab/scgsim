@@ -15,6 +15,7 @@ from scgsim.geometry.models.entities import (
     requires_route_representation,
 )
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.source.contact_pads import resolve_contact_pad_attachment
 
@@ -34,7 +35,12 @@ def validate_geometry_input(build_input: GeometryBuildInput) -> GeometryBuildInp
     if not has_vacuum_solution_region(build_input):
         state.errors.append("GeometryBuildInput requires a vacuum solution_region")
     if state.errors:
-        raise ValueError("Invalid GeometryBuildInput: " + "; ".join(state.errors))
+        raise ValueError(
+            Declared(
+                "the geometry input",
+                "the input: build it with GeometryPlan.prepare() or build_gds_stack_geometry_input",
+            ).refusal("Invalid GeometryBuildInput: " + "; ".join(state.errors))
+        )
     return build_input
 
 

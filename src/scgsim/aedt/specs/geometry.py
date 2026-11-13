@@ -12,7 +12,8 @@ from scgsim.aedt.specs.epr import PlanarJunction, SurfaceEprSpec
 from scgsim.aedt.specs.modeling import native_physical_record
 from scgsim.aedt.specs.support import prepared_lumped_supports
 from scgsim.geometry.models.lumped import LumpedSupport
-from scgsim.geometry.models.physical import PLAN_SCHEMA, PhysicalRepresentationPlan
+from scgsim.geometry.models.physical import PhysicalRepresentationPlan
+from scgsim.geometry.models.physical_checks import PLAN_SCHEMA
 
 
 @dataclass(frozen=True)

@@ -19,6 +19,7 @@ from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.source import occurrence as occurrence
 from scgsim.geometry.source import plan as plan_module
+from scgsim.geometry.source import stack_layers
 from scgsim.geometry.source.recipes import (
     Audited,
     run_source_recipe,
@@ -41,7 +42,7 @@ def native_source():
 
 def entity(name, point):
     """Create a conductor selector record at a world-frame point."""
-    return occurrence.entity_from_layer_record(
+    return stack_layers.entity_from_layer_record(
         {
             "semantic_id": name,
             "role": "metal",
@@ -169,7 +170,7 @@ def test_ground_include_and_port_recipe_outputs_match():
     cell.add(gdstk.rectangle((0, 0), (4, 4), layer=2))
     cell.add(gdstk.rectangle((5, 0), (6, 1), layer=3))
     cell.add(gdstk.rectangle((0, 0), (1, 1), layer=4))
-    ground = occurrence.entity_from_layer_record(
+    ground = stack_layers.entity_from_layer_record(
         {
             "semantic_id": "ground",
             "role": "metal",

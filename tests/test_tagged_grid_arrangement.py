@@ -10,7 +10,9 @@ from shapely import Point, Polygon, coverage_is_valid, union_all
 from scgsim.geometry.grid.arrangement import build_grid_arrangement
 from scgsim.geometry.grid.grid_regions import GridOperand
 from scgsim.geometry.grid.tagged_grid import (
+    LocatedSegment,
     PointIndex,
+    SourceSegment,
     build_tagged_subdivision,
     pixel_interval,
     source_paths,
@@ -136,12 +138,12 @@ def test_contacts_and_zero_area_source_origins_are_not_deleted():
     _, result = construct(polygons, 1)
     assert all(owners == ("0",) for _, owners in result.cells)
     assert any(
-        shape.geom_type == "LineString" and owners == ("1",)
-        for shape, owners in result.auxiliary
+        residue.geometry.geom_type == "LineString" and residue.operand_ids == ("1",)
+        for residue in result.auxiliary
     )
     assert any(
-        shape.geom_type == "Point" and "2" in owners
-        for shape, owners in result.auxiliary
+        residue.geometry.geom_type == "Point" and "2" in residue.operand_ids
+        for residue in result.auxiliary
     )
     point_paths = [path for path in result.source_paths if path.operand_index == 2]
     assert len(point_paths) == 4
@@ -162,7 +164,9 @@ def test_direction_and_missing_endpoint_context_are_explicit_refusals():
         build_grid_arrangement((bowtie,), GeometryGridContext(1))
     context = json.loads(caught.value.__notes__[0].split(": ", 1)[1])
     assert context == dict(operand_index=0, ring_index=0)
-    row = ("owner", 0, 0, 0, (0, 0), (2, 0), ((0, 0), (2, 0)), 1)
+    row = LocatedSegment(
+        SourceSegment("owner", 0, 0, 0, (0, 0), (2, 0), 1), ((0, 0), (2, 0))
+    )
     with pytest.raises(ValueError, match="source endpoint pixel incidence"):
         source_paths((row,), PointIndex.build(((0, 0),)), 1)
     # Exact half-open geometry: point-touching top/right is excluded, while
@@ -205,8 +209,8 @@ def test_parallel_source_paths_preserve_exact_graph_and_real_worker_execution():
     assert [(p.wkb, owners) for p, owners in parallel.cells] == [
         (p.wkb, owners) for p, owners in serial.cells
     ]
-    assert [(p.wkb, owners) for p, owners in parallel.auxiliary] == [
-        (p.wkb, owners) for p, owners in serial.auxiliary
+    assert [(r.geometry.wkb, r.operand_ids) for r in parallel.auxiliary] == [
+        (r.geometry.wkb, r.operand_ids) for r in serial.auxiliary
     ]
     assert graph == build_grid_arrangement(values, GeometryGridContext(0.1))
 

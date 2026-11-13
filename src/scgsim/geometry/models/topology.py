@@ -13,6 +13,7 @@ from scgsim.geometry.models.common import (
     SolverUseLiteral,
     Vector3D,
 )
+from scgsim.geometry.models.refusals import internal
 
 
 @dataclass(frozen=True)
@@ -51,7 +52,10 @@ class InterfacePlanRecord:
     def __post_init__(self) -> None:
         if not self.interface_id.startswith(f"{self.kind}__"):
             raise ValueError(
-                f"interface_id {self.interface_id!r} must start with {self.kind}__"
+                internal(
+                    f"interface {self.interface_id!r} of kind {self.kind!r} has an id "
+                    f"that does not start with {self.kind}__"
+                )
             )
         if self.solver_use is None:
             object.__setattr__(

@@ -9,14 +9,15 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypeGuard
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.ground import PlaneBounds, derived_ground_polygons
-from scgsim.geometry.source.occurrence import (
+from scgsim.geometry.source.occurrence import gds_polygons_for_entity
+from scgsim.geometry.source.recipes import Audited, audited_declared_source
+from scgsim.geometry.source.stack_layers import (
     entity_from_layer_record,
-    gds_polygons_for_entity,
     is_record_sequence,
     resolve_material_kind,
 )
-from scgsim.geometry.source.recipes import Audited, audited_declared_source
 
 if TYPE_CHECKING:
     from gdstk import Cell, Polygon
@@ -86,13 +87,25 @@ def solution_region_entity(
 ) -> SemanticEntitySpec:
     """Lower one solution record with the original material and bounds validation."""
     if not isinstance(semantic_id, str):
-        raise TypeError("solution region ids must be strings")
+        raise TypeError(
+            Declared("the stack file's solution_regions", "the stack file").expected(
+                "region id", "a string", semantic_id
+            )
+        )
     if not isinstance(record, Mapping):
-        raise TypeError("stack_file 'solution_regions' values must be mappings")
+        raise TypeError(
+            Declared(
+                f"solution region {semantic_id!r}", "the stack file's solution_regions"
+            ).expected("record", "a mapping", record)
+        )
 
     geometry = record.get("geometry", record)
     if not isinstance(geometry, Mapping):
-        raise TypeError("solution region 'geometry' must be a mapping")
+        raise TypeError(
+            Declared(
+                f"solution region {semantic_id!r}", "the stack file's solution_regions"
+            ).expected("geometry", "a mapping", geometry)
+        )
 
     geometry = dict(geometry)
     padding_um = float(geometry.get("padding_um", 0.0))
@@ -114,7 +127,9 @@ def solution_region_entity(
             record,
             material_id=record.get("material_id", semantic_id),
             materials=materials,
-            context=f"solution region {semantic_id!r}",
+            owner=Declared(
+                f"solution region {semantic_id!r}", "the stack file's solution_regions"
+            ),
         ),
         priority=record.get("priority", 0),
         geometry_kind=record.get("geometry_kind", "domain"),

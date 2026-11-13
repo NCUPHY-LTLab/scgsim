@@ -16,6 +16,7 @@ from dataclasses import dataclass, replace
 
 from scgsim.geometry.grid.grid_regions import GridPoint, grid_change_message
 from scgsim.geometry.models.grid import GeometryGridContext, format_box
+from scgsim.geometry.models.refusals import internal
 
 # An affine map ``(a, b, c, d, x, y)``: a point ``(u, v)`` lands at ``(a u + b v + x, c u + d v + y)``.
 Affine = tuple[float, ...]
@@ -62,9 +63,9 @@ class GridScope:
         """The model grid of a source recipe, which runs only on one."""
         if self.grid is None:
             raise RuntimeError(
-                "a source recipe ran without the layout grid; build its GridScope "
-                "from the layout's grid (GeometryPlan.prepare() and "
-                "build_gds_stack_geometry_input do)"
+                internal(
+                    "a source recipe ran without the layout grid; its GridScope must be built from the layout's grid"
+                )
             )
         return self.grid
 

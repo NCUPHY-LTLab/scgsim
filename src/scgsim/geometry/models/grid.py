@@ -9,6 +9,7 @@ from math import isfinite
 from typing import Any, Mapping
 
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.refusals import Declared
 
 # The class A wall-column limit, in grid steps (decided on issue 125): a side wall standing on an
 # outline edge shorter than this is refused by the meshing stage, and a junction partition keeps
@@ -28,11 +29,36 @@ class GeometryGridContext:
         if isinstance(self.grid_size_um, bool) or not isinstance(
             self.grid_size_um, (int, float)
         ):
-            raise TypeError("grid_size_um must be a positive length in micrometres")
+            raise TypeError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "grid_size_um",
+                    "a positive length in micrometres",
+                    self.grid_size_um,
+                )
+            )
         if not isfinite(self.grid_size_um) or self.grid_size_um <= 0:
-            raise ValueError("grid_size_um must be a positive finite length")
+            raise ValueError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "grid_size_um", "a positive finite length", self.grid_size_um
+                )
+            )
         if self.coordinate_frame != "assembly_xy":
-            raise ValueError("geometry grid requires the assembly_xy layout frame")
+            raise ValueError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "coordinate_frame",
+                    "the assembly_xy layout frame",
+                    self.coordinate_frame,
+                )
+            )
 
     def to_payload(self) -> dict[str, str | float]:
         """Return the canonical versioned metadata representation."""
@@ -46,9 +72,25 @@ class GeometryGridContext:
     def from_payload(cls, value: Mapping[str, Any]) -> GeometryGridContext:
         """Validate canonical metadata and reconstruct its grid policy."""
         if set(value) != {"schema_version", "grid_size_um", "coordinate_frame"}:
-            raise ValueError("geometry grid payload members are not canonical")
+            raise ValueError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "payload",
+                    "exactly schema_version, grid_size_um and coordinate_frame",
+                    sorted(value),
+                )
+            )
         if value["schema_version"] != "scgsim.geometry.grid.v1":
-            raise ValueError("unsupported geometry grid schema")
+            raise ValueError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "schema_version", "scgsim.geometry.grid.v1", value["schema_version"]
+                )
+            )
         return cls(value["grid_size_um"], value["coordinate_frame"])
 
 
