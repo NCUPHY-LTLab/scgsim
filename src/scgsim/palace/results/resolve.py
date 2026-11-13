@@ -271,6 +271,22 @@ def _discover_results(
     return discovered
 
 
+def _numeric_timings(elapsed: dict[str, Any], block: str) -> dict[str, float]:
+    """The numeric entries of one ``ElapsedTime`` block, as floats; other entries are left out."""
+    raw = elapsed.get(block)
+    if not isinstance(raw, dict):
+        raise TypeError(
+            Declared(
+                f"{NATIVE_METADATA_NAME} ElapsedTime.{block}", RETURNED_RUN_FOLDER
+            ).refusal("must be a mapping")
+        )
+    return {
+        str(key): float(value)
+        for key, value in raw.items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
+
+
 def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
     """Detach native elapsed counts and durations without filling absent measurements."""
     elapsed = palace_payload.get("ElapsedTime")
@@ -281,31 +297,8 @@ def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
             )
         )
 
-    counts_raw = elapsed.get("Counts")
-    durations_raw = elapsed.get("Durations")
-    if not isinstance(counts_raw, dict):
-        raise TypeError(
-            Declared(
-                f"{NATIVE_METADATA_NAME} ElapsedTime.Counts", RETURNED_RUN_FOLDER
-            ).refusal("must be a mapping")
-        )
-    if not isinstance(durations_raw, dict):
-        raise TypeError(
-            Declared(
-                f"{NATIVE_METADATA_NAME} ElapsedTime.Durations", RETURNED_RUN_FOLDER
-            ).refusal("must be a mapping")
-        )
-
-    counts: dict[str, int | float] = {
-        str(key): float(value)
-        for key, value in counts_raw.items()
-        if isinstance(value, (int, float)) and not isinstance(value, bool)
-    }
-    durations: dict[str, float] = {
-        str(key): float(value)
-        for key, value in durations_raw.items()
-        if isinstance(value, (int, float)) and not isinstance(value, bool)
-    }
+    counts: dict[str, int | float] = dict(_numeric_timings(elapsed, "Counts"))
+    durations = _numeric_timings(elapsed, "Durations")
     if not counts or not durations:
         raise ValueError(
             Declared(

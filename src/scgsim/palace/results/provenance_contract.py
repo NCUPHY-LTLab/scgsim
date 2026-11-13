@@ -213,29 +213,36 @@ def validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) ->
             expect_scalar(handoff_metadata, "returned_receipt_recorder", str),
         ),
     ):
-        item = expect_mapping(execution.get(field), f"execution identity {field}")
-        recorded_path = expect_scalar(item, "path", str)
-        if recorded_path != relative:
-            raise ValueError(
-                Declared(
-                    f"handoff execution identity {field} path is inconsistent",
-                    RETURNED_RUN_FOLDER,
-                ).refusal(found_text(recorded_path, relative))
-            )
-        path = confined_path(root, relative)
-        recorded_sha = expect_scalar(item, "sha256", str) if path.is_file() else None
-        if not path.is_file() or recorded_sha != sha256(path):
-            raise ValueError(
-                Declared(
-                    f"handoff execution identity {field} hash is inconsistent for {relative}",
-                    RETURNED_RUN_FOLDER,
-                ).refusal(
-                    found_text(
-                        sha256(path) if path.is_file() else "no file",
-                        item.get("sha256"),
-                    )
+        _validate_execution_file(root, execution, field, relative)
+
+
+def _validate_execution_file(
+    root: Path, execution: dict[str, Any], field: str, relative: str
+) -> None:
+    """One file of the execution identity sits at its recorded path with its recorded hash."""
+    item = expect_mapping(execution.get(field), f"execution identity {field}")
+    recorded_path = expect_scalar(item, "path", str)
+    if recorded_path != relative:
+        raise ValueError(
+            Declared(
+                f"handoff execution identity {field} path is inconsistent",
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(recorded_path, relative))
+        )
+    path = confined_path(root, relative)
+    recorded_sha = expect_scalar(item, "sha256", str) if path.is_file() else None
+    if not path.is_file() or recorded_sha != sha256(path):
+        raise ValueError(
+            Declared(
+                f"handoff execution identity {field} hash is inconsistent for {relative}",
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    sha256(path) if path.is_file() else "no file",
+                    item.get("sha256"),
                 )
             )
+        )
 
 
 def validate_resource_identity(

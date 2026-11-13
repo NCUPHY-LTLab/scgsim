@@ -307,23 +307,7 @@ class _InspectedRun:
                 )
             )
         handoff = read_json(handoff_path)
-        mesh_manifest = read_optional_json(root / MESH_MANIFEST)
-        if mesh_manifest is not None:
-            require_manifest_schema(mesh_manifest)
-        mesh_thin_film = (
-            mesh_manifest.get("route_a_thin_film")
-            if isinstance(mesh_manifest, dict)
-            else None
-        )
-        if mesh_thin_film != handoff.get("route_a_thin_film"):
-            raise ValueError(
-                Declared(
-                    "mesh manifest and handoff Route-A thin-film identity",
-                    RETURNED_RUN_FOLDER,
-                ).refusal(
-                    f"mismatch: {MESH_MANIFEST} records {mesh_thin_film!r}, {HANDOFF_METADATA} records {handoff.get('route_a_thin_film')!r} in {root}"
-                )
-            )
+        mesh_manifest = _read_mesh_manifest(root, handoff)
         problem = str(handoff.get("problem") or (resolved.problem if resolved else ""))
         route = str(handoff.get("route") or (resolved.route if resolved else ""))
         profile = str(handoff.get("profile") or "")
@@ -358,6 +342,28 @@ class _InspectedRun:
             receipt_paths,
             index_map,
         )
+
+
+def _read_mesh_manifest(root: Path, handoff: dict[str, Any]) -> dict[str, Any] | None:
+    """The run's mesh manifest, if it wrote one, with the Route-A thin-film identity the handoff records."""
+    mesh_manifest = read_optional_json(root / MESH_MANIFEST)
+    if mesh_manifest is not None:
+        require_manifest_schema(mesh_manifest)
+    mesh_thin_film = (
+        mesh_manifest.get("route_a_thin_film")
+        if isinstance(mesh_manifest, dict)
+        else None
+    )
+    if mesh_thin_film != handoff.get("route_a_thin_film"):
+        raise ValueError(
+            Declared(
+                "mesh manifest and handoff Route-A thin-film identity",
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                f"mismatch: {MESH_MANIFEST} records {mesh_thin_film!r}, {HANDOFF_METADATA} records {handoff.get('route_a_thin_film')!r} in {root}"
+            )
+        )
+    return mesh_manifest
 
 
 def _completeness(

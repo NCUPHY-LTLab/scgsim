@@ -61,6 +61,18 @@ def surface_epr_entries(index_map: Mapping[str, Any]) -> tuple[dict[str, Any], .
         )
     wholes = [entry for entry in dielectric if "inset" not in entry]
     margins = [entry for entry in dielectric if "inset" in entry]
+    _validate_entry_numbering(dielectric, wholes, margins)
+    _validate_surface_inventory(wholes)
+    _validate_margins(by_index, wholes, margins)
+    return tuple(dielectric)
+
+
+def _validate_entry_numbering(
+    dielectric: list[dict[str, Any]],
+    wholes: list[dict[str, Any]],
+    margins: list[dict[str, Any]],
+) -> None:
+    """Whole surfaces take the indices 1..N in order and are their own baselines; margins follow them."""
     if [entry["index"] for entry in wholes] != list(range(1, len(wholes) + 1)):
         raise ValueError(
             Declared(
@@ -96,9 +108,6 @@ def surface_epr_entries(index_map: Mapping[str, Any]) -> tuple[dict[str, Any], .
                     RETURNED_RUN_FOLDER,
                 ).refusal(found_text(baseline_index, entry["index"]))
             )
-    _validate_surface_inventory(wholes)
-    _validate_margins(by_index, wholes, margins)
-    return tuple(dielectric)
 
 
 def entry_rows(entry: Mapping[str, Any]) -> list[dict[str, Any]]:

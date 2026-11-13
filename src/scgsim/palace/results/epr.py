@@ -200,18 +200,9 @@ def epr_result(
     index = result.provenance.index_map
     config = result.provenance.config
     l0 = checked_number(config["Model"]["L0"], "Model.L0", positive=True)
-    entries = index["entries"]
-    surfaces = {
-        item["index"]: item for item in entries if item["section"] == DIELECTRIC_SECTION
-    }
-    domains = {
-        item["index"]: item for item in entries if item["section"] == ENERGY_SECTION
-    }
-    junctions = {
-        item["index"]: item
-        for item in entries
-        if item["section"] == LUMPED_PORT_SECTION
-    }
+    surfaces = _entries_in(index, DIELECTRIC_SECTION)
+    domains = _entries_in(index, ENERGY_SECTION)
+    junctions = _entries_in(index, LUMPED_PORT_SECTION)
     request, selected = _selected_outputs(domains, index, junctions, surfaces)
     eig = result.tables["eig"].rows
     surface_table = (
@@ -240,6 +231,13 @@ def epr_result(
     ).extract()
     provenance = _source_provenance(index, output_prefix, request, result)
     return PalaceEprResult(tuple(rows), provenance)
+
+
+def _entries_in(index: Mapping[str, Any], section: str) -> dict[int, Mapping[str, Any]]:
+    """The index-map entries of one config section, keyed by their Palace index."""
+    return {
+        item["index"]: item for item in index["entries"] if item["section"] == section
+    }
 
 
 def reanalyze_epr(

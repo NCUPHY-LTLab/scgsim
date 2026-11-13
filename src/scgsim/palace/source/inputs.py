@@ -47,23 +47,34 @@ def _validate_stack_material_kinds(
     stack: Mapping[str, Any], materials: Mapping[str, Mapping[str, Any]]
 ) -> None:
     """Require explicit material kinds for solution regions and metal layers."""
+    _validate_solution_regions(stack, materials)
+    _validate_metal_layers(stack, materials)
 
-    def material_kind(material_id: Any, owner: str) -> str:
-        if not isinstance(material_id, str) or material_id not in materials:
-            raise ValueError(
-                Declared(f"{owner}", _WHERE_STACK).refusal(
-                    "must reference an explicit stack material_id"
-                )
-            )
-        kind = materials[material_id].get("kind")
-        if kind not in {"vacuum", "dielectric", "conductor"}:
-            raise ValueError(
-                Declared(f"material {material_id!r}", _WHERE_STACK).refusal(
-                    "requires kind vacuum, dielectric, or conductor"
-                )
-            )
-        return str(kind)
 
+def _material_kind(
+    materials: Mapping[str, Mapping[str, Any]], material_id: Any, owner: str
+) -> str:
+    """The kind of the stack material ``owner`` names, refused when it names none or an unknown kind."""
+    if not isinstance(material_id, str) or material_id not in materials:
+        raise ValueError(
+            Declared(f"{owner}", _WHERE_STACK).refusal(
+                "must reference an explicit stack material_id"
+            )
+        )
+    kind = materials[material_id].get("kind")
+    if kind not in {"vacuum", "dielectric", "conductor"}:
+        raise ValueError(
+            Declared(f"material {material_id!r}", _WHERE_STACK).refusal(
+                "requires kind vacuum, dielectric, or conductor"
+            )
+        )
+    return str(kind)
+
+
+def _validate_solution_regions(
+    stack: Mapping[str, Any], materials: Mapping[str, Mapping[str, Any]]
+) -> None:
+    """Every solution region names a vacuum or dielectric material of the stack."""
     regions = stack.get("solution_regions")
     if not isinstance(regions, Mapping) or not regions:
         raise ValueError(
@@ -72,14 +83,20 @@ def _validate_stack_material_kinds(
             ).refusal(found_text(regions))
         )
     for name, region in regions.items():
-        if not isinstance(region, Mapping) or material_kind(
-            region.get("material_id"), f"solution region {name!r}"
+        if not isinstance(region, Mapping) or _material_kind(
+            materials, region.get("material_id"), f"solution region {name!r}"
         ) not in {"vacuum", "dielectric"}:
             raise ValueError(
                 Declared(f"solution region {name!r}", _WHERE_STACK).refusal(
                     "must use vacuum or dielectric material kind"
                 )
             )
+
+
+def _validate_metal_layers(
+    stack: Mapping[str, Any], materials: Mapping[str, Mapping[str, Any]]
+) -> None:
+    """Every layer is a record, and every metal layer names a conductor material of the stack."""
     layers = stack.get("layers")
     if not isinstance(layers, list) or not layers:
         raise ValueError(
@@ -96,7 +113,8 @@ def _validate_stack_material_kinds(
             )
         if (
             layer.get("role") == "metal"
-            and material_kind(layer.get("material_id"), "metal layer") != "conductor"
+            and _material_kind(materials, layer.get("material_id"), "metal layer")
+            != "conductor"
         ):
             raise ValueError(
                 Declared(

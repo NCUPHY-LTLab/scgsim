@@ -573,6 +573,27 @@ def _validate_receipt_binding(
     run_metadata: Any,
 ) -> None:
     """Require the returned receipt to identify the expected sealed handoff."""
+    _validate_metadata_binding(expected_handoff_id, handoff_metadata, run_metadata)
+    handoff_id = expect_scalar(receipt_payload, "handoff_id", str)
+    if handoff_id != expected_handoff_id:
+        raise ValueError(
+            Declared(
+                "returned run receipt handoff_id does not match expected_handoff_id",
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(handoff_id, expected_handoff_id))
+        )
+    if expect_scalar(receipt_payload, "identity_verified", bool) is not True:
+        raise ValueError(
+            Declared(
+                "returned run receipt identity is not verified", RETURNED_RUN_FOLDER
+            ).refusal(found_text(receipt_payload.get("identity_verified"), True))
+        )
+
+
+def _validate_metadata_binding(
+    expected_handoff_id: str, handoff_metadata: Any, run_metadata: Any
+) -> None:
+    """Both metadata files name the expected handoff and the returned receipt's path."""
     if (
         expect_scalar(run_metadata, "handoff_id", str, fallback="")
         != expected_handoff_id
@@ -613,19 +634,4 @@ def _validate_receipt_binding(
             ).refusal(
                 found_text(run_metadata.get("returned_receipt_path"), RETURNED_RECEIPT)
             )
-        )
-
-    handoff_id = expect_scalar(receipt_payload, "handoff_id", str)
-    if handoff_id != expected_handoff_id:
-        raise ValueError(
-            Declared(
-                "returned run receipt handoff_id does not match expected_handoff_id",
-                RETURNED_RUN_FOLDER,
-            ).refusal(found_text(handoff_id, expected_handoff_id))
-        )
-    if expect_scalar(receipt_payload, "identity_verified", bool) is not True:
-        raise ValueError(
-            Declared(
-                "returned run receipt identity is not verified", RETURNED_RUN_FOLDER
-            ).refusal(found_text(receipt_payload.get("identity_verified"), True))
         )

@@ -38,6 +38,14 @@ def validate_inspection_receipt(
         return frozenset()
     _validate_inspection_identity(handoff, receipt)
 
+    _validate_receipt_inputs(root, handoff, receipt)
+    return _verified_receipt_files(root, receipt)
+
+
+def _validate_receipt_inputs(
+    root: Path, handoff: dict[str, Any], receipt: dict[str, Any]
+) -> None:
+    """The receipt's input hashes are the handoff's, and the input files still have them."""
     input_entries = receipt.get("input_hashes")
     handoff_entries = handoff.get("hashes")
     if not isinstance(input_entries, list) or not isinstance(handoff_entries, list):
@@ -72,6 +80,9 @@ def validate_inspection_receipt(
                 )
             )
 
+
+def _verified_receipt_files(root: Path, receipt: dict[str, Any]) -> frozenset[str]:
+    """The output files and the log the receipt records as present, each checked against the folder."""
     output_entries = receipt.get("output_files")
     if not isinstance(output_entries, list):
         raise TypeError(
