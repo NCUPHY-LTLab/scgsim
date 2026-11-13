@@ -175,94 +175,134 @@ def reanalyze_epr(
     """Apply a new whole-group film snapshot to stored native participation."""
 
     if not isinstance(result, PalaceEprResult):
-        raise TypeError("result must be PalaceEprResult")
-    defaults = (
-        {}
-        if surface_defaults is None
-        else {
-            key: film_assumptions(value, partial=True)
-            for key, value in surface_defaults.items()
+        raise TypeError(
+            f"reanalyze_epr requires a PalaceEprResult; got {type(result).__name__}."
+        )
+    updates = _FilmUpdates.checked(result, surface_defaults, group_overrides)
+    rows = tuple(
+        {
+            **row,
+            "surface": [_reanalyzed_surface(item, updates) for item in row["surface"]],
         }
+        for row in result.rows
     )
-    overrides = (
-        {}
-        if group_overrides is None
-        else {
+    return PalaceEprResult(
+        rows, _reanalysis_provenance(result, updates), _verified_source=result
+    )
+
+
+@dataclass(frozen=True)
+class _FilmUpdates:
+    """The checked film changes of one reanalysis: by interface type, and by group over those."""
+
+    defaults: dict[str, dict[str, Any]]
+    overrides: dict[str, dict[str, Any]]
+
+    @classmethod
+    def checked(
+        cls,
+        result: PalaceEprResult,
+        surface_defaults: Mapping[str, Mapping[str, Any]] | None,
+        group_overrides: Mapping[str, Mapping[str, Any]] | None,
+    ) -> _FilmUpdates:
+        """Read both mappings as partial film snapshots, refusing an unknown interface type or group."""
+        defaults = {
             key: film_assumptions(value, partial=True)
-            for key, value in group_overrides.items()
+            for key, value in (surface_defaults or {}).items()
         }
-    )
-    if set(defaults) - {"MA", "MS", "SA"}:
-        raise ValueError("surface_defaults supports only MA, MS, and SA")
-    known = {item["group_id"] for row in result.rows for item in row["surface"]}
-    if set(overrides) - known:
-        raise ValueError("group_overrides contains an unknown group")
-    rows: list[dict[str, Any]] = []
-    for row in result.rows:
-        surfaces: list[dict[str, Any]] = []
-        for item in row["surface"]:
-            original = film_assumptions(item["original_assumptions"])
-            current = film_assumptions(item["assumptions"])
-            interface_update = defaults.get(item["interface_kind"], {})
-            group_update = overrides.get(item["group_id"], {})
-            applied = {**interface_update, **group_update}
-            candidate = {**current, **applied}
-            if any(
-                name in applied
-                for name in (
-                    "film_thickness_m",
-                    "film_relative_permittivity",
-                    "loss_tangent",
-                )
-            ):
-                if "source" not in applied:
-                    candidate["source"] = (
-                        "offline_group_override"
-                        if group_update
-                        else "offline_interface_default"
-                    )
-                if "preset" not in applied:
-                    candidate["preset"] = None
-            updated = film_assumptions(candidate)
-            ratio = updated["film_thickness_m"] / original["film_thickness_m"]
-            if item["interface_kind"] in {"MA", "MS"}:
-                ratio *= (
-                    original["film_relative_permittivity"]
-                    / updated["film_relative_permittivity"]
-                )
-            elif (
-                updated["film_relative_permittivity"]
-                != original["film_relative_permittivity"]
-            ):
-                raise ValueError(
-                    "SA epsilon change requires stored normal/tangential integrals"
-                )
-            participation = item["original_participation"] * ratio
-            surfaces.append(
-                {
-                    **item,
-                    "assumptions": updated,
-                    **(
-                        {
-                            "assumption_update": {
-                                "scope": "group_override"
-                                if group_update
-                                else "interface_default",
-                                "fields": sorted(applied),
-                                "original_source": original["source"],
-                                "original_preset": original["preset"],
-                            }
-                        }
-                        if applied
-                        else {}
-                    ),
-                    "participation": participation,
-                    "inverse_q": inverse_quality_factor(
-                        participation, updated["loss_tangent"]
-                    ),
-                }
+        overrides = {
+            key: film_assumptions(value, partial=True)
+            for key, value in (group_overrides or {}).items()
+        }
+        unknown_types = set(defaults) - {"MA", "MS", "SA"}
+        if unknown_types:
+            raise ValueError(
+                f"surface_defaults supports only MA, MS, and SA; got {sorted(unknown_types)}."
             )
-        rows.append({**row, "surface": surfaces})
+        known = {item["group_id"] for row in result.rows for item in row["surface"]}
+        unknown_groups = set(overrides) - known
+        if unknown_groups:
+            raise ValueError(
+                f"group_overrides contains an unknown group: {sorted(unknown_groups)}; "
+                f"this result's groups are {sorted(known)}."
+            )
+        return cls(defaults, overrides)
+
+
+def _reanalyzed_surface(
+    item: Mapping[str, Any], updates: _FilmUpdates
+) -> dict[str, Any]:
+    """One surface row with its film snapshot updated and its participation and 1/Q rescaled."""
+    original = film_assumptions(item["original_assumptions"])
+    current = film_assumptions(item["assumptions"])
+    group_update = updates.overrides.get(item["group_id"], {})
+    applied = {**updates.defaults.get(item["interface_kind"], {}), **group_update}
+    candidate = {**current, **applied}
+    if any(
+        name in applied
+        for name in ("film_thickness_m", "film_relative_permittivity", "loss_tangent")
+    ):
+        if "source" not in applied:
+            candidate["source"] = (
+                "offline_group_override"
+                if group_update
+                else "offline_interface_default"
+            )
+        if "preset" not in applied:
+            candidate["preset"] = None
+    updated = film_assumptions(candidate)
+    participation = item["original_participation"] * _participation_ratio(
+        item, original, updated
+    )
+    return {
+        **item,
+        "assumptions": updated,
+        **(
+            {
+                "assumption_update": {
+                    "scope": "group_override" if group_update else "interface_default",
+                    "fields": sorted(applied),
+                    "original_source": original["source"],
+                    "original_preset": original["preset"],
+                }
+            }
+            if applied
+            else {}
+        ),
+        "participation": participation,
+        "inverse_q": inverse_quality_factor(participation, updated["loss_tangent"]),
+    }
+
+
+def _participation_ratio(
+    item: Mapping[str, Any], original: Mapping[str, Any], updated: Mapping[str, Any]
+) -> float:
+    """Scale a thin-film participation by thickness, and for MA and MS by the inverse film permittivity.
+
+    An SA film's participation splits into normal and tangential field integrals that the result does not
+    store, so its permittivity cannot change offline.
+    """
+    ratio = updated["film_thickness_m"] / original["film_thickness_m"]
+    if item["interface_kind"] in {"MA", "MS"}:
+        ratio *= (
+            original["film_relative_permittivity"]
+            / updated["film_relative_permittivity"]
+        )
+    elif (
+        updated["film_relative_permittivity"] != original["film_relative_permittivity"]
+    ):
+        raise ValueError(
+            "SA epsilon change requires stored normal/tangential integrals: surface "
+            f"{item['name']!r} (group {item['group_id']!r}) is SA, whose result stores no such "
+            "integrals; change only film_thickness_m or loss_tangent for SA surfaces."
+        )
+    return ratio
+
+
+def _reanalysis_provenance(
+    result: PalaceEprResult, updates: _FilmUpdates
+) -> dict[str, Any]:
+    """The source provenance with the hash of the first, unreanalyzed result and the applied film change."""
     original_hash = result.provenance.get("original_result_sha256")
     if original_hash is None:
         original_hash = hashlib.sha256(
@@ -270,20 +310,16 @@ def reanalyze_epr(
                 result.to_payload(), sort_keys=True, separators=(",", ":")
             ).encode()
         ).hexdigest()
-    return PalaceEprResult(
-        tuple(rows),
-        {
-            **result.provenance,
-            "original_result_sha256": original_hash,
-            "film_analysis": {
-                "schema_version": "scgsim.epr.film-analysis.v1",
-                "surface_defaults": defaults,
-                "group_overrides": overrides,
-                "status": "derived_offline",
-            },
+    return {
+        **result.provenance,
+        "original_result_sha256": original_hash,
+        "film_analysis": {
+            "schema_version": "scgsim.epr.film-analysis.v1",
+            "surface_defaults": updates.defaults,
+            "group_overrides": updates.overrides,
+            "status": "derived_offline",
         },
-        _verified_source=result,
-    )
+    }
 
 
 def _source_provenance(
