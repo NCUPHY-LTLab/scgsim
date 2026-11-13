@@ -20,7 +20,7 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 type IntegerPoint = tuple[int, int]
 type RationalPoint = tuple[int | Fraction, int | Fraction]

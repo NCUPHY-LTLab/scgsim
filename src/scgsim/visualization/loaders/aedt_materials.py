@@ -6,8 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
-from scgsim.geometry.models.refusals import Declared
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 from scgsim.visualization.loaders.common import AEDT_RUN_FOLDER
 
 from ..scene import ScenePart, color_for_identity

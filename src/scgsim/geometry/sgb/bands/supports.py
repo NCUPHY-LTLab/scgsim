@@ -63,7 +63,6 @@ from scgsim.geometry.exact.carriers import (
 from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.exact.grid import Grid, exact_z
 from scgsim.geometry.models.grid import format_box
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.bands.die_cuts import (
@@ -98,6 +97,7 @@ from scgsim.geometry.sgb.records.interfaces import (
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.records.support import SupportRegion, primitive_ends
+from scgsim.refusal import internal
 
 
 @dataclass(frozen=True)

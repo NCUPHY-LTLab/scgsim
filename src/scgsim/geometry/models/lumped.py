@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 _SUPPORT = Declared(
     "lumped support", "the LumpedSupport passed to GeometryPlan.set_lumped_supports"

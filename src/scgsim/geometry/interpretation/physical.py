@@ -22,8 +22,8 @@ from scgsim.geometry.models.physical import (
     interpret_physical_layers,
     source_plain,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.intents import route_a_sheet_interfaces
+from scgsim.refusal import Declared
 from scgsim.semantics.route_a import geometry_z_range
 from scgsim.semantics.snapshot import canonical_sha256
 

@@ -16,7 +16,6 @@ from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_index_map import DIELECTRIC_SECTION
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.surface_epr.specs import margins_of
 from scgsim.palace.results.artifacts import (
     checked_number,
@@ -26,7 +25,7 @@ from scgsim.palace.results.artifacts import (
     optional_dict,
 )
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 SURFACE_INTERFACE_TYPES = ("MA", "MS", "SA")
 

@@ -22,9 +22,9 @@ from math import lcm
 import numpy as np
 
 from scgsim.geometry.exact.errors import SgbError
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.output.emission.numbers import PI, angle_of
 from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, TopoFace, Topology
+from scgsim.refusal import internal
 
 PLANE, CYLINDER = 0, 1  # surface kinds
 CIRCLE_SPREAD_LIMIT_UM = (

@@ -17,12 +17,12 @@ from scgsim.geometry.models.junctions import (
     junction_net_id,
     junction_occurrence_path,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.regions import (
     PortSheetOverlapRecord,
     PortSheetRegionRecord,
 )
 from scgsim.geometry.source.ports import port_sheet_hosts, port_sheet_overlaps
+from scgsim.refusal import Declared
 
 _REQUEST = Declared(
     "rectangular junction request",

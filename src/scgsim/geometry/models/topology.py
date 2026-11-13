@@ -13,7 +13,7 @@ from scgsim.geometry.models.common import (
     SolverUseLiteral,
     Vector3D,
 )
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 
 @dataclass(frozen=True)

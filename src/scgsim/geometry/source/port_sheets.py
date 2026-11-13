@@ -11,7 +11,7 @@ import copy
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 _PORTS = Declared("authored port sheets", "the ports added to the simulation")
 _STACK = Declared("the stack", "the stack the ports are added to")

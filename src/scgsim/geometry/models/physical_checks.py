@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import Declared, internal
 from scgsim.semantics.snapshot import to_plain
 
 if TYPE_CHECKING:

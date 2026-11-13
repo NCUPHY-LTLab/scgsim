@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 RETURNED_RUN_FOLDER = (
     "the run folder Palace returned: fetch it again, or run the handoff again"

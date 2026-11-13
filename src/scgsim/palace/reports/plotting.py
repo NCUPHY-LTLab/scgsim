@@ -7,10 +7,9 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple
 
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.mesh.summary import MeshSummary
 from scgsim.presentation.notebook import Card
-from scgsim.refusal import ENVIRONMENT, found_text
+from scgsim.refusal import ENVIRONMENT, Declared, found_text
 
 _WHERE_SHOW_CALL = "the arguments of the show_ call"
 

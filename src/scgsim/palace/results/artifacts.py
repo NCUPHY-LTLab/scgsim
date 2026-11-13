@@ -17,8 +17,8 @@ from scgsim.contracts.palace_run_folder import (
     read_json,
     sha256,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
+from scgsim.refusal import Declared
 
 
 class FileHash(NamedTuple):

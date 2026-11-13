@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from scgsim.geometry.exact.carriers import CarrierRole, EdgeCarrier
 from scgsim.geometry.exact.errors import SgbError
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.records import identity
+from scgsim.refusal import internal
 
 
 def assign_ids(

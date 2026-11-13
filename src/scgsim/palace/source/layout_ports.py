@@ -18,10 +18,9 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 from .ports import LayoutPortBinding, RequestedPort
 from .workflow import GeometrySettings, prepare_mesh_input

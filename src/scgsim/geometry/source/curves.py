@@ -37,9 +37,9 @@ from scgsim.geometry.models.input import (
     reconstruction_chain_refusal,
     reconstruction_without_circle,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
 from scgsim.geometry.source.plan_assembly import transform_source_point
+from scgsim.refusal import Declared
 
 _BoundaryRecord = BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec
 _BoundaryInput = _BoundaryRecord | Mapping[str, Any]

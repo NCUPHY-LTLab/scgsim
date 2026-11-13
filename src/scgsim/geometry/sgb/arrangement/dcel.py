@@ -30,9 +30,9 @@ from scgsim.geometry.exact.plane import (
     fraction_to_rep,
     point_in_ring,
 )
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge
 from scgsim.geometry.sgb.arrangement.noding.spatial_hash import cell_size_for
+from scgsim.refusal import internal
 
 
 @dataclass(frozen=True)

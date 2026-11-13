@@ -16,7 +16,6 @@ from scgsim.contracts.palace_run_folder import (
     confined_path,
     sha256,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
     FileHash,
     expect_int,
@@ -32,7 +31,7 @@ from scgsim.palace.run.archive import (
     logical_tar_member_name,
     resolve_run_archive_path,
 )
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 
 def validate_scalar_identity(

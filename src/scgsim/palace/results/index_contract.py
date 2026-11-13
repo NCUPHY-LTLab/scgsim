@@ -27,7 +27,6 @@ from scgsim.contracts.palace_run_folder import (
     OUTPUT_DIR,
     palace_problem,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
     expect_list,
     expect_mapping,
@@ -40,7 +39,7 @@ from scgsim.palace.results.surface_contract import (
     validate_surface_epr_config,
 )
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 
 def require_manifest_schema(manifest: Mapping[str, Any]) -> None:

@@ -1,14 +1,15 @@
-"""The value part of a refusal ("found X, expected Y"), and the refusal sentences for modules below geometry.
+"""How SCGSim words a refusal: the one module every stage imports.
 
-Every refusal in SCGSim has one of two shapes, worded by ``scgsim.geometry.models.refusals``:
-"{object}: {problem}. Change it in {where}." for an input someone has to change, and "internal:
-{invariant}. ..." for an invariant SCGSim broke. ``palace``, ``visualization`` and ``presentation``
-build both with that module and state the values they found with ``found_text`` from here.
-``semantics`` and ``meshing`` may not import geometry (``.importlinter``), so they word the same two
-sentences with ``refused`` and ``internal`` from here.  Standard library only, so every stage can
-import it.
+Every refusal has one of two shapes. "{object}: {problem}. Change it in {where}." is an input
+someone has to change: ``refused`` words it, ``Declared`` words it for an object that carries its own
+name and source, and ``found_text`` states the values a check compared. "internal: {invariant}. ..."
+is an invariant SCGSim broke on an input it accepted: ``internal`` words it. Standard library only,
+so every stage, ``semantics`` and ``meshing`` included, can import it.
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass
 from typing import Any
 
 INTERNAL = "internal:"
@@ -18,11 +19,19 @@ ENVIRONMENT = "the Python environment SCGSim runs in"
 _SHOWN_CHARACTERS = 120
 
 
+def shown(value: object) -> str:
+    """A found value as a refusal prints it."""
+    text = repr(value)
+    if len(text) > _SHOWN_CHARACTERS:
+        return text[: _SHOWN_CHARACTERS - 3] + "..."
+    return text
+
+
 def found_text(found: Any, expected: Any = ...) -> str:
     """The values a check compared: what it found and, when it knows it, what it expected."""
     if expected is ...:
-        return f"found {_shown(found)}"
-    return f"found {_shown(found)}, expected {_shown(expected)}"
+        return f"found {shown(found)}"
+    return f"found {shown(found)}, expected {shown(expected)}"
 
 
 def refused(subject: str, problem: str, where: str) -> str:
@@ -38,8 +47,26 @@ def internal(invariant: str) -> str:
     )
 
 
-def _shown(value: object) -> str:
-    text = repr(value)
-    if len(text) > _SHOWN_CHARACTERS:
-        return text[: _SHOWN_CHARACTERS - 3] + "..."
-    return text
+@dataclass(frozen=True)
+class Declared:
+    """A declared object a check reads: its name, and where it is declared, which says who changes it.
+
+    ``name`` reads as a noun phrase (``"stack layer 'chip/pad'"``); ``source`` completes
+    "Change it in ..." (``"the stack file"``, ``"the call to GeometryPlan.set_nets"``).
+    """
+
+    name: str
+    source: str
+
+    def refusal(self, problem: str) -> str:
+        """The refusal of ``problem`` on this object."""
+        return refused(self.name, problem, self.source)
+
+    def expected(self, field: str, expected: str, *found: object) -> str:
+        """The refusal of ``field`` of this object, which must be ``expected``; ``found`` is what it is."""
+        found_text = f", not {shown(found[0])}" if found else ""
+        return self.refusal(f"{field} must be {expected}{found_text}")
+
+    def part(self, name: str) -> Declared:
+        """A named part of this object, declared in the same place."""
+        return Declared(f"{self.name} {name}", self.source)

@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 _REQUEST = Declared(
     "rectangular junction request", "the RectangularJunctionSpec passed to the plan"

@@ -10,7 +10,7 @@ from typing import Protocol, TypeVar
 
 from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
 from scgsim.geometry.grid.coordinates import coordinate_2d_key
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 Point2D = tuple[float, float]
 PlanarLoop = tuple[Point2D, ...]

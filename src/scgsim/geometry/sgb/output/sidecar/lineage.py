@@ -13,9 +13,9 @@ from dataclasses import dataclass
 
 from scgsim.geometry.exact.carriers import ArcCarrier, Lineage
 from scgsim.geometry.exact.errors import SgbError
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.refusal import internal
 
 BAND_FAMILY_ROLE = "inset_band"
 

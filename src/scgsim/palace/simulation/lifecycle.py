@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Literal
 
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 
 class Stage(IntEnum):

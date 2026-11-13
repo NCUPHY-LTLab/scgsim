@@ -20,7 +20,7 @@ from contextlib import AbstractContextManager
 from decimal import ROUND_FLOOR, Context, Decimal, localcontext
 from fractions import Fraction
 
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 PRECISION = 60
 _CONTEXT = Context(prec=PRECISION)

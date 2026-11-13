@@ -22,7 +22,6 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.source.adapter_records import (
     AdapterSource,
@@ -55,6 +54,7 @@ from scgsim.geometry.source.recipes import (
     source_recipe_job,
     source_recipe_map,
 )
+from scgsim.refusal import Declared
 
 if TYPE_CHECKING:
     from gdstk import Cell

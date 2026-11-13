@@ -37,10 +37,10 @@ from scgsim.geometry.grid.grid_regions import (
 )
 from scgsim.geometry.grid.tagged_grid import build_tagged_subdivision
 from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry.models.refusals import internal
 from scgsim.preparation import (
     ordered_map,
 )
+from scgsim.refusal import internal
 
 if TYPE_CHECKING:
     from shapely.geometry import Polygon

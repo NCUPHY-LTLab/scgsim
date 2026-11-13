@@ -31,11 +31,11 @@ from scgsim.geometry.grid.polygon_ops import (
 )
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
 from scgsim.geometry.source.normalization import gds_layer
 from scgsim.geometry.source.recipes import Audited, audited_declared_source
 from scgsim.geometry.source.stack_layers import is_record_sequence
+from scgsim.refusal import Declared, internal
 
 
 def _entity(entity: SemanticEntitySpec) -> Declared:

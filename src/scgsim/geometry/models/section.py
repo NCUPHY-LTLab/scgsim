@@ -20,7 +20,7 @@ from numbers import Real
 from typing import Literal
 
 from scgsim.geometry.models.grid import format_box
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 PlanPoint = tuple[float, float]
 

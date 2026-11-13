@@ -29,7 +29,6 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     table_name,
 )
-from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.epr_records import (
     PalaceEprResult,
     checked_number,
@@ -42,7 +41,7 @@ from scgsim.palace.results.tables import (
     read_result_table,
 )
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 from scgsim.semantics.epr import (
     FilmAssumptions,
     FilmUpdate,

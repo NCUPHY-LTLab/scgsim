@@ -22,8 +22,7 @@ from scgsim.contracts.palace_run_folder import (
     RUNTIME_COMPATIBILITY,
     SOLVER_LOG_PREFIX,
 )
-from scgsim.geometry.models.refusals import Declared
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 _WHERE_HANDOFF_CALL = "the call to prepare_handoff"
 

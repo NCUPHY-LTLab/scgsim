@@ -16,8 +16,8 @@ from scgsim.geometry.grid.polygon_ops import (
 )
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
+from scgsim.refusal import Declared
 
 SOURCE_OCCURRENCE_POLYGON_METADATA_KEY = "source_occurrence_polygon_um"
 

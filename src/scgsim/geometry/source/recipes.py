@@ -27,8 +27,8 @@ from scgsim.geometry.grid.grid_regions import (
 )
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.models.refusals import internal
 from scgsim.preparation import ordered_map
+from scgsim.refusal import internal
 
 
 class SourcePolygonAudit(TypedDict):

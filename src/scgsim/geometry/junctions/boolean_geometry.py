@@ -16,7 +16,7 @@ from scgsim.geometry.grid.planar_loops import (
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.junctions.core import PRECISION_UM
 from scgsim.geometry.junctions.exact_geometry import inside_ring, on, region_edges
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 
 def build_polygon_region(scope: GridScope, polygons):

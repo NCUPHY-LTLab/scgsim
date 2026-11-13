@@ -33,7 +33,6 @@ from scgsim.contracts.sgb_sidecar.records import (
     VolumeKind,
 )
 from scgsim.geometry.exact.errors import SgbError
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import planned_face_area_um2, rounded
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
@@ -42,6 +41,7 @@ from scgsim.geometry.sgb.records.labels import Domain
 from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.topology.routes.groups import RoutedFace, RoutedModel
 from scgsim.geometry.sgb.topology.routes.naming import sheet_row_id
+from scgsim.refusal import internal
 
 
 def group_members(plan: BrepPlan) -> dict[str, list[str]]:

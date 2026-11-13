@@ -13,10 +13,9 @@ from dataclasses import asdict, dataclass, replace
 from numbers import Real
 from typing import Any
 
-from scgsim.geometry.models.refusals import Declared
 from scgsim.meshing import Budgets, FeatureRecipe, MesherOptions, SizingRecipe
 from scgsim.meshing.report import recipe_record
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 _WHERE_MESH_CONTROLS = "the call to set_mesh"
 

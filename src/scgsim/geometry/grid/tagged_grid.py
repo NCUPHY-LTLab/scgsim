@@ -29,8 +29,8 @@ from scgsim.geometry.grid.tagged_grid_operations import (
     ShapelyGridOperations,
     load_shapely_grid_operations,
 )
-from scgsim.geometry.models.refusals import internal
 from scgsim.preparation import current_preparation_workers, ordered_map
+from scgsim.refusal import internal
 
 if TYPE_CHECKING:
     from shapely.geometry import Point, Polygon

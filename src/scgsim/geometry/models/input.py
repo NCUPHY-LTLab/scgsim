@@ -18,8 +18,8 @@ from scgsim.geometry.models.common import (
     RouteLiteral,
 )
 from scgsim.geometry.models.lumped import LumpedSupport
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.refusal import Declared
 
 
 @dataclass(frozen=True)

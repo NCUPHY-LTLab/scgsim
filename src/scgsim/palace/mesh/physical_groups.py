@@ -31,7 +31,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from scgsim.contracts.sgb_sidecar import SIDECAR_SCHEMA, Sidecar, views
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 from .attributes import SurfacePart, lower_surface_group
 

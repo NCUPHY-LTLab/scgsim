@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import Declared
 
 
 def plan_call(method: str, name: str) -> Declared:

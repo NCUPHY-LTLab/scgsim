@@ -8,8 +8,8 @@ from typing import Any, NotRequired, TypedDict, cast
 
 from scgsim.geometry.models.common import PolygonRing, RouteLiteral
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.models.representation import RepresentationContext
+from scgsim.refusal import internal
 
 
 class _SheetInterface(TypedDict):

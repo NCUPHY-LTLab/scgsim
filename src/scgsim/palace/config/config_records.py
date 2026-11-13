@@ -12,8 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
-from scgsim.geometry.models.refusals import Declared
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 from ..mesh.physical_groups import Groups
 from ..source.surface_epr import SurfaceEprSpecs

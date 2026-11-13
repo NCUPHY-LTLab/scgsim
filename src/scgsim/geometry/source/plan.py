@@ -26,7 +26,6 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.junctions import RectangularJunctionSpec
 from scgsim.geometry.models.lumped import LumpedSupport
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.adapter import (
     LayoutOrigin,
     layout_grid,
@@ -87,6 +86,7 @@ from scgsim.geometry.source.recipes import (
 )
 from scgsim.geometry.source.stack_layers import entity_from_layer_record
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
+from scgsim.refusal import Declared, internal
 
 
 @dataclass(frozen=True)

@@ -13,8 +13,7 @@ from scgsim.aedt.results.prepared import resolve_prepared_model
 from scgsim.aedt.runtime.native.compatibility import native_compatibility
 from scgsim.aedt.specs.common import LOCKED_PYAEDT
 from scgsim.aedt.versions import AedtVersionProfile, resolve_aedt_version
-from scgsim.geometry.models.refusals import Declared, internal
-from scgsim.refusal import ENVIRONMENT, found_text
+from scgsim.refusal import ENVIRONMENT, Declared, found_text, internal
 from scgsim.visualization.loaders.aedt_materials import object_materials
 from scgsim.visualization.loaders.common import AEDT_RUN_FOLDER
 

@@ -20,7 +20,7 @@ from scgsim.geometry.grid.booleans import (
 from scgsim.geometry.grid.grid_regions import GridPoint, canonical_grid_point
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 
 @dataclass(frozen=True)

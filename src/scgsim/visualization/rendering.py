@@ -12,8 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple, cast
 
-from scgsim.geometry.models.refusals import Declared, internal
-from scgsim.refusal import ENVIRONMENT, found_text
+from scgsim.refusal import ENVIRONMENT, Declared, found_text, internal
 
 from .loaders.common import file_sha256
 from .scene import MODE_TITLES, VIEWS, ScenePart

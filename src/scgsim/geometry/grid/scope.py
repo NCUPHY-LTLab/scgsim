@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 
 from scgsim.geometry.grid.grid_regions import GridPoint, grid_change_message
 from scgsim.geometry.models.grid import GeometryGridContext, format_box
-from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import internal
 
 # An affine map ``(a, b, c, d, x, y)``: a point ``(u, v)`` lands at ``(a u + b v + x, c u + d v + y)``.
 Affine = tuple[float, ...]

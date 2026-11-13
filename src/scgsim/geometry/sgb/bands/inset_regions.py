@@ -37,7 +37,6 @@ from scgsim.geometry.exact.carriers import (
     piece_carriers,
 )
 from scgsim.geometry.exact.plane import Point, RepPoint, point_in_ring
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.dcel import (
     Arrangement,
     build_arrangement,
@@ -52,6 +51,7 @@ from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
 from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.records.prisms import Footprint
 from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
+from scgsim.refusal import internal
 
 SUPPORT_BOUNDARY = "~support"
 """Prefix of the carrier ids of the support boundary (written, never read: the role is ``SUPPORT_BOUNDARY``)."""

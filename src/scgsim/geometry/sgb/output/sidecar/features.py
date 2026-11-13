@@ -37,7 +37,6 @@ from typing import Any, cast
 
 from scgsim.contracts.sgb_sidecar.records import MeshFeature, Port
 from scgsim.geometry.exact.errors import SgbError
-from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.bands.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import rounded
@@ -48,6 +47,7 @@ from scgsim.geometry.sgb.output.sidecar.lineage import (
     CarrierLineage,
 )
 from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
+from scgsim.refusal import internal
 
 FEATURE_KINDS = (
     "film_sidewall",

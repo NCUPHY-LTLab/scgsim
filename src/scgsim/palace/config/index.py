@@ -23,8 +23,7 @@ from scgsim.contracts.palace_index_map import (
     TERMINAL_SECTION,
 )
 from scgsim.contracts.palace_run_folder import EPR_SELECTION_SCHEMA
-from scgsim.geometry.models.refusals import Declared
-from scgsim.refusal import found_text
+from scgsim.refusal import Declared, found_text
 
 _WHERE_EPR_REQUEST = "the call to set_epr_request"
 

@@ -23,8 +23,7 @@ from scgsim.contracts.palace_run_folder import (
     MESH,
     MESH_MANIFEST,
 )
-from scgsim.geometry.models.refusals import Declared, internal
-from scgsim.refusal import ENVIRONMENT, found_text
+from scgsim.refusal import ENVIRONMENT, Declared, found_text, internal
 
 from ..preview import GeometryPreview
 from ..scene import FIXED_COLORS, SceneMode, ScenePart, color_for_identity

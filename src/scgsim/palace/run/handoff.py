@@ -37,8 +37,7 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     write_json,
 )
-from scgsim.geometry.models.refusals import Declared
-from scgsim.refusal import ENVIRONMENT, found_text
+from scgsim.refusal import ENVIRONMENT, Declared, found_text
 
 from ..mesh.build import MeshBuildResult
 from ..mesh.manifest import SGB_RUNTIME_AUTHORITY

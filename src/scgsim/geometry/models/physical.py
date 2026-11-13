@@ -22,12 +22,12 @@ from scgsim.geometry.models.physical_checks import (
     supporting_entity,
     validate_opposing_films,
 )
-from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.models.representation import (
     EffectiveEnclosure,
     EntityRepresentation,
     RepresentationContext,
 )
+from scgsim.refusal import Declared, internal
 from scgsim.semantics.route_a import geometry_z_range, same_z
 from scgsim.semantics.snapshot import canonical_sha256, freeze_plain, to_plain
 

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypeGuard
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.ground import PlaneBounds, derived_ground_polygons
 from scgsim.geometry.source.occurrence import gds_polygons_for_entity
 from scgsim.geometry.source.recipes import Audited, audited_declared_source
@@ -18,6 +17,7 @@ from scgsim.geometry.source.stack_layers import (
     is_record_sequence,
     resolve_material_kind,
 )
+from scgsim.refusal import Declared
 
 if TYPE_CHECKING:
     from gdstk import Cell, Polygon

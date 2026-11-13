@@ -17,8 +17,7 @@ from scgsim.contracts.palace_run_folder import (
     palace_problem,
     sha256,
 )
-from scgsim.geometry.models.refusals import internal
-from scgsim.refusal import found_text
+from scgsim.refusal import found_text, internal
 
 
 def _corner_chord_statistics(
