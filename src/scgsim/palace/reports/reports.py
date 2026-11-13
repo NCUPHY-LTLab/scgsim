@@ -15,6 +15,7 @@ from scgsim.contracts.palace_run_folder import (
     PROBLEMS,
     RETURNED_RECEIPT,
     palace_problem,
+    read_json,
 )
 from scgsim.palace.mesh.summary import mesh_summary
 from scgsim.palace.reports.observations import (
@@ -28,7 +29,15 @@ from scgsim.palace.reports.plotting import (
     checked_show_details,
     checked_theme,
 )
-from scgsim.palace.results.artifacts import read_json
+from scgsim.palace.reports.trust import PalaceTrustReport
+from scgsim.palace.reports.views import (
+    PhysicsQuantitiesReport,
+    SimulationBenchmarkReport,
+)
+from scgsim.palace.results.artifacts import (
+    as_int,
+    read_optional_json,
+)
 from scgsim.palace.results.index_contract import (
     require_index_map_schema,
     require_manifest_schema,
@@ -39,14 +48,10 @@ from scgsim.palace.results.inspection import (
     result_selection,
     validate_inspection_receipt,
 )
-from scgsim.palace.results.models import ResolvedRunData
-from scgsim.palace.results.observations import as_int, read_optional_json
-from scgsim.palace.results.report_models import (
-    AmrPassSnapshot,
-    PalaceFailureDiagnosis,
-    PalaceResultSelection,
+from scgsim.palace.results.inspection_records import (
     PassCostRecord,
 )
+from scgsim.palace.results.resolved_records import ResolvedRunData
 from scgsim.palace.results.snapshots import collect_amr_passes
 from scgsim.palace.results.surface_contract import validate_surface_epr_config
 from scgsim.palace.results.surface_readers import (
@@ -54,10 +59,6 @@ from scgsim.palace.results.surface_readers import (
     read_surface_margin_bindings,
 )
 from scgsim.palace.results.tables import configured_mode_count
-
-from .trust import PalaceTrustReport as PalaceTrustReport
-from .views import PhysicsQuantitiesReport as PhysicsQuantitiesReport
-from .views import SimulationBenchmarkReport as SimulationBenchmarkReport
 
 
 def inspect_run_trustworthiness(
@@ -82,8 +83,7 @@ def show_run_trustworthiness(
     show_details: bool = False,
 ) -> PalaceTrustReport:
     """Build the resolved-run identity, AMR and failure view with the requested theme."""
-    if not isinstance(result, ResolvedRunData):
-        raise TypeError("resolved result report requires ResolvedPalaceResult.")
+    _require_resolved(result, "show_run_trustworthiness")
     report = _build_trust_report(result.run_dir, resolved=result, theme=theme)
     return report.show_run_trustworthiness(theme=theme, show_details=show_details)
 
@@ -111,8 +111,7 @@ def show_all_results(
 ) -> None:
     """Display trust, benchmark, and physics in the Human-defined order."""
 
-    if not isinstance(result, ResolvedRunData):
-        raise TypeError("resolved result report requires ResolvedPalaceResult.")
+    _require_resolved(result, "show_physics_quantities")
 
     from IPython.display import display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
@@ -145,8 +144,7 @@ def show_simulation_benchmark(
 ) -> SimulationBenchmarkReport:
     """Return the readable benchmark and its complete machine data."""
 
-    if not isinstance(result, ResolvedRunData):
-        raise TypeError("resolved result report requires ResolvedPalaceResult.")
+    _require_resolved(result, "show_simulation_benchmark")
 
     trust = show_run_trustworthiness(result)
     pass_cost_records = trust.pass_cost_records()
@@ -155,6 +153,15 @@ def show_simulation_benchmark(
         data=_resolved_benchmark_data(result, pass_cost_records),
         show_details=checked_show_details(show_details),
     )
+
+
+def _require_resolved(result: object, view: str) -> None:
+    """Refuse a view of anything but a resolved run, naming the view and what was passed."""
+    if not isinstance(result, ResolvedRunData):
+        raise TypeError(
+            f"{view} requires the ResolvedPalaceResult that resolve_palace_result() returns; "
+            f"got {type(result).__name__}."
+        )
 
 
 def _resolved_benchmark_data(
@@ -299,13 +306,11 @@ def _build_trust_report(
 
 
 __all__ = [
-    "AmrPassSnapshot",
-    "PalaceFailureDiagnosis",
-    "PalaceResultSelection",
-    "PalaceTrustReport",
-    "PassCostRecord",
-    "PhysicsQuantitiesReport",
     "inspect_run_trustworthiness",
+    "show_all_results",
+    "show_physics_quantities",
+    "show_run_trustworthiness",
+    "show_simulation_benchmark",
 ]
 
 

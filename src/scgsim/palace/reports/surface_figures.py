@@ -19,7 +19,7 @@ from scgsim.palace.reports.plotting import (
     plotly,
     theme_tokens,
 )
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.inspection_records import (
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
     SurfaceMarginEprRecord,

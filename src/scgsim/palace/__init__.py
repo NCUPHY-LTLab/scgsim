@@ -15,34 +15,26 @@ binds nothing) with an error that says which call fixes it.  A setting with a do
 and the numerical controls, keeps that default until the caller sets it.
 """
 
-from .reports.reports import (
-    PalaceTrustReport,
-    PhysicsQuantitiesReport,
-    SimulationBenchmarkReport,
-    inspect_run_trustworthiness,
-)
-from .results.epr import (
-    PalaceEprResult,
-    epr_result,
-    reanalyze_epr,
-    resolve_epr_result,
-    show_epr,
-)
-from .results.report_models import (
+from .reports.epr import show_epr
+from .reports.reports import inspect_run_trustworthiness
+from .reports.resolved_result import ResolvedPalaceResult, resolve_palace_result
+from .reports.trust import PalaceTrustReport
+from .reports.views import PhysicsQuantitiesReport, SimulationBenchmarkReport
+from .results.epr import epr_result, reanalyze_epr, resolve_epr_result
+from .results.epr_records import PalaceEprResult
+from .results.inspection_records import (
     PalaceFailureDiagnosis,
     PalaceResultSelection,
     PassCostRecord,
     SurfaceMarginEprRecord,
     SurfaceMarginEprSeriesSnapshot,
 )
-from .results.resolve import (
+from .results.resolved_records import (
     PalaceCost,
     PalacePerformance,
     PalaceProvenance,
     PalaceReturnedReceipt,
     ParsedTable,
-    ResolvedPalaceResult,
-    resolve_palace_result,
 )
 from .simulation.drc import SimulationDrcError, SimulationDrcReport, StageResult
 from .simulation.eigenmode import EigenmodeSim

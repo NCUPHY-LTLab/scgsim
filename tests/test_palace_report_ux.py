@@ -21,7 +21,7 @@ from scgsim.palace import (
     inspect_run_trustworthiness,
 )
 from scgsim.palace.reports.surface_figures import surface_ranking_figure
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.inspection_records import (
     AmrPassSnapshot,
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,

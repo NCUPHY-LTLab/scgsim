@@ -18,7 +18,7 @@ from scgsim.contracts.palace_run_folder import (
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
 from ..config.config import build_electrostatic_config
-from ..config.config_models import (
+from ..config.config_records import (
     ElectrostaticConfigBuildResult,
     ElectrostaticSettings,
     TerminalBinding,

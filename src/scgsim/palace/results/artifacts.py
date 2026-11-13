@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal, overload
+from typing import Any, Literal, NamedTuple, overload
 
 from scgsim.contracts.palace_run_folder import (
     RUN_RECORD_SCHEMA_VERSION,
@@ -17,6 +17,13 @@ from scgsim.contracts.palace_run_folder import (
     read_json,
     sha256,
 )
+
+
+class FileHash(NamedTuple):
+    """The size and SHA-256 of one run-folder file; both None for a file that is absent."""
+
+    bytes: int | None
+    sha256: str | None
 
 
 def expect_mapping(value: Any, name: str) -> dict[str, Any]:
@@ -31,9 +38,9 @@ def extract_hash_map(
     label: str = "hash entries",
     *,
     require_optional_values: bool = False,
-) -> dict[str, tuple[int | None, str | None]]:
+) -> dict[str, FileHash]:
     """Index recorded file sizes and SHA-256 values, rejecting duplicate paths."""
-    result: dict[str, tuple[int | None, str | None]] = {}
+    result: dict[str, FileHash] = {}
     for entry in entries:
         if not isinstance(entry, dict):
             raise TypeError(f"{label} must be mappings.")
@@ -46,21 +53,18 @@ def extract_hash_map(
         else:
             bytes_value = expect_int(entry.get("bytes"))
             sha_value = expect_scalar(entry, "sha256", str)
-        result[path] = (
-            bytes_value,
-            sha_value,
-        )
+        result[path] = FileHash(bytes_value, sha_value)
     return result
 
 
-def compute_hash_entry(path: Path) -> tuple[int | None, str | None]:
-    """Return the current file size and SHA-256, or the absent-file pair."""
+def compute_hash_entry(path: Path) -> FileHash:
+    """Return the current file size and SHA-256, or the absent-file hash."""
     if not path.is_file():
-        return None, None
-    return path.stat().st_size, sha256(path)
+        return FileHash(None, None)
+    return FileHash(path.stat().st_size, sha256(path))
 
 
-def compute_input_hash_entry(root: Path, rel: str) -> tuple[int | None, str | None]:
+def compute_input_hash_entry(root: Path, rel: str) -> FileHash:
     """Resolve one confined input path before measuring its recorded identity."""
     path = confined_path(root, rel)
     return compute_hash_entry(path)
@@ -175,20 +179,49 @@ def optional_dict(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def read_optional_json(path: Path) -> dict[str, Any] | None:
+    """Read a run-folder file that an incomplete run may lack as JSON; None only when it is absent."""
+    if not path.is_file():
+        return None
+    return read_json(path)
+
+
+def mapping_max(payload: Any) -> float | None:
+    """Read a recorded Max observation or scalar without inferring missing measurements."""
+    if isinstance(payload, dict):
+        value = payload.get("Max")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+        return None
+    if isinstance(payload, (int, float)) and not isinstance(payload, bool):
+        return float(payload)
+    return None
+
+
+def as_int(value: Any) -> int | None:
+    """Project a finite recorded numerical observation to an integer, None for anything else."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if not math.isfinite(float(value)):
+        return None
+    return int(value)
+
+
 __all__ = [
+    "FileHash",
     "as_float_map",
+    "as_int",
     "checked_number",
     "compute_hash_entry",
     "compute_input_hash_entry",
-    "confined_path",
     "expect_int",
     "expect_list",
     "expect_mapping",
     "expect_scalar",
     "extract_hash_map",
+    "mapping_max",
     "optional_dict",
-    "read_json",
-    "sha256",
+    "read_optional_json",
     "to_float",
     "validate_contract_schema",
     "validate_timestamp",

@@ -17,7 +17,7 @@ from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC, OUTPUT_
 from ..mesh.physical_groups import Groups
 from ..source.ports import LayoutPortBinding
 from .boundaries import build_electrostatic_boundaries
-from .config_models import (
+from .config_records import (
     MODEL_L0_M,
     ConfigInput,
     EigenmodeConfigBuildResult,

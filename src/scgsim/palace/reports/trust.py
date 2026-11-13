@@ -54,12 +54,12 @@ from scgsim.palace.reports.surface_figures import (
     surface_percentage_figure,
     surface_total_figure,
 )
+from scgsim.palace.results.artifacts import read_optional_json
 from scgsim.palace.results.inspection import (
     failure_payload,
     selection_payload,
 )
-from scgsim.palace.results.observations import read_optional_json
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.inspection_records import (
     AmrPassSnapshot,
     PalaceFailureDiagnosis,
     PalaceResultSelection,

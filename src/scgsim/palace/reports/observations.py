@@ -7,9 +7,13 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from scgsim.contracts.palace_run_folder import NATIVE_METADATA_NAME, palace_problem
-from scgsim.palace.results.models import ResolvedRunData
-from scgsim.palace.results.observations import as_int, mapping_max, read_optional_json
-from scgsim.palace.results.report_models import AmrPassSnapshot
+from scgsim.palace.results.artifacts import (
+    as_int,
+    mapping_max,
+    read_optional_json,
+)
+from scgsim.palace.results.inspection_records import AmrPassSnapshot
+from scgsim.palace.results.resolved_records import ResolvedRunData
 
 FREQ_HEADER = "Re{f} (GHz)"
 

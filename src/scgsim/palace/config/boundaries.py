@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from .config_models import ElectrostaticSettings, TerminalBinding, optional_string
+from .config_records import ElectrostaticSettings, TerminalBinding, optional_string
 from .index import TerminalEntry
 
 

@@ -20,7 +20,7 @@ from scgsim.contracts.palace_run_folder import (
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
 from ..config.config import build_eigenmode_config
-from ..config.config_models import EigenmodeConfigBuildResult, EigenmodeSettings
+from ..config.config_records import EigenmodeConfigBuildResult, EigenmodeSettings
 from ..config.index import EprRequest, check_epr_request
 from ..config.numerical import NumericalControls, ProblemDefaults
 from ..source.ports import RequestedPort

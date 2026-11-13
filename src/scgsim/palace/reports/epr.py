@@ -6,6 +6,8 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.palace.results.epr_records import PalaceEprResult
+
 
 def _plain_view(value: Any) -> Any:
     """Convert immutable EPR containers into values suitable for Plotly hover metadata."""
@@ -16,11 +18,15 @@ def _plain_view(value: Any) -> Any:
     return value
 
 
-def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
+def _show_view(result: PalaceEprResult, *, mode: int | None) -> dict[str, Any]:
     """Select exactly one mode and summarize known whole-surface loss and coverage."""
     selected = [row for row in result.rows if mode is None or row["mode"] == mode]
     if len(selected) != 1:
-        raise ValueError("show_epr requires one exact mode")
+        modes = [row["mode"] for row in result.rows]
+        raise ValueError(
+            f"show_epr requires one exact mode: mode={mode!r} selects {len(selected)} of the result's "
+            f"modes {modes}; pass mode= one of them."
+        )
     row = selected[0]
     surface = row["surface"]
     baselines = [
@@ -63,9 +69,19 @@ def _surface_label(item: Mapping[str, Any]) -> str:
     return f"{label} {item['margin_um']:g} µm"
 
 
-def show_epr(result: Any, *, mode: int | None = None) -> Any:
+def show_epr(result: PalaceEprResult, *, mode: int | None = None) -> Any:
     """Plot one mode with separate surface, bulk, and signed Palace port axes."""
 
+    if not isinstance(result, PalaceEprResult):
+        raise TypeError(
+            "show_epr requires a PalaceEprResult from epr_result() or resolve_epr_result(); "
+            f"got {type(result).__name__}."
+        )
+    return epr_mode_figure(result, mode=mode)
+
+
+def epr_mode_figure(result: PalaceEprResult, *, mode: int | None) -> Any:
+    """Draw the three-axis figure of the one mode ``mode`` selects from the rows of ``result``."""
     view = _show_view(result, mode=mode)
     row = view["row"]
     from plotly import graph_objects as go  # noqa: PLC0415 -- Defer heavy Plotly loading until a figure is requested.

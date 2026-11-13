@@ -19,16 +19,16 @@ from scgsim.contracts.palace_run_folder import (
     INDEX_MAP,
     NATIVE_METADATA_NAME,
     OUTPUT_DIR,
+    confined_path,
     iteration_dir,
+    sha256,
     table_name,
 )
-from scgsim.palace.reports.epr import show_epr as render
-from scgsim.palace.results.artifacts import confined_path, sha256
-from scgsim.palace.results.epr_model import (
+from scgsim.palace.results.epr_records import (
     PalaceEprResult,
     checked_number,
 )
-from scgsim.palace.results.models import ResolvedRunData
+from scgsim.palace.results.resolved_records import ResolvedRunData
 from scgsim.palace.results.surface_contract import entry_rows
 from scgsim.palace.results.tables import (
     count_index_entries,
@@ -285,15 +285,6 @@ def reanalyze_epr(
         },
         _verified_source=result,
     )
-
-
-def show_epr(result: PalaceEprResult, *, mode: int | None = None) -> Any:
-    """Plot one mode with separate surface, bulk, and signed Palace port axes."""
-
-    if not isinstance(result, PalaceEprResult):
-        raise TypeError("result must be PalaceEprResult")
-
-    return render(result, mode=mode)
 
 
 def _source_provenance(

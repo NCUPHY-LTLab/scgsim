@@ -14,8 +14,12 @@ from scgsim.contracts.palace_run_folder import (
     palace_problem,
     table_name,
 )
-from scgsim.palace.results.observations import as_int, mapping_max, read_optional_json
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.artifacts import (
+    as_int,
+    mapping_max,
+    read_optional_json,
+)
+from scgsim.palace.results.inspection_records import (
     AmrPassSnapshot,
     CollectedSnapshots,
     SurfaceEprSeriesSnapshot,

@@ -1,13 +1,12 @@
-"""Resolve a sealed manual Palace run into validated data and convenience views.
+"""Read a sealed manual Palace run folder into the checked run record ``ResolvedRunData``.
 
-Validation retains the recorded artifact order; this module never runs a solver."""
+Validation keeps the recorded artifact order; this module never runs a solver."""
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from scgsim.contracts.palace_run_folder import (
     ARCHIVE_MANIFEST,
@@ -23,37 +22,21 @@ from scgsim.contracts.palace_run_folder import (
     RUN_METADATA,
     output_table,
     palace_problem,
-)
-from scgsim.palace.reports.plotting import ReportTheme
-from scgsim.palace.reports.reports import (
-    show_all_results,
-    show_physics_quantities,
-    show_run_trustworthiness,
-    show_simulation_benchmark,
+    read_json,
 )
 from scgsim.palace.results.artifacts import (
     as_float_map,
     expect_int,
     expect_scalar,
-    read_json,
     to_float,
     validate_contract_schema,
 )
-from scgsim.palace.results.epr import epr_result
 from scgsim.palace.results.index_contract import (
     RouteConsistency,
     require_index_map_schema,
     require_manifest_schema,
     validate_config_index_correspondence,
     validate_config_problem,
-)
-from scgsim.palace.results.models import (
-    PalaceCost,
-    PalacePerformance,
-    PalaceProvenance,
-    PalaceReturnedReceipt,
-    ParsedTable,
-    ResolvedRunData,
 )
 from scgsim.palace.results.provenance_contract import (
     validate_archive_manifest,
@@ -68,6 +51,13 @@ from scgsim.palace.results.receipt_contract import (
     ReceiptValidation,
     build_returned_receipt,
     validate_returned_state_agreement,
+)
+from scgsim.palace.results.resolved_records import (
+    PalaceCost,
+    PalacePerformance,
+    PalaceProvenance,
+    ParsedTable,
+    ResolvedRunData,
 )
 from scgsim.palace.results.tables import (
     count_index_entries,
@@ -98,61 +88,10 @@ def _require_file(path: Path) -> None:
         raise FileNotFoundError(f"required artifact missing: {path}")
 
 
-@dataclass(frozen=True)
-class ResolvedPalaceResult(ResolvedRunData):
-    """Complete resolved view of one Palace run directory."""
-
-    def epr_result(self):
-        """Detach the verified final Eigenmode EPR quantities for offline work."""
-
-        return epr_result(self)
-
-    def show_run_trustworthiness(
-        self, *, theme: str = "light", show_details: bool = False
-    ):
-        """Build the identity and AMR view using the original artifact-validation order."""
-        return show_run_trustworthiness(
-            self,
-            theme=cast(ReportTheme, theme),
-            show_details=show_details,
-        )
-
-    def show_all_results(
-        self,
-        *,
-        theme: str = "light",
-        ranking_limit: int | None = 20,
-        show_details: bool = False,
-    ) -> None:
-        """Display identity, benchmark and physics views in the order a notebook reads them."""
-        show_all_results(
-            self,
-            theme=cast(ReportTheme, theme),
-            ranking_limit=ranking_limit,
-            show_details=show_details,
-        )
-
-    def show_physics_quantities(
-        self, *, theme: str = "light", ranking_limit: int | None = 20
-    ):
-        """Build the selected physics view from this sealed run without recomputing solver data."""
-        return show_physics_quantities(
-            self, theme=cast(ReportTheme, theme), ranking_limit=ranking_limit
-        )
-
-    def show_simulation_benchmark(
-        self,
-        *,
-        show_details: bool = False,
-    ):
-        """Project recorded run cost and timing while retaining complete benchmark metadata."""
-        return show_simulation_benchmark(self, show_details=show_details)
-
-
-def resolve_palace_result(
+def read_resolved_run(
     run_dir: str | Path, *, expected_handoff_id: str
-) -> ResolvedPalaceResult:
-    """Validate and resolve a completed Palace manual-handoff run directory."""
+) -> ResolvedRunData:
+    """Read a completed Palace run folder and check every record in it against the handoff it must match."""
 
     if not isinstance(expected_handoff_id, str) or not expected_handoff_id:
         raise ValueError("expected_handoff_id must be a non-empty string.")
@@ -230,7 +169,7 @@ def resolve_palace_result(
     cost = _build_cost(palace_payload)
     performance = _build_performance(palace_payload)
 
-    return ResolvedPalaceResult(
+    return ResolvedRunData(
         run_dir=root,
         problem=problem,
         route=route,
@@ -398,15 +337,7 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
     return cost
 
 
-__all__ = [
-    "PalaceCost",
-    "PalacePerformance",
-    "PalaceProvenance",
-    "PalaceReturnedReceipt",
-    "ParsedTable",
-    "ResolvedPalaceResult",
-    "resolve_palace_result",
-]
+__all__ = ["read_resolved_run"]
 
 
 def _validate_metadata_headers(

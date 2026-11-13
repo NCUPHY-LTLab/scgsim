@@ -7,15 +7,16 @@ from typing import Any, Literal
 
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA_NAME,
+    confined_path,
     palace_problem,
     table_name,
 )
 from scgsim.palace.results.artifacts import (
+    FileHash,
     compute_hash_entry,
-    confined_path,
     extract_hash_map,
 )
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.inspection_records import (
     CollectedSnapshots,
     PalaceFailureDiagnosis,
     PalaceResultSelection,
@@ -85,11 +86,11 @@ def _verify_receipt_file_record(root: Path, entry: Any, label: str) -> str:
             raise ValueError(f"returned receipt {label} bytes must be non-negative.")
         if not isinstance(sha256, str) or len(sha256) != 64:
             raise ValueError(f"returned receipt {label} sha256 must have 64 digits.")
-        if observed != (size, sha256):
+        if observed != FileHash(size, sha256):
             raise ValueError(f"returned receipt output hash mismatch for {relative}.")
     elif entry.get("bytes") is not None or entry.get("sha256") is not None:
         raise ValueError(f"returned receipt missing {label} must not carry a hash.")
-    elif observed != (None, None):
+    elif observed != FileHash(None, None):
         raise ValueError(f"returned receipt missing output now exists: {relative}.")
     return relative
 

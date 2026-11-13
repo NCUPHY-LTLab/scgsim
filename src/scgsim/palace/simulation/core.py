@@ -26,7 +26,7 @@ from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 
-from ..config.config_models import ConfigInput
+from ..config.config_records import ConfigInput
 from ..config.files import persist_problem_files
 from ..config.index import IndexEntry
 from ..config.numerical import NumericalControls, ProblemDefaults

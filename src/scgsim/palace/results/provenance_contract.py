@@ -13,16 +13,16 @@ from scgsim.contracts.palace_run_folder import (
     RUN_RECORD_SCHEMA_VERSION,
     SEALED_INPUTS,
     HandoffIdentity,
+    confined_path,
+    sha256,
 )
 from scgsim.palace.results.artifacts import (
-    confined_path,
     expect_int,
     expect_list,
     expect_mapping,
     expect_scalar,
     extract_hash_map,
     optional_dict,
-    sha256,
 )
 from scgsim.palace.results.receipt_contract import validate_palace_identity
 from scgsim.palace.run.archive import (

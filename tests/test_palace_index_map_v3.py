@@ -19,13 +19,14 @@ from palace_sgb_support import (
     surface_epr_specs,
 )
 
+from scgsim.contracts.palace_run_folder import read_json
 from scgsim.geometry.surface_epr.insets import inset_requests
 from scgsim.palace import EigenmodeSim, ElectrostaticSim, resolve_palace_result
 from scgsim.palace.config.config import (
     build_eigenmode_config,
     build_electrostatic_config,
 )
-from scgsim.palace.config.config_models import (
+from scgsim.palace.config.config_records import (
     ConfigInput,
     EigenmodeSettings,
     ElectrostaticSettings,
@@ -39,9 +40,8 @@ from scgsim.palace.reports.surface_figures import (
     surface_margin_participation_figure,
     surface_ranking_figure,
 )
-from scgsim.palace.results.artifacts import read_json
 from scgsim.palace.results.epr import epr_result, reanalyze_epr
-from scgsim.palace.results.epr_model import PalaceEprResult
+from scgsim.palace.results.epr_records import PalaceEprResult
 from scgsim.palace.results.index_contract import (
     INDEX_MAP_SCHEMA_VERSION,
     RouteConsistency,
@@ -49,7 +49,7 @@ from scgsim.palace.results.index_contract import (
     require_manifest_schema,
     validate_config_index_correspondence,
 )
-from scgsim.palace.results.models import ParsedTable, ResolvedRunData
+from scgsim.palace.results.resolved_records import ParsedTable, ResolvedRunData
 from scgsim.palace.results.surface_readers import (
     SurfaceEprReader,
     SurfaceMarginEprReader,

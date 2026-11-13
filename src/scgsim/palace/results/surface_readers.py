@@ -10,13 +10,13 @@ from typing import Any, cast
 
 from scgsim.contracts.palace_run_folder import palace_problem
 from scgsim.palace.results.index_contract import validate_index_entries
-from scgsim.palace.results.models import ParsedTable
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.inspection_records import (
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
     SurfaceMarginEprRecord,
     SurfaceMarginEprSeriesSnapshot,
 )
+from scgsim.palace.results.resolved_records import ParsedTable
 from scgsim.palace.results.surface_contract import entry_rows, surface_epr_entries
 from scgsim.palace.results.tables import (
     read_csv_table,

@@ -9,7 +9,7 @@ import pytest
 
 from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
-from scgsim.palace.config.config_models import (
+from scgsim.palace.config.config_records import (
     ConfigInput,
     EigenmodeSettings,
     ElectrostaticSettings,

@@ -17,22 +17,23 @@ from scgsim.contracts.palace_run_folder import (
     RUNTIME_COMPATIBILITY,
     RUNTIME_COMPATIBILITY_SCHEMA,
     collects_adapted_meshes,
+    confined_path,
     output_table,
+    read_json,
+    sha256,
 )
 from scgsim.palace.results.artifacts import (
+    FileHash,
     compute_hash_entry,
     compute_input_hash_entry,
-    confined_path,
     expect_int,
     expect_list,
     expect_mapping,
     expect_scalar,
     extract_hash_map,
-    read_json,
-    sha256,
     validate_timestamp,
 )
-from scgsim.palace.results.models import PalaceReturnedReceipt
+from scgsim.palace.results.resolved_records import PalaceReturnedReceipt
 from scgsim.palace.results.tables import count_index_entries, output_families
 from scgsim.palace.run.returned_receipt import adapted_mesh_output_paths
 
@@ -273,7 +274,9 @@ def _validate_log_and_solver_identity(receipt_payload: Any, root: Path) -> None:
     if not log:
         raise ValueError("returned run receipt log entry is missing.")
     log_path = expect_scalar(log, "path", str)
-    log_expected = expect_scalar(log, "bytes", int), expect_scalar(log, "sha256", str)
+    log_expected = FileHash(
+        expect_scalar(log, "bytes", int), expect_scalar(log, "sha256", str)
+    )
     log_observed = compute_hash_entry(confined_path(root, log_path))
     if log_expected != log_observed:
         raise ValueError(f"returned run receipt log hash mismatch for {log_path}.")
@@ -388,7 +391,7 @@ def _validate_returned_outputs(
 
     for rel, expected in output_map.items():
         observed = compute_hash_entry(confined_path(root, rel))
-        if observed[0] != expected[0] or observed[1] != expected[1]:
+        if observed != expected:
             raise ValueError(f"returned run receipt output hash mismatch for {rel}")
     return output_map
 

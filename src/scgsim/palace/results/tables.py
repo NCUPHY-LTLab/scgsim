@@ -16,7 +16,7 @@ from scgsim.palace.results.artifacts import (
     expect_mapping,
     expect_scalar,
 )
-from scgsim.palace.results.models import ParsedTable
+from scgsim.palace.results.resolved_records import ParsedTable
 
 
 def output_families(problem: str, index_counts: dict[str, int]) -> tuple[str, ...]:

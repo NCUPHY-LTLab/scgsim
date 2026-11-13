@@ -21,8 +21,8 @@ from scgsim.palace.reports.surface_figures import (
     surface_margin_participation_figure,
     surface_ranking_figure,
 )
-from scgsim.palace.results.observations import read_optional_json
-from scgsim.palace.results.report_models import (
+from scgsim.palace.results.artifacts import read_optional_json
+from scgsim.palace.results.inspection_records import (
     SurfaceEprSeriesSnapshot,
     SurfaceMarginEprSeriesSnapshot,
 )
