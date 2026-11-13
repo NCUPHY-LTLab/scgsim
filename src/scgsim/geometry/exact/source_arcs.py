@@ -17,13 +17,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
 
+from scgsim.geometry.exact import circle_math
+from scgsim.geometry.exact.carriers import ArcCarrier, Lineage
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.grid import Grid
+from scgsim.geometry.exact.plane import Point
 from scgsim.geometry.models.grid import format_length, format_point
 from scgsim.geometry.models.input import twice_area
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact import circle_math
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier, Lineage
-from scgsim.geometry.sgb.exact.grid import Grid
-from scgsim.geometry.sgb.exact.plane import Point
 
 RationalPoint = tuple[Fraction, Fraction]
 QUARTER_TURN = circle_math.HALF_PI

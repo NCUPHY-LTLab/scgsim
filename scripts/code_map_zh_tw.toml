@@ -18,6 +18,16 @@ Out.zh = "一個階段交給下一個階段的值，每個都從定義它的模�
 Next.en = "``source`` builds them; ``interpretation``, ``junctions`` and ``sgb`` read them."
 Next.zh = "``source`` 建立它們；``interpretation``、``junctions`` 與 ``sgb`` 讀取它們。"
 
+["geometry/exact"]
+summary.en = "Exact arithmetic on the model grid and the binding of boundary records: the kernel the geometry stages share."
+summary.zh = "模型格點上的精確算術與邊界紀錄的綁定：各幾何階段共用的核心。"
+In.en = "the effective ``GeometryBuildInput`` (from ``models``), for the declared grid, the footprints and the boundary binding; this folder reads ``models`` only."
+In.zh = "有效的 ``GeometryBuildInput``（來自 ``models``），供宣告的格點、輪廓與邊界綁定使用；這個資料夾只讀取 ``models``。"
+Out.en = "the model grid, exact plane predicates, circle arithmetic, carriers and their lineage, each Entity's footprints on the grid with its boundary records bound to exact lines and circular arcs, and the refusals of the kernel."
+Out.zh = "模型格點、精確的平面判定、圓的算術、載體與其來歷、每個 Entity 在格點上的輪廓及其綁定到精確直線與圓弧的邊界紀錄，以及這個核心的拒絕。"
+Next.en = "the junction partition (``junctions``) reads the bound rings of a lumped port's terminals, ``surface_epr`` and Palace's Surface-EPR config read ``Grid``, and every SGB stage reads all of it."
+Next.zh = "junction 分割（``junctions``）讀取集總埠端子的綁定環，``surface_epr`` 與 Palace 的 Surface-EPR 設定讀取 ``Grid``，SGB 的每個階段讀取全部內容。"
+
 ["geometry/source"]
 summary.en = "The source stage: from a layout and a stack to a prepared snapshot."
 summary.zh = "來源階段：從版圖與堆疊到準備好的 snapshot。"
@@ -51,12 +61,12 @@ Next.zh = "它的接面步驟執行 ``junctions``；接著 ``sgb`` 從有效輸�
 ["geometry/junctions"]
 summary.en = "The rectangular partition around a lumped port: its cut rule, exact emission and checks; the junction step of ``interpretation``."
 summary.zh = "集總埠周圍的矩形分割：切割規則、精確輸出與檢查；是 ``interpretation`` 的接面步驟。"
-In.en = "the effective input from ``interpretation`` and its rectangular-junction requests, each naming a source polygon and its two terminal nets."
-In.zh = "來自 ``interpretation`` 的有效輸入與其矩形接面請求，每個請求指明一個來源多邊形與它的兩個端子網路。"
+In.en = "the effective input from ``interpretation`` and its rectangular-junction requests, each naming a source polygon and its two terminal nets; the bound rings of the terminals from the exact kernel (``exact``), the binding SGB uses."
+In.zh = "來自 ``interpretation`` 的有效輸入與其矩形 junction 請求，每個請求指名一個來源多邊形與它的兩個端子 net；端子的綁定環來自精確核心（``exact``），與 SGB 使用的綁定相同。"
 Out.en = "the input with each requested polygon cut into a central rectangle and the end pieces that belong to its terminals, put back on the input's grid, and a ``junction_partitions`` record of the cut."
 Out.zh = "每個被請求的多邊形切成中央矩形與屬於兩端端子的端塊、再放回輸入格點後的輸入，以及記錄這次切割的 ``junction_partitions``。"
-Next.en = "``interpretation`` returns that input, and ``sgb`` builds from it and reads the record; SGB never imports this folder."
-Next.zh = "``interpretation`` 傳回這個輸入，``sgb`` 從它建構並讀取該紀錄；SGB 從不匯入這個資料夾。"
+Next.en = "``interpretation`` returns that input, and ``sgb`` builds from it and reads the record; SGB never imports this folder, and this folder reads nothing of SGB."
+Next.zh = "``interpretation`` 回傳該輸入，``sgb`` 由它建構並讀取這筆紀錄；SGB 從不匯入這個資料夾，這個資料夾也不讀取 SGB 的任何部分。"
 
 ["geometry/surface_epr"]
 summary.en = "Backend-neutral Surface-EPR geometry: normalized specs, their SGB band requests and the banded build."
@@ -98,21 +108,21 @@ summary.zh = "表面規劃、區域規劃與標記解析共用的表面歸屬與
 summary.en = "Semantic geometry builder (SGB) core: the prism-based, Boolean-free pipeline."
 summary.zh = "語意幾何建構器（SGB）核心：以稜柱為基礎、不使用布林運算的流程。"
 
-["geometry/sgb/exact"]
-summary.en = "The exact vocabulary every stage shares: integer geometry, the records the stages hand to one another, and the boundary binding."
-summary.zh = "每個階段共用的精確詞彙：整數幾何、各階段互相交接的紀錄，以及邊界綁定。"
-In.en = "the effective ``GeometryBuildInput``, for the footprints and the boundary binding; this folder imports no other part of SGB but ``errors``."
-In.zh = "有效的 ``GeometryBuildInput``，供輪廓與邊界綁定使用；這個資料夾除了 ``errors`` 之外不匯入 SGB 的其他部分。"
-Out.en = "the model grid, plane predicates, circle arithmetic, carriers and their lineage, labels and the interface type of a face, prisms, cut-family, band-region and support records, content-addressed ids, the stage stopwatch, and the footprints of the input with their boundary records bound to exact lines and arcs."
-Out.zh = "模型格點、平面判定、圓的算術、載體與其來歷、標籤與面的介面類型、稜柱、切割族、帶區域與支撐紀錄、內容定址的 id、階段計時器，以及輸入的輪廓與其綁定到精確直線與圓弧的邊界紀錄。"
-Next.en = "every stage of SGB imports it; the junction partition (``geometry.junctions``) reads the bound rings of a lumped port's terminals from it."
-Next.zh = "SGB 的每個階段都匯入它；junction 分割（``geometry.junctions``）從這裡讀取集總埠端子的綁定環。"
+["geometry/sgb/records"]
+summary.en = "The records SGB's stages hand to one another, and what derives from a record alone."
+summary.zh = "SGB 各階段互相交接的紀錄，以及只由一筆紀錄推導出的內容。"
+In.en = "the exact kernel (``scgsim.geometry.exact``); this folder imports no other part of SGB."
+In.zh = "精確核心（``scgsim.geometry.exact``）；這個資料夾不匯入 SGB 的其他部分。"
+Out.en = "the prism, footprint and catalogue records, cut families, band regions and support regions, the labels arrangement cells receive and the interface type they give a face, and content-addressed ids."
+Out.zh = "稜柱、輪廓與目錄紀錄、切割族、帶區域與支撐區域、排列單元的標籤及其賦予面的介面類型，以及內容定址的 id。"
+Next.en = "every stage of SGB imports it."
+Next.zh = "SGB 的每個階段都匯入它。"
 
 ["geometry/sgb/prisms"]
 summary.en = "S2: the effective input as prisms (planar footprints extruded over Z intervals), levels and slabs."
 summary.zh = "S2：把有效輸入表示成稜柱（沿 Z 區間擠出的平面輪廓）、層級與厚片。"
-In.en = "the effective ``GeometryBuildInput`` and ``RepresentationContext``."
-In.zh = "有效的 ``GeometryBuildInput`` 與 ``RepresentationContext``。"
+In.en = "the effective ``GeometryBuildInput`` and ``RepresentationContext``; the footprints and the bound boundary records from the exact kernel (``geometry.exact``)."
+In.zh = "有效的 ``GeometryBuildInput`` 與 ``RepresentationContext``；輪廓與綁定後的邊界紀錄來自精確核心（``geometry.exact``）。"
 Out.en = "the ``PrismCatalogue`` (sources, ports and the declared grid as prisms) and the ``LevelStructure`` (levels, slabs and active sets)."
 Out.zh = "``PrismCatalogue``（以稜柱表示的來源、埠與宣告的格點）與 ``LevelStructure``（層級、厚片與作用集合）。"
 Next.en = "``arrangement`` derives the arrangements of the catalogue (its physical prisms alone first, for ``bands``)."

@@ -15,6 +15,7 @@ from sgb_inputs import (
     thin_film_pair,
 )
 
+from scgsim.geometry.exact.errors import InputError, UnsupportedCurveError
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
@@ -26,12 +27,7 @@ from scgsim.geometry.sgb.arrangement.derivation.labelled import (
     derive_from_catalogue,
     derive_labelled_arrangements,
 )
-from scgsim.geometry.sgb.errors import (
-    ContactError,
-    InputError,
-    OverlapError,
-    UnsupportedCurveError,
-)
+from scgsim.geometry.sgb.errors import ContactError, OverlapError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 
 UM = 1000  # lattice units per micrometre on the 1 nm grid

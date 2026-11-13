@@ -19,6 +19,8 @@ from sgb_scenes import GRID, conductor, pad_in_ground, rect_um, slab_model
 from test_sgb_sidecar import sidecar_of
 
 from scgsim.contracts.sgb_sidecar import sidecar_schema, views
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
@@ -26,10 +28,9 @@ from scgsim.geometry.sgb.bands.requests import (
     SolutionInterface,
 )
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.errors import InputError, NoGapEdgeError
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
+from scgsim.geometry.sgb.errors import NoGapEdgeError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 
 TESTS = Path(__file__).resolve().parent
 MARGINS = (0.5, 1.0)

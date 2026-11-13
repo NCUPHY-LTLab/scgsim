@@ -24,16 +24,16 @@ from collections import deque
 from dataclasses import dataclass
 from fractions import Fraction
 
-from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact.carriers import (
+from scgsim.geometry.exact.carriers import (
     ArcCarrier,
     RingPrimitive,
     round_to_lattice,
 )
-from scgsim.geometry.sgb.exact.labels import LevelLabel
-from scgsim.geometry.sgb.exact.plane import Point
-from scgsim.geometry.sgb.exact.support import ArcCut, DieCut, SupportRegion
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.plane import Point
+from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
+from scgsim.geometry.sgb.records.labels import LevelLabel
+from scgsim.geometry.sgb.records.support import ArcCut, DieCut, SupportRegion
 
 Exact = tuple[Fraction, Fraction]
 

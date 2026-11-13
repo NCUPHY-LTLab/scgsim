@@ -49,7 +49,7 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from scgsim.contracts.sgb_sidecar import Sidecar, SidecarError, read_sidecar, views
-from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.exact.errors import SgbError
 
 GUARD_SCHEMA = "scgsim.sgb.aedt-step-guard.v1"
 GUARD_SUFFIX = ".guard.json"

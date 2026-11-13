@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from functools import cmp_to_key
 
-from scgsim.geometry.sgb.exact.plane import Point
+from scgsim.geometry.exact.plane import Point
 
 
 @dataclass(frozen=True)

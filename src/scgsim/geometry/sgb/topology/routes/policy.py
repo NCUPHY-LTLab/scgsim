@@ -32,8 +32,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from scgsim.geometry.sgb.errors import RouteError
-from scgsim.geometry.sgb.exact.labels import Domain
-from scgsim.geometry.sgb.exact.prisms import FILM_FEATURE_KINDS, PrismRecord
+from scgsim.geometry.sgb.records.labels import Domain
+from scgsim.geometry.sgb.records.prisms import FILM_FEATURE_KINDS, PrismRecord
 
 
 @dataclass(frozen=True)

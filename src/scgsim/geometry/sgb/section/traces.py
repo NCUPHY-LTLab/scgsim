@@ -18,7 +18,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from fractions import Fraction
 
-from scgsim.geometry.sgb.exact.plane import Point
+from scgsim.geometry.exact.plane import Point
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.section.frame import CutFrame
 from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, TopoFace, Topology

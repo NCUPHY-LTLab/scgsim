@@ -20,8 +20,8 @@ from test_palace_rectangular_ports import prepared_port
 from test_simulation_drc import LAYER_STACK, MATERIALS, NO_VACUUM_STACK, check, two_pads
 
 from scgsim.geometry import GeometryPlan
+from scgsim.geometry.exact.errors import UnsupportedCurveError
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
-from scgsim.geometry.sgb.errors import UnsupportedCurveError
 from scgsim.palace import EigenmodeSim
 
 PORT = "chip/device/P1"

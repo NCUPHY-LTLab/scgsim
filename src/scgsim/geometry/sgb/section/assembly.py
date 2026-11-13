@@ -19,9 +19,9 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Literal
 
-from scgsim.geometry.sgb.exact import identity
-from scgsim.geometry.sgb.exact.labels import Domain, SheetOwner
 from scgsim.geometry.sgb.model import ConformalModel
+from scgsim.geometry.sgb.records import identity
+from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
 from scgsim.geometry.sgb.section.frame import CutFrame
 from scgsim.geometry.sgb.section.records import (
     SectionEdge,

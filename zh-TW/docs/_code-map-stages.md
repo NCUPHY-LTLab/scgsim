@@ -6,10 +6,11 @@
 | --- | --- | --- | --- | --- |
 | `geometry` | 幾何 API：從版圖與堆疊建立準備好的輸入，並為建構做物理解讀。 | 這一區本身的資料夾：docstring 描述整個區。 |  |  |
 | `geometry/models` | 跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面與區域，以及拒絕訊息的措辭（`refusals`）。 | 沒有；這個資料夾不匯入其他幾何程式碼，因此每個階段都能建立與讀取這些紀錄。 | 一個階段交給下一個階段的值，每個都從定義它的模組匯入。 | `source` 建立它們；`interpretation`、`junctions` 與 `sgb` 讀取它們。 |
+| `geometry/exact` | 模型格點上的精確算術與邊界紀錄的綁定：各幾何階段共用的核心。 | 有效的 `GeometryBuildInput`（來自 `models`），供宣告的格點、輪廓與邊界綁定使用；這個資料夾只讀取 `models`。 | 模型格點、精確的平面判定、圓的算術、載體與其來歷、每個 Entity 在格點上的輪廓及其綁定到精確直線與圓弧的邊界紀錄，以及這個核心的拒絕。 | junction 分割（`junctions`）讀取集總埠端子的綁定環，`surface_epr` 與 Palace 的 Surface-EPR 設定讀取 `Grid`，SGB 的每個階段讀取全部內容。 |
 | `geometry/grid` | 共用的格點運算：在模型格點上切點、多邊形布林運算、帶標記的區域、疊加、環與多邊形運算。 | 多邊形環，以及讀取它們的 `GridScope`（`scope`）：模型格點、實例座標系、是否計算未取整的參考，以及拒絕訊息要指名的宣告來源。 | 在該格點上切好點的環（`arrangement`）、布林運算結果（`booleans`），以及保留來源出處的環運算；任何運算無法證明的變更，都在發生處以該 scope 的用語被拒絕。 | `source` 用它們建立 snapshot；`interpretation`、`junctions` 與 `planning` 呼叫同樣的運算，`planning` 不在格點上運算（`UNGRIDDED`）。各階段共用的紀錄在 `models`。 |
 | `geometry/source` | 來源階段：從版圖與堆疊到準備好的 snapshot。 | 版圖（元件、GDS）與堆疊，加上宣告的格點、真空區域與埠面。 | `GeometryPlan` 與它的 snapshot；其中的 `GeometryBuildInput` 與堆疊保留每個輸入身分，並帶有後續階段記錄的雜湊值與來源稽核。每個宣告的 recipe 連同它的稽核一起傳回結果（`recipes`）；`grid_projection` 把讀到的多邊形放上版圖的格點。 | `interpretation` 讀取準備好的輸入。`contact_pads` 找出每個接觸墊所附著的面金屬；`planning` 也會呼叫它。 |
+| `geometry/junctions` | 集總埠周圍的矩形分割：切割規則、精確輸出與檢查；是 `interpretation` 的接面步驟。 | 來自 `interpretation` 的有效輸入與其矩形 junction 請求，每個請求指名一個來源多邊形與它的兩個端子 net；端子的綁定環來自精確核心（`exact`），與 SGB 使用的綁定相同。 | 每個被請求的多邊形切成中央矩形與屬於兩端端子的端塊、再放回輸入格點後的輸入，以及記錄這次切割的 `junction_partitions`。 | `interpretation` 回傳該輸入，`sgb` 由它建構並讀取這筆紀錄；SGB 從不匯入這個資料夾，這個資料夾也不讀取 SGB 的任何部分。 |
 | `geometry/interpretation` | 準備好的輸入的物理解讀，以及它的真空包絡。 | 準備好的 `GeometryBuildInput` 與堆疊，以及選定的近似設定。 | 有效輸入與堆疊，帶有物理表示計畫與自動真空包絡；輸入的矩形接面在其上導出，薄片介面綁定到所選的近似設定。 | 它的接面步驟執行 `junctions`；接著 `sgb` 從有效輸入建構。 |
-| `geometry/junctions` | 集總埠周圍的矩形分割：切割規則、精確輸出與檢查；是 `interpretation` 的接面步驟。 | 來自 `interpretation` 的有效輸入與其矩形接面請求，每個請求指明一個來源多邊形與它的兩個端子網路。 | 每個被請求的多邊形切成中央矩形與屬於兩端端子的端塊、再放回輸入格點後的輸入，以及記錄這次切割的 `junction_partitions`。 | `interpretation` 傳回這個輸入，`sgb` 從它建構並讀取該紀錄；SGB 從不匯入這個資料夾。 |
 | `geometry/surface_epr` | 不依賴後端的 Surface-EPR 幾何：正規化的規格、對應的 SGB 帶狀請求，以及帶有內縮帶的建構。 | Palace 模擬的 `MA`／`MS`／`SA` 規格（來自 `palace/source`）；帶狀建構另外需要有效的 `GeometryBuildInput`、它的 `RepresentationContext` 與路線（來自呼叫它的 `palace/mesh`）。 | 正規化的規格與每個面採用的邊距、SGB 內縮請求，以及帶狀建構的檔案（`SgbArtifacts`：XAO、BREP 與 sidecar），由它以這些請求呼叫 `sgb.build_sgb_geometry` 建構。 | `palace/mesh` 為帶狀建構產生網格；`palace/source`、`palace/config` 與 `palace/results` 讀取規格與其邊距。 |
 | `geometry/planning` | 只有 AEDT 原生建構使用的規劃：表面、接觸、區域與拓樸規劃，以及證據與標記。 | 來自 `interpretation` 的有效輸入。 | 表面、接觸、區域與拓樸計畫，AEDT 據以建構的標記與證據紀錄，以及這些計畫共用的實體查詢、座標與邊界運算。表面分割與建構本體的紀錄放在 `surface_planning`，因為只有它讀取。 | `scgsim.aedt`。Palace 路線上（`scgsim.palace`、`sgb`、`surface_epr`）沒有任何程式匯入這個資料夾。 |
 | `geometry/planning/contact_planning` | 規劃導體接觸、重疊歸屬與同網路成員。 | 屬於 `geometry/planning`，請與那一列一起閱讀。 |  |  |
@@ -22,8 +23,8 @@
 | 資料夾 | 它是什麼 | In | Out | Next |
 | --- | --- | --- | --- | --- |
 | `geometry/sgb` | 語意幾何建構器（SGB）核心：以稜柱為基礎、不使用布林運算的流程。 | 這一區本身的資料夾：docstring 描述整個區。 |  |  |
-| `geometry/sgb/exact` | 每個階段共用的精確詞彙：整數幾何、各階段互相交接的紀錄，以及邊界綁定。 | 有效的 `GeometryBuildInput`，供輪廓與邊界綁定使用；這個資料夾除了 `errors` 之外不匯入 SGB 的其他部分。 | 模型格點、平面判定、圓的算術、載體與其來歷、標籤與面的介面類型、稜柱、切割族、帶區域與支撐紀錄、內容定址的 id、階段計時器，以及輸入的輪廓與其綁定到精確直線與圓弧的邊界紀錄。 | SGB 的每個階段都匯入它；junction 分割（`geometry.junctions`）從這裡讀取集總埠端子的綁定環。 |
-| `geometry/sgb/prisms` | S2：把有效輸入表示成稜柱（沿 Z 區間擠出的平面輪廓）、層級與厚片。 | 有效的 `GeometryBuildInput` 與 `RepresentationContext`。 | `PrismCatalogue`（以稜柱表示的來源、埠與宣告的格點）與 `LevelStructure`（層級、厚片與作用集合）。 | `arrangement` 推導目錄的排列（先只用物理稜柱，供 `bands` 使用）。 |
+| `geometry/sgb/records` | SGB 各階段互相交接的紀錄，以及只由一筆紀錄推導出的內容。 | 精確核心（`scgsim.geometry.exact`）；這個資料夾不匯入 SGB 的其他部分。 | 稜柱、輪廓與目錄紀錄、切割族、帶區域與支撐區域、排列單元的標籤及其賦予面的介面類型，以及內容定址的 id。 | SGB 的每個階段都匯入它。 |
+| `geometry/sgb/prisms` | S2：把有效輸入表示成稜柱（沿 Z 區間擠出的平面輪廓）、層級與厚片。 | 有效的 `GeometryBuildInput` 與 `RepresentationContext`；輪廓與綁定後的邊界紀錄來自精確核心（`geometry.exact`）。 | `PrismCatalogue`（以稜柱表示的來源、埠與宣告的格點）與 `LevelStructure`（層級、厚片與作用集合）。 | `arrangement` 推導目錄的排列（先只用物理稜柱，供 `bands` 使用）。 |
 | `geometry/sgb/arrangement` | S4 與 S5：曲線在格點上的平面排列，其單元已標記並合併。 | 一個 `PrismCatalogue`（`LevelStructure` 由它建立）：預先處理時只用物理稜柱，之後是帶有 `bands` 切割族的完整目錄。 | `LabelledArrangements`：每個厚片與層級的排列，已合併、已標記且內容定址。 | `bands` 在預先處理的結果上找出內縮支撐面；`topology` 把最終的排列堆疊成頂點、邊、面與體積。 |
 | `geometry/sgb/arrangement/noding` | S4：把曲線以捨入對齊到整數格點。 | 屬於 `geometry/sgb/arrangement`，請與那一列一起閱讀。 |  |  |
 | `geometry/sgb/arrangement/labelling` | S5：單元標籤、合併、成員關係，以及厚片排列與層級排列之間的連結。 | 屬於 `geometry/sgb/arrangement`，請與那一列一起閱讀。 |  |  |

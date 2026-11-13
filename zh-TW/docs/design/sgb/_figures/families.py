@@ -45,6 +45,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch, PathPatch
 from plotly.subplots import make_subplots
 
+from scgsim.geometry.exact.carriers import Lineage, LineCarrier
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.bands.generate import build_cut_families
 from scgsim.geometry.sgb.bands.requests import (
@@ -52,9 +53,8 @@ from scgsim.geometry.sgb.bands.requests import (
     InsetRequest,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier
-from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
 from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 
 MARGINS = (0.1, 0.5, 2.0)
 VIEW = ((26.0, 74.0), (26.0, 74.0))

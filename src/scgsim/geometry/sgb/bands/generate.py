@@ -17,12 +17,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from fractions import Fraction
 
+from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.sgb.bands.inset import inset_family
 from scgsim.geometry.sgb.bands.inset_plan import InsetPlan
 from scgsim.geometry.sgb.bands.inset_regions import PortClip
 from scgsim.geometry.sgb.bands.requests import InsetRequest
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact.prisms import Footprint, PrismCatalogue
+from scgsim.geometry.sgb.records.prisms import Footprint, PrismCatalogue
 
 
 @dataclass(frozen=True)

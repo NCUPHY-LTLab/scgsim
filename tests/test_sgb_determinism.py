@@ -10,8 +10,8 @@ from pathlib import Path
 
 from sgb_scenes import pad_in_ground, random_layout, slab_model
 
+from scgsim.geometry.exact.grid import Grid
 from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue
-from scgsim.geometry.sgb.exact.grid import Grid
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 TESTS = Path(__file__).resolve().parent
@@ -106,7 +106,7 @@ def test_wall_ids_do_not_depend_on_the_vertical_edges_next_to_them():
     """A wall id hashes its horizontal chains and column end points only, so a port that cuts *other* walls keeps the rest."""
     from sgb_scenes import lumped_port, rect_um  # noqa: PLC0415 -- helpers used by this test only
 
-    from scgsim.geometry.sgb.exact.prisms import PrismCatalogue  # noqa: PLC0415 -- used by this test only
+    from scgsim.geometry.sgb.records.prisms import PrismCatalogue  # noqa: PLC0415 -- used by this test only
 
     base = pad_in_ground("B", with_port=False)
 

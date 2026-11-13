@@ -62,8 +62,8 @@ flowchart TB
   end
 ```
 
-圖中省略了一區內每個階段都會使用的資料夾：幾何的 `geometry/models` 與
-`geometry/grid`、SGB 的 `geometry/sgb/exact`，以及整個套件共用的 `semantics` 與
+圖中省略了一區內每個階段都會使用的資料夾：幾何的 `geometry/models`、`geometry/exact` 與
+`geometry/grid`、SGB 的 `geometry/sgb/records`，以及整個套件共用的 `semantics` 與
 `presentation`。AEDT 的交接與收據格式定義在 `aedt/specs` 與 `aedt/results`，
 而不在 `contracts`。`visualization` 讀取 Palace 執行資料夾或 AEDT 專案來繪製幾何預覽，
 不是任何一條路線的步驟。下方的階段表格列出所有資料夾。
@@ -88,7 +88,6 @@ Next: 哪個階段讀取它
 
 | 匯入的資料夾 | 匯入 | 從那裡取得什麼 |
 | --- | --- | --- |
-| `geometry/junctions` | `geometry/sgb/exact` | SGB 共用的詞彙，位於 SGB 每個階段之下：精確紀錄與邊界綁定（`exact.boundaries`），讓分割切在 SGB 建立的環上。 |
 | `aedt/specs` | `aedt/epr` | 表面積分的分組（`epr.selection`）。 |
 | `aedt/preparation` | `aedt/results` | 收據結構描述與初始收據（`results.provenance`）。 |
 | `aedt/results` | `aedt/runtime`、`aedt/epr`、`aedt/presentation` | 批次收集的情境與效能紀錄路徑、`EprResult` 紀錄，以及 `ResolvedRun` 呼叫的顯示功能。 |

@@ -7,7 +7,7 @@ fourth).  Three stages refuse a boundary record:
   defines a circle: a component's arc on the points as the component writes them, a
   reconstruction's anchors on the vertices as their cell draws them.  An occurrence transform
   turns both in floats, where three points on one line seldom stay on one line.
-* SGB (``sgb.exact.boundaries``) binds the records of every conductor.  The junction partition
+* SGB (``geometry.exact.boundaries``) binds the records of every conductor.  The junction partition
   reads a lumped port's terminal through that binding, so a record on a terminal is refused
   there first, with the same ``InputError`` and message as off a port.
 
@@ -39,12 +39,12 @@ from test_simulation_drc import (
 
 import scgsim.palace.mesh.build as build_module
 from scgsim.geometry import GeometryPlan
+from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
     SourceCurveSpec,
 )
-from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.palace import EigenmodeSim
 

@@ -62,14 +62,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact.interfaces import (
+from scgsim.geometry.sgb.records.interfaces import (
     SHEET,
     interface_type_of,
     ordered_pair,
 )
-from scgsim.geometry.sgb.exact.labels import Domain, SheetOwner
+from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
 
 RESERVED_PREFIXES = ("MA", "MS", "MM", "SA", "AA", "SS", "EXT", "PORT")
 """The interface prefixes of a prefixed group name; no entity id may equal one of them."""
@@ -158,7 +158,7 @@ def _prefix_and_entity(
     """The interface type of a face and the entity part of its name (``("MA", "D1_pad")``), or ``None`` for no name.
 
     A Route A conductor sheet is ``("SHEET", <entity>)`` and a port ``("PORT", <port sheet id>)``; an interface
-    between two regions names both, in :func:`~scgsim.geometry.sgb.exact.interfaces.ordered_pair` order.
+    between two regions names both, in :func:`~scgsim.geometry.sgb.records.interfaces.ordered_pair` order.
     """
     interface = interface_type_of(neg, pos, owner)
     if interface is None:

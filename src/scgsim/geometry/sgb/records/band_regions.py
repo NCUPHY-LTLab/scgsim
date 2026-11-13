@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from scgsim.geometry.sgb.exact.plane import Point, RepPoint, point_in_ring, ring_bbox
+from scgsim.geometry.exact.plane import Point, RepPoint, point_in_ring, ring_bbox
 
 
 @dataclass(frozen=True)

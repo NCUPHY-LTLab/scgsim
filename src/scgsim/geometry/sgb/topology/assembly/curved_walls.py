@@ -18,8 +18,8 @@ approximated by polygons never produce cylinder walls either.
 
 from __future__ import annotations
 
+from scgsim.geometry.exact.plane import Point
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
-from scgsim.geometry.sgb.exact.plane import Point
 from scgsim.geometry.sgb.topology.assembly.walls import WallRun
 
 EdgeAt = tuple[int, int]  # (level index, edge index in that level's arrangement)

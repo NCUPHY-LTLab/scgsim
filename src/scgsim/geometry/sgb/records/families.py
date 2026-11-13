@@ -11,9 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from fractions import Fraction
 
-from scgsim.geometry.sgb.exact.band_regions import BandRegions
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier, LineCarrier
-from scgsim.geometry.sgb.exact.support import SupportRegion
+from scgsim.geometry.exact.carriers import ArcCarrier, LineCarrier
+from scgsim.geometry.sgb.records.band_regions import BandRegions
+from scgsim.geometry.sgb.records.support import SupportRegion
 
 
 @dataclass(frozen=True)

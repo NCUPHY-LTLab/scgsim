@@ -36,9 +36,9 @@ from fractions import Fraction
 from typing import Any, cast
 
 from scgsim.contracts.sgb_sidecar.records import MeshFeature, Port
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.bands.requests import ConductorSurface, InsetRequest
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan

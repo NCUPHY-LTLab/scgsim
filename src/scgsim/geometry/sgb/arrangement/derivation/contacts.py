@@ -31,16 +31,16 @@ from fractions import Fraction
 from functools import cmp_to_key
 
 from scgsim.documentation import see_also
-from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
-from scgsim.geometry.sgb.arrangement.labelling.prism_set import FIX_NETS, named_entities
-from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
-from scgsim.geometry.sgb.exact.labels import Domain, LevelLabel, SheetOwner
-from scgsim.geometry.sgb.exact.plane import (
+from scgsim.geometry.exact.plane import (
     Point,
     point_in_ring,
     segment_point_distance_sq,
 )
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
+from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
+from scgsim.geometry.sgb.arrangement.labelling.prism_set import FIX_NETS, named_entities
+from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
+from scgsim.geometry.sgb.records.labels import Domain, LevelLabel, SheetOwner
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 
 NEAR_GRID_UNITS_SQ = 4  # a prism "reaches" a point within two grid units (squared)
 # Who must act when a conductor reaches the vacuum's edge at one point: something drawn around the conductor

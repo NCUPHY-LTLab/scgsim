@@ -27,8 +27,8 @@ from OCP.TopTools import TopTools_IndexedMapOfShape  # noqa: E402
 from sgb_emit_cases import CASES  # noqa: E402
 from sgb_scenes import random_layout, slab_model  # noqa: E402
 
+from scgsim.geometry.exact.grid import Grid  # noqa: E402
 from scgsim.geometry.sgb.checks.slivers.report import sliver_report  # noqa: E402
-from scgsim.geometry.sgb.exact.grid import Grid  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file  # noqa: E402

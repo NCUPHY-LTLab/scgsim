@@ -28,7 +28,7 @@ from scgsim.geometry.sgb.arrangement.labelling.dissolve import Dissolved
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge
 from scgsim.geometry.sgb.checks.validation.arrangements import check_arcs, check_planar
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 CELL = 256  # the cell size sampled_crossings uses, in grid units
 STEP = 8.0  # its default arc sampling step

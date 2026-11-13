@@ -29,6 +29,7 @@ from typing import Any, cast
 
 from scgsim.contracts.sgb_sidecar import Sidecar
 from scgsim.contracts.sgb_sidecar.records import SurfaceGroup
+from scgsim.geometry.exact.grid import Grid
 from scgsim.geometry.sgb.bands.requests import (
     BANDED_FACE_KINDS,
     CONDUCTOR_SIDES,
@@ -37,7 +38,6 @@ from scgsim.geometry.sgb.bands.requests import (
     InsetRequest,
     InterfaceSurfaces,
 )
-from scgsim.geometry.sgb.exact.grid import Grid
 
 
 def check_bandable_face_kinds(interface_type: str, face_kinds: list[str]) -> None:

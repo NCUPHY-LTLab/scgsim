@@ -15,6 +15,10 @@ from decimal import ROUND_FLOOR, Decimal
 from fractions import Fraction
 from typing import NamedTuple
 
+from scgsim.geometry.exact.boundaries import bound_ring_primitives
+from scgsim.geometry.exact.carriers import ArcCarrier, LineEdge, RingPrimitive
+from scgsim.geometry.exact.footprints import conductor_loops
+from scgsim.geometry.exact.grid import Grid
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.junctions.boolean_geometry import (
     boolean,
@@ -32,10 +36,6 @@ from scgsim.geometry.junctions.exact_geometry import (
 from scgsim.geometry.junctions.local_frame import JunctionLocalFrame
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.sgb.exact.boundaries import bound_ring_primitives
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier, LineEdge, RingPrimitive
-from scgsim.geometry.sgb.exact.footprints import conductor_loops
-from scgsim.geometry.sgb.exact.grid import Grid
 
 
 @dataclass(frozen=True)
@@ -231,7 +231,7 @@ def built_outline(
     """The outline SGB builds for these conductors, where it meets each sheet side line.
 
     A ring with an authored boundary or an arc reconstruction is built from the lines and
-    circular arcs SGB's own binding gives it (``sgb.exact.boundaries``), so a record on a
+    circular arcs SGB's own binding gives it (``geometry.exact.boundaries``), so a record on a
     terminal is bound, and refused, by the one rule the full build uses; any other ring is its
     drawn polyline.  So a round terminal meets a side where its arc does, not where its
     polyline chord does.  SGB rounds a crossing to the model grid point whose cell holds it,

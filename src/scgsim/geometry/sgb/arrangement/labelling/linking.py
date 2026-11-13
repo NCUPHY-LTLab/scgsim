@@ -20,11 +20,11 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 
+from scgsim.geometry.exact.carriers import CarrierRole
+from scgsim.geometry.exact.errors import SgbError
+from scgsim.geometry.exact.plane import Point
 from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.dcel import Arrangement
-from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.exact.carriers import CarrierRole
-from scgsim.geometry.sgb.exact.plane import Point
 
 TAG = "~"
 """Prefix of the carrier id a slab edge gets when it enters a level arrangement; the id is written with it,

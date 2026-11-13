@@ -24,8 +24,8 @@ from scgsim.contracts.sgb_sidecar.records import (
     Summary,
     Volume,
 )
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.output.sidecar.derived import (

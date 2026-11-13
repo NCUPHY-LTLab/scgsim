@@ -17,6 +17,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from scgsim.geometry.exact.carriers import (
+    ArcCarrier,
+    CarrierRole,
+    EdgeCarrier,
+    piece_carriers,
+)
+from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.models.grid import format_box
 from scgsim.geometry.sgb.arrangement.dcel import (
     Arrangement,
@@ -40,19 +47,12 @@ from scgsim.geometry.sgb.arrangement.labelling.prism_set import (
     without_landings,
 )
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact import identity
-from scgsim.geometry.sgb.exact.carriers import (
-    ArcCarrier,
-    CarrierRole,
-    EdgeCarrier,
-    piece_carriers,
-)
-from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
-from scgsim.geometry.sgb.exact.labels import LevelLabel, SheetOwner
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.prisms.levels import LevelStructure
+from scgsim.geometry.sgb.records import identity
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
+from scgsim.geometry.sgb.records.labels import LevelLabel, SheetOwner
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 MEMBERSHIP_PREFIX = "~m:"
 """Prefix of the id of a slab's membership curve (written, never read: the role is ``CarrierRole.MEMBERSHIP``)."""

@@ -15,6 +15,7 @@ import pytest
 from sgb_inputs import gds_pad_in_ground, thin_film_pair
 from test_rectangular_junction_geometry import fixture as junction_fixture
 
+from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.grid.arrangement import build_grid_arrangement
 from scgsim.geometry.grid.grid_regions import GridOperand
 from scgsim.geometry.grid.scope import GridScope
@@ -27,7 +28,6 @@ from scgsim.geometry.models.input import (
 from scgsim.geometry.sgb.arrangement.derivation.labelled import (
     derive_labelled_arrangements,
 )
-from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.source.grid_projection import apply_geometry_grid
 from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons

@@ -28,9 +28,9 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.exact.interfaces import (
+from scgsim.geometry.sgb.records.interfaces import (
     SHEET,
     interface_type_of,
     sheet_face_sides,
@@ -62,7 +62,7 @@ class RoutedFace:
     (``None`` for a face without a name); ``net`` the Net whose exposed conductor surface the face is;
     ``face_kind`` ``top``, ``bottom``, ``sidewall``, ``sheet``, ``interface`` or ``port``; ``sheet_sides``, for
     a ``SHEET`` face, the Surface-EPR row types of the face and the side each integrates
-    (:func:`~scgsim.geometry.sgb.exact.interfaces.sheet_face_sides`), empty for every other face.  The face's
+    (:func:`~scgsim.geometry.sgb.records.interfaces.sheet_face_sides`), empty for every other face.  The face's
     group is ``RoutedModel.face_group``.
     """
 

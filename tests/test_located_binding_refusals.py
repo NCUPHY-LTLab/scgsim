@@ -3,7 +3,7 @@
 The fourth slice of the located layout refusals (``test_located_refusals.py``,
 ``test_located_layout_refusals.py``, ``test_located_junction_refusals.py`` and
 ``test_located_source_and_sgb_refusals.py`` hold the first three).  The junction partition reads
-a lumped port's terminal conductors through SGB's own binding (``sgb.exact.boundaries``), so a
+a lumped port's terminal conductors through SGB's own binding (``geometry.exact.boundaries``), so a
 record on a terminal is refused there, with the ``InputError`` and the message SGB gives the same
 record off a port; ``test_located_sgb_binding_refusals.py`` checks each refusal on and off a
 port.  The tests here declare a record on the pad of the junction device of
@@ -30,12 +30,12 @@ from test_rectangular_junction_geometry import fixture as junction_fixture
 from test_simulation_drc import check
 
 from scgsim.geometry import with_rectangular_junctions
+from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.junctions.derivation import derive_rectangular_junctions
 from scgsim.geometry.models.input import (
     GdsBoundaryReconstructionSpec,
     LayoutPolygonSpec,
 )
-from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.source.grid_projection import apply_geometry_grid
 from scgsim.palace import EigenmodeSim
 

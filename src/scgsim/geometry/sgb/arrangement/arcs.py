@@ -25,9 +25,9 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from fractions import Fraction
 
+from scgsim.geometry.exact.carriers import ArcCarrier, Lineage
+from scgsim.geometry.exact.plane import Point
 from scgsim.geometry.sgb.arrangement.dcel import Arrangement
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier, Lineage
-from scgsim.geometry.sgb.exact.plane import Point
 
 SAMPLES = 33
 CROSSING_EPSILON = 1e-7

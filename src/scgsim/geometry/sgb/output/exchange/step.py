@@ -61,8 +61,8 @@ from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
 from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.exchange.guard import (
     GUARD_SCHEMA,

@@ -73,10 +73,11 @@ AREAS = (
         (
             Folder("geometry", Role.AREA),
             Folder("geometry/models"),
+            Folder("geometry/exact"),
             Folder("geometry/grid"),
             Folder("geometry/source"),
-            Folder("geometry/interpretation"),
             Folder("geometry/junctions"),
+            Folder("geometry/interpretation"),
             Folder("geometry/surface_epr"),
             Folder("geometry/planning"),
             *_parts(
@@ -92,7 +93,7 @@ AREAS = (
         "geometry/sgb",
         (
             Folder("geometry/sgb", Role.AREA),
-            Folder("geometry/sgb/exact"),
+            Folder("geometry/sgb/records"),
             Folder("geometry/sgb/prisms"),
             Folder("geometry/sgb/arrangement"),
             *_parts("geometry/sgb/arrangement", "noding", "labelling", "derivation"),

@@ -27,16 +27,16 @@ from collections.abc import Mapping
 from fractions import Fraction
 from typing import cast
 
+from scgsim.geometry.exact.boundaries import RingKey
+from scgsim.geometry.exact.carriers import ArcCarrier
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.footprints import SourceFootprint, is_auto_vacuum_region
+from scgsim.geometry.exact.grid import exact_z
+from scgsim.geometry.exact.plane import Ring
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.physical import PHYSICAL_LAYER_FIELD
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact.boundaries import RingKey
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier
-from scgsim.geometry.sgb.exact.footprints import SourceFootprint, is_auto_vacuum_region
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.exact.plane import Ring
-from scgsim.geometry.sgb.exact.prisms import (
+from scgsim.geometry.sgb.records.prisms import (
     Footprint,
     LineEdge,
     MaterialKind,

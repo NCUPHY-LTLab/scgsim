@@ -21,16 +21,12 @@ from test_sgb_prisms import with_boundaries
 from test_simulation_drc import check, two_pads
 
 from scgsim.documentation import page_url
+from scgsim.geometry.exact.errors import UnsupportedCurveError
 from scgsim.geometry.grid.booleans import split_gdstk_cutline_loop
 from scgsim.geometry.grid.grid_regions import PolygonRegion
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import BoundaryCurveChainSpec, SourceCurveSpec
-from scgsim.geometry.sgb.errors import (
-    ContactError,
-    NonManifoldError,
-    OverlapError,
-    UnsupportedCurveError,
-)
+from scgsim.geometry.sgb.errors import ContactError, NonManifoldError, OverlapError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.source.grid_projection import apply_geometry_grid
 from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons

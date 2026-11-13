@@ -20,17 +20,17 @@ from sgb_scenes import (
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.checks.validation.validate import validate_model
 from scgsim.geometry.sgb.errors import (
     OverlapError,
     RouteError,
     ValidationError,
 )
-from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.topology.assembly.lineage import CarrierEntities
 
 
@@ -304,7 +304,7 @@ def test_a_curve_family_splits_a_cell_into_faces_of_equal_label():
 
 
 def _family_segment(name, p, q):
-    from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier  # noqa: PLC0415 -- used once
+    from scgsim.geometry.exact.carriers import Lineage, LineCarrier  # noqa: PLC0415 -- used once
 
     return LineCarrier(
         name,

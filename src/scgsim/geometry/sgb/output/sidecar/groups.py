@@ -32,13 +32,13 @@ from scgsim.contracts.sgb_sidecar.records import (
     VolumeGroup,
     VolumeKind,
 )
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.exact.interfaces import SHEET, SURFACE_EPR_TYPES
-from scgsim.geometry.sgb.exact.labels import Domain
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import planned_face_area_um2, rounded
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
+from scgsim.geometry.sgb.records.interfaces import SHEET, SURFACE_EPR_TYPES
+from scgsim.geometry.sgb.records.labels import Domain
 from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.topology.routes.groups import RoutedFace, RoutedModel
 from scgsim.geometry.sgb.topology.routes.naming import sheet_row_id

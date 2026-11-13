@@ -24,14 +24,14 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from functools import cached_property
 
-from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.exact.carriers import (
+from scgsim.geometry.exact.carriers import (
     ArcCarrier,
     LineEdge,
     RingPrimitive,
     round_to_lattice,
 )
-from scgsim.geometry.sgb.exact.plane import Point, RepPoint, point_in_ring
+from scgsim.geometry.exact.plane import Point, RepPoint, point_in_ring
+from scgsim.geometry.models.refusals import internal
 
 ORIGIN_CELL = 64.0
 """Smallest cell, in grid units, of the grid that finds the nearest distance origin of a point."""

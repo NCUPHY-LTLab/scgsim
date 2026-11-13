@@ -23,12 +23,12 @@ from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.bands.requests import InsetRequest
 from scgsim.geometry.sgb.checks.slivers.report import sliver_report
-from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
 from scgsim.geometry.sgb.model import ConformalModel, build_conformal_model
 from scgsim.geometry.sgb.output.emission.plan import plan_brep
 from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file
 from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
 from scgsim.geometry.sgb.output.sidecar.files import write_sidecar
+from scgsim.geometry.sgb.stopwatch import elapsed_seconds
 
 
 @dataclass(frozen=True)

@@ -10,7 +10,7 @@ from typing import Any
 
 from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import ValidationError
-from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
+from scgsim.geometry.sgb.stopwatch import elapsed_seconds
 
 
 @dataclass

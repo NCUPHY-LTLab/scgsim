@@ -13,12 +13,12 @@ from fractions import Fraction
 from sgb_extreme_cases import catalogue_of, chip, metal, rect_um
 
 from scgsim.contracts.sgb_sidecar import read_sidecar
+from scgsim.geometry.exact.carriers import Lineage, LineCarrier
 from scgsim.geometry.sgb.bands.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier
-from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
 from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.meshing.built_model import read_built_model
 
 GRID_UM = 0.001

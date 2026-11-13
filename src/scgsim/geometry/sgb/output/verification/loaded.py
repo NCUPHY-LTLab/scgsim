@@ -30,13 +30,13 @@ import gmsh
 
 from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.contracts.sgb_sidecar.records import IdsByTag
-from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.sgb.output.verification.tolerances import (
     RELATIVE_TOLERANCE,
     VERTEX_TOLERANCE_UM,
     relative_error,
 )
+from scgsim.geometry.sgb.stopwatch import elapsed_seconds
 
 DIMENSIONS = ("0", "1", "2", "3")
 

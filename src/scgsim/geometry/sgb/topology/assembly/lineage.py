@@ -8,8 +8,8 @@ carriers (``PrismCatalogue.known_carriers``) says what each id is; no id is read
 
 from __future__ import annotations
 
-from scgsim.geometry.sgb.exact.carriers import KnownCarrier
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
+from scgsim.geometry.exact.carriers import KnownCarrier
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 
 
 class CarrierEntities:

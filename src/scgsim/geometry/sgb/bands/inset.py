@@ -73,6 +73,18 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from fractions import Fraction
 
+from scgsim.geometry.exact import circle_math
+from scgsim.geometry.exact.carriers import (
+    ArcCarrier,
+    BandMember,
+    BandMemberRole,
+    EdgeCarrier,
+    Lineage,
+    LineCarrier,
+    LineEdge,
+    RingPrimitive,
+)
+from scgsim.geometry.exact.plane import Point
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     Segment,
     crossing_pixel,
@@ -83,25 +95,13 @@ from scgsim.geometry.sgb.bands.inset_regions import (
     RequiredEdge,
     margin_cells,
 )
-from scgsim.geometry.sgb.exact import circle_math
-from scgsim.geometry.sgb.exact.band_regions import (
+from scgsim.geometry.sgb.records.band_regions import (
     BandRegions,
     BandSeam,
     MarginRegion,
 )
-from scgsim.geometry.sgb.exact.carriers import (
-    ArcCarrier,
-    BandMember,
-    BandMemberRole,
-    EdgeCarrier,
-    Lineage,
-    LineCarrier,
-    LineEdge,
-    RingPrimitive,
-)
-from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
-from scgsim.geometry.sgb.exact.plane import Point
-from scgsim.geometry.sgb.exact.support import SupportRegion
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
+from scgsim.geometry.sgb.records.support import SupportRegion
 
 Vec = tuple[Decimal, Decimal]
 PARALLEL_EPSILON = Decimal(
