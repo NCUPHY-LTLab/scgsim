@@ -238,7 +238,10 @@ def test_public_simplepad_prepares_route_a_thin_film_ports():
     from orcapen_sc_pdk.tech import get_single_die_layer_stack  # noqa: PLC0415 -- optional PDK, imported only when installed.
 
     from scgsim.geometry import GeometryPlan  # noqa: PLC0415 -- needs the optional layout stack checked above.
-    from scgsim.palace.source.workflow import prepare_mesh_input  # noqa: PLC0415 -- needs the optional layout stack checked above.
+    from scgsim.palace.source.workflow import (  # noqa: PLC0415 -- needs the optional layout stack checked above.
+        GeometrySettings,
+        prepare_mesh_input,
+    )
 
     activate()
     plan = GeometryPlan(
@@ -255,11 +258,14 @@ def test_public_simplepad_prepares_route_a_thin_film_ports():
     snapshot = plan.prepare()
     prepared = prepare_mesh_input(
         stack=snapshot.stack,
-        route="A",
-        route_a_thin_film=None,
-        approximation_profile=ApproximationProfile("thin_film", "v1", {}),
-        vacuum_region=None,
         build_input=snapshot.geometry_input,
+        settings=GeometrySettings(
+            route="A",
+            route_a_thin_film=None,
+            approximation_profile=ApproximationProfile("thin_film", "v1", {}),
+            vacuum_region=None,
+            surface_epr_specs=None,
+        ),
     )
     overlap_widths = {
         item.host_semantic_id: max(x for x, _ in item.overlap_loop)
