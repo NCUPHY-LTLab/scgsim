@@ -37,17 +37,22 @@ def logical_tar_member_name(member_name: str, folder: str) -> str | None:
 
 
 def resolve_run_archive_path(root: Path, relative: str) -> Path:
-    """Resolve a resource-record archive path without leaving the parent folder."""
-    if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
-        raise ValueError("artifact paths must be non-empty relative paths.")
+    """Resolve a resource-record archive path, which names the archive beside the run folder.
+
+    The archive is not inside the run folder, so the run-folder confinement (``confined_path``) does not
+    apply: the one path accepted is the sibling named after the folder.
+    """
     root = Path(root).resolve()
     expected = sibling_run_archive_relative(root)
-    if relative == expected:
-        candidate = sibling_run_archive_path(root).resolve()
-        if candidate.parent != root.parent:
-            raise ValueError("artifact path escapes the run directory.")
-        return candidate
-    raise ValueError(
-        "handoff archive must be named like the run folder and sit beside it "
-        f"(expected {expected!r})."
-    )
+    if relative != expected:
+        raise ValueError(
+            "handoff archive must be named like the run folder and sit beside it "
+            f"(expected {expected!r}, the resource record names {relative!r})."
+        )
+    candidate = sibling_run_archive_path(root).resolve()
+    if candidate.parent != root.parent:
+        raise ValueError(
+            f"handoff archive {candidate} resolves outside the folder {root.parent} that holds the run "
+            "folder; replace the link with the archive itself."
+        )
+    return candidate

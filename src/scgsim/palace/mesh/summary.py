@@ -10,7 +10,12 @@ import math
 from pathlib import Path
 from typing import Any, Literal, Mapping, TypedDict
 
-from scgsim.contracts.palace_run_folder import palace_problem, sha256
+from scgsim.contracts.palace_run_folder import (
+    MESH,
+    MESH_MANIFEST,
+    palace_problem,
+    sha256,
+)
 
 
 def _corner_chord_statistics(
@@ -177,6 +182,32 @@ def mesh_summary(
             actual_solver_dof=False,
         )
     return result
+
+
+def recorded_mesh_summary(
+    mesh_manifest: Mapping[str, Any] | None,
+    *,
+    handoff: Mapping[str, Any],
+    config: Mapping[str, Any] | None,
+    problem: str,
+) -> MeshSummary:
+    """The mesh summary of a returned run folder, from its manifest, the hashes the handoff sealed and the config.
+
+    A run that stopped early may lack the manifest or the config; the summary then says what was not recorded.
+    """
+    hashes = {entry["path"]: entry["sha256"] for entry in (handoff.get("hashes") or ())}
+    solver = config.get("Solver", {}) if config is not None else {}
+    fem_order = solver.get("Order")
+    summary = mesh_summary(
+        mesh_manifest if mesh_manifest is not None else {},
+        problem=problem,
+        fem_order=fem_order,
+        mesh_sha256=hashes.get(MESH),
+        manifest_sha256=hashes.get(MESH_MANIFEST),
+    )
+    if fem_order is None and palace_problem(problem).fem_space == "ND":
+        summary["dof_estimate"]["reason"] = "FEM order not recorded"
+    return summary
 
 
 def summary_from_files(

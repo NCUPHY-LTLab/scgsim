@@ -6,8 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scgsim.contracts.palace_run_folder import MESH, MESH_MANIFEST
-from scgsim.palace.mesh.summary import MeshSummary, mesh_summary
+from scgsim.palace.mesh.summary import MeshSummary, recorded_mesh_summary
 
 
 @dataclass(frozen=True)
@@ -100,14 +99,9 @@ class ResolvedRunData:
     def mesh_summary(self) -> MeshSummary:
         """Detach sealed mesh observations; estimates are not native solver DOF."""
 
-        hashes = {
-            entry["path"]: entry["sha256"]
-            for entry in self.provenance.handoff_metadata["hashes"]
-        }
-        return mesh_summary(
+        return recorded_mesh_summary(
             self.provenance.mesh_manifest,
+            handoff=self.provenance.handoff_metadata,
+            config=self.provenance.config,
             problem=self.problem,
-            mesh_sha256=hashes[MESH],
-            manifest_sha256=hashes[MESH_MANIFEST],
-            fem_order=self.provenance.config["Solver"]["Order"],
         )

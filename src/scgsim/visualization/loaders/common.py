@@ -30,10 +30,14 @@ def confined_artifact_path(root: Path, relative: str) -> Path:
     """Resolve one relative artifact path within its run folder."""
     path = Path(relative)
     if path.is_absolute():
-        raise ValueError("preview artifact identity must be relative")
+        raise ValueError(
+            f"preview artifact identity must be relative to the run folder {root}; got {relative!r}"
+        )
     resolved = (root / path).resolve()
     if not resolved.is_relative_to(root):
-        raise ValueError("preview artifact identity escapes the run directory")
+        raise ValueError(
+            f"preview artifact identity {relative!r} escapes the run folder {root}"
+        )
     return resolved
 
 

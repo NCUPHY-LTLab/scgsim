@@ -10,14 +10,12 @@ from scgsim.contracts.palace_run_folder import (
     CONFIG,
     HANDOFF_METADATA,
     INDEX_MAP,
-    MESH,
     MESH_MANIFEST,
     PROBLEMS,
     RETURNED_RECEIPT,
-    palace_problem,
     read_json,
 )
-from scgsim.palace.mesh.summary import mesh_summary
+from scgsim.palace.mesh.summary import recorded_mesh_summary
 from scgsim.palace.reports.observations import (
     CostCards,
     configured_refinement,
@@ -388,18 +386,9 @@ def _report_provenance(
         if handoff.get(key) is not None
     }
 
-    hashes = {entry["path"]: entry["sha256"] for entry in (handoff.get("hashes") or ())}
-    solver = config.get("Solver", {}) if config is not None else {}
-    fem_order = solver.get("Order")
-    provenance["mesh_summary"] = mesh_summary(
-        mesh_manifest if mesh_manifest is not None else {},
-        problem=problem,
-        fem_order=fem_order,
-        mesh_sha256=hashes.get(MESH),
-        manifest_sha256=hashes.get(MESH_MANIFEST),
+    provenance["mesh_summary"] = recorded_mesh_summary(
+        mesh_manifest, handoff=handoff, config=config, problem=problem
     )
-    if fem_order is None and palace_problem(problem).fem_space == "ND":
-        provenance["mesh_summary"]["dof_estimate"]["reason"] = "FEM order not recorded"
     if receipt is not None:
         provenance["returned_receipt"] = receipt
     return provenance
