@@ -16,6 +16,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from scgsim.contracts.palace_index_map import (
+    DIELECTRIC_SECTION,
+    ENERGY_SECTION,
+    LUMPED_PORT_SECTION,
+    TERMINAL_SECTION,
+)
 from scgsim.contracts.palace_run_folder import EPR_SELECTION_SCHEMA
 
 SURFACE_INTERFACES = ("MA", "MS", "SA")
@@ -28,7 +34,7 @@ class PortEntry:
     ``sheet`` is the sheet's identity in the mesh: its id, the conductors it lands on and the volumes around it.
     """
 
-    section: ClassVar[str] = "Boundaries.LumpedPort"
+    section: ClassVar[str] = LUMPED_PORT_SECTION
 
     index: int
     entry_name: str
@@ -55,7 +61,7 @@ class PortEntry:
 class TerminalEntry:
     """The ``Terminal`` row of one Electrostatic terminal: the conductor surfaces of one exact Net."""
 
-    section: ClassVar[str] = "Boundaries.Terminal"
+    section: ClassVar[str] = TERMINAL_SECTION
 
     index: int
     name: str
@@ -88,7 +94,7 @@ class TerminalEntry:
 class EnergyEntry:
     """The ``Energy`` row of one solution volume: a bulk domain named by its group, with its material."""
 
-    section: ClassVar[str] = "Domains.Postprocessing.Energy"
+    section: ClassVar[str] = ENERGY_SECTION
 
     index: int
     name: str
@@ -176,7 +182,7 @@ class SurfaceEprEntry:
     own ``baseline_index``; an inset row names its baseline and carries its ``inset`` selection.
     """
 
-    section: ClassVar[str] = "Boundaries.Postprocessing.Dielectric"
+    section: ClassVar[str] = DIELECTRIC_SECTION
 
     index: int
     entry_name: str

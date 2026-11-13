@@ -9,13 +9,13 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from scgsim.contracts.palace_run_folder import EIGENMODE, palace_problem
-from scgsim.palace.config.index import (
-    EnergyEntry,
-    PortEntry,
-    SurfaceEprEntry,
-    TerminalEntry,
+from scgsim.contracts.palace_index_map import (
+    DIELECTRIC_SECTION,
+    ENERGY_SECTION,
+    LUMPED_PORT_SECTION,
+    TERMINAL_SECTION,
 )
+from scgsim.contracts.palace_run_folder import EIGENMODE, palace_problem
 from scgsim.palace.results.artifacts import (
     expect_int,
     expect_list,
@@ -343,10 +343,10 @@ def configured_mode_count(config: Mapping[str, Any] | None) -> int | None:
 
 
 _COUNTED_SECTIONS = {
-    TerminalEntry.section: "terminal",
-    PortEntry.section: "lumped_port",
-    EnergyEntry.section: "domain",
-    SurfaceEprEntry.section: "surface",
+    TERMINAL_SECTION: "terminal",
+    LUMPED_PORT_SECTION: "lumped_port",
+    ENERGY_SECTION: "domain",
+    DIELECTRIC_SECTION: "surface",
 }
 """The key ``count_index_entries`` counts each index-map section under."""
 

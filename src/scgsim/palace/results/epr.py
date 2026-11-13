@@ -12,6 +12,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_index_map import (
+    DIELECTRIC_SECTION,
+    ENERGY_SECTION,
+    LUMPED_PORT_SECTION,
+)
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
     EIGENMODE,
@@ -24,7 +29,6 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     table_name,
 )
-from scgsim.palace.config.index import EnergyEntry, PortEntry, SurfaceEprEntry
 from scgsim.palace.results.epr_records import (
     PalaceEprResult,
     checked_number,
@@ -124,17 +128,15 @@ def epr_result(
     l0 = checked_number(config["Model"]["L0"], "Model.L0", positive=True)
     entries = index["entries"]
     surfaces = {
-        item["index"]: item
-        for item in entries
-        if item["section"] == SurfaceEprEntry.section
+        item["index"]: item for item in entries if item["section"] == DIELECTRIC_SECTION
     }
     domains = {
-        item["index"]: item
-        for item in entries
-        if item["section"] == EnergyEntry.section
+        item["index"]: item for item in entries if item["section"] == ENERGY_SECTION
     }
     junctions = {
-        item["index"]: item for item in entries if item["section"] == PortEntry.section
+        item["index"]: item
+        for item in entries
+        if item["section"] == LUMPED_PORT_SECTION
     }
     request, selected = _selected_outputs(domains, index, junctions, surfaces)
     eig = result.tables["eig"].rows
