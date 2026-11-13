@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from scgsim.aedt.results.prepared import resolve_prepared_model
 from scgsim.aedt.runtime.native.compatibility import native_compatibility
@@ -249,7 +249,6 @@ def _inspect_desktop(
 ) -> _NativeSceneData:
     """Inspect the selected project and release the Desktop on every exit."""
     desktop = None
-    app = None
     connected_aedt_version: str | None = None
     with native_compatibility(source.profile):
         try:
@@ -259,75 +258,9 @@ def _inspect_desktop(
                 new_desktop=True,
                 close_on_exit=False,
             )
-            connected_aedt_version = resolve_aedt_version(
-                desktop.aedt_version_id
-            ).requested_version
-            if connected_aedt_version != source.profile.requested_version:
-                raise RuntimeError(
-                    refusal(
-                        "AEDT Desktop release does not match the selected runtime",
-                        found=connected_aedt_version,
-                        expected=source.profile.requested_version,
-                    )
-                )
-            if (
-                source.receipt_connected_version is not None
-                and connected_aedt_version != source.receipt_connected_version
-            ):
-                raise RuntimeError(
-                    refusal(
-                        "AEDT Desktop release disagrees with the run receipt",
-                        found=connected_aedt_version,
-                        expected=source.receipt_connected_version,
-                    )
-                )
-            app = desktop.load_project(
-                str(source.project_path), design_name=source.design
-            )
-            if app is False or app is None:
-                raise RuntimeError(
-                    refusal(
-                        "PyAEDT could not open the requested project/design",
-                        found={
-                            "project": str(source.project_path),
-                            "design": source.design,
-                        },
-                    )
-                )
-            if str(app.design_name) != source.design:
-                raise ValueError(
-                    refusal(
-                        "native AEDT design readback disagrees with the request",
-                        found=str(app.design_name),
-                        expected=source.design,
-                    )
-                )
-            app.modeler.refresh_all_ids()
-            object_names = tuple(str(name) for name in app.modeler.object_names)
-            if not object_names:
-                raise ValueError(
-                    refusal(
-                        "AEDT design contains no model objects", found=source.design
-                    )
-                )
-            with tempfile.TemporaryDirectory(prefix="scgsim-aedt-preview-") as raw:
-                exported = app.post.export_model_obj(
-                    assignment=list(object_names),
-                    export_path=raw,
-                    export_as_multiple_objects=True,
-                    air_objects=True,
-                )
-                datasets: dict[str, Any] = {}
-                for item in exported:
-                    path = Path(item[0])
-                    name = path.stem
-                    if name in datasets:
-                        raise ValueError(f"AEDT exported duplicate object {name}")
-                    datasets[name] = pv.read(path).copy(deep=True)
-            missing = sorted(set(object_names) - set(datasets))
-            if missing:
-                raise ValueError(f"AEDT OBJ export omitted native objects: {missing!r}")
-
+            connected_aedt_version = _connected_version(desktop, source)
+            app = _opened_design(desktop, source)
+            datasets = _exported_objects(app, source, pv)
             native_boundaries: Mapping[str, Mapping[str, Any]] = {}
             if source.receipt is not None:
                 native_boundaries = validate_native_receipt(app, source.receipt)
@@ -355,6 +288,82 @@ def _inspect_desktop(
         tuple(materials),
         tuple(boundaries),
     )
+
+
+def _connected_version(desktop: Any, source: _AedtSourceRequest) -> str:
+    """The release the opened Desktop runs, which must be the selected one and the receipt's."""
+    connected_aedt_version = resolve_aedt_version(
+        desktop.aedt_version_id
+    ).requested_version
+    if connected_aedt_version != source.profile.requested_version:
+        raise RuntimeError(
+            refusal(
+                "AEDT Desktop release does not match the selected runtime",
+                found=connected_aedt_version,
+                expected=source.profile.requested_version,
+            )
+        )
+    if (
+        source.receipt_connected_version is not None
+        and connected_aedt_version != source.receipt_connected_version
+    ):
+        raise RuntimeError(
+            refusal(
+                "AEDT Desktop release disagrees with the run receipt",
+                found=connected_aedt_version,
+                expected=source.receipt_connected_version,
+            )
+        )
+    return connected_aedt_version
+
+
+def _opened_design(desktop: Any, source: _AedtSourceRequest) -> Any:
+    """Open the requested project and design, and require the design PyAEDT opened to be that one."""
+    app = desktop.load_project(str(source.project_path), design_name=source.design)
+    if app is False or app is None:
+        raise RuntimeError(
+            refusal(
+                "PyAEDT could not open the requested project/design",
+                found={"project": str(source.project_path), "design": source.design},
+            )
+        )
+    if str(app.design_name) != source.design:
+        raise ValueError(
+            refusal(
+                "native AEDT design readback disagrees with the request",
+                found=str(app.design_name),
+                expected=source.design,
+            )
+        )
+    return app
+
+
+def _exported_objects(app: Any, source: _AedtSourceRequest, pv: Any) -> dict[str, Any]:
+    """Export every model object of the design as OBJ and read each into a PyVista dataset, by object name."""
+    app.modeler.refresh_all_ids()
+    object_names = tuple(str(name) for name in app.modeler.object_names)
+    if not object_names:
+        raise ValueError(
+            refusal("AEDT design contains no model objects", found=source.design)
+        )
+    with tempfile.TemporaryDirectory(prefix="scgsim-aedt-preview-") as raw:
+        exported = app.post.export_model_obj(
+            assignment=list(object_names),
+            export_path=raw,
+            export_as_multiple_objects=True,
+            air_objects=True,
+        )
+        datasets: dict[str, Any] = {}
+        for item in exported:
+            path = Path(item[0])
+            name = path.stem
+            if name in datasets:
+                raise ValueError(f"AEDT exported duplicate object {name}")
+            datasets[name] = pv.read(path).copy(deep=True)
+    missing = sorted(set(object_names) - set(datasets))
+    if missing:
+        raise ValueError(f"AEDT OBJ export omitted native objects: {missing!r}")
+    return datasets
 
 
 def _build_scene(
@@ -410,11 +419,50 @@ def _materials(
     receipt: dict[str, Any] | None,
     source_conductors: tuple[Mapping[str, Any], ...],
 ) -> list[ScenePart]:
-    receipt_items: dict[str, Mapping[str, Any]] = {}
-    pdk_materials: Mapping[str, Any] = {}
-    region: Mapping[str, Any] = {}
-    if receipt is not None:
-        receipt_items = {
+    """One scene part per native object, coloured by the source material the receipt records for it."""
+    recorded = _ReceiptMaterials.read(receipt)
+    parts: list[ScenePart] = []
+    for object_name, dataset in sorted(datasets.items()):
+        native_material = str(app.modeler[object_name].material_name).lower()
+        material = recorded.object_material(
+            object_name, native_material, source_conductors
+        )
+        parts.append(
+            ScenePart(
+                dataset,
+                f"material:{material.material_id}",
+                material.material_id,
+                material.kind,
+                color_for_identity(material.material_id),
+                0.08 if material.kind == "vacuum" else 0.42,
+                1,
+            )
+        )
+    return parts
+
+
+class _ObjectMaterial(NamedTuple):
+    """The material a native object is drawn with: its source material id and that material's kind."""
+
+    material_id: str
+    kind: str
+
+
+@dataclass(frozen=True)
+class _ReceiptMaterials:
+    """What a receipt records about materials: each object's binding, the PDK materials and the Region."""
+
+    receipt: dict[str, Any] | None
+    items: dict[str, Mapping[str, Any]]
+    pdk_materials: Mapping[str, Any]
+    region: Mapping[str, Any]
+
+    @classmethod
+    def read(cls, receipt: dict[str, Any] | None) -> _ReceiptMaterials:
+        """Read the material records of a receipt; a raw project has none."""
+        if receipt is None:
+            return cls(None, {}, {}, {})
+        items = {
             nonempty_text(
                 item.get("object_name"), "receipt.materials.object_name"
             ): item
@@ -424,41 +472,24 @@ def _materials(
             receipt.get("pdk_materials", {}), "receipt.pdk_materials"
         )
         region = mapping_record(receipt.get("region", {}), "receipt.region")
-    parts: list[ScenePart] = []
-    for object_name, dataset in sorted(datasets.items()):
-        native_material = str(app.modeler[object_name].material_name).lower()
-        item = receipt_items.get(object_name)
+        return cls(receipt, items, pdk_materials, region)
+
+    def object_material(
+        self,
+        object_name: str,
+        native_material: str,
+        source_conductors: tuple[Mapping[str, Any], ...],
+    ) -> _ObjectMaterial:
+        """The material of one object, checked against the native material AEDT reports for it."""
+        item = self.items.get(object_name)
         if item is not None:
             if item.get("kind") == "conductor" and "physical_layer" in item:
-                # Native PEC treatment is separate from the source material identity.
-                matches = [
-                    conductor
-                    for conductor in source_conductors
-                    if conductor["semantic_id"] == item["semantic_id"]
-                    and item["source_polygon_id"] in conductor["polygon_ids"]
-                    and conductor["physical_layer"] == item["physical_layer"]
-                ]
-                if len(matches) != 1:
-                    raise ValueError(
-                        refusal(
-                            "native conductor has no unique source material binding",
-                            found={
-                                "semantic_id": item["semantic_id"],
-                                "matches": len(matches),
-                            },
-                        )
-                    )
-                material_id = nonempty_text(
-                    matches[0].get("material_id"), "source conductor material_id"
-                )
+                material_id = _conductor_material_id(item, source_conductors)
             else:
                 material_id = nonempty_text(
                     item.get("material_id"), "receipt material_id"
                 )
-            material = mapping_record(
-                pdk_materials.get(material_id), "receipt PDK material"
-            )
-            kind = nonempty_text(material.get("kind"), "receipt material kind")
+            kind = self._kind(material_id)
             observed = mapping_record(
                 item.get("observed", {}), "receipt material observed"
             )
@@ -467,40 +498,66 @@ def _materials(
                 observed_name is not None
                 and str(observed_name).lower() != native_material
             ):
-                raise ValueError(f"native AEDT material changed for {object_name}")
-        elif object_name == "Region" and region:
+                raise ValueError(
+                    refusal(
+                        f"native AEDT material changed for {object_name}",
+                        found=native_material,
+                        expected=str(observed_name).lower(),
+                    )
+                )
+            return _ObjectMaterial(material_id, kind)
+        if object_name == "Region" and self.region:
             material_id = nonempty_text(
-                region.get("material_id"), "receipt region material_id"
+                self.region.get("material_id"), "receipt region material_id"
             )
-            material = mapping_record(
-                pdk_materials.get(material_id), "receipt PDK material"
-            )
-            kind = nonempty_text(material.get("kind"), "receipt material kind")
-            if str(region.get("observed_material_name", "")).lower() != native_material:
+            kind = self._kind(material_id)
+            if (
+                str(self.region.get("observed_material_name", "")).lower()
+                != native_material
+            ):
                 raise ValueError(
                     refusal(
                         "native AEDT Region material changed",
-                        found=region.get("observed_material_name"),
+                        found=self.region.get("observed_material_name"),
                         expected=native_material,
                     )
                 )
-        elif receipt is not None:
-            raise ValueError(f"AEDT receipt has no material identity for {object_name}")
-        else:
-            material_id = native_material
-            kind = "native AEDT material"
-        parts.append(
-            ScenePart(
-                dataset,
-                f"material:{material_id}",
-                material_id,
-                kind,
-                color_for_identity(material_id),
-                0.08 if kind == "vacuum" else 0.42,
-                1,
+            return _ObjectMaterial(material_id, kind)
+        if self.receipt is not None:
+            raise ValueError(
+                refusal(
+                    f"AEDT receipt has no material identity for {object_name}",
+                    found=sorted(self.items),
+                )
+            )
+        return _ObjectMaterial(native_material, "native AEDT material")
+
+    def _kind(self, material_id: str) -> str:
+        material = mapping_record(
+            self.pdk_materials.get(material_id), "receipt PDK material"
+        )
+        return nonempty_text(material.get("kind"), "receipt material kind")
+
+
+def _conductor_material_id(
+    item: Mapping[str, Any], source_conductors: tuple[Mapping[str, Any], ...]
+) -> str:
+    """A conductor's source material: native PEC treatment is separate from the source material identity."""
+    matches = [
+        conductor
+        for conductor in source_conductors
+        if conductor["semantic_id"] == item["semantic_id"]
+        and item["source_polygon_id"] in conductor["polygon_ids"]
+        and conductor["physical_layer"] == item["physical_layer"]
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            refusal(
+                "native conductor has no unique source material binding",
+                found={"semantic_id": item["semantic_id"], "matches": len(matches)},
             )
         )
-    return parts
+    return nonempty_text(matches[0].get("material_id"), "source conductor material_id")
 
 
 def _boundaries(
