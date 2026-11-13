@@ -34,6 +34,22 @@ defaults, described in the
 also state that fine structure refuses `mesh()` before meshing and that a mesh
 below the quality threshold stops it.
 
+The setters store frozen, checked values. `sim.numerical` is a
+`NumericalControls`: read a control as a field (`sim.numerical.amr_max_passes`,
+`sim.numerical.order`) and the whole record with `sim.numerical.to_payload()`,
+the dictionary `metadata/palace_numerical_controls.json` holds.
+`sim.surface_epr_specs` is a `SurfaceEprSpecs`, with one `SurfaceEprSpec` per
+interface type (`sim.surface_epr_specs.by_type["MA"].inset_margins_um`;
+`to_payload()` gives the normalized mapping). `sim.epr_request` is an
+`EprRequest` (`sim.epr_request.surface_interfaces`), or None before
+`set_epr_request`. To pass controls to the constructor, give a
+`NumericalControls` (`EigenmodeSim(numerical=NumericalControls(...))`). The
+record leaves `amr_max_passes`, `amr_nonconformal` and `amr_tolerance` to the
+problem: the constructor and `set_numerical(...)` fill the ones it does not set
+from the same Eigenmode defaults, so `EigenmodeSim(numerical=NumericalControls(order=2))`
+holds the same controls as `EigenmodeSim()` followed by `set_numerical(order=2)`:
+nonconformal, with the pass limit still to choose before `write_config()`.
+
 ## Eigenmode mesh and AMR defaults
 
 A fresh `EigenmodeSim` uses the shared default mesh controls

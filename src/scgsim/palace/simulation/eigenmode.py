@@ -6,22 +6,20 @@ the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what the 
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
-from ..config.config import build_eigenmode_config, configure_numerical_controls
-from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
+from ..config.config import build_eigenmode_config
+from ..config.config_models import EigenmodeConfigBuildResult, EigenmodeSettings
+from ..config.index import EprRequest, check_epr_request
+from ..config.numerical import NumericalControls, ProblemDefaults
 from ..source.ports import RequestedPort
-from ..source.transforms import (
-    validate_non_negative_int,
-    validate_nonempty_string,
-    validate_positive_number,
-)
-from .core import PalaceSimulation
+from ..source.transforms import validate_nonempty_string, validate_positive_number
+from .core import PalaceSimulation, index_map
 
 # The geometry build never reads a port's inductance, but ``add_port`` requires a positive one.
 _PORT_INDUCTANCE_H = 1.0e-9
@@ -48,21 +46,17 @@ class EigenmodeSim(PalaceSimulation):
     """
 
     ports: list[RequestedPort] = field(default_factory=list)
-    epr_request: dict[str, tuple[str, ...] | None] | None = None
+    epr_request: EprRequest | None = None
     num_modes: int = 10
     target_hz: float | None = None
     eigenmode_tolerance: float = 1e-6
     save_fields: int = 0
-    numerical: dict[str, Any] = field(
-        default_factory=lambda: configure_numerical_controls(
-            amr_nonconformal=True,
-            amr_max_passes=None,
-            amr_tolerance=None,
-            amr_update_fraction=None,
-        )
-    )
 
     problem = "Eigenmode"
+    # Nonconformal AMR, with the pass limit and its tolerance left for the user to choose.
+    numerical_defaults: ClassVar[ProblemDefaults] = ProblemDefaults(
+        amr_max_passes=None, amr_nonconformal=True, amr_tolerance=None
+    )
     # Eigenmode may skip Surface EPR: mesh() then requests no bands.
     mesh_requires_surface_epr: ClassVar[bool] = False
 
@@ -106,7 +100,7 @@ class EigenmodeSim(PalaceSimulation):
         bulk_domain_ids: Sequence[str] | None = None,
         port_names: Sequence[str] | None = None,
     ) -> None:
-        """Select reported EPR quantities without changing the physical solve.
+        """Select reported EPR quantities without changing the physical solve; stored as an ``EprRequest``.
 
         ``write_config()`` refuses a selection that names a binding the config does not have.
 
@@ -114,14 +108,11 @@ class EigenmodeSim(PalaceSimulation):
             TypeError: a selection is not a sequence of IDs.
             ValueError: a selection holds an empty or repeated ID, or an interface other than MA, MS, SA.
         """
-        surfaces = _selected(surface_interfaces, "surface_interfaces")
-        if surfaces is not None and set(surfaces) - {"MA", "MS", "SA"}:
-            raise ValueError("surface_interfaces supports only MA, MS, and SA")
-        self.epr_request = {
-            "surface_interfaces": surfaces,
-            "bulk_domain_ids": _selected(bulk_domain_ids, "bulk_domain_ids"),
-            "port_names": _selected(port_names, "port_names"),
-        }
+        self.epr_request = EprRequest.selected(
+            surface_interfaces=surface_interfaces,
+            bulk_domain_ids=bulk_domain_ids,
+            port_names=port_names,
+        )
         self._fall_back("set_epr_request")
 
     def set_eigenmode(
@@ -134,28 +125,22 @@ class EigenmodeSim(PalaceSimulation):
     ) -> None:
         """Set the number of modes, the target frequency (Hz), the solver tolerance and the saved fields.
 
-        All values are checked before any is stored.
+        All values are checked (``EigenmodeSettings``) before any is stored.
 
         Raises:
-            ValueError: a value is not positive (``save``: not a non-negative integer).
+            ValueError: a value is not positive (``save``: negative).
+            TypeError: ``save`` is not an integer.
         """
-        if (
-            not isinstance(num_modes, int)
-            or isinstance(num_modes, bool)
-            or num_modes < 1
-        ):
-            raise ValueError("num_modes must be a positive integer.")
-        if target is not None:
-            target = validate_positive_number(target, "target")
-        normalized_tolerance = validate_positive_number(tolerance, "tolerance")
-        normalized_save = validate_non_negative_int(save, "save")
-        self.num_modes = num_modes
-        self.target_hz = target
-        self.eigenmode_tolerance = normalized_tolerance
-        self.save_fields = normalized_save
+        settings = EigenmodeSettings(
+            num_modes=num_modes, target_hz=target, tolerance=tolerance, save_fields=save
+        )
+        self.num_modes = settings.num_modes
+        self.target_hz = settings.target_hz
+        self.eigenmode_tolerance = settings.tolerance
+        self.save_fields = settings.save_fields
         self._fall_back("set_eigenmode")
 
-    def set_numerical(  # noqa: PLR0913 - preserve the public keyword controls.
+    def set_numerical(  # noqa: PLR0913 -- the public keyword controls of set_numerical
         self,
         *,
         order: int = 1,
@@ -176,7 +161,7 @@ class EigenmodeSim(PalaceSimulation):
         output_paraview: bool | None = None,
         output_grid_function: bool | None = None,
     ) -> None:
-        """Set solver, FEM, AMR, and output controls for the next config write.
+        """Set solver, FEM, AMR, and output controls for the next config write; stored as ``NumericalControls``.
 
         ``amr_max_passes`` is Palace ``MaxIts``. ``amr_nonconformal`` is Palace
         ``Model.Refinement.Nonconformal``. Omitted AMR controls retain their
@@ -185,42 +170,39 @@ class EigenmodeSim(PalaceSimulation):
         ``amr_nc_levels`` sets native ``MaxNCLevels``; zero means no limit.
         Omitted Krylov and nonconformal-level controls retain current choices.
         Explicit ``ksp_type="Default"`` uses Palace's problem-specific default.
+
+        How it differs from ``ElectrostaticSim.set_numerical``: here an omitted ``amr_max_passes``,
+        ``amr_nonconformal``, ``amr_tolerance`` or ``amr_update_fraction`` keeps its current value; there each
+        takes its default (0, False, 0.01, None).
+
+        Raises:
+            ValueError: a control is out of its range or choices.
+            TypeError: a control has the wrong type.
         """
         current = self.numerical
-        self.numerical = configure_numerical_controls(
-            order=order,
-            tolerance=tolerance,
-            max_iterations=max_iterations,
-            solver_type=solver_type,
-            preconditioner=preconditioner,
-            device=device,
-            ksp_type=current.get("ksp_type") if ksp_type is None else ksp_type,
-            amr_nc_levels=(
-                current.get("amr_nc_levels") if amr_nc_levels is None else amr_nc_levels
-            ),
-            amr_max_passes=(
-                current["amr_max_passes"] if amr_max_passes is None else amr_max_passes
-            ),
-            amr_nonconformal=(
-                current["amr_nonconformal"]
-                if amr_nonconformal is None
-                else amr_nonconformal
-            ),
-            amr_tolerance=(
-                current["amr_tolerance"] if amr_tolerance is None else amr_tolerance
-            ),
-            amr_update_fraction=(
-                current["amr_update_fraction"]
-                if amr_update_fraction is None
-                else amr_update_fraction
-            ),
-            save_adapt_iterations=save_adapt_iterations,
-            save_adapt_mesh=save_adapt_mesh,
-            estimator_mg=estimator_mg,
-            output_paraview=output_paraview,
-            output_grid_function=output_grid_function,
+        self._set_numerical(
+            NumericalControls(
+                order=order,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+                solver_type=solver_type,
+                preconditioner=preconditioner,
+                device=device,
+                ksp_type=current.ksp_type if ksp_type is None else ksp_type,
+                amr_max_passes=_kept(amr_max_passes, current.amr_max_passes),
+                amr_nonconformal=_kept(amr_nonconformal, current.amr_nonconformal),
+                amr_nc_levels=_kept(amr_nc_levels, current.amr_nc_levels),
+                amr_tolerance=_kept(amr_tolerance, current.amr_tolerance),
+                amr_update_fraction=_kept(
+                    amr_update_fraction, current.amr_update_fraction
+                ),
+                save_adapt_iterations=save_adapt_iterations,
+                save_adapt_mesh=save_adapt_mesh,
+                estimator_mg=estimator_mg,
+                output_paraview=output_paraview,
+                output_grid_function=output_grid_function,
+            )
         )
-        self._fall_back("set_numerical")
 
     def write_config(self) -> Path:
         """Write ``config.json`` and its metadata for the current mesh, ports and Eigenmode settings.
@@ -229,45 +211,46 @@ class EigenmodeSim(PalaceSimulation):
             The path of the written ``config.json``.
 
         Raises:
-            ValueError: ``mesh()`` has not built the current mesh, the config refuses the bindings, or the
-                EPR request names a binding the config does not have.
+            ValueError: ``mesh()`` has not built the current mesh, AMR is left open, the config refuses the
+                bindings, or the EPR request names a binding the config does not have.
             FileNotFoundError: a file of the current mesh is gone from the run folder.
         """
-        mesh, materials = self._start_config()
+        mesh, common = self._start_config()
         result = build_eigenmode_config(
-            groups=mesh.groups,
-            ports=self._resolved_ports,
-            materials=materials,
-            surface_epr_specs=self.surface_epr_specs or {},
-            numerical=self.numerical,
+            common, ports=self._resolved_ports, eigenmode=self._eigenmode_settings()
+        )
+        check_epr_request(self.epr_request, result.index_entries)
+        return self._finish_config(mesh, result.config, self._metadata(result))
+
+    def _eigenmode_settings(self) -> EigenmodeSettings:
+        """The mode controls as the config reads them, checked again in case an attribute was assigned."""
+        return EigenmodeSettings(
             num_modes=self.num_modes,
             target_hz=self.target_hz,
-            eigenmode_tolerance=self.eigenmode_tolerance,
+            tolerance=self.eigenmode_tolerance,
             save_fields=self.save_fields,
-            mesh_path=mesh.mesh_path,
         )
-        _check_epr_request(self.epr_request, result.index_entries)
-        return self._finish_config(
-            mesh,
-            result.config,
-            metadata=(
-                (
-                    "palace_index_map.json",
-                    _index_map(result.index_entries, self.epr_request),
-                ),
-                (
-                    "palace_material_resolution.json",
-                    {
-                        "schema_version": 1,
-                        "solution_volumes": result.material_resolution,
-                    },
-                ),
-                (
-                    "port_information.json",
-                    {"schema_version": 1, "ports": result.port_information},
-                ),
-                ("palace_numerical_controls.json", self.numerical),
+
+    def _metadata(
+        self, result: EigenmodeConfigBuildResult
+    ) -> tuple[tuple[str, dict[str, Any]], ...]:
+        """The ``metadata/`` files written beside ``config.json``, in the order they are written."""
+        extra = (
+            {}
+            if self.epr_request is None
+            else {"epr_request": self.epr_request.to_payload()}
+        )
+        return (
+            ("palace_index_map.json", index_map(result.index_entries, **extra)),
+            (
+                "palace_material_resolution.json",
+                {"schema_version": 1, "solution_volumes": result.material_resolution},
             ),
+            (
+                "port_information.json",
+                {"schema_version": 1, "ports": result.port_information},
+            ),
+            ("palace_numerical_controls.json", self.numerical.to_payload()),
         )
 
     # ---- The core's questions ------------------------------------------------------------------------
@@ -287,7 +270,9 @@ class EigenmodeSim(PalaceSimulation):
                 }
                 for item in self.ports
             ],
-            "epr_request": self.epr_request,
+            "epr_request": None
+            if self.epr_request is None
+            else asdict(self.epr_request),
             "num_modes": self.num_modes,
             "target_hz": self.target_hz,
             "eigenmode_tolerance": self.eigenmode_tolerance,
@@ -305,73 +290,9 @@ class EigenmodeSim(PalaceSimulation):
             )
 
 
-def _selected(values: Sequence[str] | None, name: str) -> tuple[str, ...] | None:
-    """One ``set_epr_request`` selection as a tuple of distinct non-empty IDs, or None for all."""
-    if values is None:
-        return None
-    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
-        raise TypeError(f"{name} must be a sequence of IDs or None")
-    normalized = tuple(values)
-    if any(not isinstance(value, str) or not value for value in normalized):
-        raise ValueError(f"{name} must contain non-empty text IDs")
-    if len(normalized) != len(set(normalized)):
-        raise ValueError(f"{name} must not repeat IDs")
-    return normalized
-
-
-def _check_epr_request(
-    request: Mapping[str, tuple[str, ...] | None] | None,
-    index_entries: Sequence[Mapping[str, Any]],
-) -> None:
-    """Refuse an EPR request that selects a binding the index of the config being written does not list."""
-    if request is None:
-        return
-    available = {
-        "surface_interfaces": {
-            row["interface_type"]
-            for item in index_entries
-            if item["section"] == "Boundaries.Postprocessing.Dielectric"
-            for row in item["metadata"]["rows"]
-        },
-        "bulk_domain_ids": {
-            item["entry_name"]
-            for item in index_entries
-            if item["section"] == "Domains.Postprocessing.Energy"
-        },
-        "port_names": {
-            item["port_name"]
-            for item in index_entries
-            if item["section"] == "Boundaries.LumpedPort"
-        },
-    }
-    for name, configured in available.items():
-        chosen = request[name]
-        if chosen is not None and set(chosen) - configured:
-            unknown = sorted(set(chosen) - configured)
-            raise ValueError(
-                f"EPR request selects an unknown {name} binding {unknown}; the config has "
-                f"{sorted(configured)}: call set_epr_request() with those, then write_config()."
-            )
-
-
-def _index_map(
-    index_entries: Sequence[Mapping[str, Any]],
-    request: Mapping[str, tuple[str, ...] | None] | None,
-) -> dict[str, Any]:
-    """The ``palace_index_map.json`` payload: the index entries, and the EPR selection when one is set."""
-    payload: dict[str, Any] = {
-        "schema_version": INDEX_MAP_SCHEMA_VERSION,
-        "entries": index_entries,
-    }
-    if request is not None:
-        payload["epr_request"] = {
-            "schema_version": "scgsim.palace.epr-selection.v1",
-            **{
-                name: None if values is None else list(values)
-                for name, values in request.items()
-            },
-        }
-    return payload
+def _kept[Value](given: Value | None, current: Value) -> Value:
+    """``given``, or the current setting when the control was omitted (None)."""
+    return current if given is None else given
 
 
 __all__ = ["EigenmodeSim"]

@@ -20,14 +20,18 @@ from palace_sgb_support import (
 )
 
 from scgsim.geometry.surface_epr.insets import inset_requests
-from scgsim.palace import resolve_palace_result
+from scgsim.palace import EigenmodeSim, ElectrostaticSim, resolve_palace_result
 from scgsim.palace.config.config import (
-    LayoutPortBinding,
-    TerminalBinding,
     build_eigenmode_config,
     build_electrostatic_config,
-    configure_numerical_controls,
 )
+from scgsim.palace.config.config_models import (
+    ConfigInput,
+    EigenmodeSettings,
+    ElectrostaticSettings,
+    TerminalBinding,
+)
+from scgsim.palace.config.numerical import NumericalControls
 from scgsim.palace.mesh.manifest import MANIFEST_SCHEMA_VERSION, build_mesh_manifest
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 from scgsim.palace.reports.reports import inspect_run_trustworthiness
@@ -53,6 +57,9 @@ from scgsim.palace.results.surface_readers import (
     read_surface_margin_bindings,
 )
 from scgsim.palace.results.tables import count_index_entries
+from scgsim.palace.simulation.core import index_map
+from scgsim.palace.source.ports import LayoutPortBinding
+from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 NETS = {"A": ("left", "right"), "B": ("P", "G")}
 PORTS = {
@@ -101,11 +108,7 @@ class Run:
         )
         files = {
             "metadata/mesh_manifest.json": manifest,
-            "metadata/palace_index_map.json": {
-                "schema_version": INDEX_MAP_SCHEMA_VERSION,
-                "entries": entries,
-                **extra,
-            },
+            "metadata/palace_index_map.json": index_map(entries, **extra),
             "config.json": config,
         }
         for name, payload in files.items():
@@ -121,41 +124,40 @@ class Run:
     def _electrostatic(self, specs):
         first, second = NETS[self.route]
         result = build_electrostatic_config(
-            groups=self.groups,
+            self._common("Electrostatic", specs, ElectrostaticSim().numerical),
             terminals=[TerminalBinding("t", first)],
             ground_net_ids=[second],
-            materials=MATERIALS,
-            save_fields=0,
-            unassigned_conductor_policy="error",
-            exterior_boundary_policy="none",
-            mesh_path=Path("palace.msh"),
-            surface_epr_specs=specs,
-            numerical=configure_numerical_controls(),
+            electrostatic=ElectrostaticSettings(unassigned_conductor_policy="error"),
         )
         return (
             result.config,
-            [
-                *result.terminal_index_map,
-                *result.domain_energy_index_map,
-                *result.surface_epr_index_map,
-            ],
+            result.index_entries,
             {"ground_boundary": result.ground_boundary_resolution},
         )
 
     def _eigenmode(self, specs):
         result = build_eigenmode_config(
-            groups=self.groups,
+            self._common(
+                "Eigenmode",
+                specs,
+                NumericalControls(amr_max_passes=0).with_defaults(
+                    EigenmodeSim.numerical_defaults
+                ),
+            ),
             ports=[PORTS[self.route]],
-            materials=MATERIALS,
-            surface_epr_specs=specs,
-            numerical=configure_numerical_controls(amr_max_passes=0),
-            num_modes=3,
-            target_hz=None,
-            eigenmode_tolerance=1e-6,
-            save_fields=0,
-            mesh_path=Path("palace.msh"),
+            eigenmode=EigenmodeSettings(num_modes=3),
         )
         return result.config, result.index_entries, {}
+
+    def _common(self, problem, specs, numerical):
+        return ConfigInput(
+            problem=problem,
+            groups=self.groups,
+            mesh_path=Path("palace.msh"),
+            materials=MATERIALS,
+            surface_epr_specs=SurfaceEprSpecs.normalized(specs, materials=MATERIALS),
+            numerical=numerical,
+        )
 
     def consistency(self, **overrides) -> RouteConsistency:
         """The route consistency check over this run's metadata."""

@@ -18,12 +18,14 @@ from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb import build_sgb_geometry
 from scgsim.geometry.sgb.bands.requests import InsetRequest
 from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
+from scgsim.palace.config.surface_epr import build_surface_epr_postprocessing
 from scgsim.palace.mesh.build import (
     MeshBuildResult,
     build_route_geometry,
     mesh_route_geometry,
 )
 from scgsim.palace.mesh.controls import MeshControls
+from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 MATERIALS = {
     "Si": {"kind": "dielectric", "permittivity": 11.45, "loss_tangent": 0.0},
@@ -55,15 +57,31 @@ def sidecar_of(
     return read_sidecar(artifacts.sidecar)
 
 
+def _film_specs(margins: Mapping[str, list[float] | None]) -> dict[str, dict[str, Any]]:
+    return {
+        kind: {**FILM, **({"inset_margins_um": m} if m else {})}
+        for kind, m in margins.items()
+    }
+
+
 def surface_epr_specs(**margins: list[float] | None) -> dict[str, dict[str, Any]]:
     """Normalized Surface-EPR specs for the interface types named, e.g. ``MA=[0.5, 1.0], SA=None``."""
-    return normalize_surface_epr_specs(
-        {
-            kind: {**FILM, **({"inset_margins_um": m} if m else {})}
-            for kind, m in margins.items()
-        },
-        materials={},
+    return normalize_surface_epr_specs(_film_specs(margins), materials={})
+
+
+def surface_epr_spec_records(**margins: list[float] | None) -> SurfaceEprSpecs:
+    """The specs of ``surface_epr_specs`` as a simulation holds them, for the config builders."""
+    return SurfaceEprSpecs.normalized(_film_specs(margins), materials={})
+
+
+def lower_surface_epr(
+    groups: Mapping[str, Any], specs: Mapping[str, Mapping[str, Any]], **options: Any
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The ``Dielectric`` rows of ``specs`` (a spec mapping) and their index entries as the index map holds them."""
+    rows, entries = build_surface_epr_postprocessing(
+        groups, SurfaceEprSpecs.normalized(specs, materials={}), **options
     )
+    return rows, [entry.to_payload() for entry in entries]
 
 
 def mesh_run(  # noqa: PLR0913 -- a test builder with independent switches

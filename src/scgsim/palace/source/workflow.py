@@ -1,16 +1,13 @@
-"""Shared value preparation and ordered persistence for Palace workflows.
+"""The preparation of a plan's geometry input under the simulation's geometry settings.
 
-Simulation classes retain lifecycle and mutable-state ownership.  This module
-only composes the existing preparation transforms and writes caller-provided
-payloads in their declared order.
+Simulation classes retain lifecycle and mutable-state ownership.  This module only composes the
+existing preparation transforms in their established order.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from pathlib import Path
 from typing import Any
 
 from scgsim.geometry.models.input import GeometryBuildInput, VacuumRegionSpec
@@ -26,7 +23,23 @@ from scgsim.geometry.source.validation import has_vacuum_solution_region
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports
+from .surface_epr import SurfaceEprSpecs
 from .transforms import RouteAThinFilm
+
+
+@dataclass(frozen=True)
+class GeometrySettings:
+    """The simulation settings the geometry preparation and build read, as the simulation holds them.
+
+    ``route`` is the Surface-EPR representation (``"A"`` thin-film sheets, ``"B"`` 3D conductors);
+    ``vacuum_region`` is the simulation's own vacuum, None when the plan has one or none was set.
+    """
+
+    route: str
+    route_a_thin_film: RouteAThinFilm | None
+    approximation_profile: ApproximationProfile | None
+    vacuum_region: VacuumRegionSpec | None
+    surface_epr_specs: SurfaceEprSpecs | None
 
 
 @dataclass(frozen=True)
@@ -39,17 +52,21 @@ class PreparedMeshInput:
     physical_plan: PhysicalRepresentationPlan
 
 
-def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserve the existing caller contract.
+def prepare_mesh_input(
     *,
     stack: Mapping[str, Any],
-    route: str,
-    route_a_thin_film: RouteAThinFilm | None,
-    vacuum_region: VacuumRegionSpec | None,
     build_input: GeometryBuildInput,
-    approximation_profile: ApproximationProfile | None = None,
+    settings: GeometrySettings,
     port_sheet_source_layers: Sequence[Mapping[str, Any]] | None = None,
 ) -> PreparedMeshInput:
-    """Apply the common transforms while preserving their established order."""
+    """Apply the common transforms while preserving their established order.
+
+    ``port_sheet_source_layers`` lists the authored sheets cut as lumped ports, None for a problem with none.
+    """
+    route = settings.route
+    route_a_thin_film = settings.route_a_thin_film
+    approximation_profile = settings.approximation_profile
+    vacuum_region = settings.vacuum_region
     prepared_stack = stack
     if vacuum_region is not None:
         prepared_stack = apply_vacuum_region_to_stack(stack, vacuum_region)
@@ -203,24 +220,4 @@ def _resolve_approximation_profile(
     return approximation_profile
 
 
-def persist_problem_files(
-    *,
-    metadata_files: Sequence[tuple[Path, Mapping[str, Any]]],
-    config_path: Path,
-    config: Mapping[str, Any],
-) -> Path:
-    """Replace ordered metadata files independently, then replace config last."""
-    for path, payload in metadata_files:
-        _atomic_json(path, payload)
-    _atomic_json(config_path, config)
-    return config_path
-
-
-def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
-
-
-__all__ = ["PreparedMeshInput", "persist_problem_files", "prepare_mesh_input"]
+__all__ = ["GeometrySettings", "PreparedMeshInput", "prepare_mesh_input"]

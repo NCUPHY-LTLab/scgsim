@@ -1,227 +1,150 @@
-"""Build Palace configuration payloads from the solver attributes of prepared SGB groups."""
+"""Build the Palace ``config.json`` of each problem from the mesh's physical groups and the problem's settings.
+
+``build_eigenmode_config`` and ``build_electrostatic_config`` take a ``ConfigInput`` (the mesh, materials,
+Surface-EPR specs and numerical controls both problems share) and what the problem adds.  Each returns the
+config with its index entries (``config.index``) and the records written beside it.
+"""
 
 from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
 from numbers import Real
-from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
+from ..mesh.physical_groups import Groups
+from ..source.ports import LayoutPortBinding
 from .boundaries import build_electrostatic_boundaries
 from .config_models import (
     MODEL_L0_M,
-    ConfigBuildResult,
+    ConfigInput,
     EigenmodeConfigBuildResult,
-    LayoutPortBinding,
+    EigenmodeSettings,
+    ElectrostaticConfigBuildResult,
+    ElectrostaticSettings,
     TerminalBinding,
     optional_string,
-    positive_finite,
 )
-from .numerical import (
-    build_output_formats,
-    build_refinement,
-    configure_numerical_controls,
-    linear_solver,
-)
+from .index import EnergyEntry, PortEntry, SurfaceEprEntry
+from .numerical import build_output_formats, build_refinement, linear_solver
 from .surface_epr import build_surface_epr_postprocessing
 
 __all__ = [
-    "MODEL_L0_M",
-    "ConfigBuildResult",
-    "EigenmodeConfigBuildResult",
-    "LayoutPortBinding",
-    "TerminalBinding",
     "build_eigenmode_config",
     "build_electrostatic_config",
-    "configure_numerical_controls",
 ]
 
 
-def build_electrostatic_config(  # noqa: PLR0913 - config builder preserves its named input API.
+def build_electrostatic_config(
+    common: ConfigInput,
     *,
-    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
     terminals: Sequence[TerminalBinding],
-    ground_net_ids: Sequence[str] = (),
-    materials: Mapping[str, Mapping[str, Any]],
-    save_fields: int,
-    unassigned_conductor_policy: Literal["ground", "error"],
-    exterior_boundary_policy: Literal["none", "ground"],
-    mesh_path: Path,
-    surface_epr_specs: Mapping[str, Mapping[str, Any]],
-    numerical: Mapping[str, Any],
-) -> ConfigBuildResult:
-    """Build a minimal Palace electrostatic config payload."""
-    if (
-        not isinstance(save_fields, int)
-        or isinstance(save_fields, bool)
-        or save_fields < 0
-    ):
-        raise ValueError("save_fields must be a non-bool int >= 0.")
-    if exterior_boundary_policy == "ground" and unassigned_conductor_policy != "error":
-        raise ValueError(
-            "exterior ground requires unassigned_conductor_policy='error'."
-        )
+    ground_net_ids: Sequence[str],
+    electrostatic: ElectrostaticSettings,
+) -> ElectrostaticConfigBuildResult:
+    """Build the Electrostatic config: terminals and grounds by Net, the domains, Surface EPR and the solver.
 
-    boundary_map, terminal_index_map, ground_boundary_resolution = (
-        build_electrostatic_boundaries(
-            groups=groups,
-            terminals=terminals,
-            ground_net_ids=ground_net_ids,
-            unassigned_conductor_policy=unassigned_conductor_policy,
-            exterior_boundary_policy=exterior_boundary_policy,
-        )
+    Raises:
+        ValueError: a terminal or ground Net does not match the mesh, a material is invalid, or a required
+            Surface-EPR spec has no face.
+    """
+    boundaries, terminal_entries, ground_resolution = build_electrostatic_boundaries(
+        groups=common.groups,
+        terminals=terminals,
+        ground_net_ids=ground_net_ids,
+        electrostatic=electrostatic,
     )
-    domain_volumes = _domains_from_solution_volumes(groups.get("volumes", {}))
-    materials_payload = _materials_from_solution_volumes(
-        domain_volumes=domain_volumes,
-        materials=materials,
+    domain_volumes = _domains_from_solution_volumes(common.groups.get("volumes", {}))
+    material_rows = _materials_from_solution_volumes(domain_volumes, common.materials)
+    epr_rows, epr_entries = build_surface_epr_postprocessing(
+        common.groups, common.surface_epr_specs, model_l0_m=MODEL_L0_M
     )
-    epr_rows, epr_index_map = build_surface_epr_postprocessing(
-        groups, surface_epr_specs, model_l0_m=MODEL_L0_M
+    energy_rows, energy_entries = _domain_energy_rows(domain_volumes, common.materials)
+    config = _config(
+        common,
+        solver={"Electrostatic": {"Save": electrostatic.save_fields}},
+        boundaries=boundaries,
+        domains=(material_rows, energy_rows),
+        epr=(epr_rows, epr_entries),
     )
-    energy_rows, energy_index_map = _domain_energy_rows(domain_volumes, materials)
-
-    linear = linear_solver(numerical, problem="Electrostatic")
-    problem_block = build_output_formats(numerical)
-    problem = {
-        "Type": "Electrostatic",
-        "Verbose": 3,
-        "Output": "results/palace",
-    }
-    problem.update(problem_block)
-    config: dict[str, Any] = {
-        "Problem": problem,
-        "Model": {
-            "Mesh": str(mesh_path.name),
-            "L0": MODEL_L0_M,
-            "Refinement": build_refinement(numerical),
-        },
-        "Solver": {
-            "Linear": linear,
-            "Order": int(numerical["order"]),
-            "Device": numerical["device"],
-            "Electrostatic": {"Save": save_fields},
-        },
-        "Boundaries": boundary_map,
-        "Domains": {
-            "Materials": materials_payload,
-            "Postprocessing": {"Energy": energy_rows, "Probe": []},
-        },
-    }
-    if _requires_internal_boundary_cracking(epr_index_map):
-        config["Model"]["CrackInternalBoundaryElements"] = True
-    if epr_rows:
-        config["Boundaries"]["Postprocessing"] = {"Dielectric": epr_rows}
-    return ConfigBuildResult(
+    return ElectrostaticConfigBuildResult(
         config=config,
-        domain_names=[name for name, _ in domain_volumes],
-        terminal_index_map=terminal_index_map,
-        surface_epr_index_map=epr_index_map,
-        domain_energy_index_map=energy_index_map,
-        material_resolution=_material_resolution(domain_volumes, materials),
-        ground_boundary_resolution=ground_boundary_resolution,
+        index_entries=[*terminal_entries, *energy_entries, *epr_entries],
+        material_resolution=_material_resolution(domain_volumes, common.materials),
+        ground_boundary_resolution=ground_resolution,
     )
 
 
-def build_eigenmode_config(  # noqa: PLR0913 - config builder preserves its named input API.
+def build_eigenmode_config(
+    common: ConfigInput,
     *,
-    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
     ports: Sequence[LayoutPortBinding],
-    materials: Mapping[str, Mapping[str, Any]],
-    surface_epr_specs: Mapping[str, Mapping[str, Any]],
-    numerical: Mapping[str, Any],
-    num_modes: int,
-    target_hz: float | None,
-    eigenmode_tolerance: float,
-    save_fields: int,
-    mesh_path: Path,
+    eigenmode: EigenmodeSettings,
 ) -> EigenmodeConfigBuildResult:
-    """Build one non-Floquet Eigenmode config from SGB-authored groups."""
-    if numerical.get("amr_max_passes") is None:
-        raise ValueError(
-            "Eigenmode requires explicit amr_max_passes before config generation."
-        )
-    if numerical["amr_max_passes"] > 0 and (
-        numerical.get("amr_tolerance") is None
-        or numerical.get("amr_update_fraction") is None
-    ):
-        raise ValueError(
-            "Enabled Eigenmode AMR requires explicit amr_tolerance and amr_update_fraction."
-        )
-    if not isinstance(num_modes, int) or isinstance(num_modes, bool) or num_modes < 1:
-        raise ValueError("num_modes must be a positive integer.")
-    if not positive_finite(eigenmode_tolerance):
-        raise ValueError("Eigenmode tolerance must be finite and positive.")
-    if target_hz is not None and not positive_finite(target_hz):
-        raise ValueError("Eigenmode target must be finite positive Hz.")
-    if (
-        not isinstance(save_fields, int)
-        or isinstance(save_fields, bool)
-        or save_fields < 0
-    ):
-        raise ValueError("save_fields must be a non-negative integer.")
+    """Build one non-Floquet Eigenmode config: the PEC conductors, lumped ports, domains, Surface EPR and solver.
 
+    Raises:
+        ValueError: a port does not match its SGB group, a port is also a Surface-EPR loss group, the mesh has
+            no PEC surface, a material is invalid, or a required Surface-EPR spec has no face.
+    """
+    groups = common.groups
     domain_volumes = _domains_from_solution_volumes(groups.get("volumes", {}))
-    material_rows = _materials_from_solution_volumes(
-        domain_volumes=domain_volumes, materials=materials
+    material_rows = _materials_from_solution_volumes(domain_volumes, common.materials)
+    energy_rows, energy_entries = _domain_energy_rows(domain_volumes, common.materials)
+    epr_rows, epr_entries = build_surface_epr_postprocessing(
+        groups, common.surface_epr_specs, model_l0_m=MODEL_L0_M
     )
-    energy_rows, energy_index = _domain_energy_rows(domain_volumes, materials)
-    epr_rows, epr_index = build_surface_epr_postprocessing(
-        groups, surface_epr_specs, model_l0_m=MODEL_L0_M
+    port_rows, port_info, port_entries = _lumped_ports(groups, ports)
+    _refuse_ports_on_loss_groups(port_rows, epr_rows)
+    boundaries: dict[str, Any] = {"PEC": {"Attributes": _pec_attributes(groups)}}
+    if port_rows:
+        boundaries["LumpedPort"] = port_rows
+    config = _config(
+        common,
+        solver={"Eigenmode": _eigenmode_block(eigenmode)},
+        boundaries=boundaries,
+        domains=(material_rows, energy_rows),
+        epr=(epr_rows, epr_entries),
     )
-    lumped_ports, port_info, port_index = _lumped_ports(groups, ports)
-    epr_attributes = {
-        int(value) for row in epr_rows for value in row.get("Attributes", ())
-    }
-    port_attributes = {
-        int(value) for row in lumped_ports for value in row.get("Attributes", ())
-    }
-    if epr_attributes.intersection(port_attributes):
-        raise ValueError(
-            "LumpedPort attributes must not also be Surface-EPR loss groups."
-        )
+    return EigenmodeConfigBuildResult(
+        config=config,
+        port_information=port_info,
+        index_entries=[*port_entries, *energy_entries, *epr_entries],
+        material_resolution=_material_resolution(domain_volumes, common.materials),
+    )
 
-    pec_attributes = sorted(
-        {
-            int(value)
-            for info in groups.get("pec_surfaces", {}).values()
-            for value in info["attributes"]
-        }
-    )
-    if not pec_attributes:
-        raise ValueError("Eigenmode config requires SGB-authored PEC surfaces.")
-    eigenmode: dict[str, Any] = {
-        "N": num_modes,
-        "Tol": float(eigenmode_tolerance),
-        "Save": save_fields,
-    }
-    if target_hz is not None:
-        eigenmode["Target"] = float(target_hz) / 1e9
-    boundaries: dict[str, Any] = {"PEC": {"Attributes": pec_attributes}}
-    if lumped_ports:
-        boundaries["LumpedPort"] = lumped_ports
+
+def _config(
+    common: ConfigInput,
+    *,
+    solver: dict[str, Any],
+    boundaries: dict[str, Any],
+    domains: tuple[list[dict[str, Any]], list[dict[str, Any]]],
+    epr: tuple[list[dict[str, Any]], list[SurfaceEprEntry]],
+) -> dict[str, Any]:
+    """The config both problems write, in Palace's section order, around the problem's solver block."""
+    numerical = common.numerical
+    material_rows, energy_rows = domains
+    epr_rows, epr_entries = epr
     if epr_rows:
         boundaries["Postprocessing"] = {"Dielectric": epr_rows}
-    problem_block = build_output_formats(numerical)
-    problem = {
-        "Type": "Eigenmode",
-        "Verbose": 3,
-        "Output": "results/palace",
-    }
-    problem.update(problem_block)
-    config = {
-        "Problem": problem,
+    config: dict[str, Any] = {
+        "Problem": {
+            "Type": common.problem,
+            "Verbose": 3,
+            "Output": "results/palace",
+            **build_output_formats(numerical),
+        },
         "Model": {
-            "Mesh": mesh_path.name,
+            "Mesh": common.mesh_path.name,
             "L0": MODEL_L0_M,
             "Refinement": build_refinement(numerical),
         },
         "Solver": {
-            "Linear": linear_solver(numerical),
-            "Order": int(numerical["order"]),
-            "Device": numerical["device"],
-            "Eigenmode": eigenmode,
+            "Linear": linear_solver(numerical, problem=common.problem),
+            "Order": numerical.order,
+            "Device": numerical.device,
+            **solver,
         },
         "Boundaries": boundaries,
         "Domains": {
@@ -229,18 +152,55 @@ def build_eigenmode_config(  # noqa: PLR0913 - config builder preserves its name
             "Postprocessing": {"Energy": energy_rows, "Probe": []},
         },
     }
-    if _requires_internal_boundary_cracking(epr_index):
+    if _requires_internal_boundary_cracking(epr_entries):
         config["Model"]["CrackInternalBoundaryElements"] = True
-    return EigenmodeConfigBuildResult(
-        config=config,
-        port_information=port_info,
-        index_entries=[*port_index, *energy_index, *epr_index],
-        material_resolution=_material_resolution(domain_volumes, materials),
+    return config
+
+
+def _eigenmode_block(eigenmode: EigenmodeSettings) -> dict[str, Any]:
+    """``Solver.Eigenmode``: the number of modes, the tolerance, the saved fields and the target in GHz."""
+    block: dict[str, Any] = {
+        "N": eigenmode.num_modes,
+        "Tol": eigenmode.tolerance,
+        "Save": eigenmode.save_fields,
+    }
+    if eigenmode.target_hz is not None:
+        block["Target"] = eigenmode.target_hz / 1e9
+    return block
+
+
+def _pec_attributes(groups: Groups) -> list[int]:
+    """The attributes of every SGB-authored PEC surface; an Eigenmode model has at least one."""
+    attributes = sorted(
+        {
+            int(value)
+            for info in groups.get("pec_surfaces", {}).values()
+            for value in info["attributes"]
+        }
     )
+    if not attributes:
+        raise ValueError("Eigenmode config requires SGB-authored PEC surfaces.")
+    return attributes
+
+
+def _refuse_ports_on_loss_groups(
+    port_rows: Sequence[Mapping[str, Any]], epr_rows: Sequence[Mapping[str, Any]]
+) -> None:
+    """Refuse a lumped port whose attributes are also a Surface-EPR ``Dielectric`` row's."""
+    epr_attributes = {
+        int(value) for row in epr_rows for value in row.get("Attributes", ())
+    }
+    port_attributes = {
+        int(value) for row in port_rows for value in row.get("Attributes", ())
+    }
+    if epr_attributes.intersection(port_attributes):
+        raise ValueError(
+            "LumpedPort attributes must not also be Surface-EPR loss groups."
+        )
 
 
 def _requires_internal_boundary_cracking(
-    epr_index: Sequence[Mapping[str, Any]],
+    epr_entries: Sequence[SurfaceEprEntry],
 ) -> bool:
     """Whether a configured Surface-EPR row integrates one two-sided face from both sides.
 
@@ -251,39 +211,32 @@ def _requires_internal_boundary_cracking(
     at Palace's default otherwise.  Sidecar rows no spec selects integrate nothing and do not count.
     """
     return any(
-        row["shared_face_group"] is not None
-        for entry in epr_index
-        for row in entry["metadata"]["rows"]
+        row.shared_face_group is not None for entry in epr_entries for row in entry.rows
     )
 
 
 def _domain_energy_rows(
     domain_volumes: list[tuple[str, Mapping[str, Any]]],
     materials: Mapping[str, Mapping[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[EnergyEntry]]:
+    """The ``Domains.Postprocessing.Energy`` rows, one per solution volume, and their index entries."""
     rows = [
         {"Index": index, "Attributes": sorted(info["attributes"])}
         for index, (_, info) in enumerate(domain_volumes, start=1)
     ]
-    index_rows = [
-        {
-            "section": "Domains.Postprocessing.Energy",
-            "index": index,
-            "entry_name": name,
-            "role": "domain_energy",
-            "physical_name": name,
-            "physical_names": [name],
-            "attributes": row["Attributes"],
-            "metadata": {
-                "material": _material_identity(info, materials),
-                "entities": list(info["entities"]),
-            },
-        }
+    entries = [
+        EnergyEntry(
+            index=index,
+            name=name,
+            attributes=row["Attributes"],
+            material=_material_identity(info, materials),
+            entities=list(info["entities"]),
+        )
         for index, ((name, info), row) in enumerate(
             zip(domain_volumes, rows, strict=True), start=1
         )
     ]
-    return rows, index_rows
+    return rows, entries
 
 
 def _material_resolution(
@@ -301,16 +254,15 @@ def _material_resolution(
 
 
 def _lumped_ports(
-    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
-    ports: Sequence[LayoutPortBinding],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    groups: Groups, ports: Sequence[LayoutPortBinding]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[PortEntry]]:
     """The ``LumpedPort`` rows, port information and index entries of ``ports``, each bound to its SGB group ``P<index>``.
 
     A row's circuit keys are the port's ``circuit``, written unchanged; no port is excited.
     """
     rows: list[dict[str, Any]] = []
     information: list[dict[str, Any]] = []
-    index_rows: list[dict[str, Any]] = []
+    entries: list[PortEntry] = []
     for port in ports:
         key = f"P{port.index}"
         group = groups.get("port_surfaces", {}).get(key)
@@ -340,27 +292,26 @@ def _lumped_ports(
                 **port.circuit,
             }
         )
-        info = {
-            "portnumber": port.index,
-            "name": port.name,
-            "type": "lumped_sheet",
-            "direction": list(direction),
-            "physical_name": group["group"],
-            "attributes": attributes,
-            "source_layer": port.source_layer,
-            "target_layer": port.target_layer,
-        }
-        information.append(info)
-        index_rows.append(
+        information.append(
             {
-                "section": "Boundaries.LumpedPort",
-                "index": port.index,
-                "entry_name": key,
-                "role": "port_surface",
+                "portnumber": port.index,
+                "name": port.name,
+                "type": "lumped_sheet",
+                "direction": list(direction),
+                "physical_name": group["group"],
                 "attributes": attributes,
-                "physical_names": [group["group"]],
-                "port_name": port.name,
-                "metadata": {
+                "source_layer": port.source_layer,
+                "target_layer": port.target_layer,
+            }
+        )
+        entries.append(
+            PortEntry(
+                index=port.index,
+                entry_name=key,
+                attributes=attributes,
+                physical_names=[group["group"]],
+                port_name=port.name,
+                sheet={
                     field: group[field]
                     for field in (
                         "port_sheet_id",
@@ -369,13 +320,13 @@ def _lumped_ports(
                         "host_volumes",
                     )
                 },
-            }
+            )
         )
     if len(groups.get("port_surfaces", {})) != len(ports):
         raise ValueError(
             "SGB produced unconfigured or missing layout-sheet port groups."
         )
-    return rows, information, index_rows
+    return rows, information, entries
 
 
 def _direction_tuple(value: Any, name: str) -> tuple[float, float, float]:
@@ -401,7 +352,6 @@ def _domains_from_solution_volumes(
 
 
 def _materials_from_solution_volumes(
-    *,
     domain_volumes: list[tuple[str, Mapping[str, Any]]],
     materials: Mapping[str, Mapping[str, Any]],
 ) -> list[dict[str, Any]]:

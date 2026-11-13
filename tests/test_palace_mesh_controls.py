@@ -88,14 +88,14 @@ def test_set_mesh_retains_omitted_controls_and_invalidates_only_on_change(sim_ty
     ),
 )
 def test_the_old_mesh_options_are_gone(sim_type, removed):
-    """No separate size or Gmsh options remain on ``set_mesh`` or ``set_numerical``, nor in the numerical dict."""
+    """No separate size or Gmsh options remain on ``set_mesh`` or ``set_numerical``, nor in the numerical controls."""
     sim = sim_type()
     with pytest.raises(TypeError):
         sim.set_mesh(**{removed: 1})
     if removed in ("refined_mesh_size", "max_mesh_size"):
         with pytest.raises(TypeError):
             sim.set_numerical(**{removed: 1.0})
-    assert removed not in sim.numerical
+    assert removed not in sim.numerical.to_payload()
 
 
 class PlainRecipe:

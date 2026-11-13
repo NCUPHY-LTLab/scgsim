@@ -4,22 +4,22 @@ The structural group records below exercise config encoding, not a native mesh.
 """
 
 import json
-from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
 from scgsim.meshing import HXT, Budgets, MesherOptions
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
-from scgsim.palace.config.config import (
-    build_eigenmode_config,
-    configure_numerical_controls,
-)
+from scgsim.palace.config.config import build_eigenmode_config
+from scgsim.palace.config.config_models import ConfigInput, EigenmodeSettings
+from scgsim.palace.config.numerical import NumericalControls
 from scgsim.palace.mesh.controls import MeshControls
+from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 
 def _config(sim):
-    return build_eigenmode_config(
+    common = ConfigInput(
+        problem="Eigenmode",
         groups={
             "volumes": {
                 "vacuum": {
@@ -30,7 +30,7 @@ def _config(sim):
             },
             "pec_surfaces": {"conductor": {"attributes": [2]}},
         },
-        ports=(),
+        mesh_path=Path("palace.msh"),
         materials={
             "vacuum": {
                 "kind": "vacuum",
@@ -38,28 +38,22 @@ def _config(sim):
                 "loss_tangent": 0.0,
             }
         },
-        surface_epr_specs={},
+        surface_epr_specs=SurfaceEprSpecs({}),
         numerical=sim.numerical,
-        num_modes=sim.num_modes,
-        target_hz=sim.target_hz,
-        eigenmode_tolerance=sim.eigenmode_tolerance,
-        save_fields=sim.save_fields,
-        mesh_path=Path("palace.msh"),
-    ).config
+    )
+    eigenmode = EigenmodeSettings(
+        sim.num_modes, sim.target_hz, sim.eigenmode_tolerance, sim.save_fields
+    )
+    return build_eigenmode_config(common, ports=(), eigenmode=eigenmode).config
 
 
 def test_new_eigenmode_keeps_amr_unspecified_until_case_configuration():
     """Require a case to supply AMR bounds before producing an Eigenmode config."""
     sim = EigenmodeSim()
-    assert sim.numerical["amr_nonconformal"] is True
-    assert all(
-        sim.numerical[key] is None
-        for key in (
-            "amr_max_passes",
-            "amr_tolerance",
-            "amr_update_fraction",
-        )
-    )
+    assert sim.numerical.amr_nonconformal is True
+    assert sim.numerical.amr_max_passes is None
+    assert sim.numerical.amr_tolerance is None
+    assert sim.numerical.amr_update_fraction is None
     sim.set_mesh(mesher=MesherOptions(algorithm_3d=HXT))
     sim.set_numerical(order=2)
     with pytest.raises(ValueError, match="explicit amr_max_passes"):
@@ -96,8 +90,8 @@ def test_complete_case_controls_survive_later_setters_and_json_transport():
     )
     sim.set_numerical(order=2, tolerance=1e-7)
     sim.set_mesh(budgets=Budgets(max_rounds=3))
-    encoded = json.loads(json.dumps(sim.numerical))
-    assert configure_numerical_controls(**encoded) == sim.numerical
+    encoded = json.loads(json.dumps(sim.numerical.to_payload()))
+    assert NumericalControls(**encoded) == sim.numerical
     assert _config(sim)["Model"]["Refinement"] == {
         "UniformLevels": 0,
         "MaxIts": 3,
@@ -119,11 +113,11 @@ def test_explicit_zero_disables_amr_without_inventing_tolerance_or_fraction():
         "MaxIts": 0,
         "Nonconformal": True,
     }
-    encoded = json.loads(json.dumps(sim.numerical))
+    encoded = json.loads(json.dumps(sim.numerical.to_payload()))
     assert encoded["amr_max_passes"] == 0
     assert encoded["amr_tolerance"] is None
     assert encoded["amr_update_fraction"] is None
-    assert configure_numerical_controls(**encoded) == sim.numerical
+    assert NumericalControls(**encoded) == sim.numerical
 
 
 @pytest.mark.parametrize(
@@ -139,7 +133,7 @@ def test_invalid_case_controls_do_not_partially_apply_other_changes(invalid):
     """Leave numerical state unchanged when a combined update is invalid."""
     sim = EigenmodeSim()
     sim.set_numerical(amr_max_passes=3, amr_tolerance=0.02, amr_update_fraction=0.15)
-    before = deepcopy(sim.numerical)
+    before = sim.numerical
     with pytest.raises((ValueError, TypeError)):
         sim.set_numerical(order=2, **invalid)
     assert sim.numerical == before
@@ -148,9 +142,11 @@ def test_invalid_case_controls_do_not_partially_apply_other_changes(invalid):
 def test_electrostatic_retains_existing_sizing_and_amr_defaults():
     """Keep Electrostatic mesh controls and AMR defaults unchanged by Eigenmode rules."""
     sim = ElectrostaticSim()
-    assert sim.numerical == configure_numerical_controls()
+    assert sim.numerical == NumericalControls().with_defaults(
+        ElectrostaticSim.numerical_defaults
+    )
     assert sim.mesh_controls == MeshControls()
-    assert sim.numerical["amr_nonconformal"] is False
-    assert sim.numerical["amr_max_passes"] == 0
-    assert sim.numerical["amr_tolerance"] == 0.01
-    assert sim.numerical["amr_update_fraction"] is None
+    assert sim.numerical.amr_nonconformal is False
+    assert sim.numerical.amr_max_passes == 0
+    assert sim.numerical.amr_tolerance == 0.01
+    assert sim.numerical.amr_update_fraction is None

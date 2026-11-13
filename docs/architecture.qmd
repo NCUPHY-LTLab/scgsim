@@ -305,6 +305,25 @@ with a message that names the call to make first. One rule differs by problem
 and is stated on each class: `ElectrostaticSim.mesh()` requires
 `set_surface_epr`, `EigenmodeSim.mesh()` does not.
 
+A simulation holds its settings as named, frozen values, each checked when it
+is built and each defined in the stage that reads it first:
+
+| Attribute | Type | Stage | Read by |
+|---|---|---|---|
+| `numerical` | `NumericalControls` | `config.numerical` | `write_config()`, `mesh_summary()` (FEM order) |
+| `surface_epr_specs` | `SurfaceEprSpecs` (one `SurfaceEprSpec` per interface type) | `source.surface_epr` | `mesh()` (the bands), `write_config()` (the `Dielectric` rows) |
+| `epr_request` (Eigenmode) | `EprRequest` | `config.index` | `write_config()` (`check_epr_request` and the index map) |
+
+`write_config()` passes the config builder a `ConfigInput` (the mesh, the
+materials, the Surface-EPR specs and the numerical controls) and the problem's
+own `EigenmodeSettings` or `ElectrostaticSettings`. The builder returns the
+index entries as one record per config section (`PortEntry`, `TerminalEntry`,
+`EnergyEntry`, `SurfaceEprEntry`); `to_payload()` writes each as
+`palace_index_map.json` holds it. The Palace stages import one way, in flow
+order `source`, `mesh`, `config`, `run`: a stage may import the stages before
+it and never one after it, so `source` imports none of the other three. The
+import-linter contract `palace-stage-layers` checks it.
+
 `mesh()` discards derived state before checking prerequisites. Geometry preparation then applies the vacuum region to the
 stack, interprets the physical geometry, records Route-A metadata, and returns
 the prepared stack, geometry input, physical plan and optional material
@@ -316,7 +335,8 @@ caches the resolved ports only after mesh construction succeeds.
 
 Each `write_config()` discards config and handoff state before its
 prerequisite and mesh-file checks. Solver-specific lowering
-still occurs before persistence. A shared private writer replaces each
+still occurs before persistence. The config stage's writer
+(`config.files.persist_problem_files`) replaces each
 caller-ordered metadata file independently and replaces `config.json` last;
 earlier files therefore remain after a later write failure, and `config_path` is
 cached only after the final replacement succeeds. In-memory invalidation does

@@ -3,9 +3,13 @@
 from copy import deepcopy
 
 import pytest
-from palace_sgb_support import effective_input, sidecar_of, surface_epr_specs
+from palace_sgb_support import (
+    effective_input,
+    lower_surface_epr,
+    sidecar_of,
+    surface_epr_specs,
+)
 
-from scgsim.palace.config.surface_epr import build_surface_epr_postprocessing
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 from scgsim.palace.results.surface_contract import validate_surface_epr_config
 
@@ -21,7 +25,7 @@ def groups(tmp_path_factory):
 
 def _produce(groups, interfaces=("MA",)):
     specs = surface_epr_specs(**{kind: None for kind in interfaces})
-    rows, entries = build_surface_epr_postprocessing(groups, specs)
+    rows, entries = lower_surface_epr(groups, specs)
     return {
         "Model": {"L0": 1e-6},
         "Boundaries": {"Postprocessing": {"Dielectric": rows}},

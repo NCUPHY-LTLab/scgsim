@@ -1,7 +1,8 @@
 """Bind authored layout ports to Palace lumped-port records, without Sim state.
 
-Owns the requested port and one step of a lumped port's preparation: asking the shared geometry
-for the rectangle Palace's lumped element needs (``with_rectangular_ports``).
+Owns the requested port, the port it resolves to (``LayoutPortBinding``, which ``mesh`` cuts and
+``config`` writes) and one step of a lumped port's preparation: asking the shared geometry for the
+rectangle Palace's lumped element needs (``with_rectangular_ports``).
 """
 
 from __future__ import annotations
@@ -30,6 +31,22 @@ class RequestedPort:
 
     name: str
     layer: str
+    circuit: Mapping[str, float]
+
+
+@dataclass(frozen=True)
+class LayoutPortBinding:
+    """One requested port bound to an authored sheet of the plan; the n-th port requested is Palace ``P<n>``.
+
+    ``circuit`` holds the port's Palace ``LumpedPort`` circuit keys with their SI values, such as
+    ``{"L": 1e-8}`` (henry) for an Eigenmode port; the port's ``LumpedPort`` row carries them unchanged.
+    """
+
+    index: int
+    name: str
+    target_layer: str
+    source_layer: str
+    direction: tuple[float, float, float]
     circuit: Mapping[str, float]
 
 
