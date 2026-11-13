@@ -56,7 +56,11 @@ def test_source_grid_detects_new_port_contact_to_unselected_host(other_y, change
         build,
         polygons=(*build.polygons, other),
         entities=(*build.entities, owner),
-        metadata={**build.metadata, "source_dbu_um": 0.001},
+        metadata={
+            **build.metadata,
+            "source_dbu_um": 0.001,
+            "geometry_grid": GRID.to_payload(),
+        },
     )
     authored = with_rectangular_junctions(build, (spec,))
     assert {
@@ -166,13 +170,9 @@ def test_public_ground_recipe_retains_pre_lowering_contact_identity(
     )
     if changed:
         with pytest.raises(ValueError, match="contact"):
-            build_gds_stack_geometry_input(
-                gds_file=gds, stack_file=stack, grid_size_um=0.001
-            )
+            build_gds_stack_geometry_input(gds_file=gds, stack_file=stack)
     else:
-        result = build_gds_stack_geometry_input(
-            gds_file=gds, stack_file=stack, grid_size_um=0.001
-        )
+        result = build_gds_stack_geometry_input(gds_file=gds, stack_file=stack)
         audits = result.metadata["geometry_grid_source_audits"]
         assert {row["source_entity_id"] for row in audits} == {"left", "right"}
         assert all(row["requested_polygons"] for row in audits)
@@ -229,7 +229,7 @@ def test_public_rotated_reference_contact_is_checked_against_authored_points(
 
     def build():
         return build_gds_stack_geometry_input(
-            gds_file=gds, stack_file=stack, top_cell_name="TOP", grid_size_um=0.001
+            gds_file=gds, stack_file=stack, top_cell_name="TOP"
         )
 
     if changed:

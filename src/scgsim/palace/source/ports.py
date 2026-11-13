@@ -54,9 +54,9 @@ def with_rectangular_ports(build_input: GeometryBuildInput) -> GeometryBuildInpu
     kept = tuple(item for item in existing if item.port_sheet_id in selected)
     requested = {item.port_sheet_id for item in kept}
     entities = {entity.semantic_id: entity for entity in build_input.entities}
-    grid = geometry_grid_context(build_input)
+    grid_um = geometry_grid_context(build_input).grid_size_um
     added = tuple(
-        _port_request(region, entities, None if grid is None else grid.grid_size_um)
+        _port_request(region, entities, grid_um)
         for region in build_input.port_sheet_regions
         if region.port_sheet_id not in requested
     )

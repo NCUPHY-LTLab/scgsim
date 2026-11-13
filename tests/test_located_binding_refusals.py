@@ -246,16 +246,18 @@ def test_anchors_that_define_no_circle_on_an_input_built_by_hand_are_refused_by_
     assert on(last, (3, 1, 3, 1))
 
 
-def test_a_terminal_record_on_an_input_without_a_grid_is_refused():
-    """A record on a port's terminal needs the model grid SGB binds it on; this input declares none.
+def test_an_input_without_a_grid_is_refused():
+    """The partition reads the model grid the input declares; this input declares none.
 
-    ``GeometryPlan`` always declares the grid, so only an input built by hand reaches this
-    (before: the partition bound the record in floats without a grid).
+    ``GeometryPlan`` and the GDS adapter always declare the grid, so only an input built by
+    hand reaches this.
     """
-    with pytest.raises(InputError) as error:
-        derive_rectangular_junctions(two_layer_terminal((1.0, 0.5)))
+    build = two_layer_terminal((1.0, 0.5))
+    metadata = {k: v for k, v in build.metadata.items() if k != "geometry_grid"}
+    with pytest.raises(ValueError) as error:
+        derive_rectangular_junctions(replace(build, metadata=metadata))
     assert str(error.value).startswith(
-        "the input declares no geometry grid (metadata 'geometry_grid')"
+        "the geometry input declares no geometry grid (metadata 'geometry_grid')"
     )
 
 

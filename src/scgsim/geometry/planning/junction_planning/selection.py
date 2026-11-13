@@ -229,8 +229,7 @@ def built_outline(
     polyline chord does.  SGB rounds a crossing to the model grid point whose cell holds it,
     so a meeting is taken at that grid point.
     """
-    context = geometry_grid_context(build_input)
-    grid_um = None if context is None else context.grid_size_um
+    grid_um = geometry_grid_context(build_input).grid_size_um
     lines, arcs = _outline_edges(build_input, set(entity_ids), frame)
     meetings: dict[int, list[SideMeeting]] = {0: [], width: []}
     for side, found in meetings.items():
@@ -238,11 +237,10 @@ def built_outline(
             found.extend(_line_meetings(line, frame, side, grid_um))
         for arc in arcs:
             found.extend(_arc_meetings(arc, frame, side, grid_um))
+    sheet = (0.0, span * PRECISION_UM, 0.0, width * PRECISION_UM)
     # SGB rounds an arc's crossings to the grid, so an arc within one grid step of the sheet
     # may touch it once built.
-    near = PRECISION_UM if grid_um is None else grid_um
-    sheet = (0.0, span * PRECISION_UM, 0.0, width * PRECISION_UM)
-    widened = (-near, sheet[1] + near, -near, sheet[3] + near)
+    widened = (-grid_um, sheet[1] + grid_um, -grid_um, sheet[3] + grid_um)
     inside = [u for arc in arcs for u in _arc_positions(arc, sheet)]
     return BuiltOutline(
         {side: tuple(found) for side, found in meetings.items()},

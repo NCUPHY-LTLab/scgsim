@@ -12,17 +12,11 @@ import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
-from decimal import Decimal
-from functools import wraps
 from itertools import combinations
 from typing import (
     TYPE_CHECKING,
     Any,
-    Concatenate,
-    ParamSpec,
-    Protocol,
     TypedDict,
-    TypeVar,
     cast,
 )
 
@@ -125,44 +119,6 @@ class _NodingGroups:
         ]
 
 
-_Arguments = ParamSpec("_Arguments")
-_Result = TypeVar("_Result")
-
-
-class _PlanKCell(Protocol):
-    @property
-    def dbu(self) -> float: ...
-
-
-class _PlanComponent(Protocol):
-    @property
-    def kcl(self) -> _PlanKCell: ...
-
-
-class _SourceGridPlan(Protocol):
-    @property
-    def _component(self) -> _PlanComponent: ...
-
-    @property
-    def _grid_size_um(self) -> float | None: ...
-
-
-_PlanT = TypeVar("_PlanT", bound=_SourceGridPlan)
-
-
-def source_grid_context(
-    source_dbu_um: float, requested: float | None
-) -> GeometryGridContext:
-    """Bind projection spacing to the database unit of emitted source GDS."""
-    context = GeometryGridContext(source_dbu_um if requested is None else requested)
-    if Decimal(str(context.grid_size_um)) != Decimal(str(source_dbu_um)):
-        raise ValueError(
-            f"grid_size_um={context.grid_size_um} differs from emitted "
-            f"source_dbu_um={source_dbu_um}"
-        )
-    return context
-
-
 def _signed_area_twice(ring: Sequence[Sequence[float]]) -> float:
     return sum(
         first[0] * second[1] - first[1] * second[0]
@@ -192,8 +148,11 @@ def apply_geometry_grid(
 def _validate_bound_context(
     build_input: GeometryBuildInput, context: GeometryGridContext
 ) -> GeometryGridContext | None:
+    # A fresh input from the adapter is bound here; a bound one is projected again on its own grid.
+    if "geometry_grid" not in build_input.metadata:
+        return None
     bound_context = geometry_grid_context(build_input)
-    if bound_context is not None and bound_context != context:
+    if bound_context != context:
         raise ValueError("geometry grid context differs from the bound input policy")
     return bound_context
 
@@ -764,23 +723,3 @@ def _apply_geometry_grid(
         port_sheet_regions=projected_ports,
         metadata=source_metadata,
     )
-
-
-def with_source_grid(
-    function: Callable[Concatenate[_PlanT, _Arguments], _Result],
-) -> Callable[Concatenate[_PlanT, _Arguments], _Result]:
-    """Wrap one GeometryPlan operation in its actual source DBU scope."""
-
-    @wraps(function)
-    def prepare(
-        plan: _PlanT, *args: _Arguments.args, **kwargs: _Arguments.kwargs
-    ) -> _Result:
-        source_dbu_um = float(
-            plan._component.kcl.dbu  # noqa: SLF001 — GeometryPlan owns the native source DBU.
-        )
-        requested_grid = plan._grid_size_um  # noqa: SLF001 — preserve its native grid request.
-        context = source_grid_context(source_dbu_um, requested_grid)
-        with geometry_grid_scope(context):
-            return function(plan, *args, **kwargs)
-
-    return prepare

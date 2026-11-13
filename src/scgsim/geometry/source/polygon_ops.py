@@ -15,8 +15,7 @@ from scgsim.geometry.models.input import LayoutPolygonSpec
 from scgsim.geometry.primitives.grid import (
     FIX_EMPTY,
     SOURCE_INTENT,
-    current_grid_context,
-    current_grid_size_um,
+    bound_grid_context,
     frame_point,
     polygon_boolean,
     source_place,
@@ -30,16 +29,14 @@ def _fused_boolean_candidates(candidates):
     """Conservative world-frame broad phase for the expensive overlap test.
 
     Raw shared-edge recognition still runs in original local coordinates for
-    every pair. The historical unbound gdstk path keeps its original calls.
+    every pair.
     """
-    if current_grid_context() is None:
-        return None
     from shapely import STRtree, box  # noqa: PLC0415 -- only the bound-grid broad phase needs this optional native dependency
 
     # Native near-vertex insertion is within grid/100 and node rounding within
     # half a grid step. A full step on EACH bound is a conservative candidate
     # envelope, never an overlap/contact acceptance rule.
-    padding = 0.0 if SOURCE_INTENT.get() else current_grid_size_um()
+    padding = 0.0 if SOURCE_INTENT.get() else bound_grid_context().grid_size_um
     envelopes = []
     for polygon in candidates:
         points = tuple(frame_point(tuple(map(float, p))) for p in polygon.points)
@@ -69,7 +66,6 @@ def fused_gdstk_components(
     candidates: Sequence[Any],
 ) -> tuple[tuple[LayoutPolygonSpec, tuple[int, ...], float], ...]:
     """Return stable occupied components for explicit source selectors."""
-    import gdstk  # noqa: PLC0415 -- load the optional GDS kernel only for native source polygon fusion
 
     overlap_candidates = _fused_boolean_candidates(candidates)
     parents = list(range(len(candidates)))
@@ -90,7 +86,10 @@ def fused_gdstk_components(
             overlap = ()
             if overlap_candidates is None or other_index in overlap_candidates[index]:
                 overlap = polygon_boolean(
-                    (polygon,), (other,), "and", precision=current_grid_size_um()
+                    (polygon,),
+                    (other,),
+                    "and",
+                    precision=bound_grid_context().grid_size_um,
                 )
             if overlap or _rings_share_edge(
                 ring_from_gdstk_polygon(polygon), ring_from_gdstk_polygon(other)
@@ -106,18 +105,8 @@ def fused_gdstk_components(
             tuple(candidates[index] for index in indexes),
             (),
             "or",
-            precision=current_grid_size_um(),
+            precision=bound_grid_context().grid_size_um,
         )
-        # GDS permits conductor fragments to share an exact edge. gdstk's
-        # boolean union may retain them separately; normalize this mechanical
-        # source fact without using layout names or proximity inference.
-        if current_grid_context() is None:
-            regions = gdstk.offset(
-                cast("Sequence[gdstk.Polygon]", regions or ()),
-                0.0,
-                join="miter",
-                precision=current_grid_size_um(),
-            )
         if not regions or len(regions) != 1:
             raise ValueError("fused selector component must lower to one polygon")
         outer, holes = split_gdstk_cutline_loop(ring_from_gdstk_polygon(regions[0]))
@@ -296,9 +285,9 @@ def realized_on_lattice(polygons: Sequence[Any]) -> Sequence[Any]:
     recipe keeps working in local coordinates; rounding the local point instead
     would land on a different assembly node whenever the frame rotates.
     """
-    context = current_grid_context()
-    if context is None or SOURCE_INTENT.get():
+    if SOURCE_INTENT.get():
         return polygons
+    context = bound_grid_context()
     import gdstk  # noqa: PLC0415 -- the optional native GDS kernel, needed only when realizing a bound source recipe
 
     def on_lattice(polygon: Any) -> list[tuple[float, float]]:

@@ -203,10 +203,8 @@ def test_stack_container_failures_keep_priority(
 
 
 @pytest.mark.parametrize("workers", (None, 2))
-def test_schema_two_identity_failure_precedes_occurrence_validation(
-    native_inputs, workers
-) -> None:
-    """Compare the actual GDS digest before malformed occurrence metadata."""
+def test_a_plan_stack_with_another_gds_is_refused(native_inputs, workers) -> None:
+    """A GeometryPlan stack read with a GDS other than its own names both digests."""
     gds, stack_path, stack = native_inputs
     stack["metadata"].update(
         component_semantics_schema_version=2,
@@ -219,8 +217,11 @@ def test_schema_two_identity_failure_precedes_occurrence_validation(
     )
     with scope, pytest.raises(ValueError) as failure:
         build_gds_stack_geometry_input(gds_file=gds, stack_file=stack_path)
-    assert (
-        str(failure.value) == "GeometryPlan GDS identity differs from its paired stack"
+    actual = hashlib.sha256(gds.read_bytes()).hexdigest()
+    assert str(failure.value) == (
+        "GeometryPlan stack_file was written for the GDS with SHA-256 'invalid', "
+        f"but gds_file has SHA-256 {actual!r}. Pass the GDS saved with this stack "
+        "(the snapshot's gds_bytes), or prepare the plan again."
     )
 
 
@@ -255,7 +256,6 @@ def test_public_adapter_wrappers_keep_introspection() -> None:
         "stack_file",
         "top_cell_name",
         "metadata",
-        "grid_size_um",
     }
 
 

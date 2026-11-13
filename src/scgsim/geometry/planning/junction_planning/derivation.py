@@ -58,19 +58,19 @@ def derive_rectangular_junctions(build_input):
                 {"exterior": corners, "holes": region.holes}, geometry, 0.0
             )
         except ValueError as error:
-            context = geometry_grid_context(build_input)
-            if context is not None:
-                error.add_note(
-                    json.dumps(
-                        {
-                            "junction_id": request.junction_id,
-                            "geometry_grid": context.to_payload(),
-                            "requested_direction_xy": [dx, dy],
-                            "realization_status": "incompatible_with_existing_shape_contract",
-                        },
-                        sort_keys=True,
-                    )
+            error.add_note(
+                json.dumps(
+                    {
+                        "junction_id": request.junction_id,
+                        "geometry_grid": geometry_grid_context(
+                            build_input
+                        ).to_payload(),
+                        "requested_direction_xy": [dx, dy],
+                        "realization_status": "incompatible_with_existing_shape_contract",
+                    },
+                    sort_keys=True,
                 )
+            )
             raise
         geometries.append(geometry)
     result = partition_junctions(

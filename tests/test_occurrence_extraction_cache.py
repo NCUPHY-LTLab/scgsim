@@ -140,7 +140,10 @@ def test_selector_outputs_are_detached_and_cached_polygons_unchanged(
         },
         materials={"PEC": {"kind": "conductor"}},
     )
-    with occurrence._occurrence_extraction_scope():  # noqa: SLF001 - exercise call-local cache scope
+    with (
+        geometry_grid_scope(GeometryGridContext(0.001)),
+        occurrence._occurrence_extraction_scope(),  # noqa: SLF001 - exercise call-local cache scope
+    ):
         polygons = occurrence.read_polygons_by_layer(parent)
         before = {
             key: [p.points.tolist() for p in values] for key, values in polygons.items()

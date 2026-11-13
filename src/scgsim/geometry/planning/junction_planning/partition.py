@@ -226,8 +226,7 @@ class _JunctionPartitionPlanner:
 
     def initialize(self):
         """Index immutable authored polygons, source Entities and junction identities."""
-        grid = geometry_grid_context(self.build_input)
-        self.grid_um = None if grid is None else grid.grid_size_um
+        self.grid_um = geometry_grid_context(self.build_input).grid_size_um
         self.originals = {p.polygon_id: p for p in self.build_input.polygons}
         # A port sheet keeps its metadata, where the grid realization records it as drawn.
         self.originals.update(

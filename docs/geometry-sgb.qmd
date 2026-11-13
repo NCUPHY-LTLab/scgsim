@@ -167,9 +167,9 @@ immutable `GeometryPlanSnapshot`; `GeometryBuildInput` remains the normalized
 geometry boundary consumed by the backend preparation paths.
 
 Create the plan with `GeometryPlan(component=assembled, root_id="chip",
-layer_stack=..., material_records=..., coupon_padding_um=...,
-grid_size_um=layoutgrid_um)`. Set the source layout DBU to the selected
-`layoutgrid_um` before constructing cells. Register each named reference
+layer_stack=..., material_records=..., coupon_padding_um=...)`. The model grid
+is the layout's database unit (DBU): set the source layout DBU to the grid you
+want before constructing cells. Register each named reference
 occurrence in parent-first order with `register_instance("chip/q0", q0_ref)`.
 `plan.entities` exposes the existing semantic entity inventory with
 slash-qualified `.semantic_id` values. The Notebook supplies the final map with
@@ -179,16 +179,15 @@ bytes and digest, and detached source-occurrence records. It retains no live
 component references. Palace and AEDT consume that exact snapshot through
 `EigenmodeSim.set_plan(snapshot)`.
 
-`GeometryPlan` and `build_gds_stack_geometry_input(...)` accept
-`grid_size_um=None`. With `None`,
-the actual emitted `source_dbu_um` supplies the shared layout grid; an explicit
-mismatch raises an error naming `grid_size_um` and `source_dbu_um`. SCGSim
-checks the source DBU and does not mutate shared PDK or global state.
+`GeometryPlan` and `build_gds_stack_geometry_input(...)` take the grid from
+the GDS they read: its database unit, `source_dbu_um`, is the shared layout
+grid. SCGSim reads the DBU and does not mutate shared PDK or global state.
 `metadata.geometry_grid` records `schema_version` with value
-`scgsim.geometry.grid.v1`, the selected `grid_size_um`, and `coordinate_frame`
+`scgsim.geometry.grid.v1`, the grid's `grid_size_um`, and `coordinate_frame`
 with value `assembly_xy`. It identifies the shared fixed-precision grid for
-assembly XY/layer arrangement. Saved inputs without `metadata.geometry_grid`
-retain historical interpretation. Original source identity is retained alongside the
+assembly XY/layer arrangement. Every later stage reads the grid from it; an
+input without `metadata.geometry_grid` is refused with a `ValueError` that names
+the two calls which declare it. Original source identity is retained alongside the
 computational change ledger, and walls inherit their snapped layout endpoints.
 Z coordinates, film thickness, mesh, quadrature, and solver tolerances remain
 separate; the XY grid does not assert that every 3D coordinate lies on it.

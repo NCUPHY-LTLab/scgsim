@@ -45,20 +45,16 @@ class SourceRecipeJob:
     function: Any = None
     args: tuple = ()
     kwargs: Mapping[str, Any] = field(default_factory=dict)
-    expected: Any = None
-    comparison_error: str | None = None
     error: Exception | None = None
     traceback: Any = None
 
 
-def source_recipe_job(  # noqa: PLR0913 -- acquisition and comparison controls stay distinct from the forwarded recipe arguments
+def source_recipe_job(
     function,
     *args,
     source_cell=None,
     source_polygons=None,
     excluded_reference_indexes=(),
-    expected=None,
-    comparison_error=None,
     **kwargs,
 ):
     """Prepare worker-owned inputs on the source thread, before pool dispatch."""
@@ -73,9 +69,7 @@ def source_recipe_job(  # noqa: PLR0913 -- acquisition and comparison controls s
             layer: tuple(polygon.copy() for polygon in polygons)
             for layer, polygons in source_polygons.items()
         }
-    return SourceRecipeJob(
-        function, deepcopy(args), copied, deepcopy(expected), comparison_error
-    )
+    return SourceRecipeJob(function, deepcopy(args), copied)
 
 
 def failed_source_recipe(error):
@@ -88,10 +82,7 @@ def run_source_recipe(job):
     """Execute one source recipe and preserve its ordered failure behavior."""
     if job.error is not None:
         raise job.error.with_traceback(job.traceback)
-    result = job.function(*job.args, **job.kwargs)
-    if job.comparison_error is not None and result != job.expected:
-        raise ValueError(job.comparison_error)
-    return result
+    return job.function(*job.args, **job.kwargs)
 
 
 def resolve_material_kind(

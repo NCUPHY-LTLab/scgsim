@@ -211,14 +211,12 @@ def _refuse_bands_narrower_than_a_face(
     A band below the class B limit becomes a face the meshing stage refuses after the build, and its lineage
     (one source edge, one band offset) would read as an SGB defect; the request made it narrow.  This is the
     first point where both the margins and the model grid are known: the specs come with the simulation,
-    the grid with the prepared input, and nothing is built yet.  An input without a grid is left to SGB,
-    which refuses it.
+    the grid with the prepared input, and nothing is built yet.
     """
     margin_lists = _margin_lists(specs or {})
-    context = geometry_grid_context(build_input) if margin_lists else None
-    if context is None:
+    if not margin_lists:
         return
-    grid_um = context.grid_size_um
+    grid_um = geometry_grid_context(build_input).grid_size_um
     limit = FineStructureLimits().face_width_steps
     narrow = [
         f"{label} band={band} ({lower:g} to {upper:g} um) is {upper - lower:.6g} um "
