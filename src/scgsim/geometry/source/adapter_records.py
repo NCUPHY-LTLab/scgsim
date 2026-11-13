@@ -133,76 +133,75 @@ def lower_layer_record(
 ) -> Audited[tuple[LoweredEntity, ...]]:
     """Lower a worker-private layer record through the existing source recipes.
 
-    ``plane_bounds`` is where a Ground's plane lies when the layout draws none.
+    The record's polygons come from its geometry source; one Entity owns them all, or
+    each becomes its own Entity (a Ground of several regions, a layer split for its
+    ports, a fused selector that keeps every unexcluded region). ``plane_bounds`` is
+    where a Ground's plane lies when the layout draws none.
     """
     entity = entity_from_layer_record(record, materials=materials)
     geometry_source = str(entity.geometry.get("geometry_source", "gds_polygon"))
     if geometry_source == "die_face_minus_ground_mask":
-        occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
-        audits = ()
-        if occurrence_polygons is not None:
-            entity_polygons = tuple(
-                LayoutPolygonSpec(
-                    polygon_id=f"{entity.semantic_id}__P{index:04d}",
-                    layer=f"{record['layer']}/{record['datatype']}",
-                    exterior=region["exterior"],
-                    holes=region["holes"],
-                    object_name=entity.semantic_id,
-                    net_name=entity.net_id,
-                    metadata={"source": "die_face_minus_ground_mask"},
-                )
-                for index, region in enumerate(occurrence_polygons)
-            )
-        else:
-            derived = audited_declared_source(
-                derived_ground_polygons,
+        read = _ground_polygons(scope, entity, record, polygons_by_layer, plane_bounds)
+        split = len(read.value) > 1
+    else:
+        if geometry_source == "gds_polygon":
+            read = audited_declared_source(
+                gds_polygons_for_entity,
                 scope,
                 entity,
                 polygons_by_layer=polygons_by_layer,
-                plane=plane_bounds,
             )
-            entity_polygons, audits = derived.value, derived.audits
-        if len(entity_polygons) > 1:
-            return Audited(
-                tuple(
-                    _split_polygon_entity(entity, polygon, index)
-                    for index, polygon in enumerate(entity_polygons)
-                ),
-                audits,
-            )
-        return Audited(
-            (
-                LoweredEntity(
-                    _entity_with_polygon_geometry(entity, entity_polygons),
-                    entity_polygons,
-                ),
-            ),
-            audits,
+        else:
+            read = Audited(())
+        split = bool(entity.geometry.get("split_polygons_as_entities")) or (
+            entity.geometry.get("route_ab_fused_selector_mode", False)
+            and entity.geometry.get("selector_point_um") is None
         )
-    if geometry_source == "gds_polygon":
-        read = audited_declared_source(
-            gds_polygons_for_entity,
-            scope,
-            entity,
-            polygons_by_layer=polygons_by_layer,
-        )
-        entity_polygons, audits = read.value, read.audits
-    else:
-        entity_polygons, audits = (), ()
-
-    if entity.geometry.get("split_polygons_as_entities") or (
-        entity.geometry.get("route_ab_fused_selector_mode", False)
-        and entity.geometry.get("selector_point_um") is None
-    ):
+    if split:
         return Audited(
             tuple(
                 _split_polygon_entity(entity, polygon, index)
-                for index, polygon in enumerate(entity_polygons)
+                for index, polygon in enumerate(read.value)
             ),
-            audits,
+            read.audits,
         )
-    entity = _entity_with_polygon_geometry(entity, entity_polygons)
-    return Audited((LoweredEntity(entity, entity_polygons),), audits)
+    return Audited(
+        (LoweredEntity(_entity_with_polygon_geometry(entity, read.value), read.value),),
+        read.audits,
+    )
+
+
+def _ground_polygons(
+    scope: GridScope,
+    entity: SemanticEntitySpec,
+    record: Any,
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
+    plane_bounds: PlaneBounds,
+) -> Audited[tuple[LayoutPolygonSpec, ...]]:
+    """A Ground's polygons: those its occurrences already derived, or derived here from its mask."""
+    occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
+    if occurrence_polygons is None:
+        return audited_declared_source(
+            derived_ground_polygons,
+            scope,
+            entity,
+            polygons_by_layer=polygons_by_layer,
+            plane=plane_bounds,
+        )
+    return Audited(
+        tuple(
+            LayoutPolygonSpec(
+                polygon_id=f"{entity.semantic_id}__P{index:04d}",
+                layer=f"{record['layer']}/{record['datatype']}",
+                exterior=region["exterior"],
+                holes=region["holes"],
+                object_name=entity.semantic_id,
+                net_name=entity.net_id,
+                metadata={"source": "die_face_minus_ground_mask"},
+            )
+            for index, region in enumerate(occurrence_polygons)
+        )
+    )
 
 
 def _split_polygon_entity(
