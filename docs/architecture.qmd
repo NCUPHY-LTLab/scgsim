@@ -37,7 +37,7 @@ scgsim/
 │   ├── sgb/          # SGB core that Palace builds on; one folder per stage of the build
 │   │   ├── exact/        # the exact vocabulary every stage shares
 │   │   ├── prisms/       # S2: the effective input as prisms, levels and slabs
-│   │   ├── bands/        # S3: inset bands and refinement curves as cut families
+│   │   ├── bands/        # S3: inset bands as cut families
 │   │   ├── arrangement/  # S4 and S5: noding, planar arrangement, cell labels
 │   │   ├── topology/     # S6 to S8: vertices to volumes, routes and groups
 │   │   ├── checks/       # S9: structural validation, slivers, file checks

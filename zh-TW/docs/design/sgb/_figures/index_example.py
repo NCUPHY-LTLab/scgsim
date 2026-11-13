@@ -405,9 +405,7 @@ def unwritten(model) -> dict:
             {model.routed.face_group.get(f.id) or "(no group)" for f in dead}
         ),
         "edges_only_on_those_faces": sum(
-            1
-            for e in topo.edges.values()
-            if e.id not in used and e.kind != "refinement"
+            1 for e in topo.edges.values() if e.id not in used
         ),
         "arc_centre_vertices": len(
             {e.centre_vertex for e in topo.edges.values() if e.centre_vertex}

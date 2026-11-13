@@ -7,13 +7,13 @@ Run from the repository root with the package's environment (gmsh comes with the
 
 It builds a tiny model with ``build_sgb_geometry`` from the real inputs of the tests (``tests/sgb_inputs.py``):
 ``gds_pad_in_ground`` under Routes B and C (a 100 um die, a ground plane, a 20 um pad, one lumped port; bands of 0.5 and
-1 um on the pad top and one refinement curve) and ``thin_film_pair`` under Route A (bands on the sheet ``chip/left``).
+1 um on the pad top) and ``thin_film_pair`` under Route A (bands on the sheet ``chip/left``).
 The files go to a scratch folder.  On Routes B and C it then runs what a consumer runs: the Palace side (open the XAO in
 Gmsh, ``verify_loaded``, ``apply_sidecar_embeds``, a coarse mesh) and the AEDT side (``export_aedt_step`` and
 ``read_step_guard``).  Every sidecar is read with the contract's ``read_sidecar`` and indexed by its tables and views.
 
 It writes markdown blocks to ``../figures/`` with the prefix ``consumer-``.  Every JSON excerpt is a selection of real
-records and keys of the ``scgsim.sgb.sidecar.v3`` sidecar; a list that is cut is shown with the string ``"..."`` as its
+records and keys of the ``scgsim.sgb.sidecar.v4`` sidecar; a list that is cut is shown with the string ``"..."`` as its
 last item.  The Palace group dict is the one Palace builds, ``scgsim.palace.mesh.physical_groups.groups_from_sidecar``;
 the AEDT rows group the written faces by ``face.group``.
 """
@@ -39,7 +39,6 @@ from scgsim.geometry.sgb import build_sgb_geometry  # noqa: E402
 from scgsim.geometry.sgb.bands.requests import (  # noqa: E402
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
 )
 from scgsim.geometry.sgb.checks.verification.loaded import (  # noqa: E402
     apply_sidecar_embeds,
@@ -69,7 +68,6 @@ def build_models(out: Path) -> dict[str, Path]:
             insets=(
                 InsetRequest("pad_top", ConductorSurface("pad", "top"), (0.5, 1.0)),
             ),
-            refinements=(RefinementRequest("ref", 0.2, ((45.0, 45.0), (55.0, 45.0))),),
             output_dir=folders[route],
         )
     films = thin_film_pair()
@@ -190,7 +188,6 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
                 "surface_epr_row": rows,
                 "inset_request": b["inset_request"],
                 "band_family": b["band_family"],
-                "refinement_request": b["refinement_request"],
                 "cut_family": b["cut_family"],
             },
         ),
@@ -233,23 +230,13 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
 
 
 def embeds(b: dict[str, Any]) -> dict[str, Any]:
-    """The port, the refinement edge embedded in its host face, and the first mesh features of each kind."""
-    ((edge_id, host),) = views.embedded_edges(b)
-    edge = b["edge"][edge_id]
+    """The port and the first mesh feature of each kind."""
     by_kind: dict[str, tuple[str, Any]] = {}
     for feature_id, feature in sorted(
         b["mesh_feature"].items(), key=lambda item: (item[1]["kind"], item[0])
     ):
         by_kind.setdefault(feature["kind"], (feature_id, shorten(feature, 3)))
-    return {
-        "port": b["port"],
-        "face": {
-            host: {"embedded_edges": b["face"][host]["embedded_edges"], "...": "..."}
-        },
-        "edge": {edge_id: edge},
-        "carrier": pick(b["carrier"], *edge["carriers"]),
-        "mesh_feature": dict(by_kind.values()),
-    }
+    return {"port": b["port"], "mesh_feature": dict(by_kind.values())}
 
 
 def body(b: dict[str, Any]) -> dict[str, Any]:
@@ -394,10 +381,8 @@ def run_tables(
             lambda r: f"{r['verify_loaded'].max_relative_volume_error:.2e}",
         ),
         (
-            "`apply_sidecar_embeds` 嵌入的 face／edge",
-            lambda r: (
-                f"{r['apply_sidecar_embeds']['faces']} / {r['apply_sidecar_embeds']['edges']}"
-            ),
+            "`apply_sidecar_embeds` 嵌入的 sheet face",
+            lambda r: str(r["apply_sidecar_embeds"]),
         ),
         (
             "粗 mesh（`Mesh.MeshSizeMax` = 60 µm）的節點數",

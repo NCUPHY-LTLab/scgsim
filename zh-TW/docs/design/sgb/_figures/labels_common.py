@@ -64,7 +64,6 @@ PALETTE = {
     "seam": "#c0392b",
     "band": "#2171b5",
     "cap": "#2a8f5a",
-    "refine": "#8e44ad",
     "none": "#f2f2f2",
 }
 # primary physical-group prefix -> colour (shared by the 3D views)
@@ -183,13 +182,11 @@ def real_catalogue(*, film: bool = False, **options):
     return build_prism_catalogue(effective.build_input, effective.representation)
 
 
-def build_model(
-    catalogue, route: str, *, insets=(), refinements=(), keep_raw: bool = False
-):
+def build_model(catalogue, route: str, *, insets=(), keep_raw: bool = False):
     """The validated conformal model of a catalogue under a route (stages S4 to S9)."""
 
     return build_model_from_catalogue(
-        catalogue, route, insets=insets, refinements=refinements, keep_raw=keep_raw
+        catalogue, route, insets=insets, keep_raw=keep_raw
     )
 
 
