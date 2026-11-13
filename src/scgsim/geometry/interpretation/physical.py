@@ -8,31 +8,63 @@ source contact evidence. It adds no contact graph that the source did not declar
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
-from scgsim.geometry.grid.grid import with_input_grid
 from scgsim.geometry.interpretation.envelope import auto_vacuum_envelope_bounds
 from scgsim.geometry.models.entities import requires_route_representation
+from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.physical import (
     PHYSICAL_LAYER_FIELD,
     ApproximationProfile,
     PhysicalLayerDeclaration,
+    PhysicalRepresentationPlan,
+    interpret_physical_layers,
     source_plain,
-)
-from scgsim.geometry.models.physical import (
-    interpret_physical_layers as interpret_physical_layers,
 )
 from scgsim.geometry.source.intents import route_a_sheet_interfaces
 from scgsim.semantics.route_a import geometry_z_range
 from scgsim.semantics.snapshot import canonical_sha256
 
 
-@with_input_grid
 def interpret_physical_geometry(
     build_input: Any, stack: Mapping[str, Any], profile: ApproximationProfile
 ):
-    """Return effective input/stack and the sole source-bound representation plan."""
+    """Return effective input/stack and the sole source-bound representation plan.
+
+    The steps, in order: map each declared body to its physical representation, enclose
+    the effective bodies in the automatic vacuum region, derive the rectangular
+    junctions (``scgsim.geometry.junctions``) on the effective input, and bind each sheet
+    interface to the profile's conductor representation.
+    """
+    # An input without a declared grid is refused before anything else.
+    geometry_grid_context(build_input)
+    declarations, bindings = _physical_declarations(build_input, stack, profile)
+    plan = _representation_plan(build_input, stack, profile, declarations)
+    mapped = _mapped_bodies(build_input, stack, plan, bindings)
+    plan = replace(plan, entities=mapped.facts)
+    plan = replace(plan, enclosures=_vacuum_enclosures(mapped, plan))
+    effective_input, effective_stack = _with_representation_payload(
+        build_input, mapped, plan
+    )
+    # Junction lowering loads optional gdstk; declaration-only imports stay usable.
+    from scgsim.geometry.junctions.derivation import derive_rectangular_junctions  # noqa: PLC0415 -- load optional gdstk only when interpreting executable geometry
+
+    effective_input = derive_rectangular_junctions(effective_input)
+    return (
+        _with_context_sheet_interfaces(effective_input, plan.context),
+        effective_stack,
+        plan,
+    )
+
+
+def _physical_declarations(
+    build_input: Any, stack: Mapping[str, Any], profile: ApproximationProfile
+) -> tuple[list[PhysicalLayerDeclaration], dict[str, str]]:
+    """Each body's declared physical layer, and the layer each declaring body binds to.
+
+    A body the profile must represent by route refuses when it declares none.
+    """
     records = {item["semantic_id"]: item for item in stack["layers"]}
     records.update(stack["solution_regions"])
     declarations = []
@@ -55,7 +87,17 @@ def interpret_physical_geometry(
             raise ValueError(
                 f"source body {entity.semantic_id!r} lacks neutral physical declaration"
             )
-    plan = interpret_physical_layers(
+    return declarations, bindings
+
+
+def _representation_plan(
+    build_input: Any,
+    stack: Mapping[str, Any],
+    profile: ApproximationProfile,
+    declarations: list[PhysicalLayerDeclaration],
+) -> PhysicalRepresentationPlan:
+    """The profile's plan for the declared layers, bound to the source it interprets."""
+    return interpret_physical_layers(
         declarations,
         profile,
         supporting_entities={
@@ -76,6 +118,24 @@ def interpret_physical_geometry(
             {"input": source_plain(build_input), "stack": source_plain(stack)}
         ),
     )
+
+
+@dataclass(frozen=True)
+class _MappedBodies:
+    """The input with each body mapped to its representation, the stack likewise, and each body's mapping."""
+
+    effective_input: Any
+    effective_stack: dict[str, Any]
+    facts: dict[str, Any]
+
+
+def _mapped_bodies(
+    build_input: Any,
+    stack: Mapping[str, Any],
+    plan: PhysicalRepresentationPlan,
+    bindings: Mapping[str, str],
+) -> _MappedBodies:
+    """Map each body's Z interval and geometry through the plan, in the input and in the stack."""
     entities, facts = [], {}
     effective_stack = source_plain(stack)
     effective_records = {
@@ -106,17 +166,24 @@ def interpret_physical_geometry(
                 **record.get("metadata", {}),
                 "physical_representation": mapped,
             }
-    plan = replace(plan, entities=facts)
-    effective_input = replace(build_input, entities=tuple(entities))
+    return _MappedBodies(
+        replace(build_input, entities=tuple(entities)), effective_stack, facts
+    )
+
+
+def _vacuum_enclosures(
+    mapped: _MappedBodies, plan: PhysicalRepresentationPlan
+) -> dict[str, Any]:
+    """The automatic vacuum region of each body that declares one, around the effective bodies."""
     enclosures = {}
-    for entity in entities:
+    for entity in mapped.effective_input.entities:
         if not entity.metadata.get("is_auto_vacuum_region"):
             continue
         effective_body = auto_vacuum_envelope_bounds(
-            effective_input, route=None, representation_context=plan.context
+            mapped.effective_input, route=None, representation_context=plan.context
         )
-        source_geometry = facts[entity.semantic_id]["source_geometry"]
-        source_low, source_high = facts[entity.semantic_id]["source_interval_um"]
+        source_geometry = mapped.facts[entity.semantic_id]["source_geometry"]
+        source_low, source_high = mapped.facts[entity.semantic_id]["source_interval_um"]
         source_bounds = {
             **source_geometry["domain_bounds_um"],
             "z_min_um": source_low,
@@ -127,26 +194,25 @@ def interpret_physical_geometry(
             source_padding_um=entity.metadata["vacuum_region_padding_um"],
             source_envelope_bounds_um=source_bounds,
         )
-    plan = replace(plan, enclosures=enclosures)
+    return enclosures
+
+
+def _with_representation_payload(
+    build_input: Any, mapped: _MappedBodies, plan: PhysicalRepresentationPlan
+) -> tuple[Any, dict[str, Any]]:
+    """The effective input and stack, each carrying the plan's payload in its metadata."""
     payload = plan.to_payload()
+    effective_stack = mapped.effective_stack
     effective_stack["metadata"] = {
         **effective_stack.get("metadata", {}),
         "physical_representation": payload,
     }
     effective_input = replace(
-        effective_input,
+        mapped.effective_input,
         solution_regions=effective_stack["solution_regions"],
         metadata={**build_input.metadata, "physical_representation": payload},
     )
-    # Junction lowering loads optional gdstk; declaration-only imports stay usable.
-    from scgsim.geometry.junctions.derivation import derive_rectangular_junctions  # noqa: PLC0415 -- load optional gdstk only when interpreting executable geometry
-
-    effective_input = derive_rectangular_junctions(effective_input)
-    return (
-        _with_context_sheet_interfaces(effective_input, plan.context),
-        effective_stack,
-        plan,
-    )
+    return effective_input, effective_stack
 
 
 def _with_context_sheet_interfaces(build_input: Any, context: Any) -> Any:

@@ -12,6 +12,7 @@ from scgsim.geometry.grid.planar_loops import (
     cancel_reversed_planar_edges,
     simple_planar_loops_from_edges,
 )
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.junctions.core import PRECISION_UM, JunctionPartitionFormat
 from scgsim.geometry.junctions.exact_geometry import cross, inside_ring, region_edges
 from scgsim.geometry.models.input import (
@@ -35,6 +36,8 @@ class JunctionModel:
     originals: dict[str, LayoutPolygonSpec]
     records: dict[str, dict[str, Any]]
     output_format: JunctionPartitionFormat
+    # The input's grid, which the model's Booleans run on.
+    scope: GridScope
     authored: set[str] = field(init=False)
     eligible_polygons: dict[str, set[str]] = field(init=False)
     sheet_metals: defaultdict[str, set[str]] = field(init=False)

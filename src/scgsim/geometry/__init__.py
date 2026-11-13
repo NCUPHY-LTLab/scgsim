@@ -1,15 +1,19 @@
 """The geometry API: build a prepared input from a layout and a stack, and interpret it physically for a build.
 
-One folder per stage, in the order the work flows for a layout; ``models`` and ``grid`` are what the stages share:
+The folders in the order the work flows for a layout. ``models`` and ``grid`` come first
+because every stage uses them; the stages follow in their order:
 
-- ``models``: the typed records that cross stages.
-- ``source``: from a layout and a stack to a prepared snapshot.
-- ``grid``: the grid engine the stages call: noding, tagged regions, overlays, loops and polygon operations.
-- ``interpretation``: from a prepared input to its physical representation and vacuum enclosure.
-- ``junctions``: the rectangular partition around a lumped port.
-- ``surface_epr``: from Surface-EPR specs to the inset requests of the SGB build.
-- ``sgb``: the geometry builder.
-- ``planning``: what only AEDT's native construction uses, called from ``scgsim.aedt``.
+- ``models`` (shared records): the typed records that cross stages; imports no other geometry code.
+- ``grid`` (shared grid operations): noding on the model grid, polygon Booleans, overlays and loops; each
+  operation takes the ``GridScope`` it runs in.
+- ``source`` (stage 1): from a layout and a stack to a prepared snapshot on the layout's grid.
+- ``interpretation`` (stage 2): from a prepared input to its physical representation and vacuum enclosure;
+  its last steps derive the rectangular junctions and bind the sheet interfaces.
+- ``junctions`` (the junction step of ``interpretation``): the rectangular partition around a lumped port;
+  AEDT's planar preparation also calls its partition.
+- ``surface_epr`` (Palace only): from Surface-EPR specs to the inset requests of the SGB build.
+- ``sgb`` (stage 3): the geometry builder, from the effective input.
+- ``planning`` (AEDT only): what AEDT's native construction uses, called from ``scgsim.aedt``.
 """
 
 from scgsim.geometry.interpretation.physical import interpret_physical_geometry

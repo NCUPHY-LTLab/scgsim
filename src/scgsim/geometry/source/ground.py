@@ -7,31 +7,23 @@ transforms remain at the occurrence boundary and are applied exactly once.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from functools import wraps
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, cast
 
-from scgsim.geometry.grid.grid import (
-    named_source,
-    polygon_boolean,
-    polygon_rings,
-    preserve_declared_source,
-    source_place,
-    source_refusal,
-)
+from scgsim.geometry.grid.booleans import polygon_boolean, polygon_rings
 from scgsim.geometry.grid.loops import canonical_loop_sort_key
 from scgsim.geometry.grid.planar_loops import PlanarLoop
 from scgsim.geometry.grid.polygon_ops import (
     FIX_SELECTOR,
     fused_gdstk_components,
+    layout_polygon_region,
     point_in_layout_polygon,
     realized_on_lattice,
     selector_place,
 )
-from scgsim.geometry.grid.polygon_ops import (
-    layout_polygon_region as layout_polygon_region,
-)
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 
 
@@ -43,111 +35,81 @@ def _mask_key(entity: SemanticEntitySpec) -> tuple[int, int]:
     return (int(mask_layer[0]), int(mask_layer[1]))
 
 
-def _named_by_mask_layer(
-    function: Callable[..., tuple[LayoutPolygonSpec, ...]],
-) -> Callable[..., tuple[LayoutPolygonSpec, ...]]:
-    """Name the Ground and its mask layer in the refusals of the drawn polygons it reads."""
+@dataclass(frozen=True)
+class DrawnPlane:
+    """The plane outline a component draws, and the GDS layer it is drawn on, which a refusal of it names."""
 
-    @wraps(function)
-    def named(
-        entity: SemanticEntitySpec, **kwargs: Any
-    ) -> tuple[LayoutPolygonSpec, ...]:
-        mask = _mask_key(entity)
-        with named_source(entity.semantic_id, f"{mask[0]}/{mask[1]}"):
-            return function(entity, **kwargs)
-
-    return named
+    polygons: Sequence[Any]
+    layer: Sequence[int] | None = None
 
 
-@preserve_declared_source
-@_named_by_mask_layer
-def derived_ground_polygons(  # noqa: PLR0913 -- the Ground recipe: the entity, three layout inputs, and the plane outline with its layer
+@dataclass(frozen=True)
+class PlaneBounds:
+    """Where a Ground's plane lies when nothing draws it: the solution region it names, else the cell's bounds."""
+
+    cell_bounds_um: Mapping[str, float]
+    domain_bounds_by_semantic_id: Mapping[str, Mapping[str, Any]]
+
+
+def derived_ground_polygons(
+    scope: GridScope,
     entity: SemanticEntitySpec,
     *,
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
-    cell_bounds_um: Mapping[str, float],
-    domain_bounds_by_semantic_id: Mapping[str, Mapping[str, Any]],
-    plane_polygons: Sequence[Any] | None = None,
-    plane_layer: Sequence[int] | None = None,
+    plane: DrawnPlane | PlaneBounds,
 ) -> tuple[LayoutPolygonSpec, ...]:
     """Derive one positive Ground from its plane, mask and explicit includes.
 
-    ``plane_layer`` is the GDS layer ``plane_polygons`` were read from; a refusal of the plane
-    outline names it.
+    A declared source recipe: its callers run it through ``audited_declared_source``.
+    The refusals of the drawn polygons it reads name the Ground and its mask layer; a
+    refusal of a drawn plane outline names the plane's layer instead.
     """
     import gdstk  # noqa: PLC0415 -- Ground construction is the boundary that requires the optional native GDS kernel
 
     mask_key = _mask_key(entity)
-    if plane_polygons is None:
-        exterior = _rectangle_ring(
-            _ground_plane_bounds(entity, domain_bounds_by_semantic_id, cell_bounds_um)
-        )
-        base = (gdstk.Polygon(exterior),)
-    else:
-        base = tuple(realized_on_lattice(plane_polygons))
-        if plane_layer is not None:
-            _read_rings_on_layer(entity, plane_layer, base)
+    named = scope.naming(entity.semantic_id, f"{mask_key[0]}/{mask_key[1]}")
+    base = _ground_plane(named, gdstk, entity, plane)
     without_mask = polygon_boolean(
+        named,
         base,
         _merged_gdstk_polygons(
-            realized_on_lattice(polygons_by_layer.get(mask_key, ()))
+            named, realized_on_lattice(named, polygons_by_layer.get(mask_key, ()))
         ),
         "not",
         precision=1e-9,
     )
-    include_layer = entity.geometry.get("include_layer")
-    include_points = entity.geometry.get("include_selector_points_um", ())
-    if include_layer is None and include_points:
-        raise ValueError(
-            f"{entity.semantic_id} include_selector_points_um requires include_layer"
-        )
-    included: list[Any] = []
-    source_includes = entity.geometry.get("source_occurrence_includes", ())
-    if source_includes and (include_layer is not None or include_points):
-        raise ValueError(
-            f"{entity.semantic_id} mixes source contributions with global includes"
-        )
-    _append_source_includes(included, gdstk, entity, mask_key, source_includes)
-    if include_layer is not None:
-        if (
-            not isinstance(include_layer, Sequence)
-            or isinstance(include_layer, str | bytes)
-            or len(include_layer) != 2
-        ):
-            raise TypeError(
-                f"{entity.semantic_id} include_layer must be a GDS layer pair"
-            )
-        include_key = (int(include_layer[0]), int(include_layer[1]))
-        # The include polygons are drawn on the include layer, so their refusals name it.
-        with named_source(entity.semantic_id, f"{include_key[0]}/{include_key[1]}"):
-            included.extend(
-                _selected_includes(
-                    entity,
-                    gdstk,
-                    polygons_by_layer.get(include_key, ()),
-                    include_points,
-                )
-            )
-    regions = polygon_boolean(without_mask or (), tuple(included), "or", precision=1e-9)
+    included = _ground_includes(named, gdstk, entity, mask_key, polygons_by_layer)
+    regions = polygon_boolean(
+        named, without_mask or (), tuple(included), "or", precision=1e-9
+    )
     normalized_regions = sorted(
-        (_region_loops(region) for region in regions or ()),
+        (_region_loops(named, region) for region in regions or ()),
         key=lambda region: (
             canonical_loop_sort_key(region[0]),
             tuple(canonical_loop_sort_key(hole) for hole in region[1]),
         ),
     )
     if not normalized_regions:
-        plane = [corner for polygon in base for corner in polygon.bounding_box()]
+        corners = [corner for polygon in base for corner in polygon.bounding_box()]
         raise ValueError(
-            source_refusal(
+            named.refusal(
                 f"{entity.semantic_id} derived ground must lower to at least one planar region",
                 [
-                    f"the ground mask on this layer covers its whole plane, at {source_place(plane)}"
+                    f"the ground mask on this layer covers its whole plane, at {named.place(corners)}"
                 ],
                 "Fix the layout or the declaration: leave part of the plane outside the "
                 "ground mask, or include the metal the Ground keeps.",
             )
         )
+    return _ground_polygon_records(entity, mask_key, normalized_regions)
+
+
+def _ground_polygon_records(
+    entity: SemanticEntitySpec,
+    mask_key: tuple[int, int],
+    regions: Sequence[tuple[PlanarLoop, tuple[PlanarLoop, ...]]],
+) -> tuple[LayoutPolygonSpec, ...]:
+    """The Ground's regions as its layout polygons, on its mask layer."""
     return tuple(
         LayoutPolygonSpec(
             polygon_id=f"{entity.semantic_id}__P{index:04d}",
@@ -160,37 +122,107 @@ def derived_ground_polygons(  # noqa: PLR0913 -- the Ground recipe: the entity, 
                 "gds_layer": mask_key[0],
                 "gds_datatype": mask_key[1],
                 "source": "die_face_minus_ground_mask",
-                "include_layer": include_layer,
+                "include_layer": entity.geometry.get("include_layer"),
             },
         )
-        for index, (outer, holes) in enumerate(normalized_regions)
+        for index, (outer, holes) in enumerate(regions)
     )
 
 
+def _ground_plane(
+    scope: GridScope,
+    gdstk: ModuleType,
+    entity: SemanticEntitySpec,
+    plane: DrawnPlane | PlaneBounds,
+) -> tuple[Any, ...]:
+    """The plane the Ground is cut from: its drawn outline on the grid, or its bounds rectangle."""
+    if isinstance(plane, PlaneBounds):
+        exterior = _rectangle_ring(
+            _ground_plane_bounds(
+                entity, plane.domain_bounds_by_semantic_id, plane.cell_bounds_um
+            )
+        )
+        return (gdstk.Polygon(exterior),)
+    base = tuple(realized_on_lattice(scope, plane.polygons))
+    if plane.layer is not None:
+        _read_rings_on_layer(scope, entity, plane.layer, base)
+    return base
+
+
+def _ground_includes(
+    scope: GridScope,
+    gdstk: ModuleType,
+    entity: SemanticEntitySpec,
+    mask_key: tuple[int, int],
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
+) -> list[Any]:
+    """The metal the Ground keeps inside its mask: occurrence contributions or selected include regions."""
+    include_layer = entity.geometry.get("include_layer")
+    include_points = entity.geometry.get("include_selector_points_um", ())
+    if include_layer is None and include_points:
+        raise ValueError(
+            f"{entity.semantic_id} include_selector_points_um requires include_layer"
+        )
+    included: list[Any] = []
+    source_includes = entity.geometry.get("source_occurrence_includes", ())
+    if source_includes and (include_layer is not None or include_points):
+        raise ValueError(
+            f"{entity.semantic_id} mixes source contributions with global includes"
+        )
+    included.extend(
+        _source_include_regions(scope, gdstk, entity, mask_key, source_includes)
+    )
+    if include_layer is not None:
+        if (
+            not isinstance(include_layer, Sequence)
+            or isinstance(include_layer, str | bytes)
+            or len(include_layer) != 2
+        ):
+            raise TypeError(
+                f"{entity.semantic_id} include_layer must be a GDS layer pair"
+            )
+        include_key = (int(include_layer[0]), int(include_layer[1]))
+        # The include polygons are drawn on the include layer, so their refusals name it.
+        included.extend(
+            _selected_includes(
+                scope.naming(entity.semantic_id, f"{include_key[0]}/{include_key[1]}"),
+                entity,
+                gdstk,
+                polygons_by_layer.get(include_key, ()),
+                include_points,
+            )
+        )
+    return included
+
+
 def _read_rings_on_layer(
-    entity: SemanticEntitySpec, layer: Sequence[int], polygons: Sequence[Any]
+    scope: GridScope,
+    entity: SemanticEntitySpec,
+    layer: Sequence[int],
+    polygons: Sequence[Any],
 ) -> None:
     """Read each polygon's rings as the grid-bound Boolean that follows will, naming ``layer``.
 
     The Boolean reads the plane and the mask together under the mask's name; reading the
     plane's rings first refuses exactly the same outlines, on the layer they are drawn on.
     """
-    with named_source(entity.semantic_id, f"{int(layer[0])}/{int(layer[1])}"):
-        for polygon in polygons:
-            polygon_rings(polygon)
+    named = scope.naming(entity.semantic_id, f"{int(layer[0])}/{int(layer[1])}")
+    for polygon in polygons:
+        polygon_rings(named, polygon)
 
 
 def _selected_includes(
+    scope: GridScope,
     entity: SemanticEntitySpec,
     gdstk: ModuleType,
     drawn: Sequence[Any],
     include_points: Sequence[Any],
 ) -> list[Any]:
     """The include-layer components the Ground's selector points pick, one per point."""
-    candidates = realized_on_lattice(drawn)
+    candidates = realized_on_lattice(scope, drawn)
     # Fuse exact contacts before applying an explicit selector; ownership
     # still comes from the authored layer and selector, not proximity.
-    components = fused_gdstk_components(candidates)
+    components = fused_gdstk_components(scope, candidates)
     included: list[Any] = []
     for point in include_points:
         if (
@@ -203,37 +235,39 @@ def _selected_includes(
             )
         selector = (float(point[0]), float(point[1]))
         matches = [
-            polygon
-            for polygon, _, _ in components
-            if point_in_layout_polygon(selector, polygon)
+            component.polygon
+            for component in components
+            if point_in_layout_polygon(selector, component.polygon)
         ]
         if len(matches) != 1:
             raise ValueError(
-                source_refusal(
+                scope.refusal(
                     f"{entity.semantic_id} include selector {tuple(point)!r} matched "
                     f"{len(matches)} source polygons",
                     [
                         selector_place(
+                            scope,
                             selector,
                             [polygon.exterior for polygon in matches],
-                            [polygon.exterior for polygon, _, _ in components],
+                            [component.polygon.exterior for component in components],
                         )
                     ],
                     FIX_SELECTOR,
                 )
             )
-        included.extend(layout_polygon_region(gdstk, matches[0]))
+        included.extend(layout_polygon_region(scope, gdstk, matches[0]))
     return included
 
 
-def _append_source_includes(
-    included: list[Any],
+def _source_include_regions(
+    scope: GridScope,
     native: ModuleType,
     entity: SemanticEntitySpec,
     mask_key: tuple[int, int],
     contributions: Iterable[object],
-) -> None:
-    """Append declared occurrence polygons in their original source order."""
+) -> list[Any]:
+    """The declared occurrence polygons, as native pieces in their original source order."""
+    included: list[Any] = []
     for contribution in contributions:
         polygon = (
             contribution.get("polygon") if isinstance(contribution, Mapping) else None
@@ -244,6 +278,7 @@ def _append_source_includes(
             )
         included.extend(
             layout_polygon_region(
+                scope,
                 native,
                 LayoutPolygonSpec(
                     polygon_id=f"{entity.semantic_id}__INCLUDE__{len(included):04d}",
@@ -253,13 +288,17 @@ def _append_source_includes(
                 ),
             )
         )
+    return included
 
 
-def _merged_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
+def _merged_gdstk_polygons(
+    scope: GridScope, polygons: Sequence[Any]
+) -> tuple[Any, ...]:
     if not polygons:
         return ()
 
     merged = polygon_boolean(
+        scope,
         polygons,
         (),
         "or",
@@ -268,7 +307,9 @@ def _merged_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
     return tuple(merged or ())
 
 
-def _region_loops(region: Any) -> tuple[PlanarLoop, tuple[PlanarLoop, ...]]:
+def _region_loops(
+    scope: GridScope, region: Any
+) -> tuple[PlanarLoop, tuple[PlanarLoop, ...]]:
     """Read one Boolean region's exterior and holes as planar loops.
 
     Under a grid the Boolean already returns each region as its exterior and
@@ -279,7 +320,9 @@ def _region_loops(region: Any) -> tuple[PlanarLoop, tuple[PlanarLoop, ...]]:
     gdstk polygon, from an unbound Boolean, has its walk split.
     """
     # The grid's ring type admits points of any length; ground regions are XY.
-    return cast("tuple[PlanarLoop, tuple[PlanarLoop, ...]]", polygon_rings(region))
+    return cast(
+        "tuple[PlanarLoop, tuple[PlanarLoop, ...]]", polygon_rings(scope, region)
+    )
 
 
 def _ground_plane_bounds(

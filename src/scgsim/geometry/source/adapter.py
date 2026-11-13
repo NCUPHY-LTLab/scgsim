@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from scgsim.diagnostics import diagnostic_stage, progress
-from scgsim.geometry.grid.grid import geometry_grid_scope, source_recipe_map
 from scgsim.geometry.grid.grid_cache import with_grid_work_cache
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.common import PathInput
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import (
@@ -38,16 +38,22 @@ from scgsim.geometry.source.curves import (
     refuse_reconstructions_without_circle,
     with_drawn_rings,
 )
-from scgsim.geometry.source.grid import apply_geometry_grid
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
+from scgsim.geometry.source.ground import PlaneBounds
 from scgsim.geometry.source.intents import route_a_sheet_interfaces
 from scgsim.geometry.source.occurrence import (
-    failed_source_recipe,
     read_polygons_by_layer,
-    run_source_recipe,
-    source_recipe_job,
     with_occurrence_extraction_cache,
 )
 from scgsim.geometry.source.ports import port_sheet_regions_from_stack_metadata
+from scgsim.geometry.source.recipes import (
+    SourceGridAudit,
+    failed_source_recipe,
+    merged_audits,
+    run_source_recipe,
+    source_recipe_job,
+    source_recipe_map,
+)
 
 if TYPE_CHECKING:
     from gdstk import Cell
@@ -124,8 +130,10 @@ def build_gds_stack_geometry_input(
         stack,
         library,
         top_cell_name or stack.metadata.get("top_cell_name"),
-        metadata=metadata,
-        source_files={"gds_file": str(gds_path), "stack_file": str(stack_path)},
+        LayoutOrigin(
+            metadata=metadata,
+            source_files={"gds_file": str(gds_path), "stack_file": str(stack_path)},
+        ),
     )
 
 
@@ -187,24 +195,33 @@ def layout_grid(library: LoadedLibrary) -> GeometryGridContext:
     )
 
 
+@dataclass(frozen=True)
+class LayoutOrigin:
+    """What a lowered input records about where its layout came from.
+
+    ``metadata`` is the caller's, copied into the input; ``source_files`` names the files
+    the layout and the stack were read from; ``source_audits`` are the audits of the
+    declared recipes that already read the layout (GeometryPlan's occurrence
+    extraction), which the lowering's own follow.
+    """
+
+    metadata: Mapping[str, Any] | None = None
+    source_files: Mapping[str, str] = field(default_factory=dict)
+    source_audits: tuple[SourceGridAudit, ...] = ()
+
+
 def lower_layout(
     stack: StackRecords,
     library: LoadedLibrary,
     top_cell_name: Any,
-    *,
-    metadata: Mapping[str, Any] | None = None,
-    source_files: Mapping[str, str] | None = None,
+    origin: LayoutOrigin,
 ) -> GeometryBuildInput:
-    """Lower a loaded layout and its stack records onto the layout's grid.
-
-    ``source_files`` names the files the two were read from, for the input's metadata.
-    """
+    """Lower a loaded layout and its stack records onto the layout's grid."""
     context = layout_grid(library)
-    with geometry_grid_scope(context):
-        source = _read_selected_source(
-            stack, library, context, str(top_cell_name) if top_cell_name else None
-        )
-        return _SourceLowering(source, metadata, dict(source_files or {})).build()
+    source = _read_selected_source(
+        stack, library, context, str(top_cell_name) if top_cell_name else None
+    )
+    return _SourceLowering(source, origin).build()
 
 
 def _read_selected_source(
@@ -222,24 +239,33 @@ def _read_selected_source(
 @dataclass
 class _SourceLowering:
     source: AdapterSource
-    effective_metadata: Mapping[str, Any] | None
-    source_files: Mapping[str, str]
+    origin: LayoutOrigin
+    source_audits: tuple[SourceGridAudit, ...] = field(init=False)
     polygons: list[LayoutPolygonSpec] = field(default_factory=list)
     entities: list[SemanticEntitySpec] = field(default_factory=list)
     domain_bounds: dict[str, Mapping[str, Any]] = field(init=False)
 
+    @property
+    def scope(self) -> GridScope:
+        """The layout grid every recipe of this lowering reads on."""
+        return GridScope(self.source.grid_context)
+
     def build(self) -> GeometryBuildInput:
+        self.source_audits = self.origin.source_audits
         self.lower_solution_regions()
         self.lower_layers()
         metadata = self.combined_metadata()
         ports = port_sheet_regions_from_stack_metadata(
+            self.scope,
             self.source.stack.metadata,
             polygons_by_layer=self.source.polygons_by_layer,
             host_entities=self.entities,
             host_polygons=self.polygons,
         )
         gridded = apply_geometry_grid(
-            self.geometry_input(metadata, ports), self.source.grid_context
+            self.geometry_input(metadata, ports),
+            self.source.grid_context,
+            source_audits=self.source_audits,
         )
         # Reconstruction indices name rings as drawn in the top cell's GDS; the grid
         # has since rounded and noded them, so each polygon keeps its drawn rings.
@@ -272,10 +298,14 @@ class _SourceLowering:
             "geometry.source.lower_layers",
             counts={"layers": len(self.source.stack.layers)},
         ):
-            for rows in source_recipe_map(run_source_recipe, self.layer_jobs()):
+            lowered_layers = source_recipe_map(run_source_recipe, self.layer_jobs())
+            for rows in lowered_layers.value:
                 for lowered in rows:
                     self.polygons.extend(lowered.polygons)
                     self.entities.append(lowered.entity)
+            self.source_audits = merged_audits(
+                self.source_audits, lowered_layers.audits
+            )
 
     def layer_jobs(self):
         for diagnostic_index, record in enumerate(self.source.stack.layers):
@@ -283,11 +313,13 @@ class _SourceLowering:
             try:
                 job = source_recipe_job(
                     lower_layer_record,
+                    self.scope,
                     record,
                     materials=self.source.stack.materials,
                     source_polygons=self.source.polygons_by_layer,
-                    cell_bounds_um=self.source.cell_bounds_um,
-                    domain_bounds_by_semantic_id=self.domain_bounds,
+                    plane_bounds=PlaneBounds(
+                        self.source.cell_bounds_um, self.domain_bounds
+                    ),
                 )
             except Exception as error:  # noqa: BLE001 - marshal the original worker error in source order.
                 yield failed_source_recipe(error)
@@ -297,9 +329,9 @@ class _SourceLowering:
     def combined_metadata(self) -> dict[str, Any]:
         metadata = {
             **dict(self.source.stack.metadata),
-            **dict(self.effective_metadata or {}),
+            **dict(self.origin.metadata or {}),
             "adapter": "gds_stack",
-            **self.source_files,
+            **self.origin.source_files,
             "selected_cell_name": self.source.cell.name,
             "cell_bounds_um": self.source.cell_bounds_um,
             "source_dbu_um": self.source.grid_context.grid_size_um,

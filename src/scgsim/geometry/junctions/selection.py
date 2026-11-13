@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from decimal import ROUND_FLOOR, Decimal
 from fractions import Fraction
 
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.junctions.boolean_geometry import (
     boolean,
     build_polygon_region,
@@ -46,20 +47,21 @@ class EndSection:
     left: bool
 
 
-def contacts(polygons, span, width):
+def contacts(scope: GridScope, polygons, span, width):
     """Find extrema of area, segment and point contact with closed authored S."""
-    positions = [u for u, _ in contact_points(polygons, span, width)]
+    positions = [u for u, _ in contact_points(scope, polygons, span, width)]
     return (min(positions), max(positions)) if positions else None
 
 
-def contact_points(polygons, span, width) -> list[tuple]:
+def contact_points(scope: GridScope, polygons, span, width) -> list[tuple]:
     """The local points ``(u, v)`` that bound the polygons' area, segment and point contact with closed S.
 
     ``contacts`` reads their extent along the junction; a refusal locates the contact by them.
     """
     region = boolean(
-        build_polygon_region(polygons),
-        build_polygon_region(rectangle(0, 0, span, width)),
+        scope,
+        build_polygon_region(scope, polygons),
+        build_polygon_region(scope, rectangle(0, 0, span, width)),
         "and",
     )
     found: list[tuple] = [
@@ -106,7 +108,7 @@ def grid_cut(index, step):
     return (requested, round(requested / PRECISION_UM))
 
 
-def end_candidate(source, own, foreign, section: EndSection):
+def end_candidate(scope: GridScope, source, own, foreign, section: EndSection):
     """Cut the end piece from ``source`` beyond the cut and check it against exact contact conditions.
 
     ``source`` is the drawn sheet where SGB rebuilds the terminal with exact arcs: the end
@@ -117,7 +119,7 @@ def end_candidate(source, own, foreign, section: EndSection):
     accepted when it is one piece, meets its own terminal over an area or a length, touches no
     other net and with its terminal covers the cut edge.
     """
-    region = end_region(source, section)
+    region = end_region(scope, source, section)
     try:
         end = read_boolean_rings(region)
     except ValueError as exc:
@@ -131,7 +133,7 @@ def end_candidate(source, own, foreign, section: EndSection):
                 "components": len(end),
             },
         )
-    if end and (not own_contact(end, own)):
+    if end and (not own_contact(scope, end, own)):
         return (
             None,
             {"valid": False, "reason": "end lacks positive own-arm contact"},
@@ -149,7 +151,7 @@ def end_candidate(source, own, foreign, section: EndSection):
     return (end, {"valid": True, "empty_residual": not end, "components": len(end)})
 
 
-def end_region(source, section: EndSection):
+def end_region(scope: GridScope, source, section: EndSection):
     """The part of ``source`` beyond the cut, as the native Boolean gives it: empty for a cut at the sheet's end."""
     if not (section.cut > 0 if section.left else section.cut < section.span):
         return []
@@ -158,7 +160,7 @@ def end_region(source, section: EndSection):
         if section.left
         else rectangle(section.cut, 0, section.span, section.width)
     )
-    return boolean(source, build_polygon_region(clip), "and")
+    return boolean(scope, source, build_polygon_region(scope, clip), "and")
 
 
 # Why ``end_candidate`` refuses an end piece, in the words of a layout refusal.
@@ -174,10 +176,15 @@ END_REFUSALS = {
 }
 
 
-def own_contact(end, own) -> bool:
+def own_contact(scope: GridScope, end, own) -> bool:
     """Whether an end piece meets its terminal over a positive area or along a positive length."""
     return positive_boundary_contact(end, own) or bool(
-        boolean(build_polygon_region(end), build_polygon_region(own), "and")
+        boolean(
+            scope,
+            build_polygon_region(scope, end),
+            build_polygon_region(scope, own),
+            "and",
+        )
     )
 
 

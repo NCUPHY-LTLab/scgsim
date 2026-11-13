@@ -4,8 +4,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import cast
 
-from scgsim.geometry.grid.grid import with_input_grid
 from scgsim.geometry.grid.grid_regions import grid_change_message
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import format_box, geometry_grid_context
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
@@ -21,20 +21,25 @@ from scgsim.geometry.models.regions import (
     PortSheetOverlapRecord,
     PortSheetRegionRecord,
 )
-from scgsim.geometry.source.ports import port_sheet_overlaps
+from scgsim.geometry.source.ports import port_sheet_hosts, port_sheet_overlaps
 
 
-@with_input_grid
 def with_rectangular_junctions(
     build_input: GeometryBuildInput, specs: Iterable[object]
 ) -> GeometryBuildInput:
-    """Bind caller-selected source owners without searching other occurrences."""
+    """Bind caller-selected source owners without searching other occurrences.
+
+    The sheet's overlaps with its terminals are measured on the input's declared grid.
+    """
+    scope = GridScope(geometry_grid_context(build_input))
     requests = _validated_requests(specs)
     _validate_unique_request_ids(requests)
     entities = {item.semantic_id: item for item in build_input.entities}
     polygons = {item.polygon_id: item for item in build_input.polygons}
     replacements = {
-        request.port_sheet_id: _bind_request(build_input, request, entities, polygons)
+        request.port_sheet_id: _bind_request(
+            scope, build_input, request, entities, polygons
+        )
         for request in requests
     }
     return replace(
@@ -70,6 +75,7 @@ def _validate_unique_request_ids(
 
 
 def _bind_request(
+    scope: GridScope,
     build_input: GeometryBuildInput,
     request: RectangularJunctionSpec,
     entities: Mapping[str, SemanticEntitySpec],
@@ -87,6 +93,7 @@ def _bind_request(
     _validate_sheet_ownership(region, request)
     selected = _selected_terminal_polygons(request, entities)
     overlaps = port_sheet_overlaps(
+        scope,
         port_sheet_id=region.port_sheet_id,
         port_polygon=LayoutPolygonSpec(
             region.source_polygon_id,
@@ -95,8 +102,7 @@ def _bind_request(
             region.holes,
         ),
         target_layer=region.metadata["target_layer"],
-        host_entity_by_polygon_id=selected,
-        host_polygons_by_id={pid: polygons[pid] for pid in selected},
+        hosts=port_sheet_hosts(selected, {pid: polygons[pid] for pid in selected}),
     )
     expected_hosts = {
         request.terminal_a.source_entity_id,

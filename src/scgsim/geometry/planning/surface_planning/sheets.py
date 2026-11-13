@@ -6,13 +6,14 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import Any, cast
 
-from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.booleans import boolean_polygon_region
 from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
     loop_signature,
 )
 from scgsim.geometry.grid.planar_loops import clean_loop
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.models.common import (
     INTERFACE_KIND_ORDER,
     PolygonRing,
@@ -90,7 +91,7 @@ def plan_route_a_sheet_patches(
             "plane": {"axis": "z", "value_um": plane_z_um},
             "representation": "surface_sheet",
         }
-        sheet_region = gdstk_surface_region(parent_geometry_ref)
+        sheet_region = gdstk_surface_region(UNGRIDDED, parent_geometry_ref)
         if not sheet_region:
             raise ValueError(
                 f"{sheet.semantic_id} Route A sheet has no occupied region"
@@ -114,6 +115,7 @@ def plan_route_a_sheet_patches(
         for bottom_id, bottom_region in bottom_regions:
             for top_id, top_region in top_regions:
                 overlap = boolean_polygon_region(
+                    UNGRIDDED,
                     gdstk,
                     bottom_region,
                     top_region,
@@ -122,7 +124,9 @@ def plan_route_a_sheet_patches(
                 if not overlap:
                     continue
                 has_distinct_side_domains |= bottom_id != top_id
-                refs = geometry_refs_from_gdstk_region(parent_geometry_ref, overlap)
+                refs = geometry_refs_from_gdstk_region(
+                    UNGRIDDED, parent_geometry_ref, overlap
+                )
                 for geometry_ref in refs:
                     raw_patches.append(
                         (interface, sheet, bottom_id, top_id, geometry_ref)
@@ -130,9 +134,12 @@ def plan_route_a_sheet_patches(
                 pair_region = (
                     overlap
                     if not pair_region
-                    else boolean_polygon_region(gdstk, pair_region, overlap, "or")
+                    else boolean_polygon_region(
+                        UNGRIDDED, gdstk, pair_region, overlap, "or"
+                    )
                 )
         uncovered = boolean_polygon_region(
+            UNGRIDDED,
             gdstk,
             sheet_region,
             pair_region,
@@ -255,9 +262,10 @@ class SheetSurfacePlanner:
             matches: list[RouteASheetPatch] = []
             for patch in self.patches:
                 overlap = boolean_polygon_region(
+                    UNGRIDDED,
                     self.gdstk,
                     contact_region,
-                    gdstk_surface_region(patch.geometry_ref),
+                    gdstk_surface_region(UNGRIDDED, patch.geometry_ref),
                     "and",
                 )
                 if overlap:
@@ -269,9 +277,10 @@ class SheetSurfacePlanner:
                 )
             patch = matches[0]
             uncovered = boolean_polygon_region(
+                UNGRIDDED,
                 self.gdstk,
                 contact_region,
-                gdstk_surface_region(patch.geometry_ref),
+                gdstk_surface_region(UNGRIDDED, patch.geometry_ref),
                 "not",
             )
             if uncovered:

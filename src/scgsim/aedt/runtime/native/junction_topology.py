@@ -8,11 +8,12 @@ from fractions import Fraction
 from itertools import pairwise
 from typing import Any
 
-from scgsim.geometry.grid.grid import polygon_rings
+from scgsim.geometry.grid.booleans import polygon_rings
 from scgsim.geometry.grid.planar_loops import (
     cancel_reversed_planar_edges,
     simple_planar_loops_from_edges,
 )
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.junctions.exact_geometry import (
     closed_contact,
     cross,
@@ -292,8 +293,8 @@ def native_end_contact(end, arms) -> bool:
 
 def native_area_contact(left, right) -> bool:
     """Require an overlap piece wider, on average, than the native coordinate tolerance."""
-    for piece in fraction_overlap(left, right):
-        outer, holes = polygon_rings(piece)
+    for piece in fraction_overlap(UNGRIDDED, left, right):
+        outer, holes = polygon_rings(UNGRIDDED, piece)
         rings = (outer, *holes)
         area = abs(_ring_area(outer)) - sum(abs(_ring_area(hole)) for hole in holes)
         perimeter = sum(

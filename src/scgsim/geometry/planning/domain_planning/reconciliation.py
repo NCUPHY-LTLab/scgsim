@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any, cast
 
-from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.booleans import boolean_polygon_region
 from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
     loop_signature,
 )
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.models.entities import is_solution_entity
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.topology import SurfacePlanRecord
@@ -221,20 +222,26 @@ def reconcile_solution_domain_boundaries(
             continue
         replacement_region: tuple[Any, ...] = ()
         for candidate in sorted(planar_candidates, key=lambda item: item.surface_id):
-            candidate_region = gdstk_surface_region(candidate.geometry_ref)
+            candidate_region = gdstk_surface_region(UNGRIDDED, candidate.geometry_ref)
             replacement_region = (
                 candidate_region
                 if not replacement_region
                 else boolean_polygon_region(
-                    gdstk, replacement_region, candidate_region, "or"
+                    UNGRIDDED, gdstk, replacement_region, candidate_region, "or"
                 )
             )
         residual_region = boolean_polygon_region(
-            gdstk, gdstk_surface_region(surface.geometry_ref), replacement_region, "not"
+            UNGRIDDED,
+            gdstk,
+            gdstk_surface_region(UNGRIDDED, surface.geometry_ref),
+            replacement_region,
+            "not",
         )
         residual_refs = tuple(
             sorted(
-                geometry_refs_from_gdstk_region(surface.geometry_ref, residual_region),
+                geometry_refs_from_gdstk_region(
+                    UNGRIDDED, surface.geometry_ref, residual_region
+                ),
                 key=lambda geometry_ref: loop_signature(geometry_ref["outer_loop"]),
             )
         )

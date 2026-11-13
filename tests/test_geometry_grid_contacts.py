@@ -10,9 +10,10 @@ from geometry_grid_fixtures import GRID, rectangle, ring_area
 from test_rectangular_junction_geometry import fixture as junction_fixture
 
 from scgsim.geometry import with_rectangular_junctions
-from scgsim.geometry.grid.grid import GridOperand, build_grid_arrangement
+from scgsim.geometry.grid.arrangement import build_grid_arrangement
+from scgsim.geometry.grid.grid_regions import GridOperand
 from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
-from scgsim.geometry.source.grid import apply_geometry_grid
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
 
 
 def mixed_bridge_operands(*, physical=False):
@@ -83,8 +84,12 @@ def test_declared_ground_hole_is_audited_before_quantized_source_output(
     """Verify that declared ground hole is audited before quantized source output."""
     import gdstk  # noqa: PLC0415 -- optional GDS dependency is needed only by this adapter test
 
-    from scgsim.geometry.grid.grid import geometry_grid_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
-    from scgsim.geometry.source.ground import derived_ground_polygons  # noqa: PLC0415 -- keep this test-specific dependency scoped to its contract test
+    from scgsim.geometry.grid.scope import GridScope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.source.ground import (  # noqa: PLC0415 -- keep this test-specific dependency scoped to its contract test
+        DrawnPlane,
+        derived_ground_polygons,
+    )
+    from scgsim.geometry.source.recipes import audited_declared_source  # noqa: PLC0415 -- keep this test-specific dependency scoped to its contract test
 
     build, _ = junction_fixture()
     ground = replace(
@@ -95,19 +100,19 @@ def test_declared_ground_hole_is_audited_before_quantized_source_output(
     )
     arguments = dict(
         polygons_by_layer={(1, 0): (gdstk.rectangle((1, 1), (1 + mask_width, 2)),)},
-        cell_bounds_um={"x_min_um": 0, "x_max_um": 4, "y_min_um": 0, "y_max_um": 4},
-        domain_bounds_by_semantic_id={},
-        plane_polygons=(gdstk.rectangle((0, 0), (4, 4)),),
+        plane=DrawnPlane((gdstk.rectangle((0, 0), (4, 4)),)),
     )
-    with geometry_grid_scope(GRID):
-        if collapses:
-            with pytest.raises(
-                ValueError, match="declared physical source component/hole topology"
-            ):
-                derived_ground_polygons(ground, **arguments)
-        else:
-            result = derived_ground_polygons(ground, **arguments)
-            assert len(result) == 1 and len(result[0].holes) == 1
+    scope = GridScope(GRID)
+    if collapses:
+        with pytest.raises(
+            ValueError, match="declared physical source component/hole topology"
+        ):
+            audited_declared_source(derived_ground_polygons, scope, ground, **arguments)
+    else:
+        result = audited_declared_source(
+            derived_ground_polygons, scope, ground, **arguments
+        ).value
+        assert len(result) == 1 and len(result[0].holes) == 1
 
 
 @pytest.mark.parametrize("right_x,changed", ((1.01, False), (1.0002, True)))
@@ -274,7 +279,7 @@ def test_mixed_intermediate_chain_preserves_area_and_auxiliary_residue():
         for p in ring
     }
 
-    from scgsim.geometry.grid.grid import account_zero_area, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_overlay import account_zero_area, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     shapes = {v.operand_id: Polygon(v.exterior, v.holes) for v in operands}
     subdivision = subdivide_grid(operands, shapes, 1)
@@ -291,7 +296,7 @@ def test_zero_area_contact_sideband_nodes_faces_without_orphan_edges():
     """Verify that zero area contact sideband nodes faces without orphan edges."""
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry.grid.grid import account_zero_area, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_overlay import account_zero_area, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     operands = (
         GridOperand("A", rectangle(0, 0, 4, 4)),
@@ -338,7 +343,7 @@ def test_overlay_native_error_retains_coordinate_free_boundary_context():
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
     from shapely.errors import GEOSException  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry.grid.grid import overlay_call  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_overlay import overlay_call  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     invalid = Polygon(((0, 0), (2, 2), (0, 2), (2, 0)))
     with pytest.raises(GEOSException) as caught:
@@ -396,7 +401,7 @@ def test_realized_envelope_candidates_keep_snapped_touching_support():
     """Verify that realized envelope candidates keep snapped touching support."""
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry.grid.grid import account_zero_area, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_overlay import account_zero_area, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     operands = (
         GridOperand("A", rectangle(0, 0, 1.4, 2), contact=False),
@@ -421,7 +426,8 @@ def test_area_minus_line_keeps_hole_and_all_contact_nodes():
     """Verify that area minus line keeps hole and all contact nodes."""
     from shapely import LineString, Point, Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry.grid.grid import OverlayParts, parts_overlay, regions  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_overlay import OverlayParts, parts_overlay  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_regions import regions  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     area = Polygon(rectangle(0, 0, 8, 8), (rectangle(2, 2, 6, 6),))
     line = LineString(((-1, 4), (9, 4)))
@@ -460,7 +466,7 @@ def test_zero_area_dedup_keeps_labels_and_retained_collinear_vertices():
     """Verify that zero area dedup keeps labels and retained collinear vertices."""
     from shapely import LineString  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry.grid.grid import ZeroAreaResidue, deduplicate_residues  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_overlay import ZeroAreaResidue, deduplicate_residues  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     line = LineString(((0, 0), (1, 0), (2, 0)))
     first = ZeroAreaResidue(line, ("A",))
@@ -544,7 +550,7 @@ def test_crossing_cut_partition_conserves_parent_at_each_union_stage():
     """Verify that crossing cut partition conserves parent at each union stage."""
     from shapely import Polygon, intersection, union_all  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry.grid.grid import subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_overlay import subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     # Public coarse lattice makes snapping visible; no study geometry/values.
     context = GeometryGridContext(1)
@@ -585,106 +591,58 @@ def test_crossing_cut_partition_conserves_parent_at_each_union_stage():
 
 
 @pytest.mark.parametrize("workers", (1, 2))
-def test_source_recipe_map_isolates_context_and_merges_audits_in_source_order(workers):
-    """Verify that source recipe map isolates context and merges audits in source order."""
-    from scgsim.geometry.grid.grid import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
-        SOURCE_AUDITS,
-        SOURCE_INTENT,
-        current_grid_context,
-        frame_point,
-        geometry_grid_scope,
-        polygon_world_frame,
-        source_grid_audits,
+def test_source_recipe_map_merges_values_and_audits_in_source_order(workers):
+    """Verify that source recipe map returns values and audits in source order, each audit once."""
+    from scgsim.geometry.source.recipes import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+        Audited,
         source_recipe_map,
     )
     from scgsim.preparation import preparation_resources  # noqa: PLC0415 -- keep resource-scope imports scoped to the test that exercises them
 
-    with geometry_grid_scope(GRID), polygon_world_frame((1, 0, 0, 1, 3, 4)):
-        parent = SOURCE_AUDITS.get()
-        parent.append({"seed": 0})
-        intent = SOURCE_INTENT.set(True)
-        try:
-
-            def recipe(index):
-                local = SOURCE_AUDITS.get()
-                assert local is not parent
-                assert local == []
-                assert current_grid_context() == GRID
-                assert SOURCE_INTENT.get() is True
-                assert frame_point((0, 0)) == (3, 4)
-                local.extend(({"seed": 0}, {"recipe": index}))
-                assert parent == [{"seed": 0}]
-                return index * 2
-
-            with preparation_resources(max_workers=workers):
-                assert source_recipe_map(recipe, (2, 0, 1)) == [4, 0, 2]
-            assert source_grid_audits() == (
-                {"seed": 0},
-                {"recipe": 2},
-                {"recipe": 0},
-                {"recipe": 1},
-            )
-            assert SOURCE_AUDITS.get() is parent
-        finally:
-            SOURCE_INTENT.reset(intent)
-    assert SOURCE_AUDITS.get() is None
-
-    def disabled(index):
-        assert SOURCE_AUDITS.get() is None
-        return index
+    def recipe(index):
+        return Audited(index * 2, ({"seed": 0}, {"recipe": index}))
 
     with preparation_resources(max_workers=workers):
-        assert source_recipe_map(disabled, (1, 2)) == [1, 2]
-    assert SOURCE_AUDITS.get() is None
+        merged = source_recipe_map(recipe, (2, 0, 1))
+    assert merged.value == [4, 0, 2]
+    assert merged.audits == (
+        {"seed": 0},
+        {"recipe": 2},
+        {"recipe": 0},
+        {"recipe": 1},
+    )
 
 
 @pytest.mark.parametrize("workers", (1, 2))
-def test_source_recipe_map_preserves_first_error_and_audit_prefix_then_cleans_up(
-    workers,
-):
-    """Verify that source recipe map preserves first error and audit prefix then cleans up."""
-    from scgsim.geometry.grid.grid import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
-        SOURCE_AUDITS,
-        geometry_grid_scope,
-        source_grid_audits,
+def test_source_recipe_map_raises_the_first_error_in_source_order(workers):
+    """Verify that source recipe map raises the error of the first failing recipe in source order."""
+    from scgsim.geometry.source.recipes import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+        Audited,
         source_recipe_map,
     )
     from scgsim.preparation import preparation_resources  # noqa: PLC0415 -- keep resource-scope imports scoped to the test that exercises them
 
     first, later = ValueError("first recipe"), ValueError("later recipe")
-    with geometry_grid_scope(GRID):
-        parent = SOURCE_AUDITS.get()
 
-        def recipe(index):
-            SOURCE_AUDITS.get().append({"recipe": index})
-            assert parent == []
-            if index == 1:
-                raise first
-            if index == 2:
-                raise later
-            return index
+    def recipe(index):
+        if index == 1:
+            raise first
+        if index == 2:
+            raise later
+        return Audited(index, ({"recipe": index},))
 
-        with preparation_resources(max_workers=workers):
-            with pytest.raises(ValueError) as caught:
-                source_recipe_map(recipe, (0, 1, 2))
-            assert caught.value is first
-            assert source_grid_audits() == ({"recipe": 0}, {"recipe": 1})
-            assert SOURCE_AUDITS.get() is parent
-
-            def clean(index):
-                assert SOURCE_AUDITS.get() == []
-                return index
-
-            assert source_recipe_map(clean, (3, 4)) == [3, 4]
-            assert source_grid_audits() == ({"recipe": 0}, {"recipe": 1})
-    assert SOURCE_AUDITS.get() is None
+    with preparation_resources(max_workers=workers):
+        with pytest.raises(ValueError) as caught:
+            source_recipe_map(recipe, (0, 1, 2))
+        assert caught.value is first
+        assert source_recipe_map(recipe, (3, 4)).value == [3, 4]
 
 
 def test_realized_grid_nodes_use_one_coordinate_per_integer_key():
     """Verify that realized grid nodes use one coordinate per integer key."""
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry.grid.grid import region_key, regions  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_regions import region_key, regions  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     grid = 0.1
     endpoint = (3 * grid, 3 * grid)
@@ -712,7 +670,7 @@ def test_candidate_pairs_parallelize_real_work_with_identical_subdivision_and_gr
 
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry.grid.grid import cell_overlay_chunk, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_overlay import cell_overlay_chunk, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
     from scgsim.preparation import preparation_resources  # noqa: PLC0415 -- keep resource-scope imports scoped to the test that exercises them
 
     values = mixed_bridge_operands()
@@ -754,7 +712,7 @@ def test_candidate_pair_chunks_retain_real_geos_failures_at_original_ordinals():
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
     from shapely.errors import GEOSException  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry.grid.grid import OverlayParts, cell_overlay_chunk  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_overlay import OverlayParts, cell_overlay_chunk  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
     from scgsim.preparation import ordered_map, preparation_resources  # noqa: PLC0415 -- keep resource-scope imports scoped to the test that exercises them
 
     invalid = Polygon(((0, 0), (2, 2), (0, 2), (2, 0)))

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.junctions.core import (
     DEFAULT_FORMAT,
     JunctionPartitionFormat,
@@ -26,12 +27,19 @@ from scgsim.geometry.junctions.incidence import (
     trace_free_boundaries,
 )
 from scgsim.geometry.junctions.model_state import JunctionModel
+from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
 
 
 def model_geometry(build_input, originals, records, output_format=DEFAULT_FORMAT):
     """Trace source incidences and owned seams before topology, then slice at two cuts."""
-    state = JunctionModel(build_input, originals, records, output_format)
+    state = JunctionModel(
+        build_input,
+        originals,
+        records,
+        output_format,
+        GridScope(geometry_grid_context(build_input)),
+    )
     initialize_source(state)
     register_source_edges(state)
     register_crossings(state)

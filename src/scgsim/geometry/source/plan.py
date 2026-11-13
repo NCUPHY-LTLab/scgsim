@@ -8,7 +8,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -17,8 +16,8 @@ from types import MappingProxyType
 from typing import Any, cast
 
 from scgsim.diagnostics import diagnostic_stage, progress
-from scgsim.geometry.grid.grid import geometry_grid_scope, source_recipe_map
 from scgsim.geometry.grid.grid_cache import with_grid_work_cache
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
@@ -27,7 +26,12 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.junctions import RectangularJunctionSpec
 from scgsim.geometry.models.lumped import LumpedSupport
-from scgsim.geometry.source.adapter import layout_grid, lower_layout, stack_records
+from scgsim.geometry.source.adapter import (
+    LayoutOrigin,
+    layout_grid,
+    lower_layout,
+    stack_records,
+)
 from scgsim.geometry.source.adapter_records import LoadedLibrary
 from scgsim.geometry.source.curves import (
     boundary_binding,
@@ -37,19 +41,18 @@ from scgsim.geometry.source.curves import (
     transform_boundary,
     with_drawn_rings,
 )
+from scgsim.geometry.source.junctions import with_rectangular_junctions
 from scgsim.geometry.source.normalization import (
     finite_number,
 )
 from scgsim.geometry.source.occurrence import (
     entity_from_layer_record,
-    failed_source_recipe,
     occurrence_ground_polygons_for_entity,
     occurrence_include_polygon,
     occurrence_lumped_polygon,
     occurrence_polygons_for_entity,
     occurrence_port_polygon,
-    run_source_recipe,
-    source_recipe_job,
+    read_polygons_by_layer,
     with_occurrence_extraction_cache,
 )
 from scgsim.geometry.source.occurrence_validation import (
@@ -58,48 +61,20 @@ from scgsim.geometry.source.occurrence_validation import (
 from scgsim.geometry.source.plan_assembly import (
     GeometryPlanStackAssembler,
     component_semantics,
+    composed_transform,
+    occurrence_transform,
     source_path,
     transform_source_point,
 )
+from scgsim.geometry.source.recipes import (
+    SourceGridAudit,
+    failed_source_recipe,
+    merged_audits,
+    run_source_recipe,
+    source_recipe_job,
+    source_recipe_map,
+)
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
-
-
-def _affine(reference: Any) -> tuple[float, float, float, float, float, float]:
-    from klayout import db as kdb  # noqa: PLC0415 - transforms are needed only during occurrence registration
-
-    transform = reference.dcplx_trans
-    origin = transform * kdb.DPoint(0.0, 0.0)
-    x_axis = transform * kdb.DPoint(1.0, 0.0)
-    y_axis = transform * kdb.DPoint(0.0, 1.0)
-    values = (
-        float(x_axis.x - origin.x),
-        float(y_axis.x - origin.x),
-        float(x_axis.y - origin.y),
-        float(y_axis.y - origin.y),
-        float(origin.x),
-        float(origin.y),
-    )
-    if not all(math.isfinite(item) for item in values):
-        raise ValueError("instance transform must be finite")
-    a, b, c, d, _, _ = values
-    if not math.isclose(abs(a * d - b * c), 1.0, rel_tol=0.0, abs_tol=1e-9):
-        raise ValueError("GeometryPlan supports rigid rotation and mirror only")
-    return values
-
-
-def _compose(
-    parent: tuple[float, ...], child: tuple[float, ...]
-) -> tuple[float, float, float, float, float, float]:
-    a, b, c, d, x, y = parent
-    e, f, g, h, u, v = child
-    return (
-        a * e + b * g,
-        a * f + b * h,
-        c * e + d * g,
-        c * f + d * h,
-        a * u + b * v + x,
-        c * u + d * v + y,
-    )
 
 
 @dataclass(frozen=True)
@@ -156,6 +131,13 @@ class _WrittenLayout:
     grid: GeometryGridContext
     source_cells: Mapping[str, Any]
     child_reference_indexes: Mapping[str, tuple[int, ...]]
+
+    def occurrence_polygons(self, cell: Any, path: str) -> Mapping[Any, Any]:
+        """The polygons an occurrence draws itself, by layer: its cell without its registered children."""
+        return read_polygons_by_layer(
+            self.source_cells[cell.name],
+            excluded_reference_indexes=self.child_reference_indexes[path],
+        )
 
 
 class GeometryPlan:
@@ -267,7 +249,9 @@ class GeometryPlan:
             raise ValueError("the same source occurrence is already registered")
         child = reference.cell
         component_semantics(child, path)
-        transform = _compose(parent_transform, _affine(reference))
+        transform = composed_transform(
+            parent_transform, occurrence_transform(reference)
+        )
         self._instances[path] = (child, reference, transform)
 
     @property
@@ -341,7 +325,8 @@ class GeometryPlan:
                 or reference.cell != cell
                 or sum(item.instance == reference.instance for item in parent.insts)
                 != 1
-                or _compose(parent_transform, _affine(reference)) != transform
+                or composed_transform(parent_transform, occurrence_transform(reference))
+                != transform
             ):
                 raise ValueError(
                     f"registered occurrence {path!r} changed before prepare"
@@ -397,19 +382,23 @@ class GeometryPlan:
         stack = self._validated_stack()
         occurrences = self._occurrence_records()
         source = self._write_layout(stack, occurrences)
-        with geometry_grid_scope(source.grid):
-            with diagnostic_stage("geometry.source.extract_occurrences"):
-                self._extract_occurrence_polygons(stack, source)
-            with diagnostic_stage("geometry.source.extract_includes"):
-                self._extract_source_includes(stack, source)
-            with diagnostic_stage("geometry.source.extract_ports"):
-                self._extract_source_ports(stack, source)
-            validate_ground_contribution_ownership(stack["layers"])
-            build_input = self._lower_stack(stack, source)
-            lumped_supports = self._resolve_lumped_supports(build_input, source)
-            return self._assemble_snapshot(
-                build_input, stack, source, occurrences, lumped_supports
-            )
+        scope = GridScope(source.grid)
+        with diagnostic_stage("geometry.source.extract_occurrences"):
+            occurrence_audits = self._extract_occurrence_polygons(scope, stack, source)
+        with diagnostic_stage("geometry.source.extract_includes"):
+            include_audits = self._extract_source_includes(scope, stack, source)
+        with diagnostic_stage("geometry.source.extract_ports"):
+            port_audits = self._extract_source_ports(scope, stack, source)
+        validate_ground_contribution_ownership(scope, stack["layers"])
+        build_input = self._lower_stack(
+            stack,
+            source,
+            merged_audits(occurrence_audits, include_audits, port_audits),
+        )
+        lumped_supports = self._resolve_lumped_supports(scope, build_input, source)
+        return self._assemble_snapshot(
+            build_input, stack, source, occurrences, lumped_supports
+        )
 
     def _validated_stack(self) -> dict[str, Any]:
         stack = self._stack()
@@ -488,8 +477,8 @@ class GeometryPlan:
         )
 
     def _extract_occurrence_polygons(
-        self, stack: dict[str, Any], source: _WrittenLayout
-    ) -> None:
+        self, scope: GridScope, stack: dict[str, Any], source: _WrittenLayout
+    ) -> tuple[SourceGridAudit, ...]:
         occurrence_targets: list[dict[str, Any]] = []
 
         def occurrence_jobs():
@@ -518,10 +507,10 @@ class GeometryPlan:
                     )
                     job = source_recipe_job(
                         selector,
+                        scope,
                         entity_from_layer_record(record, materials=stack["materials"]),
-                        source_cell=source.source_cells[cell.name],
+                        source_polygons=source.occurrence_polygons(cell, path),
                         transform=transform,
-                        excluded_reference_indexes=source.child_reference_indexes[path],
                         **(
                             {
                                 "plane_layer": stack["solution_regions"][
@@ -538,13 +527,14 @@ class GeometryPlan:
                 occurrence_targets.append(record)
                 yield job
 
-        values = source_recipe_map(run_source_recipe, occurrence_jobs())
-        for record, value in zip(occurrence_targets, values, strict=True):
+        extracted = source_recipe_map(run_source_recipe, occurrence_jobs())
+        for record, value in zip(occurrence_targets, extracted.value, strict=True):
             record["geometry"]["source_occurrence_polygons_um"] = value
+        return extracted.audits
 
     def _extract_source_includes(
-        self, stack: dict[str, Any], source: _WrittenLayout
-    ) -> None:
+        self, scope: GridScope, stack: dict[str, Any], source: _WrittenLayout
+    ) -> tuple[SourceGridAudit, ...]:
         include_targets: list[dict[str, Any]] = []
 
         def include_jobs():
@@ -561,12 +551,10 @@ class GeometryPlan:
                             )
                         job = source_recipe_job(
                             occurrence_include_polygon,
+                            scope,
                             contribution,
-                            source_cell=source.source_cells[cell.name],
+                            source_polygons=source.occurrence_polygons(cell, path),
                             transform=transform,
-                            excluded_reference_indexes=source.child_reference_indexes[
-                                path
-                            ],
                         )
                     except Exception as error:  # noqa: BLE001 - retain ordered recipe failure results
                         yield failed_source_recipe(error)
@@ -574,13 +562,14 @@ class GeometryPlan:
                     include_targets.append(contribution)
                     yield job
 
-        values = source_recipe_map(run_source_recipe, include_jobs())
-        for contribution, value in zip(include_targets, values, strict=True):
+        extracted = source_recipe_map(run_source_recipe, include_jobs())
+        for contribution, value in zip(include_targets, extracted.value, strict=True):
             contribution["polygon"] = value
+        return extracted.audits
 
     def _extract_source_ports(
-        self, stack: dict[str, Any], source: _WrittenLayout
-    ) -> None:
+        self, scope: GridScope, stack: dict[str, Any], source: _WrittenLayout
+    ) -> tuple[SourceGridAudit, ...]:
         port_targets: list[dict[str, Any]] = []
 
         def port_jobs():
@@ -594,10 +583,10 @@ class GeometryPlan:
                         )
                     job = source_recipe_job(
                         occurrence_port_polygon,
+                        scope,
                         record,
-                        source_cell=source.source_cells[cell.name],
+                        source_polygons=source.occurrence_polygons(cell, path),
                         transform=transform,
-                        excluded_reference_indexes=source.child_reference_indexes[path],
                     )
                 except Exception as error:  # noqa: BLE001 - retain ordered recipe failure results
                     yield failed_source_recipe(error)
@@ -605,12 +594,16 @@ class GeometryPlan:
                 port_targets.append(record)
                 yield job
 
-        values = source_recipe_map(run_source_recipe, port_jobs())
-        for record, value in zip(port_targets, values, strict=True):
+        extracted = source_recipe_map(run_source_recipe, port_jobs())
+        for record, value in zip(port_targets, extracted.value, strict=True):
             record["source_occurrence_polygon_um"] = value
+        return extracted.audits
 
     def _lower_stack(
-        self, stack: dict[str, Any], source: _WrittenLayout
+        self,
+        stack: dict[str, Any],
+        source: _WrittenLayout,
+        source_audits: tuple[SourceGridAudit, ...],
     ) -> GeometryBuildInput:
         # The stack is lowered in its JSON form, the form a saved snapshot pair is
         # read back in, so prepare() and build_gds_stack_geometry_input on that
@@ -618,11 +611,14 @@ class GeometryPlan:
         saved = json.loads(json.dumps(stack, sort_keys=True))
         with diagnostic_stage("geometry.source.lower_stack"):
             return lower_layout(
-                stack_records(saved, None), source.library, self._component.name
+                stack_records(saved, None),
+                source.library,
+                self._component.name,
+                LayoutOrigin(source_audits=source_audits),
             )
 
     def _resolve_lumped_supports(
-        self, build_input: GeometryBuildInput, source: _WrittenLayout
+        self, scope: GridScope, build_input: GeometryBuildInput, source: _WrittenLayout
     ) -> list[LumpedSupport]:
         lumped_supports = []
         entities = {entity.semantic_id: entity for entity in build_input.entities}
@@ -665,6 +661,7 @@ class GeometryPlan:
                         f"lumped support terminal Entity {entity_id!r} lacks final Net ownership"
                     )
             polygon = occurrence_lumped_polygon(
+                scope,
                 support,
                 cell=source.source_cells[cell.name],
                 excluded_reference_indexes=source.child_reference_indexes[path],
@@ -693,57 +690,14 @@ class GeometryPlan:
         metadata = dict(build_input.metadata)
         metadata["gds_sha256"] = source.gds_sha256
         metadata["geometry_plan_root_id"] = self.root_id
-        polygon_owners = {
-            polygon_id: entity
-            for entity in build_input.entities
-            for polygon_id in entity.polygon_ids
-        }
-        polygons = tuple(
-            replace(
-                polygon,
-                metadata={
-                    **polygon.metadata,
-                    **(
-                        {
-                            "source_entity_id": polygon_owners[
-                                polygon.polygon_id
-                            ].semantic_id,
-                            "source_occurrence_path": polygon_owners[
-                                polygon.polygon_id
-                            ].metadata["source_occurrence_path"],
-                        }
-                        if polygon.polygon_id in polygon_owners
-                        else {}
-                    ),
-                },
-            )
-            for polygon in build_input.polygons
-        )
-        boundary_curves = list(self._boundary_curves)
-        reconstruction = list(self._boundary_reconstruction)
-        for path, (cell, _, transform) in self._instances.items():
-            semantics = component_semantics(cell, path)
-            boundary_curves.extend(
-                placed_boundary_curves(
-                    semantics.get("boundary_curves", ()), path, transform, build_input
-                )
-            )
-            reconstruction.extend(
-                transform_boundary(
-                    value,
-                    path=path,
-                    transform=transform,
-                    point=transform_source_point,
-                    reconstruction=True,
-                )
-                for value in semantics.get("boundary_reconstruction", ())
-            )
+        polygons = _polygons_with_owners(build_input)
+        boundary_curves, reconstruction = self._placed_boundaries(build_input)
         build_input = replace(
             build_input,
             polygons=polygons,
             metadata=metadata,
-            boundary_curves=tuple(boundary_curves),
-            boundary_reconstruction=tuple(reconstruction),
+            boundary_curves=boundary_curves,
+            boundary_reconstruction=reconstruction,
             lumped_supports=tuple(lumped_supports),
         )
         # Reconstruction indices name rings as drawn in the GDS; the source stage has
@@ -757,10 +711,6 @@ class GeometryPlan:
         build_input = with_drawn_rings(build_input, drawn_walks)
         refuse_reconstructions_without_circle(build_input, drawn_walks)
         if self._rectangular_junctions:
-            from scgsim.geometry.source.junctions import (  # noqa: PLC0415 - only used when junction requests are present
-                with_rectangular_junctions,
-            )
-
             build_input = with_rectangular_junctions(
                 build_input, self._rectangular_junctions
             )
@@ -782,3 +732,58 @@ class GeometryPlan:
             source.gds_sha256,
             occurrences,
         )
+
+    def _placed_boundaries(
+        self, build_input: GeometryBuildInput
+    ) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+        """The authored boundary curves and reconstructions, the plan's own then each occurrence's, in layout coordinates."""
+        boundary_curves = list(self._boundary_curves)
+        reconstruction = list(self._boundary_reconstruction)
+        for path, (cell, _, transform) in self._instances.items():
+            semantics = component_semantics(cell, path)
+            boundary_curves.extend(
+                placed_boundary_curves(
+                    semantics.get("boundary_curves", ()), path, transform, build_input
+                )
+            )
+            reconstruction.extend(
+                transform_boundary(
+                    value,
+                    path=path,
+                    transform=transform,
+                    point=transform_source_point,
+                    reconstruction=True,
+                )
+                for value in semantics.get("boundary_reconstruction", ())
+            )
+        return tuple(boundary_curves), tuple(reconstruction)
+
+
+def _polygons_with_owners(build_input: GeometryBuildInput) -> tuple[Any, ...]:
+    """Each polygon an Entity owns, with that Entity and its occurrence path in its metadata."""
+    polygon_owners = {
+        polygon_id: entity
+        for entity in build_input.entities
+        for polygon_id in entity.polygon_ids
+    }
+    return tuple(
+        replace(
+            polygon,
+            metadata={
+                **polygon.metadata,
+                **(
+                    {
+                        "source_entity_id": polygon_owners[
+                            polygon.polygon_id
+                        ].semantic_id,
+                        "source_occurrence_path": polygon_owners[
+                            polygon.polygon_id
+                        ].metadata["source_occurrence_path"],
+                    }
+                    if polygon.polygon_id in polygon_owners
+                    else {}
+                ),
+            },
+        )
+        for polygon in build_input.polygons
+    )

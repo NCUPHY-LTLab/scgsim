@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Sequence
 from typing import Protocol, cast
 
-from scgsim.geometry.grid.grid import polygon_boolean
+from scgsim.geometry.grid.booleans import polygon_boolean
 from scgsim.geometry.grid.planar_loops import LoopCoordinates
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.models.input import SemanticEntitySpec
 
 BOOLEAN_AREA_EPS_UM2 = 1e-8
@@ -106,6 +107,7 @@ def entities_have_finite_overlap(
 ) -> bool:
     """Check Boolean overlap area against absolute and relative noise floors."""
     overlap = polygon_boolean(
+        UNGRIDDED,
         _entity_occupied_region(first),
         _entity_occupied_region(second),
         "and",
@@ -143,7 +145,10 @@ def _entity_occupied_region(
         return (outer,)
     return tuple(
         cast(_PolygonWithArea, polygon)
-        for polygon in polygon_boolean((outer,), holes, "not", precision=1e-9) or ()
+        for polygon in polygon_boolean(
+            UNGRIDDED, (outer,), holes, "not", precision=1e-9
+        )
+        or ()
     )
 
 

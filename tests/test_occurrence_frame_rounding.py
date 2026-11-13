@@ -14,11 +14,12 @@ import pytest
 from geometry_grid_fixtures import GRID
 
 from scgsim.geometry import SemanticEntitySpec
-from scgsim.geometry.grid.grid import geometry_grid_scope
 from scgsim.geometry.grid.grid_regions import canonical_grid_point
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.source.occurrence import (
     occurrence_ground_polygons_for_entity,
     occurrence_polygons_for_entity,
+    read_polygons_by_layer,
 )
 
 gdstk = pytest.importorskip("gdstk")
@@ -104,13 +105,18 @@ def furthest_from_lattice(records):
 def test_cancelling_rotations_realize_the_drawn_polygon():
     """The nested occurrence's polygon lands on the same assembly nodes as the drawn one."""
     metal = entity(gds_layer=METAL[0], gds_datatype=METAL[1])
-    with geometry_grid_scope(GRID):
-        direct = occurrence_polygons_for_entity(
-            metal, cell=drawn((METAL, RECTANGLE)), transform=IDENTITY
-        )
-        framed = occurrence_polygons_for_entity(
-            metal, cell=nested((METAL, RECTANGLE)), transform=rotation(-45.0)
-        )
+    direct = occurrence_polygons_for_entity(
+        GridScope(GRID),
+        metal,
+        transform=IDENTITY,
+        polygons_by_layer=read_polygons_by_layer(drawn((METAL, RECTANGLE))),
+    ).value
+    framed = occurrence_polygons_for_entity(
+        GridScope(GRID),
+        metal,
+        transform=rotation(-45.0),
+        polygons_by_layer=read_polygons_by_layer(nested((METAL, RECTANGLE))),
+    ).value
     assert nodes(framed) == nodes(direct)
     assert furthest_from_lattice(framed) < 1e-9
 
@@ -123,12 +129,19 @@ def test_cancelling_rotations_derive_the_drawn_ground():
         gds_datatype=MASK[1],
     )
     shapes = ((PLANE, ((-20.0, -20.0), (30.0, 30.0))), (MASK, RECTANGLE))
-    with geometry_grid_scope(GRID):
-        direct = occurrence_ground_polygons_for_entity(
-            ground, cell=drawn(*shapes), transform=IDENTITY, plane_layer=PLANE
-        )
-        framed = occurrence_ground_polygons_for_entity(
-            ground, cell=nested(*shapes), transform=rotation(-45.0), plane_layer=PLANE
-        )
+    direct = occurrence_ground_polygons_for_entity(
+        GridScope(GRID),
+        ground,
+        transform=IDENTITY,
+        plane_layer=PLANE,
+        polygons_by_layer=read_polygons_by_layer(drawn(*shapes)),
+    ).value
+    framed = occurrence_ground_polygons_for_entity(
+        GridScope(GRID),
+        ground,
+        transform=rotation(-45.0),
+        plane_layer=PLANE,
+        polygons_by_layer=read_polygons_by_layer(nested(*shapes)),
+    ).value
     assert nodes(framed) == nodes(direct)
     assert furthest_from_lattice(framed) < 1e-9

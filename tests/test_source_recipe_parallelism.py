@@ -15,15 +15,19 @@ from scgsim.geometry import (
     PhysicalLayerDeclaration,
     build_gds_stack_geometry_input,
 )
-from scgsim.geometry.grid.grid import (
-    geometry_grid_scope,
-    source_grid_audits,
-    source_recipe_map,
-)
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.source import occurrence as occurrence
 from scgsim.geometry.source import plan as plan_module
+from scgsim.geometry.source.recipes import (
+    Audited,
+    run_source_recipe,
+    source_recipe_job,
+    source_recipe_map,
+)
 from scgsim.preparation import preparation_resources
+
+SCOPE = GridScope(GeometryGridContext(0.001))
 
 
 @pytest.fixture
@@ -63,10 +67,11 @@ def test_recipe_results_context_audits_and_serial_extraction_match(
     # Source selectors are world-frame facts; both execution paths use this transform.
     def prepared_jobs():
         for index, point in enumerate(((11, 21), (15, 21))):
-            yield occurrence.source_recipe_job(
+            yield source_recipe_job(
                 occurrence.occurrence_polygons_for_entity,
+                SCOPE,
                 entity(f"metal_{index}", point),
-                source_cell=native_source,
+                source_polygons=occurrence.read_polygons_by_layer(native_source),
                 transform=(1, 0, 0, 1, 10, 20),
             )
 
@@ -80,16 +85,13 @@ def test_recipe_results_context_audits_and_serial_extraction_match(
         return original(*args, **kwargs)
 
     monkeypatch.setattr(occurrence, "_extract_polygons_by_layer", extract)
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        serial = source_recipe_map(occurrence.run_source_recipe, prepared_jobs())
-        serial_audits = deepcopy(source_grid_audits())
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        with preparation_resources(max_workers=2):
-            parallel = source_recipe_map(occurrence.run_source_recipe, prepared_jobs())
-        parallel_audits = source_grid_audits()
-    assert parallel == serial
-    assert parallel_audits == serial_audits
-    assert [row["source_entity_id"] for row in parallel_audits] == [
+    serial = source_recipe_map(run_source_recipe, prepared_jobs())
+    serial_audits = deepcopy(serial.audits)
+    with preparation_resources(max_workers=2):
+        parallel = source_recipe_map(run_source_recipe, prepared_jobs())
+    assert parallel.value == serial.value
+    assert parallel.audits == serial_audits
+    assert [row["source_entity_id"] for row in parallel.audits] == [
         "metal_0",
         "metal_1",
     ]
@@ -101,79 +103,63 @@ def test_job_native_objects_and_record_inputs_are_isolated(native_source):
     original_points = [p.points.tolist() for p in native_source.polygons]
     record = {"nested": [1]}
 
-    def mutate(value, *, cell, polygons_by_layer):
-        assert cell is None
+    def mutate(value, *, polygons_by_layer):
         value["nested"].append(2)
         polygons_by_layer[(1, 0)][0].translate(100, 0)
-        return value, polygons_by_layer[(1, 0)][0].points.tolist()
+        return Audited((value, polygons_by_layer[(1, 0)][0].points.tolist()))
 
     def make_jobs():
         for _ in range(2):
-            yield occurrence.source_recipe_job(
-                mutate, record, source_cell=native_source
+            yield source_recipe_job(
+                mutate,
+                record,
+                source_polygons=occurrence.read_polygons_by_layer(native_source),
             )
 
     with preparation_resources(max_workers=2):
-        results = source_recipe_map(occurrence.run_source_recipe, make_jobs())
+        results = source_recipe_map(run_source_recipe, make_jobs()).value
     expected_points = [[x + 100, y] for x, y in original_points[0]]
     assert results == [({"nested": [1, 2]}, expected_points)] * 2
     assert record == {"nested": [1]}
     assert [p.points.tolist() for p in native_source.polygons] == original_points
 
 
-def refused_after_selection(value, **kwargs):
-    """Select genuinely, then refuse, so the selection's audit is kept before the error."""
-    occurrence.occurrence_polygons_for_entity(value, **kwargs)
+def refused_after_selection(scope, value, **kwargs):
+    """Select genuinely, then refuse."""
+    occurrence.occurrence_polygons_for_entity(scope, value, **kwargs)
     raise ValueError(f"source mismatch {value.semantic_id[-1]}")
 
 
-def test_first_recipe_failure_keeps_audit_prefix_and_allows_clean_next_map(
-    native_source,
-):
-    """Retain source-order failure and audit behavior across the next map."""
+def test_first_recipe_failure_in_source_order_and_a_clean_next_map(native_source):
+    """Raise the first failure in source order, then run the next map with its own audits."""
 
     def invalid_jobs():
         for index, point in enumerate(((1, 1), (99, 99))):
-            yield occurrence.source_recipe_job(
+            yield source_recipe_job(
                 refused_after_selection,
+                SCOPE,
                 entity(f"metal_{index}", point),
-                source_cell=native_source,
+                source_polygons=occurrence.read_polygons_by_layer(native_source),
                 transform=(1, 0, 0, 1, 0, 0),
             )
 
-    errors = []
-
-    def observed_run(job):
-        try:
-            return occurrence.run_source_recipe(job)
-        except ValueError as error:
-            errors.append(str(error))
-            raise
-
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        with preparation_resources(max_workers=2):
-            with pytest.raises(ValueError, match="source mismatch 0"):
-                source_recipe_map(observed_run, invalid_jobs())
-            assert "source mismatch 0" in errors
-            assert len(errors) == 2
-            assert any("source mismatch" not in error for error in errors)
-            assert [r["source_entity_id"] for r in source_grid_audits()] == ["metal_0"]
-            result = source_recipe_map(
-                occurrence.run_source_recipe,
-                [
-                    occurrence.source_recipe_job(
-                        occurrence.occurrence_polygons_for_entity,
-                        entity("next", (1, 1)),
-                        source_cell=native_source,
-                        transform=(1, 0, 0, 1, 0, 0),
-                    )
-                ],
-            )
-            assert result
-            assert [r["source_entity_id"] for r in source_grid_audits()] == [
-                "metal_0",
-                "next",
-            ]
+    with preparation_resources(max_workers=2):
+        with pytest.raises(ValueError, match="source mismatch 0"):
+            source_recipe_map(run_source_recipe, invalid_jobs())
+        result = source_recipe_map(
+            run_source_recipe,
+            [
+                source_recipe_job(
+                    occurrence.occurrence_polygons_for_entity,
+                    SCOPE,
+                    entity("next", (1, 1)),
+                    source_polygons=occurrence.read_polygons_by_layer(native_source),
+                    transform=(1, 0, 0, 1, 0, 0),
+                )
+            ],
+        )
+        assert result.value
+        assert [r["source_entity_id"] for r in result.audits] == ["next"]
 
 
 def test_ground_include_and_port_recipe_outputs_match():
@@ -200,44 +186,46 @@ def test_ground_include_and_port_recipe_outputs_match():
     )
 
     def prepared_jobs():
-        yield occurrence.source_recipe_job(
+        polygons = occurrence.read_polygons_by_layer(cell)
+        yield source_recipe_job(
             occurrence.occurrence_ground_polygons_for_entity,
+            SCOPE,
             ground,
-            source_cell=cell,
+            source_polygons=polygons,
             transform=(1, 0, 0, 1, 0, 0),
             plane_layer=(2, 0),
         )
-        yield occurrence.source_recipe_job(
+        yield source_recipe_job(
             occurrence.occurrence_include_polygon,
+            SCOPE,
             {
                 "source_local_id": "include",
                 "layer": [3, 0],
                 "selector_point_um": [5.5, 0.5],
             },
-            source_cell=cell,
+            source_polygons=polygons,
             transform=(1, 0, 0, 1, 0, 0),
         )
-        yield occurrence.source_recipe_job(
+        yield source_recipe_job(
             occurrence.occurrence_port_polygon,
+            SCOPE,
             {
                 "name": "port",
                 "layer": 4,
                 "datatype": 0,
                 "selector_point_um": [0.5, 0.5],
             },
-            source_cell=cell,
+            source_polygons=polygons,
             transform=(1, 0, 0, 1, 0, 0),
         )
 
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        serial = source_recipe_map(occurrence.run_source_recipe, prepared_jobs())
-        serial_audits = deepcopy(source_grid_audits())
-    with geometry_grid_scope(GeometryGridContext(0.001)):
-        with preparation_resources(max_workers=2):
-            parallel = source_recipe_map(occurrence.run_source_recipe, prepared_jobs())
-        assert source_grid_audits() == serial_audits
-    assert parallel == serial
-    assert len(parallel[0][0]["holes"]) == 1
+    serial = source_recipe_map(run_source_recipe, prepared_jobs())
+    serial_audits = deepcopy(serial.audits)
+    with preparation_resources(max_workers=2):
+        parallel = source_recipe_map(run_source_recipe, prepared_jobs())
+    assert parallel.audits == serial_audits
+    assert parallel.value == serial.value
+    assert len(parallel.value[0][0]["holes"]) == 1
 
 
 def test_public_adapter_exact_metadata_and_audit_order(tmp_path):
@@ -390,9 +378,8 @@ def _prepare_serial_and_parallel_plan(plan, plan_module, monkeypatch):
 
     def observed_selector(*args, **kwargs):
         # Observe genuine selectors, without substituting their outputs.
-        if kwargs.get("cell") is None:
-            barrier.wait(timeout=5)
-            worker_threads.append(get_ident())
+        barrier.wait(timeout=5)
+        worker_threads.append(get_ident())
         return original_selector(*args, **kwargs)
 
     with monkeypatch.context() as watched:
