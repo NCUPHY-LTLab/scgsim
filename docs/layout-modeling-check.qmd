@@ -61,7 +61,7 @@ def test_the_layout_can_be_modeled():
 
 Call it from the repository's tests and while the layout is being drawn. Pass
 `surface_epr_specs` with the specs the simulations will use: they are the ones
-[`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins) takes, and
+[`set_surface_epr(specs)`](specs/palace-eigenmode.qmd#surface-epr-margins) takes, and
 their margins are cut into the geometry as bands, so a layout that cannot carry
 them is refused here too. Bands are cut only on the faces the specs select, so
 a layout with no such face passes with no bands. For an assembly, pass

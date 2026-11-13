@@ -77,7 +77,7 @@ def test_surface_epr_before_a_plan_names_set_plan(sim_type):
     with pytest.raises(
         ValueError, match=r"call set_plan\(\) before set_surface_epr\(\)"
     ):
-        sim_type().set_surface_epr(representation="B", specs={})
+        sim_type().set_surface_epr(None)
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
@@ -87,18 +87,6 @@ def test_mesh_without_an_output_folder_names_set_output_dir(sim_type, monkeypatc
     sim.set_plan(two_pad_snapshot(monkeypatch))
     with pytest.raises(ValueError, match=r"call set_output_dir\(\) before mesh\(\)"):
         sim.mesh()
-
-
-def test_only_electrostatic_mesh_requires_surface_epr(monkeypatch, tmp_path):
-    """The one rule that differs by problem is a class attribute; Electrostatic refuses before any build."""
-    assert ElectrostaticSim.mesh_requires_surface_epr is True
-    assert EigenmodeSim.mesh_requires_surface_epr is False
-    sim = ElectrostaticSim()
-    sim.set_plan(two_pad_snapshot(monkeypatch))
-    sim.set_output_dir(tmp_path / "run")
-    with pytest.raises(ValueError, match=r"call set_surface_epr\(\) before mesh\(\)"):
-        sim.mesh()
-    assert not (tmp_path / "run").exists()
 
 
 @pytest.mark.parametrize("sim_type", SIMS)

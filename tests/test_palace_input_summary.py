@@ -52,9 +52,7 @@ def eigenmode_sim(monkeypatch, layer_stack, *, route="B"):
         sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     if route == "A":
-        sim.set_surface_epr(
-            representation="A", specs={}, approximation_profile=THIN_FILM
-        )
+        sim.set_route("A", approximation_profile=THIN_FILM)
     return sim
 
 
@@ -154,7 +152,6 @@ def test_the_electrostatic_summary_shows_the_vacuum_mesh_builds_and_its_settings
     sim = ElectrostaticSim()
     sim.set_plan(plan.prepare())
     sim.set_vacuum_region(VACUUM_PADDING_UM)
-    sim.set_surface_epr(representation="B", specs={})
     sim.add_terminal("pad", net_id="pad")
     sim.add_ground(net_id="electrode")
 

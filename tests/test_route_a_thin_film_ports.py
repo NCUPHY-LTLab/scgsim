@@ -261,7 +261,7 @@ def test_public_simplepad_prepares_route_a_thin_film_ports():
         build_input=snapshot.geometry_input,
         settings=GeometrySettings(
             route="A",
-            route_a_thin_film=None,
+            thin_film=None,
             approximation_profile=ApproximationProfile("thin_film", "v1", {}),
             vacuum_region=None,
             surface_epr_specs=None,

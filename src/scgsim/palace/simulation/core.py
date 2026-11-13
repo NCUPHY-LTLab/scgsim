@@ -1,8 +1,8 @@
 """What every Palace simulation shares: the plan it is bound to, the geometry settings, ``mesh()`` and the handoff.
 
 ``PalaceSimulation`` is the base of ``EigenmodeSim`` and ``ElectrostaticSim``.  It owns the calls that do
-not depend on the problem: binding a plan, the output folder, the vacuum region, Surface EPR, the mesh
-controls, ``input_summary()``, ``mesh()``, ``simulation_drc``, ``mesh_summary()`` and ``prepare_handoff()``.
+not depend on the problem: binding a plan, the output folder, the vacuum region, the route, Surface EPR,
+the mesh controls, ``input_summary()``, ``mesh()``, ``simulation_drc``, ``mesh_summary()`` and ``prepare_handoff()``.
 A problem class adds its own setters, its numerical defaults and ``write_config()``, and answers what the
 core asks of it: the class attributes and methods under "What a problem adds" below.
 
@@ -48,8 +48,8 @@ from ..source.layout_snapshot import (
 )
 from ..source.ports import LayoutPortBinding, RequestedPort
 from ..source.surface_epr import SurfaceEprSpecs
-from ..source.transforms import RouteAThinFilm, normalize_route_a_thin_film
-from ..source.workflow import GeometrySettings
+from ..source.transforms import RouteAThinFilm
+from ..source.workflow import GeometrySettings, route_profile
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .lifecycle import CALLS, Call, Stage
 
@@ -65,7 +65,7 @@ class PalaceSimulation(ABC):
 
     output_dir: Path | None = None
     route: Literal["A", "B"] = "B"
-    route_a_thin_film: RouteAThinFilm | None = None
+    thin_film: RouteAThinFilm | None = None
     approximation_profile: ApproximationProfile | None = None
     vacuum_region: VacuumRegionSpec | None = None
     surface_epr_specs: SurfaceEprSpecs | None = None
@@ -90,9 +90,6 @@ class PalaceSimulation(ABC):
 
     problem: ClassVar[Literal["Eigenmode", "Electrostatic"]]
     """The Palace ``Problem.Type`` this class writes; the mesh summary and the handoff record it."""
-
-    mesh_requires_surface_epr: ClassVar[bool]
-    """Whether ``mesh()`` refuses a simulation on which ``set_surface_epr`` was never called."""
 
     numerical_defaults: ClassVar[ProblemDefaults]
     """The AMR defaults of this problem, for every control a ``NumericalControls`` leaves to the problem."""
@@ -166,18 +163,48 @@ class PalaceSimulation(ABC):
         self.vacuum_region = VacuumRegionSpec.from_padding(padding)
         self._fall_back("set_vacuum_region")
 
-    def set_surface_epr(
+    def set_route(
         self,
+        route: Literal["A", "B"],
         *,
-        representation: str,
-        specs: Mapping[str, Mapping[str, Any]],
-        route_a_thin_film: RouteAThinFilm | None = None,
+        thin_film: RouteAThinFilm | None = None,
         approximation_profile: ApproximationProfile | None = None,
     ) -> None:
-        """Configure Surface EPR and the required Route-A thin-film lowering.
+        """Choose how the conductors are modelled: Route ``"A"`` (zero-thickness sheets) or ``"B"`` (3D volumes).
 
-        Surface EPR is geometry: its inset margins become bands that ``mesh()`` cuts into the model, so
-        this runs before ``mesh()``.  Calling it again invalidates the mesh, config and handoff.
+        A simulation that never calls ``set_route`` is Route B.  One call states the whole route setting: it
+        replaces the route, ``thin_film`` and ``approximation_profile`` together, so nothing survives from an
+        earlier call or the constructor.
+
+        * ``approximation_profile`` is the ``ApproximationProfile`` the preparation interprets the plan's
+          physical layers with.  Route A requires one: ``"thin_film"`` (no parameters), or
+          ``"substrate_face"`` or ``"metal_gap_equivalent"`` with their ``film_bindings``.  On Route B,
+          omitting it means the identity profile ``route_b``, and a profile given is used as given.
+        * ``thin_film`` (Route A only, optional) repeats the profile's name when it is ``"substrate_face"``
+          or ``"metal_gap_equivalent"`` and is checked against it; Route B refuses it.
+
+        Calling it again discards the mesh, config and handoff.
+
+        Raises:
+            ValueError: ``route`` is not ``"A"`` or ``"B"``, Route A has no ``approximation_profile``, or
+                ``thin_film`` is given on Route B, is not a Route A lowering or differs from the profile's name.
+            TypeError: ``approximation_profile`` is not an ``ApproximationProfile``.
+        """
+        # Check every value before storing any, so a refused call leaves the earlier setting whole.
+        chosen = _checked_route(route)
+        route_profile(chosen, thin_film, approximation_profile)
+        self.route = chosen
+        self.thin_film = thin_film
+        self.approximation_profile = approximation_profile
+        self._fall_back("set_route")
+
+    def set_surface_epr(self, specs: Mapping[str, Mapping[str, Any]] | None) -> None:
+        """Request Surface EPR with ``specs`` by interface type, or turn it off again with ``None``.
+
+        Surface EPR is computed only when this was called with specs.  Without it, ``mesh()`` cuts no bands
+        and ``write_config()`` writes no Surface-EPR rows.  Surface EPR is geometry: the inset margins of the
+        specs become bands that ``mesh()`` cuts into the model, so this runs before ``mesh()``; calling it
+        again, ``None`` included, discards the mesh, config and handoff.
 
         Each spec (``"MA"``, ``"MS"``, ``"SA"``) may carry:
 
@@ -194,32 +221,18 @@ class PalaceSimulation(ABC):
         margins from both (compared on the model grid), or ``mesh()`` raises.
 
         Raises:
-            ValueError: ``representation`` is not ``"A"`` or ``"B"``, no plan is bound, or a spec is invalid.
-            TypeError: ``approximation_profile`` is not an ``ApproximationProfile``.
+            ValueError: no plan is bound (the specs are checked against its materials), ``specs`` is an empty
+                mapping, or a spec is invalid.
+            TypeError: ``specs`` or a spec is not a mapping, or a field has the wrong type.
         """
-        route = (
-            representation.strip().upper() if isinstance(representation, str) else ""
-        )
-        if route not in {"A", "B"}:
-            raise ValueError(
-                "Surface EPR representation must be 'A' or 'B': pass representation='A' or 'B'."
-            )
         materials = self._require("set_surface_epr", self._materials)
-        normalized_thin_film = (
-            normalize_route_a_thin_film(route, route_a_thin_film)
-            if route_a_thin_film is not None
-            else None
-        )
-        if approximation_profile is not None and not isinstance(
-            approximation_profile, ApproximationProfile
-        ):
-            raise TypeError("approximation_profile must be ApproximationProfile")
-        normalized_specs = SurfaceEprSpecs.normalized(specs, materials=materials)
-        self.route = route  # type: ignore[assignment]
-        self.route_a_thin_film = normalized_thin_film
-        if approximation_profile is not None:
-            self.approximation_profile = approximation_profile
-        self.surface_epr_specs = normalized_specs
+        if specs is None:
+            self.surface_epr_specs = None
+        else:
+            _refuse_empty_specs(specs)
+            self.surface_epr_specs = SurfaceEprSpecs.normalized(
+                specs, materials=materials
+            )
         self._fall_back("set_surface_epr")
 
     def set_mesh(
@@ -257,7 +270,9 @@ class PalaceSimulation(ABC):
         """Show the input ``mesh()`` builds from, and the Palace settings, before mesh work.
 
         The source half is the geometry input and stack ``mesh()`` prepares from the bound plan, so it holds the
-        vacuum region, the requested ports and the route's conductors as the simulation was given them.
+        vacuum region, the requested ports and the route's conductors as the simulation was given them.  The
+        Palace half shows the route setting and the Surface-EPR specs, ``None`` (shown as "not requested")
+        when ``set_surface_epr`` was not called.
         A setup ``mesh()`` refuses while preparing is refused here with the same error, an input with no vacuum,
         planned or set, included.  Nothing is built or written, and the simulation is left as it was.
 
@@ -272,7 +287,7 @@ class PalaceSimulation(ABC):
         data["backend"] = {
             "name": "palace",
             "route": self.route,
-            "route_a_thin_film": self.route_a_thin_film,
+            "thin_film": self.thin_film,
             "approximation_profile": self.approximation_profile.to_payload()
             if self.approximation_profile is not None
             else None,
@@ -291,7 +306,7 @@ class PalaceSimulation(ABC):
         """Discard prior derived state, prepare the source, build the geometry, check it, and mesh it.
 
         Surface EPR is geometry: ``set_surface_epr`` runs before ``mesh()``, which cuts the inset
-        margins of its specs into the model as bands.  Without Surface EPR no bands are requested.
+        margins of its specs into the model as bands.  When it was not called, no bands are requested.
 
         Before the mesher starts, the built model goes through the meshing stage of ``simulation_drc``: a
         refusing fine edge or face raises :class:`~scgsim.palace.SimulationDrcError` carrying the same
@@ -301,8 +316,8 @@ class PalaceSimulation(ABC):
             The path of the written ``palace.msh``.
 
         Raises:
-            ValueError: no plan is bound, no output folder is set, the problem needs Surface EPR and none is
-                set, or the preparation or geometry build refuses the setup.
+            ValueError: no plan is bound, no output folder is set, or the preparation or geometry build
+                refuses the setup.
             SimulationDrcError: the meshing stage refuses the built model.
         """
         self._fall_back("mesh")
@@ -311,7 +326,6 @@ class PalaceSimulation(ABC):
             raise ValueError(
                 "No output folder to mesh into: call set_output_dir() before mesh()."
             )
-        self._require_surface_epr_for_mesh()
         request = self._geometry_request(plan)
         if request.materials is not None:
             self._materials = request.materials
@@ -343,8 +357,8 @@ class PalaceSimulation(ABC):
         above.  A conductor that reaches that extent only at a point, such as a lone round pad with no die
         outline or ground plane around it, pinches this vacuum and is refused.  A layout it refuses raises
         the error ``mesh()`` raises, unchanged.  With ``surface_epr_specs`` the bands are cut as
-        ``set_surface_epr(representation="B", specs=...)`` would cut them; a problem whose ``mesh()``
-        requires Surface EPR (``ElectrostaticSim``) is given ``{}`` when none is passed.
+        ``set_surface_epr(surface_epr_specs)`` would cut them, and the specs are checked as it checks them;
+        without them no bands are cut.
 
         Only a model that built goes to the meshing stage, ``scgsim.meshing.check_fine_structure``: the fine
         edges and faces the mesher cannot use, each with its location, size, owner and fix.  A refusal there
@@ -390,12 +404,8 @@ class PalaceSimulation(ABC):
             # Without vacuum above it a conductor has no metal-air face, so MA and SA bands would cut nothing.
             sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
         sim._add_drc_inputs(snapshot)  # noqa: SLF001 -- a hook of the same class
-        if surface_epr_specs is not None or cls.mesh_requires_surface_epr:
-            # Only an absent argument becomes an empty Surface EPR; any value given is validated by the setter.
-            sim.set_surface_epr(
-                representation="B",
-                specs={} if surface_epr_specs is None else surface_epr_specs,
-            )
+        if surface_epr_specs is not None:
+            sim.set_surface_epr(surface_epr_specs)
         return sim
 
     def _build_geometry(self, output_dir: str | Path) -> RouteGeometry:
@@ -405,18 +415,9 @@ class PalaceSimulation(ABC):
         output folder and mesh state are left as they were.
         """
         plan = self._require("mesh", self._plan)
-        self._require_surface_epr_for_mesh()
         return build_route_geometry(
             self._geometry_request(plan).source, output_dir=output_dir
         )
-
-    def _require_surface_epr_for_mesh(self) -> None:
-        """Refuse a mesh of a problem that requires Surface EPR when ``set_surface_epr`` was never called."""
-        if self.mesh_requires_surface_epr and self.surface_epr_specs is None:
-            raise ValueError(
-                f"No Surface EPR for the {self.problem} mesh: call set_surface_epr() before mesh() "
-                "(specs={} requests no bands)."
-            )
 
     def _geometry_request(self, plan: GeometryPlanSnapshot) -> LayoutGeometryRequest:
         """Resolve ports and prepare the geometry input of ``plan``, everything before the SGB build.
@@ -428,7 +429,7 @@ class PalaceSimulation(ABC):
             ports=self._lumped_ports(),
             settings=GeometrySettings(
                 route=self.route,
-                route_a_thin_film=self.route_a_thin_film,
+                thin_film=self.thin_film,
                 approximation_profile=self.approximation_profile,
                 vacuum_region=self.vacuum_region,
                 surface_epr_specs=self.surface_epr_specs,
@@ -476,14 +477,12 @@ class PalaceSimulation(ABC):
         mesh = self._require("write_config", self._mesh_result)
         materials = self._require("write_config", self._materials)
         _check_mesh_files(mesh)
-        # None only on Eigenmode, which may skip Surface EPR; Electrostatic's mesh() requires the specs.
-        specs = self.surface_epr_specs
         return mesh, ConfigInput(
             problem=self.problem,
             groups=mesh.groups,
             mesh_path=mesh.mesh_path,
             materials=materials,
-            surface_epr_specs=SurfaceEprSpecs({}) if specs is None else specs,
+            surface_epr_specs=self.surface_epr_specs,
             numerical=self.numerical,
         )
 
@@ -566,6 +565,31 @@ _TWO_VACUUMS = (
     "The GeometryPlan has its own vacuum (VACUUM_REGION), so the simulation cannot add one: "
     "drop sim.set_vacuum_region(), or prepare the plan without plan.set_vacuum_region()."
 )
+
+
+def _checked_route(route: Any) -> Literal["A", "B"]:
+    """``route`` as ``"A"`` or ``"B"``; any other route is refused with the two a Palace simulation takes."""
+    chosen = route.strip().upper() if isinstance(route, str) else route
+    if chosen == "A" or chosen == "B":
+        return chosen
+    if chosen == "C":
+        raise ValueError(
+            "Route C is not a Palace route: SGB builds Route C for backends that keep conductor volumes. "
+            "Call set_route('A', approximation_profile=...) or set_route('B')."
+        )
+    raise ValueError(
+        f"Unknown route {route!r}: call set_route('A', approximation_profile=...) for zero-thickness sheets "
+        "or set_route('B') for 3D conductors."
+    )
+
+
+def _refuse_empty_specs(specs: Mapping[str, Mapping[str, Any]]) -> None:
+    """Refuse an empty mapping: "no Surface EPR" has one spelling, no call (or ``None``)."""
+    if isinstance(specs, Mapping) and not specs:
+        raise ValueError(
+            "set_surface_epr({}) requests no Surface EPR: to have none, do not call set_surface_epr(), "
+            "or call set_surface_epr(None) to turn it off again."
+        )
 
 
 def _check_mesh_files(mesh: MeshBuildResult) -> None:

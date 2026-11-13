@@ -70,11 +70,10 @@ def test_the_default_recipe_meshes_simplepad_on_route_a_with_bands_clean(tmp_pat
         layout_sheet=True,
         inductance=PORT_INDUCTANCE_H,
     )
-    sim.set_surface_epr(
-        representation="A",
-        specs=specs,
-        approximation_profile=ApproximationProfile("thin_film", "v1", {}),
+    sim.set_route(
+        "A", approximation_profile=ApproximationProfile("thin_film", "v1", {})
     )
+    sim.set_surface_epr(specs)
 
     sim.mesh()
 

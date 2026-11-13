@@ -39,8 +39,7 @@ sim = EigenmodeSim()
 sim.set_plan(snapshot)
 sim.set_output_dir(palace_run_dir)
 sim.set_surface_epr(
-    representation="B",
-    specs={
+    {
         kind: {
             "thickness": record["thickness"],
             "permittivity": record["permittivity"],
@@ -50,7 +49,7 @@ sim.set_surface_epr(
             "inset_margins_um": (0.5, 1.0),
         }
         for kind, record in interface_presets.items()
-    },
+    }
 )
 sim.add_port(
     port_name,

@@ -18,7 +18,8 @@ lang: zh-TW
 | 網格摘要 | `mesh_summary()` 回傳獨立的網格產生資料 |
 | 數值控制 | `set_numerical(...)` 保留明確的階數、線性求解器、AMR 與輸出選擇 |
 | 來源／設定檢視 | `input_summary()` 回傳獨立的 `mesh()` 建模輸入（計畫套用模擬的真空區域、所要求的埠，以及所選的 Route A 或 Route B 之後）與設定，不進行檔案或原生 I/O |
-| 表面模型 | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`，須在 `mesh()` 之前 |
+| 路徑 | `set_route(route, *, thin_film=None, approximation_profile=None)`，須在 `mesh()` 之前；從未呼叫時為 Route B，Route A 要求 `approximation_profile` |
+| Surface EPR | `set_surface_epr(specs)`，須在 `mesh()` 之前；只有以規格呼叫時才計算，`None` 會關閉它，`{}` 會被拒絕 |
 | 來源指定的埠 | `add_port(name, *, layer, layout_sheet=True, inductance)`；`layout_sheet` 必須是 `True`（簽章上的預設值 `False` 會被拒絕） |
 | 輸出選取 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | 準備 | `mesh()`、`write_config()`，接著 `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
@@ -54,7 +55,7 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 內縮邊距 $m$ 選出表面上距最近 gap edge（導體輪廓上面向裸露 substrate 的邊）至少 $m$ µm 的部分。SGB 把該部分以帶面切進模型，所以一般的 Palace 對普通屬性積分；SCGSim 不寫出原生 `Mask` 或 `Inset` 設定，也不需要特殊的 Palace 建置。距離如何量測，由 [SGB 設計頁](../design/sgb/inset-imprint.qmd#band-measure)定義。
 
 ::: {.callout-important title="請在 mesh() 之前呼叫 set_surface_epr"}
-邊距是幾何：`mesh()` 會把它們連同其餘模型一起交給 SGB。請先設定 `set_surface_epr`。在 `mesh()` 之後再呼叫它，會使網格、設定檔及交接失效，必須重新執行 `mesh()`。
+邊距是幾何：`mesh()` 會把它們連同其餘模型一起交給 SGB。請先設定 `set_surface_epr`。在 `mesh()` 之後再呼叫它，會使網格、設定檔及交接失效，必須重新執行 `mesh()`。沒有這個呼叫時，`mesh()` 不切任何帶，設定檔也沒有 Surface-EPR 列。
 :::
 
 每個規格（`"MA"`、`"MS"`、`"SA"`）除了薄膜輸入，還可帶這些邊距鍵：

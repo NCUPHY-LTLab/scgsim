@@ -111,7 +111,8 @@ the part of the surface at least a given distance from the gaps. Request them
 with `inset_margins_um` in the `set_surface_epr` spec, for example
 `"inset_margins_um": (0.5, 1.0)`, and call `set_surface_epr` before
 `mesh()`, because SGB cuts the margins into the geometry. Omit the key to request
-only the baseline. The rows are ordinary Palace attributes, so a stock Palace
+only the baseline. Without a `set_surface_epr(specs)` call, no Surface EPR is
+computed. The rows are ordinary Palace attributes, so a stock Palace
 executable is enough. Keys, face kinds and limits are in the
 [Eigenmode contract](../specs/palace-eigenmode.qmd#surface-epr-margins), and the
 public [Xmon EPR extension](../tutorial-xmon-palace.qmd) shows the source

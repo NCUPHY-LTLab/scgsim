@@ -336,7 +336,7 @@ solve or returned matrix observation.
 | Route B | The closed exterior boundary shell of a finite construction metal volume is PEC; its interior is excluded from Palace solution domains and receives no tetrahedra | Yes | Yes |
 | Route C | Each conductor volume stays in the model as a solution domain | Yes | No |
 
-The Palace simulations take Route A and Route B: `set_surface_epr` and `mesh()`
+The Palace simulations take Route A and Route B: `set_route` and `mesh()`
 refuse any other route with `ValueError`. Route C is for backends that keep
 conductor volumes. AEDT is to consume the same SGB output; its current
 preparation reads the GeometryPlan snapshot through its own planar path.
@@ -450,9 +450,11 @@ physical-name prefix; the surrounding sheet may still carry its independently
 classified MA/MS evidence.
 
 Route-A profile selection is optional for a direct semantic-core consumer.
-Existing explicit Palace Route-A entry points still require
-`substrate_face` or `metal_gap_equivalent`, and Route B still rejects either
-profile. With no core profile, coordinates remain unchanged and no collapse is
+A Palace simulation on Route A requires an explicit approximation profile
+(`set_route("A", approximation_profile=...)`): `thin_film`, or `substrate_face`
+or `metal_gap_equivalent` with their film bindings. Its optional `thin_film`
+keyword takes only `substrate_face` or `metal_gap_equivalent` and must name the
+profile; Route B refuses that keyword. With no core profile, coordinates remain unchanged and no collapse is
 recorded. `metal_gap_equivalent` remains the existing effective coordinate
 normalization; no reversible-collapse claim is made.
 

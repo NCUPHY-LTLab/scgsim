@@ -56,7 +56,8 @@ preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
 | Physical Ground binding | `add_ground` | Select conductor components for Palace Ground by exact SGB net identity. |
 | Problem controls | `set_electrostatic` | Declare Electrostatic-specific config controls. |
 | Output identity | `set_output_dir` | Bind the mesh/config/handoff output location. |
-| Surface films | `set_surface_epr` | Declare surface films and their inset margins; run it before `mesh()`. |
+| Route | `set_route` | Route B when never called; Route A with its `approximation_profile`. Run it before `mesh()`. |
+| Surface films | `set_surface_epr` | Declare surface films and their inset margins; run it before `mesh()`. Without it, no Surface EPR is computed. |
 | Mesh controls | `set_mesh(...)` | Select the sizing recipe, mesher options, repair budgets and quality threshold. |
 | Source/settings view | `input_summary()` | Return the detached input `mesh()` builds from (the plan with the simulation's vacuum region and route applied) plus the settings, with no file or native I/O. |
 | Mesh | `mesh` | Build the SGB geometry, check it for fine structure, mesh it with `scgsim.meshing` and lower its groups to Palace attributes. |
@@ -268,8 +269,9 @@ high-order elements.
 Surface-EPR inset margins are cut into the geometry as bands, so `set_surface_epr`
 belongs before `mesh()`. The [Eigenmode contract](palace-eigenmode.qmd#surface-epr-margins)
 owns the margin keys, the face kinds and the rows they produce, and Electrostatic
-accepts the same specs. Calling `set_surface_epr` again invalidates the mesh,
-config and handoff.
+accepts the same specs. Surface EPR is optional here as in Eigenmode: without the
+call, `mesh()` cuts no bands and the config has no Surface-EPR rows. Calling
+`set_surface_epr` again, `None` included, invalidates the mesh, config and handoff.
 
 ## Source and geometry authority
 

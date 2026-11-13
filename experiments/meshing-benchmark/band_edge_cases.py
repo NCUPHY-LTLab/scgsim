@@ -229,7 +229,7 @@ def _disk_qubit(
                 layout_sheet=True,
                 inductance=PORT_INDUCTANCE_H,
             )
-        sim.set_surface_epr(representation="B", specs=_surface_epr_specs(bands=bands))
+        sim.set_surface_epr(_surface_epr_specs(bands=bands))
         return sim
 
     return build
@@ -262,13 +262,11 @@ def _simplepad(route: str, *, notebook_vacuum: bool) -> Callable[[], EigenmodeSi
             inductance=PORT_INDUCTANCE_H,
         )
         # Route A lowers the pad and ground to sheets; the thin-film profile says so.
-        sim.set_surface_epr(
-            representation=route,
-            specs=_surface_epr_specs(bands=True),
-            approximation_profile=ApproximationProfile("thin_film", "v1", {})
-            if route == "A"
-            else None,
-        )
+        if route == "A":
+            sim.set_route(
+                "A", approximation_profile=ApproximationProfile("thin_film", "v1", {})
+            )
+        sim.set_surface_epr(_surface_epr_specs(bands=True))
         return sim
 
     return build

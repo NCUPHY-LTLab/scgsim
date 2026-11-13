@@ -58,9 +58,7 @@ def build_electrostatic_config(
     )
     domain_volumes = _domains_from_solution_volumes(common.groups.get("volumes", {}))
     material_rows = _materials_from_solution_volumes(domain_volumes, common.materials)
-    epr_rows, epr_entries = build_surface_epr_postprocessing(
-        common.groups, common.surface_epr_specs, model_l0_m=MODEL_L0_M
-    )
+    epr_rows, epr_entries = _surface_epr_rows(common)
     energy_rows, energy_entries = _domain_energy_rows(domain_volumes, common.materials)
     config = _config(
         common,
@@ -93,9 +91,7 @@ def build_eigenmode_config(
     domain_volumes = _domains_from_solution_volumes(groups.get("volumes", {}))
     material_rows = _materials_from_solution_volumes(domain_volumes, common.materials)
     energy_rows, energy_entries = _domain_energy_rows(domain_volumes, common.materials)
-    epr_rows, epr_entries = build_surface_epr_postprocessing(
-        groups, common.surface_epr_specs, model_l0_m=MODEL_L0_M
-    )
+    epr_rows, epr_entries = _surface_epr_rows(common)
     port_rows, port_info, port_entries = _lumped_ports(groups, ports)
     _refuse_ports_on_loss_groups(port_rows, epr_rows)
     boundaries: dict[str, Any] = {"PEC": {"Attributes": _pec_attributes(groups)}}
@@ -113,6 +109,17 @@ def build_eigenmode_config(
         port_information=port_info,
         index_entries=[*port_entries, *energy_entries, *epr_entries],
         material_resolution=_material_resolution(domain_volumes, common.materials),
+    )
+
+
+def _surface_epr_rows(
+    common: ConfigInput,
+) -> tuple[list[dict[str, Any]], list[SurfaceEprEntry]]:
+    """The Surface-EPR ``Dielectric`` rows and their index entries; none when Surface EPR was not requested."""
+    if common.surface_epr_specs is None:
+        return [], []
+    return build_surface_epr_postprocessing(
+        common.groups, common.surface_epr_specs, model_l0_m=MODEL_L0_M
     )
 
 

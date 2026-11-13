@@ -70,7 +70,7 @@ body = read_plan.map_body(
 
 ## Palace 呼叫端近似設定 {#palace-caller-profile}
 
-`ElectrostaticSim` 與 `EigenmodeSim` 接受型別化的 `approximation_profile` 建構子欄位。`set_surface_epr()` 接受同名關鍵字；提供時取代選定的近似設定，省略時保留建構子選定的設定。來源授權的綁定指出實際正規化支撐 Entity 及其 `lower` 或 `upper` 面，不從層名稱、角色或相同 Z 值重建。
+`ElectrostaticSim` 與 `EigenmodeSim` 以 `set_route()` 選擇近似設定。一次呼叫陳述完整的路徑設定：它同時取代路徑、`thin_film` 與 `approximation_profile`，所以省略近似設定就是不選任何設定。Route A 要求提供；Route B 省略時選用恆等映射 `route_b`，提供時照原樣使用。來源授權的綁定指出實際正規化支撐 Entity 及其 `lower` 或 `upper` 面，不從層名稱、角色或相同 Z 值重建。
 
 ```python
 from scgsim.geometry.models.physical import ApproximationProfile
@@ -80,13 +80,10 @@ profile = ApproximationProfile(
     revision="v1",
     parameters={"film_bindings": authored_film_bindings},
 )
-sim.set_surface_epr(
-    representation="A",
-    specs=authored_surface_specs,
-    approximation_profile=profile,
-)
+sim.set_route("A", approximation_profile=profile)
+sim.set_surface_epr(authored_surface_specs)
 ```
 
-每個 `authored_film_bindings` 項目以宣告的物理層 ID 為索引，且恰好包含 `supporting_entity_id` 與 `supporting_side`。`metal_gap_equivalent` 需要兩個明確綁定且相對的薄膜。缺少綁定時，準備階段會在原生工作之前失敗，並提供替代呼叫形式。舊的 `route_a_thin_film` 字串可揭露或檢查選定名稱，但不負責指定綁定或座標運算。既有 Route B 選取若未提供明確近似設定，使用共用恆等映射 `route_b`。`build_route_geometry()` 要求準備階段產生的有效正規化輸入及表示內容。
+每個 `authored_film_bindings` 項目以宣告的物理層 ID 為索引，且恰好包含 `supporting_entity_id` 與 `supporting_side`。`metal_gap_equivalent` 需要兩個明確綁定且相對的薄膜。缺少綁定時，準備階段會在原生工作之前失敗，並提供替代呼叫形式。`set_route()` 選用的 `thin_film` 關鍵字可揭露或檢查選定名稱，但不負責指定綁定或座標運算。既有 Route B 選取若未提供明確近似設定，使用共用恆等映射 `route_b`。`build_route_geometry()` 要求準備階段產生的有效正規化輸入及表示內容。
 
 未版本化的語意匯出 `apply_thin_film_profile`、`derive_thin_film_facts` 與 `normalize_optional_profile` 已移除。請搭配 `interpret_physical_layers()` 或 `interpret_physical_geometry()` 使用中性宣告；原始固定版本來源及凍結的歷史產物保留原始程式與酬載身分。

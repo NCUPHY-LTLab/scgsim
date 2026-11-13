@@ -21,7 +21,8 @@ ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics
 | Mesh summary | `mesh_summary()` returns detached meshing evidence |
 | Numerical controls | `set_numerical(...)` retains explicit order, linear solver, AMR and output choices |
 | Source/settings view | `input_summary()` returns the detached input `mesh()` builds from (the plan with the simulation's vacuum region, requested ports and route applied) plus settings, no file/native I/O |
-| Surface model | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`, before `mesh()` |
+| Route | `set_route(route, *, thin_film=None, approximation_profile=None)`, before `mesh()`; Route B when never called, Route A requires `approximation_profile` |
+| Surface EPR | `set_surface_epr(specs)`, before `mesh()`; computed only when called with specs, `None` turns it off and `{}` is refused |
 | Authored port | `add_port(name, *, layer, layout_sheet=True, inductance)`; `layout_sheet` must be `True` (its signature default `False` is refused) |
 | Output selection | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | Preparation | `mesh()`, `write_config()`, then `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
@@ -141,7 +142,8 @@ configuration, and no special Palace build is needed. The
 ::: {.callout-important title="Call set_surface_epr before mesh()"}
 Margins are geometry: `mesh()` hands them to SGB with the rest of the model.
 Configure `set_surface_epr` first. Calling it after `mesh()` invalidates the mesh,
-config and handoff, and `mesh()` must run again.
+config and handoff, and `mesh()` must run again. Without the call, `mesh()` cuts
+no bands and the config has no Surface-EPR rows.
 :::
 
 Each spec (`"MA"`, `"MS"`, `"SA"`) takes these margin keys next to its film

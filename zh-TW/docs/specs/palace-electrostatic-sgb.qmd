@@ -38,7 +38,8 @@ prepare shared GeometryPlan snapshot
 | 物理 Ground 綁定 | `add_ground` | 依確切 SGB Net 身分選取 Palace Ground 的導體分量。 |
 | 問題控制 | `set_electrostatic` | 宣告 Electrostatic 專屬設定控制。 |
 | 輸出身分 | `set_output_dir` | 綁定網格／設定／交接輸出位置。 |
-| 表面膜 | `set_surface_epr` | 宣告表面膜及其內縮邊距；須在 `mesh()` 之前執行。 |
+| 路徑 | `set_route` | 從未呼叫時為 Route B；Route A 需附上 `approximation_profile`。須在 `mesh()` 之前執行。 |
+| 表面膜 | `set_surface_epr` | 宣告表面膜及其內縮邊距；須在 `mesh()` 之前執行。沒有它時不計算 Surface EPR。 |
 | 網格控制 | `set_mesh(...)` | 選取尺寸配方、網格器選項、修復預算與品質門檻。 |
 | 來源／設定檢視 | `input_summary()` | 回傳獨立的 `mesh()` 建模輸入（計畫套用模擬的真空區域與所選 Route 之後）與設定，不進行檔案或原生 I/O。 |
 | 網格 | `mesh` | 以 SGB 建立幾何，檢查其中的細微結構，用 `scgsim.meshing` 產生網格，並把群組降階為 Palace 屬性。 |
@@ -136,7 +137,7 @@ SGB 寫出的 XAO（位於 `geometry/`）也可以交給其他工具產生網格
 
 ## Surface EPR 邊距 {#surface-epr-margins}
 
-Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_epr` 要放在 `mesh()` 之前。邊距的鍵、面種類及產生的列，由[本徵模態契約](palace-eigenmode.qmd#surface-epr-margins)負責；Electrostatic 接受相同的規格。再次呼叫 `set_surface_epr` 會使網格、設定檔及交接失效。
+Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_epr` 要放在 `mesh()` 之前。邊距的鍵、面種類及產生的列，由[本徵模態契約](palace-eigenmode.qmd#surface-epr-margins)負責；Electrostatic 接受相同的規格。Surface EPR 在此與 Eigenmode 一樣是選用的：沒有這個呼叫時，`mesh()` 不切任何帶，設定檔也沒有 Surface-EPR 列。再次呼叫 `set_surface_epr`（包括 `None`）會使網格、設定檔及交接失效。
 
 ## 來源與幾何權威 {#source-and-geometry-authority}
 

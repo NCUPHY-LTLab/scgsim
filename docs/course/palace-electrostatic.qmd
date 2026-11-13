@@ -54,25 +54,25 @@ owns these choices and their index-map meaning.
 ## Select the geometry approximation and build inputs
 
 The bound snapshot already supplies the outer envelope. Route B is the default
-finite-metal preparation. To explicitly select it without requesting surface
-films:
+finite-metal preparation, and Surface EPR is computed only when you request it,
+so this setup meshes as it stands:
 
 ```python
-sim.set_surface_epr(representation="B", specs={})
 mesh_path = sim.mesh()
 config_path = sim.write_config()
 print(mesh_path, config_path)
 ```
 
-For a Route-A study, pass `representation="A"` with an explicit
-`approximation_profile` that carries `film_bindings` before meshing;
-`route_a_thin_film` alone does not author them. `substrate_face` preserves physical
-face coordinates; `metal_gap_equivalent` is the separate supported two-face
-normalization. Consult the [geometry contract](../geometry-sgb.qmd) before
+For a Route-A study, call `sim.set_route("A", approximation_profile=profile)`
+before meshing; Route A refuses a call without a profile. The profile says how the
+films lower to sheets: `thin_film` takes no parameters, while `substrate_face`
+preserves physical face coordinates and `metal_gap_equivalent` is the separate
+supported two-face normalization, both with explicit `film_bindings`. The optional
+`thin_film=` keyword only repeats such a profile's name and is checked against it. Consult the [geometry contract](../geometry-sgb.qmd) before
 changing that approximation. Surface films are optional postprocessing specifications, with attributed
 thickness/permittivity/loss assumptions rather than inferred material
-measurements. Their inset margins are cut into the geometry, so configure them
-with `set_surface_epr` before `mesh()`; see the
+measurements. Their inset margins are cut into the geometry, so request them
+with `set_surface_epr(specs)` before `mesh()`; see the
 [margin contract](../specs/palace-eigenmode.qmd#surface-epr-margins).
 
 The mesh is a real preparation operation. It can fail natively, and it stops

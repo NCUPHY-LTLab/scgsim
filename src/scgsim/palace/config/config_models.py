@@ -34,14 +34,15 @@ class ConfigInput:
     """What every Palace config is built from: the current mesh, the materials and the problem's shared settings.
 
     ``groups`` are the mesh's physical groups and ``mesh_path`` its ``palace.msh``; ``materials`` the material
-    records of the prepared stack.  Building it refuses numerical controls the ``problem`` cannot be written from.
+    records of the prepared stack; ``surface_epr_specs`` is None when Surface EPR was not requested.  Building it
+    refuses numerical controls the ``problem`` cannot be written from.
     """
 
     problem: Literal["Eigenmode", "Electrostatic"]
     groups: Groups
     mesh_path: Path
     materials: Mapping[str, Mapping[str, Any]]
-    surface_epr_specs: SurfaceEprSpecs
+    surface_epr_specs: SurfaceEprSpecs | None
     numerical: NumericalControls
 
     def __post_init__(self) -> None:
