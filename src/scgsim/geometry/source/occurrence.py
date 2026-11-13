@@ -32,10 +32,25 @@ from scgsim.geometry.grid.polygon_ops import (
 )
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.models.refusals import Declared
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
 from scgsim.geometry.source.normalization import gds_layer
 from scgsim.geometry.source.recipes import Audited, audited_declared_source
+
+
+def _entity(entity: SemanticEntitySpec) -> Declared:
+    """An Entity's stack layer, which declares its selector points and occurrence polygons."""
+    return Declared(f"Entity {entity.semantic_id!r}", "its stack layer's geometry")
+
+
+def _stack_layer(record: object) -> Declared:
+    """A layer record of the stack, which the stack declares."""
+    semantic_id = record.get("semantic_id") if isinstance(record, Mapping) else None
+    return Declared(
+        "stack layer" + ("" if semantic_id is None else f" {semantic_id!r}"),
+        "the stack: the stack file's layers, or the component's conductor_regions "
+        "and their PDK levels",
+    )
 
 
 def resolve_material_kind(
@@ -43,18 +58,28 @@ def resolve_material_kind(
     *,
     material_id: Any,
     materials: Mapping[str, Any],
-    context: str,
+    owner: Declared,
 ) -> str:
     """Resolve one entity kind from explicit record and stack material facts."""
     if not isinstance(material_id, str) or not material_id:
-        raise ValueError(f"{context} needs a non-empty material_id")
+        raise ValueError(
+            owner.expected("material_id", "a non-empty string", material_id)
+        )
     material = materials.get(material_id)
     if not isinstance(material, Mapping):
-        raise TypeError(f"{context} material_id {material_id!r} is not in materials")
+        raise TypeError(
+            owner.expected(
+                "material_id", "a material of the stack's materials", material_id
+            )
+        )
     stack_kind = material.get("kind")
     if stack_kind not in {"vacuum", "dielectric", "conductor"}:
         raise ValueError(
-            f"{context} material {material_id!r} needs kind vacuum, dielectric, or conductor"
+            owner.expected(
+                f"material {material_id!r} kind",
+                "vacuum, dielectric, or conductor",
+                stack_kind,
+            )
         )
     record_kind = record.get("material_kind")
     if record_kind is not None and record_kind not in {
@@ -63,11 +88,17 @@ def resolve_material_kind(
         "conductor",
     }:
         raise ValueError(
-            f"{context} material_kind must be vacuum, dielectric, or conductor"
+            owner.expected(
+                "material_kind", "vacuum, dielectric, or conductor", record_kind
+            )
         )
     if record_kind is not None and record_kind != stack_kind:
         raise ValueError(
-            f"{context} material_kind disagrees with materials[{material_id!r}].kind"
+            owner.expected(
+                "material_kind",
+                f"materials[{material_id!r}].kind {stack_kind!r}",
+                record_kind,
+            )
         )
     return str(stack_kind)
 
@@ -158,16 +189,20 @@ def entity_from_layer_record(
 ) -> SemanticEntitySpec:
     """Build a semantic entity from one stack layer and its material record."""
     if not isinstance(record, Mapping):
-        raise TypeError("stack_file 'layers' items must be mappings")
+        raise TypeError(_stack_layer(record).expected("record", "a mapping", record))
 
     layer = record.get("layer")
     datatype = record.get("datatype")
     if layer is None or datatype is None:
-        raise ValueError("stack_file layer records must define 'layer' and 'datatype'")
+        raise ValueError(
+            _stack_layer(record).refusal("it must define 'layer' and 'datatype'")
+        )
 
     for required_field in ("semantic_id", "role", "material_id"):
         if required_field not in record:
-            raise ValueError(f"stack_file layer records must define {required_field!r}")
+            raise ValueError(
+                _stack_layer(record).refusal(f"it must define {required_field!r}")
+            )
     geometry = _layer_record_geometry(record)
     geometry.setdefault("gds_layer", layer)
     geometry.setdefault("gds_datatype", datatype)
@@ -175,9 +210,11 @@ def entity_from_layer_record(
     polygon_ids = record.get("polygon_ids", ())
     labels = record.get("labels", ())
     if isinstance(polygon_ids, str | bytes) or not isinstance(polygon_ids, Sequence):
-        raise TypeError("stack_file layer record 'polygon_ids' must be a sequence")
+        raise TypeError(
+            _stack_layer(record).expected("polygon_ids", "a sequence", polygon_ids)
+        )
     if isinstance(labels, str | bytes) or not isinstance(labels, Sequence):
-        raise TypeError("stack_file layer record 'labels' must be a sequence")
+        raise TypeError(_stack_layer(record).expected("labels", "a sequence", labels))
 
     return SemanticEntitySpec(
         semantic_id=record["semantic_id"],
@@ -187,7 +224,7 @@ def entity_from_layer_record(
             record,
             material_id=record["material_id"],
             materials=materials,
-            context=f"layer {record['semantic_id']!r}",
+            owner=_stack_layer(record),
         ),
         priority=record.get("priority", 0),
         geometry_kind=record.get("geometry_kind", "layout_extrusion"),
@@ -208,20 +245,24 @@ def _layer_record_geometry(record: Mapping[str, Any]) -> dict[str, Any]:
     """A stack layer's geometry: its ``geometry`` mapping, with ``z_um`` and ``thickness_um`` given beside it."""
     raw_geometry = record.get("geometry", {})
     if not isinstance(raw_geometry, Mapping):
-        raise TypeError("stack_file layer record 'geometry' must be a mapping")
+        raise TypeError(
+            _stack_layer(record).expected("geometry", "a mapping", raw_geometry)
+        )
     geometry = dict(raw_geometry)
     if "z_um" in record or "thickness_um" in record:
         if "z_um" not in record or "thickness_um" not in record:
             raise ValueError(
-                "stack_file layer records must define both 'z_um' and "
-                "'thickness_um', or use 'geometry'"
+                _stack_layer(record).refusal(
+                    "it must define both 'z_um' and 'thickness_um', or use 'geometry'"
+                )
             )
         geometry.setdefault("z_um", record["z_um"])
         geometry.setdefault("thickness_um", record["thickness_um"])
     if not geometry:
         raise ValueError(
-            "stack_file layer records must define 'geometry' or "
-            "'z_um' plus 'thickness_um'"
+            _stack_layer(record).refusal(
+                "it must define 'geometry' or 'z_um' plus 'thickness_um'"
+            )
         )
     return geometry
 
@@ -289,7 +330,9 @@ def _excluded_selector_points(entity: SemanticEntitySpec) -> Sequence[Any]:
         excluded = ()
     if isinstance(excluded, str | bytes) or not isinstance(excluded, Sequence):
         raise TypeError(
-            f"{entity.semantic_id} exclude_selector_points_um must be a point sequence"
+            _entity(entity).expected(
+                "exclude_selector_points_um", "a point sequence", excluded
+            )
         )
     return excluded
 
@@ -392,7 +435,11 @@ def _source_occurrence_polygons(
     entity: SemanticEntitySpec, records: Any
 ) -> tuple[LayoutPolygonSpec, ...]:
     if not is_record_sequence(records):
-        raise TypeError(f"{entity.semantic_id} occurrence polygons must be a sequence")
+        raise TypeError(
+            _entity(entity).expected(
+                "source_occurrence_polygons_um", "a sequence", records
+            )
+        )
     return tuple(
         LayoutPolygonSpec(
             polygon_id=f"{entity.semantic_id}__P{index:04d}",
@@ -469,7 +516,7 @@ def _selector_point(
         or isinstance(value, str | bytes)
         or len(value) != 2
     ):
-        raise ValueError(f"{entity.semantic_id} {name} must be a 2D point")
+        raise ValueError(_entity(entity).expected(name, "a 2D point", value))
     return (float(value[0]), float(value[1]))
 
 
@@ -502,7 +549,9 @@ def _occurrence_inverse_point(
     a, b, c, d, x, y = (float(value) for value in transform)
     determinant = a * d - b * c
     if not isfinite(determinant) or abs(determinant) < 1e-12:
-        raise ValueError("GeometryPlan occurrence transform is singular")
+        raise ValueError(
+            internal(f"an occurrence transform {tuple(transform)} is singular")
+        )
     px, py = float(point[0]) - x, float(point[1]) - y
     return [(d * px - b * py) / determinant, (-c * px + a * py) / determinant]
 

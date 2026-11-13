@@ -37,6 +37,7 @@ from scgsim.geometry.models.input import (
     reconstruction_chain_refusal,
     reconstruction_without_circle,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
 from scgsim.geometry.source.plan_assembly import transform_source_point
 
@@ -51,12 +52,26 @@ GdsWalk = tuple[GdsPoint, ...]
 SourceRings = dict[str, list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]]
 
 
+_BOUNDARY_SOURCE = (
+    "its declaration: GeometryPlan.set_boundary_curves or set_boundary_reconstruction, "
+    "the component's component_semantics, or the stack file's metadata"
+)
+
+
+def _boundary(boundary_id: object = None) -> Declared:
+    """An authored boundary or source curve, which its declaration states."""
+    name = "authored boundary" if boundary_id is None else f"boundary {boundary_id!r}"
+    return Declared(name, _BOUNDARY_SOURCE)
+
+
 def source_curve(value: SourceCurveSpec | Mapping[str, Any]) -> SourceCurveSpec:
     """Normalize one typed or serialized curve declaration at its input boundary."""
     if isinstance(value, SourceCurveSpec):
         value = {name: getattr(value, name) for name in value.__dataclass_fields__}
     if not isinstance(value, Mapping):
-        raise TypeError("source curve must be a SourceCurveSpec or mapping")
+        raise TypeError(
+            _boundary().expected("source curve", "a SourceCurveSpec or mapping", value)
+        )
     record = SourceCurveSpec(**dict(value))
     if record.kind not in {
         "line_segment",
@@ -64,14 +79,30 @@ def source_curve(value: SourceCurveSpec | Mapping[str, Any]) -> SourceCurveSpec:
         "interpolation_spline",
         "bspline",
     }:
-        raise ValueError(f"unsupported source curve kind {record.kind!r}")
+        raise ValueError(
+            _boundary().expected(
+                "source curve kind",
+                "line_segment, circular_arc, interpolation_spline or bspline",
+                record.kind,
+            )
+        )
     points = tuple(tuple(float(x) for x in point) for point in record.points_um)
     if any(len(point) != 2 for point in points):
-        raise ValueError("source curve points must be XY coordinates in micrometres")
+        raise ValueError(
+            _boundary().expected(
+                "source curve points", "XY coordinates in micrometres", points
+            )
+        )
     if record.kind == "line_segment" and len(points) != 2:
-        raise ValueError("source line needs two endpoints")
+        raise ValueError(
+            _boundary().expected("source line points", "two endpoints", points)
+        )
     if record.kind == "circular_arc" and len(points) != 3:
-        raise ValueError("source circular arc needs start, on-arc and end points")
+        raise ValueError(
+            _boundary().expected(
+                "source circular arc points", "start, on-arc and end points", points
+            )
+        )
     return replace(
         record,
         points_um=points,
@@ -116,7 +147,9 @@ def boundary_binding(
     if isinstance(value, cls):
         value = {name: getattr(value, name) for name in value.__dataclass_fields__}
     if not isinstance(value, Mapping):
-        raise TypeError("boundary binding must be a source record or mapping")
+        raise TypeError(
+            _boundary().expected("binding", "a source record or mapping", value)
+        )
     # Caller mappings are JSON-shaped external records; model construction validates fields.
     data = cast(dict[str, Any], copy.deepcopy(dict(value)))
     if not reconstruction:
@@ -127,18 +160,34 @@ def boundary_binding(
     data["selector_point_um"] = tuple(data["selector_point_um"])
     record = cls(**data)
     if not record.boundary_id or not record.entity_id:
-        raise ValueError("boundary and Entity identities must be nonempty")
+        raise ValueError(
+            _boundary(record.boundary_id).refusal(
+                "boundary and Entity identities must be nonempty"
+            )
+        )
     if record.role not in {"outer", "hole"}:
-        raise ValueError("source boundary role must be outer or hole")
+        raise ValueError(
+            _boundary(record.boundary_id).expected("role", "outer or hole", record.role)
+        )
     if record.role == "hole":
         if (
             isinstance(record.hole_index, bool)
             or not isinstance(record.hole_index, int)
             or record.hole_index < 0
         ):
-            raise ValueError("hole boundary needs a zero-based source hole index")
+            raise ValueError(
+                _boundary(record.boundary_id).expected(
+                    "hole_index of a hole boundary",
+                    "a zero-based source hole index",
+                    record.hole_index,
+                )
+            )
     elif record.hole_index is not None:
-        raise ValueError("outer boundary cannot have a hole index")
+        raise ValueError(
+            _boundary(record.boundary_id).expected(
+                "hole_index of an outer boundary", "None", record.hole_index
+            )
+        )
     return record
 
 
@@ -187,7 +236,9 @@ def transform_boundary(
     record = boundary_binding(value, reconstruction=reconstruction)
     if "/" in record.entity_id or "/" in record.boundary_id:
         raise ValueError(
-            "component-authored boundary and Entity IDs must be local names"
+            _boundary(record.boundary_id).refusal(
+                "component-authored boundary and Entity IDs must be local names"
+            )
         )
     boundary_id = f"{path}/{record.boundary_id}"
     entity_id = f"{path}/{record.entity_id}"

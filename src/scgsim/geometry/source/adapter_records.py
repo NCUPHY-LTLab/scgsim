@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypeGuard
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.ground import PlaneBounds, derived_ground_polygons
 from scgsim.geometry.source.occurrence import (
     entity_from_layer_record,
@@ -114,7 +115,9 @@ def solution_region_entity(
             record,
             material_id=record.get("material_id", semantic_id),
             materials=materials,
-            context=f"solution region {semantic_id!r}",
+            owner=Declared(
+                f"solution region {semantic_id!r}", "the stack file's solution_regions"
+            ),
         ),
         priority=record.get("priority", 0),
         geometry_kind=record.get("geometry_kind", "domain"),
