@@ -23,14 +23,13 @@ from test_simulation_drc import (
 
 import scgsim.palace.mesh.build as build_module
 import scgsim.palace.simulation.core as core_module
-from scgsim.geometry import ApproximationProfile, GeometryPlan
+from scgsim.geometry import GeometryPlan
 from scgsim.geometry.source.summary import summarize_geometry_input
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
 # The two pads on their substrate span z from -5 um to the metal's top at 0.2 um; this padding, as
 # ``set_vacuum_region`` takes it, adds nothing in the plane and 1000 um below and above.
 VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
-THIN_FILM = ApproximationProfile("thin_film", "v1", {})
 
 
 def eigenmode_sim(monkeypatch, layer_stack, *, route="B"):
@@ -52,7 +51,7 @@ def eigenmode_sim(monkeypatch, layer_stack, *, route="B"):
         sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     if route == "A":
-        sim.set_route("A", approximation_profile=THIN_FILM)
+        sim.set_route("A")
     return sim
 
 

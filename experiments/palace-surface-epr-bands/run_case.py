@@ -42,7 +42,7 @@ from orcapen_sc_pdk import (
 )
 from orcapen_sc_pdk.tech import get_single_die_layer_stack
 
-from scgsim.geometry import ApproximationProfile, GeometryPlan
+from scgsim.geometry import GeometryPlan
 from scgsim.meshing import UniformBoundaryRecipe
 from scgsim.palace import EigenmodeSim, resolve_palace_result, show_epr
 
@@ -402,10 +402,8 @@ def configure_simulation(
     sim.set_plan(snapshot)
     sim.set_output_dir(run_dir)
     if route == "A":
-        # Route A lowers the pad and Ground to sheets; the thin-film profile says so (see the PDK test of Route A).
-        sim.set_route(
-            "A", approximation_profile=ApproximationProfile("thin_film", "v1", {})
-        )
+        # Route A lowers the pad and Ground to sheets with the default ``thin_film`` profile.
+        sim.set_route("A")
     sim.set_surface_epr(specs)
     ports = [(port, case.port_layer) for port in case.ports]
     if case.all_authored_ports:

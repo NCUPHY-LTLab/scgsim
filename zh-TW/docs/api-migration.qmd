@@ -168,7 +168,7 @@ Palace 現在以 SGB 建立幾何，並用 `scgsim.meshing` 產生網格。本�
 Surface EPR 邊距變成了幾何，隨之而來的改變如下：
 
 - 請在 `mesh()` 之前呼叫 `set_surface_epr`。在它之後呼叫，會使網格失效。
-- 路徑與 Surface EPR 是兩個設定。`set_surface_epr(*, representation, specs, route_a_thin_film=None, approximation_profile=None)` 改為 `set_route(route, *, thin_film=None, approximation_profile=None)` 與 `set_surface_epr(specs)`。Route B 是預設值，所以 Route B 模擬兩者都不必為路徑呼叫。只有呼叫過 `set_surface_epr(specs)` 才會計算 Surface EPR，Eigenmode 與 Electrostatic 相同：請刪除原本不要求任何東西的呼叫（Route B 搭配空的 `specs`），因為空映射現在會被拒絕；要再次關閉 Surface EPR，請用 `set_surface_epr(None)`。Route A 寫成 `set_route("A", approximation_profile=profile)`；`representation` 與 `route_a_thin_film` 關鍵字已移除。
+- 路徑與 Surface EPR 是兩個設定。`set_surface_epr(*, representation, specs, route_a_thin_film=None, approximation_profile=None)` 改為 `set_route(route, *, approximation_profile=None)` 與 `set_surface_epr(specs)`。Route B 是預設值，所以 Route B 模擬兩者都不必為路徑呼叫。只有呼叫過 `set_surface_epr(specs)` 才會計算 Surface EPR，Eigenmode 與 Electrostatic 相同：請刪除原本不要求任何東西的呼叫（Route B 搭配空的 `specs`），因為空映射現在會被拒絕；要再次關閉 Surface EPR，請用 `set_surface_epr(None)`。Route A 寫成 `set_route("A")`，以 `thin_film` 近似設定降低薄膜；`substrate_face` 與 `metal_gap_equivalent` 以 `set_route("A", approximation_profile=profile)` 傳入。`representation` 與 `route_a_thin_film` 關鍵字已移除，也沒有 `thin_film` 關鍵字：近似設定的名稱已說明降低方式。模擬的 `thin_film` 欄位與 `input_summary()` 的 `thin_film` 鍵一併移除；`input_summary()` 顯示準備階段使用的近似設定名稱，預設值也包含在內。
 - `inset_margins_um` 向 SGB 要求帶。它只接受正的嚴格遞增邊距，所以請去掉開頭的 `0.0`：基準列一定存在。
 - Palace 不再寫出原生 `Mask` 或 `Inset`，所以邊距列不需要 Palace 分支版本。結果讀取器會拒絕含有原生 `Mask` 列的設定檔。
 - `inset_margins_by_entity_um` 是新增的，用於 `MA` 與 `MS` 的逐導體邊距。`face_kinds` 接受 `sheet`、`top`、`bottom` 與 `interface`，規格要求邊距時會拒絕 `sidewall`。

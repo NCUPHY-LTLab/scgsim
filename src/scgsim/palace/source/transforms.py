@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal
-
-RouteAThinFilm = Literal["substrate_face", "metal_gap_equivalent"]
+from typing import Any
 
 
 def validate_nonempty_string(value: Any, field: str) -> str:

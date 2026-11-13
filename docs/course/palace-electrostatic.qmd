@@ -63,12 +63,14 @@ config_path = sim.write_config()
 print(mesh_path, config_path)
 ```
 
-For a Route-A study, call `sim.set_route("A", approximation_profile=profile)`
-before meshing; Route A refuses a call without a profile. The profile says how the
-films lower to sheets: `thin_film` takes no parameters, while `substrate_face`
-preserves physical face coordinates and `metal_gap_equivalent` is the separate
-supported two-face normalization, both with explicit `film_bindings`. The optional
-`thin_film=` keyword only repeats such a profile's name and is checked against it. Consult the [geometry contract](../geometry-sgb.qmd) before
+For a Route-A study, call `sim.set_route("A")` before meshing. Route A makes the
+film conductors zero-thickness sheets, while finite bodies such as bumps keep their
+volume. The approximation profile says what happens to the thickness a film had: without one, `set_route("A")` uses `thin_film`, which
+removes the thickness and takes no parameters. For `substrate_face`, which
+preserves physical face coordinates, or `metal_gap_equivalent`, the separate
+supported two-face normalization, pass the profile with its explicit
+`film_bindings`: `sim.set_route("A", approximation_profile=profile)`. Route B
+needs no call. Consult the [geometry contract](../geometry-sgb.qmd) before
 changing that approximation. Surface films are optional postprocessing specifications, with attributed
 thickness/permittivity/loss assumptions rather than inferred material
 measurements. Their inset margins are cut into the geometry, so request them

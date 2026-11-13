@@ -132,10 +132,21 @@ instruction; read it with the SCGSim commit that wrote it.
 ## Palace caller profile
 
 `ElectrostaticSim` and `EigenmodeSim` select the profile with `set_route()`.
-One call states the whole route setting: it replaces the route, `thin_film` and
-`approximation_profile` together, so omitting the profile leaves none selected.
-Route A requires one; on Route B, omitting it selects the identity `route_b`
-profile and a profile given is used as given. The source-authorized bindings
+One call states the whole route setting: it replaces the route and the
+`approximation_profile` together. A profile given is used as given; without one,
+each route has its default: Route A uses `thin_film`, Route B the identity
+`route_b` profile.
+
+| Call | Profile the preparation uses |
+|---|---|
+| `set_route("A")` | `thin_film`, no parameters |
+| `set_route("A", approximation_profile=profile)` | `substrate_face` or `metal_gap_equivalent`, with their bindings |
+| `set_route("B")`, or no call | `route_b` |
+
+`input_summary()` shows the route and the profile the preparation uses, the
+default included. SGB's route check refuses a profile the plan's films do not
+fit (Route A with `route_b` or `solid`, Route B with `thin_film`) when `mesh()`
+builds, not at `set_route()`. The source-authorized bindings
 identify actual normalized supporting Entities and their `lower` or `upper`
 faces; they are not reconstructed from layer names, roles or equal Z values.
 
@@ -155,10 +166,8 @@ Each `authored_film_bindings` entry is keyed by a declared physical layer ID
 and contains exactly `supporting_entity_id` and `supporting_side`.
 `metal_gap_equivalent` needs its two explicitly bound opposing films. Missing
 bindings fail preparation with a replacement call shape before native work.
-The optional `thin_film` keyword of `set_route()` can disclose or check the
-selected name; it does not author bindings or own coordinate arithmetic. Existing Route B
-selection uses the shared identity `route_b` profile when no explicit profile
-is supplied. `build_route_geometry()` requires preparation's effective
+`set_route()` takes no keyword that repeats the profile's name and does not
+author bindings or own coordinate arithmetic. `build_route_geometry()` requires preparation's effective
 normalized input and representation context.
 
 The unversioned semantic `apply_thin_film_profile`, `derive_thin_film_facts`

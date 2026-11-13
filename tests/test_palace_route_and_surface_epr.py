@@ -24,6 +24,7 @@ from scgsim.palace.config.index import SurfaceEprEntry
 from scgsim.palace.simulation import core
 from scgsim.palace.simulation.lifecycle import Stage
 from scgsim.palace.source import layout_ports
+from scgsim.palace.source.workflow import route_profile
 
 SIMS = [EigenmodeSim, ElectrostaticSim]
 THIN_FILM = ApproximationProfile("thin_film", "v1", {})
@@ -32,19 +33,26 @@ SUBSTRATE_FACE = ApproximationProfile(
     "v1",
     {
         "film_bindings": {
-            "film": {
-                "supporting_entity_id": "chip/substrate",
+            "metal": {
+                "supporting_entity_id": "substrate",
                 "supporting_side": "upper",
             }
         }
     },
 )
-ROUTE_SETTING = ("route", "thin_film", "approximation_profile")
+ROUTE_B = ApproximationProfile("route_b", "v1", {})
+SOLID = ApproximationProfile("solid", "v1", {})
+ROUTE_SETTING = ("route", "approximation_profile")
 
 
 def route_setting(sim):
-    """The three values one ``set_route`` call states."""
+    """The two values one ``set_route`` call states."""
     return tuple(getattr(sim, name) for name in ROUTE_SETTING)
+
+
+def profile_used(sim):
+    """The profile the preparation interprets the plan with, as ``input_summary()`` names it."""
+    return route_profile(sim.route, sim.approximation_profile)
 
 
 # ---- The route ------------------------------------------------------------------------------------------
@@ -54,9 +62,10 @@ def route_setting(sim):
 def test_a_simulation_that_never_calls_set_route_is_route_b(
     sim_type, monkeypatch, tmp_path
 ):
-    """Route B is the default, with no thin film and the identity profile left to the preparation."""
+    """Route B is the default, with the identity profile ``route_b`` left to the preparation."""
     sim = sim_type()
-    assert route_setting(sim) == ("B", None, None)
+    assert route_setting(sim) == ("B", None)
+    assert profile_used(sim) == ROUTE_B
     calls = stand_in_mesh_stages(monkeypatch, core, tmp_path)
     monkeypatch.setattr(layout_ports, "prepare_mesh_input", _prepared_stand_in)
     sim.set_plan(two_pad_snapshot(monkeypatch))
@@ -67,44 +76,91 @@ def test_a_simulation_that_never_calls_set_route_is_route_b(
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
-def test_route_a_requires_an_approximation_profile_and_shows_the_call(sim_type):
-    """Without a profile Route A cannot lower its films; the refusal names the call and the three profiles."""
+def test_each_route_has_a_default_profile_and_a_given_profile_is_used_as_given(
+    sim_type,
+):
+    """``set_route("A")`` lowers with ``thin_film`` and ``set_route("B")`` keeps ``route_b``."""
     sim = sim_type()
-    with pytest.raises(
-        ValueError, match=r"set_route\('A', approximation_profile="
-    ) as refused:
-        sim.set_route("A")
-    for name in ("'thin_film'", "'substrate_face'", "'metal_gap_equivalent'"):
-        assert name in str(refused.value)
-    with pytest.raises(ValueError, match="approximation profile"):
-        sim.set_route("A", thin_film="substrate_face")
-    assert route_setting(sim) == ("B", None, None)
-
-
-@pytest.mark.parametrize("sim_type", SIMS)
-def test_route_a_takes_a_profile_with_or_without_a_matching_thin_film(sim_type):
-    """``thin_film`` is optional on Route A and, when given, must name the profile."""
-    sim = sim_type()
-    sim.set_route("A", approximation_profile=THIN_FILM)
-    assert route_setting(sim) == ("A", None, THIN_FILM)
-    sim.set_route("A", thin_film="substrate_face", approximation_profile=SUBSTRATE_FACE)
-    assert route_setting(sim) == ("A", "substrate_face", SUBSTRATE_FACE)
-    with pytest.raises(
-        ValueError, match=r"differs from the approximation profile 'thin_film'"
-    ):
-        sim.set_route("A", thin_film="substrate_face", approximation_profile=THIN_FILM)
-    with pytest.raises(ValueError, match="Unknown Route A thin film 'thin_film'"):
-        sim.set_route("A", thin_film="thin_film", approximation_profile=THIN_FILM)  # type: ignore[arg-type]
+    sim.set_route("A")
+    assert route_setting(sim) == ("A", None)
+    assert profile_used(sim) == THIN_FILM
+    sim.set_route("A", approximation_profile=SUBSTRATE_FACE)
+    assert route_setting(sim) == ("A", SUBSTRATE_FACE)
+    assert profile_used(sim) == SUBSTRATE_FACE
+    sim.set_route("B")
+    assert route_setting(sim) == ("B", None)
+    assert profile_used(sim) == ROUTE_B
     with pytest.raises(TypeError, match="ApproximationProfile"):
         sim.set_route("A", approximation_profile="thin_film")  # type: ignore[arg-type]
-    assert route_setting(sim) == ("A", "substrate_face", SUBSTRATE_FACE)
+    assert route_setting(sim) == ("B", None)
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
-def test_route_b_refuses_a_thin_film(sim_type):
-    """Route B has 3D conductors: a thin film is refused, and the message names both ways out."""
-    with pytest.raises(ValueError, match=r"call set_route\('B'\) without thin_film"):
-        sim_type().set_route("B", thin_film="substrate_face")
+@pytest.mark.parametrize(
+    ("route", "profile"),
+    [("B", THIN_FILM), ("B", SUBSTRATE_FACE), ("A", ROUTE_B), ("A", SOLID)],
+)
+def test_a_profile_the_route_does_not_lower_with_is_used_as_given(
+    sim_type, route, profile
+):
+    """Whether a profile suits the route depends on the plan's films, so SGB's route check refuses it at
+    ``mesh()``, with the finite films or the sheets it finds; ``set_route`` does not guess."""
+    sim = sim_type()
+    sim.set_route(route, approximation_profile=profile)
+    assert route_setting(sim) == (route, profile)
+    assert profile_used(sim) == profile
+
+
+@pytest.mark.parametrize("sim_type", SIMS)
+def test_set_route_has_no_thin_film_keyword(sim_type):
+    """The profile's name says the lowering, so ``thin_film=`` is an unknown keyword."""
+    with pytest.raises(TypeError, match="thin_film"):
+        sim_type().set_route("A", thin_film="substrate_face")  # type: ignore[call-arg]
+    assert not hasattr(sim_type(), "thin_film")
+
+
+@pytest.mark.parametrize("sim_type", SIMS)
+def test_route_a_without_a_profile_prepares_the_same_input_as_the_thin_film_profile(
+    sim_type, monkeypatch
+):
+    """``set_route("A")`` and ``set_route("A", approximation_profile=thin_film)`` prepare one geometry input."""
+    snapshot = two_pad_snapshot(monkeypatch)
+    prepared = []
+    for profile in (None, THIN_FILM):
+        sim = sim_type()
+        sim.set_plan(snapshot)
+        sim.set_route("A", approximation_profile=profile)
+        prepared.append(sim._geometry_request(snapshot).source)  # noqa: SLF001
+    default, explicit = prepared
+    assert default.geometry_input == explicit.geometry_input
+    assert default.stack == explicit.stack
+    assert default.representation == explicit.representation
+
+
+@pytest.mark.parametrize("sim_type", SIMS)
+@pytest.mark.parametrize(
+    ("calls", "profile"),
+    [
+        ((), "route_b"),
+        ((("B", None),), "route_b"),
+        ((("A", None),), "thin_film"),
+        ((("A", SUBSTRATE_FACE),), "substrate_face"),
+        ((("A", SUBSTRATE_FACE), ("B", None)), "route_b"),
+        ((("B", None), ("A", None)), "thin_film"),
+    ],
+)
+def test_input_summary_names_the_profile_the_preparation_uses(
+    sim_type, calls, profile, monkeypatch, tmp_path
+):
+    """The route and the profile's name, the route's default included; a second call replaces both."""
+    sim = sim_type()
+    sim.set_plan(two_pad_snapshot(monkeypatch))
+    for route, given in calls:
+        sim.set_route(route, approximation_profile=given)
+    backend = sim.input_summary().data["backend"]
+    assert backend["route"] == (calls[-1][0] if calls else "B")
+    assert backend["approximation_profile"]["name"] == profile
+    assert "thin_film" not in backend
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
@@ -123,19 +179,19 @@ def test_any_other_route_is_refused_with_a_and_b_named(sim_type, route, says):
     """A Palace simulation takes Route A or Route B; the refusal says why and names both calls."""
     with pytest.raises(ValueError, match=says) as refused:
         sim_type().set_route(route)  # type: ignore[arg-type]
-    assert "set_route('A', approximation_profile=...)" in str(refused.value)
+    assert "set_route('A')" in str(refused.value)
     assert "set_route('B')" in str(refused.value)
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
-def test_a_second_set_route_replaces_all_three_values(sim_type):
+def test_a_second_set_route_replaces_the_route_and_the_profile(sim_type):
     """One call states the whole route setting: nothing survives from the call before."""
     sim = sim_type()
-    sim.set_route("A", thin_film="substrate_face", approximation_profile=SUBSTRATE_FACE)
-    sim.set_route("A", approximation_profile=THIN_FILM)
-    assert route_setting(sim) == ("A", None, THIN_FILM)
+    sim.set_route("A", approximation_profile=SUBSTRATE_FACE)
+    sim.set_route("A")
+    assert route_setting(sim) == ("A", None)
     sim.set_route("B")
-    assert route_setting(sim) == ("B", None, None)
+    assert route_setting(sim) == ("B", None)
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
