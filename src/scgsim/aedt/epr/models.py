@@ -1,4 +1,4 @@
-"""Detached EPR results; declaration and saved-solution names directly re-export specs."""
+"""``EprResult``, the detached EPR result; the request and saved-solution names it re-exports are defined in ``specs``."""
 
 from __future__ import annotations
 

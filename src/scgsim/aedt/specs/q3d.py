@@ -1,4 +1,4 @@
-"""Q3D v3 request and source-geometry contract; no older Q3D parser."""
+"""The Q3D v3 request and source-geometry contract."""
 
 from __future__ import annotations
 

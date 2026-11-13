@@ -611,7 +611,7 @@ def validate_modal_native_evidence(ports: Any, spec: HfssDrivenSpec) -> None:
 
 
 def validate_lumped_readback(receipt: dict[str, Any], prepared: Any) -> None:
-    """Bind current generic loads/supports; historical empty treatment is unchanged."""
+    """Bind the prepared lumped supports and RLC loads to the receipt; a model with neither needs no check."""
     supports = prepared.source.get("lumped_supports", ())
     if not supports and not prepared.lumped_rlcs:
         return

@@ -1,4 +1,4 @@
-"""Portable AEDT handoff writing and canonical input cohorts."""
+"""Write one portable AEDT handoff (``prepare_handoff``) without opening AEDT."""
 
 from __future__ import annotations
 

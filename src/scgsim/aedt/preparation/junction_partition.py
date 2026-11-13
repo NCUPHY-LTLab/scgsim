@@ -1,4 +1,4 @@
-"""AEDT junction partitions: the shared source-domain rectangle algorithm under the AEDT record format."""
+"""Partition AEDT junctions with the shared rectangle algorithm and record them in the AEDT partition format."""
 
 from dataclasses import replace
 

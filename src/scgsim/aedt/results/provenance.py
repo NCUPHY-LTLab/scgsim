@@ -1,4 +1,4 @@
-"""AEDT runtime-source records and receipt codecs."""
+"""Record the runtime source in a run receipt, and encode and check the receipt's current schema."""
 
 from __future__ import annotations
 

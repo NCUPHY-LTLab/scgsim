@@ -1,7 +1,7 @@
-"""Bind fresh AEDT preparation to the neutral physical representation owner.
+"""Interpret a prepared geometry under the requested AEDT modeling and return its effective input and stack.
 
-Geometry planning owns classification, endpoint mapping and enclosure projection.
-This consumer only selects the explicit AEDT profile and returns its context.
+``scgsim.geometry.interpretation`` classifies layers, maps endpoints and projects
+the enclosure. This module only selects the explicit AEDT profile and returns its context.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def interpret_geometry(build_input: Any, stack: Any, modeling: Modeling):
 
 
 def effective_geometry_input(build_input: Any, stack: Any, modeling: Modeling):
-    """Return common effective geometry, stack and its planner projection."""
+    """Return the effective geometry input, the effective stack and the plan's context."""
     effective_input, effective_stack, plan = interpret_geometry(
         build_input, stack, modeling
     )

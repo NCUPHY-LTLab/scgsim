@@ -356,7 +356,7 @@ def native_name(kind: str, *identity: Any) -> str:
 
 
 def native_entity_name(source: Mapping[str, Any], kind: str, *identity: Any) -> str:
-    """Keep historical hash names while giving new Plan entities readable names."""
+    """Name a native entity by the source's ``native_entity_name_policy``: ``hash.v1`` hashes the identity, ``readable.v1`` spells it."""
 
     policy = source.get("native_entity_name_policy", "hash.v1")
     if policy == "hash.v1":

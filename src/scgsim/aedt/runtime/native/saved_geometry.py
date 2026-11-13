@@ -55,7 +55,7 @@ def read_saved_junction_lines(app, project_path, design_name, prepared, geometry
     source = detached(prepared.source)
     partitions = source.get("junction_partitions", {})
     if not partitions:
-        return  # Historical geometry retains its existing binding contract.
+        return  # Without partitions there are no junction boundaries to bind.
     digest, boundaries = _read_junction_boundaries(app, project_path, design_name)
     polygons = {p["polygon_id"]: p for p in source["polygons"]}
     bindings = {j["junction_id"]: j for j in geometry["junctions"]}
