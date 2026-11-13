@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 from scgsim.palace.mesh.build import MeshBuildResult
-from scgsim.palace.results.receipt_contract import validate_palace_identity
+from scgsim.palace.results.runtime_contract import validate_palace_identity
 from scgsim.palace.run import returned_receipt
 from scgsim.palace.run.handoff import prepare_handoff
 

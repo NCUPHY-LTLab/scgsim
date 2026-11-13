@@ -17,14 +17,16 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
 )
 from scgsim.palace.results.artifacts import (
+    FileHash,
     expect_int,
     expect_list,
     expect_mapping,
     expect_scalar,
     extract_hash_map,
     optional_dict,
+    refusal,
 )
-from scgsim.palace.results.receipt_contract import validate_palace_identity
+from scgsim.palace.results.runtime_contract import validate_palace_identity
 from scgsim.palace.run.archive import (
     logical_tar_member_name,
     resolve_run_archive_path,
@@ -38,9 +40,18 @@ def validate_scalar_identity(
     handoff_identity = handoff_metadata.get("source_revisions")
     run_identity = run_metadata.get("source_revisions")
     if not isinstance(handoff_identity, dict) or not handoff_identity:
-        raise ValueError("handoff source_revisions must be a non-empty mapping.")
+        raise ValueError(
+            refusal(
+                "handoff source_revisions must be a non-empty mapping",
+                found=handoff_identity,
+            )
+        )
     if not isinstance(run_identity, dict) or not run_identity:
-        raise ValueError("run source_revisions must be a non-empty mapping.")
+        raise ValueError(
+            refusal(
+                "run source_revisions must be a non-empty mapping", found=run_identity
+            )
+        )
 
     validate_palace_identity(
         expect_mapping(
@@ -55,27 +66,49 @@ def validate_scalar_identity(
 
     if handoff_identity != run_identity:
         raise ValueError(
-            "manual handoff identity mismatch between handoff and run metadata."
+            refusal(
+                "manual handoff identity mismatch between handoff and run metadata",
+                found=run_identity,
+                expected=handoff_identity,
+            )
         )
 
     handoff_palace_identity = handoff_metadata.get("palace_identity")
     run_palace_identity = run_metadata.get("palace_identity")
     if handoff_palace_identity != run_palace_identity:
-        raise ValueError("palace identity mismatch between handoff and run metadata.")
+        raise ValueError(
+            refusal(
+                "palace identity mismatch between handoff and run metadata",
+                found=run_palace_identity,
+                expected=handoff_palace_identity,
+            )
+        )
 
     handoff_id = handoff_metadata.get("handoff_id")
     run_id = run_metadata.get("handoff_id")
     if not isinstance(handoff_id, str) or not handoff_id:
-        raise ValueError("handoff metadata must include handoff_id.")
+        raise ValueError(
+            refusal("handoff metadata must include handoff_id", found=handoff_id)
+        )
     if not isinstance(run_id, str) or not run_id:
-        raise ValueError("run metadata must include handoff_id.")
+        raise ValueError(refusal("run metadata must include handoff_id", found=run_id))
     if handoff_id != run_id:
-        raise ValueError("handoff id mismatch between handoff and run metadata.")
+        raise ValueError(
+            refusal(
+                "handoff id mismatch between handoff and run metadata",
+                found=run_id,
+                expected=handoff_id,
+            )
+        )
     if handoff_metadata.get("route_a_thin_film") != run_metadata.get(
         "route_a_thin_film"
     ):
         raise ValueError(
-            "Route-A thin-film identity mismatch between handoff and run metadata."
+            refusal(
+                "Route-A thin-film identity mismatch between handoff and run metadata",
+                found=run_metadata.get("route_a_thin_film"),
+                expected=handoff_metadata.get("route_a_thin_film"),
+            )
         )
 
 
@@ -108,7 +141,12 @@ def validate_handoff_id(
     recorded = expect_scalar(handoff_metadata, "handoff_id", str)
     if computed != recorded or computed != expected_handoff_id:
         raise ValueError(
-            "recomputed handoff identity does not match expected handoff_id."
+            refusal(
+                "recomputed handoff identity does not match expected handoff_id; the sealed "
+                "inputs or the recorded handoff_id changed",
+                found={"recomputed": computed, "recorded": recorded},
+                expected=expected_handoff_id,
+            )
         )
 
 
@@ -117,7 +155,7 @@ def validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) ->
     execution = expect_mapping(
         handoff_metadata.get("execution_identity"), "handoff execution_identity"
     )
-    if execution != {
+    recorded = {
         "profile": expect_scalar(handoff_metadata, "profile", str),
         "resources": expect_mapping(
             handoff_metadata.get("requested_resources"), "handoff requested_resources"
@@ -135,8 +173,15 @@ def validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) ->
         "command": expect_mapping(handoff_metadata.get("command"), "handoff command"),
         "script": execution.get("script"),
         "recorder": execution.get("recorder"),
-    }:
-        raise ValueError("handoff execution identity does not match handoff metadata.")
+    }
+    if execution != recorded:
+        raise ValueError(
+            refusal(
+                "handoff execution identity does not match handoff metadata",
+                found=execution,
+                expected=recorded,
+            )
+        )
     for field, relative in (
         ("script", expect_scalar(handoff_metadata, "script", str)),
         (
@@ -145,14 +190,24 @@ def validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) ->
         ),
     ):
         item = expect_mapping(execution.get(field), f"execution identity {field}")
-        if expect_scalar(item, "path", str) != relative:
+        recorded_path = expect_scalar(item, "path", str)
+        if recorded_path != relative:
             raise ValueError(
-                f"handoff execution identity {field} path is inconsistent."
+                refusal(
+                    f"handoff execution identity {field} path is inconsistent",
+                    found=recorded_path,
+                    expected=relative,
+                )
             )
         path = confined_path(root, relative)
-        if not path.is_file() or expect_scalar(item, "sha256", str) != sha256(path):
+        recorded_sha = expect_scalar(item, "sha256", str) if path.is_file() else None
+        if not path.is_file() or recorded_sha != sha256(path):
             raise ValueError(
-                f"handoff execution identity {field} hash is inconsistent."
+                refusal(
+                    f"handoff execution identity {field} hash is inconsistent for {relative}",
+                    found=sha256(path) if path.is_file() else "no file",
+                    expected=item.get("sha256"),
+                )
             )
 
 
@@ -174,12 +229,32 @@ def validate_resource_identity(
     ):
         if resource_record.get(field) != handoff_metadata.get(field):
             raise ValueError(
-                f"resource record {field} does not match handoff metadata."
+                refusal(
+                    f"resource record {field} does not match handoff metadata",
+                    found=resource_record.get(field),
+                    expected=handoff_metadata.get(field),
+                )
             )
-    if expect_scalar(resource_record, "status", str) != "completed":
-        raise ValueError("resource record status must be completed for a returned run.")
-    if expect_int(resource_record.get("exit_code"), "resource record exit_code") != 0:
-        raise ValueError("resource record exit_code must be zero for a returned run.")
+    status = expect_scalar(resource_record, "status", str)
+    if status != "completed":
+        raise ValueError(
+            refusal(
+                "resource record status must be completed for a returned run",
+                found=status,
+                expected="completed",
+            )
+        )
+    exit_code = expect_int(
+        resource_record.get("exit_code"), "resource record exit_code"
+    )
+    if exit_code != 0:
+        raise ValueError(
+            refusal(
+                "resource record exit_code must be zero for a returned run",
+                found=exit_code,
+                expected=0,
+            )
+        )
 
 
 def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
@@ -188,10 +263,12 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
     if not hashes:
         raise ValueError(f"{label} metadata has no hash entries.")
 
-    observed: dict[str, tuple[int, str]] = {}
+    observed: dict[str, FileHash] = {}
     for entry in hashes:
         if not isinstance(entry, dict):
-            raise TypeError(f"{label} metadata hashes must be mapping entries.")
+            raise TypeError(
+                refusal(f"{label} metadata hashes must be mapping entries", found=entry)
+            )
         path_name = expect_scalar(entry, "path", str)
         bytes_value = expect_int(
             entry.get("bytes"), f"{label} metadata hash entry {path_name!r} bytes"
@@ -203,17 +280,23 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
                 f"{label} metadata references missing artifact {path_name}."
             )
 
-        observed[path_name] = (
+        observed[path_name] = FileHash(
             expect_int(file_path.stat().st_size, f"size of {path_name}"),
             sha256(file_path),
         )
-        if bytes_value != observed[path_name][0]:
+        if bytes_value != observed[path_name].bytes:
             raise ValueError(
                 f"{label} hash byte size mismatch for {path_name}: "
-                f"declared {bytes_value}, observed {observed[path_name][0]}"
+                f"declared {bytes_value}, observed {observed[path_name].bytes}"
             )
-        if sha_value != observed[path_name][1]:
-            raise ValueError(f"{label} hash mismatch for {path_name}.")
+        if sha_value != observed[path_name].sha256:
+            raise ValueError(
+                refusal(
+                    f"{label} hash mismatch for {path_name}",
+                    found=observed[path_name].sha256,
+                    expected=sha_value,
+                )
+            )
 
     missing = [name for name in SEALED_INPUTS if name not in observed]
     if missing:
@@ -225,20 +308,46 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
 def validate_archive_record(root: Path, resource_record: dict[str, Any]) -> None:
     """Verify the retained compressed handoff archive against its resource record."""
     if resource_record.get("kind") != "manual_handoff":
-        raise ValueError("resource record kind must be manual_handoff.")
+        raise ValueError(
+            refusal(
+                "resource record kind must be manual_handoff",
+                found=resource_record.get("kind"),
+                expected="manual_handoff",
+            )
+        )
 
     if expect_scalar(resource_record, "status", str, fallback="") == "":
-        raise ValueError("resource record status must be a non-empty string.")
+        raise ValueError(
+            refusal(
+                "resource record status must be a non-empty string",
+                found=resource_record.get("status"),
+            )
+        )
     requested_resources = optional_dict(resource_record.get("requested_resources"))
     resolved_resources = optional_dict(resource_record.get("resolved_resources"))
     if not requested_resources:
-        raise ValueError("resource record requested_resources must be a mapping.")
+        raise ValueError(
+            refusal(
+                "resource record requested_resources must be a non-empty mapping",
+                found=resource_record.get("requested_resources"),
+            )
+        )
     if not resolved_resources:
-        raise ValueError("resource record resolved_resources must be a mapping.")
+        raise ValueError(
+            refusal(
+                "resource record resolved_resources must be a non-empty mapping",
+                found=resource_record.get("resolved_resources"),
+            )
+        )
 
     archive = optional_dict(resource_record.get("archive"))
     if not archive:
-        raise ValueError("resource record archive must be a non-empty mapping.")
+        raise ValueError(
+            refusal(
+                "resource record archive must be a non-empty mapping",
+                found=resource_record.get("archive"),
+            )
+        )
     path_name = expect_scalar(archive, "path", str)
     expected_sha = expect_scalar(archive, "sha256", str)
     archive_path = resolve_run_archive_path(root, path_name)
@@ -246,8 +355,15 @@ def validate_archive_record(root: Path, resource_record: dict[str, Any]) -> None
         raise FileNotFoundError(
             f"resource record references missing archive payload {archive_path}"
         )
-    if sha256(archive_path) != expected_sha:
-        raise ValueError("resource record archive hash mismatch.")
+    archive_sha = sha256(archive_path)
+    if archive_sha != expected_sha:
+        raise ValueError(
+            refusal(
+                f"resource record archive hash mismatch for {archive_path}",
+                found=archive_sha,
+                expected=expected_sha,
+            )
+        )
 
 
 def validate_archive_manifest(
@@ -266,15 +382,29 @@ def validate_archive_manifest(
             f"{RUN_RECORD_SCHEMA_VERSION}."
         )
     archive = expect_mapping(resource_record.get("archive"), "resource_record.archive")
-    if extract_hash_map(
+    manifest_hashes = extract_hash_map(
         expect_list(manifest.get("input_hashes"), "archive manifest input_hashes")
-    ) != extract_hash_map(
+    )
+    handoff_hashes = extract_hash_map(
         expect_list(handoff_metadata.get("hashes"), "handoff metadata hashes")
-    ):
-        raise ValueError("archive manifest input hashes do not match handoff metadata.")
-    if expect_scalar(manifest, "archive", str) != expect_scalar(archive, "path", str):
+    )
+    if manifest_hashes != handoff_hashes:
         raise ValueError(
-            "handoff archive manifest archive path does not match receipt."
+            refusal(
+                "archive manifest input hashes do not match handoff metadata",
+                found=manifest_hashes,
+                expected=handoff_hashes,
+            )
+        )
+    manifest_archive = expect_scalar(manifest, "archive", str)
+    record_archive = expect_scalar(archive, "path", str)
+    if manifest_archive != record_archive:
+        raise ValueError(
+            refusal(
+                "handoff archive manifest archive path does not match the resource record",
+                found=manifest_archive,
+                expected=record_archive,
+            )
         )
     file_members, member_paths, member_types = _manifest_members(manifest)
     required = {*SEALED_INPUTS, HANDOFF_METADATA, RUN_METADATA}
@@ -306,7 +436,13 @@ def validate_archive_manifest(
         }
         manifest_member_paths = {path.rstrip("/") for path in member_paths}
         if set(bundled) != manifest_member_paths | allowed_extra:
-            raise ValueError("archive members do not match the archive manifest.")
+            raise ValueError(
+                refusal(
+                    "archive members do not match the archive manifest",
+                    found=sorted(bundled),
+                    expected=sorted(manifest_member_paths | allowed_extra),
+                )
+            )
         _validate_bundled_types(bundle, bundled, member_types)
         _validate_bundled_hashes(bundle, bundled, file_members)
 
@@ -321,11 +457,22 @@ def _manifest_members(manifest: Any) -> Any:
         data = expect_mapping(entry, "handoff archive manifest member")
         path = expect_scalar(data, "path", str)
         if not path or path in member_paths:
-            raise ValueError("handoff archive manifest members must have unique paths.")
+            raise ValueError(
+                refusal(
+                    "handoff archive manifest members must have unique non-empty paths",
+                    found=path,
+                )
+            )
         member_paths.add(path)
         member_type = expect_scalar(data, "type", str)
         if member_type not in {"file", "directory"}:
-            raise ValueError("handoff archive manifest member type is invalid.")
+            raise ValueError(
+                refusal(
+                    f"handoff archive manifest member {path} type is invalid",
+                    found=member_type,
+                    expected="file or directory",
+                )
+            )
         member_types[path] = member_type
         if member_type == "file":
             bytes_value = expect_scalar(data, "bytes", int)
@@ -346,7 +493,13 @@ def _validate_manifest_inputs(
     )
     for path, expected in handoff_input_hashes.items():
         if manifest_input_hashes.get(path) != expected:
-            raise ValueError(f"archive manifest input hash mismatch for {path}.")
+            raise ValueError(
+                refusal(
+                    f"archive manifest input hash mismatch for {path}",
+                    found=manifest_input_hashes.get(path),
+                    expected=expected,
+                )
+            )
         if file_members.get(path) != expected:
             raise ValueError(
                 f"archive manifest must declare input {path} as an exact regular file."
@@ -374,10 +527,24 @@ def _validate_bundled_hashes(
     for path, (expected_bytes, expected_sha) in file_members.items():
         member = bundled.get(path)
         if member is None or not member.isfile() or member.size != expected_bytes:
-            raise ValueError(f"archive member size mismatch for {path}.")
+            raise ValueError(
+                refusal(
+                    f"archive member size mismatch for {path}",
+                    found=None
+                    if member is None or not member.isfile()
+                    else member.size,
+                    expected=expected_bytes,
+                )
+            )
         handle = bundle.extractfile(member)
         if handle is None:
             raise ValueError(f"archive member {path} cannot be read.")
         digest = hashlib.sha256(handle.read()).hexdigest()
         if digest != expected_sha:
-            raise ValueError(f"archive member hash mismatch for {path}.")
+            raise ValueError(
+                refusal(
+                    f"archive member hash mismatch for {path}",
+                    found=digest,
+                    expected=expected_sha,
+                )
+            )
