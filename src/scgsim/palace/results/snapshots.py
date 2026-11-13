@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA_NAME,
@@ -188,33 +188,18 @@ class SnapshotReader:
 
     def load(self) -> AmrPassSnapshot:
         """Read native electrical, surface, mesh and cost observations for this AMR pass."""
-        solves_modes = palace_problem(self.problem).solves_modes
-        eig_columns = (
-            _read_numeric_table_columns(self.path / table_name("eig"), self.mode_count)
-            if solves_modes
-            else None
-        )
-        port_epr = (
-            _read_numeric_table_columns(
-                self.path / table_name("port-EPR"), self.mode_count
-            )
-            if solves_modes
-            else None
-        )
-        capacitance = (
-            None
-            if solves_modes
-            else _read_capacitance(self.path / table_name("terminal-C"))
-        )
+        tables = self._electrical_tables()
         error_indicators = _read_error_indicators(
             self.path / table_name("error-indicators")
         )
-        frequencies = None if eig_columns is None else eig_columns.get(_FREQ_HEADER)
+        frequencies = (
+            None if tables.eig_columns is None else tables.eig_columns.get(_FREQ_HEADER)
+        )
         expected_rows = (
             len(frequencies)
             if frequencies is not None
-            else len(capacitance)
-            if capacitance is not None
+            else len(tables.capacitance)
+            if tables.capacitance is not None
             else 0
         )
         surface_epr = self._whole_surface_epr(frequencies, expected_rows)
@@ -227,22 +212,14 @@ class SnapshotReader:
             source=self.source,
             path=self.path,
             frequencies_ghz=frequencies,
-            eig_columns=eig_columns,
-            port_epr=port_epr,
-            capacitance_matrix_f=capacitance,
+            eig_columns=tables.eig_columns,
+            port_epr=tables.port_epr,
+            capacitance_matrix_f=tables.capacitance,
             surface_epr=surface_epr,
             error_indicators=error_indicators,
             error_norm=error_norm,
-            degrees_of_freedom=as_int(
-                problem_block.get("DegreesOfFreedom")
-                if isinstance(problem_block, dict)
-                else None
-            ),
-            mesh_elements=as_int(
-                problem_block.get("MeshElements")
-                if isinstance(problem_block, dict)
-                else None
-            ),
+            degrees_of_freedom=_problem_count(problem_block, "DegreesOfFreedom"),
+            mesh_elements=_problem_count(problem_block, "MeshElements"),
             elapsed_total_s=_recorded_total_seconds(palace_payload),
             peak_node_memory_mb=mapping_max(
                 palace_payload.get("PeakNodeMemoryMegabytes")
@@ -251,6 +228,24 @@ class SnapshotReader:
             ),
             surface_margin_epr=surface_margin_epr,
             native_iteration=_native_iteration(problem_block),
+        )
+
+    def _electrical_tables(self) -> _ElectricalTables:
+        """The pass's mode tables (Eigenmode) or its capacitance matrix (Electrostatic)."""
+        if palace_problem(self.problem).solves_modes:
+            return _ElectricalTables(
+                eig_columns=_read_numeric_table_columns(
+                    self.path / table_name("eig"), self.mode_count
+                ),
+                port_epr=_read_numeric_table_columns(
+                    self.path / table_name("port-EPR"), self.mode_count
+                ),
+                capacitance=None,
+            )
+        return _ElectricalTables(
+            eig_columns=None,
+            port_epr=None,
+            capacitance=_read_capacitance(self.path / table_name("terminal-C")),
         )
 
     def _surface_count(self) -> int:
@@ -289,6 +284,19 @@ class SnapshotReader:
             surface_count=self._surface_count(),
             mode_count=self.mode_count,
         ).read()
+
+
+class _ElectricalTables(NamedTuple):
+    """One pass's electrical tables: the mode columns and port EPR of an Eigenmode run, or the capacitances."""
+
+    eig_columns: dict[str, tuple[float, ...]] | None
+    port_epr: dict[str, tuple[float, ...]] | None
+    capacitance: tuple[tuple[float, ...], ...] | None
+
+
+def _problem_count(problem_block: Any, key: str) -> int | None:
+    """An integer count of Palace's ``Problem`` record, None when the record or the count is absent."""
+    return as_int(problem_block.get(key) if isinstance(problem_block, dict) else None)
 
 
 def _recorded_total_seconds(palace_payload: dict[str, Any] | None) -> float | None:
