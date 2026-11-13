@@ -169,6 +169,10 @@ def test_each_level_has_its_own_families_margins_and_band_groups(two_level_model
         }
         assert side["surface_epr_row"][name]["group"] == name
         assert side["surface_epr_row"][name]["band"] == group["band"]["index"]
+        # the surface the row is a band of keeps the qualifier: the two families' bands stay apart
+        assert side["surface_epr_row"][name]["banded_surface"] == (
+            BOTTOM if family == "bottom_sa" else TOP
+        )
     assert {n for n in side["surface_epr_row"] if n.startswith("SA::")} == {
         n for n in side["group"] if n.startswith("SA::") and "::band=" in n
     }

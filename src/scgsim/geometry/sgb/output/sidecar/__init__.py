@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v3`` (design brief sections 7 and 12, decision D8, #170).
+"""The production sidecar ``scgsim.sgb.sidecar.v4`` (design brief sections 7 and 12, decision D8, #170).
 
 The sidecar is the JSON companion of the XAO/BREP and SGB's complete record of the model: everything the build
 used, and everything the mesher, the meshing-stage check and the solver adapters need, so a reader reads and
@@ -32,9 +32,8 @@ Sources -- what the layout drew and asked for
 ``source_curve``
     each straight edge and circular arc of each Entity outline: its Entity, polygon, ring and edge number, its
     exact curve (line ends, or arc centre, radius, sense and ends) and length.
-``inset_request`` / ``refinement_request``
-    the requests as given; a refinement family also lists its segments one by one (a catalogue may declare
-    one with no request).  A face request (``scope`` face) names one face and is its own band family; a
+``inset_request``
+    the inset requests as given.  A face request (``scope`` face) names one face and is its own band family; a
     type-level request (``scope`` type: every face of a Surface-EPR type, optionally only some face kinds,
     without the excluded Entities) lists the ``families`` the physical pre-pass created, in face order, and the
     faces it ``skipped`` with the reason (``no_gap_edge``).  A port can cover a family's whole face, so whether
@@ -46,9 +45,9 @@ Sources -- what the layout drew and asked for
 Derived -- what SGB computed from the sources
 ---------------------------------------------
 ``cut_family``
-    every cut family (inset bands, refinement curves and any other role a catalogue gives): its role, edge
-    policy (``required`` or ``refinement_only``) and every level its curves are drawn at; a family a carrier
-    names that the catalogue lacks is listed with none.
+    every cut family (the inset bands, and any other role a catalogue gives): its role and every level its
+    curves are drawn at; a family a carrier names that the catalogue lacks is listed with neither.  Every
+    curve of a family is a cell boundary.
 ``band_family``
     one per banded face: its face, margins (also in model-grid units, the identity a margin is looked up by),
     band count, support area, and band index -> the groups of its faces.
@@ -57,23 +56,22 @@ Derived -- what SGB computed from the sources
     ring's size), and per primitive its curve, length, whether bands are measured from it (a distance origin),
     whether it lies on the die edge, and the source curves drawn along it.
 ``carrier``
-    every carrier an emitted horizontal or refinement edge lies on: a source curve (or a witness chord of
-    one), a band curve with the support primitive it follows, its role (edge, corner, capstart, capend), margin
-    and piece, a segment of a refinement request, or a member of another cut family (its family and member
-    name).
+    every carrier an emitted horizontal edge lies on: a source curve (or a witness chord of one), a band curve
+    with the support primitive it follows, its role (edge, corner, capstart, capend), margin and piece, or a
+    member of another cut family (its family and member name).
 
 Emitted -- the shapes that entered the model
 --------------------------------------------
 ``vertex`` / ``edge`` / ``face`` / ``volume``
-    every written vertex's position; every written edge's kind, vertices, arc, length, carriers (or, for a wall
-    column, the Entities whose walls stand on it) and whether it is written free; every written face's group,
+    every written vertex's position; every written edge's kind (horizontal or vertical), vertices, arc, length
+    and carriers (or, for a wall column, the Entities whose walls stand on it); every written face's group,
     kind, face kind, z range, side volumes, written wires, planned area, whether it is curved, the Entities,
-    band families and refinement requests of its boundary carriers (classified by lineage, never by id), the area each Entity covers (non-exclusive), its band labels and the
-    refinement curves embedded in it; every planned volume's Entity and domain, ``emitted``, group, shells,
-    planned volume, ``aedt_name``, the faces of its written solid and the sheets embedded in it.  The load-side
-    expectations by native tag (``views.expected``, which ``verify_loaded`` and the OCCT and STEP checks
-    compare) and the embeddings the mesher re-applies with ``gmsh.model.mesh.embed`` (``views.embedded_faces``,
-    ``views.embedded_edges``) are computed from these.
+    band families and other cut families of its boundary carriers (classified by lineage, never by id), the
+    area each Entity covers (non-exclusive) and its band labels; every planned volume's Entity and domain,
+    ``emitted``, group, shells, planned volume, ``aedt_name``, the faces of its written solid and the sheets
+    embedded in it.  The load-side expectations by native tag (``views.expected``, which ``verify_loaded`` and
+    the OCCT and STEP checks compare) and the sheets the mesher re-embeds with ``gmsh.model.mesh.embed``
+    (``views.embedded_faces``) are computed from these.
 ``group``
     each primary group by name: ``dim``, ``tag`` (physical tag; not identity, consumers store names), and for
     surfaces ``interface_type``, ``entities`` (owner ids), ``net``, ``face_kind``, ``adjacent_domains``
@@ -94,7 +92,9 @@ Emitted -- the shapes that entered the model
     interface type ``MA``/``MS``/``SHEET`` of a conductor.
 ``surface_epr_row``
     every Surface-EPR row (``MA::pad__top::band=2`` ...) and the group that carries it, with entities and
-    band: Palace's cumulative band selection.  A Route A sheet group (``pad::band=2``) carries
+    band: Palace's cumulative band selection.  A band row names the surface it is a band of
+    (``banded_surface``: ``MA::pad__top``, the row's name without its band), so the bands of one surface are
+    found by a field, never by cutting a row id; an unbanded row has ``None``.  A Route A sheet group (``pad::band=2``) carries
     ``MA::pad__sheet::band=2`` when a face of it has vacuum on some side and ``MS::pad__sheet::band=2``
     when a face has a dielectric on some side; a sheet with vacuum on both sides has no ``MS`` row.  A sheet
     row has ``shared_face_group`` (the sheet group), ``face_sides`` (face id -> ``above``, ``below`` or
@@ -105,8 +105,7 @@ Emitted -- the shapes that entered the model
     facts about the geometry for the mesher, never a size: ``film_sidewall`` (the sidewall outline of a
     finite body, with its ``thickness_um``), ``band_boundary`` (a band family's edges, with the request's
     ``margins_um`` and ``narrowest_band_um``), ``arc`` (the circular-arc edges of one ``radius_um``),
-    ``refinement_curve`` and ``port_edge``; each lists edge ids and the Entity, family, request or port it
-    comes from.  The mesher decides every size (see ``features``).
+    and ``port_edge``; each lists edge ids and the Entity, family or port it comes from.  The mesher decides every size (see ``features``).
 
 AEDT's contribution ledger (surface id, owner, side, classification MA/MS/SA/MM, normal hint) is read from
 ``face`` and ``group``.  The meshing stage of ``simulation_drc`` (``scgsim.meshing.check_fine_structure``)

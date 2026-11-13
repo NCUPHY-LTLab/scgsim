@@ -19,7 +19,6 @@ from sgb_scenes import (
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
     SolutionInterface,
 )
 from scgsim.geometry.sgb.checks.validation.validate import validate_model
@@ -396,26 +395,6 @@ def test_request_ids_must_be_unique_and_the_interface_z_must_be_unambiguous():
     assert "share no interface" in request_error(request, "B", stacked)
 
 
-def test_the_refinement_request_embeds_pieces_and_a_curve_in_no_face_is_an_error():
-    """A refinement request is refinement_only; a piece inside an excluded conductor fails, never dropped."""
-    gap = RefinementRequest("ref", 0.0, ((60.0, 40.0), (70.0, 40.0)))
-    model = build_model_from_catalogue(pad_in_ground("B"), "B", refinements=(gap,))
-    hosts = [f for f in model.topology.faces.values() if f.refinement_edges]
-    assert len(hosts) == 1
-    inside_metal = RefinementRequest("ref", 0.1, ((-40.0, 20.0), (-30.0, 20.0)))
-    with pytest.raises(Exception, match="no face"):
-        build_model_from_catalogue(pad_in_ground("B"), "B", refinements=(inside_metal,))
-    assert "off the" in str(
-        pytest.raises(
-            InputError,
-            build_model_from_catalogue,
-            pad_in_ground("B"),
-            "B",
-            refinements=(RefinementRequest("r", 0.0, ((0.0005, 0.0), (1.0, 1.0))),),
-        ).value
-    )
-
-
 # --------------------------------------------------------------------------- the band extreme fixtures
 
 
@@ -454,17 +433,6 @@ def test_a_reflex_corner_with_a_tiny_angle_keeps_the_bands_consistent(route, ora
     model = build_model(FIXTURES["reflex_small_angle"], route)
     for row in oracle.comparison_rows(model, "band_slit_top"):
         assert abs(row["difference_um2"]) <= row["oracle_rounding_bound_um2"]
-
-
-@pytest.mark.parametrize("route", ["A", "B", "C"])
-def test_a_refinement_curve_crossing_band_edges_is_split_at_every_crossing(route):
-    """The curve at y = 0.5 um crosses the 0.5 and 2 um band boundaries at x = -9.5, -8, 8 and 9.5."""
-    model = build_model(FIXTURES["refinement_crossing_band_edge"], route)
-    pieces = sum(len(f.refinement_edges) for f in model.topology.faces.values())
-    assert pieces == 5
-    for face in model.topology.faces.values():
-        if face.refinement_edges:
-            assert model.routed.face_group[face.id].startswith(("pad", "MA::pad"))
 
 
 # --------------------------------------------------------------------------- real inputs and new levels
@@ -530,7 +498,7 @@ def test_a_family_at_a_z_no_prism_defines_adds_an_ordinary_level():
         (70_000, 40_000),
         Lineage("family_member", family_id="cap", member="cap0"),
     )
-    cap = CurveFamilyRecord("cap", "cap", (carrier,), (Fraction(1, 10),), "required")
+    cap = CurveFamilyRecord("cap", "cap", (carrier,), (Fraction(1, 10),))
     plain = build_model_from_catalogue(base, "A")
     model = build_model_from_catalogue(
         PrismCatalogue(base.grid, base.prisms, (cap,)), "A"

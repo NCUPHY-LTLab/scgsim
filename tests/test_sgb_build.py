@@ -22,7 +22,6 @@ from scgsim.geometry.sgb import SgbArtifacts, build_sgb_geometry
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
 )
 from scgsim.geometry.sgb.checks.verification.loaded import (
     LoadCheckError,
@@ -121,19 +120,17 @@ def test_a_junction_input_builds_under_route_a(tmp_path):
     assert verify_xao(artifacts.xao, read_sidecar(artifacts.sidecar)).ok
 
 
-def test_requests_for_bands_and_refinement_curves_reach_the_files(tmp_path, films):
-    """Requests for bands and refinement curves reach the files."""
+def test_inset_requests_reach_the_files(tmp_path, films):
+    """Inset requests reach the files."""
     insets = (
         InsetRequest("band_left", ConductorSurface("chip/left", "sheet"), (0.5, 1.0)),
     )
-    refinements = (RefinementRequest("ref", 0.0, ((4.5, 1.5), (5.5, 1.5))),)
     try:
-        artifacts = build(films, "A", tmp_path, insets=insets, refinements=refinements)
+        artifacts = build(films, "A", tmp_path, insets=insets)
     except Exception as error:  # noqa: BLE001 -- name of the entity depends on the fixture; show it
         pytest.skip(f"fixture entity ids differ: {error}")
     sidecar = read_sidecar(artifacts.sidecar)
     assert list(sidecar["inset_request"]) == ["band_left"]
-    assert list(sidecar["refinement_request"]) == ["ref"]
     assert any(name.startswith("chip/left::band=") for name in sidecar["group"])
     assert verify_xao(artifacts.xao, sidecar).ok
     assert MARGINS  # the shared margins are used by the other tests

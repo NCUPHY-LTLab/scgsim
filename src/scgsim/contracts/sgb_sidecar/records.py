@@ -1,4 +1,4 @@
-"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v3``: every table and record, as a ``TypedDict``.
+"""The definition of the SGB sidecar ``scgsim.sgb.sidecar.v4``: every table and record, as a ``TypedDict``.
 
 Owns the shape of the file: its tables, the fields of each record, their types, enums and bounds, the table
 each id names, and which records accept more keys.  The value types and the ids of each table are in :mod:`.values`, and the
@@ -7,7 +7,7 @@ mesh-feature records in :mod:`.features`.  It is the one definition the JSON Sch
 ``scgsim.geometry.sgb.output.sidecar``; what each table means for SGB and for its readers is documented there.
 
 The sidecar has three layers, each a set of tables ``{id: record}``.  *Sources* are what the layout drew and
-asked for (``entity``, ``source_curve``, ``inset_request``, ``refinement_request``, ``port``).  *Derived* are
+asked for (``entity``, ``source_curve``, ``inset_request``, ``port``).  *Derived* are
 what SGB computed from them (``cut_family``, ``band_family``, ``support_ring``, ``support_primitive``,
 ``carrier``).  *Emitted*
 are the shapes that entered the model and what is said about them (``vertex``, ``edge``, ``face``, ``volume``,
@@ -62,10 +62,8 @@ from .values import (
     PlanePoint,
     Positive,
     PositiveInt,
-    RefinementRequestRef,
     Route,
     RowSide,
-    Segment,
     SheetSide,
     SidecarFile,
     SolutionKind,
@@ -106,18 +104,14 @@ class Sidecar(TypedDict):
         dict[str, InsetRequest],
         Doc("Sources: the inset requests as given, by request id."),
     ]
-    refinement_request: Annotated[
-        dict[str, RefinementRequest],
-        Doc("Sources: the refinement requests as given, by request id."),
-    ]
     port: Annotated[
         dict[str, Port], Doc("Sources: the lumped-port sheets, by port sheet id.")
     ]
     cut_family: Annotated[
         dict[str, CutFamily],
         Doc(
-            "Derived: every cut family by id (band, refinement and any other role), with every family a carrier"
-            " names."
+            "Derived: every cut family by id (the inset bands and any other role a catalogue gives), with every"
+            " family a carrier names."
         ),
     ]
     band_family: Annotated[
@@ -135,7 +129,7 @@ class Sidecar(TypedDict):
     carrier: Annotated[
         dict[str, Carrier],
         Doc(
-            "Derived: every carrier an emitted horizontal or refinement edge lies on, and what it comes from."
+            "Derived: every carrier an emitted horizontal edge lies on, and what it comes from."
         ),
     ]
     vertex: Annotated[dict[str, Vertex], Doc("Emitted: every written vertex.")]
@@ -160,7 +154,7 @@ class Sidecar(TypedDict):
         dict[str, MeshFeature],
         Doc(
             "Emitted: facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs,"
-            " refinement curves, port edges.  Their order is computed (by kind, source and facts)."
+            " port edges.  Their order is computed (by kind, source and facts)."
         ),
     ]
 
@@ -236,7 +230,6 @@ class Counts(TypedDict):
     arcs: Count
     pcurves: Count
     free_faces: Count
-    free_edges: Count
     volumes_total: Count
 
 
@@ -370,25 +363,6 @@ class SkippedFace(TypedDict):
     reason: Literal["no_gap_edge"]
 
 
-class RefinementRequest(TypedDict):
-    """A refinement family: the request as given (a polyline along which the mesher refines) and the segments SGB
-    drew from it, which are its carriers.  The heights they are drawn at are the family's levels (``cut_family``)."""
-
-    points_um: Annotated[
-        list[PlanePoint] | None,
-        Doc(
-            "The polyline as the request gave it; null for a family a catalogue declares directly, with no request."
-        ),
-    ]
-    segments_um: Annotated[
-        list[Segment],
-        Doc(
-            "Each segment of the family, start and end, in carrier order: a repeated point draws none, and"
-            " segments a catalogue declares are kept as they are, joined or not."
-        ),
-    ]
-
-
 class Port(TypedDict):
     """A lumped-port sheet: the authored identity, its Entity, and the faces and volumes that carry it."""
 
@@ -410,12 +384,10 @@ class Port(TypedDict):
 
 
 class CutFamily(TypedDict):
-    """A named set of curves SGB adds to the arrangement: its semantic role, whether its curves split cells
-    (``required``) or are only embedded (``refinement_only``), and every level they are drawn at.  A family that a
-    carrier names but the catalogue does not hold has no role, policy or levels."""
+    """A named set of curves SGB adds to the arrangement, each a cell boundary: its semantic role and every level
+    its curves are drawn at.  A family that a carrier names but the catalogue does not hold has no role or levels."""
 
     role: str | None
-    edge_policy: Literal["required", "refinement_only"] | None
     levels_um: Annotated[
         list[float],
         Doc("Every height the family's curves are drawn at, in the family's order."),
@@ -489,16 +461,9 @@ class BandMemberCarrier(TypedDict):
     piece: Count | None
 
 
-class RefinementCarrier(TypedDict):
-    """A segment of a refinement request's polyline."""
-
-    kind: Literal["refinement"]
-    request: RefinementRequestRef
-
-
 class FamilyMemberCarrier(TypedDict):
-    """A curve of a cut family that is neither a band curve on a support primitive nor a refinement segment: the
-    family its lineage names and the member name it was given (an opaque label)."""
+    """A curve of a cut family that is not a band curve on a support primitive: the family its lineage names and
+    the member name it was given (an opaque label)."""
 
     kind: Literal["family_member"]
     family: CutFamilyRef
@@ -511,13 +476,7 @@ class UnknownCarrier(TypedDict):
     kind: Literal["unknown"]
 
 
-Carrier = (
-    SourceCarrier
-    | BandMemberCarrier
-    | RefinementCarrier
-    | FamilyMemberCarrier
-    | UnknownCarrier
-)
+Carrier = SourceCarrier | BandMemberCarrier | FamilyMemberCarrier | UnknownCarrier
 
 
 # --------------------------------------------------------------------------- emitted
@@ -531,15 +490,14 @@ class Vertex(TypedDict):
 
 class Edge(TypedDict):
     """One written edge: its kind, its two vertices, its arc (null for a line), its length, and what it comes
-    from: the carriers of a horizontal or refinement edge, the Entities whose walls stand on a vertical one."""
+    from: the carriers of a horizontal edge, the Entities whose walls stand on a vertical one."""
 
-    kind: Literal["horizontal", "vertical", "refinement"]
+    kind: Literal["horizontal", "vertical"]
     vertices: Annotated[list[VertexRef], Length(2, 2)]
     arc: EdgeArc | None
     length_um: NonNegative
     carriers: list[CarrierRef]
     entities: list[EntityRef]
-    written_as_free_edge: bool
 
 
 class EdgeArc(TypedDict):
@@ -579,10 +537,6 @@ class Face(TypedDict):
             "The band families whose curves bound the face, from its band-member carriers."
         ),
     ]
-    refinements: Annotated[
-        list[RefinementRequestRef],
-        Doc("The refinement requests whose segments lie on its boundary edges."),
-    ]
     cut_families: Annotated[
         list[CutFamilyRef],
         Doc("The other cut families whose members lie on its boundary edges."),
@@ -596,10 +550,6 @@ class Face(TypedDict):
     ]
     bands: Annotated[
         list[BandLabel], Doc("The inset band labels of the face, in label order.")
-    ]
-    embedded_edges: Annotated[
-        list[EdgeRef],
-        Doc("Refinement-only curves the mesher embeds in this face, in order."),
     ]
     outer_boundary: Annotated[
         OuterBoundary | None,
@@ -724,6 +674,14 @@ class SurfaceEprRow(TypedDict):
     interface_type: SurfaceEprType
     entities: list[EntityRef]
     band: Count | None
+    banded_surface: Annotated[
+        str | None,
+        Doc(
+            "A band row: the surface it is a band of, named as the row would be without its band (MA::pad__top"
+            " for MA::pad__top::band=2), shared by every band row of that surface; a name, not an id of any"
+            " table.  Null for an unbanded row."
+        ),
+    ]
     side: Annotated[
         RowSide | None,
         Doc(

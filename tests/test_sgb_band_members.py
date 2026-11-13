@@ -264,7 +264,7 @@ def test_a_short_band_edge_leads_to_its_source_edge_through_recorded_fields():
 
 
 def test_the_sidecar_leads_a_short_band_edge_to_the_source_edge_it_offsets(tmp_path):
-    """The #138 (c) chain read from ``scgsim.sgb.sidecar.v3`` alone, by following typed ids and reading fields.
+    """The #138 (c) chain read from ``scgsim.sgb.sidecar.v4`` alone, by following typed ids and reading fields.
 
     Edge ``e:9509e27bdf7e2d28`` of ``junction_fan`` -> its carrier, a band member of role ``edge`` at margin 1000
     grid steps -> the support primitive it offsets, place 13 on its ring, a 0.1954 um line -> the source curve it
@@ -329,14 +329,14 @@ def test_every_band_member_of_the_sidecar_names_its_place_as_the_model_does(
 
 # --------------------------------------------------------------------------- the file is pinned
 
-# SHA-256 of each model's ``scgsim.sgb.sidecar.v3`` file.  Slice C re-pinned these (v2 became v3); a change meant
-# to change the file re-pins the digests it changes and says why.
+# SHA-256 of each model's ``scgsim.sgb.sidecar.v4`` file.  Re-pinned when v3 became v4 (#199: the refinement tables
+# left, a band row names its surface); a change meant to change the file re-pins the digests it changes and says why.
 SIDECAR_SHA256 = {
-    "pad_a_bands": "7fe9bcc29bc8ee09f6ea146a3cd37deb2e74b8b55435aef11d407ed7580d816f",
-    "pad_b_bands": "131c0e45eb0c27cc51573babe0b01ecc8ac8c6b6e3d7133ce27724496dacf177",
-    "junction_fan": "947a9858c07e66a0da7331ab8e24031f3b1ddee381be0b24c811b030691bdac5",
-    "cell13_circular_bend": "9b30c52d9165cbb9de8e4a351dcf26254325ba450ee4b9a8b4badc4581e5928c",
-    "strip_into_pad": "f8575530493caf605ce8956754e96b056a274ab6b748c51a5a32f1409ca70a8f",
+    "pad_a_bands": "e8e5a58eb94810145f3d165e5beb1df22427afbbb1fb995bf2ac85d43d3cb792",
+    "pad_b_bands": "64ec0396a5425b886edfa1c3d05fa1ee18d94710b3cbc0d807e20ae57bd334a9",
+    "junction_fan": "0a731889b6e1268f94946906c4e678e217a81c5c263ac6ff02728921d5fd6de7",
+    "cell13_circular_bend": "acd18c95eea096729b3dfd25b950d762fd263782194416ada4bfe199d82c2448",
+    "strip_into_pad": "c2bb542ae5673d1b9bc184842151920488ee1d6aa50cd950fc4bb4dceec7e782",
 }
 
 

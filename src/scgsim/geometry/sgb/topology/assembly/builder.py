@@ -64,7 +64,7 @@ def register(table: dict[str, Record], record: Record) -> None:
     """Store a record under its id; a different record already there means two entities share the id.
 
     A plain ``table[id] = record`` would let the later entity replace the earlier one without a trace.
-    Registering the same record twice (a point shared by two refinement curves) is fine.
+    Registering the same record twice (a vertex two edges share) is fine.
     """
     known = table.get(record.id)
     if known is None:
@@ -131,7 +131,6 @@ class _Assembly:
             self._register_splits(plan_curved_splits(self.A, runs))
             self._horizontal_faces()
             self._wall_faces(runs)
-            self._refinement_curves()
             self._prune_unused()
         self._shells(volumes)
         return Topology(
@@ -541,46 +540,8 @@ class _Assembly:
             else {}
         )
 
-    # -- refinement curves -------------------------------------------------------------
-
-    def _refinement_curves(self) -> None:
-        """Attach ``refinement_only`` curves to the face that contains them (kept as embedded edges)."""
-        for layer in self.A:
-            for edge, face_index in layer.dissolved.refinement:
-                face = self.faces.get(layer.face_ids[face_index])
-                sources = tuple(sorted(c.id for c in edge.carriers))
-                carriers = ", ".join(sources)
-                where = f"({self.grid.to_um(edge.a[0]):.4f}, {self.grid.to_um(edge.a[1]):.4f}) um on {layer.plane}"
-                if face is None:
-                    raise SgbError(
-                        f"refinement curve {carriers} at {where} lies in a cell that has no face (inside a "
-                        "volume): it cannot be embedded and is not dropped silently"
-                    )
-                eid = identity.edge_id(layer.plane, edge.a, edge.b, sources)
-                ids = []
-                for p in (edge.a, edge.b):
-                    vid = identity.vertex_id(layer.plane, p)
-                    register(
-                        self.vertices,
-                        TopoVertex(
-                            vid,
-                            p[0],
-                            p[1],
-                            layer.level_z,
-                            int(layer.level_z * self.zden),
-                        ),
-                    )
-                    ids.append(vid)
-                register(
-                    self.edges,
-                    TopoEdge(eid, "refinement", ids[0], ids[1], layer.plane, sources),
-                )
-                self.lineage[eid] = list(sources)
-                face.refinement_edges.append(eid)
-
     def _prune_unused(self) -> None:
         used = {eid for f in self.faces.values() for loop in f.loops for eid, _ in loop}
-        used |= {eid for f in self.faces.values() for eid in f.refinement_edges}
         self.edges = {k: v for k, v in self.edges.items() if k in used}
         used_vertices = {v for e in self.edges.values() for v in (e.v0, e.v1)}
         used_vertices |= {

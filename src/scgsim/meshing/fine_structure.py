@@ -203,7 +203,7 @@ def check_fine_structure(
 ) -> FineStructureReport:
     """The meshing-stage findings of the SGB model a sidecar describes.
 
-    ``sidecar`` is the ``scgsim.sgb.sidecar.v3`` file of one build, or its decoded content; the shared reader
+    ``sidecar`` is the ``scgsim.sgb.sidecar.v4`` file of one build, or its decoded content; the shared reader
     checks it as the mesher does.  Every wall face, horizontal face and free horizontal edge of the built model
     is measured; those below ``limits`` are found, located in micrometres and attributed to the layout, to the
     exact erosion or to SGB (see the module docstring).  The model is not changed.

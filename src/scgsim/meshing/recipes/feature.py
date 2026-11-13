@@ -181,7 +181,6 @@ _KIND_RULES: Mapping[str, _SizeRule] = MappingProxyType(
         "film_sidewall": _film_sidewall_size,
         "band_boundary": _band_boundary_size,
         "arc": _no_size,
-        "refinement_curve": _no_size,
         "port_edge": _no_size,
     }
 )

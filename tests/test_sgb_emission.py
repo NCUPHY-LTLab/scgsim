@@ -169,7 +169,7 @@ def test_round_trip_counts_boundaries_groups_volumes_areas_and_a_conformal_mesh(
         assert report.max_vertex_offset_um < 1e-9
         assert report.boundaries_mismatching == {"edges": 0, "faces": 0, "solids": 0}
         embedded = apply_sidecar_embeds(sidecar)
-        assert embedded["faces"] == sum(
+        assert embedded == sum(
             len(v.embedded_faces)
             for v in model.topology.volumes.values()
             if v.id in model.routed.emitted_volumes
@@ -500,35 +500,6 @@ def test_a_pinched_hole_is_written_as_two_wires_that_share_the_pinch_vertex(tmp_
         assert verify_loaded(sidecar_of(model, plan)).ok
 
 
-def test_refinement_only_curve_is_a_free_edge_and_is_reembedded_from_the_sidecar(
-    tmp_path, emit_models
-):
-    """Refinement only curve is a free edge and is reembedded from the sidecar."""
-    model = emit_models["pad_a_refinement"]
-    host = [f for f in model.topology.faces.values() if f.refinement_edges]
-    assert len(host) == 1 and len(host[0].refinement_edges) == 1
-    plan, path = written(model, tmp_path, "xao")
-    sidecar = sidecar_of(model, plan)
-    assert plan.counts["free_edges"] == 1
-    edge_tag = plan.tags()[host[0].refinement_edges[0]][1]
-    with gmsh_session(path):
-        assert verify_loaded(sidecar).ok
-        assert (
-            gmsh.model.getAdjacencies(1, edge_tag)[0].size == 0
-        )  # free: no face owns it in the file
-        assert apply_sidecar_embeds(sidecar) == {"faces": 0, "edges": 1}
-        mesh_coarsely(40.0)
-        assert (
-            gmsh.model.mesh.getElements(1, edge_tag)[1][0].size > 1
-        )  # meshed, embedded in the host face
-    edge = host[0].refinement_edges[0]
-    assert views.embedded_edges(sidecar) == [(edge, host[0].id)]
-    assert sidecar["edge"][edge]["written_as_free_edge"]
-    assert {
-        sidecar["carrier"][c]["request"] for c in sidecar["edge"][edge]["carriers"]
-    } == {"ref"}
-
-
 # --------------------------------------------------------------------------- inset bands through the direct writer
 
 
@@ -598,9 +569,7 @@ def test_pad_b_bands_meshed_with_the_cheap_recipe_has_no_flat_tetrahedron(
 # --------------------------------------------------------------------------- the Gmsh-API oracle
 
 
-@pytest.mark.parametrize(
-    "name", ["pad_a", "pad_b", "pad_a_bands", "pad_a_refinement", "void_shell_b"]
-)
+@pytest.mark.parametrize("name", ["pad_a", "pad_b", "pad_a_bands", "void_shell_b"])
 def test_the_gmsh_api_oracle_agrees_on_entities_groups_and_face_areas(
     tmp_path, emit_models, name
 ):
@@ -645,7 +614,7 @@ SCRIPT = (
     "from scgsim.geometry.sgb.output.emission.writer import write_xao_file\n"
     "digests = []\n"
     "for route in 'ABC':\n"
-    "    model = pad_model(route, bands=True, refine=route != 'C')\n"
+    "    model = pad_model(route, bands=True)\n"
     "    path = pathlib.Path(tempfile.mkdtemp()) / 'm.xao'\n"
     "    write_xao_file(plan_brep(model.topology, model.routed), path, name='m', chunk_items=50)\n"
     "    digests.append(hashlib.sha256(path.read_bytes()).hexdigest())\n"

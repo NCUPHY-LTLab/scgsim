@@ -25,7 +25,6 @@ FACTS_OF_KIND = {
     "film_sidewall": {"thickness_um"},
     "band_boundary": {"margins_um", "narrowest_band_um"},
     "arc": {"radius_um"},
-    "refinement_curve": set(),
     "port_edge": set(),
 }
 
@@ -151,9 +150,7 @@ def test_the_schema_accepts_every_kind_and_rejects_an_unknown_kind_a_size_and_a_
     """A kind outside the list, a stowaway size, a missing fact and a wrong source type are schema errors."""
     validator = jsonschema.Draft202012Validator(sidecar_schema())
     good = sidecars["pad_b_bands"]
-    assert {f["kind"] for f in good["mesh_feature"].values()} == set(FEATURE_KINDS) - {
-        "refinement_curve"
-    }
+    assert {f["kind"] for f in good["mesh_feature"].values()} == set(FEATURE_KINDS)
     assert not list(validator.iter_errors(good))
     by_kind = {f["kind"]: f for f in good["mesh_feature"].values()}
     broken_features = [
@@ -227,7 +224,7 @@ def test_route_c_adds_the_walls_of_the_retained_conductor_on_the_model_boundary(
 
 def test_a_sheet_has_no_film_sidewall(sidecars):
     """Route A conductors are sheets of zero thickness; the substrate and vacuum walls lie on the model boundary."""
-    for name in ("pad_a", "pad_a_bands", "pad_a_refinement"):
+    for name in ("pad_a", "pad_a_bands"):
         assert not features_of(sidecars[name], "film_sidewall"), name
 
 
@@ -392,25 +389,7 @@ def test_a_polygonal_outline_has_no_arc_feature():
     assert not features_of(sidecar_of(CASES["pad_polygon_a"]()), "arc")
 
 
-# --------------------------------------------------------------------------- refinement and ports
-
-
-def test_refinement_curve_keeps_the_edges_of_its_request_and_has_no_facts(sidecars):
-    """The refinement-only curve of request ``ref``."""
-    side = sidecars["pad_a_refinement"]
-    (curve,) = features_of(side, "refinement_curve")
-    assert curve["source"] == "ref" and curve["facts"] == {}
-    carriers = side["carrier"]
-    drawn = {
-        e
-        for e, edge in side["edge"].items()
-        if any(
-            carriers[c]["kind"] == "refinement" and carriers[c]["request"] == "ref"
-            for c in edge["carriers"]
-        )
-    }
-    assert set(curve["edges"]) == drawn
-    assert not features_of(sidecars["pad_a"], "refinement_curve")
+# --------------------------------------------------------------------------- ports
 
 
 @pytest.mark.parametrize("name", ["pad_a", "pad_b", "pad_c", "pad_b_bands"])

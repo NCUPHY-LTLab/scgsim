@@ -17,7 +17,6 @@ from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
 from scgsim.geometry.sgb.model import ConformalModel
 
 BAND_FAMILY_ROLE = "inset_band"
-REFINEMENT_FAMILY_ROLE = "refinement"
 
 
 @dataclass(frozen=True)
@@ -69,8 +68,8 @@ class CarrierLineage:
         )
 
     def role(self, family_id: str) -> str | None:
-        """The role of the cut family ``family_id`` (``inset_band``, ``refinement`` or any other the catalogue
-        gives); ``None`` for a family a lineage names that the catalogue does not hold."""
+        """The role of the cut family ``family_id`` (``inset_band``, or any other the catalogue gives); ``None``
+        for a family a lineage names that the catalogue does not hold."""
         return self.roles.get(family_id)
 
 

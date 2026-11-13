@@ -21,11 +21,11 @@ from scgsim.geometry.sgb.exact.labels import Domain, SheetOwner
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue
 from scgsim.geometry.sgb.topology.routes.naming import (
+    banded_rows,
     check_entity_names,
     interface_side,
     interface_type_of,
     sheet_face_sides,
-    surface_epr_row_ids,
     surface_group,
     volume_group,
 )
@@ -499,20 +499,21 @@ def test_volume_groups_and_interface_types_and_surface_epr_rows():
     assert sheet_face_sides(S, V) == {"MA": "above", "MS": "below"}
     assert sheet_face_sides(V, S) == {"MA": "below", "MS": "above"}
     assert sheet_face_sides(None, V) == {"MA": "above"}
-    assert surface_epr_row_ids(
-        "pad::band=1", "SHEET", "pad", 1, sheet_face_sides(S, V)
-    ) == [
-        "MA::pad__sheet::band=1",
-        "MS::pad__sheet::band=1",
-    ]
-    assert surface_epr_row_ids(
-        "pad::band=1", "SHEET", "pad", 1, sheet_face_sides(V, V)
-    ) == ["MA::pad__sheet::band=1"]
-    assert surface_epr_row_ids("SA::a|b__interface::band=0", "SA", "", 0) == [
-        "SA::a|b__interface::band=0"
-    ]
-    assert surface_epr_row_ids("pad", "SHEET", "pad", None) == []  # unbanded: no row
-    assert surface_epr_row_ids("PORT::p1", "PORT", "p1", 1) == []
+    # each row names the surface it is a band of, built from the same facts, never cut out of the row id
+    assert banded_rows(
+        "pad::band=1", "pad", "SHEET", "pad", 1, sheet_face_sides(S, V)
+    ) == {
+        "MA::pad__sheet::band=1": "MA::pad__sheet",
+        "MS::pad__sheet::band=1": "MS::pad__sheet",
+    }
+    assert banded_rows(
+        "pad::band=1", "pad", "SHEET", "pad", 1, sheet_face_sides(V, V)
+    ) == {"MA::pad__sheet::band=1": "MA::pad__sheet"}
+    assert banded_rows(
+        "SA::a|b__interface::band=0", "SA::a|b__interface", "SA", "", 0
+    ) == {"SA::a|b__interface::band=0": "SA::a|b__interface"}
+    assert banded_rows("pad", "pad", "SHEET", "pad", None) == {}  # unbanded: no row
+    assert banded_rows("PORT::p1", "PORT::p1", "PORT", "p1", 1) == {}
 
 
 @pytest.mark.parametrize(

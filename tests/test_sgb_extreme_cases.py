@@ -16,20 +16,13 @@ from sgb_extreme_cases import (
     FIXTURES,
     build_model,
     cases,
-    catalogue_of,
-    chip,
-    metal,
-    refinement,
 )
-from sgb_scenes import rect_um
 
 from scgsim.contracts.sgb_sidecar import read_sidecar, sidecar_schema
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 from scgsim.geometry.sgb.checks.verification.loaded import verify_xao
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 
 def build(name: str, route: str):
@@ -166,26 +159,6 @@ def test_a_pinched_hole_is_one_cycle_of_eight_edges_for_sheets():
 def test_a_port_edge_on_a_metal_sidewall_keeps_its_group_in_both_routes(route):
     """The port stays one named surface even where it touches a wall."""
     assert "PORT::p1" in build("port_edge_on_metal_sidewall", route).routed.groups
-
-
-def test_a_refinement_curve_ending_on_a_boundary_keeps_that_vertex_on_the_boundary_edge():
-    """Regression: the curve's end on a pad boundary is a vertex of the boundary edge, not a loose point."""
-    family = refinement("ref", (-10_000, 500), (0, 500), exact_z(0))
-    catalogue = catalogue_of(
-        "ref_touch",
-        "A",
-        [*chip(), metal("pad", "N", rect_um(-10, -5, 10, 5), "A")],
-        (family,),
-    )
-    topology = build_model_from_catalogue(catalogue, "A").topology
-    host = next(f for f in topology.faces.values() if f.refinement_edges)
-    boundary = {
-        v
-        for loop in host.loops
-        for eid, _ in loop
-        for v in (topology.edges[eid].v0, topology.edges[eid].v1)
-    }
-    assert topology.edges[host.refinement_edges[0]].v0 in boundary
 
 
 def test_stacked_slabs_touching_at_a_vertex_keep_their_levels_conformal():

@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v3.json",
-  "title": "scgsim.sgb.sidecar.v3",
+  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v4.json",
+  "title": "scgsim.sgb.sidecar.v4",
   "description": "Sidecar of the SGB XAO/BREP: the model, the binding of planned ids to native tags, a summary, and the tables of sources, derived curves and emitted shapes, linked by typed ids.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "model", "binding", "summary", "entity", "source_curve", "inset_request", "refinement_request", "port", "cut_family", "band_family", "support_ring", "support_primitive", "carrier", "vertex", "edge", "face", "volume", "group", "surface_epr_row", "mesh_feature"],
+  "required": ["schema", "model", "binding", "summary", "entity", "source_curve", "inset_request", "port", "cut_family", "band_family", "support_ring", "support_primitive", "carrier", "vertex", "edge", "face", "volume", "group", "surface_epr_row", "mesh_feature"],
   "properties": {
-    "schema": {"const": "scgsim.sgb.sidecar.v3"},
+    "schema": {"const": "scgsim.sgb.sidecar.v4"},
     "model": {"$ref": "#/$defs/Model"},
     "binding": {"$ref": "#/$defs/Binding"},
     "summary": {"$ref": "#/$defs/Summary"},
@@ -26,18 +26,13 @@
       "type": "object",
       "additionalProperties": {"$ref": "#/$defs/InsetRequest"}
     },
-    "refinement_request": {
-      "description": "Sources: the refinement requests as given, by request id.",
-      "type": "object",
-      "additionalProperties": {"$ref": "#/$defs/RefinementRequest"}
-    },
     "port": {
       "description": "Sources: the lumped-port sheets, by port sheet id.",
       "type": "object",
       "additionalProperties": {"$ref": "#/$defs/Port"}
     },
     "cut_family": {
-      "description": "Derived: every cut family by id (band, refinement and any other role), with every family a carrier names.",
+      "description": "Derived: every cut family by id (the inset bands and any other role a catalogue gives), with every family a carrier names.",
       "type": "object",
       "additionalProperties": {"$ref": "#/$defs/CutFamily"}
     },
@@ -57,13 +52,12 @@
       "additionalProperties": {"$ref": "#/$defs/SupportPrimitive"}
     },
     "carrier": {
-      "description": "Derived: every carrier an emitted horizontal or refinement edge lies on, and what it comes from.",
+      "description": "Derived: every carrier an emitted horizontal edge lies on, and what it comes from.",
       "type": "object",
       "additionalProperties": {
         "oneOf": [
           {"$ref": "#/$defs/SourceCarrier"},
           {"$ref": "#/$defs/BandMemberCarrier"},
-          {"$ref": "#/$defs/RefinementCarrier"},
           {"$ref": "#/$defs/FamilyMemberCarrier"},
           {"$ref": "#/$defs/UnknownCarrier"}
         ]
@@ -105,14 +99,13 @@
       "additionalProperties": {"$ref": "#/$defs/SurfaceEprRow"}
     },
     "mesh_feature": {
-      "description": "Emitted: facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs, refinement curves, port edges.  Their order is computed (by kind, source and facts).",
+      "description": "Emitted: facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs, port edges.  Their order is computed (by kind, source and facts).",
       "type": "object",
       "additionalProperties": {
         "oneOf": [
           {"$ref": "#/$defs/FilmSidewall"},
           {"$ref": "#/$defs/BandBoundary"},
           {"$ref": "#/$defs/ArcFeature"},
-          {"$ref": "#/$defs/RefinementCurve"},
           {"$ref": "#/$defs/PortEdge"}
         ]
       }
@@ -284,7 +277,7 @@
       "description": "Shapes of the written file by kind, and the number of planned volumes (volumes_total).",
       "type": "object",
       "additionalProperties": {"type": "integer", "minimum": 0},
-      "required": ["vertices", "edges", "faces", "solids", "wires", "shells", "surfaces", "cylinders", "arcs", "pcurves", "free_faces", "free_edges", "volumes_total"],
+      "required": ["vertices", "edges", "faces", "solids", "wires", "shells", "surfaces", "cylinders", "arcs", "pcurves", "free_faces", "volumes_total"],
       "properties": {
         "vertices": {"type": "integer", "minimum": 0},
         "edges": {"type": "integer", "minimum": 0},
@@ -297,18 +290,16 @@
         "arcs": {"type": "integer", "minimum": 0},
         "pcurves": {"type": "integer", "minimum": 0},
         "free_faces": {"type": "integer", "minimum": 0},
-        "free_edges": {"type": "integer", "minimum": 0},
         "volumes_total": {"type": "integer", "minimum": 0}
       }
     },
     "CutFamily": {
-      "description": "A named set of curves SGB adds to the arrangement: its semantic role, whether its curves split cells (``required``) or are only embedded (``refinement_only``), and every level they are drawn at.  A family that a carrier names but the catalogue does not hold has no role, policy or levels.",
+      "description": "A named set of curves SGB adds to the arrangement, each a cell boundary: its semantic role and every level its curves are drawn at.  A family that a carrier names but the catalogue does not hold has no role or levels.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["role", "edge_policy", "levels_um"],
+      "required": ["role", "levels_um"],
       "properties": {
         "role": {"type": ["string", "null"]},
-        "edge_policy": {"enum": ["required", "refinement_only", null]},
         "levels_um": {
           "description": "Every height the family's curves are drawn at, in the family's order.",
           "type": "array",
@@ -317,12 +308,12 @@
       }
     },
     "Edge": {
-      "description": "One written edge: its kind, its two vertices, its arc (null for a line), its length, and what it comes from: the carriers of a horizontal or refinement edge, the Entities whose walls stand on a vertical one.",
+      "description": "One written edge: its kind, its two vertices, its arc (null for a line), its length, and what it comes from: the carriers of a horizontal edge, the Entities whose walls stand on a vertical one.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "vertices", "arc", "length_um", "carriers", "entities", "written_as_free_edge"],
+      "required": ["kind", "vertices", "arc", "length_um", "carriers", "entities"],
       "properties": {
-        "kind": {"enum": ["horizontal", "vertical", "refinement"]},
+        "kind": {"enum": ["horizontal", "vertical"]},
         "vertices": {
           "type": "array",
           "items": {"type": "string", "x-references": "vertex"},
@@ -343,8 +334,7 @@
         "entities": {
           "type": "array",
           "items": {"type": "string", "x-references": "entity"}
-        },
-        "written_as_free_edge": {"type": "boolean"}
+        }
       }
     },
     "EdgeArc": {
@@ -400,7 +390,7 @@
       "description": "One written face: its group, kind, face kind, z range, the volumes on its two sides, its written loops and area, and what it comes from.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume", "loops", "area_um2", "curved", "entities", "families", "refinements", "cut_families", "membership", "bands", "embedded_edges", "outer_boundary"],
+      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume", "loops", "area_um2", "curved", "entities", "families", "cut_families", "membership", "bands", "outer_boundary"],
       "properties": {
         "group": {"type": ["string", "null"], "x-references": "group", "x-dimension": 2},
         "kind": {"enum": ["horizontal", "wall"]},
@@ -431,11 +421,6 @@
           "type": "array",
           "items": {"type": "string", "x-references": "band_family"}
         },
-        "refinements": {
-          "description": "The refinement requests whose segments lie on its boundary edges.",
-          "type": "array",
-          "items": {"type": "string", "x-references": "refinement_request"}
-        },
         "cut_families": {
           "description": "The other cut families whose members lie on its boundary edges.",
           "type": "array",
@@ -451,11 +436,6 @@
           "description": "The inset band labels of the face, in label order.",
           "type": "array",
           "items": {"$ref": "#/$defs/BandLabel"}
-        },
-        "embedded_edges": {
-          "description": "Refinement-only curves the mesher embeds in this face, in order.",
-          "type": "array",
-          "items": {"type": "string", "x-references": "edge"}
         },
         "outer_boundary": {
           "description": "For a face on the model's outer boundary (one side volume is null): where it lies; null for every other face.",
@@ -477,7 +457,7 @@
       }
     },
     "FamilyMemberCarrier": {
-      "description": "A curve of a cut family that is neither a band curve on a support primitive nor a refinement segment: the family its lineage names and the member name it was given (an opaque label).",
+      "description": "A curve of a cut family that is not a band curve on a support primitive: the family its lineage names and the member name it was given (an opaque label).",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "family", "member"],
@@ -707,65 +687,6 @@
         "facts": {"$ref": "#/$defs/NoFacts"}
       }
     },
-    "RefinementCarrier": {
-      "description": "A segment of a refinement request's polyline.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "request"],
-      "properties": {
-        "kind": {"const": "refinement"},
-        "request": {"type": "string", "x-references": "refinement_request"}
-      }
-    },
-    "RefinementCurve": {
-      "description": "The refinement-only curves of a refinement request.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["edges", "kind", "source", "facts"],
-      "properties": {
-        "edges": {
-          "type": "array",
-          "items": {"type": "string", "x-references": "edge"},
-          "minItems": 1
-        },
-        "kind": {"const": "refinement_curve"},
-        "source": {"description": "The refinement request.", "type": "string", "x-references": "refinement_request"},
-        "facts": {"$ref": "#/$defs/NoFacts"}
-      }
-    },
-    "RefinementRequest": {
-      "description": "A refinement family: the request as given (a polyline along which the mesher refines) and the segments SGB drew from it, which are its carriers.  The heights they are drawn at are the family's levels (``cut_family``).",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["points_um", "segments_um"],
-      "properties": {
-        "points_um": {
-          "description": "The polyline as the request gave it; null for a family a catalogue declares directly, with no request.",
-          "type": ["array", "null"],
-          "items": {
-            "type": "array",
-            "items": {"type": "number"},
-            "minItems": 2,
-            "maxItems": 2
-          }
-        },
-        "segments_um": {
-          "description": "Each segment of the family, start and end, in carrier order: a repeated point draws none, and segments a catalogue declares are kept as they are, joined or not.",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "array",
-              "items": {"type": "number"},
-              "minItems": 2,
-              "maxItems": 2
-            },
-            "minItems": 2,
-            "maxItems": 2
-          }
-        }
-      }
-    },
     "RoutePolicy": {
       "description": "Whether the route excludes or retains conductor volumes, and whether it allows conductor sheets.",
       "type": "object",
@@ -884,7 +805,7 @@
       "description": "One Surface-EPR row and the primary group that carries it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["group", "interface_type", "entities", "band", "side", "face_sides", "shared_face_group"],
+      "required": ["group", "interface_type", "entities", "band", "banded_surface", "side", "face_sides", "shared_face_group"],
       "properties": {
         "group": {"type": "string", "x-references": "group", "x-dimension": 2},
         "interface_type": {"enum": ["MA", "MS", "SA"]},
@@ -893,6 +814,7 @@
           "items": {"type": "string", "x-references": "entity"}
         },
         "band": {"type": ["integer", "null"], "minimum": 0},
+        "banded_surface": {"description": "A band row: the surface it is a band of, named as the row would be without its band (MA::pad__top for MA::pad__top::band=2), shared by every band row of that surface; a name, not an id of any table.  Null for an unbanded row.", "type": ["string", "null"]},
         "side": {"description": "A sheet row: the side every face in face_sides agrees on, or mixed when they disagree; null for any other row.", "enum": ["above", "below", "both", "mixed", null]},
         "face_sides": {
           "description": "A sheet row: face id -> the side of that face whose neighbour (vacuum for MA, dielectric for MS) the row integrates, listing exactly the faces that have such a neighbour; null for any other row.",

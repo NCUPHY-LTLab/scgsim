@@ -3,8 +3,8 @@
 Owns the ``vertex``, ``edge``, ``face`` and ``volume`` tables.  They describe what the XAO holds, as the plan
 numbered it: a vertex's position; an edge's kind, two vertices in written order, arc, length and what it comes
 from (carriers, or the Entities of a wall column); a face's group, kind, side volumes, written wires as oriented
-edges, planned area, the Entities, band families and refinement requests it comes from, the area each Entity
-covers, its band labels and the refinement curves embedded in it, and for a face on the model's outer boundary
+edges, planned area, the Entities, band families and other cut families it comes from, the area each Entity
+covers, its band labels, and for a face on the model's outer boundary
 the side of the model's box it lies on and the domain it bounds; a volume's domain, group, planned volume, AEDT name, the faces of the
 written solid and the sheets embedded in it.  The load-side expectations by native tag are computed from these
 tables (``scgsim.contracts.sgb_sidecar.views.expected``), so every planned measure is stored once.
@@ -57,7 +57,6 @@ def vertex_records(plan: BrepPlan) -> dict[str, Vertex]:
 def edge_records(model: ConformalModel, plan: BrepPlan) -> dict[str, Edge]:
     """Every written edge: kind, vertices, arc, length and what it comes from."""
     topology = model.topology
-    free = {plan.edge_ids[i] for i in plan.found.free_edges}
     out: dict[str, Edge] = {}
     for number, edge_id in enumerate(plan.edge_ids):
         edge = topology.edges[edge_id]
@@ -71,7 +70,6 @@ def edge_records(model: ConformalModel, plan: BrepPlan) -> dict[str, Edge]:
             length_um=_length_um(plan, number),
             carriers=[] if vertical else sources,
             entities=sources if vertical else [],
-            written_as_free_edge=edge_id in free,
         )
     return out
 
@@ -128,14 +126,12 @@ def face_records(
             curved=face.curved,
             entities=sources.entities,
             families=sources.families,
-            refinements=sources.refinements,
             cut_families=sources.cut_families,
             membership={
                 entity: rounded(share)
                 for entity, share in sorted(face.membership.items())
             },
             bands=[BandLabel(family=f, index=i) for f, i in face.bands],
-            embedded_edges=list(face.refinement_edges),
             outer_boundary=_outer_boundary(model, plan, box, face, wires),
         )
     return out
@@ -207,7 +203,6 @@ class _Sources:
 
     entities: list[str]
     families: list[str]
-    refinements: list[str]
     cut_families: list[str]
 
 
@@ -217,7 +212,7 @@ def _face_sources(
     carriers: dict[str, Carrier],
     face: TopoFace,
 ) -> _Sources:
-    """The Entities, band families, refinement requests and other cut families of the carriers on a face's
+    """The Entities, band families and other cut families of the carriers on a face's
     horizontal edges.
 
     These are the sources SGB gave the face (``TopoFace.sources``), each classified by the carrier's record
@@ -229,7 +224,6 @@ def _face_sources(
     found: dict[str, set[str]] = {
         "source": set(),
         "band_member": set(),
-        "refinement": set(),
         "family_member": set(),
     }
     for loop in face.loops:
@@ -247,7 +241,6 @@ def _face_sources(
     return _Sources(
         sorted(found["source"]),
         sorted(found["band_member"]),
-        sorted(found["refinement"]),
         sorted(found["family_member"]),
     )
 

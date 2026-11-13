@@ -1,6 +1,6 @@
 """The mesh features of the sidecar: what is true of a set of edges for the mesher, never a size.
 
-Owns the five feature records (film sidewall, band boundary, arc, refinement curve, port edge) and their facts.
+Owns the four feature records (film sidewall, band boundary, arc, port edge) and their facts.
 Each names its source in the table its kind refers to.  Part of the one definition with :mod:`.records`.
 """
 
@@ -15,7 +15,6 @@ from .values import (
     EntityRef,
     PortRef,
     Positive,
-    RefinementRequestRef,
 )
 
 
@@ -72,14 +71,6 @@ class ArcFacts(TypedDict):
     radius_um: Positive
 
 
-class RefinementCurve(_MeshFeatureEdges):
-    """The refinement-only curves of a refinement request."""
-
-    kind: Literal["refinement_curve"]
-    source: Annotated[RefinementRequestRef, Doc("The refinement request.")]
-    facts: NoFacts
-
-
 class PortEdge(_MeshFeatureEdges):
     """The boundary edges of the faces of a lumped-port sheet."""
 
@@ -92,4 +83,4 @@ class NoFacts(TypedDict):
     """The facts of a feature kind that has none: an empty object."""
 
 
-MeshFeature = FilmSidewall | BandBoundary | ArcFeature | RefinementCurve | PortEdge
+MeshFeature = FilmSidewall | BandBoundary | ArcFeature | PortEdge

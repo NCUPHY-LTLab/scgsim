@@ -1,6 +1,6 @@
 """Assembling the sidecar of a built model and its emitted shapes (design brief sections 7 and 12, #170).
 
-Owns :func:`build_sidecar`: the ``scgsim.sgb.sidecar.v3`` document that :mod:`scgsim.geometry.sgb.output.sidecar`
+Owns :func:`build_sidecar`: the ``scgsim.sgb.sidecar.v4`` document that :mod:`scgsim.geometry.sgb.output.sidecar`
 documents and ``scgsim.contracts.sgb_sidecar`` defines, from the validated model, the numbered plan and the
 requests that shaped the model.  It reads the plan and the model only; it never touches geometry or a file.
 The tables come in three layers, each from its own module: sources (:mod:`.sources`), derived
@@ -51,7 +51,6 @@ from scgsim.geometry.sgb.output.sidecar.sources import (
     entity_records,
     inset_request_records,
     port_records,
-    refinement_request_records,
     source_curve_records,
 )
 
@@ -102,7 +101,6 @@ def build_sidecar(
         entity=entity_records(model),
         source_curve=source_curve_records(model),
         inset_request=inset_request_records(model),
-        refinement_request=refinement_request_records(model),
         port=ports,
         cut_family=cut_family_records(model, carriers),
         band_family=band_family_records(model),

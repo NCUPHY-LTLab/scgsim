@@ -8,8 +8,7 @@ once (a face names its group, an edge its vertices); a view computes the other d
   ``binding.ids_by_tag``;
 * :func:`group_members`: the faces or volumes of each group, by planned id;
 * :func:`expected`: what the load-side checks compare, by native tag (positions, boundaries, areas, volumes);
-* :func:`embedded_faces` and :func:`embedded_edges`: the embeddings the mesher re-applies, host by host in tag
-  order;
+* :func:`embedded_faces`: the sheets the mesher re-embeds in their volumes, host by host in tag order;
 * :func:`ports` and :func:`mesh_features`: the ports and features in the order a reader iterates them;
 * :func:`arrangement` and :func:`curved_wall_faces`: the arrangement summary and the curved walls.
 
@@ -113,16 +112,6 @@ def embedded_faces(sidecar: Sidecar) -> list[tuple[str, str]]:
         (face, volume_id)
         for volume_id in sidecar["binding"]["ids_by_tag"]["3"]
         for face in volumes[volume_id]["embedded_faces"]
-    ]
-
-
-def embedded_edges(sidecar: Sidecar) -> list[tuple[str, str]]:
-    """(refinement edge, host face) pairs, host by host in tag order: refinement-only curves inside a face."""
-    faces = sidecar["face"]
-    return [
-        (edge, face_id)
-        for face_id in sidecar["binding"]["ids_by_tag"]["2"]
-        for edge in faces[face_id]["embedded_edges"]
     ]
 
 

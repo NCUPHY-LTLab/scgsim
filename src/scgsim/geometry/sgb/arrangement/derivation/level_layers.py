@@ -32,11 +32,7 @@ from scgsim.geometry.sgb.arrangement.labelling.bands import (
     face_bands,
     level_supports,
 )
-from scgsim.geometry.sgb.arrangement.labelling.dissolve import (
-    Dissolved,
-    FamilyPolicies,
-    dissolve,
-)
+from scgsim.geometry.sgb.arrangement.labelling.dissolve import Dissolved, dissolve
 from scgsim.geometry.sgb.arrangement.labelling.linking import TAG, SlabEdges, link_faces
 from scgsim.geometry.sgb.arrangement.labelling.membership import membership_shares
 from scgsim.geometry.sgb.arrangement.labelling.prism_set import (
@@ -70,7 +66,7 @@ class _RawLevel:
     below_link: list[int] | None
     above_link: list[int] | None
     sheets: PrismSet | None
-    policies: FamilyPolicies
+    family_curves: frozenset[str]  # carrier ids of the cut families on this level
     supports: list[LevelSupport]  # inset families targeting this level
     stats: dict[str, int]
 
@@ -87,7 +83,7 @@ def build_level_layers(  # noqa: PLR0913 - the finished slabs, the arc registry 
     """All level layers, given the finished slab layers (slab arcs are already registered in ``arcs``)."""
     raw_levels = []
     for level in range(len(levels.levels)):
-        segments, policies = _level_segments(catalogue, levels, slabs, level, arcs)
+        segments, family_curves = _level_segments(catalogue, levels, slabs, level, arcs)
         with watch.stage("noding_driver"):
             snapped = snap_round(segments, watch=watch)
         with watch.stage("dcel_faces"):
@@ -112,7 +108,7 @@ def build_level_layers(  # noqa: PLR0913 - the finished slabs, the arc registry 
             catalogue.families[i] for i in levels.level_families[level]
         )
         raw_levels.append(
-            _RawLevel(arrangement, below, above, sheets, policies, supports, stats)
+            _RawLevel(arrangement, below, above, sheets, family_curves, supports, stats)
         )
 
     with watch.stage("labelling"):
@@ -192,8 +188,8 @@ def _level_segments(
     slabs: list[Layer],
     level: int,
     arcs: dict[str, ArcCarrier],
-) -> tuple[list[Segment], FamilyPolicies]:
-    """Noding input of one level, and the edge policies of the cut families that target it."""
+) -> tuple[list[Segment], frozenset[str]]:
+    """Noding input of one level, and the carrier ids of the cut families that target it."""
     segments: list[Segment] = []
     for slab_index in (level - 1, level):
         if 0 <= slab_index < len(slabs):
@@ -204,15 +200,12 @@ def _level_segments(
             Segment(c.p, c.q, frozenset([c.edge_carrier()]))
             for c in catalogue.prisms[i].carriers()
         )
-    required: set[str] = set()
-    refinement: set[str] = set()
+    family_curves: set[str] = set()
     for family_index in levels.level_families[level]:
-        family = catalogue.families[family_index]
-        policy = required if family.edge_policy == "required" else refinement
-        for segment in family_segments(family):
+        for segment in family_segments(catalogue.families[family_index]):
             segments.append(segment)
-            policy.update(c.curve_id for c in segment.carriers)
-    return segments, FamilyPolicies(frozenset(required), frozenset(refinement))
+            family_curves.update(c.curve_id for c in segment.carriers)
+    return segments, frozenset(family_curves)
 
 
 def family_segments(family: CurveFamilyRecord) -> list[Segment]:
@@ -327,7 +320,7 @@ def _dissolve_levels(
                     extras[(k, fi)][1],
                 )
             )
-        dissolved = dissolve(arrangement, labels, raw.policies)
+        dissolved = dissolve(arrangement, labels, raw.family_curves)
         z = levels.levels[k]
         layer = Layer(
             "level",

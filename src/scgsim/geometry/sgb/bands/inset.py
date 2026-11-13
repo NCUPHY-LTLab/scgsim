@@ -54,8 +54,7 @@ seam may end on the port boundary like on the free boundary.  The part of a port
 is the host's surface, not the port (labelling), so a seam inside the landing stays: a port's *active* interior
 is its footprint minus the footprints of its hosts (:class:`PortClip`).  A seam never crosses a host boundary:
 it lies in the support region, which is either wholly the host's surface or wholly outside it.  The distance
-origins never saw the port, so every band keeps its geometry outside the port.  Only the seams of this family
-are clipped: a refinement curve is a user request and is never clipped here.
+origins never saw the port, so every band keeps its geometry outside the port.
 
 The offset of an oblique edge is not representable on the grid (its normal is irrational): curve end points
 are snapped to the lattice like every other vertex, so the carriers are exact up to the snap bound.  Every
@@ -142,7 +141,6 @@ def inset_family(
         "inset_band",
         tuple(lines),
         target_levels,
-        "required",
         tuple(arcs),
         region,
         BandRegions(tuple(regions), tuple(seams)),

@@ -122,7 +122,10 @@ def surface_epr_rows(
     * ``shared_face_group`` -- the sheet group for a sheet row, else ``None``.  A consumer that treats
       an internal two-sided face (cracking it, or counting the face once) decides from this field and
       ``face_sides``;
-    * ``band`` -- the band index, or ``None`` for an unbanded group.
+    * ``band`` -- the band index, or ``None`` for an unbanded group;
+    * ``banded_surface`` -- for a band row, the surface it is a band of, named as the row would be without its
+      band (``MA::pad__top`` for ``MA::pad__top::band=2``, ``MA::pad__sheet`` for ``MA::pad__sheet::band=2``):
+      the routed model's name, shared by every band row of that surface; ``None`` for an unbanded row.
 
     ``members`` are the faces of each group (:func:`group_members`).
     """
@@ -135,12 +138,25 @@ def surface_epr_rows(
             for row_type, face_sides in _face_sides_by_row_type(
                 model, members[name]
             ).items():
-                rows[sheet_row_id(row_type, entity, band)] = _row(
-                    name, row_type, record, band, face_sides
+                row_id = sheet_row_id(row_type, entity, band)
+                rows[row_id] = _row(
+                    name, row_type, record, band, face_sides, _surface(model, row_id)
                 )
         elif kind in SURFACE_EPR_TYPES:
-            rows[name] = _row(name, cast(SurfaceEprType, kind), record, band, None)
+            rows[name] = _row(
+                name,
+                cast(SurfaceEprType, kind),
+                record,
+                band,
+                None,
+                _surface(model, name),
+            )
     return rows
+
+
+def _surface(model: ConformalModel, row_id: str) -> str | None:
+    """The surface a band row is a band of, as routing named it; ``None`` for an unbanded row."""
+    return model.routed.banded_surfaces.get(row_id)
 
 
 def _face_sides_by_row_type(
@@ -156,18 +172,24 @@ def _face_sides_by_row_type(
     return out
 
 
-def _row(
+def _row(  # noqa: PLR0913 - the group, the row type and record, the band, the sheet sides and the surface
     group: str,
     row_type: SurfaceEprType,
     record: SurfaceGroup,
     band: int | None,
     face_sides: dict[str, SheetSide] | None,
+    banded_surface: str | None,
 ) -> SurfaceEprRow:
+    if (band is None) != (banded_surface is None):
+        raise SgbError(
+            f"internal: row of group {group!r} has band {band} but banded surface {banded_surface!r}"
+        )
     return SurfaceEprRow(
         group=group,
         interface_type=row_type,
         entities=record["entities"],
         band=band,
+        banded_surface=banded_surface,
         side=None if face_sides is None else _common_side(face_sides),
         face_sides=face_sides,
         shared_face_group=None if face_sides is None else group,

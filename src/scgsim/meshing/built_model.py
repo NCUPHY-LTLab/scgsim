@@ -11,7 +11,7 @@ accepted, by native tag (tag = 1 + position in ``binding.ids_by_tag``):
 * ``face``: each face's kind (``horizontal`` or ``wall``), physical group and the Entities and band families it
   comes from;
 * ``carrier``: what each carrier comes from (a source curve, a band curve offset from a support primitive, a
-  refinement request), with a band member's family, ring, place on the ring, role, margin and piece, and the
+  member of another cut family), with a band member's family, ring, place on the ring, role, margin and piece, and the
   source curves its primitive lies on, read from the support records it names;
 * ``support_ring``: how many primitives each ring of a band's support has, so places on a ring can be compared
   across its start;
@@ -49,7 +49,8 @@ class Carrier:
     """What one carrier of a horizontal edge comes from, as the sidecar's ``carrier`` table records it.
 
     ``kind`` is ``source`` (a source curve of the layout, or a witness chord of one), ``band_member`` (a band
-    curve of the inset family ``family``), ``refinement`` (a segment of a refinement request) or ``unknown``.
+    curve of the inset family ``family``), ``family_member`` (another curve of the cut family ``family``) or
+    ``unknown``.
     A band member offsets the primitive at ``index`` of the support ring ``ring`` (an opaque id) in the way
     ``role`` says, at ``margin_grid`` grid steps; ``piece`` numbers the parts of a cap or corner cut into several,
     and is ``None`` for a whole member.  ``primitive_sources`` are the source curves (``source_curve`` ids) that
@@ -97,7 +98,7 @@ class BuiltModel:
     ]  # native edge tag -> radius of its circle, micrometres
     face_kind: Mapping[str, str]  # face id -> "horizontal" or "wall"
     face_group: Mapping[str, str | None]
-    # face id -> the names of its Entities, band families and refinement requests
+    # face id -> the names of its Entities, band families and other cut families
     face_sources: Mapping[str, tuple[str, ...]]
     face_entities: Mapping[str, tuple[str, ...]]  # face id -> its Entities
     edge_carriers: Mapping[str, tuple[str, ...]]  # horizontal edge id -> carrier ids
@@ -194,7 +195,6 @@ def read_built_model(sidecar: Sidecar) -> BuiltModel:
                     {
                         *face["entities"],
                         *face["families"],
-                        *face["refinements"],
                         *face["cut_families"],
                     }
                 )
@@ -256,8 +256,6 @@ def _carrier(
     sidecar: Sidecar,
     place: Mapping[str, tuple[str, int]],
 ) -> Carrier:
-    if record["kind"] == "refinement":
-        return Carrier(cid, record["kind"], family=record["request"])
     if record["kind"] == "family_member":
         return Carrier(cid, record["kind"], family=record["family"])
     if record["kind"] != "band_member":

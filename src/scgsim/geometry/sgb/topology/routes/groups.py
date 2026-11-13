@@ -30,14 +30,14 @@ from dataclasses import dataclass, field
 
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
-from scgsim.geometry.sgb.topology.routes.face_names import name_faces
+from scgsim.geometry.sgb.topology.routes.face_names import FaceNames, name_faces
 from scgsim.geometry.sgb.topology.routes.naming import (
     SHEET,
+    banded_rows,
     face_kind,
     interface_type_of,
     net_of_surface,
     sheet_face_sides,
-    surface_epr_row_ids,
     volume_group,
 )
 from scgsim.geometry.sgb.topology.routes.policy import RoutePolicy
@@ -102,7 +102,10 @@ class RoutedModel:
     unions: dict[str, list[str]]
     surface_epr_rows: dict[
         str, str
-    ]  # Surface-EPR row ("MA::pad__top::band=2") -> the primary group that carries it
+    ]  # banded Surface-EPR row ("MA::pad__top::band=2") -> the primary group that carries it
+    banded_surfaces: dict[
+        str, str
+    ]  # banded Surface-EPR row -> the surface it is a band of ("MA::pad__top"), named without the band
 
     def is_emitted_face(self, face_neg: str | None, face_pos: str | None) -> bool:
         """Whether a face with these two side volumes bounds an emitted volume."""
@@ -116,11 +119,11 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
     emitted = frozenset(
         vid for vid, v in topology.volumes.items() if policy.is_emitted(v.domain)
     )
-    face_group = name_faces(topology, emitted)
+    names = name_faces(topology, emitted)
+    face_group = names.group
     faces = {fid: route_face(face) for fid, face in topology.faces.items()}
-    surfaces = _surface_groups(topology, emitted, face_group, faces)
+    surfaces = _surface_groups(topology, emitted, names, faces)
     groups = _add_volume_groups(topology, emitted, surfaces.groups)
-    _check_refinement_hosts(topology, emitted)
     return RoutedModel(
         policy,
         emitted,
@@ -129,6 +132,7 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
         dict(sorted(groups.items())),
         _unions(surfaces),
         dict(sorted(surfaces.epr_rows.items())),
+        dict(sorted(surfaces.banded_surfaces.items())),
     )
 
 
@@ -139,6 +143,7 @@ class _Surfaces:
     groups: dict[str, PhysicalGroup] = field(default_factory=dict)
     types: dict[str, str] = field(default_factory=dict)  # group -> interface type
     epr_rows: dict[str, str] = field(default_factory=dict)  # row -> group
+    banded_surfaces: dict[str, str] = field(default_factory=dict)  # row -> surface
     # sheet group -> the row types (MA, MS) some face of it has a neighbour for
     sheet_row_types: dict[str, set[str]] = field(
         default_factory=lambda: defaultdict(set)
@@ -149,13 +154,13 @@ class _Surfaces:
 def _surface_groups(
     topology: Topology,
     emitted: frozenset[str],
-    face_group: dict[str, str | None],
+    names: FaceNames,
     faces: dict[str, RoutedFace],
 ) -> _Surfaces:
     """Every named face that bounds an emitted volume, in its group, with its group's facts."""
     out = _Surfaces()
     for fid, face in sorted(topology.faces.items()):
-        group = face_group[fid]
+        group, unbanded = names.group[fid], names.unbanded[fid]
         bounds_emitted = any(
             v is not None and v in emitted for v in (face.neg_volume, face.pos_volume)
         )
@@ -169,10 +174,14 @@ def _surface_groups(
             entity = face.owner.name if face.owner is not None else ""
             band = face.bands[0][1] if face.bands else None
             out.sheet_row_types[group].update(routed.sheet_sides)
-            for row in surface_epr_row_ids(
-                group, interface, entity, band, routed.sheet_sides
-            ):
+            assert (
+                unbanded is not None
+            )  # a face with a group has a name without its band
+            for row, surface in banded_rows(
+                group, unbanded, interface, entity, band, routed.sheet_sides
+            ).items():
                 out.epr_rows[row] = group
+                out.banded_surfaces[row] = surface
         if routed.net is not None:
             out.net_groups[f"NET::{routed.net}"].add(group)
     return out
@@ -207,17 +216,3 @@ def _unions(surfaces: _Surfaces) -> dict[str, list[str]]:
         {name: sorted(members) for name, members in surfaces.net_groups.items()}
     )
     return dict(sorted(unions.items()))
-
-
-def _check_refinement_hosts(topology: Topology, emitted: frozenset[str]) -> None:
-    """A refinement curve must lie in a face of an emitted volume: it is an error, never dropped silently."""
-    for face in topology.faces.values():
-        if not face.refinement_edges:
-            continue
-        if not any(
-            v is not None and v in emitted for v in (face.neg_volume, face.pos_volume)
-        ):
-            raise SgbError(
-                f"refinement curve(s) {', '.join(sorted(face.refinement_edges))} lie in face {face.id} "
-                "of no emitted volume"
-            )

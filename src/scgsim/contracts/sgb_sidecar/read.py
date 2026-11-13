@@ -54,7 +54,8 @@ def _require_version(document: object) -> None:
     version = document.get("schema")
     if version != SIDECAR_SCHEMA:
         raise SidecarError(
-            f"sidecar schema {version!r} is not supported; this reader reads {SIDECAR_SCHEMA!r}."
+            f"sidecar schema {version!r} is not supported: this SCGSim reads only {SIDECAR_SCHEMA!r}. "
+            "Rebuild the geometry with this SCGSim to write a sidecar it reads."
         )
 
 

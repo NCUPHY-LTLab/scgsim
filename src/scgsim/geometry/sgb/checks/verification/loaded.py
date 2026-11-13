@@ -13,8 +13,8 @@ inspecting the model, always against numbers the sidecar carries:
 * every face area and solid volume equals the plan (an inside-out shell is a wrong or negative volume);
 * the physical groups equal the planned groups (names, dimensions, tags, members).
 
-:func:`apply_sidecar_embeds` re-applies the embeddings the XAO cannot carry (a port sheet inside its host
-volume, a refinement curve inside its host face).  :func:`verify_xao` is the convenience that opens the
+:func:`apply_sidecar_embeds` re-applies the embedding the XAO cannot carry (a port sheet or a floating
+sheet inside its host volume).  :func:`verify_xao` is the convenience that opens the
 file in a fresh Gmsh session first.  Failures are collected, not raised one by one; call
 :meth:`LoadReport.raise_if_failed` to stop.
 """
@@ -125,23 +125,17 @@ def verify_loaded(sidecar: Sidecar, *, groups: bool = True) -> LoadReport:
     return report
 
 
-def apply_sidecar_embeds(sidecar: Sidecar) -> dict[str, int]:
-    """Embed the sidecar's sheets in their host volumes and refinement curves in their host faces.
+def apply_sidecar_embeds(sidecar: Sidecar) -> int:
+    """Embed the sidecar's sheets in their host volumes, and return how many were embedded.
 
     Neither the BREP nor the XAO can carry mesh embedding, so the mesher calls this once after loading
-    and before meshing.  Returns how many faces and edges were embedded.
+    and before meshing.
     """
     index = views.TagIndex.of(sidecar)
     sheets = views.embedded_faces(sidecar)
-    curves = views.embedded_edges(sidecar)
     for face, host in sheets:
         gmsh.model.mesh.embed(2, [index.tag(2, face)], 3, index.tag(3, host))
-    by_host: dict[str, list[int]] = {}
-    for edge, host in curves:
-        by_host.setdefault(host, []).append(index.tag(1, edge))
-    for host_face, edges in sorted(by_host.items()):
-        gmsh.model.mesh.embed(1, edges, 2, index.tag(2, host_face))
-    return {"faces": len(sheets), "edges": len(curves)}
+    return len(sheets)
 
 
 class _Clock:

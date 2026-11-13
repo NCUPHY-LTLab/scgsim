@@ -12,7 +12,6 @@ and leaves every size to the mesher.  Each feature names a ``kind``, its ``sourc
   ``narrowest_band_um``);
 * ``arc`` -- the circular-arc edges of one radius (``source`` = the entity that owns them, or ``None``; facts
   ``radius_um``);
-* ``refinement_curve`` -- the refinement-only curves of a refinement request (``source`` = the request id);
 * ``port_edge`` -- the boundary edges of the faces of a lumped port (``source`` = the port sheet id).
 
 A feature's id is a digest of its kind, source and facts, which no two features share; readers take the
@@ -45,7 +44,6 @@ from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.output.sidecar.derived import edge_sources
 from scgsim.geometry.sgb.output.sidecar.lineage import (
     BAND_FAMILY_ROLE,
-    REFINEMENT_FAMILY_ROLE,
     CarrierLineage,
 )
 from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
@@ -54,7 +52,6 @@ FEATURE_KINDS = (
     "film_sidewall",
     "band_boundary",
     "arc",
-    "refinement_curve",
     "port_edge",
 )
 
@@ -184,7 +181,7 @@ def _edges_at(topology: Topology, wall: TopoFace, z: Fraction) -> Iterator[str]:
 def _family_features(
     model: ConformalModel, plan: BrepPlan, lineage: CarrierLineage
 ) -> Iterator[_Stated]:
-    """Band boundaries (with the margins of their request) and refinement curves, by family."""
+    """Band boundaries (with the margins of their request), by family."""
     edges_of_family: dict[str, set[str]] = defaultdict(set)
     for edge_id in plan.edge_ids:
         if model.topology.edges[edge_id].kind == "vertical":
@@ -195,11 +192,8 @@ def _family_features(
                 edges_of_family[found.family_id].add(edge_id)
     requests = {request.request_id: request for request in model.inset_plan.requests}
     for family, edge_ids in sorted(edges_of_family.items()):
-        role = lineage.role(family)
-        if role == BAND_FAMILY_ROLE:
+        if lineage.role(family) == BAND_FAMILY_ROLE:
             yield "band_boundary", family, edge_ids, _band_facts(requests, family)
-        elif role == REFINEMENT_FAMILY_ROLE:
-            yield "refinement_curve", family, edge_ids, {}
 
 
 def _band_facts(requests: dict[str, InsetRequest], family: str) -> dict[str, Any]:

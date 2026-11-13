@@ -34,7 +34,6 @@ from scgsim.geometry.sgb.bands.inset import inset_family
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
     SolutionInterface,
 )
 from scgsim.geometry.sgb.checks.verification.loaded import (
@@ -498,24 +497,3 @@ def test_the_files_of_a_banded_port_load_and_mesh(banded_port_model, tmp_path):
     with gmsh_session(artifacts.xao):
         apply_sidecar_embeds(sidecar)
         mesh_coarsely(60.0)
-
-
-def test_a_refinement_curve_across_the_port_is_a_user_cut_and_stays_in_the_port():
-    """Explicit user curves are never clipped: the port holds the pieces of a curve crossing it."""
-    effective = thin_film_pair()
-    inset = InsetRequest("band_sa", SA, MARGINS)
-    across = RefinementRequest("across", 0.0, ((5.0, 0.5), (5.0, 3.5)))
-    model = build_conformal_model(
-        effective.build_input,
-        effective.representation,
-        "A",
-        insets=(inset,),
-        refinements=(across,),
-    )
-    (face_id,) = model.routed.groups["PORT::port_sheet"].ids
-    port = model.topology.faces[face_id]
-    assert (
-        port.refinement_edges
-    )  # the curve is embedded in the port: the seams' clip never touches it
-    assert corner_count(model, port) == 4
-    assert not model.report.failures

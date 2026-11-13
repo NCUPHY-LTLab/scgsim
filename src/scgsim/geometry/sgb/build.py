@@ -21,7 +21,7 @@ from typing import Any
 
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb.bands.requests import InsetRequest, RefinementRequest
+from scgsim.geometry.sgb.bands.requests import InsetRequest
 from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
 from scgsim.geometry.sgb.model import ConformalModel, build_conformal_model
@@ -51,14 +51,13 @@ def build_sgb_geometry(  # noqa: PLR0913 - the effective input, the route and th
     *,
     route: str,
     insets: tuple[InsetRequest, ...] = (),
-    refinements: tuple[RefinementRequest, ...] = (),
     output_dir: Path,
 ) -> SgbArtifacts:
     """Build the conformal solid model of an effective input under ``route`` and write its files to ``output_dir``.
 
-    ``insets`` (Surface-EPR bands) and ``refinements`` (mesh-size curves) are the typed requests of
-    ``scgsim.geometry.sgb.bands.requests``.  Structural validation always runs and raises
-    :class:`~scgsim.geometry.sgb.errors.ValidationError` before anything is written.
+    ``insets`` are the typed Surface-EPR band requests of ``scgsim.geometry.sgb.bands.requests``.  Structural
+    validation always runs and raises :class:`~scgsim.geometry.sgb.errors.ValidationError` before anything is
+    written.
     """
     timings: dict[str, float] = {}
     started = time.perf_counter()
@@ -67,7 +66,6 @@ def build_sgb_geometry(  # noqa: PLR0913 - the effective input, the route and th
         representation,
         route,
         insets=insets,
-        refinements=refinements,
     )
     timings["derive_and_validate"] = elapsed_seconds(started)
     return emit_model(model, output_dir, timings=timings)

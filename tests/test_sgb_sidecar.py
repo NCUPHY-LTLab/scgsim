@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v2``: schema, binding, group facts, unions, lineage, mesh features, determinism."""
+"""The production sidecar ``scgsim.sgb.sidecar.v4``: schema, binding, group facts, unions, lineage, mesh features, determinism."""
 
 from __future__ import annotations
 
@@ -84,6 +84,7 @@ def test_the_schema_rejects_what_a_consumer_must_not_see(sidecars):
                     "interface_type": "MA",
                     "entities": [],
                     "band": None,
+                    "banded_surface": None,
                     "side": "left",
                     "face_sides": None,
                     "shared_face_group": None,
@@ -98,6 +99,7 @@ def test_the_schema_rejects_what_a_consumer_must_not_see(sidecars):
                     "interface_type": "MA",
                     "entities": [],
                     "band": None,
+                    "banded_surface": None,
                     "side": "above",
                     "face_sides": {"f:1": "left"},
                     "shared_face_group": "g",
@@ -106,7 +108,7 @@ def test_the_schema_rejects_what_a_consumer_must_not_see(sidecars):
         },
         {k: v for k, v in good.items() if k != "vertex"},
         {**good, "stowaway": 1},
-        {**good, "schema": "scgsim.sgb.sidecar.v2"},
+        {**good, "schema": "scgsim.sgb.sidecar.v3"},
         {**good, "model": {**good["model"], "route": "D"}},
         {
             **good,
@@ -258,6 +260,29 @@ def test_a_sheet_on_a_substrate_carries_both_surface_epr_rows(sidecars):
     assert (
         unbanded["MA::pad__sheet"]["band"] is None and "MA::ground__sheet" in unbanded
     )  # every Surface-EPR row, banded or not
+
+
+def test_a_band_row_names_the_surface_it_is_a_band_of(sidecars):
+    """Every band row states its surface as a field, the same for every band of it; an unbanded row has none."""
+    rows = sidecars["pad_a_bands"]["surface_epr_row"]
+    for k in range(4):
+        assert rows[f"MA::pad__sheet::band={k}"]["banded_surface"] == "MA::pad__sheet"
+        assert rows[f"MS::pad__sheet::band={k}"]["banded_surface"] == "MS::pad__sheet"
+    assert (
+        rows["SA::substrate|vacuum__interface::band=0"]["banded_surface"]
+        == "SA::substrate|vacuum__interface"
+    )
+    finite = sidecars["pad_b_bands"]["surface_epr_row"]
+    assert {r["banded_surface"] for r in finite.values() if r["band"] is not None} == {
+        "MA::pad__top",
+        "MS::pad__bottom",
+        "SA::substrate|vacuum__interface",
+    }
+    for name in ("pad_a", "pad_b"):
+        assert all(
+            r["banded_surface"] is None
+            for r in sidecars[name]["surface_epr_row"].values()
+        )
 
 
 def test_a_sheet_row_marks_the_side_of_the_two_sided_face_it_integrates(sidecars):
@@ -445,7 +470,7 @@ def test_face_records_carry_group_kind_z_and_the_two_sides(sidecars):
     assert top["z_um"] == [0.2, 0.2] and top["negative_volume"] is not None
 
 
-# --------------------------------------------------------------------------- lineage, insets, refinements
+# --------------------------------------------------------------------------- lineage and insets
 
 
 def test_lineage_leads_every_edge_to_a_source_curve_and_every_face_to_entities(
@@ -502,19 +527,6 @@ def test_inset_families_record_request_margins_and_the_group_of_every_band(sidec
     assert families["band_gap"]["support"]["first_entity"] == "substrate"
     for group in (g for g in side["group"].values() if g["dim"] == 2 and g["band"]):
         assert group["band"]["family"] in families
-
-
-def test_refinement_requests_list_their_edges_and_host_faces(sidecars):
-    """Refinement requests list their edges and host faces."""
-    side = sidecars["pad_a_refinement"]
-    assert list(side["refinement_request"]) == ["ref"]
-    ((edge, host),) = views.embedded_edges(side)
-    carriers = [side["carrier"][c] for c in side["edge"][edge]["carriers"]]
-    assert carriers and all(
-        c == {"kind": "refinement", "request": "ref"} for c in carriers
-    )
-    assert side["edge"][edge]["kind"] == "refinement"
-    assert side["face"][host]["group"] is not None
 
 
 def test_arrangement_and_sliver_summaries_are_numbers_for_the_manifest(sidecars):

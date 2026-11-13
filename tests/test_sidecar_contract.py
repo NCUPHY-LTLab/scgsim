@@ -1,5 +1,5 @@
 """The sidecar contract ``scgsim.contracts.sgb_sidecar`` (#170): one definition gives the schema file, the pinned
-digest beside the version, and the shared reader, and they describe ``scgsim.sgb.sidecar.v3`` as SGB writes it."""
+digest beside the version, and the shared reader, and they describe ``scgsim.sgb.sidecar.v4`` as SGB writes it."""
 
 from __future__ import annotations
 
@@ -116,9 +116,16 @@ def test_read_sidecar_returns_the_written_file_as_decoded(tmp_path, sidecars):
 
 
 def test_another_version_is_refused_by_name(sidecars):
-    """A sidecar of another version is named as such, before its structure is looked at."""
+    """A sidecar of another version is named as such, before its structure is looked at, with what to do."""
+    v3 = {**sidecars["pad_b"], "schema": "scgsim.sgb.sidecar.v3"}
+    with pytest.raises(SidecarError) as refused:
+        check_sidecar(v3)
+    message = str(refused.value)
+    assert "'scgsim.sgb.sidecar.v3' is not supported" in message
+    assert "reads only 'scgsim.sgb.sidecar.v4'" in message
+    assert "Rebuild the geometry with this SCGSim" in message
     with pytest.raises(
-        SidecarError, match=r"'scgsim\.sgb\.sidecar\.v2' is not supported.*sidecar\.v3"
+        SidecarError, match=r"'scgsim\.sgb\.sidecar\.v2' is not supported"
     ):
         check_sidecar({"schema": "scgsim.sgb.sidecar.v2"})
     with pytest.raises(SidecarError, match="a sidecar is a JSON object, not list"):
