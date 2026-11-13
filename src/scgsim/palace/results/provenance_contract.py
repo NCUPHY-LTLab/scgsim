@@ -24,13 +24,13 @@ from scgsim.palace.results.artifacts import (
     expect_scalar,
     extract_hash_map,
     optional_dict,
-    refusal,
 )
 from scgsim.palace.results.runtime_contract import validate_palace_identity
 from scgsim.palace.run.archive import (
     logical_tar_member_name,
     resolve_run_archive_path,
 )
+from scgsim.refusal import refusal
 
 
 def validate_scalar_identity(

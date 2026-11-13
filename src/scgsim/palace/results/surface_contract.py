@@ -23,8 +23,8 @@ from scgsim.palace.results.artifacts import (
     expect_mapping,
     expect_scalar,
     optional_dict,
-    refusal,
 )
+from scgsim.refusal import refusal
 
 SURFACE_INTERFACE_TYPES = ("MA", "MS", "SA")
 

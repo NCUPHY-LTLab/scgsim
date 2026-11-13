@@ -16,7 +16,6 @@ from scgsim.palace.results.artifacts import (
     FileHash,
     compute_hash_entry,
     extract_hash_map,
-    refusal,
 )
 from scgsim.palace.results.inspection_records import (
     CollectedSnapshots,
@@ -24,6 +23,7 @@ from scgsim.palace.results.inspection_records import (
     PalaceFailureDiagnosis,
     PalaceResultSelection,
 )
+from scgsim.refusal import refusal
 
 
 def validate_inspection_receipt(

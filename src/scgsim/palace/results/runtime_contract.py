@@ -19,8 +19,8 @@ from scgsim.contracts.palace_run_folder import (
 from scgsim.palace.results.artifacts import (
     expect_mapping,
     expect_scalar,
-    refusal,
 )
+from scgsim.refusal import refusal
 
 
 def validate_palace_identity(payload: Mapping[str, Any]) -> None:

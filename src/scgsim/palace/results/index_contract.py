@@ -32,13 +32,13 @@ from scgsim.palace.results.artifacts import (
     expect_mapping,
     expect_scalar,
     optional_dict,
-    refusal,
 )
 from scgsim.palace.results.surface_contract import (
     entry_rows,
     surface_epr_entries,
     validate_surface_epr_config,
 )
+from scgsim.refusal import refusal
 
 
 def require_manifest_schema(manifest: Mapping[str, Any]) -> None:

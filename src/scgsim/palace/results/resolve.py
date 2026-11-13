@@ -28,7 +28,6 @@ from scgsim.palace.results.artifacts import (
     as_float_map,
     expect_int,
     expect_scalar,
-    refusal,
     to_float,
     validate_contract_schema,
 )
@@ -65,6 +64,7 @@ from scgsim.palace.results.tables import (
     output_families,
     read_result_table,
 )
+from scgsim.refusal import refusal
 
 _REQUIRED_FILES = (
     HANDOFF_METADATA,

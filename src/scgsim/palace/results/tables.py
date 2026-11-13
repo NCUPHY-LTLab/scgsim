@@ -21,9 +21,9 @@ from scgsim.palace.results.artifacts import (
     expect_list,
     expect_mapping,
     expect_scalar,
-    refusal,
 )
 from scgsim.palace.results.resolved_records import ParsedTable
+from scgsim.refusal import refusal
 
 
 def output_families(problem: str, index_counts: dict[str, int]) -> tuple[str, ...]:

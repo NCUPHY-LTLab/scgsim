@@ -28,7 +28,6 @@ from scgsim.palace.results.artifacts import (
     expect_mapping,
     expect_scalar,
     extract_hash_map,
-    refusal,
     validate_timestamp,
 )
 from scgsim.palace.results.resolved_records import PalaceReturnedReceipt
@@ -37,6 +36,7 @@ from scgsim.palace.results.runtime_contract import (
 )
 from scgsim.palace.results.tables import count_index_entries, output_families
 from scgsim.palace.run.returned_receipt import adapted_mesh_output_paths
+from scgsim.refusal import refusal
 
 
 @dataclass(frozen=True)

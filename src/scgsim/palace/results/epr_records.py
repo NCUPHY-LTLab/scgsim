@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-from scgsim.palace.results.artifacts import checked_number, refusal
+from scgsim.palace.results.artifacts import checked_number
+from scgsim.refusal import refusal
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
 EPR_RESULT_SCHEMA = "scgsim.palace.epr-result.v2"

@@ -29,7 +29,6 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     table_name,
 )
-from scgsim.palace.results.artifacts import refusal
 from scgsim.palace.results.epr_records import (
     PalaceEprResult,
     checked_number,
@@ -41,6 +40,7 @@ from scgsim.palace.results.tables import (
     output_families,
     read_result_table,
 )
+from scgsim.refusal import refusal
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
 
