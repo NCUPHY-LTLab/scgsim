@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-from scgsim.palace.results.artifacts import checked_number
+from scgsim.palace.results.artifacts import checked_number, refusal
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
 EPR_RESULT_SCHEMA = "scgsim.palace.epr-result.v2"
@@ -61,13 +61,22 @@ class PalaceEprResult:
     def __post_init__(self) -> None:
         rows = tuple(self.rows)
         if not rows or any(not isinstance(row, Mapping) for row in rows):
-            raise ValueError("Palace EPR requires non-empty row mappings")
+            raise ValueError(
+                refusal(
+                    "Palace EPR requires non-empty row mappings",
+                    found=[type(row).__name__ for row in rows],
+                )
+            )
         identities: set[int] = set()
         group_sources: dict[str, tuple[Any, ...]] = {}
         for row in rows:
             mode = row.get("mode")
             if type(mode) is not int or mode <= 0 or mode in identities:
-                raise ValueError("Palace EPR modes must be unique positive integers")
+                raise ValueError(
+                    refusal(
+                        "Palace EPR modes must be unique positive integers", found=mode
+                    )
+                )
             identities.add(mode)
             checked_number(row.get("frequency_hz"), "frequency_hz", positive=True)
             checked_number(
@@ -84,17 +93,34 @@ class PalaceEprResult:
                 _validate_surface_result(surface, group_sources)
             for bulk in row["bulk"]:
                 if not isinstance(bulk.get("domain_id"), str) or not bulk["domain_id"]:
-                    raise ValueError("Palace EPR bulk domain_id is invalid")
+                    raise ValueError(
+                        refusal(
+                            "Palace EPR bulk domain_id must be a non-empty string",
+                            found=bulk.get("domain_id"),
+                        )
+                    )
                 checked_number(bulk.get("participation"), "bulk participation")
             _validate_ports(row["junction"])
         if not isinstance(self.provenance, Mapping) or not isinstance(
             self.provenance.get("handoff_id"), str
         ):
-            raise ValueError("Palace EPR provenance lacks handoff identity")
+            raise ValueError(
+                refusal(
+                    "Palace EPR provenance lacks handoff identity",
+                    found=self.provenance.get("handoff_id")
+                    if isinstance(self.provenance, Mapping)
+                    else self.provenance,
+                )
+            )
         if self._verified_source is not None and not isinstance(
             self._verified_source, PalaceEprResult
         ):
-            raise TypeError("verified source must be a PalaceEprResult")
+            raise TypeError(
+                refusal(
+                    "verified source must be a PalaceEprResult",
+                    found=type(self._verified_source).__name__,
+                )
+            )
         prior_rows = (
             self._verified_source.rows if self._verified_source is not None else ()
         )
@@ -143,7 +169,15 @@ class PalaceEprResult:
             "rows",
             "provenance",
         }:
-            raise ValueError("Palace EPR payload is not canonical")
+            raise ValueError(
+                refusal(
+                    "Palace EPR payload is not canonical",
+                    found=sorted(payload)
+                    if isinstance(payload, Mapping)
+                    else type(payload).__name__,
+                    expected=["provenance", "rows", "schema_version"],
+                )
+            )
         return cls(tuple(payload["rows"]), payload["provenance"])
 
 
@@ -157,7 +191,16 @@ def _validate_surface_result(
     if surface["interface_kind"] not in {"MA", "MS", "SA"} or surface[
         "evaluation_kind"
     ] not in {"unmasked_baseline", "requested_margin"}:
-        raise ValueError("Palace EPR surface identity is invalid")
+        raise ValueError(
+            refusal(
+                f"Palace EPR surface {surface['name']!r} identity is invalid",
+                found={
+                    "interface_kind": surface["interface_kind"],
+                    "evaluation_kind": surface["evaluation_kind"],
+                },
+                expected="MA, MS or SA; unmasked_baseline or requested_margin",
+            )
+        )
     checked_number(surface.get("margin_um"), "surface margin")
     for name in ("rows", "entities"):
         values = surface.get(name)
@@ -166,9 +209,19 @@ def _validate_surface_result(
             or not values
             or any(not isinstance(value, str) or not value for value in values)
         ):
-            raise ValueError(f"Palace EPR surface {name} are invalid")
+            raise ValueError(
+                refusal(
+                    f"Palace EPR surface {surface['name']!r} {name} must be non-empty strings",
+                    found=values,
+                )
+            )
     if not isinstance(surface.get("lineage"), Mapping):
-        raise TypeError("Palace EPR surface lineage must be a mapping")
+        raise TypeError(
+            refusal(
+                f"Palace EPR surface {surface['name']!r} lineage must be a mapping",
+                found=surface.get("lineage"),
+            )
+        )
     checked_number(surface.get("original_participation"), "original participation")
     checked_number(surface.get("participation"), "participation")
     assumption = film_assumptions(surface.get("assumptions"), allow_unknown=True)
@@ -186,7 +239,13 @@ def _validate_surface_result(
             abs_tol=0.0,
         )
     ):
-        raise ValueError("Palace EPR inverse_q disagrees with participation and loss")
+        raise ValueError(
+            refusal(
+                f"Palace EPR surface {surface['name']!r} inverse_q disagrees with participation and loss",
+                found=actual_q,
+                expected=expected_q,
+            )
+        )
     source = (
         surface["name"],
         surface["interface_kind"],
@@ -196,7 +255,11 @@ def _validate_surface_result(
     prior = group_sources.setdefault(surface["group_id"], source)
     if source != prior:
         raise ValueError(
-            "Palace EPR original group identity has conflicting provenance"
+            refusal(
+                f"Palace EPR group {surface['group_id']!r} has conflicting original provenance",
+                found=source,
+                expected=prior,
+            )
         )
 
 
@@ -204,11 +267,21 @@ def _validate_ports(ports: Any) -> None:
     """Retain signed finite Palace port participation and exact port identity."""
     for port in ports:
         if not isinstance(port.get("port_name"), str) or not port["port_name"]:
-            raise ValueError("Palace EPR port_name is invalid")
+            raise ValueError(
+                refusal(
+                    "Palace EPR port_name must be a non-empty string",
+                    found=port.get("port_name"),
+                )
+            )
         value = port.get("participation")
         if (
             isinstance(value, bool)
             or not isinstance(value, (int, float))
             or not math.isfinite(value)
         ):
-            raise ValueError("Palace EPR signed port participation is invalid")
+            raise ValueError(
+                refusal(
+                    f"Palace EPR port {port['port_name']!r} signed participation must be a finite number",
+                    found=value,
+                )
+            )

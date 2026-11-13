@@ -21,6 +21,7 @@ from scgsim.palace.results.artifacts import (
     expect_list,
     expect_mapping,
     expect_scalar,
+    refusal,
 )
 from scgsim.palace.results.resolved_records import ParsedTable
 
@@ -178,7 +179,12 @@ def _validate_domain_table(
 ) -> None:
     """Validate total and per-domain energy columns against configured energy indices."""
     if domain_count <= 0:
-        raise ValueError("domain count must be positive when domain table is present.")
+        raise ValueError(
+            refusal(
+                "the index map configures no energy domain, but the domain-E table is present",
+                found=domain_count,
+            )
+        )
     expected = 1 + 4 + 4 * domain_count
     if len(table.headers) != expected:
         raise ValueError(
@@ -215,7 +221,10 @@ def validate_surface_table(
     """Validate baseline surface participation, keeping native lossless Q distinct from invalid data."""
     if surface_count <= 0:
         raise ValueError(
-            "surface count must be positive when surface table is present."
+            refusal(
+                "the index map configures no Surface-EPR row, but the surface-Q table is present",
+                found=surface_count,
+            )
         )
     expected = 1 + 2 * surface_count
     if len(table.headers) != expected:
@@ -382,7 +391,11 @@ def _require_finite_data(
     """Reject missing, boolean or nonfinite numerical row values outside explicit exclusions."""
     for key, value in row.items():
         if value is None:
-            raise ValueError("result rows must not contain missing entries.")
+            raise ValueError(
+                refusal(
+                    f"result row has a missing entry in column {key!r}", found=dict(row)
+                )
+            )
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             if not allow_non_numeric:
                 raise ValueError(f"result value in column {key!r} is not numeric.")
@@ -426,7 +439,9 @@ def _require_ordered_index(
 def _require_positive_index(value: Any) -> None:
     """Require a positive integer native mode or excitation index."""
     if not isinstance(value, (int, float)) or value != int(value) or value <= 0:
-        raise ValueError("matrix row index must be a positive integer.")
+        raise ValueError(
+            refusal("matrix row index must be a positive integer", found=value)
+        )
 
 
 def eigenmode_count(config: dict[str, Any]) -> int:
@@ -437,7 +452,9 @@ def eigenmode_count(config: dict[str, Any]) -> int:
     )
     count = expect_int(eigenmode.get("N"), "config Solver.Eigenmode.N")
     if count is None or count < 1:
-        raise ValueError("config Solver.Eigenmode.N must be positive.")
+        raise ValueError(
+            refusal("config Solver.Eigenmode.N must be positive", found=count)
+        )
     return count
 
 

@@ -16,6 +16,7 @@ from scgsim.palace.results.artifacts import (
     FileHash,
     compute_hash_entry,
     extract_hash_map,
+    refusal,
 )
 from scgsim.palace.results.inspection_records import (
     CollectedSnapshots,
@@ -38,11 +39,25 @@ def validate_inspection_receipt(
     input_entries = receipt.get("input_hashes")
     handoff_entries = handoff.get("hashes")
     if not isinstance(input_entries, list) or not isinstance(handoff_entries, list):
-        raise TypeError("returned receipt and handoff input hashes must be lists.")
+        raise TypeError(
+            refusal(
+                "returned receipt and handoff input hashes must be lists",
+                found={
+                    "input_hashes": type(input_entries).__name__,
+                    "hashes": type(handoff_entries).__name__,
+                },
+            )
+        )
     receipt_inputs = extract_hash_map(input_entries)
     handoff_inputs = extract_hash_map(handoff_entries)
     if receipt_inputs != handoff_inputs:
-        raise ValueError("returned receipt input hashes do not match handoff metadata.")
+        raise ValueError(
+            refusal(
+                "returned receipt input hashes do not match handoff metadata",
+                found=receipt_inputs,
+                expected=handoff_inputs,
+            )
+        )
     for relative, expected in receipt_inputs.items():
         observed = compute_hash_entry(confined_path(root, relative))
         if observed != expected:
@@ -50,7 +65,11 @@ def validate_inspection_receipt(
 
     output_entries = receipt.get("output_files")
     if not isinstance(output_entries, list):
-        raise TypeError("returned receipt output_files must be a list.")
+        raise TypeError(
+            refusal(
+                "returned receipt output_files must be a list", found=output_entries
+            )
+        )
     verified: set[str] = set()
     seen: set[str] = set()
     for index, entry in enumerate(output_entries):
@@ -63,7 +82,7 @@ def validate_inspection_receipt(
 
     log = receipt.get("log")
     if not isinstance(log, dict):
-        raise TypeError("returned receipt log must be a mapping.")
+        raise TypeError(refusal("returned receipt log must be a mapping", found=log))
     log_relative = _verify_receipt_file_record(root, log, "log")
     if log["present"] is True:
         verified.add(log_relative)
@@ -379,10 +398,25 @@ def _validate_inspection_identity(handoff: Any, receipt: Any) -> None:
             raise ValueError(f"returned receipt {field} must be a non-empty string.")
         if field in handoff and handoff.get(field) != value:
             raise ValueError(
-                f"returned receipt {field} does not match handoff metadata."
+                refusal(
+                    f"returned receipt {field} does not match handoff metadata",
+                    found=value,
+                    expected=handoff.get(field),
+                )
             )
     if receipt.get("route_a_thin_film") != handoff.get("route_a_thin_film"):
-        raise ValueError("returned receipt Route-A thin-film identity mismatch.")
+        raise ValueError(
+            refusal(
+                "returned receipt Route-A thin-film identity mismatch",
+                found=receipt.get("route_a_thin_film"),
+                expected=handoff.get("route_a_thin_film"),
+            )
+        )
     if not isinstance(receipt.get("status"), str) or not receipt["status"]:
-        raise ValueError("returned receipt status must be a non-empty string.")
+        raise ValueError(
+            refusal(
+                "returned receipt status must be a non-empty string",
+                found=receipt.get("status"),
+            )
+        )
     _receipt_execution_state(receipt)

@@ -29,6 +29,7 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     table_name,
 )
+from scgsim.palace.results.artifacts import refusal
 from scgsim.palace.results.epr_records import (
     PalaceEprResult,
     checked_number,
@@ -58,7 +59,9 @@ def _iteration_result(
     """Read one sealed native iteration with the table validators of ``results.tables``."""
 
     if type(iteration) is not int or iteration <= 0:
-        raise ValueError("palace_iteration must be a positive integer")
+        raise ValueError(
+            refusal("palace_iteration must be a positive integer", found=iteration)
+        )
     records = {item["path"]: item for item in result.returned_receipt.output_files}
     prefixes = set()
     for path in records:
@@ -72,7 +75,12 @@ def _iteration_result(
         if iteration_dir(parts[2]) == iteration:
             prefixes.add("/".join(parts[:3]))
     if len(prefixes) != 1:
-        raise ValueError("requested native iteration lacks one receipt-bound directory")
+        raise ValueError(
+            refusal(
+                f"requested native iteration {iteration} lacks one receipt-bound directory",
+                found=sorted(prefixes),
+            )
+        )
     prefix = prefixes.pop()
 
     def verified(name: str) -> Path:
@@ -98,7 +106,15 @@ def _iteration_result(
         or not isinstance(native.get("Problem"), dict)
         or native["Problem"].get("Iteration") != iteration
     ):
-        raise ValueError("native iteration metadata disagrees with selected directory")
+        raise ValueError(
+            refusal(
+                f"native iteration metadata in {prefix}/{NATIVE_METADATA_NAME} disagrees with selected directory",
+                found=native.get("Problem", {}).get("Iteration")
+                if isinstance(native, dict) and isinstance(native.get("Problem"), dict)
+                else None,
+                expected=iteration,
+            )
+        )
     counts = count_index_entries(result.provenance.index_map)
     tables = {}
     for family in output_families(result.problem, counts):
@@ -119,7 +135,13 @@ def epr_result(
     """Extract final or explicitly selected sealed-iteration Eigenmode EPR."""
 
     if not isinstance(result, ResolvedRunData) or result.problem != EIGENMODE.name:
-        raise TypeError("a resolved Palace Eigenmode run is required")
+        raise TypeError(
+            refusal(
+                "epr_result requires a resolved Palace Eigenmode run",
+                found=getattr(result, "problem", type(result).__name__),
+                expected=EIGENMODE.name,
+            )
+        )
     output_prefix = OUTPUT_DIR
     if palace_iteration is not None:
         result, output_prefix = _iteration_result(result, palace_iteration)
@@ -408,7 +430,17 @@ class _ModeExtraction:
             if any(
                 _row_index(row) != mode for row in (surface_row, domain_row, port_row)
             ):
-                raise ValueError("Palace EPR mode tables do not align")
+                raise ValueError(
+                    refusal(
+                        "Palace EPR mode tables do not align",
+                        found={
+                            "surface-Q": _row_index(surface_row),
+                            "domain-E": _row_index(domain_row),
+                            "port-EPR": _row_index(port_row),
+                        },
+                        expected=mode,
+                    )
+                )
             normalization = checked_number(
                 domain_row["E_elec (J)"], "electric energy"
             ) + checked_number(domain_row["E_cap (J)"], "capacitive energy")
@@ -483,7 +515,14 @@ def _selected_outputs(
         != {"schema_version", "surface_interfaces", "bulk_domain_ids", "port_names"}
         or request["schema_version"] != EPR_SELECTION_SCHEMA
     ):
-        raise ValueError("Palace EPR selection payload is invalid")
+        raise ValueError(
+            refusal(
+                f"Palace EPR selection payload in {INDEX_MAP} is invalid",
+                found=request,
+                expected=f"keys schema_version ({EPR_SELECTION_SCHEMA}), surface_interfaces, "
+                "bulk_domain_ids and port_names",
+            )
+        )
     available = {
         "surface_interfaces": {
             entry_rows(item)[0]["interface_type"] for item in surfaces.values()

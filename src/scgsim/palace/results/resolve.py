@@ -28,6 +28,7 @@ from scgsim.palace.results.artifacts import (
     as_float_map,
     expect_int,
     expect_scalar,
+    refusal,
     to_float,
     validate_contract_schema,
 )
@@ -410,14 +411,36 @@ def _validate_metadata_headers(
 ) -> None:
     """Validate manual-handoff kind, schema and nonempty state before identity checks."""
     if run_metadata.get("kind") != "manual_handoff":
-        raise ValueError("run metadata does not identify manual_handoff kind.")
+        raise ValueError(
+            refusal(
+                "run metadata does not identify manual_handoff kind",
+                found=run_metadata.get("kind"),
+                expected="manual_handoff",
+            )
+        )
     if handoff_metadata.get("kind") != "manual_handoff":
-        raise ValueError("handoff metadata does not identify manual_handoff kind.")
+        raise ValueError(
+            refusal(
+                "handoff metadata does not identify manual_handoff kind",
+                found=handoff_metadata.get("kind"),
+                expected="manual_handoff",
+            )
+        )
     validate_contract_schema(handoff_metadata, "handoff metadata")
     validate_contract_schema(run_metadata, "run metadata")
     validate_contract_schema(resource_record, "resource record")
 
     if expect_scalar(run_metadata, "status", str, fallback="") == "":
-        raise ValueError("run metadata status must be a non-empty string.")
+        raise ValueError(
+            refusal(
+                "run metadata status must be a non-empty string",
+                found=run_metadata.get("status"),
+            )
+        )
     if expect_scalar(resource_record, "status", str, fallback="") == "":
-        raise ValueError("resource record status must be a non-empty string.")
+        raise ValueError(
+            refusal(
+                "resource record status must be a non-empty string",
+                found=resource_record.get("status"),
+            )
+        )
