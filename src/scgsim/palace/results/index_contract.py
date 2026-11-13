@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_index_map import (
     DIELECTRIC_SECTION,
@@ -192,8 +192,42 @@ def validate_config_index_correspondence(
 ) -> None:
     """Bind configured terminals, ports and postprocessing rows to their indexed source identities."""
     boundaries = optional_dict(config.get("Boundaries")) or {}
-    terminals: list[Any] = []
-    ports: list[Any] = []
+    excitations = _configured_excitations(boundaries, index_map, index_counts, problem)
+    dielectric = _configured_dielectric(boundaries, index_counts)
+    configured_sections = {
+        TERMINAL_SECTION: excitations.terminals,
+        LUMPED_PORT_SECTION: excitations.ports,
+        ENERGY_SECTION: expect_list(
+            expect_mapping(
+                expect_mapping(config.get("Domains"), "config.Domains").get(
+                    "Postprocessing"
+                ),
+                "config.Domains.Postprocessing",
+            ).get("Energy"),
+            "config.Domains.Postprocessing.Energy",
+        ),
+        DIELECTRIC_SECTION: dielectric,
+    }
+    entries = expect_list(index_map.get("entries"), "palace_index_map.entries")
+    for section, configured in configured_sections.items():
+        _match_section_rows(section, configured, entries)
+    validate_surface_epr_config(config, index_map)
+
+
+class _Excitations(NamedTuple):
+    """The configured Terminal rows of an Electrostatic config, or the LumpedPort rows of an Eigenmode one."""
+
+    terminals: list[Any]
+    ports: list[Any]
+
+
+def _configured_excitations(
+    boundaries: dict[str, Any],
+    index_map: dict[str, Any],
+    index_counts: dict[str, int],
+    problem: str,
+) -> _Excitations:
+    """Read the problem's excitation rows and check that the index map counts as many."""
     if not palace_problem(problem).solves_modes:
         terminals = expect_list(
             boundaries.get("Terminal"), "config.Boundaries.Terminal"
@@ -207,76 +241,88 @@ def validate_config_index_correspondence(
                 )
             )
         _validate_ground_boundary_resolution(boundaries, index_map)
-    else:
-        ports = expect_list(
-            boundaries.get("LumpedPort", []),
-            "config.Boundaries.LumpedPort",
-            allow_empty=True,
-        )
-        if index_counts["lumped_port"] != len(ports):
-            raise ValueError(
-                refusal(
-                    "lumped port count mismatch between config and index map",
-                    found=index_counts["lumped_port"],
-                    expected=len(ports),
-                )
+        return _Excitations(terminals, [])
+    ports = expect_list(
+        boundaries.get("LumpedPort", []),
+        "config.Boundaries.LumpedPort",
+        allow_empty=True,
+    )
+    if index_counts["lumped_port"] != len(ports):
+        raise ValueError(
+            refusal(
+                "lumped port count mismatch between config and index map",
+                found=index_counts["lumped_port"],
+                expected=len(ports),
             )
+        )
+    return _Excitations([], ports)
 
+
+def _configured_dielectric(
+    boundaries: dict[str, Any], index_counts: dict[str, int]
+) -> list[Any]:
+    """Read the config's Dielectric postprocessing rows and check that the index map covers them."""
     postprocessing = optional_dict(boundaries.get("Postprocessing")) or {}
-    post_diel = expect_list(
+    dielectric = expect_list(
         postprocessing.get("Dielectric", []),
         "config.Boundaries.Postprocessing.Dielectric",
         allow_empty=True,
     )
-    if post_diel and index_counts["surface"] < len(post_diel):
+    if dielectric and index_counts["surface"] < len(dielectric):
         raise ValueError(
             refusal(
                 "surface count in index map does not cover the config's Dielectric postprocessing list",
                 found=index_counts["surface"],
-                expected=f"at least {len(post_diel)}",
+                expected=f"at least {len(dielectric)}",
             )
         )
-    expected_sections = {
-        TERMINAL_SECTION: terminals,
-        LUMPED_PORT_SECTION: ports,
-        ENERGY_SECTION: expect_list(
-            expect_mapping(
-                expect_mapping(config.get("Domains"), "config.Domains").get(
-                    "Postprocessing"
-                ),
-                "config.Domains.Postprocessing",
-            ).get("Energy"),
-            "config.Domains.Postprocessing.Energy",
+    return dielectric
+
+
+def _match_section_rows(
+    section: str, configured: list[Any], entries: list[Any]
+) -> None:
+    """Pair the section's index entries with its config rows by index, and require equal attributes."""
+    indexed = sorted(
+        (
+            expect_mapping(entry, "palace index entry")
+            for entry in entries
+            if expect_scalar(entry, "section", str) == section
         ),
-        DIELECTRIC_SECTION: post_diel,
-    }
-    entries = expect_list(index_map.get("entries"), "palace_index_map.entries")
-    for section, configured in expected_sections.items():
-        indexed = sorted(
-            (
-                expect_mapping(entry, "palace index entry")
-                for entry in entries
-                if expect_scalar(entry, "section", str) == section
-            ),
-            key=lambda entry: expect_scalar(entry, "index", int),
+        key=lambda entry: expect_scalar(entry, "index", int),
+    )
+    if len(indexed) != len(configured):
+        raise ValueError(
+            refusal(
+                f"config/index entry count mismatch for {section}",
+                found=len(indexed),
+                expected=len(configured),
+            )
         )
-        if len(indexed) != len(configured):
-            raise ValueError(f"config/index entry count mismatch for {section}.")
-        for position, (entry, configured_item) in enumerate(
-            zip(indexed, configured, strict=True), start=1
-        ):
-            item = expect_mapping(configured_item, f"config {section} item")
-            if expect_scalar(entry, "index", int) != expect_scalar(item, "Index", int):
-                raise ValueError(
-                    f"config/index Index mismatch for {section} {position}."
+    for position, (entry, configured_item) in enumerate(
+        zip(indexed, configured, strict=True), start=1
+    ):
+        item = expect_mapping(configured_item, f"config {section} item")
+        index = expect_scalar(entry, "index", int)
+        config_index = expect_scalar(item, "Index", int)
+        if index != config_index:
+            raise ValueError(
+                refusal(
+                    f"config/index Index mismatch for {section} {position}",
+                    found=index,
+                    expected=config_index,
                 )
-            if expect_list(entry.get("attributes"), "index attributes") != expect_list(
-                item.get("Attributes"), "config Attributes"
-            ):
-                raise ValueError(
-                    f"config/index Attributes mismatch for {section} {position}."
+            )
+        attributes = expect_list(entry.get("attributes"), "index attributes")
+        config_attributes = expect_list(item.get("Attributes"), "config Attributes")
+        if attributes != config_attributes:
+            raise ValueError(
+                refusal(
+                    f"config/index Attributes mismatch for {section} {position}",
+                    found=attributes,
+                    expected=config_attributes,
                 )
-    validate_surface_epr_config(config, index_map)
+            )
 
 
 def validate_config_problem(config: dict[str, Any], problem: str) -> None:
