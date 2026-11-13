@@ -21,6 +21,12 @@ from scgsim.contracts.palace_run_folder import (
     OUTPUT_DIR,
     palace_problem,
 )
+from scgsim.palace.config.index import (
+    EnergyEntry,
+    PortEntry,
+    SurfaceEprEntry,
+    TerminalEntry,
+)
 from scgsim.palace.results.artifacts import (
     expect_list,
     expect_mapping,
@@ -28,7 +34,6 @@ from scgsim.palace.results.artifacts import (
     optional_dict,
 )
 from scgsim.palace.results.surface_contract import (
-    DIELECTRIC_SECTION,
     entry_rows,
     surface_epr_entries,
     validate_surface_epr_config,
@@ -97,10 +102,10 @@ class RouteConsistency:
 
 
 _SECTION_DIMENSIONS = {
-    "Boundaries.Terminal": 2,
-    "Boundaries.LumpedPort": 2,
-    DIELECTRIC_SECTION: 2,
-    "Domains.Postprocessing.Energy": 3,
+    TerminalEntry.section: 2,
+    PortEntry.section: 2,
+    SurfaceEprEntry.section: 2,
+    EnergyEntry.section: 3,
 }
 
 
@@ -171,9 +176,9 @@ def validate_config_index_correspondence(
             "surface count in index map does not cover postprocessing list."
         )
     expected_sections = {
-        "Boundaries.Terminal": terminals,
-        "Boundaries.LumpedPort": ports,
-        "Domains.Postprocessing.Energy": expect_list(
+        TerminalEntry.section: terminals,
+        PortEntry.section: ports,
+        EnergyEntry.section: expect_list(
             expect_mapping(
                 expect_mapping(config.get("Domains"), "config.Domains").get(
                     "Postprocessing"
@@ -182,7 +187,7 @@ def validate_config_index_correspondence(
             ).get("Energy"),
             "config.Domains.Postprocessing.Energy",
         ),
-        DIELECTRIC_SECTION: post_diel,
+        SurfaceEprEntry.section: post_diel,
     }
     entries = expect_list(index_map.get("entries"), "palace_index_map.entries")
     for section, configured in expected_sections.items():
@@ -301,10 +306,10 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
     if not isinstance(entries, list) or not entries:
         raise ValueError(f"{Path(INDEX_MAP).name} must include non-empty entries list.")
     expected_roles = {
-        "Boundaries.Terminal": "terminal",
-        "Boundaries.LumpedPort": "port_surface",
-        "Domains.Postprocessing.Energy": "domain_energy",
-        DIELECTRIC_SECTION: "surface_epr",
+        TerminalEntry.section: "terminal",
+        PortEntry.section: "port_surface",
+        EnergyEntry.section: "domain_energy",
+        SurfaceEprEntry.section: "surface_epr",
     }
     indices: dict[str, list[int]] = {section: [] for section in expected_roles}
     names: set[tuple[str, str]] = set()
@@ -351,16 +356,16 @@ def _validate_entry_role(
     entry: dict[str, Any], metadata: dict[str, Any], section: str
 ) -> None:
     """Validate the source identities required by one configured role."""
-    if section == "Boundaries.Terminal":
+    if section == TerminalEntry.section:
         expect_scalar(entry, "terminal_name", str)
         expect_scalar(entry, "net_id", str)
         expect_list(
             entry.get("conductor_component_ids"), "terminal conductor components"
         )
-    elif section == "Boundaries.LumpedPort":
+    elif section == PortEntry.section:
         expect_scalar(entry, "port_name", str)
         hosts = expect_list(metadata.get("host_entity_ids"), "port host entity ids")
         if len(hosts) != 2 or not all(isinstance(host, str) and host for host in hosts):
             raise ValueError("lumped port index entry must have exactly two hosts.")
-    elif section == "Domains.Postprocessing.Energy":
+    elif section == EnergyEntry.section:
         expect_mapping(metadata.get("material"), "domain index material")

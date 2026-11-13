@@ -16,6 +16,7 @@ from typing import Any
 
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
 from scgsim.geometry.surface_epr.specs import margins_of
+from scgsim.palace.config.index import SurfaceEprEntry
 from scgsim.palace.results.artifacts import (
     checked_number,
     expect_list,
@@ -24,7 +25,6 @@ from scgsim.palace.results.artifacts import (
     optional_dict,
 )
 
-DIELECTRIC_SECTION = "Boundaries.Postprocessing.Dielectric"
 SURFACE_INTERFACE_TYPES = ("MA", "MS", "SA")
 
 _SIDES = {"above", "below", "both"}
@@ -42,7 +42,7 @@ def surface_epr_entries(index_map: Mapping[str, Any]) -> tuple[dict[str, Any], .
             expect_mapping(entry, "palace dielectric index entry")
             for entry in entries
             if expect_mapping(entry, "palace index entry").get("section")
-            == DIELECTRIC_SECTION
+            == SurfaceEprEntry.section
         ),
         key=lambda entry: expect_scalar(entry, "index", int),
     )

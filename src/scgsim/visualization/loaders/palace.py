@@ -7,9 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# The loader reads the run-folder contract, not Palace: AEDT's runtime source closure reaches this module
-# through ``scgsim.visualization``, and AEDT must not ship Palace or SGB; the contract imports only the
-# standard library.
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
     INDEX_MAP,
@@ -19,11 +16,14 @@ from scgsim.contracts.palace_run_folder import (
     MESH_MANIFEST,
 )
 
+# The loader reads the run-folder contract, not Palace: AEDT's runtime source closure reaches this module
+# through ``scgsim.visualization``, and AEDT must not ship Palace or SGB; the contract imports only the
+# standard library.
+from scgsim.palace.config.index import SurfaceEprEntry
+
 from ..preview import GeometryPreview
 from ..scene import FIXED_COLORS, SceneMode, ScenePart, color_for_identity
 from .common import file_sha256, read_json_record
-
-_DIELECTRIC_SECTION = "Boundaries.Postprocessing.Dielectric"
 
 
 def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
@@ -330,7 +330,7 @@ def _palace_surface_epr(
 ) -> list[ScenePart]:
     entries: dict[int, Mapping[str, Any]] = {}
     for item in index_map.get("entries", ()):
-        if item.get("section") != _DIELECTRIC_SECTION:
+        if item.get("section") != SurfaceEprEntry.section:
             continue
         index = int(item["index"])
         if index in entries:

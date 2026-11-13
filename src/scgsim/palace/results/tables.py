@@ -10,6 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.contracts.palace_run_folder import EIGENMODE, palace_problem
+from scgsim.palace.config.index import (
+    EnergyEntry,
+    PortEntry,
+    SurfaceEprEntry,
+    TerminalEntry,
+)
 from scgsim.palace.results.artifacts import (
     expect_int,
     expect_list,
@@ -336,26 +342,24 @@ def configured_mode_count(config: Mapping[str, Any] | None) -> int | None:
     return count if type(count) is int and count >= 1 else None
 
 
+_COUNTED_SECTIONS = {
+    TerminalEntry.section: "terminal",
+    PortEntry.section: "lumped_port",
+    EnergyEntry.section: "domain",
+    SurfaceEprEntry.section: "surface",
+}
+"""The key ``count_index_entries`` counts each index-map section under."""
+
+
 def count_index_entries(index_map: dict[str, Any]) -> dict[str, int]:
     """Count configured terminals, ports, energy domains and dielectric surfaces by index section."""
     entries = expect_list(index_map.get("entries"), "palace_index_map.entries")
-    counts = {
-        "terminal": 0,
-        "lumped_port": 0,
-        "domain": 0,
-        "surface": 0,
-    }
+    counts = dict.fromkeys(_COUNTED_SECTIONS.values(), 0)
     for entry in entries:
         data = expect_mapping(entry, "palace_index_map.entry")
         section = expect_scalar(data, "section", str, fallback="")
-        if section.startswith("Boundaries.Terminal"):
-            counts["terminal"] += 1
-        elif section.startswith("Boundaries.LumpedPort"):
-            counts["lumped_port"] += 1
-        elif section.startswith("Domains.Postprocessing.Energy"):
-            counts["domain"] += 1
-        elif section == "Boundaries.Postprocessing.Dielectric":
-            counts["surface"] += 1
+        if section in _COUNTED_SECTIONS:
+            counts[_COUNTED_SECTIONS[section]] += 1
     return counts
 
 

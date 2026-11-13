@@ -24,6 +24,7 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     table_name,
 )
+from scgsim.palace.config.index import EnergyEntry, PortEntry, SurfaceEprEntry
 from scgsim.palace.results.epr_records import (
     PalaceEprResult,
     checked_number,
@@ -125,17 +126,15 @@ def epr_result(
     surfaces = {
         item["index"]: item
         for item in entries
-        if item["section"] == "Boundaries.Postprocessing.Dielectric"
+        if item["section"] == SurfaceEprEntry.section
     }
     domains = {
         item["index"]: item
         for item in entries
-        if item["section"] == "Domains.Postprocessing.Energy"
+        if item["section"] == EnergyEntry.section
     }
     junctions = {
-        item["index"]: item
-        for item in entries
-        if item["section"] == "Boundaries.LumpedPort"
+        item["index"]: item for item in entries if item["section"] == PortEntry.section
     }
     request, selected = _selected_outputs(domains, index, junctions, surfaces)
     eig = result.tables["eig"].rows
