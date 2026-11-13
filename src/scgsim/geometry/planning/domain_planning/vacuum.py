@@ -10,14 +10,12 @@ from types import ModuleType
 from typing import Any
 
 from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
-from scgsim.geometry.grid.entities import entity_z_range_um
 from scgsim.geometry.grid.grid import boolean_polygon_region
 from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
     loop_signature,
 )
-from scgsim.geometry.grid.spatial import same_coordinate_z
 from scgsim.geometry.interpretation.envelope import (
     auto_vacuum_envelope_bounds,
     auto_vacuum_padding,
@@ -26,6 +24,7 @@ from scgsim.geometry.interpretation.envelope import (
     loop_domain_bounds,
 )
 from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import entity_z_range_um
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.planning.domain_planning.occupancy import (
@@ -34,6 +33,7 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
     domain_bounds_loop,
     solution_entity_xy_region,
 )
+from scgsim.geometry.planning.spatial import same_coordinate_z
 
 
 def prepare_auto_vacuum_solution_regions(

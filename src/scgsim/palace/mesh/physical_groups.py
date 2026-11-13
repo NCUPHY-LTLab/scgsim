@@ -126,7 +126,11 @@ def _surface_groups(
         )
         next_attribute += len(parts)
         records[name] = _surface_record(
-            name, record, tags, parts, rows_by_group[name], sidecar["face"]
+            name,
+            record,
+            tags,
+            _part_records(parts, sidecar["face"]),
+            rows_by_group[name],
         )
     return records, port_groups
 
@@ -167,14 +171,30 @@ def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any
     return by_group
 
 
-def _surface_record(  # noqa: PLR0913 -- a group, its tags and parts, its rows and the faces they cover
+def _part_records(
+    parts: list[SurfacePart], faces: Mapping[str, Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    """Each part of a surface group as the group dict carries it, with the lineage of the faces it covers."""
+    return [
+        {
+            **part.to_payload(),
+            # Lineage membership is attribution only: it weights nothing.
+            "membership": {
+                face: dict(faces[face]["membership"]) for face in part.faces
+            },
+        }
+        for part in parts
+    ]
+
+
+def _surface_record(
     name: str,
     record: Mapping[str, Any],
     tags: list[int],
-    parts: list[SurfacePart],
+    parts: list[dict[str, Any]],
     rows: Mapping[str, Mapping[str, Any]],
-    faces: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
+    """One primary surface group with its tags, its parts (``_part_records``) and its Surface-EPR rows."""
     return {
         "dim": 2,
         "group": name,
@@ -191,18 +211,9 @@ def _surface_record(  # noqa: PLR0913 -- a group, its tags and parts, its rows a
         "adjacent_domains": list(record["adjacent_domains"]),
         "adjacent_volumes": list(record["adjacent_volumes"]),
         "area_um2": record["area_um2"],
-        "attributes": [part.attribute for part in parts],
+        "attributes": [part["attribute"] for part in parts],
         "tags": tags,
-        "parts": [
-            {
-                **part.to_payload(),
-                # Lineage membership is attribution only: it weights nothing.
-                "membership": {
-                    face: dict(faces[face]["membership"]) for face in part.faces
-                },
-            }
-            for part in parts
-        ],
+        "parts": parts,
     }
 
 

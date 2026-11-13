@@ -1,4 +1,4 @@
-"""Source-owned rectangular-junction requests and neutral geometry inputs."""
+"""Rectangular-junction requests, their terminal bindings, and the geometry of a derived junction."""
 
 from __future__ import annotations
 

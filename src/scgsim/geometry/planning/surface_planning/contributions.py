@@ -1,4 +1,4 @@
-"""Prepare source sheet intents and orchestrate route or neutral surface contributions."""
+"""Prepare the source sheet intents and gather the surface contributions of a route, or of no route."""
 
 from __future__ import annotations
 

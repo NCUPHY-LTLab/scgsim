@@ -10,6 +10,11 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
+from scgsim.contracts.palace_run_folder import (
+    NATIVE_METADATA,
+    OUTPUT_DIR,
+    palace_problem,
+)
 from scgsim.palace.reports.observations import (
     ERROR_INDICATOR_TRACES,
     FREQ_HEADER,
@@ -166,7 +171,7 @@ class PalaceTrustReport:
         show_details: bool = False,
     ) -> SimulationBenchmarkReport:
         """Return the readable benchmark while retaining every machine field."""
-        attempted = read_optional_json(self.run_dir / "results/palace/palace.json")
+        attempted = read_optional_json(self.run_dir / NATIVE_METADATA)
         pass_cost_records = self.pass_cost_records()
         data = {
             "cost": dict(self.cost),
@@ -447,7 +452,7 @@ class PalaceTrustReport:
     def _convergence_status_html(self) -> str:
         latest = self.passes[-1] if self.passes else None
         quantity = scalar_physics(latest, self.problem) if latest is not None else None
-        if self.problem == "Eigenmode" and quantity is not None:
+        if palace_problem(self.problem).solves_modes and quantity is not None:
             quantity_line = f"Latest Re(f): {quantity:.6g} GHz"
         elif quantity is not None:
             quantity_line = f"Latest max |C_ii|: {quantity * 1e15:.6g} fF"
@@ -466,7 +471,7 @@ class PalaceTrustReport:
             f"<p>Latest snapshot: {html.escape(self.latest_source)}</p>"
         )
         title = (
-            "No solver snapshots in results/palace"
+            f"No solver snapshots in {OUTPUT_DIR}"
             if not self.passes
             else "AMR stopped after the initial solve"
         )

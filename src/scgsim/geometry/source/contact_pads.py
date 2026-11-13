@@ -1,4 +1,4 @@
-"""Validate source entity roles, vertical ranges, and contact-pad attachment."""
+"""Resolve the face metal a contact pad attaches to: same Z range, finite overlap, one net."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from scgsim.geometry.grid.planar_loops import LoopCoordinates
 from scgsim.geometry.models.input import SemanticEntitySpec
 
 BOOLEAN_AREA_EPS_UM2 = 1e-8
+
 BOOLEAN_RELATIVE_AREA_EPS = 1e-12
 
 
@@ -153,23 +154,3 @@ def _polygon_area(points: Iterable[Sequence[float]]) -> float:
         start[0] * end[1] - start[1] * end[0]
         for start, end in zip(ring, (*ring[1:], ring[0]), strict=True)
     )
-
-
-def is_solution_entity(entity: SemanticEntitySpec) -> bool:
-    """Return whether an entity owns a vacuum or dielectric solution region."""
-    return entity.role == "solution_region" and entity.material_kind in {
-        "vacuum",
-        "dielectric",
-    }
-
-
-def is_vacuum_solution_entity(entity: SemanticEntitySpec) -> bool:
-    """Return whether an entity is a vacuum solution region."""
-    return is_solution_entity(entity) and entity.material_kind == "vacuum"
-
-
-def requires_route_representation(entity: SemanticEntitySpec) -> bool:
-    """Return whether the entity's conductor requires route representation."""
-    if is_solution_entity(entity):
-        return False
-    return entity.material_kind == "conductor"

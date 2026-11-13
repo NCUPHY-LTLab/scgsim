@@ -47,7 +47,7 @@ _Ring = Sequence[Sequence[float]]
 GdsPoint = tuple[float, float]
 # One GDS polygon's vertices in the order the polygon walks them.
 GdsWalk = tuple[GdsPoint, ...]
-# Keep tuple keys so binding errors retain the established source identifier text.
+# Keys are tuples so that a binding error names the source identifier as written.
 SourceRings = dict[str, list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]]
 
 

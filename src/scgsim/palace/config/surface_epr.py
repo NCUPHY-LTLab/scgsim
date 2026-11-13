@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
 from scgsim.geometry.sgb.exact.grid import Grid
 from scgsim.geometry.surface_epr.specs import positive_real
 
@@ -234,7 +235,7 @@ def _spec_snapshot(spec: SurfaceEprSpec, model_l0_m: float) -> dict[str, Any]:
         "thickness": native_thickness,
         "film_thickness_m": native_thickness * float(model_l0_m),
         "model_l0_m": float(model_l0_m),
-        "schema_version": "scgsim.palace.surface-film.v2",
+        "schema_version": SURFACE_FILM_SCHEMA,
     }
 
 

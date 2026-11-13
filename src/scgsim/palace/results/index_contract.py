@@ -9,9 +9,18 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from scgsim.palace.mesh.manifest import MANIFEST_SCHEMA_VERSION
+from scgsim.contracts.palace_run_folder import (
+    CONFIG,
+    INDEX_MAP,
+    INDEX_MAP_SCHEMA_VERSION,
+    MANIFEST_SCHEMA_VERSION,
+    MESH,
+    OUTPUT_DIR,
+    palace_problem,
+)
 from scgsim.palace.results.artifacts import (
     expect_list,
     expect_mapping,
@@ -24,8 +33,6 @@ from scgsim.palace.results.surface_contract import (
     surface_epr_entries,
     validate_surface_epr_config,
 )
-
-INDEX_MAP_SCHEMA_VERSION = 3
 
 
 def require_manifest_schema(manifest: Mapping[str, Any]) -> None:
@@ -137,7 +144,7 @@ def validate_config_index_correspondence(
     boundaries = optional_dict(config.get("Boundaries")) or {}
     terminals: list[Any] = []
     ports: list[Any] = []
-    if problem == "Electrostatic":
+    if not palace_problem(problem).solves_modes:
         terminals = expect_list(
             boundaries.get("Terminal"), "config.Boundaries.Terminal"
         )
@@ -164,8 +171,8 @@ def validate_config_index_correspondence(
             "surface count in index map does not cover postprocessing list."
         )
     expected_sections = {
-        "Boundaries.Terminal": terminals if problem == "Electrostatic" else [],
-        "Boundaries.LumpedPort": ports if problem == "Eigenmode" else [],
+        "Boundaries.Terminal": terminals,
+        "Boundaries.LumpedPort": ports,
         "Domains.Postprocessing.Energy": expect_list(
             expect_mapping(
                 expect_mapping(config.get("Domains"), "config.Domains").get(
@@ -210,7 +217,7 @@ def validate_config_problem(config: dict[str, Any], problem: str) -> None:
     """Require the solver problem and numerical controls recorded for this workflow."""
     problem_block = optional_dict(config.get("Problem"))
     if not problem_block:
-        raise ValueError("config.json missing Problem block.")
+        raise ValueError(f"{CONFIG} missing Problem block.")
     config_problem = expect_scalar(problem_block, "Type", str, fallback="")
     if config_problem != problem:
         raise ValueError(
@@ -220,11 +227,11 @@ def validate_config_problem(config: dict[str, Any], problem: str) -> None:
     mesh_name = (
         expect_scalar(model_block, "Mesh", str, fallback="") if model_block else ""
     )
-    if mesh_name != "palace.msh":
-        raise ValueError("config Model.Mesh must reference palace.msh.")
+    if mesh_name != MESH:
+        raise ValueError(f"config Model.Mesh must reference {MESH}.")
 
-    if problem_block.get("Output") not in {"results/palace", "results/palace/", None}:
-        raise ValueError("config Problem.Output must be results/palace.")
+    if problem_block.get("Output") not in {OUTPUT_DIR, f"{OUTPUT_DIR}/", None}:
+        raise ValueError(f"config Problem.Output must be {OUTPUT_DIR}.")
 
 
 def _validate_ground_boundary_resolution(
@@ -292,7 +299,7 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
     """Check unique section-local identities, physical attributes and source-role metadata."""
     entries = index_map.get("entries")
     if not isinstance(entries, list) or not entries:
-        raise ValueError("palace_index_map.json must include non-empty entries list.")
+        raise ValueError(f"{Path(INDEX_MAP).name} must include non-empty entries list.")
     expected_roles = {
         "Boundaries.Terminal": "terminal",
         "Boundaries.LumpedPort": "port_surface",

@@ -1,4 +1,4 @@
-"""Coordinate scoped grid construction, polygon Booleans and source-preservation audits."""
+"""Build a labelled network on the model grid, run polygon Booleans, and audit that gridding kept the source."""
 
 from __future__ import annotations
 
@@ -224,7 +224,7 @@ def build_grid_arrangement(
     """Construct one labelled fixed-grid network or an ungridded plane overlay.
 
     Fixed-grid membership follows directed source paths and face transitions.
-    Ungridded parent planes retain their distinct existing overlay contract.
+    With ``apply_grid=False`` the overlay runs on the operands' own coordinates, not on the model grid.
     """
     from shapely import (  # noqa: PLC0415 - defer native geometry loading until this operation requires it
         Polygon,
