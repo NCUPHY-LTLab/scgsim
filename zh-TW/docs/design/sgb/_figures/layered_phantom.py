@@ -23,9 +23,9 @@ from matplotlib.patches import PathPatch
 from sgb_scenes import GRID, chip_prisms, conductor, rect_um
 
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 
 GAP_NM = 3  # lateral distance of the two edges: 3 grid units = 3 nm
 

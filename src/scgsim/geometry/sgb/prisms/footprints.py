@@ -1,17 +1,16 @@
 """Where each source entity's planar footprint comes from (stage S2).
 
 Owns resolving the footprint rings of an effective entity and putting them on the
-model grid.  The rules mirror what the compiler's planning read:
+model grid:
 
 * a **solution region** is its ``outer_loop`` / ``hole_loops`` when authored, else the
   rectangle of ``domain_bounds_um`` (``domain_planning.occupancy.solution_entity_xy_region``);
 * the **automatic vacuum envelope** is the rectangle of the prepared enclosure
   (``RepresentationContext.enclosures``), which already holds the mapped effective
   bounds; padding is provenance and is never applied a second time
-  (``domain_planning.vacuum``, the route-less branch of ``prepare_envelope``);
+  (``domain_planning.vacuum``);
 * a **conductor** is one footprint per owned source polygon -- the entity-owned
-  logical polygons the curved path bound boundary records to
-  (``curved_geometry.boundaries.source_rings``).  The entity's ``outer_loop`` is the grid
+  logical polygons the boundary records bind to.  The entity's ``outer_loop`` is the grid
   union of those same polygons (``source.grid._project_entities``), so the covered
   region is identical; it is the fallback for an entity without polygons
   (``domain_planning.occupancy.route_conductor_contact_footprints``).
@@ -29,8 +28,8 @@ from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.junctions import is_junction_end_piece
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.plane import Point, Ring
-from scgsim.geometry.sgb.records.grid import Grid
+from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.plane import Point, Ring
 
 
 @dataclass(frozen=True)

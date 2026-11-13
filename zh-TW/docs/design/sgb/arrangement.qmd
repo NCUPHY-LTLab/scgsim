@@ -7,7 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/arrangement"
 ---
 
-SGB 把一組精確的曲線變成一個 **arrangement**：一個 planar graph，它的 vertex 全都落在同一個格點上、edge 彼此不交叉，而每條 edge 仍記得它所來自的精確曲線。做法是帶 exact carrier 的 snap rounding，production 實作在 `scgsim.geometry.sgb.noding` 與 `arrangement`（整數運算的 iterated snap rounding、half-edge 結構與圓弧的 realisation）。本頁先在一個小範例上走完每一步（以 production 的 noding kernel 逐 round 執行），再說明哪些性質是保證的、哪些是量測的、成本多少，以及圓弧如何納入。
+SGB 把一組精確的曲線變成一個 **arrangement**：一個 planar graph，它的 vertex 全都落在同一個格點上、edge 彼此不交叉，而每條 edge 仍記得它所來自的精確曲線。做法是帶 exact carrier 的 snap rounding，production 實作在 `scgsim.geometry.sgb.arrangement.noding` 與 `arrangement`（整數運算的 iterated snap rounding、half-edge 結構與圓弧的 realisation）。本頁先在一個小範例上走完每一步（以 production 的 noding kernel 逐 round 執行），再說明哪些性質是保證的、哪些是量測的、成本多少，以及圓弧如何納入。
 
 **Arrangement** 是由一組曲線對 XY 平面做的 planar 分割，以 vertex、edge 與 cell 儲存（見[詞彙表](index.qmd#glossary)）。輸入是一個 level 或一個 slab 的曲線（見 [2.5D layered model](layered-model.qmd)），輸出是帶有 cell 的 noded graph。cell 是 arrangement 中的平面區域，之後寫出的 BREP face 則是另一個東西。
 

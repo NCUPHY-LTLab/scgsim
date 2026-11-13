@@ -55,7 +55,7 @@ def capture():
 
 def capture_model(model) -> dict[str, Any]:
     """The same measurements for a model built in this process (the test scenes)."""
-    from scgsim.geometry.sgb.slivers.report import sliver_report
+    from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 
     return {"report": sliver_report(model, top=10**9), "facts": _topology_facts(model)}
 

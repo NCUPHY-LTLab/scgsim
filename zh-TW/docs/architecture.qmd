@@ -22,7 +22,15 @@ scgsim/
 ├── geometry/
 │   ├── source/       # component input, occurrence, stack and normalization
 │   ├── models/       # source and planning records
-│   ├── sgb/          # SGB core: arrangement, XAO and sidecar that Palace builds on
+│   ├── sgb/          # SGB core that Palace builds on; one folder per stage of the build
+│   │   ├── exact/        # the exact vocabulary every stage shares
+│   │   ├── prisms/       # S2: the effective input as prisms, levels and slabs
+│   │   ├── bands/        # S3: inset bands and refinement curves as cut families
+│   │   ├── arrangement/  # S4 and S5: noding, planar arrangement, cell labels
+│   │   ├── topology/     # S6 to S8: vertices to volumes, routes and groups
+│   │   ├── checks/       # S9: structural validation, slivers, file checks
+│   │   ├── output/       # S10: BREP and XAO, sidecar, STEP export
+│   │   └── section/      # the 2D section model
 │   ├── planning/     # physical interpretation, junction partition and AEDT's surface planning
 │   └── primitives/   # 共用 Entity、環線、網格及空間操作
 ├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO

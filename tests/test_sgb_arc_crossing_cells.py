@@ -23,12 +23,12 @@ from scgsim.geometry.sgb.arrangement.arcs import (  # private-import: the broad 
     sampled_crossings,
 )
 from scgsim.geometry.sgb.arrangement.dcel import Arrangement
-from scgsim.geometry.sgb.derivation.layer import Layer, RawMeasurements
-from scgsim.geometry.sgb.labelling.dissolve import Dissolved
-from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge
-from scgsim.geometry.sgb.stopwatch import Stopwatch
-from scgsim.geometry.sgb.validation.arrangements import check_arcs, check_planar
-from scgsim.geometry.sgb.validation.report import ValidationReport
+from scgsim.geometry.sgb.arrangement.derivation.layer import Layer, RawMeasurements
+from scgsim.geometry.sgb.arrangement.labelling.dissolve import Dissolved
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge
+from scgsim.geometry.sgb.checks.validation.arrangements import check_arcs, check_planar
+from scgsim.geometry.sgb.checks.validation.report import ValidationReport
+from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 
 CELL = 256  # the cell size sampled_crossings uses, in grid units
 STEP = 8.0  # its default arc sampling step

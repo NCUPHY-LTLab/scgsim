@@ -6,8 +6,7 @@ input's metadata -- to the prisms, carriers and Z structure the arrangement stag
 consume.  The catalogue is route-independent: Route A, B and C are labelling
 policies applied after the arrangement exists.
 
-Design decisions (each with the compiler code it follows) are in the modules of this
-package: ``footprints`` (where an entity's rings come from), ``entities`` (Z interval,
+The decisions are in the modules of this package: ``footprints`` (where an entity's rings come from), ``entities`` (Z interval,
 Net, priority), ``curves`` (authored boundaries and reconstruction), ``ports``
 (lumped-port sheets), ``arcs`` (circles on the grid).
 """
@@ -18,6 +17,8 @@ from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.prisms.curves import bind_boundaries
 from scgsim.geometry.sgb.prisms.entities import (
     check_entity_kind,
@@ -27,8 +28,6 @@ from scgsim.geometry.sgb.prisms.entities import (
 )
 from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, source_footprints
 from scgsim.geometry.sgb.prisms.ports import port_prisms
-from scgsim.geometry.sgb.records.grid import Grid
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 
 
 def build_prism_catalogue(

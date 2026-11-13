@@ -1,14 +1,13 @@
 """Effective source entities as prisms (stage S2).
 
 Owns the rules that give each entity of an effective ``GeometryBuildInput`` its Z
-interval, Net, material and priority, and builds its prisms.  They follow what the
-compiler's planning read:
+interval, Net, material and priority, and builds its prisms:
 
 * **Z interval.**  The prepared representation (``RepresentationContext.entities``)
   carries the effective interval and whether the conductor is a *sheet* (a zero
   thickness interval) or a *solid*; solution regions fall back to their effective
-  geometry (``z_min_um``/``z_max_um``, else ``z_um`` + ``thickness_um``), the same
-  fields ``primitives.entities.entity_z_range_um`` read.  The automatic vacuum
+  geometry (``z_min_um``/``z_max_um``, else ``z_um`` + ``thickness_um``), the fields
+  ``primitives.entities.entity_z_range_um`` reads.  The automatic vacuum
   envelope takes the Z of its prepared enclosure.  Levels are exactly these values:
   no Z threshold merges or drops any of them.
 * **Net.**  A conductor without a declared Net is its own Net (a floating
@@ -32,18 +31,18 @@ from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.physical import PHYSICAL_LAYER_FIELD
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.plane import Ring
-from scgsim.geometry.sgb.prisms.curves import RingKey
-from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, is_auto_vacuum_region
-from scgsim.geometry.sgb.records.carriers import ArcCarrier
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import (
+from scgsim.geometry.sgb.exact.carriers import ArcCarrier
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.plane import Ring
+from scgsim.geometry.sgb.exact.prisms import (
     Footprint,
     LineEdge,
     MaterialKind,
     PrismRecord,
     RingPrimitive,
 )
+from scgsim.geometry.sgb.prisms.curves import RingKey
+from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, is_auto_vacuum_region
 
 ZInterval = tuple[Fraction, Fraction]
 RingPrimitives = dict[RingKey, tuple[RingPrimitive, ...]]

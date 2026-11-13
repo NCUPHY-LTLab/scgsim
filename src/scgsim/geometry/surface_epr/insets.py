@@ -29,14 +29,14 @@ from typing import Any, cast
 
 from scgsim.contracts.sgb_sidecar import Sidecar
 from scgsim.contracts.sgb_sidecar.records import SurfaceGroup
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     FACE_KINDS,
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
     Side,
 )
-from scgsim.geometry.sgb.records.grid import Grid
+from scgsim.geometry.sgb.exact.grid import Grid
 
 # The kinds of face a conductor Entity has that SGB can band: a concrete request names one of these.
 CONDUCTOR_FACE_KINDS: tuple[Side, ...] = ("sheet", "top", "bottom")

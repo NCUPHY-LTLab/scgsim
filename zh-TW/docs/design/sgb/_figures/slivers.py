@@ -50,20 +50,20 @@ from sgb_scenes import GRID, chip_prisms, conductor, footprint, rect_um
 from shapely.geometry import Polygon, box
 
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     SolutionInterface,
 )
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 from scgsim.geometry.sgb.errors import ContactError
+from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier
+from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
+from scgsim.geometry.sgb.exact.grid import Grid, exact_z
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.prisms.levels import build_levels
-from scgsim.geometry.sgb.records.carriers import Lineage, LineCarrier
-from scgsim.geometry.sgb.records.families import CurveFamilyRecord
-from scgsim.geometry.sgb.records.grid import Grid, exact_z
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
-from scgsim.geometry.sgb.slivers.report import sliver_report
 
 RED = PALETTE["bad"]
 MARGINS = (0.1, 0.5, 2.0)

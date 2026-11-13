@@ -2,8 +2,7 @@
 
 Owns binding ``boundary_curves`` and ``boundary_reconstruction`` records to the
 source rings of an entity and turning them into ring primitives (straight edges
-and circular arcs), as the compiler's ``construction.curved_geometry.boundaries``
-did:
+and circular arcs):
 
 * an **authored** record replaces one complete outer or hole ring with its chain of
   line and circular-arc curves;
@@ -18,8 +17,7 @@ splines and B-splines fail closed, naming the boundary and the entity: B-spline
 carriers are a later stage.
 
 A refusal names the record, its Entity and layer, where the fault lies in micrometres and
-who must act.  The wording of the index and arc refusals lives in ``models.input``, shared
-with the compiler's construction binder.  The junction partition reads a lumped port's
+who must act.  The wording of the index and arc refusals lives in ``models.input``.  The junction partition reads a lumped port's
 terminals through this binding (``bound_rings``), so a terminal's record is refused here too.
 """
 
@@ -50,18 +48,18 @@ from scgsim.geometry.models.input import (
     ring_without_drawn_order,
 )
 from scgsim.geometry.sgb.errors import InputError, UnsupportedCurveError
-from scgsim.geometry.sgb.plane import (
+from scgsim.geometry.sgb.exact.carriers import Lineage
+from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.plane import (
     Point,
     Ring,
     fraction_to_rep,
     point_in_ring,
     ring_twice_area,
 )
+from scgsim.geometry.sgb.exact.prisms import LineEdge, RingPrimitive
 from scgsim.geometry.sgb.prisms.arcs import arc_through_points, full_circle
 from scgsim.geometry.sgb.prisms.footprints import SourceFootprint
-from scgsim.geometry.sgb.records.carriers import Lineage
-from scgsim.geometry.sgb.records.grid import Grid
-from scgsim.geometry.sgb.records.prisms import LineEdge, RingPrimitive
 
 RingKey = tuple[
     str, int, int

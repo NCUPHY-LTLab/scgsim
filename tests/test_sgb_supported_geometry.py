@@ -26,7 +26,7 @@ from sgb_supported_kit import (
     turns_degrees,
 )
 
-from scgsim.geometry.sgb.cutfamilies.inset import SHORT_ARC_GRID_STEPS
+from scgsim.geometry.sgb.bands.inset import SHORT_ARC_GRID_STEPS
 
 SCENES = {**disk_qubit.SCENES, **pdk.SCENES}
 SLOW = {

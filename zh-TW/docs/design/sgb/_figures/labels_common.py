@@ -44,9 +44,9 @@ import plotly.graph_objects as go  # noqa: E402
 from matplotlib.path import Path as MplPath  # noqa: E402
 
 from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: E402
-from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
-from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
+from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
+from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file  # noqa: E402
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue  # noqa: E402
 
 G_UM = 0.001  # um per grid unit (default grid, 1 nm)

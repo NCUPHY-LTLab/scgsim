@@ -15,9 +15,9 @@ import pytest
 from sgb_inputs import gds_pad_in_ground
 from test_sgb_band_labels import PORT_CASES, all_interface_insets
 
-from scgsim.geometry.sgb.cutfamilies.requests import RefinementRequest
-from scgsim.geometry.sgb.emission.measures import planned_face_area_um2
+from scgsim.geometry.sgb.bands.requests import RefinementRequest
 from scgsim.geometry.sgb.model import build_conformal_model
+from scgsim.geometry.sgb.output.emission.measures import planned_face_area_um2
 
 PORT_GROUP = "PORT::PORT_SHEET__P1__0000"
 PAD_CENTRE_UM, PAD_RADIUS_UM = (50.0, 50.0), 10.0

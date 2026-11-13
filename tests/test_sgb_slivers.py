@@ -10,9 +10,9 @@ from sgb_inputs import gds_pad_in_ground
 from sgb_scenes import pad_in_ground, random_layout
 from sgb_supported_kit import catalogue, type_bands
 
+from scgsim.geometry.sgb.checks.slivers.feature_size import Prim, prim_distance
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue
-from scgsim.geometry.sgb.slivers.feature_size import Prim, prim_distance
-from scgsim.geometry.sgb.slivers.report import sliver_report
 
 
 def test_report_has_sorted_measurements_with_location_and_lineage():

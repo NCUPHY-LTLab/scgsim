@@ -82,10 +82,10 @@ name = SGB emission layers point one way (entry, exchange, verification, sidecar
 type = layers
 layers =
     scgsim.geometry.sgb.build
-    scgsim.geometry.sgb.exchange
-    scgsim.geometry.sgb.verification
-    scgsim.geometry.sgb.sidecar
-    scgsim.geometry.sgb.emission
+    scgsim.geometry.sgb.output.exchange
+    scgsim.geometry.sgb.checks.verification
+    scgsim.geometry.sgb.output.sidecar
+    scgsim.geometry.sgb.output.emission
 
 [importlinter:contract:contracts-import-nothing-else]
 name = Stage contracts import nothing else from scgsim and no third-party package
