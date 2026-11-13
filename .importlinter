@@ -16,13 +16,21 @@ modules =
 [importlinter:contract:geometry-stage-layers]
 name = Geometry stages import only the stages before them (models, grid, source, junctions, interpretation, planning)
 type = layers
+containers =
+    scgsim.geometry
 layers =
-    scgsim.geometry.planning
-    scgsim.geometry.interpretation
-    scgsim.geometry.junctions
-    scgsim.geometry.source
-    scgsim.geometry.grid
-    scgsim.geometry.models
+    planning
+    interpretation
+    junctions
+    source
+    grid
+    models
+# Every folder of scgsim.geometry is in this list or named here: a new folder has to take its place in
+# the order. sgb and surface_epr are placed by the two contracts below.
+exhaustive = true
+exhaustive_ignores =
+    sgb
+    surface_epr
 
 [importlinter:contract:shared-geometry]
 name = Shared geometry does not depend on a solver backend
@@ -72,13 +80,12 @@ name = SGB reads only the shared geometry records
 type = forbidden
 source_modules =
     scgsim.geometry.sgb
+# scgsim.geometry.* matches every folder of the geometry package, present or added later; import-linter
+# skips scgsim.geometry.sgb itself, and the imports of the shared records are the ones allowed.
 forbidden_modules =
-    scgsim.geometry.grid
-    scgsim.geometry.source
-    scgsim.geometry.junctions
-    scgsim.geometry.interpretation
-    scgsim.geometry.planning
-    scgsim.geometry.surface_epr
+    scgsim.geometry.*
+ignore_imports =
+    scgsim.geometry.sgb.** -> scgsim.geometry.models.**
 
 # geometry.surface_epr and the Palace backend call SGB. The folders before it do not read it, with one
 # stated exception: the junction partition binds rings with SGB's own exact vocabulary (sgb.exact), so its
@@ -86,18 +93,17 @@ forbidden_modules =
 [importlinter:contract:stages-do-not-read-sgb]
 name = The stages before SGB do not read it (the junction partition reads sgb.exact only)
 type = forbidden
+# scgsim.geometry.* matches every folder of the geometry package, present or added later; import-linter
+# skips the forbidden folders themselves, and surface_epr calling SGB is the allowed direction.
 source_modules =
-    scgsim.geometry.models
-    scgsim.geometry.grid
-    scgsim.geometry.source
-    scgsim.geometry.junctions
-    scgsim.geometry.interpretation
-    scgsim.geometry.planning
+    scgsim.geometry.*
 forbidden_modules =
     scgsim.geometry.sgb
     scgsim.geometry.surface_epr
 ignore_imports =
     scgsim.geometry.junctions.selection -> scgsim.geometry.sgb.exact.*
+    scgsim.geometry.surface_epr.** -> scgsim.geometry.sgb.**
+    scgsim.geometry.surface_epr.** -> scgsim.geometry.sgb
 
 # SGB's folders in the order they import: a folder reads the folders before it, never one after it;
 # import-linter lists the last first. This is the order of dependency. The order in time is the step list
@@ -106,18 +112,22 @@ ignore_imports =
 [importlinter:contract:sgb-stage-layers]
 name = SGB stages import only the stages before them (errors, exact, prisms, arrangement, bands, topology, checks, model, output, section, build)
 type = layers
+containers =
+    scgsim.geometry.sgb
 layers =
-    scgsim.geometry.sgb.build
-    scgsim.geometry.sgb.section
-    scgsim.geometry.sgb.output
-    scgsim.geometry.sgb.model
-    scgsim.geometry.sgb.checks
-    scgsim.geometry.sgb.topology
-    scgsim.geometry.sgb.bands
-    scgsim.geometry.sgb.arrangement
-    scgsim.geometry.sgb.prisms
-    scgsim.geometry.sgb.exact
-    scgsim.geometry.sgb.errors
+    build
+    section
+    output
+    model
+    checks
+    topology
+    bands
+    arrangement
+    prisms
+    exact
+    errors
+# Every folder and module of scgsim.geometry.sgb is in this list: a new one has to take its place in the order.
+exhaustive = true
 
 [importlinter:contract:sgb-emission-layers]
 name = SGB emission layers point one way (entry, exchange, verification, sidecar, writer)
