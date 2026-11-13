@@ -82,6 +82,8 @@ Next: 哪個階段讀取它
 | 匯入的資料夾 | 匯入 | 從那裡取得什麼 |
 | --- | --- | --- |
 | `geometry/junctions` | `geometry/sgb` | SGB 的邊界綁定（`prisms.bound_rings`）與精確紀錄，讓分割切在 SGB 建立的環上。 |
+| `geometry/sgb/bands` | `geometry/sgb/arrangement`、`geometry/sgb/topology` | 物理預先處理所用的排列與表面命名，用來找出每條內縮帶的支撐面。 |
+| `geometry/sgb/checks` | `geometry/sgb/output` | 輸出計畫及其預計的面積與體積，OCCT 檢查用它們比對寫出的檔案。 |
 | `palace/results` | `palace/reports` | 已解析結果的顯示方法所回傳的報表視圖。 |
 | `aedt/specs` | `aedt/epr` | 表面積分的分組（`epr.selection`）。 |
 | `aedt/preparation` | `aedt/results` | 收據結構描述與初始收據（`results.provenance`）。 |

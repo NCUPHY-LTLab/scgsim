@@ -93,6 +93,8 @@ from an earlier stage to a later one:
 | Importing folder | Imports | What it takes from there |
 | --- | --- | --- |
 | `geometry/junctions` | `geometry/sgb` | SGB's boundary binder (`prisms.bound_rings`) and exact records, so the partition cuts the rings SGB builds. |
+| `geometry/sgb/bands` | `geometry/sgb/arrangement`, `geometry/sgb/topology` | The arrangement and the surface naming of the physical pre-pass that finds each inset band's support face. |
+| `geometry/sgb/checks` | `geometry/sgb/output` | The emission plan and its planned areas and volumes, which the OCCT checks compare a written file with. |
 | `palace/results` | `palace/reports` | The report views a resolved result's display methods return. |
 | `aedt/specs` | `aedt/epr` | The grouping of surface integrals (`epr.selection`). |
 | `aedt/preparation` | `aedt/results` | The receipt schema and the initial receipt (`results.provenance`). |
