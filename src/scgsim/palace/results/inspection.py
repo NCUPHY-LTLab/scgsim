@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA_NAME,
@@ -103,22 +104,25 @@ def _receipt_exit_code(receipt: dict[str, Any], field: str) -> int:
     return value
 
 
-def _receipt_execution_state(
-    receipt: dict[str, Any],
-) -> tuple[
-    Literal["config_compatibility", "solver"] | None,
-    bool | None,
-    int | None,
-    int | None,
-    int,
-    int,
-]:
+@dataclass(frozen=True)
+class _ExecutionState:
+    """Which stage a returned run reached and the exit codes the receipt records for it."""
+
+    stage: Literal["config_compatibility", "solver"] | None
+    solver_invoked: bool | None
+    preflight_exit_code: int | None
+    solver_exit_code: int | None
+    exit_code: int
+    tee_exit_code: int
+
+
+def _receipt_execution_state(receipt: dict[str, Any]) -> _ExecutionState:
     """Interpret receipt execution stages without conflating failed preflight and solver invocation."""
     exit_code = _receipt_exit_code(receipt, "exit_code")
     tee_exit_code = _receipt_exit_code(receipt, "tee_exit_code")
     stage = receipt.get("execution_stage")
     if stage is None:
-        return (
+        return _ExecutionState(
             None,
             None,
             None,
@@ -127,24 +131,31 @@ def _receipt_execution_state(
             tee_exit_code,
         )
     if stage not in {"config_compatibility", "solver"}:
-        raise ValueError("returned receipt execution_stage is invalid.")
+        raise ValueError(
+            f"returned receipt execution_stage is invalid: {stage!r}; the recorder writes "
+            "'config_compatibility' or 'solver'."
+        )
     solver_invoked = receipt.get("solver_invoked")
     if not isinstance(solver_invoked, bool):
-        raise TypeError("returned receipt solver_invoked must be boolean.")
+        raise TypeError(
+            f"returned receipt solver_invoked must be boolean; got {solver_invoked!r}."
+        )
     preflight_exit_code = _receipt_exit_code(receipt, "preflight_exit_code")
     solver_exit_code = receipt.get("solver_exit_code")
     if stage == "config_compatibility":
         if solver_invoked or solver_exit_code is not None:
             raise ValueError(
-                "config compatibility failure must record solver not invoked."
+                "config compatibility failure must record solver not invoked: the receipt records "
+                f"solver_invoked={solver_invoked!r}, solver_exit_code={solver_exit_code!r}."
             )
     else:
         if not solver_invoked or preflight_exit_code != 0:
             raise ValueError(
-                "solver execution requires a successful config compatibility preflight."
+                "solver execution requires a successful config compatibility preflight: the receipt "
+                f"records solver_invoked={solver_invoked!r}, preflight_exit_code={preflight_exit_code!r}."
             )
         solver_exit_code = _receipt_exit_code(receipt, "solver_exit_code")
-    return (
+    return _ExecutionState(
         stage,
         solver_invoked,
         preflight_exit_code,
@@ -211,77 +222,86 @@ def failure_diagnosis(
     """Describe the failed attempt from receipt status and verified log evidence."""
     if receipt is None or receipt.get("status") != "failed":
         return None
-    (
-        execution_stage,
-        solver_invoked,
-        preflight_exit,
-        solver_exit,
-        exit_code,
-        tee_exit,
-    ) = _receipt_execution_state(receipt)
+    state = _receipt_execution_state(receipt)
     evidence: list[dict[str, Any]] = [
         {
             "source": "returned_receipt",
-            "exit_code": exit_code,
-            "execution_stage": execution_stage,
-            "solver_invoked": solver_invoked,
-            "preflight_exit_code": preflight_exit,
-            "solver_exit_code": solver_exit,
-            "tee_exit_code": tee_exit,
+            "exit_code": state.exit_code,
+            "execution_stage": state.stage,
+            "solver_invoked": state.solver_invoked,
+            "preflight_exit_code": state.preflight_exit_code,
+            "solver_exit_code": state.solver_exit_code,
+            "tee_exit_code": state.tee_exit_code,
         }
     ]
     oom_evidence = (
         None
-        if execution_stage == "config_compatibility"
+        if state.stage == "config_compatibility"
         else _slurm_oom_evidence(root, receipt, receipt_paths)
     )
-    if execution_stage == "config_compatibility" and preflight_exit != 0:
-        category = "config_compatibility"
-        summary = (
-            "Palace config compatibility preflight exited with status "
-            f"{preflight_exit}; the solver was not invoked."
-        )
-    elif execution_stage == "config_compatibility" and tee_exit != 0:
-        category = "output_capture_error"
-        summary = (
-            "Config compatibility output capture exited with status "
-            f"{tee_exit}; the solver was not invoked."
-        )
-    elif execution_stage == "config_compatibility":
-        category = "unknown"
-        summary = (
-            "The run failed during config compatibility preflight; the solver "
-            "was not invoked."
-        )
-    elif oom_evidence is not None:
+    cause = _failure_cause(state, oom_evidence is not None)
+    if cause.category == "out_of_memory" and oom_evidence is not None:
         evidence.append(oom_evidence)
-        category = "out_of_memory"
-        summary = "Slurm reported an out-of-memory event."
-    elif solver_exit == 137 or exit_code == 137:
-        category = "signal_killed"
-        summary = (
-            "The solver was killed with exit 137; out of memory is possible but "
-            "not confirmed by scheduler evidence."
-        )
-    elif solver_exit != 0:
-        category = "solver_error"
-        summary = f"The Palace solver exited with status {solver_exit}."
-    elif tee_exit != 0:
-        category = "output_capture_error"
-        summary = f"Solver output capture exited with status {tee_exit}."
-    else:
-        category = "unknown"
-        summary = "The returned receipt reports failure without a classified cause."
     return PalaceFailureDiagnosis(
-        category=category,
-        exit_code=exit_code,
-        execution_stage=execution_stage,
-        solver_invoked=solver_invoked,
-        preflight_exit_code=preflight_exit,
-        solver_exit_code=solver_exit,
-        tee_exit_code=tee_exit,
-        summary=summary,
+        category=cause.category,
+        exit_code=state.exit_code,
+        execution_stage=state.stage,
+        solver_invoked=state.solver_invoked,
+        preflight_exit_code=state.preflight_exit_code,
+        solver_exit_code=state.solver_exit_code,
+        tee_exit_code=state.tee_exit_code,
+        summary=cause.summary,
         evidence=tuple(evidence),
+    )
+
+
+class _FailureCause(NamedTuple):
+    """The category a failed run falls in and the sentence that tells a person why."""
+
+    category: str
+    summary: str
+
+
+def _failure_cause(state: _ExecutionState, scheduler_oom: bool) -> _FailureCause:
+    """Classify a failure: the preflight first, then scheduler memory, a kill, the solver, the capture."""
+    if state.stage == "config_compatibility" and state.preflight_exit_code != 0:
+        return _FailureCause(
+            "config_compatibility",
+            "Palace config compatibility preflight exited with status "
+            f"{state.preflight_exit_code}; the solver was not invoked.",
+        )
+    if state.stage == "config_compatibility" and state.tee_exit_code != 0:
+        return _FailureCause(
+            "output_capture_error",
+            "Config compatibility output capture exited with status "
+            f"{state.tee_exit_code}; the solver was not invoked.",
+        )
+    if state.stage == "config_compatibility":
+        return _FailureCause(
+            "unknown",
+            "The run failed during config compatibility preflight; the solver "
+            "was not invoked.",
+        )
+    if scheduler_oom:
+        return _FailureCause("out_of_memory", "Slurm reported an out-of-memory event.")
+    if state.solver_exit_code == 137 or state.exit_code == 137:
+        return _FailureCause(
+            "signal_killed",
+            "The solver was killed with exit 137; out of memory is possible but "
+            "not confirmed by scheduler evidence.",
+        )
+    if state.solver_exit_code != 0:
+        return _FailureCause(
+            "solver_error",
+            f"The Palace solver exited with status {state.solver_exit_code}.",
+        )
+    if state.tee_exit_code != 0:
+        return _FailureCause(
+            "output_capture_error",
+            f"Solver output capture exited with status {state.tee_exit_code}.",
+        )
+    return _FailureCause(
+        "unknown", "The returned receipt reports failure without a classified cause."
     )
 
 
