@@ -8,12 +8,12 @@ from typing import cast
 from scgsim.geometry.models.common import (
     RouteLiteral,
 )
-from scgsim.geometry.models.construction import (
-    SurfacePartitionRecord,
-)
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.topology import (
     InterfacePlanRecord,
+)
+from scgsim.geometry.planning.surface_planning.construction import (
+    SurfacePartitionRecord,
 )
 
 

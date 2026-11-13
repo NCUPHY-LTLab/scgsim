@@ -8,10 +8,6 @@ from scgsim.geometry.interpretation.representation import is_sheet_context
 from scgsim.geometry.models.common import (
     RouteLiteral,
 )
-from scgsim.geometry.models.construction import (
-    ConstructionBodyPlanRecord,
-    SurfacePartitionRecord,
-)
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import (
@@ -26,6 +22,10 @@ from scgsim.geometry.planning.evidence import (
     require_semantic_evidence_facade,
 )
 from scgsim.geometry.planning.surface_planning.conductors import ConductorSurfacePlanner
+from scgsim.geometry.planning.surface_planning.construction import (
+    ConstructionBodyPlanRecord,
+    SurfacePartitionRecord,
+)
 from scgsim.geometry.planning.surface_planning.contacts import (
     contact_patches_by_entity_face,
     route_a_sheet_contacts_by_face_metal,

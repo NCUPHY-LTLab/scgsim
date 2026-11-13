@@ -79,7 +79,6 @@ def conductor_sidewall_geometry_refs(
     excluded_footprints = request.excluded_footprints
     representation_context = request.representation_context
     base_ref = route_entity_geometry_ref(
-        build_input,
         route,
         entity,
         representation=representation,
