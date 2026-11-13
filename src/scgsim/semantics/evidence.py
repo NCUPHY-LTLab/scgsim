@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from scgsim.refusal import refusal
 
@@ -263,9 +263,16 @@ def _validate_snapshot_reference(
         )
 
 
+class _PatchClass(NamedTuple):
+    """The interface kind a patch is classified as and its owners, in the order that kind names them."""
+
+    kind: str
+    owner_ids: tuple[str, ...]
+
+
 def _classify_patch(
     snapshot: SemanticFactsSnapshot, patch: SourcedPatch
-) -> tuple[str, tuple[str, ...]]:
+) -> _PatchClass:
     domains = patch.effective_domain_ids
     if patch.interface_intent == "conductor_solution":
         if domains is None or len(domains) != 1:
@@ -276,7 +283,9 @@ def _classify_patch(
                 )
             )
         material_kind = _material_kind(snapshot, domains[0])
-        return conductor_solution_interface_kind(material_kind), patch.source_owner_ids
+        return _PatchClass(
+            conductor_solution_interface_kind(material_kind), patch.source_owner_ids
+        )
     if patch.interface_intent == "solution_solution":
         if domains is None or len(domains) != 2:
             raise ValueError(
@@ -288,7 +297,7 @@ def _classify_patch(
         lower_kind = _material_kind(snapshot, domains[0])
         upper_kind = _material_kind(snapshot, domains[1])
         kind = solution_interface_kind(lower_kind, upper_kind)
-        return (
+        return _PatchClass(
             kind,
             solution_interface_owner_ids(
                 kind,
@@ -298,9 +307,9 @@ def _classify_patch(
             ),
         )
     if patch.interface_intent == "metal_metal_contact":
-        return "MM", patch.source_owner_ids
+        return _PatchClass("MM", patch.source_owner_ids)
     if patch.interface_intent == "unknown":
-        return "unknown", patch.source_owner_ids
+        return _PatchClass("unknown", patch.source_owner_ids)
     raise AssertionError(f"unvalidated interface intent {patch.interface_intent!r}")
 
 
@@ -308,5 +317,7 @@ def _material_kind(snapshot: SemanticFactsSnapshot, semantic_id: str) -> str:
     entity = snapshot.facts.get("entities", {}).get(semantic_id)
     value = entity.get("material_kind") if isinstance(entity, Mapping) else None
     if not isinstance(value, str):
-        raise ValueError(f"{semantic_id} has no snapshotted material kind")
+        raise ValueError(
+            refusal(f"{semantic_id} has no snapshotted material kind", found=value)
+        )
     return value

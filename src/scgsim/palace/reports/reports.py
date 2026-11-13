@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
@@ -28,9 +28,14 @@ from scgsim.palace.reports.plotting import (
     checked_show_details,
     checked_theme,
 )
-from scgsim.palace.reports.trust import PalaceTrustReport, ReportIdentity
+from scgsim.palace.reports.trust import PalaceTrustReport
+from scgsim.palace.reports.trust_records import (
+    ReportIdentity,
+    ReportProvenance,
+)
 from scgsim.palace.reports.views import (
     PhysicsQuantitiesReport,
+    ResolvedBenchmarkData,
     SimulationBenchmarkReport,
 )
 from scgsim.palace.results.artifacts import (
@@ -168,7 +173,7 @@ def _require_resolved(result: object, view: str) -> None:
 def _resolved_benchmark_data(
     result: ResolvedRunData,
     pass_cost_records: tuple[PassCostRecord, ...],
-) -> dict[str, Any]:
+) -> ResolvedBenchmarkData:
     """Detach final and attempted-run costs, timings, resources and selection metadata."""
     return {
         "cost": {
@@ -371,9 +376,9 @@ def _report_provenance(
     mesh_manifest: dict[str, Any] | None,
     problem: str,
     receipt: dict[str, Any] | None,
-) -> dict[str, Any]:
+) -> ReportProvenance:
     """Preserve source/resource identities and detached mesh observations for report inspection."""
-    provenance = {
+    recorded = {
         key: handoff.get(key)
         for key in (
             "source_revisions",
@@ -385,7 +390,8 @@ def _report_provenance(
         )
         if handoff.get(key) is not None
     }
-
+    # The handoff is read as JSON, so its fields are typed by the record they fill.
+    provenance = cast(ReportProvenance, recorded)
     provenance["mesh_summary"] = recorded_mesh_summary(
         mesh_manifest, handoff=handoff, config=config, problem=problem
     )

@@ -8,7 +8,7 @@ import json
 import math
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, Literal, NamedTuple, TypedDict
+from typing import Any, Literal, NamedTuple
 
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA,
@@ -37,7 +37,9 @@ from scgsim.palace.reports.plotting import (
     FigureStyle,
     LinePlot,
     PlotTheme,
+    ReferenceLine,
     ReportTheme,
+    Trace,
     axis_title,
     checked_ranking_limit,
     checked_show_details,
@@ -56,6 +58,7 @@ from scgsim.palace.reports.surface_figures import (
     surface_percentage_figure,
     surface_total_figure,
 )
+from scgsim.palace.reports.trust_records import ReportIdentity, ReportProvenance
 from scgsim.palace.results.artifacts import read_optional_json
 from scgsim.palace.results.inspection import (
     failure_payload,
@@ -71,7 +74,11 @@ from scgsim.palace.results.snapshots import (
     surface_snapshots,
 )
 
-from .views import PhysicsQuantitiesReport, SimulationBenchmarkReport
+from .views import (
+    InspectedBenchmarkData,
+    PhysicsQuantitiesReport,
+    SimulationBenchmarkReport,
+)
 
 _DURATION_BARS = (
     "MeshPreprocessing",
@@ -129,16 +136,6 @@ def _elapsed_pass_cost(
     return PassDelta(elapsed_total - previous_elapsed, None)
 
 
-class ReportIdentity(TypedDict):
-    """The identity cards of a trust report: the handoff, the parallel resources, the receipt and Palace's tag."""
-
-    handoff_id: str
-    handoff_id_short: str | None
-    resources: str | None
-    receipt: str | None
-    git_tag: str | None
-
-
 @dataclass(frozen=True)
 class PalaceTrustReport:
     """Run-identity, AMR evidence, and cost for one returned Palace run folder."""
@@ -157,7 +154,7 @@ class PalaceTrustReport:
     amr_max_passes: int | None
     durations: dict[str, float]
     cost: CostCards
-    provenance: dict[str, Any]
+    provenance: ReportProvenance
     theme: ReportTheme = "light"
     show_details: bool = False
 
@@ -192,8 +189,8 @@ class PalaceTrustReport:
         """Return the readable benchmark while retaining every machine field."""
         attempted = read_optional_json(self.run_dir / NATIVE_METADATA)
         pass_cost_records = self.pass_cost_records()
-        data = {
-            "cost": dict(self.cost),
+        data: InspectedBenchmarkData = {
+            "cost": CostCards(**self.cost),
             "mesh_summary": self.mesh_summary(),
             "performance": {"counts": {}, "durations": dict(self.durations)},
             "attempted_run": {
@@ -202,7 +199,7 @@ class PalaceTrustReport:
             },
             "selected_snapshot": {
                 "source": self.selection.selected_source,
-                "cost": dict(self.cost),
+                "cost": CostCards(**self.cost),
                 "durations": dict(self.durations),
             },
             "resources": {
@@ -446,7 +443,7 @@ class PalaceTrustReport:
         """The AMR error indicators across the passes, against the configured tolerance."""
         items: list[Any] = []
         traces = [
-            (
+            Trace(
                 name,
                 [
                     None
@@ -459,7 +456,7 @@ class PalaceTrustReport:
         ]
         hline = None
         if self.amr_tolerance is not None:
-            hline = (self.amr_tolerance, "configured AMR Tol")
+            hline = ReferenceLine(self.amr_tolerance, "configured AMR Tol")
         figure = LinePlot(
             title="AMR error indicator vs AMR pass",
             xlabel="AMR pass",
@@ -724,7 +721,7 @@ class PalaceTrustReport:
             xlabel="DOFs",
             ylabel="seconds this pass",
             xs=dofs,
-            traces=[("this pass", this_pass)],
+            traces=[Trace("this pass", this_pass)],
             point_labels=labels,
             theme=self.theme,
         ).figure()

@@ -121,7 +121,11 @@ def section(
     )
 
 
-def cards(items: Sequence[tuple[str, object]]) -> str:
+Card = tuple[str, object]
+"""One summary card: the label it shows, then the value under it."""
+
+
+def cards(items: Sequence[Card]) -> str:
     """Render escaped labels and detached values as wrapping summary cards."""
     return (
         '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px">'

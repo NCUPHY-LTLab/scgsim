@@ -13,6 +13,7 @@ from scgsim.palace.reports.plotting import (
     FigureStyle,
     LinePlot,
     ReportTheme,
+    Trace,
     axis_title,
     fmt,
     fmt_seconds,
@@ -51,7 +52,7 @@ def surface_total_figure(
         ylabel="total participation",
         xs=[snapshot.pass_index for snapshot in snapshots],
         traces=[
-            (
+            Trace(
                 interface_type,
                 [_surface_totals(snapshot)[interface_type] for snapshot in snapshots],
             )
@@ -184,7 +185,7 @@ def surface_percentage_figure(
         ylabel="share of MA+MS+SA (%)",
         xs=[snapshot.pass_index for snapshot in snapshots],
         traces=[
-            (
+            Trace(
                 interface_type,
                 [
                     None

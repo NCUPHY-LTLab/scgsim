@@ -41,7 +41,12 @@ from scgsim.palace.results.tables import (
     read_result_table,
 )
 from scgsim.refusal import refusal
-from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
+from scgsim.semantics.epr import (
+    FilmAssumptions,
+    FilmUpdate,
+    film_assumptions,
+    inverse_quality_factor,
+)
 
 
 def resolve_epr_result(path: str | Path) -> PalaceEprResult:
@@ -219,8 +224,8 @@ def reanalyze_epr(
 class _FilmUpdates:
     """The checked film changes of one reanalysis: by interface type, and by group over those."""
 
-    defaults: dict[str, dict[str, Any]]
-    overrides: dict[str, dict[str, Any]]
+    defaults: dict[str, FilmUpdate]
+    overrides: dict[str, FilmUpdate]
 
     @classmethod
     def checked(
@@ -575,7 +580,7 @@ class _RecordedFilm:
     spec: Mapping[str, Any]
     l0: float
     native_thickness: float
-    assumption: dict[str, Any]
+    assumption: FilmAssumptions
 
     @classmethod
     def checked(cls, spec: Mapping[str, Any], l0: float, number: int) -> _RecordedFilm:

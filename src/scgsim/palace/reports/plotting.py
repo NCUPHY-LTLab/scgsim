@@ -5,9 +5,10 @@ from __future__ import annotations
 import html
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from scgsim.palace.mesh.summary import MeshSummary
+from scgsim.presentation.notebook import Card
 from scgsim.refusal import refusal
 
 COLORWAY = (
@@ -98,6 +99,27 @@ def yaxis_type(name: str) -> str:
     return "linear"
 
 
+class Trace(NamedTuple):
+    """One plotted series: its legend label and one value per x position, None where nothing was recorded."""
+
+    label: str
+    values: Sequence[float | None]
+
+
+class TraceGroup(NamedTuple):
+    """The traces one figure draws, under the label the figure is named after."""
+
+    label: str
+    traces: list[Trace]
+
+
+class ReferenceLine(NamedTuple):
+    """A horizontal line drawn across a figure at ``value``, with the label it is annotated with."""
+
+    value: float
+    label: str
+
+
 @dataclass(frozen=True)
 class LinePlot:
     """Trace data and axis/theme choices that travel together into a convergence figure."""
@@ -106,10 +128,10 @@ class LinePlot:
     xlabel: str
     ylabel: str
     xs: Sequence[int | float | None]
-    traces: Sequence[tuple[str, Sequence[float | None]]]
+    traces: Sequence[Trace]
     point_labels: Sequence[str] | None = None
     yaxis_type: str = "linear"
-    hline: tuple[float, str] | None = None
+    hline: ReferenceLine | None = None
     theme: ReportTheme = "light"
 
     def figure(self) -> Any | None:
@@ -401,9 +423,7 @@ def mesh_summary_html(
     )
 
 
-def _mesh_cards(
-    summary: MeshSummary, meshing: Mapping[str, Any]
-) -> list[tuple[str, str]]:
+def _mesh_cards(summary: MeshSummary, meshing: Mapping[str, Any]) -> list[Card]:
     """The (label, value) cards of a recorded mesh: recipe, orders, sizes, algorithms, quality and repair."""
     estimate = summary["dof_estimate"]
     stats, mesher = meshing["statistics"], meshing["mesher"]

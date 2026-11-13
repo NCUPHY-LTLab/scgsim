@@ -11,7 +11,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from scgsim.refusal import refusal
 
@@ -240,16 +240,23 @@ def create_snapshot(  # noqa: PLR0913 -- preserves independent revision values a
     )
 
 
+class _Revision(NamedTuple):
+    """A resolved revision: the identifier and whether it was declared or is a content-hash fallback."""
+
+    value: str
+    kind: RevisionKind
+
+
 def _resolve_revision(
     name: str,
     value: str | None,
     kind: RevisionKind | None,
     fallback: str,
-) -> tuple[str, RevisionKind]:
+) -> _Revision:
     if value is None:
         if kind not in (None, "content_hash_fallback"):
             raise ValueError(
                 f"{name}_kind must be content_hash_fallback when {name} is None"
             )
-        return fallback, "content_hash_fallback"
-    return value, kind or "declared_revision"
+        return _Revision(fallback, "content_hash_fallback")
+    return _Revision(value, kind or "declared_revision")

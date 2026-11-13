@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal, TypedDict, cast, overload
 
 from scgsim.refusal import refusal
 
@@ -23,9 +23,47 @@ FILM_FIELDS: frozenset[str] = frozenset(
 )
 
 
+class FilmAssumptions(TypedDict):
+    """One complete SI film snapshot: thickness, relative permittivity, loss tangent and where they came from.
+
+    An offline record may keep an unknown thickness or permittivity as None (``allow_unknown``).
+    """
+
+    film_thickness_m: float | None
+    film_relative_permittivity: float | None
+    loss_tangent: float | None
+    source: str | None
+    preset: str | None
+
+
+class FilmUpdate(TypedDict, total=False):
+    """A partial film update: only the fields of a ``FilmAssumptions`` it changes."""
+
+    film_thickness_m: float | None
+    film_relative_permittivity: float | None
+    loss_tangent: float | None
+    source: str | None
+    preset: str | None
+
+
+@overload
+def film_assumptions(
+    value: Mapping[str, Any],
+    *,
+    partial: Literal[False] = False,
+    allow_unknown: bool = False,
+) -> FilmAssumptions: ...
+
+
+@overload
+def film_assumptions(
+    value: Mapping[str, Any], *, partial: Literal[True], allow_unknown: bool = False
+) -> FilmUpdate: ...
+
+
 def film_assumptions(
     value: Mapping[str, Any], *, partial: bool = False, allow_unknown: bool = False
-) -> dict[str, Any]:
+) -> FilmAssumptions | FilmUpdate:
     """Validate a complete SI film snapshot or an allowed partial update.
 
     ``allow_unknown`` lets thickness and permittivity fields retain ``None`` in
@@ -63,7 +101,9 @@ def film_assumptions(
             or not math.isfinite(number)
             or number <= 0
         ):
-            raise ValueError(f"{name} must be finite and positive")
+            raise ValueError(
+                refusal(f"{name} must be finite and positive", found=number)
+            )
         result[name] = float(number)
     if "loss_tangent" in result and result["loss_tangent"] is not None:
         number = result["loss_tangent"]
@@ -85,8 +125,11 @@ def film_assumptions(
             and result[name] is not None
             and (not isinstance(result[name], str) or not result[name].strip())
         ):
-            raise ValueError(f"{name} must be non-empty text or None")
-    return result
+            raise ValueError(
+                refusal(f"{name} must be non-empty text or None", found=result[name])
+            )
+    # Every field is checked above, so the mapping is the snapshot it claims to be.
+    return cast(FilmUpdate, result) if partial else cast(FilmAssumptions, result)
 
 
 def inverse_quality_factor(
