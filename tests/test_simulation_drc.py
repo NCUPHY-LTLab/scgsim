@@ -783,6 +783,6 @@ def test_nets_are_refused_as_set_nets_refuses_them(monkeypatch, simulation):
     """A Net naming an Entity the plan does not have is refused by ``GeometryPlan.set_nets``."""
     component = two_pads(monkeypatch, gap_um=0.0)
     with pytest.raises(
-        ValueError, match="Net 'Ground' has unknown Entity ID 'chip/pads'"
+        ValueError, match="Net 'Ground': it has unknown Entity ID 'chip/pads'"
     ):
         check(simulation, component, nets={"Ground": ("chip/pads",)})

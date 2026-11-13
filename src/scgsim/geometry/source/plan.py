@@ -80,7 +80,8 @@ from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
 def _call(method: str, name: str) -> Declared:
     """An argument of a GeometryPlan method, which its caller changes."""
-    return Declared(name, f"the call to GeometryPlan.{method}")
+    call = "GeometryPlan(...)" if method == "__init__" else f"GeometryPlan.{method}"
+    return Declared(name, f"the call to {call}")
 
 
 @dataclass(frozen=True)
@@ -167,14 +168,14 @@ class GeometryPlan:
     ) -> None:
         if not callable(getattr(component, "write_gds", None)):
             raise TypeError(
-                _call("__init__", "component").expected(
+                _call("__init__", "GeometryPlan").expected(
                     "component", "an assembled GDSFactory Component", component
                 )
             )
         self.root_id = source_path(root_id, _call("__init__", "root_id"), "root_id")
         if "/" in self.root_id:
             raise ValueError(
-                _call("__init__", "root_id").expected(
+                _call("__init__", "GeometryPlan").expected(
                     "root_id", "one path segment", self.root_id
                 )
             )
@@ -189,7 +190,7 @@ class GeometryPlan:
         )
         if self._coupon_padding_um < 0:
             raise ValueError(
-                _call("__init__", "coupon_padding_um").expected(
+                _call("__init__", "GeometryPlan").expected(
                     "coupon_padding_um", "nonnegative", self._coupon_padding_um
                 )
             )
@@ -323,7 +324,7 @@ class GeometryPlan:
         """Replace final Net membership after validating all Entity references."""
         if not isinstance(nets, Mapping):
             raise TypeError(
-                _call("set_nets", "nets").expected(
+                _call("set_nets", "GeometryPlan.set_nets").expected(
                     "nets", "a mapping of final Net IDs to qualified Entity IDs", nets
                 )
             )
@@ -380,7 +381,9 @@ class GeometryPlan:
         """
         if not isinstance(priorities, Mapping):
             raise TypeError(
-                _call("set_entity_priorities", "priorities").expected(
+                _call(
+                    "set_entity_priorities", "GeometryPlan.set_entity_priorities"
+                ).expected(
                     "priorities",
                     "a mapping of qualified Entity IDs to integers",
                     priorities,

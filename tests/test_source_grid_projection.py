@@ -71,7 +71,7 @@ def test_bound_context_mismatch_fails_before_projection():
     )
 
     with pytest.raises(
-        ValueError, match="geometry grid context differs from the bound input policy"
+        ValueError, match="internal: an input on grid .* was projected on grid"
     ):
         apply_geometry_grid(build, GeometryGridContext(0.002))
 

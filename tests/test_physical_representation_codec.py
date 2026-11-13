@@ -198,7 +198,7 @@ def test_enclosure_requires_exactly_one_source_bounds_record(provide_both):
 
     with pytest.raises(
         ValueError,
-        match="provide exactly one original body or full-envelope bounds record",
+        match="internal: an enclosure was projected from",
     ):
         plan.project_enclosure(
             effective_body_bounds_um={},
