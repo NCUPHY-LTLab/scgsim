@@ -26,6 +26,13 @@ class FileHash(NamedTuple):
     sha256: str | None
 
 
+def refusal(what: str, *, found: Any, expected: Any = ...) -> str:
+    """The text of a refusal: what is wrong, the value found and, when the check knows it, the value expected."""
+    if expected is ...:
+        return f"{what}: found {found!r}."
+    return f"{what}: found {found!r}, expected {expected!r}."
+
+
 def expect_mapping(value: Any, name: str) -> dict[str, Any]:
     """Require a JSON object before reading its named artifact fields."""
     if not isinstance(value, dict):
@@ -207,6 +214,7 @@ def as_int(value: Any) -> int | None:
 
 __all__ = [
     "FileHash",
+    "refusal",
     "as_float_map",
     "as_int",
     "checked_number",

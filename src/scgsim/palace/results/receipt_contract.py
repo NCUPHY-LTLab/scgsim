@@ -10,6 +10,7 @@ from typing import Any
 
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
+    HANDOFF_METADATA,
     INDEX_MAP,
     NATIVE_METADATA,
     RETURNED_RECEIPT,
@@ -31,6 +32,7 @@ from scgsim.palace.results.artifacts import (
     expect_mapping,
     expect_scalar,
     extract_hash_map,
+    refusal,
     validate_timestamp,
 )
 from scgsim.palace.results.resolved_records import PalaceReturnedReceipt
@@ -52,34 +54,64 @@ class ReceiptValidation:
 
     def validate(self) -> None:
         """Verify receipt binding, success, artifacts, compatibility and logs in their original order."""
-        if (
-            expect_scalar(self.receipt_payload, "schema", str)
-            != RETURNED_RECEIPT_SCHEMA
-        ):
-            raise ValueError("returned run receipt schema is invalid.")
-        if (
-            expect_int(
-                self.receipt_payload.get("schema_version"),
-                "returned receipt schema_version",
-                optional=False,
+        schema = expect_scalar(self.receipt_payload, "schema", str)
+        if schema != RETURNED_RECEIPT_SCHEMA:
+            raise ValueError(
+                refusal(
+                    "returned run receipt schema is invalid",
+                    found=schema,
+                    expected=RETURNED_RECEIPT_SCHEMA,
+                )
             )
-            != 1
-        ):
-            raise ValueError("returned run receipt schema_version must be 1.")
+        schema_version = expect_int(
+            self.receipt_payload.get("schema_version"),
+            "returned receipt schema_version",
+            optional=False,
+        )
+        if schema_version != 1:
+            raise ValueError(
+                refusal(
+                    "returned run receipt schema_version must be 1",
+                    found=schema_version,
+                )
+            )
 
         status = expect_scalar(self.receipt_payload, "status", str)
         if status != "completed":
-            raise ValueError("returned run receipt status is not completed.")
-
-        if expect_scalar(self.receipt_payload, "route", str) != self.route:
-            raise ValueError("returned run receipt route mismatch.")
-        if expect_scalar(self.receipt_payload, "problem", str) != self.problem:
-            raise ValueError("returned run receipt problem mismatch.")
-        if self.receipt_payload.get("route_a_thin_film") != self.handoff_metadata.get(
-            "route_a_thin_film"
-        ):
             raise ValueError(
-                "returned run receipt Route-A thin-film identity mismatch."
+                refusal(
+                    "returned run receipt status is not completed",
+                    found=status,
+                    expected="completed",
+                )
+            )
+
+        route = expect_scalar(self.receipt_payload, "route", str)
+        if route != self.route:
+            raise ValueError(
+                refusal(
+                    "returned run receipt route mismatch",
+                    found=route,
+                    expected=self.route,
+                )
+            )
+        problem = expect_scalar(self.receipt_payload, "problem", str)
+        if problem != self.problem:
+            raise ValueError(
+                refusal(
+                    "returned run receipt problem mismatch",
+                    found=problem,
+                    expected=self.problem,
+                )
+            )
+        thin_film = self.receipt_payload.get("route_a_thin_film")
+        if thin_film != self.handoff_metadata.get("route_a_thin_film"):
+            raise ValueError(
+                refusal(
+                    "returned run receipt Route-A thin-film identity mismatch",
+                    found=thin_film,
+                    expected=self.handoff_metadata.get("route_a_thin_film"),
+                )
             )
 
         _validate_receipt_binding(
@@ -177,15 +209,33 @@ def validate_returned_state_agreement(
         ("run metadata", run_metadata),
         ("resource record", resource_record),
     ):
-        if expect_scalar(payload, "status", str) != receipt_status:
-            raise ValueError(f"{label} status does not match returned receipt.")
-        if expect_int(payload.get("exit_code"), f"{label} exit_code") != receipt_exit:
-            raise ValueError(f"{label} exit_code does not match returned receipt.")
-        if (
-            expect_mapping(payload.get("job_identity"), f"{label} job identity")
-            != receipt_job
-        ):
-            raise ValueError(f"{label} job identity does not match returned receipt.")
+        status = expect_scalar(payload, "status", str)
+        if status != receipt_status:
+            raise ValueError(
+                refusal(
+                    f"{label} status does not match returned receipt",
+                    found=status,
+                    expected=receipt_status,
+                )
+            )
+        exit_code = expect_int(payload.get("exit_code"), f"{label} exit_code")
+        if exit_code != receipt_exit:
+            raise ValueError(
+                refusal(
+                    f"{label} exit_code does not match returned receipt",
+                    found=exit_code,
+                    expected=receipt_exit,
+                )
+            )
+        job = expect_mapping(payload.get("job_identity"), f"{label} job identity")
+        if job != receipt_job:
+            raise ValueError(
+                refusal(
+                    f"{label} job identity does not match returned receipt",
+                    found=job,
+                    expected=receipt_job,
+                )
+            )
 
 
 def _required_output_records(
@@ -202,28 +252,52 @@ def _required_output_records(
 def validate_palace_identity(payload: Mapping[str, Any]) -> None:
     """Validate solver provenance without introducing version-based eligibility policy."""
     if not payload:
-        raise ValueError("palace_identity must be a non-empty mapping.")
+        raise ValueError(
+            refusal("palace_identity must be a non-empty mapping", found=payload)
+        )
     expect_scalar(payload, "config_schema", str)
     probe = payload.get("config_compatibility_probe")
     if probe is None:
         expect_scalar(payload, "runtime", str)
         return
     if probe != "native_dry_run":
-        raise ValueError("palace_identity config compatibility probe is invalid.")
-    if payload.get("config_compatibility_semantics") != "required_before_solve":
         raise ValueError(
-            "palace_identity must require config compatibility before solving."
+            refusal(
+                "palace_identity config compatibility probe is invalid",
+                found=probe,
+                expected="native_dry_run",
+            )
         )
-    if payload.get("runtime_identity_semantics") != "observed_provenance_only":
+    semantics = payload.get("config_compatibility_semantics")
+    if semantics != "required_before_solve":
         raise ValueError(
-            "palace_identity must treat runtime identity as observed provenance only."
+            refusal(
+                "palace_identity must require config compatibility before solving",
+                found=semantics,
+                expected="required_before_solve",
+            )
+        )
+    semantics = payload.get("runtime_identity_semantics")
+    if semantics != "observed_provenance_only":
+        raise ValueError(
+            refusal(
+                "palace_identity must treat runtime identity as observed provenance only",
+                found=semantics,
+                expected="observed_provenance_only",
+            )
         )
     if (
         payload.get("runtime") is not None
         or payload.get("runtime_git_commit") is not None
     ):
         raise ValueError(
-            "palace_identity must not declare a runtime version or Git eligibility Gate."
+            refusal(
+                "palace_identity must not declare a runtime version or Git eligibility Gate",
+                found={
+                    "runtime": payload.get("runtime"),
+                    "runtime_git_commit": payload.get("runtime_git_commit"),
+                },
+            )
         )
 
 
@@ -232,7 +306,13 @@ def validate_runtime_compatibility(
 ) -> None:
     """Bind successful native dry-run observations to the exact sealed config bytes."""
     if payload.get("schema") != RUNTIME_COMPATIBILITY_SCHEMA:
-        raise ValueError("Palace runtime compatibility schema is invalid.")
+        raise ValueError(
+            refusal(
+                f"Palace runtime compatibility schema in {RUNTIME_COMPATIBILITY} is invalid",
+                found=payload.get("schema"),
+                expected=RUNTIME_COMPATIBILITY_SCHEMA,
+            )
+        )
     config = expect_mapping(payload.get("config"), "runtime compatibility config")
     expected_config = {
         "path": CONFIG,
@@ -242,7 +322,11 @@ def validate_runtime_compatibility(
     }
     if config != expected_config:
         raise ValueError(
-            "Palace runtime compatibility probe does not bind the sealed config."
+            refusal(
+                "Palace runtime compatibility probe does not bind the sealed config",
+                found=config,
+                expected=expected_config,
+            )
         )
     compatibility = expect_mapping(
         payload.get("compatibility"), "runtime compatibility result"
@@ -252,7 +336,13 @@ def validate_runtime_compatibility(
         "probe_exit_code": 0,
         "verified": True,
     }:
-        raise ValueError("Palace did not accept the sealed config during dry-run.")
+        raise ValueError(
+            refusal(
+                "Palace did not accept the sealed config during dry-run; read the dry-run log in "
+                f"{RUNTIME_COMPATIBILITY}",
+                found=compatibility,
+            )
+        )
     observed = expect_mapping(
         payload.get("observed_identity"), "runtime observed identity"
     )
@@ -260,28 +350,61 @@ def validate_runtime_compatibility(
     runtime_binary_identity = observed.get("runtime_binary_identity")
     runtime_binary_sha256 = observed.get("runtime_binary_sha256")
     if (runtime_binary_identity is None) != (runtime_binary_sha256 is None):
-        raise ValueError("Palace runtime binary provenance must be complete or absent.")
+        raise ValueError(
+            refusal(
+                "Palace runtime binary provenance must be complete or absent",
+                found={
+                    "runtime_binary_identity": runtime_binary_identity,
+                    "runtime_binary_sha256": runtime_binary_sha256,
+                },
+            )
+        )
     if runtime_binary_identity is not None:
         if (
             not isinstance(runtime_binary_identity, str)
             or not runtime_binary_identity
             or Path(runtime_binary_identity).name != runtime_binary_identity
         ):
-            raise ValueError("Palace runtime binary identity must be a basename.")
+            raise ValueError(
+                refusal(
+                    "Palace runtime binary identity must be a basename",
+                    found=runtime_binary_identity,
+                )
+            )
         if (
             not isinstance(runtime_binary_sha256, str)
             or re.fullmatch(r"[0-9a-f]{64}", runtime_binary_sha256) is None
         ):
-            raise ValueError("Palace runtime binary SHA-256 is invalid.")
+            raise ValueError(
+                refusal(
+                    "Palace runtime binary SHA-256 is not 64 hex digits",
+                    found=runtime_binary_sha256,
+                )
+            )
     command = expect_mapping(payload.get("command"), "runtime compatibility command")
     if command.get("command_style") not in {"binary", "wrapper"}:
-        raise ValueError("Palace runtime compatibility command style is invalid.")
+        raise ValueError(
+            refusal(
+                "Palace runtime compatibility command style is invalid",
+                found=command.get("command_style"),
+                expected="binary or wrapper",
+            )
+        )
     executable_identity = expect_scalar(command, "executable_identity", str)
     if Path(executable_identity).name != executable_identity:
-        raise ValueError("Palace runtime executable must be a basename.")
+        raise ValueError(
+            refusal(
+                "Palace runtime executable must be a basename",
+                found=executable_identity,
+            )
+        )
     if runtime_binary_identity is not None and command.get("command_style") != "binary":
         raise ValueError(
-            "Palace runtime binary SHA may describe only the configured binary."
+            refusal(
+                "Palace runtime binary SHA may describe only the configured binary",
+                found=command.get("command_style"),
+                expected="binary",
+            )
         )
 
 
@@ -289,18 +412,37 @@ def _validate_log_and_solver_identity(receipt_payload: Any, root: Path) -> None:
     """Verify returned log bytes and solver identity against the native Palace JSON."""
     log = expect_mapping(receipt_payload.get("log"), "return_receipt.log")
     if not log:
-        raise ValueError("returned run receipt log entry is missing.")
+        raise ValueError(
+            refusal(
+                f"returned run receipt log entry in {RETURNED_RECEIPT} is missing",
+                found=log,
+            )
+        )
     log_path = expect_scalar(log, "path", str)
     log_expected = FileHash(
         expect_scalar(log, "bytes", int), expect_scalar(log, "sha256", str)
     )
     log_observed = compute_hash_entry(confined_path(root, log_path))
     if log_expected != log_observed:
-        raise ValueError(f"returned run receipt log hash mismatch for {log_path}.")
+        raise ValueError(
+            refusal(
+                f"returned run receipt log hash mismatch for {log_path}",
+                found=log_observed,
+                expected=log_expected,
+            )
+        )
     if log_path == "":
-        raise ValueError("returned run receipt log path must be non-empty.")
+        raise ValueError(
+            refusal("returned run receipt log path must be non-empty", found=log_path)
+        )
     if expect_scalar(log, "present", bool) is not True:
-        raise ValueError("returned run receipt log is not present.")
+        raise ValueError(
+            refusal(
+                f"returned run receipt log {log_path} is not present",
+                found=log.get("present"),
+                expected=True,
+            )
+        )
 
     receipt_identity = expect_mapping(
         receipt_payload.get("solver_identity"), "receipt.solver_identity"
@@ -313,7 +455,11 @@ def _validate_log_and_solver_identity(receipt_payload: Any, root: Path) -> None:
     }
     if not expected_identity or receipt_identity != expected_identity:
         raise ValueError(
-            f"returned run receipt solver identity does not match {Path(NATIVE_METADATA).name}."
+            refusal(
+                f"returned run receipt solver identity does not match {Path(NATIVE_METADATA).name}",
+                found=receipt_identity,
+                expected=expected_identity,
+            )
         )
 
 
@@ -326,9 +472,21 @@ def _validate_completed_runtime(
     )
     if declared_palace_identity.get("config_compatibility_probe") is not None:
         if receipt_payload.get("execution_stage") != "solver":
-            raise ValueError("completed Palace receipt execution_stage must be solver.")
+            raise ValueError(
+                refusal(
+                    "completed Palace receipt execution_stage must be solver",
+                    found=receipt_payload.get("execution_stage"),
+                    expected="solver",
+                )
+            )
         if receipt_payload.get("solver_invoked") is not True:
-            raise ValueError("completed Palace receipt must record solver invocation.")
+            raise ValueError(
+                refusal(
+                    "completed Palace receipt must record solver invocation",
+                    found=receipt_payload.get("solver_invoked"),
+                    expected=True,
+                )
+            )
         if (
             expect_int(
                 receipt_payload.get("preflight_exit_code"),
@@ -337,11 +495,19 @@ def _validate_completed_runtime(
             != 0
         ):
             raise ValueError(
-                "completed Palace receipt config compatibility preflight must pass."
+                refusal(
+                    "completed Palace receipt config compatibility preflight must pass",
+                    found=receipt_payload.get("preflight_exit_code"),
+                    expected=0,
+                )
             )
         if RUNTIME_COMPATIBILITY not in output_map:
             raise ValueError(
-                "returned run receipt misses the Palace runtime compatibility artifact."
+                refusal(
+                    "returned run receipt misses the Palace runtime compatibility artifact",
+                    found=sorted(output_map),
+                    expected=f"an entry for {RUNTIME_COMPATIBILITY}",
+                )
             )
         runtime_compatibility = expect_mapping(
             receipt_payload.get("runtime_compatibility"),
@@ -350,8 +516,12 @@ def _validate_completed_runtime(
         runtime_artifact = read_json(confined_path(root, RUNTIME_COMPATIBILITY))
         if runtime_compatibility != runtime_artifact:
             raise ValueError(
-                "returned run receipt Palace runtime compatibility does not match "
-                "its artifact."
+                refusal(
+                    "returned run receipt Palace runtime compatibility does not match "
+                    f"its artifact {RUNTIME_COMPATIBILITY}",
+                    found=runtime_compatibility,
+                    expected=runtime_artifact,
+                )
             )
         validate_runtime_compatibility(
             runtime_compatibility, declared_palace_identity, root=root
@@ -370,8 +540,11 @@ def _validate_completed_runtime(
             "executable_identity"
         ):
             raise ValueError(
-                "Palace compatibility probe executable does not match the handoff "
-                "command."
+                refusal(
+                    "Palace compatibility probe executable does not match the handoff command",
+                    found=runtime_command.get("executable_identity"),
+                    expected=expected_command.get("executable_identity"),
+                )
             )
         resources = expect_mapping(
             handoff_metadata.get("requested_resources"), "handoff requested_resources"
@@ -380,7 +553,11 @@ def _validate_completed_runtime(
             "command_style", "binary"
         ):
             raise ValueError(
-                "Palace compatibility probe command style does not match the handoff."
+                refusal(
+                    "Palace compatibility probe command style does not match the handoff",
+                    found=runtime_command.get("command_style"),
+                    expected=resources.get("command_style", "binary"),
+                )
             )
 
 
@@ -410,12 +587,23 @@ def _validate_returned_outputs(
     for entry in output_files:
         data = expect_mapping(entry, "returned receipt output entry")
         if expect_scalar(data, "present", bool) is not True:
-            raise ValueError("returned run receipt lists a missing required output.")
+            raise ValueError(
+                refusal(
+                    "returned run receipt lists a missing required output",
+                    found=data.get("path"),
+                )
+            )
 
     for rel, expected in output_map.items():
         observed = compute_hash_entry(confined_path(root, rel))
         if observed != expected:
-            raise ValueError(f"returned run receipt output hash mismatch for {rel}")
+            raise ValueError(
+                refusal(
+                    f"returned run receipt output hash mismatch for {rel}",
+                    found=observed,
+                    expected=expected,
+                )
+            )
     return output_map
 
 
@@ -435,17 +623,35 @@ def _validate_returned_inputs(
     )
     if expected_input_map != configured_input_map:
         raise ValueError(
-            "returned run receipt input hashes do not match metadata hashes."
+            refusal(
+                f"returned run receipt input hashes do not match the hashes of {HANDOFF_METADATA}",
+                found=expected_input_map,
+                expected=configured_input_map,
+            )
         )
     for name, expected in expected_input_map.items():
         observed = compute_input_hash_entry(root, name)
         if expected != observed:
-            raise ValueError(f"returned run receipt input hash mismatch for {name}.")
+            raise ValueError(
+                refusal(
+                    f"returned run receipt input hash mismatch for {name}",
+                    found=observed,
+                    expected=expected,
+                )
+            )
 
-    if expect_scalar(handoff_metadata, "route", str) != route:
-        raise ValueError("handoff metadata route mismatch.")
-    if expect_scalar(run_metadata, "route", str) != route:
-        raise ValueError("run metadata route mismatch.")
+    handoff_route = expect_scalar(handoff_metadata, "route", str)
+    if handoff_route != route:
+        raise ValueError(
+            refusal(
+                "handoff metadata route mismatch", found=handoff_route, expected=route
+            )
+        )
+    run_route = expect_scalar(run_metadata, "route", str)
+    if run_route != route:
+        raise ValueError(
+            refusal("run metadata route mismatch", found=run_route, expected=route)
+        )
 
 
 def _validate_success_and_job(receipt_payload: Any) -> None:
@@ -455,22 +661,34 @@ def _validate_success_and_job(receipt_payload: Any) -> None:
     )
     if exit_code != 0:
         raise ValueError(
-            "returned run receipt exit_code must be zero for completed runs."
+            refusal(
+                "returned run receipt exit_code must be zero for completed runs",
+                found=exit_code,
+                expected=0,
+            )
         )
-    if (
-        expect_int(
-            receipt_payload.get("solver_exit_code"), "returned receipt solver_exit_code"
+    solver_exit_code = expect_int(
+        receipt_payload.get("solver_exit_code"), "returned receipt solver_exit_code"
+    )
+    if solver_exit_code != 0:
+        raise ValueError(
+            refusal(
+                "returned run receipt solver_exit_code must be zero",
+                found=solver_exit_code,
+                expected=0,
+            )
         )
-        != 0
-    ):
-        raise ValueError("returned run receipt solver_exit_code must be zero.")
-    if (
-        expect_int(
-            receipt_payload.get("tee_exit_code"), "returned receipt tee_exit_code"
+    tee_exit_code = expect_int(
+        receipt_payload.get("tee_exit_code"), "returned receipt tee_exit_code"
+    )
+    if tee_exit_code != 0:
+        raise ValueError(
+            refusal(
+                "returned run receipt tee_exit_code must be zero",
+                found=tee_exit_code,
+                expected=0,
+            )
         )
-        != 0
-    ):
-        raise ValueError("returned run receipt tee_exit_code must be zero.")
 
     validate_timestamp(
         expect_scalar(receipt_payload, "timestamp_utc", str), "timestamp_utc"
@@ -479,9 +697,19 @@ def _validate_success_and_job(receipt_payload: Any) -> None:
         receipt_payload.get("job_identity"), "returned receipt job_identity"
     )
     if expect_scalar(job_identity, "job_id", str, fallback="") == "":
-        raise ValueError("returned run receipt job_id must be a non-empty string.")
+        raise ValueError(
+            refusal(
+                "returned run receipt job_id must be a non-empty string",
+                found=job_identity.get("job_id"),
+            )
+        )
     if expect_scalar(job_identity, "job_name", str, fallback="") == "":
-        raise ValueError("returned run receipt job_name must be a non-empty string.")
+        raise ValueError(
+            refusal(
+                "returned run receipt job_name must be a non-empty string",
+                found=job_identity.get("job_name"),
+            )
+        )
 
 
 def _validate_receipt_binding(
@@ -495,26 +723,58 @@ def _validate_receipt_binding(
         expect_scalar(run_metadata, "handoff_id", str, fallback="")
         != expected_handoff_id
     ):
-        raise ValueError("run metadata handoff_id does not match expected_handoff_id.")
+        raise ValueError(
+            refusal(
+                "run metadata handoff_id does not match expected_handoff_id",
+                found=run_metadata.get("handoff_id"),
+                expected=expected_handoff_id,
+            )
+        )
     if (
         expect_scalar(handoff_metadata, "handoff_id", str, fallback="")
         != expected_handoff_id
     ):
         raise ValueError(
-            "handoff metadata handoff_id does not match expected_handoff_id."
+            refusal(
+                "handoff metadata handoff_id does not match expected_handoff_id",
+                found=handoff_metadata.get("handoff_id"),
+                expected=expected_handoff_id,
+            )
         )
     if handoff_metadata.get("returned_receipt_path") != RETURNED_RECEIPT:
-        raise ValueError("handoff metadata returned_receipt_path is incorrect.")
+        raise ValueError(
+            refusal(
+                "handoff metadata returned_receipt_path is incorrect",
+                found=handoff_metadata.get("returned_receipt_path"),
+                expected=RETURNED_RECEIPT,
+            )
+        )
     if run_metadata.get("returned_receipt_path") != RETURNED_RECEIPT:
-        raise ValueError("run metadata returned_receipt_path is incorrect.")
+        raise ValueError(
+            refusal(
+                "run metadata returned_receipt_path is incorrect",
+                found=run_metadata.get("returned_receipt_path"),
+                expected=RETURNED_RECEIPT,
+            )
+        )
 
     handoff_id = expect_scalar(receipt_payload, "handoff_id", str)
     if handoff_id != expected_handoff_id:
         raise ValueError(
-            "returned run receipt handoff_id does not match expected_handoff_id."
+            refusal(
+                "returned run receipt handoff_id does not match expected_handoff_id",
+                found=handoff_id,
+                expected=expected_handoff_id,
+            )
         )
     if expect_scalar(receipt_payload, "identity_verified", bool) is not True:
-        raise ValueError("returned run receipt identity is not verified.")
+        raise ValueError(
+            refusal(
+                "returned run receipt identity is not verified",
+                found=receipt_payload.get("identity_verified"),
+                expected=True,
+            )
+        )
 
 
 def _validate_observed_version(observed: Any) -> None:
@@ -523,17 +783,30 @@ def _validate_observed_version(observed: Any) -> None:
     if native_git_tag is not None and (
         not isinstance(native_git_tag, str) or not native_git_tag
     ):
-        raise ValueError("Palace observed native GitTag must be a non-empty string.")
+        raise ValueError(
+            refusal(
+                "Palace observed native GitTag must be a non-empty string",
+                found=native_git_tag,
+            )
+        )
     native_schema_version = observed.get("native_schema_version")
     if native_schema_version is not None and (
         not isinstance(native_schema_version, str) or not native_schema_version
     ):
         raise ValueError(
-            "Palace observed native schema version must be non-empty text or null"
+            refusal(
+                "Palace observed native schema version must be non-empty text or null",
+                found=native_schema_version,
+            )
         )
     version_probe_exit_code = observed.get("version_probe_exit_code")
     if version_probe_exit_code is not None and (
         isinstance(version_probe_exit_code, bool)
         or not isinstance(version_probe_exit_code, int)
     ):
-        raise ValueError("Palace version probe exit code must be an integer or null.")
+        raise ValueError(
+            refusal(
+                "Palace version probe exit code must be an integer or null",
+                found=version_probe_exit_code,
+            )
+        )
