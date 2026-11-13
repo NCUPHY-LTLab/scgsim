@@ -216,8 +216,7 @@ class _Assembly:
         for (level, ei), interior in sorted(splits.items()):
             layer = self.A[level]
             edge = layer.arr.edges[ei]
-            carriers = sorted(edge.carriers)
-            arc: ArcCarrier = arcs[carriers[0]]
+            arc: ArcCarrier = arcs[min(edge.carriers).id]
             root = arcs.get(arc.root_id, arc)
             points = [edge.a, *interior, edge.b]
             sources = layer.edge_sources[ei]
@@ -549,14 +548,14 @@ class _Assembly:
         for layer in self.A:
             for edge, face_index in layer.dissolved.refinement:
                 face = self.faces.get(layer.face_ids[face_index])
-                carriers = ", ".join(sorted(edge.carriers))
+                sources = tuple(sorted(c.id for c in edge.carriers))
+                carriers = ", ".join(sources)
                 where = f"({self.grid.to_um(edge.a[0]):.4f}, {self.grid.to_um(edge.a[1]):.4f}) um on {layer.plane}"
                 if face is None:
                     raise SgbError(
                         f"refinement curve {carriers} at {where} lies in a cell that has no face (inside a "
                         "volume): it cannot be embedded and is not dropped silently"
                     )
-                sources = tuple(sorted(edge.carriers))
                 eid = identity.edge_id(layer.plane, edge.a, edge.b, sources)
                 ids = []
                 for p in (edge.a, edge.b):

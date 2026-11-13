@@ -3,8 +3,10 @@
 A carrier keeps its exact definition (line through two integer points, or a
 circular arc of a circle) and a lineage record naming the source entity,
 polygon, ring and edge it came from, or the cut-family member that generated
-it.  Arrangement edges refer to carriers by id, so every edge can be traced
-back to the source curve it belongs to.
+it.  Arrangement edges hold :class:`EdgeCarrier` values -- a carrier's id with
+its role and, for a piece of a curve, the curve and the piece number -- so every
+edge can be traced back to the source curve it belongs to, and no stage reads a
+role or a curve back out of an id.
 
 Circular arcs are noded through a polyline witness (chords with sagitta at most
 a quarter of the grid): the chord pieces carry ids ``<arc id>#<k>`` and merge
@@ -14,8 +16,9 @@ back into one arc edge after dissolution (see ``arrangement.arcs``).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
+from enum import Enum
 from fractions import Fraction
 from functools import lru_cache
 from typing import Literal
@@ -23,11 +26,9 @@ from typing import Literal
 from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records import circle_math
 
-MEMBER_ONLY = "~m:"
-"""Prefix of carrier ids that exist only to cut cells for area-weighted membership; never required."""
-
 PIECE_SEPARATOR = "#"
-"""Separator in the id of the k-th witness chord of an arc carrier: ``<arc id>#<k>``."""
+"""Separator in the id of the k-th witness chord of an arc carrier: ``<arc id>#<k>``; ids are written with it,
+never split at it (the curve and the piece number are fields of :class:`EdgeCarrier`)."""
 
 WITNESS_SAGITTA = 0.25
 """Largest sagitta of a witness chord, in grid units."""
@@ -87,19 +88,87 @@ class Lineage:
         return f"{self.family_id}/{self.member}"
 
 
+class CarrierRole(Enum):
+    """What a carrier of an arrangement edge stands for, so that a stage reads it from a field, never from an id."""
+
+    CURVE = "curve"
+    """A source edge or arc, or a cut-family member: a curve SGB keeps a record of."""
+    SLAB_EDGE = "slab_edge"
+    """An edge of a slab arrangement entering a level arrangement (its id is ``linking.TAG`` + the edge id); it is
+    how assembly finds the level edges that cover a slab edge."""
+    MEMBERSHIP = "membership"
+    """A slab edge that dissolved, entering a level arrangement only to cut cells for area-weighted membership;
+    never required."""
+    SUPPORT_BOUNDARY = "support_boundary"
+    """The boundary of an inset family's support, in the arrangement of one margin (never a seam)."""
+    PORT_BOUNDARY = "port_boundary"
+    """A port footprint boundary, in the arrangement of one margin (a clip boundary, never an origin)."""
+
+
+@dataclass(frozen=True, order=True)
+class EdgeCarrier:
+    """One carrier of an arrangement edge: its id, its role and, for a piece of a curve, the curve and the piece.
+
+    Equality, hashing and order are those of ``id`` alone, so a set of carriers and its sorted order are those of
+    their ids.  ``curve`` is the id of the curve a piece belongs to (an arc, for its ``k``-th witness chord), and
+    ``piece`` its number along it; both are empty for a carrier that is a whole curve.  :meth:`whole` is the
+    carrier of the curve itself, which dissolution merges consecutive pieces into.
+    """
+
+    id: str
+    role: CarrierRole = field(default=CarrierRole.CURVE, compare=False)
+    curve: str = field(default="", compare=False)
+    piece: int | None = field(default=None, compare=False)
+
+    @property
+    def curve_id(self) -> str:
+        """The id of the curve this carrier lies on: the curve of a piece, else its own id."""
+        return self.curve or self.id
+
+    def whole(self) -> EdgeCarrier:
+        """The carrier of the curve this carrier is a piece of (itself when it is a whole curve)."""
+        return self if self.piece is None else EdgeCarrier(self.curve, self.role)
+
+
+def piece_carriers(
+    curve_id: str, count: int, role: CarrierRole = CarrierRole.CURVE
+) -> list[EdgeCarrier]:
+    """The carriers of the ``count`` pieces of a curve, in order: ids ``<curve id>#<k>``."""
+    return [
+        EdgeCarrier(f"{curve_id}{PIECE_SEPARATOR}{k}", role, curve_id, k)
+        for k in range(count)
+    ]
+
+
 @dataclass(frozen=True)
 class LineCarrier:
-    """A straight curve with exact integer endpoints and a lineage record."""
+    """A straight curve with exact integer endpoints and a lineage record.
+
+    ``curve`` and ``piece`` are set on a witness chord of a source arc: the arc's id and the chord's number along
+    it.  :meth:`edge_carrier` is what the carrier enters an arrangement as.
+    """
 
     id: str
     p: Point
     q: Point
     lineage: Lineage
+    curve: str = ""
+    piece: int | None = None
+
+    def edge_carrier(self) -> EdgeCarrier:
+        """This carrier as an arrangement edge holds it."""
+        return EdgeCarrier(self.id, CarrierRole.CURVE, self.curve, self.piece)
 
 
-def base_carrier_id(carrier_id: str) -> str:
-    """Id of the carrier a (possibly witness-piece) carrier id belongs to."""
-    return carrier_id.split(PIECE_SEPARATOR, 1)[0]
+@dataclass(frozen=True)
+class KnownCarrier:
+    """What the catalogue records about one carrier id: its lineage and the curve it lies on.
+
+    ``curve`` is the carrier's own id for a whole curve, and the arc's id for a witness chord of an arc.
+    """
+
+    lineage: Lineage
+    curve: str
 
 
 @dataclass(frozen=True)
@@ -173,10 +242,10 @@ class ArcCarrier:
         """
         return list(_witness(self.centre, self.radius, self.ccw, self.start, self.end))
 
-    def piece_ids(self) -> list[str]:
-        """Carrier ids of the witness chords, in order from start to end."""
+    def pieces(self, role: CarrierRole = CarrierRole.CURVE) -> list[EdgeCarrier]:
+        """The carriers of the witness chords, in order from start to end (ids ``<arc id>#<k>``)."""
         witness = _witness(self.centre, self.radius, self.ccw, self.start, self.end)
-        return [f"{self.id}{PIECE_SEPARATOR}{k}" for k in range(len(witness) - 1)]
+        return piece_carriers(self.id, len(witness) - 1, role)
 
 
 def _start_and_sweep(

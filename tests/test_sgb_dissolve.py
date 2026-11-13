@@ -10,6 +10,7 @@ from scgsim.geometry.sgb.errors import OverlapError
 from scgsim.geometry.sgb.labelling.dissolve import FamilyPolicies, dissolve
 from scgsim.geometry.sgb.labelling.prism_set import PrismSet, resolve_domain
 from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
+from scgsim.geometry.sgb.records.carriers import EdgeCarrier
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import Footprint, PrismRecord
@@ -52,7 +53,9 @@ def label_cells(arr, prisms):
 def arrange(prisms, extra=()):
     """Noded arrangement of every prism boundary plus extra segments."""
     segments = [
-        Segment(c.p, c.q, frozenset([c.id])) for p in prisms for c in p.carriers()
+        Segment(c.p, c.q, frozenset([c.edge_carrier()]))
+        for p in prisms
+        for c in p.carriers()
     ]
     return build_arrangement(snap_round([*segments, *extra]).edges)
 
@@ -174,7 +177,9 @@ def test_required_family_edge_survives_dissolution_but_plain_edges_do_not():
         prism("p", rect(0, 0, 100, 100)),
         prism("p", rect(0, 0, 100, 100), polygon=1),
     ]
-    arr = arrange(prisms, [Segment((50, 0), (50, 100), frozenset(["fam"]))])
+    arr = arrange(
+        prisms, [Segment((50, 0), (50, 100), frozenset([EdgeCarrier("fam")]))]
+    )
     labels = label_cells(arr, prisms)
     assert len(arr.faces) - 1 == 2
     kept = dissolve(arr, labels, FamilyPolicies(required=frozenset(["fam"])))
@@ -189,7 +194,9 @@ def test_required_family_edge_survives_dissolution_but_plain_edges_do_not():
 def test_refinement_only_edges_are_kept_aside_without_splitting_the_cell():
     """Refinement only edges are kept aside without splitting the cell."""
     prisms = [prism("p", rect(0, 0, 100, 100))]
-    arr = arrange(prisms, [Segment((50, 10), (50, 90), frozenset(["ref"]))])
+    arr = arrange(
+        prisms, [Segment((50, 10), (50, 90), frozenset([EdgeCarrier("ref")]))]
+    )
     labels = label_cells(arr, prisms)
     dissolved = dissolve(
         arr, labels, FamilyPolicies(refinement_only=frozenset(["ref"]))

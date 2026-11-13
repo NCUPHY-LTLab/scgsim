@@ -34,7 +34,7 @@ from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.labelling.prism_set import named_entities
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.plane import Point
-from scgsim.geometry.sgb.records.carriers import Lineage, base_carrier_id
+from scgsim.geometry.sgb.records.carriers import Lineage
 from scgsim.geometry.sgb.records.labels import Domain
 from scgsim.geometry.sgb.section.frame import Along, CutFrame
 
@@ -372,25 +372,18 @@ class CurveNames:
         catalogue = model.labelled.catalogue
         self._grid = catalogue.grid
         self._prisms = catalogue.prisms
-        self._lineage: dict[str, Lineage] = {}
-        for prism in catalogue.prisms:
-            for carrier in prism.carriers():
-                self._lineage[base_carrier_id(carrier.id)] = carrier.lineage
-            for arc in prism.arcs:
-                self._lineage[arc.id] = arc.lineage
-        for family in catalogue.families:
-            for carrier in family.carriers:
-                self._lineage[carrier.id] = carrier.lineage
-            for arc in family.arcs:
-                self._lineage[arc.id] = arc.lineage
+        self._lineage: dict[str, Lineage] = {
+            carrier_id: known.lineage
+            for carrier_id, known in catalogue.known_carriers().items()
+        }
 
     def curves(self, edges: Iterable[TopoEdge], z: Fraction) -> str:
         """The Entities (with their source layers) and the band seams that drew ``edges`` at level ``z``."""
         lineages = [
-            self._lineage[base]
+            self._lineage[carrier]
             for edge in edges
             for carrier in edge.sources
-            if (base := base_carrier_id(carrier)) in self._lineage
+            if carrier in self._lineage
         ]
         entities = sorted(
             {ln.entity_id for ln in lineages if ln.kind == "polygon_edge"}
@@ -410,8 +403,7 @@ class CurveNames:
     def is_band_seam(self, edge: TopoEdge) -> bool:
         """Whether an edge comes from a Surface-EPR band seam."""
         return any(
-            (ln := self._lineage.get(base_carrier_id(c))) is not None
-            and ln.band_member is not None
+            (ln := self._lineage.get(c)) is not None and ln.band_member is not None
             for c in edge.sources
         )
 

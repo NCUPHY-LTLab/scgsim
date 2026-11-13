@@ -5,11 +5,12 @@ slab arrangements below and above it, the sheets lying on the level and the
 cut families targeting it: snap-rounded edges, half-edge faces, labels linked
 from the slab cells, dissolution, membership, ids and realised arcs.
 
-A level arrangement receives each slab edge as a carrier tagged ``~<edge id>``;
-that tag is how assembly later finds the chain of level edges that covers a slab
-edge (the wall bottom and top).  The raw slab edges that dissolved enter as
-membership-only carriers: they cut the level cells along every prism boundary, so
-each cell lies wholly inside or outside every footprint and coverage is exact.
+A level arrangement receives each slab edge as a carrier of role ``SLAB_EDGE``
+(id ``~<edge id>``); that carrier is how assembly later finds the chain of level
+edges that covers a slab edge (the wall bottom and top).  The raw slab edges that
+dissolved enter as carriers of role ``MEMBERSHIP``: they cut the level cells along
+every prism boundary, so each cell lies wholly inside or outside every footprint
+and coverage is exact.
 """
 
 from __future__ import annotations
@@ -40,14 +41,18 @@ from scgsim.geometry.sgb.labelling.prism_set import PrismSet, without_landings
 from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.prisms.levels import LevelStructure
 from scgsim.geometry.sgb.records.carriers import (
-    MEMBER_ONLY,
     ArcCarrier,
-    base_carrier_id,
+    CarrierRole,
+    EdgeCarrier,
+    piece_carriers,
 )
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 from scgsim.geometry.sgb.records.labels import LevelLabel, SheetOwner
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.stopwatch import Stopwatch
+
+MEMBERSHIP_PREFIX = "~m:"
+"""Prefix of the id of a slab's membership curve (written, never read: the role is ``CarrierRole.MEMBERSHIP``)."""
 
 
 @dataclass
@@ -189,7 +194,8 @@ def _level_segments(
             segments.extend(_member_segments(slabs[slab_index]))
     for i in levels.level_sheets[level]:
         segments.extend(
-            Segment(c.p, c.q, frozenset([c.id])) for c in catalogue.prisms[i].carriers()
+            Segment(c.p, c.q, frozenset([c.edge_carrier()]))
+            for c in catalogue.prisms[i].carriers()
         )
     required: set[str] = set()
     refinement: set[str] = set()
@@ -198,17 +204,17 @@ def _level_segments(
         policy = required if family.edge_policy == "required" else refinement
         for segment in family_segments(family):
             segments.append(segment)
-            policy.update(base_carrier_id(c) for c in segment.carriers)
+            policy.update(c.curve_id for c in segment.carriers)
     return segments, FamilyPolicies(frozenset(required), frozenset(refinement))
 
 
 def family_segments(family: CurveFamilyRecord) -> list[Segment]:
     """The segments a cut family enters its level's noding as: each line whole, each arc as its witness chords."""
-    members = [(c.id, c.p, c.q) for c in family.carriers]
+    members = [(c.edge_carrier(), c.p, c.q) for c in family.carriers]
     for arc in family.arcs:
         points = arc.witness_points()
-        members.extend(zip(arc.piece_ids(), points, points[1:], strict=False))
-    return [Segment(p, q, frozenset([carrier_id])) for carrier_id, p, q in members]
+        members.extend(zip(arc.pieces(), points, points[1:], strict=False))
+    return [Segment(p, q, frozenset([carrier])) for carrier, p, q in members]
 
 
 def _slab_edge_segments(slab: Layer, arcs: dict[str, ArcCarrier]) -> list[Segment]:
@@ -221,19 +227,32 @@ def _slab_edge_segments(slab: Layer, arcs: dict[str, ArcCarrier]) -> list[Segmen
             segments.extend(
                 Segment(p, q, frozenset([piece]))
                 for piece, p, q in zip(
-                    arcs[tag].piece_ids(), points, points[1:], strict=False
+                    arcs[tag].pieces(CarrierRole.SLAB_EDGE),
+                    points,
+                    points[1:],
+                    strict=False,
                 )
             )
         else:
-            segments.append(Segment(edge.a, edge.b, frozenset([tag])))
+            carrier = EdgeCarrier(tag, CarrierRole.SLAB_EDGE)
+            segments.append(Segment(edge.a, edge.b, frozenset([carrier])))
     return segments
 
 
 def _member_segments(slab: Layer) -> list[Segment]:
-    """Raw slab edges that dissolved, as membership-only carriers (never required; they dissolve again)."""
+    """Raw slab edges that dissolved, as membership carriers (never required; they dissolve again).
+
+    They are the pieces of one membership curve per slab (``~m:<plane>#<i>``), so dissolution merges a chain of
+    them like the pieces of an arc.
+    """
+    carriers = piece_carriers(
+        f"{MEMBERSHIP_PREFIX}{slab.plane}",
+        len(slab.removed_edges),
+        CarrierRole.MEMBERSHIP,
+    )
     return [
-        Segment(e.a, e.b, frozenset([f"{MEMBER_ONLY}{slab.plane}#{i}"]))
-        for i, e in enumerate(slab.removed_edges)
+        Segment(e.a, e.b, frozenset([carrier]))
+        for carrier, e in zip(carriers, slab.removed_edges, strict=True)
     ]
 
 

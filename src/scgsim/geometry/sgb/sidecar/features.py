@@ -44,7 +44,6 @@ from scgsim.geometry.sgb.emission.plan import BrepPlan
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.sidecar.derived import edge_sources
-from scgsim.geometry.sgb.sidecar.groups import face_kind
 from scgsim.geometry.sgb.sidecar.lineage import (
     BAND_FAMILY_ROLE,
     REFINEMENT_FAMILY_ROLE,
@@ -72,7 +71,7 @@ def mesh_features(
     """The mesh features of the emitted edges, by id."""
     tag_of = {edge_id: tag for tag, edge_id in enumerate(plan.edge_ids, start=1)}
     stated: list[_Stated] = [
-        *_film_sidewalls(model.topology, plan),
+        *_film_sidewalls(model, plan),
         *_family_features(model, plan, lineage),
         *_arcs(model, plan, lineage),
         *_port_edges(model.topology, ports),
@@ -109,12 +108,13 @@ def _feature_id(kind: str, source: str | None, facts: dict[str, Any]) -> str:
 # --------------------------------------------------------------------------- film sidewalls
 
 
-def _film_sidewalls(topology: Topology, plan: BrepPlan) -> Iterator[_Stated]:
+def _film_sidewalls(model: ConformalModel, plan: BrepPlan) -> Iterator[_Stated]:
     """One feature per (body, column thickness): all edges of the sidewall faces of that body's columns."""
+    topology = model.topology
     walls_of_body: dict[str, list[TopoFace]] = defaultdict(list)
     for face_id in plan.face_ids:
         face = topology.faces[face_id]
-        if face_kind(face) == "sidewall":
+        if model.routed.faces[face_id].face_kind == "sidewall":
             for body in _film_bodies(face):
                 walls_of_body[body].append(face)
     for body, walls in sorted(walls_of_body.items()):

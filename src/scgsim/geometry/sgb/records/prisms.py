@@ -20,6 +20,7 @@ from typing import Literal
 from scgsim.geometry.sgb.plane import Point, Ring, ring_twice_area
 from scgsim.geometry.sgb.records.carriers import (
     ArcCarrier,
+    KnownCarrier,
     Lineage,
     LineCarrier,
     LineEdge,
@@ -261,10 +262,15 @@ class PrismRecord:
                 edge += 1
                 continue
             arc = arcs[run.arc_id]
-            for piece in arc.piece_ids():
+            for piece in arc.pieces():
                 carriers.append(
                     LineCarrier(
-                        piece, ring[edge], ring[(edge + 1) % count], arc.lineage
+                        piece.id,
+                        ring[edge],
+                        ring[(edge + 1) % count],
+                        arc.lineage,
+                        piece.curve,
+                        piece.piece,
                     )
                 )
                 edge += 1
@@ -279,6 +285,28 @@ class PrismCatalogue:
     prisms: tuple[PrismRecord, ...]
     families: tuple[CurveFamilyRecord, ...] = ()
     name: str = "model"
+
+    def known_carriers(self) -> dict[str, KnownCarrier]:
+        """Every carrier id the catalogue makes, with its lineage and the curve it lies on.
+
+        Prism boundary edges (straight edges and the witness chords of arcs), prism arcs, family lines, family
+        arcs and the witness chords of family arcs.  Assembly, the 2D section and the sidecar read where a carrier
+        id on an edge comes from here, never from the id.
+        """
+        known: dict[str, KnownCarrier] = {}
+        for prism in self.prisms:
+            for line in prism.carriers():
+                known[line.id] = KnownCarrier(line.lineage, line.curve or line.id)
+            for arc in prism.arcs:
+                known[arc.id] = KnownCarrier(arc.lineage, arc.id)
+        for family in self.families:
+            for line in family.carriers:
+                known[line.id] = KnownCarrier(line.lineage, line.id)
+            for arc in family.arcs:
+                known[arc.id] = KnownCarrier(arc.lineage, arc.id)
+                for piece in arc.pieces():
+                    known[piece.id] = KnownCarrier(arc.lineage, arc.id)
+        return known
 
     def arc_registry(self) -> dict[str, ArcCarrier]:
         """Every source arc carrier by id (prism arcs and curve-family arcs)."""

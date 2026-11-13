@@ -331,7 +331,7 @@ def _figure_shells(numbers: dict) -> None:
             return ("horizontal face (cell of a level arrangement)", "#9ecae1")
         if spans[fid] > 1:
             return ("wall coalesced over more than one slab", PALETTE["accent"])
-        if model.routed.face_group[fid].startswith("EXT"):
+        if model.routed.faces[fid].interface_type == "EXT":
             return ("wall on the outer chip boundary", "#bdbdbd")
         return ("wall of one slab", "#3a6ea5")
 

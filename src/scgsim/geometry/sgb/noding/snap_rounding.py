@@ -15,7 +15,7 @@ Algorithm (Hobby 1999; Guibas and Marimont 1998; Halperin and Packer 2002):
   segment missed, so the process is iterated until nothing changes.  Each round
   only re-examines edges that changed in the previous round or that touch a
   newly hot pixel.
-* Every output edge keeps the set of carrier ids of the input segments that
+* Every output edge keeps the set of carriers of the input segments that
   produced it; coincident output edges merge their carrier sets.
 
 The two heavy kernels (crossing detection, hot-pixel hit search) are pure
@@ -38,6 +38,7 @@ from scgsim.geometry.sgb.noding.spatial_hash import (
     points_extent,
 )
 from scgsim.geometry.sgb.plane import Point
+from scgsim.geometry.sgb.records.carriers import EdgeCarrier
 from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 EdgeKey = tuple[Point, Point]  # canonical: a < b lexicographically
@@ -46,19 +47,19 @@ MAX_ROUNDS = 500
 
 
 class Segment(NamedTuple):
-    """An input segment with the ids of the carriers it came from."""
+    """An input segment with the carriers it came from."""
 
     a: Point
     b: Point
-    carriers: frozenset[str]
+    carriers: frozenset[EdgeCarrier]
 
 
 class NodedEdge(NamedTuple):
-    """An output edge between two grid points (``a < b``) with its carrier ids."""
+    """An output edge between two grid points (``a < b``) with its carriers."""
 
     a: Point
     b: Point
-    carriers: frozenset[str]
+    carriers: frozenset[EdgeCarrier]
 
 
 @dataclass(frozen=True)
@@ -202,7 +203,7 @@ class _IteratedRounding:
     ) -> None:
         self.watch = watch
         self.max_rounds = max_rounds
-        self.edges: dict[EdgeKey, set[str]] = {}
+        self.edges: dict[EdgeKey, set[EdgeCarrier]] = {}
         for seg in segments:
             if seg.a != seg.b:
                 self.edges.setdefault(canonical_key(seg.a, seg.b), set()).update(
@@ -235,7 +236,7 @@ class _IteratedRounding:
         self.delta |= new_hot
         with self.watch.stage("noding_kernels"):
             chain_hits = hits_kernel(keys, flags, self.hot, self.delta)
-        rerouted: dict[EdgeKey, set[str]] = {}
+        rerouted: dict[EdgeKey, set[EdgeCarrier]] = {}
         verified: set[EdgeKey] = (
             set()
         )  # edges whose route was re-checked and left unchanged
