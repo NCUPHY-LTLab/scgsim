@@ -84,7 +84,7 @@ class SurfaceMarginEprSeriesSnapshot:
 
 @dataclass(frozen=True)
 class AmrPassSnapshot:
-    """One solver snapshot from an AMR pass or the parent results folder."""
+    """One solver snapshot from an AMR pass or the final output folder ``results/palace``."""
 
     pass_index: int
     source: str
@@ -125,7 +125,7 @@ class PassCostRecord:
 class PalaceResultSelection:
     """The readable snapshot selected independently from the run outcome.
 
-    ``selected_path`` is always relative to the run directory.
+    ``selected_path`` is always relative to the run folder.
     """
 
     final_snapshot_status: Literal["readable", "missing", "unreadable"]
@@ -140,18 +140,22 @@ class PalaceResultSelection:
     integrity: Literal["receipt_bound", "observed_unsealed", "unavailable"]
 
 
+FailureCategory = Literal[
+    "config_compatibility",
+    "out_of_memory",
+    "signal_killed",
+    "solver_error",
+    "output_capture_error",
+    "unknown",
+]
+"""What a failed run's diagnosis attributes the failure to."""
+
+
 @dataclass(frozen=True)
 class PalaceFailureDiagnosis:
     """Evidence-based diagnosis that never changes the returned run status."""
 
-    category: Literal[
-        "config_compatibility",
-        "out_of_memory",
-        "signal_killed",
-        "solver_error",
-        "output_capture_error",
-        "unknown",
-    ]
+    category: FailureCategory
     exit_code: int | None
     execution_stage: Literal["config_compatibility", "solver"] | None
     solver_invoked: bool | None

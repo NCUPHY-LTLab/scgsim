@@ -10,7 +10,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
+
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
 
 from ..mesh.physical_groups import Groups
 from ..source.surface_epr import SurfaceEprSpecs
@@ -18,7 +21,23 @@ from ..source.transforms import validate_non_negative_int, validate_positive_num
 from .index import IndexEntry
 from .numerical import NumericalControls
 
+_WHERE_EIGENMODE_SETTINGS = "the call to set_eigenmode"
+_WHERE_ELECTROSTATIC_SETTINGS = "the call to set_electrostatic"
+
 MODEL_L0_M = 1e-6
+
+
+class GroundResolution(TypedDict):
+    """How the Ground boundary was resolved, as the index map records it: requested Nets, physical and exterior."""
+
+    requested_net_ids: list[str]
+    physical_net_ids: list[str]
+    conductor_component_ids: list[str]
+    physical_names: list[str]
+    physical_attributes: list[int]
+    exterior_physical_names: list[str]
+    exterior_attributes: list[int]
+    union_attributes: list[int]
 
 
 @dataclass(frozen=True)
@@ -73,7 +92,10 @@ class EigenmodeSettings:
             or self.num_modes < 1
         ):
             raise ValueError(
-                "num_modes must be a positive integer: call set_eigenmode(num_modes=...)."
+                Declared(
+                    "num_modes must be a positive integer: call set_eigenmode(num_modes=...)",
+                    _WHERE_EIGENMODE_SETTINGS,
+                ).refusal(found_text(self.num_modes))
             )
         # A frozen dataclass normalizes its own fields through object.__setattr__.
         if self.target_hz is not None:
@@ -107,21 +129,30 @@ class ElectrostaticSettings:
         """Refuse an unknown policy or a pair of policies that contradict each other."""
         if self.unassigned_conductor_policy not in {"ground", "error"}:
             raise ValueError(
-                "unassigned_conductor_policy must be 'ground' or 'error': call "
-                "set_electrostatic(unassigned_conductor_policy=...)."
+                Declared(
+                    "unassigned_conductor_policy must be 'ground' or 'error': call "
+                    "set_electrostatic(unassigned_conductor_policy=...)",
+                    _WHERE_ELECTROSTATIC_SETTINGS,
+                ).refusal(found_text(self.unassigned_conductor_policy))
             )
         if self.exterior_boundary_policy not in {"none", "ground"}:
             raise ValueError(
-                "exterior_boundary_policy must be 'none' or 'ground': call "
-                "set_electrostatic(exterior_boundary_policy=...)."
+                Declared(
+                    "exterior_boundary_policy must be 'none' or 'ground': call "
+                    "set_electrostatic(exterior_boundary_policy=...)",
+                    _WHERE_ELECTROSTATIC_SETTINGS,
+                ).refusal(found_text(self.exterior_boundary_policy))
             )
         if (
             self.exterior_boundary_policy == "ground"
             and self.unassigned_conductor_policy != "error"
         ):
             raise ValueError(
-                "exterior ground requires unassigned_conductor_policy='error': call "
-                "set_electrostatic(unassigned_conductor_policy='error', exterior_boundary_policy='ground')."
+                Declared(
+                    "exterior ground requires unassigned_conductor_policy='error': call "
+                    "set_electrostatic(unassigned_conductor_policy='error', exterior_boundary_policy='ground')",
+                    _WHERE_ELECTROSTATIC_SETTINGS,
+                ).refusal(found_text(self.unassigned_conductor_policy, "error"))
             )
         validate_non_negative_int(self.save_fields, "save_fields")
 
@@ -133,7 +164,7 @@ class ElectrostaticConfigBuildResult:
     config: dict[str, Any]
     index_entries: list[IndexEntry]
     material_resolution: list[dict[str, Any]]
-    ground_boundary_resolution: dict[str, Any]
+    ground_boundary_resolution: GroundResolution
 
 
 @dataclass(frozen=True)

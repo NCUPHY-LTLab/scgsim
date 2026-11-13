@@ -15,8 +15,14 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import ClassVar
 
+from scgsim.refusal import found_text, refused
+
 from ..features import Feature, SidecarFeatures
 from ..sizing import BoundingBox, SizeField, SizeRequests, coarse_size, ladder_size
+
+_WHERE_RECIPE = "the sizing recipe of the meshing call"
+
+_WHERE_FEATURE_RECIPE = "the FeatureRecipe passed to set_mesh"
 
 
 @dataclass(frozen=True)
@@ -59,7 +65,16 @@ class FeatureRecipe:
         """Reject sizes that cannot define a field."""
         if not (self.conductor_edge_size_um > 0 and self.conductor_edge_grow_um > 0):
             raise ValueError(
-                "the conductor-outline size and growth distance must be positive."
+                refused(
+                    "the conductor-outline size and growth distance must be positive",
+                    found_text(
+                        {
+                            "conductor_edge_size_um": self.conductor_edge_size_um,
+                            "conductor_edge_grow_um": self.conductor_edge_grow_um,
+                        }
+                    ),
+                    _WHERE_FEATURE_RECIPE,
+                )
             )
         multiple = self.band_mesh_size_multiple
         if (
@@ -69,7 +84,11 @@ class FeatureRecipe:
             or multiple <= 0
         ):
             raise ValueError(
-                f"band_mesh_size_multiple must be a finite positive number, got {multiple!r}."
+                refused(
+                    "band_mesh_size_multiple",
+                    f"must be a finite positive number, got {multiple!r}",
+                    _WHERE_RECIPE,
+                )
             )
 
     def size_requests(

@@ -306,7 +306,7 @@ def test_a_probe_stopped_at_its_time_limit_raises_the_time_limit_error(
     monkeypatch.setattr(driver, "launch_worker", overrun)
     with pytest.raises(ProbeTimeLimitError, match=r"case\.xao.*0\.5 s"):
         measure_bounding_box(tmp_path / "case.xao", tmp_path, timeout_seconds=0.5)
-    with pytest.raises(ProbeTimeLimitError, match="no time left"):
+    with pytest.raises(ProbeTimeLimitError, match="no time is left"):
         measure_bounding_box(tmp_path / "case.xao", tmp_path, timeout_seconds=0.0)
     assert started == [0.5]
 

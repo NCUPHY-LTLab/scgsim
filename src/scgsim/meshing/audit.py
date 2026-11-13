@@ -16,6 +16,8 @@ from collections.abc import Iterable, Sequence
 import gmsh
 import numpy as np
 
+from scgsim.refusal import found_text, internal
+
 from .features import SidecarFeatures
 from .findings import QUALITY_MEASURE, BadElement, CurveCandidate, MeshAudit
 
@@ -66,7 +68,11 @@ def _tetrahedra() -> tuple[np.ndarray, np.ndarray]:
         if kind == _TETRAHEDRON
     ]
     if not found:
-        raise RuntimeError("the generated mesh has no tetrahedra.")
+        raise RuntimeError(
+            internal(
+                "the generated mesh has no tetrahedra" + ": " + found_text(len(found))
+            )
+        )
     return np.concatenate([t for t, _ in found]), np.concatenate([n for _, n in found])
 
 

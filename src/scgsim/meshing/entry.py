@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scgsim.refusal import refused
+
 from .driver import ProbeTimeLimitError, measure_bounding_box
 from .errors import MeshRepairError
 from .features import SidecarFeatures, load_features, read_features
@@ -40,6 +42,8 @@ from .report import (
     write_report,
 )
 from .stop_places import StopPlace, stop_places
+
+_WHERE_MESH_SGB = "the call to mesh_sgb"
 
 _WORK_DIR_PREFIX = ".meshing-work-"
 
@@ -108,7 +112,13 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     records at those places, with their owner and fix.
     """
     if not math.isfinite(threshold):
-        raise ValueError(f"threshold must be a finite number, got {threshold!r}.")
+        raise ValueError(
+            refused(
+                "threshold",
+                f"must be a finite number, got {threshold!r}",
+                _WHERE_MESH_SGB,
+            )
+        )
     started = time.perf_counter()
     xao = Path(xao)
     files = _Files(Path(output_dir), xao.stem)
@@ -224,7 +234,12 @@ def _deliver(
             shutil.move(outcome.last_mesh, files.rejected)
         where = "\n".join(place_lines(report))
         raise MeshRepairError(
-            f"meshing stopped without a clean mesh ({outcome.stop}); see {files.report}."
+            refused(
+                f"the mesh {files.mesh.name}",
+                f"meshing stopped without a clean mesh ({outcome.stop}); see {files.report}",
+                "the meshing controls (recipe, repair policy, budgets), or the fine structure the "
+                "report places",
+            )
             + (f"\n{where}" if where else ""),
             dict(report),
         )

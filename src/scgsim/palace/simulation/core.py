@@ -22,12 +22,14 @@ from typing import Any, ClassVar, Literal, TypeVar
 from scgsim.contracts.palace_run_folder import CONFIG, INDEX_MAP_SCHEMA_VERSION
 from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
+from scgsim.refusal import found_text
 
-from ..config.config_models import ConfigInput
-from ..config.files import persist_problem_files
+from ..config.config_records import ConfigInput
+from ..config.files import MetadataFile, persist_problem_files
 from ..config.index import IndexEntry
 from ..config.numerical import NumericalControls, ProblemDefaults
 from ..mesh.build import (
@@ -37,7 +39,7 @@ from ..mesh.build import (
     mesh_route_geometry,
 )
 from ..mesh.controls import MeshControls
-from ..mesh.summary import summary_from_files
+from ..mesh.summary import MeshSummary, summary_from_files
 from ..run.handoff import HandoffPlan, prepare_handoff
 from ..source.inputs import stack_materials
 from ..source.layout_ports import LayoutGeometryRequest, layout_geometry_request
@@ -51,6 +53,14 @@ from ..source.surface_epr import SurfaceEprSpecs
 from ..source.workflow import GeometrySettings, route_profile
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .lifecycle import CALLS, Call, Stage
+
+_WHERE_MESH_AGAIN = "the run folder: call mesh() again"
+_WHERE_NUMERICAL_ARG = "the numerical argument of the simulation"
+_WHERE_SET_ROUTE = "the call to set_route"
+_WHERE_SURFACE_EPR = "the call to set_surface_epr"
+
+_WHERE_SET_OUTPUT_DIR = "the call to set_output_dir"
+_WHERE_SET_PLAN = "the call to set_plan"
 
 _Output = TypeVar("_Output")
 
@@ -127,7 +137,10 @@ class PalaceSimulation(ABC):
         """
         if not isinstance(snapshot, GeometryPlanSnapshot):
             raise TypeError(
-                "set_plan() takes a GeometryPlanSnapshot: pass plan.prepare(), not the GeometryPlan."
+                Declared(
+                    "set_plan() takes a GeometryPlanSnapshot: pass plan.prepare(), not the GeometryPlan",
+                    _WHERE_SET_PLAN,
+                ).refusal(found_text(type(snapshot).__name__))
             )
         if snapshot_owns_vacuum(snapshot) and self.vacuum_region is not None:
             raise ValueError(_TWO_VACUUMS)
@@ -143,7 +156,12 @@ class PalaceSimulation(ABC):
             TypeError: ``path`` is not a string or ``Path``.
         """
         if not isinstance(path, (str, Path)):
-            raise TypeError("set_output_dir() takes a path string or Path.")
+            raise TypeError(
+                Declared(
+                    "set_output_dir() takes a path string or Path",
+                    _WHERE_SET_OUTPUT_DIR,
+                ).refusal(found_text(type(path).__name__))
+            )
         self.output_dir = Path(path).expanduser().resolve()
         self._fall_back("set_output_dir")
 
@@ -321,7 +339,9 @@ class PalaceSimulation(ABC):
         plan = self._require("mesh", self._plan)
         if self.output_dir is None:
             raise ValueError(
-                "No output folder to mesh into: call set_output_dir() before mesh()."
+                Declared(
+                    "No output folder to mesh into", _WHERE_SET_OUTPUT_DIR
+                ).refusal("call set_output_dir() before mesh()")
             )
         request = self._geometry_request(plan)
         if request.materials is not None:
@@ -432,7 +452,7 @@ class PalaceSimulation(ABC):
             ),
         )
 
-    def mesh_summary(self) -> dict[str, Any]:
+    def mesh_summary(self) -> MeshSummary:
         """Detach actual mesh observations and the current FEM topology estimate.
 
         Raises:
@@ -457,13 +477,14 @@ class PalaceSimulation(ABC):
         """``controls`` with the problem's defaults filled in: the one place the constructor and ``set_numerical`` share."""
         if not isinstance(controls, NumericalControls):
             raise TypeError(
-                f"numerical must be NumericalControls: pass {type(self).__name__}(numerical=NumericalControls(...)) "
-                "or call set_numerical(...)."
+                Declared("numerical", _WHERE_NUMERICAL_ARG).refusal(
+                    f"must be NumericalControls: pass {type(self).__name__}(numerical=NumericalControls(...)) or call set_numerical(...)"
+                )
             )
         return controls.with_defaults(self.numerical_defaults)
 
-    def _start_config(self) -> tuple[MeshBuildResult, ConfigInput]:
-        """Discard the previous config and return the current mesh and the shared input of a new config.
+    def _start_config(self) -> ConfigInput:
+        """Discard the previous config and return the shared input of a new config of the current mesh.
 
         Raises:
             ValueError: ``mesh()`` has not built the current mesh, or the numerical controls leave AMR open.
@@ -473,7 +494,7 @@ class PalaceSimulation(ABC):
         mesh = self._require("write_config", self._mesh_result)
         materials = self._require("write_config", self._materials)
         _check_mesh_files(mesh)
-        return mesh, ConfigInput(
+        return ConfigInput(
             problem=self.problem,
             groups=mesh.groups,
             mesh_path=mesh.mesh_path,
@@ -483,17 +504,14 @@ class PalaceSimulation(ABC):
         )
 
     def _finish_config(
-        self,
-        mesh: MeshBuildResult,
-        config: Mapping[str, Any],
-        metadata: Sequence[tuple[str, Mapping[str, Any]]],
+        self, config: Mapping[str, Any], metadata: Sequence[MetadataFile]
     ) -> Path:
         """Write each metadata file in order, then ``config.json`` last, and reach ``CONFIG_WRITTEN``."""
+        mesh = self._require("write_config", self._mesh_result)
         config_path = mesh.output_dir / CONFIG
         self.config_path = persist_problem_files(
-            metadata_files=tuple(
-                (mesh.output_dir / relative, payload) for relative, payload in metadata
-            ),
+            run_folder=mesh.output_dir,
+            metadata_files=metadata,
             config_path=config_path,
             config=config,
         )
@@ -557,10 +575,11 @@ class PalaceSimulation(ABC):
         self._stage = keep
 
 
-_TWO_VACUUMS = (
-    "The GeometryPlan has its own vacuum (VACUUM_REGION), so the simulation cannot add one: "
-    "drop sim.set_vacuum_region(), or prepare the plan without plan.set_vacuum_region()."
-)
+_TWO_VACUUMS = Declared(
+    "the GeometryPlan",
+    "the plan or the simulation: drop sim.set_vacuum_region(), or prepare the plan without "
+    "plan.set_vacuum_region()",
+).refusal("has its own vacuum (VACUUM_REGION), so the simulation cannot add one")
 
 
 def _checked_route(route: Any) -> Literal["A", "B"]:
@@ -570,12 +589,14 @@ def _checked_route(route: Any) -> Literal["A", "B"]:
         return chosen
     if chosen == "C":
         raise ValueError(
-            "Route C is not a Palace route: SGB builds Route C for backends that keep conductor volumes. "
-            "Call set_route('A') or set_route('B')."
+            Declared("Route C", _WHERE_SET_ROUTE).refusal(
+                "is not a Palace route: SGB builds Route C for backends that keep conductor volumes. Call set_route('A') or set_route('B')"
+            )
         )
     raise ValueError(
-        f"Unknown route {route!r}: call set_route('A') for films as zero-thickness sheets "
-        "or set_route('B') for 3D conductors."
+        Declared(f"Unknown route {route!r}", _WHERE_SET_ROUTE).refusal(
+            "call set_route('A') for films as zero-thickness sheets or set_route('B') for 3D conductors"
+        )
     )
 
 
@@ -583,8 +604,11 @@ def _refuse_empty_specs(specs: Mapping[str, Mapping[str, Any]]) -> None:
     """Refuse an empty mapping: "no Surface EPR" has one spelling, no call (or ``None``)."""
     if isinstance(specs, Mapping) and not specs:
         raise ValueError(
-            "set_surface_epr({}) requests no Surface EPR: to have none, do not call set_surface_epr(), "
-            "or call set_surface_epr(None) to turn it off again."
+            Declared(
+                "set_surface_epr({}) requests no Surface EPR", _WHERE_SURFACE_EPR
+            ).refusal(
+                "to have none, do not call set_surface_epr(), or call set_surface_epr(None) to turn it off again"
+            )
         )
 
 
@@ -597,7 +621,9 @@ def _check_mesh_files(mesh: MeshBuildResult) -> None:
     for path in (mesh.mesh_path, mesh.mesh_manifest_path):
         if not path.is_file():
             raise FileNotFoundError(
-                f"The current {path.name} is missing from {mesh.output_dir}: call mesh() again."
+                Declared(f"The current {path.name}", _WHERE_MESH_AGAIN).refusal(
+                    f"is missing from {mesh.output_dir}: call mesh() again"
+                )
             )
     # Only a check: parsing refuses a manifest that no longer reads as JSON; its content is not needed here.
     json.loads(mesh.mesh_manifest_path.read_text(encoding="utf-8"))

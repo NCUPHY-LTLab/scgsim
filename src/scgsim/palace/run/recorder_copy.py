@@ -13,6 +13,7 @@ import ast
 from pathlib import Path
 
 from scgsim.contracts import palace_run_folder
+from scgsim.geometry.models.refusals import internal
 
 from . import returned_receipt
 
@@ -49,7 +50,9 @@ def _contract_import_lines(recorder: str) -> tuple[int, int]:
     ]
     if len(imports) != 1 or imports[0].end_lineno is None:
         raise RuntimeError(
-            f"the receipt recorder must import {_CONTRACT} in exactly one 'from ... import' statement."
+            internal(
+                f"the receipt recorder must import {_CONTRACT} in exactly one 'from ... import' statement"
+            )
         )
     return imports[0].lineno, imports[0].end_lineno
 

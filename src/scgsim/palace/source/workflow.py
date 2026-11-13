@@ -17,14 +17,20 @@ from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalRepresentationPlan,
 )
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.geometry.source.validation import has_vacuum_solution_region
+from scgsim.refusal import found_text
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports
 from .surface_epr import SurfaceEprSpecs
+
+_WHERE_VACUUM = "the GeometryPlan, or the call to set_vacuum_region"
+
+_WHERE_SET_ROUTE = "the call to set_route"
 
 
 @dataclass(frozen=True)
@@ -64,7 +70,45 @@ def prepare_mesh_input(
     ``port_sheet_source_layers`` lists the authored sheets cut as lumped ports, None for a problem with none.
     """
     route = settings.route
-    vacuum_region = settings.vacuum_region
+    prepared_stack = _stack_with_vacuum_and_ports(
+        stack, settings.vacuum_region, port_sheet_source_layers
+    )
+    # Synchronize source selections before the single physical interpretation.
+    build_input = _synchronize_solution_regions(build_input, prepared_stack)
+    build_input = _select_authored_ports(build_input, port_sheet_source_layers)
+    if port_sheet_source_layers is not None:
+        # Every selected sheet is a Lumped Port or RLC; the physical interpretation cuts its rectangle.
+        build_input = with_rectangular_ports(build_input)
+    approximation_profile = route_profile(route, settings.approximation_profile)
+    effective_input, effective_stack, plan = interpret_physical_geometry(
+        build_input, prepared_stack, approximation_profile
+    )
+    prepared_stack = effective_stack
+    if not has_vacuum_solution_region(effective_input):
+        raise ValueError(
+            Declared("the model", _WHERE_VACUUM).refusal(
+                "has no vacuum region: the plan declares none and none was set on the simulation; call plan.set_vacuum_region(...) before prepare() or sim.set_vacuum_region(...) before mesh()"
+            )
+        )
+    if route == "A":
+        prepared_stack["metadata"]["route_a_thin_film"] = _route_a_thin_film(
+            stack, approximation_profile
+        )
+    materials = _stack_material_records(prepared_stack)
+    return PreparedMeshInput(
+        stack=prepared_stack,
+        materials=materials,
+        geometry_input=effective_input,
+        physical_plan=plan,
+    )
+
+
+def _stack_with_vacuum_and_ports(
+    stack: Mapping[str, Any],
+    vacuum_region: VacuumRegionSpec | None,
+    port_sheet_source_layers: Sequence[Mapping[str, Any]] | None,
+) -> Mapping[str, Any]:
+    """The stack with the simulation's vacuum region applied and its port sheets recorded in the metadata."""
     prepared_stack = stack
     if vacuum_region is not None:
         prepared_stack = apply_vacuum_region_to_stack(stack, vacuum_region)
@@ -79,49 +123,39 @@ def prepare_mesh_input(
         prepared_stack = with_port_sheet_metadata(
             prepared_stack, port_sheet_source_layers
         )
-    # Synchronize source selections before the single physical interpretation.
-    build_input = _synchronize_solution_regions(build_input, prepared_stack)
-    build_input = _select_authored_ports(build_input, port_sheet_source_layers)
-    if port_sheet_source_layers is not None:
-        # Every selected sheet is a Lumped Port or RLC; the physical interpretation cuts its rectangle.
-        build_input = with_rectangular_ports(build_input)
-    approximation_profile = route_profile(route, settings.approximation_profile)
-    effective_input, effective_stack, plan = interpret_physical_geometry(
-        build_input, prepared_stack, approximation_profile
-    )
-    prepared_stack = effective_stack
-    if not has_vacuum_solution_region(effective_input):
-        raise ValueError(
-            "the model has no vacuum region: the plan declares none and none was set on the simulation; "
-            "call plan.set_vacuum_region(...) before prepare() or sim.set_vacuum_region(...) before mesh()"
-        )
-    if route == "A":
-        source_hash = canonical_sha256(to_plain(stack))
-        prepared_stack["metadata"]["route_a_thin_film"] = {
-            "schema_version": 1,
-            "variant": approximation_profile.name,
-            "display_label": "A_PRIME"
-            if approximation_profile.name == "substrate_face"
-            else "A",
-            "source_stack": {
-                "revision": f"sha256:{source_hash}",
-                "sha256": source_hash,
-            },
-        }
+    return prepared_stack
+
+
+def _route_a_thin_film(
+    stack: Mapping[str, Any], approximation_profile: ApproximationProfile
+) -> dict[str, Any]:
+    """The Route A thin-film identity: the approximation's variant and the hash of the authored stack."""
+    source_hash = canonical_sha256(to_plain(stack))
+    return {
+        "schema_version": 1,
+        "variant": approximation_profile.name,
+        "display_label": "A_PRIME"
+        if approximation_profile.name == "substrate_face"
+        else "A",
+        "source_stack": {
+            "revision": f"sha256:{source_hash}",
+            "sha256": source_hash,
+        },
+    }
+
+
+def _stack_material_records(
+    prepared_stack: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]] | None:
+    """The prepared stack's material records by id, None when the stack has no materials mapping."""
     prepared_materials = prepared_stack.get("materials")
-    materials: dict[str, Mapping[str, Any]] | None = None
-    if isinstance(prepared_materials, Mapping):
-        materials = {
-            str(material_id): dict(material)
-            for material_id, material in prepared_materials.items()
-            if isinstance(material, Mapping)
-        }
-    return PreparedMeshInput(
-        stack=prepared_stack,
-        materials=materials,
-        geometry_input=effective_input,
-        physical_plan=plan,
-    )
+    if not isinstance(prepared_materials, Mapping):
+        return None
+    return {
+        str(material_id): dict(material)
+        for material_id, material in prepared_materials.items()
+        if isinstance(material, Mapping)
+    }
 
 
 def _synchronize_solution_regions(
@@ -168,7 +202,9 @@ def _select_authored_ports(
             )
             if not matches:
                 raise ValueError(
-                    f"normalized source has no authored port {record['name']!r}"
+                    internal(
+                        f"normalized source has no authored port {record['name']!r}"
+                    )
                 )
             selected.extend(
                 replace(
@@ -210,8 +246,11 @@ def route_profile(
         return ApproximationProfile(name, "v1", {})
     if not isinstance(approximation_profile, ApproximationProfile):
         raise TypeError(
-            "approximation_profile must be an ApproximationProfile: pass "
-            "set_route(..., approximation_profile=ApproximationProfile(name, 'v1', parameters))."
+            Declared(
+                "approximation_profile must be an ApproximationProfile: pass "
+                "set_route(..., approximation_profile=ApproximationProfile(name, 'v1', parameters))",
+                _WHERE_SET_ROUTE,
+            ).refusal(found_text(type(approximation_profile).__name__))
         )
     return approximation_profile
 

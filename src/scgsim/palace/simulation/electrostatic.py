@@ -18,11 +18,12 @@ from scgsim.contracts.palace_run_folder import (
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
 from ..config.config import build_electrostatic_config
-from ..config.config_models import (
+from ..config.config_records import (
     ElectrostaticConfigBuildResult,
     ElectrostaticSettings,
     TerminalBinding,
 )
+from ..config.files import MetadataFile
 from ..config.numerical import NumericalControls, ProblemDefaults
 from ..source.transforms import validate_nonempty_string
 from .core import PalaceSimulation, index_map
@@ -186,14 +187,14 @@ class ElectrostaticSim(PalaceSimulation):
                 the bindings.
             FileNotFoundError: a file of the current mesh is gone from the run folder.
         """
-        mesh, common = self._start_config()
+        common = self._start_config()
         result = build_electrostatic_config(
             common,
             terminals=self.terminals,
             ground_net_ids=self.ground_net_ids,
             electrostatic=self._electrostatic_settings(),
         )
-        return self._finish_config(mesh, result.config, self._metadata(result))
+        return self._finish_config(result.config, self._metadata(result))
 
     def _electrostatic_settings(self) -> ElectrostaticSettings:
         """The saved fields and policies as the config reads them, checked again in case an attribute was assigned."""
@@ -205,21 +206,21 @@ class ElectrostaticSim(PalaceSimulation):
 
     def _metadata(
         self, result: ElectrostaticConfigBuildResult
-    ) -> tuple[tuple[str, dict[str, Any]], ...]:
+    ) -> tuple[MetadataFile, ...]:
         """The metadata files written with ``config.json``, by run-folder path, in the order they are written."""
         return (
-            (
+            MetadataFile(
                 INDEX_MAP,
                 index_map(
                     result.index_entries,
                     ground_boundary=result.ground_boundary_resolution,
                 ),
             ),
-            (
+            MetadataFile(
                 MATERIAL_RESOLUTION,
                 {"schema_version": 1, "solution_volumes": result.material_resolution},
             ),
-            (NUMERICAL_CONTROLS, self.numerical.to_payload()),
+            MetadataFile(NUMERICAL_CONTROLS, self.numerical.to_payload()),
         )
 
     # ---- The core's questions ------------------------------------------------------------------------

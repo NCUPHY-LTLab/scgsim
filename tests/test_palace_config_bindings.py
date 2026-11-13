@@ -18,7 +18,7 @@ from scgsim.palace.config.config import (
     build_eigenmode_config,
     build_electrostatic_config,
 )
-from scgsim.palace.config.config_models import (
+from scgsim.palace.config.config_records import (
     ConfigInput,
     EigenmodeSettings,
     ElectrostaticSettings,
@@ -154,7 +154,7 @@ def test_unknown_terminal_net_and_unassigned_conductors_are_errors(case):
     route, groups = case
     with pytest.raises(ValueError, match="has no exact net match"):
         electrostatic(groups, [TerminalBinding("t", "missing")])
-    with pytest.raises(ValueError, match="Unassigned conductor components"):
+    with pytest.raises(ValueError, match="are bound to no Terminal and no Ground"):
         electrostatic(groups, [TerminalBinding("t", NETS[route][0])])
 
 

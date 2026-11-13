@@ -11,10 +11,15 @@ from typing import Any, cast
 from scgsim.aedt.epr.models import EprResult
 from scgsim.aedt.epr.selection import finite_value
 from scgsim.aedt.epr.surface import surface_energy_j
-from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
+from scgsim.semantics.epr import (
+    FilmAssumptions,
+    FilmUpdate,
+    film_assumptions,
+    inverse_quality_factor,
+)
 
 
-def _surface_original_assumptions(surface: Mapping[str, Any]) -> dict[str, Any]:
+def _surface_original_assumptions(surface: Mapping[str, Any]) -> FilmAssumptions:
     if "original_assumptions" in surface:
         return film_assumptions(surface["original_assumptions"], allow_unknown=True)
     if "assumptions" in surface:
@@ -33,7 +38,7 @@ def _surface_original_assumptions(surface: Mapping[str, Any]) -> dict[str, Any]:
 
 def _film_updates(
     updates: Mapping[str, Mapping[str, Any]] | None, *, name: str
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, FilmUpdate]:
     if updates is None:
         return {}
     if not isinstance(updates, Mapping) or any(
@@ -163,7 +168,7 @@ def _updated_assumptions(
     current: Mapping[str, Any],
     applied: Mapping[str, Any],
     group_update: Mapping[str, Any],
-) -> dict[str, Any]:
+) -> FilmAssumptions:
     candidate = {**current, **applied}
     if any(
         name in applied

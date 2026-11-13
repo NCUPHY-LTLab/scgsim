@@ -32,7 +32,7 @@ from scgsim.geometry import (
     build_gds_stack_geometry_input,
     summarize_geometry_input,
 )
-from scgsim.semantics.epr import film_assumptions
+from scgsim.semantics.epr import FilmUpdate, film_assumptions
 
 from .epr.analysis import reanalyze_epr
 from .preparation.geometry import prepare_hfss_eigenmode_from_geometry
@@ -188,7 +188,7 @@ class EigenmodeSim:
         if len({item.contribution_id for item in selected}) != len(selected):
             raise ValueError("surface contribution IDs must be unique")
         if defaults is None:
-            normalized: dict[str, dict[str, Any]] = {}
+            normalized: dict[str, FilmUpdate] = {}
         elif not isinstance(defaults, Mapping) or set(defaults) - {"MA", "MS", "SA"}:
             raise ValueError("surface defaults must be keyed by MA, MS, or SA")
         else:

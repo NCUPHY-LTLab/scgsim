@@ -292,7 +292,7 @@ def test_a_lumped_port_on_one_conductor_is_located_on_its_layer(monkeypatch):
         check(EigenmodeSim, port_on_the_pad_only(monkeypatch))
     message = str(error.value)
     assert message.startswith(
-        "lumped port 'chip/P1' must land on two conductors to be made a rectangle; "
+        "lumped port 'chip/P1': must land on two conductors to be made a rectangle; "
         "it lands on 1: ['chip/pad_0000']; the sheet is drawn on layer 9/0"
     )
     assert "Fix the layout or the port declaration" in message

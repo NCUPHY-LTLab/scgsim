@@ -102,7 +102,6 @@ from an earlier stage to a later one:
 
 | Importing folder | Imports | What it takes from there |
 | --- | --- | --- |
-| `palace/results` | `palace/reports` | The report views a resolved result's display methods return. |
 | `aedt/specs` | `aedt/epr` | The grouping of surface integrals (`epr.selection`). |
 | `aedt/preparation` | `aedt/results` | The receipt schema and the initial receipt (`results.provenance`). |
 | `aedt/results` | `aedt/runtime`, `aedt/epr`, `aedt/presentation` | The batch collection context and benchmark path, the `EprResult` record, and the display a `ResolvedRun` calls. |
@@ -127,6 +126,42 @@ refusal prints the new English to record and translate.
 their translations.
 
 {{< include _code-map-stages.md >}}
+
+## Top-level modules {#top-level-modules}
+
+Four modules sit directly in `src/scgsim`, outside every area's folders. They
+are not stages; a stage calls them.
+
+| Module | What it is | Called by |
+| --- | --- | --- |
+| `preparation.py` | The worker budget of geometry preparation: one thread pool shared by the preparation calls in a `preparation_resources` scope. | `geometry` and `palace/mesh` |
+| `diagnostics.py` | Opt-in timing, progress, memory and profile records of a preparation, written beside the result. | `geometry` and `palace/mesh` |
+| `documentation.py` | Links from a message to the published documentation of the version that raised it. | `geometry` |
+| `refusal.py` | The two sentence shapes of a refusal, for the folders that may not import `geometry`, and the text of a value found. | `meshing`, `semantics`, `preparation.py`, `diagnostics.py`; `palace`, `visualization` and `presentation` for the value found only |
+
+A refusal takes one of two shapes: "{object}: {problem}. Change it in
+{where}." for input the caller can change, and "internal: {invariant}.
+Nothing in the input is to blame: report it to SCGSim with the input that
+produced it." for a broken promise of SCGSim's own. `palace`,
+`visualization` and `presentation` write them with
+`geometry/models/refusals.py`; `meshing`, `semantics`, `preparation.py` and
+`diagnostics.py` may not import `geometry`, so `refusal.py` gives them the
+same two sentences.
+
+## Ambient state {#ambient-state}
+
+Everything a result or a message depends on is an argument or a return value.
+What is held in a context variable instead is listed here; none of it can
+change a result.
+
+| Where | What it holds | Why it may be ambient |
+| --- | --- | --- |
+| `preparation.py` `_state` | The worker budget and its thread pool. | Maps keep input order, so the budget changes only how many threads run them. |
+| `preparation.py` `_worker_depth` | How deep a map runs inside a worker. | It only makes a nested map run serially. |
+| `diagnostics.py` `_recorder` | The open diagnostic recorder. | It writes timing and memory files beside a result; nothing reads it back. |
+| `diagnostics.py` `_span` | The open timing span. | It names the parent of the next timing record only. |
+| `geometry/grid/grid_cache.py` `ACTIVE` | Pure subdivision work already done in this call. | A cache: a hit returns what the work would compute. |
+| `geometry/source/occurrence.py` `_EXTRACTION_CACHE` | Polygons already extracted from one source library. | A cache: a hit returns what the extraction would compute. |
 
 ## Where to put new code {#new-code}
 

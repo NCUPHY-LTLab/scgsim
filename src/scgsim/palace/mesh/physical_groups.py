@@ -31,6 +31,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from scgsim.contracts.sgb_sidecar import SIDECAR_SCHEMA, Sidecar, views
+from scgsim.geometry.models.refusals import internal
 
 from .attributes import SurfacePart, lower_surface_group
 
@@ -48,7 +49,9 @@ def groups_from_sidecar(sidecar: Sidecar) -> Groups:
     """
     if sidecar.get("schema") != SIDECAR_SCHEMA:
         raise ValueError(
-            f"Palace reads sidecar schema {SIDECAR_SCHEMA!r}, got {sidecar.get('schema')!r}."
+            internal(
+                f"Palace reads sidecar schema {SIDECAR_SCHEMA!r}, got {sidecar.get('schema')!r}"
+            )
         )
     members = _Members(views.group_members(sidecar), views.TagIndex.of(sidecar))
     volumes = _volume_groups(sidecar["group"], members)
@@ -93,8 +96,9 @@ def _volume_groups(
         record = physical[name]
         if record["kind"] not in SOLUTION_KINDS:
             raise ValueError(
-                f"volume group {name!r} has kind {record['kind']!r}; Palace meshes vacuum and "
-                "dielectric volumes (retained conductor volumes are Route C)."
+                internal(
+                    f"volume group {name!r} has kind {record['kind']!r}; Palace meshes vacuum and dielectric volumes (retained conductor volumes are Route C)"
+                )
             )
         volumes[name] = {
             "dim": 3,
@@ -161,7 +165,9 @@ def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any
         else:
             if family not in families:
                 raise ValueError(
-                    f"group {row['group']!r} is a band of {family!r}, which the sidecar lists no band family of."
+                    internal(
+                        f"group {row['group']!r} is a band of {family!r}, which the sidecar lists no band family of"
+                    )
                 )
             record.update(
                 family=family,
@@ -245,7 +251,9 @@ def _port_records(
     for port_sheet_id, port in views.ports(sidecar):
         key = f"P{port['port_index']}"
         if key in ports:
-            raise ValueError(f"duplicate lumped-port index {port['port_index']}.")
+            raise ValueError(
+                internal(f"duplicate lumped-port index {port['port_index']}")
+            )
         surface = surfaces[port["group"]]
         ports[key] = {
             "dim": 2,

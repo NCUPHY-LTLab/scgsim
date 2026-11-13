@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Literal
 
+from scgsim.geometry.models.refusals import Declared
+
 
 class Stage(IntEnum):
     """How far a simulation has come; a later stage holds every output of the earlier ones."""
@@ -79,6 +81,12 @@ class CallRule:
 _GEOMETRY_CHANGE = CallRule(falls_back_to=Stage.BOUND)
 _PROBLEM_CHANGE = CallRule(falls_back_to=Stage.MESHED)
 
+
+def _out_of_order(problem: str, fix: str) -> str:
+    """The refusal of a call made before the call it needs."""
+    return Declared("the simulation", f"the call order: call {fix}").refusal(problem)
+
+
 CALLS: dict[Call, CallRule] = {
     "set_plan": _GEOMETRY_CHANGE,
     "set_output_dir": _GEOMETRY_CHANGE,
@@ -88,7 +96,10 @@ CALLS: dict[Call, CallRule] = {
         needs=Stage.BOUND,
         falls_back_to=Stage.BOUND,
         # The specs name materials, and the bound plan's stack is what they are checked against.
-        refusal="No plan materials to check the Surface EPR specs against: call set_plan() before set_surface_epr().",
+        refusal=_out_of_order(
+            "has no plan materials to check the Surface EPR specs against",
+            "set_plan() before set_surface_epr()",
+        ),
     ),
     "set_mesh": _GEOMETRY_CHANGE,
     "add_port": _GEOMETRY_CHANGE,
@@ -100,26 +111,36 @@ CALLS: dict[Call, CallRule] = {
     "set_numerical": _PROBLEM_CHANGE,
     "input_summary": CallRule(
         needs=Stage.BOUND,
-        refusal="No plan to summarise: call set_plan() before input_summary().",
+        refusal=_out_of_order(
+            "has no plan to summarise", "set_plan() before input_summary()"
+        ),
     ),
     "mesh": CallRule(
         needs=Stage.BOUND,
         falls_back_to=Stage.BOUND,
-        refusal="No plan to mesh: call set_plan() before mesh().",
+        refusal=_out_of_order("has no plan to mesh", "set_plan() before mesh()"),
     ),
     "mesh_summary": CallRule(
         needs=Stage.MESHED,
-        refusal="No mesh to summarise: call mesh() before mesh_summary().",
+        refusal=_out_of_order(
+            "has no mesh to summarise", "mesh() before mesh_summary()"
+        ),
         error=RuntimeError,
     ),
     "write_config": CallRule(
         needs=Stage.MESHED,
         falls_back_to=Stage.MESHED,
-        refusal="No mesh to write a config for: call set_plan() and mesh() before write_config().",
+        refusal=_out_of_order(
+            "has no mesh to write a config for",
+            "set_plan() and mesh() before write_config()",
+        ),
     ),
     "prepare_handoff": CallRule(
         needs=Stage.CONFIG_WRITTEN,
-        refusal="No config to hand off: call mesh() and write_config() before prepare_handoff().",
+        refusal=_out_of_order(
+            "has no config to hand off",
+            "mesh() and write_config() before prepare_handoff()",
+        ),
     ),
 }
 

@@ -67,6 +67,21 @@ def test_current_list_is_a_sorted_unique_closure_with_the_entry_modules():
     assert aedt_modules <= set(paths)
 
 
+def test_the_closure_holds_no_palace_or_meshing_file():
+    """AEDT provenance names AEDT's own code: a Palace-only change must not alter it.
+
+    The import-linter independence contract covers ``scgsim.aedt`` and ``scgsim.palace`` only, so an import
+    of Palace from a module both use (the visualization loaders, ``semantics``, ``presentation``, the
+    contracts) passes it; this checks the closure itself.
+    """
+    backend = [
+        path
+        for path in current_runtime_source_paths()
+        if path.startswith(("src/scgsim/palace/", "src/scgsim/meshing/"))
+    ]
+    assert backend == []
+
+
 def test_adding_an_import_to_an_aedt_module_adds_its_target(tmp_path):
     """The list follows the code: no roster has to be edited."""
     source_root = tmp_path / "src"

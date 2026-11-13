@@ -1,10 +1,10 @@
-"""The detached ``show_epr`` chart keeps every Surface-EPR entry in its own category."""
+"""The detached ``show_epr`` chart (drawn by ``epr_mode_figure``) keeps every Surface-EPR entry in its own category."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-from scgsim.palace.reports.epr import show_epr
+from scgsim.palace.reports.epr import epr_mode_figure
 
 
 def surface_item(name, index, *, evaluation_kind, margin_um):
@@ -40,7 +40,7 @@ def test_a_banded_and_an_unbanded_face_of_one_material_pair_are_two_categories()
     result = SimpleNamespace(
         rows=[{"mode": 1, "surface": [banded, unbanded], "bulk": [], "junction": []}]
     )
-    figure = show_epr(result, mode=1)
+    figure = epr_mode_figure(result, mode=1)
     categories = list(figure.data[0].y)
     assert len(categories) == len(set(categories)) == 2
     assert "MA_Al_vacuum_banded" in categories[0]
@@ -58,6 +58,6 @@ def test_two_margins_of_one_baseline_that_print_alike_are_two_categories():
     result = SimpleNamespace(
         rows=[{"mode": 1, "surface": rows, "bulk": [], "junction": []}]
     )
-    categories = list(show_epr(result, mode=1).data[0].y)
+    categories = list(epr_mode_figure(result, mode=1).data[0].y)
     assert len(categories) == len(set(categories)) == 2
     assert all("1000 µm" in category for category in categories)

@@ -60,8 +60,8 @@
 | `palace/mesh` | 從準備好的幾何請求到 Palace 讀取的網格。 | 來自 `source` 的準備好的幾何請求，以及網格控制。 | `palace.msh`、它的物理群組與網格清單。 | `config`。 |
 | `palace/config` | 從網格的物理群組與問題的設定到 Palace 的輸入。 | 群組、埠或端子、材料、Surface-EPR 規格與數值控制。 | `config.json` 與索引對照表。 | `run`。 |
 | `palace/run` | 交給 Palace 的執行資料夾，以及回傳的內容。 | 包含網格與設定的資料夾。 | 執行腳本、收據記錄器與封存檔；Palace 執行後則是回傳的收據。 | `results`。 |
-| `palace/results` | 從完成的執行資料夾到已解析的結果。 | 資料夾，以及它必須相符的交接紀錄。 | 經過檢查的結果，含其表格與 EPR。 | `reports`。 |
-| `palace/reports` | 已解析結果的筆記本視圖。 | 已解析的結果。 | 給人閱讀的表格與圖。 | 沒有；由筆記本顯示它們。 |
+| `palace/results` | 從回傳的執行資料夾到這次執行經過檢查的紀錄。 | 資料夾，以及它必須相符的交接紀錄；可信度報告也接受未完成的執行所回傳的資料夾。 | 含表格與 EPR 的 `ResolvedRunData`，以及檢視所得的 AMR 快照、結果選擇與失敗診斷。 | `reports`。 |
+| `palace/reports` | 使用者拿到的結果，以及它的筆記本視圖。 | 來自 `results` 經過檢查的紀錄。 | `ResolvedPalaceResult`（`resolve_palace_result` 的回傳值）、可信度報告，以及給人閱讀的表格與圖。 | 沒有；由筆記本顯示它們。 |
 
 ### `aedt`
 

@@ -22,6 +22,10 @@ from scgsim.contracts.palace_run_folder import (
     RUNTIME_COMPATIBILITY,
     SOLVER_LOG_PREFIX,
 )
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
+
+_WHERE_HANDOFF_CALL = "the call to prepare_handoff"
 
 
 @dataclass(frozen=True)
@@ -60,113 +64,140 @@ class ExecutionSettings:
 
 def render_script(execution: ExecutionSettings, *, config_schema: str) -> str:
     """Render a dependency-free script for a manual Palace handoff whose config has ``config_schema``."""
-    profile = execution.profile
-    resources = execution.resources
-    style = execution.command_style
     # The thread and process counts are refused before any line is rendered.
     execution.threads()
     execution.processes()
-    directives: list[str] = []
-    if profile != "direct-local":
-        for key, value in resources.items():
-            if key in {
-                "launcher",
-                "command_style",
-                "threads",
-                "processes",
-                "output",
-                "error",
-                "open_mode",
-            }:
-                continue
-            single_line(str(value), f"resource {key}")
-            directives.append(f"#SBATCH --{key.replace('_', '-')}={value}")
-        # Slurm defaults to slurm-%j.out in the submit directory. Palace stdout
-        # already belongs in logs/palace-%j.log, so bind both streams there and
-        # do not tee (tee would duplicate every line into the same file).
-        directives.extend(
-            [
-                f"#SBATCH --output={SOLVER_LOG_PREFIX}%j.log",
-                f"#SBATCH --error={SOLVER_LOG_PREFIX}%j.log",
-                "#SBATCH --open-mode=append",
-            ]
+    directives = _slurm_directives(execution)
+    command = _solver_command(execution)
+    config_schema = single_line(str(config_schema), "palace_identity.config_schema")
+    lines = _script_start_lines(
+        execution, directives, _run_folder_lines(execution.profile)
+    )
+    lines.extend(_petsc_lines(execution.petsc_options))
+    lines.extend(_setup_lines(execution.setup_commands))
+    lines.extend(
+        _compatibility_lines(
+            profile=execution.profile,
+            probe=_compatibility_probe(config_schema),
+            receipt_command=_receipt_command(
+                "--execution-stage config_compatibility "
+                '--preflight-exit-code "$COMPATIBILITY_VERIFY_EXIT" '
+            ),
         )
+    )
+    lines.extend(
+        _solver_lines(
+            profile=execution.profile,
+            command=command,
+            receipt_command=_receipt_command(
+                "--execution-stage solver --preflight-exit-code 0 "
+                '--solver-exit-code "$PALACE_EXIT_CODE" '
+            ),
+        )
+    )
+    return "\n".join(lines)
+
+
+_NOT_SBATCH_DIRECTIVES = {
+    "launcher",
+    "command_style",
+    "threads",
+    "processes",
+    "output",
+    "error",
+    "open_mode",
+}
+"""Resource keys the script uses itself, or binds to the solver log, rather than passing to ``sbatch``."""
+
+
+def _slurm_directives(execution: ExecutionSettings) -> list[str]:
+    """The ``#SBATCH`` lines of a Slurm profile, none for ``direct-local``."""
+    if execution.profile == "direct-local":
+        return []
+    directives: list[str] = []
+    for key, value in execution.resources.items():
+        if key in _NOT_SBATCH_DIRECTIVES:
+            continue
+        single_line(str(value), f"resource {key}")
+        directives.append(f"#SBATCH --{key.replace('_', '-')}={value}")
+    # Slurm defaults to slurm-%j.out in the submit directory. Palace stdout
+    # already belongs in logs/palace-%j.log, so bind both streams there and
+    # do not tee (tee would duplicate every line into the same file).
+    directives.extend(
+        [
+            f"#SBATCH --output={SOLVER_LOG_PREFIX}%j.log",
+            f"#SBATCH --error={SOLVER_LOG_PREFIX}%j.log",
+            "#SBATCH --open-mode=append",
+        ]
+    )
+    return directives
+
+
+def _solver_command(execution: ExecutionSettings) -> str:
+    """The command line that starts Palace: the Slurm launcher, then the executable and the config."""
     launcher = (
         []
-        if profile == "direct-local"
-        else launcher_tokens(resources.get("launcher", ("srun",)))
+        if execution.profile == "direct-local"
+        else launcher_tokens(execution.resources.get("launcher", ("srun",)))
     )
-    if profile != "direct-local" and not launcher:
-        raise ValueError("Slurm profile launcher must be non-empty.")
-
+    if execution.profile != "direct-local" and not launcher:
+        raise ValueError(
+            Declared("Slurm profile launcher", _WHERE_HANDOFF_CALL).refusal(
+                f"must be non-empty: profile {execution.profile!r} got resources.launcher={execution.resources.get('launcher')!r}; pass a launcher such as ('srun',) or leave it out"
+            )
+        )
     arguments = ['"$PALACE_EXECUTABLE"']
-    if style == "wrapper":
+    if execution.command_style == "wrapper":
         arguments.extend(["-np", '"$PALACE_PROCESSES"', "-nt", '"$PALACE_THREADS"'])
     arguments.append('"$PALACE_CONFIG"')
-    command = " ".join([*(shlex.quote(item) for item in launcher), *arguments])
-    config_schema = single_line(str(config_schema), "palace_identity.config_schema")
-    receipt_command = (
+    return " ".join([*(shlex.quote(item) for item in launcher), *arguments])
+
+
+def _receipt_command(stage_arguments: str) -> str:
+    """The recorder call that writes the returned receipt after one execution stage, keeping its exit code."""
+    return (
         f'python3 {RECORDER} "$(pwd)" '
         '"$PIPELINE_EXIT_CODE" --log-path "$PALACE_LOG" '
         '--tee-exit-code "$TEE_EXIT_CODE" '
         '--job-id "${SLURM_JOB_ID:-manual}" '
         '--job-name "${SLURM_JOB_NAME:-manual}" '
-    )
-    preflight_receipt_command = (
-        receipt_command + "--execution-stage config_compatibility "
-        '--preflight-exit-code "$COMPATIBILITY_VERIFY_EXIT" '
-        " || RECEIPT_EXIT=$?"
-    )
-    solver_receipt_command = (
-        receipt_command + "--execution-stage solver --preflight-exit-code 0 "
-        '--solver-exit-code "$PALACE_EXIT_CODE" '
-        " || RECEIPT_EXIT=$?"
+        + stage_arguments
+        + " || RECEIPT_EXIT=$?"
     )
 
-    run_directory_lines = (
-        [
+
+def _run_folder_lines(profile: str) -> list[str]:
+    """Set ``RUN_DIR`` to the run folder: the script's own folder locally, the submit folder under Slurm."""
+    if profile == "direct-local":
+        return [
             'SCRIPT_SOURCE="${BASH_SOURCE[0]}"',
             'RUN_DIR="$(CDPATH= cd -- "$(dirname -- "$SCRIPT_SOURCE")" && pwd -P)" || exit 2',
         ]
-        if profile == "direct-local"
-        else [
-            '[[ -n "${SLURM_SUBMIT_DIR:-}" ]] || { echo "missing SLURM_SUBMIT_DIR" >&2; exit 2; }',
-            'RUN_DIR="$(CDPATH= cd -- "$SLURM_SUBMIT_DIR" && pwd -P)" || exit 2',
-        ]
-    )
+    return [
+        '[[ -n "${SLURM_SUBMIT_DIR:-}" ]] || { echo "missing SLURM_SUBMIT_DIR" >&2; exit 2; }',
+        'RUN_DIR="$(CDPATH= cd -- "$SLURM_SUBMIT_DIR" && pwd -P)" || exit 2',
+    ]
 
-    lines = _script_start_lines(execution, directives, run_directory_lines)
-    if execution.petsc_options:
-        petsc = " ".join(execution.petsc_options)
-        lines.extend(
-            [
-                f"PALACE_PETSC_OPTIONS={shlex.quote(petsc)}",
-                'export PETSC_OPTIONS="${PETSC_OPTIONS:-} ${PALACE_PETSC_OPTIONS}"',
-            ]
-        )
-    lines.extend(_setup_lines(execution.setup_commands))
 
-    compatibility_probe = (
+def _petsc_lines(petsc_options: Sequence[str]) -> list[str]:
+    """Append the caller's PETSc options to any the environment already sets."""
+    if not petsc_options:
+        return []
+    petsc = " ".join(petsc_options)
+    return [
+        f"PALACE_PETSC_OPTIONS={shlex.quote(petsc)}",
+        'export PETSC_OPTIONS="${PETSC_OPTIONS:-} ${PALACE_PETSC_OPTIONS}"',
+    ]
+
+
+def _compatibility_probe(config_schema: str) -> str:
+    """The recorder call that dry-runs Palace on the sealed config before the solve."""
+    return (
         f"python3 {RECORDER} verify-config "
         '"$PALACE_EXECUTABLE" "$PALACE_COMMAND_STYLE" '
         '"$PALACE_RUNTIME_COMPATIBILITY" "$PALACE_CONFIG" '
         f"--config-schema {shlex.quote(config_schema)}"
     )
-    lines.extend(
-        _compatibility_lines(
-            profile=profile,
-            probe=compatibility_probe,
-            receipt_command=preflight_receipt_command,
-        )
-    )
-    lines.extend(
-        _solver_lines(
-            profile=profile,
-            command=command,
-            receipt_command=solver_receipt_command,
-        )
-    )
-    return "\n".join(lines)
 
 
 def _script_start_lines(
@@ -322,18 +353,29 @@ def launcher_tokens(value: Any) -> list[str]:
         return [single_line(value, "launcher")]
     if not isinstance(value, Sequence):
         raise TypeError(
-            "resources.launcher must be a single string or a sequence of strings."
+            Declared(
+                "resources.launcher must be a single string or a sequence of strings",
+                _WHERE_HANDOFF_CALL,
+            ).refusal(found_text(type(value).__name__))
         )
     tokens = [single_line(item, "launcher token") for item in value]
     if not tokens:
-        raise ValueError("resources.launcher must be non-empty.")
+        raise ValueError(
+            Declared(
+                "resources.launcher must be non-empty", _WHERE_HANDOFF_CALL
+            ).refusal(found_text(list(value)))
+        )
     return tokens
 
 
 def positive_int(value: Any, field: str) -> int:
     """Require a positive integer value for a named resource field."""
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-        raise ValueError(f"{field} must be a positive integer.")
+        raise ValueError(
+            Declared(f"{field}", _WHERE_HANDOFF_CALL).refusal(
+                "must be a positive integer"
+            )
+        )
     return value
 
 
@@ -345,5 +387,9 @@ def single_line(value: str, field: str) -> str:
         or "\n" in value
         or "\r" in value
     ):
-        raise ValueError(f"{field} must be non-empty single-line text.")
+        raise ValueError(
+            Declared(f"{field}", _WHERE_HANDOFF_CALL).refusal(
+                "must be non-empty single-line text"
+            )
+        )
     return value

@@ -28,8 +28,9 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.contracts.sgb_sidecar.records import Carrier as CarrierRecord
@@ -181,26 +182,10 @@ def read_built_model(sidecar: Sidecar) -> BuiltModel:
         face_areas=tuple(float(a) for a in expected["face_area_um2"]),
         edge_ids=tuple(by_tag["1"]),
         face_ids=tuple(by_tag["2"]),
-        arc_radius={
-            tag: float(arc["radius_um"])
-            for tag, edge_id in enumerate(by_tag["1"], start=1)
-            if (arc := edges[edge_id]["arc"]) is not None
-        },
+        arc_radius=_arc_radii(edges, by_tag["1"]),
         face_kind={fid: face["kind"] for fid, face in faces.items()},
         face_group={fid: face["group"] for fid, face in faces.items()},
-        # The sources by name, whatever their kind (an Entity may be named like a request), sorted.
-        face_sources={
-            fid: tuple(
-                sorted(
-                    {
-                        *face["entities"],
-                        *face["band_families"],
-                        *face["other_cut_families"],
-                    }
-                )
-            )
-            for fid, face in faces.items()
-        },
+        face_sources=_face_sources(faces),
         face_entities={fid: tuple(face["entities"]) for fid, face in faces.items()},
         edge_carriers={
             eid: tuple(edge["carriers"])
@@ -213,29 +198,64 @@ def read_built_model(sidecar: Sidecar) -> BuiltModel:
             if edge["kind"] == _VERTICAL
         },
         carriers=_carriers(sidecar),
-        band_margins={
-            feature["source"]: tuple(float(m) for m in feature["facts"]["margins_um"])
-            for feature in views.mesh_features(sidecar)
-            if feature["kind"] == "band_boundary"
-        },
+        band_margins=_band_margins(sidecar),
         ring_sizes={
             rid: len(ring["primitives"])
             for rid, ring in sidecar["support_ring"].items()
         },
-        source_curves={
-            cid: SourceCurve(
-                kind=record["curve"]["kind"],
-                start_um=_plane_point(record["curve"]["start_um"]),
-                end_um=_plane_point(record["curve"]["end_um"]),
-                length_um=float(record["length_um"]),
-            )
-            for cid, record in sidecar["source_curve"].items()
-        },
+        source_curves=_source_curves(sidecar),
         entity_layers={
             eid: tuple(sorted({p["layer"] for p in entity["prisms"] if p["layer"]}))
             for eid, entity in sidecar["entity"].items()
         },
     )
+
+
+def _arc_radii(edges: Mapping[str, Any], edge_ids: Sequence[str]) -> dict[int, float]:
+    """The radius of each arc edge, by its Gmsh tag (its 1-based place in the binding)."""
+    return {
+        tag: float(arc["radius_um"])
+        for tag, edge_id in enumerate(edge_ids, start=1)
+        if (arc := edges[edge_id]["arc"]) is not None
+    }
+
+
+def _face_sources(faces: Mapping[str, Any]) -> dict[str, tuple[str, ...]]:
+    """The sources of each face by name, whatever their kind (an Entity may be named like a request), sorted."""
+    return {
+        fid: tuple(
+            sorted(
+                {
+                    *face["entities"],
+                    *face["band_families"],
+                    *face["other_cut_families"],
+                }
+            )
+        )
+        for fid, face in faces.items()
+    }
+
+
+def _band_margins(sidecar: Sidecar) -> dict[str, tuple[float, ...]]:
+    """The inset margins of each band family, by the request that cut it."""
+    return {
+        feature["source"]: tuple(float(m) for m in feature["facts"]["margins_um"])
+        for feature in views.mesh_features(sidecar)
+        if feature["kind"] == "band_boundary"
+    }
+
+
+def _source_curves(sidecar: Sidecar) -> dict[str, SourceCurve]:
+    """Each source curve of the layout: its kind, its end points in the plane and its length."""
+    return {
+        cid: SourceCurve(
+            kind=record["curve"]["kind"],
+            start_um=_plane_point(record["curve"]["start_um"]),
+            end_um=_plane_point(record["curve"]["end_um"]),
+            length_um=float(record["length_um"]),
+        )
+        for cid, record in sidecar["source_curve"].items()
+    }
 
 
 def _carriers(sidecar: Sidecar) -> dict[str, Carrier]:
