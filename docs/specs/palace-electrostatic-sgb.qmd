@@ -303,6 +303,13 @@ recommendations or adequacy Gates:
 | `Model.Refinement.Nonconformal` | `false` unless the notebook sets `amr_nonconformal=True` |
 | `Model.Refinement.SaveAdaptMesh` | omitted unless the notebook sets `save_adapt_mesh=True` or `False` |
 
+`sim.numerical` holds these controls as a `NumericalControls`: read a control
+as a field (`sim.numerical.amr_nonconformal`) and the whole record with
+`sim.numerical.to_payload()`, the dictionary
+`metadata/palace_numerical_controls.json` holds. `sim.surface_epr_specs` is a
+`SurfaceEprSpecs` (`sim.surface_epr_specs.by_type["MA"]`, or `to_payload()`
+for the normalized mapping).
+
 Palace defaults `Nonconformal` to `true` when the key is omitted. SCGSim always
 writes the key and defaults it to `false` (conformal tet AMR). Notebooks opt
 into nonconformal AMR with `set_numerical(amr_nonconformal=True)`.

@@ -10,20 +10,32 @@ from palace_sgb_support import (
     MATERIALS,
     effective_input,
     sidecar_of,
-    surface_epr_specs,
+    surface_epr_spec_records,
 )
 
 from scgsim.palace import EigenmodeSim
 from scgsim.palace.config.config import (
-    LayoutPortBinding,
-    TerminalBinding,
     build_eigenmode_config,
     build_electrostatic_config,
-    configure_numerical_controls,
 )
+from scgsim.palace.config.config_models import (
+    ConfigInput,
+    EigenmodeSettings,
+    ElectrostaticSettings,
+    TerminalBinding,
+)
+from scgsim.palace.config.index import (
+    EnergyEntry,
+    PortEntry,
+    SurfaceEprEntry,
+    TerminalEntry,
+)
+from scgsim.palace.config.numerical import NumericalControls
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 from scgsim.palace.results.surface_contract import validate_surface_epr_config
 from scgsim.palace.simulation.lifecycle import Stage
+from scgsim.palace.source.ports import LayoutPortBinding
+from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 NETS = {"A": ("left", "right"), "B": ("P", "G")}
 PORTS = {
@@ -42,24 +54,41 @@ def case(request, tmp_path):
     return route, groups_from_sidecar(sidecar)
 
 
-def electrostatic(groups, terminals, **overrides):
-    """The Electrostatic config of ``groups`` with the usual defaults."""
-    settings = {
-        "ground_net_ids": (),
-        "unassigned_conductor_policy": "error",
-        "exterior_boundary_policy": "none",
-        "surface_epr_specs": {},
-    }
-    settings.update(overrides)
-    return build_electrostatic_config(
+def common(problem, groups, specs=None, numerical=None):
+    """The shared config input of ``groups``: the test materials, ``specs`` (none by default)."""
+    return ConfigInput(
+        problem=problem,
         groups=groups,
-        terminals=terminals,
-        materials=MATERIALS,
-        save_fields=0,
         mesh_path=Path("palace.msh"),
-        numerical=configure_numerical_controls(),
-        **settings,
+        materials=MATERIALS,
+        surface_epr_specs=SurfaceEprSpecs({}) if specs is None else specs,
+        numerical=NumericalControls() if numerical is None else numerical,
     )
+
+
+def electrostatic(
+    groups,
+    terminals,
+    *,
+    ground_net_ids=(),
+    exterior_boundary_policy="none",
+    surface_epr_specs=None,
+):
+    """The Electrostatic config of ``groups`` with the usual defaults (unassigned conductors refused)."""
+    return build_electrostatic_config(
+        common("Electrostatic", groups, surface_epr_specs),
+        terminals=terminals,
+        ground_net_ids=ground_net_ids,
+        electrostatic=ElectrostaticSettings(
+            unassigned_conductor_policy="error",
+            exterior_boundary_policy=exterior_boundary_policy,
+        ),
+    )
+
+
+def entries_of(result, kind):
+    """The index entries of one record type."""
+    return [entry for entry in result.index_entries if isinstance(entry, kind)]
 
 
 def attributes_of(groups, net):
@@ -86,10 +115,10 @@ def test_terminal_is_the_attributes_of_the_exact_net(case):
         {"Index": 1, "Attributes": attributes_of(groups, first)}
     ]
     assert boundaries["Ground"] == {"Attributes": attributes_of(groups, second)}
-    entry = result.terminal_index_map[0]
-    assert entry["attributes"] == attributes_of(groups, first)
-    assert entry["net_id"] == first
-    assert set(entry["physical_names"]) == {
+    entry = entries_of(result, TerminalEntry)[0]
+    assert entry.attributes == attributes_of(groups, first)
+    assert entry.net_id == first
+    assert set(entry.physical_names) == {
         n for n, r in groups["pec_surfaces"].items() if r["net"] == first
     }
 
@@ -105,7 +134,9 @@ def test_terminal_binding_uses_the_entity_ids_as_conductor_components(case):
         "A": {"left": "chip/left", "right": "chip/right"},
         "B": {"P": "pad", "G": "ground_0000"},
     }[route]
-    assert result.terminal_index_map[0]["conductor_component_ids"] == [expected[first]]
+    assert entries_of(result, TerminalEntry)[0].conductor_component_ids == [
+        expected[first]
+    ]
     assert result.ground_boundary_resolution["conductor_component_ids"] == [
         expected[second]
     ]
@@ -157,9 +188,7 @@ def test_domain_materials_come_from_the_volume_materials(case):
             rows[tuple(volume["attributes"])]
             == MATERIALS[volume["material"]]["permittivity"]
         )
-    assert {
-        e["metadata"]["material"]["kind"] for e in result.domain_energy_index_map
-    } == {
+    assert {e.material["kind"] for e in entries_of(result, EnergyEntry)} == {
         "dielectric",
         "vacuum",
     }
@@ -179,14 +208,18 @@ def test_cracking_is_written_exactly_for_configured_shared_rows(
         groups,
         [TerminalBinding("t", first)],
         ground_net_ids=[second],
-        surface_epr_specs=surface_epr_specs(**films),
+        surface_epr_specs=surface_epr_spec_records(**films),
     )
     model = result.config["Model"]
     if route == "A" and shared_rows_on_route_a:
         assert model["CrackInternalBoundaryElements"] is True
     else:
         assert "CrackInternalBoundaryElements" not in model
-    entries = [*result.domain_energy_index_map, *result.surface_epr_index_map]
+    entries = [
+        entry.to_payload()
+        for entry in result.index_entries
+        if isinstance(entry, (EnergyEntry, SurfaceEprEntry))
+    ]
     validate_surface_epr_config(result.config, {"entries": entries})
 
 
@@ -198,7 +231,7 @@ def test_surface_rows_select_the_attributes_of_their_rows(case):
         groups,
         [TerminalBinding("t", first)],
         ground_net_ids=[second],
-        surface_epr_specs=surface_epr_specs(MA=None, MS=None),
+        surface_epr_specs=surface_epr_spec_records(MA=None, MS=None),
     )
     rows = result.config["Boundaries"]["Postprocessing"]["Dielectric"]
     assert all(isinstance(a, int) and a > 0 for row in rows for a in row["Attributes"])
@@ -209,20 +242,12 @@ def test_surface_rows_select_the_attributes_of_their_rows(case):
         assert sorted(by_type["MA"]) == sorted(by_type["MS"])
 
 
-def eigenmode(groups, ports, **overrides):
+def eigenmode(groups, ports, *, surface_epr_specs=None):
     """The Eigenmode config of ``groups`` with the usual defaults."""
-    numerical = configure_numerical_controls(amr_max_passes=0)
     return build_eigenmode_config(
-        groups=groups,
+        common("Eigenmode", groups, surface_epr_specs),
         ports=ports,
-        materials=MATERIALS,
-        surface_epr_specs=overrides.get("surface_epr_specs", {}),
-        numerical=numerical,
-        num_modes=3,
-        target_hz=None,
-        eigenmode_tolerance=1e-6,
-        save_fields=0,
-        mesh_path=Path("palace.msh"),
+        eigenmode=EigenmodeSettings(num_modes=3),
     )
 
 
@@ -236,11 +261,9 @@ def test_eigenmode_pec_is_every_conductor_attribute_and_the_port_is_its_own(case
     (port,) = boundaries["LumpedPort"]
     assert port["Attributes"] == groups["port_surfaces"]["P1"]["attributes"]
     assert not set(port["Attributes"]) & pec
-    (entry,) = [
-        e for e in result.index_entries if e["section"] == "Boundaries.LumpedPort"
-    ]
+    (entry,) = entries_of(result, PortEntry)
     assert (
-        entry["metadata"]["host_entity_ids"]
+        entry.sheet["host_entity_ids"]
         == groups["port_surfaces"]["P1"]["host_entity_ids"]
     )
 
@@ -267,7 +290,9 @@ def test_eigenmode_surface_rows_do_not_overlap_the_port(case):
     """Surface-EPR attributes and the port attributes stay disjoint (the config refuses an overlap)."""
     route, groups = case
     result = eigenmode(
-        groups, [PORTS[route]], surface_epr_specs=surface_epr_specs(MA=None, SA=None)
+        groups,
+        [PORTS[route]],
+        surface_epr_specs=surface_epr_spec_records(MA=None, SA=None),
     )
     rows = result.config["Boundaries"]["Postprocessing"]["Dielectric"]
     port = set(result.config["Boundaries"]["LumpedPort"][0]["Attributes"])
@@ -291,7 +316,7 @@ def test_eigenmode_epr_request_is_checked_against_the_rows_of_the_index(case, tm
         mesh_manifest_path=manifest,
     )
     sim._stage = Stage.MESHED  # noqa: SLF001 -- stands for set_plan() and mesh()
-    sim.surface_epr_specs = surface_epr_specs(MA=None)
+    sim.surface_epr_specs = surface_epr_spec_records(MA=None)
     sim.set_numerical(amr_max_passes=0)
     sim.set_epr_request(surface_interfaces=["MA"])
     assert sim.write_config() == tmp_path / "config.json"

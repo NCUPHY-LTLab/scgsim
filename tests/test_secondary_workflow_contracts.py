@@ -25,7 +25,7 @@ from scgsim.aedt import (
 )
 from scgsim.geometry import ApproximationProfile
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
-from scgsim.palace.config.config import configure_numerical_controls
+from scgsim.palace.config.numerical import NumericalControls
 
 VERSIONS = ("2023.2", "2024.2")
 
@@ -188,7 +188,7 @@ def test_palace_public_eigenmode_constructor_and_profile_control_codecs():
     restored_profile = ApproximationProfile.from_payload(
         json.loads(json.dumps(profile.to_payload()))
     )
-    numerical = configure_numerical_controls(
+    numerical = NumericalControls(
         order=2,
         tolerance=1e-6,
         max_iterations=2000,
@@ -200,10 +200,12 @@ def test_palace_public_eigenmode_constructor_and_profile_control_codecs():
         output_paraview=True,
         output_grid_function=False,
     )
-    decoded = json.loads(json.dumps(numerical))
-    assert configure_numerical_controls(**decoded) == numerical
+    decoded = json.loads(json.dumps(numerical.to_payload()))
+    assert NumericalControls(**decoded) == numerical
     request = EigenmodeSim(
-        route="B", approximation_profile=restored_profile, numerical=decoded
+        route="B",
+        approximation_profile=restored_profile,
+        numerical=NumericalControls(**decoded),
     )
     request.set_eigenmode(num_modes=2, target=3e9, tolerance=1e-6, save=1)
     assert request.approximation_profile.to_payload() == profile.to_payload()

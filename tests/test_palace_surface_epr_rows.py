@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import pytest
-from palace_sgb_support import effective_input, sidecar_of, surface_epr_specs
+from palace_sgb_support import (
+    effective_input,
+    lower_surface_epr,
+    sidecar_of,
+    surface_epr_specs,
+)
 from test_sgb_band_labels import PORT_CASES, all_interface_insets
 
 from scgsim.geometry.surface_epr.insets import inset_requests, needs_unbanded_build
 from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
-from scgsim.palace.config.surface_epr import build_surface_epr_postprocessing
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 
 
@@ -32,7 +36,7 @@ def test_margins_are_unions_of_bands_and_scale_only_the_thickness(tmp_path, l0):
     """Margin m_k selects the attributes of bands k..K; no row carries a Mask, whatever Model.L0."""
     specs = surface_epr_specs(MA=[0.5, 1.0])
     groups = banded_groups("B", tmp_path, specs)
-    rows, entries = build_surface_epr_postprocessing(groups, specs, model_l0_m=l0)
+    rows, entries = lower_surface_epr(groups, specs, model_l0_m=l0)
     assert all("Mask" not in row for row in rows)
     assert all(row["Thickness"] == pytest.approx(2e-9 / l0) for row in rows)
     by_name = {entry["entry_name"]: entry for entry in entries}
@@ -57,7 +61,7 @@ def test_a_sidewall_has_a_baseline_row_but_no_margin_rows(tmp_path):
     """Sidewalls are unbanded: they lie at the gap edge, so no margin selects them."""
     specs = surface_epr_specs(MA=[0.5])
     groups = banded_groups("B", tmp_path, specs)
-    _, entries = build_surface_epr_postprocessing(groups, specs)
+    _, entries = lower_surface_epr(groups, specs)
     names = {entry["entry_name"] for entry in entries}
     assert "MA::pad__sidewall" in names
     assert not any(name.startswith("MA::pad__sidewall__inset") for name in names)
@@ -67,7 +71,7 @@ def test_each_margin_row_names_its_bands_and_lineage_in_the_index(tmp_path):
     """Index metadata: the row, group, type, band, sides, entities, Net, attributes and lineage."""
     specs = surface_epr_specs(MA=[0.5])
     groups = banded_groups("B", tmp_path, specs)
-    _, entries = build_surface_epr_postprocessing(groups, specs)
+    _, entries = lower_surface_epr(groups, specs)
     entry = next(e for e in entries if e["entry_name"] == "MA::pad__top__inset_0")
     assert [r["row"] for r in entry["metadata"]["rows"]] == ["MA::pad__top::band=1"]
     row = entry["metadata"]["rows"][0]
@@ -93,7 +97,7 @@ def test_route_a_sheet_rows_share_attributes_and_keep_their_sides(tmp_path):
     """MA and MS rows of one sheet band sit on the same attributes; the index keeps the side of each."""
     specs = surface_epr_specs(MA=[0.5, 1.0], MS=[0.5, 1.0])
     groups = banded_groups("A", tmp_path, specs)
-    rows, entries = build_surface_epr_postprocessing(groups, specs)
+    rows, entries = lower_surface_epr(groups, specs)
     by_name = {entry["entry_name"]: entry for entry in entries}
     ma = by_name["MA::chip/left__sheet"]
     ms = by_name["MS::chip/left__sheet"]
@@ -114,9 +118,9 @@ def test_a_required_type_without_rows_is_an_error(tmp_path):
     specs = surface_epr_specs(SA=None)
     specs["SA"]["face_kinds"] = ["top"]
     with pytest.raises(ValueError, match="Required Surface EPR SA"):
-        build_surface_epr_postprocessing(groups, specs)
+        lower_surface_epr(groups, specs)
     specs["SA"]["required"] = False
-    assert build_surface_epr_postprocessing(groups, specs) == ([], [])
+    assert lower_surface_epr(groups, specs) == ([], [])
 
 
 def test_face_kinds_select_the_rows_of_those_kinds(tmp_path):
@@ -126,7 +130,7 @@ def test_face_kinds_select_the_rows_of_those_kinds(tmp_path):
     )
     specs = surface_epr_specs(MA=None)
     specs["MA"]["face_kinds"] = ["sidewall"]
-    _, entries = build_surface_epr_postprocessing(groups, specs)
+    _, entries = lower_surface_epr(groups, specs)
     assert {e["entry_name"] for e in entries} == {
         "MA::ground_0000__sidewall",
         "MA::pad__sidewall",
@@ -137,7 +141,7 @@ def test_a_margin_the_support_was_not_banded_with_is_an_error(tmp_path):
     """Config margins must be those the geometry was built with."""
     groups = banded_groups("B", tmp_path, surface_epr_specs(MA=[0.5]))
     with pytest.raises(ValueError, match="not among the margins"):
-        build_surface_epr_postprocessing(groups, surface_epr_specs(MA=[2.0]))
+        lower_surface_epr(groups, surface_epr_specs(MA=[2.0]))
 
 
 def test_margins_must_be_positive_and_strictly_increasing():
@@ -192,7 +196,7 @@ def test_margin_rows_take_their_bands_from_the_expanded_families(tmp_path):
     specs = surface_epr_specs(MA=[0.5, 1.0])
     sidecar = banded_sidecar("B", tmp_path, specs)
     groups = groups_from_sidecar(sidecar)
-    _, entries = build_surface_epr_postprocessing(groups, specs)
+    _, entries = lower_surface_epr(groups, specs)
     by_name = {entry["entry_name"]: entry for entry in entries}
     (request,) = sidecar["inset_request"].values()
     for family in (sidecar["band_family"][f] for f in request["families"]):
@@ -219,7 +223,7 @@ def test_margin_rows_take_their_bands_from_the_bands_of_concrete_requests(tmp_pa
     assert all(r["scope"] == "face" for r in sidecar["inset_request"].values())
     groups = groups_from_sidecar(sidecar)
     specs = surface_epr_specs(MA=[0.5, 1.0], SA=[0.5])
-    _, entries = build_surface_epr_postprocessing(groups, specs)
+    _, entries = lower_surface_epr(groups, specs)
     by_name = {entry["entry_name"]: entry for entry in entries}
     pad = sidecar["band_family"]["band_pad_top"]
     assert by_name["MA::pad__top__inset_1"]["physical_names"] == sorted(
@@ -235,15 +239,12 @@ def test_a_family_with_no_bands_contributes_nothing(tmp_path):
     """A port can cover a whole face: its family lists ``bands == {}`` and carries no row."""
     specs = surface_epr_specs(MA=[0.5, 1.0])
     sidecar = banded_sidecar("B", tmp_path, specs)
-    reference = build_surface_epr_postprocessing(groups_from_sidecar(sidecar), specs)
+    reference = lower_surface_epr(groups_from_sidecar(sidecar), specs)
     (request,) = sidecar["inset_request"].values()
     first = sidecar["band_family"][request["families"][0]]
     sidecar["band_family"]["epr_MA::covered::top"] = {**first, "bands": {}}
     request["families"].append("epr_MA::covered::top")
-    assert (
-        build_surface_epr_postprocessing(groups_from_sidecar(sidecar), specs)
-        == reference
-    )
+    assert lower_surface_epr(groups_from_sidecar(sidecar), specs) == reference
 
 
 def test_faces_sgb_skipped_have_a_baseline_row_and_no_margin_rows(tmp_path):
@@ -252,7 +253,7 @@ def test_faces_sgb_skipped_have_a_baseline_row_and_no_margin_rows(tmp_path):
     sidecar = banded_sidecar("B", tmp_path, specs)
     (request,) = sidecar["inset_request"].values()
     assert [s["support"]["z_um"] for s in request["skipped"]] == [-10.0]
-    _, entries = build_surface_epr_postprocessing(groups_from_sidecar(sidecar), specs)
+    _, entries = lower_surface_epr(groups_from_sidecar(sidecar), specs)
     names = [entry["entry_name"] for entry in entries]
     # Two interfaces of one pair share a name; the unbanded one keeps its baseline row and says so.
     assert names.count("SA::substrate|VACUUM_REGION__interface") == 1
@@ -269,7 +270,7 @@ def test_the_custom_path_gives_a_conductor_its_own_margin_rows(tmp_path):
     specs["MA"]["inset_margins_by_entity_um"] = {"pad": [0.25, 0.5, 0.75]}
     sidecar = banded_sidecar("B", tmp_path, specs)
     assert set(sidecar["inset_request"]) == {"epr::pad::top", "epr_MA"}
-    _, entries = build_surface_epr_postprocessing(groups_from_sidecar(sidecar), specs)
+    _, entries = lower_surface_epr(groups_from_sidecar(sidecar), specs)
     insets = {e["entry_name"]: e["inset"] for e in entries if "inset" in e}
     assert [
         (
@@ -294,7 +295,7 @@ def test_a_customised_sheet_serves_both_specs_from_its_one_set_of_margins(tmp_pa
     specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": [0.5]}
     sidecar = banded_sidecar("A", tmp_path, specs)
     groups = groups_from_sidecar(sidecar)
-    _, entries = build_surface_epr_postprocessing(groups, specs)
+    _, entries = lower_surface_epr(groups, specs)
     insets = {e["entry_name"]: e["inset"] for e in entries if "inset" in e}
     # chip/left: margins (0.5) -> both specs select bands 1..; chip/right: margins (1.0) -> bands 1..
     for interface_type in ("MA", "MS"):
@@ -364,7 +365,7 @@ def test_a_margin_is_found_among_the_bands_by_grid_identity(tmp_path):
     """The family records 0.3; a spec that writes 0.1 + 0.2 selects the same band."""
     groups = banded_groups("B", tmp_path, surface_epr_specs(MA=[0.3]))
     specs = surface_epr_specs(MA=[0.1 + 0.2])
-    _, entries = build_surface_epr_postprocessing(groups, specs)
+    _, entries = lower_surface_epr(groups, specs)
     (entry,) = (e for e in entries if e["entry_name"] == "MA::pad__top__inset_0")
     assert entry["inset"]["first_band"] == 1
 
@@ -377,4 +378,4 @@ def test_a_customised_margin_the_conductor_was_not_banded_with_is_an_error(tmp_p
     changed = surface_epr_specs(MA=[1.0])
     changed["MA"]["inset_margins_by_entity_um"] = {"pad": [0.5]}
     with pytest.raises(ValueError, match="not among the margins"):
-        build_surface_epr_postprocessing(groups, changed)
+        lower_surface_epr(groups, changed)

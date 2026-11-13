@@ -1,7 +1,7 @@
 """Pure configuration coverage for explicit AMR studies; no native solver runs."""
 
 import json
-from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -9,15 +9,21 @@ import pytest
 
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.config.config import (
-    TerminalBinding,
     build_eigenmode_config,
     build_electrostatic_config,
 )
+from scgsim.palace.config.config_models import (
+    ConfigInput,
+    EigenmodeSettings,
+    ElectrostaticSettings,
+    TerminalBinding,
+)
 from scgsim.palace.config.numerical import (
+    NumericalControls,
     build_refinement,
-    configure_numerical_controls,
     linear_solver,
 )
+from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 _GROUPS = {
     "volumes": {
@@ -36,17 +42,27 @@ _GROUPS = {
 _MATERIALS = {"vacuum": {"kind": "vacuum", "permittivity": 1.0, "loss_tangent": 0.0}}
 
 
+def _common(sim: EigenmodeSim | ElectrostaticSim) -> ConfigInput:
+    return ConfigInput(
+        problem=sim.problem,
+        groups=_GROUPS,
+        mesh_path=Path("palace.msh"),
+        materials=_MATERIALS,
+        surface_epr_specs=SurfaceEprSpecs({}),
+        numerical=sim.numerical,
+    )
+
+
 def _electrostatic_config(sim: ElectrostaticSim) -> dict[str, Any]:
     return build_electrostatic_config(
-        groups=_GROUPS,
+        _common(sim),
         terminals=[TerminalBinding(name="terminal", net_id="net")],
-        materials=_MATERIALS,
-        save_fields=sim.save_fields,
-        unassigned_conductor_policy=sim.unassigned_conductor_policy,
-        exterior_boundary_policy=sim.exterior_boundary_policy,
-        mesh_path=Path("palace.msh"),
-        surface_epr_specs={},
-        numerical=sim.numerical,
+        ground_net_ids=(),
+        electrostatic=ElectrostaticSettings(
+            sim.save_fields,
+            sim.unassigned_conductor_policy,
+            sim.exterior_boundary_policy,
+        ),
     ).config
 
 
@@ -55,7 +71,7 @@ def test_electrostatic_defaults_use_cg_boomeramg_without_changing_case_controls(
 ):
     """Select the electrostatic solver while retaining all other baseline defaults."""
     sim = ElectrostaticSim()
-    assert sim.numerical == configure_numerical_controls()
+    assert sim.numerical == NumericalControls()
     config = _electrostatic_config(sim)
     assert config["Solver"]["Linear"] == {
         "Type": "BoomerAMG",
@@ -110,7 +126,7 @@ def test_explicit_study_settings_lower_from_public_setters_without_json_edits() 
         "GridFunction": False,
     }
     assert (
-        configure_numerical_controls(**json.loads(json.dumps(sim.numerical)))
+        NumericalControls(**json.loads(json.dumps(sim.numerical.to_payload())))
         == sim.numerical
     )
 
@@ -120,16 +136,7 @@ def test_eigenmode_solver_defaults_remain_gmres_and_default_preconditioner() -> 
     sim = EigenmodeSim()
     sim.set_numerical(amr_max_passes=0)
     config = build_eigenmode_config(
-        groups=_GROUPS,
-        ports=(),
-        materials=_MATERIALS,
-        surface_epr_specs={},
-        numerical=sim.numerical,
-        num_modes=sim.num_modes,
-        target_hz=sim.target_hz,
-        eigenmode_tolerance=sim.eigenmode_tolerance,
-        save_fields=sim.save_fields,
-        mesh_path=Path("palace.msh"),
+        _common(sim), ports=(), eigenmode=EigenmodeSettings()
     ).config
     assert config["Solver"]["Linear"] == {
         "Type": "Default",
@@ -137,7 +144,7 @@ def test_eigenmode_solver_defaults_remain_gmres_and_default_preconditioner() -> 
         "Tol": 1e-6,
         "MaxIts": 400,
     }
-    assert linear_solver(configure_numerical_controls()) == config["Solver"]["Linear"]
+    assert linear_solver(NumericalControls()) == config["Solver"]["Linear"]
 
 
 @pytest.mark.parametrize(
@@ -175,8 +182,10 @@ def test_new_optional_controls_retain_choices_across_later_setters(
     sim.set_numerical(ksp_type="Default", amr_nc_levels=0)
     sim.set_numerical(order=2)
     sim.set_mesh(quality_threshold=0.02)
-    assert sim.numerical["ksp_type"] == "Default"
-    assert build_refinement({**sim.numerical, "amr_max_passes": 0})["MaxNCLevels"] == 0
+    assert sim.numerical.ksp_type == "Default"
+    assert (
+        build_refinement(replace(sim.numerical, amr_max_passes=0))["MaxNCLevels"] == 0
+    )
 
 
 @pytest.mark.parametrize(
@@ -194,7 +203,7 @@ def test_invalid_new_controls_preserve_numerical_state(
 ) -> None:
     """Reject invalid declared native settings before applying any accompanying update."""
     sim = sim_type()
-    before = deepcopy(sim.numerical)
+    before = sim.numerical
     with pytest.raises((ValueError, TypeError)):
         sim.set_numerical(order=2, **invalid)
     assert sim.numerical == before

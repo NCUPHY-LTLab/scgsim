@@ -158,6 +158,8 @@ Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_
 | `Model.Refinement.Nonconformal` | `false`，除非 Notebook 設定 `amr_nonconformal=True` |
 | `Model.Refinement.SaveAdaptMesh` | 省略，除非 Notebook 設定 `save_adapt_mesh=True` 或 `False` |
 
+`sim.numerical` 以 `NumericalControls` 保存這些控制：以欄位讀取單一控制（`sim.numerical.amr_nonconformal`），以 `sim.numerical.to_payload()` 讀取整筆紀錄，也就是 `metadata/palace_numerical_controls.json` 保存的字典。`sim.surface_epr_specs` 是 `SurfaceEprSpecs`（`sim.surface_epr_specs.by_type["MA"]`，或以 `to_payload()` 取得正規化後的對照）。
+
 Palace 在省略 `Nonconformal` 鍵時預設為 `true`。SCGSim 一律寫出此鍵，預設為 `false`（共形四面體 AMR）。Notebook 可透過 `set_numerical(amr_nonconformal=True)` 啟用非共形 AMR。
 
 `set_numerical(save_adapt_mesh=...)` 只接受 `True`、`False` 或 `None`。`None`（包含省略）透過省略 `SaveAdaptMesh`，保留先前的 SCGSim 數值酬載及設定位元組；布林值則將該確切布林值寫至 `Model.Refinement.SaveAdaptMesh`。此控制詢問 Palace 是否儲存最終自適應網格，不保證每次求解或私有流程都產生檔案。

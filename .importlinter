@@ -118,3 +118,14 @@ forbidden_modules =
 # The class A wall-column limit is one number, owned by the geometry layer's grid model.
 ignore_imports =
     scgsim.meshing.fine_structure -> scgsim.geometry.models.grid
+
+# The Palace stages in flow order: source, then mesh, then config, then run. A stage reads the stages
+# before it, never one after it; import-linter lists the last stage first.
+[importlinter:contract:palace-stage-layers]
+name = Palace stages import only the stages before them (source, mesh, config, run)
+type = layers
+layers =
+    scgsim.palace.run
+    scgsim.palace.config
+    scgsim.palace.mesh
+    scgsim.palace.source

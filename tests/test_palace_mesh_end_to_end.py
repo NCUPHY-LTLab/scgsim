@@ -22,21 +22,28 @@ from test_sgb_curved_port_landing import circular_pad_input
 
 from scgsim.meshing import Budgets, MesherOptions, MeshRepairError
 from scgsim.palace.config.config import (
-    LayoutPortBinding,
-    TerminalBinding,
     build_eigenmode_config,
     build_electrostatic_config,
-    configure_numerical_controls,
 )
+from scgsim.palace.config.config_models import (
+    ConfigInput,
+    EigenmodeSettings,
+    ElectrostaticSettings,
+    TerminalBinding,
+)
+from scgsim.palace.config.index import SurfaceEprEntry
+from scgsim.palace.config.numerical import NumericalControls
 from scgsim.palace.mesh.native import lower_mesh_in_current_process
 from scgsim.palace.mesh.summary import mesh_summary
 from scgsim.palace.reports.plotting import mesh_summary_html
 from scgsim.palace.results.index_contract import (
-    INDEX_MAP_SCHEMA_VERSION,
     RouteConsistency,
     validate_config_index_correspondence,
 )
 from scgsim.palace.results.tables import count_index_entries
+from scgsim.palace.simulation.core import index_map
+from scgsim.palace.source.ports import LayoutPortBinding
+from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 pytestmark = pytest.mark.slow
 
@@ -103,17 +110,19 @@ def check_run(result, route):
 def config_of(result, route, specs=None):
     """The Electrostatic config of a run: first Net as Terminal, second as Ground."""
     nets = sorted({r["net"] for r in result.groups["pec_surfaces"].values()})
-    return build_electrostatic_config(
+    common = ConfigInput(
+        problem="Electrostatic",
         groups=result.groups,
+        mesh_path=result.mesh_path,
+        materials=MATERIALS,
+        surface_epr_specs=SurfaceEprSpecs.normalized(specs or {}, materials=MATERIALS),
+        numerical=NumericalControls(),
+    )
+    return build_electrostatic_config(
+        common,
         terminals=[TerminalBinding("t", nets[0])],
         ground_net_ids=nets[1:],
-        materials=MATERIALS,
-        save_fields=0,
-        unassigned_conductor_policy="error",
-        exterior_boundary_policy="none",
-        mesh_path=result.mesh_path,
-        surface_epr_specs=specs or {},
-        numerical=configure_numerical_controls(),
+        electrostatic=ElectrostaticSettings(unassigned_conductor_policy="error"),
     )
 
 
@@ -222,7 +231,11 @@ def assert_margin_rows_select_the_bands_of_their_families(result, config):
         row["Index"]: row
         for row in config.config["Boundaries"]["Postprocessing"]["Dielectric"]
     }
-    margin_entries = [e for e in config.surface_epr_index_map if "inset" in e]
+    margin_entries = [
+        e.to_payload()
+        for e in config.index_entries
+        if isinstance(e, SurfaceEprEntry) and e.inset is not None
+    ]
     assert margin_entries
     for entry in margin_entries:
         wanted = expected_margin_attributes(result, entry)
@@ -233,16 +246,9 @@ def assert_margin_rows_select_the_bands_of_their_families(result, config):
 
 def assert_readers_accept_the_run(result, route, manifest, config):
     """The manifest the build wrote and the index map of its config satisfy the readers, and render."""
-    entries = [
-        *config.terminal_index_map,
-        *config.domain_energy_index_map,
-        *config.surface_epr_index_map,
-    ]
-    index = {
-        "schema_version": INDEX_MAP_SCHEMA_VERSION,
-        "entries": entries,
-        "ground_boundary": config.ground_boundary_resolution,
-    }
+    index = index_map(
+        config.index_entries, ground_boundary=config.ground_boundary_resolution
+    )
     metadata = {
         "route": route,
         "problem": "Electrostatic",
@@ -399,20 +405,22 @@ def test_a_junction_support_plane_port_meshes_on_route_a(tmp_path):
             {"L": 1e-9},
         )
     ]
-    config = build_eigenmode_config(
+    materials = {
+        **MATERIALS,
+        "Si": {"kind": "dielectric", "permittivity": 4, "loss_tangent": 0},
+    }
+    common = ConfigInput(
+        problem="Eigenmode",
         groups=result.groups,
-        ports=ports,
-        materials={
-            **MATERIALS,
-            "Si": {"kind": "dielectric", "permittivity": 4, "loss_tangent": 0},
-        },
-        surface_epr_specs=surface_epr_specs(MA=None, MS=None),
-        numerical=configure_numerical_controls(amr_max_passes=0),
-        num_modes=2,
-        target_hz=None,
-        eigenmode_tolerance=1e-6,
-        save_fields=0,
         mesh_path=result.mesh_path,
+        materials=materials,
+        surface_epr_specs=SurfaceEprSpecs.normalized(
+            surface_epr_specs(MA=None, MS=None), materials=materials
+        ),
+        numerical=NumericalControls(amr_max_passes=0),
+    )
+    config = build_eigenmode_config(
+        common, ports=ports, eigenmode=EigenmodeSettings(num_modes=2)
     )
     assert_config_binds_the_mesh(config.config, mesh)
 
