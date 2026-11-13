@@ -46,6 +46,7 @@ scgsim/
 │   ├── planning/     # physical interpretation, junction partition and AEDT's surface planning
 │   └── primitives/   # shared Entity, loop, grid and spatial operations
 ├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
+├── contracts/        # file definitions shared across stages: the SGB sidecar and the Palace run folder
 ├── semantics/        # immutable solver-independent facts
 ├── palace/
 │   ├── simulation/   # EigenmodeSim and ElectrostaticSim on one shared core and lifecycle
@@ -323,6 +324,28 @@ index entries as one record per config section (`PortEntry`, `TerminalEntry`,
 order `source`, `mesh`, `config`, `run`: a stage may import the stages before
 it and never one after it, so `source` imports none of the other three. The
 import-linter contract `palace-stage-layers` checks it.
+
+Every stage takes the run folder's layout from one module,
+`scgsim.contracts.palace_run_folder`: the path of each file (`CONFIG`, `MESH`,
+`MESH_MANIFEST`, `INDEX_MAP`, the handoff records, the recorder, `OUTPUT_DIR`),
+the schema of each record (`CONFIG_SCHEMA`, `MANIFEST_SCHEMA_VERSION`,
+`INDEX_MAP_SCHEMA_VERSION` and the receipt schemas) and the handoff id
+(`HandoffIdentity`), which the handoff writes and `resolve_palace_result`
+checks. The same module holds one record per problem, `EIGENMODE` and
+`ELECTROSTATIC` (`PalaceProblem`). The record states what differs between
+the two problems: the name of the problem in `config.json`, the tables
+Palace writes, the `Boundaries` block that excites the problem, and whether a
+table row is a mode or an excitation. Code that differs by problem reads the
+record and does not compare problem names. `PalaceProblem.written_families`
+decides which tables a run must return. The receipt recorder uses it to list
+outputs, and `results` uses it to require them. `collects_adapted_meshes`
+compares the handoff's recorded `config_schema` with `CONFIG_SCHEMA`, the
+same constant the writer uses, so raising the schema cannot stop the
+recorder from collecting adapted meshes. The contract imports only the
+standard library. The recorder in the run folder
+(`metadata/record_palace_return.py`) is the recorder module with the
+contract's text written in place of its import (`run.recorder_copy`), so a
+run folder needs only a Python interpreter to record its receipt.
 
 `mesh()` discards derived state before checking prerequisites. Geometry preparation then applies the vacuum region to the
 stack, interprets the physical geometry, records Route-A metadata, and returns
