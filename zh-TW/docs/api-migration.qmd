@@ -194,9 +194,9 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 - **目前負責模組與責任：** `scgsim.palace.simulation.drc`; 兩階段 `simulation_drc` 的報告與拒絕，`mesh()` 在網格化之前也會丟出同一個拒絕。 **門面匯出：** `SimulationDrcError`, `SimulationDrcReport`, `StageResult`.
 - **目前負責模組與責任：** `scgsim.palace.results`; 依資料保管關係載入結果。 **門面匯出：** `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
 - **目前負責模組與責任：** `scgsim.palace.results`; 獨立 EPR 數值與離線重新分析。 **門面匯出：** `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`.
-- **目前負責模組與責任：** `scgsim.palace.presentation`; 依求解器對獨立 EPR 繪圖。 **門面匯出：** `show_epr`.
+- **目前負責模組與責任：** `scgsim.palace.reports`; 依求解器對獨立 EPR 繪圖。 **門面匯出：** `show_epr`.
 - **目前負責模組與責任：** `scgsim.palace.results.report_models`; 供 Palace 呈現使用的獨立資料。 **門面匯出：** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`.
-- **目前負責模組與責任：** `scgsim.palace.presentation.reports`; 根據保留結果證據提供可信度、物理與效能比較檢視。 **門面匯出：** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
+- **目前負責模組與責任：** `scgsim.palace.reports.reports`; 根據保留結果證據提供可信度、物理與效能比較檢視。 **門面匯出：** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
 
 
 ## Palace 直接子模組匯出 {#palace-direct-submodule-exports}
@@ -206,12 +206,12 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 
 - **基準直接匯入 `scgsim.palace.electrostatic` → 目前負責模組 `scgsim.palace.simulation.electrostatic`.** 宣告符號： `ElectrostaticSim`.
 - **基準直接匯入 `scgsim.palace.eigenmode` → 目前負責模組 `scgsim.palace.simulation.eigenmode`.** 宣告符號： `EigenmodeSim`.
-- **基準直接匯入 `scgsim.palace.handoff` → 目前負責模組 `scgsim.palace.execution.handoff`.** 宣告符號： `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
+- **基準直接匯入 `scgsim.palace.handoff` → 目前負責模組 `scgsim.palace.run.handoff`.** 宣告符號： `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
 - **基準直接匯入 `scgsim.palace.resolve` → 目前負責模組 `scgsim.palace.results.resolve`.** 宣告符號： `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
-- **基準直接匯入 `scgsim.palace.report`.** 宣告符號： `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. 目前負責模組： `scgsim.palace.presentation.reports` 保留此直接匯出清單；資料定義位於 `scgsim.palace.results.report_models`. 套件門面保留其他報告匯出，包含 `SimulationBenchmarkReport` 及表面邊距資料。
+- **基準直接匯入 `scgsim.palace.report`.** 宣告符號： `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. 目前負責模組： `scgsim.palace.reports.reports` 保留此直接匯出清單；資料定義位於 `scgsim.palace.results.report_models`. 套件門面保留其他報告匯出，包含 `SimulationBenchmarkReport` 及表面邊距資料。
 
 
-目前 `scgsim.palace.results.report_models` 模組定義 `AmrPassSnapshot`、`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceEprRecord`、`SurfaceEprSeriesSnapshot`、`SurfaceMarginEprRecord` 及 `SurfaceMarginEprSeriesSnapshot`。`scgsim.palace.presentation.reports` 保留上列七個直接匯出。
+目前 `scgsim.palace.results.report_models` 模組定義 `AmrPassSnapshot`、`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceEprRecord`、`SurfaceEprSeriesSnapshot`、`SurfaceMarginEprRecord` 及 `SurfaceMarginEprSeriesSnapshot`。`scgsim.palace.reports.reports` 保留上列七個直接匯出。
 
 `scgsim.palace._epr_results` 是基準私有實作路徑，受支援名稱由 `scgsim.palace` 重新匯出。目前由 `scgsim.palace.results` 負責；舊私有匯入路徑不是相容介面。
 

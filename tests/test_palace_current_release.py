@@ -5,10 +5,10 @@ import subprocess
 
 import pytest
 
-from scgsim.palace.execution import returned_receipt
-from scgsim.palace.execution.handoff import prepare_handoff
 from scgsim.palace.mesh.build import MeshBuildResult
 from scgsim.palace.results.receipt_contract import validate_palace_identity
+from scgsim.palace.run import returned_receipt
+from scgsim.palace.run.handoff import prepare_handoff
 
 OFFICIAL_COMMIT = "0dc74cdf8c36c58b69b21c4a06e816048ec0b83f"
 

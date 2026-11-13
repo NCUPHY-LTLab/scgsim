@@ -7,7 +7,7 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
-from scgsim.palace.presentation.plotting import (
+from scgsim.palace.reports.plotting import (
     COLORWAY,
     FigureStyle,
     LinePlot,

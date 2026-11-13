@@ -10,10 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scgsim.palace.execution.archive import (
-    logical_tar_member_name,
-    resolve_run_archive_path,
-)
 from scgsim.palace.results.artifacts import (
     confined_path,
     expect_int,
@@ -25,6 +21,10 @@ from scgsim.palace.results.artifacts import (
     sha256,
 )
 from scgsim.palace.results.receipt_contract import validate_palace_identity
+from scgsim.palace.run.archive import (
+    logical_tar_member_name,
+    resolve_run_archive_path,
+)
 
 _REQUIRED_HASH_ENTRIES = (
     "palace.msh",

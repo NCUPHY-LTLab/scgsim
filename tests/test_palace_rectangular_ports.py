@@ -14,7 +14,7 @@ import math
 import pytest
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, two_pads
 
-import scgsim.palace.preparation.workflow as workflow
+import scgsim.palace.source.workflow as workflow
 from scgsim.geometry import (
     GeometryPlan,
     RectangularJunctionSpec,

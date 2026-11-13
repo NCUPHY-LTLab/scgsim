@@ -53,7 +53,7 @@ This index lists names declared by nine public facades; it does not replace each
 | `src/scgsim/aedt/specs/__init__.py` | `face6e5583a1326d130bb35845350c0363c31bd2bc277664b271b385e9ec5ec3` |
 | `src/scgsim/geometry/__init__.py` | `592524fe7659e8a336af03a3544270e996ccbbd510ea9e7cd16b0ae0bd668a35` |
 | `src/scgsim/geometry/models/__init__.py` | `0b2f89737262fb6b9ce0ca78a4bf2f8d758abb5346a085dd0b60ea57b9c6f113` |
-| `src/scgsim/palace/__init__.py` | `590d3fdb1bd6cd232a0fdb4ae704f8224a68482b237bd66539d589237d4fb994` |
+| `src/scgsim/palace/__init__.py` | `4b22a92965efe38e0c1fa6d97abfec9d9395420a679019e783eb726e2d43e130` |
 | `src/scgsim/semantics/__init__.py` | `a1902da7627ee76ba95283fc2861b6d785400c303a09e6e875375f55a056e39c` |
 | `src/scgsim/visualization/__init__.py` | `181a1bf3c38a632bc163c6ac9ee55dcbc6ca1bcc85bc6bca3e16afbe43e21ad1` |
 

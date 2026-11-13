@@ -14,14 +14,14 @@ from palace_sgb_support import (
 )
 
 from scgsim.palace import EigenmodeSim
-from scgsim.palace.mesh.physical_groups import groups_from_sidecar
-from scgsim.palace.preparation.config import (
+from scgsim.palace.config.config import (
     LayoutPortBinding,
     TerminalBinding,
     build_eigenmode_config,
     build_electrostatic_config,
     configure_numerical_controls,
 )
+from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 from scgsim.palace.results.surface_contract import validate_surface_epr_config
 from scgsim.palace.simulation.lifecycle import Stage
 

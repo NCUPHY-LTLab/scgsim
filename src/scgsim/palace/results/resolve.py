@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from scgsim.palace.presentation.plotting import ReportTheme
-from scgsim.palace.presentation.reports import (
+from scgsim.palace.reports.plotting import ReportTheme
+from scgsim.palace.reports.reports import (
     show_all_results,
     show_physics_quantities,
     show_run_trustworthiness,

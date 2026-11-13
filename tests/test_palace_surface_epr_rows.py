@@ -8,8 +8,8 @@ from test_sgb_band_labels import PORT_CASES, all_interface_insets
 
 from scgsim.geometry.surface_epr.insets import inset_requests, needs_unbanded_build
 from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
+from scgsim.palace.config.surface_epr import build_surface_epr_postprocessing
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
-from scgsim.palace.preparation.surface_epr import build_surface_epr_postprocessing
 
 
 def banded_sidecar(route, directory, specs):

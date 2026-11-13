@@ -21,17 +21,17 @@ from palace_sgb_support import (
 
 from scgsim.geometry.surface_epr.insets import inset_requests
 from scgsim.palace import resolve_palace_result
-from scgsim.palace.mesh.manifest import MANIFEST_SCHEMA_VERSION, build_mesh_manifest
-from scgsim.palace.mesh.physical_groups import groups_from_sidecar
-from scgsim.palace.preparation.config import (
+from scgsim.palace.config.config import (
     LayoutPortBinding,
     TerminalBinding,
     build_eigenmode_config,
     build_electrostatic_config,
     configure_numerical_controls,
 )
-from scgsim.palace.presentation.reports import inspect_run_trustworthiness
-from scgsim.palace.presentation.surface_figures import (
+from scgsim.palace.mesh.manifest import MANIFEST_SCHEMA_VERSION, build_mesh_manifest
+from scgsim.palace.mesh.physical_groups import groups_from_sidecar
+from scgsim.palace.reports.reports import inspect_run_trustworthiness
+from scgsim.palace.reports.surface_figures import (
     surface_margin_participation_figure,
     surface_ranking_figure,
 )

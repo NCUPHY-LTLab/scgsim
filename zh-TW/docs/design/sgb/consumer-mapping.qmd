@@ -154,7 +154,7 @@ STEP 匯出與 face 順序把關的步驟在[上一頁](consumer-contract.qmd#se
 ::: {.askr-table-compact}
 | 類別 | 項目 | 新 sidecar 與入口提供的 |
 |---|---|---|
-| **同一個 change set 切換** | Palace 的 sidecar 與 group 契約：`palace/mesh/build.py` 的 SGB 呼叫與三個檔案的讀取，`physical_groups.py`、`record_validation.py`、`refinement.py`、`provenance.py`，以及每個讀取 group 欄位的地方；result reader 驗證的 index-map metadata（`results/surface_readers.py`、`index_contract.py`、`presentation/surface_figures.py`），因為 `surface_contribution_ledger` 今天是 MA／MS／SA record 的必要證據 | 上面的欄位表；production 的 `build_sgb_geometry`、`apply_sidecar_embeds` |
+| **同一個 change set 切換** | Palace 的 sidecar 與 group 契約：`palace/mesh/build.py` 的 SGB 呼叫與三個檔案的讀取，`physical_groups.py`、`record_validation.py`、`refinement.py`、`provenance.py`，以及每個讀取 group 欄位的地方；result reader 驗證的 index-map metadata（`results/surface_readers.py`、`index_contract.py`、`reports/surface_figures.py`），因為 `surface_contribution_ledger` 今天是 MA／MS／SA record 的必要證據 | 上面的欄位表；production 的 `build_sgb_geometry`、`apply_sidecar_embeds` |
 | | Route B 的 port embedding：XAO transport group 與 `embed_route_b_port_surfaces` 一起改 | volume 的 `embedded_faces` 與 `apply_sidecar_embeds`（port 位於 support plane 時不需要 embedding） |
 | | AEDT 的 contribution ledger（`aedt/preparation/planar.py` 181–215）：保留舊 planning 到 AEDT 階段，或由新 sidecar 導出 ledger 並在同一次改完 | 上面的 ledger 對照表使後者可行；兩者的取捨尚未決定（[open 項目](#open-items)） |
 | **不變（S0 到 S1）** | `build_gds_stack_geometry_input`、`interpret_physical_geometry`、`GeometryBuildInput`、`RepresentationContext`、`GeometryGridContext`、`GeometryPlan`（含 `set_entity_priorities`）、`ApproximationProfile`、`PhysicalLayerDeclaration`；AEDT 目前使用的 S0／S1 符號（`aedt/eigenmode.py`、`aedt/preparation/*`、`aedt/specs/*`、junction partition） | 新入口的輸入就是它們的輸出；不重寫 |

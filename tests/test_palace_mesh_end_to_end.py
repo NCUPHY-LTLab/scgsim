@@ -21,16 +21,16 @@ from sgb_inputs import EffectiveInput, gds_pad_in_ground, rectangular_junction_p
 from test_sgb_curved_port_landing import circular_pad_input
 
 from scgsim.meshing import Budgets, MesherOptions, MeshRepairError
-from scgsim.palace.mesh.native import lower_mesh_in_current_process
-from scgsim.palace.mesh.summary import mesh_summary
-from scgsim.palace.preparation.config import (
+from scgsim.palace.config.config import (
     LayoutPortBinding,
     TerminalBinding,
     build_eigenmode_config,
     build_electrostatic_config,
     configure_numerical_controls,
 )
-from scgsim.palace.presentation.plotting import mesh_summary_html
+from scgsim.palace.mesh.native import lower_mesh_in_current_process
+from scgsim.palace.mesh.summary import mesh_summary
+from scgsim.palace.reports.plotting import mesh_summary_html
 from scgsim.palace.results.index_contract import (
     INDEX_MAP_SCHEMA_VERSION,
     RouteConsistency,

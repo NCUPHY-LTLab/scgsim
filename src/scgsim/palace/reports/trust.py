@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from scgsim.palace.presentation.observations import (
+from scgsim.palace.reports.observations import (
     ERROR_INDICATOR_TRACES,
     FREQ_HEADER,
     SKIP_EIG_COLUMNS,
@@ -24,7 +24,7 @@ from scgsim.palace.presentation.observations import (
     traces_are_finite,
     union_mapping_keys,
 )
-from scgsim.palace.presentation.plotting import (
+from scgsim.palace.reports.plotting import (
     COLORWAY,
     PLOT_TICK_FONT,
     FigureStyle,
@@ -44,7 +44,7 @@ from scgsim.palace.presentation.plotting import (
     theme_tokens,
     yaxis_type,
 )
-from scgsim.palace.presentation.surface_figures import (
+from scgsim.palace.reports.surface_figures import (
     series_label,
     surface_percentage_figure,
     surface_total_figure,
