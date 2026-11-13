@@ -85,7 +85,7 @@ _THEMES = {
 
 
 def yaxis_type(name: str) -> str:
-    """Choose the established logarithmic or linear scale for a named physical quantity."""
+    """Choose the logarithmic or linear scale for a named physical quantity."""
     lowered = name.lower()
     if any(
         marker in lowered

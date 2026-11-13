@@ -95,7 +95,7 @@ def expect_scalar(
     *,
     fallback: Any = None,
 ) -> Any:
-    """Read a typed field with its existing absent-value fallback semantics."""
+    """Read a typed field with ``fallback`` when the field is absent."""
     value = payload.get(field) if isinstance(payload, dict) else fallback
     if value is None:
         return fallback

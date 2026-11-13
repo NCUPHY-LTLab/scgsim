@@ -27,7 +27,7 @@ _DIELECTRIC_SECTION = "Boundaries.Postprocessing.Dielectric"
 
 
 def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
-    """Bind one Palace mesh to its exact semantic/config metadata."""
+    """Read a Palace run folder's mesh with its config, manifest and index map into a ``GeometryPreview``."""
     root = Path(run_dir).expanduser().resolve()
     paths = {name: root / name for name in (MESH, CONFIG, MESH_MANIFEST, INDEX_MAP)}
     missing = [name for name, path in paths.items() if not path.is_file()]
@@ -79,7 +79,7 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
 
 
 def _require_schema(record: Mapping[str, Any], name: str, expected: int) -> None:
-    """Run folders of older schemas are not read; the message names the recorded one."""
+    """Refuse a run folder of a schema other than the contract's; the message names the recorded one."""
     recorded = record.get("schema_version")
     if type(recorded) is not int or recorded != expected:
         raise ValueError(

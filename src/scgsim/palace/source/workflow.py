@@ -1,7 +1,8 @@
 """The preparation of a plan's geometry input under the simulation's geometry settings.
 
-Simulation classes retain lifecycle and mutable-state ownership.  This module only composes the
-existing preparation transforms in their established order.
+The simulation holds the settings and the lifecycle; this module takes them as ``GeometrySettings`` and
+holds no state.  It applies them in a fixed order: vacuum, port sheets, solution regions, authored ports,
+the physical interpretation of the route.
 """
 
 from __future__ import annotations
@@ -58,7 +59,7 @@ def prepare_mesh_input(
     settings: GeometrySettings,
     port_sheet_source_layers: Sequence[Mapping[str, Any]] | None = None,
 ) -> PreparedMeshInput:
-    """Apply the common transforms while preserving their established order.
+    """Prepare a stack and geometry input for the build: vacuum, ports and the route's interpretation, in that order.
 
     ``port_sheet_source_layers`` lists the authored sheets cut as lumped ports, None for a problem with none.
     """

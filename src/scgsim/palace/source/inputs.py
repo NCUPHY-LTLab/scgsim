@@ -1,4 +1,4 @@
-"""Private Palace problem-input parsing shared by the public problem classes."""
+"""The explicit materials of a plan's stack, checked, for the simulation classes."""
 
 from __future__ import annotations
 

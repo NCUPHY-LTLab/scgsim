@@ -1,4 +1,4 @@
-"""Run Palace's Gmsh lowering across a private JSON process boundary; no geometry construction."""
+"""Run Palace's Gmsh lowering in a fresh process, passing the request and result as JSON."""
 
 from __future__ import annotations
 

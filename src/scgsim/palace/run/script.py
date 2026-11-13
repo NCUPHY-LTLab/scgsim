@@ -1,4 +1,4 @@
-"""Render portable Palace execution scripts and validate their shell inputs."""
+"""Render the run script of a handoff, direct-local or Slurm, from checked settings."""
 
 from __future__ import annotations
 

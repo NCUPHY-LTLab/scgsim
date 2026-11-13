@@ -1,4 +1,4 @@
-"""Source-bound preview object and explicit rendered/unavailable artifacts."""
+"""``GeometryPreview``, a loaded source with its four modes, and the ``GeometryPreviewArtifact`` each mode renders to (an image, or the reason it is unavailable)."""
 
 from __future__ import annotations
 
