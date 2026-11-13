@@ -75,7 +75,7 @@ def test_an_input_without_a_grid_context_is_rejected_not_defaulted(pad):
         k: v for k, v in pad.build_input.metadata.items() if k != "geometry_grid"
     }
     bare = replace(pad.build_input, metadata=metadata)
-    with pytest.raises(InputError, match="declares no geometry grid"):
+    with pytest.raises(ValueError, match="declares no geometry grid"):
         build_prism_catalogue(bare, pad.representation)
 
 

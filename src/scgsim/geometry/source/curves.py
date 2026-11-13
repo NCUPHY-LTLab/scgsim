@@ -279,9 +279,8 @@ def _named(record: _BoundaryRecord, layers: Iterable[str]) -> str:
     return f"{record.boundary_id} (Entity {record.entity_id!r}{on and ', layer ' + on})"
 
 
-def _grid_size_um(emitted: GeometryBuildInput) -> float | None:
-    context = geometry_grid_context(emitted)
-    return None if context is None else context.grid_size_um
+def _grid_size_um(emitted: GeometryBuildInput) -> float:
+    return geometry_grid_context(emitted).grid_size_um
 
 
 def _selector_finding(
@@ -535,8 +534,6 @@ def occurrence_drawn_walks(
             return None
         if path not in by_path:
             context = geometry_grid_context(build_input)
-            if context is None:
-                return None
             cell, _, transform = instances[path]
             polygons = read_polygons_by_layer(
                 source_cells[cell.name],

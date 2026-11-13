@@ -97,18 +97,3 @@ def test_distant_world_inputs_avoid_pair_booleans_but_keep_raw_edge_calls(monkey
         assert len(ops.fused_gdstk_components(values)) == 8
     assert calls == ["or"] * 8
     assert len(edges) == 8 * 7 // 2
-
-
-def test_legacy_unbound_selector_keeps_all_pair_calls(monkeypatch):
-    """Keep all-pairs booleans when source intent has no bound grid."""
-    calls = []
-    original = ops.polygon_boolean
-
-    def observed(left, right, operation, **kwargs):
-        calls.append(operation)
-        return original(left, right, operation, **kwargs)
-
-    monkeypatch.setattr(ops, "polygon_boolean", observed)
-    with geometry_grid_scope(None):
-        assert len(ops.fused_gdstk_components(polygons("distant"))) == 2
-    assert calls == ["and", "or", "or"]

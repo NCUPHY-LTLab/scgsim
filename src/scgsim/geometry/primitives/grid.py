@@ -188,11 +188,15 @@ def with_input_grid(
     return scoped
 
 
-def current_grid_size_um() -> float:
-    """Return the active grid step or the historical unbound precision."""
+def bound_grid_context() -> GeometryGridContext:
+    """The grid of the active scope, for source-stage work, which runs only inside one."""
     context = _ACTIVE_GRID.get()
-    # Retained only for historical inputs that have no declared grid context.
-    return 1e-9 if context is None else context.grid_size_um
+    if context is None:
+        raise RuntimeError(
+            "source-stage geometry ran outside a grid scope; it runs inside "
+            "GeometryPlan.prepare() or build_gds_stack_geometry_input"
+        )
+    return context
 
 
 @contextmanager
@@ -351,12 +355,15 @@ def polygon_boolean(
     *,
     precision: float = 1e-9,
 ) -> Sequence[PolygonCoordinates]:
-    """One GEOS labelled overlay for bound data; historical gdstk unchanged."""
+    """One GEOS labelled overlay inside a grid scope; gdstk's Boolean at ``precision`` outside one.
+
+    Outside one run the junction partition's off-axis local frame and AEDT surface planning.
+    """
     context = current_grid_context()
     if context is None:
         import gdstk  # noqa: PLC0415 - defer native geometry loading until this operation requires it
 
-        # Unbound operands follow the native gdstk contract. These annotations
+        # Operands outside a scope follow the native gdstk contract. These annotations
         # preserve direct native dispatch and its own malformed-input errors.
         return gdstk.boolean(
             cast("Sequence[GdstkPolygon]", left),
@@ -473,9 +480,9 @@ def preserve_declared_source(
     def preserved(
         entity: SemanticEntitySpec, *args: _P.args, **kwargs: _P.kwargs
     ) -> tuple[LayoutPolygonSpec, ...]:
-        context = current_grid_context()
-        if context is None or SOURCE_INTENT.get():
+        if SOURCE_INTENT.get():
             return function(entity, *args, **kwargs)
+        context = bound_grid_context()
         token = SOURCE_INTENT.set(True)
         try:
             with diagnostic_stage("geometry.grid.source_reference"):

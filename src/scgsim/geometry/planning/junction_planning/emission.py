@@ -361,65 +361,58 @@ def check_emitted_partitions(state: JunctionModel) -> None:
 def realized_on_grid(build_input, result, junctions, records):
     """The emitted input realized on the input grid, each central rectangle and partition checked again.
 
-    Without a grid the input is returned as emitted; a failure keeps the junction and its grid in a note.
+    A failure keeps the junction and its grid in a note.
     """
     context = geometry_grid_context(build_input)
-    if context is not None:
-        from scgsim.geometry.source.grid import apply_geometry_grid  # noqa: PLC0415 -- retain the conditional grid-realization dependency and its failure boundary.
+    from scgsim.geometry.source.grid import apply_geometry_grid  # noqa: PLC0415 -- the source-stage grid realization loads only when a junction partition is realized.
 
-        result = _straight_end_pieces(apply_geometry_grid(result, context), records)
-        actual = {p.polygon_id: p for p in result.polygons}
-        for junction in junctions:
-            record = records[junction.junction_id]
-            polygon = actual[record["central_polygon_id"]]
-            try:
-                junction_terminal_line(
-                    {"exterior": polygon.exterior, "holes": polygon.holes},
-                    junction,
-                    record["z_um"],
-                )
-                ends = [
-                    actual[end["polygon_id"]]
-                    for end in record["ends"]
-                    if end["polygon_id"]
-                ]
-                emitted = [(p.exterior, *p.holes) for p in ends]
-                emitted.append((polygon.exterior, *polygon.holes))
-                if not emitted_partition_coverage(
-                    record["partition_model_regions"], emitted
-                ):
-                    raise ValueError(
-                        "junction grid realization changes partition coverage"
-                    )
-            except ValueError as error:
-                error.add_note(
-                    json.dumps(
-                        {
-                            "junction_id": junction.junction_id,
-                            "geometry_grid": context.to_payload(),
-                            "requested_direction_xy": list(junction.direction_xy),
-                            "requested_width_um": junction.width_um,
-                            "realization_status": "incompatible_with_existing_shape_contract",
-                        },
-                        sort_keys=True,
-                    )
-                )
-                raise
-            record["geometry_grid"] = context.to_payload()
-            record["requested_central_model_regions"] = record["central_model_regions"]
-            record["central_model_regions"] = [
-                [list(polygon.exterior), *map(list, polygon.holes)]
-            ]
-            record["realized_central_geometry_sha256"] = canonical_sha256(
-                {"exterior": polygon.exterior, "holes": polygon.holes}
+    result = _straight_end_pieces(apply_geometry_grid(result, context), records)
+    actual = {p.polygon_id: p for p in result.polygons}
+    for junction in junctions:
+        record = records[junction.junction_id]
+        polygon = actual[record["central_polygon_id"]]
+        try:
+            junction_terminal_line(
+                {"exterior": polygon.exterior, "holes": polygon.holes},
+                junction,
+                record["z_um"],
             )
-            for end in record["ends"]:
-                if end["polygon_id"]:
-                    piece = actual[end["polygon_id"]]
-                    end["requested_model_regions"] = end["model_regions"]
-                    end["model_regions"] = [
-                        [list(piece.exterior), *map(list, piece.holes)]
-                    ]
+            ends = [
+                actual[end["polygon_id"]] for end in record["ends"] if end["polygon_id"]
+            ]
+            emitted = [(p.exterior, *p.holes) for p in ends]
+            emitted.append((polygon.exterior, *polygon.holes))
+            if not emitted_partition_coverage(
+                record["partition_model_regions"], emitted
+            ):
+                raise ValueError("junction grid realization changes partition coverage")
+        except ValueError as error:
+            error.add_note(
+                json.dumps(
+                    {
+                        "junction_id": junction.junction_id,
+                        "geometry_grid": context.to_payload(),
+                        "requested_direction_xy": list(junction.direction_xy),
+                        "requested_width_um": junction.width_um,
+                        "realization_status": "incompatible_with_existing_shape_contract",
+                    },
+                    sort_keys=True,
+                )
+            )
+            raise
+        record["geometry_grid"] = context.to_payload()
+        record["requested_central_model_regions"] = record["central_model_regions"]
+        record["central_model_regions"] = [
+            [list(polygon.exterior), *map(list, polygon.holes)]
+        ]
+        record["realized_central_geometry_sha256"] = canonical_sha256(
+            {"exterior": polygon.exterior, "holes": polygon.holes}
+        )
+        for end in record["ends"]:
+            if end["polygon_id"]:
+                piece = actual[end["polygon_id"]]
+                end["requested_model_regions"] = end["model_regions"]
+                end["model_regions"] = [[list(piece.exterior), *map(list, piece.holes)]]
     return result
 
 

@@ -52,12 +52,16 @@ class GeometryGridContext:
         return cls(value["grid_size_um"], value["coordinate_frame"])
 
 
-def geometry_grid_context(
-    build_input: GeometryBuildInput,
-) -> GeometryGridContext | None:
-    """Read the optional grid policy without inferring one for older inputs."""
+def geometry_grid_context(build_input: GeometryBuildInput) -> GeometryGridContext:
+    """The model grid the input declares; an input without one is refused, never defaulted."""
     value = build_input.metadata.get("geometry_grid")
-    return None if value is None else GeometryGridContext.from_payload(value)
+    if value is None:
+        raise ValueError(
+            "the geometry input declares no geometry grid (metadata 'geometry_grid'). "
+            "Build it with GeometryPlan.prepare() or build_gds_stack_geometry_input, "
+            "which put its XY coordinates on the layout's database-unit grid."
+        )
+    return GeometryGridContext.from_payload(value)
 
 
 NM_PER_UM = 1000

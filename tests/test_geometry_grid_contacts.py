@@ -56,7 +56,11 @@ def test_source_grid_detects_new_port_contact_to_unselected_host(other_y, change
         build,
         polygons=(*build.polygons, other),
         entities=(*build.entities, owner),
-        metadata={**build.metadata, "source_dbu_um": 0.001},
+        metadata={
+            **build.metadata,
+            "source_dbu_um": 0.001,
+            "geometry_grid": GRID.to_payload(),
+        },
     )
     authored = with_rectangular_junctions(build, (spec,))
     assert {

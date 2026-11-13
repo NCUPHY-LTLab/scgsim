@@ -7,7 +7,7 @@ from typing import Any
 
 from scgsim.geometry.models.input import LayoutPolygonSpec
 from scgsim.geometry.primitives.grid import (
-    current_grid_size_um,
+    bound_grid_context,
     named_source,
     polygon_boolean,
     source_place,
@@ -57,7 +57,10 @@ def validate_ground_contribution_ownership(
                         ),
                     )
                     overlap = polygon_boolean(
-                        included, claimed, "and", precision=current_grid_size_um()
+                        included,
+                        claimed,
+                        "and",
+                        precision=bound_grid_context().grid_size_um,
                     )
                     if overlap:
                         raise ValueError(

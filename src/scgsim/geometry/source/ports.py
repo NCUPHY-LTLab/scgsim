@@ -9,7 +9,7 @@ from typing import Any, Protocol, TypeGuard, cast
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.primitives.grid import (
-    current_grid_size_um,
+    bound_grid_context,
     named_source,
     polygon_boolean,
     source_refusal,
@@ -322,7 +322,7 @@ def port_sheet_overlaps(
             port_region,
             layout_polygon_region(gdstk, host_polygon),
             "and",
-            precision=current_grid_size_um(),
+            precision=bound_grid_context().grid_size_um,
         )
         for index, overlap_polygon in enumerate(overlap_region or ()):
             area_polygon = cast(_AreaPolygon, overlap_polygon)

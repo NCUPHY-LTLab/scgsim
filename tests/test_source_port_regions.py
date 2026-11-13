@@ -51,12 +51,13 @@ def test_port_regions_preserve_ids_metadata_and_overlap_ownership() -> None:
         )
     }
 
-    regions = port_sheet_regions_from_stack_metadata(
-        metadata,
-        polygons_by_layer={(9, 2): (source_polygon,)},
-        host_entities=(host,),
-        host_polygons=(host_polygon,),
-    )
+    with geometry_grid_scope(GeometryGridContext(0.001)):
+        regions = port_sheet_regions_from_stack_metadata(
+            metadata,
+            polygons_by_layer={(9, 2): (source_polygon,)},
+            host_entities=(host,),
+            host_polygons=(host_polygon,),
+        )
 
     assert len(regions) == 1
     region = regions[0]
@@ -73,7 +74,7 @@ def test_port_regions_preserve_ids_metadata_and_overlap_ownership() -> None:
                 "port_polygon_id": "PORT_SHEET_9_2__P0000",
                 "host_semantic_id": "metal",
                 "host_polygon_id": "host-poly",
-                "overlap_loop": ((3.0, 3.0), (1.0, 3.0), (1.0, 1.0), (3.0, 1.0)),
+                "overlap_loop": ((3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)),
                 "operation": "local_fragment_required",
                 "metadata": {"overlap_polygon_index": 0},
             },
@@ -207,12 +208,13 @@ def test_occurrence_port_overlaps_only_owned_and_contributed_hosts() -> None:
         "source_occurrence_polygon_um": {"exterior": ring, "holes": ()},
     }
 
-    region = port_sheet_regions_from_stack_metadata(
-        {"port_sheet_source_layers": (port_record,)},
-        polygons_by_layer={},
-        host_entities=entities,
-        host_polygons=host_polygons,
-    )[0]
+    with geometry_grid_scope(GeometryGridContext(0.001)):
+        region = port_sheet_regions_from_stack_metadata(
+            {"port_sheet_source_layers": (port_record,)},
+            polygons_by_layer={},
+            host_entities=entities,
+            host_polygons=host_polygons,
+        )[0]
 
     assert tuple(asdict(overlap) for overlap in region.overlaps) == (
         {
@@ -221,7 +223,7 @@ def test_occurrence_port_overlaps_only_owned_and_contributed_hosts() -> None:
             "port_polygon_id": "PORT_SHEET__port__SOURCE__P0000",
             "host_semantic_id": "intended",
             "host_polygon_id": "intended-poly",
-            "overlap_loop": ((2.0, 1.0), (0.0, 1.0), (0.0, 0.0), (2.0, 0.0)),
+            "overlap_loop": ((2.0, 0.0), (2.0, 1.0), (0.0, 1.0), (0.0, 0.0)),
             "operation": "local_fragment_required",
             "metadata": {"overlap_polygon_index": 0},
         },
@@ -231,7 +233,7 @@ def test_occurrence_port_overlaps_only_owned_and_contributed_hosts() -> None:
             "port_polygon_id": "PORT_SHEET__port__SOURCE__P0000",
             "host_semantic_id": "nested",
             "host_polygon_id": "nested-poly",
-            "overlap_loop": ((2.0, 1.0), (0.0, 1.0), (0.0, 0.0), (2.0, 0.0)),
+            "overlap_loop": ((2.0, 0.0), (2.0, 1.0), (0.0, 1.0), (0.0, 0.0)),
             "operation": "local_fragment_required",
             "metadata": {"overlap_polygon_index": 0},
         },
@@ -241,14 +243,14 @@ def test_occurrence_port_overlaps_only_owned_and_contributed_hosts() -> None:
             "port_polygon_id": "PORT_SHEET__port__SOURCE__P0000",
             "host_semantic_id": "ground-carrier",
             "host_polygon_id": "ground-poly",
-            "overlap_loop": ((2.0, 1.0), (0.0, 1.0), (0.0, 0.0), (2.0, 0.0)),
+            "overlap_loop": ((2.0, 0.0), (2.0, 1.0), (0.0, 1.0), (0.0, 0.0)),
             "operation": "local_fragment_required",
             "metadata": {"overlap_polygon_index": 0},
         },
     )
 
 
-@pytest.mark.parametrize("grid_um", (None, 0.001))
+@pytest.mark.parametrize("grid_um", (0.001,))
 def test_port_overlap_preserves_port_and_host_holes(grid_um) -> None:
     """Subtract both authored holes through the shared polygon conversion path."""
     outer = ((0, 0), (4, 0), (4, 4), (0, 4))
@@ -275,8 +277,7 @@ def test_port_overlap_preserves_port_and_host_holes(grid_um) -> None:
         geometry={"gds_layer": 5, "gds_datatype": 0},
         metadata={"logical_layer_id": "M5"},
     )
-    context = None if grid_um is None else GeometryGridContext(grid_um)
-    with geometry_grid_scope(context):
+    with geometry_grid_scope(GeometryGridContext(grid_um)):
         overlaps = port_sheet_overlaps(
             port_sheet_id="P1",
             port_polygon=port,

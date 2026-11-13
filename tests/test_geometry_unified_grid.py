@@ -38,7 +38,7 @@ def test_context_codec_and_source_propagation():
         polygon_ids=("polygon",),
     )
     build = GeometryBuildInput((polygon,), (entity,))
-    assert geometry_grid_context(build) is None
+    assert "geometry_grid" not in build.metadata
     bound = apply_geometry_grid(build, context)
     assert geometry_grid_context(bound) == GRID
     assert "geometry_grid" not in build.metadata

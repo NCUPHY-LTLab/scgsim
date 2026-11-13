@@ -116,8 +116,8 @@ def test_independent_derivations_keep_the_complete_source_bound_payload() -> Non
 
 def test_empty_partition_looks_up_and_restores_one_real_grid_scope() -> None:
     """An empty selection still enters its single declared wrapper and restores the outer scope."""
-    source = GeometryBuildInput((), ())
     outer = GeometryGridContext(0.25)
+    source = GeometryBuildInput((), (), metadata={"geometry_grid": outer.to_payload()})
     calls: list[str] = []
 
     def profile(frame: FrameType, event: str, argument: object) -> None:

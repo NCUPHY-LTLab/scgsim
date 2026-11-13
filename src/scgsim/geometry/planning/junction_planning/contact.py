@@ -200,8 +200,7 @@ class _ContactInventory:
 
     def no_common_plane(self, region: PortSheetRegionRecord) -> str:
         """The refusal of port hosts without one film plane: each host's interval and plane, and the sheet."""
-        grid = geometry_grid_context(self.build_input)
-        grid_um = None if grid is None else grid.grid_size_um
+        grid_um = geometry_grid_context(self.build_input).grid_size_um
         hosts = []
         for host in self.hosts:
             fact = self.facts[host["source_entity_id"]]

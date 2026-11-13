@@ -10,6 +10,7 @@ import scgsim.geometry.source.ground as ground_source
 import scgsim.geometry.source.occurrence as occurrence_source  # private-import: exercise actual decorated source entry points while retaining their owned imports
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.primitives.grid import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+    SOURCE_INTENT,
     PolygonRegion,
     geometry_grid_scope,
     in_occurrence_frame,
@@ -136,8 +137,13 @@ def test_grid_decorators_preserve_function_metadata(decorate):
     assert wrapped.__wrapped__ is original
     assert signature(wrapped) == signature(original)
     transform = (1, 0, 0, 1, 3, 4)
-    with geometry_grid_scope(None):
-        assert wrapped("entity", transform=transform) == ("entity", transform)
+    # The source-intent pass runs the original once, without a preservation audit.
+    token = SOURCE_INTENT.set(True)
+    try:
+        with geometry_grid_scope(GeometryGridContext(0.001)):
+            assert wrapped("entity", transform=transform) == ("entity", transform)
+    finally:
+        SOURCE_INTENT.reset(token)
 
 
 @pytest.mark.parametrize(

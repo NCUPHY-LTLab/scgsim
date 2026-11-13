@@ -148,8 +148,11 @@ def apply_geometry_grid(
 def _validate_bound_context(
     build_input: GeometryBuildInput, context: GeometryGridContext
 ) -> GeometryGridContext | None:
+    # A fresh input from the adapter is bound here; a bound one is projected again on its own grid.
+    if "geometry_grid" not in build_input.metadata:
+        return None
     bound_context = geometry_grid_context(build_input)
-    if bound_context is not None and bound_context != context:
+    if bound_context != context:
         raise ValueError("geometry grid context differs from the bound input policy")
     return bound_context
 

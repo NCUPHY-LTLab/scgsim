@@ -14,6 +14,7 @@ from scgsim.geometry import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
+from scgsim.geometry.models.grid import GeometryGridContext
 
 
 def _snapshot(tmp_path, *, multibody=False):
@@ -58,7 +59,12 @@ def _snapshot(tmp_path, *, multibody=False):
     library.write_gds(gds_path)
     payload = gds_path.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
-    metadata = {"gds_sha256": digest, "source_dbu_um": 0.001, "source_occurrences": []}
+    metadata = {
+        "gds_sha256": digest,
+        "source_dbu_um": 0.001,
+        "source_occurrences": [],
+        "geometry_grid": GeometryGridContext(0.001).to_payload(),
+    }
     source = GeometryBuildInput(tuple(polygons), tuple(entities), metadata=metadata)
     stack = {
         "layers": [

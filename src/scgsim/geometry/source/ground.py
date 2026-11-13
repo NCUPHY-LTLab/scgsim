@@ -14,7 +14,6 @@ from typing import Any, cast
 
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.primitives.grid import (
-    current_grid_context,
     named_source,
     polygon_boolean,
     polygon_rings,
@@ -175,10 +174,7 @@ def _read_rings_on_layer(
 
     The Boolean reads the plane and the mask together under the mask's name; reading the
     plane's rings first refuses exactly the same outlines, on the layer they are drawn on.
-    Without a bound grid the Boolean runs natively and reads no rings, so neither does this.
     """
-    if current_grid_context() is None:
-        return
     with named_source(entity.semantic_id, f"{int(layer[0])}/{int(layer[1])}"):
         for polygon in polygons:
             polygon_rings(polygon)

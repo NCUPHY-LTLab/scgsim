@@ -18,6 +18,7 @@ from scgsim.geometry import (
     interpret_physical_geometry,
     with_rectangular_junctions,
 )
+from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
 
 SHEET = ((0, 0), (10, 0), (10, 2), (0, 2))
@@ -92,7 +93,10 @@ def fixture(*, other=False, b_z=0):
     build = GeometryBuildInput(
         tuple(polygons),
         tuple(entities),
-        metadata={"source_dbu_um": 0.5},
+        metadata={
+            "source_dbu_um": 0.5,
+            "geometry_grid": GeometryGridContext(0.001).to_payload(),
+        },
         port_sheet_regions=(region,),
     )
     spec = RectangularJunctionSpec(
@@ -139,11 +143,14 @@ def test_rectangle_and_terminal_owned_ends_cover_free_region_once():
     record = result.metadata["junction_partitions"]["junction"]
     polygons = {item.polygon_id: item for item in result.polygons}
     central = polygons[record["central_polygon_id"]]
-    assert len(central.exterior) == 4 and central.holes == ()
-    assert (
-        len({x for x, _ in central.exterior})
-        == len({y for _, y in central.exterior})
-        == 2
+    # On the grid the central rectangle keeps a vertex wherever a terminal's vertex lies on its side.
+    assert central.holes == ()
+    xs, ys = {x for x, _ in central.exterior}, {y for _, y in central.exterior}
+    assert all(
+        x in (min(xs), max(xs)) or y in (min(ys), max(ys)) for x, y in central.exterior
+    )
+    assert gdstk.Polygon(central.exterior).area() == (max(xs) - min(xs)) * (
+        max(ys) - min(ys)
     )
     parts = [[gdstk.Polygon(central.exterior)]]
     for end, expected in zip(record["ends"], ("chip/left", "chip/right"), strict=False):

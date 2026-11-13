@@ -120,8 +120,7 @@ def _overlap_count_refusal(
     request: RectangularJunctionSpec,
 ) -> str:
     """Where the sheet overlaps each terminal, when it does not overlap each one exactly once."""
-    grid = geometry_grid_context(build_input)
-    grid_um = None if grid is None else grid.grid_size_um
+    grid_um = geometry_grid_context(build_input).grid_size_um
     findings = []
     for terminal in (request.terminal_a, request.terminal_b):
         host = terminal.source_entity_id
