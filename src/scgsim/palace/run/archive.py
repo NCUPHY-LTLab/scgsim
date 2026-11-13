@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from scgsim.geometry.models.refusals import Declared
-from scgsim.palace.results.artifacts import RETURNED_RUN_FOLDER
+
+RETURNED_RUN_FOLDER = (
+    "the run folder Palace returned: fetch it again, or run the handoff again"
+)
+"""Where a refused record of a returned run folder is set right: the files are Palace's and the recorder's."""
 
 
 def sibling_run_archive_path(run_dir: Path) -> Path:

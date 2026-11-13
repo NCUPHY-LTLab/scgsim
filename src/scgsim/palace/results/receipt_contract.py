@@ -21,7 +21,6 @@ from scgsim.contracts.palace_run_folder import (
 )
 from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
-    RETURNED_RUN_FOLDER,
     FileHash,
     compute_hash_entry,
     compute_input_hash_entry,
@@ -37,6 +36,7 @@ from scgsim.palace.results.runtime_contract import (
     validate_runtime_compatibility,
 )
 from scgsim.palace.results.tables import count_index_entries, output_families
+from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.palace.run.returned_receipt import adapted_mesh_output_paths
 from scgsim.refusal import found_text
 

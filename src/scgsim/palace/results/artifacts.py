@@ -18,11 +18,7 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
 )
 from scgsim.geometry.models.refusals import Declared
-
-RETURNED_RUN_FOLDER = (
-    "the run folder Palace returned: fetch it again, or run the handoff again"
-)
-"""Where a refused record of a returned run folder is set right: the files are Palace's and the recorder's."""
+from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 
 
 class FileHash(NamedTuple):

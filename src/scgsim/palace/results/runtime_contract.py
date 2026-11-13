@@ -17,11 +17,8 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
 )
 from scgsim.geometry.models.refusals import Declared
-from scgsim.palace.results.artifacts import (
-    RETURNED_RUN_FOLDER,
-    expect_mapping,
-    expect_scalar,
-)
+from scgsim.palace.results.artifacts import expect_mapping, expect_scalar
+from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import found_text
 
 
