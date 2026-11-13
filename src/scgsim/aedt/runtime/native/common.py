@@ -94,16 +94,16 @@ def read_native_material(app: Any, native_name: str) -> dict[str, Any]:
         "native_GetData_raw": detached(raw),
         "readback_basis": "native MaterialManager.GetData, independent of cached MatProperty.value",
     }
-    for native_key, historical_key in (
+    for native_key, scalar_key in (
         ("permittivity", "relative_permittivity"),
         ("permeability", "relative_permeability"),
     ):
         value: Any = observed.get(native_key)
         try:
-            result[historical_key] = float(value)
+            result[scalar_key] = float(value)
         except (TypeError, ValueError):
-            result[historical_key] = None
-            unavailable[historical_key] = {
+            result[scalar_key] = None
+            unavailable[scalar_key] = {
                 "reason": "Native scalar value unavailable; raw shape retained",
                 "raw": value,
             }
@@ -121,7 +121,8 @@ def realize_source_material(
 
     Lookup/template names do not override authored values. This function edits
     only the owned project's DefinitionManager; source/library files are untouched.
-    Callers retain conductor/PEC translation and identity-only legacy ownership.
+    Callers skip conductors, which become PEC, and a source-free Q3D request
+    carries no source scalars, so it never calls this function.
     """
     name = material_id if native_name is None else native_name
     properties = source_material_properties(record)

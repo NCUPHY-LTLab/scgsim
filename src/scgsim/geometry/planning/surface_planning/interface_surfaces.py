@@ -7,9 +7,6 @@ from collections.abc import Mapping, Sequence
 from scgsim.geometry.models.common import (
     RouteLiteral,
 )
-from scgsim.geometry.models.construction import (
-    SurfacePartitionRecord,
-)
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import (
@@ -24,6 +21,9 @@ from scgsim.geometry.planning.entities import (
     entity_by_id,
     geometry_ref_from_metadata,
     unique_ids,
+)
+from scgsim.geometry.planning.surface_planning.construction import (
+    SurfacePartitionRecord,
 )
 from scgsim.geometry.planning.surface_planning.scope import SurfaceScope
 from scgsim.geometry.planning.surface_records import is_route_a_sheet_interface

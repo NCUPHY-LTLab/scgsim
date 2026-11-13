@@ -158,7 +158,7 @@ STEP 匯出與 face 順序把關的步驟在[上一頁](consumer-contract.qmd#se
 | | Route B 的 port embedding：XAO transport group 與 `embed_route_b_port_surfaces` 一起改 | volume 的 `embedded_faces` 與 `apply_sidecar_embeds`（port 位於 support plane 時不需要 embedding） |
 | | AEDT 的 contribution ledger（`aedt/preparation/planar.py` 181–215）：保留舊 planning 到 AEDT 階段，或由新 sidecar 導出 ledger 並在同一次改完 | 上面的 ledger 對照表使後者可行；兩者的取捨尚未決定（[open 項目](#open-items)） |
 | **不變（S0 到 S1）** | `build_gds_stack_geometry_input`、`interpret_physical_geometry`、`GeometryBuildInput`、`RepresentationContext`、`GeometryGridContext`、`GeometryPlan`（含 `set_entity_priorities`）、`ApproximationProfile`、`PhysicalLayerDeclaration`；AEDT 目前使用的 S0／S1 符號（`aedt/eigenmode.py`、`aedt/preparation/*`、`aedt/specs/*`、junction partition） | 新入口的輸入就是它們的輸出；不重寫 |
-| **之後移除** | AEDT 階段之後：`planning/`（surface、contact、domain、topology planning、evidence、tags、surface_records、geometry_refs）、`models/construction`，及 Palace v1 路徑與它們的測試 | 無 |
+| **之後移除** | AEDT 階段之後：`planning/`（surface、contact、domain、topology planning、evidence、tags、surface_records、geometry_refs），及 Palace v1 路徑與它們的測試 | 無 |
 :::
 
 ### Route C 的採用端需求 {#route-c}

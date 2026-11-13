@@ -8,7 +8,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from scgsim.aedt.epr.models import EprResult, detached
+from scgsim.aedt.data import detached
+from scgsim.aedt.epr.models import EprResult
 from scgsim.aedt.presentation.benchmark import display_benchmark
 from scgsim.aedt.presentation.epr_projection import (
     history_view,

@@ -1,7 +1,6 @@
 """EPR analysis-sheet naming and inset planning over prepared source geometry.
 
-General source preparation lives in preparation.planar; the preparation helpers
-exported here are those same function objects.
+General source preparation lives in ``preparation.planar``.
 """
 
 from __future__ import annotations
@@ -16,15 +15,7 @@ from multiprocessing import get_context
 from typing import Any
 
 from scgsim.aedt.data import canonical_sha256
-from scgsim.aedt.preparation.planar import (
-    prepare_planar_geometry_input as prepare_planar_geometry_input,
-)
-from scgsim.aedt.preparation.planar import (
-    validate_geometry_workers as validate_geometry_workers,
-)
-from scgsim.aedt.preparation.planar_junctions import (
-    planar_junction_from_port as planar_junction_from_port,
-)
+from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.preparation.planar_masks import (
     INSET_CIRCLE_POINTS,
     INSET_METHOD,

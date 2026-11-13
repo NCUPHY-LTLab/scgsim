@@ -11,7 +11,7 @@ from typing import Any
 from scgsim.geometry.grid.planar_loops import clean_loop, ring_edges
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.entities import entity_z_range_um
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.input import SemanticEntitySpec
 from scgsim.geometry.models.topology import InterfacePlanRecord
 from scgsim.geometry.planning.entities import geometry_ref_from_metadata
 from scgsim.geometry.planning.spatial import same_coordinate_z
@@ -38,7 +38,6 @@ def entity_geometry_ref(
 
 
 def route_entity_geometry_ref(
-    build_input: GeometryBuildInput,
     route: RouteLiteral | None,
     entity: SemanticEntitySpec,
     *,
@@ -46,8 +45,6 @@ def route_entity_geometry_ref(
     interfaces: tuple[InterfacePlanRecord, ...] = (),
 ) -> dict[str, Any]:
     """Extend Route A cutout bounds only from recognized conductor contacts."""
-    # ``build_input`` is part of the signature but not read: the projection uses only the entity's own data.
-    del build_input
     geometry_ref = entity_geometry_ref(entity, representation=representation)
     if route != "A" or representation != "cutout_boundary_shell":
         return geometry_ref

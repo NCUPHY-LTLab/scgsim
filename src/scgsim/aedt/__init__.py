@@ -29,7 +29,6 @@ from scgsim.geometry.models.lumped import LumpedSupport
 
 from .eigenmode import EigenmodeSim
 from .epr.analysis import combine_epr_mode, combine_surface_epr_mode, reanalyze_epr
-from .epr.geometry import planar_junction_from_port
 from .epr.workflow import analyze_epr
 from .preparation.geometry import (
     prepare_hfss_driven_from_geometry,
@@ -38,6 +37,7 @@ from .preparation.geometry import (
 )
 from .preparation.handoff import HandoffPlan, prepare_handoff
 from .preparation.planar import prepare_planar_geometry_input
+from .preparation.planar_junctions import planar_junction_from_port
 from .presentation.epr import plot_epr_result, show_epr
 from .results.epr import resolve_epr_result, resolve_saved_solution
 from .results.prepared import PreparedModel, resolve_prepared_model
