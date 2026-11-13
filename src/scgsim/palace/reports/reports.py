@@ -64,10 +64,10 @@ from scgsim.palace.results.tables import configured_mode_count
 def inspect_run_trustworthiness(
     run_dir: str | Path, *, theme: ReportTheme = "light"
 ) -> PalaceTrustReport:
-    """Build the trustworthiness report from a package folder.
+    """Build the trustworthiness report from a returned run folder.
 
     This path is for complete or incomplete returned runs. It does not replace
-    ``resolve_palace_result`` identity verification for a finished package.
+    ``resolve_palace_result`` identity verification for a finished run folder.
     ``theme`` is ``light`` (default) or ``dark`` and applies only to Plotly
     figures.
     """

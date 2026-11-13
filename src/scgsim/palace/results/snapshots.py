@@ -104,7 +104,7 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
     the last iteration's primary physics but a different recorded mesh or solver size makes the collection
     ``"unreadable"``, and the iterations are returned without it.
 
-    A run folder with no results folder, or whose final result has no physics table, is ``"missing"``; a final
+    A run folder with no ``results/palace`` folder, or whose final result has no physics table, is ``"missing"``; a final
     result that cannot be read is ``"unreadable"``.
 
     ``mode_count`` is the requested Eigenmode count when the run's config is known.

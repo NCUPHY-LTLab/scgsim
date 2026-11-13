@@ -27,7 +27,7 @@ def write_json_atomically(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def confined_artifact_path(root: Path, relative: str) -> Path:
-    """Resolve one relative artifact path within its run directory."""
+    """Resolve one relative artifact path within its run folder."""
     path = Path(relative)
     if path.is_absolute():
         raise ValueError("preview artifact identity must be relative")

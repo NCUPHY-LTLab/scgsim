@@ -25,9 +25,12 @@ class _PreparationState:
     lock: RLock = field(default_factory=RLock)
 
 
+# Ambient by design: the worker budget only decides how many threads run a map whose outputs keep input order,
+# so no result or message depends on it.
 _state: ContextVar[_PreparationState | None] = ContextVar(
     "scgsim_preparation", default=None
 )
+# Ambient by design: the nesting depth only makes a map inside a worker run serially; it changes no result.
 _worker_depth: ContextVar[int] = ContextVar("scgsim_preparation_depth", default=0)
 
 
@@ -46,9 +49,11 @@ def preparation_resources(*, max_workers: int) -> Iterator[None]:
     native environment settings or scientific input/output payloads.
     """
     if isinstance(max_workers, bool) or not isinstance(max_workers, int):
-        raise TypeError("max_workers must be a positive integer.")
+        raise TypeError(f"max_workers must be a positive integer; got {max_workers!r}.")
     if max_workers <= 0:
-        raise ValueError("max_workers must be a positive integer.")
+        raise ValueError(
+            f"max_workers must be a positive integer; got {max_workers!r}."
+        )
     if _state.get() is not None:
         yield
         return

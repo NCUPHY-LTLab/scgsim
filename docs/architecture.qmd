@@ -139,9 +139,13 @@ mapping remains empirical, not a generally validated native side query; the
 call emits a warning about that limitation. See the
 [field-side contract](specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction).
 
-Within Palace, `results.inspection_records` owns detached report records and
-`results.snapshots` their readers; `reports.reports` owns trust/physics views and figures. The
-package facade retains the existing public result and report names.
+Within Palace, `results` reads a returned run folder into checked records:
+`results.resolve` the completed run (`ResolvedRunData`), and `results.snapshots`
+and `results.inspection` the AMR snapshots, selection and failure diagnosis in
+`results.inspection_records`. `reports` holds what a user reads:
+`reports.resolved_result` returns `ResolvedPalaceResult` from
+`resolve_palace_result`, and `reports.reports` builds the trust, physics and
+benchmark views and figures. Import every public name from `scgsim.palace`.
 
 AEDT receipts record the runtime source: every file of the import closure of
 `scgsim/aedt` and the two AEDT visualization loaders, with the SHA-256 of each,

@@ -84,7 +84,7 @@ class PalaceProvenance:
 
 @dataclass(frozen=True)
 class ResolvedRunData:
-    """Complete resolved view of one Palace run directory."""
+    """The checked records of one completed Palace run folder: identity, outcome, cost, timing and tables."""
 
     run_dir: Path
     problem: str

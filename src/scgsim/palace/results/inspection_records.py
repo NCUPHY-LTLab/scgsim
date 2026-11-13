@@ -84,7 +84,7 @@ class SurfaceMarginEprSeriesSnapshot:
 
 @dataclass(frozen=True)
 class AmrPassSnapshot:
-    """One solver snapshot from an AMR pass or the parent results folder."""
+    """One solver snapshot from an AMR pass or the final output folder ``results/palace``."""
 
     pass_index: int
     source: str
@@ -125,7 +125,7 @@ class PassCostRecord:
 class PalaceResultSelection:
     """The readable snapshot selected independently from the run outcome.
 
-    ``selected_path`` is always relative to the run directory.
+    ``selected_path`` is always relative to the run folder.
     """
 
     final_snapshot_status: Literal["readable", "missing", "unreadable"]

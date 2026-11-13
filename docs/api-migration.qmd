@@ -378,11 +378,12 @@ their v2 responsibility owner.
 
 - **Current owner and responsibility:** `scgsim.palace.simulation`; the two simulation classes on one shared core and lifecycle. **Facade exports:** `ElectrostaticSim`, `EigenmodeSim`.
 - **Current owner and responsibility:** `scgsim.palace.simulation.drc`; the two-stage `simulation_drc` report and its refusal, also raised by `mesh()` before meshing. **Facade exports:** `SimulationDrcError`, `SimulationDrcReport`, `StageResult`.
-- **Current owner and responsibility:** `scgsim.palace.results`; custody-aware result loading. **Facade exports:** `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
-- **Current owner and responsibility:** `scgsim.palace.results`; detached EPR values and offline reanalysis. **Facade exports:** `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`.
+- **Current owner and responsibility:** `scgsim.palace.results.resolved_records`; the checked records of a returned run. **Facade exports:** `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`.
+- **Current owner and responsibility:** `scgsim.palace.reports.resolved_result`; the resolved result a user holds, with its notebook views. **Facade exports:** `ResolvedPalaceResult`, `resolve_palace_result`.
+- **Current owner and responsibility:** `scgsim.palace.results.epr` and `scgsim.palace.results.epr_records`; detached EPR values and offline reanalysis. **Facade exports:** `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`.
 - **Current owner and responsibility:** `scgsim.palace.reports`; solver-specific plot over detached EPR. **Facade exports:** `show_epr`.
 - **Current owner and responsibility:** `scgsim.palace.results.inspection_records`; detached data records consumed by Palace reports. **Facade exports:** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`.
-- **Current owner and responsibility:** `scgsim.palace.reports.reports`; trust, physics and benchmark views over retained result evidence. **Facade exports:** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
+- **Current owner and responsibility:** `scgsim.palace.reports`; trust, physics and benchmark views over retained result evidence (`reports.reports`, `reports.trust`, `reports.views`). **Facade exports:** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
 
 
 ## Palace direct submodule exports
@@ -394,16 +395,16 @@ explicit migration entries in addition to the package facade.
 - **Baseline direct import `scgsim.palace.electrostatic` → current owner `scgsim.palace.simulation.electrostatic`.** Declared symbols: `ElectrostaticSim`.
 - **Baseline direct import `scgsim.palace.eigenmode` → current owner `scgsim.palace.simulation.eigenmode`.** Declared symbols: `EigenmodeSim`.
 - **Baseline direct import `scgsim.palace.handoff` → current owner `scgsim.palace.run.handoff`.** Declared symbols: `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
-- **Baseline direct import `scgsim.palace.resolve` → current owner `scgsim.palace.results.resolve`.** Declared symbols: `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
-- **Baseline direct import `scgsim.palace.report`.** Declared symbols: `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. Current owner: `scgsim.palace.reports.reports` retains this direct export list; data records are defined in `scgsim.palace.results.inspection_records`. The package facade retains the other report exports, including `SimulationBenchmarkReport` and surface-margin records.
+- **Baseline direct import `scgsim.palace.resolve`.** Declared symbols: `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`. Current owners: the records in `scgsim.palace.results.resolved_records`, `ResolvedPalaceResult` and `resolve_palace_result` in `scgsim.palace.reports.resolved_result`; import them from `scgsim.palace`.
+- **Baseline direct import `scgsim.palace.report`.** Declared symbols: `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. Current owners: `inspect_run_trustworthiness` in `scgsim.palace.reports.reports`, `PalaceTrustReport` in `scgsim.palace.reports.trust`, `PhysicsQuantitiesReport` in `scgsim.palace.reports.views`, and the data records in `scgsim.palace.results.inspection_records`; import them from `scgsim.palace`.
 
 
 The current `scgsim.palace.results.inspection_records` module defines
 `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`,
 `PassCostRecord`, `SurfaceEprRecord`, `SurfaceEprSeriesSnapshot`,
-`SurfaceMarginEprRecord`, and `SurfaceMarginEprSeriesSnapshot`. The
-`scgsim.palace.reports.reports` module retains the seven direct exports
-listed above.
+`SurfaceMarginEprRecord`, and `SurfaceMarginEprSeriesSnapshot`. Each module
+declares only what it defines; the package facade `scgsim.palace` is the
+import path for every supported name.
 
 `scgsim.palace._epr_results` is a baseline private implementation path whose
 supported names are re-exported by `scgsim.palace`. Its current owner is

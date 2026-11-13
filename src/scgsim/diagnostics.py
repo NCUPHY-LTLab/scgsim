@@ -67,9 +67,14 @@ class _DiagnosticConfig:
                 "Diagnostic progress_interval_s must be finite and nonnegative."
             )
         if not isinstance(profile, bool) or not isinstance(session, str) or not session:
-            raise TypeError("Invalid diagnostic profile/session configuration.")
+            raise TypeError(
+                "Diagnostic profile must be a bool and session_id a non-empty string; "
+                f"got profile={profile!r}, session_id={session!r}."
+            )
         if parent is not None and not isinstance(parent, str):
-            raise TypeError("Invalid diagnostic parent span.")
+            raise TypeError(
+                f"Diagnostic parent_span_id must be a string or None; got {parent!r}."
+            )
         return cls(directory, float(interval), profile, session, parent)
 
 
@@ -135,7 +140,9 @@ def _rss() -> dict[str, object]:
         return {"process_peak_rss_bytes": None, "rss_status": "unavailable"}
 
 
+# Ambient by design: the recorder only writes timing and memory files beside a result; no result reads it.
 _recorder: ContextVar[_Recorder | None] = ContextVar("scgsim_diagnostics", default=None)
+# Ambient by design: the open span only names the parent of the next timing record; no result reads it.
 _span: ContextVar[_Span | None] = ContextVar("scgsim_diagnostic_span", default=None)
 
 
@@ -227,7 +234,11 @@ def _diagnostic_session(config: _DiagnosticConfig) -> Iterator[None]:
         except Exception as error:  # noqa: BLE001 -- retain the user's error and report cleanup failure as a note
             recorder.errors.append(type(error).__name__)
         if recorder.errors:
-            detail = "Preparation diagnostics failed: " + ", ".join(recorder.errors)
+            detail = (
+                "Preparation diagnostics failed: "
+                + ", ".join(recorder.errors)
+                + f" (diagnostics folder {directory})."
+            )
             if primary is not None:
                 primary.add_note(detail)
             else:

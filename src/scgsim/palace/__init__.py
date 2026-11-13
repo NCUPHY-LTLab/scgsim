@@ -7,8 +7,8 @@ One folder per stage, in the order the work flows:
 - ``mesh``: from that input to ``palace.msh`` with its physical groups and manifest.
 - ``config``: from the mesh's groups and the problem's settings to ``config.json`` and the index map.
 - ``run``: the run folder handed to Palace, and what Palace returns.
-- ``results``: from a finished run folder to a resolved result.
-- ``reports``: from a resolved result to notebook views.
+- ``results``: from a returned run folder to the checked records of the run.
+- ``reports``: the result a user holds (``resolve_palace_result``) and the notebook views of it.
 
 A public entry point refuses state it cannot run from (no bound plan, a stage called out of order, a name that
 binds nothing) with an error that says which call fixes it.  A setting with a documented default, such as Route B

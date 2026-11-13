@@ -122,7 +122,7 @@ def _elapsed_pass_cost(
 
 @dataclass(frozen=True)
 class PalaceTrustReport:
-    """Run-identity, AMR evidence, and cost for one Palace package folder."""
+    """Run-identity, AMR evidence, and cost for one returned Palace run folder."""
 
     run_dir: Path
     problem: str
