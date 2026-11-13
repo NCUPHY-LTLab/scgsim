@@ -511,7 +511,8 @@ class PalaceReportUxTests(unittest.TestCase):
             (iteration / "surface-Q.csv").write_text("m,p_surf[1]\n1,0.1\n")
             (iteration / "ignored.txt").write_text("ignored\n")
 
-            paths = iteration_output_paths(root, "Eigenmode")
+            config = {"Boundaries": {"Postprocessing": {"Dielectric": [{"Index": 1}]}}}
+            paths = iteration_output_paths(root, "Eigenmode", config=config)
 
         self.assertEqual(
             paths,

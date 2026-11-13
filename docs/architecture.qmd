@@ -301,8 +301,10 @@ decides which tables a run must return. The receipt recorder uses it to list
 outputs, and `results` uses it to require them. `collects_adapted_meshes`
 compares the handoff's recorded `config_schema` with `CONFIG_SCHEMA`, the
 same constant the writer uses, so raising the schema cannot stop the
-recorder from collecting adapted meshes. The contract imports only the
-standard library. The recorder in the run folder
+recorder from collecting adapted meshes. The contract also states the fields
+of the records the recorder writes (`ReturnedReceipt`, `FileRecord`). It
+imports only the standard library, so it words its refusals with its own
+`refused`, the same sentence `scgsim.refusal` words. The recorder in the run folder
 (`metadata/record_palace_return.py`) is the recorder module with the
 contract's text written in place of its import (`run.recorder_copy`), so a
 run folder needs only a Python interpreter to record its receipt.

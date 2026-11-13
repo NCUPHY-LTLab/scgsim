@@ -30,11 +30,11 @@ from scgsim.contracts.palace_run_folder import (
     RUN_RECORD_SCHEMA_VERSION,
     RUNTIME_COMPATIBILITY,
     SLURM_SCRIPT,
-    SOLVER_LOG_PREFIX,
     HandoffIdentity,
     read_json,
     script_name,
     sha256,
+    solver_log,
     write_json,
 )
 from scgsim.refusal import ENVIRONMENT, Declared, found_text
@@ -216,7 +216,7 @@ def _prepare_run_folder(paths: _HandoffPaths) -> None:
     if results_path.exists():
         shutil.rmtree(results_path)
     results_path.mkdir(parents=True, exist_ok=True)
-    for log_path in run_dir.glob(f"{SOLVER_LOG_PREFIX}*.log"):
+    for log_path in run_dir.glob(solver_log("*")):
         log_path.unlink()
 
 

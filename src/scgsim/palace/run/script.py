@@ -20,7 +20,7 @@ from scgsim.contracts.palace_run_folder import (
     RETURNED_RECEIPT,
     RUN_METADATA,
     RUNTIME_COMPATIBILITY,
-    SOLVER_LOG_PREFIX,
+    solver_log,
 )
 from scgsim.refusal import Declared, found_text
 
@@ -124,8 +124,8 @@ def _slurm_directives(execution: ExecutionSettings) -> list[str]:
     # do not tee (tee would duplicate every line into the same file).
     directives.extend(
         [
-            f"#SBATCH --output={SOLVER_LOG_PREFIX}%j.log",
-            f"#SBATCH --error={SOLVER_LOG_PREFIX}%j.log",
+            f"#SBATCH --output={solver_log('%j')}",
+            f"#SBATCH --error={solver_log('%j')}",
             "#SBATCH --open-mode=append",
         ]
     )
@@ -226,7 +226,7 @@ def _script_start_lines(
         f"mkdir -p {LOGS_DIR} {OUTPUT_DIR} {METADATA_DIR}",
         f"rm -f {RETURNED_RECEIPT}",
         f"rm -f {RUNTIME_COMPATIBILITY}",
-        *([f"rm -f {SOLVER_LOG_PREFIX}*.log"] if profile == "direct-local" else []),
+        *([f"rm -f {solver_log('*')}"] if profile == "direct-local" else []),
         f"rm -rf {OUTPUT_DIR}",
         f"mkdir -p {OUTPUT_DIR}",
         f'PALACE_CONFIG="{CONFIG}"',
@@ -236,7 +236,7 @@ def _script_start_lines(
         f"PALACE_THREADS={execution.threads()}",
         f"PALACE_COMMAND_STYLE={shlex.quote(execution.command_style)}",
         'export OMP_NUM_THREADS="$PALACE_THREADS"',
-        f'PALACE_LOG="{SOLVER_LOG_PREFIX}${{SLURM_JOB_ID:-manual}}.log"',
+        f'PALACE_LOG="{solver_log("${SLURM_JOB_ID:-manual}")}"',
         f'PALACE_RUNTIME_COMPATIBILITY="{RUNTIME_COMPATIBILITY}"',
         '[[ -f "$PALACE_CONFIG" ]] || { echo "missing $PALACE_CONFIG" >&2; exit 2; }',
         '[[ -f "$PALACE_MESH" ]] || { echo "missing $PALACE_MESH" >&2; exit 2; }',
