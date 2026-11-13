@@ -369,11 +369,38 @@ def mesh_summary_html(
     if summary["status"] == "not_recorded":
         return "<section><h4>Geometry mesh</h4><p>Mesh observations were not recorded in this manifest.</p></section>"
     meshing = summary["meshing"]
+    stats, recipe = meshing["statistics"], meshing["recipe"]
+    items = "".join(card_html(label, value) for label, value in _mesh_cards(summary))
+    rows = _region_rows(stats["physical_regions"])
+    header = "".join(html_cell("th", label) for label in _REGION_COLUMNS)
+    types = ", ".join(
+        f"{record['name']}: {record['count']}" for record in stats["element_types"]
+    )
+    parameters = ", ".join(
+        f"{key}={value}" for key, value in recipe["parameters"].items()
+    )
+    return (
+        "<section><h4>Geometry mesh</h4>"
+        f'<div style="display:flex;flex-wrap:wrap">{items}</div>'
+        "<p>The ND estimate uses the configured FEM order and tetrahedral primary-corner topology before boundary constraints; it is not actual solver DOF. Electrostatic H1 estimation is unavailable. Quality is measured on the linear mesh, before any elevation to the geometry order.</p>"
+        "<details><summary>Physical regions and mesh discretization</summary>"
+        f"<p>Gmsh {html.escape(str(meshing['gmsh_version']))}. {html.escape(types)}.</p>"
+        f"<p>Recipe {html.escape(recipe['name'])} v{html.escape(str(recipe['version']))}: {html.escape(parameters or 'no parameters')}.</p>"
+        "<p>Edge statistics count unique PRIMARY CORNER CHORDS within each region, not curved arc lengths. Point regions have no edges.</p>"
+        f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+        "<p>Full controls, repair policy, the quality report hash and the provenance remain available in mesh_summary() and report data.</p>"
+        "</details></section>"
+    )
+
+
+def _mesh_cards(summary: Mapping[str, Any]) -> list[tuple[str, str]]:
+    """The (label, value) cards of a recorded mesh: recipe, orders, sizes, algorithms, quality and repair."""
+    meshing = summary["meshing"]
     estimate = summary["dof_estimate"]
     stats, mesher = meshing["statistics"], meshing["mesher"]
     linear = meshing["linear_mesh"]
     recipe, budgets = meshing["recipe"], meshing["budgets"]
-    cards = [
+    return [
         ("Sizing recipe", f"{recipe['name']} v{recipe['version']}"),
         (
             "Geometry / FEM order",
@@ -411,9 +438,25 @@ def mesh_summary_html(
         ),
         ("ND topological DOF estimate", fmt(estimate.get("value"))),
     ]
-    items = "".join(card_html(label, value) for label, value in cards)
+
+
+_REGION_COLUMNS = (
+    "Region",
+    "Dim",
+    "Elements",
+    "Gmsh type: count",
+    "Edges",
+    "Min",
+    "Mean",
+    "Max",
+    "Unit",
+)
+
+
+def _region_rows(regions: Sequence[Mapping[str, Any]]) -> list[str]:
+    """One table row per physical region: its element counts and its corner-chord edge statistics."""
     rows = []
-    for region in stats["physical_regions"]:
+    for region in regions:
         chords = region.get("corner_chord_edge_lengths")
         values = [
             region["name"],
@@ -435,35 +478,4 @@ def mesh_summary_html(
         rows.append(
             "<tr>" + "".join(html_cell("td", str(value)) for value in values) + "</tr>"
         )
-    header = "".join(
-        html_cell("th", label)
-        for label in (
-            "Region",
-            "Dim",
-            "Elements",
-            "Gmsh type: count",
-            "Edges",
-            "Min",
-            "Mean",
-            "Max",
-            "Unit",
-        )
-    )
-    types = ", ".join(
-        f"{record['name']}: {record['count']}" for record in stats["element_types"]
-    )
-    parameters = ", ".join(
-        f"{key}={value}" for key, value in recipe["parameters"].items()
-    )
-    return (
-        "<section><h4>Geometry mesh</h4>"
-        f'<div style="display:flex;flex-wrap:wrap">{items}</div>'
-        "<p>The ND estimate uses the configured FEM order and tetrahedral primary-corner topology before boundary constraints; it is not actual solver DOF. Electrostatic H1 estimation is unavailable. Quality is measured on the linear mesh, before any elevation to the geometry order.</p>"
-        "<details><summary>Physical regions and mesh discretization</summary>"
-        f"<p>Gmsh {html.escape(str(meshing['gmsh_version']))}. {html.escape(types)}.</p>"
-        f"<p>Recipe {html.escape(recipe['name'])} v{html.escape(str(recipe['version']))}: {html.escape(parameters or 'no parameters')}.</p>"
-        "<p>Edge statistics count unique PRIMARY CORNER CHORDS within each region, not curved arc lengths. Point regions have no edges.</p>"
-        f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
-        "<p>Full controls, repair policy, the quality report hash and the provenance remain available in mesh_summary() and report data.</p>"
-        "</details></section>"
-    )
+    return rows

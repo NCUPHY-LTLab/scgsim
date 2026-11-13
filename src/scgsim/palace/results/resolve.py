@@ -94,11 +94,52 @@ def read_resolved_run(
     """Read a completed Palace run folder and check every record in it against the handoff it must match."""
 
     if not isinstance(expected_handoff_id, str) or not expected_handoff_id:
-        raise ValueError("expected_handoff_id must be a non-empty string.")
-
+        raise ValueError(
+            f"expected_handoff_id must be a non-empty string; got {expected_handoff_id!r}. "
+            "Pass the handoff_id that prepare_handoff() returned."
+        )
     root = Path(run_dir).expanduser().resolve()
-    # The recorded schemas come first: a run folder of another schema is rejected with its recorded
-    # version, whatever solver output it lacks.
+    records = _read_records(root)
+    handoff = records.handoff_metadata
+    route = expect_scalar(handoff, "route", str)
+    problem = expect_scalar(handoff, "problem", str)
+    if route not in {"A", "B"}:
+        raise ValueError(f"invalid route {route!r}; expected 'A' or 'B'.")
+    palace_problem(
+        problem
+    )  # refuses a problem SCGSim does not write, naming those it does
+    _check_identity(
+        root,
+        records,
+        expected_handoff_id=expected_handoff_id,
+        route=route,
+        problem=problem,
+    )
+    index_counts = count_index_entries(records.index_map)
+    _check_index_and_config(records, index_counts, route=route, problem=problem)
+    tables = _discover_results(root, problem, index_counts, records.config)
+    returned_receipt = build_returned_receipt(records.returned_receipt)
+    cost = _build_cost(records.palace_json)
+    performance = _build_performance(records.palace_json)
+    return ResolvedRunData(
+        run_dir=root,
+        problem=problem,
+        route=route,
+        has_returned_outputs=True,
+        status=expect_scalar(records.run_metadata, "status", str),
+        performance=performance,
+        cost=cost,
+        tables=tables,
+        returned_receipt=returned_receipt,
+        provenance=records,
+    )
+
+
+def _read_records(root: Path) -> PalaceProvenance:
+    """Read every record of the run folder, the two schema records first.
+
+    A run folder of another schema is refused with its recorded version, whatever solver output it lacks.
+    """
     for relative in _SCHEMA_FILES:
         _require_file(root / relative)
     index_map = read_json(root / INDEX_MAP)
@@ -107,89 +148,78 @@ def read_resolved_run(
     require_index_map_schema(index_map)
     for relative in _REQUIRED_FILES:
         _require_file(root / relative)
+    return PalaceProvenance(
+        handoff_metadata=read_json(root / HANDOFF_METADATA),
+        run_metadata=read_json(root / RUN_METADATA),
+        resource_record=read_json(root / RESOURCE_RECORD),
+        handoff_archive_manifest=read_json(root / ARCHIVE_MANIFEST),
+        index_map=index_map,
+        mesh_manifest=mesh_manifest,
+        config=read_json(root / CONFIG),
+        palace_json=read_json(root / NATIVE_METADATA),
+        returned_receipt=read_json(root / RETURNED_RECEIPT),
+    )
 
-    handoff_metadata = read_json(root / HANDOFF_METADATA)
-    run_metadata = read_json(root / RUN_METADATA)
-    resource_record = read_json(root / RESOURCE_RECORD)
-    archive_manifest = read_json(root / ARCHIVE_MANIFEST)
-    config = read_json(root / CONFIG)
-    palace_payload = read_json(root / NATIVE_METADATA)
-    receipt_payload = read_json(root / RETURNED_RECEIPT)
 
-    route = expect_scalar(handoff_metadata, "route", str)
-    problem = expect_scalar(handoff_metadata, "problem", str)
-
-    if route not in {"A", "B"}:
-        raise ValueError(f"invalid route {route!r}; expected 'A' or 'B'.")
-    palace_problem(
-        problem
-    )  # refuses a problem SCGSim does not write, naming those it does
-
-    _validate_metadata_headers(handoff_metadata, resource_record, run_metadata)
-
-    validate_scalar_identity(handoff_metadata, run_metadata)
-    validate_execution_identity(root, handoff_metadata)
-    validate_handoff_id(handoff_metadata, expected_handoff_id)
-    validate_resource_identity(resource_record, handoff_metadata)
-
+def _check_identity(
+    root: Path,
+    records: PalaceProvenance,
+    *,
+    expected_handoff_id: str,
+    route: str,
+    problem: str,
+) -> None:
+    """Check that the metadata, the receipt, the hashes and the archive all name the expected handoff."""
+    handoff, run, resource = (
+        records.handoff_metadata,
+        records.run_metadata,
+        records.resource_record,
+    )
+    _validate_metadata_headers(handoff, resource, run)
+    validate_scalar_identity(handoff, run)
+    validate_execution_identity(root, handoff)
+    validate_handoff_id(handoff, expected_handoff_id)
+    validate_resource_identity(resource, handoff)
     ReceiptValidation(
-        receipt_payload=receipt_payload,
+        receipt_payload=records.returned_receipt,
         expected_handoff_id=expected_handoff_id,
-        handoff_metadata=handoff_metadata,
-        run_metadata=run_metadata,
+        handoff_metadata=handoff,
+        run_metadata=run,
         problem=problem,
         route=route,
         root=root,
     ).validate()
     validate_returned_state_agreement(
-        receipt_payload=receipt_payload,
-        run_metadata=run_metadata,
-        resource_record=resource_record,
+        receipt_payload=records.returned_receipt,
+        run_metadata=run,
+        resource_record=resource,
     )
-    validate_hashes(root, handoff_metadata, "handoff")
-    validate_hashes(root, run_metadata, "run")
-    validate_archive_record(root, resource_record)
-    validate_archive_manifest(root, archive_manifest, resource_record, handoff_metadata)
-    index_counts = count_index_entries(index_map)
+    validate_hashes(root, handoff, "handoff")
+    validate_hashes(root, run, "run")
+    validate_archive_record(root, resource)
+    validate_archive_manifest(root, records.handoff_archive_manifest, resource, handoff)
+
+
+def _check_index_and_config(
+    records: PalaceProvenance,
+    index_counts: dict[str, int],
+    *,
+    route: str,
+    problem: str,
+) -> None:
+    """Check that the route, the mesh manifest, the index map and the config describe one model."""
     RouteConsistency(
         route,
-        run_metadata,
-        handoff_metadata,
-        mesh_manifest,
-        index_map,
+        records.run_metadata,
+        records.handoff_metadata,
+        records.mesh_manifest,
+        records.index_map,
         index_counts,
         problem,
     ).validate()
-    validate_config_problem(config, problem)
-    validate_config_index_correspondence(config, index_map, index_counts, problem)
-
-    tables = _discover_results(root, problem, index_counts, config)
-
-    returned_receipt = build_returned_receipt(receipt_payload)
-    cost = _build_cost(palace_payload)
-    performance = _build_performance(palace_payload)
-
-    return ResolvedRunData(
-        run_dir=root,
-        problem=problem,
-        route=route,
-        has_returned_outputs=True,
-        status=expect_scalar(run_metadata, "status", str),
-        performance=performance,
-        cost=cost,
-        tables=tables,
-        returned_receipt=returned_receipt,
-        provenance=PalaceProvenance(
-            handoff_metadata=handoff_metadata,
-            run_metadata=run_metadata,
-            resource_record=resource_record,
-            handoff_archive_manifest=archive_manifest,
-            index_map=index_map,
-            mesh_manifest=mesh_manifest,
-            config=config,
-            palace_json=palace_payload,
-            returned_receipt=receipt_payload,
-        ),
+    validate_config_problem(records.config, problem)
+    validate_config_index_correspondence(
+        records.config, records.index_map, index_counts, problem
     )
 
 
@@ -293,46 +323,51 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
             else None
         ),
     )
-    if any(
-        value is None
-        for value in (
-            cost.problem_degrees_of_freedom,
-            cost.mesh_elements,
-            cost.mpi_size,
-            cost.openmp_threads,
-            cost.git_tag,
-        )
-    ):
+    sizes = {
+        "Problem.DegreesOfFreedom": cost.problem_degrees_of_freedom,
+        "Problem.MeshElements": cost.mesh_elements,
+        "Problem.MPISize": cost.mpi_size,
+        "Problem.OpenMPThreads": cost.openmp_threads,
+    }
+    missing = [
+        name
+        for name, value in {**sizes, "GitTag": cost.git_tag}.items()
+        if value is None
+    ]
+    if missing:
         raise ValueError(
-            f"{NATIVE_METADATA_NAME} is missing required solver cost metadata."
+            f"{NATIVE_METADATA_NAME} is missing required solver cost metadata: {missing}; "
+            "the run Palace returned is incomplete."
         )
-    if any(
-        value is None or value <= 0
-        for value in (
-            cost.problem_degrees_of_freedom,
-            cost.mesh_elements,
-            cost.mpi_size,
-            cost.openmp_threads,
-        )
-    ):
-        raise ValueError(f"{NATIVE_METADATA_NAME} has invalid solver cost metadata.")
-    if (
-        not cost.linear_solver
-        or any(
-            value is None or not math.isfinite(value) or value < 0
-            for value in cost.peak_memory_megabytes.values()
-        )
-        or any(
-            value is None or not math.isfinite(value) or value < 0
-            for value in cost.peak_node_memory_megabytes.values()
-        )
-        or any(
-            not math.isfinite(value) or value < 0
-            for value in cost.linear_solver.values()
-        )
-    ):
+    not_positive = {
+        name: value for name, value in sizes.items() if value is None or value <= 0
+    }
+    if not_positive:
         raise ValueError(
-            f"{NATIVE_METADATA_NAME} is missing required resource cost metadata."
+            f"{NATIVE_METADATA_NAME} has invalid solver cost metadata: {not_positive} must be positive."
+        )
+    unreadable = [
+        *([] if cost.linear_solver else ["LinearSolver"]),
+        *(
+            f"PeakMemoryMegabytes.{key}"
+            for key, value in cost.peak_memory_megabytes.items()
+            if value is None or not math.isfinite(value) or value < 0
+        ),
+        *(
+            f"PeakNodeMemoryMegabytes.{key}"
+            for key, value in cost.peak_node_memory_megabytes.items()
+            if value is None or not math.isfinite(value) or value < 0
+        ),
+        *(
+            f"LinearSolver.{key}"
+            for key, value in cost.linear_solver.items()
+            if not math.isfinite(value) or value < 0
+        ),
+    ]
+    if unreadable:
+        raise ValueError(
+            f"{NATIVE_METADATA_NAME} is missing required resource cost metadata: {unreadable} "
+            "are absent, negative or not finite."
         )
     return cost
 
