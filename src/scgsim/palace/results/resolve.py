@@ -124,7 +124,7 @@ class ResolvedPalaceResult(ResolvedRunData):
         ranking_limit: int | None = 20,
         show_details: bool = False,
     ) -> None:
-        """Display identity, benchmark and physics views in the established notebook sequence."""
+        """Display identity, benchmark and physics views in the order a notebook reads them."""
         show_all_results(
             self,
             theme=cast(ReportTheme, theme),
@@ -158,7 +158,7 @@ def resolve_palace_result(
         raise ValueError("expected_handoff_id must be a non-empty string.")
 
     root = Path(run_dir).expanduser().resolve()
-    # The recorded schemas come first: a run folder of an older schema is rejected with its recorded
+    # The recorded schemas come first: a run folder of another schema is rejected with its recorded
     # version, whatever solver output it lacks.
     for relative in _SCHEMA_FILES:
         _require_file(root / relative)

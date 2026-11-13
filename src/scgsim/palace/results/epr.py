@@ -50,7 +50,7 @@ def resolve_epr_result(path: str | Path) -> PalaceEprResult:
 def _iteration_result(
     result: ResolvedRunData, iteration: int
 ) -> tuple[ResolvedRunData, str]:
-    """Read one sealed native iteration with the existing table validators."""
+    """Read one sealed native iteration with the table validators of ``results.tables``."""
 
     if type(iteration) is not int or iteration <= 0:
         raise ValueError("palace_iteration must be a positive integer")
