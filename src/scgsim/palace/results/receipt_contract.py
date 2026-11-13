@@ -438,7 +438,9 @@ def _validate_returned_outputs(
         rel = expected["path"]
         if rel not in output_map:
             raise ValueError(
-                f"returned run receipt misses required output entry: {rel}"
+                Declared("returned run receipt", RETURNED_RUN_FOLDER).refusal(
+                    f"misses required output entry: {rel}"
+                )
             )
 
     for entry in output_files:

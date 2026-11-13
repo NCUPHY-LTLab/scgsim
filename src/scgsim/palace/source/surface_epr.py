@@ -13,6 +13,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.surface_epr.specs import margins_of, normalize_surface_epr_specs
 
 
@@ -72,8 +73,9 @@ class SurfaceEprSpec:
             return self.film_thickness_m / float(model_l0_m)
         if self.thickness is None:
             raise ValueError(
-                f"Surface EPR {self.interface_type} has no thickness: build it with "
-                "SurfaceEprSpecs.normalized(), which requires one."
+                internal(
+                    f"Surface EPR {self.interface_type} has no thickness: build it with SurfaceEprSpecs.normalized(), which requires one"
+                )
             )
         return self.thickness
 

@@ -22,6 +22,8 @@ from .config_records import (
 )
 from .index import TerminalEntry
 
+_WHERE_TERMINALS_GROUNDS = "the calls to add_terminal and add_ground"
+
 _WHERE_ADD_GROUND = "the call to add_ground"
 _WHERE_ADD_TERMINAL = "the call to add_terminal"
 _WHERE_ELECTROSTATIC_SETTINGS = "the call to set_electrostatic"
@@ -75,7 +77,9 @@ class _BoundaryState:
         previous_net = self.component_nets.get(component_id)
         if previous_net is not None and previous_net != net_id:
             raise ValueError(
-                f"SGB conductor component {component_id!r} has conflicting net_id values."
+                internal(
+                    f"SGB conductor component {component_id!r} has conflicting net_id values"
+                )
             )
         self.component_nets[component_id] = net_id
         self.component_physical_names.setdefault(component_id, set()).add(
@@ -85,7 +89,9 @@ class _BoundaryState:
             previous_component = self.attribute_components.get(attribute)
             if previous_component is not None and previous_component != component_id:
                 raise ValueError(
-                    f"SGB physical attribute {attribute} belongs to multiple conductor components."
+                    internal(
+                        f"SGB physical attribute {attribute} belongs to multiple conductor components"
+                    )
                 )
             self.attribute_components[attribute] = component_id
 
@@ -148,12 +154,14 @@ def _conductor_identity(info: Mapping[str, Any]) -> _ConductorIdentity:
         )
     if net_id is None:
         raise ValueError(
-            f"SGB conductor component {component_id!r} missing exact net_id."
+            internal(f"SGB conductor component {component_id!r} missing exact net_id")
         )
     attrs = tuple(int(value) for value in info.get("attributes", ()))
     if not attrs:
         raise ValueError(
-            f"SGB conductor component {component_id!r} has no physical attributes."
+            internal(
+                f"SGB conductor component {component_id!r} has no physical attributes"
+            )
         )
     return _ConductorIdentity(component_id, net_id, attrs)
 
@@ -211,7 +219,11 @@ def _terminal_identity(terminal: TerminalBinding) -> _TerminalIdentity:
 
 def _require_new_terminal_net(net_id: str, seen_nets: set[str]) -> None:
     if net_id in seen_nets:
-        raise ValueError(f"SGB terminal net {net_id!r} is assigned more than once.")
+        raise ValueError(
+            Declared(f"SGB terminal net {net_id!r}", _WHERE_TERMINALS_GROUNDS).refusal(
+                "is assigned more than once"
+            )
+        )
     seen_nets.add(net_id)
 
 
@@ -224,7 +236,11 @@ def _components_on_net(
         if candidate == net_id
     )
     if not matching:
-        raise ValueError(f"SGB terminal {terminal_name!r} has no exact net match.")
+        raise ValueError(
+            Declared(
+                f"SGB terminal {terminal_name!r}", _WHERE_TERMINALS_GROUNDS
+            ).refusal("has no exact net match")
+        )
     return matching
 
 
@@ -233,7 +249,9 @@ def _require_terminal_components(
 ) -> None:
     if assigned.intersection(matching):
         raise ValueError(
-            f"SGB terminal {name!r} splits an already-assigned conductor component."
+            Declared(f"SGB terminal {name!r}", _WHERE_TERMINALS_GROUNDS).refusal(
+                "splits an already-assigned conductor component"
+            )
         )
 
 
@@ -291,17 +309,27 @@ def _physical_grounds(
                 ).refusal(found_text(value))
             )
         if net_id in requested:
-            raise ValueError(f"SGB physical Ground net {net_id!r} is repeated.")
+            raise ValueError(
+                Declared(
+                    f"SGB physical Ground net {net_id!r}", _WHERE_ADD_GROUND
+                ).refusal("is repeated")
+            )
         matching = {
             component_id
             for component_id, candidate in state.component_nets.items()
             if candidate == net_id
         }
         if not matching:
-            raise ValueError(f"SGB physical Ground net {net_id!r} has no exact match.")
+            raise ValueError(
+                Declared(
+                    f"SGB physical Ground net {net_id!r}", _WHERE_ADD_GROUND
+                ).refusal("has no exact match")
+            )
         if assigned.intersection(matching):
             raise ValueError(
-                f"SGB physical Ground net {net_id!r} overlaps a Terminal binding."
+                Declared(
+                    f"SGB physical Ground net {net_id!r}", _WHERE_ADD_GROUND
+                ).refusal("overlaps a Terminal binding")
             )
         requested.append(net_id)
         ground_components.update(matching)
@@ -318,7 +346,11 @@ def _assign_unrequested_conductors(
     unassigned = set(state.component_attrs).difference(assigned)
     if unassigned and policy == "error":
         raise ValueError(
-            "Unassigned conductor components: " + ", ".join(sorted(unassigned))
+            Declared(
+                "conductor components " + ", ".join(sorted(unassigned)),
+                "the calls to add_terminal and add_ground, or set_electrostatic("
+                "unassigned_conductor_policy='ground')",
+            ).refusal("are bound to no Terminal and no Ground")
         )
     if policy == "ground":
         ground_components.update(unassigned)

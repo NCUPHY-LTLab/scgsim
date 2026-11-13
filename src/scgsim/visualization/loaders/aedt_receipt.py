@@ -7,6 +7,7 @@ from typing import Any
 
 from scgsim.geometry.models.refusals import Declared
 from scgsim.refusal import found_text
+from scgsim.visualization.loaders.common import AEDT_RUN_FOLDER
 
 _WHERE_AEDT_RUN = "the AEDT run folder: fetch it again, or run the AEDT handoff again"
 
@@ -14,14 +15,18 @@ _WHERE_AEDT_RUN = "the AEDT run folder: fetch it again, or run the AEDT handoff 
 def mapping_record(value: Any, name: str) -> Mapping[str, Any]:
     """Require one decoded JSON object and name it in type errors."""
     if not isinstance(value, Mapping):
-        raise TypeError(f"{name} must be a mapping")
+        raise TypeError(
+            Declared(f"{name}", AEDT_RUN_FOLDER).refusal("must be a mapping")
+        )
     return value
 
 
 def nonempty_text(value: Any, name: str) -> str:
     """Require non-empty text and return its whitespace-trimmed value."""
     if not isinstance(value, str) or not value.strip():
-        raise TypeError(f"{name} must be non-empty text")
+        raise TypeError(
+            Declared(f"{name}", AEDT_RUN_FOLDER).refusal("must be non-empty text")
+        )
     return value.strip()
 
 
@@ -50,7 +55,11 @@ def validate_native_receipt(
     elif mode == "q2d":
         _validate_q2d_receipt(app, receipt, object_ids)
     else:
-        raise ValueError(f"unsupported AEDT receipt mode: {mode!r}")
+        raise ValueError(
+            Declared("unsupported AEDT receipt mode", AEDT_RUN_FOLDER).refusal(
+                f"{mode!r}"
+            )
+        )
     return native_boundaries
 
 
@@ -68,7 +77,7 @@ def _validate_hfss_receipt(
     if mode == "eigenmode" and receipt.get("ports"):
         raise ValueError(
             Declared(
-                "AEDT Eigenmode receipt must not contain ports", _WHERE_AEDT_RUN
+                "AEDT Eigenmode receipt must not contain ports", AEDT_RUN_FOLDER
             ).refusal(found_text(receipt.get("ports")))
         )
 
@@ -93,7 +102,7 @@ def _validate_hfss_pec_materials(
             raise ValueError(
                 Declared(
                     "native AEDT PEC boundary disagrees with the receipt",
-                    _WHERE_AEDT_RUN,
+                    AEDT_RUN_FOLDER,
                 ).refusal(
                     found_text(
                         None if props is None else props.get("BoundType"), "Perfect E"
@@ -104,7 +113,7 @@ def _validate_hfss_pec_materials(
         if sorted(int(value) for value in props.get("Objects", ())) != expected_ids:
             raise ValueError(
                 Declared(
-                    "native AEDT PEC object assignment changed", _WHERE_AEDT_RUN
+                    "native AEDT PEC object assignment changed", AEDT_RUN_FOLDER
                 ).refusal(
                     found_text(
                         sorted(int(value) for value in props.get("Objects", ())),
@@ -128,7 +137,7 @@ def _validate_hfss_geometry(
         name = nonempty_text(item.get("object_name"), "native object name")
         if object_ids.get(name) != item.get("native_object_id"):
             raise ValueError(
-                Declared("native AEDT body identity changed", _WHERE_AEDT_RUN).refusal(
+                Declared("native AEDT body identity changed", AEDT_RUN_FOLDER).refusal(
                     found_text(object_ids.get(name), item.get("native_object_id"))
                 )
             )
@@ -146,7 +155,7 @@ def _validate_sheet_pec(
     props = boundaries.get(boundary_name)
     if props is None or props.get("BoundType") != "Perfect E":
         raise ValueError(
-            Declared("native Sheet PEC boundary changed", _WHERE_AEDT_RUN).refusal(
+            Declared("native Sheet PEC boundary changed", AEDT_RUN_FOLDER).refusal(
                 found_text(
                     None if props is None else props.get("BoundType"), "Perfect E"
                 )
@@ -156,7 +165,7 @@ def _validate_sheet_pec(
     objects = {int(value) for value in props.get("Objects", ())}
     if faces != set(item["native_face_ids"]) and objects != {item["native_object_id"]}:
         raise ValueError(
-            Declared("native Sheet PEC assignment changed", _WHERE_AEDT_RUN).refusal(
+            Declared("native Sheet PEC assignment changed", AEDT_RUN_FOLDER).refusal(
                 found_text(
                     {"faces": sorted(faces), "objects": sorted(objects)},
                     {
@@ -175,7 +184,7 @@ def _validate_solid_pec(app: Any, item: Mapping[str, Any], name: str) -> None:
         obj = app.modeler[name]
         if str(obj.material_name).casefold() != "pec" or obj.solve_inside is not False:
             raise ValueError(
-                Declared("native Solid PEC material changed", _WHERE_AEDT_RUN).refusal(
+                Declared("native Solid PEC material changed", AEDT_RUN_FOLDER).refusal(
                     found_text(
                         {
                             "material": str(obj.material_name),
@@ -198,7 +207,7 @@ def _validate_hfss_ports(
             raise ValueError(
                 Declared(
                     "native AEDT port boundary disagrees with the receipt",
-                    _WHERE_AEDT_RUN,
+                    AEDT_RUN_FOLDER,
                 ).refusal(
                     found_text(
                         None if props is None else props.get("BoundType"),
@@ -209,7 +218,7 @@ def _validate_hfss_ports(
         if int(port["face_id"]) not in {int(value) for value in props.get("Faces", ())}:
             raise ValueError(
                 Declared(
-                    "native AEDT port face assignment changed", _WHERE_AEDT_RUN
+                    "native AEDT port face assignment changed", AEDT_RUN_FOLDER
                 ).refusal(
                     found_text(
                         sorted(int(value) for value in props.get("Faces", ())),
@@ -227,7 +236,7 @@ def _validate_q3d_receipt(
         str(item.get("name")) for item in receipt.get("nets", ())
     ]:
         raise ValueError(
-            Declared("native AEDT Q3D net order changed", _WHERE_AEDT_RUN).refusal(
+            Declared("native AEDT Q3D net order changed", AEDT_RUN_FOLDER).refusal(
                 found_text(
                     list(app.net_names),
                     [str(item.get("name")) for item in receipt.get("nets", ())],
@@ -246,7 +255,7 @@ def _validate_q3d_receipt(
         ):
             raise ValueError(
                 Declared(
-                    "native AEDT Q3D net object assignment changed", _WHERE_AEDT_RUN
+                    "native AEDT Q3D net object assignment changed", AEDT_RUN_FOLDER
                 ).refusal(found_text(native, expected))
             )
         _validate_q3d_terminal(app, net, "source")
@@ -268,7 +277,11 @@ def _validate_q3d_terminal(app: Any, net: Mapping[str, Any], role: str) -> None:
     if native_faces != sorted(
         int(value) for value in record.get("native_face_ids", ())
     ):
-        raise ValueError(f"native AEDT Q3D {role} assignment changed")
+        raise ValueError(
+            Declared(f"native AEDT Q3D {role} assignment", _WHERE_AEDT_RUN).refusal(
+                "changed"
+            )
+        )
 
 
 def _validate_q2d_receipt(
@@ -289,6 +302,6 @@ def _validate_q2d_receipt(
         ):
             raise ValueError(
                 Declared(
-                    "native AEDT Q2D conductor assignment changed", _WHERE_AEDT_RUN
+                    "native AEDT Q2D conductor assignment changed", AEDT_RUN_FOLDER
                 ).refusal(found_text(native, expected))
             )

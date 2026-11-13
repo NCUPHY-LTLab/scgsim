@@ -26,7 +26,7 @@ def _plain(value: Any) -> Any:
         return [_plain(item) for item in value]
     if value is None or isinstance(value, (str, bool, int, float)):
         return value
-    raise TypeError(f"unsupported EPR value {type(value).__name__}")
+    raise TypeError(internal(f"unsupported EPR value {type(value).__name__}"))
 
 
 def _freeze(value: Any, *, verified: Any = None) -> Any:
@@ -49,7 +49,7 @@ def _freeze(value: Any, *, verified: Any = None) -> Any:
         )
     if value is None or isinstance(value, (str, bool, int, float)):
         return value
-    raise TypeError(f"unsupported EPR value {type(value).__name__}")
+    raise TypeError(internal(f"unsupported EPR value {type(value).__name__}"))
 
 
 @dataclass(frozen=True)
@@ -135,8 +135,12 @@ class PalaceEprResult:
             and payload.get("schema_version") != EPR_RESULT_SCHEMA
         ):
             raise ValueError(
-                f"Palace EPR payload schema {payload.get('schema_version')!r} is not readable: "
-                f"only {EPR_RESULT_SCHEMA!r} is read, and results of older schemas are not."
+                Declared(
+                    f"Palace EPR payload schema {payload.get('schema_version')!r}",
+                    _WHERE_EPR_FILE,
+                ).refusal(
+                    f"is not readable: only {EPR_RESULT_SCHEMA!r} is read, and results of older schemas are not"
+                )
             )
         if not isinstance(payload, Mapping) or set(payload) != {
             "schema_version",
@@ -181,7 +185,11 @@ def _validate_rows(rows: tuple[Mapping[str, Any], ...]) -> None:
             if not isinstance(row.get(name), (list, tuple)) or any(
                 not isinstance(item, Mapping) for item in row[name]
             ):
-                raise TypeError(f"Palace EPR {name} must contain mappings")
+                raise TypeError(
+                    Declared(f"Palace EPR {name}", _WHERE_EPR_FILE).refusal(
+                        "must contain mappings"
+                    )
+                )
         for surface in row["surface"]:
             _validate_surface_result(surface, group_sources)
         for bulk in row["bulk"]:
@@ -208,7 +216,11 @@ def _validate_surface_identity(surface: Any) -> None:
     """The surface row names its group, interface and evaluation, its sidecar rows, Entities and lineage."""
     for name in ("group_id", "name", "interface_kind", "evaluation_kind"):
         if not isinstance(surface.get(name), str) or not surface[name]:
-            raise ValueError(f"Palace EPR surface {name} is missing")
+            raise ValueError(
+                Declared(f"Palace EPR surface {name}", _WHERE_EPR_FILE).refusal(
+                    "is missing"
+                )
+            )
     if surface["interface_kind"] not in {"MA", "MS", "SA"} or surface[
         "evaluation_kind"
     ] not in {"unmasked_baseline", "requested_margin"}:

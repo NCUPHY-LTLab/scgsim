@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, NamedTuple, cast
 
 from scgsim.geometry.models.refusals import Declared, internal
-from scgsim.refusal import found_text
+from scgsim.refusal import ENVIRONMENT, found_text
 
 from .loaders.common import file_sha256
 from .scene import MODE_TITLES, VIEWS, ScenePart
@@ -42,13 +42,19 @@ def render_mode(
 ) -> RenderedMode:
     """Render all fixed views, build their contact sheet and record artifacts."""
     if not parts:
-        raise ValueError(f"available preview mode {mode_name} has no geometry")
+        raise ValueError(
+            internal(f"available preview mode {mode_name} has no geometry")
+        )
     try:
         # PyVista and Pillow are optional until a preview is actually rendered.
         import pyvista as pv  # noqa: PLC0415 - optional renderer, loaded on demand
         from PIL import Image, ImageDraw, ImageFont  # noqa: PLC0415 - optional renderer
     except ImportError as exc:
-        raise RuntimeError("geometry rendering requires scgsim[visualization]") from exc
+        raise RuntimeError(
+            Declared("geometry rendering", ENVIRONMENT).refusal(
+                "requires scgsim[visualization]"
+            )
+        ) from exc
 
     final_dir = root / "previews/geometry" / mode_name
     final_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -298,7 +304,9 @@ def configure_headless_rendering() -> None:
         from vtkmodules.vtkRenderingOpenGL2 import vtkEGLRenderWindow  # noqa: PLC0415 - EGL is optional until headless rendering
     except ImportError as exc:
         raise RuntimeError(
-            "headless geometry preview requires VTK EGL support"
+            Declared("headless geometry preview", _WHERE_EGL).refusal(
+                "requires VTK EGL support"
+            )
         ) from exc
     device_count = vtkEGLRenderWindow().GetNumberOfDevices()
     if device_count < 1:

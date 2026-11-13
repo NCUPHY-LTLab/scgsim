@@ -26,6 +26,8 @@ from scgsim.refusal import found_text
 from .ports import LayoutPortBinding, RequestedPort
 from .workflow import GeometrySettings, prepare_mesh_input
 
+_WHERE_ADD_PORT = "the call to add_port"
+
 _WHERE_PLAN_PORTS = "the GeometryPlan's port sheets"
 
 
@@ -127,7 +129,9 @@ def _resolve_plan_ports(
         record = available.get(requested.name)
         if record is None or record["target_layer"] != requested.layer:
             raise ValueError(
-                f"GeometryPlan has no matching authored port {requested.name!r}"
+                Declared("GeometryPlan", _WHERE_ADD_PORT).refusal(
+                    f"has no matching authored port {requested.name!r}"
+                )
             )
         resolved.append(
             LayoutPortBinding(

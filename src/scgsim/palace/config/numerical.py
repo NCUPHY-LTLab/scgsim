@@ -118,8 +118,9 @@ class NumericalControls:
         _refuse_problem_defaults(self)
         if self.amr_max_passes is None:
             raise ValueError(
-                f"{problem} requires explicit amr_max_passes before config generation: call "
-                "set_numerical(amr_max_passes=...) before write_config(); 0 disables AMR."
+                Declared(f"{problem}", _WHERE_NUMERICAL).refusal(
+                    "requires explicit amr_max_passes before config generation: call set_numerical(amr_max_passes=...) before write_config(); 0 disables AMR"
+                )
             )
         if (
             problem == EIGENMODE.name
@@ -179,8 +180,9 @@ def _refuse_problem_defaults(controls: NumericalControls) -> None:
     ]
     if open_names:
         raise ValueError(
-            f"NumericalControls {open_names} still wait for the problem's defaults: hand the record to "
-            "EigenmodeSim(numerical=...) or ElectrostaticSim(numerical=...), which fill them, or set them."
+            Declared(f"NumericalControls {open_names}", _WHERE_NUMERICAL).refusal(
+                "still wait for the problem's defaults: hand the record to EigenmodeSim(numerical=...) or ElectrostaticSim(numerical=...), which fill them, or set them"
+            )
         )
 
 
@@ -251,7 +253,9 @@ def _check_choice(
         return
     if value not in choices:
         raise ValueError(
-            f"unsupported {name}: call set_numerical({name}=...) with one of {sorted(choices)}."
+            Declared(f"unsupported {name}", _WHERE_NUMERICAL).refusal(
+                f"call set_numerical({name}=...) with one of {sorted(choices)}"
+            )
         )
 
 
@@ -303,7 +307,9 @@ def _check_amr_controls(controls: NumericalControls) -> None:
         value = getattr(controls, name)
         if value is not None and not isinstance(value, bool):
             raise TypeError(
-                f"{name} must be bool or None: call set_numerical({name}=True, False or None)."
+                Declared(f"{name}", _WHERE_NUMERICAL).refusal(
+                    f"must be bool or None: call set_numerical({name}=True, False or None)"
+                )
             )
 
 

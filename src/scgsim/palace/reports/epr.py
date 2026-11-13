@@ -6,7 +6,10 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.epr_records import PalaceEprResult
+
+_WHERE_SHOW_EPR = "the call to show_epr"
 
 
 def _plain_view(value: Any) -> Any:
@@ -24,8 +27,9 @@ def _show_view(result: PalaceEprResult, *, mode: int | None) -> dict[str, Any]:
     if len(selected) != 1:
         modes = [row["mode"] for row in result.rows]
         raise ValueError(
-            f"show_epr requires one exact mode: mode={mode!r} selects {len(selected)} of the result's "
-            f"modes {modes}; pass mode= one of them."
+            Declared("show_epr", _WHERE_SHOW_EPR).refusal(
+                f"requires one exact mode: mode={mode!r} selects {len(selected)} of the result's modes {modes}; pass mode= one of them"
+            )
         )
     row = selected[0]
     surface = row["surface"]
@@ -74,8 +78,9 @@ def show_epr(result: PalaceEprResult, *, mode: int | None = None) -> Any:
 
     if not isinstance(result, PalaceEprResult):
         raise TypeError(
-            "show_epr requires a PalaceEprResult from epr_result() or resolve_epr_result(); "
-            f"got {type(result).__name__}."
+            Declared("show_epr", _WHERE_SHOW_EPR).refusal(
+                f"requires a PalaceEprResult from epr_result() or resolve_epr_result(); got {type(result).__name__}"
+            )
         )
     return epr_mode_figure(result, mode=mode)
 

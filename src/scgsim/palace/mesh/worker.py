@@ -56,7 +56,9 @@ def _run_request(request: Mapping[str, Any], result_path: Path) -> int:
 def _required(payload: Mapping[str, Any], key: str, expected: type[Any]) -> Any:
     value = payload.get(key)
     if isinstance(value, bool) or not isinstance(value, expected):
-        raise TypeError(f"Gmsh worker request field {key!r} has an invalid type.")
+        raise TypeError(
+            internal(f"Gmsh worker request field {key!r} has an invalid type")
+        )
     return value
 
 

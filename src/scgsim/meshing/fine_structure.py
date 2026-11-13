@@ -27,6 +27,7 @@ from typing import Any, Literal
 
 # The one geometric constant the meshing stage shares with the geometry layer, which owns it.
 from scgsim.geometry.models.grid import WALL_COLUMN_LIMIT_STEPS
+from scgsim.refusal import refused
 
 from .built_model import (
     Bounds,
@@ -42,6 +43,8 @@ from .built_model import (
     wedge_angles,
 )
 from .features import checked, load_checked
+
+_WHERE_LIMITS = "the FineStructureLimits passed to simulation_drc"
 
 Action = Literal["refuse", "warn"]
 Owner = Literal["layout", "erosion", "sgb"]
@@ -92,11 +95,21 @@ class FineStructureLimits:
             if not (
                 isinstance(value, (int, float)) and math.isfinite(value) and value > 0
             ):
-                raise ValueError(f"{name} must be a positive number, got {value!r}.")
+                raise ValueError(
+                    refused(
+                        f"{name}",
+                        f"must be a positive number, got {value!r}",
+                        _WHERE_LIMITS,
+                    )
+                )
         for name in ("wall_action", "face_action", "free_edge_action"):
             if getattr(self, name) not in _ACTIONS:
                 raise ValueError(
-                    f"{name} must be 'refuse' or 'warn', got {getattr(self, name)!r}."
+                    refused(
+                        f"{name}",
+                        f"must be 'refuse' or 'warn', got {getattr(self, name)!r}",
+                        _WHERE_LIMITS,
+                    )
                 )
 
 

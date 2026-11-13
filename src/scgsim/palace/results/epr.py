@@ -50,7 +50,12 @@ from scgsim.semantics.epr import (
     inverse_quality_factor,
 )
 
+_WHERE_REANALYZE = "the call to reanalyze_epr"
+
 _WHERE_EPR_RESULT_CALL = "the call to epr_result"
+
+
+_WHERE_EPR_FILE_PATH = "the path passed to resolve_epr_result"
 
 
 def resolve_epr_result(path: str | Path) -> PalaceEprResult:
@@ -58,7 +63,11 @@ def resolve_epr_result(path: str | Path) -> PalaceEprResult:
 
     source = Path(path).expanduser().resolve()
     if not source.is_file() or source.is_symlink():
-        raise FileNotFoundError(source)
+        raise FileNotFoundError(
+            Declared(f"EPR result file {source}", _WHERE_EPR_FILE_PATH).refusal(
+                "does not exist, or is a link"
+            )
+        )
     return PalaceEprResult.from_payload(json.loads(source.read_text(encoding="utf-8")))
 
 
@@ -243,7 +252,9 @@ def reanalyze_epr(
 
     if not isinstance(result, PalaceEprResult):
         raise TypeError(
-            f"reanalyze_epr requires a PalaceEprResult; got {type(result).__name__}."
+            Declared("reanalyze_epr", _WHERE_REANALYZE).refusal(
+                f"requires a PalaceEprResult; got {type(result).__name__}"
+            )
         )
     updates = _FilmUpdates.checked(result, surface_defaults, group_overrides)
     rows = tuple(
@@ -284,14 +295,17 @@ class _FilmUpdates:
         unknown_types = set(defaults) - {"MA", "MS", "SA"}
         if unknown_types:
             raise ValueError(
-                f"surface_defaults supports only MA, MS, and SA; got {sorted(unknown_types)}."
+                Declared("surface_defaults", _WHERE_REANALYZE).refusal(
+                    f"supports only MA, MS, and SA; got {sorted(unknown_types)}"
+                )
             )
         known = {item["group_id"] for row in result.rows for item in row["surface"]}
         unknown_groups = set(overrides) - known
         if unknown_groups:
             raise ValueError(
-                f"group_overrides contains an unknown group: {sorted(unknown_groups)}; "
-                f"this result's groups are {sorted(known)}."
+                Declared("group_overrides", _WHERE_REANALYZE).refusal(
+                    f"contains an unknown group: {sorted(unknown_groups)}; this result's groups are {sorted(known)}"
+                )
             )
         return cls(defaults, overrides)
 
@@ -359,9 +373,9 @@ def _participation_ratio(
         updated["film_relative_permittivity"] != original["film_relative_permittivity"]
     ):
         raise ValueError(
-            "SA epsilon change requires stored normal/tangential integrals: surface "
-            f"{item['name']!r} (group {item['group_id']!r}) is SA, whose result stores no such "
-            "integrals; change only film_thickness_m or loss_tangent for SA surfaces."
+            Declared("SA epsilon change", _WHERE_REANALYZE).refusal(
+                f"requires stored normal/tangential integrals: surface {item['name']!r} (group {item['group_id']!r}) is SA, whose result stores no such integrals; change only film_thickness_m or loss_tangent for SA surfaces"
+            )
         )
     return ratio
 
@@ -599,7 +613,11 @@ def _selected_outputs(
             or len(values) != len(set(values))
             or not set(values) <= configured
         ):
-            raise ValueError(f"Palace EPR selection has unknown or invalid {name}")
+            raise ValueError(
+                Declared("Palace EPR selection", RETURNED_RUN_FOLDER).refusal(
+                    f"has unknown or invalid {name}"
+                )
+            )
         else:
             selected[name] = set(values)
     return request, selected
@@ -646,8 +664,9 @@ class _RecordedFilm:
         )
         if recorded_l0 != l0:
             raise ValueError(
-                f"film Model.L0 disagrees with resolved config: Surface-EPR entry {number} records "
-                f"{recorded_l0} m, config.json Model.L0 is {l0} m."
+                Declared("film Model.L0", RETURNED_RUN_FOLDER).refusal(
+                    f"disagrees with resolved config: Surface-EPR entry {number} records {recorded_l0} m, config.json Model.L0 is {l0} m"
+                )
             )
         physical = checked_number(
             spec.get("film_thickness_m", native_thickness * l0),
@@ -656,8 +675,9 @@ class _RecordedFilm:
         )
         if not math.isclose(physical, native_thickness * l0, rel_tol=1e-12):
             raise ValueError(
-                f"film SI/native thickness mismatch: Surface-EPR entry {number} records "
-                f"{physical} m, but {native_thickness} x Model.L0 {l0} m is {native_thickness * l0} m."
+                Declared("film SI/native thickness", RETURNED_RUN_FOLDER).refusal(
+                    f"mismatch: Surface-EPR entry {number} records {physical} m, but {native_thickness} x Model.L0 {l0} m is {native_thickness * l0} m"
+                )
             )
         assumption = film_assumptions(
             {

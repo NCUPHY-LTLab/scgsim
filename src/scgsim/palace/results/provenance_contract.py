@@ -287,7 +287,11 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
     """Verify required input identities against the exact run-directory bytes."""
     hashes = expect_list(metadata.get("hashes"), f"{label} metadata hashes")
     if not hashes:
-        raise ValueError(f"{label} metadata has no hash entries.")
+        raise ValueError(
+            Declared(f"{label} metadata", RETURNED_RUN_FOLDER).refusal(
+                "has no hash entries"
+            )
+        )
 
     observed: dict[str, FileHash] = {}
     for entry in hashes:
@@ -306,7 +310,9 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
         file_path = confined_path(root, path_name)
         if not file_path.is_file():
             raise FileNotFoundError(
-                f"{label} metadata references missing artifact {path_name}."
+                Declared(f"{label} metadata", RETURNED_RUN_FOLDER).refusal(
+                    f"references missing artifact {path_name}"
+                )
             )
 
         observed[path_name] = FileHash(
@@ -315,8 +321,9 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
         )
         if bytes_value != observed[path_name].bytes:
             raise ValueError(
-                f"{label} hash byte size mismatch for {path_name}: "
-                f"declared {bytes_value}, observed {observed[path_name].bytes}"
+                Declared(f"{label} hash byte size", RETURNED_RUN_FOLDER).refusal(
+                    f"mismatch for {path_name}: declared {bytes_value}, observed {observed[path_name].bytes}"
+                )
             )
         if sha_value != observed[path_name].sha256:
             raise ValueError(
@@ -328,7 +335,9 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
     missing = [name for name in SEALED_INPUTS if name not in observed]
     if missing:
         raise ValueError(
-            f"{label} metadata missing hash entries for: {', '.join(missing)}"
+            Declared(f"{label} metadata", RETURNED_RUN_FOLDER).refusal(
+                f"missing hash entries for: {', '.join(missing)}"
+            )
         )
 
 
@@ -377,7 +386,9 @@ def validate_archive_record(root: Path, resource_record: dict[str, Any]) -> None
     archive_path = resolve_run_archive_path(root, path_name)
     if not archive_path.is_file():
         raise FileNotFoundError(
-            f"resource record references missing archive payload {archive_path}"
+            Declared("resource record", RETURNED_RUN_FOLDER).refusal(
+                f"references missing archive payload {archive_path}"
+            )
         )
     archive_sha = sha256(archive_path)
     if archive_sha != expected_sha:
@@ -401,13 +412,15 @@ def validate_archive_manifest(
     required = {*SEALED_INPUTS, HANDOFF_METADATA, RUN_METADATA}
     if missing := required - members.paths:
         raise ValueError(
-            "handoff archive manifest lacks required members: "
-            + ", ".join(sorted(missing))
+            Declared("handoff archive manifest", RETURNED_RUN_FOLDER).refusal(
+                "lacks required members: " + ", ".join(sorted(missing))
+            )
         )
     if non_files := required - set(members.files):
         raise ValueError(
-            "handoff archive manifest requires regular-file members: "
-            + ", ".join(sorted(non_files))
+            Declared("handoff archive manifest", RETURNED_RUN_FOLDER).refusal(
+                "requires regular-file members: " + ", ".join(sorted(non_files))
+            )
         )
     _validate_manifest_inputs(members.files, handoff_metadata, manifest)
     archive_path = resolve_run_archive_path(root, expect_scalar(archive, "path", str))
@@ -549,7 +562,9 @@ def _validate_manifest_inputs(
             )
         if file_members.get(path) != expected:
             raise ValueError(
-                f"archive manifest must declare input {path} as an exact regular file."
+                Declared("archive manifest", RETURNED_RUN_FOLDER).refusal(
+                    f"must declare input {path} as an exact regular file"
+                )
             )
 
 
@@ -560,11 +575,23 @@ def _validate_bundled_types(
     for path, member_type in member_types.items():
         member = bundled.get(path.rstrip("/"))
         if member is None:
-            raise ValueError(f"archive member is missing: {path}.")
+            raise ValueError(
+                Declared("archive member", RETURNED_RUN_FOLDER).refusal(
+                    f"is missing: {path}"
+                )
+            )
         if member_type == "file" and not member.isfile():
-            raise ValueError(f"archive member must be a regular file: {path}.")
+            raise ValueError(
+                Declared("archive member", RETURNED_RUN_FOLDER).refusal(
+                    f"must be a regular file: {path}"
+                )
+            )
         if member_type == "directory" and not member.isdir():
-            raise ValueError(f"archive member must be a directory: {path}.")
+            raise ValueError(
+                Declared("archive member", RETURNED_RUN_FOLDER).refusal(
+                    f"must be a directory: {path}"
+                )
+            )
 
 
 def _validate_bundled_hashes(
@@ -586,7 +613,11 @@ def _validate_bundled_hashes(
             )
         handle = bundle.extractfile(member)
         if handle is None:
-            raise ValueError(f"archive member {path} cannot be read.")
+            raise ValueError(
+                Declared(f"archive member {path}", RETURNED_RUN_FOLDER).refusal(
+                    "cannot be read"
+                )
+            )
         digest = hashlib.sha256(handle.read()).hexdigest()
         if digest != expected_sha:
             raise ValueError(

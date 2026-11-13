@@ -25,11 +25,15 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import NamedTuple
 
+from scgsim.refusal import refused
+
 from .driver import RoundOutcome, run_round
 from .findings import BadElement, MeshAudit
 from .job import Elevation, MeshJob
 from .mesher import MesherOptions
 from .sizing import LocalSize, SizeRequests, ladder_size
+
+_WHERE_REPAIR = "the RepairPolicy or Budgets of the meshing call"
 
 # Why the loop stopped.  Only "clean" is success; a report-only strategy also delivers on "report_only".
 STOP_CLEAN = "clean"
@@ -93,7 +97,13 @@ class Budgets:
             if not (
                 isinstance(value, (int, float)) and math.isfinite(value) and value > 0
             ):
-                raise ValueError(f"{name} must be a positive number, got {value!r}.")
+                raise ValueError(
+                    refused(
+                        f"{name}",
+                        f"must be a positive number, got {value!r}",
+                        _WHERE_REPAIR,
+                    )
+                )
 
     def time_budget(self, footprint_mm2: float | None) -> TimeBudget:
         """The limit and target for a model of this footprint: the base values times max(1, A / A_ref).

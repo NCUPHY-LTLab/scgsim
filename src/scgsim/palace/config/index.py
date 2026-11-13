@@ -285,16 +285,22 @@ def _selection(values: Sequence[str] | None, name: str) -> tuple[str, ...] | Non
         return None
     if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
         raise TypeError(
-            f"{name} must be a sequence of IDs or None: call set_epr_request({name}=[...])."
+            Declared(f"{name}", _WHERE_EPR_REQUEST).refusal(
+                f"must be a sequence of IDs or None: call set_epr_request({name}=[...])"
+            )
         )
     normalized = tuple(values)
     if any(not isinstance(value, str) or not value for value in normalized):
         raise ValueError(
-            f"{name} must contain non-empty text IDs: call set_epr_request({name}=[...])."
+            Declared(f"{name}", _WHERE_EPR_REQUEST).refusal(
+                f"must contain non-empty text IDs: call set_epr_request({name}=[...])"
+            )
         )
     if len(normalized) != len(set(normalized)):
         raise ValueError(
-            f"{name} must not repeat IDs: call set_epr_request({name}=[...]) with each once."
+            Declared(f"{name}", _WHERE_EPR_REQUEST).refusal(
+                f"must not repeat IDs: call set_epr_request({name}=[...]) with each once"
+            )
         )
     return normalized
 
@@ -336,8 +342,9 @@ def check_epr_request(
         unknown = sorted(set(chosen or ()) - configured)
         if unknown:
             raise ValueError(
-                f"EPR request selects an unknown {name} binding {unknown}; the config has "
-                f"{sorted(configured)}: call set_epr_request() with those, then write_config()."
+                Declared("EPR request", _WHERE_EPR_REQUEST).refusal(
+                    f"selects an unknown {name} binding {unknown}; the config has {sorted(configured)}: call set_epr_request() with those, then write_config()"
+                )
             )
 
 

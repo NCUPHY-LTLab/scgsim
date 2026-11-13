@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any, Literal, NamedTuple, cast
 
 from scgsim.geometry.models.refusals import Declared, internal
-from scgsim.refusal import found_text
+from scgsim.refusal import ENVIRONMENT, found_text
+from scgsim.visualization.loaders.common import AEDT_RUN_FOLDER
 
 from .loaders.common import (
     artifact_matches,
@@ -35,7 +36,8 @@ from .scene import (
     with_scene_palette,
 )
 
-_WHERE_AEDT_RUN = "the AEDT run folder: fetch it again, or run the AEDT handoff again"
+_WHERE_PREVIEW_AGAIN = "the run folder: render the preview again"
+_WHERE_PREVIEW_MODE = "the mode argument of the preview call"
 
 
 def _version(package: str) -> str | None:
@@ -132,7 +134,11 @@ class GeometryPreview:
     ) -> Any:
         """Display one inline interactive semantic scene in a notebook."""
         if mode not in MODES:
-            raise ValueError(f"unsupported geometry preview mode: {mode!r}")
+            raise ValueError(
+                Declared(
+                    "unsupported geometry preview mode", _WHERE_PREVIEW_MODE
+                ).refusal(f"{mode!r}")
+            )
         selected = self._modes[mode]
         if selected.unavailable_reason is not None:
             return GeometryPreviewArtifact(
@@ -146,8 +152,9 @@ class GeometryPreview:
             from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is only needed for the interactive legend.
         except ImportError as exc:
             raise RuntimeError(
-                "interactive geometry preview requires scgsim[visualization] "
-                "inside a Jupyter notebook"
+                Declared("interactive geometry preview", ENVIRONMENT).refusal(
+                    "requires scgsim[visualization] inside a Jupyter notebook"
+                )
             ) from exc
         display(HTML(interactive_legend(mode, selected.parts)))
         configure_headless_rendering()
@@ -202,7 +209,11 @@ class GeometryPreview:
         for relative, expected in self._source_hashes.items():
             path = confined_artifact_path(self.root, relative)
             if not path.is_file() or file_sha256(path) != expected:
-                raise ValueError(f"geometry preview source changed: {relative}")
+                raise ValueError(
+                    Declared(
+                        "geometry preview source changed", _WHERE_PREVIEW_AGAIN
+                    ).refusal(f"{relative}")
+                )
         expected_receipt = self._source_identity.get("receipt_authority_sha256")
         if expected_receipt is not None:
             receipt_path = self.root / "metadata/aedt_run_receipt.json"
@@ -212,7 +223,7 @@ class GeometryPreview:
             ):
                 raise ValueError(
                     Declared(
-                        "AEDT preview receipt authority changed", _WHERE_AEDT_RUN
+                        "AEDT preview receipt authority changed", AEDT_RUN_FOLDER
                     ).refusal(
                         found_text(
                             receipt_authority_sha256(receipt_path)

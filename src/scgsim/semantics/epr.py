@@ -72,6 +72,14 @@ def film_assumptions(
     offline records; partial updates may omit fields altogether.
     """
 
+    _validate_film_fields(value, partial)
+    result = _checked_film_values(value, allow_unknown)
+    # Every field is checked above, so the mapping is the snapshot it claims to be.
+    return cast(FilmUpdate, result) if partial else cast(FilmAssumptions, result)
+
+
+def _validate_film_fields(value: Mapping[str, Any], partial: bool) -> None:
+    """A film record has only film fields, and all of them unless it is a partial update."""
     if not isinstance(value, Mapping) or set(value) - FILM_FIELDS:
         raise ValueError(
             refused(
@@ -93,6 +101,12 @@ def film_assumptions(
                 _WHERE_FILM,
             )
         )
+
+
+def _checked_film_values(
+    value: Mapping[str, Any], allow_unknown: bool
+) -> dict[str, Any]:
+    """The film values as floats and text, each refused when it is out of range or empty."""
     result = dict(value)
     for name in ("film_thickness_m", "film_relative_permittivity"):
         if name not in result:
@@ -143,8 +157,7 @@ def film_assumptions(
                     _WHERE_FILM,
                 )
             )
-    # Every field is checked above, so the mapping is the snapshot it claims to be.
-    return cast(FilmUpdate, result) if partial else cast(FilmAssumptions, result)
+    return result
 
 
 def inverse_quality_factor(

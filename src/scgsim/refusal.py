@@ -12,6 +12,8 @@ import it.
 from typing import Any
 
 INTERNAL = "internal:"
+ENVIRONMENT = "the Python environment SCGSim runs in"
+"""Where a missing optional dependency or tool is set right."""
 # A shown value is cut at this many characters, so a refusal of a whole record stays one line.
 _SHOWN_CHARACTERS = 120
 

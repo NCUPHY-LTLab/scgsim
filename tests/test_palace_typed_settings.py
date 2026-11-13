@@ -204,7 +204,7 @@ def test_eigenmode_constructor_controls_take_the_eigenmode_defaults_like_set_num
     for sim in (built, set_later):
         with pytest.raises(
             ValueError,
-            match=r"Eigenmode requires explicit amr_max_passes.*set_numerical\(amr_max_passes=\.\.\.\)",
+            match=r"Eigenmode: requires explicit amr_max_passes.*set_numerical\(amr_max_passes=\.\.\.\)",
         ):
             _config_input(sim)
 

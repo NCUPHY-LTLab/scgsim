@@ -33,7 +33,7 @@ from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.models.refusals import internal
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.sgb import SgbArtifacts
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.surface_epr.build import build_banded_geometry
@@ -52,6 +52,9 @@ from .manifest import SGB_RUNTIME_AUTHORITY, build_mesh_manifest
 from .physical_groups import Groups, groups_from_sidecar
 from .process import lower_mesh_in_worker
 from .source import route_a_thin_film_provenance, scgsim_version
+
+_WHERE_OUTPUT_FOLDER = "the folder passed to set_output_dir"
+_WHERE_SURFACE_EPR = "the call to set_surface_epr"
 
 
 @dataclass(frozen=True)
@@ -223,10 +226,12 @@ def _refuse_bands_narrower_than_a_face(
     ]
     if narrow:
         raise ValueError(
-            "Surface EPR bands narrower than the meshing stage's face-width limit of "
-            f"{limit:g} grid steps ({limit * grid_um:g} um): {'; '.join(narrow)}. A band this narrow is a "
-            "face the mesher cannot use. Widen the margins in surface_epr_specs so that every band is at "
-            f"least {limit:g} grid steps wide."
+            Declared(
+                f"Surface EPR bands narrower than the meshing stage's face-width limit of {limit:g} grid steps ({limit * grid_um:g} um)",
+                _WHERE_SURFACE_EPR,
+            ).refusal(
+                f"{'; '.join(narrow)}. A band this narrow is a face the mesher cannot use. Widen the margins in surface_epr_specs so that every band is at least {limit:g} grid steps wide"
+            )
         )
 
 
@@ -253,7 +258,11 @@ def _margin_lists(
 def _prepare_paths(output_dir: str | Path, route: str) -> BuildPaths:
     run_dir = Path(output_dir).expanduser().resolve()
     if run_dir.exists() and any(run_dir.iterdir()):
-        raise ValueError(f"output_dir must be empty before mesh: {run_dir}")
+        raise ValueError(
+            Declared("output_dir", _WHERE_OUTPUT_FOLDER).refusal(
+                f"must be empty before mesh: {run_dir}"
+            )
+        )
     run_dir.mkdir(parents=True, exist_ok=True)
     for folder in (GEOMETRY_DIR, MESH_DIR, METADATA_DIR, LOGS_DIR, OUTPUT_DIR):
         (run_dir / folder).mkdir(parents=True, exist_ok=True)

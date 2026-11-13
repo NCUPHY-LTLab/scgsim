@@ -20,6 +20,8 @@ from scgsim.refusal import found_text, refused
 from ..features import Feature, SidecarFeatures
 from ..sizing import BoundingBox, SizeField, SizeRequests, coarse_size, ladder_size
 
+_WHERE_RECIPE = "the sizing recipe of the meshing call"
+
 _WHERE_FEATURE_RECIPE = "the FeatureRecipe passed to set_mesh"
 
 
@@ -82,7 +84,11 @@ class FeatureRecipe:
             or multiple <= 0
         ):
             raise ValueError(
-                f"band_mesh_size_multiple must be a finite positive number, got {multiple!r}."
+                refused(
+                    "band_mesh_size_multiple",
+                    f"must be a finite positive number, got {multiple!r}",
+                    _WHERE_RECIPE,
+                )
             )
 
     def size_requests(

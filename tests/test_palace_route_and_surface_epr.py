@@ -169,7 +169,7 @@ def test_input_summary_names_the_profile_the_preparation_uses(
     [
         (
             "C",
-            "Route C is not a Palace route: SGB builds Route C for backends that keep conductor volumes",
+            "Route C: is not a Palace route: SGB builds Route C for backends that keep conductor volumes",
         ),
         ("D", "Unknown route 'D'"),
         (None, "Unknown route None"),

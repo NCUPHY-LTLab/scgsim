@@ -23,6 +23,9 @@ from scgsim.geometry.models.junctions import (
     junction_net_id,
     junction_occurrence_path,
 )
+from scgsim.geometry.models.refusals import Declared
+
+_WHERE_LAYOUT = "the layout"
 
 
 @dataclass(frozen=True)
@@ -99,11 +102,9 @@ def _port_request(
         ys = [y for _, y in region.exterior]
         box = format_box((min(xs), min(ys), max(xs), max(ys)), grid_um)
         raise ValueError(
-            f"lumped port {name!r} must land on two conductors to be made a rectangle; "
-            f"it lands on {len(hosts)}: {list(hosts)}; the sheet is drawn on layer "
-            f"{region.source_layer} at {box}. Fix the layout or the port declaration: "
-            "draw the sheet so that it lands on exactly two conductors of its target "
-            f"layer {region.metadata.get('target_layer')!r}, one at each end."
+            Declared(f"lumped port {name!r}", _WHERE_LAYOUT).refusal(
+                f"must land on two conductors to be made a rectangle; it lands on {len(hosts)}: {list(hosts)}; the sheet is drawn on layer {region.source_layer} at {box}. Fix the layout or the port declaration: draw the sheet so that it lands on exactly two conductors of its target layer {region.metadata.get('target_layer')!r}, one at each end"
+            )
         )
     terminals = [_terminal(entities[host]) for host in hosts]
     terminals.sort(key=lambda item: _along_direction(region, item.source_entity_id))

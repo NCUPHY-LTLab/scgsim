@@ -50,11 +50,17 @@ def _validate_stack_material_kinds(
 
     def material_kind(material_id: Any, owner: str) -> str:
         if not isinstance(material_id, str) or material_id not in materials:
-            raise ValueError(f"{owner} must reference an explicit stack material_id.")
+            raise ValueError(
+                Declared(f"{owner}", _WHERE_STACK).refusal(
+                    "must reference an explicit stack material_id"
+                )
+            )
         kind = materials[material_id].get("kind")
         if kind not in {"vacuum", "dielectric", "conductor"}:
             raise ValueError(
-                f"material {material_id!r} requires kind vacuum, dielectric, or conductor."
+                Declared(f"material {material_id!r}", _WHERE_STACK).refusal(
+                    "requires kind vacuum, dielectric, or conductor"
+                )
             )
         return str(kind)
 
@@ -70,7 +76,9 @@ def _validate_stack_material_kinds(
             region.get("material_id"), f"solution region {name!r}"
         ) not in {"vacuum", "dielectric"}:
             raise ValueError(
-                f"solution region {name!r} must use vacuum or dielectric material kind."
+                Declared(f"solution region {name!r}", _WHERE_STACK).refusal(
+                    "must use vacuum or dielectric material kind"
+                )
             )
     layers = stack.get("layers")
     if not isinstance(layers, list) or not layers:

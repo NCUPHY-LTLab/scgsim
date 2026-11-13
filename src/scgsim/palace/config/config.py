@@ -410,10 +410,14 @@ def _direction_tuple(value: Any, name: str) -> tuple[float, float, float]:
         or not isinstance(value, (list, tuple))
         or len(value) != 3
     ):
-        raise ValueError(f"layout_sheet port {name!r} requires a 3D direction.")
+        raise ValueError(
+            internal(f"layout_sheet port {name!r} requires a 3D direction")
+        )
     direction = tuple(float(item) for item in value)
     if not all(math.isfinite(item) for item in direction):
-        raise ValueError(f"layout_sheet port {name!r} direction must be finite.")
+        raise ValueError(
+            internal(f"layout_sheet port {name!r} direction must be finite")
+        )
     return direction[0], direction[1], direction[2]
 
 
@@ -456,7 +460,9 @@ def _materials_from_solution_volumes(
         constants = _dielectric_constants(materials, material_id, name)
         if seen_attributes.intersection(attrs):
             raise ValueError(
-                f"SGB solution volume {name!r} duplicates physical attributes {attrs}."
+                internal(
+                    f"SGB solution volume {name!r} duplicates physical attributes {attrs}"
+                )
             )
         seen_attributes.update(attrs)
         material_rows.append(
@@ -546,6 +552,8 @@ def _material_identity(
         "dielectric",
     }:
         raise ValueError(
-            f"solution material {material_id!r} must carry vacuum or dielectric kind."
+            Declared(
+                f"solution material {material_id!r}", _WHERE_STACK_MATERIALS
+            ).refusal("must carry vacuum or dielectric kind")
         )
     return {"material_id": material_id, "kind": str(material["kind"])}

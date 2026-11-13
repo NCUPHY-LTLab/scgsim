@@ -54,6 +54,11 @@ from ..source.workflow import GeometrySettings, route_profile
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .lifecycle import CALLS, Call, Stage
 
+_WHERE_MESH_AGAIN = "the run folder: call mesh() again"
+_WHERE_NUMERICAL_ARG = "the numerical argument of the simulation"
+_WHERE_SET_ROUTE = "the call to set_route"
+_WHERE_SURFACE_EPR = "the call to set_surface_epr"
+
 _WHERE_SET_OUTPUT_DIR = "the call to set_output_dir"
 _WHERE_SET_PLAN = "the call to set_plan"
 
@@ -334,7 +339,9 @@ class PalaceSimulation(ABC):
         plan = self._require("mesh", self._plan)
         if self.output_dir is None:
             raise ValueError(
-                "No output folder to mesh into: call set_output_dir() before mesh()."
+                Declared(
+                    "No output folder to mesh into", _WHERE_SET_OUTPUT_DIR
+                ).refusal("call set_output_dir() before mesh()")
             )
         request = self._geometry_request(plan)
         if request.materials is not None:
@@ -470,8 +477,9 @@ class PalaceSimulation(ABC):
         """``controls`` with the problem's defaults filled in: the one place the constructor and ``set_numerical`` share."""
         if not isinstance(controls, NumericalControls):
             raise TypeError(
-                f"numerical must be NumericalControls: pass {type(self).__name__}(numerical=NumericalControls(...)) "
-                "or call set_numerical(...)."
+                Declared("numerical", _WHERE_NUMERICAL_ARG).refusal(
+                    f"must be NumericalControls: pass {type(self).__name__}(numerical=NumericalControls(...)) or call set_numerical(...)"
+                )
             )
         return controls.with_defaults(self.numerical_defaults)
 
@@ -567,10 +575,11 @@ class PalaceSimulation(ABC):
         self._stage = keep
 
 
-_TWO_VACUUMS = (
-    "The GeometryPlan has its own vacuum (VACUUM_REGION), so the simulation cannot add one: "
-    "drop sim.set_vacuum_region(), or prepare the plan without plan.set_vacuum_region()."
-)
+_TWO_VACUUMS = Declared(
+    "the GeometryPlan",
+    "the plan or the simulation: drop sim.set_vacuum_region(), or prepare the plan without "
+    "plan.set_vacuum_region()",
+).refusal("has its own vacuum (VACUUM_REGION), so the simulation cannot add one")
 
 
 def _checked_route(route: Any) -> Literal["A", "B"]:
@@ -580,12 +589,14 @@ def _checked_route(route: Any) -> Literal["A", "B"]:
         return chosen
     if chosen == "C":
         raise ValueError(
-            "Route C is not a Palace route: SGB builds Route C for backends that keep conductor volumes. "
-            "Call set_route('A') or set_route('B')."
+            Declared("Route C", _WHERE_SET_ROUTE).refusal(
+                "is not a Palace route: SGB builds Route C for backends that keep conductor volumes. Call set_route('A') or set_route('B')"
+            )
         )
     raise ValueError(
-        f"Unknown route {route!r}: call set_route('A') for films as zero-thickness sheets "
-        "or set_route('B') for 3D conductors."
+        Declared(f"Unknown route {route!r}", _WHERE_SET_ROUTE).refusal(
+            "call set_route('A') for films as zero-thickness sheets or set_route('B') for 3D conductors"
+        )
     )
 
 
@@ -593,8 +604,11 @@ def _refuse_empty_specs(specs: Mapping[str, Mapping[str, Any]]) -> None:
     """Refuse an empty mapping: "no Surface EPR" has one spelling, no call (or ``None``)."""
     if isinstance(specs, Mapping) and not specs:
         raise ValueError(
-            "set_surface_epr({}) requests no Surface EPR: to have none, do not call set_surface_epr(), "
-            "or call set_surface_epr(None) to turn it off again."
+            Declared(
+                "set_surface_epr({}) requests no Surface EPR", _WHERE_SURFACE_EPR
+            ).refusal(
+                "to have none, do not call set_surface_epr(), or call set_surface_epr(None) to turn it off again"
+            )
         )
 
 
@@ -607,7 +621,9 @@ def _check_mesh_files(mesh: MeshBuildResult) -> None:
     for path in (mesh.mesh_path, mesh.mesh_manifest_path):
         if not path.is_file():
             raise FileNotFoundError(
-                f"The current {path.name} is missing from {mesh.output_dir}: call mesh() again."
+                Declared(f"The current {path.name}", _WHERE_MESH_AGAIN).refusal(
+                    f"is missing from {mesh.output_dir}: call mesh() again"
+                )
             )
     # Only a check: parsing refuses a manifest that no longer reads as JSON; its content is not needed here.
     json.loads(mesh.mesh_manifest_path.read_text(encoding="utf-8"))

@@ -96,7 +96,11 @@ class EigenmodeSim(PalaceSimulation):
         name = validate_nonempty_string(name, "port name")
         layer = validate_nonempty_string(layer, "port target layer")
         if any(port.name == name for port in self.ports):
-            raise ValueError(f"layout_sheet port {name!r} is already added.")
+            raise ValueError(
+                Declared(f"layout_sheet port {name!r}", _WHERE_ADD_PORT).refusal(
+                    "is already added"
+                )
+            )
         self.ports.append(
             RequestedPort(
                 name=name,

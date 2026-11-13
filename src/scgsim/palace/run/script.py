@@ -142,9 +142,9 @@ def _solver_command(execution: ExecutionSettings) -> str:
     )
     if execution.profile != "direct-local" and not launcher:
         raise ValueError(
-            f"Slurm profile launcher must be non-empty: profile {execution.profile!r} got "
-            f"resources.launcher={execution.resources.get('launcher')!r}; pass a launcher "
-            "such as ('srun',) or leave it out."
+            Declared("Slurm profile launcher", _WHERE_HANDOFF_CALL).refusal(
+                f"must be non-empty: profile {execution.profile!r} got resources.launcher={execution.resources.get('launcher')!r}; pass a launcher such as ('srun',) or leave it out"
+            )
         )
     arguments = ['"$PALACE_EXECUTABLE"']
     if execution.command_style == "wrapper":
@@ -371,7 +371,11 @@ def launcher_tokens(value: Any) -> list[str]:
 def positive_int(value: Any, field: str) -> int:
     """Require a positive integer value for a named resource field."""
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-        raise ValueError(f"{field} must be a positive integer.")
+        raise ValueError(
+            Declared(f"{field}", _WHERE_HANDOFF_CALL).refusal(
+                "must be a positive integer"
+            )
+        )
     return value
 
 
@@ -383,5 +387,9 @@ def single_line(value: str, field: str) -> str:
         or "\n" in value
         or "\r" in value
     ):
-        raise ValueError(f"{field} must be non-empty single-line text.")
+        raise ValueError(
+            Declared(f"{field}", _WHERE_HANDOFF_CALL).refusal(
+                "must be non-empty single-line text"
+            )
+        )
     return value

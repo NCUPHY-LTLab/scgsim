@@ -498,7 +498,7 @@ class PalaceReportUxTests(unittest.TestCase):
                 "m,Re{f} (GHz)\n1,6.0\n",
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ValueError, "output hash mismatch"):
+            with self.assertRaisesRegex(ValueError, "output hash: mismatch"):
                 inspect_run_trustworthiness(root)
 
     def test_recorder_collects_report_relevant_iteration_files(self) -> None:

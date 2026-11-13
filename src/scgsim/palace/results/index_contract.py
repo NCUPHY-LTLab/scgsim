@@ -48,8 +48,11 @@ def require_manifest_schema(manifest: Mapping[str, Any]) -> None:
     recorded = manifest.get("schema_version")
     if type(recorded) is not int or recorded != MANIFEST_SCHEMA_VERSION:
         raise ValueError(
-            f"mesh manifest schema_version {recorded!r} is not readable: only schema_version "
-            f"{MANIFEST_SCHEMA_VERSION} is read, and run folders of older schemas are not."
+            Declared(
+                f"mesh manifest schema_version {recorded!r}", RETURNED_RUN_FOLDER
+            ).refusal(
+                f"is not readable: only schema_version {MANIFEST_SCHEMA_VERSION} is read, and run folders of older schemas are not"
+            )
         )
 
 
@@ -58,8 +61,11 @@ def require_index_map_schema(index_map: Mapping[str, Any]) -> None:
     recorded = index_map.get("schema_version")
     if type(recorded) is not int or recorded != INDEX_MAP_SCHEMA_VERSION:
         raise ValueError(
-            f"palace index map schema_version {recorded!r} is not readable: only schema_version "
-            f"{INDEX_MAP_SCHEMA_VERSION} is read, and run folders of older schemas are not."
+            Declared(
+                f"palace index map schema_version {recorded!r}", RETURNED_RUN_FOLDER
+            ).refusal(
+                f"is not readable: only schema_version {INDEX_MAP_SCHEMA_VERSION} is read, and run folders of older schemas are not"
+            )
         )
 
 
@@ -79,6 +85,14 @@ class RouteConsistency:
         """Check mesh/index schema and route agreement before interpreting configured groups."""
         require_manifest_schema(self.mesh_manifest)
         require_index_map_schema(self.index_map)
+        self._validate_route()
+        validate_index_entries(self.index_map)
+        _validate_index_against_manifest(self.index_map, self.mesh_manifest)
+
+        self._validate_problem()
+
+    def _validate_route(self) -> None:
+        """The mesh manifest, the run and the handoff name the route and the Route-A film of the run."""
         manifest_route = expect_scalar(self.mesh_manifest, "route", str, fallback="")
         if manifest_route != self.route:
             raise ValueError(
@@ -126,9 +140,8 @@ class RouteConsistency:
                 )
             )
 
-        validate_index_entries(self.index_map)
-        _validate_index_against_manifest(self.index_map, self.mesh_manifest)
-
+    def _validate_problem(self) -> None:
+        """The run and the handoff name the problem of the run."""
         run_problem = expect_scalar(self.run_metadata, "problem", str)
         handoff_problem = expect_scalar(self.handoff_metadata, "problem", str)
         if run_problem != self.problem or handoff_problem != self.problem:
@@ -174,7 +187,9 @@ def _validate_index_against_manifest(
             groups = {primary_group[(dimension, a)] for a in entry["attributes"]}
         except KeyError as exc:
             raise ValueError(
-                f"index attribute {exc.args[0][1]} is not a mesh manifest attribute."
+                Declared(
+                    f"index attribute {exc.args[0][1]}", RETURNED_RUN_FOLDER
+                ).refusal("is not a mesh manifest attribute")
             ) from exc
         if groups != set(entry["physical_names"]):
             raise ValueError(
@@ -339,21 +354,33 @@ def validate_config_problem(config: dict[str, Any], problem: str) -> None:
     """Require the solver problem and numerical controls recorded for this workflow."""
     problem_block = optional_dict(config.get("Problem"))
     if not problem_block:
-        raise ValueError(f"{CONFIG} missing Problem block.")
+        raise ValueError(
+            Declared(f"{CONFIG}", RETURNED_RUN_FOLDER).refusal("missing Problem block")
+        )
     config_problem = expect_scalar(problem_block, "Type", str, fallback="")
     if config_problem != problem:
         raise ValueError(
-            f"config Problem.Type {config_problem!r} does not match metadata problem {problem!r}."
+            Declared(
+                f"config Problem.Type {config_problem!r}", RETURNED_RUN_FOLDER
+            ).refusal(f"does not match metadata problem {problem!r}")
         )
     model_block = optional_dict(config.get("Model"))
     mesh_name = (
         expect_scalar(model_block, "Mesh", str, fallback="") if model_block else ""
     )
     if mesh_name != MESH:
-        raise ValueError(f"config Model.Mesh must reference {MESH}.")
+        raise ValueError(
+            Declared("config Model.Mesh", RETURNED_RUN_FOLDER).refusal(
+                f"must reference {MESH}"
+            )
+        )
 
     if problem_block.get("Output") not in {OUTPUT_DIR, f"{OUTPUT_DIR}/", None}:
-        raise ValueError(f"config Problem.Output must be {OUTPUT_DIR}.")
+        raise ValueError(
+            Declared("config Problem.Output", RETURNED_RUN_FOLDER).refusal(
+                f"must be {OUTPUT_DIR}"
+            )
+        )
 
 
 def _validate_ground_boundary_resolution(
@@ -493,7 +520,11 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
             )
         section = expect_scalar(entry, "section", str)
         if section not in expected_roles:
-            raise ValueError(f"index map has unsupported section {section!r}.")
+            raise ValueError(
+                Declared("index map", RETURNED_RUN_FOLDER).refusal(
+                    f"has unsupported section {section!r}"
+                )
+            )
         role = expect_scalar(entry, "role", str)
         if role != expected_roles[section]:
             raise ValueError(

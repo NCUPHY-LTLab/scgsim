@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
-from scgsim.geometry.models.refusals import internal
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.sgb.exact.grid import Grid
 from scgsim.geometry.surface_epr.specs import positive_real
 from scgsim.refusal import found_text
@@ -23,6 +23,8 @@ from scgsim.refusal import found_text
 from ..mesh.physical_groups import Groups, rows_of
 from ..source.surface_epr import SurfaceEprSpec, SurfaceEprSpecs
 from .index import IndexedRows, InsetSelection, SurfaceEprEntry, SurfaceRow
+
+_WHERE_SURFACE_EPR = "the call to set_surface_epr"
 
 
 def build_surface_epr_postprocessing(
@@ -52,8 +54,11 @@ def build_surface_epr_postprocessing(
         units = _units(all_rows, spec)
         if not units and spec.required:
             raise ValueError(
-                f"Required Surface EPR {interface_type} has no matching structured group: "
-                f"pass required=False in its spec, or set_surface_epr() without {interface_type}."
+                Declared(
+                    f"Required Surface EPR {interface_type}", _WHERE_SURFACE_EPR
+                ).refusal(
+                    f"has no matching structured group: pass required=False in its spec, or set_surface_epr() without {interface_type}"
+                )
             )
         snapshot = _spec_snapshot(spec, model_l0_m)
         for unit in units:
@@ -169,8 +174,9 @@ class _MarginRequest:
         if wanted is not None and wanted in family["margins_grid"]:
             return list(family["margins_grid"]).index(wanted) + 1
         raise ValueError(
-            f"Surface EPR {self.unit.interface_type} margin {self.margin_um} um is not among "
-            f"the margins {family['margins_um']} of the bands of {self.unit.name!r}."
+            internal(
+                f"Surface EPR {self.unit.interface_type} margin {self.margin_um} um is not among the margins {family['margins_um']} of the bands of {self.unit.name!r}"
+            )
         )
 
     def selected_rows(self) -> tuple[Mapping[str, Any], ...]:

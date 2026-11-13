@@ -15,6 +15,7 @@ from scgsim.contracts.palace_run_folder import (
     RETURNED_RECEIPT,
     read_json,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.mesh.summary import recorded_mesh_summary
 from scgsim.palace.reports.observations import (
     CostCards,
@@ -39,6 +40,7 @@ from scgsim.palace.reports.views import (
     SimulationBenchmarkReport,
 )
 from scgsim.palace.results.artifacts import (
+    RETURNED_RUN_FOLDER,
     as_int,
     read_optional_json,
 )
@@ -65,6 +67,8 @@ from scgsim.palace.results.surface_readers import (
     read_surface_margin_bindings,
 )
 from scgsim.palace.results.tables import configured_mode_count
+
+_WHERE_REPORT_VIEW = "the call to the report view"
 
 
 def inspect_run_trustworthiness(
@@ -165,8 +169,9 @@ def _require_resolved(result: object, view: str) -> None:
     """Refuse a view of anything but a resolved run, naming the view and what was passed."""
     if not isinstance(result, ResolvedRunData):
         raise TypeError(
-            f"{view} requires the ResolvedPalaceResult that resolve_palace_result() returns; "
-            f"got {type(result).__name__}."
+            Declared(f"{view}", _WHERE_REPORT_VIEW).refusal(
+                f"requires the ResolvedPalaceResult that resolve_palace_result() returns; got {type(result).__name__}"
+            )
         )
 
 
@@ -296,7 +301,11 @@ class _InspectedRun:
         """Read the handoff first, then each record a partial run may lack, refusing what disagrees."""
         handoff_path = root / HANDOFF_METADATA
         if not handoff_path.is_file():
-            raise FileNotFoundError(f"required artifact missing: {handoff_path}")
+            raise FileNotFoundError(
+                Declared("required artifact", RETURNED_RUN_FOLDER).refusal(
+                    f"missing: {handoff_path}"
+                )
+            )
         handoff = read_json(handoff_path)
         mesh_manifest = read_optional_json(root / MESH_MANIFEST)
         if mesh_manifest is not None:
@@ -308,17 +317,22 @@ class _InspectedRun:
         )
         if mesh_thin_film != handoff.get("route_a_thin_film"):
             raise ValueError(
-                "mesh manifest and handoff Route-A thin-film identity mismatch: "
-                f"{MESH_MANIFEST} records {mesh_thin_film!r}, {HANDOFF_METADATA} records "
-                f"{handoff.get('route_a_thin_film')!r} in {root}."
+                Declared(
+                    "mesh manifest and handoff Route-A thin-film identity",
+                    RETURNED_RUN_FOLDER,
+                ).refusal(
+                    f"mismatch: {MESH_MANIFEST} records {mesh_thin_film!r}, {HANDOFF_METADATA} records {handoff.get('route_a_thin_film')!r} in {root}"
+                )
             )
         problem = str(handoff.get("problem") or (resolved.problem if resolved else ""))
         route = str(handoff.get("route") or (resolved.route if resolved else ""))
         profile = str(handoff.get("profile") or "")
         if problem not in PROBLEMS:
             raise ValueError(
-                f"unsupported problem {problem!r} for trustworthiness report "
-                f"({HANDOFF_METADATA} in {root}); SCGSim writes {sorted(PROBLEMS)}."
+                Declared(
+                    f"problem {problem!r} of {HANDOFF_METADATA} in {root}",
+                    RETURNED_RUN_FOLDER,
+                ).refusal(f"is not one SCGSim writes: {sorted(PROBLEMS)}")
             )
         config = read_optional_json(root / CONFIG)
         receipt = read_optional_json(root / RETURNED_RECEIPT)

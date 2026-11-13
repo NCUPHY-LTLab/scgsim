@@ -11,6 +11,10 @@ from dataclasses import dataclass, field
 from threading import RLock
 from typing import TypeVar
 
+from scgsim.refusal import internal, refused
+
+_WHERE_PREPARATION_CALL = "the call to preparation_resources"
+
 _T = TypeVar("_T")
 _R = TypeVar("_R")
 
@@ -49,10 +53,20 @@ def preparation_resources(*, max_workers: int) -> Iterator[None]:
     native environment settings or scientific input/output payloads.
     """
     if isinstance(max_workers, bool) or not isinstance(max_workers, int):
-        raise TypeError(f"max_workers must be a positive integer; got {max_workers!r}.")
+        raise TypeError(
+            refused(
+                "max_workers",
+                f"must be a positive integer; got {max_workers!r}",
+                _WHERE_PREPARATION_CALL,
+            )
+        )
     if max_workers <= 0:
         raise ValueError(
-            f"max_workers must be a positive integer; got {max_workers!r}."
+            refused(
+                "max_workers",
+                f"must be a positive integer; got {max_workers!r}",
+                _WHERE_PREPARATION_CALL,
+            )
         )
     if _state.get() is not None:
         yield
@@ -148,7 +162,9 @@ def native_preparation() -> Iterator[None]:
         yield
         return
     if _worker_depth.get():
-        raise RuntimeError("Native meshing cannot run inside a preparation worker.")
+        raise RuntimeError(
+            internal("Native meshing cannot run inside a preparation worker")
+        )
     with state.lock:
         token = _worker_depth.set(1)
         try:

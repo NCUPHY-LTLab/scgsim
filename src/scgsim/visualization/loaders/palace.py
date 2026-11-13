@@ -23,8 +23,8 @@ from scgsim.contracts.palace_run_folder import (
     MESH,
     MESH_MANIFEST,
 )
-from scgsim.geometry.models.refusals import Declared
-from scgsim.refusal import found_text
+from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import ENVIRONMENT, found_text
 
 from ..preview import GeometryPreview
 from ..scene import FIXED_COLORS, SceneMode, ScenePart, color_for_identity
@@ -41,14 +41,20 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
     paths = {name: root / name for name in (MESH, CONFIG, MESH_MANIFEST, INDEX_MAP)}
     missing = [name for name, path in paths.items() if not path.is_file()]
     if missing:
-        raise FileNotFoundError(f"Palace preview inputs are missing: {missing!r}")
+        raise FileNotFoundError(
+            Declared("Palace preview inputs are", _WHERE_PALACE_RUN).refusal(
+                f"missing: {missing!r}"
+            )
+        )
 
     try:
         import meshio  # noqa: PLC0415 - optional visualization dependency.
         import pyvista as pv  # noqa: PLC0415 - optional visualization dependency.
     except ImportError as exc:
         raise RuntimeError(
-            "Palace geometry preview requires scgsim[visualization]"
+            Declared("Palace geometry preview", ENVIRONMENT).refusal(
+                "requires scgsim[visualization]"
+            )
         ) from exc
 
     mesh_manifest = read_json_record(paths[MESH_MANIFEST])
@@ -92,8 +98,9 @@ def _require_schema(record: Mapping[str, Any], name: str, expected: int) -> None
     recorded = record.get("schema_version")
     if type(recorded) is not int or recorded != expected:
         raise ValueError(
-            f"{name} schema_version {recorded!r} is not readable: only schema_version "
-            f"{expected} is read, and run folders of older schemas are not."
+            Declared(f"{name} schema_version {recorded!r}", _WHERE_PALACE_RUN).refusal(
+                f"is not readable: only schema_version {expected} is read, and run folders of older schemas are not"
+            )
         )
 
 
@@ -118,7 +125,7 @@ class _MeshSelection:
         )
         if not len(ids):
             raise ValueError(
-                f"Palace physical group {(dimension, attribute)} has no cells"
+                internal(f"Palace physical group {(dimension, attribute)} has no cells")
             )
         return self.grid.extract_cells(ids)
 
@@ -237,7 +244,11 @@ def _manifest_records(
         for attribute in record["attributes"]:
             key = (int(record["dimension"]), int(attribute))
             if key in records:
-                raise ValueError(f"Palace mesh manifest lists attribute {key!r} twice")
+                raise ValueError(
+                    Declared("Palace mesh manifest", _WHERE_PALACE_RUN).refusal(
+                        f"lists attribute {key!r} twice"
+                    )
+                )
             records[key] = record
     return records
 
@@ -261,7 +272,11 @@ def _palace_materials(
         for attribute in material.get("Attributes", ()):
             attribute = int(attribute)
             if attribute in assignments:
-                raise ValueError(f"Palace volume {attribute} has multiple materials")
+                raise ValueError(
+                    Declared(f"Palace volume {attribute}", _WHERE_PALACE_RUN).refusal(
+                        "has multiple materials"
+                    )
+                )
             assignments.add(attribute)
     parts: list[ScenePart] = []
     volume_attributes = {
@@ -351,12 +366,18 @@ def _assign_indexed(
     for item in items:
         index = int(item["Index"])
         if index in configured:
-            raise ValueError(f"Palace {config_key} index {index} is duplicated")
+            raise ValueError(
+                Declared(
+                    f"Palace {config_key} index {index}", _WHERE_PALACE_RUN
+                ).refusal("is duplicated")
+            )
         configured.add(index)
         record = indexed.get((section, index))
         if record is None:
             raise ValueError(
-                f"Palace {config_key} index {index} lacks index-map identity"
+                Declared(
+                    f"Palace {config_key} index {index}", _WHERE_PALACE_RUN
+                ).refusal("lacks index-map identity")
             )
         label = str(
             record.get("entry_name")
@@ -401,7 +422,9 @@ def _boundary_parts(
     missing = sorted(set(assignments) - surface_attributes)
     if missing:
         raise ValueError(
-            f"Palace configured boundary attributes are absent: {missing!r}"
+            Declared(
+                "Palace configured boundary attributes are absent", _WHERE_PALACE_RUN
+            ).refusal(f"{missing!r}")
         )
     parts: list[ScenePart] = []
     for attribute in sorted(surface_attributes):
@@ -440,7 +463,11 @@ def _palace_surface_epr(
     parts: list[ScenePart] = []
     for attribute, mappings in sorted(grouped.items()):
         if (2, attribute) not in records:
-            raise ValueError(f"Surface-EPR attribute {attribute} is absent from mesh")
+            raise ValueError(
+                Declared(
+                    f"Surface-EPR attribute {attribute}", _WHERE_PALACE_RUN
+                ).refusal("is absent from mesh")
+            )
         role = _surface_epr_role(mappings)
         # A margin row only re-selects attributes of its whole surface, which names them.
         labels = sorted(
@@ -469,7 +496,11 @@ def _dielectric_entries(index_map: Mapping[str, Any]) -> dict[int, Mapping[str, 
             continue
         index = int(item["index"])
         if index in entries:
-            raise ValueError(f"Palace Surface-EPR index {index} is duplicated")
+            raise ValueError(
+                Declared(
+                    f"Palace Surface-EPR index {index}", _WHERE_PALACE_RUN
+                ).refusal("is duplicated")
+            )
         entries[index] = item
     return entries
 
@@ -485,7 +516,11 @@ def _entries_by_attribute(
     ):
         index = int(item["Index"])
         if index in configured:
-            raise ValueError(f"Palace Surface-EPR index {index} is duplicated")
+            raise ValueError(
+                Declared(
+                    f"Palace Surface-EPR index {index}", _WHERE_PALACE_RUN
+                ).refusal("is duplicated")
+            )
         configured.add(index)
         record = entries.get(index)
         if record is None or tuple(item.get("Attributes", ())) != tuple(
@@ -529,7 +564,11 @@ def _surface_epr_role(mappings: list[Mapping[str, Any]]) -> str:
         else ""
     )
     if not role:
-        raise ValueError(f"unsupported Surface-EPR mapping: {sorted(kinds)!r}")
+        raise ValueError(
+            Declared("unsupported Surface-EPR mapping", _WHERE_PALACE_RUN).refusal(
+                f"{sorted(kinds)!r}"
+            )
+        )
     return role
 
 
@@ -643,7 +682,11 @@ def _boundary_index(
             continue
         key = (str(item.get("section")), int(item["index"]))
         if key in indexed:
-            raise ValueError(f"Palace index map has duplicate identity {key!r}")
+            raise ValueError(
+                Declared("Palace index map", _WHERE_PALACE_RUN).refusal(
+                    f"has duplicate identity {key!r}"
+                )
+            )
         indexed[key] = item
 
     return indexed

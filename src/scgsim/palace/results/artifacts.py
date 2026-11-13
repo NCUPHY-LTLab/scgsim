@@ -17,6 +17,7 @@ from scgsim.contracts.palace_run_folder import (
     read_json,
     sha256,
 )
+from scgsim.geometry.models.refusals import Declared
 
 RETURNED_RUN_FOLDER = (
     "the run folder Palace returned: fetch it again, or run the handoff again"
@@ -34,7 +35,9 @@ class FileHash(NamedTuple):
 def expect_mapping(value: Any, name: str) -> dict[str, Any]:
     """Require a JSON object before reading its named artifact fields."""
     if not isinstance(value, dict):
-        raise TypeError(f"{name} must be a JSON object.")
+        raise TypeError(
+            Declared(f"{name}", RETURNED_RUN_FOLDER).refusal("must be a JSON object")
+        )
     return value
 
 
@@ -48,10 +51,16 @@ def extract_hash_map(
     result: dict[str, FileHash] = {}
     for entry in entries:
         if not isinstance(entry, dict):
-            raise TypeError(f"{label} must be mappings.")
+            raise TypeError(
+                Declared(f"{label}", RETURNED_RUN_FOLDER).refusal("must be mappings")
+            )
         path = expect_scalar(entry, "path", str)
         if path in result:
-            raise ValueError(f"{label} contains duplicate path {path!r}.")
+            raise ValueError(
+                Declared(f"{label}", RETURNED_RUN_FOLDER).refusal(
+                    f"contains duplicate path {path!r}"
+                )
+            )
         if require_optional_values:
             bytes_value = expect_int(
                 entry.get("bytes"), f"{label} {path!r} bytes", optional=True
@@ -85,7 +94,11 @@ def validate_timestamp(value: str, label: str) -> None:
             parsed = value.replace("Z", "+00:00")
         __import__("datetime").datetime.fromisoformat(parsed)
     except Exception as exc:
-        raise ValueError(f"{label} must be an ISO-8601 UTC timestamp.") from exc
+        raise ValueError(
+            Declared(f"{label}", RETURNED_RUN_FOLDER).refusal(
+                "must be an ISO-8601 UTC timestamp"
+            )
+        ) from exc
 
 
 def validate_contract_schema(payload: dict[str, Any], label: str) -> None:
@@ -95,7 +108,9 @@ def validate_contract_schema(payload: dict[str, Any], label: str) -> None:
         != RUN_RECORD_SCHEMA_VERSION
     ):
         raise ValueError(
-            f"{label} schema_version must be integer {RUN_RECORD_SCHEMA_VERSION}."
+            Declared(f"{label} schema_version", RETURNED_RUN_FOLDER).refusal(
+                f"must be integer {RUN_RECORD_SCHEMA_VERSION}"
+            )
         )
 
 
@@ -111,16 +126,24 @@ def expect_scalar(
     if value is None:
         return fallback
     if (_type is int and isinstance(value, bool)) or not isinstance(value, _type):
-        raise TypeError(f"field {field!r} must be {_type.__name__}.")
+        raise TypeError(
+            Declared(f"field {field!r}", RETURNED_RUN_FOLDER).refusal(
+                f"must be {_type.__name__}"
+            )
+        )
     return value
 
 
 def expect_list(payload: Any, label: str, *, allow_empty: bool = False) -> list[Any]:
     """Require an artifact array and enforce its caller-selected empty-list rule."""
     if not isinstance(payload, list):
-        raise TypeError(f"{label} must be a list.")
+        raise TypeError(
+            Declared(f"{label}", RETURNED_RUN_FOLDER).refusal("must be a list")
+        )
     if not allow_empty and not payload:
-        raise ValueError(f"{label} must not be empty.")
+        raise ValueError(
+            Declared(f"{label}", RETURNED_RUN_FOLDER).refusal("must not be empty")
+        )
     return payload
 
 
@@ -140,7 +163,11 @@ def expect_int(value: Any, name: str, *, optional: bool = False) -> int | None:
         return value
     if isinstance(value, float) and value.is_integer():
         return int(value)
-    raise TypeError(f"{name} must be integer-compatible; got {value!r}.")
+    raise TypeError(
+        Declared(f"{name}", RETURNED_RUN_FOLDER).refusal(
+            f"must be integer-compatible; got {value!r}"
+        )
+    )
 
 
 def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
@@ -153,7 +180,9 @@ def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
         or (positive and value == 0)
     ):
         raise ValueError(
-            f"{name} must be finite and {'positive' if positive else 'non-negative'}"
+            Declared(f"{name}", RETURNED_RUN_FOLDER).refusal(
+                f"must be finite and {('positive' if positive else 'non-negative')}"
+            )
         )
     return float(value)
 
@@ -161,7 +190,11 @@ def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
 def to_float(value: Any, name: str) -> float:
     """Convert the recorded real number ``name`` without accepting booleans."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"{name} must be float-compatible; got {value!r}.")
+        raise TypeError(
+            Declared(f"{name}", RETURNED_RUN_FOLDER).refusal(
+                f"must be float-compatible; got {value!r}"
+            )
+        )
     return float(value)
 
 

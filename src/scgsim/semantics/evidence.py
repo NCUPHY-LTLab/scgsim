@@ -185,7 +185,9 @@ class SemanticEvidenceFacade:
         for result in self.results((patch,)):
             if result.contribution_id == patch.contribution_id:
                 return result
-        raise RuntimeError(f"missing evidence result for {patch.contribution_id!r}")
+        raise RuntimeError(
+            internal(f"missing evidence result for {patch.contribution_id!r}")
+        )
 
     def results(
         self, patches: Sequence[SourcedPatch] = ()
@@ -208,7 +210,7 @@ class SemanticEvidenceFacade:
                 for record in records[1:]
             ):
                 raise ValueError(
-                    f"conflicting semantic evidence for {contribution_id!r}"
+                    internal(f"conflicting semantic evidence for {contribution_id!r}")
                 )
             classification, source_owner_ids = _classify_patch(self.snapshot, first)
             stages: tuple[EvidenceStage, ...] = tuple(
@@ -249,7 +251,9 @@ class SemanticEvidenceFacade:
 
 def _validate_interface_intent(patch: SourcedPatch) -> None:
     if patch.interface_intent not in _INTERFACE_INTENTS:
-        raise ValueError(f"unsupported interface intent {patch.interface_intent!r}")
+        raise ValueError(
+            internal(f"unsupported interface intent {patch.interface_intent!r}")
+        )
 
 
 def _validate_snapshot_reference(
@@ -258,11 +262,13 @@ def _validate_snapshot_reference(
 ) -> None:
     if patch.snapshot_reference is None:
         raise ValueError(
-            f"semantic evidence {patch.patch_id!r} has no snapshot reference"
+            internal(f"semantic evidence {patch.patch_id!r} has no snapshot reference")
         )
     if patch.snapshot_reference != expected_reference:
         raise ValueError(
-            f"semantic evidence {patch.patch_id!r} belongs to a different snapshot"
+            internal(
+                f"semantic evidence {patch.patch_id!r} belongs to a different snapshot"
+            )
         )
 
 
@@ -315,7 +321,9 @@ def _classify_patch(
         return _PatchClass("MM", patch.source_owner_ids)
     if patch.interface_intent == "unknown":
         return _PatchClass("unknown", patch.source_owner_ids)
-    raise AssertionError(f"unvalidated interface intent {patch.interface_intent!r}")
+    raise AssertionError(
+        internal(f"unvalidated interface intent {patch.interface_intent!r}")
+    )
 
 
 def _material_kind(snapshot: SemanticFactsSnapshot, semantic_id: str) -> str:

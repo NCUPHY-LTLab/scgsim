@@ -302,7 +302,7 @@ def test_old_index_maps_are_rejected_naming_the_recorded_schema(tmp_path, record
     run = Run("B", "Electrostatic", tmp_path)
     old = {**run.index, "schema_version": recorded}
     with pytest.raises(
-        ValueError, match=rf"schema_version {recorded!r} is not readable"
+        ValueError, match=rf"schema_version {recorded!r}: is not readable"
     ):
         require_index_map_schema(old)
     with pytest.raises(ValueError, match=rf"schema_version {recorded!r}"):
@@ -315,7 +315,7 @@ def test_old_manifests_are_rejected_naming_the_recorded_schema(tmp_path, recorde
     run = Run("B", "Eigenmode", tmp_path)
     old = {**run.manifest, "schema_version": recorded}
     with pytest.raises(
-        ValueError, match=rf"schema_version {recorded!r} is not readable"
+        ValueError, match=rf"schema_version {recorded!r}: is not readable"
     ):
         require_manifest_schema(old)
     with pytest.raises(ValueError, match=rf"schema_version {recorded!r}"):

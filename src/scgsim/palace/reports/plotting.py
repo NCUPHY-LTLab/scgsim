@@ -10,7 +10,7 @@ from typing import Any, Literal, NamedTuple
 from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.mesh.summary import MeshSummary
 from scgsim.presentation.notebook import Card
-from scgsim.refusal import found_text
+from scgsim.refusal import ENVIRONMENT, found_text
 
 _WHERE_SHOW_CALL = "the arguments of the show_ call"
 
@@ -315,7 +315,9 @@ def plotly() -> Any:
         import plotly.graph_objects as go  # noqa: PLC0415 -- Defer heavy Plotly loading until a figure is requested.
     except ImportError as exc:
         raise RuntimeError(
-            "plotly is not available; install plotly to render Palace trustworthiness figures."
+            Declared("plotly", ENVIRONMENT).refusal(
+                "is not available; install plotly to render Palace trustworthiness figures"
+            )
         ) from exc
     return go
 

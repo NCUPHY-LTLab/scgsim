@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_args
 
 from scgsim.contracts.palace_run_folder import (
     ARCHIVE_MANIFEST,
@@ -38,7 +38,7 @@ from scgsim.contracts.palace_run_folder import (
     write_json,
 )
 from scgsim.geometry.models.refusals import Declared
-from scgsim.refusal import found_text
+from scgsim.refusal import ENVIRONMENT, found_text
 
 from ..mesh.build import MeshBuildResult
 from ..mesh.manifest import SGB_RUNTIME_AUTHORITY
@@ -49,6 +49,10 @@ from .archive import (
 )
 from .recorder_copy import write_standalone_recorder
 from .script import ExecutionSettings, positive_int, render_script, single_line
+
+_WHERE_MESH_THEN_CONFIG = (
+    "the run folder: call mesh() and write_config() before prepare_handoff()"
+)
 
 _WHERE_HANDOFF_CALL = "the call to prepare_handoff"
 
@@ -152,10 +156,16 @@ def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
     Nothing here starts Palace.
     """
     if profile not in _PROFILES:
-        raise ValueError(f"Unsupported handoff profile {profile!r}.")
+        raise ValueError(
+            Declared(f"handoff profile {profile!r}", _WHERE_HANDOFF_CALL).refusal(
+                f"is not supported: use one of {list(get_args(HandoffProfile))}"
+            )
+        )
     if not config_path.is_file() or not mesh_result.mesh_path.is_file():
         raise FileNotFoundError(
-            f"handoff requires existing {CONFIG} and {mesh_result.mesh_path.name}."
+            Declared("handoff", _WHERE_MESH_THEN_CONFIG).refusal(
+                f"requires existing {CONFIG} and {mesh_result.mesh_path.name}"
+            )
         )
     executable = single_line(executable, "executable")
     setup = tuple(single_line(command, "setup command") for command in setup_commands)
@@ -219,7 +229,11 @@ def _prepare_artifacts(
 ) -> _PreparedArtifacts:
     """Bind inputs and prepare the standalone script and recorder before metadata."""
     if not paths.index_map.is_file():
-        raise FileNotFoundError(f"handoff requires {INDEX_MAP}.")
+        raise FileNotFoundError(
+            Declared("handoff", _WHERE_MESH_THEN_CONFIG).refusal(
+                f"requires {INDEX_MAP}"
+            )
+        )
 
     route = _route(mesh_result)
     thin_film = _route_a_thin_film(mesh_result, route)
@@ -425,8 +439,9 @@ def _validate_resources(
         )
     if profile != "direct-local" and style == "wrapper":
         raise ValueError(
-            f"resources.command_style='wrapper' is supported only for direct-local; "
-            f"profile {profile!r} requires 'binary'."
+            Declared("resources.command_style='wrapper'", _WHERE_HANDOFF_CALL).refusal(
+                f"is supported only for direct-local; profile {profile!r} requires 'binary'"
+            )
         )
     return result
 
@@ -450,8 +465,12 @@ def _identity() -> dict[str, Any]:
         scgsim = version("scgsim")
     except PackageNotFoundError as exc:
         raise RuntimeError(
-            "Cannot prepare handoff without installed scgsim package metadata: install SCGSim "
-            "(uv sync, or pip install -e .) rather than running it from a source tree."
+            Declared(
+                "Cannot prepare handoff without installed scgsim package metadata",
+                ENVIRONMENT,
+            ).refusal(
+                "install SCGSim (uv sync, or pip install -e .) rather than running it from a source tree"
+            )
         ) from exc
     return {
         "scgsim": scgsim,

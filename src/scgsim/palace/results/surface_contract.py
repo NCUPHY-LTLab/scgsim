@@ -254,7 +254,11 @@ def _validate_row(row: dict[str, Any]) -> None:
 def _validate_film(spec: dict[str, Any]) -> None:
     """The film values, the Model.L0 they were converted with, and their SI thickness."""
     if spec.get("schema_version") != SURFACE_FILM_SCHEMA:
-        raise ValueError(f"surface EPR spec schema must be {SURFACE_FILM_SCHEMA!r}.")
+        raise ValueError(
+            Declared("surface EPR spec schema", RETURNED_RUN_FOLDER).refusal(
+                f"must be {SURFACE_FILM_SCHEMA!r}"
+            )
+        )
     thickness = checked_number(
         spec.get("thickness"), "surface EPR thickness", positive=True
     )
@@ -540,11 +544,17 @@ def _positive_ints(value: Any, label: str) -> list[int]:
     if not all(type(item) is int and item > 0 for item in items) or items != sorted(
         set(items)
     ):
-        raise ValueError(f"{label} must be sorted unique positive integers.")
+        raise ValueError(
+            Declared(f"{label}", RETURNED_RUN_FOLDER).refusal(
+                "must be sorted unique positive integers"
+            )
+        )
     return items
 
 
 def _non_empty_text(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value:
-        raise ValueError(f"{label} must be non-empty text.")
+        raise ValueError(
+            Declared(f"{label}", RETURNED_RUN_FOLDER).refusal("must be non-empty text")
+        )
     return value

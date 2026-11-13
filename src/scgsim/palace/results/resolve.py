@@ -68,6 +68,8 @@ from scgsim.palace.results.tables import (
 )
 from scgsim.refusal import found_text
 
+_WHERE_RESOLVE_CALL = "the call to resolve_palace_result"
+
 _REQUIRED_FILES = (
     HANDOFF_METADATA,
     RUN_METADATA,
@@ -88,7 +90,11 @@ _SCHEMA_FILES = (INDEX_MAP, MESH_MANIFEST)
 def _require_file(path: Path) -> None:
     """Raise when a required artifact of the run folder is missing."""
     if not path.exists():
-        raise FileNotFoundError(f"required artifact missing: {path}")
+        raise FileNotFoundError(
+            Declared("required artifact", RETURNED_RUN_FOLDER).refusal(
+                f"missing: {path}"
+            )
+        )
 
 
 def read_resolved_run(
@@ -98,8 +104,9 @@ def read_resolved_run(
 
     if not isinstance(expected_handoff_id, str) or not expected_handoff_id:
         raise ValueError(
-            f"expected_handoff_id must be a non-empty string; got {expected_handoff_id!r}. "
-            "Pass the handoff_id that prepare_handoff() returned."
+            Declared("expected_handoff_id", _WHERE_RESOLVE_CALL).refusal(
+                f"must be a non-empty string; got {expected_handoff_id!r}. Pass the handoff_id that prepare_handoff() returned"
+            )
         )
     root = Path(run_dir).expanduser().resolve()
     try:
@@ -121,7 +128,11 @@ def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
     route = expect_scalar(handoff, "route", str)
     problem = expect_scalar(handoff, "problem", str)
     if route not in {"A", "B"}:
-        raise ValueError(f"invalid route {route!r}; expected 'A' or 'B'.")
+        raise ValueError(
+            Declared(
+                f"route {route!r} of {HANDOFF_METADATA}", RETURNED_RUN_FOLDER
+            ).refusal("must be 'A' or 'B'")
+        )
     palace_problem(
         problem
     )  # refuses a problem SCGSim does not write, naming those it does
@@ -251,7 +262,11 @@ def _discover_results(
     for family in output_families(problem, index_counts):
         path = root / output_table(family)
         if not path.is_file():
-            raise FileNotFoundError(f"required result family is missing: {path}")
+            raise FileNotFoundError(
+                Declared("required result family", RETURNED_RUN_FOLDER).refusal(
+                    f"is missing: {path}"
+                )
+            )
         discovered[family] = read_result_table(path, problem, index_counts, config)
     return discovered
 
@@ -260,15 +275,25 @@ def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
     """Detach native elapsed counts and durations without filling absent measurements."""
     elapsed = palace_payload.get("ElapsedTime")
     if not isinstance(elapsed, dict):
-        raise TypeError(f"{NATIVE_METADATA_NAME} missing ElapsedTime block.")
+        raise TypeError(
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                "missing ElapsedTime block"
+            )
+        )
 
     counts_raw = elapsed.get("Counts")
     durations_raw = elapsed.get("Durations")
     if not isinstance(counts_raw, dict):
-        raise TypeError(f"{NATIVE_METADATA_NAME} ElapsedTime.Counts must be a mapping.")
+        raise TypeError(
+            Declared(
+                f"{NATIVE_METADATA_NAME} ElapsedTime.Counts", RETURNED_RUN_FOLDER
+            ).refusal("must be a mapping")
+        )
     if not isinstance(durations_raw, dict):
         raise TypeError(
-            f"{NATIVE_METADATA_NAME} ElapsedTime.Durations must be a mapping."
+            Declared(
+                f"{NATIVE_METADATA_NAME} ElapsedTime.Durations", RETURNED_RUN_FOLDER
+            ).refusal("must be a mapping")
         )
 
     counts: dict[str, int | float] = {
@@ -283,13 +308,17 @@ def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
     }
     if not counts or not durations:
         raise ValueError(
-            f"{NATIVE_METADATA_NAME} performance payload is missing numeric timing data."
+            Declared(
+                f"{NATIVE_METADATA_NAME} performance payload", RETURNED_RUN_FOLDER
+            ).refusal("is missing numeric timing data")
         )
     if any(not math.isfinite(value) or value < 0 for value in counts.values()) or any(
         not math.isfinite(value) or value < 0 for value in durations.values()
     ):
         raise ValueError(
-            f"{NATIVE_METADATA_NAME} timing payload contains invalid numeric data."
+            Declared(
+                f"{NATIVE_METADATA_NAME} timing payload", RETURNED_RUN_FOLDER
+            ).refusal("contains invalid numeric data")
         )
     if (
         "Total" not in counts
@@ -298,7 +327,9 @@ def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
         or durations["Total"] < 0
     ):
         raise ValueError(
-            f"{NATIVE_METADATA_NAME} timing payload must include non-negative Total."
+            Declared(
+                f"{NATIVE_METADATA_NAME} timing payload", RETURNED_RUN_FOLDER
+            ).refusal("must include non-negative Total")
         )
     return PalacePerformance(counts=counts, durations=durations)
 
@@ -307,7 +338,11 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
     """Detach solver, mesh, memory and parallel-resource observations from Palace JSON."""
     problem_block = palace_payload.get("Problem")
     if not isinstance(problem_block, dict):
-        raise TypeError(f"{NATIVE_METADATA_NAME} missing Problem block.")
+        raise TypeError(
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                "missing Problem block"
+            )
+        )
 
     linear_solver = palace_payload.get("LinearSolver")
     if not isinstance(linear_solver, dict):
@@ -370,15 +405,18 @@ def _check_cost(cost: PalaceCost) -> None:
     ]
     if missing:
         raise ValueError(
-            f"{NATIVE_METADATA_NAME} is missing required solver cost metadata: {missing}; "
-            "the run Palace returned is incomplete."
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                f"is missing required solver cost metadata: {missing}; the run Palace returned is incomplete"
+            )
         )
     not_positive = {
         name: value for name, value in sizes.items() if value is None or value <= 0
     }
     if not_positive:
         raise ValueError(
-            f"{NATIVE_METADATA_NAME} has invalid solver cost metadata: {not_positive} must be positive."
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                f"has invalid solver cost metadata: {not_positive} must be positive"
+            )
         )
     unreadable = [
         *([] if cost.linear_solver else ["LinearSolver"]),
@@ -400,8 +438,9 @@ def _check_cost(cost: PalaceCost) -> None:
     ]
     if unreadable:
         raise ValueError(
-            f"{NATIVE_METADATA_NAME} is missing required resource cost metadata: {unreadable} "
-            "are absent, negative or not finite."
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                f"is missing required resource cost metadata: {unreadable} are absent, negative or not finite"
+            )
         )
 
 

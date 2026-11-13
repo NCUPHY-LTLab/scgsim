@@ -17,7 +17,7 @@ from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalRepresentationPlan,
 )
-from scgsim.geometry.models.refusals import Declared
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
@@ -27,6 +27,8 @@ from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports
 from .surface_epr import SurfaceEprSpecs
+
+_WHERE_VACUUM = "the GeometryPlan, or the call to set_vacuum_region"
 
 _WHERE_SET_ROUTE = "the call to set_route"
 
@@ -84,8 +86,9 @@ def prepare_mesh_input(
     prepared_stack = effective_stack
     if not has_vacuum_solution_region(effective_input):
         raise ValueError(
-            "the model has no vacuum region: the plan declares none and none was set on the simulation; "
-            "call plan.set_vacuum_region(...) before prepare() or sim.set_vacuum_region(...) before mesh()"
+            Declared("the model", _WHERE_VACUUM).refusal(
+                "has no vacuum region: the plan declares none and none was set on the simulation; call plan.set_vacuum_region(...) before prepare() or sim.set_vacuum_region(...) before mesh()"
+            )
         )
     if route == "A":
         prepared_stack["metadata"]["route_a_thin_film"] = _route_a_thin_film(
@@ -199,7 +202,9 @@ def _select_authored_ports(
             )
             if not matches:
                 raise ValueError(
-                    f"normalized source has no authored port {record['name']!r}"
+                    internal(
+                        f"normalized source has no authored port {record['name']!r}"
+                    )
                 )
             selected.extend(
                 replace(

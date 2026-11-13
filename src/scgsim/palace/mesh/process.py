@@ -130,8 +130,9 @@ def _run_private_worker(
     else:
         detail = f"exited with status {completed.returncode}"
     raise RuntimeError(
-        f"private {worker_name} {detail}; diagnostics are in "
-        f"{LOGS_DIR}/{stdout_path.name} and {LOGS_DIR}/{stderr_path.name}"
+        internal(
+            f"private {worker_name} {detail}; diagnostics are in {LOGS_DIR}/{stdout_path.name} and {LOGS_DIR}/{stderr_path.name}"
+        )
     )
 
 

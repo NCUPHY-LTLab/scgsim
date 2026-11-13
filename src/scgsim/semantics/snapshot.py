@@ -25,8 +25,9 @@ def to_plain(value: Any) -> Any:
         for key, item in value.items():
             if not isinstance(key, str):
                 raise TypeError(
-                    "semantic fact mapping keys must be strings, "
-                    f"got {type(key).__name__}"
+                    internal(
+                        f"semantic fact mapping keys must be strings, got {type(key).__name__}"
+                    )
                 )
             plain[key] = to_plain(item)
         return plain
@@ -36,7 +37,9 @@ def to_plain(value: Any) -> Any:
         return sorted((to_plain(item) for item in value), key=repr)
     if value is None or isinstance(value, str | int | float | bool):
         return value
-    raise TypeError(f"semantic facts require plain values, got {type(value).__name__}")
+    raise TypeError(
+        internal(f"semantic facts require plain values, got {type(value).__name__}")
+    )
 
 
 def _freeze(value: Any) -> Any:
@@ -80,16 +83,18 @@ def _validate_sha256_digest(name: str, value: str) -> None:
         or len(value) != 64
         or any(character not in "0123456789abcdef" for character in value)
     ):
-        raise ValueError(f"{name} must be 64 lowercase hexadecimal characters")
+        raise ValueError(
+            internal(f"{name} must be 64 lowercase hexadecimal characters")
+        )
 
 
 def _validate_revision(name: str, value: str, kind: RevisionKind) -> None:
     """Validate a declared revision or a content-hash fallback identifier."""
     if not isinstance(value, str) or not value:
-        raise ValueError(f"{name} must be a non-empty string")
+        raise ValueError(internal(f"{name} must be a non-empty string"))
     if kind not in ("declared_revision", "content_hash_fallback"):
         raise ValueError(
-            f"{name}_kind must be declared_revision or content_hash_fallback"
+            internal(f"{name}_kind must be declared_revision or content_hash_fallback")
         )
     if kind == "content_hash_fallback":
         prefix, separator, digest = value.partition(":")
@@ -100,7 +105,9 @@ def _validate_revision(name: str, value: str, kind: RevisionKind) -> None:
             or any(character not in "0123456789abcdef" for character in digest)
         ):
             raise ValueError(
-                f"{name} marked content_hash_fallback must be sha256:<64 lowercase hex>"
+                internal(
+                    f"{name} marked content_hash_fallback must be sha256:<64 lowercase hex>"
+                )
             )
 
 
@@ -258,7 +265,9 @@ def _resolve_revision(
     if value is None:
         if kind not in (None, "content_hash_fallback"):
             raise ValueError(
-                f"{name}_kind must be content_hash_fallback when {name} is None"
+                internal(
+                    f"{name}_kind must be content_hash_fallback when {name} is None"
+                )
             )
         return _Revision(fallback, "content_hash_fallback")
     return _Revision(value, kind or "declared_revision")

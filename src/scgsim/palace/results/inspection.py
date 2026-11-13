@@ -66,7 +66,11 @@ def validate_inspection_receipt(
     for relative, expected in receipt_inputs.items():
         observed = compute_hash_entry(confined_path(root, relative))
         if observed != expected:
-            raise ValueError(f"returned receipt input hash mismatch for {relative}.")
+            raise ValueError(
+                Declared("returned receipt input hash", RETURNED_RUN_FOLDER).refusal(
+                    f"mismatch for {relative}"
+                )
+            )
 
     output_entries = receipt.get("output_files")
     if not isinstance(output_entries, list):
@@ -80,7 +84,11 @@ def validate_inspection_receipt(
     for index, entry in enumerate(output_entries):
         relative = _verify_receipt_file_record(root, entry, f"output_files[{index}]")
         if relative in seen:
-            raise ValueError(f"returned receipt contains duplicate path {relative!r}.")
+            raise ValueError(
+                Declared("returned receipt", RETURNED_RUN_FOLDER).refusal(
+                    f"contains duplicate path {relative!r}"
+                )
+            )
         seen.add(relative)
         if entry["present"] is True:
             verified.add(relative)
@@ -101,27 +109,59 @@ def validate_inspection_receipt(
 def _verify_receipt_file_record(root: Path, entry: Any, label: str) -> str:
     """Check one recorded artifact, keeping absent and present files distinct."""
     if not isinstance(entry, dict):
-        raise TypeError(f"returned receipt {label} must be a mapping.")
+        raise TypeError(
+            Declared(f"returned receipt {label}", RETURNED_RUN_FOLDER).refusal(
+                "must be a mapping"
+            )
+        )
     relative = entry.get("path")
     present = entry.get("present")
     if not isinstance(relative, str) or not relative:
-        raise ValueError(f"returned receipt {label} path must be non-empty.")
+        raise ValueError(
+            Declared(f"returned receipt {label} path", RETURNED_RUN_FOLDER).refusal(
+                "must be non-empty"
+            )
+        )
     if not isinstance(present, bool):
-        raise TypeError(f"returned receipt {label} present must be bool.")
+        raise TypeError(
+            Declared(f"returned receipt {label} present", RETURNED_RUN_FOLDER).refusal(
+                "must be bool"
+            )
+        )
     observed = compute_hash_entry(confined_path(root, relative))
     if present:
         size = entry.get("bytes")
         sha256 = entry.get("sha256")
         if isinstance(size, bool) or not isinstance(size, int) or size < 0:
-            raise ValueError(f"returned receipt {label} bytes must be non-negative.")
+            raise ValueError(
+                Declared(
+                    f"returned receipt {label} bytes", RETURNED_RUN_FOLDER
+                ).refusal("must be non-negative")
+            )
         if not isinstance(sha256, str) or len(sha256) != 64:
-            raise ValueError(f"returned receipt {label} sha256 must have 64 digits.")
+            raise ValueError(
+                Declared(
+                    f"returned receipt {label} sha256", RETURNED_RUN_FOLDER
+                ).refusal("must have 64 digits")
+            )
         if observed != FileHash(size, sha256):
-            raise ValueError(f"returned receipt output hash mismatch for {relative}.")
+            raise ValueError(
+                Declared("returned receipt output hash", RETURNED_RUN_FOLDER).refusal(
+                    f"mismatch for {relative}"
+                )
+            )
     elif entry.get("bytes") is not None or entry.get("sha256") is not None:
-        raise ValueError(f"returned receipt missing {label} must not carry a hash.")
+        raise ValueError(
+            Declared("returned receipt", RETURNED_RUN_FOLDER).refusal(
+                f"missing {label} must not carry a hash"
+            )
+        )
     elif observed != FileHash(None, None):
-        raise ValueError(f"returned receipt missing output now exists: {relative}.")
+        raise ValueError(
+            Declared("returned receipt", RETURNED_RUN_FOLDER).refusal(
+                f"missing output now exists: {relative}"
+            )
+        )
     return relative
 
 
@@ -129,7 +169,11 @@ def _receipt_exit_code(receipt: dict[str, Any], field: str) -> int:
     """Read an integer exit code while rejecting boolean receipt values."""
     value = receipt.get(field)
     if isinstance(value, bool) or not isinstance(value, int):
-        raise TypeError(f"returned receipt {field} must be an integer.")
+        raise TypeError(
+            Declared(f"returned receipt {field}", RETURNED_RUN_FOLDER).refusal(
+                "must be an integer"
+            )
+        )
     return value
 
 
@@ -161,27 +205,32 @@ def _receipt_execution_state(receipt: dict[str, Any]) -> _ExecutionState:
         )
     if stage not in {"config_compatibility", "solver"}:
         raise ValueError(
-            f"returned receipt execution_stage is invalid: {stage!r}; the recorder writes "
-            "'config_compatibility' or 'solver'."
+            Declared("returned receipt execution_stage", RETURNED_RUN_FOLDER).refusal(
+                f"is invalid: {stage!r}; the recorder writes 'config_compatibility' or 'solver'"
+            )
         )
     solver_invoked = receipt.get("solver_invoked")
     if not isinstance(solver_invoked, bool):
         raise TypeError(
-            f"returned receipt solver_invoked must be boolean; got {solver_invoked!r}."
+            Declared("returned receipt solver_invoked", RETURNED_RUN_FOLDER).refusal(
+                f"must be boolean; got {solver_invoked!r}"
+            )
         )
     preflight_exit_code = _receipt_exit_code(receipt, "preflight_exit_code")
     solver_exit_code = receipt.get("solver_exit_code")
     if stage == "config_compatibility":
         if solver_invoked or solver_exit_code is not None:
             raise ValueError(
-                "config compatibility failure must record solver not invoked: the receipt records "
-                f"solver_invoked={solver_invoked!r}, solver_exit_code={solver_exit_code!r}."
+                Declared("config compatibility failure", RETURNED_RUN_FOLDER).refusal(
+                    f"must record solver not invoked: the receipt records solver_invoked={solver_invoked!r}, solver_exit_code={solver_exit_code!r}"
+                )
             )
     else:
         if not solver_invoked or preflight_exit_code != 0:
             raise ValueError(
-                "solver execution requires a successful config compatibility preflight: the receipt "
-                f"records solver_invoked={solver_invoked!r}, preflight_exit_code={preflight_exit_code!r}."
+                Declared("solver execution", RETURNED_RUN_FOLDER).refusal(
+                    f"requires a successful config compatibility preflight: the receipt records solver_invoked={solver_invoked!r}, preflight_exit_code={preflight_exit_code!r}"
+                )
             )
         solver_exit_code = _receipt_exit_code(receipt, "solver_exit_code")
     return _ExecutionState(
@@ -404,7 +453,11 @@ def _validate_inspection_identity(handoff: Any, receipt: Any) -> None:
     for field in ("handoff_id", "route", "problem"):
         value = receipt.get(field)
         if not isinstance(value, str) or not value:
-            raise ValueError(f"returned receipt {field} must be a non-empty string.")
+            raise ValueError(
+                Declared(f"returned receipt {field}", RETURNED_RUN_FOLDER).refusal(
+                    "must be a non-empty string"
+                )
+            )
         if field in handoff and handoff.get(field) != value:
             raise ValueError(
                 Declared(

@@ -9,8 +9,8 @@ from importlib.metadata import version as package_version
 from typing import Any
 
 from scgsim.geometry.models.physical import PhysicalRepresentationPlan
-from scgsim.geometry.models.refusals import internal
-from scgsim.refusal import found_text
+from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import ENVIRONMENT, found_text
 
 
 def scgsim_version() -> str:
@@ -19,8 +19,11 @@ def scgsim_version() -> str:
         return package_version("scgsim")
     except PackageNotFoundError as exc:
         raise RuntimeError(
-            "Unable to determine installed scgsim version: no package metadata for scgsim; "
-            "install SCGSim (uv sync, or pip install -e .) rather than running it from a source tree."
+            Declared(
+                "Unable to determine installed scgsim version", ENVIRONMENT
+            ).refusal(
+                "no package metadata for scgsim; install SCGSim (uv sync, or pip install -e .) rather than running it from a source tree"
+            )
         ) from exc
 
 

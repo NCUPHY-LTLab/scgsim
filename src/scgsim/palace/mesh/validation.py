@@ -52,13 +52,17 @@ def validate_mesh_matches_groups(
             key = (int(record["dim"]), record["group"])
             if key not in live:
                 raise ValueError(
-                    f"mesh has no physical group {record['group']!r} of dimension {key[0]}."
+                    internal(
+                        f"mesh has no physical group {record['group']!r} of dimension {key[0]}"
+                    )
                 )
             if live[key].entity_tags != tuple(
                 sorted(int(tag) for tag in record["tags"])
             ):
                 raise ValueError(
-                    f"physical group {record['group']!r} covers other entities in the mesh than in the sidecar."
+                    internal(
+                        f"physical group {record['group']!r} covers other entities in the mesh than in the sidecar"
+                    )
                 )
 
 
@@ -74,8 +78,9 @@ def validate_tetrahedral_solution_groups(
     live_volume_names = {name for (dim, name) in live if dim == 3}
     if live_volume_names != expected:
         raise ValueError(
-            "live 3D physical groups differ from the solution volumes of the sidecar: "
-            f"live={sorted(live_volume_names)}, solution={sorted(expected)}."
+            internal(
+                f"live 3D physical groups differ from the solution volumes of the sidecar: live={sorted(live_volume_names)}, solution={sorted(expected)}"
+            )
         )
     for name, info in groups.get("volumes", {}).items():
         has_elements = False
@@ -87,12 +92,14 @@ def validate_tetrahedral_solution_groups(
                 )
                 if dimension != 3 or "tetrahedron" not in element_name.lower():
                     raise ValueError(
-                        f"Solver solution volume {name!r} has non-tetrahedral 3D element {element_name!r}."
+                        internal(
+                            f"Solver solution volume {name!r} has non-tetrahedral 3D element {element_name!r}"
+                        )
                     )
             has_elements = has_elements or any(len(items) for items in element_tags)
         if not has_elements:
             raise ValueError(
-                f"Solver solution volume {name!r} has no 3D mesh elements."
+                internal(f"Solver solution volume {name!r} has no 3D mesh elements")
             )
 
 
@@ -106,7 +113,9 @@ def validate_port_pec_node_intersections(
     for key, port in groups.get("port_surfaces", {}).items():
         port_edges = _surface_mesh_edges(port.get("tags", ()))
         if not port_edges:
-            raise ValueError(f"SGB lumped-port sheet {key!r} has no mesh nodes.")
+            raise ValueError(
+                internal(f"SGB lumped-port sheet {key!r} has no mesh nodes")
+            )
         for owner_id in port["host_entity_ids"]:
             owner_tags = {
                 int(tag)
@@ -116,11 +125,15 @@ def validate_port_pec_node_intersections(
             }
             if not owner_tags:
                 raise ValueError(
-                    f"SGB lumped-port sheet {key!r} owner {owner_id!r} has no PEC surface."
+                    internal(
+                        f"SGB lumped-port sheet {key!r} owner {owner_id!r} has no PEC surface"
+                    )
                 )
             if not port_edges.intersection(_surface_mesh_edges(owner_tags)):
                 raise ValueError(
-                    f"SGB lumped-port sheet {key!r} owner {owner_id!r} does not share a mesh edge."
+                    internal(
+                        f"SGB lumped-port sheet {key!r} owner {owner_id!r} does not share a mesh edge"
+                    )
                 )
 
 
@@ -137,9 +150,9 @@ def validate_port_tetrahedron_face_conformality(
         }
         if not triangles or invalid:
             raise ValueError(
-                f"SGB lumped-port sheet {key!r} is non-conformal to the tetrahedron mesh: "
-                f"{len(triangles)} triangle(s), invalid tetra-face multiplicities {invalid}; "
-                "every internal port triangle must be shared by exactly two tetrahedra."
+                internal(
+                    f"SGB lumped-port sheet {key!r} is non-conformal to the tetrahedron mesh: {len(triangles)} triangle(s), invalid tetra-face multiplicities {invalid}; every internal port triangle must be shared by exactly two tetrahedra"
+                )
             )
 
 
@@ -166,7 +179,9 @@ def _port_triangles(
                     or primary_count != 3
                 ):
                     raise ValueError(
-                        f"SGB lumped-port sheet {key!r} has unsupported element {name!r}."
+                        internal(
+                            f"SGB lumped-port sheet {key!r} has unsupported element {name!r}"
+                        )
                     )
                 triangles.extend(
                     tuple(
