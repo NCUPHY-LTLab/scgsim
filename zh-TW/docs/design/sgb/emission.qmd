@@ -172,7 +172,7 @@ group 的記錄給出名稱與 physical `tag`；它的成員是 `group` 欄位�
 
 **Embedded face** 是 free 的元素：不界定任何 volume 的 face（位於某個 volume 中間的 sheet）。running example 的 port 在 support plane 上，是兩個 solid 共用的一般 face，所以每個 volume 的 `embedded_faces` 都是空的；一片懸在 vacuum 中間的 sheet（catalogue 的 `floating_conductor` fixture 在 Route A 下就是這樣）才會成為 embedded face。BREP 把它放在 compound 之下，但無法表達它位於某個 volume 之內，所以 sidecar 在 host volume 以 `embedded_faces` 記錄它，`views.embedded_faces` 把它算成 (face, host volume) 的配對，由 mesher 在載入後重新套用。
 
-sidecar 的大小：running example（`pad_in_ground_B`）為 61.3 kB（61,308 bytes）。@tbl-sidecar 中大型 layout 的時間與大小是以較早、記錄較少的格式量得的：N = 1,000、5,000、20,000 時是 11.2、57.3、232 MB，隨規模大致線性成長，比同一個 layout 的 XAO（13.1、68.7、282 MB）小。目前的格式另外記錄每條來源曲線、support primitive 與每個 face 的 loop，大型 layout 尚未以它重新量測。它以固定順序寫出，所以不受 Python 的 hash 隨機化影響（測試）。
+sidecar 的大小：running example（`pad_in_ground_B`）為 61.7 kB（61,711 bytes）。@tbl-sidecar 中大型 layout 的時間與大小是以較早、記錄較少的格式量得的：N = 1,000、5,000、20,000 時是 11.2、57.3、232 MB，隨規模大致線性成長，比同一個 layout 的 XAO（13.1、68.7、282 MB）小。目前的格式另外記錄每條來源曲線、support primitive 與每個 face 的 loop，大型 layout 尚未以它重新量測。它以固定順序寫出，所以不受 Python 的 hash 隨機化影響（測試）。
 
 group 名稱的規則（D5，production 已實作 per-Entity）見 [D5](decisions.qmd#d5)。在執行範例中每個 Net 只有一個 Entity，所以 per-Net 與 per-Entity 得到相同的 face，只有名稱不同。Route C 由 production 實作，導體內部成為輸出的 solid，並有以 `<entity>` 命名的 volume group。
 

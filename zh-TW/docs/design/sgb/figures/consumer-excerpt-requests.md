@@ -8,6 +8,7 @@
     "1": ["MA::pad__top::band=1"],
     "2": ["MA::pad__top::band=2"]
    },
+   "hidden_contacts": {},
    "interface": null,
    "margins_grid": [500, 1000],
    "margins_um": [0.5, 1.0],
@@ -41,7 +42,6 @@
   "MA::pad__top::band=0": {
    "band": 0,
    "banded_surface": "MA::pad__top",
-   "entities": ["pad"],
    "face_sides": null,
    "group": "MA::pad__top::band=0",
    "interface_type": "MA",
@@ -51,7 +51,6 @@
   "SA::substrate|VACUUM_REGION__interface": {
    "band": null,
    "banded_surface": null,
-   "entities": ["VACUUM_REGION", "substrate"],
    "face_sides": null,
    "group": "SA::substrate|VACUUM_REGION__interface",
    "interface_type": "SA",
