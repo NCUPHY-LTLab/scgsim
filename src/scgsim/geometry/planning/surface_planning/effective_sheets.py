@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import cast
 
-from scgsim.geometry.grid.entities import entity_by_id, geometry_ref_from_metadata
 from scgsim.geometry.grid.grid import boolean_polygon_region
 from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
@@ -27,6 +26,7 @@ from scgsim.geometry.planning.domain_planning.faces import (
     planar_side_solution_regions,
     route_a_sheet_plane_z_um,
 )
+from scgsim.geometry.planning.entities import entity_by_id, geometry_ref_from_metadata
 from scgsim.geometry.planning.evidence import (
     conductor_solution_evidence,
 )

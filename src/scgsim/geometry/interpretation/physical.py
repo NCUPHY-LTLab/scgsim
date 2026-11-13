@@ -1,8 +1,8 @@
-"""One neutral selected-profile interpretation before backend construction.
+"""Interpret a prepared input under the selected approximation profile.
 
-Placement is already source-normalized. This interpreter changes only declared
-representation/Z, preserving polygon sets, ownership, materials and source
-contact evidence. Specific missing contact graphs are not fabricated here.
+Placement is already normalized by the source stage. The interpretation changes only
+the declared representation and Z, and keeps the polygon sets, ownership, materials and
+source contact evidence. It adds no contact graph that the source did not declare.
 """
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
-from scgsim.geometry.grid.entity_validation import requires_route_representation
 from scgsim.geometry.grid.grid import with_input_grid
 from scgsim.geometry.interpretation.envelope import auto_vacuum_envelope_bounds
+from scgsim.geometry.models.entities import requires_route_representation
 from scgsim.geometry.models.physical import (
     PHYSICAL_LAYER_FIELD,
     ApproximationProfile,

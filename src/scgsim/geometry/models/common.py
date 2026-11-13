@@ -1,7 +1,6 @@
-"""Shared geometry vocabulary and constants used by source and planning records.
+"""Type aliases and constants that the geometry records share: routes, interface kinds and their order, conductor roles, and the metadata keys of a geometry reference.
 
-This module owns common type aliases and policy constants, not the records that
-carry source facts or compiled geometry.
+The records themselves are in the neighbouring modules.
 """
 
 from __future__ import annotations
@@ -67,3 +66,20 @@ DEFAULT_INTERFACE_SOLVER_USE: dict[InterfaceKindLiteral, SolverUseLiteral] = {
     "MM": "solver_active",
     "SS": "solver_active",
 }
+
+
+GEOMETRY_REF_METADATA_KEYS = (
+    "plane",
+    "contact_plane",
+    "footprint",
+    "outer_loop",
+    "hole_loops",
+    "loop_geometry_ref",
+    "z_um",
+    "z_min_um",
+    "z_max_um",
+    "thickness_um",
+)
+
+
+INTERFACE_KIND_ORDER = ("MM", "SS", "AA", "MS", "MA", "SA")

@@ -6,6 +6,16 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
 
+from scgsim.contracts.palace_run_folder import (
+    CONFIG,
+    HANDOFF_METADATA,
+    INDEX_MAP,
+    MESH,
+    MESH_MANIFEST,
+    PROBLEMS,
+    RETURNED_RECEIPT,
+    palace_problem,
+)
 from scgsim.palace.mesh.summary import mesh_summary
 from scgsim.palace.reports.observations import (
     configured_refinement,
@@ -199,11 +209,11 @@ def _build_trust_report(
     theme: ReportTheme = "light",
 ) -> PalaceTrustReport:
     """Bind source identity, readable snapshots and failure state into the Palace trust view."""
-    handoff_path = root / "metadata" / "palace_handoff_metadata.json"
+    handoff_path = root / HANDOFF_METADATA
     if not handoff_path.is_file():
         raise FileNotFoundError(f"required artifact missing: {handoff_path}")
     handoff = read_json(handoff_path)
-    mesh_manifest = read_optional_json(root / "metadata" / "mesh_manifest.json")
+    mesh_manifest = read_optional_json(root / MESH_MANIFEST)
     if mesh_manifest is not None:
         require_manifest_schema(mesh_manifest)
     mesh_thin_film = (
@@ -218,17 +228,17 @@ def _build_trust_report(
     problem = str(handoff.get("problem") or (resolved.problem if resolved else ""))
     route = str(handoff.get("route") or (resolved.route if resolved else ""))
     profile = str(handoff.get("profile") or "")
-    if problem not in {"Eigenmode", "Electrostatic"}:
+    if problem not in PROBLEMS:
         raise ValueError(f"unsupported problem {problem!r} for trustworthiness report.")
 
-    config = read_optional_json(root / "config.json")
-    receipt = read_optional_json(root / "metadata" / "palace_returned_run_receipt.json")
+    config = read_optional_json(root / CONFIG)
+    receipt = read_optional_json(root / RETURNED_RECEIPT)
     receipt_paths = validate_inspection_receipt(root, handoff, receipt)
     refinement = configured_refinement(config)
     index_map = (
         resolved.provenance.index_map
         if resolved is not None
-        else read_optional_json(root / "metadata" / "palace_index_map.json")
+        else read_optional_json(root / INDEX_MAP)
     )
     if index_map is not None:
         require_index_map_schema(index_map)
@@ -327,10 +337,10 @@ def _report_provenance(
         mesh_manifest if mesh_manifest is not None else {},
         problem=problem,
         fem_order=fem_order,
-        mesh_sha256=hashes.get("palace.msh"),
-        manifest_sha256=hashes.get("metadata/mesh_manifest.json"),
+        mesh_sha256=hashes.get(MESH),
+        manifest_sha256=hashes.get(MESH_MANIFEST),
     )
-    if fem_order is None and problem == "Eigenmode":
+    if fem_order is None and palace_problem(problem).fem_space == "ND":
         provenance["mesh_summary"]["dof_estimate"]["reason"] = "FEM order not recorded"
     if receipt is not None:
         provenance["returned_receipt"] = receipt

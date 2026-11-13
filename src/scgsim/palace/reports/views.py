@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import INDEX_MAP
 from scgsim.palace.reports.plotting import (
     mesh_summary_html,
     show_figure,
@@ -91,9 +92,7 @@ class PhysicsQuantitiesReport:
     @property
     def margins_configured(self) -> bool:
         """Check the run's index map for margin rows."""
-        index_map = read_optional_json(
-            self.trust.run_dir / "metadata" / "palace_index_map.json"
-        )
+        index_map = read_optional_json(self.trust.run_dir / INDEX_MAP)
         return bool(read_surface_margin_bindings(index_map))
 
     def _ipython_display_(self) -> None:

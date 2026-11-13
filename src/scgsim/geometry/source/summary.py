@@ -1,4 +1,4 @@
-"""Own immutable detached input summaries. Rendering is lazy and read-only; no model construction or native execution."""
+"""Immutable summaries of a prepared input, rendered lazily; they read the input and build no model."""
 
 from __future__ import annotations
 

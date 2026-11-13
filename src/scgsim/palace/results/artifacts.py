@@ -1,12 +1,22 @@
-"""Read sealed JSON, hashes and confined paths without interpreting solver physics."""
+"""Read sealed JSON, hashes and confined paths without interpreting solver physics.
+
+The file helpers (``read_json``, ``sha256``, ``confined_path``) are the run-folder contract's, which the
+receipt recorder uses too; this module adds the typed field readers ``results`` checks records with.
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
+import math
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal, overload
+
+from scgsim.contracts.palace_run_folder import (
+    RUN_RECORD_SCHEMA_VERSION,
+    confined_path,
+    read_json,
+    sha256,
+)
 
 
 def expect_mapping(value: Any, name: str) -> dict[str, Any]:
@@ -68,18 +78,14 @@ def validate_timestamp(value: str, label: str) -> None:
 
 
 def validate_contract_schema(payload: dict[str, Any], label: str) -> None:
-    """Require version 1 of a handoff metadata document."""
-    if expect_scalar(payload, "schema_version", int, fallback=0) != 1:
-        raise ValueError(f"{label} schema_version must be integer 1.")
-
-
-def read_json(path: Path) -> dict[str, Any]:
-    """Load one artifact as a JSON object, retaining parse and filesystem errors."""
-    payload = path.read_text(encoding="utf-8")
-    parsed = json.loads(payload)
-    if not isinstance(parsed, dict):
-        raise TypeError(f"{path} must contain a JSON object.")
-    return parsed
+    """Require the schema version of the handoff's run records (``RUN_RECORD_SCHEMA_VERSION``)."""
+    if (
+        expect_scalar(payload, "schema_version", int, fallback=0)
+        != RUN_RECORD_SCHEMA_VERSION
+    ):
+        raise ValueError(
+            f"{label} schema_version must be integer {RUN_RECORD_SCHEMA_VERSION}."
+        )
 
 
 def expect_scalar(
@@ -130,6 +136,21 @@ def expect_int(value: Any, *, optional: bool = False) -> int | None:
     raise TypeError("value must be integer-compatible.")
 
 
+def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
+    """Require a finite non-negative recorded number (not a boolean), and above zero when ``positive``."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+        or (positive and value == 0)
+    ):
+        raise ValueError(
+            f"{name} must be finite and {'positive' if positive else 'non-negative'}"
+        )
+    return float(value)
+
+
 def to_float(value: Any) -> float:
     """Convert a recorded real number without accepting booleans."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -154,21 +175,21 @@ def optional_dict(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def sha256(path: Path) -> str:
-    """Hash the exact file bytes used to bind a Palace artifact."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def confined_path(root: Path, relative: str) -> Path:
-    """Resolve an artifact beneath the run directory and reject path escape."""
-    if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
-        raise ValueError("artifact paths must be non-empty relative paths.")
-    candidate = (root / relative).resolve()
-    root = root.resolve()
-    if not candidate.is_relative_to(root):
-        raise ValueError("artifact path escapes the run directory.")
-    return candidate
+__all__ = [
+    "as_float_map",
+    "checked_number",
+    "compute_hash_entry",
+    "compute_input_hash_entry",
+    "confined_path",
+    "expect_int",
+    "expect_list",
+    "expect_mapping",
+    "expect_scalar",
+    "extract_hash_map",
+    "optional_dict",
+    "read_json",
+    "sha256",
+    "to_float",
+    "validate_contract_schema",
+    "validate_timestamp",
+]

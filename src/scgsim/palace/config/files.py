@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+from scgsim.contracts.palace_run_folder import json_text
 
 
 def persist_problem_files(
@@ -27,7 +28,7 @@ def persist_problem_files(
 def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    temporary.write_text(json_text(payload), encoding="utf-8")
     temporary.replace(path)
 
 

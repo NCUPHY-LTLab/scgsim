@@ -53,7 +53,7 @@ def route_a_sheet_interfaces(
         intent_origin, recognition_rule, valid_routes, z_um = selection
         supports = _sheet_supports(entity, polygons_by_id)
         for index, support in enumerate(supports):
-            # Conditional expansion retains the established serialized key order.
+            # Conditional expansion keeps the serialized key order.
             interface = cast(
                 _SheetInterface,
                 {

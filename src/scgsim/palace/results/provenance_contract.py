@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import tarfile
-from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import (
+    HANDOFF_METADATA,
+    RUN_METADATA,
+    RUN_RECORD_SCHEMA_VERSION,
+    SEALED_INPUTS,
+    HandoffIdentity,
+)
 from scgsim.palace.results.artifacts import (
     confined_path,
     expect_int,
@@ -24,13 +28,6 @@ from scgsim.palace.results.receipt_contract import validate_palace_identity
 from scgsim.palace.run.archive import (
     logical_tar_member_name,
     resolve_run_archive_path,
-)
-
-_REQUIRED_HASH_ENTRIES = (
-    "palace.msh",
-    "config.json",
-    "metadata/mesh_manifest.json",
-    "metadata/palace_index_map.json",
 )
 
 
@@ -87,7 +84,7 @@ def validate_handoff_id(
 ) -> None:
     """Recompute the identity; colocated copied IDs are not evidence."""
 
-    computed = _HandoffIdentity(
+    computed = HandoffIdentity(
         profile=expect_scalar(handoff_metadata, "profile", str),
         route=expect_scalar(handoff_metadata, "route", str),
         problem=expect_scalar(handoff_metadata, "problem", str),
@@ -185,39 +182,6 @@ def validate_resource_identity(
         raise ValueError("resource record exit_code must be zero for a returned run.")
 
 
-@dataclass(frozen=True)
-class _HandoffIdentity:
-    """Canonical handoff fields whose serialized bytes determine the handoff digest."""
-
-    profile: str
-    route: str
-    problem: str
-    source_revisions: Mapping[str, Any]
-    palace_identity: Mapping[str, Any]
-    hashes: list[Any]
-    execution_identity: Mapping[str, Any]
-    route_a_thin_film: Mapping[str, Any] | None = None
-
-    def digest(self) -> str:
-        """Hash the canonical JSON identity, preserving optional thin-film inclusion."""
-        payload = {
-            "route": self.route,
-            "problem": self.problem,
-            "profile": self.profile,
-            "source_revisions": self.source_revisions,
-            "palace_identity": self.palace_identity,
-            "hashes": self.hashes,
-            "execution_identity": self.execution_identity,
-            **(
-                {"route_a_thin_film": self.route_a_thin_film}
-                if self.route_a_thin_film is not None
-                else {}
-            ),
-        }
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
 def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
     """Verify required input identities against the exact run-directory bytes."""
     hashes = expect_list(metadata.get("hashes"), f"{label} metadata hashes")
@@ -249,7 +213,7 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
         if sha_value != observed[path_name][1]:
             raise ValueError(f"{label} hash mismatch for {path_name}.")
 
-    missing = [name for name in _REQUIRED_HASH_ENTRIES if name not in observed]
+    missing = [name for name in SEALED_INPUTS if name not in observed]
     if missing:
         raise ValueError(
             f"{label} metadata missing hash entries for: {', '.join(missing)}"
@@ -291,8 +255,14 @@ def validate_archive_manifest(
     handoff_metadata: dict[str, Any],
 ) -> None:
     """Validate the archive inventory before comparing its members and exact file bytes."""
-    if expect_scalar(manifest, "schema_version", int, fallback=0) != 1:
-        raise ValueError("handoff archive manifest schema_version must be integer 1.")
+    if (
+        expect_scalar(manifest, "schema_version", int, fallback=0)
+        != RUN_RECORD_SCHEMA_VERSION
+    ):
+        raise ValueError(
+            "handoff archive manifest schema_version must be integer "
+            f"{RUN_RECORD_SCHEMA_VERSION}."
+        )
     archive = expect_mapping(resource_record.get("archive"), "resource_record.archive")
     if extract_hash_map(
         expect_list(manifest.get("input_hashes"), "archive manifest input_hashes")
@@ -305,14 +275,7 @@ def validate_archive_manifest(
             "handoff archive manifest archive path does not match receipt."
         )
     file_members, member_paths, member_types = _manifest_members(manifest)
-    required = {
-        "config.json",
-        "palace.msh",
-        "metadata/mesh_manifest.json",
-        "metadata/palace_index_map.json",
-        "metadata/palace_handoff_metadata.json",
-        "metadata/palace_run_metadata.json",
-    }
+    required = {*SEALED_INPUTS, HANDOFF_METADATA, RUN_METADATA}
     if missing := required - member_paths:
         raise ValueError(
             "handoff archive manifest lacks required members: "

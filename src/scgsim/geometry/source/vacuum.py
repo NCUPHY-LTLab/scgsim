@@ -1,4 +1,4 @@
-"""Prepare a detached declared vacuum stack. Domain planning and simulation state remain downstream."""
+"""Return a detached stack that holds the declared vacuum region."""
 
 from __future__ import annotations
 

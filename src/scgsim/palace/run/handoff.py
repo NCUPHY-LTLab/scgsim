@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import shutil
 import tarfile
 from collections.abc import Mapping, Sequence
@@ -12,15 +10,40 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from scgsim.contracts.palace_run_folder import (
+    ARCHIVE_MANIFEST,
+    CONFIG,
+    CONFIG_SCHEMA,
+    DIRECT_LOCAL_SCRIPT,
+    HANDOFF_METADATA,
+    INDEX_MAP,
+    LOGS_DIR,
+    METADATA_DIR,
+    OUTPUT_DIR,
+    RECORDER,
+    RESOURCE_RECORD,
+    RETURNED_RECEIPT,
+    RUN_METADATA,
+    RUN_RECORD_SCHEMA_VERSION,
+    RUNTIME_COMPATIBILITY,
+    SLURM_SCRIPT,
+    SOLVER_LOG_PREFIX,
+    HandoffIdentity,
+    read_json,
+    script_name,
+    sha256,
+    write_json,
+)
+
 from ..mesh.build import MeshBuildResult
 from ..mesh.manifest import SGB_RUNTIME_AUTHORITY
-from ..source.transforms import SCHEMA_VERSION
 from .archive import (
     run_archive_arcname,
     sibling_run_archive_path,
     sibling_run_archive_relative,
 )
-from .script import positive_int, render_script, single_line
+from .recorder_copy import write_standalone_recorder
+from .script import ExecutionSettings, positive_int, render_script, single_line
 
 HandoffProfile = Literal["direct-local", "slurm-single-node", "slurm-multi-node"]
 _PROFILES = {"direct-local", "slurm-single-node", "slurm-multi-node"}
@@ -47,7 +70,52 @@ class HandoffPlan:
 
 
 @dataclass(frozen=True)
+class _HandoffPaths:
+    """Where one handoff reads and writes in its run folder, from the run-folder contract."""
+
+    run_dir: Path
+    config: Path
+    mesh: Path
+    index_map: Path
+    script: Path
+    metadata: Path
+    run_metadata: Path
+    resource_record: Path
+    archive_manifest: Path
+    archive: Path
+    returned_receipt: Path
+    recorder: Path
+
+    @classmethod
+    def of(
+        cls, mesh_result: MeshBuildResult, config_path: Path, profile: str
+    ) -> _HandoffPaths:
+        """The paths of a handoff of ``mesh_result`` and ``config_path`` for ``profile``."""
+        run_dir = mesh_result.output_dir
+        return cls(
+            run_dir=run_dir,
+            config=config_path,
+            mesh=mesh_result.mesh_path,
+            index_map=run_dir / INDEX_MAP,
+            script=run_dir / script_name(profile),
+            metadata=run_dir / HANDOFF_METADATA,
+            run_metadata=run_dir / RUN_METADATA,
+            resource_record=run_dir / RESOURCE_RECORD,
+            archive_manifest=run_dir / ARCHIVE_MANIFEST,
+            archive=sibling_run_archive_path(run_dir),
+            returned_receipt=run_dir / RETURNED_RECEIPT,
+            recorder=run_dir / RECORDER,
+        )
+
+    def relative(self, path: Path) -> str:
+        """``path`` as a POSIX path relative to the run folder."""
+        return path.relative_to(self.run_dir).as_posix()
+
+
+@dataclass(frozen=True)
 class _PreparedArtifacts:
+    """What the handoff binds before it writes its records: the identities its id is the hash of."""
+
     route: str
     thin_film: dict[str, Any] | None
     hashes: list[dict[str, str | int]]
@@ -55,6 +123,10 @@ class _PreparedArtifacts:
     palace_identity: dict[str, Any]
     execution_identity: dict[str, Any]
     handoff_id: str
+
+    def thin_film_field(self) -> dict[str, Any]:
+        """The ``route_a_thin_film`` field of a record, empty for Route B."""
+        return {} if self.thin_film is None else {"route_a_thin_film": self.thin_film}
 
 
 def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
@@ -72,182 +144,105 @@ def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
     if profile not in _PROFILES:
         raise ValueError(f"Unsupported handoff profile {profile!r}.")
     if not config_path.is_file() or not mesh_result.mesh_path.is_file():
-        raise FileNotFoundError("handoff requires existing config.json and palace.msh.")
-
+        raise FileNotFoundError(
+            f"handoff requires existing {CONFIG} and {mesh_result.mesh_path.name}."
+        )
     executable = single_line(executable, "executable")
     setup = tuple(single_line(command, "setup command") for command in setup_commands)
     petsc = tuple(single_line(option, "PETSc option") for option in petsc_options)
-    resource_map = _validate_resources(profile, resources)
-    run_dir = mesh_result.output_dir
-    for directory in (
-        run_dir / "logs",
-        run_dir / "results" / "palace",
-        run_dir / "metadata",
-    ):
-        directory.mkdir(parents=True, exist_ok=True)
-
-    script_path = run_dir / (
-        "run_palace.sh" if profile == "direct-local" else "run_palace.sbatch"
-    )
-    (
-        run_dir
-        / ("run_palace.sbatch" if profile == "direct-local" else "run_palace.sh")
-    ).unlink(missing_ok=True)
-
-    metadata_path = run_dir / "metadata" / "palace_handoff_metadata.json"
-    run_metadata_path = run_dir / "metadata" / "palace_run_metadata.json"
-    resource_record_path = run_dir / "metadata" / "palace_resource_record.json"
-    manifest_path = run_dir / "metadata" / "palace_handoff_archive_manifest.json"
-    archive_path = sibling_run_archive_path(run_dir)
-    archive_relative = sibling_run_archive_relative(run_dir)
-    returned_receipt_path = run_dir / "metadata" / "palace_returned_run_receipt.json"
-    returned_receipt_recorder_path = run_dir / "metadata" / "record_palace_return.py"
-    index_map_path = run_dir / "metadata" / "palace_index_map.json"
-
-    _clear_previous_returned_outputs(
-        run_dir=run_dir,
-        returned_receipt_path=returned_receipt_path,
-    )
-    artifacts = _prepare_artifacts(
+    execution = ExecutionSettings(
         profile=profile,
-        mesh_result=mesh_result,
-        config_path=config_path,
         executable=executable,
-        resources=resource_map,
-        setup=setup,
-        petsc=petsc,
-        problem=problem,
-        run_dir=run_dir,
-        index_map_path=index_map_path,
-        script_path=script_path,
-        recorder_path=returned_receipt_recorder_path,
+        resources=_validate_resources(profile, resources),
+        setup_commands=setup,
+        petsc_options=petsc,
     )
-    _write_handoff_metadata(
-        artifacts=artifacts,
-        profile=profile,
-        problem=problem,
-        executable=executable,
-        resources=resource_map,
-        setup=setup,
-        petsc=petsc,
-        run_dir=run_dir,
-        metadata_path=metadata_path,
-        run_metadata_path=run_metadata_path,
-        script_path=script_path,
-        config_path=config_path,
-        mesh_path=mesh_result.mesh_path,
-        returned_receipt_path=returned_receipt_path,
-        recorder_path=returned_receipt_recorder_path,
-    )
-
-    resource_record_path.unlink(missing_ok=True)
-    archive_path.unlink(missing_ok=True)
-
-    _create_archive(
-        run_dir=run_dir,
-        archive_path=archive_path,
-        archive_relative=archive_relative,
-        manifest_path=manifest_path,
-        resource_record_path=resource_record_path,
-        artifacts=artifacts,
-        profile=profile,
-        problem=problem,
-        resources=resource_map,
-    )
-
+    paths = _HandoffPaths.of(mesh_result, config_path, profile)
+    _prepare_run_folder(paths)
+    artifacts = _prepare_artifacts(execution, problem, mesh_result, paths)
+    _write_handoff_metadata(artifacts, execution, problem, paths)
+    paths.resource_record.unlink(missing_ok=True)
+    paths.archive.unlink(missing_ok=True)
+    _create_archive(artifacts, execution, problem, paths)
     return HandoffPlan(
         cast(HandoffProfile, profile),
         "prepared",
         "manual_handoff",
         artifacts.handoff_id,
-        run_dir,
-        script_path,
-        metadata_path,
-        run_metadata_path,
-        resource_record_path,
-        manifest_path,
-        archive_path,
-        returned_receipt_path,
-        returned_receipt_recorder_path,
+        paths.run_dir,
+        paths.script,
+        paths.metadata,
+        paths.run_metadata,
+        paths.resource_record,
+        paths.archive_manifest,
+        paths.archive,
+        paths.returned_receipt,
+        paths.recorder,
     )
 
 
-def _prepare_artifacts(  # noqa: PLR0913 -- preparation inputs remain explicit
-    *,
-    profile: str,
-    mesh_result: MeshBuildResult,
-    config_path: Path,
-    executable: str,
-    resources: Mapping[str, Any],
-    setup: Sequence[str],
-    petsc: Sequence[str],
+def _prepare_run_folder(paths: _HandoffPaths) -> None:
+    """Create the run folder's folders and remove what an earlier handoff or run left.
+
+    A new manual handoff cannot reuse outputs, a receipt or the other profile's script from an earlier one.
+    """
+    run_dir = paths.run_dir
+    for directory in (LOGS_DIR, OUTPUT_DIR, METADATA_DIR):
+        (run_dir / directory).mkdir(parents=True, exist_ok=True)
+    for stale in {DIRECT_LOCAL_SCRIPT, SLURM_SCRIPT} - {paths.script.name}:
+        (run_dir / stale).unlink(missing_ok=True)
+    paths.returned_receipt.unlink(missing_ok=True)
+    (run_dir / RUNTIME_COMPATIBILITY).unlink(missing_ok=True)
+    results_path = run_dir / OUTPUT_DIR
+    if results_path.exists():
+        shutil.rmtree(results_path)
+    results_path.mkdir(parents=True, exist_ok=True)
+    for log_path in run_dir.glob(f"{SOLVER_LOG_PREFIX}*.log"):
+        log_path.unlink()
+
+
+def _prepare_artifacts(
+    execution: ExecutionSettings,
     problem: str,
-    run_dir: Path,
-    index_map_path: Path,
-    script_path: Path,
-    recorder_path: Path,
+    mesh_result: MeshBuildResult,
+    paths: _HandoffPaths,
 ) -> _PreparedArtifacts:
     """Bind inputs and prepare the standalone script and recorder before metadata."""
-    if not index_map_path.is_file():
-        raise FileNotFoundError("handoff requires metadata/palace_index_map.json.")
+    if not paths.index_map.is_file():
+        raise FileNotFoundError(f"handoff requires {INDEX_MAP}.")
 
     route = _route(mesh_result)
     thin_film = _route_a_thin_film(mesh_result, route)
     hashes = _hashes(
-        run_dir,
-        (
-            mesh_result.mesh_path,
-            config_path,
-            mesh_result.mesh_manifest_path,
-            index_map_path,
-        ),
+        paths,
+        (paths.mesh, paths.config, mesh_result.mesh_manifest_path, paths.index_map),
     )
     source_revisions = _identity()
     palace_identity = {
-        "config_schema": SCHEMA_VERSION,
+        "config_schema": CONFIG_SCHEMA,
         "config_compatibility_probe": "native_dry_run",
         "config_compatibility_semantics": "required_before_solve",
         "runtime_identity_semantics": "observed_provenance_only",
     }
 
-    if recorder_path.is_file():
-        recorder_path.unlink()
-    shutil.copy2(Path(__file__).with_name("returned_receipt.py"), recorder_path)
-    recorder_path.chmod(0o755)
-    script_path.write_text(
-        render_script(
-            profile,
-            executable,
-            resources,
-            setup,
-            petsc,
-            returned_receipt_recorder_name=recorder_path.name,
-            palace_identity=palace_identity,
-        )
-        + "\n",
+    write_standalone_recorder(paths.recorder)
+    paths.script.write_text(
+        render_script(execution, config_schema=CONFIG_SCHEMA) + "\n",
         encoding="utf-8",
     )
-    script_path.chmod(script_path.stat().st_mode | 0o755)
+    paths.script.chmod(paths.script.stat().st_mode | 0o755)
 
-    execution_identity = _execution_identity(
-        profile=profile,
-        resources=resources,
-        executable=executable,
-        setup=setup,
-        petsc=petsc,
-        script_path=script_path,
-        recorder_path=recorder_path,
-    )
-    handoff_id = _compute_handoff_id(
-        profile=profile,
+    execution_identity = _execution_identity(execution, paths)
+    handoff_id = HandoffIdentity(
+        profile=execution.profile,
         route=route,
         problem=problem,
         source_revisions=source_revisions,
         palace_identity=palace_identity,
-        hashes=hashes,
+        hashes=list(hashes),
         execution_identity=execution_identity,
         route_a_thin_film=thin_film,
-    )
+    ).digest()
     return _PreparedArtifacts(
         route,
         thin_film,
@@ -259,66 +254,52 @@ def _prepare_artifacts(  # noqa: PLR0913 -- preparation inputs remain explicit
     )
 
 
-def _write_handoff_metadata(  # noqa: PLR0913 -- fields map to separate JSON records
-    *,
+def _write_handoff_metadata(
     artifacts: _PreparedArtifacts,
-    profile: str,
+    execution: ExecutionSettings,
     problem: str,
-    executable: str,
-    resources: Mapping[str, Any],
-    setup: Sequence[str],
-    petsc: Sequence[str],
-    run_dir: Path,
-    metadata_path: Path,
-    run_metadata_path: Path,
-    script_path: Path,
-    config_path: Path,
-    mesh_path: Path,
-    returned_receipt_path: Path,
-    recorder_path: Path,
+    paths: _HandoffPaths,
 ) -> None:
     """Write the prepared and not-run records after script identities are known."""
-    thin_film = artifacts.thin_film
-    handoff_id = artifacts.handoff_id
-    returned_receipt_relative = returned_receipt_path.relative_to(run_dir).as_posix()
-    _write_json(
-        metadata_path,
+    returned_receipt_relative = paths.relative(paths.returned_receipt)
+    write_json(
+        paths.metadata,
         {
-            "schema_version": 1,
+            "schema_version": RUN_RECORD_SCHEMA_VERSION,
             "status": "prepared",
             "kind": "manual_handoff",
             "manual_intent": True,
-            "profile": profile,
+            "profile": execution.profile,
             "route": artifacts.route,
-            **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
+            **artifacts.thin_film_field(),
             "problem": problem,
-            "handoff_id": handoff_id,
+            "handoff_id": artifacts.handoff_id,
             "returned_receipt_path": returned_receipt_relative,
-            "returned_receipt_recorder": recorder_path.relative_to(run_dir).as_posix(),
+            "returned_receipt_recorder": paths.relative(paths.recorder),
             "palace_identity": artifacts.palace_identity,
             "source_revisions": artifacts.source_revisions,
             "execution_identity": artifacts.execution_identity,
-            "command": _redacted_command(profile, executable, resources),
-            "setup_commands": list(setup),
-            "petsc_options": list(petsc),
-            "requested_resources": resources,
-            "resolved_resources": resources,
-            "script": script_path.name,
-            "config": config_path.name,
-            "mesh": mesh_path.name,
+            "command": _redacted_command(execution),
+            "setup_commands": list(execution.setup_commands),
+            "petsc_options": list(execution.petsc_options),
+            "requested_resources": execution.resources,
+            "resolved_resources": execution.resources,
+            "script": paths.script.name,
+            "config": paths.config.name,
+            "mesh": paths.mesh.name,
             "hashes": artifacts.hashes,
         },
     )
-    _write_json(
-        run_metadata_path,
+    write_json(
+        paths.run_metadata,
         {
-            "schema_version": 1,
+            "schema_version": RUN_RECORD_SCHEMA_VERSION,
             "status": "not_run",
             "kind": "manual_handoff",
             "route": artifacts.route,
-            **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
+            **artifacts.thin_film_field(),
             "problem": problem,
-            "handoff_id": handoff_id,
+            "handoff_id": artifacts.handoff_id,
             "returned_receipt_path": returned_receipt_relative,
             "palace_identity": artifacts.palace_identity,
             "source_revisions": artifacts.source_revisions,
@@ -328,37 +309,31 @@ def _write_handoff_metadata(  # noqa: PLR0913 -- fields map to separate JSON rec
     )
 
 
-def _create_archive(  # noqa: PLR0913 -- archive paths and identities stay explicit
-    *,
-    run_dir: Path,
-    archive_path: Path,
-    archive_relative: str,
-    manifest_path: Path,
-    resource_record_path: Path,
+def _create_archive(
     artifacts: _PreparedArtifacts,
-    profile: str,
+    execution: ExecutionSettings,
     problem: str,
-    resources: Mapping[str, Any],
+    paths: _HandoffPaths,
 ) -> None:
     """Create the archive and record its digest after all archived inputs settle."""
-    excluded = {resource_record_path}
-    members = _members(run_dir, exclude=excluded | {manifest_path})
-    _write_json(
-        manifest_path,
+    run_dir = paths.run_dir
+    archive_relative = sibling_run_archive_relative(run_dir)
+    excluded = {paths.resource_record}
+    members = _members(run_dir, exclude=excluded | {paths.archive_manifest})
+    write_json(
+        paths.archive_manifest,
         {
-            "schema_version": 1,
+            "schema_version": RUN_RECORD_SCHEMA_VERSION,
             "archive": archive_relative,
             "input_hashes": artifacts.hashes,
             "members": members,
             "archive_members_excluded_from_self_listing": [
-                manifest_path.relative_to(run_dir).as_posix()
+                paths.relative(paths.archive_manifest)
             ],
-            "archive_members_excluded": [
-                resource_record_path.relative_to(run_dir).as_posix()
-            ],
+            "archive_members_excluded": [paths.relative(paths.resource_record)],
         },
     )
-    with tarfile.open(archive_path, "w:gz") as archive:
+    with tarfile.open(paths.archive, "w:gz") as archive:
         for path in sorted(run_dir.rglob("*")):
             if path in excluded:
                 continue
@@ -367,29 +342,25 @@ def _create_archive(  # noqa: PLR0913 -- archive paths and identities stay expli
                 arcname=run_archive_arcname(run_dir, path),
                 recursive=False,
             )
-    _write_json(
-        resource_record_path,
+    write_json(
+        paths.resource_record,
         {
-            "schema_version": 1,
+            "schema_version": RUN_RECORD_SCHEMA_VERSION,
             "status": "not_submitted",
             "kind": "manual_handoff",
-            "profile": profile,
+            "profile": execution.profile,
             "route": artifacts.route,
-            **(
-                {"route_a_thin_film": artifacts.thin_film}
-                if artifacts.thin_film is not None
-                else {}
-            ),
+            **artifacts.thin_film_field(),
             "problem": problem,
             "handoff_id": artifacts.handoff_id,
             "source_revisions": artifacts.source_revisions,
             "palace_identity": artifacts.palace_identity,
             "execution_identity": artifacts.execution_identity,
-            "requested_resources": resources,
-            "resolved_resources": resources,
+            "requested_resources": execution.resources,
+            "resolved_resources": execution.resources,
             "archive": {
                 "path": archive_relative,
-                "sha256": _sha256(archive_path),
+                "sha256": sha256(paths.archive),
             },
         },
     )
@@ -432,17 +403,17 @@ def _validate_resources(
     return result
 
 
-def _redacted_command(
-    profile: str, executable: str, resources: Mapping[str, Any]
-) -> dict[str, Any]:
+def _redacted_command(execution: ExecutionSettings) -> dict[str, Any]:
+    """The solver command as the records show it: the script, the executable's name, the launcher."""
+    profile = execution.profile
     return {
         "manual_only": True,
-        "script": "run_palace.sh" if profile == "direct-local" else "run_palace.sbatch",
-        "executable_identity": Path(executable).name,
-        "launcher": resources.get(
+        "script": script_name(profile),
+        "executable_identity": Path(execution.executable).name,
+        "launcher": execution.resources.get(
             "launcher", "local" if profile == "direct-local" else "srun"
         ),
-        "arguments": ["[executable]", "config.json"],
+        "arguments": ["[executable]", CONFIG],
     }
 
 
@@ -461,74 +432,19 @@ def _identity() -> dict[str, Any]:
     }
 
 
-def _compute_handoff_id(  # noqa: PLR0913 -- hash binds each protocol identity input
-    *,
-    profile: str,
-    route: str,
-    problem: str,
-    source_revisions: Mapping[str, Any],
-    palace_identity: Mapping[str, Any],
-    hashes: Sequence[Mapping[str, Any]],
-    execution_identity: Mapping[str, Any],
-    route_a_thin_film: Mapping[str, Any] | None = None,
-) -> str:
-    payload = {
-        "route": route,
-        "problem": problem,
-        "profile": profile,
-        "source_revisions": source_revisions,
-        "palace_identity": palace_identity,
-        "hashes": list(hashes),
-        "execution_identity": execution_identity,
-        **(
-            {"route_a_thin_film": route_a_thin_film}
-            if route_a_thin_film is not None
-            else {}
-        ),
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _execution_identity(  # noqa: PLR0913 -- each value is a distinct identity field
-    *,
-    profile: str,
-    resources: Mapping[str, Any],
-    executable: str,
-    setup: Sequence[str],
-    petsc: Sequence[str],
-    script_path: Path,
-    recorder_path: Path,
+def _execution_identity(
+    execution: ExecutionSettings, paths: _HandoffPaths
 ) -> dict[str, Any]:
     """Bind the generated execution surface without recording an absolute path."""
-
     return {
-        "profile": profile,
-        "resources": dict(resources),
-        "setup_commands": list(setup),
-        "petsc_options": list(petsc),
-        "command": _redacted_command(profile, executable, resources),
-        "script": {"path": script_path.name, "sha256": _sha256(script_path)},
-        "recorder": {
-            "path": f"metadata/{recorder_path.name}",
-            "sha256": _sha256(recorder_path),
-        },
+        "profile": execution.profile,
+        "resources": dict(execution.resources),
+        "setup_commands": list(execution.setup_commands),
+        "petsc_options": list(execution.petsc_options),
+        "command": _redacted_command(execution),
+        "script": {"path": paths.script.name, "sha256": sha256(paths.script)},
+        "recorder": {"path": RECORDER, "sha256": sha256(paths.recorder)},
     }
-
-
-def _clear_previous_returned_outputs(
-    *, run_dir: Path, returned_receipt_path: Path
-) -> None:
-    """A new manual handoff cannot reuse outputs or a receipt from an earlier run."""
-
-    returned_receipt_path.unlink(missing_ok=True)
-    (run_dir / "metadata" / "palace_runtime_compatibility.json").unlink(missing_ok=True)
-    results_path = run_dir / "results" / "palace"
-    if results_path.exists():
-        shutil.rmtree(results_path)
-    results_path.mkdir(parents=True, exist_ok=True)
-    for log_path in (run_dir / "logs").glob("palace-*.log"):
-        log_path.unlink()
 
 
 def _members(root: Path, *, exclude: set[Path]) -> list[dict[str, str | int]]:
@@ -545,31 +461,26 @@ def _members(root: Path, *, exclude: set[Path]) -> list[dict[str, str | int]]:
                     "path": relative,
                     "type": "file",
                     "bytes": path.stat().st_size,
-                    "sha256": _sha256(path),
+                    "sha256": sha256(path),
                 }
             )
     return members
 
 
-def _hashes(root: Path, paths: Sequence[Path]) -> list[dict[str, str | int]]:
+def _hashes(paths: _HandoffPaths, files: Sequence[Path]) -> list[dict[str, str | int]]:
+    """The run-folder path, size and SHA-256 of each sealed input, in the order given."""
     return [
         {
-            "path": path.relative_to(root).as_posix(),
+            "path": paths.relative(path),
             "bytes": path.stat().st_size,
-            "sha256": _sha256(path),
+            "sha256": sha256(path),
         }
-        for path in paths
+        for path in files
     ]
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _route(mesh_result: MeshBuildResult) -> str:
-    route = json.loads(mesh_result.provenance_path.read_text(encoding="utf-8")).get(
-        "route"
-    )
+    route = read_json(mesh_result.provenance_path).get("route")
     if route not in {"A", "B"}:
         raise ValueError("mesh provenance must carry Route A or B.")
     return route
@@ -578,8 +489,8 @@ def _route(mesh_result: MeshBuildResult) -> str:
 def _route_a_thin_film(
     mesh_result: MeshBuildResult, route: str
 ) -> dict[str, Any] | None:
-    provenance = json.loads(mesh_result.provenance_path.read_text(encoding="utf-8"))
-    manifest = json.loads(mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
+    provenance = read_json(mesh_result.provenance_path)
+    manifest = read_json(mesh_result.mesh_manifest_path)
     provenance_value = provenance.get("route_a_thin_film")
     manifest_value = manifest.get("route_a_thin_film")
     if route == "B":
@@ -591,10 +502,6 @@ def _route_a_thin_film(
             "Route A mesh provenance and manifest require identical thin-film identity."
         )
     return dict(provenance_value)
-
-
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 __all__ = ["HandoffPlan", "HandoffProfile", "prepare_handoff"]

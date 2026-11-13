@@ -1,4 +1,4 @@
-"""Convert junction polygon regions through the existing native Boolean boundary."""
+"""Convert junction polygon regions to and from the grid's native Boolean."""
 
 from __future__ import annotations
 

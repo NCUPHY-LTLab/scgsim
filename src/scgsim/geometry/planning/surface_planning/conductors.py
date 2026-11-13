@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.geometry.grid.entity_validation import is_solution_entity
 from scgsim.geometry.interpretation.representation import (
     planned_conductor_representation,
 )
@@ -13,6 +12,7 @@ from scgsim.geometry.models.common import (
     PolygonRing,
     RouteLiteral,
 )
+from scgsim.geometry.models.entities import is_solution_entity
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import (
     SurfacePlanRecord,

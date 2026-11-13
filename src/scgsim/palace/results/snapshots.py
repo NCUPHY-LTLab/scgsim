@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import (
+    NATIVE_METADATA_NAME,
+    OUTPUT_DIR,
+    iteration_dir,
+    palace_problem,
+    table_name,
+)
 from scgsim.palace.results.observations import as_int, mapping_max, read_optional_json
 from scgsim.palace.results.report_models import (
     AmrPassSnapshot,
@@ -20,9 +26,6 @@ from scgsim.palace.results.surface_readers import (
     SurfaceMarginEprReader,
 )
 from scgsim.palace.results.tables import read_csv_table, read_requested_modes
-
-_ITERATION_DIR = re.compile(r"^iteration(\d+)$")
-
 
 _FREQ_HEADER = "Re{f} (GHz)"
 
@@ -41,9 +44,7 @@ _ERROR_INDICATOR_TRACES = ("Norm", "Maximum", "Mean")
 
 def _parent_has_physics(results: Path, problem: str) -> bool:
     """Check for the problem-specific final physics table before reading a parent snapshot."""
-    if problem == "Eigenmode":
-        return (results / "eig.csv").is_file()
-    return (results / "terminal-C.csv").is_file()
+    return (results / table_name(palace_problem(problem).primary_table)).is_file()
 
 
 def _same_primary_physics(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bool:
@@ -98,14 +99,14 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
     eigenpair, and a pass whose mode index is not those modes in order is unreadable.
     Without it a pass reports the rows it finds.
     """
-    results = root / "results" / "palace"
+    results = root / OUTPUT_DIR
     if not results.is_dir():
         return CollectedSnapshots((), "missing")
     iteration_dirs = []
     for child in results.iterdir():
-        match = _ITERATION_DIR.match(child.name)
-        if match and child.is_dir():
-            iteration_dirs.append((int(match.group(1)), child))
+        number = iteration_dir(child.name)
+        if number is not None and child.is_dir():
+            iteration_dirs.append((number, child))
     iteration_dirs.sort()
     snapshots: list[AmrPassSnapshot] = []
     for index, path in iteration_dirs:
@@ -172,22 +173,27 @@ class SnapshotReader:
 
     def load(self) -> AmrPassSnapshot:
         """Read native electrical, surface, mesh and cost observations for this AMR pass."""
+        solves_modes = palace_problem(self.problem).solves_modes
         eig_columns = (
-            _read_numeric_table_columns(self.path / "eig.csv", self.mode_count)
-            if self.problem == "Eigenmode"
+            _read_numeric_table_columns(self.path / table_name("eig"), self.mode_count)
+            if solves_modes
             else None
         )
         port_epr = (
-            _read_numeric_table_columns(self.path / "port-EPR.csv", self.mode_count)
-            if self.problem == "Eigenmode"
+            _read_numeric_table_columns(
+                self.path / table_name("port-EPR"), self.mode_count
+            )
+            if solves_modes
             else None
         )
         capacitance = (
-            _read_capacitance(self.path / "terminal-C.csv")
-            if self.problem == "Electrostatic"
-            else None
+            None
+            if solves_modes
+            else _read_capacitance(self.path / table_name("terminal-C"))
         )
-        error_indicators = _read_error_indicators(self.path / "error-indicators.csv")
+        error_indicators = _read_error_indicators(
+            self.path / table_name("error-indicators")
+        )
         frequencies = None if eig_columns is None else eig_columns.get(_FREQ_HEADER)
         expected_rows = (
             len(frequencies)
@@ -201,7 +207,7 @@ class SnapshotReader:
             self.surface_margin_bindings or ()
         )
         surface_epr = SurfaceEprReader(
-            self.path / "surface-Q.csv",
+            self.path / table_name("surface-Q"),
             problem=self.problem,
             pass_index=self.pass_index,
             source=self.source,
@@ -212,7 +218,7 @@ class SnapshotReader:
             mode_count=self.mode_count,
         ).read()
         surface_margin_epr = SurfaceMarginEprReader(
-            self.path / "surface-Q.csv",
+            self.path / table_name("surface-Q"),
             problem=self.problem,
             pass_index=self.pass_index,
             source=self.source,
@@ -222,7 +228,7 @@ class SnapshotReader:
             mode_count=self.mode_count,
         ).read()
         error_norm = None if error_indicators is None else error_indicators.get("Norm")
-        palace_payload = read_optional_json(self.path / "palace.json")
+        palace_payload = read_optional_json(self.path / NATIVE_METADATA_NAME)
         problem_block = palace_payload.get("Problem") if palace_payload else None
         elapsed = None
         if palace_payload is not None:

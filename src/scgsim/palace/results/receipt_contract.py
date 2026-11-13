@@ -8,6 +8,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import (
+    CONFIG,
+    INDEX_MAP,
+    NATIVE_METADATA,
+    RETURNED_RECEIPT,
+    RETURNED_RECEIPT_SCHEMA,
+    RUNTIME_COMPATIBILITY,
+    RUNTIME_COMPATIBILITY_SCHEMA,
+    collects_adapted_meshes,
+    output_table,
+)
 from scgsim.palace.results.artifacts import (
     compute_hash_entry,
     compute_input_hash_entry,
@@ -24,17 +35,6 @@ from scgsim.palace.results.artifacts import (
 from scgsim.palace.results.models import PalaceReturnedReceipt
 from scgsim.palace.results.tables import count_index_entries, output_families
 from scgsim.palace.run.returned_receipt import adapted_mesh_output_paths
-
-_RUNTIME_COMPATIBILITY_PATH = "metadata/palace_runtime_compatibility.json"
-
-
-_RUNTIME_COMPATIBILITY_SCHEMA = "palace-runtime-compatibility.v1"
-
-
-_RETURNED_RECEIPT_SCHEMA = "palace-returned-run-receipt.v1"
-
-
-RETURNED_RECEIPT_FILE = "metadata/palace_returned_run_receipt.json"
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ class ReceiptValidation:
         """Verify receipt binding, success, artifacts, compatibility and logs in their original order."""
         if (
             expect_scalar(self.receipt_payload, "schema", str)
-            != _RETURNED_RECEIPT_SCHEMA
+            != RETURNED_RECEIPT_SCHEMA
         ):
             raise ValueError("returned run receipt schema is invalid.")
         if expect_int(self.receipt_payload.get("schema_version"), optional=False) != 1:
@@ -174,13 +174,11 @@ def _required_output_records(
     problem: str, *, index_counts: dict[str, int]
 ) -> tuple[dict[str, Any], ...]:
     """List native output families required by the written problem and configured selectors."""
-    families = output_families(problem, index_counts)
-    records: list[dict[str, Any]] = []
-    for family in families:
-        rel = f"results/palace/{family}.csv"
-        records.append({"path": rel, "bytes": 0, "sha256": ""})
-    records.append({"path": "results/palace/palace.json", "bytes": 0, "sha256": ""})
-    return tuple(records)
+    paths = [
+        *(output_table(family) for family in output_families(problem, index_counts)),
+        NATIVE_METADATA,
+    ]
+    return tuple({"path": path, "bytes": 0, "sha256": ""} for path in paths)
 
 
 def validate_palace_identity(payload: Mapping[str, Any]) -> None:
@@ -215,13 +213,13 @@ def validate_runtime_compatibility(
     payload: Mapping[str, Any], palace_identity: Mapping[str, Any], *, root: Path
 ) -> None:
     """Bind successful native dry-run observations to the exact sealed config bytes."""
-    if payload.get("schema") != _RUNTIME_COMPATIBILITY_SCHEMA:
+    if payload.get("schema") != RUNTIME_COMPATIBILITY_SCHEMA:
         raise ValueError("Palace runtime compatibility schema is invalid.")
     config = expect_mapping(payload.get("config"), "runtime compatibility config")
     expected_config = {
-        "path": "config.json",
-        "bytes": (root / "config.json").stat().st_size,
-        "sha256": sha256(root / "config.json"),
+        "path": CONFIG,
+        "bytes": (root / CONFIG).stat().st_size,
+        "sha256": sha256(root / CONFIG),
         "declared_schema": expect_scalar(palace_identity, "config_schema", str),
     }
     if config != expected_config:
@@ -287,7 +285,7 @@ def _validate_log_and_solver_identity(receipt_payload: Any, root: Path) -> None:
     receipt_identity = expect_mapping(
         receipt_payload.get("solver_identity"), "receipt.solver_identity"
     )
-    palace_identity = read_json(root / "results/palace/palace.json")
+    palace_identity = read_json(root / NATIVE_METADATA)
     expected_identity = {
         key: palace_identity[key]
         for key in ("GitTag", "PeakMemoryMegabytes", "PeakNodeMemoryMegabytes")
@@ -295,7 +293,7 @@ def _validate_log_and_solver_identity(receipt_payload: Any, root: Path) -> None:
     }
     if not expected_identity or receipt_identity != expected_identity:
         raise ValueError(
-            "returned run receipt solver identity does not match palace.json."
+            f"returned run receipt solver identity does not match {Path(NATIVE_METADATA).name}."
         )
 
 
@@ -315,7 +313,7 @@ def _validate_completed_runtime(
             raise ValueError(
                 "completed Palace receipt config compatibility preflight must pass."
             )
-        if _RUNTIME_COMPATIBILITY_PATH not in output_map:
+        if RUNTIME_COMPATIBILITY not in output_map:
             raise ValueError(
                 "returned run receipt misses the Palace runtime compatibility artifact."
             )
@@ -323,7 +321,7 @@ def _validate_completed_runtime(
             receipt_payload.get("runtime_compatibility"),
             "receipt.runtime_compatibility",
         )
-        runtime_artifact = read_json(confined_path(root, _RUNTIME_COMPATIBILITY_PATH))
+        runtime_artifact = read_json(confined_path(root, RUNTIME_COMPATIBILITY))
         if runtime_compatibility != runtime_artifact:
             raise ValueError(
                 "returned run receipt Palace runtime compatibility does not match "
@@ -366,13 +364,13 @@ def _validate_returned_outputs(
     """Verify required solver artifacts and every returned output size and hash."""
     output_files = expect_list(receipt_payload.get("output_files"), "output_files")
     output_map = extract_hash_map(output_files)
-    index_map = read_json(root / "metadata" / "palace_index_map.json")
+    index_map = read_json(root / INDEX_MAP)
     required_outputs = _required_output_records(
         problem,
         index_counts=count_index_entries(index_map),
     )
-    config = read_json(root / "config.json")
-    if handoff_metadata.get("palace_identity", {}).get("config_schema") == "1-7-0":
+    config = read_json(root / CONFIG)
+    if collects_adapted_meshes(handoff_metadata.get("palace_identity")):
         required_outputs += tuple(
             {"path": relative} for relative in adapted_mesh_output_paths(root, config)
         )
@@ -467,9 +465,9 @@ def _validate_receipt_binding(
         raise ValueError(
             "handoff metadata handoff_id does not match expected_handoff_id."
         )
-    if handoff_metadata.get("returned_receipt_path") != RETURNED_RECEIPT_FILE:
+    if handoff_metadata.get("returned_receipt_path") != RETURNED_RECEIPT:
         raise ValueError("handoff metadata returned_receipt_path is incorrect.")
-    if run_metadata.get("returned_receipt_path") != RETURNED_RECEIPT_FILE:
+    if run_metadata.get("returned_receipt_path") != RETURNED_RECEIPT:
         raise ValueError("run metadata returned_receipt_path is incorrect.")
 
     handoff_id = expect_scalar(receipt_payload, "handoff_id", str)
