@@ -73,8 +73,8 @@ AREAS = (
         (
             Folder("geometry", Role.AREA),
             Folder("geometry/models"),
-            Folder("geometry/source"),
             Folder("geometry/grid"),
+            Folder("geometry/source"),
             Folder("geometry/interpretation"),
             Folder("geometry/junctions"),
             Folder("geometry/surface_epr"),

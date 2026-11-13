@@ -15,11 +15,9 @@ import pytest
 from sgb_inputs import gds_pad_in_ground, thin_film_pair
 from test_rectangular_junction_geometry import fixture as junction_fixture
 
-from scgsim.geometry.grid.grid import (
-    GridOperand,
-    build_grid_arrangement,
-    geometry_grid_scope,
-)
+from scgsim.geometry.grid.arrangement import build_grid_arrangement
+from scgsim.geometry.grid.grid_regions import GridOperand
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
@@ -31,8 +29,9 @@ from scgsim.geometry.sgb.arrangement.derivation.labelled import (
 )
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
-from scgsim.geometry.source.grid import apply_geometry_grid
-from scgsim.geometry.source.ground import derived_ground_polygons
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
+from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
+from scgsim.geometry.source.recipes import audited_declared_source
 
 GRID = GeometryGridContext(0.001)
 NUMBER = r"-?\d+\.\d+"
@@ -84,12 +83,12 @@ def ground_with_slits(*slits):
                 gdstk.rectangle((x, y), (x + 0.0002, y + 1)) for x, y in slits
             )
         },
-        cell_bounds_um={"x_min_um": 0, "x_max_um": 4, "y_min_um": 0, "y_max_um": 4},
-        domain_bounds_by_semantic_id={},
-        plane_polygons=(gdstk.rectangle((0, 0), (4, 4)),),
+        plane=DrawnPlane((gdstk.rectangle((0, 0), (4, 4)),)),
     )
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
-        derived_ground_polygons(ground, **arguments)
+    with pytest.raises(ValueError) as error:
+        audited_declared_source(
+            derived_ground_polygons, GridScope(GRID), ground, **arguments
+        )
     return str(error.value)
 
 

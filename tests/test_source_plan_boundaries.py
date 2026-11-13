@@ -13,6 +13,7 @@ from scgsim.geometry.models.input import (
     GeometryBuildInput,
 )
 from scgsim.geometry.source import plan as source_plan
+from scgsim.geometry.source.recipes import Audited
 
 
 def _make_plan(monkeypatch, semantics_by_path):
@@ -62,7 +63,7 @@ def _make_plan(monkeypatch, semantics_by_path):
     monkeypatch.setattr(
         source_plan,
         "source_recipe_map",
-        lambda _runner, jobs: list(jobs),
+        lambda _runner, jobs: Audited(list(jobs)),
     )
     monkeypatch.setattr(source_plan, "stack_records", lambda stack, _metadata: stack)
     monkeypatch.setattr(

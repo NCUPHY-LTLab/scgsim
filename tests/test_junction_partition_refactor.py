@@ -10,7 +10,7 @@ import pytest
 from test_rectangular_junction_geometry import fixture
 
 from scgsim.geometry import with_rectangular_junctions
-from scgsim.geometry.grid.grid import current_grid_context, geometry_grid_scope
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.junctions.contact import (
     JunctionContactRequest,
     junction_contact_inventory,
@@ -83,7 +83,7 @@ def test_local_frame_keeps_complete_ring_order_and_deviation_ledger() -> None:
 def test_incidence_registry_retains_first_parameter_on_collapsed_event_error() -> None:
     """Reject distinct source parameters at one registered point without overwriting it."""
     source, _ = fixture()
-    registry = JunctionModel(source, {}, {}, DEFAULT_FORMAT)
+    registry = JunctionModel(source, {}, {}, DEFAULT_FORMAT, UNGRIDDED)
     registry.events = defaultdict(dict)
     registry.members = defaultdict(set)
     edge = ("source", 0, 0)
@@ -116,33 +116,23 @@ def test_independent_derivations_keep_the_complete_source_bound_payload() -> Non
     )
 
 
-def test_empty_partition_looks_up_and_restores_one_real_grid_scope() -> None:
-    """An empty selection still enters its single declared wrapper and restores the outer scope."""
-    outer = GeometryGridContext(0.25)
-    source = GeometryBuildInput((), (), metadata={"geometry_grid": outer.to_payload()})
+def test_empty_partition_reads_the_declared_grid_once_and_returns_its_input() -> None:
+    """An empty selection still reads the input's declared grid, which refuses an input without one."""
+    grid = GeometryGridContext(0.25)
+    source = GeometryBuildInput((), (), metadata={"geometry_grid": grid.to_payload()})
     calls: list[str] = []
 
     def profile(frame: FrameType, event: str, argument: object) -> None:
         if event == "call" and frame.f_code is geometry_grid_context.__code__:
             calls.append("lookup")
-        elif (
-            event == "c_call"
-            and frame.f_code.co_name == "geometry_grid_scope"
-            and frame.f_globals.get("__name__") == "scgsim.geometry.grid.grid"
-            and getattr(getattr(argument, "__self__", None), "name", None)
-            == "scgsim_geometry_grid"
-        ):
-            operation = getattr(argument, "__name__", None)
-            if operation in {"set", "reset"}:
-                calls.append(operation)
 
-    with geometry_grid_scope(outer):
-        previous = sys.getprofile()
-        try:
-            sys.setprofile(profile)
-            result = partition_junctions(source, (), 0.5)
-        finally:
-            sys.setprofile(previous)
-        assert result is source
-        assert current_grid_context() == outer
-    assert calls == ["lookup", "set", "reset"]
+    previous = sys.getprofile()
+    try:
+        sys.setprofile(profile)
+        result = partition_junctions(source, (), 0.5)
+    finally:
+        sys.setprofile(previous)
+    assert result is source
+    assert calls == ["lookup"]
+    with pytest.raises(ValueError, match="declares no geometry grid"):
+        partition_junctions(GeometryBuildInput((), ()), (), 0.5)

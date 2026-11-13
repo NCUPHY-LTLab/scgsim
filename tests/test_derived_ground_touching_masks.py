@@ -22,9 +22,10 @@ import pytest
 from geometry_grid_fixtures import GRID, rectangle, ring_area
 
 from scgsim.geometry import SemanticEntitySpec
-from scgsim.geometry.grid.grid import geometry_grid_scope
-from scgsim.geometry.source.ground import derived_ground_polygons
+from scgsim.geometry.grid.scope import GridScope
+from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
+from scgsim.geometry.source.recipes import audited_declared_source
 
 gdstk = pytest.importorskip("gdstk")
 
@@ -50,14 +51,13 @@ def derived_ground(die, plane=PLANE):
             "gds_datatype": MASK_LAYER[1],
         },
     )
-    with geometry_grid_scope(GRID):
-        return derived_ground_polygons(
-            entity,
-            polygons_by_layer=read_polygons_by_layer(die),
-            cell_bounds_um={},
-            domain_bounds_by_semantic_id={},
-            plane_polygons=(gdstk.Polygon(plane),),
-        )
+    return audited_declared_source(
+        derived_ground_polygons,
+        GridScope(GRID),
+        entity,
+        polygons_by_layer=read_polygons_by_layer(die),
+        plane=DrawnPlane((gdstk.Polygon(plane),)),
+    ).value
 
 
 def die_with_masks(*masks):
@@ -130,8 +130,7 @@ def strips_rotated_two_ways():
 
 def test_the_flattened_strips_hold_vertex_pairs_one_float_step_apart():
     """The case is real: the shared edge's corners differ by less than 1e-12 um after flattening."""
-    with geometry_grid_scope(GRID):
-        polygons = read_polygons_by_layer(strips_rotated_two_ways())[MASK_LAYER]
+    polygons = read_polygons_by_layer(strips_rotated_two_ways())[MASK_LAYER]
     points = sorted(
         {tuple(point) for polygon in polygons for point in polygon.points.tolist()}
     )

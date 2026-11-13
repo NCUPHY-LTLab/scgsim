@@ -13,8 +13,29 @@ from scgsim.semantics.route_a import geometry_z_range, record_geometry
 def apply_vacuum_region_to_stack(
     stack: Mapping[str, Any], vacuum_region: VacuumRegionSpec
 ) -> Mapping[str, Any]:
-    """Return a detached stack with one canonical automatic vacuum region."""
+    """Return a detached stack with one canonical automatic vacuum region.
 
+    The steps: check the stack holds no explicit airbox, make the vacuum material, bound
+    the stack's bodies, and record the region as those bounds grown by the padding.
+    """
+    raw_regions, materials = _checked_regions_without_airbox(stack, vacuum_region)
+    regions = {str(key): dict(value) for key, value in raw_regions.items()}
+    work = dict(stack)
+    material_catalog = dict(materials)
+    vacuum_id = _materialize_locked_vacuum_material(regions, material_catalog)
+    bounds = _auto_vacuum_bounds(regions, material_catalog, stack.get("layers", ()))
+    regions["VACUUM_REGION"] = _vacuum_region_record(
+        regions.get("VACUUM_REGION"), vacuum_id, bounds, vacuum_region
+    )
+    work["solution_regions"] = regions
+    work["materials"] = material_catalog
+    return {**work, "solution_regions": regions}
+
+
+def _checked_regions_without_airbox(
+    stack: Any, vacuum_region: Any
+) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+    """The stack's solution regions and materials, which must hold no explicit airbox."""
     if not isinstance(stack, Mapping):
         raise TypeError("stack must be a mapping.")
     if not isinstance(vacuum_region, VacuumRegionSpec):
@@ -36,12 +57,16 @@ def apply_vacuum_region_to_stack(
             raise ValueError(
                 "set_vacuum_region cannot be used with explicit airbox solution regions."
             )
-    regions = {str(key): dict(value) for key, value in raw_regions.items()}
-    work = dict(stack)
-    material_catalog = dict(materials)
-    vacuum_id = _materialize_locked_vacuum_material(regions, material_catalog)
-    bounds = _auto_vacuum_bounds(regions, material_catalog, stack.get("layers", ()))
-    region = regions.get("VACUUM_REGION")
+    return raw_regions, materials
+
+
+def _vacuum_region_record(
+    region: Any,
+    vacuum_id: str,
+    bounds: Mapping[str, float],
+    vacuum_region: VacuumRegionSpec,
+) -> dict[str, Any]:
+    """The VACUUM_REGION record: the stack's own if it has one, around the bounds grown by the padding."""
     if region is None:
         region = {
             "role": "solution_region",
@@ -90,10 +115,7 @@ def apply_vacuum_region_to_stack(
             },
         }
     )
-    regions["VACUUM_REGION"] = region
-    work["solution_regions"] = regions
-    work["materials"] = material_catalog
-    return {**work, "solution_regions": regions}
+    return region
 
 
 def _materialize_locked_vacuum_material(
@@ -212,6 +234,21 @@ def _region_envelope_bounds(
             f"solution region {semantic_id!r} has invalid {invalid_coordinates!r} for domain_bounds_um."
         )
 
+    z_min, z_max = _region_z_interval(semantic_id, geometry)
+    return {
+        "x_min_um": float(domain["x_min_um"]),
+        "x_max_um": float(domain["x_max_um"]),
+        "y_min_um": float(domain["y_min_um"]),
+        "y_max_um": float(domain["y_max_um"]),
+        "z_min_um": z_min,
+        "z_max_um": z_max,
+    }
+
+
+def _region_z_interval(
+    semantic_id: str, geometry: Mapping[str, Any]
+) -> tuple[float, float]:
+    """A solution region's Z interval: from its base to its top, or to its base plus its thickness."""
     z_min = geometry.get("z_min_um", geometry.get("z_um"))
     if z_min is None or not _finite(z_min):
         raise ValueError(
@@ -234,14 +271,7 @@ def _region_envelope_bounds(
         raise ValueError(
             f"solution region {semantic_id!r} has non-positive thickness for envelope aggregation."
         )
-    return {
-        "x_min_um": float(domain["x_min_um"]),
-        "x_max_um": float(domain["x_max_um"]),
-        "y_min_um": float(domain["y_min_um"]),
-        "y_max_um": float(domain["y_max_um"]),
-        "z_min_um": z_min,
-        "z_max_um": z_max,
-    }
+    return z_min, z_max
 
 
 def _material_id_for_region(region: Mapping[str, Any]) -> str:

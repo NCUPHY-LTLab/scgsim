@@ -9,7 +9,7 @@ from test_rectangular_junction_geometry import fixture
 
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
-from scgsim.geometry.source.grid import apply_geometry_grid
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
 
 
 def _payload_sha256(value: GeometryBuildInput) -> str:

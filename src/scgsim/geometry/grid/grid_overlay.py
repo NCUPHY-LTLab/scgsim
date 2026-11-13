@@ -613,8 +613,6 @@ class GridAuditor:
         raw: BaseGeometry,
         final: BaseGeometry,
     ) -> ValueError:
-        from shapely import Polygon, union_all  # noqa: PLC0415 - defer native geometry loading until this operation requires it
-
         error = ValueError(
             grid_change_message(
                 "physical geometry collapsed or changed component/hole topology at grid: "
@@ -625,6 +623,19 @@ class GridAuditor:
                 FIX_SHAPE,
             )
         )
+        error.add_note(self._topology_metrics_note(operand_index, value, raw, final))
+        return error
+
+    def _topology_metrics_note(
+        self,
+        operand_index: int,
+        value: GridOperand,
+        raw: BaseGeometry,
+        final: BaseGeometry,
+    ) -> str:
+        """The note that measures where the topology changed: requested, realized and each gridding stage."""
+        from shapely import Polygon, union_all  # noqa: PLC0415 - defer native geometry loading until this operation requires it
+
         try:
 
             def summary(shape):
@@ -684,9 +695,8 @@ class GridAuditor:
                         "unavailable": True,
                         "error_type": type(diagnostic_error).__name__,
                     }
-            error.add_note(
-                "scgsim.grid.physical_topology: " + json.dumps(metrics, sort_keys=True)
+            return "scgsim.grid.physical_topology: " + json.dumps(
+                metrics, sort_keys=True
             )
         except Exception:  # noqa: BLE001 - diagnostic failure cannot replace the original topology error
-            error.add_note("scgsim.grid.physical_topology: metrics unavailable")
-        return error
+            return "scgsim.grid.physical_topology: metrics unavailable"

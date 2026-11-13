@@ -1,6 +1,9 @@
-"""The rectangular partition around a lumped port: its cut rule, exact emission and checks.
+"""The rectangular partition around a lumped port: its cut rule, exact emission and checks; the junction step of ``interpretation``.
 
-In: the effective input and its rectangular-junction requests, each naming a source polygon and its two terminal nets.
-Out: the input with each requested polygon cut into a central rectangle and the end pieces that belong to its terminals, and a ``junction_partitions`` record of the cut.
-Next: ``sgb`` builds from that input and reads the record; it never imports this folder.
+In: the effective input from ``interpretation`` and its rectangular-junction requests, each naming a source polygon
+and its two terminal nets.
+Out: the input with each requested polygon cut into a central rectangle and the end pieces that belong to its
+terminals, put back on the input's grid, and a ``junction_partitions`` record of the cut.
+Next: ``interpretation`` returns that input, and ``sgb`` builds from it and reads the record; SGB never imports
+this folder.
 """

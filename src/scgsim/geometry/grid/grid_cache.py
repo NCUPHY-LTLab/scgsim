@@ -40,6 +40,8 @@ class _Cache:
     lock: Lock = field(default_factory=Lock)
 
 
+# Ambient because it cannot change a result: it only reuses a subdivision already built
+# from equal operands on an equal grid within one call.
 ACTIVE: ContextVar[_Cache | None] = ContextVar("scgsim_grid_work_cache", default=None)
 _T = TypeVar("_T")
 

@@ -169,8 +169,13 @@ def trace_free_boundaries(state: JunctionModel) -> None:
         source_ids = contact_ids | {record["authored_polygon_id"]}
         free = read_boolean_rings(
             boolean(
-                build_polygon_region([state.rings[record["authored_polygon_id"]]]),
-                build_polygon_region([state.rings[pid] for pid in contact_ids]),
+                state.scope,
+                build_polygon_region(
+                    state.scope, [state.rings[record["authored_polygon_id"]]]
+                ),
+                build_polygon_region(
+                    state.scope, [state.rings[pid] for pid in contact_ids]
+                ),
                 "not",
             )
         )

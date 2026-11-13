@@ -19,10 +19,11 @@ import pytest
 from geometry_grid_fixtures import GRID, ring_area
 
 from scgsim.geometry import SemanticEntitySpec, build_gds_stack_geometry_input
-from scgsim.geometry.grid.grid import geometry_grid_scope
 from scgsim.geometry.grid.polygon_ops import flattened_polygons
-from scgsim.geometry.source.ground import derived_ground_polygons
+from scgsim.geometry.grid.scope import GridScope
+from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
+from scgsim.geometry.source.recipes import audited_declared_source
 
 gdstk = pytest.importorskip("gdstk")
 
@@ -201,14 +202,13 @@ def derived_ground(top):
             "gds_datatype": LAYER[1],
         },
     )
-    with geometry_grid_scope(GRID):
-        return derived_ground_polygons(
-            entity,
-            polygons_by_layer=read_polygons_by_layer(top),
-            cell_bounds_um={},
-            domain_bounds_by_semantic_id={},
-            plane_polygons=(gdstk.Polygon(PLANE),),
-        )
+    return audited_declared_source(
+        derived_ground_polygons,
+        GridScope(GRID),
+        entity,
+        polygons_by_layer=read_polygons_by_layer(top),
+        plane=DrawnPlane((gdstk.Polygon(PLANE),)),
+    ).value
 
 
 def test_a_turned_two_rectangle_mask_derives_the_ground_of_the_mask_drawn_in_place():

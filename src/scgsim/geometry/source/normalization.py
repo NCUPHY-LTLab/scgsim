@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from math import isfinite
 from typing import Any
 
@@ -80,110 +81,40 @@ def semantic_layer_records(
     result = []
     semantic_ids: set[str] = set()
     for declaration in declarations:
-        if not isinstance(declaration, Mapping):
-            raise TypeError("component conductor_regions items must be mappings.")
-        unknown = set(declaration) - {
-            "semantic_id",
-            "level",
-            "gds_layer",
-            "net_id",
-            "geometry",
-            "metadata",
-        }
-        if unknown:
-            raise ValueError(
-                "component conductor region contains PDK-owned or unsupported fields "
-                f"{sorted(unknown)!r}."
-            )
-        required = (
-            ("semantic_id", "level", "gds_layer", "net_id")
-            if require_net
-            else ("semantic_id", "level", "gds_layer")
-        )
-        missing = [field for field in required if field not in declaration]
-        if missing:
-            raise ValueError(f"component conductor region lacks fields {missing!r}.")
-        semantic_id = _identifier(declaration["semantic_id"], "semantic_id")
+        semantic_id = _declared_conductor_id(declaration, require_net=require_net)
         if semantic_id in semantic_ids:
             raise ValueError(f"duplicate semantic layer {semantic_id!r}.")
         semantic_ids.add(semantic_id)
-        level_name = _identifier(declaration["level"], f"{semantic_id!r} level")
-        level = _level(levels, level_name)
-        level_info = _level_info(level, level_name)
-        if level_info.get("simulation_role") != "conductor":
-            raise ValueError(
-                f"PDK level {level_name!r} is not declared as a conductor."
-            )
-        material_id, z_um, thickness_um, priority = _level_facts(level, level_name)
-        _require_material(material_id, materials, f"semantic layer {semantic_id!r}")
-        auto_host = "host_void_semantic_id" not in level_info
-        host = (
-            "VACUUM_REGION"
-            if auto_host
-            else _identifier(
-                level_info["host_void_semantic_id"],
-                f"{semantic_id!r} host_void_semantic_id",
-            )
-        )
-        if host not in solution_region_ids and not auto_host:
-            raise ValueError(
-                f"semantic layer {semantic_id!r} host {host!r} is not a solution region."
-            )
+        level = _conductor_level(declaration, semantic_id, levels, materials)
+        host, auto_host = _conductor_host(level, semantic_id, solution_region_ids)
         layer, datatype = gds_layer(declaration["gds_layer"], semantic_id)
-        pdk_geometry = mapping(
-            level_info.get("geometry", {}), f"PDK level {level_name!r} geometry"
-        )
-        component_geometry = mapping(
-            declaration.get("geometry", {}), f"{semantic_id!r} geometry"
-        )
-        unknown_geometry = set(component_geometry) - {
-            "geometry_source",
-            "selector_point_um",
-            "mask_layer",
-            "include_layer",
-            "include_selector_points_um",
-        }
-        if unknown_geometry:
-            raise ValueError(
-                f"component conductor region {semantic_id!r} contains PDK-owned or "
-                f"unsupported geometry fields {sorted(unknown_geometry)!r}."
-            )
-        if "geometry_source" in component_geometry and component_geometry[
-            "geometry_source"
-        ] != pdk_geometry.get("geometry_source"):
-            pdk_geometry = {}
+        geometry = _conductor_geometry(declaration, semantic_id, level)
         component_metadata = mapping(
             declaration.get("metadata", {}), f"{semantic_id!r} metadata"
         )
         part_role = _identifier(
-            level_info.get("part_role"), f"PDK level {level_name!r} part_role"
+            level.info.get("part_role"), f"PDK level {level.name!r} part_role"
         )
         record: dict[str, Any] = {
             "layer": layer,
             "datatype": datatype,
             "semantic_id": semantic_id,
             "role": "metal",
-            "material_id": material_id,
-            "priority": priority,
+            "material_id": level.material_id,
+            "priority": level.priority,
             "part_role": part_role,
             "host_void_semantic_id": host,
             "geometry_kind": "layout_extrusion",
-            "geometry": {
-                "z_um": z_um,
-                "thickness_um": thickness_um,
-                "route_ab_fused_selector_mode": True,
-                **pdk_geometry,
-                **component_geometry,
-            },
+            "geometry": geometry,
             "route_representations": {},
             "metadata": {
-                "logical_layer_id": level_name,
-                "source_layer_name": level_name,
+                "logical_layer_id": level.name,
+                "source_layer_name": level.name,
                 "pdk_semantic_authority": "layer_stack",
                 "component_semantic_authority": "component.info",
                 **component_metadata,
                 PHYSICAL_LAYER_FIELD: _physical_declaration(
-                    level_info, level_name, material_id
+                    level.info, level.name, level.material_id
                 ),
                 **(
                     {"host_reference_origin": "generated_background"}
@@ -199,6 +130,127 @@ def semantic_layer_records(
         }
         result.append(record)
     return result
+
+
+_CONDUCTOR_FIELDS = {
+    "semantic_id",
+    "level",
+    "gds_layer",
+    "net_id",
+    "geometry",
+    "metadata",
+}
+_COMPONENT_GEOMETRY_FIELDS = {
+    "geometry_source",
+    "selector_point_um",
+    "mask_layer",
+    "include_layer",
+    "include_selector_points_um",
+}
+
+
+def _declared_conductor_id(declaration: Any, *, require_net: bool) -> str:
+    """The semantic id of one component conductor declaration, which may carry only its own fields."""
+    if not isinstance(declaration, Mapping):
+        raise TypeError("component conductor_regions items must be mappings.")
+    unknown = set(declaration) - _CONDUCTOR_FIELDS
+    if unknown:
+        raise ValueError(
+            "component conductor region contains PDK-owned or unsupported fields "
+            f"{sorted(unknown)!r}."
+        )
+    required = (
+        ("semantic_id", "level", "gds_layer", "net_id")
+        if require_net
+        else ("semantic_id", "level", "gds_layer")
+    )
+    missing = [field for field in required if field not in declaration]
+    if missing:
+        raise ValueError(f"component conductor region lacks fields {missing!r}.")
+    return _identifier(declaration["semantic_id"], "semantic_id")
+
+
+@dataclass(frozen=True)
+class _ConductorLevel:
+    """The PDK level a conductor declaration names, with the facts the stack records for it."""
+
+    name: str
+    info: dict[str, Any]
+    material_id: str
+    z_um: float
+    thickness_um: float
+    priority: int
+
+
+def _conductor_level(
+    declaration: Mapping[str, Any],
+    semantic_id: str,
+    levels: Mapping[str, Any],
+    materials: Mapping[str, Mapping[str, Any]],
+) -> _ConductorLevel:
+    """The declared level, which the PDK must declare a conductor of a known material."""
+    level_name = _identifier(declaration["level"], f"{semantic_id!r} level")
+    level = _level(levels, level_name)
+    level_info = _level_info(level, level_name)
+    if level_info.get("simulation_role") != "conductor":
+        raise ValueError(f"PDK level {level_name!r} is not declared as a conductor.")
+    material_id, z_um, thickness_um, priority = _level_facts(level, level_name)
+    _require_material(material_id, materials, f"semantic layer {semantic_id!r}")
+    return _ConductorLevel(
+        level_name, level_info, material_id, z_um, thickness_um, priority
+    )
+
+
+def _conductor_host(
+    level: _ConductorLevel, semantic_id: str, solution_region_ids: Mapping[str, Any]
+) -> tuple[str, bool]:
+    """The solution region a conductor's voids belong to, and whether it is the generated vacuum."""
+    auto_host = "host_void_semantic_id" not in level.info
+    host = (
+        "VACUUM_REGION"
+        if auto_host
+        else _identifier(
+            level.info["host_void_semantic_id"],
+            f"{semantic_id!r} host_void_semantic_id",
+        )
+    )
+    if host not in solution_region_ids and not auto_host:
+        raise ValueError(
+            f"semantic layer {semantic_id!r} host {host!r} is not a solution region."
+        )
+    return host, auto_host
+
+
+def _conductor_geometry(
+    declaration: Mapping[str, Any], semantic_id: str, level: _ConductorLevel
+) -> dict[str, Any]:
+    """The conductor's geometry: its level's Z, then the PDK's geometry, then the component's own fields.
+
+    A component that names another geometry source than the PDK's keeps none of the PDK's.
+    """
+    pdk_geometry = mapping(
+        level.info.get("geometry", {}), f"PDK level {level.name!r} geometry"
+    )
+    component_geometry = mapping(
+        declaration.get("geometry", {}), f"{semantic_id!r} geometry"
+    )
+    unknown_geometry = set(component_geometry) - _COMPONENT_GEOMETRY_FIELDS
+    if unknown_geometry:
+        raise ValueError(
+            f"component conductor region {semantic_id!r} contains PDK-owned or "
+            f"unsupported geometry fields {sorted(unknown_geometry)!r}."
+        )
+    if "geometry_source" in component_geometry and component_geometry[
+        "geometry_source"
+    ] != pdk_geometry.get("geometry_source"):
+        pdk_geometry = {}
+    return {
+        "z_um": level.z_um,
+        "thickness_um": level.thickness_um,
+        "route_ab_fused_selector_mode": True,
+        **pdk_geometry,
+        **component_geometry,
+    }
 
 
 def coupon_domain_bounds(component: Any, padding_um: float) -> dict[str, float]:

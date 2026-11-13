@@ -7,7 +7,8 @@ from fractions import Fraction
 import pytest
 from shapely import Point, Polygon, coverage_is_valid, union_all
 
-from scgsim.geometry.grid.grid import GridOperand, build_grid_arrangement
+from scgsim.geometry.grid.arrangement import build_grid_arrangement
+from scgsim.geometry.grid.grid_regions import GridOperand
 from scgsim.geometry.grid.tagged_grid import (
     PointIndex,
     build_tagged_subdivision,

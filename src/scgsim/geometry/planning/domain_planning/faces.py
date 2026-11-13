@@ -6,13 +6,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass
 from typing import Any
 
-from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.booleans import boolean_polygon_region
 from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
     loop_centroid,
     loop_signature,
 )
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.interpretation.envelope import auto_vacuum_sheet_z
 from scgsim.geometry.models.common import INTERFACE_KIND_ORDER, RouteLiteral
 from scgsim.geometry.models.entities import entity_z_range_um, is_vacuum_solution_entity
@@ -68,13 +69,19 @@ def planar_side_solution_regions(
         if not on_boundary and (not contains_plane):
             continue
         overlap = boolean_polygon_region(
-            gdstk, occupied_region, solution_entity_xy_region(gdstk, solution), "and"
+            UNGRIDDED,
+            gdstk,
+            occupied_region,
+            solution_entity_xy_region(gdstk, solution),
+            "and",
         )
         if overlap:
             records.append((solution.semantic_id, overlap))
     for index, (left_id, left_region) in enumerate(records):
         for right_id, right_region in records[index + 1 :]:
-            if boolean_polygon_region(gdstk, left_region, right_region, "and"):
+            if boolean_polygon_region(
+                UNGRIDDED, gdstk, left_region, right_region, "and"
+            ):
                 raise ValueError(
                     f"{owner_id} {side} local adjacency is ambiguous between {left_id!r} and {right_id!r}."
                 )
@@ -83,9 +90,11 @@ def planar_side_solution_regions(
         covered = (
             region
             if not covered
-            else boolean_polygon_region(gdstk, covered, region, "or")
+            else boolean_polygon_region(UNGRIDDED, gdstk, covered, region, "or")
         )
-    uncovered = boolean_polygon_region(gdstk, occupied_region, covered, "not")
+    uncovered = boolean_polygon_region(
+        UNGRIDDED, gdstk, occupied_region, covered, "not"
+    )
     if uncovered:
         raise ValueError(f"{owner_id} {side} has no local solution coverage.")
     return tuple(records)
@@ -124,7 +133,7 @@ def conductor_face_solution_pieces(
     plane_z_um = z_min_um if request.shell_part == "bottom" else z_max_um
     records: list[tuple[str, dict[str, Any]]] = []
     for geometry_ref in request.geometry_refs:
-        occupied_region = gdstk_surface_region(geometry_ref)
+        occupied_region = gdstk_surface_region(UNGRIDDED, geometry_ref)
         adjacent_regions = planar_side_solution_regions(
             request.build_input,
             owner_id=request.entity.semantic_id,
@@ -136,7 +145,9 @@ def conductor_face_solution_pieces(
             records.extend(
                 (
                     (adjacent_id, child)
-                    for child in geometry_refs_from_gdstk_region(geometry_ref, region)
+                    for child in geometry_refs_from_gdstk_region(
+                        UNGRIDDED, geometry_ref, region
+                    )
                 )
             )
     return tuple(

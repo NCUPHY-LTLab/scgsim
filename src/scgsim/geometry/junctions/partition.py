@@ -8,13 +8,9 @@ from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from typing import Any
 
-from scgsim.geometry.grid.grid import (
-    geometry_grid_scope,
-    polygon_world_frame,
-    with_input_grid,
-)
 from scgsim.geometry.grid.grid_regions import grid_change_message
 from scgsim.geometry.grid.planar_loops import PolygonCoordinates
+from scgsim.geometry.grid.scope import UNGRIDDED, GridScope
 from scgsim.geometry.junctions.boolean_geometry import (
     boolean,
     build_polygon_region,
@@ -58,6 +54,7 @@ from scgsim.geometry.junctions.selection import (
 from scgsim.geometry.junctions.terminal import junction_terminal_line
 from scgsim.geometry.models.grid import (
     WALL_COLUMN_LIMIT_STEPS,
+    GeometryGridContext,
     format_length,
     geometry_grid_context,
 )
@@ -69,7 +66,6 @@ from scgsim.geometry.models.input import (
 from scgsim.geometry.models.junctions import JunctionGeometry, junction_net_id
 
 
-@with_input_grid
 def partition_junctions(
     build_input: GeometryBuildInput,
     junctions: Sequence[JunctionGeometry],
@@ -77,7 +73,9 @@ def partition_junctions(
     *,
     output_format: JunctionPartitionFormat = DEFAULT_FORMAT,
 ):
-    """Derive terminal-owned ends and a complete central rectangle once."""
+    """Derive terminal-owned ends and a complete central rectangle once, on the input's declared grid."""
+    # An input without a declared grid is refused before anything else.
+    geometry_grid_context(build_input)
     if not junctions:
         return build_input
     if output_format.metadata_key in build_input.metadata:
@@ -108,7 +106,9 @@ class _JunctionPartitionPlanner:
     junctions: Sequence[JunctionGeometry]
     step: float
     output_format: JunctionPartitionFormat
+    grid: GeometryGridContext = field(init=False)
     grid_um: float | None = field(init=False)
+    selection: GridScope = field(init=False)
     originals: dict[str, LayoutPolygonSpec] = field(init=False)
     authored_ids: set[str] = field(init=False)
     entities: dict[str, SemanticEntitySpec] = field(init=False)
@@ -185,18 +185,18 @@ class _JunctionPartitionPlanner:
             self.sheet.metadata.get("source_name"),
             self.sheet.layer,
         )
-        with self.selection_grid():
-            self.read_conductors()
-            self.read_outline_meetings()
-            self.find_corridor()
-            self.check_cut_room()
-            self.choose_ends()
-            self.check_partition()
-            self.record_ends()
-            self.record_junction()
+        self.selection = self.selection_scope()
+        self.read_conductors()
+        self.read_outline_meetings()
+        self.find_corridor()
+        self.check_cut_room()
+        self.choose_ends()
+        self.check_partition()
+        self.record_ends()
+        self.record_junction()
         self.model_sheet()
 
-    def selection_grid(self):
+    def selection_scope(self) -> GridScope:
         """The grid the local selection's Booleans run on.
 
         Along x or y the world grid lines are local ones, so the Booleans run in the polygon
@@ -206,21 +206,15 @@ class _JunctionPartitionPlanner:
         and the central corners on grid points.
         """
         if not self.lattice.unit:
-            return geometry_grid_scope(None)
-        return polygon_world_frame(
-            (
-                self.dx,
-                self.px,
-                self.dy,
-                self.py,
-                self.origin[0] * self.dx + self.origin[1] * self.px,
-                self.origin[0] * self.dy + self.origin[1] * self.py,
-            )
-        )
+            return UNGRIDDED
+        a, b, c, d = self.dx, self.px, self.dy, self.py
+        x, y = self.origin
+        return GridScope(self.grid).placed((a, b, c, d, x * a + y * b, x * c + y * d))
 
     def initialize(self):
         """Index immutable authored polygons, source Entities and junction identities."""
-        self.grid_um = geometry_grid_context(self.build_input).grid_size_um
+        self.grid = geometry_grid_context(self.build_input)
+        self.grid_um = self.grid.grid_size_um
         self.originals = {p.polygon_id: p for p in self.build_input.polygons}
         # A port sheet keeps its metadata, where the grid realization records it as drawn.
         self.originals.update(
@@ -332,7 +326,7 @@ class _JunctionPartitionPlanner:
     def find_corridor(self):
         """Verify terminal ordering and complete clear-corridor containment."""
         terminals = (self.junction.terminal_a_net, self.junction.terminal_b_net)
-        if contacts(self.other, self.span, self.width) is not None:
+        if contacts(self.selection, self.other, self.span, self.width) is not None:
             raise ValueError(
                 self.where.refusal(
                     "third-net closed contact with authored junction sheet",
@@ -342,8 +336,8 @@ class _JunctionPartitionPlanner:
                 )
             )
         ca, cb = (
-            contacts(self.own_a, self.span, self.width),
-            contacts(self.own_b, self.span, self.width),
+            contacts(self.selection, self.own_a, self.span, self.width),
+            contacts(self.selection, self.own_b, self.span, self.width),
         )
         if ca is None or cb is None:
             raise ValueError("unsupported junction contact ordering or clear corridor")
@@ -367,14 +361,19 @@ class _JunctionPartitionPlanner:
                         raise ValueError(
                             "unsupported corridor side-boundary metal contact"
                         )
-        self.sheet_region = build_polygon_region(rectangle(0, 0, self.span, self.width))
+        self.sheet_region = build_polygon_region(
+            self.selection, rectangle(0, 0, self.span, self.width)
+        )
         self.free = boolean(
-            self.sheet_region, build_polygon_region([*self.own_a, *self.own_b]), "not"
+            self.selection,
+            self.sheet_region,
+            build_polygon_region(self.selection, [*self.own_a, *self.own_b]),
+            "not",
         )
         corridor = build_polygon_region(
-            rectangle(self.lower, 0, self.upper, self.width)
+            self.selection, rectangle(self.lower, 0, self.upper, self.width)
         )
-        if boolean(corridor, self.free, "not"):
+        if boolean(self.selection, corridor, self.free, "not"):
             raise ValueError(
                 "unsupported corridor containment; no general search performed"
             )
@@ -491,6 +490,7 @@ class _JunctionPartitionPlanner:
         requested, cut = self.cuts.position(index)
         left = side.left
         end, evidence = end_candidate(
+            self.selection,
             self.end_source(side),
             side.own,
             side.foreign,
@@ -541,15 +541,19 @@ class _JunctionPartitionPlanner:
             if any((any(section(rings, 0, cut, 0, self.width)) for rings in wrong)):
                 raise ValueError("wrong-net RLC end/corner contact")
         parts = [
-            build_polygon_region(self.end_a),
-            build_polygon_region(self.central),
-            build_polygon_region(self.end_b),
+            build_polygon_region(self.selection, self.end_a),
+            build_polygon_region(self.selection, self.central),
+            build_polygon_region(self.selection, self.end_b),
         ]
-        union = boolean([p for part in parts for p in part], [], "or")
+        union = boolean(self.selection, [p for part in parts for p in part], [], "or")
         if (
-            boolean(self.free, union, "not") or boolean(union, self.sheet_region, "not")
+            boolean(self.selection, self.free, union, "not")
+            or boolean(self.selection, union, self.sheet_region, "not")
         ) or any(
-            (boolean(parts[i], parts[j], "and") for i, j in ((0, 1), (0, 2), (1, 2)))
+            (
+                boolean(self.selection, parts[i], parts[j], "and")
+                for i, j in ((0, 1), (0, 2), (1, 2))
+            )
         ):
             raise ValueError(
                 "numerical junction geometry failure: partition coverage/interiors differ"
@@ -567,7 +571,7 @@ class _JunctionPartitionPlanner:
                 for eid, polygons in self.by_entity.items()
                 if junction_net_id(self.entities[eid]) == net
                 and (
-                    own_contact(end, polygons)
+                    own_contact(self.selection, end, polygons)
                     if end
                     else covered(polygons, 0, cut, 0, self.width)
                 )
@@ -698,7 +702,9 @@ class _JunctionPartitionPlanner:
         for entity_id, polygons in self.by_entity.items():
             net = junction_net_id(self.entities[entity_id])
             points = (
-                contact_points(polygons, self.span, self.width) if of_net(net) else []
+                contact_points(self.selection, polygons, self.span, self.width)
+                if of_net(net)
+                else []
             )
             if points:
                 found.append(
@@ -766,7 +772,7 @@ class _JunctionPartitionPlanner:
             self.where.place(
                 [(x / PRECISION_UM, y / PRECISION_UM) for x, y in piece.points]
             )
-            for piece in end_region(self.end_source(side), section)
+            for piece in end_region(self.selection, self.end_source(side), section)
         ]
         words = END_REFUSALS.get(reason, "has parts that meet only at a point")
         where = f", at {', '.join(pieces)}" if pieces else ""
