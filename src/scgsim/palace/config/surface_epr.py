@@ -15,17 +15,19 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from scgsim.geometry.sgb.records.grid import Grid
-from scgsim.geometry.surface_epr.specs import margins_of, positive_real
+from scgsim.geometry.surface_epr.specs import positive_real
 
 from ..mesh.physical_groups import Groups, rows_of
+from ..source.surface_epr import SurfaceEprSpec, SurfaceEprSpecs
+from .index import InsetSelection, SurfaceEprEntry, SurfaceRow
 
 
 def build_surface_epr_postprocessing(
     groups: Groups,
-    specs: Mapping[str, Mapping[str, Any]],
+    specs: SurfaceEprSpecs,
     *,
     model_l0_m: float = 1e-6,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[SurfaceEprEntry]]:
     """Emit Palace ``Dielectric`` rows and their index entries (index map schema 3) from the Surface-EPR rows of ``groups``.
 
     For each spec (interface type) and each surface unit of that type -- an unbanded row, or all bands of
@@ -36,17 +38,18 @@ def build_surface_epr_postprocessing(
     if not positive_real(model_l0_m):
         raise ValueError("Model.L0 must be a finite positive length in metres.")
     rows: list[dict[str, Any]] = []
-    index_map: list[dict[str, Any]] = []
+    entries: list[SurfaceEprEntry] = []
     margin_requests: list[_MarginRequest] = []
     all_rows = rows_of(groups)
     members: set[tuple[str, int]] = set()
-    for interface_type, preset in sorted(specs.items()):
-        units = _units(all_rows, interface_type, preset)
-        if not units and preset["required"]:
+    for interface_type, spec in sorted(specs.by_type.items(), key=lambda item: item[0]):
+        units = _units(all_rows, spec)
+        if not units and spec.required:
             raise ValueError(
-                f"Required Surface EPR {interface_type} has no matching structured group."
+                f"Required Surface EPR {interface_type} has no matching structured group: "
+                f"pass required=False in its spec, or set_surface_epr() without {interface_type}."
             )
-        snapshot = _spec_snapshot(preset, model_l0_m)
+        snapshot = _spec_snapshot(spec, model_l0_m)
         for unit in units:
             attributes = _unit_attributes(unit.rows)
             for attribute in attributes:
@@ -55,9 +58,17 @@ def build_surface_epr_postprocessing(
                 members.add((interface_type, attribute))
             index = len(rows) + 1
             rows.append(_dielectric_row(index, interface_type, attributes, snapshot))
-            entry = _index_entry(index, unit.name, unit.rows, attributes, snapshot)
-            entry["baseline_index"] = index
-            index_map.append(entry)
+            entries.append(
+                SurfaceEprEntry(
+                    index=index,
+                    entry_name=unit.name,
+                    attributes=attributes,
+                    physical_names=sorted({row["group"] for row in unit.rows}),
+                    rows=tuple(_surface_row(row) for row in unit.rows),
+                    epr_spec=snapshot,
+                    baseline_index=index,
+                )
+            )
             margin_requests.extend(
                 _MarginRequest(index, unit, margin_index, margin)
                 for margin_index, margin in enumerate(unit.margins_um)
@@ -69,21 +80,22 @@ def build_surface_epr_postprocessing(
             continue  # nothing of this unit lies that far from a gap edge (unbanded, or a sidewall)
         attributes = _unit_attributes(selected)
         index = len(rows) + 1
-        spec = _spec_snapshot(specs[request.unit.interface_type], model_l0_m)
-        rows.append(
-            _dielectric_row(index, request.unit.interface_type, attributes, spec)
+        interface_type = request.unit.interface_type
+        snapshot = _spec_snapshot(specs.by_type[interface_type], model_l0_m)
+        rows.append(_dielectric_row(index, interface_type, attributes, snapshot))
+        entries.append(
+            SurfaceEprEntry(
+                index=index,
+                entry_name=f"{request.unit.name}__inset_{request.margin_index}",
+                attributes=attributes,
+                physical_names=sorted({row["group"] for row in selected}),
+                rows=tuple(_surface_row(row) for row in selected),
+                epr_spec=snapshot,
+                baseline_index=request.baseline_index,
+                inset=request.description(selected),
+            )
         )
-        entry = _index_entry(
-            index,
-            f"{request.unit.name}__inset_{request.margin_index}",
-            selected,
-            attributes,
-            spec,
-        )
-        entry["baseline_index"] = request.baseline_index
-        entry["inset"] = request.description(selected)
-        index_map.append(entry)
-    return rows, index_map
+    return rows, entries
 
 
 @dataclass(frozen=True)
@@ -138,27 +150,24 @@ class _MarginRequest:
         }
         return tuple(row for row in self.unit.rows if row["group"] in groups)
 
-    def description(self, selected: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    def description(self, selected: Sequence[Mapping[str, Any]]) -> InsetSelection:
         """How the row was selected, for the index map."""
-        return {
-            "margin_um": self.margin_um,
-            "margin_index": self.margin_index,
-            "first_band": self.first_band(),
-            "bands": sorted(row["band"] for row in selected),
-        }
+        return InsetSelection(
+            margin_um=self.margin_um,
+            margin_index=self.margin_index,
+            first_band=self.first_band(),
+            bands=sorted(row["band"] for row in selected),
+        )
 
 
-def _units(
-    rows: Mapping[str, Mapping[str, Any]],
-    interface_type: str,
-    preset: Mapping[str, Any],
-) -> list[_Unit]:
-    """The surface units of one interface type, in sorted row order.
+def _units(rows: Mapping[str, Mapping[str, Any]], spec: SurfaceEprSpec) -> list[_Unit]:
+    """The surface units of the spec's interface type, in sorted row order.
 
     A row with no band is a unit of its own (a sidewall, or a face SGB did not band).  The banded rows of one
     band family are one unit: SGB gives each face one family, whose bands are listed in the sidecar.
     """
-    face_filter = preset.get("face_kinds")
+    interface_type = spec.interface_type
+    face_filter = spec.face_kinds
     singles: list[_Unit] = []
     by_family: dict[str, list[Mapping[str, Any]]] = {}
     for row_id, row in sorted(rows.items()):
@@ -171,7 +180,7 @@ def _units(
         else:
             by_family.setdefault(row["family"], []).append({**row, "row": row_id})
     banded = [
-        _family_unit(interface_type, preset, sorted(members, key=_band_order))
+        _family_unit(spec, sorted(members, key=_band_order))
         for members in by_family.values()
     ]
     return sorted(
@@ -192,13 +201,11 @@ def _unbanded_names_apart(singles: list[_Unit], banded: list[_Unit]) -> list[_Un
     ]
 
 
-def _family_unit(
-    interface_type: str, preset: Mapping[str, Any], members: Sequence[Mapping[str, Any]]
-) -> _Unit:
+def _family_unit(spec: SurfaceEprSpec, members: Sequence[Mapping[str, Any]]) -> _Unit:
     first = members[0]
     return _Unit(
         _unit_label(first),
-        interface_type,
+        spec.interface_type,
         tuple(members),
         family={
             "margins_um": first["margins_um"],
@@ -206,7 +213,7 @@ def _family_unit(
             "grid_um": first["grid_um"],
             "bands": first["family_bands"],
         },
-        margins_um=tuple(margins_of(preset, first["entities"])),
+        margins_um=tuple(spec.margins_for(first["entities"])),
     )
 
 
@@ -226,15 +233,11 @@ def _unit_attributes(rows: Sequence[Mapping[str, Any]]) -> list[int]:
     return sorted({attribute for row in rows for attribute in row["attribute_sides"]})
 
 
-def _spec_snapshot(preset: Mapping[str, Any], model_l0_m: float) -> dict[str, Any]:
+def _spec_snapshot(spec: SurfaceEprSpec, model_l0_m: float) -> dict[str, Any]:
     """The spec with its thickness in native units, as recorded in the index map."""
-    native_thickness = (
-        preset["film_thickness_m"] / float(model_l0_m)
-        if "film_thickness_m" in preset
-        else preset["thickness"]
-    )
+    native_thickness = spec.native_thickness(model_l0_m)
     return {
-        **preset,
+        **spec.to_payload(),
         "thickness": native_thickness,
         "film_thickness_m": native_thickness * float(model_l0_m),
         "model_l0_m": float(model_l0_m),
@@ -261,39 +264,19 @@ def _dielectric_row(
     }
 
 
-def _index_entry(
-    index: int,
-    name: str,
-    rows: Sequence[Mapping[str, Any]],
-    attributes: list[int],
-    snapshot: Mapping[str, Any],
-) -> dict[str, Any]:
-    return {
-        "section": "Boundaries.Postprocessing.Dielectric",
-        "index": index,
-        "entry_name": name,
-        "role": "surface_epr",
-        "attributes": attributes,
-        "physical_names": sorted({row["group"] for row in rows}),
-        "metadata": {"rows": [_row_metadata(row) for row in rows]},
-        "epr_spec": dict(snapshot),
-    }
-
-
-def _row_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
+def _surface_row(row: Mapping[str, Any]) -> SurfaceRow:
     """What a reader needs to know about one sidecar row: identity, sides, owners, Net and lineage."""
-    return {
-        "row": row["row"],
-        "group": row["group"],
-        "interface_type": row["interface_type"],
-        "face_kind": row["face_kind"],
-        "band": row["band"],
-        "side": row["side"],
-        "face_sides": row["face_sides"],
-        "shared_face_group": row["shared_face_group"],
-        "entities": list(row["entities"]),
-        "net": row["net"],
-        "attributes": sorted(row["attribute_sides"]),
-        # Lineage membership is attribution only: it weights nothing.
-        "lineage": {"membership": row["membership"]},
-    }
+    return SurfaceRow(
+        row=row["row"],
+        group=row["group"],
+        interface_type=row["interface_type"],
+        face_kind=row["face_kind"],
+        band=row["band"],
+        side=row["side"],
+        face_sides=row["face_sides"],
+        shared_face_group=row["shared_face_group"],
+        entities=list(row["entities"]),
+        net=row["net"],
+        attributes=sorted(row["attribute_sides"]),
+        membership=row["membership"],
+    )

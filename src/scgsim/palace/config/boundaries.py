@@ -11,7 +11,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from .config_models import TerminalBinding, optional_string
+from .config_models import ElectrostaticSettings, TerminalBinding, optional_string
+from .index import TerminalEntry
 
 
 @dataclass
@@ -61,7 +62,7 @@ class _BoundaryOutput:
     """Rows and identities assembled for the final solver boundary map."""
 
     terminal_rows: list[dict[str, object]]
-    terminal_index: list[dict[str, Any]]
+    terminal_index: list[TerminalEntry]
     requested_grounds: list[str]
     physical_ground_components: set[str]
     exterior_attrs: set[int]
@@ -73,10 +74,9 @@ def build_electrostatic_boundaries(
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
     terminals: Sequence[TerminalBinding],
     ground_net_ids: Sequence[str],
-    unassigned_conductor_policy: str,
-    exterior_boundary_policy: str,
-) -> tuple[dict[str, object], list[dict[str, Any]], dict[str, Any]]:
-    """Build exact-net terminal and physical/exterior ground assignments."""
+    electrostatic: ElectrostaticSettings,
+) -> tuple[dict[str, object], list[TerminalEntry], dict[str, Any]]:
+    """Build exact-net terminal and physical/exterior ground assignments, under the problem's boundary policies."""
     state = _BoundaryState(groups)
     state.collect_conductors()
     terminal_rows, terminal_index, assigned = _terminal_bindings(state, terminals)
@@ -84,9 +84,14 @@ def build_electrostatic_boundaries(
         state, ground_net_ids, assigned
     )
     _assign_unrequested_conductors(
-        state, assigned, physical_ground_components, unassigned_conductor_policy
+        state,
+        assigned,
+        physical_ground_components,
+        electrostatic.unassigned_conductor_policy,
     )
-    exterior_attrs, exterior_names = _exterior_grounds(groups, exterior_boundary_policy)
+    exterior_attrs, exterior_names = _exterior_grounds(
+        groups, electrostatic.exterior_boundary_policy
+    )
     return _assemble_boundaries(
         state,
         _BoundaryOutput(
@@ -120,9 +125,9 @@ def _conductor_identity(info: Mapping[str, Any]) -> tuple[str, str, tuple[int, .
 
 def _terminal_bindings(
     state: _BoundaryState, terminals: Sequence[TerminalBinding]
-) -> tuple[list[dict[str, object]], list[dict[str, Any]], set[str]]:
+) -> tuple[list[dict[str, object]], list[TerminalEntry], set[str]]:
     rows: list[dict[str, object]] = []
-    index_rows: list[dict[str, Any]] = []
+    index_rows: list[TerminalEntry] = []
     assigned: set[str] = set()
     seen_nets: set[str] = set()
     for index, terminal in enumerate(terminals, start=1):
@@ -191,27 +196,20 @@ def _terminal_index_entry(
     index: int,
     matching: list[str],
     attrs: list[int],
-) -> dict[str, Any]:
-    name = str(terminal.name).strip()
-    net_id = str(terminal.net_id).strip()
+) -> TerminalEntry:
     physical_names = sorted(
         physical_name
         for physical_name, info in state.groups.get("pec_surfaces", {}).items()
         if optional_string(info.get("entity")) in matching
     )
-    return {
-        "section": "Boundaries.Terminal",
-        "index": index,
-        "entry_name": name,
-        "role": "terminal",
-        "attributes": attrs,
-        "physical_names": physical_names,
-        "metadata": {"net_id": net_id, "conductor_component_ids": matching},
-        "terminal_name": name,
-        "net_id": net_id,
-        "conductor_component_ids": matching,
-        "terminal_attributes": attrs,
-    }
+    return TerminalEntry(
+        index=index,
+        name=str(terminal.name).strip(),
+        net_id=str(terminal.net_id).strip(),
+        conductor_component_ids=matching,
+        attributes=attrs,
+        physical_names=physical_names,
+    )
 
 
 def _physical_grounds(
@@ -277,7 +275,7 @@ def _exterior_grounds(
 def _assemble_boundaries(
     state: _BoundaryState,
     output: _BoundaryOutput,
-) -> tuple[dict[str, object], list[dict[str, Any]], dict[str, Any]]:
+) -> tuple[dict[str, object], list[TerminalEntry], dict[str, Any]]:
     if set(state.attribute_components).intersection(output.exterior_attrs):
         raise ValueError("conductor and exterior boundary attributes must be disjoint.")
     boundary_map: dict[str, object] = {"Terminal": output.terminal_rows}
@@ -296,10 +294,10 @@ def _assemble_boundaries(
 
 
 def _validate_terminal_map(
-    terminal_index: list[dict[str, Any]], terminal_rows: list[dict[str, object]]
+    terminal_index: list[TerminalEntry], terminal_rows: list[dict[str, object]]
 ) -> None:
     index_mapping = sorted(
-        (entry["index"], list(entry["attributes"])) for entry in terminal_index
+        (entry.index, list(entry.attributes)) for entry in terminal_index
     )
     boundary_mapping = sorted(
         (entry["Index"], cast(list[int], entry["Attributes"]))

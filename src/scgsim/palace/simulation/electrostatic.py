@@ -12,14 +12,15 @@ from typing import Any, ClassVar, Literal
 
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
-from ..config.config import (
+from ..config.config import build_electrostatic_config
+from ..config.config_models import (
+    ElectrostaticConfigBuildResult,
+    ElectrostaticSettings,
     TerminalBinding,
-    build_electrostatic_config,
-    configure_numerical_controls,
 )
-from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
-from ..source.transforms import validate_non_negative_int, validate_nonempty_string
-from .core import PalaceSimulation
+from ..config.numerical import NumericalControls
+from ..source.transforms import validate_nonempty_string
+from .core import PalaceSimulation, index_map
 
 
 @dataclass
@@ -47,7 +48,7 @@ class ElectrostaticSim(PalaceSimulation):
     save_fields: int = 0
     unassigned_conductor_policy: Literal["ground", "error"] = "ground"
     exterior_boundary_policy: Literal["none", "ground"] = "none"
-    numerical: dict[str, Any] = field(default_factory=configure_numerical_controls)
+    numerical: NumericalControls = field(default_factory=NumericalControls)
 
     problem = "Electrostatic"
     # Electrostatic needs its Surface-EPR specs before mesh(); Eigenmode does not.
@@ -87,27 +88,24 @@ class ElectrostaticSim(PalaceSimulation):
     ) -> None:
         """Set Electrostatic boundary policies and saved-field controls.
 
+        All values are checked (``ElectrostaticSettings``) before any is stored.
+
         Raises:
-            ValueError: a policy is not one of its values, or an exterior ground is asked for while
-                unassigned conductors are grounded.
+            ValueError: a policy is not one of its values, an exterior ground is asked for while
+                unassigned conductors are grounded, or ``save_fields`` is negative.
+            TypeError: ``save_fields`` is not an integer.
         """
-        if unassigned_conductor_policy not in {"ground", "error"}:
-            raise ValueError("unassigned_conductor_policy must be 'ground' or 'error'.")
-        if exterior_boundary_policy not in {"none", "ground"}:
-            raise ValueError("exterior_boundary_policy must be 'none' or 'ground'.")
-        if (
-            exterior_boundary_policy == "ground"
-            and unassigned_conductor_policy != "error"
-        ):
-            raise ValueError(
-                "exterior ground requires unassigned_conductor_policy='error'."
-            )
-        self.save_fields = validate_non_negative_int(save_fields, "save_fields")
-        self.unassigned_conductor_policy = unassigned_conductor_policy
-        self.exterior_boundary_policy = exterior_boundary_policy
+        settings = ElectrostaticSettings(
+            save_fields=save_fields,
+            unassigned_conductor_policy=unassigned_conductor_policy,
+            exterior_boundary_policy=exterior_boundary_policy,
+        )
+        self.save_fields = settings.save_fields
+        self.unassigned_conductor_policy = settings.unassigned_conductor_policy
+        self.exterior_boundary_policy = settings.exterior_boundary_policy
         self._fall_back("set_electrostatic")
 
-    def set_numerical(  # noqa: PLR0913 - preserve the public keyword controls.
+    def set_numerical(  # noqa: PLR0913 -- the public keyword controls of set_numerical
         self,
         *,
         order: int = 1,
@@ -128,7 +126,7 @@ class ElectrostaticSim(PalaceSimulation):
         output_paraview: bool | None = None,
         output_grid_function: bool | None = None,
     ) -> None:
-        """Set solver, FEM, AMR, and output controls for the next config write.
+        """Set solver, FEM, AMR, and output controls for the next config write; stored as ``NumericalControls``.
 
         ``amr_max_passes`` is Palace ``MaxIts``. ``amr_nonconformal`` is Palace
         ``Model.Refinement.Nonconformal`` and defaults to ``False``. Set
@@ -136,30 +134,39 @@ class ElectrostaticSim(PalaceSimulation):
         ``amr_nc_levels`` sets native ``MaxNCLevels``; zero means no limit.
         Omitted Krylov and nonconformal-level controls retain current choices.
         Explicit ``ksp_type="Default"`` uses Palace's problem-specific default.
+
+        How it differs from ``EigenmodeSim.set_numerical``: here an omitted ``amr_max_passes``,
+        ``amr_nonconformal``, ``amr_tolerance`` or ``amr_update_fraction`` takes its default (0, False, 0.01,
+        None); there each keeps its current value.
+
+        Raises:
+            ValueError: a control is out of its range or choices.
+            TypeError: a control has the wrong type.
         """
         current = self.numerical
-        self.numerical = configure_numerical_controls(
-            order=order,
-            tolerance=tolerance,
-            max_iterations=max_iterations,
-            solver_type=solver_type,
-            preconditioner=preconditioner,
-            device=device,
-            ksp_type=current.get("ksp_type") if ksp_type is None else ksp_type,
-            amr_nc_levels=(
-                current.get("amr_nc_levels") if amr_nc_levels is None else amr_nc_levels
-            ),
-            amr_max_passes=amr_max_passes,
-            amr_nonconformal=amr_nonconformal,
-            amr_tolerance=amr_tolerance,
-            amr_update_fraction=amr_update_fraction,
-            save_adapt_iterations=save_adapt_iterations,
-            save_adapt_mesh=save_adapt_mesh,
-            estimator_mg=estimator_mg,
-            output_paraview=output_paraview,
-            output_grid_function=output_grid_function,
+        self._set_numerical(
+            NumericalControls(
+                order=order,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
+                solver_type=solver_type,
+                preconditioner=preconditioner,
+                device=device,
+                ksp_type=current.ksp_type if ksp_type is None else ksp_type,
+                amr_max_passes=amr_max_passes,
+                amr_nonconformal=amr_nonconformal,
+                amr_nc_levels=current.amr_nc_levels
+                if amr_nc_levels is None
+                else amr_nc_levels,
+                amr_tolerance=amr_tolerance,
+                amr_update_fraction=amr_update_fraction,
+                save_adapt_iterations=save_adapt_iterations,
+                save_adapt_mesh=save_adapt_mesh,
+                estimator_mg=estimator_mg,
+                output_paraview=output_paraview,
+                output_grid_function=output_grid_function,
+            )
         )
-        self._fall_back("set_numerical")
 
     def write_config(self) -> Path:
         """Write ``config.json`` and its metadata for the current mesh, terminals, grounds and policies.
@@ -168,46 +175,44 @@ class ElectrostaticSim(PalaceSimulation):
             The path of the written ``config.json``.
 
         Raises:
-            ValueError: ``mesh()`` has not built the current mesh, or the config refuses the bindings.
+            ValueError: ``mesh()`` has not built the current mesh, AMR is left open, or the config refuses
+                the bindings.
             FileNotFoundError: a file of the current mesh is gone from the run folder.
         """
-        mesh, materials = self._start_config()
-        surface_epr_specs = self._require("write_config", self.surface_epr_specs)
+        mesh, common = self._start_config()
         result = build_electrostatic_config(
-            groups=mesh.groups,
+            common,
             terminals=self.terminals,
             ground_net_ids=self.ground_net_ids,
-            materials=materials,
+            electrostatic=self._electrostatic_settings(),
+        )
+        return self._finish_config(mesh, result.config, self._metadata(result))
+
+    def _electrostatic_settings(self) -> ElectrostaticSettings:
+        """The saved fields and policies as the config reads them, checked again in case an attribute was assigned."""
+        return ElectrostaticSettings(
             save_fields=self.save_fields,
             unassigned_conductor_policy=self.unassigned_conductor_policy,
             exterior_boundary_policy=self.exterior_boundary_policy,
-            mesh_path=mesh.mesh_path,
-            surface_epr_specs=surface_epr_specs,
-            numerical=self.numerical,
         )
-        index_map = {
-            "schema_version": INDEX_MAP_SCHEMA_VERSION,
-            "entries": [
-                *result.terminal_index_map,
-                *result.domain_energy_index_map,
-                *result.surface_epr_index_map,
-            ],
-            "ground_boundary": result.ground_boundary_resolution,
-        }
-        return self._finish_config(
-            mesh,
-            result.config,
-            metadata=(
-                ("palace_index_map.json", index_map),
-                (
-                    "palace_material_resolution.json",
-                    {
-                        "schema_version": 1,
-                        "solution_volumes": result.material_resolution,
-                    },
+
+    def _metadata(
+        self, result: ElectrostaticConfigBuildResult
+    ) -> tuple[tuple[str, dict[str, Any]], ...]:
+        """The ``metadata/`` files written beside ``config.json``, in the order they are written."""
+        return (
+            (
+                "palace_index_map.json",
+                index_map(
+                    result.index_entries,
+                    ground_boundary=result.ground_boundary_resolution,
                 ),
-                ("palace_numerical_controls.json", self.numerical),
             ),
+            (
+                "palace_material_resolution.json",
+                {"schema_version": 1, "solution_volumes": result.material_resolution},
+            ),
+            ("palace_numerical_controls.json", self.numerical.to_payload()),
         )
 
     # ---- The core's questions ------------------------------------------------------------------------

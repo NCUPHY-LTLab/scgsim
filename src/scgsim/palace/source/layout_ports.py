@@ -14,28 +14,13 @@ target layer and its direction.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
-from scgsim.geometry.models.input import VacuumRegionSpec
-from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
-from ..config.config import LayoutPortBinding
-from .ports import RequestedPort
-from .transforms import RouteAThinFilm
-from .workflow import prepare_mesh_input
-
-
-@dataclass(frozen=True)
-class GeometrySettings:
-    """The simulation settings the geometry preparation reads, as the simulation holds them."""
-
-    route: str
-    route_a_thin_film: RouteAThinFilm | None
-    approximation_profile: ApproximationProfile | None
-    vacuum_region: VacuumRegionSpec | None
-    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None
+from .ports import LayoutPortBinding, RequestedPort
+from .workflow import GeometrySettings, prepare_mesh_input
 
 
 @dataclass(frozen=True)
@@ -66,25 +51,22 @@ def layout_geometry_request(
         ([], None) if ports is None else _resolve_plan_ports(plan, ports)
     )
     source_stack = plan.stack
+    if "VACUUM_REGION" in source_stack["solution_regions"]:
+        settings = replace(settings, vacuum_region=None)  # the plan's own vacuum
     prepared = prepare_mesh_input(
         stack=source_stack,
-        route=settings.route,
-        route_a_thin_film=settings.route_a_thin_film,
-        approximation_profile=settings.approximation_profile,
-        vacuum_region=(
-            None
-            if "VACUUM_REGION" in source_stack["solution_regions"]
-            else settings.vacuum_region
-        ),
         build_input=plan.geometry_input,
+        settings=settings,
         port_sheet_source_layers=source_records,
     )
+    specs = settings.surface_epr_specs
     return LayoutGeometryRequest(
         resolved,
         {
             "stack": prepared.stack,
             "route": settings.route,
-            "surface_epr_specs": settings.surface_epr_specs,
+            # The geometry build reads the normalized specs as a mapping.
+            "surface_epr_specs": None if specs is None else specs.to_payload(),
             "source_gds_bytes": plan.gds_bytes,
             "source_geometry_input": prepared.geometry_input,
             "representation_context": prepared.physical_plan.context,
@@ -127,7 +109,6 @@ def _resolve_plan_ports(
 
 
 __all__ = [
-    "GeometrySettings",
     "LayoutGeometryRequest",
     "layout_geometry_request",
 ]

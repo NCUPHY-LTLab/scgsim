@@ -23,10 +23,12 @@ from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
-from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 
-from ..config.config import LayoutPortBinding
+from ..config.config_models import ConfigInput
+from ..config.files import persist_problem_files
+from ..config.index import IndexEntry
+from ..config.numerical import NumericalControls
 from ..mesh.build import (
     MeshBuildResult,
     RouteGeometry,
@@ -35,21 +37,19 @@ from ..mesh.build import (
 )
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
+from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
 from ..run.handoff import HandoffPlan, prepare_handoff
 from ..source.inputs import stack_materials
-from ..source.layout_ports import (
-    GeometrySettings,
-    LayoutGeometryRequest,
-    layout_geometry_request,
-)
+from ..source.layout_ports import LayoutGeometryRequest, layout_geometry_request
 from ..source.layout_snapshot import (
     DRC_VACUUM_PADDING_UM,
     prepare_layout_snapshot,
     snapshot_owns_vacuum,
 )
-from ..source.ports import RequestedPort
+from ..source.ports import LayoutPortBinding, RequestedPort
+from ..source.surface_epr import SurfaceEprSpecs
 from ..source.transforms import RouteAThinFilm, normalize_route_a_thin_film
-from ..source.workflow import persist_problem_files
+from ..source.workflow import GeometrySettings
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .lifecycle import CALLS, Call, Stage
 
@@ -68,10 +68,10 @@ class PalaceSimulation(ABC):
     route_a_thin_film: RouteAThinFilm | None = None
     approximation_profile: ApproximationProfile | None = None
     vacuum_region: VacuumRegionSpec | None = None
-    surface_epr_specs: dict[str, dict[str, Any]] | None = None
+    surface_epr_specs: SurfaceEprSpecs | None = None
     mesh_controls: MeshControls = field(default_factory=MeshControls)
     # Each problem class gives its own default; ``set_numerical`` is the problem's.
-    numerical: dict[str, Any] = field(default_factory=dict)
+    numerical: NumericalControls = field(default_factory=NumericalControls)
     config_path: Path | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
     _stage: Stage = field(default=Stage.UNBOUND, init=False, repr=False)
@@ -203,7 +203,7 @@ class PalaceSimulation(ABC):
             approximation_profile, ApproximationProfile
         ):
             raise TypeError("approximation_profile must be ApproximationProfile")
-        normalized_specs = normalize_surface_epr_specs(specs, materials=materials)
+        normalized_specs = SurfaceEprSpecs.normalized(specs, materials=materials)
         self.route = route  # type: ignore[assignment]
         self.route_a_thin_film = normalized_thin_film
         if approximation_profile is not None:
@@ -265,9 +265,11 @@ class PalaceSimulation(ABC):
             "approximation_profile": self.approximation_profile.to_payload()
             if self.approximation_profile is not None
             else None,
-            "surface_epr_specs": self.surface_epr_specs,
+            "surface_epr_specs": None
+            if self.surface_epr_specs is None
+            else self.surface_epr_specs.to_payload(),
             **self._problem_summary(),
-            "numerical": self.numerical,
+            "numerical": self.numerical.to_payload(),
             "mesh": self.mesh_controls.to_payload(),
         }
         return InputSummary(data)
@@ -433,23 +435,37 @@ class PalaceSimulation(ABC):
             mesh.mesh_path,
             mesh.mesh_manifest_path,
             problem=self.problem,
-            fem_order=self.numerical["order"],
+            fem_order=self.numerical.order,
         )
 
     # ---- Config and handoff -------------------------------------------------------------------------
 
-    def _start_config(self) -> tuple[MeshBuildResult, Mapping[str, Mapping[str, Any]]]:
-        """Discard the previous config and return the current mesh and materials a new config is written for.
+    def _set_numerical(self, controls: NumericalControls) -> None:
+        """Store the controls a ``set_numerical`` call built; the mesh stays, the config is discarded."""
+        self.numerical = controls
+        self._fall_back("set_numerical")
+
+    def _start_config(self) -> tuple[MeshBuildResult, ConfigInput]:
+        """Discard the previous config and return the current mesh and the shared input of a new config.
 
         Raises:
-            ValueError: ``mesh()`` has not built the current mesh.
+            ValueError: ``mesh()`` has not built the current mesh, or the numerical controls leave AMR open.
             FileNotFoundError: a file of that mesh is gone from the run folder.
         """
         self._fall_back("write_config")
         mesh = self._require("write_config", self._mesh_result)
         materials = self._require("write_config", self._materials)
         _check_mesh_files(mesh)
-        return mesh, materials
+        # None only on Eigenmode, which may skip Surface EPR; Electrostatic's mesh() requires the specs.
+        specs = self.surface_epr_specs
+        return mesh, ConfigInput(
+            problem=self.problem,
+            groups=mesh.groups,
+            mesh_path=mesh.mesh_path,
+            materials=materials,
+            surface_epr_specs=SurfaceEprSpecs({}) if specs is None else specs,
+            numerical=self.numerical,
+        )
 
     def _finish_config(
         self,
@@ -539,12 +555,22 @@ def _check_mesh_files(mesh: MeshBuildResult) -> None:
     The config is written beside the mesh and the handoff seals both with the manifest, so a run folder
     changed after ``mesh()`` is refused before anything is written into it.
     """
-    if not mesh.mesh_path.is_file():
-        raise FileNotFoundError(
-            f"The current palace.msh is missing from {mesh.output_dir}: call mesh() again."
-        )
-    # Reading the manifest refuses one that is gone (FileNotFoundError) or no longer JSON.
+    for path in (mesh.mesh_path, mesh.mesh_manifest_path):
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"The current {path.name} is missing from {mesh.output_dir}: call mesh() again."
+            )
+    # Only a check: parsing refuses a manifest that no longer reads as JSON; its content is not needed here.
     json.loads(mesh.mesh_manifest_path.read_text(encoding="utf-8"))
+
+
+def index_map(entries: Sequence[IndexEntry], **extra: Any) -> dict[str, Any]:
+    """The ``palace_index_map.json`` payload: the schema, the entries, then the problem's ``extra`` records."""
+    return {
+        "schema_version": INDEX_MAP_SCHEMA_VERSION,
+        "entries": [entry.to_payload() for entry in entries],
+        **extra,
+    }
 
 
 __all__ = ["PalaceSimulation"]
