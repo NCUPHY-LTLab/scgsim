@@ -78,7 +78,7 @@ def source_curve_records(model: ConformalModel) -> dict[str, SourceCurve]:
     out: dict[str, SourceCurve] = {}
     for prism in model.labelled.catalogue.prisms:
         for carrier in prism.carriers():
-            if carrier.id == carrier.lineage.describe():
+            if carrier.role == "source_edge":
                 curve = line_curve(carrier.p, carrier.q, grid)
                 out[carrier.id] = _source_curve(
                     carrier.lineage, curve, line_length_um(carrier.p, carrier.q, grid)

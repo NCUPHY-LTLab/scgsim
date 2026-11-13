@@ -642,7 +642,9 @@ def _lines_of(
         source = min(e.carriers).id
         n = pieces_of_line.get(source, 0)
         pieces_of_line[source] = n + 1
-        carrier = LineCarrier(f"{source}.{n}", e.a, e.b, lineages[source])
+        carrier = LineCarrier(
+            f"{source}.{n}", e.a, e.b, lineages[source], "family_line"
+        )
         lines.append(carrier)
         seams.append(BandSeam(carrier.id, band, seam.inside_left))
     return lines, seams

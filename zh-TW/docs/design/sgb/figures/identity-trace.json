@@ -6,7 +6,7 @@
   0.5,
   2.0
  ],
- "schema": "scgsim.sgb.sidecar.v4",
+ "schema": "scgsim.sgb.sidecar.v5",
  "step1_palace_attribute": {
   "attribute": 10,
   "resolved_name": "MA::pad__top::band=2",
@@ -51,9 +51,6 @@
    "MA::pad__top::band=2": {
     "band": 2,
     "banded_surface": "MA::pad__top",
-    "entities": [
-     "pad"
-    ],
     "face_sides": null,
     "group": "MA::pad__top::band=2",
     "interface_type": "MA",
@@ -68,6 +65,9 @@
    "native_tag": 32,
    "record": {
     "area_um2": 496.060375564,
+    "band_families": [
+     "band_pad_top"
+    ],
     "bands": [
      {
       "family": "band_pad_top",
@@ -75,19 +75,16 @@
      }
     ],
     "curved": false,
-    "cut_families": [],
     "entities": [],
-    "face_kind": "top",
-    "families": [
-     "band_pad_top"
-    ],
-    "group": "MA::pad__top::band=2",
-    "kind": "horizontal",
-    "membership": {
+    "entity_coverage": {
      "pad": 1.0,
      "vacuum": 1.0
     },
+    "face_kind": "top",
+    "group": "MA::pad__top::band=2",
+    "kind": "horizontal",
     "negative_volume": "vol:d78b0b17d727ed12",
+    "other_cut_families": [],
     "outer_boundary": null,
     "positive_volume": "vol:89bd58ad80d63355",
     "z_um": [
@@ -1840,6 +1837,9 @@
    "native_tag": 39,
    "record": {
     "area_um2": 87.1791961371,
+    "band_families": [
+     "band_pad_top"
+    ],
     "bands": [
      {
       "family": "band_pad_top",
@@ -1847,19 +1847,16 @@
      }
     ],
     "curved": false,
-    "cut_families": [],
     "entities": [],
-    "face_kind": "top",
-    "families": [
-     "band_pad_top"
-    ],
-    "group": "MA::pad__top::band=2",
-    "kind": "horizontal",
-    "membership": {
+    "entity_coverage": {
      "pad": 1.0,
      "vacuum": 1.0
     },
+    "face_kind": "top",
+    "group": "MA::pad__top::band=2",
+    "kind": "horizontal",
     "negative_volume": "vol:d78b0b17d727ed12",
+    "other_cut_families": [],
     "outer_boundary": null,
     "positive_volume": "vol:89bd58ad80d63355",
     "z_um": [
@@ -2550,10 +2547,10 @@
   "entities": [
    "pad"
   ],
-  "families": [
+  "band_families": [
    "band_pad_top"
   ],
-  "membership": {
+  "entity_coverage": {
    "pad": 1.0,
    "vacuum": 1.0
   },
@@ -3780,7 +3777,7 @@
   "entities": [
    "pad"
   ],
-  "membership": {
+  "entity_coverage": {
    "pad": 1.0
   },
   "loops": [
@@ -3880,11 +3877,11 @@
    ]
   ]
  },
- "walls_with_port_membership": [
+ "walls_with_port_coverage": [
   {
    "face": "f:5d0c9ae9fd6baca6",
    "group": "MA::ground__sidewall",
-   "membership": {
+   "entity_coverage": {
     "ground": 1.0,
     "p1": 0.083333333
    }
@@ -3892,7 +3889,7 @@
   {
    "face": "f:d9d24cf3f5dc840e",
    "group": "MA::pad__sidewall",
-   "membership": {
+   "entity_coverage": {
     "p1": 0.208333333,
     "pad": 1.0
    }
@@ -3915,6 +3912,7 @@
      "MA::pad__top::band=3"
     ]
    },
+   "hidden_contacts": {},
    "interface": null,
    "margins_grid": [
     100,

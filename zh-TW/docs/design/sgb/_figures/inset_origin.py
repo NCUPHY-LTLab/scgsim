@@ -490,8 +490,8 @@ def figure_section(model, ys_um: tuple[float, float] = (50.0, 44.0)) -> dict:
 def band_areas(sidecar: dict, family_id: str) -> list[dict]:
     """Per band of one band family (the sidecar's ``band_family``): the group names and their total area (um^2).
 
-    The names of ``bands`` are not references the reader checks: in Route B a family also names the ``MM`` group
-    of a metal-metal contact, whose face is not written.  Such a name has no group record and no area to add.
+    Each name of ``bands`` is a group the reader checked; a metal-metal contact no group carries is in
+    ``hidden_contacts`` and has no area to add.
     """
     family = sidecar["band_family"][family_id]
     written = sidecar["group"]
@@ -502,9 +502,7 @@ def band_areas(sidecar: dict, family_id: str) -> list[dict]:
             {
                 "band": int(band),
                 "groups": groups,
-                "area_um2": round(
-                    sum(written[g]["area_um2"] for g in groups if g in written), 6
-                ),
+                "area_um2": round(sum(written[g]["area_um2"] for g in groups), 6),
             }
         )
     return out

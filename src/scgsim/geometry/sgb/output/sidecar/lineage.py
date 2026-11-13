@@ -76,10 +76,10 @@ class CarrierLineage:
 def _source_curves(catalogue: PrismCatalogue) -> frozenset[str]:
     """The source curves: the straight source edges and the arcs of every prism.
 
-    A straight source edge is named by its lineage; a witness chord of an arc is not, and lies on its arc.
+    A witness chord of an arc is not a source curve: it lies on its arc.
     """
     sources: set[str] = set()
     for prism in catalogue.prisms:
-        sources.update(c.id for c in prism.carriers() if c.id == c.lineage.describe())
+        sources.update(c.id for c in prism.carriers() if c.role == "source_edge")
         sources.update(arc.id for arc in prism.arcs)
     return frozenset(sources)

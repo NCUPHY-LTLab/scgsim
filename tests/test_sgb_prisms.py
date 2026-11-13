@@ -305,6 +305,9 @@ def test_lineage_names_the_entity_polygon_ring_and_edge_of_every_carrier(pad):
         for c in carriers
     )
     assert carriers[0].id == carriers[0].lineage.describe()
+    assert {c.role for c in carriers} == {
+        "source_edge"
+    }  # the ground's outline has no arc
 
 
 # --------------------------------------------------------------------------- derivation end to end

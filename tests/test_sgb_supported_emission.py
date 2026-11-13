@@ -50,6 +50,26 @@ def test_a_supported_cell_is_written_as_brep_and_xao(name, tmp_path):
     read_sidecar(artifacts.sidecar)
 
 
+def test_a_contact_no_written_volume_bounds_is_a_hidden_contact_of_its_band(tmp_path):
+    """Route B writes no conductor volume, so where a pier stands on the ground no face is written.
+
+    The ground top's family lists that contact in ``hidden_contacts`` by its two conductors and face kind, and
+    its ``bands`` hold only written surface groups (the shared reader checks each one).
+    """
+    sidecar = read_sidecar(
+        emit_model(sample_model(SCENES["cell23_airbridge"]()), tmp_path).sidecar
+    )
+    family = sidecar["band_family"]["ma::ground_lower::top"]
+    assert family["hidden_contacts"] == {
+        "2": [{"entities": ["ground_lower", "pier_lower"], "face_kind": "interface"}]
+    }
+    assert all(
+        sidecar["group"][group]["dim"] == 2
+        for groups in family["bands"].values()
+        for group in groups
+    )
+
+
 @pytest.mark.parametrize("name", sorted(pdk.NOT_WRITTEN))
 def test_a_scene_kept_off_the_list_builds_but_is_refused_when_written(name, tmp_path):
     """The lumped sheet across a 32-point pad builds with exact bands; planning its BREP refuses a wall face.

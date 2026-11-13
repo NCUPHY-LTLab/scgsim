@@ -140,18 +140,26 @@ def piece_carriers(
     ]
 
 
+LineRole = Literal["source_edge", "arc_chord", "family_line"]
+"""What a straight carrier is: ``source_edge`` a straight edge of a prism outline (a source curve of its own),
+``arc_chord`` a witness chord of a source arc (it lies on the arc's curve), ``family_line`` a straight curve of a
+cut family."""
+
+
 @dataclass(frozen=True)
 class LineCarrier:
-    """A straight curve with exact integer endpoints and a lineage record.
+    """A straight curve with exact integer endpoints, a lineage record and its role.
 
-    ``curve`` and ``piece`` are set on a witness chord of a source arc: the arc's id and the chord's number along
-    it.  :meth:`edge_carrier` is what the carrier enters an arrangement as.
+    ``role`` is set where the carrier is made, so no stage tells a source edge from a chord or a family line by
+    its id.  ``curve`` and ``piece`` are set on a witness chord of a source arc: the arc's id and the chord's
+    number along it.  :meth:`edge_carrier` is what the carrier enters an arrangement as.
     """
 
     id: str
     p: Point
     q: Point
     lineage: Lineage
+    role: LineRole
     curve: str = ""
     piece: int | None = None
 

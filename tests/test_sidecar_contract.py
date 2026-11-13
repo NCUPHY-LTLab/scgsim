@@ -1,5 +1,5 @@
 """The sidecar contract ``scgsim.contracts.sgb_sidecar`` (#170): one definition gives the schema file, the pinned
-digest beside the version, and the shared reader, and they describe ``scgsim.sgb.sidecar.v4`` as SGB writes it."""
+digest beside the version, and the shared reader, and they describe ``scgsim.sgb.sidecar.v5`` as SGB writes it."""
 
 from __future__ import annotations
 
@@ -117,12 +117,12 @@ def test_read_sidecar_returns_the_written_file_as_decoded(tmp_path, sidecars):
 
 def test_another_version_is_refused_by_name(sidecars):
     """A sidecar of another version is named as such, before its structure is looked at, with what to do."""
-    v3 = {**sidecars["pad_b"], "schema": "scgsim.sgb.sidecar.v3"}
+    v4 = {**sidecars["pad_b"], "schema": "scgsim.sgb.sidecar.v4"}
     with pytest.raises(SidecarError) as refused:
-        check_sidecar(v3)
+        check_sidecar(v4)
     message = str(refused.value)
-    assert "'scgsim.sgb.sidecar.v3' is not supported" in message
-    assert "reads only 'scgsim.sgb.sidecar.v4'" in message
+    assert "'scgsim.sgb.sidecar.v4' is not supported" in message
+    assert "reads only 'scgsim.sgb.sidecar.v5'" in message
     assert "Rebuild the geometry with this SCGSim" in message
     with pytest.raises(
         SidecarError, match=r"'scgsim\.sgb\.sidecar\.v2' is not supported"
@@ -261,9 +261,9 @@ def _resolved(document, path):
             r"mesh_feature\[.*\]\.facts: has the unknown field",
         ),
         (
-            ("face", FIRST, "membership", "pad"),
+            ("face", FIRST, "entity_coverage", "pad"),
             -0.5,
-            r"sidecar face\[.*\]\.membership\.pad: -0\.5 is less",
+            r"sidecar face\[.*\]\.entity_coverage\.pad: -0\.5 is less",
         ),
         (
             ("carrier", FIRST, "kind"),
@@ -307,6 +307,7 @@ def test_a_reference_that_does_not_resolve_is_refused(sidecars):
         c for c, r in sorted(good["carrier"].items()) if r["kind"] == "band_member"
     )
     primitive = min(good["support_primitive"])
+    family = min(good["band_family"])
     for path, value, message in (
         (
             ("face", bound_face, "group"),
@@ -344,9 +345,24 @@ def test_a_reference_that_does_not_resolve_is_refused(sidecars):
             "which source_curve lacks",
         ),
         (
-            ("face", bound_face, "membership"),
+            ("face", bound_face, "entity_coverage"),
             {"nobody": 1.0},
-            r"membership key names 'nobody', which entity lacks",
+            r"entity_coverage key names 'nobody', which entity lacks",
+        ),
+        (
+            ("band_family", family, "bands", "0"),
+            ["MM::pad|bump__interface::band=0"],
+            "names 'MM::pad|bump__interface::band=0', which group lacks",
+        ),
+        (
+            ("band_family", family, "bands", "0"),
+            [volume],
+            f"names the group {volume!r}, which is not a face group",
+        ),
+        (
+            ("band_family", family, "hidden_contacts"),
+            {"0": [{"entities": ["pad", "bump"], "face_kind": "interface"}]},
+            "names 'bump', which entity lacks",
         ),
         (("summary", "counts", "edges"), len(edges) + 1, "summary.counts has"),
         (
