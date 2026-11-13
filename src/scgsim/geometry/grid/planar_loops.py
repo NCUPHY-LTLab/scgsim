@@ -9,7 +9,7 @@ from math import sqrt
 from typing import Protocol, TypeVar
 
 from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
-from scgsim.geometry.grid.spatial import coordinate_2d_key
+from scgsim.geometry.grid.coordinates import coordinate_2d_key
 
 Point2D = tuple[float, float]
 PlanarLoop = tuple[Point2D, ...]

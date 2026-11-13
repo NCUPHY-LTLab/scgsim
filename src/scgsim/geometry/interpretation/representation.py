@@ -1,4 +1,4 @@
-"""Read explicit prepared geometry representation facts for shared planning."""
+"""Read the prepared representation of an entity from the physical representation context."""
 
 from __future__ import annotations
 

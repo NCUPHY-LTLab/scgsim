@@ -1,4 +1,7 @@
-"""Own detached source composition, occurrence transforms and caller final Net membership. Component local facts remain source authority."""
+"""Compose components into a detached source: place each occurrence with its transform and take the Net membership the caller sets last.
+
+A component's local facts stay as the component declares them.
+"""
 
 from __future__ import annotations
 
@@ -161,7 +164,7 @@ class GeometryPlan:
     # Immutable default, so a plan assembled without ``__init__`` (tests build them that way) has no priorities.
     _entity_priorities: Mapping[str, int] = MappingProxyType({})
 
-    def __init__(  # noqa: PLR0913 - constructor preserves the established plan contract
+    def __init__(  # noqa: PLR0913 - each argument is a public setting of the plan
         self,
         component: Any,
         *,

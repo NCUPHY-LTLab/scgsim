@@ -1,4 +1,4 @@
-"""Normalize declared stack/material/region facts for both stack and plan callers. Preserve existing structural errors and source ownership."""
+"""Normalize the declared layers, materials and solution regions of a stack, for the stack adapter and the plan alike."""
 
 from __future__ import annotations
 
@@ -300,7 +300,7 @@ def gds_layer(value: Any, semantic_id: str) -> tuple[int, int]:
 def _physical_declaration(
     info: Mapping[str, Any], level_name: str, material_id: str
 ) -> dict[str, Any]:
-    """One neutral source carrier; old backend metadata is historical only."""
+    """Read the level's ``physical_layer`` declaration; a level that still carries ``aedt_modeling`` is refused."""
     if "aedt_modeling" in info:
         raise ValueError("fresh source must replace aedt_modeling with physical_layer")
     raw = info.get(PHYSICAL_LAYER_FIELD)

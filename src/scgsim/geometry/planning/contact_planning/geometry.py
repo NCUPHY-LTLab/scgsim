@@ -6,11 +6,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
-from scgsim.geometry.grid.entities import unique_ids
 from scgsim.geometry.grid.grid import boolean_polygon_region
 from scgsim.geometry.grid.loops import canonical_loop_sort_key, loop_signature
 from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area, ring_edges
-from scgsim.geometry.grid.spatial import coordinate_z_key, same_coordinate_z
 from scgsim.geometry.interpretation.representation import (
     planned_conductor_representation,
 )
@@ -26,6 +24,8 @@ from scgsim.geometry.planning.domain_planning.faces import (
     route_a_sheet_plane_z_um_from_solutions,
 )
 from scgsim.geometry.planning.domain_planning.occupancy import required_host_solution_id
+from scgsim.geometry.planning.entities import unique_ids
+from scgsim.geometry.planning.spatial import coordinate_z_key, same_coordinate_z
 
 
 @dataclass(frozen=True)
@@ -191,7 +191,7 @@ def contact_patch_loops(
 def single_rectangular_contact_loop(
     overlap_region: Sequence[Any], lower_id: str, upper_id: str
 ) -> tuple[tuple[float, float], ...]:
-    """Route-C legacy contact recognizer: exactly one rectangular patch."""
+    """Return the one axis-aligned rectangle an overlap forms, or refuse an overlap that is not one."""
     import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
     polygons = boolean_polygon_region(gdstk, overlap_region, (), "or")

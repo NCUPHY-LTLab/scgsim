@@ -32,7 +32,7 @@ owners.
 | `scgsim.geometry` | Source-facing component/occurrence and stack adaptation, GeometryPlan/snapshot, normalized inputs, vacuum/curve preparation and detached summaries | Model construction, Palace/AEDT physics or execution state |
 | `scgsim.geometry.sgb` | The SGB core Palace builds geometry with: arrangement, XAO and sidecar, bands | Meshing, solver state or component source ownership |
 | `scgsim.meshing` | Sizing recipes, the quality audit, the repair loop and the meshing report over SGB's XAO | Palace attributes, solver state or physical convergence judgments |
-| `scgsim.geometry.models` and `scgsim.geometry.grid` | One canonical model/type definition, and the grid engine and entity, loop and coordinate helpers that source, interpretation and planning share | Duplicate definitions, source-to-planning dependency cycles |
+| `scgsim.geometry.models` and `scgsim.geometry.grid` | One canonical model/type definition, and the grid engine (noding, tagged regions, overlays, loops, polygon operations) that source, interpretation, junctions and planning call, and the entity reads more than one stage makes | Duplicate definitions, source-to-planning dependency cycles |
 | `scgsim.semantics` | Stdlib-only immutable, revision-bound facts | Mutable backend objects, solver tags interpreted as source truth |
 | `scgsim.palace.simulation` | Separate Electrostatic and Eigenmode setup objects on one shared core, mutable state/invalidation and the lifecycle | Palace submission or merged state owners |
 | `scgsim.palace.source` | The geometry request: a bound plan's ports, vacuum region and Surface-EPR specs prepared as the input of the geometry build | Meshing, `config.json` or solver state |

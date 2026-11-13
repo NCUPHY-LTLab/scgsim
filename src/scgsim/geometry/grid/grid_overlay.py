@@ -1,7 +1,7 @@
 """Run labelled GEOS overlays and preserve area, zero-area support and contacts.
 
 OverlayScope carries grid and failure-location context through native calls.
-Legacy positional entry points retain existing callers during their migration.
+``overlay_call`` and ``parts_overlay`` take the scope's grid, operand and cell as positional arguments and run the same ``OverlayScope`` call.
 """
 
 from __future__ import annotations
@@ -256,7 +256,7 @@ def overlay_call(  # noqa: PLR0913 - keep overlay operands and witness coordinat
     operand_index: int | None,
     cell_index: int | None,
 ) -> BaseGeometry | None:
-    """Run the scoped native operation through the existing positional boundary."""
+    """Run the scoped native operation with the scope given as positional arguments."""
     return OverlayScope(grid, operand_index, cell_index).call(operation, left, right)
 
 
@@ -268,7 +268,7 @@ def parts_overlay(  # noqa: PLR0913 - keep overlay operands and witness coordina
     operand_index: int | None,
     cell_index: int | None,
 ) -> OverlayParts:
-    """Overlay scoped parts through the existing positional boundary."""
+    """Overlay scoped parts with the scope given as positional arguments."""
     return OverlayScope(grid, operand_index, cell_index).parts(operation, left, right)
 
 

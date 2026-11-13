@@ -4,11 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from scgsim.geometry.grid.entities import (
-    entity_by_id,
-    geometry_ref_from_metadata,
-    unique_ids,
-)
 from scgsim.geometry.models.common import (
     RouteLiteral,
 )
@@ -24,6 +19,11 @@ from scgsim.geometry.models.topology import (
 from scgsim.geometry.planning.domain_planning.faces import (
     interface_surface_kinds,
     route_a_sheet_boundary_volume_ids,
+)
+from scgsim.geometry.planning.entities import (
+    entity_by_id,
+    geometry_ref_from_metadata,
+    unique_ids,
 )
 from scgsim.geometry.planning.surface_planning.scope import SurfaceScope
 from scgsim.geometry.planning.surface_records import is_route_a_sheet_interface

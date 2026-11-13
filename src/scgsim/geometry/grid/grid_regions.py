@@ -1,4 +1,4 @@
-"""Represent grid operands/results, reconstruct atomic polygon boundaries, and locate refused changes."""
+"""Grid operands and results, atomic reconstruction of polygon boundaries, and the location a refused change names."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ if TYPE_CHECKING:
     from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
     from shapely.geometry.base import BaseGeometry
 
-# Native grid coordinates retain their supplied width; no coordinate cleaning
-# or validation is introduced at this representation boundary.
+# Native grid coordinates keep the width they are given; this boundary neither cleans
+# nor validates them.
 GridPoint = tuple[float, ...]
 GridRing = tuple[GridPoint, ...]
 GridEdge = tuple[GridPoint, GridPoint]
@@ -383,7 +383,7 @@ class GridArrangement:
 
 @dataclass(frozen=True)
 class PolygonRegion:
-    """Simple exterior/holes; cutline walk is mechanical legacy serialization."""
+    """A polygon as one exterior ring and its hole rings; ``points`` walks them as one ring joined by cutline connectors."""
 
     exterior: GridRing
     holes: tuple[GridRing, ...] = ()

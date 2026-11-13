@@ -6,8 +6,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass
 from typing import Any, cast
 
-from scgsim.geometry.grid.entities import entity_z_range_um
-from scgsim.geometry.grid.entity_validation import is_solution_entity
 from scgsim.geometry.grid.grid import boolean_polygon_region
 from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
@@ -18,15 +16,11 @@ from scgsim.geometry.grid.loops import (
     simple_interior_hole_loops,
 )
 from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area
-from scgsim.geometry.grid.spatial import (
-    geometry_ref_surface_z_um,
-    intersect_bounds,
-    same_coordinate_z,
-)
 from scgsim.geometry.interpretation.representation import (
     planned_conductor_representation,
 )
 from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import entity_z_range_um, is_solution_entity
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import SurfacePlanRecord
@@ -45,6 +39,11 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
 )
 from scgsim.geometry.planning.domain_planning.sidewalls import SolutionSidewallPlanner
 from scgsim.geometry.planning.evidence import solution_solution_evidence
+from scgsim.geometry.planning.spatial import (
+    geometry_ref_surface_z_um,
+    intersect_bounds,
+    same_coordinate_z,
+)
 from scgsim.geometry.planning.surface_records import (
     RouteASheetPatch,
     surface_contribution_provenance,

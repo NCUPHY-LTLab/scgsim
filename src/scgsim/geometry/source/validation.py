@@ -1,4 +1,7 @@
-"""Own existing input-only validation before compilation. Shared Entity predicates are lower operations, not duplicate validators."""
+"""Validate a ``GeometryBuildInput`` from its own contents: polygons, entities, attachments and port regions.
+
+The entity predicates it uses are in ``models.entities``; the contact-pad attachment is in ``source.contact_pads``.
+"""
 
 from __future__ import annotations
 
@@ -6,14 +9,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from math import isfinite
 
-from scgsim.geometry.grid.entity_validation import (
+from scgsim.geometry.models.entities import (
     is_solution_entity,
     is_vacuum_solution_entity,
     requires_route_representation,
-    resolve_contact_pad_attachment,
 )
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.source.contact_pads import resolve_contact_pad_attachment
 
 
 def has_vacuum_solution_region(build_input: GeometryBuildInput) -> bool:

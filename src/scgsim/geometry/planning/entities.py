@@ -1,13 +1,11 @@
-"""Shared source Entity lookup/metadata/range operations. No guessed native bindings or simulation state."""
+"""Lookups and ledgers over the input records that planning builds its plans from."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from math import isfinite
 from typing import Any
 
-from scgsim.geometry.grid.constants import GEOMETRY_REF_METADATA_KEYS
-from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.common import GEOMETRY_REF_METADATA_KEYS, RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import MMContactRecord
 
@@ -100,18 +98,3 @@ def unique_ids(values: Any) -> tuple[str, ...]:
         result.append(item)
         seen.add(item)
     return tuple(result)
-
-
-def entity_z_range_um(entity: SemanticEntitySpec) -> tuple[float, float]:
-    """Resolve an entity's lower and upper Z coordinates in micrometres."""
-    z_min_um = float(entity.geometry.get("z_min_um", entity.geometry.get("z_um", 0.0)))
-    z_max_um = entity.geometry.get("z_max_um")
-    if z_max_um is not None:
-        z_max_um = float(z_max_um)
-        if not isfinite(z_max_um):
-            raise ValueError(f"{entity.semantic_id} has non-finite z_max_um")
-        if z_max_um > z_min_um:
-            return z_min_um, z_max_um
-
-    thickness_um = float(entity.geometry.get("thickness_um", 0.0))
-    return z_min_um, z_min_um + thickness_um

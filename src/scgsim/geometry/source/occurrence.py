@@ -1,4 +1,4 @@
-"""Lower source Entity and occurrence polygon/port selections for adapter and plan. Never borrow planning helpers."""
+"""Lower the polygon and port selections of an Entity or an occurrence, for the stack adapter and the plan. Uses nothing from planning."""
 
 from __future__ import annotations
 

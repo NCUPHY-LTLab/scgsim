@@ -1,4 +1,4 @@
-"""Construction-body and surface-partition records read by surface planning."""
+"""Records of a surface partition and of a temporary body that surface planning reads."""
 
 from __future__ import annotations
 
