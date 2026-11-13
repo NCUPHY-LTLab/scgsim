@@ -8,7 +8,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -62,6 +61,8 @@ from scgsim.geometry.source.occurrence_validation import (
 from scgsim.geometry.source.plan_assembly import (
     GeometryPlanStackAssembler,
     component_semantics,
+    composed_transform,
+    occurrence_transform,
     source_path,
     transform_source_point,
 )
@@ -74,44 +75,6 @@ from scgsim.geometry.source.recipes import (
     source_recipe_map,
 )
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
-
-
-def _affine(reference: Any) -> tuple[float, float, float, float, float, float]:
-    from klayout import db as kdb  # noqa: PLC0415 - transforms are needed only during occurrence registration
-
-    transform = reference.dcplx_trans
-    origin = transform * kdb.DPoint(0.0, 0.0)
-    x_axis = transform * kdb.DPoint(1.0, 0.0)
-    y_axis = transform * kdb.DPoint(0.0, 1.0)
-    values = (
-        float(x_axis.x - origin.x),
-        float(y_axis.x - origin.x),
-        float(x_axis.y - origin.y),
-        float(y_axis.y - origin.y),
-        float(origin.x),
-        float(origin.y),
-    )
-    if not all(math.isfinite(item) for item in values):
-        raise ValueError("instance transform must be finite")
-    a, b, c, d, _, _ = values
-    if not math.isclose(abs(a * d - b * c), 1.0, rel_tol=0.0, abs_tol=1e-9):
-        raise ValueError("GeometryPlan supports rigid rotation and mirror only")
-    return values
-
-
-def _compose(
-    parent: tuple[float, ...], child: tuple[float, ...]
-) -> tuple[float, float, float, float, float, float]:
-    a, b, c, d, x, y = parent
-    e, f, g, h, u, v = child
-    return (
-        a * e + b * g,
-        a * f + b * h,
-        c * e + d * g,
-        c * f + d * h,
-        a * u + b * v + x,
-        c * u + d * v + y,
-    )
 
 
 @dataclass(frozen=True)
@@ -286,7 +249,9 @@ class GeometryPlan:
             raise ValueError("the same source occurrence is already registered")
         child = reference.cell
         component_semantics(child, path)
-        transform = _compose(parent_transform, _affine(reference))
+        transform = composed_transform(
+            parent_transform, occurrence_transform(reference)
+        )
         self._instances[path] = (child, reference, transform)
 
     @property
@@ -360,7 +325,8 @@ class GeometryPlan:
                 or reference.cell != cell
                 or sum(item.instance == reference.instance for item in parent.insts)
                 != 1
-                or _compose(parent_transform, _affine(reference)) != transform
+                or composed_transform(parent_transform, occurrence_transform(reference))
+                != transform
             ):
                 raise ValueError(
                     f"registered occurrence {path!r} changed before prepare"

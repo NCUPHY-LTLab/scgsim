@@ -75,8 +75,29 @@ def _fused_boolean_candidates(scope: GridScope, candidates):
 def fused_gdstk_components(
     scope: GridScope, candidates: Sequence[Any]
 ) -> tuple[FusedComponent, ...]:
-    """Return stable occupied components for explicit source selectors."""
+    """Return stable occupied components for explicit source selectors.
 
+    Drawn polygons that overlap or share an edge are one component; components are
+    ordered by their lowest x, then lowest y, then drawn area.
+    """
+    result = [
+        _fused_component(scope, candidates, indexes)
+        for indexes in _touching_groups(scope, candidates)
+    ]
+    return tuple(
+        sorted(
+            result,
+            key=lambda component: (
+                min(point[0] for point in component.polygon.exterior),
+                min(point[1] for point in component.polygon.exterior),
+                component.source_area_um2,
+            ),
+        )
+    )
+
+
+def _touching_groups(scope: GridScope, candidates: Sequence[Any]) -> list[list[int]]:
+    """The positions of the drawn polygons, grouped where they overlap or share an edge."""
     overlap_candidates = _fused_boolean_candidates(scope, candidates)
     parents = list(range(len(candidates)))
 
@@ -111,42 +132,35 @@ def fused_gdstk_components(
     members: dict[int, list[int]] = {}
     for index in range(len(candidates)):
         members.setdefault(find(index), []).append(index)
-    result: list[FusedComponent] = []
-    for indexes in members.values():
-        regions = polygon_boolean(
-            scope,
-            tuple(candidates[index] for index in indexes),
-            (),
-            "or",
-            precision=scope.bound_grid().grid_size_um,
-        )
-        if not regions or len(regions) != 1:
-            raise ValueError("fused selector component must lower to one polygon")
-        outer, holes = split_gdstk_cutline_loop(
-            scope, ring_from_gdstk_polygon(scope, regions[0])
-        )
-        source_indexes = tuple(indexes)
-        result.append(
-            FusedComponent(
-                LayoutPolygonSpec(
-                    polygon_id="",
-                    layer="",
-                    exterior=outer,
-                    holes=holes,
-                ),
-                source_indexes,
-                sum(float(candidates[index].area()) for index in source_indexes),
-            )
-        )
-    return tuple(
-        sorted(
-            result,
-            key=lambda component: (
-                min(point[0] for point in component.polygon.exterior),
-                min(point[1] for point in component.polygon.exterior),
-                component.source_area_um2,
-            ),
-        )
+    return list(members.values())
+
+
+def _fused_component(
+    scope: GridScope, candidates: Sequence[Any], indexes: Sequence[int]
+) -> FusedComponent:
+    """One group of touching drawn polygons as a single region, with the polygons it fuses."""
+    regions = polygon_boolean(
+        scope,
+        tuple(candidates[index] for index in indexes),
+        (),
+        "or",
+        precision=scope.bound_grid().grid_size_um,
+    )
+    if not regions or len(regions) != 1:
+        raise ValueError("fused selector component must lower to one polygon")
+    outer, holes = split_gdstk_cutline_loop(
+        scope, ring_from_gdstk_polygon(scope, regions[0])
+    )
+    source_indexes = tuple(indexes)
+    return FusedComponent(
+        LayoutPolygonSpec(
+            polygon_id="",
+            layer="",
+            exterior=outer,
+            holes=holes,
+        ),
+        source_indexes,
+        sum(float(candidates[index].area()) for index in source_indexes),
     )
 
 

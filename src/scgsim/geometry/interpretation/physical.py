@@ -37,9 +37,8 @@ def interpret_physical_geometry(
     junctions (``scgsim.geometry.junctions``) on the effective input, and bind each sheet
     interface to the profile's conductor representation.
     """
-    geometry_grid_context(
-        build_input
-    )  # an input without a declared grid is refused first
+    # An input without a declared grid is refused before anything else.
+    geometry_grid_context(build_input)
     declarations, bindings = _physical_declarations(build_input, stack, profile)
     plan = _representation_plan(build_input, stack, profile, declarations)
     mapped = _mapped_bodies(build_input, stack, plan, bindings)

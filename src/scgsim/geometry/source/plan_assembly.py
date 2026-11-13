@@ -40,6 +40,48 @@ def source_path(value: Any) -> str:
     return value
 
 
+def occurrence_transform(
+    reference: Any,
+) -> tuple[float, float, float, float, float, float]:
+    """The affine map ``(a, b, c, d, x, y)`` of a reference in its parent; only rigid rotation and mirror."""
+    from klayout import db as kdb  # noqa: PLC0415 - transforms are needed only during occurrence registration
+
+    transform = reference.dcplx_trans
+    origin = transform * kdb.DPoint(0.0, 0.0)
+    x_axis = transform * kdb.DPoint(1.0, 0.0)
+    y_axis = transform * kdb.DPoint(0.0, 1.0)
+    values = (
+        float(x_axis.x - origin.x),
+        float(y_axis.x - origin.x),
+        float(x_axis.y - origin.y),
+        float(y_axis.y - origin.y),
+        float(origin.x),
+        float(origin.y),
+    )
+    if not all(math.isfinite(item) for item in values):
+        raise ValueError("instance transform must be finite")
+    a, b, c, d, _, _ = values
+    if not math.isclose(abs(a * d - b * c), 1.0, rel_tol=0.0, abs_tol=1e-9):
+        raise ValueError("GeometryPlan supports rigid rotation and mirror only")
+    return values
+
+
+def composed_transform(
+    parent: tuple[float, ...], child: tuple[float, ...]
+) -> tuple[float, float, float, float, float, float]:
+    """The affine map of ``child`` placed in ``parent``: first the child's, then the parent's."""
+    a, b, c, d, x, y = parent
+    e, f, g, h, u, v = child
+    return (
+        a * e + b * g,
+        a * f + b * h,
+        c * e + d * g,
+        c * f + d * h,
+        a * u + b * v + x,
+        c * u + d * v + y,
+    )
+
+
 def transform_source_point(
     transform: tuple[float, ...], value: Sequence[float]
 ) -> list[float]:

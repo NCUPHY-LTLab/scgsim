@@ -114,7 +114,9 @@ def test_arrangement_region_reuse_preserves_holed_memberships(monkeypatch, apply
     outer = grid_regions.GridOperand(
         "outer", box(0, 0, 6, 6), holes=(box(2, 2, 4, 4),), contact=False
     )
-    cross = grid_regions.GridOperand("cross", box(3, 0, 5, 6), physical=False, contact=False)
+    cross = grid_regions.GridOperand(
+        "cross", box(3, 0, 5, 6), physical=False, contact=False
+    )
     arrangement = build_grid_arrangement(
         (outer, cross), GeometryGridContext(0.1), apply_grid=apply_grid
     )

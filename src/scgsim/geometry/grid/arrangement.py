@@ -81,13 +81,28 @@ def build_grid_arrangement(
         zero_area = subdivision.accounting
         if zero_area is None:
             zero_area = account_zero_area(subdivision.residues, cells, grid)
+    vertices = _cell_vertices(cells, zero_area)
+    faces, vertices = _atomic_grid_faces(cells, vertices, grid)
+    # Boundary and auxiliary residues remain inspectable internally through
+    # the exact physical audits; neither can create an orphan area-graph edge.
+    effective = _effective_grid_operands(values, ids, faces, apply_grid)
+    auditor = GridAuditor(values, geometries, effective, cells, faces, grid)
+    audits = auditor.physical_audits()
+    auditor.audit_contacts()
+    return GridArrangement(
+        context, faces, vertices, _face_edges(faces), tuple(audits), apply_grid
+    )
+
+
+def _cell_vertices(cells, zero_area: ZeroAreaAccounting) -> tuple:
+    """Every vertex of the cells and of the zero-area residues, sorted."""
     residue_points = {
         point
         for residue in (*zero_area.boundary, *zero_area.auxiliary)
         for point in residue_coordinates(residue.geometry)
     }
     with diagnostic_stage("geometry.grid.vertices", counts={"cells": len(cells)}):
-        vertices = tuple(
+        return tuple(
             sorted(
                 {
                     tuple(p)
@@ -98,15 +113,12 @@ def build_grid_arrangement(
                 | residue_points
             )
         )
-    faces, vertices = _atomic_grid_faces(cells, vertices, grid)
-    # Boundary and auxiliary residues remain inspectable internally through
-    # the exact physical audits; neither can create an orphan area-graph edge.
-    effective = _effective_grid_operands(values, ids, faces, apply_grid)
-    auditor = GridAuditor(values, geometries, effective, cells, faces, grid)
-    audits = auditor.physical_audits()
-    auditor.audit_contacts()
+
+
+def _face_edges(faces) -> tuple:
+    """Every edge of the faces' rings once, as a sorted pair of its ends, sorted."""
     with diagnostic_stage("geometry.grid.edges", counts={"faces": len(faces)}):
-        edges = tuple(
+        return tuple(
             sorted(
                 {
                     tuple(sorted((a, b)))
@@ -116,7 +128,6 @@ def build_grid_arrangement(
                 }
             )
         )
-    return GridArrangement(context, faces, vertices, edges, tuple(audits), apply_grid)
 
 
 def _atomic_grid_faces(cells, vertices, grid):

@@ -253,24 +253,7 @@ def rebuild_entity_support(state: JunctionModel) -> None:
         ):
             state.entities.append(entity)
             continue
-        emitted_support = []
-        for pid in ids:
-            for index, ring in enumerate(
-                (state.model[pid].exterior, *state.model[pid].holes)
-            ):
-                area = sum(
-                    (a[0] * b[1] - b[0] * a[1] for a, b in region_edges((ring,)))
-                )
-                oriented = ring if (area > 0) == (index == 0) else tuple(reversed(ring))
-                emitted_support.extend(region_edges((oriented,)))
-        emitted_support.extend(
-            (
-                (state.emit(a), state.emit(b))
-                for a, b, _ in state.physical_ends[entity.semantic_id]
-            )
-        )
-        boundary = cancel_reversed_planar_edges(emitted_support)
-        loops = simple_planar_loops_from_edges(boundary)
+        loops = _support_loops(state, entity.semantic_id, ids)
         outer = [
             ring
             for ring in loops
@@ -304,8 +287,30 @@ def rebuild_entity_support(state: JunctionModel) -> None:
         )
 
 
+def _support_loops(state: JunctionModel, entity_id: str, ids) -> tuple:
+    """The boundary loops of an Entity's kept polygons joined with the physical ends it gained."""
+    emitted_support = []
+    for pid in ids:
+        for index, ring in enumerate(
+            (state.model[pid].exterior, *state.model[pid].holes)
+        ):
+            area = sum((a[0] * b[1] - b[0] * a[1] for a, b in region_edges((ring,))))
+            oriented = ring if (area > 0) == (index == 0) else tuple(reversed(ring))
+            emitted_support.extend(region_edges((oriented,)))
+    emitted_support.extend(
+        ((state.emit(a), state.emit(b)) for a, b, _ in state.physical_ends[entity_id])
+    )
+    boundary = cancel_reversed_planar_edges(emitted_support)
+    return simple_planar_loops_from_edges(boundary)
+
+
 def check_emitted_partitions(state: JunctionModel) -> None:
-    """Check emitted coordinates against every terminal and open-side contract."""
+    """Check emitted coordinates against every terminal and open-side contract.
+
+    For each junction: no conductor enters the central rectangle, each end piece meets
+    its own arm and no other net and covers its end edge, and no conductor touches
+    the rectangle's two open sides.
+    """
     state.actual_rings = cast(
         dict[str, tuple[tuple[tuple[Fraction, Fraction], ...], ...]],
         {
@@ -326,68 +331,72 @@ def check_emitted_partitions(state: JunctionModel) -> None:
             and e.semantic_id in record["support_plane"]["eligible_entity_ids"]
             for pid in e.polygon_ids
         ]
-        c = state.actual_rings[record["central_polygon_id"]][0]
-        midpoint = tuple((sum((point[i] for point in c)) / 4 for i in (0, 1)))
-
-        def strictly_inside(point, region):
-            return inside_ring(point, region[0]) == 1 and all(
-                (inside_ring(point, hole) == -1 for hole in region[1:])
-            )
-
-        for _, _, region in conductors:
-            if (
-                any((strictly_inside(point, (c,)) for point in region[0]))
-                or any((strictly_inside(point, region) for point in (*c, midpoint)))
-                or any(
-                    (
-                        cross(a, b, u) * cross(a, b, v) < 0
-                        and cross(u, v, a) * cross(u, v, b) < 0
-                        for a, b in region_edges(region)
-                        for u, v in region_edges((c,))
-                    )
-                )
-            ):
-                raise ValueError("final cross-junction PEC intersects RLC interior")
+        central = state.actual_rings[record["central_polygon_id"]][0]
+        _check_central_clear(central, conductors)
         for end in record["ends"]:
-            own = [region for net, _, region in conductors if net == end["net_id"]]
-            other = [region for net, _, region in conductors if net != end["net_id"]]
-            if end["polygon_id"]:
-                piece = state.actual_rings[end["polygon_id"]]
-                arms = [
-                    state.actual_rings[pid]
-                    for e in state.entities
-                    if e.semantic_id == end["source_entity_id"]
-                    for pid in e.polygon_ids
-                    if pid
-                    not in {
-                        part["polygon_id"]
-                        for r in state.records.values()
-                        for part in r["ends"]
-                    }
-                ]
-                if not (
-                    fraction_boundary_contact([piece], arms)
-                    or fraction_area_overlap(state.scope, [piece], arms)
-                ):
-                    raise ValueError(
-                        "final model end lacks positive source-arm contact"
-                    )
-                if closed_contact([piece], other):
-                    raise ValueError("final cross-junction end contacts another net")
-            n = 0 if end["side"] == "A" else 1
-            start, finish = (c[3], c[0]) if n == 0 else (c[1], c[2])
-            if not model_edge_covered(own, start, finish):
-                raise ValueError(
-                    "final model designated end edge is not wholly covered"
-                )
-            if model_edge_contacts(other, start, finish):
-                raise ValueError("final cross-junction wrong-net end/corner contact")
-        for start, finish in ((c[0], c[1]), (c[2], c[3])):
+            _check_emitted_end(state, end, central, conductors)
+        for start, finish in ((central[0], central[1]), (central[2], central[3])):
             for _net, _, region in conductors:
                 intervals, points = model_edge_section(region, start, finish)
                 if intervals or any((0 < point < 1 for point in points)):
                     raise ValueError("final cross-junction open-side contact")
         record["proof_conditions"]["all_derived_junctions_checked"] = True
+
+
+def _strictly_inside(point, region) -> bool:
+    return inside_ring(point, region[0]) == 1 and all(
+        (inside_ring(point, hole) == -1 for hole in region[1:])
+    )
+
+
+def _check_central_clear(central, conductors) -> None:
+    """Refuse a conductor that reaches into the central rectangle or crosses its edges."""
+    midpoint = tuple((sum((point[i] for point in central)) / 4 for i in (0, 1)))
+    for _, _, region in conductors:
+        if (
+            any((_strictly_inside(point, (central,)) for point in region[0]))
+            or any((_strictly_inside(point, region) for point in (*central, midpoint)))
+            or any(
+                (
+                    cross(a, b, u) * cross(a, b, v) < 0
+                    and cross(u, v, a) * cross(u, v, b) < 0
+                    for a, b in region_edges(region)
+                    for u, v in region_edges((central,))
+                )
+            )
+        ):
+            raise ValueError("final cross-junction PEC intersects RLC interior")
+
+
+def _check_emitted_end(state: JunctionModel, end, central, conductors) -> None:
+    """Refuse an end piece off its own arm or on another net, or an end edge its net leaves open."""
+    own = [region for net, _, region in conductors if net == end["net_id"]]
+    other = [region for net, _, region in conductors if net != end["net_id"]]
+    if end["polygon_id"]:
+        piece = state.actual_rings[end["polygon_id"]]
+        arms = [
+            state.actual_rings[pid]
+            for e in state.entities
+            if e.semantic_id == end["source_entity_id"]
+            for pid in e.polygon_ids
+            if pid
+            not in {
+                part["polygon_id"] for r in state.records.values() for part in r["ends"]
+            }
+        ]
+        if not (
+            fraction_boundary_contact([piece], arms)
+            or fraction_area_overlap(state.scope, [piece], arms)
+        ):
+            raise ValueError("final model end lacks positive source-arm contact")
+        if closed_contact([piece], other):
+            raise ValueError("final cross-junction end contacts another net")
+    n = 0 if end["side"] == "A" else 1
+    start, finish = (central[3], central[0]) if n == 0 else (central[1], central[2])
+    if not model_edge_covered(own, start, finish):
+        raise ValueError("final model designated end edge is not wholly covered")
+    if model_edge_contacts(other, start, finish):
+        raise ValueError("final cross-junction wrong-net end/corner contact")
 
 
 def realized_on_grid(build_input, result, junctions, records):

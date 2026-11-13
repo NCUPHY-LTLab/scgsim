@@ -74,9 +74,8 @@ def partition_junctions(
     output_format: JunctionPartitionFormat = DEFAULT_FORMAT,
 ):
     """Derive terminal-owned ends and a complete central rectangle once, on the input's declared grid."""
-    geometry_grid_context(
-        build_input
-    )  # an input without a declared grid is refused first
+    # An input without a declared grid is refused before anything else.
+    geometry_grid_context(build_input)
     if not junctions:
         return build_input
     if output_format.metadata_key in build_input.metadata:
@@ -208,16 +207,9 @@ class _JunctionPartitionPlanner:
         """
         if not self.lattice.unit:
             return UNGRIDDED
-        return GridScope(self.grid).placed(
-            (
-                self.dx,
-                self.px,
-                self.dy,
-                self.py,
-                self.origin[0] * self.dx + self.origin[1] * self.px,
-                self.origin[0] * self.dy + self.origin[1] * self.py,
-            )
-        )
+        a, b, c, d = self.dx, self.px, self.dy, self.py
+        x, y = self.origin
+        return GridScope(self.grid).placed((a, b, c, d, x * a + y * b, x * c + y * d))
 
     def initialize(self):
         """Index immutable authored polygons, source Entities and junction identities."""

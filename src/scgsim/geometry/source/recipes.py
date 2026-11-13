@@ -122,30 +122,9 @@ def _declared_source_audit(
     requested: Sequence[LayoutPolygonSpec],
     realized: Sequence[LayoutPolygonSpec],
 ) -> SourceGridAudit:
-    from shapely import Polygon, union_all  # noqa: PLC0415 - optional geometry dependency
-
     context = scope.bound_grid()
-
-    def geometry(polygons):
-        return union_all(
-            [
-                Polygon(
-                    tuple(scope.to_layout(p) for p in v.exterior),
-                    tuple(tuple(scope.to_layout(p) for p in r) for r in v.holes),
-                )
-                for v in polygons
-            ]
-        )
-
-    raw, final = geometry(requested), geometry(realized)
-    before = (
-        len(polygon_components(raw)),
-        sum(len(p.interiors) for p in polygon_components(raw)),
-    )
-    after = (
-        len(polygon_components(final)),
-        sum(len(p.interiors) for p in polygon_components(final)),
-    )
+    raw, final = _layout_shape(scope, requested), _layout_shape(scope, realized)
+    before, after = _components_and_holes(raw), _components_and_holes(final)
     if before != after:
         raise ValueError(
             grid_change_message(
@@ -187,6 +166,29 @@ def _declared_source_audit(
         "realized_holes": after[1],
         "geometry_changed": not raw.equals(final),
     }
+
+
+def _layout_shape(scope: GridScope, polygons: Sequence[LayoutPolygonSpec]) -> Any:
+    """The union of the polygons in the assembled layout."""
+    from shapely import Polygon, union_all  # noqa: PLC0415 - optional geometry dependency
+
+    return union_all(
+        [
+            Polygon(
+                tuple(scope.to_layout(p) for p in v.exterior),
+                tuple(tuple(scope.to_layout(p) for p in r) for r in v.holes),
+            )
+            for v in polygons
+        ]
+    )
+
+
+def _components_and_holes(shape: Any) -> tuple[int, int]:
+    """How many polygon components a shape has, and how many holes in all."""
+    return (
+        len(polygon_components(shape)),
+        sum(len(p.interiors) for p in polygon_components(shape)),
+    )
 
 
 @dataclass(frozen=True)

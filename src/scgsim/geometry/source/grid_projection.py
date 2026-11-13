@@ -16,7 +16,6 @@ from itertools import combinations
 from typing import (
     TYPE_CHECKING,
     Any,
-    TypedDict,
     cast,
 )
 
@@ -44,42 +43,20 @@ from scgsim.geometry.source.ports import (
     port_sheet_overlaps,
     port_sheet_target_layer_matches,
 )
-from scgsim.geometry.source.recipes import SourceGridAudit, SourcePolygonAudit
+from scgsim.geometry.source.preimages import (
+    PolygonPreimage,
+    SourcePolygonInputs,
+    source_polygon_inputs,
+)
+from scgsim.geometry.source.recipes import SourceGridAudit
 from scgsim.semantics.route_a import geometry_z_range, same_z
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
 
 
-class _SourcePolygonIdentity(TypedDict):
-    source_entity_id: str
-    source_polygon_id: str
-
-
-_SourceRing = Sequence[Sequence[float]]
 _ZRange = tuple[float, float]
 _EVERY_Z: _ZRange = (-math.inf, math.inf)
-
-
-@dataclass(frozen=True)
-class _PolygonPreimage:
-    """Requested source rings retained with their original container types."""
-
-    exterior: _SourceRing
-    holes: Sequence[_SourceRing]
-
-
-@dataclass(frozen=True)
-class _SourcePolygonInputs:
-    """Entity ownership and physical source preimages for layout polygons.
-
-    ``recorded_audits`` are the source audits the projected input records: the ones
-    handed to this projection, else the ones the input already carries.
-    """
-
-    owners: Mapping[str, SemanticEntitySpec]
-    preimages: Mapping[str, _PolygonPreimage]
-    recorded_audits: Sequence[SourceGridAudit]
 
 
 @dataclass(frozen=True)
@@ -170,7 +147,7 @@ def apply_geometry_grid(
     grid has none and keeps the audits it carries.
     """
     bound_context = _validate_bound_context(build_input, context)
-    source = _source_polygon_inputs(
+    source = source_polygon_inputs(
         build_input,
         source_audits,
         use_source_preimage=bound_context is None or bool(source_audits),
@@ -223,100 +200,6 @@ def _validate_bound_context(
     return bound_context
 
 
-def _source_polygon_inputs(
-    build_input: GeometryBuildInput,
-    fresh_audits: tuple[SourceGridAudit, ...],
-    *,
-    use_source_preimage: bool,
-) -> _SourcePolygonInputs:
-    stored_audits = cast(
-        Sequence[SourceGridAudit],
-        build_input.metadata.get("geometry_grid_source_audits", ()),
-    )
-    earliest_preimages = _earliest_preimages((*fresh_audits, *stored_audits))
-    owners = {
-        polygon_id: entity
-        for entity in build_input.entities
-        for polygon_id in entity.polygon_ids
-    }
-    preimages = {
-        polygon.polygon_id: _polygon_preimage(
-            polygon,
-            owners.get(polygon.polygon_id),
-            earliest_preimages if use_source_preimage else None,
-        )
-        for polygon in build_input.polygons
-    }
-    return _SourcePolygonInputs(
-        owners=owners,
-        preimages=preimages,
-        recorded_audits=fresh_audits or stored_audits,
-    )
-
-
-def _earliest_preimages(
-    audits: Sequence[SourceGridAudit],
-) -> dict[tuple[str, str], SourcePolygonAudit]:
-    """Each audited source polygon as its first audit requested it, by Entity and polygon id."""
-    earliest_preimages: dict[tuple[str, str], SourcePolygonAudit] = {}
-    for audit in audits:
-        for source_polygon in audit.get("requested_polygons", ()):
-            earliest_preimages.setdefault(
-                (audit["source_entity_id"], source_polygon["source_polygon_id"]),
-                source_polygon,
-            )
-    return earliest_preimages
-
-
-def _polygon_preimage(
-    polygon: LayoutPolygonSpec,
-    owner: SemanticEntitySpec | None,
-    earliest_preimages: Mapping[tuple[str, str], SourcePolygonAudit] | None,
-) -> _PolygonPreimage:
-    """What a polygon was before the grid: its audited request, or the polygon itself.
-
-    Without ``earliest_preimages`` (an input projected again on its own grid) every
-    polygon is its own preimage; with them, a polygon a declared recipe made must have one.
-    """
-    # Geometry metadata is the serialized boundary for primitive source identity.
-    identity = cast(
-        _SourcePolygonIdentity | None,
-        polygon.metadata.get("geometry_grid_source_identity"),
-    )
-    if identity is None and "source_polygon_id" in polygon.metadata:
-        identity = {
-            "source_entity_id": cast(str, polygon.metadata["source_semantic_id"]),
-            "source_polygon_id": cast(str, polygon.metadata["source_polygon_id"]),
-        }
-    if identity is None and owner is not None:
-        identity = {
-            "source_entity_id": owner.semantic_id,
-            "source_polygon_id": polygon.polygon_id,
-        }
-    saved_preimage = (
-        None
-        if earliest_preimages is None or identity is None
-        else earliest_preimages.get(
-            (identity["source_entity_id"], identity["source_polygon_id"])
-        )
-    )
-    if (
-        earliest_preimages is not None
-        and "geometry_grid_source_identity" in polygon.metadata
-        and saved_preimage is None
-    ):
-        raise ValueError(
-            f"declared physical source preimage is unavailable: {polygon.polygon_id}"
-        )
-    if saved_preimage:
-        # JSON audit payloads may contain lists; preserve those public metadata values.
-        return _PolygonPreimage(
-            exterior=cast(_SourceRing, saved_preimage["exterior"]),
-            holes=cast(Sequence[_SourceRing], saved_preimage["holes"]),
-        )
-    return _PolygonPreimage(exterior=polygon.exterior, holes=polygon.holes)
-
-
 def _grid_operands(build_input: GeometryBuildInput) -> tuple[GridOperand, ...]:
     operands = [
         GridOperand(
@@ -343,7 +226,7 @@ def _grid_operands(build_input: GeometryBuildInput) -> tuple[GridOperand, ...]:
 
 def _noding_groups(
     build_input: GeometryBuildInput,
-    source: _SourcePolygonInputs,
+    source: SourcePolygonInputs,
     context: GeometryGridContext,
 ) -> _NodingGroups:
     operands = _grid_operands(build_input)
@@ -364,7 +247,7 @@ def _noding_groups(
 
 
 def _operand_z_ranges(
-    build_input: GeometryBuildInput, source: _SourcePolygonInputs
+    build_input: GeometryBuildInput, source: SourcePolygonInputs
 ) -> dict[str, _ZRange]:
     z_ranges = {
         polygon.polygon_id: _owner_z_range(source.owners.get(polygon.polygon_id))
@@ -400,7 +283,7 @@ def _z_ranges_meet(first: _ZRange, second: _ZRange) -> bool:
 
 
 def _port_sheet_hosts(
-    port: PortSheetRegionRecord, source: _SourcePolygonInputs
+    port: PortSheetRegionRecord, source: SourcePolygonInputs
 ) -> dict[str, SemanticEntitySpec]:
     return {
         polygon_id: entity
@@ -414,7 +297,7 @@ def _port_sheet_hosts(
 
 def _project_layout_polygons(
     build_input: GeometryBuildInput,
-    source: _SourcePolygonInputs,
+    source: SourcePolygonInputs,
     groups: _NodingGroups,
 ) -> _ProjectedPolygons:
     projected: list[LayoutPolygonSpec] = []
@@ -481,7 +364,7 @@ def _drawn_rings_on(
 
 def _validate_conductor_contacts(
     build_input: GeometryBuildInput,
-    source: _SourcePolygonInputs,
+    source: SourcePolygonInputs,
     projected: _ProjectedPolygons,
     context: GeometryGridContext,
 ) -> list[dict[str, object]]:
@@ -523,7 +406,7 @@ def _validate_conductor_contacts(
 
 def _conductor_shapes(
     conductors: Sequence[SemanticEntitySpec],
-    source: _SourcePolygonInputs,
+    source: SourcePolygonInputs,
     projected: _ProjectedPolygons,
     context: GeometryGridContext,
 ) -> tuple[dict[str, BaseGeometry], dict[str, BaseGeometry]]:
@@ -581,7 +464,7 @@ def _conductor_contact_refusal(
 
 def _project_port_regions(
     build_input: GeometryBuildInput,
-    source: _SourcePolygonInputs,
+    source: SourcePolygonInputs,
     projected_polygons: _ProjectedPolygons,
     groups: _NodingGroups,
     geometry_polygon: Callable[..., BaseGeometry],
@@ -598,13 +481,13 @@ class _HostOnGrid:
 
     polygon_id: str
     entity: SemanticEntitySpec
-    requested: _PolygonPreimage
+    requested: PolygonPreimage
     realized: LayoutPolygonSpec
 
 
 def _project_port_region(
     port: PortSheetRegionRecord,
-    source: _SourcePolygonInputs,
+    source: SourcePolygonInputs,
     projected_polygons: _ProjectedPolygons,
     groups: _NodingGroups,
     geometry_polygon: Callable[..., BaseGeometry],
@@ -761,7 +644,7 @@ def _project_entities(
 
 def _source_geometry_payload(
     build_input: GeometryBuildInput,
-    source: _SourcePolygonInputs,
+    source: SourcePolygonInputs,
 ) -> dict[str, object]:
     return {
         "polygons": [
@@ -787,7 +670,7 @@ class _GeometryOperations:
 
 def _project_metadata(
     build_input: GeometryBuildInput,
-    source: _SourcePolygonInputs,
+    source: SourcePolygonInputs,
     context: GeometryGridContext,
     groups: _NodingGroups,
     contact_relations: list[dict[str, object]],

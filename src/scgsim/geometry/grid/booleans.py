@@ -57,23 +57,11 @@ def polygon_boolean(
             cast("Literal['or', 'and', 'xor', 'not']", operation),
             precision=precision,
         )
-    left_ids: set[str] = set()
-    right_ids: set[str] = set()
-    values = []
-    for label, polygons, side in (("L", left, left_ids), ("R", right, right_ids)):
-        for index, polygon in enumerate(polygons):
-            outer, holes = polygon_rings(scope, polygon)
-            operand_id = f"{label}{index}"
-            side.add(operand_id)
-            values.append(
-                GridOperand(
-                    operand_id,
-                    tuple(scope.to_layout(p) for p in outer),
-                    tuple(tuple(scope.to_layout(p) for p in ring) for ring in holes),
-                    physical=False,
-                    contact=False,
-                )
-            )
+    left_operands = _boolean_operands(scope, "L", left)
+    right_operands = _boolean_operands(scope, "R", right)
+    left_ids = {operand.operand_id for operand in left_operands}
+    right_ids = {operand.operand_id for operand in right_operands}
+    values = [*left_operands, *right_operands]
     arrangement = build_grid_arrangement(
         values, scope.grid, apply_grid=not scope.reference
     )
@@ -96,6 +84,25 @@ def polygon_boolean(
         )
         for outer, holes in arrangement.face_regions(selected)
     ]
+
+
+def _boolean_operands(
+    scope: GridScope, label: str, polygons: Sequence[PolygonCoordinates]
+) -> list[GridOperand]:
+    """One side of a Boolean as grid operands in the assembled layout, named ``label`` and their index."""
+    operands = []
+    for index, polygon in enumerate(polygons):
+        outer, holes = polygon_rings(scope, polygon)
+        operands.append(
+            GridOperand(
+                f"{label}{index}",
+                tuple(scope.to_layout(p) for p in outer),
+                tuple(tuple(scope.to_layout(p) for p in ring) for ring in holes),
+                physical=False,
+                contact=False,
+            )
+        )
+    return operands
 
 
 def boolean_polygon_region(
