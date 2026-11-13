@@ -31,12 +31,11 @@ from scgsim.geometry import (
     LayoutPolygonSpec,
     PortSheetRegionRecord,
 )
-from scgsim.geometry.planning.junction_partition import (
-    drawn_exterior,
-    junction_terminal_line,
-    lattice_rectangle,
+from scgsim.geometry.junctions.lattice import drawn_exterior, lattice_rectangle
+from scgsim.geometry.junctions.terminal import junction_terminal_line
+from scgsim.geometry.planning.surface_planning.contributions import (
+    plan_representation_contribution_geometry,
 )
-from scgsim.geometry.planning.surfaces import plan_representation_contribution_geometry
 from scgsim.geometry.source.validation import validate_geometry_input
 
 

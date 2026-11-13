@@ -16,9 +16,11 @@ from scgsim.geometry.models.representation import (
     RepresentationContext,
 )
 from scgsim.geometry.models.topology import SurfacePlanRecord
-from scgsim.geometry.planning.surfaces import (
-    plan_representation_contribution_geometry,
+from scgsim.geometry.planning.surface_planning.contracts import (
     with_surface_contract_metadata,
+)
+from scgsim.geometry.planning.surface_planning.contributions import (
+    plan_representation_contribution_geometry,
 )
 
 

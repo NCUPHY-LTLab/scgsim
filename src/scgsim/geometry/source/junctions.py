@@ -4,6 +4,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import cast
 
+from scgsim.geometry.grid.grid import with_input_grid
+from scgsim.geometry.grid.grid_regions import grid_change_message
 from scgsim.geometry.models.grid import format_box, geometry_grid_context
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
@@ -19,8 +21,6 @@ from scgsim.geometry.models.regions import (
     PortSheetOverlapRecord,
     PortSheetRegionRecord,
 )
-from scgsim.geometry.primitives.grid import with_input_grid
-from scgsim.geometry.primitives.grid_regions import grid_change_message
 from scgsim.geometry.source.ports import port_sheet_overlaps
 
 

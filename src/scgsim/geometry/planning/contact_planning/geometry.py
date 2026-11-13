@@ -6,6 +6,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
+from scgsim.geometry.grid.entities import unique_ids
+from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.loops import canonical_loop_sort_key, loop_signature
+from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area, ring_edges
+from scgsim.geometry.grid.spatial import coordinate_z_key, same_coordinate_z
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import (
@@ -18,12 +26,6 @@ from scgsim.geometry.planning.domain_planning.faces import (
     route_a_sheet_plane_z_um_from_solutions,
 )
 from scgsim.geometry.planning.domain_planning.occupancy import required_host_solution_id
-from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.primitives.entities import unique_ids
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import canonical_loop_sort_key, loop_signature
-from scgsim.geometry.primitives.planar_loops import clean_loop, polygon_area, ring_edges
-from scgsim.geometry.primitives.spatial import coordinate_z_key, same_coordinate_z
 
 
 @dataclass(frozen=True)

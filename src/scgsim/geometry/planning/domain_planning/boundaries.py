@@ -6,6 +6,26 @@ from collections.abc import Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass
 from typing import Any, cast
 
+from scgsim.geometry.grid.entities import entity_z_range_um
+from scgsim.geometry.grid.entity_validation import is_solution_entity
+from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.loops import (
+    gdstk_surface_region,
+    geometry_ref_from_gdstk_polygon,
+    geometry_refs_from_gdstk_region,
+    loop_centroid,
+    loop_signature,
+    simple_interior_hole_loops,
+)
+from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area
+from scgsim.geometry.grid.spatial import (
+    geometry_ref_surface_z_um,
+    intersect_bounds,
+    same_coordinate_z,
+)
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
@@ -25,25 +45,7 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
 )
 from scgsim.geometry.planning.domain_planning.sidewalls import SolutionSidewallPlanner
 from scgsim.geometry.planning.evidence import solution_solution_evidence
-from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.primitives.entities import entity_z_range_um
-from scgsim.geometry.primitives.entity_validation import is_solution_entity
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import (
-    gdstk_surface_region,
-    geometry_ref_from_gdstk_polygon,
-    geometry_refs_from_gdstk_region,
-    loop_centroid,
-    loop_signature,
-    simple_interior_hole_loops,
-)
-from scgsim.geometry.primitives.planar_loops import clean_loop, polygon_area
-from scgsim.geometry.primitives.spatial import (
-    geometry_ref_surface_z_um,
-    intersect_bounds,
-    same_coordinate_z,
-)
-from scgsim.geometry.primitives.surface_records import (
+from scgsim.geometry.planning.surface_records import (
     RouteASheetPatch,
     surface_contribution_provenance,
 )

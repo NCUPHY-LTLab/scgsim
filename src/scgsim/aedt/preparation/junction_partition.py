@@ -1,36 +1,18 @@
-"""AEDT compatibility names over the shared source-domain rectangle algorithm."""
+"""AEDT junction partitions: the shared source-domain rectangle algorithm under the AEDT record format."""
 
 from dataclasses import replace
 
 from scgsim.aedt.specs.epr import PlanarJunction
-from scgsim.geometry.models.junctions import JunctionGeometry
-from scgsim.geometry.planning.junction_partition import (
-    JunctionContactRequest,
-    JunctionPartitionFormat,
-    junction_terminal_line,
-    plain_record,
-)
-from scgsim.geometry.planning.junction_partition import closed_contact as closed_contact
-from scgsim.geometry.planning.junction_partition import cross as cross
-from scgsim.geometry.planning.junction_partition import inside_ring as inside_ring
-from scgsim.geometry.planning.junction_partition import (
+from scgsim.geometry.junctions.contact import JunctionContactRequest
+from scgsim.geometry.junctions.contact import (
     junction_contact_inventory as _shared_contact_inventory,
 )
-from scgsim.geometry.planning.junction_partition import (
-    junction_source_binding as junction_source_binding,
-)
-from scgsim.geometry.planning.junction_partition import (
+from scgsim.geometry.junctions.core import JunctionPartitionFormat, plain_record
+from scgsim.geometry.junctions.partition import (
     partition_junctions as _partition_junctions,
 )
-from scgsim.geometry.planning.junction_partition import section as section
-
-__all__ = [
-    "closed_contact",
-    "cross",
-    "inside_ring",
-    "section",
-    "junction_source_binding",
-]
+from scgsim.geometry.junctions.terminal import junction_terminal_line
+from scgsim.geometry.models.junctions import JunctionGeometry
 
 METHOD = "scgsim.aedt.junction-partition.v1"
 _FORMAT = JunctionPartitionFormat(
@@ -73,6 +55,7 @@ def junction_geometry(junction: PlanarJunction) -> JunctionGeometry:
 
 
 def partition_junctions(build_input, junctions, step):
+    """Partition junctions under the AEDT record format, reusing the common model when it already holds them."""
     if not junctions:
         return build_input
     shared = build_input.metadata.get("junction_partitions")

@@ -6,11 +6,22 @@ from collections.abc import Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass
 from typing import Any
 
+from scgsim.geometry.grid.constants import INTERFACE_KIND_ORDER
+from scgsim.geometry.grid.entities import entity_by_id, entity_z_range_um, unique_ids
+from scgsim.geometry.grid.entity_validation import is_vacuum_solution_entity
+from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.loops import (
+    gdstk_surface_region,
+    geometry_refs_from_gdstk_region,
+    loop_centroid,
+    loop_signature,
+)
+from scgsim.geometry.grid.spatial import bounds_contains_point, same_coordinate_z
+from scgsim.geometry.interpretation.envelope import auto_vacuum_sheet_z
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord
-from scgsim.geometry.planning.domain_planning.envelope import auto_vacuum_sheet_z
 from scgsim.geometry.planning.domain_planning.hosts import auto_vacuum_host_component_id
 from scgsim.geometry.planning.domain_planning.occupancy import (
     solution_bounds,
@@ -18,25 +29,7 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
     solution_id_for_entity_coverage,
     solution_region_entities,
 )
-from scgsim.geometry.primitives.constants import INTERFACE_KIND_ORDER
-from scgsim.geometry.primitives.entities import (
-    entity_by_id,
-    entity_z_range_um,
-    unique_ids,
-)
-from scgsim.geometry.primitives.entity_validation import is_vacuum_solution_entity
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import (
-    gdstk_surface_region,
-    geometry_refs_from_gdstk_region,
-    loop_centroid,
-    loop_signature,
-)
-from scgsim.geometry.primitives.spatial import (
-    bounds_contains_point,
-    same_coordinate_z,
-)
-from scgsim.geometry.primitives.surface_records import (
+from scgsim.geometry.planning.surface_records import (
     interface_kinds,
     is_route_a_sheet_interface,
 )

@@ -8,8 +8,7 @@ import pytest
 
 import scgsim.geometry.source.ground as ground_source
 import scgsim.geometry.source.occurrence as occurrence_source  # private-import: exercise actual decorated source entry points while retaining their owned imports
-from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry.primitives.grid import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.grid.grid import (
     SOURCE_INTENT,
     PolygonRegion,
     geometry_grid_scope,
@@ -18,14 +17,13 @@ from scgsim.geometry.primitives.grid import (  # private-import: primitive packa
     preserve_declared_source,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry.primitives.loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
-    geometry_ref_from_gdstk_polygon,
-)
-from scgsim.geometry.primitives.planar_loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.grid.loops import geometry_ref_from_gdstk_polygon
+from scgsim.geometry.grid.planar_loops import (
     clean_loop,
     cutline_boundary_loops,
     polygon_area,
 )
+from scgsim.geometry.models.grid import GeometryGridContext
 
 OUTER = ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))
 HOLE = ((2.0, 2.0), (2.0, 4.0), (4.0, 4.0), (4.0, 2.0))

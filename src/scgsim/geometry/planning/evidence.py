@@ -6,10 +6,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from typing import Any, Literal
 
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.planning.representation import planned_conductor_representation
 from scgsim.semantics import (
     EvidenceResult,
     SemanticEvidenceFacade,

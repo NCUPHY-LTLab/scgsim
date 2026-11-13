@@ -13,8 +13,7 @@ from threading import get_ident
 from types import MappingProxyType
 from typing import Any
 
-from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.primitives.grid import (
+from scgsim.geometry.grid.grid import (
     in_occurrence_frame,
     named_source,
     polygon_world_frame,
@@ -23,9 +22,7 @@ from scgsim.geometry.primitives.grid import (
     source_refusal,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry.source.ground import derived_ground_polygons
-from scgsim.geometry.source.normalization import gds_layer
-from scgsim.geometry.source.polygon_ops import (
+from scgsim.geometry.grid.polygon_ops import (
     FIX_SELECTOR,
     flattened_polygons,
     fused_gdstk_components,
@@ -36,6 +33,9 @@ from scgsim.geometry.source.polygon_ops import (
     selector_place,
     without_repeated_vertices,
 )
+from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.source.ground import derived_ground_polygons
+from scgsim.geometry.source.normalization import gds_layer
 
 
 @dataclass(frozen=True)

@@ -6,19 +6,19 @@ from collections.abc import Mapping, Sequence
 from math import isfinite, sqrt
 from typing import Any, Protocol, TypeGuard, cast
 
-from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
-from scgsim.geometry.primitives.grid import (
+from scgsim.geometry.grid.grid import (
     bound_grid_context,
     named_source,
     polygon_boolean,
     source_refusal,
 )
-from scgsim.geometry.source.polygon_ops import (
+from scgsim.geometry.grid.polygon_ops import (
     layout_polygon_region,
     ring_from_gdstk_polygon,
     selector_place,
 )
+from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 
 SOURCE_OCCURRENCE_POLYGON_METADATA_KEY = "source_occurrence_polygon_um"
 

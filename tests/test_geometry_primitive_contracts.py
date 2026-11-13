@@ -2,21 +2,14 @@
 
 from dataclasses import replace
 
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
-from scgsim.geometry.primitives.entity_validation import (
+from scgsim.geometry.grid.entity_validation import (
     entities_have_finite_overlap,
     is_solution_entity,
     is_vacuum_solution_entity,
     requires_route_representation,
     resolve_contact_pad_attachment,
 )
-from scgsim.geometry.primitives.geometry_refs import (
-    entity_geometry_ref,
-    route_entity_geometry_ref,
-    sidewall_geometry_refs,
-)
-from scgsim.geometry.primitives.spatial import (  # private-import: lock down shared tolerance and canonicalization contracts
+from scgsim.geometry.grid.spatial import (
     bounds_contains_point,
     bounds_overlap,
     coordinate_2d_key,
@@ -31,7 +24,14 @@ from scgsim.geometry.primitives.spatial import (  # private-import: lock down sh
     range_within_bounds,
     segment_overlap_interval,
 )
-from scgsim.geometry.primitives.surface_records import (
+from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
+from scgsim.geometry.planning.geometry_refs import (
+    entity_geometry_ref,
+    route_entity_geometry_ref,
+    sidewall_geometry_refs,
+)
+from scgsim.geometry.planning.surface_records import (
     canonical_face_signature_3d,
     interface_kinds,
     surface_boundary_volume_ids,

@@ -5,12 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, TypedDict, cast
 
+from scgsim.geometry.grid.constants import INTERFACE_KIND_ORDER
+from scgsim.geometry.grid.entities import intent_supports_route
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord
-from scgsim.geometry.primitives.constants import INTERFACE_KIND_ORDER
-from scgsim.geometry.primitives.entities import intent_supports_route
 
 
 class InterfaceIntents(TypedDict, total=False):
