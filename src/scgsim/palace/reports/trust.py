@@ -8,7 +8,7 @@ import json
 import math
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NamedTuple, TypedDict
 
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA,
@@ -91,35 +91,42 @@ _DURATION_BARS = (
 )
 
 
+class PassDelta(NamedTuple):
+    """The solver time one AMR pass added, or why it cannot be told from the recorded cumulative timer."""
+
+    seconds: float | None
+    reason: str | None
+
+
 def _elapsed_pass_cost(
     iteration: int | None,
     elapsed_total: float | None,
     previous_iteration: int | None,
     previous_elapsed: float | None,
-) -> tuple[float | None, str | None]:
+) -> PassDelta:
     """Return a pass delta only when native iteration and cumulative timer are continuous."""
     if iteration is None:
-        return None, "native_iteration_unavailable"
+        return PassDelta(None, "native_iteration_unavailable")
     if previous_iteration is None:
         if iteration != 1:
-            return None, "missing_previous_native_iteration"
+            return PassDelta(None, "missing_previous_native_iteration")
     elif iteration <= previous_iteration:
-        return None, "native_iteration_not_increasing"
+        return PassDelta(None, "native_iteration_not_increasing")
     elif iteration != previous_iteration + 1:
-        return None, "native_iteration_gap"
+        return PassDelta(None, "native_iteration_gap")
     if elapsed_total is None:
-        return None, "cumulative_elapsed_unavailable"
+        return PassDelta(None, "cumulative_elapsed_unavailable")
     if not math.isfinite(elapsed_total):
-        return None, "nonfinite_cumulative_elapsed"
+        return PassDelta(None, "nonfinite_cumulative_elapsed")
     if previous_iteration is None:
-        return elapsed_total, None
+        return PassDelta(elapsed_total, None)
     if previous_elapsed is None:
-        return None, "previous_cumulative_elapsed_unavailable"
+        return PassDelta(None, "previous_cumulative_elapsed_unavailable")
     if not math.isfinite(previous_elapsed):
-        return None, "previous_cumulative_elapsed_nonfinite"
+        return PassDelta(None, "previous_cumulative_elapsed_nonfinite")
     if elapsed_total < previous_elapsed:
-        return None, "cumulative_elapsed_reset"
-    return elapsed_total - previous_elapsed, None
+        return PassDelta(None, "cumulative_elapsed_reset")
+    return PassDelta(elapsed_total - previous_elapsed, None)
 
 
 class ReportIdentity(TypedDict):

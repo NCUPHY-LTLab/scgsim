@@ -10,7 +10,7 @@ import tempfile
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from .loaders.common import file_sha256
 from .scene import MODE_TITLES, VIEWS, ScenePart
@@ -25,9 +25,16 @@ class _ImageTools:
     font: Any
 
 
+class RenderedMode(NamedTuple):
+    """One rendered preview mode: its contact sheet and a record (path, size, SHA-256) of every image."""
+
+    contact_sheet: Path
+    artifacts: list[dict[str, Any]]
+
+
 def render_mode(
     *, root: Path, mode_name: str, parts: tuple[ScenePart, ...]
-) -> tuple[Path, list[dict[str, Any]]]:
+) -> RenderedMode:
     """Render all fixed views, build their contact sheet and record artifacts."""
     if not parts:
         raise ValueError(f"available preview mode {mode_name} has no geometry")
@@ -63,7 +70,7 @@ def render_mode(
                 "sha256": file_sha256(path),
             }
         )
-    return final_dir / "contact-sheet.png", artifacts
+    return RenderedMode(final_dir / "contact-sheet.png", artifacts)
 
 
 def _scene_camera(

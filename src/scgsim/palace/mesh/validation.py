@@ -4,19 +4,26 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, NamedTuple
 
 
-def live_physical_groups() -> dict[tuple[int, str], tuple[int, tuple[int, ...]]]:
-    """Map live gmsh (dimension, physical name) -> (physical-group, entity tags)."""
+class LiveGroup(NamedTuple):
+    """One physical group in the live Gmsh model: its physical tag and its sorted entity tags."""
+
+    physical_tag: int
+    entity_tags: tuple[int, ...]
+
+
+def live_physical_groups() -> dict[tuple[int, str], LiveGroup]:
+    """Map live gmsh (dimension, physical name) to the group's physical tag and entity tags."""
     import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
 
-    live: dict[tuple[int, str], tuple[int, tuple[int, ...]]] = {}
+    live: dict[tuple[int, str], LiveGroup] = {}
     for dim, phys_group in gmsh.model.getPhysicalGroups():
         name = gmsh.model.getPhysicalName(dim, phys_group)
         if not name:
             continue
-        live[(int(dim), str(name))] = (
+        live[(int(dim), str(name))] = LiveGroup(
             int(phys_group),
             tuple(
                 sorted(
@@ -30,7 +37,7 @@ def live_physical_groups() -> dict[tuple[int, str], tuple[int, tuple[int, ...]]]
 
 def validate_mesh_matches_groups(
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
-    live: Mapping[tuple[int, str], tuple[int, tuple[int, ...]]],
+    live: Mapping[tuple[int, str], LiveGroup],
 ) -> None:
     """Require every primary group of the sidecar to be a physical group of the mesh on the same entities.
 
@@ -44,7 +51,9 @@ def validate_mesh_matches_groups(
                 raise ValueError(
                     f"mesh has no physical group {record['group']!r} of dimension {key[0]}."
                 )
-            if live[key][1] != tuple(sorted(int(tag) for tag in record["tags"])):
+            if live[key].entity_tags != tuple(
+                sorted(int(tag) for tag in record["tags"])
+            ):
                 raise ValueError(
                     f"physical group {record['group']!r} covers other entities in the mesh than in the sidecar."
                 )
@@ -53,7 +62,7 @@ def validate_mesh_matches_groups(
 def validate_tetrahedral_solution_groups(
     *,
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
-    live: Mapping[tuple[int, str], tuple[int, tuple[int, ...]]],
+    live: Mapping[tuple[int, str], LiveGroup],
 ) -> None:
     """Require exact live solver volume ownership and at least one 3D element each."""
     import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
