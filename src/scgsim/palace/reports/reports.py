@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -49,6 +49,8 @@ from scgsim.palace.results.inspection import (
     validate_inspection_receipt,
 )
 from scgsim.palace.results.inspection_records import (
+    CollectedSnapshots,
+    PalaceResultSelection,
     PassCostRecord,
 )
 from scgsim.palace.results.resolved_records import ResolvedRunData
@@ -216,93 +218,135 @@ def _build_trust_report(
     theme: ReportTheme = "light",
 ) -> PalaceTrustReport:
     """Bind source identity, readable snapshots and failure state into the Palace trust view."""
-    handoff_path = root / HANDOFF_METADATA
-    if not handoff_path.is_file():
-        raise FileNotFoundError(f"required artifact missing: {handoff_path}")
-    handoff = read_json(handoff_path)
-    mesh_manifest = read_optional_json(root / MESH_MANIFEST)
-    if mesh_manifest is not None:
-        require_manifest_schema(mesh_manifest)
-    mesh_thin_film = (
-        mesh_manifest.get("route_a_thin_film")
-        if isinstance(mesh_manifest, dict)
-        else None
-    )
-    if mesh_thin_film != handoff.get("route_a_thin_film"):
-        raise ValueError(
-            "mesh manifest and handoff Route-A thin-film identity mismatch."
-        )
-    problem = str(handoff.get("problem") or (resolved.problem if resolved else ""))
-    route = str(handoff.get("route") or (resolved.route if resolved else ""))
-    profile = str(handoff.get("profile") or "")
-    if problem not in PROBLEMS:
-        raise ValueError(f"unsupported problem {problem!r} for trustworthiness report.")
-
-    config = read_optional_json(root / CONFIG)
-    receipt = read_optional_json(root / RETURNED_RECEIPT)
-    receipt_paths = validate_inspection_receipt(root, handoff, receipt)
-    refinement = configured_refinement(config)
-    index_map = (
-        resolved.provenance.index_map
-        if resolved is not None
-        else read_optional_json(root / INDEX_MAP)
-    )
-    if index_map is not None:
-        require_index_map_schema(index_map)
-        validate_index_entries(index_map)
-        if config is not None:
-            validate_surface_epr_config(config, index_map)
-    surface_bindings = read_surface_bindings(index_map)
-    surface_margin_bindings = read_surface_margin_bindings(index_map)
+    run = _InspectedRun.read(root, resolved)
     collected = collect_amr_passes(
         root,
-        problem,
-        surface_bindings,
-        surface_margin_bindings,
-        failed_attempt=receipt is not None and receipt.get("status") == "failed",
-        mode_count=configured_mode_count(config),
+        run.problem,
+        read_surface_bindings(run.index_map),
+        read_surface_margin_bindings(run.index_map),
+        failed_attempt=run.receipt is not None
+        and run.receipt.get("status") == "failed",
+        mode_count=configured_mode_count(run.config),
     )
-    passes = collected.passes
-    receipt_status = receipt.get("status") if receipt is not None else None
     selection = result_selection(
         root=root,
-        problem=problem,
+        problem=run.problem,
         collected=collected,
-        receipt_paths=receipt_paths,
+        receipt_paths=run.receipt_paths,
     )
+    failure = failure_diagnosis(root, run.receipt, run.receipt_paths)
+    palace_payload = latest_palace_json(collected.passes, resolved)
+    durations = recorded_durations(palace_payload)
+    cost = cost_cards(palace_payload, resolved)
+    refinement = configured_refinement(run.config)
+    return PalaceTrustReport(
+        run_dir=root,
+        problem=run.problem,
+        route=run.route,
+        profile=run.profile,
+        completeness=_completeness(run.receipt, collected, selection),
+        latest_source=selection.selected_source or "none",
+        selection=selection,
+        failure=failure,
+        identity=_report_identity(cost, run.handoff, run.receipt, resolved),
+        passes=tuple(collected.passes),
+        amr_tolerance=refinement.get("Tol"),
+        amr_max_passes=as_int(refinement.get("MaxIts")),
+        durations=durations,
+        cost=cost,
+        provenance=_report_provenance(
+            run.config, run.handoff, run.mesh_manifest, run.problem, run.receipt
+        ),
+        theme=checked_theme(theme),
+    )
+
+
+@dataclass(frozen=True)
+class _InspectedRun:
+    """The records of a returned run folder that a trust report reads, each checked as it is read.
+
+    A run that failed or stopped early may lack the mesh manifest, the config, the receipt or the index
+    map; each is then None.
+    """
+
+    handoff: dict[str, Any]
+    mesh_manifest: dict[str, Any] | None
+    problem: str
+    route: str
+    profile: str
+    config: dict[str, Any] | None
+    receipt: dict[str, Any] | None
+    receipt_paths: frozenset[str]
+    index_map: dict[str, Any] | None
+
+    @classmethod
+    def read(cls, root: Path, resolved: ResolvedRunData | None) -> _InspectedRun:
+        """Read the handoff first, then each record a partial run may lack, refusing what disagrees."""
+        handoff_path = root / HANDOFF_METADATA
+        if not handoff_path.is_file():
+            raise FileNotFoundError(f"required artifact missing: {handoff_path}")
+        handoff = read_json(handoff_path)
+        mesh_manifest = read_optional_json(root / MESH_MANIFEST)
+        if mesh_manifest is not None:
+            require_manifest_schema(mesh_manifest)
+        mesh_thin_film = (
+            mesh_manifest.get("route_a_thin_film")
+            if isinstance(mesh_manifest, dict)
+            else None
+        )
+        if mesh_thin_film != handoff.get("route_a_thin_film"):
+            raise ValueError(
+                "mesh manifest and handoff Route-A thin-film identity mismatch: "
+                f"{MESH_MANIFEST} records {mesh_thin_film!r}, {HANDOFF_METADATA} records "
+                f"{handoff.get('route_a_thin_film')!r} in {root}."
+            )
+        problem = str(handoff.get("problem") or (resolved.problem if resolved else ""))
+        route = str(handoff.get("route") or (resolved.route if resolved else ""))
+        profile = str(handoff.get("profile") or "")
+        if problem not in PROBLEMS:
+            raise ValueError(
+                f"unsupported problem {problem!r} for trustworthiness report "
+                f"({HANDOFF_METADATA} in {root}); SCGSim writes {sorted(PROBLEMS)}."
+            )
+        config = read_optional_json(root / CONFIG)
+        receipt = read_optional_json(root / RETURNED_RECEIPT)
+        receipt_paths = validate_inspection_receipt(root, handoff, receipt)
+        index_map = (
+            resolved.provenance.index_map
+            if resolved is not None
+            else read_optional_json(root / INDEX_MAP)
+        )
+        if index_map is not None:
+            require_index_map_schema(index_map)
+            validate_index_entries(index_map)
+            if config is not None:
+                validate_surface_epr_config(config, index_map)
+        return cls(
+            handoff,
+            mesh_manifest,
+            problem,
+            route,
+            profile,
+            config,
+            receipt,
+            receipt_paths,
+            index_map,
+        )
+
+
+def _completeness(
+    receipt: dict[str, Any] | None,
+    collected: CollectedSnapshots,
+    selection: PalaceResultSelection,
+) -> Literal["complete", "partial"]:
+    """Complete only when the receipt says completed and the final tables are the readable selection."""
+    receipt_status = receipt.get("status") if receipt is not None else None
     parent_complete = (
         receipt_status == "completed"
         and collected.final_snapshot_status == "readable"
         and selection.selected_source == "final"
     )
-    completeness: Literal["complete", "partial"] = (
-        "complete" if parent_complete else "partial"
-    )
-    latest_source = selection.selected_source or "none"
-    failure = failure_diagnosis(root, receipt, receipt_paths)
-    palace_payload = latest_palace_json(passes, resolved)
-    durations = recorded_durations(palace_payload)
-    cost = cost_cards(palace_payload, resolved)
-    identity = _report_identity(cost, handoff, receipt, resolved)
-    provenance = _report_provenance(config, handoff, mesh_manifest, problem, receipt)
-    return PalaceTrustReport(
-        run_dir=root,
-        problem=problem,
-        route=route,
-        profile=profile,
-        completeness=completeness,
-        latest_source=latest_source,
-        selection=selection,
-        failure=failure,
-        identity=identity,
-        passes=tuple(passes),
-        amr_tolerance=refinement.get("Tol"),
-        amr_max_passes=as_int(refinement.get("MaxIts")),
-        durations=durations,
-        cost=cost,
-        provenance=provenance,
-        theme=checked_theme(theme),
-    )
+    return "complete" if parent_complete else "partial"
 
 
 __all__ = [
