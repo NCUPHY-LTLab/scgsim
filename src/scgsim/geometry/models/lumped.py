@@ -5,6 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from scgsim.geometry.models.refusals import Declared
+
+_SUPPORT = Declared(
+    "lumped support", "the LumpedSupport passed to GeometryPlan.set_lumped_supports"
+)
+
 
 @dataclass(frozen=True)
 class LumpedSupport:
@@ -47,22 +53,26 @@ class LumpedSupport:
         ):
             value = getattr(self, key)
             if not isinstance(value, str) or not value:
-                raise ValueError(f"{key} requires explicit source identity")
+                raise ValueError(_SUPPORT.expected(key, "nonempty text", value))
         for key, size in (("source_layer", 2), ("normal", 3), ("source_transform", 6)):
             values = tuple(getattr(self, key))
             if len(values) != size:
-                raise ValueError(f"{key} requires {size} values")
+                raise ValueError(_SUPPORT.expected(key, f"{size} values", values))
             object.__setattr__(self, key, values)
         points = tuple(tuple(point) for point in self.contact_points_um)
         if len(points) != 2 or any(len(point) != 3 for point in points):
-            raise ValueError("contact_points_um requires two ordered XYZ points")
+            raise ValueError(
+                _SUPPORT.expected("contact_points_um", "two ordered XYZ points", points)
+            )
         object.__setattr__(self, "contact_points_um", points)
         for key in ("terminal_a_entity_ids", "terminal_b_entity_ids"):
             values = tuple(getattr(self, key))
             if not values or any(
                 not isinstance(value, str) or not value for value in values
             ):
-                raise ValueError(f"{key} requires qualified Entity identities")
+                raise ValueError(
+                    _SUPPORT.expected(key, "qualified Entity identities", values)
+                )
             object.__setattr__(self, key, values)
         object.__setattr__(self, "exterior", tuple(tuple(p) for p in self.exterior))
         object.__setattr__(
@@ -71,7 +81,9 @@ class LumpedSupport:
         for ring in (self.exterior, *self.holes):
             if len(ring) < 3 or any(len(point) != 2 for point in ring):
                 raise ValueError(
-                    "lumped support requires complete local XY polygon rings"
+                    _SUPPORT.part(repr(self.support_id)).expected(
+                        "ring", "at least 3 local XY points", ring
+                    )
                 )
 
     def world_point(self, point: tuple[float, ...]) -> tuple[float, ...]:

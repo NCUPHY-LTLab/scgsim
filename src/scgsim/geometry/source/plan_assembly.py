@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.normalization import (
     coupon_domain_bounds,
     gds_layer,
@@ -391,7 +392,14 @@ def _ground_contribution(
     if key in contribution_ids:
         raise ValueError(f"duplicate ground contribution {path}/{local_id}")
     contribution_ids.add(key)
-    layer = gds_layer(raw["layer"], f"{path}/{local_id} ground contribution")
+    layer = gds_layer(
+        raw["layer"],
+        Declared(
+            f"ground contribution {path}/{local_id}",
+            "the component's component_semantics ground_plane_contributions",
+        ),
+        "layer",
+    )
     return plane_id, {
         "source_occurrence_path": path,
         "source_local_id": local_id,
@@ -420,7 +428,11 @@ def _source_port(
     if "/" in name:
         raise ValueError("component-local port name must be one segment")
     port = cell.ports[name]
-    layer = gds_layer(raw["layer"], f"{path}/{name} port")
+    layer = gds_layer(
+        raw["layer"],
+        Declared(f"port {path}/{name}", "the component's component_semantics ports"),
+        "layer",
+    )
     raw_port_layer = port.layer
     if hasattr(raw_port_layer, "layer") and hasattr(raw_port_layer, "datatype"):
         port_layer = raw_port_layer

@@ -5,6 +5,7 @@ from __future__ import annotations
 from math import isfinite
 
 from scgsim.geometry.models.input import SemanticEntitySpec
+from scgsim.geometry.models.refusals import Declared
 
 
 def entity_z_range_um(entity: SemanticEntitySpec) -> tuple[float, float]:
@@ -14,7 +15,11 @@ def entity_z_range_um(entity: SemanticEntitySpec) -> tuple[float, float]:
     if z_max_um is not None:
         z_max_um = float(z_max_um)
         if not isfinite(z_max_um):
-            raise ValueError(f"{entity.semantic_id} has non-finite z_max_um")
+            raise ValueError(
+                Declared(f"Entity {entity.semantic_id!r}", "its stack layer").expected(
+                    "z_max_um", "finite", z_max_um
+                )
+            )
         if z_max_um > z_min_um:
             return z_min_um, z_max_um
 

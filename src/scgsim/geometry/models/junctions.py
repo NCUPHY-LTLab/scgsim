@@ -6,11 +6,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from scgsim.geometry.models.refusals import Declared
+
+_REQUEST = Declared(
+    "rectangular junction request", "the RectangularJunctionSpec passed to the plan"
+)
+
 
 def _text(value: object, name: str) -> None:
     """Reject missing identity text at a record boundary."""
     if not isinstance(value, str) or not value:
-        raise ValueError(f"{name} must be nonempty text")
+        raise ValueError(_REQUEST.expected(name, "nonempty text", value))
 
 
 @dataclass(frozen=True)
@@ -61,13 +67,27 @@ class RectangularJunctionSpec:
         if not isinstance(self.terminal_a, JunctionTerminalBinding) or not isinstance(
             self.terminal_b, JunctionTerminalBinding
         ):
-            raise TypeError("terminal bindings must be JunctionTerminalBinding")
+            raise TypeError(
+                _REQUEST.expected(
+                    "terminal_a and terminal_b",
+                    "JunctionTerminalBinding records",
+                    (self.terminal_a, self.terminal_b),
+                )
+            )
         if self.terminal_a.source_entity_id == self.terminal_b.source_entity_id:
             raise ValueError(
-                "junction terminals must identify distinct source Entities"
+                _REQUEST.part(repr(self.junction_id)).expected(
+                    "terminals' source Entities",
+                    "two different Entities",
+                    self.terminal_a.source_entity_id,
+                )
             )
         if self.terminal_a.net_id == self.terminal_b.net_id:
-            raise ValueError("junction terminal Nets must be distinct")
+            raise ValueError(
+                _REQUEST.part(repr(self.junction_id)).expected(
+                    "terminals' Nets", "two different Nets", self.terminal_a.net_id
+                )
+            )
 
     def to_payload(self) -> dict[str, Any]:
         """Serialize the request, including both source-bound terminals."""

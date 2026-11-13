@@ -32,6 +32,7 @@ from scgsim.geometry.grid.polygon_ops import (
 )
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
 from scgsim.geometry.source.normalization import gds_layer
 from scgsim.geometry.source.recipes import Audited, audited_declared_source
@@ -575,7 +576,11 @@ def occurrence_ground_polygons_for_entity(
     """
     placed = scope.placed(transform)
     geometry = _local_selector_geometry(entity, transform)
-    plane_key = gds_layer(plane_layer, entity.semantic_id)
+    plane_key = gds_layer(
+        plane_layer,
+        Declared(f"plane of Ground {entity.semantic_id!r}", "the PDK layer stack"),
+        "source_layer_datatype",
+    )
     plane = polygons_by_layer.get(plane_key, ())
     if not plane:
         named = placed.naming(entity.semantic_id, f"{plane_key[0]}/{plane_key[1]}")
@@ -725,7 +730,12 @@ def occurrence_include_polygon(
     The region is selected in the cell's own coordinates; a refusal locates it in the layout.
     """
     layer = gds_layer(
-        record.get("layer"), str(record.get("source_local_id", "ground contribution"))
+        record.get("layer"),
+        Declared(
+            f"ground contribution {record.get('source_local_id')!r}",
+            "the component's component_semantics ground_plane_contributions",
+        ),
+        "layer",
     )
     point = _occurrence_inverse_point(transform, record["selector_point_um"])
     components = fused_gdstk_components(scope, polygons_by_layer.get(layer, ()))
