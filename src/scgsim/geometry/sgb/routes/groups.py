@@ -16,6 +16,8 @@ one -- so the unions are lists of primary group names, never overlapping Gmsh gr
 
 The face names, with the qualifier a band collision needs, come from
 :func:`~scgsim.geometry.sgb.routes.face_names.name_faces`; everything below reads those final names.
+What routing decides about each face besides its name -- interface type, Net, face kind and the sides
+of a sheet's Surface-EPR rows -- is a :class:`RoutedFace`, decided here once; the sidecar reads it.
 
 Native tags are never part of this plan; they follow sorted group names and are only
 recorded by emission.
@@ -26,11 +28,12 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from scgsim.geometry.sgb.assembly.records import Topology
+from scgsim.geometry.sgb.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.routes.face_names import name_faces
 from scgsim.geometry.sgb.routes.naming import (
     SHEET,
+    face_kind,
     interface_type_of,
     net_of_surface,
     sheet_face_sides,
@@ -48,6 +51,41 @@ class PhysicalGroup:
     ids: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class RoutedFace:
+    """What routing decides about one face, from the domains on its sides and its sheet owner.
+
+    ``interface_type`` is ``MA``, ``MS``, ``MM``, ``SA``, ``AA``, ``SS``, ``EXT``, ``PORT`` or ``SHEET``
+    (``None`` for a face without a name); ``net`` the Net whose exposed conductor surface the face is;
+    ``face_kind`` ``top``, ``bottom``, ``sidewall``, ``sheet``, ``interface`` or ``port``; ``sheet_sides``, for
+    a ``SHEET`` face, the Surface-EPR row types of the face and the side each integrates
+    (:func:`~scgsim.geometry.sgb.routes.naming.sheet_face_sides`), empty for every other face.  The face's
+    group is ``RoutedModel.face_group``.
+    """
+
+    interface_type: str | None
+    net: str | None
+    face_kind: str
+    sheet_sides: dict[str, str]
+
+
+def route_face(face: TopoFace) -> RoutedFace:
+    """The facts of one face (:class:`RoutedFace`)."""
+    interface = interface_type_of(face.neg_domain, face.pos_domain, face.owner)
+    return RoutedFace(
+        interface_type=interface,
+        net=net_of_surface(face.neg_domain, face.pos_domain, face.owner),
+        face_kind=face_kind(
+            face.neg_domain, face.pos_domain, face.owner, vertical=face.kind == "wall"
+        ),
+        sheet_sides=(
+            sheet_face_sides(face.neg_domain, face.pos_domain)
+            if interface == SHEET
+            else {}
+        ),
+    )
+
+
 @dataclass
 class RoutedModel:
     """The topology seen through one route."""
@@ -57,6 +95,7 @@ class RoutedModel:
     face_group: dict[
         str, str | None
     ]  # every face -> its primary group (None for a face without a name)
+    faces: dict[str, RoutedFace]  # every face -> what routing decided about it
     groups: dict[
         str, PhysicalGroup
     ]  # primary groups of emitted entities; they partition each dimension
@@ -78,13 +117,43 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
         vid for vid, v in topology.volumes.items() if policy.is_emitted(v.domain)
     )
     face_group = name_faces(topology, emitted)
-    groups: dict[str, PhysicalGroup] = {}
-    # surface group -> its interface type, from the face structure (never from the name)
-    group_types: dict[str, str] = {}
-    epr_rows: dict[str, str] = {}
+    faces = {fid: route_face(face) for fid, face in topology.faces.items()}
+    surfaces = _surface_groups(topology, emitted, face_group, faces)
+    groups = _add_volume_groups(topology, emitted, surfaces.groups)
+    _check_refinement_hosts(topology, emitted)
+    return RoutedModel(
+        policy,
+        emitted,
+        face_group,
+        faces,
+        dict(sorted(groups.items())),
+        _unions(surfaces),
+        dict(sorted(surfaces.epr_rows.items())),
+    )
+
+
+@dataclass
+class _Surfaces:
+    """The primary surface groups of a route, with what the unions and the Surface-EPR rows are made of."""
+
+    groups: dict[str, PhysicalGroup] = field(default_factory=dict)
+    types: dict[str, str] = field(default_factory=dict)  # group -> interface type
+    epr_rows: dict[str, str] = field(default_factory=dict)  # row -> group
     # sheet group -> the row types (MA, MS) some face of it has a neighbour for
-    sheet_row_types: dict[str, set[str]] = defaultdict(set)
-    net_groups: dict[str, set[str]] = defaultdict(set)
+    sheet_row_types: dict[str, set[str]] = field(
+        default_factory=lambda: defaultdict(set)
+    )
+    net_groups: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+
+
+def _surface_groups(
+    topology: Topology,
+    emitted: frozenset[str],
+    face_group: dict[str, str | None],
+    faces: dict[str, RoutedFace],
+) -> _Surfaces:
+    """Every named face that bounds an emitted volume, in its group, with its group's facts."""
+    out = _Surfaces()
     for fid, face in sorted(topology.faces.items()):
         group = face_group[fid]
         bounds_emitted = any(
@@ -92,24 +161,27 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
         )
         if group is None or not bounds_emitted:
             continue
-        groups.setdefault(group, PhysicalGroup(2)).ids.append(fid)
-        interface = interface_type_of(face.neg_domain, face.pos_domain, face.owner)
+        out.groups.setdefault(group, PhysicalGroup(2)).ids.append(fid)
+        routed = faces[fid]
+        interface = routed.interface_type
         if interface is not None:
-            group_types[group] = interface
+            out.types[group] = interface
             entity = face.owner.name if face.owner is not None else ""
             band = face.bands[0][1] if face.bands else None
-            sheet_sides = (
-                sheet_face_sides(face.neg_domain, face.pos_domain)
-                if interface == SHEET
-                else None
-            )
-            if sheet_sides is not None:
-                sheet_row_types[group].update(sheet_sides)
-            for row in surface_epr_row_ids(group, interface, entity, band, sheet_sides):
-                epr_rows[row] = group
-        net = net_of_surface(face.neg_domain, face.pos_domain, face.owner)
-        if net is not None:
-            net_groups[f"NET::{net}"].add(group)
+            out.sheet_row_types[group].update(routed.sheet_sides)
+            for row in surface_epr_row_ids(
+                group, interface, entity, band, routed.sheet_sides
+            ):
+                out.epr_rows[row] = group
+        if routed.net is not None:
+            out.net_groups[f"NET::{routed.net}"].add(group)
+    return out
+
+
+def _add_volume_groups(
+    topology: Topology, emitted: frozenset[str], groups: dict[str, PhysicalGroup]
+) -> dict[str, PhysicalGroup]:
+    """The groups with every emitted volume added to its own (a name may not be both a surface and a volume)."""
     for vid, volume in sorted(topology.volumes.items()):
         if vid in emitted:
             name = volume_group(volume.domain)
@@ -119,32 +191,21 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
                     f"physical-group name {name!r} names both a volume and a surface"
                 )
             group.ids.append(vid)
-    _check_refinement_hosts(topology, emitted)
-    ordered = dict(sorted(groups.items()))
-    return RoutedModel(
-        policy,
-        emitted,
-        face_group,
-        ordered,
-        _unions(group_types, sheet_row_types, net_groups),
-        dict(sorted(epr_rows.items())),
-    )
+    return groups
 
 
-def _unions(
-    group_types: dict[str, str],
-    sheet_row_types: dict[str, set[str]],
-    net_groups: dict[str, set[str]],
-) -> dict[str, list[str]]:
+def _unions(surfaces: _Surfaces) -> dict[str, list[str]]:
     by_type: dict[str, list[str]] = defaultdict(list)
-    for name, interface in group_types.items():
+    for name, interface in surfaces.types.items():
         by_type[interface].append(name)
     # a Route A sheet group belongs to the MA / MS union exactly when it carries that Surface-EPR row
     for sheet in list(by_type.get(SHEET, ())):
-        for row_type in sheet_row_types[sheet]:
+        for row_type in surfaces.sheet_row_types[sheet]:
             by_type[row_type].append(sheet)
     unions = {kind: sorted(names) for kind, names in by_type.items()}
-    unions.update({name: sorted(members) for name, members in net_groups.items()})
+    unions.update(
+        {name: sorted(members) for name, members in surfaces.net_groups.items()}
+    )
     return dict(sorted(unions.items()))
 
 

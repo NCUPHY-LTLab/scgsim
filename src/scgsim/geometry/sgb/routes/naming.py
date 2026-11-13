@@ -69,6 +69,13 @@ RESERVED_PREFIXES = ("MA", "MS", "MM", "SA", "AA", "SS", "EXT", "PORT")
 """The interface prefixes of a prefixed group name; no entity id may equal one of them."""
 SHEET = "SHEET"
 """Interface type of a Route A conductor sheet (a record field and a union key, never part of a group name)."""
+INTERFACE_TYPES = ("MA", "MS", "MM", "SA", "AA", "SS", SHEET)
+"""The interface types of a face between two regions or of a conductor sheet: what an inset request may state
+it expects its face to be (a port and the model boundary are not)."""
+SURFACE_EPR_TYPES = ("MA", "MS", "SA")
+"""The interface types that are Surface-EPR contributions: metal-air, metal-substrate and substrate-air.  They are
+also the types a band can be asked for by: an ``AA`` surface has no conductor next to it, so it never has a gap
+edge, and ``MM`` and ``SS`` are not Surface-EPR contributions."""
 SHEET_ROW_NEIGHBOURS = {"MA": "vacuum", "MS": "dielectric"}
 """The Surface-EPR row types of a sheet face and the kind of neighbour each one integrates."""
 FACE_KINDS = ("top", "bottom", "sidewall", "sheet", "interface")
@@ -97,7 +104,7 @@ def surface_group(  # noqa: PLR0913 - the two sides, the owner, the bands, the o
         return None
     prefix, entity = named
     if prefix == "PORT":
-        return f"PORT::{entity}"  # one sheet: no face kind, no band
+        return port_group(entity)
     if prefix == SHEET:
         return _banded(entity, bands)  # the entity id; its face kind is always sheet
     kind = face_kind(neg, pos, owner, vertical=vertical)
@@ -105,6 +112,11 @@ def surface_group(  # noqa: PLR0913 - the two sides, the owner, the bands, the o
     if qualified and kind == "interface":
         name = f"{name}{FACE_KIND_SEPARATOR}{interface_side(neg, pos)}"
     return _banded(name, bands)
+
+
+def port_group(port_sheet_id: str) -> str:
+    """The primary group of a lumped-port sheet: ``PORT::<port sheet id>`` (one sheet: no face kind, no band)."""
+    return f"PORT::{port_sheet_id}"
 
 
 def interface_side(neg: Domain | None, pos: Domain | None) -> str:

@@ -25,6 +25,7 @@ from scgsim.contracts.sgb_sidecar.records import (
     Edge,
     EdgeArc,
     Face,
+    FaceKind,
     Loop,
     OuterBoundary,
     Vertex,
@@ -42,7 +43,6 @@ from scgsim.geometry.sgb.emission.plan import ARC, BrepPlan
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.sidecar.aedt import aedt_names
 from scgsim.geometry.sgb.sidecar.derived import edge_sources
-from scgsim.geometry.sgb.sidecar.groups import face_kind
 from scgsim.geometry.sgb.sidecar.lineage import CarrierLineage
 
 
@@ -119,7 +119,7 @@ def face_records(
         out[face_id] = Face(
             group=model.routed.face_group.get(face_id),
             kind=face.kind,
-            face_kind=face_kind(face),
+            face_kind=cast(FaceKind, model.routed.faces[face_id].face_kind),
             z_um=[float(face.z_range[0]), float(face.z_range[1])],
             negative_volume=face.neg_volume,
             positive_volume=face.pos_volume,

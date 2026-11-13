@@ -48,7 +48,7 @@ scgsim-status: "CONVERGING"
 | `src/scgsim/aedt/__init__.py` | `d9b6b6fdca3d03f0657a8fd73d11ca395d060a6388e0722a4c8705b5c814a039` |
 | `src/scgsim/aedt/specs/__init__.py` | `face6e5583a1326d130bb35845350c0363c31bd2bc277664b271b385e9ec5ec3` |
 | `src/scgsim/geometry/__init__.py` | `8fce7c4a93d3778a73662d0657e6e0c37b09433f574c16aa698b5b8655b31d44` |
-| `src/scgsim/palace/__init__.py` | `590d3fdb1bd6cd232a0fdb4ae704f8224a68482b237bd66539d589237d4fb994` |
+| `src/scgsim/palace/__init__.py` | `4b22a92965efe38e0c1fa6d97abfec9d9395420a679019e783eb726e2d43e130` |
 | `src/scgsim/semantics/__init__.py` | `a1902da7627ee76ba95283fc2861b6d785400c303a09e6e875375f55a056e39c` |
 | `src/scgsim/visualization/__init__.py` | `181a1bf3c38a632bc163c6ac9ee55dcbc6ca1bcc85bc6bca3e16afbe43e21ad1` |
 

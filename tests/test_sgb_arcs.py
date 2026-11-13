@@ -71,7 +71,7 @@ def test_witness_pieces_merge_back_into_exactly_one_edge_per_quarter_arc():
     ]
     assert len(arc_edges) == 4
     assert all(
-        "#" not in c for e in layer.arr.edges for c in e.carriers
+        c.piece is None for e in layer.arr.edges for c in e.carriers
     )  # no witness piece survives
     assert len(faces) == 1
     assert len(layer.arr.cycles[layer.arr.faces[faces[0]].outer].half_edges) == 4

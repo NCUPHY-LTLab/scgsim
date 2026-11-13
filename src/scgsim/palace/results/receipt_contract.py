@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scgsim.palace.execution.returned_receipt import adapted_mesh_output_paths
 from scgsim.palace.results.artifacts import (
     compute_hash_entry,
     compute_input_hash_entry,
@@ -24,6 +23,7 @@ from scgsim.palace.results.artifacts import (
 )
 from scgsim.palace.results.models import PalaceReturnedReceipt
 from scgsim.palace.results.tables import count_index_entries, output_families
+from scgsim.palace.run.returned_receipt import adapted_mesh_output_paths
 
 _RUNTIME_COMPATIBILITY_PATH = "metadata/palace_runtime_compatibility.json"
 

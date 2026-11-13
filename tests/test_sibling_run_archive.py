@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scgsim.palace.execution.archive import (
+from scgsim.palace.run.archive import (
     logical_tar_member_name,
     resolve_run_archive_path,
     run_archive_arcname,

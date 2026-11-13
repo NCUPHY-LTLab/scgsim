@@ -26,7 +26,7 @@ from scgsim.geometry.source.summary import InputSummary, summarize_geometry_inpu
 from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 
-from ..execution.handoff import HandoffPlan, prepare_handoff
+from ..config.config import LayoutPortBinding
 from ..mesh.build import (
     MeshBuildResult,
     RouteGeometry,
@@ -35,21 +35,21 @@ from ..mesh.build import (
 )
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
-from ..preparation.config import LayoutPortBinding
-from ..preparation.inputs import stack_materials
-from ..preparation.layout_ports import (
+from ..run.handoff import HandoffPlan, prepare_handoff
+from ..source.inputs import stack_materials
+from ..source.layout_ports import (
     GeometrySettings,
     LayoutGeometryRequest,
     layout_geometry_request,
 )
-from ..preparation.layout_snapshot import (
+from ..source.layout_snapshot import (
     DRC_VACUUM_PADDING_UM,
     prepare_layout_snapshot,
     snapshot_owns_vacuum,
 )
-from ..preparation.ports import RequestedPort
-from ..preparation.transforms import RouteAThinFilm, normalize_route_a_thin_film
-from ..preparation.workflow import persist_problem_files
+from ..source.ports import RequestedPort
+from ..source.transforms import RouteAThinFilm, normalize_route_a_thin_film
+from ..source.workflow import persist_problem_files
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .lifecycle import CALLS, Call, Stage
 

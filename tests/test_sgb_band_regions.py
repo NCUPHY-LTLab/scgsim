@@ -231,9 +231,7 @@ def dropping(monkeypatch, family_id: str, keep):
         if family.family_id != family_id:
             return segments
         seams = {s.carrier_id: s for s in family.regions.seams}
-        return [
-            s for s in segments if keep(seams[next(iter(s.carriers)).split("#", 1)[0]])
-        ]
+        return [s for s in segments if keep(seams[next(iter(s.carriers)).curve_id])]
 
     monkeypatch.setattr(level_layers, "family_segments", without)
 

@@ -34,11 +34,13 @@ owners.
 | `scgsim.meshing` | Sizing recipes, the quality audit, the repair loop and the meshing report over SGB's XAO | Palace attributes, solver state or physical convergence judgments |
 | `scgsim.geometry.models` and lower primitives | One canonical model/type definition and shared source and planning primitives | Duplicate definitions, source-to-planning dependency cycles |
 | `scgsim.semantics` | Stdlib-only immutable, revision-bound facts | Mutable backend objects, solver tags interpreted as source truth |
-| `scgsim.palace.preparation` | Separate Electrostatic and Eigenmode setup objects, mutable state/invalidation, and shared preparation functions | A common Simulation base, Palace submission, or merged state owners |
+| `scgsim.palace.simulation` | Separate Electrostatic and Eigenmode setup objects on one shared core, mutable state/invalidation and the lifecycle | Palace submission or merged state owners |
+| `scgsim.palace.source` | The geometry request: a bound plan's ports, vacuum region and Surface-EPR specs prepared as the input of the geometry build | Meshing, `config.json` or solver state |
 | `scgsim.palace.mesh` | The SGB build and meshing call for a run, group lowering to solver attributes, and native mesh summaries | Result receipt custody or physical convergence judgments |
-| `scgsim.palace.execution` | Manual handoff packages and standalone host receipt recording | Automatic solver submission or result interpretation |
+| `scgsim.palace.config` | `config.json` and the index map built from the mesh's physical groups, ports or terminals, materials and numerical controls | Meshing or result interpretation |
+| `scgsim.palace.run` | Manual handoff packages and standalone host receipt recording | Automatic solver submission or result interpretation |
 | `scgsim.palace.results` | Returned artifact/custody validation, result data, and detached EPR | Solver execution or plotting state |
-| `scgsim.palace.presentation` | Palace trust, physics and cost projections and report figures | A common cross-solver physical quantity model |
+| `scgsim.palace.reports` | Palace trust, physics and cost projections and report figures | A common cross-solver physical quantity model |
 | `scgsim.aedt.specs` | Canonical request and prepared-geometry declarations, shared electrical records, and explicit parser dispatch | Runtime/Desktop state or Q3D input-v1/v2 |
 | `scgsim.aedt.preparation` | Source binding, effective geometry and physical-layer mapping, portable handoff, canonical cohort membership | Desktop lifetime, mutable EigenmodeSim state, or solve results |
 | `scgsim.aedt.runtime` | Sole transaction/receipt coordinator and Desktop lifecycle for preparation, direct runs, and batch collection; dispatches the family-specific native flow | Shared geometry source ownership or family-crossing physics |

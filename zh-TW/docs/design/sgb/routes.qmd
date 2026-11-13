@@ -98,6 +98,8 @@ solver 常想要的是 *union*，例如「Net `pad` 的所有導體表面」或�
 
 所以「所有 MA 表面」是前四個，「Net `P` 的所有導體表面」是 `net` 為 `P`、`interface_type` 為 `MA`、`MS` 或 `SHEET` 的 group：`MA::pad__sidewall`、`MA::pad__top` 與 `MS::pad__bottom`。Route A 的 sheet group（以 `<entity>` 命名）的 `interface_type` 是 `SHEET`，它承載它所具有的 MA 與 MS Surface EPR row（有 face 的某一側是 vacuum 才有 MA，是 dielectric 才有 MS），所以依種類篩選時，它依 `surface_epr_row` 也算作 `MA` 與 `MS`；Net `P` 的導體表面則是 `pad`。同一份 solver 設定兩者都能讀。SGB 在 build 內部也保留這些清單，驗證器檢查每個成員都是存在的 primary group（`unions_reference_primary_groups`），也檢查沒有任何 entity 位於兩個 group（`groups_partition_each_dimension`）。physical tag 不是 identity：tag 依 group 名稱排序，新增 group 時會位移，所以使用者應儲存 group 名稱。
 
+這些欄位在 routing 時逐 face 決定一次：`apply_route` 為每個 face 記下一筆 `RoutedFace`（`routes.groups`），內容是它的 interface type、Net、face kind，以及 sheet face 的 Surface EPR row 各積分哪一側，都由 face 兩側的 domain 與 sheet owner 算出。group 名稱本身在 `RoutedModel.face_group`。sidecar 的 writer 只讀這些欄位：group 的 `interface_type`、`net`、`face_kind` 由它的 face 的 `RoutedFace` 彙整，不再從 domain 或名稱重新推導；port 的 group 名稱 `PORT::<id>` 也只由 `routes.naming.port_group` 寫出。
+
 ::: {.callout-important title="保證：一個 face，一個 group（依據：測試）"}
 沒有任何輸出的 face 或 volume 位於兩個 physical group，也沒有任何一個不在任何 group 中。union 只是 solver 設定中的簿記：一份 group 名稱的清單。
 :::

@@ -238,7 +238,7 @@ def test_public_simplepad_prepares_route_a_thin_film_ports():
     from orcapen_sc_pdk.tech import get_single_die_layer_stack  # noqa: PLC0415 -- optional PDK, imported only when installed.
 
     from scgsim.geometry import GeometryPlan  # noqa: PLC0415 -- needs the optional layout stack checked above.
-    from scgsim.palace.preparation.workflow import prepare_mesh_input  # noqa: PLC0415 -- needs the optional layout stack checked above.
+    from scgsim.palace.source.workflow import prepare_mesh_input  # noqa: PLC0415 -- needs the optional layout stack checked above.
 
     activate()
     plan = GeometryPlan(

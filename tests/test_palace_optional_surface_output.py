@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from scgsim.palace.execution import returned_receipt
 from scgsim.palace.results import resolve
+from scgsim.palace.run import returned_receipt
 
 _ES_TABLES = {
     "terminal-C": "i,C[i][1] (F)\n1,1e-15\n",

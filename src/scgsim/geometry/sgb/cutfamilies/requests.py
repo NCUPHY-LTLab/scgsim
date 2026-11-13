@@ -69,11 +69,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 Side = Literal["sheet", "top", "bottom"]
-INTERFACE_TYPES = ("MA", "MS", "MM", "SA", "AA", "SS", "SHEET")
-BAND_TYPES = ("MA", "MS", "SA")
-"""The Surface-EPR types a type-level request can ask for: metal-air, metal-substrate and substrate-air.  The other
-interface types have no band: an ``AA`` surface has no conductor next to it, so it never has a gap edge; ``MM`` and ``SS`` are
-not Surface-EPR contributions."""
 FaceKind = Literal["sheet", "top", "bottom", "interface"]
 FACE_KINDS: tuple[FaceKind, ...] = ("sheet", "top", "bottom", "interface")
 """The face kinds a band can lie on: a conductor sheet, the top or bottom of a finite conductor, a solution interface."""

@@ -1,1 +1,4 @@
-"""Palace mesh construction, native observations, and offline quality readers."""
+"""From the prepared geometry request to the mesh Palace reads.
+
+In: the request.  Out: ``palace.msh``, its physical groups and the mesh manifest.  Next: ``config``.
+"""

@@ -48,7 +48,7 @@ def build_slab_layers(
     for slab in range(levels.slab_count):
         active = levels.slab_active[slab]
         segments = [
-            Segment(c.p, c.q, frozenset([c.id]))
+            Segment(c.p, c.q, frozenset([c.edge_carrier()]))
             for i in active
             for c in prisms[i].carriers()
         ]

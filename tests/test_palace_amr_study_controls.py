@@ -8,12 +8,12 @@ from typing import Any
 import pytest
 
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
-from scgsim.palace.preparation.config import (
+from scgsim.palace.config.config import (
     TerminalBinding,
     build_eigenmode_config,
     build_electrostatic_config,
 )
-from scgsim.palace.preparation.numerical import (
+from scgsim.palace.config.numerical import (
     build_refinement,
     configure_numerical_controls,
     linear_solver,

@@ -14,7 +14,7 @@ from typing import Any, Literal, cast
 
 from ..mesh.build import MeshBuildResult
 from ..mesh.manifest import SGB_RUNTIME_AUTHORITY
-from ..preparation.transforms import SCHEMA_VERSION
+from ..source.transforms import SCHEMA_VERSION
 from .archive import (
     run_archive_arcname,
     sibling_run_archive_path,
