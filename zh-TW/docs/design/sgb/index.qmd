@@ -12,7 +12,7 @@ scgsim-id: "docs/design/sgb/index"
 重新設計的 semantic geometry builder（SGB）把順序倒過來。它把晶片描述成有限個 **prism**，**在任何 CAD kernel 介入之前**就推導出完整的 topology 與每個 cell 的意義，再自己把結果寫成 BREP/XAO 檔案。Gmsh 不建立幾何：它載入檔案並對其產生 **mesh**，測試中也把它當作 oracle。模型上不執行任何三維 Boolean 運算。
 
 ::: {.callout-note title="SGB 的實作"}
-這個設計的 production 實作是 `scgsim.geometry.sgb`。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band 與 refinement curve、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 以 SGB 建立幾何、以 `scgsim.meshing` 產生網格，並只接受 Route A 與 Route B。AEDT 目前經由自己的平面路徑準備幾何，方向是使用同一份 SGB 輸出；舊的幾何路徑因此仍在（[D6](decisions.qmd#d6)）。要使用 SGB 的輸出，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
+這個設計的 production 實作是 `scgsim.geometry.sgb`。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 以 SGB 建立幾何、以 `scgsim.meshing` 產生網格，並只接受 Route A 與 Route B。AEDT 目前經由自己的平面路徑準備幾何，方向是使用同一份 SGB 輸出；舊的幾何路徑因此仍在（[D6](decisions.qmd#d6)）。要使用 SGB 的輸出，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
 :::
 
 ## 執行範例：輸入與輸出
@@ -102,7 +102,7 @@ flowchart TB
 這張圖是**概念性**的示意。整個設計由三個想法支撐：
 
 - **Local arrangement。** 每個 Z level 與每個 slab 各有一個 planar arrangement，只由在那裡相遇的曲線建立（見 [2.5D layered model](layered-model.qmd)）。
-- **每一種分割共用同一個機制。** 材料邊界、port、inset band 與 refinement curve 都是在 arrangement 中加入曲線，再由 label 決定意義（見 [Cut family](cut-families.qmd)）。
+- **每一種分割共用同一個機制。** 材料邊界、port 與 inset band 都是在 arrangement 中加入曲線，再由 label 決定意義（見 [Cut family](cut-families.qmd)）。
 - **格點上的 exact carrier。** 每條曲線保有它的精確定義，而每個 vertex 都落在同一個格點上（見[建立 arrangement](arrangement.qmd)）。
 
 ## 目標與各自的機制
@@ -118,7 +118,7 @@ flowchart TB
 | 4 | **可重現的 handoff identity 與程式化對應**：從每個 solver 實體回到 semantic 表面與來源曲線。 | 主要 physical group、sidecar，以及固定的對應鏈；使用端儲存 group 名稱（native tag 不是 identity）；不做座標或面積比對。 | [Identity](identity.qmd)、[Emission](emission.qmd) |
 | 5 | **與後端無關。** 一個封閉、conformal 的實體模型，供 Palace 以及之後的 AEDT 使用。 | topology 就是產物；BREP/XAO 與 AEDT 的 solid 都是它的序列化，而 Gmsh 只負責 mesh。 | [Assembly](assembly.qmd)、[Emission](emission.qmd) |
 | 6 | **依構造即 conformal；人為產生的 sliver 予以消除，來源本身的事實則予以回報。** | 共用的 atomic vertex 與 edge；snap rounding；local arrangement；dissolution；sliver 報告；fail-closed 驗證，且在任何 route 中不同 Net 的接觸都是錯誤。 | [Assembly](assembly.qmd)、[Sliver](slivers.qmd)、[Validation](validation.qmd) |
-| 7 | **可擴充的分割。** inset imprint 是第一個使用者，不是特例。 | 新的分割種類只需要一個 generator、一個 target 與一個 edge policy；assembly 與 emission 不需要新的路徑。 | [Cut family](cut-families.qmd)、[Inset imprint](inset-imprint.qmd) |
+| 7 | **可擴充的分割。** inset imprint 是第一個使用者，不是特例。 | 新的分割種類只需要一個 generator 與一個 target；assembly 與 emission 不需要新的路徑。 | [Cut family](cut-families.qmd)、[Inset imprint](inset-imprint.qmd) |
 :::
 
 第一版的非目標：mesh 演算法（由 Gmsh 負責；SGB 只提供幾何與尺寸提示）、solver 設定、推論電氣連通性，以及非 prism 的本體，例如斜側壁。非 prism 本體是擴充點，絕不會被悄悄地近似。
@@ -179,7 +179,7 @@ flowchart TB
 | **Label** | cell 的意義：slab cell 是它佔據的 domain；level cell 則是（下方、上方、sheet 擁有者、band）。 | [Label](labels-and-dissolution.qmd) |
 | **Required edge** | 會被保留的 edge：它兩側的 label 不同（label 含擁有它的 Entity，所以不同 Entity 之間的 seam 也被保留），或它所屬的 curve family 標為 `required`。 | [Label](labels-and-dissolution.qmd) |
 | **Dissolution** | 移除非 required 的 edge，並合併兩側的 cell。 | [Label](labels-and-dissolution.qmd) |
-| **Cut family** | 一筆 immutable record（id、role、generator、target、edge policy、distance origin），以 semantic role 把曲線加入 arrangement。 | [Cut family](cut-families.qmd) |
+| **Cut family** | 一筆 immutable record（id、role、generator、target、distance origin），以 semantic role 把曲線加入 arrangement。 | [Cut family](cut-families.qmd) |
 | **Band** | support 表面上兩條 inset 曲線之間的區域，依 margin 編號；band 的 face 在 label 中帶有該編號。 | [Inset imprint](inset-imprint.qmd) |
 | **Wall** | 沿著 slab edge、位於兩個 slab label 不同的 cell 之間的垂直 face。 | [Assembly](assembly.qmd) |
 | **Shell** | 圍出一個 volume 的封閉水平 face 與 wall 集合；帶有內部空洞的 volume 擁有不只一個 shell。 | [Assembly](assembly.qmd) |
@@ -189,7 +189,7 @@ flowchart TB
 | **Lineage** | 記錄 edge 或 face 回到其 carrier 與來源 entity 的路徑，合併後的 face 另附依面積加權的 membership。 | [Identity](identity.qmd) |
 | **Membership** | 對單一 face 而言，每個貢獻的來源 entity 其 footprint 所覆蓋的面積比例（wall 則是底邊長度的比例）。各比例不互斥，總和可以大於 1。Entity 是 lineage，不是「每個 entity 都有各自量測值」的承諾。 | [Identity](identity.qmd) |
 | **Physical group** | 交給 mesher 與 solver 的、已命名的一組已 emit 的 face 或 volume。每個已 emit 的實體恰好屬於一個 primary group；像「Net X 的所有導體表面」這種聯集，是 group 名稱的清單，絕不是互相重疊的 group。native tag 依排序後的名稱編號，不是 identity。 | [Identity](identity.qmd)、[Emission](emission.qmd) |
-| **Sidecar** | 與 BREP/XAO 檔案並列寫出的 JSON 檔（production 格式 `scgsim.sgb.sidecar.v3`，附 JSON Schema），SGB 對模型的完整記錄：來源（Entity、來源曲線、請求、port）、推導（cut family、band family、support ring 與 primitive、carrier）與寫出的形狀（vertex、edge、face、volume、physical group、Surface EPR row、mesh feature），每張表以 id 為鍵、以 id 互相指向；native tag 對應的規劃 id 在 `binding`。各表見[使用契約](consumer-contract.qmd#sidecar)。 | [Emission](emission.qmd) |
+| **Sidecar** | 與 BREP/XAO 檔案並列寫出的 JSON 檔（production 格式 `scgsim.sgb.sidecar.v4`，附 JSON Schema），SGB 對模型的完整記錄：來源（Entity、來源曲線、請求、port）、推導（cut family、band family、support ring 與 primitive、carrier）與寫出的形狀（vertex、edge、face、volume、physical group、Surface EPR row、mesh feature），每張表以 id 為鍵、以 id 互相指向；native tag 對應的規劃 id 在 `binding`。各表見[使用契約](consumer-contract.qmd#sidecar)。 | [Emission](emission.qmd) |
 | **Feature size** | face 的寬度，定義為兩條互不相接的邊界 edge 之間的最小距離，在精確的 carrier 上量測（含圓弧）；sliver 報告用它衡量 face 有多薄。 | [Sliver](slivers.qmd) |
 | **MA / MS / SA** | interface 種類的縮寫：MA 是 metal–vacuum（金屬與真空之間），MS 是 metal–substrate（金屬與基板之間），SA 是 substrate–vacuum（基板與真空之間，也就是 gap 表面）。它們是 Surface EPR 的 row 所用的分類，也出現在 physical group 名稱中（例如 `MA::pad__top`）。見 [概念：geometry](../../concepts/geometry.qmd) 與 [Inset imprint](inset-imprint.qmd)。 | [Identity](identity.qmd) |
 | **Net / Entity** | Entity 是元件中一個有名字的來源形狀（例如 pad）；Net 是形成同一條電氣導體的一組 Entity。定義見 [概念：geometry](../../concepts/geometry.qmd#entity-occurrence-and-net)。 | [Route](routes.qmd) |

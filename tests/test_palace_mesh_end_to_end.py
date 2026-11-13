@@ -89,7 +89,7 @@ def check_run(result, route):
     manifest = json.loads(result.mesh_manifest_path.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 2
     assert manifest["source"]["scgsim_sgb"] == "scgsim.geometry.sgb"
-    assert manifest["source"]["sidecar_schema"] == "scgsim.sgb.sidecar.v3"
+    assert manifest["source"]["sidecar_schema"] == "scgsim.sgb.sidecar.v4"
     assert manifest["source"]["model_identity_digest"].startswith("model:")
     meshing = manifest["meshing"]
     assert meshing["recipe"]["name"] == "features"

@@ -19,9 +19,9 @@ the vocabulary all of them share:
 * ``exact``        exact arithmetic and the records every stage shares: the grid, plane
                    predicates, circle math, carriers, labels, prisms, cut families and ids
 * ``prisms``       S2: the effective input as prisms, levels and slabs; boundary binding
-* ``bands``        S3: typed requests (inset bands of chosen faces or of every face of a Surface-EPR type,
-                   refinement curves) and the cut families they generate; the inset support face is found
-                   in a physical pre-pass
+* ``bands``        S3: typed requests (inset bands of chosen faces or of every face of a Surface-EPR type)
+                   and the cut families they generate; the inset support face is found in a physical
+                   pre-pass
 * ``arrangement``  S4 and S5: noding on the grid, the planar arrangement, cell labels and dissolution; the
                    slab and level arrangements as one labelled, content-addressed result,
                    :func:`~scgsim.geometry.sgb.arrangement.derivation.labelled.derive_labelled_arrangements`
@@ -33,7 +33,7 @@ the vocabulary all of them share:
                    emitted files
 * ``output``       S10: numbering of the shapes in ``TopExp::MapShapes`` order and the direct,
                    byte-deterministic BREP/XAO writer (no CAD kernel, no Boolean); the versioned JSON
-                   sidecar ``scgsim.sgb.sidecar.v3`` and its JSON Schema; the AEDT STEP export (OCP)
+                   sidecar ``scgsim.sgb.sidecar.v4`` and its JSON Schema; the AEDT STEP export (OCP)
 * ``section``      the 2D section model of a validated model, cut along a line
 
 Beside them: ``model`` runs the stages and returns the validated model

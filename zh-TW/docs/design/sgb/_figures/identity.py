@@ -7,7 +7,7 @@ Run, with the Python of the checkout that contains the production SGB core (``sc
 Computes, with the production package, a real mapping-chain lookup on the pad-in-ground running example (Route B with
 inset bands, its lumped port on the support plane z = 0) and the determinism evidence quoted by the page.  The model is
 built, written with ``emit_model`` into a scratch folder and the lookup reads the written sidecar
-(``scgsim.sgb.sidecar.v3``) through the contract's reader and views, exactly as a consumer would: every step follows a
+(``scgsim.sgb.sidecar.v4``) through the contract's reader and views, exactly as a consumer would: every step follows a
 typed reference of one record to another, and no id is parsed.  Outputs go to ``docs/design/sgb/figures/`` (prefix ``identity-``):
 
 * ``identity-trace.json``        every step of the lookup  Palace attribute -> source curve (also quoted in the page)
@@ -51,7 +51,7 @@ TRACED_MARGIN_UM = (
 def describe_edge(sidecar, edge_id: str) -> dict:
     """One written edge and each of its carriers, followed by reference to what it comes from.
 
-    A horizontal or refinement edge names its carriers (``edge.carriers`` -> ``carrier``); a band member leads to the
+    A horizontal edge names its carriers (``edge.carriers`` -> ``carrier``); a band member leads to the
     support primitive it follows, the primitive's ring and band family, and the source curves drawn along it; a source
     carrier leads to its source curve and Entity.  A vertical edge names the Entities whose walls stand on it.
     """
@@ -86,8 +86,6 @@ def resolve_carrier(sidecar, carrier_id: str) -> dict:
             },
             source_curves={c: sidecar["source_curve"][c] for c in primitive["sources"]},
         )
-    elif carrier["kind"] == "refinement":
-        record["refinement_request"] = sidecar["refinement_request"][carrier["request"]]
     elif carrier["kind"] == "family_member":
         record["cut_family"] = sidecar["cut_family"][carrier["family"]]
     return record

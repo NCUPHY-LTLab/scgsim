@@ -25,6 +25,7 @@
    "rows": {
     "MA::pad__top::band=0": {
      "band": 0,
+     "banded_surface": "MA::pad__top",
      "entities": ["pad"],
      "face_kind": "top",
      "face_sides": null,

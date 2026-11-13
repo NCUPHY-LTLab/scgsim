@@ -29,7 +29,6 @@ FEATURE_KINDS = (
     "film_sidewall",
     "band_boundary",
     "arc",
-    "refinement_curve",
     "port_edge",
 )
 _EDGE_DIM = 1
@@ -84,14 +83,6 @@ class EmbeddedFace:
 
 
 @dataclass(frozen=True)
-class EmbeddedEdge:
-    """A refinement-only curve (native tag) that lies in the face ``host_face`` and must be embedded in it."""
-
-    edge: int
-    host_face: int
-
-
-@dataclass(frozen=True)
 class SidecarFeatures:
     """Everything the meshing module reads from a sidecar."""
 
@@ -99,7 +90,6 @@ class SidecarFeatures:
     binding: Binding
     groups: tuple[PhysicalGroup, ...]
     embedded_faces: tuple[EmbeddedFace, ...]
-    embedded_edges: tuple[EmbeddedEdge, ...]
     # Ids of the entities whose volume is a conductor, emitted or not: a feature's ``source`` is one of
     # these when a conductor owns the feature (a dielectric or the vacuum is not in the set).
     conductors: frozenset[str] = frozenset()
@@ -157,10 +147,6 @@ def _features(sidecar: Sidecar) -> SidecarFeatures:
         embedded_faces=tuple(
             EmbeddedFace(index.tag(2, face), index.tag(3, host))
             for face, host in views.embedded_faces(sidecar)
-        ),
-        embedded_edges=tuple(
-            EmbeddedEdge(index.tag(1, edge), index.tag(2, host))
-            for edge, host in views.embedded_edges(sidecar)
         ),
         conductors=frozenset(
             volume["entity"]

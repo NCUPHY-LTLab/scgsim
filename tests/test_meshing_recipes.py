@@ -144,7 +144,6 @@ def test_kinds_without_an_a_priori_rule_ask_for_no_size():
     """Kinds without an a priori rule ask for no size."""
     kinds = features_of(
         feature("arc", [2], {"radius_um": 10.0}, source=None),
-        feature("refinement_curve", [3]),
         feature("port_edge", [4]),
     )
     assert (
@@ -160,12 +159,11 @@ def band(tags, narrowest_um=0.5, margins_um=(0.5, 1.0)):
 
 
 def unbanded():
-    """Every kind but band edges: two film walls, an arc, a refinement curve and a port edge."""
+    """Every kind but band edges: two film walls, an arc and a port edge."""
     return features_of(
         film([1, 2]),
         film([3], 0.05),
         feature("arc", [4], {"radius_um": 10.0}, source=None),
-        feature("refinement_curve", [5]),
         feature("port_edge", [6]),
     )
 

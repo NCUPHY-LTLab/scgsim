@@ -1,4 +1,4 @@
-"""Named models for the emission tests: the running examples under every route, with and without cut families.
+"""Named models for the emission tests: the running examples under every route, with and without inset bands.
 
 Each case is a function returning a validated :class:`ConformalModel`.  ``MESH_SIZE`` gives the coarse mesh
 size (um) that suits a case when a test also meshes it.
@@ -14,7 +14,6 @@ from sgb_scenes import airbridge, pad_in_ground, random_layout
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
     SolutionInterface,
 )
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
@@ -38,23 +37,11 @@ def pad_requests(route: str) -> tuple[InsetRequest, ...]:
     )
 
 
-def pad_model(
-    route: str, *, bands: bool = False, refine: bool = False
-) -> ConformalModel:
+def pad_model(route: str, *, bands: bool = False) -> ConformalModel:
     """The pad in ground under a route (Route C builds the finite catalogue of Route B)."""
     catalogue = pad_in_ground("A" if route == "A" else "B")
-    refinements = (
-        (
-            RefinementRequest("ref", 0.0, ((-40.0, 55.0), (40.0, 55.0))),
-        )  # on the substrate-vacuum interface
-        if refine
-        else ()
-    )
     return build_model_from_catalogue(
-        catalogue,
-        route,
-        insets=pad_requests(route) if bands else (),
-        refinements=refinements,
+        catalogue, route, insets=pad_requests(route) if bands else ()
     )
 
 
@@ -73,8 +60,6 @@ CASES: dict[str, Callable[[], ConformalModel]] = {
     "pad_a_bands": lambda: pad_model("A", bands=True),
     "pad_b_bands": lambda: pad_model("B", bands=True),
     "pad_c_bands": lambda: pad_model("C", bands=True),
-    "pad_a_refinement": lambda: pad_model("A", refine=True),
-    "pad_b_refinement": lambda: pad_model("B", refine=True),
     "void_shell_b": lambda: build_model(FIXTURES["floating_conductor"], "B"),
     "void_shell_c": lambda: build_model(FIXTURES["floating_conductor"], "C"),
     "floating_sheet_a": lambda: build_model(FIXTURES["floating_conductor"], "A"),

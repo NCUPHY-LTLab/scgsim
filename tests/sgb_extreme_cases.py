@@ -5,8 +5,8 @@ structural validators stay cheap.  The catalogue is data: :data:`FIXTURES` maps 
 :class:`Fixture` (risk, builder, routes, expected failure per route).  Fixtures that must be
 refused (a different-Net contact, a same-Net non-manifold pinch) carry the expected error class.
 
-The inset-band fixtures carry their typed requests (``insets`` / ``refinements``); ``build_model``
-applies them together with the catalogue.
+The inset-band fixtures carry their typed requests (``insets``); ``build_model`` applies them together
+with the catalogue.
 """
 
 from __future__ import annotations
@@ -17,11 +17,7 @@ from fractions import Fraction
 
 from sgb_scenes import GRID, rect_um, to_grid
 
-from scgsim.geometry.sgb.bands.requests import (
-    ConductorSurface,
-    InsetRequest,
-    RefinementRequest,
-)
+from scgsim.geometry.sgb.bands.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
 from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier, circle_arcs
 from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
@@ -139,14 +135,20 @@ def port(
     )
 
 
-def refinement(
-    name: str, p: tuple[int, int], q: tuple[int, int], z: Fraction
+def closed_family(
+    name: str, ring: list[tuple[int, int]], z: Fraction
 ) -> CurveFamilyRecord:
-    """A one-segment refinement-only family at height ``z``."""
-    carrier = LineCarrier(
-        f"{name}0", p, q, Lineage("family_member", family_id=name, member=f"{name}0")
+    """A cut family at height ``z`` whose curves close the polygon ``ring`` (grid units)."""
+    carriers = tuple(
+        LineCarrier(
+            f"{name}{k}",
+            p,
+            q,
+            Lineage("family_member", family_id=name, member=f"{name}{k}"),
+        )
+        for k, (p, q) in enumerate(zip(ring, [*ring[1:], ring[0]], strict=True))
     )
-    return CurveFamilyRecord(name, "refinement", (carrier,), (z,), "refinement_only")
+    return CurveFamilyRecord(name, "guide", carriers, (z,))
 
 
 # --------------------------------------------------------------------------- fixtures
@@ -244,9 +246,9 @@ def hole_touches_outer(route: str) -> PrismCatalogue:
 
 
 def _foreign_vertex_family(route: str) -> tuple[CurveFamilyRecord, ...]:
-    """A refinement curve whose end point (4330, 2500) g lies 0.1 g from the circle r = 5000 g."""
+    """A cut-family triangle on the disk top whose corner (4330, 2500) g lies 0.1 g from the circle r = 5000 g."""
     z = exact_z(0) if route == "A" else exact_z(METAL_THICKNESS)
-    return (refinement("ref", (0, 0), (4330, 2500), z),)
+    return (closed_family("guide", [(0, 0), (4330, 2500), (0, 2500)], z),)
 
 
 def arc_with_foreign_vertex(route: str) -> PrismCatalogue:
@@ -407,17 +409,16 @@ def reflex_small_angle(route: str) -> PrismCatalogue:
     )
 
 
-def refinement_crossing_band_edge(route: str) -> PrismCatalogue:
-    """A refinement-only line crossing the bands' boundaries of a banded pad (it ends inside the outermost band)."""
+def family_crossing_band_edge(route: str) -> PrismCatalogue:
+    """A cut-family rectangle on the top of a banded pad whose long sides cross the 0.5 and 2 um band boundaries."""
+    z = exact_z(0) if route == "A" else exact_z(METAL_THICKNESS)
+    rectangle = [(-9_900, 500), (9_900, 500), (9_900, 1_500), (-9_900, 1_500)]
     return catalogue_of(
-        "refinement_crossing_band_edge",
+        "family_crossing_band_edge",
         route,
         [*chip(), metal("pad", "N", rect_um(-10, -5, 10, 5), route)],
+        (closed_family("guide", rectangle, z),),
     )
-
-
-def _top_z_um(route: str) -> float:
-    return 0.0 if route == "A" else float(METAL_THICKNESS)
 
 
 # --------------------------------------------------------------------------- catalogue
@@ -434,7 +435,6 @@ class Fixture:
     expect_error: dict[str, type[Exception]] = field(default_factory=dict)
     note: str = ""
     insets: Callable[[str], tuple[InsetRequest, ...]] = lambda route: ()  # noqa: ARG005 - default: no bands
-    refinements: Callable[[str], tuple[RefinementRequest, ...]] = lambda route: ()  # noqa: ARG005
 
 
 FIXTURES: dict[str, Fixture] = {
@@ -552,13 +552,10 @@ FIXTURES: dict[str, Fixture] = {
             insets=lambda route: surface_bands("slit", route, (0.05, 0.2)),
         ),  # fmt: skip
         Fixture(
-            "refinement_crossing_band_edge",
-            "refinement curve crossing band boundaries",
-            refinement_crossing_band_edge,
+            "family_crossing_band_edge",
+            "cut-family curves crossing band boundaries",
+            family_crossing_band_edge,
             insets=lambda route: surface_bands("pad", route, (0.5, 2.0)),
-            refinements=lambda route: (
-                RefinementRequest("ref", _top_z_um(route), ((-9.9, 0.5), (9.9, 0.5))),
-            ),
         ),  # fmt: skip
         Fixture(
             "near_coincident_layers_sub_grid",
@@ -584,10 +581,7 @@ def cases() -> list[tuple[Fixture, str]]:
 
 
 def build_model(fixture: Fixture, route: str) -> ConformalModel:
-    """The validated model of a fixture under a route, with its band and refinement requests."""
+    """The validated model of a fixture under a route, with its band requests."""
     return build_model_from_catalogue(
-        fixture.build(route),
-        route,
-        insets=fixture.insets(route),
-        refinements=fixture.refinements(route),
+        fixture.build(route), route, insets=fixture.insets(route)
     )

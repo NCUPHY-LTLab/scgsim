@@ -164,8 +164,9 @@ class _MarginRequest:
 def _units(rows: Mapping[str, Mapping[str, Any]], spec: SurfaceEprSpec) -> list[_Unit]:
     """The surface units of the spec's interface type, in sorted row order.
 
-    A row with no band is a unit of its own (a sidewall, or a face SGB did not band).  The banded rows of one
-    band family are one unit: SGB gives each face one family, whose bands are listed in the sidecar.
+    A row with no band is a unit of its own (a sidewall, or a face SGB did not band), named by its row id.  The
+    banded rows of one band family are one unit: SGB gives each face one family, whose bands are listed in the
+    sidecar, and the unit is named by the surface the rows are bands of (``banded_surface``).
     """
     interface_type = spec.interface_type
     face_filter = spec.face_kinds
@@ -205,7 +206,7 @@ def _unbanded_names_apart(singles: list[_Unit], banded: list[_Unit]) -> list[_Un
 def _family_unit(spec: SurfaceEprSpec, members: Sequence[Mapping[str, Any]]) -> _Unit:
     first = members[0]
     return _Unit(
-        _unit_label(first),
+        first["banded_surface"],
         spec.interface_type,
         tuple(members),
         family={
@@ -216,14 +217,6 @@ def _family_unit(spec: SurfaceEprSpec, members: Sequence[Mapping[str, Any]]) -> 
         },
         margins_um=tuple(spec.margins_for(first["entities"])),
     )
-
-
-def _unit_label(first_band_row: Mapping[str, Any]) -> str:
-    """A label for the index: the row id of a family's first band without its band suffix.
-
-    Only a label.  Which rows a margin selects comes from the sidecar's bands, never from names.
-    """
-    return first_band_row["row"].removesuffix(f"::band={first_band_row['band']}")
 
 
 def _band_order(row: Mapping[str, Any]) -> tuple[int, str]:

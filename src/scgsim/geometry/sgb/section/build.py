@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from scgsim.geometry.models.section import CutLine
 from scgsim.geometry.sgb.bands.requests import InsetRequest
-from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.section.assembly import (
     AssembledSection,
@@ -42,7 +41,6 @@ from scgsim.geometry.sgb.topology.routes.naming import volume_group
 
 def build_section_model(model: ConformalModel, cut: CutLine) -> SectionModel:
     """The plane section of ``model`` along ``cut``, validated in 2D (see the module docstring)."""
-    _refuse_refinement_curves(model)
     frame = cut_frame(cut, model.labelled.catalogue.grid)
     curves = curves_of_emitted_faces(model)
     check_within_extent(frame, model.topology, curves)
@@ -77,16 +75,6 @@ def build_section_model(model: ConformalModel, cut: CutLine) -> SectionModel:
         _band_families(model, assembled),
         report,
     )
-
-
-def _refuse_refinement_curves(model: ConformalModel) -> None:
-    """A section keeps no mesh-size curve, so a model built with some is refused rather than losing them."""
-    if model.refinements:
-        names = ", ".join(sorted(r.request_id for r in model.refinements))
-        raise InputError(
-            f"the 3D model carries refinement curves ({names}), which a 2D model has no place for. Fix "
-            "the build: build the model to be cut without RefinementRequest curves."
-        )
 
 
 def _groups(assembled: AssembledSection) -> dict[str, PhysicalGroup]:

@@ -19,12 +19,10 @@ NonNegative = Annotated[float, Minimum(0)]
 PlanePoint = Annotated[list[float], Length(2, 2)]  # (x, y) um
 SpacePoint = Annotated[list[float], Length(3, 3)]  # (x, y, z) um
 ZRange = Annotated[list[float], Length(2, 2)]  # (lowest, highest) z um
-Segment = Annotated[list[PlanePoint], Length(2, 2)]  # (start, end) um
 
 EntityRef = Annotated[str, Ref("entity")]
 SourceCurveRef = Annotated[str, Ref("source_curve")]
 BandFamilyRef = Annotated[str, Ref("band_family")]
-RefinementRequestRef = Annotated[str, Ref("refinement_request")]
 CutFamilyRef = Annotated[str, Ref("cut_family")]
 PortRef = Annotated[str, Ref("port")]
 SupportRingRef = Annotated[str, Ref("support_ring")]

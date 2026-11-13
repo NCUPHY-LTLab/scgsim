@@ -4,17 +4,16 @@ The scene is the production real input ``gds_pad_in_ground`` interpreted with th
 pad are sheets at z = 0, the port lies on the same plane) with the typed requests
 
 * ``InsetRequest`` bands of margins 0.1, 0.5 and 2 um on the pad sheet and on the substrate-vacuum gap,
-* ``RefinementRequest`` one open line across gap and pad, edge policy ``refinement_only`` (kept as an embedded curve),
 
 plus one family written for this page and added without touching any pipeline code (the request API has no such family):
 
-* ``window``  -- a closed rectangle in the gap, edge policy ``required`` (a user partition: the cell is split, the group is not).
+* ``window``  -- a closed rectangle in the gap (a user partition: the cell is split, the group is not).
 
 Writes into ``docs/design/sgb/figures/``:
 
 * ``families-level.svg/.html``  level z = 0 with every edge coloured by the family that cut it, cells by primary group;
 * ``families-numbers.json``     ablation counts (what each family adds), band areas with and without the extra families, order
-  independence of the build identity, the family record fields, and the two errors the page quotes.
+  independence of the build identity and the family record fields.
 
 Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/families.py
 """
@@ -51,10 +50,8 @@ from scgsim.geometry.sgb.bands.generate import build_cut_families
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier
 from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
 from scgsim.geometry.sgb.model import build_model_from_catalogue
@@ -69,7 +66,7 @@ def _um(x: float) -> int:
 
 
 def _line_family(
-    family_id: str, role: str, points_um, closed: bool, policy: str
+    family_id: str, role: str, points_um, closed: bool
 ) -> CurveFamilyRecord:
     pts = [(_um(x), _um(y)) for x, y in points_um]
     pairs = list(zip(pts, pts[1:], strict=False)) + (
@@ -84,7 +81,7 @@ def _line_family(
         )
         for i, (p, q) in enumerate(pairs)
     )
-    return CurveFamilyRecord(family_id, role, carriers, (Fraction(0),), policy)
+    return CurveFamilyRecord(family_id, role, carriers, (Fraction(0),))
 
 
 def _window_family() -> CurveFamilyRecord:
@@ -93,12 +90,11 @@ def _window_family() -> CurveFamilyRecord:
         "partition",
         [(31.0, 55.0), (37.0, 55.0), (37.0, 65.0), (31.0, 65.0)],
         True,
-        "required",
     )
 
 
-def _requests(bands: bool, refine: bool):
-    insets = (
+def _requests(bands: bool):
+    return (
         (
             InsetRequest("band_pad", ConductorSurface("pad", "sheet"), MARGINS),
             InsetRequest(
@@ -110,21 +106,15 @@ def _requests(bands: bool, refine: bool):
         if bands
         else ()
     )
-    refinements = (
-        (RefinementRequest("refine", 0.0, ((32.0, 45.0), (50.0, 45.0))),)
-        if refine
-        else ()
-    )
-    return insets, refinements
 
 
-def scene(catalogue, window: bool, refine: bool, bands: bool, reverse: bool = False):
+def scene(catalogue, window: bool, bands: bool, reverse: bool = False):
     """The Route A model with the chosen families; ``reverse`` lists the families in the opposite order."""
-    insets, refinements = _requests(bands, refine)
+    insets = _requests(bands)
     cat = with_extra_families(catalogue, _window_family()) if window else catalogue
     if not reverse:
-        return build_model(cat, "A", insets=insets, refinements=refinements)
-    full = build_cut_families(cat, insets, refinements).catalogue
+        return build_model(cat, "A", insets=insets)
+    full = build_cut_families(cat, insets).catalogue
     return build_model_from_catalogue(
         replace(full, families=tuple(reversed(full.families))), "A"
     )
@@ -142,7 +132,7 @@ def family_of(catalogue, known, sources) -> str:
     ports = {p.entity_id for p in catalogue.prisms if p.material_kind == "port"}
     lineages = [known[s].lineage for s in sources if s in known]
     families = {ln.family_id for ln in lineages if ln.kind == "family_member"}
-    for tag in ("window", "band_pad", "band_gap", "refine"):
+    for tag in ("window", "band_pad", "band_gap"):
         if tag in families:
             return tag
     if any(ln.entity_id in ports for ln in lineages if ln.kind == "polygon_edge"):
@@ -155,8 +145,7 @@ EDGE_STYLE = {  # family -> (colour, width, label)
     "port": (PALETTE["port"], 2.0, "port footprint (sheet of the port prism)"),
     "band_pad": (PALETTE["band"], 0.9, "inset bands of the pad sheet"),
     "band_gap": ("#e6550d", 0.9, "inset bands of the gap"),
-    "window": (PALETTE["cap"], 2.2, "window family (required)"),
-    "refine": (PALETTE["refine"], 1.6, "refinement curve (refinement_only, embedded)"),
+    "window": (PALETTE["cap"], 2.2, "window family"),
 }
 GROUP_FILL = {"ground_0000": "#9a9a9a", "PORT::PORT_SHEET__P1__0000": "#f3b4ae"}
 
@@ -245,36 +234,13 @@ def _figure_level(model, numbers: dict) -> None:
                 name=label,
             )
         )
-    refinement = layer.dissolved.refinement
-    xs, ys = [], []
-    for edge, _face in refinement:
-        ax.plot(
-            [edge.a[0] * G_UM, edge.b[0] * G_UM],
-            [edge.a[1] * G_UM, edge.b[1] * G_UM],
-            color=EDGE_STYLE["refine"][0],
-            lw=1.8,
-            ls=(0, (5, 3)),
-        )
-        xs += [edge.a[0] * G_UM, edge.b[0] * G_UM, None]
-        ys += [edge.a[1] * G_UM, edge.b[1] * G_UM, None]
-    used["refine"] = (EDGE_STYLE["refine"][0], EDGE_STYLE["refine"][2])
-    pcs.add_trace(
-        go.Scatter(
-            x=xs,
-            y=ys,
-            mode="lines",
-            line=dict(color=EDGE_STYLE["refine"][0], width=3, dash="dash"),
-            name=EDGE_STYLE["refine"][2],
-        )
-    )
     finish_plan(
         ax,
         *VIEW,
-        "Level z = 0 of the running example (Route A) with port, bands, a required window and a refinement curve",
+        "Level z = 0 of the running example (Route A) with port, bands and a window family",
     )
     handles = [
-        Line2D([0], [0], color=c, lw=2.5, ls="--" if k == "refine" else "-", label=name)
-        for k, (c, name) in used.items()
+        Line2D([0], [0], color=c, lw=2.5, label=name) for c, name in used.values()
     ]
     handles += [
         Patch(facecolor="#6baed6", label="cells: pad bands (blue ramp, dark = edge)"),
@@ -300,7 +266,6 @@ def _figure_level(model, numbers: dict) -> None:
     numbers["level_edges_by_family"] = {
         fam: len(polys) for fam, polys in by_family.items()
     }
-    numbers["level_refinement_pieces"] = len(refinement)
 
 
 def counts(model) -> dict:
@@ -312,7 +277,6 @@ def counts(model) -> dict:
         "level_edges": len(layer.arr.edges),
         "level_noded_edges": layer.stats["edges_before"],
         "level_hot_pixels": layer.stats["hot_pixels"],
-        "refinement_pieces": len(layer.dissolved.refinement),
         "topology": {k: model.counts[k] for k in ("vertices", "edges", "faces")},
         "face_groups": len(groups),
         "faces_in_SA_groups": sum(
@@ -329,7 +293,7 @@ def counts(model) -> dict:
 
 def port_invariance(numbers: dict) -> None:
     """The port moves no band but takes its footprint out of the gap bands: the exact area of every band label with and without the port."""
-    insets, _ = _requests(True, False)
+    insets = _requests(True)
     with_port = band_areas(build_model(real_catalogue(film=True), "A", insets=insets))
     without = band_areas(
         build_model(real_catalogue(film=True, with_port=False), "A", insets=insets)
@@ -349,54 +313,24 @@ def port_invariance(numbers: dict) -> None:
     }
 
 
-def errors(numbers: dict) -> None:
-    """A refinement curve on a level where its cell has no face stops the build (Route B, metal top z = 0.2); no ``dissolve`` policy."""
-    catalogue = real_catalogue()
-    request = RefinementRequest("r", 0.2, ((32.0, 55.0), (38.0, 55.0)))
-    try:
-        build_model(catalogue, "B", refinements=(request,))
-        numbers["refinement_in_faceless_cell"] = "built"
-    except SgbError as e:
-        numbers["refinement_in_faceless_cell"] = {
-            "error": type(e).__name__,
-            "message": str(e),
-        }
-    carrier = LineCarrier(
-        "r/0",
-        (-70000, -8000),
-        (-60000, -8000),
-        Lineage("family_member", family_id="r", member="r/0"),
-    )
-    try:
-        CurveFamilyRecord("t", "tile_seam", (carrier,), (Fraction(0),), "dissolve")
-        numbers["dissolve_policy"] = "accepted"
-    except ValueError as e:  # dissolve is not an edge policy
-        numbers["dissolve_policy"] = {"error": type(e).__name__, "message": str(e)}
-
-
 def main() -> None:
     """Write the cut-family figure and its numbers."""
     catalogue = real_catalogue(film=True)
     numbers: dict = {
-        "scene": "gds_pad_in_ground with the thin_film profile (Route A) + bands (0.1, 0.5, 2.0 um) + window + refine"
+        "scene": "gds_pad_in_ground with the thin_film profile (Route A) + bands (0.1, 0.5, 2.0 um) + window"
     }
-    full = scene(catalogue, True, True, True)
+    full = scene(catalogue, True, True)
     _figure_level(full, numbers)
-    bands_only = scene(catalogue, False, False, True)
+    bands_only = scene(catalogue, False, True)
     numbers["ablation"] = {
-        "port_and_physical_boundaries_only": counts(
-            scene(catalogue, False, False, False)
-        ),
+        "port_and_physical_boundaries_only": counts(scene(catalogue, False, False)),
         "plus_bands": counts(bands_only),
-        "plus_bands_and_window": counts(scene(catalogue, True, False, True)),
-        "plus_bands_and_refine": counts(scene(catalogue, False, True, True)),
-        "all_families": counts(full),
+        "plus_bands_and_window": counts(full),
     }
-    # distance-origin rule: the window and the refinement curve never move a band boundary
+    # distance-origin rule: the window never moves a band boundary
     with_all, only = band_areas(full), band_areas(bands_only)
     numbers["band_areas_um2"] = {
-        k: {"bands_only": only[k], "with_window_and_refine": with_all[k]}
-        for k in sorted(only)
+        k: {"bands_only": only[k], "with_window": with_all[k]} for k in sorted(only)
     }
     numbers["max_band_area_difference_um2"] = max(
         abs(with_all[k] - only[k]) for k in only
@@ -404,14 +338,13 @@ def main() -> None:
     # order independence: reversing the family list gives the same identity
     numbers["identity_digest_equal_when_family_order_reversed"] = (
         full.identity_digest()
-        == scene(catalogue, True, True, True, reverse=True).identity_digest()
+        == scene(catalogue, True, True, reverse=True).identity_digest()
     )
     numbers["family_record_fields"] = [
         "family_id",
         "role",
         "carriers",
         "target_levels",
-        "edge_policy",
         "arcs",
         "support",
     ]
@@ -419,7 +352,6 @@ def main() -> None:
         {
             "family_id": f.family_id,
             "role": f.role,
-            "edge_policy": f.edge_policy,
             "target_levels": [str(z) for z in f.target_levels],
             "carriers": len(f.carriers),
             "arcs": len(f.arcs),
@@ -434,7 +366,6 @@ def main() -> None:
         n: len(g.ids) for n, g in bands_only.routed.groups.items() if g.dim == 2
     }
     port_invariance(numbers)
-    errors(numbers)
     write_numbers("families", numbers)
     print("families: done")
 

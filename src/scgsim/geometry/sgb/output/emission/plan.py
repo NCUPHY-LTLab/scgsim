@@ -113,7 +113,6 @@ class BrepPlan:
             "arcs": int((self.edge_kind == ARC).sum()),
             "pcurves": len(self.pc_edge),
             "free_faces": len(f.free_faces),
-            "free_edges": len(f.free_edges),
         }
 
     def tags(self) -> dict[str, tuple[int, int]]:

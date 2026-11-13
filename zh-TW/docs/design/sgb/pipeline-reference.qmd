@@ -21,7 +21,7 @@ scgsim-id: "docs/design/sgb/pipeline-reference"
 | S0 | Source snapshot | `GeometryPlan` → normalized source（沿用 develop 的 fixed-grid source preparation） | occurrence | 不在 package 中（develop） |
 | S1 | Physical interpretation | source → effective input（含 Route A 的零厚度 sheet） | entity | 不在 package 中（develop） |
 | S2 | Prism catalogue | effective input → `PrismCatalogue`（`PrismRecord`）、`LevelStructure` | entity | `levels` |
-| S3 | Cut families | prism + 請求（`InsetRequest`、`RefinementRequest`）→ `CurveFamilyRecord` | region × margin | 不單獨計時（在 arrangement 之前的 pre-pass） |
+| S3 | Cut families | prism + 請求（`InsetRequest`）→ `CurveFamilyRecord` | region × margin | 不單獨計時（在 arrangement 之前的 pre-pass） |
 | S4 | Arrangement | curve → snap-rounded $S_i$、$A_i$ | level 或 slab | `noding_kernels`、`noding_driver`、`dcel_faces`、`linking`、`arc_realisation` |
 | S5 | Labelling 與 dissolution | arrangement + prism → 帶 label 的最小 cell | cell | `labelling`、`dissolution` |
 | S6 | Topology assembly | cell → vertex、edge、face、wall、shell、volume | slab、volume | `wall_runs`、`shells`、`assembly_registry`、`assembly_faces`、`wall_prep`、`shell_prep`、`volume_connectivity`、`contact_check`、`manifold_check` |
@@ -84,11 +84,11 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 ::: {.askr-table-compact}
 | | |
 |---|---|
-| 輸入 | prism 與 family 請求：`InsetRequest`（support 為 `ConductorSurface`、`SolutionInterface` 或按 Surface EPR 種類選出所有 face 的 `InterfaceSurfaces`，margin 序列）、`RefinementRequest`（折線）；port footprint 是 port prism，不經過請求 |
+| 輸入 | prism 與 family 請求：`InsetRequest`（support 為 `ConductorSurface`、`SolutionInterface` 或按 Surface EPR 種類選出所有 face 的 `InterfaceSurfaces`，margin 序列）；port footprint 是 port prism，不經過請求 |
 | 輸出 | `CurveFamilyRecord`：carrier（line）、arc、目標 level、edge 政策、support region |
-| Record | `CurveFamilyRecord`、`SupportRegion`（由精確 line 與 arc primitive 組成的 ring，加上 margin）、`InsetRequest`、`ConductorSurface`、`SolutionInterface`、`InterfaceSurfaces`、`RefinementRequest` |
+| Record | `CurveFamilyRecord`、`SupportRegion`（由精確 line 與 arc primitive 組成的 ring，加上 margin）、`InsetRequest`、`ConductorSurface`、`SolutionInterface`、`InterfaceSurfaces` |
 | 工作單位 | region × margin |
-| 失敗 | `InputError`：請求找不到對應的 face、margin 不是遞增的正整數格點倍數、request id 重複、宣告的 interface 種類與 cell 的 label 不符；v1 拒絕對 B-spline carrier 做 inset；空的 band 是結果，不是失敗；edge 政策只有 `required` 與 `refinement_only`，其他值會被 `CurveFamilyRecord` 拒絕 |
+| 失敗 | `InputError`：請求找不到對應的 face、margin 不是遞增的正整數格點倍數、request id 重複、宣告的 interface 種類與 cell 的 label 不符；v1 拒絕對 B-spline carrier 做 inset；空的 band 是結果，不是失敗 |
 :::
 
 ### S4 Arrangement
@@ -109,10 +109,10 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 | | |
 |---|---|
 | 輸入 | arrangement、prism、family 的 edge 政策 |
-| 輸出 | slab label（`Domain`）、level label（`LevelLabel`），然後是 dissolve 後的 arrangement：移除非 required 的 edge、合併 cell、移除同一 carrier 上的 degree-2 vertex；`refinement_only` 曲線保留為內嵌 edge |
+| 輸出 | slab label（`Domain`）、level label（`LevelLabel`），然後是 dissolve 後的 arrangement：移除非 required 的 edge、合併 cell、移除同一 carrier 上的 degree-2 vertex；cut family 的 edge 一律保留 |
 | Record | `Domain`、`SheetOwner`、`LevelLabel`、`FamilyPolicies`、`Dissolved` |
 | 工作單位 | cell（labelling）；dissolution 逐 layer |
-| 失敗 | `OverlapError`：不同 Net 的 conductor 重疊、同一個 Net 的兩個 Entity 以相同 priority 重疊（訊息指出該補哪個 priority 來源）、不同 owner 的 sheet 重疊、同 priority 但材料不同的 dielectric；`SgbError`：落在沒有 face 的 cell 或不輸出之 volume 的 `refinement_only` 片段（refinement 片段不會被默默丟棄） |
+| 失敗 | `OverlapError`：不同 Net 的 conductor 重疊、同一個 Net 的兩個 Entity 以相同 priority 重疊（訊息指出該補哪個 priority 來源）、不同 owner 的 sheet 重疊、同 priority 但材料不同的 dielectric |
 :::
 
 沒有 `dissolve` edge 政策：進入 arrangement 的曲線不是切開 cell，就是被 embed。
@@ -123,7 +123,7 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 | | |
 |---|---|
 | 輸入 | dissolve 後的 slab 與 level arrangement、level cell 與 slab cell 之間的連結 |
-| 輸出 | `Topology`：vertex、edge（horizontal、vertical、refinement）、horizontal face、**coalesced** wall（曲面 wall 在外來 vertex 處切成精確圓柱）、vertical edge column、volume、shell |
+| 輸出 | `Topology`：vertex、edge（horizontal、vertical）、horizontal face、**coalesced** wall（曲面 wall 在外來 vertex 處切成精確圓柱）、vertical edge column、volume、shell |
 | Record | `TopoVertex`、`TopoEdge`、`TopoFace`、`Shell`、`TopoVolume`、`Topology` |
 | 工作單位 | slab（wall）、volume（shell）；volume connectivity 是全域 reduction |
 | 失敗 | `ContactError`（`contact_check`）：不同 Net 的 conductor 在 slab 或 level arrangement 的 vertex、edge 或疊合的 face 上接觸（包含 Route A sheet 共用 edge 或 vertex，以及只在 grid 上因 snapping 才出現的接觸，例如 4 nm 間隙在 g = 1 nm 通過、在 g = 10 nm 失敗）；`SgbError`：wall 連接不同 volume 的 cell，或 slab edge chain 不明確或斷裂。`NonManifoldError`（`check_manifold`）：同一個 domain 的兩個 cell 只在 slab 的一個 vertex 相接，也就是 volume 會把一條 vertical edge 使用四次（non-manifold pinch；也包含 Route B 中 hole 碰到自己的外邊界）；它在 shell assembly 之前就丟出，訊息指名 Net、entity、位置與「vertical edge」。Route A 的 sheet 可以在角落相接，不受影響。`shells_closed_and_oriented` 保留為第二道防線 |
@@ -138,7 +138,7 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 | 輸出 | 哪些 volume 要輸出（Route A 與 B 排除 conductor volume；Route C 保留它們）、每個 face 與 volume 的 primary group（`RoutedModel`） |
 | Record | `RoutePolicy`（`name`、`exclude_conductor_volumes`、`allows_sheets`、`rejects_finite_films`）；Route A、B、C 各是一個常數 |
 | 工作單位 | face 或 volume（label 規則） |
-| 失敗 | `RouteError`（route check，在任何 arrangement 之前）；refinement curve 落在沒有輸出 volume 的 face 時 `SgbError` |
+| 失敗 | `RouteError`（route check，在任何 arrangement 之前） |
 :::
 
 ### S8 Identity 與 group
@@ -177,7 +177,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | | |
 |---|---|
 | 輸入 | topology、route |
-| 輸出 | `semantic_geometry_route_<a\|b\|c>.brep`、`.xao`、`.sidecar.json`（`scgsim.sgb.sidecar.v3`）、`.slivers.json`、`.validation.json`；Gmsh 只用來做 meshing（與作為測試 oracle） |
+| 輸出 | `semantic_geometry_route_<a\|b\|c>.brep`、`.xao`、`.sidecar.json`（`scgsim.sgb.sidecar.v4`）、`.slivers.json`、`.validation.json`；Gmsh 只用來做 meshing（與作為測試 oracle） |
 | Record | 直接 writer 的計畫（`BrepPlan`：vertex、edge、wire、face、shell、solid 與 pcurve）；`SgbArtifacts`（五個路徑、route、counts、timings） |
 | 工作單位 | writer 以 chunk 依檔案順序算繪，輸出對任何 chunk 大小逐位元相同 |
 | 失敗 | 直接 writer 明確寫出每個 orientation；writer 拒絕不能精確寫出的曲面（不是平面、不是單一圓的圓柱、帶洞的曲面 wall 等）時 `SgbError`；對寫出的檔案執行 `check_file(strict=True)` 時，OCCT finding 為 `OcctCheckError`，缺 OCP 為 `OcctUnavailable`；寫出的檔案不依賴 Gmsh 的 healing，需要 fix 就是規劃缺陷 |
@@ -195,7 +195,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | `ArcCarrier` | `id`、`centre`、`radius`（精確分數）、`ccw`、`start`、`end`、`lineage`、`root` | 小於 360° 的 arc；circle 是四段 quarter arc；`root` 是 derived arc 偏差所對照的 source carrier |
 | `Footprint` | `outer`（CCW ring）、`holes`（CW ring）、`arc_runs` | 整數 grid 座標；arc 以 chord run 加 `arc_runs` 表示 |
 | `PrismRecord` | `entity_id`、`footprint`、`z0`、`z1`（精確分數）、`material`、`material_kind`（`conductor`、`dielectric`、`vacuum`、`port`）、`net_id`、`priority`、`polygon`、`arcs`、`port`（`PortIdentity`）、`feature_kind`、`occurrence`、`layer` | `z0 == z1` 是 sheet（`is_sheet`）；conductor 必須有 `net_id`；port prism 一定是 sheet 且帶 `PortIdentity`；`feature_kind`（`stack_film`、`local_film`、`finite_volume`）供 Route A 的規則使用，`occurrence` 與 `layer` 供 priority 錯誤訊息指出來源 |
-| `CurveFamilyRecord` | `family_id`、`role`、`carriers`、`target_levels`、`edge_policy`（`required`、`refinement_only`）、`arcs`、`support` | inset band 的 `support` 是 `SupportRegion`；carrier id 形如 `band_pad_top/ring0/edge8@m100.0`（primitive、margin、片段），reflex arc 是 `…/corner<k>@m<margin>` |
+| `CurveFamilyRecord` | `family_id`、`role`、`carriers`、`target_levels`、`arcs`、`support` | inset band 的 `support` 是 `SupportRegion`；carrier id 形如 `band_pad_top/ring0/edge8@m100.0`（primitive、margin、片段），reflex arc 是 `…/corner<k>@m<margin>` |
 | `SupportRegion` | `rings`（精確 primitive，內部在左側）、`margins`（grid unit，遞增）、`origin_mask`（每個 primitive 是否為 gap edge）、`sources`（每個 primitive 所在的 source edge 或 arc 的 carrier id，同一條邊上有幾個 Entity 的外框就有幾個） | inset family 的 support；`origins` 是 distance origin（gap edge，見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)），其餘邊界是 `free_boundary` |
 | `PrismCatalogue` | `grid`、`prisms`、`families`、`name` | arrangement 階段的輸入；route 是 build 函式的引數，不在 catalogue 內 |
 | `LevelStructure` | `levels`、`slab_active`、`level_sheets`、`level_families` | level 是排序後相異的 Z 值；slab $i$ 是 $(z_i, z_{i+1})$ |
@@ -216,10 +216,10 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | `FaceRec` | `outer`（cycle index）、`holes` | |
 | `RealisedArc` | `carrier`、`root`、`centre`、`radius`、`ccw`、`bulge_left`、`segment_area`、`deviation`、`root_centre`、`root_radius` | 使用 carrier 半徑、通過兩個 snapped 端點的 arc；`deviation` 是對照精確 source circle 量得 |
 | `Layer` | `kind`（`slab`、`level`）、`index`、`plane`、`z`、`dissolved`、`cells`、`vertex_ids`、`edge_ids`、`edge_sources`、`face_ids`、`edge_curve`、`below_cell`、`above_cell`、`raw`、`stats` | 一個 arrangement 與它的 ID；`plane` 是 `level[1/5]` 或 `slab[0,1/10]` |
-| `Dissolved` | `arrangement`、`labels`、`refinement`、`face_map`、`stats` | `stats` 記錄 edge 與 face 在 dissolve 前後的數量 |
+| `Dissolved` | `arrangement`、`labels`、`face_map`、`stats`、`removed` | `stats` 記錄 edge 與 face 在 dissolve 前後的數量 |
 | `TopoVertex` | `id`、`x`、`y`、`z`、`zs` | `zs` 是 $z$ 乘上共同的 level 分母（精確整數體積運算） |
-| `TopoEdge` | `id`、`kind`（`horizontal`、`vertical`、`refinement`）、`v0`、`v1`、`plane`、`sources`、`curve`、`centre_vertex` | arc edge 的 `curve` 是 `RealisedArc` |
-| `TopoFace` | `id`、`kind`（`horizontal`、`wall`）、`plane`、`loops`、`neg_domain`、`pos_domain`、`owner`、`neg_volume`、`pos_volume`、`planar`、`z_range`、`twice_xy_area`、`sources`、`membership`、`bands`、`cylinder`、`bulge_volume`、`refinement_edges` | `loops` 是 `((edge id, ±1), …)`，第一個 loop 是外圈；恰好一個 primary group，由 `RoutedModel.face_group` 給出；`cylinder` 是曲面 wall 的（下 arc edge id，上 arc edge id），`curved` 是由它推得的屬性；`membership` 是 entity → 涵蓋面積比例（horizontal face 為涵蓋面積比例，wall 為底邊長度比例；彼此不互斥，總和可超過 1，且包含背景 prism） |
+| `TopoEdge` | `id`、`kind`（`horizontal`、`vertical`）、`v0`、`v1`、`plane`、`sources`、`curve`、`centre_vertex` | arc edge 的 `curve` 是 `RealisedArc` |
+| `TopoFace` | `id`、`kind`（`horizontal`、`wall`）、`plane`、`loops`、`neg_domain`、`pos_domain`、`owner`、`neg_volume`、`pos_volume`、`planar`、`z_range`、`twice_xy_area`、`sources`、`membership`、`bands`、`cylinder`、`bulge_volume` | `loops` 是 `((edge id, ±1), …)`，第一個 loop 是外圈；恰好一個 primary group，由 `RoutedModel.face_group` 給出；`cylinder` 是曲面 wall 的（下 arc edge id，上 arc edge id），`curved` 是由它推得的屬性；`membership` 是 entity → 涵蓋面積比例（horizontal face 為涵蓋面積比例，wall 為底邊長度比例；彼此不互斥，總和可超過 1，且包含背景 prism） |
 | `Shell` | `faces`（(face id, ±1), …）、`signed_volume`、`role`（`outer`、`inner`） | inner shell 是 void（例如 Route B 中完全被 dielectric 包住的導體） |
 | `TopoVolume` | `id`、`domain`、`cells`、`shells`、`embedded_faces` | `embedded_faces` 不圍成任何 volume（volume 內部的 sheet；位於 support plane 的 port 不在其中）；是否輸出由 `RoutedModel.emitted_volumes` 決定 |
 | `Topology` | `grid_um`、`levels`、`vertices`、`edges`、`faces`、`volumes`、`lineage` | `lineage[edge id] = carrier ID`；group 與 union 在 `RoutedModel`：`groups[name] = PhysicalGroup(dim, ids)` 對每個維度做 partition，`unions`、`surface_epr_rows` 另列 |
@@ -253,7 +253,7 @@ primary group 命名為 `<kind>::<qualified entity id>__<face kind>[::band=k]`�
 | 檔案 | 內容 |
 |---|---|
 | `….brep`、`….xao` | 直接 writer 輸出的幾何（XAO 帶 physical group）；BREP 為 OCCT `CASCADE Topology V1` 文字，並寫出 pcurve（容差 $10^{-7}$ µm） |
-| `….sidecar.json`（`scgsim.sgb.sidecar.v3`） | `schema`；`model`（名稱、identity digest、`route`、`route_policy`、`grid_um`、`tolerance_um`、檔名）；`binding`（tag = 1 + 在 `ids_by_tag[dim]` 的位置，依 `TopExp::MapShapes` 前序）；`summary`（寫出的數量、sliver 摘要、圓弧 edge 數）；以及以 id 為鍵、以 id 互相指向的三層表：來源 `entity`、`source_curve`、`inset_request`、`refinement_request`、`port`，推導 `cut_family`、`band_family`、`support_ring`、`support_primitive`、`carrier`，寫出 `vertex`、`edge`、`face`、`volume`、`group`、`surface_epr_row`、`mesh_feature`。group 成員、依 native tag 的預期值與 embedding 配對由 `scgsim.contracts.sgb_sidecar.views` 算出 |
+| `….sidecar.json`（`scgsim.sgb.sidecar.v4`） | `schema`；`model`（名稱、identity digest、`route`、`route_policy`、`grid_um`、`tolerance_um`、檔名）；`binding`（tag = 1 + 在 `ids_by_tag[dim]` 的位置，依 `TopExp::MapShapes` 前序）；`summary`（寫出的數量、sliver 摘要、圓弧 edge 數）；以及以 id 為鍵、以 id 互相指向的三層表：來源 `entity`、`source_curve`、`inset_request`、`port`，推導 `cut_family`、`band_family`、`support_ring`、`support_primitive`、`carrier`，寫出 `vertex`、`edge`、`face`、`volume`、`group`、`surface_epr_row`、`mesh_feature`。group 成員、依 native tag 的預期值與 embedding 配對由 `scgsim.contracts.sgb_sidecar.views` 算出 |
 | `….slivers.json` | 最短 edge、最窄 face、最小角度、薄 slab、snap drift、arc edge 偏差，各自帶位置、plane 與 lineage；最窄 face 的 `value_um` 是 feature size，`width_2a_over_p_um` 是 chord polygon 的 $2A/P$ |
 | `….validation.json` | `passed`、檢查清單（不含時間）與 `counts` |
 :::
@@ -290,7 +290,7 @@ production 對含 band 的 Route B 模型執行 31 項檢查（`validation_repor
 | `vertex_ids_unique`、`edge_ids_unique`、`face_ids_unique`、`topology_keyed_by_entity_id`、`every_cell_in_exactly_one_volume` | atomic id 唯一：一個 id 只對應一個 entity，topology 以 record 自己的 id 為 key，每個有 label 的 slab cell 恰好在一個 volume |
 :::
 
-此外有 fail-closed 的檢查不在上表中：route check（`RouteError`，在任何 arrangement 之前）、`refinement_only` 片段的放置檢查（`SgbError`），以及 `check_file` 對寫出的檔案做 OCCT 檢查時，planned ID 與 native entity 的比對。
+此外有 fail-closed 的檢查不在上表中：route check（`RouteError`，在任何 arrangement 之前），以及 `check_file` 對寫出的檔案做 OCCT 檢查時，planned ID 與 native entity 的比對。
 
 ## 錯誤類別
 

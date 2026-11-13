@@ -23,7 +23,6 @@ SOURCE_TABLE = {
     "film_sidewall": "entity",
     "arc": "entity",
     "band_boundary": "band_family",
-    "refinement_curve": "refinement_request",
     "port_edge": "port",
 }
 
@@ -31,13 +30,12 @@ SOURCE_TABLE = {
 def sidecar_with(
     *features: dict[str, Any],
     embedded_faces: Sequence[tuple[str, str]] = (),
-    embedded_edges: Sequence[tuple[str, str]] = (),
 ) -> dict[str, Any]:
-    """A minimal valid v3 sidecar: twelve edges e0..e11 on eight vertices, three faces f0..f2, the emitted
+    """A minimal valid v4 sidecar: twelve edges e0..e11 on eight vertices, three faces f0..f2, the emitted
     substrate ``vol0`` and vacuum ``vol1`` and the unemitted conductor ``pad`` (``vol2``), with ``features``.
 
     Each feature's source gets a record of the table its kind names, so every reference resolves;
-    ``embedded_faces`` are (face, host volume) pairs and ``embedded_edges`` (edge, host face) pairs.
+    ``embedded_faces`` are (face, host volume) pairs.
     """
     document: dict[str, Any] = {
         "schema": SIDECAR_SCHEMA,
@@ -67,7 +65,7 @@ def sidecar_with(
                 **dict.fromkeys(
                     ("wires", "shells", "surfaces", "cylinders", "arcs", "pcurves"), 0
                 ),
-                **dict.fromkeys(("free_faces", "free_edges"), 0),
+                "free_faces": 0,
                 "vertices": VERTEX_COUNT,
                 "edges": EDGE_COUNT,
                 "faces": len(FACE_LOOPS),
@@ -84,7 +82,6 @@ def sidecar_with(
         },
         "source_curve": {},
         "inset_request": {},
-        "refinement_request": {},
         "port": {},
         "cut_family": {},
         "band_family": {},
@@ -102,7 +99,6 @@ def sidecar_with(
                 "length_um": 1.0,
                 "carriers": [],
                 "entities": [],
-                "written_as_free_edge": False,
             }
             for i in range(EDGE_COUNT)
         },
@@ -135,8 +131,6 @@ def sidecar_with(
         _add_feature(document, f"mf{number:02d}", entry)
     for face, host in embedded_faces:
         document["volume"][host]["embedded_faces"].append(face)
-    for edge, host in embedded_edges:
-        document["face"][host]["embedded_edges"].append(edge)
     return document
 
 
@@ -166,11 +160,9 @@ def _face(group: str, edges: Sequence[str]) -> dict[str, Any]:
         "curved": False,
         "entities": [],
         "families": [],
-        "refinements": [],
         "cut_families": [],
         "membership": {},
         "bands": [],
-        "embedded_edges": [],
         "outer_boundary": None,
     }
 
@@ -242,11 +234,6 @@ def _add_feature(
             "band_count": 2,
             "support_area_um2": None,
             "bands": {},
-        }
-    elif table == "refinement_request":
-        document["refinement_request"][source] = {
-            "points_um": [[0.0, 0.0], [1.0, 0.0]],
-            "segments_um": [[[0.0, 0.0], [1.0, 0.0]]],
         }
     else:
         document["port"][source] = {

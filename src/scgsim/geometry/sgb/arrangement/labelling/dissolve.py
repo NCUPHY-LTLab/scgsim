@@ -4,13 +4,10 @@ Owns deciding which edges of a labelled arrangement survive and rebuilding the
 minimal arrangement without the rest:
 
 * an edge is *required* iff the labels on its two sides differ, or one of its
-  carriers belongs to a family whose edge policy is ``required``;
-* ``refinement_only`` edges are not required but are kept aside as embedded
-  curves of the face that contains them;
+  carriers belongs to a cut family;
 * every other edge dissolves: its two cells merge;
 * afterwards degree-2 vertices whose two edges have the same carrier set are
-  removed (this erases witness splits of one arc and other same-carrier chains),
-  except where a refinement-only curve ends: that vertex stays on the boundary;
+  removed (this erases witness splits of one arc and other same-carrier chains);
 * a merged chain whose chord would cross another edge or pass through a vertex
   is split again at one of its own vertices, so the rebuilt arrangement stays
   planar.
@@ -39,14 +36,6 @@ EdgeSides = tuple[
 ]  # (left label, right label) along an edge's a -> b direction
 
 
-@dataclass(frozen=True)
-class FamilyPolicies:
-    """Carrier ids grouped by their curve family's edge policy."""
-
-    required: frozenset[str] = frozenset()
-    refinement_only: frozenset[str] = frozenset()
-
-
 @dataclass
 class Dissolved:
     """A labelled arrangement after dissolution plus the maps back to the raw one."""
@@ -55,7 +44,6 @@ class Dissolved:
     labels: list[
         Any
     ]  # label of each face of ``arrangement``; index 0 is the unbounded face
-    refinement: list[tuple[NodedEdge, int]]  # (edge, face index in ``arrangement``)
     face_map: list[int]  # old face index -> new face index
     stats: dict[str, int]
     removed: list[NodedEdge] = field(
@@ -64,49 +52,41 @@ class Dissolved:
 
 
 def dissolve(
-    arr: Arrangement, labels: list[Any], policies: FamilyPolicies | None = None
+    arr: Arrangement, labels: list[Any], family_curves: frozenset[str] = frozenset()
 ) -> Dissolved:
-    """Drop non-required edges, merge cells, remove same-carrier degree-2 vertices."""
-    policies = policies or FamilyPolicies()
-    kept, refinement_edges = _classify_edges(arr, labels, policies)
-    # A refinement curve that ends on a boundary chain pins that vertex: the mesher embeds the
-    # curve in the face and needs the boundary edge to end there.
-    pinned = {p for ei in refinement_edges for p in (arr.edges[ei].a, arr.edges[ei].b)}
-    chains = _planar_chords(arr, _merge_degree_two(arr, kept, labels, pinned))
+    """Drop non-required edges, merge cells, remove same-carrier degree-2 vertices.
+
+    ``family_curves`` are the carrier ids of the cut families on the arrangement: their edges are required.
+    """
+    kept = _required_edges(arr, labels, family_curves)
+    chains = _planar_chords(arr, _merge_degree_two(arr, kept, labels))
     new_arr = build_arrangement([chain.edge for chain in chains])
     new_labels = _face_labels(new_arr, chains)
     face_map = _old_to_new_faces(arr, new_arr, chains)
-    refinement = [
-        (arr.edges[ei], face_map[arr.he_face[2 * ei]]) for ei in refinement_edges
-    ]
     stats = {
         "edges_before": len(arr.edges),
         "edges_after": len(new_arr.edges),
         "faces_before": len(arr.faces) - 1,
         "faces_after": len(new_arr.faces) - 1,
-        "refinement_edges": len(refinement),
     }
     kept_set = set(kept)
     removed = [e for ei, e in enumerate(arr.edges) if ei not in kept_set]
-    return Dissolved(new_arr, new_labels, refinement, face_map, stats, removed)
+    return Dissolved(new_arr, new_labels, face_map, stats, removed)
 
 
-def _classify_edges(
-    arr: Arrangement, labels: list[Any], policies: FamilyPolicies
-) -> tuple[list[int], list[int]]:
-    """Indices of the required edges and of the refinement-only edges."""
+def _required_edges(
+    arr: Arrangement, labels: list[Any], family_curves: frozenset[str]
+) -> list[int]:
+    """Indices of the required edges: different labels on the two sides, or a cut-family carrier."""
     kept: list[int] = []
-    refinement: list[int] = []
     for ei, edge in enumerate(arr.edges):
         left, right = labels[arr.he_face[2 * ei]], labels[arr.he_face[2 * ei + 1]]
         curves = {
             c.curve_id for c in edge.carriers if c.role is not CarrierRole.MEMBERSHIP
         }
-        if left != right or (curves & policies.required):
+        if left != right or (curves & family_curves):
             kept.append(ei)
-        elif curves & policies.refinement_only:
-            refinement.append(ei)
-    return kept, refinement
+    return kept
 
 
 def _face_labels(new_arr: Arrangement, chains: list[_Chain]) -> list[Any]:
@@ -138,9 +118,8 @@ def _merge_degree_two(
     arr: Arrangement,
     kept: list[int],
     labels: list[Any],
-    pinned: set[Point],
 ) -> list[_Chain]:
-    """Remove vertices of degree 2 whose two edges carry the identical carrier set (never at a pinned vertex)."""
+    """Remove vertices of degree 2 whose two edges carry the identical carrier set."""
     live: dict[tuple[Point, Point], _Chain] = {}
     for ei in kept:
         e = arr.edges[ei]
@@ -157,7 +136,7 @@ def _merge_degree_two(
         incident[key[1]].add(key)
     for vertex in sorted(incident):
         keys = incident[vertex]
-        if len(keys) == 2 and vertex not in pinned:
+        if len(keys) == 2:
             _try_join(live, incident, vertex, sorted(keys))
     return [chain for _, chain in sorted(live.items())]
 

@@ -96,9 +96,8 @@ slab label 只是來源 prism 與明確 priority 規則的函式。CAD kernel �
 
 ## Required edge 與非 required edge
 
-noding 之後，每條 edge 左右各有一個 cell。若兩側 label 不同，或它屬於 edge policy 為 `required` 的 curve family（port footprint、inset band 邊界；見 [Cut family](cut-families.qmd)），則該 edge 為 **required**。其餘皆為 **seam**：它分隔兩個就模型而言是同一個東西的 cell。label 帶著擁有它的 Entity（`Domain.owner`、`SheetOwner`），所以依 D5，兩側屬於不同 Entity 的 edge 預設也是 required（見「Attribution policy」）。
+noding 之後，每條 edge 左右各有一個 cell。若兩側 label 不同，或它屬於某個 cut family（port footprint、inset band 邊界；見 [Cut family](cut-families.qmd)），則該 edge 為 **required**。其餘皆為 **seam**：它分隔兩個就模型而言是同一個東西的 cell。label 帶著擁有它的 Entity（`Domain.owner`、`SheetOwner`），所以依 D5，兩側屬於不同 Entity 的 edge 預設也是 required（見「Attribution policy」）。
 
-第二種 policy `refinement_only` 不在這個二分之內：這類 edge 不是 required，所以從不切分 cell，也不改變 label，但會被另外保存為包含它的 cell 的 *embedded curve*（見 [Cut family](cut-families.qmd#edge-policies)）。
 
 ## Dissolution
 

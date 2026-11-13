@@ -23,7 +23,7 @@ from scgsim.geometry.sgb.arrangement.derivation.labelled import (
 )
 from scgsim.geometry.sgb.bands.generate import build_cut_families
 from scgsim.geometry.sgb.bands.inset_plan import InsetPlan
-from scgsim.geometry.sgb.bands.requests import InsetRequest, RefinementRequest
+from scgsim.geometry.sgb.bands.requests import InsetRequest
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
 from scgsim.geometry.sgb.checks.validation.validate import validate_model
 from scgsim.geometry.sgb.exact import identity
@@ -57,7 +57,6 @@ class ConformalModel:
     insets: tuple[
         InsetRequest, ...
     ] = ()  # the inset requests the model was built with, as given
-    refinements: tuple[RefinementRequest, ...] = ()
     inset_plan: InsetPlan = field(
         default_factory=InsetPlan
     )  # the band families the inset requests became
@@ -108,13 +107,10 @@ def build_conformal_model(
     route: str,
     *,
     insets: tuple[InsetRequest, ...] = (),
-    refinements: tuple[RefinementRequest, ...] = (),
 ) -> ConformalModel:
-    """The validated conformal model of an effective input under a route, with the requested cut families."""
+    """The validated conformal model of an effective input under a route, with the requested inset bands."""
     catalogue = build_prism_catalogue(build_input, representation)
-    return build_model_from_catalogue(
-        catalogue, route, insets=insets, refinements=refinements
-    )
+    return build_model_from_catalogue(catalogue, route, insets=insets)
 
 
 def build_model_from_catalogue(
@@ -122,13 +118,12 @@ def build_model_from_catalogue(
     route: str,
     *,
     insets: tuple[InsetRequest, ...] = (),
-    refinements: tuple[RefinementRequest, ...] = (),
     keep_raw: bool = False,
 ) -> ConformalModel:
-    """The validated conformal model of a prism catalogue under a route, with the requested cut families.
+    """The validated conformal model of a prism catalogue under a route, with the requested inset bands.
 
-    ``insets`` (Surface-EPR bands) and ``refinements`` (mesh-size curves) are the typed requests of
-    ``bands.requests``; they become cut families before the arrangements are built.  Pass bands only as
+    ``insets`` (Surface-EPR bands) are the typed requests of ``bands.requests``; they become cut families
+    before the arrangements are built.  Pass bands only as
     ``insets``: the sidecar reads each band family's support and margins from its request, so a catalogue that
     already carries inset families builds but fails when its sidecar is written.
     """
@@ -137,7 +132,7 @@ def build_model_from_catalogue(
     check_entity_names(
         p.entity_id for p in catalogue.prisms if p.material_kind != "port"
     )
-    cut_families = build_cut_families(catalogue, insets, refinements)
+    cut_families = build_cut_families(catalogue, insets)
     catalogue = cut_families.catalogue
     # The pipeline allocates millions of small acyclic objects; the cyclic collector would only
     # re-scan them, so it is paused for the build.
@@ -145,7 +140,7 @@ def build_model_from_catalogue(
     gc.disable()
     try:
         model = _build(catalogue, policy, keep_raw=keep_raw)
-        model.insets, model.refinements = insets, refinements
+        model.insets = insets
         model.inset_plan = cut_families.insets
         return model
     finally:

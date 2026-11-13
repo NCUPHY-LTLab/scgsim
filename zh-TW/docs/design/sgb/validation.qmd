@@ -41,7 +41,7 @@ mesher 不比對它收到的兩個檔案。把一次 build 的 XAO 配上另一�
 
 ## 極端案例 catalogue 的結果 {#catalogue}
 
-production 的 catalogue（`tests/sgb_extreme_cases.py` 的 fixture，`tests/sgb_catalogue_report.py` 產生報告）有 23 個 fixture，每個 fixture 宣告自己適用的 route（多數是 A、B、C，少數只有 B 與 C），共 63 列：Route A 17 列，Route B 與 C 各 23 列。fixture 涵蓋近切圓弧與直線、淺角相交的兩條圓弧、1 到 3 個 $g$ 長的 edge、共線重疊、窄縫、band 消失與 neck 被 inset 切開、浮空導體、巢狀 hole、堆疊 slab 在角落或 wall 邊緣相碰、port edge 落在金屬側壁上、refinement curve 穿過 band 邊界，以及相距 0.4 g 與 2 g 的近乎重合邊緣等，也包含圓弧上有外來 vertex 的案例。
+production 的 catalogue（`tests/sgb_extreme_cases.py` 的 fixture，`tests/sgb_catalogue_report.py` 產生報告）有 23 個 fixture，每個 fixture 宣告自己適用的 route（多數是 A、B、C，少數只有 B 與 C），共 63 列：Route A 17 列，Route B 與 C 各 23 列。fixture 涵蓋近切圓弧與直線、淺角相交的兩條圓弧、1 到 3 個 $g$ 長的 edge、共線重疊、窄縫、band 消失與 neck 被 inset 切開、浮空導體、巢狀 hole、堆疊 slab 在角落或 wall 邊緣相碰、port edge 落在金屬側壁上、cut family 的曲線穿過 band 邊界，以及相距 0.4 g 與 2 g 的近乎重合邊緣等，也包含圓弧上有外來 vertex 的案例。
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Route | 列數 | 建出並通過全部檢查 | 預期的拒絕 |
@@ -124,7 +124,6 @@ SGB 各頁使用的「保證」並不都是同一種強度。本頁與其他頁�
 | 來源無法詮釋 | route check、labelling 規則；priority 缺少或相同時 `OverlapError` 會指出該由 layer stack、元件標註或 `GeometryPlan` 的哪一個來源補上 | `Route A needs film conductors as sheets, but these films are still finite after the physical interpretation: …; select a profile that collapses them to sheets (for example thin_film) or choose Route B or C`；`different-Net conductors overlap near (42.5000, 46.5000) um: other_net, pad on layer metal. Fix the layout or the Net declaration: draw the conductors of different Nets apart, or declare them one Net.` |
 | Non-manifold pinch | contact 階段的專用檢查，在 arrangement 之後、assembly 之前 | `NonManifoldError`：`non-manifold pinch: VACUUM_REGION (pinched between conductors pad on layer metal, pinch of Net P) touches itself along the vertical edge at (60.0000, 60.0000) um, z 0.0..0.2 um (slab[0,1/5]) …`（一小塊同 Net 的有限厚度金屬只在轉角碰到 pad，兩側的 vacuum 只在那條 vertical edge 相接）；同 Net 的有限厚度金屬只在 vertex 或 vertical edge 相接，或 hole 在 Route B 碰到自己的外邊界；Route A 的 sheet 可以在轉角相接 |
 | 不同 Net 接觸 | contact check，在 arrangement 之後、assembly 之前 | `ContactError`：指出兩個 Net、各自的 Entity、位置與 plane；包含只因 snap 或較粗 grid 而封閉的 gap |
-| Refinement 位置錯誤 | assembly | `SgbError`：`refinement curve r/seg0 at (32.0000, 55.0000) um on level[1/5] lies in a cell that has no face …` |
 | 推導出的結構不一致 | assembly：slab-edge chain 無法追溯、level cell 對其 slab cell 看法不一、wall 連到不同 volume 的 cell | 指出 edge 或 wall id 的 `SgbError` |
 | Invariant 失敗 | 驗證器，S9 階段 | 列出每一個失敗 check 的 `ValidationError` |
 :::
@@ -193,14 +192,13 @@ id 是 64 bit 的內容雜湊，碰撞機率極低，但以 id 為 key 的容器
 | `every_cell_in_exactly_one_volume` | 每個有 label 的 slab cell 恰好屬於一個 volume | 有 cell 不在任何 volume，或被兩個 volume 同時使用（某個 volume id 吞掉另一個） |
 :::
 
-另外兩處在建構時就拒絕：assembly 把 record 存到某個 id 之下時，若那裡已有不同的 record 就失敗（同一個 record 重複登記，例如兩條 refinement curve 共用一個點，則可以）；emission 在編號時若同一個 planned id 被編兩次就失敗（`check_one_tag_per_id`）。
+另外兩處在建構時就拒絕：assembly 把 record 存到某個 id 之下時，若那裡已有不同的 record 就失敗（同一個 record 重複登記，例如兩條 edge 共用的 vertex，則可以）；emission 在編號時若同一個 planned id 被編兩次就失敗（`check_one_tag_per_id`）。
 
 ### 在 `validate` 之外檢查
 
 下列 invariant（brief 第 11 與 14 節）不在 `validate_model` 本身，而是在 pipeline 的其他位置（其中不同 Net 接觸與 non-manifold pinch 也會在報告中留下一筆記錄）：
 
 - **不同 Net 接觸**：pipeline 的 `contact_check` 階段（`arrangement/derivation/contacts.py`），在 arrangement 完成之後、assembly 之前，從每個 arrangement 的 vertex 與 face 檢查，涵蓋任何 route、任何平面，也涵蓋只由 grid 造成的接觸（`ContactError`）。
-- **Refinement 位置**：refinement curve 的每一段都必須落在有 face 且屬於某個輸出 volume 的 cell；否則 assembly 拋出 `SgbError`（見 [Cut family](cut-families.qmd#embed-or-edge)）。
 - **每個 native entity 恰有一個 planned id。** 寫出的檔案以 `TopExp::MapShapes` 的順序編號，emission 拒絕任何一個 planned id 被編兩次，`verify_loaded` 與 OCCT 檢查再逐維度比對載入的 entity 與 planned id，不同就失敗（[Emission](emission.qmd)）。
 - **Mesh conformity**（沒有重複節點、每個共用的內部 face 都被共用）：測試與 catalogue 在粗 mesh 上檢查；`verify_loaded` 以預期的數量、邊界、面積與體積間接保護它。
 
@@ -241,7 +239,7 @@ flowchart LR
   S2 --> S4["arrangement<br/>snap rounding"]
   S4 --> S5["labelling<br/>OverlapError"]
   S5 --> SC["contact 階段<br/>ContactError, NonManifoldError"]
-  SC --> S6["assembly<br/>SgbError：chain、refinement 位置"]
+  SC --> S6["assembly<br/>SgbError：chain"]
   S6 --> S9["S9 驗證<br/>ValidationError"]
   S9 --> S10["emission<br/>每個 native entity 一個 planned id"]
   S9 -. "任何失敗：中止，不回傳" .-> X(("中止"))
@@ -258,7 +256,7 @@ flowchart LR
 - 驗證有兩層：開發測試中的 OCCT 檢查與 Gmsh 載入檢查，以及每一次 production build 的 SGB 結構 invariant。mesher 信任同一次 build 寫出的檔案，不再檢查。七個執行範例與 catalogue 中 54 個可建出的列都通過全部檢查，另外 9 列是預期中的拒絕。
 - 結構 invariant 在一次 build 中共記錄 31 個 check，涵蓋 arrangement、contact、shell 與 face、physical group；其中四個是警告，一個是抽樣。
 - 每個 check 都從完成的 record 重新計算它的陳述，所以 assembly 的缺陷無法躲在自己的簿記後面。
-- 任何硬性失敗都會拋出例外；不修補，也不回傳模型。不同 Net 的接觸與 refinement 位置錯誤在更早的階段就會中止。
+- 任何硬性失敗都會拋出例外；不修補，也不回傳模型。不同 Net 的接觸在更早的階段就會中止。
 - 下一步：驗證過的規劃如何送到 Gmsh，見 [Emission](emission.qmd)。
 
 ## 補充：重現資料

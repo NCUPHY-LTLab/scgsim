@@ -297,8 +297,7 @@
   "ContactError (contact check, after the arrangements)": "different-Net contact between P (entities pad on layer metal) and other (entities touching_net) at (40.0000, 45.0000) um on slab[0,1/5] (grid g = 0.001 um; a gap smaller than the grid closes when the sources snap). Fix the layout or the Net declaration: draw the conductors of different Nets apart, or declare them one Net.",
   "NonManifoldError (same-Net pinch at a corner, finite metal; before assembly)": "non-manifold pinch: VACUUM_REGION (pinched between conductors pad on layer metal, pinch of Net P) touches itself along the vertical edge at (60.0000, 60.0000) um, z 0.0..0.2 um (slab[0,1/5]): two cells of one domain meet only at a vertex. Fix the layout: give them a shared edge or separate them.",
   "OverlapError (labelling, S5)": "different-Net conductors overlap near (42.5000, 46.5000) um: other_net, pad on layer metal. Fix the layout or the Net declaration: draw the conductors of different Nets apart, or declare them one Net.",
-  "RouteError (route check, before S2)": "Route A needs film conductors as sheets, but these films are still finite after the physical interpretation: ground_0000, pad; select a profile that collapses them to sheets (for example thin_film) or choose Route B or C",
-  "SgbError (refinement curve in a cell with no face, assembly)": "refinement curve r/seg0 at (32.0000, 55.0000) um on level[1/5] lies in a cell that has no face (inside a volume): it cannot be embedded and is not dropped silently"
+  "RouteError (route check, before S2)": "Route A needs film conductors as sheets, but these films are still finite after the physical interpretation: ground_0000, pad; select a profile that collapses them to sheets (for example thin_film) or choose Route B or C"
  },
  "occt_examples": {
   "all_ok": true,

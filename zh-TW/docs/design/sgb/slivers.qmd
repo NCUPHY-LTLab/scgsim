@@ -148,7 +148,7 @@ report 是已完成 build 的函式（`sliver_report(model)`）。它讀取 topo
 |---|---|---|---|
 | **保留並回報**（v1 的做法） | 模型完全依繪製的樣子建出；sliver 被列出 | mesher 會遇到 sliver | 已實作（`sliver_report`；薄於 $g$ 的 slab 同樣保留並回報） |
 | 對某個 layer 或 family 使用**較粗的 snap grid** | 該 layer 中距離小於較粗 grid 的邊界被合併 | 可能抹掉真實的 gap，包括兩個 Net 之間的 gap | v1 不提供；每個模型只有一個 grid |
-| **Derived-to-source snapping**，$\tau_{\text{derived}}$ | 與來源曲線距離在 $\tau$ 之內的 derived 曲線（inset、refinement）移到來源曲線上；**來源曲線永不移動** | band 邊緣最多移動 $\tau$，所以 band 面積略有改變 | v1 不提供；見下方的模擬 |
+| **Derived-to-source snapping**，$\tau_{\text{derived}}$ | 與來源曲線距離在 $\tau$ 之內的 derived 曲線（inset band）移到來源曲線上；**來源曲線永不移動** | band 邊緣最多移動 $\tau$，所以 band 面積略有改變 | v1 不提供；見下方的模擬 |
 :::
 
 下面兩個計算範例，各自明確是替代的模擬，用來看這些 policy 若加入會發生什麼：

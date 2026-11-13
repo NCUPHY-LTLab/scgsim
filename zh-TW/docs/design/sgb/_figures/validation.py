@@ -49,7 +49,6 @@ from sgb_scenes import pad_in_ground as stage_pad_in_ground
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
     SolutionInterface,
 )
 from scgsim.geometry.sgb.checks.validation.validate import validate_model
@@ -59,7 +58,6 @@ from scgsim.geometry.sgb.errors import (
     NonManifoldError,
     OverlapError,
     RouteError,
-    SgbError,
     ValidationError,
 )
 from scgsim.geometry.sgb.exact.grid import exact_z
@@ -468,14 +466,6 @@ def _early_errors(numbers: dict) -> None:
         ],
         NonManifoldError,
     )
-    try:
-        build_model(
-            catalogue,
-            "B",
-            refinements=(RefinementRequest("r", 0.2, ((32.0, 55.0), (38.0, 55.0))),),
-        )
-    except SgbError as e:
-        out["SgbError (refinement curve in a cell with no face, assembly)"] = str(e)
     numbers["early_errors"] = out
 
 

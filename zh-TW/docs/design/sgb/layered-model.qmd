@@ -159,7 +159,7 @@ airbridge 有七個 prism：substrate、vacuum、兩半 ground、兩根 post 與
 ## 邊界情況
 
 - **Sheet。** 在 Route A 中所有導體都是 sheet，所以模型只有晶片本體（以及任何 port sheet）的 level；沒有任何 slab 帶有金屬 prism。Route A 與 Route B 的差別只在 labelling policy（見 [Route](routes.qmd)）。
-- **Family 以某個 level 為 target。** cut family（band、refinement curve）把它的曲線加到它所指定的 level。若 family 指定的 Z 沒有任何 prism 定義，它會新增該 level：那是一個普通的 level，不改變任何 active set（production 已實作並有測試）。本設計範例中的所有 family 都指向既有的 level（見 [Cut family](cut-families.qmd)）。
+- **Family 以某個 level 為 target。** cut family（例如 inset band）把它的曲線加到它所指定的 level。若 family 指定的 Z 沒有任何 prism 定義，它會新增該 level：那是一個普通的 level，不改變任何 active set（production 已實作並有測試）。本設計範例中的所有 family 都指向既有的 level（見 [Cut family](cut-families.qmd)）。
 - **薄的 slab。** Level 是宣告的精確 Z 值，不設任何 Z 的 threshold。兩個 prism 的高度只差幾奈米，就會產生一個比 $g$ 還薄的 slab；它會被保留並回報，不會使 build 失敗（決策 D2，見 [Sliver](slivers.qmd)）。原型曾在驗證時因這種 slab 中止；production 已移除這個中止，薄 slab 以兩個警告回報（見 [Validation](validation.qmd)），並有測試保證它從來源保留到 arrangement。
 - **同一 Net 的金屬重疊。** 同一個 Entity 的重疊不是錯誤，seam 會被 dissolve，合併後 face 的 lineage 保有兩個 prism。兩個 Entity 的重疊由 priority 決定（較高者擁有重疊區，seam 保留，輸掉的 Entity 在 membership 中仍列出份額）；priority 相同或缺少則為錯誤。
 - **不同 Net 的金屬重疊或接觸。** 同一個 slab 中的重疊是錯誤，會使 build 中止。接觸也是錯誤，而且在每一種 route 中都是：包含兩片 Route A sheet 共用一條 edge 或一個 vertex，以及由 snapping 造成的接觸（在 g = 1 nm 時 4 nm 的間隙可以通過，在 g = 10 nm 時則不行）。接觸以 `ContactError` 在 build 的早期丟出。

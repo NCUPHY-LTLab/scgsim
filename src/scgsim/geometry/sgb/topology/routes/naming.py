@@ -278,21 +278,27 @@ def sheet_face_sides(neg: Domain | None, pos: Domain | None) -> dict[str, str]:
     return out
 
 
-def surface_epr_row_ids(
+def banded_rows(  # noqa: PLR0913 - the group's two names, its type and Entity, the band and the sheet sides
     group: str,
+    unbanded_group: str,
     interface: str,
     entity: str,
     band: int | None,
     sheet_sides: dict[str, str] | None = None,
-) -> list[str]:
-    """The Surface-EPR rows a banded group carries, from facts the caller already has (never from the name).
+) -> dict[str, str]:
+    """The Surface-EPR rows a banded group carries, each with the surface it is a band of, from facts the caller
+    already has (never from the name).
 
-    A Route A sheet group carries the ``MA`` and ``MS`` rows of its Entity that ``sheet_sides`` (the
-    :func:`sheet_face_sides` of one of its faces) names; every other banded group carries its own name as
-    its row; a port carries none.
+    ``unbanded_group`` is the group's name as its faces would be named without their band.  A Route A sheet
+    group carries the ``MA`` and ``MS`` rows of its Entity that ``sheet_sides`` (the :func:`sheet_face_sides`
+    of one of its faces) names, bands of ``MA::<entity>__sheet`` and ``MS::<entity>__sheet``; every other banded
+    group carries its own name as its row, a band of ``unbanded_group``; a port carries none.
     """
     if band is None or interface == "PORT":
-        return []
+        return {}
     if interface == SHEET:
-        return [sheet_row_id(row_type, entity, band) for row_type in sheet_sides or ()]
-    return [group]
+        return {
+            sheet_row_id(row_type, entity, band): sheet_row_id(row_type, entity, None)
+            for row_type in sheet_sides or ()
+        }
+    return {group: unbanded_group}

@@ -71,7 +71,7 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
 ) -> MeshResult:
     """Mesh the SGB model in ``xao`` so that no tetrahedron is below ``threshold``.
 
-    ``sidecar`` is the ``scgsim.sgb.sidecar.v3`` file next to the XAO, or its decoded content.  The mesh
+    ``sidecar`` is the ``scgsim.sgb.sidecar.v4`` file next to the XAO, or its decoded content.  The mesh
     ``<xao stem>.msh`` and the report ``<xao stem>.quality.json`` / ``.quality.txt`` are written to
     ``output_dir``.  ``threshold`` has no default: it is the element-quality bound the caller requires.
 

@@ -84,7 +84,6 @@ def _build_entities(model: ConformalModel, result: OracleResult) -> None:
         needed.update(v.embedded_faces)
     faces = {fid: topo.faces[fid] for fid in sorted(needed)}
     edges = {eid for f in faces.values() for lp in f.loops for eid, _ in lp}
-    edges |= {eid for f in faces.values() for eid in f.refinement_edges}
     vertices = {v for eid in edges for v in (topo.edges[eid].v0, topo.edges[eid].v1)}
     centres = {
         topo.edges[eid].centre_vertex for eid in edges if topo.edges[eid].centre_vertex
@@ -158,11 +157,6 @@ def embed_planned(model: ConformalModel, tags: dict[str, tuple[int, int]]) -> No
         if vid in model.routed.emitted_volumes:
             for fid in v.embedded_faces:
                 gmsh.model.mesh.embed(2, [tags[fid][1]], 3, tags[vid][1])
-    for fid, f in topo.faces.items():
-        if f.refinement_edges and fid in tags:
-            gmsh.model.mesh.embed(
-                1, [tags[e][1] for e in f.refinement_edges], 2, tags[fid][1]
-            )
 
 
 # --------------------------------------------------------------------------- mesh conformity

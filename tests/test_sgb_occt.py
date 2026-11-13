@@ -226,20 +226,6 @@ def test_the_uncorrupted_file_is_clean_so_the_controls_are_meaningful(pad):
 # --------------------------------------------------------------------------- what the argument analyzer must not see
 
 
-def test_refinement_curve_is_excluded_from_the_argument_analyzer_but_not_from_brepcheck(
-    tmp_path, emit_models
-):
-    """Refinement curve is excluded from the argument analyzer but not from brepcheck."""
-    model = emit_models["pad_a_refinement"]
-    plan = plan_brep(model.topology, model.routed)
-    write_brep_file(plan, tmp_path / "m.brep")
-    report = check_file(tmp_path / "m.brep", model.topology, plan)
-    assert (
-        report.arguments["excluded_free_edges"] == 1
-    )  # an embedded curve interferes with its host face by design
-    assert report.ok and report.brepcheck["checked"]["edge"] == len(plan.edge_ids)
-
-
 def test_embedded_free_faces_are_excluded_from_the_solid_analysis_and_analysed_on_their_own(
     tmp_path, emit_models
 ):

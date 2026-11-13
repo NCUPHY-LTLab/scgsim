@@ -1,4 +1,4 @@
-"""The two owner rules the sidecar v3 made decidable: a support ring's size (#147) and a short source edge (#138 (c)).
+"""The two owner rules the sidecar made decidable since v3: a support ring's size (#147) and a short source edge (#138 (c)).
 
 The meshing stage attributes a fine band edge or face by lineage, read from the sidecar alone (#170, slices D and
 E).  Both scenes are real SGB builds of Route B with MA, MS and SA bands at (0.5, 1.0) um, checked as ``mesh()``

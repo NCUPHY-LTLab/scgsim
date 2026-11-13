@@ -2,9 +2,8 @@
 
 Owns the tables a consumer follows lineage back to: ``entity`` (each Entity's prisms, each with its kind,
 material, Net, layer, z range and feature kind), ``source_curve`` (each straight edge and arc of each Entity outline, with its exact
-curve and length), ``inset_request`` and ``refinement_request`` (the requests as given; a refinement
-family also with the segments drawn from it) and ``port`` (each
-lumped-port sheet with the faces and volumes that carry it).  Lengths and coordinates are micrometres, rounded
+curve and length), ``inset_request`` (the inset requests as given, with the band families each became) and
+``port`` (each lumped-port sheet with the faces and volumes that carry it).  Lengths and coordinates are micrometres, rounded
 like every value of the sidecar (``output.emission.measures.rounded``).
 """
 
@@ -24,7 +23,6 @@ from scgsim.contracts.sgb_sidecar.records import (
     InterfaceSupport,
     LineCurve,
     Port,
-    RefinementRequest,
     SkippedFace,
     SourceCurve,
     SurfaceEprType,
@@ -46,7 +44,6 @@ from scgsim.geometry.sgb.exact.prisms import PrismRecord
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
-from scgsim.geometry.sgb.output.sidecar.lineage import REFINEMENT_FAMILY_ROLE
 from scgsim.geometry.sgb.topology.routes.naming import port_group
 
 
@@ -200,31 +197,6 @@ def concrete_support(
             z_um=support.z_um,
         )
     raise SgbError(f"internal: {support!r} names every face of a type, not one face")
-
-
-def refinement_request_records(model: ConformalModel) -> dict[str, RefinementRequest]:
-    """Every refinement family: the request as given, and the segments SGB drew, each carrier as it is.
-
-    The levels the segments are drawn at are the family's, in ``cut_family``.
-
-    A refinement family is the cut family of one request (``bands.generate``); a catalogue may also carry
-    one directly, with no request, which has no polyline as given.  Its segments are kept one by one, never
-    joined into a polyline, because they need not touch nor follow one another.
-    """
-    given = {r.request_id: r for r in model.refinements}
-    grid = model.topology.grid_um
-    out: dict[str, RefinementRequest] = {}
-    for family in model.labelled.catalogue.families:
-        if family.role != REFINEMENT_FAMILY_ROLE:
-            continue
-        request = given.get(family.family_id)
-        out[family.family_id] = RefinementRequest(
-            points_um=None if request is None else [list(p) for p in request.points_um],
-            segments_um=[
-                [_point_um(c.p, grid), _point_um(c.q, grid)] for c in family.carriers
-            ],
-        )
-    return dict(sorted(out.items()))
 
 
 def port_records(model: ConformalModel, plan: BrepPlan) -> dict[str, Port]:

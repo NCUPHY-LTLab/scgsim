@@ -33,10 +33,10 @@ class TopoVertex:
 
 @dataclass
 class TopoEdge:
-    """An edge: horizontal (on a level plane), vertical (a wall column) or a refinement curve."""
+    """An edge: horizontal (on a level plane) or vertical (a wall column)."""
 
     id: str
-    kind: Literal["horizontal", "vertical", "refinement"]
+    kind: Literal["horizontal", "vertical"]
     v0: str
     v1: str
     plane: str
@@ -74,9 +74,6 @@ class TopoFace:
         None  # curved wall: (bottom arc edge id, top arc edge id) of its one cylinder
     )
     bulge_volume: float = 0.0  # walls: sum of (arc segment area x height), + when the arcs bulge into the pos side
-    refinement_edges: list[str] = field(
-        default_factory=list
-    )  # embedded mesh-size curves (refinement_only)
 
     @property
     def curved(self) -> bool:

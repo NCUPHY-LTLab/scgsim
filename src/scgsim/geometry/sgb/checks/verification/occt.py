@@ -239,26 +239,23 @@ def _faulty_row(analyzer: Any, name: str, index: int, sub: Any) -> dict[str, Any
     return row
 
 
-def without_free_shapes(shape: Any) -> tuple[Any, int, int]:
-    """The shape minus compound-level free edges and free faces, and how many of each were dropped.
+def without_free_faces(shape: Any) -> tuple[Any, int]:
+    """The shape minus its compound-level free faces, and how many were dropped.
 
-    A ``refinement_only`` curve is written as a free edge of the compound that lies *inside* a face of a
-    solid, an embedded sheet (a port or a floating Route A sheet) as a free face inside a solid (the mesher
-    embeds both).  To a Boolean pre-check that is a self-interference by design, so they are excluded from
-    ``BOPAlgo_ArgumentAnalyzer`` (the other checks still see them; the free faces are analysed on their own
-    by :func:`argument_check`).
+    An embedded sheet (a port or a floating Route A sheet) is written as a free face of the compound inside a
+    solid (the mesher embeds it).  To a Boolean pre-check that is a self-interference by design, so the free
+    faces are excluded from ``BOPAlgo_ArgumentAnalyzer`` (the other checks still see them, and
+    :func:`argument_check` analyses them on their own).
     """
-    kept, edges, faces = [], 0, 0
+    kept, faces = [], 0
     for child in _children(shape):
-        if child.ShapeType() == TopAbs_EDGE:
-            edges += 1
-        elif child.ShapeType() == TopAbs_FACE:
+        if child.ShapeType() == TopAbs_FACE:
             faces += 1
         else:
             kept.append(child)
-    if not (edges or faces):
-        return shape, 0, 0
-    return _compound(kept), edges, faces
+    if not faces:
+        return shape, 0
+    return _compound(kept), faces
 
 
 def _compound(children: list[Any]) -> Any:
@@ -311,11 +308,10 @@ def argument_check(
 ) -> dict[str, Any]:
     """``BOPAlgo_ArgumentAnalyzer`` with the modes listed in the module docstring.
 
-    The solids are analysed without the compound-level free edges and faces (they interfere with their
-    host by design); the free faces are analysed as a compound of their own, so a defect among them is
-    still found.
+    The solids are analysed without the compound-level free faces (they interfere with their host by
+    design); the free faces are analysed as a compound of their own, so a defect among them is still found.
     """
-    solids, dropped_edges, dropped_faces = without_free_shapes(shape)
+    solids, dropped_faces = without_free_faces(shape)
     analyzer, modes = _analyze(
         solids, self_interference=self_interference, parallel=parallel
     )
@@ -333,7 +329,6 @@ def argument_check(
         "flags": modes,
         "results": results[:limit],
         "result_count": len(results),
-        "excluded_free_edges": dropped_edges,
         "excluded_free_faces": dropped_faces,
     }
 

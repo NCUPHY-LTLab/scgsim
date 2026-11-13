@@ -11,11 +11,9 @@ interpreter, and every quoted block is compared with what was written.  Two kind
 * **File blocks** have a header like ``{.text filename="semantic_geometry_route_b.brep, lines 1170-1178"}`` (or ``line 205``).
   The file name selects the written file; the lines are compared with the block, ignoring trailing spaces.
 * **Sidecar blocks** have a header like ``{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}``.  The sidecar is
-  read from the example; a header ``（節錄，加上 refinement curve）`` selects the example built with one refinement curve
-  (``RefinementRequest("ref", 0.0, ((-40.0, 55.0), (40.0, 55.0)))`` on the substrate-vacuum interface).  The sidecar is read
-  with the contract's ``read_sidecar``.  The excerpt is parsed as JSON (a ``"…"`` key or item stands for omitted content) and
-  every value in it must equal the sidecar's, found under the same key: a table of ``scgsim.sgb.sidecar.v3`` (``group``,
-  ``face``, ``edge`` ...) or another top-level field.
+  read from the example with the contract's ``read_sidecar``.  The excerpt is parsed as JSON (a ``"…"`` key or item stands
+  for omitted content) and every value in it must equal the sidecar's, found under the same key: a table of
+  ``scgsim.sgb.sidecar.v4`` (``group``, ``face``, ``edge`` ...) or another top-level field.
 
 Exit status 1 lists every mismatch.
 """
@@ -36,7 +34,7 @@ PAGES = (HERE.parent / "emission.qmd", HERE.parent / "brep-format.qmd")
 ROOT = HERE.parents[4]
 STEM = "semantic_geometry_route_b"
 SIDECAR_BLOCK = re.compile(
-    rf'^```\{{\.json filename="(?P<name>{STEM}\.sidecar\.json)（節錄(?P<variant>[^）]*)）"\}}\n(?P<body>.*?)^```',
+    rf'^```\{{\.json filename="(?P<name>{STEM}\.sidecar\.json)（節錄）"\}}\n(?P<body>.*?)^```',
     re.S | re.M,
 )
 FILE_BLOCK = re.compile(
@@ -49,11 +47,7 @@ sys.path.insert(0, sys.argv[1])
 from pathlib import Path
 import inset_kit as kit
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.bands.requests import RefinementRequest
-from scgsim.geometry.sgb.model import build_model_from_catalogue
 emit_model(kit.pad_model("B", None), Path(sys.argv[2]) / "plain")
-refinement = RefinementRequest("ref", 0.0, ((-40.0, 55.0), (40.0, 55.0)))
-emit_model(build_model_from_catalogue(kit.pad_catalogue("B"), "B", refinements=(refinement,)), Path(sys.argv[2]) / "refinement")
 """
 
 
@@ -65,7 +59,7 @@ def _quoted_blocks(text: str):
 
 
 def _write_example(scratch: Path) -> None:
-    """Write the example (plain, and with one refinement curve) into ``scratch``, in a fresh interpreter."""
+    """Write the example into ``scratch``, in a fresh interpreter."""
     subprocess.run(
         [sys.executable, "-c", GENERATE, str(HERE), str(scratch)],
         cwd=ROOT,
@@ -99,12 +93,8 @@ def _differences(excerpt: object, actual: object, path: str) -> list[str]:
 
 def _check_sidecar_blocks(scratch: Path, problems: list[str]) -> int:
     blocks = [m for page in PAGES for m in SIDECAR_BLOCK.finditer(page.read_text())]
-    sidecars: dict[str, dict] = {}
+    sidecar = read_sidecar(scratch / "plain" / f"{STEM}.sidecar.json")
     for match in blocks:
-        variant = "refinement" if "refinement" in match["variant"] else "plain"
-        sidecar = sidecars.setdefault(
-            variant, read_sidecar(scratch / variant / f"{STEM}.sidecar.json")
-        )
         body = match["body"].strip().rstrip(",")
         excerpt = json.loads("{" + body + "}")
         for key, value in excerpt.items():  # a table or another top-level field

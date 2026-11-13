@@ -22,7 +22,6 @@ def test_every_kind_of_the_interface_is_read_with_its_facts():
             {"margins_um": [0.5, 1.0], "narrowest_band_um": 0.5},
         ),
         feature("arc", [5], {"radius_um": 10.0}, source=None),
-        feature("refinement_curve", [6]),
         feature("port_edge", [7, 8]),
     )
     features = {f.kind: f for f in read_features(sidecar).features}
@@ -38,9 +37,7 @@ def test_every_kind_of_the_interface_is_read_with_its_facts():
 
 def test_the_binding_groups_and_embeddings_are_carried_for_the_audit():
     """The binding, the groups with the members that name them, and the embeddings by native tag."""
-    sidecar = sidecar_with(
-        film([1]), embedded_faces=[("f2", "vol1")], embedded_edges=[("e3", "f1")]
-    )
+    sidecar = sidecar_with(film([1]), embedded_faces=[("f2", "vol1")])
     result = read_features(sidecar)
     assert result.binding.id_of(1, 4) == "e3"
     assert result.binding.id_of(2, 3) == "f2"
@@ -49,7 +46,6 @@ def test_the_binding_groups_and_embeddings_are_carried_for_the_audit():
         "MA::pad__sidewall"
     ] == (2, ("f0", "f1"))
     assert [(e.face, e.host_volume) for e in result.embedded_faces] == [(3, 2)]
-    assert [(e.edge, e.host_face) for e in result.embedded_edges] == [(4, 2)]
 
 
 def test_features_by_curve_lists_every_feature_that_covers_a_curve():
@@ -85,8 +81,10 @@ def test_a_fact_the_contract_does_not_define_is_refused():
 def test_another_version_is_refused_by_name():
     """A sidecar of another version is refused by its version."""
     sidecar = sidecar_with()
-    sidecar["schema"] = "scgsim.sgb.sidecar.v2"
-    with pytest.raises(SidecarError, match="sidecar.v2.*sidecar.v3"):
+    sidecar["schema"] = "scgsim.sgb.sidecar.v3"
+    with pytest.raises(
+        SidecarError, match="sidecar.v3.*sidecar.v4.*Rebuild the geometry"
+    ):
         read_features(sidecar)
 
 

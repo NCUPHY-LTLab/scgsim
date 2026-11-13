@@ -9,7 +9,7 @@
    "xao": "semantic_geometry_route_b.xao"
   },
   "grid_um": 0.001,
-  "identity_digest": "model:1e26e8df33eabe43",
+  "identity_digest": "model:c428addc8d9092be",
   "name": "semantic_geometry_route_b",
   "route": "B",
   "route_policy": {
@@ -18,21 +18,20 @@
   },
   "tolerance_um": 1e-07
  },
- "schema": "scgsim.sgb.sidecar.v3",
+ "schema": "scgsim.sgb.sidecar.v4",
  "summary": {
   "arc_edges": 0,
   "counts": {
    "arcs": 0,
    "cylinders": 0,
-   "edges": 86,
+   "edges": 85,
    "faces": 36,
-   "free_edges": 1,
    "free_faces": 0,
    "pcurves": 161,
    "shells": 3,
    "solids": 2,
    "surfaces": 30,
-   "vertices": 60,
+   "vertices": 58,
    "volumes_total": 4,
    "wires": 40
   },

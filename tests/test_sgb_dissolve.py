@@ -6,12 +6,11 @@ import pytest
 from sgb_scenes import GRID
 
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement, interior_point
-from scgsim.geometry.sgb.arrangement.labelling.dissolve import FamilyPolicies, dissolve
+from scgsim.geometry.sgb.arrangement.labelling.dissolve import dissolve
 from scgsim.geometry.sgb.arrangement.labelling.prism_set import PrismSet, resolve_domain
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.errors import OverlapError
 from scgsim.geometry.sgb.exact.carriers import EdgeCarrier
-from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
 from scgsim.geometry.sgb.exact.grid import exact_z
 from scgsim.geometry.sgb.exact.prisms import Footprint, PrismRecord
 
@@ -182,27 +181,13 @@ def test_required_family_edge_survives_dissolution_but_plain_edges_do_not():
     )
     labels = label_cells(arr, prisms)
     assert len(arr.faces) - 1 == 2
-    kept = dissolve(arr, labels, FamilyPolicies(required=frozenset(["fam"])))
+    kept = dissolve(arr, labels, frozenset(["fam"]))
     assert len(kept.arrangement.faces) - 1 == 2
     gone = dissolve(arr, labels)
     assert len(gone.arrangement.faces) - 1 == 1
     assert (
         len(gone.arrangement.edges) == 4
     )  # degree-2 vertices of the seam were removed
-
-
-def test_refinement_only_edges_are_kept_aside_without_splitting_the_cell():
-    """Refinement only edges are kept aside without splitting the cell."""
-    prisms = [prism("p", rect(0, 0, 100, 100))]
-    arr = arrange(
-        prisms, [Segment((50, 10), (50, 90), frozenset([EdgeCarrier("ref")]))]
-    )
-    labels = label_cells(arr, prisms)
-    dissolved = dissolve(
-        arr, labels, FamilyPolicies(refinement_only=frozenset(["ref"]))
-    )
-    assert len(dissolved.arrangement.faces) - 1 == 1
-    assert len(dissolved.refinement) == 1 and dissolved.refinement[0][1] == 1
 
 
 def test_degree_two_vertex_with_different_carriers_is_kept():
@@ -217,9 +202,3 @@ def test_degree_two_vertex_with_different_carriers_is_kept():
     assert len(dissolved.arrangement.faces) - 1 == 1
     assert dissolved.arrangement.face_twice_area(1) == 2 * 200 * 100
     assert len(dissolved.arrangement.edges) == 6
-
-
-def test_an_unknown_edge_policy_is_rejected():
-    """An unknown edge policy is rejected."""
-    with pytest.raises(ValueError, match="unknown edge policy"):
-        CurveFamilyRecord("f", "seam", (), (exact_z(0),), "dissolve")  # type: ignore[arg-type]

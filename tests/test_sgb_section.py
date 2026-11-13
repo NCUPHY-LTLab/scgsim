@@ -28,7 +28,6 @@ from scgsim.geometry.models.section import CutLine
 from scgsim.geometry.sgb.bands.requests import (
     InsetRequest,
     InterfaceSurfaces,
-    RefinementRequest,
 )
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.exact.grid import exact_z
@@ -492,15 +491,6 @@ def test_a_cut_end_off_the_grid_is_refused():
     )
     message = refusal(model, CutLine((0.0005, -40.0), (0.0005, 40.0)))
     assert "start_um (0.0005, -40.0) um is off the 0.001 um model grid" in message
-
-
-def test_a_model_with_refinement_curves_is_refused():
-    """A 2D model has no place for mesh-size curves, so they are refused rather than lost."""
-    catalogue = PrismCatalogue(GRID, tuple(chip_prisms(GRID, 40.0)))
-    line = RefinementRequest("r", 0.0, ((-5.0, 0.0), (5.0, 0.0)))
-    model = build_model_from_catalogue(catalogue, "B", refinements=(line,))
-    message = refusal(model, CutLine((0.0, -40.0), (0.0, 40.0)))
-    assert "carries refinement curves (r)" in message
 
 
 def test_every_refusal_links_to_the_cut_rules():

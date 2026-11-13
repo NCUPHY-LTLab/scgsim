@@ -2,7 +2,7 @@
 
 Owns the public vocabulary for asking SGB to partition a surface: *which* surface (a support selection by
 entity and face, or by the two solution regions an interface lies between) and *how* (margins in
-micrometres, or a curve to embed).  A request is plain data; ``generate`` turns it into a
+micrometres).  A request is plain data; ``generate`` turns it into a
 ``CurveFamilyRecord`` before the arrangements are built.  Nothing here refers to a solver: the bands are
 geometry, and each is its own primary physical group (``MA::<entity>__<face kind>::band=k`` and so on), so a backend
 integrates a plain surface integral over the union of the band groups it needs.
@@ -58,7 +58,7 @@ therefore never move a band.  The die outer edge is a dicing line: a gap edge th
 measured as if its conductor continued past it, so its bands run straight to the die edge.  Ports also cut no band: a band seam stops at the boundary of a lumped port on the
 support's level, so the port is one face (a rectangular port stays one rectangle) and a band's geometry outside the
 port is what it would be without it.  Only the cuts that must exist split a port: a material or entity boundary, a
-host overlap, a junction partition, or a ``RefinementRequest`` curve crossing it.  A conductor face is measured from the gap edges of its footprint (the top and
+host overlap or a junction partition.  A conductor face is measured from the gap edges of its footprint (the top and
 bottom faces of a finite body have the same footprint); a solution interface from the gap edges on its own
 boundary.  A support with no gap edge is an ``InputError``.
 """
@@ -118,16 +118,3 @@ class InsetRequest:
     interface: str | None = (
         None  # expected interface type of the face, checked against its labels (a concrete support only)
     )
-
-
-@dataclass(frozen=True)
-class RefinementRequest:
-    """A polyline of mesh-size curves at height ``z_um`` that the mesher embeds in the face containing it.
-
-    The pieces are ``refinement_only``: they never change a label, they are embedded in the face
-    that contains them, and a piece that lands in no emitted face is an error, never dropped.
-    """
-
-    request_id: str
-    z_um: float
-    points_um: tuple[tuple[float, float], ...]

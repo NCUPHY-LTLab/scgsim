@@ -7,7 +7,7 @@ native entity is known by construction, never by matching geometry.  A shared fa
 numbered once, where it is first reached, and referenced by index everywhere else.
 
 The walk also decides, per face, its surface (``surfaces``), the wires of its loops, and the free
-shapes of the compound: embedded faces (a sheet inside a volume) and refinement-only edges.
+shapes of the compound: the embedded faces (a sheet inside a volume).
 
 Does not own the surfaces' geometry (``surfaces``), the arrays (``plan``) or the text (``records``).
 """
@@ -49,7 +49,6 @@ class Numbering:
     solid_first_shell: list[int] = field(default_factory=list)
     solid_shell_count: list[int] = field(default_factory=list)
     free_faces: list[int] = field(default_factory=list)
-    free_edges: list[int] = field(default_factory=list)
     solid_ref: list[int] = field(
         default_factory=list
     )  # MapShapes index of each shape (for the XAO)
@@ -61,7 +60,7 @@ class Numbering:
 def walk_emitted_volumes(
     topology: Topology, routed: RoutedModel, surfaces: SurfaceBuilder
 ) -> Numbering:
-    """Number the shapes of every emitted volume, then the free faces and edges of the compound."""
+    """Number the shapes of every emitted volume, then the free faces of the compound."""
     emitted = [
         (vid, volume)
         for vid, volume in sorted(topology.volumes.items())
@@ -75,7 +74,6 @@ def walk_emitted_volumes(
     for _, volume in emitted:
         for face_id in volume.embedded_faces:
             walk.free_face(face_id)
-    walk.free_refinement_edges()
     return walk.found
 
 
@@ -111,13 +109,6 @@ class _Walk:
         number = self._face(face_id)
         if not known:
             self.found.free_faces.append(number)
-
-    def free_refinement_edges(self) -> None:
-        """Refinement-only curves of the numbered faces: free edges of the compound."""
-        for face_id in list(self.found.face_ids):
-            for edge_id in self.topology.faces[face_id].refinement_edges:
-                if edge_id not in self._edge_no:
-                    self.found.free_edges.append(self._edge(edge_id))
 
     def _oriented(self, sign: int, face_number: int) -> int:
         """Signed 1-based face reference; a flipped face is used with the opposite orientation."""

@@ -7,13 +7,13 @@ Writes into ``docs/design/sgb/figures/``:
   z = 0.2 (metal top);
 * ``routes-3d.svg/.html``     Route A and Route B as exploded volumes coloured by primary group;
 * ``routes-abc-section.svg``  a conceptual cross-section (not computed);
-* ``routes-numbers.json``     side-by-side counts of the three routes, plus the two stage-level examples of the page.
+* ``routes-numbers.json``     side-by-side counts of the three routes, plus the stage-level example of the page.
 
 The running example is the production real input ``gds_pad_in_ground`` (``tests/sgb_inputs.py``); the port lies on the
 support plane z = 0.  Route A needs zero-thickness conductors, so Route A is the same GDS and stack interpreted with the
-``thin_film`` profile (``labels_common.real_input(film=True)``); Route B and C use the ``solid`` profile.  Two examples
-are not the real input and say so in the numbers: the stage-level scene ``pad_in_ground("B")`` of ``tests/sgb_scenes.py``
-(port in the metal's mid-plane, a sheet inside one volume) and the real input with one dangling refinement curve.
+``thin_film`` profile (``labels_common.real_input(film=True)``); Route B and C use the ``solid`` profile.  One example
+is not the real input and says so in the numbers: the stage-level scene ``pad_in_ground("B")`` of ``tests/sgb_scenes.py``
+(port in the metal's mid-plane, a sheet inside one volume).
 
 Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/routes.py
 """
@@ -53,7 +53,6 @@ from scgsim.contracts.sgb_sidecar import read_sidecar, views
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
     SolutionInterface,
 )
 from scgsim.geometry.sgb.build import emit_model
@@ -295,19 +294,6 @@ def emitted(model) -> dict:
             {"face": face, "host_volume": host}
             for face, host in views.embedded_faces(sidecar)
         ],
-        "embedded_edges": [
-            {
-                "edge": edge,
-                "host_face": host,
-                "requests": [
-                    sidecar["carrier"][c]["request"]
-                    for c in sidecar["edge"][edge]["carriers"]
-                    if sidecar["carrier"][c]["kind"] == "refinement"
-                ],
-                "written_as_free_edge": sidecar["edge"][edge]["written_as_free_edge"],
-            }
-            for edge, host in views.embedded_edges(sidecar)
-        ],
         "ports": {
             port_id: {
                 k: port[k]
@@ -360,16 +346,6 @@ def midplane_scene(numbers: dict) -> None:
     model = build_model(stage_pad_in_ground("B"), "B")
     numbers["stage_scene_midplane_port"] = {
         "scene": "tests/sgb_scenes.py pad_in_ground('B'): port at z = 0.1 um",
-        **_route_numbers(model),
-    }
-
-
-def refinement_on_real_input(b_catalogue, numbers: dict) -> None:
-    """The real input with one dangling refinement curve in the gap: what production really embeds."""
-    request = RefinementRequest("ref", 0.0, ((32.0, 55.0), (38.0, 55.0)))
-    model = build_model(b_catalogue, "B", refinements=(request,))
-    numbers["real_input_with_refinement_curve"] = {
-        "request": "refinement curve (32, 55) -> (38, 55) um at z = 0",
         **_route_numbers(model),
     }
 
@@ -487,7 +463,6 @@ def main() -> None:
     _figure_3d(a, b)
     figure_abc_section()
     midplane_scene(numbers)
-    refinement_on_real_input(catalogue_b, numbers)
     bands_on_real_input(catalogue_b, numbers)
     write_numbers("routes", numbers)
     print("routes: done")

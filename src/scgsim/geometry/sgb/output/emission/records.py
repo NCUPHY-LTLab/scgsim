@@ -317,12 +317,11 @@ def text_solids(plan: BrepPlan, lo: int, hi: int) -> str:
 
 
 def compound_text(plan: BrepPlan) -> str:
-    """The root compound: every solid, then the free faces, then the free edges."""
+    """The root compound: every solid, then the free faces."""
     b = plan.section_bases()
     found = plan.found
     children = ["+%d 0 " % (b["SO"] - i) for i in range(len(found.solid_ids))]
     children += ["+%d 0 " % (b["F"] - i) for i in found.free_faces]
-    children += ["+%d 0 " % (b["E"] - i) for i in found.free_edges]
     return "Co\n\n" + FLAGS["Co"] + "\n" + "".join(children) + "*\n\n+1 0 \n"
 
 

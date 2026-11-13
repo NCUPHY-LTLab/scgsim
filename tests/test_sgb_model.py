@@ -24,7 +24,6 @@ from scgsim.geometry.sgb.checks.validation.validate import validate_model
 from scgsim.geometry.sgb.errors import (
     OverlapError,
     RouteError,
-    SgbError,
     ValidationError,
 )
 from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
@@ -275,10 +274,8 @@ def test_arrangements_are_local_not_global():
         assert has_deck == touches_deck_slab, layer.plane
 
 
-def test_curve_families_required_and_refinement_only():
-    """A required family splits a cell into faces of equal label; a refinement-only curve is embedded."""
-    from sgb_extreme_cases import refinement  # noqa: PLC0415 -- a test helper imported where it is used
-
+def test_a_curve_family_splits_a_cell_into_faces_of_equal_label():
+    """A cut family splits a cell into faces of equal label."""
     base = pad_in_ground("A")
     ring = [
         (-75_000, -20_000),
@@ -291,12 +288,10 @@ def test_curve_families_required_and_refinement_only():
         "port_footprint",
         tuple(_family_segment(f"cap{i}", ring[i], ring[(i + 1) % 4]) for i in range(4)),
         (Fraction(0),),
-        "required",
     )
-    refine = refinement("ref", (-40_000, 55_000), (40_000, 55_000), Fraction(0))
     plain = build_model_from_catalogue(base, "A")
     families = build_model_from_catalogue(
-        PrismCatalogue(base.grid, base.prisms, (required, refine)), "A"
+        PrismCatalogue(base.grid, base.prisms, (required,)), "A"
     )
 
     def gap_faces(model):
@@ -305,8 +300,7 @@ def test_curve_families_required_and_refinement_only():
 
     assert (
         gap_faces(families) == gap_faces(plain) + 1
-    )  # the required family splits one cell in two
-    assert len([f for f in families.topology.faces.values() if f.refinement_edges]) == 1
+    )  # the family splits one cell in two
 
 
 def _family_segment(name, p, q):
@@ -314,29 +308,6 @@ def _family_segment(name, p, q):
 
     return LineCarrier(
         name, p, q, Lineage("family_member", family_id="fam", member=name)
-    )
-
-
-def test_a_refinement_curve_in_a_cell_without_a_face_is_an_error_not_a_silent_drop():
-    """Inside the pad metal at the port mid-plane the cell is inside an excluded conductor: no face to embed in."""
-    from sgb_extreme_cases import refinement  # noqa: PLC0415 -- a test helper imported where it is used
-
-    base = pad_in_ground("B")
-    inside_pad = refinement(
-        "ref", (-40_000, 20_000), (-30_000, 20_000), Fraction("0.1")
-    )
-    with pytest.raises(SgbError, match="no face"):
-        build_model_from_catalogue(
-            PrismCatalogue(base.grid, base.prisms, (inside_pad,)), "B"
-        )
-    in_the_gap = refinement("ref", (60_000, 40_000), (70_000, 40_000), Fraction(0))
-    model = build_model_from_catalogue(
-        PrismCatalogue(base.grid, base.prisms, (in_the_gap,)), "B"
-    )
-    hosts = [f for f in model.topology.faces.values() if f.refinement_edges]
-    assert (
-        len(hosts) == 1
-        and model.routed.face_group[hosts[0].id] == "SA::substrate|vacuum__interface"
     )
 
 
