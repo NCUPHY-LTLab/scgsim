@@ -19,11 +19,12 @@ from the folders' own docstrings, so they say what the code says.
 Both routes start from a layout and a stack and end at a result a person reads;
 they are the two routes of the [backend support matrix](backend-support.qmd).
 Every square box is a folder below `src/scgsim`, named as the folder is; a
-rounded box is outside SCGSim. A solid
-arrow is an import: the stage at its head imports the stage at its tail, or,
-where the arrow says *calls*, the stage at its tail calls the one at its head.
-A dashed arrow is a file or a value handed over, labelled with what it is and,
-where a contract module defines the file, with that module.
+rounded box is outside SCGSim. A solid arrow is an import: the stage at its
+head imports the stage at its tail, or, where the arrow says *calls*, the stage
+at its tail calls the one at its head. A dashed arrow is a file or a value
+handed over, labelled with what it is and, where a contract module defines the
+file, with that module. The inner Palace box holds what `palace/simulation`
+runs when a notebook calls `mesh()`, `write_config()` and `prepare_handoff()`.
 
 ```{mermaid}
 %%| column: screen-inset
@@ -36,7 +37,7 @@ flowchart TB
   ginterp --> psource
   ginterp --> gplan
   subgraph palace_route["Palace route"]
-    subgraph simulation["palace/simulation calls"]
+    subgraph simulation["run by palace/simulation"]
       psource["palace/source"] --> pmesh["palace/mesh"]
       pmesh -- "calls" --> gsepr["geometry/surface_epr"]
       gsepr -- "calls" --> gsgb["geometry/sgb"]
@@ -83,8 +84,8 @@ Next: which stage reads that
 ```
 
 Imports point against the flow: a later stage imports an earlier one, and an
-earlier stage does not import a later one. A stage that drives others is the
-one exception by design: `palace/simulation` imports each Palace stage it runs,
+earlier stage does not import a later one. The exception is a stage that
+drives others: `palace/simulation` imports each Palace stage it runs,
 `geometry/interpretation` calls `geometry/junctions` as its last step, and
 `aedt/runtime` calls the in-AEDT part of `aedt/epr`. These imports also point
 from an earlier stage to a later one:
