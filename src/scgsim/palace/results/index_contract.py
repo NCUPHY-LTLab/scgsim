@@ -29,7 +29,6 @@ from scgsim.contracts.palace_run_folder import (
 )
 from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
-    RETURNED_RUN_FOLDER,
     expect_list,
     expect_mapping,
     expect_scalar,
@@ -40,6 +39,7 @@ from scgsim.palace.results.surface_contract import (
     surface_epr_entries,
     validate_surface_epr_config,
 )
+from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import found_text
 
 
