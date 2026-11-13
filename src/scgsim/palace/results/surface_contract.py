@@ -16,15 +16,17 @@ from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_index_map import DIELECTRIC_SECTION
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.surface_epr.specs import margins_of
 from scgsim.palace.results.artifacts import (
+    RETURNED_RUN_FOLDER,
     checked_number,
     expect_list,
     expect_mapping,
     expect_scalar,
     optional_dict,
 )
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 SURFACE_INTERFACE_TYPES = ("MA", "MS", "SA")
 
@@ -52,40 +54,47 @@ def surface_epr_entries(index_map: Mapping[str, Any]) -> tuple[dict[str, Any], .
     by_index = {entry["index"]: entry for entry in dielectric}
     if len(by_index) != len(dielectric):
         raise ValueError(
-            refusal(
+            Declared(
                 "surface EPR index entries must have unique indices",
-                found=[entry["index"] for entry in dielectric],
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text([entry["index"] for entry in dielectric]))
         )
     wholes = [entry for entry in dielectric if "inset" not in entry]
     margins = [entry for entry in dielectric if "inset" in entry]
     if [entry["index"] for entry in wholes] != list(range(1, len(wholes) + 1)):
         raise ValueError(
-            refusal(
+            Declared(
                 "surface EPR whole-surface entries must retain the initial contiguous indices",
-                found=[entry["index"] for entry in wholes],
-                expected=list(range(1, len(wholes) + 1)),
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    [entry["index"] for entry in wholes],
+                    list(range(1, len(wholes) + 1)),
+                )
             )
         )
     if [entry["index"] for entry in margins] != list(
         range(len(wholes) + 1, len(dielectric) + 1)
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 "surface EPR margin entries must append after all surfaces",
-                found=[entry["index"] for entry in margins],
-                expected=list(range(len(wholes) + 1, len(dielectric) + 1)),
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    [entry["index"] for entry in margins],
+                    list(range(len(wholes) + 1, len(dielectric) + 1)),
+                )
             )
         )
     for entry in wholes:
         baseline_index = expect_scalar(entry, "baseline_index", int)
         if baseline_index != entry["index"]:
             raise ValueError(
-                refusal(
+                Declared(
                     f"whole-surface entry {entry['index']}'s baseline_index must equal its index",
-                    found=baseline_index,
-                    expected=entry["index"],
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(baseline_index, entry["index"]))
             )
     _validate_surface_inventory(wholes)
     _validate_margins(by_index, wholes, margins)
@@ -114,20 +123,23 @@ def validate_surface_epr_config(
     ]
     if any("Mask" in row for row in rows):
         raise ValueError(
-            refusal(
-                "native Mask surface EPR rows are not accepted",
-                found=[row.get("Index") for row in rows if "Mask" in row],
-            )
+            Declared(
+                "native Mask surface EPR rows are not accepted", RETURNED_RUN_FOLDER
+            ).refusal(found_text([row.get("Index") for row in rows if "Mask" in row]))
         )
     configured = {expect_scalar(row, "Index", int): row for row in rows}
     if len(configured) != len(rows) or set(configured) != {
         entry["index"] for entry in entries
     }:
         raise ValueError(
-            refusal(
+            Declared(
                 "config and index evidence disagree on dielectric rows",
-                found=[row.get("Index") for row in rows],
-                expected=sorted(entry["index"] for entry in entries),
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    [row.get("Index") for row in rows],
+                    sorted(entry["index"] for entry in entries),
+                )
             )
         )
     model = expect_mapping(config.get("Model"), "config.Model")
@@ -142,10 +154,10 @@ def _validate_entry(entry: dict[str, Any]) -> None:
     role = expect_scalar(entry, "role", str)
     if role != "surface_epr":
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR index entry {entry.get('index')} role must be surface_epr",
-                found=role,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(role))
         )
     metadata = expect_mapping(entry.get("metadata"), "surface EPR metadata")
     rows = expect_list(metadata.get("rows"), "surface EPR rows")
@@ -154,36 +166,34 @@ def _validate_entry(entry: dict[str, Any]) -> None:
     row_ids = [row["row"] for row in rows]
     if len(set(row_ids)) != len(row_ids):
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR rows repeat a row id within entry {entry.get('index')}",
-                found=row_ids,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(row_ids))
         )
     if len({row["interface_type"] for row in rows}) != 1:
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR rows of entry {entry.get('index')} must share one interface type",
-                found=sorted({row["interface_type"] for row in rows}),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(sorted({row["interface_type"] for row in rows})))
         )
     attributes = _positive_ints(entry.get("attributes"), "surface EPR attributes")
     row_attributes = sorted({a for row in rows for a in row["attributes"]})
     if attributes != row_attributes:
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR entry {entry.get('index')} attributes disagree with their row evidence",
-                found=attributes,
-                expected=row_attributes,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(attributes, row_attributes))
         )
     row_groups = sorted({row["group"] for row in rows})
     if entry.get("physical_names") != row_groups:
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR entry {entry.get('index')} physical names disagree with their row evidence",
-                found=entry.get("physical_names"),
-                expected=row_groups,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(entry.get("physical_names"), row_groups))
         )
     _validate_film(expect_mapping(entry.get("epr_spec"), "surface EPR spec"))
 
@@ -194,26 +204,25 @@ def _validate_row(row: dict[str, Any]) -> None:
         _non_empty_text(row.get(field), f"surface EPR row {field}")
     if row.get("interface_type") not in SURFACE_INTERFACE_TYPES:
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR row {row.get('row')!r} interface_type must be MA, MS, or SA",
-                found=row.get("interface_type"),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(row.get("interface_type")))
         )
     band = row.get("band")
     if band is not None and (type(band) is not int or band < 0):
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR row {row.get('row')!r} band must be null or a non-negative integer",
-                found=band,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(band))
         )
     if row.get("side") is not None and row["side"] not in _ROW_SIDES:
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR row {row.get('row')!r} side is invalid",
-                found=row["side"],
-                expected=sorted(_ROW_SIDES),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(row["side"], sorted(_ROW_SIDES)))
         )
     face_sides = row.get("face_sides")
     if face_sides is not None and (
@@ -224,10 +233,10 @@ def _validate_row(row: dict[str, Any]) -> None:
         )
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR row {row.get('row')!r} face_sides must map faces to {sorted(_SIDES)}",
-                found=face_sides,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(face_sides))
         )
     shared = row.get("shared_face_group")
     if shared is not None:
@@ -253,10 +262,10 @@ def _validate_film(spec: dict[str, Any]) -> None:
     loss = spec.get("loss_tangent")
     if loss is not None and (_finite(loss) is None or loss < 0):
         raise ValueError(
-            refusal(
+            Declared(
                 "surface EPR loss_tangent must be finite and non-negative or null",
-                found=loss,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(loss))
         )
     scale = checked_number(
         spec.get("model_l0_m"), "surface EPR model_l0_m", positive=True
@@ -266,11 +275,10 @@ def _validate_film(spec: dict[str, Any]) -> None:
     )
     if not math.isclose(physical, thickness * scale, rel_tol=1e-12):
         raise ValueError(
-            refusal(
+            Declared(
                 "surface EPR SI thickness conflicts with recorded Model.L0",
-                found=physical,
-                expected=thickness * scale,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(physical, thickness * scale))
         )
     margins = spec.get("inset_margins_um")
     if margins is not None:
@@ -291,9 +299,10 @@ def _validate_margin_sequence(margins: Any) -> None:
     ]
     if any(b <= a for a, b in zip(values, values[1:], strict=False)):
         raise ValueError(
-            refusal(
-                "surface EPR inset margins must be strictly increasing", found=values
-            )
+            Declared(
+                "surface EPR inset margins must be strictly increasing",
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(values))
         )
 
 
@@ -305,17 +314,19 @@ def _validate_surface_inventory(wholes: list[dict[str, Any]]) -> None:
         for row in entry_rows(entry):
             if row["row"] in row_ids:
                 raise ValueError(
-                    refusal("surface EPR row is duplicated", found=row["row"])
+                    Declared(
+                        "surface EPR row is duplicated", RETURNED_RUN_FOLDER
+                    ).refusal(found_text(row["row"]))
                 )
             row_ids.add(row["row"])
         interface_type = entry_rows(entry)[0]["interface_type"]
         for attribute in entry["attributes"]:
             if (interface_type, attribute) in members:
                 raise ValueError(
-                    refusal(
+                    Declared(
                         f"surface EPR physical attribute is duplicated for {interface_type}",
-                        found=attribute,
-                    )
+                        RETURNED_RUN_FOLDER,
+                    ).refusal(found_text(attribute))
                 )
             members.add((interface_type, attribute))
 
@@ -333,10 +344,10 @@ def _validate_margins(
         _validate_margin_ordinal(entry, baseline, inset)
         if inset.margin_index in seen[baseline["index"]]:
             raise ValueError(
-                refusal(
+                Declared(
                     f"surface EPR margin ordinal is duplicated for whole surface {baseline['index']}",
-                    found=inset.margin_index,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(inset.margin_index))
             )
         seen[baseline["index"]].append(inset.margin_index)
         _validate_margin_film(entry, baseline)
@@ -351,10 +362,13 @@ def _margin_baseline(
     baseline = by_index.get(expect_scalar(entry, "baseline_index", int))
     if baseline is None or baseline not in wholes:
         raise ValueError(
-            refusal(
+            Declared(
                 f"margin entry {entry.get('index')} must bind one whole-surface entry",
-                found=entry.get("baseline_index"),
-                expected=[whole["index"] for whole in wholes],
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    entry.get("baseline_index"), [whole["index"] for whole in wholes]
+                )
             )
         )
     return baseline
@@ -385,16 +399,18 @@ class _MarginInset(NamedTuple):
             or min(bands) < first_band
         ):
             raise ValueError(
-                refusal(
+                Declared(
                     f"surface EPR inset of entry {entry.get('index')} disagrees with its band rows",
-                    found={
-                        "margin_index": margin_index,
-                        "first_band": first_band,
-                        "bands": bands,
-                    },
-                    expected=sorted(
-                        row["band"] for row in rows if row["band"] is not None
-                    ),
+                    RETURNED_RUN_FOLDER,
+                ).refusal(
+                    found_text(
+                        {
+                            "margin_index": margin_index,
+                            "first_band": first_band,
+                            "bands": bands,
+                        },
+                        sorted(row["band"] for row in rows if row["band"] is not None),
+                    )
                 )
             )
         return cls(margin_index, margin_um)
@@ -413,13 +429,17 @@ def _validate_margin_ordinal(
         or configured[inset.margin_index] != inset.margin_um
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface EPR margin of entry {entry.get('index')} disagrees with the configured "
                 f"margin sequence {configured}",
-                found={
-                    "margin_index": inset.margin_index,
-                    "margin_um": inset.margin_um,
-                },
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    {
+                        "margin_index": inset.margin_index,
+                        "margin_um": inset.margin_um,
+                    }
+                )
             )
         )
 
@@ -436,17 +456,21 @@ def _validate_margin_film(entry: dict[str, Any], baseline: dict[str, Any]) -> No
         <= {row["row"] for row in entry_rows(baseline)}
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 f"margin entry {entry.get('index')} must be part of whole surface "
                 f"{baseline['index']} and share its film",
-                found={
-                    "attributes": entry["attributes"],
-                    "epr_spec": entry["epr_spec"],
-                },
-                expected={
-                    "attributes": baseline["attributes"],
-                    "epr_spec": baseline["epr_spec"],
-                },
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    {
+                        "attributes": entry["attributes"],
+                        "epr_spec": entry["epr_spec"],
+                    },
+                    {
+                        "attributes": baseline["attributes"],
+                        "epr_spec": baseline["epr_spec"],
+                    },
+                )
             )
         )
 
@@ -458,20 +482,18 @@ def _match_configured_row(
     configured = expect_list(row.get("Attributes"), "config dielectric Attributes")
     if configured != entry["attributes"]:
         raise ValueError(
-            refusal(
+            Declared(
                 f"config surface EPR row {entry['index']} attributes do not match index evidence",
-                found=configured,
-                expected=entry["attributes"],
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(configured, entry["attributes"]))
         )
     spec = entry["epr_spec"]
     if float(spec["model_l0_m"]) != float(model_l0_m):
         raise ValueError(
-            refusal(
+            Declared(
                 f"surface film Model.L0 of entry {entry['index']} disagrees with config",
-                found=spec["model_l0_m"],
-                expected=model_l0_m,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(spec["model_l0_m"], model_l0_m))
         )
     expected = {
         "Type": entry_rows(entry)[0]["interface_type"],
@@ -482,11 +504,10 @@ def _match_configured_row(
     }
     if any(key not in row or row[key] != value for key, value in expected.items()):
         raise ValueError(
-            refusal(
+            Declared(
                 f"config surface EPR row {entry['index']} fields do not match source index evidence",
-                found={key: row.get(key) for key in expected},
-                expected=expected,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text({key: row.get(key) for key in expected}, expected))
         )
 
 
@@ -501,11 +522,10 @@ def _validate_internal_boundary_cracking(
     )
     if (model.get("CrackInternalBoundaryElements") is True) != needed:
         raise ValueError(
-            refusal(
+            Declared(
                 "config Model.CrackInternalBoundaryElements disagrees with the shared-face rows",
-                found=model.get("CrackInternalBoundaryElements"),
-                expected=needed,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(model.get("CrackInternalBoundaryElements"), needed))
         )
 
 

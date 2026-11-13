@@ -17,15 +17,18 @@ from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalRepresentationPlan,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.geometry.source.validation import has_vacuum_solution_region
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports
 from .surface_epr import SurfaceEprSpecs
+
+_WHERE_SET_ROUTE = "the call to set_route"
 
 
 @dataclass(frozen=True)
@@ -238,11 +241,11 @@ def route_profile(
         return ApproximationProfile(name, "v1", {})
     if not isinstance(approximation_profile, ApproximationProfile):
         raise TypeError(
-            refusal(
+            Declared(
                 "approximation_profile must be an ApproximationProfile: pass "
                 "set_route(..., approximation_profile=ApproximationProfile(name, 'v1', parameters))",
-                found=type(approximation_profile).__name__,
-            )
+                _WHERE_SET_ROUTE,
+            ).refusal(found_text(type(approximation_profile).__name__))
         )
     return approximation_profile
 

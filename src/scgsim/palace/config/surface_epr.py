@@ -15,9 +15,10 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.exact.grid import Grid
 from scgsim.geometry.surface_epr.specs import positive_real
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 from ..mesh.physical_groups import Groups, rows_of
 from ..source.surface_epr import SurfaceEprSpec, SurfaceEprSpecs
@@ -39,8 +40,10 @@ def build_surface_epr_postprocessing(
     """
     if not positive_real(model_l0_m):
         raise ValueError(
-            refusal(
-                "Model.L0 must be a finite positive length in metres", found=model_l0_m
+            internal(
+                "Model.L0 must be a finite positive length in metres"
+                + ": "
+                + found_text(model_l0_m)
             )
         )
     built = _DielectricRows()
@@ -83,9 +86,10 @@ class _DielectricRows:
         for attribute in attributes:
             if (interface_type, attribute) in self.members:
                 raise ValueError(
-                    refusal(
-                        f"Surface EPR physical attribute is duplicated for {interface_type}",
-                        found=attribute,
+                    internal(
+                        f"Surface EPR physical attribute is duplicated for {interface_type}"
+                        + ": "
+                        + found_text(attribute)
                     )
                 )
             self.members.add((interface_type, attribute))

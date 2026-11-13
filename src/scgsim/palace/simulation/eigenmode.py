@@ -17,8 +17,9 @@ from scgsim.contracts.palace_run_folder import (
     NUMERICAL_CONTROLS,
     PORT_INFORMATION,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 from ..config.config import build_eigenmode_config
 from ..config.config_records import EigenmodeConfigBuildResult, EigenmodeSettings
@@ -28,6 +29,8 @@ from ..config.numerical import NumericalControls, ProblemDefaults
 from ..source.ports import RequestedPort
 from ..source.transforms import validate_nonempty_string, validate_positive_number
 from .core import PalaceSimulation, index_map
+
+_WHERE_ADD_PORT = "the call to add_port"
 
 # The geometry build never reads a port's inductance, but ``add_port`` requires a positive one.
 _PORT_INDUCTANCE_H = 1.0e-9
@@ -85,10 +88,10 @@ class EigenmodeSim(PalaceSimulation):
         """
         if layout_sheet is not True:
             raise ValueError(
-                refusal(
+                Declared(
                     f"Eigenmode supports only authored sheet ports: pass layout_sheet=True for {name!r}",
-                    found=layout_sheet,
-                )
+                    _WHERE_ADD_PORT,
+                ).refusal(found_text(layout_sheet))
             )
         name = validate_nonempty_string(name, "port name")
         layer = validate_nonempty_string(layer, "port target layer")

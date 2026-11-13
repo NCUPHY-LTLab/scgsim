@@ -22,10 +22,11 @@ from typing import Any, ClassVar, Literal, TypeVar
 from scgsim.contracts.palace_run_folder import CONFIG, INDEX_MAP_SCHEMA_VERSION
 from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 from ..config.config_records import ConfigInput
 from ..config.files import MetadataFile, persist_problem_files
@@ -52,6 +53,9 @@ from ..source.surface_epr import SurfaceEprSpecs
 from ..source.workflow import GeometrySettings, route_profile
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .lifecycle import CALLS, Call, Stage
+
+_WHERE_SET_OUTPUT_DIR = "the call to set_output_dir"
+_WHERE_SET_PLAN = "the call to set_plan"
 
 _Output = TypeVar("_Output")
 
@@ -128,10 +132,10 @@ class PalaceSimulation(ABC):
         """
         if not isinstance(snapshot, GeometryPlanSnapshot):
             raise TypeError(
-                refusal(
+                Declared(
                     "set_plan() takes a GeometryPlanSnapshot: pass plan.prepare(), not the GeometryPlan",
-                    found=type(snapshot).__name__,
-                )
+                    _WHERE_SET_PLAN,
+                ).refusal(found_text(type(snapshot).__name__))
             )
         if snapshot_owns_vacuum(snapshot) and self.vacuum_region is not None:
             raise ValueError(_TWO_VACUUMS)
@@ -148,10 +152,10 @@ class PalaceSimulation(ABC):
         """
         if not isinstance(path, (str, Path)):
             raise TypeError(
-                refusal(
+                Declared(
                     "set_output_dir() takes a path string or Path",
-                    found=type(path).__name__,
-                )
+                    _WHERE_SET_OUTPUT_DIR,
+                ).refusal(found_text(type(path).__name__))
             )
         self.output_dir = Path(path).expanduser().resolve()
         self._fall_back("set_output_dir")

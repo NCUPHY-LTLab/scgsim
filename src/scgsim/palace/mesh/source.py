@@ -9,7 +9,8 @@ from importlib.metadata import version as package_version
 from typing import Any
 
 from scgsim.geometry.models.physical import PhysicalRepresentationPlan
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import found_text
 
 
 def scgsim_version() -> str:
@@ -30,23 +31,37 @@ def route_a_thin_film_provenance(
     metadata = stack.get("metadata", {})
     if not isinstance(metadata, Mapping):
         raise TypeError(
-            refusal("stack metadata must be a mapping", found=type(metadata).__name__)
+            internal(
+                "stack metadata must be a mapping"
+                + ": "
+                + found_text(type(metadata).__name__)
+            )
         )
     value = metadata.get("route_a_thin_film")
     if route == "B":
         if value is not None:
             raise ValueError(
-                refusal("Route B stack must not define route_a_thin_film", found=value)
+                internal(
+                    "Route B stack must not define route_a_thin_film"
+                    + ": "
+                    + found_text(value)
+                )
             )
         return None
     if value is None:
         raise ValueError(
-            refusal("Route A stack requires route_a_thin_film provenance", found=value)
+            internal(
+                "Route A stack requires route_a_thin_film provenance"
+                + ": "
+                + found_text(value)
+            )
         )
     if not isinstance(value, Mapping):
         raise TypeError(
-            refusal(
-                "Route A route_a_thin_film provenance must be a mapping", found=value
+            internal(
+                "Route A route_a_thin_film provenance must be a mapping"
+                + ": "
+                + found_text(value)
             )
         )
     result = copy.deepcopy(dict(value))
@@ -55,10 +70,10 @@ def route_a_thin_film_provenance(
         plan = PhysicalRepresentationPlan.from_payload(physical)
         if result.get("variant") != plan.profile.name:
             raise ValueError(
-                refusal(
-                    "Palace profile provenance differs from the neutral physical plan",
-                    found=result.get("variant"),
-                    expected=plan.profile.name,
+                internal(
+                    "Palace profile provenance differs from the neutral physical plan"
+                    + ": "
+                    + found_text(result.get("variant"), plan.profile.name)
                 )
             )
         return result
@@ -72,19 +87,26 @@ def route_a_thin_film_provenance(
         or result.get("display_label") != expected_label
     ):
         raise ValueError(
-            refusal(
-                "Route A thin-film provenance variant or display label is invalid",
-                found={
-                    "schema_version": result.get("schema_version"),
-                    "display_label": result.get("display_label"),
-                },
-                expected={"schema_version": 1, "display_label": expected_label},
+            internal(
+                "Route A thin-film provenance variant or display label is invalid"
+                + ": "
+                + found_text(
+                    {
+                        "schema_version": result.get("schema_version"),
+                        "display_label": result.get("display_label"),
+                    },
+                    {"schema_version": 1, "display_label": expected_label},
+                )
             )
         )
     source = result.get("source_stack")
     if not isinstance(source, Mapping):
         raise TypeError(
-            refusal("Route A thin-film provenance requires source_stack", found=source)
+            internal(
+                "Route A thin-film provenance requires source_stack"
+                + ": "
+                + found_text(source)
+            )
         )
     sha = source.get("sha256")
     if (
@@ -93,8 +115,10 @@ def route_a_thin_film_provenance(
         or source.get("revision") != f"sha256:{sha}"
     ):
         raise ValueError(
-            refusal(
-                "Route A thin-film source-stack identity is invalid", found=dict(source)
+            internal(
+                "Route A thin-film source-stack identity is invalid"
+                + ": "
+                + found_text(dict(source))
             )
         )
     return result

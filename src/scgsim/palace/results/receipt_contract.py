@@ -19,7 +19,9 @@ from scgsim.contracts.palace_run_folder import (
     output_table,
     read_json,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
+    RETURNED_RUN_FOLDER,
     FileHash,
     compute_hash_entry,
     compute_input_hash_entry,
@@ -36,7 +38,7 @@ from scgsim.palace.results.runtime_contract import (
 )
 from scgsim.palace.results.tables import count_index_entries, output_families
 from scgsim.palace.run.returned_receipt import adapted_mesh_output_paths
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 
 @dataclass(frozen=True)
@@ -86,11 +88,9 @@ class ReceiptValidation:
         schema = expect_scalar(self.receipt_payload, "schema", str)
         if schema != RETURNED_RECEIPT_SCHEMA:
             raise ValueError(
-                refusal(
-                    "returned run receipt schema is invalid",
-                    found=schema,
-                    expected=RETURNED_RECEIPT_SCHEMA,
-                )
+                Declared(
+                    "returned run receipt schema is invalid", RETURNED_RUN_FOLDER
+                ).refusal(found_text(schema, RETURNED_RECEIPT_SCHEMA))
             )
         schema_version = expect_int(
             self.receipt_payload.get("schema_version"),
@@ -99,47 +99,43 @@ class ReceiptValidation:
         )
         if schema_version != 1:
             raise ValueError(
-                refusal(
-                    "returned run receipt schema_version must be 1",
-                    found=schema_version,
-                )
+                Declared(
+                    "returned run receipt schema_version must be 1", RETURNED_RUN_FOLDER
+                ).refusal(found_text(schema_version))
             )
 
         status = expect_scalar(self.receipt_payload, "status", str)
         if status != "completed":
             raise ValueError(
-                refusal(
-                    "returned run receipt status is not completed",
-                    found=status,
-                    expected="completed",
-                )
+                Declared(
+                    "returned run receipt status is not completed", RETURNED_RUN_FOLDER
+                ).refusal(found_text(status, "completed"))
             )
 
         route = expect_scalar(self.receipt_payload, "route", str)
         if route != self.route:
             raise ValueError(
-                refusal(
-                    "returned run receipt route mismatch",
-                    found=route,
-                    expected=self.route,
-                )
+                Declared(
+                    "returned run receipt route mismatch", RETURNED_RUN_FOLDER
+                ).refusal(found_text(route, self.route))
             )
         problem = expect_scalar(self.receipt_payload, "problem", str)
         if problem != self.problem:
             raise ValueError(
-                refusal(
-                    "returned run receipt problem mismatch",
-                    found=problem,
-                    expected=self.problem,
-                )
+                Declared(
+                    "returned run receipt problem mismatch", RETURNED_RUN_FOLDER
+                ).refusal(found_text(problem, self.problem))
             )
         thin_film = self.receipt_payload.get("route_a_thin_film")
         if thin_film != self.handoff_metadata.get("route_a_thin_film"):
             raise ValueError(
-                refusal(
+                Declared(
                     "returned run receipt Route-A thin-film identity mismatch",
-                    found=thin_film,
-                    expected=self.handoff_metadata.get("route_a_thin_film"),
+                    RETURNED_RUN_FOLDER,
+                ).refusal(
+                    found_text(
+                        thin_film, self.handoff_metadata.get("route_a_thin_film")
+                    )
                 )
             )
 
@@ -214,29 +210,26 @@ def validate_returned_state_agreement(
         status = expect_scalar(payload, "status", str)
         if status != receipt_status:
             raise ValueError(
-                refusal(
+                Declared(
                     f"{label} status does not match returned receipt",
-                    found=status,
-                    expected=receipt_status,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(status, receipt_status))
             )
         exit_code = expect_int(payload.get("exit_code"), f"{label} exit_code")
         if exit_code != receipt_exit:
             raise ValueError(
-                refusal(
+                Declared(
                     f"{label} exit_code does not match returned receipt",
-                    found=exit_code,
-                    expected=receipt_exit,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(exit_code, receipt_exit))
             )
         job = expect_mapping(payload.get("job_identity"), f"{label} job identity")
         if job != receipt_job:
             raise ValueError(
-                refusal(
+                Declared(
                     f"{label} job identity does not match returned receipt",
-                    found=job,
-                    expected=receipt_job,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(job, receipt_job))
             )
 
 
@@ -256,10 +249,10 @@ def _validate_log_and_solver_identity(receipt_payload: Any, root: Path) -> None:
     log = expect_mapping(receipt_payload.get("log"), "return_receipt.log")
     if not log:
         raise ValueError(
-            refusal(
+            Declared(
                 f"returned run receipt log entry in {RETURNED_RECEIPT} is missing",
-                found=log,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(log))
         )
     log_path = expect_scalar(log, "path", str)
     log_expected = FileHash(
@@ -268,23 +261,23 @@ def _validate_log_and_solver_identity(receipt_payload: Any, root: Path) -> None:
     log_observed = compute_hash_entry(confined_path(root, log_path))
     if log_expected != log_observed:
         raise ValueError(
-            refusal(
+            Declared(
                 f"returned run receipt log hash mismatch for {log_path}",
-                found=log_observed,
-                expected=log_expected,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(log_observed, log_expected))
         )
     if log_path == "":
         raise ValueError(
-            refusal("returned run receipt log path must be non-empty", found=log_path)
+            Declared(
+                "returned run receipt log path must be non-empty", RETURNED_RUN_FOLDER
+            ).refusal(found_text(log_path))
         )
     if expect_scalar(log, "present", bool) is not True:
         raise ValueError(
-            refusal(
+            Declared(
                 f"returned run receipt log {log_path} is not present",
-                found=log.get("present"),
-                expected=True,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(log.get("present"), True))
         )
 
     receipt_identity = expect_mapping(
@@ -298,11 +291,10 @@ def _validate_log_and_solver_identity(receipt_payload: Any, root: Path) -> None:
     }
     if not expected_identity or receipt_identity != expected_identity:
         raise ValueError(
-            refusal(
+            Declared(
                 f"returned run receipt solver identity does not match {Path(NATIVE_METADATA).name}",
-                found=receipt_identity,
-                expected=expected_identity,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(receipt_identity, expected_identity))
         )
 
 
@@ -327,19 +319,17 @@ def _validate_solver_stage(receipt_payload: Any, output_map: Any) -> None:
     """A completed probed run reached the solver after a passing preflight, and kept the probe's record."""
     if receipt_payload.get("execution_stage") != "solver":
         raise ValueError(
-            refusal(
+            Declared(
                 "completed Palace receipt execution_stage must be solver",
-                found=receipt_payload.get("execution_stage"),
-                expected="solver",
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(receipt_payload.get("execution_stage"), "solver"))
         )
     if receipt_payload.get("solver_invoked") is not True:
         raise ValueError(
-            refusal(
+            Declared(
                 "completed Palace receipt must record solver invocation",
-                found=receipt_payload.get("solver_invoked"),
-                expected=True,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(receipt_payload.get("solver_invoked"), True))
         )
     if (
         expect_int(
@@ -349,18 +339,18 @@ def _validate_solver_stage(receipt_payload: Any, output_map: Any) -> None:
         != 0
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 "completed Palace receipt config compatibility preflight must pass",
-                found=receipt_payload.get("preflight_exit_code"),
-                expected=0,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(receipt_payload.get("preflight_exit_code"), 0))
         )
     if RUNTIME_COMPATIBILITY not in output_map:
         raise ValueError(
-            refusal(
+            Declared(
                 "returned run receipt misses the Palace runtime compatibility artifact",
-                found=sorted(output_map),
-                expected=f"an entry for {RUNTIME_COMPATIBILITY}",
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(sorted(output_map), f"an entry for {RUNTIME_COMPATIBILITY}")
             )
         )
 
@@ -374,12 +364,11 @@ def _recorded_runtime_compatibility(receipt_payload: Any, root: Path) -> dict[st
     runtime_artifact = read_json(confined_path(root, RUNTIME_COMPATIBILITY))
     if runtime_compatibility != runtime_artifact:
         raise ValueError(
-            refusal(
+            Declared(
                 "returned run receipt Palace runtime compatibility does not match "
                 f"its artifact {RUNTIME_COMPATIBILITY}",
-                found=runtime_compatibility,
-                expected=runtime_artifact,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(runtime_compatibility, runtime_artifact))
         )
     return runtime_compatibility
 
@@ -402,10 +391,14 @@ def _validate_probe_command(
         "executable_identity"
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 "Palace compatibility probe executable does not match the handoff command",
-                found=runtime_command.get("executable_identity"),
-                expected=expected_command.get("executable_identity"),
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    runtime_command.get("executable_identity"),
+                    expected_command.get("executable_identity"),
+                )
             )
         )
     resources = expect_mapping(
@@ -413,10 +406,14 @@ def _validate_probe_command(
     )
     if runtime_command.get("command_style") != resources.get("command_style", "binary"):
         raise ValueError(
-            refusal(
+            Declared(
                 "Palace compatibility probe command style does not match the handoff",
-                found=runtime_command.get("command_style"),
-                expected=resources.get("command_style", "binary"),
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    runtime_command.get("command_style"),
+                    resources.get("command_style", "binary"),
+                )
             )
         )
 
@@ -448,21 +445,20 @@ def _validate_returned_outputs(
         data = expect_mapping(entry, "returned receipt output entry")
         if expect_scalar(data, "present", bool) is not True:
             raise ValueError(
-                refusal(
+                Declared(
                     "returned run receipt lists a missing required output",
-                    found=data.get("path"),
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(data.get("path")))
             )
 
     for rel, expected in output_map.items():
         observed = compute_hash_entry(confined_path(root, rel))
         if observed != expected:
             raise ValueError(
-                refusal(
+                Declared(
                     f"returned run receipt output hash mismatch for {rel}",
-                    found=observed,
-                    expected=expected,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(observed, expected))
             )
     return output_map
 
@@ -483,34 +479,34 @@ def _validate_returned_inputs(
     )
     if expected_input_map != configured_input_map:
         raise ValueError(
-            refusal(
+            Declared(
                 f"returned run receipt input hashes do not match the hashes of {HANDOFF_METADATA}",
-                found=expected_input_map,
-                expected=configured_input_map,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(expected_input_map, configured_input_map))
         )
     for name, expected in expected_input_map.items():
         observed = compute_input_hash_entry(root, name)
         if expected != observed:
             raise ValueError(
-                refusal(
+                Declared(
                     f"returned run receipt input hash mismatch for {name}",
-                    found=observed,
-                    expected=expected,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(observed, expected))
             )
 
     handoff_route = expect_scalar(handoff_metadata, "route", str)
     if handoff_route != route:
         raise ValueError(
-            refusal(
-                "handoff metadata route mismatch", found=handoff_route, expected=route
+            Declared("handoff metadata route mismatch", RETURNED_RUN_FOLDER).refusal(
+                found_text(handoff_route, route)
             )
         )
     run_route = expect_scalar(run_metadata, "route", str)
     if run_route != route:
         raise ValueError(
-            refusal("run metadata route mismatch", found=run_route, expected=route)
+            Declared("run metadata route mismatch", RETURNED_RUN_FOLDER).refusal(
+                found_text(run_route, route)
+            )
         )
 
 
@@ -521,33 +517,29 @@ def _validate_success_and_job(receipt_payload: Any) -> None:
     )
     if exit_code != 0:
         raise ValueError(
-            refusal(
+            Declared(
                 "returned run receipt exit_code must be zero for completed runs",
-                found=exit_code,
-                expected=0,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(exit_code, 0))
         )
     solver_exit_code = expect_int(
         receipt_payload.get("solver_exit_code"), "returned receipt solver_exit_code"
     )
     if solver_exit_code != 0:
         raise ValueError(
-            refusal(
+            Declared(
                 "returned run receipt solver_exit_code must be zero",
-                found=solver_exit_code,
-                expected=0,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(solver_exit_code, 0))
         )
     tee_exit_code = expect_int(
         receipt_payload.get("tee_exit_code"), "returned receipt tee_exit_code"
     )
     if tee_exit_code != 0:
         raise ValueError(
-            refusal(
-                "returned run receipt tee_exit_code must be zero",
-                found=tee_exit_code,
-                expected=0,
-            )
+            Declared(
+                "returned run receipt tee_exit_code must be zero", RETURNED_RUN_FOLDER
+            ).refusal(found_text(tee_exit_code, 0))
         )
 
     validate_timestamp(
@@ -558,17 +550,17 @@ def _validate_success_and_job(receipt_payload: Any) -> None:
     )
     if expect_scalar(job_identity, "job_id", str, fallback="") == "":
         raise ValueError(
-            refusal(
+            Declared(
                 "returned run receipt job_id must be a non-empty string",
-                found=job_identity.get("job_id"),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(job_identity.get("job_id")))
         )
     if expect_scalar(job_identity, "job_name", str, fallback="") == "":
         raise ValueError(
-            refusal(
+            Declared(
                 "returned run receipt job_name must be a non-empty string",
-                found=job_identity.get("job_name"),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(job_identity.get("job_name")))
         )
 
 
@@ -584,54 +576,54 @@ def _validate_receipt_binding(
         != expected_handoff_id
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 "run metadata handoff_id does not match expected_handoff_id",
-                found=run_metadata.get("handoff_id"),
-                expected=expected_handoff_id,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(run_metadata.get("handoff_id"), expected_handoff_id))
         )
     if (
         expect_scalar(handoff_metadata, "handoff_id", str, fallback="")
         != expected_handoff_id
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 "handoff metadata handoff_id does not match expected_handoff_id",
-                found=handoff_metadata.get("handoff_id"),
-                expected=expected_handoff_id,
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(handoff_metadata.get("handoff_id"), expected_handoff_id)
             )
         )
     if handoff_metadata.get("returned_receipt_path") != RETURNED_RECEIPT:
         raise ValueError(
-            refusal(
+            Declared(
                 "handoff metadata returned_receipt_path is incorrect",
-                found=handoff_metadata.get("returned_receipt_path"),
-                expected=RETURNED_RECEIPT,
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    handoff_metadata.get("returned_receipt_path"), RETURNED_RECEIPT
+                )
             )
         )
     if run_metadata.get("returned_receipt_path") != RETURNED_RECEIPT:
         raise ValueError(
-            refusal(
-                "run metadata returned_receipt_path is incorrect",
-                found=run_metadata.get("returned_receipt_path"),
-                expected=RETURNED_RECEIPT,
+            Declared(
+                "run metadata returned_receipt_path is incorrect", RETURNED_RUN_FOLDER
+            ).refusal(
+                found_text(run_metadata.get("returned_receipt_path"), RETURNED_RECEIPT)
             )
         )
 
     handoff_id = expect_scalar(receipt_payload, "handoff_id", str)
     if handoff_id != expected_handoff_id:
         raise ValueError(
-            refusal(
+            Declared(
                 "returned run receipt handoff_id does not match expected_handoff_id",
-                found=handoff_id,
-                expected=expected_handoff_id,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(handoff_id, expected_handoff_id))
         )
     if expect_scalar(receipt_payload, "identity_verified", bool) is not True:
         raise ValueError(
-            refusal(
-                "returned run receipt identity is not verified",
-                found=receipt_payload.get("identity_verified"),
-                expected=True,
-            )
+            Declared(
+                "returned run receipt identity is not verified", RETURNED_RUN_FOLDER
+            ).refusal(found_text(receipt_payload.get("identity_verified"), True))
         )

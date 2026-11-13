@@ -6,7 +6,8 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import Any, NamedTuple
 
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import found_text
 
 
 class LiveGroup(NamedTuple):
@@ -206,10 +207,10 @@ def _tetrahedron_face_counts(
             face_size = (order + 1) * (order + 2) // 2
             if len(face_nodes) % face_size:
                 raise ValueError(
-                    refusal(
-                        "Gmsh returned an incomplete tetrahedron face list",
-                        found=len(face_nodes),
-                        expected=f"a multiple of {face_size}",
+                    internal(
+                        "Gmsh returned an incomplete tetrahedron face list"
+                        + ": "
+                        + found_text(len(face_nodes), f"a multiple of {face_size}")
                     )
                 )
             for index in range(0, len(face_nodes), face_size):

@@ -37,7 +37,8 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     write_json,
 )
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
 
 from ..mesh.build import MeshBuildResult
 from ..mesh.manifest import SGB_RUNTIME_AUTHORITY
@@ -48,6 +49,8 @@ from .archive import (
 )
 from .recorder_copy import write_standalone_recorder
 from .script import ExecutionSettings, positive_int, render_script, single_line
+
+_WHERE_HANDOFF_CALL = "the call to prepare_handoff"
 
 HandoffProfile = Literal["direct-local", "slurm-single-node", "slurm-multi-node"]
 _PROFILES = {"direct-local", "slurm-single-node", "slurm-multi-node"}
@@ -378,7 +381,9 @@ def _validate_resources(
 ) -> dict[str, Any]:
     if not isinstance(resources, Mapping) or not resources:
         raise ValueError(
-            refusal("handoff requires caller-supplied resources", found=resources)
+            Declared(
+                "handoff requires caller-supplied resources", _WHERE_HANDOFF_CALL
+            ).refusal(found_text(resources))
         )
     result = dict(resources)
     if profile == "direct-local":
@@ -390,32 +395,33 @@ def _validate_resources(
         nodes = positive_int(result.get("nodes"), "resources.nodes")
         if profile == "slurm-single-node" and nodes != 1:
             raise ValueError(
-                refusal(
+                Declared(
                     "slurm-single-node is a single-node profile and requires resources.nodes=1",
-                    found=nodes,
-                )
+                    _WHERE_HANDOFF_CALL,
+                ).refusal(found_text(nodes))
             )
         if profile == "slurm-multi-node":
             if nodes < 2:
                 raise ValueError(
-                    refusal(
+                    Declared(
                         "slurm-multi-node is a multi-node profile and requires resources.nodes >= 2",
-                        found=nodes,
-                    )
+                        _WHERE_HANDOFF_CALL,
+                    ).refusal(found_text(nodes))
                 )
             if not any(key in result for key in ("mem", "mem_per_cpu")):
                 raise ValueError(
-                    refusal(
+                    Declared(
                         "slurm-multi-node requires caller-supplied high-memory resource (mem or mem_per_cpu)",
-                        found=sorted(result),
-                    )
+                        _WHERE_HANDOFF_CALL,
+                    ).refusal(found_text(sorted(result)))
                 )
     style = result.get("command_style", "binary")
     if style not in {"binary", "wrapper"}:
         raise ValueError(
-            refusal(
-                "resources.command_style must be 'binary' or 'wrapper'", found=style
-            )
+            Declared(
+                "resources.command_style must be 'binary' or 'wrapper'",
+                _WHERE_HANDOFF_CALL,
+            ).refusal(found_text(style))
         )
     if profile != "direct-local" and style == "wrapper":
         raise ValueError(
@@ -506,7 +512,9 @@ def _route(mesh_result: MeshBuildResult) -> str:
     route = read_json(mesh_result.provenance_path).get("route")
     if route not in {"A", "B"}:
         raise ValueError(
-            refusal("mesh provenance must carry Route A or B", found=route)
+            Declared(
+                "mesh provenance must carry Route A or B", _WHERE_HANDOFF_CALL
+            ).refusal(found_text(route))
         )
     return route
 
@@ -521,19 +529,22 @@ def _route_a_thin_film(
     if route == "B":
         if provenance_value is not None or manifest_value is not None:
             raise ValueError(
-                refusal(
+                Declared(
                     "Route B mesh metadata must not define route_a_thin_film",
-                    found={"provenance": provenance_value, "manifest": manifest_value},
+                    _WHERE_HANDOFF_CALL,
+                ).refusal(
+                    found_text(
+                        {"provenance": provenance_value, "manifest": manifest_value}
+                    )
                 )
             )
         return None
     if not isinstance(provenance_value, Mapping) or provenance_value != manifest_value:
         raise ValueError(
-            refusal(
+            Declared(
                 "Route A mesh provenance and manifest require identical thin-film identity",
-                found=provenance_value,
-                expected=manifest_value,
-            )
+                _WHERE_HANDOFF_CALL,
+            ).refusal(found_text(provenance_value, manifest_value))
         )
     return dict(provenance_value)
 

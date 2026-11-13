@@ -16,7 +16,9 @@ from scgsim.contracts.palace_run_folder import (
     confined_path,
     sha256,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
+    RETURNED_RUN_FOLDER,
     FileHash,
     expect_int,
     expect_list,
@@ -30,7 +32,7 @@ from scgsim.palace.run.archive import (
     logical_tar_member_name,
     resolve_run_archive_path,
 )
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 
 def validate_scalar_identity(
@@ -41,16 +43,16 @@ def validate_scalar_identity(
     run_identity = run_metadata.get("source_revisions")
     if not isinstance(handoff_identity, dict) or not handoff_identity:
         raise ValueError(
-            refusal(
+            Declared(
                 "handoff source_revisions must be a non-empty mapping",
-                found=handoff_identity,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(handoff_identity))
         )
     if not isinstance(run_identity, dict) or not run_identity:
         raise ValueError(
-            refusal(
-                "run source_revisions must be a non-empty mapping", found=run_identity
-            )
+            Declared(
+                "run source_revisions must be a non-empty mapping", RETURNED_RUN_FOLDER
+            ).refusal(found_text(run_identity))
         )
 
     validate_palace_identity(
@@ -66,48 +68,55 @@ def validate_scalar_identity(
 
     if handoff_identity != run_identity:
         raise ValueError(
-            refusal(
+            Declared(
                 "manual handoff identity mismatch between handoff and run metadata",
-                found=run_identity,
-                expected=handoff_identity,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(run_identity, handoff_identity))
         )
 
     handoff_palace_identity = handoff_metadata.get("palace_identity")
     run_palace_identity = run_metadata.get("palace_identity")
     if handoff_palace_identity != run_palace_identity:
         raise ValueError(
-            refusal(
+            Declared(
                 "palace identity mismatch between handoff and run metadata",
-                found=run_palace_identity,
-                expected=handoff_palace_identity,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(run_palace_identity, handoff_palace_identity))
         )
 
     handoff_id = handoff_metadata.get("handoff_id")
     run_id = run_metadata.get("handoff_id")
     if not isinstance(handoff_id, str) or not handoff_id:
         raise ValueError(
-            refusal("handoff metadata must include handoff_id", found=handoff_id)
+            Declared(
+                "handoff metadata must include handoff_id", RETURNED_RUN_FOLDER
+            ).refusal(found_text(handoff_id))
         )
     if not isinstance(run_id, str) or not run_id:
-        raise ValueError(refusal("run metadata must include handoff_id", found=run_id))
+        raise ValueError(
+            Declared(
+                "run metadata must include handoff_id", RETURNED_RUN_FOLDER
+            ).refusal(found_text(run_id))
+        )
     if handoff_id != run_id:
         raise ValueError(
-            refusal(
+            Declared(
                 "handoff id mismatch between handoff and run metadata",
-                found=run_id,
-                expected=handoff_id,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(run_id, handoff_id))
         )
     if handoff_metadata.get("route_a_thin_film") != run_metadata.get(
         "route_a_thin_film"
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 "Route-A thin-film identity mismatch between handoff and run metadata",
-                found=run_metadata.get("route_a_thin_film"),
-                expected=handoff_metadata.get("route_a_thin_film"),
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    run_metadata.get("route_a_thin_film"),
+                    handoff_metadata.get("route_a_thin_film"),
+                )
             )
         )
 
@@ -141,11 +150,14 @@ def validate_handoff_id(
     recorded = expect_scalar(handoff_metadata, "handoff_id", str)
     if computed != recorded or computed != expected_handoff_id:
         raise ValueError(
-            refusal(
+            Declared(
                 "recomputed handoff identity does not match expected handoff_id; the sealed "
                 "inputs or the recorded handoff_id changed",
-                found={"recomputed": computed, "recorded": recorded},
-                expected=expected_handoff_id,
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    {"recomputed": computed, "recorded": recorded}, expected_handoff_id
+                )
             )
         )
 
@@ -176,11 +188,10 @@ def validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) ->
     }
     if execution != recorded:
         raise ValueError(
-            refusal(
+            Declared(
                 "handoff execution identity does not match handoff metadata",
-                found=execution,
-                expected=recorded,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(execution, recorded))
         )
     for field, relative in (
         ("script", expect_scalar(handoff_metadata, "script", str)),
@@ -193,20 +204,23 @@ def validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) ->
         recorded_path = expect_scalar(item, "path", str)
         if recorded_path != relative:
             raise ValueError(
-                refusal(
+                Declared(
                     f"handoff execution identity {field} path is inconsistent",
-                    found=recorded_path,
-                    expected=relative,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(recorded_path, relative))
             )
         path = confined_path(root, relative)
         recorded_sha = expect_scalar(item, "sha256", str) if path.is_file() else None
         if not path.is_file() or recorded_sha != sha256(path):
             raise ValueError(
-                refusal(
+                Declared(
                     f"handoff execution identity {field} hash is inconsistent for {relative}",
-                    found=sha256(path) if path.is_file() else "no file",
-                    expected=item.get("sha256"),
+                    RETURNED_RUN_FOLDER,
+                ).refusal(
+                    found_text(
+                        sha256(path) if path.is_file() else "no file",
+                        item.get("sha256"),
+                    )
                 )
             )
 
@@ -229,31 +243,30 @@ def validate_resource_identity(
     ):
         if resource_record.get(field) != handoff_metadata.get(field):
             raise ValueError(
-                refusal(
+                Declared(
                     f"resource record {field} does not match handoff metadata",
-                    found=resource_record.get(field),
-                    expected=handoff_metadata.get(field),
+                    RETURNED_RUN_FOLDER,
+                ).refusal(
+                    found_text(resource_record.get(field), handoff_metadata.get(field))
                 )
             )
     status = expect_scalar(resource_record, "status", str)
     if status != "completed":
         raise ValueError(
-            refusal(
+            Declared(
                 "resource record status must be completed for a returned run",
-                found=status,
-                expected="completed",
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(status, "completed"))
         )
     exit_code = expect_int(
         resource_record.get("exit_code"), "resource record exit_code"
     )
     if exit_code != 0:
         raise ValueError(
-            refusal(
+            Declared(
                 "resource record exit_code must be zero for a returned run",
-                found=exit_code,
-                expected=0,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(exit_code, 0))
         )
 
 
@@ -267,7 +280,10 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
     for entry in hashes:
         if not isinstance(entry, dict):
             raise TypeError(
-                refusal(f"{label} metadata hashes must be mapping entries", found=entry)
+                Declared(
+                    f"{label} metadata hashes must be mapping entries",
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(entry))
             )
         path_name = expect_scalar(entry, "path", str)
         bytes_value = expect_int(
@@ -291,11 +307,9 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
             )
         if sha_value != observed[path_name].sha256:
             raise ValueError(
-                refusal(
-                    f"{label} hash mismatch for {path_name}",
-                    found=observed[path_name].sha256,
-                    expected=sha_value,
-                )
+                Declared(
+                    f"{label} hash mismatch for {path_name}", RETURNED_RUN_FOLDER
+                ).refusal(found_text(observed[path_name].sha256, sha_value))
             )
 
     missing = [name for name in SEALED_INPUTS if name not in observed]
@@ -309,44 +323,41 @@ def validate_archive_record(root: Path, resource_record: dict[str, Any]) -> None
     """Verify the retained compressed handoff archive against its resource record."""
     if resource_record.get("kind") != "manual_handoff":
         raise ValueError(
-            refusal(
-                "resource record kind must be manual_handoff",
-                found=resource_record.get("kind"),
-                expected="manual_handoff",
-            )
+            Declared(
+                "resource record kind must be manual_handoff", RETURNED_RUN_FOLDER
+            ).refusal(found_text(resource_record.get("kind"), "manual_handoff"))
         )
 
     if expect_scalar(resource_record, "status", str, fallback="") == "":
         raise ValueError(
-            refusal(
-                "resource record status must be a non-empty string",
-                found=resource_record.get("status"),
-            )
+            Declared(
+                "resource record status must be a non-empty string", RETURNED_RUN_FOLDER
+            ).refusal(found_text(resource_record.get("status")))
         )
     requested_resources = optional_dict(resource_record.get("requested_resources"))
     resolved_resources = optional_dict(resource_record.get("resolved_resources"))
     if not requested_resources:
         raise ValueError(
-            refusal(
+            Declared(
                 "resource record requested_resources must be a non-empty mapping",
-                found=resource_record.get("requested_resources"),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(resource_record.get("requested_resources")))
         )
     if not resolved_resources:
         raise ValueError(
-            refusal(
+            Declared(
                 "resource record resolved_resources must be a non-empty mapping",
-                found=resource_record.get("resolved_resources"),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(resource_record.get("resolved_resources")))
         )
 
     archive = optional_dict(resource_record.get("archive"))
     if not archive:
         raise ValueError(
-            refusal(
+            Declared(
                 "resource record archive must be a non-empty mapping",
-                found=resource_record.get("archive"),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(resource_record.get("archive")))
         )
     path_name = expect_scalar(archive, "path", str)
     expected_sha = expect_scalar(archive, "sha256", str)
@@ -358,11 +369,10 @@ def validate_archive_record(root: Path, resource_record: dict[str, Any]) -> None
     archive_sha = sha256(archive_path)
     if archive_sha != expected_sha:
         raise ValueError(
-            refusal(
+            Declared(
                 f"resource record archive hash mismatch for {archive_path}",
-                found=archive_sha,
-                expected=expected_sha,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(archive_sha, expected_sha))
         )
 
 
@@ -400,10 +410,13 @@ def validate_archive_manifest(
         manifest_member_paths = {path.rstrip("/") for path in members.paths}
         if set(bundled) != manifest_member_paths | allowed_extra:
             raise ValueError(
-                refusal(
+                Declared(
                     "archive members do not match the archive manifest",
-                    found=sorted(bundled),
-                    expected=sorted(manifest_member_paths | allowed_extra),
+                    RETURNED_RUN_FOLDER,
+                ).refusal(
+                    found_text(
+                        sorted(bundled), sorted(manifest_member_paths | allowed_extra)
+                    )
                 )
             )
         _validate_bundled_types(bundle, bundled, members.types)
@@ -419,11 +432,11 @@ def _validate_manifest_header(
     schema_version = expect_scalar(manifest, "schema_version", int, fallback=0)
     if schema_version != RUN_RECORD_SCHEMA_VERSION:
         raise ValueError(
-            refusal(
+            Declared(
                 "handoff archive manifest schema_version must be integer "
                 f"{RUN_RECORD_SCHEMA_VERSION}",
-                found=schema_version,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(schema_version))
         )
     archive = expect_mapping(resource_record.get("archive"), "resource_record.archive")
     manifest_hashes = extract_hash_map(
@@ -434,21 +447,19 @@ def _validate_manifest_header(
     )
     if manifest_hashes != handoff_hashes:
         raise ValueError(
-            refusal(
+            Declared(
                 "archive manifest input hashes do not match handoff metadata",
-                found=manifest_hashes,
-                expected=handoff_hashes,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(manifest_hashes, handoff_hashes))
         )
     manifest_archive = expect_scalar(manifest, "archive", str)
     record_archive = expect_scalar(archive, "path", str)
     if manifest_archive != record_archive:
         raise ValueError(
-            refusal(
+            Declared(
                 "handoff archive manifest archive path does not match the resource record",
-                found=manifest_archive,
-                expected=record_archive,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(manifest_archive, record_archive))
         )
     return archive
 
@@ -483,20 +494,19 @@ def _manifest_members(manifest: Any) -> _ManifestMembers:
         path = expect_scalar(data, "path", str)
         if not path or path in member_paths:
             raise ValueError(
-                refusal(
+                Declared(
                     "handoff archive manifest members must have unique non-empty paths",
-                    found=path,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(path))
             )
         member_paths.add(path)
         member_type = expect_scalar(data, "type", str)
         if member_type not in {"file", "directory"}:
             raise ValueError(
-                refusal(
+                Declared(
                     f"handoff archive manifest member {path} type is invalid",
-                    found=member_type,
-                    expected="file or directory",
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(member_type, "file or directory"))
             )
         member_types[path] = member_type
         if member_type == "file":
@@ -519,11 +529,10 @@ def _validate_manifest_inputs(
     for path, expected in handoff_input_hashes.items():
         if manifest_input_hashes.get(path) != expected:
             raise ValueError(
-                refusal(
+                Declared(
                     f"archive manifest input hash mismatch for {path}",
-                    found=manifest_input_hashes.get(path),
-                    expected=expected,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(manifest_input_hashes.get(path), expected))
             )
         if file_members.get(path) != expected:
             raise ValueError(
@@ -553,12 +562,13 @@ def _validate_bundled_hashes(
         member = bundled.get(path)
         if member is None or not member.isfile() or member.size != expected_bytes:
             raise ValueError(
-                refusal(
-                    f"archive member size mismatch for {path}",
-                    found=None
-                    if member is None or not member.isfile()
-                    else member.size,
-                    expected=expected_bytes,
+                Declared(
+                    f"archive member size mismatch for {path}", RETURNED_RUN_FOLDER
+                ).refusal(
+                    found_text(
+                        None if member is None or not member.isfile() else member.size,
+                        expected_bytes,
+                    )
                 )
             )
         handle = bundle.extractfile(member)
@@ -567,9 +577,7 @@ def _validate_bundled_hashes(
         digest = hashlib.sha256(handle.read()).hexdigest()
         if digest != expected_sha:
             raise ValueError(
-                refusal(
-                    f"archive member hash mismatch for {path}",
-                    found=digest,
-                    expected=expected_sha,
-                )
+                Declared(
+                    f"archive member hash mismatch for {path}", RETURNED_RUN_FOLDER
+                ).refusal(found_text(digest, expected_sha))
             )

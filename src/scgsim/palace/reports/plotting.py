@@ -7,9 +7,12 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple
 
+from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.mesh.summary import MeshSummary
 from scgsim.presentation.notebook import Card
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
+
+_WHERE_SHOW_CALL = "the arguments of the show_ call"
 
 COLORWAY = (
     "#56B4E9",
@@ -329,7 +332,11 @@ def checked_theme(theme: str) -> ReportTheme:
     """Accept the supported light/dark display choices without changing report data."""
     if theme == "light" or theme == "dark":
         return theme
-    raise ValueError(refusal("theme must be 'light' or 'dark'", found=theme))
+    raise ValueError(
+        Declared("theme must be 'light' or 'dark'", _WHERE_SHOW_CALL).refusal(
+            found_text(theme)
+        )
+    )
 
 
 def checked_ranking_limit(value: int | None) -> int | None:
@@ -338,7 +345,9 @@ def checked_ranking_limit(value: int | None) -> int | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ValueError(
-            refusal("ranking_limit must be a positive integer or None", found=value)
+            Declared(
+                "ranking_limit must be a positive integer or None", _WHERE_SHOW_CALL
+            ).refusal(found_text(value))
         )
     return value
 
@@ -346,7 +355,11 @@ def checked_ranking_limit(value: int | None) -> int | None:
 def checked_show_details(value: bool) -> bool:
     """Require an explicit boolean choice for expanded report metadata."""
     if not isinstance(value, bool):
-        raise TypeError(refusal("show_details must be a bool", found=value))
+        raise TypeError(
+            Declared("show_details must be a bool", _WHERE_SHOW_CALL).refusal(
+                found_text(value)
+            )
+        )
     return value
 
 

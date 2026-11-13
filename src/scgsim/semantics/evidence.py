@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple
 
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text, internal
 
 from .interfaces import (
     conductor_solution_interface_kind,
@@ -61,9 +61,10 @@ class SourcedPatch:
         """Freeze sequence and observation inputs at the record boundary."""
         if self.evidence_stage not in _STAGE_ORDER:
             raise ValueError(
-                refusal(
-                    "evidence_stage must be declared, planned, or observed",
-                    found=self.evidence_stage,
+                internal(
+                    "evidence_stage must be declared, planned, or observed"
+                    + ": "
+                    + found_text(self.evidence_stage)
                 )
             )
         for field_name in ("source_owner_ids", "aggregate_owner_ids"):
@@ -83,9 +84,10 @@ class SourcedPatch:
             self.snapshot_reference, SemanticSnapshotReference
         ):
             raise TypeError(
-                refusal(
-                    "snapshot_reference must be a SemanticSnapshotReference or None",
-                    found=type(self.snapshot_reference).__name__,
+                internal(
+                    "snapshot_reference must be a SemanticSnapshotReference or None"
+                    + ": "
+                    + found_text(type(self.snapshot_reference).__name__)
                 )
             )
 
@@ -132,9 +134,10 @@ class EvidenceResult:
         """Normalize ordered collections and validate the bound snapshot."""
         if not isinstance(self.snapshot_reference, SemanticSnapshotReference):
             raise TypeError(
-                refusal(
-                    "snapshot_reference must be a SemanticSnapshotReference",
-                    found=type(self.snapshot_reference).__name__,
+                internal(
+                    "snapshot_reference must be a SemanticSnapshotReference"
+                    + ": "
+                    + found_text(type(self.snapshot_reference).__name__)
                 )
             )
         for field_name in (
@@ -277,9 +280,10 @@ def _classify_patch(
     if patch.interface_intent == "conductor_solution":
         if domains is None or len(domains) != 1:
             raise ValueError(
-                refusal(
-                    "conductor_solution evidence requires one effective domain",
-                    found=domains,
+                internal(
+                    "conductor_solution evidence requires one effective domain"
+                    + ": "
+                    + found_text(domains)
                 )
             )
         material_kind = _material_kind(snapshot, domains[0])
@@ -289,9 +293,10 @@ def _classify_patch(
     if patch.interface_intent == "solution_solution":
         if domains is None or len(domains) != 2:
             raise ValueError(
-                refusal(
-                    "solution_solution evidence requires two ordered effective domains",
-                    found=domains,
+                internal(
+                    "solution_solution evidence requires two ordered effective domains"
+                    + ": "
+                    + found_text(domains)
                 )
             )
         lower_kind = _material_kind(snapshot, domains[0])
@@ -318,6 +323,10 @@ def _material_kind(snapshot: SemanticFactsSnapshot, semantic_id: str) -> str:
     value = entity.get("material_kind") if isinstance(entity, Mapping) else None
     if not isinstance(value, str):
         raise ValueError(
-            refusal(f"{semantic_id} has no snapshotted material kind", found=value)
+            internal(
+                f"{semantic_id} has no snapshotted material kind"
+                + ": "
+                + found_text(value)
+            )
         )
     return value

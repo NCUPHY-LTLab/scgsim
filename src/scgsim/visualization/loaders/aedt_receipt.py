@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
+
+_WHERE_AEDT_RUN = "the AEDT run folder: fetch it again, or run the AEDT handoff again"
 
 
 def mapping_record(value: Any, name: str) -> Mapping[str, Any]:
@@ -64,10 +67,9 @@ def _validate_hfss_receipt(
     _validate_hfss_ports(receipt, boundaries)
     if mode == "eigenmode" and receipt.get("ports"):
         raise ValueError(
-            refusal(
-                "AEDT Eigenmode receipt must not contain ports",
-                found=receipt.get("ports"),
-            )
+            Declared(
+                "AEDT Eigenmode receipt must not contain ports", _WHERE_AEDT_RUN
+            ).refusal(found_text(receipt.get("ports")))
         )
 
 
@@ -89,19 +91,25 @@ def _validate_hfss_pec_materials(
         props = boundaries.get(boundary_name)
         if props is None or props.get("BoundType") != "Perfect E":
             raise ValueError(
-                refusal(
+                Declared(
                     "native AEDT PEC boundary disagrees with the receipt",
-                    found=None if props is None else props.get("BoundType"),
-                    expected="Perfect E",
+                    _WHERE_AEDT_RUN,
+                ).refusal(
+                    found_text(
+                        None if props is None else props.get("BoundType"), "Perfect E"
+                    )
                 )
             )
         expected_ids = sorted(object_ids[name] for name in object_names)
         if sorted(int(value) for value in props.get("Objects", ())) != expected_ids:
             raise ValueError(
-                refusal(
-                    "native AEDT PEC object assignment changed",
-                    found=sorted(int(value) for value in props.get("Objects", ())),
-                    expected=expected_ids,
+                Declared(
+                    "native AEDT PEC object assignment changed", _WHERE_AEDT_RUN
+                ).refusal(
+                    found_text(
+                        sorted(int(value) for value in props.get("Objects", ())),
+                        expected_ids,
+                    )
                 )
             )
 
@@ -120,10 +128,8 @@ def _validate_hfss_geometry(
         name = nonempty_text(item.get("object_name"), "native object name")
         if object_ids.get(name) != item.get("native_object_id"):
             raise ValueError(
-                refusal(
-                    "native AEDT body identity changed",
-                    found=object_ids.get(name),
-                    expected=item.get("native_object_id"),
+                Declared("native AEDT body identity changed", _WHERE_AEDT_RUN).refusal(
+                    found_text(object_ids.get(name), item.get("native_object_id"))
                 )
             )
         _validate_sheet_pec(item, boundaries)
@@ -140,23 +146,24 @@ def _validate_sheet_pec(
     props = boundaries.get(boundary_name)
     if props is None or props.get("BoundType") != "Perfect E":
         raise ValueError(
-            refusal(
-                "native Sheet PEC boundary changed",
-                found=None if props is None else props.get("BoundType"),
-                expected="Perfect E",
+            Declared("native Sheet PEC boundary changed", _WHERE_AEDT_RUN).refusal(
+                found_text(
+                    None if props is None else props.get("BoundType"), "Perfect E"
+                )
             )
         )
     faces = {int(value) for value in props.get("Faces", ())}
     objects = {int(value) for value in props.get("Objects", ())}
     if faces != set(item["native_face_ids"]) and objects != {item["native_object_id"]}:
         raise ValueError(
-            refusal(
-                "native Sheet PEC assignment changed",
-                found={"faces": sorted(faces), "objects": sorted(objects)},
-                expected={
-                    "faces": sorted(item["native_face_ids"]),
-                    "objects": [item["native_object_id"]],
-                },
+            Declared("native Sheet PEC assignment changed", _WHERE_AEDT_RUN).refusal(
+                found_text(
+                    {"faces": sorted(faces), "objects": sorted(objects)},
+                    {
+                        "faces": sorted(item["native_face_ids"]),
+                        "objects": [item["native_object_id"]],
+                    },
+                )
             )
         )
 
@@ -168,13 +175,14 @@ def _validate_solid_pec(app: Any, item: Mapping[str, Any], name: str) -> None:
         obj = app.modeler[name]
         if str(obj.material_name).casefold() != "pec" or obj.solve_inside is not False:
             raise ValueError(
-                refusal(
-                    "native Solid PEC material changed",
-                    found={
-                        "material": str(obj.material_name),
-                        "solve_inside": obj.solve_inside,
-                    },
-                    expected={"material": "pec", "solve_inside": False},
+                Declared("native Solid PEC material changed", _WHERE_AEDT_RUN).refusal(
+                    found_text(
+                        {
+                            "material": str(obj.material_name),
+                            "solve_inside": obj.solve_inside,
+                        },
+                        {"material": "pec", "solve_inside": False},
+                    )
                 )
             )
 
@@ -188,18 +196,25 @@ def _validate_hfss_ports(
         props = boundaries.get(boundary_name)
         if props is None or props.get("BoundType") not in {"Wave Port", "Lumped Port"}:
             raise ValueError(
-                refusal(
+                Declared(
                     "native AEDT port boundary disagrees with the receipt",
-                    found=None if props is None else props.get("BoundType"),
-                    expected="Wave Port or Lumped Port",
+                    _WHERE_AEDT_RUN,
+                ).refusal(
+                    found_text(
+                        None if props is None else props.get("BoundType"),
+                        "Wave Port or Lumped Port",
+                    )
                 )
             )
         if int(port["face_id"]) not in {int(value) for value in props.get("Faces", ())}:
             raise ValueError(
-                refusal(
-                    "native AEDT port face assignment changed",
-                    found=sorted(int(value) for value in props.get("Faces", ())),
-                    expected=int(port["face_id"]),
+                Declared(
+                    "native AEDT port face assignment changed", _WHERE_AEDT_RUN
+                ).refusal(
+                    found_text(
+                        sorted(int(value) for value in props.get("Faces", ())),
+                        int(port["face_id"]),
+                    )
                 )
             )
 
@@ -212,10 +227,11 @@ def _validate_q3d_receipt(
         str(item.get("name")) for item in receipt.get("nets", ())
     ]:
         raise ValueError(
-            refusal(
-                "native AEDT Q3D net order changed",
-                found=list(app.net_names),
-                expected=[str(item.get("name")) for item in receipt.get("nets", ())],
+            Declared("native AEDT Q3D net order changed", _WHERE_AEDT_RUN).refusal(
+                found_text(
+                    list(app.net_names),
+                    [str(item.get("name")) for item in receipt.get("nets", ())],
+                )
             )
         )
     for net in receipt.get("nets", ()):
@@ -229,11 +245,9 @@ def _validate_q3d_receipt(
             int(value) for value in net.get("native_object_ids", ())
         ):
             raise ValueError(
-                refusal(
-                    "native AEDT Q3D net object assignment changed",
-                    found=native,
-                    expected=expected,
-                )
+                Declared(
+                    "native AEDT Q3D net object assignment changed", _WHERE_AEDT_RUN
+                ).refusal(found_text(native, expected))
             )
         _validate_q3d_terminal(app, net, "source")
         _validate_q3d_terminal(app, net, "sink")
@@ -274,9 +288,7 @@ def _validate_q2d_receipt(
             int(value) for value in conductor.get("native_object_ids", ())
         ):
             raise ValueError(
-                refusal(
-                    "native AEDT Q2D conductor assignment changed",
-                    found=native,
-                    expected=expected,
-                )
+                Declared(
+                    "native AEDT Q2D conductor assignment changed", _WHERE_AEDT_RUN
+                ).refusal(found_text(native, expected))
             )

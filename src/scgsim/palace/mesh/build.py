@@ -33,6 +33,7 @@ from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb import SgbArtifacts
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.surface_epr.build import build_banded_geometry
@@ -43,7 +44,7 @@ from scgsim.meshing import (
 )
 from scgsim.meshing.fine_structure import below_steps
 from scgsim.preparation import native_preparation
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 from ..source.layout_ports import GeometryBuildRequest
 from .controls import MeshControls
@@ -167,10 +168,16 @@ def build_route_geometry(
     route = request.route
     if not isinstance(request.stack, Mapping):
         raise TypeError(
-            refusal("stack must be a mapping", found=type(request.stack).__name__)
+            internal(
+                "stack must be a mapping"
+                + ": "
+                + found_text(type(request.stack).__name__)
+            )
         )
     if route not in {"A", "B"}:
-        raise ValueError(refusal("route must be either 'A' or 'B'", found=route))
+        raise ValueError(
+            internal("route must be either 'A' or 'B'" + ": " + found_text(route))
+        )
     _refuse_bands_narrower_than_a_face(
         request.surface_epr_specs, request.geometry_input
     )
@@ -269,23 +276,27 @@ def _write_sources(
     """Write the plan's GDS bytes and the stack paired with them; return the plan's top cell."""
     if not isinstance(source_gds_bytes, bytes):
         raise TypeError(
-            refusal(
-                "plan GDS source must be bytes", found=type(source_gds_bytes).__name__
+            internal(
+                "plan GDS source must be bytes"
+                + ": "
+                + found_text(type(source_gds_bytes).__name__)
             )
         )
     wanted = stack.get("metadata", {}).get("gds_sha256")
     observed = hashlib.sha256(source_gds_bytes).hexdigest()
     if wanted != observed:
         raise ValueError(
-            refusal(
-                "plan GDS bytes differ from paired stack source",
-                found=observed,
-                expected=wanted,
+            internal(
+                "plan GDS bytes differ from paired stack source"
+                + ": "
+                + found_text(observed, wanted)
             )
         )
     top_cell = stack.get("metadata", {}).get("top_cell_name")
     if not isinstance(top_cell, str) or not top_cell:
-        raise ValueError(refusal("plan stack requires top_cell_name", found=top_cell))
+        raise ValueError(
+            internal("plan stack requires top_cell_name" + ": " + found_text(top_cell))
+        )
     paths.gds_path.write_bytes(source_gds_bytes)
     paths.stack_path.write_text(json_text(dict(stack)), encoding="utf-8")
 

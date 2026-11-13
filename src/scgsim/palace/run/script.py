@@ -22,7 +22,10 @@ from scgsim.contracts.palace_run_folder import (
     RUNTIME_COMPATIBILITY,
     SOLVER_LOG_PREFIX,
 )
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
+
+_WHERE_HANDOFF_CALL = "the call to prepare_handoff"
 
 
 @dataclass(frozen=True)
@@ -350,15 +353,17 @@ def launcher_tokens(value: Any) -> list[str]:
         return [single_line(value, "launcher")]
     if not isinstance(value, Sequence):
         raise TypeError(
-            refusal(
+            Declared(
                 "resources.launcher must be a single string or a sequence of strings",
-                found=type(value).__name__,
-            )
+                _WHERE_HANDOFF_CALL,
+            ).refusal(found_text(type(value).__name__))
         )
     tokens = [single_line(item, "launcher token") for item in value]
     if not tokens:
         raise ValueError(
-            refusal("resources.launcher must be non-empty", found=list(value))
+            Declared(
+                "resources.launcher must be non-empty", _WHERE_HANDOFF_CALL
+            ).refusal(found_text(list(value)))
         )
     return tokens
 

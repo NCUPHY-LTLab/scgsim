@@ -18,6 +18,11 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
 )
 
+RETURNED_RUN_FOLDER = (
+    "the run folder Palace returned: fetch it again, or run the handoff again"
+)
+"""Where a refused record of a returned run folder is set right: the files are Palace's and the recorder's."""
+
 
 class FileHash(NamedTuple):
     """The size and SHA-256 of one run-folder file; both None for a file that is absent."""
@@ -206,6 +211,7 @@ def as_int(value: Any) -> int | None:
 
 
 __all__ = [
+    "RETURNED_RUN_FOLDER",
     "FileHash",
     "as_float_map",
     "as_int",

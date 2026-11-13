@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
+
+_WHERE_STACK = "the stack file"
 
 
 def stack_materials(stack: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
@@ -13,10 +16,9 @@ def stack_materials(stack: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     materials = stack.get("materials")
     if not isinstance(materials, Mapping) or not materials:
         raise ValueError(
-            refusal(
-                "stack must define a non-empty explicit materials mapping",
-                found=materials,
-            )
+            Declared(
+                "stack must define a non-empty explicit materials mapping", _WHERE_STACK
+            ).refusal(found_text(materials))
         )
     resolved = {
         str(key): value
@@ -25,13 +27,16 @@ def stack_materials(stack: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     }
     if len(resolved) != len(materials):
         raise TypeError(
-            refusal(
-                "every explicit stack material must be a mapping",
-                found=sorted(
-                    str(key)
-                    for key, value in materials.items()
-                    if not isinstance(value, Mapping)
-                ),
+            Declared(
+                "every explicit stack material must be a mapping", _WHERE_STACK
+            ).refusal(
+                found_text(
+                    sorted(
+                        str(key)
+                        for key, value in materials.items()
+                        if not isinstance(value, Mapping)
+                    )
+                )
             )
         )
     _validate_stack_material_kinds(stack, resolved)
@@ -56,7 +61,9 @@ def _validate_stack_material_kinds(
     regions = stack.get("solution_regions")
     if not isinstance(regions, Mapping) or not regions:
         raise ValueError(
-            refusal("stack must define explicit solution_regions", found=regions)
+            Declared(
+                "stack must define explicit solution_regions", _WHERE_STACK
+            ).refusal(found_text(regions))
         )
     for name, region in regions.items():
         if not isinstance(region, Mapping) or material_kind(
@@ -67,21 +74,32 @@ def _validate_stack_material_kinds(
             )
     layers = stack.get("layers")
     if not isinstance(layers, list) or not layers:
-        raise ValueError(refusal("stack must define explicit layers", found=layers))
+        raise ValueError(
+            Declared("stack must define explicit layers", _WHERE_STACK).refusal(
+                found_text(layers)
+            )
+        )
     for layer in layers:
         if not isinstance(layer, Mapping):
-            raise TypeError(refusal("stack layers must be mappings", found=layer))
+            raise TypeError(
+                Declared("stack layers must be mappings", _WHERE_STACK).refusal(
+                    found_text(layer)
+                )
+            )
         if (
             layer.get("role") == "metal"
             and material_kind(layer.get("material_id"), "metal layer") != "conductor"
         ):
             raise ValueError(
-                refusal(
-                    "metal layer material must have conductor kind",
-                    found={
-                        "layer": layer.get("name"),
-                        "material_id": layer.get("material_id"),
-                    },
+                Declared(
+                    "metal layer material must have conductor kind", _WHERE_STACK
+                ).refusal(
+                    found_text(
+                        {
+                            "layer": layer.get("name"),
+                            "material_id": layer.get("material_id"),
+                        }
+                    )
                 )
             )
 

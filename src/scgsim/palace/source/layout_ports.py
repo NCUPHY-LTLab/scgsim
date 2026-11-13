@@ -18,12 +18,15 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 from .ports import LayoutPortBinding, RequestedPort
 from .workflow import GeometrySettings, prepare_mesh_input
+
+_WHERE_PLAN_PORTS = "the GeometryPlan's port sheets"
 
 
 @dataclass(frozen=True)
@@ -106,13 +109,16 @@ def _resolve_plan_ports(
     available = {record["name"]: record for record in available_records}
     if len(available) != len(available_records):
         raise ValueError(
-            refusal(
-                "GeometryPlan port names must be unique",
-                found=sorted(
-                    name
-                    for name in available
-                    if [r["name"] for r in available_records].count(name) > 1
-                ),
+            Declared(
+                "GeometryPlan port names must be unique", _WHERE_PLAN_PORTS
+            ).refusal(
+                found_text(
+                    sorted(
+                        name
+                        for name in available
+                        if [r["name"] for r in available_records].count(name) > 1
+                    )
+                )
             )
         )
     resolved: list[LayoutPortBinding] = []

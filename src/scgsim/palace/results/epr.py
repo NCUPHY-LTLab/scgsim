@@ -29,6 +29,8 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     table_name,
 )
+from scgsim.geometry.models.refusals import Declared
+from scgsim.palace.results.artifacts import RETURNED_RUN_FOLDER
 from scgsim.palace.results.epr_records import (
     PalaceEprResult,
     checked_number,
@@ -40,13 +42,15 @@ from scgsim.palace.results.tables import (
     output_families,
     read_result_table,
 )
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 from scgsim.semantics.epr import (
     FilmAssumptions,
     FilmUpdate,
     film_assumptions,
     inverse_quality_factor,
 )
+
+_WHERE_EPR_RESULT_CALL = "the call to epr_result"
 
 
 def resolve_epr_result(path: str | Path) -> PalaceEprResult:
@@ -65,7 +69,9 @@ def _iteration_result(
 
     if type(iteration) is not int or iteration <= 0:
         raise ValueError(
-            refusal("palace_iteration must be a positive integer", found=iteration)
+            Declared(
+                "palace_iteration must be a positive integer", _WHERE_EPR_RESULT_CALL
+            ).refusal(found_text(iteration))
         )
     records = {item["path"]: item for item in result.returned_receipt.output_files}
     prefixes = set()
@@ -81,10 +87,10 @@ def _iteration_result(
             prefixes.add("/".join(parts[:3]))
     if len(prefixes) != 1:
         raise ValueError(
-            refusal(
+            Declared(
                 f"requested native iteration {iteration} lacks one receipt-bound directory",
-                found=sorted(prefixes),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(sorted(prefixes)))
         )
     prefix = prefixes.pop()
 
@@ -112,12 +118,17 @@ def _iteration_result(
         or native["Problem"].get("Iteration") != iteration
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 f"native iteration metadata in {prefix}/{NATIVE_METADATA_NAME} disagrees with selected directory",
-                found=native.get("Problem", {}).get("Iteration")
-                if isinstance(native, dict) and isinstance(native.get("Problem"), dict)
-                else None,
-                expected=iteration,
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    native.get("Problem", {}).get("Iteration")
+                    if isinstance(native, dict)
+                    and isinstance(native.get("Problem"), dict)
+                    else None,
+                    iteration,
+                )
             )
         )
     counts = count_index_entries(result.provenance.index_map)
@@ -141,10 +152,13 @@ def epr_result(
 
     if not isinstance(result, ResolvedRunData) or result.problem != EIGENMODE.name:
         raise TypeError(
-            refusal(
+            Declared(
                 "epr_result requires a resolved Palace Eigenmode run",
-                found=getattr(result, "problem", type(result).__name__),
-                expected=EIGENMODE.name,
+                _WHERE_EPR_RESULT_CALL,
+            ).refusal(
+                found_text(
+                    getattr(result, "problem", type(result).__name__), EIGENMODE.name
+                )
             )
         )
     output_prefix = OUTPUT_DIR
@@ -436,14 +450,17 @@ class _ModeExtraction:
                 _row_index(row) != mode for row in (surface_row, domain_row, port_row)
             ):
                 raise ValueError(
-                    refusal(
-                        "Palace EPR mode tables do not align",
-                        found={
-                            "surface-Q": _row_index(surface_row),
-                            "domain-E": _row_index(domain_row),
-                            "port-EPR": _row_index(port_row),
-                        },
-                        expected=mode,
+                    Declared(
+                        "Palace EPR mode tables do not align", RETURNED_RUN_FOLDER
+                    ).refusal(
+                        found_text(
+                            {
+                                "surface-Q": _row_index(surface_row),
+                                "domain-E": _row_index(domain_row),
+                                "port-EPR": _row_index(port_row),
+                            },
+                            mode,
+                        )
                     )
                 )
             normalization = checked_number(
@@ -521,11 +538,15 @@ def _selected_outputs(
         or request["schema_version"] != EPR_SELECTION_SCHEMA
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 f"Palace EPR selection payload in {INDEX_MAP} is invalid",
-                found=request,
-                expected=f"keys schema_version ({EPR_SELECTION_SCHEMA}), surface_interfaces, "
-                "bulk_domain_ids and port_names",
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    request,
+                    f"keys schema_version ({EPR_SELECTION_SCHEMA}), surface_interfaces, "
+                    "bulk_domain_ids and port_names",
+                )
             )
         )
     available = {

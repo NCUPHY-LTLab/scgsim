@@ -17,7 +17,8 @@ from scgsim.contracts.palace_run_folder import (
     palace_problem,
     sha256,
 )
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import internal
+from scgsim.refusal import found_text
 
 
 def _corner_chord_statistics(
@@ -142,10 +143,10 @@ class _TetrahedralTopology:
             )
             if key in self.shared and self.shared[key] != value:
                 raise ValueError(
-                    refusal(
-                        "shared tetrahedral face has different high-order nodes",
-                        found={"face": key, "nodes": value},
-                        expected=self.shared[key],
+                    internal(
+                        "shared tetrahedral face has different high-order nodes"
+                        + ": "
+                        + found_text({"face": key, "nodes": value}, self.shared[key])
                     )
                 )
             self.shared[key] = value

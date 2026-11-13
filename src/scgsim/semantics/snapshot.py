@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal, NamedTuple
 
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text, internal
 
 RevisionKind = Literal["declared_revision", "content_hash_fallback"]
 
@@ -124,9 +124,10 @@ class SemanticSnapshotReference:
         )
         if not isinstance(self.projection_version, str) or not self.projection_version:
             raise ValueError(
-                refusal(
-                    "projection_version must be a non-empty string",
-                    found=self.projection_version,
+                internal(
+                    "projection_version must be a non-empty string"
+                    + ": "
+                    + found_text(self.projection_version)
                 )
             )
         _validate_sha256_digest("canonical_sha256", self.canonical_sha256)
@@ -161,10 +162,10 @@ class SemanticFactsSnapshot:
         _validate_sha256_digest("canonical_sha256", self.canonical_sha256)
         if self.canonical_sha256 != digest:
             raise ValueError(
-                refusal(
-                    "canonical_sha256 does not match semantic facts",
-                    found=self.canonical_sha256,
-                    expected=digest,
+                internal(
+                    "canonical_sha256 does not match semantic facts"
+                    + ": "
+                    + found_text(self.canonical_sha256, digest)
                 )
             )
         _validate_revision(
@@ -175,9 +176,10 @@ class SemanticFactsSnapshot:
         )
         if not isinstance(self.projection_version, str) or not self.projection_version:
             raise ValueError(
-                refusal(
-                    "projection_version must be a non-empty string",
-                    found=self.projection_version,
+                internal(
+                    "projection_version must be a non-empty string"
+                    + ": "
+                    + found_text(self.projection_version)
                 )
             )
         object.__setattr__(self, "facts", _freeze(plain))

@@ -11,7 +11,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, cast
 
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import found_text
 
 from .config_records import (
     ElectrostaticSettings,
@@ -20,6 +21,10 @@ from .config_records import (
     optional_string,
 )
 from .index import TerminalEntry
+
+_WHERE_ADD_GROUND = "the call to add_ground"
+_WHERE_ADD_TERMINAL = "the call to add_terminal"
+_WHERE_ELECTROSTATIC_SETTINGS = "the call to set_electrostatic"
 
 
 @dataclass(frozen=True)
@@ -55,9 +60,10 @@ class _BoundaryState:
             self._record_component(physical_name, _conductor_identity(info))
         if not self.component_attrs:
             raise ValueError(
-                refusal(
-                    "SGB config needs at least one solver-active conductor component",
-                    found=sorted(self.groups.get("pec_surfaces", {})),
+                internal(
+                    "SGB config needs at least one solver-active conductor component"
+                    + ": "
+                    + found_text(sorted(self.groups.get("pec_surfaces", {})))
                 )
             )
 
@@ -134,9 +140,10 @@ def _conductor_identity(info: Mapping[str, Any]) -> _ConductorIdentity:
     net_id = optional_string(info.get("net"))
     if component_id is None:
         raise ValueError(
-            refusal(
-                f"SGB conductor surface with attributes {info.get('attributes')} has no Entity id",
-                found=info.get("entity"),
+            internal(
+                f"SGB conductor surface with attributes {info.get('attributes')} has no Entity id"
+                + ": "
+                + found_text(info.get("entity"))
             )
         )
     if net_id is None:
@@ -193,11 +200,11 @@ def _terminal_identity(terminal: TerminalBinding) -> _TerminalIdentity:
     name = optional_string(terminal.name)
     if net_id is None or name is None:
         raise ValueError(
-            refusal(
+            Declared(
                 "terminal binding names and net ids must be non-empty: call "
                 "add_terminal(name, net_id=...)",
-                found={"name": terminal.name, "net_id": terminal.net_id},
-            )
+                _WHERE_ADD_TERMINAL,
+            ).refusal(found_text({"name": terminal.name, "net_id": terminal.net_id}))
         )
     return _TerminalIdentity(name, net_id)
 
@@ -278,10 +285,10 @@ def _physical_grounds(
         net_id = optional_string(value)
         if net_id is None:
             raise ValueError(
-                refusal(
+                Declared(
                     "physical Ground net ids must be non-empty: call add_ground(net_id=...)",
-                    found=value,
-                )
+                    _WHERE_ADD_GROUND,
+                ).refusal(found_text(value))
             )
         if net_id in requested:
             raise ValueError(f"SGB physical Ground net {net_id!r} is repeated.")
@@ -336,11 +343,11 @@ def _exterior_grounds(
                 physical_names.add(str(physical_name))
         if not attrs:
             raise ValueError(
-                refusal(
+                Declared(
                     "exterior_boundary_policy='ground' requires at least one exterior boundary; "
                     "the boundary surfaces of the mesh have no domain boundary",
-                    found=sorted(groups.get("boundary_surfaces", {})),
-                )
+                    _WHERE_ELECTROSTATIC_SETTINGS,
+                ).refusal(found_text(sorted(groups.get("boundary_surfaces", {}))))
             )
     return _ExteriorGrounds(attrs, physical_names)
 
@@ -351,11 +358,16 @@ def _assemble_boundaries(
 ) -> ElectrostaticBoundaries:
     if set(state.attribute_components).intersection(output.exterior_attrs):
         raise ValueError(
-            refusal(
-                "conductor and exterior boundary attributes must be disjoint",
-                found=sorted(
-                    set(state.attribute_components).intersection(output.exterior_attrs)
-                ),
+            internal(
+                "conductor and exterior boundary attributes must be disjoint"
+                + ": "
+                + found_text(
+                    sorted(
+                        set(state.attribute_components).intersection(
+                            output.exterior_attrs
+                        )
+                    )
+                )
             )
         )
     boundary_map: dict[str, object] = {"Terminal": output.terminal_rows}
@@ -385,10 +397,10 @@ def _validate_terminal_map(
     )
     if index_mapping != boundary_mapping:
         raise ValueError(
-            refusal(
-                "Terminal-to-boundary mapping mismatch after synthesis",
-                found=index_mapping,
-                expected=boundary_mapping,
+            internal(
+                "Terminal-to-boundary mapping mismatch after synthesis"
+                + ": "
+                + found_text(index_mapping, boundary_mapping)
             )
         )
 

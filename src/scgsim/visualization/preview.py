@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, NamedTuple, cast
 
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import found_text
 
 from .loaders.common import (
     artifact_matches,
@@ -33,6 +34,8 @@ from .scene import (
     SceneMode,
     with_scene_palette,
 )
+
+_WHERE_AEDT_RUN = "the AEDT run folder: fetch it again, or run the AEDT handoff again"
 
 
 def _version(package: str) -> str | None:
@@ -99,10 +102,10 @@ class GeometryPreview:
         self._modes = {name: with_scene_palette(mode) for name, mode in modes.items()}
         if set(self._modes) != set(MODES):
             raise ValueError(
-                refusal(
-                    "geometry preview requires exactly four named modes",
-                    found=sorted(self._modes),
-                    expected=list(MODES),
+                internal(
+                    "geometry preview requires exactly four named modes"
+                    + ": "
+                    + found_text(sorted(self._modes), list(MODES))
                 )
             )
         self._manifest_path = self.root / "metadata/geometry_preview_manifest.json"
@@ -208,12 +211,15 @@ class GeometryPreview:
                 or receipt_authority_sha256(receipt_path) != expected_receipt
             ):
                 raise ValueError(
-                    refusal(
-                        "AEDT preview receipt authority changed",
-                        found=receipt_authority_sha256(receipt_path)
-                        if receipt_path.is_file()
-                        else None,
-                        expected=expected_receipt,
+                    Declared(
+                        "AEDT preview receipt authority changed", _WHERE_AEDT_RUN
+                    ).refusal(
+                        found_text(
+                            receipt_authority_sha256(receipt_path)
+                            if receipt_path.is_file()
+                            else None,
+                            expected_receipt,
+                        )
                     )
                 )
 

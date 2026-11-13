@@ -12,10 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NamedTuple, cast
 
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import found_text
 
 from .loaders.common import file_sha256
 from .scene import MODE_TITLES, VIEWS, ScenePart
+
+_WHERE_EGL = "this host's VTK EGL setup"
 
 
 @dataclass(frozen=True)
@@ -190,7 +193,11 @@ def add_parts(
         if clip is not None:
             if center is None:
                 raise ValueError(
-                    refusal("visualization clip requires a scene center", found=clip)
+                    internal(
+                        "visualization clip requires a scene center"
+                        + ": "
+                        + found_text(clip)
+                    )
                 )
             normal = (1.0, 0.0, 0.0) if clip[0] == "x" else (0.0, 1.0, 0.0)
             dataset = dataset.clip(normal=normal, origin=center, invert=False)
@@ -253,8 +260,10 @@ def _combined_bounds(parts: tuple[ScenePart, ...]) -> tuple[float, ...]:
     bounds = [part.dataset.bounds for part in parts if part.dataset.n_points]
     if not bounds:
         raise ValueError(
-            refusal(
-                "preview geometry has no points", found=[part.label for part in parts]
+            internal(
+                "preview geometry has no points"
+                + ": "
+                + found_text([part.label for part in parts])
             )
         )
     result = (
@@ -267,7 +276,9 @@ def _combined_bounds(parts: tuple[ScenePart, ...]) -> tuple[float, ...]:
     )
     if not all(math.isfinite(value) for value in result):
         raise ValueError(
-            refusal("preview geometry bounds are non-finite", found=result)
+            internal(
+                "preview geometry bounds are non-finite" + ": " + found_text(result)
+            )
         )
     return result
 
@@ -292,10 +303,9 @@ def configure_headless_rendering() -> None:
     device_count = vtkEGLRenderWindow().GetNumberOfDevices()
     if device_count < 1:
         raise RuntimeError(
-            refusal(
-                "headless geometry preview found no EGL rendering device",
-                found=device_count,
-            )
+            Declared(
+                "headless geometry preview found no EGL rendering device", _WHERE_EGL
+            ).refusal(found_text(device_count))
         )
     os.environ["VTK_DEFAULT_EGL_DEVICE_INDEX"] = str(device_count - 1)
 

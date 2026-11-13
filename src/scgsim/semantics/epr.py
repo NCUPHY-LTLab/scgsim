@@ -10,7 +10,9 @@ import math
 from collections.abc import Mapping
 from typing import Any, Literal, TypedDict, cast, overload
 
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text, internal, refused
+
+_WHERE_FILM = "the Surface-EPR spec or film update that carries it"
 
 FILM_FIELDS: frozenset[str] = frozenset(
     {
@@ -72,20 +74,23 @@ def film_assumptions(
 
     if not isinstance(value, Mapping) or set(value) - FILM_FIELDS:
         raise ValueError(
-            refusal(
+            refused(
                 "film assumptions contain unsupported fields",
-                found=sorted(set(value) - FILM_FIELDS)
-                if isinstance(value, Mapping)
-                else type(value).__name__,
-                expected=sorted(FILM_FIELDS),
+                found_text(
+                    sorted(set(value) - FILM_FIELDS)
+                    if isinstance(value, Mapping)
+                    else type(value).__name__,
+                    sorted(FILM_FIELDS),
+                ),
+                _WHERE_FILM,
             )
         )
     if not partial and set(value) != FILM_FIELDS:
         raise ValueError(
-            refusal(
+            refused(
                 "film assumptions require all snapshot fields",
-                found=sorted(value),
-                expected=sorted(FILM_FIELDS),
+                found_text(sorted(value), sorted(FILM_FIELDS)),
+                _WHERE_FILM,
             )
         )
     result = dict(value)
@@ -102,7 +107,11 @@ def film_assumptions(
             or number <= 0
         ):
             raise ValueError(
-                refusal(f"{name} must be finite and positive", found=number)
+                refused(
+                    f"{name} must be finite and positive",
+                    found_text(number),
+                    _WHERE_FILM,
+                )
             )
         result[name] = float(number)
     if "loss_tangent" in result and result["loss_tangent"] is not None:
@@ -114,8 +123,10 @@ def film_assumptions(
             or number < 0
         ):
             raise ValueError(
-                refusal(
-                    "loss_tangent must be finite and non-negative or None", found=number
+                refused(
+                    "loss_tangent must be finite and non-negative or None",
+                    found_text(number),
+                    _WHERE_FILM,
                 )
             )
         result["loss_tangent"] = float(number)
@@ -126,7 +137,11 @@ def film_assumptions(
             and (not isinstance(result[name], str) or not result[name].strip())
         ):
             raise ValueError(
-                refusal(f"{name} must be non-empty text or None", found=result[name])
+                refused(
+                    f"{name} must be non-empty text or None",
+                    found_text(result[name]),
+                    _WHERE_FILM,
+                )
             )
     # Every field is checked above, so the mapping is the snapshot it claims to be.
     return cast(FilmUpdate, result) if partial else cast(FilmAssumptions, result)
@@ -146,9 +161,10 @@ def inverse_quality_factor(
         or participation < 0
     ):
         raise ValueError(
-            refusal(
-                "participation must be finite and non-negative or None",
-                found=participation,
+            internal(
+                "participation must be finite and non-negative or None"
+                + ": "
+                + found_text(participation)
             )
         )
     film_assumptions({"loss_tangent": loss_tangent}, partial=True)

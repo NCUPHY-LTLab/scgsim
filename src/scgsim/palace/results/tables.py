@@ -16,14 +16,16 @@ from scgsim.contracts.palace_index_map import (
     TERMINAL_SECTION,
 )
 from scgsim.contracts.palace_run_folder import EIGENMODE, palace_problem
+from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
+    RETURNED_RUN_FOLDER,
     expect_int,
     expect_list,
     expect_mapping,
     expect_scalar,
 )
 from scgsim.palace.results.resolved_records import ParsedTable
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 
 def output_families(problem: str, index_counts: dict[str, int]) -> tuple[str, ...]:
@@ -180,10 +182,10 @@ def _validate_domain_table(
     """Validate total and per-domain energy columns against configured energy indices."""
     if domain_count <= 0:
         raise ValueError(
-            refusal(
+            Declared(
                 "the index map configures no energy domain, but the domain-E table is present",
-                found=domain_count,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(domain_count))
         )
     expected = 1 + 4 + 4 * domain_count
     if len(table.headers) != expected:
@@ -221,10 +223,10 @@ def validate_surface_table(
     """Validate baseline surface participation, keeping native lossless Q distinct from invalid data."""
     if surface_count <= 0:
         raise ValueError(
-            refusal(
+            Declared(
                 "the index map configures no Surface-EPR row, but the surface-Q table is present",
-                found=surface_count,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(surface_count))
         )
     expected = 1 + 2 * surface_count
     if len(table.headers) != expected:
@@ -392,9 +394,10 @@ def _require_finite_data(
     for key, value in row.items():
         if value is None:
             raise ValueError(
-                refusal(
-                    f"result row has a missing entry in column {key!r}", found=dict(row)
-                )
+                Declared(
+                    f"result row has a missing entry in column {key!r}",
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(dict(row)))
             )
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             if not allow_non_numeric:
@@ -440,7 +443,9 @@ def _require_positive_index(value: Any) -> None:
     """Require a positive integer native mode or excitation index."""
     if not isinstance(value, (int, float)) or value != int(value) or value <= 0:
         raise ValueError(
-            refusal("matrix row index must be a positive integer", found=value)
+            Declared(
+                "matrix row index must be a positive integer", RETURNED_RUN_FOLDER
+            ).refusal(found_text(value))
         )
 
 
@@ -453,7 +458,9 @@ def eigenmode_count(config: dict[str, Any]) -> int:
     count = expect_int(eigenmode.get("N"), "config Solver.Eigenmode.N")
     if count is None or count < 1:
         raise ValueError(
-            refusal("config Solver.Eigenmode.N must be positive", found=count)
+            Declared(
+                "config Solver.Eigenmode.N must be positive", RETURNED_RUN_FOLDER
+            ).refusal(found_text(count))
         )
     return count
 

@@ -24,7 +24,9 @@ from scgsim.contracts.palace_run_folder import (
     palace_problem,
     read_json,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
+    RETURNED_RUN_FOLDER,
     as_float_map,
     expect_int,
     expect_scalar,
@@ -64,7 +66,7 @@ from scgsim.palace.results.tables import (
     output_families,
     read_result_table,
 )
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 _REQUIRED_FILES = (
     HANDOFF_METADATA,
@@ -412,19 +414,17 @@ def _validate_metadata_headers(
     """Validate manual-handoff kind, schema and nonempty state before identity checks."""
     if run_metadata.get("kind") != "manual_handoff":
         raise ValueError(
-            refusal(
+            Declared(
                 "run metadata does not identify manual_handoff kind",
-                found=run_metadata.get("kind"),
-                expected="manual_handoff",
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(run_metadata.get("kind"), "manual_handoff"))
         )
     if handoff_metadata.get("kind") != "manual_handoff":
         raise ValueError(
-            refusal(
+            Declared(
                 "handoff metadata does not identify manual_handoff kind",
-                found=handoff_metadata.get("kind"),
-                expected="manual_handoff",
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(handoff_metadata.get("kind"), "manual_handoff"))
         )
     validate_contract_schema(handoff_metadata, "handoff metadata")
     validate_contract_schema(run_metadata, "run metadata")
@@ -432,15 +432,13 @@ def _validate_metadata_headers(
 
     if expect_scalar(run_metadata, "status", str, fallback="") == "":
         raise ValueError(
-            refusal(
-                "run metadata status must be a non-empty string",
-                found=run_metadata.get("status"),
-            )
+            Declared(
+                "run metadata status must be a non-empty string", RETURNED_RUN_FOLDER
+            ).refusal(found_text(run_metadata.get("status")))
         )
     if expect_scalar(resource_record, "status", str, fallback="") == "":
         raise ValueError(
-            refusal(
-                "resource record status must be a non-empty string",
-                found=resource_record.get("status"),
-            )
+            Declared(
+                "resource record status must be a non-empty string", RETURNED_RUN_FOLDER
+            ).refusal(found_text(resource_record.get("status")))
         )

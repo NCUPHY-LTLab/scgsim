@@ -23,7 +23,10 @@ from scgsim.contracts.palace_index_map import (
     TERMINAL_SECTION,
 )
 from scgsim.contracts.palace_run_folder import EPR_SELECTION_SCHEMA
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
+
+_WHERE_EPR_REQUEST = "the call to set_epr_request"
 
 SURFACE_INTERFACES = ("MA", "MS", "SA")
 
@@ -254,11 +257,11 @@ class EprRequest:
         surfaces = _selection(surface_interfaces, "surface_interfaces")
         if surfaces is not None and set(surfaces) - set(SURFACE_INTERFACES):
             raise ValueError(
-                refusal(
+                Declared(
                     "surface_interfaces supports only MA, MS, and SA: call "
                     "set_epr_request(surface_interfaces=...) with those",
-                    found=sorted(set(surfaces) - set(SURFACE_INTERFACES)),
-                )
+                    _WHERE_EPR_REQUEST,
+                ).refusal(found_text(sorted(set(surfaces) - set(SURFACE_INTERFACES))))
             )
         return cls(
             surfaces,

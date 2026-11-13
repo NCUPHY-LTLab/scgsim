@@ -27,7 +27,9 @@ from scgsim.contracts.palace_run_folder import (
     OUTPUT_DIR,
     palace_problem,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
+    RETURNED_RUN_FOLDER,
     expect_list,
     expect_mapping,
     expect_scalar,
@@ -38,7 +40,7 @@ from scgsim.palace.results.surface_contract import (
     surface_epr_entries,
     validate_surface_epr_config,
 )
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
 
 
 def require_manifest_schema(manifest: Mapping[str, Any]) -> None:
@@ -80,11 +82,10 @@ class RouteConsistency:
         manifest_route = expect_scalar(self.mesh_manifest, "route", str, fallback="")
         if manifest_route != self.route:
             raise ValueError(
-                refusal(
+                Declared(
                     "mesh manifest route does not match resolved route",
-                    found=manifest_route,
-                    expected=self.route,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(manifest_route, self.route))
             )
         thin_film = self.handoff_metadata.get("route_a_thin_film")
         if (
@@ -92,13 +93,19 @@ class RouteConsistency:
             or self.run_metadata.get("route_a_thin_film") != thin_film
         ):
             raise ValueError(
-                refusal(
+                Declared(
                     "mesh manifest and run metadata Route-A thin-film identity mismatch",
-                    found={
-                        "mesh manifest": self.mesh_manifest.get("route_a_thin_film"),
-                        "run metadata": self.run_metadata.get("route_a_thin_film"),
-                    },
-                    expected=thin_film,
+                    RETURNED_RUN_FOLDER,
+                ).refusal(
+                    found_text(
+                        {
+                            "mesh manifest": self.mesh_manifest.get(
+                                "route_a_thin_film"
+                            ),
+                            "run metadata": self.run_metadata.get("route_a_thin_film"),
+                        },
+                        thin_film,
+                    )
                 )
             )
 
@@ -106,13 +113,16 @@ class RouteConsistency:
         handoff_route = expect_scalar(self.handoff_metadata, "route", str)
         if run_route != self.route or handoff_route != self.route:
             raise ValueError(
-                refusal(
-                    "metadata route does not match resolved route",
-                    found={
-                        "run metadata": run_route,
-                        "handoff metadata": handoff_route,
-                    },
-                    expected=self.route,
+                Declared(
+                    "metadata route does not match resolved route", RETURNED_RUN_FOLDER
+                ).refusal(
+                    found_text(
+                        {
+                            "run metadata": run_route,
+                            "handoff metadata": handoff_route,
+                        },
+                        self.route,
+                    )
                 )
             )
 
@@ -123,13 +133,17 @@ class RouteConsistency:
         handoff_problem = expect_scalar(self.handoff_metadata, "problem", str)
         if run_problem != self.problem or handoff_problem != self.problem:
             raise ValueError(
-                refusal(
+                Declared(
                     "metadata problem does not match resolved problem",
-                    found={
-                        "run metadata": run_problem,
-                        "handoff metadata": handoff_problem,
-                    },
-                    expected=self.problem,
+                    RETURNED_RUN_FOLDER,
+                ).refusal(
+                    found_text(
+                        {
+                            "run metadata": run_problem,
+                            "handoff metadata": handoff_problem,
+                        },
+                        self.problem,
+                    )
                 )
             )
 
@@ -164,22 +178,23 @@ def _validate_index_against_manifest(
             ) from exc
         if groups != set(entry["physical_names"]):
             raise ValueError(
-                refusal(
+                Declared(
                     f"index entry {entry.get('entry_name')!r} physical_names disagree with the mesh manifest",
-                    found=sorted(entry["physical_names"]),
-                    expected=sorted(groups),
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(sorted(entry["physical_names"]), sorted(groups)))
             )
     for entry in surface_epr_entries(index_map):
         for row in entry_rows(entry):
             if {primary_group[(2, a)] for a in row["attributes"]} != {row["group"]}:
                 raise ValueError(
-                    refusal(
+                    Declared(
                         f"index surface row {row.get('row')!r} group disagrees with the mesh manifest",
-                        found=row["group"],
-                        expected=sorted(
-                            {primary_group[(2, a)] for a in row["attributes"]}
-                        ),
+                        RETURNED_RUN_FOLDER,
+                    ).refusal(
+                        found_text(
+                            row["group"],
+                            sorted({primary_group[(2, a)] for a in row["attributes"]}),
+                        )
                     )
                 )
 
@@ -234,11 +249,10 @@ def _configured_excitations(
         )
         if index_counts["terminal"] != len(terminals):
             raise ValueError(
-                refusal(
+                Declared(
                     "terminal count mismatch between config and index map",
-                    found=index_counts["terminal"],
-                    expected=len(terminals),
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(index_counts["terminal"], len(terminals)))
             )
         _validate_ground_boundary_resolution(boundaries, index_map)
         return _Excitations(terminals, [])
@@ -249,11 +263,10 @@ def _configured_excitations(
     )
     if index_counts["lumped_port"] != len(ports):
         raise ValueError(
-            refusal(
+            Declared(
                 "lumped port count mismatch between config and index map",
-                found=index_counts["lumped_port"],
-                expected=len(ports),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(index_counts["lumped_port"], len(ports)))
         )
     return _Excitations([], ports)
 
@@ -270,10 +283,11 @@ def _configured_dielectric(
     )
     if dielectric and index_counts["surface"] < len(dielectric):
         raise ValueError(
-            refusal(
+            Declared(
                 "surface count in index map does not cover the config's Dielectric postprocessing list",
-                found=index_counts["surface"],
-                expected=f"at least {len(dielectric)}",
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(index_counts["surface"], f"at least {len(dielectric)}")
             )
         )
     return dielectric
@@ -293,11 +307,9 @@ def _match_section_rows(
     )
     if len(indexed) != len(configured):
         raise ValueError(
-            refusal(
-                f"config/index entry count mismatch for {section}",
-                found=len(indexed),
-                expected=len(configured),
-            )
+            Declared(
+                f"config/index entry count mismatch for {section}", RETURNED_RUN_FOLDER
+            ).refusal(found_text(len(indexed), len(configured)))
         )
     for position, (entry, configured_item) in enumerate(
         zip(indexed, configured, strict=True), start=1
@@ -307,21 +319,19 @@ def _match_section_rows(
         config_index = expect_scalar(item, "Index", int)
         if index != config_index:
             raise ValueError(
-                refusal(
+                Declared(
                     f"config/index Index mismatch for {section} {position}",
-                    found=index,
-                    expected=config_index,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(index, config_index))
             )
         attributes = expect_list(entry.get("attributes"), "index attributes")
         config_attributes = expect_list(item.get("Attributes"), "config Attributes")
         if attributes != config_attributes:
             raise ValueError(
-                refusal(
+                Declared(
                     f"config/index Attributes mismatch for {section} {position}",
-                    found=attributes,
-                    expected=config_attributes,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(attributes, config_attributes))
             )
 
 
@@ -371,11 +381,10 @@ def _ground_resolution_fields(index_map: dict[str, Any]) -> dict[str, list[Any]]
     )
     if set(record) != set(list_fields):
         raise ValueError(
-            refusal(
+            Declared(
                 "ground boundary index evidence has unexpected fields",
-                found=sorted(record),
-                expected=sorted(list_fields),
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(sorted(record), sorted(list_fields)))
         )
     values = {
         field: expect_list(
@@ -394,10 +403,10 @@ def _ground_resolution_fields(index_map: dict[str, Any]) -> dict[str, list[Any]]
             field
         ] != sorted(set(values[field])):
             raise ValueError(
-                refusal(
+                Declared(
                     f"ground_boundary.{field} must be sorted unique text",
-                    found=values[field],
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(values[field]))
             )
     for field in (
         "physical_attributes",
@@ -409,10 +418,10 @@ def _ground_resolution_fields(index_map: dict[str, Any]) -> dict[str, list[Any]]
             for item in values[field]
         ) or values[field] != sorted(set(values[field])):
             raise ValueError(
-                refusal(
+                Declared(
                     f"ground_boundary.{field} must be sorted unique positive integers",
-                    found=values[field],
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(values[field]))
             )
     return values
 
@@ -426,31 +435,34 @@ def _validate_ground_union(
     union = sorted(physical | exterior)
     if physical & exterior or values["union_attributes"] != union:
         raise ValueError(
-            refusal(
+            Declared(
                 "physical/exterior Ground evidence has an invalid union",
-                found={
-                    "physical": sorted(physical),
-                    "exterior": sorted(exterior),
-                    "union": values["union_attributes"],
-                },
-                expected=f"disjoint sets whose union is {union}",
+                RETURNED_RUN_FOLDER,
+            ).refusal(
+                found_text(
+                    {
+                        "physical": sorted(physical),
+                        "exterior": sorted(exterior),
+                        "union": values["union_attributes"],
+                    },
+                    f"disjoint sets whose union is {union}",
+                )
             )
         )
     configured = boundaries.get("Ground")
     if union:
         if configured != {"Attributes": union}:
             raise ValueError(
-                refusal(
+                Declared(
                     "config Ground attributes do not match index evidence",
-                    found=configured,
-                    expected={"Attributes": union},
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(configured, {"Attributes": union}))
             )
     elif configured is not None:
         raise ValueError(
-            refusal(
-                "config contains Ground without indexed attributes", found=configured
-            )
+            Declared(
+                "config contains Ground without indexed attributes", RETURNED_RUN_FOLDER
+            ).refusal(found_text(configured))
         )
 
 
@@ -459,10 +471,10 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
     entries = index_map.get("entries")
     if not isinstance(entries, list) or not entries:
         raise ValueError(
-            refusal(
+            Declared(
                 f"{Path(INDEX_MAP).name} must include a non-empty entries list",
-                found=entries,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(entries))
         )
     expected_roles = {
         TERMINAL_SECTION: "terminal",
@@ -475,7 +487,9 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
     for entry in entries:
         if not isinstance(entry, dict) or not entry:
             raise ValueError(
-                refusal("index map entries must be non-empty mappings", found=entry)
+                Declared(
+                    "index map entries must be non-empty mappings", RETURNED_RUN_FOLDER
+                ).refusal(found_text(entry))
             )
         section = expect_scalar(entry, "section", str)
         if section not in expected_roles:
@@ -483,26 +497,28 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
         role = expect_scalar(entry, "role", str)
         if role != expected_roles[section]:
             raise ValueError(
-                refusal(
+                Declared(
                     f"index map section {section} and role are inconsistent",
-                    found=role,
-                    expected=expected_roles[section],
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(role, expected_roles[section]))
             )
         index = expect_scalar(entry, "index", int)
         if index < 1:
             raise ValueError(
-                refusal(f"index map indices of {section} must be positive", found=index)
+                Declared(
+                    f"index map indices of {section} must be positive",
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(index))
             )
         indices[section].append(index)
         _validate_entry_fields(entry, section, names)
     for section, values in indices.items():
         if values and sorted(values) != list(range(1, len(values) + 1)):
             raise ValueError(
-                refusal(
+                Declared(
                     f"index map {section} entries must be numbered 1..N",
-                    found=sorted(values),
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(sorted(values)))
             )
     surface_epr_entries(index_map)
 
@@ -514,19 +530,19 @@ def _validate_entry_fields(
     entry_name = expect_scalar(entry, "entry_name", str)
     if not entry_name or (section, entry_name) in names:
         raise ValueError(
-            refusal(
+            Declared(
                 f"index entry names must be non-empty and unique per section ({section})",
-                found=entry_name,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(entry_name))
         )
     names.add((section, entry_name))
     physical_names = expect_list(entry.get("physical_names"), "index physical_names")
     if not all(isinstance(name, str) and name for name in physical_names):
         raise ValueError(
-            refusal(
+            Declared(
                 f"index entry {entry_name!r} physical_names must be non-empty strings",
-                found=physical_names,
-            )
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(physical_names))
         )
     entry_attributes = expect_list(entry.get("attributes"), "index attributes")
     for attribute in entry_attributes:
@@ -536,10 +552,10 @@ def _validate_entry_fields(
             or attribute < 1
         ):
             raise ValueError(
-                refusal(
+                Declared(
                     f"index entry {entry_name!r} attributes must be positive integers",
-                    found=attribute,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(attribute))
             )
     metadata = expect_mapping(entry.get("metadata"), "index metadata")
     _validate_entry_role(entry, metadata, section)
@@ -560,10 +576,10 @@ def _validate_entry_role(
         hosts = expect_list(metadata.get("host_entity_ids"), "port host entity ids")
         if len(hosts) != 2 or not all(isinstance(host, str) and host for host in hosts):
             raise ValueError(
-                refusal(
+                Declared(
                     f"lumped port index entry {entry.get('port_name')!r} must have exactly two hosts",
-                    found=hosts,
-                )
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(hosts))
             )
     elif section == ENERGY_SECTION:
         expect_mapping(metadata.get("material"), "domain index material")

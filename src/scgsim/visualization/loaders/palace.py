@@ -23,11 +23,16 @@ from scgsim.contracts.palace_run_folder import (
     MESH,
     MESH_MANIFEST,
 )
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared
+from scgsim.refusal import found_text
 
 from ..preview import GeometryPreview
 from ..scene import FIXED_COLORS, SceneMode, ScenePart, color_for_identity
 from .common import file_sha256, read_json_record
+
+_WHERE_PALACE_RUN = (
+    "the Palace run folder: prepare it again with mesh() and write_config()"
+)
 
 
 def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
@@ -163,20 +168,18 @@ def _bind_mesh_selection(
     }
     if actual != set(records):
         raise ValueError(
-            refusal(
+            Declared(
                 "Palace mesh physical tags do not match mesh manifest",
-                found=sorted(actual),
-                expected=sorted(records),
-            )
+                _WHERE_PALACE_RUN,
+            ).refusal(found_text(sorted(actual), sorted(records)))
         )
     field_names = _field_names(mesh)
     if actual != set(field_names):
         raise ValueError(
-            refusal(
+            Declared(
                 "Palace mesh field names do not cover every physical tag",
-                found=sorted(field_names),
-                expected=sorted(actual),
-            )
+                _WHERE_PALACE_RUN,
+            ).refusal(found_text(sorted(field_names), sorted(actual)))
         )
     return _MeshSelection(
         grid,
@@ -202,10 +205,13 @@ def _cell_tags(mesh: Any, grid: Any) -> _CellTags:
     physical_blocks = mesh.cell_data.get("gmsh:physical")
     if physical_blocks is None or len(physical_blocks) != len(mesh.cells):
         raise ValueError(
-            refusal(
-                "Palace mesh has no complete gmsh:physical cell tags",
-                found=None if physical_blocks is None else len(physical_blocks),
-                expected=len(mesh.cells),
+            Declared(
+                "Palace mesh has no complete gmsh:physical cell tags", _WHERE_PALACE_RUN
+            ).refusal(
+                found_text(
+                    None if physical_blocks is None else len(physical_blocks),
+                    len(mesh.cells),
+                )
             )
         )
     tags = _CellTags([], [], [])
@@ -215,11 +221,9 @@ def _cell_tags(mesh: Any, grid: Any) -> _CellTags:
         tags.physical.extend(int(value) for value in block_tags)
     if len(tags.physical) != grid.n_cells:
         raise ValueError(
-            refusal(
-                "Palace mesh cell-tag cardinality mismatch",
-                found=len(tags.physical),
-                expected=grid.n_cells,
-            )
+            Declared(
+                "Palace mesh cell-tag cardinality mismatch", _WHERE_PALACE_RUN
+            ).refusal(found_text(len(tags.physical), grid.n_cells))
         )
     return tags
 
@@ -265,11 +269,10 @@ def _palace_materials(
     }
     if volume_attributes != assignments:
         raise ValueError(
-            refusal(
+            Declared(
                 "Palace volume groups and config materials do not match",
-                found=sorted(assignments),
-                expected=sorted(volume_attributes),
-            )
+                _WHERE_PALACE_RUN,
+            ).refusal(found_text(sorted(assignments), sorted(volume_attributes)))
         )
     for attribute in sorted(assignments):
         record = records[(3, attribute)]
@@ -328,11 +331,10 @@ def _assign(
     previous = assignments.get(attribute)
     if previous is not None and previous != value:
         raise ValueError(
-            refusal(
+            Declared(
                 f"Palace boundary {attribute} has conflicting assignments",
-                found=value,
-                expected=previous,
-            )
+                _WHERE_PALACE_RUN,
+            ).refusal(found_text(value, previous))
         )
     assignments[attribute] = value
 
@@ -366,11 +368,10 @@ def _assign_indexed(
         recorded = tuple(int(value) for value in record.get("attributes", ()))
         if attributes != recorded:
             raise ValueError(
-                refusal(
+                Declared(
                     f"Palace {config_key} {index} config/index-map mismatch",
-                    found=list(attributes),
-                    expected=list(recorded),
-                )
+                    _WHERE_PALACE_RUN,
+                ).refusal(found_text(list(attributes), list(recorded)))
             )
         for attribute in attributes:
             _assign(
@@ -381,11 +382,10 @@ def _assign_indexed(
     mapped = {index for (mapped_section, index) in indexed if mapped_section == section}
     if mapped != configured:
         raise ValueError(
-            refusal(
+            Declared(
                 f"Palace {config_key} config/index-map identities differ",
-                found=sorted(configured),
-                expected=sorted(mapped),
-            )
+                _WHERE_PALACE_RUN,
+            ).refusal(found_text(sorted(configured), sorted(mapped)))
         )
 
 
@@ -492,26 +492,26 @@ def _entries_by_attribute(
             record.get("attributes", ())
         ):
             raise ValueError(
-                refusal(
-                    "Palace Surface-EPR config/index-map mismatch",
-                    found={
-                        "index": index,
-                        "config Attributes": list(item.get("Attributes", ())),
-                    },
-                    expected=None
-                    if record is None
-                    else list(record.get("attributes", ())),
+                Declared(
+                    "Palace Surface-EPR config/index-map mismatch", _WHERE_PALACE_RUN
+                ).refusal(
+                    found_text(
+                        {
+                            "index": index,
+                            "config Attributes": list(item.get("Attributes", ())),
+                        },
+                        None if record is None else list(record.get("attributes", ())),
+                    )
                 )
             )
         for attribute in item.get("Attributes", ()):
             grouped.setdefault(int(attribute), []).append(record)
     if set(entries) != configured:
         raise ValueError(
-            refusal(
+            Declared(
                 "Palace Surface-EPR config/index-map identities differ",
-                found=sorted(configured),
-                expected=sorted(entries),
-            )
+                _WHERE_PALACE_RUN,
+            ).refusal(found_text(sorted(configured), sorted(entries)))
         )
     return grouped
 

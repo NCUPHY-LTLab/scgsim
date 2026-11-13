@@ -13,9 +13,12 @@ from dataclasses import asdict, dataclass, replace
 from numbers import Real
 from typing import Any
 
+from scgsim.geometry.models.refusals import Declared
 from scgsim.meshing import Budgets, FeatureRecipe, MesherOptions, SizingRecipe
 from scgsim.meshing.report import recipe_record
-from scgsim.refusal import refusal
+from scgsim.refusal import found_text
+
+_WHERE_MESH_CONTROLS = "the call to set_mesh"
 
 # Provisional (Human decision H2, issue 65): the minimum signed inverse condition number (minSICN) every tetrahedron must reach.
 DEFAULT_QUALITY_THRESHOLD = 0.01
@@ -40,24 +43,22 @@ class MeshControls:
             and hasattr(self.recipe, "version")
         ):
             raise TypeError(
-                refusal(
+                Declared(
                     "recipe must be a scgsim.meshing sizing recipe",
-                    found=type(self.recipe).__name__,
-                )
+                    _WHERE_MESH_CONTROLS,
+                ).refusal(found_text(type(self.recipe).__name__))
             )
         if not isinstance(self.mesher, MesherOptions):
             raise TypeError(
-                refusal(
-                    "mesher must be scgsim.meshing.MesherOptions",
-                    found=type(self.mesher).__name__,
-                )
+                Declared(
+                    "mesher must be scgsim.meshing.MesherOptions", _WHERE_MESH_CONTROLS
+                ).refusal(found_text(type(self.mesher).__name__))
             )
         if not isinstance(self.budgets, Budgets):
             raise TypeError(
-                refusal(
-                    "budgets must be scgsim.meshing.Budgets",
-                    found=type(self.budgets).__name__,
-                )
+                Declared(
+                    "budgets must be scgsim.meshing.Budgets", _WHERE_MESH_CONTROLS
+                ).refusal(found_text(type(self.budgets).__name__))
             )
         threshold = self.quality_threshold
         if (
@@ -66,7 +67,9 @@ class MeshControls:
             or not math.isfinite(threshold)
         ):
             raise ValueError(
-                refusal("quality_threshold must be a finite number", found=threshold)
+                Declared(
+                    "quality_threshold must be a finite number", _WHERE_MESH_CONTROLS
+                ).refusal(found_text(threshold))
             )
 
     def updated(

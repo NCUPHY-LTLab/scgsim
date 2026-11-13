@@ -14,7 +14,8 @@ from numbers import Real
 from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC, OUTPUT_DIR
-from scgsim.refusal import refusal
+from scgsim.geometry.models.refusals import Declared, internal
+from scgsim.refusal import found_text
 
 from ..mesh.physical_groups import Groups
 from ..source.ports import LayoutPortBinding
@@ -32,6 +33,10 @@ from .config_records import (
 from .index import EnergyEntry, IndexedRows, LumpedPortRows, PortEntry, SurfaceEprEntry
 from .numerical import build_output_formats, build_refinement, linear_solver
 from .surface_epr import build_surface_epr_postprocessing
+
+_WHERE_PLAN_CONDUCTORS = "the GeometryPlan's conductors"
+_WHERE_PORTS_ON_LOSS = "the calls to add_port and set_surface_epr"
+_WHERE_STACK_MATERIALS = "the stack file's materials"
 
 __all__ = [
     "build_eigenmode_config",
@@ -195,10 +200,10 @@ def _pec_attributes(groups: Groups) -> list[int]:
     )
     if not attributes:
         raise ValueError(
-            refusal(
+            Declared(
                 "Eigenmode config requires SGB-authored PEC surfaces; the plan's conductors produced none",
-                found=sorted(groups.get("pec_surfaces", {})),
-            )
+                _WHERE_PLAN_CONDUCTORS,
+            ).refusal(found_text(sorted(groups.get("pec_surfaces", {}))))
         )
     return attributes
 
@@ -215,10 +220,10 @@ def _refuse_ports_on_loss_groups(
     }
     if epr_attributes.intersection(port_attributes):
         raise ValueError(
-            refusal(
+            Declared(
                 "LumpedPort attributes must not also be Surface-EPR loss groups",
-                found=sorted(epr_attributes.intersection(port_attributes)),
-            )
+                _WHERE_PORTS_ON_LOSS,
+            ).refusal(found_text(sorted(epr_attributes.intersection(port_attributes))))
         )
 
 
@@ -310,10 +315,12 @@ def _lumped_ports(groups: Groups, ports: Sequence[LayoutPortBinding]) -> LumpedP
         entries.append(_port_entry(port, bound))
     if len(groups.get("port_surfaces", {})) != len(ports):
         raise ValueError(
-            refusal(
-                "SGB produced unconfigured or missing layout-sheet port groups",
-                found=sorted(groups.get("port_surfaces", {})),
-                expected=f"{len(ports)} port groups",
+            internal(
+                "SGB produced unconfigured or missing layout-sheet port groups"
+                + ": "
+                + found_text(
+                    sorted(groups.get("port_surfaces", {})), f"{len(ports)} port groups"
+                )
             )
         )
     return LumpedPortRows(rows, entries, information)
@@ -334,9 +341,10 @@ def _bound_port_group(groups: Groups, port: LayoutPortBinding) -> _BoundPortGrou
     group = groups.get("port_surfaces", {}).get(key)
     if group is None:
         raise ValueError(
-            refusal(
-                f"layout_sheet port {port.name!r} has no SGB group {key}",
-                found=sorted(groups.get("port_surfaces", {})),
+            internal(
+                f"layout_sheet port {port.name!r} has no SGB group {key}"
+                + ": "
+                + found_text(sorted(groups.get("port_surfaces", {})))
             )
         )
     direction = _direction_tuple(group.get("direction"), port.name)
@@ -351,22 +359,25 @@ def _bound_port_group(groups: Groups, port: LayoutPortBinding) -> _BoundPortGrou
         )
     ):
         raise ValueError(
-            refusal(
-                f"layout_sheet port {port.name!r} does not match SGB-authored identity",
-                found={
-                    "port_index": group["port_index"],
-                    "source_name": group["source_name"],
-                    "source_layer": group["source_layer"],
-                    "target_layer": group["target_layer"],
-                    "direction": direction,
-                },
-                expected={
-                    "port_index": port.index,
-                    "source_name": port.name,
-                    "source_layer": port.source_layer,
-                    "target_layer": port.target_layer,
-                    "direction": port.direction,
-                },
+            internal(
+                f"layout_sheet port {port.name!r} does not match SGB-authored identity"
+                + ": "
+                + found_text(
+                    {
+                        "port_index": group["port_index"],
+                        "source_name": group["source_name"],
+                        "source_layer": group["source_layer"],
+                        "target_layer": group["target_layer"],
+                        "direction": direction,
+                    },
+                    {
+                        "port_index": port.index,
+                        "source_name": port.name,
+                        "source_layer": port.source_layer,
+                        "target_layer": port.target_layer,
+                        "direction": port.direction,
+                    },
+                )
             )
         )
     attributes = sorted(int(value) for value in group["attributes"])
@@ -420,11 +431,13 @@ def _materials_from_solution_volumes(
     """Build Palace-domain material rows from explicit material records."""
     if not isinstance(materials, Mapping) or not materials:
         raise ValueError(
-            refusal(
+            Declared(
                 "stack must include a non-empty top-level materials mapping for config generation",
-                found=materials
-                if not isinstance(materials, Mapping)
-                else dict(materials),
+                _WHERE_STACK_MATERIALS,
+            ).refusal(
+                found_text(
+                    materials if not isinstance(materials, Mapping) else dict(materials)
+                )
             )
         )
 
@@ -435,10 +448,10 @@ def _materials_from_solution_volumes(
         material_id = optional_string(volume.get("material"))
         if not material_id:
             raise ValueError(
-                refusal(
+                Declared(
                     f"SGB solution volume {name!r} must define a non-empty material id",
-                    found=volume.get("material"),
-                )
+                    _WHERE_STACK_MATERIALS,
+                ).refusal(found_text(volume.get("material")))
             )
         constants = _dielectric_constants(materials, material_id, name)
         if seen_attributes.intersection(attrs):
@@ -470,25 +483,24 @@ def _dielectric_constants(
     material = materials.get(material_id)
     if material is None:
         raise ValueError(
-            refusal(
+            Declared(
                 f"SGB solution volume {volume!r} references unknown material id {material_id!r}",
-                found=material_id,
-                expected=sorted(materials),
-            )
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(material_id, sorted(materials)))
         )
     if not isinstance(material, Mapping):
         raise TypeError(
-            refusal(
+            Declared(
                 f"SGB material record {material_id!r} must be a mapping",
-                found=type(material).__name__,
-            )
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(type(material).__name__))
         )
     if material.get("kind") not in {"vacuum", "dielectric"}:
         raise ValueError(
-            refusal(
+            Declared(
                 f"SGB solution material {material_id!r} must have vacuum or dielectric kind",
-                found=material.get("kind"),
-            )
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(material.get("kind")))
         )
     permittivity = material.get("permittivity")
     loss_tangent = material.get("loss_tangent")
@@ -498,10 +510,10 @@ def _dielectric_constants(
         or float(permittivity) <= 0.0
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 f"Material {material_id!r} requires finite positive permittivity",
-                found=permittivity,
-            )
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(permittivity))
         )
     if (
         not isinstance(loss_tangent, Real)
@@ -509,10 +521,10 @@ def _dielectric_constants(
         or float(loss_tangent) < 0.0
     ):
         raise ValueError(
-            refusal(
+            Declared(
                 f"Material {material_id!r} requires finite non-negative loss_tangent",
-                found=loss_tangent,
-            )
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(loss_tangent))
         )
     return _DielectricConstants(float(permittivity), float(loss_tangent))
 
@@ -523,10 +535,10 @@ def _material_identity(
     material_id = volume.get("material")
     if not isinstance(material_id, str) or not material_id:
         raise ValueError(
-            refusal(
+            Declared(
                 f"solution volume {volume.get('group')!r} must carry one explicit material id",
-                found=material_id,
-            )
+                _WHERE_STACK_MATERIALS,
+            ).refusal(found_text(material_id))
         )
     material = materials.get(material_id)
     if not isinstance(material, Mapping) or material.get("kind") not in {
