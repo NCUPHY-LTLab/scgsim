@@ -264,7 +264,7 @@ def _validate_per_binding_inputs(context: SurfaceContributionContext) -> None:
 def _per_binding_surface_rows(
     context: SurfaceContributionContext,
 ) -> list[dict[str, Any]]:
-    """Calculate legacy per-binding surface energies in prepared order."""
+    """Calculate one surface energy row per prepared binding, in prepared order."""
     prepared = context.prepared
     surface = context.surface
     masked_areas = context.masked_areas
@@ -406,8 +406,7 @@ def native_surface_reference_rows(
     }
     references_requested = prepared.modeling == "solid" and bool(expected_contributions)
     if "native_surface_references" not in raw:
-        # Keep previously serialized raw records readable without fabricating
-        # reference values that were not part of their original evidence.
+        # A raw record without references has none to report; do not invent them.
         return None
     references = exact_mapping(
         raw["native_surface_references"], "native_surface_references"

@@ -1,7 +1,7 @@
-"""Bind fresh AEDT preparation to the neutral physical representation owner.
+"""Interpret a prepared geometry under the requested AEDT modeling and return its effective input and stack.
 
-Geometry planning owns classification, endpoint mapping and enclosure projection.
-This consumer only selects the explicit AEDT profile and returns its context.
+``scgsim.geometry.interpretation`` classifies layers, maps endpoints and projects
+the enclosure. This module only selects the explicit AEDT profile and returns its context.
 """
 
 from __future__ import annotations

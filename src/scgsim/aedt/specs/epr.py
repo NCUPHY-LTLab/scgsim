@@ -29,7 +29,7 @@ def surface_evaluations(
 
     requested = tuple(("requested_margin", float(value)) for value in margins_um)
     if policy is None:
-        return requested  # Historical records had no automatic baseline.
+        return requested  # No policy: only the requested margins, with no automatic baseline.
     if policy != "unmasked_plus_requested.v1":
         raise ValueError("unsupported surface evaluation policy")
     return (("unmasked_baseline", 0.0), *requested)
@@ -479,7 +479,7 @@ class ExpressionCacheConvergenceSet:
 def iter_expression_convergence(
     control: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None,
 ) -> tuple[ExpressionCacheConvergence, ...]:
-    """One normalization path without rewriting historical singleton requests."""
+    """Normalize a single control, a control set or None to one tuple of controls."""
     if control is None:
         return ()
     if isinstance(control, ExpressionCacheConvergence):

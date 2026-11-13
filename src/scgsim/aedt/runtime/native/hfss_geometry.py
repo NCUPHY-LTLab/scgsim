@@ -230,7 +230,7 @@ def bind_saved_planar_geometry(
             "binding_stage": "saved_project_readback_without_cad_creation",
         }
     elif "outer_boundary_policy" not in region_plan:
-        # Historical prepared source records an explicit named enclosure.
+        # A region plan without ``outer_boundary_policy`` names its closed enclosure boundary explicitly.
         closed_type = native_boundary_type(app, "SCGSimClosedEnclosure")
         if closed_type != "Perfect E":
             raise RuntimeError("saved EPR closed enclosure boundary differs")

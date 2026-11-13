@@ -28,7 +28,7 @@ def junction_polygon(
     """Select the authored or partitioned polygon recorded for one junction."""
     record = source.get("junction_partitions", {}).get(junction.junction_id)
     if record is None:
-        # Historical prepared geometry retains its recorded authored sheet.
+        # A junction with no partition record keeps its authored sheet.
         return polygons[junction.source_polygon_id], None
     if record.get("method") != "scgsim.aedt.junction-partition.v1":
         raise ValueError("unknown junction partition method")

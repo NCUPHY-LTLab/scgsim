@@ -112,7 +112,7 @@ class FrequencySweepSpec:
         return {
             "start_ghz": self.start_ghz,
             "stop_ghz": self.stop_ghz,
-            # Preserve authored count representation in historical payload identity.
+            # Keep ``points`` as authored so the payload hash does not change.
             "points": self.points,
         }
 

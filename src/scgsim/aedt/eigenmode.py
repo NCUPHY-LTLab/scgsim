@@ -1,4 +1,4 @@
-"""One mutable Eigenmode preparation facade over the AEDT owners."""
+"""``EigenmodeSim``: configure an Eigenmode or EPR run on a geometry plan and prepare its handoff."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Saved-solution and EPR artifact verification/readback."""
+"""Seal and resolve saved-solution cohorts, and read a verified EPR result offline."""
 
 from __future__ import annotations
 

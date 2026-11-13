@@ -1,4 +1,7 @@
-"""Shared body-first HFSS preparation. Source supports stay distinct from solver treatments and EPR junctions."""
+"""Detach a geometry input into the prepared planar geometry that HFSS and EPR runs use.
+
+Source supports stay distinct from solver treatments and EPR junctions.
+"""
 
 from __future__ import annotations
 

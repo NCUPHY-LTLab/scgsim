@@ -15,7 +15,7 @@ from scgsim.aedt.specs.epr import (
 
 
 def identity_sha256(value: Any) -> str:
-    """Hash a canonical expression or cache identity with its historical encoding."""
+    """Hash a canonical expression or cache identity: SHA-256 of its sorted, compact JSON."""
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()

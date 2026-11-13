@@ -150,7 +150,7 @@ def solution_body(
 
 
 def prepared_modeling_identity(prepared: PreparedPlanarGeometry) -> dict[str, Any]:
-    """Keep legacy route labels on historical rebinds; new records name modeling."""
+    """Name the source's modeling, or its route when the prepared record carries no modeling."""
     if prepared.modeling is not None:
         return {"modeling": prepared.modeling}
     return {"route": prepared.route}
@@ -196,8 +196,8 @@ def native_conductor_geometry(
             float(physical_layer["effective_z_max_um"]),
         )
 
-    # Historical saved-project reads retain the recorded route basis. New native
-    # construction is rejected before reaching this reader-only interpretation.
+    # A source record without ``modeling`` is read on its recorded route basis.
+    # Native construction rejects such a record before it reaches this reader.
     z_min_um, z_max_um = entity_z_range(entity)
     if entity["representation"] == "surface_sheet":
         z_min_um = z_max_um = route_a_sheet_z(source, entity)
@@ -231,7 +231,7 @@ def native_solution_materials(source: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def install_material_catalog(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
-    """Install declared solution materials with the historical vacuum-only default."""
+    """Install the declared vacuum and dielectric materials (a vacuum defaults to permittivity 1); conductors are skipped."""
     observed: dict[str, Any] = {}
     for material_id, record in materials.items():
         if not isinstance(material_id, str) or not isinstance(record, Mapping):
@@ -247,7 +247,7 @@ def install_material_catalog(app: Any, materials: Mapping[str, Any]) -> dict[str
                 raise ValueError(
                     f"prepared material {material_id!r} requires positive permittivity"
                 )
-            # Preserve the existing vacuum-only preparation contract.
+            # A vacuum may omit its permittivity; a dielectric may not.
             requested["permittivity"] = 1.0
         observed[material_id] = realize_source_material(app, material_id, requested)
     return observed

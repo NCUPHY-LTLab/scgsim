@@ -1,4 +1,4 @@
-"""Resolved AEDT run result presentation only."""
+"""Display a resolved AEDT run: its numerical, physics and receipt projections."""
 
 from __future__ import annotations
 

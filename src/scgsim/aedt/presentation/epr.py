@@ -1,4 +1,4 @@
-"""EPR-specific plots and notebook presentation only."""
+"""Plot (``plot_epr_result``) and show (``show_epr``) an EPR result in a notebook."""
 
 from __future__ import annotations
 

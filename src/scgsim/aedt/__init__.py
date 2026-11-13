@@ -1,4 +1,9 @@
-"""AEDT request, execution, analysis, and result APIs."""
+"""Prepare, run and read back AEDT (HFSS, Q3D, Q2D) calculations from a geometry plan.
+
+In: a ``GeometryPlan`` snapshot, or an AEDT request spec for ``prepare_handoff``, with the request's controls.
+Out: a portable handoff that an AEDT run reads, and from a finished run the detached results (``ResolvedRun``, ``PreparedModel``, ``EprResult``).
+Next: ``python -m scgsim.aedt.run`` executes the handoff; notebooks read results through ``resolve_results`` and the plot helpers.
+"""
 
 from importlib import import_module
 from typing import TYPE_CHECKING

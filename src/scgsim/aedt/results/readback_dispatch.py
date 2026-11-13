@@ -24,7 +24,7 @@ from scgsim.aedt.specs.q3d import Q3dSpec
 
 
 def validate_result_readback(root: Path, receipt: dict[str, Any], spec: Any) -> None:
-    """Validate native result readback in its historical family order."""
+    """Check the receipt's connected versions, then the native readback of the spec's family (Q2D, Q3D, Eigenmode or scattering)."""
     connected = receipt.get("connected")
     if not isinstance(connected, dict) or connected != {
         "aedt_version": spec.aedt_version,
