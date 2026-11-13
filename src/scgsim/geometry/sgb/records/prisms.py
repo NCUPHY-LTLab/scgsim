@@ -17,8 +17,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Literal
 
-from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.exact.carriers import (
+from scgsim.geometry.exact.carriers import (
     ArcCarrier,
     KnownCarrier,
     Lineage,
@@ -26,9 +25,10 @@ from scgsim.geometry.sgb.exact.carriers import (
     LineEdge,
     RingPrimitive,
 )
-from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
-from scgsim.geometry.sgb.exact.grid import Grid
-from scgsim.geometry.sgb.exact.plane import Point, Ring, ring_twice_area
+from scgsim.geometry.exact.grid import Grid
+from scgsim.geometry.exact.plane import Point, Ring, ring_twice_area
+from scgsim.geometry.models.refusals import internal
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 
 MaterialKind = Literal["conductor", "dielectric", "vacuum", "port"]
 FILM_FEATURE_KINDS = frozenset({"stack_film", "local_film"})

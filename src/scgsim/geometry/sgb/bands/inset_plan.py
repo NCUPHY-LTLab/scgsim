@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.grid import Grid
 from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
@@ -39,9 +41,8 @@ from scgsim.geometry.sgb.bands.supports import (
     locate_face,
     resolve_support,
 )
-from scgsim.geometry.sgb.errors import InputError, NoGapEdgeError
-from scgsim.geometry.sgb.exact.grid import Grid
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
+from scgsim.geometry.sgb.errors import NoGapEdgeError
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 
 NO_GAP_EDGE = "no_gap_edge"
 """Why a face is skipped: no conductor edge with exposed dielectric next to it to measure the bands from."""

@@ -30,6 +30,13 @@ import math
 from collections import deque
 from dataclasses import dataclass
 
+from scgsim.geometry.exact.carriers import (
+    CarrierRole,
+    EdgeCarrier,
+    LineEdge,
+    piece_carriers,
+)
+from scgsim.geometry.exact.plane import Point, RepPoint, point_in_ring
 from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.dcel import (
     Arrangement,
@@ -43,15 +50,8 @@ from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     snap_round,
 )
 from scgsim.geometry.sgb.errors import ValidationError
-from scgsim.geometry.sgb.exact.carriers import (
-    CarrierRole,
-    EdgeCarrier,
-    LineEdge,
-    piece_carriers,
-)
-from scgsim.geometry.sgb.exact.plane import Point, RepPoint, point_in_ring
-from scgsim.geometry.sgb.exact.prisms import Footprint
-from scgsim.geometry.sgb.exact.support import DISTANCE_SLACK, SupportRegion
+from scgsim.geometry.sgb.records.prisms import Footprint
+from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
 
 SUPPORT_BOUNDARY = "~support"
 """Prefix of the carrier ids of the support boundary (written, never read: the role is ``SUPPORT_BOUNDARY``)."""

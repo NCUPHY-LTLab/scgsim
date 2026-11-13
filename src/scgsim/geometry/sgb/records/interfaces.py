@@ -7,7 +7,7 @@ never read back from a group name.
 
 from __future__ import annotations
 
-from scgsim.geometry.sgb.exact.labels import Domain, SheetOwner
+from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
 
 SHEET = "SHEET"
 """Interface type of a Route A conductor sheet (a record field and a union key, never part of a group name)."""

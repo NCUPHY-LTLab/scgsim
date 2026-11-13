@@ -12,14 +12,14 @@ from sgb_extreme_cases import catalogue_of, chip, disk
 from sgb_scenes import GRID, chip_prisms, conductor, footprint, pad_in_ground, rect_um
 
 from scgsim.contracts.sgb_sidecar import sidecar_schema, views
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.bands.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.checks.slivers.report import sliver_report
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.output.emission.plan import plan_brep
 from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
 from scgsim.geometry.sgb.output.sidecar.features import FEATURE_KINDS
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 
 FACTS_OF_KIND = {
     "film_sidewall": {"thickness_um"},

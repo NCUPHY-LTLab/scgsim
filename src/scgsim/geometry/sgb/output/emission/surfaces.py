@@ -21,8 +21,8 @@ from math import lcm
 
 import numpy as np
 
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.output.emission.numbers import PI, angle_of
 from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, TopoFace, Topology
 

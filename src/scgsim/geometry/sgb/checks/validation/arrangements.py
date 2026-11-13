@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from scgsim.geometry.exact.grid import Grid
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area, sampled_crossings
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
@@ -22,10 +23,9 @@ from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     hits_kernel,
 )
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
-from scgsim.geometry.sgb.exact.grid import Grid
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.prisms.levels import LevelStructure
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 SNAP_BOUND_GRID_UNITS = 1.0  # iterated snap rounding on layout inputs stays below this
 PRISM_AREA_TOLERANCE_FACTOR = (

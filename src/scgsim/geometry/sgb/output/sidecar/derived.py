@@ -24,8 +24,7 @@ from scgsim.contracts.sgb_sidecar.records import (
     SupportRing,
     UnknownCarrier,
 )
-from scgsim.geometry.sgb.exact.carriers import LineEdge, RingPrimitive
-from scgsim.geometry.sgb.exact.support import SupportRegion
+from scgsim.geometry.exact.carriers import LineEdge, RingPrimitive
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
@@ -41,6 +40,7 @@ from scgsim.geometry.sgb.output.sidecar.sources import (
     line_curve,
     line_length_um,
 )
+from scgsim.geometry.sgb.records.support import SupportRegion
 
 
 def band_family_records(model: ConformalModel) -> dict[str, BandFamily]:

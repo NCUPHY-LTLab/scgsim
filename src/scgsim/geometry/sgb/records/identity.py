@@ -22,8 +22,8 @@ import hashlib
 import json
 from fractions import Fraction
 
+from scgsim.geometry.exact.plane import Point
 from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.exact.plane import Point
 
 ID_HEX_DIGITS = 16
 

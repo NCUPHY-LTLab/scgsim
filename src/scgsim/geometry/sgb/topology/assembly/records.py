@@ -13,7 +13,7 @@ from fractions import Fraction
 from typing import Literal
 
 from scgsim.geometry.sgb.arrangement.arcs import RealisedArc
-from scgsim.geometry.sgb.exact.labels import Domain, SheetOwner
+from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
 
 Loop = tuple[
     tuple[str, int], ...

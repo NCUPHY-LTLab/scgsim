@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from scgsim.geometry.exact.plane import point_in_ring
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement, interior_point
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
-from scgsim.geometry.sgb.exact.plane import point_in_ring
 
 
 def ring(points, name):

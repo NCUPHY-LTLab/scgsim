@@ -31,14 +31,14 @@ from test_palace_rectangular_ports import (
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
 
 from scgsim.geometry import GeometryPlan
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.source_arcs import circumcircle
 from scgsim.geometry.models.input import (
     GdsBoundaryReconstructionSpec,
     RingChain,
     drawn_chain_on_ring,
 )
 from scgsim.geometry.models.junctions import is_junction_end_piece
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact.source_arcs import circumcircle
 from scgsim.geometry.sgb.model import build_conformal_model
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.palace import EigenmodeSim

@@ -14,16 +14,16 @@ import math
 import pytest
 from sgb_scenes import GRID, footprint, rect_um
 
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
 )
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.exact.interfaces import interface_type_of
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
+from scgsim.geometry.sgb.records.interfaces import interface_type_of
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 
 MARGINS = (0.5, 1.0)
 HALF = 20.0  # the die is 40 x 40 um

@@ -7,19 +7,18 @@ consume.  The catalogue is route-independent: Route A, B and C are labelling
 policies applied after the arrangement exists.
 
 The steps read in order below: the declared grid, each Entity's footprints and the binding of its boundary
-records (``exact.footprints`` and ``exact.boundaries``, which the junction partition shares), the prisms of
+records (``geometry.exact.footprints`` and ``geometry.exact.boundaries``, which the junction partition shares), the prisms of
 each Entity (``entities``: Z interval, Net, priority) and the lumped-port sheets (``ports``).
 """
 
 from __future__ import annotations
 
+from scgsim.geometry.exact.boundaries import bind_boundaries
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.footprints import SourceFootprint, source_footprints
+from scgsim.geometry.exact.grid import declared_grid
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact.boundaries import bind_boundaries
-from scgsim.geometry.sgb.exact.footprints import SourceFootprint, source_footprints
-from scgsim.geometry.sgb.exact.grid import declared_grid
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.prisms.entities import (
     check_entity_kind,
     entity_interval,
@@ -27,6 +26,7 @@ from scgsim.geometry.sgb.prisms.entities import (
     physical_feature_kind,
 )
 from scgsim.geometry.sgb.prisms.ports import port_prisms
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 
 
 def build_prism_catalogue(

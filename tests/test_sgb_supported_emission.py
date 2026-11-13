@@ -23,8 +23,8 @@ from sgb_unsupported_cells import straight_lead
 from test_sgb_supported_geometry import SCENES, scene_params
 
 from scgsim.contracts.sgb_sidecar import read_sidecar
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.meshing import check_fine_structure
 

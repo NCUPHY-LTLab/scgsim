@@ -11,7 +11,7 @@ import math
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 
-from scgsim.geometry.sgb.exact.plane import Point
+from scgsim.geometry.exact.plane import Point
 
 CellBounds = tuple[
     int, int, int, int

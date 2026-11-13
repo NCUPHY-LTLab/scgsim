@@ -14,7 +14,7 @@ section of such a line (the decisions on issue 188):
 * in the section, nothing excluded from the model (a conductor, or the space outside) touches another such
   region only at a point, which would pinch the 2D domain.
 
-Each refusal is an :class:`~scgsim.geometry.sgb.errors.InputError` that names what the cut meets (the Entity and
+Each refusal is an :class:`~scgsim.geometry.exact.errors.InputError` that names what the cut meets (the Entity and
 its source layer, or the band family and margin), the level, the place in micrometres and the fix, and counts
 the further places along the cut where a rule is broken.  The place reported is the one nearest the cut's start.
 """
@@ -28,13 +28,13 @@ from fractions import Fraction
 from typing import NoReturn
 
 from scgsim.documentation import see_also
+from scgsim.geometry.exact.carriers import Lineage
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.plane import Point
 from scgsim.geometry.models.grid import format_box, format_point
 from scgsim.geometry.sgb.arrangement.labelling.prism_set import named_entities
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact.carriers import Lineage
-from scgsim.geometry.sgb.exact.labels import Domain
-from scgsim.geometry.sgb.exact.plane import Point
 from scgsim.geometry.sgb.model import ConformalModel
+from scgsim.geometry.sgb.records.labels import Domain
 from scgsim.geometry.sgb.section.frame import Along, CutFrame
 from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, Topology
 

@@ -12,8 +12,8 @@ from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangem
 from scgsim.geometry.sgb.checks.validation import arrangements, ids
 from scgsim.geometry.sgb.checks.validation import topology as topology_checks
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.topology.assembly.records import Topology
 from scgsim.geometry.sgb.topology.routes.groups import RoutedModel
 

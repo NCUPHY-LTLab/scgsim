@@ -33,6 +33,18 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from fractions import Fraction
 
+from scgsim.geometry.exact.carriers import Lineage, LineEdge, RingPrimitive
+from scgsim.geometry.exact.errors import InputError, UnsupportedCurveError
+from scgsim.geometry.exact.footprints import SourceFootprint, source_footprints
+from scgsim.geometry.exact.grid import Grid, declared_grid
+from scgsim.geometry.exact.plane import (
+    Point,
+    Ring,
+    fraction_to_rep,
+    point_in_ring,
+    ring_twice_area,
+)
+from scgsim.geometry.exact.source_arcs import arc_through_points, full_circle
 from scgsim.geometry.models.grid import format_box, format_point
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
@@ -53,19 +65,6 @@ from scgsim.geometry.models.input import (
     ring_without_drawn_order,
 )
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb.errors import InputError, UnsupportedCurveError
-from scgsim.geometry.sgb.exact.carriers import Lineage
-from scgsim.geometry.sgb.exact.footprints import SourceFootprint, source_footprints
-from scgsim.geometry.sgb.exact.grid import Grid, declared_grid
-from scgsim.geometry.sgb.exact.plane import (
-    Point,
-    Ring,
-    fraction_to_rep,
-    point_in_ring,
-    ring_twice_area,
-)
-from scgsim.geometry.sgb.exact.prisms import LineEdge, RingPrimitive
-from scgsim.geometry.sgb.exact.source_arcs import arc_through_points, full_circle
 
 RingKey = tuple[str, int, int]
 """One source ring: ``(Entity id, polygon index, ring index)``.

@@ -54,6 +54,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from fractions import Fraction
 
+from scgsim.geometry.exact.carriers import (
+    ArcCarrier,
+    Lineage,
+    LineEdge,
+    RingPrimitive,
+)
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.grid import Grid, exact_z
 from scgsim.geometry.models.grid import format_box
 from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
@@ -79,24 +87,17 @@ from scgsim.geometry.sgb.bands.requests import (
     InterfaceSurfaces,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.errors import InputError, NoGapEdgeError
-from scgsim.geometry.sgb.exact.carriers import (
-    ArcCarrier,
-    Lineage,
-    LineEdge,
-    RingPrimitive,
-)
-from scgsim.geometry.sgb.exact.grid import Grid, exact_z
-from scgsim.geometry.sgb.exact.interfaces import (
+from scgsim.geometry.sgb.errors import NoGapEdgeError
+from scgsim.geometry.sgb.records.interfaces import (
     INTERFACE_TYPES,
     SHEET,
     SURFACE_EPR_TYPES,
     interface_type_of,
     sheet_face_sides,
 )
-from scgsim.geometry.sgb.exact.labels import LevelLabel
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.exact.support import SupportRegion, primitive_ends
+from scgsim.geometry.sgb.records.labels import LevelLabel
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.records.support import SupportRegion, primitive_ends
 
 
 @dataclass(frozen=True)

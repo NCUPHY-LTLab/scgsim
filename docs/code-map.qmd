@@ -73,7 +73,7 @@ flowchart TB
 ```
 
 The diagram leaves out the folders every stage of an area uses:
-`geometry/models` and `geometry/grid` in geometry, `geometry/sgb/exact` in SGB,
+`geometry/models`, `geometry/exact` and `geometry/grid` in geometry, `geometry/sgb/records` in SGB,
 and `semantics` and `presentation` across the package. AEDT's handoff and
 receipt formats are defined in `aedt/specs` and `aedt/results`, not in
 `contracts`. `visualization` reads a Palace run folder or an AEDT project to
@@ -102,7 +102,6 @@ from an earlier stage to a later one:
 
 | Importing folder | Imports | What it takes from there |
 | --- | --- | --- |
-| `geometry/junctions` | `geometry/sgb/exact` | SGB's shared vocabulary, below every SGB stage: the exact records and the boundary binder (`exact.boundaries`), so the partition cuts the rings SGB builds. |
 | `palace/results` | `palace/reports` | The report views a resolved result's display methods return. |
 | `aedt/specs` | `aedt/epr` | The grouping of surface integrals (`epr.selection`). |
 | `aedt/preparation` | `aedt/results` | The receipt schema and the initial receipt (`results.provenance`). |

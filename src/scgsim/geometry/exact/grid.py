@@ -10,9 +10,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from fractions import Fraction
 
+from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.sgb.errors import InputError
 
 LATTICE_TOLERANCE = Fraction(1, 1_000_000)
 """Largest distance, in grid units, between a declared coordinate and its lattice point.

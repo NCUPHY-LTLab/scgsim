@@ -21,6 +21,9 @@ from sgb_scenes import (
 )
 
 import scgsim.geometry.sgb.arrangement.derivation.level_layers as level_layers
+from scgsim.geometry.exact.carriers import Lineage, circle_arcs
+from scgsim.geometry.exact.grid import exact_z
+from scgsim.geometry.exact.plane import point_in_ring
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
@@ -29,16 +32,13 @@ from scgsim.geometry.sgb.bands.requests import (
     SolutionInterface,
 )
 from scgsim.geometry.sgb.errors import ValidationError
-from scgsim.geometry.sgb.exact.carriers import Lineage, circle_arcs
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.exact.plane import point_in_ring
-from scgsim.geometry.sgb.exact.prisms import (
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
+from scgsim.geometry.sgb.records.prisms import (
     Footprint,
     LineEdge,
     PrismCatalogue,
     PrismRecord,
 )
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 
 MARGINS = (0.5, 1.0)
 SHEET_HEIGHT = 10.0

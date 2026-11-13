@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from scgsim.geometry.exact.carriers import ArcCarrier
 from scgsim.geometry.sgb.arrangement.dcel import (
     Arrangement,
     build_arrangement,
@@ -24,12 +25,11 @@ from scgsim.geometry.sgb.arrangement.labelling.dissolve import dissolve
 from scgsim.geometry.sgb.arrangement.labelling.membership import membership_shares
 from scgsim.geometry.sgb.arrangement.labelling.prism_set import PrismSet, resolve_domain
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
-from scgsim.geometry.sgb.exact import identity
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier
-from scgsim.geometry.sgb.exact.labels import Domain
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.prisms.levels import LevelStructure
+from scgsim.geometry.sgb.records import identity
+from scgsim.geometry.sgb.records.labels import Domain
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 
 def build_slab_layers(

@@ -22,17 +22,13 @@ from test_sgb_prisms import with_boundaries
 from test_simulation_drc import LAYER_STACK, MATERIALS, check, level, two_pads
 
 from scgsim.geometry import GeometryPlan
+from scgsim.geometry.exact.errors import InputError, SgbError
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     SourceCurveSpec,
 )
-from scgsim.geometry.sgb.errors import (
-    InputError,
-    NoGapEdgeError,
-    OverlapError,
-    SgbError,
-)
+from scgsim.geometry.sgb.errors import NoGapEdgeError, OverlapError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
 from scgsim.geometry.source.lumped_supports import occurrence_lumped_polygon

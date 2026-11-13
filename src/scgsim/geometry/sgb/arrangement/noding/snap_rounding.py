@@ -31,6 +31,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import NamedTuple
 
+from scgsim.geometry.exact.carriers import EdgeCarrier
+from scgsim.geometry.exact.plane import Point
 from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.noding.spatial_hash import (
     HotGrid,
@@ -38,9 +40,7 @@ from scgsim.geometry.sgb.arrangement.noding.spatial_hash import (
     cells_along,
     points_extent,
 )
-from scgsim.geometry.sgb.exact.carriers import EdgeCarrier
-from scgsim.geometry.sgb.exact.plane import Point
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 EdgeKey = tuple[Point, Point]  # canonical: a < b lexicographically
 Crossing = tuple[int, int, int]  # exact point (X / den, Y / den) stored as (X, Y, den)

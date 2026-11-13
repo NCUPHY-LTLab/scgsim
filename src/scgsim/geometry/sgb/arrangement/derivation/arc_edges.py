@@ -8,10 +8,10 @@ and below can node them again as arcs.
 
 from __future__ import annotations
 
+from scgsim.geometry.exact.carriers import ArcCarrier
 from scgsim.geometry.sgb.arrangement.arcs import derived_arc, realise
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.arrangement.labelling.linking import TAG
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier
 
 
 def realise_arc_edges(

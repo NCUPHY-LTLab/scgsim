@@ -34,10 +34,10 @@ from scgsim.geometry.sgb.bands.inset_plan import InsetPlan, plan_insets
 from scgsim.geometry.sgb.bands.requests import InsetRequest
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
 from scgsim.geometry.sgb.checks.validation.validate import validate_model
-from scgsim.geometry.sgb.exact import identity
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
+from scgsim.geometry.sgb.records import identity
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.topology.assembly.builder import assemble_topology
 from scgsim.geometry.sgb.topology.assembly.records import Topology
 from scgsim.geometry.sgb.topology.routes.groups import RoutedModel, apply_route

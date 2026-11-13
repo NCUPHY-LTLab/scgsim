@@ -10,10 +10,10 @@ from sgb_scenes import (
     rect_um,
 )
 
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.errors import OverlapError
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.exact.prisms import Footprint, PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.records.prisms import Footprint, PrismCatalogue, PrismRecord
 
 
 def sourced(  # noqa: PLR0913 - a test builder

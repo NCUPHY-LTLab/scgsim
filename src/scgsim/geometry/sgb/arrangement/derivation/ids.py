@@ -8,11 +8,11 @@ slab edges are renumbered.
 
 from __future__ import annotations
 
+from scgsim.geometry.exact.carriers import CarrierRole, EdgeCarrier
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
-from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.exact import identity
-from scgsim.geometry.sgb.exact.carriers import CarrierRole, EdgeCarrier
+from scgsim.geometry.sgb.records import identity
 
 
 def assign_ids(

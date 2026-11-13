@@ -52,7 +52,7 @@ from OCP.TopoDS import TopoDS, TopoDS_Compound, TopoDS_Iterator, TopoDS_Shape
 from OCP.TopTools import TopTools_IndexedMapOfShape
 
 from scgsim.contracts.sgb_sidecar import Sidecar, views
-from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.sgb.output.emission.measures import (
     planned_face_area_um2,
     planned_volume_um3,

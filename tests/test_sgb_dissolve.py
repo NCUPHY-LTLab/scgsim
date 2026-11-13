@@ -5,14 +5,14 @@ from __future__ import annotations
 import pytest
 from sgb_scenes import GRID
 
+from scgsim.geometry.exact.carriers import EdgeCarrier
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement, interior_point
 from scgsim.geometry.sgb.arrangement.labelling.dissolve import dissolve
 from scgsim.geometry.sgb.arrangement.labelling.prism_set import PrismSet, resolve_domain
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.errors import OverlapError
-from scgsim.geometry.sgb.exact.carriers import EdgeCarrier
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.exact.prisms import Footprint, PrismRecord
+from scgsim.geometry.sgb.records.prisms import Footprint, PrismRecord
 
 
 def rect(x0, y0, x1, y1):

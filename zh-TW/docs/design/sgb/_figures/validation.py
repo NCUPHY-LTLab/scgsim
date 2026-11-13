@@ -46,6 +46,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from sgb_scenes import airbridge, footprint, rect_um
 from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
@@ -59,13 +60,12 @@ from scgsim.geometry.sgb.errors import (
     RouteError,
     ValidationError,
 )
-from scgsim.geometry.sgb.exact.grid import exact_z
-from scgsim.geometry.sgb.exact.labels import LevelLabel
-from scgsim.geometry.sgb.exact.prisms import PrismRecord
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.output.emission.plan import plan_brep
 from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file
 from scgsim.geometry.sgb.output.verification.occt import check_file
+from scgsim.geometry.sgb.records.labels import LevelLabel
+from scgsim.geometry.sgb.records.prisms import PrismRecord
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 G = 0.001
 MARGINS = (0.1, 0.5, 2.0)

@@ -15,13 +15,13 @@ from sgb_scenes import LINEAGE, disc_model, pad_in_ground  # noqa: E402
 from shapely.geometry import Point as ShapelyPoint  # noqa: E402
 from shapely.geometry import box  # noqa: E402
 
+from scgsim.geometry.exact.carriers import Lineage, circle_arcs  # noqa: E402
 from scgsim.geometry.sgb.arrangement.arcs import (  # noqa: E402
     face_exact_area,
     realise,
     sampled_crossings,
 )
 from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.exact.carriers import Lineage, circle_arcs  # noqa: E402
 
 TESTS = Path(__file__).resolve().parent
 

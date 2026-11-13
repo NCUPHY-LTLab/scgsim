@@ -22,21 +22,21 @@ import sgb_supported_pdk_cells as pdk
 from sgb_supported_kit import Conductor, Scene, catalogue, to_lattice, type_bands
 
 from scgsim.contracts.sgb_sidecar import read_sidecar
-from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.exact.carriers import (
+from scgsim.geometry.exact.carriers import (
     ArcCarrier,
     LineCarrier,
     LineEdge,
     round_to_lattice,
 )
-from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
-from scgsim.geometry.sgb.exact.support import (
+from scgsim.geometry.sgb.build import emit_model
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
+from scgsim.geometry.sgb.output.sidecar.lineage import CarrierLineage
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
+from scgsim.geometry.sgb.records.support import (
     DISTANCE_SLACK,
     SupportRegion,
     distance_to_primitive,
 )
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.output.sidecar.lineage import CarrierLineage
 
 # A source edge is noded by snap rounding: the arrangement edges along it end within half a grid diagonal of it.
 SOURCE_SNAP_STEPS = math.sqrt(2) / 2

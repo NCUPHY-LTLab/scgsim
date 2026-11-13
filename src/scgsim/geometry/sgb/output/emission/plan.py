@@ -21,9 +21,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.models.grid import format_um
 from scgsim.geometry.models.refusals import internal
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.output.emission.numbers import PI, angle_of
 from scgsim.geometry.sgb.output.emission.surfaces import (
     CYLINDER,

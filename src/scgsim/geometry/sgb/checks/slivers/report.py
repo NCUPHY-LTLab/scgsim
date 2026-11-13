@@ -23,9 +23,9 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from scgsim.geometry.exact.plane import segment_point_distance_sq
 from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.checks.slivers.feature_size import Prim, feature_size
-from scgsim.geometry.sgb.exact.plane import segment_point_distance_sq
 from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.topology.routes.groups import RoutedModel
 

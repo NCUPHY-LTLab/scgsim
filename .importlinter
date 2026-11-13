@@ -59,8 +59,8 @@ forbidden_modules =
     scgsim.aedt
     scgsim.palace
 
-# The junction partition reads SGB's boundary binding (sgb.exact.boundaries); SGB reads the
-# partition's record from its input, never the partition's code.
+# The junction partition and SGB share the boundary binding of the exact kernel (geometry.exact.boundaries);
+# SGB reads the partition's record from its input, never the partition's code.
 [importlinter:contract:sgb-core-independence]
 name = SGB core does not depend on the replaced geometry paths
 type = forbidden

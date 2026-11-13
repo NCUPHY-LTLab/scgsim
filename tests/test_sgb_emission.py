@@ -27,9 +27,9 @@ from sgb_gmsh_oracle import (
 from sgb_scenes import random_layout
 
 from scgsim.contracts.sgb_sidecar import read_sidecar, views
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.checks.slivers.report import sliver_report
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.output.emission.numbers import angle_of
 from scgsim.geometry.sgb.output.emission.plan import check_one_tag_per_id, plan_brep

@@ -34,6 +34,9 @@ from collections.abc import Sequence
 from fractions import Fraction
 from math import hypot, isfinite
 
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.footprints import lattice_ring
+from scgsim.geometry.exact.grid import Grid, exact_z
 from scgsim.geometry.models.grid import format_box
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.physical import (
@@ -45,10 +48,7 @@ from scgsim.geometry.models.representation import (
     EntityRepresentation,
     RepresentationContext,
 )
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact.footprints import lattice_ring
-from scgsim.geometry.sgb.exact.grid import Grid, exact_z
-from scgsim.geometry.sgb.exact.prisms import Footprint, PortIdentity, PrismRecord
+from scgsim.geometry.sgb.records.prisms import Footprint, PortIdentity, PrismRecord
 
 PORT_MATERIAL = "lumped_port"
 JUNCTION_PARTITION_KEY = "rectangular_junction_partition"

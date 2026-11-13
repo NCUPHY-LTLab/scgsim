@@ -11,8 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from fractions import Fraction
 
-from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
-from scgsim.geometry.sgb.exact.prisms import PrismRecord
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
+from scgsim.geometry.sgb.records.prisms import PrismRecord
 
 
 @dataclass(frozen=True)

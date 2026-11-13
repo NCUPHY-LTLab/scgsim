@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections import Counter
 
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, Topology
 from scgsim.geometry.sgb.topology.assembly.shells import shell_checks
 from scgsim.geometry.sgb.topology.routes.groups import RoutedModel

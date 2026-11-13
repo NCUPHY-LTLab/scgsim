@@ -22,14 +22,14 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+from scgsim.geometry.exact.carriers import CarrierRole
+from scgsim.geometry.exact.plane import Point, point_in_ring
 from scgsim.geometry.sgb.arrangement.dcel import Arrangement, build_arrangement
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     NodedEdge,
     crossing_pixels_kernel,
     hits_kernel,
 )
-from scgsim.geometry.sgb.exact.carriers import CarrierRole
-from scgsim.geometry.sgb.exact.plane import Point, point_in_ring
 
 EdgeSides = tuple[
     Any, Any

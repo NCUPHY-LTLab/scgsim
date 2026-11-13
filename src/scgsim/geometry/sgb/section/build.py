@@ -10,7 +10,7 @@ model's; nothing is re-derived from the sources.
 The steps run in order: the cut on the model grid, the cut within the model's extent, the crossings of every
 curve of an emitted face (each refused where it breaks a cut rule), the traces of the faces and walls, the
 section's cells and regions with the rules read on them, the records, the groups, and the 2D validation.  A
-broken cut rule raises :class:`~scgsim.geometry.sgb.errors.InputError` with its place; a failed invariant
+broken cut rule raises :class:`~scgsim.geometry.exact.errors.InputError` with its place; a failed invariant
 raises :class:`~scgsim.geometry.sgb.errors.ValidationError`.  Nothing is written: emitting the 2D model to
 files is a later stage.  The section is a function of the 3D model alone.
 """
