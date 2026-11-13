@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from typing import Any, Literal
+from dataclasses import dataclass, replace
+from typing import Any
 
 from scgsim.aedt.data import canonical_sha256, detached, freeze
 from scgsim.aedt.specs.common import LumpedRlc
@@ -14,14 +14,12 @@ from scgsim.aedt.specs.support import prepared_lumped_supports
 from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import PLAN_SCHEMA, PhysicalRepresentationPlan
 
-Route = Literal["A", "B"]
-
 
 @dataclass(frozen=True)
 class PreparedPlanarGeometry:
     """Detached source request before any native AEDT object exists."""
 
-    modeling: str | None
+    modeling: str
     source: Mapping[str, Any]
     junctions: tuple[PlanarJunction, ...]
     contribution_catalog: tuple[Mapping[str, Any], ...]
@@ -29,8 +27,6 @@ class PreparedPlanarGeometry:
     surface_bindings: tuple[Mapping[str, Any], ...]
     model_sha256: str
     source_sha256: str
-    route: Route | None = None
-    _historical_modeling: bool = field(default=False, repr=False, compare=False)
     lumped_rlcs: tuple[LumpedRlc, ...] = ()
 
     def __post_init__(self) -> None:
@@ -45,15 +41,8 @@ class PreparedPlanarGeometry:
         self._validate_digests(source)
 
     def _validate_modeling_identity(self) -> None:
-        if self._historical_modeling:
-            if self.route not in {"A", "B"} or self.modeling is not None:
-                raise ValueError(
-                    "historical planar geometry requires its original route basis"
-                )
-        elif self.modeling not in {"solid", "thin_film"} or self.route is not None:
-            raise ValueError(
-                "new planar geometry requires explicit modeling without route alias"
-            )
+        if self.modeling not in {"solid", "thin_film"}:
+            raise ValueError("planar geometry requires explicit modeling")
 
     def _validated_lumped_rlcs(self) -> tuple[LumpedRlc, ...]:
         rlcs = tuple(self.lumped_rlcs)
@@ -92,23 +81,8 @@ class PreparedPlanarGeometry:
 
     def _validated_source(self) -> Mapping[str, Any]:
         source = freeze(self.source)
-        trace = source.get("modeling")
-        if isinstance(trace, Mapping) and trace.get("schema_version") == PLAN_SCHEMA:
-            plan = PhysicalRepresentationPlan.from_payload(trace)
-            if plan.profile.name != self.modeling:
-                raise ValueError(
-                    "prepared geometry modeling differs from its neutral profile"
-                )
-            for entity in source["conductors"]:
-                expected = native_physical_record(plan.entities[entity["semantic_id"]])
-                if detached(entity["physical_layer"]) != expected:
-                    raise ValueError(
-                        "prepared conductor physical evidence differs from the neutral plan"
-                    )
-                if entity["representation"] != expected["representation"]:
-                    raise ValueError(
-                        "prepared conductor representation differs from the neutral plan"
-                    )
+        if "modeling" in source:
+            self._validate_modeling_trace(source)
         if "lumped_supports" in source:
             supports = tuple(
                 LumpedSupport.from_payload(item["source"])
@@ -120,6 +94,35 @@ class PreparedPlanarGeometry:
                     "serialized effective support geometry differs from its source map"
                 )
         return source
+
+    def _validate_modeling_trace(self, source: Mapping[str, Any]) -> None:
+        """Check the source's physical representation plan against its conductors.
+
+        Only a tagged plan is read. An untagged trace (a ``PhysicalLayerSpec``
+        layer map) was written by an earlier SCGSim and is refused here.
+        """
+        trace = source["modeling"]
+        if not isinstance(trace, Mapping) or trace.get("schema_version") != PLAN_SCHEMA:
+            raise ValueError(
+                "prepared planar source carries no tagged physical representation "
+                f"plan ({PLAN_SCHEMA}); prepare the geometry again with "
+                "prepare_planar_geometry_input"
+            )
+        plan = PhysicalRepresentationPlan.from_payload(trace)
+        if plan.profile.name != self.modeling:
+            raise ValueError(
+                "prepared geometry modeling differs from its neutral profile"
+            )
+        for entity in source["conductors"]:
+            expected = native_physical_record(plan.entities[entity["semantic_id"]])
+            if detached(entity["physical_layer"]) != expected:
+                raise ValueError(
+                    "prepared conductor physical evidence differs from the neutral plan"
+                )
+            if entity["representation"] != expected["representation"]:
+                raise ValueError(
+                    "prepared conductor representation differs from the neutral plan"
+                )
 
     def _validate_support_links(
         self, source: Mapping[str, Any], rlcs: tuple[LumpedRlc, ...]
@@ -151,7 +154,7 @@ class PreparedPlanarGeometry:
     def _validate_digests(self, source: Mapping[str, Any]) -> None:
         expected_model = canonical_sha256(
             {
-                **self._modeling_identity,
+                "modeling": self.modeling,
                 "source": source,
                 "junctions": [item.to_payload() for item in self.junctions],
                 **self._rlc_payload,
@@ -161,7 +164,7 @@ class PreparedPlanarGeometry:
             raise ValueError("prepared planar model digest is inconsistent")
         expected = canonical_sha256(
             {
-                **self._modeling_identity,
+                "modeling": self.modeling,
                 "source": source,
                 "junctions": [item.to_payload() for item in self.junctions],
                 **self._rlc_payload,
@@ -189,7 +192,7 @@ class PreparedPlanarGeometry:
         if any(not isinstance(item, LumpedRlc) for item in records):
             raise TypeError("treatments must contain LumpedRlc records")
         model = {
-            **self._modeling_identity,
+            "modeling": self.modeling,
             "source": self.source,
             "junctions": [item.to_payload() for item in self.junctions],
             **(
@@ -211,19 +214,11 @@ class PreparedPlanarGeometry:
             source_sha256=canonical_sha256(identity),
         )
 
-    @property
-    def _modeling_identity(self) -> dict[str, Any]:
-        return (
-            {"route": self.route}
-            if self._historical_modeling
-            else {"modeling": self.modeling}
-        )
-
     def to_payload(self) -> dict[str, Any]:
         """Return the canonical PreparedPlanarGeometry payload."""
         return {
             "schema_version": "scgsim.aedt.epr-planar.v2",
-            **self._modeling_identity,
+            "modeling": self.modeling,
             "source": detached(self.source),
             "junctions": [item.to_payload() for item in self.junctions],
             **self._rlc_payload,
@@ -241,9 +236,15 @@ class PreparedPlanarGeometry:
         """Decode a PreparedPlanarGeometry from its canonical payload."""
         if not isinstance(value, Mapping):
             raise TypeError("prepared planar payload must be a mapping")
+        if "modeling" not in value:
+            raise ValueError(
+                "prepared planar payload has no 'modeling'; an earlier SCGSim wrote "
+                "it on a route basis, which this version does not read; prepare the "
+                "geometry again with prepare_planar_geometry_input"
+            )
         expected = {
             "schema_version",
-            "route",
+            "modeling",
             "source",
             "junctions",
             "contribution_catalog",
@@ -252,9 +253,6 @@ class PreparedPlanarGeometry:
             "model_sha256",
             "source_sha256",
         }
-        if "modeling" in value:
-            expected.remove("route")
-            expected.add("modeling")
         if "lumped_rlcs" in value:
             expected.add("lumped_rlcs")
         schema = value.get("schema_version")
@@ -264,9 +262,7 @@ class PreparedPlanarGeometry:
             lumped_rlcs=tuple(
                 LumpedRlc.from_payload(item) for item in value.get("lumped_rlcs", ())
             ),
-            modeling=value.get("modeling"),
-            route=value.get("route"),
-            _historical_modeling="modeling" not in value,
+            modeling=value["modeling"],
             source=value["source"],
             junctions=tuple(
                 PlanarJunction.from_payload(item) for item in value["junctions"]

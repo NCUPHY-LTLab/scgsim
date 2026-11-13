@@ -24,7 +24,6 @@ from scgsim.aedt.runtime.native.planar_bodies import (
     native_conductor_geometry,
     native_solution_materials,
     polygon_sheet,
-    prepared_modeling_identity,
     solution_body,
     swept_z_solid,
     validate_native_modeling_source,
@@ -104,7 +103,7 @@ def prepare_native_planar_geometry(
         raise ValueError("EPR geometry predates single Region; reprepare the handoff")
     if source["native_region"].get("outer_boundary_policy") != "hfss_default.v1":
         raise ValueError("EPR Region boundary policy requires re-preparation")
-    validate_native_modeling_source(prepared, source)
+    validate_native_modeling_source(source)
     polygons = {item["polygon_id"]: item for item in source["polygons"]}
     junction_regions = {
         item["source_polygon_id"]: item for item in source["junction_regions"]
@@ -159,7 +158,7 @@ def prepare_native_planar_geometry(
         raise RuntimeError("native planar object names are not unique")
     return {
         "schema_version": "scgsim.aedt.epr-native-binding.v1",
-        **prepared_modeling_identity(prepared),
+        "modeling": prepared.modeling,
         "source_sha256": prepared.source_sha256,
         "objects": bindings,
         **(
@@ -185,7 +184,7 @@ def bind_saved_planar_geometry(
     if not isinstance(prepared, PreparedPlanarGeometry):
         raise TypeError("prepared must be PreparedPlanarGeometry")
     source = detached(prepared.source)
-    validate_native_modeling_source(prepared, source)
+    validate_native_modeling_source(source)
     if (
         source.get("native_region", {}).get("method")
         != "single_region_absolute_offset.v1"
@@ -223,27 +222,15 @@ def bind_saved_planar_geometry(
         )
 
     selections: list[dict[str, Any]] = []
-    boundary_policy = region_plan.get("outer_boundary_policy")
-    if boundary_policy == "hfss_default.v1":
-        enclosure = {
-            **implicit_closed_enclosure(app, source),
-            "binding_stage": "saved_project_readback_without_cad_creation",
-        }
-    elif "outer_boundary_policy" not in region_plan:
-        # A region plan without ``outer_boundary_policy`` names its closed enclosure boundary explicitly.
-        closed_type = native_boundary_type(app, "SCGSimClosedEnclosure")
-        if closed_type != "Perfect E":
-            raise RuntimeError("saved EPR closed enclosure boundary differs")
-        enclosure = {
-            "boundary_name": "SCGSimClosedEnclosure",
-            "native_boundary_type": closed_type,
-            "binding_stage": "saved_project_readback_without_cad_creation",
-        }
-    else:
-        raise ValueError("saved EPR Region boundary policy is unknown")
+    if region_plan.get("outer_boundary_policy") != "hfss_default.v1":
+        raise ValueError("saved EPR Region boundary policy requires re-preparation")
+    enclosure = {
+        **implicit_closed_enclosure(app, source),
+        "binding_stage": "saved_project_readback_without_cad_creation",
+    }
     return {
         "schema_version": "scgsim.aedt.epr-native-binding.v1",
-        **prepared_modeling_identity(prepared),
+        "modeling": prepared.modeling,
         "source_sha256": prepared.source_sha256,
         "objects": objects,
         **(
@@ -355,7 +342,7 @@ def _create_conductors(
                     "kind": "conductor",
                     "semantic_id": entity["semantic_id"],
                     "source_polygon_id": polygon_id,
-                    **prepared_modeling_identity(prepared),
+                    "modeling": prepared.modeling,
                     "physical_layer": detached(entity["physical_layer"]),
                     "object_name": obj.name,
                     "boundary_name": boundary_name,
@@ -506,7 +493,7 @@ def _bind_saved_conductors(
                     "kind": "conductor",
                     "semantic_id": entity["semantic_id"],
                     "source_polygon_id": polygon_id,
-                    **prepared_modeling_identity(prepared),
+                    "modeling": prepared.modeling,
                     **(
                         {"physical_layer": detached(entity["physical_layer"])}
                         if isinstance(entity.get("physical_layer"), Mapping)

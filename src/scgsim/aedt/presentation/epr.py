@@ -6,7 +6,8 @@ import html
 import textwrap
 from typing import Any
 
-from scgsim.aedt.epr.models import EprResult, detached
+from scgsim.aedt.data import detached
+from scgsim.aedt.epr.models import EprResult
 from scgsim.aedt.presentation.epr_projection import (
     history_view,
     native_reference_table_data,

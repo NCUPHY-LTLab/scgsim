@@ -5,9 +5,22 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from scgsim.geometry.models.common import GEOMETRY_REF_METADATA_KEYS, RouteLiteral
+from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import MMContactRecord
+
+_GEOMETRY_REF_METADATA_KEYS = (
+    "plane",
+    "contact_plane",
+    "footprint",
+    "outer_loop",
+    "hole_loops",
+    "loop_geometry_ref",
+    "z_um",
+    "z_min_um",
+    "z_max_um",
+    "thickness_um",
+)
 
 
 def component_metadata(
@@ -63,7 +76,9 @@ def _one_component_value(
 
 def geometry_ref_from_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
     """Extract the recognized geometry-reference fields from metadata."""
-    return {key: metadata[key] for key in GEOMETRY_REF_METADATA_KEYS if key in metadata}
+    return {
+        key: metadata[key] for key in _GEOMETRY_REF_METADATA_KEYS if key in metadata
+    }
 
 
 def intent_supports_route(intent: Mapping[str, Any], route: RouteLiteral) -> bool:

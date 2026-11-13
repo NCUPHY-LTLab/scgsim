@@ -136,12 +136,9 @@ def _collect_surface_group_members(
         for evaluation_kind, margin in surface_evaluations(
             spec.margins_um, policy=context.evaluation_policy
         ):
-            evaluation_key = (
-                (evaluation_kind, float(margin))
-                if context.evaluation_policy is not None
-                else (float(margin),)
+            groups.setdefault((*signature, evaluation_kind, float(margin)), []).append(
+                member
             )
-            groups.setdefault((*signature, *evaluation_key), []).append(member)
 
 
 def _finish_surface_groups(
@@ -150,7 +147,6 @@ def _finish_surface_groups(
 ) -> tuple[dict[str, Any], ...]:
     """Assign stable IDs after validating assumptions and member uniqueness."""
     specs = context.specs
-    evaluation_policy = context.evaluation_policy
     result: list[dict[str, Any]] = []
     for signature, members in sorted(groups.items(), key=lambda item: repr(item[0])):
         member_assumptions = {
@@ -165,14 +161,15 @@ def _finish_surface_groups(
             raise ValueError(
                 "one physical surface group has conflicting film provenance"
             )
-        owner_id, interface_kind, thickness, film_epsilon, substrate_epsilon = (
-            signature[:5]
-        )
-        if evaluation_policy is None:
-            evaluation_kind = None
-            margin = signature[5]
-        else:
-            evaluation_kind, margin = signature[5:]
+        (
+            owner_id,
+            interface_kind,
+            thickness,
+            film_epsilon,
+            substrate_epsilon,
+            evaluation_kind,
+            margin,
+        ) = signature
         members.sort(key=lambda item: (item["binding_id"], item["contribution_id"]))
         if len({item["binding_id"] for item in members}) != len(members):
             raise ValueError("surface group repeats a physical binding")
@@ -183,9 +180,8 @@ def _finish_surface_groups(
             "film_relative_permittivity": film_epsilon,
             "substrate_relative_permittivity": substrate_epsilon,
             "margin_um": margin,
+            "evaluation_kind": evaluation_kind,
         }
-        if evaluation_kind is not None:
-            group_identity["evaluation_kind"] = evaluation_kind
         group_id = (
             "surface_group_"
             + hashlib.sha256(

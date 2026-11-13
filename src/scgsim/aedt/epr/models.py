@@ -1,4 +1,4 @@
-"""``EprResult``, the detached EPR result; the request and saved-solution names it re-exports are defined in ``specs``."""
+"""``EprResult``, the detached EPR result of a run or an offline reanalysis."""
 
 from __future__ import annotations
 
@@ -8,58 +8,12 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
 from scgsim.aedt.data import (
-    canonical_sha256 as canonical_sha256,
+    detached,
+    freeze,
+    number_value,
+    text_value,
 )
-from scgsim.aedt.data import (
-    detached as detached,
-)
-from scgsim.aedt.data import (
-    freeze as freeze,
-)
-from scgsim.aedt.data import (
-    number_value as number_value,
-)
-from scgsim.aedt.data import (
-    text_value as text_value,
-)
-from scgsim.aedt.specs.common import LumpedRlc as LumpedRlc
-from scgsim.aedt.specs.epr import (
-    EprAnalysisRequest as EprAnalysisRequest,
-)
-from scgsim.aedt.specs.epr import (
-    ExpressionCacheConvergence as ExpressionCacheConvergence,
-)
-from scgsim.aedt.specs.epr import (
-    ExpressionCacheConvergenceSet as ExpressionCacheConvergenceSet,
-)
-from scgsim.aedt.specs.epr import (
-    FieldSide as FieldSide,
-)
-from scgsim.aedt.specs.epr import (
-    InterfaceKind as InterfaceKind,
-)
-from scgsim.aedt.specs.epr import (
-    NativeExpressionDefinition as NativeExpressionDefinition,
-)
-from scgsim.aedt.specs.epr import (
-    NormalizedSurfaceEprTotal as NormalizedSurfaceEprTotal,
-)
-from scgsim.aedt.specs.epr import (
-    PlanarJunction as PlanarJunction,
-)
-from scgsim.aedt.specs.epr import (
-    SavedSolution as SavedSolution,
-)
-from scgsim.aedt.specs.epr import (
-    SurfaceEprSpec as SurfaceEprSpec,
-)
-from scgsim.aedt.specs.epr import (
-    surface_evaluations as surface_evaluations,
-)
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry as PreparedPlanarGeometry
 from scgsim.semantics.epr import film_assumptions
-
-Route = Literal["A", "B"]
 
 EPR_RESULT_SCHEMA = "scgsim.aedt.epr-result.v2"
 _EARLIER_RESULT_SCHEMAS = {"scgsim.aedt.epr-result.v1"}

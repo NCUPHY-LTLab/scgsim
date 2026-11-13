@@ -117,6 +117,34 @@ def test_a_request_without_a_physical_representation_is_refused(tmp_path):
         parse_aedt_spec(payload, base_dir=tmp_path)
 
 
+def test_a_request_without_modeling_is_refused(tmp_path):
+    """A request payload that names no modeling is refused before it is decoded."""
+    payload = _epr_request_payload(tmp_path)
+    del payload["modeling"]
+    del payload["physical_layers"]
+    with pytest.raises(
+        ValueError, match="require a tagged neutral physical_representation"
+    ):
+        parse_aedt_spec(payload, base_dir=tmp_path)
+
+
+def test_a_planar_geometry_on_a_route_basis_is_refused():
+    """A prepared planar payload with ``route`` and no ``modeling`` is not decoded."""
+    payload = file_only_geometry().to_payload()
+    payload["route"] = "A"
+    del payload["modeling"]
+    with pytest.raises(ValueError, match="has no 'modeling'"):
+        PreparedPlanarGeometry.from_payload(payload)
+
+
+def test_a_planar_geometry_with_an_untagged_layer_map_is_refused():
+    """A source trace that is a layer map, not a tagged plan, is not read."""
+    payload = file_only_geometry().to_payload()
+    payload["source"]["modeling"] = {"modeling": "solid", "source_layers": []}
+    with pytest.raises(ValueError, match="no tagged physical representation plan"):
+        PreparedPlanarGeometry.from_payload(payload)
+
+
 def test_an_earlier_planar_geometry_schema_is_refused():
     """The v1 prepared planar geometry payload is not decoded."""
     payload = file_only_geometry().to_payload()
