@@ -5,15 +5,15 @@ from dataclasses import replace
 import pytest
 
 from scgsim.geometry import interpret_physical_layers as facade_interpreter
+from scgsim.geometry.interpretation.physical import (
+    interpret_physical_layers as planning_interpreter,
+)
 from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
     interpret_physical_layers,
     source_plain,
-)
-from scgsim.geometry.planning.physical import (
-    interpret_physical_layers as planning_interpreter,
 )
 from scgsim.semantics.snapshot import canonical_sha256, freeze_plain
 

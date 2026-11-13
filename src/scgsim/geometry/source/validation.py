@@ -6,14 +6,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from math import isfinite
 
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.regions import PortSheetRegionRecord
-from scgsim.geometry.primitives.entity_validation import (
+from scgsim.geometry.grid.entity_validation import (
     is_solution_entity,
     is_vacuum_solution_entity,
     requires_route_representation,
     resolve_contact_pad_attachment,
 )
+from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.regions import PortSheetRegionRecord
 
 
 def has_vacuum_solution_region(build_input: GeometryBuildInput) -> bool:

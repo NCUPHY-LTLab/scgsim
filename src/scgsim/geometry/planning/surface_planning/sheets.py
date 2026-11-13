@@ -6,6 +6,19 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import Any, cast
 
+from scgsim.geometry.grid.constants import INTERFACE_KIND_ORDER
+from scgsim.geometry.grid.entities import (
+    entity_by_id,
+    geometry_ref_from_metadata,
+    unique_ids,
+)
+from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.loops import (
+    gdstk_surface_region,
+    geometry_refs_from_gdstk_region,
+    loop_signature,
+)
+from scgsim.geometry.grid.planar_loops import clean_loop
 from scgsim.geometry.models.common import (
     PolygonRing,
     RouteLiteral,
@@ -17,7 +30,7 @@ from scgsim.geometry.models.topology import (
     MMContactRecord,
     SurfacePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.domain_planning.faces import (
     planar_side_solution_regions,
     route_a_sheet_plane_z_um,
 )
@@ -29,29 +42,14 @@ from scgsim.geometry.planning.surface_planning.contacts import (
     subtract_contact_patches_from_face,
 )
 from scgsim.geometry.planning.surface_planning.scope import SurfaceScope
-from scgsim.geometry.planning.tags import (
-    entity_physical_group_id,
-    physical_group_owner_ids,
-)
-from scgsim.geometry.primitives.constants import (
-    INTERFACE_KIND_ORDER,
-)
-from scgsim.geometry.primitives.entities import (
-    entity_by_id,
-    geometry_ref_from_metadata,
-    unique_ids,
-)
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import (
-    gdstk_surface_region,
-    geometry_refs_from_gdstk_region,
-    loop_signature,
-)
-from scgsim.geometry.primitives.planar_loops import clean_loop
-from scgsim.geometry.primitives.surface_records import (
+from scgsim.geometry.planning.surface_records import (
     RouteASheetPatch,
     is_route_a_sheet_interface,
     surface_contribution_provenance,
+)
+from scgsim.geometry.planning.tags import (
+    entity_physical_group_id,
+    physical_group_owner_ids,
 )
 from scgsim.semantics import EvidenceResult, SemanticEvidenceFacade
 

@@ -35,7 +35,7 @@ from scgsim.aedt.runtime.native.planar_region import (
     verified_region_bounds,
 )
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.geometry.planning.junction_partition import junction_terminal_line
+from scgsim.geometry.junctions.terminal import junction_terminal_line
 
 
 def _native_lumped_supports(

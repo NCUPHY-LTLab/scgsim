@@ -32,8 +32,12 @@ lifecycles.
 ```text
 scgsim/
 ├── geometry/
-│   ├── source/       # component input, occurrence, stack and normalization
-│   ├── models/       # source and planning records
+│   ├── models/       # typed records that cross stages
+│   ├── source/       # from a layout and a stack to a prepared snapshot
+│   ├── grid/         # the source stage's grid engine: noding, tagged regions, overlays, loops
+│   ├── interpretation/ # from a prepared input to its physical representation and vacuum enclosure
+│   ├── junctions/    # the rectangular partition around a lumped port
+│   ├── surface_epr/  # from Surface-EPR specs to the inset requests of the SGB build
 │   ├── sgb/          # SGB core that Palace builds on; one folder per stage of the build
 │   │   ├── exact/        # the exact vocabulary every stage shares
 │   │   ├── prisms/       # S2: the effective input as prisms, levels and slabs
@@ -43,8 +47,7 @@ scgsim/
 │   │   ├── checks/       # S9: structural validation, slivers, file checks
 │   │   ├── output/       # S10: BREP and XAO, sidecar, STEP export
 │   │   └── section/      # the 2D section model
-│   ├── planning/     # physical interpretation, junction partition and AEDT's surface planning
-│   └── primitives/   # shared Entity, loop, grid and spatial operations
+│   └── planning/     # what only AEDT's native construction uses: surface, contact, domain, topology planning
 ├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
 ├── contracts/        # file definitions shared across stages: the SGB sidecar and the Palace run folder
 ├── semantics/        # immutable solver-independent facts
@@ -100,9 +103,11 @@ The transaction retains sole Desktop and receipt ownership. General body,
 support, material and enclosure native operations belong to `runtime.native`;
 generic RLC assignment and saved readback belong to the native lumped owner.
 
-Geometry source preparation, planning and model construction have separate
-owners: preparation uses shared primitives, planning coordinates specialized
-owners, and SGB builds the model from the prepared input.
+Geometry source preparation, interpretation and model construction have
+separate owners: the source stage uses the grid engine, interpretation and the
+junction partition turn its prepared input into the effective input, and SGB
+builds the model from that input. Only AEDT's native construction uses
+`scgsim.geometry.planning`.
 Backend families consume the shared geometry without importing one another.
 `semantics` remains a stdlib-only immutable fact boundary. Palace and AEDT keep
 separate mutable simulation state, transaction lifetime, and physical result
@@ -140,10 +145,10 @@ boundaries; callers use the supported entry.
 |---|---|
 | `scgsim.geometry.source.plan_assembly` | Compose component occurrences, transforms, stack facts, and caller-assigned Nets into source input. |
 | `scgsim.geometry.planning.contact_planning` | Recognize declared interfaces, contact patches, and metal-to-metal contact ownership. |
-| `scgsim.geometry.planning.junction_planning` | Resolve authored support and incident-conductor binding, then derive exact rectangular-junction partitions. |
+| `scgsim.geometry.junctions` | Resolve authored support and incident-conductor binding, then derive exact rectangular-junction partitions. |
 | `scgsim.geometry.planning.surface_planning` | Build solver-facing surfaces, contact coverage, contribution patches, and partitions. |
 | `scgsim.geometry.planning.topology_planning` | Resolve shared surface ownership and ring geometry for surface planning. |
-| `scgsim.geometry.primitives.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
+| `scgsim.geometry.grid.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
 
 The [API migration reference](api-migration.qmd) lists the supported import
 routes for these operations.

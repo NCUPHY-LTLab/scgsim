@@ -30,11 +30,11 @@ from test_rectangular_junction_geometry import fixture as junction_fixture
 from test_simulation_drc import check
 
 from scgsim.geometry import with_rectangular_junctions
+from scgsim.geometry.junctions.derivation import derive_rectangular_junctions
 from scgsim.geometry.models.input import (
     GdsBoundaryReconstructionSpec,
     LayoutPolygonSpec,
 )
-from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.source.grid import apply_geometry_grid
 from scgsim.palace import EigenmodeSim

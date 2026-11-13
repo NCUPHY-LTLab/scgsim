@@ -6,24 +6,22 @@ from collections.abc import Mapping, Sequence
 from math import isfinite
 from typing import Any, cast
 
-from scgsim.geometry.models.common import PolygonRing, Vector3D
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.topology import (
-    InterfacePlanRecord,
-    MMContactRecord,
-)
-from scgsim.geometry.primitives.constants import (
-    TOPOLOGY_EPS_UM,
-)
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import (
+from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.grid.grid import boolean_polygon_region
+from scgsim.geometry.grid.loops import (
     canonical_loop_sort_key,
     contact_holes_are_simple,
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
     same_loop_geometry,
 )
-from scgsim.geometry.primitives.planar_loops import clean_loop
+from scgsim.geometry.grid.planar_loops import clean_loop
+from scgsim.geometry.models.common import PolygonRing, Vector3D
+from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.topology import (
+    InterfacePlanRecord,
+    MMContactRecord,
+)
 
 
 def contact_patches_by_entity_face(

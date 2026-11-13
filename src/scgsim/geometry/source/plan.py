@@ -14,6 +14,8 @@ from types import MappingProxyType
 from typing import Any, cast
 
 from scgsim.diagnostics import diagnostic_stage, progress
+from scgsim.geometry.grid.grid import geometry_grid_scope, source_recipe_map
+from scgsim.geometry.grid.grid_cache import with_grid_work_cache
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
@@ -22,8 +24,6 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.junctions import RectangularJunctionSpec
 from scgsim.geometry.models.lumped import LumpedSupport
-from scgsim.geometry.primitives.grid import geometry_grid_scope, source_recipe_map
-from scgsim.geometry.primitives.grid_cache import with_grid_work_cache
 from scgsim.geometry.source.adapter import layout_grid, lower_layout, stack_records
 from scgsim.geometry.source.adapter_records import LoadedLibrary
 from scgsim.geometry.source.curves import (

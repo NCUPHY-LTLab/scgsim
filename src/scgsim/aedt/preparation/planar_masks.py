@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from scgsim.aedt.data import canonical_sha256
 from scgsim.aedt.preparation.planar_source import plain
-from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
+from scgsim.geometry.grid.spatial import geometry_ref_surface_z_um
 
 INSET_CIRCLE_POINTS = 128
 INSET_METHOD = "klayout_complement_minkowski.v1"

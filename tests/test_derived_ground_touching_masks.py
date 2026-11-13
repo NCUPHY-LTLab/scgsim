@@ -22,7 +22,7 @@ import pytest
 from geometry_grid_fixtures import GRID, rectangle, ring_area
 
 from scgsim.geometry import SemanticEntitySpec
-from scgsim.geometry.primitives.grid import geometry_grid_scope
+from scgsim.geometry.grid.grid import geometry_grid_scope
 from scgsim.geometry.source.ground import derived_ground_polygons
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
 

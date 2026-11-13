@@ -15,12 +15,12 @@ from scgsim.geometry import (
     PhysicalLayerDeclaration,
     build_gds_stack_geometry_input,
 )
-from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry.primitives.grid import (
+from scgsim.geometry.grid.grid import (
     geometry_grid_scope,
     source_grid_audits,
     source_recipe_map,
 )
+from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.source import occurrence as occurrence
 from scgsim.geometry.source import plan as plan_module
 from scgsim.preparation import preparation_resources

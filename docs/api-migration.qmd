@@ -157,11 +157,11 @@ source code does not import planning. Source identity, snapshot detachment,
 caller-owned final Net membership and native correspondence remain owned by
 their current responsibilities.
 
-The shared implementation modules use responsibility names. Geometry
-primitives move from `scgsim.geometry._primitives` to
-`scgsim.geometry.primitives`, including `grid_cache` and `tagged_grid`;
-`source._normalization`, `source._occurrence`, and `source._polygon_ops` move to
-`source.normalization`, `source.occurrence`, and `source.polygon_ops`. These
+The shared implementation modules use responsibility names. The grid
+engine lives in `scgsim.geometry.grid`, including `grid_cache` and
+`tagged_grid`; `source._normalization` and `source._occurrence` move to
+`source.normalization` and `source.occurrence`, and `source._polygon_ops` to
+`scgsim.geometry.grid.polygon_ops`. These
 internal names do not expand the supported API; use the `geometry` facade
 above.
 
@@ -177,11 +177,11 @@ Their supported routes remain the package facades:
 
 The responsibility modules are `scgsim.geometry.source.plan_assembly`,
 `scgsim.geometry.planning.contact_planning`,
-`scgsim.geometry.planning.junction_planning`,
+`scgsim.geometry.junctions`,
 `scgsim.geometry.planning.surface_planning`,
 `scgsim.geometry.planning.topology_planning`,
-`scgsim.geometry.primitives.tagged_grid_faces`, and
-`scgsim.geometry.primitives.tagged_grid_operations`. They organize the
+`scgsim.geometry.grid.tagged_grid_faces`, and
+`scgsim.geometry.grid.tagged_grid_operations`. They organize the
 implementation without adding new supported imports.
 
 The junction implementation derives exact partitions for explicitly declared

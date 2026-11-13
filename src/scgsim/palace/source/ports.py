@@ -58,7 +58,7 @@ def with_rectangular_ports(build_input: GeometryBuildInput) -> GeometryBuildInpu
     A sheet that lands on a round conductor ends on that conductor's arc, so SCGSim keeps only
     the central rectangle of the drawn sheet as the port and gives the two end pieces to the
     conductors the sheet lands on.  The partition itself, its cut rule and its refusals are
-    the shared geometry's (``scgsim.geometry.planning.junction_partition``); this step only
+    the shared geometry's (``scgsim.geometry.junctions.partition``); this step only
     names the two terminals of each sheet.  Requests the plan already holds are kept for the
     sheets this simulation selected; a request for a sheet it did not select is dropped with
     that sheet, since only the selected sheets reach the build.

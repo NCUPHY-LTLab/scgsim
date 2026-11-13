@@ -8,20 +8,17 @@ from fractions import Fraction
 from typing import Any
 
 from scgsim.aedt.preparation.junction_partition import (
-    closed_contact,
     junction_contact_inventory,
     junction_geometry,
-    junction_source_binding,
 )
 from scgsim.aedt.specs.epr import (
     PlanarJunction,
 )
 from scgsim.geometry import GeometryBuildInput
-from scgsim.geometry.planning.junction_partition import (
-    drawn_exterior,
-    junction_terminal_line,
-    lattice_rectangle,
-)
+from scgsim.geometry.junctions.contact import junction_source_binding
+from scgsim.geometry.junctions.exact_geometry import closed_contact
+from scgsim.geometry.junctions.lattice import drawn_exterior, lattice_rectangle
+from scgsim.geometry.junctions.terminal import junction_terminal_line
 from scgsim.geometry.source.validation import validate_geometry_input
 
 

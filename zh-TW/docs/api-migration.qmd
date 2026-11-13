@@ -70,7 +70,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 共用多邊形、空間與 Entity 基元位於來源階段下方；來源程式不匯入規劃。來源身份、快照分離、呼叫者負責的最終 Net 成員及原生對應，維持目前各自的責任歸屬。
 
-共用實作模組依責任分工。幾何基本操作從 `scgsim.geometry._primitives` 移至 `scgsim.geometry.primitives`，其中包括 `grid_cache` 與 `tagged_grid`；`source._normalization`、`source._occurrence` 及 `source._polygon_ops` 則分別移至 `source.normalization`、`source.occurrence` 與 `source.polygon_ops`。這些內部名稱不會擴大受支援的 API；請使用上列 `geometry` 外觀模組。
+共用實作模組依責任分工。網格引擎位於 `scgsim.geometry.grid`，其中包括 `grid_cache` 與 `tagged_grid`；`source._normalization` 與 `source._occurrence` 分別移至 `source.normalization` 與 `source.occurrence`，`source._polygon_ops` 則移至 `scgsim.geometry.grid.polygon_ops`。這些內部名稱不會擴大受支援的 API；請使用上列 `geometry` 外觀模組。
 
 規劃與標記網格模組也依相同責任邊界組織。支援的匯入路徑仍是套件外觀模組：
 
@@ -81,7 +81,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 | 矩形接面宣告與推導 | 從 `scgsim.geometry` 使用 `RectangularJunctionSpec` 與 `with_rectangular_junctions`，再呼叫 `interpret_physical_geometry` |
 | Palace 研究的模型建構 | 從 `scgsim.palace` 使用 `EigenmodeSim` 或 `ElectrostaticSim`；自行準備的輸入使用 `scgsim.geometry.sgb` 的 `build_sgb_geometry` |
 
-負責模組包括 `scgsim.geometry.source.plan_assembly`、`scgsim.geometry.planning.contact_planning`、`scgsim.geometry.planning.junction_planning`、`scgsim.geometry.planning.surface_planning`、`scgsim.geometry.planning.topology_planning`、`scgsim.geometry.primitives.tagged_grid_faces` 及 `scgsim.geometry.primitives.tagged_grid_operations`。這些模組整理內部實作，不新增支援的匯入路徑。
+負責模組包括 `scgsim.geometry.source.plan_assembly`、`scgsim.geometry.planning.contact_planning`、`scgsim.geometry.junctions`、`scgsim.geometry.planning.surface_planning`、`scgsim.geometry.planning.topology_planning`、`scgsim.geometry.grid.tagged_grid_faces` 及 `scgsim.geometry.grid.tagged_grid_operations`。這些模組整理內部實作，不新增支援的匯入路徑。
 
 接面規劃會為明確宣告的矩形接面推導精確分區。來源與 AEDT 準備共用內部服務 `junction_contact_inventory(build_input, request)` 及 `JunctionContactRequest`，以解析來源支撐面與相鄰導體。這些橋接名稱不是 `scgsim.geometry` 的匯出；呼叫端透過幾何外觀模組宣告要求，再使用標準物理解讀步驟。
 

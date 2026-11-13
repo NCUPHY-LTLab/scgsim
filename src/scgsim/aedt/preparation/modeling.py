@@ -10,8 +10,8 @@ from typing import Any
 
 from scgsim.aedt.data import canonical_sha256, detached
 from scgsim.aedt.specs.modeling import Modeling
+from scgsim.geometry.interpretation.physical import interpret_physical_geometry
 from scgsim.geometry.models.physical import ApproximationProfile
-from scgsim.geometry.planning.physical import interpret_physical_geometry
 
 
 def interpret_geometry(build_input: Any, stack: Any, modeling: Modeling):

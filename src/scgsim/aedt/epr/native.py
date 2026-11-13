@@ -25,7 +25,7 @@ from scgsim.aedt.runtime.native.common import (
     native_object_evidence,
 )
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
+from scgsim.geometry.grid.spatial import geometry_ref_surface_z_um
 
 
 def _analysis_surface_sheet(
