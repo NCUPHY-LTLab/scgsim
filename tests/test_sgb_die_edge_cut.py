@@ -55,13 +55,13 @@ from sgb_unsupported_cells import arc_cut_by_the_die_edge, strip_into_notch
 
 from scgsim.geometry.sgb.bands.requests import InsetRequest, InterfaceSurfaces
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.exact.grid import exact_z
 from scgsim.geometry.sgb.exact.prisms import (
     Footprint,
     PrismCatalogue,
     PrismRecord,
 )
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 
 DIE = (0.0, -30.0, 20.0, 30.0)
 STRIP = [(0.0, -25.0), (20.0, 15.0), (20.0, 25.0), (0.0, -15.0)]

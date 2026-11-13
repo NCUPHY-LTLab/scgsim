@@ -23,8 +23,8 @@ from fractions import Fraction
 from functools import lru_cache
 from typing import Literal
 
-from scgsim.geometry.sgb.exact.plane import Point
 from scgsim.geometry.sgb.exact import circle_math
+from scgsim.geometry.sgb.exact.plane import Point
 
 PIECE_SEPARATOR = "#"
 """Separator in the id of the k-th witness chord of an arc carrier: ``<arc id>#<k>``; ids are written with it,

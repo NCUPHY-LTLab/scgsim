@@ -30,10 +30,10 @@ from dataclasses import dataclass
 
 from scgsim.geometry.sgb.arrangement.dcel import Arrangement
 from scgsim.geometry.sgb.errors import ValidationError
-from scgsim.geometry.sgb.exact.plane import Point, RepPoint
 from scgsim.geometry.sgb.exact.band_regions import BandRegions, BandSeam
 from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
 from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.plane import Point, RepPoint
 from scgsim.geometry.sgb.exact.support import SupportRegion
 
 MAX_REPORTED = 5

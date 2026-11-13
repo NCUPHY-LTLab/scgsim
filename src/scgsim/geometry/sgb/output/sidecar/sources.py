@@ -39,15 +39,15 @@ from scgsim.geometry.sgb.bands.requests import (
 from scgsim.geometry.sgb.bands.requests import (
     InsetRequest as InsetRequestRecord,
 )
+from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.exact.carriers import ArcCarrier, Lineage
+from scgsim.geometry.sgb.exact.plane import Point
+from scgsim.geometry.sgb.exact.prisms import PrismRecord
+from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
-from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.model import ConformalModel
-from scgsim.geometry.sgb.exact.plane import Point
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier, Lineage
-from scgsim.geometry.sgb.exact.prisms import PrismRecord
-from scgsim.geometry.sgb.topology.routes.naming import port_group
 from scgsim.geometry.sgb.output.sidecar.lineage import REFINEMENT_FAMILY_ROLE
+from scgsim.geometry.sgb.topology.routes.naming import port_group
 
 
 def entity_records(model: ConformalModel) -> dict[str, Entity]:

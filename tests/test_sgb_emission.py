@@ -28,18 +28,18 @@ from sgb_scenes import random_layout
 
 from scgsim.contracts.sgb_sidecar import read_sidecar, views
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.output.emission.numbers import angle_of
-from scgsim.geometry.sgb.output.emission.plan import check_one_tag_per_id, plan_brep
-from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file
-from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
 from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 from scgsim.geometry.sgb.checks.verification.loaded import (
     apply_sidecar_embeds,
     verify_loaded,
     verify_xao,
 )
+from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.output.emission.numbers import angle_of
+from scgsim.geometry.sgb.output.emission.plan import check_one_tag_per_id, plan_brep
+from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file
+from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
 
 
 def sidecar_of(model, plan):

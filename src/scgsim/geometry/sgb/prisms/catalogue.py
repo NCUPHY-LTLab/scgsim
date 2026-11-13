@@ -18,6 +18,8 @@ from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.prisms.curves import bind_boundaries
 from scgsim.geometry.sgb.prisms.entities import (
     check_entity_kind,
@@ -27,8 +29,6 @@ from scgsim.geometry.sgb.prisms.entities import (
 )
 from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, source_footprints
 from scgsim.geometry.sgb.prisms.ports import port_prisms
-from scgsim.geometry.sgb.exact.grid import Grid
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 
 
 def build_prism_catalogue(

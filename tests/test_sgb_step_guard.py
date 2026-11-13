@@ -25,6 +25,9 @@ from sgb_extreme_cases import (  # noqa: E402
 )
 
 from scgsim.contracts.sgb_sidecar import views  # noqa: E402
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report  # noqa: E402
+from scgsim.geometry.sgb.exact.grid import exact_z  # noqa: E402
+from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.output.emission.writer import write_brep_file  # noqa: E402
 from scgsim.geometry.sgb.output.exchange.guard import (  # noqa: E402
@@ -35,11 +38,8 @@ from scgsim.geometry.sgb.output.exchange.guard import (  # noqa: E402
     write_step_guard,
 )
 from scgsim.geometry.sgb.output.exchange.step import export_aedt_step  # noqa: E402
-from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.exact.grid import exact_z  # noqa: E402
 from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar  # noqa: E402
 from scgsim.geometry.sgb.output.sidecar.files import write_sidecar  # noqa: E402
-from scgsim.geometry.sgb.checks.slivers.report import sliver_report  # noqa: E402
 
 pytestmark = pytest.mark.occt
 

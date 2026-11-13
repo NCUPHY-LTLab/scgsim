@@ -18,7 +18,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from scgsim.geometry.models.grid import format_box
-from scgsim.geometry.sgb.exact import identity
 from scgsim.geometry.sgb.arrangement.dcel import (
     Arrangement,
     build_arrangement,
@@ -27,19 +26,26 @@ from scgsim.geometry.sgb.arrangement.dcel import (
 from scgsim.geometry.sgb.arrangement.derivation.arc_edges import realise_arc_edges
 from scgsim.geometry.sgb.arrangement.derivation.ids import assign_ids
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer, RawMeasurements
-from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.arrangement.labelling.bands import (
     LevelSupport,
     check_seams_kept,
     face_bands,
     level_supports,
 )
-from scgsim.geometry.sgb.arrangement.labelling.dissolve import Dissolved, FamilyPolicies, dissolve
+from scgsim.geometry.sgb.arrangement.labelling.dissolve import (
+    Dissolved,
+    FamilyPolicies,
+    dissolve,
+)
 from scgsim.geometry.sgb.arrangement.labelling.linking import TAG, SlabEdges, link_faces
 from scgsim.geometry.sgb.arrangement.labelling.membership import membership_shares
-from scgsim.geometry.sgb.arrangement.labelling.prism_set import PrismSet, without_landings
+from scgsim.geometry.sgb.arrangement.labelling.prism_set import (
+    PrismSet,
+    without_landings,
+)
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
-from scgsim.geometry.sgb.prisms.levels import LevelStructure
+from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.exact import identity
 from scgsim.geometry.sgb.exact.carriers import (
     ArcCarrier,
     CarrierRole,
@@ -50,6 +56,7 @@ from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
 from scgsim.geometry.sgb.exact.labels import LevelLabel, SheetOwner
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
 from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.prisms.levels import LevelStructure
 
 MEMBERSHIP_PREFIX = "~m:"
 """Prefix of the id of a slab's membership curve (written, never read: the role is ``CarrierRole.MEMBERSHIP``)."""

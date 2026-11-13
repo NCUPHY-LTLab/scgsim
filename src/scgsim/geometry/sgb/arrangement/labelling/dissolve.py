@@ -31,8 +31,8 @@ from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     crossing_pixels_kernel,
     hits_kernel,
 )
-from scgsim.geometry.sgb.exact.plane import Point, point_in_ring
 from scgsim.geometry.sgb.exact.carriers import CarrierRole
+from scgsim.geometry.sgb.exact.plane import Point, point_in_ring
 
 EdgeSides = tuple[
     Any, Any

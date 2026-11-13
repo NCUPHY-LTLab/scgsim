@@ -74,17 +74,16 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from fractions import Fraction
 
-from scgsim.geometry.sgb.bands.inset_regions import (
-    PortClip,
-    RequiredEdge,
-    margin_cells,
-)
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     Segment,
     crossing_pixel,
     proper_crossing,
 )
-from scgsim.geometry.sgb.exact.plane import Point
+from scgsim.geometry.sgb.bands.inset_regions import (
+    PortClip,
+    RequiredEdge,
+    margin_cells,
+)
 from scgsim.geometry.sgb.exact import circle_math
 from scgsim.geometry.sgb.exact.band_regions import (
     BandRegions,
@@ -102,6 +101,7 @@ from scgsim.geometry.sgb.exact.carriers import (
     RingPrimitive,
 )
 from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
+from scgsim.geometry.sgb.exact.plane import Point
 from scgsim.geometry.sgb.exact.support import SupportRegion
 
 Vec = tuple[Decimal, Decimal]

@@ -23,7 +23,6 @@ from sgb_supported_kit import Conductor, Scene, catalogue, to_lattice, type_band
 
 from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.exact.carriers import (
     ArcCarrier,
     LineCarrier,
@@ -36,6 +35,7 @@ from scgsim.geometry.sgb.exact.support import (
     SupportRegion,
     distance_to_primitive,
 )
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.output.sidecar.lineage import CarrierLineage
 
 # A source edge is noded by snap rounding: the arrangement edges along it end within half a grid diagonal of it.

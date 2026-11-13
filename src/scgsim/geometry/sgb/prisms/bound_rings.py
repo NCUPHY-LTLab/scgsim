@@ -14,11 +14,11 @@ from dataclasses import replace
 
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
+from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.prisms import RingPrimitive
 from scgsim.geometry.sgb.prisms.catalogue import declared_grid
 from scgsim.geometry.sgb.prisms.curves import RingKey, bind_boundaries
 from scgsim.geometry.sgb.prisms.footprints import source_footprints
-from scgsim.geometry.sgb.exact.grid import Grid
-from scgsim.geometry.sgb.exact.prisms import RingPrimitive
 
 
 def bound_ring_primitives(

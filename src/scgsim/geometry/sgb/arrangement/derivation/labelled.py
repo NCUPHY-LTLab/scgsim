@@ -15,16 +15,19 @@ from dataclasses import dataclass, field
 
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb.exact import identity
-from scgsim.geometry.sgb.arrangement.derivation.contacts import check_contacts, check_manifold
+from scgsim.geometry.sgb.arrangement.derivation.contacts import (
+    check_contacts,
+    check_manifold,
+)
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.arrangement.derivation.level_layers import build_level_layers
 from scgsim.geometry.sgb.arrangement.derivation.slabs import build_slab_layers
-from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
-from scgsim.geometry.sgb.prisms.levels import LevelStructure, build_levels
+from scgsim.geometry.sgb.exact import identity
 from scgsim.geometry.sgb.exact.carriers import ArcCarrier
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
 from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
+from scgsim.geometry.sgb.prisms.levels import LevelStructure, build_levels
 
 
 @dataclass

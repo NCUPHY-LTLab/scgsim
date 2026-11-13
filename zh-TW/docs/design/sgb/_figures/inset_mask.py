@@ -28,8 +28,8 @@ from sgb_gmsh_oracle import (  # noqa: E402
 from scgsim.contracts.sgb_sidecar import read_sidecar, views  # noqa: E402
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area  # noqa: E402
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
-from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.checks.verification.loaded import verify_loaded  # noqa: E402
+from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
 
 # --------------------------------------------------------------------------- 5. mask vs imprint (2-D gmsh illustration)
 

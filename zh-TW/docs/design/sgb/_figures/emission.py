@@ -1,4 +1,4 @@
-"""Figures and tables for ``docs/design/sgb/output/emission.qmd``.
+"""Figures and tables for ``docs/design/sgb/emission.qmd``.
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 

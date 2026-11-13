@@ -21,9 +21,9 @@ from math import lcm
 
 import numpy as np
 
-from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, TopoFace, Topology
-from scgsim.geometry.sgb.output.emission.numbers import PI, angle_of
 from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.output.emission.numbers import PI, angle_of
+from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, TopoFace, Topology
 
 PLANE, CYLINDER = 0, 1  # surface kinds
 CIRCLE_SPREAD_LIMIT_UM = (

@@ -21,7 +21,6 @@ from sgb_scenes import GRID, chip_prisms, exact_band_areas, footprint, rect_um, 
 
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.bands.requests import InsetRequest, InterfaceSurfaces
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.exact.carriers import Lineage, circle_arcs
 from scgsim.geometry.sgb.exact.grid import exact_z
 from scgsim.geometry.sgb.exact.prisms import (
@@ -31,6 +30,7 @@ from scgsim.geometry.sgb.exact.prisms import (
     PrismCatalogue,
     PrismRecord,
 )
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 
 PAD_RADIUS = 10.0
 GAP = 2.0

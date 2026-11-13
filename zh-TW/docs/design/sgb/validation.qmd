@@ -4,7 +4,7 @@ description: "SGB 檢查的每一條 invariant、它在何處執行、失敗代�
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
-scgsim-id: "docs/design/sgb/checks/validation"
+scgsim-id: "docs/design/sgb/validation"
 ---
 
 SGB 推導出的模型要交給 mesher 與 solver，所以在寫出之前必須能回答：這個模型的 topology 是否自洽？本頁列出每一條結構 invariant、它在何處執行、失敗代表什麼，並說明支配全部規則的原則：**invariant 一旦失敗，build 就中止；不修補，也不產生 fallback geometry。** 這些是*結構* invariant，關於已規劃 topology 的陳述，不是真就是假；它們不是 research Gate，後者是 Human 的決定（[Open decision](decisions.qmd)）。兩層驗證與下列 invariant 在 production（`scgsim.geometry.sgb`）都已實作：`validate_model` 在每次 build 都執行，一次 build 的報告記錄 31 項 check，其中 4 項是不使 build 失敗的警告。
@@ -199,7 +199,7 @@ id 是 64 bit 的內容雜湊，碰撞機率極低，但以 id 為 key 的容器
 
 下列 invariant（brief 第 11 與 14 節）不在 `validate_model` 本身，而是在 pipeline 的其他位置（其中不同 Net 接觸與 non-manifold pinch 也會在報告中留下一筆記錄）：
 
-- **不同 Net 接觸**：pipeline 的 `contact_check` 階段（`derivation/contacts.py`），在 arrangement 完成之後、assembly 之前，從每個 arrangement 的 vertex 與 face 檢查，涵蓋任何 route、任何平面，也涵蓋只由 grid 造成的接觸（`ContactError`）。
+- **不同 Net 接觸**：pipeline 的 `contact_check` 階段（`arrangement/derivation/contacts.py`），在 arrangement 完成之後、assembly 之前，從每個 arrangement 的 vertex 與 face 檢查，涵蓋任何 route、任何平面，也涵蓋只由 grid 造成的接觸（`ContactError`）。
 - **Refinement 位置**：refinement curve 的每一段都必須落在有 face 且屬於某個輸出 volume 的 cell；否則 assembly 拋出 `SgbError`（見 [Cut family](cut-families.qmd#embed-or-edge)）。
 - **每個 native entity 恰有一個 planned id。** 寫出的檔案以 `TopExp::MapShapes` 的順序編號，emission 拒絕任何一個 planned id 被編兩次，`verify_loaded` 與 OCCT 檢查再逐維度比對載入的 entity 與 planned id，不同就失敗（[Emission](emission.qmd)）。
 - **Mesh conformity**（沒有重複節點、每個共用的內部 face 都被共用）：測試與 catalogue 在粗 mesh 上檢查；`verify_loaded` 以預期的數量、邊界、面積與體積間接保護它。
@@ -263,4 +263,4 @@ flowchart LR
 
 ## 補充：重現資料
 
-圖與被竄改 shell 的範例由 `zh-TW/docs/design/sgb/_figures/validation.py` 以 production 套件 `scgsim.geometry.sgb` 產生（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行）；數字在 `figures/validation-numbers.json`，被竄改模型的完整報告在 `figures/validation-tampered-shell-report.json`（不含各 check 的耗時，它們不屬於任何輸出檔）。執行範例是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`（Route B）。production 的數字：invariant 清單是 `ConformalModel.report`（`validation_report` 檔案）的 31 個 check；OCCT 的數字由 script 對六個真實輸入的模型與兩個 stage 層的 scene 以 `check_file` 取得（單次執行，耗時隨機器而異，需要 OCP）；catalogue 由 `python tests/sgb_catalogue_report.py --timings --out <資料夾>` 在 `scgsim` 套件根目錄產生（寫出 `catalogue.json`）。validator 與 `verify_loaded` 的 scaling 是 production 量測，數字在 `figures/why-validator-scaling.json` 與 `figures/why-scaling-numbers.json`（由 `_figures/why_scaling.py` 產生）。Brief 對應第 11 節與第 14 節；production 模組為 `validation`、`derivation/contacts`、`verification/loaded`、`verification/occt`；測試為 `tests/test_sgb_validation.py`、`tests/test_sgb_extreme_cases.py`、`tests/test_sgb_occt.py`。名詞見[詞彙表](index.qmd#glossary)。
+圖與被竄改 shell 的範例由 `zh-TW/docs/design/sgb/_figures/validation.py` 以 production 套件 `scgsim.geometry.sgb` 產生（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行）；數字在 `figures/validation-numbers.json`，被竄改模型的完整報告在 `figures/validation-tampered-shell-report.json`（不含各 check 的耗時，它們不屬於任何輸出檔）。執行範例是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`（Route B）。production 的數字：invariant 清單是 `ConformalModel.report`（`validation_report` 檔案）的 31 個 check；OCCT 的數字由 script 對六個真實輸入的模型與兩個 stage 層的 scene 以 `check_file` 取得（單次執行，耗時隨機器而異，需要 OCP）；catalogue 由 `python tests/sgb_catalogue_report.py --timings --out <資料夾>` 在 `scgsim` 套件根目錄產生（寫出 `catalogue.json`）。validator 與 `verify_loaded` 的 scaling 是 production 量測，數字在 `figures/why-validator-scaling.json` 與 `figures/why-scaling-numbers.json`（由 `_figures/why_scaling.py` 產生）。Brief 對應第 11 節與第 14 節；production 模組為 `checks/validation`、`arrangement/derivation/contacts`、`checks/verification/loaded`、`checks/verification/occt`；測試為 `tests/test_sgb_validation.py`、`tests/test_sgb_extreme_cases.py`、`tests/test_sgb_occt.py`。名詞見[詞彙表](index.qmd#glossary)。

@@ -22,9 +22,9 @@ from collections.abc import Sequence
 
 from scgsim.geometry.sgb.arrangement.dcel import BoxIndex
 from scgsim.geometry.sgb.errors import OverlapError
-from scgsim.geometry.sgb.exact.plane import RepPoint, point_in_ring, ring_bbox
 from scgsim.geometry.sgb.exact.grid import Grid
 from scgsim.geometry.sgb.exact.labels import Domain, SheetOwner
+from scgsim.geometry.sgb.exact.plane import RepPoint, point_in_ring, ring_bbox
 from scgsim.geometry.sgb.exact.prisms import PrismRecord
 
 

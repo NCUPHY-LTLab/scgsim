@@ -8,14 +8,14 @@ need to look at a *failing* report call :func:`validate_model` themselves and de
 
 from __future__ import annotations
 
-from scgsim.geometry.sgb.topology.assembly.records import Topology
 from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.topology.routes.groups import RoutedModel
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.checks.validation import arrangements, ids
 from scgsim.geometry.sgb.checks.validation import topology as topology_checks
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
+from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.topology.assembly.records import Topology
+from scgsim.geometry.sgb.topology.routes.groups import RoutedModel
 
 
 def validate_model(

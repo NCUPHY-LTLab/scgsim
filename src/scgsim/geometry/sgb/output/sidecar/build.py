@@ -24,9 +24,9 @@ from scgsim.contracts.sgb_sidecar.records import (
     Summary,
     Volume,
 )
-from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
+from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.output.sidecar.derived import (
     band_family_records,
     carrier_records,
@@ -65,7 +65,9 @@ BINDING_RULE = (
 class SidecarContext:
     """What the sidecar records besides the model and the plan: the file names and the sliver report summary."""
 
-    sliver_summary: SliverSummary  # ``checks.slivers.report.sliver_report(model)["summary"]``
+    sliver_summary: (
+        SliverSummary  # ``checks.slivers.report.sliver_report(model)["summary"]``
+    )
     files: dict[str, str] = field(default_factory=dict)
     name: str = "model"
 

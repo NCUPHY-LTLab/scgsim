@@ -55,9 +55,9 @@ from scgsim.geometry.sgb.bands.requests import (
     SolutionInterface,
 )
 from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier
 from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
+from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 MARGINS = (0.1, 0.5, 2.0)
 VIEW = ((26.0, 74.0), (26.0, 74.0))

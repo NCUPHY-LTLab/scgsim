@@ -31,10 +31,13 @@ from sgb_scenes import pad_in_ground, random_layout
 
 from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.output.emission.plan import plan_brep
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.checks.verification.loaded import apply_sidecar_embeds, verify_loaded
+from scgsim.geometry.sgb.checks.verification.loaded import (
+    apply_sidecar_embeds,
+    verify_loaded,
+)
 from scgsim.geometry.sgb.checks.verification.ocp import ocp_available
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
+from scgsim.geometry.sgb.output.emission.plan import plan_brep
 
 MESH_SIZE_UM = 4.0  # coarse: the fixtures are 40 x 40 x 20 um boxes
 NOT_MEASURED = {"mesh": "not meshed"}

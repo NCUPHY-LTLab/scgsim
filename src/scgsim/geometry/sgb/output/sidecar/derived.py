@@ -26,11 +26,11 @@ from scgsim.contracts.sgb_sidecar.records import (
     SupportRing,
     UnknownCarrier,
 )
-from scgsim.geometry.sgb.output.emission.measures import rounded
-from scgsim.geometry.sgb.output.emission.plan import BrepPlan
-from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.exact.carriers import LineEdge, RingPrimitive
 from scgsim.geometry.sgb.exact.support import SupportRegion
+from scgsim.geometry.sgb.model import ConformalModel
+from scgsim.geometry.sgb.output.emission.measures import rounded
+from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.output.sidecar.groups import band_groups
 from scgsim.geometry.sgb.output.sidecar.lineage import (
     BAND_FAMILY_ROLE,

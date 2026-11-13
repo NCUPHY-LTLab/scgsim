@@ -15,7 +15,7 @@ writer 輸出的 BREP 是純文字，XAO 是把同一份 BREP 加上 sub-shape r
 
 ## BREP 基本結構 {#brep-essentials}
 
-**BREP**（boundary representation）以邊界描述 solid。BREP 檔是純文字，分成固定的 section。writer（`emission/writer.py`）依下表順序輸出；數量是 running example 的數字。
+**BREP**（boundary representation）以邊界描述 solid。BREP 檔是純文字，分成固定的 section。writer（`output/emission/writer.py`）依下表順序輸出；數量是 running example 的數字。
 
 | Section | 內容 | 數量 |
 |---|---|---:|

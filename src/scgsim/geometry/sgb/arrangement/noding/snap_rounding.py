@@ -37,8 +37,8 @@ from scgsim.geometry.sgb.arrangement.noding.spatial_hash import (
     cells_along,
     points_extent,
 )
-from scgsim.geometry.sgb.exact.plane import Point
 from scgsim.geometry.sgb.exact.carriers import EdgeCarrier
+from scgsim.geometry.sgb.exact.plane import Point
 from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 
 EdgeKey = tuple[Point, Point]  # canonical: a < b lexicographically

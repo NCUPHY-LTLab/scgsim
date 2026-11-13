@@ -4,7 +4,7 @@ description: "Sliver 幾何的四種來源、哪些由建構消除、量測剩�
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
-scgsim-id: "docs/design/sgb/checks/slivers"
+scgsim-id: "docs/design/sgb/slivers"
 ---
 
 **Sliver** 指的是遠小於模型特徵的 face 或 edge：短於 grid $g$ 的 edge，或只有幾奈米寬的 face。sliver 迫使 mesher 在毀掉元素品質與產生大量細小元素之間做選擇；以 Boolean 為基礎的 CAD 也會在它們周圍失去 topology。
@@ -184,4 +184,4 @@ Human 已決定（D2）：v1 不設任何 sliver 門檻，上表兩個選用 pol
 
 ## 補充：重現資料
 
-範例由 `zh-TW/docs/design/sgb/_figures/slivers.py` 以 production 套件 `scgsim.geometry.sgb`（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行）建構並以 `sliver_report(model)` 量測；數字在 `figures/slivers-numbers.json`。第 1 到第 3 種來源與較粗 grid 的替代模擬是手工建的 stage 層 catalogue（用 `tests/sgb_scenes.py` 的 helper）；第 4 種來源的環形 gap 與 derived 對 source 的例子，以及執行範例的 report 表，用 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`（環形 gap 與 derived 例子為 Route A，以 `thin_film` profile 詮釋；測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原），表中標為 stage 層的列取自 `tests/sgb_emit_cases.py` 的 `CASES`。production 的欄位與數值來自 `sliver_report(model)`；catalogue 數字由 `python tests/sgb_catalogue_report.py` 產生。Brief 對應第 10 節與 open decision D2；production 模組為 `slivers`（`report`、`feature_size`）、`derivation/contacts`、`noding`、`labelling/dissolve`；測試 `tests/test_sgb_slivers.py`、`tests/test_sgb_extreme_cases.py`。Snap rounding 的文獻：J. D. Hobby（1999），*Practical segment intersection with finite precision output*；L. J. Guibas 與 D. H. Marimont（1998），*Rounding arrangements dynamically*；D. Halperin 與 E. Packer（2002），*Iterated snap rounding*（見[建立 arrangement](arrangement.qmd)）。名詞見[詞彙表](index.qmd#glossary)。
+範例由 `zh-TW/docs/design/sgb/_figures/slivers.py` 以 production 套件 `scgsim.geometry.sgb`（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行）建構並以 `sliver_report(model)` 量測；數字在 `figures/slivers-numbers.json`。第 1 到第 3 種來源與較粗 grid 的替代模擬是手工建的 stage 層 catalogue（用 `tests/sgb_scenes.py` 的 helper）；第 4 種來源的環形 gap 與 derived 對 source 的例子，以及執行範例的 report 表，用 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`（環形 gap 與 derived 例子為 Route A，以 `thin_film` profile 詮釋；測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原），表中標為 stage 層的列取自 `tests/sgb_emit_cases.py` 的 `CASES`。production 的欄位與數值來自 `sliver_report(model)`；catalogue 數字由 `python tests/sgb_catalogue_report.py` 產生。Brief 對應第 10 節與 open decision D2；production 模組為 `checks/slivers`（`report`、`feature_size`）、`arrangement/derivation/contacts`、`arrangement/noding`、`arrangement/labelling/dissolve`；測試 `tests/test_sgb_slivers.py`、`tests/test_sgb_extreme_cases.py`。Snap rounding 的文獻：J. D. Hobby（1999），*Practical segment intersection with finite precision output*；L. J. Guibas 與 D. H. Marimont（1998），*Rounding arrangements dynamically*；D. Halperin 與 E. Packer（2002），*Iterated snap rounding*（見[建立 arrangement](arrangement.qmd)）。名詞見[詞彙表](index.qmd#glossary)。

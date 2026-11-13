@@ -36,15 +36,19 @@ from scgsim.geometry.sgb.arrangement.dcel import (
     interior_point,
     sample_points,
 )
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
+    NodedEdge,
+    Segment,
+    snap_round,
+)
 from scgsim.geometry.sgb.errors import ValidationError
-from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge, Segment, snap_round
-from scgsim.geometry.sgb.exact.plane import Point, RepPoint, point_in_ring
 from scgsim.geometry.sgb.exact.carriers import (
     CarrierRole,
     EdgeCarrier,
     LineEdge,
     piece_carriers,
 )
+from scgsim.geometry.sgb.exact.plane import Point, RepPoint, point_in_ring
 from scgsim.geometry.sgb.exact.prisms import Footprint
 from scgsim.geometry.sgb.exact.support import DISTANCE_SLACK, SupportRegion
 

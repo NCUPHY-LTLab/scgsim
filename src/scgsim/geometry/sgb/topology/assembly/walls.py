@@ -24,9 +24,9 @@ from typing import Any
 
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.arrangement.labelling.linking import TAG, walk_chain
-from scgsim.geometry.sgb.exact.plane import Point
 from scgsim.geometry.sgb.exact.carriers import CarrierRole
 from scgsim.geometry.sgb.exact.labels import Domain
+from scgsim.geometry.sgb.exact.plane import Point
 from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 
 

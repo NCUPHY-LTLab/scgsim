@@ -34,13 +34,13 @@ from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
 from sgb_scenes import slab_model  # noqa: E402
 
 from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
-from scgsim.geometry.sgb.build import build_sgb_geometry, emit_model  # noqa: E402
 from scgsim.geometry.sgb.bands.requests import (  # noqa: E402
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
     SolutionInterface,
 )
+from scgsim.geometry.sgb.build import build_sgb_geometry, emit_model  # noqa: E402
 from scgsim.geometry.sgb.errors import InputError  # noqa: E402
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue  # noqa: E402
 

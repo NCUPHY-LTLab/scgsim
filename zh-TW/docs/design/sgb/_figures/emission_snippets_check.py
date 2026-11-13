@@ -1,4 +1,4 @@
-"""Check that the file excerpts quoted in ``docs/design/sgb/output/emission.qmd`` and ``brep-format.qmd`` are real.
+"""Check that the file excerpts quoted in ``docs/design/sgb/emission.qmd`` and ``brep-format.qmd`` are real.
 
 Run from the repository root with the package's environment::
 

@@ -12,8 +12,8 @@ from sgb_scenes import airbridge  # noqa: E402
 
 from scgsim.contracts.sgb_sidecar import read_sidecar, views  # noqa: E402
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
-from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
+from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
 
 FIGURES = kit.FIGURES
 DATA = FIGURES / "emission-timing-data.json"

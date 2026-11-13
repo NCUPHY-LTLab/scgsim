@@ -14,16 +14,15 @@ from collections.abc import Sequence
 from fractions import Fraction
 
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
-from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge, Segment
 from scgsim.geometry.sgb.arrangement.noding.spatial_hash import HotGrid
+from scgsim.geometry.sgb.exact.carriers import ArcCarrier, Lineage, circle_arcs
+from scgsim.geometry.sgb.exact.grid import Grid, exact_z
 from scgsim.geometry.sgb.exact.plane import (
     Point,
     segment_point_distance_sq,
     segments_properly_cross,
 )
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier, Lineage, circle_arcs
-from scgsim.geometry.sgb.exact.grid import Grid, exact_z
 from scgsim.geometry.sgb.exact.prisms import (
     Footprint,
     LineEdge,
@@ -31,6 +30,7 @@ from scgsim.geometry.sgb.exact.prisms import (
     PrismCatalogue,
     PrismRecord,
 )
+from scgsim.geometry.sgb.model import ConformalModel
 
 GRID = Grid(0.001)
 Um = tuple[float, float]

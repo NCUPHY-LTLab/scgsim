@@ -16,11 +16,11 @@ from __future__ import annotations
 
 from collections import Counter
 
+from scgsim.geometry.sgb.checks.validation.report import ValidationReport
+from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, Topology
 from scgsim.geometry.sgb.topology.assembly.shells import shell_checks
 from scgsim.geometry.sgb.topology.routes.groups import RoutedModel
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
-from scgsim.geometry.sgb.checks.validation.report import ValidationReport
 
 CYLINDER_TOLERANCE = 1e-6  # grid units: the same circle within floating-point noise
 

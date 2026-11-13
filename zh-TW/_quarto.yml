@@ -186,14 +186,14 @@ website:
     - docs/design/sgb/layered-model.qmd
     - docs/design/sgb/arrangement.qmd
     - docs/design/sgb/labels-and-dissolution.qmd
-    - docs/design/sgb/topology/assembly.qmd
-    - docs/design/sgb/topology/routes.qmd
+    - docs/design/sgb/assembly.qmd
+    - docs/design/sgb/routes.qmd
     - docs/design/sgb/cut-families.qmd
     - docs/design/sgb/inset-imprint.qmd
-    - docs/design/sgb/exact/identity.qmd
-    - docs/design/sgb/checks/slivers.qmd
-    - docs/design/sgb/checks/validation.qmd
-    - docs/design/sgb/output/emission.qmd
+    - docs/design/sgb/identity.qmd
+    - docs/design/sgb/slivers.qmd
+    - docs/design/sgb/validation.qmd
+    - docs/design/sgb/emission.qmd
     - docs/design/sgb/brep-format.qmd
     - docs/design/sgb/consumer-contract.qmd
     - docs/design/sgb/consumer-mapping.qmd

@@ -58,13 +58,13 @@ import json  # noqa: E402
 
 import gmsh  # noqa: E402
 
-from scgsim.geometry.sgb.output.exchange.guard import read_step_guard  # noqa: E402
-from scgsim.geometry.sgb.output.exchange.step import export_aedt_step  # noqa: E402
-from scgsim.geometry.sgb.output.sidecar.files import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.checks.verification.loaded import (  # noqa: E402
     apply_sidecar_embeds,
     verify_loaded,
 )
+from scgsim.geometry.sgb.output.exchange.guard import read_step_guard  # noqa: E402
+from scgsim.geometry.sgb.output.exchange.step import export_aedt_step  # noqa: E402
+from scgsim.geometry.sgb.output.sidecar.files import read_sidecar  # noqa: E402
 
 runs: dict[str, object] = {}
 for route in "BC":

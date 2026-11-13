@@ -25,10 +25,10 @@ from scgsim.contracts.sgb_sidecar.structure import (
     require_known_keywords,
     require_structure,
 )
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 from scgsim.geometry.sgb.output.emission.plan import plan_brep
 from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
 from scgsim.geometry.sgb.output.sidecar.files import write_sidecar
-from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 
 
 @pytest.fixture(scope="module")

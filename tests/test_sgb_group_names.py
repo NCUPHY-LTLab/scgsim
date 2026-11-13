@@ -10,8 +10,8 @@ import pytest
 from sgb_scenes import airbridge, pad_in_ground
 
 from scgsim.geometry.sgb.bands.requests import InsetRequest, InterfaceSurfaces
-from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
+from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 BANDS = (1.0,)
 

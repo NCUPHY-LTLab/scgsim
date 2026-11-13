@@ -22,13 +22,13 @@ from scgsim.geometry.sgb.bands.requests import (
     RefinementRequest,
     SolutionInterface,
 )
+from scgsim.geometry.sgb.checks.validation.validate import validate_model
 from scgsim.geometry.sgb.errors import InputError, ValidationError
-from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.exact.labels import LevelLabel
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.output.sidecar.lineage import CarrierLineage
 from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
-from scgsim.geometry.sgb.checks.validation.validate import validate_model
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.output.sidecar.lineage import CarrierLineage
 
 MARGINS = (0.1, 0.5, 2.0)
 PAD_AREA_UM2 = 100 * 60 - 20 * 15 - 12 * 12 / 2 - 25 * (1 - math.pi / 4) - math.pi * 64

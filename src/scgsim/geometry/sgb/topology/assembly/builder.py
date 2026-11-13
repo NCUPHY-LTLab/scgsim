@@ -30,8 +30,15 @@ from dataclasses import dataclass
 from math import lcm
 from typing import TypeVar
 
-from scgsim.geometry.sgb.exact import identity
 from scgsim.geometry.sgb.arrangement.arcs import RealisedArc, realise
+from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
+from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
+from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.exact import identity
+from scgsim.geometry.sgb.exact.carriers import ArcCarrier
+from scgsim.geometry.sgb.exact.labels import Domain, LevelLabel
+from scgsim.geometry.sgb.exact.plane import Point
+from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 from scgsim.geometry.sgb.topology.assembly.curved_walls import (
     EdgeAt,
     is_curved,
@@ -48,13 +55,6 @@ from scgsim.geometry.sgb.topology.assembly.records import (
 )
 from scgsim.geometry.sgb.topology.assembly.shells import is_planar, volume_shells
 from scgsim.geometry.sgb.topology.assembly.walls import WallRun, find_wall_runs
-from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
-from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
-from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.exact.plane import Point
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier
-from scgsim.geometry.sgb.exact.labels import Domain, LevelLabel
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
 
 Entry = tuple[str, int]  # (edge id, +1 / -1 relative to the edge's v0 -> v1 direction)
 Record = TypeVar("Record", TopoVertex, TopoEdge, TopoFace, TopoVolume)

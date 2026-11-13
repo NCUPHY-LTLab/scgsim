@@ -24,9 +24,9 @@ from pathlib import Path
 from typing import BinaryIO
 from xml.sax.saxutils import quoteattr
 
+from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.output.emission.records import SECTION_TEXT, compound_text
-from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
 
 CHUNK_ITEMS = 40_000  # items of one section per text-generation task
 BREP_HEAD = "CASCADE Topology V1, (c) Matra-Datavision\nLocations 0\nCurve2ds %d\n"

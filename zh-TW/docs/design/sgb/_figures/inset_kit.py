@@ -54,9 +54,9 @@ try:
         InsetRequest,
         SolutionInterface,
     )
-    from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue  # noqa: E402
     from scgsim.geometry.sgb.exact.carriers import LineEdge  # noqa: E402
     from scgsim.geometry.sgb.exact.prisms import PrismCatalogue  # noqa: E402
+    from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue  # noqa: E402
 except ImportError as error:  # pragma: no cover -- a usage message, not logic
     raise SystemExit(
         f"{error}\nThese figures are computed by the production SGB core: set SGB_CORE to a checkout that contains "

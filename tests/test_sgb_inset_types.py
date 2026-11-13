@@ -19,17 +19,17 @@ from sgb_scenes import GRID, conductor, pad_in_ground, rect_um, slab_model
 from test_sgb_sidecar import sidecar_of
 
 from scgsim.contracts.sgb_sidecar import sidecar_schema, views
-from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
     SolutionInterface,
 )
+from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.errors import InputError, NoGapEdgeError
-from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.exact.grid import exact_z
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
+from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 TESTS = Path(__file__).resolve().parent
 MARGINS = (0.5, 1.0)
@@ -539,8 +539,8 @@ def test_a_type_request_gives_one_sidecar_for_every_hash_seed():
 def test_a_type_request_model_passes_the_official_occt_checks(tmp_path):
     """A model banded by type: the written XAO is read back and checked by OpenCASCADE."""
     pytest.importorskip("OCP")
-    from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
     from scgsim.geometry.sgb.checks.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
+    from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
 
     model = build(
         pad_in_ground("B"), "B", *by_type("MA", "MS", "SA", margins=(0.5, 2.0))

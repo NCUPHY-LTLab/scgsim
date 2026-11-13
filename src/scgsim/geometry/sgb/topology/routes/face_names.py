@@ -14,8 +14,8 @@ reads the final names from the one :func:`name_faces` result.
 
 from __future__ import annotations
 
-from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.topology.routes.naming import surface_group
 
 

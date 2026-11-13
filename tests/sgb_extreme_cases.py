@@ -23,7 +23,6 @@ from scgsim.geometry.sgb.bands.requests import (
     RefinementRequest,
 )
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier, circle_arcs
 from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
 from scgsim.geometry.sgb.exact.grid import exact_z
@@ -33,6 +32,7 @@ from scgsim.geometry.sgb.exact.prisms import (
     PrismCatalogue,
     PrismRecord,
 )
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 
 METAL_THICKNESS = "0.2"
 Point = tuple[float, float]

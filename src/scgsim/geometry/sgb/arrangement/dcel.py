@@ -26,7 +26,12 @@ from functools import cmp_to_key
 
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge
 from scgsim.geometry.sgb.arrangement.noding.spatial_hash import cell_size_for
-from scgsim.geometry.sgb.exact.plane import Point, RepPoint, fraction_to_rep, point_in_ring
+from scgsim.geometry.sgb.exact.plane import (
+    Point,
+    RepPoint,
+    fraction_to_rep,
+    point_in_ring,
+)
 
 
 @dataclass(frozen=True)

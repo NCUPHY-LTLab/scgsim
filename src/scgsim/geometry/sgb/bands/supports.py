@@ -55,6 +55,11 @@ from dataclasses import dataclass, replace
 from fractions import Fraction
 
 from scgsim.geometry.models.grid import format_box
+from scgsim.geometry.sgb.arrangement.derivation.labelled import (
+    LabelledArrangements,
+    derive_from_catalogue,
+)
+from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.bands.die_cuts import (
     cells_beyond_the_die,
     check_die_cuts,
@@ -76,11 +81,6 @@ from scgsim.geometry.sgb.bands.requests import (
     Side,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.arrangement.derivation.labelled import (
-    LabelledArrangements,
-    derive_from_catalogue,
-)
-from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.errors import InputError, NoGapEdgeError
 from scgsim.geometry.sgb.exact.carriers import (
     ArcCarrier,

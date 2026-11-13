@@ -6,10 +6,10 @@ import pytest
 from sgb_scenes import GRID
 
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement, interior_point
-from scgsim.geometry.sgb.errors import OverlapError
 from scgsim.geometry.sgb.arrangement.labelling.dissolve import FamilyPolicies, dissolve
 from scgsim.geometry.sgb.arrangement.labelling.prism_set import PrismSet, resolve_domain
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
+from scgsim.geometry.sgb.errors import OverlapError
 from scgsim.geometry.sgb.exact.carriers import EdgeCarrier
 from scgsim.geometry.sgb.exact.families import CurveFamilyRecord
 from scgsim.geometry.sgb.exact.grid import exact_z

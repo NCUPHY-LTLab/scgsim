@@ -20,8 +20,8 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from fractions import Fraction
 
+from scgsim.geometry.sgb.checks.validation.report import ValidationReport
 from scgsim.geometry.sgb.model import ConformalModel
-from scgsim.geometry.sgb.topology.routes.groups import PhysicalGroup
 from scgsim.geometry.sgb.section.assembly import (
     AssembledSection,
     SectionGrid,
@@ -29,7 +29,7 @@ from scgsim.geometry.sgb.section.assembly import (
 )
 from scgsim.geometry.sgb.section.frame import CutFrame
 from scgsim.geometry.sgb.section.traces import Traces
-from scgsim.geometry.sgb.checks.validation.report import ValidationReport
+from scgsim.geometry.sgb.topology.routes.groups import PhysicalGroup
 
 _SHOWN = 5  # problems a failed check lists
 

@@ -17,24 +17,28 @@ from fractions import Fraction
 
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb.exact import identity
-from scgsim.geometry.sgb.topology.assembly.builder import assemble_topology
-from scgsim.geometry.sgb.topology.assembly.records import Topology
-from scgsim.geometry.sgb.bands.generate import build_cut_families
-from scgsim.geometry.sgb.bands.inset_plan import InsetPlan
-from scgsim.geometry.sgb.bands.requests import InsetRequest, RefinementRequest
 from scgsim.geometry.sgb.arrangement.derivation.labelled import (
     LabelledArrangements,
     derive_arrangements,
 )
-from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
-from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
-from scgsim.geometry.sgb.topology.routes.groups import RoutedModel, apply_route
-from scgsim.geometry.sgb.topology.routes.naming import check_entity_names
-from scgsim.geometry.sgb.topology.routes.policy import RoutePolicy, check_route, route_policy
-from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.bands.generate import build_cut_families
+from scgsim.geometry.sgb.bands.inset_plan import InsetPlan
+from scgsim.geometry.sgb.bands.requests import InsetRequest, RefinementRequest
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
 from scgsim.geometry.sgb.checks.validation.validate import validate_model
+from scgsim.geometry.sgb.exact import identity
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
+from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
+from scgsim.geometry.sgb.topology.assembly.builder import assemble_topology
+from scgsim.geometry.sgb.topology.assembly.records import Topology
+from scgsim.geometry.sgb.topology.routes.groups import RoutedModel, apply_route
+from scgsim.geometry.sgb.topology.routes.naming import check_entity_names
+from scgsim.geometry.sgb.topology.routes.policy import (
+    RoutePolicy,
+    check_route,
+    route_policy,
+)
 
 LENGTH_UNIT = "um"
 """The unit of the model grid and of every length a hand-off carries."""

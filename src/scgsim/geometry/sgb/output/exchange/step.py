@@ -61,8 +61,10 @@ from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
 from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
-from scgsim.geometry.sgb.output.emission.measures import rounded
+from scgsim.geometry.sgb.checks.verification.occt import read_shape, sidecar_mismatches
+from scgsim.geometry.sgb.checks.verification.ocp import require_ocp
 from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.exchange.guard import (
     GUARD_SCHEMA,
     FaceGuard,
@@ -77,8 +79,6 @@ from scgsim.geometry.sgb.output.exchange.guard import (
     guarded_file,
     write_step_guard,
 )
-from scgsim.geometry.sgb.checks.verification.occt import read_shape, sidecar_mismatches
-from scgsim.geometry.sgb.checks.verification.ocp import require_ocp
 
 LENGTH_UNIT = (
     "UM"  # the label of the written numbers; the numbers themselves are micrometres

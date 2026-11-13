@@ -24,6 +24,12 @@ from scgsim.geometry.sgb.arrangement.dcel import (
     interior_point,
     strip_cells,
 )
+from scgsim.geometry.sgb.arrangement.labelling.bands import (
+    check_seams_kept,
+    face_bands,
+    level_supports,
+)
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.bands.inset import inset_family
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
@@ -31,24 +37,21 @@ from scgsim.geometry.sgb.bands.requests import (
     RefinementRequest,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.errors import InputError, ValidationError
-from scgsim.geometry.sgb.arrangement.labelling.bands import (
-    check_seams_kept,
-    face_bands,
-    level_supports,
+from scgsim.geometry.sgb.checks.verification.loaded import (
+    apply_sidecar_embeds,
+    verify_xao,
 )
+from scgsim.geometry.sgb.errors import InputError, ValidationError
+from scgsim.geometry.sgb.exact.carriers import EdgeCarrier
+from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.prisms import LineEdge
+from scgsim.geometry.sgb.exact.support import DISTANCE_SLACK, SupportRegion
 from scgsim.geometry.sgb.model import (
     ConformalModel,
     build_conformal_model,
     build_model_from_catalogue,
 )
-from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
-from scgsim.geometry.sgb.exact.carriers import EdgeCarrier
-from scgsim.geometry.sgb.exact.grid import Grid
-from scgsim.geometry.sgb.exact.prisms import LineEdge
-from scgsim.geometry.sgb.exact.support import DISTANCE_SLACK, SupportRegion
-from scgsim.geometry.sgb.checks.verification.loaded import apply_sidecar_embeds, verify_xao
 
 MARGINS = (0.5, 1.0)
 SA = SolutionInterface("substrate", "upper_air", z_um=0)

@@ -4,7 +4,7 @@ description: "導體以零厚度 sheet（Route A）、排除的有限厚度金�
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
-scgsim-id: "docs/design/sgb/topology/routes"
+scgsim-id: "docs/design/sgb/routes"
 ---
 
 同一顆晶片的導體，可以用不同的方式交給 solver：把薄膜當成零厚度的 sheet（Route A）、把有限厚度的金屬 volume 從求解區域中挖掉、只留下它的邊界（Route B），或把導體 volume 保留下來並在內部 mesh（Route C）。SGB 把這個選擇放在 labelling 層：arrangement、cell 與 face 的推導對每種 route 都是同一份程式，route 只決定導體的 cell 在輸出中代表什麼，以及哪些 volume 會被輸出。
@@ -173,7 +173,7 @@ D1 已決定 **Route C 屬於 v1**，production 已實作。導體 volume 保留
 
 ## 補充：重現資料
 
-圖與數字由 `zh-TW/docs/design/sgb/_figures/routes.py` 以 production 套件 `scgsim.geometry.sgb` 產生（用本 repository 的環境執行；sidecar 以 `read_sidecar` 讀回，embedding 與 port 取自 `views`），記錄在 `figures/routes-numbers.json`。Route B 與 C 是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`；Route A 是同一份 GDS 與 stack 以 `thin_film` profile 詮釋（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）。數量是 `build_model_from_catalogue` 得到的 `ConformalModel.counts`，輸出數量取自 `emit_model` 寫出的 BREP plan（`SgbArtifacts.counts`）與 sidecar。兩個不是真實輸入的例子：stage 層的 scene `tests/sgb_scenes.py` 的 `pad_in_ground("B")`（port 在中間平面，embedded face）與真實輸入加一條 dangling refinement curve。Brief 對應第 7 節（group、embedded face）、第 8 節（S7）與第 14 節（naming、contact）；production 模組為 `routes`、`assembly`、`emission`。
+圖與數字由 `zh-TW/docs/design/sgb/_figures/routes.py` 以 production 套件 `scgsim.geometry.sgb` 產生（用本 repository 的環境執行；sidecar 以 `read_sidecar` 讀回，embedding 與 port 取自 `views`），記錄在 `figures/routes-numbers.json`。Route B 與 C 是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`；Route A 是同一份 GDS 與 stack 以 `thin_film` profile 詮釋（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）。數量是 `build_model_from_catalogue` 得到的 `ConformalModel.counts`，輸出數量取自 `emit_model` 寫出的 BREP plan（`SgbArtifacts.counts`）與 sidecar。兩個不是真實輸入的例子：stage 層的 scene `tests/sgb_scenes.py` 的 `pad_in_ground("B")`（port 在中間平面，embedded face）與真實輸入加一條 dangling refinement curve。Brief 對應第 7 節（group、embedded face）、第 8 節（S7）與第 14 節（naming、contact）；production 模組為 `topology/routes`、`topology/assembly`、`output/emission`。
 
 Port 的 SA 面積表來自真實輸入：`experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 的 `all_interfaces` 組（每個 entity 的每個表面與 SA 都要求 band，margin 0.5 與 1 µm）寫在 `out/all_interfaces/route_{a,b,c}/`，摘要在 `out/all_interfaces/summary.json`；「沒有 port」的欄位用 `gds_pad_in_ground(with_port=False)` 以同樣的 band 要求建出。
 

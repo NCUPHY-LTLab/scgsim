@@ -38,7 +38,6 @@ from sgb_scenes import airbridge, random_layout
 
 from scgsim.geometry.sgb.arrangement.arcs import realise, sample_arc
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
-from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     Segment,
     assemble_chain,
@@ -46,10 +45,13 @@ from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     hits_kernel,
     snap_round,
 )
-from scgsim.geometry.sgb.arrangement.noding.snap_rounding import canonical_key as canonical
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
+    canonical_key as canonical,
+)
 from scgsim.geometry.sgb.arrangement.noding.spatial_hash import HotGrid
-from scgsim.geometry.sgb.exact.carriers import ArcCarrier, EdgeCarrier, Lineage
 from scgsim.geometry.sgb.checks.slivers.report import sliver_report
+from scgsim.geometry.sgb.exact.carriers import ArcCarrier, EdgeCarrier, Lineage
+from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 SQRT_HALF = math.sqrt(2) / 2
 

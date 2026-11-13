@@ -16,7 +16,12 @@ from __future__ import annotations
 from collections import defaultdict
 from fractions import Fraction
 
-from scgsim.geometry.sgb.topology.assembly.records import Shell, TopoEdge, TopoFace, TopoVertex
+from scgsim.geometry.sgb.topology.assembly.records import (
+    Shell,
+    TopoEdge,
+    TopoFace,
+    TopoVertex,
+)
 
 Vec = tuple[int, int, int]
 

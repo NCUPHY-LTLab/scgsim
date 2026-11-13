@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/pipeline-reference"
 
 這一頁是查詢用的：每個 stage 讀什麼、產生什麼、出問題時怎麼辦，以及 stage 之間傳遞的 record 欄位。stage 與 record 的設計見[總覽](index.qmd)，名詞見[術語表](index.qmd#glossary)。
 
-名稱與欄位是 production 的（`scgsim.geometry.sgb` 的 `records`、`prisms`、`noding`、`arrangement`、`labelling`、`derivation`、`assembly`、`routes`、`validation`、`emission`、`sidecar`）。**S0 與 S1 不在 SGB package 中**：它們沿用 develop 的固定 grid source preparation，S2 直接讀它們的產物（effective `GeometryBuildInput` 與 `RepresentationContext`）；S2 由真實輸入的測試涵蓋。
+名稱與欄位是 production 的（`scgsim.geometry.sgb` 的 `exact`、`prisms`、`bands`、`arrangement`（`noding`、`labelling`、`derivation`）、`topology`（`assembly`、`routes`）、`checks`（`validation`、`slivers`、`verification`）、`output`（`emission`、`sidecar`、`exchange`））。**S0 與 S1 不在 SGB package 中**：它們沿用 develop 的固定 grid source preparation，S2 直接讀它們的產物（effective `GeometryBuildInput` 與 `RepresentationContext`）；S2 由真實輸入的測試涵蓋。
 
 本頁分開使用兩個詞：**cell** 是 arrangement 中的平面區域；**face** 是 topology 中實際輸出的 BREP face，一個 face 由一個或多個 cell 合併而成（horizontal face），或是 wall。
 

@@ -33,17 +33,17 @@ from scgsim.contracts.sgb_sidecar.records import (
     VolumeGroup,
     VolumeKind,
 )
-from scgsim.geometry.sgb.topology.assembly.records import TopoFace
+from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import (
     planned_face_area_um2,
     planned_volume_um3,
     rounded,
 )
 from scgsim.geometry.sgb.output.emission.plan import ARC, BrepPlan
-from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.sidecar.aedt import aedt_names
 from scgsim.geometry.sgb.output.sidecar.derived import edge_sources
 from scgsim.geometry.sgb.output.sidecar.lineage import CarrierLineage
+from scgsim.geometry.sgb.topology.assembly.records import TopoFace
 
 
 def vertex_records(plan: BrepPlan) -> dict[str, Vertex]:

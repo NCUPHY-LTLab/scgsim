@@ -48,9 +48,9 @@ from scgsim.geometry.models.representation import (
     RepresentationContext,
 )
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.prisms.footprints import lattice_ring
 from scgsim.geometry.sgb.exact.grid import Grid, exact_z
 from scgsim.geometry.sgb.exact.prisms import Footprint, PortIdentity, PrismRecord
+from scgsim.geometry.sgb.prisms.footprints import lattice_ring
 
 PORT_MATERIAL = "lumped_port"
 JUNCTION_PARTITION_KEY = "rectangular_junction_partition"

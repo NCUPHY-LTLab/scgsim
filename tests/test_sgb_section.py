@@ -31,9 +31,9 @@ from scgsim.geometry.sgb.bands.requests import (
     RefinementRequest,
 )
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.exact.grid import exact_z
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
+from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.section import SectionModel, build_section_model
 
 MARGINS = (0.5, 1.0)

@@ -19,9 +19,9 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable, Iterable
 
-from scgsim.geometry.sgb.topology.assembly.records import Topology
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.checks.validation.report import ValidationReport
+from scgsim.geometry.sgb.topology.assembly.records import Topology
 
 SHOWN_IDS = 3  # repeated ids named in a failure message
 

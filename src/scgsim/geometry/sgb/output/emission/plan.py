@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from scgsim.geometry.models.grid import format_um
-from scgsim.geometry.sgb.topology.assembly.records import Topology
+from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.output.emission.numbers import PI, angle_of
 from scgsim.geometry.sgb.output.emission.surfaces import (
     CYLINDER,
@@ -30,7 +30,7 @@ from scgsim.geometry.sgb.output.emission.surfaces import (
     check_edges_lie_on_surfaces,
 )
 from scgsim.geometry.sgb.output.emission.walk import Numbering, walk_emitted_volumes
-from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.topology.assembly.records import Topology
 from scgsim.geometry.sgb.topology.routes.groups import RoutedModel
 
 TOLERANCE = 1e-7  # um; every vertex, edge and face carries this tolerance

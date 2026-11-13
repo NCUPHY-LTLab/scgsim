@@ -52,19 +52,19 @@ from OCP.TopoDS import TopoDS, TopoDS_Compound, TopoDS_Iterator, TopoDS_Shape
 from OCP.TopTools import TopTools_IndexedMapOfShape
 
 from scgsim.contracts.sgb_sidecar import Sidecar, views
-from scgsim.geometry.sgb.topology.assembly.records import Topology
-from scgsim.geometry.sgb.output.emission.measures import (
-    planned_face_area_um2,
-    planned_volume_um3,
-)
-from scgsim.geometry.sgb.output.emission.plan import BrepPlan
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.checks.verification.ocp import require_ocp
 from scgsim.geometry.sgb.checks.verification.tolerances import (
     RELATIVE_TOLERANCE,
     VERTEX_TOLERANCE_UM,
     relative_error,
 )
+from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.output.emission.measures import (
+    planned_face_area_um2,
+    planned_volume_um3,
+)
+from scgsim.geometry.sgb.output.emission.plan import BrepPlan
+from scgsim.geometry.sgb.topology.assembly.records import Topology
 
 ARGUMENT_MODES = (
     "ArgumentTypeMode", "SelfInterMode", "SmallEdgeMode", "RebuildFaceMode", "TangentMode",

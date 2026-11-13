@@ -11,8 +11,8 @@ from pathlib import Path
 from sgb_scenes import pad_in_ground, random_layout, slab_model
 
 from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue
-from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 TESTS = Path(__file__).resolve().parent
 SCRIPT = (

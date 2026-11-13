@@ -16,15 +16,15 @@ from sgb_emit_cases import CASES
 from sgb_scenes import GRID, conductor, footprint, rect_um
 
 from scgsim.contracts.sgb_sidecar import read_sidecar, sidecar_schema, views
-from scgsim.geometry.sgb.output.emission.plan import plan_brep
-from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 from scgsim.geometry.sgb.exact.grid import exact_z
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
-from scgsim.geometry.sgb.topology.routes.naming import FACE_KINDS
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.output.emission.plan import plan_brep
 from scgsim.geometry.sgb.output.sidecar.aedt import aedt_names, sanitise_aedt_name
 from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
 from scgsim.geometry.sgb.output.sidecar.files import write_sidecar
-from scgsim.geometry.sgb.checks.slivers.report import sliver_report
+from scgsim.geometry.sgb.topology.routes.naming import FACE_KINDS
 
 TESTS = Path(__file__).resolve().parent
 

@@ -37,18 +37,18 @@ from fractions import Fraction
 from typing import Any, cast
 
 from scgsim.contracts.sgb_sidecar.records import MeshFeature, Port
-from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.bands.requests import ConductorSurface, InsetRequest
-from scgsim.geometry.sgb.output.emission.measures import rounded
-from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
+from scgsim.geometry.sgb.output.emission.measures import rounded
+from scgsim.geometry.sgb.output.emission.plan import BrepPlan
 from scgsim.geometry.sgb.output.sidecar.derived import edge_sources
 from scgsim.geometry.sgb.output.sidecar.lineage import (
     BAND_FAMILY_ROLE,
     REFINEMENT_FAMILY_ROLE,
     CarrierLineage,
 )
+from scgsim.geometry.sgb.topology.assembly.records import TopoFace, Topology
 
 FEATURE_KINDS = (
     "film_sidewall",

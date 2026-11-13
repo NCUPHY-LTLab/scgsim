@@ -4,7 +4,7 @@ description: "每個 vertex、edge、face 與 volume 如何取得可重現的 co
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
-scgsim-id: "docs/design/sgb/exact/identity"
+scgsim-id: "docs/design/sgb/identity"
 ---
 
 Solver 回報某個 attribute 的結果時，SGB 讓你能以查表（而不是看幾何）知道它是什麼：從 Palace attribute 一路追到 physical group、face、edge、carrier，最後到 source 曲線。這一頁說明這條 mapping chain、兩層 identity、每種 entity 的 hash 規則、lineage 記錄了什麼，並在 running example 上完整追一次。
