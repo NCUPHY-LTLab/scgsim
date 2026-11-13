@@ -65,7 +65,7 @@ two meshes were made the same way.
 ::: {.askr-table-compact}
 | Identity | Example | Where it is recorded | When it changes |
 |---|---|---|---|
-| Package version | `scgsim 2.0.0rc15` | `scgsim_version` in the run's provenance (`metadata/route_b_provenance.json`, or `route_a_…` on Route A) | With every release of SCGSim. |
+| Package version | `scgsim 3.0.0rc1` | `scgsim_version` in the run's provenance (`metadata/route_b_provenance.json`, or `route_a_…` on Route A) | With every release of SCGSim. |
 | Recipe version | `scgsim.meshing.features/N` for `FeatureRecipe`, `scgsim.meshing.uniform-boundary/N` for `UniformBoundaryRecipe`, `scgsim.meshing.global-size/N` for `GlobalSizeRecipe` | `recipe.version` in each quality report and in the mesh manifest, beside `recipe.parameters` | Only when the sizes the recipe asks for change. |
 | Report format | `scgsim.meshing.report/N` | `report_version` in each quality report | When the fields of the quality report change. |
 :::
