@@ -350,7 +350,7 @@ def _complete_mode_energy_record(
     junction_rows = inputs.junction_rows
     result = {
         "schema_version": "scgsim.aedt.epr-mode-energy.v2",
-        "surface_granularity": granularity or "per_binding.v1",
+        "surface_granularity": granularity,
         "frequency_hz": frequency_hz,
         "electric_energy_j": electric_energy_j,
         "magnetic_energy_j": magnetic_energy_j,

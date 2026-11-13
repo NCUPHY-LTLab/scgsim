@@ -29,7 +29,10 @@ def surface_evaluations(
 
     requested = tuple(("requested_margin", float(value)) for value in margins_um)
     if policy is None:
-        return requested  # No policy: only the requested margins, with no automatic baseline.
+        raise ValueError(
+            "prepared geometry names no surface_evaluation_policy; prepare it "
+            "again with prepare_planar_geometry_input"
+        )
     if policy != "unmasked_plus_requested.v1":
         raise ValueError("unsupported surface evaluation policy")
     return (("unmasked_baseline", 0.0), *requested)
