@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
 
 # Geometry references carry extensible source metadata; Any preserves its
 # existing payload contract rather than imposing a new metadata schema.
-from scgsim.geometry.grid.entities import entity_z_range_um, geometry_ref_from_metadata
+from typing import Any
+
 from scgsim.geometry.grid.planar_loops import clean_loop, ring_edges
-from scgsim.geometry.grid.spatial import same_coordinate_z
 from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import entity_z_range_um
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import InterfacePlanRecord
+from scgsim.geometry.planning.entities import geometry_ref_from_metadata
+from scgsim.geometry.planning.spatial import same_coordinate_z
 
 
 def entity_geometry_ref(

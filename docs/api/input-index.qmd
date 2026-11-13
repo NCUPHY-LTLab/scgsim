@@ -47,7 +47,7 @@ This index lists names declared by nine public facades; it does not replace each
 | `zh-TW/docs/api/analyze-epr-usage.md` | `5cdfd9f0aa8b57e1dbd3365b3907235c12b4a33d985358b6eb321a0d15c7675c` |
 | `src/scgsim/aedt/__init__.py` | `d9b6b6fdca3d03f0657a8fd73d11ca395d060a6388e0722a4c8705b5c814a039` |
 | `src/scgsim/aedt/specs/__init__.py` | `face6e5583a1326d130bb35845350c0363c31bd2bc277664b271b385e9ec5ec3` |
-| `src/scgsim/geometry/__init__.py` | `6b09efdaf4620cd852a5d77703d001f55ba0f549510cd914516e832c31a5172d` |
+| `src/scgsim/geometry/__init__.py` | `bf7c7a39ffc9bd1208c7dd6715b1a4a1ca0fc727359a00f8e30e0198eaf31fa3` |
 | `src/scgsim/palace/__init__.py` | `4b22a92965efe38e0c1fa6d97abfec9d9395420a679019e783eb726e2d43e130` |
 | `src/scgsim/semantics/__init__.py` | `a1902da7627ee76ba95283fc2861b6d785400c303a09e6e875375f55a056e39c` |
 | `src/scgsim/visualization/__init__.py` | `181a1bf3c38a632bc163c6ac9ee55dcbc6ca1bcc85bc6bca3e16afbe43e21ad1` |

@@ -67,3 +67,20 @@ DEFAULT_INTERFACE_SOLVER_USE: dict[InterfaceKindLiteral, SolverUseLiteral] = {
     "MM": "solver_active",
     "SS": "solver_active",
 }
+
+
+GEOMETRY_REF_METADATA_KEYS = (
+    "plane",
+    "contact_plane",
+    "footprint",
+    "outer_loop",
+    "hole_loops",
+    "loop_geometry_ref",
+    "z_um",
+    "z_min_um",
+    "z_max_um",
+    "thickness_um",
+)
+
+
+INTERFACE_KIND_ORDER = ("MM", "SS", "AA", "MS", "MA", "SA")

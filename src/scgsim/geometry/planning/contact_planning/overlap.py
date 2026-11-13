@@ -6,11 +6,9 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
-from scgsim.geometry.grid.entities import entity_z_range_um
-from scgsim.geometry.grid.entity_validation import resolve_contact_pad_attachment
 from scgsim.geometry.grid.grid import boolean_polygon_region
-from scgsim.geometry.grid.spatial import same_coordinate_z
 from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import entity_z_range_um
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.planning.contact_planning.geometry import contact_patch_loops
@@ -18,6 +16,8 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
     entity_occupied_region,
     route_conductor_contact_footprints,
 )
+from scgsim.geometry.planning.spatial import same_coordinate_z
+from scgsim.geometry.source.contact_pads import resolve_contact_pad_attachment
 
 
 def validate_volumetric_conductor_contacts(

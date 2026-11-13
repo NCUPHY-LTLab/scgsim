@@ -7,13 +7,12 @@ from dataclasses import dataclass
 from typing import Any
 
 # Surface provenance remains an extensible JSON-shaped metadata payload.
-from scgsim.geometry.grid.constants import INTERFACE_KIND_ORDER
-from scgsim.geometry.grid.entities import unique_ids
-from scgsim.geometry.grid.spatial import coordinate_key
-from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.common import INTERFACE_KIND_ORDER, RouteLiteral
 from scgsim.geometry.models.input import SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
+from scgsim.geometry.planning.entities import unique_ids
+from scgsim.geometry.planning.spatial import coordinate_key
 from scgsim.semantics import EvidenceResult
 
 

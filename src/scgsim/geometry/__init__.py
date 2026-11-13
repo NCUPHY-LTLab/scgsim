@@ -4,7 +4,7 @@ One folder per stage, in the order the work flows for a layout; ``models`` and `
 
 - ``models``: the typed records that cross stages.
 - ``source``: from a layout and a stack to a prepared snapshot.
-- ``grid``: the source stage's grid engine.
+- ``grid``: the grid engine the stages call: noding, tagged regions, overlays, loops and polygon operations.
 - ``interpretation``: from a prepared input to its physical representation and vacuum enclosure.
 - ``junctions``: the rectangular partition around a lumped port.
 - ``surface_epr``: from Surface-EPR specs to the inset requests of the SGB build.

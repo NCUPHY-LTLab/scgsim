@@ -15,7 +15,7 @@ from scgsim.aedt.preparation.planar_source import (
 from scgsim.aedt.runtime.native.planar_bodies import native_conductor_geometry
 from scgsim.aedt.runtime.native.saved_geometry import read_saved_hfss_design
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.geometry.grid.spatial import geometry_ref_surface_z_um
+from scgsim.geometry.planning.spatial import geometry_ref_surface_z_um
 
 
 def bind_native_surface_references(

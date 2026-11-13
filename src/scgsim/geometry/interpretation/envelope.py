@@ -6,13 +6,12 @@ from collections.abc import Mapping, Sequence
 from math import isfinite
 from typing import Any, cast
 
-from scgsim.geometry.grid.entities import entity_z_range_um
-from scgsim.geometry.grid.entity_validation import is_solution_entity
 from scgsim.geometry.grid.planar_loops import clean_loop
 from scgsim.geometry.interpretation.representation import (
     planned_conductor_representation,
 )
 from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import entity_z_range_um, is_solution_entity
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 

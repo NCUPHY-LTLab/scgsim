@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.grid.coordinates import coordinate_2d_key, segment_overlap_interval
 from scgsim.geometry.grid.grid import (
     boolean_polygon_region,
     loop_inside_loop,
@@ -26,7 +27,6 @@ from scgsim.geometry.grid.planar_loops import (
 from scgsim.geometry.grid.planar_loops import (
     simple_planar_loops_from_edges as simple_planar_loops_from_edges,
 )
-from scgsim.geometry.grid.spatial import coordinate_2d_key, segment_overlap_interval
 from scgsim.geometry.models.input import SemanticEntitySpec
 
 

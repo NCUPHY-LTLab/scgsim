@@ -6,17 +6,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from scgsim.geometry.grid.entities import component_metadata, unique_ids
-from scgsim.geometry.grid.entity_validation import is_solution_entity
 from scgsim.geometry.models.common import (
     RouteLiteral,
 )
+from scgsim.geometry.models.entities import is_solution_entity
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.topology import (
     InterfacePlanRecord,
     MMContactRecord,
     SurfacePlanRecord,
 )
+from scgsim.geometry.planning.entities import component_metadata, unique_ids
 from scgsim.geometry.planning.surface_planning.contacts import is_face_pad_mm_contact
 from scgsim.geometry.planning.tags import (
     surface_physical_owner_ids,
