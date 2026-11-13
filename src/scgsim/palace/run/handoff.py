@@ -37,6 +37,7 @@ from scgsim.contracts.palace_run_folder import (
     sha256,
     write_json,
 )
+from scgsim.refusal import refusal
 
 from ..mesh.build import MeshBuildResult
 from ..mesh.manifest import SGB_RUNTIME_AUTHORITY
@@ -376,7 +377,9 @@ def _validate_resources(
     profile: str, resources: Mapping[str, Any] | None
 ) -> dict[str, Any]:
     if not isinstance(resources, Mapping) or not resources:
-        raise ValueError("handoff requires caller-supplied resources.")
+        raise ValueError(
+            refusal("handoff requires caller-supplied resources", found=resources)
+        )
     result = dict(resources)
     if profile == "direct-local":
         positive_int(result.get("threads", 1), "resources.threads")
@@ -387,24 +390,37 @@ def _validate_resources(
         nodes = positive_int(result.get("nodes"), "resources.nodes")
         if profile == "slurm-single-node" and nodes != 1:
             raise ValueError(
-                "slurm-single-node is a single-node profile and requires resources.nodes=1."
+                refusal(
+                    "slurm-single-node is a single-node profile and requires resources.nodes=1",
+                    found=nodes,
+                )
             )
         if profile == "slurm-multi-node":
             if nodes < 2:
                 raise ValueError(
-                    "slurm-multi-node is a multi-node profile and requires resources.nodes >= 2."
+                    refusal(
+                        "slurm-multi-node is a multi-node profile and requires resources.nodes >= 2",
+                        found=nodes,
+                    )
                 )
             if not any(key in result for key in ("mem", "mem_per_cpu")):
                 raise ValueError(
-                    "slurm-multi-node requires caller-supplied high-memory resource (mem or mem_per_cpu)."
+                    refusal(
+                        "slurm-multi-node requires caller-supplied high-memory resource (mem or mem_per_cpu)",
+                        found=sorted(result),
+                    )
                 )
     style = result.get("command_style", "binary")
     if style not in {"binary", "wrapper"}:
-        raise ValueError("resources.command_style must be 'binary' or 'wrapper'.")
+        raise ValueError(
+            refusal(
+                "resources.command_style must be 'binary' or 'wrapper'", found=style
+            )
+        )
     if profile != "direct-local" and style == "wrapper":
         raise ValueError(
-            "resources.command_style='wrapper' is supported only for direct-local; "
-            "Slurm profiles require 'binary'."
+            f"resources.command_style='wrapper' is supported only for direct-local; "
+            f"profile {profile!r} requires 'binary'."
         )
     return result
 
@@ -428,7 +444,8 @@ def _identity() -> dict[str, Any]:
         scgsim = version("scgsim")
     except PackageNotFoundError as exc:
         raise RuntimeError(
-            "Cannot prepare handoff without installed scgsim package metadata."
+            "Cannot prepare handoff without installed scgsim package metadata: install SCGSim "
+            "(uv sync, or pip install -e .) rather than running it from a source tree."
         ) from exc
     return {
         "scgsim": scgsim,
@@ -488,7 +505,9 @@ def _hashes(paths: _HandoffPaths, files: Sequence[Path]) -> list[dict[str, str |
 def _route(mesh_result: MeshBuildResult) -> str:
     route = read_json(mesh_result.provenance_path).get("route")
     if route not in {"A", "B"}:
-        raise ValueError("mesh provenance must carry Route A or B.")
+        raise ValueError(
+            refusal("mesh provenance must carry Route A or B", found=route)
+        )
     return route
 
 
@@ -501,11 +520,20 @@ def _route_a_thin_film(
     manifest_value = manifest.get("route_a_thin_film")
     if route == "B":
         if provenance_value is not None or manifest_value is not None:
-            raise ValueError("Route B mesh metadata must not define route_a_thin_film.")
+            raise ValueError(
+                refusal(
+                    "Route B mesh metadata must not define route_a_thin_film",
+                    found={"provenance": provenance_value, "manifest": manifest_value},
+                )
+            )
         return None
     if not isinstance(provenance_value, Mapping) or provenance_value != manifest_value:
         raise ValueError(
-            "Route A mesh provenance and manifest require identical thin-film identity."
+            refusal(
+                "Route A mesh provenance and manifest require identical thin-film identity",
+                found=provenance_value,
+                expected=manifest_value,
+            )
         )
     return dict(provenance_value)
 

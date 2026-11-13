@@ -21,6 +21,7 @@ from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.geometry.source.validation import has_vacuum_solution_region
+from scgsim.refusal import refusal
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports
@@ -237,8 +238,11 @@ def route_profile(
         return ApproximationProfile(name, "v1", {})
     if not isinstance(approximation_profile, ApproximationProfile):
         raise TypeError(
-            "approximation_profile must be an ApproximationProfile: pass "
-            "set_route(..., approximation_profile=ApproximationProfile(name, 'v1', parameters))."
+            refusal(
+                "approximation_profile must be an ApproximationProfile: pass "
+                "set_route(..., approximation_profile=ApproximationProfile(name, 'v1', parameters))",
+                found=type(approximation_profile).__name__,
+            )
         )
     return approximation_profile
 

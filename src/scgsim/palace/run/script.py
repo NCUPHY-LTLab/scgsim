@@ -22,6 +22,7 @@ from scgsim.contracts.palace_run_folder import (
     RUNTIME_COMPATIBILITY,
     SOLVER_LOG_PREFIX,
 )
+from scgsim.refusal import refusal
 
 
 @dataclass(frozen=True)
@@ -349,11 +350,16 @@ def launcher_tokens(value: Any) -> list[str]:
         return [single_line(value, "launcher")]
     if not isinstance(value, Sequence):
         raise TypeError(
-            "resources.launcher must be a single string or a sequence of strings."
+            refusal(
+                "resources.launcher must be a single string or a sequence of strings",
+                found=type(value).__name__,
+            )
         )
     tokens = [single_line(item, "launcher token") for item in value]
     if not tokens:
-        raise ValueError("resources.launcher must be non-empty.")
+        raise ValueError(
+            refusal("resources.launcher must be non-empty", found=list(value))
+        )
     return tokens
 
 

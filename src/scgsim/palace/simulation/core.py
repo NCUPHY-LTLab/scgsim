@@ -25,6 +25,7 @@ from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
+from scgsim.refusal import refusal
 
 from ..config.config_records import ConfigInput
 from ..config.files import persist_problem_files
@@ -127,7 +128,10 @@ class PalaceSimulation(ABC):
         """
         if not isinstance(snapshot, GeometryPlanSnapshot):
             raise TypeError(
-                "set_plan() takes a GeometryPlanSnapshot: pass plan.prepare(), not the GeometryPlan."
+                refusal(
+                    "set_plan() takes a GeometryPlanSnapshot: pass plan.prepare(), not the GeometryPlan",
+                    found=type(snapshot).__name__,
+                )
             )
         if snapshot_owns_vacuum(snapshot) and self.vacuum_region is not None:
             raise ValueError(_TWO_VACUUMS)
@@ -143,7 +147,12 @@ class PalaceSimulation(ABC):
             TypeError: ``path`` is not a string or ``Path``.
         """
         if not isinstance(path, (str, Path)):
-            raise TypeError("set_output_dir() takes a path string or Path.")
+            raise TypeError(
+                refusal(
+                    "set_output_dir() takes a path string or Path",
+                    found=type(path).__name__,
+                )
+            )
         self.output_dir = Path(path).expanduser().resolve()
         self._fall_back("set_output_dir")
 

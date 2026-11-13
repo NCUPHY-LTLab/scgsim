@@ -18,6 +18,7 @@ from scgsim.contracts.palace_run_folder import (
     PORT_INFORMATION,
 )
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
+from scgsim.refusal import refusal
 
 from ..config.config import build_eigenmode_config
 from ..config.config_records import EigenmodeConfigBuildResult, EigenmodeSettings
@@ -83,7 +84,10 @@ class EigenmodeSim(PalaceSimulation):
         """
         if layout_sheet is not True:
             raise ValueError(
-                "Eigenmode supports only authored sheet ports: pass layout_sheet=True."
+                refusal(
+                    f"Eigenmode supports only authored sheet ports: pass layout_sheet=True for {name!r}",
+                    found=layout_sheet,
+                )
             )
         name = validate_nonempty_string(name, "port name")
         layer = validate_nonempty_string(layer, "port target layer")

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from scgsim.palace.mesh.summary import MeshSummary
+from scgsim.refusal import refusal
 
 COLORWAY = (
     "#56B4E9",
@@ -306,7 +307,7 @@ def checked_theme(theme: str) -> ReportTheme:
     """Accept the supported light/dark display choices without changing report data."""
     if theme == "light" or theme == "dark":
         return theme
-    raise ValueError("theme must be 'light' or 'dark'.")
+    raise ValueError(refusal("theme must be 'light' or 'dark'", found=theme))
 
 
 def checked_ranking_limit(value: int | None) -> int | None:
@@ -314,14 +315,16 @@ def checked_ranking_limit(value: int | None) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError("ranking_limit must be a positive integer or None.")
+        raise ValueError(
+            refusal("ranking_limit must be a positive integer or None", found=value)
+        )
     return value
 
 
 def checked_show_details(value: bool) -> bool:
     """Require an explicit boolean choice for expanded report metadata."""
     if not isinstance(value, bool):
-        raise TypeError("show_details must be a bool.")
+        raise TypeError(refusal("show_details must be a bool", found=value))
     return value
 
 
