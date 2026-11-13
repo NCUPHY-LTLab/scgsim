@@ -24,7 +24,6 @@ from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports
 from .surface_epr import SurfaceEprSpecs
-from .transforms import RouteAThinFilm
 
 
 @dataclass(frozen=True)
@@ -32,11 +31,11 @@ class GeometrySettings:
     """The simulation settings the geometry preparation and build read, as the simulation holds them.
 
     ``route`` is how the conductors are modelled (``"A"`` thin-film sheets, ``"B"`` 3D conductors), with
-    ``thin_film`` and ``approximation_profile`` as ``set_route`` checked them; ``vacuum_region`` is the simulation's own vacuum, None when the plan has one or none was set.
+    the ``approximation_profile`` given to ``set_route``, None for the route's default profile;
+    ``vacuum_region`` is the simulation's own vacuum, None when the plan has one or none was set.
     """
 
     route: str
-    thin_film: RouteAThinFilm | None
     approximation_profile: ApproximationProfile | None
     vacuum_region: VacuumRegionSpec | None
     surface_epr_specs: SurfaceEprSpecs | None
@@ -85,9 +84,7 @@ def prepare_mesh_input(
     if port_sheet_source_layers is not None:
         # Every selected sheet is a Lumped Port or RLC; the physical interpretation cuts its rectangle.
         build_input = with_rectangular_ports(build_input)
-    approximation_profile = route_profile(
-        route, settings.thin_film, settings.approximation_profile
-    )
+    approximation_profile = route_profile(route, settings.approximation_profile)
     effective_input, effective_stack, plan = interpret_physical_geometry(
         build_input, prepared_stack, approximation_profile
     )
@@ -195,57 +192,27 @@ def _select_authored_ports(
 
 
 def route_profile(
-    route: str,
-    thin_film: Any,
-    approximation_profile: Any,
+    route: str, approximation_profile: ApproximationProfile | None
 ) -> ApproximationProfile:
-    """The approximation profile the preparation interprets the plan with, once the route setting is checked.
+    """The approximation profile the preparation interprets the plan with.
 
-    This is the one place the route setting is checked: ``set_route`` calls it when the setting is made, and
-    the preparation again for the profile it uses.  Route B refuses a thin film and, without a profile, uses
-    the identity profile ``route_b``; a profile given on Route B is used as given.  Route A requires a profile,
-    and a ``thin_film`` given with it must be one of the two Route A lowerings and name that profile.
+    The given profile is used as given.  Without one, each route has its default: Route A lowers the films
+    with ``thin_film`` and Route B keeps the conductors finite with the identity profile ``route_b``.
+    ``set_route`` calls this when the setting is made, and the preparation and ``input_summary()`` again for
+    the profile they use, so the three agree.
 
     Raises:
-        ValueError: a thin film on Route B, Route A without a profile, or a thin film that is not a Route A
-            lowering or differs from the profile's name.
-        TypeError: ``approximation_profile`` is not an ``ApproximationProfile``.
+        TypeError: ``approximation_profile`` is neither None nor an ``ApproximationProfile``.
     """
-    if route == "B" and thin_film is not None:
-        raise ValueError(
-            f"Route B has no thin film, so thin_film={thin_film!r} does not apply: call set_route('B') "
-            "without thin_film, or set_route('A', ...) for zero-thickness sheets."
-        )
     if approximation_profile is None:
-        if route == "A":
-            raise ValueError(_ROUTE_A_NEEDS_A_PROFILE)
-        return ApproximationProfile("route_b", "v1", {})
+        name = "thin_film" if route == "A" else "route_b"
+        return ApproximationProfile(name, "v1", {})
     if not isinstance(approximation_profile, ApproximationProfile):
         raise TypeError(
             "approximation_profile must be an ApproximationProfile: pass "
             "set_route(..., approximation_profile=ApproximationProfile(name, 'v1', parameters))."
         )
-    if thin_film is not None and thin_film not in _THIN_FILMS:
-        raise ValueError(
-            f"Unknown Route A thin film {thin_film!r}: pass thin_film='substrate_face' or "
-            "'metal_gap_equivalent', or leave it out."
-        )
-    if thin_film is not None and approximation_profile.name != thin_film:
-        raise ValueError(
-            f"thin_film={thin_film!r} differs from the approximation profile {approximation_profile.name!r}: "
-            f"pass thin_film={approximation_profile.name!r} to set_route, or leave it out."
-        )
     return approximation_profile
-
-
-_THIN_FILMS = ("substrate_face", "metal_gap_equivalent")
-
-_ROUTE_A_NEEDS_A_PROFILE = (
-    "Route A needs an approximation profile, which says how the films lower to sheets: call "
-    "set_route('A', approximation_profile=ApproximationProfile(name, 'v1', parameters)) with name "
-    "'thin_film' (parameters {}), or 'substrate_face' or 'metal_gap_equivalent' "
-    "(parameters {'film_bindings': explicit_bindings})."
-)
 
 
 __all__ = [

@@ -324,14 +324,19 @@ Surface-EPR margins became geometry, and the changes follow from that:
 - Call `set_surface_epr` before `mesh()`. Calling it afterwards invalidates the mesh.
 - The route and Surface EPR are two settings. `set_surface_epr(*, representation,
   specs, route_a_thin_film=None, approximation_profile=None)` became
-  `set_route(route, *, thin_film=None, approximation_profile=None)` and
+  `set_route(route, *, approximation_profile=None)` and
   `set_surface_epr(specs)`. Route B is the default, so a Route B simulation calls
   neither for its route. Surface EPR is computed only when `set_surface_epr(specs)`
   was called, for Eigenmode and Electrostatic alike: drop the call that asked for
   none (Route B with empty `specs`), since an empty mapping is now refused, and
   use `set_surface_epr(None)` to turn Surface EPR off again. Route A
-  is `set_route("A", approximation_profile=profile)`; the keywords
-  `representation` and `route_a_thin_film` are gone.
+  is `set_route("A")`, which lowers the films with the `thin_film` profile;
+  `substrate_face` and `metal_gap_equivalent` are passed as
+  `set_route("A", approximation_profile=profile)`. The keywords `representation`
+  and `route_a_thin_film` are gone, and there is no `thin_film` keyword: the
+  profile's name already says the lowering. The simulation's `thin_film` field and
+  the `thin_film` key of `input_summary()` are gone with it; `input_summary()`
+  shows the name of the profile the preparation uses, the default included.
 - `inset_margins_um` asks SGB for bands. It accepts only positive, strictly
   increasing margins, so drop a leading `0.0`: the baseline row is always present.
 - Palace no longer writes native `Mask` or `Inset`, so margin rows need no Palace
