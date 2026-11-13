@@ -1,7 +1,9 @@
-"""Prepared-native HFSS EPR packaging, solver-only attempts and owned collection.
+"""Package a prepared HFSS EPR model, run its solver-only attempt and collect the result.
 
-Native model preparation and collection remain transaction-owned operations.
-The installed and transported solver runners share one standard-library protocol.
+``prepare_native_batch`` packages a released prepare-only model, ``run_native_batch``
+solves it with a standard-library runner and ``collect_native_batch`` collects the
+result on an owned copy. The installed and transported solver runners share one
+standard-library protocol.
 """
 
 from __future__ import annotations

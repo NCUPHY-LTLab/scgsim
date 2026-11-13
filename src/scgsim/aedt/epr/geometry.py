@@ -1,7 +1,7 @@
 """EPR analysis-sheet naming and inset planning over prepared source geometry.
 
-General source preparation is owned by preparation.planar; public preparation
-helpers are direct reexports of those same function objects.
+General source preparation lives in preparation.planar; the preparation helpers
+exported here are those same function objects.
 """
 
 from __future__ import annotations
@@ -98,8 +98,9 @@ def _sheet_name(
     tail = f"_{classification}_{side}_{margin}{part_label}_{digest}"
     owner_budget = 60 - len("EPR_") - len(tail)
     if owner_budget < 1:
-        # Preserve successful legacy labels; compact only overflow of SCG's
-        # inherited identifier budget, not an asserted native naming limit.
+        # A name that fits the 60-character budget keeps its readable label; only
+        # an overflow is compacted to a hash token. The budget is SCGSim's own,
+        # not a limit AEDT states.
         token = (
             base64.b32encode(bytes.fromhex(identity_sha256)).decode("ascii").rstrip("=")
         )

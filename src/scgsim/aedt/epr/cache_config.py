@@ -15,7 +15,7 @@ from scgsim.aedt.specs.epr import (
 
 
 def identity_sha256(value: Any) -> str:
-    """Hash a canonical expression or cache identity with its historical encoding."""
+    """Hash a canonical expression or cache identity: SHA-256 of its sorted, compact JSON."""
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
@@ -104,7 +104,7 @@ def cache_items(
 
 
 def native_expression_cache(items: list[dict[str, Any]]) -> list[Any]:
-    """Encode the native cache request with its established convergence fields."""
+    """Encode the native ``ExpressionCache`` request, with each item's convergence fields."""
     result: list[Any] = ["NAME:ExpressionCache"]
     for item in items:
         result.append(

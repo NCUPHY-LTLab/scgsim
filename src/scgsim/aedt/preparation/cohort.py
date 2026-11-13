@@ -1,4 +1,4 @@
-"""Canonical prepared-input path and hash cohort ownership."""
+"""The canonical file set of a prepared handoff and the hash cohort that binds it."""
 
 from __future__ import annotations
 

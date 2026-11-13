@@ -60,7 +60,7 @@ class IntegralTarget:
 
 
 def integral_target(purpose: str, selection: Mapping[str, Any]) -> IntegralTarget:
-    """Decode the legacy identity once; never add these fields to its wire form."""
+    """Decode the kind and scope id of a persisted purpose once; they are never stored beside it."""
 
     kind = next(
         (item for item in _INTEGRAL_KINDS if purpose.startswith(f"{item}_")),

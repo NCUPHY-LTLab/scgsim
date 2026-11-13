@@ -1,4 +1,9 @@
-"""AEDT request, execution, analysis, and result APIs."""
+"""Prepare, run and read back AEDT (HFSS, Q3D, Q2D) calculations.
+
+In: an AEDT request spec for ``prepare_handoff``, with the request's controls. HFSS Eigenmode and the Q3D C/G preparation can also start from a ``GeometryPlan`` snapshot; Q2D starts from a ``Q2dSpec`` of explicit rectangles and conductor groups.
+Out: a portable handoff that an AEDT run reads; from a finished run the detached results (``ResolvedRun``, ``EprResult``); from a preparation-only run, which never invokes the solver, the ``PreparedModel``.
+Next: ``python -m scgsim.aedt.run`` executes the handoff; notebooks read a finished run through ``resolve_results``, a preparation-only run through ``resolve_prepared_model``, and plot with the plot helpers.
+"""
 
 from importlib import import_module
 from typing import TYPE_CHECKING

@@ -1,4 +1,4 @@
-"""Unique detached prepared geometry carrier; source/model identity is preserved."""
+"""``PreparedPlanarGeometry``: the detached prepared geometry, carrying its source and model identity."""
 
 from __future__ import annotations
 

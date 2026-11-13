@@ -26,7 +26,7 @@ NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
 
 
 def native_coordinates_close(left, right) -> bool:
-    """Compare coordinates using the existing absolute native-readback resolution."""
+    """Compare coordinates within the absolute native-readback tolerance."""
     return len(left) == len(right) and all(
         math.isfinite(float(a))
         and math.isfinite(float(b))

@@ -11,7 +11,7 @@ from scgsim.aedt.io import read_json
 
 
 def read_simulation_benchmark(path: Path, setup_name: str) -> dict[str, Any]:
-    """Read a previously hash-verified benchmark, never opening AEDT."""
+    """Read a benchmark file the receipt has already hash-verified, never opening AEDT."""
     payload = read_json(path)
     if (
         not isinstance(payload, dict)
