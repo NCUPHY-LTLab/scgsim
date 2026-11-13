@@ -68,40 +68,7 @@ class PalaceEprResult:
                     found=[type(row).__name__ for row in rows],
                 )
             )
-        identities: set[int] = set()
-        group_sources: dict[str, tuple[Any, ...]] = {}
-        for row in rows:
-            mode = row.get("mode")
-            if type(mode) is not int or mode <= 0 or mode in identities:
-                raise ValueError(
-                    refusal(
-                        "Palace EPR modes must be unique positive integers", found=mode
-                    )
-                )
-            identities.add(mode)
-            checked_number(row.get("frequency_hz"), "frequency_hz", positive=True)
-            checked_number(
-                row.get("normalization_energy_j"),
-                "normalization_energy_j",
-                positive=True,
-            )
-            for name in ("surface", "bulk", "junction"):
-                if not isinstance(row.get(name), (list, tuple)) or any(
-                    not isinstance(item, Mapping) for item in row[name]
-                ):
-                    raise TypeError(f"Palace EPR {name} must contain mappings")
-            for surface in row["surface"]:
-                _validate_surface_result(surface, group_sources)
-            for bulk in row["bulk"]:
-                if not isinstance(bulk.get("domain_id"), str) or not bulk["domain_id"]:
-                    raise ValueError(
-                        refusal(
-                            "Palace EPR bulk domain_id must be a non-empty string",
-                            found=bulk.get("domain_id"),
-                        )
-                    )
-                checked_number(bulk.get("participation"), "bulk participation")
-            _validate_ports(row["junction"])
+        _validate_rows(rows)
         if not isinstance(self.provenance, Mapping) or not isinstance(
             self.provenance.get("handoff_id"), str
         ):
@@ -182,10 +149,52 @@ class PalaceEprResult:
         return cls(tuple(payload["rows"]), payload["provenance"])
 
 
+def _validate_rows(rows: tuple[Mapping[str, Any], ...]) -> None:
+    """Each row is one mode, numbered once, with its normalisation and its surface, bulk and port records."""
+    identities: set[int] = set()
+    group_sources: dict[str, tuple[Any, ...]] = {}
+    for row in rows:
+        mode = row.get("mode")
+        if type(mode) is not int or mode <= 0 or mode in identities:
+            raise ValueError(
+                refusal("Palace EPR modes must be unique positive integers", found=mode)
+            )
+        identities.add(mode)
+        checked_number(row.get("frequency_hz"), "frequency_hz", positive=True)
+        checked_number(
+            row.get("normalization_energy_j"),
+            "normalization_energy_j",
+            positive=True,
+        )
+        for name in ("surface", "bulk", "junction"):
+            if not isinstance(row.get(name), (list, tuple)) or any(
+                not isinstance(item, Mapping) for item in row[name]
+            ):
+                raise TypeError(f"Palace EPR {name} must contain mappings")
+        for surface in row["surface"]:
+            _validate_surface_result(surface, group_sources)
+        for bulk in row["bulk"]:
+            if not isinstance(bulk.get("domain_id"), str) or not bulk["domain_id"]:
+                raise ValueError(
+                    refusal(
+                        "Palace EPR bulk domain_id must be a non-empty string",
+                        found=bulk.get("domain_id"),
+                    )
+                )
+            checked_number(bulk.get("participation"), "bulk participation")
+        _validate_ports(row["junction"])
+
+
 def _validate_surface_result(
     surface: Any, group_sources: dict[str, tuple[Any, ...]]
 ) -> None:
     """Validate film values and preserve original-group identity across modes."""
+    _validate_surface_identity(surface)
+    _validate_surface_film(surface, group_sources)
+
+
+def _validate_surface_identity(surface: Any) -> None:
+    """The surface row names its group, interface and evaluation, its sidecar rows, Entities and lineage."""
     for name in ("group_id", "name", "interface_kind", "evaluation_kind"):
         if not isinstance(surface.get(name), str) or not surface[name]:
             raise ValueError(f"Palace EPR surface {name} is missing")
@@ -223,6 +232,12 @@ def _validate_surface_result(
                 found=surface.get("lineage"),
             )
         )
+
+
+def _validate_surface_film(
+    surface: Any, group_sources: dict[str, tuple[Any, ...]]
+) -> None:
+    """The participation and 1/Q agree with the film, and every mode gives one group the same origin."""
     checked_number(surface.get("original_participation"), "original participation")
     checked_number(surface.get("participation"), "participation")
     assumption = film_assumptions(surface.get("assumptions"), allow_unknown=True)

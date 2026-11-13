@@ -350,6 +350,12 @@ def _validate_ground_boundary_resolution(
     boundaries: dict[str, Any], index_map: dict[str, Any]
 ) -> None:
     """Verify physical/exterior Ground attributes and their exact configured union."""
+    values = _ground_resolution_fields(index_map)
+    _validate_ground_union(boundaries, values)
+
+
+def _ground_resolution_fields(index_map: dict[str, Any]) -> dict[str, list[Any]]:
+    """The index map's Ground resolution, each field a sorted list of unique names or positive attributes."""
     record = expect_mapping(
         index_map.get("ground_boundary"), "palace_index_map.ground_boundary"
     )
@@ -387,7 +393,12 @@ def _validate_ground_boundary_resolution(
         if not all(isinstance(item, str) and item for item in values[field]) or values[
             field
         ] != sorted(set(values[field])):
-            raise ValueError(f"ground_boundary.{field} must be sorted unique text.")
+            raise ValueError(
+                refusal(
+                    f"ground_boundary.{field} must be sorted unique text",
+                    found=values[field],
+                )
+            )
     for field in (
         "physical_attributes",
         "exterior_attributes",
@@ -398,8 +409,18 @@ def _validate_ground_boundary_resolution(
             for item in values[field]
         ) or values[field] != sorted(set(values[field])):
             raise ValueError(
-                f"ground_boundary.{field} must be sorted unique positive integers."
+                refusal(
+                    f"ground_boundary.{field} must be sorted unique positive integers",
+                    found=values[field],
+                )
             )
+    return values
+
+
+def _validate_ground_union(
+    boundaries: dict[str, Any], values: dict[str, list[Any]]
+) -> None:
+    """Physical and exterior Ground attributes are disjoint, and their union is the config's Ground."""
     physical = set(values["physical_attributes"])
     exterior = set(values["exterior_attributes"])
     union = sorted(physical | exterior)
@@ -437,7 +458,12 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
     """Check unique section-local identities, physical attributes and source-role metadata."""
     entries = index_map.get("entries")
     if not isinstance(entries, list) or not entries:
-        raise ValueError(f"{Path(INDEX_MAP).name} must include non-empty entries list.")
+        raise ValueError(
+            refusal(
+                f"{Path(INDEX_MAP).name} must include a non-empty entries list",
+                found=entries,
+            )
+        )
     expected_roles = {
         TERMINAL_SECTION: "terminal",
         LUMPED_PORT_SECTION: "port_surface",
@@ -469,44 +495,54 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
                 refusal(f"index map indices of {section} must be positive", found=index)
             )
         indices[section].append(index)
-        entry_name = expect_scalar(entry, "entry_name", str)
-        if not entry_name or (section, entry_name) in names:
-            raise ValueError(
-                refusal(
-                    f"index entry names must be non-empty and unique per section ({section})",
-                    found=entry_name,
-                )
-            )
-        names.add((section, entry_name))
-        physical_names = expect_list(
-            entry.get("physical_names"), "index physical_names"
-        )
-        if not all(isinstance(name, str) and name for name in physical_names):
-            raise ValueError(
-                refusal(
-                    f"index entry {entry_name!r} physical_names must be non-empty strings",
-                    found=physical_names,
-                )
-            )
-        entry_attributes = expect_list(entry.get("attributes"), "index attributes")
-        for attribute in entry_attributes:
-            if (
-                not isinstance(attribute, int)
-                or isinstance(attribute, bool)
-                or attribute < 1
-            ):
-                raise ValueError(
-                    refusal(
-                        f"index entry {entry_name!r} attributes must be positive integers",
-                        found=attribute,
-                    )
-                )
-        metadata = expect_mapping(entry.get("metadata"), "index metadata")
-        _validate_entry_role(entry, metadata, section)
+        _validate_entry_fields(entry, section, names)
     for section, values in indices.items():
         if values and sorted(values) != list(range(1, len(values) + 1)):
-            raise ValueError(f"index map {section} entries must be ordered 1..N.")
+            raise ValueError(
+                refusal(
+                    f"index map {section} entries must be numbered 1..N",
+                    found=sorted(values),
+                )
+            )
     surface_epr_entries(index_map)
+
+
+def _validate_entry_fields(
+    entry: dict[str, Any], section: str, names: set[tuple[str, str]]
+) -> None:
+    """One entry's name (unique in its section), physical names, attributes and role metadata."""
+    entry_name = expect_scalar(entry, "entry_name", str)
+    if not entry_name or (section, entry_name) in names:
+        raise ValueError(
+            refusal(
+                f"index entry names must be non-empty and unique per section ({section})",
+                found=entry_name,
+            )
+        )
+    names.add((section, entry_name))
+    physical_names = expect_list(entry.get("physical_names"), "index physical_names")
+    if not all(isinstance(name, str) and name for name in physical_names):
+        raise ValueError(
+            refusal(
+                f"index entry {entry_name!r} physical_names must be non-empty strings",
+                found=physical_names,
+            )
+        )
+    entry_attributes = expect_list(entry.get("attributes"), "index attributes")
+    for attribute in entry_attributes:
+        if (
+            not isinstance(attribute, int)
+            or isinstance(attribute, bool)
+            or attribute < 1
+        ):
+            raise ValueError(
+                refusal(
+                    f"index entry {entry_name!r} attributes must be positive integers",
+                    found=attribute,
+                )
+            )
+    metadata = expect_mapping(entry.get("metadata"), "index metadata")
+    _validate_entry_role(entry, metadata, section)
 
 
 def _validate_entry_role(
