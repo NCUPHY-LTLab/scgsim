@@ -4,27 +4,68 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import (
+    CONFIG,
+    HANDOFF_METADATA,
+    INDEX_MAP,
+    LOGS_DIR,
+    MESH,
+    MESH_MANIFEST,
+    METADATA_DIR,
+    OUTPUT_DIR,
+    RECORDER,
+    RETURNED_RECEIPT,
+    RUN_METADATA,
+    RUNTIME_COMPATIBILITY,
+    SOLVER_LOG_PREFIX,
+)
 
-def render_script(  # noqa: PLR0913 -- separate handoff settings feed script text
-    profile: str,
-    executable: str,
-    resources: Mapping[str, Any],
-    setup: Sequence[str],
-    petsc: Sequence[str],
-    *,
-    returned_receipt_recorder_name: str,
-    palace_identity: Mapping[str, Any],
-) -> str:
-    """Render a dependency-free script for a manual Palace handoff."""
-    style = str(resources.get("command_style", "binary"))
-    threads = positive_int(
-        resources.get("threads", resources.get("cpus_per_task", 1)), "threads"
-    )
-    processes = positive_int(
-        resources.get("processes", resources.get("ntasks", 1)), "processes"
-    )
+
+@dataclass(frozen=True)
+class ExecutionSettings:
+    """How the run script starts Palace: the caller's profile, executable, resources and commands, checked.
+
+    ``prepare_handoff`` builds it after checking each value; the script and the handoff's execution identity
+    are rendered from it.
+    """
+
+    profile: str
+    executable: str
+    resources: Mapping[str, Any]
+    setup_commands: tuple[str, ...]
+    petsc_options: tuple[str, ...]
+
+    @property
+    def command_style(self) -> str:
+        """``binary`` (Palace's own executable) or ``wrapper`` (the ``palace`` launcher script)."""
+        return str(self.resources.get("command_style", "binary"))
+
+    def threads(self) -> int:
+        """The OpenMP threads per process: ``threads``, else Slurm's ``cpus_per_task``, else 1."""
+        resources = self.resources
+        return positive_int(
+            resources.get("threads", resources.get("cpus_per_task", 1)), "threads"
+        )
+
+    def processes(self) -> int:
+        """The MPI processes: ``processes``, else Slurm's ``ntasks``, else 1."""
+        resources = self.resources
+        return positive_int(
+            resources.get("processes", resources.get("ntasks", 1)), "processes"
+        )
+
+
+def render_script(execution: ExecutionSettings, *, config_schema: str) -> str:
+    """Render a dependency-free script for a manual Palace handoff whose config has ``config_schema``."""
+    profile = execution.profile
+    resources = execution.resources
+    style = execution.command_style
+    # The thread and process counts are refused before any line is rendered.
+    execution.threads()
+    execution.processes()
     directives: list[str] = []
     if profile != "direct-local":
         for key, value in resources.items():
@@ -45,8 +86,8 @@ def render_script(  # noqa: PLR0913 -- separate handoff settings feed script tex
         # do not tee (tee would duplicate every line into the same file).
         directives.extend(
             [
-                "#SBATCH --output=logs/palace-%j.log",
-                "#SBATCH --error=logs/palace-%j.log",
+                f"#SBATCH --output={SOLVER_LOG_PREFIX}%j.log",
+                f"#SBATCH --error={SOLVER_LOG_PREFIX}%j.log",
                 "#SBATCH --open-mode=append",
             ]
         )
@@ -63,11 +104,9 @@ def render_script(  # noqa: PLR0913 -- separate handoff settings feed script tex
         arguments.extend(["-np", '"$PALACE_PROCESSES"', "-nt", '"$PALACE_THREADS"'])
     arguments.append('"$PALACE_CONFIG"')
     command = " ".join([*(shlex.quote(item) for item in launcher), *arguments])
-    config_schema = single_line(
-        str(palace_identity["config_schema"]), "palace_identity.config_schema"
-    )
+    config_schema = single_line(str(config_schema), "palace_identity.config_schema")
     receipt_command = (
-        f'python3 metadata/{returned_receipt_recorder_name} "$(pwd)" '
+        f'python3 {RECORDER} "$(pwd)" '
         '"$PIPELINE_EXIT_CODE" --log-path "$PALACE_LOG" '
         '--tee-exit-code "$TEE_EXIT_CODE" '
         '--job-id "${SLURM_JOB_ID:-manual}" '
@@ -96,26 +135,19 @@ def render_script(  # noqa: PLR0913 -- separate handoff settings feed script tex
         ]
     )
 
-    lines = _script_start_lines(
-        profile=profile,
-        directives=directives,
-        run_directory_lines=run_directory_lines,
-        executable=executable,
-        processes=processes,
-        threads=threads,
-        style=style,
-    )
-    if petsc:
+    lines = _script_start_lines(execution, directives, run_directory_lines)
+    if execution.petsc_options:
+        petsc = " ".join(execution.petsc_options)
         lines.extend(
             [
-                f"PALACE_PETSC_OPTIONS={shlex.quote(' '.join(petsc))}",
+                f"PALACE_PETSC_OPTIONS={shlex.quote(petsc)}",
                 'export PETSC_OPTIONS="${PETSC_OPTIONS:-} ${PALACE_PETSC_OPTIONS}"',
             ]
         )
-    lines.extend(_setup_lines(setup))
+    lines.extend(_setup_lines(execution.setup_commands))
 
     compatibility_probe = (
-        f"python3 metadata/{returned_receipt_recorder_name} verify-config "
+        f"python3 {RECORDER} verify-config "
         '"$PALACE_EXECUTABLE" "$PALACE_COMMAND_STYLE" '
         '"$PALACE_RUNTIME_COMPATIBILITY" "$PALACE_CONFIG" '
         f"--config-schema {shlex.quote(config_schema)}"
@@ -137,48 +169,53 @@ def render_script(  # noqa: PLR0913 -- separate handoff settings feed script tex
     return "\n".join(lines)
 
 
-def _script_start_lines(  # noqa: PLR0913 -- renders distinct script variables
-    *,
-    profile: str,
+def _script_start_lines(
+    execution: ExecutionSettings,
     directives: Sequence[str],
     run_directory_lines: Sequence[str],
-    executable: str,
-    processes: int,
-    threads: int,
-    style: str,
 ) -> list[str]:
     """Set run-directory, cleanup, and solver variables in the generated script."""
+    profile = execution.profile
     return [
         "#!/usr/bin/env bash",
         *directives,
         "",
         "set -u",
         *run_directory_lines,
-        '[[ -f "$RUN_DIR/config.json" ]] || { echo "missing $RUN_DIR/config.json" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/palace.msh" ]] || { echo "missing $RUN_DIR/palace.msh" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/metadata/palace_handoff_metadata.json" ]] || { echo "missing canonical handoff metadata" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/metadata/palace_run_metadata.json" ]] || { echo "missing canonical run metadata" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/metadata/mesh_manifest.json" ]] || { echo "missing canonical mesh manifest" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/metadata/palace_index_map.json" ]] || { echo "missing canonical index map" >&2; exit 2; }',
+        *(
+            _require_file_line(f"$RUN_DIR/{name}", f"$RUN_DIR/{name}")
+            for name in (CONFIG, MESH)
+        ),
+        _require_file_line(
+            f"$RUN_DIR/{HANDOFF_METADATA}", "canonical handoff metadata"
+        ),
+        _require_file_line(f"$RUN_DIR/{RUN_METADATA}", "canonical run metadata"),
+        _require_file_line(f"$RUN_DIR/{MESH_MANIFEST}", "canonical mesh manifest"),
+        _require_file_line(f"$RUN_DIR/{INDEX_MAP}", "canonical index map"),
         'cd "$RUN_DIR" || exit 2',
-        "mkdir -p logs results/palace metadata",
-        "rm -f metadata/palace_returned_run_receipt.json",
-        "rm -f metadata/palace_runtime_compatibility.json",
-        *(["rm -f logs/palace-*.log"] if profile == "direct-local" else []),
-        "rm -rf results/palace",
-        "mkdir -p results/palace",
-        'PALACE_CONFIG="config.json"',
-        'PALACE_MESH="palace.msh"',
-        f"PALACE_EXECUTABLE={shlex.quote(executable)}",
-        f"PALACE_PROCESSES={processes}",
-        f"PALACE_THREADS={threads}",
-        f"PALACE_COMMAND_STYLE={shlex.quote(style)}",
+        f"mkdir -p {LOGS_DIR} {OUTPUT_DIR} {METADATA_DIR}",
+        f"rm -f {RETURNED_RECEIPT}",
+        f"rm -f {RUNTIME_COMPATIBILITY}",
+        *([f"rm -f {SOLVER_LOG_PREFIX}*.log"] if profile == "direct-local" else []),
+        f"rm -rf {OUTPUT_DIR}",
+        f"mkdir -p {OUTPUT_DIR}",
+        f'PALACE_CONFIG="{CONFIG}"',
+        f'PALACE_MESH="{MESH}"',
+        f"PALACE_EXECUTABLE={shlex.quote(execution.executable)}",
+        f"PALACE_PROCESSES={execution.processes()}",
+        f"PALACE_THREADS={execution.threads()}",
+        f"PALACE_COMMAND_STYLE={shlex.quote(execution.command_style)}",
         'export OMP_NUM_THREADS="$PALACE_THREADS"',
-        'PALACE_LOG="logs/palace-${SLURM_JOB_ID:-manual}.log"',
-        'PALACE_RUNTIME_COMPATIBILITY="metadata/palace_runtime_compatibility.json"',
+        f'PALACE_LOG="{SOLVER_LOG_PREFIX}${{SLURM_JOB_ID:-manual}}.log"',
+        f'PALACE_RUNTIME_COMPATIBILITY="{RUNTIME_COMPATIBILITY}"',
         '[[ -f "$PALACE_CONFIG" ]] || { echo "missing $PALACE_CONFIG" >&2; exit 2; }',
         '[[ -f "$PALACE_MESH" ]] || { echo "missing $PALACE_MESH" >&2; exit 2; }',
     ]
+
+
+def _require_file_line(path: str, missing: str) -> str:
+    """The script line that exits with status 2 unless ``path`` is a file, printing ``missing <missing>``."""
+    return f'[[ -f "{path}" ]] || {{ echo "missing {missing}" >&2; exit 2; }}'
 
 
 def _setup_lines(setup: Sequence[str]) -> list[str]:

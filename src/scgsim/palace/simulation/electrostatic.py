@@ -10,6 +10,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
+from scgsim.contracts.palace_run_folder import (
+    INDEX_MAP,
+    MATERIAL_RESOLUTION,
+    NUMERICAL_CONTROLS,
+)
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
 from ..config.config import build_electrostatic_config
@@ -202,20 +207,20 @@ class ElectrostaticSim(PalaceSimulation):
     def _metadata(
         self, result: ElectrostaticConfigBuildResult
     ) -> tuple[tuple[str, dict[str, Any]], ...]:
-        """The ``metadata/`` files written beside ``config.json``, in the order they are written."""
+        """The metadata files written with ``config.json``, by run-folder path, in the order they are written."""
         return (
             (
-                "palace_index_map.json",
+                INDEX_MAP,
                 index_map(
                     result.index_entries,
                     ground_boundary=result.ground_boundary_resolution,
                 ),
             ),
             (
-                "palace_material_resolution.json",
+                MATERIAL_RESOLUTION,
                 {"schema_version": 1, "solution_volumes": result.material_resolution},
             ),
-            ("palace_numerical_controls.json", self.numerical.to_payload()),
+            (NUMERICAL_CONTROLS, self.numerical.to_payload()),
         )
 
     # ---- The core's questions ------------------------------------------------------------------------

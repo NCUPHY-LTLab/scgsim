@@ -6,6 +6,7 @@ import math
 from collections.abc import Callable, Sequence
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import NATIVE_METADATA_NAME, palace_problem
 from scgsim.palace.results.models import ResolvedRunData
 from scgsim.palace.results.observations import as_int, mapping_max, read_optional_json
 from scgsim.palace.results.report_models import AmrPassSnapshot
@@ -23,7 +24,7 @@ def scalar_physics(pass_: AmrPassSnapshot | None, problem: str) -> float | None:
     """Select the first mode frequency or largest absolute Maxwell diagonal for convergence."""
     if pass_ is None:
         return None
-    if problem == "Eigenmode":
+    if palace_problem(problem).solves_modes:
         if not pass_.frequencies_ghz:
             return None
         return pass_.frequencies_ghz[0]
@@ -59,7 +60,7 @@ def latest_palace_json(
     if resolved is not None:
         return resolved.provenance.palace_json
     for pass_ in reversed(passes):
-        payload = read_optional_json(pass_.path / "palace.json")
+        payload = read_optional_json(pass_.path / NATIVE_METADATA_NAME)
         if payload is not None:
             return payload
     return None

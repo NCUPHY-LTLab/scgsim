@@ -25,6 +25,7 @@ from scgsim.palace.mesh.build import (
     mesh_route_geometry,
 )
 from scgsim.palace.mesh.controls import MeshControls
+from scgsim.palace.source.layout_ports import GeometryBuildRequest
 from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 MATERIALS = {
@@ -121,13 +122,13 @@ def mesh_run(  # noqa: PLR0913 -- a test builder with independent switches
             **metadata,
         },
     }
-    geometry = build_route_geometry(
+    request = GeometryBuildRequest(
         stack=stack,
         route=route,
-        output_dir=directory / "run",
-        source_gds_bytes=source,
+        gds_bytes=source,
+        geometry_input=effective.build_input,
+        representation=effective.representation,
         surface_epr_specs=specs,
-        source_geometry_input=effective.build_input,
-        representation_context=effective.representation,
     )
+    geometry = build_route_geometry(request, output_dir=directory / "run")
     return mesh_route_geometry(geometry, MeshControls().updated(**controls))

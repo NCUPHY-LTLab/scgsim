@@ -7,27 +7,29 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# The loader reads the run-folder contract, not Palace: AEDT's runtime source closure reaches this module
+# through ``scgsim.visualization``, and AEDT must not ship Palace or SGB; the contract imports only the
+# standard library.
+from scgsim.contracts.palace_run_folder import (
+    CONFIG,
+    INDEX_MAP,
+    INDEX_MAP_SCHEMA_VERSION,
+    MANIFEST_SCHEMA_VERSION,
+    MESH,
+    MESH_MANIFEST,
+)
+
 from ..preview import GeometryPreview
 from ..scene import FIXED_COLORS, SceneMode, ScenePart, color_for_identity
 from .common import file_sha256, read_json_record
 
-# These numbers belong to the Palace contract (``palace.mesh.manifest`` and ``palace.results.index_contract``).
-# The loader cannot import Palace: AEDT's runtime source closure reaches this module through
-# ``scgsim.visualization``, and AEDT must not ship Palace or SGB.  A test pins them equal.
-MANIFEST_SCHEMA_VERSION = 2
-INDEX_MAP_SCHEMA_VERSION = 3
 _DIELECTRIC_SECTION = "Boundaries.Postprocessing.Dielectric"
 
 
 def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
     """Bind one Palace mesh to its exact semantic/config metadata."""
     root = Path(run_dir).expanduser().resolve()
-    paths = {
-        "palace.msh": root / "palace.msh",
-        "config.json": root / "config.json",
-        "metadata/mesh_manifest.json": root / "metadata/mesh_manifest.json",
-        "metadata/palace_index_map.json": root / "metadata/palace_index_map.json",
-    }
+    paths = {name: root / name for name in (MESH, CONFIG, MESH_MANIFEST, INDEX_MAP)}
     missing = [name for name, path in paths.items() if not path.is_file()]
     if missing:
         raise FileNotFoundError(f"Palace preview inputs are missing: {missing!r}")
@@ -40,12 +42,12 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
             "Palace geometry preview requires scgsim[visualization]"
         ) from exc
 
-    mesh_manifest = read_json_record(paths["metadata/mesh_manifest.json"])
-    index_map = read_json_record(paths["metadata/palace_index_map.json"])
+    mesh_manifest = read_json_record(paths[MESH_MANIFEST])
+    index_map = read_json_record(paths[INDEX_MAP])
     _require_schema(mesh_manifest, "mesh manifest", MANIFEST_SCHEMA_VERSION)
     _require_schema(index_map, "palace index map", INDEX_MAP_SCHEMA_VERSION)
-    config = read_json_record(paths["config.json"])
-    mesh = meshio.read(paths["palace.msh"])
+    config = read_json_record(paths[CONFIG])
+    mesh = meshio.read(paths[MESH])
     grid = _high_order_grid(mesh, mesh_manifest, pv)
     selection = _bind_mesh_selection(mesh, grid, mesh_manifest)
     materials = _palace_materials(config, selection.records, selection.cells)

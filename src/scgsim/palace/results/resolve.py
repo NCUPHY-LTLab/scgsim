@@ -9,6 +9,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from scgsim.contracts.palace_run_folder import (
+    ARCHIVE_MANIFEST,
+    CONFIG,
+    HANDOFF_METADATA,
+    INDEX_MAP,
+    MESH,
+    MESH_MANIFEST,
+    NATIVE_METADATA,
+    NATIVE_METADATA_NAME,
+    RESOURCE_RECORD,
+    RETURNED_RECEIPT,
+    RUN_METADATA,
+    output_table,
+    palace_problem,
+)
 from scgsim.palace.reports.plotting import ReportTheme
 from scgsim.palace.reports.reports import (
     show_all_results,
@@ -50,36 +65,31 @@ from scgsim.palace.results.provenance_contract import (
     validate_scalar_identity,
 )
 from scgsim.palace.results.receipt_contract import (
-    RETURNED_RECEIPT_FILE,
     ReceiptValidation,
     build_returned_receipt,
     validate_returned_state_agreement,
 )
 from scgsim.palace.results.tables import (
-    PROBLEM_FAMILIES,
     count_index_entries,
     output_families,
     read_result_table,
 )
 
 _REQUIRED_FILES = (
-    "metadata/palace_handoff_metadata.json",
-    "metadata/palace_run_metadata.json",
-    "metadata/palace_resource_record.json",
-    "metadata/palace_handoff_archive_manifest.json",
-    "metadata/palace_index_map.json",
-    "metadata/mesh_manifest.json",
-    "metadata/palace_returned_run_receipt.json",
-    "config.json",
-    "palace.msh",
-    "results/palace/palace.json",
+    HANDOFF_METADATA,
+    RUN_METADATA,
+    RESOURCE_RECORD,
+    ARCHIVE_MANIFEST,
+    INDEX_MAP,
+    MESH_MANIFEST,
+    RETURNED_RECEIPT,
+    CONFIG,
+    MESH,
+    NATIVE_METADATA,
 )
 
 
-_SCHEMA_FILES = (
-    "metadata/palace_index_map.json",
-    "metadata/mesh_manifest.json",
-)
+_SCHEMA_FILES = (INDEX_MAP, MESH_MANIFEST)
 
 
 def _require_file(path: Path) -> None:
@@ -152,32 +162,29 @@ def resolve_palace_result(
     # version, whatever solver output it lacks.
     for relative in _SCHEMA_FILES:
         _require_file(root / relative)
-    index_map = read_json(root / "metadata/palace_index_map.json")
-    mesh_manifest = read_json(root / "metadata/mesh_manifest.json")
+    index_map = read_json(root / INDEX_MAP)
+    mesh_manifest = read_json(root / MESH_MANIFEST)
     require_manifest_schema(mesh_manifest)
     require_index_map_schema(index_map)
     for relative in _REQUIRED_FILES:
         _require_file(root / relative)
 
-    handoff_metadata = read_json(root / "metadata" / "palace_handoff_metadata.json")
-    run_metadata = read_json(root / "metadata" / "palace_run_metadata.json")
-    resource_record = read_json(root / "metadata" / "palace_resource_record.json")
-    archive_manifest = read_json(
-        root / "metadata" / "palace_handoff_archive_manifest.json"
-    )
-    config = read_json(root / "config.json")
-    palace_payload = read_json(root / "results/palace/palace.json")
-    receipt_payload = read_json(root / RETURNED_RECEIPT_FILE)
+    handoff_metadata = read_json(root / HANDOFF_METADATA)
+    run_metadata = read_json(root / RUN_METADATA)
+    resource_record = read_json(root / RESOURCE_RECORD)
+    archive_manifest = read_json(root / ARCHIVE_MANIFEST)
+    config = read_json(root / CONFIG)
+    palace_payload = read_json(root / NATIVE_METADATA)
+    receipt_payload = read_json(root / RETURNED_RECEIPT)
 
     route = expect_scalar(handoff_metadata, "route", str)
     problem = expect_scalar(handoff_metadata, "problem", str)
 
     if route not in {"A", "B"}:
         raise ValueError(f"invalid route {route!r}; expected 'A' or 'B'.")
-    if problem not in PROBLEM_FAMILIES:
-        raise ValueError(
-            f"unsupported problem {problem!r}; expected one of {tuple(PROBLEM_FAMILIES)}."
-        )
+    palace_problem(
+        problem
+    )  # refuses a problem SCGSim does not write, naming those it does
 
     _validate_metadata_headers(handoff_metadata, resource_record, run_metadata)
 
@@ -254,10 +261,9 @@ def _discover_results(
     config: dict[str, Any],
 ) -> dict[str, ParsedTable]:
     """Read every required final native table and validate its sealed config/index correspondence."""
-    results_root = root / "results" / "palace"
     discovered: dict[str, ParsedTable] = {}
     for family in output_families(problem, index_counts):
-        path = results_root / f"{family}.csv"
+        path = root / output_table(family)
         if not path.is_file():
             raise FileNotFoundError(f"required result family is missing: {path}")
         discovered[family] = read_result_table(path, problem, index_counts, config)
@@ -268,14 +274,16 @@ def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
     """Detach native elapsed counts and durations without filling absent measurements."""
     elapsed = palace_payload.get("ElapsedTime")
     if not isinstance(elapsed, dict):
-        raise TypeError("palace.json missing ElapsedTime block.")
+        raise TypeError(f"{NATIVE_METADATA_NAME} missing ElapsedTime block.")
 
     counts_raw = elapsed.get("Counts")
     durations_raw = elapsed.get("Durations")
     if not isinstance(counts_raw, dict):
-        raise TypeError("palace.json ElapsedTime.Counts must be a mapping.")
+        raise TypeError(f"{NATIVE_METADATA_NAME} ElapsedTime.Counts must be a mapping.")
     if not isinstance(durations_raw, dict):
-        raise TypeError("palace.json ElapsedTime.Durations must be a mapping.")
+        raise TypeError(
+            f"{NATIVE_METADATA_NAME} ElapsedTime.Durations must be a mapping."
+        )
 
     counts: dict[str, int | float] = {
         str(key): float(value)
@@ -289,19 +297,23 @@ def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
     }
     if not counts or not durations:
         raise ValueError(
-            "palace.json performance payload is missing numeric timing data."
+            f"{NATIVE_METADATA_NAME} performance payload is missing numeric timing data."
         )
     if any(not math.isfinite(value) or value < 0 for value in counts.values()) or any(
         not math.isfinite(value) or value < 0 for value in durations.values()
     ):
-        raise ValueError("palace.json timing payload contains invalid numeric data.")
+        raise ValueError(
+            f"{NATIVE_METADATA_NAME} timing payload contains invalid numeric data."
+        )
     if (
         "Total" not in counts
         or "Total" not in durations
         or counts["Total"] < 1
         or durations["Total"] < 0
     ):
-        raise ValueError("palace.json timing payload must include non-negative Total.")
+        raise ValueError(
+            f"{NATIVE_METADATA_NAME} timing payload must include non-negative Total."
+        )
     return PalacePerformance(counts=counts, durations=durations)
 
 
@@ -309,7 +321,7 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
     """Detach solver, mesh, memory and parallel-resource observations from Palace JSON."""
     problem_block = palace_payload.get("Problem")
     if not isinstance(problem_block, dict):
-        raise TypeError("palace.json missing Problem block.")
+        raise TypeError(f"{NATIVE_METADATA_NAME} missing Problem block.")
 
     linear_solver = palace_payload.get("LinearSolver")
     if not isinstance(linear_solver, dict):
@@ -352,7 +364,9 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
             cost.git_tag,
         )
     ):
-        raise ValueError("palace.json is missing required solver cost metadata.")
+        raise ValueError(
+            f"{NATIVE_METADATA_NAME} is missing required solver cost metadata."
+        )
     if any(
         value is None or value <= 0
         for value in (
@@ -362,7 +376,7 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
             cost.openmp_threads,
         )
     ):
-        raise ValueError("palace.json has invalid solver cost metadata.")
+        raise ValueError(f"{NATIVE_METADATA_NAME} has invalid solver cost metadata.")
     if (
         not cost.linear_solver
         or any(
@@ -378,7 +392,9 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
             for value in cost.linear_solver.values()
         )
     ):
-        raise ValueError("palace.json is missing required resource cost metadata.")
+        raise ValueError(
+            f"{NATIVE_METADATA_NAME} is missing required resource cost metadata."
+        )
     return cost
 
 

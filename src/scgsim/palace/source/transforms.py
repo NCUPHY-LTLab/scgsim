@@ -5,8 +5,6 @@ from __future__ import annotations
 import math
 from typing import Any, Literal, cast
 
-SCHEMA_VERSION = "1-7-0"
-
 RouteAThinFilm = Literal["substrate_face", "metal_gap_equivalent"]
 
 

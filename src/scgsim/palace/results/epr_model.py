@@ -8,24 +8,10 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
+from scgsim.palace.results.artifacts import checked_number
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
 EPR_RESULT_SCHEMA = "scgsim.palace.epr-result.v2"
-
-
-def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
-    """Require a finite nonnegative EPR value, optionally excluding zero."""
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(value)
-        or value < 0
-        or (positive and value == 0)
-    ):
-        raise ValueError(
-            f"{name} must be finite and {'positive' if positive else 'non-negative'}"
-        )
-    return float(value)
 
 
 def _plain(value: Any) -> Any:

@@ -5,6 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
+from scgsim.contracts.palace_run_folder import (
+    NATIVE_METADATA_NAME,
+    palace_problem,
+    table_name,
+)
 from scgsim.palace.results.artifacts import (
     compute_hash_entry,
     confined_path,
@@ -191,15 +196,8 @@ def result_selection(
 def _snapshot_artifact_paths(path: Path, problem: str) -> tuple[Path, ...]:
     """Enumerate the problem-specific files that establish one complete result snapshot."""
     names = (
-        (
-            "eig.csv",
-            "port-EPR.csv",
-            "surface-Q.csv",
-            "error-indicators.csv",
-            "palace.json",
-        )
-        if problem == "Eigenmode"
-        else ("terminal-C.csv", "surface-Q.csv", "error-indicators.csv", "palace.json")
+        *(table_name(family) for family in palace_problem(problem).snapshot_tables),
+        NATIVE_METADATA_NAME,
     )
     return tuple(candidate for name in names if (candidate := path / name).is_file())
 

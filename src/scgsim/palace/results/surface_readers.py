@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from scgsim.contracts.palace_run_folder import palace_problem
 from scgsim.palace.results.index_contract import validate_index_entries
 from scgsim.palace.results.models import ParsedTable
 from scgsim.palace.results.report_models import (
@@ -131,9 +132,9 @@ class SurfaceEprReader:
             table = _read_surface_table(self.path, self.mode_count)
             validate_surface_table(table, self.surface_count, self.expected_rows)
             snapshots: list[SurfaceEprSeriesSnapshot] = []
-            index_name = "m" if self.problem == "Eigenmode" else "i"
+            problem = palace_problem(self.problem)
             for row in table.rows:
-                series_index = int(row[index_name])
+                series_index = int(row[problem.series_index])
                 records = tuple(
                     SurfaceEprRecord(
                         **binding,
@@ -165,9 +166,7 @@ class SurfaceEprReader:
                         pass_index=self.pass_index,
                         source=self.source,
                         series_index=series_index,
-                        series_kind="mode"
-                        if self.problem == "Eigenmode"
-                        else "excitation",
+                        series_kind=problem.series,
                         records=records,
                         quality_factor_total=quality_factor,
                         t1_seconds=t1_seconds,
@@ -205,13 +204,13 @@ class SurfaceMarginEprReader:
         try:
             table = _read_surface_table(self.path, self.mode_count)
             validate_surface_table(table, self.surface_count, self.expected_rows)
-            index_name = "m" if self.problem == "Eigenmode" else "i"
+            problem = palace_problem(self.problem)
             return tuple(
                 SurfaceMarginEprSeriesSnapshot(
                     pass_index=self.pass_index,
                     source=self.source,
-                    series_index=int(row[index_name]),
-                    series_kind="mode" if self.problem == "Eigenmode" else "excitation",
+                    series_index=int(row[problem.series_index]),
+                    series_kind=problem.series,
                     records=tuple(
                         SurfaceMarginEprRecord(
                             **binding,

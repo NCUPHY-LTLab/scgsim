@@ -11,6 +11,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
+from scgsim.contracts.palace_run_folder import (
+    INDEX_MAP,
+    MATERIAL_RESOLUTION,
+    NUMERICAL_CONTROLS,
+    PORT_INFORMATION,
+)
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
 from ..config.config import build_eigenmode_config
@@ -234,23 +240,20 @@ class EigenmodeSim(PalaceSimulation):
     def _metadata(
         self, result: EigenmodeConfigBuildResult
     ) -> tuple[tuple[str, dict[str, Any]], ...]:
-        """The ``metadata/`` files written beside ``config.json``, in the order they are written."""
+        """The metadata files written with ``config.json``, by run-folder path, in the order they are written."""
         extra = (
             {}
             if self.epr_request is None
             else {"epr_request": self.epr_request.to_payload()}
         )
         return (
-            ("palace_index_map.json", index_map(result.index_entries, **extra)),
+            (INDEX_MAP, index_map(result.index_entries, **extra)),
             (
-                "palace_material_resolution.json",
+                MATERIAL_RESOLUTION,
                 {"schema_version": 1, "solution_volumes": result.material_resolution},
             ),
-            (
-                "port_information.json",
-                {"schema_version": 1, "ports": result.port_information},
-            ),
-            ("palace_numerical_controls.json", self.numerical.to_payload()),
+            (PORT_INFORMATION, {"schema_version": 1, "ports": result.port_information}),
+            (NUMERICAL_CONTROLS, self.numerical.to_payload()),
         )
 
     # ---- The core's questions ------------------------------------------------------------------------

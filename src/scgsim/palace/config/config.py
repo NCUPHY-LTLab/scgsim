@@ -12,6 +12,8 @@ from collections.abc import Mapping, Sequence
 from numbers import Real
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC, OUTPUT_DIR
+
 from ..mesh.physical_groups import Groups
 from ..source.ports import LayoutPortBinding
 from .boundaries import build_electrostatic_boundaries
@@ -62,7 +64,7 @@ def build_electrostatic_config(
     energy_rows, energy_entries = _domain_energy_rows(domain_volumes, common.materials)
     config = _config(
         common,
-        solver={"Electrostatic": {"Save": electrostatic.save_fields}},
+        solver={ELECTROSTATIC.name: {"Save": electrostatic.save_fields}},
         boundaries=boundaries,
         domains=(material_rows, energy_rows),
         epr=(epr_rows, epr_entries),
@@ -101,7 +103,7 @@ def build_eigenmode_config(
         boundaries["LumpedPort"] = port_rows
     config = _config(
         common,
-        solver={"Eigenmode": _eigenmode_block(eigenmode)},
+        solver={EIGENMODE.name: _eigenmode_block(eigenmode)},
         boundaries=boundaries,
         domains=(material_rows, energy_rows),
         epr=(epr_rows, epr_entries),
@@ -132,7 +134,7 @@ def _config(
         "Problem": {
             "Type": common.problem,
             "Verbose": 3,
-            "Output": "results/palace",
+            "Output": OUTPUT_DIR,
             **build_output_formats(numerical),
         },
         "Model": {

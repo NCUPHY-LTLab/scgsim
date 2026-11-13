@@ -7,6 +7,7 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import palace_problem
 from scgsim.palace.reports.plotting import (
     COLORWAY,
     FigureStyle,
@@ -292,7 +293,7 @@ def surface_loss_html(snapshot: SurfaceEprSeriesSnapshot, problem: str) -> str:
         ("Latest source", snapshot.source),
         ("Surface-loss Q_total", q_value),
     ]
-    if problem == "Eigenmode":
+    if palace_problem(problem).solves_modes:
         cards.append(
             (
                 "Surface-loss T1",

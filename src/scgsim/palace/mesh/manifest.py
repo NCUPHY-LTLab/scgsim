@@ -5,12 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import MANIFEST_SCHEMA_VERSION
 from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.contracts.sgb_sidecar.records import InsetRequest
 
 from .physical_groups import Groups
 
-MANIFEST_SCHEMA_VERSION = 2
 # The geometry producer the manifest, the route provenance and the handoff record.
 SGB_RUNTIME_AUTHORITY = "scgsim.geometry.sgb"
 
@@ -85,41 +85,32 @@ def attribute_entries(groups: Groups) -> list[dict[str, Any]]:
     """One entry per solver attribute: its dimension, number, name, entity tags and primary SGB group."""
     entries: list[dict[str, Any]] = []
     for name, record in groups["volumes"].items():
+        entry = _entry("volumes", record, name, record["attributes"][0], record["tags"])
         entries.append(
-            _entry(
-                "volumes",
-                record,
-                name,
-                record["attributes"][0],
-                record["tags"],
-                kind=record["kind"],
-                material=record["material"],
-            )
+            {**entry, "kind": record["kind"], "material": record["material"]}
         )
     for section in ("boundary_surfaces", "port_surfaces"):
         for record in groups[section].values():
             entries.extend(
-                _entry(
-                    section,
-                    record,
-                    part["name"],
-                    part["attribute"],
-                    part["tags"],
-                    rows=part["rows"],
-                )
+                {
+                    **_entry(
+                        section, record, part["name"], part["attribute"], part["tags"]
+                    ),
+                    "rows": part["rows"],
+                }
                 for part in record["parts"]
             )
     return sorted(entries, key=lambda e: (e["dimension"], e["attributes"][0]))
 
 
-def _entry(  # noqa: PLR0913 -- the fixed identity of an attribute plus its section's extras
+def _entry(
     section: str,
     record: Mapping[str, Any],
     name: str,
     attribute: int,
     tags: list[int],
-    **extra: Any,
 ) -> dict[str, Any]:
+    """The identity of one solver attribute; the caller adds its section's own fields after it."""
     entry: dict[str, Any] = {
         "name": name,
         "group": record["group"],
@@ -129,5 +120,4 @@ def _entry(  # noqa: PLR0913 -- the fixed identity of an attribute plus its sect
         "tags": list(tags),
     }
     entry.update({key: record[key] for key in _ATTRIBUTE_FIELDS if key in record})
-    entry.update(extra)
     return entry

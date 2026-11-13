@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Literal, TypeVar
 
+from scgsim.contracts.palace_run_folder import CONFIG, INDEX_MAP_SCHEMA_VERSION
 from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
@@ -37,7 +38,6 @@ from ..mesh.build import (
 )
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
-from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
 from ..run.handoff import HandoffPlan, prepare_handoff
 from ..source.inputs import stack_materials
 from ..source.layout_ports import LayoutGeometryRequest, layout_geometry_request
@@ -267,7 +267,7 @@ class PalaceSimulation(ABC):
         plan = self._require("input_summary", self._plan)
         prepared = self._geometry_request(plan).source
         data = summarize_geometry_input(
-            prepared["source_geometry_input"], prepared_stack=prepared["stack"]
+            prepared.geometry_input, prepared_stack=prepared.stack
         ).data
         data["backend"] = {
             "name": "palace",
@@ -315,7 +315,7 @@ class PalaceSimulation(ABC):
         request = self._geometry_request(plan)
         if request.materials is not None:
             self._materials = request.materials
-        geometry = build_route_geometry(**request.source, output_dir=self.output_dir)
+        geometry = build_route_geometry(request.source, output_dir=self.output_dir)
         check_meshing_stage(geometry)
         self._mesh_result = mesh_route_geometry(geometry, self.mesh_controls)
         self._resolved_ports = request.ports
@@ -407,7 +407,7 @@ class PalaceSimulation(ABC):
         plan = self._require("mesh", self._plan)
         self._require_surface_epr_for_mesh()
         return build_route_geometry(
-            **self._geometry_request(plan).source, output_dir=output_dir
+            self._geometry_request(plan).source, output_dir=output_dir
         )
 
     def _require_surface_epr_for_mesh(self) -> None:
@@ -493,12 +493,11 @@ class PalaceSimulation(ABC):
         config: Mapping[str, Any],
         metadata: Sequence[tuple[str, Mapping[str, Any]]],
     ) -> Path:
-        """Write each ``metadata/<name>`` file in order, then ``config.json`` last, and reach ``CONFIG_WRITTEN``."""
-        metadata_dir = mesh.output_dir / "metadata"
-        config_path = mesh.output_dir / "config.json"
+        """Write each metadata file in order, then ``config.json`` last, and reach ``CONFIG_WRITTEN``."""
+        config_path = mesh.output_dir / CONFIG
         self.config_path = persist_problem_files(
             metadata_files=tuple(
-                (metadata_dir / name, payload) for name, payload in metadata
+                (mesh.output_dir / relative, payload) for relative, payload in metadata
             ),
             config_path=config_path,
             config=config,

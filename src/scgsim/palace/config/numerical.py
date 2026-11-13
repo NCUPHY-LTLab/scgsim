@@ -18,6 +18,8 @@ from enum import Enum
 from numbers import Real
 from typing import Any, Literal
 
+from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC
+
 _KSP_TYPES = {"Default", "CG", "MINRES", "GMRES", "FGMRES", "BiCGSTAB"}
 _SOLVER_TYPES = {"Default", "SuperLU", "STRUMPACK", "MUMPS"}
 _PRECONDITIONERS = {"Default", "AMS", "BoomerAMG"}
@@ -116,7 +118,7 @@ class NumericalControls:
                 "set_numerical(amr_max_passes=...) before write_config(); 0 disables AMR."
             )
         if (
-            problem == "Eigenmode"
+            problem == EIGENMODE.name
             and isinstance(self.amr_max_passes, int)
             and self.amr_max_passes > 0
             and (self.amr_tolerance is None or self.amr_update_fraction is None)
@@ -298,7 +300,7 @@ def linear_solver(
     Explicit ``ksp_type="Default"`` delegates Krylov selection to Palace.
     """
     use_electrostatic_defaults = (
-        problem == "Electrostatic"
+        problem == ELECTROSTATIC.name
         and numerical.solver_type == "Default"
         and numerical.preconditioner == "Default"
     )

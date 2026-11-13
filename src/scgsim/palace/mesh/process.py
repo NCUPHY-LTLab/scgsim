@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import LOGS_DIR, json_text
 from scgsim.diagnostics import diagnostic_stage, worker_config
 
 from .physical_groups import Groups
@@ -72,13 +73,13 @@ def _run_private_worker(
     *, arguments: Sequence[str], run_dir: Path, worker_name: str
 ) -> None:
     """Execute one private IPC worker and retain only its diagnostic logs."""
-    logs = run_dir / "logs"
+    logs = run_dir / LOGS_DIR
     logs.mkdir(parents=True, exist_ok=True)
     stdout_path = logs / f"{worker_name}.stdout.log"
     stderr_path = logs / f"{worker_name}.stderr.log"
     worker_environment = _private_worker_environment()
     (logs / "private_worker_environment_keys.json").write_text(
-        json.dumps(sorted(worker_environment), indent=2) + "\n", encoding="utf-8"
+        json_text(sorted(worker_environment)), encoding="utf-8"
     )
     with (
         stdout_path.open("w", encoding="utf-8") as stdout,
@@ -104,7 +105,7 @@ def _run_private_worker(
         detail = f"exited with status {completed.returncode}"
     raise RuntimeError(
         f"private {worker_name} {detail}; diagnostics are in "
-        f"logs/{worker_name}.stdout.log and logs/{worker_name}.stderr.log"
+        f"{LOGS_DIR}/{stdout_path.name} and {LOGS_DIR}/{stderr_path.name}"
     )
 
 

@@ -12,6 +12,16 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import (
+    CONFIG,
+    EIGENMODE,
+    EPR_SELECTION_SCHEMA,
+    INDEX_MAP,
+    NATIVE_METADATA_NAME,
+    OUTPUT_DIR,
+    iteration_dir,
+    table_name,
+)
 from scgsim.palace.reports.epr import show_epr as render
 from scgsim.palace.results.artifacts import confined_path, sha256
 from scgsim.palace.results.epr_model import (
@@ -50,16 +60,11 @@ def _iteration_result(
         parts = Path(path).parts
         if (
             len(parts) != 4
-            or parts[:2] != ("results", "palace")
-            or parts[3] != "palace.json"
+            or parts[:2] != Path(OUTPUT_DIR).parts
+            or parts[3] != NATIVE_METADATA_NAME
         ):
             continue
-        suffix = parts[2].removeprefix("iteration")
-        if (
-            parts[2].startswith("iteration")
-            and suffix.isdigit()
-            and int(suffix) == iteration
-        ):
+        if iteration_dir(parts[2]) == iteration:
             prefixes.add("/".join(parts[:3]))
     if len(prefixes) != 1:
         raise ValueError("requested native iteration lacks one receipt-bound directory")
@@ -82,7 +87,7 @@ def _iteration_result(
             )
         return path
 
-    native = json.loads(verified("palace.json").read_text(encoding="utf-8"))
+    native = json.loads(verified(NATIVE_METADATA_NAME).read_text(encoding="utf-8"))
     if (
         not isinstance(native, dict)
         or not isinstance(native.get("Problem"), dict)
@@ -93,7 +98,10 @@ def _iteration_result(
     tables = {}
     for family in output_families(result.problem, counts):
         tables[family] = read_result_table(
-            verified(f"{family}.csv"), result.problem, counts, result.provenance.config
+            verified(table_name(family)),
+            result.problem,
+            counts,
+            result.provenance.config,
         )
     return replace(
         result, tables=tables, provenance=replace(result.provenance, palace_json=native)
@@ -105,9 +113,9 @@ def epr_result(
 ) -> PalaceEprResult:
     """Extract final or explicitly selected sealed-iteration Eigenmode EPR."""
 
-    if not isinstance(result, ResolvedRunData) or result.problem != "Eigenmode":
+    if not isinstance(result, ResolvedRunData) or result.problem != EIGENMODE.name:
         raise TypeError("a resolved Palace Eigenmode run is required")
-    output_prefix = "results/palace"
+    output_prefix = OUTPUT_DIR
     if palace_iteration is not None:
         result, output_prefix = _iteration_result(result, palace_iteration)
     index = result.provenance.index_map
@@ -295,22 +303,17 @@ def _source_provenance(
     result: ResolvedRunData,
 ) -> dict[str, Any]:
     """Record the exact config, index and solver-output identities behind extracted EPR."""
-    source_inputs = {"config.json", "metadata/palace_index_map.json"}
+    source_inputs = {CONFIG, INDEX_MAP}
     source_outputs = {
-        f"{output_prefix}/{name}.csv"
-        for name in (
-            "eig",
-            "domain-E",
-            "surface-Q",
-            "port-EPR",
-        )
+        f"{output_prefix}/{table_name(family)}"
+        for family in ("eig", "domain-E", "surface-Q", "port-EPR")
     }
-    source_outputs.add(f"{output_prefix}/palace.json")
+    source_outputs.add(f"{output_prefix}/{NATIVE_METADATA_NAME}")
     palace_output = next(
         (
             item
             for item in result.returned_receipt.output_files
-            if item.get("path") == f"{output_prefix}/palace.json"
+            if item.get("path") == f"{output_prefix}/{NATIVE_METADATA_NAME}"
         ),
         None,
     )
@@ -322,7 +325,7 @@ def _source_provenance(
         "handoff_id": result.returned_receipt.handoff_id,
         "route": result.route,
         "source": "verified_final_palace_tables"
-        if output_prefix == "results/palace"
+        if output_prefix == OUTPUT_DIR
         else "verified_iteration_palace_tables",
         "analysis_request": request,
         "surface_scope": "recorded_native_MA_MS_SA; sidewalls_uncomputed_if_unselected",
@@ -440,7 +443,7 @@ def _selected_outputs(
     request = index.get(
         "epr_request",
         {
-            "schema_version": "scgsim.palace.epr-selection.v1",
+            "schema_version": EPR_SELECTION_SCHEMA,
             "surface_interfaces": None,
             "bulk_domain_ids": None,
             "port_names": None,
@@ -450,7 +453,7 @@ def _selected_outputs(
         not isinstance(request, Mapping)
         or set(request)
         != {"schema_version", "surface_interfaces", "bulk_domain_ids", "port_names"}
-        or request["schema_version"] != "scgsim.palace.epr-selection.v1"
+        or request["schema_version"] != EPR_SELECTION_SCHEMA
     ):
         raise ValueError("Palace EPR selection payload is invalid")
     available = {
