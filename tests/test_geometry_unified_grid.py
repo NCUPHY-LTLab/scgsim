@@ -17,12 +17,12 @@ from scgsim.geometry import (
 from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
 from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
 from scgsim.geometry.primitives.grid import GridOperand, build_grid_arrangement
-from scgsim.geometry.source.grid import apply_geometry_grid, source_grid_context
+from scgsim.geometry.source.grid import apply_geometry_grid
 
 
 def test_context_codec_and_source_propagation():
     """Verify that context codec and source propagation."""
-    context = source_grid_context(0.001)
+    context = GeometryGridContext(0.001)
     assert (
         GeometryGridContext.from_payload(json.loads(json.dumps(context.to_payload())))
         == GRID

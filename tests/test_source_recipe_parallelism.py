@@ -22,7 +22,6 @@ from scgsim.geometry.primitives.grid import (
     source_recipe_map,
 )
 from scgsim.geometry.source import occurrence as occurrence
-from scgsim.geometry.source import occurrence_validation as occurrence_validation_module
 from scgsim.geometry.source import plan as plan_module
 from scgsim.preparation import preparation_resources
 
@@ -122,7 +121,13 @@ def test_job_native_objects_and_record_inputs_are_isolated(native_source):
     assert [p.points.tolist() for p in native_source.polygons] == original_points
 
 
-def test_first_comparison_failure_keeps_audit_prefix_and_allows_clean_next_map(
+def refused_after_selection(value, **kwargs):
+    """Select genuinely, then refuse, so the selection's audit is kept before the error."""
+    occurrence.occurrence_polygons_for_entity(value, **kwargs)
+    raise ValueError(f"source mismatch {value.semantic_id[-1]}")
+
+
+def test_first_recipe_failure_keeps_audit_prefix_and_allows_clean_next_map(
     native_source,
 ):
     """Retain source-order failure and audit behavior across the next map."""
@@ -130,12 +135,10 @@ def test_first_comparison_failure_keeps_audit_prefix_and_allows_clean_next_map(
     def invalid_jobs():
         for index, point in enumerate(((1, 1), (99, 99))):
             yield occurrence.source_recipe_job(
-                occurrence.occurrence_polygons_for_entity,
+                refused_after_selection,
                 entity(f"metal_{index}", point),
                 source_cell=native_source,
                 transform=(1, 0, 0, 1, 0, 0),
-                expected=[],
-                comparison_error=f"source mismatch {index}",
             )
 
     errors = []
@@ -396,11 +399,6 @@ def _prepare_serial_and_parallel_plan(plan, plan_module, monkeypatch):
         watched.setattr(
             plan_module, "occurrence_polygons_for_entity", observed_selector
         )
-        watched.setattr(
-            occurrence_validation_module,
-            "occurrence_polygons_for_entity",
-            observed_selector,
-        )
         with preparation_resources(max_workers=2):
             parallel = plan.prepare()
     return serial, parallel, worker_threads
@@ -408,9 +406,7 @@ def _prepare_serial_and_parallel_plan(plan, plan_module, monkeypatch):
 
 def _assert_parallel_snapshot(serial, parallel, emitted_bytes, worker_threads):
     """Check thread use, exact plan equality, and detached metadata."""
-    assert (
-        len(worker_threads) == 4
-    )  # Plan extraction plus adapter expected-value batch.
+    assert len(worker_threads) == 2  # One extraction per occurrence Entity.
     assert len(set(worker_threads)) == 2
     assert get_ident() not in worker_threads
     assert parallel.gds_bytes == serial.gds_bytes == emitted_bytes
@@ -423,20 +419,24 @@ def _assert_parallel_snapshot(serial, parallel, emitted_bytes, worker_threads):
 
 
 def _assert_error_priority_and_recovery(serial, emitted, tmp_path):
-    """Keep source-order validation errors and permit a clean subsequent adapter."""
-    # Keep current expected-record checks and source-order error priority.
+    """Refuse the saved stack with another GDS, then read the saved pair as prepare() lowered it."""
     saved_stack = tmp_path / "saved.stack.json"
-    broken = deepcopy(serial.stack)
-    broken["layers"][0]["geometry"]["source_occurrence_polygons_um"] = []
-    broken["layers"][1]["metadata"]["source_occurrence_path"] = "missing"
-    saved_stack.write_text(json.dumps(broken))
+    other_gds = tmp_path / "other.gds"
+    other_gds.write_bytes(emitted.read_bytes() + b"\0")
+    saved_stack.write_text(json.dumps(serial.stack))
     with preparation_resources(max_workers=2):
-        with pytest.raises(
-            ValueError, match="polygon source differs for 'coupon/first'"
-        ):
-            build_gds_stack_geometry_input(gds_file=emitted, stack_file=saved_stack)
+        with pytest.raises(ValueError, match="written for the GDS with SHA-256"):
+            build_gds_stack_geometry_input(gds_file=other_gds, stack_file=saved_stack)
         assert occurrence._EXTRACTION_CACHE.get() is None  # noqa: SLF001 - verify failed adapter scope cleanup
-        saved_stack.write_text(json.dumps(serial.stack))
-        assert build_gds_stack_geometry_input(
+        reloaded = build_gds_stack_geometry_input(
             gds_file=emitted, stack_file=saved_stack
-        ).polygons
+        )
+    prepared = serial.geometry_input
+
+    def shapes(source):
+        return [(p.polygon_id, p.layer, p.exterior, p.holes) for p in source.polygons]
+
+    assert shapes(reloaded) == shapes(prepared)
+    assert [e.semantic_id for e in reloaded.entities] == [
+        e.semantic_id for e in prepared.entities
+    ]

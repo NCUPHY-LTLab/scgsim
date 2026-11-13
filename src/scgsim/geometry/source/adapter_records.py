@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypeGuard
 
 from scgsim.geometry.models.grid import GeometryGridContext
@@ -26,10 +25,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class StackRecords:
-    """Validated stack containers with their original layout and stack paths."""
+    """Validated stack containers."""
 
-    gds_path: Path
-    stack_path: Path
     layers: Sequence[Any]
     solution_regions: Mapping[str, Any]
     materials: Mapping[str, Any]
@@ -63,7 +60,6 @@ class AdapterSource:
     cell: Cell
     cell_bounds_um: Mapping[str, float]
     polygons_by_layer: Mapping[tuple[int, int], tuple[Polygon, ...]]
-    source_dbu_um: float
     grid_context: GeometryGridContext
 
 

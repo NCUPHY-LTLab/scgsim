@@ -11,9 +11,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 from scgsim.diagnostics import diagnostic_stage, progress
+from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
     SemanticEntitySpec,
@@ -21,9 +22,10 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.junctions import RectangularJunctionSpec
 from scgsim.geometry.models.lumped import LumpedSupport
-from scgsim.geometry.primitives.grid import source_recipe_map
+from scgsim.geometry.primitives.grid import geometry_grid_scope, source_recipe_map
 from scgsim.geometry.primitives.grid_cache import with_grid_work_cache
-from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
+from scgsim.geometry.source.adapter import layout_grid, lower_layout, stack_records
+from scgsim.geometry.source.adapter_records import LoadedLibrary
 from scgsim.geometry.source.curves import (
     boundary_binding,
     occurrence_drawn_walks,
@@ -32,7 +34,6 @@ from scgsim.geometry.source.curves import (
     transform_boundary,
     with_drawn_rings,
 )
-from scgsim.geometry.source.grid import with_source_grid
 from scgsim.geometry.source.normalization import (
     finite_number,
 )
@@ -47,6 +48,9 @@ from scgsim.geometry.source.occurrence import (
     run_source_recipe,
     source_recipe_job,
     with_occurrence_extraction_cache,
+)
+from scgsim.geometry.source.occurrence_validation import (
+    validate_ground_contribution_ownership,
 )
 from scgsim.geometry.source.plan_assembly import (
     GeometryPlanStackAssembler,
@@ -97,7 +101,12 @@ def _compose(
 
 @dataclass(frozen=True)
 class GeometryPlanSnapshot:
-    """One detached GDS, stack, normalized input, and source-identity pair."""
+    """One detached GDS, stack, normalized input, and source-identity pair.
+
+    ``GeometryPlan.prepare()`` builds it: the stack and the normalized input name
+    ``gds_sha256``, the digest of ``gds_bytes``, because prepare() wrote all three
+    from the one GDS it hashed.
+    """
 
     _geometry_input: GeometryBuildInput
     _stack_json: str
@@ -108,20 +117,10 @@ class GeometryPlanSnapshot:
     def __post_init__(self) -> None:
         if not isinstance(self._geometry_input, GeometryBuildInput):
             raise TypeError("snapshot requires GeometryBuildInput")
-        if hashlib.sha256(self.gds_bytes).hexdigest() != self.gds_sha256:
-            raise ValueError("snapshot GDS digest differs")
         object.__setattr__(self, "_geometry_input", copy.deepcopy(self._geometry_input))
         object.__setattr__(
             self, "_source_occurrences", copy.deepcopy(self._source_occurrences)
         )
-        stack = json.loads(self._stack_json)
-        metadata = stack.get("metadata", {})
-        if metadata.get("gds_sha256") != self.gds_sha256:
-            raise ValueError("snapshot stack GDS identity differs")
-        if metadata.get("source_occurrences") != list(self._source_occurrences):
-            raise ValueError("snapshot occurrence identity differs")
-        if self._geometry_input.metadata.get("gds_sha256") != self.gds_sha256:
-            raise ValueError("snapshot normalized-input GDS identity differs")
 
     @property
     def geometry_input(self) -> GeometryBuildInput:
@@ -145,14 +144,13 @@ class GeometryPlanSnapshot:
 
 
 @dataclass(frozen=True)
-class _WrittenGeometrySource:
-    """Temporary source files and identities shared by preparation phases."""
+class _WrittenLayout:
+    """The GDS prepare() wrote once, read once, and every phase after it works from."""
 
-    gds_file: Path
-    stack_file: Path
     gds_bytes: bytes
     gds_sha256: str
-    occurrences: tuple[Mapping[str, Any], ...]
+    library: LoadedLibrary
+    grid: GeometryGridContext
     source_cells: Mapping[str, Any]
     child_reference_indexes: Mapping[str, tuple[int, ...]]
 
@@ -388,7 +386,6 @@ class GeometryPlan:
         return stack
 
     @with_grid_work_cache
-    @with_source_grid
     @diagnostic_stage("geometry.plan.prepare")
     @with_occurrence_extraction_cache
     def prepare(self) -> GeometryPlanSnapshot:
@@ -396,17 +393,20 @@ class GeometryPlan:
         self._validate_registered_sources()
         stack = self._validated_stack()
         occurrences = self._occurrence_records()
-        with TemporaryDirectory(prefix="scgsim-geometry-plan-") as temporary:
-            source = self._write_source_inputs(Path(temporary), stack, occurrences)
+        source = self._write_layout(stack, occurrences)
+        with geometry_grid_scope(source.grid):
             with diagnostic_stage("geometry.source.extract_occurrences"):
                 self._extract_occurrence_polygons(stack, source)
             with diagnostic_stage("geometry.source.extract_includes"):
                 self._extract_source_includes(stack, source)
             with diagnostic_stage("geometry.source.extract_ports"):
                 self._extract_source_ports(stack, source)
+            validate_ground_contribution_ownership(stack["layers"])
             build_input = self._lower_stack(stack, source)
             lumped_supports = self._resolve_lumped_supports(build_input, source)
-        return self._assemble_snapshot(build_input, stack, source, lumped_supports)
+            return self._assemble_snapshot(
+                build_input, stack, source, occurrences, lumped_supports
+            )
 
     def _validated_stack(self) -> dict[str, Any]:
         stack = self._stack()
@@ -448,26 +448,25 @@ class GeometryPlan:
             for path, (cell, reference, transform) in sorted(self._instances.items())
         )
 
-    def _write_source_inputs(
+    def _write_layout(
         self,
-        root: Path,
         stack: dict[str, Any],
         occurrences: tuple[Mapping[str, Any], ...],
-    ) -> _WrittenGeometrySource:
-        gds_file = root / "source.gds"
-        stack_file = root / "source.stack.json"
-        with diagnostic_stage("geometry.source.write_gds"):
-            self._component.write_gds(gds_file)
-        gds_bytes = gds_file.read_bytes()
+    ) -> _WrittenLayout:
+        import gdstk  # noqa: PLC0415 - GDS parsing is needed only during preparation
+
+        with TemporaryDirectory(prefix="scgsim-geometry-plan-") as temporary:
+            gds_file = Path(temporary) / "source.gds"
+            with diagnostic_stage("geometry.source.write_gds"):
+                self._component.write_gds(gds_file)
+            gds_bytes = gds_file.read_bytes()
+            with diagnostic_stage("geometry.source.read_gds"):
+                # read_gds parses Cell objects only; no RawCell is inserted here.
+                library = cast("LoadedLibrary", gdstk.read_gds(str(gds_file)))
         gds_sha256 = hashlib.sha256(gds_bytes).hexdigest()
         stack["metadata"]["gds_sha256"] = gds_sha256
         stack["metadata"]["source_occurrences"] = occurrences
-        import gdstk  # noqa: PLC0415 - GDS parsing is needed only during preparation
-
-        with diagnostic_stage("geometry.source.read_gds"):
-            source_cells = {
-                cell.name: cell for cell in gdstk.read_gds(str(gds_file)).cells
-            }
+        source_cells = {cell.name: cell for cell in library.cells}
         child_reference_indexes = {
             path: tuple(
                 row["reference_index"]
@@ -476,18 +475,17 @@ class GeometryPlan:
             )
             for path in self._instances
         }
-        return _WrittenGeometrySource(
-            gds_file,
-            stack_file,
+        return _WrittenLayout(
             gds_bytes,
             gds_sha256,
-            occurrences,
+            library,
+            layout_grid(library),
             source_cells,
             child_reference_indexes,
         )
 
     def _extract_occurrence_polygons(
-        self, stack: dict[str, Any], source: _WrittenGeometrySource
+        self, stack: dict[str, Any], source: _WrittenLayout
     ) -> None:
         occurrence_targets: list[dict[str, Any]] = []
 
@@ -542,7 +540,7 @@ class GeometryPlan:
             record["geometry"]["source_occurrence_polygons_um"] = value
 
     def _extract_source_includes(
-        self, stack: dict[str, Any], source: _WrittenGeometrySource
+        self, stack: dict[str, Any], source: _WrittenLayout
     ) -> None:
         include_targets: list[dict[str, Any]] = []
 
@@ -578,7 +576,7 @@ class GeometryPlan:
             contribution["polygon"] = value
 
     def _extract_source_ports(
-        self, stack: dict[str, Any], source: _WrittenGeometrySource
+        self, stack: dict[str, Any], source: _WrittenLayout
     ) -> None:
         port_targets: list[dict[str, Any]] = []
 
@@ -609,20 +607,19 @@ class GeometryPlan:
             record["source_occurrence_polygon_um"] = value
 
     def _lower_stack(
-        self, stack: dict[str, Any], source: _WrittenGeometrySource
+        self, stack: dict[str, Any], source: _WrittenLayout
     ) -> GeometryBuildInput:
-        source.stack_file.write_text(
-            json.dumps(stack, sort_keys=True), encoding="utf-8"
-        )
+        # The stack is lowered in its JSON form, the form a saved snapshot pair is
+        # read back in, so prepare() and build_gds_stack_geometry_input on that
+        # pair give the same input.
+        saved = json.loads(json.dumps(stack, sort_keys=True))
         with diagnostic_stage("geometry.source.lower_stack"):
-            return build_gds_stack_geometry_input(
-                gds_file=source.gds_file,
-                stack_file=source.stack_file,
-                top_cell_name=self._component.name,
+            return lower_layout(
+                stack_records(saved, None), source.library, self._component.name
             )
 
     def _resolve_lumped_supports(
-        self, build_input: GeometryBuildInput, source: _WrittenGeometrySource
+        self, build_input: GeometryBuildInput, source: _WrittenLayout
     ) -> list[LumpedSupport]:
         lumped_supports = []
         entities = {entity.semantic_id: entity for entity in build_input.entities}
@@ -685,13 +682,12 @@ class GeometryPlan:
         self,
         build_input: GeometryBuildInput,
         stack: dict[str, Any],
-        source: _WrittenGeometrySource,
+        source: _WrittenLayout,
+        occurrences: tuple[Mapping[str, Any], ...],
         lumped_supports: list[LumpedSupport],
     ) -> GeometryPlanSnapshot:
         # The source remains self-contained after its temporary files disappear.
         metadata = dict(build_input.metadata)
-        metadata.pop("gds_file", None)
-        metadata.pop("stack_file", None)
         metadata["gds_sha256"] = source.gds_sha256
         metadata["geometry_plan_root_id"] = self.root_id
         polygon_owners = {
@@ -781,5 +777,5 @@ class GeometryPlan:
             json.dumps(stack, sort_keys=True),
             source.gds_bytes,
             source.gds_sha256,
-            source.occurrences,
+            occurrences,
         )

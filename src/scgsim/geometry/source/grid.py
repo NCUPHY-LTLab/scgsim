@@ -12,16 +12,11 @@ import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
-from functools import wraps
 from itertools import combinations
 from typing import (
     TYPE_CHECKING,
     Any,
-    Concatenate,
-    ParamSpec,
-    Protocol,
     TypedDict,
-    TypeVar,
     cast,
 )
 
@@ -122,33 +117,6 @@ class _NodingGroups:
             }
             for z_range, arrangement in self.arrangements.items()
         ]
-
-
-_Arguments = ParamSpec("_Arguments")
-_Result = TypeVar("_Result")
-
-
-class _PlanKCell(Protocol):
-    @property
-    def dbu(self) -> float: ...
-
-
-class _PlanComponent(Protocol):
-    @property
-    def kcl(self) -> _PlanKCell: ...
-
-
-class _SourceGridPlan(Protocol):
-    @property
-    def _component(self) -> _PlanComponent: ...
-
-
-_PlanT = TypeVar("_PlanT", bound=_SourceGridPlan)
-
-
-def source_grid_context(source_dbu_um: float) -> GeometryGridContext:
-    """The model grid: the database unit of the emitted source GDS."""
-    return GeometryGridContext(source_dbu_um)
 
 
 def _signed_area_twice(ring: Sequence[Sequence[float]]) -> float:
@@ -752,22 +720,3 @@ def _apply_geometry_grid(
         port_sheet_regions=projected_ports,
         metadata=source_metadata,
     )
-
-
-def with_source_grid(
-    function: Callable[Concatenate[_PlanT, _Arguments], _Result],
-) -> Callable[Concatenate[_PlanT, _Arguments], _Result]:
-    """Wrap one GeometryPlan operation in its actual source DBU scope."""
-
-    @wraps(function)
-    def prepare(
-        plan: _PlanT, *args: _Arguments.args, **kwargs: _Arguments.kwargs
-    ) -> _Result:
-        source_dbu_um = float(
-            plan._component.kcl.dbu  # noqa: SLF001 — GeometryPlan owns the native source DBU.
-        )
-        context = source_grid_context(source_dbu_um)
-        with geometry_grid_scope(context):
-            return function(plan, *args, **kwargs)
-
-    return prepare
