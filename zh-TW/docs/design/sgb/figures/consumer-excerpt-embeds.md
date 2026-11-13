@@ -1,28 +1,5 @@
 ```{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}
 {
- "carrier": {
-  "ref/seg0": {
-   "kind": "refinement",
-   "request": "ref"
-  }
- },
- "edge": {
-  "e:3104024764366180": {
-   "arc": null,
-   "carriers": ["ref/seg0"],
-   "entities": [],
-   "kind": "refinement",
-   "length_um": 10.0,
-   "vertices": ["v:631126c5c6c687e9", "v:a5b0dda38b9136d7"],
-   "written_as_free_edge": true
-  }
- },
- "face": {
-  "f:7e8c90cb3e7cf1ae": {
-   "...": "...",
-   "embedded_edges": ["e:3104024764366180"]
-  }
- },
  "mesh_feature": {
   "mf:27de51bd5dbc2cca": {
    "edges": ["e:c5222f81df043e40", "e:5d7fe5923fb36d8a", "e:7e88aa41fe5fca70", "..."],
@@ -46,12 +23,6 @@
    },
    "kind": "band_boundary",
    "source": "pad_top"
-  },
-  "mf:f7a462c87bed4529": {
-   "edges": ["e:3104024764366180"],
-   "facts": {},
-   "kind": "refinement_curve",
-   "source": "ref"
   }
  },
  "port": {

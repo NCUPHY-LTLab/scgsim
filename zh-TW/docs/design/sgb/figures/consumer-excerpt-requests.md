@@ -20,14 +20,8 @@
  },
  "cut_family": {
   "pad_top": {
-   "edge_policy": "required",
    "levels_um": [0.2],
    "role": "inset_band"
-  },
-  "ref": {
-   "edge_policy": "refinement_only",
-   "levels_um": [0.2],
-   "role": "refinement"
   }
  },
  "inset_request": {
@@ -43,23 +37,10 @@
    }
   }
  },
- "refinement_request": {
-  "ref": {
-   "points_um": [
-    [45.0, 45.0],
-    [55.0, 45.0]
-   ],
-   "segments_um": [
-    [
-     [45.0, 45.0],
-     [55.0, 45.0]
-    ]
-   ]
-  }
- },
  "surface_epr_row": {
   "MA::pad__top::band=0": {
    "band": 0,
+   "banded_surface": "MA::pad__top",
    "entities": ["pad"],
    "face_sides": null,
    "group": "MA::pad__top::band=0",
@@ -69,6 +50,7 @@
   },
   "SA::substrate|VACUUM_REGION__interface": {
    "band": null,
+   "banded_surface": null,
    "entities": ["VACUUM_REGION", "substrate"],
    "face_sides": null,
    "group": "SA::substrate|VACUUM_REGION__interface",

@@ -86,7 +86,7 @@ Gmsh API 還有第二個弱點，是任何計時都看不出來的：`addSurface
 - **Direct writer 隨 N 大致線性。**N = 1,000、5,000、20,000 時，plan 加算繪是 0.49 s、2.81 s、13.8 s，每個寫出的元素（vertex、edge、face）約 7.6 到 10.6 µs。
 - **Planning 約佔 direct 寫出的一半。**N = 20,000 時，plan 是 6.87 s，BREP 與 XAO 的算繪是 6.93 s，合計 13.8 s；N = 1,000 與 5,000 時 plan 佔 51% 與 58%（@tbl-direct）。
 - **載入是下限。**Gmsh 讀取並 synchronize 同樣的 414,156 個 vertex、620,297 條 edge 與 267,635 個 face（N = 20,000 的 direct XAO）需要 49.7 s，比寫出本身（13.8 s）長；沒有任何 writer 能消除這個成本。載入 API 產生的 XAO 比載入 direct XAO 慢 13% 到 23%（@tbl-load），載入不含 group 的 BREP 比載入 XAO 快 5% 到 10%。
-- **報告與 sidecar 比檔案本身貴。**N = 20,000 時，sliver 與 validation report 要 49.7 s、sidecar 要 19.6 s（以前一版格式 v2 量得；v3 記錄得更多，見[下文](#physical-groups-and-the-sidecar)），合計比寫出 BREP 與 XAO 的 13.8 s 長得多（@tbl-sidecar）；本頁沒有把報告再拆成 sliver 與 validation 兩項。
+- **報告與 sidecar 比檔案本身貴。**N = 20,000 時，sliver 與 validation report 要 49.7 s、sidecar 要 19.6 s（以較早、記錄較少的 sidecar 格式量得，見[下文](#physical-groups-and-the-sidecar)），合計比寫出 BREP 與 XAO 的 13.8 s 長得多（@tbl-sidecar）；本頁沒有把報告再拆成 sliver 與 validation 兩項。
 - **不需要 healing。**本頁所有載入都把 `Geometry.OCCAutoFix` 關閉，元素數量與規劃相同，`verify_loaded` 與 OCCT 檢查都通過，所以這些檔案並不依賴 Gmsh 修復。
 
 輸出不受 chunk 大小影響。文字以 chunk 為單位算繪，再依檔案順序寫出；單元測試以三個 hash seed 與刻意很小的 chunk 寫出 XAO，每個 route 只得到一個 digest（`test_the_xao_bytes_do_not_depend_on_python_hash_randomisation`）。
@@ -126,19 +126,19 @@ running example 的 primary group（`MA`：metal–vacuum 側，`MS`：metal–s
 
 {{< askr-chart-view src="figures/emission-groups-3d.html" label="依 physical group 檢視模型" >}}
 
-XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer 也會在它旁邊寫一個 JSON **sidecar**，即 `<stem>.sidecar.json`（格式 `scgsim.sgb.sidecar.v3`，附 JSON Schema）。它以 planned id 與 group 名稱指稱每個元素，不含 native handle：native tag 一律由 `binding` 的順序得到。sidecar 的每個欄位是一張以 id 為鍵的表，記錄之間以 id 互相指向，每個事實只存一次；每張表的定義見[使用契約](consumer-contract.qmd#sidecar)，下表只列出與 emission 有關的主要欄位：
+XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer 也會在它旁邊寫一個 JSON **sidecar**，即 `<stem>.sidecar.json`（格式 `scgsim.sgb.sidecar.v4`，附 JSON Schema）。它以 planned id 與 group 名稱指稱每個元素，不含 native handle：native tag 一律由 `binding` 的順序得到。sidecar 的每個欄位是一張以 id 為鍵的表，記錄之間以 id 互相指向，每個事實只存一次；每張表的定義見[使用契約](consumer-contract.qmd#sidecar)，下表只列出與 emission 有關的主要欄位：
 
 | Sidecar 欄位 | 內容 |
 |---|---|
 | `binding`（`ids_by_tag`） | 每個維度的 planned id，依 native tag 順序排列：`tag = 1 + 位置` |
 | `group` | 每個 primary group：維度、physical `tag`、`interface_type`、`face_kind`、`entities`、`net`、`band`、面積與兩側的 volume；成員是 `group` 欄位指向它的 face 或 volume |
-| `surface_epr_row` | 每個 Surface EPR row 讀取的 group（含 `side`、`face_sides` 與 `shared_face_group`） |
-| `vertex`、`edge`、`face`、`volume` | 每個寫出的元素：vertex 的位置；edge 的 vertex、圓弧、長度、carrier 與 `written_as_free_edge`；face 的 group、loop、面積、`curved`、來源、membership 與嵌在其中的 refinement edge（`embedded_edges`）；volume 的 solid face 與嵌在其中的 sheet（`embedded_faces`） |
-| `port`、`mesh_feature` | lumped port 的來源識別、host 與 face；薄膜 sidewall、band 邊界、圓弧、refinement curve 與 port 的 edge，並附上這些 edge 的幾何事實（厚度、margin、半徑），沒有尺寸 |
-| `entity`、`source_curve`、`carrier` 與 band、refinement 的表 | 每條 edge 回到來源曲線與 Entity 的 lineage（見 [mapping chain](identity.qmd)） |
+| `surface_epr_row` | 每個 Surface EPR row 讀取的 group（含 `side`、`face_sides` 與 `shared_face_group`；band row 另有它所屬表面的名稱 `banded_surface`） |
+| `vertex`、`edge`、`face`、`volume` | 每個寫出的元素：vertex 的位置；edge 的 kind、vertex、圓弧、長度與 carrier；face 的 group、loop、面積、`curved`、來源與 membership；volume 的 solid face 與嵌在其中的 sheet（`embedded_faces`） |
+| `port`、`mesh_feature` | lumped port 的來源識別、host 與 face；薄膜 sidewall、band 邊界、圓弧與 port 的 edge，並附上這些 edge 的幾何事實（厚度、margin、半徑），沒有尺寸 |
+| `entity`、`source_curve`、`carrier` 與 band 的表 | 每條 edge 回到來源曲線與 Entity 的 lineage（見 [mapping chain](identity.qmd)） |
 | `model`、`summary` | route、`route_policy`、`grid_um`、`tolerance_um` 與檔名；實際寫出的數量、sliver 摘要與圓弧 edge 數 |
 
-檔案裡沒有、由共用模組 `scgsim.contracts.sgb_sidecar.views` 從這些表算出的是：每個 group 的成員與它們的 native tag、`verify_loaded` 比對的預期值（`views.expected`）、mesher 重新 embed 的配對（`views.embedded_faces`、`views.embedded_edges`），以及曲面 wall 的清單（`views.curved_wall_faces`）。
+檔案裡沒有、由共用模組 `scgsim.contracts.sgb_sidecar.views` 從這些表算出的是：每個 group 的成員與它們的 native tag、`verify_loaded` 比對的預期值（`views.expected`）、mesher 重新 embed 的配對（`views.embedded_faces`），以及曲面 wall 的清單（`views.curved_wall_faces`）。
 
 group 的記錄給出名稱與 physical `tag`；它的成員是 `group` 欄位指向它的 face，成員的 native tag 由 `views.native_tags` 依 `ids_by_tag` 算出（下例是 20 與 28）。running example 中 substrate／vacuum 的 group 與它的兩個 face（節錄，`"…"` 表示省略的鍵）：
 
@@ -170,31 +170,9 @@ group 的記錄給出名稱與 physical `tag`；它的成員是 `group` 欄位�
  },
 ```
 
-**Embedded face 與 curve** 是 free 的元素：不界定任何 volume 的 face（位於某個 volume 中間的 sheet）與 refinement curve。running example 的 port 在 support plane 上，是兩個 solid 共用的一般 face，所以每個 volume 的 `embedded_faces` 都是空的；一片懸在 vacuum 中間的 sheet（catalogue 的 `floating_conductor` fixture 在 Route A 下就是這樣）才會成為 embedded face。refinement curve 一定是 free 的：BREP 可以把它放在 compound 之下（下例是對 running example 加上一條位於 substrate–vacuum interface、從 (−40, 55) 到 (40, 55) µm 的 refinement curve，`RefinementRequest("ref", 0.0, …)`，compound 因此多了一筆 free edge）。但 BREP 無法表達該 edge 位於某個 face 之內，所以 sidecar 在含有它的 face 以 `embedded_edges` 記錄它，`views.embedded_edges` 把它算成 (edge, host face) 的配對，由 mesher 在載入後重新套用；edge 的 carrier 是 `refinement` 種，指回它的請求：
+**Embedded face** 是 free 的元素：不界定任何 volume 的 face（位於某個 volume 中間的 sheet）。running example 的 port 在 support plane 上，是兩個 solid 共用的一般 face，所以每個 volume 的 `embedded_faces` 都是空的；一片懸在 vacuum 中間的 sheet（catalogue 的 `floating_conductor` fixture 在 Route A 下就是這樣）才會成為 embedded face。BREP 把它放在 compound 之下，但無法表達它位於某個 volume 之內，所以 sidecar 在 host volume 以 `embedded_faces` 記錄它，`views.embedded_faces` 把它算成 (face, host volume) 的配對，由 mesher 在載入後重新套用。
 
-```{.json filename="semantic_geometry_route_b.sidecar.json（節錄，加上 refinement curve）"}
- "face": {
-  "f:9d1ffbd71300203f": {
-   "embedded_edges": ["e:af4aaf89517281c3"],
-   "group": "SA::substrate|vacuum__interface",
-   "…": "…"
-  }
- },
- "edge": {
-  "e:af4aaf89517281c3": {
-   "carriers": ["ref/seg0"],
-   "kind": "refinement",
-   "length_um": 80.0,
-   "written_as_free_edge": true,
-   "…": "…"
-  }
- },
- "carrier": {
-  "ref/seg0": { "kind": "refinement", "request": "ref" }
- },
-```
-
-sidecar 的大小：running example（`pad_in_ground_B`）為 64.9 kB（64,925 bytes）。@tbl-sidecar 中大型 layout 的時間與大小是以前一版格式 v2 量得的：N = 1,000、5,000、20,000 時是 11.2、57.3、232 MB，隨規模大致線性成長，比同一個 layout 的 XAO（13.1、68.7、282 MB）小。v3 另外記錄每條來源曲線、support primitive 與每個 face 的 loop，在 PDK 元件上約是 v2 的 2.1 倍，大型 layout 的 v3 時間與大小尚未重新量測。它以固定順序寫出，所以不受 Python 的 hash 隨機化影響（測試）。
+sidecar 的大小：running example（`pad_in_ground_B`）為 61.3 kB（61,308 bytes）。@tbl-sidecar 中大型 layout 的時間與大小是以較早、記錄較少的格式量得的：N = 1,000、5,000、20,000 時是 11.2、57.3、232 MB，隨規模大致線性成長，比同一個 layout 的 XAO（13.1、68.7、282 MB）小。目前的格式另外記錄每條來源曲線、support primitive 與每個 face 的 loop，大型 layout 尚未以它重新量測。它以固定順序寫出，所以不受 Python 的 hash 隨機化影響（測試）。
 
 group 名稱的規則（D5，production 已實作 per-Entity）見 [D5](decisions.qmd#d5)。在執行範例中每個 Net 只有一個 Entity，所以 per-Net 與 per-Entity 得到相同的 face，只有名稱不同。Route C 由 production 實作，導體內部成為輸出的 solid，並有以 `<entity>` 命名的 volume group。
 
@@ -209,7 +187,7 @@ Gmsh 只用來對寫出的模型做 mesh，以及作為 test oracle，絕不建�
 %%{init: {"flowchart": {"rankSpacing": 22, "nodeSpacing": 20, "padding": 6}}}%%
 flowchart TB
   A["1. 開啟 XAO：幾何與 primary physical group 連同名稱一起載入"] --> C["2. 讀取同一次 build 的 sidecar：由 ids_by_tag 得到 planned id 到 tag 的對應"]
-  C --> D["3. 重新套用 embed：(face, host volume) 與 (edge, host face)；由 mesh_feature 決定尺寸"]
+  C --> D["3. 重新套用 embed：(face, host volume)；由 mesh_feature 決定尺寸"]
   D --> E["4. 產生 mesh"]
   E --> F["5. Solver 設定（Palace）：依名稱從 sidecar 的 group 表取得 group；依 Net 或種類的集合由 group 的欄位篩出"]
 ```
@@ -224,8 +202,6 @@ from scgsim.contracts.sgb_sidecar import views
 index = views.TagIndex.of(sidecar)  # planned id -> native tag, tag = 1 + 位置
 for face, host_volume in views.embedded_faces(sidecar):
     gmsh.model.mesh.embed(2, [index.tag(2, face)], 3, index.tag(3, host_volume))
-for edge, host_face in views.embedded_edges(sidecar):
-    gmsh.model.mesh.embed(1, [index.tag(1, edge)], 2, index.tag(2, host_face))
 ```
 
 ## 載入後的檢查 {#validation-after-loading}
@@ -245,7 +221,7 @@ OCCT 檢查有三組結果，範圍由小到大（詳細見 [Validation](validat
 
 **七個執行範例。**`pad_in_ground` 的 Route A、B、C 與各自含 band 的版本，以及 Route B 的 `airbridge`，各有 BREP 與 XAO 兩份報告，共 14 份，全部 `ok`：`BRepCheck_Analyzer` 對每個 vertex、edge、wire、face、shell 與 solid 判定 valid，faulty 元素 0 個；`BOPAlgo_ArgumentAnalyzer`（含 self-interference）沒有 fault，也沒有 result，它不分析 free 的 sheet（running example 的 port 是一般 face，所以沒有 free face 被排除）；`ShapeAnalysis_Shell` 在每個 shell 都找不到 free edge 或 bad edge，沒有 edge 短於十倍 tolerance；kernel 算出的 solid volume 與 plan 的相對誤差最大 $7.9 \times 10^{-14}$，face 面積最大 $1.3 \times 10^{-12}$。14 份報告的 `BRepCheck_Analyzer` 耗時是 2.7 到 25.5 ms，`BOPAlgo_ArgumentAnalyzer` 是 7.0 到 216.2 ms（單次執行；逐案例見 @tbl-occt）。
 
-**極端案例 catalogue。**23 個 fixture 在 Route A、B、C 下共 63 列：54 列建出，並通過 build 與結構檢查、寫出、Gmsh 載入、conformal mesh 與全部 OCCT 檢查；9 列是預期的拒絕（6 個 `NonManifoldError`、3 個 `ContactError`），它們在 build 階段就丟出（1.5 到 22.1 ms），不會拖到寫出之後。這些 fixture 針對容易出問題的幾何：近乎相切的 arc 與直線、淺角度相交的 arc、1 到 3 個 g 長的 edge、頂點相接、重疊的共線 edge、接觸外框的洞、會被 inset 切斷的細頸、會消失的 band、很小的 reflex 角、浮動導體、巢狀的洞、堆疊 slab 的角接觸、port 邊落在 metal sidewall 上、穿過 band 邊界的 refinement curve、相距 0.4 g 與 2 g 的兩層邊，以及圓弧上有外來 vertex 的 wall。54 個通過的組合中，`BRepCheck_Analyzer` 耗時 1.2 到 8.5 ms，`BOPAlgo_ArgumentAnalyzer` 全部模式 3.7 到 48.3 ms（單次執行，@tbl-extreme-timing）。每一列也記錄粗略 mesh 的 `minSICN`、`gamma` 與 drift（D2、D7 的依據）。測試另外在隨機 layout（$N = 100$ 的三種 route 做完整檢查，$N = 1,000$ 的 Route B 做 self-interference 關閉的檢查）上跑 OCCT 檢查，全部通過；尚未量測 $N = 1,000$ 以上的 OCCT 檢查成本。
+**極端案例 catalogue。**23 個 fixture 在 Route A、B、C 下共 63 列：54 列建出，並通過 build 與結構檢查、寫出、Gmsh 載入、conformal mesh 與全部 OCCT 檢查；9 列是預期的拒絕（6 個 `NonManifoldError`、3 個 `ContactError`），它們在 build 階段就丟出（1.5 到 22.1 ms），不會拖到寫出之後。這些 fixture 針對容易出問題的幾何：近乎相切的 arc 與直線、淺角度相交的 arc、1 到 3 個 g 長的 edge、頂點相接、重疊的共線 edge、接觸外框的洞、會被 inset 切斷的細頸、會消失的 band、很小的 reflex 角、浮動導體、巢狀的洞、堆疊 slab 的角接觸、port 邊落在 metal sidewall 上、穿過 band 邊界的 cut family 曲線、相距 0.4 g 與 2 g 的兩層邊，以及圓弧上有外來 vertex 的 wall。54 個通過的組合中，`BRepCheck_Analyzer` 耗時 1.2 到 8.5 ms，`BOPAlgo_ArgumentAnalyzer` 全部模式 3.7 到 48.3 ms（單次執行，@tbl-extreme-timing）。每一列也記錄粗略 mesh 的 `minSICN`、`gamma` 與 drift（D2、D7 的依據）。測試另外在隨機 layout（$N = 100$ 的三種 route 做完整檢查，$N = 1,000$ 的 Route B 做 self-interference 關閉的檢查）上跑 OCCT 檢查，全部通過；尚未量測 $N = 1,000$ 以上的 OCCT 檢查成本。
 
 **Runtime validator 的規模。**結構檢查（第 2 層）與測試用的 `verify_loaded` 在 N = 1,000、5,000、20,000 的隨機 layout（seed 2，polygon-only）上逐項計時：耗時 0.1 s 以上的各項，對 face 數 F 的 slope 在 1.00 到 1.35 之間（band 與 arc 檢查在這些 layout 上沒有工作量，各不到 5 ms），所以成本大致隨 face 數線性成長。N = 20,000（F = 285,871）時，`verify_loaded` 共 14.4 s，各項結構檢查的時間相加是 11.2 s；最大的幾項是 `planarity`（4.5 s）、載入側的 `face_areas`（4.0 s）與 `shells`（3.9 s）（逐項在補充的 @tbl-validator）。
 
@@ -277,13 +253,12 @@ solid 的 **sense**（shell 的哪一側是內部）正是 mass 檢查要保護�
 
 ## Mesh feature {#mesh-features}
 
-SGB 只知道精確的 topology，所以 sidecar 的 `mesh_feature` 陳述關於 edge 的**幾何事實**：這組 edge 是厚 0.2 µm 的薄膜 sidewall，這組 edge 是寬 0.5 與 1 µm 的 band 邊界，這組 edge 是半徑 10 µm 的圓弧。任何 mesh 尺寸都不在 sidecar 裡：尺寸與演算法由 mesher 決定，同一份事實可以支援不同的策略。事實來自三種 edge：
+SGB 只知道精確的 topology，所以 sidecar 的 `mesh_feature` 陳述關於 edge 的**幾何事實**：這組 edge 是厚 0.2 µm 的薄膜 sidewall，這組 edge 是寬 0.5 與 1 µm 的 band 邊界，這組 edge 是半徑 10 µm 的圓弧。任何 mesh 尺寸都不在 sidecar 裡：尺寸與演算法由 mesher 決定，同一份事實可以支援不同的策略。事實來自兩種 edge：
 
 - **已經存在的 edge。**inset band 的 edge 與 port footprint 的 edge 都是模型的 edge（見 [inset imprint](inset-imprint.qmd) 與 [cut families](cut-families.qmd)）。sidecar 的 `edge.carriers` 指名每條 edge 的 carrier，`carrier` 表說明它來自哪裡：例如 `pad_in_ground_B_bands` 中 band 曲線的 carrier 是 `band_member`，指向它 offset 的 support primitive，而 primitive 的 ring 屬於 band family `band_pad_top`。所以 mesher 依記錄的欄位選出某個 family 的 curve，不需要額外的幾何，也不解析 id。
-- **Refinement-only curve。**採用 `refinement_only` policy 的 cut family 會把它的 curve 保留為 free edge，且不改變任何 label；落在沒有輸出 face 的 curve 是錯誤。writer 把它們放在 compound 之下，sidecar 在含有它的 face 以 `embedded_edges` 記錄它（`views.embedded_edges` 給出 `(edge, host face)`），mesher 以 `mesh.embed(1, curves, 2, face)` embed 它們，讓 mesh node 落在該 curve 上。
 - **薄膜的 sidewall 與圓弧。**這兩種 edge 的事實（z 方向的厚度、圓弧的半徑）直接取自 slab 的 level 與 arc 的 carrier，不必再從 mesh 量。
 
-`mesh_feature` 是一張以 feature id 為鍵的表，每筆有 `kind`、`source`、`edges`（planned id）與 `facts`；`source` 依種類指向 `entity`、`band_family`、`refinement_request` 或 `port` 表，edge 的 native tag 由 `views.native_tags` 算出。`views.mesh_features` 依 `(kind, source, facts 的標準 JSON)` 排出 mesher 讀取的順序，每筆內的 edge 依 tag 排序；數字與 sidecar 的其他 µm 數值用同一個 12 位有效數字的寫法，所以不受 Python 的 hash 隨機化影響（測試）。
+`mesh_feature` 是一張以 feature id 為鍵的表，每筆有 `kind`、`source`、`edges`（planned id）與 `facts`；`source` 依種類指向 `entity`、`band_family` 或 `port` 表，edge 的 native tag 由 `views.native_tags` 算出。`views.mesh_features` 依 `(kind, source, facts 的標準 JSON)` 排出 mesher 讀取的順序，每筆內的 edge 依 tag 排序；數字與 sidecar 的其他 µm 數值用同一個 12 位有效數字的寫法，所以不受 Python 的 hash 隨機化影響（測試）。
 
 ::: {.askr-table-compact}
 | `kind` | `source` | `facts` | edge |
@@ -291,7 +266,6 @@ SGB 只知道精確的 topology，所以 sidecar 的 `mesh_feature` 陳述關於
 | `film_sidewall` | 本體的 entity id | `thickness_um`：有輸出的 sidewall 疊成的柱高 | 該本體有輸出的 sidewall face 的所有 edge（上下外框與垂直 edge） |
 | `band_boundary` | band family id | `margins_um`（由小到大）、`narrowest_band_um`（相鄰 margin 的最小差，起點 0） | inset family 的 edge |
 | `arc` | 擁有這些圓弧的唯一 entity；沒有唯一者時為 `null` | `radius_um`：carrier 的半徑 | 同一個 `(entity, 半徑)` 的圓弧 edge |
-| `refinement_curve` | refinement request id | 無 | refinement request 的曲線 |
 | `port_edge` | port sheet id | 無 | lumped port 的 face 的邊界 edge |
 :::
 
@@ -307,16 +281,14 @@ SGB 只知道精確的 topology，所以 sidecar 的 `mesh_feature` 陳述關於
 | C | 所有 wall，包括導體之間的介面 | 0.2 |
 :::
 
-Route B 的 0.1 是正確的事實：在 mesher 要 mesh 的區域裡，那一側只是一個 0.1 µm 高的台階。比較不同 route 的 `thickness_um` 時，差異來自哪些 wall 有輸出，不代表幾何有錯。gap 或 spacing 的事實不在 sidecar 裡；之後新增一種 `kind` 或一項 fact 是改動 sidecar 的定義，因此要升版，`kind` 不在上述五種之內則是 schema 錯誤。
+Route B 的 0.1 是正確的事實：在 mesher 要 mesh 的區域裡，那一側只是一個 0.1 µm 高的台階。比較不同 route 的 `thickness_um` 時，差異來自哪些 wall 有輸出，不代表幾何有錯。gap 或 spacing 的事實不在 sidecar 裡；之後新增一種 `kind` 或一項 fact 是改動 sidecar 的定義，因此要升版，`kind` 不在上述四種之內則是 schema 錯誤。
 
 測試用的 size field 是一個由選定 curve 出發的 `Distance` field，餵給 `Threshold` field：靠近 curve 時給出 `refine_size`，並在 `DistMin` 與 `DistMax` 之間成長到全域最大值。band 測試使用 `refine_size` 1.0 µm，範圍 1–20 µm。band 測試中 `MeshSizeMin` 維持 0，因為 2 µm 的下限無法解析 0.1 µm 的 band；gmsh-API 路徑也以同樣方式失敗。其他範例的 mesh 使用 `MeshSizeMin` = 2 µm，因為 0.2 µm 的 metal 厚度否則會迫使到處都出現很小的 element。
 
 band 從哪裡量起、每個 band 的範圍，見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)。
 
-三個 band case 與一條 refinement curve 在測試中都經過 direct writer。載入後，每個 band group 的 mesh 使得它的 triangle 都恰好是每個相鄰 volume 中一個 tetrahedron 的 face（沒有 element 跨過 band 的邊界），且 centroid 以 exact carrier 的距離判斷落在該 band 內（`pad_in_ground_A_bands` 有 8 個 band group，Route B 與 C 的 band 範例各 12 個，全部如此，@tbl-bands；Route A 把 band group 命名為 `<entity>::band=k`（sheet）與 `SA::substrate|vacuum__interface::band=k`，Route B 與 C 對 pad 的上表面（`MA::<entity>__top`）與下表面（`MS::<entity>__bottom`）各自產生 band，另有 `SA::…__interface::band=k`（介面；名稱規則見 [identity](identity.qmd#band-group-names)）；逐 group 的 triangle 數見 [inset imprint](inset-imprint.qmd)）。
+三個 band case 在測試中都經過 direct writer。載入後，每個 band group 的 mesh 使得它的 triangle 都恰好是每個相鄰 volume 中一個 tetrahedron 的 face（沒有 element 跨過 band 的邊界），且 centroid 以 exact carrier 的距離判斷落在該 band 內（`pad_in_ground_A_bands` 有 8 個 band group，Route B 與 C 的 band 範例各 12 個，全部如此，@tbl-bands；Route A 把 band group 命名為 `<entity>::band=k`（sheet）與 `SA::substrate|vacuum__interface::band=k`，Route B 與 C 對 pad 的上表面（`MA::<entity>__top`）與下表面（`MS::<entity>__bottom`）各自產生 band，另有 `SA::…__interface::band=k`（介面；名稱規則見 [identity](identity.qmd#band-group-names)）；逐 group 的 triangle 數見 [inset imprint](inset-imprint.qmd)）。
 
-
-對 refinement curve，測試檢查：該 edge 在載入的檔案中是 free 的（沒有任何 face 擁有它）、它被切成多於一個 element，以及 sidecar 中該 edge 的 `written_as_free_edge` 為 true。
 
 ### 測試用的 mesh 配方 {#mesh-recipe}
 
@@ -337,7 +309,7 @@ SGB 以 `export_aedt_step` 把具名 solid 匯出成 XDE assembly 的 STEP：ban
 - **含 foreign vertex 的 curved wall。**當一條 arc 上有外來的 vertex（例如 port 的邊接在圓形 pad 上，或另一層的 post 站在彎曲的邊上），assembly 在該 vertex 處用一條 vertical edge 把 wall 切開，上緣的 arc 也在同一處切開，每一段都是落在自己實現的圓上的精確 cylinder，兩段共用那條 vertical edge（見 [Assembly](assembly.qmd#curved-walls)）。catalogue 的 `arc_with_foreign_vertex` 與 `arc_with_foreign_vertex_from_post` 通過全部檢查。writer 對每一段 cylinder 是精確的，而不是「對任意邊數的 curved wall 都精確」。
 - **只有宣告的 arc 會產生 cylinder wall。**只有 polygon 的圓（GDS 中以多邊形近似的圓）永遠不會產生 cylinder wall，它們的 wall 是平面，所以上述切開只影響宣告成 arc 的幾何。
 - **其他不支援的曲面會丟出 `SgbError`。**writer 處理 plane 與單一圓的 cylinder。它也拒絕不是這種 cylinder 的非平面 face、帶洞的 curved wall、繞滿整個 cylinder 的 curved wall、行進方向不同的上緣 arc、不是繞 +z 逆時針的 horizontal face，以及在同一個 wire 中出現兩次的 edge（seam 或 bridge edge）。新增一種 face 要在 `SURFACE_RECORDS` 加一個條目，新增 curve 要在 `CURVE_RECORDS` 加一個，新增 (curve, surface) 組合要在 `PCURVE_RECORDS` 加一個。編號、共用與 section 排列都不變。
-- **只在小型 case 上有測試涵蓋。**帶內部 void 的 solid（真空中一個 40 × 30 × 1 µm 的浮動導體：vacuum solid 有外側與內側兩個 shell，volume 是 box 減去 void，把內側 shell 反向則會改成加上 void）、refinement 的 free edge，以及兩個 inset band case。B-spline 的 surface 與 curve 尚未實作。
+- **只在小型 case 上有測試涵蓋。**帶內部 void 的 solid（真空中一個 40 × 30 × 1 µm 的浮動導體：vacuum solid 有外側與內側兩個 shell，volume 是 box 減去 void，把內側 shell 反向則會改成加上 void），以及兩個 inset band case。B-spline 的 surface 與 curve 尚未實作。
 - **量測。**每個計時儲存格只跑一次，所以結果有執行間的變異：同一個 N = 2,000 的 Gmsh-API oracle 執行了三次，是 84、66 與 65 s（第一次與機器上的其他工作同時執行；表中是最後一次）。Gmsh 的載入時間是佔主導且無法控制的部分。所有 scaling 計時都是 polygon-only 的 layout，Gmsh-API oracle 不做 sewing，也只量到 N = 2,000。
 
 ## 參考資料 {#references}
@@ -384,7 +356,7 @@ Direct writer 的 plan 與算繪（`why-scaling-measured.json`）。
 ::: {#tbl-sidecar .askr-table-compact .askr-table-numeric}
 {{< include figures/emission-sidecar-table.md >}}
 
-`emit_model` 在寫完 BREP 與 XAO 之後的步驟：sliver 與 validation report、sidecar（前一版格式 v2，含 lineage 與 membership）的時間與大小，以及 Gmsh 載入 XAO 的時間（`why-scaling-measured.json`）。@tbl-direct 與 @tbl-load 的寫出時間只包含幾何檔案。
+`emit_model` 在寫完 BREP 與 XAO 之後的步驟：sliver 與 validation report、sidecar（較早、記錄較少的格式，含 lineage 與 membership）的時間與大小，以及 Gmsh 載入 XAO 的時間（`why-scaling-measured.json`）。@tbl-direct 與 @tbl-load 的寫出時間只包含幾何檔案。
 :::
 
 ### 極端案例目錄與 validator 規模

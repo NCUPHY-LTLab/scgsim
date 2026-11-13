@@ -174,7 +174,7 @@ witness 的代價是大小。半徑為 $r$ 的 quarter arc 約需要 $\sqrt{r/g}
 - **幾乎重合的來源曲線。** 兩條相差只有幾個 grid unit 的不同邊界，只要它們留在不同的 pixel，就會保持分開。要保留、回報或合併它們，是 policy 的決定（見 [Sliver](slivers.qmd)）；格點不決定它。極端案例目錄有兩個直接的例子：兩個 layer 的邊緣只差 0.4 g 時會合併、不產生 sliver；差 2 g 時留下一個真正的 2 nm 寬 face，而它通過 `BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer` 與 conformal mesh 的全部檢查，所以只需要回報，不需要移除。
 - **由 snapping 造成的接觸。** 兩個不同 Net 之間的間隙若小於一個 pixel，粗格點會把它關上；這樣的接觸是錯誤，並且指出兩個 entity 與位置。4 nm 的間隙在 g = 1 nm 時可以通過，在 g = 10 nm 時不行（見 [2.5D layered model](layered-model.qmd)）。
 - **困難的曲線組合。** 極端案例目錄中，近乎相切的圓弧與直線（secant 深 2 nm）、夾角 1.6 度的兩段圓弧、共線重疊的 edge，以及 0.6 度窄縫的 reflex vertex，在 Route A 與 Route B 都通過全部檢查。
-- **來源曲線絕不移動。** 衍生曲線（inset、refinement curve）之後也許會被允許在某個容許值內 snap 到來源曲線上。那是經 Human 把關的 policy，不在本頁範圍內（見 [Sliver](slivers.qmd)）。
+- **來源曲線絕不移動。** 衍生曲線（inset band）之後也許會被允許在某個容許值內 snap 到來源曲線上。那是經 Human 把關的 policy，不在本頁範圍內（見 [Sliver](slivers.qmd)）。
 - **Z。** arrangement 是 planar 的。Level 是精確的，從不被 snap。
 
 ## 補充：重現資料

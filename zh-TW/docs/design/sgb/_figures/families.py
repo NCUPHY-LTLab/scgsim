@@ -65,7 +65,9 @@ def _um(x: float) -> int:
     return round(x * 1000)
 
 
-def _line_family(family_id: str, role: str, points_um, closed: bool) -> CurveFamilyRecord:
+def _line_family(
+    family_id: str, role: str, points_um, closed: bool
+) -> CurveFamilyRecord:
     pts = [(_um(x), _um(y)) for x, y in points_um]
     pairs = list(zip(pts, pts[1:], strict=False)) + (
         [(pts[-1], pts[0])] if closed else []
@@ -321,17 +323,14 @@ def main() -> None:
     _figure_level(full, numbers)
     bands_only = scene(catalogue, False, True)
     numbers["ablation"] = {
-        "port_and_physical_boundaries_only": counts(
-            scene(catalogue, False, False)
-        ),
+        "port_and_physical_boundaries_only": counts(scene(catalogue, False, False)),
         "plus_bands": counts(bands_only),
         "plus_bands_and_window": counts(full),
     }
     # distance-origin rule: the window never moves a band boundary
     with_all, only = band_areas(full), band_areas(bands_only)
     numbers["band_areas_um2"] = {
-        k: {"bands_only": only[k], "with_window": with_all[k]}
-        for k in sorted(only)
+        k: {"bands_only": only[k], "with_window": with_all[k]} for k in sorted(only)
     }
     numbers["max_band_area_difference_um2"] = max(
         abs(with_all[k] - only[k]) for k in only

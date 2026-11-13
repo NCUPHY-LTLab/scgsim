@@ -6,7 +6,7 @@
   0.5,
   2.0
  ],
- "schema": "scgsim.sgb.sidecar.v3",
+ "schema": "scgsim.sgb.sidecar.v4",
  "step1_palace_attribute": {
   "attribute": 10,
   "resolved_name": "MA::pad__top::band=2",
@@ -50,6 +50,7 @@
   "surface_epr_rows": {
    "MA::pad__top::band=2": {
     "band": 2,
+    "banded_surface": "MA::pad__top",
     "entities": [
      "pad"
     ],
@@ -75,7 +76,6 @@
     ],
     "curved": false,
     "cut_families": [],
-    "embedded_edges": [],
     "entities": [],
     "face_kind": "top",
     "families": [
@@ -90,7 +90,6 @@
     "negative_volume": "vol:d78b0b17d727ed12",
     "outer_boundary": null,
     "positive_volume": "vol:89bd58ad80d63355",
-    "refinements": [],
     "z_um": [
      0.2,
      0.2
@@ -1849,7 +1848,6 @@
     ],
     "curved": false,
     "cut_families": [],
-    "embedded_edges": [],
     "entities": [],
     "face_kind": "top",
     "families": [
@@ -1864,7 +1862,6 @@
     "negative_volume": "vol:d78b0b17d727ed12",
     "outer_boundary": null,
     "positive_volume": "vol:89bd58ad80d63355",
-    "refinements": [],
     "z_um": [
      0.2,
      0.2
@@ -4028,7 +4025,6 @@
    "cylinders": 5,
    "edges": 270,
    "faces": 56,
-   "free_edges": 0,
    "free_faces": 0,
    "pcurves": 352,
    "shells": 2,

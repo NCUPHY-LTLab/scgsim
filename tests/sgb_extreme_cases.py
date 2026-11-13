@@ -409,6 +409,18 @@ def reflex_small_angle(route: str) -> PrismCatalogue:
     )
 
 
+def family_crossing_band_edge(route: str) -> PrismCatalogue:
+    """A cut-family rectangle on the top of a banded pad whose long sides cross the 0.5 and 2 um band boundaries."""
+    z = exact_z(0) if route == "A" else exact_z(METAL_THICKNESS)
+    rectangle = [(-9_900, 500), (9_900, 500), (9_900, 1_500), (-9_900, 1_500)]
+    return catalogue_of(
+        "family_crossing_band_edge",
+        route,
+        [*chip(), metal("pad", "N", rect_um(-10, -5, 10, 5), route)],
+        (closed_family("guide", rectangle, z),),
+    )
+
+
 # --------------------------------------------------------------------------- catalogue
 
 
@@ -538,6 +550,12 @@ FIXTURES: dict[str, Fixture] = {
             "reflex vertex of a 0.6 degree slit with inset bands",
             reflex_small_angle,
             insets=lambda route: surface_bands("slit", route, (0.05, 0.2)),
+        ),  # fmt: skip
+        Fixture(
+            "family_crossing_band_edge",
+            "cut-family curves crossing band boundaries",
+            family_crossing_band_edge,
+            insets=lambda route: surface_bands("pad", route, (0.5, 2.0)),
         ),  # fmt: skip
         Fixture(
             "near_coincident_layers_sub_grid",

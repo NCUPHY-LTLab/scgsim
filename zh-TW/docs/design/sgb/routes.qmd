@@ -147,7 +147,7 @@ production 的 port 因為上面的規則，不會出現在 volume 內部：真�
 - 它在 pad 與 ground wall 上的兩條 edge 與 wall 片段共用（這就是這兩面 wall 在 $z = 0.1$ 被切開的原因，見[從 arrangement 到實體](assembly.qmd#coalescing)）；其他兩條 edge 是自由 edge，驗證器把它們計為自由 edge（scene 中為 2 條，沒有任何 dangling edge）；
 - XAO 檔案無法攜帶「face embedded 於 volume」這種資訊，所以 sidecar 記錄這組配對，由 mesher 重新套用。sidecar 中是 host volume 的記錄 `"embedded_faces": ["<face id>"]`（`views.embedded_faces` 把它算成 `(face, host volume)` 的配對；face 自己的 `group` 是 `PORT::p1`），mesher 對每一組呼叫 Gmsh 的 embedding（`gmsh.model.mesh.embed(2, [face], 3, volume)`；`verify_loaded` 之後由 `apply_sidecar_embeds` 重新套用）。
 
-**真實輸入今天用到 embedding 的是 dangling refinement curve。** 在真實輸入的 gap 內（$z = 0$）加一條從 $(32, 55)$ 到 $(38, 55)$ µm 的 refinement curve（`RefinementRequest`），模型多出 2 個 vertex 與 1 條 `refinement` edge，face 數不變（34 個）。它是 `refinement_only`：不切開 gap 的 cell；sidecar 中每個 volume 的 `embedded_faces` 仍是空的，含有這條 edge 的 face 在 `embedded_edges` 列出它，edge 的 carrier 是 `refinement` 種、指向請求 `ref`，`written_as_free_edge` 為 true；`apply_sidecar_embeds` 對每個 host face 呼叫 `gmsh.model.mesh.embed(1, edges, 2, face)`。`mesh.embed` 適用的其他地方見 [Cut family](cut-families.qmd#embed-or-edge)。
+**真實輸入不用 embedding。** 真實輸入的 port 位於 support plane，是兩個 volume 之間的一般 face，所以每個 volume 的 `embedded_faces` 都是空的；只有懸在 volume 中間的 sheet（例如上面 stage-level scene 中間平面的 port）才需要 `apply_sidecar_embeds` 重新 embed。`mesh.embed` 適用的地方見 [Cut family](cut-families.qmd#embed-or-edge)。
 
 ## Route C：保留導體 volume
 
@@ -169,7 +169,7 @@ D1 已決定 **Route C 屬於 v1**，production 已實作。導體 volume 保留
 - 每個輸出的 face 與 volume 有一個 primary group；依 Net 或種類的 group 清單由 group 的欄位篩出，不是另一個 Gmsh group。
 - lumped port 位於 host 的 support plane（PDK 宣告的 film attachment face）；它佔去該處的 SA 面積，但不移動任何 band。
 - Route A 只拒絕仍有限厚度的 film，保留有限厚度本體（bump 等）；Route B 與 C 拒絕導體 sheet；Route C 保留並 mesh 導體 volume。
-- 下一步：route 之外的分割，例如 port、band 與 refinement curve，見 [Cut family](cut-families.qmd)。
+- 下一步：route 之外的分割，例如 port 與 band，見 [Cut family](cut-families.qmd)。
 
 ## 補充：重現資料
 

@@ -435,6 +435,23 @@ def test_a_reflex_corner_with_a_tiny_angle_keeps_the_bands_consistent(route, ora
         assert abs(row["difference_um2"]) <= row["oracle_rounding_bound_um2"]
 
 
+@pytest.mark.parametrize("route", ["A", "B", "C"])
+def test_cut_family_curves_crossing_band_edges_are_split_at_every_crossing(route):
+    """The rectangle's long sides at y = 0.5 and 1.5 um cross the 0.5 and 2 um band boundaries at x = -9.5, -8, 8 and 9.5."""
+    model = build_model(FIXTURES["family_crossing_band_edge"], route)
+    assert not model.report.failures
+    known = model.labelled.catalogue.known_carriers()
+    pieces = [
+        e
+        for e in model.topology.edges.values()
+        if e.kind == "horizontal"
+        and any(c in known and known[c].lineage.family_id == "guide" for c in e.sources)
+    ]
+    assert (
+        len(pieces) == 2 * 5 + 2
+    )  # each long side in five pieces, each short side whole
+
+
 # --------------------------------------------------------------------------- real inputs and new levels
 
 

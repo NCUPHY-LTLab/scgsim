@@ -22,8 +22,7 @@
    "entities": [],
    "kind": "horizontal",
    "length_um": 30.0,
-   "vertices": ["v:81719d79408a6890", "v:230e1a1c3d0a941d"],
-   "written_as_free_edge": false
+   "vertices": ["v:81719d79408a6890", "v:230e1a1c3d0a941d"]
   }
  },
  "entity": {
@@ -47,7 +46,6 @@
    "bands": [],
    "curved": false,
    "cut_families": [],
-   "embedded_edges": [],
    "entities": ["ground_0000", "substrate"],
    "face_kind": "sidewall",
    "families": [],
@@ -66,7 +64,6 @@
    "negative_volume": "vol:739993ecf3919fb3",
    "outer_boundary": null,
    "positive_volume": "vol:7346ec1a4ff1ccf9",
-   "refinements": [],
    "z_um": [0.0, 0.2]
   }
  },

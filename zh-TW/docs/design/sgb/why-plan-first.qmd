@@ -135,7 +135,7 @@ flowchart TB
 看 @fig-tail 時請注意：
 
 - **直接寫出 BREP/XAO 本身很便宜。** 規劃好的階層以文字寫出，沒有任何東西透過 API 建立：13.8 s，其中規劃 `plan_brep` 佔 6.9 s。三個檔案共 $190 + 282 + 232 = 704$ MB（BREP 190 MB、XAO 282 MB、sidecar 232 MB）。
-- **sidecar 與報告不便宜。** 附有 lineage 與 membership 的 sidecar 在 $N = 20000$ 時要 19.6 s（這裡的 sidecar 時間與大小都以前一版格式 v2 量得；目前的 v3 記錄得更多，見 [Emission](emission.qmd#physical-groups-and-the-sidecar)），sliver 與 validation 報告要 49.7 s。這兩項合計 69 s，比寫出 CAD 檔案本身多得多；它們與 CAD 檔案一起寫出，所以屬於 emission 的成本。
+- **sidecar 與報告不便宜。** 附有 lineage 與 membership 的 sidecar 在 $N = 20000$ 時要 19.6 s（這裡的 sidecar 時間與大小都以較早、記錄較少的格式量得；目前的格式記錄得更多，見 [Emission](emission.qmd#physical-groups-and-the-sidecar)），sliver 與 validation 報告要 49.7 s。這兩項合計 69 s，比寫出 CAD 檔案本身多得多；它們與 CAD 檔案一起寫出，所以屬於 emission 的成本。
 - **載入不屬於 SGB。** Gmsh 解析 267 635 個 face 在 $N = 20000$ 時要 49.7 s，這是 Gmsh 讀取任何格式的下限，而且它和其他一切一樣，隨 face 數成長（局部斜率 1.13 與 1.19）。載入之後的 `verify_loaded` 再花 15.3 s。
 - **Gmsh API 的 oracle 比 direct writer 慢得多，而且不是線性成長。** 同一個 layout 在 $N = 1000$ 時 oracle 要 8.9 s，direct writer 要 0.49 s（約 18 倍）；$N = 2000$ 時 oracle 要 63.3 s。oracle 與主要的 scaling 重跑同時執行時更慢（同樣三個 $N$ 量到 2.6 s、9.7 s、107.7 s），所以它的時間對機器負載很敏感，請只看量級。一次 $N = 5000$ 的試跑超過 10 分鐘仍未完成，已中止，所以 oracle 沒有 $N = 5000$ 與 $N = 20000$ 的數字，也不外推。
 

@@ -83,7 +83,7 @@ lumped port 與金屬都在同一個 support plane 上：PDK 宣告金屬是附�
 
 ![pad-in-ground 在 $y = 50$ µm 與 $y = 44$ µm 的剖面（z 軸拉長，金屬只有 0.2 µm 厚）。灰色是金屬，淺棕色是 substrate，點線是 support plane $z = 0$。黑色的短直線是 gap edge；金屬 top face（MA）與 bottom face（MS）上的藍色是 band，上圖（$y = 50$ µm）的剖面穿過 port：紅線在 $z = 0$ 上，蓋住整個 gap，所以那裡的 SA band 被拿掉；下圖（$y = 44$ µm）在 port 旁邊，gap 中可以看到 SA 的橘色 band。](figures/inset-origin-section.svg){#fig-origin-section fig-alt="兩張 x–z 剖面：金屬在 substrate 表面上，gap 的兩側有 gap edge；一張的 z = 0 上有紅色的 port，另一張的 z = 0 上有橘色的 SA band。"}
 
-port 只拿走它蓋住的面積：port 的 footprint 不再屬於 SA，所以 SA band 的 face 不含 port 蓋住的部分。band 的 seam 在 port 的邊界停下，不會穿進 port 的 sheet，所以 port 是**一個 face**（矩形的 port 就是一個矩形 face），group `PORT::<id>` 就是這個 face；明確的 `RefinementRequest` 曲線則仍嵌在這個 face 內，不會把它切開。port 不會移動任何 band，因為 gap edge 的判斷把 port 當作不存在：pad-in-ground 的 port 蓋住 40 µm² 的 SA，SA 的三個 band 面積加上這 40 µm² 等於沒有 port 時的面積，每個 band 都只少不多（測試 `test_a_port_removes_its_footprint_from_the_sa_bands_without_moving_a_band`）。
+port 只拿走它蓋住的面積：port 的 footprint 不再屬於 SA，所以 SA band 的 face 不含 port 蓋住的部分。band 的 seam 在 port 的邊界停下，不會穿進 port 的 sheet，所以 port 是**一個 face**（矩形的 port 就是一個矩形 face），group `PORT::<id>` 就是這個 face。port 不會移動任何 band，因為 gap edge 的判斷把 port 當作不存在：pad-in-ground 的 port 蓋住 40 µm² 的 SA，SA 的三個 band 面積加上這 40 µm² 等於沒有 port 時的面積，每個 band 都只少不多（測試 `test_a_port_removes_its_footprint_from_the_sa_bands_without_moving_a_band`）。
 
 ### 什麼會失敗
 
@@ -155,7 +155,7 @@ band 的編號跟著 margin 的區間：某個區間沒有面積時，它的 ban
 - **精度。**端點 snap 到 grid，arc 以 witness chord 切開，所以 cut 與精確 offset 最多相差 `DISTANCE_SLACK`。取樣點必須與 margin 相差超過它才算數；比它還薄、沒有這種取樣點的 cell，以內部點 `d >= m` 決定，與 cut 本身一樣精確。沒有新增任何面積門檻：很窄但有面積的區域就是一個 band。
 - **兩側的來源。**每條 seam 記錄的是它兩側 cell 的 band，Imprint 檢查與標記都用這份記錄比對，不重新推算方向。
 - **port。**port 內的 edge 不是 seam，所以 port 仍是一個 face；沿著 port 邊界的 seam 不切開 port 的內部，保留。port 的 face 不與 seam 比對，因為它可以橫跨 band。
-- **獨立的限制不受影響。**不切的 seam 只是 band family 自己的 carrier；同一位置的材料邊界、port、其他 family 與 refinement curve 是各自的 carrier，照常保留。
+- **獨立的限制不受影響。**不切的 seam 只是 band family 自己的 carrier；同一位置的材料邊界、port 與其他 family 是各自的 carrier，照常保留。
 :::
 
 ### 限制 {#band-regions-limits}
@@ -392,7 +392,7 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 
 精確的 band 面積與 AEDT 風格的 erosion 比較：區域以 1 nm 的 database unit 表示，把補集用 512 邊形膨脹後減去。下表給出 $R_m$（band $\ge k$ 的聯集）的面積：由精確 arc、由 KLayout，以及 oracle 自己的 rounding 雜訊（每個邊界點 ±0.5 nm）：
 
-八個比較（pad top 與 gap 各四個 margin）的最大相對誤差是 $1.6 \times 10^{-6}$（完整表格見補充）。在 extreme-case catalogue 中另有 4 個 band fixture（neck 被切開、band 消失、0.6° 的 slit、refinement 穿過 band edge；Route A、B、C 下共 20 個 family、60 個比較）也對 KLayout 做了比較，每個差值都在 oracle 的 rounding 雜訊之內，最大相對誤差是 $1.95 \times 10^{-5}$；$1.6 \times 10^{-6}$ 只適用於 pad 與 gap。
+八個比較（pad top 與 gap 各四個 margin）的最大相對誤差是 $1.6 \times 10^{-6}$（完整表格見補充）。在 extreme-case catalogue 中另有 4 個 band fixture（neck 被切開、band 消失、0.6° 的 slit、cut family 穿過 band edge；Route A、B、C 下共 20 個 family、60 個比較）也對 KLayout 做了比較，每個差值都在 oracle 的 rounding 雜訊之內，最大相對誤差是 $1.95 \times 10^{-5}$；$1.6 \times 10^{-6}$ 只適用於 pad 與 gap。
 每個差值都遠小於 oracle 自己的 rounding 雜訊，相對誤差至多 $1.6 \times 10^{-6}$。margin 0 的列沒有 erosion，所以它只反映多邊形化 arc 的 chord 誤差（約 $10^{-4}$ µm²）。Route B 的 top 與 bottom face 給出與 pad top 相同的數字。曲線本身在約一奈米內一致，那是多邊形整數 rounding 的量級：
 
 ![三個 margin 的 offset arc 與 512 邊形 erosion 在 notch、rounded corner 與 hole 附近的比較，以及它們相對精確半徑的徑向偏差。請看下排：精確 carrier 落在圓上，512 邊形因頂點的整數 rounding 而散布約 ±1 nm。](figures/inset-arcs-vs-polygon.svg){#fig-arcs fig-alt="三個放大視圖，精確 arc 疊在 KLayout 多邊形邊界上，以及三張以奈米為單位的徑向偏差散點圖。"}

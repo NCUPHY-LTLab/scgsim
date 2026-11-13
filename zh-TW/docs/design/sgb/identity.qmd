@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/identity"
 
 Solver 回報某個 attribute 的結果時，SGB 讓你能以查表（而不是看幾何）知道它是什麼：從 Palace attribute 一路追到 physical group、face、edge、carrier，最後到 source 曲線。這一頁說明這條 mapping chain、兩層 identity、每種 entity 的 hash 規則、lineage 記錄了什麼，並在 running example 上完整追一次。
 
-本頁以 Route B 含 band 的 pad-in-ground 範例（production 測試端的 stage-level scene `pad_in_ground("B")`，三個 margin 0.1、0.5、2 µm 的 band，lumped port 在 host 的 support plane z = 0）為例。查詢鏈的數字、圖與決定性的量測都由 `zh-TW/docs/design/sgb/_figures/identity.py` 對 production（`scgsim.geometry.sgb`）計算：建出模型、以 `emit_model` 寫出，再以 `read_sidecar` 讀 sidecar `scgsim.sgb.sidecar.v3`，與 consumer 讀到的相同。
+本頁以 Route B 含 band 的 pad-in-ground 範例（production 測試端的 stage-level scene `pad_in_ground("B")`，三個 margin 0.1、0.5、2 µm 的 band，lumped port 在 host 的 support plane z = 0）為例。查詢鏈的數字、圖與決定性的量測都由 `zh-TW/docs/design/sgb/_figures/identity.py` 對 production（`scgsim.geometry.sgb`）計算：建出模型、以 `emit_model` 寫出，再以 `read_sidecar` 讀 sidecar `scgsim.sgb.sidecar.v4`，與 consumer 讀到的相同。
 
 ## 以 running example 看：attribute 10
 
@@ -30,7 +30,7 @@ flowchart LR
   C -.->|"views.native_tags"| N["native tags<br/>32, 39（只記錄）"]
 ```
 
-每個箭頭都是一次查表。下列數字來自 production 的 sidecar（`scgsim.sgb.sidecar.v3`）；每張表的完整定義見[使用契約](consumer-contract.qmd#sidecar)。
+每個箭頭都是一次查表。下列數字來自 production 的 sidecar（`scgsim.sgb.sidecar.v4`）；每張表的完整定義見[使用契約](consumer-contract.qmd#sidecar)。
 
 ::: {.askr-table-compact}
 | 步驟 | 你手上有 | 查詢 | 你得到 |
@@ -137,24 +137,23 @@ Edge 的 carrier 是產生它的曲線；重合的 edge 會合併它們的 carri
 |---|---|---|
 | `source` | `source_curve` | 一條來源曲線：Entity、polygon、ring、edge 序號、精確的直線或圓弧與長度。來源圓弧（circle 是四段 quarter arc）的 witness chord，以及由它推導出的圓弧，也指向這條來源圓弧 |
 | `band_member` | `primitive`、`role`、`margin_grid`、`piece` | 它 offset 的 support primitive；primitive 的 `ring`、它在 ring 中的位置、ring 所屬的 band family，以及沿 primitive 畫的來源曲線（`sources`）。`role` 是 `edge`（offset 這個 primitive）、`corner`（繞過它之後的 reflex 頂點，接到 ring 的下一個 primitive）、`capstart` 或 `capend`（繞過它的起點或終點）；`piece` 是被切成數段的 cap 或 corner 的段號，整段時為 `null` |
-| `refinement` | `request` | refinement 請求（`refinement_request`） |
 | `family_member` | `family`、`member` | 其他 role 的 cut family（`cut_family`）與成員名稱（不透明的標籤） |
 | `unknown` | 無 | SGB 不知道它的來源 |
 :::
 
 直線 inset member 與 arc member 一樣，保留它是由哪個 primitive 產生的：兩者都是 `band_member`，`primitive` 指向那個 primitive。ring 依序列出它的 primitive，所以 ring 的大小與兩個 primitive 是否相鄰，都從 `support_ring.primitives` 讀出。
 
-Face 記錄它的邊界 carrier 的來源，依 carrier 的種類分開：`entities`（`source` carrier 的 Entity）、`families`（`band_member` 的 band family）、`refinements` 與 `cut_families`。例如 `MA::pad__top::band=0` 的 face 是 `entities: [pad]`、`families: [band_pad_top]`，`MA::pad__top::band=2` 的 face 是 `entities: []`、`families: [band_pad_top]`。Wall 由它的邊指向 Entity，vertical edge 以 `entities` 指向牆立在它上面的 Entity。
+Face 記錄它的邊界 carrier 的來源，依 carrier 的種類分開：`entities`（`source` carrier 的 Entity）、`families`（`band_member` 的 band family）與 `cut_families`（`family_member` 的其他 cut family）。例如 `MA::pad__top::band=0` 的 face 是 `entities: [pad]`、`families: [band_pad_top]`，`MA::pad__top::band=2` 的 face 是 `entities: []`、`families: [band_pad_top]`。Wall 由它的邊指向 Entity，vertical edge 以 `entities` 指向牆立在它上面的 Entity。
 
 **Membership**（D5 的預設，production 已實作）逐 face 記錄每個貢獻的 source entity 所涵蓋之面積比例（`face.membership`）：horizontal face 為涵蓋面積的比例，wall 為底邊長度中由該 entity 的 edge 承載的比例。比例彼此不互斥，總和可以超過 1，因為每個 cell 同時也被背景的 substrate 與 vacuum prism 涵蓋：`MA::pad__top::band=2` 的 face 是 `{pad: 1.0, vacuum: 1.0}`。Entity 是 lineage，不是「每個 Entity 都有獨立量測」的承諾。
 
 ## Sidecar：native tag 只記錄，不信任
 
-直接 writer 把每個 planned ID 對到 native tag，規則是**依建構順序**：tag = 1 + 該 ID 在 `binding.ids_by_tag[dim]` 中的位置（OCCT 的 `TopExp::MapShapes` 前序），絕不靠幾何比對。「每個輸出的 native entity 恰好有一個 planned ID」若不成立，載入檢查與 OCCT 檢查就會失敗。production 的 `<stem>.sidecar.json`（`scgsim.sgb.sidecar.v3`，附 JSON Schema；每張表的定義在[使用契約](consumer-contract.qmd#sidecar)）把上面這條查詢用到的每個事實存一次，分成三層，記錄之間以 id 互相指向：
+直接 writer 把每個 planned ID 對到 native tag，規則是**依建構順序**：tag = 1 + 該 ID 在 `binding.ids_by_tag[dim]` 中的位置（OCCT 的 `TopExp::MapShapes` 前序），絕不靠幾何比對。「每個輸出的 native entity 恰好有一個 planned ID」若不成立，載入檢查與 OCCT 檢查就會失敗。production 的 `<stem>.sidecar.json`（`scgsim.sgb.sidecar.v4`，附 JSON Schema；每張表的定義在[使用契約](consumer-contract.qmd#sidecar)）把上面這條查詢用到的每個事實存一次，分成三層，記錄之間以 id 互相指向：
 
-- **來源**：`entity`（每個 Entity 的 prism、material、Net 與 layer）、`source_curve`（每條來源直線與圓弧）、`inset_request`、`refinement_request` 與 `port`；
+- **來源**：`entity`（每個 Entity 的 prism、material、Net 與 layer）、`source_curve`（每條來源直線與圓弧）、`inset_request` 與 `port`；
 - **推導**：`cut_family`、`band_family`、`support_ring`、`support_primitive`，以及上表的 `carrier`；
-- **寫出**：`vertex`、`edge`（它的 carrier）、`face`（group、loop、來源、membership、band 與嵌入的 refinement edge）、`volume`（寫出的 solid 的 face 與嵌入的 sheet）、`group`（名稱、dimension、physical `tag`、`interface_type`、`face_kind`、`entities`、`net`、`band`、面積與兩側的 volume）、`surface_epr_row` 與 `mesh_feature`；頂層另有 `binding`、`model`（route、route policy、grid、tolerance）與 `summary`（數量與 sliver 摘要）。
+- **寫出**：`vertex`、`edge`（它的 carrier）、`face`（group、loop、來源、membership 與 band）、`volume`（寫出的 solid 的 face 與嵌入的 sheet）、`group`（名稱、dimension、physical `tag`、`interface_type`、`face_kind`、`entities`、`net`、`band`、面積與兩側的 volume）、`surface_epr_row` 與 `mesh_feature`；頂層另有 `binding`、`model`（route、route policy、grid、tolerance）與 `summary`（數量與 sliver 摘要）。
 
 group 的成員、成員的 native tag、mesher 要重新套用的 `(face, host volume)` 與 `(edge, host face)` 配對（BREP 與 XAO 都無法攜帶 mesh embedding），以及 `verify_loaded` 比對的規劃值，都不另存，由 `scgsim.contracts.sgb_sidecar.views` 從這些表算出。每個輸出的 face 與 volume 恰好在一個 primary group 內，因為 Gmsh 的 MSH 輸出會依 group 重複 element，solver 可能誤讀；「Net `pad` 的所有導體表面」是 `net` 為 `pad` 的 `MA`、`MS` 與 `SHEET` group 名稱的清單，例如 `[MA::pad__sidewall, MA::pad__top::band=0..3, MS::pad__bottom::band=0..3]`，絕不是重疊的 Gmsh group。`surface_epr_row` 把 Surface EPR 的 row 對到承載它的 primary group：Route A 的 sheet group（以 entity id 命名，例如 `pad::band=2`）只在其中有 face 的某一側是 vacuum 時承載 MA row、有某一側是 dielectric 時承載 MS row；sheet 的 row 以 `shared_face_group` 指向該 group，`face_sides` 逐 face 列出積分的是哪一側（`above`、`below` 或 `both`，只列實際積分的 face），`side` 是共同的值或 `mixed`。
 

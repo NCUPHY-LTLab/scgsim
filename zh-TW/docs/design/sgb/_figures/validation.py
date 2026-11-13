@@ -58,7 +58,6 @@ from scgsim.geometry.sgb.errors import (
     NonManifoldError,
     OverlapError,
     RouteError,
-    SgbError,
     ValidationError,
 )
 from scgsim.geometry.sgb.exact.grid import exact_z
