@@ -173,18 +173,13 @@ layers =
     scgsim.palace.source
 
 # A notebook displays what scgsim.visualization loads; no other package reads it.
+# scgsim.* matches every top-level subpackage and module, present or added later; import-linter skips
+# scgsim.visualization itself.
 [importlinter:contract:nothing-reads-visualization]
 name = No other package reads visualization
 type = forbidden
 source_modules =
-    scgsim.geometry
-    scgsim.meshing
-    scgsim.palace
-    scgsim.aedt
-    scgsim.presentation
-    scgsim.preparation
-    scgsim.diagnostics
-    scgsim.documentation
+    scgsim.*
 forbidden_modules =
     scgsim.visualization
 
