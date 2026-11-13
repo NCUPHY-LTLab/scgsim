@@ -5,6 +5,7 @@ include docs/api/analyze-epr-usage.md
 include zh-TW/docs/api/analyze-epr-usage.md
 include scripts/generate_knowledge_reference.py
 recursive-include docs *.qmd
+include docs/_*.md
 recursive-include docs/assets *
 recursive-include src/scgsim/_agent_knowledge *.json *.md *.qmd
 recursive-include src/scgsim/_agent_knowledge/docs/assets *

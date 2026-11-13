@@ -58,6 +58,7 @@ scgsim = [
     "_agent_knowledge/README.md",
     "_agent_knowledge/docs/*.qmd",
     "_agent_knowledge/docs/**/*.qmd",
+    "_agent_knowledge/docs/_*.md",
     "_agent_knowledge/docs/assets/*",
     "_agent_knowledge/docs/assets/**/*",
     "geometry/sgb/output/sidecar/*.json",

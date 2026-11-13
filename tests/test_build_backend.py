@@ -284,3 +284,45 @@ def test_other_pep517_hooks_retain_setuptools_identity(backend):
         "prepare_metadata_for_build_editable",
     ):
         assert getattr(backend, name) is getattr(build_meta, name)
+
+
+def _add_include_page(source_tree, target):
+    page = source_tree / "docs/architecture.qmd"
+    page.write_text(
+        page.read_text(encoding="utf-8") + "\n{{< include " + target + " >}}\n",
+        encoding="utf-8",
+    )
+
+
+def test_included_file_is_bundled_once_for_two_pages(source_tree, backend):
+    """Ship an include target at its repository path, as an auxiliary file."""
+    (source_tree / "docs/_table.md").write_text("| a |\n", encoding="utf-8")
+    _add_include_page(source_tree, "_table.md")
+    page = source_tree / "docs/examples.qmd"
+    page.write_text(
+        page.read_text(encoding="utf-8") + "\n{{< include _table.md >}}\n",
+        encoding="utf-8",
+    )
+    backend.generate_knowledge()
+    bundle = source_tree / "src/scgsim/_agent_knowledge"
+    assert (bundle / "docs/_table.md").read_bytes() == b"| a |\n"
+    manifest = json.loads((bundle / "manifest.json").read_bytes())
+    assert "docs/_table.md" not in {r["path"] for r in manifest["resources"]}
+
+
+def test_missing_include_target_names_page_and_target(source_tree, backend):
+    """Refuse a page whose include resolves to nothing, before any output."""
+    _add_include_page(source_tree, "_absent.md")
+    before = _bundle_state(source_tree)
+    with pytest.raises(ValueError, match=r"docs/architecture\.qmd.*_absent\.md"):
+        backend.generate_knowledge()
+    assert _bundle_state(source_tree) == before
+
+
+def test_include_target_outside_docs_is_refused(source_tree, backend):
+    """Keep files outside docs/ from entering the installed bundle."""
+    _add_include_page(source_tree, "../README.md")
+    before = _bundle_state(source_tree)
+    with pytest.raises(ValueError, match=r"docs/architecture\.qmd.*outside docs/"):
+        backend.generate_knowledge()
+    assert _bundle_state(source_tree) == before
