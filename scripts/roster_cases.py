@@ -228,5 +228,5 @@ def configured_simulation(layout: Layout, snapshot, specs):
                 layout_sheet=True,
                 inductance=PORT_INDUCTANCE_H,
             )
-    sim.set_surface_epr(representation="B", specs=specs)
+    sim.set_surface_epr(specs)
     return sim

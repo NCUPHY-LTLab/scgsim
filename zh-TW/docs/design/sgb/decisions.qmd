@@ -14,7 +14,7 @@ scgsim-id: "docs/design/sgb/decisions"
 ::: {.askr-table-compact}
 | ID | 問題 | 決定 | 決定者 | production 實作狀態 | 已知缺口 |
 |---|---|---|---|---|---|
-| [D1](#d1) | 是否支援 Route C（保留 conductor volume）？ | 納入 v1 | Human（範圍）；細節由 architecture review | 已實作：Route C 保留並 mesh 導體 volume（以裸的 entity id `<entity>` 命名），lumped port 位於 host 的 support plane（與 Route B 相同）；測試與 catalogue 涵蓋三種 route | Palace 不接受 Route C（`set_surface_epr` 與 `mesh()` 只接受 A 與 B） |
+| [D1](#d1) | 是否支援 Route C（保留 conductor volume）？ | 納入 v1 | Human（範圍）；細節由 architecture review | 已實作：Route C 保留並 mesh 導體 volume（以裸的 entity id `<entity>` 命名），lumped port 位於 host 的 support plane（與 Route B 相同）；測試與 catalogue 涵蓋三種 route | Palace 不接受 Route C（`set_route` 與 `mesh()` 只接受 A 與 B） |
 | [D2](#d2) | sliver 的 threshold 與 derived-to-source snapping？ | v1 不設 threshold，只回報 | Human | 已實作：只回報；薄於 $g$ 的 slab 保留並以警告回報；catalogue 逐列記錄 mesh 品質與 drift | band 的 mesh 尺寸屬 Palace adopter（見 D2） |
 | [D3](#d3) | arc 如何做 noding？ | polyline witness 加 merge-back（暫定） | Lead，architecture review 中 | 已實作（1a） | witness 成本只在執行範例與 catalogue 量過，未在 scaling 量過 |
 | [D4](#d4) | AEDT 的 solid 交換與 face identity？ | XDE assembly 的 STEP、預先切好的 band | Lead，architecture review 中 | 匯出端已實作：`export_aedt_step`、sidecar 的 `aedt_name` 與 face 守衛清單；匯入端屬 AEDT adopter | production 的輸出尚未實際匯入 AEDT 測過 |

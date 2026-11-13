@@ -401,14 +401,12 @@ def configure_simulation(
     sim = EigenmodeSim()
     sim.set_plan(snapshot)
     sim.set_output_dir(run_dir)
-    sim.set_surface_epr(
-        representation=route,
-        specs=specs,
+    if route == "A":
         # Route A lowers the pad and Ground to sheets; the thin-film profile says so (see the PDK test of Route A).
-        approximation_profile=ApproximationProfile("thin_film", "v1", {})
-        if route == "A"
-        else None,
-    )
+        sim.set_route(
+            "A", approximation_profile=ApproximationProfile("thin_film", "v1", {})
+        )
+    sim.set_surface_epr(specs)
     ports = [(port, case.port_layer) for port in case.ports]
     if case.all_authored_ports:
         ports = [

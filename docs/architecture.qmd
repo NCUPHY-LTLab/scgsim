@@ -295,7 +295,7 @@ that report. See [Tetrahedral Mesh Quality](mesh-quality.qmd).
 mesh, config, resolved-port, and handoff state. Both are subclasses of one
 private base, `scgsim.palace.simulation.core.PalaceSimulation`, which holds
 everything they share: `set_plan`, `set_output_dir`, `set_vacuum_region`,
-`set_surface_epr`, `set_mesh`, `input_summary()`, `mesh()`, `simulation_drc`,
+`set_route`, `set_surface_epr`, `set_mesh`, `input_summary()`, `mesh()`, `simulation_drc`,
 `mesh_summary()` and `prepare_handoff()`. Each problem file,
 `simulation/eigenmode.py` and `simulation/electrostatic.py`, shows only what its
 problem adds: its setters, its numerical defaults and its `write_config()`.
@@ -304,12 +304,12 @@ The lifecycle is one table, `scgsim.palace.simulation.lifecycle`. A
 simulation is `UNBOUND`, `BOUND` (`set_plan`), `MESHED` (`mesh()`),
 `CONFIG_WRITTEN` (`write_config()`) or `HANDED_OFF` (`prepare_handoff()`). The
 table says which stage each call needs and how far each call falls back:
-setters whose value `mesh()` reads (output folder, vacuum, Surface EPR, mesh
-controls, Eigenmode ports) fall back to `BOUND`, setters only `write_config()`
+setters whose value `mesh()` reads (output folder, vacuum, route, Surface EPR,
+mesh controls, Eigenmode ports) fall back to `BOUND`, setters only `write_config()`
 reads fall back to `MESHED`. A call made before the stage it needs is refused
-with a message that names the call to make first. One rule differs by problem
-and is stated on each class: `ElectrostaticSim.mesh()` requires
-`set_surface_epr`, `EigenmodeSim.mesh()` does not.
+with a message that names the call to make first. The rules are the same for
+both problems: Route B is the default, and Surface EPR is computed only when
+`set_surface_epr(specs)` was called.
 
 A simulation holds its settings as named, frozen values, each checked when it
 is built and each defined in the stage that reads it first:

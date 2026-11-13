@@ -155,7 +155,9 @@ class Run:
             groups=self.groups,
             mesh_path=Path("palace.msh"),
             materials=MATERIALS,
-            surface_epr_specs=SurfaceEprSpecs.normalized(specs, materials=MATERIALS),
+            surface_epr_specs=None
+            if specs is None
+            else SurfaceEprSpecs.normalized(specs, materials=MATERIALS),
             numerical=numerical,
         )
 

@@ -38,7 +38,7 @@ def test_the_layout_can_be_modeled():
         print(report.render_text())  # 若有警告，會列在這裡
 ```
 
-請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請傳入模擬將使用的 `surface_epr_specs`：它與 [`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins) 接受的規格相同，其邊界間距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。條帶只切在規格所選的面上，所以沒有這類面的版圖會通過，但不會切出條帶。若是組裝件，請以 `{"chip/device": reference, ...}` 傳入 `instances`，格式與 `GeometryPlan.register_instance` 相同；計畫的根名稱為 `chip`。實例會依映射中的順序註冊，所以請先列父層、再列子層（`chip/device` 在 `chip/device/pads` 之前）。
+請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請傳入模擬將使用的 `surface_epr_specs`：它與 [`set_surface_epr(specs)`](specs/palace-eigenmode.qmd#surface-epr-margins) 接受的規格相同，其邊界間距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。條帶只切在規格所選的面上，所以沒有這類面的版圖會通過，但不會切出條帶。若是組裝件，請以 `{"chip/device": reference, ...}` 傳入 `instances`，格式與 `GeometryPlan.register_instance` 相同；計畫的根名稱為 `chip`。實例會依映射中的順序註冊，所以請先列父層、再列子層（`chip/device` 在 `chip/device/pads` 之前）。
 
 請以 `nets` 傳入模擬的計畫所設定的 Net 指派，格式與 `GeometryPlan.set_nets` 相同：`{"Ground": ("chip/D0_TOP_GROUND_PLANE", ...), ...}`，每個成員都是以 `chip` 開頭的完整 Entity ID。傳入 `nets` 後，檢查採用與模擬相同的 Net 宣告。如此檢查所建出的模型，就是該模擬會建出的模型。未給 `nets` 時，任何導體都沒有 Net，因此相接觸的兩個導體都會被當作不同 Net 的接觸而拒絕。銦凸塊連接兩片接地面的覆晶版圖都會因此被拒絕，直到兩片接地面與所有凸塊以同一個 Ground net 傳入。不同 Net 的兩個導體相接觸時，無論是否給 `nets` 都會被拒絕。
 

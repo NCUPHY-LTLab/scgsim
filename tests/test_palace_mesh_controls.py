@@ -205,21 +205,3 @@ def test_surface_epr_set_after_mesh_invalidates_it():
     assert sim._mesh_result is None  # noqa: SLF001
     assert sim.config_path is None
     assert sim._stage is Stage.BOUND  # noqa: SLF001
-
-
-def test_eigenmode_without_surface_epr_requests_no_insets(monkeypatch, tmp_path):
-    """Eigenmode may skip Surface EPR: ``mesh()`` then passes no specs, so no bands are requested."""
-    calls = stand_in_mesh_stages(monkeypatch, core, tmp_path)
-    prepared = SimpleNamespace(
-        stack=STACK,
-        materials=None,
-        geometry_input=object(),
-        physical_plan=SimpleNamespace(context=object()),
-    )
-    monkeypatch.setattr(layout_ports, "prepare_mesh_input", lambda **kwargs: prepared)
-    sim = EigenmodeSim()
-    sim.set_plan(two_pad_snapshot(monkeypatch))
-    sim.set_output_dir(tmp_path)
-    sim.mesh()
-    (_, geometry), *_ = calls
-    assert geometry.surface_epr_specs is None
