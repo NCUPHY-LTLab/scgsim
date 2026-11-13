@@ -46,7 +46,7 @@
 
 | 資料夾 | 它是什麼 | In | Out | Next |
 | --- | --- | --- | --- | --- |
-| `meshing` | SGB 幾何的獨立網格產生：依配方決定尺寸、品質稽核與修補迴圈。 | 一次 SGB 建構的 XAO 與 `scgsim.sgb.sidecar.v5` sidecar，加上品質門檻、尺寸配方與網格器選項（來自 `palace/mesh`；`palace/simulation` 呼叫細微結構檢查）。 | 帶有 XAO 物理群組、沒有任何四面體低於門檻的 Gmsh 網格，以及它的品質報告（`MeshResult`）；為 `simulation_drc` 則產生低於限制的細微邊與面（`FineStructureReport`）。 | `palace/mesh` 把網格轉成 `palace.msh`，並在網格清單中記錄報告。 |
+| `meshing` | SGB 幾何的獨立網格產生：依配方決定尺寸、品質稽核與修補迴圈。 | 一次 SGB 建構的 XAO 與 `scgsim.sgb.sidecar.v5` sidecar，加上品質門檻、尺寸配方與網格器選項（來自 `palace/mesh`；`palace/simulation` 呼叫細微結構檢查）。 | 帶有 XAO 物理群組的 Gmsh 網格與它的品質報告（`MeshResult`）：沒有任何四面體低於門檻，例外是只回報的 `GmshDefaultRecipe`，它的網格只回報品質、不強制門檻；為 `simulation_drc` 則產生低於限制的細微邊與面（`FineStructureReport`）。 | `palace/mesh` 把網格轉成 `palace.msh`，並在網格清單中記錄報告。 |
 | `meshing/recipes` | 尺寸配方：每個配方只決定模型的初始元素尺寸，不做其他事。 | 屬於 `meshing`，請與那一列一起閱讀。 |  |  |
 
 ### `palace`

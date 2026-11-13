@@ -46,7 +46,7 @@
 
 | Folder | What it is | In | Out | Next |
 | --- | --- | --- | --- | --- |
-| `meshing` | Standalone meshing of SGB geometry: sizes from a recipe, a quality audit and a repair loop. | the XAO and the `scgsim.sgb.sidecar.v5` sidecar of one SGB build, with the quality threshold, the sizing recipe and the mesher options (from `palace/mesh`; `palace/simulation` calls the fine-structure check). | a Gmsh mesh with the XAO's physical groups, no tetrahedron below the threshold, and its quality report (`MeshResult`); for `simulation_drc`, the fine edges and faces below the limits (`FineStructureReport`). | `palace/mesh` turns the mesh into `palace.msh` and records the report in the mesh manifest. |
+| `meshing` | Standalone meshing of SGB geometry: sizes from a recipe, a quality audit and a repair loop. | the XAO and the `scgsim.sgb.sidecar.v5` sidecar of one SGB build, with the quality threshold, the sizing recipe and the mesher options (from `palace/mesh`; `palace/simulation` calls the fine-structure check). | a Gmsh mesh with the XAO's physical groups and its quality report (`MeshResult`): no tetrahedron is below the threshold, except with the report-only `GmshDefaultRecipe`, whose mesh is delivered with its quality reported, not enforced; for `simulation_drc`, the fine edges and faces below the limits (`FineStructureReport`). | `palace/mesh` turns the mesh into `palace.msh` and records the report in the mesh manifest. |
 | `meshing/recipes` | Sizing recipes: each one decides the initial element sizes of a model, and nothing else. | Part of `meshing`; read it with that row. |  |  |
 
 ### `palace`

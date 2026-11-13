@@ -221,8 +221,8 @@ summary.en = "Standalone meshing of SGB geometry: sizes from a recipe, a quality
 summary.zh = "SGB 幾何的獨立網格產生：依配方決定尺寸、品質稽核與修補迴圈。"
 In.en = "the XAO and the ``scgsim.sgb.sidecar.v5`` sidecar of one SGB build, with the quality threshold, the sizing recipe and the mesher options (from ``palace/mesh``; ``palace/simulation`` calls the fine-structure check)."
 In.zh = "一次 SGB 建構的 XAO 與 ``scgsim.sgb.sidecar.v5`` sidecar，加上品質門檻、尺寸配方與網格器選項（來自 ``palace/mesh``；``palace/simulation`` 呼叫細微結構檢查）。"
-Out.en = "a Gmsh mesh with the XAO's physical groups, no tetrahedron below the threshold, and its quality report (``MeshResult``); for ``simulation_drc``, the fine edges and faces below the limits (``FineStructureReport``)."
-Out.zh = "帶有 XAO 物理群組、沒有任何四面體低於門檻的 Gmsh 網格，以及它的品質報告（``MeshResult``）；為 ``simulation_drc`` 則產生低於限制的細微邊與面（``FineStructureReport``）。"
+Out.en = "a Gmsh mesh with the XAO's physical groups and its quality report (``MeshResult``): no tetrahedron is below the threshold, except with the report-only ``GmshDefaultRecipe``, whose mesh is delivered with its quality reported, not enforced; for ``simulation_drc``, the fine edges and faces below the limits (``FineStructureReport``)."
+Out.zh = "帶有 XAO 物理群組的 Gmsh 網格與它的品質報告（``MeshResult``）：沒有任何四面體低於門檻，例外是只回報的 ``GmshDefaultRecipe``，它的網格只回報品質、不強制門檻；為 ``simulation_drc`` 則產生低於限制的細微邊與面（``FineStructureReport``）。"
 Next.en = "``palace/mesh`` turns the mesh into ``palace.msh`` and records the report in the mesh manifest."
 Next.zh = "``palace/mesh`` 把網格轉成 ``palace.msh``，並在網格清單中記錄報告。"
 
