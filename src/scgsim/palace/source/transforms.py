@@ -1,4 +1,4 @@
-"""Shared staged simulation primitives for Palace candidates."""
+"""The checks for the numbers and strings the simulation settings take, and the Route A thin-film names."""
 
 from __future__ import annotations
 

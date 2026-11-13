@@ -1,4 +1,4 @@
-"""Gmsh worker for the Palace JSON request/result process boundary."""
+"""The fresh process ``process.lower_mesh_in_worker`` starts: it reads a JSON request and writes the lowering's result as JSON."""
 
 from __future__ import annotations
 

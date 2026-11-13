@@ -19,7 +19,7 @@ outputs from here.  A path is relative to the run folder, in POSIX form::
 
 The receipt recorder (``scgsim.palace.run.returned_receipt``) runs in the run folder with only a Python
 interpreter.  When ``prepare_handoff`` copies it there, the text of this module takes the place of the
-recorder's import of it (``scgsim.palace.run.handoff``), so the copy carries the same layout, problems and
+recorder's import of it (``scgsim.palace.run.recorder_copy``), so the copy carries the same layout, problems and
 helpers, and nothing in the run folder imports SCGSim.  For that reason this module imports only the
 standard library (``.importlinter``: ``contracts-import-nothing-else``) and has no ``__future__`` import.
 """

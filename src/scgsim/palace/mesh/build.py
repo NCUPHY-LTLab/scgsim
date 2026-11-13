@@ -1,4 +1,4 @@
-"""Orchestrate one Palace mesh: SGB geometry, the meshing module, Palace's lowering, paired artifacts.
+"""Build the SGB geometry of a prepared request, mesh it, and write ``palace.msh`` with its manifest into the run folder.
 
 Portions adapted from gsim 0.2.0+scq.1, revision
 8f5dc6c05255d003a9c6d8959537bcf8068379d3.

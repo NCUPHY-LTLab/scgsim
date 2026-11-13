@@ -1,7 +1,7 @@
 """Validate route, terminal, port and Physical Group correspondence in sealed inputs.
 
-Only the current schemas are read: mesh manifest 2 and palace index map 3.  Run folders of older schemas are
-not read; ``require_manifest_schema`` and ``require_index_map_schema`` reject them with the recorded schema
+Only the schemas the run-folder contract names (``MANIFEST_SCHEMA_VERSION`` and ``INDEX_MAP_SCHEMA_VERSION``)
+are read.  A run folder of another schema is refused; ``require_manifest_schema`` and ``require_index_map_schema`` reject them with the recorded schema
 in the message.
 """
 
