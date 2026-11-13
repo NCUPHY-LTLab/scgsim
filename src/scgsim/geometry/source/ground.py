@@ -25,10 +25,12 @@ from scgsim.geometry.grid.planar_loops import PlanarLoop
 from scgsim.geometry.grid.polygon_ops import (
     FIX_SELECTOR,
     fused_gdstk_components,
-    layout_polygon_region,
     point_in_layout_polygon,
     realized_on_lattice,
     selector_place,
+)
+from scgsim.geometry.grid.polygon_ops import (
+    layout_polygon_region as layout_polygon_region,
 )
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 

@@ -5,13 +5,13 @@ from contextlib import nullcontext
 import gdstk
 import pytest
 
+from scgsim.geometry.grid import polygon_ops as ops
 from scgsim.geometry.grid.grid import (
     SOURCE_INTENT,
     geometry_grid_scope,
     polygon_world_frame,
 )
 from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry.grid import polygon_ops as ops
 
 
 def polygons(kind):

@@ -35,6 +35,21 @@ from scgsim.geometry.grid.grid_overlay import (
     residue_coordinates,
     subdivide_grid,
 )
+from scgsim.geometry.grid.grid_overlay import (
+    OverlayParts as OverlayParts,
+)
+from scgsim.geometry.grid.grid_overlay import (
+    cell_overlay_chunk as cell_overlay_chunk,
+)
+from scgsim.geometry.grid.grid_overlay import (
+    deduplicate_residues as deduplicate_residues,
+)
+from scgsim.geometry.grid.grid_overlay import (
+    overlay_call as overlay_call,
+)
+from scgsim.geometry.grid.grid_overlay import (
+    parts_overlay as parts_overlay,
+)
 from scgsim.geometry.grid.grid_regions import (
     FIX_SHAPE,
     GridArrangement,
@@ -50,6 +65,12 @@ from scgsim.geometry.grid.grid_regions import (
     regions,
     regions_indexed,
     topology_changes,
+)
+from scgsim.geometry.grid.grid_regions import (
+    GridOperandAudit as GridOperandAudit,
+)
+from scgsim.geometry.grid.grid_regions import (
+    region_key as region_key,
 )
 from scgsim.geometry.grid.planar_loops import (
     LoopCoordinates,

@@ -20,6 +20,12 @@ from scgsim.geometry.grid.planar_loops import (
     point_on_planar_segment,
     ring_edges,
 )
+from scgsim.geometry.grid.planar_loops import (
+    cancel_reversed_planar_edges as cancel_reversed_planar_edges,
+)
+from scgsim.geometry.grid.planar_loops import (
+    simple_planar_loops_from_edges as simple_planar_loops_from_edges,
+)
 from scgsim.geometry.grid.spatial import coordinate_2d_key, segment_overlap_interval
 from scgsim.geometry.models.input import SemanticEntitySpec
 
