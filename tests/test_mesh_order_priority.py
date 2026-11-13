@@ -7,7 +7,6 @@ from types import SimpleNamespace
 import pytest
 
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
-from scgsim.geometry.source.stack import build_component_stack
 
 MATERIALS = {
     "PEC": {"kind": "conductor"},
@@ -53,35 +52,45 @@ def _layers(order_a, order_b, metal_order=1, vacuum_order=5):
     }
 
 
-def _component(schema_version=2):
-    return SimpleNamespace(
-        dbbox=lambda: SimpleNamespace(left=0, bottom=0, right=4, top=4),
-        info={
-            "component_semantics": {
-                "schema_version": schema_version,
-                "conductor_regions": [
-                    {
-                        "semantic_id": "metal",
-                        "level": "metal",
-                        "gds_layer": [1, 0],
-                        "net_id": "N1",
-                    }
-                ],
-            }
-        },
+def _plan(monkeypatch, layers):
+    """A real ``GeometryPlan`` with one metal pad on the given PDK levels."""
+    import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
+
+    from scgsim.geometry import GeometryPlan  # noqa: PLC0415 -- the plan needs the optional layout stack above
+
+    # Restore process-local PDK state after this test.
+    monkeypatch.setattr(
+        gf.pdk,
+        "_ACTIVE_PDK",
+        gf.pdk._ACTIVE_PDK,  # noqa: SLF001 -- preserve the active PDK during test setup
     )
+    gf.gpdk.PDK.activate()
+    component = gf.Component()
+    component.add_polygon(((0, 0), (4, 0), (4, 4), (0, 4)), layer=(1, 0))
+    component.info["component_semantics"] = {
+        "schema_version": 2,
+        "conductor_regions": [
+            {"semantic_id": "metal", "level": "metal", "gds_layer": [1, 0]}
+        ],
+    }
+    plan = GeometryPlan(
+        component,
+        root_id="chip",
+        layer_stack=SimpleNamespace(layers=layers),
+        material_records=MATERIALS,
+        coupon_padding_um=1,
+        grid_size_um=0.001,
+    )
+    plan.set_nets({"N1": ("chip/metal",)})
+    return plan
 
 
 @pytest.mark.parametrize("orders", ((1, 2), (2, 1), (0, 3)))
-def test_stack_priority_is_negated_mesh_order_for_all_level_kinds(orders):
+def test_stack_priority_is_negated_mesh_order_for_all_level_kinds(monkeypatch, orders):
     """Lower `mesh_order` yields the higher internal priority, on every record."""
     order_a, order_b = orders
-    stack = build_component_stack(
-        component=_component(schema_version=1),
-        layer_stack=SimpleNamespace(layers=_layers(order_a, order_b, metal_order=4)),
-        material_records=MATERIALS,
-        coupon_padding_um=1,
-    )
+    plan = _plan(monkeypatch, _layers(order_a, order_b, metal_order=4))
+    stack = plan.prepare().stack
 
     regions = stack["solution_regions"]
     assert regions["diel_a"]["priority"] == -order_a

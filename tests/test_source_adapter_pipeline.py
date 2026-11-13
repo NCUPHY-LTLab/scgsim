@@ -13,7 +13,6 @@ import gdstk
 import pytest
 
 from scgsim.geometry import build_gds_stack_geometry_input
-from scgsim.geometry.source.adapter import build_gdsfactory_geometry_input
 from scgsim.preparation import preparation_resources
 
 
@@ -225,6 +224,22 @@ def test_schema_two_identity_failure_precedes_occurrence_validation(
     )
 
 
+@pytest.mark.parametrize("version", (1, 3, "2"))
+def test_an_unknown_component_semantics_version_is_refused(
+    native_inputs, version
+) -> None:
+    """Only schema 2 carries occurrence lineage; another version is not skipped."""
+    gds, stack_path, stack = native_inputs
+    stack["metadata"]["component_semantics_schema_version"] = version
+    _write_stack(stack_path, stack)
+    with pytest.raises(ValueError) as failure:
+        build_gds_stack_geometry_input(gds_file=gds, stack_file=stack_path)
+    assert str(failure.value) == (
+        f"stack metadata component_semantics_schema_version is {version!r}; "
+        "only 2, which GeometryPlan writes, is supported"
+    )
+
+
 def test_public_adapter_wrappers_keep_introspection() -> None:
     """The cache and diagnostics scopes retain the public signature and documentation."""
     function = build_gds_stack_geometry_input
@@ -242,7 +257,6 @@ def test_public_adapter_wrappers_keep_introspection() -> None:
         "metadata",
         "grid_size_um",
     }
-    assert "work_dir" in inspect.signature(build_gdsfactory_geometry_input).parameters
 
 
 def test_schema_two_real_ground_keeps_geometry_across_workers(tmp_path: Path) -> None:

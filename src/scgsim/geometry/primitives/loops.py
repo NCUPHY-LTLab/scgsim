@@ -21,7 +21,6 @@ from scgsim.geometry.primitives.planar_loops import (
     clean_loop,
     filter_gdstk_polygons,
     point_on_planar_segment,
-    polygon_area,
     ring_edges,
 )
 from scgsim.geometry.primitives.planar_loops import (
@@ -263,7 +262,3 @@ def geometry_refs_from_gdstk_region(
         geometry_ref_from_gdstk_polygon(parent_geometry_ref, polygon)
         for polygon in filter_gdstk_polygons(region)
     )
-
-
-_ring_edges = ring_edges
-_polygon_area = polygon_area

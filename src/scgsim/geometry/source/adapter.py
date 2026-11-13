@@ -1,4 +1,4 @@
-"""Load public GDS/component inputs and run the ordered source-normalization pipeline."""
+"""Load a GDS file with its stack JSON and run the ordered source-normalization pipeline."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, cast
 
 from scgsim.diagnostics import diagnostic_stage, progress
@@ -48,11 +47,8 @@ from scgsim.geometry.source.occurrence import (
 )
 from scgsim.geometry.source.occurrence_validation import validate_occurrence_sources
 from scgsim.geometry.source.ports import port_sheet_regions_from_stack_metadata
-from scgsim.geometry.source.stack import build_component_stack
 
 if TYPE_CHECKING:
-    from gdsfactory import Component
-    from gdsfactory.technology import LayerStack
     from gdstk import Cell
 
     from scgsim.geometry.models.grid import GeometryGridContext
@@ -135,50 +131,6 @@ def build_gds_stack_geometry_input(
         )
         effective_metadata = validate_occurrence_sources(source, metadata)
         return _SourceLowering(source, effective_metadata).build()
-
-
-def build_gdsfactory_geometry_input(  # noqa: PLR0913 - preserve the public adapter contract.
-    *,
-    component: Component,
-    layer_stack: LayerStack,
-    materials: Mapping[str, Any] | None = None,
-    metadata: Mapping[str, Any] | None = None,
-    top_cell_name: str | None = None,
-    work_dir: PathInput | None = None,
-    padding_um: float = 100.0,
-    grid_size_um: float | None = None,
-) -> GeometryBuildInput:
-    """Build GeometryBuildInput from GDSFactory layout and technology objects.
-
-    This adapter intentionally lowers GDSFactory/gsim objects into the reviewed
-    Level-0 contract: a GDS file plus stack JSON, then delegates to
-    `build_gds_stack_geometry_input`. The adapter does not invent a second
-    semantic language.
-
-    `layer_stack.layers[*].info` supplies PDK-owned material, fabrication,
-    host-volume, and 3D-integration semantics. `component.info` supplies
-    component-owned conductor identities, nets, and topology selectors.
-    Missing or mixed authority fails before geometry lowering.
-
-    `work_dir` makes the generated GDS and stack JSON reviewable. Without it,
-    temporary files are used only long enough to call the Level-0 adapter.
-    """
-
-    if materials is not None and not isinstance(materials, Mapping):
-        raise TypeError("materials must be a mapping when provided")
-    adapter = _ComponentAdapter(
-        component,
-        layer_stack,
-        materials,
-        metadata,
-        top_cell_name,
-        padding_um,
-        grid_size_um,
-    )
-    if work_dir is None:
-        with TemporaryDirectory() as tmp:
-            return adapter.build_in(Path(tmp))
-    return adapter.build_in(Path(work_dir))
 
 
 def _read_stack_records(
@@ -340,74 +292,6 @@ class _SourceLowering:
         )
 
 
-@dataclass(frozen=True)
-class _ComponentAdapter:
-    component: Component
-    layer_stack: LayerStack
-    materials: Mapping[str, Any] | None
-    metadata: Mapping[str, Any] | None
-    top_cell_name: str | None
-    padding_um: float
-    grid_size_um: float | None
-
-    def build_in(self, work_dir: Path) -> GeometryBuildInput:
-        work_dir.mkdir(parents=True, exist_ok=True)
-        component_name = str(
-            getattr(self.component, "name", "component") or "component"
-        )
-        safe_name = component_name.replace("/", "_").replace(":", "_")
-        gds_path = work_dir / f"{safe_name}.gds"
-        stack_path = work_dir / f"{safe_name}.stack.json"
-        self.write_gds(gds_path)
-        stack_mapping = self.stack_mapping(gds_path)
-        stack_path.write_text(
-            json.dumps(stack_mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        return build_gds_stack_geometry_input(
-            gds_file=gds_path,
-            stack_file=stack_path,
-            top_cell_name=self.top_cell_name or component_name,
-            grid_size_um=self.grid_size_um,
-            metadata={
-                **dict(self.metadata or {}),
-                "adapter": "gdsfactory",
-                "component_name": component_name,
-                "generated_gds_file": str(gds_path),
-                "generated_stack_file": str(stack_path),
-            },
-        )
-
-    def write_gds(self, gds_path: Path) -> None:
-        write_gds = getattr(self.component, "write_gds", None)
-        if write_gds is None:
-            raise TypeError("component must provide write_gds(path)")
-        try:
-            write_gds(gds_path)
-        except TypeError:
-            write_gds(str(gds_path))
-
-    def stack_mapping(self, source_gds: Path) -> dict[str, Any]:
-        # Preserve source material validation after genuine GDS emission, including
-        # the existing None/malformed-input failure path owned by the stack builder.
-        material_records = cast("Mapping[str, Mapping[str, Any]]", self.materials)
-        stack = build_component_stack(
-            component=self.component,
-            layer_stack=self.layer_stack,
-            material_records=material_records,
-            coupon_padding_um=self.padding_um,
-        )
-        stack["metadata"].update(
-            {
-                "schema": "semantic_geometry_stack_v1",
-                "units": "um",
-                "source": str(source_gds),
-                "adapter": "gdsfactory",
-                "material_names": sorted(str(key) for key in (self.materials or {})),
-            }
-        )
-        return stack
-
-
 def _load_stack_mapping(
     stack_file: PathInput,
 ) -> tuple[Mapping[str, Any], Path]:
@@ -467,6 +351,3 @@ def _cell_bounds_um(cell: Cell) -> dict[str, float]:
         "x_max_um": float(x_max),
         "y_max_um": float(y_max),
     }
-
-
-# Palace preparation still imports this source-owned helper at its original path.

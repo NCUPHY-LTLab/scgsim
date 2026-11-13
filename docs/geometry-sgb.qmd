@@ -26,7 +26,7 @@ validator is defined in `scgsim.geometry.source.validation`. Direct defining
 modules and model aliases are listed in the
 [API migration reference](api-migration.qmd#geometry-api).
 
-`build_component_stack()` composes two explicit authorities. PDK
+`GeometryPlan` composes two explicit authorities. PDK
 `LayerStack` records supply materials, process layers, Z/thickness,
 conductor/solution roles, and exact host volumes. Component annotations supply
 local entity identity, ports, functional conductor regions, and topology
@@ -38,12 +38,11 @@ region wins over a vacuum region regardless of `mesh_order` (conductors are
 resolved before solution regions and never compete on priority). Only
 between solution regions of the same kind does `LayerLevel.mesh_order` decide,
 following the gdsfactory convention that the lower value wins.
-`build_component_stack()` converts it once into the internal `priority`
+`GeometryPlan` converts it once into the internal `priority`
 (`priority = -mesh_order`) on both solution-region and conductor records.
 `SemanticEntitySpec.priority`, and `priority` in a saved stack or annotation
 record, always means the higher value wins; `mesh_order` is never used as a
-priority directly. Source stacks recorded before this conversion carry
-the previous priority values, so they keep their recorded identity.
+priority directly.
 
 In the public Xmon composition, the reusable child keeps its local pad,
 coupler, mask, and a ground-arm metal contribution. That arm overlaps the
@@ -180,8 +179,8 @@ bytes and digest, and detached source-occurrence records. It retains no live
 component references. Palace and AEDT consume that exact snapshot through
 `EigenmodeSim.set_plan(snapshot)`.
 
-`GeometryPlan`, `build_gds_stack_geometry_input(...)`, and
-`build_gdsfactory_geometry_input(...)` accept `grid_size_um=None`. With `None`,
+`GeometryPlan` and `build_gds_stack_geometry_input(...)` accept
+`grid_size_um=None`. With `None`,
 the actual emitted `source_dbu_um` supplies the shared layout grid; an explicit
 mismatch raises an error naming `grid_size_um` and `source_dbu_um`. SCGSim
 checks the source DBU and does not mutate shared PDK or global state.
