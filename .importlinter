@@ -9,14 +9,20 @@ modules =
     scgsim.aedt
     scgsim.palace
 
-[importlinter:contract:geometry-source]
-name = Geometry source and models do not depend on planning
-type = forbidden
-source_modules =
-    scgsim.geometry.source
-    scgsim.geometry.models
-forbidden_modules =
+# The folders a layout passes through before SGB, in the order they import: the shared records, the shared
+# grid operations, the source stage, the junction step and the physical interpretation that runs it.
+# AEDT's planning reads them all. A folder reads the folders before it, never one after it; import-linter
+# lists the last folder first.
+[importlinter:contract:geometry-stage-layers]
+name = Geometry stages import only the stages before them (models, grid, source, junctions, interpretation, planning)
+type = layers
+layers =
     scgsim.geometry.planning
+    scgsim.geometry.interpretation
+    scgsim.geometry.junctions
+    scgsim.geometry.source
+    scgsim.geometry.grid
+    scgsim.geometry.models
 
 [importlinter:contract:shared-geometry]
 name = Shared geometry does not depend on a solver backend
@@ -59,17 +65,59 @@ forbidden_modules =
     scgsim.aedt
     scgsim.palace
 
-# The junction partition reads SGB's boundary binding (sgb.exact.boundaries); SGB reads the
-# partition's record from its input, never the partition's code.
-[importlinter:contract:sgb-core-independence]
-name = SGB core does not depend on the replaced geometry paths
+# SGB reads the shared records of geometry.models and no other geometry folder: the stages before it
+# reach it through its input, never through their code.
+[importlinter:contract:sgb-reads-records-only]
+name = SGB reads only the shared geometry records
 type = forbidden
 source_modules =
     scgsim.geometry.sgb
 forbidden_modules =
-    scgsim.geometry.planning
-    scgsim.geometry.interpretation.envelope
+    scgsim.geometry.grid
+    scgsim.geometry.source
     scgsim.geometry.junctions
+    scgsim.geometry.interpretation
+    scgsim.geometry.planning
+    scgsim.geometry.surface_epr
+
+# geometry.surface_epr and the Palace backend call SGB. The folders before it do not read it, with one
+# stated exception: the junction partition binds rings with SGB's own exact vocabulary (sgb.exact), so its
+# cut and SGB's arcs are decided by one implementation.
+[importlinter:contract:stages-do-not-read-sgb]
+name = The stages before SGB do not read it (the junction partition reads sgb.exact only)
+type = forbidden
+source_modules =
+    scgsim.geometry.models
+    scgsim.geometry.grid
+    scgsim.geometry.source
+    scgsim.geometry.junctions
+    scgsim.geometry.interpretation
+    scgsim.geometry.planning
+forbidden_modules =
+    scgsim.geometry.sgb
+    scgsim.geometry.surface_epr
+ignore_imports =
+    scgsim.geometry.junctions.selection -> scgsim.geometry.sgb.exact.*
+
+# SGB's folders in the order they import: a folder reads the folders before it, never one after it;
+# import-linter lists the last first. This is the order of dependency. The order in time is the step list
+# of sgb.model, where the arrangement runs twice: on the physical prisms alone, for the bands to find
+# their support faces, then with the cut families the bands produce.
+[importlinter:contract:sgb-stage-layers]
+name = SGB stages import only the stages before them (errors, exact, prisms, arrangement, bands, topology, checks, model, output, section, build)
+type = layers
+layers =
+    scgsim.geometry.sgb.build
+    scgsim.geometry.sgb.section
+    scgsim.geometry.sgb.output
+    scgsim.geometry.sgb.model
+    scgsim.geometry.sgb.checks
+    scgsim.geometry.sgb.topology
+    scgsim.geometry.sgb.bands
+    scgsim.geometry.sgb.arrangement
+    scgsim.geometry.sgb.prisms
+    scgsim.geometry.sgb.exact
+    scgsim.geometry.sgb.errors
 
 [importlinter:contract:sgb-emission-layers]
 name = SGB emission layers point one way (entry, exchange, verification, sidecar, writer)
@@ -123,3 +171,30 @@ layers =
     scgsim.palace.config
     scgsim.palace.mesh
     scgsim.palace.source
+
+# A notebook displays what scgsim.visualization loads; no other package reads it.
+[importlinter:contract:nothing-reads-visualization]
+name = No other package reads visualization
+type = forbidden
+source_modules =
+    scgsim.geometry
+    scgsim.meshing
+    scgsim.palace
+    scgsim.aedt
+    scgsim.presentation
+    scgsim.preparation
+    scgsim.diagnostics
+    scgsim.documentation
+forbidden_modules =
+    scgsim.visualization
+
+# AEDT records the sources its run can import, and that record includes the visualization loaders. They
+# read a Palace run folder through scgsim.contracts alone, so a Palace change never alters AEDT provenance.
+[importlinter:contract:visualization-reads-no-palace-code]
+name = Visualization reads a Palace run folder through the contracts, never Palace or meshing code
+type = forbidden
+source_modules =
+    scgsim.visualization
+forbidden_modules =
+    scgsim.palace
+    scgsim.meshing
