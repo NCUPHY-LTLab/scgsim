@@ -5,9 +5,10 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, NamedTuple
 
+from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.normalization import (
     coupon_domain_bounds,
@@ -601,3 +602,33 @@ def _source_port(
         "selector_point_um": transform_source_point(transform, port.center),
         "source_occurrence_path": path,
     }
+
+
+def polygons_with_owners(build_input: GeometryBuildInput) -> tuple[Any, ...]:
+    """Each polygon an Entity owns, with that Entity and its occurrence path in its metadata."""
+    polygon_owners = {
+        polygon_id: entity
+        for entity in build_input.entities
+        for polygon_id in entity.polygon_ids
+    }
+    return tuple(
+        replace(
+            polygon,
+            metadata={
+                **polygon.metadata,
+                **(
+                    {
+                        "source_entity_id": polygon_owners[
+                            polygon.polygon_id
+                        ].semantic_id,
+                        "source_occurrence_path": polygon_owners[
+                            polygon.polygon_id
+                        ].metadata["source_occurrence_path"],
+                    }
+                    if polygon.polygon_id in polygon_owners
+                    else {}
+                ),
+            },
+        )
+        for polygon in build_input.polygons
+    )

@@ -13,6 +13,7 @@ from scgsim.geometry.grid.grid_regions import canonical_grid_point
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.source import occurrence as occurrence
+from scgsim.geometry.source import stack_layers
 from scgsim.geometry.source.recipes import audited_declared_source
 
 
@@ -129,7 +130,7 @@ def test_selector_outputs_are_detached_and_cached_polygons_unchanged(
 ):
     """Return detached selector records without mutating cached native polygons."""
     parent, _, _ = cells
-    entity = occurrence.entity_from_layer_record(
+    entity = stack_layers.entity_from_layer_record(
         {
             "semantic_id": "metal",
             "role": "conductor",
@@ -214,7 +215,7 @@ def test_one_extraction_realizes_on_each_bound_grid(extractions):
     local.add(gdstk.rectangle((0, 0), (1, 0.5), layer=1))
     rotated = gdstk.Cell("ROTATED")
     rotated.add(gdstk.Reference(local, rotation=math.radians(30)))
-    entity = occurrence.entity_from_layer_record(
+    entity = stack_layers.entity_from_layer_record(
         {
             "semantic_id": "metal",
             "role": "conductor",

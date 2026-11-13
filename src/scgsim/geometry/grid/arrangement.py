@@ -1,4 +1,11 @@
-"""Build the labelled network of polygon operands on the model grid, or their exact overlay without one."""
+"""Build the labelled network of polygon operands on the model grid, or their exact overlay without one.
+
+This is a planar arrangement, the same concept as ``geometry.sgb.arrangement``, built by a
+different engine for a different stage: here GEOS nodes drawn polygons on the model grid,
+for the source stage's projection and every grid Boolean; SGB's arrangement nodes the
+prisms' curves, arcs included, in exact integer arithmetic for the build. A reader of the
+source stage or of a Boolean wants this one; a reader of the solid model wants SGB's.
+"""
 
 from __future__ import annotations
 

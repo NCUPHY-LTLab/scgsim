@@ -138,12 +138,12 @@ def test_contacts_and_zero_area_source_origins_are_not_deleted():
     _, result = construct(polygons, 1)
     assert all(owners == ("0",) for _, owners in result.cells)
     assert any(
-        shape.geom_type == "LineString" and owners == ("1",)
-        for shape, owners in result.auxiliary
+        residue.geometry.geom_type == "LineString" and residue.operand_ids == ("1",)
+        for residue in result.auxiliary
     )
     assert any(
-        shape.geom_type == "Point" and "2" in owners
-        for shape, owners in result.auxiliary
+        residue.geometry.geom_type == "Point" and "2" in residue.operand_ids
+        for residue in result.auxiliary
     )
     point_paths = [path for path in result.source_paths if path.operand_index == 2]
     assert len(point_paths) == 4
@@ -209,8 +209,8 @@ def test_parallel_source_paths_preserve_exact_graph_and_real_worker_execution():
     assert [(p.wkb, owners) for p, owners in parallel.cells] == [
         (p.wkb, owners) for p, owners in serial.cells
     ]
-    assert [(p.wkb, owners) for p, owners in parallel.auxiliary] == [
-        (p.wkb, owners) for p, owners in serial.auxiliary
+    assert [(r.geometry.wkb, r.operand_ids) for r in parallel.auxiliary] == [
+        (r.geometry.wkb, r.operand_ids) for r in serial.auxiliary
     ]
     assert graph == build_grid_arrangement(values, GeometryGridContext(0.1))
 

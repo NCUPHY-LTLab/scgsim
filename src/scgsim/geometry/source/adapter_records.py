@@ -11,13 +11,13 @@ from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.ground import PlaneBounds, derived_ground_polygons
-from scgsim.geometry.source.occurrence import (
+from scgsim.geometry.source.occurrence import gds_polygons_for_entity
+from scgsim.geometry.source.recipes import Audited, audited_declared_source
+from scgsim.geometry.source.stack_layers import (
     entity_from_layer_record,
-    gds_polygons_for_entity,
     is_record_sequence,
     resolve_material_kind,
 )
-from scgsim.geometry.source.recipes import Audited, audited_declared_source
 
 if TYPE_CHECKING:
     from gdstk import Cell, Polygon

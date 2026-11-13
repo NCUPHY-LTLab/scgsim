@@ -43,14 +43,17 @@ from scgsim.geometry.source.curves import (
     with_drawn_rings,
 )
 from scgsim.geometry.source.junctions import with_rectangular_junctions
+from scgsim.geometry.source.lumped_supports import (
+    check_lumped_terminals,
+    lumped_support_plane,
+    occurrence_lumped_polygon,
+)
 from scgsim.geometry.source.normalization import (
     finite_number,
 )
 from scgsim.geometry.source.occurrence import (
-    entity_from_layer_record,
     occurrence_ground_polygons_for_entity,
     occurrence_include_polygon,
-    occurrence_lumped_polygon,
     occurrence_polygons_for_entity,
     occurrence_port_polygon,
     read_polygons_by_layer,
@@ -64,8 +67,15 @@ from scgsim.geometry.source.plan_assembly import (
     component_semantics,
     composed_transform,
     occurrence_transform,
+    polygons_with_owners,
     source_path,
     transform_source_point,
+)
+from scgsim.geometry.source.plan_bindings import (
+    check_bindings_still_hold,
+    plan_call,
+    validated_nets,
+    validated_priorities,
 )
 from scgsim.geometry.source.recipes import (
     SourceGridAudit,
@@ -75,13 +85,8 @@ from scgsim.geometry.source.recipes import (
     source_recipe_job,
     source_recipe_map,
 )
+from scgsim.geometry.source.stack_layers import entity_from_layer_record
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
-
-
-def _call(method: str, name: str) -> Declared:
-    """An argument of a GeometryPlan method, which its caller changes."""
-    call = "GeometryPlan(...)" if method == "__init__" else f"GeometryPlan.{method}"
-    return Declared(name, f"the call to {call}")
 
 
 @dataclass(frozen=True)
@@ -168,14 +173,14 @@ class GeometryPlan:
     ) -> None:
         if not callable(getattr(component, "write_gds", None)):
             raise TypeError(
-                _call("__init__", "GeometryPlan").expected(
+                plan_call("__init__", "GeometryPlan").expected(
                     "component", "an assembled GDSFactory Component", component
                 )
             )
-        self.root_id = source_path(root_id, _call("__init__", "root_id"), "root_id")
+        self.root_id = source_path(root_id, plan_call("__init__", "root_id"), "root_id")
         if "/" in self.root_id:
             raise ValueError(
-                _call("__init__", "GeometryPlan").expected(
+                plan_call("__init__", "GeometryPlan").expected(
                     "root_id", "one path segment", self.root_id
                 )
             )
@@ -185,12 +190,12 @@ class GeometryPlan:
         self._material_records = material_records
         self._coupon_padding_um = finite_number(
             coupon_padding_um,
-            _call("__init__", "coupon_padding_um"),
+            plan_call("__init__", "coupon_padding_um"),
             "coupon_padding_um",
         )
         if self._coupon_padding_um < 0:
             raise ValueError(
-                _call("__init__", "GeometryPlan").expected(
+                plan_call("__init__", "GeometryPlan").expected(
                     "coupon_padding_um", "nonnegative", self._coupon_padding_um
                 )
             )
@@ -210,17 +215,17 @@ class GeometryPlan:
         requests = tuple(specs)
         if any(not isinstance(item, RectangularJunctionSpec) for item in requests):
             raise TypeError(
-                _call("set_rectangular_junctions", "rectangular junctions").expected(
-                    "every request", "a RectangularJunctionSpec", requests
-                )
+                plan_call(
+                    "set_rectangular_junctions", "rectangular junctions"
+                ).expected("every request", "a RectangularJunctionSpec", requests)
             )
         for field in ("junction_id", "port_sheet_id"):
             identities = [getattr(item, field) for item in requests]
             if len(set(identities)) != len(identities):
                 raise ValueError(
-                    _call("set_rectangular_junctions", "rectangular junctions").refusal(
-                        f"duplicate rectangular junction {field}"
-                    )
+                    plan_call(
+                        "set_rectangular_junctions", "rectangular junctions"
+                    ).refusal(f"duplicate rectangular junction {field}")
                 )
         self._rectangular_junctions = requests
 
@@ -229,13 +234,13 @@ class GeometryPlan:
         records = tuple(supports)
         if any(not isinstance(record, LumpedSupport) for record in records):
             raise TypeError(
-                _call("set_lumped_supports", "lumped supports").expected(
+                plan_call("set_lumped_supports", "lumped supports").expected(
                     "every support", "a LumpedSupport record", records
                 )
             )
         if len({record.support_id for record in records}) != len(records):
             raise ValueError(
-                _call("set_lumped_supports", "lumped supports").refusal(
+                plan_call("set_lumped_supports", "lumped supports").refusal(
                     "lumped support IDs must be unique"
                 )
             )
@@ -262,7 +267,7 @@ class GeometryPlan:
 
     def register_instance(self, path: str, reference: Any) -> None:
         """Register one authored child occurrence and its composed transform."""
-        path = source_path(path, _call("register_instance", "path"), "path")
+        path = source_path(path, plan_call("register_instance", "path"), "path")
         parent_path, _, _ = path.rpartition("/")
         if (
             not parent_path
@@ -270,14 +275,14 @@ class GeometryPlan:
             or path in self._instances
         ):
             raise ValueError(
-                _call("register_instance", f"instance path {path!r}").refusal(
+                plan_call("register_instance", f"instance path {path!r}").refusal(
                     "it needs a registered parent and must be unique"
                 )
             )
         parent_component, _, parent_transform = self._instances[parent_path]
         if getattr(reference, "parent_cell", None) != parent_component:
             raise ValueError(
-                _call("register_instance", f"reference for {path!r}").refusal(
+                plan_call("register_instance", f"reference for {path!r}").refusal(
                     "reference is not an occurrence in its declared parent"
                 )
             )
@@ -288,7 +293,7 @@ class GeometryPlan:
         ]
         if len(matches) != 1:
             raise ValueError(
-                _call("register_instance", f"reference for {path!r}").refusal(
+                plan_call("register_instance", f"reference for {path!r}").refusal(
                     "reference must resolve to exactly one parent occurrence"
                 )
             )
@@ -300,7 +305,7 @@ class GeometryPlan:
             if (other_parent := key.rpartition("/")[0])
         ):
             raise ValueError(
-                _call("register_instance", f"reference for {path!r}").refusal(
+                plan_call("register_instance", f"reference for {path!r}").refusal(
                     "the same source occurrence is already registered"
                 )
             )
@@ -324,47 +329,13 @@ class GeometryPlan:
         """Replace final Net membership after validating all Entity references."""
         if not isinstance(nets, Mapping):
             raise TypeError(
-                _call("set_nets", "GeometryPlan.set_nets").expected(
+                plan_call("set_nets", "GeometryPlan.set_nets").expected(
                     "nets", "a mapping of final Net IDs to qualified Entity IDs", nets
                 )
             )
-        available = {entity.semantic_id for entity in self.entities}
-        owners: dict[str, str] = {}
-        prepared: dict[str, tuple[str, ...]] = {}
-        for net, members in nets.items():
-            if not isinstance(net, str) or not net:
-                raise ValueError(
-                    _call("set_nets", "nets").expected("Net ID", "nonempty text", net)
-                )
-            if isinstance(members, (str, bytes)) or not isinstance(members, Sequence):
-                raise TypeError(
-                    _call("set_nets", f"Net {net!r}").expected(
-                        "members", "a sequence of Entity IDs", members
-                    )
-                )
-            unique = tuple(dict.fromkeys(members))
-            if not unique:
-                raise ValueError(
-                    _call("set_nets", f"Net {net!r}").refusal(
-                        "it needs at least one Entity ID"
-                    )
-                )
-            for entity_id in unique:
-                if not isinstance(entity_id, str) or entity_id not in available:
-                    raise ValueError(
-                        _call("set_nets", f"Net {net!r}").refusal(
-                            f"it has unknown Entity ID {entity_id!r}"
-                        )
-                    )
-                prior = owners.setdefault(entity_id, net)
-                if prior != net:
-                    raise ValueError(
-                        _call("set_nets", f"Entity {entity_id!r}").refusal(
-                            "it belongs to two Nets"
-                        )
-                    )
-            prepared[net] = unique
-        self._nets = prepared
+        self._nets = validated_nets(
+            nets, {entity.semantic_id for entity in self.entities}
+        )
 
     def set_entity_priorities(self, priorities: Mapping[str, int]) -> None:
         """Replace the assembly-level overlap priority of Entities after validating every reference.
@@ -381,7 +352,7 @@ class GeometryPlan:
         """
         if not isinstance(priorities, Mapping):
             raise TypeError(
-                _call(
+                plan_call(
                     "set_entity_priorities", "GeometryPlan.set_entity_priorities"
                 ).expected(
                     "priorities",
@@ -389,23 +360,11 @@ class GeometryPlan:
                     priorities,
                 )
             )
-        available = {entity.semantic_id for entity in self.entities}
-        prepared: dict[str, int] = {}
-        for entity_id, value in priorities.items():
-            if not isinstance(entity_id, str) or entity_id not in available:
-                raise ValueError(
-                    _call("set_entity_priorities", "priorities").refusal(
-                        f"priority has unknown Entity ID {entity_id!r}"
-                    )
-                )
-            if isinstance(value, bool) or not isinstance(value, int):
-                raise TypeError(
-                    _call(
-                        "set_entity_priorities", f"priority of Entity {entity_id!r}"
-                    ).expected("priority", "an integer", value)
-                )
-            prepared[entity_id] = value
-        self._entity_priorities = MappingProxyType(prepared)
+        self._entity_priorities = MappingProxyType(
+            validated_priorities(
+                priorities, {entity.semantic_id for entity in self.entities}
+            )
+        )
 
     def _validate_registered_sources(self) -> None:
         """Reject authored descendants that would disappear during GDS flattening."""
@@ -502,23 +461,11 @@ class GeometryPlan:
 
     def _validated_stack(self) -> dict[str, Any]:
         stack = self._stack()
-        available = {record["semantic_id"] for record in stack["layers"]}
-        for net, members in self._nets.items():
-            if not members or any(member not in available for member in members):
-                raise ValueError(
-                    _call("set_nets", f"Net {net!r}").refusal(
-                        "it changed after set_nets; call set_nets again"
-                    )
-                )
-        for entity_id in self._entity_priorities:
-            if entity_id not in available:
-                raise ValueError(
-                    _call(
-                        "set_entity_priorities", f"priority of Entity {entity_id!r}"
-                    ).refusal(
-                        "it changed after set_entity_priorities; call set_entity_priorities again"
-                    )
-                )
+        check_bindings_still_hold(
+            self._nets,
+            self._entity_priorities,
+            {record["semantic_id"] for record in stack["layers"]},
+        )
         if self._vacuum_region is not None:
             stack = dict(apply_vacuum_region_to_stack(stack, self._vacuum_region))
         return stack
@@ -735,7 +682,7 @@ class GeometryPlan:
         entities = {entity.semantic_id: entity for entity in build_input.entities}
         for support in self._lumped_supports:
             path = support.source_occurrence_path
-            owner = _call(
+            owner = plan_call(
                 "set_lumped_supports", f"lumped support {support.support_id!r}"
             )
             if path not in self._instances:
@@ -743,8 +690,8 @@ class GeometryPlan:
                     owner.refusal(f"its occurrence {path!r} is not registered")
                 )
             cell, _, transform = self._instances[path]
-            source_z_um = self._lumped_support_plane(support, owner)
-            _check_lumped_terminals(support, entities, owner)
+            source_z_um = lumped_support_plane(support, self._layer_stack, owner)
+            check_lumped_terminals(support, entities, owner)
             polygon = occurrence_lumped_polygon(
                 scope,
                 support,
@@ -763,40 +710,6 @@ class GeometryPlan:
             )
         return lumped_supports
 
-    def _lumped_support_plane(self, support: LumpedSupport, owner: Declared) -> float:
-        """The Z of the support's level, which its layer, its declared plane and its contacts must match."""
-        if support.source_level not in self._layer_stack.layers:
-            raise ValueError(
-                owner.refusal(
-                    f"its level {support.source_level!r} is not declared in the layer stack"
-                )
-            )
-        level = self._layer_stack.layers[support.source_level]
-        from gdsfactory.pdk import get_layer_tuple  # noqa: PLC0415 - needed only for authored lumped supports
-
-        if get_layer_tuple(level.layer.layer) != support.source_layer:
-            raise ValueError(
-                owner.refusal(
-                    "its source level/layer binding differs from the layer stack"
-                )
-            )
-        source_z_um = float(level.zmin)
-        if support.source_z_um is not None and support.source_z_um != source_z_um:
-            raise ValueError(
-                owner.expected(
-                    "source_z_um",
-                    f"its level's plane {source_z_um}",
-                    support.source_z_um,
-                )
-            )
-        if any(point[2] != source_z_um for point in support.contact_points_um):
-            raise ValueError(
-                owner.refusal(
-                    f"its contacts differ from its level's plane z = {source_z_um} um"
-                )
-            )
-        return source_z_um
-
     def _assemble_snapshot(
         self,
         build_input: GeometryBuildInput,
@@ -809,7 +722,7 @@ class GeometryPlan:
         metadata = dict(build_input.metadata)
         metadata["gds_sha256"] = source.gds_sha256
         metadata["geometry_plan_root_id"] = self.root_id
-        polygons = _polygons_with_owners(build_input)
+        polygons = polygons_with_owners(build_input)
         boundary_curves, reconstruction = self._placed_boundaries(build_input)
         build_input = replace(
             build_input,
@@ -876,57 +789,3 @@ class GeometryPlan:
                 for value in semantics.get("boundary_reconstruction", ())
             )
         return tuple(boundary_curves), tuple(reconstruction)
-
-
-def _check_lumped_terminals(
-    support: LumpedSupport, entities: Mapping[str, Any], owner: Declared
-) -> None:
-    """Refuse a lumped support whose terminal Entities are not conductors with a final Net."""
-    for entity_id in (
-        *support.terminal_a_entity_ids,
-        *support.terminal_b_entity_ids,
-    ):
-        if (
-            entity_id not in entities
-            or entities[entity_id].material_kind != "conductor"
-        ):
-            raise ValueError(
-                owner.refusal(f"its terminal Entity {entity_id!r} is not a conductor")
-            )
-        if entities[entity_id].net_id is None:
-            raise ValueError(
-                owner.refusal(
-                    f"its terminal Entity {entity_id!r} lacks final Net ownership; "
-                    "give it a Net with set_nets"
-                )
-            )
-
-
-def _polygons_with_owners(build_input: GeometryBuildInput) -> tuple[Any, ...]:
-    """Each polygon an Entity owns, with that Entity and its occurrence path in its metadata."""
-    polygon_owners = {
-        polygon_id: entity
-        for entity in build_input.entities
-        for polygon_id in entity.polygon_ids
-    }
-    return tuple(
-        replace(
-            polygon,
-            metadata={
-                **polygon.metadata,
-                **(
-                    {
-                        "source_entity_id": polygon_owners[
-                            polygon.polygon_id
-                        ].semantic_id,
-                        "source_occurrence_path": polygon_owners[
-                            polygon.polygon_id
-                        ].metadata["source_occurrence_path"],
-                    }
-                    if polygon.polygon_id in polygon_owners
-                    else {}
-                ),
-            },
-        )
-        for polygon in build_input.polygons
-    )
