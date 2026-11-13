@@ -9,10 +9,11 @@ import gdstk
 import pytest
 
 from scgsim.geometry import build_gds_stack_geometry_input
-from scgsim.geometry.grid.grid import geometry_grid_scope
 from scgsim.geometry.grid.grid_regions import canonical_grid_point
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.source import occurrence as occurrence
+from scgsim.geometry.source.recipes import audited_declared_source
 
 
 @pytest.fixture
@@ -140,20 +141,24 @@ def test_selector_outputs_are_detached_and_cached_polygons_unchanged(
         },
         materials={"PEC": {"kind": "conductor"}},
     )
-    with (
-        geometry_grid_scope(GeometryGridContext(0.001)),
-        occurrence._occurrence_extraction_scope(),  # noqa: SLF001 - exercise call-local cache scope
-    ):
+    scope = GridScope(GeometryGridContext(0.001))
+    with occurrence._occurrence_extraction_scope():  # noqa: SLF001 - exercise call-local cache scope
         polygons = occurrence.read_polygons_by_layer(parent)
         before = {
             key: [p.points.tolist() for p in values] for key, values in polygons.items()
         }
         first = occurrence.occurrence_polygons_for_entity(
-            entity, cell=parent, transform=(1, 0, 0, 1, 0, 0)
-        )
+            scope,
+            entity,
+            transform=(1, 0, 0, 1, 0, 0),
+            polygons_by_layer=occurrence.read_polygons_by_layer(parent),
+        ).value
         second = occurrence.occurrence_polygons_for_entity(
-            entity, cell=parent, transform=(1, 0, 0, 1, 0, 0)
-        )
+            scope,
+            entity,
+            transform=(1, 0, 0, 1, 0, 0),
+            polygons_by_layer=occurrence.read_polygons_by_layer(parent),
+        ).value
         assert first == second
         assert json.loads(json.dumps(first))
         first[0]["exterior"][0][0] = 99
@@ -224,11 +229,12 @@ def test_one_extraction_realizes_on_each_bound_grid(extractions):
     realized = {}
     with occurrence._occurrence_extraction_scope():  # noqa: SLF001 - exercise call-local cache scope
         for step in (0.001, 0.01):
-            with geometry_grid_scope(GeometryGridContext(step)):
-                (polygon,) = occurrence.gds_polygons_for_entity(
-                    entity,
-                    polygons_by_layer=occurrence.read_polygons_by_layer(rotated),
-                )
+            (polygon,) = audited_declared_source(
+                occurrence.gds_polygons_for_entity,
+                GridScope(GeometryGridContext(step)),
+                entity,
+                polygons_by_layer=occurrence.read_polygons_by_layer(rotated),
+            ).value
             realized[step] = polygon.exterior
     assert len(extractions) == 1
     for step, ring in realized.items():

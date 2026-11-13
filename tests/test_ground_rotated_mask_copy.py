@@ -15,9 +15,10 @@ import pytest
 from geometry_grid_fixtures import GRID
 
 from scgsim.geometry import SemanticEntitySpec
-from scgsim.geometry.grid.grid import geometry_grid_scope
-from scgsim.geometry.source.ground import derived_ground_polygons
+from scgsim.geometry.grid.scope import GridScope
+from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
+from scgsim.geometry.source.recipes import audited_declared_source
 
 gdstk = pytest.importorskip("gdstk")
 
@@ -66,15 +67,14 @@ def derived_ground(die):
             "gds_datatype": MASK_LAYER[1],
         },
     )
-    with geometry_grid_scope(GRID):
-        polygons = read_polygons_by_layer(die)
-        return derived_ground_polygons(
-            entity,
-            polygons_by_layer=polygons,
-            cell_bounds_um={},
-            domain_bounds_by_semantic_id={},
-            plane_polygons=(gdstk.Polygon(PLANE),),
-        )
+    polygons = read_polygons_by_layer(die)
+    return audited_declared_source(
+        derived_ground_polygons,
+        GridScope(GRID),
+        entity,
+        polygons_by_layer=polygons,
+        plane=DrawnPlane((gdstk.Polygon(PLANE),)),
+    ).value
 
 
 def edges(ring):
@@ -84,8 +84,7 @@ def edges(ring):
 
 def test_reading_the_cell_keeps_the_rotated_instance_as_authored():
     """Flattening keeps the floating-point rotation; only the ground's realization rounds it."""
-    with geometry_grid_scope(GRID):
-        polygons = read_polygons_by_layer(layout(with_instance=True))[MASK_LAYER]
+    polygons = read_polygons_by_layer(layout(with_instance=True))[MASK_LAYER]
     rings = sorted(sorted(map(tuple, polygon.points.tolist())) for polygon in polygons)
     assert sorted(direct_mask()) in rings
     (instance,) = [ring for ring in rings if ring != sorted(direct_mask())]

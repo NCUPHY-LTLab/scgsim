@@ -5,19 +5,14 @@ from threading import Barrier, Lock
 
 import pytest
 
-from scgsim.geometry.grid.grid import (
-    SOURCE_AUDITS,
-    GridOperand,
-    geometry_grid_scope,
-    source_grid_audits,
-    source_recipe_map,
-)
 from scgsim.geometry.grid.grid_cache import (
     cached_subdivision,
     grid_work_cache_scope,
     with_grid_work_cache,
 )
+from scgsim.geometry.grid.grid_regions import GridOperand
 from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.source.recipes import Audited, source_recipe_map
 from scgsim.preparation import preparation_resources
 
 BASE = GridOperand("A", ((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)))
@@ -138,23 +133,17 @@ def test_concurrent_misses_and_per_call_audits_remain_independent():
     def recipe(index):
         value = cached_subdivision((BASE,), CONTEXT, apply_grid=True, build=build)
         # Audit ownership is outside the cached pure builder, once per invocation.
-        SOURCE_AUDITS.get().append({"recipe": index})
-        return value
+        return Audited(value, ({"recipe": index},))
 
     with (
         preparation_resources(max_workers=2),
-        geometry_grid_scope(CONTEXT),
         grid_work_cache_scope(),
     ):
-        assert source_recipe_map(recipe, (0, 1)) == [
-            (("immutable",),),
-            (("immutable",),),
-        ]
+        first = source_recipe_map(recipe, (0, 1))
+        assert first.value == [(("immutable",),), (("immutable",),)]
         assert len(calls) == 2
-        assert source_grid_audits() == ({"recipe": 0}, {"recipe": 1})
-        assert source_recipe_map(recipe, (2, 3)) == [
-            (("immutable",),),
-            (("immutable",),),
-        ]
+        assert first.audits == ({"recipe": 0}, {"recipe": 1})
+        second = source_recipe_map(recipe, (2, 3))
+        assert second.value == [(("immutable",),), (("immutable",),)]
         assert len(calls) == 2
-        assert source_grid_audits() == tuple({"recipe": i} for i in range(4))
+        assert second.audits == ({"recipe": 2}, {"recipe": 3})

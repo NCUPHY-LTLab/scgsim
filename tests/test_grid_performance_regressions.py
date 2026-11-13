@@ -7,10 +7,10 @@ import shapely
 from shapely import Polygon, coverage_union_all, union_all
 
 from scgsim.geometry.grid import (
-    grid,
     grid_overlay,
     grid_regions,
 )
+from scgsim.geometry.grid.arrangement import build_grid_arrangement
 from scgsim.geometry.models.grid import GeometryGridContext
 
 
@@ -33,7 +33,7 @@ CASES = [
 def test_existing_incremental_index_matches_exhaustive_candidates(monkeypatch, rings):
     """Keep the indexed subdivision exactly equal to exhaustive native overlays."""
     values = tuple(
-        grid.GridOperand(str(i), ring, physical=False, contact=False)
+        grid_regions.GridOperand(str(i), ring, physical=False, contact=False)
         for i, ring in enumerate(rings)
     )
     shapes = {v.operand_id: Polygon(v.exterior) for v in values}
@@ -61,7 +61,7 @@ def test_existing_incremental_index_matches_exhaustive_candidates(monkeypatch, r
 def test_separated_incremental_inputs_do_no_pair_boolean_work(monkeypatch):
     """Avoid pair overlays for separated inputs without dropping area cells."""
     values = tuple(
-        grid.GridOperand(
+        grid_regions.GridOperand(
             str(i), box(10 * i, 0, 10 * i + 1, 1), physical=False, contact=False
         )
         for i in range(12)
@@ -111,11 +111,11 @@ def test_shared_vertex_conversion_once_and_exact_diagonal_incidence(monkeypatch)
 @pytest.mark.parametrize("apply_grid", (False, True))
 def test_arrangement_region_reuse_preserves_holed_memberships(monkeypatch, apply_grid):
     """Reuse each immutable region result without changing holed memberships."""
-    outer = grid.GridOperand(
+    outer = grid_regions.GridOperand(
         "outer", box(0, 0, 6, 6), holes=(box(2, 2, 4, 4),), contact=False
     )
-    cross = grid.GridOperand("cross", box(3, 0, 5, 6), physical=False, contact=False)
-    arrangement = grid.build_grid_arrangement(
+    cross = grid_regions.GridOperand("cross", box(3, 0, 5, 6), physical=False, contact=False)
+    arrangement = build_grid_arrangement(
         (outer, cross), GeometryGridContext(0.1), apply_grid=apply_grid
     )
     selected_ids = tuple(
@@ -151,12 +151,12 @@ def test_arrangement_region_reuse_preserves_holed_memberships(monkeypatch, apply
 def test_strict_contact_and_identity_failures_remain():
     """Retain original failures for changed physical contact or repeated identities."""
     values = (
-        grid.GridOperand("A", box(0, 0, 0.96, 1)),
-        grid.GridOperand("B", box(1.04, 0, 2, 1)),
+        grid_regions.GridOperand("A", box(0, 0, 0.96, 1)),
+        grid_regions.GridOperand("B", box(1.04, 0, 2, 1)),
     )
     with pytest.raises(ValueError, match="physical contact changed"):
-        grid.build_grid_arrangement(values, GeometryGridContext(0.1))
+        build_grid_arrangement(values, GeometryGridContext(0.1))
     with pytest.raises(ValueError, match="identities are duplicated"):
-        grid.build_grid_arrangement(
+        build_grid_arrangement(
             (values[0], replace(values[1], operand_id="A")), GeometryGridContext(0.1)
         )

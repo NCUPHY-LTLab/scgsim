@@ -36,7 +36,7 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
 )
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.source.grid import apply_geometry_grid
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
 from scgsim.palace import EigenmodeSim
 
 # The pad as its GDS cell stores it: KLayout walks it clockwise from its lower-left corner,

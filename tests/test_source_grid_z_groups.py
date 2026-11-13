@@ -16,7 +16,7 @@ from geometry_grid_fixtures import GRID
 from test_simulation_drc import MATERIALS, level
 
 from scgsim.geometry import GeometryBuildInput, LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.source.grid import apply_geometry_grid
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
 from scgsim.palace import EigenmodeSim
 
 RADIUS_UM = 35.0
