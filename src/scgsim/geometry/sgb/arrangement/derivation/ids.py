@@ -8,6 +8,7 @@ slab edges are renumbered.
 
 from __future__ import annotations
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.exact import identity
@@ -52,7 +53,9 @@ def _sources(
         return tag_sources[carrier.id]
     if carrier.role is not CarrierRole.CURVE:
         raise SgbError(
-            f"internal: the {carrier.role.value} carrier {carrier.id!r} names the sources of a kept edge"
+            internal(
+                f"the {carrier.role.value} carrier {carrier.id!r} names the sources of a kept edge"
+            )
         )
     return (carrier.id,)
 

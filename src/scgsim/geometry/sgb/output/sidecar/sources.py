@@ -28,6 +28,7 @@ from scgsim.contracts.sgb_sidecar.records import (
     SurfaceEprType,
     TypeSupport,
 )
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.bands.inset_plan import TypeExpansion
 from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
@@ -196,7 +197,7 @@ def concrete_support(
             second_entity=support.second_entity_id,
             z_um=support.z_um,
         )
-    raise SgbError(f"internal: {support!r} names every face of a type, not one face")
+    raise SgbError(internal(f"{support!r} names every face of a type, not one face"))
 
 
 def port_records(model: ConformalModel, plan: BrepPlan) -> dict[str, Port]:

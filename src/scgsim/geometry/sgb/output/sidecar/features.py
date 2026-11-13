@@ -36,6 +36,7 @@ from fractions import Fraction
 from typing import Any, cast
 
 from scgsim.contracts.sgb_sidecar.records import MeshFeature, Port
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.bands.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
@@ -77,7 +78,7 @@ def mesh_features(
     for kind, source, edges, facts in stated:
         feature_id = _feature_id(kind, source, facts)
         if feature_id in out:
-            raise SgbError(f"internal: two {kind} features of {source!r} state {facts}")
+            raise SgbError(internal(f"two {kind} features of {source!r} state {facts}"))
         out[feature_id] = _feature(kind, source, edges, facts, tag_of)
     return dict(sorted(out.items()))
 
@@ -200,7 +201,7 @@ def _band_facts(requests: dict[str, InsetRequest], family: str) -> dict[str, Any
     """The margins of an inset request, ascending, and the narrowest band they leave (the first one starts at 0)."""
     if family not in requests:
         raise SgbError(
-            f"internal: band family {family!r} has no inset request in the model"
+            internal(f"band family {family!r} has no inset request in the model")
         )
     margins = sorted(requests[family].margins_um)
     widths = [

@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from functools import cmp_to_key
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge
 from scgsim.geometry.sgb.arrangement.noding.spatial_hash import cell_size_for
 from scgsim.geometry.sgb.exact.plane import (
@@ -345,7 +346,7 @@ def interior_point(arr: Arrangement, face_index: int) -> RepPoint:
         if intervals:
             left, right = max(intervals, key=lambda i: i[1] - i[0])
             return fraction_to_rep((left + right) / 2, mid)
-    raise ValueError("internal: face has no interior point (degenerate face)")
+    raise ValueError(internal("face has no interior point (degenerate face)"))
 
 
 # Where, across a cell's width, its sample points lie (fractions of the width from the left).

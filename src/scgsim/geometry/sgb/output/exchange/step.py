@@ -61,6 +61,7 @@ from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
 from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.exchange.guard import (
@@ -223,7 +224,7 @@ def _aedt_name(sidecar: Sidecar, solid: str) -> str:
     name = sidecar["volume"][solid]["aedt_name"]
     if name is None:
         raise StepExportError(
-            f"internal: the sidecar gives the emitted solid {solid} no AEDT name"
+            internal(f"the sidecar gives the emitted solid {solid} no AEDT name")
         )
     return name
 
@@ -353,7 +354,7 @@ def _write_assembly(solids: list[Any], names: list[str], step_path: Path) -> Non
     ]
     if not all(accepted):
         raise StepExportError(
-            f"internal: Interface_Static refused a STEP parameter: {accepted}"
+            internal(f"Interface_Static refused a STEP parameter: {accepted}")
         )
     application = XCAFApp_Application.GetApplication_s()
     document = TDocStd_Document(TCollection_ExtendedString("BinXCAF"))

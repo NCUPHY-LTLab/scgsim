@@ -7,8 +7,9 @@ passes down. A drawn polygon is refused in the same way through ``GridScope.refu
 which adds where in the layout the problem lies.
 
 A message that opens with ``internal:`` names an invariant SCGSim itself broke on an input
-it accepted: nothing in the input is to blame, so it asks for a report. SGB marks its own
-broken invariants with the same word and the same meaning (``scgsim.geometry.sgb.errors``).
+it accepted: nothing in the input is to blame, so it asks for a report. ``internal`` is the
+one definition of that wording; every geometry stage, SGB included, builds such a message
+with it.
 """
 
 from __future__ import annotations

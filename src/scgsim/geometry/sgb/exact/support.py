@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from functools import cached_property
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.exact.carriers import (
     ArcCarrier,
     LineEdge,
@@ -391,7 +392,7 @@ class _OriginGrid:
     def __init__(self, origins: tuple[RingPrimitive, ...]) -> None:
         if not origins:
             raise ValueError(
-                "internal: a support region without distance origins has no distances"
+                internal("a support region without distance origins has no distances")
             )
         self.origins = origins
         boxes = [_bounding_box(prim) for prim in origins]
