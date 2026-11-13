@@ -435,7 +435,7 @@ def eigenmode_count(config: dict[str, Any]) -> int:
     eigenmode = expect_mapping(
         solver.get(EIGENMODE.name), f"config.Solver.{EIGENMODE.name}"
     )
-    count = expect_int(eigenmode.get("N"))
+    count = expect_int(eigenmode.get("N"), "config Solver.Eigenmode.N")
     if count is None or count < 1:
         raise ValueError("config Solver.Eigenmode.N must be positive.")
     return count

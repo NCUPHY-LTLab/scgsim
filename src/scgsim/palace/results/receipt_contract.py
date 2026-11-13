@@ -57,7 +57,14 @@ class ReceiptValidation:
             != RETURNED_RECEIPT_SCHEMA
         ):
             raise ValueError("returned run receipt schema is invalid.")
-        if expect_int(self.receipt_payload.get("schema_version"), optional=False) != 1:
+        if (
+            expect_int(
+                self.receipt_payload.get("schema_version"),
+                "returned receipt schema_version",
+                optional=False,
+            )
+            != 1
+        ):
             raise ValueError("returned run receipt schema_version must be 1.")
 
         status = expect_scalar(self.receipt_payload, "status", str)
@@ -107,12 +114,18 @@ def build_returned_receipt(payload: dict[str, Any]) -> PalaceReturnedReceipt:
     """Detach validated receipt fields while retaining optional execution-stage observations."""
     return PalaceReturnedReceipt(
         schema=expect_scalar(payload, "schema", str),
-        schema_version=expect_int(payload.get("schema_version")),
+        schema_version=expect_int(
+            payload.get("schema_version"), "returned receipt schema_version"
+        ),
         handoff_id=expect_scalar(payload, "handoff_id", str),
         status=expect_scalar(payload, "status", str),
-        exit_code=expect_int(payload.get("exit_code")),
-        solver_exit_code=expect_int(payload.get("solver_exit_code")),
-        tee_exit_code=expect_int(payload.get("tee_exit_code")),
+        exit_code=expect_int(payload.get("exit_code"), "returned receipt exit_code"),
+        solver_exit_code=expect_int(
+            payload.get("solver_exit_code"), "returned receipt solver_exit_code"
+        ),
+        tee_exit_code=expect_int(
+            payload.get("tee_exit_code"), "returned receipt tee_exit_code"
+        ),
         route=expect_scalar(payload, "route", str),
         problem=expect_scalar(payload, "problem", str),
         identity_verified=expect_scalar(payload, "identity_verified", bool),
@@ -141,7 +154,9 @@ def build_returned_receipt(payload: dict[str, Any]) -> PalaceReturnedReceipt:
         execution_stage=expect_scalar(payload, "execution_stage", str, fallback=None),
         solver_invoked=expect_scalar(payload, "solver_invoked", bool, fallback=None),
         preflight_exit_code=expect_int(
-            payload.get("preflight_exit_code"), optional=True
+            payload.get("preflight_exit_code"),
+            "returned receipt preflight_exit_code",
+            optional=True,
         ),
     )
 
@@ -154,7 +169,9 @@ def validate_returned_state_agreement(
 ) -> None:
     """Require receipt, run metadata and resource record to report the same completion."""
     receipt_status = expect_scalar(receipt_payload, "status", str)
-    receipt_exit = expect_int(receipt_payload.get("exit_code"))
+    receipt_exit = expect_int(
+        receipt_payload.get("exit_code"), "returned receipt exit_code"
+    )
     receipt_job = expect_mapping(receipt_payload.get("job_identity"), "receipt job")
     for label, payload in (
         ("run metadata", run_metadata),
@@ -162,7 +179,7 @@ def validate_returned_state_agreement(
     ):
         if expect_scalar(payload, "status", str) != receipt_status:
             raise ValueError(f"{label} status does not match returned receipt.")
-        if expect_int(payload.get("exit_code")) != receipt_exit:
+        if expect_int(payload.get("exit_code"), f"{label} exit_code") != receipt_exit:
             raise ValueError(f"{label} exit_code does not match returned receipt.")
         if (
             expect_mapping(payload.get("job_identity"), f"{label} job identity")
@@ -312,7 +329,13 @@ def _validate_completed_runtime(
             raise ValueError("completed Palace receipt execution_stage must be solver.")
         if receipt_payload.get("solver_invoked") is not True:
             raise ValueError("completed Palace receipt must record solver invocation.")
-        if expect_int(receipt_payload.get("preflight_exit_code")) != 0:
+        if (
+            expect_int(
+                receipt_payload.get("preflight_exit_code"),
+                "returned receipt preflight_exit_code",
+            )
+            != 0
+        ):
             raise ValueError(
                 "completed Palace receipt config compatibility preflight must pass."
             )
@@ -427,14 +450,26 @@ def _validate_returned_inputs(
 
 def _validate_success_and_job(receipt_payload: Any) -> None:
     """Require successful pipeline exit codes and a nonempty recorded job identity."""
-    exit_code = expect_int(receipt_payload.get("exit_code"))
+    exit_code = expect_int(
+        receipt_payload.get("exit_code"), "returned receipt exit_code"
+    )
     if exit_code != 0:
         raise ValueError(
             "returned run receipt exit_code must be zero for completed runs."
         )
-    if expect_int(receipt_payload.get("solver_exit_code")) != 0:
+    if (
+        expect_int(
+            receipt_payload.get("solver_exit_code"), "returned receipt solver_exit_code"
+        )
+        != 0
+    ):
         raise ValueError("returned run receipt solver_exit_code must be zero.")
-    if expect_int(receipt_payload.get("tee_exit_code")) != 0:
+    if (
+        expect_int(
+            receipt_payload.get("tee_exit_code"), "returned receipt tee_exit_code"
+        )
+        != 0
+    ):
         raise ValueError("returned run receipt tee_exit_code must be zero.")
 
     validate_timestamp(

@@ -178,7 +178,7 @@ def validate_resource_identity(
             )
     if expect_scalar(resource_record, "status", str) != "completed":
         raise ValueError("resource record status must be completed for a returned run.")
-    if expect_int(resource_record.get("exit_code")) != 0:
+    if expect_int(resource_record.get("exit_code"), "resource record exit_code") != 0:
         raise ValueError("resource record exit_code must be zero for a returned run.")
 
 
@@ -193,7 +193,9 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
         if not isinstance(entry, dict):
             raise TypeError(f"{label} metadata hashes must be mapping entries.")
         path_name = expect_scalar(entry, "path", str)
-        bytes_value = expect_int(entry.get("bytes"))
+        bytes_value = expect_int(
+            entry.get("bytes"), f"{label} metadata hash entry {path_name!r} bytes"
+        )
         sha_value = expect_scalar(entry, "sha256", str)
         file_path = confined_path(root, path_name)
         if not file_path.is_file():
@@ -202,7 +204,7 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
             )
 
         observed[path_name] = (
-            expect_int(file_path.stat().st_size),
+            expect_int(file_path.stat().st_size, f"size of {path_name}"),
             sha256(file_path),
         )
         if bytes_value != observed[path_name][0]:

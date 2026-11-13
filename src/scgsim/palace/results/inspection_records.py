@@ -140,18 +140,22 @@ class PalaceResultSelection:
     integrity: Literal["receipt_bound", "observed_unsealed", "unavailable"]
 
 
+FailureCategory = Literal[
+    "config_compatibility",
+    "out_of_memory",
+    "signal_killed",
+    "solver_error",
+    "output_capture_error",
+    "unknown",
+]
+"""What a failed run's diagnosis attributes the failure to."""
+
+
 @dataclass(frozen=True)
 class PalaceFailureDiagnosis:
     """Evidence-based diagnosis that never changes the returned run status."""
 
-    category: Literal[
-        "config_compatibility",
-        "out_of_memory",
-        "signal_killed",
-        "solver_error",
-        "output_capture_error",
-        "unknown",
-    ]
+    category: FailureCategory
     exit_code: int | None
     execution_stage: Literal["config_compatibility", "solver"] | None
     solver_invoked: bool | None

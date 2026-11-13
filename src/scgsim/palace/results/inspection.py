@@ -19,6 +19,7 @@ from scgsim.palace.results.artifacts import (
 )
 from scgsim.palace.results.inspection_records import (
     CollectedSnapshots,
+    FailureCategory,
     PalaceFailureDiagnosis,
     PalaceResultSelection,
 )
@@ -258,7 +259,7 @@ def failure_diagnosis(
 class _FailureCause(NamedTuple):
     """The category a failed run falls in and the sentence that tells a person why."""
 
-    category: str
+    category: FailureCategory
     summary: str
 
 

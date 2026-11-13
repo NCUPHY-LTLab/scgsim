@@ -48,10 +48,12 @@ def extract_hash_map(
         if path in result:
             raise ValueError(f"{label} contains duplicate path {path!r}.")
         if require_optional_values:
-            bytes_value = expect_int(entry.get("bytes"), optional=True)
+            bytes_value = expect_int(
+                entry.get("bytes"), f"{label} {path!r} bytes", optional=True
+            )
             sha_value = expect_scalar(entry, "sha256", str, fallback=None)
         else:
-            bytes_value = expect_int(entry.get("bytes"))
+            bytes_value = expect_int(entry.get("bytes"), f"{label} {path!r} bytes")
             sha_value = expect_scalar(entry, "sha256", str)
         result[path] = FileHash(bytes_value, sha_value)
     return result
@@ -118,26 +120,22 @@ def expect_list(payload: Any, label: str, *, allow_empty: bool = False) -> list[
 
 
 @overload
-def expect_int(value: Any, *, optional: Literal[False] = False) -> int: ...
+def expect_int(value: Any, name: str, *, optional: Literal[False] = False) -> int: ...
 
 
 @overload
-def expect_int(value: Any, *, optional: Literal[True]) -> int | None: ...
+def expect_int(value: Any, name: str, *, optional: Literal[True]) -> int | None: ...
 
 
-def expect_int(value: Any, *, optional: bool = False) -> int | None:
-    """Read integer-compatible JSON values while keeping booleans distinct."""
-    if value is None:
-        if optional:
-            return None
-        raise TypeError("value must be integer-compatible.")
-    if isinstance(value, bool):
-        raise TypeError("value must be integer-compatible.")
-    if isinstance(value, int):
+def expect_int(value: Any, name: str, *, optional: bool = False) -> int | None:
+    """Read the integer-compatible JSON value ``name`` while keeping booleans distinct."""
+    if value is None and optional:
+        return None
+    if isinstance(value, int) and not isinstance(value, bool):
         return value
     if isinstance(value, float) and value.is_integer():
         return int(value)
-    raise TypeError("value must be integer-compatible.")
+    raise TypeError(f"{name} must be integer-compatible; got {value!r}.")
 
 
 def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
@@ -155,10 +153,10 @@ def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
     return float(value)
 
 
-def to_float(value: Any) -> float:
-    """Convert a recorded real number without accepting booleans."""
+def to_float(value: Any, name: str) -> float:
+    """Convert the recorded real number ``name`` without accepting booleans."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError("value must be float-compatible.")
+        raise TypeError(f"{name} must be float-compatible; got {value!r}.")
     return float(value)
 
 
@@ -167,7 +165,7 @@ def as_float_map(payload: Any, keys: tuple[str, ...]) -> dict[str, float | None]
     if not isinstance(payload, dict):
         return {key: None for key in keys}
     return {
-        key: to_float(payload.get(key))
+        key: to_float(payload.get(key), key)
         if isinstance(payload.get(key), (int, float))
         else None
         for key in keys

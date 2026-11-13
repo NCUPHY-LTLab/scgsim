@@ -297,10 +297,21 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
         linear_solver = {}
 
     cost = PalaceCost(
-        problem_degrees_of_freedom=expect_int(problem_block.get("DegreesOfFreedom")),
-        mesh_elements=expect_int(problem_block.get("MeshElements")),
-        mpi_size=expect_int(problem_block.get("MPISize")),
-        openmp_threads=expect_int(problem_block.get("OpenMPThreads")),
+        problem_degrees_of_freedom=expect_int(
+            problem_block.get("DegreesOfFreedom"),
+            f"{NATIVE_METADATA_NAME} Problem.DegreesOfFreedom",
+        ),
+        mesh_elements=expect_int(
+            problem_block.get("MeshElements"),
+            f"{NATIVE_METADATA_NAME} Problem.MeshElements",
+        ),
+        mpi_size=expect_int(
+            problem_block.get("MPISize"), f"{NATIVE_METADATA_NAME} Problem.MPISize"
+        ),
+        openmp_threads=expect_int(
+            problem_block.get("OpenMPThreads"),
+            f"{NATIVE_METADATA_NAME} Problem.OpenMPThreads",
+        ),
         peak_memory_megabytes=as_float_map(
             palace_payload.get("PeakMemoryMegabytes"),
             ("Average", "Max", "Min", "Total"),
@@ -310,7 +321,7 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
             ("Average", "Max", "Min", "Total"),
         ),
         linear_solver={
-            key: to_float(value)
+            key: to_float(value, f"{NATIVE_METADATA_NAME} LinearSolver.{key}")
             for key, value in linear_solver.items()
             if isinstance(linear_solver, dict)
             and isinstance(key, str)
