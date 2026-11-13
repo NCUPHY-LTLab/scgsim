@@ -32,6 +32,7 @@ from scgsim.palace.results.artifacts import (
     expect_mapping,
     expect_scalar,
     optional_dict,
+    refusal,
 )
 from scgsim.palace.results.surface_contract import (
     entry_rows,
@@ -76,21 +77,44 @@ class RouteConsistency:
         """Check mesh/index schema and route agreement before interpreting configured groups."""
         require_manifest_schema(self.mesh_manifest)
         require_index_map_schema(self.index_map)
-        if expect_scalar(self.mesh_manifest, "route", str, fallback="") != self.route:
-            raise ValueError("mesh manifest route does not match resolved route.")
+        manifest_route = expect_scalar(self.mesh_manifest, "route", str, fallback="")
+        if manifest_route != self.route:
+            raise ValueError(
+                refusal(
+                    "mesh manifest route does not match resolved route",
+                    found=manifest_route,
+                    expected=self.route,
+                )
+            )
         thin_film = self.handoff_metadata.get("route_a_thin_film")
         if (
             self.mesh_manifest.get("route_a_thin_film") != thin_film
             or self.run_metadata.get("route_a_thin_film") != thin_film
         ):
             raise ValueError(
-                "mesh manifest and run metadata Route-A thin-film identity mismatch."
+                refusal(
+                    "mesh manifest and run metadata Route-A thin-film identity mismatch",
+                    found={
+                        "mesh manifest": self.mesh_manifest.get("route_a_thin_film"),
+                        "run metadata": self.run_metadata.get("route_a_thin_film"),
+                    },
+                    expected=thin_film,
+                )
             )
 
         run_route = expect_scalar(self.run_metadata, "route", str)
         handoff_route = expect_scalar(self.handoff_metadata, "route", str)
         if run_route != self.route or handoff_route != self.route:
-            raise ValueError("metadata route does not match resolved route.")
+            raise ValueError(
+                refusal(
+                    "metadata route does not match resolved route",
+                    found={
+                        "run metadata": run_route,
+                        "handoff metadata": handoff_route,
+                    },
+                    expected=self.route,
+                )
+            )
 
         validate_index_entries(self.index_map)
         _validate_index_against_manifest(self.index_map, self.mesh_manifest)
@@ -98,7 +122,16 @@ class RouteConsistency:
         run_problem = expect_scalar(self.run_metadata, "problem", str)
         handoff_problem = expect_scalar(self.handoff_metadata, "problem", str)
         if run_problem != self.problem or handoff_problem != self.problem:
-            raise ValueError("metadata problem does not match resolved problem.")
+            raise ValueError(
+                refusal(
+                    "metadata problem does not match resolved problem",
+                    found={
+                        "run metadata": run_problem,
+                        "handoff metadata": handoff_problem,
+                    },
+                    expected=self.problem,
+                )
+            )
 
 
 _SECTION_DIMENSIONS = {
@@ -130,12 +163,24 @@ def _validate_index_against_manifest(
                 f"index attribute {exc.args[0][1]} is not a mesh manifest attribute."
             ) from exc
         if groups != set(entry["physical_names"]):
-            raise ValueError("index physical_names disagree with the mesh manifest.")
+            raise ValueError(
+                refusal(
+                    f"index entry {entry.get('entry_name')!r} physical_names disagree with the mesh manifest",
+                    found=sorted(entry["physical_names"]),
+                    expected=sorted(groups),
+                )
+            )
     for entry in surface_epr_entries(index_map):
         for row in entry_rows(entry):
             if {primary_group[(2, a)] for a in row["attributes"]} != {row["group"]}:
                 raise ValueError(
-                    "index surface row group disagrees with the mesh manifest."
+                    refusal(
+                        f"index surface row {row.get('row')!r} group disagrees with the mesh manifest",
+                        found=row["group"],
+                        expected=sorted(
+                            {primary_group[(2, a)] for a in row["attributes"]}
+                        ),
+                    )
                 )
 
 
@@ -154,7 +199,13 @@ def validate_config_index_correspondence(
             boundaries.get("Terminal"), "config.Boundaries.Terminal"
         )
         if index_counts["terminal"] != len(terminals):
-            raise ValueError("terminal count mismatch between config and index map.")
+            raise ValueError(
+                refusal(
+                    "terminal count mismatch between config and index map",
+                    found=index_counts["terminal"],
+                    expected=len(terminals),
+                )
+            )
         _validate_ground_boundary_resolution(boundaries, index_map)
     else:
         ports = expect_list(
@@ -163,7 +214,13 @@ def validate_config_index_correspondence(
             allow_empty=True,
         )
         if index_counts["lumped_port"] != len(ports):
-            raise ValueError("lumped port count mismatch between config and index map.")
+            raise ValueError(
+                refusal(
+                    "lumped port count mismatch between config and index map",
+                    found=index_counts["lumped_port"],
+                    expected=len(ports),
+                )
+            )
 
     postprocessing = optional_dict(boundaries.get("Postprocessing")) or {}
     post_diel = expect_list(
@@ -173,7 +230,11 @@ def validate_config_index_correspondence(
     )
     if post_diel and index_counts["surface"] < len(post_diel):
         raise ValueError(
-            "surface count in index map does not cover postprocessing list."
+            refusal(
+                "surface count in index map does not cover the config's Dielectric postprocessing list",
+                found=index_counts["surface"],
+                expected=f"at least {len(post_diel)}",
+            )
         )
     expected_sections = {
         TERMINAL_SECTION: terminals,
@@ -257,7 +318,13 @@ def _validate_ground_boundary_resolution(
         "union_attributes",
     )
     if set(record) != set(list_fields):
-        raise ValueError("ground boundary index evidence has unexpected fields.")
+        raise ValueError(
+            refusal(
+                "ground boundary index evidence has unexpected fields",
+                found=sorted(record),
+                expected=sorted(list_fields),
+            )
+        )
     values = {
         field: expect_list(
             record.get(field), f"ground_boundary.{field}", allow_empty=True
@@ -291,13 +358,33 @@ def _validate_ground_boundary_resolution(
     exterior = set(values["exterior_attributes"])
     union = sorted(physical | exterior)
     if physical & exterior or values["union_attributes"] != union:
-        raise ValueError("physical/exterior Ground evidence has an invalid union.")
+        raise ValueError(
+            refusal(
+                "physical/exterior Ground evidence has an invalid union",
+                found={
+                    "physical": sorted(physical),
+                    "exterior": sorted(exterior),
+                    "union": values["union_attributes"],
+                },
+                expected=f"disjoint sets whose union is {union}",
+            )
+        )
     configured = boundaries.get("Ground")
     if union:
         if configured != {"Attributes": union}:
-            raise ValueError("config Ground attributes do not match index evidence.")
+            raise ValueError(
+                refusal(
+                    "config Ground attributes do not match index evidence",
+                    found=configured,
+                    expected={"Attributes": union},
+                )
+            )
     elif configured is not None:
-        raise ValueError("config contains Ground without indexed attributes.")
+        raise ValueError(
+            refusal(
+                "config contains Ground without indexed attributes", found=configured
+            )
+        )
 
 
 def validate_index_entries(index_map: dict[str, Any]) -> None:
@@ -315,27 +402,46 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
     names: set[tuple[str, str]] = set()
     for entry in entries:
         if not isinstance(entry, dict) or not entry:
-            raise ValueError("index map entries must be non-empty mappings.")
+            raise ValueError(
+                refusal("index map entries must be non-empty mappings", found=entry)
+            )
         section = expect_scalar(entry, "section", str)
         if section not in expected_roles:
             raise ValueError(f"index map has unsupported section {section!r}.")
-        if expect_scalar(entry, "role", str) != expected_roles[section]:
-            raise ValueError("index map section and role are inconsistent.")
+        role = expect_scalar(entry, "role", str)
+        if role != expected_roles[section]:
+            raise ValueError(
+                refusal(
+                    f"index map section {section} and role are inconsistent",
+                    found=role,
+                    expected=expected_roles[section],
+                )
+            )
         index = expect_scalar(entry, "index", int)
         if index < 1:
-            raise ValueError("index map indices must be positive.")
+            raise ValueError(
+                refusal(f"index map indices of {section} must be positive", found=index)
+            )
         indices[section].append(index)
         entry_name = expect_scalar(entry, "entry_name", str)
         if not entry_name or (section, entry_name) in names:
             raise ValueError(
-                "index entry names must be non-empty and unique per section."
+                refusal(
+                    f"index entry names must be non-empty and unique per section ({section})",
+                    found=entry_name,
+                )
             )
         names.add((section, entry_name))
         physical_names = expect_list(
             entry.get("physical_names"), "index physical_names"
         )
         if not all(isinstance(name, str) and name for name in physical_names):
-            raise ValueError("index physical_names must be non-empty strings.")
+            raise ValueError(
+                refusal(
+                    f"index entry {entry_name!r} physical_names must be non-empty strings",
+                    found=physical_names,
+                )
+            )
         entry_attributes = expect_list(entry.get("attributes"), "index attributes")
         for attribute in entry_attributes:
             if (
@@ -343,7 +449,12 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
                 or isinstance(attribute, bool)
                 or attribute < 1
             ):
-                raise ValueError("index attributes must be positive integers.")
+                raise ValueError(
+                    refusal(
+                        f"index entry {entry_name!r} attributes must be positive integers",
+                        found=attribute,
+                    )
+                )
         metadata = expect_mapping(entry.get("metadata"), "index metadata")
         _validate_entry_role(entry, metadata, section)
     for section, values in indices.items():
@@ -366,6 +477,11 @@ def _validate_entry_role(
         expect_scalar(entry, "port_name", str)
         hosts = expect_list(metadata.get("host_entity_ids"), "port host entity ids")
         if len(hosts) != 2 or not all(isinstance(host, str) and host for host in hosts):
-            raise ValueError("lumped port index entry must have exactly two hosts.")
+            raise ValueError(
+                refusal(
+                    f"lumped port index entry {entry.get('port_name')!r} must have exactly two hosts",
+                    found=hosts,
+                )
+            )
     elif section == ENERGY_SECTION:
         expect_mapping(metadata.get("material"), "domain index material")
