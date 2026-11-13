@@ -26,7 +26,9 @@ from scgsim.palace.results.inspection_records import (
     SurfaceMarginEprSeriesSnapshot,
 )
 from scgsim.palace.results.surface_readers import (
+    SurfaceBinding,
     SurfaceEprReader,
+    SurfaceMarginBinding,
     SurfaceMarginEprReader,
 )
 from scgsim.palace.results.tables import read_csv_table, read_requested_modes
@@ -90,8 +92,8 @@ def _problem_size_conflicts(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bo
 def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface bindings and two read conditions
     root: Path,
     problem: str,
-    surface_bindings: tuple[dict[str, Any], ...] | None,
-    surface_margin_bindings: tuple[dict[str, Any], ...] | None,
+    surface_bindings: tuple[SurfaceBinding, ...] | None,
+    surface_margin_bindings: tuple[SurfaceMarginBinding, ...] | None,
     *,
     failed_attempt: bool,
     mode_count: int | None = None,
@@ -173,8 +175,8 @@ class SnapshotReader:
     source: str
     path: Path
     problem: str
-    surface_bindings: tuple[dict[str, Any], ...] | None
-    surface_margin_bindings: tuple[dict[str, Any], ...] | None
+    surface_bindings: tuple[SurfaceBinding, ...] | None
+    surface_margin_bindings: tuple[SurfaceMarginBinding, ...] | None
     mode_count: int | None = None
 
     def load_optional(self) -> AmrPassSnapshot | None:

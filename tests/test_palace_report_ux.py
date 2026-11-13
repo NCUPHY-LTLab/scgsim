@@ -26,7 +26,7 @@ from scgsim.palace.results.inspection_records import (
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
 )
-from scgsim.palace.results.surface_readers import SurfaceEprReader
+from scgsim.palace.results.surface_readers import SurfaceBinding, SurfaceEprReader
 from scgsim.palace.run.returned_receipt import iteration_output_paths
 
 
@@ -539,18 +539,18 @@ class PalaceReportUxTests(unittest.TestCase):
                 frequencies_ghz=(5.0,),
                 expected_rows=1,
                 bindings=(
-                    {
-                        "index": 1,
-                        "interface_type": "MA",
-                        "name": "SURFACE_1",
-                        "rows": ("ROW_1",),
-                        "face_kinds": ("interface",),
-                        "entities": ("ENTITY_1",),
-                        "nets": ("GROUND",),
-                        "attributes": (7,),
-                        "lineage": {"f:1": {"ENTITY_1": 1.0}},
-                        "loss_tangent": 0.0,
-                    },
+                    SurfaceBinding(
+                        index=1,
+                        interface_type="MA",
+                        name="SURFACE_1",
+                        rows=("ROW_1",),
+                        face_kinds=("interface",),
+                        entities=("ENTITY_1",),
+                        nets=("GROUND",),
+                        attributes=(7,),
+                        lineage={"f:1": {"ENTITY_1": 1.0}},
+                        loss_tangent=0.0,
+                    ),
                 ),
                 surface_count=1,
             ).read()

@@ -218,10 +218,10 @@ def test_a_producer_made_index_map_round_trips_through_the_readers(run, tmp_path
     wholes = read_surface_bindings(run.index)
     margins = read_surface_margin_bindings(run.index)
     assert wholes and margins
-    assert {b["interface_type"] for b in wholes} == {"MA", "MS", "SA"}
-    assert all(b["baseline_index"] in {w["index"] for w in wholes} for b in margins)
-    assert {m["margin_um"] for m in margins} == {0.5, 1.0}
-    assert all(m["bands"] for m in margins)
+    assert {b.interface_type for b in wholes} == {"MA", "MS", "SA"}
+    assert all(b.baseline_index in {w.index for w in wholes} for b in margins)
+    assert {m.margin_um for m in margins} == {0.5, 1.0}
+    assert all(m.bands for m in margins)
 
     table = tmp_path / "surface-Q.csv"
     _surface_q(run, table)
@@ -236,8 +236,8 @@ def test_a_producer_made_index_map_round_trips_through_the_readers(run, tmp_path
         table, frequencies_ghz=None, bindings=wholes, **kwargs
     ).read()
     (margin_series,) = SurfaceMarginEprReader(table, bindings=margins, **kwargs).read()
-    assert [r.index for r in series.records] == [b["index"] for b in wholes]
-    assert [r.index for r in margin_series.records] == [b["index"] for b in margins]
+    assert [r.index for r in series.records] == [b.index for b in wholes]
+    assert [r.index for r in margin_series.records] == [b.index for b in margins]
     assert all(r.entities and r.rows and r.attributes for r in series.records)
     assert all(r.participation == 0.01 * r.index for r in series.records)
 
@@ -278,7 +278,7 @@ def test_surface_readers_keep_the_requested_modes_of_a_longer_table(run, tmp_pat
         return
     assert [item.series_index for item in series] == [1]
     assert [item.series_index for item in margin_series] == [1]
-    assert [r.index for r in series[0].records] == [b["index"] for b in wholes]
+    assert [r.index for r in series[0].records] == [b.index for b in wholes]
 
 
 def test_the_electrostatic_index_map_keeps_the_ground_evidence(tmp_path):
