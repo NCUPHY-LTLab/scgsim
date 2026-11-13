@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.geometry.interpretation.envelope import auto_vacuum_envelope_bounds
 from scgsim.geometry.models.entities import requires_route_representation
@@ -59,9 +59,16 @@ def interpret_physical_geometry(
     )
 
 
+class _Declarations(NamedTuple):
+    """The declared physical layers, and the layer each declaring body binds to."""
+
+    declarations: list[PhysicalLayerDeclaration]
+    bindings: dict[str, str]
+
+
 def _physical_declarations(
     build_input: Any, stack: Mapping[str, Any], profile: ApproximationProfile
-) -> tuple[list[PhysicalLayerDeclaration], dict[str, str]]:
+) -> _Declarations:
     """Each body's declared physical layer, and the layer each declaring body binds to.
 
     A body the profile must represent by route refuses when it declares none.
@@ -93,7 +100,7 @@ def _physical_declarations(
                     f"it lacks a neutral physical declaration, which profile {profile.name!r} needs"
                 )
             )
-    return declarations, bindings
+    return _Declarations(declarations, bindings)
 
 
 def _representation_plan(
@@ -203,9 +210,16 @@ def _vacuum_enclosures(
     return enclosures
 
 
+class _Effective(NamedTuple):
+    """The effective input and stack."""
+
+    build_input: Any
+    stack: dict[str, Any]
+
+
 def _with_representation_payload(
     build_input: Any, mapped: _MappedBodies, plan: PhysicalRepresentationPlan
-) -> tuple[Any, dict[str, Any]]:
+) -> _Effective:
     """The effective input and stack, each carrying the plan's payload in its metadata."""
     payload = plan.to_payload()
     effective_stack = mapped.effective_stack
@@ -218,7 +232,7 @@ def _with_representation_payload(
         solution_regions=effective_stack["solution_regions"],
         metadata={**build_input.metadata, "physical_representation": payload},
     )
-    return effective_input, effective_stack
+    return _Effective(effective_input, effective_stack)
 
 
 def _with_context_sheet_interfaces(build_input: Any, context: Any) -> Any:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.refusals import Declared
@@ -51,9 +51,14 @@ def apply_vacuum_region_to_stack(
     return {**work, "solution_regions": regions}
 
 
-def _checked_regions_without_airbox(
-    stack: Any, vacuum_region: Any
-) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+class _StackParts(NamedTuple):
+    """The stack's solution regions and materials."""
+
+    solution_regions: Mapping[str, Any]
+    materials: Mapping[str, Any]
+
+
+def _checked_regions_without_airbox(stack: Any, vacuum_region: Any) -> _StackParts:
     """The stack's solution regions and materials, which must hold no explicit airbox."""
     if not isinstance(stack, Mapping):
         raise TypeError(_CALL.expected("stack", "a mapping", stack))
@@ -84,7 +89,7 @@ def _checked_regions_without_airbox(
                     "it is an explicit airbox; set_vacuum_region cannot be used with explicit airbox solution regions: remove one of them"
                 )
             )
-    return raw_regions, materials
+    return _StackParts(raw_regions, materials)
 
 
 def _vacuum_region_record(

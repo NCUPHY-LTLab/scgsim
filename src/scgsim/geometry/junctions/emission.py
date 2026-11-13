@@ -6,7 +6,7 @@ import json
 from collections import defaultdict
 from dataclasses import replace
 from fractions import Fraction
-from typing import cast
+from typing import Any, NamedTuple, cast
 
 from scgsim.geometry.grid.planar_loops import (
     cancel_reversed_planar_edges,
@@ -182,9 +182,16 @@ def _emit_end_pieces(state: JunctionModel, jid: str, record, ends, owners) -> No
         end["model_regions"] = plain_record(part)
 
 
+class _CheckedPartition(NamedTuple):
+    """The emitted free boundary and the emitted partition of one junction."""
+
+    free: Any
+    partition: Any
+
+
 def _checked_partition_coverage(
     state: JunctionModel, jid: str, chosen, emitted_slices, emitted_pieces
-) -> tuple:
+) -> _CheckedPartition:
     """The emitted free boundary and partition, each refused unless the emitted pieces cover it exactly.
 
     ``emitted_slices`` are the free part's slices with the central rectangle; ``emitted_pieces``
@@ -206,7 +213,7 @@ def _checked_partition_coverage(
                 "numerical junction emitted end pieces and rectangle differ from their slices"
             )
         )
-    return final_free, final_partition
+    return _CheckedPartition(final_free, final_partition)
 
 
 def _record_emitted_partition(

@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 from scgsim.diagnostics import diagnostic_stage, progress
 from scgsim.geometry.grid.tagged_grid_faces import (
@@ -257,21 +257,42 @@ def _pixel_path(a, b, endpoints, context):
     return path
 
 
-def source_paths(rows, index, scale):
+class SourceSegment(NamedTuple):
+    """One directed exterior or hole edge of an operand, in operand order, with its ring's orientation."""
+
+    operand_id: str
+    operand_index: int
+    ring_index: int
+    segment_index: int
+    start: tuple
+    end: tuple
+    orientation: int
+
+
+class LocatedSegment(NamedTuple):
+    """A source segment with its ends' arrangement keys and the raw chain it splits into.
+
+    Without a ``chain`` the segment runs straight from end to end.
+    """
+
+    segment: SourceSegment
+    endpoint_keys: tuple
+    chain: tuple | None = None
+
+
+def source_paths(rows: Sequence[LocatedSegment], index, scale):
     """Build source-segment paths through indexed arrangement nodes."""
     output = []
     for row in rows:
-        (
-            value,
-            operand_index,
-            ring_index,
-            segment_index,
-            a,
-            b,
-            endpoints,
-            orientation,
-        ) = row[:8]
-        chain = row[8] if len(row) == 9 else ((a, endpoints[0]), (b, endpoints[1]))
+        segment, endpoints = row.segment, row.endpoint_keys
+        value, operand_index = segment.operand_id, segment.operand_index
+        ring_index, segment_index = segment.ring_index, segment.segment_index
+        a, b, orientation = segment.start, segment.end, segment.orientation
+        chain = (
+            row.chain
+            if row.chain is not None
+            else ((a, endpoints[0]), (b, endpoints[1]))
+        )
         context = dict(
             operand_index=operand_index,
             ring_index=ring_index,
@@ -330,7 +351,7 @@ def _source_segments(
                 zip(ring_points, (*ring_points[1:], ring_points[0]), strict=True)
             ):
                 raw_rows.append(
-                    (
+                    SourceSegment(
                         value.operand_id,
                         operand_index,
                         ring_index,
@@ -344,12 +365,19 @@ def _source_segments(
     return raw_rows, vertices
 
 
+class _NativeNetwork(NamedTuple):
+    """The unique source edges, and the snapped line network built from them."""
+
+    unique_edges: tuple
+    network: _NativeGridNetwork
+
+
 def _native_grid_network(
     raw_rows, vertices, grid, operations: ShapelyGridOperations
-) -> tuple[tuple, _NativeGridNetwork]:
+) -> _NativeNetwork:
     """Build one global snapped line network before observing rounded points."""
     unique_edges = tuple(
-        dict.fromkeys(tuple(sorted((row[4], row[5]))) for row in raw_rows)
+        dict.fromkeys(tuple(sorted((row.start, row.end))) for row in raw_rows)
     )
     with diagnostic_stage(
         "geometry.grid.tagged_network", counts={"segments": len(raw_rows)}
@@ -400,8 +428,9 @@ def _native_grid_network(
             {key(point) for point in operations.get_coordinates(native)}
             | set(endpoint_keys)
         )
-    return unique_edges, _NativeGridNetwork(
-        edges, endpoint_keys, native_grid, scale, pixels
+    return _NativeNetwork(
+        unique_edges,
+        _NativeGridNetwork(edges, endpoint_keys, native_grid, scale, pixels),
     )
 
 
@@ -442,15 +471,14 @@ def _source_path_arrangement(
     point_index = PointIndex.build((*network.pixels, *context_keys.values()))
 
     def source_chain(row):
-        edge = tuple(sorted((row[4], row[5])))
-        chain = raw_chain(row[4], row[5], chains[edge])
+        edge = tuple(sorted((row.start, row.end)))
+        chain = raw_chain(row.start, row.end, chains[edge])
         return tuple((point, context_keys[point]) for point in chain)
 
     rows = tuple(
-        (
-            *row[:6],
+        LocatedSegment(
+            row,
             (network.endpoint_keys[2 * index], network.endpoint_keys[2 * index + 1]),
-            row[6],
             source_chain(row),
         )
         for index, row in enumerate(raw_rows)

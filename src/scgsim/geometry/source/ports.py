@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite, sqrt
-from typing import Any, Protocol, TypeGuard, cast
+from typing import Any, NamedTuple, Protocol, TypeGuard, cast
 
 from scgsim.geometry.grid.booleans import polygon_boolean
 from scgsim.geometry.grid.polygon_ops import (
@@ -110,9 +110,14 @@ def port_sheet_regions_from_stack_metadata(
     return tuple(regions)
 
 
-def _normalized_port_direction(
-    raw_direction: Any, owner: Declared
-) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+class _PortDirection(NamedTuple):
+    """A port direction as declared, and as the unit vector in XY."""
+
+    raw: tuple[float, float, float]
+    unit: tuple[float, float, float]
+
+
+def _normalized_port_direction(raw_direction: Any, owner: Declared) -> _PortDirection:
     if (
         isinstance(raw_direction, str | bytes)
         or not isinstance(raw_direction, Sequence)
@@ -130,7 +135,9 @@ def _normalized_port_direction(
             owner.expected("direction", "finite, in XY and nonzero", raw_direction)
         )
     length = sqrt(direction[0] ** 2 + direction[1] ** 2)
-    return direction, (direction[0] / length, direction[1] / length, 0.0)
+    return _PortDirection(
+        direction, (direction[0] / length, direction[1] / length, 0.0)
+    )
 
 
 def _is_source_record_sequence(value: Any) -> TypeGuard[Sequence[Any]]:
@@ -210,12 +217,19 @@ def _validated_port_metadata(record: Any) -> _PortSheetDeclaration:
     )
 
 
+class _IndexedSheet(NamedTuple):
+    """A sheet polygon of a port, and its index among the polygons drawn on its layer."""
+
+    drawn_index: int
+    polygon: Any
+
+
 def _selected_port_polygons(
     scope: GridScope,
     record: Mapping[str, Any],
     declared: _PortSheetDeclaration,
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
-) -> tuple[tuple[int, LayoutPolygonSpec], ...]:
+) -> tuple[_IndexedSheet, ...]:
     """The port's sheet polygons, each with its index among the polygons drawn on its layer."""
     layer, datatype, source_name = (
         declared.layer,
@@ -236,7 +250,7 @@ def _selected_port_polygons(
                 "source_name": source_name,
             },
         )
-        return ((0, polygon),)
+        return (_IndexedSheet(0, polygon),)
 
     selected = _drawn_sheets_under_selector(
         scope,
@@ -245,7 +259,7 @@ def _selected_port_polygons(
         polygons_by_layer.get((layer, datatype), ()),
     )
     return tuple(
-        (
+        _IndexedSheet(
             index,
             LayoutPolygonSpec(
                 polygon_id=f"PORT_SHEET_{layer}_{datatype}__P{index:04d}",
@@ -268,10 +282,10 @@ def _drawn_sheets_under_selector(
     selector: Any,
     declared: _PortSheetDeclaration,
     source_polygons: Sequence[Any],
-) -> tuple[tuple[int, Any], ...]:
+) -> tuple[_IndexedSheet, ...]:
     """The polygons drawn on the port's layer, each with its index: all of them, or the one under the selector."""
     if selector is None:
-        return tuple(enumerate(source_polygons))
+        return tuple(_IndexedSheet(*item) for item in enumerate(source_polygons))
     if (
         isinstance(selector, (str, bytes))
         or not isinstance(selector, Sequence)
@@ -285,7 +299,7 @@ def _drawn_sheets_under_selector(
         )
     point = (float(selector[0]), float(selector[1]))
     selected = tuple(
-        (index, polygon)
+        _IndexedSheet(index, polygon)
         for index, polygon in enumerate(source_polygons)
         if point_in_ring(point, ring_from_gdstk_polygon(scope, polygon))
     )

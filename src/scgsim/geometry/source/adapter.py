@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from scgsim.diagnostics import diagnostic_stage, progress
 from scgsim.geometry.grid.grid_cache import with_grid_work_cache
@@ -386,9 +386,16 @@ class _SourceLowering:
         )
 
 
+class _LoadedStack(NamedTuple):
+    """A stack file's JSON mapping and the path it was read from."""
+
+    mapping: Mapping[str, Any]
+    path: Path
+
+
 def _load_stack_mapping(
     stack_file: PathInput,
-) -> tuple[Mapping[str, Any], Path]:
+) -> _LoadedStack:
     stack_path = Path(stack_file)
     if not stack_path.is_file():
         raise FileNotFoundError(
@@ -408,7 +415,7 @@ def _load_stack_mapping(
         raise TypeError(
             _STACK_FILE.expected("JSON root", "a mapping", type(data).__name__)
         )
-    return data, stack_path
+    return _LoadedStack(data, stack_path)
 
 
 def _select_gds_cell(library: LoadedLibrary, top_cell_name: str | None) -> Cell:

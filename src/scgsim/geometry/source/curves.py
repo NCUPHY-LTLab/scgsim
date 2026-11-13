@@ -48,8 +48,6 @@ _Ring = Sequence[Sequence[float]]
 GdsPoint = tuple[float, float]
 # One GDS polygon's vertices in the order the polygon walks them.
 GdsWalk = tuple[GdsPoint, ...]
-# Keys are tuples so that a binding error names the source identifier as written.
-SourceRings = dict[str, list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]]
 
 
 _BOUNDARY_SOURCE = (
@@ -372,15 +370,19 @@ def _on_layers(layers: Sequence[str | None]) -> str:
 
 
 def _selected_polygons(
-    record: _BoundaryRecord, rings: SourceRings, end_pieces: frozenset[str]
-) -> list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]:
+    record: _BoundaryRecord,
+    polygons: Sequence[LayoutPolygonSpec],
+    end_pieces: frozenset[str],
+) -> list[LayoutPolygonSpec]:
+    """The record's Entity's polygons that hold its selector point; junction end pieces never do."""
     # GDS polygon selection is optional until source boundaries are bound.
     import gdstk  # noqa: PLC0415 - optional native layout dependency
 
     candidates = []
-    for pid, outer, holes in rings.get(record.entity_id, ()):
+    for polygon in polygons:
+        outer, holes = polygon.exterior, polygon.holes
         # A junction end piece can overlap the terminal the selector names; it is never selected.
-        if pid in end_pieces:
+        if polygon.polygon_id in end_pieces:
             continue
         region = [gdstk.Polygon(outer)]
         if holes:
@@ -388,7 +390,7 @@ def _selected_polygons(
                 gdstk.boolean(region, [gdstk.Polygon(h) for h in holes], "not") or []
             )
         if gdstk.inside([record.selector_point_um], region)[0]:
-            candidates.append((pid, outer, holes))
+            candidates.append(polygon)
     return candidates
 
 
@@ -621,14 +623,10 @@ def refuse_reconstructions_without_circle(
         if record.kind != "circular_arc":
             continue
         polygons = [by_id[i] for i in owned.get(record.entity_id, ()) if i in by_id]
-        selected = _selected_polygons(
-            record,
-            {record.entity_id: [(p.polygon_id, p.exterior, p.holes) for p in polygons]},
-            frozenset(),
-        )
+        selected = _selected_polygons(record, polygons, frozenset())
         if len(selected) != 1:
             continue
-        polygon = by_id[selected[0][0]]
+        polygon = by_id[selected[0].polygon_id]
         walks = drawn_walks_of(polygon)
         ring = drawn_ring_of(
             polygon, 0 if record.role == "outer" else 1 + cast(int, record.hole_index)

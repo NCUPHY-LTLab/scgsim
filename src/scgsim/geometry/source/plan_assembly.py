@@ -6,7 +6,7 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.normalization import (
@@ -285,14 +285,10 @@ class GeometryPlanStackAssembler:
             },
         }
 
-    def _component_records(
-        self, net_owners: Mapping[str, str]
-    ) -> tuple[
-        list[dict[str, Any]], list[dict[str, Any]], list[tuple[str, dict[str, Any]]]
-    ]:
+    def _component_records(self, net_owners: Mapping[str, str]) -> _ComponentRecords:
         declarations: list[dict[str, Any]] = []
         ports: list[dict[str, Any]] = []
-        contributions: list[tuple[str, dict[str, Any]]] = []
+        contributions: list[_GroundContribution] = []
         contribution_ids: set[tuple[str, str]] = set()
         for path, (cell, _, transform) in self.instances.items():
             semantics = component_semantics(cell, path)
@@ -307,7 +303,7 @@ class GeometryPlanStackAssembler:
                 contributions.append(contribution)
             for raw in semantics.get("ports", ()):
                 ports.append(_source_port(path, cell, raw, transform, len(ports) + 1))
-        return declarations, ports, contributions
+        return _ComponentRecords(declarations, ports, contributions)
 
     def _validate_physical_planes(
         self,
@@ -367,7 +363,7 @@ class GeometryPlanStackAssembler:
 
     def _apply_ground_contributions(
         self,
-        contributions: list[tuple[str, dict[str, Any]]],
+        contributions: list[_GroundContribution],
         by_id: Mapping[str, dict[str, Any]],
     ) -> None:
         for plane_id, contribution in contributions:
@@ -473,12 +469,27 @@ def _entity_declaration(
     }
 
 
+class _ComponentRecords(NamedTuple):
+    """Every occurrence's conductor declarations, ports and ground contributions, in layout coordinates."""
+
+    declarations: list[dict[str, Any]]
+    ports: list[dict[str, Any]]
+    contributions: list[_GroundContribution]
+
+
+class _GroundContribution(NamedTuple):
+    """One ground contribution: the root plane it adds to, and its record."""
+
+    plane_id: str
+    record: dict[str, Any]
+
+
 def _ground_contribution(
     path: str,
     raw: Any,
     transform: tuple[float, ...],
     contribution_ids: set[tuple[str, str]],
-) -> tuple[str, dict[str, Any]]:
+) -> _GroundContribution:
     if not isinstance(raw, Mapping) or set(raw) != {
         "local_id",
         "plane_id",
@@ -521,15 +532,18 @@ def _ground_contribution(
         ),
         "layer",
     )
-    return plane_id, {
-        "source_occurrence_path": path,
-        "source_local_id": local_id,
-        "level": level,
-        "layer": list(layer),
-        "selector_point_um": transform_source_point(
-            transform, raw["selector_point_um"]
-        ),
-    }
+    return _GroundContribution(
+        plane_id,
+        {
+            "source_occurrence_path": path,
+            "source_local_id": local_id,
+            "level": level,
+            "layer": list(layer),
+            "selector_point_um": transform_source_point(
+                transform, raw["selector_point_um"]
+            ),
+        },
+    )
 
 
 def _source_port(

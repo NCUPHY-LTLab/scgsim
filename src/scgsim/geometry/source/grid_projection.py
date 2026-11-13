@@ -16,6 +16,7 @@ from itertools import combinations
 from typing import (
     TYPE_CHECKING,
     Any,
+    NamedTuple,
     cast,
 )
 
@@ -410,12 +411,19 @@ def _validate_conductor_contacts(
     return contact_relations
 
 
+class _ConductorShapes(NamedTuple):
+    """Each conductor's region as requested and as the grid realized it, by Entity id."""
+
+    requested: dict[str, BaseGeometry]
+    realized: dict[str, BaseGeometry]
+
+
 def _conductor_shapes(
     conductors: Sequence[SemanticEntitySpec],
     source: SourcePolygonInputs,
     projected: _ProjectedPolygons,
     context: GeometryGridContext,
-) -> tuple[dict[str, BaseGeometry], dict[str, BaseGeometry]]:
+) -> _ConductorShapes:
     """Each conductor's region as requested and as the grid realized it, by Entity id."""
     from shapely import Polygon, union_all  # noqa: PLC0415 — load native topology only after projection validation.
 
@@ -442,7 +450,7 @@ def _conductor_shapes(
         )
         for entity in conductors
     }
-    return raw_geometry, effective_geometry
+    return _ConductorShapes(raw_geometry, effective_geometry)
 
 
 def _conductor_contact_refusal(

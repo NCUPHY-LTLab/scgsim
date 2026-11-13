@@ -6,7 +6,7 @@ import copy
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import isfinite
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.geometry.models.physical import (
     PHYSICAL_LAYER_FIELD,
@@ -219,9 +219,16 @@ def _conductor_level(
     return _ConductorLevel(level_name, level_info, facts)
 
 
+class _ConductorHost(NamedTuple):
+    """The solution region a conductor's voids belong to, and whether it is the generated vacuum."""
+
+    host_void_semantic_id: str
+    generated: bool
+
+
 def _conductor_host(
     level: _ConductorLevel, semantic_id: str, solution_region_ids: Mapping[str, Any]
-) -> tuple[str, bool]:
+) -> _ConductorHost:
     """The solution region a conductor's voids belong to, and whether it is the generated vacuum."""
     auto_host = "host_void_semantic_id" not in level.info
     host = (
@@ -239,7 +246,7 @@ def _conductor_host(
                 "host_void_semantic_id", "a solution region of the stack", host
             )
         )
-    return host, auto_host
+    return _ConductorHost(host, auto_host)
 
 
 def _conductor_geometry(

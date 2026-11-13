@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from fractions import Fraction
 from itertools import pairwise
-from typing import cast
+from typing import NamedTuple, cast
 
 from scgsim.geometry.junctions.boolean_geometry import (
     boolean,
@@ -245,7 +245,14 @@ def slice_free_boundaries(state: JunctionModel) -> None:
         )
 
 
-def _lattice_cut_planes(record) -> tuple[tuple[int, int], list[Fraction]]:
+class _CutPlanes(NamedTuple):
+    """The lattice direction v and each cut's position along it."""
+
+    direction: tuple[int, int]
+    cuts: list[Fraction]
+
+
+def _lattice_cut_planes(record) -> _CutPlanes:
     """The lattice direction v and each cut's position along it, v . P for its lattice point P.
 
     Model units are Boolean units; along x or y these are the cut positions the slicing has
@@ -256,7 +263,7 @@ def _lattice_cut_planes(record) -> tuple[tuple[int, int], list[Fraction]]:
     x, y = lattice["corners_grid"][0]
     units = Fraction(str(lattice["grid_um"])) / Fraction(str(PRECISION_UM))
     cuts = [((x + n * p) * p + (y + n * q) * q) * units for n in record["cut_indices"]]
-    return (p, q), cuts
+    return _CutPlanes((p, q), cuts)
 
 
 def sheet_boundary(state: JunctionModel, sheet_id: str) -> list:

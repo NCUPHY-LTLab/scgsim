@@ -10,7 +10,9 @@ from shapely import Point, Polygon, coverage_is_valid, union_all
 from scgsim.geometry.grid.arrangement import build_grid_arrangement
 from scgsim.geometry.grid.grid_regions import GridOperand
 from scgsim.geometry.grid.tagged_grid import (
+    LocatedSegment,
     PointIndex,
+    SourceSegment,
     build_tagged_subdivision,
     pixel_interval,
     source_paths,
@@ -162,7 +164,9 @@ def test_direction_and_missing_endpoint_context_are_explicit_refusals():
         build_grid_arrangement((bowtie,), GeometryGridContext(1))
     context = json.loads(caught.value.__notes__[0].split(": ", 1)[1])
     assert context == dict(operand_index=0, ring_index=0)
-    row = ("owner", 0, 0, 0, (0, 0), (2, 0), ((0, 0), (2, 0)), 1)
+    row = LocatedSegment(
+        SourceSegment("owner", 0, 0, 0, (0, 0), (2, 0), 1), ((0, 0), (2, 0))
+    )
     with pytest.raises(ValueError, match="source endpoint pixel incidence"):
         source_paths((row,), PointIndex.build(((0, 0),)), 1)
     # Exact half-open geometry: point-touching top/right is excluded, while

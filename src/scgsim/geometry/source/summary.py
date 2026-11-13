@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.refusals import Declared, internal
@@ -398,9 +398,16 @@ def _checked_summary_pair(
     return materials
 
 
+class _EntityRows(NamedTuple):
+    """One summary row per Entity, and the Entities of each Net."""
+
+    entities: list[dict[str, Any]]
+    nets: dict[str, list[str]]
+
+
 def _entity_rows(
     build_input: GeometryBuildInput,
-) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+) -> _EntityRows:
     """One summary row per Entity, and the Entities of each Net in input order."""
     nets: dict[str, list[str]] = {}
     entities = []
@@ -422,7 +429,7 @@ def _entity_rows(
                 "source_occurrence_path": entity.metadata.get("source_occurrence_path"),
             }
         )
-    return entities, nets
+    return _EntityRows(entities, nets)
 
 
 def _port_rows(build_input: GeometryBuildInput) -> list[dict[str, Any]]:
