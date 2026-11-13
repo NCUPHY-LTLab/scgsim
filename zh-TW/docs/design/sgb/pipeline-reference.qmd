@@ -177,7 +177,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | | |
 |---|---|
 | 輸入 | topology、route |
-| 輸出 | `semantic_geometry_route_<a\|b\|c>.brep`、`.xao`、`.sidecar.json`（`scgsim.sgb.sidecar.v4`）、`.slivers.json`、`.validation.json`；Gmsh 只用來做 meshing（與作為測試 oracle） |
+| 輸出 | `semantic_geometry_route_<a\|b\|c>.brep`、`.xao`、`.sidecar.json`（`scgsim.sgb.sidecar.v5`）、`.slivers.json`、`.validation.json`；Gmsh 只用來做 meshing（與作為測試 oracle） |
 | Record | 直接 writer 的計畫（`BrepPlan`：vertex、edge、wire、face、shell、solid 與 pcurve）；`SgbArtifacts`（五個路徑、route、counts、timings） |
 | 工作單位 | writer 以 chunk 依檔案順序算繪，輸出對任何 chunk 大小逐位元相同 |
 | 失敗 | 直接 writer 明確寫出每個 orientation；writer 拒絕不能精確寫出的曲面（不是平面、不是單一圓的圓柱、帶洞的曲面 wall 等）時 `SgbError`；對寫出的檔案執行 `check_file(strict=True)` 時，OCCT finding 為 `OcctCheckError`，缺 OCP 為 `OcctUnavailable`；寫出的檔案不依賴 Gmsh 的 healing，需要 fix 就是規劃缺陷 |
@@ -253,7 +253,7 @@ primary group 命名為 `<kind>::<qualified entity id>__<face kind>[::band=k]`�
 | 檔案 | 內容 |
 |---|---|
 | `….brep`、`….xao` | 直接 writer 輸出的幾何（XAO 帶 physical group）；BREP 為 OCCT `CASCADE Topology V1` 文字，並寫出 pcurve（容差 $10^{-7}$ µm） |
-| `….sidecar.json`（`scgsim.sgb.sidecar.v4`） | `schema`；`model`（名稱、identity digest、`route`、`route_policy`、`grid_um`、`tolerance_um`、檔名）；`binding`（tag = 1 + 在 `ids_by_tag[dim]` 的位置，依 `TopExp::MapShapes` 前序）；`summary`（寫出的數量、sliver 摘要、圓弧 edge 數）；以及以 id 為鍵、以 id 互相指向的三層表：來源 `entity`、`source_curve`、`inset_request`、`port`，推導 `cut_family`、`band_family`、`support_ring`、`support_primitive`、`carrier`，寫出 `vertex`、`edge`、`face`、`volume`、`group`、`surface_epr_row`、`mesh_feature`。group 成員、依 native tag 的預期值與 embedding 配對由 `scgsim.contracts.sgb_sidecar.views` 算出 |
+| `….sidecar.json`（`scgsim.sgb.sidecar.v5`） | `schema`；`model`（名稱、identity digest、`route`、`route_policy`、`grid_um`、`tolerance_um`、檔名）；`binding`（tag = 1 + 在 `ids_by_tag[dim]` 的位置，依 `TopExp::MapShapes` 前序）；`summary`（寫出的數量、sliver 摘要、圓弧 edge 數）；以及以 id 為鍵、以 id 互相指向的三層表：來源 `entity`、`source_curve`、`inset_request`、`port`，推導 `cut_family`、`band_family`、`support_ring`、`support_primitive`、`carrier`，寫出 `vertex`、`edge`、`face`、`volume`、`group`、`surface_epr_row`、`mesh_feature`。group 成員、依 native tag 的預期值與 embedding 配對由 `scgsim.contracts.sgb_sidecar.views` 算出 |
 | `….slivers.json` | 最短 edge、最窄 face、最小角度、薄 slab、snap drift、arc edge 偏差，各自帶位置、plane 與 lineage；最窄 face 的 `value_um` 是 feature size，`width_2a_over_p_um` 是 chord polygon 的 $2A/P$ |
 | `….validation.json` | `passed`、檢查清單（不含時間）與 `counts` |
 :::

@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v4``: schema, binding, group facts, unions, lineage, mesh features, determinism."""
+"""The production sidecar ``scgsim.sgb.sidecar.v5``: schema, binding, group facts, unions, lineage, mesh features, determinism."""
 
 from __future__ import annotations
 
@@ -108,7 +108,7 @@ def test_the_schema_rejects_what_a_consumer_must_not_see(sidecars):
         },
         {k: v for k, v in good.items() if k != "vertex"},
         {**good, "stowaway": 1},
-        {**good, "schema": "scgsim.sgb.sidecar.v3"},
+        {**good, "schema": "scgsim.sgb.sidecar.v4"},
         {**good, "model": {**good["model"], "route": "D"}},
         {
             **good,
@@ -254,7 +254,9 @@ def test_a_sheet_on_a_substrate_carries_both_surface_epr_rows(sidecars):
         == "pad::band=2"
     )
     assert rows["MA::pad__sheet::band=2"]["band"] == 2
-    assert rows["MA::pad__sheet::band=2"]["entities"] == ["pad"]
+    assert side["group"]["pad::band=2"]["entities"] == [
+        "pad"
+    ]  # the entities of its rows
     assert rows["SA::substrate|vacuum__interface::band=0"]["interface_type"] == "SA"
     unbanded = sidecars["pad_a"]["surface_epr_row"]
     assert (
@@ -500,8 +502,10 @@ def test_lineage_leads_every_edge_to_a_source_curve_and_every_face_to_entities(
     )
     assert curve["curve"]["kind"] == "line" and curve["length_um"] > 0
     for fid, face in side["face"].items():
-        assert face["entities"] and face["membership"], fid
-        assert all(0 < share <= 1.0000001 for share in face["membership"].values()), fid
+        assert face["entities"] and face["entity_coverage"], fid
+        assert all(
+            0 < share <= 1.0000001 for share in face["entity_coverage"].values()
+        ), fid
 
 
 def test_inset_families_record_request_margins_and_the_group_of_every_band(sidecars):

@@ -15,9 +15,8 @@ an object included.  *Table rules* are the facts that tie tables together:
 * a face is on the outer boundary exactly when one of its side volumes is null, and the domain it bounds is
   the Entity of the other.
 
-Not checked, because the sidecar keeps no table of them: an inset family's ``bands`` (in Route B they also name
-the ``MM`` group of a metal-metal contact, which is no physical group), and the Entities a caller excluded from a
-type-level request, which are the request as given.
+Not checked, because the sidecar keeps no table of them: the Entities a caller excluded from a type-level
+request, which are the request as given.
 """
 
 import functools

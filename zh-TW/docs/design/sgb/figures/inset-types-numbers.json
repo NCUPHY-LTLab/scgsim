@@ -87,6 +87,7 @@
        "MA::ground_0000__top::band=2"
       ]
      },
+     "hidden_contacts": {},
      "interface": null,
      "margins_grid": [
       500,
@@ -115,6 +116,7 @@
        "MA::pad__top::band=2"
       ]
      },
+     "hidden_contacts": {},
      "interface": null,
      "margins_grid": [
       500,
@@ -143,6 +145,7 @@
        "MS::ground_0000__bottom::band=2"
       ]
      },
+     "hidden_contacts": {},
      "interface": null,
      "margins_grid": [
       500,
@@ -171,6 +174,7 @@
        "MS::pad__bottom::band=2"
       ]
      },
+     "hidden_contacts": {},
      "interface": null,
      "margins_grid": [
       500,
@@ -199,6 +203,7 @@
        "SA::substrate|VACUUM_REGION__interface::band=2"
       ]
      },
+     "hidden_contacts": {},
      "interface": null,
      "margins_grid": [
       500,
@@ -287,6 +292,7 @@
        "chip/left::band=2"
       ]
      },
+     "hidden_contacts": {},
      "interface": null,
      "margins_grid": [
       500,
@@ -315,6 +321,7 @@
        "chip/right::band=2"
       ]
      },
+     "hidden_contacts": {},
      "interface": null,
      "margins_grid": [
       500,
@@ -343,6 +350,7 @@
        "SA::substrate|upper_air__interface::band=2"
       ]
      },
+     "hidden_contacts": {},
      "interface": null,
      "margins_grid": [
       500,

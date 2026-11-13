@@ -307,7 +307,11 @@ def _family_segment(name, p, q):
     from scgsim.geometry.sgb.exact.carriers import Lineage, LineCarrier  # noqa: PLC0415 -- used once
 
     return LineCarrier(
-        name, p, q, Lineage("family_member", family_id="fam", member=name)
+        name,
+        p,
+        q,
+        Lineage("family_member", family_id="fam", member=name),
+        "family_line",
     )
 
 

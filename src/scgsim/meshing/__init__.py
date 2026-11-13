@@ -10,7 +10,7 @@ repair, delivered whatever its quality.
 :class:`MesherOptions` sets the Gmsh algorithms and the order of the delivered mesh; the audit always
 measures the linear mesh.  :func:`check_fine_structure` is the meshing stage of ``simulation_drc``: before
 any meshing it finds the fine edges and faces of a built model below :class:`FineStructureLimits`, with
-their location and owner.  The module reads only the sidecar JSON (``scgsim.sgb.sidecar.v4``) and the XAO;
+their location and owner.  The module reads only the sidecar JSON (``scgsim.sgb.sidecar.v5``) and the XAO;
 it imports no SGB, AEDT or Palace code.  It trusts that the two files are the pair one SGB build wrote and
 does not check them against each other.
 

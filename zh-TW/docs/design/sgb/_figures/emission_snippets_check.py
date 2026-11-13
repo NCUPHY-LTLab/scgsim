@@ -13,7 +13,7 @@ interpreter, and every quoted block is compared with what was written.  Two kind
 * **Sidecar blocks** have a header like ``{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}``.  The sidecar is
   read from the example with the contract's ``read_sidecar``.  The excerpt is parsed as JSON (a ``"…"`` key or item stands
   for omitted content) and every value in it must equal the sidecar's, found under the same key: a table of
-  ``scgsim.sgb.sidecar.v4`` (``group``, ``face``, ``edge`` ...) or another top-level field.
+  ``scgsim.sgb.sidecar.v5`` (``group``, ``face``, ``edge`` ...) or another top-level field.
 
 Exit status 1 lists every mismatch.
 """

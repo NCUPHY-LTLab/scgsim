@@ -78,6 +78,7 @@ def _line_family(
             p,
             q,
             Lineage("family_member", family_id=family_id, member=f"{family_id}/{i}"),
+            "family_line",
         )
         for i, (p, q) in enumerate(pairs)
     )

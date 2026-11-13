@@ -145,6 +145,7 @@ def closed_family(
             p,
             q,
             Lineage("family_member", family_id=name, member=f"{name}{k}"),
+            "family_line",
         )
         for k, (p, q) in enumerate(zip(ring, [*ring[1:], ring[0]], strict=True))
     )

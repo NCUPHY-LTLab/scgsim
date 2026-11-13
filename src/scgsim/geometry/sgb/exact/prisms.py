@@ -257,6 +257,7 @@ class PrismRecord:
                         ring[edge],
                         ring[(edge + 1) % count],
                         lineage,
+                        "source_edge",
                     )
                 )
                 edge += 1
@@ -269,6 +270,7 @@ class PrismRecord:
                         ring[edge],
                         ring[(edge + 1) % count],
                         arc.lineage,
+                        "arc_chord",
                         piece.curve,
                         piece.piece,
                     )

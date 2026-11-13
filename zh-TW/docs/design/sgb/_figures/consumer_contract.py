@@ -13,7 +13,7 @@ Gmsh, ``verify_loaded``, ``apply_sidecar_embeds``, a coarse mesh) and the AEDT s
 ``read_step_guard``).  Every sidecar is read with the contract's ``read_sidecar`` and indexed by its tables and views.
 
 It writes markdown blocks to ``../figures/`` with the prefix ``consumer-``.  Every JSON excerpt is a selection of real
-records and keys of the ``scgsim.sgb.sidecar.v4`` sidecar; a list that is cut is shown with the string ``"..."`` as its
+records and keys of the ``scgsim.sgb.sidecar.v5`` sidecar; a list that is cut is shown with the string ``"..."`` as its
 last item.  The Palace group dict is the one Palace builds, ``scgsim.palace.mesh.physical_groups.groups_from_sidecar``;
 the AEDT rows group the written faces by ``face.group``.
 """

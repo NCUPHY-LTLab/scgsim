@@ -159,9 +159,9 @@ def _face(group: str, edges: Sequence[str]) -> dict[str, Any]:
         "area_um2": 1.0,
         "curved": False,
         "entities": [],
-        "families": [],
-        "cut_families": [],
-        "membership": {},
+        "band_families": [],
+        "other_cut_families": [],
+        "entity_coverage": {},
         "bands": [],
         "outer_boundary": None,
     }
@@ -234,6 +234,7 @@ def _add_feature(
             "band_count": 2,
             "support_area_um2": None,
             "bands": {},
+            "hidden_contacts": {},
         }
     else:
         document["port"][source] = {

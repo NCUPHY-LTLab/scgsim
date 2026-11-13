@@ -33,7 +33,7 @@ the vocabulary all of them share:
                    emitted files
 * ``output``       S10: numbering of the shapes in ``TopExp::MapShapes`` order and the direct,
                    byte-deterministic BREP/XAO writer (no CAD kernel, no Boolean); the versioned JSON
-                   sidecar ``scgsim.sgb.sidecar.v4`` and its JSON Schema; the AEDT STEP export (OCP)
+                   sidecar ``scgsim.sgb.sidecar.v5`` and its JSON Schema; the AEDT STEP export (OCP)
 * ``section``      the 2D section model of a validated model, cut along a line
 
 Beside them: ``model`` runs the stages and returns the validated model
