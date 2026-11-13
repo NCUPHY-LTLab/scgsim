@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import EIGENMODE, palace_problem
 from scgsim.palace.results.artifacts import (
     expect_int,
     expect_list,
@@ -17,42 +18,12 @@ from scgsim.palace.results.artifacts import (
 )
 from scgsim.palace.results.models import ParsedTable
 
-PROBLEM_FAMILIES = {
-    "Electrostatic": (
-        "terminal-C",
-        "terminal-Cm",
-        "terminal-Cinv",
-        "terminal-V",
-        "domain-E",
-        "surface-Q",
-        "error-indicators",
-    ),
-    "Eigenmode": (
-        "eig",
-        "port-EPR",
-        "port-I",
-        "port-V",
-        "domain-E",
-        "surface-Q",
-        "error-indicators",
-    ),
-}
-
 
 def output_families(problem: str, index_counts: dict[str, int]) -> tuple[str, ...]:
-    """Select native result families from the problem and configured surface/port counts."""
-    if problem != "Eigenmode":
-        return tuple(
-            family
-            for family in PROBLEM_FAMILIES[problem]
-            if family != "surface-Q" or index_counts["surface"]
-        )
-    return (
-        "eig",
-        *(("port-EPR", "port-I", "port-V") if index_counts["lumped_port"] else ()),
-        "domain-E",
-        *(("surface-Q",) if index_counts["surface"] else ()),
-        "error-indicators",
+    """The native result families of ``problem`` for the lumped ports and surfaces the index map lists."""
+    return palace_problem(problem).written_families(
+        lumped_ports=bool(index_counts["lumped_port"]),
+        surfaces=bool(index_counts["surface"]),
     )
 
 
@@ -66,10 +37,10 @@ def validate_table(
     if not table.rows:
         raise ValueError(f"{table.path} has no result rows.")
 
-    if problem == "Electrostatic":
-        _validate_electrostatic_table(table, index_counts, config)
-    elif problem == "Eigenmode":
+    if palace_problem(problem).solves_modes:
         _validate_eigenmode_table(table, index_counts, config)
+    else:
+        _validate_electrostatic_table(table, index_counts, config)
 
 
 def _validate_matrix_table(
@@ -323,7 +294,7 @@ def read_result_table(
 ) -> ParsedTable:
     """Read one native result table as the sealed config and index map describe it."""
     table = read_csv_table(path)
-    if problem == "Eigenmode" and table.name in _MODE_FAMILIES:
+    if palace_problem(problem).solves_modes and table.name in _MODE_FAMILIES:
         table = requested_modes(table, eigenmode_count(config))
     validate_table(problem, table, index_counts, config)
     return table
@@ -360,7 +331,7 @@ def read_requested_modes(path: Path, mode_count: int) -> ParsedTable:
 def configured_mode_count(config: Mapping[str, Any] | None) -> int | None:
     """Read the requested mode count of a config that an inspection may lack."""
     solver = config.get("Solver") if isinstance(config, Mapping) else None
-    eigenmode = solver.get("Eigenmode") if isinstance(solver, Mapping) else None
+    eigenmode = solver.get(EIGENMODE.name) if isinstance(solver, Mapping) else None
     count = eigenmode.get("N") if isinstance(eigenmode, Mapping) else None
     return count if type(count) is int and count >= 1 else None
 
@@ -457,7 +428,9 @@ def _require_positive_index(value: Any) -> None:
 def eigenmode_count(config: dict[str, Any]) -> int:
     """Read the positive requested mode count from the sealed Eigenmode solver config."""
     solver = expect_mapping(config.get("Solver"), "config.Solver")
-    eigenmode = expect_mapping(solver.get("Eigenmode"), "config.Solver.Eigenmode")
+    eigenmode = expect_mapping(
+        solver.get(EIGENMODE.name), f"config.Solver.{EIGENMODE.name}"
+    )
     count = expect_int(eigenmode.get("N"))
     if count is None or count < 1:
         raise ValueError("config Solver.Eigenmode.N must be positive.")

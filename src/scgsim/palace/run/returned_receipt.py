@@ -1,4 +1,10 @@
-"""Pure-stdlib recorder for completed manual Palace runs."""
+"""The receipt recorder of a manual Palace run: it runs in the run folder with only a Python interpreter.
+
+The run script calls it twice: ``verify-config`` before the solve, which records Palace's dry run of
+``config.json``, and then with the solver's exit codes, which writes the returned-run receipt.  The paths,
+problems and helpers it imports are the run-folder contract; the copy ``prepare_handoff`` puts in the run
+folder carries that contract's text in place of the import, so the copy imports only the standard library.
+"""
 
 from __future__ import annotations
 
@@ -16,83 +22,45 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-SCHEMA = "palace-returned-run-receipt.v1"
-RUNTIME_COMPATIBILITY_SCHEMA = "palace-runtime-compatibility.v1"
-RUNTIME_COMPATIBILITY_PATH = "metadata/palace_runtime_compatibility.json"
+from scgsim.contracts.palace_run_folder import (
+    CONFIG,
+    HANDOFF_METADATA,
+    ITERATION_PREFIX,
+    NATIVE_METADATA,
+    NATIVE_METADATA_NAME,
+    OUTPUT_DIR,
+    RESOURCE_RECORD,
+    RETURNED_RECEIPT,
+    RETURNED_RECEIPT_SCHEMA,
+    RUN_METADATA,
+    RUNTIME_COMPATIBILITY,
+    RUNTIME_COMPATIBILITY_SCHEMA,
+    collects_adapted_meshes,
+    confined_path,
+    json_text,
+    output_table,
+    palace_problem,
+    read_json,
+    sha256,
+)
 
 UTC = timezone.utc
 
-_REQUIRED_OUTPUT_FAMILIES = {
-    "Electrostatic": (
-        "terminal-C",
-        "terminal-Cm",
-        "terminal-Cinv",
-        "terminal-V",
-        "domain-E",
-        "surface-Q",
-        "error-indicators",
-    ),
-    "Eigenmode": (
-        "eig",
-        "port-EPR",
-        "port-I",
-        "port-V",
-        "domain-E",
-        "surface-Q",
-        "error-indicators",
-    ),
-}
 
-
-def _output_families(problem: str, config: dict[str, Any]) -> tuple[str, ...]:
-    families = _REQUIRED_OUTPUT_FAMILIES.get(problem)
-    if families is None:
-        raise ValueError("unsupported problem")
-    if problem != "Eigenmode":
-        boundaries = config.get("Boundaries")
-        if not isinstance(boundaries, dict):
-            raise TypeError("Electrostatic config Boundaries must be a JSON object")
-        postprocessing = boundaries.get("Postprocessing", {})
-        if not isinstance(postprocessing, dict):
-            raise TypeError("Electrostatic postprocessing must be a JSON object")
-        surfaces = postprocessing.get("Dielectric", [])
-        if not isinstance(surfaces, list):
-            raise TypeError("Electrostatic dielectric postprocessing must be a list")
-        return tuple(family for family in families if family != "surface-Q" or surfaces)
+def _written_families(problem: str, config: dict[str, Any]) -> tuple[str, ...]:
+    """The output families Palace writes for ``problem`` from this ``config``: its ports and Surface-EPR rows."""
+    record = palace_problem(problem)
     boundaries = config.get("Boundaries")
     if not isinstance(boundaries, dict):
-        raise TypeError("Eigenmode config Boundaries must be a JSON object")
-    ports = boundaries.get("LumpedPort", [])
+        raise TypeError(f"{problem} config Boundaries must be a JSON object")
+    ports = boundaries.get(record.excitation, []) if record.port_families else []
     postprocessing = boundaries.get("Postprocessing", {})
     if not isinstance(ports, list) or not isinstance(postprocessing, dict):
-        raise TypeError("Eigenmode boundaries have invalid postprocessing or ports")
+        raise TypeError(f"{problem} boundaries have invalid postprocessing or ports")
     surfaces = postprocessing.get("Dielectric", [])
     if not isinstance(surfaces, list):
-        raise TypeError("Eigenmode dielectric postprocessing must be a list")
-    return (
-        "eig",
-        *(("port-EPR", "port-I", "port-V") if ports else ()),
-        "domain-E",
-        *(("surface-Q",) if surfaces else ()),
-        "error-indicators",
-    )
-
-
-def sha256(path: Path) -> str:
-    """Return a file's SHA-256 digest using only the standard library."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    payload = path.read_text(encoding="utf-8")
-    data = json.loads(payload)
-    if not isinstance(data, dict):
-        raise TypeError(f"{path} must contain a JSON object.")
-    return data
+        raise TypeError(f"{problem} dielectric postprocessing must be a list")
+    return record.written_families(lumped_ports=bool(ports), surfaces=bool(surfaces))
 
 
 def _required_output_paths(
@@ -101,29 +69,28 @@ def _required_output_paths(
     *,
     config: dict[str, Any],
 ) -> list[str]:
-    families = _output_families(problem, config)
-    paths = [f"results/palace/{family}.csv" for family in families]
-    paths.append("results/palace/palace.json")
+    paths = [output_table(family) for family in _written_families(problem, config)]
+    paths.append(NATIVE_METADATA)
     if log_path:
         paths.append(log_path)
     return paths
 
 
 def _iteration_directories(root: Path) -> list[Path]:
-    results = root / "results/palace"
-    if not confined_path(root, "results/palace").is_dir():
+    results = root / OUTPUT_DIR
+    if not confined_path(root, OUTPUT_DIR).is_dir():
         return []
     directories = []
     for path in results.iterdir():
         if (
-            not path.name.startswith("iteration")
-            or not path.name.removeprefix("iteration").isdigit()
+            not path.name.startswith(ITERATION_PREFIX)
+            or not path.name.removeprefix(ITERATION_PREFIX).isdigit()
         ):
             continue
         if confined_path(root, path.relative_to(root).as_posix()).is_dir():
             directories.append(path)
     return sorted(
-        directories, key=lambda path: int(path.name.removeprefix("iteration"))
+        directories, key=lambda path: int(path.name.removeprefix(ITERATION_PREFIX))
     )
 
 
@@ -135,15 +102,15 @@ def iteration_output_paths(
 ) -> list[str]:
     """Return the present output tables beneath recognized iteration folders."""
     families = (
-        _output_families(problem, config)
+        _written_families(problem, config)
         if config is not None
-        else _REQUIRED_OUTPUT_FAMILIES[problem]
+        else palace_problem(problem).output_families
     )
     paths: list[str] = []
     for directory in _iteration_directories(root):
-        names = [*families, "palace"]
+        names = [*(f"{family}.csv" for family in families), NATIVE_METADATA_NAME]
         for name in names:
-            path = directory / f"{name}.{'json' if name == 'palace' else 'csv'}"
+            path = directory / name
             if path.is_file():
                 paths.append(path.relative_to(root).as_posix())
     return paths
@@ -159,17 +126,19 @@ def adapted_mesh_output_paths(root: Path, config: dict[str, Any]) -> list[str]:
     if config.get("Model", {}).get("Refinement", {}).get("SaveAdaptMesh") is not True:
         return []
     mesh_name = Path(config["Model"]["Mesh"]).stem
-    results = root / "results/palace"
-    if not confined_path(root, "results/palace").is_dir():
+    results = root / OUTPUT_DIR
+    if not confined_path(root, OUTPUT_DIR).is_dir():
         return []
     directories = [results, *_iteration_directories(root)]
     outputs: list[str] = []
     for directory in directories:
-        metadata_relative = (directory / "palace.json").relative_to(root).as_posix()
+        metadata_relative = (
+            (directory / NATIVE_METADATA_NAME).relative_to(root).as_posix()
+        )
         metadata_path = confined_path(root, metadata_relative)
         if not metadata_path.is_file():
             continue  # The existing required metadata inventory handles missing metadata.
-        metadata = _read_json(metadata_path)
+        metadata = read_json(metadata_path)
         if "SavedAdaptedMesh" not in metadata:
             continue
         if not isinstance(metadata["SavedAdaptedMesh"], dict):
@@ -206,8 +175,7 @@ def record_for_path(run_dir: Path, relative_path: str) -> dict[str, Any]:
 
 
 def _hashes_from_metadata(root: Path) -> list[dict[str, Any]]:
-    metadata_path = root / "metadata" / "palace_handoff_metadata.json"
-    metadata = _read_json(metadata_path)
+    metadata = read_json(root / HANDOFF_METADATA)
     hashes = metadata.get("hashes")
     if not isinstance(hashes, list):
         raise TypeError("handoff metadata hashes must be a list.")
@@ -228,10 +196,10 @@ def _diagnostic_handoff_id(
 
 
 def _solver_identity(root: Path) -> dict[str, Any]:
-    palace_json_path = root / "results" / "palace" / "palace.json"
+    palace_json_path = root / NATIVE_METADATA
     if not palace_json_path.is_file():
         return {}
-    payload = _read_json(palace_json_path)
+    payload = read_json(palace_json_path)
     return {
         k: payload[k]
         for k in ("GitTag", "PeakMemoryMegabytes", "PeakNodeMemoryMegabytes")
@@ -266,10 +234,10 @@ def _runtime_compatibility(
     config_schema = _compatibility_required(handoff_metadata)
     if config_schema is None:
         return {}
-    path = confined_path(root, RUNTIME_COMPATIBILITY_PATH)
+    path = confined_path(root, RUNTIME_COMPATIBILITY)
     if not path.is_file():
         return {}
-    payload = _read_json(path)
+    payload = read_json(path)
     if payload.get("schema") != RUNTIME_COMPATIBILITY_SCHEMA:
         return payload
     if payload.get("config", {}).get("declared_schema") != config_schema:
@@ -293,7 +261,7 @@ def _runtime_compatibility_verified(
     if not isinstance(config, dict) or not isinstance(compatibility, dict):
         return False
     config_path = config.get("path")
-    if config_path != "config.json" or config.get("declared_schema") != config_schema:
+    if config_path != CONFIG or config.get("declared_schema") != config_schema:
         return False
     expected_config = record_for_path(root, config_path)
     if expected_config["present"] is not True:
@@ -340,9 +308,7 @@ def main() -> int:
     parser.add_argument("--solver-exit-code", type=int, default=None)
     parser.add_argument("--tee-exit-code", type=int, default=None)
     parser.add_argument("--diagnostic-after-the-fact", action="store_true")
-    parser.add_argument(
-        "--receipt-path", default="metadata/palace_returned_run_receipt.json"
-    )
+    parser.add_argument("--receipt-path", default=RETURNED_RECEIPT)
     args = parser.parse_args()
     return _write_returned_receipt(args)
 
@@ -359,7 +325,7 @@ def _write_returned_receipt(args: argparse.Namespace) -> int:
         raise ValueError("preflight failure must not declare a solver exit code.")
 
     root = args.run_dir.expanduser().resolve()
-    handoff_metadata = _read_json(root / "metadata" / "palace_handoff_metadata.json")
+    handoff_metadata = read_json(root / HANDOFF_METADATA)
     route = handoff_metadata.get("route")
     problem = handoff_metadata.get("problem")
     if not isinstance(route, str) or route not in {"A", "B"}:
@@ -415,7 +381,7 @@ def _receipt_payload(context: _ReceiptContext) -> dict[str, Any]:
         context.root, context.handoff_metadata
     )
     compatibility_required = _compatibility_required(context.handoff_metadata)
-    config = _read_json(context.root / "config.json")
+    config = read_json(context.root / CONFIG)
     output_paths = [
         *_required_output_paths(
             context.problem,
@@ -427,12 +393,9 @@ def _receipt_payload(context: _ReceiptContext) -> dict[str, Any]:
             context.problem,
             config=config,
         ),
-        *([RUNTIME_COMPATIBILITY_PATH] if compatibility_required is not None else []),
+        *([RUNTIME_COMPATIBILITY] if compatibility_required is not None else []),
     ]
-    if (
-        context.handoff_metadata.get("palace_identity", {}).get("config_schema")
-        == "1-7-0"
-    ):
+    if collects_adapted_meshes(context.handoff_metadata.get("palace_identity")):
         output_paths.extend(adapted_mesh_output_paths(context.root, config))
         output_paths = list(dict.fromkeys(output_paths))
     output_records = [record_for_path(context.root, path) for path in output_paths]
@@ -462,7 +425,7 @@ def _receipt_payload(context: _ReceiptContext) -> dict[str, Any]:
         status = "failed"
 
     payload: dict[str, Any] = {
-        "schema": SCHEMA,
+        "schema": RETURNED_RECEIPT_SCHEMA,
         "schema_version": 1,
         "handoff_id": context.handoff_id,
         "route": context.route,
@@ -520,8 +483,8 @@ def _update_resource_record(
     exit_code: int,
     job_identity: dict[str, Any],
 ) -> None:
-    path = root / "metadata" / "palace_resource_record.json"
-    record = _read_json(path)
+    path = root / RESOURCE_RECORD
+    record = read_json(path)
     if record.get("handoff_id") != handoff_metadata.get("handoff_id"):
         raise ValueError("resource record handoff identity does not match metadata.")
     record.update(
@@ -529,7 +492,7 @@ def _update_resource_record(
             "status": status,
             "exit_code": exit_code,
             "job_identity": job_identity,
-            "returned_receipt_path": "metadata/palace_returned_run_receipt.json",
+            "returned_receipt_path": RETURNED_RECEIPT,
         }
     )
     _write_json_atomic(path, record)
@@ -543,8 +506,8 @@ def _update_run_metadata(
     exit_code: int,
     job_identity: dict[str, Any],
 ) -> None:
-    path = root / "metadata" / "palace_run_metadata.json"
-    record = _read_json(path)
+    path = root / RUN_METADATA
+    record = read_json(path)
     if record.get("handoff_id") != handoff_metadata.get("handoff_id"):
         raise ValueError("run metadata handoff identity does not match metadata.")
     record.update(
@@ -552,7 +515,7 @@ def _update_run_metadata(
             "status": status,
             "exit_code": exit_code,
             "job_identity": job_identity,
-            "returned_receipt_path": "metadata/palace_returned_run_receipt.json",
+            "returned_receipt_path": RETURNED_RECEIPT,
         }
     )
     _write_json_atomic(path, record)
@@ -563,19 +526,9 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     with tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", dir=path.parent, delete=False
     ) as handle:
-        handle.write(json.dumps(payload, indent=2) + "\n")
+        handle.write(json_text(payload))
         temporary = Path(handle.name)
     os.replace(temporary, path)
-
-
-def confined_path(root: Path, relative: str) -> Path:
-    """Resolve a receipt path while keeping it inside its run directory."""
-    if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
-        raise ValueError("receipt artifact paths must be non-empty relative paths.")
-    candidate = (root / relative).resolve()
-    if not candidate.is_relative_to(root.resolve()):
-        raise ValueError("receipt artifact path escapes the run directory.")
-    return candidate
 
 
 def _run_probe(command: list[str]) -> tuple[int | None, str]:

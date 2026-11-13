@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Literal, TypeVar
 
+from scgsim.contracts.palace_run_folder import CONFIG, INDEX_MAP_SCHEMA_VERSION
 from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
@@ -37,7 +38,6 @@ from ..mesh.build import (
 )
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
-from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
 from ..run.handoff import HandoffPlan, prepare_handoff
 from ..source.inputs import stack_materials
 from ..source.layout_ports import LayoutGeometryRequest, layout_geometry_request
@@ -493,12 +493,11 @@ class PalaceSimulation(ABC):
         config: Mapping[str, Any],
         metadata: Sequence[tuple[str, Mapping[str, Any]]],
     ) -> Path:
-        """Write each ``metadata/<name>`` file in order, then ``config.json`` last, and reach ``CONFIG_WRITTEN``."""
-        metadata_dir = mesh.output_dir / "metadata"
-        config_path = mesh.output_dir / "config.json"
+        """Write each metadata file in order, then ``config.json`` last, and reach ``CONFIG_WRITTEN``."""
+        config_path = mesh.output_dir / CONFIG
         self.config_path = persist_problem_files(
             metadata_files=tuple(
-                (metadata_dir / name, payload) for name, payload in metadata
+                (mesh.output_dir / relative, payload) for relative, payload in metadata
             ),
             config_path=config_path,
             config=config,

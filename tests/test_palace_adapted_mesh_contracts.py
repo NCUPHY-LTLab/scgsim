@@ -13,7 +13,7 @@ from scgsim.palace.run.returned_receipt import (
     adapted_mesh_output_paths,
     record_for_path,
 )
-from scgsim.palace.source.transforms import SCHEMA_VERSION
+from scgsim.contracts.palace_run_folder import CONFIG_SCHEMA
 
 
 def config(enabled=True):
@@ -31,7 +31,7 @@ def metadata(directory, *, adapted=True):
 
 def test_new_schema_label():
     """New schema label."""
-    assert SCHEMA_VERSION == "1-7-0"
+    assert CONFIG_SCHEMA == "1-7-0"
 
 
 def test_disabled_save_has_no_fabricated_artifact_requirement(tmp_path):

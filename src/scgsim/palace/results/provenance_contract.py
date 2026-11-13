@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import (
+    HANDOFF_METADATA,
+    RUN_METADATA,
+    RUN_RECORD_SCHEMA_VERSION,
+    SEALED_INPUTS,
+)
 from scgsim.palace.results.artifacts import (
     confined_path,
     expect_int,
@@ -24,13 +30,6 @@ from scgsim.palace.results.receipt_contract import validate_palace_identity
 from scgsim.palace.run.archive import (
     logical_tar_member_name,
     resolve_run_archive_path,
-)
-
-_REQUIRED_HASH_ENTRIES = (
-    "palace.msh",
-    "config.json",
-    "metadata/mesh_manifest.json",
-    "metadata/palace_index_map.json",
 )
 
 
@@ -249,7 +248,7 @@ def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
         if sha_value != observed[path_name][1]:
             raise ValueError(f"{label} hash mismatch for {path_name}.")
 
-    missing = [name for name in _REQUIRED_HASH_ENTRIES if name not in observed]
+    missing = [name for name in SEALED_INPUTS if name not in observed]
     if missing:
         raise ValueError(
             f"{label} metadata missing hash entries for: {', '.join(missing)}"
@@ -291,8 +290,14 @@ def validate_archive_manifest(
     handoff_metadata: dict[str, Any],
 ) -> None:
     """Validate the archive inventory before comparing its members and exact file bytes."""
-    if expect_scalar(manifest, "schema_version", int, fallback=0) != 1:
-        raise ValueError("handoff archive manifest schema_version must be integer 1.")
+    if (
+        expect_scalar(manifest, "schema_version", int, fallback=0)
+        != RUN_RECORD_SCHEMA_VERSION
+    ):
+        raise ValueError(
+            "handoff archive manifest schema_version must be integer "
+            f"{RUN_RECORD_SCHEMA_VERSION}."
+        )
     archive = expect_mapping(resource_record.get("archive"), "resource_record.archive")
     if extract_hash_map(
         expect_list(manifest.get("input_hashes"), "archive manifest input_hashes")
@@ -305,14 +310,7 @@ def validate_archive_manifest(
             "handoff archive manifest archive path does not match receipt."
         )
     file_members, member_paths, member_types = _manifest_members(manifest)
-    required = {
-        "config.json",
-        "palace.msh",
-        "metadata/mesh_manifest.json",
-        "metadata/palace_index_map.json",
-        "metadata/palace_handoff_metadata.json",
-        "metadata/palace_run_metadata.json",
-    }
+    required = {*SEALED_INPUTS, HANDOFF_METADATA, RUN_METADATA}
     if missing := required - member_paths:
         raise ValueError(
             "handoff archive manifest lacks required members: "

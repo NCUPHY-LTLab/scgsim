@@ -10,6 +10,8 @@ import math
 from pathlib import Path
 from typing import Any, Mapping
 
+from scgsim.contracts.palace_run_folder import palace_problem, sha256
+
 
 def _corner_chord_statistics(
     edges: set[tuple[int, ...]], points: Mapping[int, tuple[float, ...]]
@@ -122,6 +124,7 @@ def mesh_summary(
 ) -> dict[str, Any]:
     """Detach recorded observations and a separately labeled FEM topology estimate."""
     observed = manifest.get("meshing")
+    fem_space = palace_problem(problem).fem_space
     result: dict[str, Any] = dict(
         status="recorded" if observed is not None else "not_recorded",
         mesh_sha256=mesh_sha256,
@@ -132,11 +135,11 @@ def mesh_summary(
             status="unavailable",
             actual_solver_dof=False,
             reason="H1 estimate not implemented"
-            if problem == "Electrostatic"
+            if fem_space == "H1"
             else "tetrahedral topology not recorded",
         ),
     )
-    if problem == "Eigenmode" and observed is not None and fem_order is not None:
+    if fem_space == "ND" and observed is not None and fem_order is not None:
         topology = observed["statistics"]["tetrahedral_topology"]
         p = fem_order
         estimate = (
@@ -163,7 +166,7 @@ def summary_from_files(
         json.loads(payload),
         problem=problem,
         fem_order=fem_order,
-        mesh_sha256=hashlib.sha256(mesh_path.read_bytes()).hexdigest(),
+        mesh_sha256=sha256(mesh_path),
         manifest_sha256=hashlib.sha256(payload).hexdigest(),
     )
 

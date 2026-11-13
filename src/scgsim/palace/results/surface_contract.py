@@ -14,6 +14,7 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
 from scgsim.geometry.surface_epr.specs import margins_of
 from scgsim.palace.results.artifacts import (
     expect_list,
@@ -24,7 +25,6 @@ from scgsim.palace.results.artifacts import (
 
 DIELECTRIC_SECTION = "Boundaries.Postprocessing.Dielectric"
 SURFACE_INTERFACE_TYPES = ("MA", "MS", "SA")
-FILM_SCHEMA = "scgsim.palace.surface-film.v2"
 
 _SIDES = {"above", "below", "both"}
 _ROW_SIDES = _SIDES | {"mixed"}
@@ -160,8 +160,8 @@ def _validate_row(row: dict[str, Any]) -> None:
 
 def _validate_film(spec: dict[str, Any]) -> None:
     """The film values, the Model.L0 they were converted with, and their SI thickness."""
-    if spec.get("schema_version") != FILM_SCHEMA:
-        raise ValueError(f"surface EPR spec schema must be {FILM_SCHEMA!r}.")
+    if spec.get("schema_version") != SURFACE_FILM_SCHEMA:
+        raise ValueError(f"surface EPR spec schema must be {SURFACE_FILM_SCHEMA!r}.")
     thickness = _positive_number(spec.get("thickness"), "surface EPR thickness")
     _positive_number(spec.get("permittivity"), "surface EPR permittivity")
     loss = spec.get("loss_tangent")

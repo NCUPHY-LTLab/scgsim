@@ -5,12 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import MANIFEST_SCHEMA_VERSION
 from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.contracts.sgb_sidecar.records import InsetRequest
 
 from .physical_groups import Groups
 
-MANIFEST_SCHEMA_VERSION = 2
 # The geometry producer the manifest, the route provenance and the handoff record.
 SGB_RUNTIME_AUTHORITY = "scgsim.geometry.sgb"
 

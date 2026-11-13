@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import MESH, MESH_MANIFEST
 from scgsim.palace.mesh.summary import mesh_summary
 
 
@@ -106,7 +107,7 @@ class ResolvedRunData:
         return mesh_summary(
             self.provenance.mesh_manifest,
             problem=self.problem,
-            mesh_sha256=hashes["palace.msh"],
-            manifest_sha256=hashes["metadata/mesh_manifest.json"],
+            mesh_sha256=hashes[MESH],
+            manifest_sha256=hashes[MESH_MANIFEST],
             fem_order=self.provenance.config["Solver"]["Order"],
         )

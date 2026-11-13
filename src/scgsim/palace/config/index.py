@@ -16,8 +16,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from scgsim.contracts.palace_run_folder import EPR_SELECTION_SCHEMA
+
 SURFACE_INTERFACES = ("MA", "MS", "SA")
-EPR_SELECTION_SCHEMA = "scgsim.palace.epr-selection.v1"
 
 
 @dataclass(frozen=True)
@@ -318,7 +319,6 @@ def check_epr_request(
 
 
 __all__ = [
-    "EPR_SELECTION_SCHEMA",
     "SURFACE_INTERFACES",
     "EnergyEntry",
     "EprRequest",

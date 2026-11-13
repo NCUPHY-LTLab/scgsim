@@ -10,12 +10,24 @@ See NOTICE and LICENSES/gsim-LICENSE.txt for retained upstream notices.
 from __future__ import annotations
 
 import hashlib
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import (
+    GEOMETRY_DIR,
+    LOGS_DIR,
+    MESH,
+    MESH_DIR,
+    MESH_MANIFEST,
+    METADATA_DIR,
+    OUTPUT_DIR,
+    SOURCE_GDS,
+    SOURCE_STACK,
+    json_text,
+    route_provenance,
+)
 from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.models.grid import geometry_grid_context
@@ -260,28 +272,19 @@ def _prepare_paths(output_dir: str | Path, route: str) -> BuildPaths:
     run_dir = Path(output_dir).expanduser().resolve()
     if run_dir.exists() and any(run_dir.iterdir()):
         raise ValueError(f"output_dir must be empty before mesh: {run_dir}")
-    geometry_dir = run_dir / "geometry"
-    mesh_dir = run_dir / "mesh"
-
-    for path in (
-        run_dir,
-        geometry_dir,
-        mesh_dir,
-        run_dir / "metadata",
-        run_dir / "logs",
-        run_dir / "results" / "palace",
-    ):
-        path.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    for folder in (GEOMETRY_DIR, MESH_DIR, METADATA_DIR, LOGS_DIR, OUTPUT_DIR):
+        (run_dir / folder).mkdir(parents=True, exist_ok=True)
 
     return BuildPaths(
         run_dir=run_dir,
-        geometry_dir=geometry_dir,
-        mesh_dir=mesh_dir,
-        gds_path=geometry_dir / "design.gds",
-        stack_path=geometry_dir / "design.stack.json",
-        mesh_path=run_dir / "palace.msh",
-        manifest_path=run_dir / "metadata" / "mesh_manifest.json",
-        provenance_path=run_dir / "metadata" / f"route_{route.lower()}_provenance.json",
+        geometry_dir=run_dir / GEOMETRY_DIR,
+        mesh_dir=run_dir / MESH_DIR,
+        gds_path=run_dir / SOURCE_GDS,
+        stack_path=run_dir / SOURCE_STACK,
+        mesh_path=run_dir / MESH,
+        manifest_path=run_dir / MESH_MANIFEST,
+        provenance_path=run_dir / route_provenance(route),
     )
 
 
@@ -299,9 +302,7 @@ def _write_sources(
     if not isinstance(top_cell, str) or not top_cell:
         raise ValueError("plan stack requires top_cell_name")
     paths.gds_path.write_bytes(source_gds_bytes)
-    paths.stack_path.write_text(
-        json.dumps(dict(stack), indent=2) + "\n", encoding="utf-8"
-    )
+    paths.stack_path.write_text(json_text(dict(stack)), encoding="utf-8")
 
     return top_cell
 

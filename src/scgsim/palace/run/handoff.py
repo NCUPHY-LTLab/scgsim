@@ -12,14 +12,38 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from scgsim.contracts.palace_run_folder import (
+    ARCHIVE_MANIFEST,
+    CONFIG,
+    CONFIG_SCHEMA,
+    DIRECT_LOCAL_SCRIPT,
+    HANDOFF_METADATA,
+    INDEX_MAP,
+    LOGS_DIR,
+    METADATA_DIR,
+    OUTPUT_DIR,
+    RECORDER,
+    RESOURCE_RECORD,
+    RETURNED_RECEIPT,
+    RUN_METADATA,
+    RUN_RECORD_SCHEMA_VERSION,
+    RUNTIME_COMPATIBILITY,
+    SLURM_SCRIPT,
+    SOLVER_LOG_PREFIX,
+    read_json,
+    script_name,
+    sha256,
+    write_json,
+)
+
 from ..mesh.build import MeshBuildResult
 from ..mesh.manifest import SGB_RUNTIME_AUTHORITY
-from ..source.transforms import SCHEMA_VERSION
 from .archive import (
     run_archive_arcname,
     sibling_run_archive_path,
     sibling_run_archive_relative,
 )
+from .recorder_copy import write_standalone_recorder
 from .script import positive_int, render_script, single_line
 
 HandoffProfile = Literal["direct-local", "slurm-single-node", "slurm-multi-node"]
@@ -72,37 +96,31 @@ def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
     if profile not in _PROFILES:
         raise ValueError(f"Unsupported handoff profile {profile!r}.")
     if not config_path.is_file() or not mesh_result.mesh_path.is_file():
-        raise FileNotFoundError("handoff requires existing config.json and palace.msh.")
+        raise FileNotFoundError(
+            f"handoff requires existing {CONFIG} and {mesh_result.mesh_path.name}."
+        )
 
     executable = single_line(executable, "executable")
     setup = tuple(single_line(command, "setup command") for command in setup_commands)
     petsc = tuple(single_line(option, "PETSc option") for option in petsc_options)
     resource_map = _validate_resources(profile, resources)
     run_dir = mesh_result.output_dir
-    for directory in (
-        run_dir / "logs",
-        run_dir / "results" / "palace",
-        run_dir / "metadata",
-    ):
-        directory.mkdir(parents=True, exist_ok=True)
+    for directory in (LOGS_DIR, OUTPUT_DIR, METADATA_DIR):
+        (run_dir / directory).mkdir(parents=True, exist_ok=True)
 
-    script_path = run_dir / (
-        "run_palace.sh" if profile == "direct-local" else "run_palace.sbatch"
-    )
-    (
-        run_dir
-        / ("run_palace.sbatch" if profile == "direct-local" else "run_palace.sh")
-    ).unlink(missing_ok=True)
+    script_path = run_dir / script_name(profile)
+    for stale in {DIRECT_LOCAL_SCRIPT, SLURM_SCRIPT} - {script_path.name}:
+        (run_dir / stale).unlink(missing_ok=True)
 
-    metadata_path = run_dir / "metadata" / "palace_handoff_metadata.json"
-    run_metadata_path = run_dir / "metadata" / "palace_run_metadata.json"
-    resource_record_path = run_dir / "metadata" / "palace_resource_record.json"
-    manifest_path = run_dir / "metadata" / "palace_handoff_archive_manifest.json"
+    metadata_path = run_dir / HANDOFF_METADATA
+    run_metadata_path = run_dir / RUN_METADATA
+    resource_record_path = run_dir / RESOURCE_RECORD
+    manifest_path = run_dir / ARCHIVE_MANIFEST
     archive_path = sibling_run_archive_path(run_dir)
     archive_relative = sibling_run_archive_relative(run_dir)
-    returned_receipt_path = run_dir / "metadata" / "palace_returned_run_receipt.json"
-    returned_receipt_recorder_path = run_dir / "metadata" / "record_palace_return.py"
-    index_map_path = run_dir / "metadata" / "palace_index_map.json"
+    returned_receipt_path = run_dir / RETURNED_RECEIPT
+    returned_receipt_recorder_path = run_dir / RECORDER
+    index_map_path = run_dir / INDEX_MAP
 
     _clear_previous_returned_outputs(
         run_dir=run_dir,
@@ -189,7 +207,7 @@ def _prepare_artifacts(  # noqa: PLR0913 -- preparation inputs remain explicit
 ) -> _PreparedArtifacts:
     """Bind inputs and prepare the standalone script and recorder before metadata."""
     if not index_map_path.is_file():
-        raise FileNotFoundError("handoff requires metadata/palace_index_map.json.")
+        raise FileNotFoundError(f"handoff requires {INDEX_MAP}.")
 
     route = _route(mesh_result)
     thin_film = _route_a_thin_film(mesh_result, route)
@@ -204,16 +222,13 @@ def _prepare_artifacts(  # noqa: PLR0913 -- preparation inputs remain explicit
     )
     source_revisions = _identity()
     palace_identity = {
-        "config_schema": SCHEMA_VERSION,
+        "config_schema": CONFIG_SCHEMA,
         "config_compatibility_probe": "native_dry_run",
         "config_compatibility_semantics": "required_before_solve",
         "runtime_identity_semantics": "observed_provenance_only",
     }
 
-    if recorder_path.is_file():
-        recorder_path.unlink()
-    shutil.copy2(Path(__file__).with_name("returned_receipt.py"), recorder_path)
-    recorder_path.chmod(0o755)
+    write_standalone_recorder(recorder_path)
     script_path.write_text(
         render_script(
             profile,
@@ -221,7 +236,6 @@ def _prepare_artifacts(  # noqa: PLR0913 -- preparation inputs remain explicit
             resources,
             setup,
             petsc,
-            returned_receipt_recorder_name=recorder_path.name,
             palace_identity=palace_identity,
         )
         + "\n",
@@ -281,10 +295,10 @@ def _write_handoff_metadata(  # noqa: PLR0913 -- fields map to separate JSON rec
     thin_film = artifacts.thin_film
     handoff_id = artifacts.handoff_id
     returned_receipt_relative = returned_receipt_path.relative_to(run_dir).as_posix()
-    _write_json(
+    write_json(
         metadata_path,
         {
-            "schema_version": 1,
+            "schema_version": RUN_RECORD_SCHEMA_VERSION,
             "status": "prepared",
             "kind": "manual_handoff",
             "manual_intent": True,
@@ -309,10 +323,10 @@ def _write_handoff_metadata(  # noqa: PLR0913 -- fields map to separate JSON rec
             "hashes": artifacts.hashes,
         },
     )
-    _write_json(
+    write_json(
         run_metadata_path,
         {
-            "schema_version": 1,
+            "schema_version": RUN_RECORD_SCHEMA_VERSION,
             "status": "not_run",
             "kind": "manual_handoff",
             "route": artifacts.route,
@@ -343,10 +357,10 @@ def _create_archive(  # noqa: PLR0913 -- archive paths and identities stay expli
     """Create the archive and record its digest after all archived inputs settle."""
     excluded = {resource_record_path}
     members = _members(run_dir, exclude=excluded | {manifest_path})
-    _write_json(
+    write_json(
         manifest_path,
         {
-            "schema_version": 1,
+            "schema_version": RUN_RECORD_SCHEMA_VERSION,
             "archive": archive_relative,
             "input_hashes": artifacts.hashes,
             "members": members,
@@ -367,10 +381,10 @@ def _create_archive(  # noqa: PLR0913 -- archive paths and identities stay expli
                 arcname=run_archive_arcname(run_dir, path),
                 recursive=False,
             )
-    _write_json(
+    write_json(
         resource_record_path,
         {
-            "schema_version": 1,
+            "schema_version": RUN_RECORD_SCHEMA_VERSION,
             "status": "not_submitted",
             "kind": "manual_handoff",
             "profile": profile,
@@ -389,7 +403,7 @@ def _create_archive(  # noqa: PLR0913 -- archive paths and identities stay expli
             "resolved_resources": resources,
             "archive": {
                 "path": archive_relative,
-                "sha256": _sha256(archive_path),
+                "sha256": sha256(archive_path),
             },
         },
     )
@@ -437,12 +451,12 @@ def _redacted_command(
 ) -> dict[str, Any]:
     return {
         "manual_only": True,
-        "script": "run_palace.sh" if profile == "direct-local" else "run_palace.sbatch",
+        "script": script_name(profile),
         "executable_identity": Path(executable).name,
         "launcher": resources.get(
             "launcher", "local" if profile == "direct-local" else "srun"
         ),
-        "arguments": ["[executable]", "config.json"],
+        "arguments": ["[executable]", CONFIG],
     }
 
 
@@ -508,10 +522,10 @@ def _execution_identity(  # noqa: PLR0913 -- each value is a distinct identity f
         "setup_commands": list(setup),
         "petsc_options": list(petsc),
         "command": _redacted_command(profile, executable, resources),
-        "script": {"path": script_path.name, "sha256": _sha256(script_path)},
+        "script": {"path": script_path.name, "sha256": sha256(script_path)},
         "recorder": {
-            "path": f"metadata/{recorder_path.name}",
-            "sha256": _sha256(recorder_path),
+            "path": RECORDER,
+            "sha256": sha256(recorder_path),
         },
     }
 
@@ -522,12 +536,12 @@ def _clear_previous_returned_outputs(
     """A new manual handoff cannot reuse outputs or a receipt from an earlier run."""
 
     returned_receipt_path.unlink(missing_ok=True)
-    (run_dir / "metadata" / "palace_runtime_compatibility.json").unlink(missing_ok=True)
-    results_path = run_dir / "results" / "palace"
+    (run_dir / RUNTIME_COMPATIBILITY).unlink(missing_ok=True)
+    results_path = run_dir / OUTPUT_DIR
     if results_path.exists():
         shutil.rmtree(results_path)
     results_path.mkdir(parents=True, exist_ok=True)
-    for log_path in (run_dir / "logs").glob("palace-*.log"):
+    for log_path in run_dir.glob(f"{SOLVER_LOG_PREFIX}*.log"):
         log_path.unlink()
 
 
@@ -545,7 +559,7 @@ def _members(root: Path, *, exclude: set[Path]) -> list[dict[str, str | int]]:
                     "path": relative,
                     "type": "file",
                     "bytes": path.stat().st_size,
-                    "sha256": _sha256(path),
+                    "sha256": sha256(path),
                 }
             )
     return members
@@ -556,20 +570,14 @@ def _hashes(root: Path, paths: Sequence[Path]) -> list[dict[str, str | int]]:
         {
             "path": path.relative_to(root).as_posix(),
             "bytes": path.stat().st_size,
-            "sha256": _sha256(path),
+            "sha256": sha256(path),
         }
         for path in paths
     ]
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _route(mesh_result: MeshBuildResult) -> str:
-    route = json.loads(mesh_result.provenance_path.read_text(encoding="utf-8")).get(
-        "route"
-    )
+    route = read_json(mesh_result.provenance_path).get("route")
     if route not in {"A", "B"}:
         raise ValueError("mesh provenance must carry Route A or B.")
     return route
@@ -578,8 +586,8 @@ def _route(mesh_result: MeshBuildResult) -> str:
 def _route_a_thin_film(
     mesh_result: MeshBuildResult, route: str
 ) -> dict[str, Any] | None:
-    provenance = json.loads(mesh_result.provenance_path.read_text(encoding="utf-8"))
-    manifest = json.loads(mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
+    provenance = read_json(mesh_result.provenance_path)
+    manifest = read_json(mesh_result.mesh_manifest_path)
     provenance_value = provenance.get("route_a_thin_film")
     manifest_value = manifest.get("route_a_thin_film")
     if route == "B":
@@ -591,10 +599,6 @@ def _route_a_thin_film(
             "Route A mesh provenance and manifest require identical thin-film identity."
         )
     return dict(provenance_value)
-
-
-def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 __all__ = ["HandoffPlan", "HandoffProfile", "prepare_handoff"]
