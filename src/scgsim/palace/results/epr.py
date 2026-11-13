@@ -30,7 +30,6 @@ from scgsim.contracts.palace_run_folder import (
     table_name,
 )
 from scgsim.geometry.models.refusals import Declared
-from scgsim.palace.results.artifacts import RETURNED_RUN_FOLDER
 from scgsim.palace.results.epr_records import (
     PalaceEprResult,
     checked_number,
@@ -42,6 +41,7 @@ from scgsim.palace.results.tables import (
     output_families,
     read_result_table,
 )
+from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import found_text
 from scgsim.semantics.epr import (
     FilmAssumptions,

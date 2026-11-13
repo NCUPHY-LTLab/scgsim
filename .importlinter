@@ -171,16 +171,24 @@ forbidden_modules =
 ignore_imports =
     scgsim.meshing.fine_structure -> scgsim.geometry.models.grid
 
-# The Palace stages in flow order: source, then mesh, then config, then run. A stage reads the stages
-# before it, never one after it; import-linter lists the last stage first.
+# The Palace stages in flow order: source, mesh, config, run, then results and the reports that show them.
+# A stage reads the stages before it, never one after it; import-linter lists the last stage first. The
+# simulation classes are the entry: they call source, mesh, config and run, and no stage reads them.
 [importlinter:contract:palace-stage-layers]
-name = Palace stages import only the stages before them (source, mesh, config, run)
+name = Palace stages import only the stages before them (source, mesh, config, run, results, reports; entry simulation)
 type = layers
+containers =
+    scgsim.palace
 layers =
-    scgsim.palace.run
-    scgsim.palace.config
-    scgsim.palace.mesh
-    scgsim.palace.source
+    simulation
+    reports
+    results
+    run
+    config
+    mesh
+    source
+# Every folder of scgsim.palace is in this list: a new one has to take its place in the order.
+exhaustive = true
 
 # A notebook displays what scgsim.visualization loads; no other package reads it.
 # scgsim.* matches every top-level subpackage and module, present or added later; import-linter skips

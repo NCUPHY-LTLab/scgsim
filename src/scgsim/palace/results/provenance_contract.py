@@ -18,7 +18,6 @@ from scgsim.contracts.palace_run_folder import (
 )
 from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
-    RETURNED_RUN_FOLDER,
     FileHash,
     expect_int,
     expect_list,
@@ -29,6 +28,7 @@ from scgsim.palace.results.artifacts import (
 )
 from scgsim.palace.results.runtime_contract import validate_palace_identity
 from scgsim.palace.run.archive import (
+    RETURNED_RUN_FOLDER,
     logical_tar_member_name,
     resolve_run_archive_path,
 )

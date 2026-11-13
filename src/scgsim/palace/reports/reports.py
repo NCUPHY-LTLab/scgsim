@@ -40,7 +40,6 @@ from scgsim.palace.reports.views import (
     SimulationBenchmarkReport,
 )
 from scgsim.palace.results.artifacts import (
-    RETURNED_RUN_FOLDER,
     as_int,
     read_optional_json,
 )
@@ -67,6 +66,7 @@ from scgsim.palace.results.surface_readers import (
     read_surface_margin_bindings,
 )
 from scgsim.palace.results.tables import configured_mode_count
+from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 
 _WHERE_REPORT_VIEW = "the call to the report view"
 

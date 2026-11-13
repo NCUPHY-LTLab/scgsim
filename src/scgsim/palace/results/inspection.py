@@ -14,7 +14,6 @@ from scgsim.contracts.palace_run_folder import (
 )
 from scgsim.geometry.models.refusals import Declared
 from scgsim.palace.results.artifacts import (
-    RETURNED_RUN_FOLDER,
     FileHash,
     compute_hash_entry,
     extract_hash_map,
@@ -25,6 +24,7 @@ from scgsim.palace.results.inspection_records import (
     PalaceFailureDiagnosis,
     PalaceResultSelection,
 )
+from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import found_text
 
 
