@@ -15,16 +15,16 @@ import pytest
 from sgb_inputs import gds_pad_in_ground, thin_film_pair
 from test_rectangular_junction_geometry import fixture as junction_fixture
 
+from scgsim.geometry.grid.grid import (
+    GridOperand,
+    build_grid_arrangement,
+    geometry_grid_scope,
+)
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     LayoutPolygonSpec,
     SourceCurveSpec,
-)
-from scgsim.geometry.primitives.grid import (
-    GridOperand,
-    build_grid_arrangement,
-    geometry_grid_scope,
 )
 from scgsim.geometry.sgb.arrangement.derivation.labelled import (
     derive_labelled_arrangements,

@@ -13,13 +13,13 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal, cast
 
 from scgsim.aedt.data import detached
+from scgsim.geometry.interpretation.physical import interpret_physical_layers
 from scgsim.geometry.models.physical import (
     PLAN_SCHEMA,
     ApproximationProfile,
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
 )
-from scgsim.geometry.planning.physical import interpret_physical_layers
 
 Modeling = Literal["solid", "thin_film"]
 LayerModelKind = Literal["stack_film", "local_film", "retained_solid"]

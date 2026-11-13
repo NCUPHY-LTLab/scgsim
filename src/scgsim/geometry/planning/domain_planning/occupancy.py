@@ -6,26 +6,28 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
+from scgsim.geometry.grid.entities import entity_by_id
+from scgsim.geometry.grid.entity_validation import is_solution_entity
+from scgsim.geometry.grid.grid import (
+    boolean_polygon_region,
+    polygon_boolean,
+    split_gdstk_cutline_loop,
+)
+from scgsim.geometry.grid.loops import (
+    geometry_refs_from_gdstk_region,
+    loops_share_edge_overlap,
+)
+from scgsim.geometry.grid.planar_loops import clean_loop, filter_gdstk_polygons
+from scgsim.geometry.grid.spatial import range_within_bounds, same_coordinate_z
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
     SemanticEntitySpec,
 )
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.primitives.entities import entity_by_id
-from scgsim.geometry.primitives.entity_validation import is_solution_entity
-from scgsim.geometry.primitives.grid import (
-    boolean_polygon_region,
-    polygon_boolean,
-    split_gdstk_cutline_loop,
-)
-from scgsim.geometry.primitives.loops import (
-    geometry_refs_from_gdstk_region,
-    loops_share_edge_overlap,
-)
-from scgsim.geometry.primitives.planar_loops import clean_loop, filter_gdstk_polygons
-from scgsim.geometry.primitives.spatial import range_within_bounds, same_coordinate_z
 
 if TYPE_CHECKING:
     pass
@@ -92,22 +94,6 @@ def _xy_region_from_loops(
             precision=1e-09,
         )
     )
-
-
-def loop_domain_bounds(
-    outer_loop: tuple[tuple[float, float], ...],
-    hole_loops: tuple[tuple[tuple[float, float], ...], ...] = (),
-) -> dict[str, float]:
-    """Compute XY bounds across the outer and hole rings."""
-    points = tuple(
-        (point for loop in (outer_loop, *hole_loops) for point in clean_loop(loop))
-    )
-    return {
-        "x_min_um": min((point[0] for point in points)),
-        "y_min_um": min((point[1] for point in points)),
-        "x_max_um": max((point[0] for point in points)),
-        "y_max_um": max((point[1] for point in points)),
-    }
 
 
 def active_route_conductor_entities(

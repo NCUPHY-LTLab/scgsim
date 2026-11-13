@@ -8,9 +8,9 @@ from pathlib import Path
 import gdstk
 import pytest
 
+from scgsim.geometry.grid.grid import geometry_grid_scope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.primitives.grid import geometry_grid_scope
 from scgsim.geometry.source.plan_assembly import transform_source_direction
 from scgsim.geometry.source.ports import (
     port_sheet_overlaps,
@@ -306,7 +306,6 @@ def _source_import_dependencies() -> dict[str, set[str]]:
         "junctions": Path("src/scgsim/geometry/source/junctions.py"),
         "ports": Path("src/scgsim/geometry/source/ports.py"),
         "ground": Path("src/scgsim/geometry/source/ground.py"),
-        "polygon_ops": Path("src/scgsim/geometry/source/polygon_ops.py"),
     }
     dependencies = {name: set() for name in module_paths}
     for name, path in module_paths.items():

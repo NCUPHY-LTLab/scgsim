@@ -14,8 +14,8 @@ import pytest
 from geometry_grid_fixtures import GRID
 
 from scgsim.geometry import SemanticEntitySpec
-from scgsim.geometry.primitives.grid import geometry_grid_scope
-from scgsim.geometry.primitives.grid_regions import canonical_grid_point
+from scgsim.geometry.grid.grid import geometry_grid_scope
+from scgsim.geometry.grid.grid_regions import canonical_grid_point
 from scgsim.geometry.source.occurrence import (
     occurrence_ground_polygons_for_entity,
     occurrence_polygons_for_entity,

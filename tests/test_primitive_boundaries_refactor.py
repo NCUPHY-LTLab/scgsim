@@ -27,7 +27,7 @@ class MissingShapely(MetaPathFinder):
         return None
 
 sys.meta_path.insert(0, MissingShapely())
-from scgsim.geometry.primitives.tagged_grid import build_tagged_subdivision
+from scgsim.geometry.grid.tagged_grid import build_tagged_subdivision
 
 try:
     build_tagged_subdivision((), {}, 1.0)

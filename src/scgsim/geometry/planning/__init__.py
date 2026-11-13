@@ -1,1 +1,6 @@
-"""Planning stages between source and backend. Preserve source provenance and canonical IDs; do not discover ownership from backend names."""
+"""Planning that only AEDT's native construction uses: surface, contact, domain and topology planning, evidence and tags.
+
+In: the effective input from ``interpretation``.
+Out: the surface, contact, domain and topology plans and the tag and evidence records that AEDT builds from.
+Next: ``scgsim.aedt``. Nothing on the Palace route (``scgsim.palace``, ``sgb``, ``surface_epr``) imports this folder.
+"""

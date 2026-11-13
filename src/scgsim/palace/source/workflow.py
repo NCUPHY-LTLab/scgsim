@@ -10,12 +10,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
+from scgsim.geometry.interpretation.physical import interpret_physical_geometry
 from scgsim.geometry.models.input import GeometryBuildInput, VacuumRegionSpec
 from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalRepresentationPlan,
 )
-from scgsim.geometry.planning.physical import interpret_physical_geometry
 from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack

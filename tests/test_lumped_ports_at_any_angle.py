@@ -20,7 +20,7 @@ from test_palace_rectangular_ports import VACUUM_PADDING_UM, port_group, prepare
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
 
 from scgsim.geometry import GeometryPlan
-from scgsim.geometry.planning.junction_partition import lattice_rectangle
+from scgsim.geometry.junctions.lattice import lattice_rectangle
 from scgsim.palace import EigenmodeSim
 
 GRID_UM = 0.001

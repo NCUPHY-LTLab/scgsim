@@ -7,14 +7,14 @@ from fractions import Fraction
 import pytest
 from shapely import Point, Polygon, coverage_is_valid, union_all
 
-from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry.primitives.grid import GridOperand, build_grid_arrangement
-from scgsim.geometry.primitives.tagged_grid import (
+from scgsim.geometry.grid.grid import GridOperand, build_grid_arrangement
+from scgsim.geometry.grid.tagged_grid import (
     PointIndex,
     build_tagged_subdivision,
     pixel_interval,
     source_paths,
 )
+from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.preparation import preparation_resources
 
 
@@ -212,7 +212,7 @@ def test_parallel_source_paths_preserve_exact_graph_and_real_worker_execution():
 
 def test_cached_pure_partition_does_not_cache_or_skip_physical_failure_audits():
     """Verify that cached pure partition does not cache or skip physical failure audits."""
-    from scgsim.geometry.primitives.grid_cache import ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_cache import ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     thin = GridOperand("thin", rectangle(0, 0, 0.25, 2), contact=False)
     with grid_work_cache_scope():
@@ -277,7 +277,7 @@ def test_presnap_raw_context_recovers_public_native_network(polygons):
 
 def test_directed_offline_nodes_use_geometric_secondary_order():
     """Verify that directed offline nodes use geometric secondary order."""
-    from scgsim.geometry.primitives.tagged_grid import raw_chain  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.tagged_grid import raw_chain  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     # Equal dominant coordinates must use direction-aware geometry, not tag ID.
     nodes = {(0, 0), (10, 1), (5, 0.51), (5, 0.49)}
@@ -287,7 +287,7 @@ def test_directed_offline_nodes_use_geometric_secondary_order():
 
 def test_cache_reuses_raw_polygons_but_repeats_contact_audit():
     """Verify that cache reuses raw polygons but repeats contact audit."""
-    from scgsim.geometry.primitives.grid_cache import ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.grid.grid_cache import ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     values = (
         GridOperand("A", rectangle(0, 0, 1.1, 1)),

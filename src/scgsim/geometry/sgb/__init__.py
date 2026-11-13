@@ -7,10 +7,10 @@ are the stable outputs of the source and physical-interpretation stages: the eff
 
 The Palace mesh stage and ``geometry.surface_epr`` (which builds the geometry with the
 Surface-EPR bands its specs ask for) call it through :func:`build_sgb_geometry`.  The
-junction partition of ``geometry.planning.junction_planning`` reads its boundary binder,
-``prisms.bound_rings``.  SGB imports nothing from the ``geometry.planning`` modules that
-derive domains, surfaces, contacts, topology, tags or the junction partition; the
-partition's record reaches it through the input.
+junction partition of ``geometry.junctions`` reads its boundary binder,
+``prisms.bound_rings``.  SGB imports nothing from ``geometry.planning``,
+``geometry.interpretation`` or ``geometry.junctions``; the partition's record reaches it
+through the input.
 
 The folders are the stages of the build, in the order the work flows; each folder's
 docstring says what comes in, what goes out and which stage is next.  ``exact`` is

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area
+from scgsim.geometry.grid.spatial import geometry_ref_surface_z_um
 from scgsim.geometry.models.topology import SurfacePlanRecord
-from scgsim.geometry.primitives.planar_loops import clean_loop, polygon_area
-from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
 
 
 def surface_ring3d_specs(

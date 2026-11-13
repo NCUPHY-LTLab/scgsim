@@ -8,18 +8,18 @@ from fractions import Fraction
 from itertools import pairwise
 from typing import Any
 
-from scgsim.aedt.preparation.junction_partition import (
+from scgsim.geometry.grid.grid import polygon_rings
+from scgsim.geometry.grid.planar_loops import (
+    cancel_reversed_planar_edges,
+    simple_planar_loops_from_edges,
+)
+from scgsim.geometry.junctions.exact_geometry import (
     closed_contact,
     cross,
     inside_ring,
     section,
 )
-from scgsim.geometry.planning.junction_partition import fraction_overlap
-from scgsim.geometry.primitives.grid import polygon_rings
-from scgsim.geometry.primitives.planar_loops import (
-    cancel_reversed_planar_edges,
-    simple_planar_loops_from_edges,
-)
+from scgsim.geometry.junctions.model_checks import fraction_overlap
 
 # Native CAD readback uses an absolute micrometre tolerance, never relative scaling.
 NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5

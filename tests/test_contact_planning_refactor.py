@@ -9,9 +9,11 @@ from scgsim.geometry.models.representation import (
     EntityRepresentation,
     RepresentationContext,
 )
-from scgsim.geometry.planning.interfaces import (
-    plan_conductor_contact_patches,
+from scgsim.geometry.planning.contact_planning.membership import (
     plan_mm_contact_records_with_components,
+)
+from scgsim.geometry.planning.contact_planning.patches import (
+    plan_conductor_contact_patches,
 )
 
 

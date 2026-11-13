@@ -21,14 +21,14 @@ from test_sgb_prisms import with_boundaries
 from test_simulation_drc import check, two_pads
 
 from scgsim.documentation import page_url
-from scgsim.geometry.models.input import BoundaryCurveChainSpec, SourceCurveSpec
-from scgsim.geometry.primitives.grid import (
+from scgsim.geometry.grid.grid import (
     PolygonRegion,
     geometry_grid_scope,
     named_source,
     polygon_world_frame,
     split_gdstk_cutline_loop,
 )
+from scgsim.geometry.models.input import BoundaryCurveChainSpec, SourceCurveSpec
 from scgsim.geometry.sgb.errors import (
     ContactError,
     NonManifoldError,
