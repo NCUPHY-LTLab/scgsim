@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
 
@@ -54,7 +55,7 @@ class ValidationReport:
         if self.failures:
             lines = "; ".join(f"{c.name}: {c.detail}" for c in self.failures)
             raise ValidationError(
-                f"internal: {len(self.failures)} invariant(s) failed: {lines}"
+                internal(f"{len(self.failures)} invariant(s) failed: {lines}")
             )
 
     def to_dict(self) -> dict[str, Any]:

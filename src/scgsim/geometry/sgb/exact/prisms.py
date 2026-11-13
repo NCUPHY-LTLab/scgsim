@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Literal
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.exact.carriers import (
     ArcCarrier,
     KnownCarrier,
@@ -90,7 +91,7 @@ class Footprint:
                 ring_numbers.extend([primitive.lineage.edge] * (len(witness) - 1))
             if (ring_twice_area(points) > 0) != (ring_index == 0):
                 raise ValueError(
-                    "internal: ring orientation: outer must be CCW and holes CW"
+                    internal("ring orientation: outer must be CCW and holes CW")
                 )
             rings.append(tuple(points))
             numbers.append(tuple(ring_numbers))
@@ -145,7 +146,7 @@ def oriented_ring(ring: Sequence[Point], *, ccw: bool) -> tuple[Ring, tuple[int,
     if len(kept) > 1 and kept[0][0] == kept[-1][0]:
         kept.pop(0)
     if len(kept) < 3:
-        raise ValueError("internal: a ring needs at least three distinct points")
+        raise ValueError(internal("a ring needs at least three distinct points"))
     cleaned = tuple(point for point, _ in kept)
     numbers = tuple(index for _, index in kept)
     if (ring_twice_area(cleaned) > 0) != ccw:
@@ -198,17 +199,19 @@ class PrismRecord:
 
     def __post_init__(self) -> None:
         if self.z1 < self.z0:
-            raise ValueError(f"internal: {self.entity_id}: z1 < z0")
+            raise ValueError(internal(f"{self.entity_id}: z1 < z0"))
         if self.material_kind == "conductor" and not self.net_id:
             raise ValueError(
-                f"internal: {self.entity_id}: conductor prism needs a net_id"
+                internal(f"{self.entity_id}: conductor prism needs a net_id")
             )
         if (self.material_kind == "port") != (self.port is not None):
             raise ValueError(
-                f"internal: {self.entity_id}: exactly the port prisms carry a port identity"
+                internal(
+                    f"{self.entity_id}: exactly the port prisms carry a port identity"
+                )
             )
         if self.material_kind == "port" and self.z0 != self.z1:
-            raise ValueError(f"internal: {self.entity_id}: a port prism is a sheet")
+            raise ValueError(internal(f"{self.entity_id}: a port prism is a sheet"))
 
     @property
     def is_sheet(self) -> bool:

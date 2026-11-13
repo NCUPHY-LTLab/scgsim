@@ -22,6 +22,7 @@ import hashlib
 import json
 from fractions import Fraction
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.exact.plane import Point
 
 ID_HEX_DIGITS = 16
@@ -40,7 +41,7 @@ def _encode(value: object) -> object:
     fields = getattr(value, "__dataclass_fields__", None)
     if fields is not None:
         return {name: getattr(value, name) for name in fields}
-    raise TypeError(f"internal: cannot hash {type(value)}")
+    raise TypeError(internal(f"cannot hash {type(value)}"))
 
 
 def digest(kind: str, payload: object) -> str:

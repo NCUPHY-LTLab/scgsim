@@ -32,6 +32,7 @@ from scgsim.contracts.sgb_sidecar.records import (
     VolumeGroup,
     VolumeKind,
 )
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.exact.interfaces import SHEET, SURFACE_EPR_TYPES
 from scgsim.geometry.sgb.exact.labels import Domain
@@ -181,7 +182,9 @@ def _row(  # noqa: PLR0913 - the group, the row type and record, the band, the s
 ) -> SurfaceEprRow:
     if (band is None) != (banded_surface is None):
         raise SgbError(
-            f"internal: row of group {group!r} has band {band} but banded surface {banded_surface!r}"
+            internal(
+                f"row of group {group!r} has band {band} but banded surface {banded_surface!r}"
+            )
         )
     return SurfaceEprRow(
         group=group,
@@ -205,7 +208,7 @@ def _group_face_kind(name: str, faces: list[RoutedFace]) -> FaceKind:
     kinds = {f.face_kind for f in faces}
     if len(kinds) != 1:
         raise SgbError(
-            f"internal: physical group {name} mixes face kinds {sorted(kinds)}"
+            internal(f"physical group {name} mixes face kinds {sorted(kinds)}")
         )
     return cast(FaceKind, kinds.pop())
 
@@ -216,7 +219,9 @@ def _group_interface_type(name: str, faces: list[RoutedFace]) -> InterfaceType:
     found = sorted(t for t in types if t is not None)
     if len(types) != 1 or len(found) != 1:
         raise SgbError(
-            f"internal: physical group {name} mixes interface types {sorted(map(str, types))}"
+            internal(
+                f"physical group {name} mixes interface types {sorted(map(str, types))}"
+            )
         )
     return cast(InterfaceType, found[0])
 
@@ -330,7 +335,9 @@ def _hidden_contact(
         or face.pos_domain is None
     ):
         raise SgbError(
-            f"internal: the banded face {face_id} bounds no written volume and is no metal-metal contact"
+            internal(
+                f"the banded face {face_id} bounds no written volume and is no metal-metal contact"
+            )
         )
     first, second = sorted((face.neg_domain.name, face.pos_domain.name))
     return first, second, routed.face_kind

@@ -31,6 +31,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import NamedTuple
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.noding.spatial_hash import (
     HotGrid,
     cell_size_for,
@@ -219,7 +220,7 @@ class _IteratedRounding:
         while self.changed or self.delta:
             rounds += 1
             if rounds > self.max_rounds:
-                raise RuntimeError("internal: snap rounding did not converge")
+                raise RuntimeError(internal("snap rounding did not converge"))
             self._round()
         edges = [
             NodedEdge(a, b, frozenset(carriers))

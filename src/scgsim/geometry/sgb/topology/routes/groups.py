@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.exact.interfaces import (
     SHEET,
@@ -199,7 +200,9 @@ def _add_volume_groups(
             group = groups.setdefault(name, PhysicalGroup(3))
             if group.dim != 3:
                 raise SgbError(
-                    f"internal: physical-group name {name!r} names both a volume and a surface"
+                    internal(
+                        f"physical-group name {name!r} names both a volume and a surface"
+                    )
                 )
             group.ids.append(vid)
     return groups

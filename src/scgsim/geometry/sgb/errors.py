@@ -2,9 +2,8 @@
 
 No fallback geometry is ever produced: a source or planning defect surfaces as
 one of these errors, naming the entities and the location involved, and saying who
-must change what.  A message that opens with ``internal:`` names an invariant SGB
-itself broke on an input it accepted: nothing in the input is to blame, and the
-fix is in SGB, so report it with the input that produced it.
+must change what.  An invariant SGB itself broke on an input it accepted is worded by
+``internal`` in ``scgsim.geometry.models.refusals``, which owns that wording.
 """
 
 from __future__ import annotations

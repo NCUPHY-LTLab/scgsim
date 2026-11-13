@@ -28,6 +28,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.dcel import Arrangement
 from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.exact.band_regions import BandRegions, BandSeam
@@ -150,8 +151,10 @@ def check_seams_kept(  # noqa: PLR0913 - a level, its labels and the families it
         shown = "; ".join(problems[:MAX_REPORTED])
         more = len(problems) - MAX_REPORTED
         raise ValidationError(
-            f"internal: Imprint lost band boundaries on {plane}: {shown}"
-            + (f" (and {more} more)" if more > 0 else "")
+            internal(
+                f"Imprint lost band boundaries on {plane}: {shown}"
+                + (f" (and {more} more)" if more > 0 else "")
+            )
         )
 
 
@@ -178,7 +181,9 @@ def _pieces_of(family: CurveFamilyRecord) -> dict[tuple[str, str], list[_Piece]]
             ]
         else:
             raise ValidationError(
-                f"internal: band seam {seam.carrier_id!r} of {family.family_id!r} is not a carrier of its family"
+                internal(
+                    f"band seam {seam.carrier_id!r} of {family.family_id!r} is not a carrier of its family"
+                )
             )
     return out
 
