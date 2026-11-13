@@ -16,6 +16,7 @@ from scgsim.contracts.palace_run_folder import (
     MESH,
     MESH_MANIFEST,
 )
+from scgsim.refusal import refusal
 
 # The loader reads the run-folder contract, not Palace: AEDT's runtime source closure reaches this module
 # through ``scgsim.visualization``, and AEDT must not ship Palace or SGB; the contract imports only the
@@ -152,7 +153,13 @@ def _bind_mesh_selection(
 
     physical_blocks = mesh.cell_data.get("gmsh:physical")
     if physical_blocks is None or len(physical_blocks) != len(mesh.cells):
-        raise ValueError("Palace mesh has no complete gmsh:physical cell tags")
+        raise ValueError(
+            refusal(
+                "Palace mesh has no complete gmsh:physical cell tags",
+                found=None if physical_blocks is None else len(physical_blocks),
+                expected=len(mesh.cells),
+            )
+        )
     dimensions: list[int] = []
     cell_types: list[str] = []
     physical: list[int] = []
@@ -161,7 +168,13 @@ def _bind_mesh_selection(
         cell_types.extend([block.type] * len(block.data))
         physical.extend(int(value) for value in tags)
     if len(physical) != grid.n_cells:
-        raise ValueError("Palace mesh cell-tag cardinality mismatch")
+        raise ValueError(
+            refusal(
+                "Palace mesh cell-tag cardinality mismatch",
+                found=len(physical),
+                expected=grid.n_cells,
+            )
+        )
     dimensions_array = np.asarray(dimensions)
     physical_array = np.asarray(physical)
     cell_types_array = np.asarray(cell_types)
@@ -179,13 +192,25 @@ def _bind_mesh_selection(
         for dim, attribute in zip(dimensions, physical, strict=True)
     }
     if actual != set(records):
-        raise ValueError("Palace mesh physical tags do not match mesh manifest")
+        raise ValueError(
+            refusal(
+                "Palace mesh physical tags do not match mesh manifest",
+                found=sorted(actual),
+                expected=sorted(records),
+            )
+        )
     field_names: dict[tuple[int, int], list[str]] = {}
     for name, value in mesh.field_data.items():
         key = (int(value[1]), int(value[0]))
         field_names.setdefault(key, []).append(str(name))
     if actual != set(field_names):
-        raise ValueError("Palace mesh field names do not cover every physical tag")
+        raise ValueError(
+            refusal(
+                "Palace mesh field names do not cover every physical tag",
+                found=sorted(field_names),
+                expected=sorted(actual),
+            )
+        )
 
     return _MeshSelection(
         grid,
@@ -215,7 +240,13 @@ def _palace_materials(
         attribute for dimension, attribute in records if dimension == 3
     }
     if volume_attributes != assignments:
-        raise ValueError("Palace volume groups and config materials do not match")
+        raise ValueError(
+            refusal(
+                "Palace volume groups and config materials do not match",
+                found=sorted(assignments),
+                expected=sorted(volume_attributes),
+            )
+        )
     for attribute in sorted(assignments):
         record = records[(3, attribute)]
         material_id = str(record["material"])
@@ -348,11 +379,28 @@ def _palace_surface_epr(
         if record is None or tuple(item.get("Attributes", ())) != tuple(
             record.get("attributes", ())
         ):
-            raise ValueError("Palace Surface-EPR config/index-map mismatch")
+            raise ValueError(
+                refusal(
+                    "Palace Surface-EPR config/index-map mismatch",
+                    found={
+                        "index": index,
+                        "config Attributes": list(item.get("Attributes", ())),
+                    },
+                    expected=None
+                    if record is None
+                    else list(record.get("attributes", ())),
+                )
+            )
         for attribute in item.get("Attributes", ()):
             grouped.setdefault(int(attribute), []).append(record)
     if set(entries) != configured:
-        raise ValueError("Palace Surface-EPR config/index-map identities differ")
+        raise ValueError(
+            refusal(
+                "Palace Surface-EPR config/index-map identities differ",
+                found=sorted(configured),
+                expected=sorted(entries),
+            )
+        )
     parts: list[ScenePart] = []
     for attribute, mappings in sorted(grouped.items()):
         if (2, attribute) not in records:

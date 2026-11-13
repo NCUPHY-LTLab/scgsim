@@ -10,6 +10,8 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.refusal import refusal
+
 FILM_FIELDS: frozenset[str] = frozenset(
     {
         "film_thickness_m",
@@ -31,9 +33,23 @@ def film_assumptions(
     """
 
     if not isinstance(value, Mapping) or set(value) - FILM_FIELDS:
-        raise ValueError("film assumptions contain unsupported fields")
+        raise ValueError(
+            refusal(
+                "film assumptions contain unsupported fields",
+                found=sorted(set(value) - FILM_FIELDS)
+                if isinstance(value, Mapping)
+                else type(value).__name__,
+                expected=sorted(FILM_FIELDS),
+            )
+        )
     if not partial and set(value) != FILM_FIELDS:
-        raise ValueError("film assumptions require all snapshot fields")
+        raise ValueError(
+            refusal(
+                "film assumptions require all snapshot fields",
+                found=sorted(value),
+                expected=sorted(FILM_FIELDS),
+            )
+        )
     result = dict(value)
     for name in ("film_thickness_m", "film_relative_permittivity"):
         if name not in result:
@@ -57,7 +73,11 @@ def film_assumptions(
             or not math.isfinite(number)
             or number < 0
         ):
-            raise ValueError("loss_tangent must be finite and non-negative or None")
+            raise ValueError(
+                refusal(
+                    "loss_tangent must be finite and non-negative or None", found=number
+                )
+            )
         result["loss_tangent"] = float(number)
     for name in ("source", "preset"):
         if (
@@ -82,6 +102,11 @@ def inverse_quality_factor(
         or not math.isfinite(participation)
         or participation < 0
     ):
-        raise ValueError("participation must be finite and non-negative or None")
+        raise ValueError(
+            refusal(
+                "participation must be finite and non-negative or None",
+                found=participation,
+            )
+        )
     film_assumptions({"loss_tangent": loss_tangent}, partial=True)
     return float(participation) * float(loss_tangent)

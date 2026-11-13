@@ -11,6 +11,8 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Literal, Protocol, TypeVar, cast
 
+from scgsim.refusal import refusal
+
 ReportTheme = Literal["light", "dark"]
 
 
@@ -61,7 +63,7 @@ def checked_theme(theme: str) -> ReportTheme:
     """Validate one public presentation choice before rendering or reading data."""
 
     if not isinstance(theme, str) or theme not in _THEMES:
-        raise ValueError("theme must be 'light' or 'dark'")
+        raise ValueError(refusal("theme must be 'light' or 'dark'", found=theme))
     return cast(ReportTheme, theme)
 
 

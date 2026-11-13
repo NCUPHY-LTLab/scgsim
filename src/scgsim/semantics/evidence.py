@@ -12,6 +12,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from scgsim.refusal import refusal
+
 from .interfaces import (
     conductor_solution_interface_kind,
     solution_interface_kind,
@@ -58,7 +60,12 @@ class SourcedPatch:
     def __post_init__(self) -> None:
         """Freeze sequence and observation inputs at the record boundary."""
         if self.evidence_stage not in _STAGE_ORDER:
-            raise ValueError("evidence_stage must be declared, planned, or observed")
+            raise ValueError(
+                refusal(
+                    "evidence_stage must be declared, planned, or observed",
+                    found=self.evidence_stage,
+                )
+            )
         for field_name in ("source_owner_ids", "aggregate_owner_ids"):
             object.__setattr__(self, field_name, tuple(getattr(self, field_name)))
         for field_name in (
@@ -76,7 +83,10 @@ class SourcedPatch:
             self.snapshot_reference, SemanticSnapshotReference
         ):
             raise TypeError(
-                "snapshot_reference must be a SemanticSnapshotReference or None"
+                refusal(
+                    "snapshot_reference must be a SemanticSnapshotReference or None",
+                    found=type(self.snapshot_reference).__name__,
+                )
             )
 
     def semantic_identity(self) -> tuple[Any, ...]:
@@ -121,7 +131,12 @@ class EvidenceResult:
     def __post_init__(self) -> None:
         """Normalize ordered collections and validate the bound snapshot."""
         if not isinstance(self.snapshot_reference, SemanticSnapshotReference):
-            raise TypeError("snapshot_reference must be a SemanticSnapshotReference")
+            raise TypeError(
+                refusal(
+                    "snapshot_reference must be a SemanticSnapshotReference",
+                    found=type(self.snapshot_reference).__name__,
+                )
+            )
         for field_name in (
             "patch_ids",
             "source_owner_ids",
@@ -255,14 +270,20 @@ def _classify_patch(
     if patch.interface_intent == "conductor_solution":
         if domains is None or len(domains) != 1:
             raise ValueError(
-                "conductor_solution evidence requires one effective domain"
+                refusal(
+                    "conductor_solution evidence requires one effective domain",
+                    found=domains,
+                )
             )
         material_kind = _material_kind(snapshot, domains[0])
         return conductor_solution_interface_kind(material_kind), patch.source_owner_ids
     if patch.interface_intent == "solution_solution":
         if domains is None or len(domains) != 2:
             raise ValueError(
-                "solution_solution evidence requires two ordered effective domains"
+                refusal(
+                    "solution_solution evidence requires two ordered effective domains",
+                    found=domains,
+                )
             )
         lower_kind = _material_kind(snapshot, domains[0])
         upper_kind = _material_kind(snapshot, domains[1])

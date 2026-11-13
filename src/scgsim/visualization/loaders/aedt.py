@@ -13,6 +13,7 @@ from scgsim.aedt.results.prepared import resolve_prepared_model
 from scgsim.aedt.runtime.native.compatibility import native_compatibility
 from scgsim.aedt.specs.common import LOCKED_PYAEDT
 from scgsim.aedt.versions import AedtVersionProfile, resolve_aedt_version
+from scgsim.refusal import refusal
 
 from ..preview import GeometryPreview
 from ..scene import FIXED_COLORS, SceneMode, ScenePart, color_for_identity
@@ -89,11 +90,23 @@ def _read_raw_project(
 ) -> _AedtSourceRequest:
     """Validate explicit identity for one raw project file."""
     if project_path.suffix.lower() != ".aedt":
-        raise ValueError("raw AEDT geometry source must be an .aedt project")
+        raise ValueError(
+            refusal(
+                "raw AEDT geometry source must be an .aedt project",
+                found=str(project_path),
+            )
+        )
     if aedt_version is None:
-        raise TypeError("raw .aedt preview requires an explicit aedt_version")
+        raise TypeError(
+            refusal(
+                "raw .aedt preview requires an explicit aedt_version",
+                found=aedt_version,
+            )
+        )
     if not design or not design.strip():
-        raise ValueError("raw .aedt preview requires an explicit design")
+        raise ValueError(
+            refusal("raw .aedt preview requires an explicit design", found=design)
+        )
     return _AedtSourceRequest(
         project_path.parent,
         project_path,
@@ -112,7 +125,9 @@ def _read_run_folder(
     """Validate run spec and receipt identity before native inspection."""
     spec_path = root / "aedt_spec.json"
     if not spec_path.is_file():
-        raise FileNotFoundError("AEDT run folder has no aedt_spec.json")
+        raise FileNotFoundError(
+            refusal("AEDT run folder has no aedt_spec.json", found=str(spec_path))
+        )
     spec = read_json_record(spec_path)
     aedt = mapping_record(spec.get("aedt"), "spec.aedt")
     profile = resolve_aedt_version(cast(str, aedt.get("requested_version")))
@@ -121,11 +136,23 @@ def _read_run_folder(
         and resolve_aedt_version(aedt_version).requested_version
         != profile.requested_version
     ):
-        raise ValueError("explicit AEDT version disagrees with the run spec")
+        raise ValueError(
+            refusal(
+                "explicit AEDT version disagrees with the run spec",
+                found=aedt_version,
+                expected=profile.requested_version,
+            )
+        )
     project = mapping_record(spec.get("project"), "spec.project")
     recorded_design = nonempty_text(project.get("design"), "spec.project.design")
     if design is not None and design != recorded_design:
-        raise ValueError("explicit design disagrees with the AEDT run spec")
+        raise ValueError(
+            refusal(
+                "explicit design disagrees with the AEDT run spec",
+                found=design,
+                expected=recorded_design,
+            )
+        )
     project_name = nonempty_text(project.get("name"), "spec.project.name")
     project_path = confined_artifact_path(root, f"{project_name}.aedt")
     receipt_path = root / "metadata/aedt_run_receipt.json"
@@ -171,14 +198,32 @@ def _read_receipt_source(
         if receipt.get("status") != "native_preparation_only":
             recorded_source = mapping_record(receipt.get("source"), "receipt.source")
             if recorded_source.get("spec_sha256") != file_sha256(spec_path):
-                raise ValueError("AEDT source spec hash disagrees with the receipt")
+                raise ValueError(
+                    refusal(
+                        "AEDT source spec hash disagrees with the receipt",
+                        found=file_sha256(spec_path),
+                        expected=recorded_source.get("spec_sha256"),
+                    )
+                )
     if receipt.get("project") != project_path.relative_to(root).as_posix():
-        raise ValueError("AEDT receipt project identity disagrees with the spec")
+        raise ValueError(
+            refusal(
+                "AEDT receipt project identity disagrees with the spec",
+                found=receipt.get("project"),
+                expected=project_path.relative_to(root).as_posix(),
+            )
+        )
     outputs = mapping_record(receipt.get("outputs", {}), "receipt.outputs")
     relative = project_path.relative_to(root).as_posix()
     expected = outputs.get(relative)
     if not isinstance(expected, str) or file_sha256(project_path) != expected:
-        raise ValueError("AEDT project hash disagrees with the run receipt")
+        raise ValueError(
+            refusal(
+                "AEDT project hash disagrees with the run receipt",
+                found=file_sha256(project_path),
+                expected=expected,
+            )
+        )
     return source_conductors, receipt_version
 
 
@@ -219,28 +264,52 @@ def _inspect_desktop(
             ).requested_version
             if connected_aedt_version != source.profile.requested_version:
                 raise RuntimeError(
-                    "AEDT Desktop release does not match the selected runtime"
+                    refusal(
+                        "AEDT Desktop release does not match the selected runtime",
+                        found=connected_aedt_version,
+                        expected=source.profile.requested_version,
+                    )
                 )
             if (
                 source.receipt_connected_version is not None
                 and connected_aedt_version != source.receipt_connected_version
             ):
                 raise RuntimeError(
-                    "AEDT Desktop release disagrees with the run receipt"
+                    refusal(
+                        "AEDT Desktop release disagrees with the run receipt",
+                        found=connected_aedt_version,
+                        expected=source.receipt_connected_version,
+                    )
                 )
             app = desktop.load_project(
                 str(source.project_path), design_name=source.design
             )
             if app is False or app is None:
-                raise RuntimeError("PyAEDT could not open the requested project/design")
+                raise RuntimeError(
+                    refusal(
+                        "PyAEDT could not open the requested project/design",
+                        found={
+                            "project": str(source.project_path),
+                            "design": source.design,
+                        },
+                    )
+                )
             if str(app.design_name) != source.design:
                 raise ValueError(
-                    "native AEDT design readback disagrees with the request"
+                    refusal(
+                        "native AEDT design readback disagrees with the request",
+                        found=str(app.design_name),
+                        expected=source.design,
+                    )
                 )
             app.modeler.refresh_all_ids()
             object_names = tuple(str(name) for name in app.modeler.object_names)
             if not object_names:
-                raise ValueError("AEDT design contains no model objects")
+                raise ValueError(
+                    refusal(
+                        "AEDT design contains no model objects", found=source.design
+                    )
+                )
             with tempfile.TemporaryDirectory(prefix="scgsim-aedt-preview-") as raw:
                 exported = app.post.export_model_obj(
                     assignment=list(object_names),
@@ -275,7 +344,10 @@ def _inspect_desktop(
                 )
                 if released is False:
                     raise RuntimeError(
-                        "AEDT Desktop did not confirm release after preview"
+                        refusal(
+                            "AEDT Desktop did not confirm release after preview",
+                            found=released,
+                        )
                     )
 
     return _NativeSceneData(
@@ -368,7 +440,13 @@ def _materials(
                 ]
                 if len(matches) != 1:
                     raise ValueError(
-                        "native conductor has no unique source material binding"
+                        refusal(
+                            "native conductor has no unique source material binding",
+                            found={
+                                "semantic_id": item["semantic_id"],
+                                "matches": len(matches),
+                            },
+                        )
                     )
                 material_id = nonempty_text(
                     matches[0].get("material_id"), "source conductor material_id"
@@ -399,7 +477,13 @@ def _materials(
             )
             kind = nonempty_text(material.get("kind"), "receipt material kind")
             if str(region.get("observed_material_name", "")).lower() != native_material:
-                raise ValueError("native AEDT Region material changed")
+                raise ValueError(
+                    refusal(
+                        "native AEDT Region material changed",
+                        found=region.get("observed_material_name"),
+                        expected=native_material,
+                    )
+                )
         elif receipt is not None:
             raise ValueError(f"AEDT receipt has no material identity for {object_name}")
         else:
@@ -552,7 +636,13 @@ def _read_receipt_hfss_boundaries(
         if native_objects:
             object_name = nonempty_text(item.get("object_name"), "receipt object_name")
             if object_name not in native_objects:
-                raise ValueError("AEDT PEC receipt object readback is inconsistent")
+                raise ValueError(
+                    refusal(
+                        "AEDT PEC receipt object readback is inconsistent",
+                        found=object_name,
+                        expected=sorted(native_objects),
+                    )
+                )
             scene.add_object(object_name, "PEC", "PEC")
         elif item.get("boundary_name") or observed.get("native_solve_inside") is False:
             object_name = nonempty_text(item.get("object_name"), "receipt object_name")

@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from scgsim.refusal import refusal
+
 from .loaders.common import (
     artifact_matches,
     confined_artifact_path,
@@ -87,7 +89,13 @@ class GeometryPreview:
         self._bind_receipt = bind_aedt_receipt
         self._modes = {name: with_scene_palette(mode) for name, mode in modes.items()}
         if set(self._modes) != set(MODES):
-            raise ValueError("geometry preview requires exactly four named modes")
+            raise ValueError(
+                refusal(
+                    "geometry preview requires exactly four named modes",
+                    found=sorted(self._modes),
+                    expected=list(MODES),
+                )
+            )
         self._manifest_path = self.root / "metadata/geometry_preview_manifest.json"
 
     def show_materials(self) -> GeometryPreviewArtifact:
@@ -190,7 +198,15 @@ class GeometryPreview:
                 not receipt_path.is_file()
                 or receipt_authority_sha256(receipt_path) != expected_receipt
             ):
-                raise ValueError("AEDT preview receipt authority changed")
+                raise ValueError(
+                    refusal(
+                        "AEDT preview receipt authority changed",
+                        found=receipt_authority_sha256(receipt_path)
+                        if receipt_path.is_file()
+                        else None,
+                        expected=expected_receipt,
+                    )
+                )
 
     def _write_manifest(
         self,

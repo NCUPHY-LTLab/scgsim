@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import ClassVar
 
+from scgsim.refusal import refusal
+
 from ..features import Feature, SidecarFeatures
 from ..sizing import BoundingBox, SizeField, SizeRequests, coarse_size, ladder_size
 
@@ -59,7 +61,13 @@ class FeatureRecipe:
         """Reject sizes that cannot define a field."""
         if not (self.conductor_edge_size_um > 0 and self.conductor_edge_grow_um > 0):
             raise ValueError(
-                "the conductor-outline size and growth distance must be positive."
+                refusal(
+                    "the conductor-outline size and growth distance must be positive",
+                    found={
+                        "conductor_edge_size_um": self.conductor_edge_size_um,
+                        "conductor_edge_grow_um": self.conductor_edge_grow_um,
+                    },
+                )
             )
         multiple = self.band_mesh_size_multiple
         if (

@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal
 
+from scgsim.refusal import refusal
+
 RevisionKind = Literal["declared_revision", "content_hash_fallback"]
 
 
@@ -121,7 +123,12 @@ class SemanticSnapshotReference:
             "geometry_revision", self.geometry_revision, self.geometry_revision_kind
         )
         if not isinstance(self.projection_version, str) or not self.projection_version:
-            raise ValueError("projection_version must be a non-empty string")
+            raise ValueError(
+                refusal(
+                    "projection_version must be a non-empty string",
+                    found=self.projection_version,
+                )
+            )
         _validate_sha256_digest("canonical_sha256", self.canonical_sha256)
 
     def detached(self) -> dict[str, str]:
@@ -153,7 +160,13 @@ class SemanticFactsSnapshot:
         digest = _canonical_sha256_plain(plain)
         _validate_sha256_digest("canonical_sha256", self.canonical_sha256)
         if self.canonical_sha256 != digest:
-            raise ValueError("canonical_sha256 does not match semantic facts")
+            raise ValueError(
+                refusal(
+                    "canonical_sha256 does not match semantic facts",
+                    found=self.canonical_sha256,
+                    expected=digest,
+                )
+            )
         _validate_revision(
             "source_revision", self.source_revision, self.source_revision_kind
         )
@@ -161,7 +174,12 @@ class SemanticFactsSnapshot:
             "geometry_revision", self.geometry_revision, self.geometry_revision_kind
         )
         if not isinstance(self.projection_version, str) or not self.projection_version:
-            raise ValueError("projection_version must be a non-empty string")
+            raise ValueError(
+                refusal(
+                    "projection_version must be a non-empty string",
+                    found=self.projection_version,
+                )
+            )
         object.__setattr__(self, "facts", _freeze(plain))
 
     def reference(self) -> SemanticSnapshotReference:
