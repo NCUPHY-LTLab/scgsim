@@ -110,24 +110,7 @@ def mesh_route_geometry(
         meshing=_meshing_record(meshed, observed, paths),
     )
     write_json(paths.manifest_path, manifest)
-    write_json(
-        paths.provenance_path,
-        {
-            "scgsim_version": scgsim_version(),
-            "route": built.route,
-            **(
-                {"route_a_thin_film": built.route_a_thin_film}
-                if built.route_a_thin_film is not None
-                else {}
-            ),
-            "geometry_authority": SGB_RUNTIME_AUTHORITY,
-            "component_top_cell": built.top_cell,
-            "run_dir": ".",
-            "stack_path": paths.relative(paths.stack_path),
-            "xao_path": paths.relative(artifacts.xao),
-            "sidecar_path": paths.relative(artifacts.sidecar),
-        },
-    )
+    write_json(paths.provenance_path, _route_provenance(built))
     return MeshBuildResult(
         output_dir=paths.run_dir,
         mesh_path=paths.mesh_path,
@@ -294,6 +277,26 @@ def _write_sources(
     paths.stack_path.write_text(json_text(dict(stack)), encoding="utf-8")
 
     return top_cell
+
+
+def _route_provenance(built: RouteGeometry) -> dict[str, Any]:
+    """The route provenance record: the version, route and authority that built the mesh, and its inputs."""
+    paths, artifacts = built.paths, built.artifacts
+    return {
+        "scgsim_version": scgsim_version(),
+        "route": built.route,
+        **(
+            {"route_a_thin_film": built.route_a_thin_film}
+            if built.route_a_thin_film is not None
+            else {}
+        ),
+        "geometry_authority": SGB_RUNTIME_AUTHORITY,
+        "component_top_cell": built.top_cell,
+        "run_dir": ".",
+        "stack_path": paths.relative(paths.stack_path),
+        "xao_path": paths.relative(artifacts.xao),
+        "sidecar_path": paths.relative(artifacts.sidecar),
+    }
 
 
 @diagnostic_stage("palace.mesh.module")

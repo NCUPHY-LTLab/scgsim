@@ -64,21 +64,9 @@ def prepare_mesh_input(
     ``port_sheet_source_layers`` lists the authored sheets cut as lumped ports, None for a problem with none.
     """
     route = settings.route
-    vacuum_region = settings.vacuum_region
-    prepared_stack = stack
-    if vacuum_region is not None:
-        prepared_stack = apply_vacuum_region_to_stack(stack, vacuum_region)
-    if port_sheet_source_layers is not None:
-        prepared_stack = {
-            **prepared_stack,
-            "metadata": {
-                **prepared_stack.get("metadata", {}),
-                "port_sheet_source_layers": [],
-            },
-        }
-        prepared_stack = with_port_sheet_metadata(
-            prepared_stack, port_sheet_source_layers
-        )
+    prepared_stack = _stack_with_vacuum_and_ports(
+        stack, settings.vacuum_region, port_sheet_source_layers
+    )
     # Synchronize source selections before the single physical interpretation.
     build_input = _synchronize_solution_regions(build_input, prepared_stack)
     build_input = _select_authored_ports(build_input, port_sheet_source_layers)
@@ -96,32 +84,71 @@ def prepare_mesh_input(
             "call plan.set_vacuum_region(...) before prepare() or sim.set_vacuum_region(...) before mesh()"
         )
     if route == "A":
-        source_hash = canonical_sha256(to_plain(stack))
-        prepared_stack["metadata"]["route_a_thin_film"] = {
-            "schema_version": 1,
-            "variant": approximation_profile.name,
-            "display_label": "A_PRIME"
-            if approximation_profile.name == "substrate_face"
-            else "A",
-            "source_stack": {
-                "revision": f"sha256:{source_hash}",
-                "sha256": source_hash,
-            },
-        }
-    prepared_materials = prepared_stack.get("materials")
-    materials: dict[str, Mapping[str, Any]] | None = None
-    if isinstance(prepared_materials, Mapping):
-        materials = {
-            str(material_id): dict(material)
-            for material_id, material in prepared_materials.items()
-            if isinstance(material, Mapping)
-        }
+        prepared_stack["metadata"]["route_a_thin_film"] = _route_a_thin_film(
+            stack, approximation_profile
+        )
+    materials = _stack_material_records(prepared_stack)
     return PreparedMeshInput(
         stack=prepared_stack,
         materials=materials,
         geometry_input=effective_input,
         physical_plan=plan,
     )
+
+
+def _stack_with_vacuum_and_ports(
+    stack: Mapping[str, Any],
+    vacuum_region: VacuumRegionSpec | None,
+    port_sheet_source_layers: Sequence[Mapping[str, Any]] | None,
+) -> Mapping[str, Any]:
+    """The stack with the simulation's vacuum region applied and its port sheets recorded in the metadata."""
+    prepared_stack = stack
+    if vacuum_region is not None:
+        prepared_stack = apply_vacuum_region_to_stack(stack, vacuum_region)
+    if port_sheet_source_layers is not None:
+        prepared_stack = {
+            **prepared_stack,
+            "metadata": {
+                **prepared_stack.get("metadata", {}),
+                "port_sheet_source_layers": [],
+            },
+        }
+        prepared_stack = with_port_sheet_metadata(
+            prepared_stack, port_sheet_source_layers
+        )
+    return prepared_stack
+
+
+def _route_a_thin_film(
+    stack: Mapping[str, Any], approximation_profile: ApproximationProfile
+) -> dict[str, Any]:
+    """The Route A thin-film identity: the approximation's variant and the hash of the authored stack."""
+    source_hash = canonical_sha256(to_plain(stack))
+    return {
+        "schema_version": 1,
+        "variant": approximation_profile.name,
+        "display_label": "A_PRIME"
+        if approximation_profile.name == "substrate_face"
+        else "A",
+        "source_stack": {
+            "revision": f"sha256:{source_hash}",
+            "sha256": source_hash,
+        },
+    }
+
+
+def _stack_material_records(
+    prepared_stack: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]] | None:
+    """The prepared stack's material records by id, None when the stack has no materials mapping."""
+    prepared_materials = prepared_stack.get("materials")
+    if not isinstance(prepared_materials, Mapping):
+        return None
+    return {
+        str(material_id): dict(material)
+        for material_id, material in prepared_materials.items()
+        if isinstance(material, Mapping)
+    }
 
 
 def _synchronize_solution_regions(
