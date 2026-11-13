@@ -39,6 +39,14 @@ def validate_scalar_identity(
     handoff_metadata: dict[str, Any], run_metadata: dict[str, Any]
 ) -> None:
     """Match shared handoff and run fields before checking artifact identities."""
+    _validate_source_identity(handoff_metadata, run_metadata)
+    _validate_shared_handoff(handoff_metadata, run_metadata)
+
+
+def _validate_source_identity(
+    handoff_metadata: dict[str, Any], run_metadata: dict[str, Any]
+) -> None:
+    """Both records name the same source revisions, and each declares a valid Palace identity."""
     handoff_identity = handoff_metadata.get("source_revisions")
     run_identity = run_metadata.get("source_revisions")
     if not isinstance(handoff_identity, dict) or not handoff_identity:
@@ -74,6 +82,11 @@ def validate_scalar_identity(
             ).refusal(found_text(run_identity, handoff_identity))
         )
 
+
+def _validate_shared_handoff(
+    handoff_metadata: dict[str, Any], run_metadata: dict[str, Any]
+) -> None:
+    """Both records name the same Palace identity, handoff id and Route-A film."""
     handoff_palace_identity = handoff_metadata.get("palace_identity")
     run_palace_identity = run_metadata.get("palace_identity")
     if handoff_palace_identity != run_palace_identity:

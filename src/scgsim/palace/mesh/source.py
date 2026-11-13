@@ -77,6 +77,12 @@ def route_a_thin_film_provenance(
                 )
             )
         return result
+    _validate_standalone_film(result)
+    return result
+
+
+def _validate_standalone_film(result: dict[str, Any]) -> None:
+    """A film record without a physical plan names its variant's label and the hash of its source stack."""
     variant: Any = result.get("variant")
     expected_label = {
         "substrate_face": "A_PRIME",
@@ -121,4 +127,3 @@ def route_a_thin_film_provenance(
                 + found_text(dict(source))
             )
         )
-    return result

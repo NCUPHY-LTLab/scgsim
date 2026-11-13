@@ -10,7 +10,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_index_map import (
     DIELECTRIC_SECTION,
@@ -62,9 +62,14 @@ def resolve_epr_result(path: str | Path) -> PalaceEprResult:
     return PalaceEprResult.from_payload(json.loads(source.read_text(encoding="utf-8")))
 
 
-def _iteration_result(
-    result: ResolvedRunData, iteration: int
-) -> tuple[ResolvedRunData, str]:
+class _IterationRun(NamedTuple):
+    """A resolved run read at one sealed AMR iteration, and the folder of that iteration's outputs."""
+
+    run: ResolvedRunData
+    output_prefix: str
+
+
+def _iteration_result(result: ResolvedRunData, iteration: int) -> _IterationRun:
     """Read one sealed native iteration with the table validators of ``results.tables``."""
 
     if type(iteration) is not int or iteration <= 0:
@@ -74,44 +79,12 @@ def _iteration_result(
             ).refusal(found_text(iteration))
         )
     records = {item["path"]: item for item in result.returned_receipt.output_files}
-    prefixes = set()
-    for path in records:
-        parts = Path(path).parts
-        if (
-            len(parts) != 4
-            or parts[:2] != Path(OUTPUT_DIR).parts
-            or parts[3] != NATIVE_METADATA_NAME
-        ):
-            continue
-        if iteration_dir(parts[2]) == iteration:
-            prefixes.add("/".join(parts[:3]))
-    if len(prefixes) != 1:
-        raise ValueError(
-            Declared(
-                f"requested native iteration {iteration} lacks one receipt-bound directory",
-                RETURNED_RUN_FOLDER,
-            ).refusal(found_text(sorted(prefixes)))
+    prefix = _iteration_prefix(records, iteration)
+    native = json.loads(
+        _verified_artifact(result, records, prefix, NATIVE_METADATA_NAME).read_text(
+            encoding="utf-8"
         )
-    prefix = prefixes.pop()
-
-    def verified(name: str) -> Path:
-        """Return an iteration artifact only when its receipt size and hash still match."""
-        relative = f"{prefix}/{name}"
-        record = records.get(relative)
-        path = confined_path(result.run_dir, relative)
-        if (
-            record is None
-            or record.get("present") is not True
-            or not path.is_file()
-            or path.stat().st_size != record.get("bytes")
-            or sha256(path) != record.get("sha256")
-        ):
-            raise ValueError(
-                f"native iteration artifact is missing or changed: {relative}"
-            )
-        return path
-
-    native = json.loads(verified(NATIVE_METADATA_NAME).read_text(encoding="utf-8"))
+    )
     if (
         not isinstance(native, dict)
         or not isinstance(native.get("Problem"), dict)
@@ -135,14 +108,65 @@ def _iteration_result(
     tables = {}
     for family in output_families(result.problem, counts):
         tables[family] = read_result_table(
-            verified(table_name(family)),
+            _verified_artifact(result, records, prefix, table_name(family)),
             result.problem,
             counts,
             result.provenance.config,
         )
-    return replace(
-        result, tables=tables, provenance=replace(result.provenance, palace_json=native)
-    ), prefix
+    return _IterationRun(
+        replace(
+            result,
+            tables=tables,
+            provenance=replace(result.provenance, palace_json=native),
+        ),
+        prefix,
+    )
+
+
+def _iteration_prefix(records: dict[str, Any], iteration: int) -> str:
+    """The one receipt-bound output folder of ``iteration``."""
+    prefixes = set()
+    for path in records:
+        parts = Path(path).parts
+        if (
+            len(parts) != 4
+            or parts[:2] != Path(OUTPUT_DIR).parts
+            or parts[3] != NATIVE_METADATA_NAME
+        ):
+            continue
+        if iteration_dir(parts[2]) == iteration:
+            prefixes.add("/".join(parts[:3]))
+    if len(prefixes) != 1:
+        raise ValueError(
+            Declared(
+                f"requested native iteration {iteration} lacks one receipt-bound directory",
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(sorted(prefixes)))
+        )
+    return prefixes.pop()
+
+
+def _verified_artifact(
+    result: ResolvedRunData, records: dict[str, Any], prefix: str, name: str
+) -> Path:
+    """An iteration artifact, only when its receipt size and hash still match the file."""
+    relative = f"{prefix}/{name}"
+    record = records.get(relative)
+    path = confined_path(result.run_dir, relative)
+    if (
+        record is None
+        or record.get("present") is not True
+        or not path.is_file()
+        or path.stat().st_size != record.get("bytes")
+        or sha256(path) != record.get("sha256")
+    ):
+        raise ValueError(
+            Declared(
+                f"native iteration artifact {relative} is missing or changed",
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(record))
+        )
+    return path
 
 
 def epr_result(
@@ -472,29 +496,8 @@ class _ModeExtraction:
             surface_items = _mode_surface_items(
                 self.surfaces, self.selected, self.l0, surface_row
             )
-            bulk = [
-                {
-                    "domain_id": item["entry_name"],
-                    "index": number,
-                    "material": item["metadata"]["material"],
-                    "participation": checked_number(
-                        domain_row[f"p_elec[{number}]"], "bulk participation"
-                    ),
-                }
-                for number, item in sorted(self.domains.items())
-                if item["entry_name"] in self.selected["bulk_domain_ids"]
-            ]
-            port = [
-                {
-                    "port_name": item["port_name"],
-                    "host_entity_ids": item["metadata"]["host_entity_ids"],
-                    "index": number,
-                    "participation": float(port_row[f"p[{number}]"]),
-                    "signed_palace": True,
-                }
-                for number, item in sorted(self.junctions.items())
-                if item["port_name"] in self.selected["port_names"]
-            ]
+            bulk = self._bulk_items(domain_row)
+            port = self._port_items(port_row)
             self.rows.append(
                 {
                     "mode": mode,
@@ -508,6 +511,35 @@ class _ModeExtraction:
                     "junction": port,
                 }
             )
+
+    def _bulk_items(self, domain_row: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """The selected bulk domains' participation in one mode, by their energy-table index."""
+        return [
+            {
+                "domain_id": item["entry_name"],
+                "index": number,
+                "material": item["metadata"]["material"],
+                "participation": checked_number(
+                    domain_row[f"p_elec[{number}]"], "bulk participation"
+                ),
+            }
+            for number, item in sorted(self.domains.items())
+            if item["entry_name"] in self.selected["bulk_domain_ids"]
+        ]
+
+    def _port_items(self, port_row: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """The selected lumped ports' signed participation in one mode, as Palace reports it."""
+        return [
+            {
+                "port_name": item["port_name"],
+                "host_entity_ids": item["metadata"]["host_entity_ids"],
+                "index": number,
+                "participation": float(port_row[f"p[{number}]"]),
+                "signed_palace": True,
+            }
+            for number, item in sorted(self.junctions.items())
+            if item["port_name"] in self.selected["port_names"]
+        ]
 
 
 def _row_index(row: Mapping[str, Any]) -> int:
