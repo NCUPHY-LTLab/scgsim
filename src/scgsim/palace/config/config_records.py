@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from scgsim.refusal import refusal
+
 from ..mesh.physical_groups import Groups
 from ..source.surface_epr import SurfaceEprSpecs
 from ..source.transforms import validate_non_negative_int, validate_positive_number
@@ -73,7 +75,10 @@ class EigenmodeSettings:
             or self.num_modes < 1
         ):
             raise ValueError(
-                "num_modes must be a positive integer: call set_eigenmode(num_modes=...)."
+                refusal(
+                    "num_modes must be a positive integer: call set_eigenmode(num_modes=...)",
+                    found=self.num_modes,
+                )
             )
         # A frozen dataclass normalizes its own fields through object.__setattr__.
         if self.target_hz is not None:
@@ -107,21 +112,31 @@ class ElectrostaticSettings:
         """Refuse an unknown policy or a pair of policies that contradict each other."""
         if self.unassigned_conductor_policy not in {"ground", "error"}:
             raise ValueError(
-                "unassigned_conductor_policy must be 'ground' or 'error': call "
-                "set_electrostatic(unassigned_conductor_policy=...)."
+                refusal(
+                    "unassigned_conductor_policy must be 'ground' or 'error': call "
+                    "set_electrostatic(unassigned_conductor_policy=...)",
+                    found=self.unassigned_conductor_policy,
+                )
             )
         if self.exterior_boundary_policy not in {"none", "ground"}:
             raise ValueError(
-                "exterior_boundary_policy must be 'none' or 'ground': call "
-                "set_electrostatic(exterior_boundary_policy=...)."
+                refusal(
+                    "exterior_boundary_policy must be 'none' or 'ground': call "
+                    "set_electrostatic(exterior_boundary_policy=...)",
+                    found=self.exterior_boundary_policy,
+                )
             )
         if (
             self.exterior_boundary_policy == "ground"
             and self.unassigned_conductor_policy != "error"
         ):
             raise ValueError(
-                "exterior ground requires unassigned_conductor_policy='error': call "
-                "set_electrostatic(unassigned_conductor_policy='error', exterior_boundary_policy='ground')."
+                refusal(
+                    "exterior ground requires unassigned_conductor_policy='error': call "
+                    "set_electrostatic(unassigned_conductor_policy='error', exterior_boundary_policy='ground')",
+                    found=self.unassigned_conductor_policy,
+                    expected="error",
+                )
             )
         validate_non_negative_int(self.save_fields, "save_fields")
 

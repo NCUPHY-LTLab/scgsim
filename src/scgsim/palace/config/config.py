@@ -13,6 +13,7 @@ from numbers import Real
 from typing import Any
 
 from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC, OUTPUT_DIR
+from scgsim.refusal import refusal
 
 from ..mesh.physical_groups import Groups
 from ..source.ports import LayoutPortBinding
@@ -188,7 +189,12 @@ def _pec_attributes(groups: Groups) -> list[int]:
         }
     )
     if not attributes:
-        raise ValueError("Eigenmode config requires SGB-authored PEC surfaces.")
+        raise ValueError(
+            refusal(
+                "Eigenmode config requires SGB-authored PEC surfaces; the plan's conductors produced none",
+                found=sorted(groups.get("pec_surfaces", {})),
+            )
+        )
     return attributes
 
 
@@ -204,7 +210,10 @@ def _refuse_ports_on_loss_groups(
     }
     if epr_attributes.intersection(port_attributes):
         raise ValueError(
-            "LumpedPort attributes must not also be Surface-EPR loss groups."
+            refusal(
+                "LumpedPort attributes must not also be Surface-EPR loss groups",
+                found=sorted(epr_attributes.intersection(port_attributes)),
+            )
         )
 
 
@@ -333,7 +342,11 @@ def _lumped_ports(
         )
     if len(groups.get("port_surfaces", {})) != len(ports):
         raise ValueError(
-            "SGB produced unconfigured or missing layout-sheet port groups."
+            refusal(
+                "SGB produced unconfigured or missing layout-sheet port groups",
+                found=sorted(groups.get("port_surfaces", {})),
+                expected=f"{len(ports)} port groups",
+            )
         )
     return rows, information, entries
 
@@ -367,7 +380,12 @@ def _materials_from_solution_volumes(
     """Build Palace-domain material rows from explicit material records."""
     if not isinstance(materials, Mapping) or not materials:
         raise ValueError(
-            "stack must include top-level materials mapping for config generation."
+            refusal(
+                "stack must include a non-empty top-level materials mapping for config generation",
+                found=materials
+                if not isinstance(materials, Mapping)
+                else dict(materials),
+            )
         )
 
     material_rows: list[dict[str, Any]] = []
@@ -429,7 +447,12 @@ def _material_identity(
 ) -> dict[str, str]:
     material_id = volume.get("material")
     if not isinstance(material_id, str) or not material_id:
-        raise ValueError("solution volume must carry one explicit material id.")
+        raise ValueError(
+            refusal(
+                f"solution volume {volume.get('group')!r} must carry one explicit material id",
+                found=material_id,
+            )
+        )
     material = materials.get(material_id)
     if not isinstance(material, Mapping) or material.get("kind") not in {
         "vacuum",

@@ -11,6 +11,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from scgsim.refusal import refusal
+
 from .config_records import ElectrostaticSettings, TerminalBinding, optional_string
 from .index import TerminalEntry
 
@@ -32,7 +34,10 @@ class _BoundaryState:
             self._record_component(physical_name, component_id, net_id, attrs)
         if not self.component_attrs:
             raise ValueError(
-                "SGB config needs at least one solver-active conductor component."
+                refusal(
+                    "SGB config needs at least one solver-active conductor component",
+                    found=sorted(self.groups.get("pec_surfaces", {})),
+                )
             )
 
     def _record_component(
@@ -110,7 +115,12 @@ def _conductor_identity(info: Mapping[str, Any]) -> tuple[str, str, tuple[int, .
     component_id = optional_string(info.get("entity"))
     net_id = optional_string(info.get("net"))
     if component_id is None:
-        raise ValueError("SGB conductor surface missing its Entity id.")
+        raise ValueError(
+            refusal(
+                f"SGB conductor surface with attributes {info.get('attributes')} has no Entity id",
+                found=info.get("entity"),
+            )
+        )
     if net_id is None:
         raise ValueError(
             f"SGB conductor component {component_id!r} missing exact net_id."
@@ -148,7 +158,13 @@ def _terminal_identity(terminal: TerminalBinding) -> tuple[str, str]:
     net_id = optional_string(terminal.net_id)
     name = optional_string(terminal.name)
     if net_id is None or name is None:
-        raise ValueError("terminal binding names and net ids must be non-empty.")
+        raise ValueError(
+            refusal(
+                "terminal binding names and net ids must be non-empty: call "
+                "add_terminal(name, net_id=...)",
+                found={"name": terminal.name, "net_id": terminal.net_id},
+            )
+        )
     return name, net_id
 
 
@@ -220,7 +236,12 @@ def _physical_grounds(
     for value in ground_net_ids:
         net_id = optional_string(value)
         if net_id is None:
-            raise ValueError("physical Ground net ids must be non-empty.")
+            raise ValueError(
+                refusal(
+                    "physical Ground net ids must be non-empty: call add_ground(net_id=...)",
+                    found=value,
+                )
+            )
         if net_id in requested:
             raise ValueError(f"SGB physical Ground net {net_id!r} is repeated.")
         matching = {
@@ -267,7 +288,11 @@ def _exterior_grounds(
                 physical_names.add(str(physical_name))
         if not attrs:
             raise ValueError(
-                "exterior_boundary_policy='ground' requires at least one exterior boundary."
+                refusal(
+                    "exterior_boundary_policy='ground' requires at least one exterior boundary; "
+                    "the boundary surfaces of the mesh have no domain boundary",
+                    found=sorted(groups.get("boundary_surfaces", {})),
+                )
             )
     return attrs, physical_names
 
@@ -277,7 +302,14 @@ def _assemble_boundaries(
     output: _BoundaryOutput,
 ) -> tuple[dict[str, object], list[TerminalEntry], dict[str, Any]]:
     if set(state.attribute_components).intersection(output.exterior_attrs):
-        raise ValueError("conductor and exterior boundary attributes must be disjoint.")
+        raise ValueError(
+            refusal(
+                "conductor and exterior boundary attributes must be disjoint",
+                found=sorted(
+                    set(state.attribute_components).intersection(output.exterior_attrs)
+                ),
+            )
+        )
     boundary_map: dict[str, object] = {"Terminal": output.terminal_rows}
     physical_attrs = _attributes_for_components(
         state, sorted(output.physical_ground_components)
@@ -304,7 +336,13 @@ def _validate_terminal_map(
         for entry in terminal_rows
     )
     if index_mapping != boundary_mapping:
-        raise ValueError("Terminal-to-boundary mapping mismatch after synthesis.")
+        raise ValueError(
+            refusal(
+                "Terminal-to-boundary mapping mismatch after synthesis",
+                found=index_mapping,
+                expected=boundary_mapping,
+            )
+        )
 
 
 def _ground_resolution(

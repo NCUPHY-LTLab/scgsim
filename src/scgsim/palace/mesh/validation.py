@@ -6,6 +6,8 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import Any, NamedTuple
 
+from scgsim.refusal import refusal
+
 
 class LiveGroup(NamedTuple):
     """One physical group in the live Gmsh model: its physical tag and its sorted entity tags."""
@@ -175,7 +177,13 @@ def validate_port_tetrahedron_face_conformality(
             )
             face_size = (order + 1) * (order + 2) // 2
             if len(face_nodes) % face_size:
-                raise ValueError("Gmsh returned an incomplete tetrahedron face list.")
+                raise ValueError(
+                    refusal(
+                        "Gmsh returned an incomplete tetrahedron face list",
+                        found=len(face_nodes),
+                        expected=f"a multiple of {face_size}",
+                    )
+                )
             for index in range(0, len(face_nodes), face_size):
                 face = tuple(
                     sorted(int(node) for node in face_nodes[index : index + face_size])

@@ -12,6 +12,7 @@ from typing import Any
 
 from scgsim.contracts.palace_run_folder import LOGS_DIR, json_text
 from scgsim.diagnostics import diagnostic_stage, worker_config
+from scgsim.refusal import refusal
 
 from .physical_groups import Groups
 
@@ -35,9 +36,19 @@ def lower_mesh_in_worker(
         request["preparation_diagnostics"] = diagnostic_config
     result = _run_gmsh_worker(request=request, run_dir=run_dir)
     if not mesh_path.is_file():
-        raise FileNotFoundError("fresh Gmsh mesh worker did not write the MSH file.")
+        raise FileNotFoundError(
+            refusal(
+                "fresh Gmsh mesh worker did not write the MSH file",
+                found=str(mesh_path),
+            )
+        )
     if not isinstance(result.get("statistics"), dict):
-        raise TypeError("fresh Gmsh mesh worker result lacks mesh statistics.")
+        raise TypeError(
+            refusal(
+                "fresh Gmsh mesh worker result lacks mesh statistics",
+                found=sorted(result),
+            )
+        )
     return dict(result)
 
 
@@ -62,10 +73,20 @@ def _run_gmsh_worker(*, request: Mapping[str, Any], run_dir: Path) -> Mapping[st
             worker_name="gmsh_mesh_worker",
         )
         if not result_path.is_file():
-            raise FileNotFoundError("fresh Gmsh mesh worker did not write a result.")
+            raise FileNotFoundError(
+                refusal(
+                    "fresh Gmsh mesh worker did not write a result",
+                    found=str(result_path),
+                )
+            )
         result = json.loads(result_path.read_text(encoding="utf-8"))
         if not isinstance(result, Mapping):
-            raise TypeError("fresh Gmsh mesh worker result must be a mapping.")
+            raise TypeError(
+                refusal(
+                    "fresh Gmsh mesh worker result must be a mapping",
+                    found=type(result).__name__,
+                )
+            )
         return result
 
 

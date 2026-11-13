@@ -43,6 +43,7 @@ from scgsim.meshing import (
 )
 from scgsim.meshing.fine_structure import below_steps
 from scgsim.preparation import native_preparation
+from scgsim.refusal import refusal
 
 from ..source.layout_ports import GeometryBuildRequest
 from .controls import MeshControls
@@ -165,9 +166,11 @@ def build_route_geometry(
     """
     route = request.route
     if not isinstance(request.stack, Mapping):
-        raise TypeError("stack must be a mapping.")
+        raise TypeError(
+            refusal("stack must be a mapping", found=type(request.stack).__name__)
+        )
     if route not in {"A", "B"}:
-        raise ValueError("route must be either 'A' or 'B'.")
+        raise ValueError(refusal("route must be either 'A' or 'B'", found=route))
     _refuse_bands_narrower_than_a_face(
         request.surface_epr_specs, request.geometry_input
     )
@@ -265,14 +268,24 @@ def _write_sources(
 ) -> str:
     """Write the plan's GDS bytes and the stack paired with them; return the plan's top cell."""
     if not isinstance(source_gds_bytes, bytes):
-        raise TypeError("plan GDS source must be bytes")
+        raise TypeError(
+            refusal(
+                "plan GDS source must be bytes", found=type(source_gds_bytes).__name__
+            )
+        )
     wanted = stack.get("metadata", {}).get("gds_sha256")
     observed = hashlib.sha256(source_gds_bytes).hexdigest()
     if wanted != observed:
-        raise ValueError("plan GDS bytes differ from paired stack source")
+        raise ValueError(
+            refusal(
+                "plan GDS bytes differ from paired stack source",
+                found=observed,
+                expected=wanted,
+            )
+        )
     top_cell = stack.get("metadata", {}).get("top_cell_name")
     if not isinstance(top_cell, str) or not top_cell:
-        raise ValueError("plan stack requires top_cell_name")
+        raise ValueError(refusal("plan stack requires top_cell_name", found=top_cell))
     paths.gds_path.write_bytes(source_gds_bytes)
     paths.stack_path.write_text(json_text(dict(stack)), encoding="utf-8")
 

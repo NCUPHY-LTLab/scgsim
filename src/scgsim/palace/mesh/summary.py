@@ -16,6 +16,7 @@ from scgsim.contracts.palace_run_folder import (
     palace_problem,
     sha256,
 )
+from scgsim.refusal import refusal
 
 
 def _corner_chord_statistics(
@@ -101,7 +102,11 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
                 )
                 if key in shared and shared[key] != value:
                     raise ValueError(
-                        "shared tetrahedral face has different high-order nodes"
+                        refusal(
+                            "shared tetrahedral face has different high-order nodes",
+                            found={"face": key, "nodes": value},
+                            expected=shared[key],
+                        )
                     )
                 shared[key] = value
     return dict(

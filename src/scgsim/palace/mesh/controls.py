@@ -15,6 +15,7 @@ from typing import Any
 
 from scgsim.meshing import Budgets, FeatureRecipe, MesherOptions, SizingRecipe
 from scgsim.meshing.report import recipe_record
+from scgsim.refusal import refusal
 
 # Provisional (Human decision H2, issue 65): the minimum signed inverse condition number (minSICN) every tetrahedron must reach.
 DEFAULT_QUALITY_THRESHOLD = 0.01
@@ -38,18 +39,35 @@ class MeshControls:
             and hasattr(self.recipe, "name")
             and hasattr(self.recipe, "version")
         ):
-            raise TypeError("recipe must be a scgsim.meshing sizing recipe.")
+            raise TypeError(
+                refusal(
+                    "recipe must be a scgsim.meshing sizing recipe",
+                    found=type(self.recipe).__name__,
+                )
+            )
         if not isinstance(self.mesher, MesherOptions):
-            raise TypeError("mesher must be scgsim.meshing.MesherOptions.")
+            raise TypeError(
+                refusal(
+                    "mesher must be scgsim.meshing.MesherOptions",
+                    found=type(self.mesher).__name__,
+                )
+            )
         if not isinstance(self.budgets, Budgets):
-            raise TypeError("budgets must be scgsim.meshing.Budgets.")
+            raise TypeError(
+                refusal(
+                    "budgets must be scgsim.meshing.Budgets",
+                    found=type(self.budgets).__name__,
+                )
+            )
         threshold = self.quality_threshold
         if (
             isinstance(threshold, bool)
             or not isinstance(threshold, Real)
             or not math.isfinite(threshold)
         ):
-            raise ValueError("quality_threshold must be a finite number.")
+            raise ValueError(
+                refusal("quality_threshold must be a finite number", found=threshold)
+            )
 
     def updated(
         self,

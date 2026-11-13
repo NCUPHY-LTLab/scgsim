@@ -17,6 +17,7 @@ from typing import Any
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
 from scgsim.geometry.sgb.exact.grid import Grid
 from scgsim.geometry.surface_epr.specs import positive_real
+from scgsim.refusal import refusal
 
 from ..mesh.physical_groups import Groups, rows_of
 from ..source.surface_epr import SurfaceEprSpec, SurfaceEprSpecs
@@ -37,7 +38,11 @@ def build_surface_epr_postprocessing(
     the margin's band to the last.
     """
     if not positive_real(model_l0_m):
-        raise ValueError("Model.L0 must be a finite positive length in metres.")
+        raise ValueError(
+            refusal(
+                "Model.L0 must be a finite positive length in metres", found=model_l0_m
+            )
+        )
     rows: list[dict[str, Any]] = []
     entries: list[SurfaceEprEntry] = []
     margin_requests: list[_MarginRequest] = []
@@ -55,7 +60,12 @@ def build_surface_epr_postprocessing(
             attributes = _unit_attributes(unit.rows)
             for attribute in attributes:
                 if (interface_type, attribute) in members:
-                    raise ValueError("Surface EPR physical attribute is duplicated.")
+                    raise ValueError(
+                        refusal(
+                            f"Surface EPR physical attribute is duplicated for {interface_type}",
+                            found=attribute,
+                        )
+                    )
                 members.add((interface_type, attribute))
             index = len(rows) + 1
             rows.append(_dielectric_row(index, interface_type, attributes, snapshot))
