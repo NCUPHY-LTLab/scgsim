@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.output.emission.surfaces import SurfaceBuilder
 from scgsim.geometry.sgb.topology.assembly.records import Loop, TopoFace, Topology
@@ -141,7 +142,9 @@ class _Walk:
             signed = [sign * (self._edge(eid) + 1) for eid, sign in loop]
             if len({abs(s) for s in signed}) != len(signed):
                 raise SgbError(
-                    f"internal: face {face_id}: an edge occurs twice in one wire (seam/bridge edges are not written)"
+                    internal(
+                        f"face {face_id}: an edge occurs twice in one wire (seam/bridge edges are not written)"
+                    )
                 )
             for s in signed:
                 found.pcurves.setdefault(

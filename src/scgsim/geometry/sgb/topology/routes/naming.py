@@ -62,6 +62,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.exact.interfaces import (
     SHEET,
@@ -120,7 +121,7 @@ def interface_side(neg: Domain | None, pos: Domain | None) -> str:
     ``bottom`` when it is above.  Both domains must exist.
     """
     if neg is None or pos is None:
-        raise ValueError("internal: an interface face has a domain on each side")
+        raise ValueError(internal("an interface face has a domain on each side"))
     first, _ = ordered_pair(neg, pos)
     return "top" if first == neg else "bottom"
 

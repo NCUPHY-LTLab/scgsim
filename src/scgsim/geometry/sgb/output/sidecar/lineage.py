@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.exact.carriers import ArcCarrier, Lineage
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
@@ -64,7 +65,9 @@ class CarrierLineage:
             if arc is not None and arc.root_id in self.source_curves:
                 return arc.root_id
         raise SgbError(
-            f"internal: the source carrier {carrier_id!r} lies on no source curve of the catalogue"
+            internal(
+                f"the source carrier {carrier_id!r} lies on no source curve of the catalogue"
+            )
         )
 
     def role(self, family_id: str) -> str | None:

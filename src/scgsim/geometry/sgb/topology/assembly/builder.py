@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from math import lcm
 from typing import TypeVar
 
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.arcs import RealisedArc, realise
 from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
@@ -71,7 +72,9 @@ def register(table: dict[str, Record], record: Record) -> None:
         table[record.id] = record
     elif known != record:
         raise SgbError(
-            f"internal: two distinct {type(record).__name__} records share the atomic id {record.id}"
+            internal(
+                f"two distinct {type(record).__name__} records share the atomic id {record.id}"
+            )
         )
 
 
@@ -411,8 +414,10 @@ class _Assembly:
             for b, t in zip(bottom, top, strict=True)
         ):
             raise SgbError(
-                f"internal: curved wall from {run.u} to {run.v} has different vertices at its bottom and top "
-                "after splitting: the cylinder cannot be formed"
+                internal(
+                    f"curved wall from {run.u} to {run.v} has different vertices at its bottom and top "
+                    "after splitting: the cylinder cannot be formed"
+                )
             )
         return [
             _WallPiece(run, b.start, b.end, [b], [t])
@@ -443,7 +448,9 @@ class _Assembly:
             self._side_volume(run.k1, run.left_top, run.dom_l),
         ):
             raise SgbError(
-                f"internal: wall from {run.u} to {run.v} joins cells of different volumes"
+                internal(
+                    f"wall from {run.u} to {run.v} joins cells of different volumes"
+                )
             )
         z_lo, z_hi = self.levels.levels[k0], self.levels.levels[k1]
         plane = f"wall[{z_lo},{z_hi}]"

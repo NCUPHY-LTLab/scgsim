@@ -55,6 +55,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 from scgsim.geometry.models.grid import format_box
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
 from scgsim.geometry.sgb.bands.die_cuts import (
@@ -183,7 +184,9 @@ def concrete_support(request: InsetRequest) -> ConcreteSupport:
     """The face a request names; a type-level request names none (``inset_plan`` expands it into faces first)."""
     if isinstance(request.support, InterfaceSurfaces):
         raise InputError(
-            f"internal: inset request {request.request_id!r}: a type-level support names no single face"
+            internal(
+                f"inset request {request.request_id!r}: a type-level support names no single face"
+            )
         )
     return request.support
 

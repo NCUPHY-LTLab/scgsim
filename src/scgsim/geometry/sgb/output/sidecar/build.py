@@ -24,6 +24,7 @@ from scgsim.contracts.sgb_sidecar.records import (
     Summary,
     Volume,
 )
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
@@ -161,5 +162,7 @@ def _require_named_members(
     differ = sorted(g for g in {*named, *members} if named.get(g) != members.get(g))
     if differ:
         raise SgbError(
-            f"internal: the members of groups {differ[:3]} are not the faces and volumes that name them"
+            internal(
+                f"the members of groups {differ[:3]} are not the faces and volumes that name them"
+            )
         )
