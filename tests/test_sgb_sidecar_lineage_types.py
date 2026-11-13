@@ -70,7 +70,9 @@ def test_an_entity_named_like_a_band_family_stays_an_entity_of_the_faces_it_boun
     assert bounded
     for fid in bounded:
         assert "bands" in sidecar["face"][fid]["entities"], fid
-    banded = [f for f, face in sidecar["face"].items() if "bands" in face["families"]]
+    banded = [
+        f for f, face in sidecar["face"].items() if "bands" in face["band_families"]
+    ]
     assert banded and all(
         any(label["family"] == "bands" for label in sidecar["face"][f]["bands"])
         or sidecar["face"][f]["kind"] == "wall"
@@ -98,7 +100,7 @@ def family_segment(
 ) -> LineCarrier:
     """Segment ``k`` of a family; its lineage names the family ``named`` (by default the family itself)."""
     lineage = Lineage("family_member", family_id=named or family, member=f"{family}{k}")
-    return LineCarrier(f"{family}{k}", p, q, lineage)
+    return LineCarrier(f"{family}{k}", p, q, lineage, "family_line")
 
 
 def ring_family(
@@ -147,7 +149,7 @@ def test_a_required_family_of_another_role_is_written_as_its_members(tmp_path):
         "role": "port_footprint",
         "levels_um": [0.0],
     }
-    assert any("cap" in face["cut_families"] for face in sidecar["face"].values())
+    assert any("cap" in face["other_cut_families"] for face in sidecar["face"].values())
     built = read_built_model(sidecar)
     assert all(built.carriers[cid].family == "cap" for cid in members)
 

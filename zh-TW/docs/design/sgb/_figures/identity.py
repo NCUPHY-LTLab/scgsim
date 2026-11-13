@@ -7,7 +7,7 @@ Run, with the Python of the checkout that contains the production SGB core (``sc
 Computes, with the production package, a real mapping-chain lookup on the pad-in-ground running example (Route B with
 inset bands, its lumped port on the support plane z = 0) and the determinism evidence quoted by the page.  The model is
 built, written with ``emit_model`` into a scratch folder and the lookup reads the written sidecar
-(``scgsim.sgb.sidecar.v4``) through the contract's reader and views, exactly as a consumer would: every step follows a
+(``scgsim.sgb.sidecar.v5``) through the contract's reader and views, exactly as a consumer would: every step follows a
 typed reference of one record to another, and no id is parsed.  Outputs go to ``docs/design/sgb/figures/`` (prefix ``identity-``):
 
 * ``identity-trace.json``        every step of the lookup  Palace attribute -> source curve (also quoted in the page)
@@ -137,8 +137,8 @@ def _build_trace(model, sidecar) -> dict:
         "name": ALT_GROUP,
         "face": alt_face,
         "entities": sidecar["face"][alt_face]["entities"],
-        "families": sidecar["face"][alt_face]["families"],
-        "membership": sidecar["face"][alt_face]["membership"],
+        "band_families": sidecar["face"][alt_face]["band_families"],
+        "entity_coverage": sidecar["face"][alt_face]["entity_coverage"],
         "loops": face_loops(sidecar, alt_face),
     }
     wall = next(
@@ -151,14 +151,14 @@ def _build_trace(model, sidecar) -> dict:
         "face": wall,
         "z_um": sidecar["face"][wall]["z_um"],
         "entities": sidecar["face"][wall]["entities"],
-        "membership": sidecar["face"][wall]["membership"],
+        "entity_coverage": sidecar["face"][wall]["entity_coverage"],
         "loops": face_loops(sidecar, wall),
     }
     port_entities = {port["entity"] for port in sidecar["port"].values()}
-    trace["walls_with_port_membership"] = [
-        {"face": fid, "group": face["group"], "membership": face["membership"]}
+    trace["walls_with_port_coverage"] = [
+        {"face": fid, "group": face["group"], "entity_coverage": face["entity_coverage"]}
         for fid, face in sorted(sidecar["face"].items())
-        if face["kind"] == "wall" and port_entities & set(face["membership"])
+        if face["kind"] == "wall" and port_entities & set(face["entity_coverage"])
     ]
     trace["step7_band_family"] = {
         "band_family": sidecar["band_family"][TRACED_FAMILY],

@@ -514,6 +514,7 @@ def test_a_family_at_a_z_no_prism_defines_adds_an_ordinary_level():
         (60_000, 40_000),
         (70_000, 40_000),
         Lineage("family_member", family_id="cap", member="cap0"),
+        "family_line",
     )
     cap = CurveFamilyRecord("cap", "cap", (carrier,), (Fraction(1, 10),))
     plain = build_model_from_catalogue(base, "A")

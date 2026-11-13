@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v4.json",
-  "title": "scgsim.sgb.sidecar.v4",
+  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v5.json",
+  "title": "scgsim.sgb.sidecar.v5",
   "description": "Sidecar of the SGB XAO/BREP: the model, the binding of planned ids to native tags, a summary, and the tables of sources, derived curves and emitted shapes, linked by typed ids.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "model", "binding", "summary", "entity", "source_curve", "inset_request", "port", "cut_family", "band_family", "support_ring", "support_primitive", "carrier", "vertex", "edge", "face", "volume", "group", "surface_epr_row", "mesh_feature"],
   "properties": {
-    "schema": {"const": "scgsim.sgb.sidecar.v4"},
+    "schema": {"const": "scgsim.sgb.sidecar.v5"},
     "model": {"$ref": "#/$defs/Model"},
     "binding": {"$ref": "#/$defs/Binding"},
     "summary": {"$ref": "#/$defs/Summary"},
@@ -208,10 +208,10 @@
       }
     },
     "BandFamily": {
-      "description": "One band family: the face an inset request bands, its margins (also in model-grid units, the identity a margin is looked up by), the area of its support region and the groups of each band.",
+      "description": "One band family: the face an inset request bands, its margins (also in model-grid units, the identity a margin is looked up by), the area of its support region, the groups of each band and the contacts of each band that no group carries.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands"],
+      "required": ["support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands", "hidden_contacts"],
       "properties": {
         "support": {
           "oneOf": [
@@ -231,11 +231,19 @@
         "band_count": {"type": "integer", "minimum": 1},
         "support_area_um2": {"type": ["number", "null"]},
         "bands": {
-          "description": "Band index -> the primary groups of the faces in that band.  In Route B a family also names the MM group of a metal-metal contact, which is not a physical group, so these names are not checked.",
+          "description": "Band index -> the surface groups whose faces lie in that band; a band no written face lies in is absent.",
           "type": "object",
           "additionalProperties": {
             "type": "array",
-            "items": {"type": "string"}
+            "items": {"type": "string", "x-references": "group", "x-dimension": 2}
+          }
+        },
+        "hidden_contacts": {
+          "description": "Band index -> the metal-metal contacts that lie in that band but bound no written volume (Route B excludes conductor volumes), so no group carries them; a band without one is absent.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/HiddenContact"}
           }
         }
       }
@@ -390,7 +398,7 @@
       "description": "One written face: its group, kind, face kind, z range, the volumes on its two sides, its written loops and area, and what it comes from.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume", "loops", "area_um2", "curved", "entities", "families", "cut_families", "membership", "bands", "outer_boundary"],
+      "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume", "loops", "area_um2", "curved", "entities", "band_families", "other_cut_families", "entity_coverage", "bands", "outer_boundary"],
       "properties": {
         "group": {"type": ["string", "null"], "x-references": "group", "x-dimension": 2},
         "kind": {"enum": ["horizontal", "wall"]},
@@ -412,28 +420,28 @@
         "area_um2": {"type": "number", "exclusiveMinimum": 0},
         "curved": {"description": "A wall on a cylinder.", "type": "boolean"},
         "entities": {
-          "description": "The Entities whose outlines bound the face, from the source carriers of its edges.",
+          "description": "The Entities whose outline curves lie on the face's boundary, from the source carriers of its horizontal edges.  Which Entities cover the face is entity_coverage.",
           "type": "array",
           "items": {"type": "string", "x-references": "entity"}
         },
-        "families": {
-          "description": "The band families whose curves bound the face, from its band-member carriers.",
+        "band_families": {
+          "description": "The band families whose band curves lie on the face's boundary, from the band-member carriers of its edges.  Which bands the face lies in is bands: a face inside a band need not touch its curves.",
           "type": "array",
           "items": {"type": "string", "x-references": "band_family"}
         },
-        "cut_families": {
-          "description": "The other cut families whose members lie on its boundary edges.",
+        "other_cut_families": {
+          "description": "The cut families other than the band families whose curves lie on the face's boundary, from the family-member carriers of its edges.",
           "type": "array",
           "items": {"type": "string", "x-references": "cut_family"}
         },
-        "membership": {
-          "description": "Entity -> covered fraction of the face area; non-exclusive, may sum to more than 1 (walls use the share of their bottom boundary length).",
+        "entity_coverage": {
+          "description": "Entity -> the fraction of the face's area that Entity covers (a wall: of its bottom boundary length); non-exclusive, may sum to more than 1.",
           "type": "object",
           "additionalProperties": {"type": "number", "minimum": 0},
           "propertyNames": {"x-references": "entity"}
         },
         "bands": {
-          "description": "The inset band labels of the face, in label order.",
+          "description": "The inset bands the face lies in (family and index), in label order; which band curves bound it is band_families.",
           "type": "array",
           "items": {"$ref": "#/$defs/BandLabel"}
         },
@@ -500,6 +508,22 @@
       "properties": {
         "family": {"type": "string", "x-references": "band_family"},
         "index": {"type": "integer", "minimum": 0}
+      }
+    },
+    "HiddenContact": {
+      "description": "A metal-metal contact inside a band that is not written: the two conductors that meet there and the face kind of the contact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entities", "face_kind"],
+      "properties": {
+        "entities": {
+          "description": "The two conductors, by id.",
+          "type": "array",
+          "items": {"type": "string", "x-references": "entity"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "face_kind": {"enum": ["top", "bottom", "sidewall", "sheet", "port", "interface"]}
       }
     },
     "IdsByTag": {
@@ -802,17 +826,13 @@
       }
     },
     "SurfaceEprRow": {
-      "description": "One Surface-EPR row and the primary group that carries it.",
+      "description": "One Surface-EPR row and the primary group that carries it; the row's Entities are its group's.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["group", "interface_type", "entities", "band", "banded_surface", "side", "face_sides", "shared_face_group"],
+      "required": ["group", "interface_type", "band", "banded_surface", "side", "face_sides", "shared_face_group"],
       "properties": {
         "group": {"type": "string", "x-references": "group", "x-dimension": 2},
         "interface_type": {"enum": ["MA", "MS", "SA"]},
-        "entities": {
-          "type": "array",
-          "items": {"type": "string", "x-references": "entity"}
-        },
         "band": {"type": ["integer", "null"], "minimum": 0},
         "banded_surface": {"description": "A band row: the surface it is a band of, named as the row would be without its band (MA::pad__top for MA::pad__top::band=2), shared by every band row of that surface; a name, not an id of any table.  Null for an unbanded row.", "type": ["string", "null"]},
         "side": {"description": "A sheet row: the side every face in face_sides agrees on, or mixed when they disagree; null for any other row.", "enum": ["above", "below", "both", "mixed", null]},

@@ -126,14 +126,14 @@ running example 的 primary group（`MA`：metal–vacuum 側，`MS`：metal–s
 
 {{< askr-chart-view src="figures/emission-groups-3d.html" label="依 physical group 檢視模型" >}}
 
-XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer 也會在它旁邊寫一個 JSON **sidecar**，即 `<stem>.sidecar.json`（格式 `scgsim.sgb.sidecar.v4`，附 JSON Schema）。它以 planned id 與 group 名稱指稱每個元素，不含 native handle：native tag 一律由 `binding` 的順序得到。sidecar 的每個欄位是一張以 id 為鍵的表，記錄之間以 id 互相指向，每個事實只存一次；每張表的定義見[使用契約](consumer-contract.qmd#sidecar)，下表只列出與 emission 有關的主要欄位：
+XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer 也會在它旁邊寫一個 JSON **sidecar**，即 `<stem>.sidecar.json`（格式 `scgsim.sgb.sidecar.v5`，附 JSON Schema）。它以 planned id 與 group 名稱指稱每個元素，不含 native handle：native tag 一律由 `binding` 的順序得到。sidecar 的每個欄位是一張以 id 為鍵的表，記錄之間以 id 互相指向，每個事實只存一次；每張表的定義見[使用契約](consumer-contract.qmd#sidecar)，下表只列出與 emission 有關的主要欄位：
 
 | Sidecar 欄位 | 內容 |
 |---|---|
 | `binding`（`ids_by_tag`） | 每個維度的 planned id，依 native tag 順序排列：`tag = 1 + 位置` |
 | `group` | 每個 primary group：維度、physical `tag`、`interface_type`、`face_kind`、`entities`、`net`、`band`、面積與兩側的 volume；成員是 `group` 欄位指向它的 face 或 volume |
 | `surface_epr_row` | 每個 Surface EPR row 讀取的 group（含 `side`、`face_sides` 與 `shared_face_group`；band row 另有它所屬表面的名稱 `banded_surface`） |
-| `vertex`、`edge`、`face`、`volume` | 每個寫出的元素：vertex 的位置；edge 的 kind、vertex、圓弧、長度與 carrier；face 的 group、loop、面積、`curved`、來源與 membership；volume 的 solid face 與嵌在其中的 sheet（`embedded_faces`） |
+| `vertex`、`edge`、`face`、`volume` | 每個寫出的元素：vertex 的位置；edge 的 kind、vertex、圓弧、長度與 carrier；face 的 group、loop、面積、`curved`、邊界曲線的來源、`entity_coverage` 與 `bands`；volume 的 solid face 與嵌在其中的 sheet（`embedded_faces`） |
 | `port`、`mesh_feature` | lumped port 的來源識別、host 與 face；薄膜 sidewall、band 邊界、圓弧與 port 的 edge，並附上這些 edge 的幾何事實（厚度、margin、半徑），沒有尺寸 |
 | `entity`、`source_curve`、`carrier` 與 band 的表 | 每條 edge 回到來源曲線與 Entity 的 lineage（見 [mapping chain](identity.qmd)） |
 | `model`、`summary` | route、`route_policy`、`grid_um`、`tolerance_um` 與檔名；實際寫出的數量、sliver 摘要與圓弧 edge 數 |

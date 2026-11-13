@@ -41,7 +41,7 @@ Groups = Mapping[str, Mapping[str, Mapping[str, Any]]]
 
 
 def groups_from_sidecar(sidecar: Sidecar) -> Groups:
-    """The group dict of one ``scgsim.sgb.sidecar.v4`` sidecar the shared reader accepted, with attributes assigned.
+    """The group dict of one ``scgsim.sgb.sidecar.v5`` sidecar the shared reader accepted, with attributes assigned.
 
     Attributes are numbered per dimension from 1 in sorted group-name order (the parts of a split group in
     signature order), the numbering SGB itself uses for physical tags.
@@ -138,8 +138,9 @@ def _surface_groups(
 def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any]]:
     """The Surface-EPR rows of each group, each with the facts a consumer needs to select its attributes.
 
-    A banded row names its band family and carries the family's margins (in micrometres and in model-grid
-    units, with the grid) and bands (band index to the groups that carry it), all read from the sidecar.
+    A row carries its group's Entities, Net and face kind.  A banded row names its band family and carries the
+    family's margins (in micrometres and in model-grid units, with the grid) and bands (band index to the groups
+    that carry it), all read from the sidecar.
     """
     families = sidecar["band_family"]
     physical = sidecar["group"]
@@ -147,7 +148,12 @@ def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any
     for row_id, row in sidecar["surface_epr_row"].items():
         group = physical[row["group"]]
         family = group["band"]["family"] if group["band"] else None
-        record = {**row, "net": group["net"], "face_kind": group["face_kind"]}
+        record = {
+            **row,
+            "entities": list(group["entities"]),
+            "net": group["net"],
+            "face_kind": group["face_kind"],
+        }
         if family is None:
             record.update(
                 family=None, margins_um=None, margins_grid=None, family_bands=None
@@ -180,7 +186,7 @@ def _part_records(
             **part.to_payload(),
             # Lineage membership is attribution only: it weights nothing.
             "membership": {
-                face: dict(faces[face]["membership"]) for face in part.faces
+                face: dict(faces[face]["entity_coverage"]) for face in part.faces
             },
         }
         for part in parts

@@ -1,7 +1,7 @@
 """The derived layer of the sidecar: what SGB computed from the sources (design brief sections 5 to 7, #170).
 
 Owns ``cut_family`` (every cut family: role and levels), ``band_family`` (one per banded face: its
-margins, support area and band groups), ``support_ring`` and
+margins, support area, band groups and hidden contacts), ``support_ring`` and
 ``support_primitive`` (the exact boundary of each family's support region: per primitive its curve, length,
 whether it is a distance origin or on the die edge, and the source curves it lies on), and ``carrier`` (every
 carrier on an emitted horizontal edge: the source curve it lies on, the support primitive a band curve
@@ -29,7 +29,7 @@ from scgsim.geometry.sgb.exact.support import SupportRegion
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
-from scgsim.geometry.sgb.output.sidecar.groups import band_groups
+from scgsim.geometry.sgb.output.sidecar.groups import FamilyBands, band_groups
 from scgsim.geometry.sgb.output.sidecar.lineage import (
     BAND_FAMILY_ROLE,
     CarrierLineage,
@@ -44,13 +44,15 @@ from scgsim.geometry.sgb.output.sidecar.sources import (
 
 
 def band_family_records(model: ConformalModel) -> dict[str, BandFamily]:
-    """Every band family: its face (the request every request on the face agrees with), margins, area and bands."""
+    """Every band family: its face (the request every request on the face agrees with), margins, area, the
+    groups of each band and the contacts of each band no group carries."""
     grid = model.topology.grid_um
     bands = band_groups(model.topology, model.routed)
     regions = support_regions(model)
     out: dict[str, BandFamily] = {}
     for request in model.inset_plan.requests:
         region = regions.get(request.request_id)
+        found = bands.get(request.request_id, FamilyBands({}, {}))
         out[request.request_id] = BandFamily(
             support=concrete_support(request.support),
             interface=request.interface,
@@ -58,9 +60,10 @@ def band_family_records(model: ConformalModel) -> dict[str, BandFamily]:
             margins_grid=list(region.margins) if region else [],
             band_count=len(request.margins_um) + 1,
             support_area_um2=rounded(region.area() * grid * grid) if region else None,
-            bands={
-                str(index): names
-                for index, names in bands.get(request.request_id, {}).items()
+            bands={str(index): names for index, names in found.groups.items()},
+            hidden_contacts={
+                str(index): contacts
+                for index, contacts in found.hidden_contacts.items()
             },
         )
     return dict(sorted(out.items()))

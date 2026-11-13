@@ -14,12 +14,14 @@ a group's facts are read from those of its faces, never derived again from the d
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import cast
 
 from scgsim.contracts.sgb_sidecar.records import (
     AdjacentDomain,
     FaceKind,
     GroupBand,
+    HiddenContact,
     InterfaceType,
     RowSide,
     SheetSide,
@@ -122,7 +124,7 @@ def surface_epr_rows(
     * ``shared_face_group`` -- the sheet group for a sheet row, else ``None``.  A consumer that treats
       an internal two-sided face (cracking it, or counting the face once) decides from this field and
       ``face_sides``;
-    * ``band`` -- the band index, or ``None`` for an unbanded group;
+    * ``band`` -- the band index, or ``None`` for an unbanded group (the row's Entities are its group's);
     * ``banded_surface`` -- for a band row, the surface it is a band of, named as the row would be without its
       band (``MA::pad__top`` for ``MA::pad__top::band=2``, ``MA::pad__sheet`` for ``MA::pad__sheet::band=2``):
       the routed model's name, shared by every band row of that surface; ``None`` for an unbanded row.
@@ -187,7 +189,6 @@ def _row(  # noqa: PLR0913 - the group, the row type and record, the band, the s
     return SurfaceEprRow(
         group=group,
         interface_type=row_type,
-        entities=record["entities"],
         band=band,
         banded_surface=banded_surface,
         side=None if face_sides is None else _common_side(face_sides),
@@ -275,21 +276,62 @@ def _band(faces: list[TopoFace]) -> GroupBand | None:
     return GroupBand(family=family, index=index)
 
 
-def band_groups(
-    topology: Topology, routed: RoutedModel
-) -> dict[str, dict[int, list[str]]]:
-    """Family id -> band index -> sorted primary groups, over every band label of every face that carries one.
+@dataclass(frozen=True)
+class FamilyBands:
+    """What lies in each band of one family: band index -> the written groups, and the contacts no group carries."""
 
-    A port face carries the nominal bands of the place it lies in, and is in no band group.
+    groups: dict[int, list[str]]
+    hidden_contacts: dict[int, list[HiddenContact]]
+
+
+def band_groups(topology: Topology, routed: RoutedModel) -> dict[str, FamilyBands]:
+    """Family id -> what lies in each band, over every band label of every named face that carries one.
+
+    A face that bounds a written volume is in its group.  A named face that bounds none is a contact between two
+    conductors in a route that writes no conductor volume (Route B): no group carries it, so it is a hidden
+    contact, by its two conductors and face kind.  A port face carries the nominal bands of the place it lies
+    in, and is in no band group.
     """
-    out: dict[str, dict[int, set[str]]] = {}
+    groups: dict[str, dict[int, set[str]]] = {}
+    contacts: dict[str, dict[int, set[tuple[str, str, str]]]] = {}
     for fid, face in topology.faces.items():
         group = routed.face_group.get(fid)
-        if group is None or not face.bands or routed.faces[fid].face_kind == "port":
+        routed_face = routed.faces[fid]
+        if group is None or not face.bands or routed_face.face_kind == "port":
             continue
+        written = routed.is_emitted_face(face.neg_volume, face.pos_volume)
+        contact = None if written else _hidden_contact(fid, face, routed_face)
         for family, index in face.bands:
-            out.setdefault(family, {}).setdefault(index, set()).add(group)
+            if contact is None:
+                groups.setdefault(family, {}).setdefault(index, set()).add(group)
+            else:
+                contacts.setdefault(family, {}).setdefault(index, set()).add(contact)
     return {
-        family: {index: sorted(names) for index, names in sorted(bands.items())}
-        for family, bands in sorted(out.items())
+        family: FamilyBands(
+            groups={i: sorted(g) for i, g in sorted(groups.get(family, {}).items())},
+            hidden_contacts={
+                i: [
+                    HiddenContact(entities=[a, b], face_kind=cast(FaceKind, kind))
+                    for a, b, kind in sorted(found)
+                ]
+                for i, found in sorted(contacts.get(family, {}).items())
+            },
+        )
+        for family in sorted({*groups, *contacts})
     }
+
+
+def _hidden_contact(
+    face_id: str, face: TopoFace, routed: RoutedFace
+) -> tuple[str, str, str]:
+    """The two conductors and the face kind of a named face no written volume bounds."""
+    if (
+        routed.interface_type != "MM"
+        or face.neg_domain is None
+        or face.pos_domain is None
+    ):
+        raise SgbError(
+            f"internal: the banded face {face_id} bounds no written volume and is no metal-metal contact"
+        )
+    first, second = sorted((face.neg_domain.name, face.pos_domain.name))
+    return first, second, routed.face_kind

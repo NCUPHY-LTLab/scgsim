@@ -258,7 +258,7 @@ def test_a_family_the_pre_pass_banded_may_have_no_band_once_a_port_covers_its_fa
     family = side["band_family"][family_id]
     assert family_id == "sa::substrate|vacuum::z=0.0"
     assert family["margins_um"] == [0.5, 1.0]
-    assert family["bands"] == {}
+    assert family["bands"] == {} and family["hidden_contacts"] == {}
     assert record["skipped"] == []
     assert not [
         row for row in side["surface_epr_row"].values() if row["interface_type"] == "SA"
