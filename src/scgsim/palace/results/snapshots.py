@@ -215,43 +215,11 @@ class SnapshotReader:
             if capacitance is not None
             else 0
         )
-        # Margin rows are Dielectric rows of the same table, so both readers expect all of its columns.
-        surface_count = len(self.surface_bindings or ()) + len(
-            self.surface_margin_bindings or ()
-        )
-        surface_epr = SurfaceEprReader(
-            self.path / table_name("surface-Q"),
-            problem=self.problem,
-            pass_index=self.pass_index,
-            source=self.source,
-            frequencies_ghz=frequencies,
-            expected_rows=expected_rows,
-            bindings=self.surface_bindings,
-            surface_count=surface_count,
-            mode_count=self.mode_count,
-        ).read()
-        surface_margin_epr = SurfaceMarginEprReader(
-            self.path / table_name("surface-Q"),
-            problem=self.problem,
-            pass_index=self.pass_index,
-            source=self.source,
-            expected_rows=expected_rows,
-            bindings=self.surface_margin_bindings,
-            surface_count=surface_count,
-            mode_count=self.mode_count,
-        ).read()
+        surface_epr = self._whole_surface_epr(frequencies, expected_rows)
+        surface_margin_epr = self._margin_epr(expected_rows)
         error_norm = None if error_indicators is None else error_indicators.get("Norm")
         palace_payload = read_optional_json(self.path / NATIVE_METADATA_NAME)
         problem_block = palace_payload.get("Problem") if palace_payload else None
-        elapsed = None
-        if palace_payload is not None:
-            durations = palace_payload.get("ElapsedTime", {})
-            if isinstance(durations, dict):
-                duration_map = durations.get("Durations")
-                if isinstance(duration_map, dict) and isinstance(
-                    duration_map.get("Total"), (int, float)
-                ):
-                    elapsed = float(duration_map["Total"])
         return AmrPassSnapshot(
             pass_index=self.pass_index,
             source=self.source,
@@ -273,7 +241,7 @@ class SnapshotReader:
                 if isinstance(problem_block, dict)
                 else None
             ),
-            elapsed_total_s=elapsed,
+            elapsed_total_s=_recorded_total_seconds(palace_payload),
             peak_node_memory_mb=mapping_max(
                 palace_payload.get("PeakNodeMemoryMegabytes")
                 if palace_payload
@@ -282,6 +250,58 @@ class SnapshotReader:
             surface_margin_epr=surface_margin_epr,
             native_iteration=_native_iteration(problem_block),
         )
+
+    def _surface_count(self) -> int:
+        """Margin rows are Dielectric rows of the same table, so both readers expect all of its columns."""
+        return len(self.surface_bindings or ()) + len(
+            self.surface_margin_bindings or ()
+        )
+
+    def _whole_surface_epr(
+        self, frequencies: tuple[float, ...] | None, expected_rows: int
+    ) -> tuple[SurfaceEprSeriesSnapshot, ...] | None:
+        """Read the whole-surface Surface-EPR rows of this pass's ``surface-Q`` table."""
+        return SurfaceEprReader(
+            self.path / table_name("surface-Q"),
+            problem=self.problem,
+            pass_index=self.pass_index,
+            source=self.source,
+            frequencies_ghz=frequencies,
+            expected_rows=expected_rows,
+            bindings=self.surface_bindings,
+            surface_count=self._surface_count(),
+            mode_count=self.mode_count,
+        ).read()
+
+    def _margin_epr(
+        self, expected_rows: int
+    ) -> tuple[SurfaceMarginEprSeriesSnapshot, ...] | None:
+        """Read the margin rows of this pass's ``surface-Q`` table."""
+        return SurfaceMarginEprReader(
+            self.path / table_name("surface-Q"),
+            problem=self.problem,
+            pass_index=self.pass_index,
+            source=self.source,
+            expected_rows=expected_rows,
+            bindings=self.surface_margin_bindings,
+            surface_count=self._surface_count(),
+            mode_count=self.mode_count,
+        ).read()
+
+
+def _recorded_total_seconds(palace_payload: dict[str, Any] | None) -> float | None:
+    """The ``ElapsedTime.Durations.Total`` Palace recorded for a pass, None when it is absent."""
+    if palace_payload is None:
+        return None
+    durations = palace_payload.get("ElapsedTime", {})
+    if not isinstance(durations, dict):
+        return None
+    duration_map = durations.get("Durations")
+    if isinstance(duration_map, dict) and isinstance(
+        duration_map.get("Total"), (int, float)
+    ):
+        return float(duration_map["Total"])
+    return None
 
 
 def _native_iteration(problem: Any) -> int | None:
