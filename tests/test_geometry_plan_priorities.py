@@ -56,7 +56,7 @@ def test_the_mapping_is_replaced_as_a_whole_and_must_be_a_mapping(monkeypatch):
     plan.set_entity_priorities({"chip/pad": 2})
     plan.set_entity_priorities({"chip/electrode": 7})
     assert priorities_of(plan) == {**source, "chip/electrode": 7}
-    with pytest.raises(TypeError, match="map qualified Entity IDs"):
+    with pytest.raises(TypeError, match="must be a mapping of qualified Entity IDs"):
         plan.set_entity_priorities([("chip/pad", 1)])
 
 

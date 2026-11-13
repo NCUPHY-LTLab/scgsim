@@ -13,6 +13,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from decimal import ROUND_FLOOR, Decimal
 from fractions import Fraction
+from typing import NamedTuple
 
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.junctions.boolean_geometry import (
@@ -294,9 +295,16 @@ def _angle(point: tuple[float, float], centre: tuple[float, float]) -> float:
     return math.atan2(point[1] - centre[1], point[0] - centre[0])
 
 
+class _OutlineEdges(NamedTuple):
+    """A conductor outline's straight edges, in model XY, and its circular arcs, in the local frame."""
+
+    lines: list[Line]
+    arcs: list[_Arc]
+
+
 def _outline_edges(
     build_input: GeometryBuildInput, selected: set[str], frame: JunctionLocalFrame
-) -> tuple[list[Line], list[_Arc]]:
+) -> _OutlineEdges:
     """The straight edges, in model XY, and the circular arcs, in the local frame, of these conductors' outline.
 
     A ring a boundary record binds is read from SGB's binding; every other ring from its drawn
@@ -326,7 +334,7 @@ def _outline_edges(
                     if isinstance(p, LineEdge)
                 )
                 arcs.extend(_bound_arcs(primitives, grid, frame))
-    return lines, arcs
+    return _OutlineEdges(lines, arcs)
 
 
 def _drawn_edges(ring) -> list[Line]:
@@ -498,7 +506,14 @@ def nearest_meetings(
     )
 
 
-def _nearest_meeting(found, cut, span, *, left) -> tuple[int, bool]:
+class _NearestMeeting(NamedTuple):
+    """Where a terminal meets a side line nearest the cut, and whether an edge along the side ends there."""
+
+    position: int
+    along_side: bool
+
+
+def _nearest_meeting(found, cut, span, *, left) -> _NearestMeeting:
     """The terminal's meeting with one side line nearest the cut on its side, or the sheet corner, and whether an edge along the side ends there."""
     if left:
         reached = [m for m in found if 0 <= m.position <= cut]
@@ -506,4 +521,6 @@ def _nearest_meeting(found, cut, span, *, left) -> tuple[int, bool]:
     else:
         reached = [m for m in found if cut <= m.position <= span]
         nearest = min((m.position for m in reached), default=span)
-    return nearest, any(m.along_side and m.position == nearest for m in reached)
+    return _NearestMeeting(
+        nearest, any(m.along_side and m.position == nearest for m in reached)
+    )

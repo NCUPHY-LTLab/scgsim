@@ -9,9 +9,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NamedTuple, cast
 
 from scgsim.diagnostics import diagnostic_stage, progress
+from scgsim.geometry.grid.grid_overlay import LabelledCell, ZeroAreaResidue
 from scgsim.geometry.grid.tagged_grid_faces import (
     EdgeProvenance,
     FaceArrangement,
@@ -28,6 +29,7 @@ from scgsim.geometry.grid.tagged_grid_operations import (
     ShapelyGridOperations,
     load_shapely_grid_operations,
 )
+from scgsim.geometry.models.refusals import internal
 from scgsim.preparation import current_preparation_workers, ordered_map
 
 if TYPE_CHECKING:
@@ -85,7 +87,11 @@ def _line_parts(value):
         return tuple(p for child in value.geoms for p in _line_parts(child))
     if value.geom_type in {"Point", "MultiPoint"}:
         return ()
-    raise ValueError("tagged grid native boundary network is not lineal")
+    raise ValueError(
+        internal(
+            f"the tagged grid boundary network holds a {value.geom_type}, not lines"
+        )
+    )
 
 
 def pixel_interval(a, b, pixel):
@@ -142,6 +148,29 @@ def _intersection_nodes(value):
     return tuple(point for child in value.geoms for point in _intersection_nodes(child))
 
 
+def _segment_intersection(lines, i, j, grid, intersection):
+    """The nodes where source segments ``i`` and ``j`` meet; a native failure carries their ordinals."""
+    try:
+        return _intersection_nodes(intersection(lines[i], lines[j], grid_size=0))
+    except Exception as error:  # noqa: BLE001 -- annotate and re-raise any native failure unchanged.
+        try:
+            error.add_note(
+                "scgsim.grid.tagged_raw_context: "
+                + json.dumps(
+                    dict(
+                        operation="intersection",
+                        input_dimension=1,
+                        segment_ordinals=(i, j),
+                        grid_size_um=grid,
+                    ),
+                    sort_keys=True,
+                )
+            )
+        except Exception:  # noqa: BLE001 -- preserve the native error if its note cannot be attached.
+            pass
+        raise
+
+
 def _raw_context(segments, grid, operations: ShapelyGridOperations):
     """Recover pair-known pre-snap nodes without native-edge attribution.
     Snap width is context, not a physical tolerance; graph certification binds."""
@@ -165,27 +194,7 @@ def _raw_context(segments, grid, operations: ShapelyGridOperations):
         output = []
         for j in candidates:
             c, d = segments[j]
-            try:
-                common = _intersection_nodes(
-                    intersection(lines[i], lines[j], grid_size=0)
-                )
-            except Exception as error:  # noqa: BLE001 -- annotate and re-raise any native failure unchanged.
-                try:
-                    error.add_note(
-                        "scgsim.grid.tagged_raw_context: "
-                        + json.dumps(
-                            dict(
-                                operation="intersection",
-                                input_dimension=1,
-                                segment_ordinals=(i, j),
-                                grid_size_um=grid,
-                            ),
-                            sort_keys=True,
-                        )
-                    )
-                except Exception:  # noqa: BLE001 -- preserve the native error if its note cannot be attached.
-                    pass
-                raise
+            common = _segment_intersection(lines, i, j, grid, intersection)
             if any(p not in (a, b) or p not in (c, d) for p in common):
                 output.extend((owner, p) for owner in (i, j) for p in common)
                 continue
@@ -252,21 +261,42 @@ def _pixel_path(a, b, endpoints, context):
     return path
 
 
-def source_paths(rows, index, scale):
+class SourceSegment(NamedTuple):
+    """One directed exterior or hole edge of an operand, in operand order, with its ring's orientation."""
+
+    operand_id: str
+    operand_index: int
+    ring_index: int
+    segment_index: int
+    start: tuple
+    end: tuple
+    orientation: int
+
+
+class LocatedSegment(NamedTuple):
+    """A source segment with its ends' arrangement keys and the raw chain it splits into.
+
+    Without a ``chain`` the segment runs straight from end to end.
+    """
+
+    segment: SourceSegment
+    endpoint_keys: tuple
+    chain: tuple | None = None
+
+
+def source_paths(rows: Sequence[LocatedSegment], index, scale):
     """Build source-segment paths through indexed arrangement nodes."""
     output = []
     for row in rows:
-        (
-            value,
-            operand_index,
-            ring_index,
-            segment_index,
-            a,
-            b,
-            endpoints,
-            orientation,
-        ) = row[:8]
-        chain = row[8] if len(row) == 9 else ((a, endpoints[0]), (b, endpoints[1]))
+        segment, endpoints = row.segment, row.endpoint_keys
+        value, operand_index = segment.operand_id, segment.operand_index
+        ring_index, segment_index = segment.ring_index, segment.segment_index
+        a, b, orientation = segment.start, segment.end, segment.orientation
+        chain = (
+            row.chain
+            if row.chain is not None
+            else ((a, endpoints[0]), (b, endpoints[1]))
+        )
         context = dict(
             operand_index=operand_index,
             ring_index=ring_index,
@@ -325,7 +355,7 @@ def _source_segments(
                 zip(ring_points, (*ring_points[1:], ring_points[0]), strict=True)
             ):
                 raw_rows.append(
-                    (
+                    SourceSegment(
                         value.operand_id,
                         operand_index,
                         ring_index,
@@ -339,12 +369,19 @@ def _source_segments(
     return raw_rows, vertices
 
 
+class _NativeNetwork(NamedTuple):
+    """The unique source edges, and the snapped line network built from them."""
+
+    unique_edges: tuple
+    network: _NativeGridNetwork
+
+
 def _native_grid_network(
     raw_rows, vertices, grid, operations: ShapelyGridOperations
-) -> tuple[tuple, _NativeGridNetwork]:
+) -> _NativeNetwork:
     """Build one global snapped line network before observing rounded points."""
     unique_edges = tuple(
-        dict.fromkeys(tuple(sorted((row[4], row[5]))) for row in raw_rows)
+        dict.fromkeys(tuple(sorted((row.start, row.end))) for row in raw_rows)
     )
     with diagnostic_stage(
         "geometry.grid.tagged_network", counts={"segments": len(raw_rows)}
@@ -395,25 +432,14 @@ def _native_grid_network(
             {key(point) for point in operations.get_coordinates(native)}
             | set(endpoint_keys)
         )
-    return unique_edges, _NativeGridNetwork(
-        edges, endpoint_keys, native_grid, scale, pixels
+    return _NativeNetwork(
+        unique_edges,
+        _NativeGridNetwork(edges, endpoint_keys, native_grid, scale, pixels),
     )
 
 
-def _source_path_arrangement(
-    raw_rows,
-    unique_edges,
-    network,
-    operations: ShapelyGridOperations,
-) -> _SourcePathArrangement:
-    """Recover source context and rasterize each directed source segment."""
-    chains = dict(
-        zip(
-            unique_edges,
-            _raw_context(unique_edges, network.native_grid, operations),
-            strict=True,
-        )
-    )
+def _context_keys(chains, network, operations: ShapelyGridOperations) -> dict:
+    """Each raw context point of the chains, keyed by where the native grid rounds it."""
     context_points = tuple(
         dict.fromkeys(point for chain in chains.values() for point in chain)
     )
@@ -434,18 +460,35 @@ def _source_path_arrangement(
             strict=True,
         )
     )
+    return context_keys
+
+
+def _source_path_arrangement(
+    raw_rows,
+    unique_edges,
+    network,
+    operations: ShapelyGridOperations,
+) -> _SourcePathArrangement:
+    """Recover source context and rasterize each directed source segment."""
+    chains = dict(
+        zip(
+            unique_edges,
+            _raw_context(unique_edges, network.native_grid, operations),
+            strict=True,
+        )
+    )
+    context_keys = _context_keys(chains, network, operations)
     point_index = PointIndex.build((*network.pixels, *context_keys.values()))
 
     def source_chain(row):
-        edge = tuple(sorted((row[4], row[5])))
-        chain = raw_chain(row[4], row[5], chains[edge])
+        edge = tuple(sorted((row.start, row.end)))
+        chain = raw_chain(row.start, row.end, chains[edge])
         return tuple((point, context_keys[point]) for point in chain)
 
     rows = tuple(
-        (
-            *row[:6],
+        LocatedSegment(
+            row,
             (network.endpoint_keys[2 * index], network.endpoint_keys[2 * index + 1]),
-            row[6],
             source_chain(row),
         )
         for index, row in enumerate(raw_rows)
@@ -488,6 +531,32 @@ def _world_point(point: LatticePoint, grid_step: Decimal) -> tuple[float, ...]:
     return tuple(float(value * grid_step) for value in point)
 
 
+def _tagged_cells(
+    values: Sequence[GridOperand],
+    arrangement: FaceArrangement,
+    step: Decimal,
+    operations: ShapelyGridOperations,
+) -> tuple[LabelledCell, ...]:
+    """Each face some operand covers, as a polygon in the layout with the ids of the operands that cover it."""
+
+    def world(point):
+        return _world_point(point, step)
+
+    return tuple(
+        (
+            operations.polygon(
+                tuple(map(world, loops[0])),
+                tuple(tuple(map(world, ring)) for ring in loops[1:]),
+            ),
+            tuple(
+                values[owner].operand_id for owner in sorted(arrangement.winding[index])
+            ),
+        )
+        for index, loops in enumerate(arrangement.loops)
+        if arrangement.winding[index]
+    )
+
+
 def _subdivision_output(
     values: Sequence[GridOperand],
     paths: tuple[SourcePath, ...],
@@ -501,20 +570,9 @@ def _subdivision_output(
     def world(point):
         return _world_point(point, step)
 
-    cells = tuple(
-        (
-            operations.polygon(
-                tuple(map(world, loops[0])),
-                tuple(tuple(map(world, ring)) for ring in loops[1:]),
-            ),
-            tuple(
-                values[owner].operand_id for owner in sorted(arrangement.winding[index])
-            ),
-        )
-        for index, loops in enumerate(arrangement.loops)
-        if arrangement.winding[index]
-    )
-    boundary, auxiliary = [], []
+    cells = _tagged_cells(values, arrangement, step, operations)
+    boundary: list[ZeroAreaResidue] = []
+    auxiliary: list[ZeroAreaResidue] = []
     active_edges = {
         edge
         for edge, face_index in arrangement.left.items()
@@ -528,7 +586,7 @@ def _subdivision_output(
                 {paths[index].operand_index for index, _ in provenance.origins[edge]}
             )
         )
-        row = (operations.line_string(tuple(map(world, edge))), owners)
+        row = ZeroAreaResidue(operations.line_string(tuple(map(world, edge))), owners)
         (
             boundary
             if edge in active_edges or tuple(reversed(edge)) in active_edges
@@ -539,7 +597,7 @@ def _subdivision_output(
         if len(path.nodes) == 1:
             collapsed[path.nodes[0]].add(path.operand_index)
     for point, owners in sorted(collapsed.items()):
-        row = (
+        row = ZeroAreaResidue(
             operations.point(_world_point(point, step)),
             tuple(values[owner].operand_id for owner in sorted(owners)),
         )

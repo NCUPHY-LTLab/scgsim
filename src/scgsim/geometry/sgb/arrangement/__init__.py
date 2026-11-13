@@ -10,4 +10,7 @@ vertices, edges, faces and volumes.
 * ``dcel``, ``arcs`` the half-edge structure with its faces and holes, and the realisation of arc edges
 * ``labelling``   cell labels, dissolution, membership and the links between slab and level arrangements
 * ``derivation``  the slab and level arrangements as one labelled, content-addressed result
+
+``geometry.grid.arrangement`` builds the same kind of arrangement for the source stage and
+the grid Booleans, from drawn polygons with GEOS; this one is the build's, exact and with arcs.
 """

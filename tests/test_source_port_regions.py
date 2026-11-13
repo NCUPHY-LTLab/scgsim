@@ -95,7 +95,7 @@ def test_port_regions_preserve_ids_metadata_and_overlap_ownership() -> None:
 
 def test_port_regions_keep_validation_error_order() -> None:
     """Reject a bad source kind before later missing field validation."""
-    with pytest.raises(ValueError, match="currently supports only"):
+    with pytest.raises(ValueError, match="source must be palace_lumped_port_sheet"):
         port_sheet_regions_from_stack_metadata(
             GridScope(GeometryGridContext(0.001)),
             {"port_sheet_source_layers": ({"source": "other"},)},

@@ -35,11 +35,11 @@ from scgsim.geometry.sgb.errors import (
 )
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
+from scgsim.geometry.source.lumped_supports import occurrence_lumped_polygon
 from scgsim.geometry.source.occurrence import (
     gds_polygons_for_entity,
     occurrence_ground_polygons_for_entity,
     occurrence_include_polygon,
-    occurrence_lumped_polygon,
 )
 from scgsim.geometry.source.occurrence_validation import (
     validate_ground_contribution_ownership,

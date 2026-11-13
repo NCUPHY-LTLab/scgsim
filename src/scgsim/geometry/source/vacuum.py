@@ -4,10 +4,29 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 from scgsim.geometry.models.input import VacuumRegionSpec
+from scgsim.geometry.models.refusals import Declared
 from scgsim.semantics.route_a import geometry_z_range, record_geometry
+
+_CALL = Declared(
+    "apply_vacuum_region_to_stack", "the call to apply_vacuum_region_to_stack"
+)
+_STACK = Declared(
+    "the stack", "the stack: the PDK layer stack's levels, or the stack file"
+)
+_MATERIALS = Declared(
+    "the stack's materials", "the material records the stack was built from"
+)
+
+
+def _region(semantic_id: object) -> Declared:
+    """A solution region of the stack, which the stack declares."""
+    return Declared(
+        f"solution region {semantic_id!r}",
+        "the stack: its PDK layer stack level, or the stack file's solution_regions",
+    )
 
 
 def apply_vacuum_region_to_stack(
@@ -32,32 +51,70 @@ def apply_vacuum_region_to_stack(
     return {**work, "solution_regions": regions}
 
 
-def _checked_regions_without_airbox(
-    stack: Any, vacuum_region: Any
-) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+class _StackParts(NamedTuple):
+    """The stack's solution regions and materials."""
+
+    solution_regions: Mapping[str, Any]
+    materials: Mapping[str, Any]
+
+
+def _checked_regions_without_airbox(stack: Any, vacuum_region: Any) -> _StackParts:
     """The stack's solution regions and materials, which must hold no explicit airbox."""
     if not isinstance(stack, Mapping):
-        raise TypeError("stack must be a mapping.")
+        raise TypeError(_CALL.expected("stack", "a mapping", stack))
     if not isinstance(vacuum_region, VacuumRegionSpec):
-        raise TypeError("vacuum_region must be a VacuumRegionSpec")
+        raise TypeError(
+            _CALL.expected("vacuum_region", "a VacuumRegionSpec", vacuum_region)
+        )
     raw_regions = stack.get("solution_regions")
     materials = stack.get("materials")
     if not isinstance(raw_regions, Mapping):
-        raise TypeError("stack must define solution_regions mapping.")
+        raise TypeError(_STACK.expected("solution_regions", "a mapping", raw_regions))
     if not isinstance(materials, Mapping):
-        raise TypeError("stack must define a materials mapping.")
+        raise TypeError(_STACK.expected("materials", "a mapping", materials))
     for semantic_id, region in raw_regions.items():
         if not isinstance(region, Mapping):
-            raise TypeError(f"solution region {semantic_id!r} must be a mapping.")
+            raise TypeError(
+                _region(semantic_id).expected("record", "a mapping", region)
+            )
         if not isinstance(region.get("is_airbox", False), bool):
             raise TypeError(
-                f"solution region {semantic_id!r} is_airbox must be a bool."
+                _region(semantic_id).expected(
+                    "is_airbox", "a boolean", region.get("is_airbox")
+                )
             )
         if region.get("is_airbox", False):
             raise ValueError(
-                "set_vacuum_region cannot be used with explicit airbox solution regions."
+                _region(semantic_id).refusal(
+                    "it is an explicit airbox; set_vacuum_region cannot be used with explicit airbox solution regions: remove one of them"
+                )
             )
-    return raw_regions, materials
+    return _StackParts(raw_regions, materials)
+
+
+def _vacuum_region_base(region: Any, vacuum_id: str) -> dict[str, Any]:
+    """The record the VACUUM_REGION starts from: the stack's own, of the vacuum material, or a new one."""
+    if region is None:
+        return {
+            "role": "solution_region",
+            "material_id": vacuum_id,
+            "geometry_kind": "domain",
+            "metadata": {},
+            "geometry": {},
+        }
+    if not isinstance(region, Mapping):
+        raise TypeError(
+            _region("VACUUM_REGION").expected("record", "a mapping", region)
+        )
+    if _material_id_for_region(region) != vacuum_id:
+        raise ValueError(
+            _region("VACUUM_REGION").expected(
+                "material_id",
+                f"the vacuum material {vacuum_id!r}",
+                _material_id_for_region(region),
+            )
+        )
+    return dict(region)
 
 
 def _vacuum_region_record(
@@ -67,22 +124,7 @@ def _vacuum_region_record(
     vacuum_region: VacuumRegionSpec,
 ) -> dict[str, Any]:
     """The VACUUM_REGION record: the stack's own if it has one, around the bounds grown by the padding."""
-    if region is None:
-        region = {
-            "role": "solution_region",
-            "material_id": vacuum_id,
-            "geometry_kind": "domain",
-            "metadata": {},
-            "geometry": {},
-        }
-    else:
-        if not isinstance(region, Mapping):
-            raise TypeError("VACUUM_REGION solution record must be a mapping.")
-        if _material_id_for_region(region) != vacuum_id:
-            raise ValueError(
-                "VACUUM_REGION material_id conflicts with existing vacuum material"
-            )
-        region = dict(region)
+    region = _vacuum_region_base(region, vacuum_id)
     region.update(
         {
             "material_id": vacuum_id,
@@ -129,7 +171,7 @@ def _materialize_locked_vacuum_material(
             "loss_tangent": 0.0,
         }
     elif not isinstance(record, Mapping):
-        raise TypeError("material 'vacuum' must be a mapping.")
+        raise TypeError(_MATERIALS.expected("material 'vacuum'", "a mapping", record))
     else:
         normalized = dict(record)
         if normalized.get("permittivity") is None:
@@ -137,20 +179,40 @@ def _materialize_locked_vacuum_material(
         if normalized.get("loss_tangent") is None:
             normalized["loss_tangent"] = 0.0
         if normalized.get("kind") != "vacuum":
-            raise ValueError("material 'vacuum' must have kind 'vacuum'.")
+            raise ValueError(
+                _MATERIALS.expected(
+                    "material 'vacuum' kind", "vacuum", normalized.get("kind")
+                )
+            )
         if normalized["permittivity"] != 1.0:
-            raise ValueError("material 'vacuum' must define permittivity=1.0.")
+            raise ValueError(
+                _MATERIALS.expected(
+                    "material 'vacuum' permittivity", "1.0", normalized["permittivity"]
+                )
+            )
         if normalized["loss_tangent"] != 0.0:
-            raise ValueError("material 'vacuum' must define loss_tangent=0.0.")
+            raise ValueError(
+                _MATERIALS.expected(
+                    "material 'vacuum' loss_tangent", "0.0", normalized["loss_tangent"]
+                )
+            )
         materials["vacuum"] = normalized
     for semantic_id, region in regions.items():
         material_id = _material_id_for_region(region)
         material = materials.get(material_id)
         if not isinstance(material, Mapping):
-            raise TypeError(f"solution region material {material_id!r} is missing.")
+            raise TypeError(
+                _region(semantic_id).expected(
+                    "material", "a material of the stack", material_id
+                )
+            )
         if material.get("kind") == "vacuum" and material_id != "vacuum":
             raise ValueError(
-                f"vacuum solution region {semantic_id!r} uses noncanonical material"
+                _region(semantic_id).expected(
+                    "material",
+                    "the canonical material 'vacuum', as it is a vacuum",
+                    material_id,
+                )
             )
     return "vacuum"
 
@@ -168,16 +230,16 @@ def _auto_vacuum_bounds(
         bounds.append(region_bounds)
     if not bounds:
         raise ValueError(
-            "Cannot auto-compute vacuum envelope without non-vacuum solution regions."
+            _STACK.refusal(
+                "it has no non-vacuum solution region to put the vacuum envelope around"
+            )
         )
     if isinstance(layers, (str, bytes)) or not isinstance(layers, Sequence):
-        raise TypeError("stack layers must be a sequence for auto vacuum envelope.")
+        raise TypeError(_STACK.expected("layers", "a sequence", layers))
     layer_ranges = []
     for index, layer in enumerate(layers):
         if not isinstance(layer, Mapping):
-            raise TypeError(
-                f"stack layer {index} must be a mapping for auto vacuum envelope."
-            )
+            raise TypeError(_STACK.expected(f"layer {index}", "a mapping", layer))
         layer_ranges.append(
             geometry_z_range(
                 record_geometry(layer, str(layer.get("semantic_id", index))),
@@ -218,12 +280,12 @@ def _region_envelope_bounds(
     geometry = region.get("geometry")
     if not isinstance(geometry, Mapping):
         raise TypeError(
-            f"solution region {semantic_id!r} must define geometry for auto vacuum envelope."
+            _region(semantic_id).expected("geometry", "a mapping", geometry)
         )
     domain = geometry.get("domain_bounds_um")
     if not isinstance(domain, Mapping):
         raise TypeError(
-            f"solution region {semantic_id!r} must define domain_bounds_um for auto vacuum envelope."
+            _region(semantic_id).expected("domain_bounds_um", "a mapping", domain)
         )
     coordinate_names = ("x_min_um", "x_max_um", "y_min_um", "y_max_um")
     invalid_coordinates = [
@@ -231,7 +293,9 @@ def _region_envelope_bounds(
     ]
     if invalid_coordinates:
         raise ValueError(
-            f"solution region {semantic_id!r} has invalid {invalid_coordinates!r} for domain_bounds_um."
+            _region(semantic_id).expected(
+                f"domain_bounds_um {invalid_coordinates!r}", "finite", domain
+            )
         )
 
     z_min, z_max = _region_z_interval(semantic_id, geometry)
@@ -251,25 +315,27 @@ def _region_z_interval(
     """A solution region's Z interval: from its base to its top, or to its base plus its thickness."""
     z_min = geometry.get("z_min_um", geometry.get("z_um"))
     if z_min is None or not _finite(z_min):
-        raise ValueError(
-            f"solution region {semantic_id!r} has missing or non-finite z_min_um."
-        )
+        raise ValueError(_region(semantic_id).expected("z_min_um", "finite", z_min))
     z_min = float(z_min)
     z_max = geometry.get("z_max_um")
     if z_max is None:
         thickness = geometry.get("thickness_um")
         if thickness is None or not _finite(thickness):
             raise ValueError(
-                f"solution region {semantic_id!r} requires finite z_max_um or thickness_um."
+                _region(semantic_id).expected(
+                    "z_max_um or thickness_um", "finite", thickness
+                )
             )
         z_max = z_min + float(thickness)
     elif not _finite(z_max):
-        raise ValueError(f"solution region {semantic_id!r} has non-finite z_max_um.")
+        raise ValueError(_region(semantic_id).expected("z_max_um", "finite", z_max))
     else:
         z_max = float(z_max)
     if not z_min < z_max:
         raise ValueError(
-            f"solution region {semantic_id!r} has non-positive thickness for envelope aggregation."
+            _region(semantic_id).refusal(
+                f"its thickness is not positive: z from {z_min} to {z_max} um"
+            )
         )
     return z_min, z_max
 
@@ -277,7 +343,11 @@ def _region_z_interval(
 def _material_id_for_region(region: Mapping[str, Any]) -> str:
     material_id = region.get("material_id", region.get("name"))
     if not isinstance(material_id, str) or not material_id:
-        raise ValueError("solution region material_id must be a non-empty string.")
+        raise ValueError(
+            _region(region.get("semantic_id")).expected(
+                "material_id", "a non-empty string", material_id
+            )
+        )
     return material_id
 
 
@@ -285,11 +355,17 @@ def _material_kind(material_id: str, materials: Mapping[str, Any]) -> str:
     material = materials.get(material_id)
     if not isinstance(material, Mapping):
         raise TypeError(
-            f"solution region material {material_id!r} must resolve a material mapping."
+            _MATERIALS.expected(f"material {material_id!r}", "a mapping", material)
         )
     kind = material.get("kind")
     if kind not in {"vacuum", "dielectric", "conductor"}:
-        raise ValueError(f"solution region material {material_id!r} has invalid kind.")
+        raise ValueError(
+            _MATERIALS.expected(
+                f"material {material_id!r} kind",
+                "vacuum, dielectric or conductor",
+                kind,
+            )
+        )
     return str(kind)
 
 

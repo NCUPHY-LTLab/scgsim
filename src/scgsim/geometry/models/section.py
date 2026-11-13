@@ -20,6 +20,7 @@ from numbers import Real
 from typing import Literal
 
 from scgsim.geometry.models.grid import format_box
+from scgsim.geometry.models.refusals import Declared
 
 PlanPoint = tuple[float, float]
 
@@ -39,13 +40,17 @@ class CutLine:
         where = f"CutLine {format_box((*start, *end), None)}"
         if start == end:
             raise ValueError(
-                f"{where} has no length; give it two different ends across the line"
+                Declared(where, "the CutLine call").refusal(
+                    "it has no length; give it two different ends across the line"
+                )
             )
         if start[0] != end[0] and start[1] != end[1]:
             raise ValueError(
-                f"{where} runs neither along x nor along y. Fix the cut line: give both ends "
-                "the same y (a cut along x) or the same x (a cut along y), across a section of the "
-                "line that runs the other way"
+                Declared(where, "the CutLine call").refusal(
+                    "it runs neither along x nor along y; give both ends the same y (a cut "
+                    "along x) or the same x (a cut along y), across a section of the line "
+                    "that runs the other way"
+                )
             )
 
     @property
@@ -60,18 +65,23 @@ class CutLine:
         return abs(self.end_um[index] - self.start_um[index])
 
 
+_CUT_LINE = Declared("CutLine", "the CutLine call")
+
+
 def _plan_point(value: object, name: str) -> PlanPoint:
     """A point of the plan as two finite floats; anything else is a ``TypeError`` or ``ValueError``."""
     if not isinstance(value, Sequence) or isinstance(value, str) or len(value) != 2:
         raise TypeError(
-            f"CutLine {name} must be an (x, y) pair in micrometres, not {value!r}"
+            _CUT_LINE.expected(name, "an (x, y) pair in micrometres", value)
         )
     x, y = value
     for coordinate in (x, y):
         if isinstance(coordinate, bool) or not isinstance(coordinate, Real):
             raise TypeError(
-                f"CutLine {name} must be an (x, y) pair of numbers in micrometres, not {value!r}"
+                _CUT_LINE.expected(
+                    name, "an (x, y) pair of numbers in micrometres", value
+                )
             )
         if not isfinite(coordinate):
-            raise ValueError(f"CutLine {name} must be finite, not {value!r}")
+            raise ValueError(_CUT_LINE.expected(name, "finite", value))
     return (float(x), float(y))

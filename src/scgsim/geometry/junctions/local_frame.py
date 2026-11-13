@@ -11,6 +11,7 @@ from scgsim.geometry.junctions.core import PRECISION_UM
 from scgsim.geometry.junctions.exact_geometry import inside_ring, region_edges
 from scgsim.geometry.models.grid import format_box, format_length
 from scgsim.geometry.models.input import LayoutPolygonSpec
+from scgsim.geometry.models.refusals import internal
 
 
 @dataclass(frozen=True)
@@ -47,11 +48,15 @@ class JunctionLocalFrame:
             area = sum((a[0] * b[1] - b[0] * a[1] for a, b in region_edges((ring,))))
             if len(set(ring)) < 3 or area == 0:
                 raise ValueError(
-                    "numerical junction geometry failure: source polygon/hole collapses at Boolean precision"
+                    internal(
+                        "numerical junction geometry failure: source polygon/hole collapses at Boolean precision"
+                    )
                 )
             if index and any((inside_ring(point, rings[0]) != 1 for point in ring)):
                 raise ValueError(
-                    "numerical junction geometry failure: source hole loses interior topology"
+                    internal(
+                        "numerical junction geometry failure: source hole loses interior topology"
+                    )
                 )
         return tuple(rings)
 

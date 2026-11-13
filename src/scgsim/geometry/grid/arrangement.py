@@ -1,4 +1,11 @@
-"""Build the labelled network of polygon operands on the model grid, or their exact overlay without one."""
+"""Build the labelled network of polygon operands on the model grid, or their exact overlay without one.
+
+This is a planar arrangement, the same concept as ``geometry.sgb.arrangement``, built by a
+different engine for a different stage: here GEOS nodes drawn polygons on the model grid,
+for the source stage's projection and every grid Boolean; SGB's arrangement nodes the
+prisms' curves, arcs included, in exact integer arithmetic for the build. A reader of the
+source stage or of a Boolean wants this one; a reader of the solid model wants SGB's.
+"""
 
 from __future__ import annotations
 
@@ -17,7 +24,6 @@ from scgsim.geometry.grid.grid_overlay import (
     GridAuditor,
     Subdivision,
     ZeroAreaAccounting,
-    ZeroAreaResidue,
     account_zero_area,
     residue_coordinates,
     subdivide_grid,
@@ -31,6 +37,7 @@ from scgsim.geometry.grid.grid_regions import (
 )
 from scgsim.geometry.grid.tagged_grid import build_tagged_subdivision
 from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.models.refusals import internal
 from scgsim.preparation import (
     ordered_map,
 )
@@ -66,7 +73,11 @@ def build_grid_arrangement(
     )
     ids = [v.operand_id for v in values]
     if len(ids) != len(set(ids)):
-        raise ValueError("common grid operand identities are duplicated")
+        raise ValueError(
+            internal(
+                f"grid operand identities are duplicated: {sorted(set(i for i in ids if ids.count(i) > 1))}"
+            )
+        )
 
     def construct() -> _GridWork:
         return _construct_grid_work(values, grid, apply_grid, Polygon)
@@ -203,10 +214,7 @@ def _construct_grid_work(
         return _GridWork(raw_polygons, subdivide_grid(values, geometries, None))
 
     result = build_tagged_subdivision(values, geometries, grid)
-    accounting = ZeroAreaAccounting(
-        tuple(ZeroAreaResidue(*row) for row in result.boundary),
-        tuple(ZeroAreaResidue(*row) for row in result.auxiliary),
-    )
+    accounting = ZeroAreaAccounting(tuple(result.boundary), tuple(result.auxiliary))
     return _GridWork(
         raw_polygons,
         Subdivision(

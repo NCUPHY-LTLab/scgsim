@@ -168,22 +168,22 @@ def test_public_native_pipeline_preserves_holes_ports_curves_and_metadata(
         (
             {"layers": None, "solution_regions": None},
             TypeError,
-            "stack_file must define sequence 'layers'",
+            "the stack file: layers must be a sequence, not None. Change it in the stack_file passed to build_gds_stack_geometry_input.",
         ),
         (
             {"solution_regions": None, "materials": None},
             TypeError,
-            "stack_file must define mapping 'solution_regions'",
+            "the stack file: solution_regions must be a mapping, not None. Change it in the stack_file passed to build_gds_stack_geometry_input.",
         ),
         (
             {"materials": None, "metadata": None},
             TypeError,
-            "stack_file must define mapping 'materials'",
+            "the stack file: materials must be a mapping, not None. Change it in the stack_file passed to build_gds_stack_geometry_input.",
         ),
         (
             {"metadata": None},
             TypeError,
-            "stack_file 'metadata' must be a mapping when provided",
+            "the stack file: metadata must be a mapping when given, not None. Change it in the stack_file passed to build_gds_stack_geometry_input.",
         ),
     ],
 )
@@ -236,8 +236,8 @@ def test_an_unknown_component_semantics_version_is_refused(
     with pytest.raises(ValueError) as failure:
         build_gds_stack_geometry_input(gds_file=gds, stack_file=stack_path)
     assert str(failure.value) == (
-        f"stack metadata component_semantics_schema_version is {version!r}; "
-        "only 2, which GeometryPlan writes, is supported"
+        "the stack file: metadata component_semantics_schema_version must be 2, "
+        f"which GeometryPlan writes, not {version!r}. Change it in the stack_file passed to build_gds_stack_geometry_input."
     )
 
 

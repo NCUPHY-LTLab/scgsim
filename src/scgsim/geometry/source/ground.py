@@ -25,6 +25,12 @@ from scgsim.geometry.grid.polygon_ops import (
 )
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.refusals import Declared
+
+
+def _ground(entity: SemanticEntitySpec) -> Declared:
+    """A Ground's declaration, which its stack layer states."""
+    return Declared(f"Ground {entity.semantic_id!r}", "its stack layer's geometry")
 
 
 def _mask_key(entity: SemanticEntitySpec) -> tuple[int, int]:
@@ -161,13 +167,15 @@ def _ground_includes(
     include_points = entity.geometry.get("include_selector_points_um", ())
     if include_layer is None and include_points:
         raise ValueError(
-            f"{entity.semantic_id} include_selector_points_um requires include_layer"
+            _ground(entity).refusal("include_selector_points_um requires include_layer")
         )
     included: list[Any] = []
     source_includes = entity.geometry.get("source_occurrence_includes", ())
     if source_includes and (include_layer is not None or include_points):
         raise ValueError(
-            f"{entity.semantic_id} mixes source contributions with global includes"
+            _ground(entity).refusal(
+                "it mixes source contributions with global includes"
+            )
         )
     included.extend(
         _source_include_regions(scope, gdstk, entity, mask_key, source_includes)
@@ -179,7 +187,9 @@ def _ground_includes(
             or len(include_layer) != 2
         ):
             raise TypeError(
-                f"{entity.semantic_id} include_layer must be a GDS layer pair"
+                _ground(entity).expected(
+                    "include_layer", "a GDS layer pair", include_layer
+                )
             )
         include_key = (int(include_layer[0]), int(include_layer[1]))
         # The include polygons are drawn on the include layer, so their refusals name it.
@@ -231,7 +241,9 @@ def _selected_includes(
             or len(point) != 2
         ):
             raise TypeError(
-                f"{entity.semantic_id} include_selector_points_um requires 2D points"
+                _ground(entity).expected(
+                    "include_selector_points_um", "2D points", point
+                )
             )
         selector = (float(point[0]), float(point[1]))
         matches = [
@@ -274,7 +286,9 @@ def _source_include_regions(
         )
         if not isinstance(polygon, Mapping):
             raise ValueError(
-                f"{entity.semantic_id} has an incomplete source contribution"
+                _ground(entity).expected(
+                    "source contribution", "a mapping with its polygon", contribution
+                )
             )
         included.extend(
             layout_polygon_region(
@@ -334,13 +348,16 @@ def _ground_plane_bounds(
     if plane_bounds_ref is None:
         return cell_bounds_um
     if not isinstance(plane_bounds_ref, str):
-        raise TypeError(f"{entity.semantic_id} plane_bounds_ref must be a string")
+        raise TypeError(
+            _ground(entity).expected("plane_bounds_ref", "a string", plane_bounds_ref)
+        )
     try:
         return domain_bounds_by_semantic_id[plane_bounds_ref]
     except KeyError as exc:
         raise ValueError(
-            f"{entity.semantic_id} plane_bounds_ref {plane_bounds_ref!r} "
-            "does not match a solution region"
+            _ground(entity).expected(
+                "plane_bounds_ref", "a solution region of the stack", plane_bounds_ref
+            )
         ) from exc
 
 

@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from functools import cached_property
 from itertools import pairwise
 from types import TracebackType
-from typing import TYPE_CHECKING, Literal, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 from scgsim.diagnostics import (
     diagnostic_stage,
@@ -292,6 +292,18 @@ class ZeroAreaAccounting:
 
     boundary: tuple[ZeroAreaResidue, ...]
     auxiliary: tuple[ZeroAreaResidue, ...]
+
+
+def _shape_summary(shape: Any) -> dict[str, object]:
+    """What a topology note says of one shape: empty, valid, components, holes and area."""
+    polygons = polygon_components(shape)
+    return {
+        "empty": bool(shape.is_empty),
+        "is_valid": bool(shape.is_valid),
+        "components": len(polygons),
+        "holes": sum(len(p.interiors) for p in polygons),
+        "area_um2": float(shape.area),
+    }
 
 
 @dataclass(frozen=True)
@@ -634,62 +646,16 @@ class GridAuditor:
         final: BaseGeometry,
     ) -> str:
         """The note that measures where the topology changed: requested, realized and each gridding stage."""
-        from shapely import Polygon, union_all  # noqa: PLC0415 - defer native geometry loading until this operation requires it
-
         try:
-
-            def summary(shape):
-                polygons = polygon_components(shape)
-                return {
-                    "empty": bool(shape.is_empty),
-                    "is_valid": bool(shape.is_valid),
-                    "components": len(polygons),
-                    "holes": sum(len(p.interiors) for p in polygons),
-                    "area_um2": float(shape.area),
-                }
-
             metrics = {
                 "operand_index": operand_index,
                 "grid_size_um": self.grid,
-                "requested": summary(raw),
-                "realized": summary(final),
+                "requested": _shape_summary(raw),
+                "realized": _shape_summary(final),
             }
-            # Error-only witnesses separate input rounding, subdivision
-            # coverage, and final re-union. They never enter the output
-            # or change the original physical preservation decision.
-            stages = (
-                (
-                    "initial_grid_realization",
-                    lambda raw=raw, operand_index=operand_index: overlay_call(
-                        "intersection", raw, raw, self.grid, operand_index, None
-                    ),
-                ),
-                (
-                    "labelled_cells_without_resnap",
-                    lambda value=value: union_all(
-                        [
-                            cell
-                            for cell, labels in self.cells
-                            if value.operand_id in labels
-                        ],
-                        grid_size=0,
-                    ),
-                ),
-                (
-                    "reconstructed_faces_without_resnap",
-                    lambda value=value: union_all(
-                        [
-                            Polygon(face.exterior, face.holes)
-                            for face in self.faces
-                            if value.operand_id in face.operand_ids
-                        ],
-                        grid_size=0,
-                    ),
-                ),
-            )
-            for name, operation in stages:
+            for name, operation in self._witness_stages(operand_index, value, raw):
                 try:
-                    metrics[name] = summary(operation())
+                    metrics[name] = _shape_summary(operation())
                 except Exception as diagnostic_error:  # noqa: BLE001 - an error-only witness cannot replace the original topology failure
                     metrics[name] = {
                         "unavailable": True,
@@ -700,3 +666,39 @@ class GridAuditor:
             )
         except Exception:  # noqa: BLE001 - diagnostic failure cannot replace the original topology error
             return "scgsim.grid.physical_topology: metrics unavailable"
+
+    def _witness_stages(
+        self, operand_index: int, value: GridOperand, raw: BaseGeometry
+    ):
+        """The gridding stages a topology note measures, each as a name and the shape it gives."""
+        from shapely import Polygon, union_all  # noqa: PLC0415 - defer native geometry loading until this operation requires it
+
+        # Error-only witnesses separate input rounding, subdivision
+        # coverage, and final re-union. They never enter the output
+        # or change the original physical preservation decision.
+        return (
+            (
+                "initial_grid_realization",
+                lambda raw=raw, operand_index=operand_index: overlay_call(
+                    "intersection", raw, raw, self.grid, operand_index, None
+                ),
+            ),
+            (
+                "labelled_cells_without_resnap",
+                lambda value=value: union_all(
+                    [cell for cell, labels in self.cells if value.operand_id in labels],
+                    grid_size=0,
+                ),
+            ),
+            (
+                "reconstructed_faces_without_resnap",
+                lambda value=value: union_all(
+                    [
+                        Polygon(face.exterior, face.holes)
+                        for face in self.faces
+                        if value.operand_id in face.operand_ids
+                    ],
+                    grid_size=0,
+                ),
+            ),
+        )

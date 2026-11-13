@@ -18,6 +18,7 @@ from scgsim.geometry.models.common import (
     RouteLiteral,
 )
 from scgsim.geometry.models.lumped import LumpedSupport
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 
 
@@ -557,7 +558,9 @@ class VacuumRegionSpec:
         """Normalize scalar, 3-sequence, or sparse six-face vacuum padding."""
         if isinstance(value, bool) or value is None:
             raise TypeError(
-                "vacuum padding must be a number, 3-sequence, or six-face mapping."
+                _PADDING.expected(
+                    "padding", "a number, a 3-sequence or a six-face mapping", value
+                )
             )
 
         if isinstance(value, (int, float)):
@@ -567,7 +570,9 @@ class VacuumRegionSpec:
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
             if len(value) != 3:
                 raise ValueError(
-                    "vacuum 3-sequence padding must contain exactly 3 items for x/y/z."
+                    _PADDING.expected(
+                        "padding", "exactly 3 items, for x, y and z", value
+                    )
                 )
             x_padding, y_padding, z_padding = (
                 _non_negative_float(value[0], "x_padding"),
@@ -584,39 +589,50 @@ class VacuumRegionSpec:
             )
 
         if not isinstance(value, Mapping):
-            raise TypeError("vacuum padding must be a number, 3-sequence, or mapping.")
-
-        required = {
-            "x_minus_um",
-            "x_plus_um",
-            "y_minus_um",
-            "y_plus_um",
-            "z_minus_um",
-            "z_plus_um",
-        }
-        keys = set(value.keys())
-        if not keys <= required:
-            extras = tuple(sorted(keys - required))
-            raise ValueError(
-                f"vacuum face padding mapping has unsupported keys: {extras!r}."
+            raise TypeError(
+                _PADDING.expected(
+                    "padding", "a number, a 3-sequence or a six-face mapping", value
+                )
             )
 
-        face_map = {
-            key: _non_negative_float(value.get(key, 0.0), key) for key in required
-        }
-        return cls(**{key: value for key, value in face_map.items()})
+        return cls(**_face_padding(value))
+
+
+_PADDING = Declared("the vacuum region padding", "the call to set_vacuum_region")
+_FACES = (
+    "x_minus_um",
+    "x_plus_um",
+    "y_minus_um",
+    "y_plus_um",
+    "z_minus_um",
+    "z_plus_um",
+)
+
+
+def _face_padding(value: Mapping[str, Any]) -> dict[str, float]:
+    """A six-face padding mapping, each face it omits padded by zero."""
+    required = set(_FACES)
+    keys = set(value.keys())
+    if not keys <= required:
+        extras = tuple(sorted(keys - required))
+        raise ValueError(
+            _PADDING.expected(
+                "face mapping", f"keyed only by {sorted(required)}", extras
+            )
+        )
+    return {key: _non_negative_float(value.get(key, 0.0), key) for key in required}
 
 
 def _non_negative_float(value: Any, field: str) -> float:
     if value is None:
-        raise ValueError(f"vacuum padding field {field!r} is required.")
+        raise ValueError(_PADDING.expected(field, "given", value))
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"vacuum padding field {field!r} must be numeric.")
+        raise TypeError(_PADDING.expected(field, "a number of micrometres", value))
     text = float(value)
     if not math.isfinite(text):
-        raise ValueError(f"vacuum padding field {field!r} must be finite.")
+        raise ValueError(_PADDING.expected(field, "finite", value))
     if text < 0.0:
-        raise ValueError(f"vacuum padding field {field!r} must be non-negative.")
+        raise ValueError(_PADDING.expected(field, "non-negative", value))
     return text
 
 

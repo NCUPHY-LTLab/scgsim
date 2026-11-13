@@ -20,6 +20,7 @@ from scgsim.geometry.grid.booleans import (
 from scgsim.geometry.grid.grid_regions import GridPoint, canonical_grid_point
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import LayoutPolygonSpec
+from scgsim.geometry.models.refusals import internal
 
 
 @dataclass(frozen=True)
@@ -147,7 +148,11 @@ def _fused_component(
         precision=scope.bound_grid().grid_size_um,
     )
     if not regions or len(regions) != 1:
-        raise ValueError("fused selector component must lower to one polygon")
+        raise ValueError(
+            internal(
+                f"touching drawn polygons {list(indexes)} fused into {len(regions or ())} regions, not one"
+            )
+        )
     outer, holes = split_gdstk_cutline_loop(
         scope, ring_from_gdstk_polygon(scope, regions[0])
     )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import SemanticEntitySpec
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.models.representation import (
     EntityRepresentation,
     RepresentationContext,
@@ -19,7 +20,9 @@ def entity_representation(
     """Read an entity's prepared representation from the required context."""
     if context is None:
         raise ValueError(
-            "current geometry planning requires an explicit physical representation context"
+            internal(
+                "geometry planning was asked to run without a physical representation context"
+            )
         )
     return context.entities.get(entity.semantic_id)
 

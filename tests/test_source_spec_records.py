@@ -60,7 +60,7 @@ def test_curve_and_boundary_normalization_preserves_detached_metadata():
     assert transformed.curves[0].points_um == ((10, 20), (10, 22))
     assert transformed.metadata["source_orientation"] == 1
 
-    with pytest.raises(ValueError, match="unsupported source curve kind"):
+    with pytest.raises(ValueError, match="source curve kind must be line_segment"):
         source_curve({"kind": "unknown", "points_um": []})
 
 

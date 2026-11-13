@@ -11,6 +11,11 @@ import copy
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from scgsim.geometry.models.refusals import Declared
+
+_PORTS = Declared("authored port sheets", "the ports added to the simulation")
+_STACK = Declared("the stack", "the stack the ports are added to")
+
 
 def with_port_sheet_metadata(
     stack: Mapping[str, Any], records: Sequence[Mapping[str, Any]]
@@ -19,16 +24,20 @@ def with_port_sheet_metadata(
     payload = copy.deepcopy(dict(stack))
     metadata = payload.get("metadata", {})
     if not isinstance(metadata, Mapping):
-        raise TypeError("stack metadata must be a mapping.")
+        raise TypeError(_STACK.expected("metadata", "a mapping", metadata))
     metadata = dict(metadata)
     existing = metadata.get("port_sheet_source_layers")
     if existing not in (None, [], ()) and records:
-        raise ValueError("stack already defines port_sheet_source_layers.")
+        raise ValueError(
+            _STACK.refusal(
+                "it already defines port_sheet_source_layers; add the ports in one place"
+            )
+        )
     effective_records = records if records else existing or ()
     if effective_records:
         layers = payload.get("layers")
         if not isinstance(layers, list):
-            raise TypeError("stack layers must be a list for authored port sheets.")
+            raise TypeError(_STACK.expected("layers", "a list", layers))
         rewritten_layers = list(layers)
         for record in effective_records:
             target_layer = _port_target_layer(record)
@@ -45,10 +54,14 @@ def with_port_sheet_metadata(
 def _port_target_layer(record: Any) -> str:
     """The logical layer an authored port record names as its sheet's target."""
     if not isinstance(record, Mapping):
-        raise TypeError("port-sheet source records must be mappings.")
+        raise TypeError(_PORTS.expected("record", "a mapping", record))
     target_layer = record.get("target_layer")
     if not isinstance(target_layer, str) or not target_layer:
-        raise ValueError("port-sheet source records require target_layer.")
+        raise ValueError(
+            _PORTS.expected(
+                "target_layer", "a non-empty layer name", record.get("target_layer")
+            )
+        )
     return target_layer
 
 
@@ -68,7 +81,9 @@ def _target_layer_indexes(layers: Sequence[Any], target_layer: str) -> list[int]
     ]
     if not matches:
         raise ValueError(
-            f"authored port target_layer {target_layer!r} must match a logical stack layer."
+            _PORTS.expected(
+                "target_layer", "a logical layer of the stack", target_layer
+            )
         )
     return matches
 
@@ -76,15 +91,19 @@ def _target_layer_indexes(layers: Sequence[Any], target_layer: str) -> list[int]
 def _splittable_face_metal(layer: Any, target_layer: str) -> dict[str, Any]:
     """A face-metal stack layer whose polygons each become their own Entity."""
     if not isinstance(layer, Mapping):
-        raise TypeError("matched logical stack layer must be a mapping.")
+        raise TypeError(_STACK.expected(f"layer {target_layer!r}", "a mapping", layer))
     if layer.get("role") != "metal" or layer.get("part_role") != "face_metal":
         raise ValueError(
-            f"authored port target_layer {target_layer!r} must have face-metal semantics."
+            _PORTS.expected(
+                f"target_layer {target_layer!r}",
+                "a face-metal layer",
+                (layer.get("role"), layer.get("part_role")),
+            )
         )
     geometry = layer.get("geometry")
     if not isinstance(geometry, Mapping):
         raise TypeError(
-            f"authored port target_layer {target_layer!r} must define geometry mapping."
+            _STACK.expected(f"layer {target_layer!r} geometry", "a mapping", geometry)
         )
     rewritten = dict(layer)
     rewritten_geometry = dict(geometry)
