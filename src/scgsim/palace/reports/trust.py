@@ -386,6 +386,14 @@ class PalaceTrustReport:
         xs = tuple(pass_.pass_index for pass_ in self.passes)
         items: list[Any] = []
         items.extend(self._eigenmode_convergence_items(xs))
+        items.extend(self._port_epr_figures(xs))
+        items.extend(self._capacitance_figures(xs))
+        items.extend(self._error_indicator_figures(xs))
+        return items
+
+    def _port_epr_figures(self, xs: tuple[int, ...]) -> list[Any]:
+        """One figure per recorded port-EPR column, each mode a trace across the AMR passes."""
+        items: list[Any] = []
         for header in union_mapping_keys(self.passes, "port_epr"):
             traces = mode_traces(
                 self.passes,
@@ -403,6 +411,11 @@ class PalaceTrustReport:
             ).figure()
             if figure is not None:
                 items.append(figure)
+        return items
+
+    def _capacitance_figures(self, xs: tuple[int, ...]) -> list[Any]:
+        """The Maxwell capacitance coefficients across the AMR passes, with their pass-to-pass changes."""
+        items: list[Any] = []
         for label, traces in capacitance_traces(self.passes):
             figure = LinePlot(
                 title=f"{label} vs AMR pass",
@@ -427,6 +440,11 @@ class PalaceTrustReport:
             ).figure()
             if delta is not None:
                 items.append(delta)
+        return items
+
+    def _error_indicator_figures(self, xs: tuple[int, ...]) -> list[Any]:
+        """The AMR error indicators across the passes, against the configured tolerance."""
+        items: list[Any] = []
         traces = [
             (
                 name,

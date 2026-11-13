@@ -99,6 +99,20 @@ def read_resolved_run(
             "Pass the handoff_id that prepare_handoff() returned."
         )
     root = Path(run_dir).expanduser().resolve()
+    try:
+        return _checked_run(root, expected_handoff_id)
+    except (FileNotFoundError, TypeError, ValueError) as error:
+        # Each check names what disagrees; every one of them is acted on the same way.
+        error.add_note(
+            f"Run folder {root}, expected handoff {expected_handoff_id!r}: resolve_palace_result reads only "
+            "the folder Palace returned for that handoff, complete and unchanged. Fetch the returned folder "
+            "again, or prepare and run a new handoff."
+        )
+        raise
+
+
+def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
+    """Read the run folder's records, check them in the recorded order and read the result tables."""
     records = _read_records(root)
     handoff = records.handoff_metadata
     route = expect_scalar(handoff, "route", str)
