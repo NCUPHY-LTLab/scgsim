@@ -84,6 +84,7 @@ def emit_partitions(state: JunctionModel) -> None:
     state.physical_ends = defaultdict(list)
     owners = {entity.semantic_id: entity for entity in state.build_input.entities}
     for jid, record in state.records.items():
+        # Lowering registers emitted points, so the slices are lowered in this order.
         parts = [state.lower(state.refine(part)) for part in state.sliced[jid]]
         chosen = [
             state.sheet_sliced[jid][k] if end["landing"] else state.sliced[jid][k]
@@ -94,24 +95,7 @@ def emit_partitions(state: JunctionModel) -> None:
             None,
             state.lower(state.refine(chosen[1]), simplify=record["ends"][1]["landing"]),
         ]
-        central = state.lower(state.refine(state.sliced[jid][1]), simplify=True)
-        if len(central) != 1 or len(central[0]) != 1 or len(central[0][0]) != 4:
-            raise ValueError(
-                "numerical junction final central remainder is not a four-corner rectangle"
-            )
-        dx, dy = record["direction_xy"]
-        uv = [(x * dx + y * dy, -x * dy + y * dx) for x, y in central[0][0]]
-        amin, amax = (min((u for u, _ in uv)), max((u for u, _ in uv)))
-        vmin, vmax = (min((v for _, v in uv)), max((v for _, v in uv)))
-        corners = tuple(
-            (
-                min(
-                    zip(central[0][0], uv, strict=False),
-                    key=lambda item: (item[1][0] - u) ** 2 + (item[1][1] - v) ** 2,
-                )[0]
-                for u, v in ((amin, vmin), (amax, vmin), (amax, vmax), (amin, vmax))
-            )
-        )
+        corners = _central_corners(state, jid, record)
         sheet = state.originals[record["authored_polygon_id"]]
         state.additions.append(
             LayoutPolygonSpec(
@@ -124,82 +108,133 @@ def emit_partitions(state: JunctionModel) -> None:
                 },
             )
         )
-        for n, part in ((0, ends[0]), (1, ends[2])):
-            end = record["ends"][n]
-            if len(part) > 1:
-                raise ValueError(
-                    "unsupported junction end topology in final model coordinates"
-                )
-            if bool(part) != (end["polygon_id"] is not None):
-                raise ValueError(
-                    "numerical junction zero-end residual differs from selected local proof"
-                )
-            if part:
-                state.additions.append(
-                    LayoutPolygonSpec(
-                        end["polygon_id"],
-                        sheet.layer,
-                        part[0][0],
-                        tuple(part[0][1:]),
-                        net_name=owners[end["source_entity_id"]].net_id,
-                        metadata={
-                            state.output_format.junction_metadata_key: jid,
-                            "source_entity_id": end["source_entity_id"],
-                            "part": JUNCTION_END_PIECE_PART,
-                        },
-                    )
-                )
-                state.appended[end["source_entity_id"]].append(end["polygon_id"])
-                state.physical_ends[end["source_entity_id"]].extend(
-                    state.refine(state.sliced[jid][0 if n == 0 else 2])
-                )
-            end["model_regions"] = plain_record(part)
-        final_free = state.lower(state.refine(state.free_edges[jid]))
-        if not emitted_partition_coverage(
-            final_free, [*parts[0], (corners,), *parts[2]]
-        ):
-            raise ValueError(
-                "numerical junction emitted partition does not cover source free boundary"
-            )
-        final_partition = state.lower(
-            state.refine([*chosen[0], *state.sliced[jid][1], *chosen[1]])
+        _emit_end_pieces(state, jid, record, (ends[0], ends[2]), owners)
+        final_free, final_partition = _checked_partition_coverage(
+            state,
+            jid,
+            chosen,
+            [*parts[0], (corners,), *parts[2]],
+            [*ends[0], (corners,), *ends[2]],
         )
-        if not emitted_partition_coverage(
-            final_partition, [*ends[0], (corners,), *ends[2]]
-        ):
-            raise ValueError(
-                "numerical junction emitted end pieces and rectangle differ from their slices"
-            )
-        record["free_model_regions"] = plain_record(final_free)
-        record["partition_model_regions"] = plain_record(final_partition)
-        record["central_model_regions"] = [[list(corners)]]
-        record["proof_conditions"]["emitted_partition_coverage"] = True
-        record["model_coordinate_method"] = "source_edge_incidence_and_two_cuts.v1"
-        record["model_boolean_precision_um"] = PRECISION_UM
-        record["maximum_model_source_coordinate_deviation_um"] = max(
-            (
-                abs(round(v / PRECISION_UM) * PRECISION_UM - v)
-                for pid in state.needed
-                for ring in (state.originals[pid].exterior, *state.originals[pid].holes)
-                for point in ring
-                for v in point
-            )
-        )
-        record["maximum_model_intersection_coordinate_deviation_um"] = (
-            state.intersection_deviation
-        )
-        record["authored_source_geometry"] = {
-            "exterior": plain_record(sheet.exterior),
-            "holes": plain_record(sheet.holes),
-        }
-        record["model_cut_projection_ranges_um"] = [
-            [
-                min((x * dx + y * dy for x, y in edge)),
-                max((x * dx + y * dy for x, y in edge)),
-            ]
-            for edge in ((corners[3], corners[0]), (corners[1], corners[2]))
-        ]
+        _record_emitted_partition(state, record, corners, final_free, final_partition)
     state.model.update({p.polygon_id: p for p in state.additions})
+
+
+def _central_corners(state: JunctionModel, jid: str, record) -> tuple:
+    """The central rectangle's four corners in model coordinates, in its local order along the junction."""
+    central = state.lower(state.refine(state.sliced[jid][1]), simplify=True)
+    if len(central) != 1 or len(central[0]) != 1 or len(central[0][0]) != 4:
+        raise ValueError(
+            "numerical junction final central remainder is not a four-corner rectangle"
+        )
+    dx, dy = record["direction_xy"]
+    uv = [(x * dx + y * dy, -x * dy + y * dx) for x, y in central[0][0]]
+    amin, amax = (min((u for u, _ in uv)), max((u for u, _ in uv)))
+    vmin, vmax = (min((v for _, v in uv)), max((v for _, v in uv)))
+    return tuple(
+        (
+            min(
+                zip(central[0][0], uv, strict=False),
+                key=lambda item: (item[1][0] - u) ** 2 + (item[1][1] - v) ** 2,
+            )[0]
+            for u, v in ((amin, vmin), (amax, vmin), (amax, vmax), (amin, vmax))
+        )
+    )
+
+
+def _emit_end_pieces(state: JunctionModel, jid: str, record, ends, owners) -> None:
+    """Add each nonempty end piece to its terminal's Entity, which must match the local selection."""
+    sheet = state.originals[record["authored_polygon_id"]]
+    for n, part in ((0, ends[0]), (1, ends[1])):
+        end = record["ends"][n]
+        if len(part) > 1:
+            raise ValueError(
+                "unsupported junction end topology in final model coordinates"
+            )
+        if bool(part) != (end["polygon_id"] is not None):
+            raise ValueError(
+                "numerical junction zero-end residual differs from selected local proof"
+            )
+        if part:
+            state.additions.append(
+                LayoutPolygonSpec(
+                    end["polygon_id"],
+                    sheet.layer,
+                    part[0][0],
+                    tuple(part[0][1:]),
+                    net_name=owners[end["source_entity_id"]].net_id,
+                    metadata={
+                        state.output_format.junction_metadata_key: jid,
+                        "source_entity_id": end["source_entity_id"],
+                        "part": JUNCTION_END_PIECE_PART,
+                    },
+                )
+            )
+            state.appended[end["source_entity_id"]].append(end["polygon_id"])
+            state.physical_ends[end["source_entity_id"]].extend(
+                state.refine(state.sliced[jid][0 if n == 0 else 2])
+            )
+        end["model_regions"] = plain_record(part)
+
+
+def _checked_partition_coverage(
+    state: JunctionModel, jid: str, chosen, emitted_slices, emitted_pieces
+) -> tuple:
+    """The emitted free boundary and partition, each refused unless the emitted pieces cover it exactly.
+
+    ``emitted_slices`` are the free part's slices with the central rectangle; ``emitted_pieces``
+    the end pieces with it.
+    """
+    final_free = state.lower(state.refine(state.free_edges[jid]))
+    if not emitted_partition_coverage(final_free, emitted_slices):
+        raise ValueError(
+            "numerical junction emitted partition does not cover source free boundary"
+        )
+    final_partition = state.lower(
+        state.refine([*chosen[0], *state.sliced[jid][1], *chosen[1]])
+    )
+    if not emitted_partition_coverage(final_partition, emitted_pieces):
+        raise ValueError(
+            "numerical junction emitted end pieces and rectangle differ from their slices"
+        )
+    return final_free, final_partition
+
+
+def _record_emitted_partition(
+    state: JunctionModel, record, corners, final_free, final_partition
+) -> None:
+    """Write what the emission produced and how into the junction's partition record."""
+    dx, dy = record["direction_xy"]
+    sheet = state.originals[record["authored_polygon_id"]]
+    record["free_model_regions"] = plain_record(final_free)
+    record["partition_model_regions"] = plain_record(final_partition)
+    record["central_model_regions"] = [[list(corners)]]
+    record["proof_conditions"]["emitted_partition_coverage"] = True
+    record["model_coordinate_method"] = "source_edge_incidence_and_two_cuts.v1"
+    record["model_boolean_precision_um"] = PRECISION_UM
+    record["maximum_model_source_coordinate_deviation_um"] = max(
+        (
+            abs(round(v / PRECISION_UM) * PRECISION_UM - v)
+            for pid in state.needed
+            for ring in (state.originals[pid].exterior, *state.originals[pid].holes)
+            for point in ring
+            for v in point
+        )
+    )
+    record["maximum_model_intersection_coordinate_deviation_um"] = (
+        state.intersection_deviation
+    )
+    record["authored_source_geometry"] = {
+        "exterior": plain_record(sheet.exterior),
+        "holes": plain_record(sheet.holes),
+    }
+    record["model_cut_projection_ranges_um"] = [
+        [
+            min((x * dx + y * dy for x, y in edge)),
+            max((x * dx + y * dy for x, y in edge)),
+        ]
+        for edge in ((corners[3], corners[0]), (corners[1], corners[2]))
+    ]
 
 
 def rebuild_entity_support(state: JunctionModel) -> None:

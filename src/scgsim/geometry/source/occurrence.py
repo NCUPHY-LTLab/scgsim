@@ -167,24 +167,7 @@ def entity_from_layer_record(
     for required_field in ("semantic_id", "role", "material_id"):
         if required_field not in record:
             raise ValueError(f"stack_file layer records must define {required_field!r}")
-
-    raw_geometry = record.get("geometry", {})
-    if not isinstance(raw_geometry, Mapping):
-        raise TypeError("stack_file layer record 'geometry' must be a mapping")
-    geometry = dict(raw_geometry)
-    if "z_um" in record or "thickness_um" in record:
-        if "z_um" not in record or "thickness_um" not in record:
-            raise ValueError(
-                "stack_file layer records must define both 'z_um' and "
-                "'thickness_um', or use 'geometry'"
-            )
-        geometry.setdefault("z_um", record["z_um"])
-        geometry.setdefault("thickness_um", record["thickness_um"])
-    if not geometry:
-        raise ValueError(
-            "stack_file layer records must define 'geometry' or "
-            "'z_um' plus 'thickness_um'"
-        )
+    geometry = _layer_record_geometry(record)
     geometry.setdefault("gds_layer", layer)
     geometry.setdefault("gds_datatype", datatype)
 
@@ -218,6 +201,28 @@ def entity_from_layer_record(
         geometry=geometry,
         metadata=record.get("metadata", {}),
     )
+
+
+def _layer_record_geometry(record: Mapping[str, Any]) -> dict[str, Any]:
+    """A stack layer's geometry: its ``geometry`` mapping, with ``z_um`` and ``thickness_um`` given beside it."""
+    raw_geometry = record.get("geometry", {})
+    if not isinstance(raw_geometry, Mapping):
+        raise TypeError("stack_file layer record 'geometry' must be a mapping")
+    geometry = dict(raw_geometry)
+    if "z_um" in record or "thickness_um" in record:
+        if "z_um" not in record or "thickness_um" not in record:
+            raise ValueError(
+                "stack_file layer records must define both 'z_um' and "
+                "'thickness_um', or use 'geometry'"
+            )
+        geometry.setdefault("z_um", record["z_um"])
+        geometry.setdefault("thickness_um", record["thickness_um"])
+    if not geometry:
+        raise ValueError(
+            "stack_file layer records must define 'geometry' or "
+            "'z_um' plus 'thickness_um'"
+        )
+    return geometry
 
 
 def gds_polygons_for_entity(

@@ -233,7 +233,31 @@ def _source_polygon_inputs(
         Sequence[SourceGridAudit],
         build_input.metadata.get("geometry_grid_source_audits", ()),
     )
-    audits = (*fresh_audits, *stored_audits)
+    earliest_preimages = _earliest_preimages((*fresh_audits, *stored_audits))
+    owners = {
+        polygon_id: entity
+        for entity in build_input.entities
+        for polygon_id in entity.polygon_ids
+    }
+    preimages = {
+        polygon.polygon_id: _polygon_preimage(
+            polygon,
+            owners.get(polygon.polygon_id),
+            earliest_preimages if use_source_preimage else None,
+        )
+        for polygon in build_input.polygons
+    }
+    return _SourcePolygonInputs(
+        owners=owners,
+        preimages=preimages,
+        recorded_audits=fresh_audits or stored_audits,
+    )
+
+
+def _earliest_preimages(
+    audits: Sequence[SourceGridAudit],
+) -> dict[tuple[str, str], SourcePolygonAudit]:
+    """Each audited source polygon as its first audit requested it, by Entity and polygon id."""
     earliest_preimages: dict[tuple[str, str], SourcePolygonAudit] = {}
     for audit in audits:
         for source_polygon in audit.get("requested_polygons", ()):
@@ -241,62 +265,56 @@ def _source_polygon_inputs(
                 (audit["source_entity_id"], source_polygon["source_polygon_id"]),
                 source_polygon,
             )
+    return earliest_preimages
 
-    owners = {
-        polygon_id: entity
-        for entity in build_input.entities
-        for polygon_id in entity.polygon_ids
-    }
-    preimages: dict[str, _PolygonPreimage] = {}
-    for polygon in build_input.polygons:
-        # Geometry metadata is the serialized boundary for primitive source identity.
-        identity = cast(
-            _SourcePolygonIdentity | None,
-            polygon.metadata.get("geometry_grid_source_identity"),
-        )
-        owner = owners.get(polygon.polygon_id)
-        if identity is None and "source_polygon_id" in polygon.metadata:
-            identity = {
-                "source_entity_id": cast(str, polygon.metadata["source_semantic_id"]),
-                "source_polygon_id": cast(str, polygon.metadata["source_polygon_id"]),
-            }
-        if identity is None and owner is not None:
-            identity = {
-                "source_entity_id": owner.semantic_id,
-                "source_polygon_id": polygon.polygon_id,
-            }
-        saved_preimage = (
-            None
-            if not use_source_preimage or identity is None
-            else earliest_preimages.get(
-                (identity["source_entity_id"], identity["source_polygon_id"])
-            )
-        )
-        if (
-            use_source_preimage
-            and "geometry_grid_source_identity" in polygon.metadata
-            and saved_preimage is None
-        ):
-            raise ValueError(
-                "declared physical source preimage is unavailable: "
-                f"{polygon.polygon_id}"
-            )
-        if saved_preimage:
-            # JSON audit payloads may contain lists; preserve those public metadata values.
-            preimages[polygon.polygon_id] = _PolygonPreimage(
-                exterior=cast(_SourceRing, saved_preimage["exterior"]),
-                holes=cast(Sequence[_SourceRing], saved_preimage["holes"]),
-            )
-        else:
-            preimages[polygon.polygon_id] = _PolygonPreimage(
-                exterior=polygon.exterior,
-                holes=polygon.holes,
-            )
-    return _SourcePolygonInputs(
-        owners=owners,
-        preimages=preimages,
-        recorded_audits=fresh_audits or stored_audits,
+
+def _polygon_preimage(
+    polygon: LayoutPolygonSpec,
+    owner: SemanticEntitySpec | None,
+    earliest_preimages: Mapping[tuple[str, str], SourcePolygonAudit] | None,
+) -> _PolygonPreimage:
+    """What a polygon was before the grid: its audited request, or the polygon itself.
+
+    Without ``earliest_preimages`` (an input projected again on its own grid) every
+    polygon is its own preimage; with them, a polygon a declared recipe made must have one.
+    """
+    # Geometry metadata is the serialized boundary for primitive source identity.
+    identity = cast(
+        _SourcePolygonIdentity | None,
+        polygon.metadata.get("geometry_grid_source_identity"),
     )
+    if identity is None and "source_polygon_id" in polygon.metadata:
+        identity = {
+            "source_entity_id": cast(str, polygon.metadata["source_semantic_id"]),
+            "source_polygon_id": cast(str, polygon.metadata["source_polygon_id"]),
+        }
+    if identity is None and owner is not None:
+        identity = {
+            "source_entity_id": owner.semantic_id,
+            "source_polygon_id": polygon.polygon_id,
+        }
+    saved_preimage = (
+        None
+        if earliest_preimages is None or identity is None
+        else earliest_preimages.get(
+            (identity["source_entity_id"], identity["source_polygon_id"])
+        )
+    )
+    if (
+        earliest_preimages is not None
+        and "geometry_grid_source_identity" in polygon.metadata
+        and saved_preimage is None
+    ):
+        raise ValueError(
+            f"declared physical source preimage is unavailable: {polygon.polygon_id}"
+        )
+    if saved_preimage:
+        # JSON audit payloads may contain lists; preserve those public metadata values.
+        return _PolygonPreimage(
+            exterior=cast(_SourceRing, saved_preimage["exterior"]),
+            holes=cast(Sequence[_SourceRing], saved_preimage["holes"]),
+        )
+    return _PolygonPreimage(exterior=polygon.exterior, holes=polygon.holes)
 
 
 def _grid_operands(build_input: GeometryBuildInput) -> tuple[GridOperand, ...]:
@@ -467,11 +485,51 @@ def _validate_conductor_contacts(
     projected: _ProjectedPolygons,
     context: GeometryGridContext,
 ) -> list[dict[str, object]]:
-    from shapely import Polygon, union_all  # noqa: PLC0415 — load native topology only after projection validation.
-
+    """The contact of each pair of conductors that share Z, refused where the grid changed it."""
     conductors = [
         entity for entity in build_input.entities if entity.material_kind == "conductor"
     ]
+    raw_geometry, effective_geometry = _conductor_shapes(
+        conductors, source, projected, context
+    )
+    contact_relations: list[dict[str, object]] = []
+    for first, second in combinations(conductors, 2):
+        first_z = geometry_z_range(first.geometry, first.semantic_id)
+        second_z = geometry_z_range(second.geometry, second.semantic_id)
+        if max(first_z[0], second_z[0]) > min(first_z[1], second_z[1]):
+            continue
+        pair = (first.semantic_id, second.semantic_id)
+        requested = raw_geometry[pair[0]].relate(raw_geometry[pair[1]])
+        realized = effective_geometry[pair[0]].relate(effective_geometry[pair[1]])
+        if requested != realized:
+            raise ValueError(
+                _conductor_contact_refusal(
+                    (first, second),
+                    projected,
+                    (raw_geometry[pair[0]], raw_geometry[pair[1]]),
+                    (effective_geometry[pair[0]], effective_geometry[pair[1]]),
+                    context.grid_size_um,
+                )
+            )
+        contact_relations.append(
+            {
+                "entity_ids": pair,
+                "requested_de9im": requested,
+                "realized_de9im": realized,
+            }
+        )
+    return contact_relations
+
+
+def _conductor_shapes(
+    conductors: Sequence[SemanticEntitySpec],
+    source: _SourcePolygonInputs,
+    projected: _ProjectedPolygons,
+    context: GeometryGridContext,
+) -> tuple[dict[str, BaseGeometry], dict[str, BaseGeometry]]:
+    """Each conductor's region as requested and as the grid realized it, by Entity id."""
+    from shapely import Polygon, union_all  # noqa: PLC0415 — load native topology only after projection validation.
+
     raw_geometry = {
         entity.semantic_id: union_all(
             [
@@ -495,52 +553,30 @@ def _validate_conductor_contacts(
         )
         for entity in conductors
     }
-    contact_relations: list[dict[str, object]] = []
-    for first, second in combinations(conductors, 2):
-        first_z = geometry_z_range(first.geometry, first.semantic_id)
-        second_z = geometry_z_range(second.geometry, second.semantic_id)
-        if max(first_z[0], second_z[0]) > min(first_z[1], second_z[1]):
-            continue
-        requested = raw_geometry[first.semantic_id].relate(
-            raw_geometry[second.semantic_id]
-        )
-        realized = effective_geometry[first.semantic_id].relate(
-            effective_geometry[second.semantic_id]
-        )
-        if requested != realized:
-            raise ValueError(
-                grid_change_message(
-                    "conductor contact changed at grid: "
-                    f"{first.semantic_id}, {second.semantic_id}",
-                    [
-                        projected.by_id[polygon_id].layer
-                        for entity in (first, second)
-                        for polygon_id in entity.polygon_ids
-                        if polygon_id in projected.by_id
-                    ],
-                    context.grid_size_um,
-                    contact_changes(
-                        (
-                            raw_geometry[first.semantic_id],
-                            raw_geometry[second.semantic_id],
-                        ),
-                        (
-                            effective_geometry[first.semantic_id],
-                            effective_geometry[second.semantic_id],
-                        ),
-                        context.grid_size_um,
-                    ),
-                    FIX_CONTACT,
-                )
-            )
-        contact_relations.append(
-            {
-                "entity_ids": (first.semantic_id, second.semantic_id),
-                "requested_de9im": requested,
-                "realized_de9im": realized,
-            }
-        )
-    return contact_relations
+    return raw_geometry, effective_geometry
+
+
+def _conductor_contact_refusal(
+    pair: tuple[SemanticEntitySpec, SemanticEntitySpec],
+    projected: _ProjectedPolygons,
+    requested: tuple[BaseGeometry, BaseGeometry],
+    realized: tuple[BaseGeometry, BaseGeometry],
+    grid_size_um: float,
+) -> str:
+    """The refusal of two conductors whose contact the grid changed, on their layers and where it changed."""
+    first, second = pair
+    return grid_change_message(
+        f"conductor contact changed at grid: {first.semantic_id}, {second.semantic_id}",
+        [
+            projected.by_id[polygon_id].layer
+            for entity in pair
+            for polygon_id in entity.polygon_ids
+            if polygon_id in projected.by_id
+        ],
+        grid_size_um,
+        contact_changes(requested, realized, grid_size_um),
+        FIX_CONTACT,
+    )
 
 
 def _project_port_regions(

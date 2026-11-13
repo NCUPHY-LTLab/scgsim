@@ -300,80 +300,16 @@ def summarize_geometry_input(
     build_input: GeometryBuildInput, *, prepared_stack: Mapping[str, Any]
 ) -> InputSummary:
     """Summarize an already-normalized GDS/stack pair without preparing it."""
-
-    if not isinstance(build_input, GeometryBuildInput):
-        raise TypeError("build_input must be GeometryBuildInput")
-    if not isinstance(prepared_stack, Mapping):
-        raise TypeError("prepared_stack must be a mapping")
-    validate_geometry_input(build_input)
-    stack_metadata = prepared_stack.get("metadata", {})
-    if not isinstance(stack_metadata, Mapping):
-        raise TypeError("prepared_stack metadata must be a mapping")
-    source_hash = build_input.metadata.get("gds_sha256")
-    stack_hash = stack_metadata.get("gds_sha256")
-    if (source_hash is not None or stack_hash is not None) and (
-        not isinstance(source_hash, str) or source_hash != stack_hash
-    ):
-        raise ValueError("normalized input and prepared stack GDS identities differ")
-    materials = prepared_stack.get("materials")
-    if not isinstance(materials, Mapping):
-        raise ValueError("prepared_stack requires a materials mapping")
-    missing = {entity.material_id for entity in build_input.entities} - set(materials)
-    if missing:
-        raise ValueError(
-            f"source entities reference unknown materials: {sorted(missing)!r}"
-        )
-    nets: dict[str, list[str]] = {}
-    entities = []
-    by_id = {entity.semantic_id: entity for entity in build_input.entities}
-    for entity in build_input.entities:
-        z_min, z_max = geometry_z_range(entity.geometry, entity.semantic_id)
-        if entity.net_id is not None:
-            nets.setdefault(entity.net_id, []).append(entity.semantic_id)
-        entities.append(
-            {
-                "semantic_id": entity.semantic_id,
-                "role": entity.role,
-                "part_role": entity.part_role,
-                "material_id": entity.material_id,
-                "material_kind": entity.material_kind,
-                "net_id": entity.net_id,
-                "z_min_um": z_min,
-                "z_max_um": z_max,
-                "polygon_ids": list(entity.polygon_ids),
-                "source_occurrence_path": entity.metadata.get("source_occurrence_path"),
-            }
-        )
-    ports = []
-    for port in build_input.port_sheet_regions:
-        overlap_nets = {
-            net_id
-            for item in port.overlaps
-            if (net_id := by_id[item.host_semantic_id].net_id) is not None
-        }
-        ports.append(
-            {
-                "source_name": port.metadata["source_name"],
-                "source_polygon_id": port.source_polygon_id,
-                "target_layer": port.metadata["target_layer"],
-                "direction": port.metadata["direction"],
-                "source_occurrence_path": port.metadata.get("source_occurrence_path"),
-                "overlap_hosts": [item.host_semantic_id for item in port.overlaps],
-                "overlap_nets": sorted(overlap_nets),
-            }
-        )
+    materials = _checked_summary_pair(build_input, prepared_stack)
+    entities, nets = _entity_rows(build_input)
+    ports = _port_rows(build_input)
     source_metadata = build_input.metadata
-    top_cell_name = source_metadata.get("selected_cell_name")
-    if not isinstance(top_cell_name, str) or not top_cell_name.strip():
-        top_cell_name = source_metadata.get("top_cell_name")
-    if not isinstance(top_cell_name, str) or not top_cell_name.strip():
-        top_cell_name = None
     return InputSummary(
         {
             "source": {
                 "status": "normalized",
                 "gds_sha256": source_metadata.get("gds_sha256"),
-                "top_cell_name": top_cell_name,
+                "top_cell_name": _top_cell_name(source_metadata),
                 "entity_count": len(build_input.entities),
                 "polygon_count": len(build_input.polygons),
                 "port_sheet_count": len(build_input.port_sheet_regions),
@@ -402,3 +338,93 @@ def summarize_geometry_input(
             "native_status": "not_observed",
         }
     )
+
+
+def _checked_summary_pair(
+    build_input: GeometryBuildInput, prepared_stack: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    """The stack's materials, once the input is valid, both name one GDS and every material is known."""
+    if not isinstance(build_input, GeometryBuildInput):
+        raise TypeError("build_input must be GeometryBuildInput")
+    if not isinstance(prepared_stack, Mapping):
+        raise TypeError("prepared_stack must be a mapping")
+    validate_geometry_input(build_input)
+    stack_metadata = prepared_stack.get("metadata", {})
+    if not isinstance(stack_metadata, Mapping):
+        raise TypeError("prepared_stack metadata must be a mapping")
+    source_hash = build_input.metadata.get("gds_sha256")
+    stack_hash = stack_metadata.get("gds_sha256")
+    if (source_hash is not None or stack_hash is not None) and (
+        not isinstance(source_hash, str) or source_hash != stack_hash
+    ):
+        raise ValueError("normalized input and prepared stack GDS identities differ")
+    materials = prepared_stack.get("materials")
+    if not isinstance(materials, Mapping):
+        raise ValueError("prepared_stack requires a materials mapping")
+    missing = {entity.material_id for entity in build_input.entities} - set(materials)
+    if missing:
+        raise ValueError(
+            f"source entities reference unknown materials: {sorted(missing)!r}"
+        )
+    return materials
+
+
+def _entity_rows(
+    build_input: GeometryBuildInput,
+) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    """One summary row per Entity, and the Entities of each Net in input order."""
+    nets: dict[str, list[str]] = {}
+    entities = []
+    for entity in build_input.entities:
+        z_min, z_max = geometry_z_range(entity.geometry, entity.semantic_id)
+        if entity.net_id is not None:
+            nets.setdefault(entity.net_id, []).append(entity.semantic_id)
+        entities.append(
+            {
+                "semantic_id": entity.semantic_id,
+                "role": entity.role,
+                "part_role": entity.part_role,
+                "material_id": entity.material_id,
+                "material_kind": entity.material_kind,
+                "net_id": entity.net_id,
+                "z_min_um": z_min,
+                "z_max_um": z_max,
+                "polygon_ids": list(entity.polygon_ids),
+                "source_occurrence_path": entity.metadata.get("source_occurrence_path"),
+            }
+        )
+    return entities, nets
+
+
+def _port_rows(build_input: GeometryBuildInput) -> list[dict[str, Any]]:
+    """One summary row per port sheet, with the Entities and Nets it overlaps."""
+    by_id = {entity.semantic_id: entity for entity in build_input.entities}
+    ports = []
+    for port in build_input.port_sheet_regions:
+        overlap_nets = {
+            net_id
+            for item in port.overlaps
+            if (net_id := by_id[item.host_semantic_id].net_id) is not None
+        }
+        ports.append(
+            {
+                "source_name": port.metadata["source_name"],
+                "source_polygon_id": port.source_polygon_id,
+                "target_layer": port.metadata["target_layer"],
+                "direction": port.metadata["direction"],
+                "source_occurrence_path": port.metadata.get("source_occurrence_path"),
+                "overlap_hosts": [item.host_semantic_id for item in port.overlaps],
+                "overlap_nets": sorted(overlap_nets),
+            }
+        )
+    return ports
+
+
+def _top_cell_name(source_metadata: Mapping[str, Any]) -> str | None:
+    """The GDS cell the input was read from, or the stack's top cell, when either is named."""
+    top_cell_name = source_metadata.get("selected_cell_name")
+    if not isinstance(top_cell_name, str) or not top_cell_name.strip():
+        top_cell_name = source_metadata.get("top_cell_name")
+    if not isinstance(top_cell_name, str) or not top_cell_name.strip():
+        top_cell_name = None
+    return top_cell_name

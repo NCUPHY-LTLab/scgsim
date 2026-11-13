@@ -101,6 +101,15 @@ def derived_ground_polygons(
                 "ground mask, or include the metal the Ground keeps.",
             )
         )
+    return _ground_polygon_records(entity, mask_key, normalized_regions)
+
+
+def _ground_polygon_records(
+    entity: SemanticEntitySpec,
+    mask_key: tuple[int, int],
+    regions: Sequence[tuple[PlanarLoop, tuple[PlanarLoop, ...]]],
+) -> tuple[LayoutPolygonSpec, ...]:
+    """The Ground's regions as its layout polygons, on its mask layer."""
     return tuple(
         LayoutPolygonSpec(
             polygon_id=f"{entity.semantic_id}__P{index:04d}",
@@ -116,7 +125,7 @@ def derived_ground_polygons(
                 "include_layer": entity.geometry.get("include_layer"),
             },
         )
-        for index, (outer, holes) in enumerate(normalized_regions)
+        for index, (outer, holes) in enumerate(regions)
     )
 
 

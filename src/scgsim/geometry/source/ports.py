@@ -209,45 +209,12 @@ def _selected_port_polygons(
         )
         return ((0, polygon),)
 
-    source_polygons = polygons_by_layer.get((layer, datatype), ())
-    selector = record.get("selector_point_um")
-    if selector is None:
-        selected = tuple(enumerate(source_polygons))
-    else:
-        if (
-            isinstance(selector, (str, bytes))
-            or not isinstance(selector, Sequence)
-            or len(selector) != 2
-        ):
-            raise ValueError("port sheet selector_point_um must be a 2D point")
-        point = (float(selector[0]), float(selector[1]))
-        selected = tuple(
-            (index, polygon)
-            for index, polygon in enumerate(source_polygons)
-            if point_in_ring(point, ring_from_gdstk_polygon(scope, polygon))
-        )
-        if len(selected) != 1:
-            named = scope.naming(source_name, f"{layer}/{datatype}")
-            raise ValueError(
-                named.refusal(
-                    f"port sheet {source_name!r} selector matched {len(selected)} "
-                    "polygons",
-                    [
-                        selector_place(
-                            named,
-                            point,
-                            [ring_from_gdstk_polygon(named, p) for _, p in selected],
-                            [
-                                ring_from_gdstk_polygon(named, p)
-                                for p in source_polygons
-                            ],
-                        )
-                    ],
-                    "Fix the layout or the declaration: draw the port's sheet as one "
-                    "polygon on its layer under the selector point, or move the point "
-                    "onto it.",
-                )
-            )
+    selected = _drawn_sheets_under_selector(
+        scope,
+        record.get("selector_point_um"),
+        declared,
+        polygons_by_layer.get((layer, datatype), ()),
+    )
     return tuple(
         (
             index,
@@ -265,6 +232,49 @@ def _selected_port_polygons(
         )
         for index, polygon in selected
     )
+
+
+def _drawn_sheets_under_selector(
+    scope: GridScope,
+    selector: Any,
+    declared: _PortSheetDeclaration,
+    source_polygons: Sequence[Any],
+) -> tuple[tuple[int, Any], ...]:
+    """The polygons drawn on the port's layer, each with its index: all of them, or the one under the selector."""
+    if selector is None:
+        return tuple(enumerate(source_polygons))
+    if (
+        isinstance(selector, (str, bytes))
+        or not isinstance(selector, Sequence)
+        or len(selector) != 2
+    ):
+        raise ValueError("port sheet selector_point_um must be a 2D point")
+    point = (float(selector[0]), float(selector[1]))
+    selected = tuple(
+        (index, polygon)
+        for index, polygon in enumerate(source_polygons)
+        if point_in_ring(point, ring_from_gdstk_polygon(scope, polygon))
+    )
+    if len(selected) != 1:
+        source_name = declared.source_name
+        named = scope.naming(source_name, f"{declared.layer}/{declared.datatype}")
+        raise ValueError(
+            named.refusal(
+                f"port sheet {source_name!r} selector matched {len(selected)} polygons",
+                [
+                    selector_place(
+                        named,
+                        point,
+                        [ring_from_gdstk_polygon(named, p) for _, p in selected],
+                        [ring_from_gdstk_polygon(named, p) for p in source_polygons],
+                    )
+                ],
+                "Fix the layout or the declaration: draw the port's sheet as one "
+                "polygon on its layer under the selector point, or move the point "
+                "onto it.",
+            )
+        )
+    return selected
 
 
 def _hosts_for_source_occurrence(
