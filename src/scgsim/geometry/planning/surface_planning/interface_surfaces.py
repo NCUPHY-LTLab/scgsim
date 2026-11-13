@@ -16,7 +16,7 @@ from scgsim.geometry.models.topology import (
     InterfacePlanRecord,
     SurfacePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.domain_planning.faces import (
     interface_surface_kinds,
     route_a_sheet_boundary_volume_ids,
 )

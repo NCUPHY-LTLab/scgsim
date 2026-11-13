@@ -11,7 +11,7 @@ from scgsim.geometry.models.common import (
 )
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import SurfacePlanRecord
-from scgsim.geometry.planning.topology import surface_owner_ids
+from scgsim.geometry.planning.topology_planning.ownership import surface_owner_ids
 from scgsim.semantics import ownership
 
 

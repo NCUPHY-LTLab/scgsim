@@ -17,7 +17,7 @@ from scgsim.aedt.runtime.native.junction_topology import (
     native_polygon_correspondence,
 )
 from scgsim.aedt.runtime.native.planar_bodies import junction_geometry
-from scgsim.geometry.planning.junction_partition import junction_terminal_line
+from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
 
 
 def read_saved_hfss_design(project_path, design_name, *, purpose):

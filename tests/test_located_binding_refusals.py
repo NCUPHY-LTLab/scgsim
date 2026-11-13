@@ -34,7 +34,9 @@ from scgsim.geometry.models.input import (
     GdsBoundaryReconstructionSpec,
     LayoutPolygonSpec,
 )
-from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
+from scgsim.geometry.planning.junction_planning.derivation import (
+    derive_rectangular_junctions,
+)
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.source.grid import apply_geometry_grid
 from scgsim.palace import EigenmodeSim

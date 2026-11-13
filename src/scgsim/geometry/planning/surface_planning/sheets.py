@@ -17,7 +17,7 @@ from scgsim.geometry.models.topology import (
     MMContactRecord,
     SurfacePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.domain_planning.faces import (
     planar_side_solution_regions,
     route_a_sheet_plane_z_um,
 )

@@ -12,18 +12,22 @@ from test_rectangular_junction_geometry import fixture
 from scgsim.geometry import with_rectangular_junctions
 from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
-from scgsim.geometry.planning.junction_partition import (
-    DEFAULT_FORMAT,
+from scgsim.geometry.planning.junction_planning.contact import (
     JunctionContactRequest,
-    canonical_sha256,
-    derive_rectangular_junctions,
     junction_contact_inventory,
     junction_source_binding,
-    partition_junctions,
+)
+from scgsim.geometry.planning.junction_planning.core import (
+    DEFAULT_FORMAT,
+    canonical_sha256,
     plain_record,
+)
+from scgsim.geometry.planning.junction_planning.derivation import (
+    derive_rectangular_junctions,
 )
 from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
 from scgsim.geometry.planning.junction_planning.model_state import JunctionModel
+from scgsim.geometry.planning.junction_planning.partition import partition_junctions
 from scgsim.geometry.primitives.grid import current_grid_context, geometry_grid_scope
 
 

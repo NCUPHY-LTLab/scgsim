@@ -13,19 +13,23 @@ from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import (
     SurfacePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.contact_planning.intents import recognize_route_interfaces
+from scgsim.geometry.planning.contact_planning.membership import (
+    plan_mm_contact_records,
+    plan_mm_contact_records_with_components,
+)
+from scgsim.geometry.planning.contact_planning.patches import (
+    plan_conductor_contact_patches,
+)
+from scgsim.geometry.planning.domain_planning.reconciliation import (
     merge_solution_sidewall_interfaces,
-    prepare_auto_vacuum_solution_regions,
     reconcile_solution_domain_boundaries,
+)
+from scgsim.geometry.planning.domain_planning.vacuum import (
+    prepare_auto_vacuum_solution_regions,
 )
 from scgsim.geometry.planning.evidence import (
     build_semantic_evidence_facade,
-)
-from scgsim.geometry.planning.interfaces import (
-    plan_conductor_contact_patches,
-    plan_mm_contact_records,
-    plan_mm_contact_records_with_components,
-    recognize_route_interfaces,
 )
 from scgsim.geometry.planning.surface_planning.partitions import plan_surface_partitions
 from scgsim.geometry.planning.surface_planning.planner import plan_route_surfaces

@@ -8,13 +8,13 @@ from fractions import Fraction
 from itertools import pairwise
 from typing import Any
 
-from scgsim.aedt.preparation.junction_partition import (
+from scgsim.geometry.planning.junction_planning.exact_geometry import (
     closed_contact,
     cross,
     inside_ring,
     section,
 )
-from scgsim.geometry.planning.junction_partition import fraction_overlap
+from scgsim.geometry.planning.junction_planning.model_checks import fraction_overlap
 from scgsim.geometry.primitives.grid import polygon_rings
 from scgsim.geometry.primitives.planar_loops import (
     cancel_reversed_planar_edges,

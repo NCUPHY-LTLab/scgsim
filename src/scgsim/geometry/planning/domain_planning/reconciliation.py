@@ -8,7 +8,7 @@ from typing import Any, cast
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.topology import SurfacePlanRecord
 from scgsim.geometry.planning.evidence import solution_solution_evidence
-from scgsim.geometry.planning.topology import surface_ring3d_specs
+from scgsim.geometry.planning.topology_planning.rings import surface_ring3d_specs
 from scgsim.geometry.primitives.entities import unique_ids
 from scgsim.geometry.primitives.entity_validation import is_solution_entity
 from scgsim.geometry.primitives.grid import boolean_polygon_region

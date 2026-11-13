@@ -19,7 +19,7 @@ from scgsim.geometry.planning.surface_planning.contacts import is_face_pad_mm_co
 from scgsim.geometry.planning.tags import (
     surface_physical_owner_ids,
 )
-from scgsim.geometry.planning.topology import surface_owner_ids
+from scgsim.geometry.planning.topology_planning.ownership import surface_owner_ids
 from scgsim.geometry.primitives.entities import (
     component_metadata,
     unique_ids,

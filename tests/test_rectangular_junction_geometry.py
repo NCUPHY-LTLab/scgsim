@@ -19,7 +19,9 @@ from scgsim.geometry import (
     with_rectangular_junctions,
 )
 from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
+from scgsim.geometry.planning.junction_planning.derivation import (
+    derive_rectangular_junctions,
+)
 
 SHEET = ((0, 0), (10, 0), (10, 2), (0, 2))
 LEFT = ((-2, 0), (3, 0), (3, 1), (2, 1), (2, 2), (-2, 2))

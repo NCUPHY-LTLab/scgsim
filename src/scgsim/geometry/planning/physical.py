@@ -20,7 +20,9 @@ from scgsim.geometry.models.physical import (
 from scgsim.geometry.models.physical import (
     interpret_physical_layers as interpret_physical_layers,
 )
-from scgsim.geometry.planning.domain import auto_vacuum_envelope_bounds
+from scgsim.geometry.planning.domain_planning.envelope import (
+    auto_vacuum_envelope_bounds,
+)
 from scgsim.geometry.primitives.entity_validation import requires_route_representation
 from scgsim.geometry.primitives.grid import with_input_grid
 from scgsim.geometry.source.intents import route_a_sheet_interfaces
@@ -139,7 +141,9 @@ def interpret_physical_geometry(
         metadata={**build_input.metadata, "physical_representation": payload},
     )
     # Junction lowering loads optional gdstk; declaration-only imports stay usable.
-    from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions  # noqa: PLC0415 -- load optional gdstk only when interpreting executable geometry
+    from scgsim.geometry.planning.junction_planning.derivation import (
+        derive_rectangular_junctions,  # noqa: PLC0415 -- load optional gdstk only when interpreting executable geometry
+    )
 
     effective_input = derive_rectangular_junctions(effective_input)
     return (

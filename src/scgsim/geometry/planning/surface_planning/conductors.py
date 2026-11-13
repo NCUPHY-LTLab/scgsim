@@ -13,10 +13,14 @@ from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import (
     SurfacePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.domain_planning.faces import (
     ConductorFaceRequest,
     conductor_face_solution_pieces,
+)
+from scgsim.geometry.planning.domain_planning.hosts import (
     conductor_sidewall_adjacent_solution_id,
+)
+from scgsim.geometry.planning.domain_planning.occupancy import (
     route_conductor_contact_footprints,
 )
 from scgsim.geometry.planning.evidence import (

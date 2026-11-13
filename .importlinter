@@ -67,7 +67,6 @@ type = forbidden
 source_modules =
     scgsim.geometry.sgb
 forbidden_modules =
-    scgsim.geometry.planning.domain
     scgsim.geometry.planning.domain_planning
     scgsim.geometry.planning.surface_planning
     scgsim.geometry.planning.contact_planning
@@ -75,7 +74,6 @@ forbidden_modules =
     scgsim.geometry.planning.evidence
     scgsim.geometry.planning.tags
     scgsim.geometry.planning.junction_planning
-    scgsim.geometry.planning.junction_partition
 
 [importlinter:contract:sgb-emission-layers]
 name = SGB emission layers point one way (entry, exchange, verification, sidecar, writer)

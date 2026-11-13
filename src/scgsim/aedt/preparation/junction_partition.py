@@ -1,36 +1,21 @@
-"""AEDT compatibility names over the shared source-domain rectangle algorithm."""
+"""AEDT junction partitions: the shared source-domain rectangle algorithm under the AEDT record format."""
 
 from dataclasses import replace
 
 from scgsim.aedt.specs.epr import PlanarJunction
 from scgsim.geometry.models.junctions import JunctionGeometry
-from scgsim.geometry.planning.junction_partition import (
-    JunctionContactRequest,
-    JunctionPartitionFormat,
-    junction_terminal_line,
-    plain_record,
-)
-from scgsim.geometry.planning.junction_partition import closed_contact as closed_contact
-from scgsim.geometry.planning.junction_partition import cross as cross
-from scgsim.geometry.planning.junction_partition import inside_ring as inside_ring
-from scgsim.geometry.planning.junction_partition import (
+from scgsim.geometry.planning.junction_planning.contact import JunctionContactRequest
+from scgsim.geometry.planning.junction_planning.contact import (
     junction_contact_inventory as _shared_contact_inventory,
 )
-from scgsim.geometry.planning.junction_partition import (
-    junction_source_binding as junction_source_binding,
+from scgsim.geometry.planning.junction_planning.core import (
+    JunctionPartitionFormat,
+    plain_record,
 )
-from scgsim.geometry.planning.junction_partition import (
+from scgsim.geometry.planning.junction_planning.partition import (
     partition_junctions as _partition_junctions,
 )
-from scgsim.geometry.planning.junction_partition import section as section
-
-__all__ = [
-    "closed_contact",
-    "cross",
-    "inside_ring",
-    "section",
-    "junction_source_binding",
-]
+from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
 
 METHOD = "scgsim.aedt.junction-partition.v1"
 _FORMAT = JunctionPartitionFormat(

@@ -15,12 +15,14 @@ from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import (
     InterfacePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.domain_planning.hosts import (
     adjacent_auto_vacuum_sidewall_component_id,
     conductor_sidewall_adjacent_solution_id,
     conductor_sidewall_ref_solution_id,
-    route_conductor_contact_footprints,
     sidewall_is_auto_vacuum_envelope_edge,
+)
+from scgsim.geometry.planning.domain_planning.occupancy import (
+    route_conductor_contact_footprints,
     sidewall_on_solution_outer_boundary,
 )
 from scgsim.geometry.planning.representation import (

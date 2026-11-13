@@ -18,7 +18,7 @@ from scgsim.geometry.models.topology import (
     MMContactRecord,
     SurfacePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.domain_planning.boundaries import (
     plan_substrate_air_surfaces,
 )
 from scgsim.geometry.planning.evidence import (
