@@ -81,6 +81,12 @@ the selected solver.
 model preparation to a caller-controlled solver execution and result return.
 It does not itself mean that a solver ran or completed.
 
+[Run folder]{#term-run-folder} is the folder a simulation writes its mesh,
+configuration and handoff into and the solver writes its results into; code
+names it `run_dir`. Results are resolved from a run folder. Package is kept
+for what is packed to travel between hosts, such as the `.tar.gz` archive a
+handoff writes beside its run folder.
+
 ## Results
 
 [Sheet]{#term-sheet} is a two-dimensional source or native geometric surface;

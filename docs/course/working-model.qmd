@@ -172,9 +172,9 @@ host resources answer different questions. Record the value and purpose of
 each change beside the quantity you plan to inspect. Example controls in a
 lesson are starting inputs, not a universal accuracy recommendation.
 
-Prepare a new run directory and handoff for a changed request. Inspect the
+Prepare a new run folder and handoff for a changed request. Inspect the
 [source summary](source-observations.qmd) and, when useful, the
-[prepared model](solver-observations.qmd), then execute the exact new package.
+[prepared model](solver-observations.qmd), then execute that new handoff.
 Retain each result with its own settings so that a later comparison can name
 which geometry, boundary and request changed.
 

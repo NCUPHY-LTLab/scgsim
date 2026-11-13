@@ -22,11 +22,11 @@ Current Palace `show_all_results()` presentation follows this order:
 2. numerical evidence and simulation cost/resource benchmarks;
 3. available solver-specific physics.
 
-`inspect_run_trustworthiness()` supports completed, failed, and partial returned
-packages. It preserves the recorded receipt status and may expose the latest
+`inspect_run_trustworthiness()` supports completed, failed, and partly returned
+run folders. It preserves the recorded receipt status and may expose the latest
 readable evidence without promoting an incomplete run. The strict
 `resolve_palace_result(..., expected_handoff_id=...)` path accepts only a
-completed package whose handoff, receipt, solver, and artifact hashes validate.
+completed run folder whose handoff, receipt, solver, and artifact hashes validate.
 
 The AEDT `ResolvedRun.show_all_results()` order is identity, numerical
 evidence, benchmark, physics, then details. Identity uses the recorded project,
@@ -158,7 +158,7 @@ margins are alternative views and are not added to the subtotal. Sidewall
 energy remains labeled uncomputed where it was not evaluated. These figures
 show the available evidence and do not claim total device loss or a lifetime.
 
-Palace and AEDT quantities resolved from original run packages remain bound to
+Palace and AEDT quantities resolved from original run folders remain bound to
 their applicable receipt, artifact-hash, handoff, and solver identities. A
 detached Palace EPR result retains original artifact identity and hash
 references, but those references do not authenticate the detached JSON itself.
@@ -180,8 +180,8 @@ policies. EPR normalization and unknown-loss interpretation remain separate.
 The existing inspection and strict-resolution split also governs Palace margin
 rows. A margin row is a `Dielectric` row over the bands SGB cut at and beyond
 that margin, so it sits in the same `surface-Q.csv` table as the baseline rows.
-`inspect_run_trustworthiness()` may inspect a completed, failed, or partial
-package and marks unavailable margin data as unavailable without changing the
+`inspect_run_trustworthiness()` may inspect a completed, failed, or partly
+returned run folder and marks unavailable margin data as unavailable without changing the
 receipt state. Each source reads its margin rows as one all-or-nothing snapshot:
 if its table cannot be read or does not match the index map, that source has no
 margin snapshot. A strict completed resolution of a run that requested surface

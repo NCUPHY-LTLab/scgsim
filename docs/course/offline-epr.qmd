@@ -18,7 +18,7 @@ interpreting participation as loss.
 ## Palace: detach the verified final result
 
 In the [returned-run lesson](returned-results.qmd), after strict resolution of
-your Palace Eigenmode package:
+your Palace Eigenmode run folder:
 
 ```python
 import json

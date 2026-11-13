@@ -18,7 +18,7 @@ A run or report binds, as applicable:
 - config, mesh, handoff, result, and report artifact identities;
 - validation and failure state.
 
-Use the returned package together with its preparation-side source and model
+Use the returned run folder together with its preparation-side source and model
 notes. A distribution version alone does not identify the runtime code bytes,
 layout, settings or native result of a particular study. The current
 runtime-source manifest and content digest identify the module bytes used for

@@ -11,7 +11,7 @@ scgsim-id: "docs/course/offline-epr"
 
 ## Palace：分離已確認的最終結果 {#palace-detach-the-verified-final-result}
 
-在[回傳資料教學](returned-results.qmd)中，嚴格解析 Palace Eigenmode 套件後：
+在[回傳資料教學](returned-results.qmd)中，嚴格解析 Palace Eigenmode 執行資料夾後：
 
 ```python
 import json

@@ -419,7 +419,7 @@ surface.
 - **`inspect_aedt_geometry` → `scgsim.visualization.loaders.aedt`.**
   Responsibility: Bind AEDT native/receipt identity and load solver-assigned
   geometry. A raw `.aedt` path requires explicit `aedt_version` and design; a
-  sealed run directory uses its bound spec version without an override.
+  sealed run folder uses its bound spec version without an override.
 - **Scene records and shared rendering → `scgsim.visualization.scene`, `scgsim.visualization.rendering`.** Responsibility: Keep scene construction and rendering reusable without taking solver physics or simulation status ownership.
 - **Shared loader file-identity helpers → `scgsim.visualization.loaders.common`.** Responsibility: One loader-level implementation for JSON, hash and confined-path observations.
 

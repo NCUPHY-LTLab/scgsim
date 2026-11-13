@@ -37,7 +37,7 @@ elevation.
 
 | Surface | Contract |
 |---|---|
-| `inspect_palace_geometry(run_dir)` | Bind a Palace run directory and its authoritative mesh metadata. |
+| `inspect_palace_geometry(run_dir)` | Bind a Palace run folder and its authoritative mesh metadata. |
 | `inspect_aedt_geometry(source, ...)` | Bind an AEDT source; raw `.aedt` requires explicit `aedt_version` and design, while a sealed run uses its bound spec version. |
 | `preview.show_materials()` | Render the available material assignments. |
 | `preview.show_boundaries()` | Render the available boundary assignments. |
