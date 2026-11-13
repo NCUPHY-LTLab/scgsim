@@ -4,11 +4,15 @@ Every package folder under ``src/scgsim`` opens its ``__init__.py`` with one sen
 three lines, ``In:`` (what it takes, from whom), ``Out:`` (what it produces) and ``Next:`` (who reads that).
 ``AREAS`` lists every folder once, in the order the work flows, and says which folders are stages. This
 script reads the docstrings (it never imports SCGSim) and writes one Markdown table per area for each
-language edition of the site, which ``docs/code-map.qmd`` and its Chinese copy include.
+language edition of the site, which ``docs/code-map.qmd`` and its Chinese copy include. The English rows
+are the docstrings; the Traditional Chinese rows are the authored translations in ``code_map_zh_tw.toml``
+beside this script, each entry recording the English text it translates.
 
 It refuses, naming the folder, a package folder ``AREAS`` does not list, a listed folder that is not a
-package folder, a stage whose docstring lacks one of the three lines, and a folder listed as something else
-whose docstring has all three (list it as a stage).
+package folder, a stage whose docstring lacks one of the three lines, a folder listed as something else
+whose docstring has all three (list it as a stage), a folder without a translation entry, an entry for a
+folder that is gone, and an entry whose recorded English is no longer the docstring's text (translate the
+new text and record it).
 
     python scripts/generate_code_map.py          # write the tables
     python scripts/generate_code_map.py --check  # refuse tables that differ from the docstrings
@@ -19,6 +23,7 @@ from __future__ import annotations
 import argparse
 import ast
 import re
+import tomllib
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -26,6 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = "src/scgsim"
 LINE_KEYS = ("In", "Out", "Next")
+TRANSLATION = "scripts/code_map_zh_tw.toml"
 
 
 class Role(Enum):
@@ -72,7 +78,7 @@ AREAS = (
             Folder("geometry/grid"),
             Folder("geometry/interpretation"),
             Folder("geometry/junctions"),
-            Folder("geometry/surface_epr", Role.MODULES),
+            Folder("geometry/surface_epr"),
             Folder("geometry/planning"),
             *_parts(
                 "geometry/planning",
@@ -103,7 +109,7 @@ AREAS = (
     ),
     Area(
         "meshing",
-        (Folder("meshing", Role.AREA), *_parts("meshing", "recipes")),
+        (Folder("meshing"), *_parts("meshing", "recipes")),
     ),
     Area(
         "palace",
@@ -154,12 +160,15 @@ AREAS = (
 
 @dataclass(frozen=True)
 class Edition:
-    """The words one language edition puts around the docstring text, and the file it includes."""
+    """The words one language edition puts around the rows, the file it includes, and the language of its rows."""
 
     path: str
     header: tuple[str, str, str, str, str]
     shared_heading: str
     notes: dict[Role, str]
+    language: (
+        str  # "en": the docstring itself; otherwise the key of the authored translation
+    )
 
 
 EDITIONS = (
@@ -173,6 +182,7 @@ EDITIONS = (
             Role.MODULES: "Its docstring names its modules instead of In, Out and Next.",
             Role.SHARED: "Used by every area, outside the flow of any one of them.",
         },
+        "en",
     ),
     Edition(
         "zh-TW/docs/_code-map-stages.md",
@@ -184,6 +194,7 @@ EDITIONS = (
             Role.MODULES: "docstring 列出它的模組，而沒有 In、Out、Next 三行。",
             Role.SHARED: "各區共用，不屬於任何一區的流程。",
         },
+        "zh",
     ),
 )
 
@@ -194,6 +205,14 @@ class Docstring:
 
     summary: str
     lines: dict[str, str]
+
+    def text(self, field: str) -> str:
+        """The text of one field: ``summary`` or one of ``LINE_KEYS``."""
+        return self.summary if field == "summary" else self.lines[field]
+
+
+# folder (as the table names it) -> field -> {"en": the docstring text it translates, "zh": the translation}
+Translations = dict[str, dict[str, dict[str, str]]]
 
 
 def main() -> None:
@@ -226,10 +245,16 @@ class CodeMapError(ValueError):
 def render(root: Path = ROOT) -> dict[str, str]:
     """Return the text of each edition's include file, after checking every folder against ``AREAS``."""
     docstrings = read_docstrings(root)
-    problems = check_folders(docstrings)
+    translations: Translations = tomllib.loads(
+        (root / TRANSLATION).read_text(encoding="utf-8")
+    )
+    problems = check_folders(docstrings) or check_translations(docstrings, translations)
     if problems:
         raise CodeMapError("The code map cannot be generated:\n" + "\n".join(problems))
-    return {edition.path: _render_edition(edition, docstrings) for edition in EDITIONS}
+    return {
+        edition.path: _render_edition(edition, docstrings, translations)
+        for edition in EDITIONS
+    }
 
 
 def read_docstrings(root: Path) -> dict[str, Docstring | None]:
@@ -306,32 +331,97 @@ def _shown(path: str) -> str:
     return f"{PACKAGE}/{path}".rstrip("/")
 
 
-def _render_edition(edition: Edition, docstrings: dict[str, Docstring | None]) -> str:
+def check_translations(
+    docstrings: dict[str, Docstring | None], translations: Translations
+) -> list[str]:
+    """One message per folder whose translation entry is missing, left over or translates other text."""
+    listed = {_name(folder): folder for area in AREAS for folder in area.folders}
+    problems = [
+        f'{TRANSLATION}: entry ["{name}"] names no listed folder; remove it'
+        for name in translations
+        if name not in listed
+    ]
+    for name, folder in listed.items():
+        docstring = docstrings[folder.path]
+        assert docstring is not None  # check_folders refused a folder without one
+        problems.extend(
+            _entry_problems(name, folder, docstring, translations.get(name))
+        )
+    return problems
+
+
+def _entry_problems(
+    name: str,
+    folder: Folder,
+    docstring: Docstring,
+    entry: dict[str, dict[str, str]] | None,
+) -> list[str]:
+    where = f'{_shown(folder.path)} ({TRANSLATION} ["{name}"])'
+    if entry is None:
+        return [
+            f"{where}: no translation entry; add summary.en and summary.zh, and In, Out and Next for a stage"
+        ]
+    fields = _fields(folder)
+    problems = [
+        f"{where}: field {field} is not shown for this folder; remove it"
+        for field in entry
+        if field not in fields
+    ]
+    for field in fields:
+        recorded = entry.get(field, {})
+        if not recorded.get("zh"):
+            problems.append(f"{where}: {field}.zh is missing")
+        if recorded.get("en") != docstring.text(field):
+            problems.append(
+                f"{where}: the docstring's {field} is not the English this entry translates; set {field}.en to"
+                f" the text below and translate it again in {field}.zh:\n    {docstring.text(field)}"
+            )
+    return problems
+
+
+def _fields(folder: Folder) -> tuple[str, ...]:
+    return ("summary", *LINE_KEYS) if folder.role is Role.STAGE else ("summary",)
+
+
+def _name(folder: Folder) -> str:
+    return folder.path or "scgsim"
+
+
+def _render_edition(
+    edition: Edition,
+    docstrings: dict[str, Docstring | None],
+    translations: Translations,
+) -> str:
     sections = [
-        "<!-- Generated by scripts/generate_code_map.py from the package docstrings; do not edit. -->"
+        f"<!-- Generated by scripts/generate_code_map.py from the package docstrings and {TRANSLATION}; do not edit. -->"
     ]
     for area in AREAS:
         heading = edition.shared_heading if area.name == "shared" else f"`{area.name}`"
         rows = [
-            _row(folder, docstrings[folder.path], edition) for folder in area.folders
+            _row(folder, docstrings[folder.path], edition, translations)
+            for folder in area.folders
         ]
         sections.append(f"### {heading}\n\n" + _table(edition.header, rows))
     return "\n\n".join(sections) + "\n"
 
 
 def _row(
-    folder: Folder, docstring: Docstring | None, edition: Edition
+    folder: Folder,
+    docstring: Docstring | None,
+    edition: Edition,
+    translations: Translations,
 ) -> tuple[str, ...]:
     assert docstring is not None  # check_folders refused a folder without one
-    name = f"`{folder.path or 'scgsim'}`"
-    if folder.role is Role.STAGE:
-        return (
-            name,
-            _cell(docstring.summary),
-            *(_cell(docstring.lines[key]) for key in LINE_KEYS),
-        )
-    note = edition.notes[folder.role].format(part_of=folder.part_of)
-    return (name, _cell(docstring.summary), note, "", "")
+
+    def text(field: str) -> str:
+        if edition.language == "en":
+            return _cell(docstring.text(field))
+        return _cell(translations[_name(folder)][field][edition.language])
+
+    cells = [text(field) for field in _fields(folder)]
+    if folder.role is not Role.STAGE:
+        cells += [edition.notes[folder.role].format(part_of=folder.part_of), "", ""]
+    return (f"`{_name(folder)}`", *cells)
 
 
 def _table(header: tuple[str, ...], rows: list[tuple[str, ...]]) -> str:
@@ -340,11 +430,7 @@ def _table(header: tuple[str, ...], rows: list[tuple[str, ...]]) -> str:
 
 
 def _cell(text: str) -> str:
-    """Docstring markup as Markdown: ``x`` and Sphinx roles become code spans; a pipe would split the cell.
-
-    An issue number (``#170``, ``issue 188``) points at a delivery record, which a reader page does not show.
-    """
-    text = re.sub(r"\s*\((?:#|issue )\d+\)|,\s*#\d+(?=\))", "", text)
+    """Docstring markup as Markdown: ``x`` and Sphinx roles become code spans; a pipe would split the cell."""
     text = re.sub(
         r":[a-z]+:`~?([^`]+)`", lambda m: f"`{m.group(1).rpartition('.')[2]}`", text
     )

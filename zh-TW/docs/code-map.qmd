@@ -11,8 +11,11 @@ sidebar: contribution
 
 ## 兩條路線 {#routes}
 
-兩條路線都從版圖與堆疊開始，到使用者閱讀的結果為止；它們就是
-[後端支援矩陣](backend-support.qmd)中的兩條路線。每個方框都是 `src/scgsim`
+這兩條路線就是[後端支援矩陣](backend-support.qmd)中的兩條路線，都以使用者閱讀的結果為終點。
+Palace 路線從版圖與堆疊開始。AEDT 路線有兩個入口：每種 AEDT 計算都接受傳給 `prepare_handoff`
+的 AEDT 請求規格，由呼叫者建立 `aedt/specs` 的規格紀錄，而 Q2D 與不使用來源的 Q3D 只能從這裡進入；
+source-first 的 HFSS Eigenmode 與 Q3D C/G 準備也可以改從 `GeometryPlan` 開始，它的 snapshot
+會先經過共用幾何階段與 `geometry/planning`，再進入 `aedt/preparation`。每個方框都是 `src/scgsim`
 底下的資料夾，名稱與資料夾相同；圓角框則在 SCGSim 之外。實線箭頭代表匯入：
 箭頭終點的階段匯入起點的階段；標示「呼叫」的箭頭則代表起點的階段呼叫終點的階段。
 虛線箭頭代表交接的檔案或數值，標示交接的內容；若檔案由契約模組定義，也標示該模組。
@@ -44,7 +47,11 @@ flowchart TB
     presults --> preports["palace/reports"]
   end
   subgraph aedt_route["AEDT 路線"]
-    gplan["geometry/planning"] --> aprep
+    subgraph plan_backed["GeometryPlan 入口"]
+      gplan["geometry/planning"]
+    end
+    request(["請求值"]) -. "AEDT 請求規格<br/>每種家族皆可；Q2D 與不使用來源的 Q3D 只能從這裡進入" .-> aspecs
+    gplan --> aprep
     aspecs["aedt/specs"] --> aprep["aedt/preparation"]
     aprep -. "交接資料夾" .-> aruntime["aedt/runtime"]
     aruntime -- "呼叫" --> aepr["aedt/epr"]
@@ -91,15 +98,17 @@ Next: 哪個階段讀取它
 
 ## 階段表格 {#stage-tables}
 
-每一區有一個表格，各列依工作經過的順序排列。每列的文字取自該資料夾的
-docstring：「它是什麼」是第一句話，In、Out、Next 是那三行；這些文字維持程式碼中的英文原文。
+每一區有一個表格，各列依工作經過的順序排列。每列的文字是該資料夾 docstring 的翻譯：
+「它是什麼」是第一句話，In、Out、Next 是那三行；英文原文在英文版的同一頁。
 不是階段的資料夾會在 In 欄說明它是什麼：一區本身的資料夾、某一列所列階段的一部分，
 或 docstring 列出模組而非三行的階段。
 
-要修改某一列，請編輯該資料夾的 docstring，再執行
-`python scripts/generate_code_map.py`；各列的順序只在這個腳本中寫一次。
-腳本會拒絕它沒有列出的套件資料夾，也會拒絕缺少三行之一的階段；表格與 docstring
-不一致時，`tests/test_code_map.py` 會失敗。
+要修改某一列，請編輯該資料夾的 docstring，在 `scripts/code_map_zh_tw.toml` 翻譯改動的文字，
+再執行 `python scripts/generate_code_map.py`；各列的順序只在這個腳本中寫一次。
+翻譯檔的每一筆都記錄它所翻譯的英文。腳本會拒絕它沒有列出的套件資料夾、缺少三行之一的階段、
+沒有翻譯的資料夾、對應資料夾已不存在的翻譯，以及所記錄的英文已不等於 docstring 的翻譯；
+最後這種情況會印出需要記錄並重新翻譯的新英文。表格與 docstring 或翻譯不一致時，
+`tests/test_code_map.py` 會失敗。
 
 {{< include _code-map-stages.md >}}
 
@@ -111,7 +120,8 @@ docstring：「它是什麼」是第一句話，In、Out、Next 是那三行；�
   也不匯入第三方套件，因此每個階段都能匯入它們。import-linter 契約
   `contracts-import-nothing-else` 會檢查 `contracts`。
 - 新的套件資料夾要加入 `scripts/generate_code_map.py` 的 `AREAS`，放在工作抵達它的位置；
-  它的 `__init__.py` 要有那一句話，若是階段，還要有那三行。
+  它的 `__init__.py` 要有那一句話，若是階段，還要有那三行，並在
+  `scripts/code_map_zh_tw.toml` 加入它們的翻譯。
 
 ## 契約與設計 {#contracts-and-design}
 

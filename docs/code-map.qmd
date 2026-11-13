@@ -16,8 +16,14 @@ from the folders' own docstrings, so they say what the code says.
 
 ## The two routes {#routes}
 
-Both routes start from a layout and a stack and end at a result a person reads;
-they are the two routes of the [backend support matrix](backend-support.qmd).
+The two routes are those of the [backend support matrix](backend-support.qmd),
+and both end at a result a person reads. The Palace route starts from a layout
+and a stack. The AEDT route has two entries. Every AEDT calculation accepts an
+AEDT request spec passed to `prepare_handoff`: the caller builds the spec
+records of `aedt/specs`, and Q2D and source-free Q3D enter only this way.
+Source-first HFSS Eigenmode and the Q3D C/G preparation can start from a
+`GeometryPlan` instead; its snapshot passes through the shared geometry stages
+and `geometry/planning` before `aedt/preparation`.
 Every square box is a folder below `src/scgsim`, named as the folder is; a
 rounded box is outside SCGSim. A solid arrow is an import: the stage at its
 head imports the stage at its tail, or, where the arrow says *calls*, the stage
@@ -51,7 +57,11 @@ flowchart TB
     presults --> preports["palace/reports"]
   end
   subgraph aedt_route["AEDT route"]
-    gplan["geometry/planning"] --> aprep
+    subgraph plan_backed["GeometryPlan entry"]
+      gplan["geometry/planning"]
+    end
+    request(["request values"]) -. "AEDT request spec<br/>every family; the only entry for Q2D and source-free Q3D" .-> aspecs
+    gplan --> aprep
     aspecs["aedt/specs"] --> aprep["aedt/preparation"]
     aprep -. "handoff folder" .-> aruntime["aedt/runtime"]
     aruntime -- "calls" --> aepr["aedt/epr"]
@@ -108,11 +118,16 @@ In, Out and Next are the three lines. A folder that is not a stage says in
 its In cell what it is instead: an area's own folder, a part of the stage in
 the row it names, or a stage whose docstring names its modules.
 
-To change a row, edit the folder's docstring and run
-`python scripts/generate_code_map.py`; the order of the rows is stated once, in
-that script. The script refuses a package folder it does not list and a stage
-whose docstring lacks one of the three lines, and
-`tests/test_code_map.py` fails while the tables differ from the docstrings.
+To change a row, edit the folder's docstring, translate the changed text in
+`scripts/code_map_zh_tw.toml`, and run `python scripts/generate_code_map.py`;
+the order of the rows is stated once, in that script. Each entry of the
+translation file records the English it translates. The script refuses a
+package folder it does not list, a stage whose docstring lacks one of the three
+lines, a folder without a translation entry, an entry for a folder that is gone,
+and an entry whose recorded English is no longer the docstring's text; that
+refusal prints the new English to record and translate.
+`tests/test_code_map.py` fails while the tables differ from the docstrings and
+their translations.
 
 {{< include _code-map-stages.md >}}
 
@@ -128,7 +143,8 @@ whose docstring lacks one of the three lines, and
   checks `contracts`.
 - A new package folder goes into `AREAS` in `scripts/generate_code_map.py`
   where the work reaches it, with the sentence and, for a stage, the three
-  lines in its `__init__.py`.
+  lines in its `__init__.py`, and their translation in
+  `scripts/code_map_zh_tw.toml`.
 
 ## Contracts and design {#contracts-and-design}
 

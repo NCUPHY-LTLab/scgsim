@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v5`` (design brief sections 7 and 12, decision D8, #170).
+"""The production sidecar ``scgsim.sgb.sidecar.v5`` (design brief sections 7 and 12, decision D8).
 
 The sidecar is the JSON companion of the XAO/BREP and SGB's complete record of the model: everything the build
 used, and everything the mesher, the meshing-stage check and the solver adapters need, so a reader reads and
