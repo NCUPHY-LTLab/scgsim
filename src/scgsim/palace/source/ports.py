@@ -1,4 +1,4 @@
-"""Bind authored layout ports to Palace lumped-port records, without Sim state.
+"""Bind authored layout ports to Palace lumped-port records.
 
 Owns the requested port, the port it resolves to (``LayoutPortBinding``, which ``mesh`` cuts and
 ``config`` writes) and one step of a lumped port's preparation: asking the shared geometry for the

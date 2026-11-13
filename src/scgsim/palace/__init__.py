@@ -1,4 +1,4 @@
-"""Palace workflow contracts, result views, and handoff utilities.
+"""Run a Palace simulation from a prepared plan to a run folder, and read the run Palace returns.
 
 One folder per stage, in the order the work flows:
 
@@ -10,9 +10,9 @@ One folder per stage, in the order the work flows:
 - ``results``: from a finished run folder to a resolved result.
 - ``reports``: from a resolved result to notebook views.
 
-Ownership: SCGSim Development.
-Failure intent: all public entrypoints are fail-closed and reject incomplete
-state without silently changing behavior.
+A public entry point refuses state it cannot run from (no bound plan, a stage called out of order, a name that
+binds nothing) with an error that says which call fixes it.  A setting with a documented default, such as Route B
+and the numerical controls, keeps that default until the caller sets it.
 """
 
 from .reports.reports import (

@@ -36,7 +36,7 @@ def inspect_aedt_geometry(
     design: str | None = None,
     aedt_version: str | None = None,
 ) -> GeometryPreview:
-    """Read source identity, inspect AEDT geometry, release Desktop, then build a scene."""
+    """Read an AEDT project into a ``GeometryPreview``: take its identity, inspect it in AEDT, release Desktop, then build the scenes."""
     source_request = _read_source(source, design=design, aedt_version=aedt_version)
     native_scene = _inspect_native_project(source_request)
     return _build_scene(source_request, native_scene)

@@ -196,7 +196,7 @@ def native_positive_infinity_q_notice(
 def delta_traces(
     traces: Sequence[tuple[str, Sequence[float | None]]],
 ) -> list[tuple[str, list[float | None]]]:
-    """Compute successive absolute trace differences for the existing convergence view."""
+    """Compute successive absolute trace differences for the convergence view."""
     deltas: list[tuple[str, list[float | None]]] = []
     for name, ys in traces:
         series: list[float | None] = []

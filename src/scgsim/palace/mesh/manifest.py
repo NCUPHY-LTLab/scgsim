@@ -1,4 +1,4 @@
-"""Build the mesh manifest (schema 2): what produced ``palace.msh`` and how its groups map to attributes."""
+"""Build the mesh manifest (``MANIFEST_SCHEMA_VERSION``): what produced ``palace.msh`` and how its groups map to attributes."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from scgsim.contracts.sgb_sidecar.records import InsetRequest
 
 from .physical_groups import Groups
 
-# The geometry producer the manifest, the route provenance and the handoff record.
+# The geometry producer that the manifest, the route provenance and the handoff record.
 SGB_RUNTIME_AUTHORITY = "scgsim.geometry.sgb"
 
 _ATTRIBUTE_FIELDS = (

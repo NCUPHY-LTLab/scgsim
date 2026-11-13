@@ -1,4 +1,7 @@
-"""Manual-only Palace handoff adapted from gsim portable fixes @ 8cf5fa79fa3abb176940dbfc520ff34a44f4770e."""
+"""Write the run script, metadata and archive that hand a meshed and configured run folder to a manual Palace run.
+
+Portions adapted from gsim portable fixes, revision 8cf5fa79fa3abb176940dbfc520ff34a44f4770e; see NOTICE.
+"""
 
 from __future__ import annotations
 
@@ -140,7 +143,10 @@ def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
     petsc_options: Sequence[str] = (),
     problem: Literal["Electrostatic", "Eigenmode"],
 ) -> HandoffPlan:
-    """Create only portable handoff artifacts; caller owns executable and resources."""
+    """Write the run script, metadata, receipt recorder and archive; the caller names the executable and the resources.
+
+    Nothing here starts Palace.
+    """
     if profile not in _PROFILES:
         raise ValueError(f"Unsupported handoff profile {profile!r}.")
     if not config_path.is_file() or not mesh_result.mesh_path.is_file():
