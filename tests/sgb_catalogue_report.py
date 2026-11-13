@@ -31,10 +31,10 @@ from sgb_scenes import pad_in_ground, random_layout
 
 from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.emission.plan import plan_brep
+from scgsim.geometry.sgb.output.emission.plan import plan_brep
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_loaded
-from scgsim.geometry.sgb.verification.ocp import ocp_available
+from scgsim.geometry.sgb.checks.verification.loaded import apply_sidecar_embeds, verify_loaded
+from scgsim.geometry.sgb.checks.verification.ocp import ocp_available
 
 MESH_SIZE_UM = 4.0  # coarse: the fixtures are 40 x 40 x 20 um boxes
 NOT_MEASURED = {"mesh": "not meshed"}
@@ -67,7 +67,7 @@ def measure(
         if mesh_size is not None:
             row.update(_mesh_row(sidecar, mesh_size))
     if with_occt and ocp_available():
-        from scgsim.geometry.sgb.verification.occt import check_file  # noqa: PLC0415 -- optional OCP (the occt group)
+        from scgsim.geometry.sgb.checks.verification.occt import check_file  # noqa: PLC0415 -- optional OCP (the occt group)
 
         plan = plan_brep(model.topology, model.routed)
         report = check_file(artifacts.xao, model.topology, plan, self_interference=True)

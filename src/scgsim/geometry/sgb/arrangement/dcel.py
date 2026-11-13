@@ -13,7 +13,7 @@ Conventions
   outside), which is a *hole* of the face that encloses the component.
 * Face 0 is always the unbounded face.
 
-Does not own labels (``labelling``), dissolution or snapping.
+Does not own labels (``arrangement.labelling``), dissolution or snapping.
 """
 
 from __future__ import annotations
@@ -24,9 +24,9 @@ from dataclasses import dataclass
 from fractions import Fraction
 from functools import cmp_to_key
 
-from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge
-from scgsim.geometry.sgb.noding.spatial_hash import cell_size_for
-from scgsim.geometry.sgb.plane import Point, RepPoint, fraction_to_rep, point_in_ring
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge
+from scgsim.geometry.sgb.arrangement.noding.spatial_hash import cell_size_for
+from scgsim.geometry.sgb.exact.plane import Point, RepPoint, fraction_to_rep, point_in_ring
 
 
 @dataclass(frozen=True)

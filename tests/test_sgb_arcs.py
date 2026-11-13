@@ -20,8 +20,8 @@ from scgsim.geometry.sgb.arrangement.arcs import (  # noqa: E402
     realise,
     sampled_crossings,
 )
-from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.records.carriers import Lineage, circle_arcs  # noqa: E402
+from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue  # noqa: E402
+from scgsim.geometry.sgb.exact.carriers import Lineage, circle_arcs  # noqa: E402
 
 TESTS = Path(__file__).resolve().parent
 
@@ -173,7 +173,7 @@ def test_arc_example_ids_are_identical_for_every_hash_seed():
     catalogue = pad_in_ground("B")
     code = (
         f"import sys; sys.path.insert(0, {str(TESTS)!r})\n"
-        "from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue\n"
+        "from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue\n"
         "from sgb_scenes import pad_in_ground\n"
         "print(derive_from_catalogue(pad_in_ground('B')).identity_digest())\n"
     )

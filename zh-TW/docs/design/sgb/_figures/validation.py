@@ -46,14 +46,14 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from sgb_scenes import airbridge, footprint, rect_um
 from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     RefinementRequest,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.emission.plan import plan_brep
-from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file
+from scgsim.geometry.sgb.output.emission.plan import plan_brep
+from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file
 from scgsim.geometry.sgb.errors import (
     ContactError,
     NonManifoldError,
@@ -62,12 +62,12 @@ from scgsim.geometry.sgb.errors import (
     SgbError,
     ValidationError,
 )
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.labels import LevelLabel
-from scgsim.geometry.sgb.records.prisms import PrismRecord
-from scgsim.geometry.sgb.stopwatch import Stopwatch
-from scgsim.geometry.sgb.validation.validate import validate_model
-from scgsim.geometry.sgb.verification.occt import check_file
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.labels import LevelLabel
+from scgsim.geometry.sgb.exact.prisms import PrismRecord
+from scgsim.geometry.sgb.exact.stopwatch import Stopwatch
+from scgsim.geometry.sgb.checks.validation.validate import validate_model
+from scgsim.geometry.sgb.checks.verification.occt import check_file
 
 G = 0.001
 MARGINS = (0.1, 0.5, 2.0)

@@ -27,9 +27,9 @@ from scgsim.contracts.sgb_sidecar import read_sidecar, sidecar_schema
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.slivers.report import sliver_report
-from scgsim.geometry.sgb.verification.loaded import verify_xao
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
+from scgsim.geometry.sgb.checks.verification.loaded import verify_xao
 
 
 def build(name: str, route: str):
@@ -243,8 +243,8 @@ def _unemitted_faces(model) -> int:
 def test_every_fixture_passes_the_official_occt_checks(fixture, route, tmp_path):
     """BRepCheck, the Boolean argument analyzer (with self-interference) and ShapeAnalysis, against the plan."""
     pytest.importorskip("OCP")
-    from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
-    from scgsim.geometry.sgb.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
+    from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
+    from scgsim.geometry.sgb.checks.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
 
     model = build_model(fixture, route)
     artifacts = emit_model(model, tmp_path)

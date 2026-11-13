@@ -51,7 +51,7 @@ from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
 from scgsim.contracts.sgb_sidecar import read_sidecar, views
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     RefinementRequest,

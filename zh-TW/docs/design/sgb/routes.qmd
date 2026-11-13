@@ -4,7 +4,7 @@ description: "導體以零厚度 sheet（Route A）、排除的有限厚度金�
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
-scgsim-id: "docs/design/sgb/routes"
+scgsim-id: "docs/design/sgb/topology/routes"
 ---
 
 同一顆晶片的導體，可以用不同的方式交給 solver：把薄膜當成零厚度的 sheet（Route A）、把有限厚度的金屬 volume 從求解區域中挖掉、只留下它的邊界（Route B），或把導體 volume 保留下來並在內部 mesh（Route C）。SGB 把這個選擇放在 labelling 層：arrangement、cell 與 face 的推導對每種 route 都是同一份程式，route 只決定導體的 cell 在輸出中代表什麼，以及哪些 volume 會被輸出。

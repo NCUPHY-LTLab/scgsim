@@ -7,7 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/labels-and-dissolution"
 ---
 
-Arrangement 只告訴我們平面被曲線切成哪些 **cell**（平面區域）；SGB 還要知道每個 cell 是什麼，以及哪些 edge 可以留下。本頁說明 slab cell 與 level cell 的 label 怎麼來、一條 edge 保留或移除的規則，以及 dissolution 具體移除哪些 seam。這些規則在 production（`scgsim.geometry.sgb.labelling`）已實作；本頁的圖與數字都由 production 算出，用到 stage 層 scene 的地方會明說。
+Arrangement 只告訴我們平面被曲線切成哪些 **cell**（平面區域）；SGB 還要知道每個 cell 是什麼，以及哪些 edge 可以留下。本頁說明 slab cell 與 level cell 的 label 怎麼來、一條 edge 保留或移除的規則，以及 dissolution 具體移除哪些 seam。這些規則在 production（`scgsim.geometry.sgb.arrangement.labelling`）已實作；本頁的圖與數字都由 production 算出，用到 stage 層 scene 的地方會明說。
 
 這裡的 cell 是 arrangement 中的平面區域；輸出的 **face** 指 BREP face。一個 level cell 是否會成為 horizontal face，由它的 label 決定（見下）。arrangement 如何建立見[建立 arrangement](arrangement.qmd)，Z 方向的結構（level、slab、active set）見[2.5D 分層模型](layered-model.qmd)。
 

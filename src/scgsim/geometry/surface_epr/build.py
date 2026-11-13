@@ -17,7 +17,7 @@ from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb import SgbArtifacts, build_sgb_geometry
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest
+from scgsim.geometry.sgb.bands.requests import InsetRequest
 
 from .insets import inset_requests, needs_unbanded_build, requests_wanted
 

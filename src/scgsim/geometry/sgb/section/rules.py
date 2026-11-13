@@ -29,13 +29,13 @@ from typing import NoReturn
 
 from scgsim.documentation import see_also
 from scgsim.geometry.models.grid import format_box, format_point
-from scgsim.geometry.sgb.assembly.records import TopoEdge, Topology
+from scgsim.geometry.sgb.topology.assembly.records import TopoEdge, Topology
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.labelling.prism_set import named_entities
+from scgsim.geometry.sgb.arrangement.labelling.prism_set import named_entities
 from scgsim.geometry.sgb.model import ConformalModel
-from scgsim.geometry.sgb.plane import Point
-from scgsim.geometry.sgb.records.carriers import Lineage
-from scgsim.geometry.sgb.records.labels import Domain
+from scgsim.geometry.sgb.exact.plane import Point
+from scgsim.geometry.sgb.exact.carriers import Lineage
+from scgsim.geometry.sgb.exact.labels import Domain
 from scgsim.geometry.sgb.section.frame import Along, CutFrame
 
 ARC_CLEARANCE = 0.5

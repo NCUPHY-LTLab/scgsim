@@ -18,8 +18,8 @@ import klayout.db as db
 from sgb_scenes import exact_band_areas
 
 from scgsim.geometry.sgb.model import ConformalModel
-from scgsim.geometry.sgb.records.carriers import LineEdge
-from scgsim.geometry.sgb.records.support import SupportRegion
+from scgsim.geometry.sgb.exact.carriers import LineEdge
+from scgsim.geometry.sgb.exact.support import SupportRegion
 
 DISK_SIDES = 512
 CHORD_SAGITTA = 0.01

@@ -8,7 +8,7 @@ sliver report and the validation report.
 
 The mesher takes it from there: open the XAO in Gmsh, re-apply the sidecar's embeddings, mesh.  It trusts
 the XAO and sidecar of one build and does not check them again; the tests do that with ``verify_loaded``
-(``scgsim.geometry.sgb.verification.loaded``), which also serves to diagnose a file suspected to be wrong.
+(``scgsim.geometry.sgb.checks.verification.loaded``), which also serves to diagnose a file suspected to be wrong.
 """
 
 from __future__ import annotations
@@ -21,14 +21,14 @@ from typing import Any
 
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, RefinementRequest
-from scgsim.geometry.sgb.emission.plan import plan_brep
-from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file
+from scgsim.geometry.sgb.bands.requests import InsetRequest, RefinementRequest
+from scgsim.geometry.sgb.output.emission.plan import plan_brep
+from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file
 from scgsim.geometry.sgb.model import ConformalModel, build_conformal_model
-from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar
-from scgsim.geometry.sgb.sidecar.files import write_sidecar
-from scgsim.geometry.sgb.slivers.report import sliver_report
-from scgsim.geometry.sgb.stopwatch import elapsed_seconds
+from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
+from scgsim.geometry.sgb.output.sidecar.files import write_sidecar
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
+from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ def build_sgb_geometry(  # noqa: PLR0913 - the effective input, the route and th
     """Build the conformal solid model of an effective input under ``route`` and write its files to ``output_dir``.
 
     ``insets`` (Surface-EPR bands) and ``refinements`` (mesh-size curves) are the typed requests of
-    ``scgsim.geometry.sgb.cutfamilies.requests``.  Structural validation always runs and raises
+    ``scgsim.geometry.sgb.bands.requests``.  Structural validation always runs and raises
     :class:`~scgsim.geometry.sgb.errors.ValidationError` before anything is written.
     """
     timings: dict[str, float] = {}

@@ -159,7 +159,7 @@ a face without one, such as the underside of a substrate, is covered only by the
 baseline row. The manifest lists the faces SGB skipped.
 
 Group names attach the face kind to the entity with `__`, for example
-`MA::pad__top::band=1`. The [naming rule](../../zh-TW/docs/design/sgb/identity.html#band-group-names)
+`MA::pad__top::band=1`. The [naming rule](../../zh-TW/docs/design/sgb/exact/identity.html#band-group-names)
 is owned by the SGB design pages; read band membership from the index map instead
 of parsing names.
 

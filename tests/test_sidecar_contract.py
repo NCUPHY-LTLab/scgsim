@@ -25,10 +25,10 @@ from scgsim.contracts.sgb_sidecar.structure import (
     require_known_keywords,
     require_structure,
 )
-from scgsim.geometry.sgb.emission.plan import plan_brep
-from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar
-from scgsim.geometry.sgb.sidecar.files import write_sidecar
-from scgsim.geometry.sgb.slivers.report import sliver_report
+from scgsim.geometry.sgb.output.emission.plan import plan_brep
+from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
+from scgsim.geometry.sgb.output.sidecar.files import write_sidecar
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 
 
 @pytest.fixture(scope="module")
@@ -54,7 +54,7 @@ def sidecars(emit_models):
 def test_the_schema_file_is_the_schema_derived_from_the_records():
     """``sidecar.schema.json`` is the derived schema; after a change to the records run scripts/generate_sidecar_schema.py."""
     committed = (
-        resources.files("scgsim.geometry.sgb.sidecar")
+        resources.files("scgsim.geometry.sgb.output.sidecar")
         .joinpath("sidecar.schema.json")
         .read_text(encoding="utf-8")
     )

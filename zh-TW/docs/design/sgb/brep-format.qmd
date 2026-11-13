@@ -11,7 +11,7 @@ scgsim-id: "docs/design/sgb/brep-format"
 
 writer 輸出的 BREP 是純文字，XAO 是把同一份 BREP 加上 sub-shape reference 與 group 包起來的 XML。審查 writer 時，你可以直接打開 `semantic_geometry_route_b.brep` 或 `.xao`，親手核對任何一筆 record。這一頁逐段說明檔案的結構、編號規則與 orientation 規則；為什麼要自己寫檔、怎麼交給 Gmsh，見 [emission](emission.qmd)。
 
-範例是 pad-in-ground（[Route B](routes.qmd)，port 在 host 的 support plane z = 0；與 [emission](emission.qmd#the-running-example-at-the-point-of-emission) 的 running example 相同）。本頁引用的區塊都是 production 的 writer（`scgsim.geometry.sgb.emission.writer`）寫出的這個範例的真實行，檔案名稱為 `semantic_geometry_route_b.brep` 與 `.xao`，行號標在區塊標題上。文中的 face 都是輸出的 BREP face，不是 arrangement 的 cell（兩者的差別見 [emission](emission.qmd#the-running-example-at-the-point-of-emission)）。
+範例是 pad-in-ground（[Route B](routes.qmd)，port 在 host 的 support plane z = 0；與 [emission](emission.qmd#the-running-example-at-the-point-of-emission) 的 running example 相同）。本頁引用的區塊都是 production 的 writer（`scgsim.geometry.sgb.output.emission.writer`）寫出的這個範例的真實行，檔案名稱為 `semantic_geometry_route_b.brep` 與 `.xao`，行號標在區塊標題上。文中的 face 都是輸出的 BREP face，不是 arrangement 的 cell（兩者的差別見 [emission](emission.qmd#the-running-example-at-the-point-of-emission)）。
 
 ## BREP 基本結構 {#brep-essentials}
 

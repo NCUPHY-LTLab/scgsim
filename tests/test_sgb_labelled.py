@@ -16,11 +16,11 @@ from sgb_scenes import (
     slab_model,
 )
 
-from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue
+from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError, OverlapError
 from scgsim.geometry.sgb.prisms.levels import build_levels
-from scgsim.geometry.sgb.records.grid import Grid, exact_z
-from scgsim.geometry.sgb.records.prisms import Footprint, PrismCatalogue, PrismRecord
+from scgsim.geometry.sgb.exact.grid import Grid, exact_z
+from scgsim.geometry.sgb.exact.prisms import Footprint, PrismCatalogue, PrismRecord
 
 # --------------------------------------------------------------------------- levels
 

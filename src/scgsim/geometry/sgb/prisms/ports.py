@@ -22,7 +22,7 @@ carries the port identity.  The semantics follow the compiler's port lowering
   host's raw GDS polyline, while SGB may have reconstructed the host as an exact arc, and the
   two would meet as one edge with two carriers.  Labelling instead reads the landing from the
   host footprint SGB built: a port-sheet cell over a host is the host
-  (``labelling.prism_set.without_landings``), so the port keeps only its *active remainder*
+  (``arrangement.labelling.prism_set.without_landings``), so the port keeps only its *active remainder*
   and shares the host's own edges.  A region bound to a rectangular junction partition is
   already the junction's central rectangle and keeps its full footprint
   (``lowering._PortSheetLowerer.read_geometry``), so it has no landing.
@@ -49,8 +49,8 @@ from scgsim.geometry.models.representation import (
 )
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.prisms.footprints import lattice_ring
-from scgsim.geometry.sgb.records.grid import Grid, exact_z
-from scgsim.geometry.sgb.records.prisms import Footprint, PortIdentity, PrismRecord
+from scgsim.geometry.sgb.exact.grid import Grid, exact_z
+from scgsim.geometry.sgb.exact.prisms import Footprint, PortIdentity, PrismRecord
 
 PORT_MATERIAL = "lumped_port"
 JUNCTION_PARTITION_KEY = "rectangular_junction_partition"

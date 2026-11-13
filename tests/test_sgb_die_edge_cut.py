@@ -53,11 +53,11 @@ from sgb_supported_kit import (
 )
 from sgb_unsupported_cells import arc_cut_by_the_die_edge, strip_into_notch
 
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, InterfaceSurfaces
+from scgsim.geometry.sgb.bands.requests import InsetRequest, InterfaceSurfaces
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import (
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.prisms import (
     Footprint,
     PrismCatalogue,
     PrismRecord,

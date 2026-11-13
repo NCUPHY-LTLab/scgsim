@@ -18,9 +18,9 @@ from sgb_scenes import (
 
 from scgsim.geometry.sgb.errors import InputError, OverlapError, RouteError
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue
-from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue
-from scgsim.geometry.sgb.routes.naming import (
+from scgsim.geometry.sgb.exact.labels import Domain, SheetOwner
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
+from scgsim.geometry.sgb.topology.routes.naming import (
     check_entity_names,
     interface_side,
     interface_type_of,

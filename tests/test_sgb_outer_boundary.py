@@ -15,8 +15,8 @@ from sgb_supported_kit import Conductor, Scene, catalogue, lattice
 from scgsim.contracts.sgb_sidecar import SidecarError, check_sidecar, read_sidecar
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import Footprint, PrismRecord
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.prisms import Footprint, PrismRecord
 
 HALF = 50.0
 PAD = [

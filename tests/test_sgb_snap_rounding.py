@@ -17,8 +17,8 @@ from shapely.geometry import LineString  # noqa: E402
 from shapely.ops import polygonize, unary_union  # noqa: E402
 
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement  # noqa: E402
-from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round  # noqa: E402
-from scgsim.geometry.sgb.noding.spatial_hash import HotGrid  # noqa: E402
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round  # noqa: E402
+from scgsim.geometry.sgb.arrangement.noding.spatial_hash import HotGrid  # noqa: E402
 
 CASES = [
     (seed, count, extent)

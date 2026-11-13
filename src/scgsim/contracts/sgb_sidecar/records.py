@@ -4,7 +4,7 @@ Owns the shape of the file: its tables, the fields of each record, their types, 
 each id names, and which records accept more keys.  The value types and the ids of each table are in :mod:`.values`, and the
 mesh-feature records in :mod:`.features`.  It is the one definition the JSON Schema is derived from
 (:mod:`.schema`) and the shared reader checks against (:mod:`.read`, :mod:`.references`).  The writer is
-``scgsim.geometry.sgb.sidecar``; what each table means for SGB and for its readers is documented there.
+``scgsim.geometry.sgb.output.sidecar``; what each table means for SGB and for its readers is documented there.
 
 The sidecar has three layers, each a set of tables ``{id: record}``.  *Sources* are what the layout drew and
 asked for (``entity``, ``source_curve``, ``inset_request``, ``refinement_request``, ``port``).  *Derived* are

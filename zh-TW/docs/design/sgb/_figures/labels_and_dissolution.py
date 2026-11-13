@@ -54,8 +54,8 @@ from sgb_scenes import pad_in_ground as stage_pad_in_ground
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.arrangement.dcel import interior_point
 from scgsim.geometry.sgb.errors import ContactError, OverlapError
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import PrismRecord
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.prisms import PrismRecord
 
 PLAN = ((-24.0, 124.0), (-24.0, 124.0))  # the whole model, micrometres
 VIEW = ((26.0, 74.0), (26.0, 74.0))  # the cutout, micrometres

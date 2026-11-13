@@ -32,12 +32,12 @@ from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.physical import PHYSICAL_LAYER_FIELD
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.plane import Ring
+from scgsim.geometry.sgb.exact.plane import Ring
 from scgsim.geometry.sgb.prisms.curves import RingKey
 from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, is_auto_vacuum_region
-from scgsim.geometry.sgb.records.carriers import ArcCarrier
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import (
+from scgsim.geometry.sgb.exact.carriers import ArcCarrier
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.prisms import (
     Footprint,
     LineEdge,
     MaterialKind,

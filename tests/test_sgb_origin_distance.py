@@ -23,11 +23,11 @@ from sgb_supported_kit import (
     type_bands,
 )
 
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, SolutionInterface
+from scgsim.geometry.sgb.bands.requests import InsetRequest, SolutionInterface
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records import support
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue
-from scgsim.geometry.sgb.records.support import (  # private-import: the cells a query lists are the cost under test
+from scgsim.geometry.sgb.exact import support
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue
+from scgsim.geometry.sgb.exact.support import (  # private-import: the cells a query lists are the cost under test
     SupportRegion,
     _ring_cells,
     distance_to_primitive,

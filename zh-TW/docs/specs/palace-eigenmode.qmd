@@ -71,7 +71,7 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 
 每個表面列都有一個涵蓋全部面的基準列。每個邊距再多一列，涵蓋從該邊距往外的各帶。邊距列是同一表面的替代評估，不是互斥的帶：請分開讀取每一列，不要相加。SGB 只在面有 gap edge 時才切帶，所以沒有 gap edge 的面（例如基板底面）只由基準列涵蓋。SGB 略過的面會列在清單中。
 
-群組名稱以 `__` 把面種類接在 entity 之後，例如 `MA::pad__top::band=1`。[命名規則](../design/sgb/identity.qmd#band-group-names)由 SGB 設計頁負責；請從索引映射讀取帶的成員，不要解析名稱。
+群組名稱以 `__` 把面種類接在 entity 之後，例如 `MA::pad__top::band=1`。[命名規則](../design/sgb/exact/identity.qmd#band-group-names)由 SGB 設計頁負責；請從索引映射讀取帶的成員，不要解析名稱。
 
 ::: {.callout-note collapse="true" title="列、側與裂開的 sheet"}
 索引映射（結構 v3）為每個表面列記錄 `row` 與 `group`、`interface_type`、`band`、`side`、`face_sides`、`entities`、`net` 與 `attributes`，並以譜系成員資格作為歸屬資訊：譜系不加權任何東西。單側列把 `above` 或 `below` 對應到 Palace 後處理的側。兩側都是真空的 Route A sheet 是一個從兩側積分的面，需要 Palace 的內部邊界裂開；SCGSim 恰好在某個已設定的列有 `shared_face_group` 時寫出 `Model.CrackInternalBoundaryElements`；沒有在 sheet 上設定 `MA` 或 `MS` 膜層的執行，會保留 Palace 的預設值。在不同位置分別位於真空與介電質之上的 sheet，會在不同屬性上得到各自的 `MA` 與 `MS` 列。

@@ -21,10 +21,10 @@ from sgb_scenes import random_layout  # noqa: E402
 
 from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
-from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
-from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: E402
+from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
+from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.verification.loaded import verify_loaded  # noqa: E402
+from scgsim.geometry.sgb.checks.verification.loaded import verify_loaded  # noqa: E402
 
 # the children run through ``emission.py`` itself, so each starts with every import of the full script, as a figure run does
 ENTRY_SCRIPT = Path(__file__).resolve().with_name("emission.py")

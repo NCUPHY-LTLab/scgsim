@@ -7,7 +7,7 @@ from palace_sgb_support import effective_input, mesh_run, sidecar_of, surface_ep
 
 import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,

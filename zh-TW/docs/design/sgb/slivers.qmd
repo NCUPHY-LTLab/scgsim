@@ -4,12 +4,12 @@ description: "Sliver 幾何的四種來源、哪些由建構消除、量測剩�
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
-scgsim-id: "docs/design/sgb/slivers"
+scgsim-id: "docs/design/sgb/checks/slivers"
 ---
 
 **Sliver** 指的是遠小於模型特徵的 face 或 edge：短於 grid $g$ 的 edge，或只有幾奈米寬的 face。sliver 迫使 mesher 在毀掉元素品質與產生大量細小元素之間做選擇；以 Boolean 為基礎的 CAD 也會在它們周圍失去 topology。
 
-SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人為結果，各有一個具體的機制把它們移除；第四種來自來源幾何本身，被視為幾何本來的樣子：SGB 保留它，並在 **sliver report** 中回報（D2，Human 決定：v1 只回報，不設門檻）。本頁依序說明這四種、report 的格式與每個數字的意義，以及 D2 的決定與日後可能的選項。sliver report 與 D2 的行為在 production（`scgsim.geometry.sgb.slivers`）已實作；本頁的圖與範例數字都由 production 算出；第 1 到第 3 種來源與較粗 grid 的範例是手工建的 stage 層 scene（需要真實輸入沒有的 layer 或次 grid 特徵），執行範例與第 4 種來源用真實輸入。
+SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人為結果，各有一個具體的機制把它們移除；第四種來自來源幾何本身，被視為幾何本來的樣子：SGB 保留它，並在 **sliver report** 中回報（D2，Human 決定：v1 只回報，不設門檻）。本頁依序說明這四種、report 的格式與每個數字的意義，以及 D2 的決定與日後可能的選項。sliver report 與 D2 的行為在 production（`scgsim.geometry.sgb.checks.slivers`）已實作；本頁的圖與範例數字都由 production 算出；第 1 到第 3 種來源與較粗 grid 的範例是手工建的 stage 層 scene（需要真實輸入沒有的 layer 或次 grid 特徵），執行範例與第 4 種來源用真實輸入。
 
 ## 執行範例的觀點
 

@@ -16,8 +16,8 @@ import sgb_supported_cells as disk_qubit
 from sgb_supported_kit import catalogue, type_bands
 
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records import circle_math
-from scgsim.geometry.sgb.records.carriers import (  # private-import: each build must compute its witnesses afresh, under its own context
+from scgsim.geometry.sgb.exact import circle_math
+from scgsim.geometry.sgb.exact.carriers import (  # private-import: each build must compute its witnesses afresh, under its own context
     _witness,
 )
 

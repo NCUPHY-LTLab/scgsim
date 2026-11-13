@@ -4,12 +4,12 @@ description: "已 label 並 dissolve 的 arrangement 如何成為 horizontal fac
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
-scgsim-id: "docs/design/sgb/assembly"
+scgsim-id: "docs/design/sgb/topology/assembly"
 ---
 
 已 label 的平面 cell 要變成可以交給 mesher 的實體模型，SGB 不使用任何 CAD kernel，而是直接由 arrangement 的 vertex 與 edge 組裝出 horizontal face、垂直 wall、vertical edge、shell 與 volume。本頁說明每一種的建構規則、讓 wall 保持最小的 coalescing 規則，以及相鄰 volume 為什麼會落在同一個 face 上。
 
-文中 **cell** 指 arrangement 中的平面區域，**face** 指輸出的 BREP face：一個 level cell 需要 face 時，才會成為一個 horizontal face。Assembly 是 S6 階段（production：`scgsim.geometry.sgb.assembly`），輸入是已 dissolve 的 slab arrangement $S_i$ 與 level arrangement $A_i$（含 label 與 link），輸出是一組 vertex、edge、face 與 volume，每個 entity 都有 [identity](identity.qmd)，[emission](emission.qmd) 可以由下而上寫出。
+文中 **cell** 指 arrangement 中的平面區域，**face** 指輸出的 BREP face：一個 level cell 需要 face 時，才會成為一個 horizontal face。Assembly 是 S6 階段（production：`scgsim.geometry.sgb.topology.assembly`），輸入是已 dissolve 的 slab arrangement $S_i$ 與 level arrangement $A_i$（含 label 與 link），輸出是一組 vertex、edge、face 與 volume，每個 entity 都有 [identity](identity.qmd)，[emission](emission.qmd) 可以由下而上寫出。
 
 ## 組裝什麼，依什麼順序
 

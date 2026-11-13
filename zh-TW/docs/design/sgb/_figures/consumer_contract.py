@@ -36,14 +36,14 @@ from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
 
 from scgsim.contracts.sgb_sidecar import read_sidecar, views  # noqa: E402
 from scgsim.geometry.sgb import build_sgb_geometry  # noqa: E402
-from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
+from scgsim.geometry.sgb.bands.requests import (  # noqa: E402
     ConductorSurface,
     InsetRequest,
     RefinementRequest,
 )
-from scgsim.geometry.sgb.exchange.guard import read_step_guard  # noqa: E402
-from scgsim.geometry.sgb.exchange.step import export_aedt_step  # noqa: E402
-from scgsim.geometry.sgb.verification.loaded import (  # noqa: E402
+from scgsim.geometry.sgb.output.exchange.guard import read_step_guard  # noqa: E402
+from scgsim.geometry.sgb.output.exchange.step import export_aedt_step  # noqa: E402
+from scgsim.geometry.sgb.checks.verification.loaded import (  # noqa: E402
     apply_sidecar_embeds,
     verify_loaded,
 )

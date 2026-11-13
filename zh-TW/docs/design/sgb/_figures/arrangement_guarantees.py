@@ -2,7 +2,7 @@
 
 Computed here (the page quotes these numbers):
 
-* guarantees of iterated snap rounding (``scgsim.geometry.sgb.noding``) on random segment sets and on layout-like inputs: no crossings, no vertex on an
+* guarantees of iterated snap rounding (``scgsim.geometry.sgb.arrangement.noding``) on random segment sets and on layout-like inputs: no crossings, no vertex on an
   edge interior, minimum edge length, minimum vertex-edge distance, maximum deviation from the carriers, and the same
   measurements after round 1 only (classic snap rounding);
 * cost: snap-rounding plus DCEL time against the number of segments, and hot pixels against N from the production
@@ -39,17 +39,17 @@ from sgb_scenes import airbridge, random_layout
 from scgsim.geometry.sgb.arrangement.arcs import realise, sample_arc
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.noding.snap_rounding import (
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     Segment,
     assemble_chain,
     crossing_pixels_kernel,
     hits_kernel,
     snap_round,
 )
-from scgsim.geometry.sgb.noding.snap_rounding import canonical_key as canonical
-from scgsim.geometry.sgb.noding.spatial_hash import HotGrid
-from scgsim.geometry.sgb.records.carriers import ArcCarrier, EdgeCarrier, Lineage
-from scgsim.geometry.sgb.slivers.report import sliver_report
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import canonical_key as canonical
+from scgsim.geometry.sgb.arrangement.noding.spatial_hash import HotGrid
+from scgsim.geometry.sgb.exact.carriers import ArcCarrier, EdgeCarrier, Lineage
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 
 SQRT_HALF = math.sqrt(2) / 2
 

@@ -16,7 +16,7 @@ from sgb_scenes import GRID, conductor, footprint, rect_um
 from test_sgb_sidecar import sidecar_of
 
 from scgsim.contracts.sgb_sidecar import sidecar_schema, views
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
@@ -24,8 +24,8 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
 )
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.records.prisms import (
+from scgsim.geometry.sgb.exact.grid import exact_z
+from scgsim.geometry.sgb.exact.prisms import (
     PortIdentity,
     PrismCatalogue,
     PrismRecord,

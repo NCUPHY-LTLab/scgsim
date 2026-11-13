@@ -40,14 +40,14 @@ from sgb_scenes import slab_model  # noqa: E402
 
 from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.build import build_sgb_geometry  # noqa: E402
-from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
+from scgsim.geometry.sgb.bands.requests import (  # noqa: E402
     ConductorSurface,
     InsetRequest,
     SolutionInterface,
 )
 from scgsim.geometry.sgb.errors import InputError  # noqa: E402
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.records.carriers import LineEdge  # noqa: E402
+from scgsim.geometry.sgb.exact.carriers import LineEdge  # noqa: E402
 
 G = kit.G_UM
 MARGINS = (0.5, 1.0)

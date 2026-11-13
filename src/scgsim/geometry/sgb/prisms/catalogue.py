@@ -27,8 +27,8 @@ from scgsim.geometry.sgb.prisms.entities import (
 )
 from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, source_footprints
 from scgsim.geometry.sgb.prisms.ports import port_prisms
-from scgsim.geometry.sgb.records.grid import Grid
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
+from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
 
 
 def build_prism_catalogue(

@@ -26,7 +26,7 @@ from scgsim.geometry.primitives.grid import (
     build_grid_arrangement,
     geometry_grid_scope,
 )
-from scgsim.geometry.sgb.derivation.labelled import derive_labelled_arrangements
+from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_labelled_arrangements
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.source.grid import apply_geometry_grid

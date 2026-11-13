@@ -15,8 +15,8 @@ from scgsim.documentation import see_also
 from scgsim.geometry.models.grid import format_box, format_point
 from scgsim.geometry.models.section import CutLine
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.plane import Point, RepPoint
-from scgsim.geometry.sgb.records.grid import Grid
+from scgsim.geometry.sgb.exact.plane import Point, RepPoint
+from scgsim.geometry.sgb.exact.grid import Grid
 
 Along = int | Fraction | float
 """A position along the cut, in grid units: exact at a crossing, a float only for the place of an arc."""

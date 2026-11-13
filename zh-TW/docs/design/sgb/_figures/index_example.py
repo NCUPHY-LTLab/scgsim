@@ -46,7 +46,7 @@ from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.prisms.levels import build_levels
-from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
+from scgsim.geometry.sgb.checks.verification.loaded import apply_sidecar_embeds
 
 GROUP_COLOURS = {
     "SA": "#9ecae1",
