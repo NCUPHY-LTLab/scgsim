@@ -21,7 +21,7 @@ from scgsim.refusal import refusal
 
 from ..mesh.physical_groups import Groups, rows_of
 from ..source.surface_epr import SurfaceEprSpec, SurfaceEprSpecs
-from .index import InsetSelection, SurfaceEprEntry, SurfaceRow
+from .index import IndexedRows, InsetSelection, SurfaceEprEntry, SurfaceRow
 
 
 def build_surface_epr_postprocessing(
@@ -29,7 +29,7 @@ def build_surface_epr_postprocessing(
     specs: SurfaceEprSpecs,
     *,
     model_l0_m: float = 1e-6,
-) -> tuple[list[dict[str, Any]], list[SurfaceEprEntry]]:
+) -> IndexedRows[SurfaceEprEntry]:
     """Emit Palace ``Dielectric`` rows and their index entries (index map schema 3) from the Surface-EPR rows of ``groups``.
 
     For each spec (interface type) and each surface unit of that type -- an unbanded row, or all bands of
@@ -106,7 +106,7 @@ def build_surface_epr_postprocessing(
                 inset=request.description(selected),
             )
         )
-    return rows, entries
+    return IndexedRows(rows, entries)
 
 
 @dataclass(frozen=True)

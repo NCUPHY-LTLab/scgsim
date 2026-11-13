@@ -28,7 +28,7 @@ from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 from scgsim.refusal import refusal
 
 from ..config.config_records import ConfigInput
-from ..config.files import persist_problem_files
+from ..config.files import MetadataFile, persist_problem_files
 from ..config.index import IndexEntry
 from ..config.numerical import NumericalControls, ProblemDefaults
 from ..mesh.build import (
@@ -471,8 +471,8 @@ class PalaceSimulation(ABC):
             )
         return controls.with_defaults(self.numerical_defaults)
 
-    def _start_config(self) -> tuple[MeshBuildResult, ConfigInput]:
-        """Discard the previous config and return the current mesh and the shared input of a new config.
+    def _start_config(self) -> ConfigInput:
+        """Discard the previous config and return the shared input of a new config of the current mesh.
 
         Raises:
             ValueError: ``mesh()`` has not built the current mesh, or the numerical controls leave AMR open.
@@ -482,7 +482,7 @@ class PalaceSimulation(ABC):
         mesh = self._require("write_config", self._mesh_result)
         materials = self._require("write_config", self._materials)
         _check_mesh_files(mesh)
-        return mesh, ConfigInput(
+        return ConfigInput(
             problem=self.problem,
             groups=mesh.groups,
             mesh_path=mesh.mesh_path,
@@ -492,17 +492,14 @@ class PalaceSimulation(ABC):
         )
 
     def _finish_config(
-        self,
-        mesh: MeshBuildResult,
-        config: Mapping[str, Any],
-        metadata: Sequence[tuple[str, Mapping[str, Any]]],
+        self, config: Mapping[str, Any], metadata: Sequence[MetadataFile]
     ) -> Path:
         """Write each metadata file in order, then ``config.json`` last, and reach ``CONFIG_WRITTEN``."""
+        mesh = self._require("write_config", self._mesh_result)
         config_path = mesh.output_dir / CONFIG
         self.config_path = persist_problem_files(
-            metadata_files=tuple(
-                (mesh.output_dir / relative, payload) for relative, payload in metadata
-            ),
+            run_folder=mesh.output_dir,
+            metadata_files=metadata,
             config_path=config_path,
             config=config,
         )

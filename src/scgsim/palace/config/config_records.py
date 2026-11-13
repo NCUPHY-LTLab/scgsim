@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from scgsim.refusal import refusal
 
@@ -21,6 +21,19 @@ from .index import IndexEntry
 from .numerical import NumericalControls
 
 MODEL_L0_M = 1e-6
+
+
+class GroundResolution(TypedDict):
+    """How the Ground boundary was resolved, as the index map records it: requested Nets, physical and exterior."""
+
+    requested_net_ids: list[str]
+    physical_net_ids: list[str]
+    conductor_component_ids: list[str]
+    physical_names: list[str]
+    physical_attributes: list[int]
+    exterior_physical_names: list[str]
+    exterior_attributes: list[int]
+    union_attributes: list[int]
 
 
 @dataclass(frozen=True)
@@ -148,7 +161,7 @@ class ElectrostaticConfigBuildResult:
     config: dict[str, Any]
     index_entries: list[IndexEntry]
     material_resolution: list[dict[str, Any]]
-    ground_boundary_resolution: dict[str, Any]
+    ground_boundary_resolution: GroundResolution
 
 
 @dataclass(frozen=True)

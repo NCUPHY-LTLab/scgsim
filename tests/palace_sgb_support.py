@@ -79,10 +79,10 @@ def lower_surface_epr(
     groups: Mapping[str, Any], specs: Mapping[str, Mapping[str, Any]], **options: Any
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """The ``Dielectric`` rows of ``specs`` (a spec mapping) and their index entries as the index map holds them."""
-    rows, entries = build_surface_epr_postprocessing(
+    built = build_surface_epr_postprocessing(
         groups, SurfaceEprSpecs.normalized(specs, materials={}), **options
     )
-    return rows, [entry.to_payload() for entry in entries]
+    return built.rows, [entry.to_payload() for entry in built.entries]
 
 
 def mesh_run(  # noqa: PLR0913 -- a test builder with independent switches

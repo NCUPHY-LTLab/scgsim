@@ -9,12 +9,34 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from scgsim.refusal import refusal
 
-from .config_records import ElectrostaticSettings, TerminalBinding, optional_string
+from .config_records import (
+    ElectrostaticSettings,
+    GroundResolution,
+    TerminalBinding,
+    optional_string,
+)
 from .index import TerminalEntry
+
+
+@dataclass(frozen=True)
+class ElectrostaticBoundaries:
+    """The ``Boundaries`` block of an Electrostatic config, its Terminal index entries and its Ground resolution."""
+
+    boundaries: dict[str, object]
+    terminals: list[TerminalEntry]
+    ground_resolution: GroundResolution
+
+
+class _ConductorIdentity(NamedTuple):
+    """One conductor surface group: its component (the sidecar Entity id), its exact Net and its attributes."""
+
+    component_id: str
+    net_id: str
+    attributes: tuple[int, ...]
 
 
 @dataclass
@@ -30,8 +52,7 @@ class _BoundaryState:
     def collect_conductors(self) -> None:
         """Collect active conductor component, net and physical-attribute identities."""
         for physical_name, info in self.groups.get("pec_surfaces", {}).items():
-            component_id, net_id, attrs = _conductor_identity(info)
-            self._record_component(physical_name, component_id, net_id, attrs)
+            self._record_component(physical_name, _conductor_identity(info))
         if not self.component_attrs:
             raise ValueError(
                 refusal(
@@ -41,8 +62,9 @@ class _BoundaryState:
             )
 
     def _record_component(
-        self, physical_name: str, component_id: str, net_id: str, attrs: tuple[int, ...]
+        self, physical_name: str, conductor: _ConductorIdentity
     ) -> None:
+        component_id, net_id, attrs = conductor
         self.component_attrs.setdefault(component_id, set()).update(attrs)
         previous_net = self.component_nets.get(component_id)
         if previous_net is not None and previous_net != net_id:
@@ -80,37 +102,33 @@ def build_electrostatic_boundaries(
     terminals: Sequence[TerminalBinding],
     ground_net_ids: Sequence[str],
     electrostatic: ElectrostaticSettings,
-) -> tuple[dict[str, object], list[TerminalEntry], dict[str, Any]]:
+) -> ElectrostaticBoundaries:
     """Build exact-net terminal and physical/exterior ground assignments, under the problem's boundary policies."""
     state = _BoundaryState(groups)
     state.collect_conductors()
-    terminal_rows, terminal_index, assigned = _terminal_bindings(state, terminals)
-    requested_grounds, physical_ground_components = _physical_grounds(
-        state, ground_net_ids, assigned
-    )
+    bound = _terminal_bindings(state, terminals)
+    physical = _physical_grounds(state, ground_net_ids, bound.assigned)
     _assign_unrequested_conductors(
         state,
-        assigned,
-        physical_ground_components,
+        bound.assigned,
+        physical.components,
         electrostatic.unassigned_conductor_policy,
     )
-    exterior_attrs, exterior_names = _exterior_grounds(
-        groups, electrostatic.exterior_boundary_policy
-    )
+    exterior = _exterior_grounds(groups, electrostatic.exterior_boundary_policy)
     return _assemble_boundaries(
         state,
         _BoundaryOutput(
-            terminal_rows,
-            terminal_index,
-            requested_grounds,
-            physical_ground_components,
-            exterior_attrs,
-            exterior_names,
+            bound.rows,
+            bound.entries,
+            physical.requested,
+            physical.components,
+            exterior.attributes,
+            exterior.names,
         ),
     )
 
 
-def _conductor_identity(info: Mapping[str, Any]) -> tuple[str, str, tuple[int, ...]]:
+def _conductor_identity(info: Mapping[str, Any]) -> _ConductorIdentity:
     """The conductor component (the sidecar Entity id), its exact Net and its attributes."""
     component_id = optional_string(info.get("entity"))
     net_id = optional_string(info.get("net"))
@@ -130,12 +148,21 @@ def _conductor_identity(info: Mapping[str, Any]) -> tuple[str, str, tuple[int, .
         raise ValueError(
             f"SGB conductor component {component_id!r} has no physical attributes."
         )
-    return component_id, net_id, attrs
+    return _ConductorIdentity(component_id, net_id, attrs)
+
+
+@dataclass(frozen=True)
+class _TerminalBindings:
+    """The Terminal rows and index entries, and the conductor components they claim."""
+
+    rows: list[dict[str, object]]
+    entries: list[TerminalEntry]
+    assigned: set[str]
 
 
 def _terminal_bindings(
     state: _BoundaryState, terminals: Sequence[TerminalBinding]
-) -> tuple[list[dict[str, object]], list[TerminalEntry], set[str]]:
+) -> _TerminalBindings:
     rows: list[dict[str, object]] = []
     index_rows: list[TerminalEntry] = []
     assigned: set[str] = set()
@@ -151,10 +178,17 @@ def _terminal_bindings(
             _terminal_index_entry(state, terminal, index, matching, attrs)
         )
         assigned.update(matching)
-    return rows, index_rows, assigned
+    return _TerminalBindings(rows, index_rows, assigned)
 
 
-def _terminal_identity(terminal: TerminalBinding) -> tuple[str, str]:
+class _TerminalIdentity(NamedTuple):
+    """A terminal's name and the exact Net it binds."""
+
+    name: str
+    net_id: str
+
+
+def _terminal_identity(terminal: TerminalBinding) -> _TerminalIdentity:
     net_id = optional_string(terminal.net_id)
     name = optional_string(terminal.name)
     if net_id is None or name is None:
@@ -165,7 +199,7 @@ def _terminal_identity(terminal: TerminalBinding) -> tuple[str, str]:
                 found={"name": terminal.name, "net_id": terminal.net_id},
             )
         )
-    return name, net_id
+    return _TerminalIdentity(name, net_id)
 
 
 def _require_new_terminal_net(net_id: str, seen_nets: set[str]) -> None:
@@ -228,9 +262,16 @@ def _terminal_index_entry(
     )
 
 
+class _PhysicalGrounds(NamedTuple):
+    """The Nets the caller grounded, in their order, and the conductor components on them."""
+
+    requested: list[str]
+    components: set[str]
+
+
 def _physical_grounds(
     state: _BoundaryState, ground_net_ids: Sequence[str], assigned: set[str]
-) -> tuple[list[str], set[str]]:
+) -> _PhysicalGrounds:
     requested: list[str] = []
     ground_components: set[str] = set()
     for value in ground_net_ids:
@@ -258,7 +299,7 @@ def _physical_grounds(
         requested.append(net_id)
         ground_components.update(matching)
         assigned.update(matching)
-    return requested, ground_components
+    return _PhysicalGrounds(requested, ground_components)
 
 
 def _assign_unrequested_conductors(
@@ -276,9 +317,16 @@ def _assign_unrequested_conductors(
         ground_components.update(unassigned)
 
 
+class _ExteriorGrounds(NamedTuple):
+    """The attributes and group names of the domain-boundary faces grounded by the exterior policy."""
+
+    attributes: set[int]
+    names: set[str]
+
+
 def _exterior_grounds(
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]], policy: str
-) -> tuple[set[int], set[str]]:
+) -> _ExteriorGrounds:
     attrs: set[int] = set()
     physical_names: set[str] = set()
     if policy == "ground":
@@ -294,13 +342,13 @@ def _exterior_grounds(
                     found=sorted(groups.get("boundary_surfaces", {})),
                 )
             )
-    return attrs, physical_names
+    return _ExteriorGrounds(attrs, physical_names)
 
 
 def _assemble_boundaries(
     state: _BoundaryState,
     output: _BoundaryOutput,
-) -> tuple[dict[str, object], list[TerminalEntry], dict[str, Any]]:
+) -> ElectrostaticBoundaries:
     if set(state.attribute_components).intersection(output.exterior_attrs):
         raise ValueError(
             refusal(
@@ -318,7 +366,7 @@ def _assemble_boundaries(
     if ground_attrs:
         boundary_map["Ground"] = {"Attributes": sorted(ground_attrs)}
     _validate_terminal_map(output.terminal_index, output.terminal_rows)
-    return (
+    return ElectrostaticBoundaries(
         boundary_map,
         output.terminal_index,
         _ground_resolution(state, output, physical_attrs, ground_attrs),
@@ -350,7 +398,7 @@ def _ground_resolution(
     output: _BoundaryOutput,
     physical_attrs: list[int],
     union_attrs: set[int],
-) -> dict[str, Any]:
+) -> GroundResolution:
     sorted_components = sorted(output.physical_ground_components)
     return {
         "requested_net_ids": sorted(output.requested_grounds),
@@ -372,4 +420,8 @@ def _ground_resolution(
     }
 
 
-__all__ = ["build_electrostatic_boundaries"]
+__all__ = [
+    "ElectrostaticBoundaries",
+    "GroundResolution",
+    "build_electrostatic_boundaries",
+]

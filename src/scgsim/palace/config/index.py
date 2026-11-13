@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Generic, TypeVar
 
 from scgsim.contracts.palace_index_map import (
     DIELECTRIC_SECTION,
@@ -26,6 +26,16 @@ from scgsim.contracts.palace_run_folder import EPR_SELECTION_SCHEMA
 from scgsim.refusal import refusal
 
 SURFACE_INTERFACES = ("MA", "MS", "SA")
+
+EntryT = TypeVar("EntryT")
+
+
+@dataclass(frozen=True)
+class IndexedRows(Generic[EntryT]):
+    """Rows one builder writes into ``config.json`` and the index-map entries that describe them, in one order."""
+
+    rows: list[dict[str, Any]]
+    entries: list[EntryT]
 
 
 @dataclass(frozen=True)
@@ -328,7 +338,16 @@ def check_epr_request(
             )
 
 
+@dataclass(frozen=True)
+class LumpedPortRows(IndexedRows[PortEntry]):
+    """The ``LumpedPort`` rows and entries, with the port information file's record of each port."""
+
+    information: list[dict[str, Any]]
+
+
 __all__ = [
+    "IndexedRows",
+    "LumpedPortRows",
     "SURFACE_INTERFACES",
     "EnergyEntry",
     "EprRequest",

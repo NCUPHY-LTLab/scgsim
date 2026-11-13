@@ -22,6 +22,7 @@ from scgsim.refusal import refusal
 
 from ..config.config import build_eigenmode_config
 from ..config.config_records import EigenmodeConfigBuildResult, EigenmodeSettings
+from ..config.files import MetadataFile
 from ..config.index import EprRequest, check_epr_request
 from ..config.numerical import NumericalControls, ProblemDefaults
 from ..source.ports import RequestedPort
@@ -224,12 +225,12 @@ class EigenmodeSim(PalaceSimulation):
                 bindings, or the EPR request names a binding the config does not have.
             FileNotFoundError: a file of the current mesh is gone from the run folder.
         """
-        mesh, common = self._start_config()
+        common = self._start_config()
         result = build_eigenmode_config(
             common, ports=self._resolved_ports, eigenmode=self._eigenmode_settings()
         )
         check_epr_request(self.epr_request, result.index_entries)
-        return self._finish_config(mesh, result.config, self._metadata(result))
+        return self._finish_config(result.config, self._metadata(result))
 
     def _eigenmode_settings(self) -> EigenmodeSettings:
         """The mode controls as the config reads them, checked again in case an attribute was assigned."""
@@ -240,9 +241,7 @@ class EigenmodeSim(PalaceSimulation):
             save_fields=self.save_fields,
         )
 
-    def _metadata(
-        self, result: EigenmodeConfigBuildResult
-    ) -> tuple[tuple[str, dict[str, Any]], ...]:
+    def _metadata(self, result: EigenmodeConfigBuildResult) -> tuple[MetadataFile, ...]:
         """The metadata files written with ``config.json``, by run-folder path, in the order they are written."""
         extra = (
             {}
@@ -250,13 +249,16 @@ class EigenmodeSim(PalaceSimulation):
             else {"epr_request": self.epr_request.to_payload()}
         )
         return (
-            (INDEX_MAP, index_map(result.index_entries, **extra)),
-            (
+            MetadataFile(INDEX_MAP, index_map(result.index_entries, **extra)),
+            MetadataFile(
                 MATERIAL_RESOLUTION,
                 {"schema_version": 1, "solution_volumes": result.material_resolution},
             ),
-            (PORT_INFORMATION, {"schema_version": 1, "ports": result.port_information}),
-            (NUMERICAL_CONTROLS, self.numerical.to_payload()),
+            MetadataFile(
+                PORT_INFORMATION,
+                {"schema_version": 1, "ports": result.port_information},
+            ),
+            MetadataFile(NUMERICAL_CONTROLS, self.numerical.to_payload()),
         )
 
     # ---- The core's questions ------------------------------------------------------------------------

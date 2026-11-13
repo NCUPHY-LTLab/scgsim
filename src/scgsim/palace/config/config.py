@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from numbers import Real
 from typing import Any
 
@@ -28,7 +29,7 @@ from .config_records import (
     TerminalBinding,
     optional_string,
 )
-from .index import EnergyEntry, PortEntry, SurfaceEprEntry
+from .index import EnergyEntry, IndexedRows, LumpedPortRows, PortEntry, SurfaceEprEntry
 from .numerical import build_output_formats, build_refinement, linear_solver
 from .surface_epr import build_surface_epr_postprocessing
 
@@ -51,7 +52,7 @@ def build_electrostatic_config(
         ValueError: a terminal or ground Net does not match the mesh, a material is invalid, or a required
             Surface-EPR spec has no face.
     """
-    boundaries, terminal_entries, ground_resolution = build_electrostatic_boundaries(
+    boundaries = build_electrostatic_boundaries(
         groups=common.groups,
         terminals=terminals,
         ground_net_ids=ground_net_ids,
@@ -59,20 +60,20 @@ def build_electrostatic_config(
     )
     domain_volumes = _domains_from_solution_volumes(common.groups.get("volumes", {}))
     material_rows = _materials_from_solution_volumes(domain_volumes, common.materials)
-    epr_rows, epr_entries = _surface_epr_rows(common)
-    energy_rows, energy_entries = _domain_energy_rows(domain_volumes, common.materials)
+    epr = _surface_epr_rows(common)
+    energy = _domain_energy_rows(domain_volumes, common.materials)
     config = _config(
         common,
         solver={ELECTROSTATIC.name: {"Save": electrostatic.save_fields}},
-        boundaries=boundaries,
-        domains=(material_rows, energy_rows),
-        epr=(epr_rows, epr_entries),
+        boundaries=boundaries.boundaries,
+        domains=_Domains(material_rows, energy),
+        epr=epr,
     )
     return ElectrostaticConfigBuildResult(
         config=config,
-        index_entries=[*terminal_entries, *energy_entries, *epr_entries],
+        index_entries=[*boundaries.terminals, *energy.entries, *epr.entries],
         material_resolution=_material_resolution(domain_volumes, common.materials),
-        ground_boundary_resolution=ground_resolution,
+        ground_boundary_resolution=boundaries.ground_resolution,
     )
 
 
@@ -91,37 +92,43 @@ def build_eigenmode_config(
     groups = common.groups
     domain_volumes = _domains_from_solution_volumes(groups.get("volumes", {}))
     material_rows = _materials_from_solution_volumes(domain_volumes, common.materials)
-    energy_rows, energy_entries = _domain_energy_rows(domain_volumes, common.materials)
-    epr_rows, epr_entries = _surface_epr_rows(common)
-    port_rows, port_info, port_entries = _lumped_ports(groups, ports)
-    _refuse_ports_on_loss_groups(port_rows, epr_rows)
+    energy = _domain_energy_rows(domain_volumes, common.materials)
+    epr = _surface_epr_rows(common)
+    ports_rows = _lumped_ports(groups, ports)
+    _refuse_ports_on_loss_groups(ports_rows.rows, epr.rows)
     boundaries: dict[str, Any] = {"PEC": {"Attributes": _pec_attributes(groups)}}
-    if port_rows:
-        boundaries["LumpedPort"] = port_rows
+    if ports_rows.rows:
+        boundaries["LumpedPort"] = ports_rows.rows
     config = _config(
         common,
         solver={EIGENMODE.name: _eigenmode_block(eigenmode)},
         boundaries=boundaries,
-        domains=(material_rows, energy_rows),
-        epr=(epr_rows, epr_entries),
+        domains=_Domains(material_rows, energy),
+        epr=epr,
     )
     return EigenmodeConfigBuildResult(
         config=config,
-        port_information=port_info,
-        index_entries=[*port_entries, *energy_entries, *epr_entries],
+        port_information=ports_rows.information,
+        index_entries=[*ports_rows.entries, *energy.entries, *epr.entries],
         material_resolution=_material_resolution(domain_volumes, common.materials),
     )
 
 
-def _surface_epr_rows(
-    common: ConfigInput,
-) -> tuple[list[dict[str, Any]], list[SurfaceEprEntry]]:
+def _surface_epr_rows(common: ConfigInput) -> IndexedRows[SurfaceEprEntry]:
     """The Surface-EPR ``Dielectric`` rows and their index entries; none when Surface EPR was not requested."""
     if common.surface_epr_specs is None:
-        return [], []
+        return IndexedRows([], [])
     return build_surface_epr_postprocessing(
         common.groups, common.surface_epr_specs, model_l0_m=MODEL_L0_M
     )
+
+
+@dataclass(frozen=True)
+class _Domains:
+    """The ``Domains`` of a config: one material row per solution volume, and the energy rows and entries."""
+
+    materials: list[dict[str, Any]]
+    energy: IndexedRows[EnergyEntry]
 
 
 def _config(
@@ -129,15 +136,13 @@ def _config(
     *,
     solver: dict[str, Any],
     boundaries: dict[str, Any],
-    domains: tuple[list[dict[str, Any]], list[dict[str, Any]]],
-    epr: tuple[list[dict[str, Any]], list[SurfaceEprEntry]],
+    domains: _Domains,
+    epr: IndexedRows[SurfaceEprEntry],
 ) -> dict[str, Any]:
     """The config both problems write, in Palace's section order, around the problem's solver block."""
     numerical = common.numerical
-    material_rows, energy_rows = domains
-    epr_rows, epr_entries = epr
-    if epr_rows:
-        boundaries["Postprocessing"] = {"Dielectric": epr_rows}
+    if epr.rows:
+        boundaries["Postprocessing"] = {"Dielectric": epr.rows}
     config: dict[str, Any] = {
         "Problem": {
             "Type": common.problem,
@@ -158,11 +163,11 @@ def _config(
         },
         "Boundaries": boundaries,
         "Domains": {
-            "Materials": material_rows,
-            "Postprocessing": {"Energy": energy_rows, "Probe": []},
+            "Materials": domains.materials,
+            "Postprocessing": {"Energy": domains.energy.rows, "Probe": []},
         },
     }
-    if _requires_internal_boundary_cracking(epr_entries):
+    if _requires_internal_boundary_cracking(epr.entries):
         config["Model"]["CrackInternalBoundaryElements"] = True
     return config
 
@@ -234,13 +239,13 @@ def _requires_internal_boundary_cracking(
 
 
 def _domain_energy_rows(
-    domain_volumes: list[tuple[str, Mapping[str, Any]]],
+    domain_volumes: Mapping[str, Mapping[str, Any]],
     materials: Mapping[str, Mapping[str, Any]],
-) -> tuple[list[dict[str, Any]], list[EnergyEntry]]:
+) -> IndexedRows[EnergyEntry]:
     """The ``Domains.Postprocessing.Energy`` rows, one per solution volume, and their index entries."""
     rows = [
         {"Index": index, "Attributes": sorted(info["attributes"])}
-        for index, (_, info) in enumerate(domain_volumes, start=1)
+        for index, info in enumerate(domain_volumes.values(), start=1)
     ]
     entries = [
         EnergyEntry(
@@ -251,14 +256,14 @@ def _domain_energy_rows(
             entities=list(info["entities"]),
         )
         for index, ((name, info), row) in enumerate(
-            zip(domain_volumes, rows, strict=True), start=1
+            zip(domain_volumes.items(), rows, strict=True), start=1
         )
     ]
-    return rows, entries
+    return IndexedRows(rows, entries)
 
 
 def _material_resolution(
-    domain_volumes: list[tuple[str, Mapping[str, Any]]],
+    domain_volumes: Mapping[str, Mapping[str, Any]],
     materials: Mapping[str, Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     return [
@@ -267,13 +272,11 @@ def _material_resolution(
             "attributes": sorted(volume["attributes"]),
             "material": _material_identity(volume, materials),
         }
-        for name, volume in domain_volumes
+        for name, volume in domain_volumes.items()
     ]
 
 
-def _lumped_ports(
-    groups: Groups, ports: Sequence[LayoutPortBinding]
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[PortEntry]]:
+def _lumped_ports(groups: Groups, ports: Sequence[LayoutPortBinding]) -> LumpedPortRows:
     """The ``LumpedPort`` rows, port information and index entries of ``ports``, each bound to its SGB group ``P<index>``.
 
     A row's circuit keys are the port's ``circuit``, written unchanged; no port is excited.
@@ -348,7 +351,7 @@ def _lumped_ports(
                 expected=f"{len(ports)} port groups",
             )
         )
-    return rows, information, entries
+    return LumpedPortRows(rows, entries, information)
 
 
 def _direction_tuple(value: Any, name: str) -> tuple[float, float, float]:
@@ -366,15 +369,13 @@ def _direction_tuple(value: Any, name: str) -> tuple[float, float, float]:
 
 def _domains_from_solution_volumes(
     groups: Mapping[str, Mapping[str, Any]],
-) -> list[tuple[str, Mapping[str, Any]]]:
-    """Sort solver volumes as deterministic domains."""
-    return sorted(
-        ((name, dict(info)) for name, info in groups.items()), key=lambda item: item[0]
-    )
+) -> dict[str, Mapping[str, Any]]:
+    """The solver volumes by group name, in name order: the order the domains are numbered in."""
+    return {name: dict(groups[name]) for name in sorted(groups)}
 
 
 def _materials_from_solution_volumes(
-    domain_volumes: list[tuple[str, Mapping[str, Any]]],
+    domain_volumes: Mapping[str, Mapping[str, Any]],
     materials: Mapping[str, Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     """Build Palace-domain material rows from explicit material records."""
@@ -390,7 +391,7 @@ def _materials_from_solution_volumes(
 
     material_rows: list[dict[str, Any]] = []
     seen_attributes: set[int] = set()
-    for name, volume in domain_volumes:
+    for name, volume in domain_volumes.items():
         attrs = sorted(int(item) for item in volume["attributes"])
         material_id = optional_string(volume.get("material"))
         if not material_id:
