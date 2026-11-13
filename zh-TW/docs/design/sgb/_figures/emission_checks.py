@@ -26,11 +26,11 @@ from sgb_gmsh_oracle import (  # noqa: E402
 )
 
 from scgsim.contracts.sgb_sidecar import views  # noqa: E402
-from scgsim.geometry.sgb.checks.verification.loaded import (  # noqa: E402
+from scgsim.geometry.sgb.output.verification.loaded import (  # noqa: E402
     apply_sidecar_embeds,
     verify_loaded,
 )
-from scgsim.geometry.sgb.checks.verification.occt import (  # noqa: E402
+from scgsim.geometry.sgb.output.verification.occt import (  # noqa: E402
     check_file,
     check_shape,
     read_brep,

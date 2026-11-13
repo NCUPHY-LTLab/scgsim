@@ -30,16 +30,14 @@ from typing import Any, cast
 from scgsim.contracts.sgb_sidecar import Sidecar
 from scgsim.contracts.sgb_sidecar.records import SurfaceGroup
 from scgsim.geometry.sgb.bands.requests import (
-    FACE_KINDS,
+    BANDED_FACE_KINDS,
+    CONDUCTOR_SIDES,
+    ConductorSide,
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
-    Side,
 )
 from scgsim.geometry.sgb.exact.grid import Grid
-
-# The kinds of face a conductor Entity has that SGB can band: a concrete request names one of these.
-CONDUCTOR_FACE_KINDS: tuple[Side, ...] = ("sheet", "top", "bottom")
 
 
 def check_bandable_face_kinds(interface_type: str, face_kinds: list[str]) -> None:
@@ -49,11 +47,11 @@ def check_bandable_face_kinds(interface_type: str, face_kinds: list[str]) -> Non
     ``sheet``, ``top``, ``bottom`` and ``interface`` map onto themselves.  The remaining kind a surface group
     has, ``sidewall``, has no SGB equivalent because SGB never bands sidewalls.
     """
-    unbandable = [kind for kind in face_kinds if kind not in FACE_KINDS]
+    unbandable = [kind for kind in face_kinds if kind not in BANDED_FACE_KINDS]
     if unbandable:
         raise ValueError(
             f"Surface EPR {interface_type} face_kinds {unbandable} cannot carry inset margins; "
-            f"SGB bands only {list(FACE_KINDS)} (sidewalls are never banded)."
+            f"SGB bands only {list(BANDED_FACE_KINDS)} (sidewalls are never banded)."
         )
 
 
@@ -85,7 +83,8 @@ def inset_requests(
     if needs_unbanded_build(specs):
         if unbanded_sidecar is None:
             raise ValueError(
-                "inset_margins_by_entity_um needs the sidecar of an unbanded build to find the faces."
+                "inset_requests: specs with inset_margins_by_entity_um need unbanded_sidecar, the sidecar "
+                "of an unbanded build of the same input (build_banded_geometry builds it first)."
             )
         named = _named_conductor_requests(specs, unbanded_sidecar)
     by_type = [
@@ -235,10 +234,10 @@ def _conductor_faces(
         if (
             row["interface_type"] == interface_type
             and entity in group["entities"]
-            and kind in CONDUCTOR_FACE_KINDS
+            and kind in CONDUCTOR_SIDES
             and (face_kinds is None or kind in face_kinds)
         ):
-            faces.add(ConductorSurface(entity, cast(Side, kind)))
+            faces.add(ConductorSurface(entity, cast(ConductorSide, kind)))
     return faces
 
 

@@ -176,7 +176,7 @@ def _type_request(
         ),
         interface=None,
         margins_um=list(request.margins_um),
-        families=list(expansion.banded),
+        families=list(expansion.families),
         skipped=[
             SkippedFace(support=concrete_support(s.support), reason="no_gap_edge")
             for s in expansion.skipped

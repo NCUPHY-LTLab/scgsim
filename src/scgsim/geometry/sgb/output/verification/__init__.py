@@ -1,6 +1,6 @@
 """Checks of the written geometry: the Gmsh load check and what the OCCT checks add.
 
-* ``loaded``  -- :func:`~scgsim.geometry.sgb.checks.verification.loaded.verify_loaded`, the load check the tests
+* ``loaded``  -- :func:`~scgsim.geometry.sgb.output.verification.loaded.verify_loaded`, the load check the tests
   run after opening the XAO in Gmsh (the mesher trusts the files of one build and does not run it): counts, vertex positions, boundaries, face areas, solid
   volumes and physical groups against the sidecar, and re-applying the embeddings the sidecar records.
   It needs Gmsh only (the ``palace`` extra).

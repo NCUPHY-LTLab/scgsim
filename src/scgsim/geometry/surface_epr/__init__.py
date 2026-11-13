@@ -1,16 +1,17 @@
 """Backend-neutral Surface-EPR geometry: normalized specs, their SGB band requests and the banded build.
 
 In: the ``MA``/``MS``/``SA`` specs of a Palace simulation (from ``palace/source``); for the banded build, the effective
-``GeometryBuildInput``, its ``RepresentationContext`` and the route (from ``palace/mesh``).
+``GeometryBuildInput``, its ``RepresentationContext`` and the route (from ``palace/mesh``, which calls it).
 Out: the normalized specs and the margins each face takes, the SGB inset requests, and the banded build's files
-(``SgbArtifacts``: XAO, BREP and sidecar).
-Next: ``sgb`` builds the geometry with the inset requests; ``palace/mesh`` meshes the banded build, and
-``palace/source``, ``palace/config`` and ``palace/results`` read the specs and their margins.
+(``SgbArtifacts``: XAO, BREP and sidecar), which it builds by calling ``sgb.build_sgb_geometry`` with those requests.
+Next: ``palace/mesh`` meshes the banded build, and ``palace/source``, ``palace/config`` and ``palace/results`` read the
+specs and their margins.
 
 ``specs`` normalizes the ``MA``/``MS``/``SA`` specs and says which margins a face takes, ``insets`` turns
 their margins into SGB inset requests, and ``build`` builds a route's geometry with those bands (with the
 unbanded first build that ``inset_margins_by_entity_um`` needs).  Palace imports these from here;
-which faces it integrates and how stay with Palace.
+which faces it integrates and how stay with Palace.  The folder sits beside the shared geometry stages, but it is
+not a stage before SGB: Palace calls it, and it calls SGB.
 """
 
 from scgsim.geometry.surface_epr.build import build_banded_geometry

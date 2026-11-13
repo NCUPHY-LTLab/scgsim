@@ -28,6 +28,7 @@ from __future__ import annotations
 import itertools
 import math
 from fractions import Fraction
+from operator import attrgetter
 
 import gdstk
 from labels_common import (
@@ -67,6 +68,7 @@ from scgsim.geometry.sgb.prisms.levels import build_levels
 
 RED = PALETTE["bad"]
 MARGINS = (0.1, 0.5, 2.0)
+PARTS = attrgetter("labelled", "topology", "routed")
 
 
 def rings_grid(arr, curves, fi: int, window=None):
@@ -311,7 +313,7 @@ def _phantom(numbers: dict):
     )
     out = {}
     for name, m in (("local", local), ("global_emulated", glob)):
-        rep = sliver_report(m, top=200, drift=False)
+        rep = sliver_report(*PARTS(m), top=200, drift=False)
         thin = [f for f in rep["narrowest_faces"] if f["value_um"] < 0.01]
         out[name] = {
             "faces_narrower_than_10nm": len(thin),
@@ -398,7 +400,7 @@ def _seam(numbers: dict):
         seam_catalogue(one_entity=False, priorities=(1, 0)), "B"
     )
     two_layer = next(s for s in two.labelled.slabs if s.plane == "slab[0,1/5]")
-    rep = sliver_report(two, top=3, drift=False)
+    rep = sliver_report(*PARTS(two), top=3, drift=False)
     numbers["seam_as_two_entities"] = {
         "cells_after": len(two_layer.arr.faces) - 1,
         "edges_after": len(two_layer.arr.edges),
@@ -462,7 +464,7 @@ def ring_catalogue(gap_um: float = 0.005):
 
 def _source_gap(numbers: dict):
     model = build_model(ring_catalogue(), "A")
-    rep = sliver_report(model, top=3, drift=False)
+    rep = sliver_report(*PARTS(model), top=3, drift=False)
     numbers["source_gap"] = {
         "scene": "real input (thin_film, no port) with the pad 5 nm short of the cutout on every side",
         "gap_um": 0.005,
@@ -549,12 +551,9 @@ def _derived(numbers: dict):
     snapped = build_model(derived_catalogue(42.0), "A", insets=bands)
     out = {}
     for name, m in (("before", near), ("after_emulated_snap", snapped)):
-        rep = sliver_report(m, top=3, drift=False)
-        thin = [
-            f
-            for f in sliver_report(m, top=200, drift=False)["narrowest_faces"]
-            if f["value_um"] < 0.01
-        ]
+        rep = sliver_report(*PARTS(m), top=3, drift=False)
+        faces = sliver_report(*PARTS(m), top=200, drift=False)["narrowest_faces"]
+        thin = [f for f in faces if f["value_um"] < 0.01]
         out[name] = {
             "level_cells": len(_level_layer(m, Fraction(0)).arr.faces) - 1,
             "model_faces": m.counts["faces"],
@@ -647,7 +646,7 @@ def summary_table(numbers: dict) -> None:
     }
     out = {}
     for name, m in models.items():
-        rep = sliver_report(m)
+        rep = sliver_report(*PARTS(m))
         out[name] = {
             **rep["summary"],
             "shortest_edge_entry": rep["shortest_edges"][0],

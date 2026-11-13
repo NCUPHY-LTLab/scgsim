@@ -8,7 +8,7 @@ sliver report and the validation report.
 
 The mesher takes it from there: open the XAO in Gmsh, re-apply the sidecar's embeddings, mesh.  It trusts
 the XAO and sidecar of one build and does not check them again; the tests do that with ``verify_loaded``
-(``scgsim.geometry.sgb.checks.verification.loaded``), which also serves to diagnose a file suspected to be wrong.
+(``scgsim.geometry.sgb.output.verification.loaded``), which also serves to diagnose a file suspected to be wrong.
 """
 
 from __future__ import annotations
@@ -100,7 +100,7 @@ def emit_model(
         plan, paths["xao"], name=stem, brep=paths["brep"]
     )
     started = time.perf_counter()
-    slivers = sliver_report(model)
+    slivers = sliver_report(model.labelled, model.topology, model.routed)
     _write_json(paths["sliver_report"], slivers)
     # wall times are not part of any file: every file is the same for every run of the same model
     validation = {k: v for k, v in model.report.to_dict().items() if k != "timings_s"}

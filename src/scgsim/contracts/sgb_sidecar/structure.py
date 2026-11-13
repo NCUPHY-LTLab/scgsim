@@ -42,7 +42,8 @@ def require_structure(value: object, schema: dict[str, Any]) -> None:
         _Checker(schema.get("$defs", {})).check(value, schema, ())
     except _Mismatch as mismatch:
         raise SidecarError(
-            f"sidecar {_place(mismatch.path)}: {mismatch.reason}"
+            f"sidecar {_place(mismatch.path)}: {mismatch.reason}. A sidecar SGB wrote always has this "
+            "structure: rebuild the geometry, or report it if SGB wrote it unchanged"
         ) from None
 
 
@@ -57,7 +58,7 @@ def require_known_keywords(schema: object) -> None:
     unknown = set(schema) - KEYWORDS - ANNOTATIONS
     if unknown:
         raise ValueError(
-            f"the sidecar schema uses {sorted(unknown)}, which the shared reader does not check"
+            f"internal: the sidecar schema uses {sorted(unknown)}, which the shared reader does not check"
         )
     for keyword in ("$defs", "properties"):
         for subschema in schema.get(keyword, {}).values():

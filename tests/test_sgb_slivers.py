@@ -19,7 +19,7 @@ def test_report_has_sorted_measurements_with_location_and_lineage():
     """Rows are worst first; each has a location and the carriers or entities it came from."""
     model = build_model_from_catalogue(pad_in_ground("B"), "B")
     before = model.identity_digest()
-    report = sliver_report(model, top=5)
+    report = sliver_report(model.labelled, model.topology, model.routed, top=5)
     assert model.identity_digest() == before  # report only
     for key, field in (
         ("shortest_edges", "value_um"),
@@ -46,7 +46,9 @@ def test_report_has_sorted_measurements_with_location_and_lineage():
 def test_narrowest_face_width_is_the_local_feature_size_on_exact_carriers():
     """A 30 x 10 um port: the feature size is the distance between its long sides, not 2A/P."""
     model = build_model_from_catalogue(pad_in_ground("A"), "A")
-    narrow = sliver_report(model, top=50)["narrowest_faces"]
+    narrow = sliver_report(model.labelled, model.topology, model.routed, top=50)[
+        "narrowest_faces"
+    ]
     port = next(r for r in narrow if r["group"] == "PORT::p1")
     assert math.isclose(port["value_um"], 10.0, rel_tol=1e-9)
     assert math.isclose(
@@ -64,7 +66,13 @@ def test_a_triangle_face_reports_its_smallest_altitude_not_zero(name):
     model = build_model_from_catalogue(
         catalogue(disk_qubit.SCENES[name]()), "B", insets=type_bands()
     )
-    faces = sliver_report(model, top=len(model.topology.faces), drift=False)
+    faces = sliver_report(
+        model.labelled,
+        model.topology,
+        model.routed,
+        top=len(model.topology.faces),
+        drift=False,
+    )
     widths = {row["id"]: row["value_um"] for row in faces["narrowest_faces"]}
     assert all(width > 0 for width in widths.values())
     triangles = _straight_triangles(model)
@@ -110,7 +118,7 @@ def test_smallest_angle_reflects_oblique_geometry_and_drift_is_reported():
     model = build_model_from_catalogue(
         random_layout(30, seed=3, route="A", overlap_fraction=1.0), "A"
     )
-    report = sliver_report(model)
+    report = sliver_report(model.labelled, model.topology, model.routed)
     assert report["smallest_angles"][0]["value_deg"] < 90.0
     drift = report["snap_drift"]
     assert drift["edges_measured"] > 0 and drift["max_grid_units"] <= 1.0
@@ -122,7 +130,8 @@ def test_smallest_angle_reflects_oblique_geometry_and_drift_is_reported():
 
 def test_arc_edges_are_reported_with_their_deviation_from_the_exact_carrier():
     """The worst arc deviations come first."""
-    report = sliver_report(build_model_from_catalogue(pad_in_ground("A"), "A"), top=3)
+    model = build_model_from_catalogue(pad_in_ground("A"), "A")
+    report = sliver_report(model.labelled, model.topology, model.routed, top=3)
     arcs = report["arc_edges"]
     assert arcs["count"] >= 5 and arcs["max_deviation_grid"] <= 1.0
     worst = [w["value_grid_units"] for w in arcs["worst"]]
@@ -148,7 +157,7 @@ def test_slabs_thinner_than_the_grid_are_reported_never_a_failure(tmp_path):
             if c.name == "vertical_edges_shorter_than_g_are_kept"
         )
         assert vertical.warning and not vertical.passed
-        report = sliver_report(model)
+        report = sliver_report(model.labelled, model.topology, model.routed)
         assert [s["thickness_um"] for s in report["thin_slabs"]] == [
             pytest.approx(0.0004)
         ]

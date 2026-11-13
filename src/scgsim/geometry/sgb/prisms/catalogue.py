@@ -6,27 +6,26 @@ input's metadata -- to the prisms, carriers and Z structure the arrangement stag
 consume.  The catalogue is route-independent: Route A, B and C are labelling
 policies applied after the arrangement exists.
 
-The decisions are in the modules of this package: ``footprints`` (where an entity's rings come from), ``entities`` (Z interval,
-Net, priority), ``curves`` (authored boundaries and reconstruction), ``ports``
-(lumped-port sheets), ``arcs`` (circles on the grid).
+The steps read in order below: the declared grid, each Entity's footprints and the binding of its boundary
+records (``exact.footprints`` and ``exact.boundaries``, which the junction partition shares), the prisms of
+each Entity (``entities``: Z interval, Net, priority) and the lumped-port sheets (``ports``).
 """
 
 from __future__ import annotations
 
-from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.exact.grid import Grid
+from scgsim.geometry.sgb.exact.boundaries import bind_boundaries
+from scgsim.geometry.sgb.exact.footprints import SourceFootprint, source_footprints
+from scgsim.geometry.sgb.exact.grid import declared_grid
 from scgsim.geometry.sgb.exact.prisms import PrismCatalogue, PrismRecord
-from scgsim.geometry.sgb.prisms.curves import bind_boundaries
 from scgsim.geometry.sgb.prisms.entities import (
     check_entity_kind,
     entity_interval,
     entity_prisms,
     physical_feature_kind,
 )
-from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, source_footprints
 from scgsim.geometry.sgb.prisms.ports import port_prisms
 
 
@@ -59,14 +58,3 @@ def build_prism_catalogue(
     if not prisms:
         raise InputError("the effective input has no entities")
     return PrismCatalogue(grid, tuple(prisms))
-
-
-def declared_grid(build_input: GeometryBuildInput) -> Grid:
-    """The model grid the input declares; an input without one is rejected, never defaulted."""
-    context = geometry_grid_context(build_input)
-    if context is None:
-        raise InputError(
-            "the input declares no geometry grid (metadata 'geometry_grid'); build it with "
-            "GeometryPlan or build_gds_stack_geometry_input so XY coordinates sit on a declared grid"
-        )
-    return Grid(context.grid_size_um)

@@ -252,7 +252,7 @@ sidecar 給的是 material **id**（`Al`、`Si`）與 `kind`，不含 permittivi
 ```python
 import gmsh
 from scgsim.contracts.sgb_sidecar import read_sidecar
-from scgsim.geometry.sgb.checks.verification.loaded import apply_sidecar_embeds
+from scgsim.geometry.sgb.output.verification.loaded import apply_sidecar_embeds
 
 sidecar = read_sidecar(artifacts.sidecar)
 gmsh.initialize(["-noenv"])

@@ -30,13 +30,13 @@ import gmsh
 
 from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.contracts.sgb_sidecar.records import IdsByTag
-from scgsim.geometry.sgb.checks.verification.tolerances import (
+from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
+from scgsim.geometry.sgb.output.verification.tolerances import (
     RELATIVE_TOLERANCE,
     VERTEX_TOLERANCE_UM,
     relative_error,
 )
-from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.exact.stopwatch import elapsed_seconds
 
 DIMENSIONS = ("0", "1", "2", "3")
 
@@ -71,6 +71,7 @@ class LoadReport:
             raise LoadCheckError(
                 f"{len(self.problems)} difference(s) between the loaded model and the plan: "
                 + "; ".join(self.problems[:6])
+                + ". This is an SGB defect for files SGB wrote and nothing changed since: report it with the files"
             )
 
 

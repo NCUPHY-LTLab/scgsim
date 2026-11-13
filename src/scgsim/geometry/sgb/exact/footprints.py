@@ -108,7 +108,8 @@ def _envelope_rectangle(
         return _rectangle(bounds, entity.semantic_id)
     raise InputError(
         f"{entity.semantic_id} is the automatic vacuum envelope but has neither a "
-        "prepared enclosure nor domain_bounds_um"
+        "prepared enclosure nor domain_bounds_um. Fix the input: build it with GeometryPlan, "
+        "which prepares the enclosure, or give the Entity domain_bounds_um"
     )
 
 
@@ -122,7 +123,7 @@ def _solution_loops(
     if not isinstance(bounds, Mapping):
         raise InputError(
             f"{entity.semantic_id} has no source planar footprint: a solution region "
-            "needs outer_loop or domain_bounds_um"
+            "needs outer_loop or domain_bounds_um. Fix the declaration: give the region one of them"
         )
     return _rectangle(bounds, entity.semantic_id), ()
 
@@ -144,7 +145,8 @@ def conductor_loops(
         polygon = polygons.get(polygon_id)
         if polygon is None:
             raise InputError(
-                f"{entity.semantic_id} references unknown polygon_id {polygon_id!r}"
+                f"{entity.semantic_id} references unknown polygon_id {polygon_id!r}; the input "
+                "has no polygon with that id. Fix the input: name a polygon it carries"
             )
         loops.append((polygon.exterior, polygon.holes))
         authored.append(not is_junction_end_piece(polygon))
@@ -154,7 +156,8 @@ def conductor_loops(
     if "outer_loop" in geometry:
         return [(geometry["outer_loop"], tuple(geometry.get("hole_loops", ())))], [True]
     raise InputError(
-        f"{entity.semantic_id} has no source planar footprint: it needs polygon_ids or outer_loop"
+        f"{entity.semantic_id} has no source planar footprint: it needs polygon_ids or outer_loop. "
+        "Fix the declaration: give the Entity its polygons"
     )
 
 
@@ -166,10 +169,14 @@ def _rectangle(
         y0, y1 = float(bounds["y_min_um"]), float(bounds["y_max_um"])
     except (KeyError, TypeError, ValueError) as error:
         raise InputError(
-            f"{entity_id} bounds must define x_min_um, x_max_um, y_min_um and y_max_um"
+            f"{entity_id} bounds must define x_min_um, x_max_um, y_min_um and y_max_um as numbers, "
+            f"not {dict(bounds)!r}. Fix the declaration of the Entity's bounds"
         ) from error
     if not (x0 < x1 and y0 < y1):
-        raise InputError(f"{entity_id} has a non-positive XY extent")
+        raise InputError(
+            f"{entity_id} has a non-positive XY extent: x {x0} to {x1} um, y {y0} to {y1} um. "
+            "Fix the declaration: give the Entity bounds whose maximum exceeds the minimum"
+        )
     return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
 
 

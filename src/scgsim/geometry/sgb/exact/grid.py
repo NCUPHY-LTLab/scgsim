@@ -10,6 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from fractions import Fraction
 
+from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.sgb.errors import InputError
+
 LATTICE_TOLERANCE = Fraction(1, 1_000_000)
 """Largest distance, in grid units, between a declared coordinate and its lattice point.
 
@@ -26,7 +30,10 @@ class Grid:
 
     def __post_init__(self) -> None:
         if not self.size_um > 0:
-            raise ValueError("grid size must be a positive length in micrometres")
+            raise ValueError(
+                f"grid size must be a positive length in micrometres, not {self.size_um!r}; "
+                "declare the geometry grid of the input with a positive size"
+            )
 
     def to_um(self, units: int | Fraction | float) -> float:
         """Length in micrometres of a coordinate expressed in grid units."""
@@ -65,3 +72,14 @@ def exact_z(value_um: float | int | str | Fraction) -> Fraction:
     if isinstance(value_um, str):
         return Fraction(value_um)
     return Fraction(repr(round(float(value_um), Z_DECIMALS)))
+
+
+def declared_grid(build_input: GeometryBuildInput) -> Grid:
+    """The model grid the input declares; an input without one is rejected, never defaulted."""
+    context = geometry_grid_context(build_input)
+    if context is None:
+        raise InputError(
+            "the input declares no geometry grid (metadata 'geometry_grid'); build it with "
+            "GeometryPlan or build_gds_stack_geometry_input so XY coordinates sit on a declared grid"
+        )
+    return Grid(context.grid_size_um)

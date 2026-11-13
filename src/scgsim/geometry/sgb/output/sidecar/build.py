@@ -64,9 +64,7 @@ BINDING_RULE = (
 class SidecarContext:
     """What the sidecar records besides the model and the plan: the file names and the sliver report summary."""
 
-    sliver_summary: (
-        SliverSummary  # ``checks.slivers.report.sliver_report(model)["summary"]``
-    )
+    sliver_summary: SliverSummary  # ``checks.slivers.report.sliver_report(model.labelled, model.topology, model.routed)["summary"]``
     files: dict[str, str] = field(default_factory=dict)
     name: str = "model"
 

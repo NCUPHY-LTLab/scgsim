@@ -36,10 +36,6 @@ from scgsim.geometry.sgb.bands.requests import (
     InsetRequest,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.checks.verification.loaded import (
-    apply_sidecar_embeds,
-    verify_xao,
-)
 from scgsim.geometry.sgb.errors import InputError, ValidationError
 from scgsim.geometry.sgb.exact.carriers import EdgeCarrier
 from scgsim.geometry.sgb.exact.grid import Grid
@@ -49,6 +45,10 @@ from scgsim.geometry.sgb.model import (
     ConformalModel,
     build_conformal_model,
     build_model_from_catalogue,
+)
+from scgsim.geometry.sgb.output.verification.loaded import (
+    apply_sidecar_embeds,
+    verify_xao,
 )
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 

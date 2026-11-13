@@ -22,9 +22,9 @@ from sgb_inputs import (
 from scgsim.contracts.sgb_sidecar import read_sidecar, views
 from scgsim.geometry.sgb import build_sgb_geometry
 from scgsim.geometry.sgb.bands.requests import InsetRequest, SolutionInterface
-from scgsim.geometry.sgb.checks.verification.loaded import verify_xao
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import build_conformal_model
+from scgsim.geometry.sgb.output.verification.loaded import verify_xao
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 
 PORT_GROUP = "PORT::PORT_SHEET__P1__0000"

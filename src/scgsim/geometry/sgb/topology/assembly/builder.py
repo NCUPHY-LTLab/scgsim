@@ -71,7 +71,7 @@ def register(table: dict[str, Record], record: Record) -> None:
         table[record.id] = record
     elif known != record:
         raise SgbError(
-            f"two distinct {type(record).__name__} records share the atomic id {record.id}"
+            f"internal: two distinct {type(record).__name__} records share the atomic id {record.id}"
         )
 
 
@@ -411,7 +411,7 @@ class _Assembly:
             for b, t in zip(bottom, top, strict=True)
         ):
             raise SgbError(
-                f"curved wall from {run.u} to {run.v} has different vertices at its bottom and top "
+                f"internal: curved wall from {run.u} to {run.v} has different vertices at its bottom and top "
                 "after splitting: the cylinder cannot be formed"
             )
         return [
@@ -443,7 +443,7 @@ class _Assembly:
             self._side_volume(run.k1, run.left_top, run.dom_l),
         ):
             raise SgbError(
-                f"wall from {run.u} to {run.v} joins cells of different volumes"
+                f"internal: wall from {run.u} to {run.v} joins cells of different volumes"
             )
         z_lo, z_hi = self.levels.levels[k0], self.levels.levels[k1]
         plane = f"wall[{z_lo},{z_hi}]"
