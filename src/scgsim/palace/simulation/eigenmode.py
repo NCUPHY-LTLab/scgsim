@@ -16,23 +16,13 @@ from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from ..config.config import build_eigenmode_config
 from ..config.config_models import EigenmodeConfigBuildResult, EigenmodeSettings
 from ..config.index import EprRequest, check_epr_request
-from ..config.numerical import NumericalControls
+from ..config.numerical import NumericalControls, ProblemDefaults
 from ..source.ports import RequestedPort
 from ..source.transforms import validate_nonempty_string, validate_positive_number
 from .core import PalaceSimulation, index_map
 
 # The geometry build never reads a port's inductance, but ``add_port`` requires a positive one.
 _PORT_INDUCTANCE_H = 1.0e-9
-
-
-def _eigenmode_numerical_default() -> NumericalControls:
-    """A fresh Eigenmode's controls: nonconformal AMR, with the pass limit and its settings left to choose."""
-    return NumericalControls(
-        amr_nonconformal=True,
-        amr_max_passes=None,
-        amr_tolerance=None,
-        amr_update_fraction=None,
-    )
 
 
 @dataclass
@@ -61,9 +51,12 @@ class EigenmodeSim(PalaceSimulation):
     target_hz: float | None = None
     eigenmode_tolerance: float = 1e-6
     save_fields: int = 0
-    numerical: NumericalControls = field(default_factory=_eigenmode_numerical_default)
 
     problem = "Eigenmode"
+    # Nonconformal AMR, with the pass limit and its tolerance left for the user to choose.
+    numerical_defaults: ClassVar[ProblemDefaults] = ProblemDefaults(
+        amr_max_passes=None, amr_nonconformal=True, amr_tolerance=None
+    )
     # Eigenmode may skip Surface EPR: mesh() then requests no bands.
     mesh_requires_surface_epr: ClassVar[bool] = False
 

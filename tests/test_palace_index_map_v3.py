@@ -20,7 +20,7 @@ from palace_sgb_support import (
 )
 
 from scgsim.geometry.surface_epr.insets import inset_requests
-from scgsim.palace import resolve_palace_result
+from scgsim.palace import EigenmodeSim, ElectrostaticSim, resolve_palace_result
 from scgsim.palace.config.config import (
     build_eigenmode_config,
     build_electrostatic_config,
@@ -124,7 +124,7 @@ class Run:
     def _electrostatic(self, specs):
         first, second = NETS[self.route]
         result = build_electrostatic_config(
-            self._common("Electrostatic", specs, NumericalControls()),
+            self._common("Electrostatic", specs, ElectrostaticSim().numerical),
             terminals=[TerminalBinding("t", first)],
             ground_net_ids=[second],
             electrostatic=ElectrostaticSettings(unassigned_conductor_policy="error"),
@@ -137,7 +137,13 @@ class Run:
 
     def _eigenmode(self, specs):
         result = build_eigenmode_config(
-            self._common("Eigenmode", specs, NumericalControls(amr_max_passes=0)),
+            self._common(
+                "Eigenmode",
+                specs,
+                NumericalControls(amr_max_passes=0).with_defaults(
+                    EigenmodeSim.numerical_defaults
+                ),
+            ),
             ports=[PORTS[self.route]],
             eigenmode=EigenmodeSettings(num_modes=3),
         )

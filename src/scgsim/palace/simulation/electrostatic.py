@@ -18,7 +18,7 @@ from ..config.config_models import (
     ElectrostaticSettings,
     TerminalBinding,
 )
-from ..config.numerical import NumericalControls
+from ..config.numerical import NumericalControls, ProblemDefaults
 from ..source.transforms import validate_nonempty_string
 from .core import PalaceSimulation, index_map
 
@@ -48,9 +48,12 @@ class ElectrostaticSim(PalaceSimulation):
     save_fields: int = 0
     unassigned_conductor_policy: Literal["ground", "error"] = "ground"
     exterior_boundary_policy: Literal["none", "ground"] = "none"
-    numerical: NumericalControls = field(default_factory=NumericalControls)
 
     problem = "Electrostatic"
+    # AMR off by default, conformal when enabled, with a tolerance of 0.01.
+    numerical_defaults: ClassVar[ProblemDefaults] = ProblemDefaults(
+        amr_max_passes=0, amr_nonconformal=False, amr_tolerance=1e-2
+    )
     # Electrostatic needs its Surface-EPR specs before mesh(); Eigenmode does not.
     mesh_requires_surface_epr: ClassVar[bool] = True
 

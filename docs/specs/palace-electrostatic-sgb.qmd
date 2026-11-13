@@ -308,7 +308,10 @@ as a field (`sim.numerical.amr_nonconformal`) and the whole record with
 `sim.numerical.to_payload()`, the dictionary
 `metadata/palace_numerical_controls.json` holds. `sim.surface_epr_specs` is a
 `SurfaceEprSpecs` (`sim.surface_epr_specs.by_type["MA"]`, or `to_payload()`
-for the normalized mapping).
+for the normalized mapping). A `NumericalControls` given to
+`ElectrostaticSim(numerical=...)` gets the Electrostatic defaults above for the
+AMR controls it does not set (0 passes, conformal, tolerance 0.01), as
+`set_numerical(...)` does.
 
 Palace defaults `Nonconformal` to `true` when the key is omitted. SCGSim always
 writes the key and defaults it to `false` (conformal tet AMR). Notebooks opt

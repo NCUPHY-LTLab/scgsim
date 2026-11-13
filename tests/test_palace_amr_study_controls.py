@@ -71,7 +71,9 @@ def test_electrostatic_defaults_use_cg_boomeramg_without_changing_case_controls(
 ):
     """Select the electrostatic solver while retaining all other baseline defaults."""
     sim = ElectrostaticSim()
-    assert sim.numerical == NumericalControls()
+    assert sim.numerical == NumericalControls().with_defaults(
+        ElectrostaticSim.numerical_defaults
+    )
     config = _electrostatic_config(sim)
     assert config["Solver"]["Linear"] == {
         "Type": "BoomerAMG",

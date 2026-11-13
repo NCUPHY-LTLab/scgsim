@@ -25,7 +25,7 @@ lang: zh-TW
 
 幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。本徵模態與 Electrostatic 兩個外觀介面共用同一組網格控制與預設值，記載於 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls)，該節也說明細微結構會使 `mesh()` 在產生網格之前被拒絕，以及網格低於品質門檻時 `mesh()` 會中止。
 
-設定方法儲存的是凍結且已檢查的值。`sim.numerical` 是 `NumericalControls`：以欄位讀取單一控制（`sim.numerical.amr_max_passes`、`sim.numerical.order`），以 `sim.numerical.to_payload()` 讀取整筆紀錄，也就是 `metadata/palace_numerical_controls.json` 保存的字典。`sim.surface_epr_specs` 是 `SurfaceEprSpecs`，每個介面型別一個 `SurfaceEprSpec`（`sim.surface_epr_specs.by_type["MA"].inset_margins_um`；`to_payload()` 給出正規化後的對照）。`sim.epr_request` 是 `EprRequest`（`sim.epr_request.surface_interfaces`），在 `set_epr_request` 之前為 None。若要在建構時傳入控制，請給 `NumericalControls`（`EigenmodeSim(numerical=NumericalControls(...))`）。
+設定方法儲存的是凍結且已檢查的值。`sim.numerical` 是 `NumericalControls`：以欄位讀取單一控制（`sim.numerical.amr_max_passes`、`sim.numerical.order`），以 `sim.numerical.to_payload()` 讀取整筆紀錄，也就是 `metadata/palace_numerical_controls.json` 保存的字典。`sim.surface_epr_specs` 是 `SurfaceEprSpecs`，每個介面型別一個 `SurfaceEprSpec`（`sim.surface_epr_specs.by_type["MA"].inset_margins_um`；`to_payload()` 給出正規化後的對照）。`sim.epr_request` 是 `EprRequest`（`sim.epr_request.surface_interfaces`），在 `set_epr_request` 之前為 None。若要在建構時傳入控制，請給 `NumericalControls`（`EigenmodeSim(numerical=NumericalControls(...))`）。此紀錄把 `amr_max_passes`、`amr_nonconformal` 與 `amr_tolerance` 留給問題決定：建構子與 `set_numerical(...)` 以同一組 Eigenmode 預設值填入紀錄未設定者，因此 `EigenmodeSim(numerical=NumericalControls(order=2))` 與 `EigenmodeSim()` 接著 `set_numerical(order=2)` 保存相同的控制：非共形，且在 `write_config()` 之前仍須選擇迭代上限。
 
 ## 本徵模態網格與 AMR 預設值 {#eigenmode-mesh-and-amr-defaults}
 

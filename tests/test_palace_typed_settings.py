@@ -62,7 +62,7 @@ def test_numerical_controls_write_the_recorded_payload_and_hold_mumps_at_one_ite
     """The payload keeps its key order and leaves unset optional keys out; MUMPS records one iteration."""
     controls = NumericalControls(
         solver_type="MUMPS", max_iterations=50, ksp_type="CG", amr_nc_levels=0
-    )
+    ).with_defaults(ElectrostaticSim.numerical_defaults)
     payload = controls.to_payload()
     assert list(payload) == [
         "order",
@@ -114,7 +114,9 @@ def test_a_config_input_refuses_an_unchosen_amr_pass_limit(problem):
             mesh_path=Path("palace.msh"),
             materials={},
             surface_epr_specs=SurfaceEprSpecs({}),
-            numerical=NumericalControls(amr_max_passes=None),
+            numerical=NumericalControls(amr_max_passes=None).with_defaults(
+                ElectrostaticSim.numerical_defaults
+            ),
         )
 
 
@@ -177,3 +179,54 @@ def test_an_epr_request_is_checked_against_the_index_entries():
         "bulk_domain_ids",
         "port_names",
     ]
+
+
+def _config_input(sim):
+    """The shared config input ``write_config()`` builds, on an empty mesh: only the numerical check runs."""
+    return ConfigInput(
+        problem=sim.problem,
+        groups={},
+        mesh_path=Path("palace.msh"),
+        materials={},
+        surface_epr_specs=SurfaceEprSpecs({}),
+        numerical=sim.numerical,
+    )
+
+
+def test_eigenmode_constructor_controls_take_the_eigenmode_defaults_like_set_numerical():
+    """``EigenmodeSim(numerical=NumericalControls(order=2))`` equals ``set_numerical(order=2)``: nonconformal, pass limit open."""
+    built = EigenmodeSim(numerical=NumericalControls(order=2))
+    set_later = EigenmodeSim()
+    set_later.set_numerical(order=2)
+    assert built.numerical == set_later.numerical
+    assert built.numerical.amr_nonconformal is True
+    assert built.numerical.amr_max_passes is None
+    for sim in (built, set_later):
+        with pytest.raises(
+            ValueError,
+            match=r"Eigenmode requires explicit amr_max_passes.*set_numerical\(amr_max_passes=\.\.\.\)",
+        ):
+            _config_input(sim)
+
+
+def test_electrostatic_constructor_controls_take_the_electrostatic_defaults_like_set_numerical():
+    """``ElectrostaticSim(numerical=NumericalControls(order=2))`` equals ``set_numerical(order=2)``: AMR off, conformal."""
+    built = ElectrostaticSim(numerical=NumericalControls(order=2))
+    set_later = ElectrostaticSim()
+    set_later.set_numerical(order=2)
+    assert built.numerical == set_later.numerical
+    assert (
+        built.numerical.amr_max_passes,
+        built.numerical.amr_nonconformal,
+        built.numerical.amr_tolerance,
+    ) == (0, False, 0.01)
+    for sim in (built, set_later):
+        assert _config_input(sim).numerical == built.numerical
+
+
+def test_a_record_left_to_the_problem_is_not_written_and_a_dict_is_refused():
+    """A record whose problem defaults were never filled is refused before it is written; so is a dict."""
+    with pytest.raises(ValueError, match="wait for the problem's defaults"):
+        NumericalControls(order=2).to_payload()
+    with pytest.raises(TypeError, match=r"EigenmodeSim\(numerical=NumericalControls"):
+        EigenmodeSim(numerical={"order": 2})  # type: ignore[arg-type]

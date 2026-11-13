@@ -158,7 +158,7 @@ Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_
 | `Model.Refinement.Nonconformal` | `false`，除非 Notebook 設定 `amr_nonconformal=True` |
 | `Model.Refinement.SaveAdaptMesh` | 省略，除非 Notebook 設定 `save_adapt_mesh=True` 或 `False` |
 
-`sim.numerical` 以 `NumericalControls` 保存這些控制：以欄位讀取單一控制（`sim.numerical.amr_nonconformal`），以 `sim.numerical.to_payload()` 讀取整筆紀錄，也就是 `metadata/palace_numerical_controls.json` 保存的字典。`sim.surface_epr_specs` 是 `SurfaceEprSpecs`（`sim.surface_epr_specs.by_type["MA"]`，或以 `to_payload()` 取得正規化後的對照）。
+`sim.numerical` 以 `NumericalControls` 保存這些控制：以欄位讀取單一控制（`sim.numerical.amr_nonconformal`），以 `sim.numerical.to_payload()` 讀取整筆紀錄，也就是 `metadata/palace_numerical_controls.json` 保存的字典。`sim.surface_epr_specs` 是 `SurfaceEprSpecs`（`sim.surface_epr_specs.by_type["MA"]`，或以 `to_payload()` 取得正規化後的對照）。交給 `ElectrostaticSim(numerical=...)` 的 `NumericalControls` 中未設定的 AMR 控制，會如 `set_numerical(...)` 一樣取得上述 Electrostatic 預設值（0 次迭代、共形、容許誤差 0.01）。
 
 Palace 在省略 `Nonconformal` 鍵時預設為 `true`。SCGSim 一律寫出此鍵，預設為 `false`（共形四面體 AMR）。Notebook 可透過 `set_numerical(amr_nonconformal=True)` 啟用非共形 AMR。
 

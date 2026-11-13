@@ -13,7 +13,7 @@ from palace_sgb_support import (
     surface_epr_spec_records,
 )
 
-from scgsim.palace import EigenmodeSim
+from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.config.config import (
     build_eigenmode_config,
     build_electrostatic_config,
@@ -54,6 +54,9 @@ def case(request, tmp_path):
     return route, groups_from_sidecar(sidecar)
 
 
+SIMULATIONS = {"Eigenmode": EigenmodeSim, "Electrostatic": ElectrostaticSim}
+
+
 def common(problem, groups, specs=None, numerical=None):
     """The shared config input of ``groups``: the test materials, ``specs`` (none by default)."""
     return ConfigInput(
@@ -62,7 +65,11 @@ def common(problem, groups, specs=None, numerical=None):
         mesh_path=Path("palace.msh"),
         materials=MATERIALS,
         surface_epr_specs=SurfaceEprSpecs({}) if specs is None else specs,
-        numerical=NumericalControls() if numerical is None else numerical,
+        numerical=NumericalControls(amr_max_passes=0).with_defaults(
+            SIMULATIONS[problem].numerical_defaults
+        )
+        if numerical is None
+        else numerical,
     )
 
 

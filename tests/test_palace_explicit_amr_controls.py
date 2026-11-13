@@ -142,7 +142,9 @@ def test_invalid_case_controls_do_not_partially_apply_other_changes(invalid):
 def test_electrostatic_retains_existing_sizing_and_amr_defaults():
     """Keep Electrostatic mesh controls and AMR defaults unchanged by Eigenmode rules."""
     sim = ElectrostaticSim()
-    assert sim.numerical == NumericalControls()
+    assert sim.numerical == NumericalControls().with_defaults(
+        ElectrostaticSim.numerical_defaults
+    )
     assert sim.mesh_controls == MeshControls()
     assert sim.numerical.amr_nonconformal is False
     assert sim.numerical.amr_max_passes == 0

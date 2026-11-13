@@ -28,7 +28,7 @@ from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 from ..config.config_models import ConfigInput
 from ..config.files import persist_problem_files
 from ..config.index import IndexEntry
-from ..config.numerical import NumericalControls
+from ..config.numerical import NumericalControls, ProblemDefaults
 from ..mesh.build import (
     MeshBuildResult,
     RouteGeometry,
@@ -70,7 +70,7 @@ class PalaceSimulation(ABC):
     vacuum_region: VacuumRegionSpec | None = None
     surface_epr_specs: SurfaceEprSpecs | None = None
     mesh_controls: MeshControls = field(default_factory=MeshControls)
-    # Each problem class gives its own default; ``set_numerical`` is the problem's.
+    # Filled with the problem's ``numerical_defaults`` on construction and by every ``set_numerical``.
     numerical: NumericalControls = field(default_factory=NumericalControls)
     config_path: Path | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
@@ -94,6 +94,9 @@ class PalaceSimulation(ABC):
     mesh_requires_surface_epr: ClassVar[bool]
     """Whether ``mesh()`` refuses a simulation on which ``set_surface_epr`` was never called."""
 
+    numerical_defaults: ClassVar[ProblemDefaults]
+    """The AMR defaults of this problem, for every control a ``NumericalControls`` leaves to the problem."""
+
     @abstractmethod
     def _lumped_ports(self) -> list[RequestedPort] | None:
         """The authored port sheets the geometry cuts as lumped ports, or None for a problem with none."""
@@ -109,6 +112,14 @@ class PalaceSimulation(ABC):
     @abstractmethod
     def write_config(self) -> Path:
         """Write ``config.json`` and its metadata for the current mesh; see the problem class."""
+
+    def __post_init__(self) -> None:
+        """Fill the problem's defaults into the numerical controls the constructor was given.
+
+        Raises:
+            TypeError: ``numerical`` is not a ``NumericalControls``.
+        """
+        self.numerical = self._with_problem_defaults(self.numerical)
 
     # ---- Binding and geometry settings --------------------------------------------------------------
 
@@ -442,8 +453,17 @@ class PalaceSimulation(ABC):
 
     def _set_numerical(self, controls: NumericalControls) -> None:
         """Store the controls a ``set_numerical`` call built; the mesh stays, the config is discarded."""
-        self.numerical = controls
+        self.numerical = self._with_problem_defaults(controls)
         self._fall_back("set_numerical")
+
+    def _with_problem_defaults(self, controls: NumericalControls) -> NumericalControls:
+        """``controls`` with the problem's defaults filled in: the one place the constructor and ``set_numerical`` share."""
+        if not isinstance(controls, NumericalControls):
+            raise TypeError(
+                f"numerical must be NumericalControls: pass {type(self).__name__}(numerical=NumericalControls(...)) "
+                "or call set_numerical(...)."
+            )
+        return controls.with_defaults(self.numerical_defaults)
 
     def _start_config(self) -> tuple[MeshBuildResult, ConfigInput]:
         """Discard the previous config and return the current mesh and the shared input of a new config.
