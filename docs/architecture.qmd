@@ -175,7 +175,7 @@ call emits a warning about that limitation. See the
 [field-side contract](specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction).
 
 Within Palace, `results.report_models` owns detached report records and
-`results.snapshots` their readers; `presentation.reports` owns trust/physics views and figures. The
+`results.snapshots` their readers; `reports.reports` owns trust/physics views and figures. The
 package facade retains the existing public result and report names.
 
 AEDT receipts record the runtime source: every file of the import closure of
