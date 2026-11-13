@@ -92,6 +92,31 @@ def _checked_regions_without_airbox(stack: Any, vacuum_region: Any) -> _StackPar
     return _StackParts(raw_regions, materials)
 
 
+def _vacuum_region_base(region: Any, vacuum_id: str) -> dict[str, Any]:
+    """The record the VACUUM_REGION starts from: the stack's own, of the vacuum material, or a new one."""
+    if region is None:
+        return {
+            "role": "solution_region",
+            "material_id": vacuum_id,
+            "geometry_kind": "domain",
+            "metadata": {},
+            "geometry": {},
+        }
+    if not isinstance(region, Mapping):
+        raise TypeError(
+            _region("VACUUM_REGION").expected("record", "a mapping", region)
+        )
+    if _material_id_for_region(region) != vacuum_id:
+        raise ValueError(
+            _region("VACUUM_REGION").expected(
+                "material_id",
+                f"the vacuum material {vacuum_id!r}",
+                _material_id_for_region(region),
+            )
+        )
+    return dict(region)
+
+
 def _vacuum_region_record(
     region: Any,
     vacuum_id: str,
@@ -99,28 +124,7 @@ def _vacuum_region_record(
     vacuum_region: VacuumRegionSpec,
 ) -> dict[str, Any]:
     """The VACUUM_REGION record: the stack's own if it has one, around the bounds grown by the padding."""
-    if region is None:
-        region = {
-            "role": "solution_region",
-            "material_id": vacuum_id,
-            "geometry_kind": "domain",
-            "metadata": {},
-            "geometry": {},
-        }
-    else:
-        if not isinstance(region, Mapping):
-            raise TypeError(
-                _region("VACUUM_REGION").expected("record", "a mapping", region)
-            )
-        if _material_id_for_region(region) != vacuum_id:
-            raise ValueError(
-                _region("VACUUM_REGION").expected(
-                    "material_id",
-                    f"the vacuum material {vacuum_id!r}",
-                    _material_id_for_region(region),
-                )
-            )
-        region = dict(region)
+    region = _vacuum_region_base(region, vacuum_id)
     region.update(
         {
             "material_id": vacuum_id,

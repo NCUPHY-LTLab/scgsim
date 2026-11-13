@@ -116,21 +116,7 @@ def semantic_layer_records(
             "geometry_kind": "layout_extrusion",
             "geometry": geometry,
             "route_representations": {},
-            "metadata": {
-                "logical_layer_id": level.name,
-                "source_layer_name": level.name,
-                "pdk_semantic_authority": "layer_stack",
-                "component_semantic_authority": "component.info",
-                **component_metadata,
-                PHYSICAL_LAYER_FIELD: _physical_declaration(
-                    level.info, level.name, level.facts.material_id
-                ),
-                **(
-                    {"host_reference_origin": "generated_background"}
-                    if auto_host
-                    else {}
-                ),
-            },
+            "metadata": _conductor_metadata(level, component_metadata, auto_host),
             "net_id": (
                 _identifier(
                     declaration["net_id"], conductor_declared(semantic_id), "net_id"
@@ -141,6 +127,23 @@ def semantic_layer_records(
         }
         result.append(record)
     return result
+
+
+def _conductor_metadata(
+    level: _ConductorLevel, component_metadata: Mapping[str, Any], auto_host: bool
+) -> dict[str, Any]:
+    """What a conductor's stack record keeps about its level, its component and its physical layer."""
+    return {
+        "logical_layer_id": level.name,
+        "source_layer_name": level.name,
+        "pdk_semantic_authority": "layer_stack",
+        "component_semantic_authority": "component.info",
+        **component_metadata,
+        PHYSICAL_LAYER_FIELD: _physical_declaration(
+            level.info, level.name, level.facts.material_id
+        ),
+        **({"host_reference_origin": "generated_background"} if auto_host else {}),
+    }
 
 
 _CONDUCTOR_FIELDS = {

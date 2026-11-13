@@ -17,7 +17,6 @@ from scgsim.geometry.grid.grid_overlay import (
     GridAuditor,
     Subdivision,
     ZeroAreaAccounting,
-    ZeroAreaResidue,
     account_zero_area,
     residue_coordinates,
     subdivide_grid,
@@ -208,10 +207,7 @@ def _construct_grid_work(
         return _GridWork(raw_polygons, subdivide_grid(values, geometries, None))
 
     result = build_tagged_subdivision(values, geometries, grid)
-    accounting = ZeroAreaAccounting(
-        tuple(ZeroAreaResidue(*row) for row in result.boundary),
-        tuple(ZeroAreaResidue(*row) for row in result.auxiliary),
-    )
+    accounting = ZeroAreaAccounting(tuple(result.boundary), tuple(result.auxiliary))
     return _GridWork(
         raw_polygons,
         Subdivision(

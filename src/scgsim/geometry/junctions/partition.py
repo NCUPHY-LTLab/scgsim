@@ -366,6 +366,11 @@ class _JunctionPartitionPlanner:
         if lower >= upper:
             raise ValueError(self.no_gap_refusal(lower, upper))
         self.lower, self.upper = (lower, upper)
+        self.check_corridor_sides()
+        self.check_corridor_clear()
+
+    def check_corridor_sides(self) -> None:
+        """Refuse metal that touches the sheet's long sides between the two cut bounds."""
         for polygons in (self.own_a, self.own_b, self.other):
             for rings in polygons:
                 for y in (0, self.width):
@@ -378,6 +383,9 @@ class _JunctionPartitionPlanner:
                                 "unsupported corridor side-boundary metal contact: metal touches the sheet's long sides"
                             )
                         )
+
+    def check_corridor_clear(self) -> None:
+        """Refuse a corridor between the bounds that is not wholly free of both terminals."""
         self.sheet_region = build_polygon_region(
             self.selection, rectangle(0, 0, self.span, self.width)
         )

@@ -32,15 +32,8 @@ def _port_record(record: object) -> Declared:
     )
 
 
-def port_sheet_regions_from_stack_metadata(
-    scope: GridScope,
-    stack_metadata: Mapping[str, Any],
-    *,
-    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
-    host_entities: Sequence[SemanticEntitySpec],
-    host_polygons: Sequence[LayoutPolygonSpec],
-) -> tuple[PortSheetRegionRecord, ...]:
-    """Build source port regions using stack metadata and exact host ownership."""
+def _port_records(stack_metadata: Mapping[str, Any]) -> Sequence[Any]:
+    """The stack's port_sheet_source_layers entries, none when it declares none."""
     raw_records = stack_metadata.get("port_sheet_source_layers", ())
     if raw_records is None:
         return ()
@@ -50,7 +43,19 @@ def port_sheet_regions_from_stack_metadata(
                 "port_sheet_source_layers", "a sequence", raw_records
             )
         )
+    return raw_records
 
+
+def port_sheet_regions_from_stack_metadata(
+    scope: GridScope,
+    stack_metadata: Mapping[str, Any],
+    *,
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
+    host_entities: Sequence[SemanticEntitySpec],
+    host_polygons: Sequence[LayoutPolygonSpec],
+) -> tuple[PortSheetRegionRecord, ...]:
+    """Build source port regions using stack metadata and exact host ownership."""
+    raw_records = _port_records(stack_metadata)
     host_entity_by_polygon_id = {
         polygon_id: entity
         for entity in host_entities
@@ -90,24 +95,31 @@ def port_sheet_regions_from_stack_metadata(
                     exterior=source_polygon.exterior,
                     holes=source_polygon.holes,
                     overlaps=overlaps,
-                    metadata={
-                        "source_index": source_index,
-                        "source_name": declared.source_name,
-                        "port_index": declared.port_index,
-                        "target_layer": declared.target_layer,
-                        "direction": declared.direction,
-                        "direction_raw": declared.raw_direction,
-                        "direction_sign_convention": declared.sign_convention,
-                        "source": "palace_lumped_port_sheet",
-                        **(
-                            {"source_occurrence_path": record["source_occurrence_path"]}
-                            if "source_occurrence_path" in record
-                            else {}
-                        ),
-                    },
+                    metadata=_port_sheet_metadata(declared, record, source_index),
                 )
             )
     return tuple(regions)
+
+
+def _port_sheet_metadata(
+    declared: _PortSheetDeclaration, record: Mapping[str, Any], source_index: int
+) -> dict[str, Any]:
+    """What a port sheet region records about its declaration."""
+    return {
+        "source_index": source_index,
+        "source_name": declared.source_name,
+        "port_index": declared.port_index,
+        "target_layer": declared.target_layer,
+        "direction": declared.direction,
+        "direction_raw": declared.raw_direction,
+        "direction_sign_convention": declared.sign_convention,
+        "source": "palace_lumped_port_sheet",
+        **(
+            {"source_occurrence_path": record["source_occurrence_path"]}
+            if "source_occurrence_path" in record
+            else {}
+        ),
+    }
 
 
 class _PortDirection(NamedTuple):

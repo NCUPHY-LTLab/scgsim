@@ -77,40 +77,43 @@ def _auto_vacuum_surface_sheet_for_xy_envelope(
     )
 
 
+def _declared_domain_bounds(
+    entity: SemanticEntitySpec, domain_bounds: Mapping[str, Any]
+) -> dict[str, float]:
+    """A solution region's declared XY bounds, which must be complete, finite and of positive extent."""
+    required = ("x_min_um", "x_max_um", "y_min_um", "y_max_um")
+    missing = [name for name in required if name not in domain_bounds]
+    if missing:
+        raise TypeError(
+            _body(entity).expected(
+                "domain_bounds_um",
+                "x_min_um, x_max_um, y_min_um and y_max_um",
+                sorted(domain_bounds),
+            )
+        )
+    values = [cast(float, domain_bounds.get(name)) for name in required]
+    if any((not isfinite(float(value)) for value in values)):
+        raise ValueError(_body(entity).expected("domain_bounds_um", "finite", values))
+    x_min_um, x_max_um, y_min_um, y_max_um = (float(value) for value in values)
+    if not (x_min_um < x_max_um and y_min_um < y_max_um):
+        raise ValueError(
+            _body(entity).expected("domain_bounds_um", "a positive XY extent", values)
+        )
+    return {
+        "x_min_um": x_min_um,
+        "x_max_um": x_max_um,
+        "y_min_um": y_min_um,
+        "y_max_um": y_max_um,
+    }
+
+
 def _auto_vacuum_entity_xy_bounds(
     build_input: GeometryBuildInput, entity: SemanticEntitySpec
 ) -> dict[str, float]:
     geometry = entity.geometry
     domain_bounds = geometry.get("domain_bounds_um")
     if isinstance(domain_bounds, Mapping):
-        required = ("x_min_um", "x_max_um", "y_min_um", "y_max_um")
-        missing = [name for name in required if name not in domain_bounds]
-        if missing:
-            raise TypeError(
-                _body(entity).expected(
-                    "domain_bounds_um",
-                    "x_min_um, x_max_um, y_min_um and y_max_um",
-                    sorted(domain_bounds),
-                )
-            )
-        values = [cast(float, domain_bounds.get(name)) for name in required]
-        if any((not isfinite(float(value)) for value in values)):
-            raise ValueError(
-                _body(entity).expected("domain_bounds_um", "finite", values)
-            )
-        x_min_um, x_max_um, y_min_um, y_max_um = (float(value) for value in values)
-        if not (x_min_um < x_max_um and y_min_um < y_max_um):
-            raise ValueError(
-                _body(entity).expected(
-                    "domain_bounds_um", "a positive XY extent", values
-                )
-            )
-        return {
-            "x_min_um": x_min_um,
-            "x_max_um": x_max_um,
-            "y_min_um": y_min_um,
-            "y_max_um": y_max_um,
-        }
+        return _declared_domain_bounds(entity, domain_bounds)
     if "outer_loop" in geometry:
         outer_loop = clean_loop(geometry["outer_loop"])
         hole_loops = tuple(
@@ -203,26 +206,10 @@ def auto_vacuum_envelope_bounds(
         if bool(entity.metadata.get("is_auto_vacuum_region")):
             continue
         xy_bounds = _auto_vacuum_entity_xy_bounds(build_input, entity)
-        entry = {**xy_bounds, "z_min_um": float("nan"), "z_max_um": float("nan")}
-        if is_subtractor:
-            z_min_um, z_max_um = entity_z_range_um(entity)
-            if not (
-                isfinite(z_min_um) and isfinite(z_max_um) and (z_max_um > z_min_um)
-            ):
-                raise ValueError(
-                    _body(entity).expected(
-                        "Z extent", "positive and finite", (z_min_um, z_max_um)
-                    )
-                )
-            entry["z_min_um"] = float(z_min_um)
-            entry["z_max_um"] = float(z_max_um)
-        elif include_for_xy and (not is_subtractor):
-            sheet_z_um = auto_vacuum_sheet_z(
-                build_input, entity, representation_context=representation_context
-            )
-            entry["z_min_um"] = sheet_z_um
-            entry["z_max_um"] = sheet_z_um
-        bounds.append(entry)
+        z_min_um, z_max_um = _envelope_z_interval(
+            build_input, entity, is_subtractor, representation_context
+        )
+        bounds.append({**xy_bounds, "z_min_um": z_min_um, "z_max_um": z_max_um})
     if not bounds:
         raise ValueError(
             Declared(
@@ -247,6 +234,28 @@ def auto_vacuum_envelope_bounds(
         "z_min_um": min((item["z_min_um"] for item in finite_z_bounds)),
         "z_max_um": max((item["z_max_um"] for item in finite_z_bounds)),
     }
+
+
+def _envelope_z_interval(
+    build_input: GeometryBuildInput,
+    entity: SemanticEntitySpec,
+    is_subtractor: bool,
+    representation_context: RepresentationContext | None,
+) -> tuple[float, float]:
+    """The Z a body adds to the envelope: a solid's interval, or a sheet's plane as low and high."""
+    if is_subtractor:
+        z_min_um, z_max_um = entity_z_range_um(entity)
+        if not (isfinite(z_min_um) and isfinite(z_max_um) and (z_max_um > z_min_um)):
+            raise ValueError(
+                _body(entity).expected(
+                    "Z extent", "positive and finite", (z_min_um, z_max_um)
+                )
+            )
+        return float(z_min_um), float(z_max_um)
+    sheet_z_um = auto_vacuum_sheet_z(
+        build_input, entity, representation_context=representation_context
+    )
+    return sheet_z_um, sheet_z_um
 
 
 def auto_vacuum_sheet_z(

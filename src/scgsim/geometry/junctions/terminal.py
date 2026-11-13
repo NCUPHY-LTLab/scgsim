@@ -39,13 +39,9 @@ class JunctionTerminalGeometry(Protocol):
         ...
 
 
-def junction_terminal_line(
-    polygon: Mapping[str, Any], junction: JunctionTerminalGeometry, z_um: float
-) -> tuple[list[list[float]], float]:
-    """Validate a rectangular junction sheet and return its axial terminal line."""
-    exterior = tuple(
-        ((float(point[0]), float(point[1])) for point in polygon["exterior"])
-    )
+def _corner_points(ring) -> tuple[tuple[float, float], ...]:
+    """A ring's corners: its points without repeats and without points on a straight run, decided exactly."""
+    exterior = tuple(((float(point[0]), float(point[1])) for point in ring))
 
     def rational(p):
         return tuple((Fraction(str(v)) for v in p))
@@ -53,7 +49,7 @@ def junction_terminal_line(
     witness = tuple(
         (point for index, point in enumerate(exterior) if point != exterior[index - 1])
     )
-    exterior = tuple(
+    return tuple(
         (
             point
             for index, point in enumerate(witness)
@@ -65,10 +61,17 @@ def junction_terminal_line(
             != 0
         )
     )
+
+
+def junction_terminal_line(
+    polygon: Mapping[str, Any], junction: JunctionTerminalGeometry, z_um: float
+) -> tuple[list[list[float]], float]:
+    """Validate a rectangular junction sheet and return its axial terminal line."""
+    exterior = _corner_points(polygon["exterior"])
     if len(exterior) != 4 or polygon.get("holes"):
         raise ValueError(
             _junction(junction).refusal(
-                f"junction {junction.junction_id!r} requires one rectangular polygon without holes"
+                "it requires one rectangular polygon without holes"
             )
         )
     dx, dy = junction.direction_xy
@@ -78,22 +81,18 @@ def junction_terminal_line(
     across_min, across_max = (min(projected.across), max(projected.across))
     tolerance = projected.tolerance
     if along_max - along_min <= tolerance or across_max - across_min <= tolerance:
-        raise ValueError(
-            _junction(junction).refusal(
-                f"junction {junction.junction_id!r} polygon has empty projected extent"
-            )
-        )
+        raise ValueError(_junction(junction).refusal("it has empty projected extent"))
     if not projected.corners_on_extent():
         raise ValueError(
             _junction(junction).refusal(
-                f"junction {junction.junction_id!r} polygon is not rectangular in its declared direction"
+                "it is not rectangular in its declared direction"
             )
         )
     width = across_max - across_min
     if not math.isclose(width, junction.width_um, rel_tol=1e-09, abs_tol=1e-09):
         raise ValueError(
             _junction(junction).refusal(
-                f"junction {junction.junction_id!r} width disagrees with its polygon"
+                f"its width disagrees with the junction's width {junction.width_um} um"
             )
         )
     across_mid = (across_min + across_max) / 2.0

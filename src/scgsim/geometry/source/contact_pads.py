@@ -37,15 +37,10 @@ class _PolygonWithArea(Protocol):
         ...
 
 
-def resolve_contact_pad_attachment(
-    pad: SemanticEntitySpec,
-    entities: Sequence[SemanticEntitySpec],
-    *,
-    finite_overlap: Callable[[SemanticEntitySpec, SemanticEntitySpec], bool]
-    | None = None,
-    defer_overlap: bool = False,
-) -> SemanticEntitySpec | None:
-    """Resolve attachment, or check declarations before native curved overlap exists."""
+def _declared_face_metals(
+    pad: SemanticEntitySpec, entities: Sequence[SemanticEntitySpec]
+) -> tuple[SemanticEntitySpec, ...]:
+    """The face-metal Entities the pad's attached id names, by id or by semantic group."""
     attached_id = pad.attached_face_metal_semantic_id
     candidates = tuple(
         candidate
@@ -64,6 +59,19 @@ def resolve_contact_pad_attachment(
         raise ValueError(
             _pad(pad).refusal("its attachment must be a face_metal Entity")
         )
+    return candidates
+
+
+def resolve_contact_pad_attachment(
+    pad: SemanticEntitySpec,
+    entities: Sequence[SemanticEntitySpec],
+    *,
+    finite_overlap: Callable[[SemanticEntitySpec, SemanticEntitySpec], bool]
+    | None = None,
+    defer_overlap: bool = False,
+) -> SemanticEntitySpec | None:
+    """Resolve attachment, or check declarations before native curved overlap exists."""
+    candidates = _declared_face_metals(pad, entities)
     matches = tuple(
         candidate
         for candidate in candidates

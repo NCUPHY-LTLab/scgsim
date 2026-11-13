@@ -735,76 +735,16 @@ class GeometryPlan:
         entities = {entity.semantic_id: entity for entity in build_input.entities}
         for support in self._lumped_supports:
             path = support.source_occurrence_path
+            owner = _call(
+                "set_lumped_supports", f"lumped support {support.support_id!r}"
+            )
             if path not in self._instances:
                 raise ValueError(
-                    _call(
-                        "set_lumped_supports", f"lumped support {support.support_id!r}"
-                    ).refusal(f"its occurrence {path!r} is not registered")
+                    owner.refusal(f"its occurrence {path!r} is not registered")
                 )
             cell, _, transform = self._instances[path]
-            if support.source_level not in self._layer_stack.layers:
-                raise ValueError(
-                    _call(
-                        "set_lumped_supports", f"lumped support {support.support_id!r}"
-                    ).refusal(
-                        f"its level {support.source_level!r} is not declared in the layer stack"
-                    )
-                )
-            level = self._layer_stack.layers[support.source_level]
-            from gdsfactory.pdk import get_layer_tuple  # noqa: PLC0415 - needed only for authored lumped supports
-
-            if get_layer_tuple(level.layer.layer) != support.source_layer:
-                raise ValueError(
-                    _call(
-                        "set_lumped_supports", f"lumped support {support.support_id!r}"
-                    ).refusal(
-                        "its source level/layer binding differs from the layer stack"
-                    )
-                )
-            source_z_um = float(level.zmin)
-            if support.source_z_um is not None and support.source_z_um != source_z_um:
-                raise ValueError(
-                    _call(
-                        "set_lumped_supports", f"lumped support {support.support_id!r}"
-                    ).expected(
-                        "source_z_um",
-                        f"its level's plane {source_z_um}",
-                        support.source_z_um,
-                    )
-                )
-            if any(point[2] != source_z_um for point in support.contact_points_um):
-                raise ValueError(
-                    _call(
-                        "set_lumped_supports", f"lumped support {support.support_id!r}"
-                    ).refusal(
-                        f"its contacts differ from its level's plane z = {source_z_um} um"
-                    )
-                )
-            for entity_id in (
-                *support.terminal_a_entity_ids,
-                *support.terminal_b_entity_ids,
-            ):
-                if (
-                    entity_id not in entities
-                    or entities[entity_id].material_kind != "conductor"
-                ):
-                    raise ValueError(
-                        _call(
-                            "set_lumped_supports",
-                            f"lumped support {support.support_id!r}",
-                        ).refusal(
-                            f"its terminal Entity {entity_id!r} is not a conductor"
-                        )
-                    )
-                if entities[entity_id].net_id is None:
-                    raise ValueError(
-                        _call(
-                            "set_lumped_supports",
-                            f"lumped support {support.support_id!r}",
-                        ).refusal(
-                            f"its terminal Entity {entity_id!r} lacks final Net ownership; give it a Net with set_nets"
-                        )
-                    )
+            source_z_um = self._lumped_support_plane(support, owner)
+            _check_lumped_terminals(support, entities, owner)
             polygon = occurrence_lumped_polygon(
                 scope,
                 support,
@@ -822,6 +762,40 @@ class GeometryPlan:
                 )
             )
         return lumped_supports
+
+    def _lumped_support_plane(self, support: LumpedSupport, owner: Declared) -> float:
+        """The Z of the support's level, which its layer, its declared plane and its contacts must match."""
+        if support.source_level not in self._layer_stack.layers:
+            raise ValueError(
+                owner.refusal(
+                    f"its level {support.source_level!r} is not declared in the layer stack"
+                )
+            )
+        level = self._layer_stack.layers[support.source_level]
+        from gdsfactory.pdk import get_layer_tuple  # noqa: PLC0415 - needed only for authored lumped supports
+
+        if get_layer_tuple(level.layer.layer) != support.source_layer:
+            raise ValueError(
+                owner.refusal(
+                    "its source level/layer binding differs from the layer stack"
+                )
+            )
+        source_z_um = float(level.zmin)
+        if support.source_z_um is not None and support.source_z_um != source_z_um:
+            raise ValueError(
+                owner.expected(
+                    "source_z_um",
+                    f"its level's plane {source_z_um}",
+                    support.source_z_um,
+                )
+            )
+        if any(point[2] != source_z_um for point in support.contact_points_um):
+            raise ValueError(
+                owner.refusal(
+                    f"its contacts differ from its level's plane z = {source_z_um} um"
+                )
+            )
+        return source_z_um
 
     def _assemble_snapshot(
         self,
@@ -902,6 +876,30 @@ class GeometryPlan:
                 for value in semantics.get("boundary_reconstruction", ())
             )
         return tuple(boundary_curves), tuple(reconstruction)
+
+
+def _check_lumped_terminals(
+    support: LumpedSupport, entities: Mapping[str, Any], owner: Declared
+) -> None:
+    """Refuse a lumped support whose terminal Entities are not conductors with a final Net."""
+    for entity_id in (
+        *support.terminal_a_entity_ids,
+        *support.terminal_b_entity_ids,
+    ):
+        if (
+            entity_id not in entities
+            or entities[entity_id].material_kind != "conductor"
+        ):
+            raise ValueError(
+                owner.refusal(f"its terminal Entity {entity_id!r} is not a conductor")
+            )
+        if entities[entity_id].net_id is None:
+            raise ValueError(
+                owner.refusal(
+                    f"its terminal Entity {entity_id!r} lacks final Net ownership; "
+                    "give it a Net with set_nets"
+                )
+            )
 
 
 def _polygons_with_owners(build_input: GeometryBuildInput) -> tuple[Any, ...]:
