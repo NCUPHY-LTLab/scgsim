@@ -94,8 +94,14 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
 ) -> CollectedSnapshots:
     """Read the native AMR iterations in order, then the final result of the run folder.
 
-    The final result replaces the last iteration when both are the same native iteration with the same
-    margin physics, and is appended after it otherwise.
+    The final result is the last iteration read again, and replaces it, only when all of these hold: both have
+    the same primary physics, both are the same native iteration, and their margin physics agree.  In every
+    other case it is appended after the iterations.  One exception: on a failed attempt, a final result with
+    the last iteration's primary physics but a different recorded mesh or solver size makes the collection
+    ``"unreadable"``, and the iterations are returned without it.
+
+    A run folder with no results folder, or whose final result has no physics table, is ``"missing"``; a final
+    result that cannot be read is ``"unreadable"``.
 
     ``mode_count`` is the requested Eigenmode count when the run's config is known.
     Each pass then keeps those modes of the tables Palace wrote for every converged
