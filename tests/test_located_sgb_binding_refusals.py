@@ -7,7 +7,7 @@ fourth).  Three stages refuse a boundary record:
   defines a circle: a component's arc on the points as the component writes them, a
   reconstruction's anchors on the vertices as their cell draws them.  An occurrence transform
   turns both in floats, where three points on one line seldom stay on one line.
-* SGB (``sgb.prisms.curves``) binds the records of every conductor.  The junction partition
+* SGB (``sgb.exact.boundaries``) binds the records of every conductor.  The junction partition
   reads a lumped port's terminal through that binding, so a record on a terminal is refused
   there first, with the same ``InputError`` and message as off a port.
 
@@ -317,7 +317,7 @@ def test_two_reconstructions_of_one_drawn_segment_are_refused_on_it(monkeypatch)
     )
     message = one_refusal(monkeypatch, reconstruction=[pad_arc(), second])
     assert message.startswith(
-        "overlapping reconstruction segment claims on ring ('chip/pad', 0, 0): "
+        "overlapping reconstruction segment claims on the outer ring of polygon 0: "
         "chip/PAD_ARC and chip/PAD_ARC_2 (Entity 'chip/pad' on layer 1/0) both replace "
         "the ring between "
     )

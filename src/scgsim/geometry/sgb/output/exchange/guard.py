@@ -156,6 +156,7 @@ def read_step_guard(path: Path) -> StepGuard:
         raise StepGuardError(
             f"{path}: the sidecar's model {model!r} (route {route!r}) is not "
             f"the guarded {guard['model']!r} (route {guard['route']!r})"
+            ". Export the STEP again from the geometry file and its sidecar (export_aedt_step)"
         )
     try:
         mismatches = guard_mismatches(guard["solids"], guard["free_faces"], sidecar)
@@ -165,7 +166,9 @@ def read_step_guard(path: Path) -> StepGuard:
         ) from error
     if mismatches:
         raise StepGuardError(
-            f"{path} does not match its sidecar: " + "; ".join(mismatches)
+            f"{path} does not match its sidecar: "
+            + "; ".join(mismatches)
+            + ". Export the STEP again from the geometry file and its sidecar (export_aedt_step)"
         )
     return guard
 
@@ -458,12 +461,14 @@ def _check_bound_file(guard_path: Path, role: str, record: Any) -> None:
     if not target.is_file():
         raise StepGuardError(
             f"{guard_path}: the {role} file {record['path']} is missing"
+            ". Export the STEP again from the geometry file and its sidecar (export_aedt_step)"
         )
     observed = file_sha256(target)
     if observed != record["sha256"]:
         raise StepGuardError(
             f"{guard_path}: the {role} file {record['path']} changed "
             f"(sha256 {observed}, guarded {record['sha256']})"
+            ". Export the STEP again from the geometry file and its sidecar (export_aedt_step)"
         )
 
 

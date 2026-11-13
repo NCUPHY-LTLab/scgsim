@@ -40,7 +40,6 @@ class Role(Enum):
     STAGE = "stage"  # a stage of the work: its docstring has In, Out and Next
     AREA = "area"  # an area's own folder: its docstring describes the area as a whole
     PART = "part"  # one part of the stage named by ``part_of``: that stage's lines cover it
-    MODULES = "modules"  # a stage whose docstring names its modules instead of the three lines
     SHARED = "shared"  # used by every area, outside the flow of any one of them
 
 
@@ -95,16 +94,18 @@ AREAS = (
             Folder("geometry/sgb", Role.AREA),
             Folder("geometry/sgb/exact"),
             Folder("geometry/sgb/prisms"),
-            Folder("geometry/sgb/bands"),
             Folder("geometry/sgb/arrangement"),
             *_parts("geometry/sgb/arrangement", "noding", "labelling", "derivation"),
+            Folder("geometry/sgb/bands"),
             Folder("geometry/sgb/topology"),
             *_parts("geometry/sgb/topology", "assembly", "routes"),
             Folder("geometry/sgb/checks"),
-            *_parts("geometry/sgb/checks", "validation", "slivers", "verification"),
+            *_parts("geometry/sgb/checks", "validation", "slivers"),
             Folder("geometry/sgb/output"),
-            *_parts("geometry/sgb/output", "emission", "sidecar", "exchange"),
-            Folder("geometry/sgb/section", Role.MODULES),
+            *_parts(
+                "geometry/sgb/output", "emission", "sidecar", "verification", "exchange"
+            ),
+            Folder("geometry/sgb/section"),
         ),
     ),
     Area(
@@ -179,7 +180,6 @@ EDITIONS = (
         {
             Role.AREA: "The area's own folder: its docstring describes the area as a whole.",
             Role.PART: "Part of `{part_of}`; read it with that row.",
-            Role.MODULES: "Its docstring names its modules instead of In, Out and Next.",
             Role.SHARED: "Used by every area, outside the flow of any one of them.",
         },
         "en",
@@ -191,7 +191,6 @@ EDITIONS = (
         {
             Role.AREA: "這一區本身的資料夾：docstring 描述整個區。",
             Role.PART: "屬於 `{part_of}`，請與那一列一起閱讀。",
-            Role.MODULES: "docstring 列出它的模組，而沒有 In、Out、Next 三行。",
             Role.SHARED: "各區共用，不屬於任何一區的流程。",
         },
         "zh",

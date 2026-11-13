@@ -68,9 +68,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-Side = Literal["sheet", "top", "bottom"]
-FaceKind = Literal["sheet", "top", "bottom", "interface"]
-FACE_KINDS: tuple[FaceKind, ...] = ("sheet", "top", "bottom", "interface")
+ConductorSide = Literal["sheet", "top", "bottom"]
+CONDUCTOR_SIDES: tuple[ConductorSide, ...] = ("sheet", "top", "bottom")
+"""The faces of a conductor a band can lie on: its sheet, or the top or bottom of its finite body."""
+BandedFaceKind = Literal["sheet", "top", "bottom", "interface"]
+BANDED_FACE_KINDS: tuple[BandedFaceKind, ...] = ("sheet", "top", "bottom", "interface")
 """The face kinds a band can lie on: a conductor sheet, the top or bottom of a finite conductor, a solution interface."""
 
 
@@ -79,7 +81,7 @@ class ConductorSurface:
     """A face of one conductor Entity: its sheet, or the top or bottom face of its finite body."""
 
     entity_id: str
-    side: Side
+    side: ConductorSide
 
 
 @dataclass(frozen=True)

@@ -21,8 +21,8 @@ from sgb_extreme_cases import (
 from scgsim.contracts.sgb_sidecar import read_sidecar, sidecar_schema
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.checks.slivers.report import sliver_report
-from scgsim.geometry.sgb.checks.verification.loaded import verify_xao
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
+from scgsim.geometry.sgb.output.verification.loaded import verify_xao
 
 
 def build(name: str, route: str):
@@ -216,8 +216,8 @@ def _unemitted_faces(model) -> int:
 def test_every_fixture_passes_the_official_occt_checks(fixture, route, tmp_path):
     """BRepCheck, the Boolean argument analyzer (with self-interference) and ShapeAnalysis, against the plan."""
     pytest.importorskip("OCP")
-    from scgsim.geometry.sgb.checks.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
     from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
+    from scgsim.geometry.sgb.output.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
 
     model = build_model(fixture, route)
     artifacts = emit_model(model, tmp_path)
@@ -234,7 +234,8 @@ def test_every_fixture_passes_the_official_occt_checks(fixture, route, tmp_path)
 )
 def test_snap_drift_stays_within_one_grid_unit_on_every_fixture(fixture, route):
     """Reopen trigger of decision D7: drift above 1 g on the fixture catalogue would revisit bounded-drift snap rounding."""
-    summary = sliver_report(build_model(fixture, route))["summary"]
+    model = build_model(fixture, route)
+    summary = sliver_report(model.labelled, model.topology, model.routed)["summary"]
     assert summary["max_snap_drift_grid"] <= 1.0, (
         f"{fixture.name} {route}: {summary['max_snap_drift_grid']} g"
     )

@@ -495,7 +495,7 @@ def test_two_boundaries_of_one_ring_are_located_at_the_ring(monkeypatch):
         InputError, component=with_pad_boundary(monkeypatch, extra=(second,))
     )
     assert message.startswith(
-        "multiple complete authored boundaries claim ring ('chip/pad', 0, 0): "
+        "multiple complete authored boundaries claim the outer ring of polygon 0: "
         "chip/PAD_OUTER and chip/PAD_OUTER_2 (Entity 'chip/pad' on layer 1/0)"
     )
     assert message.endswith(
@@ -544,7 +544,7 @@ def test_an_authored_and_a_reconstructed_boundary_of_one_ring_are_located(tmp_pa
         build_prism_catalogue(curved.build_input, curved.representation)
     message = str(error.value)
     assert message.startswith(
-        "authored and reconstructed boundaries both claim ring ('pad', 0, 0): "
+        "authored and reconstructed boundaries both claim the outer ring of polygon 0: "
         "pad_outline and pad_corner (Entity 'pad'"
     )
     assert "Fix the declaration: describe the ring by one authored boundary" in message

@@ -292,12 +292,12 @@ def test_the_cpw_section_keeps_the_3d_groups_unions_rows_and_bands_it_crosses(
     assert "MA::signal__sidewall" in cpw_section.unions["NET::signal"]
     rows = cpw_section.surface_epr_rows
     assert len(rows) == 21 and all(rows[row] == row for row in rows)
-    assert sorted(r.request_id for r in cpw_section.band_families) == sorted(
+    assert sorted(r.request_id for r in cpw_section.band_family_requests) == sorted(
         f"{t}::{e}::{s}"
         for t, s in (("ma", "top"), ("ms", "bottom"))
         for e in ("gnd_minus", "gnd_plus", "signal")
     ) + ["sa::substrate|vacuum::z=0.0"]
-    assert {r.margins_um for r in cpw_section.band_families} == {MARGINS}
+    assert {r.margins_um for r in cpw_section.band_family_requests} == {MARGINS}
     assert cpw_section.report.failures == []
 
 

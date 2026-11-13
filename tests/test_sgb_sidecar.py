@@ -34,7 +34,10 @@ def sidecar_of(model, **context):
     return build_sidecar(
         model,
         plan_brep(model.topology, model.routed),
-        SidecarContext(sliver_report(model)["summary"], **context),
+        SidecarContext(
+            sliver_report(model.labelled, model.topology, model.routed)["summary"],
+            **context,
+        ),
     )
 
 
@@ -677,7 +680,7 @@ SCRIPT = (
     "for route in 'ABC':\n"
     "    model = pad_model(route, bands=True)\n"
     "    path = pathlib.Path(tempfile.mkdtemp()) / 's.json'\n"
-    "    write_sidecar(path, build_sidecar(model, plan_brep(model.topology, model.routed), SidecarContext(sliver_report(model)['summary'])))\n"
+    "    write_sidecar(path, build_sidecar(model, plan_brep(model.topology, model.routed), SidecarContext(sliver_report(model.labelled, model.topology, model.routed)['summary'])))\n"
     "    digests.append(hashlib.sha256(path.read_bytes()).hexdigest())\n"
     "print(*digests)\n"
 )

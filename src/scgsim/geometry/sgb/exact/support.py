@@ -391,7 +391,7 @@ class _OriginGrid:
     def __init__(self, origins: tuple[RingPrimitive, ...]) -> None:
         if not origins:
             raise ValueError(
-                "a support region without distance origins has no distances"
+                "internal: a support region without distance origins has no distances"
             )
         self.origins = origins
         boxes = [_bounding_box(prim) for prim in origins]

@@ -11,7 +11,7 @@ policies, cut families and emission build on this result in later sub-stages.
 from __future__ import annotations
 
 import gc
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
@@ -87,6 +87,20 @@ def derive_from_catalogue(
     finally:
         if was_enabled:
             gc.enable()
+
+
+def derive_physical_arrangements(catalogue: PrismCatalogue) -> LabelledArrangements:
+    """The physical pre-pass: the labelled arrangements of the catalogue's prisms without ports or cut families.
+
+    ``bands`` finds every inset support face on it, so the faces and their gap edges are the physical ones:
+    ports, contact caps and other bands never move a band.
+    """
+    physical = replace(
+        catalogue,
+        prisms=tuple(p for p in catalogue.prisms if p.material_kind != "port"),
+        families=(),
+    )
+    return derive_from_catalogue(physical)
 
 
 def derive_arrangements(

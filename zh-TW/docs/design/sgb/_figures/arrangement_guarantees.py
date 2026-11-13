@@ -226,13 +226,13 @@ def example_models() -> dict:
 
 def _layout_like() -> dict:
     model = build_model_from_catalogue(random_layout(200, seed=1, route="B"), "B")
-    drift = sliver_report(model)["snap_drift"]
+    drift = sliver_report(model.labelled, model.topology, model.routed)["snap_drift"]
     layers = model.labelled.slabs + model.labelled.level_layers
     rounds = Counter(layer.stats["snap_rounds"] for layer in layers)
     cases = {}
     for case, build in example_models().items():
         built = build()
-        report = sliver_report(built)
+        report = sliver_report(built.labelled, built.topology, built.routed)
         cases[case] = {
             "max_snap_drift_g": report["snap_drift"]["max_grid_units"],
             "edges_measured": report["snap_drift"]["edges_measured"],

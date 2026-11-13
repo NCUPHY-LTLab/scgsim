@@ -34,7 +34,9 @@ def sidecar_of(model: ConformalModel) -> dict:
     return build_sidecar(
         model,
         plan_brep(model.topology, model.routed),
-        SidecarContext(sliver_report(model)["summary"]),
+        SidecarContext(
+            sliver_report(model.labelled, model.topology, model.routed)["summary"]
+        ),
     )
 
 

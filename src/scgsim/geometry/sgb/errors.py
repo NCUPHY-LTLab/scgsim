@@ -1,7 +1,10 @@
 """Exceptions raised by the SGB pipeline.  Every one stops the build (fail closed).
 
 No fallback geometry is ever produced: a source or planning defect surfaces as
-one of these errors, naming the entities and the location involved.
+one of these errors, naming the entities and the location involved, and saying who
+must change what.  A message that opens with ``internal:`` names an invariant SGB
+itself broke on an input it accepted: nothing in the input is to blame, and the
+fix is in SGB, so report it with the input that produced it.
 """
 
 from __future__ import annotations

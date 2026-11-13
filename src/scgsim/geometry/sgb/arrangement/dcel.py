@@ -345,7 +345,7 @@ def interior_point(arr: Arrangement, face_index: int) -> RepPoint:
         if intervals:
             left, right = max(intervals, key=lambda i: i[1] - i[0])
             return fraction_to_rep((left + right) / 2, mid)
-    raise ValueError("face has no interior point (degenerate face)")
+    raise ValueError("internal: face has no interior point (degenerate face)")
 
 
 # Where, across a cell's width, its sample points lie (fractions of the width from the left).

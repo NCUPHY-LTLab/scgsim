@@ -20,8 +20,13 @@ from .version import SIDECAR_SCHEMA
 
 
 def read_sidecar(path: Path | str) -> Sidecar:
-    """The checked sidecar stored in the file ``path``."""
-    return check_sidecar(_decoded(Path(path)))
+    """The checked sidecar stored in the file ``path``; a refusal names the file."""
+    path = Path(path)
+    document = _decoded(path)
+    try:
+        return check_sidecar(document)
+    except SidecarError as error:
+        raise SidecarError(f"{path}: {error}") from None
 
 
 def check_sidecar(document: object) -> Sidecar:
@@ -38,7 +43,9 @@ def _decoded(path: Path) -> object:
         return json.loads(path.read_text(encoding="utf-8"), parse_constant=_not_json)
     # A JSONDecodeError, a UnicodeDecodeError, or the NaN or Infinity that _not_json refuses.
     except ValueError as error:
-        raise SidecarError(f"sidecar {path.name} is not JSON: {error}") from None
+        raise SidecarError(
+            f"sidecar {path} is not JSON: {error}. Rebuild the geometry to write it again"
+        ) from None
 
 
 def _not_json(constant: str) -> Any:

@@ -3,7 +3,7 @@
 The fourth slice of the located layout refusals (``test_located_refusals.py``,
 ``test_located_layout_refusals.py``, ``test_located_junction_refusals.py`` and
 ``test_located_source_and_sgb_refusals.py`` hold the first three).  The junction partition reads
-a lumped port's terminal conductors through SGB's own binding (``sgb.prisms.bound_rings``), so a
+a lumped port's terminal conductors through SGB's own binding (``sgb.exact.boundaries``), so a
 record on a terminal is refused there, with the ``InputError`` and the message SGB gives the same
 record off a port; ``test_located_sgb_binding_refusals.py`` checks each refusal on and off a
 port.  The tests here declare a record on the pad of the junction device of

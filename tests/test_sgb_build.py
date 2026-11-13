@@ -23,13 +23,13 @@ from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
 )
-from scgsim.geometry.sgb.checks.verification.loaded import (
+from scgsim.geometry.sgb.errors import RouteError
+from scgsim.geometry.sgb.output.verification.loaded import (
     LoadCheckError,
     apply_sidecar_embeds,
     verify_loaded,
     verify_xao,
 )
-from scgsim.geometry.sgb.errors import RouteError
 
 ARTIFACT_NAMES = ("xao", "brep", "sidecar", "sliver_report", "validation_report")
 

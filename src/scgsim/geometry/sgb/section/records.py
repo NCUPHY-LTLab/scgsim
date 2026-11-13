@@ -88,7 +88,8 @@ class SectionModel:
 
     ``groups`` are the primary groups (``dim`` 2 for faces, 1 for edges) and ``unions`` the 3D unions restricted
     to them; ``surface_epr_rows`` maps each Surface-EPR row the cut crosses to its group, and
-    ``band_families`` are the inset families whose bands the cut crosses, with their margins.  ``source`` is the
+    ``band_family_requests`` are the concrete requests of the band families whose bands the cut crosses (one per
+    family, its id the family's), with their margins.  ``source`` is the
     3D model, which keeps the sources and lineage the section refers to.
     """
 
@@ -101,7 +102,7 @@ class SectionModel:
     groups: dict[str, PhysicalGroup]
     unions: dict[str, list[str]]
     surface_epr_rows: dict[str, str]
-    band_families: tuple[InsetRequest, ...]
+    band_family_requests: tuple[InsetRequest, ...]
     report: ValidationReport
 
     @property
@@ -131,6 +132,6 @@ class SectionModel:
                 "groups": {k: [g.dim, sorted(g.ids)] for k, g in self.groups.items()},
                 "unions": self.unions,
                 "surface_epr_rows": self.surface_epr_rows,
-                "band_families": [r.request_id for r in self.band_families],
+                "band_families": [r.request_id for r in self.band_family_requests],
             },
         )

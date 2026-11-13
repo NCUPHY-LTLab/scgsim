@@ -16,7 +16,7 @@ not pull it), over the shape the direct writer produced, and returning a structu
    values, matched by the writer's ``TopExp::MapShapes`` numbering.
 
 With ``strict=True`` any finding raises :class:`OcctCheckError`.  This module needs OCP at import: call
-:func:`~scgsim.geometry.sgb.checks.verification.ocp.require_ocp` first to get the readable error naming the dependency group.
+:func:`~scgsim.geometry.sgb.output.verification.ocp.require_ocp` first to get the readable error naming the dependency group.
 
 Does not own writing (``output.emission``) or SGB's own structural invariants (``validation``).
 """
@@ -52,18 +52,18 @@ from OCP.TopoDS import TopoDS, TopoDS_Compound, TopoDS_Iterator, TopoDS_Shape
 from OCP.TopTools import TopTools_IndexedMapOfShape
 
 from scgsim.contracts.sgb_sidecar import Sidecar, views
-from scgsim.geometry.sgb.checks.verification.ocp import require_ocp
-from scgsim.geometry.sgb.checks.verification.tolerances import (
-    RELATIVE_TOLERANCE,
-    VERTEX_TOLERANCE_UM,
-    relative_error,
-)
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.output.emission.measures import (
     planned_face_area_um2,
     planned_volume_um3,
 )
 from scgsim.geometry.sgb.output.emission.plan import BrepPlan
+from scgsim.geometry.sgb.output.verification.ocp import require_ocp
+from scgsim.geometry.sgb.output.verification.tolerances import (
+    RELATIVE_TOLERANCE,
+    VERTEX_TOLERANCE_UM,
+    relative_error,
+)
 from scgsim.geometry.sgb.topology.assembly.records import Topology
 
 ARGUMENT_MODES = (
@@ -101,6 +101,7 @@ class OcctReport:
             raise OcctCheckError(
                 f"{self.source}: {len(self.problems)} OCCT finding(s): "
                 + "; ".join(self.problems[:6])
+                + ". This is an SGB defect for files SGB wrote and nothing changed since: report it with the files"
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -449,9 +450,9 @@ def plan_properties(
 def sidecar_mismatches(shape: Any, sidecar: Sidecar, *, limit: int = 3) -> list[str]:
     """Where a loaded shape differs from the sidecar's load-side view (``views.expected``), by tag order; empty when it belongs to it.
 
-    The OCP twin of :func:`~scgsim.geometry.sgb.checks.verification.loaded.verify_loaded`'s counts, vertex
+    The OCP twin of :func:`~scgsim.geometry.sgb.output.verification.loaded.verify_loaded`'s counts, vertex
     placement, face-area and solid-volume checks, with the same tolerances
-    (:mod:`~scgsim.geometry.sgb.checks.verification.tolerances`) and the same tag order (``TopExp::MapShapes``).
+    (:mod:`~scgsim.geometry.sgb.output.verification.tolerances`) and the same tag order (``TopExp::MapShapes``).
     Counts come first: when they differ the tag order means nothing, so only those are reported.  Each
     other quantity lists at most ``limit`` of its mismatches, named by planned id.
     """

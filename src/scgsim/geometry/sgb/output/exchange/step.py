@@ -61,8 +61,6 @@ from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
 from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
-from scgsim.geometry.sgb.checks.verification.occt import read_shape, sidecar_mismatches
-from scgsim.geometry.sgb.checks.verification.ocp import require_ocp
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.output.emission.measures import rounded
 from scgsim.geometry.sgb.output.exchange.guard import (
@@ -79,6 +77,8 @@ from scgsim.geometry.sgb.output.exchange.guard import (
     guarded_file,
     write_step_guard,
 )
+from scgsim.geometry.sgb.output.verification.occt import read_shape, sidecar_mismatches
+from scgsim.geometry.sgb.output.verification.ocp import require_ocp
 
 LENGTH_UNIT = (
     "UM"  # the label of the written numbers; the numbers themselves are micrometres
@@ -135,39 +135,18 @@ def export_aedt_step(
     require_ocp()
     sidecar = read_sidecar(sidecar_file)
     shape = read_shape(geometry_file)
-    mismatches = sidecar_mismatches(shape, sidecar)
-    if mismatches:
-        raise StepExportError(
-            f"{geometry_file} does not belong to the sidecar: " + "; ".join(mismatches)
-        )
+    _check_belongs(shape, sidecar, geometry_file, sidecar_file)
     solids = _indexed(shape, TopAbs_SOLID)
-    solid_ids = sidecar["binding"]["ids_by_tag"]["3"]
-    names = [_aedt_name(sidecar, vid) for vid in solid_ids]
     faces = _FaceIndex(
         _indexed(shape, TopAbs_FACE), sidecar["binding"]["ids_by_tag"]["2"]
     )
-    solid_guards: list[SolidGuard] = [
-        {
-            "solid": vid,
-            "aedt_name": name,
-            "faces": [faces.guard(f) for f in _faces_of(solids.FindKey(i + 1))],
-        }
-        for i, (vid, name) in enumerate(zip(solid_ids, names, strict=True))
-    ]
-    free_ids = set(free_face_ids(sidecar, solid_ids))
-    free_faces = [
-        faces.free_face(face, sidecar["face"][fid]["group"])
-        for face, fid in faces.in_tag_order()
-        if fid in free_ids
-    ]
-    mismatches = guard_mismatches(solid_guards, free_faces, sidecar)
-    if mismatches:
-        raise StepExportError(
-            f"{geometry_file} does not carry its planned faces: "
-            + "; ".join(mismatches)
-        )
+    solid_guards = _solid_guards(sidecar, solids, faces)
+    free_faces = _free_faces(sidecar, faces)
+    _check_planned_faces(solid_guards, free_faces, sidecar, geometry_file)
     _write_assembly(
-        [solids.FindKey(i + 1) for i in range(solids.Extent())], names, step_path
+        [solids.FindKey(i + 1) for i in range(solids.Extent())],
+        [solid["aedt_name"] for solid in solid_guards],
+        step_path,
     )
     guard_path = guard_path_for(step_path)
     guard: StepGuard = {
@@ -187,11 +166,65 @@ def export_aedt_step(
     return StepExport(step_path, guard_path, guard)
 
 
+def _check_belongs(
+    shape: Any, sidecar: Sidecar, geometry_file: Path, sidecar_file: Path
+) -> None:
+    """Refuse a geometry file whose load-side view differs from the sidecar's."""
+    mismatches = sidecar_mismatches(shape, sidecar)
+    if mismatches:
+        raise StepExportError(
+            f"{geometry_file} does not belong to the sidecar: "
+            + "; ".join(mismatches)
+            + f". Export the XAO or BREP that the build wrote next to {sidecar_file.name}."
+        )
+
+
+def _solid_guards(sidecar: Sidecar, solids: Any, faces: _FaceIndex) -> list[SolidGuard]:
+    """Each written solid in tag order: its planned volume, its AEDT name and the guards of its faces."""
+    solid_ids = sidecar["binding"]["ids_by_tag"]["3"]
+    return [
+        {
+            "solid": vid,
+            "aedt_name": _aedt_name(sidecar, vid),
+            "faces": [faces.guard(f) for f in _faces_of(solids.FindKey(i + 1))],
+        }
+        for i, vid in enumerate(solid_ids)
+    ]
+
+
+def _free_faces(sidecar: Sidecar, faces: _FaceIndex) -> list[FreeFace]:
+    """The guards of the written faces no solid bounds, in tag order."""
+    free_ids = set(free_face_ids(sidecar, sidecar["binding"]["ids_by_tag"]["3"]))
+    return [
+        faces.free_face(face, sidecar["face"][fid]["group"])
+        for face, fid in faces.in_tag_order()
+        if fid in free_ids
+    ]
+
+
+def _check_planned_faces(
+    solid_guards: list[SolidGuard],
+    free_faces: list[FreeFace],
+    sidecar: Sidecar,
+    geometry_file: Path,
+) -> None:
+    """Refuse a file whose solids do not carry exactly their planned faces (the check the reader repeats)."""
+    mismatches = guard_mismatches(solid_guards, free_faces, sidecar)
+    if mismatches:
+        raise StepExportError(
+            f"{geometry_file} does not carry its planned faces: "
+            + "; ".join(mismatches)
+            + ". This is an SGB defect for a file SGB wrote unchanged: report it with the file and its sidecar."
+        )
+
+
 def _aedt_name(sidecar: Sidecar, solid: str) -> str:
     """The AEDT name the sidecar gives an emitted solid (only an unemitted volume has none)."""
     name = sidecar["volume"][solid]["aedt_name"]
     if name is None:
-        raise StepExportError(f"the sidecar gives the solid {solid} no AEDT name")
+        raise StepExportError(
+            f"internal: the sidecar gives the emitted solid {solid} no AEDT name"
+        )
     return name
 
 
@@ -319,7 +352,9 @@ def _write_assembly(solids: list[Any], names: list[str], step_path: Path) -> Non
         Interface_Static.SetIVal_s("write.stepcaf.subshapes.name", 0),
     ]
     if not all(accepted):
-        raise StepExportError(f"Interface_Static refused a STEP parameter: {accepted}")
+        raise StepExportError(
+            f"internal: Interface_Static refused a STEP parameter: {accepted}"
+        )
     application = XCAFApp_Application.GetApplication_s()
     document = TDocStd_Document(TCollection_ExtendedString("BinXCAF"))
     application.InitDocument(document)
@@ -345,10 +380,14 @@ def _write_assembly(solids: list[Any], names: list[str], step_path: Path) -> Non
     step_path.parent.mkdir(parents=True, exist_ok=True)
     with _quiet_occt():
         if not writer.Transfer(document, STEPControl_AsIs):
-            raise StepExportError("STEP transfer failed")
+            raise StepExportError(
+                f"{step_path}: OCCT could not transfer the solids to STEP"
+            )
         status = writer.Write(str(step_path))
     if int(status) != 1:
-        raise StepExportError(f"STEP write failed: {status}")
+        raise StepExportError(
+            f"{step_path}: OCCT could not write the STEP (status {status}); check that the folder is writable"
+        )
 
 
 @contextmanager

@@ -219,7 +219,7 @@ class _IteratedRounding:
         while self.changed or self.delta:
             rounds += 1
             if rounds > self.max_rounds:
-                raise RuntimeError("snap rounding did not converge")
+                raise RuntimeError("internal: snap rounding did not converge")
             self._round()
         edges = [
             NodedEdge(a, b, frozenset(carriers))

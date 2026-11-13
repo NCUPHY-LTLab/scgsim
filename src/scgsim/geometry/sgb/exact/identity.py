@@ -40,7 +40,7 @@ def _encode(value: object) -> object:
     fields = getattr(value, "__dataclass_fields__", None)
     if fields is not None:
         return {name: getattr(value, name) for name in fields}
-    raise TypeError(f"cannot hash {type(value)}")
+    raise TypeError(f"internal: cannot hash {type(value)}")
 
 
 def digest(kind: str, payload: object) -> str:
