@@ -35,6 +35,7 @@ from scgsim.geometry.models.junctions import (
     JUNCTION_END_PIECE_PART,
     junction_net_id,
 )
+from scgsim.geometry.models.refusals import internal
 from scgsim.geometry.source.grid_projection import apply_geometry_grid
 
 
@@ -125,7 +126,9 @@ def _central_corners(state: JunctionModel, jid: str, record) -> tuple:
     central = state.lower(state.refine(state.sliced[jid][1]), simplify=True)
     if len(central) != 1 or len(central[0]) != 1 or len(central[0][0]) != 4:
         raise ValueError(
-            "numerical junction final central remainder is not a four-corner rectangle"
+            internal(
+                "numerical junction final central remainder is not a four-corner rectangle"
+            )
         )
     dx, dy = record["direction_xy"]
     uv = [(x * dx + y * dy, -x * dy + y * dx) for x, y in central[0][0]]
@@ -149,11 +152,13 @@ def _emit_end_pieces(state: JunctionModel, jid: str, record, ends, owners) -> No
         end = record["ends"][n]
         if len(part) > 1:
             raise ValueError(
-                "unsupported junction end topology in final model coordinates"
+                internal("unsupported junction end topology in final model coordinates")
             )
         if bool(part) != (end["polygon_id"] is not None):
             raise ValueError(
-                "numerical junction zero-end residual differs from selected local proof"
+                internal(
+                    "numerical junction zero-end residual differs from selected local proof"
+                )
             )
         if part:
             state.additions.append(
@@ -188,14 +193,18 @@ def _checked_partition_coverage(
     final_free = state.lower(state.refine(state.free_edges[jid]))
     if not emitted_partition_coverage(final_free, emitted_slices):
         raise ValueError(
-            "numerical junction emitted partition does not cover source free boundary"
+            internal(
+                "numerical junction emitted partition does not cover source free boundary"
+            )
         )
     final_partition = state.lower(
         state.refine([*chosen[0], *state.sliced[jid][1], *chosen[1]])
     )
     if not emitted_partition_coverage(final_partition, emitted_pieces):
         raise ValueError(
-            "numerical junction emitted end pieces and rectangle differ from their slices"
+            internal(
+                "numerical junction emitted end pieces and rectangle differ from their slices"
+            )
         )
     return final_free, final_partition
 
@@ -271,7 +280,9 @@ def rebuild_entity_support(state: JunctionModel) -> None:
         ]
         if len(outer) != 1:
             raise ValueError(
-                "junction source Entity support cannot be represented as one connected normalized region"
+                internal(
+                    "junction source Entity support cannot be represented as one connected normalized region"
+                )
             )
         geometry = {
             **entity.geometry,
@@ -339,7 +350,7 @@ def check_emitted_partitions(state: JunctionModel) -> None:
             for _net, _, region in conductors:
                 intervals, points = model_edge_section(region, start, finish)
                 if intervals or any((0 < point < 1 for point in points)):
-                    raise ValueError("final cross-junction open-side contact")
+                    raise ValueError(internal("final cross-junction open-side contact"))
         record["proof_conditions"]["all_derived_junctions_checked"] = True
 
 
@@ -365,7 +376,9 @@ def _check_central_clear(central, conductors) -> None:
                 )
             )
         ):
-            raise ValueError("final cross-junction PEC intersects RLC interior")
+            raise ValueError(
+                internal("final cross-junction PEC intersects RLC interior")
+            )
 
 
 def _check_emitted_end(state: JunctionModel, end, central, conductors) -> None:
@@ -388,15 +401,19 @@ def _check_emitted_end(state: JunctionModel, end, central, conductors) -> None:
             fraction_boundary_contact([piece], arms)
             or fraction_area_overlap(state.scope, [piece], arms)
         ):
-            raise ValueError("final model end lacks positive source-arm contact")
+            raise ValueError(
+                internal("final model end lacks positive source-arm contact")
+            )
         if closed_contact([piece], other):
-            raise ValueError("final cross-junction end contacts another net")
+            raise ValueError(internal("final cross-junction end contacts another net"))
     n = 0 if end["side"] == "A" else 1
     start, finish = (central[3], central[0]) if n == 0 else (central[1], central[2])
     if not model_edge_covered(own, start, finish):
-        raise ValueError("final model designated end edge is not wholly covered")
+        raise ValueError(
+            internal("final model designated end edge is not wholly covered")
+        )
     if model_edge_contacts(other, start, finish):
-        raise ValueError("final cross-junction wrong-net end/corner contact")
+        raise ValueError(internal("final cross-junction wrong-net end/corner contact"))
 
 
 def realized_on_grid(build_input, result, junctions, records):
@@ -427,7 +444,9 @@ def realized_on_grid(build_input, result, junctions, records):
             if not emitted_partition_coverage(
                 record["partition_model_regions"], emitted
             ):
-                raise ValueError("junction grid realization changes partition coverage")
+                raise ValueError(
+                    internal("junction grid realization changes partition coverage")
+                )
         except ValueError as error:
             error.add_note(
                 json.dumps(

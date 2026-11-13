@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, cast
 
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.grid.tagged_grid_operations import ShapelyGridOperations
+from scgsim.geometry.models.refusals import internal
 
 if TYPE_CHECKING:
     from shapely.geometry import Polygon
@@ -107,7 +108,7 @@ def edge_atoms(
 
 def refuse_graph(reason, **context):
     """Raise the established graph-construction error with structured context."""
-    error = ValueError("tagged grid construction cannot establish " + reason)
+    error = ValueError(internal("tagged grid construction cannot establish " + reason))
     error.add_note("scgsim.grid.tagged_context: " + json.dumps(context, sort_keys=True))
     raise error
 

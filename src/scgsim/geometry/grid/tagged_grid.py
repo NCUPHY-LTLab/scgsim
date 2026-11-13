@@ -28,6 +28,7 @@ from scgsim.geometry.grid.tagged_grid_operations import (
     ShapelyGridOperations,
     load_shapely_grid_operations,
 )
+from scgsim.geometry.models.refusals import internal
 from scgsim.preparation import current_preparation_workers, ordered_map
 
 if TYPE_CHECKING:
@@ -85,7 +86,11 @@ def _line_parts(value):
         return tuple(p for child in value.geoms for p in _line_parts(child))
     if value.geom_type in {"Point", "MultiPoint"}:
         return ()
-    raise ValueError("tagged grid native boundary network is not lineal")
+    raise ValueError(
+        internal(
+            f"the tagged grid boundary network holds a {value.geom_type}, not lines"
+        )
+    )
 
 
 def pixel_interval(a, b, pixel):

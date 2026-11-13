@@ -10,6 +10,7 @@ from typing import Protocol, TypeVar
 
 from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
 from scgsim.geometry.grid.coordinates import coordinate_2d_key
+from scgsim.geometry.models.refusals import internal
 
 Point2D = tuple[float, float]
 PlanarLoop = tuple[Point2D, ...]
@@ -104,9 +105,15 @@ def clean_loop(loop: LoopCoordinates) -> PlanarLoop:
     points = _drop_near_duplicate_loop_points(points)
     points = _drop_redundant_collinear_loop_points(points)
     if len(points) < 3:
-        raise ValueError("loop requires at least 3 unique points")
+        raise ValueError(
+            internal(
+                f"a loop with fewer than 3 unique points reached a loop operation: {points}"
+            )
+        )
     if abs(polygon_area(points)) <= TOPOLOGY_EPS_UM:
-        raise ValueError("loop area is below topology tolerance")
+        raise ValueError(
+            internal(f"a loop of no area reached a loop operation: {points}")
+        )
     return points
 
 

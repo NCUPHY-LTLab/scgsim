@@ -16,6 +16,7 @@ from scgsim.geometry.grid.planar_loops import (
 from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.junctions.core import PRECISION_UM
 from scgsim.geometry.junctions.exact_geometry import inside_ring, on, region_edges
+from scgsim.geometry.models.refusals import internal
 
 
 def build_polygon_region(scope: GridScope, polygons):
@@ -90,7 +91,9 @@ def read_boolean_rings(region):
         holes = tuple((ring for ring in loops if ring is not outer))
         if any((inside_ring(hole[0], outer) != 1 for hole in holes)):
             raise ValueError(
-                "junction residual has point-connected or non-interior components"
+                internal(
+                    "a junction residual has point-connected or non-interior components"
+                )
             )
         result.append((outer, *holes))
     return result

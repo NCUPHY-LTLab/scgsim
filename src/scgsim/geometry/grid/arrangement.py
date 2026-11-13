@@ -31,6 +31,7 @@ from scgsim.geometry.grid.grid_regions import (
 )
 from scgsim.geometry.grid.tagged_grid import build_tagged_subdivision
 from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.models.refusals import internal
 from scgsim.preparation import (
     ordered_map,
 )
@@ -66,7 +67,11 @@ def build_grid_arrangement(
     )
     ids = [v.operand_id for v in values]
     if len(ids) != len(set(ids)):
-        raise ValueError("common grid operand identities are duplicated")
+        raise ValueError(
+            internal(
+                f"grid operand identities are duplicated: {sorted(set(i for i in ids if ids.count(i) > 1))}"
+            )
+        )
 
     def construct() -> _GridWork:
         return _construct_grid_work(values, grid, apply_grid, Polygon)

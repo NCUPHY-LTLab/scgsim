@@ -20,6 +20,7 @@ from scgsim.geometry.models.input import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
+from scgsim.geometry.models.refusals import internal
 
 type IntegerPoint = tuple[int, int]
 type RationalPoint = tuple[int | Fraction, int | Fraction]
@@ -70,7 +71,9 @@ class JunctionModel:
         prior = self.events[edge].get(point)
         if prior is not None and prior != parameter:
             raise ValueError(
-                "numerical junction incidence collapses distinct source parameters"
+                internal(
+                    "numerical junction incidence collapses distinct source parameters"
+                )
             )
         self.events[edge][point] = parameter
         self.members[point].add(edge)
@@ -84,14 +87,18 @@ class JunctionModel:
                 ta, tb = (self.events[source][a], self.events[source][b])
                 if ta == tb:
                     raise ValueError(
-                        "numerical junction source edge has collapsed parameter span"
+                        internal(
+                            "numerical junction source edge has collapsed parameter span"
+                        )
                     )
                 for point, t in self.events[source].items():
                     u = (t - ta) / (tb - ta)
                     if 0 < u < 1:
                         if u in split and split[u] != point:
                             raise ValueError(
-                                "numerical junction source incidences disagree"
+                                internal(
+                                    "numerical junction source incidences disagree"
+                                )
                             )
                         split[u] = point
             ordered = [point for _, point in sorted(split.items())]
@@ -107,7 +114,9 @@ class JunctionModel:
             )
             if result in self.reverse and self.reverse[result] != point:
                 raise ValueError(
-                    "numerical junction shared vertices collapse on serialization"
+                    internal(
+                        "numerical junction shared vertices collapse on serialization"
+                    )
                 )
             self.reverse[result] = point
             self.registry[point] = result
@@ -150,7 +159,9 @@ class JunctionModel:
                     for hole in holes
                 )
             ):
-                raise ValueError("junction residual has unsupported nested components")
+                raise ValueError(
+                    internal("junction residual has unsupported nested components")
+                )
             region = []
             for index, loop in enumerate((ring, *holes)):
                 if simplify:
@@ -169,5 +180,7 @@ class JunctionModel:
                 region.append(tuple((self.emit(point) for point in loop)))
             regions.append(tuple(region))
         if sum((len(region) for region in regions)) != len(loops):
-            raise ValueError("junction residual has point-connected components")
+            raise ValueError(
+                internal("junction residual has point-connected components")
+            )
         return regions

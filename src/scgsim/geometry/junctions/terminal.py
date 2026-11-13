@@ -9,6 +9,15 @@ from fractions import Fraction
 from typing import Any, Protocol
 
 from scgsim.geometry.junctions.exact_geometry import cross
+from scgsim.geometry.models.refusals import Declared
+
+
+def _junction(junction: object) -> Declared:
+    """A junction's sheet, which the layout draws."""
+    return Declared(
+        f"the sheet of junction {getattr(junction, 'junction_id', None)!r}",
+        "the layout: draw the sheet as one rectangle along the port direction",
+    )
 
 
 class JunctionTerminalGeometry(Protocol):
@@ -58,7 +67,9 @@ def junction_terminal_line(
     )
     if len(exterior) != 4 or polygon.get("holes"):
         raise ValueError(
-            f"junction {junction.junction_id!r} requires one rectangular polygon without holes"
+            _junction(junction).refusal(
+                f"junction {junction.junction_id!r} requires one rectangular polygon without holes"
+            )
         )
     dx, dy = junction.direction_xy
     px, py = (-dy, dx)
@@ -68,16 +79,22 @@ def junction_terminal_line(
     tolerance = projected.tolerance
     if along_max - along_min <= tolerance or across_max - across_min <= tolerance:
         raise ValueError(
-            f"junction {junction.junction_id!r} polygon has empty projected extent"
+            _junction(junction).refusal(
+                f"junction {junction.junction_id!r} polygon has empty projected extent"
+            )
         )
     if not projected.corners_on_extent():
         raise ValueError(
-            f"junction {junction.junction_id!r} polygon is not rectangular in its declared direction"
+            _junction(junction).refusal(
+                f"junction {junction.junction_id!r} polygon is not rectangular in its declared direction"
+            )
         )
     width = across_max - across_min
     if not math.isclose(width, junction.width_um, rel_tol=1e-09, abs_tol=1e-09):
         raise ValueError(
-            f"junction {junction.junction_id!r} width disagrees with its polygon"
+            _junction(junction).refusal(
+                f"junction {junction.junction_id!r} width disagrees with its polygon"
+            )
         )
     across_mid = (across_min + across_max) / 2.0
     line = [

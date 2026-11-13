@@ -55,6 +55,7 @@ from scgsim.geometry.junctions.terminal import junction_terminal_line
 from scgsim.geometry.models.grid import (
     WALL_COLUMN_LIMIT_STEPS,
     GeometryGridContext,
+    format_extent,
     format_length,
     geometry_grid_context,
 )
@@ -64,6 +65,7 @@ from scgsim.geometry.models.input import (
     SemanticEntitySpec,
 )
 from scgsim.geometry.models.junctions import JunctionGeometry, junction_net_id
+from scgsim.geometry.models.refusals import Declared, internal
 
 
 def partition_junctions(
@@ -80,7 +82,12 @@ def partition_junctions(
         return build_input
     if output_format.metadata_key in build_input.metadata:
         raise ValueError(
-            "junction input is already partitioned; use immutable authored input"
+            Declared(
+                "the junction input",
+                "the call: pass the authored input, before any partition",
+            ).refusal(
+                "junction input is already partitioned; use immutable authored input"
+            )
         )
     return _JunctionPartitionPlanner(
         build_input, junctions, step, output_format
@@ -273,7 +280,9 @@ class _JunctionPartitionPlanner:
         self.width = round((max(across) - self.origin[1]) / PRECISION_UM)
         if self.span <= 0 or self.width <= 0:
             raise ValueError(
-                "junction authored geometry collapses at Boolean precision"
+                self.junction_refusal(
+                    "junction authored geometry collapses at Boolean precision"
+                )
             )
         self.deviations = []
 
@@ -297,7 +306,9 @@ class _JunctionPartitionPlanner:
         )
         if not self.own_a or not self.own_b:
             raise ValueError(
-                "junction requires both explicit terminal conductor geometries"
+                self.junction_refusal(
+                    "junction requires both explicit terminal conductor geometries: a terminal Net draws no conductor in the sheet's support plane"
+                )
             )
         self.other = [
             p
@@ -340,7 +351,11 @@ class _JunctionPartitionPlanner:
             contacts(self.selection, self.own_b, self.span, self.width),
         )
         if ca is None or cb is None:
-            raise ValueError("unsupported junction contact ordering or clear corridor")
+            raise ValueError(
+                self.junction_refusal(
+                    "unsupported junction contact ordering or clear corridor: each terminal must meet the sheet from its own end"
+                )
+            )
         # An exact arc can reach farther into the sheet than the drawn polygon's chords; the
         # cuts lie beyond it, so the central rectangle stays clear of the conductor SGB builds.
         lower, upper = ca[1], cb[0]
@@ -359,7 +374,9 @@ class _JunctionPartitionPlanner:
                         (self.lower < v < self.upper for v in points)
                     ):
                         raise ValueError(
-                            "unsupported corridor side-boundary metal contact"
+                            self.junction_refusal(
+                                "unsupported corridor side-boundary metal contact: metal touches the sheet's long sides"
+                            )
                         )
         self.sheet_region = build_polygon_region(
             self.selection, rectangle(0, 0, self.span, self.width)
@@ -375,7 +392,9 @@ class _JunctionPartitionPlanner:
         )
         if boolean(self.selection, corridor, self.free, "not"):
             raise ValueError(
-                "unsupported corridor containment; no general search performed"
+                self.junction_refusal(
+                    "unsupported corridor containment; no general search performed: the terminals leave no clear corridor across the sheet"
+                )
             )
 
     def check_cut_room(self) -> None:
@@ -441,7 +460,9 @@ class _JunctionPartitionPlanner:
             interior = self.cuts.beyond(index, bound, left=left)
             if interior and cut == bound:
                 raise ValueError(
-                    "numerical junction geometry failure: interior grid cut collapses to boundary"
+                    internal(
+                        "numerical junction geometry failure: interior grid cut collapses to boundary"
+                    )
                 )
             if (
                 cut < self.lower
@@ -481,7 +502,9 @@ class _JunctionPartitionPlanner:
             end = self.check_end(side, index)
             if end is None:
                 raise ValueError(
-                    "unsupported junction end topology on verified corridor/grid"
+                    self.junction_refusal(
+                        "unsupported junction end topology on verified corridor/grid"
+                    )
                 )
         return (cut, end, index)
 
@@ -532,14 +555,18 @@ class _JunctionPartitionPlanner:
                     (self.a < v < self.b for v in points)
                 ):
                     raise ValueError(
-                        "RLC open side has forbidden line or point contact"
+                        self.junction_refusal(
+                            "RLC open side has forbidden line or point contact"
+                        )
                     )
         for cut, wrong in (
             (self.a, self.own_b + self.other + self.end_b),
             (self.b, self.own_a + self.other + self.end_a),
         ):
             if any((any(section(rings, 0, cut, 0, self.width)) for rings in wrong)):
-                raise ValueError("wrong-net RLC end/corner contact")
+                raise ValueError(
+                    self.junction_refusal("wrong-net RLC end/corner contact")
+                )
         parts = [
             build_polygon_region(self.selection, self.end_a),
             build_polygon_region(self.selection, self.central),
@@ -556,7 +583,9 @@ class _JunctionPartitionPlanner:
             )
         ):
             raise ValueError(
-                "numerical junction geometry failure: partition coverage/interiors differ"
+                internal(
+                    "numerical junction geometry failure: partition coverage/interiors differ"
+                )
             )
 
     def record_ends(self):
@@ -675,6 +704,20 @@ class _JunctionPartitionPlanner:
         self.result = realized_on_grid(
             self.build_input, self.result, self.junctions, self.records
         )
+
+    def junction_refusal(self, problem: str) -> str:
+        """The refusal of the junction being planned: its id, where its sheet lies, and who changes it."""
+        sheet = getattr(self, "sheet", None)
+        where = (
+            ""
+            if sheet is None
+            else f" (its sheet lies at {format_extent(sheet.exterior, self.grid_um)})"
+        )
+        return Declared(
+            f"junction {self.junction.junction_id!r}{where}",
+            "the layout: draw the sheet and its two terminals as the rectangular "
+            "junction rule needs",
+        ).refusal(problem)
 
     def net_of(self, side: _EndSide) -> str:
         """The Net of the terminal an end is cut beside."""

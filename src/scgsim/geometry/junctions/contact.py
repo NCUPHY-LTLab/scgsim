@@ -21,8 +21,17 @@ from scgsim.geometry.models.physical import (
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
 )
+from scgsim.geometry.models.refusals import Declared, internal
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.semantics.route_a import geometry_z_range
+
+
+def _sheet(source_polygon_id: object) -> Declared:
+    """A junction's sheet and terminals, as its request and the stack bind them."""
+    return Declared(
+        f"the junction on sheet {source_polygon_id!r}",
+        "its RectangularJunctionSpec and the stack levels of its sheet and terminals",
+    )
 
 
 @dataclass(frozen=True)
@@ -83,7 +92,11 @@ class _ContactInventory:
             if region.source_polygon_id == self.request.source_polygon_id
         ]
         if len(self.regions) > 1:
-            raise ValueError("junction source sheet has ambiguous port-region identity")
+            raise ValueError(
+                _sheet(self.request.source_polygon_id).refusal(
+                    "junction source sheet has ambiguous port-region identity: two port sheets share its polygon"
+                )
+            )
         self.polygons = {
             polygon.polygon_id: polygon for polygon in self.build_input.polygons
         }
@@ -111,7 +124,9 @@ class _ContactInventory:
             if projection is not None:
                 if self.plan is None:
                     raise ValueError(
-                        "junction lowered source requires its common physical plan"
+                        internal(
+                            "a junction was lowered without its common physical representation plan"
+                        )
                     )
                 source_interval = tuple(projection["source_interval_um"])
                 physical_id = projection["physical_layer_id"]
@@ -159,7 +174,7 @@ class _ContactInventory:
                 or overlap.port_polygon_id != self.request.source_polygon_id
             ):
                 raise ValueError(
-                    "junction port overlap references another source sheet"
+                    internal("junction port overlap references another source sheet")
                 )
             matches = [
                 eid
@@ -173,7 +188,7 @@ class _ContactInventory:
             ]
             if len(matches) != 1 or overlap.host_polygon_id not in self.polygons:
                 raise ValueError(
-                    "junction port host lacks exact Entity/polygon ownership"
+                    internal("junction port host lacks exact Entity/polygon ownership")
                 )
             self.hosts.append(self.host_record(matches[0], overlap.host_polygon_id))
         anchors = {
@@ -194,7 +209,9 @@ class _ContactInventory:
             )
         ):
             raise ValueError(
-                "junction port host is disjoint from its authored support plane"
+                _sheet(self.request.source_polygon_id).refusal(
+                    "junction port host is disjoint from its authored support plane"
+                )
             )
         self.basis = "port_overlap_hosts"
 
@@ -267,7 +284,9 @@ class _ContactInventory:
         }
         if len(candidates) != 1:
             raise ValueError(
-                "junction terminal contacts lack a unique authored support plane"
+                _sheet(self.request.source_polygon_id).refusal(
+                    "junction terminal contacts lack a unique authored support plane"
+                )
             )
         self.source_z = next(iter(candidates))
         self.hosts = [
@@ -296,7 +315,9 @@ class _ContactInventory:
             and plain_record(self.request.stored_binding) != self.binding
         ):
             raise ValueError(
-                "junction stored support-plane binding differs from current source"
+                _sheet(self.request.source_polygon_id).refusal(
+                    "junction stored support-plane binding differs from current source; bind the junction again"
+                )
             )
 
     def project_effective_plane(self):
@@ -317,7 +338,9 @@ class _ContactInventory:
             effective_planes.add(self.effective_z)
         if len(effective_planes) != 1:
             raise ValueError(
-                "junction anchor hosts map to different effective support planes"
+                _sheet(self.request.source_polygon_id).refusal(
+                    "junction anchor hosts map to different effective support planes"
+                )
             )
         self.effective_z = next(iter(effective_planes))
         if any(
@@ -330,7 +353,9 @@ class _ContactInventory:
             )
         ):
             raise ValueError(
-                "junction host does not meet its mapped effective support plane"
+                _sheet(self.request.source_polygon_id).refusal(
+                    "junction host does not meet its mapped effective support plane"
+                )
             )
 
     def assemble(self):

@@ -22,6 +22,7 @@ from scgsim.geometry.models.physical import (
     interpret_physical_layers,
     source_plain,
 )
+from scgsim.geometry.models.refusals import Declared
 from scgsim.geometry.source.intents import route_a_sheet_interfaces
 from scgsim.semantics.route_a import geometry_z_range
 from scgsim.semantics.snapshot import canonical_sha256
@@ -85,7 +86,12 @@ def _physical_declarations(
             "route_b",
         }:
             raise ValueError(
-                f"source body {entity.semantic_id!r} lacks neutral physical declaration"
+                Declared(
+                    f"source body {entity.semantic_id!r}",
+                    "the physical_layer declaration of its PDK layer stack level",
+                ).refusal(
+                    f"it lacks a neutral physical declaration, which profile {profile.name!r} needs"
+                )
             )
     return declarations, bindings
 
