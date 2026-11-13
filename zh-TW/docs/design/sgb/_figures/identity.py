@@ -156,7 +156,11 @@ def _build_trace(model, sidecar) -> dict:
     }
     port_entities = {port["entity"] for port in sidecar["port"].values()}
     trace["walls_with_port_coverage"] = [
-        {"face": fid, "group": face["group"], "entity_coverage": face["entity_coverage"]}
+        {
+            "face": fid,
+            "group": face["group"],
+            "entity_coverage": face["entity_coverage"],
+        }
         for fid, face in sorted(sidecar["face"].items())
         if face["kind"] == "wall" and port_entities & set(face["entity_coverage"])
     ]
