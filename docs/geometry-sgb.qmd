@@ -450,11 +450,10 @@ physical-name prefix; the surrounding sheet may still carry its independently
 classified MA/MS evidence.
 
 Route-A profile selection is optional for a direct semantic-core consumer.
-A Palace simulation on Route A requires an explicit approximation profile
-(`set_route("A", approximation_profile=...)`): `thin_film`, or `substrate_face`
-or `metal_gap_equivalent` with their film bindings. Its optional `thin_film`
-keyword takes only `substrate_face` or `metal_gap_equivalent` and must name the
-profile; Route B refuses that keyword. With no core profile, coordinates remain unchanged and no collapse is
+A Palace simulation on Route A without a profile uses `thin_film`
+(`set_route("A")`); `substrate_face` or `metal_gap_equivalent` with their film
+bindings are passed as `set_route("A", approximation_profile=...)`. Route B
+without a profile uses the identity profile `route_b`. With no core profile, coordinates remain unchanged and no collapse is
 recorded. `metal_gap_equivalent` remains the existing effective coordinate
 normalization; no reversible-collapse claim is made.
 

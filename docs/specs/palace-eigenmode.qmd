@@ -21,7 +21,7 @@ ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics
 | Mesh summary | `mesh_summary()` returns detached meshing evidence |
 | Numerical controls | `set_numerical(...)` retains explicit order, linear solver, AMR and output choices |
 | Source/settings view | `input_summary()` returns the detached input `mesh()` builds from (the plan with the simulation's vacuum region, requested ports and route applied) plus settings, no file/native I/O |
-| Route | `set_route(route, *, thin_film=None, approximation_profile=None)`, before `mesh()`; Route B when never called, Route A requires `approximation_profile` |
+| Route | `set_route(route, *, approximation_profile=None)`, before `mesh()`; Route B when never called, Route A with no profile uses `thin_film` |
 | Surface EPR | `set_surface_epr(specs)`, before `mesh()`; computed only when called with specs, `None` turns it off and `{}` is refused |
 | Authored port | `add_port(name, *, layer, layout_sheet=True, inductance)`; `layout_sheet` must be `True` (its signature default `False` is refused) |
 | Output selection | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |

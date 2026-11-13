@@ -18,7 +18,7 @@ lang: zh-TW
 | 網格摘要 | `mesh_summary()` 回傳獨立的網格產生資料 |
 | 數值控制 | `set_numerical(...)` 保留明確的階數、線性求解器、AMR 與輸出選擇 |
 | 來源／設定檢視 | `input_summary()` 回傳獨立的 `mesh()` 建模輸入（計畫套用模擬的真空區域、所要求的埠，以及所選的 Route A 或 Route B 之後）與設定，不進行檔案或原生 I/O |
-| 路徑 | `set_route(route, *, thin_film=None, approximation_profile=None)`，須在 `mesh()` 之前；從未呼叫時為 Route B，Route A 要求 `approximation_profile` |
+| 路徑 | `set_route(route, *, approximation_profile=None)`，須在 `mesh()` 之前；從未呼叫時為 Route B，Route A 不提供近似設定時使用 `thin_film` |
 | Surface EPR | `set_surface_epr(specs)`，須在 `mesh()` 之前；只有以規格呼叫時才計算，`None` 會關閉它，`{}` 會被拒絕 |
 | 來源指定的埠 | `add_port(name, *, layer, layout_sheet=True, inductance)`；`layout_sheet` 必須是 `True`（簽章上的預設值 `False` 會被拒絕） |
 | 輸出選取 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |

@@ -48,7 +48,6 @@ from ..source.layout_snapshot import (
 )
 from ..source.ports import LayoutPortBinding, RequestedPort
 from ..source.surface_epr import SurfaceEprSpecs
-from ..source.transforms import RouteAThinFilm
 from ..source.workflow import GeometrySettings, route_profile
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .lifecycle import CALLS, Call, Stage
@@ -65,7 +64,6 @@ class PalaceSimulation(ABC):
 
     output_dir: Path | None = None
     route: Literal["A", "B"] = "B"
-    thin_film: RouteAThinFilm | None = None
     approximation_profile: ApproximationProfile | None = None
     vacuum_region: VacuumRegionSpec | None = None
     surface_epr_specs: SurfaceEprSpecs | None = None
@@ -167,34 +165,33 @@ class PalaceSimulation(ABC):
         self,
         route: Literal["A", "B"],
         *,
-        thin_film: RouteAThinFilm | None = None,
         approximation_profile: ApproximationProfile | None = None,
     ) -> None:
-        """Choose how the conductors are modelled: Route ``"A"`` (zero-thickness sheets) or ``"B"`` (3D volumes).
+        """Choose how the conductors are modelled: Route ``"A"`` (films as zero-thickness sheets) or ``"B"`` (3D volumes).
 
         A simulation that never calls ``set_route`` is Route B.  One call states the whole route setting: it
-        replaces the route, ``thin_film`` and ``approximation_profile`` together, so nothing survives from an
-        earlier call or the constructor.
+        replaces the route and ``approximation_profile`` together, so nothing survives from an earlier call or
+        the constructor.
 
-        * ``approximation_profile`` is the ``ApproximationProfile`` the preparation interprets the plan's
-          physical layers with.  Route A requires one: ``"thin_film"`` (no parameters), or
-          ``"substrate_face"`` or ``"metal_gap_equivalent"`` with their ``film_bindings``.  On Route B,
-          omitting it means the identity profile ``route_b``, and a profile given is used as given.
-        * ``thin_film`` (Route A only, optional) repeats the profile's name when it is ``"substrate_face"``
-          or ``"metal_gap_equivalent"`` and is checked against it; Route B refuses it.
+        ``approximation_profile`` is the ``ApproximationProfile`` the preparation interprets the plan's
+        physical layers with, used as given.  Without one, each route has its default:
+
+        * ``set_route("A")`` uses ``thin_film`` (no parameters): the film's thickness is removed and what is
+          above it moves down.
+        * ``set_route("A", approximation_profile=profile)`` uses ``substrate_face`` or
+          ``metal_gap_equivalent`` with their ``film_bindings``.
+        * ``set_route("B")`` uses the identity profile ``route_b``, which is also what no call gives.
 
         Calling it again discards the mesh, config and handoff.
 
         Raises:
-            ValueError: ``route`` is not ``"A"`` or ``"B"``, Route A has no ``approximation_profile``, or
-                ``thin_film`` is given on Route B, is not a Route A lowering or differs from the profile's name.
+            ValueError: ``route`` is not ``"A"`` or ``"B"``.
             TypeError: ``approximation_profile`` is not an ``ApproximationProfile``.
         """
         # Check every value before storing any, so a refused call leaves the earlier setting whole.
         chosen = _checked_route(route)
-        route_profile(chosen, thin_film, approximation_profile)
+        route_profile(chosen, approximation_profile)
         self.route = chosen
-        self.thin_film = thin_film
         self.approximation_profile = approximation_profile
         self._fall_back("set_route")
 
@@ -271,8 +268,9 @@ class PalaceSimulation(ABC):
 
         The source half is the geometry input and stack ``mesh()`` prepares from the bound plan, so it holds the
         vacuum region, the requested ports and the route's conductors as the simulation was given them.  The
-        Palace half shows the route setting and the Surface-EPR specs, ``None`` (shown as "not requested")
-        when ``set_surface_epr`` was not called.
+        Palace half shows the route and the approximation profile the preparation uses (the route's default
+        included) and the Surface-EPR specs, ``None`` (shown as "not requested") when ``set_surface_epr`` was
+        not called.
         A setup ``mesh()`` refuses while preparing is refused here with the same error, an input with no vacuum,
         planned or set, included.  Nothing is built or written, and the simulation is left as it was.
 
@@ -287,10 +285,9 @@ class PalaceSimulation(ABC):
         data["backend"] = {
             "name": "palace",
             "route": self.route,
-            "thin_film": self.thin_film,
-            "approximation_profile": self.approximation_profile.to_payload()
-            if self.approximation_profile is not None
-            else None,
+            "approximation_profile": route_profile(
+                self.route, self.approximation_profile
+            ).to_payload(),
             "surface_epr_specs": None
             if self.surface_epr_specs is None
             else self.surface_epr_specs.to_payload(),
@@ -429,7 +426,6 @@ class PalaceSimulation(ABC):
             ports=self._lumped_ports(),
             settings=GeometrySettings(
                 route=self.route,
-                thin_film=self.thin_film,
                 approximation_profile=self.approximation_profile,
                 vacuum_region=self.vacuum_region,
                 surface_epr_specs=self.surface_epr_specs,
@@ -575,10 +571,10 @@ def _checked_route(route: Any) -> Literal["A", "B"]:
     if chosen == "C":
         raise ValueError(
             "Route C is not a Palace route: SGB builds Route C for backends that keep conductor volumes. "
-            "Call set_route('A', approximation_profile=...) or set_route('B')."
+            "Call set_route('A') or set_route('B')."
         )
     raise ValueError(
-        f"Unknown route {route!r}: call set_route('A', approximation_profile=...) for zero-thickness sheets "
+        f"Unknown route {route!r}: call set_route('A') for films as zero-thickness sheets "
         "or set_route('B') for 3D conductors."
     )
 

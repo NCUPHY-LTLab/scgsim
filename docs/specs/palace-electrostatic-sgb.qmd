@@ -56,7 +56,7 @@ preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
 | Physical Ground binding | `add_ground` | Select conductor components for Palace Ground by exact SGB net identity. |
 | Problem controls | `set_electrostatic` | Declare Electrostatic-specific config controls. |
 | Output identity | `set_output_dir` | Bind the mesh/config/handoff output location. |
-| Route | `set_route` | Route B when never called; Route A with its `approximation_profile`. Run it before `mesh()`. |
+| Route | `set_route` | Route B when never called; `set_route("A")` uses the `thin_film` profile, or pass an `approximation_profile`. Run it before `mesh()`. |
 | Surface films | `set_surface_epr` | Declare surface films and their inset margins; run it before `mesh()`. Without it, no Surface EPR is computed. |
 | Mesh controls | `set_mesh(...)` | Select the sizing recipe, mesher options, repair budgets and quality threshold. |
 | Source/settings view | `input_summary()` | Return the detached input `mesh()` builds from (the plan with the simulation's vacuum region and route applied) plus the settings, with no file or native I/O. |

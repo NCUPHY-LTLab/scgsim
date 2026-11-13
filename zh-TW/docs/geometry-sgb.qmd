@@ -165,7 +165,7 @@ SGB 對每個來源／模型版本，將已驗證來源事實投影至 `scgsim.s
 
 `plan_route_surfaces()` 負責公開投影邊界：省略外觀物件時建立一次，提供時則驗證相同路徑及建構輸入指紋，再於既有鄰接呼叫位置重用。明確指定的介面種類及擁有者中繼資料，優先於衍生預設值。Route-A 薄片接觸平面範圍維持 `MM` 拓撲關係，但轉換為既有 `MS` 端帽並使用既定物理名稱前綴；周圍薄片仍可攜帶獨立分類的 MA／MS 資料。
 
-直接語意核心使用端可選擇不提供 Route-A 近似設定。Palace 模擬使用 Route A 時要求明確的近似設定（`set_route("A", approximation_profile=...)`）：`thin_film`，或帶有薄膜綁定的 `substrate_face` 或 `metal_gap_equivalent`。其選用的 `thin_film` 關鍵字只接受 `substrate_face` 或 `metal_gap_equivalent`，且必須與近似設定同名；Route B 拒絕此關鍵字。核心沒有近似設定時，座標不變且不記錄壓縮。`metal_gap_equivalent` 保持既有有效座標正規化，不宣稱可逆壓縮。
+直接語意核心使用端可選擇不提供 Route-A 近似設定。Palace 模擬使用 Route A 而不提供近似設定時，使用 `thin_film`（`set_route("A")`）；帶有薄膜綁定的 `substrate_face` 或 `metal_gap_equivalent` 以 `set_route("A", approximation_profile=...)` 傳入。Route B 不提供近似設定時使用恆等映射 `route_b`。核心沒有近似設定時，座標不變且不記錄壓縮。`metal_gap_equivalent` 保持既有有效座標正規化，不宣稱可逆壓縮。
 
 堆疊沒有 PDK 真空層時，只有呼叫端選用 `set_vacuum_region()`，省略導體宿主宣告才綁定至內部產生的背景。相同正規化多邊形對基板區域接觸檢查，同時為指定宿主與產生背景的堆疊提供 Route-A 物理支撐。它考慮完整外環與孔洞，要求唯一正面積接觸；包圍盒相交、點／邊接觸或自動區域邊不足以成立。已指定但無法解析的宿主名稱仍失敗，不默默重新綁定。單基板 `substrate_face` 沒有相對晶粒或間隙值；兩個相對基板保留物理 `substrate_face`，以及不同且限雙面的 `metal_gap_equivalent` 正規化。產生的 Region 在來源幾何之後套用近似設定，並繞實際介電與有限 PEC 佔據區分割。Route-A 薄片不扣除虛構體積。
 
