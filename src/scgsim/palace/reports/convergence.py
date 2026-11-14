@@ -345,33 +345,63 @@ def _cell(item: CriterionAtPass) -> str:
 
 
 def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
-    """Per criterion, what it measured at each pass on a log axis, with the declared threshold as the line."""
+    """What the criteria measured at each pass on a log axis, with the declared threshold as the line.
+
+    Criteria that measure one quantity the same way against one threshold share a figure, so the three kinds
+    of one ``SurfaceEpr.each(...).within(...)`` are three lines under their threshold, not three figures.
+    """
     if check.plan is None or not check.passes:
         return []
+    criteria = check.plan.criteria
     xs = [item.number for item in check.passes]
     figures: list[Any] = []
-    for index, criterion in enumerate(check.plan.criteria):
-        at_passes = [item.criteria[index] for item in check.passes]
+    for group in _sharing_a_figure(criteria):
+        first = criteria[group[0]]
         traces = [
             Trace(
                 planned.label,
-                [at.values[value_index].measured for at in at_passes],
+                [
+                    item.criteria[index].values[position].measured
+                    for item in check.passes
+                ],
             )
-            for value_index, planned in enumerate(criterion.values)
+            for index in group
+            for position, planned in enumerate(criteria[index].values)
         ]
+        label = first.label if len(group) == 1 else _QUANTITY_NAMES[first.quantity]
         figure = LinePlot(
-            title=f"{criterion.label}: {_measured_words(criterion)} vs AMR pass",
+            title=f"{label}: {_measured_words(first)} vs AMR pass",
             xlabel="AMR pass",
-            ylabel=_axis_words(criterion),
+            ylabel=_axis_words(first),
             xs=xs,
             traces=traces,
             yaxis_type="log",
-            hline=ReferenceLine(criterion.threshold, "declared threshold"),
+            hline=ReferenceLine(
+                first.threshold, f"declared: at most {_number(first.threshold, first)}"
+            ),
             theme=theme,
         ).figure()
         if figure is not None:
             figures.append(figure)
     return figures
+
+
+def _sharing_a_figure(criteria: Sequence[PlannedCriterion]) -> list[list[int]]:
+    """The criteria's positions, grouped by what they measure and against which threshold, in declared order."""
+    groups: dict[tuple[str, str, float, str], list[int]] = {}
+    for index, criterion in enumerate(criteria):
+        key = (criterion.quantity, criterion.test, criterion.threshold, criterion.unit)
+        groups.setdefault(key, []).append(index)
+    return list(groups.values())
+
+
+_QUANTITY_NAMES = {
+    "capacitance": "Capacitance",
+    "mode_frequency": "Mode frequency",
+    "surface_epr": "Surface participation",
+    "error_indicator": "Error indicator",
+}
+"""What a figure of several criteria on one quantity is called."""
 
 
 def _in_a_row(passes: int) -> str:
@@ -400,10 +430,10 @@ def _measured_words(criterion: PlannedCriterion) -> str:
 def _axis_words(criterion: PlannedCriterion) -> str:
     """What the figure's vertical axis is, in the words of the table."""
     if criterion.test == "percent_change":
-        return f"{_measured_words(criterion)} (change from the pass before, % of the value)"
+        return "change from the pass before (%)"
     unit = "" if criterion.unit == "1" else f" ({criterion.unit})"
     if criterion.test == "absolute_change":
-        return f"Max Delta{unit} (change from the pass before)"
+        return f"change from the pass before{unit}"
     return f"value{unit}"
 
 

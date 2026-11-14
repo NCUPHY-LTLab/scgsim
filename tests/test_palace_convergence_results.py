@@ -248,7 +248,7 @@ def test_whole_surface_participation_matches_the_whole_surface_records(
 
 
 def test_the_trust_report_shows_the_verdict_the_table_and_the_thresholds(returned):
-    """The verdict sentence, the table with a row per pass and one change figure per criterion."""
+    """The verdict sentence, the table with a row per pass and the figures of what the criteria measured."""
     result = resolve_palace_result(
         returned.root, expected_handoff_id=returned.handoff_id
     )
@@ -274,6 +274,22 @@ def test_the_trust_report_shows_the_verdict_the_table_and_the_thresholds(returne
     ]
     assert "C diagonal: Delta % vs AMR pass" in titles
     assert "error indicator (Norm): value vs AMR pass" in titles
+    # MA and MS, declared together against one threshold, share one figure: a line per kind and excitation.
+    shared = next(
+        figure
+        for figure in displayed
+        if hasattr(figure, "layout")
+        and figure.layout.title.text
+        == "Surface participation: Max Percent Delta vs AMR pass"
+    )
+    assert [trace.name.split(" ")[0] for trace in shared.data] == [
+        "MA",
+        "MA",
+        "MS",
+        "MS",
+    ]
+    assert shared.layout.yaxis.title.text == "change from the pass before (%)"
+    assert [shape.y0 for shape in shared.layout.shapes] == [2.0]
     error_figure = next(
         figure
         for figure in displayed
