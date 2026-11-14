@@ -39,6 +39,7 @@ def test_the_package_version_has_a_published_root():
 @pytest.mark.parametrize(
     ("package_version", "root"),
     [
+        ("3.0.0rc1", "v3.0.0-dev/"),
         ("2.0.0rc15", "v2.0.0-dev/"),
         ("2.1.0.dev3", "v2.1.0-dev/"),
         ("2.0.0", "v2.0.0/"),
