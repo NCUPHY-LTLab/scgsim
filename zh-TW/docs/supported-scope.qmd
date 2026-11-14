@@ -146,13 +146,13 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 
 ## 模擬之前先檢查版圖 {#check-a-layout}
 
-請在版圖的測試中、以及繪圖過程中，呼叫 `EigenmodeSim.simulation_drc`、`ElectrostaticSim.simulation_drc`，或兩者都呼叫。每個檢查都以您的 Net 與 Surface-EPR 邊距，執行該類別 `mesh()` 所執行的規劃與幾何建構，再執行 `mesh()` 也會先執行的網格階段檢查，並拋出相同的錯誤。呼叫方式見[版圖建模檢查](layout-modeling-check.qmd)。
+請在版圖的測試中、以及繪圖過程中，呼叫 `EigenmodeSim.simulation_drc`、`ElectrostaticSim.simulation_drc`，或兩者都呼叫。每個檢查都在您傳入的 route 上、以您的 Net 與 Surface-EPR 邊距，執行該類別 `mesh()` 所執行的規劃與幾何建構，再執行 `mesh()` 也會先執行的網格階段檢查，並拋出相同的錯誤。route 為 Route A 或 Route B，以 `set_route` 接受的方式傳入（`route` 與 `approximation_profile`），未傳入時為 Route B。呼叫方式見[版圖建模檢查](layout-modeling-check.qmd)。
 
-通過檢查表示這次檢查所建的模型被接受：Route B、您傳入的 Net 與邊距，以及[檢查使用的設定](layout-modeling-check.qmd#what-the-check-uses)所列的固定設定。它只確立這次建構實際檢查過的規則：
+通過檢查表示這次檢查所建的模型被接受：您傳入的 route 與近似設定、Net 與邊距，以及[檢查使用的設定](layout-modeling-check.qmd#what-the-check-uses)所列的固定設定。它只確立這次建構實際檢查過的規則：
 
 - [埠的規則](#rules-ports)只由 `EigenmodeSim.simulation_drc` 檢查。`ElectrostaticSim` 不選用埠薄片，所以它的檢查不會測到埠的規則。
 
-檢查在產生網格之前就停止。它的網格階段會依[網格階段的類別](layout-modeling-check.qmd#what-the-meshing-stage-reports)找出微細結構，但通過檢查不代表模型一定能產生網格。它也不檢查 Route A、其他設定或 AEDT。
+檢查在產生網格之前就停止。它的網格階段會依[網格階段的類別](layout-modeling-check.qmd#what-the-meshing-stage-reports)找出微細結構，但通過檢查不代表模型一定能產生網格。它也不檢查所傳入之外的 route 或近似設定、其他設定、Route C 或 AEDT。
 
 ## 失敗時怎麼辦 {#when-something-fails}
 

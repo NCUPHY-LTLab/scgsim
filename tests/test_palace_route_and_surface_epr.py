@@ -184,6 +184,27 @@ def test_any_other_route_is_refused_with_a_and_b_named(sim_type, route, says):
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
+def test_the_constructor_states_a_route_setting_by_the_same_rule(sim_type):
+    """A route setting given to the constructor is checked as ``set_route`` checks it, and names the constructor."""
+    name = sim_type.__name__
+    assert sim_type(route=" a ").route == "A"
+    assert (
+        sim_type(route="A", approximation_profile=THIN_FILM).approximation_profile
+        == THIN_FILM
+    )
+    with pytest.raises(TypeError) as not_a_profile:
+        sim_type(route="A", approximation_profile={"name": "thin_film"})
+    message = str(not_a_profile.value)
+    assert f"{name}(..., approximation_profile=ApproximationProfile(" in message
+    assert message.endswith(f"found 'dict'. Change it in the call to {name}.")
+    with pytest.raises(ValueError, match="Route C") as route_c:
+        sim_type(route="C")
+    assert str(route_c.value).endswith(
+        f"Call {name}(route='A') or {name}(route='B'). Change it in the call to {name}."
+    )
+
+
+@pytest.mark.parametrize("sim_type", SIMS)
 def test_a_second_set_route_replaces_the_route_and_the_profile(sim_type):
     """One call states the whole route setting: nothing survives from the call before."""
     sim = sim_type()

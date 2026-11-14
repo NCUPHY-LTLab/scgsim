@@ -49,13 +49,19 @@ from ..source.layout_snapshot import (
 )
 from ..source.ports import LayoutPortBinding, RequestedPort
 from ..source.surface_epr import SurfaceEprSpecs
-from ..source.workflow import GeometrySettings, route_profile
+from ..source.workflow import (
+    SET_ROUTE,
+    SIMULATION_DRC,
+    GeometrySettings,
+    RouteCall,
+    checked_route_setting,
+    route_profile,
+)
 from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .lifecycle import CALLS, Call, Stage
 
 _WHERE_MESH_AGAIN = "the run folder: call mesh() again"
 _WHERE_NUMERICAL_ARG = "the numerical argument of the simulation"
-_WHERE_SET_ROUTE = "the call to set_route"
 _WHERE_SURFACE_EPR = "the call to set_surface_epr"
 
 _WHERE_SET_OUTPUT_DIR = "the call to set_output_dir"
@@ -118,11 +124,21 @@ class PalaceSimulation(ABC):
         """Write ``config.json`` and its metadata for the current mesh; see the problem class."""
 
     def __post_init__(self) -> None:
-        """Fill the problem's defaults into the numerical controls the constructor was given.
+        """Check the route setting the constructor was given, and fill the problem's numerical defaults.
+
+        The constructor states a route setting as ``set_route`` does, so it is checked by the same rule
+        and a refusal names the constructor.
 
         Raises:
-            TypeError: ``numerical`` is not a ``NumericalControls``.
+            ValueError: ``route`` is not ``"A"`` or ``"B"``.
+            TypeError: ``approximation_profile`` is neither None nor an ``ApproximationProfile``, or
+                ``numerical`` is not a ``NumericalControls``.
         """
+        self.route, self.approximation_profile = checked_route_setting(
+            self.route,
+            self.approximation_profile,
+            RouteCall(type(self).__name__, "route={route}"),
+        )
         self.numerical = self._with_problem_defaults(self.numerical)
 
     # ---- Binding and geometry settings --------------------------------------------------------------
@@ -205,11 +221,19 @@ class PalaceSimulation(ABC):
             ValueError: ``route`` is not ``"A"`` or ``"B"``.
             TypeError: ``approximation_profile`` is not an ``ApproximationProfile``.
         """
+        self._set_route(route, approximation_profile, SET_ROUTE)
+
+    def _set_route(
+        self,
+        route: Any,
+        approximation_profile: Any,
+        call: RouteCall,
+    ) -> None:
+        """Store the route setting ``call`` states; a refusal names ``call``, where the setting is changed."""
         # Check every value before storing any, so a refused call leaves the earlier setting whole.
-        chosen = _checked_route(route)
-        route_profile(chosen, approximation_profile)
-        self.route = chosen
-        self.approximation_profile = approximation_profile
+        self.route, self.approximation_profile = checked_route_setting(
+            route, approximation_profile, call
+        )
         self._fall_back("set_route")
 
     def set_surface_epr(self, specs: Mapping[str, Mapping[str, Any]] | None) -> None:
@@ -362,19 +386,23 @@ class PalaceSimulation(ABC):
         instances: Mapping[str, Any] | None = None,
         nets: Mapping[str, Sequence[str]] | None = None,
         surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
+        route: Literal["A", "B"] = "B",
+        approximation_profile: ApproximationProfile | None = None,
     ) -> SimulationDrcReport:
         """Check that this simulation can model and mesh ``component``, in two stages, and return their report.
 
-        The geometry stage runs the preparation and SGB geometry build of ``mesh()``, with fixed settings:
-        Route B, zero coupon padding, the problem's own fixed inputs (``EigenmodeSim``: every authored port
-        with a fixed inductance, which the geometry never reads; ``ElectrostaticSim``: no terminals, which
-        are not needed before meshing) and, when the layout has no vacuum of its own, a vacuum region padded
-        by (x, y, z) = (0, 0, 1000) um: it ends at the layout's planar extent and reaches 1000 um below and
-        above.  A conductor that reaches that extent only at a point, such as a lone round pad with no die
-        outline or ground plane around it, pinches this vacuum and is refused.  A layout it refuses raises
-        the error ``mesh()`` raises, unchanged.  With ``surface_epr_specs`` the bands are cut as
-        ``set_surface_epr(surface_epr_specs)`` would cut them, and the specs are checked as it checks them;
-        without them no bands are cut.
+        The geometry stage runs the preparation and SGB geometry build of ``mesh()`` on the route the
+        simulation will use: ``route`` and ``approximation_profile`` are the arguments of ``set_route``, with
+        its defaults and refusals, and a refusal names this call.  Without them the check is Route B.  The
+        other settings are fixed: zero coupon padding, the problem's own fixed inputs (``EigenmodeSim``:
+        every authored port with a fixed inductance, which the geometry never reads; ``ElectrostaticSim``:
+        no terminals, which are not needed before meshing) and, when the layout has no vacuum of its own, a
+        vacuum region padded by (x, y, z) = (0, 0, 1000) um: it ends at the layout's planar extent and
+        reaches 1000 um below and above.  A conductor that reaches that extent only at a point, such as a
+        lone round pad with no die outline or ground plane around it, pinches this vacuum and is refused.  A
+        layout it refuses raises the error ``mesh()`` raises, unchanged.  With ``surface_epr_specs`` the
+        bands are cut as ``set_surface_epr(surface_epr_specs)`` would cut them, and the specs are checked as
+        it checks them; without them no bands are cut.
 
         Only a model that built goes to the meshing stage, ``scgsim.meshing.check_fine_structure``: the fine
         edges and faces the mesher cannot use, each with its location, size, owner and fix.  A refusal there
@@ -383,9 +411,10 @@ class PalaceSimulation(ABC):
         the geometry is written to a temporary folder that is removed.  ``mesh()`` runs the same meshing
         stage on the model it builds, before the mesher starts.
 
-        A pass means the layout can be modeled with these settings.  It does not promise that other
-        settings (Route A, terminals, junctions, lumped supports, another vacuum region) will model; run
-        that simulation's own ``mesh()`` for that.
+        A pass means the layout can be modeled on the route and profile checked, with these fixed settings.
+        It does not promise that other settings (another route or profile, terminals, junctions, lumped
+        supports, another vacuum region) will model; run that simulation's own ``mesh()`` for that.  Route C
+        is not a Palace route, so it is refused here as ``set_route`` refuses it.
 
         Args:
             component: The layout Component under check.
@@ -396,7 +425,17 @@ class PalaceSimulation(ABC):
                 ``GeometryPlan.set_nets`` takes it.  Without it no conductor has a Net, so any two conductors
                 that touch are refused as a different-Net contact.
             surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
+            route: ``"A"`` or ``"B"``, as ``set_route`` takes it.
+            approximation_profile: The ``ApproximationProfile`` ``set_route`` takes; None for the route's
+                default (``thin_film`` for Route A, ``route_b`` for Route B).
+
+        Raises:
+            ValueError: ``route`` is not ``"A"`` or ``"B"``.
+            TypeError: ``approximation_profile`` is not an ``ApproximationProfile``.
         """
+        sim = cls()
+        # The route is checked before the layout is read, so a refused route costs no preparation.
+        sim._set_route(route, approximation_profile, SIMULATION_DRC)  # noqa: SLF001 -- the check is a classmethod of the same class
         snapshot = prepare_layout_snapshot(
             component,
             layer_stack=layer_stack,
@@ -404,25 +443,22 @@ class PalaceSimulation(ABC):
             instances=instances,
             nets=nets,
         )
-        sim = cls._for_drc(snapshot, surface_epr_specs)
+        sim._bind_for_drc(snapshot, surface_epr_specs)  # noqa: SLF001 -- the check is a classmethod of the same class
         return run_stages(sim._build_geometry)  # noqa: SLF001 -- the check is a classmethod of the same class
 
-    @classmethod
-    def _for_drc(
-        cls,
+    def _bind_for_drc(
+        self,
         snapshot: GeometryPlanSnapshot,
         surface_epr_specs: Mapping[str, Mapping[str, Any]] | None,
-    ) -> PalaceSimulation:
-        """A simulation of ``cls`` bound to ``snapshot`` with the fixed settings ``simulation_drc`` documents."""
-        sim = cls()
-        sim.set_plan(snapshot)
+    ) -> None:
+        """Bind ``snapshot`` with the fixed settings ``simulation_drc`` documents, on the route already set."""
+        self.set_plan(snapshot)
         if not snapshot_owns_vacuum(snapshot):
             # Without vacuum above it a conductor has no metal-air face, so MA and SA bands would cut nothing.
-            sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
-        sim._add_drc_inputs(snapshot)  # noqa: SLF001 -- a hook of the same class
+            self.set_vacuum_region(DRC_VACUUM_PADDING_UM)
+        self._add_drc_inputs(snapshot)
         if surface_epr_specs is not None:
-            sim.set_surface_epr(surface_epr_specs)
-        return sim
+            self.set_surface_epr(surface_epr_specs)
 
     def _build_geometry(self, output_dir: str | Path) -> RouteGeometry:
         """Run the preparation and SGB geometry build of ``mesh()`` into ``output_dir``, then stop.
@@ -579,24 +615,6 @@ _TWO_VACUUMS = Declared(
     "the plan or the simulation: drop sim.set_vacuum_region(), or prepare the plan without "
     "plan.set_vacuum_region()",
 ).refusal("has its own vacuum (VACUUM_REGION), so the simulation cannot add one")
-
-
-def _checked_route(route: Any) -> Literal["A", "B"]:
-    """``route`` as ``"A"`` or ``"B"``; any other route is refused with the two a Palace simulation takes."""
-    chosen = route.strip().upper() if isinstance(route, str) else route
-    if chosen == "A" or chosen == "B":
-        return chosen
-    if chosen == "C":
-        raise ValueError(
-            Declared("Route C", _WHERE_SET_ROUTE).refusal(
-                "is not a Palace route: SGB builds Route C for backends that keep conductor volumes. Call set_route('A') or set_route('B')"
-            )
-        )
-    raise ValueError(
-        Declared(f"Unknown route {route!r}", _WHERE_SET_ROUTE).refusal(
-            "call set_route('A') for films as zero-thickness sheets or set_route('B') for 3D conductors"
-        )
-    )
 
 
 def _refuse_empty_specs(specs: Mapping[str, Mapping[str, Any]]) -> None:
