@@ -5,6 +5,7 @@ Validation keeps the recorded artifact order; this module never runs a solver.""
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from scgsim.contracts.palace_run_folder import (
     MESH_MANIFEST,
     NATIVE_METADATA,
     NATIVE_METADATA_NAME,
+    OUTPUT_DIR,
     RESOURCE_RECORD,
     RETURNED_RECEIPT,
     RUN_METADATA,
@@ -31,7 +33,7 @@ from scgsim.palace.results.artifacts import (
     to_float,
     validate_contract_schema,
 )
-from scgsim.palace.results.convergence import check_passes, read_plan
+from scgsim.palace.results.convergence import passes_allowed, returned_convergence
 from scgsim.palace.results.index_contract import (
     RouteConsistency,
     require_index_map_schema,
@@ -145,13 +147,26 @@ def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
     )
     index_counts = count_index_entries(records.index_map)
     _check_index_and_config(records, index_counts, route=route, problem=problem)
-    tables = _discover_results(root, problem, index_counts, records.config)
     returned_receipt = build_returned_receipt(records.returned_receipt)
+    # The passes are read only for a declared run, so one without a plan costs what it did before.
+    convergence = returned_convergence(
+        root,
+        handoff,
+        problem,
+        records.returned_receipt,
+        passes_allowed(records.config),
+    )
+    records = _with_result_metadata(root, records, convergence.result_folder)
+    tables = _discover_results(
+        root,
+        problem,
+        index_counts,
+        records.config,
+        result_folder=convergence.result_folder,
+        receipt=records.returned_receipt,
+    )
     cost = _build_cost(records.palace_json)
     performance = _build_performance(records.palace_json)
-    # The passes are read only for a declared run, so one without a plan costs what it did before.
-    plan = read_plan(root, handoff, problem)
-    convergence = check_passes(plan, root)
     return ResolvedRunData(
         run_dir=root,
         problem=problem,
@@ -163,7 +178,8 @@ def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
         tables=tables,
         returned_receipt=returned_receipt,
         provenance=records,
-        convergence=convergence,
+        convergence=convergence.check,
+        solver_end=convergence.end,
     )
 
 
@@ -255,24 +271,64 @@ def _check_index_and_config(
     )
 
 
-def _discover_results(
+def _with_result_metadata(
+    root: Path, records: PalaceProvenance, result_folder: str
+) -> PalaceProvenance:
+    """The records with the ``palace.json`` of the run's result, which for a stopped run is its last pass's.
+
+    The top-level ``palace.json`` of a stopped run may already describe the mesh of the solve that was cut
+    short, so the cost of the result is read beside the result's own tables.
+    """
+    if result_folder == OUTPUT_DIR:
+        return records
+    relative = f"{result_folder}/{NATIVE_METADATA_NAME}"
+    _require_receipt_bound(records.returned_receipt, relative)
+    return replace(records, palace_json=read_json(root / relative))
+
+
+def _discover_results(  # noqa: PLR0913 -- the tables, where they are, and what binds them
     root: Path,
     problem: str,
     index_counts: dict[str, int],
     config: dict[str, Any],
+    *,
+    receipt: dict[str, Any],
+    result_folder: str = OUTPUT_DIR,
 ) -> dict[str, ParsedTable]:
-    """Read every required final native table and validate its sealed config/index correspondence."""
+    """Read every required native table of the run's result and validate its sealed config/index correspondence.
+
+    The result is the top level of ``results/palace`` or ``result_folder``.  Wherever it is, a table is read
+    only when ``receipt`` lists it: the receipt check compared a listed file's hash, so its bytes are the
+    ones returned.
+    """
     discovered: dict[str, ParsedTable] = {}
     for family in output_families(problem, index_counts):
-        path = root / output_table(family)
+        relative = output_table(family, result_folder)
+        path = root / relative
         if not path.is_file():
             raise FileNotFoundError(
                 Declared("required result family", RETURNED_RUN_FOLDER).refusal(
                     f"is missing: {path}"
                 )
             )
+        _require_receipt_bound(receipt, relative)
         discovered[family] = read_result_table(path, problem, index_counts, config)
     return discovered
+
+
+def _require_receipt_bound(receipt: dict[str, Any], relative: str) -> None:
+    """A result file is read only when the receipt lists it (its hash was checked)."""
+    listed = {
+        entry.get("path")
+        for entry in receipt.get("output_files", [])
+        if isinstance(entry, dict) and entry.get("present") is True
+    }
+    if relative not in listed:
+        raise ValueError(
+            Declared(f"result file {relative}", RETURNED_RUN_FOLDER).refusal(
+                f"is not among the outputs {RETURNED_RECEIPT} records, so its bytes are not the ones returned"
+            )
+        )
 
 
 def _numeric_timings(elapsed: dict[str, Any], block: str) -> dict[str, float]:

@@ -14,14 +14,17 @@ outputs from here.  A path is relative to the run folder, in POSIX form::
     run_palace.sh | run_palace.sbatch   script_name(profile) (run)
     metadata/palace_handoff_*.json ...  HANDOFF_METADATA, RUN_METADATA, RESOURCE_RECORD, ARCHIVE_MANIFEST (run)
     metadata/record_palace_return.py    RECORDER: the receipt recorder (run)
+    metadata/run_palace_until_converged.py  CONVERGENCE_RUNNER (run), only when convergence is declared
     logs/palace-<job>.log               solver_log(job): the solver log the run script writes
     results/palace/                     OUTPUT_DIR: what Palace writes, see ``PalaceProblem``
+    metadata/palace_convergence_decision.json  CONVERGENCE_DECISION, written by the runner during the solve
     metadata/palace_returned_run_receipt.json  RETURNED_RECEIPT, written by the recorder after the solve
 
-The receipt recorder (``scgsim.palace.run.returned_receipt``) runs in the run folder with only a Python
-interpreter.  When ``prepare_handoff`` copies it there, the text of this module takes the place of the
-recorder's import of it (``scgsim.palace.run.recorder_copy``), so the copy carries the same layout, problems and
-helpers, and nothing in the run folder imports SCGSim.  For that reason this module imports only the
+The receipt recorder (``scgsim.palace.run.returned_receipt``) and the convergence runner
+(``scgsim.palace.run.convergence_runner``) run in the run folder with only a Python interpreter.  When
+``prepare_handoff`` copies them there, the text of this module takes the place of their import of it
+(``scgsim.palace.run.standalone_copy``), so each copy carries the same layout, problems and helpers, and
+nothing in the run folder imports SCGSim.  For that reason this module imports only the
 standard library (``.importlinter``: ``contracts-import-nothing-else``) and has no ``__future__`` import,
 and it words its refusals with its own ``refused``, the sentence ``scgsim.refusal`` words for every other
 stage.
@@ -29,7 +32,10 @@ stage.
 
 import hashlib
 import json
+import os
+import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
@@ -58,6 +64,10 @@ RUN_METADATA = "metadata/palace_run_metadata.json"
 RESOURCE_RECORD = "metadata/palace_resource_record.json"
 ARCHIVE_MANIFEST = "metadata/palace_handoff_archive_manifest.json"
 RECORDER = "metadata/record_palace_return.py"
+CONVERGENCE_RUNNER = "metadata/run_palace_until_converged.py"
+"""The convergence runner the run script starts the solver through; copied only when convergence is declared."""
+CONVERGENCE_DECISION = "metadata/palace_convergence_decision.json"
+"""The runner's record of the passes it read, its verdict and how the solver ended."""
 RETURNED_RECEIPT = "metadata/palace_returned_run_receipt.json"
 RUNTIME_COMPATIBILITY = "metadata/palace_runtime_compatibility.json"
 
@@ -124,7 +134,11 @@ RUN_RECORD_SCHEMA_VERSION = 1
 """The ``schema_version`` of the handoff metadata, run metadata, resource record and archive manifest."""
 EPR_SELECTION_SCHEMA = "scgsim.palace.epr-selection.v1"
 SURFACE_FILM_SCHEMA = "scgsim.palace.surface-film.v2"
-RETURNED_RECEIPT_SCHEMA = "palace-returned-run-receipt.v1"
+RETURNED_RECEIPT_SCHEMA_VERSION = 2
+RETURNED_RECEIPT_SCHEMA = (
+    f"palace-returned-run-receipt.v{RETURNED_RECEIPT_SCHEMA_VERSION}"
+)
+"""The receipt the recorder writes; a receipt of an earlier version is refused, never read."""
 RUNTIME_COMPATIBILITY_SCHEMA = "palace-runtime-compatibility.v1"
 
 
@@ -162,8 +176,30 @@ def refused(subject: str, problem: str, where: str) -> str:
 # ---- The records the recorder writes -----------------------------------------------------------------
 
 ReceiptStatus = Literal["completed", "failed", "diagnostic_unverified"]
-"""``completed`` only when every exit code is 0, the sealed inputs match and every output is present;
-``diagnostic_unverified`` for a receipt written after the fact, which ``resolve`` never accepts."""
+"""``completed`` when the sealed inputs match, every required output is present and the solver ended in one
+of the two ways a run completes (``COMPLETED_ENDINGS``); ``diagnostic_unverified`` for a receipt written after
+the fact, which ``resolve`` never accepts."""
+
+RunEnding = Literal[
+    "not_started",
+    "solver_ended",
+    "stopped_at_convergence",
+    "stop_escalated",
+    "runner_terminated",
+    "not_recorded",
+]
+"""How the solver of a run ended, as the receipt states it.
+
+``not_started``: the run stopped before the solve (the config's dry run).  ``solver_ended``: the solver ended
+without a stop from SCGSim, by itself or ended by something else; its exit code says which, and only exit
+code 0 completes the run.  ``stopped_at_convergence``: the convergence runner stopped it with SIGTERM after a
+pass at which the declared criteria had converged, and it ended within the runner's wait; this completes the
+run whatever exit code the stop gave.  ``stop_escalated``: it did not end on SIGTERM and the runner killed it.
+``runner_terminated``: the runner itself was told to end (by the script, the scheduler or a person) and ended
+the solver first.  ``not_recorded``: a declared run whose runner left no readable decision record.
+"""
+COMPLETED_ENDINGS: tuple[RunEnding, ...] = ("solver_ended", "stopped_at_convergence")
+"""The endings a completed receipt can state."""
 
 
 class FileRecord(TypedDict):
@@ -197,12 +233,14 @@ class _ReceiptFields(TypedDict):
     preflight_exit_code: int
     solver_exit_code: int | None
     tee_exit_code: int | None
+    ending: RunEnding
     identity_verified: bool
     timestamp_utc: str
     job_identity: JobIdentity
     input_hashes: list[dict[str, Any]]
     output_files: list[FileRecord]
     log: FileRecord
+    convergence_decision: FileRecord | None
     solver_identity: dict[str, Any]
 
 
@@ -416,6 +454,22 @@ def write_json(path: Path, payload: Any) -> None:
     """Write ``payload`` as a run-folder JSON record at ``path``, creating its folder."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json_text(payload), encoding="utf-8")
+
+
+def write_json_atomic(path: Path, payload: Any) -> None:
+    """Write a run-folder JSON record through a temporary file beside it, so a reader never sees half of it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=path.parent, delete=False
+    ) as handle:
+        handle.write(json_text(payload))
+        temporary = Path(handle.name)
+    os.replace(temporary, path)
+
+
+def utc_timestamp() -> str:
+    """The time now in UTC as the run folder's records write it, ``2026-11-14T08:00:00.123456Z``."""
+    return datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def confined_path(root: Path, relative: str) -> Path:

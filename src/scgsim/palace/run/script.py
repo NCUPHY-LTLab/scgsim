@@ -9,6 +9,8 @@ from typing import Any
 
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
+    CONVERGENCE_DECISION,
+    CONVERGENCE_RUNNER,
     HANDOFF_METADATA,
     INDEX_MAP,
     LOGS_DIR,
@@ -61,16 +63,29 @@ class ExecutionSettings:
         )
 
 
-def render_script(execution: ExecutionSettings, *, config_schema: str) -> str:
-    """Render a dependency-free script for a manual Palace handoff whose config has ``config_schema``."""
+def render_script(
+    execution: ExecutionSettings, *, config_schema: str, convergence_declared: bool
+) -> str:
+    """Render a dependency-free script for a manual Palace handoff whose config has ``config_schema``.
+
+    With ``convergence_declared`` the script starts the solver command through the convergence runner, which
+    stops the solver once the declared criteria have converged, and exits with the receipt's verdict, since a
+    stopped solver's non-zero exit code is kept in a completed run.  Without it the script is the one it has
+    always been.
+    """
     # The thread and process counts are refused before any line is rendered.
     execution.threads()
     execution.processes()
     directives = _slurm_directives(execution)
     command = _solver_command(execution)
+    if convergence_declared:
+        command = f'python3 {CONVERGENCE_RUNNER} "$(pwd)" -- {command}'
     config_schema = single_line(str(config_schema), "palace_identity.config_schema")
     lines = _script_start_lines(
-        execution, directives, _run_folder_lines(execution.profile)
+        execution,
+        directives,
+        _run_folder_lines(execution.profile),
+        convergence_declared=convergence_declared,
     )
     lines.extend(_petsc_lines(execution.petsc_options))
     lines.extend(_setup_lines(execution.setup_commands))
@@ -92,6 +107,7 @@ def render_script(execution: ExecutionSettings, *, config_schema: str) -> str:
                 "--execution-stage solver --preflight-exit-code 0 "
                 '--solver-exit-code "$PALACE_EXIT_CODE" '
             ),
+            exit_with_receipt=convergence_declared,
         )
     )
     return "\n".join(lines)
@@ -203,6 +219,8 @@ def _script_start_lines(
     execution: ExecutionSettings,
     directives: Sequence[str],
     run_directory_lines: Sequence[str],
+    *,
+    convergence_declared: bool,
 ) -> list[str]:
     """Set run-directory, cleanup, and solver variables in the generated script."""
     profile = execution.profile
@@ -225,6 +243,7 @@ def _script_start_lines(
         'cd "$RUN_DIR" || exit 2',
         f"mkdir -p {LOGS_DIR} {OUTPUT_DIR} {METADATA_DIR}",
         f"rm -f {RETURNED_RECEIPT}",
+        *([f"rm -f {CONVERGENCE_DECISION}"] if convergence_declared else []),
         f"rm -f {RUNTIME_COMPATIBILITY}",
         *([f"rm -f {solver_log('*')}"] if profile == "direct-local" else []),
         f"rm -rf {OUTPUT_DIR}",
@@ -312,8 +331,14 @@ def _compatibility_lines(
     return lines
 
 
-def _solver_lines(*, profile: str, command: str, receipt_command: str) -> list[str]:
-    """Run Palace, preserve its status, and record the completed attempt."""
+def _solver_lines(
+    *, profile: str, command: str, receipt_command: str, exit_with_receipt: bool
+) -> list[str]:
+    """Run Palace, preserve its status, and record the completed attempt.
+
+    ``exit_with_receipt``: the script's exit status is the recorder's (0 for a completed receipt), not the
+    solver's, because a solver stopped at convergence ends with a non-zero code in a completed run.
+    """
     execution_lines = (
         [
             "set -o pipefail",
@@ -332,18 +357,21 @@ def _solver_lines(*, profile: str, command: str, receipt_command: str) -> list[s
             "PIPELINE_EXIT_CODE=$PALACE_EXIT_CODE",
         ]
     )
-    lines: list[str] = []
-    lines.extend(
-        [
-            *execution_lines,
-            receipt_command,
-            "RECEIPT_EXIT=${RECEIPT_EXIT:-0}",
+    exits = (
+        ['exit "$RECEIPT_EXIT"']
+        if exit_with_receipt
+        else [
             'if [ "$PIPELINE_EXIT_CODE" -ne 0 ]; then exit "$PIPELINE_EXIT_CODE"; fi',
             'if [ "$RECEIPT_EXIT" -ne 0 ]; then exit "$RECEIPT_EXIT"; fi',
             'exit "$PIPELINE_EXIT_CODE"',
         ]
     )
-    return lines
+    return [
+        *execution_lines,
+        receipt_command,
+        "RECEIPT_EXIT=${RECEIPT_EXIT:-0}",
+        *exits,
+    ]
 
 
 def launcher_tokens(value: Any) -> list[str]:

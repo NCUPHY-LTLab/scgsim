@@ -358,7 +358,7 @@ def test_a_criterion_with_an_unknown_test_or_threshold_is_refused():
 
 
 def test_the_check_imports_only_the_standard_library():
-    """The module can be copied into a run folder: no SCGSim import, no ``__future__`` import."""
+    """The module can be copied into a run folder: no SCGSim import but the run-folder contract, no ``__future__``."""
     tree = ast.parse(Path(palace_convergence.__file__).read_text(encoding="utf-8"))
     imported = set()
     for node in ast.walk(tree):
@@ -366,6 +366,8 @@ def test_the_check_imports_only_the_standard_library():
             imported.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             assert node.level == 0
+            if node.module == "scgsim.contracts.palace_run_folder":
+                continue  # embedded in the same copy (scgsim.palace.run.standalone_copy)
             imported.add((node.module or "").split(".")[0])
     assert imported <= set(sys.stdlib_module_names)
     assert "__future__" not in imported

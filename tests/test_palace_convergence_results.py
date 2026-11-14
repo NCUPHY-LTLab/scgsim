@@ -20,7 +20,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from palace_convergence_support import electrostatic
+from palace_convergence_support import electrostatic, write_electrostatic_pass
 
 from scgsim.contracts.palace_run_folder import (
     CONVERGENCE_PLAN,
@@ -96,92 +96,10 @@ def _captured_notebook_display():
                 sys.modules[name] = original
 
 
-def _matrix(path: Path, prefix: str, unit: str, matrix: list[list[float]]) -> None:
-    columns = ",".join(f"{prefix}{j}] ({unit})" for j in range(1, len(matrix) + 1))
-    rows = "".join(
-        f"{i},{','.join(f'{value:+.12e}' for value in row)}\n"
-        for i, row in enumerate(matrix, start=1)
-    )
-    path.write_text(f"i,{columns}\n{rows}", encoding="utf-8")
-
-
 def _pass_tables(folder: Path, number: int, counts: dict[str, int]) -> None:
     """Every Electrostatic table of one pass, in Palace's headers, for two terminals."""
-    folder.mkdir(parents=True, exist_ok=True)
-    c11, c22 = (value * 1e-15 for value in _DIAGONALS_FF[number - 1])
-    c12 = -5e-15
-    maxwell = [[c11, c12], [c12, c22]]
-    _matrix(folder / "terminal-C.csv", "C[i][", "F", maxwell)
-    _matrix(folder / "terminal-Cm.csv", "C_m[i][", "F", maxwell)
-    _matrix(
-        folder / "terminal-Cinv.csv", "C⁻¹[i][", "1/F", [[1e13, 1e11], [1e11, 3e12]]
-    )
-    (folder / "terminal-V.csv").write_text(
-        "i,V_inc[i] (V)\n1,1.0\n2,1.0\n", encoding="utf-8"
-    )
-    domains = counts["domain"]
-    domain_headers = "".join(
-        f",E_elec[{k}] (J),p_elec[{k}],E_mag[{k}] (J),p_mag[{k}]"
-        for k in range(1, domains + 1)
-    )
-    domain_cells = ",1e-20,0.5,0.0,0.0" * domains
-    (folder / "domain-E.csv").write_text(
-        f"i,E_elec (J),E_mag (J),E_cap (J),E_ind (J){domain_headers}\n"
-        + "".join(f"{i},1e-20,0.0,0.0,0.0{domain_cells}\n" for i in (1, 2)),
-        encoding="utf-8",
-    )
-    surfaces = counts["surface"]
-    surface_headers = "".join(
-        f",p_surf[{k}],Q_surf[{k}]" for k in range(1, surfaces + 1)
-    )
-    (folder / "surface-Q.csv").write_text(
-        f"i{surface_headers}\n"
-        + "".join(
-            f"{i}"
-            + "".join(
-                f",{1e-3 * k * (1 + 0.01 / number) * i:.12e},+inf"
-                for k in range(1, surfaces + 1)
-            )
-            + "\n"
-            for i in (1, 2)
-        ),
-        encoding="utf-8",
-    )
-    norm = _NORMS[number - 1]
-    (folder / "error-indicators.csv").write_text(
-        f"Norm,Minimum,Maximum,Mean\n{norm},1e-9,{norm},{norm / 10}\n", encoding="utf-8"
-    )
-    (folder / "palace.json").write_text(
-        json.dumps(
-            {
-                "Problem": {
-                    "DegreesOfFreedom": 1000 * number,
-                    "MeshElements": 500 * number,
-                    "MPISize": 1,
-                    "OpenMPThreads": 1,
-                    "Iteration": number,
-                },
-                "ElapsedTime": {
-                    "Counts": {"Total": 1},
-                    "Durations": {"Total": 2.0 * number, "Solve": 1.0 * number},
-                },
-                "PeakMemoryMegabytes": {
-                    "Average": 10,
-                    "Max": 10,
-                    "Min": 10,
-                    "Total": 10,
-                },
-                "PeakNodeMemoryMegabytes": {
-                    "Average": 10,
-                    "Max": 10,
-                    "Min": 10,
-                    "Total": 10,
-                },
-                "LinearSolver": {"TotalSolves": 2},
-                "GitTag": "v0.18.1",
-            }
-        ),
-        encoding="utf-8",
+    write_electrostatic_pass(
+        folder, number, counts, _DIAGONALS_FF[number - 1], _NORMS[number - 1]
     )
 
 

@@ -1,27 +1,34 @@
+# long-file: the receipt, the ending it states and the dry run travel to the solver host as one standalone script.
+
 """The receipt recorder of a manual Palace run: it runs in the run folder with only a Python interpreter.
 
 The run script calls it twice: ``verify-config`` before the solve, which records Palace's dry run of
-``config.json``, and then with the solver's exit codes, which writes the returned-run receipt.  The paths,
-problems and helpers it imports are the run-folder contract; the copy ``prepare_handoff`` puts in the run
-folder carries that contract's text in place of the import, so the copy imports only the standard library.
+``config.json``, and then with the solver's exit codes, which writes the returned-run receipt.  For a run with
+a convergence plan the receipt states how the solver ended from the runner's decision record, which it binds by
+hash.  The paths, problems and helpers it imports are the run-folder and convergence contracts; the copy
+``prepare_handoff`` puts in the run folder carries their text in place of the imports, so the copy imports only
+the standard library.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from scgsim.contracts.palace_convergence import (
+    ConvergenceDecision,
+    completed_stop_problem,
+)
 from scgsim.contracts.palace_run_folder import (
     CONFIG,
+    CONVERGENCE_DECISION,
+    CONVERGENCE_PLAN,
     HANDOFF_METADATA,
     NATIVE_METADATA,
     NATIVE_METADATA_NAME,
@@ -29,6 +36,7 @@ from scgsim.contracts.palace_run_folder import (
     RESOURCE_RECORD,
     RETURNED_RECEIPT,
     RETURNED_RECEIPT_SCHEMA,
+    RETURNED_RECEIPT_SCHEMA_VERSION,
     RUN_METADATA,
     RUNTIME_COMPATIBILITY,
     RUNTIME_COMPATIBILITY_SCHEMA,
@@ -38,11 +46,11 @@ from scgsim.contracts.palace_run_folder import (
     ObservedIdentity,
     ReceiptStatus,
     ReturnedReceipt,
+    RunEnding,
     canonical_sha256,
     collects_adapted_meshes,
     confined_path,
     iteration_number,
-    json_text,
     output_table,
     palace_problem,
     read_json,
@@ -50,6 +58,8 @@ from scgsim.contracts.palace_run_folder import (
     refused,
     sha256,
     table_name,
+    utc_timestamp,
+    write_json_atomic,
 )
 
 _WHERE_RUN_SCRIPT = "the run script that calls the recorder: prepare the handoff again"
@@ -111,7 +121,7 @@ def _record_return(request: _ReturnRequest) -> int:
     receipt = _receipt(request, handoff)
     for path in (RESOURCE_RECORD, RUN_METADATA):
         _record_status(request, handoff, receipt, path)
-    _write_json_atomic(confined_path(request.root, request.receipt_path), receipt)
+    write_json_atomic(confined_path(request.root, request.receipt_path), receipt)
     if receipt["status"] == "completed" or request.diagnostic_after_the_fact:
         return 0
     return request.exit_code if request.exit_code != 0 else 3
@@ -249,13 +259,15 @@ def _receipt(request: _ReturnRequest, handoff: _Handoff) -> ReturnedReceipt:
     compatibility_schema = _compatibility_schema(handoff.metadata)
     runtime_compatibility = _runtime_compatibility(root, compatibility_schema)
     config = read_json(root / CONFIG)
+    ended = _how_it_ended(request, handoff)
     output_files = [
         record_for_path(root, path)
-        for path in _output_paths(request, handoff, config, compatibility_schema)
+        for path in _output_paths(request, handoff, config, compatibility_schema, ended)
     ]
     log = record_for_path(root, request.log_path)
     status = _status(
         request,
+        ended,
         outputs_present=all(record["present"] is True for record in output_files),
         inputs_match=_input_hashes_match(root, handoff.input_hashes),
         runtime_compatible=_runtime_compatibility_verified(
@@ -264,7 +276,7 @@ def _receipt(request: _ReturnRequest, handoff: _Handoff) -> ReturnedReceipt:
     )
     receipt: ReturnedReceipt = {
         "schema": RETURNED_RECEIPT_SCHEMA,
-        "schema_version": 1,
+        "schema_version": RETURNED_RECEIPT_SCHEMA_VERSION,
         "handoff_id": handoff.handoff_id,
         "route": handoff.route,
         "problem": handoff.problem,
@@ -275,14 +287,16 @@ def _receipt(request: _ReturnRequest, handoff: _Handoff) -> ReturnedReceipt:
         "preflight_exit_code": request.preflight_exit_code,
         "solver_exit_code": request.solver_exit_code,
         "tee_exit_code": request.tee_exit_code,
+        "ending": ended.ending,
         "identity_verified": status == "completed",
-        "timestamp_utc": datetime.now(tz=timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z"),
+        "timestamp_utc": utc_timestamp(),
         "job_identity": request.job,
         "input_hashes": handoff.input_hashes,
         "output_files": output_files,
         "log": log,
+        "convergence_decision": record_for_path(root, CONVERGENCE_DECISION)
+        if ended.declared
+        else None,
         "solver_identity": solver_identity,
     }
     if compatibility_schema is not None:
@@ -290,6 +304,93 @@ def _receipt(request: _ReturnRequest, handoff: _Handoff) -> ReturnedReceipt:
     if handoff.metadata.get("route_a_thin_film") is not None:
         receipt["route_a_thin_film"] = handoff.metadata["route_a_thin_film"]
     return receipt
+
+
+@dataclass(frozen=True)
+class _Ended:
+    """How the solver ended, as the recorder reads it, and why that cannot complete the run when it cannot.
+
+    ``declared`` runs have a sealed convergence plan: their solver ran through the convergence runner, and the
+    runner's ``decision`` says how it ended.  ``problem`` is set when the decision is missing, unreadable, for
+    another plan, contradicts the exit code the script passed, or does not record a completed stop.
+    """
+
+    ending: RunEnding
+    declared: bool
+    decision: ConvergenceDecision | None = None
+    problem: str | None = None
+
+    @property
+    def stopped(self) -> bool:
+        """Whether the runner ended the solver during its adaptive loop, so the top level is no solve of its own."""
+        return self.ending in (
+            "stopped_at_convergence",
+            "stop_escalated",
+            "runner_terminated",
+        )
+
+    def required_result_folder(self) -> str | None:
+        """The pass folder whose tables are the result of a run stopped at convergence, None otherwise."""
+        if self.ending != "stopped_at_convergence" or self.decision is None:
+            return None
+        return self.decision.result_folder
+
+
+def _how_it_ended(request: _ReturnRequest, handoff: _Handoff) -> _Ended:
+    """The solver's ending: from the stage for an undeclared run, from the runner's decision for a declared one."""
+    sealed = next(
+        (
+            entry
+            for entry in handoff.input_hashes
+            if isinstance(entry, dict) and entry.get("path") == CONVERGENCE_PLAN
+        ),
+        None,
+    )
+    if not request.solver_invoked:
+        return _Ended("not_started", declared=sealed is not None)
+    if sealed is None:
+        return _Ended("solver_ended", declared=False)
+    try:
+        decision = ConvergenceDecision.from_payload(
+            read_json(request.root / CONVERGENCE_DECISION)
+        )
+    except (OSError, ValueError, TypeError) as error:
+        return _Ended(
+            "not_recorded", declared=True, problem=f"{CONVERGENCE_DECISION}: {error}"
+        )
+    ending = decision.ending
+    if ending is None or decision.solver is None:
+        return _Ended(
+            "not_recorded",
+            declared=True,
+            decision=decision,
+            problem=f"{CONVERGENCE_DECISION} was written before the stop and never completed",
+        )
+    return _Ended(
+        ending,
+        declared=True,
+        decision=decision,
+        problem=_decision_problem(request, decision, sealed),
+    )
+
+
+def _decision_problem(
+    request: _ReturnRequest, decision: ConvergenceDecision, sealed: dict[str, Any]
+) -> str | None:
+    """Why the runner's decision cannot complete the run, None when it can."""
+    if decision.plan_sha256 != sealed.get("sha256"):
+        return f"{CONVERGENCE_DECISION} is for another plan than the one the handoff sealed"
+    if (
+        decision.solver is not None
+        and decision.solver.exit_code != request.solver_exit_code
+    ):
+        return (
+            f"{CONVERGENCE_DECISION} records solver exit code {decision.solver.exit_code}, and the run "
+            f"script passed {request.solver_exit_code}"
+        )
+    if decision.ending == "stopped_at_convergence":
+        return completed_stop_problem(decision)
+    return None
 
 
 def _solver_identity(root: Path) -> dict[str, Any]:
@@ -355,22 +456,40 @@ def _output_paths(
     handoff: _Handoff,
     config: dict[str, Any],
     compatibility_schema: str | None,
+    ended: _Ended,
 ) -> list[str]:
-    """Every output the receipt records: the tables, ``palace.json``, the log, the dry run, adapted meshes."""
+    """Every output the receipt records: the tables, ``palace.json``, the log, the dry run, adapted meshes.
+
+    A run's result is its top-level tables, each required.  A solver the runner ended during its adaptive loop
+    left no solve of its own at the top level (links into its last pass, or a solve under way): those tables
+    are recorded when present, and for a stop at convergence the tables of the last pass recorded are
+    required instead.
+    """
+    families = _written_families(handoff.problem, config)
+    result_folder = ended.required_result_folder()
     paths = [
         *(
             output_table(family)
-            for family in _written_families(handoff.problem, config)
+            for family in families
+            if not ended.stopped
+            or confined_path(request.root, output_table(family)).is_file()
         ),
         NATIVE_METADATA,
         *([request.log_path] if request.log_path else []),
         *iteration_output_paths(request.root, handoff.problem, config=config),
+        *(
+            [
+                *(output_table(family, result_folder) for family in families),
+                f"{result_folder}/{NATIVE_METADATA_NAME}",
+            ]
+            if result_folder is not None
+            else []
+        ),
         *([RUNTIME_COMPATIBILITY] if compatibility_schema is not None else []),
     ]
     if collects_adapted_meshes(handoff.metadata.get("palace_identity")):
         paths.extend(adapted_mesh_output_paths(request.root, config))
-        paths = list(dict.fromkeys(paths))
-    return paths
+    return list(dict.fromkeys(paths))
 
 
 def _written_families(problem: str, config: dict[str, Any]) -> tuple[str, ...]:
@@ -493,29 +612,39 @@ def _adapted_mesh_paths_in(root: Path, directory: Path, mesh_name: str) -> list[
 
 def _status(
     request: _ReturnRequest,
+    ended: _Ended,
     *,
     outputs_present: bool,
     inputs_match: bool,
     runtime_compatible: bool,
 ) -> ReceiptStatus:
-    """Completed only when every exit code is 0, the inputs match, the outputs are present and the dry run passed."""
+    """Completed when the inputs match, the outputs are present, the dry run passed and the solver ended well.
+
+    The solver ended well in one of two ways.  ``solver_ended``: every exit code is 0, as for every run.
+    ``stopped_at_convergence``: the runner's decision records a completed stop and the script's exit code is
+    the solver's own, whatever the stop gave.  The output capture must have exited 0 in both.  Everything else
+    is ``failed``.
+    """
     if request.diagnostic_after_the_fact:
         return "diagnostic_unverified"
-    exit_codes_zero = (
-        request.exit_code == 0
+    if not (
+        request.solver_invoked
         and request.preflight_exit_code == 0
-        and request.solver_exit_code == 0
         and request.tee_exit_code == 0
-    )
-    if (
-        exit_codes_zero
-        and request.solver_invoked
         and inputs_match
         and outputs_present
         and runtime_compatible
+        and ended.problem is None
     ):
-        return "completed"
-    return "failed"
+        return "failed"
+    if ended.ending == "solver_ended":
+        ended_well = request.exit_code == 0 and request.solver_exit_code == 0
+    else:
+        ended_well = (
+            ended.ending == "stopped_at_convergence"
+            and request.exit_code == request.solver_exit_code
+        )
+    return "completed" if ended_well else "failed"
 
 
 def _input_hashes_match(root: Path, input_hashes: list[dict[str, Any]]) -> bool:
@@ -594,18 +723,7 @@ def _record_status(
             "returned_receipt_path": RETURNED_RECEIPT,
         }
     )
-    _write_json_atomic(path, record)
-
-
-def _write_json_atomic(path: Path, payload: Any) -> None:
-    """Write a run-folder JSON record through a temporary file beside it, so a reader never sees half of it."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, delete=False
-    ) as handle:
-        handle.write(json_text(payload))
-        temporary = Path(handle.name)
-    os.replace(temporary, path)
+    write_json_atomic(path, record)
 
 
 # ---- The dry run before the solve ---------------------------------------------------------------------
@@ -662,7 +780,7 @@ def _verify_config(argv: list[str]) -> int:
     observed = _observe_palace(probe)
     root = Path.cwd().resolve()
     dry_run = _dry_run(probe, root)
-    _write_json_atomic(
+    write_json_atomic(
         confined_path(root, probe.output_path),
         _compatibility_record(probe, observed, dry_run),
     )

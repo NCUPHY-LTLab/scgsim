@@ -72,6 +72,7 @@ def _read(root: Path, config: dict, surfaces: int = 0) -> dict:
         "Electrostatic",
         {"terminal": 1, "domain": 1, "lumped_port": 0, "surface": surfaces},
         config,
+        receipt=_record(root),
     )
 
 

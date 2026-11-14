@@ -1,9 +1,10 @@
 """The declared convergence as the trust report shows it: the verdict, the table of passes, the change figures.
 
-Everything here is read from a ``ConvergenceCheck`` (``scgsim.contracts.palace_convergence``); nothing is
-computed again.  ``verdict_sentence`` says what a reader can act on, ``pass_table_html`` shows every criterion
-at every pass by its worst number, and ``change_figures`` plots what each criterion measured against the
-threshold the user declared.
+Everything here is read from a ``ConvergenceCheck`` (``scgsim.contracts.palace_convergence``) and the
+``SolverEnd`` of the run; nothing is computed again.  ``verdict_sentence`` says what a reader can act on: the
+verdict, then how Palace ended (stopped by SCGSim after a pass, with the passes of the limit not run, or at its
+own end).  ``pass_table_html`` shows every criterion at every pass by its worst number, and ``change_figures``
+plots what each criterion measured against the threshold the user declared.
 """
 
 from __future__ import annotations
@@ -24,9 +25,12 @@ from scgsim.palace.reports.plotting import (
     Trace,
     html_cell,
 )
+from scgsim.palace.results.convergence import SolverEnd
 
 
-def declared_items(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
+def declared_items(
+    check: ConvergenceCheck, theme: ReportTheme, end: SolverEnd | None = None
+) -> list[Any]:
     """The declared convergence as the trust report opens its numerical evidence; nothing when undeclared.
 
     The verdict comes first, then the table of passes, then each criterion's figure.
@@ -35,7 +39,7 @@ def declared_items(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
         return []
     return [
         "<section><h4>Declared convergence</h4>"
-        f"<p><strong>{html.escape(verdict_sentence(check))}</strong></p>"
+        f"<p><strong>{html.escape(verdict_sentence(check, end))}</strong></p>"
         f"{pass_table_html(check)}</section>",
         *change_figures(check, theme),
     ]
@@ -51,22 +55,63 @@ def declared_threshold(check: ConvergenceCheck, quantity: str) -> float | None:
     )
 
 
-def verdict_card(check: ConvergenceCheck) -> str:
+def verdict_card(check: ConvergenceCheck, end: SolverEnd | None = None) -> str:
     """The verdict in a few words, as the run-identity card shows it."""
     verdict = check.verdict
     if verdict.state == "converged":
-        return f"converged at pass {verdict.pass_number}"
+        stopped = _stopped_after(end)
+        return f"converged at pass {verdict.pass_number}" + (
+            "" if stopped is None else f", stopped after pass {stopped}"
+        )
     if verdict.state == "not_converged":
         return f"not converged in {_passes(verdict.passes_read)} read"
     return "not declared"
 
 
-def verdict_sentence(check: ConvergenceCheck) -> str:
+def verdict_sentence(check: ConvergenceCheck, end: SolverEnd | None = None) -> str:
     """The verdict as a sentence: at which pass, which criterion held last, or what still fails and by how much.
 
     It speaks of the passes read: every pass of a returned run, only some of a partly returned one.  A pass
-    is named by Palace's number, counted from the solve on the input mesh.
+    is named by Palace's number, counted from the solve on the input mesh.  With the run's ``end`` it then
+    says how Palace ended (``ending_sentence``).
     """
+    return _verdict_words(check) + ending_sentence(check, end)
+
+
+def ending_sentence(check: ConvergenceCheck, end: SolverEnd | None) -> str:
+    """How Palace ended, after the verdict: stopped after a pass, with the passes of the limit not run, or by itself.
+
+    Empty without a receipt to say it, or for a run that declared nothing.
+    """
+    if end is None or end.ending is None or check.plan is None:
+        return ""
+    last = check.passes[-1].number if check.passes else None
+    allowed = end.passes_allowed
+    stopped = _stopped_after(end)
+    if stopped is not None:
+        not_run = None if allowed is None or last is None else allowed - last
+        return f" SCGSim stopped Palace after pass {stopped}" + (
+            "."
+            if not not_run or allowed is None
+            else f": {not_run} of the {_passes(allowed)} its limit allows "
+            f"{'was' if not_run == 1 else 'were'} not run."
+        )
+    if end.ending == "solver_ended":
+        if allowed is not None and last == allowed:
+            return f" Palace ended by itself at its limit of {_passes(allowed)}."
+        return f" Palace ended by itself after pass {last}."
+    return f" The solver's ending: {end.ending}."
+
+
+def _stopped_after(end: SolverEnd | None) -> int | None:
+    """The pass after which SCGSim stopped Palace at convergence, None for any other ending."""
+    if end is None or end.ending != "stopped_at_convergence":
+        return None
+    return end.stopped_after
+
+
+def _verdict_words(check: ConvergenceCheck) -> str:
+    """The verdict part of ``verdict_sentence``."""
     verdict = check.verdict
     plan = check.plan
     if plan is None:

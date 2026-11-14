@@ -34,6 +34,7 @@ from .reports.reports import inspect_run_trustworthiness
 from .reports.resolved_result import ResolvedPalaceResult, resolve_palace_result
 from .reports.trust import PalaceTrustReport
 from .reports.views import PhysicsQuantitiesReport, SimulationBenchmarkReport
+from .results.convergence import SolverEnd
 from .results.epr import epr_result, reanalyze_epr, resolve_epr_result
 from .results.epr_records import PalaceEprResult
 from .results.inspection_records import (
@@ -80,6 +81,7 @@ __all__ = [
     "SimulationBenchmarkReport",
     "SimulationDrcError",
     "SimulationDrcReport",
+    "SolverEnd",
     "StageResult",
     "SurfaceEpr",
     "SurfaceMarginEprRecord",

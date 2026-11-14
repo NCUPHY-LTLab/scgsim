@@ -51,11 +51,14 @@ sim.set_convergence(
 
 `write_config()` 在寫出任何檔案之前，以設定檔檢查宣告：`Capacitance.element("xmon", "pad")` 會被拒絕，因為模擬沒有 `pad` 端子；`set_numerical(amr_max_passes=1)` 也會被拒絕，因為兩次求解不可能讓一條變化準則連續成立兩個 pass。明確給定 `amr_tolerance` 同樣會被拒絕：有宣告時由準則決定，拒絕訊息會寫出應改寫的 `ErrorIndicator().below(...)`。
 
-在這個版本中，Palace 仍會執行全部七次求解。讀取回傳的執行時，`result.convergence.verdict` 與可信度報告會說明執行在哪個 pass 已收斂，例如：
+Palace 會在執行已收斂的第一個 pass 停止：執行指令碼透過一個小型執行器啟動它，執行器在每個 pass 完成時檢查，並在那裡停止 Palace，因此在 pass 4 收斂的執行不會開始代價高的第 5 到第 7 次求解。讀取回傳的執行時，`result.convergence.verdict` 與可信度報告會說明它在哪裡收斂、在哪裡停止，例如：
 
-> Converged at pass 4, of the 7 passes read (passes 1 to 7): every criterion
+> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
 > held at passes 3 to 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3.
-> 3 more passes were read after it.
+> No pass was read after it. SCGSim stopped Palace after pass 4: 3 of the 7
+> passes its limit allows were not run.
+
+此時結果是 pass 4 的表格。沒有收斂的執行會跑完全部七次求解，並如實說明（「Palace ended by itself at its limit of 7 passes」）。
 
 所有的量（對角、次對角、整個矩陣、依介面類別的 Surface EPR）與所有檢查，列在[收斂宣告](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)。
 

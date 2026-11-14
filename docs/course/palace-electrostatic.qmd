@@ -83,13 +83,20 @@ two solves cannot give two passes in a row of a change. A stated
 `amr_tolerance` is refused too: with a declaration the criteria decide, and the
 refusal names the `ErrorIndicator().below(...)` line to write instead.
 
-In this version Palace still runs all seven solves. When you read the returned
-run, `result.convergence.verdict` and the trust report say at which pass the
-run had converged, for example:
+Palace stops at the first pass where the run has converged: the run script
+starts it through a small runner that checks each pass as it completes and
+stops Palace there, so a run that converges at pass 4 never starts the
+expensive solves 5 to 7. When you read the returned run,
+`result.convergence.verdict` and the trust report say where it converged and
+where it stopped, for example:
 
-> Converged at pass 4, of the 7 passes read (passes 1 to 7): every criterion
+> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
 > held at passes 3 to 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3.
-> 3 more passes were read after it.
+> No pass was read after it. SCGSim stopped Palace after pass 4: 3 of the 7
+> passes its limit allows were not run.
+
+The result is then pass 4's tables. A run that does not converge runs all seven
+solves and says so ("Palace ended by itself at its limit of 7 passes").
 
 The [convergence declaration](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)
 lists every quantity (the diagonal, sub-diagonals, the whole matrix, Surface EPR

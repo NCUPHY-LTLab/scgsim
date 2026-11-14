@@ -112,6 +112,11 @@ spec and must not be left out by `set_epr_request(surface_interfaces=...)`.
 stated once stays until the simulation is built again with controls that leave
 it out; `write_config()` refuses it together with a declaration.
 
+The [stop at convergence](palace-electrostatic-sgb.qmd#convergence-stop) is the
+same for both problems. An Eigenmode solve starts `eig.csv` and `port-EPR.csv`
+with their header only, so a stop during the next solve leaves those tables at
+the top level; the result is read from the last `iteration<k>/` all the same.
+
 ## Lumped ports {#lumped-ports}
 
 Each `add_port(..., layout_sheet=True)` becomes one `Boundaries.LumpedPort` row

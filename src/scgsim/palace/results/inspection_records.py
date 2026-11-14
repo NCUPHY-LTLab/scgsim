@@ -153,6 +153,7 @@ class PalaceResultSelection:
     selected_pass_index: int | None
     reason: Literal[
         "final_snapshot",
+        "last_pass_of_a_stopped_run",
         "latest_complete_iteration_after_failed_attempt",
         "no_complete_snapshot",
     ]
@@ -163,6 +164,7 @@ FailureCategory = Literal[
     "config_compatibility",
     "out_of_memory",
     "signal_killed",
+    "convergence_stop",
     "solver_error",
     "output_capture_error",
     "unknown",

@@ -7,12 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.contracts.palace_run_folder import (
+    COMPLETED_ENDINGS,
     CONFIG,
     HANDOFF_METADATA,
     INDEX_MAP,
     NATIVE_METADATA,
     RETURNED_RECEIPT,
     RETURNED_RECEIPT_SCHEMA,
+    RETURNED_RECEIPT_SCHEMA_VERSION,
     RUNTIME_COMPATIBILITY,
     collects_adapted_meshes,
     confined_path,
@@ -62,7 +64,7 @@ class ReceiptValidation:
             self.run_metadata,
         )
 
-        _validate_success_and_job(self.receipt_payload)
+        _validate_success_and_job(self.receipt_payload, self._ending())
 
         _validate_returned_inputs(
             self.handoff_metadata,
@@ -73,7 +75,11 @@ class ReceiptValidation:
         )
 
         output_map = _validate_returned_outputs(
-            self.handoff_metadata, self.problem, self.receipt_payload, self.root
+            self.handoff_metadata,
+            self.problem,
+            self.receipt_payload,
+            self.root,
+            self._ending(),
         )
 
         _validate_completed_runtime(
@@ -82,33 +88,25 @@ class ReceiptValidation:
 
         _validate_log_and_solver_identity(self.receipt_payload, self.root)
 
+    def _ending(self) -> str:
+        return expect_scalar(self.receipt_payload, "ending", str)
+
     def _validate_header(self) -> None:
         """The receipt has the current schema, says completed, and names the route and problem of the run."""
-        schema = expect_scalar(self.receipt_payload, "schema", str)
-        if schema != RETURNED_RECEIPT_SCHEMA:
-            raise ValueError(
-                Declared(
-                    "returned run receipt schema is invalid", RETURNED_RUN_FOLDER
-                ).refusal(found_text(schema, RETURNED_RECEIPT_SCHEMA))
-            )
-        schema_version = expect_int(
-            self.receipt_payload.get("schema_version"),
-            "returned receipt schema_version",
-            optional=False,
-        )
-        if schema_version != 1:
-            raise ValueError(
-                Declared(
-                    "returned run receipt schema_version must be 1", RETURNED_RUN_FOLDER
-                ).refusal(found_text(schema_version))
-            )
-
+        require_current_receipt(self.receipt_payload)
         status = expect_scalar(self.receipt_payload, "status", str)
         if status != "completed":
             raise ValueError(
                 Declared(
                     "returned run receipt status is not completed", RETURNED_RUN_FOLDER
                 ).refusal(found_text(status, "completed"))
+            )
+        ending = self._ending()
+        if ending not in COMPLETED_ENDINGS:
+            raise ValueError(
+                Declared(
+                    f"returned run receipt ending {ending!r}", RETURNED_RUN_FOLDER
+                ).refusal(f"is not one a completed run has: {list(COMPLETED_ENDINGS)}")
             )
 
         route = expect_scalar(self.receipt_payload, "route", str)
@@ -139,6 +137,41 @@ class ReceiptValidation:
             )
 
 
+_RECEIPT_SCHEMA_PREFIX = "palace-returned-run-receipt.v"
+
+
+def require_current_receipt(receipt: dict[str, Any]) -> None:
+    """Refuse a receipt an earlier SCGSim wrote, saying how to read it, and one of no known schema.
+
+    This version reads only the receipt it writes; a result recorded by an earlier one is read with the
+    SCGSim commit that wrote it.
+    """
+    schema = receipt.get("schema")
+    version = receipt.get("schema_version")
+    if schema == RETURNED_RECEIPT_SCHEMA and version == RETURNED_RECEIPT_SCHEMA_VERSION:
+        return
+    number = (
+        schema.removeprefix(_RECEIPT_SCHEMA_PREFIX)
+        if isinstance(schema, str) and schema.startswith(_RECEIPT_SCHEMA_PREFIX)
+        else ""
+    )
+    if number.isdigit() and int(number) < RETURNED_RECEIPT_SCHEMA_VERSION:
+        raise ValueError(
+            Declared(f"returned run receipt {schema}", RETURNED_RUN_FOLDER).refusal(
+                f"was written by an earlier SCGSim, which this version does not read (it reads "
+                f"{RETURNED_RECEIPT_SCHEMA}); read this result with the SCGSim commit that wrote it"
+            )
+        )
+    raise ValueError(
+        Declared("returned run receipt schema is invalid", RETURNED_RUN_FOLDER).refusal(
+            found_text(
+                f"{schema} version {version}",
+                f"{RETURNED_RECEIPT_SCHEMA} version {RETURNED_RECEIPT_SCHEMA_VERSION}",
+            )
+        )
+    )
+
+
 def build_returned_receipt(payload: dict[str, Any]) -> PalaceReturnedReceipt:
     """Detach validated receipt fields while retaining optional execution-stage observations."""
     return PalaceReturnedReceipt(
@@ -148,6 +181,7 @@ def build_returned_receipt(payload: dict[str, Any]) -> PalaceReturnedReceipt:
         ),
         handoff_id=expect_scalar(payload, "handoff_id", str),
         status=expect_scalar(payload, "status", str),
+        ending=expect_scalar(payload, "ending", str),
         exit_code=expect_int(payload.get("exit_code"), "returned receipt exit_code"),
         solver_exit_code=expect_int(
             payload.get("solver_exit_code"), "returned receipt solver_exit_code"
@@ -176,6 +210,11 @@ def build_returned_receipt(payload: dict[str, Any]) -> PalaceReturnedReceipt:
         ),
         log=expect_mapping(payload.get("log"), "receipt.log")
         if payload.get("log") is not None
+        else None,
+        convergence_decision=expect_mapping(
+            payload.get("convergence_decision"), "receipt.convergence_decision"
+        )
+        if payload.get("convergence_decision") is not None
         else None,
         solver_identity=expect_mapping(
             payload.get("solver_identity"), "receipt.solver_identity"
@@ -233,11 +272,14 @@ def validate_returned_state_agreement(
 
 
 def _required_output_records(
-    problem: str, *, index_counts: dict[str, int]
+    problem: str, *, index_counts: dict[str, int], tables: bool
 ) -> tuple[dict[str, Any], ...]:
     """List native output families required by the written problem and configured selectors."""
     paths = [
-        *(output_table(family) for family in output_families(problem, index_counts)),
+        *(
+            output_table(family)
+            for family in (output_families(problem, index_counts) if tables else ())
+        ),
         NATIVE_METADATA,
     ]
     return tuple({"path": path, "bytes": 0, "sha256": ""} for path in paths)
@@ -418,15 +460,20 @@ def _validate_probe_command(
 
 
 def _validate_returned_outputs(
-    handoff_metadata: Any, problem: str, receipt_payload: Any, root: Path
+    handoff_metadata: Any, problem: str, receipt_payload: Any, root: Path, ending: str
 ) -> Any:
-    """Verify required solver artifacts and every returned output size and hash."""
+    """Verify required solver artifacts and every returned output size and hash.
+
+    A solver stopped at convergence left no final solve at the top level, so only its ``palace.json`` is
+    required there; the tables of its last pass are required where result reading takes them from.
+    """
     output_files = expect_list(receipt_payload.get("output_files"), "output_files")
     output_map = extract_hash_map(output_files)
     index_map = read_json(root / INDEX_MAP)
     required_outputs = _required_output_records(
         problem,
         index_counts=count_index_entries(index_map),
+        tables=ending == "solver_ended",
     )
     config = read_json(root / CONFIG)
     if collects_adapted_meshes(handoff_metadata.get("palace_identity")):
@@ -511,28 +558,44 @@ def _validate_returned_inputs(
         )
 
 
-def _validate_success_and_job(receipt_payload: Any) -> None:
-    """Require successful pipeline exit codes and a nonempty recorded job identity."""
+def _validate_success_and_job(receipt_payload: Any, ending: str) -> None:
+    """Require the exit codes of a completed run and a nonempty recorded job identity.
+
+    A solver that ended by itself exited 0.  One stopped at convergence exited with whatever code the stop
+    gave; the pipeline's exit code must be that same code, and the decision record must hold it too
+    (``results.convergence``).
+    """
     exit_code = expect_int(
         receipt_payload.get("exit_code"), "returned receipt exit_code"
     )
-    if exit_code != 0:
-        raise ValueError(
-            Declared(
-                "returned run receipt exit_code must be zero for completed runs",
-                RETURNED_RUN_FOLDER,
-            ).refusal(found_text(exit_code, 0))
-        )
     solver_exit_code = expect_int(
         receipt_payload.get("solver_exit_code"), "returned receipt solver_exit_code"
     )
-    if solver_exit_code != 0:
-        raise ValueError(
-            Declared(
-                "returned run receipt solver_exit_code must be zero",
-                RETURNED_RUN_FOLDER,
-            ).refusal(found_text(solver_exit_code, 0))
-        )
+    if ending == "stopped_at_convergence":
+        if exit_code != solver_exit_code:
+            raise ValueError(
+                Declared(
+                    "returned run receipt exit_code of a solver stopped at convergence",
+                    RETURNED_RUN_FOLDER,
+                ).refusal(
+                    f"must be the solver's exit code {solver_exit_code}; found {exit_code}"
+                )
+            )
+    else:
+        if exit_code != 0:
+            raise ValueError(
+                Declared(
+                    "returned run receipt exit_code must be zero for completed runs",
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(exit_code, 0))
+            )
+        if solver_exit_code != 0:
+            raise ValueError(
+                Declared(
+                    "returned run receipt solver_exit_code must be zero",
+                    RETURNED_RUN_FOLDER,
+                ).refusal(found_text(solver_exit_code, 0))
+            )
     tee_exit_code = expect_int(
         receipt_payload.get("tee_exit_code"), "returned receipt tee_exit_code"
     )

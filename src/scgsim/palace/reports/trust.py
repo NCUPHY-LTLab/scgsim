@@ -66,6 +66,7 @@ from scgsim.palace.reports.surface_figures import (
 )
 from scgsim.palace.reports.trust_records import ReportIdentity, ReportProvenance
 from scgsim.palace.results.artifacts import read_optional_json
+from scgsim.palace.results.convergence import SolverEnd
 from scgsim.palace.results.inspection import (
     failure_payload,
     selection_payload,
@@ -125,6 +126,7 @@ class PalaceTrustReport:
     cost: CostCards
     provenance: ReportProvenance
     convergence: ConvergenceCheck
+    solver_end: SolverEnd | None = None
     theme: ReportTheme = "light"
     show_details: bool = False
 
@@ -237,7 +239,10 @@ class PalaceTrustReport:
         items = self._convergence_items()
         if len(self.passes) >= 2:
             display(HTML(self._convergence_heading_html()))
-        items = [*declared_items(self.convergence, self.theme), *items]
+        items = [
+            *declared_items(self.convergence, self.theme, self.solver_end),
+            *items,
+        ]
         for item in items:
             if isinstance(item, str):
                 display(HTML(item))
@@ -272,12 +277,12 @@ class PalaceTrustReport:
             ("Profile", self.profile),
             ("Completeness", self.completeness),
             ("Latest snapshot", self.latest_source),
-            ("Final snapshot", self.selection.final_snapshot_status),
+            ("Final snapshot", self._final_snapshot_text()),
             ("Selection integrity", self.selection.integrity),
             ("AMR passes recorded", str(len(self.passes))),
             ("AMR MaxIts", fmt(self.amr_max_passes)),
             ("AMR Tol", self._tolerance_text()),
-            ("Convergence", verdict_card(self.convergence)),
+            ("Convergence", verdict_card(self.convergence, self.solver_end)),
             ("MPI × OpenMP", self.identity.get("resources")),
             ("Receipt", self.identity.get("receipt")),
             ("Palace git", self.identity.get("git_tag")),
@@ -296,8 +301,24 @@ class PalaceTrustReport:
             f"{self._run_state_html()}</section>"
         )
 
+    def _final_snapshot_text(self) -> str:
+        """The top level's state; a run stopped at convergence has no final solve there, by design."""
+        if self.selection.reason == "last_pass_of_a_stopped_run":
+            return "none: stopped at convergence"
+        return self.selection.final_snapshot_status
+
     def _run_state_html(self) -> str:
         notices: list[str] = []
+        if self.selection.reason == "last_pass_of_a_stopped_run":
+            notices.append(
+                "<div style='border-left:4px solid #1a7f37;background:rgba(26,127,55,0.10);"
+                "padding:0.65rem 0.8rem;margin:0.7rem 0'>"
+                "<strong>Stopped at convergence</strong><br>"
+                f"The result is the last pass Palace completed, "
+                f"{html.escape(self.selection.selected_source or 'unavailable')}: the convergence runner "
+                "stopped Palace after it, so the top level holds no final solve. Integrity: "
+                f"{html.escape(self.selection.integrity)}.</div>"
+            )
         if self.failure is not None:
             notices.append(
                 "<div style='border-left:4px solid #cf222e;background:rgba(207,34,46,0.10);"

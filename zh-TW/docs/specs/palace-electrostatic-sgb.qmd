@@ -159,7 +159,7 @@ sim.set_numerical(order=2, amr_max_passes=12)
 sim.set_convergence(
     Capacitance.diagonal().within(relative=1e-3),
     Capacitance.element("island", "resonator").within(relative=1e-2),
-    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(relative=2e-2),
     ErrorIndicator().below(1e-2),
     minimum_converged_passes=2,
 )
@@ -177,6 +177,10 @@ sim.set_convergence(
 `within(relative=...)` 限制與前一個 pass 相比的變化 $|q_k - q_{k-1}| / |q_k|$。$q_k$ 為零時，若 $q_{k-1}$ 也為零則變化為零，否則相對變化沒有定義，該準則不成立。絕對形式以量所儲存的單位命名：電容用 `absolute_f`（法拉），頻率用 `absolute_ghz`，參與率沒有單位，用 `absolute`。兩者恰好給一個。`ErrorIndicator().below(value)` 限制的是值本身：指標至多為 `value`。
 
 一個 pass 是 Palace 的一次求解：pass 1 求解輸入網格，pass $k$ 在 $k-1$ 次細化之後。變化準則比較 pass $k$ 與 pass $k-1$，所以在 pass 1 不可能成立。有多個數的量，在每個數都成立時才成立；當每條準則在以 $k$ 結尾的連續 `minimum_converged_passes` 個 pass 都成立，執行就在 pass $k$ 收斂。同一類別的全表面列與邊距列從不相加：邊距列是其全表面列的一部分。
+
+::: {.callout-note title="變化準則說明了什麼"}
+變化準則說的是一個量在兩個 pass 之間變動很小，不是它離極限還有多遠。在目前量測過的佈局上，全表面參與率每個 pass 都在成長，沒有任何變化準則在它上面成立，這樣的執行會跑到 pass 上限。邊距以外的參與率（`margin_um=`）確實會穩定下來，但不是每個 pass 都平穩，這正是 `minimum_converged_passes` 的用途。量測紀錄在 [issue 248](https://github.com/NCUPHY-LTLab/scgsim/issues/248#issuecomment-6873586635)。
+:::
 
 再次呼叫會取代整個宣告；`set_convergence(None)` 移除宣告，沒有任何準則的 `set_convergence()` 會被拒絕。此呼叫與 `set_numerical` 一樣保留網格、捨棄設定檔與交接。
 
@@ -202,7 +206,42 @@ sim.set_convergence(
 
 有宣告時，宣告的準則取代 Palace 自己的容許誤差。`write_config()` 把 `Model.Refinement.Tol` 寫成最小的正規雙精度浮點數，使得只有 `amr_max_passes` 會結束執行，並寫出 `SaveAdaptIterations: true`，讓 Palace 把每個 pass 保留在 `results/palace/iteration<k>`。它把檢查的計畫寫到 `metadata/palace_convergence_plan.json`：每條準則在報告中顯示的標籤；每個數的結果表、列、欄位與欄位的組合方式（參與率是其各列欄位的總和）；檢定、門檻，以及 `minimum_converged_passes`。一個量由哪些欄位組成，只在這裡、依同一份設定寫出的索引對照表條目決定一次。`prepare_handoff()` 把計畫與其他輸入一起封存，因此回傳的執行若計畫已改變會被拒絕。沒有宣告時，以上都不會寫出，設定檔只由 AMR 控制決定。
 
-在這個版本中，Palace 仍會執行到 `amr_max_passes` 的每一個 pass。檢查在讀取回傳的執行時進行：`ResolvedPalaceResult.convergence` 與[可信度報告](../report-model.qmd#declared-convergence)會說明執行在哪個 pass 已收斂，或哪條準則仍不成立、差多少。
+### 收斂時停止 {#convergence-stop}
+
+有宣告時，宣告的準則一旦收斂，Palace 就會被停止：在準則成立的那個 pass 完成後一到兩秒，所以該 pass 之後的求解不會執行。執行指令碼透過 `prepare_handoff()` 複製到執行資料夾的收斂執行器 `metadata/run_palace_until_converged.py` 啟動 Palace；它只需要 Python 標準函式庫（[執行設定檔](../execution-profiles.qmd#convergence-runner)）。執行器：
+
+1. 在它自己的 session 中啟動指令碼原本會執行的求解指令；Palace 的輸出照舊進入日誌；
+2. 每秒查看一次 `results/palace`。某個 pass 的 `iteration<k>/` 資料夾在兩次查看之間沒有變化時，才算這個 pass；每多一個 pass，執行器就執行與讀取結果時相同的檢查；
+3. 判定為已收斂時，先寫出 `metadata/palace_convergence_decision.json`，再對求解器的 session 送出 SIGTERM，並等到它全部結束：指令本身、它啟動的啟動器，以及由啟動器結束的各個 rank。60 秒後仍有任何一個在執行，就送出 SIGKILL；
+4. 求解器結束後（停止之後，或在 `amr_max_passes` 自行結束），再寫一次決定紀錄，內容是 `results/palace` 當時的 pass 與求解器的結束碼。
+
+執行器不會留下無人看管的求解器。被要求結束時（SIGTERM、SIGINT 或 SIGHUP），它先結束求解器並記下原因。來不及這麼做就被結束時（執行器本身或指令碼的整個行程群組收到 SIGKILL），求解器交給它的守護行程：執行器與求解器一同啟動、位於自己 session 中的行程，一旦執行器不在，就以同樣的方式結束求解器的 session。
+
+Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化網格，因此停止發生在這段細化期間，或下一次求解開始時；已完成 pass 的檔案都不會改變。停止的要求在資料夾出現後一到兩秒送出（執行器每秒查看一次，第二次查看時才計入該 pass），Palace 在要求之後約一秒內結束。回執要到這時才寫出，所以不會有求解器的行程在回執之後寫入檔案。
+
+耗時短於這一到兩秒的 pass 仍然會執行。執行器會把它和前一個 pass 一起計入：判定指出執行在哪個 pass 收斂、其後又讀到幾個 pass，Palace 在最後一個之後被停止，結果就是最後那個 pass。所有 pass 都這麼短的執行，在執行器查看之前就已結束；它照 Palace 結束的樣子算完成。停止省下的是每一個比這更長的 pass，時間都花在那裡：每個 pass 的元素數是前一個的二到三倍。
+
+回執記載求解器如何結束（`ending`），並保留求解器自己的結束碼：
+
+| `ending` | 情況 | 回執 |
+|---|---|---|
+| `solver_ended` | Palace 結束時 SCGSim 沒有停止它 | 所有結束碼為 0 時 `completed`，否則 `failed` |
+| `stopped_at_convergence` | 執行器在判定已收斂的 pass 之後停止它，且它在等待時間內結束 | `completed`，結束碼是停止造成的那一個：Palace 的 `palace` 包裝指令碼被訊號結束時為 143，直接啟動 `mpirun` 時為 1 |
+| `stop_escalated` | 它沒有因 SIGTERM 結束，被強制終止 | `failed` |
+| `runner_terminated` | 執行器自己被要求結束，並因此結束了 Palace。若 Palace 已在收斂停止後的收尾中才被要求結束，停止照樣成立 | `failed` |
+| `not_recorded` | 執行器沒有留下完整的決定紀錄 | `failed` |
+
+在收斂時停止的執行，其結果是最後一個 pass：讀取結果時從 `iteration<k>/` 取得表格與成本，因為頂層放的是指向它的連結，或正在進行的求解。Palace 也可能剛好在執行器做出決定的那一刻完成最後一次求解。如果它那時已經自行結束（結束碼 0，最後一次求解在頂層），就沒有任何東西被停止，執行記為自行結束。如果停止仍然送到它，執行就是被停止的，結果是頂層的那最後一次求解。
+
+讀取結果時會從回傳的檔案重新計算檢查；下列情況會拒絕這個執行，並說出不一致之處：
+
+- pass 或判定與決定紀錄不同，或決定紀錄不是回執所綁定的那一份；
+- 決定紀錄與回執記載的結束方式不同，或求解器的結束碼不同；
+- 頂層是連結或正在進行的求解，回執卻說 Palace 自行結束；
+- 沒有計畫卻有決定紀錄，或有計畫卻沒有決定紀錄；
+- 結果的某張表格（在頂層或在 `iteration<k>/`）不在回執記載的輸出之中。
+
+`ResolvedPalaceResult.convergence` 與[可信度報告](../report-model.qmd#declared-convergence)會說明執行在哪個 pass 收斂、Palace 在哪裡停止，或在 pass 上限時哪條準則仍不成立、差多少。`ResolvedPalaceResult.solver_end`（一個 `SolverEnd`）保存回執的 `ending`、執行器在哪個 pass 之後停止 Palace，以及上限允許的 pass 數（`amr_max_passes + 1`）。
 
 ## 靜電預設值 {#candidate-electrostatic-defaults}
 

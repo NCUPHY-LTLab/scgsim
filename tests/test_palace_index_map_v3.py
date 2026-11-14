@@ -41,6 +41,7 @@ from scgsim.palace.reports.surface_figures import (
     surface_margin_participation_figure,
     surface_ranking_figure,
 )
+from scgsim.palace.results.convergence import SolverEnd
 from scgsim.palace.results.epr import epr_result, reanalyze_epr
 from scgsim.palace.results.epr_records import PalaceEprResult
 from scgsim.palace.results.index_contract import (
@@ -499,6 +500,7 @@ def _resolved_eigenmode(run: Run) -> ResolvedRunData:
         returned_receipt=receipt,
         provenance=provenance,
         convergence=ConvergenceCheck.not_declared(),
+        solver_end=SolverEnd("solver_ended", None, None),
     )
 
 

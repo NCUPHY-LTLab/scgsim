@@ -306,8 +306,13 @@ of the records the recorder writes (`ReturnedReceipt`, `FileRecord`). It
 imports only the standard library, so it words its refusals with its own
 `refused`, the same sentence `scgsim.refusal` words. The recorder in the run folder
 (`metadata/record_palace_return.py`) is the recorder module with the
-contract's text written in place of its import (`run.recorder_copy`), so a
-run folder needs only a Python interpreter to record its receipt.
+contracts' text written in place of their imports (`run.standalone_copy`), so a
+run folder needs only a Python interpreter to record its receipt. A run with a
+convergence declaration also gets the convergence runner
+(`metadata/run_palace_until_converged.py`, from `run.convergence_runner`), copied
+the same way with `scgsim.contracts.palace_convergence`: it runs the one
+convergence check after each pass on the solver host and stops Palace once the
+declared criteria have converged.
 
 `mesh()` discards derived state before checking prerequisites. Geometry preparation then applies the vacuum region to the
 stack, interprets the physical geometry, records Route-A metadata, and returns
