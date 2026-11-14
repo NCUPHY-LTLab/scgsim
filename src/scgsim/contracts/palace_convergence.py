@@ -1,10 +1,13 @@
-"""The convergence plan of a Palace run and the one check that decides, pass by pass, whether the run converged.
+# long-file: the enumeration of passes and the check travel to the solver host as one standalone script.
+
+"""The convergence plan of a Palace run, the passes a returned run holds, and the one check on them.
 
 ``set_convergence`` declares criteria; ``write_config()`` turns them into a ``ConvergencePlan``: for every
 criterion, which numbers to read from which result table of a pass, how to compare them and against what
 threshold.  The plan is written to the run folder (``metadata/palace_convergence_plan.json``) and bound into
-the handoff.  ``check_convergence`` executes the plan on the pass folders of a returned run and is the only
-code that decides "converged": result reading and the trust report call it, and nothing else computes a
+the handoff.  ``returned_passes`` is the one enumeration of the passes of a ``results/palace`` folder, by
+the identity of its files; ``collect_amr_passes`` and result reading both use it.  ``check_convergence``
+executes the plan on those passes and is the only code that decides "converged": nothing else computes a
 change or compares one with a threshold.
 
 Passes are Palace's solves.  Pass 1 is the solve on the input mesh, pass k the solve after k - 1
@@ -18,6 +21,7 @@ run folder and run there without SCGSim, as the receipt recorder is.
 """
 
 import csv
+import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -290,17 +294,253 @@ def _positive_finite(value: Any) -> bool:
 
 @dataclass(frozen=True)
 class PassFolder:
-    """One pass of a run: its number, the folder holding its tables, and whether that number is established.
+    """One pass of a run: its number, the folder holding its tables, and whether its readings can be used.
 
     ``number`` is the pass the folder records about itself (Palace's ``Problem.Iteration``: 1 is the solve on
-    the input mesh).  ``identity_problem`` says why it could not be established (no readable record, or one
-    that disagrees with the folder name); such a pass is read, but no change is measured to or from it and it
-    is in no run of passes in a row.
+    the input mesh), established by ``returned_passes``.  ``identity_problem`` says why the pass cannot be read
+    (two folders record it with different tables); none of its readings is then used, no change is measured to
+    or from it, and it is in no run of passes in a row.
     """
 
     number: int
     path: Path
     identity_problem: str | None = None
+
+
+# ---- The passes of a returned results folder ---------------------------------------------------------------
+#
+# Palace 0.18.1 writes the tables of the solve under way at the top of ``results/palace``.  After solve k,
+# when it refines again with ``SaveAdaptIterations``, it moves those tables into ``iteration<k>/`` (zero-padded
+# to the width of ``MaxIts``), leaves a symbolic link to each at the top level, and writes a new ``palace.json``
+# there; ``iteration<k>/palace.json`` records ``Problem.Iteration = k``.  The next solve replaces the links one
+# by one, starting some tables with their header only.  The last solve of a run that ends by itself stays at
+# the top level as regular files, and its ``palace.json`` records its own iteration.  So which pass a folder
+# holds is decided by what its files are, never by its place in a listing.
+
+
+@dataclass(frozen=True)
+class SetAside:
+    """A result folder that is not read as a pass, and why (a number not established, an unfinished solve)."""
+
+    folder: Path
+    reason: str
+
+
+@dataclass(frozen=True)
+class ReturnedPasses:
+    """The passes a ``results/palace`` folder holds, in order of their numbers, and what it holds besides.
+
+    ``final`` says what the top level is: ``pass`` (a solve of its own), ``copy`` (regular files equal to the
+    iteration of the pass it records, as a tool that follows links leaves a stopped run), ``linked`` (links
+    into an iteration, so no solve of its own), ``unfinished`` (a solve under way: links and new files mixed,
+    or a table with its header only), ``missing`` (no table) or ``set_aside`` (a number not established).
+    """
+
+    passes: tuple[PassFolder, ...]
+    set_aside: tuple[SetAside, ...]
+    final: Literal["pass", "copy", "linked", "unfinished", "missing", "set_aside"]
+    final_reason: str | None = None
+
+
+_METADATA = "palace.json"
+_ITERATION_PREFIX = "iteration"
+
+
+def returned_passes(results: Path) -> ReturnedPasses:
+    """Enumerate the passes of ``results`` (a run's ``results/palace``) by the identity of their files.
+
+    * ``iteration<k>/`` is pass k when its ``palace.json`` records ``Problem.Iteration`` k and its tables are
+      regular files; otherwise it is set aside with the reason.
+    * The top level is a pass of its own only when its ``palace.json`` and every table are regular files
+      with data rows; its number is the iteration it records.  Tables that are links into ``iteration<k>/``
+      are that iteration's files.  Links mixed with regular files, or a table with only its header, are a
+      solve under way.
+    * Two folders that record the same pass are one pass when they hold the same tables, byte for byte;
+      otherwise the pass is kept with an ``identity_problem`` and none of its readings is used.
+
+    There is no other numbering: a pass's number is recorded and consistent, or the folder is set aside.
+    """
+    candidates: list[tuple[int, Path]] = []
+    set_aside: list[SetAside] = []
+    iterations = sorted(
+        (number, child)
+        for child in (results.iterdir() if results.is_dir() else ())
+        if child.is_dir() and (number := _folder_iteration(child.name)) is not None
+    )
+    for number, folder in iterations:
+        reason = _iteration_problem(folder, number)
+        if reason is None:
+            candidates.append((number, folder))
+        else:
+            set_aside.append(SetAside(folder, reason))
+    final, final_reason, recorded = _top_level(results)
+    if final == "pass" and recorded is not None:
+        candidates.append((recorded, results))
+    elif final in ("unfinished", "set_aside") and final_reason is not None:
+        set_aside.append(SetAside(results, final_reason))
+    passes, copied = _merge(candidates)
+    return ReturnedPasses(
+        tuple(passes),
+        tuple(set_aside),
+        "copy" if final == "pass" and copied else final,
+        final_reason,
+    )
+
+
+def _folder_iteration(name: str) -> int | None:
+    """The ``N`` of a folder named ``iteration<N>``, None for any other name."""
+    number = name.removeprefix(_ITERATION_PREFIX)
+    return (
+        int(number) if name.startswith(_ITERATION_PREFIX) and number.isdigit() else None
+    )
+
+
+def _tables(folder: Path) -> list[Path]:
+    """The tables of a result folder: its ``.csv`` files, links included."""
+    return sorted(
+        path
+        for path in folder.iterdir()
+        if path.suffix == ".csv" and (path.is_file() or path.is_symlink())
+    )
+
+
+def _recorded_iteration(folder: Path) -> int | str:
+    """The ``Problem.Iteration`` a folder's own ``palace.json`` records, or why there is none."""
+    metadata = folder / _METADATA
+    if metadata.is_symlink() or not metadata.is_file():
+        return f"has no {_METADATA} of its own"
+    try:
+        payload = json.loads(metadata.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return f"has a {_METADATA} that cannot be read"
+    problem = payload.get("Problem") if isinstance(payload, dict) else None
+    recorded = problem.get("Iteration") if isinstance(problem, dict) else None
+    if type(recorded) is not int or recorded < 1:
+        return f"has a {_METADATA} that records no Problem.Iteration"
+    return recorded
+
+
+def _iteration_problem(folder: Path, number: int) -> str | None:
+    """Why ``iteration<number>/`` is not pass ``number``, or None when it is."""
+    recorded = _recorded_iteration(folder)
+    if isinstance(recorded, str):
+        return f"{folder.name} {recorded}"
+    if recorded != number:
+        return f"{folder.name} records Problem.Iteration {recorded}, not {number}"
+    linked = [path.name for path in _tables(folder) if path.is_symlink()]
+    if linked:
+        return f"{folder.name} holds links, not tables of its own: {linked}"
+    return None
+
+
+def _top_level(
+    results: Path,
+) -> tuple[
+    Literal["pass", "linked", "unfinished", "missing", "set_aside"],
+    str | None,
+    int | None,
+]:
+    """What the top level of ``results`` is, why when it is no pass, and the pass it records when it is."""
+    tables = _tables(results) if results.is_dir() else []
+    if not tables:
+        return "missing", "the final result holds no table", None
+    links = [path for path in tables if path.is_symlink()]
+    if links:
+        targets = {_link_iteration(results, path) for path in links}
+        if len(links) == len(tables) and len(targets) == 1 and None not in targets:
+            (target,) = targets
+            return (
+                "linked",
+                f"the final result's tables are links into iteration{target}",
+                None,
+            )
+        return (
+            "unfinished",
+            "the final result is a solve under way: its tables mix links into iteration folders with new files",
+            None,
+        )
+    header_only = [path.name for path in tables if _data_rows(path) == 0]
+    if header_only:
+        return (
+            "unfinished",
+            f"the final result is a solve under way: {header_only} hold only their header",
+            None,
+        )
+    recorded = _recorded_iteration(results)
+    if isinstance(recorded, str):
+        return "set_aside", f"the final result {recorded}", None
+    return "pass", None, recorded
+
+
+def _link_iteration(results: Path, link: Path) -> int | None:
+    """The ``N`` of the ``iteration<N>/`` a top-level link resolves into, None when it points elsewhere."""
+    try:
+        target = link.resolve(strict=True)
+        relative = target.relative_to(results.resolve())
+    except (OSError, ValueError):
+        return None
+    return _folder_iteration(relative.parts[0]) if len(relative.parts) == 2 else None
+
+
+def _data_rows(path: Path) -> int:
+    """How many non-empty lines a table has after its header."""
+    with path.open(encoding="utf-8", newline="") as handle:
+        return max(sum(1 for line in handle if line.strip()) - 1, 0)
+
+
+def _merge(candidates: list[tuple[int, Path]]) -> tuple[list[PassFolder], bool]:
+    """One pass per recorded number; whether the top level was a copy of an iteration it repeats."""
+    passes: list[PassFolder] = []
+    copied = False
+    for number in sorted({n for n, _ in candidates}):
+        # Iteration folders first: a copied top level's palace.json describes the solve after it.
+        folders = sorted(
+            (path for n, path in candidates if n == number),
+            key=lambda path: _folder_iteration(path.name) is None,
+        )
+        if len(folders) == 1:
+            passes.append(PassFolder(number, folders[0]))
+            continue
+        differing = _differing_tables(folders)
+        if differing:
+            names = " and ".join(_source_name(path) for path in folders)
+            passes.append(
+                PassFolder(
+                    number,
+                    folders[0],
+                    f"pass {number} is recorded by {names}, whose tables differ: {differing}",
+                )
+            )
+        else:
+            passes.append(PassFolder(number, folders[0]))
+            copied = copied or any(
+                _folder_iteration(path.name) is None for path in folders
+            )
+    return passes, copied
+
+
+def _source_name(folder: Path) -> str:
+    return (
+        folder.name
+        if _folder_iteration(folder.name) is not None
+        else "the final result"
+    )
+
+
+def _differing_tables(folders: list[Path]) -> list[str]:
+    """The tables that are not the same bytes in every one of ``folders``, or held by only some of them."""
+    names = sorted({path.name for folder in folders for path in _tables(folder)})
+    return [
+        name
+        for name in names
+        if len(
+            {
+                (folder / name).read_bytes() if (folder / name).is_file() else None
+                for folder in folders
+            }
+        )
+        != 1
+    ]
 
 
 @dataclass(frozen=True)
@@ -339,8 +579,8 @@ class CriterionAtPass:
 class PassCheck:
     """Every criterion at one pass; ``streak`` is how many passes in a row, ending here, all criteria held.
 
-    ``identity_problem`` says why the pass's number is not established (see ``PassFolder``), or that two
-    folders record the same pass; such a pass has a streak of 0 and its neighbours measure no change to it.
+    ``identity_problem`` is the ``PassFolder``'s: such a pass has a streak of 0 and its neighbours measure no
+    change to it.
     """
 
     number: int
@@ -377,11 +617,15 @@ class ConvergenceVerdict:
 
 @dataclass(frozen=True)
 class ConvergenceCheck:
-    """The plan of a run, the check of every pass read, and the verdict; ``plan`` is None when nothing was declared."""
+    """The plan of a run, the check of every pass read, and the verdict; ``plan`` is None when nothing was declared.
+
+    ``set_aside`` are the result folders that were not read as passes, each with why.
+    """
 
     plan: ConvergencePlan | None
     passes: tuple[PassCheck, ...]
     verdict: ConvergenceVerdict
+    set_aside: tuple[SetAside, ...] = ()
 
     @classmethod
     def not_declared(cls) -> "ConvergenceCheck":
@@ -390,21 +634,23 @@ class ConvergenceCheck:
 
 
 def check_convergence(
-    plan: ConvergencePlan, passes: Sequence[PassFolder]
+    plan: ConvergencePlan,
+    passes: Sequence[PassFolder],
+    set_aside: Sequence[SetAside] = (),
 ) -> ConvergenceCheck:
     """Read the planned numbers of every pass, apply each criterion, and decide the verdict.
 
-    ``passes`` are in order of their numbers.  A change is measured only between two passes whose numbers are
-    established and consecutive: otherwise it is unavailable, with the reason, the change criterion does not
-    hold there, and the run of passes in a row starts again.  A value criterion needs no neighbour.  Two
-    folders that record the same pass make both unreadable, since which is that solve cannot be told.
+    ``passes`` are ``returned_passes``'s, in order of their numbers; ``set_aside`` its folders that are no
+    pass, kept for the record.  A change is measured only between two readable passes whose numbers are
+    consecutive: otherwise it is unavailable, with the reason, the change criterion does not hold there, and
+    the run of passes in a row starts again.  A value criterion needs no neighbour.
     """
-    problems = _identity_problems(passes)
+    problems = [folder.identity_problem for folder in passes]
     readings = [
         _read_pass(plan, folder.path)
-        if problem is None or folder.identity_problem == problem
-        else _unavailable(plan, problem)
-        for folder, problem in zip(passes, problems, strict=True)
+        if folder.identity_problem is None
+        else _unavailable(plan, folder.identity_problem)
+        for folder in passes
     ]
     checks: list[PassCheck] = []
     for position, folder in enumerate(passes):
@@ -435,23 +681,9 @@ def check_convergence(
                 folder.number, folder.path, criteria, holds, streak, problems[position]
             )
         )
-    return ConvergenceCheck(plan, tuple(checks), _verdict(plan, checks))
-
-
-def _identity_problems(passes: Sequence[PassFolder]) -> list[str | None]:
-    """Why each pass's number is not established: its own record, or that another folder records it too."""
-    problems: list[str | None] = []
-    for folder in passes:
-        twins = [item.path.name for item in passes if item.number == folder.number]
-        if folder.identity_problem is not None:
-            problems.append(folder.identity_problem)
-        elif len(twins) > 1:
-            problems.append(
-                f"pass {folder.number} is recorded by {len(twins)} folders ({', '.join(twins)})"
-            )
-        else:
-            problems.append(None)
-    return problems
+    return ConvergenceCheck(
+        plan, tuple(checks), _verdict(plan, checks), tuple(set_aside)
+    )
 
 
 def _unavailable(plan: ConvergencePlan, reason: str) -> list[list["_Reading"]]:

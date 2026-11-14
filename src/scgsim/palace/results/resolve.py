@@ -39,7 +39,6 @@ from scgsim.palace.results.index_contract import (
     validate_config_index_correspondence,
     validate_config_problem,
 )
-from scgsim.palace.results.inspection_records import AmrPassSnapshot
 from scgsim.palace.results.provenance_contract import (
     validate_archive_manifest,
     validate_archive_record,
@@ -61,13 +60,7 @@ from scgsim.palace.results.resolved_records import (
     ParsedTable,
     ResolvedRunData,
 )
-from scgsim.palace.results.snapshots import collect_amr_passes
-from scgsim.palace.results.surface_readers import (
-    read_surface_bindings,
-    read_surface_margin_bindings,
-)
 from scgsim.palace.results.tables import (
-    configured_mode_count,
     count_index_entries,
     output_families,
     read_result_table,
@@ -158,9 +151,7 @@ def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
     performance = _build_performance(records.palace_json)
     # The passes are read only for a declared run, so one without a plan costs what it did before.
     plan = read_plan(root, handoff, problem)
-    convergence = check_passes(
-        plan, () if plan is None else _passes(root, problem, records)
-    )
+    convergence = check_passes(plan, root)
     return ResolvedRunData(
         run_dir=root,
         problem=problem,
@@ -174,20 +165,6 @@ def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
         provenance=records,
         convergence=convergence,
     )
-
-
-def _passes(
-    root: Path, problem: str, records: PalaceProvenance
-) -> tuple[AmrPassSnapshot, ...]:
-    """The passes of a completed run in order, as the trust report reads them, for the convergence check."""
-    return collect_amr_passes(
-        root,
-        problem,
-        read_surface_bindings(records.index_map),
-        read_surface_margin_bindings(records.index_map),
-        failed_attempt=False,
-        mode_count=configured_mode_count(records.config),
-    ).passes
 
 
 def _read_records(root: Path) -> PalaceProvenance:

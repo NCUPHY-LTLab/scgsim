@@ -39,7 +39,7 @@ from scgsim.palace import (
 )
 from scgsim.palace.reports.convergence import verdict_sentence
 from scgsim.palace.reports.plotting import plotly
-from scgsim.palace.results import resolve as resolve_module
+from scgsim.palace.results import convergence as convergence_module
 from scgsim.palace.results.convergence import read_plan
 from scgsim.palace.results.snapshots import collect_amr_passes
 from scgsim.palace.results.surface_readers import (
@@ -286,7 +286,6 @@ def test_the_check_reads_the_numbers_the_snapshot_readers_read(returned):
         "Electrostatic",
         read_surface_bindings(index_map),
         read_surface_margin_bindings(index_map),
-        failed_attempt=False,
     ).passes
     assert len(snapshots) == len(result.convergence.passes) == 4
     for snapshot, check in zip(snapshots, result.convergence.passes, strict=True):
@@ -479,6 +478,6 @@ def test_a_run_without_a_plan_reads_no_pass_folder(tmp_path, monkeypatch):
     def refuse(*_args, **_kwargs):
         raise AssertionError("an undeclared run must not collect its passes")
 
-    monkeypatch.setattr(resolve_module, "collect_amr_passes", refuse)
+    monkeypatch.setattr(convergence_module, "returned_passes", refuse)
     result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
     assert result.convergence.verdict.state == "not_declared"

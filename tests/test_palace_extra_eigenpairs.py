@@ -167,9 +167,7 @@ def _reindex(path: Path, modes: Sequence[float]) -> None:
 def test_each_amr_pass_keeps_the_requested_modes_when_the_count_is_known(tmp_path):
     """Archived and final passes both report N modes of the K that Palace wrote."""
     _eigenmode_run(tmp_path, [1, 2, 3])
-    collected = collect_amr_passes(
-        tmp_path, "Eigenmode", None, None, failed_attempt=False, mode_count=1
-    )
+    collected = collect_amr_passes(tmp_path, "Eigenmode", None, None, mode_count=1)
     assert [item.source for item in collected.passes] == ["iteration1", "final"]
     for iteration, item in enumerate(collected.passes, start=1):
         assert item.frequencies_ghz == (_value(1 + 0.5 * iteration, 1),)
@@ -180,9 +178,7 @@ def test_each_amr_pass_keeps_the_requested_modes_when_the_count_is_known(tmp_pat
 def test_an_amr_pass_read_without_a_config_reports_the_rows_it_finds(tmp_path):
     """An inspection with no mode count keeps showing every row of the table."""
     _eigenmode_run(tmp_path, [1, 2, 3])
-    collected = collect_amr_passes(
-        tmp_path, "Eigenmode", None, None, failed_attempt=False
-    )
+    collected = collect_amr_passes(tmp_path, "Eigenmode", None, None)
     assert [len(item.frequencies_ghz) for item in collected.passes] == [3, 3]
 
 
@@ -204,15 +200,11 @@ def test_an_amr_pass_without_the_requested_modes_in_order_is_unreadable(
     _eigenmode_run(tmp_path, [1, 2, 3])
     results = tmp_path / "results" / "palace"
     _write(results / "iteration1", family, modes)
-    collected = collect_amr_passes(
-        tmp_path, "Eigenmode", None, None, failed_attempt=False, mode_count=2
-    )
+    collected = collect_amr_passes(tmp_path, "Eigenmode", None, None, mode_count=2)
     assert [item.source for item in collected.passes] == ["final"]
     assert collected.final_snapshot_status == "readable"
     _write(results, family, modes)
-    collected = collect_amr_passes(
-        tmp_path, "Eigenmode", None, None, failed_attempt=False, mode_count=2
-    )
+    collected = collect_amr_passes(tmp_path, "Eigenmode", None, None, mode_count=2)
     assert collected.passes == ()
     assert collected.final_snapshot_status == "unreadable"
 

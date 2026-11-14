@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from scgsim.contracts.palace_convergence import SetAside
+
 
 def pass_number(pass_index: int) -> int:
     """The pass a snapshot's ``pass_index`` is, as Palace counts its solves.
@@ -97,8 +99,6 @@ class AmrPassSnapshot:
 
     ``pass_index`` counts the refinements before the pass (0 for the solve on the input mesh);
     ``pass_number`` is the pass as Palace counts its solves, from 1, as the folder records it.
-    ``identity_problem`` says why the number is not one the folder records (no readable
-    ``Problem.Iteration``, or one that disagrees with the folder name); None when it is.
     """
 
     pass_index: int
@@ -117,7 +117,6 @@ class AmrPassSnapshot:
     peak_node_memory_mb: float | None
     surface_margin_epr: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None = None
     native_iteration: int | None = None
-    identity_problem: str | None = None
 
     @property
     def pass_number(self) -> int:
@@ -188,7 +187,13 @@ class PalaceFailureDiagnosis:
 
 @dataclass(frozen=True)
 class CollectedSnapshots:
-    """Readable AMR snapshots plus the independently observed final-table status."""
+    """Readable AMR snapshots plus the independently observed final-table status.
+
+    ``final_reason`` says why the top level of ``results/palace`` is no pass of its own, when it is not;
+    ``set_aside`` are the folders that are not read as passes, each with why.
+    """
 
     passes: tuple[AmrPassSnapshot, ...]
     final_snapshot_status: Literal["readable", "missing", "unreadable"]
+    final_reason: str | None = None
+    set_aside: tuple[SetAside, ...] = ()

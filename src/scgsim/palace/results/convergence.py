@@ -2,31 +2,30 @@
 
 ``read_plan`` reads ``metadata/palace_convergence_plan.json`` only when the handoff sealed it, refuses a plan
 that is present but unsealed or changed since, and returns None for a run that declared nothing, before any
-pass is read.  ``check_passes`` runs ``scgsim.contracts.palace_convergence``'s check on the passes in the
-order ``collect_amr_passes`` gives them; the check reads every number from the pass folders' tables itself,
-and the snapshots give only the pass numbers and their folders.  Callers collect the passes only when there
-is a plan, so a run without a declaration costs what it did before.
+pass is read.  ``check_passes`` runs ``scgsim.contracts.palace_convergence``'s check on the passes its
+``returned_passes`` finds in ``results/palace``, the enumeration ``collect_amr_passes`` uses too; the check
+reads every number from the pass folders' tables itself.  Without a plan nothing in ``results/palace`` is
+read, so a run without a declaration costs what it did before.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from scgsim.contracts.palace_convergence import (
     ConvergenceCheck,
     ConvergencePlan,
-    PassFolder,
     check_convergence,
+    returned_passes,
 )
 from scgsim.contracts.palace_run_folder import (
     CONVERGENCE_PLAN,
     HANDOFF_METADATA,
+    OUTPUT_DIR,
     read_json,
     sha256,
 )
-from scgsim.palace.results.inspection_records import AmrPassSnapshot
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import Declared
 
@@ -55,19 +54,12 @@ def read_plan(
     return plan
 
 
-def check_passes(
-    plan: ConvergencePlan | None, passes: Sequence[AmrPassSnapshot]
-) -> ConvergenceCheck:
-    """The check of ``plan`` on ``passes``, or ``not declared`` without a plan."""
+def check_passes(plan: ConvergencePlan | None, root: Path) -> ConvergenceCheck:
+    """The check of ``plan`` on the passes of the run folder ``root``, or ``not declared`` without a plan."""
     if plan is None:
         return ConvergenceCheck.not_declared()
-    return check_convergence(
-        plan,
-        [
-            PassFolder(snapshot.pass_number, snapshot.path, snapshot.identity_problem)
-            for snapshot in passes
-        ],
-    )
+    returned = returned_passes(root / OUTPUT_DIR)
+    return check_convergence(plan, returned.passes, returned.set_aside)
 
 
 def _sealed_plan(handoff: dict[str, Any]) -> dict[str, Any] | None:

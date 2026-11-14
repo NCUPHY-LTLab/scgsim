@@ -84,6 +84,10 @@ class NativeEigenmodeQInfinityTests(unittest.TestCase):
                 _EIG_HEADER + "1,5.0,0.0,+inf,0.0,0.0\n",
                 encoding="utf-8",
             )
+            # Palace records the solve on the input mesh as iteration 1 once it is done.
+            (results / "palace.json").write_text(
+                json.dumps({"Problem": {"Iteration": 1}}), encoding="utf-8"
+            )
 
             # Build through the public inspector; this is not a mocked report.
             report = inspect_run_trustworthiness(root)

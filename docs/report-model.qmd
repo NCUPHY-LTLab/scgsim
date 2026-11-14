@@ -95,16 +95,30 @@ check on the returned pass folders, `results/palace/iteration<k>` and the final
 of every pass (each number, what its test measured, whether it holds) and the
 verdict. A run folder without a plan has the verdict `not_declared`.
 
-An AMR pass is one Palace solve, counted from 1: pass 1 solves the input mesh,
-and pass $k$ is written to `iteration<k>` unless it is the last solve. A folder's
-pass is the `Problem.Iteration` its own `palace.json` records, not its place in
-the listing, so a folder that returned `iteration1` and the final result of
-pass 4 holds passes 1 and 4. Every AMR pass axis of the trust report counts this
-way. A change is measured only between two passes whose numbers are established
-and consecutive. A pass whose `palace.json` records no iteration, or one that
-disagrees with its folder name, or a pass two folders record, is in no
-comparison and in no run of passes in a row; the verdict names it and why, and
-says which passes before the verdict were not read.
+An AMR pass is one Palace solve, counted from 1: pass 1 solves the input mesh.
+Which folder of `results/palace` holds which pass is decided by what its files
+are, once, for the trust report and the convergence check alike:
+
+- `iteration<k>/` is pass $k$ when its own `palace.json` records
+  `Problem.Iteration` $k$ and its tables are regular files. Palace 0.18.1 moves
+  the tables of solve $k$ there before it refines again.
+- The top level is a pass of its own only when its `palace.json` and every table
+  are regular files with data rows; its number is the iteration it records. This
+  is the last solve of a run that ended by itself.
+- A top level whose tables are links into `iteration<k>/` holds pass $k$'s
+  files, not a solve of its own: a run stopped right after pass $k$. One that
+  mixes links with new files, or holds a table with its header only, is a
+  solve under way and is no pass.
+- Two folders that record the same pass are one pass when they hold the same
+  tables, byte for byte (a stopped run copied by a tool that follows links).
+  Otherwise their readings conflict and that pass is not read.
+- A folder whose own record is missing, unreadable or names another pass is no
+  pass. No number is ever taken from a folder's place in the listing.
+
+Every AMR pass axis of the trust report counts this way. A change is measured
+only between two readable passes whose numbers are consecutive. The verdict
+names the passes read, the passes before it that were not read, and every
+folder set aside or pass not read, with why.
 
 With a declaration, the Numerical Evidence section of the trust report opens with:
 

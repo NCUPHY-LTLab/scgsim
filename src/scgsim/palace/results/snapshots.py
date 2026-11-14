@@ -1,25 +1,22 @@
-"""Read ordered AMR passes while retaining final/iteration snapshot selection rules.
+"""Read the AMR passes of a returned run folder as detached snapshots, one per pass.
 
-A pass is one Palace solve, and its number is the one its own ``palace.json`` records as
-``Problem.Iteration``.  Palace 0.18.1 records 1 for the solve on the input mesh and k for the solve after
-k - 1 refinements, and with ``SaveAdaptIterations`` copies solve k into ``iteration<k>`` (zero-padded to the
-width of ``MaxIts``) before it refines; the last solve stays in ``results/palace`` only.  So ``iteration<k>``
-records k and the final result records one more than the last refinement.  A folder whose record is missing,
-or names another pass than its folder name, keeps a number from its place in the listing but carries an
-``identity_problem``, so no comparison and no run of passes in a row is built on it.
+Which folder is which pass is decided once, by ``scgsim.contracts.palace_convergence.returned_passes``, from
+the identity of the files (each folder's own ``Problem.Iteration``, links into ``iteration<k>/``, an unfinished
+top level); the convergence check uses the same enumeration.  This module reads the tables of each pass it
+returns and compares no physics to decide which folder is which.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
+from scgsim.contracts.palace_convergence import ReturnedPasses, returned_passes
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA_NAME,
     OUTPUT_DIR,
-    iteration_number,
     palace_problem,
     table_name,
 )
@@ -57,70 +54,21 @@ _SKIP_EIG_COLUMNS = {"Error (Bkwd.)", "Error (Abs.)"}
 _ERROR_INDICATOR_TRACES = ("Norm", "Maximum", "Mean")
 
 
-def _parent_has_physics(results: Path, problem: str) -> bool:
-    """Check for the problem-specific final physics table before reading a parent snapshot."""
-    return (results / table_name(palace_problem(problem).primary_table)).is_file()
-
-
-def _same_primary_physics(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bool:
-    """Compare matching mode frequencies or capacitance matrices across two snapshots."""
-    if left.frequencies_ghz is not None and right.frequencies_ghz is not None:
-        return left.frequencies_ghz == right.frequencies_ghz
-    if left.capacitance_matrix_f is not None and right.capacitance_matrix_f is not None:
-        return left.capacitance_matrix_f == right.capacitance_matrix_f
-    return False
-
-
-def _same_margin_physics(
-    left: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None,
-    right: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None,
-) -> bool:
-    """Compare margin-row contributions while preserving unavailable margin data."""
-    if left is None or right is None:
-        return left is right
-    return tuple(
-        (snapshot.series_index, snapshot.series_kind, snapshot.records)
-        for snapshot in left
-    ) == tuple(
-        (snapshot.series_index, snapshot.series_kind, snapshot.records)
-        for snapshot in right
-    )
-
-
-def _problem_size_conflicts(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bool:
-    """Detect conflicting recorded mesh or solver sizes between otherwise matching snapshots."""
-    return any(
-        left_value is not None and right_value is not None and left_value != right_value
-        for left_value, right_value in (
-            (left.degrees_of_freedom, right.degrees_of_freedom),
-            (left.mesh_elements, right.mesh_elements),
-        )
-    )
-
-
-def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface bindings and two read conditions
+def collect_amr_passes(
     root: Path,
     problem: str,
     surface_bindings: tuple[SurfaceBinding, ...] | None,
     surface_margin_bindings: tuple[SurfaceMarginBinding, ...] | None,
     *,
-    failed_attempt: bool,
     mode_count: int | None = None,
 ) -> CollectedSnapshots:
-    """Read the native AMR iterations in order, then the final result of the run folder.
+    """Read every pass ``returned_passes`` finds in the run folder, in order of its number.
 
-    Each pass is numbered by what its folder records (``pass_identity``): ``iteration<N>`` must record ``N``,
-    and the final result is the pass it records, not one after the largest folder number, so a folder that
-    returned ``iteration1`` and the final result of pass 4 holds passes 1 and 4.
-
-    The final result is the last iteration read again, and replaces it, only when all of these hold: both have
-    the same primary physics, both are the same native iteration, and their margin physics agree.  In every
-    other case it is appended after the iterations.  One exception: on a failed attempt, a final result with
-    the last iteration's primary physics but a different recorded mesh or solver size makes the collection
-    ``"unreadable"``, and the iterations are returned without it.
-
-    A run folder with no ``results/palace`` folder, or whose final result has no physics table, is ``"missing"``; a final
-    result that cannot be read is ``"unreadable"``.
+    A pass whose two folders hold different tables is left out (which of them is that solve cannot be told),
+    and so is one whose snapshot cannot be read.  ``final_snapshot_status`` is ``"readable"`` when the top level
+    of ``results/palace`` is a solve of its own and was read, ``"missing"`` when it holds no table or not the
+    problem's own table, and ``"unreadable"`` otherwise: links into an iteration, a solve under way, a copy of
+    an iteration, or a number not established; ``final_reason`` and ``set_aside`` say why.
 
     ``mode_count`` is the requested Eigenmode count when the run's config is known.
     Each pass then keeps those modes of the tables Palace wrote for every converged
@@ -129,105 +77,50 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
     """
     results = root / OUTPUT_DIR
     if not results.is_dir():
-        return CollectedSnapshots((), "missing")
-    iteration_dirs = []
-    for child in results.iterdir():
-        number = iteration_number(child.name)
-        if number is not None and child.is_dir():
-            iteration_dirs.append((number, child))
-    iteration_dirs.sort()
+        return CollectedSnapshots((), "missing", "there is no results/palace folder")
+    returned = returned_passes(results)
     snapshots: list[AmrPassSnapshot] = []
-    for index, path in iteration_dirs:
-        identity = pass_identity(path, folder_number=index, fallback_number=index)
+    final_read = False
+    for folder in returned.passes:
+        is_final = folder.path == results
+        if folder.identity_problem is not None:
+            continue
+        if is_final and not _has_primary_table(results, problem):
+            continue
         snapshot = SnapshotReader(
-            pass_index=identity.number - 1,
-            source=path.name,
-            path=path,
+            pass_index=folder.number - 1,
+            source="final" if is_final else folder.path.name,
+            path=folder.path,
             problem=problem,
             surface_bindings=surface_bindings,
             surface_margin_bindings=surface_margin_bindings,
             mode_count=mode_count,
-            identity_problem=identity.problem,
         ).load_optional()
         if snapshot is not None:
             snapshots.append(snapshot)
-    if not _parent_has_physics(results, problem):
-        return CollectedSnapshots(tuple(snapshots), "missing")
-    identity = pass_identity(
-        results,
-        folder_number=None,
-        fallback_number=max((index for index, _path in iteration_dirs), default=0) + 1,
+            final_read = final_read or is_final
+    return CollectedSnapshots(
+        tuple(snapshots),
+        _final_status(returned, results, problem, final_read),
+        returned.final_reason,
+        returned.set_aside,
     )
-    parent = SnapshotReader(
-        pass_index=identity.number - 1,
-        source="final",
-        path=results,
-        problem=problem,
-        surface_bindings=surface_bindings,
-        surface_margin_bindings=surface_margin_bindings,
-        mode_count=mode_count,
-        identity_problem=identity.problem,
-    ).load_optional()
-    if parent is None:
-        return CollectedSnapshots(tuple(snapshots), "unreadable")
-    if snapshots and _same_primary_physics(snapshots[-1], parent):
-        if failed_attempt and _problem_size_conflicts(snapshots[-1], parent):
-            return CollectedSnapshots(tuple(snapshots), "unreadable")
-        # Equal electrical values do not identify a mesh-refinement round.
-        if (
-            parent.native_iteration is None
-            or snapshots[-1].native_iteration != parent.native_iteration
-        ):
-            return CollectedSnapshots((*snapshots, parent), "readable")
-        parent = replace(parent, pass_index=snapshots[-1].pass_index)
-        if _same_margin_physics(
-            snapshots[-1].surface_margin_epr, parent.surface_margin_epr
-        ):
-            snapshots[-1] = replace(parent, pass_index=snapshots[-1].pass_index)
-            return CollectedSnapshots(tuple(snapshots), "readable")
-    return CollectedSnapshots((*snapshots, parent), "readable")
 
 
-class PassIdentity(NamedTuple):
-    """The pass a result folder is: its number, and why that number is not one the folder records, if so."""
-
-    number: int
-    problem: str | None
+def _has_primary_table(results: Path, problem: str) -> bool:
+    """Whether a folder holds the problem's own table (``eig.csv`` or ``terminal-C.csv``)."""
+    return (results / table_name(palace_problem(problem).primary_table)).is_file()
 
 
-def pass_identity(
-    folder: Path, *, folder_number: int | None, fallback_number: int
-) -> PassIdentity:
-    """The pass ``folder`` records about itself (``Problem.Iteration`` of its ``palace.json``).
-
-    ``folder_number`` is the ``N`` of an ``iteration<N>`` folder (None for the final result), which must
-    agree with the record.  Without a readable record, or when they disagree, the pass keeps
-    ``fallback_number`` (its place in the listing) and the reason is returned with it.
-    """
-    try:
-        payload = read_optional_json(folder / NATIVE_METADATA_NAME)
-    except (OSError, TypeError, ValueError):
-        payload = None
-        reason = f"{_named(folder, folder_number)}: its {NATIVE_METADATA_NAME} cannot be read"
-    else:
-        reason = f"{_named(folder, folder_number)} has no {NATIVE_METADATA_NAME}"
-    recorded = None
-    if payload is not None:
-        recorded = _native_iteration(payload.get("Problem"))
-        reason = f"{_named(folder, folder_number)}: its {NATIVE_METADATA_NAME} records no Problem.Iteration"
-    if recorded is None:
-        return PassIdentity(fallback_number, reason)
-    if folder_number is not None and recorded != folder_number:
-        return PassIdentity(
-            fallback_number,
-            f"{folder.name} records Problem.Iteration {recorded}, not {folder_number}",
-        )
-    return PassIdentity(recorded, None)
-
-
-def _named(folder: Path, folder_number: int | None) -> str:
-    """How an identity reason names a pass folder: its ``iteration<N>`` name, or the final result."""
-    return "the final result" if folder_number is None else folder.name
+def _final_status(
+    returned: ReturnedPasses, results: Path, problem: str, final_read: bool
+) -> Literal["readable", "missing", "unreadable"]:
+    """How the top level of ``results/palace`` reads: a solve of its own, nothing, or something else."""
+    if returned.final == "missing" or (
+        returned.final == "pass" and not _has_primary_table(results, problem)
+    ):
+        return "missing"
+    return "readable" if returned.final == "pass" and final_read else "unreadable"
 
 
 @dataclass(frozen=True)
@@ -241,7 +134,6 @@ class SnapshotReader:
     surface_bindings: tuple[SurfaceBinding, ...] | None
     surface_margin_bindings: tuple[SurfaceMarginBinding, ...] | None
     mode_count: int | None = None
-    identity_problem: str | None = None
 
     def load_optional(self) -> AmrPassSnapshot | None:
         """Return no snapshot when native files are absent or unreadable."""
@@ -292,7 +184,6 @@ class SnapshotReader:
             ),
             surface_margin_epr=surface_margin_epr,
             native_iteration=_native_iteration(problem_block),
-            identity_problem=self.identity_problem,
         )
 
     def _electrical_tables(self) -> _ElectricalTables:

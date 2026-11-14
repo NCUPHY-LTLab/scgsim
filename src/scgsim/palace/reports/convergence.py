@@ -105,16 +105,14 @@ def verdict_sentence(check: ConvergenceCheck) -> str:
 
 
 def _reading_notes(check: ConvergenceCheck, converged_at: int | None) -> str:
-    """What the passes read leave out: passes not returned, and passes whose number is not established.
+    """What the passes read leave out: passes not returned, unreadable passes, and folders set aside.
 
-    A pass that was not read could have converged the run earlier, so the verdict says so; a pass whose
-    number is not established is in no comparison, and the verdict says why.
+    A pass that was not read could have converged the run earlier, so the verdict says so; a pass two
+    folders record with different tables is in no comparison, and a folder that is no pass (its number not
+    established, or a solve under way) is named with why.
     """
-    established = {
-        item.number for item in check.passes if item.identity_problem is None
-    }
-    last = converged_at if converged_at is not None else max(established, default=0)
     read_numbers = {item.number for item in check.passes}
+    last = converged_at if converged_at is not None else max(read_numbers, default=0)
     missing = [number for number in range(1, last) if number not in read_numbers]
     notes = ""
     if missing:
@@ -131,8 +129,10 @@ def _reading_notes(check: ConvergenceCheck, converged_at: int | None) -> str:
     for item in check.passes:
         if item.identity_problem is not None:
             notes += (
-                f" {item.folder.name} is in no comparison: {item.identity_problem}."
+                f" Pass {item.number} is in no comparison: {item.identity_problem}."
             )
+    for folder in check.set_aside:
+        notes += f" Not read as a pass: {folder.reason}."
     return notes
 
 
@@ -211,7 +211,7 @@ def pass_table_html(check: ConvergenceCheck) -> str:
         + "".join(
             html_cell(
                 "td",
-                "not counted: number not established"
+                "not counted: its folders differ"
                 if item.identity_problem is not None
                 else f"holds, {item.streak} in a row"
                 if item.holds

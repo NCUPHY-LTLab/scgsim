@@ -41,7 +41,15 @@ Palace 報告讀取與外觀介面及已解析執行相同的獨立 `mesh_summar
 
 模擬若呼叫了 [`set_convergence`](specs/palace-electrostatic-sgb.qmd#convergence-declaration)，執行就帶著封存的準則計畫。讀取結果時，同一個收斂檢查會在回傳的 pass 資料夾（`results/palace/iteration<k>` 與最終的 `results/palace`）上執行：`ResolvedPalaceResult.convergence` 保存計畫、每個 pass 的檢查（每個數、其檢定量到的值、是否成立）與判定。沒有計畫的執行資料夾，判定為 `not_declared`。
 
-一個 AMR pass 是 Palace 的一次求解，從 1 起算：pass 1 求解輸入網格；pass $k$ 寫入 `iteration<k>`，除非它是最後一次求解。一個資料夾是哪個 pass，以它自己的 `palace.json` 記錄的 `Problem.Iteration` 為準，而不是它在清單中的位置；因此只回傳 `iteration1` 與 pass 4 最終結果的資料夾，含有 pass 1 與 pass 4。可信度報告的每條 AMR pass 軸都這樣計數。變化只在兩個編號已確立且相鄰的 pass 之間量測。`palace.json` 沒有記錄迭代、記錄與資料夾名稱不符，或有兩個資料夾記錄同一個 pass 時，該 pass 不參與任何比較，也不計入任何連續 pass；判定會指出它與原因，並說明判定之前哪些 pass 沒有讀到。
+一個 AMR pass 是 Palace 的一次求解，從 1 起算：pass 1 求解輸入網格。`results/palace` 中哪個資料夾是哪個 pass，只依它的檔案是什麼來決定一次，可信度報告與收斂檢查都用這個規則：
+
+- `iteration<k>/` 是 pass $k$，條件是它自己的 `palace.json` 記錄 `Problem.Iteration` $k$，且它的表格都是一般檔案。Palace 0.18.1 在再次細化之前，會把求解 $k$ 的表格移到這裡。
+- 最上層只有在它的 `palace.json` 與每個表格都是含資料列的一般檔案時，才是自己的一個 pass；編號是它記錄的迭代。這是自行結束的執行的最後一次求解。
+- 最上層的表格若是指向 `iteration<k>/` 的連結，它存的是 pass $k$ 的檔案，不是自己的求解：執行在 pass $k$ 之後立刻被停止。若連結與新檔案混雜，或有只含標題列的表格，就是一次進行中的求解，不算 pass。
+- 兩個資料夾記錄同一個 pass 時，若表格逐位元組相同（例如以會跟隨連結的工具複製被停止的執行），就是同一個 pass；否則兩者的讀值互相矛盾，該 pass 不被讀取。
+- 自己的記錄缺少、無法讀取，或記錄的是別的 pass 的資料夾，不算 pass。編號從不取自資料夾在清單中的位置。
+
+可信度報告的每條 AMR pass 軸都這樣計數。變化只在兩個編號相鄰且可讀的 pass 之間量測。判定會列出讀到的 pass、判定之前沒有讀到的 pass，以及每個被擱置的資料夾或未讀取的 pass 與原因。
 
 有宣告時，可信度報告的 Numerical Evidence 一節依序先顯示：
 

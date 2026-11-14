@@ -242,8 +242,6 @@ def _build_trust_report(
         run.problem,
         read_surface_bindings(run.index_map),
         read_surface_margin_bindings(run.index_map),
-        failed_attempt=run.receipt is not None
-        and run.receipt.get("status") == "failed",
         mode_count=configured_mode_count(run.config),
     )
     selection = result_selection(
@@ -261,7 +259,7 @@ def _build_trust_report(
     convergence = (
         resolved.convergence
         if resolved is not None
-        else check_passes(read_plan(root, run.handoff, run.problem), collected.passes)
+        else check_passes(read_plan(root, run.handoff, run.problem), root)
     )
     return PalaceTrustReport(
         run_dir=root,
