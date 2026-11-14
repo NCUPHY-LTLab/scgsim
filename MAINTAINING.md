@@ -42,7 +42,11 @@ identity separate from generated presentation identity.
 
 ## Documentation builds
 
-`scripts/pages_versions.json` is the version catalogue.
+`scripts/pages_versions.json` is the version catalogue. Its `retired_development_lines`
+names release lines whose development root is no longer published: `v<line>-dev/`
+then leads to the current development site, so links made by installed prereleases
+of that line still reach the page. Add a line there when the development version
+moves to the next release line.
 `scripts/build_docs_site.py` freezes source revisions and metadata, renders
 clean snapshots with code execution disabled and assembles the combined site.
 Current main/develop use their own content; retained historical versions keep

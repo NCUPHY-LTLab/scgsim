@@ -18,7 +18,7 @@ Palace 與 AEDT 後端實作、測試及技術文件仍屬不同來源責任，�
 
 ## 文件建置 {#documentation-builds}
 
-`scripts/pages_versions.json` 是版本目錄。`scripts/build_docs_site.py` 會固定來源修訂版本與中繼資料，在停用程式碼執行的狀態下渲染乾淨快照，並組合完整網站。目前 `main` 與 `develop` 使用各自的內容；保留的歷史版本沿用原始 README／Quarto 內文，並套用有文件記錄的呈現覆蓋層。
+`scripts/pages_versions.json` 是版本目錄。其中的 `retired_development_lines` 列出開發版根目錄已不再發布的發行線：`v<line>-dev/` 會導向目前的開發版網站，讓已安裝的該發行線預發行版所產生的連結仍能抵達頁面。開發版本號移到下一條發行線時，請把舊的發行線加進去。`scripts/build_docs_site.py` 會固定來源修訂版本與中繼資料，在停用程式碼執行的狀態下渲染乾淨快照，並組合完整網站。目前 `main` 與 `develop` 使用各自的內容；保留的歷史版本沿用原始 README／Quarto 內文，並套用有文件記錄的呈現覆蓋層。
 
 根目錄會選取最新穩定版本。切換版本時，若目前頁面存在就保留該頁，否則前往該版本首頁。`/main/` 與 `/develop/` 是別名。各版本網站會使用一致的行內目錄。套件版本、內容修訂版本、呈現修訂版本、Askr 修訂版本與分支，會在產生的建置記錄中分別列出。
 
