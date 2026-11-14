@@ -179,17 +179,21 @@ def _isolated_python(directory: Path) -> Path:
     return directory
 
 
-def _returned_run(tmp_path: Path, *, declare: bool = True) -> SimpleNamespace:
+_DECLARED = (
+    Capacitance.diagonal().within(relative=1e-3),
+    SurfaceEpr.each("MA", "MS", margin_um=1.0).within(relative=2e-2),
+    ErrorIndicator().below(0.05),
+)
+
+
+def _returned_run(
+    tmp_path: Path, *, declare: bool = True, criteria=_DECLARED
+) -> SimpleNamespace:
     """Write the config and handoff of a four-pass run, run its script, and return the run folder and id."""
     sim = electrostatic(tmp_path / "model")
     sim.set_numerical(amr_max_passes=len(_DIAGONALS_FF) - 1)
     if declare:
-        sim.set_convergence(
-            Capacitance.diagonal().within(relative=1e-3),
-            SurfaceEpr.each("MA", "MS", margin_um=1.0).within(relative=2e-2),
-            ErrorIndicator().below(0.05),
-            minimum_converged_passes=2,
-        )
+        sim.set_convergence(*criteria, minimum_converged_passes=2)
     sim.write_config()
     counts = count_index_entries(read_json(sim.output_dir / INDEX_MAP))
     solve = tmp_path / "solve"
@@ -394,3 +398,21 @@ def test_a_run_without_a_declaration_is_not_declared_and_refuses_an_added_plan(
     (run.root / CONVERGENCE_PLAN).write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="is not among the inputs"):
         read_convergence(run.root, handoff, "Electrostatic", ())
+
+
+def test_without_a_declared_indicator_the_indicator_figure_draws_no_line(tmp_path):
+    """The written Tol only keeps Palace from stopping, so it is not drawn as a threshold."""
+    run = _returned_run(tmp_path, criteria=_DECLARED[:1])
+    trust = inspect_run_trustworthiness(run.root)
+    figures: list = []
+    with (
+        _captured_notebook_display(),
+        patch("scgsim.palace.reports.trust.show_figure", figures.append),
+    ):
+        trust._ipython_display_()  # noqa: SLF001 -- the notebook display hook
+    indicator = next(
+        figure
+        for figure in figures
+        if figure.layout.title.text == "AMR error indicator vs AMR pass"
+    )
+    assert indicator.layout.shapes == ()

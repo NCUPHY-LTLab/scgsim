@@ -427,10 +427,11 @@ class PalaceTrustReport:
             for name in ERROR_INDICATOR_TRACES
         ]
         hline = None
+        # With a declaration the configured Tol only keeps Palace from stopping; the line is the declared one.
         declared = declared_threshold(self.convergence, "error_indicator")
         if declared is not None:
             hline = ReferenceLine(declared, "declared threshold")
-        elif self.amr_tolerance is not None:
+        elif self.convergence.plan is None and self.amr_tolerance is not None:
             hline = ReferenceLine(self.amr_tolerance, "configured AMR Tol")
         figure = LinePlot(
             title="AMR error indicator vs AMR pass",
