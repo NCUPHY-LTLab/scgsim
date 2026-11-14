@@ -421,7 +421,7 @@ def change_figures(
             for position, planned in enumerate(criteria[index].values)
         ]
         figure = LinePlot(
-            title=f"{first.group or first.label} {_measured_words(first)} vs AMR pass",
+            title=f"{_figure_subject(first)} vs AMR pass",
             xlabel="AMR pass",
             ylabel=_axis_words(first),
             xs=xs,
@@ -446,6 +446,13 @@ def _sharing_a_figure(
         key = (criterion.group or criterion.name, criterion.test, criterion.unit)
         groups.setdefault(key, []).append(index)
     return list(groups.values())
+
+
+def _figure_subject(criterion: PlannedCriterion) -> str:
+    """What a change figure is of: its group's measure, or what its axis says for a criterion alone."""
+    if criterion.group:
+        return f"{criterion.group} {_measured_words(criterion)}"
+    return _axis_words(criterion)
 
 
 def _line_name(criterion: PlannedCriterion, value: PlannedValue) -> str:
