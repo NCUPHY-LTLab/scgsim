@@ -138,7 +138,7 @@ def pass_table_html(check: ConvergenceCheck) -> str:
     rows.append(
         "<tr>"
         + html_cell("td", "Every criterion")
-        + html_cell("td", f"{check.plan.minimum_converged_passes} pass(es) in a row")
+        + html_cell("td", _in_a_row(check.plan.minimum_converged_passes))
         + "".join(
             html_cell(
                 "td",
@@ -158,17 +158,16 @@ def pass_table_html(check: ConvergenceCheck) -> str:
 
 
 def _cell(item: CriterionAtPass) -> str:
+    """Whether the criterion holds, by its worst number; why that number is missing when it is."""
     worst = item.worst
     mark = "holds" if item.holds else "fails"
-    measured = (
-        "unavailable"
-        if worst.measured is None
-        else _number(worst.measured, item.criterion)
-    )
+    if worst.measured is None:
+        # Pass 1 of a change criterion has the same reason for every number: say it once.
+        shared = len({value.unavailable for value in item.values}) == 1
+        which = "" if shared or len(item.values) == 1 else f" ({worst.label})"
+        return html_cell("td", f"{mark}: {worst.unavailable}{which}")
     which = "" if len(item.values) == 1 else f" ({worst.label})"
-    title = html.escape(worst.unavailable or "", quote=True)
-    cell = html_cell("td", f"{mark}: {measured}{which}")
-    return cell.replace("<td ", f"<td title='{title}' ", 1) if title else cell
+    return html_cell("td", f"{mark}: {_number(worst.measured, item.criterion)}{which}")
 
 
 def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
@@ -187,8 +186,8 @@ def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
             for value_index, planned in enumerate(criterion.values)
         ]
         figure = LinePlot(
-            title=f"{criterion.label}: {_measured_words(criterion)} vs pass",
-            xlabel="pass",
+            title=f"{criterion.label}: {_measured_words(criterion)} vs AMR pass",
+            xlabel="AMR pass",
             ylabel=_axis_words(criterion),
             xs=xs,
             traces=traces,
@@ -199,6 +198,10 @@ def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
         if figure is not None:
             figures.append(figure)
     return figures
+
+
+def _in_a_row(passes: int) -> str:
+    return "1 pass" if passes == 1 else f"{passes} passes in a row"
 
 
 def _measured(value: ValueAtPass) -> float | None:
