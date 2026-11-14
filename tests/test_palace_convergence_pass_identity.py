@@ -37,7 +37,7 @@ from scgsim.palace.results.snapshots import collect_amr_passes
 _DIAGONAL = PlannedCriterion(
     "C diagonal",
     "capacitance",
-    "relative_change",
+    "percent_change",
     0.001,
     "F",
     (PlannedValue("C[a][a]", "terminal-C.csv", TableRow("i", 1), ("C[i][1] (F)",)),),
@@ -53,7 +53,7 @@ _INDICATOR = PlannedCriterion(
 _MA = PlannedCriterion(
     "MA participation",
     "surface_epr",
-    "relative_change",
+    "percent_change",
     0.02,
     "1",
     (
@@ -68,7 +68,7 @@ _MA = PlannedCriterion(
 _FREQUENCY = PlannedCriterion(
     "frequency, every mode",
     "mode_frequency",
-    "relative_change",
+    "percent_change",
     1e-5,
     "GHz",
     (PlannedValue("frequency, mode 1", "eig.csv", TableRow("m", 1), ("Re{f} (GHz)",)),),
@@ -354,7 +354,7 @@ def test_two_readings_of_one_pass_that_conflict_are_not_used(
     assert not second.holds and second.streak == 0
     assert _reasons(check, 2) == {reason}
     assert check.verdict.state == "not_converged"
-    assert "Pass 2?" in pass_table_html(check)
+    assert ">2?</td>" in pass_table_html(check)
     assert [item.pass_number for item in _snapshots(tmp_path).passes] == [1]
 
 

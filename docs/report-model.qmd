@@ -132,10 +132,14 @@ With a declaration, the Numerical Evidence section of the trust report opens wit
    how many of the passes read come after it. Not converged: each criterion that
    fails at the last pass read, its worst number, what it measured, the declared
    threshold and how many times the threshold that is;
-2. one table, a row per criterion and a column per pass, each cell the
-   criterion's worst number at that pass and whether it holds, or that it was
-   not measured there and why (a change at pass 1), and a last row with how many
-   passes in a row every criterion has held;
+2. one table laid out as AEDT's convergence table: a row per pass with its
+   solved elements, then a column per criterion, headed by what was declared
+   and holding the criterion's worst number at that pass and whether it holds
+   (`N/A` for a change at pass 1, which has no pass before it), and a last
+   column with how many passes in a row every criterion has held. A change is
+   a percentage of the value and carries the name the AEDT side gives it:
+   `Delta %` for a capacitance, `Max Delta Freq. %` for a mode frequency,
+   `Max Percent Delta` for a participation;
 3. one figure per criterion: what it measured against the pass on a log axis,
    with the declared threshold as the dashed line.
 

@@ -37,15 +37,16 @@ from scgsim.contracts.palace_run_folder import RunEnding
 PLAN_SCHEMA = "scgsim.palace.convergence-plan"
 PLAN_SCHEMA_VERSION = 1
 
-Test = Literal["relative_change", "absolute_change", "at_most"]
+Test = Literal["percent_change", "absolute_change", "at_most"]
 """How a criterion compares a number with its threshold.
 
-``relative_change``: ``|q_k - q_(k-1)| / |q_k|``.  When both are zero the change is zero; when only ``q_k`` is
-zero the relative change is undefined and the criterion does not hold.  ``absolute_change``:
+``percent_change``: ``100 |q_k - q_(k-1)| / |q_k|``, the change from the previous pass as a percentage of the
+value, as the AEDT side of SCGSim states its deltas.  When both are zero the change is zero; when only ``q_k``
+is zero the percentage is undefined and the criterion does not hold.  ``absolute_change``:
 ``|q_k - q_(k-1)|`` in the unit of the number.  ``at_most``: the number itself.  Each holds when what it
 measures is at most the threshold.
 """
-TESTS: tuple[Test, ...] = ("relative_change", "absolute_change", "at_most")
+TESTS: tuple[Test, ...] = ("percent_change", "absolute_change", "at_most")
 
 Quantity = Literal["capacitance", "mode_frequency", "surface_epr", "error_indicator"]
 QUANTITIES: tuple[Quantity, ...] = (
@@ -919,7 +920,7 @@ def _value_at_pass(
             label, value, None, False, f"previous pass: {earlier_unavailable}"
         )
     change = abs(value - earlier)
-    if criterion.test == "relative_change":
+    if criterion.test == "percent_change":
         if value == 0.0:
             if earlier != 0.0:
                 return ValueAtPass(
@@ -927,11 +928,11 @@ def _value_at_pass(
                     value,
                     None,
                     False,
-                    "relative change undefined: the value is zero",
+                    "percent change undefined: the value is zero",
                 )
             # Both passes read zero: nothing changed.
             return ValueAtPass(label, value, 0.0, True)
-        change /= abs(value)
+        change = 100.0 * change / abs(value)
     return ValueAtPass(label, value, change, change <= criterion.threshold)
 
 

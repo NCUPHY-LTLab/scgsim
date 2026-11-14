@@ -304,9 +304,9 @@ from scgsim.palace import Capacitance, ErrorIndicator, SurfaceEpr
 
 sim.set_numerical(order=2, amr_max_passes=12)
 sim.set_convergence(
-    Capacitance.diagonal().within(relative=1e-3),
-    Capacitance.element("island", "resonator").within(relative=1e-2),
-    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(relative=2e-2),
+    Capacitance.diagonal().within(percent=0.1),
+    Capacitance.element("island", "resonator").within(percent=1),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(percent=2),
     ErrorIndicator().below(1e-2),
     minimum_converged_passes=2,
 )
@@ -321,8 +321,11 @@ The numbers above only show the form; the thresholds are the user's.
 | `SurfaceEpr(interface_kind, margin_um=None, modes=None, terminals=None)` | both | The participation of one interface kind: the sum over its whole-surface rows, or over its margin rows at `margin_um`. One number per mode (`modes=`, Eigenmode) or per excitation (`terminals=`, Electrostatic); None selects all. `SurfaceEpr.each("MA", "MS", "SA")` declares one criterion per kind with one threshold. |
 | `ErrorIndicator()` | both | The `Norm` Palace writes to `error-indicators.csv`. |
 
-`within(relative=...)` bounds the change from the previous pass,
-$|q_k - q_{k-1}| / |q_k|$. When $q_k$ is zero the change is zero if $q_{k-1}$
+`within(percent=...)` bounds the change from the previous pass as a percentage
+of the value, $100\,|q_k - q_{k-1}| / |q_k|$. It is the measure the AEDT side
+states its deltas in: `Delta %` of a Q3D matrix, `Max Delta Freq. %` of HFSS
+Eigenmode, `Max Percent Delta` of an HFSS expression; the report uses those
+names. When $q_k$ is zero the change is zero if $q_{k-1}$
 is zero too, and otherwise undefined, so the criterion does not hold. The
 absolute form names the unit the quantity is stored in: `absolute_f` for
 capacitance (farads), `absolute_ghz` for frequency, `absolute` for a

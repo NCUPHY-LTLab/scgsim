@@ -47,8 +47,8 @@ from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
 sim.set_eigenmode(num_modes=2, target=5e9)
 sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
 sim.set_convergence(
-    ModeFrequency().within(relative=1e-5),
-    SurfaceEpr("MA", margin_um=1.0, modes=[1]).within(relative=1e-2),
+    ModeFrequency().within(percent=0.001),
+    SurfaceEpr("MA", margin_um=1.0, modes=[1]).within(percent=1),
     ErrorIndicator().below(1e-2),
 )
 ```

@@ -113,8 +113,8 @@ def _isolated_python(directory: Path) -> Path:
 
 
 _DECLARED = (
-    Capacitance.diagonal().within(relative=1e-3),
-    SurfaceEpr.each("MA", "MS", margin_um=1.0).within(relative=2e-2),
+    Capacitance.diagonal().within(percent=0.1),
+    SurfaceEpr.each("MA", "MS", margin_um=1.0).within(percent=2),
     ErrorIndicator().below(0.05),
 )
 
@@ -248,7 +248,7 @@ def test_whole_surface_participation_matches_the_whole_surface_records(
 
 
 def test_the_trust_report_shows_the_verdict_the_table_and_the_thresholds(returned):
-    """The verdict sentence, the criterion-by-pass table and one change figure per criterion."""
+    """The verdict sentence, the table with a row per pass and one change figure per criterion."""
     result = resolve_palace_result(
         returned.root, expected_handoff_id=returned.handoff_id
     )
@@ -262,7 +262,8 @@ def test_the_trust_report_shows_the_verdict_the_table_and_the_thresholds(returne
     html = "".join(item.data for item in displayed if isinstance(item.data, str))
     assert "Declared convergence" in html
     assert "Converged at pass 4, of the 4 passes read" in html
-    assert "Pass 1</th>" in html and "Pass 4</th>" in html
+    assert ">Pass</th>" in html and ">Solved elements</th>" in html
+    assert "Delta % at most 0.1" in html and ">N/A</td>" in html
     assert "A dashed line is the threshold declared with set_convergence()" in html
     assert "set aside: convergence declared" in html
     assert "not a newly invented acceptance Gate" not in html
@@ -271,7 +272,7 @@ def test_the_trust_report_shows_the_verdict_the_table_and_the_thresholds(returne
         for figure in displayed
         if hasattr(figure, "layout") and figure.layout.title.text
     ]
-    assert "C diagonal: relative change vs AMR pass" in titles
+    assert "C diagonal: Delta % vs AMR pass" in titles
     assert "error indicator (Norm): value vs AMR pass" in titles
     error_figure = next(
         figure
@@ -298,7 +299,9 @@ def test_a_partly_returned_run_shows_the_passes_it_holds(tmp_path):
     assert verdict_sentence(check).startswith(
         "Not converged in the 2 passes read (passes 1 to 2). At pass 2:"
     )
-    assert "C diagonal (C[pad][pad]): relative change 0.0099" in verdict_sentence(check)
+    assert "C diagonal (C[pad][pad]): Delta % 0.99, above the declared 0.1" in (
+        verdict_sentence(check)
+    )
 
 
 def test_a_changed_plan_is_refused(tmp_path):

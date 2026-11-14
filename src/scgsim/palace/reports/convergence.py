@@ -6,16 +6,16 @@ verdict, then how Palace ended (stopped by SCGSim after a pass, with the passes 
 own end).  ``pass_table_html`` shows every criterion at every pass by its worst number, and ``change_figures``
 plots what each criterion measured against the threshold the user declared.
 The numbers are shown as the AEDT side of SCGSim names them, so a reader compares the two solvers in one
-vocabulary: a relative change is a percentage, called ``Delta %`` for a capacitance (Q3D's matrix delta),
+vocabulary: a change is a percentage of the value, called ``Delta %`` for a capacitance (Q3D's matrix delta),
 ``Max Delta Freq. %`` for a mode frequency (HFSS Eigenmode) and ``Max Percent Delta`` for a participation
 (HFSS's expression convergence); the table has a row per pass with its solved elements, like AEDT's.  The
-declaration and the plan keep the relative change as a fraction; only what is shown is a percentage.
+declaration, the plan and the check use the same percentage.
 """
 
 from __future__ import annotations
 
 import html
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scgsim.contracts.palace_convergence import (
@@ -23,16 +23,17 @@ from scgsim.contracts.palace_convergence import (
     CriterionAtPass,
     PassCheck,
     PlannedCriterion,
-    ValueAtPass,
 )
 from scgsim.palace.reports.plotting import (
     LinePlot,
     ReferenceLine,
     ReportTheme,
     Trace,
+    fmt,
     html_cell,
 )
 from scgsim.palace.results.convergence import SolverEnd
+from scgsim.palace.results.inspection_records import AmrPassSnapshot
 
 
 def declared_items(
@@ -55,6 +56,23 @@ def declared_items(
         f"{pass_table_html(check, solved_elements)}</section>",
         *change_figures(check, theme),
     ]
+
+
+def solved_elements(passes: Sequence[AmrPassSnapshot]) -> dict[int, int]:
+    """The mesh elements of each pass read, by the pass's number, for the table's ``Solved elements``."""
+    return {
+        item.pass_number: item.mesh_elements
+        for item in passes
+        if item.mesh_elements is not None
+    }
+
+
+def pass_limit_text(amr_max_passes: int | None) -> str:
+    """The configured ``MaxIts`` with the passes it allows: N refinements are N + 1 solves."""
+    if amr_max_passes is None:
+        return fmt(amr_max_passes)
+    allowed = amr_max_passes + 1
+    return f"{amr_max_passes} ({allowed} pass{'' if allowed == 1 else 'es'})"
 
 
 def declared_threshold(check: ConvergenceCheck, quantity: str) -> float | None:
@@ -277,7 +295,7 @@ def pass_table_html(
         "<table style='border-collapse:collapse;font-size:0.9rem'>"
         f"<thead>{header}</thead><tbody>{''.join(rows)}</tbody></table>"
         "<p style='opacity:0.75'>Each cell is the criterion's worst number at that pass and, for a group, "
-        "which number; a relative change is a percentage. N/A: a change needs the pass before it, so "
+        "which number; a change is a percentage of the value. N/A: a change needs the pass before it, so "
         "pass 1 has none.</p>"
     )
 
@@ -337,7 +355,7 @@ def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
         traces = [
             Trace(
                 planned.label,
-                [_measured(at.values[value_index], criterion) for at in at_passes],
+                [at.values[value_index].measured for at in at_passes],
             )
             for value_index, planned in enumerate(criterion.values)
         ]
@@ -348,9 +366,7 @@ def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
             xs=xs,
             traces=traces,
             yaxis_type="log",
-            hline=ReferenceLine(
-                _shown(criterion.threshold, criterion), "declared threshold"
-            ),
+            hline=ReferenceLine(criterion.threshold, "declared threshold"),
             theme=theme,
         ).figure()
         if figure is not None:
@@ -360,10 +376,6 @@ def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
 
 def _in_a_row(passes: int) -> str:
     return "1 pass in a row" if passes == 1 else f"{passes} passes in a row"
-
-
-def _measured(value: ValueAtPass, criterion: PlannedCriterion) -> float | None:
-    return None if value.measured is None else _shown(value.measured, criterion)
 
 
 _NO_PASS_BEFORE = "no pass before it"
@@ -378,7 +390,7 @@ _DELTA_NAMES = {
 
 
 def _measured_words(criterion: PlannedCriterion) -> str:
-    if criterion.test == "relative_change":
+    if criterion.test == "percent_change":
         return _DELTA_NAMES.get(criterion.quantity, "Delta %")
     if criterion.test == "absolute_change":
         return "Max Delta"
@@ -386,11 +398,12 @@ def _measured_words(criterion: PlannedCriterion) -> str:
 
 
 def _axis_words(criterion: PlannedCriterion) -> str:
-    if criterion.test == "relative_change":
-        return "100 |q_k - q_(k-1)| / |q_k|  (%)"
+    """What the figure's vertical axis is, in the words of the table."""
+    if criterion.test == "percent_change":
+        return f"{_measured_words(criterion)} (change from the pass before, % of the value)"
     unit = "" if criterion.unit == "1" else f" ({criterion.unit})"
     if criterion.test == "absolute_change":
-        return f"|q_k - q_(k-1)|{unit}"
+        return f"Max Delta{unit} (change from the pass before)"
     return f"value{unit}"
 
 
@@ -399,26 +412,23 @@ def _threshold_words(criterion: PlannedCriterion) -> str:
     return f"{_measured_words(criterion)} at most {_number(criterion.threshold, criterion)}"
 
 
-def _shown(value: float, criterion: PlannedCriterion) -> float:
-    """A measured number or a threshold as the report shows it: a relative change as a percentage."""
-    return value * 100 if criterion.test == "relative_change" else value
-
-
 def _number(value: float, criterion: PlannedCriterion) -> str:
     """A measured number or threshold as shown, in the criterion's unit unless it is relative or unitless."""
     unit = (
         ""
-        if criterion.test == "relative_change" or criterion.unit == "1"
+        if criterion.test == "percent_change" or criterion.unit == "1"
         else f" {criterion.unit}"
     )
-    return f"{_shown(value, criterion):.3g}{unit}"
+    return f"{value:.3g}{unit}"
 
 
 __all__ = [
     "change_figures",
     "declared_items",
     "declared_threshold",
+    "pass_limit_text",
     "pass_table_html",
+    "solved_elements",
     "verdict_card",
     "verdict_sentence",
 ]

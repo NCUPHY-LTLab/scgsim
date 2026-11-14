@@ -63,7 +63,7 @@ from scgsim.palace import Capacitance, ErrorIndicator
 
 sim.set_numerical(order=2, amr_max_passes=6)
 sim.set_convergence(
-    Capacitance.element("xmon", "xmon").within(relative=1e-3),
+    Capacitance.element("xmon", "xmon").within(percent=0.1),
     ErrorIndicator().below(1e-2),
     minimum_converged_passes=2,
 )

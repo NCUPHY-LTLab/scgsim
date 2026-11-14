@@ -46,7 +46,7 @@ def test_each_capacitance_selection_has_its_label():
 
 def test_each_threshold_keyword_names_its_unit():
     """A relative change, or an absolute change in the unit the quantity is stored in."""
-    assert Capacitance.diagonal().within(relative=1e-3).test == "relative_change"
+    assert Capacitance.diagonal().within(percent=0.1).test == "percent_change"
     assert Capacitance.diagonal().within(absolute_f=1e-18).test == "absolute_change"
     assert ModeFrequency().within(absolute_ghz=1e-4).threshold == 1e-4
     assert SurfaceEpr("MA").within(absolute=1e-5).test == "absolute_change"
@@ -59,10 +59,10 @@ def test_each_threshold_keyword_names_its_unit():
     [
         (lambda: Capacitance.diagonal().within(), "exactly one threshold"),
         (
-            lambda: Capacitance.diagonal().within(relative=1e-3, absolute_f=1e-18),
+            lambda: Capacitance.diagonal().within(percent=0.1, absolute_f=1e-18),
             "exactly one threshold",
         ),
-        (lambda: ModeFrequency().within(relative=0.0), "positive finite number"),
+        (lambda: ModeFrequency().within(percent=0), "positive finite number"),
         (lambda: SurfaceEpr("MA").within(absolute=float("nan")), "positive finite"),
         (lambda: ErrorIndicator().below(-1.0), "positive finite number"),
         (lambda: ErrorIndicator().below(True), "positive finite number"),
@@ -90,7 +90,7 @@ def test_each_declares_one_criterion_per_kind_with_one_threshold():
     """``SurfaceEpr.each`` is one declaration that becomes a criterion per interface kind."""
     sim = ElectrostaticSim()
     sim.set_convergence(
-        SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(relative=2e-2)
+        SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(percent=2)
     )
     assert sim.convergence is not None
     assert [item.label for item in sim.convergence.criteria] == [
@@ -98,7 +98,7 @@ def test_each_declares_one_criterion_per_kind_with_one_threshold():
         "MS participation, 1 um or more from the gap edge",
         "SA participation, 1 um or more from the gap edge",
     ]
-    assert {item.threshold for item in sim.convergence.criteria} == {2e-2}
+    assert {item.threshold for item in sim.convergence.criteria} == {2.0}
     assert sim.convergence.minimum_converged_passes == 1
 
 
@@ -107,22 +107,22 @@ def test_each_declares_one_criterion_per_kind_with_one_threshold():
     [
         (
             EigenmodeSim,
-            Capacitance.diagonal().within(relative=1e-3),
+            Capacitance.diagonal().within(percent=0.1),
             "does not fit EigenmodeSim, which takes ModeFrequency, SurfaceEpr, ErrorIndicator",
         ),
         (
             ElectrostaticSim,
-            ModeFrequency().within(relative=1e-3),
+            ModeFrequency().within(percent=0.1),
             "ElectrostaticSim, which takes Capacitance, SurfaceEpr, ErrorIndicator",
         ),
         (
             ElectrostaticSim,
-            SurfaceEpr("MA", modes=[1]).within(relative=1e-3),
+            SurfaceEpr("MA", modes=[1]).within(percent=0.1),
             "whose rows are terminals",
         ),
         (
             EigenmodeSim,
-            SurfaceEpr("MA", terminals=["a"]).within(relative=1e-3),
+            SurfaceEpr("MA", terminals=["a"]).within(percent=0.1),
             "whose rows are modes",
         ),
         (ElectrostaticSim, Capacitance.diagonal(), "takes criteria, a quantity of"),
@@ -142,14 +142,14 @@ def test_a_quantity_that_does_not_fit_the_simulation_is_refused(
     [
         (
             Criterion(Capacitance.diagonal(), "at_most", 0.001),
-            r"tests 'at_most', and Capacitance offers \['relative_change', 'absolute_change'\]",
+            r"tests 'at_most', and Capacitance offers \['percent_change', 'absolute_change'\]",
         ),
         (
-            Criterion(ErrorIndicator(), "relative_change", 0.01),
+            Criterion(ErrorIndicator(), "percent_change", 0.01),
             r"ErrorIndicator offers \['at_most'\]",
         ),
         (
-            Criterion(ModeFrequency(), "relative_change", float("nan")),
+            Criterion(ModeFrequency(), "percent_change", float("nan")),
             "threshold must be a positive finite number",
         ),
         (
@@ -222,7 +222,7 @@ def test_a_call_replaces_the_whole_declaration():
     """Calling again replaces every criterion and the pass count."""
     sim = EigenmodeSim()
     sim.set_convergence(
-        ModeFrequency().within(relative=1e-4), minimum_converged_passes=3
+        ModeFrequency().within(percent=0.01), minimum_converged_passes=3
     )
     sim.set_convergence(ErrorIndicator().below(1e-2))
     assert sim.convergence is not None
@@ -259,7 +259,7 @@ def test_the_plan_reads_the_maxwell_matrix_by_terminal_order(tmp_path):
     sim = electrostatic(tmp_path)
     sim.set_numerical(amr_max_passes=3)
     sim.set_convergence(
-        Capacitance.matrix().within(relative=1e-3),
+        Capacitance.matrix().within(percent=0.1),
         Capacitance.sub_diagonal().within(absolute_f=1e-18),
         minimum_converged_passes=2,
     )
@@ -286,8 +286,8 @@ def test_the_plan_takes_a_participation_from_the_index_map_entries(tmp_path):
     sim = electrostatic(tmp_path)
     sim.set_numerical(amr_max_passes=1)
     sim.set_convergence(
-        SurfaceEpr("MA").within(relative=1e-2),
-        SurfaceEpr("MA", margin_um=1.0, terminals=["plane"]).within(relative=1e-2),
+        SurfaceEpr("MA").within(percent=1),
+        SurfaceEpr("MA", margin_um=1.0, terminals=["plane"]).within(percent=1),
     )
     sim.write_config()
     entries = json.loads((sim.output_dir / INDEX_MAP).read_text(encoding="utf-8"))[
@@ -322,8 +322,8 @@ def test_an_eigenmode_plan_reads_each_mode(tmp_path):
     sim = eigenmode(tmp_path, num_modes=3)
     sim.set_numerical(amr_max_passes=2, amr_update_fraction=0.7)
     sim.set_convergence(
-        ModeFrequency().within(relative=1e-5),
-        SurfaceEpr("SA", modes=[2]).within(relative=1e-2),
+        ModeFrequency().within(percent=0.001),
+        SurfaceEpr("SA", modes=[2]).within(percent=1),
     )
     sim.write_config()
     frequency, participation = _plan(sim)["criteria"]
@@ -381,35 +381,35 @@ def test_removing_the_declaration_removes_the_plan(tmp_path):
     [
         (
             lambda sim: sim.set_convergence(
-                Capacitance.element("pad", "gnd").within(relative=1e-3)
+                Capacitance.element("pad", "gnd").within(percent=0.1)
             ),
             r"names terminals \['gnd'\] the simulation does not have; it has \['pad', 'plane'\]",
             "set_convergence and add_terminal",
         ),
         (
             lambda sim: sim.set_convergence(
-                Capacitance.sub_diagonal(2).within(relative=1e-3)
+                Capacitance.sub_diagonal(2).within(percent=0.1)
             ),
             "selects no element of the 2-terminal matrix",
             "set_convergence and add_terminal",
         ),
         (
             lambda sim: sim.set_convergence(
-                SurfaceEpr("MA", terminals=["feed"]).within(relative=1e-3)
+                SurfaceEpr("MA", terminals=["feed"]).within(percent=0.1)
             ),
             r"selects terminals \['feed'\]",
             "set_convergence and add_terminal",
         ),
         (
             lambda sim: sim.set_convergence(
-                SurfaceEpr("SA", margin_um=1.0).within(relative=1e-3)
+                SurfaceEpr("SA", margin_um=1.0).within(percent=0.1)
             ),
             r"margin 1 um, which the SA spec does not declare; it declares no margin",
             "set_convergence and set_surface_epr",
         ),
         (
             lambda sim: sim.set_convergence(
-                SurfaceEpr("MA", margin_um=0.75).within(relative=1e-3)
+                SurfaceEpr("MA", margin_um=0.75).within(percent=0.1)
             ),
             r"its margins are \[0.5, 1.0\] um",
             "set_convergence and set_surface_epr",
@@ -434,7 +434,7 @@ def test_a_kind_without_surface_epr_is_refused(tmp_path):
     """A participation criterion needs Surface EPR requested for its kind."""
     sim = electrostatic(tmp_path, surface_epr=False)
     sim.set_numerical(amr_max_passes=2)
-    sim.set_convergence(SurfaceEpr("MS").within(relative=1e-3))
+    sim.set_convergence(SurfaceEpr("MS").within(percent=0.1))
     with pytest.raises(
         ValueError,
         match=r"Surface EPR is not requested for MS: call set_surface_epr\(\)",
@@ -446,13 +446,13 @@ def test_eigenmode_modes_and_the_epr_selection_are_checked(tmp_path):
     """A mode beyond ``num_modes`` and a kind ``set_epr_request`` leaves out are refused."""
     sim = eigenmode(tmp_path, num_modes=2)
     sim.set_numerical(amr_max_passes=2, amr_update_fraction=0.7)
-    sim.set_convergence(ModeFrequency(modes=[3]).within(relative=1e-5))
+    sim.set_convergence(ModeFrequency(modes=[3]).within(percent=0.001))
     with pytest.raises(
         ValueError, match=r"selects modes \[3\], and the run computes 2"
     ) as refused:
         sim.write_config()
     assert "set_convergence and set_eigenmode" in str(refused.value)
-    sim.set_convergence(SurfaceEpr("SA").within(relative=1e-2))
+    sim.set_convergence(SurfaceEpr("SA").within(percent=1))
     sim.set_epr_request(surface_interfaces=["MA"])
     with pytest.raises(
         ValueError, match=r"set_epr_request\(surface_interfaces=...\) leaves out"
@@ -466,7 +466,7 @@ def test_too_few_passes_for_the_declaration_are_refused(tmp_path):
     sim = electrostatic(tmp_path)
     sim.set_numerical(amr_max_passes=1)
     sim.set_convergence(
-        Capacitance.diagonal().within(relative=1e-3), minimum_converged_passes=2
+        Capacitance.diagonal().within(percent=0.1), minimum_converged_passes=2
     )
     with pytest.raises(
         ValueError, match=r"allows 2 solve\(s\), and the declaration needs at least 3"
@@ -482,7 +482,7 @@ def test_a_stated_amr_tolerance_is_refused_with_the_criterion_to_write(tmp_path)
     """Electrostatic: a stated tolerance is refused, the default one is set aside."""
     sim = electrostatic(tmp_path)
     sim.set_numerical(amr_max_passes=2, amr_tolerance=0.02)
-    sim.set_convergence(Capacitance.diagonal().within(relative=1e-3))
+    sim.set_convergence(Capacitance.diagonal().within(percent=0.1))
     with pytest.raises(
         ValueError, match=r"add the criterion ErrorIndicator\(\)\.below\(0\.02\)"
     ) as refused:
@@ -495,7 +495,7 @@ def test_a_stated_amr_tolerance_is_refused_with_the_criterion_to_write(tmp_path)
 def test_an_eigenmode_tolerance_kept_by_set_numerical_is_refused(tmp_path):
     """Eigenmode keeps an omitted control, so the refusal says to build controls without it."""
     sim = meshed_eigenmode_with_tolerance(tmp_path)
-    sim.set_convergence(ModeFrequency().within(relative=1e-5))
+    sim.set_convergence(ModeFrequency().within(percent=0.001))
     with pytest.raises(
         ValueError, match="EigenmodeSim.set_numerical keeps an omitted amr_tolerance"
     ):
