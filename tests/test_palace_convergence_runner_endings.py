@@ -15,6 +15,7 @@ import sys
 
 import pytest
 from palace_stand_in_solver import (
+    end_left_over,
     read_pids,
     wait_until_gone,
 )
@@ -211,6 +212,59 @@ def test_no_solver_is_started_when_its_guard_cannot_be(tmp_path):
     assert done.stdout == "REFUSED: no process left | pipes as before: True\n", (
         done.stdout + done.stderr
     )
+
+
+_KILLED_AS_THE_SOLVER_STARTS = """
+import os, runpy, signal, subprocess, sys
+
+root, runner, marker = sys.argv[1:]
+started = subprocess.Popen
+
+class KilledAsTheSolverStarts(started):
+    def __init__(self, *arguments, **options):
+        super().__init__(*arguments, **options)
+        with open(marker, "w") as handle:
+            handle.write(str(self.pid))
+        os.kill(os.getpid(), signal.SIGKILL)
+
+subprocess.Popen = KilledAsTheSolverStarts
+sys.argv = ["runner", root, "--", "sleep", "60"]
+runpy.run_path(os.path.join(root, runner), run_name="__main__")
+"""
+
+
+def test_a_runner_killed_as_the_solver_starts_still_leaves_no_solver(tmp_path):
+    """SIGKILL to the runner at the moment the solver's process exists, before the runner does anything more.
+
+    The solver's first process told the guard its session before it became the solver command, so the guard
+    knows it without a word from the runner and ends it.  The copied runner is run with a ``Popen`` that
+    ends the runner as soon as it has started the solver, a minute's ``sleep``.
+    """
+    run = prepared_run(tmp_path)
+    marker = tmp_path / "solver.pid"
+    with (tmp_path / "runner.log").open("w") as log:
+        # A file, not a pipe: the solver inherits it, and a pipe would keep this call waiting for the solver.
+        done = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-S",
+                "-c",
+                _KILLED_AS_THE_SOLVER_STARTS,
+                str(run.root),
+                str(CONVERGENCE_RUNNER),
+                str(marker),
+            ],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+    solver = {"solver": int(marker.read_text())}
+    try:
+        assert done.returncode == -signal.SIGKILL
+        assert wait_until_gone(solver) == []
+    finally:
+        end_left_over(solver)
 
 
 @pytest.mark.parametrize(

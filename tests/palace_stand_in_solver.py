@@ -180,10 +180,10 @@ def alive(pid: int) -> bool:
     """Whether a process with id ``pid`` exists and is not a zombie."""
     try:
         os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    status = Path(f"/proc/{pid}/stat")
-    return not (status.is_file() and status.read_text().split(") ")[-1][:1] == "Z")
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[-1][:1]
+    except (ProcessLookupError, FileNotFoundError):
+        return False  # it ended between the two looks
+    return state != "Z"
 
 
 def wait_until_gone(pids: dict[str, int], timeout_s: float = 10.0) -> list[str]:
@@ -218,4 +218,7 @@ def end_left_over(pids: dict[str, int]) -> None:
     """End any process of a test's own run that is still there, so a failed test leaves nothing behind."""
     for pid in pids.values():
         if alive(pid):
-            os.kill(pid, signal.SIGKILL)
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # it ended by itself meanwhile

@@ -164,11 +164,18 @@ def _start(command: list[str]) -> _Running:
     """Start the guard, then the solver in a session of its own, with the runner's output streams.
 
     The guard comes first, so that no solver runs without one: when the guard cannot be started, no solver
-    is.  The runner then tells the guard which session to end.
+    is.  The solver's first process tells the guard its session itself, before it becomes the solver command,
+    so the guard knows the solver from the moment it exists, whatever happens to the runner meanwhile.
     """
     guard = _start_guard()
-    process = subprocess.Popen(command, start_new_session=True)
-    os.write(guard, f"{process.pid}\n".encode())
+
+    def name_the_session() -> None:
+        # Runs in the solver's process, once it leads its session and before the command replaces it.
+        os.write(guard, f"{os.getpid()}\n".encode())
+
+    process = subprocess.Popen(
+        command, start_new_session=True, preexec_fn=name_the_session
+    )
     return _Running(process, guard)
 
 
@@ -179,8 +186,9 @@ def _start_guard() -> int:
     on unwatched to its pass limit: a launcher's wrapper script does not pass a signal on to the launcher it
     started.  The guard is a copy of the runner in a session of its own, so a signal to the script's process
     group does not reach it.  It waits on a pipe only the runner holds, which closes when the runner ends,
-    however it ends.  The runner writes the solver's session there once the solver runs, and ``done`` once it
-    has ended the session itself.  If the pipe closes with a session and without ``done``, the guard sends
+    however it ends.  The solver's first process writes its session there before it becomes the solver
+    command, and the runner writes ``done`` once it has ended the session itself.  If the pipe closes with a
+    session and without ``done``, the guard sends
     SIGTERM to the solver's process group, once: the runner is gone at that moment and the solver still
     runs, so the group is the solver's.  It sends nothing later, when the group's id could have passed to
     another process.
