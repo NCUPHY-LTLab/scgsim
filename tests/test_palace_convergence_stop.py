@@ -110,6 +110,7 @@ def _prepared(  # noqa: PLR0913 -- one run folder, each switch independent
     fail_after: int | None = None,
     ignore_sigterm: bool = False,
     behind_wrapper: bool = False,
+    shutdown_s: float = 0.0,
 ) -> SimpleNamespace:
     """Write the config and handoff of a six-pass run with its stand-in Palace; nothing runs yet."""
     if problem == "Electrostatic":
@@ -152,6 +153,7 @@ def _prepared(  # noqa: PLR0913 -- one run folder, each switch independent
         fail_after=fail_after,
         ignore_sigterm=ignore_sigterm,
         behind_wrapper=behind_wrapper,
+        shutdown_s=shutdown_s,
     )
     resources = (
         {
@@ -388,6 +390,33 @@ def test_an_eigenmode_run_stopped_during_the_next_solve_reads_its_last_pass(tmp_
     assert any(
         "solve under way" in item.reason for item in result.convergence.set_aside
     )
+
+
+def test_a_stop_waits_for_the_launcher_behind_a_wrapper_script(tmp_path):
+    """Behind a wrapper script the solver's first process ends at once on SIGTERM; its launcher takes longer.
+
+    Palace's own ``palace`` is such a script.  The runner waits until the launcher has brought its ranks
+    down itself, so the decision record and the receipt are written after the solver's last process ended;
+    the exit code the receipt keeps is the wrapper's, ended by the signal.
+    """
+    run = _prepared(
+        tmp_path,
+        refine_s=[0.05, 0.05, 0.05, _LONG_S, 0.05, 0.05],
+        behind_wrapper=True,
+        shutdown_s=1.0,
+    )
+    assert _run(run) == 0, run.log
+    launcher_ended = float(run.pids_path.with_name("launcher_ended").read_text())
+    decision = _decision(run)
+    assert decision.ending == "stopped_at_convergence"
+    assert decision.stop is not None and decision.stop.escalated_utc is None
+    assert decision.solver is not None
+    assert decision.solver.exit_code == 128 + signal.SIGTERM
+    assert (run.root / CONVERGENCE_DECISION).stat().st_mtime >= launcher_ended
+    assert (run.root / RETURNED_RECEIPT).stat().st_mtime >= launcher_ended
+    assert wait_until_gone(read_pids(run.pids_path)) == []
+    resolved = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    assert resolved.convergence.verdict.state == "converged"
 
 
 def test_a_run_that_does_not_converge_ends_at_its_limit(tmp_path):

@@ -12,17 +12,26 @@ The runner
 2. looks at ``results/palace`` every ``LOOK_INTERVAL_S``; a pass counts once its ``iteration<k>/`` folder is
    unchanged between two looks, and after each new pass it runs the check of the plan on the passes read;
 3. when the verdict is converged, writes the decision record, then sends SIGTERM to the solver's session and
-   waits ``STOP_WAIT_S`` for it to end, sending SIGKILL to the session only after that wait;
-4. when the solver has ended, by itself or after the stop, ends with SIGKILL any process still left in the
-   solver's process group (a rank its launcher did not end), writes the decision record again with the passes
-   the results folder then holds and the solver's exit code, and exits with that exit code.
+   waits ``STOP_WAIT_S`` for all of it to end, sending SIGKILL to the session only after that wait;
+4. when the solver has ended, by itself or after the stop, ends in the same way what its first process left
+   behind (a launcher whose wrapper script ended first), writes the decision record again with the passes the
+   results folder then holds and the solver's exit code, and exits with that exit code.
+
+The solver has ended when its first process has ended and its session holds no process any more.  The first
+process alone does not say it: Palace's ``palace`` is a wrapper script that SIGTERM ends at once, while the
+launcher it started (``prterun``) needs 0.3 to 0.6 s more to bring its ranks down and ends after the last of
+them.  The ranks are each in a process group of their own, so only their launcher ends them; a launcher ended
+by SIGKILL before it has done that leaves them to end by themselves about a second later (measured with
+Palace 0.18.1 and Open MPI 5.0.10).  Which processes a session holds is read from ``/proc``.  On a system
+without it the runner waits for the solver's first process only, and the SIGKILL to its group at the end is
+all that ends a launcher behind a wrapper script.
 
 It signals only the process group of the session it started, and only while that session's first process has
 not been reaped, so the signal cannot reach a process that took over its number.  Told to end itself (SIGTERM,
 SIGINT or SIGHUP: the script, the scheduler or a person ending the job), it ends the solver the same way first
 and records why.  Ended without that chance (SIGKILL, to it or to the script's whole process group), it leaves
-the solver to its guard: a process in a session of its own that ends the solver's session the same way as
-soon as the runner is gone.
+the solver to its guard: a process in a session of its own that sends SIGTERM to the solver's session as soon
+as the runner is gone.
 
 Like the receipt recorder, the copy carries the contracts' text in place of their imports
 (``standalone_copy``), so it runs with only a Python interpreter.
@@ -113,6 +122,8 @@ def run(request: _Request) -> int:
         # Whatever happened above, the runner does not leave its solver running unwatched.
         if not _ended(solver):
             _stop(solver, looker.stop_now("runner_terminated"))
+    if stop is None:
+        _end_what_is_left(solver)
     exit_code = _exit_code(_reap(solver))
     final = looker.decision(
         looker.final_check(),
@@ -155,7 +166,9 @@ def _start_guard(session: int) -> int:
     on unwatched to its pass limit: a launcher's wrapper script does not pass a signal on to the launcher it
     started.  The guard is a copy of the runner in a session of its own, so a signal to the script's process
     group does not reach it.  It waits on a pipe only the runner holds, which closes when the runner ends,
-    however it ends.  If the runner did not stand the guard down first, the guard ends the solver's session.
+    however it ends.  If the runner did not stand the guard down first, the guard sends SIGTERM to the
+    solver's process group, once: the runner is gone at that moment and the solver still runs, so the group
+    is the solver's.  It sends nothing later, when the group's id could have passed to another process.
     """
     watched, held = os.pipe()
     if os.fork() != 0:
@@ -171,7 +184,7 @@ def _start_guard(session: int) -> int:
         for stream in (0, 1, 2):
             os.dup2(null, stream)
         if not os.read(watched, 1):
-            _end_session(session)
+            _signal_group(session, signal.SIGTERM)
     finally:
         os._exit(0)
 
@@ -182,30 +195,36 @@ def _stand_down(solver: _Running) -> None:
     os.close(solver.guard)
 
 
-def _end_session(session: int) -> None:
-    """End the session's process group as the runner's stop does, from a process that is not its parent."""
-    if not _signal_group(session, signal.SIGTERM):
-        return
-    if not _group_gone_within(session, STOP_WAIT_S):
-        _signal_group(session, signal.SIGKILL)
-
-
-def _signal_group(group: int, signum: int) -> bool:
-    """Signal a process group; False when it has no process left."""
+def _signal_group(group: int, signum: int) -> None:
+    """Signal a process group, if it has a process left."""
     try:
         os.killpg(group, signum)
     except ProcessLookupError:
-        return False
-    return True
+        pass
 
 
-def _group_gone_within(group: int, seconds: float) -> bool:
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        if not _signal_group(group, 0):
-            return True
-        time.sleep(_POLL_S)
-    return False
+def _session_members(session: int) -> list[int]:
+    """The processes of a session that have not ended, as ``/proc`` lists them; none where there is no /proc.
+
+    A process that has ended and waits to be reaped (the solver's first process, which the runner keeps so)
+    is not one of them.
+    """
+    members = []
+    try:
+        entries = [entry for entry in os.scandir("/proc") if entry.name.isdigit()]
+    except OSError:
+        return members
+    for entry in entries:
+        try:
+            # /proc/<pid>/stat: "pid (name) state ppid pgrp session ..."; the name may hold spaces.
+            state, _parent, _group, recorded = (
+                Path(entry.path, "stat").read_text().rsplit(") ", 1)[1].split()[:4]
+            )
+        except (OSError, IndexError, ValueError):
+            continue  # the process ended while it was read
+        if state != "Z" and int(recorded) == session:
+            members.append(int(entry.name))
+    return members
 
 
 def _supervise(
@@ -233,25 +252,63 @@ def _supervise(
 
 
 def _stop(solver: _Running, stop: SolverStop) -> SolverStop:
-    """Send SIGTERM to the solver's session and wait; send SIGKILL after ``STOP_WAIT_S`` if it is still there."""
+    """End the solver's session for ``stop``; the stop says so when SIGKILL was needed."""
+    escalated = _end(solver)
+    return stop if escalated is None else replace(stop, escalated_utc=escalated)
+
+
+def _end(solver: _Running) -> str | None:
+    """Send SIGTERM to the solver's process group and wait for its session to end; SIGKILL after ``STOP_WAIT_S``.
+
+    SIGTERM goes to the group: the command and the launcher it started, which ends its ranks.  SIGKILL goes
+    to every process the session then still holds.  Returns when SIGKILL was sent, None when SIGTERM was
+    enough.
+    """
     _signal_session(solver, signal.SIGTERM)
-    if _wait_until_ended(solver, STOP_WAIT_S):
-        return stop
-    escalated = replace(stop, escalated_utc=utc_timestamp())
+    if _all_ended_within(solver, STOP_WAIT_S):
+        return None
+    escalated = utc_timestamp()
     _say(
         f"the solver did not end {STOP_WAIT_S:g} s after SIGTERM; sending SIGKILL to its session"
     )
     _signal_session(solver, signal.SIGKILL)
-    _wait_until_ended(solver, KILL_WAIT_S)
+    for member in _session_members(solver.pid):
+        try:
+            os.kill(member, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    _all_ended_within(solver, KILL_WAIT_S)
     return escalated
+
+
+def _all_ended_within(solver: _Running, seconds: float) -> bool:
+    """Whether, within ``seconds``, the solver's first process has ended and its session holds no process."""
+    deadline = time.monotonic() + seconds
+    while not (_ended(solver) and not _session_members(solver.pid)):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(_POLL_S)
+    return True
+
+
+def _end_what_is_left(solver: _Running) -> None:
+    """After the solver's first process ended by itself: end what it left running, as a stop would.
+
+    A launcher outlives a wrapper script that was killed, and goes on solving.  Nothing is left when the
+    launcher itself ended, which is how a run that completes ends.
+    """
+    if not _session_members(solver.pid):
+        return
+    _say("the solver's first process ended and left processes running; ending them")
+    _end(solver)
 
 
 def _reap(solver: _Running) -> int:
     """Collect the solver's exit status, after ending with SIGKILL any process its group still holds.
 
-    A process left in the group outlived the solver it belongs to (a rank its launcher did not end).  The
-    signal goes out, and the guard is stood down, before the first process is reaped: until then the group's
-    id is still the solver's, so neither the runner nor the guard can signal a process that took it over.
+    Where the session's members can be read, none is left by now.  The signal goes out, and the guard is
+    stood down, before the first process is reaped: until then the group's id is still the solver's, so
+    neither the runner nor the guard can signal a process that took it over.
     """
     _signal_session(solver, signal.SIGKILL)
     _stand_down(solver)
@@ -279,15 +336,6 @@ def _ended(solver: _Running) -> bool:
     except ChildProcessError:
         return True
     return state is not None
-
-
-def _wait_until_ended(solver: _Running, seconds: float) -> bool:
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        if _ended(solver):
-            return True
-        time.sleep(_POLL_S)
-    return _ended(solver)
 
 
 def _exit_code(returncode: int) -> int:

@@ -212,19 +212,19 @@ sim.set_convergence(
 
 1. 在它自己的 session 中啟動指令碼原本會執行的求解指令；Palace 的輸出照舊進入日誌；
 2. 每秒查看一次 `results/palace`。某個 pass 的 `iteration<k>/` 資料夾在兩次查看之間沒有變化時，才算這個 pass；每多一個 pass，執行器就執行與讀取結果時相同的檢查；
-3. 判定為已收斂時，先寫出 `metadata/palace_convergence_decision.json`，再對求解器的 session 送出 SIGTERM。60 秒後求解器仍在執行，就送出 SIGKILL；
+3. 判定為已收斂時，先寫出 `metadata/palace_convergence_decision.json`，再對求解器的 session 送出 SIGTERM，並等到它全部結束：指令本身、它啟動的啟動器，以及由啟動器結束的各個 rank。60 秒後仍有任何一個在執行，就送出 SIGKILL；
 4. 求解器結束後（停止之後，或在 `amr_max_passes` 自行結束），再寫一次決定紀錄，內容是 `results/palace` 當時的 pass 與求解器的結束碼。
 
 執行器不會留下無人看管的求解器。被要求結束時（SIGTERM、SIGINT 或 SIGHUP），它先結束求解器並記下原因。來不及這麼做就被結束時（執行器本身或指令碼的整個行程群組收到 SIGKILL），求解器交給它的守護行程：執行器與求解器一同啟動、位於自己 session 中的行程，一旦執行器不在，就以同樣的方式結束求解器的 session。
 
-Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化網格，因此停止發生在這段細化期間，或下一次求解開始時；已完成 pass 的檔案都不會改變。代價是資料夾出現到被查看之間的一到兩秒，之後的求解都不會執行。
+Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化網格，因此停止發生在這段細化期間，或下一次求解開始時；已完成 pass 的檔案都不會改變。停止的要求在資料夾出現後一到兩秒送出，Palace 在要求之後約一秒內結束，之後的求解都不會執行。回執要到這時才寫出，所以不會有求解器的行程在回執之後寫入檔案。
 
 回執記載求解器如何結束（`ending`），並保留求解器自己的結束碼：
 
 | `ending` | 情況 | 回執 |
 |---|---|---|
 | `solver_ended` | Palace 結束時 SCGSim 沒有停止它 | 所有結束碼為 0 時 `completed`，否則 `failed` |
-| `stopped_at_convergence` | 執行器在判定已收斂的 pass 之後停止它，且它在等待時間內結束 | `completed`，結束碼是停止造成的那一個（在 `mpirun` 下的 Palace 結束碼為 1） |
+| `stopped_at_convergence` | 執行器在判定已收斂的 pass 之後停止它，且它在等待時間內結束 | `completed`，結束碼是停止造成的那一個：Palace 的 `palace` 包裝指令碼被訊號結束時為 143，直接啟動 `mpirun` 時為 1 |
 | `stop_escalated` | 它沒有因 SIGTERM 結束，被強制終止 | `failed` |
 | `runner_terminated` | 執行器自己被要求結束，先結束了 Palace | `failed` |
 | `not_recorded` | 執行器沒有留下完整的決定紀錄 | `failed` |

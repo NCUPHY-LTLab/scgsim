@@ -11,8 +11,11 @@ It does what Palace 0.18.1 was recorded doing in the stop experiments of issue 2
 * then it pauses for "refinement" and prints ``Proceeding with solve/estimate iteration k+1...``;
 * the last solve stays at the top level, and it prints ``Completed N iterations of adaptive mesh refinement``.
 
-Like a launcher (``prterun``) it starts one "rank" in its process group and answers SIGTERM by ending the
-rank and exiting 1.  ``behind_wrapper`` puts it behind a shell script that starts it as a child and passes
+Like a launcher (``prterun``) it starts one "rank" in a process group of the rank's own and answers SIGTERM
+by ending the rank and exiting 1, after ``shutdown_s`` (a launcher takes a moment to bring its ranks down);
+it then writes the time to ``launcher_ended`` beside ``pids``.  As ``prterun`` was seen to do, it closes
+the descriptors it inherited beyond its output streams before its rank has ended, so nothing it inherited
+tells when it ends.  Like an MPI rank, the rank ends by itself shortly after its launcher is gone.  ``behind_wrapper`` puts it behind a shell script that starts it as a child and passes
 no signal on, as Palace's own ``palace`` wrapper does with ``prterun`` (issue 248, the stop check with real
 Palace): a signal to the solver's first process then reaches the wrapper only.  A schedule (JSON beside the
 script) sets the pass tables, the pauses, a failure after a pass, and whether it ignores SIGTERM.  It writes
@@ -41,9 +44,9 @@ import time
 from pathlib import Path
 
 SCHEDULE = json.loads(Path(__file__).with_suffix(".json").read_text())
-RANK = "import signal, time\n" + (
+RANK = "import os, signal, time\n" + (
     "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n" if SCHEDULE["ignore_sigterm"] else ""
-) + "while True:\n    time.sleep(0.05)\n"
+) + "launcher = os.getppid()\nwhile os.getppid() == launcher:\n    time.sleep(0.05)\ntime.sleep(0.3)\n"
 
 
 def main(arguments):
@@ -54,7 +57,7 @@ def main(arguments):
         return 0
     if arguments[:1] == ["--dry-run"]:
         return 0
-    rank = subprocess.Popen([sys.executable, "-I", "-c", RANK])
+    rank = subprocess.Popen([sys.executable, "-I", "-c", RANK], process_group=0)
     pids = {"solver": os.getpid(), "runner": os.getppid(), "rank": rank.pid}
     if SCHEDULE["behind_wrapper"]:
         wrapper = os.getppid()
@@ -66,8 +69,11 @@ def main(arguments):
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
     else:
         def stop(_signum, _frame):
+            os.closerange(3, 64)
+            time.sleep(SCHEDULE["shutdown_s"])
             rank.terminate()
             rank.wait()
+            Path(SCHEDULE["pids"]).with_name("launcher_ended").write_text(repr(time.time()))
             os._exit(1)
         signal.signal(signal.SIGTERM, stop)
     results = Path("results/palace")
@@ -128,6 +134,7 @@ def write_stand_in(  # noqa: PLR0913 -- one schedule, each switch independent
     fail_after: int | None = None,
     ignore_sigterm: bool = False,
     behind_wrapper: bool = False,
+    shutdown_s: float = 0.0,
 ) -> Path:
     """Write the stand-in solver at ``path`` (its schedule beside it) and return ``path``.
 
@@ -148,6 +155,7 @@ def write_stand_in(  # noqa: PLR0913 -- one schedule, each switch independent
                 "fail_after": fail_after,
                 "ignore_sigterm": ignore_sigterm,
                 "behind_wrapper": behind_wrapper,
+                "shutdown_s": shutdown_s,
             }
         ),
         encoding="utf-8",
