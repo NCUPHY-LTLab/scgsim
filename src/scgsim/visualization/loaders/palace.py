@@ -112,7 +112,6 @@ class _MeshSelection:
     physical: Any
     cell_types: Any
     records: dict[tuple[int, int], Mapping[str, Any]]
-    field_names: dict[tuple[int, int], list[str]]
     actual: set[tuple[int, int]]
 
     def cells(self, dimension: int, attribute: int) -> Any:
@@ -139,7 +138,7 @@ class _MeshSelection:
                     ]
                 )
             )
-            name = " / ".join(sorted(self.field_names[(dimension, attribute)]))
+            name = str(self.records[(dimension, attribute)]["name"])
             mesh_parts.append(
                 ScenePart(
                     dataset=self.cells(dimension, attribute),
@@ -179,23 +178,40 @@ def _bind_mesh_selection(
                 _WHERE_PALACE_RUN,
             ).refusal(found_text(sorted(actual), sorted(records)))
         )
-    field_names = _field_names(mesh)
-    if actual != set(field_names):
-        raise ValueError(
-            Declared(
-                "Palace mesh field names do not cover every physical tag",
-                _WHERE_PALACE_RUN,
-            ).refusal(found_text(sorted(field_names), sorted(actual)))
-        )
+    _require_manifest_names(_field_names(mesh), records)
     return _MeshSelection(
         grid,
         np.asarray(tags.dimensions),
         np.asarray(tags.physical),
         np.asarray(tags.cell_types),
         records,
-        field_names,
         actual,
     )
+
+
+def _require_manifest_names(
+    field_names: Mapping[tuple[int, int], list[str]],
+    records: Mapping[tuple[int, int], Mapping[str, Any]],
+) -> None:
+    """Require the mesh to name each physical tag as the manifest does, and nothing else.
+
+    ``mesh()`` writes the mesh and the manifest from one group dict, so a difference is SCGSim's to
+    answer for: meshing again with the same SCGSim writes the same names.  Every difference is listed.
+    """
+    expected = {key: [str(record["name"])] for key, record in records.items()}
+    differences = [
+        f"{key} is named {sorted(field_names.get(key, []))!r} in palace.msh"
+        f" and {expected.get(key, [])!r} in the manifest"
+        for key in sorted(set(field_names) | set(expected))
+        if sorted(field_names.get(key, [])) != expected.get(key, [])
+    ]
+    if differences:
+        raise ValueError(
+            internal(
+                "palace.msh names its physical tags otherwise than the mesh manifest written with it: "
+                + "; ".join(differences)
+            )
+        )
 
 
 class _CellTags(NamedTuple):
