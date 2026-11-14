@@ -281,7 +281,7 @@ def test_the_report_records_the_recipe_the_policies_and_what_the_quality_was_mea
         budgets=Budgets(max_rounds=3),
         mesher=MesherOptions(algorithm_2d=5),
     ).report
-    assert report["report_version"] == "scgsim.meshing.report/4"
+    assert report["report_version"] == "scgsim.meshing.report/5"
     assert report["recipe"]["name"] == "features"
     assert report["recipe"]["parameters"]["max_size_divisor"] == 20.0
     assert report["repair"] == {"edge_fraction": 0.4}
@@ -497,6 +497,7 @@ def test_the_gmsh_default_recipe_meshes_once_with_gmsh_s_sizes_and_reports_witho
     assert mesh["bad_count"] == report["remaining_bad"]["count"] > 0
     assert report["remaining_bad"]["listed"]
     assert report["stop_places"] == []
+    assert report["meshing_stage"] is None
     stem = pad_in_ground_b.xao.stem
     assert result.mesh == tmp_path / f"{stem}.msh"
     assert not (tmp_path / f"{stem}.rejected.msh").exists()

@@ -177,11 +177,18 @@ set, while `simulation_drc` checks the model of the route it is given and its
 fixed settings (below). For the same plan, the same route and profile build the
 same model in both; when the two models differ, so can their findings.
 
-`mesh()` also reports places in the same terms. When its repair loop stops
-without a clean mesh, the error and the quality report (`stop_places`) give the
-µm location of the remaining bad elements and the meshing-stage findings at
-those places, with their owner and fix. A place is the reach of the refinement
-the loop applied there. A place with no finding is SCGSim's to answer for.
+`mesh()` also reports in the same terms when its repair loop stops without a
+clean mesh. The error and the text quality report first give what the meshing
+stage found anywhere in the model: for each class and measure, the number of
+findings and whether they refuse or warn, the smallest size in µm and grid
+steps, the count per owner, and the smallest finding in full with its owner and
+fix. Fine structure can cost the repair loop rounds wherever it is, so these
+findings can matter even at a place that has none of its own. The JSON quality
+report lists every finding under `meshing_stage`. Then come the µm locations of
+the remaining bad elements (`stop_places`) and the findings at those places,
+with their owner and fix. A place is the reach of the refinement the loop
+applied there. A place with no finding is SCGSim's to answer for; when the
+model has findings elsewhere, act on those as well.
 
 ## What the check uses
 
