@@ -45,6 +45,7 @@ study notes. `save` controls native saved-field output. A fresh
 sets `amr_max_passes=0`, which disables adaptive refinement. Before
 `write_config()`, provide `amr_max_passes` through `set_numerical(...)`; a
 positive pass limit also requires caller-selected `amr_tolerance` and
+`amr_update_fraction`, or, with a convergence declaration (below), only
 `amr_update_fraction`. Later calls that omit these controls retain their
 current values. Record selected numerical and output controls beside the
 action they govern rather than hiding them in notebook helpers.
@@ -54,6 +55,41 @@ It displays normalized source and settings without meshing or solving. The
 vacuum envelope came from the plan, and the unspecified external Eigenmode
 surface retains Palace's natural PMC condition. That differs from the default
 Perfect E exterior in the AEDT EPR model.
+
+## Declare when refinement has converged
+
+With adaptive refinement, say which numbers must settle instead of giving
+Palace a tolerance. The thresholds below show the form; choose your own:
+
+```python
+from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
+
+sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
+sim.set_convergence(
+    ModeFrequency(modes=[1]).within(relative=1e-5),
+    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    ErrorIndicator().below(1e-2),
+)
+```
+
+`amr_max_passes=8` allows eight refinements, so nine solves; each solve is one
+pass, and pass 1 solves the mesh `mesh()` writes. Mode 1's frequency holds at a
+pass when it moved by at most one part in 10⁵ since the pass before. The
+Surface-EPR line declares one criterion per interface kind, each on that kind's
+whole-surface participation of every mode; it needs `set_surface_epr` with all
+three specs before `mesh()`. With a declaration Palace's own tolerance no longer
+ends the run, so `amr_tolerance` is left out: `write_config()` refuses it and
+names the `ErrorIndicator().below(...)` line to write instead. It also refuses
+`ModeFrequency(modes=[3])` while `num_modes=2`, and a kind that
+`set_epr_request(surface_interfaces=...)` leaves out.
+
+In this version Palace still runs all nine solves. The returned run's
+`result.convergence` and the trust report say at which pass every criterion had
+held, which one held last, or which one still fails at the last pass and by how
+much against its threshold. The
+[Eigenmode contract](../specs/palace-eigenmode.qmd#eigenmode-convergence) and
+the shared [convergence declaration](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)
+list every quantity and check.
 
 ## Build the real backend inputs
 

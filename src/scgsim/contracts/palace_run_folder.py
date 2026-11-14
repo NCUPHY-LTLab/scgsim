@@ -10,6 +10,7 @@ outputs from here.  A path is relative to the run folder, in POSIX form::
     metadata/mesh_manifest.json         MESH_MANIFEST    (mesh)
     metadata/route_<a|b>_provenance.json  route_provenance(route) (mesh)
     metadata/palace_index_map.json      INDEX_MAP        (config), with the problem's other metadata files
+    metadata/palace_convergence_plan.json  CONVERGENCE_PLAN (config), only when convergence is declared
     run_palace.sh | run_palace.sbatch   script_name(profile) (run)
     metadata/palace_handoff_*.json ...  HANDOFF_METADATA, RUN_METADATA, RESOURCE_RECORD, ARCHIVE_MANIFEST (run)
     metadata/record_palace_return.py    RECORDER: the receipt recorder (run)
@@ -49,6 +50,8 @@ INDEX_MAP = "metadata/palace_index_map.json"
 MATERIAL_RESOLUTION = "metadata/palace_material_resolution.json"
 PORT_INFORMATION = "metadata/port_information.json"
 NUMERICAL_CONTROLS = "metadata/palace_numerical_controls.json"
+CONVERGENCE_PLAN = "metadata/palace_convergence_plan.json"
+"""The convergence plan (``scgsim.contracts.palace_convergence``), written only when convergence is declared."""
 
 HANDOFF_METADATA = "metadata/palace_handoff_metadata.json"
 RUN_METADATA = "metadata/palace_run_metadata.json"
@@ -70,6 +73,9 @@ ITERATION_PREFIX = "iteration"
 
 SEALED_INPUTS = (MESH, CONFIG, MESH_MANIFEST, INDEX_MAP)
 """The inputs the handoff hashes, in the order it records them; the receipt and ``resolve`` check each."""
+SEALED_WHEN_PRESENT = (CONVERGENCE_PLAN,)
+"""The inputs the handoff hashes after ``SEALED_INPUTS`` when the run folder has them; a reader refuses one
+that is present but not hashed."""
 
 
 def route_provenance(route: str) -> str:

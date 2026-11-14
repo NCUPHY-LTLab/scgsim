@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, TypedDict
+from typing import Any, NamedTuple, TypedDict
 
 from scgsim.contracts.palace_run_folder import NATIVE_METADATA_NAME, palace_problem
 from scgsim.palace.reports.plotting import Trace, TraceGroup
@@ -270,3 +270,41 @@ def capacitance_traces(
     if len(all_traces) > 9:
         return [TraceGroup("Maxwell C_ij", all_traces)]
     return per_element
+
+
+class PassDelta(NamedTuple):
+    """The solver time one AMR pass added, or why it cannot be told from the recorded cumulative timer."""
+
+    seconds: float | None
+    reason: str | None
+
+
+def elapsed_pass_cost(
+    iteration: int | None,
+    elapsed_total: float | None,
+    previous_iteration: int | None,
+    previous_elapsed: float | None,
+) -> PassDelta:
+    """Return a pass delta only when native iteration and cumulative timer are continuous."""
+    if iteration is None:
+        return PassDelta(None, "native_iteration_unavailable")
+    if previous_iteration is None:
+        if iteration != 1:
+            return PassDelta(None, "missing_previous_native_iteration")
+    elif iteration <= previous_iteration:
+        return PassDelta(None, "native_iteration_not_increasing")
+    elif iteration != previous_iteration + 1:
+        return PassDelta(None, "native_iteration_gap")
+    if elapsed_total is None:
+        return PassDelta(None, "cumulative_elapsed_unavailable")
+    if not math.isfinite(elapsed_total):
+        return PassDelta(None, "nonfinite_cumulative_elapsed")
+    if previous_iteration is None:
+        return PassDelta(elapsed_total, None)
+    if previous_elapsed is None:
+        return PassDelta(None, "previous_cumulative_elapsed_unavailable")
+    if not math.isfinite(previous_elapsed):
+        return PassDelta(None, "previous_cumulative_elapsed_nonfinite")
+    if elapsed_total < previous_elapsed:
+        return PassDelta(None, "cumulative_elapsed_reset")
+    return PassDelta(elapsed_total - previous_elapsed, None)

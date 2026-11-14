@@ -22,8 +22,9 @@ from scgsim.refusal import Declared, found_text
 
 from ..config.config import build_eigenmode_config
 from ..config.config_records import EigenmodeConfigBuildResult, EigenmodeSettings
+from ..config.convergence_plan import PlanContext
 from ..config.files import MetadataFile
-from ..config.index import EprRequest, check_epr_request
+from ..config.index import EprRequest, IndexEntry, check_epr_request
 from ..config.numerical import NumericalControls, ProblemDefaults
 from ..source.ports import RequestedPort
 from ..source.transforms import validate_nonempty_string, validate_positive_number
@@ -236,7 +237,9 @@ class EigenmodeSim(PalaceSimulation):
             common, ports=self._resolved_ports, eigenmode=self._eigenmode_settings()
         )
         check_epr_request(self.epr_request, result.index_entries)
-        return self._finish_config(result.config, self._metadata(result))
+        return self._finish_config(
+            result.config, self._metadata(result), result.index_entries
+        )
 
     def _eigenmode_settings(self) -> EigenmodeSettings:
         """The mode controls as the config reads them, checked again in case an attribute was assigned."""
@@ -268,6 +271,17 @@ class EigenmodeSim(PalaceSimulation):
         )
 
     # ---- The core's questions ------------------------------------------------------------------------
+
+    def _plan_context(self, entries: Sequence[IndexEntry]) -> PlanContext:
+        """The Surface-EPR rows, the mode count and the EPR selection, for a convergence criterion."""
+        return PlanContext(
+            problem=self.problem,
+            entries=entries,
+            num_modes=self.num_modes,
+            surface_interfaces=None
+            if self.epr_request is None
+            else self.epr_request.surface_interfaces,
+        )
 
     def _lumped_ports(self) -> list[RequestedPort]:
         """Every port added, in the order ``add_port`` received them."""

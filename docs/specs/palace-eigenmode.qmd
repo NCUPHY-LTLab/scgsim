@@ -25,6 +25,7 @@ ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics
 | Surface EPR | `set_surface_epr(specs)`, before `mesh()`; computed only when called with specs, `None` turns it off and `{}` is refused |
 | Authored port | `add_port(name, *, layer, layout_sheet=True, inductance)`; `layout_sheet` must be `True` (its signature default `False` is refused) |
 | Output selection | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
+| Convergence | `set_convergence(*criteria, minimum_converged_passes=1)` with `ModeFrequency`, `SurfaceEpr` and `ErrorIndicator` criteria; see [the convergence declaration](palace-electrostatic-sgb.qmd#convergence-declaration) |
 | Preparation | `mesh()`, `write_config()`, then `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
 Geometric order is distinct from the FEM order configured through
@@ -59,7 +60,9 @@ threshold) and writes `Model.Refinement.Nonconformal=true`. Before
 `write_config()`, provide `amr_max_passes` through `set_numerical(...)`. For a
 positive pass limit, also provide `amr_tolerance` and `amr_update_fraction`;
 setting `amr_max_passes=0` disables adaptive refinement and allows those two
-values to remain unset. In later `set_numerical(...)` calls, omitted
+values to remain unset. With a convergence declaration, the declared criteria end
+the run in place of `amr_tolerance`: a positive pass limit then needs only
+`amr_update_fraction`, and a stated `amr_tolerance` is refused. In later `set_numerical(...)` calls, omitted
 `ksp_type`, `amr_max_passes`, `amr_nonconformal`, `amr_nc_levels`,
 `amr_tolerance` and `amr_update_fraction` retain their current settings; every other omitted value (`order`, `tolerance`,
 `max_iterations`, `solver_type`, `preconditioner`, `device`,
@@ -84,6 +87,30 @@ on the simulation (or `plan.set_vacuum_region(...)` before `prepare()`). The
 [GeometryPlan contract](../geometry-sgb.qmd) owns source identity and route
 preparation. The [Electrostatic/shared Palace contract](palace-electrostatic-sgb.qmd)
 owns the shared mesh controls and config controls.
+
+## Convergence on Eigenmode {#eigenmode-convergence}
+
+`EigenmodeSim.set_convergence` takes `ModeFrequency`, `SurfaceEpr` and
+`ErrorIndicator`; the shared [convergence declaration](palace-electrostatic-sgb.qmd#convergence-declaration)
+defines them, their checks and what `write_config()` writes:
+
+```python
+from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
+
+sim.set_eigenmode(num_modes=2, target=5e9)
+sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
+sim.set_convergence(
+    ModeFrequency().within(relative=1e-5),
+    SurfaceEpr("MA", margin_um=1.0, modes=[1]).within(relative=1e-2),
+    ErrorIndicator().below(1e-2),
+)
+```
+
+A mode is a mode number from 1 to `num_modes`. A Surface-EPR kind must have a
+spec and must not be left out by `set_epr_request(surface_interfaces=...)`.
+`EigenmodeSim.set_numerical` keeps an omitted `amr_tolerance`, so a tolerance
+stated once stays until the simulation is built again with controls that leave
+it out; `write_config()` refuses it together with a declaration.
 
 ## Lumped ports {#lumped-ports}
 

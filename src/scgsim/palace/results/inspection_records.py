@@ -8,6 +8,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from scgsim.contracts.palace_convergence import SetAside
+
+
+def pass_number(pass_index: int) -> int:
+    """The pass a snapshot's ``pass_index`` is, as Palace counts its solves.
+
+    Pass 1 is the solve on the input mesh, written to ``iteration1``; ``pass_index`` counts the refinements
+    before the pass, so it is one less.
+    """
+    return pass_index + 1
+
 
 @dataclass(frozen=True)
 class SurfaceEprRecord:
@@ -84,7 +95,11 @@ class SurfaceMarginEprSeriesSnapshot:
 
 @dataclass(frozen=True)
 class AmrPassSnapshot:
-    """One solver snapshot from an AMR pass or the final output folder ``results/palace``."""
+    """One solver snapshot from an AMR pass or the final output folder ``results/palace``.
+
+    ``pass_index`` counts the refinements before the pass (0 for the solve on the input mesh);
+    ``pass_number`` is the pass as Palace counts its solves, from 1, as the folder records it.
+    """
 
     pass_index: int
     source: str
@@ -102,7 +117,11 @@ class AmrPassSnapshot:
     peak_node_memory_mb: float | None
     surface_margin_epr: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None = None
     native_iteration: int | None = None
-    terminal_ids: tuple[str, ...] | None = None
+
+    @property
+    def pass_number(self) -> int:
+        """The pass as Palace counts its solves (``pass_number``)."""
+        return pass_number(self.pass_index)
 
 
 @dataclass(frozen=True)
@@ -168,7 +187,13 @@ class PalaceFailureDiagnosis:
 
 @dataclass(frozen=True)
 class CollectedSnapshots:
-    """Readable AMR snapshots plus the independently observed final-table status."""
+    """Readable AMR snapshots plus the independently observed final-table status.
+
+    ``final_reason`` says why the top level of ``results/palace`` is no pass of its own, when it is not;
+    ``set_aside`` are the folders that are not read as passes, each with why.
+    """
 
     passes: tuple[AmrPassSnapshot, ...]
     final_snapshot_status: Literal["readable", "missing", "unreadable"]
+    final_reason: str | None = None
+    set_aside: tuple[SetAside, ...] = ()

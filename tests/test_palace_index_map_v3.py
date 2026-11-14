@@ -19,6 +19,7 @@ from palace_sgb_support import (
     surface_epr_specs,
 )
 
+from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.contracts.palace_run_folder import read_json
 from scgsim.geometry.surface_epr.insets import inset_requests
 from scgsim.palace import EigenmodeSim, ElectrostaticSim, resolve_palace_result
@@ -497,6 +498,7 @@ def _resolved_eigenmode(run: Run) -> ResolvedRunData:
         tables=tables,
         returned_receipt=receipt,
         provenance=provenance,
+        convergence=ConvergenceCheck.not_declared(),
     )
 
 

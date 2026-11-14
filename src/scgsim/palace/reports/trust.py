@@ -5,17 +5,22 @@ from __future__ import annotations
 import copy
 import html
 import json
-import math
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal
 
+from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.contracts.palace_run_folder import (
     NATIVE_METADATA,
     OUTPUT_DIR,
     palace_problem,
 )
 from scgsim.palace.mesh.summary import MeshSummary
+from scgsim.palace.reports.convergence import (
+    declared_items,
+    declared_threshold,
+    verdict_card,
+)
 from scgsim.palace.reports.observations import (
     ERROR_INDICATOR_TRACES,
     FREQ_HEADER,
@@ -24,6 +29,7 @@ from scgsim.palace.reports.observations import (
     capacitance_traces,
     cost_cards,
     delta_traces,
+    elapsed_pass_cost,
     mode_traces,
     native_positive_infinity_q_notice,
     recorded_durations,
@@ -69,6 +75,7 @@ from scgsim.palace.results.inspection_records import (
     PalaceFailureDiagnosis,
     PalaceResultSelection,
     PassCostRecord,
+    pass_number,
 )
 from scgsim.palace.results.snapshots import (
     surface_snapshots,
@@ -98,44 +105,6 @@ _DURATION_BARS = (
 )
 
 
-class PassDelta(NamedTuple):
-    """The solver time one AMR pass added, or why it cannot be told from the recorded cumulative timer."""
-
-    seconds: float | None
-    reason: str | None
-
-
-def _elapsed_pass_cost(
-    iteration: int | None,
-    elapsed_total: float | None,
-    previous_iteration: int | None,
-    previous_elapsed: float | None,
-) -> PassDelta:
-    """Return a pass delta only when native iteration and cumulative timer are continuous."""
-    if iteration is None:
-        return PassDelta(None, "native_iteration_unavailable")
-    if previous_iteration is None:
-        if iteration != 1:
-            return PassDelta(None, "missing_previous_native_iteration")
-    elif iteration <= previous_iteration:
-        return PassDelta(None, "native_iteration_not_increasing")
-    elif iteration != previous_iteration + 1:
-        return PassDelta(None, "native_iteration_gap")
-    if elapsed_total is None:
-        return PassDelta(None, "cumulative_elapsed_unavailable")
-    if not math.isfinite(elapsed_total):
-        return PassDelta(None, "nonfinite_cumulative_elapsed")
-    if previous_iteration is None:
-        return PassDelta(elapsed_total, None)
-    if previous_elapsed is None:
-        return PassDelta(None, "previous_cumulative_elapsed_unavailable")
-    if not math.isfinite(previous_elapsed):
-        return PassDelta(None, "previous_cumulative_elapsed_nonfinite")
-    if elapsed_total < previous_elapsed:
-        return PassDelta(None, "cumulative_elapsed_reset")
-    return PassDelta(elapsed_total - previous_elapsed, None)
-
-
 @dataclass(frozen=True)
 class PalaceTrustReport:
     """Run-identity, AMR evidence, and cost for one returned Palace run folder."""
@@ -155,6 +124,7 @@ class PalaceTrustReport:
     durations: dict[str, float]
     cost: CostCards
     provenance: ReportProvenance
+    convergence: ConvergenceCheck
     theme: ReportTheme = "light"
     show_details: bool = False
 
@@ -267,6 +237,7 @@ class PalaceTrustReport:
         items = self._convergence_items()
         if len(self.passes) >= 2:
             display(HTML(self._convergence_heading_html()))
+        items = [*declared_items(self.convergence, self.theme), *items]
         for item in items:
             if isinstance(item, str):
                 display(HTML(item))
@@ -305,7 +276,8 @@ class PalaceTrustReport:
             ("Selection integrity", self.selection.integrity),
             ("AMR passes recorded", str(len(self.passes))),
             ("AMR MaxIts", fmt(self.amr_max_passes)),
-            ("AMR Tol", fmt(self.amr_tolerance)),
+            ("AMR Tol", self._tolerance_text()),
+            ("Convergence", verdict_card(self.convergence)),
             ("MPI × OpenMP", self.identity.get("resources")),
             ("Receipt", self.identity.get("receipt")),
             ("Palace git", self.identity.get("git_tag")),
@@ -380,7 +352,7 @@ class PalaceTrustReport:
             if q_notice is not None:
                 items.append(q_notice)
             return items
-        xs = tuple(pass_.pass_index for pass_ in self.passes)
+        xs = tuple(pass_.pass_number for pass_ in self.passes)
         items: list[Any] = []
         items.extend(self._eigenmode_convergence_items(xs))
         items.extend(self._port_epr_figures(xs))
@@ -455,7 +427,11 @@ class PalaceTrustReport:
             for name in ERROR_INDICATOR_TRACES
         ]
         hline = None
-        if self.amr_tolerance is not None:
+        # With a declaration the configured Tol only keeps Palace from stopping; the line is the declared one.
+        declared = declared_threshold(self.convergence, "error_indicator")
+        if declared is not None:
+            hline = ReferenceLine(declared, "declared threshold")
+        elif self.convergence.plan is None and self.amr_tolerance is not None:
             hline = ReferenceLine(self.amr_tolerance, "configured AMR Tol")
         figure = LinePlot(
             title="AMR error indicator vs AMR pass",
@@ -472,16 +448,27 @@ class PalaceTrustReport:
         return items
 
     def _convergence_heading_html(self) -> str:
+        dashed_line = (
+            "The dashed line is the configured Palace AMR Tol, not a newly invented acceptance Gate. "
+            if self.convergence.plan is None
+            else "A dashed line is the threshold declared with set_convergence(). "
+        )
         return (
             "<section><h3>Numerical Evidence</h3>"
             "<p style='opacity:0.75;margin-top:0'>Each readable AMR scalar is its own "
             "figure. AMR error Norm, Maximum, and Mean share one log plot because they "
-            "are the same local indicator. Minimum is omitted. The dashed line is the "
-            "configured Palace AMR Tol, not a newly invented acceptance Gate. "
+            "are the same local indicator. Minimum is omitted. "
+            f"{dashed_line}"
             "Surface participation convergence follows below; latest ranking and "
             "loss interpretation remain a separate physics call.</p>"
             "</section>"
         )
+
+    def _tolerance_text(self) -> str:
+        """Palace's AMR Tol, or that the declared criteria end the run in its place."""
+        if self.convergence.plan is not None:
+            return "set aside: convergence declared"
+        return fmt(self.amr_tolerance)
 
     def _convergence_status_html(self) -> str:
         latest = self.passes[-1] if self.passes else None
@@ -500,7 +487,7 @@ class PalaceTrustReport:
         body = (
             f"<p>{html.escape(quantity_line)}</p>"
             f"<p>{html.escape(error_line)}</p>"
-            f"<p>Configured AMR Tol: {html.escape(fmt(self.amr_tolerance))}</p>"
+            f"<p>Configured AMR Tol: {html.escape(self._tolerance_text())}</p>"
             f"<p>Configured MaxIts: {html.escape(fmt(self.amr_max_passes))}</p>"
             f"<p>Latest snapshot: {html.escape(self.latest_source)}</p>"
         )
@@ -620,7 +607,7 @@ class PalaceTrustReport:
         previous_elapsed: float | None = None
         for pass_ in self.passes:
             iteration = pass_.native_iteration
-            elapsed_pass, elapsed_reason = _elapsed_pass_cost(
+            elapsed_pass, elapsed_reason = elapsed_pass_cost(
                 iteration,
                 pass_.elapsed_total_s,
                 previous_iteration,
@@ -685,7 +672,7 @@ class PalaceTrustReport:
         for record in records:
             rows.append(
                 "<tr>"
-                + html_cell("td", str(record.pass_index))
+                + html_cell("td", str(pass_number(record.pass_index)))
                 + html_cell("td", record.source)
                 + html_cell("td", fmt(record.native_iteration))
                 + html_cell("td", fmt(record.degrees_of_freedom))

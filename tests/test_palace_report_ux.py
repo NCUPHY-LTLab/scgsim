@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import sys
 import tempfile
 import types
@@ -13,6 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.palace import (
     PalaceResultSelection,
     PalaceTrustReport,
@@ -133,6 +135,7 @@ def _trust_report(
         durations={},
         cost={},
         provenance={},
+        convergence=ConvergenceCheck.not_declared(),
     )
 
 
@@ -164,14 +167,11 @@ def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenari
     results.mkdir(parents=True)
     logs.mkdir()
     (root / "config.json").write_text("{}", encoding="utf-8")
-    (results / "eig.csv").write_text(
-        (
-            "m,Re{f} (GHz)\n1,5.0\n"
-            if conflicting_final_problem_size
-            else "m,Re{f} (GHz)\n"
-        ),
-        encoding="utf-8",
-    )
+    # As Palace 0.18.1 leaves a run killed during the solve after pass 7: iteration07 holds pass 7, and the
+    # top level is that solve under way (eig.csv with its header only), or, when it was killed before the
+    # solve wrote anything, links into iteration07 beside a palace.json that already counts the next mesh.
+    if not conflicting_final_problem_size:
+        (results / "eig.csv").write_text("m,Re{f} (GHz)\n", encoding="utf-8")
     (logs / "palace-1.log").write_text(log_text, encoding="utf-8")
     if include_iteration:
         iteration = results / "iteration07"
@@ -180,22 +180,30 @@ def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenari
             "m,Re{f} (GHz)\n1,5.0\n",
             encoding="utf-8",
         )
-        if conflicting_final_problem_size:
-            (iteration / "palace.json").write_text(
-                json.dumps(
-                    {
-                        "Problem": {"DegreesOfFreedom": 100, "MeshElements": 50},
-                        "ElapsedTime": {"Durations": {"Total": 10.0}},
-                    }
-                )
-                + "\n",
-                encoding="utf-8",
+        (iteration / "palace.json").write_text(
+            json.dumps(
+                {
+                    "Problem": {
+                        "DegreesOfFreedom": 100,
+                        "MeshElements": 50,
+                        "Iteration": 7,
+                    },
+                    "ElapsedTime": {"Durations": {"Total": 10.0}},
+                }
             )
+            + "\n",
+            encoding="utf-8",
+        )
     if conflicting_final_problem_size:
+        os.symlink("iteration07/eig.csv", results / "eig.csv")
         (results / "palace.json").write_text(
             json.dumps(
                 {
-                    "Problem": {"DegreesOfFreedom": 200, "MeshElements": 100},
+                    "Problem": {
+                        "DegreesOfFreedom": 200,
+                        "MeshElements": 100,
+                        "Iteration": 7,
+                    },
                     "ElapsedTime": {"Durations": {"Total": 10.0}},
                 }
             )
@@ -232,8 +240,7 @@ def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenari
     ]
     if seal_iteration:
         output_paths.append("results/palace/iteration07/eig.csv")
-        if conflicting_final_problem_size:
-            output_paths.append("results/palace/iteration07/palace.json")
+        output_paths.append("results/palace/iteration07/palace.json")
     output_files = [_file_record(root, relative) for relative in output_paths]
     receipt: dict[str, object] = {
         "schema": "palace-returned-run-receipt.v1",

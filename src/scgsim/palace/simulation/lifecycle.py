@@ -57,6 +57,7 @@ Call = Literal[
     "add_ground",
     "set_electrostatic",
     "set_numerical",
+    "set_convergence",
     "input_summary",
     "mesh",
     "mesh_summary",
@@ -109,6 +110,7 @@ CALLS: dict[Call, CallRule] = {
     "add_ground": _PROBLEM_CHANGE,
     "set_electrostatic": _PROBLEM_CHANGE,
     "set_numerical": _PROBLEM_CHANGE,
+    "set_convergence": _PROBLEM_CHANGE,
     "input_summary": CallRule(
         needs=Stage.BOUND,
         refusal=_out_of_order(

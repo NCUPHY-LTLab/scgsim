@@ -13,6 +13,7 @@ Three controls have a default that depends on the problem (``ProblemDefaults``):
 from __future__ import annotations
 
 import math
+import sys
 from dataclasses import dataclass, replace
 from enum import Enum
 from numbers import Real
@@ -26,6 +27,15 @@ _WHERE_NUMERICAL = "the call to set_numerical"
 _KSP_TYPES = {"Default", "CG", "MINRES", "GMRES", "FGMRES", "BiCGSTAB"}
 _SOLVER_TYPES = {"Default", "SuperLU", "STRUMPACK", "MUMPS"}
 _PRECONDITIONERS = {"Default", "AMS", "BoomerAMG"}
+
+DECLARED_CONVERGENCE_TOL = sys.float_info.min
+"""``Model.Refinement.Tol`` of a run with a convergence declaration: small enough never to end the run.
+
+With ``set_convergence`` the declared criteria decide when the run has converged, so Palace's own tolerance
+must not stop refinement first.  Palace accepts any ``Tol > 0.0``; this is the smallest normal double.  A
+smaller, subnormal value could be flushed to zero by a solver built with flush-to-zero arithmetic, and Palace
+would refuse it.
+"""
 
 
 class ProblemDefault(Enum):
@@ -107,12 +117,20 @@ class NumericalControls:
             },
         )
 
-    def check_ready_for(self, problem: Literal["Eigenmode", "Electrostatic"]) -> None:
+    def check_ready_for(
+        self,
+        problem: Literal["Eigenmode", "Electrostatic"],
+        *,
+        convergence_declared: bool = False,
+    ) -> None:
         """Refuse controls ``problem``'s config cannot be written from: AMR settings still left open.
+
+        With ``convergence_declared`` the declared criteria, not ``amr_tolerance``, end the run, so Eigenmode
+        AMR then needs only its update fraction.
 
         Raises:
             ValueError: ``amr_max_passes`` was never chosen, or Eigenmode AMR is enabled without its
-                tolerance and update fraction.
+                tolerance (unless convergence is declared) and update fraction.
         """
         _refuse_problem_defaults(self)
         if self.amr_max_passes is None:
@@ -125,6 +143,21 @@ class NumericalControls:
             problem == EIGENMODE.name
             and isinstance(self.amr_max_passes, int)
             and self.amr_max_passes > 0
+            and convergence_declared
+            and self.amr_update_fraction is None
+        ):
+            raise ValueError(
+                Declared(
+                    "Enabled Eigenmode AMR requires explicit amr_update_fraction: call "
+                    "set_numerical(amr_update_fraction=...) before write_config()",
+                    _WHERE_NUMERICAL,
+                ).refusal(found_text({"amr_update_fraction": self.amr_update_fraction}))
+            )
+        if (
+            problem == EIGENMODE.name
+            and isinstance(self.amr_max_passes, int)
+            and self.amr_max_passes > 0
+            and not convergence_declared
             and (self.amr_tolerance is None or self.amr_update_fraction is None)
         ):
             raise ValueError(
@@ -391,8 +424,13 @@ def linear_solver(
     return linear
 
 
-def build_refinement(numerical: NumericalControls) -> dict[str, Any]:
+def build_refinement(
+    numerical: NumericalControls, *, convergence_declared: bool = False
+) -> dict[str, Any]:
     """Translate AMR controls into Palace's ``Model.Refinement`` block.
+
+    With ``convergence_declared`` the block carries ``DECLARED_CONVERGENCE_TOL``, so only the pass limit ends
+    the run, and ``SaveAdaptIterations: true``, so every pass the declaration is checked on is kept.
 
     Raises:
         ValueError: ``amr_max_passes`` was never chosen (``NumericalControls.check_ready_for`` says so first).
@@ -413,10 +451,14 @@ def build_refinement(numerical: NumericalControls) -> dict[str, Any]:
     }
     if numerical.amr_nc_levels is not None:
         refinement["MaxNCLevels"] = numerical.amr_nc_levels
-    if numerical.amr_tolerance is not None:
-        refinement["Tol"] = numerical.amr_tolerance
-    if numerical.save_adapt_iterations is not None:
-        refinement["SaveAdaptIterations"] = numerical.save_adapt_iterations
+    if convergence_declared:
+        refinement["Tol"] = DECLARED_CONVERGENCE_TOL
+        refinement["SaveAdaptIterations"] = True
+    else:
+        if numerical.amr_tolerance is not None:
+            refinement["Tol"] = numerical.amr_tolerance
+        if numerical.save_adapt_iterations is not None:
+            refinement["SaveAdaptIterations"] = numerical.save_adapt_iterations
     if numerical.save_adapt_mesh is not None:
         refinement["SaveAdaptMesh"] = numerical.save_adapt_mesh
     if numerical.amr_update_fraction is not None:
@@ -437,6 +479,7 @@ def build_output_formats(numerical: NumericalControls) -> dict[str, Any]:
 
 
 __all__ = [
+    "DECLARED_CONVERGENCE_TOL",
     "PROBLEM_DEFAULT",
     "NumericalControls",
     "ProblemDefault",

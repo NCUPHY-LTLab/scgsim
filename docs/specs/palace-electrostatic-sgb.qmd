@@ -61,6 +61,7 @@ preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
 | Mesh controls | `set_mesh(...)` | Select the sizing recipe, mesher options, repair budgets and quality threshold. |
 | Source/settings view | `input_summary()` | Return the detached input `mesh()` builds from (the plan with the simulation's vacuum region and route applied) plus the settings, with no file or native I/O. |
 | Mesh | `mesh` | Build the SGB geometry, check it for fine structure, mesh it with `scgsim.meshing` and lower its groups to Palace attributes. |
+| Convergence | `set_convergence` | Declare the criteria that decide when adaptive refinement has converged; see [the convergence declaration](#convergence-declaration). |
 | Config | `write_config` | Write the Palace Electrostatic configuration for the reviewed mesh identities. |
 
 These methods are public APIs.
@@ -292,6 +293,100 @@ terminals/ground and the real mesh/config sequence. The separate
 Neither preparation path starts Palace or submits a job. Shared private state
 invalidation/persistence implementation lives in [architecture](../architecture.qmd#palace-preparation-lifecycle).
 
+## Convergence declaration {#convergence-declaration}
+
+`set_convergence(*criteria, minimum_converged_passes=1)` declares when an
+adaptive run has converged. Both Palace facades take it. A criterion is a
+quantity and a threshold; no threshold has a default:
+
+```python
+from scgsim.palace import Capacitance, ErrorIndicator, SurfaceEpr
+
+sim.set_numerical(order=2, amr_max_passes=12)
+sim.set_convergence(
+    Capacitance.diagonal().within(relative=1e-3),
+    Capacitance.element("island", "resonator").within(relative=1e-2),
+    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    ErrorIndicator().below(1e-2),
+    minimum_converged_passes=2,
+)
+```
+
+The numbers above only show the form; the thresholds are the user's.
+
+| Quantity | On | Each pass reads |
+|---|---|---|
+| `Capacitance.element(a, b)`, `.diagonal()`, `.sub_diagonal(offset=1)`, `.off_diagonal()`, `.matrix()`, `.elements([(a, b), ...])` | `ElectrostaticSim` | Elements `C[a][b]` of the Maxwell matrix in `terminal-C.csv`, named by terminal. `sub_diagonal` pairs terminals `offset` apart in the order they were added; `off_diagonal` and `matrix` take each pair of different terminals once. |
+| `ModeFrequency(modes=None)` | `EigenmodeSim` | `Re{f}` of each selected mode in `eig.csv`, in GHz; None selects every computed mode. |
+| `SurfaceEpr(interface_kind, margin_um=None, modes=None, terminals=None)` | both | The participation of one interface kind: the sum over its whole-surface rows, or over its margin rows at `margin_um`. One number per mode (`modes=`, Eigenmode) or per excitation (`terminals=`, Electrostatic); None selects all. `SurfaceEpr.each("MA", "MS", "SA")` declares one criterion per kind with one threshold. |
+| `ErrorIndicator()` | both | The `Norm` Palace writes to `error-indicators.csv`. |
+
+`within(relative=...)` bounds the change from the previous pass,
+$|q_k - q_{k-1}| / |q_k|$. When $q_k$ is zero the change is zero if $q_{k-1}$
+is zero too, and otherwise undefined, so the criterion does not hold. The
+absolute form names the unit the quantity is stored in: `absolute_f` for
+capacitance (farads), `absolute_ghz` for frequency, `absolute` for a
+participation, which has no unit. Give exactly one. `ErrorIndicator().below(value)`
+bounds the value itself: the indicator is at most `value`.
+
+A pass is one Palace solve: pass 1 solves the input mesh, and pass $k$ follows
+$k-1$ refinements. A change criterion compares pass $k$ with pass $k-1$, so it
+cannot hold at pass 1. A quantity with several numbers holds when each of them
+does; the run has converged at pass $k$ when every criterion holds at each of
+the `minimum_converged_passes` passes ending at $k$. The whole-surface rows and
+the margin rows of a kind are never added together: a margin row is a part of
+its whole-surface row.
+
+Another call replaces the whole declaration; `set_convergence(None)` removes it,
+and `set_convergence()` with no criterion is refused. The call keeps the mesh
+and discards the config and handoff, as `set_numerical` does.
+
+### Checks
+
+`set_convergence` refuses, naming the call to change:
+
+- a quantity the simulation does not take (a `Capacitance` on `EigenmodeSim`,
+  a `ModeFrequency` on `ElectrostaticSim`, `modes=` on Electrostatic or
+  `terminals=` on Eigenmode), with the quantities the class takes;
+- a threshold that is not positive and finite, or two thresholds, or none;
+- `minimum_converged_passes` that is not an integer of at least 1.
+
+`write_config()` refuses, before it writes anything:
+
+- a terminal name the simulation does not have, or a selection with no element;
+- a mode beyond `num_modes`;
+- an interface kind with no Surface EPR requested (`set_surface_epr`), or one
+  `set_epr_request(surface_interfaces=...)` leaves out;
+- a `margin_um` its spec does not declare, naming the margins it does;
+- an `amr_max_passes` too small for the declaration to hold at all: a run of
+  `amr_max_passes` refinements solves `amr_max_passes + 1` times, and the
+  declaration needs `minimum_converged_passes` solves, plus one when a criterion
+  is on a change;
+- a stated `amr_tolerance`, with the `ErrorIndicator().below(...)` criterion to
+  declare instead;
+- `save_adapt_iterations=False`, since every pass is read.
+
+### What is written, and how it relates to the AMR controls
+
+With a declaration, the declared criteria take the place of Palace's own
+tolerance. `write_config()` writes `Model.Refinement.Tol` as the smallest normal
+double, so that only `amr_max_passes` ends the run, and
+`SaveAdaptIterations: true`, so that Palace keeps every pass in
+`results/palace/iteration<k>`. It writes the plan of the check to
+`metadata/palace_convergence_plan.json`: for each criterion its label as the
+report shows it, and for each number the result table, the row, the columns and
+how they combine (a participation sums the columns of its rows), the test, the
+threshold, and `minimum_converged_passes`. Which columns make up a quantity is
+decided there once, from the index map entries the same config writes.
+`prepare_handoff()` seals the plan with the other inputs, so a returned run with
+a changed plan is refused. Without a declaration nothing of this is written and
+the config is what the AMR controls alone give.
+
+In this version Palace still runs every pass up to `amr_max_passes`. The check
+runs when the returned run is read: `ResolvedPalaceResult.convergence` and the
+[trust report](../report-model.qmd#declared-convergence) say at which pass the
+run had converged, or which criterion still fails and by how much.
+
 ## Electrostatic defaults {#candidate-electrostatic-defaults}
 
 These are implementation defaults, not universal scientific
@@ -313,7 +408,8 @@ as a field (`sim.numerical.amr_nonconformal`) and the whole record with
 for the normalized mapping). A `NumericalControls` given to
 `ElectrostaticSim(numerical=...)` gets the Electrostatic defaults above for the
 AMR controls it does not set (0 passes, conformal, tolerance 0.01), as
-`set_numerical(...)` does.
+`set_numerical(...)` does. With a [convergence declaration](#convergence-declaration)
+the default tolerance is set aside and a stated one is refused.
 
 Palace defaults `Nonconformal` to `true` when the key is omitted. SCGSim always
 writes the key and defaults it to `false` (conformal tet AMR). Notebooks opt

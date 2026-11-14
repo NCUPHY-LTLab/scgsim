@@ -85,6 +85,79 @@ hash-bound `adaptive-convergence.prop` export, rather than being exposed as a
 normalized count or full raw history in the report. They do not turn failed/incomplete work into completion, infer an
 unknown stopping cause from pass count, or change Q2D/Q3D policies.
 
+## Declared convergence of a Palace run {#declared-convergence}
+
+A Palace run whose simulation called
+[`set_convergence`](specs/palace-electrostatic-sgb.qmd#convergence-declaration)
+carries its criteria as a sealed plan. Result reading runs the one convergence
+check on the returned pass folders, `results/palace/iteration<k>` and the final
+`results/palace`: `ResolvedPalaceResult.convergence` holds the plan, the check
+of every pass (each number, what its test measured, whether it holds) and the
+verdict. A run folder without a plan has the verdict `not_declared`.
+
+An AMR pass is one Palace solve, counted from 1: pass 1 solves the input mesh.
+Which folder of `results/palace` holds which pass is decided by what its files
+are, once, for the trust report and the convergence check alike:
+
+- `iteration<k>/` is pass $k$ when its own `palace.json` records
+  `Problem.Iteration` $k$ and its tables are regular files. Palace 0.18.1 moves
+  the tables of solve $k$ there before it refines again.
+- The top level is a pass of its own only when its `palace.json` and every table
+  are regular files with data rows; its number is the iteration it records. This
+  is the last solve of a run that ended by itself.
+- A top level whose tables are links into `iteration<k>/` holds pass $k$'s
+  files, not a solve of its own: a run stopped right after pass $k$. One that
+  mixes links with new files, or holds a table with its header only, is a
+  solve under way and is no pass.
+- Two folders that record the same pass are one pass when they hold the same
+  tables, byte for byte (a stopped run copied by a tool that follows links).
+  Otherwise their readings conflict and that pass is not read.
+- A folder whose own record is missing, unreadable or names another pass is no
+  pass. No number is ever taken from a folder's place in the listing.
+- A table that cannot be read (no permission, or bytes that are not text) does
+  not stop the listing. A top level that holds one is set aside with the reason;
+  two folders of one pass that cannot be compared for it leave that pass unread;
+  a declared number in such a table is unavailable at that pass. The other
+  folders are read all the same.
+
+Every AMR pass axis of the trust report counts this way. A change is measured
+only between two readable passes whose numbers are consecutive. The verdict
+names the passes read, the passes before it that were not read, and every
+folder set aside or pass not read, with why.
+
+With a declaration, the Numerical Evidence section of the trust report opens with:
+
+1. the verdict as a sentence. Converged: the pass, the passes that held in a
+   row, the criterion that was the last to hold and the pass it held from, and
+   how many of the passes read come after it. Not converged: each criterion that
+   fails at the last pass read, its worst number, what it measured and how many
+   times the declared threshold that is;
+2. one table, a row per criterion and a column per pass, each cell the
+   criterion's worst number at that pass and whether it holds, and a last row
+   with how many passes in a row every criterion has held;
+3. one figure per criterion: what it measured against the pass on a log axis,
+   with the declared threshold as the dashed line.
+
+The figures of the quantities themselves follow unchanged. On the error
+indicator figure, the dashed line is the declared `ErrorIndicator` threshold,
+or no line when none is declared; the identity cards show `AMR Tol` as set aside
+and a `Convergence` card with the verdict. Without a declaration the dashed line
+is the configured Palace `Tol`, and the `Convergence` card reads
+`not declared`.
+
+`inspect_run_trustworthiness()` shows the same table for the passes a partly
+returned run folder holds; the verdict then counts the passes read (for
+example "3 passes read (passes 1, 4 and 5)"), not the passes Palace ran. A
+number that cannot be read without ambiguity (a table that repeats a column, or
+two rows with the same index) is unavailable, with the reason, and never holds.
+A plan that is present but was not sealed by the
+handoff, or that changed after it, is refused by both readers.
+
+In this version Palace runs every pass up to `amr_max_passes`; the verdict says
+at which pass the run had converged, and the passes after it are kept in the
+table. The criteria are the caller's: the verdict states whether they held, not
+whether the research question is answered.
+
 ## Honesty rule
 
 Solver-specific quantities remain solver-specific. Electrostatic matrices,

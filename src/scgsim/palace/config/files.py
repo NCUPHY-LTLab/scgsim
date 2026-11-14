@@ -22,11 +22,16 @@ def persist_problem_files(
     metadata_files: Sequence[MetadataFile],
     config_path: Path,
     config: Mapping[str, Any],
+    removed: Sequence[str] = (),
 ) -> Path:
-    """Replace each metadata file in order, then ``config.json`` last, each through a temporary file.
+    """Remove each ``removed`` file, replace each metadata file in order, then ``config.json`` last.
 
-    Writing the config last means a run folder whose ``config.json`` is new has every metadata file it needs.
+    ``removed`` are run-folder files an earlier config wrote and this one does not, such as a convergence plan
+    after the declaration was removed.  Each written file goes through a temporary file; writing the config
+    last means a run folder whose ``config.json`` is new has every metadata file it needs and no stale one.
     """
+    for relative in removed:
+        (run_folder / relative).unlink(missing_ok=True)
     for metadata in metadata_files:
         _atomic_json(run_folder / metadata.relative, metadata.payload)
     _atomic_json(config_path, config)

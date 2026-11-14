@@ -2,7 +2,8 @@
 
 ``PalaceSimulation`` is the base of ``EigenmodeSim`` and ``ElectrostaticSim``.  It owns the calls that do
 not depend on the problem: binding a plan, the output folder, the vacuum region, the route, Surface EPR,
-the mesh controls, ``input_summary()``, ``mesh()``, ``simulation_drc``, ``mesh_summary()`` and ``prepare_handoff()``.
+the mesh controls, the convergence declaration, ``input_summary()``, ``mesh()``, ``simulation_drc``,
+``mesh_summary()`` and ``prepare_handoff()``.
 A problem class adds its own setters, its numerical defaults and ``write_config()``, and answers what the
 core asks of it: the class attributes and methods under "What a problem adds" below.
 
@@ -19,7 +20,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Literal, TypeVar
 
-from scgsim.contracts.palace_run_folder import CONFIG, INDEX_MAP_SCHEMA_VERSION
+from scgsim.contracts.palace_run_folder import (
+    CONFIG,
+    CONVERGENCE_PLAN,
+    INDEX_MAP_SCHEMA_VERSION,
+)
 from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
@@ -28,9 +33,11 @@ from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 from scgsim.refusal import Declared, found_text
 
 from ..config.config_records import ConfigInput
+from ..config.convergence import ConvergenceDeclaration, Criterion, CriterionGroup
+from ..config.convergence_plan import PlanContext, convergence_plan
 from ..config.files import MetadataFile, persist_problem_files
 from ..config.index import IndexEntry
-from ..config.numerical import NumericalControls, ProblemDefaults
+from ..config.numerical import PROBLEM_DEFAULT, NumericalControls, ProblemDefaults
 from ..mesh.build import (
     MeshBuildResult,
     RouteGeometry,
@@ -63,6 +70,7 @@ from .lifecycle import CALLS, Call, Stage
 _WHERE_MESH_AGAIN = "the run folder: call mesh() again"
 _WHERE_NUMERICAL_ARG = "the numerical argument of the simulation"
 _WHERE_SURFACE_EPR = "the call to set_surface_epr"
+_WHERE_SET_CONVERGENCE = "the call to set_convergence"
 
 _WHERE_SET_OUTPUT_DIR = "the call to set_output_dir"
 _WHERE_SET_PLAN = "the call to set_plan"
@@ -85,6 +93,7 @@ class PalaceSimulation(ABC):
     mesh_controls: MeshControls = field(default_factory=MeshControls)
     # Filled with the problem's ``numerical_defaults`` on construction and by every ``set_numerical``.
     numerical: NumericalControls = field(default_factory=NumericalControls)
+    convergence: ConvergenceDeclaration | None = field(default=None, init=False)
     config_path: Path | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
     _stage: Stage = field(default=Stage.UNBOUND, init=False, repr=False)
@@ -98,6 +107,9 @@ class PalaceSimulation(ABC):
     _resolved_ports: list[LayoutPortBinding] = field(
         default_factory=list, init=False, repr=False
     )
+    # Whether ``amr_tolerance`` was given rather than filled from the problem's default: with a convergence
+    # declaration a given tolerance is refused, a default one is set aside.
+    _amr_tolerance_stated: bool = field(default=False, init=False, repr=False)
 
     # ---- What a problem adds ------------------------------------------------------------------------
 
@@ -122,6 +134,10 @@ class PalaceSimulation(ABC):
     @abstractmethod
     def write_config(self) -> Path:
         """Write ``config.json`` and its metadata for the current mesh; see the problem class."""
+
+    @abstractmethod
+    def _plan_context(self, entries: Sequence[IndexEntry]) -> PlanContext:
+        """What the config with index ``entries`` holds that a convergence criterion is checked against."""
 
     def __post_init__(self) -> None:
         """Check the route setting the constructor was given, and fill the problem's numerical defaults.
@@ -301,6 +317,53 @@ class PalaceSimulation(ABC):
         if controls != self.mesh_controls:
             self.mesh_controls = controls
             self._fall_back("set_mesh")
+
+    def set_convergence(
+        self,
+        *criteria: Criterion | CriterionGroup | None,
+        minimum_converged_passes: int = 1,
+    ) -> None:
+        """Declare when the run has converged: every criterion holds in ``minimum_converged_passes`` passes in a row.
+
+        Each criterion is a quantity and its threshold (``Capacitance``, ``ModeFrequency``, ``SurfaceEpr``,
+        ``ErrorIndicator``; see ``scgsim.palace.config.convergence``).  A pass is one Palace solve: pass 1
+        solves the input mesh, and a change criterion compares a pass with the one before it, so it holds
+        from pass 2 on.  A call replaces the whole declaration; ``set_convergence(None)`` removes it.  This
+        is a problem setting: it keeps the mesh and discards the config and handoff.
+
+        ``write_config()`` then writes the plan the declaration becomes
+        (``metadata/palace_convergence_plan.json``), writes Palace's ``Tol`` so small that only
+        ``amr_max_passes`` ends the run, and saves every pass.  It refuses a criterion that names a terminal,
+        mode, interface kind or margin the config does not have, a stated ``amr_tolerance``,
+        ``save_adapt_iterations=False``, and an ``amr_max_passes`` too small for the declaration to hold.
+        Palace runs every pass up to ``amr_max_passes``; result reading and the trust report say at which
+        pass the run had converged.
+
+        Raises:
+            ValueError: no criterion is given, ``None`` comes with criteria, an argument is not a criterion,
+                a quantity does not fit this simulation, or ``minimum_converged_passes`` is not an integer of
+                at least 1.
+        """
+        if criteria == (None,):
+            self.convergence = None
+        elif None in criteria:
+            raise ValueError(
+                Declared(
+                    f"{type(self).__name__}.set_convergence(None, ...)",
+                    _WHERE_SET_CONVERGENCE,
+                ).refusal(
+                    "removes the declaration and declares criteria at once: call set_convergence(None) alone, "
+                    "or pass only criteria"
+                )
+            )
+        else:
+            self.convergence = ConvergenceDeclaration.declared(
+                [item for item in criteria if item is not None],
+                minimum_converged_passes=minimum_converged_passes,
+                problem=self.problem,
+                simulation=type(self).__name__,
+            )
+        self._fall_back("set_convergence")
 
     # ---- Inspecting the input -----------------------------------------------------------------------
 
@@ -509,13 +572,21 @@ class PalaceSimulation(ABC):
         self._fall_back("set_numerical")
 
     def _with_problem_defaults(self, controls: NumericalControls) -> NumericalControls:
-        """``controls`` with the problem's defaults filled in: the one place the constructor and ``set_numerical`` share."""
+        """``controls`` with the problem's defaults filled in: the one place the constructor and ``set_numerical`` share.
+
+        It also records whether ``amr_tolerance`` was given, which a convergence declaration needs to know
+        after the default has filled it.
+        """
         if not isinstance(controls, NumericalControls):
             raise TypeError(
                 Declared("numerical", _WHERE_NUMERICAL_ARG).refusal(
                     f"must be NumericalControls: pass {type(self).__name__}(numerical=NumericalControls(...)) or call set_numerical(...)"
                 )
             )
+        self._amr_tolerance_stated = controls.amr_tolerance not in (
+            PROBLEM_DEFAULT,
+            None,
+        )
         return controls.with_defaults(self.numerical_defaults)
 
     def _start_config(self) -> ConfigInput:
@@ -529,6 +600,10 @@ class PalaceSimulation(ABC):
         mesh = self._require("write_config", self._mesh_result)
         materials = self._require("write_config", self._materials)
         _check_mesh_files(mesh)
+        if self.convergence is not None:
+            self.convergence.check_numerical(
+                self.numerical, amr_tolerance_stated=self._amr_tolerance_stated
+            )
         return ConfigInput(
             problem=self.problem,
             groups=mesh.groups,
@@ -536,19 +611,36 @@ class PalaceSimulation(ABC):
             materials=materials,
             surface_epr_specs=self.surface_epr_specs,
             numerical=self.numerical,
+            convergence_declared=self.convergence is not None,
         )
 
     def _finish_config(
-        self, config: Mapping[str, Any], metadata: Sequence[MetadataFile]
+        self,
+        config: Mapping[str, Any],
+        metadata: Sequence[MetadataFile],
+        entries: Sequence[IndexEntry],
     ) -> Path:
-        """Write each metadata file in order, then ``config.json`` last, and reach ``CONFIG_WRITTEN``."""
+        """Plan the declared convergence, write each metadata file in order, then ``config.json`` last.
+
+        The plan is derived from the config's index ``entries`` before anything is written, so a criterion
+        the config cannot satisfy leaves the run folder as it was.  Without a declaration an earlier plan is
+        removed.  The simulation then reaches ``CONFIG_WRITTEN``.
+        """
         mesh = self._require("write_config", self._mesh_result)
         config_path = mesh.output_dir / CONFIG
+        plan = (
+            None
+            if self.convergence is None
+            else convergence_plan(self.convergence, self._plan_context(entries))
+        )
         self.config_path = persist_problem_files(
             run_folder=mesh.output_dir,
-            metadata_files=metadata,
+            metadata_files=metadata
+            if plan is None
+            else (*metadata, MetadataFile(CONVERGENCE_PLAN, plan.to_payload())),
             config_path=config_path,
             config=config,
+            removed=(CONVERGENCE_PLAN,) if plan is None else (),
         )
         self._stage = Stage.CONFIG_WRITTEN
         return config_path
