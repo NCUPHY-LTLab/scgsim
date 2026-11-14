@@ -159,7 +159,7 @@ sim.set_numerical(order=2, amr_max_passes=12)
 sim.set_convergence(
     Capacitance.diagonal().within(relative=1e-3),
     Capacitance.element("island", "resonator").within(relative=1e-2),
-    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(relative=2e-2),
     ErrorIndicator().below(1e-2),
     minimum_converged_passes=2,
 )
@@ -177,6 +177,10 @@ sim.set_convergence(
 `within(relative=...)` 限制與前一個 pass 相比的變化 $|q_k - q_{k-1}| / |q_k|$。$q_k$ 為零時，若 $q_{k-1}$ 也為零則變化為零，否則相對變化沒有定義，該準則不成立。絕對形式以量所儲存的單位命名：電容用 `absolute_f`（法拉），頻率用 `absolute_ghz`，參與率沒有單位，用 `absolute`。兩者恰好給一個。`ErrorIndicator().below(value)` 限制的是值本身：指標至多為 `value`。
 
 一個 pass 是 Palace 的一次求解：pass 1 求解輸入網格，pass $k$ 在 $k-1$ 次細化之後。變化準則比較 pass $k$ 與 pass $k-1$，所以在 pass 1 不可能成立。有多個數的量，在每個數都成立時才成立；當每條準則在以 $k$ 結尾的連續 `minimum_converged_passes` 個 pass 都成立，執行就在 pass $k$ 收斂。同一類別的全表面列與邊距列從不相加：邊距列是其全表面列的一部分。
+
+::: {.callout-note title="變化準則說明了什麼"}
+變化準則說的是一個量在兩個 pass 之間變動很小，不是它離極限還有多遠。在目前量測過的佈局上，全表面參與率每個 pass 都在成長，沒有任何變化準則在它上面成立，這樣的執行會跑到 pass 上限。邊距以外的參與率（`margin_um=`）確實會穩定下來，但不是每個 pass 都平穩，這正是 `minimum_converged_passes` 的用途。量測紀錄在 [issue 248](https://github.com/NCUPHY-LTLab/scgsim/issues/248#issuecomment-6873586635)。
+:::
 
 再次呼叫會取代整個宣告；`set_convergence(None)` 移除宣告，沒有任何準則的 `set_convergence()` 會被拒絕。此呼叫與 `set_numerical` 一樣保留網格、捨棄設定檔與交接。
 

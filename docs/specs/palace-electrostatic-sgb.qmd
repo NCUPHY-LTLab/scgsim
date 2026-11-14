@@ -306,7 +306,7 @@ sim.set_numerical(order=2, amr_max_passes=12)
 sim.set_convergence(
     Capacitance.diagonal().within(relative=1e-3),
     Capacitance.element("island", "resonator").within(relative=1e-2),
-    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(relative=2e-2),
     ErrorIndicator().below(1e-2),
     minimum_converged_passes=2,
 )
@@ -336,6 +336,16 @@ does; the run has converged at pass $k$ when every criterion holds at each of
 the `minimum_converged_passes` passes ending at $k$. The whole-surface rows and
 the margin rows of a kind are never added together: a margin row is a part of
 its whole-surface row.
+
+::: {.callout-note title="What a change criterion says"}
+A change criterion says that a quantity moved little between two passes, not
+how far it is from its limit. On the layouts measured so far, whole-surface
+participation grew at every pass, and no change criterion on it held, so such
+a run goes to its pass limit. Participation beyond a margin (`margin_um=`)
+did settle, though not steadily from pass to pass, which is what
+`minimum_converged_passes` is for. The measurements are recorded on
+[issue 248](https://github.com/NCUPHY-LTLab/scgsim/issues/248#issuecomment-6873586635).
+:::
 
 Another call replaces the whole declaration; `set_convergence(None)` removes it,
 and `set_convergence()` with no criterion is refused. The call keeps the mesh

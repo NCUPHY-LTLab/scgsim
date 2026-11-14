@@ -40,12 +40,12 @@ from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
 sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
 sim.set_convergence(
     ModeFrequency(modes=[1]).within(relative=1e-5),
-    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(relative=2e-2),
     ErrorIndicator().below(1e-2),
 )
 ```
 
-`amr_max_passes=8` 允許八次細化，也就是九次求解；每次求解是一個 pass，pass 1 求解 `mesh()` 寫出的網格。模態 1 的頻率在某個 pass 成立，是指它與前一個 pass 相比變化至多十萬分之一。Surface EPR 這一行為每種介面類別各宣告一條準則，各自作用於該類別每個模態的全表面參與率；它需要在 `mesh()` 之前以三種規格呼叫 `set_surface_epr`。有宣告時 Palace 自己的容許誤差不再結束執行，所以不給 `amr_tolerance`：`write_config()` 會拒絕它，並寫出應改寫的 `ErrorIndicator().below(...)`。它也會在 `num_modes=2` 時拒絕 `ModeFrequency(modes=[3])`，以及被 `set_epr_request(surface_interfaces=...)` 排除的類別。
+`amr_max_passes=8` 允許八次細化，也就是九次求解；每次求解是一個 pass，pass 1 求解 `mesh()` 寫出的網格。模態 1 的頻率在某個 pass 成立，是指它與前一個 pass 相比變化至多十萬分之一。Surface EPR 這一行為每種介面類別各宣告一條準則，各自作用於該類別每個模態在 1 µm 邊距以外的參與率；它需要在 `mesh()` 之前以三種規格呼叫 `set_surface_epr`，且每種規格都要求這個[邊距](#surface-epr-margin-rows)。這裡刻意不宣告全表面參與率：在量測過的佈局上，它每細化一次都還在成長，變化準則不會在它上面成立。有宣告時 Palace 自己的容許誤差不再結束執行，所以不給 `amr_tolerance`：`write_config()` 會拒絕它，並寫出應改寫的 `ErrorIndicator().below(...)`。它也會在 `num_modes=2` 時拒絕 `ModeFrequency(modes=[3])`，以及被 `set_epr_request(surface_interfaces=...)` 排除的類別。
 
 Palace 會在每條準則都已成立的第一個 pass 停止，之後的求解都不會開始；沒有收斂的執行會跑完全部九次。回傳執行的 `result.convergence` 與可信度報告會說明每條準則在哪個 pass 都已成立、最後成立的是哪一條、SCGSim 在哪個 pass 之後停止 Palace，或在最後一個 pass 上哪一條仍不成立、與門檻差多少。所有的量與檢查列在[本徵模態契約](../specs/palace-eigenmode.qmd#eigenmode-convergence)與共用的[收斂宣告](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)。
 
