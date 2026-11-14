@@ -121,19 +121,24 @@ _DECLARED = (
 
 
 def _returned_run(
-    tmp_path: Path, *, declare: bool = True, criteria=_DECLARED
+    tmp_path: Path,
+    *,
+    declare: bool = True,
+    criteria=_DECLARED,
+    passes: int = len(_DIAGONALS_FF),
+    in_a_row: int = 2,
 ) -> SimpleNamespace:
-    """Write the config and handoff of a four-pass run, run its script, and return the run folder and id."""
+    """Write the config and handoff of a run of ``passes`` passes (four), run its script, return its folder and id."""
     sim = electrostatic(tmp_path / "model")
-    sim.set_numerical(amr_max_passes=len(_DIAGONALS_FF) - 1)
+    sim.set_numerical(amr_max_passes=passes - 1)
     if declare:
-        sim.set_convergence(*criteria, minimum_converged_passes=2)
+        sim.set_convergence(*criteria, minimum_converged_passes=in_a_row)
     sim.write_config()
     counts = count_index_entries(read_json(sim.output_dir / INDEX_MAP))
     solve = tmp_path / "solve"
-    for number in range(1, len(_DIAGONALS_FF)):
+    for number in range(1, passes):
         _pass_tables(solve / f"iteration{number}", number, counts)
-    _pass_tables(solve, len(_DIAGONALS_FF), counts)
+    _pass_tables(solve, passes, counts)
     palace = tmp_path / "palace"
     palace.write_text(_FAKE_PALACE.replace("{solve}", str(solve)), encoding="utf-8")
     palace.chmod(0o755)
@@ -319,6 +324,60 @@ def test_the_trust_report_shows_the_run_the_table_and_each_quantity_with_its_cha
     assert error_figure.layout.annotations[0].text == "≤ 0.05"
 
 
+@pytest.mark.parametrize(
+    ("threshold", "cell", "outcome"),
+    [(0.5, "0.2 ✓", "holds, 1 in a row"), (0.05, "0.2 ✗", "fails")],
+)
+def test_a_run_of_one_pass_shows_its_declared_criteria(
+    tmp_path, threshold, cell, outcome
+):
+    """One pass has no trend to plot; the table of the declared criteria is shown all the same."""
+    run = _returned_run(
+        tmp_path,
+        criteria=(ErrorIndicator().below(threshold),),
+        passes=1,
+        in_a_row=1,
+    )
+    result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    assert [item.number for item in result.convergence.passes] == [1]
+    html, _ = _shown(result.show_run_trustworthiness())
+    assert "A trend plot is omitted because a single pass" in html
+    assert f">≤ {threshold:g}</span>" in html
+    assert f">{cell}</td>" in html and f">{outcome}</td>" in html
+
+
+def test_the_criteria_of_one_inset_stand_together_whatever_their_declared_order(
+    tmp_path,
+):
+    """MA at 0.5 um, MA at 1 um, then MS at 0.5 um: the 0.5 um inset is named once, over MA and MS."""
+    run = _returned_run(
+        tmp_path,
+        criteria=(
+            SurfaceEpr("MA", margin_um=0.5).within(percent=2),
+            SurfaceEpr("MA", margin_um=1.0).within(percent=2),
+            SurfaceEpr("MS", margin_um=0.5).within(percent=2),
+        ),
+    )
+    result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    html, _ = _shown(result.show_run_trustworthiness())
+    assert html.count("Surface EPR, inset 0.5 um") == 1
+    assert html.count("Surface EPR, inset 1 um") == 1
+    head = html[html.index("<thead>") : html.index("</thead>")]
+    assert head.index("inset 0.5 um") < head.index("inset 1 um")
+    assert [name for name in ("MA", "MS", "MA") if f">{name}</th>" in head] == [
+        "MA",
+        "MS",
+        "MA",
+    ]
+    assert head.count(">MA</th>") == 2 and head.count(">MS</th>") == 1
+    # The cells follow their headings: at pass 2, MA and MS at 0.5 um, then MA at 1 um.
+    declared = result.convergence.passes[1].criteria
+    expected = [f">{declared[index].worst.measured:.3g} % " for index in (0, 2, 1)]
+    row = html[html.index("<tbody>") :].split("</tr>")[1]
+    positions = [row.index(text) for text in expected]
+    assert positions == sorted(positions)
+
+
 def test_the_trust_report_with_details_adds_the_records_and_the_verdict(returned):
     """``show_details`` adds what the run folder records and the verdict as a sentence."""
     result = resolve_palace_result(
@@ -359,6 +418,20 @@ def test_all_results_are_shown_in_the_order_a_reader_asks(returned):
         "PhysicsQuantitiesReport",
         "SimulationBenchmarkReport",
     ]
+
+
+def test_the_benchmark_takes_the_theme_of_its_figures(returned):
+    """Every view switches between light and dark: the benchmark too, alone and within all results."""
+    result = resolve_palace_result(
+        returned.root, expected_handoff_id=returned.handoff_id
+    )
+    assert result.show_simulation_benchmark().trust.theme == "light"
+    assert result.show_simulation_benchmark(theme="dark").trust.theme == "dark"
+    with pytest.raises(ValueError, match="theme must be 'light' or 'dark'"):
+        result.show_simulation_benchmark(theme="sepia")
+    with _captured_notebook_display() as displayed:
+        result.show_all_results(theme="dark")
+    assert [item.trust.theme for item in displayed[1:]] == ["dark", "dark"]
 
 
 def test_a_partly_returned_run_shows_the_passes_it_holds(tmp_path):

@@ -161,9 +161,10 @@ class PalaceTrustReport:
     def show_simulation_benchmark(
         self,
         *,
+        theme: ReportTheme = "light",
         show_details: bool = False,
     ) -> SimulationBenchmarkReport:
-        """Return the readable benchmark while retaining every machine field."""
+        """Return the readable benchmark with the selected theme, retaining every machine field."""
         attempted = read_optional_json(self.run_dir / NATIVE_METADATA)
         pass_cost_records = self.pass_cost_records()
         data: InspectedBenchmarkData = {
@@ -195,7 +196,7 @@ class PalaceTrustReport:
             "pass_cost_records": [asdict(record) for record in pass_cost_records],
         }
         return SimulationBenchmarkReport(
-            trust=self,
+            trust=self.with_theme(theme),
             data=data,
             show_details=checked_show_details(show_details),
         )
@@ -222,7 +223,7 @@ class PalaceTrustReport:
                 ranking_limit=ranking_limit,
             )
         )
-        display(trust.show_simulation_benchmark(show_details=show_details))
+        display(trust.show_simulation_benchmark(theme=theme, show_details=show_details))
 
     def _tokens(self) -> PlotTheme:
         return theme_tokens(self.theme)
@@ -241,18 +242,18 @@ class PalaceTrustReport:
         from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
         display(HTML(self.identity_html()))
+        declared = declared_html(
+            self.convergence,
+            self.solver_end,
+            solved_elements=solved_elements(self.passes),
+            show_details=self.show_details,
+        )
         items = self._convergence_items()
         if len(self.passes) >= 2:
-            items = [
-                "<section><h3>Convergence</h3></section>",
-                *declared_html(
-                    self.convergence,
-                    self.solver_end,
-                    solved_elements=solved_elements(self.passes),
-                    show_details=self.show_details,
-                ),
-                *items,
-            ]
+            items = ["<section><h3>Convergence</h3></section>", *declared, *items]
+        else:
+            # One pass has no trend to plot; its status carries the heading, and the declared table follows.
+            items = [*items, *declared]
         for item in items:
             if isinstance(item, str):
                 display(HTML(item))

@@ -156,13 +156,14 @@ def show_all_results(
 def show_simulation_benchmark(
     result: ResolvedRunData,
     *,
+    theme: ReportTheme = "light",
     show_details: bool = False,
 ) -> SimulationBenchmarkReport:
-    """Return the readable benchmark and its complete machine data."""
+    """Return the readable benchmark, its figures in ``theme``, and its complete machine data."""
 
     _require_resolved(result, "show_simulation_benchmark")
 
-    trust = show_run_trustworthiness(result)
+    trust = show_run_trustworthiness(result, theme=theme)
     pass_cost_records = trust.pass_cost_records()
     return SimulationBenchmarkReport(
         trust=trust,

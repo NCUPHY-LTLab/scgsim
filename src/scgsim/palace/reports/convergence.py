@@ -277,7 +277,8 @@ def pass_table_html(
     """
     if check.plan is None or not check.passes:
         return ""
-    criteria = check.plan.criteria
+    order = _column_order(check.plan.criteria)
+    criteria = [check.plan.criteria[index] for index in order]
     elements = solved_elements or {}
     grouped = any(criterion.group for criterion in criteria)
     rows_tall = 2 if grouped else 1
@@ -303,7 +304,7 @@ def pass_table_html(
         + html_cell(
             "td", f"{elements[item.number]:,}" if item.number in elements else ""
         )
-        + "".join(_cell(at_pass) for at_pass in item.criteria)
+        + "".join(_cell(item.criteria[index]) for index in order)
         + html_cell("td", _every_criterion(item))
         + "</tr>"
         for item in check.passes
@@ -319,6 +320,27 @@ def pass_table_html(
         "<p style='opacity:0.75'>A change is measured from the pass before, so pass 1 has none (N/A)."
         f"{worst}</p>"
     )
+
+
+def _column_order(criteria: Sequence[PlannedCriterion]) -> list[int]:
+    """The criteria's positions as the table's columns: declared order, a group's criteria side by side.
+
+    A group stands where its first criterion was declared, so its name heads one run of columns even when
+    another criterion was declared between two of its own.
+    """
+    order: list[int] = []
+    placed: set[str] = set()
+    for index, criterion in enumerate(criteria):
+        if not criterion.group:
+            order.append(index)
+        elif criterion.group not in placed:
+            placed.add(criterion.group)
+            order.extend(
+                position
+                for position, other in enumerate(criteria)
+                if other.group == criterion.group
+            )
+    return order
 
 
 def _criteria_headings(

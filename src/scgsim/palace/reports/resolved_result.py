@@ -83,7 +83,10 @@ class ResolvedPalaceResult(ResolvedRunData):
     def show_simulation_benchmark(
         self,
         *,
+        theme: str = "light",
         show_details: bool = False,
     ) -> SimulationBenchmarkReport:
         """Project recorded run cost and timing while retaining complete benchmark metadata."""
-        return show_simulation_benchmark(self, show_details=show_details)
+        return show_simulation_benchmark(
+            self, theme=cast(ReportTheme, theme), show_details=show_details
+        )

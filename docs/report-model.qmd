@@ -25,7 +25,9 @@ Current Palace `show_all_results()` presentation follows this order:
 
 This is the order a reader asks about a run. Each view is also a call of its
 own: `show_run_trustworthiness()`, `show_physics_quantities()` and
-`show_simulation_benchmark()`.
+`show_simulation_benchmark()`. Every one of them takes `theme="light"` (the
+default) or `theme="dark"` for its figures, and `show_all_results(theme=...)`
+passes it to all three.
 
 `inspect_run_trustworthiness()` supports completed, failed, and partly returned
 run folders. It preserves the recorded receipt status and may expose the latest
@@ -144,8 +146,10 @@ convergence. It shows, in this order:
    change at pass 1, which has no pass before it). Surface EPR criteria at one
    inset stand under the inset's name, said once: `Surface EPR, inset 0.5 um`
    over `MA`, `MS` and `SA`, where `inset 0.5 um` is the part of the surfaces
-   0.5 um or more from the gap edge. The last column says for how many passes
-   in a row every criterion has held.
+   0.5 um or more from the gap edge. The criteria of one inset stand side by
+   side whatever the order they were declared in. The last column says for how
+   many passes in a row every criterion has held. A run of one pass has no
+   trend to plot: its status is shown, then this table.
 3. Each quantity against the pass, followed by the figure of its declared
    change on a log axis with the threshold as the dashed line. A change is a
    percentage of the value and carries the name the AEDT side gives it:

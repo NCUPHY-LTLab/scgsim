@@ -279,6 +279,7 @@ class PalaceReportUxTests(unittest.TestCase):
                 result.show_run_trustworthiness,
                 result.show_all_results,
                 result.show_physics_quantities,
+                result.show_simulation_benchmark,
             ):
                 with self.subTest(method=show.__name__):
                     with self.assertRaises(FileNotFoundError):
