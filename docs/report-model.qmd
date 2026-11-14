@@ -130,11 +130,12 @@ With a declaration, the Numerical Evidence section of the trust report opens wit
 1. the verdict as a sentence. Converged: the pass, the passes that held in a
    row, the criterion that was the last to hold and the pass it held from, and
    how many of the passes read come after it. Not converged: each criterion that
-   fails at the last pass read, its worst number, what it measured and how many
-   times the declared threshold that is;
+   fails at the last pass read, its worst number, what it measured, the declared
+   threshold and how many times the threshold that is;
 2. one table, a row per criterion and a column per pass, each cell the
-   criterion's worst number at that pass and whether it holds, and a last row
-   with how many passes in a row every criterion has held;
+   criterion's worst number at that pass and whether it holds, or that it was
+   not measured there and why (a change at pass 1), and a last row with how many
+   passes in a row every criterion has held;
 3. one figure per criterion: what it measured against the pass on a log axis,
    with the declared threshold as the dashed line.
 

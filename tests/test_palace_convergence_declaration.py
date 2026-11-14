@@ -37,7 +37,10 @@ def test_each_capacitance_selection_has_its_label():
     assert Capacitance.matrix().label == "C matrix"
     assert Capacitance.elements([("a", "a"), ("a", "b")]).label == "C C[a][a], C[a][b]"
     assert ModeFrequency(modes=[1, 3]).label == "frequency, modes 1, 3"
-    assert SurfaceEpr("MA", margin_um=1).label == "MA participation beyond 1 um"
+    assert (
+        SurfaceEpr("MA", margin_um=1).label
+        == "MA participation, 1 um or more from the gap edge"
+    )
     assert SurfaceEpr("SA", modes=[2]).label == "SA participation, mode 2"
 
 
@@ -91,9 +94,9 @@ def test_each_declares_one_criterion_per_kind_with_one_threshold():
     )
     assert sim.convergence is not None
     assert [item.label for item in sim.convergence.criteria] == [
-        "MA participation beyond 1 um",
-        "MS participation beyond 1 um",
-        "SA participation beyond 1 um",
+        "MA participation, 1 um or more from the gap edge",
+        "MS participation, 1 um or more from the gap edge",
+        "SA participation, 1 um or more from the gap edge",
     ]
     assert {item.threshold for item in sim.convergence.criteria} == {2e-2}
     assert sim.convergence.minimum_converged_passes == 1

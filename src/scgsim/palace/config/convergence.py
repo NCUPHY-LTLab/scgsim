@@ -348,9 +348,13 @@ class SurfaceEpr:
 
     @property
     def surface_label(self) -> str:
-        """The kind and the surfaces summed, as each number's label starts: ``MA participation beyond 1 um``."""
-        beyond = "" if self.margin_um is None else f" beyond {self.margin_um:g} um"
-        return f"{self.interface_kind} participation{beyond}"
+        """The kind and the surfaces summed: ``MA participation, 1 um or more from the gap edge``."""
+        inside = (
+            ""
+            if self.margin_um is None
+            else f", {self.margin_um:g} um or more from the gap edge"
+        )
+        return f"{self.interface_kind} participation{inside}"
 
     @property
     def label(self) -> str:

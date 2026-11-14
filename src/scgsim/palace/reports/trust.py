@@ -280,7 +280,7 @@ class PalaceTrustReport:
             ("Final snapshot", self._final_snapshot_text()),
             ("Selection integrity", self.selection.integrity),
             ("AMR passes recorded", str(len(self.passes))),
-            ("AMR MaxIts", fmt(self.amr_max_passes)),
+            ("AMR MaxIts", self._max_passes_text()),
             ("AMR Tol", self._tolerance_text()),
             ("Convergence", verdict_card(self.convergence, self.solver_end)),
             ("MPI × OpenMP", self.identity.get("resources")),
@@ -484,6 +484,13 @@ class PalaceTrustReport:
             "loss interpretation remain a separate physics call.</p>"
             "</section>"
         )
+
+    def _max_passes_text(self) -> str:
+        """The configured MaxIts with the passes it allows: N refinements are N + 1 solves."""
+        if self.amr_max_passes is None:
+            return fmt(self.amr_max_passes)
+        allowed = self.amr_max_passes + 1
+        return f"{self.amr_max_passes} ({allowed} pass{'' if allowed == 1 else 'es'})"
 
     def _tolerance_text(self) -> str:
         """Palace's AMR Tol, or that the declared criteria end the run in its place."""

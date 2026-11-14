@@ -122,7 +122,7 @@ def test_a_relative_change_compares_each_pass_with_the_one_before(tmp_path):
     check = check_convergence(_plan(_diagonal()), passes)
     first, second, third = (item.criteria[0] for item in check.passes)
     assert [value.measured for value in first.values] == [None, None]
-    assert first.values[0].unavailable == "no previous pass to compare with"
+    assert first.values[0].unavailable == "no pass before it"
     assert not first.holds
     assert second.values[0].measured == pytest.approx(1e-15 / 101e-15)
     assert second.worst.label == "C[a][a]"
