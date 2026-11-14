@@ -9,6 +9,7 @@ stand-in that copies pass folders written in Palace's formats into ``results/pal
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -290,6 +291,9 @@ def test_the_trust_report_shows_the_verdict_the_table_and_the_thresholds(returne
     ]
     assert shared.layout.yaxis.title.text == "change from the pass before (%)"
     assert [shape.y0 for shape in shared.layout.shapes] == [2.0]
+    # The label sits on the line: on a log axis an annotation is placed by the exponent.
+    label = shared.layout.annotations[0]
+    assert (label.text, label.y) == ("declared: at most 2", math.log10(2.0))
     error_figure = next(
         figure
         for figure in displayed

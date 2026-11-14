@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple
@@ -197,19 +198,35 @@ class LinePlot:
         if not plotted:
             return None
         if self.hline is not None:
-            fig.add_hline(
-                y=self.hline[0],
-                line_dash="dot",
-                line_color=tokens.muted,
-                line_width=1.5,
-                annotation_text=self.hline[1],
-                annotation_font={"size": PLOT_TICK_FONT, "color": tokens.muted},
-                annotation_position="top right",
-            )
+            self._draw_reference_line(fig, self.hline, tokens)
         fig.update_xaxes(title=axis_title(self.xlabel, tokens))
         fig.update_yaxes(title=axis_title(self.ylabel, tokens), type=self.yaxis_type)
         _maybe_integer_xticks(fig, self.xs)
         return fig
+
+    def _draw_reference_line(self, fig: Any, line: ReferenceLine, tokens: Any) -> None:
+        """Draw the dotted line at ``line.value`` and its label just above its right end.
+
+        Plotly places an annotation on a log axis by the exponent, so the label is given ``log10`` of the
+        value there; given the value itself it sits at ``10**value`` and stretches the axis up to it.
+        """
+        on_log_axis = self.yaxis_type == "log"
+        if on_log_axis and line.value <= 0:
+            return
+        fig.add_hline(
+            y=line.value, line_dash="dot", line_color=tokens.muted, line_width=1.5
+        )
+        fig.add_annotation(
+            x=1,
+            xref="x domain",
+            xanchor="right",
+            y=math.log10(line.value) if on_log_axis else line.value,
+            yref="y",
+            yanchor="bottom",
+            text=line.label,
+            showarrow=False,
+            font={"size": PLOT_TICK_FONT, "color": tokens.muted},
+        )
 
 
 @dataclass(frozen=True)
