@@ -389,9 +389,12 @@ class _Assembly:
             )
         return total
 
+    def _carriers(self, edge_ids: list[str]) -> list[str]:
+        return sorted({s for eid in edge_ids for s in self.lineage.get(eid, ())})
+
     def _sources(self, edge_ids: list[str]) -> tuple[str, ...]:
-        carriers = {s for eid in edge_ids for s in self.lineage.get(eid, ())}
-        return self.entities.entities_of(list(carriers))
+        """What drew the edges: their Entities and cut families."""
+        return self.entities.owners_of(self._carriers(edge_ids))
 
     # -- walls -------------------------------------------------------------------------
 
@@ -433,13 +436,15 @@ class _Assembly:
             *self._column(piece.v, k0, k1, up=False),
             *((link.edge_id, -link.sign) for link in reversed(piece.bottom)),
         )
-        sources = self._sources([link.edge_id for link in (*piece.bottom, *piece.top)])
+        rims = [link.edge_id for link in (*piece.bottom, *piece.top)]
+        sources = self._sources(rims)
+        # A wall column belongs to the Entities of the walls that meet there, by the rule the wall's
+        # membership uses: a band seam under a wall draws its rim but names no Entity.
+        entities = self.entities.entities_of(self._carriers(rims))
         for eid, _ in loop:
             edge = self.edges[eid]
-            if (
-                edge.kind == "vertical"
-            ):  # a wall column inherits the lineage of the walls that meet there
-                edge.sources = tuple(sorted(set(edge.sources) | set(sources)))
+            if edge.kind == "vertical":
+                edge.sources = tuple(sorted(set(edge.sources) | set(entities)))
                 self.lineage[eid] = list(edge.sources)
         neg = self._side_volume(k0, run.right, run.dom_r)
         pos = self._side_volume(k0, run.left, run.dom_l)
