@@ -214,6 +214,68 @@ def test_no_solver_is_started_when_its_guard_cannot_be(tmp_path):
     )
 
 
+_SLOW_GUARD = """
+import os, runpy, subprocess, sys, time
+
+root, runner, record = sys.argv[1:]
+detach = os.setsid
+
+def slow_detach():
+    time.sleep(1.0)
+    detach()
+    with open(record, "a") as handle:
+        handle.write(f"guard {time.monotonic()}\\n")
+
+started = subprocess.Popen
+
+class Recorded(started):
+    def __init__(self, *arguments, **options):
+        with open(record, "a") as handle:
+            handle.write(f"solver {time.monotonic()}\\n")
+        super().__init__(*arguments, **options)
+
+os.setsid = slow_detach
+subprocess.Popen = Recorded
+sys.argv = ["runner", root, "--", "true"]
+try:
+    runpy.run_path(os.path.join(root, runner), run_name="__main__")
+except SystemExit:
+    pass
+"""
+
+
+def test_no_solver_is_started_before_its_guard_has_a_session_of_its_own(tmp_path):
+    """The guard takes a second to leave the script's session: the solver is started only after it has.
+
+    Until the guard leads a session of its own, a signal to the script's process group would end it with
+    the runner, and a solver started meanwhile would be left with nobody.  The copied runner is run with a
+    slowed ``setsid`` in the guard and a ``Popen`` that records when the solver is started.
+    """
+    run = prepared_run(tmp_path)
+    record = tmp_path / "started.txt"
+    with (tmp_path / "runner.log").open("w") as log:
+        subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-S",
+                "-c",
+                _SLOW_GUARD,
+                str(run.root),
+                str(CONVERGENCE_RUNNER),
+                str(record),
+            ],
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=True,
+        )
+    at = {
+        who: float(when)
+        for who, when in (line.split() for line in record.read_text().splitlines())
+    }
+    assert at["guard"] <= at["solver"]
+
+
 _KILLED_AS_THE_SOLVER_STARTS = """
 import os, runpy, signal, subprocess, sys
 

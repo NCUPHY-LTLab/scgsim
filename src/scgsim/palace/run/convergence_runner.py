@@ -192,19 +192,35 @@ def _start_guard() -> int:
     SIGTERM to the solver's process group, once: the runner is gone at that moment and the solver still
     runs, so the group is the solver's.  It sends nothing later, when the group's id could have passed to
     another process.
+
+    The call returns only when the guard has said that it leads a session of its own: until then a signal
+    to the script's process group would still end it with the runner, so no solver is started before.
+
+    Raises:
+        OSError: the guard could not be started, or ended before it had a session of its own.
     """
     watched, held = os.pipe()
+    detached, detaching = os.pipe()
     try:
         guard = os.fork()
     except OSError:
-        os.close(watched)
-        os.close(held)
+        for end in (watched, held, detached, detaching):
+            os.close(end)
         raise
     if guard != 0:
         os.close(watched)
+        os.close(detaching)
+        try:
+            ready = os.read(detached, 1)
+        finally:
+            os.close(detached)
+        if not ready:
+            os.close(held)
+            raise OSError("the convergence runner's guard ended before it was ready")
         return held
     try:
         os.close(held)
+        os.close(detached)
         os.setsid()
         for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
             signal.signal(signum, signal.SIG_IGN)
@@ -212,6 +228,8 @@ def _start_guard() -> int:
         null = os.open(os.devnull, os.O_RDWR)
         for stream in (0, 1, 2):
             os.dup2(null, stream)
+        os.write(detaching, b"1")
+        os.close(detaching)
         told = b""
         while chunk := os.read(watched, 64):
             told += chunk
