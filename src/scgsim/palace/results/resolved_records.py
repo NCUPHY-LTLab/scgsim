@@ -8,6 +8,7 @@ from typing import Any
 
 from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.palace.mesh.summary import MeshSummary, recorded_mesh_summary
+from scgsim.palace.results.convergence import SolverEnd
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class PalaceReturnedReceipt:
     schema_version: int
     handoff_id: str
     status: str
+    ending: str
     exit_code: int
     solver_exit_code: int
     tee_exit_code: int
@@ -61,6 +63,7 @@ class PalaceReturnedReceipt:
     input_hashes: tuple[dict[str, Any], ...]
     output_files: tuple[dict[str, Any], ...]
     log: dict[str, Any] | None
+    convergence_decision: dict[str, Any] | None
     solver_identity: dict[str, Any]
     execution_stage: str | None = None
     solver_invoked: bool | None = None
@@ -87,7 +90,10 @@ class ResolvedRunData:
     """The checked records of one completed Palace run folder: identity, outcome, cost, timing and tables.
 
     ``convergence`` is the declared convergence checked on every pass of the run: the plan, the table of
-    passes and the verdict, whose state is ``not_declared`` when the run folder has no plan.
+    passes and the verdict, whose state is ``not_declared`` when the run folder has no plan.  ``solver_end``
+    says how the solver ended: by itself, or stopped by the convergence runner after a pass.  ``tables`` and
+    the cost come from the run's result: the top level of ``results/palace``, or for a stopped run the folder
+    of its last pass, since such a run has no final top-level solve.
     """
 
     run_dir: Path
@@ -101,6 +107,7 @@ class ResolvedRunData:
     returned_receipt: PalaceReturnedReceipt
     provenance: PalaceProvenance
     convergence: ConvergenceCheck
+    solver_end: SolverEnd
 
     def mesh_summary(self) -> MeshSummary:
         """Detach sealed mesh observations; estimates are not native solver DOF."""

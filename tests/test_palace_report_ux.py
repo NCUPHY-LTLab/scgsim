@@ -243,8 +243,8 @@ def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenari
         output_paths.append("results/palace/iteration07/palace.json")
     output_files = [_file_record(root, relative) for relative in output_paths]
     receipt: dict[str, object] = {
-        "schema": "palace-returned-run-receipt.v1",
-        "schema_version": 1,
+        "schema": "palace-returned-run-receipt.v2",
+        "schema_version": 2,
         "handoff_id": handoff_id,
         "route": "A",
         "problem": "Eigenmode",
@@ -252,10 +252,12 @@ def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenari
         "exit_code": solver_exit_code,
         "solver_exit_code": solver_exit_code,
         "tee_exit_code": 0,
+        "ending": "solver_ended",
         "identity_verified": False,
         "input_hashes": input_hashes,
         "output_files": output_files,
         "log": _file_record(root, "logs/palace-1.log"),
+        "convergence_decision": None,
     }
     (metadata / "palace_returned_run_receipt.json").write_text(
         json.dumps(receipt) + "\n",
@@ -409,7 +411,7 @@ class PalaceReportUxTests(unittest.TestCase):
         self.assertEqual(trust.passes[0].path.name, "iteration07")
         self.assertEqual(trust.passes[0].frequencies_ghz, (5.0,))
         self.assertEqual(trust.identity["handoff_id"], handoff_id)
-        self.assertEqual(trust.identity["receipt"], "failed / exit 137")
+        self.assertEqual(trust.identity["receipt"], "failed, solver_ended / exit 137")
         self.assertEqual(trust.provenance["returned_receipt"], receipt)
         identity_html = trust.identity_html()
         self.assertIn("Run failed", identity_html)

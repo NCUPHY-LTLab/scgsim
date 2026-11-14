@@ -16,8 +16,12 @@ refinements; Palace writes pass k to ``results/palace/iteration<k>`` and the las
 at pass 1.  A criterion holds at a pass when every number it reads holds; the run has converged at pass k
 when every criterion holds at each of the ``minimum_converged_passes`` passes ending at k.
 
-The module imports only the standard library and has no ``__future__`` import, so it can be copied into a
-run folder and run there without SCGSim, as the receipt recorder is.
+The convergence runner (``scgsim.palace.run.convergence_runner``) runs the same check on the solver host
+after each pass and stops the solver once it has converged; it records what it read and how the solver ended
+in a ``ConvergenceDecision``, which the receipt binds and result reading recomputes (``check_disagreement``).
+
+The module imports only the standard library and the run-folder contract, and has no ``__future__`` import,
+so it can be copied into a run folder and run there without SCGSim, as the receipt recorder is.
 """
 
 import csv
@@ -27,6 +31,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
+
+from scgsim.contracts.palace_run_folder import RunEnding
 
 PLAN_SCHEMA = "scgsim.palace.convergence-plan"
 PLAN_SCHEMA_VERSION = 1
@@ -910,3 +916,400 @@ def _holding_since(checks: list[PassCheck], position: int, criterion: int) -> in
     ):
         start -= 1
     return checks[start].number
+
+
+def top_level_state(
+    results: Path,
+) -> tuple[Literal["pass", "linked", "unfinished", "missing", "set_aside"], str | None]:
+    """What the top level of ``results`` holds, and why when it is no pass, without reading the iterations.
+
+    ``pass``: the last solve of a run that ended by itself.  ``linked`` or ``unfinished``: the top level of a
+    solver that was ended during its adaptive loop.  Result reading compares it with how the receipt says the
+    solver ended; ``returned_passes`` gives the same answer, and says besides whether a top level is a copy.
+    """
+    state, reason, _recorded = _top_level(results)
+    return state, reason
+
+
+# ---- The decision record -----------------------------------------------------------------------------------
+#
+# The runner writes ``metadata/palace_convergence_decision.json`` twice: once when the verdict is converged,
+# before it signals the solver, and again when the solver has ended, with the passes the results folder then
+# holds and the solver's exit code.  A run that ends without a stop gets the second record only.
+
+DECISION_SCHEMA = "scgsim.palace.convergence-decision"
+DECISION_SCHEMA_VERSION = 1
+
+_WHERE_DECISION = (
+    "the run folder's convergence decision: the runner writes it during the solve; run the handoff again, "
+    "or fetch the returned run again"
+)
+
+
+def _decision_refused(subject: str, problem: str) -> str:
+    """The sentence ``scgsim.refusal.refused`` words, for the decision record."""
+    return f"{subject}: {problem}. Change it in {_WHERE_DECISION}."
+
+
+StopReason = Literal["converged", "runner_terminated"]
+"""Why the runner signalled the solver: the verdict was converged, or the runner itself was told to end."""
+
+
+@dataclass(frozen=True)
+class SolverStop:
+    """The runner's stop of the solver: why, after which pass, and when it signalled the solver's session.
+
+    ``after_pass`` is the last pass the runner had read when it decided, None when it had read none.
+    ``escalated_utc`` is when it sent SIGKILL because the solver had not ended within its wait after SIGTERM.
+    """
+
+    reason: StopReason
+    after_pass: int | None
+    requested_utc: str
+    escalated_utc: str | None = None
+
+    def to_payload(self) -> dict[str, Any]:
+        """The stop as the decision record holds it."""
+        return {
+            "reason": self.reason,
+            "after_pass": self.after_pass,
+            "signal": "SIGTERM",
+            "requested_utc": self.requested_utc,
+            "escalated_utc": self.escalated_utc,
+        }
+
+
+@dataclass(frozen=True)
+class SolverExit:
+    """How the solver ended as the runner saw it: its exit code as a shell reports it (128 + N for signal N)."""
+
+    exit_code: int
+    ended_utc: str
+
+
+@dataclass(frozen=True)
+class ConvergenceDecision:
+    """What the runner read, what the check decided and how the solver ended, as the decision record holds it.
+
+    ``checked`` is ``recorded_check`` of the check the runner ran last: its passes with their readings, the
+    folders set aside and the verdict.  ``seen_utc`` maps each pass number to when the runner first read it.
+    ``solver`` is None in the record written before the stop.  ``look_interval_s`` and ``stop_wait_s`` are the
+    runner's operating parameters, kept for the reader of the record.
+    """
+
+    plan_sha256: str
+    started_utc: str
+    look_interval_s: float
+    stop_wait_s: float
+    checked: dict[str, Any]
+    seen_utc: dict[str, str]
+    stop: SolverStop | None
+    solver: SolverExit | None
+
+    @property
+    def ending(self) -> RunEnding | None:
+        """How the solver ended (``RunEnding``); None while the record is the one written before the stop."""
+        if self.solver is None:
+            return None
+        if self.stop is None:
+            return "solver_ended"
+        if self.stop.escalated_utc is not None:
+            return "stop_escalated"
+        if self.stop.reason == "runner_terminated":
+            return "runner_terminated"
+        return "stopped_at_convergence"
+
+    @property
+    def result_folder(self) -> str | None:
+        """The folder of the last pass recorded, relative to the run folder: a stopped run's result."""
+        passes = self.checked.get("passes") or []
+        return passes[-1]["folder"] if passes else None
+
+    def to_payload(self) -> dict[str, Any]:
+        """The decision as ``metadata/palace_convergence_decision.json`` holds it."""
+        return {
+            "schema": DECISION_SCHEMA,
+            "schema_version": DECISION_SCHEMA_VERSION,
+            "plan_sha256": self.plan_sha256,
+            "runner": {
+                "look_interval_s": self.look_interval_s,
+                "stop_wait_s": self.stop_wait_s,
+            },
+            "started_utc": self.started_utc,
+            **self.checked,
+            "seen_utc": dict(self.seen_utc),
+            "stop": None if self.stop is None else self.stop.to_payload(),
+            "solver": None
+            if self.solver is None
+            else {
+                "exit_code": self.solver.exit_code,
+                "ended_utc": self.solver.ended_utc,
+            },
+        }
+
+    @classmethod
+    def from_payload(cls, payload: Any) -> "ConvergenceDecision":
+        """Read a decision record; one of another schema, or with a field out of shape, is refused.
+
+        Raises:
+            ValueError: the schema or a field is not what this version writes.
+        """
+        record = _decision_mapping(payload, "the convergence decision")
+        if (
+            record.get("schema") != DECISION_SCHEMA
+            or record.get("schema_version") != DECISION_SCHEMA_VERSION
+        ):
+            raise ValueError(
+                _decision_refused(
+                    "the convergence decision",
+                    f"is schema {record.get('schema')!r} version {record.get('schema_version')!r}; this "
+                    f"SCGSim reads {DECISION_SCHEMA!r} version {DECISION_SCHEMA_VERSION}",
+                )
+            )
+        runner = _decision_mapping(record.get("runner"), "runner")
+        return cls(
+            plan_sha256=_decision_text(record.get("plan_sha256"), "plan_sha256"),
+            started_utc=_decision_text(record.get("started_utc"), "started_utc"),
+            look_interval_s=_decision_seconds(
+                runner.get("look_interval_s"), "look_interval_s"
+            ),
+            stop_wait_s=_decision_seconds(runner.get("stop_wait_s"), "stop_wait_s"),
+            checked={
+                "passes": _decision_list(record.get("passes"), "passes"),
+                "set_aside": _decision_list(record.get("set_aside"), "set_aside"),
+                "verdict": dict(_decision_mapping(record.get("verdict"), "verdict")),
+            },
+            seen_utc={
+                str(key): _decision_text(value, f"seen_utc {key}")
+                for key, value in _decision_mapping(
+                    record.get("seen_utc"), "seen_utc"
+                ).items()
+            },
+            stop=_solver_stop(record.get("stop")),
+            solver=_solver_exit(record.get("solver")),
+        )
+
+
+def _solver_stop(payload: Any) -> SolverStop | None:
+    if payload is None:
+        return None
+    stop = _decision_mapping(payload, "stop")
+    reason = stop.get("reason")
+    if (
+        reason not in ("converged", "runner_terminated")
+        or stop.get("signal") != "SIGTERM"
+    ):
+        raise ValueError(
+            _decision_refused(
+                "stop of the convergence decision",
+                f"has reason {reason!r} and signal {stop.get('signal')!r}; expected 'converged' or "
+                "'runner_terminated', and 'SIGTERM'",
+            )
+        )
+    after = stop.get("after_pass")
+    escalated = stop.get("escalated_utc")
+    return SolverStop(
+        reason=reason,
+        after_pass=None if after is None else _positive_int(after, "stop after_pass"),
+        requested_utc=_decision_text(stop.get("requested_utc"), "stop requested_utc"),
+        escalated_utc=None
+        if escalated is None
+        else _decision_text(escalated, "stop escalated_utc"),
+    )
+
+
+def _solver_exit(payload: Any) -> SolverExit | None:
+    if payload is None:
+        return None
+    solver = _decision_mapping(payload, "solver")
+    code = solver.get("exit_code")
+    if type(code) is not int or code < 0:
+        raise ValueError(
+            _decision_refused(
+                "solver exit_code of the convergence decision",
+                f"must be an integer of at least 0, not {code!r}",
+            )
+        )
+    return SolverExit(code, _decision_text(solver.get("ended_utc"), "solver ended_utc"))
+
+
+def _decision_mapping(value: Any, name: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(
+            _decision_refused(name, f"must be a JSON object, not {value!r}")
+        )
+    return value
+
+
+def _decision_list(value: Any, name: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise ValueError(_decision_refused(name, f"must be a JSON list, not {value!r}"))
+    return value
+
+
+def _decision_text(value: Any, name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(
+            _decision_refused(name, f"must be non-empty text, not {value!r}")
+        )
+    return value
+
+
+def _decision_seconds(value: Any, name: str) -> float:
+    if not _positive_finite(value):
+        raise ValueError(
+            _decision_refused(
+                name, f"must be a positive number of seconds, not {value!r}"
+            )
+        )
+    return float(value)
+
+
+def recorded_check(check: ConvergenceCheck, root: Path) -> dict[str, Any]:
+    """The check as the decision record holds it: every pass with its readings, the folders set aside, the verdict.
+
+    Folders are relative to the run folder ``root``.  Result reading builds the same record from the returned
+    files and compares the two (``check_disagreement``), so this is the one form both sides write.
+    """
+    verdict = check.verdict
+    return {
+        "passes": [
+            {
+                "number": item.number,
+                "folder": item.folder.relative_to(root).as_posix(),
+                "holds": item.holds,
+                "streak": item.streak,
+                "identity_problem": item.identity_problem,
+                "criteria": [
+                    {
+                        "label": criterion.criterion.label,
+                        "holds": criterion.holds,
+                        "values": [
+                            {
+                                "label": value.label,
+                                "value": value.value,
+                                "measured": value.measured,
+                                "holds": value.holds,
+                                "unavailable": value.unavailable,
+                            }
+                            for value in criterion.values
+                        ],
+                    }
+                    for criterion in item.criteria
+                ],
+            }
+            for item in check.passes
+        ],
+        "set_aside": [
+            {
+                "folder": folder.folder.relative_to(root).as_posix(),
+                "reason": folder.reason,
+            }
+            for folder in check.set_aside
+        ],
+        "verdict": {
+            "state": verdict.state,
+            "pass_number": verdict.pass_number,
+            "passes_read": verdict.passes_read,
+            "passes_read_after": verdict.passes_read_after,
+            "last_to_hold": list(verdict.last_to_hold),
+            "last_to_hold_from": verdict.last_to_hold_from,
+            "failing": [item.criterion.label for item in verdict.failing],
+        },
+    }
+
+
+def check_disagreement(
+    recorded: Mapping[str, Any], read: Mapping[str, Any]
+) -> str | None:
+    """Where a recorded check and the check read again from the files first differ; None when they agree.
+
+    Both are ``recorded_check`` forms.  The answer names the part (the verdict, a pass, a criterion of it, a
+    number of that criterion) and both values, e.g. ``pass 3, C diagonal, C[pad][pad], value: recorded
+    1.01e-13, read 1.02e-13``.
+    """
+    return _first_difference(dict(recorded), dict(read), "")
+
+
+def _first_difference(recorded: Any, read: Any, where: str) -> str | None:
+    if isinstance(recorded, dict) and isinstance(read, dict):
+        if set(recorded) != set(read):
+            return f"{where or 'the record'}: recorded fields {sorted(recorded)}, read {sorted(read)}"
+        for key in recorded:
+            found = _first_difference(recorded[key], read[key], _joined(where, key))
+            if found is not None:
+                return found
+        return None
+    if isinstance(recorded, list) and isinstance(read, list):
+        recorded_names = [_item_name(item) for item in recorded]
+        read_names = [_item_name(item) for item in read]
+        if len(recorded) != len(read) or recorded_names != read_names:
+            return (
+                f"{where}: recorded {_names_listed(recorded, recorded_names)}, read "
+                f"{_names_listed(read, read_names)}"
+            )
+        # A list's items name themselves (``pass 3``, a label), so the list's own key is dropped.
+        within = where.rpartition(", ")[0] if where.endswith(_LIST_KEYS) else where
+        for name, left, right in zip(recorded_names, recorded, read, strict=True):
+            found = _first_difference(left, right, _joined(within, name))
+            if found is not None:
+                return found
+        return None
+    if recorded != read or type(recorded) is not type(read):
+        return f"{where}: recorded {recorded!r}, read {read!r}"
+    return None
+
+
+_LIST_KEYS = ("passes", "criteria", "values")
+"""The record keys whose items are named in a disagreement by their own number or label."""
+
+
+def _item_name(item: Any) -> str:
+    """How a list item is named in a disagreement: ``pass 3``, a criterion's or a number's label, a folder."""
+    if isinstance(item, dict):
+        if "number" in item:
+            return f"pass {item['number']}"
+        if "label" in item:
+            return str(item["label"])
+        if "folder" in item:
+            return str(item["folder"])
+    return repr(item)
+
+
+def _names_listed(items: list[Any], names: list[str]) -> str:
+    return "nothing" if not items else ", ".join(names)
+
+
+def _joined(where: str, part: str) -> str:
+    """``pass 3, C diagonal``: the parts of a disagreement's place, outermost first."""
+    return part if not where else f"{where}, {part}"
+
+
+def completed_stop_problem(decision: ConvergenceDecision) -> str | None:
+    """Why ``decision`` does not record a completed stop at convergence; None when it does.
+
+    A completed stop: the runner stopped the solver with SIGTERM because the verdict was converged, the solver
+    ended within the wait, the verdict of the passes recorded is converged at a pass no later than the one the
+    runner stopped after, and the last pass recorded, the run's result, is readable and no earlier.
+    """
+    if decision.ending != "stopped_at_convergence":
+        return (
+            f"the solver's ending is {decision.ending!r}, not 'stopped_at_convergence'"
+        )
+    verdict = decision.checked["verdict"]
+    if verdict.get("state") != "converged":
+        return f"the verdict of the passes recorded is {verdict.get('state')!r}, not 'converged'"
+    after = decision.stop.after_pass if decision.stop is not None else None
+    converged_at = verdict.get("pass_number")
+    if after is None or not isinstance(converged_at, int) or converged_at > after:
+        return (
+            f"the runner stopped the solver after pass {after}, and the passes recorded converged at "
+            f"pass {converged_at}"
+        )
+    last = decision.checked["passes"][-1]
+    if last.get("number", 0) < after or last.get("identity_problem") is not None:
+        return (
+            f"the last pass recorded, pass {last.get('number')}, is not a readable pass from pass {after} "
+            f"on: {last.get('identity_problem') or 'it is earlier'}"
+        )
+    return None

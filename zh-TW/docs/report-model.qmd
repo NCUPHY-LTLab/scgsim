@@ -61,7 +61,14 @@ Palace 報告讀取與外觀介面及已解析執行相同的獨立 `mesh_summar
 
 `inspect_run_trustworthiness()` 對部分回傳的執行資料夾，以其中現有的 pass 顯示同一張表。此時判定計算的是讀到的 pass（例如「3 passes read (passes 1, 4 and 5)」），而不是 Palace 執行過的 pass。無法無歧義讀取的數（表格重複某欄，或兩列有相同索引）標為無法取得並附上原因，且永遠不算成立。存在但未經交接封存的計畫，或交接後被改過的計畫，兩種讀取都會拒絕。
 
-在這個版本中，Palace 會執行到 `amr_max_passes` 的每一個 pass；判定說明執行在哪個 pass 已收斂，之後的 pass 仍保留在表中。準則由呼叫者決定：判定說的是它們是否成立，不是研究問題是否已有答案。
+有宣告時，Palace 會[在收斂時停止](specs/palace-electrostatic-sgb.qmd#convergence-stop)，判定句接著依回執與執行器的決定紀錄說明它如何結束：
+
+> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
+> held at passes 3 to 4, 2 in a row. Last to hold: C diagonal, from pass 3. No
+> pass was read after it. SCGSim stopped Palace after pass 4: 2 of the 6 passes
+> its limit allows were not run.
+
+沒有收斂的執行在上限結束：「Not converged in the 6 passes read (passes 1 to 6). At pass 6: ... Palace ended by itself at its limit of 6 passes.」`Convergence` 卡片顯示「converged at pass 4, stopped after pass 4」。停止的執行在 `results/palace` 頂層沒有最終求解：它的結果、基準與成本都來自最後一個 pass，身分卡 `Final snapshot` 顯示「none: stopped at convergence」，並有一則提示說明使用的是哪個 pass。沒有讓執行完成的停止（`stop_escalated`、`runner_terminated`、`not_recorded`）是失敗的執行，失敗類別為 `convergence_stop`。準則由呼叫者決定：判定說的是它們是否成立，不是研究問題是否已有答案。
 
 ## 如實呈現規則 {#honesty-rule}
 

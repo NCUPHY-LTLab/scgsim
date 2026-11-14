@@ -42,7 +42,12 @@ from scgsim.palace.results.artifacts import (
     as_int,
     read_optional_json,
 )
-from scgsim.palace.results.convergence import check_passes, read_plan
+from scgsim.palace.results.convergence import (
+    check_passes,
+    inspected_end,
+    passes_allowed,
+    read_plan,
+)
 from scgsim.palace.results.index_contract import (
     require_index_map_schema,
     require_manifest_schema,
@@ -244,11 +249,17 @@ def _build_trust_report(
         read_surface_margin_bindings(run.index_map),
         mode_count=configured_mode_count(run.config),
     )
+    solver_end = (
+        resolved.solver_end
+        if resolved is not None
+        else inspected_end(root, run.receipt, passes_allowed(run.config))
+    )
     selection = result_selection(
         root=root,
         problem=run.problem,
         collected=collected,
         receipt_paths=run.receipt_paths,
+        stopped_at_convergence=solver_end.ending == "stopped_at_convergence",
     )
     failure = failure_diagnosis(root, run.receipt, run.receipt_paths)
     palace_payload = latest_palace_json(collected.passes, resolved)
@@ -280,6 +291,7 @@ def _build_trust_report(
             run.config, run.handoff, run.mesh_manifest, run.problem, run.receipt
         ),
         convergence=convergence,
+        solver_end=solver_end,
         theme=checked_theme(theme),
     )
 
@@ -377,14 +389,24 @@ def _completeness(
     collected: CollectedSnapshots,
     selection: PalaceResultSelection,
 ) -> Literal["complete", "partial"]:
-    """Complete only when the receipt says completed and the final tables are the readable selection."""
+    """Complete when the receipt says completed and the run's result is the readable selection.
+
+    The result is the final tables, or for a solver stopped at convergence its last pass, bound by the receipt.
+    """
     receipt_status = receipt.get("status") if receipt is not None else None
-    parent_complete = (
-        receipt_status == "completed"
-        and collected.final_snapshot_status == "readable"
+    final = (
+        collected.final_snapshot_status == "readable"
         and selection.selected_source == "final"
     )
-    return "complete" if parent_complete else "partial"
+    stopped = (
+        selection.reason == "last_pass_of_a_stopped_run"
+        and selection.integrity == "receipt_bound"
+    )
+    return (
+        "complete"
+        if receipt_status == "completed" and (final or stopped)
+        else "partial"
+    )
 
 
 __all__ = [
@@ -441,10 +463,14 @@ def _report_identity(
     receipt_status = None
     if receipt is not None:
         receipt_status = (
-            f"{receipt.get('status', 'unknown')} / exit {receipt.get('exit_code', '?')}"
+            f"{receipt.get('status', 'unknown')}, {receipt.get('ending', 'ending unknown')} "
+            f"/ exit {receipt.get('exit_code', '?')}"
         )
     elif resolved is not None:
-        receipt_status = f"{resolved.returned_receipt.status} / exit {resolved.returned_receipt.exit_code}"
+        receipt_status = (
+            f"{resolved.returned_receipt.status}, {resolved.returned_receipt.ending} "
+            f"/ exit {resolved.returned_receipt.exit_code}"
+        )
     handoff_id = str(handoff.get("handoff_id") or "")
     return {
         "handoff_id": handoff_id,

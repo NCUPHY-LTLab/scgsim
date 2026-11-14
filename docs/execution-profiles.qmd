@@ -60,6 +60,31 @@ The named profiles above describe Palace launch shapes. AEDT prepared-native
 BatchSolve is a separate EPR package workflow, not a new `ExecutionProfile` or
 SCGSim scheduler submission.
 
+## With a convergence declaration {#convergence-runner}
+
+When the simulation [declared its convergence](specs/palace-electrostatic-sgb.qmd#convergence-stop),
+the script starts the solver command of the table above through the
+convergence runner the handoff copies into the run folder:
+
+```bash
+python3 metadata/run_palace_until_converged.py "$(pwd)" -- "$PALACE_EXECUTABLE" "$PALACE_CONFIG" 2>&1 | tee -a "$PALACE_LOG"
+```
+
+On Slurm the command after `--` is the `srun` line, and the scheduler writes
+the log. The runner starts that command in a session of its own and stops it
+with SIGTERM once the declared criteria have converged; `srun` forwards the
+signal to its tasks. The script then exits with the receipt's verdict (0 for a
+completed run), because a solver stopped at convergence exits non-zero although the run completed. It
+also removes an earlier `metadata/palace_convergence_decision.json` before the
+solve. Without a declaration the script is unchanged: it starts the solver
+command itself.
+
+::: {.callout-note title="Not yet run under a real scheduler"}
+The Slurm profiles build the runner's command by the same path as
+`direct-local`, and the tests run the generated batch script with a stand-in
+`srun` and Palace. A stop under a real Slurm allocation has not been run yet.
+:::
+
 ## Handoff lifecycle
 
 ```text

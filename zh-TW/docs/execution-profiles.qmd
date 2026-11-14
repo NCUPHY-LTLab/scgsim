@@ -39,6 +39,20 @@ Palace 指令碼會在求解指令之前，針對確切的交接 `config.json` �
 
 上述命名設定檔描述 Palace 啟動形式。AEDT prepared-native BatchSolve 是另一種 EPR 套件工作流程，不是新的 `ExecutionProfile`，也不會由 SCGSim 提交排程工作。
 
+## 有收斂宣告時 {#convergence-runner}
+
+模擬[宣告了收斂](specs/palace-electrostatic-sgb.qmd#convergence-stop)時，指令碼透過交接複製到執行資料夾的收斂執行器，啟動上表的求解指令：
+
+```bash
+python3 metadata/run_palace_until_converged.py "$(pwd)" -- "$PALACE_EXECUTABLE" "$PALACE_CONFIG" 2>&1 | tee -a "$PALACE_LOG"
+```
+
+在 Slurm 上，`--` 之後的指令是 `srun` 那一行，日誌由排程器寫出。執行器在它自己的 session 中啟動那個指令，並在宣告的準則收斂後以 SIGTERM 停止它；`srun` 會把訊號轉給它的任務。接著指令碼以回執的判定結束（完成的執行為 0），因為在收斂時停止的求解器即使執行已完成，結束碼也不是 0。它也會在求解前移除先前的 `metadata/palace_convergence_decision.json`。沒有宣告時，指令碼不變：由它自己啟動求解指令。
+
+::: {.callout-note title="尚未在真正的排程器下執行"}
+Slurm 設定檔與 `direct-local` 以同一條路徑產生執行器的指令，測試以替身 `srun` 與 Palace 執行產生的批次指令碼。在真正的 Slurm 配置下停止，目前尚未執行過。
+:::
+
 ## 交接生命週期 {#handoff-lifecycle}
 
 ```text
