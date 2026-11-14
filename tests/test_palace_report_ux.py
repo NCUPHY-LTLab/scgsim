@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.palace import (
     PalaceResultSelection,
     PalaceTrustReport,
@@ -133,6 +134,7 @@ def _trust_report(
         durations={},
         cost={},
         provenance={},
+        convergence=ConvergenceCheck.not_declared(),
     )
 
 

@@ -157,7 +157,9 @@ def _config(
         "Model": {
             "Mesh": common.mesh_path.name,
             "L0": MODEL_L0_M,
-            "Refinement": build_refinement(numerical),
+            "Refinement": build_refinement(
+                numerical, convergence_declared=common.convergence_declared
+            ),
         },
         "Solver": {
             "Linear": linear_solver(numerical, problem=common.problem),

@@ -52,8 +52,9 @@ class ConfigInput:
     """What every Palace config is built from: the current mesh, the materials and the problem's shared settings.
 
     ``groups`` are the mesh's physical groups and ``mesh_path`` its ``palace.msh``; ``materials`` the material
-    records of the prepared stack; ``surface_epr_specs`` is None when Surface EPR was not requested.  Building it
-    refuses numerical controls the ``problem`` cannot be written from.
+    records of the prepared stack; ``surface_epr_specs`` is None when Surface EPR was not requested.
+    ``convergence_declared`` says that ``set_convergence`` declared criteria, which then end the run in place
+    of Palace's tolerance.  Building it refuses numerical controls the ``problem`` cannot be written from.
     """
 
     problem: Literal["Eigenmode", "Electrostatic"]
@@ -62,10 +63,13 @@ class ConfigInput:
     materials: Mapping[str, Mapping[str, Any]]
     surface_epr_specs: SurfaceEprSpecs | None
     numerical: NumericalControls
+    convergence_declared: bool = False
 
     def __post_init__(self) -> None:
         """Refuse AMR settings left open (``NumericalControls.check_ready_for``)."""
-        self.numerical.check_ready_for(self.problem)
+        self.numerical.check_ready_for(
+            self.problem, convergence_declared=self.convergence_declared
+        )
 
 
 @dataclass(frozen=True)

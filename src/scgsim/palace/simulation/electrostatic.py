@@ -6,6 +6,7 @@ the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what the 
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Literal
@@ -23,8 +24,15 @@ from ..config.config_records import (
     ElectrostaticSettings,
     TerminalBinding,
 )
+from ..config.convergence_plan import PlanContext
 from ..config.files import MetadataFile
-from ..config.numerical import NumericalControls, ProblemDefaults
+from ..config.index import IndexEntry
+from ..config.numerical import (
+    PROBLEM_DEFAULT,
+    NumericalControls,
+    ProblemDefault,
+    ProblemDefaults,
+)
 from ..source.transforms import validate_nonempty_string
 from .core import PalaceSimulation, index_map
 
@@ -126,7 +134,7 @@ class ElectrostaticSim(PalaceSimulation):
         amr_max_passes: int = 0,
         amr_nonconformal: bool = False,
         amr_nc_levels: int | None = None,
-        amr_tolerance: float = 1e-2,
+        amr_tolerance: float | None | ProblemDefault = PROBLEM_DEFAULT,
         amr_update_fraction: float | None = None,
         save_adapt_iterations: bool | None = None,
         save_adapt_mesh: bool | None = None,
@@ -145,7 +153,8 @@ class ElectrostaticSim(PalaceSimulation):
 
         How it differs from ``EigenmodeSim.set_numerical``: here an omitted ``amr_max_passes``,
         ``amr_nonconformal``, ``amr_tolerance`` or ``amr_update_fraction`` takes its default (0, False, 0.01,
-        None); there each keeps its current value.
+        None); there each keeps its current value.  With ``set_convergence`` the declared criteria end the
+        run: leave ``amr_tolerance`` out, and its default is set aside.
 
         Raises:
             ValueError: a control is out of its range or choices.
@@ -194,7 +203,9 @@ class ElectrostaticSim(PalaceSimulation):
             ground_net_ids=self.ground_net_ids,
             electrostatic=self._electrostatic_settings(),
         )
-        return self._finish_config(result.config, self._metadata(result))
+        return self._finish_config(
+            result.config, self._metadata(result), result.index_entries
+        )
 
     def _electrostatic_settings(self) -> ElectrostaticSettings:
         """The saved fields and policies as the config reads them, checked again in case an attribute was assigned."""
@@ -224,6 +235,10 @@ class ElectrostaticSim(PalaceSimulation):
         )
 
     # ---- The core's questions ------------------------------------------------------------------------
+
+    def _plan_context(self, entries: Sequence[IndexEntry]) -> PlanContext:
+        """The terminals of the config, for a convergence criterion to be checked against."""
+        return PlanContext(problem=self.problem, entries=entries)
 
     def _lumped_ports(self) -> None:
         """None: an Electrostatic model cuts no lumped ports, and the plan's sheets stay as authored."""

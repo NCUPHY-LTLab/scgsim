@@ -9,6 +9,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 
+def pass_number(pass_index: int) -> int:
+    """The pass a snapshot's ``pass_index`` is, as Palace counts its solves.
+
+    Pass 1 is the solve on the input mesh, written to ``iteration1``; ``pass_index`` counts the refinements
+    before the pass, so it is one less.
+    """
+    return pass_index + 1
+
+
 @dataclass(frozen=True)
 class SurfaceEprRecord:
     """One solver-native Surface-EPR row over a whole surface, bound to the sidecar rows it integrates.
@@ -84,7 +93,11 @@ class SurfaceMarginEprSeriesSnapshot:
 
 @dataclass(frozen=True)
 class AmrPassSnapshot:
-    """One solver snapshot from an AMR pass or the final output folder ``results/palace``."""
+    """One solver snapshot from an AMR pass or the final output folder ``results/palace``.
+
+    ``pass_index`` counts the refinements before the pass (0 for the solve on the input mesh);
+    ``pass_number`` is the pass as Palace counts its solves, from 1.
+    """
 
     pass_index: int
     source: str
@@ -102,7 +115,11 @@ class AmrPassSnapshot:
     peak_node_memory_mb: float | None
     surface_margin_epr: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None = None
     native_iteration: int | None = None
-    terminal_ids: tuple[str, ...] | None = None
+
+    @property
+    def pass_number(self) -> int:
+        """The pass as Palace counts its solves (``pass_number``)."""
+        return pass_number(self.pass_index)
 
 
 @dataclass(frozen=True)

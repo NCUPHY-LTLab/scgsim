@@ -42,6 +42,7 @@ from scgsim.palace.results.artifacts import (
     as_int,
     read_optional_json,
 )
+from scgsim.palace.results.convergence import read_convergence
 from scgsim.palace.results.index_contract import (
     require_index_map_schema,
     require_manifest_schema,
@@ -256,6 +257,12 @@ def _build_trust_report(
     durations = recorded_durations(palace_payload)
     cost = cost_cards(palace_payload, resolved)
     refinement = configured_refinement(run.config)
+    # A resolved run was checked on the same passes; a partial one is checked on the passes it holds.
+    convergence = (
+        resolved.convergence
+        if resolved is not None
+        else read_convergence(root, run.handoff, run.problem, collected.passes)
+    )
     return PalaceTrustReport(
         run_dir=root,
         problem=run.problem,
@@ -274,6 +281,7 @@ def _build_trust_report(
         provenance=_report_provenance(
             run.config, run.handoff, run.mesh_manifest, run.problem, run.receipt
         ),
+        convergence=convergence,
         theme=checked_theme(theme),
     )
 

@@ -15,6 +15,20 @@ binds nothing) with an error that says which call fixes it.  A setting with a do
 and the numerical controls, keeps that default until the caller sets it.
 """
 
+from scgsim.contracts.palace_convergence import (
+    ConvergenceCheck,
+    ConvergencePlan,
+    ConvergenceVerdict,
+)
+
+from .config.convergence import (
+    Capacitance,
+    Criterion,
+    CriterionGroup,
+    ErrorIndicator,
+    ModeFrequency,
+    SurfaceEpr,
+)
 from .reports.epr import show_epr
 from .reports.reports import inspect_run_trustworthiness
 from .reports.resolved_result import ResolvedPalaceResult, resolve_palace_result
@@ -41,8 +55,16 @@ from .simulation.eigenmode import EigenmodeSim
 from .simulation.electrostatic import ElectrostaticSim
 
 __all__ = [
+    "Capacitance",
+    "ConvergenceCheck",
+    "ConvergencePlan",
+    "ConvergenceVerdict",
+    "Criterion",
+    "CriterionGroup",
     "EigenmodeSim",
     "ElectrostaticSim",
+    "ErrorIndicator",
+    "ModeFrequency",
     "PalaceCost",
     "PalaceEprResult",
     "PalaceFailureDiagnosis",
@@ -59,6 +81,7 @@ __all__ = [
     "SimulationDrcError",
     "SimulationDrcReport",
     "StageResult",
+    "SurfaceEpr",
     "SurfaceMarginEprRecord",
     "SurfaceMarginEprSeriesSnapshot",
     "epr_result",

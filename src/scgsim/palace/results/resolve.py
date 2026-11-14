@@ -31,6 +31,7 @@ from scgsim.palace.results.artifacts import (
     to_float,
     validate_contract_schema,
 )
+from scgsim.palace.results.convergence import read_convergence
 from scgsim.palace.results.index_contract import (
     RouteConsistency,
     require_index_map_schema,
@@ -38,6 +39,7 @@ from scgsim.palace.results.index_contract import (
     validate_config_index_correspondence,
     validate_config_problem,
 )
+from scgsim.palace.results.inspection_records import AmrPassSnapshot
 from scgsim.palace.results.provenance_contract import (
     validate_archive_manifest,
     validate_archive_record,
@@ -59,7 +61,13 @@ from scgsim.palace.results.resolved_records import (
     ParsedTable,
     ResolvedRunData,
 )
+from scgsim.palace.results.snapshots import collect_amr_passes
+from scgsim.palace.results.surface_readers import (
+    read_surface_bindings,
+    read_surface_margin_bindings,
+)
 from scgsim.palace.results.tables import (
+    configured_mode_count,
     count_index_entries,
     output_families,
     read_result_table,
@@ -148,6 +156,9 @@ def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
     returned_receipt = build_returned_receipt(records.returned_receipt)
     cost = _build_cost(records.palace_json)
     performance = _build_performance(records.palace_json)
+    convergence = read_convergence(
+        root, handoff, problem, _passes(root, problem, records)
+    )
     return ResolvedRunData(
         run_dir=root,
         problem=problem,
@@ -159,7 +170,22 @@ def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
         tables=tables,
         returned_receipt=returned_receipt,
         provenance=records,
+        convergence=convergence,
     )
+
+
+def _passes(
+    root: Path, problem: str, records: PalaceProvenance
+) -> tuple[AmrPassSnapshot, ...]:
+    """The passes of a completed run in order, as the trust report reads them, for the convergence check."""
+    return collect_amr_passes(
+        root,
+        problem,
+        read_surface_bindings(records.index_map),
+        read_surface_margin_bindings(records.index_map),
+        failed_attempt=False,
+        mode_count=configured_mode_count(records.config),
+    ).passes
 
 
 def _read_records(root: Path) -> PalaceProvenance:

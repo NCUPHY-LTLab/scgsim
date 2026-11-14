@@ -25,6 +25,7 @@ from scgsim.palace.results.inspection_records import (
     SurfaceEprSeriesSnapshot,
     SurfaceMarginEprRecord,
     SurfaceMarginEprSeriesSnapshot,
+    pass_number,
 )
 
 SURFACE_TYPES = ("MA", "MS", "SA")
@@ -50,7 +51,7 @@ def surface_total_figure(
         title=f"{series_label(snapshots[-1])}: MA/MS/SA participation vs AMR pass",
         xlabel="AMR pass",
         ylabel="total participation",
-        xs=[snapshot.pass_index for snapshot in snapshots],
+        xs=[pass_number(snapshot.pass_index) for snapshot in snapshots],
         traces=[
             Trace(
                 interface_type,
@@ -183,7 +184,7 @@ def surface_percentage_figure(
         title=f"{series_label(snapshots[-1])}: normalized MA/MS/SA participation",
         xlabel="AMR pass",
         ylabel="share of MA+MS+SA (%)",
-        xs=[snapshot.pass_index for snapshot in snapshots],
+        xs=[pass_number(snapshot.pass_index) for snapshot in snapshots],
         traces=[
             Trace(
                 interface_type,

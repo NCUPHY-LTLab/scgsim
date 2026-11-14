@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.palace.mesh.summary import MeshSummary, recorded_mesh_summary
 
 
@@ -83,7 +84,11 @@ class PalaceProvenance:
 
 @dataclass(frozen=True)
 class ResolvedRunData:
-    """The checked records of one completed Palace run folder: identity, outcome, cost, timing and tables."""
+    """The checked records of one completed Palace run folder: identity, outcome, cost, timing and tables.
+
+    ``convergence`` is the declared convergence checked on every pass of the run: the plan, the table of
+    passes and the verdict, whose state is ``not_declared`` when the run folder has no plan.
+    """
 
     run_dir: Path
     problem: str
@@ -95,6 +100,7 @@ class ResolvedRunData:
     tables: dict[str, ParsedTable]
     returned_receipt: PalaceReturnedReceipt
     provenance: PalaceProvenance
+    convergence: ConvergenceCheck
 
     def mesh_summary(self) -> MeshSummary:
         """Detach sealed mesh observations; estimates are not native solver DOF."""

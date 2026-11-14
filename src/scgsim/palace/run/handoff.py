@@ -29,6 +29,7 @@ from scgsim.contracts.palace_run_folder import (
     RUN_METADATA,
     RUN_RECORD_SCHEMA_VERSION,
     RUNTIME_COMPATIBILITY,
+    SEALED_WHEN_PRESENT,
     SLURM_SCRIPT,
     HandoffIdentity,
     read_json,
@@ -236,9 +237,20 @@ def _prepare_artifacts(
 
     route = _route(mesh_result)
     thin_film = _route_a_thin_film(mesh_result, route)
+    sealed_when_present = [
+        paths.run_dir / relative
+        for relative in SEALED_WHEN_PRESENT
+        if (paths.run_dir / relative).is_file()
+    ]
     hashes = _hashes(
         paths,
-        (paths.mesh, paths.config, mesh_result.mesh_manifest_path, paths.index_map),
+        (
+            paths.mesh,
+            paths.config,
+            mesh_result.mesh_manifest_path,
+            paths.index_map,
+            *sealed_when_present,
+        ),
     )
     source_revisions = _identity()
     palace_identity = {
