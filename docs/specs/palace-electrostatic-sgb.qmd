@@ -449,7 +449,7 @@ exit code:
 | `ending` | When | Receipt |
 |---|---|---|
 | `solver_ended` | Palace ended without a stop from SCGSim | `completed` when every exit code is 0, `failed` otherwise |
-| `stopped_at_convergence` | the runner stopped it after a pass at which the verdict is converged, and it ended within the wait | `completed`, with the exit code the stop gave: 143 for Palace's `palace` wrapper script, which the signal ends, and 1 for `mpirun` started directly |
+| `stopped_at_convergence` | the runner stopped it after a pass at which the verdict is converged, and it ended within the wait | `completed`, with the exit code the stop gave: 143 for Palace's `palace` wrapper script, which the signal ends, 1 for `mpirun` started directly, and 137 for `srun`, which ends its step |
 | `stop_escalated` | it did not end on SIGTERM and was killed | `failed` |
 | `runner_terminated` | the runner itself was told to end and ended Palace for that reason. Told to end while Palace is already ending after the stop at convergence, the stop stands | `failed` |
 | `not_recorded` | the runner left no complete decision record | `failed` |

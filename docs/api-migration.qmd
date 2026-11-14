@@ -370,6 +370,45 @@ old-name aliases.
 | `surface-mask-Q.csv` and `surface-mask-energy.csv` | Margin rows are read from `surface-Q.csv` |
 :::
 
+### Convergence and reports {#palace-convergence-migration}
+
+`3.0.0rc2` adds the convergence declaration and changes what the reports show.
+
+**Run folders written by `3.0.0rc1` or earlier are not read.** The returned
+receipt is now version 2 and states how the solver ended. Result reading refuses
+a version 1 receipt and names the commit that wrote it as the way to read that
+folder; to read a study with this release, prepare and run it again.
+
+New, and optional:
+
+- `sim.set_convergence(...)` declares when a run has converged, with criteria
+  on the capacitance, the mode frequencies, Surface EPR and Palace's error
+  indicator ([declaration](specs/palace-electrostatic-sgb.qmd#convergence-declaration)).
+  A change is a percentage of the value:
+  `Capacitance.diagonal().within(percent=0.5)`. Palace is
+  [stopped](specs/palace-electrostatic-sgb.qmd#convergence-stop) after the pass
+  at which the criteria have converged, so the passes after it are not run. With
+  a declaration `amr_tolerance` is set aside, and stating one is refused.
+- `ResolvedPalaceResult.convergence` holds the check of every pass and the
+  verdict, and `ResolvedPalaceResult.solver_end` how Palace ended.
+
+Changed for every run, declared or not:
+
+::: {.askr-table-compact}
+| Before | Now |
+|---|---|
+| Run Identity showed every recorded field | Problem, Route, Profile, AMR passes recorded and MPI × OpenMP; the rest with `show_details=True` |
+| `|Δ …| vs AMR pass` figures | Removed. With a declaration each quantity is followed by its declared change in percent |
+| One surface figure with MA, MS and SA | One figure per interface kind, a line for the whole surfaces and one per inset |
+| `show_physics_quantities()` opened with the surface ranking | It opens with the capacitance matrix, or each mode's frequency and Q |
+| `show_all_results()`: trust, benchmark, physics | Trust, physics, benchmark |
+| `show_simulation_benchmark()` took no `theme` | Every view takes `theme="light"` or `"dark"` |
+| A capacitance figure named `C[1][1]` | Named by its terminals, `C[signal][signal]` |
+:::
+
+The layout of each view is in the
+[report model](report-model.qmd#declared-convergence).
+
 ## Palace package symbols
 
 `scgsim.palace` declares 26 package-facade names. The inventory groups them by

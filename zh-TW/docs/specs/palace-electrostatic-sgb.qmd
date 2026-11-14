@@ -226,7 +226,7 @@ Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化�
 | `ending` | 情況 | 回執 |
 |---|---|---|
 | `solver_ended` | Palace 結束時 SCGSim 沒有停止它 | 所有結束碼為 0 時 `completed`，否則 `failed` |
-| `stopped_at_convergence` | 執行器在判定已收斂的 pass 之後停止它，且它在等待時間內結束 | `completed`，結束碼是停止造成的那一個：Palace 的 `palace` 包裝指令碼被訊號結束時為 143，直接啟動 `mpirun` 時為 1 |
+| `stopped_at_convergence` | 執行器在判定已收斂的 pass 之後停止它，且它在等待時間內結束 | `completed`，結束碼是停止造成的那一個：Palace 的 `palace` 包裝指令碼被訊號結束時為 143，直接啟動 `mpirun` 時為 1，由 `srun` 啟動時為 137（`srun` 會結束它的 step） |
 | `stop_escalated` | 它沒有因 SIGTERM 結束，被強制終止 | `failed` |
 | `runner_terminated` | 執行器自己被要求結束，並因此結束了 Palace。若 Palace 已在收斂停止後的收尾中才被要求結束，停止照樣成立 | `failed` |
 | `not_recorded` | 執行器沒有留下完整的決定紀錄 | `failed` |
