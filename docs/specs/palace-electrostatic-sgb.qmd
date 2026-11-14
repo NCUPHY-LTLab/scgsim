@@ -468,7 +468,9 @@ the run, naming what disagrees, when:
   exit codes of the solver;
 - the top level holds links or a solve under way, and the receipt says Palace
   ended by itself;
-- a decision record is present without a plan, or a plan has none.
+- a decision record is present without a plan, or a plan has none;
+- a table of the result, at the top level or in `iteration<k>/`, is not among
+  the outputs the receipt records.
 
 `ResolvedPalaceResult.convergence` and the
 [trust report](../report-model.qmd#declared-convergence) say at which pass the

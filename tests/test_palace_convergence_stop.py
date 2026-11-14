@@ -353,6 +353,29 @@ def test_a_stop_after_the_last_solve_is_complete_gives_that_solve_as_the_result(
     assert result.show_run_trustworthiness().completeness == "complete"
 
 
+def test_a_top_level_result_table_is_read_only_when_the_receipt_lists_it(tmp_path):
+    """A stop after the last solve gives the top level as the result: its tables are bound by the receipt too.
+
+    ``domain-E.csv`` is a table no declared criterion reads, so the convergence check does not see it change.
+    """
+    run = prepared_run(tmp_path, values=SETTLES_AT_5, finish_s=LONG_S)
+    assert run_script(run) == 0, run.log
+    table = f"{OUTPUT_DIR}/domain-E.csv"
+
+    def no_longer_listed(receipt):
+        receipt["output_files"] = [
+            entry for entry in receipt["output_files"] if entry["path"] != table
+        ]
+
+    rewrite_json(run.root / RETURNED_RECEIPT, no_longer_listed)
+    *before, row = (run.root / table).read_text().splitlines()
+    cells = row.split(",")
+    cells[1] = f"{2 * float(cells[1]):.12e}"
+    (run.root / table).write_text("\n".join([*before, ",".join(cells)]) + "\n")
+    with pytest.raises(ValueError, match="domain-E.csv: is not among the outputs"):
+        resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+
+
 def test_a_run_that_does_not_converge_ends_at_its_limit(tmp_path):
     """No stop: Palace runs every pass its limit allows, the receipt is completed, and the report says so."""
     run = prepared_run(tmp_path, values=NEVER_SETTLES)

@@ -238,7 +238,8 @@ Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化�
 - pass 或判定與決定紀錄不同，或決定紀錄不是回執所綁定的那一份；
 - 決定紀錄與回執記載的結束方式不同，或求解器的結束碼不同；
 - 頂層是連結或正在進行的求解，回執卻說 Palace 自行結束；
-- 沒有計畫卻有決定紀錄，或有計畫卻沒有決定紀錄。
+- 沒有計畫卻有決定紀錄，或有計畫卻沒有決定紀錄；
+- 結果的某張表格（在頂層或在 `iteration<k>/`）不在回執記載的輸出之中。
 
 `ResolvedPalaceResult.convergence` 與[可信度報告](../report-model.qmd#declared-convergence)會說明執行在哪個 pass 收斂、Palace 在哪裡停止，或在 pass 上限時哪條準則仍不成立、差多少。`ResolvedPalaceResult.solver_end`（一個 `SolverEnd`）保存回執的 `ending`、執行器在哪個 pass 之後停止 Palace，以及上限允許的 pass 數（`amr_max_passes + 1`）。
 

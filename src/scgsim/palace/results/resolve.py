@@ -292,13 +292,14 @@ def _discover_results(  # noqa: PLR0913 -- the tables, where they are, and what 
     index_counts: dict[str, int],
     config: dict[str, Any],
     *,
+    receipt: dict[str, Any],
     result_folder: str = OUTPUT_DIR,
-    receipt: dict[str, Any] | None = None,
 ) -> dict[str, ParsedTable]:
     """Read every required native table of the run's result and validate its sealed config/index correspondence.
 
-    The result is the top level of ``results/palace``, or ``result_folder``, whose tables are read only
-    when ``receipt`` lists them.
+    The result is the top level of ``results/palace`` or ``result_folder``.  Wherever it is, a table is read
+    only when ``receipt`` lists it: the receipt check compared a listed file's hash, so its bytes are the
+    ones returned.
     """
     discovered: dict[str, ParsedTable] = {}
     for family in output_families(problem, index_counts):
@@ -310,14 +311,13 @@ def _discover_results(  # noqa: PLR0913 -- the tables, where they are, and what 
                     f"is missing: {path}"
                 )
             )
-        if result_folder != OUTPUT_DIR:
-            _require_receipt_bound(receipt or {}, relative)
+        _require_receipt_bound(receipt, relative)
         discovered[family] = read_result_table(path, problem, index_counts, config)
     return discovered
 
 
 def _require_receipt_bound(receipt: dict[str, Any], relative: str) -> None:
-    """A result file outside the top level is read only when the receipt lists it (its hash was checked)."""
+    """A result file is read only when the receipt lists it (its hash was checked)."""
     listed = {
         entry.get("path")
         for entry in receipt.get("output_files", [])
