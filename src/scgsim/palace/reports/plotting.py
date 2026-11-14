@@ -446,7 +446,7 @@ def mesh_summary_html(
         "<p>The ND estimate uses the configured FEM order and tetrahedral primary-corner topology before boundary constraints; it is not actual solver DOF. Electrostatic H1 estimation is unavailable. Quality is measured on the linear mesh, before any elevation to the geometry order.</p>"
         "<details><summary>Physical regions and mesh discretization</summary>"
         f"<p>Gmsh {html.escape(str(meshing['gmsh_version']))}. {html.escape(types)}.</p>"
-        f"<p>Recipe {html.escape(recipe['name'])} v{html.escape(str(recipe['version']))}: {html.escape(parameters or 'no parameters')}.</p>"
+        f"<p>Recipe {html.escape(recipe['name'])} ({html.escape(str(recipe['version']))}): {html.escape(parameters or 'no parameters')}.</p>"
         "<p>Edge statistics count unique PRIMARY CORNER CHORDS within each region, not curved arc lengths. Point regions have no edges.</p>"
         f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
         "<p>Full controls, repair policy, the quality report hash and the provenance remain available in mesh_summary() and report data.</p>"
@@ -461,7 +461,7 @@ def _mesh_cards(summary: MeshSummary, meshing: Mapping[str, Any]) -> list[Card]:
     linear = meshing["linear_mesh"]
     recipe, budgets = meshing["recipe"], meshing["budgets"]
     return [
-        ("Sizing recipe", f"{recipe['name']} v{recipe['version']}"),
+        ("Sizing recipe", f"{recipe['name']} ({recipe['version']})"),
         (
             "Geometry / FEM order",
             f"{mesher['geometry_order']} / {fmt(summary['finite_element_order'])}",
