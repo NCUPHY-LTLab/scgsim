@@ -188,6 +188,33 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 | `surface-mask-Q.csv` 與 `surface-mask-energy.csv` | 邊距列從 `surface-Q.csv` 讀取 |
 :::
 
+### 收斂與報告 {#palace-convergence-migration}
+
+`3.0.0rc2` 新增收斂宣告，並改變報告顯示的內容。
+
+**`3.0.0rc1` 或更早版本寫出的執行資料夾不再讀取。** 回傳的回執現在是第 2 版，並記載求解器如何結束。讀取結果時會拒絕第 1 版的回執，並指出要讀那個資料夾應使用寫出它的版本；要用這個版本讀一項研究，請重新準備並執行。
+
+新增且可選用：
+
+- `sim.set_convergence(...)` 宣告執行何時算收斂，準則可針對電容、模態頻率、Surface EPR 與 Palace 的誤差指標（[宣告](specs/palace-electrostatic-sgb.qmd#convergence-declaration)）。變化以該值的百分比表示：`Capacitance.diagonal().within(percent=0.5)`。準則收斂的那個 pass 之後，Palace 會被[停止](specs/palace-electrostatic-sgb.qmd#convergence-stop)，其後的 pass 不再執行。有宣告時 `amr_tolerance` 不使用，明確給定會被拒絕。
+- `ResolvedPalaceResult.convergence` 保存每個 pass 的檢查與判定，`ResolvedPalaceResult.solver_end` 保存 Palace 如何結束。
+
+不論有沒有宣告，每次執行都會遇到的改變：
+
+::: {.askr-table-compact}
+| 之前 | 現在 |
+|---|---|
+| Run Identity 顯示所有紀錄欄位 | Problem、Route、Profile、AMR passes recorded 與 MPI × OpenMP；其餘使用 `show_details=True` |
+| `|Δ …| vs AMR pass` 圖 | 已移除。有宣告時，每個量後面接著它宣告的變化（百分比） |
+| 一張圖畫 MA、MS、SA | 每種介面一張圖，一條線是整個表面，每個 inset 各一條線 |
+| `show_physics_quantities()` 從表面排名開始 | 從電容矩陣，或各模態的頻率與 Q 開始 |
+| `show_all_results()`：可信度、基準、物理量 | 可信度、物理量、基準 |
+| `show_simulation_benchmark()` 沒有 `theme` | 每份報告都接受 `theme="light"` 或 `"dark"` |
+| 電容圖命名為 `C[1][1]` | 以端點命名，`C[signal][signal]` |
+:::
+
+各份報告的版面見[報告模型](report-model.qmd#declared-convergence)。
+
 ## Palace 套件符號 {#palace-package-symbols}
 
 `scgsim.palace` 宣告 26 個套件門面名稱。下列清單依 v2 責任模組分組。
