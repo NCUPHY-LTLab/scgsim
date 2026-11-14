@@ -208,7 +208,7 @@ sim.set_convergence(
 
 ### 收斂時停止 {#convergence-stop}
 
-有宣告時，宣告的準則收斂之後不再執行任何 pass。執行指令碼透過 `prepare_handoff()` 複製到執行資料夾的收斂執行器 `metadata/run_palace_until_converged.py` 啟動 Palace；它只需要 Python 標準函式庫（[執行設定檔](../execution-profiles.qmd#convergence-runner)）。執行器：
+有宣告時，宣告的準則一旦收斂，Palace 就會被停止：在準則成立的那個 pass 完成後一到兩秒，所以該 pass 之後的求解不會執行。執行指令碼透過 `prepare_handoff()` 複製到執行資料夾的收斂執行器 `metadata/run_palace_until_converged.py` 啟動 Palace；它只需要 Python 標準函式庫（[執行設定檔](../execution-profiles.qmd#convergence-runner)）。執行器：
 
 1. 在它自己的 session 中啟動指令碼原本會執行的求解指令；Palace 的輸出照舊進入日誌；
 2. 每秒查看一次 `results/palace`。某個 pass 的 `iteration<k>/` 資料夾在兩次查看之間沒有變化時，才算這個 pass；每多一個 pass，執行器就執行與讀取結果時相同的檢查；
@@ -217,7 +217,9 @@ sim.set_convergence(
 
 執行器不會留下無人看管的求解器。被要求結束時（SIGTERM、SIGINT 或 SIGHUP），它先結束求解器並記下原因。來不及這麼做就被結束時（執行器本身或指令碼的整個行程群組收到 SIGKILL），求解器交給它的守護行程：執行器與求解器一同啟動、位於自己 session 中的行程，一旦執行器不在，就以同樣的方式結束求解器的 session。
 
-Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化網格，因此停止發生在這段細化期間，或下一次求解開始時；已完成 pass 的檔案都不會改變。停止的要求在資料夾出現後一到兩秒送出，Palace 在要求之後約一秒內結束，之後的求解都不會執行。回執要到這時才寫出，所以不會有求解器的行程在回執之後寫入檔案。
+Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化網格，因此停止發生在這段細化期間，或下一次求解開始時；已完成 pass 的檔案都不會改變。停止的要求在資料夾出現後一到兩秒送出（執行器每秒查看一次，第二次查看時才計入該 pass），Palace 在要求之後約一秒內結束。回執要到這時才寫出，所以不會有求解器的行程在回執之後寫入檔案。
+
+耗時短於這一到兩秒的 pass 仍然會執行。執行器會把它和前一個 pass 一起計入：判定指出執行在哪個 pass 收斂、其後又讀到幾個 pass，Palace 在最後一個之後被停止，結果就是最後那個 pass。所有 pass 都這麼短的執行，在執行器查看之前就已結束；它照 Palace 結束的樣子算完成。停止省下的是每一個比這更長的 pass，時間都花在那裡：每個 pass 的元素數是前一個的二到三倍。
 
 回執記載求解器如何結束（`ending`），並保留求解器自己的結束碼：
 
@@ -226,7 +228,7 @@ Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化�
 | `solver_ended` | Palace 結束時 SCGSim 沒有停止它 | 所有結束碼為 0 時 `completed`，否則 `failed` |
 | `stopped_at_convergence` | 執行器在判定已收斂的 pass 之後停止它，且它在等待時間內結束 | `completed`，結束碼是停止造成的那一個：Palace 的 `palace` 包裝指令碼被訊號結束時為 143，直接啟動 `mpirun` 時為 1 |
 | `stop_escalated` | 它沒有因 SIGTERM 結束，被強制終止 | `failed` |
-| `runner_terminated` | 執行器自己被要求結束，先結束了 Palace | `failed` |
+| `runner_terminated` | 執行器自己被要求結束，並因此結束了 Palace。若 Palace 已在收斂停止後的收尾中才被要求結束，停止照樣成立 | `failed` |
 | `not_recorded` | 執行器沒有留下完整的決定紀錄 | `failed` |
 
 在收斂時停止的執行，其結果是最後一個 pass：讀取結果時從 `iteration<k>/` 取得表格與成本，因為頂層放的是指向它的連結，或正在進行的求解。讀取結果時會從回傳的檔案重新計算檢查；下列情況會拒絕這個執行，並說出不一致之處：

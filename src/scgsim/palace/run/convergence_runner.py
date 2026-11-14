@@ -29,9 +29,14 @@ all that ends a launcher behind a wrapper script.
 It signals only the process group of the session it started, and only while that session's first process has
 not been reaped, so the signal cannot reach a process that took over its number.  Told to end itself (SIGTERM,
 SIGINT or SIGHUP: the script, the scheduler or a person ending the job), it ends the solver the same way first
-and records why.  Ended without that chance (SIGKILL, to it or to the script's whole process group), it leaves
-the solver to its guard: a process in a session of its own that sends SIGTERM to the solver's session as soon
-as the runner is gone.
+and records why; told so while the solver is already ending after the stop at convergence, the stop stands,
+since that is what ended the solver.  Ended without that chance (SIGKILL, to it or to the script's whole process group), it leaves
+the solver to its guard: a process in a session of its own, started before the solver, that sends SIGTERM to
+the solver's session as soon as the runner is gone.
+
+The stop comes one to two seconds after a pass is complete (``LOOK_INTERVAL_S``, two looks), so a pass shorter
+than that still runs and is counted with the pass before it; a run that ends before the first look is
+complete as the solver ended it.
 
 Like the receipt recorder, the copy carries the contracts' text in place of their imports
 (``standalone_copy``), so it runs with only a Python interpreter.
@@ -78,6 +83,8 @@ STOP_WAIT_S = 60.0
 ``mpirun`` ended in 0.4 s; the margin is for a launcher such as ``srun`` that forwards the signal to its tasks."""
 KILL_WAIT_S = 10.0
 """How long the runner waits for the solver to end after SIGKILL before it reports the solver as it is."""
+_STOOD_DOWN = b"done\n"
+"""What the runner writes to its guard once it has ended the solver's session itself."""
 _POLL_S = 0.1
 """How often the runner checks whether the solver has ended or the runner was told to end."""
 
@@ -154,24 +161,38 @@ class _Running:
 
 
 def _start(command: list[str]) -> _Running:
-    """Start the solver in a session of its own, with the runner's output streams, and then its guard."""
+    """Start the guard, then the solver in a session of its own, with the runner's output streams.
+
+    The guard comes first, so that no solver runs without one: when the guard cannot be started, no solver
+    is.  The runner then tells the guard which session to end.
+    """
+    guard = _start_guard()
     process = subprocess.Popen(command, start_new_session=True)
-    return _Running(process, _start_guard(process.pid))
+    os.write(guard, f"{process.pid}\n".encode())
+    return _Running(process, guard)
 
 
-def _start_guard(session: int) -> int:
-    """Start the guard of the solver's session; return the pipe end the runner holds for it.
+def _start_guard() -> int:
+    """Start the guard; return the pipe end through which the runner tells it the session and stands it down.
 
     The runner can be ended in a way it cannot answer, and the solver, in a session of its own, would then run
     on unwatched to its pass limit: a launcher's wrapper script does not pass a signal on to the launcher it
     started.  The guard is a copy of the runner in a session of its own, so a signal to the script's process
     group does not reach it.  It waits on a pipe only the runner holds, which closes when the runner ends,
-    however it ends.  If the runner did not stand the guard down first, the guard sends SIGTERM to the
-    solver's process group, once: the runner is gone at that moment and the solver still runs, so the group
-    is the solver's.  It sends nothing later, when the group's id could have passed to another process.
+    however it ends.  The runner writes the solver's session there once the solver runs, and ``done`` once it
+    has ended the session itself.  If the pipe closes with a session and without ``done``, the guard sends
+    SIGTERM to the solver's process group, once: the runner is gone at that moment and the solver still
+    runs, so the group is the solver's.  It sends nothing later, when the group's id could have passed to
+    another process.
     """
     watched, held = os.pipe()
-    if os.fork() != 0:
+    try:
+        guard = os.fork()
+    except OSError:
+        os.close(watched)
+        os.close(held)
+        raise
+    if guard != 0:
         os.close(watched)
         return held
     try:
@@ -183,15 +204,19 @@ def _start_guard(session: int) -> int:
         null = os.open(os.devnull, os.O_RDWR)
         for stream in (0, 1, 2):
             os.dup2(null, stream)
-        if not os.read(watched, 1):
-            _signal_group(session, signal.SIGTERM)
+        told = b""
+        while chunk := os.read(watched, 64):
+            told += chunk
+        session, _, after = told.partition(b"\n")
+        if session and after != _STOOD_DOWN:
+            _signal_group(int(session), signal.SIGTERM)
     finally:
         os._exit(0)
 
 
 def _stand_down(solver: _Running) -> None:
     """Tell the guard that the runner has ended the solver's session itself."""
-    os.write(solver.guard, b"1")
+    os.write(solver.guard, _STOOD_DOWN)
     os.close(solver.guard)
 
 

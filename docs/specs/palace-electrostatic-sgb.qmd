@@ -394,7 +394,9 @@ the config is what the AMR controls alone give.
 
 ### The stop at convergence {#convergence-stop}
 
-With a declaration, no pass runs after the declared criteria have converged.
+With a declaration, Palace is stopped once the declared criteria have
+converged, one to two seconds after the pass at which they hold is complete, so
+the solves after that pass are not run.
 The run script starts Palace through the convergence runner that
 `prepare_handoff()` copies into the run folder,
 `metadata/run_palace_until_converged.py`, which needs only Python's standard
@@ -425,9 +427,18 @@ runner is gone.
 Palace 0.18.1 completes pass $k$ in `iteration<k>/` before it refines the mesh
 for pass $k+1$, so the stop comes during that refinement or at the start of the
 next solve; no file of a completed pass changes. The stop is requested one to
-two seconds after the folder appears, Palace has ended within about a second
-of the request, and none of the solves after it runs. The receipt is written
-only then, so no solver process writes a file after it.
+two seconds after the folder appears (the runner looks every second and counts a
+pass at its second look), and Palace has ended within about a second of the
+request. The receipt is written only then, so no solver process writes a file
+after it.
+
+A pass that takes less than those one to two seconds still runs. The runner then
+counts it with the pass before it: the verdict names the pass at which the run
+converged and how many passes were read after it, Palace is stopped after the
+last of them, and the result is that last pass. A run whose passes are all that
+short has ended before the runner looked; it is complete as Palace ended it.
+What the stop saves is every pass longer than that, which is where the time
+goes: a pass has two to three times the elements of the one before.
 
 The receipt states how the solver ended (`ending`) and keeps the solver's own
 exit code:
@@ -437,7 +448,7 @@ exit code:
 | `solver_ended` | Palace ended without a stop from SCGSim | `completed` when every exit code is 0, `failed` otherwise |
 | `stopped_at_convergence` | the runner stopped it after a pass at which the verdict is converged, and it ended within the wait | `completed`, with the exit code the stop gave: 143 for Palace's `palace` wrapper script, which the signal ends, and 1 for `mpirun` started directly |
 | `stop_escalated` | it did not end on SIGTERM and was killed | `failed` |
-| `runner_terminated` | the runner itself was told to end, and ended Palace first | `failed` |
+| `runner_terminated` | the runner itself was told to end and ended Palace for that reason. Told to end while Palace is already ending after the stop at convergence, the stop stands | `failed` |
 | `not_recorded` | the runner left no complete decision record | `failed` |
 
 The result of a run stopped at convergence is its last pass: result reading

@@ -87,7 +87,8 @@ names the `ErrorIndicator().below(...)` line to write instead. It also refuses
 `set_epr_request(surface_interfaces=...)` leaves out.
 
 Palace stops at the first pass where every criterion has held, so the solves
-after it are never started; a run that does not converge runs all nine. The
+after it are not run (the stop comes one to two seconds after that pass); a run
+that does not converge runs all nine. The
 returned run's `result.convergence` and the trust report say at which pass every
 criterion had held, which one held last and after which pass SCGSim stopped
 Palace, or which one still fails at the last pass and by how much against its

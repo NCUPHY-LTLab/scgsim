@@ -13,246 +13,61 @@ passes 3 and 4, two in a row.
 
 from __future__ import annotations
 
-import json
-import os
 import signal
-import subprocess
 import sys
-import time
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-from palace_convergence_support import (
-    eigenmode,
-    electrostatic,
-    write_eigenmode_pass,
-    write_electrostatic_pass,
-)
 from palace_stand_in_solver import (
-    end_left_over,
     read_pids,
-    runner_processes,
     wait_until_gone,
-    write_stand_in,
+)
+from palace_stop_support import (
+    LONG_S,
+    NEVER_SETTLES,
+    decision_of,
+    prepared_run,
+    rewrite_json,
+    run_script,
+    runner_processes_left,
 )
 
-from scgsim.contracts.palace_convergence import ConvergenceDecision
 from scgsim.contracts.palace_run_folder import (
     CONVERGENCE_DECISION,
     CONVERGENCE_RUNNER,
-    INDEX_MAP,
     OUTPUT_DIR,
     RESOURCE_RECORD,
     RETURNED_RECEIPT,
     RUN_METADATA,
     read_json,
     record_for_path,
-    solver_log,
 )
 from scgsim.palace import (
-    Capacitance,
-    ErrorIndicator,
-    ModeFrequency,
-    SurfaceEpr,
     inspect_run_trustworthiness,
     resolve_palace_result,
 )
 from scgsim.palace.reports.convergence import verdict_card, verdict_sentence
-from scgsim.palace.results.tables import count_index_entries
 
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
     reason="the runner's stop is checked through /proc",
 )
 
-_SETTLES_AT_4 = [
-    (100.0, 300.0),
-    (101.0, 300.06),
-    (101.05, 300.07),
-    (101.06, 300.07),
-    (101.06, 300.07),
-    (101.06, 300.07),
-]
-_NEVER_SETTLES = [(100.0 + 2 * k, 300.0 + k) for k in range(6)]
-_NORMS = [0.2, 0.04, 0.03, 0.02, 0.02, 0.02]
-_DECLARED = (
-    Capacitance.diagonal().within(relative=1e-3),
-    SurfaceEpr.each("MA", "MS", margin_um=1.0).within(relative=2e-2),
-    ErrorIndicator().below(0.05),
-)
-_LONG_S = 60.0
-"""A pause no test waits out: the runner stops the stand-in during it, or the test ends it."""
-
-
-def _isolated_python(directory: Path) -> Path:
-    """A ``python3`` on PATH that sees only the standard library, as on a solver host."""
-    directory.mkdir(parents=True, exist_ok=True)
-    wrapper = directory / "python3"
-    wrapper.write_text(f'#!/bin/sh\nexec "{sys.executable}" -I -S "$@"\n')
-    wrapper.chmod(0o755)
-    srun = directory / "srun"
-    srun.write_text('#!/bin/sh\nexec "$@"\n')
-    srun.chmod(0o755)
-    return directory
-
-
-def _prepared(  # noqa: PLR0913 -- one run folder, each switch independent
-    tmp_path: Path,
-    *,
-    problem: str = "Electrostatic",
-    values: list | None = None,
-    refine_s: list[float] | None = None,
-    solve_s: list[float] | None = None,
-    declare: bool = True,
-    profile: str = "direct-local",
-    style: str = "binary",
-    fail_after: int | None = None,
-    ignore_sigterm: bool = False,
-    behind_wrapper: bool = False,
-    shutdown_s: float = 0.0,
-) -> SimpleNamespace:
-    """Write the config and handoff of a six-pass run with its stand-in Palace; nothing runs yet."""
-    if problem == "Electrostatic":
-        sim = electrostatic(tmp_path / "model")
-        values = values or _SETTLES_AT_4
-        criteria = _DECLARED
-    else:
-        sim = eigenmode(tmp_path / "model", num_modes=1)
-        values = values or [(5.0,), (5.2,), (5.2001,), (5.2001,), (5.2001,), (5.2001,)]
-        criteria = (ModeFrequency().within(relative=1e-3), ErrorIndicator().below(0.05))
-    sim.set_numerical(
-        amr_max_passes=len(values) - 1,
-        **({} if problem == "Electrostatic" else {"amr_update_fraction": 0.7}),
-    )
-    if declare:
-        sim.set_convergence(*criteria, minimum_converged_passes=2)
-    sim.write_config()
-    counts = count_index_entries(read_json(sim.output_dir / INDEX_MAP))
-    write = (
-        write_electrostatic_pass if problem == "Electrostatic" else write_eigenmode_pass
-    )
-    passes = []
-    for number, value in enumerate(values, start=1):
-        folder = tmp_path / "solve" / f"pass{number}"
-        write(folder, number, counts, value, _NORMS[number - 1])
-        passes.append(
-            {
-                "tables": str(folder),
-                "norm": _NORMS[number - 1],
-                "solve_s": (solve_s or [0.05] * len(values))[number - 1],
-                "refine_s": (refine_s or [0.05] * len(values))[number - 1],
-            }
-        )
-    pids = tmp_path / "pids.json"
-    palace = write_stand_in(
-        tmp_path / "bin" / "palace",
-        problem=problem,
-        passes=passes,
-        pids=pids,
-        fail_after=fail_after,
-        ignore_sigterm=ignore_sigterm,
-        behind_wrapper=behind_wrapper,
-        shutdown_s=shutdown_s,
-    )
-    resources = (
-        {
-            "processes": 1,
-            "threads": 1,
-            **({"command_style": style} if style != "binary" else {}),
-        }
-        if profile == "direct-local"
-        else {"ntasks": 1, "cpus_per_task": 1, "nodes": 1}
-    )
-    plan = sim.prepare_handoff(
-        profile=profile, executable=str(palace), resources=resources
-    )
-    return SimpleNamespace(
-        root=plan.run_dir,
-        plan=plan,
-        handoff_id=plan.handoff_id,
-        pids_path=pids,
-        python=_isolated_python(tmp_path / "bin"),
-        profile=profile,
-    )
-
-
-def _start(run: SimpleNamespace) -> subprocess.Popen:
-    """Start the run script as a person or a scheduler would: in its own session, the log where it goes."""
-    environment = {
-        **os.environ,
-        "PATH": f"{run.python}{os.pathsep}{os.environ['PATH']}",
-    }
-    if run.profile == "direct-local":
-        output = subprocess.PIPE
-    else:
-        environment.update(
-            {
-                "SLURM_SUBMIT_DIR": str(run.root),
-                "SLURM_JOB_ID": "4242",
-                "SLURM_JOB_NAME": "stop",
-            }
-        )
-        # Slurm writes the job's output to the log the script's directives name.
-        output = (run.root / solver_log("4242")).open("ab")
-    return subprocess.Popen(
-        ["bash", str(run.plan.script_path)],
-        stdout=output,
-        stderr=subprocess.STDOUT,
-        env=environment,
-        start_new_session=True,
-    )
-
-
-def _finish(
-    run: SimpleNamespace, process: subprocess.Popen, timeout_s: float = 60.0
-) -> int:
-    """Wait for the run script; whatever the test saw, leave none of the run's processes behind."""
-    try:
-        process.wait(timeout=timeout_s)
-    finally:
-        if process.poll() is None:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
-        if run.pids_path.is_file():
-            end_left_over(json.loads(run.pids_path.read_text()))
-    run.log = (run.root / _log_name(run)).read_text(encoding="utf-8")
-    return process.returncode
-
-
-def _log_name(run: SimpleNamespace) -> str:
-    return solver_log("manual" if run.profile == "direct-local" else "4242")
-
-
-def _run(run: SimpleNamespace) -> int:
-    return _finish(run, _start(run))
-
-
-def _decision(run: SimpleNamespace) -> ConvergenceDecision:
-    return ConvergenceDecision.from_payload(read_json(run.root / CONVERGENCE_DECISION))
-
-
-def _rewrite_json(path: Path, change) -> None:
-    payload = read_json(path)
-    change(payload)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
 
 @pytest.fixture(scope="module")
 def stopped(tmp_path_factory):
     """One declared Electrostatic run stopped at convergence, after its pass 4 of 6."""
-    run = _prepared(
+    run = prepared_run(
         tmp_path_factory.mktemp("stopped"),
-        refine_s=[0.05, 0.05, 0.05, _LONG_S, 0.05, 0.05],
+        refine_s=[0.05, 0.05, 0.05, LONG_S, 0.05, 0.05],
     )
-    run.exit_code = _run(run)
+    run.exit_code = run_script(run)
     return run
 
 
 def test_the_runner_stops_palace_after_the_first_converged_pass(stopped):
     """Converged at pass 4: the decision is written, the solver's session gets SIGTERM, nothing is left."""
     assert stopped.exit_code == 0, stopped.log
-    decision = _decision(stopped)
+    decision = decision_of(stopped)
     assert decision.ending == "stopped_at_convergence"
     assert decision.stop is not None
     assert (decision.stop.reason, decision.stop.after_pass) == ("converged", 4)
@@ -266,7 +81,7 @@ def test_the_runner_stops_palace_after_the_first_converged_pass(stopped):
     assert not (results / "iteration5").exists()
     assert (results / "terminal-C.csv").is_symlink()
     assert wait_until_gone(read_pids(stopped.pids_path)) == []
-    assert _runner_processes_left(stopped) == []
+    assert runner_processes_left(stopped) == []
     assert "Adaptive mesh refinement (AMR) iteration 4:" in stopped.log
     assert (
         "SCGSim convergence runner: converged at pass 4; stopping the solver after pass 4"
@@ -357,16 +172,16 @@ def test_the_report_says_where_it_stopped_and_what_was_not_run(stopped):
 )
 def test_every_profile_and_command_style_stops_the_same_way(tmp_path, profile, style):
     """The wrapper's ``-np``/``-nt`` command and the Slurm script's ``srun`` command run through the runner."""
-    run = _prepared(
+    run = prepared_run(
         tmp_path,
         profile=profile,
         style=style,
-        refine_s=[0.05, 0.05, 0.05, _LONG_S, 0.05, 0.05],
+        refine_s=[0.05, 0.05, 0.05, LONG_S, 0.05, 0.05],
     )
     script = run.plan.script_path.read_text()
     assert f'python3 {CONVERGENCE_RUNNER} "$(pwd)" -- ' in script
-    assert _run(run) == 0, run.log
-    assert _decision(run).ending == "stopped_at_convergence"
+    assert run_script(run) == 0, run.log
+    assert decision_of(run).ending == "stopped_at_convergence"
     assert wait_until_gone(read_pids(run.pids_path)) == []
     result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
     assert result.solver_end.stopped_after == 4
@@ -374,12 +189,12 @@ def test_every_profile_and_command_style_stops_the_same_way(tmp_path, profile, s
 
 def test_an_eigenmode_run_stopped_during_the_next_solve_reads_its_last_pass(tmp_path):
     """Stopped while the next solve has started ``eig.csv`` with its header: the result is still pass 4."""
-    run = _prepared(
+    run = prepared_run(
         tmp_path,
         problem="Eigenmode",
-        solve_s=[0.05, 0.05, 0.05, 0.05, _LONG_S, 0.05],
+        solve_s=[0.05, 0.05, 0.05, 0.05, LONG_S, 0.05],
     )
-    assert _run(run) == 0, run.log
+    assert run_script(run) == 0, run.log
     results = run.root / OUTPUT_DIR
     assert not (results / "eig.csv").is_symlink()
     assert len((results / "eig.csv").read_text().splitlines()) == 1
@@ -399,15 +214,15 @@ def test_a_stop_waits_for_the_launcher_behind_a_wrapper_script(tmp_path):
     down itself, so the decision record and the receipt are written after the solver's last process ended;
     the exit code the receipt keeps is the wrapper's, ended by the signal.
     """
-    run = _prepared(
+    run = prepared_run(
         tmp_path,
-        refine_s=[0.05, 0.05, 0.05, _LONG_S, 0.05, 0.05],
+        refine_s=[0.05, 0.05, 0.05, LONG_S, 0.05, 0.05],
         behind_wrapper=True,
         shutdown_s=1.0,
     )
-    assert _run(run) == 0, run.log
+    assert run_script(run) == 0, run.log
     launcher_ended = float(run.pids_path.with_name("launcher_ended").read_text())
-    decision = _decision(run)
+    decision = decision_of(run)
     assert decision.ending == "stopped_at_convergence"
     assert decision.stop is not None and decision.stop.escalated_utc is None
     assert decision.solver is not None
@@ -419,11 +234,70 @@ def test_a_stop_waits_for_the_launcher_behind_a_wrapper_script(tmp_path):
     assert resolved.convergence.verdict.state == "converged"
 
 
+def test_a_pass_shorter_than_the_looks_is_read_and_the_stop_comes_after_it(tmp_path):
+    """The stop is requested one to two seconds after a pass is complete, so a shorter pass still runs.
+
+    Pass 5 completes a tenth of a second after pass 4, at which the run has converged, and pass 6 takes
+    long.  The runner counts both passes at the same look: the verdict is still pass 4, the record says one
+    pass was read after it, Palace is stopped after pass 5, and the result is pass 5's tables.
+    """
+    run = prepared_run(tmp_path, refine_s=[0.05, 0.05, 0.05, 0.05, LONG_S, 0.05])
+    assert run_script(run) == 0, run.log
+    decision = decision_of(run)
+    assert decision.ending == "stopped_at_convergence"
+    assert decision.stop is not None and decision.stop.after_pass == 5
+    assert decision.checked["verdict"]["pass_number"] == 4
+    assert not (run.root / OUTPUT_DIR / "iteration6").exists()
+    result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    verdict = result.convergence.verdict
+    assert (verdict.state, verdict.pass_number, verdict.passes_read_after) == (
+        "converged",
+        4,
+        1,
+    )
+    sentence = verdict_sentence(result.convergence, result.solver_end)
+    assert "1 more pass was read after it." in sentence
+    assert "SCGSim stopped Palace after pass 5" in sentence
+    assert (
+        result.tables["terminal-C"].path
+        == run.root / OUTPUT_DIR / "iteration5" / "terminal-C.csv"
+    )
+
+
+def test_a_run_that_ends_before_the_first_look_is_read_as_it_ended(tmp_path):
+    """Every pass takes a hundredth of a second: Palace has ended before the runner looked, so nothing is stopped.
+
+    The run is complete as Palace ended it; the verdict says at which pass it had converged and how many
+    passes came after.
+    """
+    run = prepared_run(tmp_path, solve_s=[0.01] * 6, refine_s=[0.01] * 6)
+    assert run_script(run) == 0, run.log
+    decision = decision_of(run)
+    assert decision.ending == "solver_ended" and decision.stop is None
+    receipt = read_json(run.root / RETURNED_RECEIPT)
+    assert (receipt["status"], receipt["ending"], receipt["solver_exit_code"]) == (
+        "completed",
+        "solver_ended",
+        0,
+    )
+    result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    verdict = result.convergence.verdict
+    assert (verdict.state, verdict.pass_number, verdict.passes_read_after) == (
+        "converged",
+        4,
+        2,
+    )
+    sentence = verdict_sentence(result.convergence, result.solver_end)
+    assert "2 more passes were read after it." in sentence
+    assert sentence.endswith("Palace ended by itself at its limit of 6 passes.")
+    assert result.tables["terminal-C"].path == run.root / OUTPUT_DIR / "terminal-C.csv"
+
+
 def test_a_run_that_does_not_converge_ends_at_its_limit(tmp_path):
     """No stop: Palace runs every pass its limit allows, the receipt is completed, and the report says so."""
-    run = _prepared(tmp_path, values=_NEVER_SETTLES)
-    assert _run(run) == 0, run.log
-    decision = _decision(run)
+    run = prepared_run(tmp_path, values=NEVER_SETTLES)
+    assert run_script(run) == 0, run.log
+    decision = decision_of(run)
     assert decision.ending == "solver_ended" and decision.stop is None
     receipt = read_json(run.root / RETURNED_RECEIPT)
     assert (receipt["status"], receipt["ending"], receipt["solver_exit_code"]) == (
@@ -442,155 +316,22 @@ def test_a_run_that_does_not_converge_ends_at_its_limit(tmp_path):
     assert result.tables["terminal-C"].path == run.root / OUTPUT_DIR / "terminal-C.csv"
 
 
-def test_a_solver_that_fails_is_failed(tmp_path):
-    """The solver exits 2 after pass 2: no stop, ``failed``, the exit code kept, nothing left."""
-    run = _prepared(tmp_path, fail_after=2)
-    assert _run(run) == 2
-    decision = _decision(run)
-    assert decision.ending == "solver_ended" and decision.solver.exit_code == 2
-    receipt = read_json(run.root / RETURNED_RECEIPT)
-    assert (receipt["status"], receipt["ending"], receipt["solver_exit_code"]) == (
-        "failed",
-        "solver_ended",
-        2,
-    )
-    assert wait_until_gone(read_pids(run.pids_path)) == []
-    with pytest.raises(ValueError, match="status must be completed"):
-        resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
-
-
-def test_a_solver_killed_from_outside_is_failed_not_a_stop(tmp_path):
-    """SIGKILL to the solver before convergence: the runner did not stop it, so the run is ``failed``."""
-    run = _prepared(tmp_path, refine_s=[_LONG_S] * 6)
-    process = _start(run)
-    pids = read_pids(run.pids_path)
-    _wait_for(run.root / OUTPUT_DIR / "iteration1")
-    os.kill(pids["solver"], signal.SIGKILL)
-    assert _finish(run, process) == 137
-    decision = _decision(run)
-    assert (decision.ending, decision.stop, decision.solver.exit_code) == (
-        "solver_ended",
-        None,
-        137,
-    )
-    receipt = read_json(run.root / RETURNED_RECEIPT)
-    assert (receipt["status"], receipt["ending"]) == ("failed", "solver_ended")
-    # The rank the killed launcher left is ended with the rest of the solver's group.
-    assert wait_until_gone(pids) == []
-
-
-def test_a_solver_that_ignores_sigterm_is_killed_after_the_wait(tmp_path):
-    """SIGTERM is ignored: after the wait the runner sends SIGKILL, records it, and the run is ``failed``."""
-    run = _prepared(
-        tmp_path, ignore_sigterm=True, refine_s=[0.05, 0.05, 0.05, _LONG_S, 0.05, 0.05]
-    )
-    runner = run.root / CONVERGENCE_RUNNER
-    # The real runner with its wait shortened, so the test does not wait the minute out.
-    runner.write_text(
-        runner.read_text().replace("\nSTOP_WAIT_S = 60.0\n", "\nSTOP_WAIT_S = 1.0\n"),
-        encoding="utf-8",
-    )
-    assert _run(run) != 0
-    decision = _decision(run)
-    assert decision.ending == "stop_escalated"
-    assert decision.stop.escalated_utc is not None
-    assert decision.solver.exit_code == 128 + signal.SIGKILL
-    assert read_json(run.root / RETURNED_RECEIPT)["status"] == "failed"
-    assert "sending SIGKILL to its session" in run.log
-    assert wait_until_gone(read_pids(run.pids_path)) == []
-    failure = inspect_run_trustworthiness(run.root).failure
-    assert failure is not None and failure.category == "convergence_stop"
-    assert "did not end on SIGTERM" in failure.summary
-
-
-def test_a_runner_told_to_end_ends_the_solver_first(tmp_path):
-    """SIGTERM to the runner during a solve: it stops the solver, records why, and leaves nothing."""
-    run = _prepared(tmp_path, refine_s=[_LONG_S] * 6)
-    process = _start(run)
-    pids = read_pids(run.pids_path)
-    _wait_for(run.root / OUTPUT_DIR / "iteration1")
-    os.kill(pids["runner"], signal.SIGTERM)
-    assert _finish(run, process) != 0
-    decision = _decision(run)
-    assert decision.ending == "runner_terminated"
-    assert decision.stop.reason == "runner_terminated"
-    assert read_json(run.root / RETURNED_RECEIPT)["status"] == "failed"
-    assert wait_until_gone(pids) == []
-    failure = inspect_run_trustworthiness(run.root).failure
-    assert failure is not None and failure.category == "convergence_stop"
-
-
-@pytest.mark.parametrize(
-    "behind_wrapper", [False, True], ids=["launcher", "wrapper-script"]
-)
-def test_a_runner_killed_outright_still_leaves_no_solver(tmp_path, behind_wrapper):
-    """SIGKILL to the runner: its guard ends the solver's session, and nothing is left.
-
-    Behind a wrapper script, as Palace's own ``palace`` is, the launcher is not the solver's first process:
-    only a signal to the whole session ends it and its rank.
-    """
-    run = _prepared(tmp_path, refine_s=[_LONG_S] * 6, behind_wrapper=behind_wrapper)
-    process = _start(run)
-    pids = read_pids(run.pids_path)
-    _wait_for(run.root / OUTPUT_DIR / "iteration1")
-    os.kill(pids["runner"], signal.SIGKILL)
-    assert _finish(run, process) != 0
-    assert wait_until_gone(pids) == []
-    assert _runner_processes_left(run) == []
-    receipt = read_json(run.root / RETURNED_RECEIPT)
-    assert (receipt["status"], receipt["ending"]) == ("failed", "not_recorded")
-
-
-def test_a_script_killed_with_its_whole_group_still_leaves_no_solver(tmp_path):
-    """SIGKILL to the script's process group ends the script, ``tee`` and the runner at once.
-
-    The solver is in a session of its own, so that signal does not reach it; the guard, in a session of its
-    own too, ends it.  The script wrote no receipt.
-    """
-    run = _prepared(tmp_path, refine_s=[_LONG_S] * 6, behind_wrapper=True)
-    process = _start(run)
-    pids = read_pids(run.pids_path)
-    _wait_for(run.root / OUTPUT_DIR / "iteration1")
-    os.killpg(process.pid, signal.SIGKILL)
-    # Looked at before ``_finish``, which ends whatever a run left behind.
-    left = wait_until_gone(pids)
-    assert _finish(run, process) == -signal.SIGKILL
-    assert left == []
-    assert _runner_processes_left(run) == []
-    assert not (run.root / RETURNED_RECEIPT).exists()
-
-
-def _runner_processes_left(run: SimpleNamespace, timeout_s: float = 10.0) -> list[int]:
-    """The runner and guard processes of the run still there after ``timeout_s``."""
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline and runner_processes(run.root):
-        time.sleep(0.05)
-    return runner_processes(run.root)
-
-
-def _wait_for(path: Path, timeout_s: float = 20.0) -> None:
-    deadline = time.monotonic() + timeout_s
-    while not path.exists():
-        assert time.monotonic() < deadline, f"{path} did not appear"
-        time.sleep(0.05)
-
-
 # ---- Result reading refuses what disagrees ----------------------------------------------------------------
 
 
 def test_a_decision_record_edited_after_the_run_is_refused(tmp_path):
     """Edited alone, its hash no longer matches the receipt; edited with the receipt, the recompute differs."""
-    run = _prepared(tmp_path, refine_s=[0.05, 0.05, 0.05, _LONG_S, 0.05, 0.05])
-    assert _run(run) == 0, run.log
+    run = prepared_run(tmp_path, refine_s=[0.05, 0.05, 0.05, LONG_S, 0.05, 0.05])
+    assert run_script(run) == 0, run.log
     path = run.root / CONVERGENCE_DECISION
 
     def change_a_reading(payload):
         payload["passes"][3]["criteria"][0]["values"][0]["value"] = 1.2e-13
 
-    _rewrite_json(path, change_a_reading)
+    rewrite_json(path, change_a_reading)
     with pytest.raises(ValueError, match="changed after .* was written"):
         resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
-    _rewrite_json(
+    rewrite_json(
         run.root / RETURNED_RECEIPT,
         lambda receipt: receipt.update(
             convergence_decision=record_for_path(run.root, CONVERGENCE_DECISION)
@@ -608,15 +349,15 @@ def test_a_stopped_folder_with_a_receipt_forged_to_say_palace_ended_by_itself_is
     tmp_path,
 ):
     """Exit codes rewritten to 0 and the ending to ``solver_ended``: the top level of links says otherwise."""
-    run = _prepared(tmp_path, refine_s=[0.05, 0.05, 0.05, _LONG_S, 0.05, 0.05])
-    assert _run(run) == 0, run.log
+    run = prepared_run(tmp_path, refine_s=[0.05, 0.05, 0.05, LONG_S, 0.05, 0.05])
+    assert run_script(run) == 0, run.log
 
     def ended_by_itself(record):
         record.update(exit_code=0, solver_exit_code=0, ending="solver_ended")
 
-    _rewrite_json(run.root / RETURNED_RECEIPT, ended_by_itself)
+    rewrite_json(run.root / RETURNED_RECEIPT, ended_by_itself)
     for record in (RUN_METADATA, RESOURCE_RECORD):
-        _rewrite_json(run.root / record, lambda payload: payload.update(exit_code=0))
+        rewrite_json(run.root / record, lambda payload: payload.update(exit_code=0))
     with pytest.raises(
         ValueError,
         match=r"is the folder of a solver ended during its adaptive loop \(the final result's tables are "
@@ -627,9 +368,9 @@ def test_a_stopped_folder_with_a_receipt_forged_to_say_palace_ended_by_itself_is
 
 def test_final_tables_of_its_own_with_a_receipt_saying_stopped_are_refused(tmp_path):
     """A run that ended by itself, its receipt forged to say it was stopped: the top-level solve says otherwise."""
-    run = _prepared(tmp_path, values=_NEVER_SETTLES)
-    assert _run(run) == 0, run.log
-    _rewrite_json(
+    run = prepared_run(tmp_path, values=NEVER_SETTLES)
+    assert run_script(run) == 0, run.log
+    rewrite_json(
         run.root / RETURNED_RECEIPT,
         lambda receipt: receipt.update(ending="stopped_at_convergence"),
     )
@@ -639,8 +380,8 @@ def test_final_tables_of_its_own_with_a_receipt_saying_stopped_are_refused(tmp_p
 
 def test_a_plan_without_its_decision_record_is_refused(tmp_path):
     """The receipt of this version binds the decision of a declared run; without it the run is not read."""
-    run = _prepared(tmp_path, values=_NEVER_SETTLES)
-    assert _run(run) == 0, run.log
+    run = prepared_run(tmp_path, values=NEVER_SETTLES)
+    assert run_script(run) == 0, run.log
     (run.root / CONVERGENCE_DECISION).unlink()
     with pytest.raises(
         FileNotFoundError, match="is missing, and the run has a convergence plan"
@@ -650,8 +391,8 @@ def test_a_plan_without_its_decision_record_is_refused(tmp_path):
 
 def test_a_decision_record_without_a_plan_is_refused(tmp_path):
     """A run with no declaration has no runner, so a decision record in its folder is refused."""
-    run = _prepared(tmp_path, declare=False)
-    assert _run(run) == 0, run.log
+    run = prepared_run(tmp_path, declare=False)
+    assert run_script(run) == 0, run.log
     (run.root / CONVERGENCE_DECISION).write_text("{}", encoding="utf-8")
     with pytest.raises(
         ValueError, match="sealed no convergence plan: no runner ran for this handoff"
@@ -664,7 +405,7 @@ def test_a_receipt_an_earlier_scgsim_wrote_is_refused_with_how_to_read_it(stoppe
     path = stopped.root / RETURNED_RECEIPT
     original = path.read_text(encoding="utf-8")
     try:
-        _rewrite_json(
+        rewrite_json(
             path,
             lambda receipt: receipt.update(
                 schema="palace-returned-run-receipt.v1", schema_version=1
@@ -682,7 +423,7 @@ def test_a_receipt_an_earlier_scgsim_wrote_is_refused_with_how_to_read_it(stoppe
 
 def test_without_a_declaration_palace_runs_as_before(tmp_path):
     """No plan: no runner in the folder, the script starts Palace itself, the receipt has no decision."""
-    run = _prepared(tmp_path, declare=False)
+    run = prepared_run(tmp_path, declare=False)
     script = run.plan.script_path.read_text()
     assert CONVERGENCE_RUNNER not in script and CONVERGENCE_DECISION not in script
     assert (
@@ -693,7 +434,7 @@ def test_without_a_declaration_palace_runs_as_before(tmp_path):
         'if [ "$RECEIPT_EXIT" -ne 0 ]; then exit "$RECEIPT_EXIT"; fi\nexit "$PIPELINE_EXIT_CODE"\n'
     )
     assert not (run.root / CONVERGENCE_RUNNER).exists()
-    assert _run(run) == 0, run.log
+    assert run_script(run) == 0, run.log
     receipt = read_json(run.root / RETURNED_RECEIPT)
     assert (receipt["status"], receipt["ending"], receipt["convergence_decision"]) == (
         "completed",
