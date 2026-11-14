@@ -37,6 +37,7 @@ from scgsim.palace import (
     resolve_palace_result,
 )
 from scgsim.palace.reports.convergence import verdict_sentence
+from scgsim.palace.reports.plotting import plotly
 from scgsim.palace.results.convergence import read_convergence
 from scgsim.palace.results.snapshots import collect_amr_passes
 from scgsim.palace.results.surface_readers import (
@@ -71,14 +72,26 @@ cp -R "{solve}"/. results/palace/
 @contextmanager
 def _captured_notebook_display():
     """Collect what the report displays, in a stand-in ``IPython.display`` whose ``HTML`` keeps its text."""
+    # Plotly reads IPython when it is first imported; import it first so it never caches the stand-in.
+    plotly()
+    # Only the two IPython entries are replaced and restored: modules Plotly imports while the report
+    # builds its figures stay loaded, so their classes stay the ones later tests use.
     displayed: list[object] = []
     module = types.ModuleType("IPython.display")
     module.HTML = lambda data: types.SimpleNamespace(data=data)  # type: ignore[attr-defined]
     module.display = displayed.append  # type: ignore[attr-defined]
     package = types.ModuleType("IPython")
     package.display = module  # type: ignore[attr-defined]
-    with patch.dict(sys.modules, {"IPython": package, "IPython.display": module}):
+    saved = {name: sys.modules.get(name) for name in ("IPython", "IPython.display")}
+    sys.modules.update({"IPython": package, "IPython.display": module})
+    try:
         yield displayed
+    finally:
+        for name, original in saved.items():
+            if original is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = original
 
 
 def _matrix(path: Path, prefix: str, unit: str, matrix: list[list[float]]) -> None:
