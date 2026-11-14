@@ -540,6 +540,36 @@ def test_a_final_table_that_cannot_be_opened_sets_the_final_result_aside(tmp_pat
 
 
 @_NOT_ROOT
+def test_an_iteration_folder_that_cannot_be_listed_is_set_aside_alone(tmp_path):
+    """``iteration2`` lets its files be opened but not be listed: it is set aside, and the other folders are read.
+
+    Its own record names pass 2, but which tables it holds cannot be seen.  Pass 3 is then compared with no
+    pass before it.
+    """
+    results = _results(tmp_path)
+    _electrostatic(results / "iteration1", 1, capacitance=1.0e-13, norm=0.2)
+    _electrostatic(results / "iteration2", 2, capacitance=1.0e-13, norm=0.04)
+    _electrostatic(results, 3, capacitance=1.0e-13, norm=0.04)
+    (results / "iteration2").chmod(0o111)
+    try:
+        returned = returned_passes(results)
+        assert [(folder.number, folder.path.name) for folder in returned.passes] == [
+            (1, "iteration1"),
+            (3, "palace"),
+        ]
+        assert [(aside.folder.name, aside.reason) for aside in returned.set_aside] == [
+            ("iteration2", "iteration2 cannot be read (Permission denied)")
+        ]
+        assert [item.pass_number for item in _snapshots(tmp_path).passes] == [1, 3]
+        check = _check(tmp_path)
+        assert _reasons(check, 3) == {
+            "no previous pass to compare with: pass 2 was not read"
+        }
+    finally:
+        (results / "iteration2").chmod(0o755)
+
+
+@_NOT_ROOT
 def test_two_folders_of_one_pass_with_a_table_that_cannot_be_opened_are_not_compared(
     tmp_path,
 ):
