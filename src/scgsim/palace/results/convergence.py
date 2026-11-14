@@ -148,6 +148,14 @@ def returned_convergence(
                 f"records the ending {decision.ending!r}, and {RETURNED_RECEIPT} states {ending!r}"
             )
         )
+    recorded_exit = decision.solver.exit_code if decision.solver is not None else None
+    if recorded_exit != receipt.get("solver_exit_code"):
+        raise ValueError(
+            Declared(f"{CONVERGENCE_DECISION} in {root}", RETURNED_RUN_FOLDER).refusal(
+                f"records the solver's exit code {recorded_exit!r}, and {RETURNED_RECEIPT} states "
+                f"{receipt.get('solver_exit_code')!r}"
+            )
+        )
     if ending == "stopped_at_convergence":
         problem_text = completed_stop_problem(decision)
         if problem_text is not None:
@@ -222,13 +230,6 @@ def _check_top_level(root: Path, ending: Any) -> None:
             Declared(f"{results}", RETURNED_RUN_FOLDER).refusal(
                 f"is the folder of a solver ended during its adaptive loop ({reason}), and "
                 f"{RETURNED_RECEIPT} says the solver ended by itself"
-            )
-        )
-    if ending == "stopped_at_convergence" and state == "pass":
-        raise ValueError(
-            Declared(f"{results}", RETURNED_RUN_FOLDER).refusal(
-                "holds a solve of its own at its top level, as a solver that ended by itself leaves it, and "
-                f"{RETURNED_RECEIPT} says the runner stopped the solver at convergence"
             )
         )
 

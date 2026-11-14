@@ -453,14 +453,21 @@ exit code:
 
 The result of a run stopped at convergence is its last pass: result reading
 takes the tables and the cost from `iteration<k>/`, since the top level holds
-links into it or a solve under way. Result reading computes the check again
-from the returned files and refuses the run, naming what disagrees, when:
+links into it or a solve under way. Palace can also complete its last solve in
+the moment the runner decides. If it has ended by itself by then (exit code 0,
+its last solve at the top level), nothing was stopped and the run is recorded
+as ended by itself. If the stop still reaches it, the run was stopped and its
+result is that last solve, at the top level.
+
+Result reading computes the check again from the returned files and refuses
+the run, naming what disagrees, when:
 
 - the passes or the verdict differ from the decision record, or the record is
   not the one the receipt binds;
+- the decision record and the receipt state different endings, or different
+  exit codes of the solver;
 - the top level holds links or a solve under way, and the receipt says Palace
-  ended by itself; or it holds a solve of its own, and the receipt says the
-  runner stopped Palace;
+  ended by itself;
 - a decision record is present without a plan, or a plan has none.
 
 `ResolvedPalaceResult.convergence` and the

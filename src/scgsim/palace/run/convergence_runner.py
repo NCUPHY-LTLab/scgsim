@@ -64,6 +64,7 @@ from scgsim.contracts.palace_convergence import (
     check_convergence,
     recorded_check,
     returned_passes,
+    top_level_state,
 )
 from scgsim.contracts.palace_run_folder import (
     CONVERGENCE_DECISION,
@@ -134,7 +135,7 @@ def run(request: _Request) -> int:
     exit_code = _exit_code(_reap(solver))
     final = looker.decision(
         looker.final_check(),
-        stop,
+        _stop_that_ended_the_solver(stop, exit_code, looker.results),
         SolverExit(exit_code, utc_timestamp()),
     )
     _write_decision(root, final)
@@ -300,6 +301,21 @@ def _supervise(
                 return _stop(solver, stop)
         time.sleep(_POLL_S)
     return None
+
+
+def _stop_that_ended_the_solver(
+    stop: SolverStop | None, exit_code: int, results: Path
+) -> SolverStop | None:
+    """The stop, unless the solver had ended by itself before the signal reached it.
+
+    The stop comes a moment after the verdict, and a solver can complete its last solve and end in that
+    moment.  It then exits with 0 and leaves that solve at the top of the results folder, as every run that
+    ends by itself does: nothing was stopped, and the run is recorded as ended by itself.
+    """
+    ended_by_itself = exit_code == 0 and top_level_state(results)[0] == "pass"
+    if stop is not None and stop.reason == "converged" and ended_by_itself:
+        return None
+    return stop
 
 
 def _stop(solver: _Running, stop: SolverStop) -> SolverStop:

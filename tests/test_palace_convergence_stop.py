@@ -13,6 +13,7 @@ passes 3 and 4, two in a row.
 
 from __future__ import annotations
 
+import shutil
 import signal
 import sys
 
@@ -24,6 +25,7 @@ from palace_stand_in_solver import (
 from palace_stop_support import (
     LONG_S,
     NEVER_SETTLES,
+    SETTLES_AT_5,
     decision_of,
     prepared_run,
     rewrite_json,
@@ -293,6 +295,64 @@ def test_a_run_that_ends_before_the_first_look_is_read_as_it_ended(tmp_path):
     assert result.tables["terminal-C"].path == run.root / OUTPUT_DIR / "terminal-C.csv"
 
 
+def test_a_solver_that_ends_by_itself_as_the_runner_decides_ended_by_itself(tmp_path):
+    """The run converges at pass 5 and the solver completes its last solve and ends as the runner decides.
+
+    The stop found nothing to end: the solver exits with 0 and leaves its last solve at the top level, so
+    the run is recorded as ended by itself, complete, and read as such.
+    """
+    run = prepared_run(tmp_path, values=SETTLES_AT_5, ends_itself_on_decision=True)
+    assert run_script(run) == 0, run.log
+    decision = decision_of(run)
+    assert decision.ending == "solver_ended" and decision.stop is None
+    assert decision.solver is not None and decision.solver.exit_code == 0
+    receipt = read_json(run.root / RETURNED_RECEIPT)
+    assert (receipt["status"], receipt["ending"], receipt["solver_exit_code"]) == (
+        "completed",
+        "solver_ended",
+        0,
+    )
+    result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    verdict = result.convergence.verdict
+    assert (verdict.state, verdict.pass_number, verdict.passes_read_after) == (
+        "converged",
+        5,
+        1,
+    )
+    assert verdict_sentence(result.convergence, result.solver_end).endswith(
+        "Palace ended by itself at its limit of 6 passes."
+    )
+    assert result.tables["terminal-C"].path == run.root / OUTPUT_DIR / "terminal-C.csv"
+
+
+def test_a_stop_after_the_last_solve_is_complete_gives_that_solve_as_the_result(
+    tmp_path,
+):
+    """The run converges at pass 5, and the stop reaches the solver when its last solve is already complete.
+
+    The stop ended the solver, so the run was stopped at convergence; every pass its limit allows had run,
+    and the result is the last one, at the top level.
+    """
+    run = prepared_run(tmp_path, values=SETTLES_AT_5, finish_s=LONG_S)
+    assert run_script(run) == 0, run.log
+    decision = decision_of(run)
+    assert decision.ending == "stopped_at_convergence"
+    assert decision.stop is not None and decision.stop.after_pass == 5
+    assert decision.solver is not None and decision.solver.exit_code == 1
+    assert read_json(run.root / RETURNED_RECEIPT)["status"] == "completed"
+    result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    verdict = result.convergence.verdict
+    assert (verdict.state, verdict.pass_number, verdict.passes_read_after) == (
+        "converged",
+        5,
+        1,
+    )
+    sentence = verdict_sentence(result.convergence, result.solver_end)
+    assert sentence.endswith("SCGSim stopped Palace after pass 5.")
+    assert result.tables["terminal-C"].path == run.root / OUTPUT_DIR / "terminal-C.csv"
+    assert result.show_run_trustworthiness().completeness == "complete"
+
+
 def test_a_run_that_does_not_converge_ends_at_its_limit(tmp_path):
     """No stop: Palace runs every pass its limit allows, the receipt is completed, and the report says so."""
     run = prepared_run(tmp_path, values=NEVER_SETTLES)
@@ -345,6 +405,34 @@ def test_a_decision_record_edited_after_the_run_is_refused(tmp_path):
         resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
 
 
+def test_a_decision_record_whose_exit_code_differs_from_the_receipt_is_refused(
+    stopped, tmp_path
+):
+    """The decision's exit code edited, and the receipt's binding of the decision updated to match the edit.
+
+    The readings and the ending still agree; the two records now give two accounts of how the solver
+    exited, and result reading refuses them.
+    """
+    root = tmp_path / "run"
+    shutil.copytree(stopped.root, root, symlinks=True)
+    shutil.copy(stopped.root.parent / "run.tar.gz", tmp_path / "run.tar.gz")
+    rewrite_json(
+        root / CONVERGENCE_DECISION,
+        lambda decision: decision["solver"].update(exit_code=137),
+    )
+    rewrite_json(
+        root / RETURNED_RECEIPT,
+        lambda receipt: receipt.update(
+            convergence_decision=record_for_path(root, CONVERGENCE_DECISION)
+        ),
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"records the solver's exit code 137, and .* states 1",
+    ):
+        resolve_palace_result(root, expected_handoff_id=stopped.handoff_id)
+
+
 def test_a_stopped_folder_with_a_receipt_forged_to_say_palace_ended_by_itself_is_refused(
     tmp_path,
 ):
@@ -374,7 +462,10 @@ def test_final_tables_of_its_own_with_a_receipt_saying_stopped_are_refused(tmp_p
         run.root / RETURNED_RECEIPT,
         lambda receipt: receipt.update(ending="stopped_at_convergence"),
     )
-    with pytest.raises(ValueError, match="holds a solve of its own at its top level"):
+    with pytest.raises(
+        ValueError,
+        match="records the ending 'solver_ended', and .* states 'stopped_at_convergence'",
+    ):
         resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
 
 

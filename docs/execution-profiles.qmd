@@ -79,6 +79,11 @@ also removes an earlier `metadata/palace_convergence_decision.json` before the
 solve. Without a declaration the script is unchanged: it starts the solver
 command itself.
 
+A run folder is run once at a time. Its script started again while it runs
+would have two solvers write one results folder and two runners write one
+decision record, and neither result could be trusted. Jobs that run side by
+side each take a run folder of their own, from their own `prepare_handoff()`.
+
 ::: {.callout-note title="Not yet run under a real scheduler"}
 The Slurm profiles build the runner's command by the same path as
 `direct-local`, and the tests run the generated batch script with a stand-in

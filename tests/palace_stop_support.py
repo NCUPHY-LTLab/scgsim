@@ -54,6 +54,15 @@ SETTLES_AT_4 = [
     (101.06, 300.07),
     (101.06, 300.07),
 ]
+SETTLES_AT_5 = [
+    (100.0, 300.0),
+    (101.0, 300.06),
+    (103.0, 300.5),
+    (103.05, 300.51),
+    (103.06, 300.51),
+    (103.06, 300.51),
+]
+"""Every criterion holds at passes 4 and 5: converged at pass 5, the last before the run's final solve."""
 NEVER_SETTLES = [(100.0 + 2 * k, 300.0 + k) for k in range(6)]
 NORMS = [0.2, 0.04, 0.03, 0.02, 0.02, 0.02]
 DECLARED = (
@@ -91,6 +100,8 @@ def prepared_run(  # noqa: PLR0913 -- one run folder, each switch independent
     ignore_sigterm: bool = False,
     behind_wrapper: bool = False,
     shutdown_s: float = 0.0,
+    finish_s: float = 0.0,
+    ends_itself_on_decision: bool = False,
 ) -> SimpleNamespace:
     """Write the config and handoff of a six-pass run with its stand-in Palace; nothing runs yet."""
     if problem == "Electrostatic":
@@ -134,6 +145,8 @@ def prepared_run(  # noqa: PLR0913 -- one run folder, each switch independent
         ignore_sigterm=ignore_sigterm,
         behind_wrapper=behind_wrapper,
         shutdown_s=shutdown_s,
+        finish_s=finish_s,
+        ends_itself_on_decision=ends_itself_on_decision,
     )
     resources = (
         {

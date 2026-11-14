@@ -13,7 +13,10 @@ It does what Palace 0.18.1 was recorded doing in the stop experiments of issue 2
 
 Like a launcher (``prterun``) it starts one "rank" in a process group of the rank's own and answers SIGTERM
 by ending the rank and exiting 1, after ``shutdown_s`` (a launcher takes a moment to bring its ranks down);
-it then writes the time to ``launcher_ended`` beside ``pids``.  As ``prterun`` was seen to do, it closes
+it then writes the time to ``launcher_ended`` beside ``pids``.  ``finish_s`` keeps it alive that long after
+its last solve is complete; with ``ends_itself_on_decision`` it ignores SIGTERM and ends by itself, with exit
+code 0, once its last solve is complete and the runner's decision record exists: a solver that ends on its own
+in the moment the runner decides to stop it.  As ``prterun`` was seen to do, it closes
 the descriptors it inherited beyond its output streams before its rank has ended, so nothing it inherited
 tells when it ends.  Like an MPI rank, the rank ends by itself shortly after its launcher is gone.  ``behind_wrapper`` puts it behind a shell script that starts it as a child and passes
 no signal on, as Palace's own ``palace`` wrapper does with ``prterun`` (issue 248, the stop check with real
@@ -65,7 +68,7 @@ def main(arguments):
         runner = int(Path(f"/proc/{wrapper}/stat").read_text().rsplit(") ", 1)[1].split()[1])
         pids.update(wrapper=wrapper, runner=runner)
     Path(SCHEDULE["pids"]).write_text(json.dumps(pids))
-    if SCHEDULE["ignore_sigterm"]:
+    if SCHEDULE["ignore_sigterm"] or SCHEDULE["ends_itself_on_decision"]:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
     else:
         def stop(_signum, _frame):
@@ -102,6 +105,10 @@ def main(arguments):
             return 2
         if number == len(passes):
             print(f"Completed {number - 1} iterations of adaptive mesh refinement (AMR):", flush=True)
+            if SCHEDULE["ends_itself_on_decision"]:
+                while not Path("metadata/palace_convergence_decision.json").exists():
+                    time.sleep(0.01)
+            time.sleep(SCHEDULE["finish_s"])
             break
         print(f"Adaptive mesh refinement (AMR) iteration {number}:", flush=True)
         folder = results / f"iteration{number}"
@@ -135,6 +142,8 @@ def write_stand_in(  # noqa: PLR0913 -- one schedule, each switch independent
     ignore_sigterm: bool = False,
     behind_wrapper: bool = False,
     shutdown_s: float = 0.0,
+    finish_s: float = 0.0,
+    ends_itself_on_decision: bool = False,
 ) -> Path:
     """Write the stand-in solver at ``path`` (its schedule beside it) and return ``path``.
 
@@ -156,6 +165,8 @@ def write_stand_in(  # noqa: PLR0913 -- one schedule, each switch independent
                 "ignore_sigterm": ignore_sigterm,
                 "behind_wrapper": behind_wrapper,
                 "shutdown_s": shutdown_s,
+                "finish_s": finish_s,
+                "ends_itself_on_decision": ends_itself_on_decision,
             }
         ),
         encoding="utf-8",
