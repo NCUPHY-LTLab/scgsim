@@ -125,7 +125,7 @@ def show_all_results(
     ranking_limit: int | None = 20,
     show_details: bool = False,
 ) -> None:
-    """Display trust, benchmark, and physics in the Human-defined order."""
+    """Display the views in the order a reader asks: which run and did it converge, its numbers, its cost."""
 
     _require_resolved(result, "show_physics_quantities")
 
@@ -137,18 +137,18 @@ def show_all_results(
         show_details=show_details,
     )
     display(trust)
+    display(
+        trust.show_physics_quantities(
+            theme=theme,
+            ranking_limit=ranking_limit,
+        )
+    )
     pass_cost_records = trust.pass_cost_records()
     display(
         SimulationBenchmarkReport(
             trust=trust,
             data=_resolved_benchmark_data(result, pass_cost_records),
             show_details=checked_show_details(show_details),
-        )
-    )
-    display(
-        trust.show_physics_quantities(
-            theme=theme,
-            ranking_limit=ranking_limit,
         )
     )
 

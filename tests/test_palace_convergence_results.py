@@ -347,6 +347,20 @@ def test_the_physics_view_opens_with_the_numbers_the_run_was_solved_for(returned
     assert html.count(">pad</th>") == 2 and html.count(">plane</th>") == 2
 
 
+def test_all_results_are_shown_in_the_order_a_reader_asks(returned):
+    """Which run and did it converge, then its numbers, then what it cost."""
+    result = resolve_palace_result(
+        returned.root, expected_handoff_id=returned.handoff_id
+    )
+    with _captured_notebook_display() as displayed:
+        result.show_all_results()
+    assert [type(item).__name__ for item in displayed] == [
+        "PalaceTrustReport",
+        "PhysicsQuantitiesReport",
+        "SimulationBenchmarkReport",
+    ]
+
+
 def test_a_partly_returned_run_shows_the_passes_it_holds(tmp_path):
     """Without the final result or the receipt, the trust report checks the iteration folders there are."""
     run = _returned_run(tmp_path)

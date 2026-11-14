@@ -64,7 +64,7 @@ class ResolvedPalaceResult(ResolvedRunData):
         ranking_limit: int | None = 20,
         show_details: bool = False,
     ) -> None:
-        """Display identity, benchmark and physics views in the order a notebook reads them."""
+        """Display the trust, physics and benchmark views, in the order a reader asks about a run."""
         show_all_results(
             self,
             theme=cast(ReportTheme, theme),

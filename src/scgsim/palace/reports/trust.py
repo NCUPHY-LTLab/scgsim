@@ -207,7 +207,7 @@ class PalaceTrustReport:
         ranking_limit: int | None = 20,
         show_details: bool = False,
     ) -> None:
-        """Display trust, benchmark, and available physics in the shared order."""
+        """Display trust, the available physics, then the benchmark: the order of ``show_all_results``."""
 
         from IPython.display import display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
@@ -216,13 +216,13 @@ class PalaceTrustReport:
             show_details=show_details,
         )
         display(trust)
-        display(trust.show_simulation_benchmark(show_details=show_details))
         display(
             trust.show_physics_quantities(
                 theme=theme,
                 ranking_limit=ranking_limit,
             )
         )
+        display(trust.show_simulation_benchmark(show_details=show_details))
 
     def _tokens(self) -> PlotTheme:
         return theme_tokens(self.theme)
