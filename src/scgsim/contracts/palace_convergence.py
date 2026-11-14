@@ -333,7 +333,8 @@ class ReturnedPasses:
     ``final`` says what the top level is: ``pass`` (a solve of its own), ``copy`` (regular files equal to the
     iteration of the pass it records, as a tool that follows links leaves a stopped run), ``linked`` (links
     into an iteration, so no solve of its own), ``unfinished`` (a solve under way: links and new files mixed,
-    or a table with its header only), ``missing`` (no table) or ``set_aside`` (a number not established).
+    or a table with its header only), ``missing`` (no table) or ``set_aside`` (a number not established, or
+    a table that cannot be read).
     """
 
     passes: tuple[PassFolder, ...]
@@ -359,7 +360,18 @@ def returned_passes(results: Path) -> ReturnedPasses:
       otherwise the pass is kept with an ``identity_problem`` and none of its readings is used.
 
     There is no other numbering: a pass's number is recorded and consistent, or the folder is set aside.
+    A table that cannot be read sets its folder aside, or leaves the pass with an ``identity_problem`` when
+    it is needed to tell two folders apart; the other folders are read all the same.  A results folder that
+    cannot be listed at all is set aside whole.
     """
+    try:
+        return _returned_passes(results)
+    except OSError as error:
+        reason = f"{results.name} cannot be read ({error.strerror or error})"
+        return ReturnedPasses((), (SetAside(results, reason),), "set_aside", reason)
+
+
+def _returned_passes(results: Path) -> ReturnedPasses:
     candidates: list[tuple[int, Path]] = []
     set_aside: list[SetAside] = []
     iterations = sorted(
@@ -459,7 +471,19 @@ def _top_level(
             "the final result is a solve under way: its tables mix links into iteration folders with new files",
             None,
         )
-    header_only = [path.name for path in tables if _data_rows(path) == 0]
+    contents = {path.name: _table_bytes(path) for path in tables}
+    unreadable = [content for content in contents.values() if isinstance(content, str)]
+    if unreadable:
+        return (
+            "set_aside",
+            f"the final result holds a table that cannot be read: {'; '.join(unreadable)}",
+            None,
+        )
+    header_only = [
+        name
+        for name, content in contents.items()
+        if isinstance(content, bytes) and _data_rows(content) == 0
+    ]
     if header_only:
         return (
             "unfinished",
@@ -482,10 +506,17 @@ def _link_iteration(results: Path, link: Path) -> int | None:
     return _folder_iteration(relative.parts[0]) if len(relative.parts) == 2 else None
 
 
-def _data_rows(path: Path) -> int:
+def _table_bytes(path: Path) -> bytes | str:
+    """A table's bytes, or why they cannot be read."""
+    try:
+        return path.read_bytes()
+    except OSError as error:
+        return f"{path.name} cannot be read ({error.strerror or error})"
+
+
+def _data_rows(table: bytes) -> int:
     """How many non-empty lines a table has after its header."""
-    with path.open(encoding="utf-8", newline="") as handle:
-        return max(sum(1 for line in handle if line.strip()) - 1, 0)
+    return max(sum(1 for line in table.splitlines() if line.strip()) - 1, 0)
 
 
 def _merge(candidates: list[tuple[int, Path]]) -> tuple[list[PassFolder], bool]:
@@ -501,14 +532,19 @@ def _merge(candidates: list[tuple[int, Path]]) -> tuple[list[PassFolder], bool]:
         if len(folders) == 1:
             passes.append(PassFolder(number, folders[0]))
             continue
-        differing = _differing_tables(folders)
-        if differing:
+        differing, unreadable = _differing_tables(folders)
+        if differing or unreadable:
             names = " and ".join(_source_name(path) for path in folders)
+            problem = (
+                f"whose tables cannot be compared: {'; '.join(unreadable)}"
+                if unreadable
+                else f"whose tables differ: {differing}"
+            )
             passes.append(
                 PassFolder(
                     number,
                     folders[0],
-                    f"pass {number} is recorded by {names}, whose tables differ: {differing}",
+                    f"pass {number} is recorded by {names}, {problem}",
                 )
             )
         else:
@@ -527,20 +563,29 @@ def _source_name(folder: Path) -> str:
     )
 
 
-def _differing_tables(folders: list[Path]) -> list[str]:
-    """The tables that are not the same bytes in every one of ``folders``, or held by only some of them."""
+def _differing_tables(folders: list[Path]) -> tuple[list[str], list[str]]:
+    """The tables not the same bytes in every one of ``folders`` (or held by only some), and those unreadable.
+
+    The second list says, per unreadable table, the folder and why.
+    """
     names = sorted({path.name for folder in folders for path in _tables(folder)})
-    return [
-        name
-        for name in names
-        if len(
-            {
-                (folder / name).read_bytes() if (folder / name).is_file() else None
-                for folder in folders
-            }
-        )
-        != 1
-    ]
+    differing: list[str] = []
+    unreadable: list[str] = []
+    for name in names:
+        contents = [
+            _table_bytes(folder / name) if (folder / name).is_file() else None
+            for folder in folders
+        ]
+        reasons = [
+            f"{_source_name(folder)}: {content}"
+            for folder, content in zip(folders, contents, strict=True)
+            if isinstance(content, str)
+        ]
+        if reasons:
+            unreadable.extend(reasons)
+        elif len(set(contents)) != 1:
+            differing.append(name)
+    return differing, unreadable
 
 
 @dataclass(frozen=True)
@@ -777,12 +822,17 @@ def _read_table(path: Path) -> _Table | str:
     """A pass's table as text cells, or why it cannot be read; headers and cells lose Palace's padding."""
     if not path.is_file():
         return f"{path.name} is missing"
-    with path.open(encoding="utf-8", newline="") as handle:
+    content = _table_bytes(path)
+    if isinstance(content, str):
+        return content
+    try:
         lines = [
             tuple(cell.strip() for cell in line)
-            for line in csv.reader(handle)
+            for line in csv.reader(content.decode("utf-8").splitlines())
             if any(cell.strip() for cell in line)
         ]
+    except (UnicodeDecodeError, csv.Error) as error:
+        return f"{path.name} cannot be read as a table ({error})"
     if not lines:
         return f"{path.name} is empty"
     headers, rows = lines[0], tuple(lines[1:])

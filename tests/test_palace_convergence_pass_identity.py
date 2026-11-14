@@ -488,6 +488,82 @@ def test_a_table_missing_in_one_pass_makes_that_pass_and_the_next_change_unavail
     assert check.verdict.state == "not_converged"
 
 
+_NOT_ROOT = pytest.mark.skipif(
+    os.geteuid() == 0, reason="a file's permissions do not stop the superuser"
+)
+
+
+def test_a_final_table_that_is_not_text_leaves_the_iterations_readable(tmp_path):
+    """A top-level table with bytes that are not UTF-8: the passes are still listed, and its reading says why.
+
+    The enumeration counts a table's rows without decoding it; only reading the planned number decodes, and
+    that reading is then unavailable with the reason.
+    """
+    results = _results(tmp_path)
+    _electrostatic(results / "iteration1", 1, capacitance=1.0e-13, norm=0.2)
+    _electrostatic(results, 2, capacitance=1.0e-13, norm=0.04)
+    (results / "terminal-C.csv").write_bytes(b"\xff\xfe i, C[i][1] (F)\n 1, 1.0e-13\n")
+    returned = returned_passes(results)
+    assert [(folder.number, folder.path.name) for folder in returned.passes] == [
+        (1, "iteration1"),
+        (2, "palace"),
+    ]
+    check = _check(tmp_path, _DIAGONAL, _INDICATOR)
+    assert _numbers(check) == [1, 2]
+    reason = next(iter(_reasons(check, 2) - {None}))
+    assert reason.startswith("terminal-C.csv cannot be read as a table")
+    assert [item.pass_number for item in _snapshots(tmp_path).passes] == [1]
+
+
+@_NOT_ROOT
+def test_a_final_table_that_cannot_be_opened_sets_the_final_result_aside(tmp_path):
+    """A top-level table without read permission: the final result is set aside with the reason, iteration1 stays."""
+    results = _results(tmp_path)
+    _electrostatic(results / "iteration1", 1, capacitance=1.0e-13, norm=0.2)
+    _electrostatic(results, 2, capacitance=1.0e-13, norm=0.04)
+    locked = results / "domain-E.csv"
+    locked.write_text("locked\n", encoding="utf-8")
+    locked.chmod(0)
+    try:
+        returned = returned_passes(results)
+        assert [folder.path.name for folder in returned.passes] == ["iteration1"]
+        assert returned.final == "set_aside"
+        assert returned.final_reason == (
+            "the final result holds a table that cannot be read: "
+            "domain-E.csv cannot be read (Permission denied)"
+        )
+        collected = _snapshots(tmp_path)
+        assert [item.pass_number for item in collected.passes] == [1]
+        assert collected.final_snapshot_status == "unreadable"
+    finally:
+        locked.chmod(0o644)
+
+
+@_NOT_ROOT
+def test_two_folders_of_one_pass_with_a_table_that_cannot_be_opened_are_not_compared(
+    tmp_path,
+):
+    """``iteration2`` and the final result both record pass 2, and a table of ``iteration2`` cannot be opened.
+
+    Whether the two hold the same solve cannot be told, so pass 2 is kept with the problem and not used.
+    """
+    results = _results(tmp_path)
+    _electrostatic(results / "iteration1", 1, capacitance=1.0e-13, norm=0.2)
+    _electrostatic(results / "iteration2", 2, capacitance=1.0e-13, norm=0.04)
+    _electrostatic(results, 2, capacitance=1.0e-13, norm=0.04)
+    locked = results / "iteration2" / "terminal-C.csv"
+    locked.chmod(0)
+    try:
+        returned = returned_passes(results)
+        assert [folder.number for folder in returned.passes] == [1, 2]
+        assert returned.passes[1].identity_problem == (
+            "pass 2 is recorded by iteration2 and the final result, whose tables cannot be compared: "
+            "iteration2: terminal-C.csv cannot be read (Permission denied)"
+        )
+    finally:
+        locked.chmod(0o644)
+
+
 def test_without_the_final_result_the_iterations_are_the_passes_read(tmp_path):
     """No top-level table: the verdict is over the iterations read, and names them."""
     results = _results(tmp_path)

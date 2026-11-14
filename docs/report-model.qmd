@@ -114,6 +114,11 @@ are, once, for the trust report and the convergence check alike:
   Otherwise their readings conflict and that pass is not read.
 - A folder whose own record is missing, unreadable or names another pass is no
   pass. No number is ever taken from a folder's place in the listing.
+- A table that cannot be read (no permission, or bytes that are not text) does
+  not stop the listing. A top level that holds one is set aside with the reason;
+  two folders of one pass that cannot be compared for it leave that pass unread;
+  a declared number in such a table is unavailable at that pass. The other
+  folders are read all the same.
 
 Every AMR pass axis of the trust report counts this way. A change is measured
 only between two readable passes whose numbers are consecutive. The verdict
