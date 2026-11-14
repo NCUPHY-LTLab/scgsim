@@ -60,9 +60,7 @@ def _criterion(
     return PlannedCriterion(label, quantity, test, threshold, unit, values)  # type: ignore[arg-type]
 
 
-def _diagonal(
-    test: str = "relative_change", threshold: float = 1e-3
-) -> PlannedCriterion:
+def _diagonal(test: str = "percent_change", threshold: float = 0.1) -> PlannedCriterion:
     return _criterion(
         "C diagonal",
         (
@@ -109,7 +107,7 @@ def _passes(
     return folders
 
 
-def test_a_relative_change_compares_each_pass_with_the_one_before(tmp_path):
+def test_a_percent_change_compares_each_pass_with_the_one_before(tmp_path):
     """The change at pass k is |C_k - C_(k-1)| / |C_k| for every element; pass 1 has none."""
     passes = _passes(
         tmp_path,
@@ -124,10 +122,10 @@ def test_a_relative_change_compares_each_pass_with_the_one_before(tmp_path):
     assert [value.measured for value in first.values] == [None, None]
     assert first.values[0].unavailable == "no pass before it"
     assert not first.holds
-    assert second.values[0].measured == pytest.approx(1e-15 / 101e-15)
+    assert second.values[0].measured == pytest.approx(100 * 1e-15 / 101e-15)
     assert second.worst.label == "C[a][a]"
     assert not second.holds
-    assert third.values[0].measured == pytest.approx(0.05e-15 / 101.05e-15)
+    assert third.values[0].measured == pytest.approx(100 * 0.05e-15 / 101.05e-15)
     assert third.holds
     assert check.verdict.state == "converged"
     assert check.verdict.pass_number == 3
@@ -147,7 +145,7 @@ def test_an_absolute_change_is_in_the_unit_of_the_number(tmp_path):
 
 
 def test_a_zero_value_holds_only_when_the_previous_one_is_zero_too(tmp_path):
-    """Both zero: no change.  Only the new one zero: the relative change is undefined and fails."""
+    """Both zero: no change.  Only the new one zero: the percentage is undefined and fails."""
     off_diagonal = _criterion(
         "C[a][b]",
         (
@@ -155,8 +153,8 @@ def test_a_zero_value_holds_only_when_the_previous_one_is_zero_too(tmp_path):
                 "C[a][b]", "terminal-C.csv", TableRow("i", 1), ("C[i][2] (F)",)
             ),
         ),
-        "relative_change",
-        1e-3,
+        "percent_change",
+        0.1,
     )
     passes = _passes(
         tmp_path, [(1e-15, 2e-18, 1e-15), (1e-15, 0.0, 1e-15), (1e-15, 0.0, 1e-15)]
@@ -165,8 +163,7 @@ def test_a_zero_value_holds_only_when_the_previous_one_is_zero_too(tmp_path):
     undefined, unchanged = check.passes[1].criteria[0], check.passes[2].criteria[0]
     assert not undefined.holds
     assert (
-        undefined.values[0].unavailable
-        == "relative change undefined: the value is zero"
+        undefined.values[0].unavailable == "percent change undefined: the value is zero"
     )
     assert unchanged.holds
     assert unchanged.values[0].measured == 0.0
@@ -216,7 +213,7 @@ def test_a_run_that_never_holds_names_what_fails_at_its_last_pass(tmp_path):
     assert check.verdict.passes_read == 3
     (failing,) = check.verdict.failing
     assert failing.worst.label == "C[a][a]"
-    assert failing.worst.measured == pytest.approx(1e-15 / 102e-15)
+    assert failing.worst.measured == pytest.approx(100 * 1e-15 / 102e-15)
 
 
 def test_a_missing_or_unreadable_number_does_not_hold(tmp_path):
@@ -229,8 +226,8 @@ def test_a_missing_or_unreadable_number_does_not_hold(tmp_path):
                 "MA, excitation a", "surface-Q.csv", TableRow("i", 1), ("p_surf[1]",)
             ),
         ),
-        "relative_change",
-        1e-2,
+        "percent_change",
+        1.0,
     )
     beyond = _criterion(
         "C[c][c]",
@@ -239,8 +236,8 @@ def test_a_missing_or_unreadable_number_does_not_hold(tmp_path):
                 "C[c][c]", "terminal-C.csv", TableRow("i", 3), ("C[i][3] (F)",)
             ),
         ),
-        "relative_change",
-        1e-2,
+        "percent_change",
+        1.0,
     )
     check = check_convergence(_plan(surface, beyond), passes)
     missing, absent_row = check.passes[1].criteria

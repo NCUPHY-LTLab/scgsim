@@ -66,8 +66,8 @@ SETTLES_AT_5 = [
 NEVER_SETTLES = [(100.0 + 2 * k, 300.0 + k) for k in range(6)]
 NORMS = [0.2, 0.04, 0.03, 0.02, 0.02, 0.02]
 DECLARED = (
-    Capacitance.diagonal().within(relative=1e-3),
-    SurfaceEpr.each("MA", "MS", margin_um=1.0).within(relative=2e-2),
+    Capacitance.diagonal().within(percent=0.1),
+    SurfaceEpr.each("MA", "MS", margin_um=1.0).within(percent=2),
     ErrorIndicator().below(0.05),
 )
 LONG_S = 60.0
@@ -111,7 +111,7 @@ def prepared_run(  # noqa: PLR0913 -- one run folder, each switch independent
     else:
         sim = eigenmode(tmp_path / "model", num_modes=1)
         values = values or [(5.0,), (5.2,), (5.2001,), (5.2001,), (5.2001,), (5.2001,)]
-        criteria = (ModeFrequency().within(relative=1e-3), ErrorIndicator().below(0.05))
+        criteria = (ModeFrequency().within(percent=0.1), ErrorIndicator().below(0.05))
     sim.set_numerical(
         amr_max_passes=len(values) - 1,
         **({} if problem == "Electrostatic" else {"amr_update_fraction": 0.7}),
