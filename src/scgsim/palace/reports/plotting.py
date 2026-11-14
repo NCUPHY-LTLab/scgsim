@@ -47,6 +47,7 @@ PLOT_TICK_FONT = 14
 
 
 _PLOT_LEGEND_FONT = 15
+_LEGEND_ROW_HEIGHT = 22
 
 
 ReportTheme = Literal["light", "dark"]
@@ -135,16 +136,21 @@ class LinePlot:
     yaxis_type: str = "linear"
     hline: ReferenceLine | None = None
     theme: ReportTheme = "light"
+    legend_rows: int = 2
+    """The rows the legend above the plot takes: one per trace when the names are too long to share a row."""
 
     def figure(self) -> Any | None:
         """Render available paired points, labels and an optional configured reference line."""
         tokens = theme_tokens(self.theme)
         go = plotly()
         fig = go.Figure()
+        # The margin above the plot holds the title and two legend rows; further rows get room of their own.
+        above = _LEGEND_ROW_HEIGHT * max(0, self.legend_rows - 2)
         # A responsive width does not reclaim the fixed gutter for an outside legend.
         FigureStyle(
             title=self.title,
-            margin={"l": 84, "r": 36, "t": 116, "b": 64},
+            height=_PLOT_HEIGHT + above,
+            margin={"l": 84, "r": 36, "t": 116 + above, "b": 64},
             theme=self.theme,
         ).apply(fig)
         fig.update_layout(
