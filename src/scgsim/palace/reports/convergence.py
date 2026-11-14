@@ -5,16 +5,23 @@ Everything here is read from a ``ConvergenceCheck`` (``scgsim.contracts.palace_c
 verdict, then how Palace ended (stopped by SCGSim after a pass, with the passes of the limit not run, or at its
 own end).  ``pass_table_html`` shows every criterion at every pass by its worst number, and ``change_figures``
 plots what each criterion measured against the threshold the user declared.
+The numbers are shown as the AEDT side of SCGSim names them, so a reader compares the two solvers in one
+vocabulary: a relative change is a percentage, called ``Delta %`` for a capacitance (Q3D's matrix delta),
+``Max Delta Freq. %`` for a mode frequency (HFSS Eigenmode) and ``Max Percent Delta`` for a participation
+(HFSS's expression convergence); the table has a row per pass with its solved elements, like AEDT's.  The
+declaration and the plan keep the relative change as a fraction; only what is shown is a percentage.
 """
 
 from __future__ import annotations
 
 import html
+from collections.abc import Mapping
 from typing import Any
 
 from scgsim.contracts.palace_convergence import (
     ConvergenceCheck,
     CriterionAtPass,
+    PassCheck,
     PlannedCriterion,
     ValueAtPass,
 )
@@ -29,18 +36,23 @@ from scgsim.palace.results.convergence import SolverEnd
 
 
 def declared_items(
-    check: ConvergenceCheck, theme: ReportTheme, end: SolverEnd | None = None
+    check: ConvergenceCheck,
+    theme: ReportTheme,
+    end: SolverEnd | None = None,
+    *,
+    solved_elements: Mapping[int, int] | None = None,
 ) -> list[Any]:
     """The declared convergence as the trust report opens its numerical evidence; nothing when undeclared.
 
-    The verdict comes first, then the table of passes, then each criterion's figure.
+    The verdict comes first, then the table of passes, then each criterion's figure.  ``solved_elements``
+    gives the mesh elements of each pass by its number, for the table.
     """
     if check.plan is None:
         return []
     return [
         "<section><h4>Declared convergence</h4>"
         f"<p><strong>{html.escape(verdict_sentence(check, end))}</strong></p>"
-        f"{pass_table_html(check)}</section>",
+        f"{pass_table_html(check, solved_elements)}</section>",
         *change_figures(check, theme),
     ]
 
@@ -229,76 +241,89 @@ def _within(value_label: str, criterion_label: str) -> str:
     return value_label.removeprefix(f"{criterion_label}, ")
 
 
-def pass_table_html(check: ConvergenceCheck) -> str:
-    """One row per criterion, one column per pass: whether it holds, by its worst number."""
+def pass_table_html(
+    check: ConvergenceCheck, solved_elements: Mapping[int, int] | None = None
+) -> str:
+    """One row per pass, as AEDT's convergence table has it: its solved elements and each criterion's worst number.
+
+    A column is a criterion, headed by its label and what was declared; the last column says whether every
+    criterion held and for how many passes in a row.
+    """
     if check.plan is None or not check.passes:
         return ""
+    elements = solved_elements or {}
     header = (
         "<tr>"
-        + html_cell("th", "Criterion")
-        + html_cell("th", "Declared")
-        + "".join(
-            html_cell(
-                "th",
-                f"Pass {item.number}" + ("" if item.identity_problem is None else "?"),
-            )
-            for item in check.passes
-        )
+        + html_cell("th", "Pass")
+        + html_cell("th", "Solved elements")
+        + "".join(_criterion_heading(criterion) for criterion in check.plan.criteria)
+        + _heading("Every criterion", _in_a_row(check.plan.minimum_converged_passes))
         + "</tr>"
     )
     rows = [
         "<tr>"
-        + html_cell("td", criterion.label)
-        + html_cell("td", _threshold_words(criterion))
-        + "".join(_cell(check_pass.criteria[index]) for check_pass in check.passes)
-        + "</tr>"
-        for index, criterion in enumerate(check.plan.criteria)
-    ]
-    rows.append(
-        "<tr>"
-        + html_cell("td", "Every criterion")
-        + html_cell("td", _in_a_row(check.plan.minimum_converged_passes))
-        + "".join(
-            html_cell(
-                "td",
-                "not counted: its folders differ"
-                if item.identity_problem is not None
-                else f"holds, {item.streak} in a row"
-                if item.holds
-                else "fails",
-            )
-            for item in check.passes
+        + html_cell(
+            "td", f"{item.number}" + ("" if item.identity_problem is None else "?")
         )
+        + html_cell(
+            "td", f"{elements[item.number]:,}" if item.number in elements else ""
+        )
+        + "".join(_cell(at_pass) for at_pass in item.criteria)
+        + html_cell("td", _every_criterion(item))
         + "</tr>"
-    )
+        for item in check.passes
+    ]
     return (
         "<table style='border-collapse:collapse;font-size:0.9rem'>"
         f"<thead>{header}</thead><tbody>{''.join(rows)}</tbody></table>"
-        "<p style='opacity:0.75'>Each cell is the criterion's worst number at that pass: what it measured "
-        "and, for a group, which number. A change criterion cannot hold at pass 1, which has no pass "
-        "before it.</p>"
+        "<p style='opacity:0.75'>Each cell is the criterion's worst number at that pass and, for a group, "
+        "which number; a relative change is a percentage. N/A: a change needs the pass before it, so "
+        "pass 1 has none.</p>"
     )
 
 
+def _heading(label: str, declared: str) -> str:
+    """A column heading in two lines: what the column is, and what was declared for it."""
+    return (
+        "<th style='border:1px solid var(--border,#d0d7de);padding:0.35rem 0.65rem;text-align:left'>"
+        f"{html.escape(label)}<br><span style='font-weight:normal;opacity:0.75'>"
+        f"{html.escape(declared)}</span></th>"
+    )
+
+
+def _criterion_heading(criterion: PlannedCriterion) -> str:
+    return _heading(criterion.label, _threshold_words(criterion))
+
+
+def _every_criterion(item: PassCheck) -> str:
+    """Whether every criterion held at the pass, and for how many passes in a row."""
+    if item.identity_problem is not None:
+        return "not counted: its folders differ"
+    if item.holds:
+        return f"holds, {item.streak} in a row"
+    if any(value.measured is None for at in item.criteria for value in at.values):
+        return "not yet"
+    return "fails"
+
+
 def _cell(item: CriterionAtPass) -> str:
-    """Whether the criterion holds, by its worst number; why that number is missing when it is."""
+    """The criterion's worst number at a pass and whether it holds; why it is missing when it is."""
     worst = item.worst
-    if worst.measured is None:
-        # Pass 1 of a change criterion has the same reason for every number: say it once.
-        shared = len({value.unavailable for value in item.values}) == 1
-        which = (
-            ""
-            if shared or len(item.values) == 1
-            else f" ({_within(worst.label, item.criterion.label)})"
-        )
-        return html_cell("td", f"not measured: {worst.unavailable}{which}")
-    mark = "holds" if item.holds else "fails"
     which = (
         ""
         if len(item.values) == 1
         else f" ({_within(worst.label, item.criterion.label)})"
     )
-    return html_cell("td", f"{mark}: {_number(worst.measured, item.criterion)}{which}")
+    if worst.measured is None:
+        if worst.unavailable == _NO_PASS_BEFORE:
+            return html_cell("td", "N/A")
+        # One reason for every number of the criterion is said once.
+        shared = len({value.unavailable for value in item.values}) == 1
+        return html_cell(
+            "td", f"not measured: {worst.unavailable}{'' if shared else which}"
+        )
+    mark = "✓" if item.holds else "✗"
+    return html_cell("td", f"{_number(worst.measured, item.criterion)} {mark}{which}")
 
 
 def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
@@ -312,7 +337,7 @@ def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
         traces = [
             Trace(
                 planned.label,
-                [_measured(at.values[value_index]) for at in at_passes],
+                [_measured(at.values[value_index], criterion) for at in at_passes],
             )
             for value_index, planned in enumerate(criterion.values)
         ]
@@ -323,7 +348,9 @@ def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
             xs=xs,
             traces=traces,
             yaxis_type="log",
-            hline=ReferenceLine(criterion.threshold, "declared threshold"),
+            hline=ReferenceLine(
+                _shown(criterion.threshold, criterion), "declared threshold"
+            ),
             theme=theme,
         ).figure()
         if figure is not None:
@@ -335,21 +362,32 @@ def _in_a_row(passes: int) -> str:
     return "1 pass in a row" if passes == 1 else f"{passes} passes in a row"
 
 
-def _measured(value: ValueAtPass) -> float | None:
-    return value.measured
+def _measured(value: ValueAtPass, criterion: PlannedCriterion) -> float | None:
+    return None if value.measured is None else _shown(value.measured, criterion)
+
+
+_NO_PASS_BEFORE = "no pass before it"
+"""The contract's reason for a change that pass 1 cannot have."""
+
+_DELTA_NAMES = {
+    "capacitance": "Delta %",
+    "mode_frequency": "Max Delta Freq. %",
+    "surface_epr": "Max Percent Delta",
+}
+"""A relative change by the name the AEDT side gives the same measure of that quantity."""
 
 
 def _measured_words(criterion: PlannedCriterion) -> str:
     if criterion.test == "relative_change":
-        return "relative change"
+        return _DELTA_NAMES.get(criterion.quantity, "Delta %")
     if criterion.test == "absolute_change":
-        return "change"
+        return "Max Delta"
     return "value"
 
 
 def _axis_words(criterion: PlannedCriterion) -> str:
     if criterion.test == "relative_change":
-        return "|q_k - q_(k-1)| / |q_k|"
+        return "100 |q_k - q_(k-1)| / |q_k|  (%)"
     unit = "" if criterion.unit == "1" else f" ({criterion.unit})"
     if criterion.test == "absolute_change":
         return f"|q_k - q_(k-1)|{unit}"
@@ -357,18 +395,23 @@ def _axis_words(criterion: PlannedCriterion) -> str:
 
 
 def _threshold_words(criterion: PlannedCriterion) -> str:
-    """The declared threshold as a reader says it: ``relative change at most 0.001``."""
+    """The declared threshold as a reader says it: ``Delta % at most 0.1``."""
     return f"{_measured_words(criterion)} at most {_number(criterion.threshold, criterion)}"
 
 
+def _shown(value: float, criterion: PlannedCriterion) -> float:
+    """A measured number or a threshold as the report shows it: a relative change as a percentage."""
+    return value * 100 if criterion.test == "relative_change" else value
+
+
 def _number(value: float, criterion: PlannedCriterion) -> str:
-    """A measured number or threshold, in the criterion's unit unless it is relative or unitless."""
+    """A measured number or threshold as shown, in the criterion's unit unless it is relative or unitless."""
     unit = (
         ""
         if criterion.test == "relative_change" or criterion.unit == "1"
         else f" {criterion.unit}"
     )
-    return f"{value:.3g}{unit}"
+    return f"{_shown(value, criterion):.3g}{unit}"
 
 
 __all__ = [
