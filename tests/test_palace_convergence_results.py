@@ -287,7 +287,7 @@ def test_the_trust_report_shows_the_run_the_table_and_each_quantity_with_its_cha
     assert ">N/A</td>" in html
     titles = [figure.layout.title.text for figure in figures]
     value, change = (
-        titles.index("C[1][1] vs AMR pass"),
+        titles.index("C[pad][pad] vs AMR pass"),
         titles.index("C diagonal Delta % vs AMR pass"),
     )
     assert value < change < titles.index("AMR error indicator vs AMR pass")

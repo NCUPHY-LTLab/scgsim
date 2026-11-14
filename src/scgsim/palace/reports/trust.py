@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.contracts.palace_run_folder import (
+    INDEX_MAP,
     NATIVE_METADATA,
     OUTPUT_DIR,
     palace_problem,
@@ -36,6 +37,7 @@ from scgsim.palace.reports.observations import (
     native_positive_infinity_q_notice,
     recorded_durations,
     scalar_physics,
+    terminal_names,
     traces_are_finite,
     union_mapping_keys,
 )
@@ -422,7 +424,8 @@ class PalaceTrustReport:
     def _capacitance_figures(self, xs: tuple[int, ...]) -> list[Any]:
         """The Maxwell capacitance coefficients across the AMR passes, then the declared change of them."""
         items: list[Any] = []
-        for label, traces in capacitance_traces(self.passes):
+        names = terminal_names(read_optional_json(self.run_dir / INDEX_MAP))
+        for label, traces in capacitance_traces(self.passes, names):
             figure = LinePlot(
                 title=f"{label} vs AMR pass",
                 xlabel="AMR pass",

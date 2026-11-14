@@ -217,7 +217,7 @@ def result_values_html(
 ) -> str:
     """The numbers the run was solved for, at ``pass_``: the capacitance matrix, or each mode's frequency and Q."""
     if pass_.capacitance_matrix_f is not None:
-        names = _terminal_names(index_map)
+        names = terminal_names(index_map)
         size = len(pass_.capacitance_matrix_f)
         labels = [names.get(index, str(index)) for index in range(1, size + 1)]
         header = html_cell("th", "") + "".join(html_cell("th", name) for name in labels)
@@ -254,7 +254,7 @@ def _values_table(title: str, header: str, rows: str) -> str:
     )
 
 
-def _terminal_names(index_map: Mapping[str, Any] | None) -> dict[int, str]:
+def terminal_names(index_map: Mapping[str, Any] | None) -> dict[int, str]:
     """Each terminal's name by its Palace index, from the run's index map."""
     entries = (index_map or {}).get("entries", [])
     return {
@@ -268,9 +268,9 @@ def _terminal_names(index_map: Mapping[str, Any] | None) -> dict[int, str]:
 
 
 def capacitance_traces(
-    passes: Sequence[AmrPassSnapshot],
+    passes: Sequence[AmrPassSnapshot], names: Mapping[int, str]
 ) -> list[TraceGroup]:
-    """Project individual Maxwell coefficients and their diagonal scale in femtofarads."""
+    """Project individual Maxwell coefficients in femtofarads, each named by its terminals (``names``)."""
     rows = max(
         (
             len(pass_.capacitance_matrix_f)
@@ -294,7 +294,7 @@ def capacitance_traces(
     per_element: list[TraceGroup] = []
     for row in range(rows):
         for col in range(cols):
-            name = f"C[{row + 1}][{col + 1}]"
+            name = f"C[{names.get(row + 1, row + 1)}][{names.get(col + 1, col + 1)}]"
             values = []
             for pass_ in passes:
                 matrix = pass_.capacitance_matrix_f
