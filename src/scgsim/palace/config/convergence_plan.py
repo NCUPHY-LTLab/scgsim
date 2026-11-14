@@ -255,7 +255,11 @@ def _surface_columns(quantity: SurfaceEpr, context: PlanContext) -> tuple[str, .
             raise ValueError(
                 Declared(f"{quantity.label} criterion", where).refusal(
                     f"reads the {kind} rows at margin {quantity.margin_um:g} um, which the {kind} spec does "
-                    f"not declare; its margins are {margins} um"
+                    + (
+                        f"not declare; its margins are {margins} um"
+                        if margins
+                        else "not declare; it declares no margin"
+                    )
                 )
             )
     return tuple(f"p_surf[{entry.index}]" for entry in chosen)

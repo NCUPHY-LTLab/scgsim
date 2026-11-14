@@ -523,9 +523,7 @@ def _check_fit(criterion: Any, problem: Problem, simulation: str) -> None:
         raise ValueError(
             Declared(
                 f"{type(quantity).__name__} criterion", _WHERE_SET_CONVERGENCE
-            ).refusal(
-                f"does not fit a {problem} simulation: {simulation} takes {names}"
-            )
+            ).refusal(f"does not fit {simulation}, which takes {names}")
         )
     if isinstance(quantity, SurfaceEpr):
         wrong = (
@@ -539,7 +537,7 @@ def _check_fit(criterion: Any, problem: Problem, simulation: str) -> None:
             right = "modes" if wrong == "terminals" else "terminals"
             raise ValueError(
                 Declared(f"SurfaceEpr {wrong}=...", _WHERE_SET_CONVERGENCE).refusal(
-                    f"does not fit a {problem} simulation, whose rows are {right}: select with {right}=..."
+                    f"does not fit {simulation}, whose rows are {right}: select with {right}=..."
                 )
             )
 
