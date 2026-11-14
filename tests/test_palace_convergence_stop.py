@@ -154,8 +154,11 @@ def test_the_report_says_where_it_stopped_and_what_was_not_run(stopped):
     assert trust.completeness == "complete"
     assert trust.selection.reason == "last_pass_of_a_stopped_run"
     assert trust.selection.selected_source == "iteration4"
-    assert "Stopped at convergence" in trust.identity_html()
-    assert "none: stopped at convergence" in trust.identity_html()
+    # The stop is the run as declared, so the identity says nothing of it; the records are with the details.
+    assert "Stopped at convergence" not in trust.identity_html()
+    detailed = result.show_run_trustworthiness(show_details=True).identity_html()
+    assert "Stopped at convergence" in detailed
+    assert "none: stopped at convergence" in detailed
     inspected = inspect_run_trustworthiness(stopped.root)
     assert inspected.completeness == "complete"
     assert verdict_sentence(inspected.convergence, inspected.solver_end) == sentence

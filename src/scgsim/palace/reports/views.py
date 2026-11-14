@@ -9,7 +9,7 @@ from typing import Any, Literal, TypedDict
 
 from scgsim.contracts.palace_run_folder import INDEX_MAP
 from scgsim.palace.mesh.summary import MeshSummary
-from scgsim.palace.reports.observations import CostCards
+from scgsim.palace.reports.observations import CostCards, result_values_html
 from scgsim.palace.reports.plotting import (
     mesh_summary_html,
     show_figure,
@@ -198,6 +198,13 @@ class PhysicsQuantitiesReport:
         from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
         display(HTML(self._heading_html()))
+        if self.trust.passes:
+            values = result_values_html(
+                self.trust.passes[-1],
+                read_optional_json(self.trust.run_dir / INDEX_MAP),
+            )
+            if values:
+                display(HTML(values))
         snapshots = self.snapshots
         if not snapshots:
             display(
@@ -248,24 +255,18 @@ class PhysicsQuantitiesReport:
                 )
 
     def _heading_html(self) -> str:
-        state = (
-            "complete returned run"
+        passes = self.trust.passes
+        source = (
+            f"Values of pass {passes[-1].pass_number}, the last pass read."
+            if passes
+            else "No pass was read."
+        )
+        partial = (
+            ""
             if self.trust.completeness == "complete"
-            else "partial / convergence not established"
+            else " The run is not complete, so these are not its final values."
         )
-        limit = (
-            "all surfaces" if self.ranking_limit is None else str(self.ranking_limit)
-        )
-        latest_source = self.trust.selection.selected_source or "unavailable"
         return (
             "<section><h3>Physics Quantities</h3>"
-            "<p style='opacity:0.75;margin-top:0'>Latest-readable individual-surface "
-            "participation and loss interpretation are shown only after run identity "
-            "and numerical evidence. Modes and excitations remain separate. "
-            f"Run state: {html.escape(state)}; latest readable snapshot: "
-            f"{html.escape(latest_source)}; ranking limit: "
-            f"{html.escape(limit)}; snapshot integrity: "
-            f"{html.escape(self.trust.selection.integrity)}. Complete bound records "
-            "remain available through "
-            "<code>snapshots</code>.</p></section>"
+            f"<p style='opacity:0.75;margin-top:0'>{html.escape(source + partial)}</p></section>"
         )

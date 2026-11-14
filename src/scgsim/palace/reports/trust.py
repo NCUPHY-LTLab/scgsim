@@ -11,14 +11,18 @@ from typing import Any, Literal
 
 from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.contracts.palace_run_folder import (
+    INDEX_MAP,
     NATIVE_METADATA,
     OUTPUT_DIR,
     palace_problem,
 )
 from scgsim.palace.mesh.summary import MeshSummary
 from scgsim.palace.reports.convergence import (
-    declared_items,
-    declared_threshold,
+    change_figures,
+    declared_html,
+    pass_limit_text,
+    solved_elements,
+    threshold_line,
     verdict_card,
 )
 from scgsim.palace.reports.observations import (
@@ -28,12 +32,12 @@ from scgsim.palace.reports.observations import (
     CostCards,
     capacitance_traces,
     cost_cards,
-    delta_traces,
     elapsed_pass_cost,
     mode_traces,
     native_positive_infinity_q_notice,
     recorded_durations,
     scalar_physics,
+    terminal_names,
     traces_are_finite,
     union_mapping_keys,
 )
@@ -61,8 +65,8 @@ from scgsim.palace.reports.plotting import (
 )
 from scgsim.palace.reports.surface_figures import (
     series_label,
+    surface_kind_figures,
     surface_percentage_figure,
-    surface_total_figure,
 )
 from scgsim.palace.reports.trust_records import ReportIdentity, ReportProvenance
 from scgsim.palace.results.artifacts import read_optional_json
@@ -79,6 +83,7 @@ from scgsim.palace.results.inspection_records import (
     pass_number,
 )
 from scgsim.palace.results.snapshots import (
+    surface_margin_snapshots,
     surface_snapshots,
 )
 
@@ -156,9 +161,10 @@ class PalaceTrustReport:
     def show_simulation_benchmark(
         self,
         *,
+        theme: ReportTheme = "light",
         show_details: bool = False,
     ) -> SimulationBenchmarkReport:
-        """Return the readable benchmark while retaining every machine field."""
+        """Return the readable benchmark with the selected theme, retaining every machine field."""
         attempted = read_optional_json(self.run_dir / NATIVE_METADATA)
         pass_cost_records = self.pass_cost_records()
         data: InspectedBenchmarkData = {
@@ -190,7 +196,7 @@ class PalaceTrustReport:
             "pass_cost_records": [asdict(record) for record in pass_cost_records],
         }
         return SimulationBenchmarkReport(
-            trust=self,
+            trust=self.with_theme(theme),
             data=data,
             show_details=checked_show_details(show_details),
         )
@@ -202,7 +208,7 @@ class PalaceTrustReport:
         ranking_limit: int | None = 20,
         show_details: bool = False,
     ) -> None:
-        """Display trust, benchmark, and available physics in the shared order."""
+        """Display trust, the available physics, then the benchmark: the order of ``show_all_results``."""
 
         from IPython.display import display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
@@ -211,13 +217,13 @@ class PalaceTrustReport:
             show_details=show_details,
         )
         display(trust)
-        display(trust.show_simulation_benchmark(show_details=show_details))
         display(
             trust.show_physics_quantities(
                 theme=theme,
                 ranking_limit=ranking_limit,
             )
         )
+        display(trust.show_simulation_benchmark(theme=theme, show_details=show_details))
 
     def _tokens(self) -> PlotTheme:
         return theme_tokens(self.theme)
@@ -228,21 +234,26 @@ class PalaceTrustReport:
             "<div style='min-width:11rem;flex:1 1 11rem;border:1px solid var(--border,#d0d7de);"
             "border-radius:8px;padding:0.6rem 0.75rem;margin:0.25rem;'>"
             f"<div style='font-size:0.75rem;opacity:0.7'>{html.escape(str(label))}</div>"
-            f"<div style='font-size:0.95rem;font-weight:600'>{html.escape(str(value))}</div>"
-            "</div>"
+            "<div style='font-size:0.95rem;font-weight:600;overflow-wrap:anywhere'>"
+            f"{html.escape(str(value))}</div></div>"
         )
 
     def _ipython_display_(self) -> None:
         from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
         display(HTML(self.identity_html()))
+        declared = declared_html(
+            self.convergence,
+            self.solver_end,
+            solved_elements=solved_elements(self.passes),
+            show_details=self.show_details,
+        )
         items = self._convergence_items()
         if len(self.passes) >= 2:
-            display(HTML(self._convergence_heading_html()))
-        items = [
-            *declared_items(self.convergence, self.theme, self.solver_end),
-            *items,
-        ]
+            items = ["<section><h3>Convergence</h3></section>", *declared, *items]
+        else:
+            # One pass has no trend to plot; its status carries the heading, and the declared table follows.
+            items = [*items, *declared]
         for item in items:
             if isinstance(item, str):
                 display(HTML(item))
@@ -271,23 +282,18 @@ class PalaceTrustReport:
 
     def identity_html(self) -> str:
         """Render run identity together with failure and snapshot-selection notices."""
-        cards = (
+        cards: list[tuple[str, Any]] = [
             ("Problem", self.problem),
             ("Route", self.route),
             ("Profile", self.profile),
-            ("Completeness", self.completeness),
-            ("Latest snapshot", self.latest_source),
-            ("Final snapshot", self._final_snapshot_text()),
-            ("Selection integrity", self.selection.integrity),
             ("AMR passes recorded", str(len(self.passes))),
-            ("AMR MaxIts", fmt(self.amr_max_passes)),
-            ("AMR Tol", self._tolerance_text()),
-            ("Convergence", verdict_card(self.convergence, self.solver_end)),
             ("MPI × OpenMP", self.identity.get("resources")),
-            ("Receipt", self.identity.get("receipt")),
-            ("Palace git", self.identity.get("git_tag")),
-            ("Handoff id", self.identity.get("handoff_id_short")),
-        )
+        ]
+        if self.show_details:
+            cards += self._record_cards()
+        elif self.completeness != "complete":
+            # A run that is not complete changes how its numbers are read, so it is said up front.
+            cards.append(("Completeness", self.completeness))
         items = "".join(
             self.card_html(str(label), value)
             for label, value in cards
@@ -295,11 +301,24 @@ class PalaceTrustReport:
         )
         return (
             "<section><h3>Run Identity</h3>"
-            "<p style='opacity:0.75;margin-top:0'>Run folder and solver identity. "
-            "This is not a physics result.</p>"
             f"<div style='display:flex;flex-wrap:wrap'>{items}</div>"
             f"{self._run_state_html()}</section>"
         )
+
+    def _record_cards(self) -> list[tuple[str, Any]]:
+        """What the run folder records beyond the run's identity, shown with ``show_details``."""
+        return [
+            ("Completeness", self.completeness),
+            ("Latest snapshot", self.latest_source),
+            ("Final snapshot", self._final_snapshot_text()),
+            ("Selection integrity", self.selection.integrity),
+            ("AMR MaxIts", pass_limit_text(self.amr_max_passes)),
+            ("AMR Tol", self._tolerance_text()),
+            ("Convergence", verdict_card(self.convergence, self.solver_end)),
+            ("Receipt", self.identity.get("receipt")),
+            ("Palace git", self.identity.get("git_tag")),
+            ("Handoff id", self.identity.get("handoff_id_short")),
+        ]
 
     def _final_snapshot_text(self) -> str:
         """The top level's state; a run stopped at convergence has no final solve there, by design."""
@@ -309,7 +328,7 @@ class PalaceTrustReport:
 
     def _run_state_html(self) -> str:
         notices: list[str] = []
-        if self.selection.reason == "last_pass_of_a_stopped_run":
+        if self.show_details and self.selection.reason == "last_pass_of_a_stopped_run":
             notices.append(
                 "<div style='border-left:4px solid #1a7f37;background:rgba(26,127,55,0.10);"
                 "padding:0.65rem 0.8rem;margin:0.7rem 0'>"
@@ -404,9 +423,10 @@ class PalaceTrustReport:
         return items
 
     def _capacitance_figures(self, xs: tuple[int, ...]) -> list[Any]:
-        """The Maxwell capacitance coefficients across the AMR passes, with their pass-to-pass changes."""
+        """The Maxwell capacitance coefficients across the AMR passes, then the declared change of them."""
         items: list[Any] = []
-        for label, traces in capacitance_traces(self.passes):
+        names = terminal_names(read_optional_json(self.run_dir / INDEX_MAP))
+        for label, traces in capacitance_traces(self.passes, names):
             figure = LinePlot(
                 title=f"{label} vs AMR pass",
                 xlabel="AMR pass",
@@ -417,19 +437,7 @@ class PalaceTrustReport:
             ).figure()
             if figure is not None:
                 items.append(figure)
-            if label == "Maxwell C_ij":
-                continue
-            delta = LinePlot(
-                title=f"|Δ {label}| vs AMR pass",
-                xlabel="AMR pass",
-                ylabel="|Δ| (fF)",
-                xs=xs[1:],
-                traces=delta_traces(traces),
-                yaxis_type="log",
-                theme=self.theme,
-            ).figure()
-            if delta is not None:
-                items.append(delta)
+        items.extend(change_figures(self.convergence, self.theme, "capacitance"))
         return items
 
     def _error_indicator_figures(self, xs: tuple[int, ...]) -> list[Any]:
@@ -447,12 +455,9 @@ class PalaceTrustReport:
             )
             for name in ERROR_INDICATOR_TRACES
         ]
-        hline = None
         # With a declaration the configured Tol only keeps Palace from stopping; the line is the declared one.
-        declared = declared_threshold(self.convergence, "error_indicator")
-        if declared is not None:
-            hline = ReferenceLine(declared, "declared threshold")
-        elif self.convergence.plan is None and self.amr_tolerance is not None:
+        hline = threshold_line(self.convergence, "error_indicator")
+        if self.convergence.plan is None and self.amr_tolerance is not None:
             hline = ReferenceLine(self.amr_tolerance, "configured AMR Tol")
         figure = LinePlot(
             title="AMR error indicator vs AMR pass",
@@ -461,29 +466,12 @@ class PalaceTrustReport:
             xs=xs,
             traces=traces,
             yaxis_type="log",
-            hline=hline,
+            hlines=() if hline is None else (hline,),
             theme=self.theme,
         ).figure()
         if figure is not None:
             items.append(figure)
         return items
-
-    def _convergence_heading_html(self) -> str:
-        dashed_line = (
-            "The dashed line is the configured Palace AMR Tol, not a newly invented acceptance Gate. "
-            if self.convergence.plan is None
-            else "A dashed line is the threshold declared with set_convergence(). "
-        )
-        return (
-            "<section><h3>Numerical Evidence</h3>"
-            "<p style='opacity:0.75;margin-top:0'>Each readable AMR scalar is its own "
-            "figure. AMR error Norm, Maximum, and Mean share one log plot because they "
-            "are the same local indicator. Minimum is omitted. "
-            f"{dashed_line}"
-            "Surface participation convergence follows below; latest ranking and "
-            "loss interpretation remain a separate physics call.</p>"
-            "</section>"
-        )
 
     def _tolerance_text(self) -> str:
         """Palace's AMR Tol, or that the declared criteria end the run in its place."""
@@ -518,7 +506,7 @@ class PalaceTrustReport:
             else "AMR stopped after the initial solve"
         )
         return (
-            "<section><h3>Numerical Evidence</h3>"
+            "<section><h3>Convergence</h3>"
             "<div style='border:1px solid var(--border,#d0d7de);border-radius:8px;"
             f"padding:0.9rem 1rem'><strong>{html.escape(title)}</strong>{body}</div>"
             "<p style='opacity:0.75'>A trend plot is omitted because a single pass "
@@ -530,29 +518,22 @@ class PalaceTrustReport:
         if not snapshots:
             return [
                 (
-                    "<section><h3>Surface-EPR Numerical Convergence</h3>"
+                    "<section><h3>Surface EPR Convergence</h3>"
                     "<p style='opacity:0.75'>MA/MS/SA participation convergence is "
                     "unavailable because no readable structured surface-Q snapshot "
                     "was returned.</p></section>"
                 )
             ]
-        items: list[Any] = [
-            (
-                "<section><h3>Surface-EPR Numerical Convergence</h3>"
-                "<p style='opacity:0.75;margin-top:0'>Each mode or excitation is kept "
-                "separate. Percentages use the MA+MS+SA sum from the same source and "
-                "AMR pass.</p></section>"
-            )
-        ]
+        items: list[Any] = ["<section><h3>Surface EPR Convergence</h3></section>"]
+        insets = surface_margin_snapshots(self.passes)
         for series_index in sorted({item.series_index for item in snapshots}):
             series = tuple(
                 item for item in snapshots if item.series_index == series_index
             )
             items.append(f"<h4>{html.escape(series_label(series[-1]))}</h4>")
-            total = surface_total_figure(series, self.theme)
-            if total is not None:
-                items.append(total)
+            items.extend(surface_kind_figures(series, insets, self.theme))
             items.append(surface_percentage_figure(series, self.theme))
+        items.extend(change_figures(self.convergence, self.theme, "surface_epr"))
         return items
 
     def benchmark_cards_html(self) -> str:
@@ -747,7 +728,7 @@ class PalaceTrustReport:
         )
 
     def _eigenmode_convergence_items(self, xs: tuple[int, ...]) -> list[Any]:
-        """Build native modal traces and frequency deltas in header order."""
+        """The native modal columns across the passes in header order, the declared change after the frequency."""
         items: list[Any] = []
         for header in union_mapping_keys(self.passes, "eig_columns"):
             if header in SKIP_EIG_COLUMNS:
@@ -778,15 +759,7 @@ class PalaceTrustReport:
             if figure is not None:
                 items.append(figure)
             if header == FREQ_HEADER:
-                delta = LinePlot(
-                    title=f"|Δ {header}| vs AMR pass",
-                    xlabel="AMR pass",
-                    ylabel=f"|Δ {header}|",
-                    xs=xs[1:],
-                    traces=delta_traces(traces),
-                    yaxis_type="log",
-                    theme=self.theme,
-                ).figure()
-                if delta is not None:
-                    items.append(delta)
+                items.extend(
+                    change_figures(self.convergence, self.theme, "mode_frequency")
+                )
         return items

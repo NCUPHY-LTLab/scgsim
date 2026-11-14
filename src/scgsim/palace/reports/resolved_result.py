@@ -64,7 +64,7 @@ class ResolvedPalaceResult(ResolvedRunData):
         ranking_limit: int | None = 20,
         show_details: bool = False,
     ) -> None:
-        """Display identity, benchmark and physics views in the order a notebook reads them."""
+        """Display the trust, physics and benchmark views, in the order a reader asks about a run."""
         show_all_results(
             self,
             theme=cast(ReportTheme, theme),
@@ -83,7 +83,10 @@ class ResolvedPalaceResult(ResolvedRunData):
     def show_simulation_benchmark(
         self,
         *,
+        theme: str = "light",
         show_details: bool = False,
     ) -> SimulationBenchmarkReport:
         """Project recorded run cost and timing while retaining complete benchmark metadata."""
-        return show_simulation_benchmark(self, show_details=show_details)
+        return show_simulation_benchmark(
+            self, theme=cast(ReportTheme, theme), show_details=show_details
+        )

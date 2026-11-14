@@ -66,15 +66,15 @@ from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
 
 sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
 sim.set_convergence(
-    ModeFrequency(modes=[1]).within(relative=1e-5),
-    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(relative=2e-2),
+    ModeFrequency(modes=[1]).within(percent=0.001),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(percent=2),
     ErrorIndicator().below(1e-2),
 )
 ```
 
 `amr_max_passes=8` allows eight refinements, so nine solves; each solve is one
 pass, and pass 1 solves the mesh `mesh()` writes. Mode 1's frequency holds at a
-pass when it moved by at most one part in 10⁵ since the pass before. The
+pass when it moved by at most 0.001 % since the pass before. The
 Surface-EPR line declares one criterion per interface kind, each on that kind's
 participation beyond 1 µm of every mode; it needs `set_surface_epr` with all
 three specs, each asking for that [margin](#surface-epr-margin-rows), before

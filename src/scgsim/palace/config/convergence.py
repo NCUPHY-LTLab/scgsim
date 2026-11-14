@@ -6,8 +6,8 @@ participation of one interface kind (``SurfaceEpr``, both problems; ``MA`` metal
 metal-substrate, ``SA`` substrate-air) and Palace's error indicator (``ErrorIndicator``, both problems)::
 
     sim.set_convergence(
-        Capacitance.diagonal().within(relative=1e-3),
-        SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+        Capacitance.diagonal().within(percent=0.1),
+        SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(percent=2),
         ErrorIndicator().below(1e-2),
         minimum_converged_passes=2,
     )
@@ -40,7 +40,7 @@ _WHERE_SET_CONVERGENCE = "the call to set_convergence"
 _WHERE_NUMERICAL_OR_CONVERGENCE = "the calls to set_numerical and set_convergence"
 
 # The tests a quantity offers: a change for the solved quantities, a value for Palace's indicator.
-_CHANGE_TESTS: tuple[Test, ...] = ("relative_change", "absolute_change")
+_CHANGE_TESTS: tuple[Test, ...] = ("percent_change", "absolute_change")
 _VALUE_TESTS: tuple[Test, ...] = ("at_most",)
 
 Problem = Literal["Eigenmode", "Electrostatic"]
@@ -146,18 +146,18 @@ class Capacitance:
         return f"C {self.selection.replace('_', '-')}"
 
     def within(
-        self, *, relative: float | None = None, absolute_f: float | None = None
+        self, *, percent: float | None = None, absolute_f: float | None = None
     ) -> Criterion:
         """The criterion that each element changes from the previous pass by at most the threshold.
 
-        ``relative`` bounds ``|C_k - C_(k-1)| / |C_k|``; ``absolute_f`` bounds ``|C_k - C_(k-1)|`` in farads.
-        Give exactly one.  When ``C_k`` is zero the relative change is undefined and the criterion does not
-        hold, unless ``C_(k-1)`` is zero too.
+        ``percent`` bounds ``100 |C_k - C_(k-1)| / |C_k|``, the change as a percentage of the value (AEDT's
+        ``Delta %``); ``absolute_f`` bounds ``|C_k - C_(k-1)|`` in farads.  Give exactly one.  When ``C_k`` is
+        zero the percentage is undefined and the criterion does not hold, unless ``C_(k-1)`` is zero too.
 
         Raises:
             ValueError: neither or both thresholds are given, or the threshold is not positive and finite.
         """
-        return _change_criterion(self, relative, ("absolute_f", absolute_f))
+        return _change_criterion(self, percent, ("absolute_f", absolute_f))
 
 
 def _check_capacitance(quantity: Capacitance) -> None:
@@ -244,17 +244,18 @@ class ModeFrequency:
         return f"frequency, {_selected('mode', self.modes)}"
 
     def within(
-        self, *, relative: float | None = None, absolute_ghz: float | None = None
+        self, *, percent: float | None = None, absolute_ghz: float | None = None
     ) -> Criterion:
         """The criterion that each frequency changes from the previous pass by at most the threshold.
 
-        ``relative`` bounds ``|f_k - f_(k-1)| / |f_k|``; ``absolute_ghz`` bounds ``|f_k - f_(k-1)|`` in GHz.
+        ``percent`` bounds ``100 |f_k - f_(k-1)| / |f_k|`` (AEDT's ``Max Delta Freq. %``); ``absolute_ghz`` bounds
+        ``|f_k - f_(k-1)|`` in GHz.
         Give exactly one.
 
         Raises:
             ValueError: neither or both thresholds are given, or the threshold is not positive and finite.
         """
-        return _change_criterion(self, relative, ("absolute_ghz", absolute_ghz))
+        return _change_criterion(self, percent, ("absolute_ghz", absolute_ghz))
 
 
 @dataclass(frozen=True)
@@ -347,14 +348,17 @@ class SurfaceEpr:
         )
 
     @property
-    def surface_label(self) -> str:
-        """The kind and the surfaces summed, as each number's label starts: ``MA participation beyond 1 um``."""
-        beyond = "" if self.margin_um is None else f" beyond {self.margin_um:g} um"
-        return f"{self.interface_kind} participation{beyond}"
+    def group(self) -> str:
+        """What the kinds summed over the same surfaces are shown under: ``Surface EPR, inset 1 um``.
+
+        ``inset 1 um`` is the part of the surfaces that lies 1 um or more from the gap edge.
+        """
+        inset = "" if self.margin_um is None else f", inset {self.margin_um:g} um"
+        return f"Surface EPR{inset}"
 
     @property
     def label(self) -> str:
-        """How the report names the quantity: ``surface_label`` and the selected modes or excitations."""
+        """The kind within its group, with the selected modes or excitations: ``MA``, ``MA, modes 1, 2``."""
         selection = (
             ""
             if self.modes is None and self.terminals is None
@@ -365,20 +369,26 @@ class SurfaceEpr:
                 else _selected("excitation", self.terminals)
             )
         )
-        return f"{self.surface_label}{selection}"
+        return f"{self.interface_kind}{selection}"
+
+    @property
+    def surface_label(self) -> str:
+        """The kind with its group, as each number's label starts: ``Surface EPR, inset 1 um, MA``."""
+        return f"{self.group}, {self.interface_kind}"
 
     def within(
-        self, *, relative: float | None = None, absolute: float | None = None
+        self, *, percent: float | None = None, absolute: float | None = None
     ) -> Criterion:
         """The criterion that each participation changes from the previous pass by at most the threshold.
 
-        ``relative`` bounds ``|p_k - p_(k-1)| / |p_k|``; ``absolute`` bounds ``|p_k - p_(k-1)|`` (a
+        ``percent`` bounds ``100 |p_k - p_(k-1)| / |p_k|`` (AEDT's ``Max Percent Delta``); ``absolute`` bounds
+        ``|p_k - p_(k-1)|`` (a
         participation has no unit).  Give exactly one.
 
         Raises:
             ValueError: neither or both thresholds are given, or the threshold is not positive and finite.
         """
-        return _change_criterion(self, relative, ("absolute", absolute))
+        return _change_criterion(self, percent, ("absolute", absolute))
 
 
 @dataclass(frozen=True)
@@ -388,12 +398,12 @@ class SurfaceEprKinds:
     quantities: tuple[SurfaceEpr, ...]
 
     def within(
-        self, *, relative: float | None = None, absolute: float | None = None
+        self, *, percent: float | None = None, absolute: float | None = None
     ) -> CriterionGroup:
         """One criterion per kind, each with this threshold; see ``SurfaceEpr.within``."""
         return CriterionGroup(
             tuple(
-                quantity.within(relative=relative, absolute=absolute)
+                quantity.within(percent=percent, absolute=absolute)
                 for quantity in self.quantities
             )
         )
@@ -424,6 +434,13 @@ class ErrorIndicator:
 
 
 ConvergenceQuantity = Capacitance | ModeFrequency | SurfaceEpr | ErrorIndicator
+
+
+def quantity_name(quantity: ConvergenceQuantity) -> str:
+    """The quantity as a refusal names it: its label, under its group when it has one."""
+    if isinstance(quantity, SurfaceEpr):
+        return f"{quantity.group}, {quantity.label}"
+    return quantity.label
 
 
 # ---- Criteria and the declaration ----------------------------------------------------------------------------
@@ -467,18 +484,18 @@ def checked_criterion(
     quantity = criterion.quantity
     if criterion.test not in quantity.tests:
         raise ValueError(
-            Declared(f"{quantity.label} criterion", where).refusal(
+            Declared(f"{quantity_name(quantity)} criterion", where).refusal(
                 f"tests {criterion.test!r}, and {type(quantity).__name__} offers {list(quantity.tests)}: "
                 + (
                     "bound its value with ErrorIndicator().below(...)"
                     if isinstance(quantity, ErrorIndicator)
-                    else "bound its change with .within(relative=...) or its absolute form"
+                    else "bound its change with .within(percent=...) or its absolute form"
                 )
             )
         )
     if not _positive_finite(criterion.threshold):
         raise ValueError(
-            Declared(f"{quantity.label} criterion", where).expected(
+            Declared(f"{quantity_name(quantity)} criterion", where).expected(
                 threshold_name, "a positive finite number", criterion.threshold
             )
         )
@@ -648,25 +665,25 @@ def _check_fit(criterion: Criterion, problem: Problem, simulation: str) -> None:
 
 def _change_criterion(
     quantity: Capacitance | ModeFrequency | SurfaceEpr,
-    relative: float | None,
+    percent: float | None,
     absolute: tuple[str, float | None],
 ) -> Criterion:
-    """The change criterion of the one threshold given, relative or absolute in the quantity's unit."""
+    """The change criterion of the one threshold given, a percentage or absolute in the quantity's unit."""
     absolute_name, absolute_value = absolute
-    if (relative is None) == (absolute_value is None):
+    if (percent is None) == (absolute_value is None):
         raise ValueError(
             Declared(
-                f"{quantity.label} criterion",
+                f"{quantity_name(quantity)} criterion",
                 f"the call to {type(quantity).__name__}.within",
             ).refusal(
-                f"takes exactly one threshold, relative=... or {absolute_name}=...; "
-                f"{found_text({'relative': relative, absolute_name: absolute_value})}"
+                f"takes exactly one threshold, percent=... or {absolute_name}=...; "
+                f"{found_text({'percent': percent, absolute_name: absolute_value})}"
             )
         )
     where = f"the call to {type(quantity).__name__}.within"
-    if relative is not None:
+    if percent is not None:
         return checked_criterion(
-            Criterion(quantity, "relative_change", relative), where, "relative"
+            Criterion(quantity, "percent_change", percent), where, "percent"
         )
     # Exactly one was given, so the absolute threshold is set here.
     assert absolute_value is not None

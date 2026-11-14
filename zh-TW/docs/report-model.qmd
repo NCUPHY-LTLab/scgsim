@@ -15,9 +15,11 @@ SCGSim 是獨立的下游工具套件，不是官方 gsim。它提供嚴格的�
 
 目前 Palace `show_all_results()` 依下列順序呈現：
 
-1. 執行可信度、執行身分及憑證狀態；
-2. 數值資料與模擬成本／資源基準；
-3. 可用的求解器專屬物理量。
+1. 執行可信度：這是哪一次執行、是否收斂；
+2. 可用的求解器專屬物理量：這次求解算出的數值與表面參與率；
+3. 模擬基準：這次執行花了多少。
+
+這是讀者看一次執行時提問的順序。每一份也可以單獨呼叫：`show_run_trustworthiness()`、`show_physics_quantities()` 與 `show_simulation_benchmark()`。它們都接受 `theme="light"`（預設）或 `theme="dark"` 來決定圖的配色；`show_all_results(theme=...)` 會把它傳給三份報告。
 
 `inspect_run_trustworthiness()` 支援完成、失敗及只回傳一部分的執行資料夾。它保留紀錄的憑證狀態，可揭露最新可讀資料，但不將未完成執行提升為完成。嚴格的 `resolve_palace_result(..., expected_handoff_id=...)` 路徑只接受交接、憑證、求解器及產物雜湊均驗證通過的完成執行資料夾。
 
@@ -52,13 +54,14 @@ Palace 報告讀取與外觀介面及已解析執行相同的獨立 `mesh_summar
 
 可信度報告的每條 AMR pass 軸都這樣計數。變化只在兩個編號相鄰且可讀的 pass 之間量測。判定會列出讀到的 pass、判定之前沒有讀到的 pass，以及每個被擱置的資料夾或未讀取的 pass 與原因。
 
-有宣告時，可信度報告的 Numerical Evidence 一節依序先顯示：
+可信度報告是讀者用來認出這次執行、判斷它是否收斂的地方，依序顯示：
 
-1. 以一句話寫出的判定。已收斂：在哪個 pass、哪些 pass 連續成立、最後成立的準則及其自哪個 pass 起成立，以及讀到的 pass 中有幾個在它之後。未收斂：在讀到的最後一個 pass 上每條不成立的準則、其最差的數、量到的值，以及是宣告門檻的幾倍；
-2. 一張表：每條準則一列、每個 pass 一欄，每格是該準則在該 pass 最差的數及是否成立；最後一列是所有準則已連續成立幾個 pass；
-3. 每條準則一張圖：量到的值對 pass，對數軸，宣告的門檻為虛線。
+1. **Run Identity**：問題、路徑、執行設定檔、記錄到的 AMR pass 數，以及 MPI 與 OpenMP 的數目。執行不完整時在這裡說明；失敗的執行另有一則提示寫出失敗類別。
+2. **Convergence**（有宣告時）：一張與 AEDT 收斂表相同排法的表。每個 pass 一列，先是該 pass 求解的元素數；每條準則一欄，欄首是它的名稱與門檻（`C diagonal`、`≤ 0.5 %`），所以下面每個數都對著上面的門檻讀；格內是該準則在該 pass 的數及是否成立（pass 1 的變化沒有前一個 pass 可比，寫 `N/A`）。同一個 inset 的 Surface EPR 準則排在該 inset 的名稱之下，名稱只寫一次：`Surface EPR, inset 0.5 um` 底下是 `MA`、`MS`、`SA`；`inset 0.5 um` 指表面上離間隙邊緣 0.5 um 以上的部分。同一個 inset 的準則不論宣告的先後都排在一起。最後一欄是所有準則已連續成立幾個 pass。只有一個 pass 的執行沒有趨勢可畫：先顯示它的狀態，再顯示這張表。
+3. 各物理量對 pass 的圖，後面接著它宣告的變化的圖：對數軸，門檻為虛線。變化以該值的百分比表示，名稱沿用 AEDT 那一側的說法：電容為 `Delta %`、模態頻率為 `Max Delta Freq. %`、參與率為 `Max Percent Delta`。誤差指標圖上的虛線是宣告的 `ErrorIndicator` 門檻；沒有宣告時是設定的 Palace `Tol`。
+4. **Surface EPR Convergence**：每個模態或激發下，每種介面一張圖（它們的參與率相差數個數量級），圖上一條線是整個表面，另外每個記錄到的 inset 各一條線；之後是宣告的變化，每個 inset 一張圖，每種介面一條線。
 
-之後是原本各物理量本身的圖，維持不變。誤差指標圖上的虛線是宣告的 `ErrorIndicator` 門檻；沒有宣告這條準則時就不畫線。身分卡片把 `AMR Tol` 顯示為不使用，並多一張顯示判定的 `Convergence` 卡片。沒有宣告時，虛線是設定的 Palace `Tol`，`Convergence` 卡片顯示 `not declared`。
+`show_run_trustworthiness(show_details=True)` 另外顯示執行資料夾的紀錄：其餘的身分卡片（完整性、快照、選取完整性、`AMR MaxIts`、`AMR Tol`、`Convergence` 卡片、回執、Palace 版本與交接識別碼）、表格上方以一句話寫出的判定、在收斂時停止的提示，以及來源紀錄。判定句在已收斂時寫出在哪個 pass、哪些 pass 連續成立、最後成立的準則，以及讀到的 pass 中有幾個在它之後；未收斂時寫出在讀到的最後一個 pass 上每條不成立的準則、其最差的數、宣告的門檻，以及是門檻的幾倍。程式可從 `ResolvedPalaceResult.convergence` 取得同一個判定。
 
 `inspect_run_trustworthiness()` 對部分回傳的執行資料夾，以其中現有的 pass 顯示同一張表。此時判定計算的是讀到的 pass（例如「3 passes read (passes 1, 4 and 5)」），而不是 Palace 執行過的 pass。無法無歧義讀取的數（表格重複某欄，或兩列有相同索引）標為無法取得並附上原因，且永遠不算成立。存在但未經交接封存的計畫，或交接後被改過的計畫，兩種讀取都會拒絕。
 
@@ -69,7 +72,7 @@ Palace 報告讀取與外觀介面及已解析執行相同的獨立 `mesh_summar
 > pass was read after it. SCGSim stopped Palace after pass 4: 2 of the 6 passes
 > its limit allows were not run.
 
-沒有收斂的執行在上限結束：「Not converged in the 6 passes read (passes 1 to 6). At pass 6: ... Palace ended by itself at its limit of 6 passes.」`Convergence` 卡片顯示「converged at pass 4, stopped after pass 4」。停止的執行在 `results/palace` 頂層沒有最終求解：它的結果、基準與成本都來自最後一個 pass，身分卡 `Final snapshot` 顯示「none: stopped at convergence」，並有一則提示說明使用的是哪個 pass。沒有讓執行完成的停止（`stop_escalated`、`runner_terminated`、`not_recorded`）是失敗的執行，失敗類別為 `convergence_stop`。準則由呼叫者決定：判定說的是它們是否成立，不是研究問題是否已有答案。
+沒有收斂的執行在上限結束：「Not converged in the 6 passes read (passes 1 to 6). At pass 6: ... Palace ended by itself at its limit of 6 passes.」停止的執行在 `results/palace` 頂層沒有最終求解：它的結果、基準與成本都來自最後一個 pass。使用 `show_details` 時，`Convergence` 卡片顯示「converged at pass 4, stopped after pass 4」，`Final snapshot` 卡片顯示「none: stopped at convergence」，並有一則提示說明使用的是哪個 pass。沒有讓執行完成的停止（`stop_escalated`、`runner_terminated`、`not_recorded`）是失敗的執行，失敗類別為 `convergence_stop`。準則由呼叫者決定：判定說的是它們是否成立，不是研究問題是否已有答案。
 
 ## 如實呈現規則 {#honesty-rule}
 

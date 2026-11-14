@@ -4,7 +4,7 @@
 the Surface-EPR rows and margins, the Eigenmode EPR selection) and names, for every number it reads, the
 result table, the row and the columns.  This is the one place that decides which columns make up a quantity:
 "MA, whole surfaces" is the ``p_surf`` column of every whole-surface ``Dielectric`` entry of kind ``MA``, and
-"MA beyond 1 um" that of every margin entry of kind ``MA`` at 1 um, read from the index entries the same
+"MA, 1 um or more from the gap edge" that of every margin entry of kind ``MA`` at 1 um, read from the index entries the same
 config writes.  The check (``scgsim.contracts.palace_convergence``) reads only the plan.
 """
 
@@ -35,6 +35,7 @@ from .convergence import (
     ModeFrequency,
     SurfaceEpr,
     element_label,
+    quantity_name,
 )
 from .index import IndexEntry, SurfaceEprEntry, TerminalEntry
 
@@ -117,6 +118,7 @@ def _criterion(criterion: Criterion, context: PlanContext) -> PlannedCriterion:
         threshold=criterion.threshold,
         unit=_UNITS[type(quantity)],
         values=values,
+        group=quantity.group if isinstance(quantity, SurfaceEpr) else "",
     )
 
 
@@ -131,7 +133,7 @@ def _capacitance_values(
     if unknown:
         raise ValueError(
             Declared(
-                f"{quantity.label} criterion",
+                f"{quantity_name(quantity)} criterion",
                 "the calls to set_convergence and add_terminal",
             ).refusal(
                 f"names terminals {unknown} the simulation does not have; it has {names}"
@@ -140,7 +142,7 @@ def _capacitance_values(
     if not pairs:
         raise ValueError(
             Declared(
-                f"{quantity.label} criterion",
+                f"{quantity_name(quantity)} criterion",
                 "the calls to set_convergence and add_terminal",
             ).refusal(
                 f"selects no element of the {len(names)}-terminal matrix {names}: choose another selection"
@@ -181,7 +183,7 @@ def _frequency_values(
     quantity: ModeFrequency, context: PlanContext
 ) -> tuple[PlannedValue, ...]:
     """The frequency of mode ``m`` is row ``m``, column ``Re{f} (GHz)`` of ``eig.csv``."""
-    modes = _checked_modes(quantity.modes, quantity.label, context)
+    modes = _checked_modes(quantity.modes, quantity_name(quantity), context)
     return tuple(
         PlannedValue(
             f"frequency, mode {mode}",
@@ -221,7 +223,7 @@ def _surface_columns(quantity: SurfaceEpr, context: PlanContext) -> tuple[str, .
     ):
         raise ValueError(
             Declared(
-                f"{quantity.label} criterion",
+                f"{quantity_name(quantity)} criterion",
                 "the calls to set_convergence and set_epr_request",
             ).refusal(
                 f"reads {kind}, which set_epr_request(surface_interfaces=...) leaves out of the "
@@ -235,7 +237,7 @@ def _surface_columns(quantity: SurfaceEpr, context: PlanContext) -> tuple[str, .
     ]
     if not entries:
         raise ValueError(
-            Declared(f"{quantity.label} criterion", where).refusal(
+            Declared(f"{quantity_name(quantity)} criterion", where).refusal(
                 f"reads {kind} participation, and Surface EPR is not requested for {kind}: call "
                 f"set_surface_epr() with a {kind} spec"
             )
@@ -253,7 +255,7 @@ def _surface_columns(quantity: SurfaceEpr, context: PlanContext) -> tuple[str, .
                 {entry.inset.margin_um for entry in entries if entry.inset is not None}
             )
             raise ValueError(
-                Declared(f"{quantity.label} criterion", where).refusal(
+                Declared(f"{quantity_name(quantity)} criterion", where).refusal(
                     f"reads the {kind} rows at margin {quantity.margin_um:g} um, which the {kind} spec does "
                     + (
                         f"not declare; its margins are {margins} um"
@@ -270,7 +272,7 @@ def _surface_rows(quantity: SurfaceEpr, context: PlanContext) -> list[tuple[str,
     if context.problem == EIGENMODE.name:
         return [
             (f"mode {mode}", mode)
-            for mode in _checked_modes(quantity.modes, quantity.label, context)
+            for mode in _checked_modes(quantity.modes, quantity_name(quantity), context)
         ]
     terminals = context.terminals
     selected = (
@@ -280,7 +282,7 @@ def _surface_rows(quantity: SurfaceEpr, context: PlanContext) -> list[tuple[str,
     if unknown:
         raise ValueError(
             Declared(
-                f"{quantity.label} criterion",
+                f"{quantity_name(quantity)} criterion",
                 "the calls to set_convergence and add_terminal",
             ).refusal(
                 f"selects terminals {unknown} the simulation does not have; it has {list(terminals)}"

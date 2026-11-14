@@ -9,6 +9,7 @@ stand-in that copies pass folders written in Palace's formats into ``results/pal
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -113,26 +114,31 @@ def _isolated_python(directory: Path) -> Path:
 
 
 _DECLARED = (
-    Capacitance.diagonal().within(relative=1e-3),
-    SurfaceEpr.each("MA", "MS", margin_um=1.0).within(relative=2e-2),
+    Capacitance.diagonal().within(percent=0.1),
+    SurfaceEpr.each("MA", "MS", margin_um=1.0).within(percent=2),
     ErrorIndicator().below(0.05),
 )
 
 
 def _returned_run(
-    tmp_path: Path, *, declare: bool = True, criteria=_DECLARED
+    tmp_path: Path,
+    *,
+    declare: bool = True,
+    criteria=_DECLARED,
+    passes: int = len(_DIAGONALS_FF),
+    in_a_row: int = 2,
 ) -> SimpleNamespace:
-    """Write the config and handoff of a four-pass run, run its script, and return the run folder and id."""
+    """Write the config and handoff of a run of ``passes`` passes (four), run its script, return its folder and id."""
     sim = electrostatic(tmp_path / "model")
-    sim.set_numerical(amr_max_passes=len(_DIAGONALS_FF) - 1)
+    sim.set_numerical(amr_max_passes=passes - 1)
     if declare:
-        sim.set_convergence(*criteria, minimum_converged_passes=2)
+        sim.set_convergence(*criteria, minimum_converged_passes=in_a_row)
     sim.write_config()
     counts = count_index_entries(read_json(sim.output_dir / INDEX_MAP))
     solve = tmp_path / "solve"
-    for number in range(1, len(_DIAGONALS_FF)):
+    for number in range(1, passes):
         _pass_tables(solve / f"iteration{number}", number, counts)
-    _pass_tables(solve, len(_DIAGONALS_FF), counts)
+    _pass_tables(solve, passes, counts)
     palace = tmp_path / "palace"
     palace.write_text(_FAKE_PALACE.replace("{solve}", str(solve)), encoding="utf-8")
     palace.chmod(0o755)
@@ -247,39 +253,185 @@ def test_whole_surface_participation_matches_the_whole_surface_records(
             assert not set(value["columns"]) & {f"p_surf[{b.index}]" for b in whole}
 
 
-def test_the_trust_report_shows_the_verdict_the_table_and_the_thresholds(returned):
-    """The verdict sentence, the criterion-by-pass table and one change figure per criterion."""
+def _shown(report) -> tuple[str, list]:
+    """The HTML a report displays in a notebook, joined, and its figures in order."""
+    with (
+        _captured_notebook_display() as displayed,
+        patch("scgsim.palace.reports.trust.show_figure", displayed.append),
+    ):
+        report._ipython_display_()  # noqa: SLF001 -- the notebook display hook
+    html = "".join(item.data for item in displayed if isinstance(item.data, str))
+    return html, [item for item in displayed if hasattr(item, "layout")]
+
+
+def test_the_trust_report_shows_the_run_the_table_and_each_quantity_with_its_change(
+    returned,
+):
+    """What a reader of a run needs: which run, the table of the criteria per pass, and the figures.
+
+    The identity is five cards.  The table heads a criterion by its name and its threshold, a group's name
+    once over its criteria.  Each quantity's figure is followed by the figure of its declared change.
+    """
     result = resolve_palace_result(
         returned.root, expected_handoff_id=returned.handoff_id
     )
     trust = result.show_run_trustworthiness()
     assert trust.convergence == result.convergence
+    html, figures = _shown(trust)
+    cards = html.split("<h3>Convergence</h3>")[0]
+    for label in ("Problem", "Route", "Profile", "AMR passes recorded", "MPI × OpenMP"):
+        assert f">{label}</div>" in cards
+    for label in ("Final snapshot", "Selection integrity", "AMR Tol", "Receipt"):
+        assert f">{label}</div>" not in html
+    assert "Converged at pass 4" not in html and "Numerical Evidence" not in html
+    assert ">Pass</th>" in html and ">Solved elements</th>" in html
+    assert ">C diagonal<br>" in html and ">≤ 0.1 %</span>" in html
+    # MA and MS at one inset stand under the inset's name, said once, with the threshold they share.
+    assert html.count("Surface EPR, inset 1 um") == 1
+    assert "colspan='2'" in html and ">MA</th>" in html and ">MS</th>" in html
+    assert ">N/A</td>" in html
+    titles = [figure.layout.title.text for figure in figures]
+    value, change = (
+        titles.index("C[pad][pad] vs AMR pass"),
+        titles.index("C diagonal Delta % vs AMR pass"),
+    )
+    assert value < change < titles.index("AMR error indicator vs AMR pass")
+    assert not [title for title in titles if title.startswith("|Δ")]
+    assert "Excitation 1: MA participation vs AMR pass" in titles
+    by_kind = figures[titles.index("Excitation 1: MA participation vs AMR pass")]
+    # Every inset the run records is a line, declared or not.
+    assert [trace.name for trace in by_kind.data] == [
+        "whole surface",
+        "inset 0.5 um",
+        "inset 1 um",
+    ]
+    shared = figures[
+        titles.index("Surface EPR, inset 1 um Max Percent Delta vs AMR pass")
+    ]
+    assert [trace.name for trace in shared.data] == [
+        "MA, excitation pad",
+        "MA, excitation plane",
+        "MS, excitation pad",
+        "MS, excitation plane",
+    ]
+    assert shared.layout.yaxis.title.text == "Surface EPR Max Percent Delta"
+    assert [shape.y0 for shape in shared.layout.shapes] == [2.0]
+    # The label sits on the line: on a log axis an annotation is placed by the exponent.
+    label = shared.layout.annotations[0]
+    assert (label.text, label.y) == ("≤ 2 %", math.log10(2.0))
+    error_figure = figures[titles.index("AMR error indicator vs AMR pass")]
+    assert [shape.y0 for shape in error_figure.layout.shapes] == [0.05]
+    assert error_figure.layout.annotations[0].text == "≤ 0.05"
+
+
+@pytest.mark.parametrize(
+    ("threshold", "cell", "outcome"),
+    [(0.5, "0.2 ✓", "holds, 1 in a row"), (0.05, "0.2 ✗", "fails")],
+)
+def test_a_run_of_one_pass_shows_its_declared_criteria(
+    tmp_path, threshold, cell, outcome
+):
+    """One pass has no trend to plot; the table of the declared criteria is shown all the same."""
+    run = _returned_run(
+        tmp_path,
+        criteria=(ErrorIndicator().below(threshold),),
+        passes=1,
+        in_a_row=1,
+    )
+    result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    assert [item.number for item in result.convergence.passes] == [1]
+    html, _ = _shown(result.show_run_trustworthiness())
+    assert "A trend plot is omitted because a single pass" in html
+    assert f">≤ {threshold:g}</span>" in html
+    assert f">{cell}</td>" in html and f">{outcome}</td>" in html
+
+
+def test_the_criteria_of_one_inset_stand_together_whatever_their_declared_order(
+    tmp_path,
+):
+    """MA at 0.5 um, MA at 1 um, then MS at 0.5 um: the 0.5 um inset is named once, over MA and MS."""
+    run = _returned_run(
+        tmp_path,
+        criteria=(
+            SurfaceEpr("MA", margin_um=0.5).within(percent=2),
+            SurfaceEpr("MA", margin_um=1.0).within(percent=2),
+            SurfaceEpr("MS", margin_um=0.5).within(percent=2),
+        ),
+    )
+    result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    html, _ = _shown(result.show_run_trustworthiness())
+    assert html.count("Surface EPR, inset 0.5 um") == 1
+    assert html.count("Surface EPR, inset 1 um") == 1
+    head = html[html.index("<thead>") : html.index("</thead>")]
+    assert head.index("inset 0.5 um") < head.index("inset 1 um")
+    assert [name for name in ("MA", "MS", "MA") if f">{name}</th>" in head] == [
+        "MA",
+        "MS",
+        "MA",
+    ]
+    assert head.count(">MA</th>") == 2 and head.count(">MS</th>") == 1
+    # The cells follow their headings: at pass 2, MA and MS at 0.5 um, then MA at 1 um.
+    declared = result.convergence.passes[1].criteria
+    expected = [f">{declared[index].worst.measured:.3g} % " for index in (0, 2, 1)]
+    row = html[html.index("<tbody>") :].split("</tr>")[1]
+    positions = [row.index(text) for text in expected]
+    assert positions == sorted(positions)
+
+
+def test_the_trust_report_with_details_adds_the_records_and_the_verdict(returned):
+    """``show_details`` adds what the run folder records and the verdict as a sentence."""
+    result = resolve_palace_result(
+        returned.root, expected_handoff_id=returned.handoff_id
+    )
+    html, _ = _shown(result.show_run_trustworthiness(show_details=True))
+    for label in ("Final snapshot", "Selection integrity", "AMR Tol", "Receipt"):
+        assert f">{label}</div>" in html
+    assert "set aside: convergence declared" in html
+    assert "Converged at pass 4, of the 4 passes read" in html
+
+
+def test_the_physics_view_opens_with_the_numbers_the_run_was_solved_for(returned):
+    """The capacitance matrix of the last pass read, its rows and columns named by terminal."""
+    result = resolve_palace_result(
+        returned.root, expected_handoff_id=returned.handoff_id
+    )
     with (
         _captured_notebook_display() as displayed,
-        patch("scgsim.palace.reports.trust.show_figure", displayed.append),
+        patch("scgsim.palace.reports.views.show_figure", lambda figure: None),
     ):
-        trust._ipython_display_()  # noqa: SLF001 -- the notebook display hook
+        result.show_physics_quantities()._ipython_display_()  # noqa: SLF001 -- the notebook display hook
     html = "".join(item.data for item in displayed if isinstance(item.data, str))
-    assert "Declared convergence" in html
-    assert "Converged at pass 4, of the 4 passes read" in html
-    assert "Pass 1</th>" in html and "Pass 4</th>" in html
-    assert "A dashed line is the threshold declared with set_convergence()" in html
-    assert "set aside: convergence declared" in html
-    assert "not a newly invented acceptance Gate" not in html
-    titles = [
-        figure.layout.title.text
-        for figure in displayed
-        if hasattr(figure, "layout") and figure.layout.title.text
-    ]
-    assert "C diagonal: relative change vs AMR pass" in titles
-    assert "error indicator (Norm): value vs AMR pass" in titles
-    error_figure = next(
-        figure
-        for figure in displayed
-        if hasattr(figure, "layout")
-        and figure.layout.title.text == "AMR error indicator vs AMR pass"
+    assert "Values of pass 4, the last pass read." in html
+    assert "Maxwell capacitance matrix (fF)" in html
+    assert html.count(">pad</th>") == 2 and html.count(">plane</th>") == 2
+
+
+def test_all_results_are_shown_in_the_order_a_reader_asks(returned):
+    """Which run and did it converge, then its numbers, then what it cost."""
+    result = resolve_palace_result(
+        returned.root, expected_handoff_id=returned.handoff_id
     )
-    assert [shape.y0 for shape in error_figure.layout.shapes] == [0.05]
+    with _captured_notebook_display() as displayed:
+        result.show_all_results()
+    assert [type(item).__name__ for item in displayed] == [
+        "PalaceTrustReport",
+        "PhysicsQuantitiesReport",
+        "SimulationBenchmarkReport",
+    ]
+
+
+def test_the_benchmark_takes_the_theme_of_its_figures(returned):
+    """Every view switches between light and dark: the benchmark too, alone and within all results."""
+    result = resolve_palace_result(
+        returned.root, expected_handoff_id=returned.handoff_id
+    )
+    assert result.show_simulation_benchmark().trust.theme == "light"
+    assert result.show_simulation_benchmark(theme="dark").trust.theme == "dark"
+    with pytest.raises(ValueError, match="theme must be 'light' or 'dark'"):
+        result.show_simulation_benchmark(theme="sepia")
+    with _captured_notebook_display() as displayed:
+        result.show_all_results(theme="dark")
+    assert [item.trust.theme for item in displayed[1:]] == ["dark", "dark"]
 
 
 def test_a_partly_returned_run_shows_the_passes_it_holds(tmp_path):
@@ -298,7 +450,9 @@ def test_a_partly_returned_run_shows_the_passes_it_holds(tmp_path):
     assert verdict_sentence(check).startswith(
         "Not converged in the 2 passes read (passes 1 to 2). At pass 2:"
     )
-    assert "C diagonal (C[pad][pad]): relative change 0.0099" in verdict_sentence(check)
+    assert "C diagonal (C[pad][pad]): changed by 0.99 %, above the declared 0.1 %" in (
+        verdict_sentence(check)
+    )
 
 
 def test_a_changed_plan_is_refused(tmp_path):

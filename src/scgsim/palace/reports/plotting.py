@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple
@@ -133,7 +134,7 @@ class LinePlot:
     traces: Sequence[Trace]
     point_labels: Sequence[str] | None = None
     yaxis_type: str = "linear"
-    hline: ReferenceLine | None = None
+    hlines: Sequence[ReferenceLine] = ()
     theme: ReportTheme = "light"
 
     def figure(self) -> Any | None:
@@ -190,20 +191,36 @@ class LinePlot:
             plotted = True
         if not plotted:
             return None
-        if self.hline is not None:
-            fig.add_hline(
-                y=self.hline[0],
-                line_dash="dot",
-                line_color=tokens.muted,
-                line_width=1.5,
-                annotation_text=self.hline[1],
-                annotation_font={"size": PLOT_TICK_FONT, "color": tokens.muted},
-                annotation_position="top right",
-            )
+        for line in self.hlines:
+            self._draw_reference_line(fig, line, tokens)
         fig.update_xaxes(title=axis_title(self.xlabel, tokens))
         fig.update_yaxes(title=axis_title(self.ylabel, tokens), type=self.yaxis_type)
         _maybe_integer_xticks(fig, self.xs)
         return fig
+
+    def _draw_reference_line(self, fig: Any, line: ReferenceLine, tokens: Any) -> None:
+        """Draw the dotted line at ``line.value`` and its label just above its right end.
+
+        Plotly places an annotation on a log axis by the exponent, so the label is given ``log10`` of the
+        value there; given the value itself it sits at ``10**value`` and stretches the axis up to it.
+        """
+        on_log_axis = self.yaxis_type == "log"
+        if on_log_axis and line.value <= 0:
+            return
+        fig.add_hline(
+            y=line.value, line_dash="dot", line_color=tokens.muted, line_width=1.5
+        )
+        fig.add_annotation(
+            x=1,
+            xref="x domain",
+            xanchor="right",
+            y=math.log10(line.value) if on_log_axis else line.value,
+            yref="y",
+            yanchor="bottom",
+            text=line.label,
+            showarrow=False,
+            font={"size": PLOT_TICK_FONT, "color": tokens.muted},
+        )
 
 
 @dataclass(frozen=True)
@@ -429,7 +446,7 @@ def mesh_summary_html(
         "<p>The ND estimate uses the configured FEM order and tetrahedral primary-corner topology before boundary constraints; it is not actual solver DOF. Electrostatic H1 estimation is unavailable. Quality is measured on the linear mesh, before any elevation to the geometry order.</p>"
         "<details><summary>Physical regions and mesh discretization</summary>"
         f"<p>Gmsh {html.escape(str(meshing['gmsh_version']))}. {html.escape(types)}.</p>"
-        f"<p>Recipe {html.escape(recipe['name'])} v{html.escape(str(recipe['version']))}: {html.escape(parameters or 'no parameters')}.</p>"
+        f"<p>Recipe {html.escape(recipe['name'])} ({html.escape(str(recipe['version']))}): {html.escape(parameters or 'no parameters')}.</p>"
         "<p>Edge statistics count unique PRIMARY CORNER CHORDS within each region, not curved arc lengths. Point regions have no edges.</p>"
         f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
         "<p>Full controls, repair policy, the quality report hash and the provenance remain available in mesh_summary() and report data.</p>"
@@ -444,7 +461,7 @@ def _mesh_cards(summary: MeshSummary, meshing: Mapping[str, Any]) -> list[Card]:
     linear = meshing["linear_mesh"]
     recipe, budgets = meshing["recipe"], meshing["budgets"]
     return [
-        ("Sizing recipe", f"{recipe['name']} v{recipe['version']}"),
+        ("Sizing recipe", f"{recipe['name']} ({recipe['version']})"),
         (
             "Geometry / FEM order",
             f"{mesher['geometry_order']} / {fmt(summary['finite_element_order'])}",
