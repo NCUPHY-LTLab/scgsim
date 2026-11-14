@@ -25,6 +25,7 @@ lang: zh-TW
 | `quality_measure`、`threshold` | `minSICN` 與執行所依循的門檻。 |
 | `stop`、`rounds`、`history` | 修復迴圈如何結束，以及每一輪改變了什麼。 |
 | `mesh` | 四面體與節點數、`min_quality`、低於門檻的 `bad_count`、`measured_on`（`linear mesh before elevation`）、交付的 `geometry_order` 與 3D 演算法。沒有任何一輪產生網格時為 `null`。 |
+| `meshing_stage` | 模型的網格階段檢查找到的每一項發現及所用的限制，與 `simulation_drc` 回報的相同。交付網格時為 `null`。 |
 | `remaining_bad`、`stop_places` | 仍低於門檻的元素及其位置、群組與特徵類別，以及它們以微米計聚集的位置與該處找到的細邊或細面。乾淨停止時為空。 |
 | `recipe`、`repair`、`mesher`、`budgets`、`time_budget` | 執行使用的設定。 |
 | `timing` | 總計、每輪、網格化與稽核的秒數。集中在同一個鍵下，因此相同輸入的兩次執行在去掉它之後相等。 |

@@ -27,6 +27,7 @@ with Gmsh.
 from __future__ import annotations
 
 import math
+from collections import Counter
 from dataclasses import replace
 
 import pytest
@@ -50,6 +51,7 @@ from scgsim.geometry.models.input import BoundaryCurveChainSpec, SourceCurveSpec
 from scgsim.geometry.sgb.errors import OverlapError
 from scgsim.meshing import (
     Budgets,
+    FineFeature,
     FineStructureLimits,
     MeshRepairError,
     check_fine_structure,
@@ -603,6 +605,67 @@ def test_a_meshing_stop_names_where_and_who_must_act(monkeypatch, tmp_path):
     message = str(raised.value)
     assert "layout must act: A wall column gap" in message
     assert "the mesher's to answer for" in message
+
+
+def test_a_mesh_stop_gives_the_meshing_stage_warnings_before_its_places(
+    monkeypatch, tmp_path
+):
+    """The convex scene's class C warnings are given, by class and with the smallest in full, before the places.
+
+    The scene meshes clean with the default controls.  Set through ``set_mesh`` to no repair round and a
+    threshold of 0.3, ``mesh()`` stops with bad elements at several places, some with no finding; those keep
+    their own line and its attribution.  The findings are those ``simulation_drc`` gives for the same set-up.
+    """
+    pytest.importorskip("gmsh", reason="the meshing module needs Gmsh (extra: palace)")
+    warned = check(
+        EigenmodeSim,
+        scene(monkeypatch, PADS["convex"], CONTACT_ELECTRODE),
+        surface_epr_specs=BANDED,
+        nets=ONE_NET,
+    ).meshing.findings
+    assert warned
+    assert {(f.rule, f.action) for f in warned} == {("C", "warn")}
+    sim = set_up_as_the_check(
+        EigenmodeSim,
+        scene(monkeypatch, PADS["convex"], CONTACT_ELECTRODE),
+        tmp_path / "run",
+        BANDED,
+        ONE_NET,
+    )
+    sim.set_mesh(quality_threshold=0.3, budgets=Budgets(max_rounds=0))
+    with pytest.raises(MeshRepairError) as raised:
+        sim.mesh()
+    report = raised.value.report
+    assert [
+        FineFeature.from_json(raw) for raw in report["meshing_stage"]["findings"]
+    ] == list(warned)
+    assert any(not place["fine_structure"] for place in report["stop_places"])
+
+    smallest = min(warned, key=lambda f: (f.value, f.entity))
+    owners = ", ".join(
+        f"{owner} {count}"
+        for owner, count in sorted(Counter(f.owner for f in warned).items())
+    )
+    summary = [
+        f"  the meshing-stage check of this model gave {len(warned)} finding(s); fine structure can cost "
+        "the repair loop rounds wherever it is, so act on these as well as on the places below:",
+        f"    {len(warned)} class C warning(s), edge length down to {smallest.size}; by owner: {owners}",
+        f"      the smallest: {smallest.describe()}",
+        "    every finding is listed under meshing_stage.findings in the quality report (.quality.json)",
+    ]
+    lines = str(raised.value).splitlines()
+    first_place = next(
+        i for i, line in enumerate(lines) if line.startswith("  where: ")
+    )
+    assert lines[1:first_place] == summary
+    assert (
+        "    no fine edge or face below the meshing-stage limits there: the mesher's to answer "
+        "for; report it to SCGSim with this report"
+    ) in lines[first_place:]
+    text = (
+        tmp_path / "run" / "mesh" / "semantic_geometry_route_b.quality.txt"
+    ).read_text(encoding="utf-8")
+    assert "\n".join(summary) in text
 
 
 @pytest.mark.slow

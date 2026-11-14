@@ -38,6 +38,7 @@ The mesh manifest records the report's path and SHA-256.
 | `quality_measure`, `threshold` | `minSICN` and the threshold the run was held to. |
 | `stop`, `rounds`, `history` | How the repair loop ended and what each round changed. |
 | `mesh` | Tetrahedron and node counts, `min_quality`, `bad_count` below the threshold, `measured_on` (`linear mesh before elevation`), the delivered `geometry_order` and the 3D algorithm. `null` when no round produced a mesh. |
+| `meshing_stage` | Every finding of the meshing-stage check of the model, with the limits it used, as `simulation_drc` reports them. `null` for a delivered mesh. |
 | `remaining_bad`, `stop_places` | The elements still below the threshold, with location, groups and feature kinds, and where they cluster in micrometres with the fine edges or faces found there. Empty for a clean stop. |
 | `recipe`, `repair`, `mesher`, `budgets`, `time_budget` | The settings the run used. |
 | `timing` | Total, per-round, meshing and audit seconds. Kept under one key, so two runs of the same input compare equal without it. |

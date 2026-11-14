@@ -3,8 +3,9 @@
 Owns what a run says about itself: the recipe (name, version, parameters), the repair policy, the mesher
 options and the budgets, the time budget of the model, the threshold, how the loop stopped, the counts,
 and the bad elements that remain with their location, groups and feature kinds.  A run that stops without a
-clean mesh also says where its bad elements are (``stop_places``): each place in micrometres, and the fine
-edges and faces the meshing-stage check records there with their owner and fix.  The counts and the
+clean mesh also says what the meshing-stage check finds in its model (``meshing_stage``: every fine edge and
+face, wherever it is) and where its bad elements are (``stop_places``): each place in micrometres, and the
+findings there with their owner and fix.  The counts and the
 minimum quality are measured on the linear mesh, before any elevation to a higher order; the report says
 so.  All timings sit under one
 ``timing`` key, so two runs of the same input compare equal without it.
@@ -13,22 +14,25 @@ so.  All timings sit under one
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, TypedDict
 
 from .findings import QUALITY_MEASURE, BadElement
+from .fine_structure import FineFeature, FineStructureReport
 from .mesher import MesherOptions
 from .recipes import SizingRecipe
 from .repair import Budgets, RepairOutcome, RepairPolicy, TimeBudget
 from .stop_places import StopPlace
 
-REPORT_VERSION = "scgsim.meshing.report/4"
+REPORT_VERSION = "scgsim.meshing.report/5"
 MAX_LISTED_ELEMENTS = 200
 # How many elements, and how many places, the text summary names.
 _LISTED_IN_TEXT = 5
 MEASURED_ON = "linear mesh before elevation"
+_FOUND_AS = {"refuse": "refusal", "warn": "warning"}
 
 
 class QualityReport(TypedDict):
@@ -47,6 +51,8 @@ class QualityReport(TypedDict):
     mesh: dict[str, Any] | None
     history: list[dict[str, Any]]
     remaining_bad: dict[str, Any]
+    # The meshing-stage check of the model (FineStructureReport.to_json); None for a delivered mesh.
+    meshing_stage: dict[str, Any] | None
     stop_places: list[dict[str, Any]]  # empty for a clean stop
     timing: dict[str, Any]
 
@@ -77,10 +83,12 @@ def build_report(
     settings: RunSettings,
     total_seconds: float,
     places: Sequence[StopPlace] = (),
+    meshing_stage: FineStructureReport | None = None,
 ) -> QualityReport:
     """The report of a finished loop.  ``mesh`` is ``None`` when no round produced a mesh.
 
     ``places`` are where the remaining bad elements are (see ``stop_places``); the most crowded are listed.
+    ``meshing_stage`` is the meshing-stage check of the model, given for a stop; every finding is recorded.
     """
     audit = outcome.last_audit
     return QualityReport(
@@ -116,6 +124,7 @@ def build_report(
         remaining_bad=_remaining_bad(
             audit.bad if audit else (), audit.bad_count if audit else 0
         ),
+        meshing_stage=None if meshing_stage is None else meshing_stage.to_json(),
         stop_places=[place.to_json() for place in places[:MAX_LISTED_ELEMENTS]],
         timing={
             "total_seconds": total_seconds,
@@ -156,6 +165,7 @@ def render_text(report: QualityReport) -> str:
             f"{element['location']} groups {', '.join(element['groups']) or '-'} "
             f"features {', '.join(element['feature_kinds']) or '-'}"
         )
+    lines.extend(meshing_stage_lines(report))
     lines.extend(place_lines(report))
     budget = report["time_budget"]
     lines.append(
@@ -163,6 +173,41 @@ def render_text(report: QualityReport) -> str:
         f"target {budget['target_seconds']:.0f} s for {_footprint(budget['footprint_mm2'])}"
     )
     return "\n".join(lines) + "\n"
+
+
+def meshing_stage_lines(report: QualityReport) -> list[str]:
+    """What the meshing-stage check found anywhere in the model of a stop, said before its places.
+
+    A finding costs the repair loop rounds wherever it is, so a place with no finding of its own does not
+    mean the layout has none.  Each class and measure gets its count, its smallest size, the count per owner
+    and the smallest finding in full (:meth:`FineFeature.describe`, which states its owner and fix).
+    """
+    stage = report["meshing_stage"]
+    if stage is None or not stage["findings"]:
+        return []
+    findings = [FineFeature.from_json(raw) for raw in stage["findings"]]
+    classes: dict[tuple[bool, str, str], list[FineFeature]] = {}
+    for finding in findings:
+        classes.setdefault(
+            (finding.action != "refuse", finding.rule, finding.measure), []
+        ).append(finding)
+    lines = [
+        f"  the meshing-stage check of this model gave {len(findings)} finding(s); fine structure "
+        "can cost the repair loop rounds wherever it is, so act on these as well as on the places below:"
+    ]
+    for group in (classes[key] for key in sorted(classes)):
+        smallest = min(group, key=lambda f: (f.value, f.entity))
+        owners = Counter(f.owner for f in group)
+        lines.append(
+            f"    {len(group)} class {smallest.rule} {_FOUND_AS[smallest.action]}(s), {smallest.measure} "
+            f"down to {smallest.size}; by owner: "
+            + ", ".join(f"{owner} {count}" for owner, count in sorted(owners.items()))
+        )
+        lines.append(f"      the smallest: {smallest.describe()}")
+    lines.append(
+        "    every finding is listed under meshing_stage.findings in the quality report (.quality.json)"
+    )
+    return lines
 
 
 def place_lines(report: QualityReport) -> list[str]:
@@ -181,13 +226,8 @@ def place_lines(report: QualityReport) -> list[str]:
             )
         for found in place["fine_structure"]:
             fx, fy, fz = found["location_um"]
-            size = (
-                f"{found['value']:.4g} deg"
-                if found["value_steps"] is None
-                else f"{found['value']:.6g} um ({found['value_steps']:.3g} grid steps)"
-            )
             lines.append(
-                f"    {found['owner']} must act: {found['rule']} {found['measure']} {size} at "
+                f"    {found['owner']} must act: {found['rule']} {found['measure']} {found['size']} at "
                 f"({fx:.4f}, {fy:.4f}, {fz:.4f}) um, {found['entity']}; fix: {found['fix']}"
             )
     return lines
