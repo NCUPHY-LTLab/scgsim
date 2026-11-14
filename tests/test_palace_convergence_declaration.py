@@ -120,7 +120,7 @@ def test_each_declares_one_criterion_per_kind_with_one_threshold():
             SurfaceEpr("MA", terminals=["a"]).within(relative=1e-3),
             "whose rows are modes",
         ),
-        (ElectrostaticSim, Capacitance.diagonal(), "takes criteria such as"),
+        (ElectrostaticSim, Capacitance.diagonal(), "takes criteria, a quantity of"),
     ],
 )
 def test_a_quantity_that_does_not_fit_the_simulation_is_refused(

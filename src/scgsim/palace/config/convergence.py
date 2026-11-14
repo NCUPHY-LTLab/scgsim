@@ -514,8 +514,8 @@ def _check_fit(criterion: Any, problem: Problem, simulation: str) -> None:
     if not isinstance(criterion, Criterion):
         raise ValueError(
             Declared(f"{simulation}.set_convergence()", _WHERE_SET_CONVERGENCE).refusal(
-                f"takes criteria such as {taken[0].__name__}....within(...) or ErrorIndicator().below(...); "
-                f"{found_text(type(criterion).__name__)}"
+                f"takes criteria, a quantity of {names} with its threshold, such as "
+                f"ErrorIndicator().below(...); {found_text(type(criterion).__name__)}"
             )
         )
     quantity = criterion.quantity
