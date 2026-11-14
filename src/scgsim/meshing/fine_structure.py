@@ -148,21 +148,33 @@ class FineFeature:
     fix: str
     stage: str = STAGE
 
+    @property
+    def size(self) -> str:
+        """The size the finding was found by, with its unit: micrometres and grid steps, or degrees."""
+        if self.value_steps is None:
+            return f"{self.value:.4g} deg"
+        return f"{self.value:.6g} um ({self.value_steps:.3g} grid steps)"
+
     def describe(self) -> str:
         """The finding as one paragraph of text: stage, rule, place, layer, size, source, owner, cause and fix."""
         x, y, z = self.location_um
-        size = (
-            f"{self.value:.4g} deg"
-            if self.value_steps is None
-            else f"{self.value:.6g} um ({self.value_steps:.3g} grid steps)"
-        )
         groups = ", ".join(self.groups) or "-"
         return (
-            f"{self.stage} stage, {self.action} {self.rule}: {self.measure} {size} < {self.limit:g} "
+            f"{self.stage} stage, {self.action} {self.rule}: {self.measure} {self.size} < {self.limit:g} "
             f"{self.limit_unit} at ({x:.4f}, {y:.4f}, {z:.4f}) um, {self.entity} in {groups}"
             f"{_on_layers(self.layers)}; "
             f"from {', '.join(self.sources) or '-'}; owner {self.owner}. {self.cause} Fix: {self.fix}"
         )
+
+    @classmethod
+    def from_json(cls, raw: Mapping[str, Any]) -> FineFeature:
+        """Rebuild a finding from its JSON form (``asdict`` of the record, as the quality report holds it)."""
+        fields = dict(raw)
+        for name in ("groups", "entities", "layers", "sources", "location_um"):
+            fields[name] = tuple(fields[name])
+        low, high = fields["bounds_um"]
+        fields["bounds_um"] = (tuple(low), tuple(high))
+        return cls(**fields)
 
 
 @dataclass(frozen=True)
