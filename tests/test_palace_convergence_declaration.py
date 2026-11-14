@@ -37,11 +37,10 @@ def test_each_capacitance_selection_has_its_label():
     assert Capacitance.matrix().label == "C matrix"
     assert Capacitance.elements([("a", "a"), ("a", "b")]).label == "C C[a][a], C[a][b]"
     assert ModeFrequency(modes=[1, 3]).label == "frequency, modes 1, 3"
-    assert (
-        SurfaceEpr("MA", margin_um=1).label
-        == "MA participation, 1 um or more from the gap edge"
-    )
-    assert SurfaceEpr("SA", modes=[2]).label == "SA participation, mode 2"
+    inset = SurfaceEpr("MA", margin_um=1)
+    assert (inset.group, inset.label) == ("Surface EPR, inset 1 um", "MA")
+    whole = SurfaceEpr("SA", modes=[2])
+    assert (whole.group, whole.label) == ("Surface EPR", "SA, mode 2")
 
 
 def test_each_threshold_keyword_names_its_unit():
@@ -93,11 +92,10 @@ def test_each_declares_one_criterion_per_kind_with_one_threshold():
         SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(percent=2)
     )
     assert sim.convergence is not None
-    assert [item.label for item in sim.convergence.criteria] == [
-        "MA participation, 1 um or more from the gap edge",
-        "MS participation, 1 um or more from the gap edge",
-        "SA participation, 1 um or more from the gap edge",
-    ]
+    assert [item.label for item in sim.convergence.criteria] == ["MA", "MS", "SA"]
+    assert {item.quantity.group for item in sim.convergence.criteria} == {
+        "Surface EPR, inset 1 um"
+    }
     assert {item.threshold for item in sim.convergence.criteria} == {2.0}
     assert sim.convergence.minimum_converged_passes == 1
 
@@ -309,8 +307,8 @@ def test_the_plan_takes_a_participation_from_the_index_map_entries(tmp_path):
     surfaces, margins = _plan(sim)["criteria"]
     assert [value["columns"] for value in surfaces["values"]] == [whole, whole]
     assert [value["label"] for value in surfaces["values"]] == [
-        "MA participation, excitation pad",
-        "MA participation, excitation plane",
+        "Surface EPR, MA, excitation pad",
+        "Surface EPR, MA, excitation plane",
     ]
     assert [(value["row"], value["columns"]) for value in margins["values"]] == [
         ({"column": "i", "index": 2}, beyond)

@@ -35,7 +35,7 @@ from typing import Any, Literal
 from scgsim.contracts.palace_run_folder import RunEnding
 
 PLAN_SCHEMA = "scgsim.palace.convergence-plan"
-PLAN_SCHEMA_VERSION = 1
+PLAN_SCHEMA_VERSION = 2
 
 Test = Literal["percent_change", "absolute_change", "at_most"]
 """How a criterion compares a number with its threshold.
@@ -112,9 +112,11 @@ class PlannedValue:
 class PlannedCriterion:
     """One declared criterion: the numbers it reads, its test and its threshold.
 
-    ``label`` is how the report names the criterion; ``unit`` is the unit the numbers are stored in
-    (``F``, ``GHz``, or ``1`` for a participation or Palace's error indicator), which is the unit of an
-    ``absolute_change`` or ``at_most`` threshold.
+    ``group`` names what the criterion is one of, shared by the criteria shown together (``Surface EPR,
+    inset 0.5 um`` for the kinds declared at that margin); it is empty for a criterion that stands alone.
+    ``label`` names the criterion within its group (``MA``), or by itself (``C diagonal``).  ``unit`` is the
+    unit the numbers are stored in (``F``, ``GHz``, or ``1`` for a participation or Palace's error
+    indicator), which is the unit of an ``absolute_change`` or ``at_most`` threshold.
     """
 
     label: str
@@ -123,6 +125,12 @@ class PlannedCriterion:
     threshold: float
     unit: str
     values: tuple[PlannedValue, ...]
+    group: str = ""
+
+    @property
+    def name(self) -> str:
+        """The criterion's full name, as a record or a sentence states it: ``Surface EPR, inset 0.5 um, MA``."""
+        return f"{self.group}, {self.label}" if self.group else self.label
 
     @property
     def measures_change(self) -> bool:
@@ -132,6 +140,7 @@ class PlannedCriterion:
     def to_payload(self) -> dict[str, Any]:
         """The criterion as the plan file holds it."""
         return {
+            "group": self.group,
             "label": self.label,
             "quantity": self.quantity,
             "test": self.test,
@@ -219,6 +228,14 @@ def _criterion(payload: Any) -> PlannedCriterion:
         raise ValueError(
             _refused(f"criterion {label!r} of the convergence plan", "reads no number")
         )
+    group = criterion.get("group")
+    if not isinstance(group, str):
+        raise ValueError(
+            _refused(
+                f"criterion {label!r} of the convergence plan",
+                f"has group {group!r}; it must be text, empty for a criterion that stands alone",
+            )
+        )
     return PlannedCriterion(
         label=label,
         quantity=quantity,
@@ -226,6 +243,7 @@ def _criterion(payload: Any) -> PlannedCriterion:
         threshold=float(threshold),
         unit=_text(criterion.get("unit"), f"{label} unit"),
         values=values,
+        group=group,
     )
 
 
@@ -967,7 +985,7 @@ def _verdict(plan: ConvergencePlan, checks: list[PassCheck]) -> ConvergenceVerdi
         pass_number=checks[converged_at].number,
         passes_read_after=len(checks) - 1 - converged_at,
         last_to_hold=tuple(
-            criterion.label
+            criterion.name
             for criterion, start in zip(plan.criteria, starts, strict=True)
             if start == latest
         ),
@@ -1252,7 +1270,7 @@ def recorded_check(check: ConvergenceCheck, root: Path) -> dict[str, Any]:
                 "identity_problem": item.identity_problem,
                 "criteria": [
                     {
-                        "label": criterion.criterion.label,
+                        "label": criterion.criterion.name,
                         "holds": criterion.holds,
                         "values": [
                             {
@@ -1284,7 +1302,7 @@ def recorded_check(check: ConvergenceCheck, root: Path) -> dict[str, Any]:
             "passes_read_after": verdict.passes_read_after,
             "last_to_hold": list(verdict.last_to_hold),
             "last_to_hold_from": verdict.last_to_hold_from,
-            "failing": [item.criterion.label for item in verdict.failing],
+            "failing": [item.criterion.name for item in verdict.failing],
         },
     }
 

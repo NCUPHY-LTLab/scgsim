@@ -322,7 +322,7 @@ def test_the_plan_payload_round_trips_and_names_its_schema():
     plan = _plan(_diagonal(), _error(0.02), in_a_row=2)
     payload = json.loads(json.dumps(plan.to_payload()))
     assert payload["schema"] == "scgsim.palace.convergence-plan"
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["criteria"][0]["values"][0]["combine"] == "sum"
     assert ConvergencePlan.from_payload(payload) == plan
 
@@ -330,7 +330,7 @@ def test_the_plan_payload_round_trips_and_names_its_schema():
 @pytest.mark.parametrize(
     ("change", "message"),
     [
-        ({"schema_version": 2}, "this SCGSim reads"),
+        ({"schema_version": 1}, "this SCGSim reads"),
         ({"criteria": []}, "has no criterion"),
         ({"minimum_converged_passes": 0}, "integer of at least 1"),
     ],

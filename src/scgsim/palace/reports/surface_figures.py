@@ -43,24 +43,74 @@ def _surface_totals(snapshot: SurfaceEprSeriesSnapshot) -> dict[str, float]:
     }
 
 
-def surface_total_figure(
-    snapshots: Sequence[SurfaceEprSeriesSnapshot], theme: ReportTheme
-) -> Any | None:
-    """Plot total MA/MS/SA participation across the recorded surface series."""
-    return LinePlot(
-        title=f"{series_label(snapshots[-1])}: MA/MS/SA participation vs AMR pass",
-        xlabel="AMR pass",
-        ylabel="total participation",
-        xs=[pass_number(snapshot.pass_index) for snapshot in snapshots],
-        traces=[
+def surface_kind_figures(
+    snapshots: Sequence[SurfaceEprSeriesSnapshot],
+    insets: Sequence[SurfaceMarginEprSeriesSnapshot],
+    theme: ReportTheme,
+) -> list[Any]:
+    """Per interface kind, its participation across the passes: the whole surfaces, and each inset recorded.
+
+    The kinds are drawn apart because their participations differ by orders of magnitude.  ``inset 1 um``
+    is the part of the kind's surfaces 1 um or more from the gap edge, summed over its margin rows.
+    """
+    figures: list[Any] = []
+    by_pass = [
+        latest_margin_snapshot(
+            insets,
+            pass_index=snapshot.pass_index,
+            source=snapshot.source,
+            series_index=snapshot.series_index,
+        )
+        for snapshot in snapshots
+    ]
+    margins = sorted(
+        {record.margin_um for inset in by_pass if inset for record in inset.records}
+    )
+    for interface_type in SURFACE_TYPES:
+        if not any(
+            record.interface_type == interface_type
+            for snapshot in snapshots
+            for record in snapshot.records
+        ):
+            continue
+        traces = [
             Trace(
-                interface_type,
+                "whole surface",
                 [_surface_totals(snapshot)[interface_type] for snapshot in snapshots],
-            )
-            for interface_type in SURFACE_TYPES
-        ],
-        theme=theme,
-    ).figure()
+            ),
+            *(
+                Trace(
+                    f"inset {margin:g} um",
+                    [_inset_total(inset, interface_type, margin) for inset in by_pass],
+                )
+                for margin in margins
+            ),
+        ]
+        figure = LinePlot(
+            title=f"{series_label(snapshots[-1])}: {interface_type} participation vs AMR pass",
+            xlabel="AMR pass",
+            ylabel=f"{interface_type} participation",
+            xs=[pass_number(snapshot.pass_index) for snapshot in snapshots],
+            traces=traces,
+            theme=theme,
+        ).figure()
+        if figure is not None:
+            figures.append(figure)
+    return figures
+
+
+def _inset_total(
+    inset: SurfaceMarginEprSeriesSnapshot | None, interface_type: str, margin_um: float
+) -> float | None:
+    """One kind's participation at one inset of a pass; None when the pass records no such rows."""
+    if inset is None:
+        return None
+    rows = [
+        record.participation
+        for record in inset.records
+        if record.interface_type == interface_type and record.margin_um == margin_um
+    ]
+    return sum(rows) if rows else None
 
 
 def latest_margin_snapshot(

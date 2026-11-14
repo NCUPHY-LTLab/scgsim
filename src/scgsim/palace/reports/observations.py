@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import html
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, NamedTuple, TypedDict
 
+from scgsim.contracts.palace_index_map import TERMINAL_SECTION
 from scgsim.contracts.palace_run_folder import NATIVE_METADATA_NAME, palace_problem
-from scgsim.palace.reports.plotting import Trace, TraceGroup
+from scgsim.palace.reports.plotting import Trace, TraceGroup, html_cell
 from scgsim.palace.results.artifacts import (
     as_int,
     mapping_max,
@@ -210,23 +212,59 @@ def native_positive_infinity_q_notice(
     )
 
 
-def delta_traces(
-    traces: Sequence[Trace],
-) -> list[Trace]:
-    """Compute successive absolute trace differences for the convergence view."""
-    deltas: list[Trace] = []
-    for name, ys in traces:
-        series: list[float | None] = []
-        previous: float | None = None
-        for value in ys:
-            if previous is None or value is None:
-                series.append(None)
-            else:
-                series.append(abs(value - previous))
-            if value is not None:
-                previous = value
-        deltas.append(Trace(name, series[1:]))
-    return deltas
+def result_values_html(
+    pass_: AmrPassSnapshot, index_map: Mapping[str, Any] | None
+) -> str:
+    """The numbers the run was solved for, at ``pass_``: the capacitance matrix, or each mode's frequency and Q."""
+    if pass_.capacitance_matrix_f is not None:
+        names = _terminal_names(index_map)
+        size = len(pass_.capacitance_matrix_f)
+        labels = [names.get(index, str(index)) for index in range(1, size + 1)]
+        header = html_cell("th", "") + "".join(html_cell("th", name) for name in labels)
+        rows = "".join(
+            "<tr>"
+            + html_cell("th", label)
+            + "".join(html_cell("td", f"{value * 1e15:.6g}") for value in row)
+            + "</tr>"
+            for label, row in zip(labels, pass_.capacitance_matrix_f, strict=True)
+        )
+        return _values_table("Maxwell capacitance matrix (fF)", header, rows)
+    if pass_.frequencies_ghz is not None:
+        quality = (pass_.eig_columns or {}).get("Q", ())
+        header = "".join(html_cell("th", name) for name in ("Mode", FREQ_HEADER, "Q"))
+        rows = "".join(
+            "<tr>"
+            + html_cell("td", str(mode))
+            + html_cell("td", f"{frequency:.9g}")
+            + html_cell(
+                "td", f"{quality[mode - 1]:.6g}" if mode <= len(quality) else ""
+            )
+            + "</tr>"
+            for mode, frequency in enumerate(pass_.frequencies_ghz, start=1)
+        )
+        return _values_table("Modes", header, rows)
+    return ""
+
+
+def _values_table(title: str, header: str, rows: str) -> str:
+    return (
+        f"<h4>{html.escape(title)}</h4>"
+        "<table style='border-collapse:collapse;font-size:0.9rem'>"
+        f"<thead><tr>{header}</tr></thead><tbody>{rows}</tbody></table>"
+    )
+
+
+def _terminal_names(index_map: Mapping[str, Any] | None) -> dict[int, str]:
+    """Each terminal's name by its Palace index, from the run's index map."""
+    entries = (index_map or {}).get("entries", [])
+    return {
+        entry["index"]: entry["terminal_name"]
+        for entry in entries
+        if isinstance(entry, dict)
+        and entry.get("section") == TERMINAL_SECTION
+        and isinstance(entry.get("terminal_name"), str)
+        and isinstance(entry.get("index"), int)
+    }
 
 
 def capacitance_traces(

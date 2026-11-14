@@ -341,8 +341,8 @@ class PalaceReportUxTests(unittest.TestCase):
                 return_value=["numerical"],
             ),
             patch(
-                "scgsim.palace.reports.trust.surface_total_figure",
-                return_value=total,
+                "scgsim.palace.reports.trust.surface_kind_figures",
+                return_value=[total],
             ),
             patch(
                 "scgsim.palace.reports.trust.surface_percentage_figure",
@@ -362,7 +362,7 @@ class PalaceReportUxTests(unittest.TestCase):
         physics = trust.show_physics_quantities(ranking_limit=1)
         with (
             patch(
-                "scgsim.palace.reports.trust.surface_total_figure",
+                "scgsim.palace.reports.trust.surface_kind_figures",
                 side_effect=AssertionError("physics must not redraw convergence"),
             ),
             patch(

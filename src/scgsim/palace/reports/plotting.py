@@ -48,7 +48,6 @@ PLOT_TICK_FONT = 14
 
 
 _PLOT_LEGEND_FONT = 15
-_LEGEND_ROW_HEIGHT = 22
 
 
 ReportTheme = Literal["light", "dark"]
@@ -135,23 +134,18 @@ class LinePlot:
     traces: Sequence[Trace]
     point_labels: Sequence[str] | None = None
     yaxis_type: str = "linear"
-    hline: ReferenceLine | None = None
+    hlines: Sequence[ReferenceLine] = ()
     theme: ReportTheme = "light"
-    legend_rows: int = 2
-    """The rows the legend above the plot takes: one per trace when the names are too long to share a row."""
 
     def figure(self) -> Any | None:
         """Render available paired points, labels and an optional configured reference line."""
         tokens = theme_tokens(self.theme)
         go = plotly()
         fig = go.Figure()
-        # The margin above the plot holds the title and two legend rows; further rows get room of their own.
-        above = _LEGEND_ROW_HEIGHT * max(0, self.legend_rows - 2)
         # A responsive width does not reclaim the fixed gutter for an outside legend.
         FigureStyle(
             title=self.title,
-            height=_PLOT_HEIGHT + above,
-            margin={"l": 84, "r": 36, "t": 116 + above, "b": 64},
+            margin={"l": 84, "r": 36, "t": 116, "b": 64},
             theme=self.theme,
         ).apply(fig)
         fig.update_layout(
@@ -197,8 +191,8 @@ class LinePlot:
             plotted = True
         if not plotted:
             return None
-        if self.hline is not None:
-            self._draw_reference_line(fig, self.hline, tokens)
+        for line in self.hlines:
+            self._draw_reference_line(fig, line, tokens)
         fig.update_xaxes(title=axis_title(self.xlabel, tokens))
         fig.update_yaxes(title=axis_title(self.ylabel, tokens), type=self.yaxis_type)
         _maybe_integer_xticks(fig, self.xs)

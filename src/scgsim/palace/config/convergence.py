@@ -348,18 +348,17 @@ class SurfaceEpr:
         )
 
     @property
-    def surface_label(self) -> str:
-        """The kind and the surfaces summed: ``MA participation, 1 um or more from the gap edge``."""
-        inside = (
-            ""
-            if self.margin_um is None
-            else f", {self.margin_um:g} um or more from the gap edge"
-        )
-        return f"{self.interface_kind} participation{inside}"
+    def group(self) -> str:
+        """What the kinds summed over the same surfaces are shown under: ``Surface EPR, inset 1 um``.
+
+        ``inset 1 um`` is the part of the surfaces that lies 1 um or more from the gap edge.
+        """
+        inset = "" if self.margin_um is None else f", inset {self.margin_um:g} um"
+        return f"Surface EPR{inset}"
 
     @property
     def label(self) -> str:
-        """How the report names the quantity: ``surface_label`` and the selected modes or excitations."""
+        """The kind within its group, with the selected modes or excitations: ``MA``, ``MA, modes 1, 2``."""
         selection = (
             ""
             if self.modes is None and self.terminals is None
@@ -370,7 +369,12 @@ class SurfaceEpr:
                 else _selected("excitation", self.terminals)
             )
         )
-        return f"{self.surface_label}{selection}"
+        return f"{self.interface_kind}{selection}"
+
+    @property
+    def surface_label(self) -> str:
+        """The kind with its group, as each number's label starts: ``Surface EPR, inset 1 um, MA``."""
+        return f"{self.group}, {self.interface_kind}"
 
     def within(
         self, *, percent: float | None = None, absolute: float | None = None
@@ -432,6 +436,13 @@ class ErrorIndicator:
 ConvergenceQuantity = Capacitance | ModeFrequency | SurfaceEpr | ErrorIndicator
 
 
+def quantity_name(quantity: ConvergenceQuantity) -> str:
+    """The quantity as a refusal names it: its label, under its group when it has one."""
+    if isinstance(quantity, SurfaceEpr):
+        return f"{quantity.group}, {quantity.label}"
+    return quantity.label
+
+
 # ---- Criteria and the declaration ----------------------------------------------------------------------------
 
 
@@ -473,7 +484,7 @@ def checked_criterion(
     quantity = criterion.quantity
     if criterion.test not in quantity.tests:
         raise ValueError(
-            Declared(f"{quantity.label} criterion", where).refusal(
+            Declared(f"{quantity_name(quantity)} criterion", where).refusal(
                 f"tests {criterion.test!r}, and {type(quantity).__name__} offers {list(quantity.tests)}: "
                 + (
                     "bound its value with ErrorIndicator().below(...)"
@@ -484,7 +495,7 @@ def checked_criterion(
         )
     if not _positive_finite(criterion.threshold):
         raise ValueError(
-            Declared(f"{quantity.label} criterion", where).expected(
+            Declared(f"{quantity_name(quantity)} criterion", where).expected(
                 threshold_name, "a positive finite number", criterion.threshold
             )
         )
@@ -662,7 +673,7 @@ def _change_criterion(
     if (percent is None) == (absolute_value is None):
         raise ValueError(
             Declared(
-                f"{quantity.label} criterion",
+                f"{quantity_name(quantity)} criterion",
                 f"the call to {type(quantity).__name__}.within",
             ).refusal(
                 f"takes exactly one threshold, percent=... or {absolute_name}=...; "

@@ -248,59 +248,103 @@ def test_whole_surface_participation_matches_the_whole_surface_records(
             assert not set(value["columns"]) & {f"p_surf[{b.index}]" for b in whole}
 
 
-def test_the_trust_report_shows_the_verdict_the_table_and_the_thresholds(returned):
-    """The verdict sentence, the table with a row per pass and the figures of what the criteria measured."""
+def _shown(report) -> tuple[str, list]:
+    """The HTML a report displays in a notebook, joined, and its figures in order."""
+    with (
+        _captured_notebook_display() as displayed,
+        patch("scgsim.palace.reports.trust.show_figure", displayed.append),
+    ):
+        report._ipython_display_()  # noqa: SLF001 -- the notebook display hook
+    html = "".join(item.data for item in displayed if isinstance(item.data, str))
+    return html, [item for item in displayed if hasattr(item, "layout")]
+
+
+def test_the_trust_report_shows_the_run_the_table_and_each_quantity_with_its_change(
+    returned,
+):
+    """What a reader of a run needs: which run, the table of the criteria per pass, and the figures.
+
+    The identity is five cards.  The table heads a criterion by its name and its threshold, a group's name
+    once over its criteria.  Each quantity's figure is followed by the figure of its declared change.
+    """
     result = resolve_palace_result(
         returned.root, expected_handoff_id=returned.handoff_id
     )
     trust = result.show_run_trustworthiness()
     assert trust.convergence == result.convergence
-    with (
-        _captured_notebook_display() as displayed,
-        patch("scgsim.palace.reports.trust.show_figure", displayed.append),
-    ):
-        trust._ipython_display_()  # noqa: SLF001 -- the notebook display hook
-    html = "".join(item.data for item in displayed if isinstance(item.data, str))
-    assert "Declared convergence" in html
-    assert "Converged at pass 4, of the 4 passes read" in html
+    html, figures = _shown(trust)
+    cards = html.split("<h3>Convergence</h3>")[0]
+    for label in ("Problem", "Route", "Profile", "AMR passes recorded", "MPI × OpenMP"):
+        assert f">{label}</div>" in cards
+    for label in ("Final snapshot", "Selection integrity", "AMR Tol", "Receipt"):
+        assert f">{label}</div>" not in html
+    assert "Converged at pass 4" not in html and "Numerical Evidence" not in html
     assert ">Pass</th>" in html and ">Solved elements</th>" in html
-    assert "Delta % at most 0.1" in html and ">N/A</td>" in html
-    assert "A dashed line is the threshold declared with set_convergence()" in html
-    assert "set aside: convergence declared" in html
-    assert "not a newly invented acceptance Gate" not in html
-    titles = [
-        figure.layout.title.text
-        for figure in displayed
-        if hasattr(figure, "layout") and figure.layout.title.text
-    ]
-    assert "C diagonal: Delta % vs AMR pass" in titles
-    assert "error indicator (Norm): value vs AMR pass" in titles
-    # MA and MS, declared together against one threshold, share one figure: a line per kind and excitation.
-    shared = next(
-        figure
-        for figure in displayed
-        if hasattr(figure, "layout")
-        and figure.layout.title.text
-        == "Surface participation: Max Percent Delta vs AMR pass"
+    assert ">C diagonal<br>" in html and ">≤ 0.1 %</span>" in html
+    # MA and MS at one inset stand under the inset's name, said once, with the threshold they share.
+    assert html.count("Surface EPR, inset 1 um") == 1
+    assert "colspan='2'" in html and ">MA</th>" in html and ">MS</th>" in html
+    assert ">N/A</td>" in html
+    titles = [figure.layout.title.text for figure in figures]
+    value, change = (
+        titles.index("C[1][1] vs AMR pass"),
+        titles.index("C diagonal Delta % vs AMR pass"),
     )
-    assert [trace.name.split(" ")[0] for trace in shared.data] == [
-        "MA",
-        "MA",
-        "MS",
-        "MS",
+    assert value < change < titles.index("AMR error indicator vs AMR pass")
+    assert not [title for title in titles if title.startswith("|Δ")]
+    assert "Excitation 1: MA participation vs AMR pass" in titles
+    by_kind = figures[titles.index("Excitation 1: MA participation vs AMR pass")]
+    # Every inset the run records is a line, declared or not.
+    assert [trace.name for trace in by_kind.data] == [
+        "whole surface",
+        "inset 0.5 um",
+        "inset 1 um",
     ]
-    assert shared.layout.yaxis.title.text == "change from the pass before (%)"
+    shared = figures[
+        titles.index("Surface EPR, inset 1 um Max Percent Delta vs AMR pass")
+    ]
+    assert [trace.name for trace in shared.data] == [
+        "MA, excitation pad",
+        "MA, excitation plane",
+        "MS, excitation pad",
+        "MS, excitation plane",
+    ]
+    assert shared.layout.yaxis.title.text == "Surface EPR Max Percent Delta"
     assert [shape.y0 for shape in shared.layout.shapes] == [2.0]
     # The label sits on the line: on a log axis an annotation is placed by the exponent.
     label = shared.layout.annotations[0]
-    assert (label.text, label.y) == ("declared: at most 2", math.log10(2.0))
-    error_figure = next(
-        figure
-        for figure in displayed
-        if hasattr(figure, "layout")
-        and figure.layout.title.text == "AMR error indicator vs AMR pass"
-    )
+    assert (label.text, label.y) == ("≤ 2 %", math.log10(2.0))
+    error_figure = figures[titles.index("AMR error indicator vs AMR pass")]
     assert [shape.y0 for shape in error_figure.layout.shapes] == [0.05]
+    assert error_figure.layout.annotations[0].text == "≤ 0.05"
+
+
+def test_the_trust_report_with_details_adds_the_records_and_the_verdict(returned):
+    """``show_details`` adds what the run folder records and the verdict as a sentence."""
+    result = resolve_palace_result(
+        returned.root, expected_handoff_id=returned.handoff_id
+    )
+    html, _ = _shown(result.show_run_trustworthiness(show_details=True))
+    for label in ("Final snapshot", "Selection integrity", "AMR Tol", "Receipt"):
+        assert f">{label}</div>" in html
+    assert "set aside: convergence declared" in html
+    assert "Converged at pass 4, of the 4 passes read" in html
+
+
+def test_the_physics_view_opens_with_the_numbers_the_run_was_solved_for(returned):
+    """The capacitance matrix of the last pass read, its rows and columns named by terminal."""
+    result = resolve_palace_result(
+        returned.root, expected_handoff_id=returned.handoff_id
+    )
+    with (
+        _captured_notebook_display() as displayed,
+        patch("scgsim.palace.reports.views.show_figure", lambda figure: None),
+    ):
+        result.show_physics_quantities()._ipython_display_()  # noqa: SLF001 -- the notebook display hook
+    html = "".join(item.data for item in displayed if isinstance(item.data, str))
+    assert "Values of pass 4, the last pass read." in html
+    assert "Maxwell capacitance matrix (fF)" in html
+    assert html.count(">pad</th>") == 2 and html.count(">plane</th>") == 2
 
 
 def test_a_partly_returned_run_shows_the_passes_it_holds(tmp_path):
@@ -319,7 +363,7 @@ def test_a_partly_returned_run_shows_the_passes_it_holds(tmp_path):
     assert verdict_sentence(check).startswith(
         "Not converged in the 2 passes read (passes 1 to 2). At pass 2:"
     )
-    assert "C diagonal (C[pad][pad]): Delta % 0.99, above the declared 0.1" in (
+    assert "C diagonal (C[pad][pad]): changed by 0.99 %, above the declared 0.1 %" in (
         verdict_sentence(check)
     )
 

@@ -15,6 +15,7 @@ declaration, the plan and the check use the same percentage.
 from __future__ import annotations
 
 import html
+import itertools
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -23,6 +24,7 @@ from scgsim.contracts.palace_convergence import (
     CriterionAtPass,
     PassCheck,
     PlannedCriterion,
+    PlannedValue,
 )
 from scgsim.palace.reports.plotting import (
     LinePlot,
@@ -36,26 +38,26 @@ from scgsim.palace.results.convergence import SolverEnd
 from scgsim.palace.results.inspection_records import AmrPassSnapshot
 
 
-def declared_items(
+def declared_html(
     check: ConvergenceCheck,
-    theme: ReportTheme,
     end: SolverEnd | None = None,
     *,
     solved_elements: Mapping[int, int] | None = None,
-) -> list[Any]:
-    """The declared convergence as the trust report opens its numerical evidence; nothing when undeclared.
+    show_details: bool = False,
+) -> list[str]:
+    """The table of the declared criteria at each pass; nothing when undeclared.
 
-    The verdict comes first, then the table of passes, then each criterion's figure.  ``solved_elements``
-    gives the mesh elements of each pass by its number, for the table.
+    ``solved_elements`` gives the mesh elements of each pass by its number.  With ``show_details`` the
+    verdict comes first as a sentence; the table alone already shows which pass every criterion held at.
     """
     if check.plan is None:
         return []
-    return [
-        "<section><h4>Declared convergence</h4>"
+    sentence = (
         f"<p><strong>{html.escape(verdict_sentence(check, end))}</strong></p>"
-        f"{pass_table_html(check, solved_elements)}</section>",
-        *change_figures(check, theme),
-    ]
+        if show_details
+        else ""
+    )
+    return [f"<section>{sentence}{pass_table_html(check, solved_elements)}</section>"]
 
 
 def solved_elements(passes: Sequence[AmrPassSnapshot]) -> dict[int, int]:
@@ -75,12 +77,16 @@ def pass_limit_text(amr_max_passes: int | None) -> str:
     return f"{amr_max_passes} ({allowed} pass{'' if allowed == 1 else 'es'})"
 
 
-def declared_threshold(check: ConvergenceCheck, quantity: str) -> float | None:
-    """The threshold declared for ``quantity`` (``error_indicator``), None when no criterion is on it."""
+def threshold_line(check: ConvergenceCheck, quantity: str) -> ReferenceLine | None:
+    """The line of the threshold declared for ``quantity`` (``error_indicator``), None when none is."""
     if check.plan is None:
         return None
     return next(
-        (item.threshold for item in check.plan.criteria if item.quantity == quantity),
+        (
+            ReferenceLine(item.threshold, _threshold_words(item))
+            for item in check.plan.criteria
+            if item.quantity == quantity
+        ),
         None,
     )
 
@@ -241,42 +247,53 @@ def _failure(item: CriterionAtPass) -> str:
     worst = item.worst
     criterion = item.criterion
     named = (
-        item.criterion.label
-        if len(item.values) == 1 and worst.label == criterion.label
-        else f"{criterion.label} ({_within(worst.label, criterion.label)})"
+        criterion.name
+        if len(item.values) == 1 and worst.label == criterion.name
+        else f"{criterion.name} ({_within(worst.label, criterion.name)})"
     )
     if worst.measured is None:
         return f"{named}: not measured, {worst.unavailable}"
     times = worst.measured / criterion.threshold
+    measured = "changed by" if criterion.measures_change else "value"
     return (
-        f"{named}: {_measured_words(criterion)} {_number(worst.measured, criterion)}, "
+        f"{named}: {measured} {_number(worst.measured, criterion)}, "
         f"above the declared {_number(criterion.threshold, criterion)} ({times:.3g} times it)"
     )
 
 
-def _within(value_label: str, criterion_label: str) -> str:
-    """A number's label without the criterion's label it starts with: ``excitation signal``."""
-    return value_label.removeprefix(f"{criterion_label}, ")
+def _within(value_label: str, criterion_name: str) -> str:
+    """A number's label without the criterion's name it starts with: ``excitation signal``."""
+    return value_label.removeprefix(f"{criterion_name}, ")
 
 
 def pass_table_html(
     check: ConvergenceCheck, solved_elements: Mapping[int, int] | None = None
 ) -> str:
-    """One row per pass, as AEDT's convergence table has it: its solved elements and each criterion's worst number.
+    """One row per pass, as AEDT's convergence table has it: its solved elements and each criterion's number.
 
-    A column is a criterion, headed by its label and what was declared; the last column says whether every
-    criterion held and for how many passes in a row.
+    A column is a criterion, headed by its name and its threshold, so each number below is read against the
+    threshold above it.  Criteria of one group stand under the group's name, said once.  The last column
+    says whether every criterion held and for how many passes in a row.
     """
     if check.plan is None or not check.passes:
         return ""
+    criteria = check.plan.criteria
     elements = solved_elements or {}
+    grouped = any(criterion.group for criterion in criteria)
+    rows_tall = 2 if grouped else 1
+    top, below = _criteria_headings(criteria, rows_tall)
     header = (
         "<tr>"
-        + html_cell("th", "Pass")
-        + html_cell("th", "Solved elements")
-        + "".join(_criterion_heading(criterion) for criterion in check.plan.criteria)
-        + _heading("Every criterion", _in_a_row(check.plan.minimum_converged_passes))
+        + _heading("Pass", rows=rows_tall)
+        + _heading("Solved elements", rows=rows_tall)
+        + top
+        + _heading(
+            "Every criterion",
+            _in_a_row(check.plan.minimum_converged_passes),
+            rows=rows_tall,
+        )
         + "</tr>"
+        + (f"<tr>{below}</tr>" if grouped else "")
     )
     rows = [
         "<tr>"
@@ -291,26 +308,59 @@ def pass_table_html(
         + "</tr>"
         for item in check.passes
     ]
+    worst = (
+        " A criterion that reads several numbers shows its worst one."
+        if any(len(criterion.values) > 1 for criterion in criteria)
+        else ""
+    )
     return (
         "<table style='border-collapse:collapse;font-size:0.9rem'>"
         f"<thead>{header}</thead><tbody>{''.join(rows)}</tbody></table>"
-        "<p style='opacity:0.75'>Each cell is the criterion's worst number at that pass and, for a group, "
-        "which number; a change is a percentage of the value. N/A: a change needs the pass before it, so "
-        "pass 1 has none.</p>"
+        "<p style='opacity:0.75'>A change is measured from the pass before, so pass 1 has none (N/A)."
+        f"{worst}</p>"
     )
 
 
-def _heading(label: str, declared: str) -> str:
-    """A column heading in two lines: what the column is, and what was declared for it."""
+def _criteria_headings(
+    criteria: Sequence[PlannedCriterion], rows_tall: int
+) -> tuple[str, str]:
+    """The two heading rows: a group's name once over its criteria, a criterion alone over both rows."""
+    top: list[str] = []
+    below: list[str] = []
+    for group, members_of in itertools.groupby(criteria, key=lambda item: item.group):
+        members = list(members_of)
+        if not group:
+            top.extend(
+                _heading(item.label, _threshold_words(item), rows=rows_tall)
+                for item in members
+            )
+            continue
+        shared = len({(item.test, item.threshold) for item in members}) == 1
+        top.append(
+            _heading(
+                group,
+                _threshold_words(members[0]) if shared else "",
+                columns=len(members),
+            )
+        )
+        below.extend(
+            _heading(item.label, "" if shared else _threshold_words(item))
+            for item in members
+        )
+    return "".join(top), "".join(below)
+
+
+def _heading(label: str, declared: str = "", *, rows: int = 1, columns: int = 1) -> str:
+    """A column heading: what the column is and, on a second line, what was declared for it."""
+    second = (
+        f"<br><span style='font-weight:normal;opacity:0.75'>{html.escape(declared)}</span>"
+        if declared
+        else ""
+    )
     return (
-        "<th style='border:1px solid var(--border,#d0d7de);padding:0.35rem 0.65rem;text-align:left'>"
-        f"{html.escape(label)}<br><span style='font-weight:normal;opacity:0.75'>"
-        f"{html.escape(declared)}</span></th>"
+        f"<th rowspan='{rows}' colspan='{columns}' style='border:1px solid var(--border,#d0d7de);"
+        f"padding:0.35rem 0.65rem;text-align:left'>{html.escape(label)}{second}</th>"
     )
-
-
-def _criterion_heading(criterion: PlannedCriterion) -> str:
-    return _heading(criterion.label, _threshold_words(criterion))
 
 
 def _every_criterion(item: PassCheck) -> str:
@@ -330,7 +380,7 @@ def _cell(item: CriterionAtPass) -> str:
     which = (
         ""
         if len(item.values) == 1
-        else f" ({_within(worst.label, item.criterion.label)})"
+        else f" ({_within(worst.label, item.criterion.name)})"
     )
     if worst.measured is None:
         if worst.unavailable == _NO_PASS_BEFORE:
@@ -344,65 +394,80 @@ def _cell(item: CriterionAtPass) -> str:
     return html_cell("td", f"{_number(worst.measured, item.criterion)} {mark}{which}")
 
 
-def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
-    """What the criteria measured at each pass on a log axis, with the declared threshold as the line.
+def change_figures(
+    check: ConvergenceCheck, theme: ReportTheme, quantity: str
+) -> list[Any]:
+    """What the change criteria on ``quantity`` measured at each pass, on a log axis, with their thresholds.
 
-    Criteria that measure one quantity the same way against one threshold share a figure, so the three kinds
-    of one ``SurfaceEpr.each(...).within(...)`` are three lines under their threshold, not three figures.
+    The criteria of one group share a figure, a line each (MA, MS and SA at one inset); a criterion that
+    stands alone has its own, a line per number it reads.
     """
     if check.plan is None or not check.passes:
         return []
     criteria = check.plan.criteria
     xs = [item.number for item in check.passes]
     figures: list[Any] = []
-    for group in _sharing_a_figure(criteria):
-        first = criteria[group[0]]
+    for members in _sharing_a_figure(criteria, quantity):
+        first = criteria[members[0]]
         traces = [
             Trace(
-                planned.label,
+                _line_name(criteria[index], planned),
                 [
                     item.criteria[index].values[position].measured
                     for item in check.passes
                 ],
             )
-            for index in group
+            for index in members
             for position, planned in enumerate(criteria[index].values)
         ]
-        label = first.label if len(group) == 1 else _QUANTITY_NAMES[first.quantity]
         figure = LinePlot(
-            title=f"{label}: {_measured_words(first)} vs AMR pass",
+            title=f"{first.group or first.label} {_measured_words(first)} vs AMR pass",
             xlabel="AMR pass",
             ylabel=_axis_words(first),
             xs=xs,
             traces=traces,
             yaxis_type="log",
-            hline=ReferenceLine(
-                first.threshold, f"declared: at most {_number(first.threshold, first)}"
-            ),
+            hlines=_threshold_lines([criteria[index] for index in members]),
             theme=theme,
-            legend_rows=len(traces),
         ).figure()
         if figure is not None:
             figures.append(figure)
     return figures
 
 
-def _sharing_a_figure(criteria: Sequence[PlannedCriterion]) -> list[list[int]]:
-    """The criteria's positions, grouped by what they measure and against which threshold, in declared order."""
-    groups: dict[tuple[str, str, float, str], list[int]] = {}
+def _sharing_a_figure(
+    criteria: Sequence[PlannedCriterion], quantity: str
+) -> list[list[int]]:
+    """The positions of the change criteria on ``quantity``, by group and by what they measure, in order."""
+    groups: dict[tuple[str, str, str], list[int]] = {}
     for index, criterion in enumerate(criteria):
-        key = (criterion.quantity, criterion.test, criterion.threshold, criterion.unit)
+        if criterion.quantity != quantity or not criterion.measures_change:
+            continue
+        key = (criterion.group or criterion.name, criterion.test, criterion.unit)
         groups.setdefault(key, []).append(index)
     return list(groups.values())
 
 
-_QUANTITY_NAMES = {
-    "capacitance": "Capacitance",
-    "mode_frequency": "Mode frequency",
-    "surface_epr": "Surface participation",
-    "error_indicator": "Error indicator",
-}
-"""What a figure of several criteria on one quantity is called."""
+def _line_name(criterion: PlannedCriterion, value: PlannedValue) -> str:
+    """A line's name in the legend: the number's own label, or within a group the criterion's and which number."""
+    if not criterion.group:
+        return value.label
+    if len(criterion.values) == 1:
+        return criterion.label
+    return f"{criterion.label}, {_within(value.label, criterion.name)}"
+
+
+def _threshold_lines(criteria: Sequence[PlannedCriterion]) -> list[ReferenceLine]:
+    """One line per threshold of the figure's criteria, named by its criterion when they differ."""
+    thresholds = {criterion.threshold for criterion in criteria}
+    if len(thresholds) == 1:
+        return [ReferenceLine(criteria[0].threshold, _threshold_words(criteria[0]))]
+    return [
+        ReferenceLine(
+            criterion.threshold, f"{criterion.label} {_threshold_words(criterion)}"
+        )
+        for criterion in criteria
+    ]
 
 
 def _in_a_row(passes: int) -> str:
@@ -429,37 +494,40 @@ def _measured_words(criterion: PlannedCriterion) -> str:
 
 
 def _axis_words(criterion: PlannedCriterion) -> str:
-    """What the figure's vertical axis is, in the words of the table."""
-    if criterion.test == "percent_change":
-        return "change from the pass before (%)"
-    unit = "" if criterion.unit == "1" else f" ({criterion.unit})"
-    if criterion.test == "absolute_change":
-        return f"change from the pass before{unit}"
-    return f"value{unit}"
-
-
-def _threshold_words(criterion: PlannedCriterion) -> str:
-    """The declared threshold as a reader says it: ``Delta % at most 0.1``."""
-    return f"{_measured_words(criterion)} at most {_number(criterion.threshold, criterion)}"
-
-
-def _number(value: float, criterion: PlannedCriterion) -> str:
-    """A measured number or threshold as shown, in the criterion's unit unless it is relative or unitless."""
+    """The figure's vertical axis: whose change it is and the name of the measure, ``C diagonal Delta %``."""
+    subject = {
+        "capacitance": f"{criterion.label} ",
+        "surface_epr": "Surface EPR ",
+    }.get(criterion.quantity, "")
     unit = (
         ""
         if criterion.test == "percent_change" or criterion.unit == "1"
-        else f" {criterion.unit}"
+        else f" ({criterion.unit})"
     )
+    return f"{subject}{_measured_words(criterion)}{unit}"
+
+
+def _threshold_words(criterion: PlannedCriterion) -> str:
+    """The declared threshold as a heading states it: ``≤ 0.5 %``, ``change ≤ 0.001 GHz``, ``≤ 0.045``."""
+    bound = f"≤ {_number(criterion.threshold, criterion)}"
+    return f"change {bound}" if criterion.test == "absolute_change" else bound
+
+
+def _number(value: float, criterion: PlannedCriterion) -> str:
+    """A measured number or threshold as shown: a percentage, or in the criterion's unit unless unitless."""
+    if criterion.test == "percent_change":
+        return f"{value:.3g} %"
+    unit = "" if criterion.unit == "1" else f" {criterion.unit}"
     return f"{value:.3g}{unit}"
 
 
 __all__ = [
     "change_figures",
-    "declared_items",
-    "declared_threshold",
+    "declared_html",
     "pass_limit_text",
     "pass_table_html",
     "solved_elements",
+    "threshold_line",
     "verdict_card",
     "verdict_sentence",
 ]
