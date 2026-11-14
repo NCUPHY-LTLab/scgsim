@@ -240,7 +240,12 @@ class PalaceTrustReport:
         if len(self.passes) >= 2:
             display(HTML(self._convergence_heading_html()))
         items = [
-            *declared_items(self.convergence, self.theme, self.solver_end),
+            *declared_items(
+                self.convergence,
+                self.theme,
+                self.solver_end,
+                solved_elements=self._solved_elements(),
+            ),
             *items,
         ]
         for item in items:
@@ -484,6 +489,14 @@ class PalaceTrustReport:
             "loss interpretation remain a separate physics call.</p>"
             "</section>"
         )
+
+    def _solved_elements(self) -> dict[int, int]:
+        """The mesh elements of each pass read, by the pass's number."""
+        return {
+            item.pass_number: item.mesh_elements
+            for item in self.passes
+            if item.mesh_elements is not None
+        }
 
     def _max_passes_text(self) -> str:
         """The configured MaxIts with the passes it allows: N refinements are N + 1 solves."""
