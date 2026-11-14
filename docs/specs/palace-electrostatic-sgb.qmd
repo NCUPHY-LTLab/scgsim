@@ -306,7 +306,7 @@ sim.set_numerical(order=2, amr_max_passes=12)
 sim.set_convergence(
     Capacitance.diagonal().within(relative=1e-3),
     Capacitance.element("island", "resonator").within(relative=1e-2),
-    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(relative=2e-2),
     ErrorIndicator().below(1e-2),
     minimum_converged_passes=2,
 )
@@ -336,6 +336,16 @@ does; the run has converged at pass $k$ when every criterion holds at each of
 the `minimum_converged_passes` passes ending at $k$. The whole-surface rows and
 the margin rows of a kind are never added together: a margin row is a part of
 its whole-surface row.
+
+::: {.callout-note title="What a change criterion says"}
+A change criterion says that a quantity moved little between two passes, not
+how far it is from its limit. On the layouts measured so far, whole-surface
+participation grew at every pass, and no change criterion on it held, so such
+a run goes to its pass limit. Participation beyond a margin (`margin_um=`)
+did settle, though not steadily from pass to pass, which is what
+`minimum_converged_passes` is for. The measurements are recorded on
+[issue 248](https://github.com/NCUPHY-LTLab/scgsim/issues/248#issuecomment-6873586635).
+:::
 
 Another call replaces the whole declaration; `set_convergence(None)` removes it,
 and `set_convergence()` with no criterion is refused. The call keeps the mesh
@@ -382,10 +392,92 @@ decided there once, from the index map entries the same config writes.
 a changed plan is refused. Without a declaration nothing of this is written and
 the config is what the AMR controls alone give.
 
-In this version Palace still runs every pass up to `amr_max_passes`. The check
-runs when the returned run is read: `ResolvedPalaceResult.convergence` and the
+### The stop at convergence {#convergence-stop}
+
+With a declaration, Palace is stopped once the declared criteria have
+converged, one to two seconds after the pass at which they hold is complete, so
+the solves after that pass are not run.
+The run script starts Palace through the convergence runner that
+`prepare_handoff()` copies into the run folder,
+`metadata/run_palace_until_converged.py`, which needs only Python's standard
+library ([execution profiles](../execution-profiles.qmd#convergence-runner)).
+The runner:
+
+1. starts the solver command the script would have run, in a session of its
+   own; Palace's output reaches the log as before;
+2. looks at `results/palace` every second. A pass counts once its
+   `iteration<k>/` folder is unchanged between two looks, and after each new pass
+   the runner runs the same check that result reading runs;
+3. when the verdict is converged, writes
+   `metadata/palace_convergence_decision.json` first, then sends SIGTERM to the
+   solver's session and waits until all of it has ended: the command, the
+   launcher it started and the ranks the launcher ends. If any of it is still
+   running 60 s later, it sends SIGKILL;
+4. when the solver has ended, after the stop or by itself at `amr_max_passes`,
+   writes the decision record again with the passes `results/palace` then holds
+   and the solver's exit code.
+
+The runner does not leave the solver running unwatched. Told to end (SIGTERM,
+SIGINT or SIGHUP), it ends the solver first and records why. Ended without that
+chance (SIGKILL, to the runner or to the script's whole process group), it
+leaves the solver to its guard: a process the runner starts with the solver, in
+a session of its own, which ends the solver's session in the same way once the
+runner is gone.
+
+Palace 0.18.1 completes pass $k$ in `iteration<k>/` before it refines the mesh
+for pass $k+1$, so the stop comes during that refinement or at the start of the
+next solve; no file of a completed pass changes. The stop is requested one to
+two seconds after the folder appears (the runner looks every second and counts a
+pass at its second look), and Palace has ended within about a second of the
+request. The receipt is written only then, so no solver process writes a file
+after it.
+
+A pass that takes less than those one to two seconds still runs. The runner then
+counts it with the pass before it: the verdict names the pass at which the run
+converged and how many passes were read after it, Palace is stopped after the
+last of them, and the result is that last pass. A run whose passes are all that
+short has ended before the runner looked; it is complete as Palace ended it.
+What the stop saves is every pass longer than that, which is where the time
+goes: a pass has two to three times the elements of the one before.
+
+The receipt states how the solver ended (`ending`) and keeps the solver's own
+exit code:
+
+| `ending` | When | Receipt |
+|---|---|---|
+| `solver_ended` | Palace ended without a stop from SCGSim | `completed` when every exit code is 0, `failed` otherwise |
+| `stopped_at_convergence` | the runner stopped it after a pass at which the verdict is converged, and it ended within the wait | `completed`, with the exit code the stop gave: 143 for Palace's `palace` wrapper script, which the signal ends, and 1 for `mpirun` started directly |
+| `stop_escalated` | it did not end on SIGTERM and was killed | `failed` |
+| `runner_terminated` | the runner itself was told to end and ended Palace for that reason. Told to end while Palace is already ending after the stop at convergence, the stop stands | `failed` |
+| `not_recorded` | the runner left no complete decision record | `failed` |
+
+The result of a run stopped at convergence is its last pass: result reading
+takes the tables and the cost from `iteration<k>/`, since the top level holds
+links into it or a solve under way. Palace can also complete its last solve in
+the moment the runner decides. If it has ended by itself by then (exit code 0,
+its last solve at the top level), nothing was stopped and the run is recorded
+as ended by itself. If the stop still reaches it, the run was stopped and its
+result is that last solve, at the top level.
+
+Result reading computes the check again from the returned files and refuses
+the run, naming what disagrees, when:
+
+- the passes or the verdict differ from the decision record, or the record is
+  not the one the receipt binds;
+- the decision record and the receipt state different endings, or different
+  exit codes of the solver;
+- the top level holds links or a solve under way, and the receipt says Palace
+  ended by itself;
+- a decision record is present without a plan, or a plan has none;
+- a table of the result, at the top level or in `iteration<k>/`, is not among
+  the outputs the receipt records.
+
+`ResolvedPalaceResult.convergence` and the
 [trust report](../report-model.qmd#declared-convergence) say at which pass the
-run had converged, or which criterion still fails and by how much.
+run converged and where Palace stopped, or which criterion still fails at the
+pass limit and by how much. `ResolvedPalaceResult.solver_end` (a `SolverEnd`)
+holds the receipt's `ending`, the pass the runner stopped Palace after, and the
+passes the limit allows (`amr_max_passes + 1`).
 
 ## Electrostatic defaults {#candidate-electrostatic-defaults}
 

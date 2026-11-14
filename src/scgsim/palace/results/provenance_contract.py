@@ -197,6 +197,12 @@ def validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) ->
         "command": expect_mapping(handoff_metadata.get("command"), "handoff command"),
         "script": execution.get("script"),
         "recorder": execution.get("recorder"),
+        # The convergence runner is part of the execution only when the handoff declared convergence.
+        **(
+            {"runner": execution.get("runner")}
+            if "convergence_runner" in handoff_metadata
+            else {}
+        ),
     }
     if execution != recorded:
         raise ValueError(
@@ -205,13 +211,15 @@ def validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) ->
                 RETURNED_RUN_FOLDER,
             ).refusal(found_text(execution, recorded))
         )
-    for field, relative in (
+    files = [
         ("script", expect_scalar(handoff_metadata, "script", str)),
-        (
-            "recorder",
-            expect_scalar(handoff_metadata, "returned_receipt_recorder", str),
-        ),
-    ):
+        ("recorder", expect_scalar(handoff_metadata, "returned_receipt_recorder", str)),
+    ]
+    if "convergence_runner" in handoff_metadata:
+        files.append(
+            ("runner", expect_scalar(handoff_metadata, "convergence_runner", str))
+        )
+    for field, relative in files:
         _validate_execution_file(root, execution, field, relative)
 
 
@@ -277,16 +285,9 @@ def validate_resource_identity(
                 RETURNED_RUN_FOLDER,
             ).refusal(found_text(status, "completed"))
         )
-    exit_code = expect_int(
-        resource_record.get("exit_code"), "resource record exit_code"
-    )
-    if exit_code != 0:
-        raise ValueError(
-            Declared(
-                "resource record exit_code must be zero for a returned run",
-                RETURNED_RUN_FOLDER,
-            ).refusal(found_text(exit_code, 0))
-        )
+    # Which exit code a completed run has depends on how its solver ended: the receipt's check decides it,
+    # and the resource record must agree with the receipt (``validate_returned_state_agreement``).
+    expect_int(resource_record.get("exit_code"), "resource record exit_code")
 
 
 def validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:

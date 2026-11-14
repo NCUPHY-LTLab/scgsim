@@ -23,6 +23,7 @@ from scgsim.palace.results.inspection_records import (
     PalaceFailureDiagnosis,
     PalaceResultSelection,
 )
+from scgsim.palace.results.receipt_contract import require_current_receipt
 from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import Declared, found_text
 
@@ -35,6 +36,7 @@ def validate_inspection_receipt(
     """Verify available input, output and log identities before selecting report snapshots."""
     if receipt is None:
         return frozenset()
+    require_current_receipt(receipt)
     _validate_inspection_identity(handoff, receipt)
 
     _validate_receipt_inputs(root, handoff, receipt)
@@ -259,8 +261,14 @@ def result_selection(
     problem: str,
     collected: CollectedSnapshots,
     receipt_paths: frozenset[str],
+    stopped_at_convergence: bool,
 ) -> PalaceResultSelection:
-    """Choose final or iteration data from completion state and receipt-bound readable snapshots."""
+    """Choose final or iteration data from completion state and receipt-bound readable snapshots.
+
+    The last readable pass is selected.  It is the final snapshot when it is the top level, the result of
+    the run when the convergence runner stopped the solver after it, and otherwise the evidence a failed
+    attempt left.
+    """
     if not collected.passes:
         return PalaceResultSelection(
             final_snapshot_status=collected.final_snapshot_status,
@@ -271,9 +279,15 @@ def result_selection(
             integrity="unavailable",
         )
     selected = collected.passes[-1]
-    reason = (
+    reason: Literal[
+        "final_snapshot",
+        "last_pass_of_a_stopped_run",
+        "latest_complete_iteration_after_failed_attempt",
+    ] = (
         "final_snapshot"
         if selected.source == "final"
+        else "last_pass_of_a_stopped_run"
+        if stopped_at_convergence
         else "latest_complete_iteration_after_failed_attempt"
     )
     artifact_paths = _snapshot_artifact_paths(selected.path, problem)
@@ -327,7 +341,7 @@ def failure_diagnosis(
         if state.stage == "config_compatibility"
         else _slurm_oom_evidence(root, receipt, receipt_paths)
     )
-    cause = _failure_cause(state, oom_evidence is not None)
+    cause = _failure_cause(state, oom_evidence is not None, receipt.get("ending"))
     if cause.category == "out_of_memory" and oom_evidence is not None:
         evidence.append(oom_evidence)
     return PalaceFailureDiagnosis(
@@ -350,8 +364,21 @@ class _FailureCause(NamedTuple):
     summary: str
 
 
-def _failure_cause(state: _ExecutionState, scheduler_oom: bool) -> _FailureCause:
-    """Classify a failure: the preflight first, then scheduler memory, a kill, the solver, the capture."""
+_STOP_FAILURES = {
+    "stop_escalated": "The convergence runner stopped Palace at convergence, but Palace did not end on "
+    "SIGTERM within the runner's wait and was killed with SIGKILL; such a stop is not a completed run.",
+    "runner_terminated": "The convergence runner was told to end (by the run script, the scheduler or a "
+    "person) and ended Palace first.",
+    "not_recorded": "The convergence runner left no complete decision record, so how Palace ended is not "
+    "known.",
+}
+"""The failures of a run with a convergence plan that its receipt's ending names."""
+
+
+def _failure_cause(
+    state: _ExecutionState, scheduler_oom: bool, ending: Any = None
+) -> _FailureCause:
+    """Classify a failure: the preflight, scheduler memory, the convergence runner, a kill, the solver, the capture."""
     if state.stage == "config_compatibility" and state.preflight_exit_code != 0:
         return _FailureCause(
             "config_compatibility",
@@ -372,6 +399,8 @@ def _failure_cause(state: _ExecutionState, scheduler_oom: bool) -> _FailureCause
         )
     if scheduler_oom:
         return _FailureCause("out_of_memory", "Slurm reported an out-of-memory event.")
+    if ending in _STOP_FAILURES:
+        return _FailureCause("convergence_stop", _STOP_FAILURES[ending])
     if state.solver_exit_code == 137 or state.exit_code == 137:
         return _FailureCause(
             "signal_killed",

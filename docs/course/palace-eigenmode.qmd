@@ -67,7 +67,7 @@ from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
 sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
 sim.set_convergence(
     ModeFrequency(modes=[1]).within(relative=1e-5),
-    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(relative=2e-2),
     ErrorIndicator().below(1e-2),
 )
 ```
@@ -76,17 +76,23 @@ sim.set_convergence(
 pass, and pass 1 solves the mesh `mesh()` writes. Mode 1's frequency holds at a
 pass when it moved by at most one part in 10⁵ since the pass before. The
 Surface-EPR line declares one criterion per interface kind, each on that kind's
-whole-surface participation of every mode; it needs `set_surface_epr` with all
-three specs before `mesh()`. With a declaration Palace's own tolerance no longer
+participation beyond 1 µm of every mode; it needs `set_surface_epr` with all
+three specs, each asking for that [margin](#surface-epr-margin-rows), before
+`mesh()`. The whole-surface participation is left out on purpose: it kept
+growing with every refinement on the layouts measured, so a change criterion
+on it would not hold. With a declaration Palace's own tolerance no longer
 ends the run, so `amr_tolerance` is left out: `write_config()` refuses it and
 names the `ErrorIndicator().below(...)` line to write instead. It also refuses
 `ModeFrequency(modes=[3])` while `num_modes=2`, and a kind that
 `set_epr_request(surface_interfaces=...)` leaves out.
 
-In this version Palace still runs all nine solves. The returned run's
-`result.convergence` and the trust report say at which pass every criterion had
-held, which one held last, or which one still fails at the last pass and by how
-much against its threshold. The
+Palace stops at the first pass where every criterion has held, so the solves
+after it are not run (the stop comes one to two seconds after that pass); a run
+that does not converge runs all nine. The
+returned run's `result.convergence` and the trust report say at which pass every
+criterion had held, which one held last and after which pass SCGSim stopped
+Palace, or which one still fails at the last pass and by how much against its
+threshold. The
 [Eigenmode contract](../specs/palace-eigenmode.qmd#eigenmode-convergence) and
 the shared [convergence declaration](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)
 list every quantity and check.

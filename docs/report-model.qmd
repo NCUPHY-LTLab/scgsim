@@ -153,10 +153,26 @@ two rows with the same index) is unavailable, with the reason, and never holds.
 A plan that is present but was not sealed by the
 handoff, or that changed after it, is refused by both readers.
 
-In this version Palace runs every pass up to `amr_max_passes`; the verdict says
-at which pass the run had converged, and the passes after it are kept in the
-table. The criteria are the caller's: the verdict states whether they held, not
-whether the research question is answered.
+With a declaration Palace is
+[stopped at convergence](specs/palace-electrostatic-sgb.qmd#convergence-stop),
+and the verdict sentence then says how it ended, from the receipt and the
+runner's decision record:
+
+> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
+> held at passes 3 to 4, 2 in a row. Last to hold: C diagonal, from pass 3. No
+> pass was read after it. SCGSim stopped Palace after pass 4: 2 of the 6 passes
+> its limit allows were not run.
+
+A run that did not converge ends at its limit: "Not converged in the 6 passes
+read (passes 1 to 6). At pass 6: ... Palace ended by itself at its limit of 6
+passes." The `Convergence` card reads "converged at pass 4, stopped after
+pass 4". A stopped run has no final solve at the top level of `results/palace`:
+its result, its benchmark and its cost are those of its last pass, the identity
+card `Final snapshot` reads "none: stopped at convergence", and a notice names
+the pass used. A stop that did not complete the run (`stop_escalated`,
+`runner_terminated`, `not_recorded`) is a failed run, with the failure category
+`convergence_stop`. The criteria are the caller's: the verdict states whether
+they held, not whether the research question is answered.
 
 ## Honesty rule
 

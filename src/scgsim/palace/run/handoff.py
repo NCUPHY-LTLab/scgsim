@@ -17,6 +17,9 @@ from scgsim.contracts.palace_run_folder import (
     ARCHIVE_MANIFEST,
     CONFIG,
     CONFIG_SCHEMA,
+    CONVERGENCE_DECISION,
+    CONVERGENCE_PLAN,
+    CONVERGENCE_RUNNER,
     DIRECT_LOCAL_SCRIPT,
     HANDOFF_METADATA,
     INDEX_MAP,
@@ -42,13 +45,14 @@ from scgsim.refusal import ENVIRONMENT, Declared, found_text
 
 from ..mesh.build import MeshBuildResult
 from ..mesh.manifest import SGB_RUNTIME_AUTHORITY
+from . import convergence_runner, returned_receipt
 from .archive import (
     run_archive_arcname,
     sibling_run_archive_path,
     sibling_run_archive_relative,
 )
-from .recorder_copy import write_standalone_recorder
 from .script import ExecutionSettings, positive_int, render_script, single_line
+from .standalone_copy import write_standalone
 
 _WHERE_MESH_THEN_CONFIG = (
     "the run folder: call mesh() and write_config() before prepare_handoff()"
@@ -96,6 +100,7 @@ class _HandoffPaths:
     archive: Path
     returned_receipt: Path
     recorder: Path
+    runner: Path
 
     @classmethod
     def of(
@@ -116,7 +121,13 @@ class _HandoffPaths:
             archive=sibling_run_archive_path(run_dir),
             returned_receipt=run_dir / RETURNED_RECEIPT,
             recorder=run_dir / RECORDER,
+            runner=run_dir / CONVERGENCE_RUNNER,
         )
+
+    @property
+    def convergence_declared(self) -> bool:
+        """Whether the config stage wrote a convergence plan, so the solver runs through the runner."""
+        return (self.run_dir / CONVERGENCE_PLAN).is_file()
 
     def relative(self, path: Path) -> str:
         """``path`` as a POSIX path relative to the run folder."""
@@ -213,6 +224,7 @@ def _prepare_run_folder(paths: _HandoffPaths) -> None:
         (run_dir / stale).unlink(missing_ok=True)
     paths.returned_receipt.unlink(missing_ok=True)
     (run_dir / RUNTIME_COMPATIBILITY).unlink(missing_ok=True)
+    (run_dir / CONVERGENCE_DECISION).unlink(missing_ok=True)
     results_path = run_dir / OUTPUT_DIR
     if results_path.exists():
         shutil.rmtree(results_path)
@@ -260,9 +272,18 @@ def _prepare_artifacts(
         "runtime_identity_semantics": "observed_provenance_only",
     }
 
-    write_standalone_recorder(paths.recorder)
+    write_standalone(returned_receipt, paths.recorder)
+    if paths.convergence_declared:
+        write_standalone(convergence_runner, paths.runner)
+    else:
+        paths.runner.unlink(missing_ok=True)
     paths.script.write_text(
-        render_script(execution, config_schema=CONFIG_SCHEMA) + "\n",
+        render_script(
+            execution,
+            config_schema=CONFIG_SCHEMA,
+            convergence_declared=paths.convergence_declared,
+        )
+        + "\n",
         encoding="utf-8",
     )
     paths.script.chmod(paths.script.stat().st_mode | 0o755)
@@ -311,6 +332,11 @@ def _write_handoff_metadata(
             "handoff_id": artifacts.handoff_id,
             "returned_receipt_path": returned_receipt_relative,
             "returned_receipt_recorder": paths.relative(paths.recorder),
+            **(
+                {"convergence_runner": paths.relative(paths.runner)}
+                if paths.convergence_declared
+                else {}
+            ),
             "palace_identity": artifacts.palace_identity,
             "source_revisions": artifacts.source_revisions,
             "execution_identity": artifacts.execution_identity,
@@ -503,6 +529,16 @@ def _execution_identity(
         "command": _redacted_command(execution),
         "script": {"path": paths.script.name, "sha256": sha256(paths.script)},
         "recorder": {"path": RECORDER, "sha256": sha256(paths.recorder)},
+        **(
+            {
+                "runner": {
+                    "path": CONVERGENCE_RUNNER,
+                    "sha256": sha256(paths.runner),
+                }
+            }
+            if paths.convergence_declared
+            else {}
+        ),
     }
 
 
