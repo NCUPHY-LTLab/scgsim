@@ -44,7 +44,7 @@ Palace [網格摘要](specs/palace-electrostatic-sgb.qmd#mesh-manifest-and-detac
 ::: {.askr-table-compact}
 | 識別 | 範例 | 記錄位置 | 何時改變 |
 |---|---|---|---|
-| 套件版本 | `scgsim 2.0.0rc15` | 執行來源記錄中的 `scgsim_version`（`metadata/route_b_provenance.json`；Route A 為 `route_a_…`） | SCGSim 每次發行都會改變。 |
+| 套件版本 | `scgsim 3.0.0rc1` | 執行來源記錄中的 `scgsim_version`（`metadata/route_b_provenance.json`；Route A 為 `route_a_…`） | SCGSim 每次發行都會改變。 |
 | 配方版本 | `FeatureRecipe` 為 `scgsim.meshing.features/N`、`UniformBoundaryRecipe` 為 `scgsim.meshing.uniform-boundary/N`、`GlobalSizeRecipe` 為 `scgsim.meshing.global-size/N` | 每份品質報告與網格清單中的 `recipe.version`，與 `recipe.parameters` 並列 | 只在配方要求的尺寸改變時。 |
 | 報告格式 | `scgsim.meshing.report/N` | 每份品質報告中的 `report_version` | 品質報告的欄位改變時。 |
 :::

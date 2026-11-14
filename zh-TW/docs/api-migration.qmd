@@ -1,13 +1,13 @@
 ---
-title: "SCGSim 2.0 API 遷移對照"
+title: "SCGSim API 遷移對照"
 lang: zh-TW
-description: "目前公開的幾何、AEDT、Palace 與視覺化符號對應至 SCGSim 2.0，包含 AEDT 建模與版本選擇契約。"
+description: "目前公開的幾何、AEDT、Palace 與視覺化符號對應至目前的負責模組，包含 AEDT 建模與版本選擇契約。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
 ---
 
-本參考頁將已固定的 v1 API 介面（下文稱為基準）對應至 SCGSim 2.0 的負責模組。
+本參考頁將已固定的 v1 API 介面（下文稱為基準）對應至 SCGSim 3.0 目前的負責模組。
 
 Solid/Thin-Film 三維要求擴充規定：每個新的 Q3D 與 HFSS 三維要求，都必須在要求層級明確設定 `modeling` 為 `"solid"` 或 `"thin_film"`。此欄位沒有預設值，也不會替這些系列推定省略的模式。先前支援的結果酬載只能透過原系列／結構版本的讀取器讀取，原始酬載與雜湊保持不變。這不改變 Q2D 等未變更系列的共用版本化交接相容性；Q2D 與 Palace 的其餘契約也保持不變。
 
@@ -17,7 +17,7 @@ Solid/Thin-Film 三維要求擴充規定：每個新的 Q3D 與 HFSS 三維要�
 
 AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並在清理時還原：`use_grpc_api=True`、`grpc_secure_mode=False`、`grpc_local=True`、`grpc_listen_all=False` 及 `PYAEDT_USE_PRE_GRPC_ARGS="True"`。AEDT 2024.2 不覆寫傳輸設定。要求的版本之間沒有備援切換或降版。已儲存產物的來源版本，與要求版本及實際連線版本各自獨立；未知來源維持 `None`，分析仍可使用另外明確指定的版本執行，不需查找或遷移。
 
-套件層級門面仍是受支援的高階入口。此移動不會替舊內部路徑新增相容包裝。既有消費端釘選保持不變；消費端只有在明確採用 v2 套件及其新舊對照時才遷移。
+套件層級門面仍是受支援的高階入口。此移動不會替舊內部路徑新增相容包裝。既有消費端釘選保持不變；消費端只有在明確採用目前的套件及其新舊對照時才遷移。
 
 ## 遷移規則 {#migration-rules}
 

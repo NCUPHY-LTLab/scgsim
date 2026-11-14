@@ -1,13 +1,13 @@
 ---
-title: "SCGSim 2.0 API Migration Map"
-description: "Current public geometry, AEDT, Palace and visualization symbols mapped to SCGSim 2.0, including the AEDT modeling and release-selection contracts."
+title: "SCGSim API Migration Map"
+description: "Current public geometry, AEDT, Palace and visualization symbols mapped to their current owners, including the AEDT modeling and release-selection contracts."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
 ---
 
 This reference maps the frozen v1 API surfaces, called the baseline below, to
-their SCGSim 2.0 owners.
+their current owners in SCGSim 3.0.
 
 The Solid/Thin-Film 3D request extension requires a request-level `modeling`
 value of `"solid"` or `"thin_film"` for
@@ -38,7 +38,7 @@ using its separately explicit requested release, without lookup or migration.
 Package-level facades remain the supported high-level entrypoints. The move
 does not add compatibility wrappers for old internal paths. Existing consumer
 pins remain unchanged; a consumer migrates only when it deliberately adopts
-the v2 package and the corresponding old-to-new map.
+the current package and the corresponding old-to-new map.
 
 ## Migration rules
 

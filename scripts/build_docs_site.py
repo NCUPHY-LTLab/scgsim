@@ -48,6 +48,9 @@ class _VersionPolicy(TypedDict):
     development_ref: str
     stable_ref: str
     historical: list[_HistoricalVersion]
+    # Release lines whose development root (``v<line>-dev/``) is no longer published.  Installed
+    # prereleases of such a line still link there, so each root stays as an alias of the development site.
+    retired_development_lines: list[str]
 
 
 class _SourceIdentity(TypedDict, total=False):
@@ -481,9 +484,11 @@ class _SourceCatalog:
 def _stage_publication(sources: _SourceCatalog, work: Path, quarto: str) -> Path:
     """Render the ordered catalog and write publication routes into one staging tree."""
     latest = sources.latest_stable()
+    development = sources.entries[0]["root"]
     aliases = {
-        PREFIX + "develop/": sources.entries[0]["root"],
+        PREFIX + "develop/": development,
         PREFIX + "main/": latest["root"],
+        **_retired_development_aliases(sources, development),
     }
     manifest: _VersionManifest = {
         "mode": "inline",
@@ -505,6 +510,26 @@ def _stage_publication(sources: _SourceCatalog, work: Path, quarto: str) -> Path
     _write_routes(site, sources.entries, latest, aliases)
     _write_build_manifest(site, sources, latest)
     return site
+
+
+def _retired_development_aliases(
+    sources: _SourceCatalog, development: str
+) -> dict[str, str]:
+    """Lead each retired development root to the development site, where its pages went.
+
+    A development root always showed the newest development pages, so an alias keeps what a link from an
+    installed prerelease did before its line was retired.
+    """
+    roots = {item["root"] for item in sources.entries}
+    aliases = {}
+    for line in sources.policy["retired_development_lines"]:
+        retired = PREFIX + "v" + line + "-dev/"
+        if retired in roots:
+            raise ValueError(
+                f"development line {line} is published at {retired} and cannot be retired"
+            )
+        aliases[retired] = development
+    return aliases
 
 
 def _render_versions(
