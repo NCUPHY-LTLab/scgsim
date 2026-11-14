@@ -437,16 +437,17 @@ def test_without_a_declared_indicator_the_indicator_figure_draws_no_line(tmp_pat
 def test_a_partly_returned_run_counts_the_passes_it_read(tmp_path):
     """Passes 1, 4 and 5 are three passes read; none is "after convergence" by Palace's numbers (round 1, B3).
 
-    Only iteration1 and iteration4 are kept and the final result is pass 5 (Problem.Iteration 4 + 1 would be
-    5 in a longer run); the criterion is on the indicator, which holds at passes 4 and 5.
+    The folder keeps iteration1, iteration4 and the final result of pass 5, each recording its own pass; the
+    criterion is on the indicator, which holds at passes 4 and 5.
     """
     run = _returned_run(tmp_path, criteria=(ErrorIndicator().below(0.035),))
     results = run.root / OUTPUT_DIR
     (run.root / RETURNED_RECEIPT).unlink()
-    # Renumber the returned passes 1, 2, 3 (final) into 1, 4, 5 as a partial copy of a longer run leaves them.
-    (results / "iteration3").rename(results / "iteration4")
-
+    # The solves of a longer run, as a partial copy of it leaves them: passes 1, 4 and 5.
     shutil.rmtree(results / "iteration2")
+    (results / "iteration3").rename(results / "iteration4")
+    _record_iteration(results / "iteration4", 4)
+    _record_iteration(results, 5)
     check = inspect_run_trustworthiness(run.root).convergence
     assert [item.number for item in check.passes] == [1, 4, 5]
     verdict = check.verdict
@@ -459,6 +460,16 @@ def test_a_partly_returned_run_counts_the_passes_it_read(tmp_path):
     )
     assert "-" not in sentence.split("Last to hold")[1]
     assert "No pass was read after it." in sentence
+    assert sentence.endswith(
+        "Passes 2 and 3 were not read, so the run may have converged earlier."
+    )
+
+
+def _record_iteration(folder: Path, iteration: int) -> None:
+    """Make ``folder``'s ``palace.json`` record ``iteration`` as its ``Problem.Iteration``."""
+    payload = read_json(folder / "palace.json")
+    payload["Problem"]["Iteration"] = iteration
+    (folder / "palace.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_a_run_without_a_plan_reads_no_pass_folder(tmp_path, monkeypatch):

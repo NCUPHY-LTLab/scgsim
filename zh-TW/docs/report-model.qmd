@@ -41,7 +41,7 @@ Palace 報告讀取與外觀介面及已解析執行相同的獨立 `mesh_summar
 
 模擬若呼叫了 [`set_convergence`](specs/palace-electrostatic-sgb.qmd#convergence-declaration)，執行就帶著封存的準則計畫。讀取結果時，同一個收斂檢查會在回傳的 pass 資料夾（`results/palace/iteration<k>` 與最終的 `results/palace`）上執行：`ResolvedPalaceResult.convergence` 保存計畫、每個 pass 的檢查（每個數、其檢定量到的值、是否成立）與判定。沒有計畫的執行資料夾，判定為 `not_declared`。
 
-一個 AMR pass 是 Palace 的一次求解，從 1 起算：pass 1 求解輸入網格；pass $k$ 寫入 `iteration<k>`，除非它是最後一次求解。可信度報告的每條 AMR pass 軸都這樣計數。
+一個 AMR pass 是 Palace 的一次求解，從 1 起算：pass 1 求解輸入網格；pass $k$ 寫入 `iteration<k>`，除非它是最後一次求解。一個資料夾是哪個 pass，以它自己的 `palace.json` 記錄的 `Problem.Iteration` 為準，而不是它在清單中的位置；因此只回傳 `iteration1` 與 pass 4 最終結果的資料夾，含有 pass 1 與 pass 4。可信度報告的每條 AMR pass 軸都這樣計數。變化只在兩個編號已確立且相鄰的 pass 之間量測。`palace.json` 沒有記錄迭代、記錄與資料夾名稱不符，或有兩個資料夾記錄同一個 pass 時，該 pass 不參與任何比較，也不計入任何連續 pass；判定會指出它與原因，並說明判定之前哪些 pass 沒有讀到。
 
 有宣告時，可信度報告的 Numerical Evidence 一節依序先顯示：
 

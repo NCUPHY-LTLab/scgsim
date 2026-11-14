@@ -96,8 +96,15 @@ of every pass (each number, what its test measured, whether it holds) and the
 verdict. A run folder without a plan has the verdict `not_declared`.
 
 An AMR pass is one Palace solve, counted from 1: pass 1 solves the input mesh,
-and pass $k$ is written to `iteration<k>` unless it is the last solve. Every AMR
-pass axis of the trust report counts this way.
+and pass $k$ is written to `iteration<k>` unless it is the last solve. A folder's
+pass is the `Problem.Iteration` its own `palace.json` records, not its place in
+the listing, so a folder that returned `iteration1` and the final result of
+pass 4 holds passes 1 and 4. Every AMR pass axis of the trust report counts this
+way. A change is measured only between two passes whose numbers are established
+and consecutive. A pass whose `palace.json` records no iteration, or one that
+disagrees with its folder name, or a pass two folders record, is in no
+comparison and in no run of passes in a row; the verdict names it and why, and
+says which passes before the verdict were not read.
 
 With a declaration, the Numerical Evidence section of the trust report opens with:
 

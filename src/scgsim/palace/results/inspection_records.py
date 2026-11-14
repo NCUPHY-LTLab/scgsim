@@ -96,7 +96,9 @@ class AmrPassSnapshot:
     """One solver snapshot from an AMR pass or the final output folder ``results/palace``.
 
     ``pass_index`` counts the refinements before the pass (0 for the solve on the input mesh);
-    ``pass_number`` is the pass as Palace counts its solves, from 1.
+    ``pass_number`` is the pass as Palace counts its solves, from 1, as the folder records it.
+    ``identity_problem`` says why the number is not one the folder records (no readable
+    ``Problem.Iteration``, or one that disagrees with the folder name); None when it is.
     """
 
     pass_index: int
@@ -115,6 +117,7 @@ class AmrPassSnapshot:
     peak_node_memory_mb: float | None
     surface_margin_epr: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None = None
     native_iteration: int | None = None
+    identity_problem: str | None = None
 
     @property
     def pass_number(self) -> int:

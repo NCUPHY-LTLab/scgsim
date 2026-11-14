@@ -1,4 +1,13 @@
-"""Read ordered AMR passes while retaining final/iteration snapshot selection rules."""
+"""Read ordered AMR passes while retaining final/iteration snapshot selection rules.
+
+A pass is one Palace solve, and its number is the one its own ``palace.json`` records as
+``Problem.Iteration``.  Palace 0.18.1 records 1 for the solve on the input mesh and k for the solve after
+k - 1 refinements, and with ``SaveAdaptIterations`` copies solve k into ``iteration<k>`` (zero-padded to the
+width of ``MaxIts``) before it refines; the last solve stays in ``results/palace`` only.  So ``iteration<k>``
+records k and the final result records one more than the last refinement.  A folder whose record is missing,
+or names another pass than its folder name, keeps a number from its place in the listing but carries an
+``identity_problem``, so no comparison and no run of passes in a row is built on it.
+"""
 
 from __future__ import annotations
 
@@ -100,6 +109,10 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
 ) -> CollectedSnapshots:
     """Read the native AMR iterations in order, then the final result of the run folder.
 
+    Each pass is numbered by what its folder records (``pass_identity``): ``iteration<N>`` must record ``N``,
+    and the final result is the pass it records, not one after the largest folder number, so a folder that
+    returned ``iteration1`` and the final result of pass 4 holds passes 1 and 4.
+
     The final result is the last iteration read again, and replaces it, only when all of these hold: both have
     the same primary physics, both are the same native iteration, and their margin physics agree.  In every
     other case it is appended after the iterations.  One exception: on a failed attempt, a final result with
@@ -125,27 +138,35 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
     iteration_dirs.sort()
     snapshots: list[AmrPassSnapshot] = []
     for index, path in iteration_dirs:
+        identity = pass_identity(path, folder_number=index, fallback_number=index)
         snapshot = SnapshotReader(
-            pass_index=index - 1,
+            pass_index=identity.number - 1,
             source=path.name,
             path=path,
             problem=problem,
             surface_bindings=surface_bindings,
             surface_margin_bindings=surface_margin_bindings,
             mode_count=mode_count,
+            identity_problem=identity.problem,
         ).load_optional()
         if snapshot is not None:
             snapshots.append(snapshot)
     if not _parent_has_physics(results, problem):
         return CollectedSnapshots(tuple(snapshots), "missing")
+    identity = pass_identity(
+        results,
+        folder_number=None,
+        fallback_number=max((index for index, _path in iteration_dirs), default=0) + 1,
+    )
     parent = SnapshotReader(
-        pass_index=max((index for index, _path in iteration_dirs), default=0),
+        pass_index=identity.number - 1,
         source="final",
         path=results,
         problem=problem,
         surface_bindings=surface_bindings,
         surface_margin_bindings=surface_margin_bindings,
         mode_count=mode_count,
+        identity_problem=identity.problem,
     ).load_optional()
     if parent is None:
         return CollectedSnapshots(tuple(snapshots), "unreadable")
@@ -167,6 +188,48 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
     return CollectedSnapshots((*snapshots, parent), "readable")
 
 
+class PassIdentity(NamedTuple):
+    """The pass a result folder is: its number, and why that number is not one the folder records, if so."""
+
+    number: int
+    problem: str | None
+
+
+def pass_identity(
+    folder: Path, *, folder_number: int | None, fallback_number: int
+) -> PassIdentity:
+    """The pass ``folder`` records about itself (``Problem.Iteration`` of its ``palace.json``).
+
+    ``folder_number`` is the ``N`` of an ``iteration<N>`` folder (None for the final result), which must
+    agree with the record.  Without a readable record, or when they disagree, the pass keeps
+    ``fallback_number`` (its place in the listing) and the reason is returned with it.
+    """
+    try:
+        payload = read_optional_json(folder / NATIVE_METADATA_NAME)
+    except (OSError, TypeError, ValueError):
+        payload = None
+        reason = f"{_named(folder, folder_number)}: its {NATIVE_METADATA_NAME} cannot be read"
+    else:
+        reason = f"{_named(folder, folder_number)} has no {NATIVE_METADATA_NAME}"
+    recorded = None
+    if payload is not None:
+        recorded = _native_iteration(payload.get("Problem"))
+        reason = f"{_named(folder, folder_number)}: its {NATIVE_METADATA_NAME} records no Problem.Iteration"
+    if recorded is None:
+        return PassIdentity(fallback_number, reason)
+    if folder_number is not None and recorded != folder_number:
+        return PassIdentity(
+            fallback_number,
+            f"{folder.name} records Problem.Iteration {recorded}, not {folder_number}",
+        )
+    return PassIdentity(recorded, None)
+
+
+def _named(folder: Path, folder_number: int | None) -> str:
+    """How an identity reason names a pass folder: its ``iteration<N>`` name, or the final result."""
+    return "the final result" if folder_number is None else folder.name
+
+
 @dataclass(frozen=True)
 class SnapshotReader:
     """One native pass location, problem and surface bindings read as a detached snapshot."""
@@ -178,6 +241,7 @@ class SnapshotReader:
     surface_bindings: tuple[SurfaceBinding, ...] | None
     surface_margin_bindings: tuple[SurfaceMarginBinding, ...] | None
     mode_count: int | None = None
+    identity_problem: str | None = None
 
     def load_optional(self) -> AmrPassSnapshot | None:
         """Return no snapshot when native files are absent or unreadable."""
@@ -228,6 +292,7 @@ class SnapshotReader:
             ),
             surface_margin_epr=surface_margin_epr,
             native_iteration=_native_iteration(problem_block),
+            identity_problem=self.identity_problem,
         )
 
     def _electrical_tables(self) -> _ElectricalTables:

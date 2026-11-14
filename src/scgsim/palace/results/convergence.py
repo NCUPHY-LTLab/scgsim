@@ -63,7 +63,10 @@ def check_passes(
         return ConvergenceCheck.not_declared()
     return check_convergence(
         plan,
-        [PassFolder(snapshot.pass_number, snapshot.path) for snapshot in passes],
+        [
+            PassFolder(snapshot.pass_number, snapshot.path, snapshot.identity_problem)
+            for snapshot in passes
+        ],
     )
 
 

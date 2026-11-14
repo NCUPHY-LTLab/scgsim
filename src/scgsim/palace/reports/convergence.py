@@ -91,16 +91,56 @@ def verdict_sentence(check: ConvergenceCheck) -> str:
         return (
             f"Converged at pass {verdict.pass_number}, of the {read}: every criterion held {held}. "
             f"Last to hold: {', '.join(verdict.last_to_hold)}, from pass {verdict.last_to_hold_from}. "
-            f"{read_after}"
+            f"{read_after}{_reading_notes(check, verdict.pass_number)}"
         )
     last = check.passes[-1]
+    notes = _reading_notes(check, None)
     if not verdict.failing:
         return (
             f"Not converged in the {read}: every criterion holds at pass {last.number}, for "
-            f"{last.streak} of the {in_a_row} passes in a row the declaration needs."
+            f"{last.streak} of the {in_a_row} passes in a row the declaration needs.{notes}"
         )
     failing = "; ".join(_failure(item) for item in verdict.failing)
-    return f"Not converged in the {read}. At pass {last.number}: {failing}."
+    return f"Not converged in the {read}. At pass {last.number}: {failing}.{notes}"
+
+
+def _reading_notes(check: ConvergenceCheck, converged_at: int | None) -> str:
+    """What the passes read leave out: passes not returned, and passes whose number is not established.
+
+    A pass that was not read could have converged the run earlier, so the verdict says so; a pass whose
+    number is not established is in no comparison, and the verdict says why.
+    """
+    established = {
+        item.number for item in check.passes if item.identity_problem is None
+    }
+    last = converged_at if converged_at is not None else max(established, default=0)
+    read_numbers = {item.number for item in check.passes}
+    missing = [number for number in range(1, last) if number not in read_numbers]
+    notes = ""
+    if missing:
+        names = _listed(missing)
+        notes += (
+            f" {'Pass' if len(missing) == 1 else 'Passes'} {names} "
+            f"{'was' if len(missing) == 1 else 'were'} not read"
+            + (
+                ", so the run may have converged earlier."
+                if converged_at is not None
+                else "."
+            )
+        )
+    for item in check.passes:
+        if item.identity_problem is not None:
+            notes += (
+                f" {item.folder.name} is in no comparison: {item.identity_problem}."
+            )
+    return notes
+
+
+def _listed(numbers: list[int]) -> str:
+    """``2``, ``2 and 3`` or ``1, 2 and 3``."""
+    if len(numbers) == 1:
+        return str(numbers[0])
+    return ", ".join(str(number) for number in numbers[:-1]) + f" and {numbers[-1]}"
 
 
 def _passes_read(check: ConvergenceCheck) -> str:
@@ -147,7 +187,13 @@ def pass_table_html(check: ConvergenceCheck) -> str:
         "<tr>"
         + html_cell("th", "Criterion")
         + html_cell("th", "Declared")
-        + "".join(html_cell("th", f"Pass {item.number}") for item in check.passes)
+        + "".join(
+            html_cell(
+                "th",
+                f"Pass {item.number}" + ("" if item.identity_problem is None else "?"),
+            )
+            for item in check.passes
+        )
         + "</tr>"
     )
     rows = [
@@ -165,7 +211,11 @@ def pass_table_html(check: ConvergenceCheck) -> str:
         + "".join(
             html_cell(
                 "td",
-                f"holds, {item.streak} in a row" if item.holds else "fails",
+                "not counted: number not established"
+                if item.identity_problem is not None
+                else f"holds, {item.streak} in a row"
+                if item.holds
+                else "fails",
             )
             for item in check.passes
         )

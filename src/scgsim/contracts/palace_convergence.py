@@ -290,10 +290,17 @@ def _positive_finite(value: Any) -> bool:
 
 @dataclass(frozen=True)
 class PassFolder:
-    """One pass of a run: its number (1 is the solve on the input mesh) and the folder holding its tables."""
+    """One pass of a run: its number, the folder holding its tables, and whether that number is established.
+
+    ``number`` is the pass the folder records about itself (Palace's ``Problem.Iteration``: 1 is the solve on
+    the input mesh).  ``identity_problem`` says why it could not be established (no readable record, or one
+    that disagrees with the folder name); such a pass is read, but no change is measured to or from it and it
+    is in no run of passes in a row.
+    """
 
     number: int
     path: Path
+    identity_problem: str | None = None
 
 
 @dataclass(frozen=True)
@@ -330,13 +337,18 @@ class CriterionAtPass:
 
 @dataclass(frozen=True)
 class PassCheck:
-    """Every criterion at one pass; ``streak`` is how many passes in a row, ending here, all criteria held."""
+    """Every criterion at one pass; ``streak`` is how many passes in a row, ending here, all criteria held.
+
+    ``identity_problem`` says why the pass's number is not established (see ``PassFolder``), or that two
+    folders record the same pass; such a pass has a streak of 0 and its neighbours measure no change to it.
+    """
 
     number: int
     folder: Path
     criteria: tuple[CriterionAtPass, ...]
     holds: bool
     streak: int
+    identity_problem: str | None = None
 
 
 @dataclass(frozen=True)
@@ -382,30 +394,90 @@ def check_convergence(
 ) -> ConvergenceCheck:
     """Read the planned numbers of every pass, apply each criterion, and decide the verdict.
 
-    ``passes`` are in order of their numbers.  A pass whose previous pass is not among them has no change to
-    measure, so its change criteria do not hold, and its streak starts again.
+    ``passes`` are in order of their numbers.  A change is measured only between two passes whose numbers are
+    established and consecutive: otherwise it is unavailable, with the reason, the change criterion does not
+    hold there, and the run of passes in a row starts again.  A value criterion needs no neighbour.  Two
+    folders that record the same pass make both unreadable, since which is that solve cannot be told.
     """
-    readings = [_read_pass(plan, folder.path) for folder in passes]
+    problems = _identity_problems(passes)
+    readings = [
+        _read_pass(plan, folder.path)
+        if problem is None or folder.identity_problem == problem
+        else _unavailable(plan, problem)
+        for folder, problem in zip(passes, problems, strict=True)
+    ]
     checks: list[PassCheck] = []
     for position, folder in enumerate(passes):
-        previous = (
-            readings[position - 1]
-            if position > 0 and passes[position - 1].number == folder.number - 1
-            else None
-        )
+        previous = _previous(passes, problems, readings, position)
         criteria = tuple(
             _criterion_at_pass(
                 criterion,
                 readings[position][index],
-                None if previous is None else previous[index],
+                previous if isinstance(previous, str) else previous[index],
             )
             for index, criterion in enumerate(plan.criteria)
         )
         holds = all(item.holds for item in criteria)
-        continues = bool(checks) and checks[-1].number == folder.number - 1
-        streak = (checks[-1].streak + 1 if continues else 1) if holds else 0
-        checks.append(PassCheck(folder.number, folder.path, criteria, holds, streak))
+        continues = (
+            bool(checks)
+            and checks[-1].identity_problem is None
+            and checks[-1].number == folder.number - 1
+        )
+        streak = (
+            0
+            if not holds or problems[position] is not None
+            else checks[-1].streak + 1
+            if continues
+            else 1
+        )
+        checks.append(
+            PassCheck(
+                folder.number, folder.path, criteria, holds, streak, problems[position]
+            )
+        )
     return ConvergenceCheck(plan, tuple(checks), _verdict(plan, checks))
+
+
+def _identity_problems(passes: Sequence[PassFolder]) -> list[str | None]:
+    """Why each pass's number is not established: its own record, or that another folder records it too."""
+    problems: list[str | None] = []
+    for folder in passes:
+        twins = [item.path.name for item in passes if item.number == folder.number]
+        if folder.identity_problem is not None:
+            problems.append(folder.identity_problem)
+        elif len(twins) > 1:
+            problems.append(
+                f"pass {folder.number} is recorded by {len(twins)} folders ({', '.join(twins)})"
+            )
+        else:
+            problems.append(None)
+    return problems
+
+
+def _unavailable(plan: ConvergencePlan, reason: str) -> list[list["_Reading"]]:
+    """Every planned number of a pass that cannot be read, each with ``reason``."""
+    return [
+        [(None, reason) for _value in criterion.values] for criterion in plan.criteria
+    ]
+
+
+def _previous(
+    passes: Sequence[PassFolder],
+    problems: list[str | None],
+    readings: list[list[list["_Reading"]]],
+    position: int,
+) -> list[list["_Reading"]] | str:
+    """The readings of the solve immediately before this pass, or why there is none to compare with."""
+    number = passes[position].number
+    if problems[position] is not None:
+        return f"no previous pass to compare with: {problems[position]}"
+    if number == 1:
+        return "no previous pass to compare with"
+    if position == 0 or passes[position - 1].number != number - 1:
+        return f"no previous pass to compare with: pass {number - 1} was not read"
+    if problems[position - 1] is not None:
+        return f"no previous pass to compare with: {problems[position - 1]}"
+    return readings[position - 1]
 
 
 _Reading = tuple[float | None, str | None]
@@ -504,14 +576,15 @@ def _number(cell: str) -> float | None:
 def _criterion_at_pass(
     criterion: PlannedCriterion,
     readings: list[_Reading],
-    previous: list[_Reading] | None,
+    previous: list[_Reading] | str,
 ) -> CriterionAtPass:
+    """``previous`` is the readings of the pass before, or why there is none to compare with."""
     values = tuple(
         _value_at_pass(
             criterion,
             planned.label,
             reading,
-            None if previous is None else previous[index],
+            previous if isinstance(previous, str) else previous[index],
         )
         for index, (planned, reading) in enumerate(
             zip(criterion.values, readings, strict=True)
@@ -524,17 +597,15 @@ def _value_at_pass(
     criterion: PlannedCriterion,
     label: str,
     reading: _Reading,
-    previous: _Reading | None,
+    previous: _Reading | str,
 ) -> ValueAtPass:
     value, unavailable = reading
     if value is None:
         return ValueAtPass(label, None, None, False, unavailable)
     if criterion.test == "at_most":
         return ValueAtPass(label, value, value, value <= criterion.threshold)
-    if previous is None:
-        return ValueAtPass(
-            label, value, None, False, "no previous pass to compare with"
-        )
+    if isinstance(previous, str):
+        return ValueAtPass(label, value, None, False, previous)
     earlier, earlier_unavailable = previous
     if earlier is None:
         return ValueAtPass(
@@ -601,6 +672,7 @@ def _holding_since(checks: list[PassCheck], position: int, criterion: int) -> in
     start = position
     while (
         start > 0
+        and checks[start - 1].identity_problem is None
         and checks[start - 1].number == checks[start].number - 1
         and checks[start - 1].criteria[criterion].holds
     ):

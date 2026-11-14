@@ -255,7 +255,7 @@ def test_a_gap_in_the_passes_breaks_the_comparison_and_the_streak(tmp_path):
     passes = _passes(tmp_path, [(1e-15, 0.0, 1e-15)] * 3)
     check = check_convergence(_plan(_diagonal()), [passes[0], passes[2]])
     assert check.passes[1].criteria[0].values[0].unavailable == (
-        "no previous pass to compare with"
+        "no previous pass to compare with: pass 2 was not read"
     )
     assert check.verdict.state == "not_converged"
 
