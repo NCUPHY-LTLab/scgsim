@@ -215,6 +215,8 @@ sim.set_convergence(
 3. 判定為已收斂時，先寫出 `metadata/palace_convergence_decision.json`，再對求解器的 session 送出 SIGTERM。60 秒後求解器仍在執行，就送出 SIGKILL；
 4. 求解器結束後（停止之後，或在 `amr_max_passes` 自行結束），再寫一次決定紀錄，內容是 `results/palace` 當時的 pass 與求解器的結束碼。
 
+執行器不會留下無人看管的求解器。被要求結束時（SIGTERM、SIGINT 或 SIGHUP），它先結束求解器並記下原因。來不及這麼做就被結束時（執行器本身或指令碼的整個行程群組收到 SIGKILL），求解器交給它的守護行程：執行器與求解器一同啟動、位於自己 session 中的行程，一旦執行器不在，就以同樣的方式結束求解器的 session。
+
 Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化網格，因此停止發生在這段細化期間，或下一次求解開始時；已完成 pass 的檔案都不會改變。代價是資料夾出現到被查看之間的一到兩秒，之後的求解都不會執行。
 
 回執記載求解器如何結束（`ending`），並保留求解器自己的結束碼：

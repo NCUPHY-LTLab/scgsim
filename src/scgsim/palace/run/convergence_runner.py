@@ -20,7 +20,9 @@ The runner
 It signals only the process group of the session it started, and only while that session's first process has
 not been reaped, so the signal cannot reach a process that took over its number.  Told to end itself (SIGTERM,
 SIGINT or SIGHUP: the script, the scheduler or a person ending the job), it ends the solver the same way first
-and records why.  On Linux the solver also receives SIGTERM if the runner dies without that chance (SIGKILL).
+and records why.  Ended without that chance (SIGKILL, to it or to the script's whole process group), it leaves
+the solver to its guard: a process in a session of its own that ends the solver's session the same way as
+soon as the runner is gone.
 
 Like the receipt recorder, the copy carries the contracts' text in place of their imports
 (``standalone_copy``), so it runs with only a Python interpreter.
@@ -29,7 +31,6 @@ Like the receipt recorder, the copy carries the contracts' text in place of thei
 from __future__ import annotations
 
 import argparse
-import ctypes
 import os
 import signal
 import subprocess
@@ -70,9 +71,6 @@ KILL_WAIT_S = 10.0
 """How long the runner waits for the solver to end after SIGKILL before it reports the solver as it is."""
 _POLL_S = 0.1
 """How often the runner checks whether the solver has ended or the runner was told to end."""
-
-_PR_SET_PDEATHSIG = 1
-"""Linux ``prctl`` option: the signal a process receives when its parent ends."""
 
 
 def _script_main() -> None:
@@ -128,9 +126,13 @@ def run(request: _Request) -> int:
 
 @dataclass(frozen=True)
 class _Running:
-    """The solver process the runner started; its id is also its session's and its process group's."""
+    """The solver process the runner started, and the pipe end that stands its guard down.
+
+    The process's id is also its session's and its process group's.
+    """
 
     process: subprocess.Popen[bytes]
+    guard: int
 
     @property
     def pid(self) -> int:
@@ -141,21 +143,69 @@ class _Running:
 
 
 def _start(command: list[str]) -> _Running:
-    """Start the solver in a session of its own, with the runner's output streams."""
-    parent = os.getpid()
+    """Start the solver in a session of its own, with the runner's output streams, and then its guard."""
+    process = subprocess.Popen(command, start_new_session=True)
+    return _Running(process, _start_guard(process.pid))
 
-    def end_with_the_runner() -> None:
-        # Runs in the solver's process before the command: on Linux it receives SIGTERM if the runner dies.
-        if sys.platform.startswith("linux"):
-            ctypes.CDLL(None, use_errno=True).prctl(_PR_SET_PDEATHSIG, signal.SIGTERM)
-            if os.getppid() != parent:
-                os.kill(os.getpid(), signal.SIGTERM)
 
-    return _Running(
-        subprocess.Popen(
-            command, start_new_session=True, preexec_fn=end_with_the_runner
-        )
-    )
+def _start_guard(session: int) -> int:
+    """Start the guard of the solver's session; return the pipe end the runner holds for it.
+
+    The runner can be ended in a way it cannot answer, and the solver, in a session of its own, would then run
+    on unwatched to its pass limit: a launcher's wrapper script does not pass a signal on to the launcher it
+    started.  The guard is a copy of the runner in a session of its own, so a signal to the script's process
+    group does not reach it.  It waits on a pipe only the runner holds, which closes when the runner ends,
+    however it ends.  If the runner did not stand the guard down first, the guard ends the solver's session.
+    """
+    watched, held = os.pipe()
+    if os.fork() != 0:
+        os.close(watched)
+        return held
+    try:
+        os.close(held)
+        os.setsid()
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            signal.signal(signum, signal.SIG_IGN)
+        # The log's pipe must close when the script's processes end, not when the guard does.
+        null = os.open(os.devnull, os.O_RDWR)
+        for stream in (0, 1, 2):
+            os.dup2(null, stream)
+        if not os.read(watched, 1):
+            _end_session(session)
+    finally:
+        os._exit(0)
+
+
+def _stand_down(solver: _Running) -> None:
+    """Tell the guard that the runner has ended the solver's session itself."""
+    os.write(solver.guard, b"1")
+    os.close(solver.guard)
+
+
+def _end_session(session: int) -> None:
+    """End the session's process group as the runner's stop does, from a process that is not its parent."""
+    if not _signal_group(session, signal.SIGTERM):
+        return
+    if not _group_gone_within(session, STOP_WAIT_S):
+        _signal_group(session, signal.SIGKILL)
+
+
+def _signal_group(group: int, signum: int) -> bool:
+    """Signal a process group; False when it has no process left."""
+    try:
+        os.killpg(group, signum)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _group_gone_within(group: int, seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if not _signal_group(group, 0):
+            return True
+        time.sleep(_POLL_S)
+    return False
 
 
 def _supervise(
@@ -200,9 +250,11 @@ def _reap(solver: _Running) -> int:
     """Collect the solver's exit status, after ending with SIGKILL any process its group still holds.
 
     A process left in the group outlived the solver it belongs to (a rank its launcher did not end).  The
-    signal goes out before the first process is reaped, so the group's id is still the solver's.
+    signal goes out, and the guard is stood down, before the first process is reaped: until then the group's
+    id is still the solver's, so neither the runner nor the guard can signal a process that took it over.
     """
     _signal_session(solver, signal.SIGKILL)
+    _stand_down(solver)
     return solver.wait()
 
 

@@ -12,9 +12,12 @@ It does what Palace 0.18.1 was recorded doing in the stop experiments of issue 2
 * the last solve stays at the top level, and it prints ``Completed N iterations of adaptive mesh refinement``.
 
 Like a launcher (``prterun``) it starts one "rank" in its process group and answers SIGTERM by ending the
-rank and exiting 1.  A schedule (JSON beside the script) sets the pass tables, the pauses, a failure after a
-pass, and whether it ignores SIGTERM.  It writes the ids of itself, its parent (the runner) and its rank to
-``pids`` in the schedule, so a test can check that none of them is left.
+rank and exiting 1.  ``behind_wrapper`` puts it behind a shell script that starts it as a child and passes
+no signal on, as Palace's own ``palace`` wrapper does with ``prterun`` (issue 248, the stop check with real
+Palace): a signal to the solver's first process then reaches the wrapper only.  A schedule (JSON beside the
+script) sets the pass tables, the pauses, a failure after a pass, and whether it ignores SIGTERM.  It writes
+the ids of itself, the runner, its rank and its wrapper to ``pids`` in the schedule, so a test can check that
+none of them is left.
 """
 
 from __future__ import annotations
@@ -52,9 +55,13 @@ def main(arguments):
     if arguments[:1] == ["--dry-run"]:
         return 0
     rank = subprocess.Popen([sys.executable, "-I", "-c", RANK])
-    Path(SCHEDULE["pids"]).write_text(
-        json.dumps({"solver": os.getpid(), "runner": os.getppid(), "rank": rank.pid})
-    )
+    pids = {"solver": os.getpid(), "runner": os.getppid(), "rank": rank.pid}
+    if SCHEDULE["behind_wrapper"]:
+        wrapper = os.getppid()
+        # /proc/<pid>/stat: "pid (name) state ppid ..."; the runner started the wrapper.
+        runner = int(Path(f"/proc/{wrapper}/stat").read_text().rsplit(") ", 1)[1].split()[1])
+        pids.update(wrapper=wrapper, runner=runner)
+    Path(SCHEDULE["pids"]).write_text(json.dumps(pids))
     if SCHEDULE["ignore_sigterm"]:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
     else:
@@ -120,16 +127,19 @@ def write_stand_in(  # noqa: PLR0913 -- one schedule, each switch independent
     pids: Path,
     fail_after: int | None = None,
     ignore_sigterm: bool = False,
+    behind_wrapper: bool = False,
 ) -> Path:
     """Write the stand-in solver at ``path`` (its schedule beside it) and return ``path``.
 
     Each pass is ``{"tables": folder, "norm": float, "solve_s": seconds, "refine_s": seconds}``: the folder
-    holds the pass's tables and ``palace.json`` in Palace's formats.
+    holds the pass's tables and ``palace.json`` in Palace's formats.  With ``behind_wrapper``, ``path`` is a
+    shell script that runs the stand-in as its child.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"#!{sys.executable} -I\n{_SOURCE}", encoding="utf-8")
-    path.chmod(0o755)
-    path.with_suffix(".json").write_text(
+    launcher = path.with_name(f"{path.name}-launcher") if behind_wrapper else path
+    launcher.write_text(f"#!{sys.executable} -I\n{_SOURCE}", encoding="utf-8")
+    launcher.chmod(0o755)
+    launcher.with_suffix(".json").write_text(
         json.dumps(
             {
                 "problem": problem,
@@ -137,10 +147,14 @@ def write_stand_in(  # noqa: PLR0913 -- one schedule, each switch independent
                 "pids": str(pids),
                 "fail_after": fail_after,
                 "ignore_sigterm": ignore_sigterm,
+                "behind_wrapper": behind_wrapper,
             }
         ),
         encoding="utf-8",
     )
+    if behind_wrapper:
+        path.write_text(f'#!/bin/sh\n"{launcher}" "$@"\n', encoding="utf-8")
+        path.chmod(0o755)
     return path
 
 
@@ -173,6 +187,23 @@ def wait_until_gone(pids: dict[str, int], timeout_s: float = 10.0) -> list[str]:
             return []
         time.sleep(0.05)
     return [name for name, pid in pids.items() if alive(pid)]
+
+
+def runner_processes(run_dir: Path) -> list[int]:
+    """The ids of the processes started from the runner copy of ``run_dir``: the runner and its guard."""
+    found = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            command = (entry / "cmdline").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        if str(run_dir).encode() in command and any(
+            part.endswith(b"run_palace_until_converged.py") for part in command
+        ):
+            found.append(int(entry.name))
+    return [pid for pid in found if alive(pid)]
 
 
 def end_left_over(pids: dict[str, int]) -> None:

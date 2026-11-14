@@ -413,6 +413,13 @@ The runner:
    writes the decision record again with the passes `results/palace` then holds
    and the solver's exit code.
 
+The runner does not leave the solver running unwatched. Told to end (SIGTERM,
+SIGINT or SIGHUP), it ends the solver first and records why. Ended without that
+chance (SIGKILL, to the runner or to the script's whole process group), it
+leaves the solver to its guard: a process the runner starts with the solver, in
+a session of its own, which ends the solver's session in the same way once the
+runner is gone.
+
 Palace 0.18.1 completes pass $k$ in `iteration<k>/` before it refines the mesh
 for pass $k+1$, so the stop comes during that refinement or at the start of the
 next solve; no file of a completed pass changes. The cost is the time between

@@ -32,6 +32,7 @@ from palace_convergence_support import (
 from palace_stand_in_solver import (
     end_left_over,
     read_pids,
+    runner_processes,
     wait_until_gone,
     write_stand_in,
 )
@@ -62,7 +63,7 @@ from scgsim.palace.results.tables import count_index_entries
 
 pytestmark = pytest.mark.skipif(
     not sys.platform.startswith("linux"),
-    reason="the runner's stop is checked through /proc and Linux's parent-death signal",
+    reason="the runner's stop is checked through /proc",
 )
 
 _SETTLES_AT_4 = [
@@ -108,6 +109,7 @@ def _prepared(  # noqa: PLR0913 -- one run folder, each switch independent
     style: str = "binary",
     fail_after: int | None = None,
     ignore_sigterm: bool = False,
+    behind_wrapper: bool = False,
 ) -> SimpleNamespace:
     """Write the config and handoff of a six-pass run with its stand-in Palace; nothing runs yet."""
     if problem == "Electrostatic":
@@ -149,6 +151,7 @@ def _prepared(  # noqa: PLR0913 -- one run folder, each switch independent
         pids=pids,
         fail_after=fail_after,
         ignore_sigterm=ignore_sigterm,
+        behind_wrapper=behind_wrapper,
     )
     resources = (
         {
@@ -261,6 +264,7 @@ def test_the_runner_stops_palace_after_the_first_converged_pass(stopped):
     assert not (results / "iteration5").exists()
     assert (results / "terminal-C.csv").is_symlink()
     assert wait_until_gone(read_pids(stopped.pids_path)) == []
+    assert _runner_processes_left(stopped) == []
     assert "Adaptive mesh refinement (AMR) iteration 4:" in stopped.log
     assert (
         "SCGSim convergence runner: converged at pass 4; stopping the solver after pass 4"
@@ -487,17 +491,52 @@ def test_a_runner_told_to_end_ends_the_solver_first(tmp_path):
     assert failure is not None and failure.category == "convergence_stop"
 
 
-def test_a_runner_killed_outright_still_leaves_no_solver(tmp_path):
-    """SIGKILL to the runner: Linux ends the solver through its parent-death signal; nothing is left."""
-    run = _prepared(tmp_path, refine_s=[_LONG_S] * 6)
+@pytest.mark.parametrize(
+    "behind_wrapper", [False, True], ids=["launcher", "wrapper-script"]
+)
+def test_a_runner_killed_outright_still_leaves_no_solver(tmp_path, behind_wrapper):
+    """SIGKILL to the runner: its guard ends the solver's session, and nothing is left.
+
+    Behind a wrapper script, as Palace's own ``palace`` is, the launcher is not the solver's first process:
+    only a signal to the whole session ends it and its rank.
+    """
+    run = _prepared(tmp_path, refine_s=[_LONG_S] * 6, behind_wrapper=behind_wrapper)
     process = _start(run)
     pids = read_pids(run.pids_path)
     _wait_for(run.root / OUTPUT_DIR / "iteration1")
     os.kill(pids["runner"], signal.SIGKILL)
     assert _finish(run, process) != 0
     assert wait_until_gone(pids) == []
+    assert _runner_processes_left(run) == []
     receipt = read_json(run.root / RETURNED_RECEIPT)
     assert (receipt["status"], receipt["ending"]) == ("failed", "not_recorded")
+
+
+def test_a_script_killed_with_its_whole_group_still_leaves_no_solver(tmp_path):
+    """SIGKILL to the script's process group ends the script, ``tee`` and the runner at once.
+
+    The solver is in a session of its own, so that signal does not reach it; the guard, in a session of its
+    own too, ends it.  The script wrote no receipt.
+    """
+    run = _prepared(tmp_path, refine_s=[_LONG_S] * 6, behind_wrapper=True)
+    process = _start(run)
+    pids = read_pids(run.pids_path)
+    _wait_for(run.root / OUTPUT_DIR / "iteration1")
+    os.killpg(process.pid, signal.SIGKILL)
+    # Looked at before ``_finish``, which ends whatever a run left behind.
+    left = wait_until_gone(pids)
+    assert _finish(run, process) == -signal.SIGKILL
+    assert left == []
+    assert _runner_processes_left(run) == []
+    assert not (run.root / RETURNED_RECEIPT).exists()
+
+
+def _runner_processes_left(run: SimpleNamespace, timeout_s: float = 10.0) -> list[int]:
+    """The runner and guard processes of the run still there after ``timeout_s``."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline and runner_processes(run.root):
+        time.sleep(0.05)
+    return runner_processes(run.root)
 
 
 def _wait_for(path: Path, timeout_s: float = 20.0) -> None:
