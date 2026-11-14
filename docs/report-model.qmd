@@ -85,6 +85,49 @@ hash-bound `adaptive-convergence.prop` export, rather than being exposed as a
 normalized count or full raw history in the report. They do not turn failed/incomplete work into completion, infer an
 unknown stopping cause from pass count, or change Q2D/Q3D policies.
 
+## Declared convergence of a Palace run {#declared-convergence}
+
+A Palace run whose simulation called
+[`set_convergence`](specs/palace-electrostatic-sgb.qmd#convergence-declaration)
+carries its criteria as a sealed plan. Result reading runs the one convergence
+check on the returned pass folders, `results/palace/iteration<k>` and the final
+`results/palace`: `ResolvedPalaceResult.convergence` holds the plan, the check
+of every pass (each number, what its test measured, whether it holds) and the
+verdict. A run folder without a plan has the verdict `not_declared`.
+
+An AMR pass is one Palace solve, counted from 1: pass 1 solves the input mesh,
+and pass $k$ is written to `iteration<k>` unless it is the last solve. Every AMR
+pass axis of the trust report counts this way.
+
+With a declaration, the Numerical Evidence section of the trust report opens with:
+
+1. the verdict as a sentence. Converged: the pass, the passes that held in a
+   row, the criterion that was the last to hold and the pass it held from, and
+   how many passes ran after convergence. Not converged: each criterion that
+   fails at the last pass read, its worst number, what it measured and how many
+   times the declared threshold that is;
+2. one table, a row per criterion and a column per pass, each cell the
+   criterion's worst number at that pass and whether it holds, and a last row
+   with how many passes in a row every criterion has held;
+3. one figure per criterion: what it measured against the pass on a log axis,
+   with the declared threshold as the dashed line.
+
+The figures of the quantities themselves follow unchanged. On the error
+indicator figure, the dashed line is the declared `ErrorIndicator` threshold,
+or no line when none is declared; the identity cards show `AMR Tol` as set aside
+and a `Convergence` card with the verdict. Without a declaration the dashed line
+is the configured Palace `Tol`, and the `Convergence` card reads
+`not declared`.
+
+`inspect_run_trustworthiness()` shows the same table for the passes a partly
+returned run folder holds. A plan that is present but was not sealed by the
+handoff, or that changed after it, is refused by both readers.
+
+In this version Palace runs every pass up to `amr_max_passes`; the verdict says
+at which pass the run had converged, and the passes after it are kept in the
+table. The criteria are the caller's: the verdict states whether they held, not
+whether the research question is answered.
+
 ## Honesty rule
 
 Solver-specific quantities remain solver-specific. Electrostatic matrices,

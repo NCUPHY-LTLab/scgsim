@@ -37,6 +37,24 @@ Palace 報告讀取與外觀介面及已解析執行相同的獨立 `mesh_summar
 
 使用[結果閱讀課程](course/returned-results.qmd#interpret-for-scq-use)，將物理量及其變化連結至預定的 SCQ 用途。呼叫端指定的準則、準則變更、原生完成／收斂狀態及紀錄歷史，仍是 Notebook 應保留的觀察。報告不以通用研究充分性門檻取代它們。原生收斂與可用數值產物不自動代表研究問題已獲解答。這種解讀不取代原生狀態、雜湊、迭代選取或真實執行失敗意義。HFSS Driven／Eigenmode 的報告只移除 [HFSS 契約](specs/aedt-runtime.qmd#hfss-convergence-observations) 所述的三項額外收斂限定。報告呈現既有結構化收斂欄位，並保持要求及跨匯出一致性。請將呼叫端準則與原生紀錄一同保留：Eigenmode 的連續迭代次數及原生歷史仍在綁定雜湊的 `adaptive-convergence.prop` 匯出中，不會在報告中成為正規化次數或完整原始歷史。它們不將失敗／未完成工作變成完成，不從迭代次數推論未知停止原因，也不改變 Q2D／Q3D 政策。
 
+## Palace 執行的宣告收斂 {#declared-convergence}
+
+模擬若呼叫了 [`set_convergence`](specs/palace-electrostatic-sgb.qmd#convergence-declaration)，執行就帶著封存的準則計畫。讀取結果時，同一個收斂檢查會在回傳的 pass 資料夾（`results/palace/iteration<k>` 與最終的 `results/palace`）上執行：`ResolvedPalaceResult.convergence` 保存計畫、每個 pass 的檢查（每個數、其檢定量到的值、是否成立）與判定。沒有計畫的執行資料夾，判定為 `not_declared`。
+
+一個 AMR pass 是 Palace 的一次求解，從 1 起算：pass 1 求解輸入網格；pass $k$ 寫入 `iteration<k>`，除非它是最後一次求解。可信度報告的每條 AMR pass 軸都這樣計數。
+
+有宣告時，可信度報告的 Numerical Evidence 一節依序先顯示：
+
+1. 以一句話寫出的判定。已收斂：在哪個 pass、哪些 pass 連續成立、最後成立的準則及其自哪個 pass 起成立，以及收斂後又執行了幾個 pass。未收斂：在讀到的最後一個 pass 上每條不成立的準則、其最差的數、量到的值，以及是宣告門檻的幾倍；
+2. 一張表：每條準則一列、每個 pass 一欄，每格是該準則在該 pass 最差的數及是否成立；最後一列是所有準則已連續成立幾個 pass；
+3. 每條準則一張圖：量到的值對 pass，對數軸，宣告的門檻為虛線。
+
+之後是原本各物理量本身的圖，維持不變。誤差指標圖上的虛線是宣告的 `ErrorIndicator` 門檻；沒有宣告這條準則時就不畫線。身分卡片把 `AMR Tol` 顯示為不使用，並多一張顯示判定的 `Convergence` 卡片。沒有宣告時，虛線是設定的 Palace `Tol`，`Convergence` 卡片顯示 `not declared`。
+
+`inspect_run_trustworthiness()` 對部分回傳的執行資料夾，以其中現有的 pass 顯示同一張表。存在但未經交接封存的計畫，或交接後被改過的計畫，兩種讀取都會拒絕。
+
+在這個版本中，Palace 會執行到 `amr_max_passes` 的每一個 pass；判定說明執行在哪個 pass 已收斂，之後的 pass 仍保留在表中。準則由呼叫者決定：判定說的是它們是否成立，不是研究問題是否已有答案。
+
 ## 如實呈現規則 {#honesty-rule}
 
 求解器專屬物理量維持各自語意。靜電矩陣、本徵頻率、驅動網路響應、場能量參與率、Q3D 矩陣及 Q2D 單位長度結果，都必須保留自己的單位、擷取依據及失敗意義。

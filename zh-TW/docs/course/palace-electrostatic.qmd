@@ -32,6 +32,33 @@ sim.set_mesh(quality_threshold=0.01)
 
 端子與接地選擇器使用確切的最終 Net ID，不是幾何中心的估計值。明確指定 `error` 政策會將未涵蓋的導體元件視為輸入錯誤；另一個支援的 `ground` 政策則會將未指派元件接地。請依實驗選擇政策。此處外部邊界不接地；`exterior_boundary_policy="ground"` 是另一種模型，且要求明確使用 error 政策。[契約](../specs/palace-electrostatic-sgb.qmd)說明這些選擇及其索引對照意義。
 
+## 宣告細化何時已收斂 {#declare-when-refinement-has-converged}
+
+自適應細化預設關閉（`amr_max_passes=0`）。要細化時，給一個迭代上限，再說明哪些數必須停止變化、容許變化多少。下面的門檻只示範寫法；請依電路問題的需要自行選擇：
+
+```python
+from scgsim.palace import Capacitance, ErrorIndicator
+
+sim.set_numerical(order=2, amr_max_passes=6)
+sim.set_convergence(
+    Capacitance.element("xmon", "xmon").within(relative=1e-3),
+    ErrorIndicator().below(1e-2),
+    minimum_converged_passes=2,
+)
+```
+
+每個 pass 是 Palace 的一次求解；pass 1 求解 `mesh()` 寫出的網格。第一條準則在某個 pass 成立，是指 `C[xmon][xmon]` 與前一個 pass 相比變化至多 0.1 %，所以最早在 pass 2 成立。第二條準則在 Palace 的誤差指標至多 0.01 時成立。兩條都已連續成立兩個 pass 的第一個 pass，就是執行收斂的 pass；六次細化有七次求解，足夠達成。
+
+`write_config()` 在寫出任何檔案之前，以設定檔檢查宣告：`Capacitance.element("xmon", "pad")` 會被拒絕，因為模擬沒有 `pad` 端子；`set_numerical(amr_max_passes=1)` 也會被拒絕，因為兩次求解不可能讓一條變化準則連續成立兩個 pass。明確給定 `amr_tolerance` 同樣會被拒絕：有宣告時由準則決定，拒絕訊息會寫出應改寫的 `ErrorIndicator().below(...)`。
+
+在這個版本中，Palace 仍會執行全部七次求解。讀取回傳的執行時，`result.convergence.verdict` 與可信度報告會說明執行在哪個 pass 已收斂，例如：
+
+> Converged at pass 4 of the 7 passes run: every criterion held at passes 3 to
+> 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3. 3 more passes ran
+> after it, up to amr_max_passes.
+
+所有的量（對角、次對角、整個矩陣、依介面類別的 Surface EPR）與所有檢查，列在[收斂宣告](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)。
+
 ## 選擇幾何近似並建立輸入 {#select-the-geometry-approximation-and-build-inputs}
 
 已綁定的快照已提供外部包覆。Route B 是預設的有限金屬準備方式，而 Surface EPR 只在你要求時才計算，所以這個設定可以直接產生網格：

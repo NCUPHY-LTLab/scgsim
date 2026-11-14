@@ -43,6 +43,7 @@ prepare shared GeometryPlan snapshot
 | 網格控制 | `set_mesh(...)` | 選取尺寸配方、網格器選項、修復預算與品質門檻。 |
 | 來源／設定檢視 | `input_summary()` | 回傳獨立的 `mesh()` 建模輸入（計畫套用模擬的真空區域與所選 Route 之後）與設定，不進行檔案或原生 I/O。 |
 | 網格 | `mesh` | 以 SGB 建立幾何，檢查其中的細微結構，用 `scgsim.meshing` 產生網格，並把群組降階為 Palace 屬性。 |
+| 收斂 | `set_convergence` | 宣告決定自適應細化何時已收斂的準則；見[收斂宣告](#convergence-declaration)。 |
 | 設定 | `write_config` | 為已審閱網格身分寫入 Palace Electrostatic 設定。 |
 
 這些方法是公開 API。
@@ -147,6 +148,62 @@ Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_
 
 [Electrostatic 課程](../course/palace-electrostatic.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。共用私有狀態的失效處理／持久化實作位於[架構](../architecture.qmd#palace-preparation-lifecycle)。
 
+## 收斂宣告 {#convergence-declaration}
+
+`set_convergence(*criteria, minimum_converged_passes=1)` 宣告自適應執行何時算已收斂，兩個 Palace 外觀介面都接受。一條準則是一個量加一個門檻；門檻沒有預設值：
+
+```python
+from scgsim.palace import Capacitance, ErrorIndicator, SurfaceEpr
+
+sim.set_numerical(order=2, amr_max_passes=12)
+sim.set_convergence(
+    Capacitance.diagonal().within(relative=1e-3),
+    Capacitance.element("island", "resonator").within(relative=1e-2),
+    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    ErrorIndicator().below(1e-2),
+    minimum_converged_passes=2,
+)
+```
+
+上面的數字只示範寫法；門檻由使用者決定。
+
+| 量 | 適用於 | 每個 pass 讀取 |
+|---|---|---|
+| `Capacitance.element(a, b)`、`.diagonal()`、`.sub_diagonal(offset=1)`、`.off_diagonal()`、`.matrix()`、`.elements([(a, b), ...])` | `ElectrostaticSim` | `terminal-C.csv` 中 Maxwell 矩陣的元素 `C[a][b]`，以端子名稱指定。`sub_diagonal` 依端子加入的順序，配對相隔 `offset` 的端子；`off_diagonal` 與 `matrix` 對每對不同端子只取一次。 |
+| `ModeFrequency(modes=None)` | `EigenmodeSim` | `eig.csv` 中每個所選模態的 `Re{f}`，單位 GHz；None 選取所有計算的模態。 |
+| `SurfaceEpr(interface_kind, margin_um=None, modes=None, terminals=None)` | 兩者 | 一種介面類別的參與率：其全表面列的總和，或其在 `margin_um` 的邊距列總和。每個模態（`modes=`，Eigenmode）或每個激發（`terminals=`，Electrostatic）一個數；None 選取全部。`SurfaceEpr.each("MA", "MS", "SA")` 以同一個門檻為每種類別各宣告一條準則。 |
+| `ErrorIndicator()` | 兩者 | Palace 寫入 `error-indicators.csv` 的 `Norm`。 |
+
+`within(relative=...)` 限制與前一個 pass 相比的變化 $|q_k - q_{k-1}| / |q_k|$。$q_k$ 為零時，若 $q_{k-1}$ 也為零則變化為零，否則相對變化沒有定義，該準則不成立。絕對形式以量所儲存的單位命名：電容用 `absolute_f`（法拉），頻率用 `absolute_ghz`，參與率沒有單位，用 `absolute`。兩者恰好給一個。`ErrorIndicator().below(value)` 限制的是值本身：指標至多為 `value`。
+
+一個 pass 是 Palace 的一次求解：pass 1 求解輸入網格，pass $k$ 在 $k-1$ 次細化之後。變化準則比較 pass $k$ 與 pass $k-1$，所以在 pass 1 不可能成立。有多個數的量，在每個數都成立時才成立；當每條準則在以 $k$ 結尾的連續 `minimum_converged_passes` 個 pass 都成立，執行就在 pass $k$ 收斂。同一類別的全表面列與邊距列從不相加：邊距列是其全表面列的一部分。
+
+再次呼叫會取代整個宣告；`set_convergence(None)` 移除宣告，沒有任何準則的 `set_convergence()` 會被拒絕。此呼叫與 `set_numerical` 一樣保留網格、捨棄設定檔與交接。
+
+### 檢查 {#checks}
+
+`set_convergence` 會拒絕下列情況，並指出要修改的呼叫：
+
+- 模擬不接受的量（`EigenmodeSim` 上的 `Capacitance`、`ElectrostaticSim` 上的 `ModeFrequency`、Electrostatic 上的 `modes=` 或 Eigenmode 上的 `terminals=`），並列出該類別接受的量；
+- 不是正的有限數的門檻，或同時給了兩個門檻，或一個都沒給；
+- 不是至少為 1 的整數的 `minimum_converged_passes`。
+
+`write_config()` 在寫出任何檔案之前會拒絕：
+
+- 模擬沒有的端子名稱，或選不到任何元素的選取；
+- 超過 `num_modes` 的模態；
+- 沒有要求 Surface EPR（`set_surface_epr`）的介面類別，或被 `set_epr_request(surface_interfaces=...)` 排除的類別；
+- 規格沒有宣告的 `margin_um`，並列出已宣告的邊距；
+- 太小、使宣告根本不可能成立的 `amr_max_passes`：`amr_max_passes` 次細化會求解 `amr_max_passes + 1` 次，而宣告需要 `minimum_converged_passes` 次求解，有變化準則時再多一次；
+- 明確給定的 `amr_tolerance`，並寫出應改為宣告的 `ErrorIndicator().below(...)` 準則；
+- `save_adapt_iterations=False`，因為每個 pass 都要讀取。
+
+### 寫出什麼，以及與 AMR 控制的關係 {#what-is-written-and-how-it-relates-to-the-amr-controls}
+
+有宣告時，宣告的準則取代 Palace 自己的容許誤差。`write_config()` 把 `Model.Refinement.Tol` 寫成最小的正規雙精度浮點數，使得只有 `amr_max_passes` 會結束執行，並寫出 `SaveAdaptIterations: true`，讓 Palace 把每個 pass 保留在 `results/palace/iteration<k>`。它把檢查的計畫寫到 `metadata/palace_convergence_plan.json`：每條準則在報告中顯示的標籤；每個數的結果表、列、欄位與欄位的組合方式（參與率是其各列欄位的總和）；檢定、門檻，以及 `minimum_converged_passes`。一個量由哪些欄位組成，只在這裡、依同一份設定寫出的索引對照表條目決定一次。`prepare_handoff()` 把計畫與其他輸入一起封存，因此回傳的執行若計畫已改變會被拒絕。沒有宣告時，以上都不會寫出，設定檔只由 AMR 控制決定。
+
+在這個版本中，Palace 仍會執行到 `amr_max_passes` 的每一個 pass。檢查在讀取回傳的執行時進行：`ResolvedPalaceResult.convergence` 與[可信度報告](../report-model.qmd#declared-convergence)會說明執行在哪個 pass 已收斂，或哪條準則仍不成立、差多少。
+
 ## 靜電預設值 {#candidate-electrostatic-defaults}
 
 下列為實作預設值，不是通用科學建議或充分性門檻：
@@ -159,7 +216,7 @@ Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_
 | `Model.Refinement.Nonconformal` | `false`，除非 Notebook 設定 `amr_nonconformal=True` |
 | `Model.Refinement.SaveAdaptMesh` | 省略，除非 Notebook 設定 `save_adapt_mesh=True` 或 `False` |
 
-`sim.numerical` 以 `NumericalControls` 保存這些控制：以欄位讀取單一控制（`sim.numerical.amr_nonconformal`），以 `sim.numerical.to_payload()` 讀取整筆紀錄，也就是 `metadata/palace_numerical_controls.json` 保存的字典。`sim.surface_epr_specs` 是 `SurfaceEprSpecs`（`sim.surface_epr_specs.by_type["MA"]`，或以 `to_payload()` 取得正規化後的對照）。交給 `ElectrostaticSim(numerical=...)` 的 `NumericalControls` 中未設定的 AMR 控制，會如 `set_numerical(...)` 一樣取得上述 Electrostatic 預設值（0 次迭代、共形、容許誤差 0.01）。
+`sim.numerical` 以 `NumericalControls` 保存這些控制：以欄位讀取單一控制（`sim.numerical.amr_nonconformal`），以 `sim.numerical.to_payload()` 讀取整筆紀錄，也就是 `metadata/palace_numerical_controls.json` 保存的字典。`sim.surface_epr_specs` 是 `SurfaceEprSpecs`（`sim.surface_epr_specs.by_type["MA"]`，或以 `to_payload()` 取得正規化後的對照）。交給 `ElectrostaticSim(numerical=...)` 的 `NumericalControls` 中未設定的 AMR 控制，會如 `set_numerical(...)` 一樣取得上述 Electrostatic 預設值（0 次迭代、共形、容許誤差 0.01）。有[收斂宣告](#convergence-declaration)時，預設的容許誤差不使用，明確給定的則會被拒絕。
 
 Palace 在省略 `Nonconformal` 鍵時預設為 `true`。SCGSim 一律寫出此鍵，預設為 `false`（共形四面體 AMR）。Notebook 可透過 `set_numerical(amr_nonconformal=True)` 啟用非共形 AMR。
 

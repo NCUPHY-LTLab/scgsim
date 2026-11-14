@@ -51,6 +51,50 @@ left ungrounded here; `exterior_boundary_policy="ground"` is a separate model
 and requires the explicit error policy. [The contract](../specs/palace-electrostatic-sgb.qmd)
 owns these choices and their index-map meaning.
 
+## Declare when refinement has converged
+
+Adaptive refinement is off by default (`amr_max_passes=0`). To refine, give a
+pass limit, then state which numbers must stop changing and by how much. The
+thresholds below show the form; choose your own from what the circuit question
+needs:
+
+```python
+from scgsim.palace import Capacitance, ErrorIndicator
+
+sim.set_numerical(order=2, amr_max_passes=6)
+sim.set_convergence(
+    Capacitance.element("xmon", "xmon").within(relative=1e-3),
+    ErrorIndicator().below(1e-2),
+    minimum_converged_passes=2,
+)
+```
+
+Each pass is one Palace solve; pass 1 solves the mesh `mesh()` writes. The
+first criterion holds at a pass when `C[xmon][xmon]` changed by at most 0.1 %
+since the pass before, so it can first hold at pass 2. The second holds when
+Palace's error indicator is at most 0.01. The run has converged at the first pass
+where both have held for two passes in a row; with six refinements there are
+seven solves, enough for that.
+
+`write_config()` checks the declaration against the config before it writes
+anything: `Capacitance.element("xmon", "pad")` is refused because the simulation
+has no terminal `pad`, and `set_numerical(amr_max_passes=1)` is refused because
+two solves cannot give two passes in a row of a change. A stated
+`amr_tolerance` is refused too: with a declaration the criteria decide, and the
+refusal names the `ErrorIndicator().below(...)` line to write instead.
+
+In this version Palace still runs all seven solves. When you read the returned
+run, `result.convergence.verdict` and the trust report say at which pass the
+run had converged, for example:
+
+> Converged at pass 4 of the 7 passes run: every criterion held at passes 3 to
+> 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3. 3 more passes ran
+> after it, up to amr_max_passes.
+
+The [convergence declaration](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)
+lists every quantity (the diagonal, sub-diagonals, the whole matrix, Surface EPR
+by interface kind) and every check.
+
 ## Select the geometry approximation and build inputs
 
 The bound snapshot already supplies the outer envelope. Route B is the default

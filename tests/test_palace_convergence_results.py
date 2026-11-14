@@ -12,13 +12,14 @@ import json
 import os
 import subprocess
 import sys
+import types
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 from palace_convergence_support import electrostatic
-from test_palace_report_ux import _captured_notebook_display
 
 from scgsim.contracts.palace_run_folder import (
     CONVERGENCE_PLAN,
@@ -65,6 +66,19 @@ if [ "$1" = "--dry-run" ]; then
 fi
 cp -R "{solve}"/. results/palace/
 """
+
+
+@contextmanager
+def _captured_notebook_display():
+    """Collect what the report displays, in a stand-in ``IPython.display`` whose ``HTML`` keeps its text."""
+    displayed: list[object] = []
+    module = types.ModuleType("IPython.display")
+    module.HTML = lambda data: types.SimpleNamespace(data=data)  # type: ignore[attr-defined]
+    module.display = displayed.append  # type: ignore[attr-defined]
+    package = types.ModuleType("IPython")
+    package.display = module  # type: ignore[attr-defined]
+    with patch.dict(sys.modules, {"IPython": package, "IPython.display": module}):
+        yield displayed
 
 
 def _matrix(path: Path, prefix: str, unit: str, matrix: list[list[float]]) -> None:

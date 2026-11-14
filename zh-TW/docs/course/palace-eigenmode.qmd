@@ -26,9 +26,28 @@ display(sim.input_summary())
 
 `set_mesh(...)` 決定網格如何設尺寸與檢查：`recipe` 設定初始元素尺寸，`mesher` 設定 Gmsh 演算法與幾何階數，`budgets` 決定修復迴圈要努力到什麼程度，`quality_threshold` 則是每個四面體必須達到的最小有號反條件數（minSICN）。本範例傳入預設值 `FeatureRecipe()` 與 `0.01`，讓你看到該在哪裡修改；省略 `set_mesh` 會得到相同的網格。幾何階數控制網格表示法，與 Palace 的 FEM 階數無關。各配方、參數，以及網格達不到門檻時會發生什麼事，見共用的 [Palace 網格控制](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
-這些是範例明確指定的控制項：target 單位是 Hz，配方的尺寸單位是微米。請依 SCQ 研究所需的模態與數量選擇設定，並在研究紀錄中保留所選值與後續變更。`save` 控制原生儲存場輸出。全新的 `EigenmodeSim` 會寫入 `Nonconformal=true`。此單網格範例明確設定 `amr_max_passes=0`，以停用自適應細化。呼叫 `write_config()` 前，請透過 `set_numerical(...)` 提供 `amr_max_passes`；若通過次數上限大於零，也必須由呼叫端選定 `amr_tolerance` 與 `amr_update_fraction`。後續呼叫若省略這些控制項，會沿用目前值。請在其所控制的操作旁記錄選用的數值與輸出控制項，不要將它們藏在 Notebook 輔助程式中。
+這些是範例明確指定的控制項：target 單位是 Hz，配方的尺寸單位是微米。請依 SCQ 研究所需的模態與數量選擇設定，並在研究紀錄中保留所選值與後續變更。`save` 控制原生儲存場輸出。全新的 `EigenmodeSim` 會寫入 `Nonconformal=true`。此單網格範例明確設定 `amr_max_passes=0`，以停用自適應細化。呼叫 `write_config()` 前，請透過 `set_numerical(...)` 提供 `amr_max_passes`；若通過次數上限大於零，也必須由呼叫端選定 `amr_tolerance` 與 `amr_update_fraction`；有收斂宣告（見下節）時只需要 `amr_update_fraction`。後續呼叫若省略這些控制項，會沿用目前值。請在其所控制的操作旁記錄選用的數值與輸出控制項，不要將它們藏在 Notebook 輔助程式中。
 
 請依研究需求檢視摘要中的模態／搜尋／資源設定。摘要會顯示正規化來源與設定，但不會產生網格或求解。真空包覆來自 plan；未指定的外部 Eigenmode 表面沿用 Palace 的自然 PMC 條件。這與 AEDT EPR 模型預設的 Perfect E 外部邊界不同。
+
+## 宣告細化何時已收斂 {#declare-when-refinement-has-converged}
+
+使用自適應細化時，說明哪些數必須穩定，而不是給 Palace 一個容許誤差。下面的門檻只示範寫法；請自行選擇：
+
+```python
+from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
+
+sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
+sim.set_convergence(
+    ModeFrequency(modes=[1]).within(relative=1e-5),
+    SurfaceEpr.each("MA", "MS", "SA").within(relative=2e-2),
+    ErrorIndicator().below(1e-2),
+)
+```
+
+`amr_max_passes=8` 允許八次細化，也就是九次求解；每次求解是一個 pass，pass 1 求解 `mesh()` 寫出的網格。模態 1 的頻率在某個 pass 成立，是指它與前一個 pass 相比變化至多十萬分之一。Surface EPR 這一行為每種介面類別各宣告一條準則，各自作用於該類別每個模態的全表面參與率；它需要在 `mesh()` 之前以三種規格呼叫 `set_surface_epr`。有宣告時 Palace 自己的容許誤差不再結束執行，所以不給 `amr_tolerance`：`write_config()` 會拒絕它，並寫出應改寫的 `ErrorIndicator().below(...)`。它也會在 `num_modes=2` 時拒絕 `ModeFrequency(modes=[3])`，以及被 `set_epr_request(surface_interfaces=...)` 排除的類別。
+
+在這個版本中，Palace 仍會執行全部九次求解。回傳執行的 `result.convergence` 與可信度報告會說明每條準則在哪個 pass 都已成立、最後成立的是哪一條，或在最後一個 pass 上哪一條仍不成立、與門檻差多少。所有的量與檢查列在[本徵模態契約](../specs/palace-eigenmode.qmd#eigenmode-convergence)與共用的[收斂宣告](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)。
 
 ## 建立實際後端輸入 {#build-the-real-backend-inputs}
 
