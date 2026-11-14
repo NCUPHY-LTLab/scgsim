@@ -124,11 +124,21 @@ class PalaceSimulation(ABC):
         """Write ``config.json`` and its metadata for the current mesh; see the problem class."""
 
     def __post_init__(self) -> None:
-        """Fill the problem's defaults into the numerical controls the constructor was given.
+        """Check the route setting the constructor was given, and fill the problem's numerical defaults.
+
+        The constructor states a route setting as ``set_route`` does, so it is checked by the same rule
+        and a refusal names the constructor.
 
         Raises:
-            TypeError: ``numerical`` is not a ``NumericalControls``.
+            ValueError: ``route`` is not ``"A"`` or ``"B"``.
+            TypeError: ``approximation_profile`` is neither None nor an ``ApproximationProfile``, or
+                ``numerical`` is not a ``NumericalControls``.
         """
+        self.route, self.approximation_profile = checked_route_setting(
+            self.route,
+            self.approximation_profile,
+            RouteCall(type(self).__name__, "route={route}"),
+        )
         self.numerical = self._with_problem_defaults(self.numerical)
 
     # ---- Binding and geometry settings --------------------------------------------------------------

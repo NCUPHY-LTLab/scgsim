@@ -35,8 +35,9 @@ _WHERE_VACUUM = "the GeometryPlan, or the call to set_vacuum_region"
 class RouteCall:
     """The call that states a route setting, which a refusal of that setting names.
 
-    ``name`` is the call (``set_route`` or ``simulation_drc``); ``route_argument`` spells how it takes the
-    route, with ``{route}`` standing for the route as Python writes it.
+    ``name`` is the call (``set_route``, ``simulation_drc`` or the simulation class a constructor call
+    names); ``route_argument`` spells how it takes the route, with ``{route}`` standing for the route as
+    Python writes it.
     """
 
     name: str
