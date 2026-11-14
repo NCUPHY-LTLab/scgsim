@@ -74,6 +74,11 @@ def apply_attributes(groups: Groups) -> None:
     """
     import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
 
+    # Gmsh keeps the name table when the groups are removed, and a kept name wins over the name a new
+    # group is added with: once a split group shifts the numbering, every later tag would carry the name
+    # of the primary group that had its number.  So the names go first.
+    for dim, tag in gmsh.model.getPhysicalGroups():
+        gmsh.model.removePhysicalName(gmsh.model.getPhysicalName(dim, tag))
     gmsh.model.removePhysicalGroups()
     for name, record in sorted(groups["volumes"].items()):
         (attribute,) = record["attributes"]
