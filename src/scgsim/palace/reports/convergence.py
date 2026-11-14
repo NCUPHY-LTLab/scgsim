@@ -135,7 +135,7 @@ def _verdict_words(check: ConvergenceCheck) -> str:
         )
         return (
             f"Converged at pass {verdict.pass_number}, of the {read}: every criterion held {held}. "
-            f"Last to hold: {', '.join(verdict.last_to_hold)}, from pass {verdict.last_to_hold_from}. "
+            f"Last to hold: {'; '.join(verdict.last_to_hold)}, from pass {verdict.last_to_hold_from}. "
             f"{read_after}{_reading_notes(check, verdict.pass_number)}"
         )
     last = check.passes[-1]
@@ -213,15 +213,20 @@ def _failure(item: CriterionAtPass) -> str:
     named = (
         item.criterion.label
         if len(item.values) == 1 and worst.label == criterion.label
-        else f"{criterion.label} ({worst.label})"
+        else f"{criterion.label} ({_within(worst.label, criterion.label)})"
     )
     if worst.measured is None:
-        return f"{named}: unavailable, {worst.unavailable}"
+        return f"{named}: not measured, {worst.unavailable}"
     times = worst.measured / criterion.threshold
     return (
         f"{named}: {_measured_words(criterion)} {_number(worst.measured, criterion)}, "
-        f"{times:.3g} times the declared {_threshold_words(criterion)}"
+        f"above the declared {_number(criterion.threshold, criterion)} ({times:.3g} times it)"
     )
+
+
+def _within(value_label: str, criterion_label: str) -> str:
+    """A number's label without the criterion's label it starts with: ``excitation signal``."""
+    return value_label.removeprefix(f"{criterion_label}, ")
 
 
 def pass_table_html(check: ConvergenceCheck) -> str:
@@ -278,13 +283,21 @@ def pass_table_html(check: ConvergenceCheck) -> str:
 def _cell(item: CriterionAtPass) -> str:
     """Whether the criterion holds, by its worst number; why that number is missing when it is."""
     worst = item.worst
-    mark = "holds" if item.holds else "fails"
     if worst.measured is None:
         # Pass 1 of a change criterion has the same reason for every number: say it once.
         shared = len({value.unavailable for value in item.values}) == 1
-        which = "" if shared or len(item.values) == 1 else f" ({worst.label})"
-        return html_cell("td", f"{mark}: {worst.unavailable}{which}")
-    which = "" if len(item.values) == 1 else f" ({worst.label})"
+        which = (
+            ""
+            if shared or len(item.values) == 1
+            else f" ({_within(worst.label, item.criterion.label)})"
+        )
+        return html_cell("td", f"not measured: {worst.unavailable}{which}")
+    mark = "holds" if item.holds else "fails"
+    which = (
+        ""
+        if len(item.values) == 1
+        else f" ({_within(worst.label, item.criterion.label)})"
+    )
     return html_cell("td", f"{mark}: {_number(worst.measured, item.criterion)}{which}")
 
 
@@ -319,7 +332,7 @@ def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
 
 
 def _in_a_row(passes: int) -> str:
-    return "1 pass" if passes == 1 else f"{passes} passes in a row"
+    return "1 pass in a row" if passes == 1 else f"{passes} passes in a row"
 
 
 def _measured(value: ValueAtPass) -> float | None:

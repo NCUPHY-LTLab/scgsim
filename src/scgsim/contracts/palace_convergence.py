@@ -774,7 +774,7 @@ def _previous(
     if problems[position] is not None:
         return f"no previous pass to compare with: {problems[position]}"
     if number == 1:
-        return "no previous pass to compare with"
+        return "no pass before it"
     if position == 0 or passes[position - 1].number != number - 1:
         return f"no previous pass to compare with: pass {number - 1} was not read"
     if problems[position - 1] is not None:

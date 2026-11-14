@@ -4,7 +4,7 @@
 the Surface-EPR rows and margins, the Eigenmode EPR selection) and names, for every number it reads, the
 result table, the row and the columns.  This is the one place that decides which columns make up a quantity:
 "MA, whole surfaces" is the ``p_surf`` column of every whole-surface ``Dielectric`` entry of kind ``MA``, and
-"MA beyond 1 um" that of every margin entry of kind ``MA`` at 1 um, read from the index entries the same
+"MA, 1 um or more from the gap edge" that of every margin entry of kind ``MA`` at 1 um, read from the index entries the same
 config writes.  The check (``scgsim.contracts.palace_convergence``) reads only the plan.
 """
 
