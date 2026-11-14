@@ -380,6 +380,7 @@ def change_figures(check: ConvergenceCheck, theme: ReportTheme) -> list[Any]:
                 first.threshold, f"declared: at most {_number(first.threshold, first)}"
             ),
             theme=theme,
+            legend_rows=len(traces),
         ).figure()
         if figure is not None:
             figures.append(figure)
