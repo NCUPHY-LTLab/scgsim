@@ -53,9 +53,9 @@ sim.set_convergence(
 
 在這個版本中，Palace 仍會執行全部七次求解。讀取回傳的執行時，`result.convergence.verdict` 與可信度報告會說明執行在哪個 pass 已收斂，例如：
 
-> Converged at pass 4 of the 7 passes run: every criterion held at passes 3 to
-> 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3. 3 more passes ran
-> after it, up to amr_max_passes.
+> Converged at pass 4, of the 7 passes read (passes 1 to 7): every criterion
+> held at passes 3 to 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3.
+> 3 more passes were read after it.
 
 所有的量（對角、次對角、整個矩陣、依介面類別的 Surface EPR）與所有檢查，列在[收斂宣告](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)。
 

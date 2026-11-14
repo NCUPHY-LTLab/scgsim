@@ -57,16 +57,23 @@ def verdict_card(check: ConvergenceCheck) -> str:
     if verdict.state == "converged":
         return f"converged at pass {verdict.pass_number}"
     if verdict.state == "not_converged":
-        return f"not converged in {verdict.passes_run} passes"
+        return f"not converged in {_passes(verdict.passes_read)} read"
     return "not declared"
 
 
 def verdict_sentence(check: ConvergenceCheck) -> str:
-    """The verdict as a sentence: at which pass, which criterion held last, or what still fails and by how much."""
+    """The verdict as a sentence: at which pass, which criterion held last, or what still fails and by how much.
+
+    It speaks of the passes read: every pass of a returned run, only some of a partly returned one.  A pass
+    is named by Palace's number, counted from the solve on the input mesh.
+    """
     verdict = check.verdict
     plan = check.plan
     if plan is None:
         return "Convergence is not declared for this run."
+    if not check.passes:
+        return "Not converged: the run folder holds no pass to check."
+    read = _passes_read(check)
     in_a_row = plan.minimum_converged_passes
     if verdict.state == "converged" and verdict.pass_number is not None:
         first = verdict.pass_number - in_a_row + 1
@@ -75,27 +82,43 @@ def verdict_sentence(check: ConvergenceCheck) -> str:
             if in_a_row == 1
             else f"at passes {first} to {verdict.pass_number}, {in_a_row} in a row"
         )
-        after = verdict.passes_after_convergence
-        ran_after = (
-            "No pass ran after it."
+        after = verdict.passes_read_after or 0
+        read_after = (
+            "No pass was read after it."
             if not after
-            else f"{after} more pass{'es' if after > 1 else ''} ran after it, up to amr_max_passes."
+            else f"{after} more {'pass was' if after == 1 else 'passes were'} read after it."
         )
         return (
-            f"Converged at pass {verdict.pass_number} of the {verdict.passes_run} passes run: every criterion "
-            f"held {held}. Last to hold: {', '.join(verdict.last_to_hold)}, from pass "
-            f"{verdict.last_to_hold_from}. {ran_after}"
+            f"Converged at pass {verdict.pass_number}, of the {read}: every criterion held {held}. "
+            f"Last to hold: {', '.join(verdict.last_to_hold)}, from pass {verdict.last_to_hold_from}. "
+            f"{read_after}"
         )
-    if not check.passes:
-        return "Not converged: the run folder holds no pass to check."
     last = check.passes[-1]
     if not verdict.failing:
         return (
-            f"Not converged within the {verdict.passes_run} passes run: every criterion holds at pass "
-            f"{last.number}, for {last.streak} of the {in_a_row} passes in a row the declaration needs."
+            f"Not converged in the {read}: every criterion holds at pass {last.number}, for "
+            f"{last.streak} of the {in_a_row} passes in a row the declaration needs."
         )
     failing = "; ".join(_failure(item) for item in verdict.failing)
-    return f"Not converged within the {verdict.passes_run} passes run. At pass {last.number}: {failing}."
+    return f"Not converged in the {read}. At pass {last.number}: {failing}."
+
+
+def _passes_read(check: ConvergenceCheck) -> str:
+    """``4 passes read (passes 1 to 4)``, or ``3 passes read (passes 1, 4 and 5)`` when some are missing."""
+    numbers = [item.number for item in check.passes]
+    if len(numbers) == 1:
+        which = f"pass {numbers[0]}"
+    elif numbers == list(range(numbers[0], numbers[0] + len(numbers))):
+        which = f"passes {numbers[0]} to {numbers[-1]}"
+    else:
+        which = (
+            "passes " + ", ".join(str(n) for n in numbers[:-1]) + f" and {numbers[-1]}"
+        )
+    return f"{_passes(len(numbers))} read ({which})"
+
+
+def _passes(count: int) -> str:
+    return f"{count} pass" if count == 1 else f"{count} passes"
 
 
 def _failure(item: CriterionAtPass) -> str:

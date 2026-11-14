@@ -131,7 +131,7 @@ def test_a_relative_change_compares_each_pass_with_the_one_before(tmp_path):
     assert third.holds
     assert check.verdict.state == "converged"
     assert check.verdict.pass_number == 3
-    assert check.verdict.passes_after_convergence == 0
+    assert check.verdict.passes_read_after == 0
 
 
 def test_an_absolute_change_is_in_the_unit_of_the_number(tmp_path):
@@ -184,7 +184,7 @@ def test_minimum_converged_passes_counts_passes_in_a_row(tmp_path):
     assert [item.streak for item in check.passes] == [0, 1, 0, 1, 2, 3]
     assert check.verdict.state == "converged"
     assert check.verdict.pass_number == 5
-    assert check.verdict.passes_after_convergence == 1
+    assert check.verdict.passes_read_after == 1
     assert check.verdict.last_to_hold == ("error indicator (Norm)",)
     assert check.verdict.last_to_hold_from == 4
 
@@ -213,7 +213,7 @@ def test_a_run_that_never_holds_names_what_fails_at_its_last_pass(tmp_path):
     )
     check = check_convergence(_plan(_diagonal()), passes)
     assert check.verdict.state == "not_converged"
-    assert check.verdict.passes_run == 3
+    assert check.verdict.passes_read == 3
     (failing,) = check.verdict.failing
     assert failing.worst.label == "C[a][a]"
     assert failing.worst.measured == pytest.approx(1e-15 / 102e-15)
@@ -317,7 +317,7 @@ def test_no_pass_is_not_converged():
     """A folder with no pass read has no verdict but ``not_converged`` over zero passes."""
     check = check_convergence(_plan(_error(0.1)), [])
     assert check.verdict.state == "not_converged"
-    assert check.verdict.passes_run == 0
+    assert check.verdict.passes_read == 0
 
 
 def test_the_plan_payload_round_trips_and_names_its_schema():
@@ -369,3 +369,59 @@ def test_the_check_imports_only_the_standard_library():
             imported.add((node.module or "").split(".")[0])
     assert imported <= set(sys.stdlib_module_names)
     assert "__future__" not in imported
+
+
+def test_two_rows_with_one_index_make_the_number_unavailable(tmp_path):
+    """A second row ``i = 1`` is not ignored: the reading is ambiguous and never holds (round 1, B2)."""
+    folders = _passes(tmp_path, [(1e-15, 0.0, 1e-15), (1e-15, 0.0, 1e-15)])
+    table = folders[1].path / "terminal-C.csv"
+    table.write_text(
+        table.read_text(encoding="utf-8") + "1,9.0e-15,0.0\n", encoding="utf-8"
+    )
+    check = check_convergence(_plan(_diagonal()), folders)
+    first = check.passes[1].criteria[0].values[0]
+    assert first.value is None and not first.holds
+    assert (
+        first.unavailable == "terminal-C.csv has 2 rows i = 1, so the row is ambiguous"
+    )
+    assert check.verdict.state == "not_converged"
+
+
+def test_a_repeated_column_makes_the_table_unavailable(tmp_path):
+    """A table that repeats a header gives no number at all, with the reason (round 1, B2)."""
+    folders = _passes(tmp_path, [(1e-15, 0.0, 1e-15), (1e-15, 0.0, 1e-15)])
+    (folders[1].path / "terminal-C.csv").write_text(
+        "i,C[i][1] (F),C[i][1] (F)\n1,1e-15,2e-15\n2,0.0,1e-15\n", encoding="utf-8"
+    )
+    check = check_convergence(_plan(_diagonal()), folders)
+    values = check.passes[1].criteria[0].values
+    assert all(value.value is None and not value.holds for value in values)
+    assert values[0].unavailable == (
+        "terminal-C.csv repeats the column(s) ['C[i][1] (F)'], so its cells are ambiguous"
+    )
+
+
+def test_passes_after_convergence_are_counted_among_the_passes_read(tmp_path):
+    """Passes 1, 4 and 5 are three passes read; what comes after convergence is counted among them (B3).
+
+    Palace's numbers would give 3 - 5 = -2 and 3 - 4 = -1 passes after.
+    """
+    folder = tmp_path / "results/palace"
+    passes = [
+        PassFolder(number, _error_pass(folder / f"iteration{number}", norm))
+        for number, norm in ((1, 0.5), (4, 0.01), (5, 0.01))
+    ]
+    check = check_convergence(_plan(_error(0.02), in_a_row=2), passes)
+    verdict = check.verdict
+    assert (verdict.pass_number, verdict.passes_read, verdict.passes_read_after) == (
+        5,
+        3,
+        0,
+    )
+    check = check_convergence(_plan(_error(0.02), in_a_row=1), passes)
+    verdict = check.verdict
+    assert (verdict.pass_number, verdict.passes_read, verdict.passes_read_after) == (
+        4,
+        3,
+        1,
+    )

@@ -31,7 +31,7 @@ from scgsim.palace.results.artifacts import (
     to_float,
     validate_contract_schema,
 )
-from scgsim.palace.results.convergence import read_convergence
+from scgsim.palace.results.convergence import check_passes, read_plan
 from scgsim.palace.results.index_contract import (
     RouteConsistency,
     require_index_map_schema,
@@ -156,8 +156,10 @@ def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
     returned_receipt = build_returned_receipt(records.returned_receipt)
     cost = _build_cost(records.palace_json)
     performance = _build_performance(records.palace_json)
-    convergence = read_convergence(
-        root, handoff, problem, _passes(root, problem, records)
+    # The passes are read only for a declared run, so one without a plan costs what it did before.
+    plan = read_plan(root, handoff, problem)
+    convergence = check_passes(
+        plan, () if plan is None else _passes(root, problem, records)
     )
     return ResolvedRunData(
         run_dir=root,

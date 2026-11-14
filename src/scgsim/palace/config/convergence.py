@@ -27,7 +27,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from numbers import Real
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from scgsim.contracts.palace_convergence import Test
 from scgsim.contracts.palace_run_folder import EIGENMODE, ELECTROSTATIC
@@ -38,6 +38,10 @@ from .numerical import NumericalControls
 
 _WHERE_SET_CONVERGENCE = "the call to set_convergence"
 _WHERE_NUMERICAL_OR_CONVERGENCE = "the calls to set_numerical and set_convergence"
+
+# The tests a quantity offers: a change for the solved quantities, a value for Palace's indicator.
+_CHANGE_TESTS: tuple[Test, ...] = ("relative_change", "absolute_change")
+_VALUE_TESTS: tuple[Test, ...] = ("at_most",)
 
 Problem = Literal["Eigenmode", "Electrostatic"]
 
@@ -59,16 +63,35 @@ class Capacitance:
     ``matrix()`` (the diagonal and each pair once) or ``elements([(a, b), ...])``.  Element ``C[a][b]`` is
     the charge on terminal ``a`` with terminal ``b`` at 1 V, row ``a`` and column ``b`` of
     ``terminal-C.csv``.  Terminal names are checked when ``write_config()`` runs.
+
+    Raises on build:
+        ValueError: the selection is not one of the six, ``element`` names other than one pair,
+            ``elements`` names no pair or a pair twice, a pair is not two non-empty names, or
+            ``sub_diagonal`` has an offset that is not an integer of at least 1.
     """
+
+    tests: ClassVar[tuple[Test, ...]] = _CHANGE_TESTS
 
     selection: CapacitanceSelection
     pairs: tuple[tuple[str, str], ...] = ()
     offset: int | None = None
 
+    def __post_init__(self) -> None:
+        """Check the selection and its pairs or offset: the one check every way of building one goes through."""
+        _check_capacitance(self)
+        object.__setattr__(
+            self,
+            "pairs",
+            tuple(
+                _terminal_pair(pair, f"Capacitance.{self.selection}")
+                for pair in self.pairs
+            ),
+        )
+
     @classmethod
     def element(cls, a: str, b: str) -> Capacitance:
         """The one element ``C[a][b]``; ``a == b`` is a diagonal element."""
-        return cls("element", (_terminal_pair((a, b), "Capacitance.element"),))
+        return cls("element", ((a, b),))
 
     @classmethod
     def diagonal(cls) -> Capacitance:
@@ -82,13 +105,6 @@ class Capacitance:
         Raises:
             ValueError: ``offset`` is not an integer of at least 1.
         """
-        if type(offset) is not int or offset < 1:
-            raise ValueError(
-                Declared(
-                    "Capacitance.sub_diagonal offset",
-                    "the call to Capacitance.sub_diagonal",
-                ).expected("offset", "an integer of at least 1", offset)
-            )
         return cls("sub_diagonal", offset=offset)
 
     @classmethod
@@ -108,25 +124,15 @@ class Capacitance:
         Raises:
             ValueError: ``pairs`` is empty or names a pair twice, or a name is not non-empty text.
         """
-        where = "the call to Capacitance.elements"
-        if (
-            isinstance(pairs, (str, bytes))
-            or not isinstance(pairs, Sequence)
-            or not pairs
-        ):
+        if isinstance(pairs, (str, bytes)) or not isinstance(pairs, Sequence):
             raise ValueError(
-                Declared("Capacitance.elements", where).refusal(
+                Declared(
+                    "Capacitance.elements", "the call to Capacitance.elements"
+                ).refusal(
                     f"takes a non-empty list of (a, b) terminal pairs; {found_text(pairs)}"
                 )
             )
-        checked = tuple(_terminal_pair(pair, "Capacitance.elements") for pair in pairs)
-        if len(set(checked)) != len(checked):
-            raise ValueError(
-                Declared("Capacitance.elements", where).refusal(
-                    f"names a pair more than once; {found_text(list(checked))}"
-                )
-            )
-        return cls("elements", checked)
+        return cls("elements", tuple(pairs))
 
     @property
     def label(self) -> str:
@@ -154,6 +160,58 @@ class Capacitance:
         return _change_criterion(self, relative, ("absolute_f", absolute_f))
 
 
+def _check_capacitance(quantity: Capacitance) -> None:
+    """Refuse a selection that is not one of the six, or pairs or an offset that do not fit it."""
+    selection, pairs, offset = quantity.selection, quantity.pairs, quantity.offset
+    where = f"the call to Capacitance.{selection}"
+    selections = (
+        "element",
+        "diagonal",
+        "sub_diagonal",
+        "off_diagonal",
+        "matrix",
+        "elements",
+    )
+    if selection not in selections:
+        raise ValueError(
+            Declared("Capacitance selection", "the call to Capacitance").expected(
+                "selection", f"one of {selections}", selection
+            )
+        )
+    if not isinstance(pairs, tuple):
+        raise ValueError(
+            Declared(f"Capacitance.{selection}", where).expected(
+                "pairs", "a tuple of (a, b) pairs", pairs
+            )
+        )
+    named = {"element": len(pairs) == 1, "elements": bool(pairs)}.get(
+        selection, not pairs
+    )
+    if not named or len(set(pairs)) != len(pairs):
+        raise ValueError(
+            Declared(f"Capacitance.{selection}", where).refusal(
+                {
+                    "element": "names exactly one (a, b) pair",
+                    "elements": "takes a non-empty list of (a, b) terminal pairs, each pair once",
+                }.get(selection, "names no pair")
+                + f"; {found_text(list(pairs))}"
+            )
+        )
+    if selection == "sub_diagonal":
+        if type(offset) is not int or offset < 1:
+            raise ValueError(
+                Declared("Capacitance.sub_diagonal offset", where).expected(
+                    "offset", "an integer of at least 1", offset
+                )
+            )
+    elif offset is not None:
+        raise ValueError(
+            Declared(f"Capacitance.{selection}", where).expected(
+                "offset", "None", offset
+            )
+        )
+
+
 def element_label(a: str, b: str) -> str:
     """How the report names element ``C[a][b]``."""
     return f"C[{a}][{b}]"
@@ -169,6 +227,8 @@ class ModeFrequency:
     Raises on build:
         ValueError: ``modes`` is empty, repeats a mode, or holds something other than an integer of at least 1.
     """
+
+    tests: ClassVar[tuple[Test, ...]] = _CHANGE_TESTS
 
     modes: tuple[int, ...] | None = None
 
@@ -213,6 +273,8 @@ class SurfaceEpr:
         ValueError: the kind is not ``MA``, ``MS`` or ``SA``, ``margin_um`` is not positive, a selection is
             empty or repeats an item, or both ``modes`` and ``terminals`` are given.
     """
+
+    tests: ClassVar[tuple[Test, ...]] = _CHANGE_TESTS
 
     interface_kind: str
     margin_um: float | None = None
@@ -341,6 +403,8 @@ class SurfaceEprKinds:
 class ErrorIndicator:
     """The norm of Palace's AMR error indicator (``Norm`` of ``error-indicators.csv``), unitless, on both problems."""
 
+    tests: ClassVar[tuple[Test, ...]] = _VALUE_TESTS
+
     @property
     def label(self) -> str:
         """How the report names the quantity."""
@@ -352,7 +416,11 @@ class ErrorIndicator:
         Raises:
             ValueError: ``value`` is not positive and finite.
         """
-        return Criterion(self, "at_most", _threshold(self, "value", value, "below"))
+        return checked_criterion(
+            Criterion(self, "at_most", value),
+            "the call to ErrorIndicator.below",
+            "value",
+        )
 
 
 ConvergenceQuantity = Capacitance | ModeFrequency | SurfaceEpr | ErrorIndicator
@@ -373,6 +441,48 @@ class Criterion:
     def label(self) -> str:
         """How the report names the criterion: its quantity's label."""
         return self.quantity.label
+
+
+def checked_criterion(
+    criterion: Any, where: str, threshold_name: str = "threshold"
+) -> Criterion:
+    """``criterion`` with its threshold as a float, after the one check every criterion goes through.
+
+    The quantity must be one of the four, the test one the quantity offers (a change for ``Capacitance``,
+    ``ModeFrequency`` and ``SurfaceEpr``, a value for ``ErrorIndicator``) and the threshold positive and
+    finite.  ``within``, ``below`` and ``set_convergence`` all call it; ``where`` names the call to change.
+
+    Raises:
+        ValueError: ``criterion`` is not a ``Criterion``, or one of those does not hold.
+    """
+    if not isinstance(criterion, Criterion) or not isinstance(
+        criterion.quantity, (Capacitance, ModeFrequency, SurfaceEpr, ErrorIndicator)
+    ):
+        raise ValueError(
+            Declared("set_convergence() argument", where).refusal(
+                "takes criteria, a quantity of Capacitance, ModeFrequency, SurfaceEpr or ErrorIndicator "
+                f"with its threshold, such as ErrorIndicator().below(...); {found_text(type(criterion).__name__)}"
+            )
+        )
+    quantity = criterion.quantity
+    if criterion.test not in quantity.tests:
+        raise ValueError(
+            Declared(f"{quantity.label} criterion", where).refusal(
+                f"tests {criterion.test!r}, and {type(quantity).__name__} offers {list(quantity.tests)}: "
+                + (
+                    "bound its value with ErrorIndicator().below(...)"
+                    if isinstance(quantity, ErrorIndicator)
+                    else "bound its change with .within(relative=...) or its absolute form"
+                )
+            )
+        )
+    if not _positive_finite(criterion.threshold):
+        raise ValueError(
+            Declared(f"{quantity.label} criterion", where).expected(
+                threshold_name, "a positive finite number", criterion.threshold
+            )
+        )
+    return Criterion(quantity, criterion.test, float(criterion.threshold))
 
 
 @dataclass(frozen=True)
@@ -422,7 +532,17 @@ class ConvergenceDeclaration:
             ValueError: no criterion is given, an argument is not a criterion, a quantity does not fit the
                 problem, or ``minimum_converged_passes`` is not an integer of at least 1.
         """
-        if not criteria:
+        flat = tuple(
+            checked_criterion(item, _WHERE_SET_CONVERGENCE)
+            for argument in criteria
+            for item in (
+                argument.criteria
+                if isinstance(argument, CriterionGroup)
+                else (argument,)
+            )
+        )
+        # Checked after flattening, so an empty group declares nothing either.
+        if not flat:
             raise ValueError(
                 Declared(
                     f"{simulation}.set_convergence()", _WHERE_SET_CONVERGENCE
@@ -431,15 +551,6 @@ class ConvergenceDeclaration:
                     "set_convergence(None) to remove the declaration"
                 )
             )
-        flat = tuple(
-            item
-            for argument in criteria
-            for item in (
-                argument.criteria
-                if isinstance(argument, CriterionGroup)
-                else (argument,)
-            )
-        )
         for criterion in flat:
             _check_fit(criterion, problem, simulation)
         if type(minimum_converged_passes) is not int or minimum_converged_passes < 1:
@@ -507,17 +618,10 @@ class ConvergenceDeclaration:
             )
 
 
-def _check_fit(criterion: Any, problem: Problem, simulation: str) -> None:
-    """Refuse an argument that is not a criterion, or a quantity the problem's tables do not hold."""
+def _check_fit(criterion: Criterion, problem: Problem, simulation: str) -> None:
+    """Refuse a quantity the problem's tables do not hold."""
     taken = _QUANTITIES[problem]
     names = ", ".join(kind.__name__ for kind in taken)
-    if not isinstance(criterion, Criterion):
-        raise ValueError(
-            Declared(f"{simulation}.set_convergence()", _WHERE_SET_CONVERGENCE).refusal(
-                f"takes criteria, a quantity of {names} with its threshold, such as "
-                f"ErrorIndicator().below(...); {found_text(type(criterion).__name__)}"
-            )
-        )
     quantity = criterion.quantity
     if not isinstance(quantity, taken):
         raise ValueError(
@@ -559,31 +663,16 @@ def _change_criterion(
                 f"{found_text({'relative': relative, absolute_name: absolute_value})}"
             )
         )
+    where = f"the call to {type(quantity).__name__}.within"
     if relative is not None:
-        return Criterion(
-            quantity,
-            "relative_change",
-            _threshold(quantity, "relative", relative, "within"),
+        return checked_criterion(
+            Criterion(quantity, "relative_change", relative), where, "relative"
         )
-    return Criterion(
-        quantity,
-        "absolute_change",
-        _threshold(quantity, absolute_name, absolute_value, "within"),
+    # Exactly one was given, so the absolute threshold is set here.
+    assert absolute_value is not None
+    return checked_criterion(
+        Criterion(quantity, "absolute_change", absolute_value), where, absolute_name
     )
-
-
-def _threshold(
-    quantity: ConvergenceQuantity, name: str, value: Any, call: str
-) -> float:
-    """``value`` as a float threshold; one that is not positive and finite is refused."""
-    if not _positive_finite(value):
-        raise ValueError(
-            Declared(
-                f"{quantity.label} criterion",
-                f"the call to {type(quantity).__name__}.{call}",
-            ).expected(name, "a positive finite number", value)
-        )
-    return float(value)
 
 
 def _positive_finite(value: Any) -> bool:
@@ -676,5 +765,6 @@ __all__ = [
     "ModeFrequency",
     "SurfaceEpr",
     "SurfaceEprKinds",
+    "checked_criterion",
     "element_label",
 ]

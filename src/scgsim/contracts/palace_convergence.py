@@ -343,26 +343,24 @@ class PassCheck:
 class ConvergenceVerdict:
     """What the passes decide.
 
-    ``converged``: every criterion held for ``minimum_converged_passes`` passes in a row, first at
-    ``pass_number``; ``last_to_hold`` names the criteria whose run of holding passes began last, at
-    ``last_to_hold_from``.  ``not_converged``: no pass reached that; ``failing`` are the criteria that do not
-    hold at the last pass read (empty when all hold there but not yet for enough passes in a row).
-    ``not_declared``: the run has no plan.  ``passes_run`` counts the passes read.
+    ``converged``: every criterion held for ``minimum_converged_passes`` passes in a row, first at Palace's
+    pass ``pass_number``; ``last_to_hold`` names the criteria whose run of holding passes began last, at
+    pass ``last_to_hold_from``.  ``not_converged``: no pass reached that; ``failing`` are the criteria that do
+    not hold at the last pass read (empty when all hold there but not yet for enough passes in a row).
+    ``not_declared``: the run has no plan.
+
+    ``passes_read`` counts the pass folders the check read, and ``passes_read_after`` those of them after the
+    converged pass, by position among the passes read.  Both differ from Palace's pass numbers when a folder
+    returned only some passes (passes 1, 4 and 5 are three passes read).
     """
 
     state: Literal["converged", "not_converged", "not_declared"]
-    passes_run: int
+    passes_read: int
     pass_number: int | None = None
+    passes_read_after: int | None = None
     last_to_hold: tuple[str, ...] = ()
     last_to_hold_from: int | None = None
     failing: tuple[CriterionAtPass, ...] = ()
-
-    @property
-    def passes_after_convergence(self) -> int | None:
-        """How many passes ran after the pass the run converged at; None when it did not converge."""
-        if self.pass_number is None:
-            return None
-        return self.passes_run - self.pass_number
 
 
 @dataclass(frozen=True)
@@ -376,7 +374,7 @@ class ConvergenceCheck:
     @classmethod
     def not_declared(cls) -> "ConvergenceCheck":
         """The check of a run whose folder has no convergence plan."""
-        return cls(None, (), ConvergenceVerdict("not_declared", passes_run=0))
+        return cls(None, (), ConvergenceVerdict("not_declared", passes_read=0))
 
 
 def check_convergence(
@@ -460,10 +458,15 @@ class _Table:
         if row.column not in self.headers:
             return f"{self.name} has no index column {row.column!r}"
         position = self.headers.index(row.column)
-        for cells in self.rows:
-            if _number(cells[position]) == row.index:
-                return cells
-        return f"{self.name} has no row {row.column} = {row.index}"
+        matching = [
+            cells for cells in self.rows if _number(cells[position]) == row.index
+        ]
+        if not matching:
+            return f"{self.name} has no row {row.column} = {row.index}"
+        if len(matching) > 1:
+            # Which of them Palace meant cannot be told, so neither is read.
+            return f"{self.name} has {len(matching)} rows {row.column} = {row.index}, so the row is ambiguous"
+        return matching[0]
 
 
 def _read_table(path: Path) -> _Table | str:
@@ -479,6 +482,12 @@ def _read_table(path: Path) -> _Table | str:
     if not lines:
         return f"{path.name} is empty"
     headers, rows = lines[0], tuple(lines[1:])
+    repeated = sorted({header for header in headers if headers.count(header) > 1})
+    if repeated:
+        # A repeated column makes every cell under that name ambiguous; the whole table is not read.
+        return (
+            f"{path.name} repeats the column(s) {repeated}, so its cells are ambiguous"
+        )
     if any(len(cells) != len(headers) for cells in rows):
         return f"{path.name} has a row whose cells do not match its headers"
     return _Table(path.name, headers, rows)
@@ -561,7 +570,7 @@ def _verdict(plan: ConvergencePlan, checks: list[PassCheck]) -> ConvergenceVerdi
     if converged_at is None:
         return ConvergenceVerdict(
             "not_converged",
-            passes_run=len(checks),
+            passes_read=len(checks),
             failing=tuple(
                 item
                 for item in (checks[-1].criteria if checks else ())
@@ -575,8 +584,9 @@ def _verdict(plan: ConvergencePlan, checks: list[PassCheck]) -> ConvergenceVerdi
     latest = max(starts)
     return ConvergenceVerdict(
         "converged",
-        passes_run=len(checks),
+        passes_read=len(checks),
         pass_number=checks[converged_at].number,
+        passes_read_after=len(checks) - 1 - converged_at,
         last_to_hold=tuple(
             criterion.label
             for criterion, start in zip(plan.criteria, starts, strict=True)

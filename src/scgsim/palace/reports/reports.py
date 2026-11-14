@@ -42,7 +42,7 @@ from scgsim.palace.results.artifacts import (
     as_int,
     read_optional_json,
 )
-from scgsim.palace.results.convergence import read_convergence
+from scgsim.palace.results.convergence import check_passes, read_plan
 from scgsim.palace.results.index_contract import (
     require_index_map_schema,
     require_manifest_schema,
@@ -261,7 +261,7 @@ def _build_trust_report(
     convergence = (
         resolved.convergence
         if resolved is not None
-        else read_convergence(root, run.handoff, run.problem, collected.passes)
+        else check_passes(read_plan(root, run.handoff, run.problem), collected.passes)
     )
     return PalaceTrustReport(
         run_dir=root,

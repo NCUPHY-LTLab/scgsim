@@ -87,9 +87,9 @@ In this version Palace still runs all seven solves. When you read the returned
 run, `result.convergence.verdict` and the trust report say at which pass the
 run had converged, for example:
 
-> Converged at pass 4 of the 7 passes run: every criterion held at passes 3 to
-> 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3. 3 more passes ran
-> after it, up to amr_max_passes.
+> Converged at pass 4, of the 7 passes read (passes 1 to 7): every criterion
+> held at passes 3 to 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3.
+> 3 more passes were read after it.
 
 The [convergence declaration](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)
 lists every quantity (the diagonal, sub-diagonals, the whole matrix, Surface EPR

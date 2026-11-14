@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import types
@@ -38,7 +39,8 @@ from scgsim.palace import (
 )
 from scgsim.palace.reports.convergence import verdict_sentence
 from scgsim.palace.reports.plotting import plotly
-from scgsim.palace.results.convergence import read_convergence
+from scgsim.palace.results import resolve as resolve_module
+from scgsim.palace.results.convergence import read_plan
 from scgsim.palace.results.snapshots import collect_amr_passes
 from scgsim.palace.results.surface_readers import (
     read_surface_bindings,
@@ -259,16 +261,17 @@ def test_result_reading_gives_the_convergence_of_every_pass(returned):
     assert [item.number for item in check.passes] == [1, 2, 3, 4]
     assert [item.holds for item in check.passes] == [False, False, True, True]
     verdict = check.verdict
-    assert (verdict.state, verdict.pass_number, verdict.passes_run) == (
+    assert (verdict.state, verdict.pass_number, verdict.passes_read) == (
         "converged",
         4,
         4,
     )
     assert verdict.last_to_hold == ("C diagonal",)
     assert verdict.last_to_hold_from == 3
-    assert verdict.passes_after_convergence == 0
+    assert verdict.passes_read_after == 0
     assert verdict_sentence(check).startswith(
-        "Converged at pass 4 of the 4 passes run: every criterion held at passes 3 to 4, 2 in a row."
+        "Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion held at passes 3 to 4, "
+        "2 in a row."
     )
 
 
@@ -341,7 +344,7 @@ def test_the_trust_report_shows_the_verdict_the_table_and_the_thresholds(returne
         trust._ipython_display_()  # noqa: SLF001 -- the notebook display hook
     html = "".join(item.data for item in displayed if isinstance(item.data, str))
     assert "Declared convergence" in html
-    assert "Converged at pass 4 of the 4 passes run" in html
+    assert "Converged at pass 4, of the 4 passes read" in html
     assert "Pass 1</th>" in html and "Pass 4</th>" in html
     assert "A dashed line is the threshold declared with set_convergence()" in html
     assert "set aside: convergence declared" in html
@@ -376,7 +379,7 @@ def test_a_partly_returned_run_shows_the_passes_it_holds(tmp_path):
     assert [item.number for item in check.passes] == [1, 2]
     assert check.verdict.state == "not_converged"
     assert verdict_sentence(check).startswith(
-        "Not converged within the 2 passes run. At pass 2:"
+        "Not converged in the 2 passes read (passes 1 to 2). At pass 2:"
     )
     assert "C diagonal (C[pad][pad]): relative change 0.0099" in verdict_sentence(check)
 
@@ -410,7 +413,7 @@ def test_a_run_without_a_declaration_is_not_declared_and_refuses_an_added_plan(
     assert CONVERGENCE_PLAN not in [entry["path"] for entry in handoff["hashes"]]
     (run.root / CONVERGENCE_PLAN).write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="is not among the inputs"):
-        read_convergence(run.root, handoff, "Electrostatic", ())
+        read_plan(run.root, handoff, "Electrostatic")
 
 
 def test_without_a_declared_indicator_the_indicator_figure_draws_no_line(tmp_path):
@@ -429,3 +432,42 @@ def test_without_a_declared_indicator_the_indicator_figure_draws_no_line(tmp_pat
         if figure.layout.title.text == "AMR error indicator vs AMR pass"
     )
     assert indicator.layout.shapes == ()
+
+
+def test_a_partly_returned_run_counts_the_passes_it_read(tmp_path):
+    """Passes 1, 4 and 5 are three passes read; none is "after convergence" by Palace's numbers (round 1, B3).
+
+    Only iteration1 and iteration4 are kept and the final result is pass 5 (Problem.Iteration 4 + 1 would be
+    5 in a longer run); the criterion is on the indicator, which holds at passes 4 and 5.
+    """
+    run = _returned_run(tmp_path, criteria=(ErrorIndicator().below(0.035),))
+    results = run.root / OUTPUT_DIR
+    (run.root / RETURNED_RECEIPT).unlink()
+    # Renumber the returned passes 1, 2, 3 (final) into 1, 4, 5 as a partial copy of a longer run leaves them.
+    (results / "iteration3").rename(results / "iteration4")
+
+    shutil.rmtree(results / "iteration2")
+    check = inspect_run_trustworthiness(run.root).convergence
+    assert [item.number for item in check.passes] == [1, 4, 5]
+    verdict = check.verdict
+    assert (verdict.state, verdict.pass_number) == ("converged", 5)
+    assert verdict.passes_read == 3
+    assert verdict.passes_read_after == 0
+    sentence = verdict_sentence(check)
+    assert sentence.startswith(
+        "Converged at pass 5, of the 3 passes read (passes 1, 4 and 5)"
+    )
+    assert "-" not in sentence.split("Last to hold")[1]
+    assert "No pass was read after it." in sentence
+
+
+def test_a_run_without_a_plan_reads_no_pass_folder(tmp_path, monkeypatch):
+    """Resolving an undeclared run never collects its passes, so it costs what it did before (round 1, R1)."""
+    run = _returned_run(tmp_path, declare=False)
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("an undeclared run must not collect its passes")
+
+    monkeypatch.setattr(resolve_module, "collect_amr_passes", refuse)
+    result = resolve_palace_result(run.root, expected_handoff_id=run.handoff_id)
+    assert result.convergence.verdict.state == "not_declared"

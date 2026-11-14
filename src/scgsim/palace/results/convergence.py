@@ -1,10 +1,11 @@
-"""Read the declared convergence of a returned run: its bound plan, checked on the passes the folder holds.
+"""Read the declared convergence of a returned run: its sealed plan, then the check of the passes it holds.
 
-``read_convergence`` reads ``metadata/palace_convergence_plan.json`` only when the handoff sealed it, refuses a
-plan that is present but unsealed or changed since, and runs ``scgsim.contracts.palace_convergence``'s
-check on the passes in the order ``collect_amr_passes`` gives them.  The check reads every number from the
-pass folders' tables itself; the snapshots give only the pass numbers and their folders.  A run folder
-without a plan has convergence ``not declared``.
+``read_plan`` reads ``metadata/palace_convergence_plan.json`` only when the handoff sealed it, refuses a plan
+that is present but unsealed or changed since, and returns None for a run that declared nothing, before any
+pass is read.  ``check_passes`` runs ``scgsim.contracts.palace_convergence``'s check on the passes in the
+order ``collect_amr_passes`` gives them; the check reads every number from the pass folders' tables itself,
+and the snapshots give only the pass numbers and their folders.  Callers collect the passes only when there
+is a plan, so a run without a declaration costs what it did before.
 """
 
 from __future__ import annotations
@@ -30,13 +31,10 @@ from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
 from scgsim.refusal import Declared
 
 
-def read_convergence(
-    root: Path,
-    handoff: dict[str, Any],
-    problem: str,
-    passes: Sequence[AmrPassSnapshot],
-) -> ConvergenceCheck:
-    """The convergence check of the run in ``root`` on ``passes``, or ``not declared`` without a plan.
+def read_plan(
+    root: Path, handoff: dict[str, Any], problem: str
+) -> ConvergencePlan | None:
+    """The sealed convergence plan of the run in ``root``, or None when the run declared none.
 
     Raises:
         ValueError: the plan is present but the handoff did not seal it, it changed since, the handoff
@@ -45,7 +43,7 @@ def read_convergence(
     plan_path = root / CONVERGENCE_PLAN
     sealed = _sealed_plan(handoff)
     if sealed is None and not plan_path.is_file():
-        return ConvergenceCheck.not_declared()
+        return None
     _check_sealed(plan_path, sealed)
     plan = ConvergencePlan.from_payload(read_json(plan_path))
     if plan.problem != problem:
@@ -54,6 +52,15 @@ def read_convergence(
                 f"is a plan for {plan.problem}, and the run is {problem}"
             )
         )
+    return plan
+
+
+def check_passes(
+    plan: ConvergencePlan | None, passes: Sequence[AmrPassSnapshot]
+) -> ConvergenceCheck:
+    """The check of ``plan`` on ``passes``, or ``not declared`` without a plan."""
+    if plan is None:
+        return ConvergenceCheck.not_declared()
     return check_convergence(
         plan,
         [PassFolder(snapshot.pass_number, snapshot.path) for snapshot in passes],
@@ -96,4 +103,4 @@ def _check_sealed(plan_path: Path, sealed: dict[str, Any] | None) -> None:
         )
 
 
-__all__ = ["read_convergence"]
+__all__ = ["check_passes", "read_plan"]

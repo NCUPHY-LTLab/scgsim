@@ -14,6 +14,8 @@ from palace_convergence_support import eigenmode, electrostatic
 from scgsim.contracts.palace_run_folder import CONFIG, CONVERGENCE_PLAN, INDEX_MAP
 from scgsim.palace import (
     Capacitance,
+    Criterion,
+    CriterionGroup,
     EigenmodeSim,
     ElectrostaticSim,
     ErrorIndicator,
@@ -63,7 +65,7 @@ def test_each_threshold_keyword_names_its_unit():
         (lambda: ErrorIndicator().below(True), "positive finite number"),
         (lambda: Capacitance.sub_diagonal(0), "integer of at least 1"),
         (lambda: Capacitance.elements([]), "non-empty list"),
-        (lambda: Capacitance.elements([("a", "b"), ("a", "b")]), "more than once"),
+        (lambda: Capacitance.elements([("a", "b"), ("a", "b")]), "each pair once"),
         (lambda: Capacitance.element("a", ""), "two non-empty terminal names"),
         (lambda: ModeFrequency(modes=[0]), "mode numbers from 1"),
         (lambda: ModeFrequency(modes=[1, 1]), "distinct mode numbers"),
@@ -130,6 +132,65 @@ def test_a_quantity_that_does_not_fit_the_simulation_is_refused(
     with pytest.raises(ValueError, match=message) as refused:
         sim_type().set_convergence(criterion)
     assert "Change it in the call to set_convergence" in str(refused.value)
+
+
+@pytest.mark.parametrize(
+    ("criterion", "message"),
+    [
+        (
+            Criterion(Capacitance.diagonal(), "at_most", 0.001),
+            r"tests 'at_most', and Capacitance offers \['relative_change', 'absolute_change'\]",
+        ),
+        (
+            Criterion(ErrorIndicator(), "relative_change", 0.01),
+            r"ErrorIndicator offers \['at_most'\]",
+        ),
+        (
+            Criterion(ModeFrequency(), "relative_change", float("nan")),
+            "threshold must be a positive finite number",
+        ),
+        (
+            Criterion(SurfaceEpr("MA"), "absolute_change", -1.0),
+            "threshold must be a positive finite number",
+        ),
+        (Criterion(ErrorIndicator(), "at_most", True), "positive finite number"),
+    ],
+)
+def test_a_hand_built_criterion_goes_through_the_same_checks(criterion, message):
+    """``set_convergence`` refuses a record the fluent calls could not have built (review round 1, B1).
+
+    A value test on a capacitance would hold at pass 1 and "converge" there; a NaN threshold never compares.
+    """
+    sim_type = (
+        EigenmodeSim
+        if isinstance(criterion.quantity, ModeFrequency)
+        else ElectrostaticSim
+    )
+    with pytest.raises(ValueError, match=message) as refused:
+        sim_type().set_convergence(criterion)
+    assert "Change it in the call to set_convergence" in str(refused.value)
+
+
+def test_an_empty_group_declares_nothing_and_is_refused():
+    """``CriterionGroup(())`` flattens to no criterion, which is refused like ``set_convergence()``."""
+    with pytest.raises(ValueError, match="names no criterion"):
+        ElectrostaticSim().set_convergence(CriterionGroup(()))
+
+
+@pytest.mark.parametrize(
+    ("build", "message"),
+    [
+        (lambda: Capacitance("element"), "names exactly one"),
+        (lambda: Capacitance("elements"), "non-empty list"),
+        (lambda: Capacitance("sub_diagonal"), "integer of at least 1"),
+        (lambda: Capacitance("diagonal", offset=2), "offset must be None"),
+        (lambda: Capacitance("rows"), "selection must be one of"),
+    ],
+)
+def test_a_hand_built_capacitance_goes_through_the_same_checks(build, message):
+    """The class methods and the constructor share one check of the selection."""
+    with pytest.raises(ValueError, match=message):
+        build()
 
 
 @pytest.mark.parametrize("passes", [0, 1.5, True, "2"])
