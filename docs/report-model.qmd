@@ -140,8 +140,10 @@ With a declaration, the Numerical Evidence section of the trust report opens wit
    a percentage of the value and carries the name the AEDT side gives it:
    `Delta %` for a capacitance, `Max Delta Freq. %` for a mode frequency,
    `Max Percent Delta` for a participation;
-3. one figure per criterion: what it measured against the pass on a log axis,
-   with the declared threshold as the dashed line.
+3. the figures: what the criteria measured against the pass on a log axis,
+   with the declared threshold as the dashed line. Criteria that measure one
+   quantity the same way against one threshold share a figure, so MA, MS and SA
+   declared together are three lines under their threshold.
 
 The figures of the quantities themselves follow unchanged. On the error
 indicator figure, the dashed line is the declared `ErrorIndicator` threshold,
