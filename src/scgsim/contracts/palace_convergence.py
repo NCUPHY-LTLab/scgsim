@@ -366,15 +366,20 @@ def returned_passes(results: Path) -> ReturnedPasses:
       otherwise the pass is kept with an ``identity_problem`` and none of its readings is used.
 
     There is no other numbering: a pass's number is recorded and consistent, or the folder is set aside.
-    A table that cannot be read sets its folder aside, or leaves the pass with an ``identity_problem`` when
-    it is needed to tell two folders apart; the other folders are read all the same.  A results folder that
-    cannot be listed at all is set aside whole.
+    A folder or a table that cannot be read sets that folder aside, or leaves the pass with an
+    ``identity_problem`` when it is needed to tell two folders apart; the other folders are read all the
+    same.  Only a results folder that cannot be listed itself is set aside whole.
     """
     try:
         return _returned_passes(results)
     except OSError as error:
-        reason = f"{results.name} cannot be read ({error.strerror or error})"
+        reason = _unread(results.name, error)
         return ReturnedPasses((), (SetAside(results, reason),), "set_aside", reason)
+
+
+def _unread(name: str, error: OSError) -> str:
+    """Why a folder or a table could not be read: its name and the system's reason."""
+    return f"{name} cannot be read ({error.strerror or error})"
 
 
 def _returned_passes(results: Path) -> ReturnedPasses:
@@ -386,12 +391,23 @@ def _returned_passes(results: Path) -> ReturnedPasses:
         if child.is_dir() and (number := _folder_iteration(child.name)) is not None
     )
     for number, folder in iterations:
-        reason = _iteration_problem(folder, number)
+        try:
+            reason = _iteration_problem(folder, number)
+        except OSError as error:
+            # This folder only: its record or its listing cannot be read, the others can.
+            reason = _unread(folder.name, error)
         if reason is None:
             candidates.append((number, folder))
         else:
             set_aside.append(SetAside(folder, reason))
-    final, final_reason, recorded = _top_level(results)
+    try:
+        final, final_reason, recorded = _top_level(results)
+    except OSError as error:
+        final, final_reason, recorded = (
+            "set_aside",
+            f"the final result cannot be read ({error.strerror or error})",
+            None,
+        )
     if final == "pass" and recorded is not None:
         candidates.append((recorded, results))
     elif final in ("unfinished", "set_aside") and final_reason is not None:
@@ -517,7 +533,7 @@ def _table_bytes(path: Path) -> bytes | str:
     try:
         return path.read_bytes()
     except OSError as error:
-        return f"{path.name} cannot be read ({error.strerror or error})"
+        return _unread(path.name, error)
 
 
 def _data_rows(table: bytes) -> int:
@@ -538,7 +554,10 @@ def _merge(candidates: list[tuple[int, Path]]) -> tuple[list[PassFolder], bool]:
         if len(folders) == 1:
             passes.append(PassFolder(number, folders[0]))
             continue
-        differing, unreadable = _differing_tables(folders)
+        try:
+            differing, unreadable = _differing_tables(folders)
+        except OSError as error:
+            differing, unreadable = [], [_unread(f"pass {number}", error)]
         if differing or unreadable:
             names = " and ".join(_source_name(path) for path in folders)
             problem = (
