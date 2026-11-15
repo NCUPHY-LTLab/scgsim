@@ -349,7 +349,7 @@ resources: AedtResources | None = None) -> HandoffPlan`。它以 `prepare_sgb_mo
 
 交接在 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard，清單中列於 `aedt_spec.json` 之後；收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`。在 AEDT 機器上，要求會對照該資料夾解碼，並再次檢查每個檔案。宣告原生建構 `bodies` 或 `region_padding_um` 的要求，或缺少模型鍵的收據來源，會附理由拒絕（決策 6）；不轉換舊 Q3D 要求。
 
-執行期把受 guard 保護的 STEP 匯入空的 Q3D 設計（`import_sgb_model`）：物件必須恰為 guard 的實體，每個面對應到其規劃面，材料與 Region 建立後讀回。接著以各 Net 的 Q3D 類型指派要求的 Net，並在其物件的指定側指派源與匯：實體取每個頂點都位於物件沿該側最外處的平面面，且須相連成一片；片取該處的直線邊，且須構成一段不中斷的線段。面與邊在匯入的讀回容差內取自匯入物件。每個終端在指派後讀回，並從已儲存設計再讀回一次。
+執行期把受 guard 保護的 STEP 匯入空的 Q3D 設計（`import_sgb_model`）：物件必須恰為 guard 的實體，每個面對應到其規劃面，材料與 Region 建立後讀回。在 Route A 中，先把每個導體片群組（`SHEET`）從其所在面複製重建為一個以群組命名的片物件，並設為厚度取自堆疊層薄膜物理厚度（`PreparedSgbModel.sheet_thickness_um`）的 PEC `ThinConductor`，再讀回。接著以各 Net 的 Q3D 類型指派要求的 Net，並在其物件的指定側指派源與匯：實體取每個頂點都位於物件沿該側最外處的平面面，且須相連成一片；片取該處的直線邊，且須構成一段不中斷的線段。面與邊在匯入的讀回容差內取自匯入物件。每個終端在指派後讀回，並從已儲存設計再讀回一次。
 
 結果讀取要求收據的幾何帶有模型身份與 guard 的實體，Net 與終端是要求的那些，且 Region 在讀回容差內為模型的 `VACUUM_REGION` 方盒。
 

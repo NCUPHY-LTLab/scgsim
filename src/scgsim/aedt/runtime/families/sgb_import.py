@@ -17,7 +17,8 @@ before any assignment when what AEDT imported is not the guarded model:
 7. HFSS: one Perfect E per Net over the Route A sheet faces, and a Lumped RLC over the port-sheet faces of
    each junction and of each generic ``LumpedRlc`` (issue #67 decision 8).  Each assignment and its
    readback use the planned name.  Q3D assigns its Nets, with their request's types, and their sources and
-   sinks after the import (:mod:`.q3d_terminals`).
+   sinks after the import (:mod:`.q3d_terminals`); in Route A it first rebuilds each conductor-sheet group
+   as one sheet object, a PEC thin conductor of its film's thickness, since Q3D puts a Net on objects only.
 
 Every port sheet must carry a junction or an RLC.  Lumped Terminal ports wait for the SGB flow's Driven
 Terminal design, and a model that has them is refused, not approximated.
@@ -31,6 +32,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from scgsim.aedt.preparation.sgb_model import PreparedSgbModel, port_group
+from scgsim.aedt.preparation.sgb_q3d import sheet_object_names
 from scgsim.aedt.runtime.families.sgb_boundaries import (
     HfssBoundaryPlan,
     PortRlc,
@@ -49,7 +51,7 @@ from scgsim.aedt.runtime.native.common import (
     native_object_property,
     realize_source_material,
 )
-from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
+from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar, views
 from scgsim.geometry.sgb.output.exchange.guard import (
     FreeFace,
     LoopSegment,
@@ -124,6 +126,10 @@ def import_sgb_model(
             assign_port_rlc(app, rlc, face_copies, tolerance_um)
             for rlc in hfss.lumped_rlcs
         ]
+    if family == "q3d":
+        imported.record["conductor_sheets"] = rebuild_conductor_sheets(
+            app, model, sidecar, imported
+        )
     imported.record["readback_tolerance_um"] = tolerance_um
     imported.record["model_identity_sha256"] = model.identity_sha256
     return imported
@@ -145,9 +151,6 @@ def _check_supported(model: PreparedSgbModel, family: Family) -> None:
     """Refuse what the import cannot realize yet rather than realize it partly."""
     if family not in ("hfss", "q3d"):
         raise ValueError(f"family must be 'hfss' or 'q3d', got {family!r}")
-    if family == "q3d" and model.route == "A":
-        # A Q3D sheet conductor needs its thin-conductor thickness, which the SGB model does not carry yet.
-        raise NotImplementedError("Q3D imports Route C models only for now")
     if family == "q3d" and (model.junctions or model.lumped_rlcs):
         raise ValueError(
             "Q3D has no junctions or lumped RLCs; they belong to HFSS Eigenmode"
@@ -435,6 +438,137 @@ def _assign_outer_perfect_h(app: Any, region: Any) -> dict[str, Any]:
     if not boundary or native_boundary_type(app, OUTER_BOUNDARY_NAME) != "Perfect H":
         raise SgbImportError("AEDT did not assign Perfect H on the Region faces")
     return {"boundary": OUTER_BOUNDARY_NAME, "type": "Perfect H", "faces": face_ids}
+
+
+# ---------------------------------------------------------------- Q3D conductor sheets (Route A)
+
+
+def rebuild_conductor_sheets(
+    app: Any, model: PreparedSgbModel, sidecar: Sidecar, imported: ImportedSgbModel
+) -> list[dict[str, Any]]:
+    """Each ``SHEET`` group as one sheet object, a PEC thin conductor of its film's thickness; Route C has none.
+
+    Q3D puts a Net on whole objects, not on faces of the substrate, so each group's faces are copied from the
+    solid they lie on into one object named by the group (:func:`sheet_object_names`), and that object is a
+    ``ThinConductor`` of the stack layer's thickness (``PreparedSgbModel.sheet_thickness_um``).
+    """
+    kinds = {
+        name: sidecar["volume"][solid]["kind"]
+        for solid, name in imported.objects.items()
+    }
+    members = views.group_members(sidecar)
+    records = []
+    for group, name in sheet_object_names(
+        sidecar, set(imported.objects.values())
+    ).items():
+        faces = [
+            _sheet_face_copy(group, planned, imported.face_copies[planned], kinds)
+            for planned in members[group]
+        ]
+        copy_faces_to_sheet(app, f"sheet group {group}", faces, name, non_model=False)
+        records.append(
+            _assign_thin_conductor(app, group, name, model.sheet_thickness_um[group])
+        )
+    return records
+
+
+def _sheet_face_copy(
+    group: str, planned: str, copies: Mapping[str, int], kinds: Mapping[str, str]
+) -> tuple[str, int]:
+    """The copy of a sheet face the sheet is rebuilt from: its only copy, or the dielectric's under a body."""
+    if len(copies) == 1:
+        ((object_name, face_id),) = copies.items()
+        return object_name, face_id
+    dielectric = [(o, f) for o, f in copies.items() if kinds.get(o) == "dielectric"]
+    if len(dielectric) != 1:
+        raise SgbImportError(
+            f"face {planned} of sheet group {group!r} has copies {dict(copies)}, not one dielectric copy"
+        )
+    return dielectric[0]
+
+
+def _assign_thin_conductor(
+    app: Any, group: str, name: str, thickness_um: float
+) -> dict[str, Any]:
+    boundary_name = f"{name}ThinConductor"
+    thickness = f"{thickness_um:.17g}um"
+    boundary = app.assign_thin_conductor(
+        assignment=name, material="pec", thickness=thickness, name=boundary_name
+    )
+    if not boundary or boundary.name != boundary_name:
+        raise SgbImportError(f"AEDT did not assign the thin conductor of {name!r}")
+    child = boundary.child_object
+    raw = child.GetPropValue("Material")
+    # AEDT 2024.2 reports the thin conductor's material as ``["Material:=", "pec"]``.
+    if isinstance(raw, (list, tuple)) and len(raw) == 2 and raw[0] == "Material:=":
+        raw = raw[1]
+    material = str(raw).strip('"')
+    observed = _length_um(child.GetPropValue("Thickness"))
+    assigned = [
+        int(value) for value in app.oboundary.GetExcitationAssignment(boundary_name)
+    ]
+    if (
+        material.casefold() != "pec"
+        or abs(observed - thickness_um) > 1e-9 * thickness_um
+        or assigned != [int(app.modeler[name].id)]
+    ):
+        raise SgbImportError(
+            f"the thin conductor of {name!r} reads back as {material!r}, {observed} um on {assigned}"
+        )
+    return {
+        "group": group,
+        "object_name": name,
+        "boundary": boundary_name,
+        "material": material,
+        "thickness_um": observed,
+    }
+
+
+def _length_um(value: Any) -> float:
+    from ansys.aedt.core.generic.numbers_utils import (  # noqa: PLC0415 -- PyAEDT is optional and loaded only inside a live AEDT session.
+        Quantity,
+    )
+
+    quantity = Quantity(value)
+    if quantity.unit_system != "Length":
+        raise SgbImportError(f"{value!r} is not a length")
+    return float(quantity.to("um").value)
+
+
+def copy_faces_to_sheet(
+    app: Any,
+    label: str,
+    faces: Sequence[tuple[str, int]],
+    name: str,
+    *,
+    non_model: bool,
+) -> None:
+    """Copy ``faces`` into one sheet named ``name``; its area must be theirs.  ``label`` names the owner."""
+    areas = {
+        (object_name, int(face.id)): float(face.area)
+        for object_name in {object_name for object_name, _ in faces}
+        for face in app.modeler[object_name].faces
+    }
+    expected = sum(areas[face] for face in faces)
+    created = app.modeler.create_object_from_face(
+        [face_id for _, face_id in faces], non_model=non_model
+    )
+    sheets = created if isinstance(created, list) else [created]
+    names = [sheet.name for sheet in sheets if sheet]
+    if len(names) != len(faces):
+        raise SgbImportError(
+            f"AEDT copied {len(names)} of the {len(faces)} faces of {label}"
+        )
+    if len(names) > 1 and not app.modeler.unite(names):
+        raise SgbImportError(f"AEDT did not unite the faces of {label}")
+    sheet = app.modeler[names[0]]
+    sheet.name = name
+    area = sum(float(face.area) for face in sheet.faces)
+    # The copies are AEDT's own faces, so their areas agree to floating-point noise.
+    if sheet.name != name or abs(area - expected) > 1e-9 * expected:
+        raise SgbImportError(
+            f"the sheet of {label} is {sheet.name!r} of {area} um2, not {name!r} of {expected} um2"
+        )
 
 
 # ---------------------------------------------------------------- HFSS conductors and junctions

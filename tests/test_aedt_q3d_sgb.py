@@ -205,6 +205,21 @@ def test_the_request_round_trips_with_its_stage_and_terminals(
     assert restored.nets == spec.nets
 
 
+def test_route_a_sheets_are_net_objects_with_their_stack_film_thickness(tmp_path):
+    """In Route A each conductor-sheet group is one object of its Net, of the film thickness the stack declares."""
+    source, stack = rectangular_junction_source("VACUUM_REGION")
+    model = prepare_sgb_model(
+        source, prepared_stack=stack, modeling="thin_film", output_dir=tmp_path
+    )
+    assert model.route == "A"
+    assert dict(model.sheet_thickness_um) == {"chip/left": 0.25, "chip/right": 0.25}
+    assert type(model).from_payload(model.to_payload()) == model
+    assert q3d_net_objects(model) == {"A": ("chip_left",), "B": ("chip_right",)}
+    assert junction_model().sheet_thickness_um == {}
+    with pytest.raises(ValueError, match="finite and positive"):
+        replace(model, sheet_thickness_um={"chip/left": 0.0})
+
+
 def test_a_payload_of_the_native_builder_is_refused():
     """Decision 6: a request that declares natively built bodies is not run or read."""
     payload = junction_q3d_spec().to_payload()

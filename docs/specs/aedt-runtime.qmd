@@ -924,7 +924,10 @@ conversion from an earlier Q3D request.
 The runtime imports the guarded STEP into an empty Q3D design
 (`import_sgb_model`): the objects must be exactly the guard's solids, every
 face is matched to its planned face, the materials and the Region are created
-and read back. It then assigns each request Net with its Q3D type over its
+and read back. In Route A it first rebuilds each conductor-sheet group
+(`SHEET`) as one sheet object, copied from the face it lies on and named by
+the group, and makes it a PEC `ThinConductor` of the film's physical thickness
+from the stack layer (`PreparedSgbModel.sheet_thickness_um`), read back. It then assigns each request Net with its Q3D type over its
 objects, and each source and sink on the authored side of its object: on a
 solid, the planar faces whose every vertex lies at the object's extreme along
 the side, which must join into one patch; on a sheet, the straight edges there,

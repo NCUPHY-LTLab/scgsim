@@ -36,6 +36,7 @@ def validate_q3d_model_readback(
     if ("ports" in receipt or not prepared) and receipt.get("ports") != []:
         raise RuntimeError("Q3D receipt must not contain HFSS ports")
     validate_imported_sgb_model(receipt, spec.model)
+    _validate_conductor_sheets(receipt["geometry"], spec)
     nets = receipt.get("nets")
     if not isinstance(nets, list) or len(nets) != len(spec.nets):
         raise RuntimeError("Q3D receipt has invalid net evidence")
@@ -57,6 +58,21 @@ def validate_q3d_model_readback(
     if len(set(net_object_ids)) != len(net_object_ids):
         raise RuntimeError("Q3D native object IDs must be unique across nets")
     _validate_q3d_region_ground(receipt, spec, nets)
+
+
+def _validate_conductor_sheets(geometry: dict[str, Any], spec: Q3dSpec) -> None:
+    """Each Route A sheet group is one thin conductor of the model's thickness; Route C has none."""
+    sheets = geometry.get("conductor_sheets")
+    expected = dict(spec.model.sheet_thickness_um)
+    if (
+        not isinstance(sheets, list)
+        or {record.get("group"): record.get("thickness_um") for record in sheets}
+        != expected
+        or any(str(record.get("material", "")).casefold() != "pec" for record in sheets)
+    ):
+        raise RuntimeError(
+            "the Q3D conductor sheets are not the model's sheet groups at their thickness"
+        )
 
 
 def _validate_q3d_net(record: Any, expected: Any) -> None:

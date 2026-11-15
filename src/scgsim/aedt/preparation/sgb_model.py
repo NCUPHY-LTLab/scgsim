@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -101,7 +101,8 @@ class PreparedSgbModel:
     the plan's ``VACUUM_REGION``, the box SGB built and the box AEDT's Region takes.  ``materials`` are the
     stack's records of the materials the model's volumes name, which AEDT realizes on the imported objects.
     ``lumped_rlcs`` and ``lumped_ports`` each sit on the ``PORT::<port_sheet_id>`` group they name; a port
-    sheet carries at most one of them or one junction.
+    sheet carries at most one of them or one junction.  ``sheet_thickness_um`` is the physical thickness of
+    each Route A conductor-sheet group (``SHEET``), which Q3D gives its thin conductor.
     """
 
     modeling: Modeling
@@ -118,6 +119,7 @@ class PreparedSgbModel:
     lumped_ports: tuple[LumpedTerminalPort, ...] = ()
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
     ground_net_ids: tuple[str, ...] | None = None
+    sheet_thickness_um: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         modeling_from_value(self.modeling)
@@ -149,6 +151,12 @@ class PreparedSgbModel:
             object.__setattr__(
                 self, "surface_epr_specs", freeze(self.surface_epr_specs)
             )
+        thickness = {
+            group: float(value) for group, value in self.sheet_thickness_um.items()
+        }
+        if any(not math.isfinite(value) or value <= 0 for value in thickness.values()):
+            raise ValueError("sheet_thickness_um must be finite and positive")
+        object.__setattr__(self, "sheet_thickness_um", freeze(thickness))
 
     def path(self, role: str) -> Path:
         """The file bound under ``role`` (``step``, ``geometry``, ``sidecar`` or ``guard``)."""
@@ -191,6 +199,7 @@ class PreparedSgbModel:
             "ground_net_ids": None
             if self.ground_net_ids is None
             else list(self.ground_net_ids),
+            "sheet_thickness_um": detached(self.sheet_thickness_um),
         }
 
     @classmethod
@@ -231,6 +240,7 @@ class PreparedSgbModel:
             ground_net_ids=None
             if value["ground_net_ids"] is None
             else tuple(value["ground_net_ids"]),
+            sheet_thickness_um=value["sheet_thickness_um"],
         )
 
 
@@ -311,7 +321,31 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
         lumped_ports=lumped_ports,
         surface_epr_specs=surface_epr_specs,
         ground_net_ids=None if ground_net_ids is None else tuple(ground_net_ids),
+        sheet_thickness_um=sheet_thicknesses_um(sidecar, plan.entities),
     )
+
+
+def sheet_thicknesses_um(
+    sidecar: Sidecar, entities: Mapping[str, Mapping[str, Any]]
+) -> dict[str, float]:
+    """``SHEET`` group -> the physical thickness of its conductor film, from the stack layer the film declares.
+
+    A Route A conductor is a sheet in the model; Q3D gives it its film's thickness back as a thin conductor.
+    The thickness is the physical interpretation's ``physical_thickness_um`` of the group's one Entity, which
+    for a stack or local film is the layer's declared normal thickness.
+    """
+    out: dict[str, float] = {}
+    for name, group in sorted(sidecar["group"].items()):
+        if group["dim"] != 2 or group.get("interface_type") != "SHEET":
+            continue
+        (entity,) = group["entities"]
+        record = entities[entity]
+        if record["representation"] != "sheet":
+            raise ValueError(
+                f"sheet group {name!r} is Entity {entity!r}, which is not a sheet"
+            )
+        out[name] = float(record["physical_thickness_um"])
+    return out
 
 
 def vacuum_bounds_um(

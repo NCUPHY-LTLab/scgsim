@@ -37,7 +37,10 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from scgsim.aedt.epr.sgb_source import row_selection_names
-from scgsim.aedt.runtime.families.sgb_import import ImportedSgbModel
+from scgsim.aedt.runtime.families.sgb_import import (
+    ImportedSgbModel,
+    copy_faces_to_sheet,
+)
 from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.geometry.sgb.output.sidecar.aedt import sanitise_aedt_name
 
@@ -101,32 +104,7 @@ def create_selection_sheet(
     app: Any, label: str, faces: Sequence[tuple[str, int]], name: str
 ) -> None:
     """Copy ``faces`` into one non-model sheet named ``name``; its area must be theirs.  ``label`` names the owner."""
-    areas = {
-        (object_name, int(face.id)): float(face.area)
-        for object_name in {object_name for object_name, _ in faces}
-        for face in app.modeler[object_name].faces
-    }
-    expected = sum(areas[face] for face in faces)
-    created = app.modeler.create_object_from_face(
-        [face_id for _, face_id in faces], non_model=True
-    )
-    sheets = created if isinstance(created, list) else [created]
-    names = [sheet.name for sheet in sheets if sheet]
-    if len(names) != len(faces):
-        raise SurfaceBindingError(
-            f"AEDT copied {len(names)} of the {len(faces)} faces of {label}"
-        )
-    if len(names) > 1 and not app.modeler.unite(names):
-        raise SurfaceBindingError(f"AEDT did not unite the faces of {label}")
-    sheet = app.modeler[names[0]]
-    sheet.name = name
-    area = sum(float(face.area) for face in sheet.faces)
-    # The copies are AEDT's own faces, so their areas agree to floating-point noise.
-    if sheet.name != name or abs(area - expected) > 1e-9 * expected:
-        raise SurfaceBindingError(
-            f"the selection of {label} is {sheet.name!r} of {area} um2, "
-            f"not {name!r} of {expected} um2"
-        )
+    copy_faces_to_sheet(app, label, faces, name, non_model=True)
 
 
 @dataclass(frozen=True)
