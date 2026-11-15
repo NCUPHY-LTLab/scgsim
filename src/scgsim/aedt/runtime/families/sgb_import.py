@@ -397,10 +397,16 @@ def _create_region(
             f"the Region spans {list(observed)} um, not the VACUUM_REGION box "
             f"{list(model.vacuum_bounds_um)} um"
         )
-    vacuum = [v for v in sidecar["volume"].values() if v["kind"] == "vacuum"]
+    # The vacuum may be several volumes (a substrate spanning the box splits it above and below); the Region
+    # is one box, so they must share one material.
+    vacuum = {
+        v["material"] for v in sidecar["volume"].values() if v["kind"] == "vacuum"
+    }
     if len(vacuum) != 1:
-        raise SgbImportError(f"the model has {len(vacuum)} vacuum volumes, not one")
-    material_id = vacuum[0]["material"]
+        raise SgbImportError(
+            f"the model's vacuum volumes have materials {sorted(vacuum)}, not one"
+        )
+    (material_id,) = vacuum
     realized = realize_source_material(app, material_id, model.materials[material_id])
     region.material_name = realized["native_name"]
     material = native_object_property(region, "Material").strip('"')

@@ -106,7 +106,10 @@ def _assign_terminal(
 
 
 def verify_saved_q3d_terminals(app: Any, nets: list[dict[str, Any]]) -> None:
-    """Read every terminal back from the saved design: its faces or edges, Net and terminal type."""
+    """Read every terminal back from the saved design: its faces or edges, Net and terminal type.
+
+    The saved design names a terminal's Net by that Net boundary's ``ID``, not by its name.
+    """
     boundaries = app.design_properties["BoundarySetup"]["Boundaries"]
     for net in nets:
         for kind in ("source", "sink"):
@@ -118,11 +121,12 @@ def verify_saved_q3d_terminals(app: Any, nets: list[dict[str, Any]]) -> None:
             ids = terminal["native_face_ids" if key == "Faces" else "native_edge_ids"]
             if (
                 sorted(int(value) for value in saved.get(key, ())) != ids
-                or saved.get("Net") != net["name"]
+                or saved.get("Net") != boundaries[net["name"]].get("ID")
                 or saved.get("TerminalType") != terminal["terminal_type"]
             ):
                 raise Q3dTerminalError(
-                    f"the saved Q3D {kind} {terminal['name']!r} differs from its assignment"
+                    f"the saved Q3D {kind} {terminal['name']!r} is {saved}, not its assignment "
+                    f"({key} {ids} on Net {net['name']!r})"
                 )
 
 

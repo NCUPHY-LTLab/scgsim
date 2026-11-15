@@ -44,6 +44,7 @@ from scgsim.aedt.runtime.families.q3d_terminals import (  # noqa: E402
     assign_q3d_nets,
     sheet_side_edges,
     solid_side_faces,
+    verify_saved_q3d_terminals,
 )
 from scgsim.aedt.runtime.handoff_validation import verify_prepared_hashes  # noqa: E402
 from scgsim.aedt.specs.parse import parse_aedt_spec  # noqa: E402
@@ -350,3 +351,15 @@ def test_nets_and_terminals_are_assigned_with_the_requests_types_and_read_back()
     assert records[0]["sink"]["native_face_ids"] == [1, 2]
     assert boundary.calls[0][:3] == ["NAME:ASource", "Faces:=", [3]]
     assert "source" not in records[1]
+    # The saved design names a terminal's Net by the Net boundary's ID (AEDT 2024.2).
+    saved = {
+        "A": {"ID": 0, "BoundType": "SignalNet"},
+        "B": {"ID": 3, "BoundType": "GroundNet"},
+        "ASource": {"Faces": [3], "Net": 0, "TerminalType": "ConstantVoltage"},
+        "ASink": {"Faces": [1, 2], "Net": 0, "TerminalType": "ConstantVoltage"},
+    }
+    app.design_properties = {"BoundarySetup": {"Boundaries": saved}}
+    verify_saved_q3d_terminals(app, records)
+    saved["ASink"]["Net"] = 3
+    with pytest.raises(Q3dTerminalError, match="not its assignment"):
+        verify_saved_q3d_terminals(app, records)
