@@ -4,6 +4,6 @@ In: polygon rings and the ``GridScope`` they are read in (``scope``): the model 
 the unrounded reference is evaluated, and the declared source a refusal names.
 Out: rings noded on that grid (``arrangement``), Boolean results (``booleans``) and loop operations that keep source
 provenance; a change no operation can certify is refused where it happens, in the scope's words.
-Next: ``source`` builds its snapshot with them; ``interpretation``, ``junctions`` and ``planning`` call the same
-operations, ``planning`` on no grid (``UNGRIDDED``). The records the stages share are in ``models``.
+Next: ``source`` builds its snapshot with them; ``interpretation`` and ``junctions`` call the same operations, a
+junction's off-axis frame on no grid (``UNGRIDDED``). The records the stages share are in ``models``.
 """

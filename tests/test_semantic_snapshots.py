@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from scgsim.semantics.ownership import unique_ids
 from scgsim.semantics.snapshot import canonical_sha256, create_snapshot
 
 
@@ -98,19 +97,3 @@ def test_revision_kind_cannot_claim_a_missing_declared_revision() -> None:
             projection_version="facts-v1",
             source_revision_kind="declared_revision",
         )
-
-
-def test_unique_ids_accepts_unhashable_string_subclasses() -> None:
-    """Deduplicate legacy identifiers without requiring hashable text values."""
-
-    class UnhashableIdentifier(str):
-        """Model string identifiers whose custom value disables hashing."""
-
-        __hash__ = None
-
-        def __str__(self) -> str:
-            return self
-
-    owner = UnhashableIdentifier("owner-a")
-
-    assert unique_ids([owner, owner]) == ("owner-a",)

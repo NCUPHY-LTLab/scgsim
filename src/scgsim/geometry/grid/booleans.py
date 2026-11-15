@@ -44,7 +44,7 @@ def polygon_boolean(
 ) -> Sequence[PolygonCoordinates]:
     """One labelled overlay on the scope's grid; gdstk's Boolean at ``precision`` without one.
 
-    Without a grid run AEDT's native planning and a junction partition's off-axis local frame.
+    Without a grid run a contact pad's overlap test and a junction partition's off-axis local frame.
     """
     if scope.grid is None:
         import gdstk  # noqa: PLC0415 - defer native geometry loading until this operation requires it

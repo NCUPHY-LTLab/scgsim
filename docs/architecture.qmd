@@ -95,10 +95,7 @@ boundaries; callers use the supported entry.
 | Internal owner | Responsibility |
 |---|---|
 | `scgsim.geometry.source.plan_assembly` | Compose component occurrences, transforms, stack facts, and caller-assigned Nets into source input. |
-| `scgsim.geometry.planning.contact_planning` | Recognize declared interfaces, contact patches, and metal-to-metal contact ownership. |
 | `scgsim.geometry.junctions` | Resolve authored support and incident-conductor binding, then derive exact rectangular-junction partitions. |
-| `scgsim.geometry.planning.surface_planning` | Build solver-facing surfaces, contact coverage, contribution patches, and partitions. |
-| `scgsim.geometry.planning.topology_planning` | Resolve shared surface ownership and ring geometry for surface planning. |
 | `scgsim.geometry.grid.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
 
 The [API migration reference](api-migration.qmd) lists the supported import
@@ -181,7 +178,7 @@ the sidecar and checks the imported shape against the guard.
 | Local entities, polygon and authored curve boundaries, ports, and topology selectors | Component designer |
 | Named occurrences and the final `Net -> Entity` assignment | Notebook `GeometryPlan` |
 | Immutable normalized source geometry | `GeometryPlan` and `GeometryBuildInput` |
-| Revision-bound material, interface, owner, side, and evidence facts | `scgsim.semantics` internal stdlib core |
+| Revision-bound fact snapshots, the Route A source projection and EPR records | `scgsim.semantics` internal stdlib core |
 | Geometry names, topology, Route A/B surfaces | `scgsim.geometry.sgb` |
 | Tetrahedral meshing of SGB geometry, sizing recipes and the quality threshold | `scgsim.meshing` |
 | Palace and AEDT implementation | `scgsim.palace` and `scgsim.aedt` |
@@ -196,17 +193,12 @@ the sidecar and checks the imported shape against the guard.
 
 `scgsim.semantics` is a solver-independent stdlib boundary. It detaches plain
 values into recursively immutable, revision-bound snapshots and returns detached
-serialization. Evidence patches retain the snapshot that classified them;
-missing/different revision identity fails rather than silently rebinding facts.
+serialization. Missing or different revision identity fails rather than
+silently rebinding facts.
 Native tags remain opaque observations, not sources of guessed contact.
-
-Geometry planning reuses one source/model projection instead of deep-copying
-stacks at every adjacency call. Domain ordering, sheet owners and aggregate
-physical-group owners remain separate projections. Contribution multiplicity
-is retained by the semantic ledger even when native geometry aggregates a
-surface. Material identity, approximation and native implementation stay
-separate. The [GeometryPlan/route contract](geometry-sgb.qmd) owns their public
-meaning; this page explains which modules implement it.
+Material identity, approximation and native implementation stay separate. The
+[GeometryPlan/route contract](geometry-sgb.qmd) owns their public meaning; this
+page explains which modules implement it.
 
 AEDT does not consume Gmsh tags. It imports the SGB model's STEP; the sidecar
 names its solids, face groups, port faces and Surface-EPR rows, and the guard

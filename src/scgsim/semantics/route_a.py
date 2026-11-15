@@ -1,7 +1,7 @@
 """Source geometry primitives retained independently of profile interpretation.
 
 Neutral physical declarations and selected-profile arithmetic belong to
-geometry.models.physical and geometry.planning.physical. This module does not
+geometry.models.physical and geometry.interpretation.physical. This module does not
 classify source bodies from route roles or author approximation semantics.
 Raw geometry fields remain dynamically typed and unchanged; only Z coordinates
 and extents are converted to finite floats here.

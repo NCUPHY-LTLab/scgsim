@@ -30,7 +30,7 @@ scgsim-status: "CONVERGING"
 
 ### scgsim.semantics
 
-`EvidenceResult`, `MATERIAL_KINDS`, `SemanticEvidenceFacade`, `SemanticFactsSnapshot`, `SemanticSnapshotReference`, `SourcedPatch`, `canonical_sha256`, `conductor_solution_interface_kind`, `create_snapshot`, `is_supported_material_kind`, `is_vacuum_material_kind`, `solution_interface_kind`, `solution_interface_owner_ids`.
+`SemanticFactsSnapshot`, `SemanticSnapshotReference`, `canonical_sha256`, `create_snapshot`.
 
 ### scgsim.visualization
 
@@ -47,9 +47,9 @@ scgsim-status: "CONVERGING"
 | `zh-TW/docs/api/analyze-epr-usage.md` | `b5db4425fc362af6b6f24e4226669ef2756444347938ecbe544ec3a1c2e911d5` |
 | `src/scgsim/aedt/__init__.py` | `690069c00ec98682fedd0501875e1011921e8bc8c42e5a817be50a3f2fef8c76` |
 | `src/scgsim/aedt/specs/__init__.py` | `2dce2baa961727dac9e6253167d4448ef8b4e11958e5fb7bdf0d2f571d05300e` |
-| `src/scgsim/geometry/__init__.py` | `e303dfa14a602aa8849c2f25c3deea910804f2c52bf619ae269d78e407dabf45` |
+| `src/scgsim/geometry/__init__.py` | `49c6c6c8a724a49d3d8eb72b659661904b1231174e51fca0933aa0ebe1f640b6` |
 | `src/scgsim/palace/__init__.py` | `99a94bc6f25857c205a4fce053a779abedfa16f979a49323ea2729b8e168a4f4` |
-| `src/scgsim/semantics/__init__.py` | `a1902da7627ee76ba95283fc2861b6d785400c303a09e6e875375f55a056e39c` |
+| `src/scgsim/semantics/__init__.py` | `54cfd5f6a8ee0d9864601ec9ac6290a34c04b18949db1760f4c460bf722e8f61` |
 | `src/scgsim/visualization/__init__.py` | `89a6eb15003c49dc9243c7f2c9bf5cd4adfd8c4c2494b031d25e3cfef4feb8b7` |
 
 ## 未收錄於離線套件的公開文件
