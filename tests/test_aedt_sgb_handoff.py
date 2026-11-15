@@ -28,6 +28,7 @@ pytestmark = pytest.mark.occt
 
 @pytest.fixture(scope="module")
 def model(tmp_path_factory):
+    """One prepared SGB model of the rectangular junction source, built once for the module."""
     source, stack = rectangular_junction_source("VACUUM_REGION")
     return prepare_sgb_model(
         source,
@@ -51,7 +52,9 @@ def test_a_moved_handoff_binds_its_own_copy_of_the_model(model, tmp_path):
     """The payload names only the handoff's ``model/`` folder; bound back, it is the same model."""
     payload, moved = _moved(model, tmp_path)
     assert payload["model_dir"] == "model"
-    assert sorted(path.split("/")[0] for path in sgb_model_paths(model)) == ["model"] * 4
+    assert (
+        sorted(path.split("/")[0] for path in sgb_model_paths(model)) == ["model"] * 4
+    )
     for path in sgb_model_paths(model):
         assert (moved / path).is_file()
     bound = bind_sgb_model(payload, moved)

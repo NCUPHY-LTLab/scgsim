@@ -70,9 +70,7 @@ def sgb_model_source(model: PreparedSgbModel) -> dict[str, Any]:
     """What a handoff's source record binds of the model: its identity and each file's SHA-256."""
     return {
         "sgb_model_sha256": model.identity_sha256,
-        "sgb_model_files": {
-            role: model.files[role]["sha256"] for role in BOUND_FILES
-        },
+        "sgb_model_files": {role: model.files[role]["sha256"] for role in BOUND_FILES},
     }
 
 
