@@ -15,16 +15,16 @@ pytest.importorskip("OCP")
 
 from sgb_inputs import rectangular_junction_source  # noqa: E402
 
-from scgsim.aedt.epr.sgb_energy import (  # noqa: E402
-    SURFACE_GRANULARITY,
-    combine_sgb_epr_mode,
-)
 from scgsim.aedt.epr.expression_codec import compile_named_expression  # noqa: E402
 from scgsim.aedt.epr.integrals import (  # noqa: E402
     empty_raw_integrals,
     integral_target,
     purpose_unit,
     store_integral,
+)
+from scgsim.aedt.epr.sgb_energy import (  # noqa: E402
+    SURFACE_GRANULARITY,
+    combine_sgb_epr_mode,
 )
 from scgsim.aedt.epr.sgb_expressions import (  # noqa: E402
     normalized_surface_total_operations,
