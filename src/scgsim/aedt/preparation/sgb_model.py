@@ -23,7 +23,7 @@ it imports anything.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -46,6 +46,7 @@ from scgsim.geometry.sgb.output.exchange.guard import (
     read_step_guard,
 )
 from scgsim.geometry.sgb.output.exchange.step import export_aedt_step
+from scgsim.geometry.sgb.output.sidecar.aedt import sanitise_aedt_name
 from scgsim.geometry.sgb.topology.routes.policy import (
     ROUTE_A_RETAINED_BODIES,
     ROUTE_C,
@@ -63,7 +64,7 @@ BUILD_POLICY: dict[str, RoutePolicy] = {
     "thin_film": ROUTE_A_RETAINED_BODIES,
     "solid": ROUTE_C,
 }
-_BOUND_FILES = ("step", "geometry", "sidecar", "guard")
+BOUND_FILES = ("step", "geometry", "sidecar", "guard")
 DRIVEN_PORT_FOLLOW_UP = "NCUPHY-LTLab/scgsim#135"
 
 
@@ -127,8 +128,8 @@ class PreparedSgbModel:
                 f"modeling {self.modeling!r} is Route {REQUESTED_ROUTE[self.modeling]} realized as "
                 f"Route {REALIZED_ROUTE[self.modeling]}"
             )
-        if set(self.files) != set(_BOUND_FILES):
-            raise ValueError(f"a prepared SGB model binds exactly {_BOUND_FILES}")
+        if set(self.files) != set(BOUND_FILES):
+            raise ValueError(f"a prepared SGB model binds exactly {BOUND_FILES}")
         object.__setattr__(self, "files", freeze(self.files))
         object.__setattr__(self, "model_identity", freeze(self.model_identity))
         object.__setattr__(self, "materials", freeze(self.materials))
@@ -161,7 +162,7 @@ class PreparedSgbModel:
 
     def verify_files(self) -> None:
         """Raise ``ValueError`` when a bound file is missing or changed since preparation."""
-        for role in _BOUND_FILES:
+        for role in BOUND_FILES:
             path = self.path(role)
             if not path.is_file() or file_sha256(path) != self.files[role]["sha256"]:
                 raise ValueError(
@@ -280,6 +281,7 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
     sidecar = read_sidecar(artifacts.sidecar)
     check_region_box(sidecar, bounds)
     _check_port_groups(sidecar, bound_junctions, rlcs, lumped_ports)
+    aedt_net_names(net_groups(sidecar))
     _check_ground_nets(sidecar, ground_net_ids)
     files = {
         role: {"path": path.name, "sha256": file_sha256(path)}
@@ -477,6 +479,27 @@ def _check_ground_nets(sidecar: Sidecar, ground_net_ids: Sequence[str] | None) -
     unknown = sorted(set(ground_net_ids) - set(net_groups(sidecar)))
     if unknown:
         raise ValueError(f"ground Nets {unknown} are not Nets of the SGB model")
+
+
+def aedt_net_names(nets: Iterable[str]) -> dict[str, str]:
+    """Net -> its AEDT name (``chip/A`` -> ``chip_A``); two Nets whose names coincide are refused.
+
+    AEDT keeps only ``[A-Za-z0-9_]`` of a name, so ``chip/A`` and ``chip_A`` would claim one Net and one
+    Perfect E boundary.  The pair is refused, naming both Net IDs and the shared name, rather than one of
+    them renamed (the Human, 2026-11-12, issue #67).
+    """
+    out: dict[str, str] = {}
+    by_name: dict[str, str] = {}
+    for net in sorted(nets):
+        name = sanitise_aedt_name(net)
+        if name in by_name:
+            raise ValueError(
+                f"Nets {by_name[name]!r} and {net!r} both become the AEDT name {name!r}; "
+                "rename one of them"
+            )
+        by_name[name] = net
+        out[net] = name
+    return out
 
 
 def net_groups(sidecar: Sidecar) -> dict[str, list[str]]:

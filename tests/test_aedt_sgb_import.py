@@ -36,7 +36,10 @@ from scgsim.aedt.epr.sgb_surfaces import (  # noqa: E402
     surface_face_bindings,
     surface_field_selections,
 )
-from scgsim.aedt.preparation.sgb_model import prepare_sgb_model  # noqa: E402
+from scgsim.aedt.preparation.sgb_model import (  # noqa: E402
+    aedt_net_names,
+    prepare_sgb_model,
+)
 from scgsim.aedt.runtime.families.sgb_boundaries import (  # noqa: E402
     BoundaryPlanError,
     plan_hfss_boundaries,
@@ -475,15 +478,27 @@ def _renamed_nets(sidecar, renames):
     return out
 
 
-def test_nets_whose_ids_sanitise_alike_get_a_perfect_e_each(models):
-    """``chip/A`` and ``chip_A`` both sanitise to ``chip_A``; each Net gets its own Perfect E, on its own faces."""
-    sidecar, imported = _as_imported(models["thin_film"])
+def test_nets_whose_ids_sanitise_alike_are_refused_before_any_boundary(models):
+    """``chip/A`` and ``chip_A`` both become ``chip_A``: the plan refuses the pair, naming both and the name."""
+    sidecar, _ = _as_imported(models["thin_film"])
     renamed = _renamed_nets(sidecar, {"A": "chip/A", "B": "chip_A"})
+    guard = json.loads(models["thin_film"].path("guard").read_text(encoding="utf-8"))
+    with pytest.raises(
+        BoundaryPlanError,
+        match="Nets 'chip/A' and 'chip_A' both become the AEDT name 'chip_A'",
+    ):
+        plan_hfss_boundaries(renamed, guard, (), ())
+
+
+def test_each_net_gets_a_perfect_e_named_by_its_sanitised_id(models):
+    """``chip/A`` becomes ``perfect_e_chip_A``; each Net's boundary holds its own sheet faces."""
+    sidecar, imported = _as_imported(models["thin_film"])
+    renamed = _renamed_nets(sidecar, {"A": "chip/A"})
     guard = json.loads(models["thin_film"].path("guard").read_text(encoding="utf-8"))
     plan = plan_hfss_boundaries(renamed, guard, (), ())
     assert {net: name for net, (name, _) in plan.perfect_e.items()} == {
         "chip/A": "perfect_e_chip_A",
-        "chip_A": "perfect_e_chip_A__2",
+        "B": "perfect_e_B",
     }
     design = _FakeDesign({})
     records = assign_sheet_perfect_e(design, plan, imported.face_copies)
@@ -491,16 +506,14 @@ def test_nets_whose_ids_sanitise_alike_get_a_perfect_e_each(models):
     for record in records:
         kind, props = design.boundaries[record["boundary"]]
         assert kind == "Perfect E" and props["Faces"] == record["faces"]
-    assert set(design.boundaries) == {r["boundary"] for r in records}
 
 
-def test_q3d_nets_whose_ids_sanitise_alike_are_assigned_and_read_back_apart(models):
-    """Each Net is assigned and read back under its own unique name, never one Net under the other's."""
+def test_q3d_nets_are_assigned_and_read_back_under_their_sanitised_ids(models):
+    """Each Net is assigned and read back under its sanitised ID."""
     sidecar, imported = _as_imported(models["solid"])
-    renamed = _renamed_nets(sidecar, {"A": "chip/A", "B": "chip_A"})
-    roles = {"chip/A": "Signal", "chip_A": "Ground"}
+    renamed = _renamed_nets(sidecar, {"A": "chip/A"})
+    roles = {"chip/A": "Signal", "B": "Ground"}
     names = q3d_net_names(roles)
-    assert names == {"chip/A": "chip_A", "chip_A": "chip_A__2"}
     design = _FakeDesign(
         {
             name: SimpleNamespace(id=k)
@@ -509,4 +522,24 @@ def test_q3d_nets_whose_ids_sanitise_alike_are_assigned_and_read_back_apart(mode
     )
     records = assign_q3d_nets(design, renamed, imported.objects, roles, names)
     assert design.nets == {r["name"]: r["objects"] for r in records}
-    assert {r["net"]: r["name"] for r in records} == names
+    assert {r["net"]: r["name"] for r in records} == {"chip/A": "chip_A", "B": "B"}
+
+
+def test_q3d_nets_are_named_by_their_sanitised_ids_and_a_shared_name_is_refused():
+    """A Q3D Net is its sanitised ID; a pair that shares one is refused, never suffixed."""
+    assert q3d_net_names({"chip/A": "Signal", "B": "Ground"}) == {
+        "B": "B",
+        "chip/A": "chip_A",
+    }
+    with pytest.raises(
+        BoundaryPlanError,
+        match="Nets 'chip/A' and 'chip_A' both become the AEDT name 'chip_A'",
+    ):
+        q3d_net_names({"chip/A": "Signal", "chip_A": "Ground"})
+
+
+def test_preparation_refuses_nets_that_become_one_aedt_name():
+    """``prepare_sgb_model`` checks the model's Nets with this rule before AEDT is touched."""
+    assert aedt_net_names(["A", "B"]) == {"A": "A", "B": "B"}
+    with pytest.raises(ValueError, match="'chip.A' and 'chip_A' both become"):
+        aedt_net_names(["chip_A", "chip.A"])

@@ -399,6 +399,20 @@ wave and modal runs are not available once the native builder is removed. The
 import also refuses lumped Terminal ports until the SGB flow sets up a Driven
 Terminal design.
 
+AEDT keeps only `[A-Za-z0-9_]` of a name, so a Net's AEDT name (its Q3D Net
+and its HFSS `perfect_e_<name>` boundary) is its ID with every other
+character replaced by `_`. `prepare_sgb_model()` refuses two Nets whose IDs
+become the same name, such as `chip/A` and `chip_A`, naming both Net IDs and
+the shared name, before AEDT is touched; neither is renamed.
+
+A handoff of the SGB flow carries its model: the STEP, the BREP it was
+written from, the sidecar and the guard are copied into the handoff's
+`model/` folder, and the request names that relative folder. Where AEDT runs,
+every file is checked against its recorded SHA-256 before anything is
+imported. The handoff's source record binds the model's identity and the four
+file hashes; a record without them belongs to a natively built model, which
+is refused (issue #67 decision 6).
+
 In AEDT, `modeling="thin_film"` builds Route A with its finite bodies (bumps,
 posts) retained as conductor solids (`ROUTE_A_RETAINED_BODIES`; the sidecar's
 `route_policy.conductor_volumes` is `retained`), and the import makes them

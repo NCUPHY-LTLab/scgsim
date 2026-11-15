@@ -3,9 +3,11 @@
 :func:`plan_hfss_boundaries` names every HFSS boundary and binds each port treatment (a junction or a
 generic ``LumpedRlc``) to all the faces of its port sheet: SGB partitions a port sheet where another face
 meets it (a pad wall, a band), and each of those faces must import exactly once.  :func:`q3d_net_names`
-names the Q3D Nets.  Net, junction and port-sheet IDs such as ``chip/A`` and ``chip_A`` sanitise to the
-same AEDT name, so every name comes from :func:`~scgsim.geometry.sgb.output.sidecar.aedt.aedt_names`, which
-appends ``__2``, ``__3`` ... to a later collision; the assignment and its readback then use that one name.
+names the Q3D Nets.  A Net's AEDT name is its sanitised ID
+(:func:`~scgsim.aedt.preparation.sgb_model.aedt_net_names`); two Nets whose IDs sanitise alike (``chip/A``
+and ``chip_A``) are refused, as preparation already refuses them.  Junction and port-sheet names come from
+:func:`~scgsim.geometry.sgb.output.sidecar.aedt.aedt_names`, which appends ``__2``, ``__3`` ... to a later
+collision; the assignment and its readback use that one name.
 A model the plan refuses raises :class:`BoundaryPlanError` before the import changes the design.
 """
 
@@ -17,7 +19,12 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from scgsim.aedt.preparation.sgb_model import SgbJunction, net_groups, port_group
+from scgsim.aedt.preparation.sgb_model import (
+    SgbJunction,
+    aedt_net_names,
+    net_groups,
+    port_group,
+)
 from scgsim.aedt.rlc import rlc_native_topology
 from scgsim.aedt.specs.common import LumpedRlc
 from scgsim.contracts.sgb_sidecar import Sidecar, views
@@ -51,8 +58,9 @@ class HfssBoundaryPlan:
     """Every HFSS boundary the import assigns, named and checked against the sidecar and guard before AEDT.
 
     ``perfect_e`` maps each Net with Route A sheet faces to its boundary name and its planned faces.  Names
-    are unique among their kind (:func:`~scgsim.geometry.sgb.output.sidecar.aedt.aedt_names`), so two Nets or two
-    treatments whose IDs sanitise alike never claim one boundary.
+    are unique among their kind: two Nets whose IDs sanitise alike are refused (:func:`q3d_net_names`), and
+    two treatments whose IDs sanitise alike are told apart by
+    :func:`~scgsim.geometry.sgb.output.sidecar.aedt.aedt_names`.
     """
 
     perfect_e: Mapping[str, tuple[str, tuple[str, ...]]]
@@ -103,8 +111,8 @@ def _perfect_e_plan(
         for net, names in net_groups(sidecar).items()
     }
     sheets = {net: faces for net, faces in sheets.items() if faces}
-    names = aedt_names([(net, f"perfect_e_{net}") for net in sheets])
-    return {net: (names[net], faces) for net, faces in sheets.items()}
+    names = q3d_net_names(net_groups(sidecar))
+    return {net: (f"perfect_e_{names[net]}", faces) for net, faces in sheets.items()}
 
 
 def _junction_rlcs(
@@ -208,8 +216,11 @@ def _checked_port(
 
 
 def q3d_net_names(nets: Iterable[str]) -> dict[str, str]:
-    """Net -> its AEDT Net name, unique across ``nets`` (``chip/A`` and ``chip_A`` become ``chip_A``, ``chip_A__2``)."""
-    return aedt_names([(net, net) for net in sorted(nets)])
+    """Net -> its AEDT Net name, its sanitised ID; two Nets whose IDs sanitise alike raise :class:`BoundaryPlanError`."""
+    try:
+        return aedt_net_names(nets)
+    except ValueError as error:
+        raise BoundaryPlanError(str(error)) from error
 
 
 def _unit(values: Sequence[float]) -> Point:
