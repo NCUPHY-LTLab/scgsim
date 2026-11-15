@@ -232,4 +232,53 @@ fine structure, and `mesh()` can still stop with `MeshRepairError`, which then
 names the places where it stopped.
 :::
 
-AEDT is outside this check, because AEDT does not build its model from SGB geometry.
+## The check of the AEDT Eigenmode simulation {#aedt-eigenmode-check}
+
+`scgsim.aedt.EigenmodeSim` builds its model from the same SGB geometry and
+imports its STEP into HFSS, so it has its own class-level `simulation_drc()`.
+It checks the geometry half of that simulation's own pipeline, everything
+before AEDT starts, and needs no AEDT:
+
+1. the plan's SGB model on the route `modeling` realizes: `"thin_film"` is
+   Route A (each conductor a sheet), `"solid"` is Route C (each conductor a
+   solid of its film's thickness);
+2. the STEP export and its import guard, the Region box against the plan's
+   `VACUUM_REGION`, and the AEDT names of Nets and RLCs (two IDs that become
+   one AEDT name are refused, naming both);
+3. the import's first step: every port sheet's boundary on the guarded faces;
+4. the selection of every Surface-EPR row on the faces the import will hold.
+
+```python
+from scgsim.aedt import EigenmodeSim
+
+report = EigenmodeSim.simulation_drc(
+    component,
+    layer_stack=layer_stack,
+    material_records=material_records,
+    nets=nets,
+    surface_epr_specs=surface_epr_specs,
+    modeling="solid",  # or "thin_film"; there is no default
+)
+print(report.render_text())  # geometry stage: passed
+```
+
+The arguments are the Palace check's, with `modeling` in place of `route` and
+`approximation_profile`: Route C is checked here, and the Palace classes keep
+refusing it. A layout meant for both modelings calls the check once for each.
+It needs `scgsim[aedt]` installed (the STEP export uses OCP).
+
+A step that refuses raises the error that step raises in the simulation,
+unchanged, so read it as you read a refusal of `prepare_handoff()`. AEDT
+meshes the model itself, so there is no meshing stage: the
+`SimulationDrcReport` of `scgsim.aedt` has the geometry stage only. The fixed
+settings are the Palace check's where they mean the same: zero coupon padding,
+the (0, 0, 1000) µm vacuum when the layout has none (AEDT's Region is that
+box), and every port sheet with a parallel inductance, which the geometry
+never reads. A pass means that model can be built and imported with these
+settings. It does not promise the other `modeling`, junctions, lumped RLCs or
+another vacuum, nor that AEDT meshes or solves the model; run that
+simulation's `prepare_handoff()` and its AEDT run for that.
+
+HFSS Driven Terminal and Q3D C/G have no simulation class: their geometry half
+is `prepare_sgb_model(...)` itself, which builds and checks the model without
+AEDT.

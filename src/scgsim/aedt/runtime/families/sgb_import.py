@@ -89,18 +89,7 @@ def import_sgb_model(
     app: Any, model: PreparedSgbModel, *, family: Family
 ) -> ImportedSgbModel:
     """Import ``model`` into the empty design of ``app`` and assign what its sidecar names (see the module)."""
-    _check_supported(model, family)
-    model.verify_files()
-    guard = read_step_guard(model.path("guard"))
-    sidecar = read_sidecar(model.path("sidecar"))
-    _check_ports(model, sidecar, family)
-    hfss = (
-        plan_hfss_boundaries(
-            sidecar, guard, model.junctions, model.lumped_rlcs, model.lumped_ports
-        )
-        if family == "hfss"
-        else None
-    )
+    guard, sidecar, hfss = plan_import(model, family=family)
     # AEDT's readback is coarser than the sidecar's tolerance_um (decision 9), so every comparison with what
     # AEDT reports uses a thousandth of the bound model's own grid.
     tolerance_um = import_tolerance_um(float(sidecar["model"]["grid_um"]))
@@ -141,6 +130,53 @@ def import_sgb_model(
     imported.record["readback_tolerance_um"] = tolerance_um
     imported.record["model_identity_sha256"] = model.identity_sha256
     return imported
+
+
+def plan_import(
+    model: PreparedSgbModel, *, family: Family
+) -> tuple[StepGuard, Sidecar, HfssBoundaryPlan | None]:
+    """Step 1 of the import, which needs no AEDT: the model's guard, sidecar and HFSS boundary plan.
+
+    It refuses a model the import cannot realize before AEDT is touched: a treatment the family does not
+    have, a changed file, an untreated HFSS port sheet, a boundary or Net name two IDs share.  The
+    ``simulation_drc`` of an AEDT simulation class runs it too.
+    """
+    _check_supported(model, family)
+    model.verify_files()
+    guard = read_step_guard(model.path("guard"))
+    sidecar = read_sidecar(model.path("sidecar"))
+    _check_ports(model, sidecar, family)
+    hfss = (
+        plan_hfss_boundaries(
+            sidecar, guard, model.junctions, model.lumped_rlcs, model.lumped_ports
+        )
+        if family == "hfss"
+        else None
+    )
+    return guard, sidecar, hfss
+
+
+def planned_import(guard: StepGuard) -> ImportedSgbModel:
+    """The import the guard plans, before AEDT makes it: each guarded face once on each solid that lists it.
+
+    A free face is planned as its rebuilt sheet, named as :func:`import_sgb_model` names it.  AEDT gives
+    face ids only on import, so a planned copy's id is the face's place in its solid's guard record, counted
+    from 1 (0 for a sheet's one face): it says which copy a selection takes, not which AEDT face it is.
+    """
+    copies: dict[str, dict[str, int]] = {}
+    for solid in guard["solids"]:
+        for position, face in enumerate(solid["faces"], start=1):
+            copies.setdefault(face["face"], {})[solid["aedt_name"]] = position
+    sheets = free_sheet_names(guard["free_faces"])
+    for face, name in sheets.items():
+        copies[face] = {name: 0}
+    objects = {solid["solid"]: solid["aedt_name"] for solid in guard["solids"]}
+    return ImportedSgbModel(objects, copies, sheets)
+
+
+def free_sheet_names(free_faces: Sequence[FreeFace]) -> dict[str, str]:
+    """Planned free face id -> the AEDT name of the sheet it is rebuilt as, named by its group."""
+    return aedt_names([(face["face"], face["group"] or "sheet") for face in free_faces])
 
 
 def lumped_port_faces(guard: StepGuard, sheets: Mapping[str, str]) -> dict[str, Any]:
@@ -279,9 +315,7 @@ def _rebuild_free_faces(
     app: Any, free_faces: Sequence[FreeFace], tolerance_um: float
 ) -> dict[str, str]:
     """Planned free face id -> the AEDT sheet rebuilt from its guarded loops, named by its group."""
-    names = aedt_names(
-        [(face["face"], face["group"] or "sheet") for face in free_faces]
-    )
+    names = free_sheet_names(free_faces)
     sheets: dict[str, str] = {}
     for face in free_faces:
         outer, *holes = (

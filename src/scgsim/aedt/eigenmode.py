@@ -34,6 +34,13 @@ from scgsim.geometry import (
 )
 from scgsim.geometry.surface_epr import normalize_surface_epr_specs
 
+from .drc import (
+    SimulationDrcReport,
+    check_eigenmode_model,
+    fixed_port_rlcs,
+    layout_snapshot,
+    run_geometry_stage,
+)
 from .epr.reanalysis import reanalyze_epr
 from .preparation.geometry import prepare_hfss_eigenmode_from_geometry
 from .preparation.handoff import HandoffPlan
@@ -181,11 +188,6 @@ class EigenmodeSim:
         if specs is None:
             self.surface_epr_specs = None
         else:
-            if isinstance(specs, Mapping) and not specs:
-                raise ValueError(
-                    "set_surface_epr({}) requests no Surface EPR; to have none, do not call "
-                    "set_surface_epr(), or call set_surface_epr(None) to turn it off again"
-                )
             stack = (
                 self._plan_snapshot.stack
                 if self._plan_snapshot is not None
@@ -193,9 +195,7 @@ class EigenmodeSim:
             )
             if stack is None:
                 raise ValueError("set_surface_epr() needs the plan or stack first")
-            self.surface_epr_specs = normalize_surface_epr_specs(
-                specs, materials=stack["materials"]
-            )
+            self.surface_epr_specs = _surface_epr_specs(specs, stack)
         self._invalidate_model()
 
     def add_lumped_rlc(self, treatment: LumpedRlc) -> None:
@@ -347,6 +347,76 @@ class EigenmodeSim:
         self.handoff_plan = plan
         return plan
 
+    @classmethod
+    def simulation_drc(  # noqa: PLR0913 -- the layout, its PDK data, and the plan settings the simulation takes
+        cls,
+        component: Any,
+        *,
+        layer_stack: Any,
+        material_records: Mapping[str, Mapping[str, Any]],
+        instances: Mapping[str, Any] | None = None,
+        nets: Mapping[str, Sequence[str]] | None = None,
+        surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
+        modeling: Modeling,
+    ) -> SimulationDrcReport:
+        """Check that this simulation can build its AEDT model of ``component``, without AEDT, and return the report.
+
+        The check runs the geometry half of ``prepare_handoff()`` and of the HFSS import, everything before
+        AEDT is started (:mod:`scgsim.aedt.drc`): the plan's SGB model on the route ``modeling`` realizes
+        (``"thin_film"`` Route A, ``"solid"`` Route C) with its STEP and import guard, the boundaries the
+        import plans on the guarded faces, and the selection of every Surface-EPR row.  A step that refuses
+        raises the error that step raises in the simulation, unchanged.  The other settings are fixed: zero
+        coupon padding; every authored port sheet with a parallel inductance, which the geometry never
+        reads; and, when the layout has no vacuum of its own, the plan's vacuum region padded by
+        (x, y, z) = (0, 0, 1000) um, the vacuum of Palace's check.  With ``surface_epr_specs`` the bands are
+        cut as ``set_surface_epr(surface_epr_specs)`` would cut them, and the specs are checked as it checks
+        them; without them no bands are cut.
+
+        AEDT meshes the model itself, so the report has a geometry stage only.  The model is built in a
+        temporary folder that is removed.  A pass means that model can be built and imported with these
+        fixed settings; it does not promise other settings (the other ``modeling``, junctions, lumped RLCs,
+        another vacuum region), nor that AEDT meshes or solves it.
+
+        Args:
+            component: The layout Component under check.
+            layer_stack: The PDK layer stack, as ``GeometryPlan`` takes it.
+            material_records: The PDK material records, as ``GeometryPlan`` takes them.
+            instances: ``{"chip/device": reference, ...}`` for an assembly, as ``GeometryPlan.register_instance``.
+            nets: ``{"Ground": ("chip/plane", ...), ...}``, the Net assignment the simulation's plan is given, as
+                ``GeometryPlan.set_nets`` takes it.  Without it no conductor has a Net.
+            surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
+            modeling: ``"solid"`` or ``"thin_film"``, as ``EigenmodeSim`` takes it; there is no default.
+
+        Raises:
+            ValueError: ``modeling`` is not ``"solid"`` or ``"thin_film"``, or a step of the pipeline
+                refuses the layout.
+        """
+        # The modeling is checked before the layout is read, so a refused one costs no preparation.
+        modeling = modeling_from_value(modeling)
+        snapshot = layout_snapshot(
+            component,
+            layer_stack=layer_stack,
+            material_records=material_records,
+            instances=instances,
+            nets=nets,
+        )
+        specs = (
+            None
+            if surface_epr_specs is None
+            else _surface_epr_specs(surface_epr_specs, snapshot.stack)
+        )
+        return run_geometry_stage(
+            lambda folder: prepare_sgb_model(
+                snapshot.geometry_input,
+                prepared_stack=snapshot.stack,
+                modeling=modeling,
+                output_dir=folder,
+                lumped_rlcs=fixed_port_rlcs(snapshot),
+                surface_epr_specs=specs,
+            ),
+            check_eigenmode_model,
+        )
+
     def resolve_results(self, run_dir: str | Path | None = None) -> ResolvedRun:
         """Resolve completed result evidence from the plan or explicit run path."""
         if run_dir is None:
@@ -377,6 +447,18 @@ class EigenmodeSim:
     ) -> Any:
         """Display one detached EPR result without running the solver."""
         return show_epr(result, mode=mode, native_pass=native_pass, theme=theme)
+
+
+def _surface_epr_specs(
+    specs: Mapping[str, Mapping[str, Any]], stack: Mapping[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """``specs`` checked against ``stack``'s materials, as ``set_surface_epr`` and ``simulation_drc`` take them."""
+    if isinstance(specs, Mapping) and not specs:
+        raise ValueError(
+            "set_surface_epr({}) requests no Surface EPR; to have none, do not call "
+            "set_surface_epr(), or call set_surface_epr(None) to turn it off again"
+        )
+    return normalize_surface_epr_specs(specs, materials=stack["materials"])
 
 
 def _stack_payload(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:

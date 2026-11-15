@@ -22,6 +22,7 @@ from scgsim.aedt.specs.epr import (
     SavedSolution,
 )
 
+from .drc import SimulationDrcReport, StageResult
 from .eigenmode import EigenmodeSim
 from .epr.reanalysis import reanalyze_epr
 from .epr.workflow import analyze_epr
@@ -101,6 +102,8 @@ __all__ = [
     "Q3dSpec",
     "ResolvedRun",
     "SavedSolution",
+    "SimulationDrcReport",
+    "StageResult",
     "TerminalPort",
     "analyze_epr",
     "parse_aedt_spec",

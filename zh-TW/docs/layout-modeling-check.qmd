@@ -105,4 +105,31 @@ route 是您傳入的那一個，其他設定是固定的：
 通過代表在所檢查的 route 與近似設定上、以上述固定設定建出的模型被接受，且沒有任何會被網格階段類別拒絕的邊或面，但不代表切出了多少條帶。它不保證其他設定能夠建模：其他 route 或近似設定、Electrostatic 端子、接面、集總支撐或不同的真空區域。若要檢查特定設定，請執行該模擬自己的 `mesh()`。通過也不保證能得到乾淨的網格：網格階段的類別用來防範細微結構，`mesh()` 仍可能以 `MeshRepairError` 中止，此時錯誤會指出中止的位置。
 :::
 
-AEDT 不在此檢查範圍內，因為 AEDT 不以 SGB 幾何建立模型。
+## AEDT 本徵模態模擬的檢查 {#aedt-eigenmode-check}
+
+`scgsim.aedt.EigenmodeSim` 由同一份 SGB 幾何建立模型，再把其 STEP 匯入 HFSS，因此有自己的類別層級 `simulation_drc()`。它檢查該模擬自身流程的幾何半段，也就是 AEDT 啟動之前的一切，不需要 AEDT：
+
+1. 在 `modeling` 所實現的路徑上建立計畫的 SGB 模型：`"thin_film"` 為 Route A（每個導體為薄片），`"solid"` 為 Route C（每個導體為其膜厚的實體）；
+2. STEP 匯出與其匯入防護、Region 方框與計畫 `VACUUM_REGION` 的比對，以及 Net 與 RLC 的 AEDT 名稱（兩個 ID 變成同一個 AEDT 名稱時會被拒絕，並指出兩者）；
+3. 匯入的第一步：每個端口薄片在受防護面上的邊界；
+4. 在匯入將持有的面上，選取每一列 Surface-EPR。
+
+```python
+from scgsim.aedt import EigenmodeSim
+
+report = EigenmodeSim.simulation_drc(
+    component,
+    layer_stack=layer_stack,
+    material_records=material_records,
+    nets=nets,
+    surface_epr_specs=surface_epr_specs,
+    modeling="solid",  # 或 "thin_film"；沒有預設值
+)
+print(report.render_text())  # geometry stage: passed
+```
+
+引數與 Palace 的檢查相同，只是以 `modeling` 取代 `route` 與 `approximation_profile`：Route C 在此檢查，Palace 類別則繼續拒絕它。要用於兩種 modeling 的版圖，對每一種各呼叫一次。需要安裝 `scgsim[aedt]`（STEP 匯出使用 OCP）。
+
+拒絕的步驟會原封不動地拋出它在模擬中拋出的錯誤，請像閱讀 `prepare_handoff()` 的拒絕一樣閱讀它。AEDT 自行建立網格，因此沒有網格階段：`scgsim.aedt` 的 `SimulationDrcReport` 只有幾何階段。固定設定在意義相同處與 Palace 的檢查一致：零 coupon 外擴；版圖沒有自己的真空時使用 (0, 0, 1000) µm 的真空（AEDT 的 Region 就是這個方框）；每個端口薄片給一個並聯電感，幾何不會讀取它。通過表示該模型在這些設定下可以建立並匯入。它不保證另一種 `modeling`、接面、集總 RLC 或其他真空，也不保證 AEDT 能為模型建立網格或求解；這些請執行該模擬的 `prepare_handoff()` 與其 AEDT 執行。
+
+HFSS Driven Terminal 與 Q3D C/G 沒有模擬類別：它們的幾何半段就是 `prepare_sgb_model(...)` 本身，不需要 AEDT 即可建立並檢查模型。
