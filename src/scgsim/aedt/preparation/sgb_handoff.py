@@ -49,6 +49,13 @@ def attach_sgb_model(model: PreparedSgbModel, run_dir: Path) -> dict[str, Any]:
     return payload
 
 
+def model_payload(model: PreparedSgbModel) -> dict[str, Any]:
+    """The model as a request payload names it: in the handoff's own ``model/`` folder."""
+    payload = model.to_payload()
+    payload["model_dir"] = SGB_MODEL_DIR
+    return payload
+
+
 def bind_sgb_model(payload: Mapping[str, Any], run_dir: Path) -> PreparedSgbModel:
     """The model of a handoff payload, bound to its files under ``run_dir/model`` and checked again.
 

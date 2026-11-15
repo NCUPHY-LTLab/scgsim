@@ -13,9 +13,7 @@ from typing import Any
 
 from scgsim.aedt.data import detached, freeze
 from scgsim.aedt.io import file_sha256, read_json
-from scgsim.aedt.preparation.cohort import validate_geometry_source
 from scgsim.aedt.preparation.sgb_handoff import SOURCE_KEYS, check_sgb_model_source
-from scgsim.aedt.preparation.sgb_model import PreparedSgbModel
 from scgsim.aedt.results.hfss_readback import (
     validate_hfss_pec_bindings,
     validate_hfss_setup,
@@ -30,7 +28,10 @@ from scgsim.aedt.results.q3d_readback import (
     validate_q3d_model_readback,
     validate_q3d_setup,
 )
-from scgsim.aedt.results.readback_common import positive_unique_ids
+from scgsim.aedt.results.readback_common import (
+    positive_unique_ids,
+    validate_imported_sgb_model,
+)
 from scgsim.aedt.results.receipt_validation import (
     contained,
     validate_completion_cohort,
@@ -49,7 +50,6 @@ from scgsim.aedt.specs.hfss import (
 from scgsim.aedt.specs.parse import parse_aedt_spec
 from scgsim.aedt.specs.q2d import Q2dSpec
 from scgsim.aedt.specs.q3d import Q3dSpec
-from scgsim.geometry.sgb.output.exchange.guard import read_step_guard
 
 
 @dataclass(frozen=True)
@@ -258,22 +258,6 @@ def _validate_sgb_eigenmode_source(context: PreparedModelContext) -> None:
         raise RuntimeError("HFSS Eigenmode prepared receipt must not contain ports")
 
 
-def validate_imported_sgb_model(
-    receipt: dict[str, Any], model: PreparedSgbModel
-) -> None:
-    """Refuse a receipt whose geometry is not ``model`` imported: its identity and the guard's solids."""
-    geometry = receipt.get("geometry")
-    if (
-        not isinstance(geometry, dict)
-        or geometry.get("model_identity_sha256") != model.identity_sha256
-    ):
-        raise RuntimeError("the receipt's AEDT geometry is not the request's SGB model")
-    guard = read_step_guard(model.path("guard"))
-    expected = {solid["solid"]: solid["aedt_name"] for solid in guard["solids"]}
-    if geometry.get("objects") != expected:
-        raise RuntimeError("the receipt's imported objects are not the guard's solids")
-
-
 def _validate_body_first_source(context: PreparedModelContext) -> None:
     """Verify the body-first planar source and its native object roster."""
     spec = context.spec
@@ -302,10 +286,13 @@ def _validate_body_first_source(context: PreparedModelContext) -> None:
 
 
 def _validate_q3d_source(context: PreparedModelContext) -> None:
-    """Verify Q3D source identity and native body assignments."""
-    if set(context.source_binding) != {"spec", "spec_sha256"}:
-        raise RuntimeError("Q3D prepared source must not contain an imported GDS")
-    validate_geometry_source(context.root, context.source_binding, context.spec)
+    """The receipt binds the request's SGB model, and its Nets and terminals are the request's."""
+    try:
+        check_sgb_model_source(context.source_binding, context.spec.model)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    if set(context.source_binding) != {"spec", "spec_sha256", *SOURCE_KEYS}:
+        raise RuntimeError("Q3D source members are not canonical")
     validate_q3d_model_readback(
         context.root, context.receipt, context.spec, prepared=True
     )

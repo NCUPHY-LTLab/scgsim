@@ -15,8 +15,9 @@ before any assignment when what AEDT imported is not the guarded model:
    on the Region's faces: Palace assigns nothing to its exterior, which is its natural PMC condition, and
    the two realizations must have the same outer boundary condition;
 7. HFSS: one Perfect E per Net over the Route A sheet faces, and a Lumped RLC over the port-sheet faces of
-   each junction and of each generic ``LumpedRlc`` (issue #67 decision 8).  Q3D: one Net per sidecar Net
-   over its conductor solids.  Each assignment and its readback use the planned name.
+   each junction and of each generic ``LumpedRlc`` (issue #67 decision 8).  Each assignment and its
+   readback use the planned name.  Q3D assigns its Nets, with their request's types, and their sources and
+   sinks after the import (:mod:`.q3d_terminals`).
 
 Every port sheet must carry a junction or an RLC.  Lumped Terminal ports wait for the SGB flow's Driven
 Terminal design, and a model that has them is refused, not approximated.
@@ -34,7 +35,6 @@ from scgsim.aedt.runtime.families.sgb_boundaries import (
     HfssBoundaryPlan,
     PortRlc,
     plan_hfss_boundaries,
-    q3d_net_names,
 )
 from scgsim.aedt.runtime.families.sgb_faces import (
     ImportedFace,
@@ -43,6 +43,7 @@ from scgsim.aedt.runtime.families.sgb_faces import (
     match_solid_faces,
 )
 from scgsim.aedt.runtime.native.common import (
+    detached_data,
     native_boundary_type,
     native_object_boolean_property,
     native_object_property,
@@ -97,8 +98,6 @@ def import_sgb_model(
         if family == "hfss"
         else None
     )
-    roles = q3d_net_roles(model, sidecar) if family == "q3d" else {}
-    net_names = q3d_net_names(roles)
     # AEDT's readback is coarser than the sidecar's tolerance_um (decision 9), so every comparison with what
     # AEDT reports uses a thousandth of the bound model's own grid.
     tolerance_um = import_tolerance_um(float(sidecar["model"]["grid_um"]))
@@ -125,13 +124,21 @@ def import_sgb_model(
             assign_port_rlc(app, rlc, face_copies, tolerance_um)
             for rlc in hfss.lumped_rlcs
         ]
-    else:
-        imported.record["nets"] = assign_q3d_nets(
-            app, sidecar, objects, roles, net_names
-        )
     imported.record["readback_tolerance_um"] = tolerance_um
     imported.record["model_identity_sha256"] = model.identity_sha256
     return imported
+
+
+def imported_geometry_record(imported: ImportedSgbModel) -> dict[str, Any]:
+    """The detached record of an imported model: where its solids and faces are, and what was assigned."""
+    return {
+        "objects": dict(imported.objects),
+        "face_copies": {
+            face: dict(copies) for face, copies in imported.face_copies.items()
+        },
+        "sheets": dict(imported.sheets),
+        **detached_data(imported.record),
+    }
 
 
 def _check_supported(model: PreparedSgbModel, family: Family) -> None:
@@ -543,66 +550,6 @@ def _port_end_midpoint(
             f"the port face's edges at {extreme} um along its direction do not form one segment"
         )
     return _point([(a[k] + b[k]) / 2 for k in range(3)])
-
-
-# ---------------------------------------------------------------- Q3D
-
-
-def q3d_net_roles(
-    model: PreparedSgbModel, sidecar: Sidecar
-) -> dict[str, Literal["Signal", "Ground"]]:
-    """Each conductor Net's Q3D role from the model's ground declaration: Ground if declared, else Signal."""
-    if model.ground_net_ids is None:
-        raise ValueError(
-            "the SGB model declares no ground Nets, so the Q3D Net roles are unknown; pass "
-            "ground_net_ids to prepare_sgb_model (an empty sequence when no Net is ground)"
-        )
-    nets = {
-        volume["net"]
-        for volume in sidecar["volume"].values()
-        if volume["kind"] == "conductor" and volume["net"] is not None
-    }
-    missing = sorted(set(model.ground_net_ids) - nets)
-    if missing:
-        raise ValueError(f"ground Nets {missing} have no conductor solid in the model")
-    return {
-        net: "Ground" if net in model.ground_net_ids else "Signal"
-        for net in sorted(nets)
-    }
-
-
-def assign_q3d_nets(
-    app: Any,
-    sidecar: Sidecar,
-    objects: Mapping[str, str],
-    roles: Mapping[str, Literal["Signal", "Ground"]],
-    net_names: Mapping[str, str],
-) -> list[dict[str, Any]]:
-    """One Net per sidecar Net over its conductor solids, in Net order, with its declared role.
-
-    Each Net is assigned and read back under its name in ``net_names`` (:func:`q3d_net_names`).
-    """
-    by_net: dict[str, list[str]] = {}
-    for solid_id, name in objects.items():
-        volume = sidecar["volume"][solid_id]
-        if volume["kind"] == "conductor":
-            if volume["net"] is None:
-                raise SgbImportError(f"conductor {name} has no Net")
-            by_net.setdefault(volume["net"], []).append(name)
-    records = []
-    for net, names in sorted(by_net.items()):
-        net_name = net_names[net]
-        boundary = app.assign_net(names, net_name, roles[net])
-        assigned = sorted(
-            int(value) for value in app.oboundary.GetExcitationAssignment(net_name)
-        )
-        expected = sorted(int(app.modeler[name].id) for name in names)
-        if not boundary or assigned != expected:
-            raise SgbImportError(f"AEDT did not assign Net {net!r} to {names}")
-        records.append(
-            {"net": net, "name": net_name, "role": roles[net], "objects": names}
-        )
-    return records
 
 
 # ---------------------------------------------------------------- small vector helpers

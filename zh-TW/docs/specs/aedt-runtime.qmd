@@ -9,7 +9,7 @@ scgsim-id: "docs/specs/aedt-runtime"
 
 [課程地圖](../examples.qmd)連結所有已實作的 AEDT 系列課程。本頁定義精確規格、失敗規則，以及此版本讀取的[目前格式](#current-formats)。
 
-下方實體／薄膜建模擴充除本頁明列的必要三維建模選擇外，不修訂 v2 交易或 Q3D body-v3 契約。
+下方實體／薄膜建模擴充除本頁明列的必要三維建模選擇外，不修訂 v2 交易或 Q3D v3 契約。
 
 ## 共用生命週期 {#one-shared-lifecycle}
 
@@ -186,7 +186,7 @@ SCGSim 只讀取它自己寫出的格式。較早的 SCGSim 寫出的交接、�
 | HFSS Driven Terminal | 明確 `modeling="solid"` 或 `modeling="thin_film"`；既有 Wave `TerminalPort` 或另行宣告、具明確訊號／參考身份的 `LumpedTerminalPort`；求解需完整 `HfssRunControl` | 依序排列的終端 S 參數及 Touchstone |
 | HFSS Driven Modal | 明確 `modeling="solid"` 或 `modeling="thin_film"`；含精確積分線的模態埠；求解需完整 `HfssRunControl` | 依序排列的模態 S 參數、阻抗及 Touchstone |
 | HFSS Eigenmode | 明確 `modeling="solid"` 或 `modeling="thin_film"`；既有執行期仍不使用埠；求解需完整 `EigenmodeRunControl`，包含模式數與搜尋頻率；一般 RLC 模型元件和 `PlanarJunction`、EPR 接面資料分開 | 一般實數模式頻率、原生 Q 與收斂證據；EPR 歷史及已儲存場結果使用獨立結果契約 |
-| Q3D | 明確 `modeling="solid"` 或 `modeling="thin_film"`；精確導體 Net 成員；AC/RL 使用真實 Signal source/sink 對；支援無終端 C/G；可選精確六面 Region 接地封閉；求解需完整系列控制 | 原生電容矩陣，以及啟用時的電阻／電感矩陣 |
+| Q3D | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型；精確導體 Net 成員；AC/RL 使用真實 Signal source/sink 對；支援無終端 C/G；可選精確六面 Region 接地封閉；求解需完整系列控制 | 原生電容矩陣，以及啟用時的電阻／電感矩陣 |
 | Q2D | 明確剖面幾何與導體／參考指派 | 每單位長度電容／電導及電阻／電感矩陣 |
 
 ### 集總埠片與終端 RLC {#hfss-shared-lumped-support}
@@ -250,7 +250,7 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 理想超導體由來源 PDK 材料宣告決定，包含 `PdkMaterial.is_superconducting`，並保留 Al、Nb 等原材料 ID。實體映射到原生 `pec`；薄 Q3D 本體使用 `ThinConductor`、材料 `pec` 與具有明確單位的宣告物理厚度；薄 HFSS 本體使用 `Perfect E`。非超導介電與真空指派採明確 PDK AEDT 材料庫對應。不支援的材料模型明確失敗，不改用室溫材料或損耗模型。
 
-Q3D AC/RL 保留要求的 Signal Net 與 ConstantVoltage source/sink 語意。實體終端綁原生面；薄膜終端綁原生 `AssignSource`／`AssignSink` 邊。`+X`、`-X`、`+Y`、`-Y` 選取器只在對應來源外部終端唯一時使用；轉接器不選最近邊，也不使用孔邊界。片上的 `+Z` 或 `-Z` 終端是輸入錯誤，因為片沒有分開的厚度面。僅 C/G Q3D 不需假終端。既有 HFSS 模式專屬埠與參考契約，仍在同一座標映射下有效。
+Q3D AC/RL 保留要求的 Signal Net 與 ConstantVoltage source/sink 語意。終端取自匯入後的物件，而非來源多邊形（[SGB 模型上的 Q3D](#q3d-sgb-model)）：實體取其沿該側最外處的平面面；片取該處的直線邊，且須構成一段不中斷的線段。某側沒有選到任何東西，或選到的部分無法相連時會被拒絕；轉接器不選最近的面或邊。片上的 `+Z` 或 `-Z` 終端是輸入錯誤，因為片沒有分開的厚度面。僅 C/G Q3D 不需假終端。既有 HFSS 模式專屬埠與參考契約，仍在同一座標映射下有效。
 
 既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 作業，可對 Q3D C/G 或 AC/RL、HFSS Eigenmode、HFSS Driven Modal 及 HFSS Driven Terminal 準備、讀回、儲存並釋放模型。它不呼叫 `Analyze`、建立求解器網格、求解，或匯出場與結果矩陣。僅準備收據不是已完成求解結果，嚴格結果解析不變。一般明確求解路徑仍可用，但此建模範圍不宣稱任一表示已取得求解結果或數值精確度。
 
@@ -313,9 +313,9 @@ Q2D／Q3D 契約將原生觀察方向套用到下列兩項額外資格，和先�
 
 ## Q3D 擷取與 Region 接地契約 {#q3d-extraction-and-region-ground-candidate}
 
-目前 Q3D 要求只使用 `scgsim.aedt.q3d.v3`。`Q3dSpec` 的 `bodies` 含明確 `Q3dBodySpec`，沒有 GDS 匯入或逐片綁定欄位。每個本體宣告 XY `exterior_um` 外環、零個以上 `holes_um`、`z_min_um`／`z_max_um`、`material_id`、`physical_role` 與最終 `net_id`。無來源呼叫者直接編寫這些正規化本體事實。可選來源身份欄位，只在有來源準備提供時存在；SCGSim 不替無來源本體推定。下述其餘專案、材料、Net、執行控制、Region 及擷取控制保持既有意義。
+目前 Q3D 要求只使用 `scgsim.aedt.q3d.v3`。`Q3dSpec` 攜帶 AEDT 匯入的 `PreparedSgbModel`，以及該模型每個 Net 各一個 `Q3dNetSpec`（[SGB 模型上的 Q3D](#q3d-sgb-model)）；不宣告本體、GDS 匯入或逐片綁定。下述其餘專案、Net、執行控制、Region 及擷取控制保持既有意義。
 
-`Q3dNetSpec.object_names` 指向本體 ID，因此一個 Net 可含多個獨立導體本體，每個導體本體恰屬一個最終 Net。基板本體使用介電材料且無 Net。C/G 可不提供 Signal 終端；AC/RL 必須為每個 Signal Net 提供完整 source/sink 物件與側別對。此 body-v3 要求與轉換行為屬於 v2 實作／API。
+`Q3dNetSpec.name` 是 Net 的 AEDT 名稱（清理後的 ID），`Q3dNetSpec.object_names` 指向模型中屬於該 Net 的導體物件，因此一個 Net 可含多個物件，每個導體物件恰屬一個 Net。C/G 可不提供 Signal 終端；AC/RL 必須為每個 Signal Net 提供完整 source/sink 物件與側別對。
 
 `Q3dSpec.solve_ac_rl` 是嚴格布林值，預設 `true`，因此保留既有電容／電導加 AC 電阻／電感聯合擷取，封存並解析 `results/q3d/c_matrix.csv`、`results/q3d/ac_rl_matrix.csv` 及正規化 `results/q3d/matrices.csv`。`solve_ac_rl=false` 時，只建立電容／電導設定，並封存／解析唯一原生 `results/q3d/c_matrix.csv`；不產生 AC-RL 設定欄位、匯出、收斂證據或正規化相容產物。
 
@@ -327,33 +327,37 @@ Region 接地時，SCGSim 從名為 `Region` 的 AEDT 物件六個原生面，�
 
 解析器要求封存指派與原生讀回精確一致，確認產生 Net 和宣告物理 Net 的指派互斥，並驗證宣告物理 `Ground` 指派未變。缺少、重複、不符、非原生或不成功的驗證證據，都會拒絕執行。最終求解後專案儲存之後，會再次讀取同一份原生 Region 與邊界證據，才使其成為收據依據。
 
-模型片放在 Region 面上後，AEDT Region 歷史會再次擴張。因此 SCGSim 先保存要求擴張後的原生面，在該處建立六張片，再以零額外偏移重建最終原生 Region。最終 Region 具有要求擴張邊界；收據明確記錄要求 padding 與零偏移收尾。
+模型片放在 Region 面上後，AEDT Region 歷史會再次擴張。因此 SCGSim 先保存 Region 的原生面，在該處建立六張片，再以零額外偏移重建最終原生 Region。最終 Region 保留模型的 `VACUUM_REGION` 邊界與匯入 Region 的材料；收據明確記錄零偏移收尾。
 
 沒有相容備援、物理橋或聯集路徑。
 
-### Q3D 本體輸入 v3 {#q3d-body-input-v3}
+### SGB 模型上的 Q3D {#q3d-sgb-model}
 
-Q3D 目前只有 `scgsim.aedt.q3d.v3` 輸入契約；v1/v2 Q3D 反序列化、GDS 匯入及逐片綁定都不是目前輸入路徑，也不自動轉換舊 Q3D 要求。無來源呼叫者直接在相同 v3 `Q3dSpec` 中編寫 `Q3dBodySpec`。每個本體提供完整正規化外環／孔環、微米 Z 區間、材料 ID、物理角色（`signal`、`ground` 或 `substrate`），以及導體的最終 Net ID。基板使用介電材料且無 Net。無來源本體不提供 `source_entity_id`、`source_polygon_id`、`source_occurrence_path`、`source_local_entity_id`、`source_level`、`source_layer_datatype` 等可選來源欄位。
-
-結構化前端為 `prepare_q3d_from_geometry(snapshot: GeometryPlanSnapshot, *,
+Q3D 模擬的是 Palace 網格化的同一幾何（issue #67）。結構化前端為 `prepare_q3d_from_geometry(snapshot: GeometryPlanSnapshot, *,
 aedt_version: str, modeling, output_dir, project_name, design_name,
-materials: Mapping[str, PdkMaterial],
 net_types: Mapping[str, Literal["Signal", "Ground"]],
 physical_ground_nets: Sequence[str],
 terminal_pairs: Mapping[str, Q3dTerminalPair] | None = None,
 run_control: MatrixRunControl | None = None,
-region_padding_um: Sequence[float], resources: AedtResources | None = None)
--> HandoffPlan`。它接受不可變 GeometryPlan 快照，回傳僅供 C/G 的可攜式 v3 交接（`solve_ac_rl=False`）。快照負責來源幾何與最終 Net 成員。`net_types` 必須精確涵蓋導體 Net ID；`physical_ground_nets` 明確指定其中一個子集，與要求的原生型別獨立。材料、執行控制、Region padding 及可選資源仍由呼叫者提供。前端不推定連通性，也不改寫 Net 成員；只依 `terminal_pairs` 中該 Net 的項目設定其 source 與 sink 終端。C/G Signal Net 可沒有終端；AC/RL 則每個 Signal Net 都需完整 source/sink 對。不默默線性化來源曲線，既有 AEDT 曲線意圖排除仍有效。
+resources: AedtResources | None = None) -> HandoffPlan`。它以 `prepare_sgb_model` 建立計畫的 SGB 模型，回傳僅供 C/G 的可攜式 v3 交接（`solve_ac_rl=False`）：
 
-有來源要求的 `geometry_source` 使用 `scgsim.aedt.q3d-geometry-source.v3`，透過路徑與 SHA-256 綁定標準 GDS、獨立堆疊與來源追蹤，並記錄宣告本體及其正規化來源關係。來源附件移入可攜式交接。有來源表示將完整外環與內環保留為單一本體足跡；原生建構使用已覆蓋外片、扣除孔區域，再沿 +Z 掃出宣告區間。此 input-v3 契約不含三角化、GDS 逐片匯入、Net Unite、座標修復或一般特徵尺寸政策。AEDT 路徑不檢查來源或轉換後幾何的寬度與細長區，也不套用通用最小特徵規則。
+1. `modeling="solid"` 建立 Route C（導體實體）；`"thin_film"` 建立 Route A（導體片），其有限本體保留為實體。STEP 不含真空；Q3D 的 Region 即計畫的 `VACUUM_REGION` 方盒，因此沒有 `GeometryPlan.set_vacuum_region(...)` 的計畫會被拒絕，要求也沒有 Region 邊距。
+2. `net_types` 以 Net ID 為鍵，為模型每個 Net 指定 Q3D 類型，且必須恰好列出模型的 Net。`physical_ground_nets` 記錄哪些 Net 在物理上接地（`PreparedSgbModel.ground_net_ids`），與其 Q3D 類型分開。
+3. 每個 Net 成為一個 `Q3dNetSpec`，涵蓋模型中屬於該 Net 的導體物件：guard 的導體實體，以及 Route A 中重建為物件的導體片。ID 會變成同一 AEDT 名稱的 Net 會被拒絕。
+4. `terminal_pairs` 的項目以 GeometryPlan Entity ID 與全域側指定源與匯；每個 Entity 必須恰好是該 Net 的一個導體物件。
+5. 材料是堆疊中模型體積所指材料的紀錄。Route C 導體實體為 `pec`；介電體取其堆疊材料；Region 取真空的材料。
 
-有來源 Q3D 直接建構每個正規化完整本體，不做 GDS 匯入或物件重新命名。接著在材料／Net 指派、設定或求解前，讀取完整原生原始物件清單，確認必要本體身份歸屬。單一本體建構呼叫成功，不代表所有必要本體都已建立。缺少或不明確必要本體、額外未歸屬物件，都在本體清單／讀回階段失敗。原始例外在收據 `error` 中保持主要錯誤；階段細節保留本體歸屬、原始清單、可讀時的原生 ID，以及可取得的原生警告／錯誤脈絡。診斷讀取失敗時，該脈絡為無法提供，不能取代主要失敗。只有警告不會拒絕完整清單。來源契約定義本體歸屬與失敗行為。
+交接在 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard，清單中列於 `aedt_spec.json` 之後；收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`。在 AEDT 機器上，要求會對照該資料夾解碼，並再次檢查每個檔案。宣告原生建構 `bodies` 或 `region_padding_um` 的要求，或缺少模型鍵的收據來源，會附理由拒絕（決策 6）；不轉換舊 Q3D 要求。
+
+執行期把受 guard 保護的 STEP 匯入空的 Q3D 設計（`import_sgb_model`）：物件必須恰為 guard 的實體，每個面對應到其規劃面，材料與 Region 建立後讀回。接著以各 Net 的 Q3D 類型指派要求的 Net，並在其物件的指定側指派源與匯：實體取每個頂點都位於物件沿該側最外處的平面面，且須相連成一片；片取該處的直線邊，且須構成一段不中斷的線段。面與邊在匯入的讀回容差內取自匯入物件。每個終端在指派後讀回，並從已儲存設計再讀回一次。
+
+結果讀取要求收據的幾何帶有模型身份與 guard 的實體，Net 與終端是要求的那些，且 Region 在讀回容差內為模型的 `VACUUM_REGION` 方盒。
 
 #### Q3D 原生僅建構執行 {#q3d-native-build-only-execution}
 
-Q3D v3 透過既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 入口，提供明確啟用的原生僅建構操作。它沿用求解路徑的本體建構、材料／Net 指派、Region 與設定建立／讀回、專案儲存及所負責 Desktop 釋放，不呼叫原生 `Analyze`、建立求解器網格、求解，或匯出矩陣／收斂資料。收據記錄 `status="native_preparation_only"`、`solver_invoked=false` 及 `resources.status="not_used_prepare_only"`，唯一原生輸出是已儲存 AEDT 專案。此次執行會消耗一次性交接，後續求解需重新準備交接。嚴格 `resolve_results` 仍要求已完成求解結果，不把僅準備收據解析成結果。一般 Q3D `--execute` 行為不變。
+Q3D v3 透過既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 入口，提供明確啟用的原生僅建構操作。它沿用求解路徑的模型匯入、材料／Net 指派、Region 與設定建立／讀回、專案儲存及所負責 Desktop 釋放，不呼叫原生 `Analyze`、建立求解器網格、求解，或匯出矩陣／收斂資料。收據記錄 `status="native_preparation_only"`、`solver_invoked=false` 及 `resources.status="not_used_prepare_only"`，唯一原生輸出是已儲存 AEDT 專案。此次執行會消耗一次性交接，後續求解需重新準備交接。嚴格 `resolve_results` 仍要求已完成求解結果，不把僅準備收據解析成結果。一般 Q3D `--execute` 行為不變。
 
-v3 交接以既有順序保留五條一般允許路徑。有來源相容群組追加 `geometry/source.gds`、`metadata/geometry_stack.json` 及 `metadata/geometry_trace.json`；清單 `members` 在 `allowed_paths` 中略過自身路徑，其他檔案的順序、雜湊與宣告檢查不變。因此無來源交接有五條允許路徑、四筆成員；有來源 v3 則有八條允許路徑、七筆成員。
+v3 交接的允許路徑為 `run_aedt.sh`、`aedt_spec.json`、`model/` 下模型的四個檔案，以及三個 metadata 檔案；清單 `members` 略過自身路徑，其他檔案的順序與雜湊不變，共九條允許路徑、八筆成員。
 
 #### Q3D 使用者要求停止／中止並儲存
 

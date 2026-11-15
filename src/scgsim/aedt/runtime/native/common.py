@@ -14,7 +14,6 @@ from scgsim.aedt.data import detached
 from scgsim.aedt.specs.common import LOCKED_PYAEDT
 from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
 from scgsim.aedt.specs.parse import AedtSpec, parse_aedt_spec
-from scgsim.aedt.specs.q3d import Q3dSpec
 from scgsim.aedt.versions import AedtVersionProfile
 
 
@@ -384,7 +383,7 @@ def resolve_native_assignment(
 
 
 def create_region(
-    hfss: Any, spec: HfssDrivenSpec | HfssEigenmodeSpec | Q3dSpec
+    hfss: Any, spec: HfssDrivenSpec | HfssEigenmodeSpec
 ) -> dict[str, Any]:
     """Create and verify the requested GDS-family solution Region."""
     if hfss.modeler.get_object_from_name("Region") is not None:
@@ -430,11 +429,6 @@ def create_region(
         result["padding_um"] = list(effective_padding)
         result["source_effective_envelope"] = envelope
         result["native_bounding_box_um"] = list(q3d_region_bounds(region))
-    if isinstance(spec, Q3dSpec):
-        result["native_region_object_id"] = int(region.id)
-        if envelope is None:
-            result["native_bounding_box_um"] = list(q3d_region_bounds(region))
-        result["requested_padding_um"] = list(spec.region_padding_um)
     return result
 
 

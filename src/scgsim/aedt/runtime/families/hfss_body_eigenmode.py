@@ -22,7 +22,11 @@ from scgsim.aedt.runtime.benchmark import (
 from scgsim.aedt.runtime.families.hfss_exports import export_eigenmode
 from scgsim.aedt.runtime.families.hfss_history import read_body_eigenmode_history
 from scgsim.aedt.runtime.families.hfss_setup import read_body_eigenmode_setup
-from scgsim.aedt.runtime.families.sgb_import import ImportedSgbModel, import_sgb_model
+from scgsim.aedt.runtime.families.sgb_import import (
+    ImportedSgbModel,
+    import_sgb_model,
+    imported_geometry_record,
+)
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
     detached_data,
@@ -171,18 +175,6 @@ def prepare_body_eigenmode(  # noqa: PLR0913 -- preserve the family geometry/ana
         cache,
         timings,
     )
-
-
-def imported_geometry_record(imported: ImportedSgbModel) -> dict[str, Any]:
-    """The detached record of an imported model: where its solids and faces are, and what was assigned."""
-    return {
-        "objects": dict(imported.objects),
-        "face_copies": {
-            face: dict(copies) for face, copies in imported.face_copies.items()
-        },
-        "sheets": dict(imported.sheets),
-        **detached_data(imported.record),
-    }
 
 
 def imported_model(geometry: dict[str, Any]) -> ImportedSgbModel:

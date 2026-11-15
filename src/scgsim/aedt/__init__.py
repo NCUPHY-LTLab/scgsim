@@ -68,7 +68,7 @@ from .specs.hfss import (
 from .specs.modeling import PhysicalLayerSpec
 from .specs.parse import AedtSpec, parse_aedt_spec
 from .specs.q2d import Q2dConductorSpec, Q2dRectangleSpec, Q2dSpec
-from .specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec, Q3dTerminalPair
+from .specs.q3d import Q3dNetSpec, Q3dSpec, Q3dTerminalPair
 
 if TYPE_CHECKING:
     from .batch import (
@@ -116,7 +116,6 @@ __all__ = [
     "Q2dConductorSpec",
     "Q2dRectangleSpec",
     "Q2dSpec",
-    "Q3dBodySpec",
     "Q3dNetSpec",
     "Q3dSpec",
     "Q3dTerminalPair",

@@ -250,8 +250,8 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
 
     ``surface_epr_specs`` are Palace's ``MA``/``MS``/``SA`` specs after
     :func:`scgsim.geometry.surface_epr.normalize_surface_epr_specs`; their margins become bands.
-    ``ground_net_ids`` declares the Nets that are ground, as Palace's electrostatic ground does; Q3D reads
-    each Net's role from it and refuses a model without it.  Every one must be a Net of the model.
+    ``ground_net_ids`` records the Nets that are physically ground, as Palace's electrostatic ground declares
+    them; every one must be a Net of the model.  A Q3D request gives each Net its Q3D type itself.
     ``lumped_rlcs`` and the ``LumpedTerminalPort`` entries of ``ports`` name the plan's port sheets; a wave
     ``TerminalPort`` or a ``ModalPort`` is refused before anything is built (:func:`lumped_ports_of`).
     """

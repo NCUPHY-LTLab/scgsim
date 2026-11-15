@@ -1,4 +1,4 @@
-"""GeometryPlan-to-AEDT request preparation adapters."""
+"""GeometryPlan-to-AEDT request preparation adapters: each writes the handoff of an SGB model."""
 
 from __future__ import annotations
 
@@ -21,9 +21,13 @@ from scgsim.aedt.preparation.handoff import (
 )
 from scgsim.aedt.preparation.handoff_files import handoff_member, utc_now, write_script
 from scgsim.aedt.preparation.planar import validate_geometry_workers
-from scgsim.aedt.preparation.q3d_geometry import lower_q3d_geometry
 from scgsim.aedt.preparation.sgb_handoff import attach_sgb_model, sgb_model_source
-from scgsim.aedt.preparation.sgb_model import PreparedSgbModel
+from scgsim.aedt.preparation.sgb_model import (
+    PreparedSgbModel,
+    aedt_net_names,
+    prepare_sgb_model,
+)
+from scgsim.aedt.preparation.sgb_q3d import q3d_conductors, terminal_object
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
@@ -36,7 +40,6 @@ from scgsim.aedt.specs.common import (
     AedtResources,
     LumpedTerminalPort,
     MatrixRunControl,
-    PdkMaterial,
     TerminalPort,
 )
 from scgsim.aedt.specs.epr import (
@@ -53,7 +56,7 @@ from scgsim.aedt.specs.hfss import (
 )
 from scgsim.aedt.specs.hfss_common import EigenmodeRunControl, HfssRunControl
 from scgsim.aedt.specs.modeling import Modeling
-from scgsim.aedt.specs.q3d import Q3dTerminalPair
+from scgsim.aedt.specs.q3d import Q3dNetSpec, Q3dSpec, Q3dTerminalPair
 from scgsim.geometry import GeometryPlanSnapshot
 
 
@@ -65,40 +68,86 @@ def prepare_q3d_from_geometry(  # noqa: PLR0913 -- preserve the supported explic
     output_dir: str | Path,
     project_name: str,
     design_name: str,
-    materials: Mapping[str, PdkMaterial],
     net_types: Mapping[str, Literal["Signal", "Ground"]],
     physical_ground_nets: Sequence[str],
     terminal_pairs: Mapping[str, Q3dTerminalPair] | None = None,
     run_control: MatrixRunControl | None = None,
-    region_padding_um: Sequence[float],
     resources: AedtResources | None = None,
 ) -> HandoffPlan:
-    """Prepare finite C/G geometry from detached source facts, without AEDT.
+    """Prepare the capacitance-only Q3D handoff of the plan's SGB model, without AEDT.
 
-    The caller owns final Net membership and native net types independently
-    of physical ground roles. Component/PDK source geometry remains unchanged;
-    generated import layers, source trace and originals travel in the handoff.
-    Omitted run_control declares model-only preparation without solve setup.
-    Optional terminal_pairs map final Net IDs to exact source Entity identities
-    and caller-selected global sides; each selected Entity must emit one body.
+    The plan is built as the SGB model AEDT imports (:func:`prepare_sgb_model`, issue #67); its Region is the
+    plan's ``VACUUM_REGION`` (decision 5).  ``net_types`` gives every Net of the model its Q3D type, keyed
+    by Net id; ``physical_ground_nets`` records which Nets are physically ground, independently of their Q3D
+    type.  Optional ``terminal_pairs`` map a Net id to the Entities and global sides of its source and sink;
+    each Entity must be one conductor object of that Net.  Omitted ``run_control`` declares model-only
+    preparation without solve setup.
     """
-
-    with TemporaryDirectory(prefix="scgsim-q3d-geometry-") as temporary:
-        spec = lower_q3d_geometry(
-            snapshot,
-            aedt_version=aedt_version,
+    if isinstance(physical_ground_nets, str | bytes):
+        raise TypeError("physical_ground_nets must be a sequence of Net ids")
+    if not isinstance(snapshot, GeometryPlanSnapshot):
+        raise TypeError("snapshot must be GeometryPlanSnapshot")
+    with TemporaryDirectory(prefix="scgsim-q3d-model-") as temporary:
+        model = prepare_sgb_model(
+            snapshot.geometry_input,
+            prepared_stack=snapshot.stack,
             modeling=modeling,
-            directory=Path(temporary),
+            output_dir=Path(temporary),
+            ground_net_ids=tuple(physical_ground_nets),
+        )
+        spec = Q3dSpec(
+            aedt_version=aedt_version,
+            modeling=model.modeling,
             project_name=project_name,
             design_name=design_name,
-            materials=materials,
-            net_types=net_types,
-            physical_ground_nets=physical_ground_nets,
-            terminal_pairs=terminal_pairs,
+            model=model,
+            nets=q3d_nets(model, net_types, terminal_pairs),
             run_control=run_control,
-            region_padding_um=region_padding_um,
+            solve_ac_rl=False,
         )
         return prepare_handoff(spec=spec, output_dir=output_dir, resources=resources)
+
+
+def q3d_nets(
+    model: PreparedSgbModel,
+    net_types: Mapping[str, Literal["Signal", "Ground"]],
+    terminal_pairs: Mapping[str, Q3dTerminalPair] | None,
+) -> tuple[Q3dNetSpec, ...]:
+    """One :class:`Q3dNetSpec` per Net of ``model``: its type, objects and, when paired, source and sink.
+
+    ``net_types`` must name exactly the model's Nets; each terminal Entity resolves to its one conductor
+    object of the Net (:func:`terminal_object`).
+    """
+    pairs = {} if terminal_pairs is None else dict(terminal_pairs)
+    if any(not isinstance(pair, Q3dTerminalPair) for pair in pairs.values()):
+        raise TypeError("terminal_pairs values must be Q3dTerminalPair")
+    conductors = q3d_conductors(model)
+    if set(net_types) != set(conductors):
+        raise ValueError(
+            f"net_types names {sorted(net_types)}, the model's Nets are {sorted(conductors)}"
+        )
+    if not set(pairs) <= set(conductors):
+        raise ValueError("terminal_pairs must select Nets of the model")
+    names = aedt_net_names(conductors)
+    nets = []
+    for net, objects in conductors.items():
+        pair = pairs.get(net)
+        nets.append(
+            Q3dNetSpec(
+                name=names[net],
+                net_type=net_types[net],
+                object_names=tuple(sorted(objects)),
+                source_object=None
+                if pair is None
+                else terminal_object(model, net, pair.source_entity_id),
+                source_side=None if pair is None else pair.source_side,
+                sink_object=None
+                if pair is None
+                else terminal_object(model, net, pair.sink_entity_id),
+                sink_side=None if pair is None else pair.sink_side,
+            )
+        )
+    return tuple(nets)
 
 
 def prepare_hfss_eigenmode_from_geometry(  # noqa: PLR0913 -- preserve the supported explicit preparation keyword API.

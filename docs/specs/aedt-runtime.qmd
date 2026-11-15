@@ -9,7 +9,7 @@ scgsim-id: "docs/specs/aedt-runtime"
 The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications and failure rules, and the [current formats](#current-formats) this version reads.
 
 The Solid/Thin-Film modeling extension below does not revise the v2
-transaction or Q3D body-v3 contracts except where this page explicitly
+transaction or Q3D v3 contracts except where this page explicitly
 describes the required 3D modeling selection.
 
 ## One shared lifecycle
@@ -365,7 +365,7 @@ uses the separate `run_control=None` path described above.
 | HFSS Driven Terminal | explicit `modeling="solid"` or `modeling="thin_film"`; existing Wave `TerminalPort` or separately declared `LumpedTerminalPort` with explicit signal/reference identity; complete `HfssRunControl` for solving | ordered terminal S-parameters and Touchstone |
 | HFSS Driven Modal | explicit `modeling="solid"` or `modeling="thin_film"`; modal ports with exact integration lines; complete `HfssRunControl` for solving | ordered modal S-parameters, impedance, and Touchstone |
 | HFSS Eigenmode | explicit `modeling="solid"` or `modeling="thin_film"`; the existing runtime remains port-free; complete `EigenmodeRunControl`, including mode count and search frequency, for solving; generic RLC model elements are distinct from `PlanarJunction` and EPR junction records | ordinary real mode frequency, native Q, and convergence evidence; EPR history and saved-field results use their separate result contract |
-| Q3D | explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; real Signal source/sink pairs for AC/RL; terminal-free C/G is supported; optional exact six-face Region ground seal; complete family controls for solving | native capacitance and, when enabled, resistance/inductance matrices |
+| Q3D | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; real Signal source/sink pairs for AC/RL; terminal-free C/G is supported; optional exact six-face Region ground seal; complete family controls for solving | native capacitance and, when enabled, resistance/inductance matrices |
 | Q2D | explicit cross-section geometry and conductor/reference assignments | per-unit-length capacitance/conductance and resistance/inductance matrices |
 
 ### Lumped port sheets and terminal RLC {#hfss-shared-lumped-support}
@@ -608,11 +608,12 @@ Unsupported material models fail explicitly; no room-temperature material or
 loss model is substituted.
 
 Q3D AC/RL retains the requested Signal Net and ConstantVoltage source/sink
-semantics. Solid terminals bind to native faces; thin-film terminals bind to
-native `AssignSource`/`AssignSink` edges. A `+X`, `-X`, `+Y`, or `-Y` selector is
-used only when the corresponding source exterior terminal is unambiguous; the
-adapter does not choose a nearest edge or use a hole boundary. A `+Z` or `-Z`
-terminal on a sheet is an input error because a sheet has no separate
+semantics. A terminal is read from the imported object, not from source
+polygons ([Q3D on the SGB model](#q3d-sgb-model)): on a solid, the planar faces
+at the object's extreme along the side; on a sheet, the straight edges there,
+as one unbroken segment. A side that selects nothing, or pieces that do not
+join, is refused; the adapter does not choose a nearest face or edge. A `+Z` or
+`-Z` terminal on a sheet is an input error because a sheet has no separate
 thickness faces. C/G-only Q3D does not require dummy terminals. Existing HFSS
 mode-specific port and reference contracts remain in force under the same
 coordinate map.
@@ -821,22 +822,17 @@ order, and every primary matrix value match the sealed run and are finite.
 
 ## Q3D extraction and Region-ground contract {#q3d-extraction-and-region-ground-candidate}
 
-The current Q3D request uses only `scgsim.aedt.q3d.v3`. A `Q3dSpec` contains
-explicit `Q3dBodySpec` records in `bodies`; it has no GDS import or per-piece
-binding fields. Each body declares an XY `exterior_um` ring, zero or more
-`holes_um`, its `z_min_um` and `z_max_um`, `material_id`, `physical_role`, and
-final `net_id`. Source-free callers author these normalized body facts
-directly. Optional source identity fields are present only when supplied by a
-source-backed preparation; SCGSim does not infer them for source-free bodies.
-The remaining project, material, Net, run-control, Region and extraction
-controls described below retain their existing meanings.
+The current Q3D request uses only `scgsim.aedt.q3d.v3`. A `Q3dSpec` carries
+the `PreparedSgbModel` AEDT imports and one `Q3dNetSpec` per Net of that model
+([Q3D on the SGB model](#q3d-sgb-model)); it declares no bodies, GDS import or
+per-piece binding. The remaining project, Net, run-control, Region and
+extraction controls described below retain their existing meanings.
 
-`Q3dNetSpec.object_names` names body IDs, so one Net may own several distinct
-conductor bodies and every conductor body belongs to exactly one final Net.
-Substrate bodies use dielectric material and no Net. A C/G request may leave
-Signal terminals absent; an AC/RL request requires each Signal Net's complete
-source/sink object and side pair. This body-v3 request and lowering behavior is
-part of the v2 implementation/API.
+`Q3dNetSpec.name` is the Net's AEDT name (its sanitised ID) and
+`Q3dNetSpec.object_names` names the model's conductor objects of that Net, so
+one Net may own several objects and every conductor object belongs to exactly
+one Net. A C/G request may leave Signal terminals absent; an AC/RL request
+requires each Signal Net's complete source/sink object and side pair.
 
 `Q3dSpec.solve_ac_rl` is a strict boolean and defaults to `true`. The default
 therefore preserves the existing combined capacitance/conductance plus AC
@@ -879,78 +875,72 @@ The same native Region and boundary evidence is read again after the final
 post-solve project save before it becomes receipt-authoritative.
 
 AEDT Region history expands again when model sheets are placed on its faces.
-SCGSim therefore snapshots the requested expanded native faces, creates the six
-sheets there, and rebuilds the final native Region with zero additional offset.
-The final Region has the requested expanded bounds; the receipt records both
-the requested padding and this zero-offset finalization explicitly.
+SCGSim therefore snapshots the Region's native faces, creates the six sheets
+there, and rebuilds the final native Region with zero additional offset. The
+final Region keeps the model's `VACUUM_REGION` bounds and the imported Region's
+material; the receipt records this zero-offset finalization explicitly.
 
 There is no compatibility fallback, physical bridge, or unite path.
 
-### Q3D body-backed input v3 {#q3d-body-input-v3}
+### Q3D on the SGB model {#q3d-sgb-model}
 
-Q3D has one current input contract, `scgsim.aedt.q3d.v3`; v1/v2 Q3D
-deserialization, GDS imports and per-piece binding are not current input
-paths. There is no automatic conversion from an earlier Q3D request. A
-source-free caller authors `Q3dBodySpec` records directly in the same v3
-`Q3dSpec`. Each body supplies its complete normalized exterior and hole rings,
-Z interval in micrometres, material ID, physical role (`signal`, `ground`, or
-`substrate`), and final Net ID for conductors. A substrate body uses a
-dielectric material and no Net. Optional source fields such as
-`source_entity_id`, `source_polygon_id`, `source_occurrence_path`,
-`source_local_entity_id`, `source_level`, and `source_layer_datatype` remain
-absent for a source-free body.
-
-The structured frontend is
+Q3D models the geometry Palace meshes (issue #67). The structured frontend is
 `prepare_q3d_from_geometry(snapshot: GeometryPlanSnapshot, *,
 aedt_version: str, modeling, output_dir, project_name, design_name,
-materials: Mapping[str, PdkMaterial],
 net_types: Mapping[str, Literal["Signal", "Ground"]],
 physical_ground_nets: Sequence[str],
 terminal_pairs: Mapping[str, Q3dTerminalPair] | None = None,
 run_control: MatrixRunControl | None = None,
-region_padding_um: Sequence[float], resources: AedtResources | None = None)
--> HandoffPlan`. It consumes the immutable GeometryPlan snapshot and returns a
-portable v3 handoff for C/G only (`solve_ac_rl=False`). The snapshot owns
-source geometry and final Net membership. `net_types` must cover exactly its
-conductor Net IDs; `physical_ground_nets` explicitly identifies a subset of
-those IDs independently of their requested native type. Materials, run
-control, Region padding and optional resources remain caller inputs. The
-frontend does not infer connectivity or rewrite Net membership. It sets a
-Net's source and sink terminals only from its entry in `terminal_pairs`. A C/G Signal Net may have no terminals; AC/RL requires a complete
-source/sink pair for each Signal Net. Source curves are not silently
-linearized; the existing AEDT curve-intent exclusion remains in force.
+resources: AedtResources | None = None) -> HandoffPlan`. It builds the plan's
+SGB model with `prepare_sgb_model` and returns a portable v3 handoff for C/G
+only (`solve_ac_rl=False`):
 
-For source-backed requests, `geometry_source` uses
-`scgsim.aedt.q3d-geometry-source.v3`. It binds the canonical GDS, detached
-stack and source trace by path and SHA-256 and records the declared bodies and
-their normalized source lineage. Source attachment files are relocated into
-the portable handoff. The source-backed representation preserves
-complete outer and inner rings as one body footprint; its native construction
-uses a covered outer sheet, subtraction of the hole regions, and a +Z sweep
-through the declared interval. No triangulation or
-GDS-piece import, Net Unite, coordinate repair, or generic feature-size policy
-is part of this input-v3 contract. The AEDT path runs no source- or
-lowered-geometry width or sliver check and applies no universal minimum-feature
-rule.
+1. `modeling="solid"` builds Route C (conductor solids); `"thin_film"` builds
+   Route A (conductor sheets) with its finite bodies retained as solids. The
+   STEP leaves out the vacuum; Q3D's Region is the plan's `VACUUM_REGION` box,
+   so a plan without `GeometryPlan.set_vacuum_region(...)` is refused and the
+   request has no Region padding.
+2. `net_types` gives every Net of the model its Q3D type, keyed by Net ID, and
+   must name exactly the model's Nets. `physical_ground_nets` records which
+   Nets are physically ground (`PreparedSgbModel.ground_net_ids`),
+   independently of their Q3D type.
+3. Each Net becomes one `Q3dNetSpec` over the model's conductor objects of that
+   Net: the guard's conductor solids and, in Route A, the conductor sheets
+   rebuilt as objects. Nets whose IDs become one AEDT name are refused.
+4. A `terminal_pairs` entry names a source and a sink by GeometryPlan Entity ID
+   and global side; each Entity must be exactly one conductor object of its Net.
+5. The materials are the stack's records of the materials the model's volumes
+   name. A Route C conductor solid is `pec`; a dielectric takes its stack
+   material; the Region takes the vacuum's.
 
-Source-backed Q3D constructs each normalized whole body directly, without a
-GDS import or object rename. It then reads the complete raw native object
-inventory and attributes the required native body identities before material
-or Net assignment, setup, or solve. A successful body-construction call alone
-does not establish that every required body arrived. Missing or ambiguous
-required bodies, or extra unattributed objects, fail at the body inventory
-and readback phase. The original exception stays primary in receipt `error`;
-phase detail retains body attribution, raw inventory and native IDs when
-readable, plus available native warning/error context. If a diagnostic read
-fails, its context is unavailable and cannot replace the primary failure.
-Warning presence alone does not reject a complete inventory. The source
-contract defines body attribution and failure behavior.
+The handoff carries the model's STEP, BREP, sidecar and guard in its `model/`
+folder, listed in the manifest after `aedt_spec.json`, and its receipt source
+binds `sgb_model_sha256` and `sgb_model_files`. On the AEDT machine the request
+is decoded against that folder and every file is checked again. A request that
+declares natively built `bodies` or `region_padding_um`, or a receipt source
+without the model's keys, is refused with the reason (decision 6); there is no
+conversion from an earlier Q3D request.
+
+The runtime imports the guarded STEP into an empty Q3D design
+(`import_sgb_model`): the objects must be exactly the guard's solids, every
+face is matched to its planned face, the materials and the Region are created
+and read back. It then assigns each request Net with its Q3D type over its
+objects, and each source and sink on the authored side of its object: on a
+solid, the planar faces whose every vertex lies at the object's extreme along
+the side, which must join into one patch; on a sheet, the straight edges there,
+which must form one unbroken segment. Faces and edges are read from the
+imported object within the import's readback tolerance. Each terminal is read
+back after assignment and again from the saved design.
+
+Result reading requires the receipt's geometry to carry the model identity and
+the guard's solids, its Nets and terminals to be the request's, and its Region
+to be the model's `VACUUM_REGION` box within the readback tolerance.
 
 #### Q3D native build-only execution
 
 Q3D v3 has an opt-in native build-only operation using the existing
 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only`
-entrypoint. It follows the same body construction, material and Net assignment,
+entrypoint. It follows the same model import, material and Net assignment,
 Region and setup creation/readback, project save, and owned Desktop release as
 the solver path. It does not call native `Analyze`, create a solver mesh, solve,
 or export matrices or convergence data. The receipt records
@@ -962,13 +952,10 @@ continues to require a completed solver result; it does not resolve a
 preparation-only receipt as a result. Normal Q3D
 `--execute` behavior is unchanged.
 
-The v3 handoff keeps the five ordinary allowed paths in their established
-order. A source-backed cohort appends `geometry/source.gds`,
-`metadata/geometry_stack.json`, and `metadata/geometry_trace.json`; the
-manifest's `members` sequence omits its own path wherever it appears in
-`allowed_paths` and preserves the order, hashes and declaration checks of the
-other files. Thus a source-free handoff has five allowed paths and four member
-records, while source-backed v3 has eight allowed paths and seven records.
+The v3 handoff's allowed paths are `run_aedt.sh`, `aedt_spec.json`, the
+model's four files under `model/`, and the three metadata files; the
+manifest's `members` sequence omits its own path and preserves the order and
+hashes of the other files, nine allowed paths and eight records.
 
 #### Q3D user-requested Stop/Abort and save
 
@@ -1055,13 +1042,10 @@ not retrofitted. Ordinary Q3D without request intent, HFSS, Q2D, Eigenmode EPR,
 and non-Linux solver flows are unchanged. The Eigenmode EPR
 no-automatic-partial-save rule remains unchanged.
 
-The v3 handoff keeps the five ordinary allowed paths in their established
-order. A source-backed cohort appends `geometry/source.gds`,
-`metadata/geometry_stack.json`, and `metadata/geometry_trace.json`; the
-manifest's `members` sequence omits its own path wherever it appears in
-`allowed_paths` and preserves the order, hashes and declaration checks of the
-other files. Thus a source-free handoff has five allowed paths and four member
-records, while source-backed v3 has eight allowed paths and seven records.
+The v3 handoff's allowed paths are `run_aedt.sh`, `aedt_spec.json`, the
+model's four files under `model/`, and the three metadata files; the
+manifest's `members` sequence omits its own path and preserves the order and
+hashes of the other files, nine allowed paths and eight records.
 
 ## Eigenmode saved fields and Surface-EPR direction
 

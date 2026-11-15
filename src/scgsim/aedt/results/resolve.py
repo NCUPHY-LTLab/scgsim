@@ -9,9 +9,6 @@ from typing import Any, Literal, cast
 
 from scgsim.aedt.epr.models import EprResult
 from scgsim.aedt.io import file_sha256, read_json
-from scgsim.aedt.preparation.cohort import (
-    validate_geometry_source,
-)
 from scgsim.aedt.preparation.sgb_handoff import SOURCE_KEYS, check_sgb_model_source
 from scgsim.aedt.presentation.benchmark import display_benchmark
 from scgsim.aedt.presentation.runs import display_resolved_run
@@ -23,8 +20,8 @@ from scgsim.aedt.results.hfss_readback import (
     validate_hfss_pec_bindings,
 )
 from scgsim.aedt.results.matrices import parse_matrix_export, read_q2d_rlgc_matrix
-from scgsim.aedt.results.prepared import validate_imported_sgb_model
 from scgsim.aedt.results.provenance import require_current_receipt
+from scgsim.aedt.results.readback_common import validate_imported_sgb_model
 from scgsim.aedt.results.readback_dispatch import validate_result_readback
 from scgsim.aedt.results.receipt_validation import (
     contained,
@@ -370,13 +367,13 @@ def _read_completed_receipt(root: Path) -> tuple[Path, dict[str, Any]]:
 
 def _validate_source_binding(root: Path, source: dict[str, Any], spec: Any) -> None:
     """Verify canonical source members for the resolved model family."""
-    if isinstance(spec, HfssEprSpec):
+    if isinstance(spec, (HfssEprSpec, Q3dSpec)):
         try:
             check_sgb_model_source(source, spec.model)
         except ValueError as exc:
             raise RuntimeError(str(exc)) from exc
         if set(source) != {"spec", "spec_sha256", *SOURCE_KEYS}:
-            raise RuntimeError("HFSS Eigenmode source members are not canonical")
+            raise RuntimeError(f"{spec.mode} source members are not canonical")
     elif isinstance(spec, HfssDrivenGeometrySpec):
         expected_source = {
             "spec",
@@ -391,15 +388,9 @@ def _validate_source_binding(root: Path, source: dict[str, Any], spec: Any) -> N
             or source["planar_model_sha256"] != spec.geometry.model_sha256
         ):
             raise RuntimeError("body-first Eigenmode source identity differs")
-    elif isinstance(spec, (Q2dSpec, Q3dSpec)):
+    elif isinstance(spec, Q2dSpec):
         if set(source) != {"spec", "spec_sha256"}:
-            raise RuntimeError(
-                "Q2D receipt must not contain a GDS source"
-                if isinstance(spec, Q2dSpec)
-                else "Q3D body receipt must not contain an imported GDS source"
-            )
-        if isinstance(spec, Q3dSpec):
-            validate_geometry_source(root, source, spec)
+            raise RuntimeError("Q2D receipt must not contain a GDS source")
     else:
         if source.get("gds") != "geometry/design.gds":
             raise RuntimeError("receipt GDS path is not canonical")

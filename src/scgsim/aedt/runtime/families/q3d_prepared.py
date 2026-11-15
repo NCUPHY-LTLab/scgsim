@@ -22,7 +22,7 @@ class PreparedQ3d:
     app: Any
     request: BoundAedtRequest
     project_path: Path
-    materials: list[dict[str, Any]]
+    geometry: dict[str, Any]
     region: dict[str, Any]
     nets: list[dict[str, Any]]
     setup: dict[str, Any] | None
@@ -30,7 +30,7 @@ class PreparedQ3d:
     def __post_init__(self) -> None:
         if not isinstance(self.request, BoundAedtRequest):
             raise TypeError("PreparedQ3d requires a bound AEDT request")
-        for name in ("materials", "region", "nets", "setup"):
+        for name in ("geometry", "region", "nets", "setup"):
             object.__setattr__(self, name, detached_data(getattr(self, name)))
 
 
@@ -45,7 +45,8 @@ def prepared_q3d_result(prepared: PreparedQ3d) -> dict[str, Any]:
         "project": prepared.project_path.relative_to(
             prepared.request.workspace
         ).as_posix(),
-        "materials": detached_data(prepared.materials),
+        "geometry": detached_data(prepared.geometry),
+        "materials": detached_data(prepared.geometry["materials"]),
         "region": detached_data(prepared.region),
         "nets": detached_data(prepared.nets),
         "setup": detached_data(prepared.setup),

@@ -262,7 +262,7 @@ def _validate_q3d_receipt(
 
 
 def _validate_q3d_terminal(app: Any, net: Mapping[str, Any], role: str) -> None:
-    """Check one optional Q3D terminal face assignment."""
+    """Check one optional Q3D terminal assignment, faces or edges."""
     record = net.get(role)
     if record is None:
         return
@@ -273,9 +273,9 @@ def _validate_q3d_terminal(app: Any, net: Mapping[str, Any], role: str) -> None:
             nonempty_text(record.get("name"), f"receipt Q3D {role} name")
         )
     )
-    if native_faces != sorted(
-        int(value) for value in record.get("native_face_ids", ())
-    ):
+    # A solid's terminal is faces, a sheet's (Route A) is edges.
+    recorded = record.get("native_face_ids", record.get("native_edge_ids", ()))
+    if native_faces != sorted(int(value) for value in recorded):
         raise ValueError(
             Declared(f"native AEDT Q3D {role} assignment", _WHERE_AEDT_RUN).refusal(
                 "changed"

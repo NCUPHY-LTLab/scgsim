@@ -70,7 +70,7 @@ film or finite volume), physical thickness, and the film attachment face where
 applicable. Existing Object, Net, port, connected
 outline and hole identities remain the request's source of truth.
 
-This selection uses the existing Q3D body-v3 and HFSS family schema
+This selection uses the existing Q3D v3 and HFSS family schema
 identifiers. A Q3D/HFSS request or result payload without `modeling` and its
 tagged `physical_representation` was written by an earlier SCGSim and is
 refused; read it with the SCGSim commit that wrote it. The execution path never
@@ -203,7 +203,7 @@ private definition module here does not make it public.
 - **Baseline `scgsim.aedt.spec` → current canonical owner `scgsim.aedt.specs.common`.** Baseline names: `AedtResources`, `LayerImport`, `ObjectBinding`, `PdkMaterial`, `TerminalPort`, `ModalPort`, `MatrixRunControl`, `HfssDrivenMode`.
 - **Baseline `scgsim.aedt.spec` → current canonical owner `scgsim.aedt.specs.hfss`.** Baseline names: `FrequencySweepSpec`, `HfssRunControl`, `EigenmodeRunControl`, `HfssDrivenSpec`, `HfssSpec`, `HfssEigenmodeSpec`, `HfssEprSpec`, `HfssEprAnalysisSpec`, `LengthMeshSpec`.
 - **Baseline `scgsim.aedt.spec` → current canonical owner `scgsim.aedt.specs.q2d`.** Baseline names: `Q2dRectangleSpec`, `Q2dConductorSpec`, `Q2dSpec`.
-- **Baseline `scgsim.aedt.spec` → current canonical owner `scgsim.aedt.specs.q3d`.** Baseline names: `Q3dBodySpec`, `Q3dNetSpec`, `Q3dSpec`.
+- **Baseline `scgsim.aedt.spec` → current canonical owner `scgsim.aedt.specs.q3d`.** Baseline names: `Q3dNetSpec`, `Q3dSpec`.
 - **Baseline `scgsim.aedt.spec` → current canonical owner `scgsim.aedt.specs.parse`.** Baseline names: `AedtSpec`, `parse_aedt_spec`.
 - **Baseline `scgsim.aedt._epr_models` → current canonical owner `scgsim.aedt.epr.models`.** Baseline names: `EprResult`.
 - **Baseline `scgsim.aedt._epr_models` → current canonical owner `scgsim.aedt.specs.epr`.** Baseline names: `EprAnalysisRequest`, `ExpressionCacheConvergence`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PlanarJunction`, `SavedSolution`.
@@ -218,12 +218,13 @@ private definition module here does not make it public.
 - **Baseline `scgsim.aedt._epr_results` → current canonical owner `scgsim.aedt.epr.reanalysis`.** Baseline names: `reanalyze_epr`.
 - **New for issue #67 → canonical owner `scgsim.aedt.preparation.sgb_model`.** Names: `PreparedSgbModel`, `prepare_sgb_model`; `prepare_hfss_eigenmode_from_geometry` takes `model=`.
 - **Removed by issue #67 (HFSS Eigenmode on the SGB model).** `SurfaceEprSpec` (declare Surface EPR with `EigenmodeSim.set_surface_epr(specs)`, Palace's specs by interface type), `EprAnalysisRequest.surface_contribution_ids` (now `surface_epr_groups`, sidecar Surface-EPR groups), `combine_epr_mode` and `combine_surface_epr_mode` (the planar combination), and `analyze_epr(geometry=..., geometry_workers=...)` (now `analyze_epr(model=...)`).
+- **Removed by issue #67 (Q3D on the SGB model).** `Q3dBodySpec` and the source-free body request (a `Q3dSpec` carries the `PreparedSgbModel` and the model's Nets), and the `materials` and `region_padding_um` parameters of `prepare_q3d_from_geometry` (the materials are the stack's and the Region is the plan's `VACUUM_REGION`, decision 5).
 - **Baseline `scgsim.aedt._epr_results` → current canonical owner `scgsim.aedt.results.epr`.** Baseline names: `resolve_epr_result`, `resolve_saved_solution`.
 - **Baseline `scgsim.aedt._epr_results and _presentation` → current canonical owner `scgsim.aedt.presentation.epr`.** Baseline names: `plot_epr_result`, `show_epr`.
 - **Baseline `scgsim.aedt.run` → current canonical owner `scgsim.aedt.run`.** Baseline names: `main`.
 
 
-The package's complete current `__all__` roster is: `AedtResources`, `AedtSpec`, `EigenmodeRunControl`, `EigenmodeSim`, `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `FrequencySweepSpec`, `HandoffPlan`, `HfssDrivenMode`, `HfssDrivenSpec`, `HfssEigenmodeSpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssRunControl`, `HfssSpec`, `LayerImport`, `LengthMeshSpec`, `MatrixRunControl`, `ModalPort`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `ObjectBinding`, `PdkMaterial`, `PlanarJunction`, `PreparedPlanarGeometry`, `PreparedSgbModel`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dBodySpec`, `Q3dNetSpec`, `Q3dSpec`, `ResolvedRun`, `SavedSolution`, `TerminalPort`, `analyze_epr`, `parse_aedt_spec`, `planar_junction_from_port`, `plot_epr_result`, `prepare_handoff`, `prepare_hfss_eigenmode_from_geometry`, `prepare_planar_geometry_input`, `prepare_q3d_from_geometry`, `prepare_sgb_model`, `reanalyze_epr`, `resolve_epr_result`, `resolve_results`, `resolve_saved_solution`, `show_epr`.
+The package's complete current `__all__` roster is: `AedtResources`, `AedtSpec`, `EigenmodeRunControl`, `EigenmodeSim`, `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `FrequencySweepSpec`, `HandoffPlan`, `HfssDrivenMode`, `HfssDrivenSpec`, `HfssEigenmodeSpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssRunControl`, `HfssSpec`, `LayerImport`, `LengthMeshSpec`, `MatrixRunControl`, `ModalPort`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `ObjectBinding`, `PdkMaterial`, `PlanarJunction`, `PreparedPlanarGeometry`, `PreparedSgbModel`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dNetSpec`, `Q3dSpec`, `ResolvedRun`, `SavedSolution`, `TerminalPort`, `analyze_epr`, `parse_aedt_spec`, `planar_junction_from_port`, `plot_epr_result`, `prepare_handoff`, `prepare_hfss_eigenmode_from_geometry`, `prepare_planar_geometry_input`, `prepare_q3d_from_geometry`, `prepare_sgb_model`, `reanalyze_epr`, `resolve_epr_result`, `resolve_results`, `resolve_saved_solution`, `show_epr`.
 
 The new responsibility tree follows the existing boundaries:
 

@@ -11,7 +11,6 @@ from scgsim.aedt.io import file_sha256, read_json
 from scgsim.aedt.preparation.cohort import (
     canonical_handoff_paths,
     canonical_member_paths,
-    validate_geometry_source,
     validate_hfss_import_source,
 )
 from scgsim.aedt.preparation.sgb_handoff import SOURCE_KEYS, check_sgb_model_source
@@ -130,19 +129,15 @@ def verify_prepared_hashes(
         raise RuntimeError("receipt source paths are not canonical")
     if file_sha256(spec_path) != _text(source.get("spec_sha256"), "source.spec_sha256"):
         raise RuntimeError("prepared spec hash mismatch")
-    if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec)):
+    if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec, Q3dSpec)):
         _verify_sgb_model_hashes(metadata, source, spec)
         return
     if isinstance(spec, HfssDrivenGeometrySpec):
         _verify_planar_hashes(metadata, source, spec)
         return
-    if isinstance(spec, (Q2dSpec, Q3dSpec)):
+    if isinstance(spec, Q2dSpec):
         if set(source) != {"spec", "spec_sha256"} or "gds_sha256" in metadata:
-            raise RuntimeError(
-                "Q2D handoff must not contain a GDS source"
-                if isinstance(spec, Q2dSpec)
-                else "Q3D body handoff must not contain an imported GDS source"
-            )
+            raise RuntimeError("Q2D handoff must not contain a GDS source")
         return
     gds_path = cast(Path, spec.gds_path)
     if source.get("gds") != "geometry/design.gds":
@@ -156,7 +151,7 @@ def verify_prepared_hashes(
 def _verify_sgb_model_hashes(
     metadata: dict[str, Any],
     source: dict[str, Any],
-    spec: HfssEprAnalysisSpec | HfssEprSpec,
+    spec: HfssEprAnalysisSpec | HfssEprSpec | Q3dSpec,
 ) -> None:
     """The receipt binds the request's SGB model; a native builder's handoff is refused (decision 6)."""
     try:
@@ -167,9 +162,9 @@ def _verify_sgb_model_hashes(
     if isinstance(spec, HfssEprAnalysisSpec):
         expected_source_keys.add("saved_solution_sha256")
     if set(source) != expected_source_keys:
-        raise RuntimeError("HFSS Eigenmode handoff source members are not canonical")
+        raise RuntimeError(f"{spec.mode} handoff source members are not canonical")
     if "gds_sha256" in metadata:
-        raise RuntimeError("HFSS Eigenmode handoff must not contain a GDS source")
+        raise RuntimeError(f"{spec.mode} handoff must not contain a GDS source")
     if (
         isinstance(spec, HfssEprAnalysisSpec)
         and source.get("saved_solution_sha256") != spec.saved_solution.content_sha256
@@ -242,8 +237,6 @@ def verify_prepared_cohort(
         ):
             raise RuntimeError(f"handoff manifest member mismatch: {relative}")
         hashes[relative] = item["sha256"]
-    if isinstance(spec, Q3dSpec):
-        validate_geometry_source(run_dir, receipt["source"], spec)
     validate_hfss_import_source(run_dir, read_json(run_dir / "aedt_spec.json"), spec)
     return {
         "preparation_cohort": cohort.name,

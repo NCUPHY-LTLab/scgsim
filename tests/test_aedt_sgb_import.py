@@ -54,12 +54,10 @@ from scgsim.aedt.runtime.families.sgb_import import (  # noqa: E402
     ImportedSgbModel,
     SgbImportError,
     assign_port_rlc,
-    assign_q3d_nets,
     assign_sheet_perfect_e,
     current_line_um,
     import_sgb_model,
     polyline_of_loop,
-    q3d_net_roles,
     segment_length_um,
 )
 from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort  # noqa: E402
@@ -231,8 +229,8 @@ def test_selectors_are_keyed_by_group_and_default_to_the_face_itself(models):
         surface_field_selections(bindings, {"chip/left::band=0": "below"})
 
 
-def test_q3d_net_roles_come_from_the_models_ground_declaration(tmp_path):
-    """A declared ground Net is Ground, every other conductor Net Signal; no declaration is refused."""
+def test_the_model_records_its_physical_ground_nets(tmp_path):
+    """``ground_net_ids`` is recorded and round-trips; the Q3D type of each Net comes from the Q3D request."""
     source, stack = rectangular_junction_source("VACUUM_REGION")
     model = prepare_sgb_model(
         source,
@@ -241,16 +239,8 @@ def test_q3d_net_roles_come_from_the_models_ground_declaration(tmp_path):
         output_dir=tmp_path / "grounded",
         ground_net_ids=("B",),
     )
-    sidecar = json.loads(model.path("sidecar").read_text(encoding="utf-8"))
-    assert q3d_net_roles(model, sidecar) == {"A": "Signal", "B": "Ground"}
+    assert model.ground_net_ids == ("B",)
     assert type(model).from_payload(model.to_payload()) == model
-    undeclared = replace(model, ground_net_ids=None)
-    with pytest.raises(ValueError, match="declares no ground Nets"):
-        q3d_net_roles(undeclared, sidecar)
-    assert q3d_net_roles(replace(model, ground_net_ids=()), sidecar) == {
-        "A": "Signal",
-        "B": "Signal",
-    }
 
 
 def test_a_ground_net_the_model_does_not_have_is_refused(tmp_path):
@@ -510,23 +500,6 @@ def test_each_net_gets_a_perfect_e_named_by_its_sanitised_id(models):
     for record in records:
         kind, props = design.boundaries[record["boundary"]]
         assert kind == "Perfect E" and props["Faces"] == record["faces"]
-
-
-def test_q3d_nets_are_assigned_and_read_back_under_their_sanitised_ids(models):
-    """Each Net is assigned and read back under its sanitised ID."""
-    sidecar, imported = _as_imported(models["solid"])
-    renamed = _renamed_nets(sidecar, {"A": "chip/A"})
-    roles = {"chip/A": "Signal", "B": "Ground"}
-    names = q3d_net_names(roles)
-    design = _FakeDesign(
-        {
-            name: SimpleNamespace(id=k)
-            for k, name in enumerate(imported.objects.values())
-        }
-    )
-    records = assign_q3d_nets(design, renamed, imported.objects, roles, names)
-    assert design.nets == {r["name"]: r["objects"] for r in records}
-    assert {r["net"]: r["name"] for r in records} == {"chip/A": "chip_A", "B": "B"}
 
 
 def test_q3d_nets_are_named_by_their_sanitised_ids_and_a_shared_name_is_refused():

@@ -30,6 +30,7 @@ def record_result_before_release(
             "outputs",
             "connected",
             "project",
+            "geometry",
             "materials",
             "region",
             "nets",

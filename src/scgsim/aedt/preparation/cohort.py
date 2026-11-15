@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from scgsim.aedt.io import file_sha256, read_json
+from scgsim.aedt.io import file_sha256
 from scgsim.aedt.preparation.sgb_handoff import sgb_model_paths
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
@@ -18,17 +18,11 @@ from scgsim.aedt.specs.q3d import Q3dSpec
 
 MANIFEST_PATH = "metadata/aedt_handoff_manifest.json"
 
-GEOMETRY_SOURCE_PATHS = {
-    "canonical_gds": "geometry/source.gds",
-    "stack": "metadata/geometry_stack.json",
-    "trace": "metadata/geometry_trace.json",
-}
-
 
 def canonical_handoff_paths(spec: AedtSpec) -> list[str]:
     """Return the complete canonical file set for one prepared workflow."""
     paths = ["run_aedt.sh", "aedt_spec.json"]
-    if isinstance(spec, (HfssEprSpec, HfssEprAnalysisSpec)):
+    if isinstance(spec, (HfssEprSpec, HfssEprAnalysisSpec, Q3dSpec)):
         paths.extend(sgb_model_paths(spec.model))
     if isinstance(spec, HfssEprAnalysisSpec):
         paths.extend(f"saved/{item['path']}" for item in spec.saved_solution.members)
@@ -43,50 +37,12 @@ def canonical_handoff_paths(spec: AedtSpec) -> list[str]:
             MANIFEST_PATH,
         )
     )
-    if isinstance(spec, Q3dSpec) and spec.geometry_source is not None:
-        paths.extend(GEOMETRY_SOURCE_PATHS.values())
     return paths
 
 
 def canonical_member_paths(spec: AedtSpec) -> list[str]:
     """Return canonical manifest members excluding the manifest itself."""
     return [path for path in canonical_handoff_paths(spec) if path != MANIFEST_PATH]
-
-
-def validate_geometry_source(
-    root: Path, receipt_source: Mapping, spec: Q3dSpec
-) -> None:
-    """Bind the three canonical source attachments and trace to the sealed spec."""
-    geometry_source = spec.geometry_source
-    if geometry_source is None:
-        return
-    verified = {}
-    for key, expected_path in GEOMETRY_SOURCE_PATHS.items():
-        reference = geometry_source["files"][key]
-        if reference["path"] != expected_path:
-            raise RuntimeError("Q3D geometry_source attachment path is not canonical")
-        path = (root / expected_path).resolve()
-        if not path.is_relative_to(root.resolve()):
-            raise RuntimeError(
-                f"Q3D geometry_source attachment escapes run directory: {key}"
-            )
-        if not path.is_file() or file_sha256(path) != reference["sha256"]:
-            raise RuntimeError(f"Q3D geometry_source attachment hash mismatch: {key}")
-        verified[key] = path
-    if (
-        geometry_source["files"]["canonical_gds"]["sha256"]
-        != geometry_source["source_gds_sha256"]
-        or geometry_source["files"]["stack"]["sha256"]
-        != geometry_source["source_stack_sha256"]
-    ):
-        raise RuntimeError("Q3D geometry_source attachment digests are inconsistent")
-    trace = read_json(verified["trace"])
-    if not isinstance(trace, Mapping):
-        raise RuntimeError("Q3D geometry trace mapping is invalid")
-    expected_trace_source = dict(geometry_source)
-    expected_trace_source.pop("files")
-    if trace.get("geometry_source") != expected_trace_source:
-        raise RuntimeError("Q3D geometry trace mapping differs from the sealed spec")
 
 
 def validate_hfss_import_source(

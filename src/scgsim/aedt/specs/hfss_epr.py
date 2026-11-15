@@ -15,7 +15,7 @@ from types import MappingProxyType
 from typing import Any, Literal, cast
 
 from scgsim.aedt.epr.sgb_source import sgb_epr_source
-from scgsim.aedt.preparation.sgb_handoff import SGB_MODEL_DIR, bind_sgb_model
+from scgsim.aedt.preparation.sgb_handoff import bind_sgb_model, model_payload
 from scgsim.aedt.preparation.sgb_model import PreparedSgbModel
 from scgsim.aedt.specs.common import (
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
@@ -370,13 +370,6 @@ class HfssEprAnalysisSpec:
                 else None
             ),
         )
-
-
-def model_payload(model: PreparedSgbModel) -> dict[str, Any]:
-    """The model as a request payload names it: in the handoff's own ``model/`` folder."""
-    payload = model.to_payload()
-    payload["model_dir"] = SGB_MODEL_DIR
-    return payload
 
 
 def _bound_model(payload: Mapping[str, Any], base_dir: Path | None) -> PreparedSgbModel:

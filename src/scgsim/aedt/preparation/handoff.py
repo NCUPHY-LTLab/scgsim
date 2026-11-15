@@ -15,7 +15,6 @@ from scgsim.aedt.data import (
 )
 from scgsim.aedt.io import file_sha256, write_json
 from scgsim.aedt.preparation.cohort import (
-    GEOMETRY_SOURCE_PATHS,
     canonical_handoff_paths,
 )
 from scgsim.aedt.preparation.gds import GdsPreflight, gds_preflight, write_import_gds
@@ -176,18 +175,20 @@ class _PortableHandoff:
                     HfssDrivenSpec | HfssEigenmodeSpec, self.spec
                 ).effective_layer_imports
             ]
-        if isinstance(self.spec, Q3dSpec) and self.spec.geometry_source is not None:
-            geometry_source = detached(self.spec.geometry_source)
-            for key, destination in GEOMETRY_SOURCE_PATHS.items():
-                reference = geometry_source["files"][key]
-                source_path = Path(reference["path"])
-                if file_sha256(source_path) != reference["sha256"]:
-                    raise ValueError(f"Q3D source attachment identity differs: {key}")
-                target = self.run_dir / destination
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source_path, target)
-                reference["path"] = destination
-            self.payload["geometry_source"] = geometry_source
+        if isinstance(self.spec, Q3dSpec):
+            attach_sgb_model(self.spec.model, self.run_dir)
+            self.materials = detached(self.spec.model.materials)
+            vacuum = [
+                material_id
+                for material_id, record in self.materials.items()
+                if record.get("kind") == "vacuum"
+            ]
+            if len(vacuum) != 1:
+                raise ValueError("a Q3D SGB model requires exactly one vacuum material")
+            self.vacuum_material_id = vacuum[0]
+        else:
+            self.materials = self.payload["materials"]
+            self.vacuum_material_id = self.payload["vacuum_material_id"]
         write_json(self.spec_path, self.payload)
 
     def _write_metadata(self) -> None:
@@ -201,8 +202,8 @@ class _PortableHandoff:
             "status": "prepared",
             "mode": self.spec.mode,
             "project": self.payload["project"],
-            "materials": self.payload["materials"],
-            "vacuum_material_id": self.payload["vacuum_material_id"],
+            "materials": self.materials,
+            "vacuum_material_id": self.vacuum_material_id,
             "run_control": self.payload["run_control"],
             "execution": {
                 "resources": self.resources.to_payload() if self.resources else None
@@ -216,6 +217,11 @@ class _PortableHandoff:
         self.source = {
             "spec": self.spec_path.name,
             "spec_sha256": file_sha256(self.spec_path),
+            **(
+                sgb_model_source(self.spec.model)
+                if isinstance(self.spec, Q3dSpec)
+                else {}
+            ),
         }
         if self.copied_gds is not None and self.preflight is not None:
             self.files["gds"] = "geometry/design.gds"
@@ -244,8 +250,8 @@ class _PortableHandoff:
                         "pyaedt_version": self.spec.pyaedt_version,
                         "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
                     },
-                    pdk_materials=self.payload["materials"],
-                    vacuum_material_id=self.payload["vacuum_material_id"],
+                    pdk_materials=self.materials,
+                    vacuum_material_id=self.vacuum_material_id,
                     source=self.source,
                     prepared_runtime_source_value=self.prepared_source,
                     outputs={},
