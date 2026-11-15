@@ -272,6 +272,63 @@ def field_integral_operations(
     return [*value, *terminal]
 
 
+def surface_row_operations(
+    *, quantity: str, selection_name: str, adjacent_side: bool = False
+) -> list[str]:
+    """The HFSS stack of one Surface-EPR row integral on its sheet, with the sheet's own normal at each point.
+
+    A sidecar row can hold faces of several orientations (the walls around a pad) and curved walls, so no
+    single normal vector serves it: ``Operation('Normal')`` pushes the unit normal of the surface the
+    integral is entered on.  Only ``|E.n|^2`` is used, so the normal's orientation does not matter.
+    ``electric_tangential`` is ``|E|^2 - |E.n|^2``; ``adjacent_side`` reads the field just off the sheet
+    (``EnterAdjacentSurf``), for the two field quantities only.
+    """
+    if quantity == "masked_area":
+        if adjacent_side:
+            raise ValueError("adjacent_side is valid only for surface field quantities")
+        value = _constant(1.0)
+    elif quantity in {"electric_normal", "electric_tangential"}:
+        normal_square = _binary(
+            _square(
+                [
+                    "Fundamental_Quantity('E')",
+                    "Operation('Real')",
+                    "Operation('Normal')",
+                    "Operation('Dot')",
+                ]
+            ),
+            _square(
+                [
+                    "Fundamental_Quantity('E')",
+                    "Operation('Imag')",
+                    "Operation('Normal')",
+                    "Operation('Dot')",
+                ]
+            ),
+            "+",
+        )
+        if quantity == "electric_normal":
+            value = normal_square
+        else:
+            full_real = ["Fundamental_Quantity('E')", "Operation('Real')"]
+            full_imag = ["Fundamental_Quantity('E')", "Operation('Imag')"]
+            full_square = _binary(
+                [*full_real, *full_real, "Operation('Dot')"],
+                [*full_imag, *full_imag, "Operation('Dot')"],
+                "+",
+            )
+            value = _binary(full_square, normal_square, "-")
+    else:
+        raise ValueError(f"unsupported Surface-EPR row quantity {quantity!r}")
+    enter = "EnterAdjacentSurf" if adjacent_side else "EnterSurface"
+    return [
+        *value,
+        f"{enter}('{selection_name}')",
+        "Operation('SurfaceValue')",
+        "Operation('Integrate')",
+    ]
+
+
 def junction_voltage_operations(
     *, quantity: str, selection_name: str, direction_xy: Sequence[float]
 ) -> list[str]:

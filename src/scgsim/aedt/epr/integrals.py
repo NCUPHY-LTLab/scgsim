@@ -73,7 +73,12 @@ def integral_target(purpose: str, selection: Mapping[str, Any]) -> IntegralTarge
     if kind in {"effective_volume", "electric_volume", "magnetic_energy"}:
         selection_kind, key = "volume", "semantic_id"
     elif kind in {"electric_normal", "electric_tangential", "masked_area"}:
-        selection_kind, key = "surface_group", "group_id"
+        # An SGB model integrates each sidecar Surface-EPR row (issue #67); the planner integrated groups.
+        selection_kind, key = (
+            ("surface_row", "row")
+            if selection.get("kind") == "surface_row"
+            else ("surface_group", "group_id")
+        )
     elif kind in {
         "native_surface_reference_normal",
         "native_surface_reference_tangential",

@@ -403,7 +403,10 @@ AEDT keeps only `[A-Za-z0-9_]` of a name, so a Net's AEDT name (its Q3D Net
 and its HFSS `perfect_e_<name>` boundary) is its ID with every other
 character replaced by `_`. `prepare_sgb_model()` refuses two Nets whose IDs
 become the same name, such as `chip/A` and `chip_A`, naming both Net IDs and
-the shared name, before AEDT is touched; neither is renamed.
+the shared name, before AEDT is touched; neither is renamed. The same rule
+names a junction's Lumped RLC `junction_rlc_<junction_id>` and a port sheet's
+`LumpedRlc` `rlc_<port_sheet_id>`: two junction IDs, or two port-sheet IDs,
+whose names coincide are refused the same way, with no `__2` suffix.
 
 A handoff of the SGB flow carries its model: the STEP, the BREP it was
 written from, the sidecar and the guard are copied into the handoff's
@@ -412,6 +415,27 @@ every file is checked against its recorded SHA-256 before anything is
 imported. The handoff's source record binds the model's identity and the four
 file hashes; a record without them belongs to a natively built model, which
 is refused (issue #67 decision 6).
+
+The EPR of an SGB model reads what it integrates from the sidecar and the
+prepared record, without AEDT (`scgsim.aedt.epr.sgb_source`). The domains
+are the imported dielectric solids, by AEDT object name, and the `Region`;
+a conductor solid is PEC and holds no field. Each sidecar Surface-EPR row of a
+declared type is integrated once, on the non-model sheet of its faces. The
+reported contributions group the rows as Palace's `Dielectric` rows do: per
+interface type and surface unit (an unbanded row, or every band of one band
+family) a baseline over all its rows, and per inset margin an entry over its
+bands from the margin's band on, under Palace's entry names; an entry's energy
+is the sum of its rows'. AEDT has no Palace `Model.L0`, so a film given in
+Palace's native `thickness` is refused; give `film_thickness_m`. A junction's
+voltage is the area integral of the field along its port's sidecar
+`direction`, divided by the port sheet's width across it, read from the
+sidecar's port record; `prepare_sgb_model()` refuses a `PlanarJunction` whose
+`width_um` is not that width within the model's `tolerance_um`. Each row has
+three expressions on its sheet (normal and tangential electric integrals and
+the area); a row can hold faces of several orientations and curved walls, so
+the normal is the sheet's own at each point (`Operation('Normal')`), not one
+vector. A junction's voltage is integrated on a non-model sheet copied from
+its port faces. The public EPR flow does not use this yet.
 
 In AEDT, `modeling="thin_film"` builds Route A with its finite bodies (bumps,
 posts) retained as conductor solids (`ROUTE_A_RETAINED_BODIES`; the sidecar's

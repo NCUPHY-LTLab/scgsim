@@ -37,7 +37,10 @@ from scgsim.aedt.epr.sgb_surfaces import (  # noqa: E402
     surface_field_selections,
 )
 from scgsim.aedt.preparation.sgb_model import (  # noqa: E402
+    SgbJunction,
     aedt_net_names,
+    junction_rlc_names,
+    lumped_rlc_names,
     prepare_sgb_model,
 )
 from scgsim.aedt.runtime.families.sgb_boundaries import (  # noqa: E402
@@ -60,6 +63,7 @@ from scgsim.aedt.runtime.families.sgb_import import (  # noqa: E402
     segment_length_um,
 )
 from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort  # noqa: E402
+from scgsim.aedt.specs.epr import PlanarJunction  # noqa: E402
 from scgsim.contracts.sgb_sidecar import views  # noqa: E402
 from scgsim.geometry.surface_epr import normalize_surface_epr_specs  # noqa: E402
 
@@ -536,6 +540,27 @@ def test_q3d_nets_are_named_by_their_sanitised_ids_and_a_shared_name_is_refused(
         match="Nets 'chip/A' and 'chip_A' both become the AEDT name 'chip_A'",
     ):
         q3d_net_names({"chip/A": "Signal", "chip_A": "Ground"})
+
+
+def test_preparation_refuses_junctions_and_port_sheets_that_become_one_aedt_name():
+    """A junction's and a port sheet's RLC names follow the Net rule: refused, never suffixed."""
+    junction = PlanarJunction("j/1", "sheet_polygon", "A", "B", (1, 0), 2.0, 1e-8, 0.0)
+    pair = [
+        SgbJunction(junction, "PORT::a"),
+        SgbJunction(replace(junction, junction_id="j_1"), "PORT::b"),
+    ]
+    assert junction_rlc_names(pair[:1]) == {"j/1": "junction_rlc_j_1"}
+    with pytest.raises(
+        ValueError,
+        match="Junctions 'j/1' and 'j_1' both become the AEDT name 'junction_rlc_j_1'",
+    ):
+        junction_rlc_names(pair)
+    rlcs = [LumpedRlc(sheet, "series", resistance_ohm=50.0) for sheet in ("s.1", "s_1")]
+    with pytest.raises(
+        ValueError,
+        match="Port sheets 's.1' and 's_1' both become the AEDT name 'rlc_s_1'",
+    ):
+        lumped_rlc_names(rlcs)
 
 
 def test_preparation_refuses_nets_that_become_one_aedt_name():

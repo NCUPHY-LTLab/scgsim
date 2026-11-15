@@ -197,9 +197,11 @@ SCGSim 只讀取它自己寫出的格式。較早的 SCGSim 寫出的交接、�
 
 在 SGB 流程中，HFSS 匯入把每個 `LumpedRlc` 放在它的埠面上，方式與接面相同：在匯入的 face 上建立一個 Lumped RLC，電流線沿 sidecar 的 `direction`，連接該 face 自身兩端 edge 的中點。每個埠片都必須帶有一個接面或一個 RLC。SGB 流程拒絕 Driven wave `TerminalPort` 與 Driven Modal 埠，訊息指向 NCUPHY-LTLab/scgsim#135；在該 Issue 完成之前，原生建構器移除後 AEDT 無法執行 Driven wave 與 modal。在 SGB 流程建立 Driven Terminal 設計之前，匯入也拒絕集總 Terminal 埠。
 
-AEDT 的名稱只保留 `[A-Za-z0-9_]`，因此 Net 的 AEDT 名稱（它的 Q3D Net 與 HFSS `perfect_e_<name>` 邊界）是把 ID 中其他字元換成 `_` 的結果。兩個 Net 的 ID 變成同一個名稱時（例如 `chip/A` 與 `chip_A`），`prepare_sgb_model()` 在接觸 AEDT 之前就拒絕，訊息指出兩個 Net ID 與共用的名稱；不替任何一個改名。
+AEDT 的名稱只保留 `[A-Za-z0-9_]`，因此 Net 的 AEDT 名稱（它的 Q3D Net 與 HFSS `perfect_e_<name>` 邊界）是把 ID 中其他字元換成 `_` 的結果。兩個 Net 的 ID 變成同一個名稱時（例如 `chip/A` 與 `chip_A`），`prepare_sgb_model()` 在接觸 AEDT 之前就拒絕，訊息指出兩個 Net ID 與共用的名稱；不替任何一個改名。同一規則也用於 junction 的 Lumped RLC（`junction_rlc_<junction_id>`）與 port sheet 的 `LumpedRlc`（`rlc_<port_sheet_id>`）：兩個 junction ID 或兩個 port sheet ID 的名稱相同時同樣被拒絕，不加 `__2` 後綴。
 
 SGB 流程的 handoff 帶著它的模型：STEP、寫出它的 BREP、sidecar 與 guard 複製到 handoff 的 `model/` 資料夾，要求中記錄的是這個相對資料夾。在執行 AEDT 的機器上，匯入任何東西之前，每個檔案都會依記錄的 SHA-256 再檢查一次。handoff 的來源紀錄綁定模型的識別與四個檔案的雜湊；沒有這些的紀錄屬於原生建構的模型，會被拒絕（issue #67 decision 6）。
+
+SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分的對象（`scgsim.aedt.epr.sgb_source`）。區域是匯入的介電實體（以 AEDT 物件名稱為鍵）與 `Region`；導體實體是 PEC，內部沒有場。每一列已宣告型別的 sidecar Surface-EPR 列各積分一次，積分在由它的面複製出的非模型 sheet 上。回報的貢獻依 Palace `Dielectric` 列的方式分組：每個介面型別與表面單元（一列沒有 band 的列，或一個 band family 的全部 band）有一個涵蓋全部列的 baseline，每個 inset margin 另有一項涵蓋從該 margin 的 band 起到最後的 band，名稱與 Palace 的項目相同；一項的能量是其各列能量之和。AEDT 沒有 Palace 的 `Model.L0`，所以以 Palace 原生 `thickness` 給的 film 會被拒絕；請給 `film_thickness_m`。junction 電壓是沿其 port 在 sidecar 中的 `direction` 的場的面積分，除以 port sheet 橫跨該方向的寬度，寬度讀自 sidecar 的 port 紀錄；`PlanarJunction` 的 `width_um` 與此寬度相差超過模型的 `tolerance_um` 時，`prepare_sgb_model()` 會拒絕。每一列在它的 sheet 上有三個運算式（電場法向與切向積分及面積）；一列可能包含多個朝向的面與曲面牆，所以法向量取 sheet 在每一點自己的法向（`Operation('Normal')`），而非單一向量。junction 電壓在由其 port 面複製出的非模型 sheet 上積分。公開的 EPR 流程尚未使用這些。
 
 在 AEDT 中，`modeling="thin_film"` 建立 Route A，並把有限 body（bump、post）保留為導體 solid（`ROUTE_A_RETAINED_BODIES`；sidecar 的 `route_policy.conductor_volumes` 為 `retained`），匯入時設為 PEC，與 Route B 請求以 Route C 建立的方式相同。這種 body 所站的 sheet face 會在 body 與 substrate 上各匯入一份；它的 Surface-EPR row 讀取 substrate 那一份，也就是 body 被排除時它唯一的那一份。
 

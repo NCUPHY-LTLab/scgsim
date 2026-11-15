@@ -5,9 +5,9 @@ generic ``LumpedRlc``) to all the faces of its port sheet: SGB partitions a port
 meets it (a pad wall, a band), and each of those faces must import exactly once.  :func:`q3d_net_names`
 names the Q3D Nets.  A Net's AEDT name is its sanitised ID
 (:func:`~scgsim.aedt.preparation.sgb_model.aedt_net_names`); two Nets whose IDs sanitise alike (``chip/A``
-and ``chip_A``) are refused, as preparation already refuses them.  Junction and port-sheet names come from
-:func:`~scgsim.geometry.sgb.output.sidecar.aedt.aedt_names`, which appends ``__2``, ``__3`` ... to a later
-collision; the assignment and its readback use that one name.
+and ``chip_A``) are refused, as preparation already refuses them.  A junction's Lumped RLC is named
+``junction_rlc_<id>`` and a port sheet's ``LumpedRlc`` ``rlc_<id>``, sanitised the same way; two ids whose
+names coincide are refused too (:func:`~scgsim.aedt.preparation.sgb_model.junction_rlc_names`).
 A model the plan refuses raises :class:`BoundaryPlanError` before the import changes the design.
 """
 
@@ -22,6 +22,8 @@ from typing import Any
 from scgsim.aedt.preparation.sgb_model import (
     SgbJunction,
     aedt_net_names,
+    junction_rlc_names,
+    lumped_rlc_names,
     net_groups,
     port_group,
 )
@@ -29,7 +31,6 @@ from scgsim.aedt.rlc import rlc_native_topology
 from scgsim.aedt.specs.common import LumpedRlc
 from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.geometry.sgb.output.exchange.guard import StepGuard
-from scgsim.geometry.sgb.output.sidecar.aedt import aedt_names
 
 Point = tuple[float, float, float]
 
@@ -58,9 +59,7 @@ class HfssBoundaryPlan:
     """Every HFSS boundary the import assigns, named and checked against the sidecar and guard before AEDT.
 
     ``perfect_e`` maps each Net with Route A sheet faces to its boundary name and its planned faces.  Names
-    are unique among their kind: two Nets whose IDs sanitise alike are refused (:func:`q3d_net_names`), and
-    two treatments whose IDs sanitise alike are told apart by
-    :func:`~scgsim.geometry.sgb.output.sidecar.aedt.aedt_names`.
+    are unique among their kind: two Nets, junctions or port sheets whose IDs sanitise alike are refused.
     """
 
     perfect_e: Mapping[str, tuple[str, tuple[str, ...]]]
@@ -119,12 +118,7 @@ def _junction_rlcs(
     sidecar: Sidecar, copies: Counter[str], junctions: Sequence[SgbJunction]
 ) -> tuple[PortRlc, ...]:
     """Each junction's parallel Lumped RLC (its inductance and capacitance) on its port sheet."""
-    names = aedt_names(
-        [
-            (item.junction.junction_id, f"junction_rlc_{item.junction.junction_id}")
-            for item in junctions
-        ]
-    )
+    names = junction_rlc_names(junctions)
     planned = []
     for item in junctions:
         junction = item.junction
@@ -159,9 +153,7 @@ def _generic_rlcs(
     sidecar: Sidecar, copies: Counter[str], lumped_rlcs: Sequence[LumpedRlc]
 ) -> tuple[PortRlc, ...]:
     """Each ``LumpedRlc`` on the port sheet it names: exactly its enabled branches, in its topology."""
-    names = aedt_names(
-        [(item.port_sheet_id, f"rlc_{item.port_sheet_id}") for item in lumped_rlcs]
-    )
+    names = lumped_rlc_names(lumped_rlcs)
     planned = []
     for item in lumped_rlcs:
         port = _checked_port(sidecar, port_group(item.port_sheet_id), copies)

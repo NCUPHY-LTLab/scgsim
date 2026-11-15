@@ -1,4 +1,4 @@
-"""Bind each Surface-EPR row of an imported SGB model to one AEDT surface selection, and choose how it is integrated.
+"""Bind each Surface-EPR row and junction of an imported SGB model to one AEDT surface selection, and choose how it is integrated.
 
 A Surface-EPR row of the sidecar (``surface_epr_rows``) is one interface type on one group: ``MA``
 (metal-air), ``MS`` (metal-substrate) or ``SA`` (substrate-air).  Its faces are the group's planned faces.
@@ -21,6 +21,9 @@ face list of faces inside the model (a substrate face under a conductor or again
 session ends with it, while a non-model sheet of the same faces integrates (issue #67 development check).
 Being non-model, the sheet does not enter the mesh or the solve.
 
+A junction's voltage is integrated the same way, on a non-model sheet copied from its port faces
+(:func:`create_junction_selections`), read on their dielectric side like a sheet row.
+
 The field each row integrates is read on its selection: ``surface`` enters the sheet itself
 (``EnterSurface``), ``adjacent`` the surface just off it (``EnterAdjacentSurface``).  The choice is keyed by
 sidecar group (``surface_field_selectors``), so a saved solve can be integrated again with another choice
@@ -29,13 +32,14 @@ without solving again.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from scgsim.aedt.epr.sgb_source import row_selection_names
 from scgsim.aedt.runtime.families.sgb_import import ImportedSgbModel
 from scgsim.contracts.sgb_sidecar import Sidecar, views
-from scgsim.geometry.sgb.output.sidecar.aedt import aedt_names
+from scgsim.geometry.sgb.output.sidecar.aedt import sanitise_aedt_name
 
 FieldSelector = Literal["surface", "adjacent"]
 DIELECTRIC_SIDE_TYPES = ("MS", "SA", "SHEET")
@@ -79,38 +83,100 @@ def create_surface_selections(
     """Create the non-model sheet of every Surface-EPR row on the imported model; ``{row: binding}``."""
     bindings = surface_face_bindings(sidecar, imported)
     for binding in bindings.values():
-        _create_selection_sheet(app, binding)
+        create_selection_sheet(
+            app, f"row {binding.row}", binding.faces, binding.selection_name
+        )
     return bindings
 
 
-def _create_selection_sheet(app: Any, binding: SurfaceSelection) -> None:
-    """Copy the row's faces into one non-model sheet named ``binding.selection_name``; its area must be theirs."""
+def create_selection_sheet(
+    app: Any, label: str, faces: Sequence[tuple[str, int]], name: str
+) -> None:
+    """Copy ``faces`` into one non-model sheet named ``name``; its area must be theirs.  ``label`` names the owner."""
     areas = {
-        (name, int(face.id)): float(face.area)
-        for name in {name for name, _ in binding.faces}
-        for face in app.modeler[name].faces
+        (object_name, int(face.id)): float(face.area)
+        for object_name in {object_name for object_name, _ in faces}
+        for face in app.modeler[object_name].faces
     }
-    expected = sum(areas[face] for face in binding.faces)
+    expected = sum(areas[face] for face in faces)
     created = app.modeler.create_object_from_face(
-        [face_id for _, face_id in binding.faces], non_model=True
+        [face_id for _, face_id in faces], non_model=True
     )
     sheets = created if isinstance(created, list) else [created]
     names = [sheet.name for sheet in sheets if sheet]
-    if len(names) != len(binding.faces):
+    if len(names) != len(faces):
         raise SurfaceBindingError(
-            f"AEDT copied {len(names)} of the {len(binding.faces)} faces of row {binding.row}"
+            f"AEDT copied {len(names)} of the {len(faces)} faces of {label}"
         )
     if len(names) > 1 and not app.modeler.unite(names):
-        raise SurfaceBindingError(f"AEDT did not unite the faces of row {binding.row}")
+        raise SurfaceBindingError(f"AEDT did not unite the faces of {label}")
     sheet = app.modeler[names[0]]
-    sheet.name = binding.selection_name
+    sheet.name = name
     area = sum(float(face.area) for face in sheet.faces)
     # The copies are AEDT's own faces, so their areas agree to floating-point noise.
-    if sheet.name != binding.selection_name or abs(area - expected) > 1e-9 * expected:
+    if sheet.name != name or abs(area - expected) > 1e-9 * expected:
         raise SurfaceBindingError(
-            f"the selection of row {binding.row} is {sheet.name!r} of {area} um2, "
-            f"not {binding.selection_name!r} of {expected} um2"
+            f"the selection of {label} is {sheet.name!r} of {area} um2, "
+            f"not {name!r} of {expected} um2"
         )
+
+
+@dataclass(frozen=True)
+class JunctionSelection:
+    """One junction and the AEDT non-model sheet of its port faces its voltage is integrated on."""
+
+    junction_id: str
+    port_group: str
+    selection_name: str
+    faces: tuple[tuple[str, int], ...]
+
+
+def junction_face_bindings(
+    sidecar: Sidecar, junction_groups: Mapping[str, str], imported: ImportedSgbModel
+) -> dict[str, JunctionSelection]:
+    """``{junction id: binding}`` for ``junction_groups`` (junction id -> ``PORT::`` group), without AEDT.
+
+    The voltage sheet copies the port faces, read on their dielectric side like a sheet row; its name is
+    ``epr_junction_<id>``, and two junction ids that become one AEDT name are refused.
+    """
+    kinds = {
+        name: sidecar["volume"][solid]["kind"]
+        for solid, name in imported.objects.items()
+    }
+    ports = {port["group"]: port for port in sidecar["port"].values()}
+    out: dict[str, JunctionSelection] = {}
+    by_name: dict[str, str] = {}
+    for junction_id, group in sorted(junction_groups.items()):
+        name = sanitise_aedt_name(f"epr_junction_{junction_id}")
+        if name in by_name:
+            raise SurfaceBindingError(
+                f"junctions {by_name[name]!r} and {junction_id!r} both become the AEDT name {name!r}"
+            )
+        by_name[name] = junction_id
+        faces = tuple(
+            selected_copy(junction_id, "SHEET", face, imported, kinds)
+            for face in ports[group]["faces"]
+        )
+        out[junction_id] = JunctionSelection(junction_id, group, name, faces)
+    return out
+
+
+def create_junction_selections(
+    app: Any,
+    sidecar: Sidecar,
+    junction_groups: Mapping[str, str],
+    imported: ImportedSgbModel,
+) -> dict[str, JunctionSelection]:
+    """Create the voltage sheet of every junction on the imported model; ``{junction id: binding}``."""
+    bindings = junction_face_bindings(sidecar, junction_groups, imported)
+    for binding in bindings.values():
+        create_selection_sheet(
+            app,
+            f"junction {binding.junction_id}",
+            binding.faces,
+            binding.selection_name,
+        )
+    return bindings
 
 
 def surface_face_bindings(
@@ -118,7 +184,7 @@ def surface_face_bindings(
 ) -> dict[str, SurfaceSelection]:
     """The face-list binding of every Surface-EPR row, without touching AEDT."""
     rows = sidecar["surface_epr_row"]
-    names = aedt_names([(row, f"epr_{row}") for row in sorted(rows)])
+    names = row_selection_names(sidecar)
     kinds = {
         name: sidecar["volume"][solid]["kind"]
         for solid, name in imported.objects.items()

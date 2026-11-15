@@ -23,6 +23,7 @@ it imports anything.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -281,7 +282,10 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
     sidecar = read_sidecar(artifacts.sidecar)
     check_region_box(sidecar, bounds)
     _check_port_groups(sidecar, bound_junctions, rlcs, lumped_ports)
+    check_junction_widths(sidecar, bound_junctions)
     aedt_net_names(net_groups(sidecar))
+    junction_rlc_names(bound_junctions)
+    lumped_rlc_names(rlcs)
     _check_ground_nets(sidecar, ground_net_ids)
     files = {
         role: {"path": path.name, "sha256": file_sha256(path)}
@@ -412,6 +416,42 @@ def bind_junctions(
     return tuple(out)
 
 
+def check_junction_widths(sidecar: Sidecar, junctions: Sequence[SgbJunction]) -> None:
+    """Refuse a junction whose ``width_um`` is not the width of the port sheet SGB built for it.
+
+    The junction voltage is the area integral of the field along the port's direction divided by the sheet's
+    width across it, read from the sidecar's port record (:func:`port_width_um`), so a junction that states
+    another width names another sheet.
+    """
+    ports = {port["group"]: port for port in sidecar["port"].values()}
+    tolerance = float(sidecar["model"]["tolerance_um"])
+    for item in junctions:
+        port = ports[item.port_group]
+        width = port_width_um(sidecar, port["faces"], port["direction"])
+        if abs(width - item.junction.width_um) > tolerance:
+            raise ValueError(
+                f"junction {item.junction.junction_id!r} states width_um {item.junction.width_um}, "
+                f"but its port sheet {item.port_group} is {width} um wide across its direction"
+            )
+
+
+def port_width_um(
+    sidecar: Sidecar, faces: Sequence[str], direction: Sequence[float]
+) -> float:
+    """The extent of the port faces across ``direction`` in their plane: the width a junction voltage divides by."""
+    norm = math.hypot(direction[0], direction[1])
+    across = (-direction[1] / norm, direction[0] / norm)
+    positions = [
+        sidecar["vertex"][vertex]["position_um"]
+        for face in faces
+        for loop in sidecar["face"][face]["loops"]
+        for edge in loop["edges"]
+        for vertex in sidecar["edge"][edge]["vertices"]
+    ]
+    values = [p[0] * across[0] + p[1] * across[1] for p in positions]
+    return max(values) - min(values)
+
+
 def lumped_ports_of(
     ports: Sequence[LumpedTerminalPort | TerminalPort | ModalPort],
 ) -> tuple[LumpedTerminalPort, ...]:
@@ -499,6 +539,41 @@ def aedt_net_names(nets: Iterable[str]) -> dict[str, str]:
             )
         by_name[name] = net
         out[net] = name
+    return out
+
+
+def junction_rlc_names(junctions: Sequence[SgbJunction]) -> dict[str, str]:
+    """Junction id -> the AEDT name of its Lumped RLC (``junction_rlc_<id>``); two ids naming one RLC are refused."""
+    return _distinct_aedt_names(
+        "Junctions",
+        {
+            item.junction.junction_id: f"junction_rlc_{item.junction.junction_id}"
+            for item in junctions
+        },
+    )
+
+
+def lumped_rlc_names(lumped_rlcs: Sequence[LumpedRlc]) -> dict[str, str]:
+    """Port sheet id -> the AEDT name of its ``LumpedRlc`` (``rlc_<id>``); two ids naming one RLC are refused."""
+    return _distinct_aedt_names(
+        "Port sheets",
+        {item.port_sheet_id: f"rlc_{item.port_sheet_id}" for item in lumped_rlcs},
+    )
+
+
+def _distinct_aedt_names(kind: str, wanted: Mapping[str, str]) -> dict[str, str]:
+    """Id -> its sanitised AEDT name; two ids whose names coincide are refused, as Nets are (the Human, 2026-11-12)."""
+    out: dict[str, str] = {}
+    by_name: dict[str, str] = {}
+    for item_id in sorted(wanted):
+        name = sanitise_aedt_name(wanted[item_id])
+        if name in by_name:
+            raise ValueError(
+                f"{kind} {by_name[name]!r} and {item_id!r} both become the AEDT name {name!r}; "
+                "rename one of them"
+            )
+        by_name[name] = item_id
+        out[item_id] = name
     return out
 
 
