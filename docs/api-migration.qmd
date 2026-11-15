@@ -111,8 +111,8 @@ their fields. A film declaration carries its original normal thickness in
 `physical_dimensions["normal_thickness_um"]`, and film physical-thickness
 output reports that value without recomputing it from endpoints. The earlier
 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side,
-source_thickness_um=None)` record is not a request declaration: a request
-that passes one raises `TypeError` and asks for `PhysicalLayerDeclaration`. The physical layer ID is
+source_thickness_um=None)` record is removed, with the AEDT request's own
+physical layers: the plan declares them with `PhysicalLayerDeclaration`. The physical layer ID is
 counted once across polygons, occurrences, and Net membership; no per-layer
 `stack_id` is introduced. Coordinate mapping uses endpoint spans; finite
 volumes keep their own body extent.

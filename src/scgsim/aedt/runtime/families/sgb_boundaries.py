@@ -28,12 +28,13 @@ from scgsim.aedt.preparation.sgb_model import (
     net_groups,
     port_group,
 )
-from scgsim.aedt.rlc import rlc_native_topology
 from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort
 from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.geometry.sgb.output.exchange.guard import StepGuard
 
 Point = tuple[float, float, float]
+# A LumpedRlc topology as AEDT spells it.
+_NATIVE_RLC_TOPOLOGY = {"series": "Serial", "parallel": "Parallel"}
 
 
 class BoundaryPlanError(ValueError):
@@ -194,7 +195,7 @@ def rlc_branches(treatment: LumpedRlc) -> dict[str, Any]:
 
     ``None`` alone disables a branch, so an authored zero stays an enabled branch of value zero.
     """
-    branches: dict[str, Any] = {"RLC Type": rlc_native_topology(treatment.topology)}
+    branches: dict[str, Any] = {"RLC Type": _NATIVE_RLC_TOPOLOGY[treatment.topology]}
     for enabled, key, value, unit in (
         ("UseResist", "Resistance", treatment.resistance_ohm, "ohm"),
         ("UseInduct", "Inductance", treatment.inductance_h, "H"),

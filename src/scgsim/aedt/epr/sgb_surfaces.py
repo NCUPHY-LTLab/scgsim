@@ -46,7 +46,6 @@ from scgsim.geometry.sgb.output.sidecar.aedt import sanitise_aedt_name
 
 FieldSelector = Literal["surface", "adjacent"]
 DIELECTRIC_SIDE_TYPES = ("MS", "SA", "SHEET")
-_ENTER = {"surface": "EnterSurface", "adjacent": "EnterAdjacentSurface"}
 
 
 class SurfaceBindingError(RuntimeError):
@@ -236,30 +235,3 @@ def selected_copy(
         f"Surface-EPR row {row}: face {face} has imported copies {sorted(copies)}, "
         f"none of them the one {interface_type} reads"
     )
-
-
-def surface_field_selections(
-    bindings: Mapping[str, SurfaceSelection],
-    selectors: Mapping[str, FieldSelector] | None,
-) -> dict[str, str]:
-    """``{row: native token}`` -- ``EnterSurface`` or ``EnterAdjacentSurface`` on the row's selection.
-
-    ``selectors`` are keyed by sidecar group; a group without one reads its faces themselves (``surface``).
-    A selector for a group no row carries, or of another value, is refused.
-    """
-    selectors = dict(selectors or {})
-    groups = {binding.group for binding in bindings.values()}
-    unknown = sorted(set(selectors) - groups)
-    if unknown:
-        raise ValueError(
-            f"surface_field_selectors name groups no row carries: {unknown}"
-        )
-    wrong = sorted(g for g, value in selectors.items() if value not in _ENTER)
-    if wrong:
-        raise ValueError(
-            f"surface_field_selectors for {wrong} must be 'surface' or 'adjacent'"
-        )
-    return {
-        row: _ENTER[selectors.get(binding.group, "surface")]
-        for row, binding in bindings.items()
-    }

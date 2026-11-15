@@ -35,7 +35,6 @@ import scgsim.aedt.runtime.families.sgb_import as sgb_import  # noqa: E402
 from scgsim.aedt.epr.sgb_surfaces import (  # noqa: E402
     SurfaceBindingError,
     surface_face_bindings,
-    surface_field_selections,
 )
 from scgsim.aedt.preparation.sgb_model import (  # noqa: E402
     SgbJunction,
@@ -218,20 +217,6 @@ def test_a_face_with_two_copies_and_no_dielectric_side_is_refused(models):
     copies = {**imported.face_copies, face: {"chip_left": 1, "substrate": 2}}
     with pytest.raises(SurfaceBindingError, match="none of them"):
         surface_face_bindings(sidecar, ImportedSgbModel(imported.objects, copies, {}))
-
-
-def test_selectors_are_keyed_by_group_and_default_to_the_face_itself(models):
-    """``adjacent`` on one group switches only that group's rows; an unknown group is refused."""
-    sidecar, imported = _as_imported(models["thin_film"])
-    bindings = surface_face_bindings(sidecar, imported)
-    tokens = surface_field_selections(bindings, {"chip/left::band=0": "adjacent"})
-    assert tokens["MA::chip/left__sheet::band=0"] == "EnterAdjacentSurface"
-    assert tokens["MS::chip/left__sheet::band=0"] == "EnterAdjacentSurface"
-    assert tokens["MA::chip/left__sheet::band=1"] == "EnterSurface"
-    with pytest.raises(ValueError, match="no row carries"):
-        surface_field_selections(bindings, {"MA::chip/left__sheet::band=0": "surface"})
-    with pytest.raises(ValueError, match="'surface' or 'adjacent'"):
-        surface_field_selections(bindings, {"chip/left::band=0": "below"})
 
 
 def test_the_model_records_its_physical_ground_nets(tmp_path):
