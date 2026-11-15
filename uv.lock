@@ -2702,11 +2702,13 @@ dependencies = [
 
 [package.optional-dependencies]
 aedt = [
+    { name = "cadquery-ocp-novtk" },
     { name = "gdstk" },
     { name = "pyaedt" },
     { name = "shapely" },
 ]
 aedt-epr = [
+    { name = "cadquery-ocp-novtk" },
     { name = "gdsfactory" },
     { name = "gdstk" },
     { name = "klayout" },
@@ -2756,6 +2758,8 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cadquery-ocp-novtk", marker = "extra == 'aedt'", specifier = "==7.8.1.1.post1" },
+    { name = "cadquery-ocp-novtk", marker = "extra == 'aedt-epr'", specifier = "==7.8.1.1.post1" },
     { name = "gdsfactory", marker = "extra == 'aedt-epr'", specifier = ">=9,<10" },
     { name = "gdsfactory", marker = "extra == 'palace'", specifier = ">=9,<10" },
     { name = "gdstk", marker = "extra == 'aedt'" },

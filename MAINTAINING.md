@@ -127,7 +127,8 @@ and `private_golden` tests. `quality` runs the unified
 standard Pyright with the three retained strict scopes, and six import-layer
 contracts. Both install the `occt` dependency group, so Pyright resolves OCP
 and the `occt`-marked OCCT checks run. `docs-smoke` runs current source
-examples through file-only preparation with the pinned public PDK.
+examples through file-only preparation with the pinned public PDK; it installs
+OCP at the version of the `aedt` extra, because the AEDT examples export a STEP.
 `pdk-tests` runs the `pdk`-marked tests against the public OrcaPen SC PDK at
 the commit `README.md` installs, from that PDK's frozen lock with the current
 SCGSim wheel. The test jobs pass `--fail-on-skip`: they install every
