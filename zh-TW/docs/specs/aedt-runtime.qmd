@@ -42,7 +42,7 @@ family: prepare native model -> solve explicit setup -> export/read back
 run.py: release Desktop -> write final receipt
 ```
 
-一般命令與僅準備路徑使用相同的私有系列準備函式及交易負責者。EPR 與 Q3D 已支援 `--execute --prepare-only`；實體／薄膜範圍將此操作延伸到 HFSS Eigenmode、Driven Modal 與 Driven Terminal。一般 `--execute` 系列行為不變，兩條路徑都不新增第二個 Desktop 負責者。
+一般命令與僅準備路徑使用相同的私有系列準備函式及交易負責者。EPR 與 Q3D 已支援 `--execute --prepare-only`；實體／薄膜範圍將此操作延伸到 HFSS Eigenmode 與 Driven Terminal。一般 `--execute` 系列行為不變，兩條路徑都不新增第二個 Desktop 負責者。
 
 ### 僅準備模型與物理結果解析 {#aedt-model-only-preparation}
 
@@ -123,19 +123,20 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 SCGSim 只讀取它自己寫出的格式。較早的 SCGSim 寫出的交接、收據、要求或結果，請以寫入它的 SCGSim commit 讀取；此版本不轉換也不遷移它們。
 
+此版本已沒有原生 AEDT 建構器（issue #67），它的執行資料夾不會被讀取：`execute_handoff`、`resolve_results()` 與 `analyze_epr()` 會拒絕其交接、要求與已儲存解，訊息說明請以此版本重新準備並執行研究。酬載帶有 `geometry`（原生建構器的）的要求、GDS 匯入路徑的 v1 HFSS 交接，以及缺少 `sgb_model_sha256` 與 `sgb_model_files` 的來源紀錄，都以這種方式遭拒。
+
 | 記錄 | 目前格式 |
 |---|---|
-| 交接中繼資料 | GDS 匯入與 Q2D／Q3D 系列為 `scgsim.aedt.handoff.v1`；本體優先與 EPR 系列為 `scgsim.aedt.handoff.v2` |
+| 交接中繼資料 | Q2D 與 Q3D 為 `scgsim.aedt.handoff.v1`；HFSS Driven Terminal、Eigenmode 與 EPR 為 `scgsim.aedt.handoff.v2` |
 | 交接清單 | `scgsim.aedt.handoff-manifest.v1` 與 `.v2`，與上列交接配對 |
 | 收據 | `scgsim.aedt.receipt.v3`，初始與完成皆同 |
 | 執行期來源 | `scgsim.aedt.runtime-source.v30`（[規則](#runtime-source)） |
 | HFSS EPR 要求 | `scgsim.aedt.hfss-eigenmode-epr.v2`；帶一個運算式快取收斂控制時為 `.v3`，帶一組時為 `.v4` |
 | 儲存場分析要求 | `scgsim.aedt.hfss-eigenmode-epr-analysis.v2`；帶表面場選擇器時為 `.v3` |
-| 已準備平面幾何 | `scgsim.aedt.epr-planar.v2` |
 | EPR 結果與模態能量列 | `scgsim.aedt.epr-result.v2` 與 `scgsim.aedt.epr-mode-energy.v2` |
 | 儲存解清單與收據 | `scgsim.aedt.saved-solution-manifest.v2` 與 `scgsim.aedt.saved-solution-receipt.v2` |
 
-每個 HFSS 三維與 Q3D 要求都帶明確的 `modeling` 及其中性 `physical_representation`；缺少表示的要求酬載會遭拒。表面貢獻一律記錄 `loss_tangent`、`source` 與 `preset`，EPR 分析要求一律記錄 `bulk_domain_ids`。
+每個 HFSS 三維與 Q3D 要求都帶明確的 `modeling`，以及準備它的 SGB 模型（位於交接的 `model/` 資料夾）；物理詮釋在模型之內。表面貢獻一律記錄 `loss_tangent`、`source` 與 `preset`，EPR 分析要求一律記錄 `bulk_domain_ids`。
 
 每個收據讀取器（執行、`resolve_results()` 與已準備模型讀取器）都先檢查收據結構版本，以及其中每筆執行期來源記錄的結構版本。`scgsim.aedt.receipt.v1` 或 `.v2` 收據，或執行期來源為較早結構版本的 V3 收據，會遭拒，訊息說明它由較早的 SCGSim 寫入並指出如何讀取。此檢查在讀取任何要求或結果之前進行，因此舊結果由這一條規則拒絕，而不是由它接著碰到的某個較舊格式拒絕。單獨讀取的 v1 EPR 結果或 v1 儲存解清單，也以相同訊息遭拒。
 
@@ -183,19 +184,19 @@ SCGSim 只讀取它自己寫出的格式。較早的 SCGSim 寫出的交接、�
 
 | 系列 | 必要模型語意 | 必要回傳資料 |
 |---|---|---|
-| HFSS Driven Terminal | 明確 `modeling="solid"` 或 `modeling="thin_film"`；既有 Wave `TerminalPort` 或另行宣告、具明確訊號／參考身份的 `LumpedTerminalPort`；求解需完整 `HfssRunControl` | 依序排列的終端 S 參數及 Touchstone |
-| HFSS Driven Modal | 明確 `modeling="solid"` 或 `modeling="thin_film"`；含精確積分線的模態埠；求解需完整 `HfssRunControl` | 依序排列的模態 S 參數、阻抗及 Touchstone |
-| HFSS Eigenmode | 明確 `modeling="solid"` 或 `modeling="thin_film"`；既有執行期仍不使用埠；求解需完整 `EigenmodeRunControl`，包含模式數與搜尋頻率；一般 RLC 模型元件和 `PlanarJunction`、EPR 接面資料分開 | 一般實數模式頻率、原生 Q 與收斂證據；EPR 歷史及已儲存場結果使用獨立結果契約 |
+| HFSS Driven Terminal | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型，其兩個 `LumpedTerminalPort` 位於埠片上，具明確訊號／參考身份（[見下](#hfss-driven-terminal-sgb)）；求解需完整 `HfssRunControl` | 依序排列的終端 S 參數及 Touchstone |
+| HFSS Driven Modal | 等待其在 SGB 模型上的埠（[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)）；`prepare_sgb_model` 拒絕 `ModalPort` | 無 |
+| HFSS Eigenmode | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型；不使用埠；求解需完整 `EigenmodeRunControl`，包含模式數與搜尋頻率；一般 RLC 模型元件和 `PlanarJunction`、EPR 接面資料分開 | 一般實數模式頻率、原生 Q 與收斂證據；EPR 歷史及已儲存場結果使用獨立結果契約 |
 | Q3D | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型；精確導體 Net 成員；AC/RL 使用真實 Signal source/sink 對；支援無終端 C/G；可選精確六面 Region 接地封閉；求解需完整系列控制 | 原生電容矩陣，以及啟用時的電阻／電感矩陣 |
 | Q2D | 明確剖面幾何與導體／參考指派 | 每單位長度電容／電導及電阻／電感矩陣 |
 
 ### 集總埠片與終端 RLC {#hfss-shared-lumped-support}
 
-此 HFSS 集總元件支援新增一般電路元件，同時保留既有 Wave Terminal 與 Josephson 接面契約。
+`LumpedRlc` 與 `LumpedTerminalPort` 指名一個 `port_sheet_id`：計畫中的一個埠片，SGB 模型把它記成 `PORT::<port_sheet_id>` group，與 Palace 的集總元件相同（issue #67 decision 8）。不再有另外的支撐紀錄。`prepare_sgb_model()` 把每一個綁到它的 group；模型中沒有該 group 的名稱會被拒絕，接面、RLC 或集總埠共用同一個埠片也會被拒絕。在 HFSS 中，每個埠片都必須帶有一個接面、一個 RLC 或一個集總 Terminal 埠。
 
-`LumpedRlc` 與 `LumpedTerminalPort` 指名一個 `port_sheet_id`：計畫中的一個埠片，SGB 模型把它記成 `PORT::<port_sheet_id>` group，與 Palace 的集總元件相同（issue #67 decision 8）。不再有另外的支撐紀錄。`prepare_sgb_model()` 把每一個綁到它的 group；模型中沒有該 group 的名稱會被拒絕，接面、RLC 或集總埠共用同一個埠片也會被拒絕。原生平面建構器沒有埠片，因此兩種紀錄都會被它拒絕。本體優先流程使用 `HfssDrivenGeometrySpec`，設定 `mode="terminal"` 與結構 `hfss-driven-geometry.v1`，透過 `prepare_hfss_driven_from_geometry()` 準備。`body_first_driven_terminal` 是準備流程名稱，不是規格模式。幾何要求不含 RLC 欄位。既有 `TerminalPort.signal_entity_ids` 在舊酬載中仍可省略；本體優先路徑則必填，由前端明確宣告 Signal 與參考。舊 GDS 參考綁定不變。
+HFSS 匯入把每個 `LumpedRlc` 放在它的埠面上，方式與接面相同：在匯入的 face 上建立一個 Lumped RLC，電流線沿 sidecar 的 `direction`，連接這些 face 自身兩端 edge 的中點。
 
-在 SGB 流程中，HFSS 匯入把每個 `LumpedRlc` 放在它的埠面上，方式與接面相同：在匯入的 face 上建立一個 Lumped RLC，電流線沿 sidecar 的 `direction`，連接該 face 自身兩端 edge 的中點。每個埠片都必須帶有一個接面或一個 RLC。SGB 流程拒絕 Driven wave `TerminalPort` 與 Driven Modal 埠，訊息指向 NCUPHY-LTLab/scgsim#135；在該 Issue 完成之前，原生建構器移除後 AEDT 無法執行 Driven wave 與 modal。在 SGB 流程建立 Driven Terminal 設計之前，匯入也拒絕集總 Terminal 埠。
+SGB 流程拒絕 Driven wave `TerminalPort` 與 Driven Modal 埠，訊息指向 NCUPHY-LTLab/scgsim#135；在該 Issue 完成之前，AEDT 無法執行 Driven wave 與 modal。
 
 AEDT 的名稱只保留 `[A-Za-z0-9_]`，因此 Net 的 AEDT 名稱（它的 Q3D Net 與 HFSS `perfect_e_<name>` 邊界）是把 ID 中其他字元換成 `_` 的結果。兩個 Net 的 ID 變成同一個名稱時（例如 `chip/A` 與 `chip_A`），`prepare_sgb_model()` 在接觸 AEDT 之前就拒絕，訊息指出兩個 Net ID 與共用的名稱；不替任何一個改名。同一規則也用於 junction 的 Lumped RLC（`junction_rlc_<junction_id>`）與 port sheet 的 `LumpedRlc`（`rlc_<port_sheet_id>`）：兩個 junction ID 或兩個 port sheet ID 的名稱相同時同樣被拒絕，不加 `__2` 後綴。
 
@@ -205,11 +206,17 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 在 AEDT 中，`modeling="thin_film"` 建立 Route A，並把有限 body（bump、post）保留為導體 solid（`ROUTE_A_RETAINED_BODIES`；sidecar 的 `route_policy.conductor_volumes` 為 `retained`），匯入時設為 PEC，與 Route B 請求以 Route C 建立的方式相同。這種 body 所站的 sheet face 會在 body 與 substrate 上各匯入一份；它的 Surface-EPR row 讀取 substrate 那一份，也就是 body 被排除時它唯一的那一份。
 
-`TerminalPort` 仍是既有 Wave 埠輸入。`LumpedTerminalPort` 是獨立的 Driven Terminal 輸入，明確指定埠片、終端與參考，且必須提供 `impedance_ohm`；它沒有 RLC 網路欄位。50 ohm 這類值是作業輸入，不是套件預設值。Lumped 要求不會轉換成 Wave 埠。
+### SGB 模型上的 HFSS Driven Terminal {#hfss-driven-terminal-sgb}
 
-目前 Wave Terminal 契約的來源有向點對註記，記錄 Wave 埠參考來源，不是 Modal `IntLine`。要求停用重新正規化，物理去嵌入位移為零。此時原生未啟用的 50-ohm 設定，不是來源負載、重新正規化目標或已解得的特性阻抗。實際原生去嵌入啟用旗標另外記錄；位移為零不表示旗標已停用。
+`prepare_hfss_driven_from_geometry(model=...)` 為一個 `PreparedSgbModel` 準備 Driven Terminal 交接，其 `lumped_ports` 就是它的兩個埠（`prepare_sgb_model(..., ports=...)`）。`HfssDrivenGeometrySpec`（結構 `hfss-driven-geometry.v1`，模式 `terminal`）攜帶此模型；它的 `ports` 就是模型的埠。要求必須有埠 1 與 2，名稱不同，並共用一個有序參考；每個埠片的兩個宿主 Entity，必須是該埠的一個訊號 Entity 與一個參考 Entity。Driven 模型不帶接面、集總 RLC 或 Surface-EPR 規格。交接在 `model/` 中攜帶模型的四個檔案，收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`，與 HFSS Eigenmode 相同。帶有 `geometry`（原生建構器的）的要求酬載會遭拒，並說明原因。
 
-每個 `HfssDrivenGeometrySpec` Terminal 埠都必須使用相同且有順序的來源 Entity 參考 tuple：Lumped 使用 `LumpedTerminalPort.reference_entity_ids`，Wave 使用 `TerminalPort.reference_objects`。此要求適用於 Lumped、Wave 及混合要求，選取器不排序或合併。先執行既有所有權、埠系列及全 Wave 側別檢查。原生讀回驗證設計層級 `TerminalReferenceConductors` 清單，不能據此建立每個埠不同的參考指派。具有不同參考 tuple 的歷史酬載，會被目前建構器拒絕，包含酬載解碼；原執行證據仍屬歷史。已儲存的本體優先 Terminal 子指派，原生讀回為 `Edges` 或 `Faces`，每個 ID 必須唯一解析為一個由來源建立的導體物件。缺少或不明確的指定型別／所有者會使讀回失敗。父埠的 `Faces` 支撐指派和子訊號所有權保持分開。
+在 AEDT 中，執行會把 STEP 匯入空白的 Driven Terminal 設計（`import_sgb_model`），Region、其 Perfect H 與每個 Route A Net 的 Perfect E 都與 Eigenmode 相同。帶有集總 Terminal 埠的模型只匯入 Driven Terminal 設計，而 Driven Terminal 設計也只接受帶有這些埠的模型。接著每個埠依序為：
+
+1. **薄片。** 位於匯入實體上的埠面，會依 guard 中每個面的精確頂點迴圈重新畫成一個薄片物件 `port_sheet_<port_sheet_id>`，並與 guard 的面積比對；不是其頂點所成平面多邊形的面會遭拒。AEDT 2024.2 匯入的基板面與旁邊導體實體相距約 2e-8 µm，Terminal 埠找不到這些導體（開發檢查，2026-11-15）。自由面本身已是這樣的薄片。
+2. **埠。** 一個 Terminal `Lumped Port`，以要求中的名稱命名，覆蓋薄片各面，使用要求的阻抗與 `renormalize`。
+3. **Terminal。** `<name>_T1`，位於薄片在訊號宿主一端、沿 sidecar `direction`（由薄片第一個宿主指向第二個）的直線邊上；這些邊必須構成一條連續線段。AEDT 會把帶積分線的集總埠做成沒有 Terminal 的 Modal 埠，即使在 Driven Terminal 設計中亦然，因此 Terminal 指派在邊上。
+
+儲存後，每個埠都從已儲存的設計讀回：一個正好位於其各面上的 Terminal `Lumped Port`，以及它唯一的 Terminal，即正好位於其各邊上的已儲存子項。收據保留這些紀錄、原生屬性與 AEDT 記錄的參考導體。結果讀取要求收據的幾何就是請求的模型匯入後的樣子（其識別與 guard 的實體）、每筆埠紀錄就是匯入所建立的那一筆，以及所宣告掃頻的有序 S 參數與 Touchstone。
 
 `LumpedRlc` 要求明確 `series` 或 `parallel` 拓樸。R、L、C 分別選擇，`None` 停用對應元件；每個啟用的一般 R、L、C 值，在數值轉換後必須有限。零仍表示啟用，有限負值保留。目前建構器會拒絕含非有限值的歷史一般 RLC 酬載，包含解碼；限制只適用於這些一般 RLC 元件，不延伸到其他電路或 EPR 量。`EigenmodeSim.add_lumped_rlc()` 加入模型負責的集合，每個埠片一個處理，`HfssEprSpec` 只投影準備清單，不建立第二份可編輯副本。模型來源雜湊包含 RLC 資料。此一般線性網路不是 Josephson 接面，不建立 `PlanarJunction`、接面參與率或 EPR 貢獻；既有接面與已儲存場 EPR 結果契約保持分開。
 
@@ -220,7 +227,7 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 | 系列 | 公開執行控制 | 原生設定映射 |
 |---|---|---|
 | HFSS Eigenmode，包含 EPR | `EigenmodeRunControl` | `scgsim.aedt.runtime.native.hfss_eigenmode` 的唯一私有映射，把七個控制對應至 `MinimumFrequency`、`NumModes`、`MaxDeltaFreq`、`MaximumPasses`、`MinimumPasses`、`MinimumConvergedPasses` 與 `PercentRefinement`，一般 Eigenmode 與 EPR 共用。 |
-| HFSS Driven Modal 與 Terminal | `HfssRunControl` | Driven-HFSS 自適應設定與頻率掃描在 HFSS 系列內轉譯；Modal 與 Terminal 保留不同的設計及埠語意。 |
+| HFSS Driven Terminal | `HfssRunControl` | Driven-HFSS 自適應設定與頻率掃描在 HFSS 系列內轉譯。 |
 | Q3D | `MatrixRunControl` | Q3D 負責自己的 `Cap`、`AC`、`DC` 區塊及啟用狀態。 |
 | Q2D | `MatrixRunControl` | Q2D 負責自己的 `CGDataBlock` 與 `RLDataBlock` 控制。 |
 
@@ -230,15 +237,13 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 ## 實體與薄膜三維建模 {#aedt-solid-thin-film}
 
-每個新的 Q3D 或 HFSS 三維要求，都明確選擇 `modeling="solid"` 或 `"thin_film"`；不推定模式，也沒有公開 A/B/C 執行別名。沿用目前系列結構識別字。新要求在來源宣告旁攜帶帶標記的 `physical_representation` 計畫；平面來源將同一份帶標記解讀存於標準 `source["modeling"]` 位置。中立 ABI 與明確 Palace 設定檔介面見[共用物理表示契約](physical-representation.qmd)；Q2D 仍為獨立剖面契約。
+每個新的 Q3D 或 HFSS 三維要求，都明確選擇 `modeling="solid"` 或 `"thin_film"`；不推定模式，也沒有公開 A/B/C 執行別名。沿用目前系列結構識別字。此選擇決定模型建立所用的 SGB 路徑：`thin_film` 為 Route A，`solid` 為 Route C。下列物理解讀在建立模型時套用；要求攜帶的是模型，而非自己的一份表示。中立 ABI 與明確 Palace 設定檔介面見[共用物理表示契約](physical-representation.qmd)；Q2D 仍為獨立剖面契約。
 
 所選 PDK／來源宣告 `PhysicalLayerDeclaration`，包含物理身份、來源 level／選取器、來源區間、材料身份、`feature_kind`、物理尺寸與編寫的接觸事實。特徵種類為 `stack_film`、`local_film`、`finite_volume`。來源承載欄位為 `physical_layer`；新的 `aedt_modeling` 中繼資料與角色推導路徑分類已退役。不從名稱、Net、材料、大小、鄰近或相同 Z 值推定分類。同一物理層身份在多邊形與放置實例間共用，沒有另外的 stack 識別字；輸入使用唯一明確編寫的 LayerStack 組裝座標系。
 
 只有來源選取的物理 level 進入解讀宣告集合；未使用的目錄膜不會讓模型坍縮。已選取且具來源身份的橋接入射關係保留為來源證據；一般未編寫的 bridge／bump 接觸仍為缺少。兩者都不能建立原生連通性或 HFSS 場側對應。
 
-明確 `ApproximationProfile` 與共用 `PhysicalRepresentationPlan` 負責座標映射、逐本體解讀、層綁定支撐投影，以及完整要求的包絡。來源本體與 `LayerImport` 保留原端點和物理層綁定，`effective_bodies`、`effective_layer_imports` 則揭露衍生原生區間。有限體積映射自己的實際本體端點，不直接採用整個名目層跨度。膜物理厚度仍是來源法向厚度；TSV 壁的徑向厚度不是軸向跨度。沒有層宣告的明確 Solid 幾何，可使用共用恆等計畫，不編造物理 ID。
-
-缺少帶標記之中性 `physical_representation`、物理層為 `PhysicalLayerSpec` 記錄的要求酬載，由較早的 SCGSim 寫入。它會遭拒並指示重新準備，不會轉成新的中性宣告；請以寫入它的 SCGSim commit 讀取（[目前格式](#current-formats)）。歷史零寬導體匯入保持原記錄的 Sheet 表示，不重新標為 Solid 體積。
+明確 `ApproximationProfile` 與共用 `PhysicalRepresentationPlan` 負責座標映射、逐本體解讀、層綁定支撐投影，以及完整要求的包絡。有限體積映射自己的實際本體端點，不直接採用整個名目層跨度。膜物理厚度仍是來源法向厚度；TSV 壁的徑向厚度不是軸向跨度。沒有層宣告的明確 Solid 幾何，可使用共用恆等計畫，不編造物理 ID。
 
 `solid` 模式保留來源物理 Z 區間；`thin_film` 把承載堆疊的膜表示為片，並從累積堆疊高度移除其宣告厚度。產生的有效 Z 映射套用到該堆疊上方各層。局部 film／deck 在套用堆疊映射後，於宣告接觸側成為片；其自身厚度不壓縮堆疊。有限體積保持三維，映射實際本體端點。柱與 bump 保持實體並映射端點，不推定延長。這些映射來自編寫的宣告，不寫死層身份或膜厚。
 
@@ -248,11 +253,11 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 導體來源法向厚度或 `physical_thickness_um`，不是 EPR 模型的介面膜厚。交給 `set_surface_epr()` 的 MA、MS 或 SA spec 的 `film_thickness_m` 是獨立的模型輸入；不以導體厚度取代介面假設。
 
-理想超導體由來源 PDK 材料宣告決定，包含 `PdkMaterial.is_superconducting`，並保留 Al、Nb 等原材料 ID。實體映射到原生 `pec`；薄 Q3D 本體使用 `ThinConductor`、材料 `pec` 與具有明確單位的宣告物理厚度；薄 HFSS 本體使用 `Perfect E`。非超導介電與真空指派採明確 PDK AEDT 材料庫對應。不支援的材料模型明確失敗，不改用室溫材料或損耗模型。
+理想超導體由層疊的材料紀錄決定，並保留 Al、Nb 等原材料 ID。實體映射到原生 `pec`；薄 Q3D 本體使用 `ThinConductor`、材料 `pec` 與具有明確單位的宣告物理厚度；薄 HFSS 本體使用 `Perfect E`。非超導介電與真空指派採明確 PDK AEDT 材料庫對應。不支援的材料模型明確失敗，不改用室溫材料或損耗模型。
 
 Q3D AC/RL 保留要求的 Signal Net 與 ConstantVoltage source/sink 語意。終端取自匯入後的物件，而非來源多邊形（[SGB 模型上的 Q3D](#q3d-sgb-model)）：實體取其沿該側最外處的平面面；片取該處的直線邊，且須構成一段不中斷的線段。某側沒有選到任何東西，或選到的部分無法相連時會被拒絕；轉接器不選最近的面或邊。片上的 `+Z` 或 `-Z` 終端是輸入錯誤，因為片沒有分開的厚度面。僅 C/G Q3D 不需假終端。既有 HFSS 模式專屬埠與參考契約，仍在同一座標映射下有效。
 
-既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 作業，可對 Q3D C/G 或 AC/RL、HFSS Eigenmode、HFSS Driven Modal 及 HFSS Driven Terminal 準備、讀回、儲存並釋放模型。它不呼叫 `Analyze`、建立求解器網格、求解，或匯出場與結果矩陣。僅準備收據不是已完成求解結果，嚴格結果解析不變。一般明確求解路徑仍可用，但此建模範圍不宣稱任一表示已取得求解結果或數值精確度。
+既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 作業，可對 Q3D C/G 或 AC/RL、HFSS Eigenmode 及 HFSS Driven Terminal 準備、讀回、儲存並釋放模型。它不呼叫 `Analyze`、建立求解器網格、求解，或匯出場與結果矩陣。僅準備收據不是已完成求解結果，嚴格結果解析不變。一般明確求解路徑仍可用，但此建模範圍不宣稱任一表示已取得求解結果或數值精確度。
 
 ### HFSS Driven 由呼叫者決定掃描點數 {#hfss-driven-sweep-count}
 
@@ -295,7 +300,7 @@ Q2D／Q3D 契約將原生觀察方向套用到下列兩項額外資格，和先�
 
 ### 原生模擬效能比較 {#native-simulation-benchmark}
 
-每次新完成的 HFSS Driven Terminal、Driven Modal、Eigenmode（含 EPR）、Q3D、Q2D 求解，都在所負責 AEDT 工作階段內寫入版本化 `results/simulation-benchmark.v1.json`，執行收據記錄名稱與雜湊。`status` 區分完整原生效能資料、無法提供資料，以及效能 API／格式錯誤；後兩者不會把成功物理求解改成求解器失敗。聲稱的 JSON 無法寫入或雜湊，則屬產物完整性失敗。沒有此輸出的歷史完成收據仍可讀，顯示 `not_recorded`，不合成舊效能測量；聲稱存在但缺檔或雜湊不符，會被 `resolve_results()` 拒絕。
+每次新完成的 HFSS Driven Terminal、Eigenmode（含 EPR）、Q3D、Q2D 求解，都在所負責 AEDT 工作階段內寫入版本化 `results/simulation-benchmark.v1.json`，執行收據記錄名稱與雜湊。`status` 區分完整原生效能資料、無法提供資料，以及效能 API／格式錯誤；後兩者不會把成功物理求解改成求解器失敗。聲稱的 JSON 無法寫入或雜湊，則屬產物完整性失敗。沒有此輸出的歷史完成收據仍可讀，顯示 `not_recorded`，不合成舊效能測量；聲稱存在但缺檔或雜湊不符，會被 `resolve_results()` 拒絕。
 
 效能資料保留精確原生設定、variation、求解程序群組、自適應 pass 與階段身份。只記錄可取得的原生 real／elapsed 與 CPU 時間、原生 Memory 的格式化字串和 PyAEDT 轉換，以及明確標示的四面體、求解元素或線性矩陣大小。終端結果矩陣維度不稱為求解器矩陣大小。階段峰值取最大值而不相加；父子時間可能重疊，不累加。缺少指標及 Q3D 自適應效能限制保留為無法提供，不填零。SCGSim 收據 wall time 與原生作業時間分開。擷取直接走訪原生 `results/profile` OO 樹，使原生讀取失敗成為效能資料錯誤，而非默默略過群組；也保留帶原生 variation 身份的設定根節點純量屬性。
 
@@ -497,7 +502,7 @@ sim.set_expression_cache_convergence(
 
 ### 公開 EPR 介面 {#public-epr-candidate-surface}
 
-公開的 HFSS Eigenmode 入口是 `EigenmodeSim`（`set_plan`、`set_eigenmode`、`set_surface_epr`、`add_junction`、`add_lumped_rlc` 與 `set_epr_request`）、`prepare_sgb_model()` 搭配 `prepare_hfss_eigenmode_from_geometry(model=...)`，以及用於已儲存解的 `analyze_epr(model=...)`。它們都接收一次 SGB 建模的同一個 `PreparedSgbModel`；沒有平面 Eigenmode 準備流程。HFSS Driven 在有自己的 SGB 路徑之前仍使用 `PreparedPlanarGeometry`。
+公開的 HFSS Eigenmode 入口是 `EigenmodeSim`（`set_plan`、`set_eigenmode`、`set_surface_epr`、`add_junction`、`add_lumped_rlc` 與 `set_epr_request`）、`prepare_sgb_model()` 搭配 `prepare_hfss_eigenmode_from_geometry(model=...)`，以及用於已儲存解的 `analyze_epr(model=...)`。它們都接收一次 SGB 建模的同一個 `PreparedSgbModel`；沒有平面 Eigenmode 準備流程。HFSS Driven Terminal 接收同一種 `PreparedSgbModel`（[其路徑](#hfss-driven-terminal-sgb)）。
 
 #### 自動矩形接面分割 {#aedt-automatic-junction-partition}
 

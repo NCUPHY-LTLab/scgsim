@@ -1,75 +1,54 @@
 ---
 lang: zh-TW
 title: "AEDT：HFSS Driven Terminal"
-description: "為目前的雙埠端子網路明確指定共用接地參考。"
+description: "在 SGB 模型上準備雙埠 HFSS Driven Terminal 網路，集總埠位於其埠片上。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-terminal"
 ---
 
-接續[CPW 輸入](aedt-inputs.qmd)。Terminal 埠會明確標示參考導體。它與 Modal 使用相同的來源 GDS 和 PDK 材料對應，但此模型的參考指派有各自的原生證據與結果意義。即使網路曲線相似，也不代表兩種埠模型相同。如 Eigenmode 教學所述，請將輸入頁面中零厚度的 M1 匯入替換為 0.2 µm 的 `NB_FILM` 區間，並以 `PhysicalLayerDeclaration` 宣告此薄膜，以下表面為附著面，因此 HFSS 薄片仍位於 z = 0。此宣告由範例自行撰寫；coupon GDS 本身不含任何宣告。
+HFSS Driven Terminal 求解 SGB 模型的雙埠網路，也就是 Palace 網格化的同一個模型。請從一個 `GeometryPlan` 快照開始，其版圖帶有兩個集總埠薄片，各位於一個埠與其導體相接之處。每個埠是一個 `LumpedTerminalPort`，指名它的薄片（`port_sheet_id`，即模型的 `PORT::<port_sheet_id>` 群組）、薄片相接的訊號與參考 Entity，以及埠阻抗。
 
 ```python
 from pathlib import Path
 from scgsim.aedt import (
-    FrequencySweepSpec, HfssDrivenSpec, HfssRunControl, LayerImport,
-    LengthMeshSpec, TerminalPort, prepare_handoff,
+    FrequencySweepSpec, HfssRunControl, LumpedTerminalPort,
+    prepare_hfss_driven_from_geometry, prepare_sgb_model,
 )
-from scgsim.geometry import PhysicalLayerDeclaration
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
-metal_thickness_um = 0.2
-physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerDeclaration(
-    physical_layer_id=physical_layer_id,
-    source_level_id="D0_TOP_M1",
-    source_level_and_gds_pair={"layer": 1, "datatype": 0},
-    source_interval_um=(0.0, metal_thickness_um),
-    material_id="Nb",
-    feature_kind="stack_film",
-    physical_dimensions={"normal_thickness_um": metal_thickness_um},
-    source_contact_facts={"layer_attachment_face": "lower"},
-)
-layer_imports = (
-    LayerImport(
-        1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
-        physical_layer_id=physical_layer_id,
-    ),
-    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
-)
-
 ports = (
-    TerminalPort(1, "o1", "-X", ground_objects),
-    TerminalPort(2, "o2", "+X", ground_objects),
+    LumpedTerminalPort(1, "p1", "port_1", ("chip/pad_1",), ("chip/ground",), 50.0),
+    LumpedTerminalPort(2, "p2", "port_2", ("chip/pad_2",), ("chip/ground",), 50.0),
 )
-spec = HfssDrivenSpec(
-    aedt_version=AEDT_VERSION,
-    mode="terminal", gds_path=source_gds, modeling="thin_film",
-    project_name="public_cpw_terminal", design_name="CpwFiniteGroundTerminal",
-    materials=materials, vacuum_material_id="vacuum",
-    layer_imports=layer_imports, object_bindings=object_bindings,
-    physical_layers=(physical_layer,),
+model = prepare_sgb_model(
+    snapshot.geometry_input,
+    prepared_stack=snapshot.stack,
+    modeling="solid",  # or "thin_film"
+    output_dir=Path(".artifacts/driven-model"),
     ports=ports,
-    run_control=HfssRunControl(
-        "Setup1", "Fast20000", FrequencySweepSpec(3.0, 8.0, 20_000)
-    ),
-    region_padding_um=(0.0, 0.0, 100.0, 100.0, 1000.0, 1000.0),
-    length_mesh=LengthMeshSpec(("D0_TOP_M1_1",), ground_objects, 10.0),
 )
-handoff = prepare_handoff(
-    spec=spec, output_dir=Path(".artifacts/public-cpw-terminal")
+handoff = prepare_hfss_driven_from_geometry(
+    aedt_version=AEDT_VERSION,
+    model=model,
+    project_name="two_port",
+    design_name="DrivenTerminal",
+    run_control=HfssRunControl(
+        "Setup1", "Sweep1", FrequencySweepSpec(4.0, 8.0, points=201)
+    ),
+    output_dir=Path(".artifacts/driven-handoff"),
 )
 print(handoff.spec_path, handoff.archive_path)
 ```
 
-兩個埠共用有序全域參考 tuple `("D0_TOP_M1_2", "D0_TOP_M1_3")`，也就是宣告的接地物件。參考必須指向完全相同的來源綁定；目前的契約不會根據接觸幾何推斷接地。`TerminalPort` 的選用欄位 `deembed_um` 單位為微米且不得為負；本範例設為零。
+埠屬於模型：`prepare_sgb_model(..., ports=...)` 把每個埠綁定到它的埠片，並拒絕模型中不存在的薄片。Driven 請求正好需要兩個埠 1 與 2，名稱不同，並共用一個有序參考。每個薄片都必須連接該埠的一個訊號 Entity 與一個參考 Entity。Driven 模型不帶接面、集總 RLC 或 Surface-EPR 規格；這些屬於 HFSS Eigenmode。交接在其 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard。
 
-範例要求 20,000 個點，這是 `FrequencySweepSpec` 的預設值。請依研究所需的網路響應選擇 `points` 與掃頻範圍；原生設定與回傳讀回結果會保留此請求。[掃頻參考](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)列出精確輸入規則。
+在 AEDT 中，執行會像 Eigenmode 一樣把 STEP 匯入空白的 Driven Terminal 設計，並把每個埠放在它的薄片上：薄片各面上的 Terminal 集總埠，以及位於薄片與訊號導體相接邊上的 Terminal。[執行階段契約](../specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)列出這些規則。回傳解析器會檢查收據的幾何就是請求的模型匯入後的樣子、每個埠與 Terminal 都是從已儲存的設計中、在指定的面與邊上讀回，並檢查所宣告掃頻的有序 S 參數與 Touchstone。
 
-檢查複製後規格的埠順序、參考與端面，再於[原生主機上執行](execute.qmd)。回傳解析器會檢查實際端子／參考讀回結果及有序 S 參數／Touchstone，而非只檢查請求的參考。[重新啟動並解析回傳資料](returned-results.qmd)後，再將網路響應交給下游分析。原生基準與自適應證據會分別描述執行過程與物理響應。請一併保留原生狀態、實際控制項與可取得的變化量。解讀 S 參數時使用端子參考慣例，不要將此輸出視為模態積分線模型。
+範例請求 201 個點。請依研究所需的網路響應選擇 `points` 與掃頻範圍；原生設定與回傳讀回都會保留此請求。[掃頻參考](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)列出其精確的輸入規則。
 
-若預期模型需要明確積分線，請使用 [Modal](aedt-driven-modal.qmd)。[執行階段契約](../specs/aedt-runtime.qmd)說明失敗行為與受限的雙埠介面。
+請先檢查複製規格中的埠，再[在原生主機上執行](execute.qmd)並[重新開始與解析](returned-results.qmd)，之後才把網路響應交給下游分析。原生基準與自適應證據描述的是這次執行，與物理響應分開。
 
-### Wave 與 Lumped Terminal 埠 {#wave-and-lumped-terminal-ports}
+### 等待 issue #135 的埠 {#ports-that-wait-for-issue-135}
 
-上方範例使用 Wave `TerminalPort` 輸入。Lumped 激發使用另一種 `LumpedTerminalPort` 宣告，並明確指定埠片（`port_sheet_id`）、端子與參考指派，且必須提供 `impedance_ohm`。兩種埠有不同的原生模型，因此 Lumped 請求不會退回建立 Wave 埠。一般 Series／Parallel RLC 模型元件屬於 Eigenmode 模型的 `lumped_rlcs` 集合，各自位於所指名的埠片上；它們不同於 Driven Terminal 的純量埠阻抗，也不同於 Josephson 接面／EPR 模型。執行階段參考說明埠片識別與 body-first 路徑。在該路徑中，必須提供 `TerminalPort.signal_entity_ids`，明確列出宣告的 Signal 與其參考；既有 GDS 參考綁定維持不變。
+Region 面上的波 `TerminalPort` 與每一種 Driven Modal 埠（`ModalPort`）在 SGB 模型上都還沒有實作。宣告這類埠的請求會被 `prepare_sgb_model` 拒絕，並指向 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)；在該 issue 完成前沒有 Driven Modal 工作流程。GDS 匯入路徑（`HfssDrivenSpec`、`gds_path`、`LayerImport`、`ObjectBinding`、`LengthMeshSpec`）已移除。

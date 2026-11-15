@@ -220,7 +220,7 @@ gap 內若容納不到兩個切線位置，就放不下矩形：SCGSim 會拒絕
 | `cuts` | 每條切線的 `index`（從 A 起算的切線位置）、`from_corner_a_um` 與兩端 `ends_um` |
 | `modelled_sheet_um` | 長邊在兩條切線之間拉直後的薄片；只有長邊原本不直時才有 |
 
-AEDT 的準備以 `prepare_planar_geometry_input(...).source["junction_partitions"][junction_id]["lattice"]` 回傳這份紀錄。Palace 模擬由同一份紀錄準備埠，並把它保存在 prepared geometry 的埠薄片上，鍵為 `rectangular_junction_lattice`。
+分區把這份紀錄存在準備好的輸入中，位置為 `metadata["junction_partitions"][junction_id]["lattice"]`；Palace 與 AEDT 共同求解的 SGB 模型就由這份紀錄建立。Palace 模擬把它保存在 prepared geometry 的埠薄片上，鍵為 `rectangular_junction_lattice`。
 
 ## 以多邊形畫成的曲線輪廓 {#curve-rule}
 

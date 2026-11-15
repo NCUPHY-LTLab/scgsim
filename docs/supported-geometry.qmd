@@ -354,10 +354,11 @@ The partition record of each port carries what SCGSim did under `lattice`:
 | `cuts` | each cut's `index` (cut positions from A), `from_corner_a_um` and its two `ends_um` |
 | `modelled_sheet_um` | the sheet with its long sides straight between the cuts, present only when they were not |
 
-The AEDT preparation returns the record as
-`prepare_planar_geometry_input(...).source["junction_partitions"][junction_id]["lattice"]`.
-A Palace simulation prepares its port from the same record and keeps it on the
-port sheet of its prepared geometry, under `rectangular_junction_lattice`.
+The partition records it in the prepared input as
+`metadata["junction_partitions"][junction_id]["lattice"]`, and the SGB model
+Palace and AEDT both solve is built from that record. A Palace simulation keeps
+it on the port sheet of its prepared geometry, under
+`rectangular_junction_lattice`.
 
 ## Curved outlines drawn as polygons {#curve-rule}
 

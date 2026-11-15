@@ -74,9 +74,9 @@ the rows.
 
 ## Source and result differences
 
-GeometryPlan is shared by Palace, source-first HFSS Eigenmode and the Q3D C/G
-preparation frontend. Q3D also supports source-free v3 body authoring; Q2D
-takes cross-section facts, not an inferred slice. Shared source geometry does
+GeometryPlan is shared by Palace, HFSS Eigenmode, HFSS Driven Terminal and
+Q3D C/G: each solves the plan's SGB model. Q2D takes cross-section facts, not
+an inferred slice. Shared source geometry does
 not equalize boundary conditions or make lumped capacitance, resonance,
 S-parameters and per-length matrices interchangeable. Use each result's units
 and native conductor/port/mode order.

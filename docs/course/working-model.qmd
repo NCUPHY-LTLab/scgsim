@@ -158,11 +158,11 @@ terminals. Q2D uses explicit cross-section rectangles and conductor groups; it
 does not generate a slice of the GeometryPlan.
 :::
 
-For another network question, continue to [Driven Modal](aedt-driven-modal.qmd)
-or [Driven Terminal](aedt-driven-terminal.qmd). For finite conductor extraction,
-use [Q3D](aedt-q3d.qmd); for per-unit-length line matrices, use [Q2D](aedt-q2d.qmd).
-The [CPW inputs](aedt-inputs.qmd) lesson supplies direct-GDS mappings for HFSS;
-Q3D has a separate body-backed input contract.
+For a two-port network, continue to [Driven Terminal](aedt-driven-terminal.qmd);
+Driven Modal waits for issue #135 ([Driven Modal](aedt-driven-modal.qmd)). For
+finite conductor extraction, use [Q3D](aedt-q3d.qmd); for per-unit-length line
+matrices, use [Q2D](aedt-q2d.qmd). The [CPW inputs](aedt-inputs.qmd) lesson
+prepares the `GeometryPlan` snapshot whose SGB model HFSS and Q3D solve.
 
 ## Change a solver request
 

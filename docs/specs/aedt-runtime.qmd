@@ -76,7 +76,7 @@ run.py: release Desktop -> write final receipt
 The normal command and preparation-only paths use the same private family
 preparation functions and transaction owner. EPR and Q3D already support
 `--execute --prepare-only`; the Solid/Thin-Film scope extends that operation
-to HFSS Eigenmode, Driven Modal and Driven Terminal. The usual `--execute`
+to HFSS Eigenmode and Driven Terminal. The usual `--execute`
 family behavior remains unchanged, and neither path creates a second Desktop
 owner.
 
@@ -245,21 +245,28 @@ SCGSim reads only the formats it writes. A handoff, receipt, request or result
 written by an earlier SCGSim is read with the SCGSim commit that wrote it; this
 version does not convert or migrate it.
 
+Run folders of the native AEDT builder, which this version no longer has
+(issue #67), are not read: `execute_handoff`, `resolve_results()` and
+`analyze_epr()` refuse their handoffs, requests and saved solutions, and the
+message says to prepare and run the study again with this version. A request
+whose payload carries `geometry` (the native builder's), a v1 HFSS handoff of
+the GDS-import route, and a source record without `sgb_model_sha256` and
+`sgb_model_files` are each refused this way.
+
 | Record | Current format |
 |---|---|
-| Handoff metadata | `scgsim.aedt.handoff.v1` for the GDS-import and Q2D/Q3D families; `scgsim.aedt.handoff.v2` for the body-first and EPR families |
+| Handoff metadata | `scgsim.aedt.handoff.v1` for Q2D and Q3D; `scgsim.aedt.handoff.v2` for HFSS Driven Terminal, Eigenmode and EPR |
 | Handoff manifest | `scgsim.aedt.handoff-manifest.v1` and `.v2`, paired with the handoff above |
 | Receipt | `scgsim.aedt.receipt.v3`, initial and completed |
 | Runtime source | `scgsim.aedt.runtime-source.v30` ([rule](#runtime-source)) |
 | HFSS EPR request | `scgsim.aedt.hfss-eigenmode-epr.v2`; `.v3` with one expression-cache convergence control, `.v4` with a collection |
 | Saved-field analysis request | `scgsim.aedt.hfss-eigenmode-epr-analysis.v2`; `.v3` with surface field selectors |
-| Prepared planar geometry | `scgsim.aedt.epr-planar.v2` |
 | EPR result and mode-energy row | `scgsim.aedt.epr-result.v2` and `scgsim.aedt.epr-mode-energy.v2` |
 | Saved-solution manifest and receipt | `scgsim.aedt.saved-solution-manifest.v2` and `scgsim.aedt.saved-solution-receipt.v2` |
 
-Every HFSS 3D and Q3D request carries explicit `modeling` and its neutral
-`physical_representation`; a request payload without the representation is
-refused. A surface contribution always records `loss_tangent`, `source` and
+Every HFSS 3D and Q3D request carries explicit `modeling` and the SGB model it
+was prepared from, in its handoff's `model/` folder; the physical interpretation
+is inside the model. A surface contribution always records `loss_tangent`, `source` and
 `preset`, and an EPR analysis request always records `bulk_domain_ids`.
 
 Every receipt reader (execution, `resolve_results()` and the prepared-model
@@ -362,9 +369,9 @@ uses the separate `run_control=None` path described above.
 
 | Family | Required model semantics | Required returned data |
 |---|---|---|
-| HFSS Driven Terminal | explicit `modeling="solid"` or `modeling="thin_film"`; existing Wave `TerminalPort` or separately declared `LumpedTerminalPort` with explicit signal/reference identity; complete `HfssRunControl` for solving | ordered terminal S-parameters and Touchstone |
-| HFSS Driven Modal | explicit `modeling="solid"` or `modeling="thin_film"`; modal ports with exact integration lines; complete `HfssRunControl` for solving | ordered modal S-parameters, impedance, and Touchstone |
-| HFSS Eigenmode | explicit `modeling="solid"` or `modeling="thin_film"`; the existing runtime remains port-free; complete `EigenmodeRunControl`, including mode count and search frequency, for solving; generic RLC model elements are distinct from `PlanarJunction` and EPR junction records | ordinary real mode frequency, native Q, and convergence evidence; EPR history and saved-field results use their separate result contract |
+| HFSS Driven Terminal | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"` whose two `LumpedTerminalPort`s sit on its port sheets, with explicit signal/reference identity ([below](#hfss-driven-terminal-sgb)); complete `HfssRunControl` for solving | ordered terminal S-parameters and Touchstone |
+| HFSS Driven Modal | waits for its ports on the SGB model ([issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)); `prepare_sgb_model` refuses a `ModalPort` | none |
+| HFSS Eigenmode | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"`; port-free; complete `EigenmodeRunControl`, including mode count and search frequency, for solving; generic RLC model elements are distinct from `PlanarJunction` and EPR junction records | ordinary real mode frequency, native Q, and convergence evidence; EPR history and saved-field results use their separate result contract |
 | Q3D | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; real Signal source/sink pairs for AC/RL; terminal-free C/G is supported; optional exact six-face Region ground seal; complete family controls for solving | native capacitance and, when enabled, resistance/inductance matrices |
 | Q2D | explicit cross-section geometry and conductor/reference assignments | per-unit-length capacitance/conductance and resistance/inductance matrices |
 
@@ -386,6 +393,53 @@ the midpoints of those faces' own edges at both ends along the sidecar
 The SGB flow refuses a Driven wave `TerminalPort` and a Driven Modal port, with
 a message naming NCUPHY-LTLab/scgsim#135; until that Issue lands, AEDT Driven
 wave and modal runs are not available.
+
+AEDT keeps only `[A-Za-z0-9_]` of a name, so a Net's AEDT name (its Q3D Net
+and its HFSS `perfect_e_<name>` boundary) is its ID with every other
+character replaced by `_`. `prepare_sgb_model()` refuses two Nets whose IDs
+become the same name, such as `chip/A` and `chip_A`, naming both Net IDs and
+the shared name, before AEDT is touched; neither is renamed. The same rule
+names a junction's Lumped RLC `junction_rlc_<junction_id>` and a port sheet's
+`LumpedRlc` `rlc_<port_sheet_id>`: two junction IDs, or two port-sheet IDs,
+whose names coincide are refused the same way, with no `__2` suffix.
+
+A handoff of the SGB flow carries its model: the STEP, the BREP it was
+written from, the sidecar and the guard are copied into the handoff's
+`model/` folder, and the request names that relative folder. Where AEDT runs,
+every file is checked against its recorded SHA-256 before anything is
+imported. The handoff's source record binds the model's identity and the four
+file hashes; a record without them belongs to a natively built model, which
+is refused (issue #67 decision 6).
+
+The EPR of an SGB model reads what it integrates from the sidecar and the
+prepared record, without AEDT (`scgsim.aedt.epr.sgb_source`). The domains
+are the imported dielectric solids, by AEDT object name, and the `Region`;
+a conductor solid is PEC and holds no field. Each sidecar Surface-EPR row of a
+declared type is integrated once, on the non-model sheet of its faces. The
+reported contributions group the rows as Palace's `Dielectric` rows do: per
+interface type and surface unit (an unbanded row, or every band of one band
+family) a baseline over all its rows, and per inset margin an entry over its
+bands from the margin's band on, under Palace's entry names; an entry's energy
+is the sum of its rows'. AEDT has no Palace `Model.L0`, so a film given in
+Palace's native `thickness` is refused; give `film_thickness_m`. A junction's
+voltage is the area integral of the field along its port's sidecar
+`direction`, divided by the port sheet's width across it, read from the
+sidecar's port record; `prepare_sgb_model()` refuses a `PlanarJunction` whose
+`width_um` is not that width within the model's `tolerance_um`. Each row has
+three expressions on its sheet (normal and tangential electric integrals and
+the area); a row can hold faces of several orientations and curved walls, so
+the normal is the sheet's own at each point (`Operation('Normal')`), not one
+vector. A junction's voltage is integrated on a non-model sheet copied from
+its port faces. The public HFSS Eigenmode flow runs on this (see
+[Eigenmode saved fields](#eigenmode-saved-fields-and-surface-epr-direction)).
+
+In AEDT, `modeling="thin_film"` builds Route A with its finite bodies (bumps,
+posts) retained as conductor solids (`ROUTE_A_RETAINED_BODIES`; the sidecar's
+`route_policy.conductor_volumes` is `retained`), and the import makes them
+PEC, the same way a Route B request is built as Route C. A sheet face that
+such a body stands on imports on the body and on the substrate; its
+Surface-EPR rows read the substrate's copy, the copy it has when the body is
+excluded.
 
 ### HFSS Driven Terminal on the SGB model {#hfss-driven-terminal-sgb}
 
@@ -456,7 +510,7 @@ unchanged under AEDT 2023.2 or 2024.2 and PyAEDT 1.3.0.
 | Family | Public run control | Native setup mapping |
 |---|---|---|
 | HFSS Eigenmode, including EPR | `EigenmodeRunControl` | One private mapping in `scgsim.aedt.runtime.native.hfss_eigenmode` maps the seven controls to `MinimumFrequency`, `NumModes`, `MaxDeltaFreq`, `MaximumPasses`, `MinimumPasses`, `MinimumConvergedPasses`, and `PercentRefinement` for ordinary Eigenmode and EPR. |
-| HFSS Driven Modal and Terminal | `HfssRunControl` | The Driven-HFSS adaptive setup and frequency sweep are translated within the HFSS family; Modal and Terminal retain their distinct design and port semantics. |
+| HFSS Driven Terminal | `HfssRunControl` | The Driven-HFSS adaptive setup and frequency sweep are translated within the HFSS family. |
 | Q3D | `MatrixRunControl` | Q3D owns its `Cap`, `AC`, and `DC` blocks and their enable states. |
 | Q2D | `MatrixRunControl` | Q2D owns its `CGDataBlock` and `RLDataBlock` controls. |
 
@@ -481,10 +535,10 @@ checked by the resolver has that meaning.
 Every fresh Q3D
 or HFSS 3D request explicitly selects `modeling="solid"` or `"thin_film"`;
 there is no inferred mode or public A/B/C execution alias. Current family
-schema identifiers remain in use. Fresh requests carry the tagged
-`physical_representation` plan alongside their source declaration records.
-Planar source stores that same tagged interpretation in its canonical
-`source["modeling"]` location. See the
+schema identifiers remain in use. The selection decides the SGB route the
+model is built on: `thin_film` is Route A, `solid` Route C. The physical
+interpretation below is applied when the model is built, and the request
+carries the model, not a representation of its own. See the
 [shared physical representation contract](physical-representation.qmd) for the
 neutral ABI and the explicit Palace profile interface; Q2D remains a separate
 cross-section contract.
@@ -507,22 +561,11 @@ HFSS field-side correspondence.
 
 An explicit `ApproximationProfile` and the common
 `PhysicalRepresentationPlan` own coordinate mapping, per-body interpretation,
-layer-bound support projection and the full requested enclosure. Source body
-and `LayerImport` records retain their original endpoints and physical layer
-binding; `effective_bodies` and `effective_layer_imports` expose derived native
-intervals. Finite volumes map their actual body endpoints rather than taking
+layer-bound support projection and the full requested enclosure. Finite volumes map their actual body endpoints rather than taking
 the whole nominal layer span. Film physical thickness remains the source's
 normal thickness. A TSV wall's radial thickness is not its axial span.
 Explicit Solid geometry without layer declarations can use the common
 identity plan without inventing physical IDs.
-
-A request payload without a tagged neutral `physical_representation`, whose
-physical layers are `PhysicalLayerSpec` records, was written by an earlier
-SCGSim. It is refused with a replacement preparation instruction and is not
-converted into fresh neutral declarations; read it with the SCGSim commit that
-wrote it ([current formats](#current-formats)). Historical zero-width conductor
-imports remain their recorded Sheet representation and are not relabeled as
-Solid volumes.
 
 In `solid` mode, the model retains source physical Z intervals. In
 `thin_film` mode, a stack-bearing film is represented as a sheet and its
@@ -554,9 +597,8 @@ interface-film thickness used by the EPR model. The `film_thickness_m` of the
 MA, MS or SA spec given to `set_surface_epr()` is an independent model input. Do
 not substitute the conductor thickness for that interface assumption.
 
-An ideal superconductor is determined by the source PDK material declaration,
-including `PdkMaterial.is_superconducting`; the original material ID (such as
-Al or Nb) remains recorded. A solid maps to native `pec`. A thin Q3D body uses
+An ideal superconductor is determined by the stack's material record; the
+original material ID (such as Al or Nb) remains recorded. A solid maps to native `pec`. A thin Q3D body uses
 `ThinConductor` with material `pec` and the declared physical thickness with
 explicit units. A thin HFSS body uses `Perfect E`. Non-superconducting
 dielectric and vacuum assignments use explicit PDK AEDT library mappings.
@@ -576,7 +618,7 @@ coordinate map.
 
 The existing `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only`
 operation prepares, reads back, saves and releases a model for Q3D C/G or
-AC/RL, HFSS Eigenmode, HFSS Driven Modal, and HFSS Driven Terminal. It does not
+AC/RL, HFSS Eigenmode and HFSS Driven Terminal. It does not
 call `Analyze`, create a solver mesh, solve, or export fields or result
 matrices. Its preparation-only receipt is not a completed solve result; strict
 result resolution remains unchanged. The ordinary explicit solve path remains
@@ -702,7 +744,7 @@ private consumer solve or EPR result.
 
 ### Native simulation benchmark
 
-Every new completed HFSS Driven Terminal, Driven Modal, Eigenmode (including
+Every new completed HFSS Driven Terminal, Eigenmode (including
 EPR), Q3D, and Q2D solve writes a versioned
 `results/simulation-benchmark.v1.json` during its owned AEDT session. The run
 receipt names and hashes that output. Its `status` distinguishes complete
@@ -1255,8 +1297,8 @@ The public HFSS Eigenmode entries are `EigenmodeSim` (with `set_plan`,
 `set_epr_request`), `prepare_sgb_model()` with
 `prepare_hfss_eigenmode_from_geometry(model=...)`, and `analyze_epr(model=...)`
 for a saved solution. All of them take the one `PreparedSgbModel` of an SGB
-build; there is no planar Eigenmode preparation. HFSS Driven still uses
-`PreparedPlanarGeometry` until its own SGB route.
+build; there is no planar Eigenmode preparation. HFSS Driven Terminal takes
+the same `PreparedSgbModel` ([its route](#hfss-driven-terminal-sgb)).
 
 #### Automatic rectangular junction partition {#aedt-automatic-junction-partition}
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the selected HFSS documentation blocks through file-only preparation."""
+"""Run the selected HFSS documentation blocks through file-only preparation of the SGB handoff."""
 
 from __future__ import annotations
 
@@ -37,15 +37,15 @@ class Selection:
 SELECTIONS = (
     Selection(
         "docs/course/aedt-inputs.qmd",
-        "Make the shared source and mapping",
+        "Make the CPW plan",
         1,
-        "coupon.write_gds(source_gds, with_metadata=False)",
+        "snapshot = plan.prepare()",
     ),
     Selection(
         "docs/course/aedt-eigenmode.qmd",
         None,
         1,
-        "handoff = prepare_handoff(",
+        "handoff = sim.prepare_handoff()",
     ),
 )
 
@@ -154,11 +154,11 @@ def _validate_prepare_cutoff(block: CodeBlock, path: Path) -> None:
             for target in statement.targets
         )
         and isinstance(statement.value, ast.Call)
-        and _call_name(statement.value.func) == "prepare_handoff"
+        and _call_name(statement.value.func) == "sim.prepare_handoff"
     ]
     if len(prepare_assignments) != 1:
         raise ValueError(
-            f"{path}:{block.line}: expected one direct prepare_handoff assignment"
+            f"{path}:{block.line}: expected one direct sim.prepare_handoff() assignment"
         )
     prepare_index = prepare_assignments[0]
     if prepare_index != len(tree.body) - 2:
