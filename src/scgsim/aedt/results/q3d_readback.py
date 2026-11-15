@@ -1,8 +1,7 @@
-"""Strict offline validation of a Q3D run on an SGB model: Nets, terminals, Region, setup and matrices."""
+"""Strict offline validation of a Q3D run on an SGB model: Nets, Region, setup and the C/G matrix."""
 
 from __future__ import annotations
 
-import csv
 import math
 from pathlib import Path
 from typing import Any, cast
@@ -32,7 +31,7 @@ _Q3D_REGION_SHEET_NAMES = {
 def validate_q3d_model_readback(
     root: Path, receipt: dict[str, Any], spec: Q3dSpec, *, prepared: bool = False
 ) -> None:
-    """Bind the receipt's model to the request: the imported SGB model, its Nets, terminals and Region."""
+    """Bind the receipt's model to the request: the imported SGB model, its Nets and Region."""
     if ("ports" in receipt or not prepared) and receipt.get("ports") != []:
         raise RuntimeError("Q3D receipt must not contain HFSS ports")
     validate_imported_sgb_model(receipt, spec.model)
@@ -42,16 +41,6 @@ def validate_q3d_model_readback(
         raise RuntimeError("Q3D receipt has invalid net evidence")
     for record, expected in zip(nets, spec.nets, strict=True):
         _validate_q3d_net(record, expected)
-        if expected.has_terminals:
-            for kind, object_name, side in (
-                ("source", expected.source_object, expected.source_side),
-                ("sink", expected.sink_object, expected.sink_side),
-            ):
-                _validate_q3d_terminal(
-                    record.get(kind), expected, kind, object_name, side
-                )
-        elif "source" in record or "sink" in record:
-            raise RuntimeError("Q3D net receipt contains undeclared terminals")
     net_object_ids = [
         object_id for record in nets for object_id in record["native_object_ids"]
     ]
@@ -76,9 +65,10 @@ def _validate_conductor_sheets(geometry: dict[str, Any], spec: Q3dSpec) -> None:
 
 
 def _validate_q3d_net(record: Any, expected: Any) -> None:
-    """A Net record names the request's Net, type and objects, with one native id per object."""
+    """A Net record names the request's Net, type and objects, with one native id per object, and nothing else."""
     if (
         not isinstance(record, dict)
+        or set(record) != {"name", "net_type", "object_names", "native_object_ids"}
         or record.get("name") != expected.name
         or record.get("net_type") != expected.net_type
         or record.get("object_names") != list(expected.object_names)
@@ -90,26 +80,6 @@ def _validate_q3d_net(record: Any, expected: Any) -> None:
         raise RuntimeError("Q3D native net evidence does not match the spec")
 
 
-def _validate_q3d_terminal(
-    terminal: Any, net: Any, kind: str, object_name: Any, side: Any
-) -> None:
-    """A terminal record names its Net's terminal on the authored object and side, over faces or edges."""
-    if (
-        not isinstance(terminal, dict)
-        or terminal.get("name") != f"{net.name}{kind.title()}"
-        or terminal.get("object_name") != object_name
-        or terminal.get("side") != side
-        or terminal.get("terminal_type") != "ConstantVoltage"
-    ):
-        raise RuntimeError("Q3D native terminal evidence is invalid")
-    keys = {"native_face_ids", "native_edge_ids"} & set(terminal)
-    if len(keys) != 1:
-        raise RuntimeError("Q3D terminal evidence must name faces or edges")
-    ids = terminal[keys.pop()]
-    if not isinstance(ids, list) or not ids or not positive_unique_ids(ids, len(ids)):
-        raise RuntimeError("Q3D terminal native ids are invalid")
-
-
 def validate_q3d_readback(root: Path, receipt: dict[str, Any], spec: Q3dSpec) -> None:
     """Verify Q3D native model, setup, convergence, and exported matrices."""
     run_control = cast(MatrixRunControl, spec.run_control)
@@ -119,22 +89,6 @@ def validate_q3d_readback(root: Path, receipt: dict[str, Any], spec: Q3dSpec) ->
         raise RuntimeError("Q3D native convergence evidence is invalid")
     readback = receipt.get("result_readback")
     matrices = readback.get("matrices") if isinstance(readback, dict) else None
-    if spec.solve_ac_rl:
-        if (
-            not isinstance(matrices, dict)
-            or matrices.get("frequency_ghz") != run_control.frequency_ghz
-            or set(matrices.get("native", {})) != {"c", "ac_rl"}
-            or not isinstance(matrices.get("normalized_rows"), int)
-            or matrices["normalized_rows"] <= 0
-        ):
-            raise RuntimeError("Q3D matrix readback is invalid")
-        _validate_normalized_matrices(
-            contained(root, "results/q3d/matrices.csv"),
-            matrices["normalized_rows"],
-            {"C", "AC RL"},
-        )
-        _read_q3d_original_cg(root, spec)
-        return
     rows, summary = _read_q3d_original_cg(root, spec)
     expected_matrices = {
         "path": "results/q3d/c_matrix.csv",
@@ -163,18 +117,6 @@ def validate_q3d_setup(receipt: dict[str, Any], spec: Q3dSpec) -> None:
             "dc_enabled": False,
         },
     }
-    if spec.solve_ac_rl:
-        expected_setup["native"].update(
-            {
-                "ac_rl_maximum_passes": run_control.maximum_passes,
-                "ac_rl_minimum_passes": run_control.minimum_passes,
-                "ac_rl_minimum_converged_passes": (
-                    run_control.minimum_converged_passes
-                ),
-                "ac_rl_convergence_percent": run_control.convergence_percent,
-                "ac_rl_percent_refinement": run_control.percent_refinement,
-            }
-        )
     if receipt.get("setup") != expected_setup:
         raise RuntimeError("Q3D native setup evidence is invalid")
 
@@ -441,28 +383,3 @@ def _q3d_face_normal_matches(direction: str, value: Any) -> bool:
         for index, item in enumerate(normal)
         if index != axis
     )
-
-
-def _validate_normalized_matrices(
-    path: Path, expected_rows: int, problem_types: set[str]
-) -> None:
-    with path.open(newline="", encoding="utf-8") as stream:
-        rows = list(csv.DictReader(stream))
-    if len(rows) != expected_rows or not rows:
-        raise RuntimeError("normalized matrix row count is invalid")
-    expected_quantities = {"C", "G", "L", "R"}
-    if {row.get("quantity") for row in rows} != expected_quantities:
-        raise RuntimeError("normalized matrix quantities are incomplete")
-    for row in rows:
-        try:
-            value = float(row["value"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise RuntimeError("normalized matrix value is invalid") from exc
-        if (
-            not math.isfinite(value)
-            or row.get("problem_type") not in problem_types
-            or not row.get("row")
-            or not row.get("column")
-            or not row.get("unit")
-        ):
-            raise RuntimeError("normalized matrix row is invalid")

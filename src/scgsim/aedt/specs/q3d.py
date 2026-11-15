@@ -1,4 +1,4 @@
-"""The Q3D request on an SGB model: its Nets, optional source and sink, and the matrix setup.
+"""The Q3D request on an SGB model: its Nets and the capacitance/conductance setup.
 
 The request carries the :class:`PreparedSgbModel` AEDT imports (issue #67), as HFSS Eigenmode does.  Its
 payload is a handoff payload: the model lives in the handoff's ``model/`` folder, so a payload is decoded
@@ -8,6 +8,9 @@ the native builder (one that declares ``bodies``) is refused with the reason (is
 The Nets are the model's: one :class:`Q3dNetSpec` per Net of the model, named by its AEDT name (the
 sanitised Net id), over exactly the model's conductor objects of that Net
 (:func:`scgsim.aedt.preparation.sgb_q3d.q3d_net_objects`), with the request's Q3D type.
+
+Q3D on the model extracts C/G only; AC/RL, with its sources and sinks, is designed again in
+NCUPHY-LTLab/scgsim#265.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from pathlib import Path
-from typing import Any, Literal, cast, get_args
+from typing import Any, Literal, cast
 
 from scgsim.aedt.preparation.sgb_handoff import bind_sgb_model, model_payload
 from scgsim.aedt.preparation.sgb_model import PreparedSgbModel
@@ -25,7 +28,6 @@ from scgsim.aedt.specs.common import (
     OFFICIAL_PYAEDT_SOURCE_URL,
     Q3D_SCHEMA_VERSION,
     MatrixRunControl,
-    Side,
     project_filename,
     project_name_from_payload,
     text_value,
@@ -40,37 +42,12 @@ NATIVE_PAYLOAD_REFUSAL = (
 
 
 @dataclass(frozen=True)
-class Q3dTerminalPair:
-    """Caller-selected global terminal sides on exact source Entity identities.
-
-    Each selected Entity must be exactly one conductor object of its Net in the SGB model.
-    """
-
-    source_entity_id: str
-    source_side: Side
-    sink_entity_id: str
-    sink_side: Side
-
-    def __post_init__(self) -> None:
-        for name in ("source_entity_id", "sink_entity_id"):
-            object.__setattr__(self, name, text_value(getattr(self, name), name))
-        if self.source_side not in get_args(Side) or self.sink_side not in get_args(
-            Side
-        ):
-            raise ValueError("Q3D source and sink sides are invalid")
-
-
-@dataclass(frozen=True)
 class Q3dNetSpec:
-    """One exact connected Q3D net and optional signal source/sink."""
+    """One exact connected Q3D net: its AEDT name, Q3D type and conductor objects."""
 
     name: str
     net_type: Literal["Signal", "Ground"]
     object_names: tuple[str, ...]
-    source_object: str | None = None
-    source_side: Side | None = None
-    sink_object: str | None = None
-    sink_side: Side | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "name", text_value(self.name, "net.name"))
@@ -82,37 +59,6 @@ class Q3dNetSpec:
         if not objects or len(set(objects)) != len(objects):
             raise ValueError("Q3D net object_names must be nonempty and unique")
         object.__setattr__(self, "object_names", objects)
-        terminal_values = (
-            self.source_object,
-            self.source_side,
-            self.sink_object,
-            self.sink_side,
-        )
-        if self.net_type == "Ground":
-            if any(value is not None for value in terminal_values):
-                raise ValueError("Q3D Ground nets must not define source or sink")
-            return
-        if all(value is None for value in terminal_values):
-            return
-        if any(value is None for value in terminal_values):
-            raise ValueError(
-                "Q3D Signal terminals must be all absent or a complete source/sink pair"
-            )
-        source = text_value(self.source_object, "net.source_object")
-        sink = text_value(self.sink_object, "net.sink_object")
-        if source not in objects or sink not in objects:
-            raise ValueError("Q3D source and sink objects must belong to their net")
-        if self.source_side not in get_args(Side) or self.sink_side not in get_args(
-            Side
-        ):
-            raise ValueError("Q3D source and sink sides are invalid")
-        object.__setattr__(self, "source_object", source)
-        object.__setattr__(self, "sink_object", sink)
-
-    @property
-    def has_terminals(self) -> bool:
-        """Whether this Net declares a source and a sink."""
-        return self.source_object is not None
 
     def to_payload(self) -> dict[str, Any]:
         """Return this request record in its canonical payload shape."""
@@ -120,16 +66,12 @@ class Q3dNetSpec:
             "name": self.name,
             "net_type": self.net_type,
             "object_names": list(self.object_names),
-            "source_object": self.source_object,
-            "source_side": self.source_side,
-            "sink_object": self.sink_object,
-            "sink_side": self.sink_side,
         }
 
 
 @dataclass(frozen=True)
 class Q3dSpec:
-    """One Q3D model of an SGB model with optional matrix setup.
+    """One capacitance/conductance Q3D model of an SGB model with optional matrix setup.
 
     Explicit run_control=None declares model preparation without solve setup.  The Region is the model's
     ``VACUUM_REGION`` box (issue #67 decision 5).  ``grounded_region_net`` names a new Ground Net made of the
@@ -142,7 +84,6 @@ class Q3dSpec:
     model: PreparedSgbModel
     nets: tuple[Q3dNetSpec, ...]
     run_control: MatrixRunControl | None
-    solve_ac_rl: bool = True
     grounded_region_net: str | None = None
     aedt_version: str = dataclass_field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
@@ -176,8 +117,7 @@ class Q3dSpec:
             raise TypeError("run_control must be MatrixRunControl or None")
         nets = tuple(self.nets)
         _check_model_nets(self.model, nets)
-        _check_terminals(self.solve_ac_rl, nets)
-        _check_grounded_region(self.grounded_region_net, self.solve_ac_rl, nets)
+        _check_grounded_region(self.grounded_region_net, nets)
         object.__setattr__(self, "nets", nets)
 
     def to_payload(self) -> dict[str, Any]:
@@ -197,7 +137,6 @@ class Q3dSpec:
             "run_control": None
             if self.run_control is None
             else self.run_control.to_payload(),
-            "solve_ac_rl": self.solve_ac_rl,
             "grounded_region_net": self.grounded_region_net,
         }
 
@@ -223,7 +162,6 @@ class Q3dSpec:
             "model",
             "nets",
             "run_control",
-            "solve_ac_rl",
             "grounded_region_net",
         }
         if set(payload) != expected or payload.get("mode") != "q3d":
@@ -244,7 +182,6 @@ class Q3dSpec:
                 if payload["run_control"] is None
                 else MatrixRunControl(**payload["run_control"])
             ),
-            solve_ac_rl=payload["solve_ac_rl"],
             grounded_region_net=payload["grounded_region_net"],
             aedt_version=payload["aedt"]["requested_version"],
             pyaedt_version=payload["pyaedt"]["locked_version"],
@@ -270,24 +207,12 @@ def _check_model_nets(model: PreparedSgbModel, nets: tuple[Q3dNetSpec, ...]) -> 
         raise ValueError("Q3D requires at least one Signal net")
 
 
-def _check_terminals(solve_ac_rl: bool, nets: tuple[Q3dNetSpec, ...]) -> None:
-    if not isinstance(solve_ac_rl, bool):
-        raise TypeError("solve_ac_rl must be boolean")
-    if solve_ac_rl and any(
-        net.net_type == "Signal" and not net.has_terminals for net in nets
-    ):
-        raise ValueError("Q3D AC/RL requires complete terminals for every Signal net")
-
-
 def _check_grounded_region(
     grounded_region_net: str | None,
-    solve_ac_rl: bool,
     nets: tuple[Q3dNetSpec, ...],
 ) -> None:
     if grounded_region_net is None:
         return
     text_value(grounded_region_net, "grounded_region_net")
-    if solve_ac_rl:
-        raise ValueError("grounded_region_net requires solve_ac_rl=False")
     if grounded_region_net in {net.name for net in nets}:
         raise ValueError("grounded_region_net must name a new dedicated enclosure net")

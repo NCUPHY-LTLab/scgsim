@@ -81,18 +81,3 @@ def q3d_net_objects(model: PreparedSgbModel) -> dict[str, tuple[str, ...]]:
     conductors = q3d_conductors(model)
     names = aedt_net_names(conductors)
     return {names[net]: tuple(sorted(objects)) for net, objects in conductors.items()}
-
-
-def terminal_object(model: PreparedSgbModel, net_id: str, entity_id: str) -> str:
-    """The one conductor object of Net ``net_id`` that carries Entity ``entity_id``.
-
-    A terminal names an Entity; it must be exactly one object of its own Net.
-    """
-    objects = q3d_conductors(model).get(net_id, {})
-    matches = [name for name, entity in objects.items() if entity == entity_id]
-    if len(matches) != 1:
-        raise ValueError(
-            f"terminal Entity {entity_id!r} is {len(matches)} conductor objects of Net {net_id!r} "
-            f"({sorted(matches)}), not one"
-        )
-    return matches[0]

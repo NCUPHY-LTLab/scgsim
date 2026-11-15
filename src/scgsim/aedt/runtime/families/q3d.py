@@ -11,6 +11,7 @@ from scgsim.aedt.results.convergence.q3d import read_q3d_convergence
 from scgsim.aedt.runtime.benchmark import attach_simulation_benchmark
 from scgsim.aedt.runtime.control import Q3dStopControl
 from scgsim.aedt.runtime.families.q3d_exports import export_q3d_matrices
+from scgsim.aedt.runtime.families.q3d_nets import assign_q3d_nets
 from scgsim.aedt.runtime.families.q3d_prepared import PreparedQ3d
 from scgsim.aedt.runtime.families.q3d_prepared import (
     prepared_q3d_result as prepared_q3d_result,
@@ -20,10 +21,6 @@ from scgsim.aedt.runtime.families.q3d_region import (
     seal_q3d_region,
 )
 from scgsim.aedt.runtime.families.q3d_setup import read_q3d_setup, setup_q3d
-from scgsim.aedt.runtime.families.q3d_terminals import (
-    assign_q3d_nets,
-    verify_saved_q3d_terminals,
-)
 from scgsim.aedt.runtime.families.q3d_termination import termination_q3d_result
 from scgsim.aedt.runtime.families.sgb_import import (
     import_sgb_model,
@@ -104,7 +101,7 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
     )
     app.modeler.model_units = "um"
     geometry = imported_geometry_record(import_sgb_model(app, spec.model, family="q3d"))
-    nets = assign_q3d_nets(app, spec, geometry["readback_tolerance_um"])
+    nets = assign_q3d_nets(app, spec)
     region = dict(geometry["region"])
     if spec.grounded_region_net is not None:
         grounded_region = seal_q3d_region(app, spec, region["native_material"])
@@ -115,7 +112,6 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
         setup_q3d(app, spec, spec.run_control)
     if not app.save_project() or not project_path.is_file():
         raise RuntimeError("Q3D project was not saved before solve")
-    verify_saved_q3d_terminals(app, nets)
     setup = (
         read_q3d_setup(app, spec, spec.run_control)
         if spec.run_control is not None

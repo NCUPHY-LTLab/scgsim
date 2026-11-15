@@ -14,7 +14,7 @@ scgsim-status: "CONVERGING"
 
 ### scgsim.aedt
 
-`AedtResources`, `AedtSpec`, `EigenmodeRunControl`, `EigenmodeSim`, `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `ExpressionCacheConvergenceSet`, `FrequencySweepSpec`, `HandoffPlan`, `HfssDrivenGeometrySpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssRunControl`, `HfssSpec`, `LumpedRlc`, `LumpedTerminalPort`, `MatrixRunControl`, `ModalPort`, `NativeBatchPackage`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PdkMaterial`, `PlanarJunction`, `PreparedModel`, `PreparedSgbModel`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dNetSpec`, `Q3dSpec`, `Q3dTerminalPair`, `ResolvedRun`, `SavedSolution`, `TerminalPort`, `analyze_epr`, `collect_native_batch`, `parse_aedt_spec`, `planar_junction_from_port`, `plot_epr_result`, `prepare_handoff`, `prepare_hfss_driven_from_geometry`, `prepare_hfss_eigenmode_from_geometry`, `prepare_native_batch`, `prepare_q3d_from_geometry`, `prepare_sgb_model`, `reanalyze_epr`, `request_q3d_abort_and_save`, `request_q3d_stop_and_save`, `resolve_epr_result`, `resolve_prepared_model`, `resolve_results`, `resolve_saved_solution`, `run_native_batch`, `show_epr`.
+`AedtResources`, `AedtSpec`, `EigenmodeRunControl`, `EigenmodeSim`, `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `ExpressionCacheConvergenceSet`, `FrequencySweepSpec`, `HandoffPlan`, `HfssDrivenGeometrySpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssRunControl`, `HfssSpec`, `LumpedRlc`, `LumpedTerminalPort`, `MatrixRunControl`, `ModalPort`, `NativeBatchPackage`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PdkMaterial`, `PlanarJunction`, `PreparedModel`, `PreparedSgbModel`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dNetSpec`, `Q3dSpec`, `ResolvedRun`, `SavedSolution`, `TerminalPort`, `analyze_epr`, `collect_native_batch`, `parse_aedt_spec`, `planar_junction_from_port`, `plot_epr_result`, `prepare_handoff`, `prepare_hfss_driven_from_geometry`, `prepare_hfss_eigenmode_from_geometry`, `prepare_native_batch`, `prepare_q3d_from_geometry`, `prepare_sgb_model`, `reanalyze_epr`, `request_q3d_abort_and_save`, `request_q3d_stop_and_save`, `resolve_epr_result`, `resolve_prepared_model`, `resolve_results`, `resolve_saved_solution`, `run_native_batch`, `show_epr`.
 
 ### scgsim.aedt.specs
 
@@ -45,7 +45,7 @@ scgsim-status: "CONVERGING"
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/api/analyze-epr-usage.md` | `c1e040aa9af091eb00262c62615cf4a2b8ec594cf0090dda61cfbba11e739f6c` |
 | `zh-TW/docs/api/analyze-epr-usage.md` | `b5db4425fc362af6b6f24e4226669ef2756444347938ecbe544ec3a1c2e911d5` |
-| `src/scgsim/aedt/__init__.py` | `8b5c0f6d62a1d9ed6cb67ee8202ba7d1f4459637696d1ae52013253b302d8cd4` |
+| `src/scgsim/aedt/__init__.py` | `690069c00ec98682fedd0501875e1011921e8bc8c42e5a817be50a3f2fef8c76` |
 | `src/scgsim/aedt/specs/__init__.py` | `2dce2baa961727dac9e6253167d4448ef8b4e11958e5fb7bdf0d2f571d05300e` |
 | `src/scgsim/geometry/__init__.py` | `e303dfa14a602aa8849c2f25c3deea910804f2c52bf619ae269d78e407dabf45` |
 | `src/scgsim/palace/__init__.py` | `99a94bc6f25857c205a4fce053a779abedfa16f979a49323ea2729b8e168a4f4` |

@@ -187,7 +187,7 @@ SCGSim 只讀取它自己寫出的格式。較早的 SCGSim 寫出的交接、�
 | HFSS Driven Terminal | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型，其兩個 `LumpedTerminalPort` 位於埠片上，具明確訊號／參考身份（[見下](#hfss-driven-terminal-sgb)）；求解需完整 `HfssRunControl` | 依序排列的終端 S 參數及 Touchstone |
 | HFSS Driven Modal | 等待其在 SGB 模型上的埠（[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)）；`prepare_sgb_model` 拒絕 `ModalPort` | 無 |
 | HFSS Eigenmode | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型；不使用埠；求解需完整 `EigenmodeRunControl`，包含模式數與搜尋頻率；一般 RLC 模型元件和 `PlanarJunction`、EPR 接面資料分開 | 一般實數模式頻率、原生 Q 與收斂證據；EPR 歷史及已儲存場結果使用獨立結果契約 |
-| Q3D | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型；精確導體 Net 成員；AC/RL 使用真實 Signal source/sink 對；支援無終端 C/G；可選精確六面 Region 接地封閉；求解需完整系列控制 | 原生電容矩陣，以及啟用時的電阻／電感矩陣 |
+| Q3D | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型；精確導體 Net 成員；只有 C/G，沒有終端（AC/RL 在 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265) 中重新設計）；可選精確六面 Region 接地封閉；求解需完整系列控制 | 原生電容／電導矩陣 |
 | Q2D | 明確剖面幾何與導體／參考指派 | 每單位長度電容／電導及電阻／電感矩陣 |
 
 ### 集總埠片與終端 RLC {#hfss-shared-lumped-support}
@@ -228,7 +228,7 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 |---|---|---|
 | HFSS Eigenmode，包含 EPR | `EigenmodeRunControl` | `scgsim.aedt.runtime.native.hfss_eigenmode` 的唯一私有映射，把七個控制對應至 `MinimumFrequency`、`NumModes`、`MaxDeltaFreq`、`MaximumPasses`、`MinimumPasses`、`MinimumConvergedPasses` 與 `PercentRefinement`，一般 Eigenmode 與 EPR 共用。 |
 | HFSS Driven Terminal | `HfssRunControl` | Driven-HFSS 自適應設定與頻率掃描在 HFSS 系列內轉譯。 |
-| Q3D | `MatrixRunControl` | Q3D 負責自己的 `Cap`、`AC`、`DC` 區塊及啟用狀態。 |
+| Q3D | `MatrixRunControl` | Q3D 負責自己的 `Cap` 區塊；`AC` 與 `DC` 區塊保持停用。 |
 | Q2D | `MatrixRunControl` | Q2D 負責自己的 `CGDataBlock` 與 `RLDataBlock` 控制。 |
 
 共用的 Q3D／Q2D 要求詞彙，不表示原生區塊可互換。同樣地，共用原生執行期負責 Desktop 生命週期、ACF／資源處理及已儲存 `AnalysisSetup` 樹的存取；取得原始屬性不解釋求解器欄位，也不取代各系列自己的儲存設定讀取器。EPR 將運算式快取項目加入共用 Eigenmode 基礎設定，並負責這項擴充，不另建第二份自適應場映射。
@@ -255,9 +255,9 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 理想超導體由層疊的材料紀錄決定，並保留 Al、Nb 等原材料 ID。實體映射到原生 `pec`；薄 Q3D 本體使用 `ThinConductor`、材料 `pec` 與具有明確單位的宣告物理厚度；薄 HFSS 本體使用 `Perfect E`。非超導介電與真空指派採明確 PDK AEDT 材料庫對應。不支援的材料模型明確失敗，不改用室溫材料或損耗模型。
 
-Q3D AC/RL 保留要求的 Signal Net 與 ConstantVoltage source/sink 語意。終端取自匯入後的物件，而非來源多邊形（[SGB 模型上的 Q3D](#q3d-sgb-model)）：實體取其沿該側最外處的平面面；片取該處的直線邊，且須構成一段不中斷的線段。某側沒有選到任何東西，或選到的部分無法相連時會被拒絕；轉接器不選最近的面或邊。片上的 `+Z` 或 `-Z` 終端是輸入錯誤，因為片沒有分開的厚度面。僅 C/G Q3D 不需假終端。既有 HFSS 模式專屬埠與參考契約，仍在同一座標映射下有效。
+既有 HFSS 模式專屬埠與參考契約，仍在同一座標映射下有效。
 
-既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 作業，可對 Q3D C/G 或 AC/RL、HFSS Eigenmode 及 HFSS Driven Terminal 準備、讀回、儲存並釋放模型。它不呼叫 `Analyze`、建立求解器網格、求解，或匯出場與結果矩陣。僅準備收據不是已完成求解結果，嚴格結果解析不變。一般明確求解路徑仍可用，但此建模範圍不宣稱任一表示已取得求解結果或數值精確度。
+既有 `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only` 作業，可對 Q3D C/G、HFSS Eigenmode 及 HFSS Driven Terminal 準備、讀回、儲存並釋放模型。它不呼叫 `Analyze`、建立求解器網格、求解，或匯出場與結果矩陣。僅準備收據不是已完成求解結果，嚴格結果解析不變。一般明確求解路徑仍可用，但此建模範圍不宣稱任一表示已取得求解結果或數值精確度。
 
 ### HFSS Driven 由呼叫者決定掃描點數 {#hfss-driven-sweep-count}
 
@@ -320,11 +320,11 @@ Q2D／Q3D 契約將原生觀察方向套用到下列兩項額外資格，和先�
 
 目前 Q3D 要求只使用 `scgsim.aedt.q3d.v3`。`Q3dSpec` 攜帶 AEDT 匯入的 `PreparedSgbModel`，以及該模型每個 Net 各一個 `Q3dNetSpec`（[SGB 模型上的 Q3D](#q3d-sgb-model)）；不宣告本體、GDS 匯入或逐片綁定。下述其餘專案、Net、執行控制、Region 及擷取控制保持既有意義。
 
-`Q3dNetSpec.name` 是 Net 的 AEDT 名稱（清理後的 ID），`Q3dNetSpec.object_names` 指向模型中屬於該 Net 的導體物件，因此一個 Net 可含多個物件，每個導體物件恰屬一個 Net。C/G 可不提供 Signal 終端；AC/RL 必須為每個 Signal Net 提供完整 source/sink 物件與側別對。
+`Q3dNetSpec.name` 是 Net 的 AEDT 名稱（清理後的 ID），`Q3dNetSpec.object_names` 指向模型中屬於該 Net 的導體物件，因此一個 Net 可含多個物件，每個導體物件恰屬一個 Net。Net 不帶源或匯。
 
-`Q3dSpec.solve_ac_rl` 是嚴格布林值，預設 `true`，因此保留既有電容／電導加 AC 電阻／電感聯合擷取，封存並解析 `results/q3d/c_matrix.csv`、`results/q3d/ac_rl_matrix.csv` 及正規化 `results/q3d/matrices.csv`。`solve_ac_rl=false` 時，只建立電容／電導設定，並封存／解析唯一原生 `results/q3d/c_matrix.csv`；不產生 AC-RL 設定欄位、匯出、收斂證據或正規化相容產物。
+Q3D 要求只擷取電容與電導：Q3D 只建立電容／電導設定，並封存與解析唯一的原生 `results/q3d/c_matrix.csv`；已儲存的 AC-RL 或 DC 區塊、`ACRLConv` 收斂區塊或 AC-RL 矩陣檔都會遭拒。SGB 模型上沒有 AC/RL；它會連同自己的源與匯，在 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265) 中重新設計。
 
-`Q3dSpec.grounded_region_net` 可為 `null` 以保留開放形式，或為非空文字，指定 SCGSim 新建、專屬 Region 包絡的 `GroundNet`。產生名稱不能與任何宣告物理 Net 衝突。接地 Region 必須搭配 `solve_ac_rl=false`，其他組合明確失敗。此建構只適用電容／電導，不宣稱 DC 或 AC-RL 回流路徑。
+`Q3dSpec.grounded_region_net` 可為 `null` 以保留開放形式，或為非空文字，指定 SCGSim 新建、專屬 Region 包絡的 `GroundNet`。產生名稱不能與任何宣告物理 Net 衝突。此建構是電容／電導建構，不宣稱 DC 或 AC-RL 回流路徑。
 
 Region 接地時，SCGSim 從名為 `Region` 的 AEDT 物件六個原生面，恰建立六張 PEC `ThinConductor` 片。片維持分開、邊接觸的幾何物件，只指派給產生的 Region 包絡 Net；不聯集或新增物理橋。宣告的物理 `Ground` Net 與原生物件指派不變。
 
@@ -342,21 +342,19 @@ Q3D 模擬的是 Palace 網格化的同一幾何（issue #67）。結構化前�
 aedt_version: str, modeling, output_dir, project_name, design_name,
 net_types: Mapping[str, Literal["Signal", "Ground"]],
 physical_ground_nets: Sequence[str],
-terminal_pairs: Mapping[str, Q3dTerminalPair] | None = None,
 run_control: MatrixRunControl | None = None,
-resources: AedtResources | None = None) -> HandoffPlan`。它以 `prepare_sgb_model` 建立計畫的 SGB 模型，回傳僅供 C/G 的可攜式 v3 交接（`solve_ac_rl=False`）：
+resources: AedtResources | None = None) -> HandoffPlan`。它以 `prepare_sgb_model` 建立計畫的 SGB 模型，回傳供 C/G 的可攜式 v3 交接：
 
 1. `modeling="solid"` 建立 Route C（導體實體）；`"thin_film"` 建立 Route A（導體片），其有限本體保留為實體。STEP 不含真空；Q3D 的 Region 即計畫的 `VACUUM_REGION` 方盒，因此沒有 `GeometryPlan.set_vacuum_region(...)` 的計畫會被拒絕，要求也沒有 Region 邊距。
 2. `net_types` 以 Net ID 為鍵，為模型每個 Net 指定 Q3D 類型，且必須恰好列出模型的 Net。`physical_ground_nets` 記錄哪些 Net 在物理上接地（`PreparedSgbModel.ground_net_ids`），與其 Q3D 類型分開。
 3. 每個 Net 成為一個 `Q3dNetSpec`，涵蓋模型中屬於該 Net 的導體物件：guard 的導體實體，以及 Route A 中重建為物件的導體片。ID 會變成同一 AEDT 名稱的 Net 會被拒絕。
-4. `terminal_pairs` 的項目以 GeometryPlan Entity ID 與全域側指定源與匯；每個 Entity 必須恰好是該 Net 的一個導體物件。
-5. 材料是堆疊中模型體積所指材料的紀錄。Route C 導體實體為 `pec`；介電體取其堆疊材料；Region 取真空的材料。
+4. 材料是堆疊中模型體積所指材料的紀錄。Route C 導體實體為 `pec`；介電體取其堆疊材料；Region 取真空的材料。
 
 交接在 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard，清單中列於 `aedt_spec.json` 之後；收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`。在 AEDT 機器上，要求會對照該資料夾解碼，並再次檢查每個檔案。宣告原生建構 `bodies` 或 `region_padding_um` 的要求，或缺少模型鍵的收據來源，會附理由拒絕（決策 6）；不轉換舊 Q3D 要求。
 
-執行期把受 guard 保護的 STEP 匯入空的 Q3D 設計（`import_sgb_model`）：物件必須恰為 guard 的實體，每個面對應到其規劃面，材料與 Region 建立後讀回。在 Route A 中，先把每個導體片群組（`SHEET`）從其所在面複製重建為一個以群組命名的片物件，並設為厚度取自堆疊層薄膜物理厚度（`PreparedSgbModel.sheet_thickness_um`）的 PEC `ThinConductor`，再讀回。接著以各 Net 的 Q3D 類型指派要求的 Net，並在其物件的指定側指派源與匯：實體取每個頂點都位於物件沿該側最外處的平面面，且須相連成一片；片取該處的直線邊，且須構成一段不中斷的線段。面與邊在匯入的讀回容差內取自匯入物件。每個終端在指派後讀回，並從已儲存設計再讀回一次。
+執行期把受 guard 保護的 STEP 匯入空的 Q3D 設計（`import_sgb_model`）：物件必須恰為 guard 的實體，每個面對應到其規劃面，材料與 Region 建立後讀回。在 Route A 中，先把每個導體片群組（`SHEET`）從其所在面複製重建為一個以群組命名的片物件，並設為厚度取自堆疊層薄膜物理厚度（`PreparedSgbModel.sheet_thickness_um`）的 PEC `ThinConductor`，再讀回。接著以各 Net 的 Q3D 類型指派要求的 Net，並讀回每個 Net 的物件。
 
-結果讀取要求收據的幾何帶有模型身份與 guard 的實體，Net 與終端是要求的那些，且 Region 在讀回容差內為模型的 `VACUUM_REGION` 方盒。
+結果讀取要求收據的幾何帶有模型身份與 guard 的實體，Net 是要求的那些，且 Region 在讀回容差內為模型的 `VACUUM_REGION` 方盒。
 
 #### Q3D 原生僅建構執行 {#q3d-native-build-only-execution}
 

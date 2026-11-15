@@ -150,11 +150,8 @@ Use [Concept](../concepts/problems.qmd) to separate those physical choices from
 their backend API representation.
 
 ::: {.callout-note title="Q3D and Q2D have their own inputs"}
-Q3D v3 uses explicit finite-thickness bodies with rings, materials, physical
-roles and final Net membership. A separate source-first frontend can prepare
-those bodies from a GeometryPlan snapshot; source-free callers author the
-bodies directly. AC/RL requests also provide complete Signal source/sink
-terminals. Q2D uses explicit cross-section rectangles and conductor groups; it
+Q3D solves the SGB model of a GeometryPlan snapshot, with its final Net
+membership, and extracts C/G only. Q2D uses explicit cross-section rectangles and conductor groups; it
 does not generate a slice of the GeometryPlan.
 :::
 

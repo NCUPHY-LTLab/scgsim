@@ -157,17 +157,16 @@ class ResolvedRun:
             if not isinstance(spec, Q3dSpec):
                 raise RuntimeError("resolved Q3D result has a non-Q3D spec")
             run_control = cast(MatrixRunControl, spec.run_control)
-            if not spec.solve_ac_rl:
-                rows, _ = parse_matrix_export(
-                    self.primary_csv,
-                    "Q3D",
-                    "C",
-                    run_control.frequency_ghz,
-                    {"Capacitance Matrix": "C", "Conductance Matrix": "G"},
-                )
-                return tuple(
-                    {key: str(value) for key, value in row.items()} for row in rows
-                )
+            rows, _ = parse_matrix_export(
+                self.primary_csv,
+                "Q3D",
+                "C",
+                run_control.frequency_ghz,
+                {"Capacitance Matrix": "C", "Conductance Matrix": "G"},
+            )
+            return tuple(
+                {key: str(value) for key, value in row.items()} for row in rows
+            )
 
         with self.primary_csv.open(newline="", encoding="utf-8-sig") as stream:
             return tuple(dict(row) for row in csv.DictReader(stream))
@@ -477,10 +476,7 @@ def _resolve_q3d_outputs(context: OutputContext) -> ResolvedRun:
     if context.benchmark_path is not None:
         expected.add(BENCHMARK_RELATIVE)
     primary = "results/q3d/c_matrix.csv"
-    if context.spec.solve_ac_rl:
-        expected.update({"results/q3d/ac_rl_matrix.csv", "results/q3d/matrices.csv"})
-        primary = "results/q3d/matrices.csv"
-    elif any(
+    if any(
         contained(context.root, relative).exists()
         for relative in ("results/q3d/ac_rl_matrix.csv", "results/q3d/matrices.csv")
     ):

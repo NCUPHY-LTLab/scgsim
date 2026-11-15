@@ -483,7 +483,6 @@ class _ResolvedRunDisplay:
                 (label, histories[problem].get("final_pass"))
                 for problem, label in (
                     ("capacitance", "Capacitance observed final pass"),
-                    ("ac_rl", "AC/RL observed final pass"),
                 )
                 if problem in histories
             ) or (("Q3D observed final pass", None),)

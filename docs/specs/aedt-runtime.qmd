@@ -372,7 +372,7 @@ uses the separate `run_control=None` path described above.
 | HFSS Driven Terminal | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"` whose two `LumpedTerminalPort`s sit on its port sheets, with explicit signal/reference identity ([below](#hfss-driven-terminal-sgb)); complete `HfssRunControl` for solving | ordered terminal S-parameters and Touchstone |
 | HFSS Driven Modal | waits for its ports on the SGB model ([issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)); `prepare_sgb_model` refuses a `ModalPort` | none |
 | HFSS Eigenmode | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"`; port-free; complete `EigenmodeRunControl`, including mode count and search frequency, for solving; generic RLC model elements are distinct from `PlanarJunction` and EPR junction records | ordinary real mode frequency, native Q, and convergence evidence; EPR history and saved-field results use their separate result contract |
-| Q3D | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; real Signal source/sink pairs for AC/RL; terminal-free C/G is supported; optional exact six-face Region ground seal; complete family controls for solving | native capacitance and, when enabled, resistance/inductance matrices |
+| Q3D | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; C/G only, with no terminals (AC/RL is designed again in [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)); optional exact six-face Region ground seal; complete family controls for solving | native capacitance/conductance matrix |
 | Q2D | explicit cross-section geometry and conductor/reference assignments | per-unit-length capacitance/conductance and resistance/inductance matrices |
 
 ### Lumped port sheets and terminal RLC {#hfss-shared-lumped-support}
@@ -511,7 +511,7 @@ unchanged under AEDT 2023.2 or 2024.2 and PyAEDT 1.3.0.
 |---|---|---|
 | HFSS Eigenmode, including EPR | `EigenmodeRunControl` | One private mapping in `scgsim.aedt.runtime.native.hfss_eigenmode` maps the seven controls to `MinimumFrequency`, `NumModes`, `MaxDeltaFreq`, `MaximumPasses`, `MinimumPasses`, `MinimumConvergedPasses`, and `PercentRefinement` for ordinary Eigenmode and EPR. |
 | HFSS Driven Terminal | `HfssRunControl` | The Driven-HFSS adaptive setup and frequency sweep are translated within the HFSS family. |
-| Q3D | `MatrixRunControl` | Q3D owns its `Cap`, `AC`, and `DC` blocks and their enable states. |
+| Q3D | `MatrixRunControl` | Q3D owns its `Cap` block; the `AC` and `DC` blocks stay disabled. |
 | Q2D | `MatrixRunControl` | Q2D owns its `CGDataBlock` and `RLDataBlock` controls. |
 
 The shared Q3D and Q2D request vocabulary does not make their native blocks
@@ -605,20 +605,12 @@ dielectric and vacuum assignments use explicit PDK AEDT library mappings.
 Unsupported material models fail explicitly; no room-temperature material or
 loss model is substituted.
 
-Q3D AC/RL retains the requested Signal Net and ConstantVoltage source/sink
-semantics. A terminal is read from the imported object, not from source
-polygons ([Q3D on the SGB model](#q3d-sgb-model)): on a solid, the planar faces
-at the object's extreme along the side; on a sheet, the straight edges there,
-as one unbroken segment. A side that selects nothing, or pieces that do not
-join, is refused; the adapter does not choose a nearest face or edge. A `+Z` or
-`-Z` terminal on a sheet is an input error because a sheet has no separate
-thickness faces. C/G-only Q3D does not require dummy terminals. Existing HFSS
-mode-specific port and reference contracts remain in force under the same
+Existing HFSS mode-specific port and reference contracts remain in force under the same
 coordinate map.
 
 The existing `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only`
-operation prepares, reads back, saves and releases a model for Q3D C/G or
-AC/RL, HFSS Eigenmode and HFSS Driven Terminal. It does not
+operation prepares, reads back, saves and releases a model for Q3D C/G,
+HFSS Eigenmode and HFSS Driven Terminal. It does not
 call `Analyze`, create a solver mesh, solve, or export fields or result
 matrices. Its preparation-only receipt is not a completed solve result; strict
 result resolution remains unchanged. The ordinary explicit solve path remains
@@ -829,24 +821,19 @@ extraction controls described below retain their existing meanings.
 `Q3dNetSpec.name` is the Net's AEDT name (its sanitised ID) and
 `Q3dNetSpec.object_names` names the model's conductor objects of that Net, so
 one Net may own several objects and every conductor object belongs to exactly
-one Net. A C/G request may leave Signal terminals absent; an AC/RL request
-requires each Signal Net's complete source/sink object and side pair.
+one Net. A Net carries no source or sink.
 
-`Q3dSpec.solve_ac_rl` is a strict boolean and defaults to `true`. The default
-therefore preserves the existing combined capacitance/conductance plus AC
-resistance/inductance extraction: it seals and resolves
-`results/q3d/c_matrix.csv`, `results/q3d/ac_rl_matrix.csv`, and the normalized
-`results/q3d/matrices.csv`. With `solve_ac_rl=false`, Q3D creates only the
-capacitance/conductance setup and seals/resolves exactly the native
-`results/q3d/c_matrix.csv`; no AC-RL setup fields, export, convergence evidence,
-or normalized compatibility artifact is produced.
+A Q3D request extracts capacitance and conductance only: Q3D creates only the
+capacitance/conductance setup and seals and resolves exactly the native
+`results/q3d/c_matrix.csv`; a saved AC-RL or DC block, an `ACRLConv`
+convergence block or an AC-RL matrix file is refused. AC/RL is not available on the SGB model; it is designed again, with sources and sinks of their own, in
+[issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265).
 
 `Q3dSpec.grounded_region_net` is either `null`, retaining the open formulation,
 or non-empty text naming a new SCGSim-created, dedicated Region-enclosure
 `GroundNet`. The generated name must not collide with any declared physical
-net. A grounded Region requires `solve_ac_rl=false`; the combination otherwise
-fails closed. This is a capacitance/conductance-only construction and makes no
-DC or AC-RL return-path claim.
+net. This is a capacitance/conductance construction and makes no DC or AC-RL
+return-path claim.
 
 For a grounded Region, SCGSim creates exactly six PEC `ThinConductor` sheets
 from the six native faces of the AEDT object named `Region`. The sheets remain
@@ -887,11 +874,9 @@ Q3D models the geometry Palace meshes (issue #67). The structured frontend is
 aedt_version: str, modeling, output_dir, project_name, design_name,
 net_types: Mapping[str, Literal["Signal", "Ground"]],
 physical_ground_nets: Sequence[str],
-terminal_pairs: Mapping[str, Q3dTerminalPair] | None = None,
 run_control: MatrixRunControl | None = None,
 resources: AedtResources | None = None) -> HandoffPlan`. It builds the plan's
-SGB model with `prepare_sgb_model` and returns a portable v3 handoff for C/G
-only (`solve_ac_rl=False`):
+SGB model with `prepare_sgb_model` and returns a portable v3 handoff for C/G:
 
 1. `modeling="solid"` builds Route C (conductor solids); `"thin_film"` builds
    Route A (conductor sheets) with its finite bodies retained as solids. The
@@ -905,9 +890,7 @@ only (`solve_ac_rl=False`):
 3. Each Net becomes one `Q3dNetSpec` over the model's conductor objects of that
    Net: the guard's conductor solids and, in Route A, the conductor sheets
    rebuilt as objects. Nets whose IDs become one AEDT name are refused.
-4. A `terminal_pairs` entry names a source and a sink by GeometryPlan Entity ID
-   and global side; each Entity must be exactly one conductor object of its Net.
-5. The materials are the stack's records of the materials the model's volumes
+4. The materials are the stack's records of the materials the model's volumes
    name. A Route C conductor solid is `pec`; a dielectric takes its stack
    material; the Region takes the vacuum's.
 
@@ -926,15 +909,10 @@ and read back. In Route A it first rebuilds each conductor-sheet group
 (`SHEET`) as one sheet object, copied from the face it lies on and named by
 the group, and makes it a PEC `ThinConductor` of the film's physical thickness
 from the stack layer (`PreparedSgbModel.sheet_thickness_um`), read back. It then assigns each request Net with its Q3D type over its
-objects, and each source and sink on the authored side of its object: on a
-solid, the planar faces whose every vertex lies at the object's extreme along
-the side, which must join into one patch; on a sheet, the straight edges there,
-which must form one unbroken segment. Faces and edges are read from the
-imported object within the import's readback tolerance. Each terminal is read
-back after assignment and again from the saved design.
+objects and reads each Net's objects back.
 
 Result reading requires the receipt's geometry to carry the model identity and
-the guard's solids, its Nets and terminals to be the request's, and its Region
+the guard's solids, its Nets to be the request's, and its Region
 to be the model's `VACUUM_REGION` box within the readback tolerance.
 
 #### Q3D native build-only execution

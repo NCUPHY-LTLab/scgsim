@@ -18,8 +18,8 @@ before any assignment when what AEDT imported is not the guarded model:
    each junction and of each generic ``LumpedRlc`` (issue #67 decision 8); in a Driven Terminal design, a
    lumped port over the port-sheet faces of each ``LumpedTerminalPort``, its integration line read from
    those faces' edges as the Lumped RLC's current line is.  Each assignment and its readback use the
-   planned name.  Q3D assigns its Nets, with their request's types, and their sources and
-   sinks after the import (:mod:`.q3d_terminals`); in Route A it first rebuilds each conductor-sheet group
+   planned name.  Q3D assigns its Nets, with their request's types, after the import
+   (:mod:`.q3d_nets`); in Route A it first rebuilds each conductor-sheet group
    as one sheet object, a PEC thin conductor of its film's thickness, since Q3D puts a Net on objects only.
 
 Every port sheet must carry a junction, an RLC or a lumped Terminal port.  Lumped Terminal ports are
