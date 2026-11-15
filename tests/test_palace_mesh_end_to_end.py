@@ -1,6 +1,6 @@
 """Component to ``palace.msh`` and config through SGB, the meshing module and Palace's lowering (needs Gmsh).
 
-Every case runs ``build_route_mesh`` for real and then builds the config from the groups it returned.  No
+Every case runs ``build_route_geometry`` and ``mesh_route_geometry`` for real and then builds the config from the groups it returned.  No
 Palace binary runs.
 """
 
@@ -21,28 +21,51 @@ from sgb_inputs import EffectiveInput, gds_pad_in_ground, rectangular_junction_p
 from test_sgb_curved_port_landing import circular_pad_input
 
 from scgsim.meshing import Budgets, MesherOptions, MeshRepairError
-from scgsim.palace.mesh.native import lower_mesh_in_current_process
-from scgsim.palace.mesh.quality.reader import read_msh22
-from scgsim.palace.mesh.summary import mesh_summary
-from scgsim.palace.preparation.config import (
-    LayoutPortBinding,
-    TerminalBinding,
+from scgsim.palace import EigenmodeSim, ElectrostaticSim
+from scgsim.palace.config.config import (
     build_eigenmode_config,
     build_electrostatic_config,
-    configure_numerical_controls,
 )
-from scgsim.palace.presentation.plotting import mesh_summary_html
+from scgsim.palace.config.config_records import (
+    ConfigInput,
+    EigenmodeSettings,
+    ElectrostaticSettings,
+    TerminalBinding,
+)
+from scgsim.palace.config.index import SurfaceEprEntry
+from scgsim.palace.config.numerical import NumericalControls
+from scgsim.palace.mesh.native import lower_mesh_in_current_process
+from scgsim.palace.mesh.summary import mesh_summary
+from scgsim.palace.reports.plotting import mesh_summary_html
 from scgsim.palace.results.index_contract import (
-    INDEX_MAP_SCHEMA_VERSION,
     RouteConsistency,
     validate_config_index_correspondence,
 )
 from scgsim.palace.results.tables import count_index_entries
+from scgsim.palace.simulation.core import index_map
+from scgsim.palace.source.ports import LayoutPortBinding
+from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 pytestmark = pytest.mark.slow
 
 # A Route A sheet is one face for MA and MS, so both ask the same margins.
 SPECS = surface_epr_specs(MA=[0.5, 1.0], MS=[0.5, 1.0], SA=[0.5])
+
+
+def physical_names(mesh_path):
+    """(dimension, tag) -> name of every physical group of a written mesh, read by Gmsh."""
+    import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only where a native mesh is checked.
+
+    gmsh.initialize(["-noenv"])
+    try:
+        gmsh.option.setNumber("General.Terminal", 0)
+        gmsh.open(str(mesh_path))
+        return {
+            (dim, tag): gmsh.model.getPhysicalName(dim, tag)
+            for dim, tag in gmsh.model.getPhysicalGroups()
+        }
+    finally:
+        gmsh.finalize()
 
 
 def check_run(result, route):
@@ -61,12 +84,12 @@ def check_run(result, route):
     ]
     assert not (run / "metadata" / "semantic_geometry").exists()
     assert not (run / "geometry" / ".unbanded").exists()
-    mesh = read_msh22(run / "palace.msh")
-    assert mesh.physical_names
+    names = physical_names(run / "palace.msh")
+    assert names
     manifest = json.loads(result.mesh_manifest_path.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 2
     assert manifest["source"]["scgsim_sgb"] == "scgsim.geometry.sgb"
-    assert manifest["source"]["sidecar_schema"] == "scgsim.sgb.sidecar.v2"
+    assert manifest["source"]["sidecar_schema"] == "scgsim.sgb.sidecar.v5"
     assert manifest["source"]["model_identity_digest"].startswith("model:")
     meshing = manifest["meshing"]
     assert meshing["recipe"]["name"] == "features"
@@ -80,25 +103,29 @@ def check_run(result, route):
     listed = {
         (e["dimension"], e["attributes"][0]): e["name"] for e in manifest["groups"]
     }
-    assert listed == {key: name for key, name in mesh.physical_names.items()}
+    assert listed == names
     assert {e["group"] for e in manifest["groups"]} >= set(result.groups["volumes"])
-    return manifest, mesh
+    return manifest, names
 
 
 def config_of(result, route, specs=None):
     """The Electrostatic config of a run: first Net as Terminal, second as Ground."""
     nets = sorted({r["net"] for r in result.groups["pec_surfaces"].values()})
-    return build_electrostatic_config(
+    common = ConfigInput(
+        problem="Electrostatic",
         groups=result.groups,
+        mesh_path=result.mesh_path,
+        materials=MATERIALS,
+        surface_epr_specs=SurfaceEprSpecs.normalized(specs or {}, materials=MATERIALS),
+        numerical=NumericalControls().with_defaults(
+            ElectrostaticSim.numerical_defaults
+        ),
+    )
+    return build_electrostatic_config(
+        common,
         terminals=[TerminalBinding("t", nets[0])],
         ground_net_ids=nets[1:],
-        materials=MATERIALS,
-        save_fields=0,
-        unassigned_conductor_policy="error",
-        exterior_boundary_policy="none",
-        mesh_path=result.mesh_path,
-        surface_epr_specs=specs or {},
-        numerical=configure_numerical_controls(),
+        electrostatic=ElectrostaticSettings(unassigned_conductor_policy="error"),
     )
 
 
@@ -118,10 +145,10 @@ def config_attributes(config):
     return {(2, a) for a in boundary}, {(3, a) for a in domains}
 
 
-def assert_config_binds_the_mesh(config, mesh):
+def assert_config_binds_the_mesh(config, names):
     """Every attribute of the config is a physical group of the mesh, in its dimension."""
     surfaces, volumes = config_attributes(config)
-    assert (surfaces | volumes) <= set(mesh.physical_names)
+    assert (surfaces | volumes) <= set(names)
 
 
 @pytest.fixture(scope="module")
@@ -144,8 +171,7 @@ def test_a_component_meshes_to_a_palace_mesh_and_a_config(route, route_a, route_
     """Routes A and B: mesh, manifest and config agree, with bands as separate groups."""
     result = {"A": route_a, "B": route_b}[route]
     manifest, mesh = check_run(result, route)
-    names = set(mesh.physical_names.values())
-    assert banded_groups_of(result) and banded_groups_of(result) <= names
+    assert banded_groups_of(result) and banded_groups_of(result) <= set(mesh.values())
     config = config_of(result, route, SPECS)
     assert_config_binds_the_mesh(config.config, mesh)
     assert manifest["route"] == route
@@ -164,21 +190,20 @@ def banded_groups_of(result):
     """The surface groups SGB cut into bands, read from the sidecar's ``band`` field."""
     return {
         name
-        for name, group in sidecar_of_run(result)["physical_groups"].items()
+        for name, group in sidecar_of_run(result)["group"].items()
         if group.get("band") is not None
     }
 
 
 def band_families(sidecar):
-    """Every band family of a sidecar once: concrete requests, and the families of type-level expansions.
+    """Every band family of a sidecar once, each with its id as ``request_id``.
 
-    A Route A sheet serves an MA and an MS request, so both expansions list the same family.
+    A Route A sheet serves an MA and an MS request, so both requests list the same family.
     """
-    families = {}
-    for inset in sidecar["insets"]:
-        for family in inset["expansion"]["banded"] if "expansion" in inset else [inset]:
-            families[family["request_id"]] = family
-    return list(families.values())
+    return [
+        {**family, "request_id": family_id}
+        for family_id, family in sidecar["band_family"].items()
+    ]
 
 
 def expected_margin_attributes(result, entry):
@@ -209,7 +234,11 @@ def assert_margin_rows_select_the_bands_of_their_families(result, config):
         row["Index"]: row
         for row in config.config["Boundaries"]["Postprocessing"]["Dielectric"]
     }
-    margin_entries = [e for e in config.surface_epr_index_map if "inset" in e]
+    margin_entries = [
+        e.to_payload()
+        for e in config.index_entries
+        if isinstance(e, SurfaceEprEntry) and e.inset is not None
+    ]
     assert margin_entries
     for entry in margin_entries:
         wanted = expected_margin_attributes(result, entry)
@@ -220,16 +249,9 @@ def assert_margin_rows_select_the_bands_of_their_families(result, config):
 
 def assert_readers_accept_the_run(result, route, manifest, config):
     """The manifest the build wrote and the index map of its config satisfy the readers, and render."""
-    entries = [
-        *config.terminal_index_map,
-        *config.domain_energy_index_map,
-        *config.surface_epr_index_map,
-    ]
-    index = {
-        "schema_version": INDEX_MAP_SCHEMA_VERSION,
-        "entries": entries,
-        "ground_boundary": config.ground_boundary_resolution,
-    }
+    index = index_map(
+        config.index_entries, ground_boundary=config.ground_boundary_resolution
+    )
     metadata = {
         "route": route,
         "problem": "Electrostatic",
@@ -259,8 +281,8 @@ def test_route_b_sends_one_request_per_spec_and_gets_a_band_family_per_support(
     route_b,
 ):
     """The bands requested from the specs: one type-level request each, expanded to MA tops, MS bottoms and the SA gap."""
-    insets = sidecar_of_run(route_b)["insets"]
-    assert {i["request_id"] for i in insets} == {"epr_MA", "epr_MS", "epr_SA"}
+    insets = sidecar_of_run(route_b)["inset_request"]
+    assert set(insets) == {"epr_MA", "epr_MS", "epr_SA"}
     families = band_families(sidecar_of_run(route_b))
     assert len(families) == 5
     assert any("VACUUM_REGION" in f["request_id"] for f in families)
@@ -383,23 +405,27 @@ def test_a_junction_support_plane_port_meshes_on_route_a(tmp_path):
             port["target_layer"],
             port["source_layer"],
             tuple(port["direction"]),
-            1e-9,
+            {"L": 1e-9},
         )
     ]
-    config = build_eigenmode_config(
+    materials = {
+        **MATERIALS,
+        "Si": {"kind": "dielectric", "permittivity": 4, "loss_tangent": 0},
+    }
+    common = ConfigInput(
+        problem="Eigenmode",
         groups=result.groups,
-        ports=ports,
-        materials={
-            **MATERIALS,
-            "Si": {"kind": "dielectric", "permittivity": 4, "loss_tangent": 0},
-        },
-        surface_epr_specs=surface_epr_specs(MA=None, MS=None),
-        numerical=configure_numerical_controls(amr_max_passes=0),
-        num_modes=2,
-        target_hz=None,
-        eigenmode_tolerance=1e-6,
-        save_fields=0,
         mesh_path=result.mesh_path,
+        materials=materials,
+        surface_epr_specs=SurfaceEprSpecs.normalized(
+            surface_epr_specs(MA=None, MS=None), materials=materials
+        ),
+        numerical=NumericalControls(amr_max_passes=0).with_defaults(
+            EigenmodeSim.numerical_defaults
+        ),
+    )
+    config = build_eigenmode_config(
+        common, ports=ports, eigenmode=EigenmodeSettings(num_modes=2)
     )
     assert_config_binds_the_mesh(config.config, mesh)
 
@@ -449,7 +475,7 @@ def test_the_unbanded_build_is_skipped_without_margins(tmp_path):
     result = mesh_run(
         effective_input("B", tmp_path), "B", tmp_path, specs=surface_epr_specs(MA=None)
     )
-    assert json.loads(result.sidecar_path.read_text())["insets"] == []
+    assert json.loads(result.sidecar_path.read_text())["inset_request"] == {}
     assert not banded_groups_of(result)
 
 
@@ -491,12 +517,13 @@ def test_the_custom_path_bands_one_conductor_with_its_own_margins(route, tmp_pat
     result = mesh_run(effective_input(route, tmp_path), route, tmp_path, specs=specs)
     check_run(result, route)
     sidecar = sidecar_of_run(result)
-    concrete = [i for i in sidecar["insets"] if "expansion" not in i]
-    assert [i["support"]["entity"] for i in concrete] == [entity]
-    (type_ma,) = (i for i in sidecar["insets"] if i["request_id"] == "epr_MA")
+    requests = sidecar["inset_request"]
+    concrete = [r for r in requests.values() if r["scope"] == "face"]
+    assert [r["support"]["entity"] for r in concrete] == [entity]
+    type_ma = requests["epr_MA"]
     assert type_ma["support"]["exclude_entity_ids"] == [entity]
     assert entity not in {
-        f["support"]["entity"] for f in type_ma["expansion"]["banded"]
+        sidecar["band_family"][f]["support"]["entity"] for f in type_ma["families"]
     }
 
     config = config_of(result, route, specs)
@@ -511,7 +538,7 @@ def test_the_custom_path_bands_one_conductor_with_its_own_margins(route, tmp_pat
     other_rows = [m for n, m in ma_margins.items() if entity not in n]
     assert own_rows == [own]
     assert other_rows and all(m == rest for m in other_rows)
-    assert_config_binds_the_mesh(config.config, read_msh22(result.mesh_path))
+    assert_config_binds_the_mesh(config.config, physical_names(result.mesh_path))
 
 
 def test_a_sheet_asked_the_same_margins_in_different_spellings_by_ma_and_ms_meshes(
@@ -523,10 +550,14 @@ def test_a_sheet_asked_the_same_margins_in_different_spellings_by_ma_and_ms_mesh
     specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": [0.1 + 0.2]}
     result = mesh_run(effective_input("A", tmp_path), "A", tmp_path, specs=specs)
     check_run(result, "A")
-    (family,) = (i for i in sidecar_of_run(result)["insets"] if "expansion" not in i)
+    sidecar = sidecar_of_run(result)
+    ((family_id,),) = (
+        r["families"] for r in sidecar["inset_request"].values() if r["scope"] == "face"
+    )
+    family = sidecar["band_family"][family_id]
     assert family["support"]["entity"] == "chip/left"
     assert family["margins_grid"] == [300]
     config = config_of(result, "A", specs)
     margins = assert_margin_rows_select_the_bands_of_their_families(result, config)
     assert {name.split("::")[0] for name in margins} == {"MA", "MS"}
-    assert_config_binds_the_mesh(config.config, read_msh22(result.mesh_path))
+    assert_config_binds_the_mesh(config.config, physical_names(result.mesh_path))

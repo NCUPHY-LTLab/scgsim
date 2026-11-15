@@ -1,35 +1,35 @@
-"""Carry loaded adapter facts and lower stack/entity records without source-file policy."""
+"""Carry the facts a loaded layout gives the adapter, and lower stack and entity records; it applies no file policy."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypeGuard
 
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.source.ground import derived_ground_polygons
-from scgsim.geometry.source.occurrence import (
+from scgsim.geometry.source.ground import PlaneBounds, derived_ground_polygons
+from scgsim.geometry.source.occurrence import gds_polygons_for_entity
+from scgsim.geometry.source.recipes import Audited, audited_declared_source
+from scgsim.geometry.source.stack_layers import (
     entity_from_layer_record,
-    gds_polygons_for_entity,
     is_record_sequence,
     resolve_material_kind,
 )
+from scgsim.refusal import Declared
 
 if TYPE_CHECKING:
     from gdstk import Cell, Polygon
 
-# Stack geometry and metadata are extensible JSON supplied to their existing
-# source validators. Any preserves that payload boundary and its error order.
+# Stack geometry and metadata are JSON given as it is and checked by the source
+# validators, so their values are typed Any.
 
 
 @dataclass(frozen=True)
 class StackRecords:
-    """Validated stack containers with their original layout and stack paths."""
+    """Validated stack containers."""
 
-    gds_path: Path
-    stack_path: Path
     layers: Sequence[Any]
     solution_regions: Mapping[str, Any]
     materials: Mapping[str, Any]
@@ -63,7 +63,6 @@ class AdapterSource:
     cell: Cell
     cell_bounds_um: Mapping[str, float]
     polygons_by_layer: Mapping[tuple[int, int], tuple[Polygon, ...]]
-    source_dbu_um: float
     grid_context: GeometryGridContext
 
 
@@ -88,13 +87,25 @@ def solution_region_entity(
 ) -> SemanticEntitySpec:
     """Lower one solution record with the original material and bounds validation."""
     if not isinstance(semantic_id, str):
-        raise TypeError("solution region ids must be strings")
+        raise TypeError(
+            Declared("the stack file's solution_regions", "the stack file").expected(
+                "region id", "a string", semantic_id
+            )
+        )
     if not isinstance(record, Mapping):
-        raise TypeError("stack_file 'solution_regions' values must be mappings")
+        raise TypeError(
+            Declared(
+                f"solution region {semantic_id!r}", "the stack file's solution_regions"
+            ).expected("record", "a mapping", record)
+        )
 
     geometry = record.get("geometry", record)
     if not isinstance(geometry, Mapping):
-        raise TypeError("solution region 'geometry' must be a mapping")
+        raise TypeError(
+            Declared(
+                f"solution region {semantic_id!r}", "the stack file's solution_regions"
+            ).expected("geometry", "a mapping", geometry)
+        )
 
     geometry = dict(geometry)
     padding_um = float(geometry.get("padding_um", 0.0))
@@ -116,7 +127,9 @@ def solution_region_entity(
             record,
             material_id=record.get("material_id", semantic_id),
             materials=materials,
-            context=f"solution region {semantic_id!r}",
+            owner=Declared(
+                f"solution region {semantic_id!r}", "the stack file's solution_regions"
+            ),
         ),
         priority=record.get("priority", 0),
         geometry_kind=record.get("geometry_kind", "domain"),
@@ -126,66 +139,84 @@ def solution_region_entity(
 
 
 def lower_layer_record(
+    scope: GridScope,
     record: Any,
     *,
     materials: Mapping[str, Any],
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
-    cell_bounds_um: Mapping[str, float],
-    domain_bounds_by_semantic_id: Mapping[str, Mapping[str, Any]],
-) -> tuple[LoweredEntity, ...]:
-    """Lower a worker-private layer record through the existing source recipes."""
+    plane_bounds: PlaneBounds,
+) -> Audited[tuple[LoweredEntity, ...]]:
+    """Lower a worker-private layer record through the existing source recipes.
+
+    The record's polygons come from its geometry source; one Entity owns them all, or
+    each becomes its own Entity (a Ground of several regions, a layer split for its
+    ports, a fused selector that keeps every unexcluded region). ``plane_bounds`` is
+    where a Ground's plane lies when the layout draws none.
+    """
     entity = entity_from_layer_record(record, materials=materials)
     geometry_source = str(entity.geometry.get("geometry_source", "gds_polygon"))
     if geometry_source == "die_face_minus_ground_mask":
-        occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
-        if occurrence_polygons is not None:
-            entity_polygons = tuple(
-                LayoutPolygonSpec(
-                    polygon_id=f"{entity.semantic_id}__P{index:04d}",
-                    layer=f"{record['layer']}/{record['datatype']}",
-                    exterior=region["exterior"],
-                    holes=region["holes"],
-                    object_name=entity.semantic_id,
-                    net_name=entity.net_id,
-                    metadata={"source": "die_face_minus_ground_mask"},
-                )
-                for index, region in enumerate(occurrence_polygons)
-            )
-        else:
-            entity_polygons = derived_ground_polygons(
+        read = _ground_polygons(scope, entity, record, polygons_by_layer, plane_bounds)
+        split = len(read.value) > 1
+    else:
+        if geometry_source == "gds_polygon":
+            read = audited_declared_source(
+                gds_polygons_for_entity,
+                scope,
                 entity,
                 polygons_by_layer=polygons_by_layer,
-                cell_bounds_um=cell_bounds_um,
-                domain_bounds_by_semantic_id=domain_bounds_by_semantic_id,
             )
-        if len(entity_polygons) > 1:
-            return tuple(
-                _split_polygon_entity(entity, polygon, index)
-                for index, polygon in enumerate(entity_polygons)
-            )
-        return (
-            LoweredEntity(
-                _entity_with_polygon_geometry(entity, entity_polygons), entity_polygons
-            ),
+        else:
+            read = Audited(())
+        split = bool(entity.geometry.get("split_polygons_as_entities")) or (
+            entity.geometry.get("route_ab_fused_selector_mode", False)
+            and entity.geometry.get("selector_point_um") is None
         )
-    elif geometry_source == "gds_polygon":
-        entity_polygons = gds_polygons_for_entity(
+    if split:
+        return Audited(
+            tuple(
+                _split_polygon_entity(entity, polygon, index)
+                for index, polygon in enumerate(read.value)
+            ),
+            read.audits,
+        )
+    return Audited(
+        (LoweredEntity(_entity_with_polygon_geometry(entity, read.value), read.value),),
+        read.audits,
+    )
+
+
+def _ground_polygons(
+    scope: GridScope,
+    entity: SemanticEntitySpec,
+    record: Any,
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
+    plane_bounds: PlaneBounds,
+) -> Audited[tuple[LayoutPolygonSpec, ...]]:
+    """A Ground's polygons: those its occurrences already derived, or derived here from its mask."""
+    occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
+    if occurrence_polygons is None:
+        return audited_declared_source(
+            derived_ground_polygons,
+            scope,
             entity,
             polygons_by_layer=polygons_by_layer,
+            plane=plane_bounds,
         )
-    else:
-        entity_polygons = ()
-
-    if entity.geometry.get("split_polygons_as_entities") or (
-        entity.geometry.get("route_ab_fused_selector_mode", False)
-        and entity.geometry.get("selector_point_um") is None
-    ):
-        return tuple(
-            _split_polygon_entity(entity, polygon, index)
-            for index, polygon in enumerate(entity_polygons)
+    return Audited(
+        tuple(
+            LayoutPolygonSpec(
+                polygon_id=f"{entity.semantic_id}__P{index:04d}",
+                layer=f"{record['layer']}/{record['datatype']}",
+                exterior=region["exterior"],
+                holes=region["holes"],
+                object_name=entity.semantic_id,
+                net_name=entity.net_id,
+                metadata={"source": "die_face_minus_ground_mask"},
+            )
+            for index, region in enumerate(occurrence_polygons)
         )
-    entity = _entity_with_polygon_geometry(entity, entity_polygons)
-    return (LoweredEntity(entity, entity_polygons),)
+    )
 
 
 def _split_polygon_entity(

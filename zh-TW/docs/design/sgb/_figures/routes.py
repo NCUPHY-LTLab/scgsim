@@ -7,20 +7,19 @@ Writes into ``docs/design/sgb/figures/``:
   z = 0.2 (metal top);
 * ``routes-3d.svg/.html``     Route A and Route B as exploded volumes coloured by primary group;
 * ``routes-abc-section.svg``  a conceptual cross-section (not computed);
-* ``routes-numbers.json``     side-by-side counts of the three routes, plus the two stage-level examples of the page.
+* ``routes-numbers.json``     side-by-side counts of the three routes, plus the stage-level example of the page.
 
 The running example is the production real input ``gds_pad_in_ground`` (``tests/sgb_inputs.py``); the port lies on the
 support plane z = 0.  Route A needs zero-thickness conductors, so Route A is the same GDS and stack interpreted with the
-``thin_film`` profile (``labels_common.real_input(film=True)``); Route B and C use the ``solid`` profile.  Two examples
-are not the real input and say so in the numbers: the stage-level scene ``pad_in_ground("B")`` of ``tests/sgb_scenes.py``
-(port in the metal's mid-plane, a sheet inside one volume) and the real input with one dangling refinement curve.
+``thin_film`` profile (``labels_common.real_input(film=True)``); Route B and C use the ``solid`` profile.  One example
+is not the real input and says so in the numbers: the stage-level scene ``pad_in_ground("B")`` of ``tests/sgb_scenes.py``
+(port in the metal's mid-plane, a sheet inside one volume).
 
 Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/routes.py
 """
 
 from __future__ import annotations
 
-import json
 import tempfile
 from collections import Counter
 from fractions import Fraction
@@ -50,13 +49,13 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from plotly.subplots import make_subplots
 from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
-from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.contracts.sgb_sidecar import read_sidecar, views
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
     SolutionInterface,
 )
+from scgsim.geometry.sgb.build import emit_model
 
 GROUP_FILL = {
     "ground_0000": "#7f7f7f",
@@ -288,15 +287,20 @@ def emitted(model) -> dict:
     """The model's counts, the emitted counts of its BREP plan, and the sidecar facts the page quotes."""
     with tempfile.TemporaryDirectory() as tmp:
         artifacts = emit_model(model, Path(tmp))
-        sidecar = json.loads(artifacts.sidecar.read_text())
+        sidecar = read_sidecar(artifacts.sidecar)
     return {
         "counts": artifacts.counts,
-        "embedded_faces": sidecar["embedded_faces"],
-        "refinement_edges": sidecar["refinement_edges"],
-        "ports": [
-            {k: p[k] for k in ("group", "host_volumes", "adjacent_volumes", "z_um")}
-            for p in sidecar["ports"]
+        "embedded_faces": [
+            {"face": face, "host_volume": host}
+            for face, host in views.embedded_faces(sidecar)
         ],
+        "ports": {
+            port_id: {
+                k: port[k]
+                for k in ("group", "host_volumes", "adjacent_volumes", "z_um")
+            }
+            for port_id, port in views.ports(sidecar)
+        },
     }
 
 
@@ -342,16 +346,6 @@ def midplane_scene(numbers: dict) -> None:
     model = build_model(stage_pad_in_ground("B"), "B")
     numbers["stage_scene_midplane_port"] = {
         "scene": "tests/sgb_scenes.py pad_in_ground('B'): port at z = 0.1 um",
-        **_route_numbers(model),
-    }
-
-
-def refinement_on_real_input(b_catalogue, numbers: dict) -> None:
-    """The real input with one dangling refinement curve in the gap: what production really embeds."""
-    request = RefinementRequest("ref", 0.0, ((32.0, 55.0), (38.0, 55.0)))
-    model = build_model(b_catalogue, "B", refinements=(request,))
-    numbers["real_input_with_refinement_curve"] = {
-        "request": "refinement curve (32, 55) -> (38, 55) um at z = 0",
         **_route_numbers(model),
     }
 
@@ -469,7 +463,6 @@ def main() -> None:
     _figure_3d(a, b)
     figure_abc_section()
     midplane_scene(numbers)
-    refinement_on_real_input(catalogue_b, numbers)
     bands_on_real_input(catalogue_b, numbers)
     write_numbers("routes", numbers)
     print("routes: done")

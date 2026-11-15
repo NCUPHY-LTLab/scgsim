@@ -38,7 +38,7 @@ layout 產生器是 SGB 測試套件的 `random_layout`（`tests/sgb_scenes.py`�
 
 seed 一律是 2。不用 seed 1，是因為它在 20,000 個特徵時會產生同一個 Net 的兩個形狀（`f5879` 與 `f5879b`），它們只在一個 vertex 相接。production 的建構會以 `NonManifoldError` 拒絕這種輸入：同一個 Net 的 pinch 在設計上是不合法的，所以這個拒絕是正確的行為。seed 2 到 9 在 20,000 個特徵時都建得出來。
 
-scaling 量測在九種 tile 與 worker 排程下，各量 1,000、5,000 與 20,000 個特徵，共 27 個 case；每個 case 在自己的 Python 行程中執行，所以 peak memory 屬於該 case；整體共花 970 s。Gmsh API 的比較使用 500、1,000 與 2,000 個特徵，validator 計時則使用 1,000、5,000 與 20,000 個特徵。
+scaling 量測 1,000、5,000 與 20,000 個特徵；每個 case 在自己的 Python 行程中執行，所以 peak memory 屬於該 case。Gmsh API 的比較使用 500、1,000 與 2,000 個特徵，validator 計時則使用 1,000、5,000 與 20,000 個特徵。
 
 ## 資料檔
 
@@ -46,7 +46,7 @@ scaling 量測在九種 tile 與 worker 排程下，各量 1,000、5,000 與 20,
 
 | 檔案 | 內容 | 產生者 |
 |---|---|---|
-| `why-scaling-measured.json` | 27 個 case：各 stage 的時間、數量、peak memory、identity digest；一個 tile 的執行中，寫出的檔案、Gmsh 載入與 `verify_loaded` | `why_scaling.py measure` |
+| `why-scaling-measured.json` | 每個 N 一個 case：各 stage 的時間、數量、peak memory、identity digest、寫出的檔案、Gmsh 載入與 `verify_loaded` | `why_scaling.py measure` |
 | `why-scaling-oracle.json` | Gmsh API 建構在 500、1,000 與 2,000 個特徵時的時間與 solid 質量 | `why_scaling.py oracle` |
 | `why-validator-scaling.json` | 十二項結構檢查在 1,000、5,000 與 20,000 個特徵時的時間；這是第二組計時，本研究不繪製 | `why_scaling.py validators` |
 | `emission-timing-data.json` | Gmsh API 與 direct writer 逐步驟的比較，以及每一項檢查（結構檢查與載入後的檢查）的時間 | `emission.py --measure` |
@@ -61,7 +61,7 @@ SGB_CORE=<SGB core checkout>
 PY=<SGB core 環境的 Python 直譯器，已安裝 gmsh 與 OCP>
 export SGB_CORE
 
-$PY zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # 約 16 分鐘
+$PY zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # 約 5 分鐘
 $PY zh-TW/docs/design/sgb/_figures/why_scaling.py oracle
 $PY zh-TW/docs/design/sgb/_figures/why_scaling.py validators
 $PY zh-TW/docs/design/sgb/_figures/emission.py --measure

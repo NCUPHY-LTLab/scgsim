@@ -15,6 +15,7 @@ from sgb_inputs import (
     thin_film_pair,
 )
 
+from scgsim.geometry.exact.errors import InputError, UnsupportedCurveError
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
@@ -22,16 +23,11 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
-from scgsim.geometry.sgb.derivation.labelled import (
+from scgsim.geometry.sgb.arrangement.derivation.labelled import (
     derive_from_catalogue,
     derive_labelled_arrangements,
 )
-from scgsim.geometry.sgb.errors import (
-    ContactError,
-    InputError,
-    OverlapError,
-    UnsupportedCurveError,
-)
+from scgsim.geometry.sgb.errors import ContactError, OverlapError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 
 UM = 1000  # lattice units per micrometre on the 1 nm grid
@@ -75,7 +71,7 @@ def test_an_input_without_a_grid_context_is_rejected_not_defaulted(pad):
         k: v for k, v in pad.build_input.metadata.items() if k != "geometry_grid"
     }
     bare = replace(pad.build_input, metadata=metadata)
-    with pytest.raises(InputError, match="declares no geometry grid"):
+    with pytest.raises(ValueError, match="declares no geometry grid"):
         build_prism_catalogue(bare, pad.representation)
 
 
@@ -305,6 +301,9 @@ def test_lineage_names_the_entity_polygon_ring_and_edge_of_every_carrier(pad):
         for c in carriers
     )
     assert carriers[0].id == carriers[0].lineage.describe()
+    assert {c.role for c in carriers} == {
+        "source_edge"
+    }  # the ground's outline has no arc
 
 
 # --------------------------------------------------------------------------- derivation end to end
@@ -339,21 +338,6 @@ def test_thin_film_sheets_label_their_level_by_entity_and_port(thin_film):
     }
     # sheets of different owners share edges at the landings, which is legal for a port
     assert len(result.slabs) == 2
-
-
-def test_real_inputs_have_the_same_identity_for_every_tile_and_worker_count(
-    pad, thin_film
-):
-    """Real inputs have the same identity for every tile and worker count."""
-    for effective in (pad, thin_film):
-        reference = derive_labelled_arrangements(
-            effective.build_input, effective.representation
-        )
-        tiled = derive_labelled_arrangements(
-            effective.build_input, effective.representation, tiles=3, workers=2
-        )
-        assert tiled.identity_sets() == reference.identity_sets()
-        assert tiled.identity_digest() == reference.identity_digest()
 
 
 # --------------------------------------------------------------------------- boundary curves

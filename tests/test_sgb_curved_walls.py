@@ -74,13 +74,14 @@ def test_the_horizontal_faces_above_and_below_carry_the_split_so_edges_stay_shar
     topology = model.topology
 
     def arc_edges(group):
-        """Arc edges."""
-        (face,) = (
-            topology.faces[i]
+        """The arc edges of the horizontal faces of a group (the triangle on the top splits its face in two)."""
+        return [
+            e
             for i in model.routed.groups[group].ids
             if topology.faces[i].kind == "horizontal"
-        )
-        return [e for e, _ in face.loops[0] if topology.edges[e].curve is not None]
+            for e, _ in topology.faces[i].loops[0]
+            if topology.edges[e].curve is not None
+        ]
 
     assert len(arc_edges("MA::disk__top")) == len(arc_edges("MS::disk__bottom")) == 5
     assert model.report.failures == []

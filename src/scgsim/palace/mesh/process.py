@@ -1,4 +1,4 @@
-"""Run Palace's Gmsh lowering across a private JSON process boundary; no geometry construction."""
+"""Run Palace's Gmsh lowering in a fresh process, passing the request and result as JSON."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from scgsim.contracts.palace_run_folder import LOGS_DIR, json_text
 from scgsim.diagnostics import diagnostic_stage, worker_config
+from scgsim.refusal import found_text, internal
 
 from .physical_groups import Groups
 
@@ -34,9 +36,21 @@ def lower_mesh_in_worker(
         request["preparation_diagnostics"] = diagnostic_config
     result = _run_gmsh_worker(request=request, run_dir=run_dir)
     if not mesh_path.is_file():
-        raise FileNotFoundError("fresh Gmsh mesh worker did not write the MSH file.")
+        raise FileNotFoundError(
+            internal(
+                "fresh Gmsh mesh worker did not write the MSH file"
+                + ": "
+                + found_text(str(mesh_path))
+            )
+        )
     if not isinstance(result.get("statistics"), dict):
-        raise TypeError("fresh Gmsh mesh worker result lacks mesh statistics.")
+        raise TypeError(
+            internal(
+                "fresh Gmsh mesh worker result lacks mesh statistics"
+                + ": "
+                + found_text(sorted(result))
+            )
+        )
     return dict(result)
 
 
@@ -61,10 +75,22 @@ def _run_gmsh_worker(*, request: Mapping[str, Any], run_dir: Path) -> Mapping[st
             worker_name="gmsh_mesh_worker",
         )
         if not result_path.is_file():
-            raise FileNotFoundError("fresh Gmsh mesh worker did not write a result.")
+            raise FileNotFoundError(
+                internal(
+                    "fresh Gmsh mesh worker did not write a result"
+                    + ": "
+                    + found_text(str(result_path))
+                )
+            )
         result = json.loads(result_path.read_text(encoding="utf-8"))
         if not isinstance(result, Mapping):
-            raise TypeError("fresh Gmsh mesh worker result must be a mapping.")
+            raise TypeError(
+                internal(
+                    "fresh Gmsh mesh worker result must be a mapping"
+                    + ": "
+                    + found_text(type(result).__name__)
+                )
+            )
         return result
 
 
@@ -72,13 +98,13 @@ def _run_private_worker(
     *, arguments: Sequence[str], run_dir: Path, worker_name: str
 ) -> None:
     """Execute one private IPC worker and retain only its diagnostic logs."""
-    logs = run_dir / "logs"
+    logs = run_dir / LOGS_DIR
     logs.mkdir(parents=True, exist_ok=True)
     stdout_path = logs / f"{worker_name}.stdout.log"
     stderr_path = logs / f"{worker_name}.stderr.log"
     worker_environment = _private_worker_environment()
     (logs / "private_worker_environment_keys.json").write_text(
-        json.dumps(sorted(worker_environment), indent=2) + "\n", encoding="utf-8"
+        json_text(sorted(worker_environment)), encoding="utf-8"
     )
     with (
         stdout_path.open("w", encoding="utf-8") as stdout,
@@ -103,8 +129,9 @@ def _run_private_worker(
     else:
         detail = f"exited with status {completed.returncode}"
     raise RuntimeError(
-        f"private {worker_name} {detail}; diagnostics are in "
-        f"logs/{worker_name}.stdout.log and logs/{worker_name}.stderr.log"
+        internal(
+            f"private {worker_name} {detail}; diagnostics are in {LOGS_DIR}/{stdout_path.name} and {LOGS_DIR}/{stderr_path.name}"
+        )
     )
 
 

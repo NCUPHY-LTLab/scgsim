@@ -1,56 +1,71 @@
-"""Palace workflow contracts, offline diagnostics, and handoff utilities.
+"""Run a Palace simulation from a prepared plan to a run folder, and read the run Palace returns.
 
-Ownership: SCGSim Development.
-Failure intent: all public entrypoints are fail-closed and reject incomplete
-state without silently changing behavior. Mesh-quality warnings describe the
-stored mesh and are not workflow failures or acceptance thresholds.
+One folder per stage, in the order the work flows:
+
+- ``simulation``: the stage a user drives, the two simulation classes and their lifecycle.
+- ``source``: from a bound plan to the input of the geometry build.
+- ``mesh``: from that input to ``palace.msh`` with its physical groups and manifest.
+- ``config``: from the mesh's groups and the problem's settings to ``config.json`` and the index map.
+- ``run``: the run folder handed to Palace, and what Palace returns.
+- ``results``: from a returned run folder to the checked records of the run.
+- ``reports``: the result a user holds (``resolve_palace_result``) and the notebook views of it.
+
+A public entry point refuses state it cannot run from (no bound plan, a stage called out of order, a name that
+binds nothing) with an error that says which call fixes it.  A setting with a documented default, such as Route B
+and the numerical controls, keeps that default until the caller sets it.
 """
 
-from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
+from scgsim.contracts.palace_convergence import (
+    ConvergenceCheck,
+    ConvergencePlan,
+    ConvergenceVerdict,
+)
 
-from .preparation.drc import SimulationDrcError, SimulationDrcReport, StageResult
-from .preparation.eigenmode import EigenmodeSim
-from .preparation.electrostatic import ElectrostaticSim
-from .presentation.amr import PalaceAmrReport, show_amr_analysis
-from .presentation.reports import (
-    PalaceTrustReport,
-    PhysicsQuantitiesReport,
-    SimulationBenchmarkReport,
-    inspect_run_trustworthiness,
+from .config.convergence import (
+    Capacitance,
+    Criterion,
+    CriterionGroup,
+    ErrorIndicator,
+    ModeFrequency,
+    SurfaceEpr,
 )
-from .results.amr_analysis import analyze_amr
-from .results.amr_models import CapacitanceReference, PalaceAmrAnalysis
-from .results.epr import (
-    PalaceEprResult,
-    epr_result,
-    reanalyze_epr,
-    resolve_epr_result,
-    show_epr,
-)
-from .results.report_data import (
+from .reports.epr import show_epr
+from .reports.reports import inspect_run_trustworthiness
+from .reports.resolved_result import ResolvedPalaceResult, resolve_palace_result
+from .reports.trust import PalaceTrustReport
+from .reports.views import PhysicsQuantitiesReport, SimulationBenchmarkReport
+from .results.convergence import SolverEnd
+from .results.epr import epr_result, reanalyze_epr, resolve_epr_result
+from .results.epr_records import PalaceEprResult
+from .results.inspection_records import (
     PalaceFailureDiagnosis,
     PalaceResultSelection,
     PassCostRecord,
     SurfaceMarginEprRecord,
     SurfaceMarginEprSeriesSnapshot,
 )
-from .results.resolve import (
+from .results.resolved_records import (
     PalaceCost,
     PalacePerformance,
     PalaceProvenance,
     PalaceReturnedReceipt,
     ParsedTable,
-    ResolvedPalaceResult,
-    resolve_palace_result,
 )
+from .simulation.drc import SimulationDrcError, SimulationDrcReport, StageResult
+from .simulation.eigenmode import EigenmodeSim
+from .simulation.electrostatic import ElectrostaticSim
 
 __all__ = [
-    "CapacitanceReference",
+    "Capacitance",
+    "ConvergenceCheck",
+    "ConvergencePlan",
+    "ConvergenceVerdict",
+    "Criterion",
+    "CriterionGroup",
     "EigenmodeSim",
     "ElectrostaticSim",
-    "MeshQualityReport",
-    "PalaceAmrAnalysis",
-    "PalaceAmrReport",
+    "ErrorIndicator",
+    "ModeFrequency",
     "PalaceCost",
     "PalaceEprResult",
     "PalaceFailureDiagnosis",
@@ -66,16 +81,15 @@ __all__ = [
     "SimulationBenchmarkReport",
     "SimulationDrcError",
     "SimulationDrcReport",
+    "SolverEnd",
     "StageResult",
+    "SurfaceEpr",
     "SurfaceMarginEprRecord",
     "SurfaceMarginEprSeriesSnapshot",
-    "analyze_amr",
-    "check_mesh_quality",
     "epr_result",
     "inspect_run_trustworthiness",
     "reanalyze_epr",
     "resolve_epr_result",
     "resolve_palace_result",
-    "show_amr_analysis",
     "show_epr",
 ]

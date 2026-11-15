@@ -19,7 +19,7 @@ from scgsim.aedt.results.hfss_readback import (
     validate_hfss_setup,
     validate_modal_native_evidence,
 )
-from scgsim.aedt.results.provenance import RECEIPT_V3, SOURCE_SCHEMA_V19
+from scgsim.aedt.results.provenance import require_current_receipt
 from scgsim.aedt.results.q2d_readback import (
     validate_q2d_model_readback,
     validate_q2d_setup,
@@ -93,10 +93,9 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
         root = path
     receipt_path = contained(root, "metadata/aedt_run_receipt.json")
     receipt = read_json(receipt_path)
+    require_current_receipt(receipt)
     if (
-        not isinstance(receipt, dict)
-        or receipt.get("schema_version") != RECEIPT_V3
-        or receipt.get("status") != "native_preparation_only"
+        receipt.get("status") != "native_preparation_only"
         or receipt.get("solver_invoked") is not False
     ):
         raise RuntimeError("receipt is not a successful native prepared-model stage")
@@ -117,9 +116,7 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
     ):
         raise RuntimeError("prepared model source paths are not canonical")
     spec_path = verified(root, "aedt_spec.json", source_binding, "spec_sha256")
-    spec = parse_aedt_spec(
-        read_json(spec_path), base_dir=root, allow_historical_modeling=True
-    )
+    spec = parse_aedt_spec(read_json(spec_path), base_dir=root)
     context = PreparedModelContext(
         root, receipt_path, receipt, save, source_binding, spec
     )
@@ -152,7 +149,7 @@ def _validate_prepared_identity(context: PreparedModelContext) -> str:
     }:
         raise RuntimeError("prepared model connected family/version differs")
     expected_stage = "model_only" if spec.run_control is None else "model_with_setup"
-    # Older prepared-with-setup receipts omit the marker but still bind controls.
+    # A prepared-with-setup receipt may omit the marker; only a model-only receipt must carry it.
     if "model_stage" in receipt:
         if receipt["model_stage"] != expected_stage:
             raise RuntimeError("prepared model stage differs from its declaration")
@@ -299,12 +296,7 @@ def _validate_imported_gds_source(context: PreparedModelContext) -> None:
         if receipt.get("ports") != []:
             raise RuntimeError("Eigenmode prepared receipt must have no ports")
     elif spec.mode == "terminal":
-        validate_terminal_native_evidence(
-            receipt.get("ports"),
-            spec,
-            current=receipt.get("runtime_source", {}).get("schema_version")
-            == SOURCE_SCHEMA_V19,
-        )
+        validate_terminal_native_evidence(receipt.get("ports"), spec)
     else:
         validate_modal_native_evidence(receipt.get("ports"), spec)
 

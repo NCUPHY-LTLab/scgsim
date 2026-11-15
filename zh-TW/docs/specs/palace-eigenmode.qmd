@@ -7,32 +7,55 @@ scgsim-id: "docs/specs/palace-eigenmode"
 lang: zh-TW
 ---
 
-`scgsim.palace.EigenmodeSim` 負責可變的網格、設定、已解析埠及交接狀態。它與 Electrostatic、AEDT 分開，沒有共用的模擬基底物件。[Palace 課程](../course/palace-eigenmode.qmd) 說明一般流程；[Xmon EPR](../tutorial-xmon-palace.qmd) 補充選用的物理分析。
+`scgsim.palace.EigenmodeSim` 負責可變的網格、設定、已解析埠及交接狀態。它與 `ElectrostaticSim` 共用同一個私有核心（綁定、幾何設定、`mesh()`、摘要、交接與生命週期），只加上本徵模態專屬的設定方法與設定檔；它與 AEDT 不共用任何部分。[Palace 課程](../course/palace-eigenmode.qmd) 說明一般流程；[Xmon EPR](../tutorial-xmon-palace.qmd) 補充選用的物理分析。
 
 | 階段 | 公開介面 |
 |---|---|
 | 共用來源 | `set_plan(GeometryPlanSnapshot)` |
-| 獨立來源 | 在新的未綁定模擬上呼叫 `set_geometry(component)` 與 `set_stack(stack)` |
 | 輸出 | `set_output_dir(path)` |
 | 本徵模態 | `set_eigenmode(*, num_modes=10, target=None, tolerance=1e-6, save=0)` |
 | 網格控制 | `set_mesh(...)` 接受共用的尺寸配方、網格器選項、修復預算與品質門檻 |
 | 網格摘要 | `mesh_summary()` 回傳獨立的網格產生資料 |
 | 數值控制 | `set_numerical(...)` 保留明確的階數、線性求解器、AMR 與輸出選擇 |
-| 來源／設定檢視 | `input_summary()` 回傳獨立的來源與設定，不進行檔案或原生 I/O |
-| 表面模型 | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`，須在 `mesh()` 之前 |
+| 來源／設定檢視 | `input_summary()` 回傳獨立的 `mesh()` 建模輸入（計畫套用模擬的真空區域、所要求的埠，以及所選的 Route A 或 Route B 之後）與設定，不進行檔案或原生 I/O |
+| 路徑 | `set_route(route, *, approximation_profile=None)`，須在 `mesh()` 之前；從未呼叫時為 Route B，Route A 不提供近似設定時使用 `thin_film` |
+| Surface EPR | `set_surface_epr(specs)`，須在 `mesh()` 之前；只有以規格呼叫時才計算，`None` 會關閉它，`{}` 會被拒絕 |
 | 來源指定的埠 | `add_port(name, *, layer, layout_sheet=True, inductance)`；`layout_sheet` 必須是 `True`（簽章上的預設值 `False` 會被拒絕） |
 | 輸出選取 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
+| 收斂 | `set_convergence(*criteria, minimum_converged_passes=1)`，準則可用 `ModeFrequency`、`SurfaceEpr` 與 `ErrorIndicator`；見[收斂宣告](palace-electrostatic-sgb.qmd#convergence-declaration) |
 | 準備 | `mesh()`、`write_config()`，接著 `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
 幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。本徵模態與 Electrostatic 兩個外觀介面共用同一組網格控制與預設值，記載於 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls)，該節也說明細微結構會使 `mesh()` 在產生網格之前被拒絕，以及網格低於品質門檻時 `mesh()` 會中止。
 
+設定方法儲存的是凍結且已檢查的值。`sim.numerical` 是 `NumericalControls`：以欄位讀取單一控制（`sim.numerical.amr_max_passes`、`sim.numerical.order`），以 `sim.numerical.to_payload()` 讀取整筆紀錄，也就是 `metadata/palace_numerical_controls.json` 保存的字典。`sim.surface_epr_specs` 是 `SurfaceEprSpecs`，每個介面型別一個 `SurfaceEprSpec`（`sim.surface_epr_specs.by_type["MA"].inset_margins_um`；`to_payload()` 給出正規化後的對照）。`sim.epr_request` 是 `EprRequest`（`sim.epr_request.surface_interfaces`），在 `set_epr_request` 之前為 None。若要在建構時傳入控制，請給 `NumericalControls`（`EigenmodeSim(numerical=NumericalControls(...))`）。此紀錄把 `amr_max_passes`、`amr_nonconformal` 與 `amr_tolerance` 留給問題決定：建構子與 `set_numerical(...)` 以同一組 Eigenmode 預設值填入紀錄未設定者，因此 `EigenmodeSim(numerical=NumericalControls(order=2))` 與 `EigenmodeSim()` 接著 `set_numerical(order=2)` 保存相同的控制：非共形，且在 `write_config()` 之前仍須選擇迭代上限。
+
 ## 本徵模態網格與 AMR 預設值 {#eigenmode-mesh-and-amr-defaults}
 
-新的 `EigenmodeSim` 使用共用的預設網格控制（`FeatureRecipe()`、`MesherOptions()`、`Budgets()` 與 `0.01` 品質門檻），並寫入 `Model.Refinement.Nonconformal=true`。在 `write_config()` 之前，透過 `set_numerical(...)` 提供 `amr_max_passes`。若迭代上限為正值，也必須提供 `amr_tolerance` 與 `amr_update_fraction`；設定 `amr_max_passes=0` 會停用自適應細化，並允許另外兩值維持未設定。之後的 `set_numerical(...)` 呼叫若省略 `ksp_type`、`amr_max_passes`、`amr_nonconformal`、`amr_nc_levels`、`amr_tolerance`、`amr_update_fraction` 或 `save_adapt_diagnostics`，就保留目前設定；其餘省略的值（`order`、`tolerance`、`max_iterations`、`solver_type`、`preconditioner`、`device`、`save_adapt_iterations`、`save_adapt_mesh`、`estimator_mg`、`output_paraview` 與 `output_grid_function`）都採用預設值。這些是輸入控制，不是充分性建議。Electrostatic 保留共用契約中既有的 AMR 預設值。
+新的 `EigenmodeSim` 使用共用的預設網格控制（`FeatureRecipe()`、`MesherOptions()`、`Budgets()` 與 `0.01` 品質門檻），並寫入 `Model.Refinement.Nonconformal=true`。在 `write_config()` 之前，透過 `set_numerical(...)` 提供 `amr_max_passes`。若迭代上限為正值，也必須提供 `amr_tolerance` 與 `amr_update_fraction`；設定 `amr_max_passes=0` 會停用自適應細化，並允許另外兩值維持未設定。有收斂宣告時，宣告的準則取代 `amr_tolerance` 結束執行：正的迭代上限只需要 `amr_update_fraction`，明確給定的 `amr_tolerance` 會被拒絕。之後的 `set_numerical(...)` 呼叫若省略 `ksp_type`、`amr_max_passes`、`amr_nonconformal`、`amr_nc_levels`、`amr_tolerance` 或 `amr_update_fraction`，就保留目前設定；其餘省略的值（`order`、`tolerance`、`max_iterations`、`solver_type`、`preconditioner`、`device`、`save_adapt_iterations`、`save_adapt_mesh`、`estimator_mg`、`output_paraview` 與 `output_grid_function`）都採用預設值。這些是輸入控制，不是充分性建議。Electrostatic 保留共用契約中既有的 AMR 預設值。
 
 `mesh_summary()` 回報紀錄的網格控制、原生元素與區域數量及網格身分。其 Nédélec 自由度值是根據主角點四面體及設定的 FEM 階數所做的拓撲估計，不是求解器回報的 DOF 數量。變更 FEM 階數會更新此估計，不重新產生網格。這些網格紀錄不確立數值充分性。
 
-目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫攜帶共用包絡，不能用獨立幾何／堆疊或互相衝突的包絡設定器局部取代。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責共用網格控制與共用設定控制。
+目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫若帶有自己的真空，會拒絕模擬上的 `set_vacuum_region`。模型需要真空區域：計畫沒有宣告、模擬也沒有呼叫 `set_vacuum_region` 時（或在 `prepare()` 之前呼叫 `plan.set_vacuum_region(...)`），`mesh()` 與 `input_summary()` 會拒絕。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責共用網格控制與共用設定控制。
+
+## 本徵模態上的收斂 {#eigenmode-convergence}
+
+`EigenmodeSim.set_convergence` 接受 `ModeFrequency`、`SurfaceEpr` 與 `ErrorIndicator`；它們的定義、檢查與 `write_config()` 寫出的內容，見共用的[收斂宣告](palace-electrostatic-sgb.qmd#convergence-declaration)：
+
+```python
+from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
+
+sim.set_eigenmode(num_modes=2, target=5e9)
+sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
+sim.set_convergence(
+    ModeFrequency().within(percent=0.001),
+    SurfaceEpr("MA", margin_um=1.0, modes=[1]).within(percent=1),
+    ErrorIndicator().below(1e-2),
+)
+```
+
+模態是 1 到 `num_modes` 的模態編號。Surface EPR 的類別必須有規格，且不能被 `set_epr_request(surface_interfaces=...)` 排除。`EigenmodeSim.set_numerical` 會保留省略的 `amr_tolerance`，所以一旦給過容許誤差，就會一直保留，直到以不含它的控制重新建立模擬；有宣告時 `write_config()` 會拒絕它。
+
+兩種問題的[收斂時停止](palace-electrostatic-sgb.qmd#convergence-stop)相同。本徵模態求解一開始會把 `eig.csv` 與 `port-EPR.csv` 寫成只有標題列，因此在下一次求解期間停止時，頂層會留下這兩個表格；結果仍從最後一個 `iteration<k>/` 讀取。
 
 ## 集總埠 {#lumped-ports}
 
@@ -53,7 +76,7 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 內縮邊距 $m$ 選出表面上距最近 gap edge（導體輪廓上面向裸露 substrate 的邊）至少 $m$ µm 的部分。SGB 把該部分以帶面切進模型，所以一般的 Palace 對普通屬性積分；SCGSim 不寫出原生 `Mask` 或 `Inset` 設定，也不需要特殊的 Palace 建置。距離如何量測，由 [SGB 設計頁](../design/sgb/inset-imprint.qmd#band-measure)定義。
 
 ::: {.callout-important title="請在 mesh() 之前呼叫 set_surface_epr"}
-邊距是幾何：`mesh()` 會把它們連同其餘模型一起交給 SGB。請先設定 `set_surface_epr`。在 `mesh()` 之後再呼叫它，會使網格、設定檔及交接失效，必須重新執行 `mesh()`。
+邊距是幾何：`mesh()` 會把它們連同其餘模型一起交給 SGB。請先設定 `set_surface_epr`。在 `mesh()` 之後再呼叫它，會使網格、設定檔及交接失效，必須重新執行 `mesh()`。沒有這個呼叫時，`mesh()` 不切任何帶，設定檔也沒有 Surface-EPR 列。
 :::
 
 每個規格（`"MA"`、`"MS"`、`"SA"`）除了薄膜輸入，還可帶這些邊距鍵：

@@ -24,53 +24,10 @@ standalone solver process, and collection on the requested AEDT version.
 
 ## Current package structure
 
-The package separates source geometry, geometry compilation, solver backends,
-result handling, and presentation. The tree below shows shared package
-ownership; Palace and AEDT retain their own preparation, execution, and result
+The [code map](code-map.qmd) shows every folder of the package, which stage
+each one is and the order the work flows through them on the Palace and AEDT
+routes. Palace and AEDT retain their own preparation, execution, and result
 lifecycles.
-
-```text
-scgsim/
-├── geometry/
-│   ├── source/       # component input, occurrence, stack and normalization
-│   ├── models/       # source and construction records
-│   ├── compiler/     # advanced build API, derived records and validators
-│   ├── sgb/          # SGB core: arrangement, XAO and sidecar that Palace builds on
-│   ├── planning/     # domain, interface, surface, volume and tag planning
-│   ├── construction/ # native OCC construction, correspondence and export
-│   └── primitives/   # shared Entity, loop, grid and spatial operations
-├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
-├── semantics/        # immutable solver-independent facts
-├── palace/
-│   ├── preparation/  # distinct Electrostatic and Eigenmode input state owners
-│   ├── mesh/         # SGB build, meshing call, group lowering, summaries and offline quality
-│   │   └── quality/  # detached offline MSH reader and report
-│   ├── execution/    # manual handoff and host receipt recorder
-│   ├── results/      # custody-aware result and EPR reading
-│   └── presentation/ # Palace-specific reports and figures
-├── aedt/
-│   ├── eigenmode.py  # retained mutable high-level state facade
-│   ├── specs/        # detached requests, prepared geometry and parsing
-│   ├── preparation/ # source binding, effective geometry, handoff and cohorts
-│   ├── runtime/     # transaction, family-native and batch owners
-│   │   ├── batch_protocol.py # stdlib package/file protocol
-│   │   └── batch_runner.py   # standalone process and CLI
-│   ├── epr/         # EPR surface support, fields/cache and analysis composition
-│   ├── results/     # strict readers and convergence observations
-│   ├── presentation/
-│   └── run.py       # supported CLI, delegates to transaction owner
-├── visualization/
-│   ├── loaders/      # backend artifact readers and common file checks
-│   ├── scene.py
-│   ├── preview.py
-│   └── rendering.py
-└── presentation/     # shared physics-neutral notebook formatting
-```
-
-Curved construction has a facade at `geometry.construction.curved`; its
-focused operations live in `curved_geometry` modules for source boundaries,
-planar arrangement, native kernel operations, shared surfaces, and canonical
-records.
 
 The responsibility correction keeps one definition for every detached AEDT
 request record. `aedt.specs.geometry` owns `PreparedPlanarGeometry`;
@@ -97,9 +54,11 @@ The transaction retains sole Desktop and receipt ownership. General body,
 support, material and enclosure native operations belong to `runtime.native`;
 generic RLC assignment and saved readback belong to the native lumped owner.
 
-Geometry source preparation and compiler planning have separate owners:
-preparation uses shared primitives, planning coordinates specialized owners,
-and construction lowers the resulting plan to native geometry and exports.
+Geometry source preparation, interpretation and model construction have
+separate owners: the source stage uses the grid engine, interpretation and the
+junction partition turn its prepared input into the effective input, and SGB
+builds the model from that input. Only AEDT's native construction uses
+`scgsim.geometry.planning`.
 Backend families consume the shared geometry without importing one another.
 `semantics` remains a stdlib-only immutable fact boundary. Palace and AEDT keep
 separate mutable simulation state, transaction lifetime, and physical result
@@ -119,45 +78,38 @@ revived Q3D input-v1/v2 paths. The formal `python -m scgsim.aedt.run` entrypoint
 remains supported; it is the AEDT transaction CLI, not a legacy wrapper.
 
 The `geometry` facade is the source-authoring entrypoint. It exposes
-`GeometryPlan`, detached snapshots, normalized input records, component and
-stack adapters, physical representation interpretation, and input summaries.
-The `geometry.compiler` facade is for advanced builds: it exposes
-`SemanticGeometryBuilder`, route-plan construction, derived records, stage
-operations, and validators. Input validation is defined in
-`geometry.source.validation` and re-exported by `geometry.compiler`. Palace does
-not build through this facade: it calls `build_sgb_geometry` from
-`scgsim.geometry.sgb` and meshes the result with `scgsim.meshing`.
+`GeometryPlan`, detached snapshots, normalized input records, the GDS and
+stack-file adapter, physical representation interpretation, and input summaries.
+Palace calls `build_sgb_geometry` from `scgsim.geometry.sgb` and meshes the
+result with `scgsim.meshing`. `scgsim.geometry.sgb` sits below the supported
+entry: a layout enters through `GeometryPlan` and the simulation classes of
+`scgsim.palace` and `scgsim.aedt`, and a direct call with an input built by
+hand assumes what that entry guarantees; see
+[the supported entry](supported-scope.qmd#supported-entry).
 `interpret_physical_geometry` from `scgsim.geometry` returns the effective
-input, stack, and representation plan. Pass `plan.context` to
-`build_route_construction_plan` from `scgsim.geometry.compiler` when you need
-the plan alone, or to `SemanticGeometryBuilder.build` when the route should
-continue through native construction and physical-group export.
+input, stack, and representation plan.
 
 Internal modules divide work by responsibility. They are implementation
-boundaries; ordinary callers should use the two facades above.
+boundaries; callers use the supported entry.
 
 | Internal owner | Responsibility |
 |---|---|
 | `scgsim.geometry.source.plan_assembly` | Compose component occurrences, transforms, stack facts, and caller-assigned Nets into source input. |
 | `scgsim.geometry.planning.contact_planning` | Recognize declared interfaces, contact patches, and metal-to-metal contact ownership. |
-| `scgsim.geometry.planning.junction_planning` | Resolve authored support and incident-conductor binding, then derive exact rectangular-junction partitions. |
-| `scgsim.geometry.planning.port_planning` | Lower source-bound port sheets and validate route-specific port geometry. |
+| `scgsim.geometry.junctions` | Resolve authored support and incident-conductor binding, then derive exact rectangular-junction partitions. |
 | `scgsim.geometry.planning.surface_planning` | Build solver-facing surfaces, contact coverage, contribution patches, and partitions. |
-| `scgsim.geometry.planning.volume_planning` | Plan retained volumes, construction cutters, host exclusions, and shell orientation. |
-| `scgsim.geometry.planning.topology_planning` | Assign canonical points, curves, loops, and shared surface ownership. |
-| `scgsim.geometry.primitives.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
-| `scgsim.geometry.construction.native_geometry` | Lower construction plans through Gmsh/OCC, retain topology bindings, and produce XAO and conformity records. |
-| `scgsim.geometry.source.ground_bump_geometry` | Audit authored bump sites, select fill-lattice sites, and create source geometry records. |
+| `scgsim.geometry.planning.topology_planning` | Resolve shared surface ownership and ring geometry for surface planning. |
+| `scgsim.geometry.grid.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
 
 The [API migration reference](api-migration.qmd) lists the supported import
-routes for these operations. Native correspondence, shell repair, curved
-arrangement, and physical-group export remain in construction.
+routes for these operations.
 
-Palace keeps two distinct mutable preparation owners: Electrostatic and
-Eigenmode setup state, invalidation, and failure ordering remain specific to
-each facade. Mesh construction keeps its worker boundary: the meshing module runs Gmsh in
+Palace's two simulations, Electrostatic and Eigenmode, share one core in
+`scgsim.palace.simulation`: binding, geometry settings, meshing, summaries,
+handoff and the lifecycle are written once, and each problem class adds its own
+setters and config. Mesh construction keeps its worker boundary: the meshing module runs Gmsh in
 child processes, and Palace lowers the groups to solver attributes in one more
-worker. Offline mesh-quality reading stays separate. Manual
+worker. Manual
 handoff and its standalone host recorder remain execution-owned, while strict
 result/EPR resolution remains offline and Palace reports remain
 solver-specific. AEDT likewise keeps its `EigenmodeSim` state facade, but one
@@ -187,23 +139,22 @@ mapping remains empirical, not a generally validated native side query; the
 call emits a warning about that limitation. See the
 [field-side contract](specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction).
 
-Within Palace, `results.report_data` owns detached report records and snapshot
-readers; `presentation.reports` owns trust/physics views and figures. The
-package facade retains the existing public result and report names.
+Within Palace, `results` reads a returned run folder into checked records:
+`results.resolve` the completed run (`ResolvedRunData`), and `results.snapshots`
+and `results.inspection` the AMR snapshots, selection and failure diagnosis in
+`results.inspection_records`. `reports` holds what a user reads:
+`reports.resolved_result` returns `ResolvedPalaceResult` from
+`resolve_palace_result`, and `reports.reports` builds the trust, physics and
+benchmark views and figures. Import every public name from `scgsim.palace`.
 
-The first SCGSim 2.0 producer emitted `scgsim.aedt.runtime-source.v13` with 61
-canonical declared module paths, including 41 AEDT modules. Its records carry
-`schema_version`, `stage`, `modules`, `content_sha256`, and
-`revision_observation`; module bytes and their digest are mandatory, while the
-truthful Git observation may be unavailable. V13 has no helper-hash map and
-does not claim exhaustive transitive-source coverage. Historical runtime-source
-inventories continue to interpret their original module paths and identities;
-relocation does not rewrite or reinterpret their receipts. The current producer
-emits runtime-source v30 while retaining receipt V3; its declared inventory
-binds the relocated implementation.
+AEDT receipts record the runtime source: every file of the import closure of
+`scgsim/aedt` and the two AEDT visualization loaders, with the SHA-256 of each,
+under `scgsim.aedt.runtime-source.v30`. The list is computed on each use, so
+moving or deleting a module changes the list instead of breaking AEDT
+([runtime-source contract](specs/aedt-runtime.qmd#runtime-source)).
 
 The flow below shows the source structure. Geometry source preparation
-and compiler planning have separate owners, and neither backend defines source
+and model construction have separate owners, and neither backend defines source
 identity.
 
 ```{mermaid}
@@ -232,24 +183,12 @@ the Notebook's final `Net -> Entity` map, then prepares one immutable source
 snapshot for the normalized `GeometryBuildInput` boundary. The source model
 includes authored curve declarations and explicit GDS
 reconstruction records in that snapshot while preserving Entity/Net ownership.
-`scgsim.geometry` owns the source-facing plan and snapshot; the
-`scgsim.geometry.compiler` surface owns route planning and derived construction
-records. Palace builds line and circular-arc curves through SGB (`scgsim.geometry.sgb`); AEDT curve
+`scgsim.geometry` owns the source-facing plan and snapshot. Palace builds line and circular-arc curves through SGB (`scgsim.geometry.sgb`); AEDT curve
 lowering is unsupported. The
 [GeometryPlan contract](geometry-sgb.qmd) owns exact curve identity and
 arrangement semantics. Native observations do not replace source identity or
 establish connectivity. AEDT binding evidence retains source members and
 coverage through native aggregation.
-
-On the compiler's OCC path, stock shell AutoFix may replace native face tags while
-correcting shell orientation. Geometry construction maps repaired faces to source surfaces by
-complete native wire/edge correspondence and carries that mapping through
-export and backend construction. Source `SurfaceID`s remain authoritative;
-numeric Gmsh tags may change. In the observed Circle Route B construction,
-shared faces and metal-cutout boundaries remained source-bound, with port
-sheets still separate. That observation is scoped to this geometry case. Construction fails
-when required correspondence cannot be established. The geometry contract
-owns the exact behavior and failure boundary.
 
 ## Contract boundaries
 
@@ -260,7 +199,7 @@ owns the exact behavior and failure boundary.
 | Named occurrences and the final `Net -> Entity` assignment | Notebook `GeometryPlan` |
 | Immutable normalized source geometry | `GeometryPlan` and `GeometryBuildInput` |
 | Revision-bound material, interface, owner, side, and evidence facts | `scgsim.semantics` internal stdlib core |
-| Geometry names, topology, Route A/B surfaces | `scgsim.geometry.sgb` for Palace; `scgsim.geometry.compiler` for the advanced builder |
+| Geometry names, topology, Route A/B surfaces | `scgsim.geometry.sgb` |
 | Tetrahedral meshing of SGB geometry, sizing recipes and the quality threshold | `scgsim.meshing` |
 | Palace and AEDT implementation | `scgsim.palace` and `scgsim.aedt` |
 | Native geometry bindings and derived aggregates | Backend adapters, with source members and coverage retained |
@@ -268,7 +207,6 @@ owns the exact behavior and failure boundary.
 | Run identity, handoff, profiles, receipts | One common SCGSim contract |
 | Physical result meaning | Solver-specific, never flattened into a false common quantity |
 | Report navigation, provenance, cost presentation | SCGSim report/resolver surfaces |
-| Offline tetrahedral mesh diagnostics | `scgsim.palace.mesh.quality`, exposed through `scgsim.palace` |
 | Public component-simulation notebook source | OrPen SC PDK |
 
 ## Internal semantic facts
@@ -279,7 +217,7 @@ serialization. Evidence patches retain the snapshot that classified them;
 missing/different revision identity fails rather than silently rebinding facts.
 Native tags remain opaque observations, not sources of guessed contact.
 
-The geometry compiler reuses one source/model projection while planning instead of deep-copying
+Geometry planning reuses one source/model projection instead of deep-copying
 stacks at every adjacency call. Domain ordering, sheet owners and aggregate
 physical-group owners remain separate projections. Contribution multiplicity
 is retained by the semantic ledger even when native geometry aggregates a
@@ -287,7 +225,7 @@ surface. Material identity, approximation and native implementation stay
 separate. The [GeometryPlan/route contract](geometry-sgb.qmd) owns their public
 meaning; this page explains which modules implement it.
 
-AEDT's native construction does not consume Gmsh tags or construction plans.
+AEDT's native construction does not consume Gmsh tags.
 Its binding sidecar retains source members and coverage through native bodies,
 sheets, faces and calculator selections. The [AEDT contract](specs/aedt-runtime.qmd)
 owns exact side-selection and result rules. Display-only helpers live under
@@ -302,47 +240,103 @@ directly. SCGSim owns the reusable package APIs, not a duplicate notebook source
 The per-family supported calculations and current limits
 are maintained in the [Backend Support Matrix](backend-support.qmd).
 
-Palace mesh-quality inspection is an offline reader under
-`scgsim.palace.mesh.quality` over the emitted MSH file.
-It neither owns mesh construction (the `scgsim.meshing` audit holds the
-threshold) nor starts a native backend. The reader binds
-one immutable parsed snapshot to the file bytes and leaves mesh acceptance and
-scientific convergence outside the report contract. See
-[Tetrahedral Mesh Quality](mesh-quality.qmd).
+Mesh quality is the `scgsim.meshing` audit that `mesh()` runs: it holds the
+threshold and writes the quality report. Scientific convergence stays outside
+that report. See [Tetrahedral Mesh Quality](mesh-quality.qmd).
 
 ## Palace preparation lifecycle
 
-`ElectrostaticSim` and `EigenmodeSim` remain the public owners of their mutable
-mesh, config, resolved-port, and handoff state. Their shared private workflow
-only prepares values and persists caller-supplied JSON payloads; it is not a
-base simulation object and does not receive callbacks into simulation state.
+`ElectrostaticSim` and `EigenmodeSim` are the public owners of their mutable
+mesh, config, resolved-port, and handoff state. Both are subclasses of one
+private base, `scgsim.palace.simulation.core.PalaceSimulation`, which holds
+everything they share: `set_plan`, `set_output_dir`, `set_vacuum_region`,
+`set_route`, `set_surface_epr`, `set_mesh`, `input_summary()`, `mesh()`, `simulation_drc`,
+`mesh_summary()` and `prepare_handoff()`. Each problem file,
+`simulation/eigenmode.py` and `simulation/electrostatic.py`, shows only what its
+problem adds: its setters, its numerical defaults and its `write_config()`.
 
-Both public `mesh()` methods invalidate derived state before checking
-prerequisites. Geometry preparation then applies the vacuum region, the
-indium-bump fill and the airbox to the stack, then interprets the physical
-geometry and records Route-A metadata, and returns the prepared component,
-stack, bump-fill record, and optional material mapping. The simulation stores
+The lifecycle is one table, `scgsim.palace.simulation.lifecycle`. A
+simulation is `UNBOUND`, `BOUND` (`set_plan`), `MESHED` (`mesh()`),
+`CONFIG_WRITTEN` (`write_config()`) or `HANDED_OFF` (`prepare_handoff()`). The
+table says which stage each call needs and how far each call falls back:
+setters whose value `mesh()` reads (output folder, vacuum, route, Surface EPR,
+mesh controls, Eigenmode ports) fall back to `BOUND`, setters only `write_config()`
+reads fall back to `MESHED`. A call made before the stage it needs is refused
+with a message that names the call to make first. The rules are the same for
+both problems: Route B is the default, and Surface EPR is computed only when
+`set_surface_epr(specs)` was called.
+
+A simulation holds its settings as named, frozen values, each checked when it
+is built and each defined in the stage that reads it first:
+
+| Attribute | Type | Stage | Read by |
+|---|---|---|---|
+| `numerical` | `NumericalControls` | `config.numerical` | `write_config()`, `mesh_summary()` (FEM order) |
+| `surface_epr_specs` | `SurfaceEprSpecs` (one `SurfaceEprSpec` per interface type) | `source.surface_epr` | `mesh()` (the bands), `write_config()` (the `Dielectric` rows) |
+| `epr_request` (Eigenmode) | `EprRequest` | `config.index` | `write_config()` (`check_epr_request` and the index map) |
+
+`write_config()` passes the config builder a `ConfigInput` (the mesh, the
+materials, the Surface-EPR specs and the numerical controls) and the problem's
+own `EigenmodeSettings` or `ElectrostaticSettings`. The builder returns the
+index entries as one record per config section (`PortEntry`, `TerminalEntry`,
+`EnergyEntry`, `SurfaceEprEntry`); `to_payload()` writes each as
+`palace_index_map.json` holds it. The Palace stages import one way, in flow
+order `source`, `mesh`, `config`, `run`: a stage may import the stages before
+it and never one after it, so `source` imports none of the other three. The
+import-linter contract `palace-stage-layers` checks it.
+
+Every stage takes the run folder's layout from one module,
+`scgsim.contracts.palace_run_folder`: the path of each file (`CONFIG`, `MESH`,
+`MESH_MANIFEST`, `INDEX_MAP`, the handoff records, the recorder, `OUTPUT_DIR`),
+the schema of each record (`CONFIG_SCHEMA`, `MANIFEST_SCHEMA_VERSION`,
+`INDEX_MAP_SCHEMA_VERSION` and the receipt schemas) and the handoff id
+(`HandoffIdentity`), which the handoff writes and `resolve_palace_result`
+checks. The same module holds one record per problem, `EIGENMODE` and
+`ELECTROSTATIC` (`PalaceProblem`). The record states what differs between
+the two problems: the name of the problem in `config.json`, the tables
+Palace writes, the `Boundaries` block that excites the problem, and whether a
+table row is a mode or an excitation. Code that differs by problem reads the
+record and does not compare problem names. `PalaceProblem.written_families`
+decides which tables a run must return. The receipt recorder uses it to list
+outputs, and `results` uses it to require them. `collects_adapted_meshes`
+compares the handoff's recorded `config_schema` with `CONFIG_SCHEMA`, the
+same constant the writer uses, so raising the schema cannot stop the
+recorder from collecting adapted meshes. The contract also states the fields
+of the records the recorder writes (`ReturnedReceipt`, `FileRecord`). It
+imports only the standard library, so it words its refusals with its own
+`refused`, the same sentence `scgsim.refusal` words. The recorder in the run folder
+(`metadata/record_palace_return.py`) is the recorder module with the
+contracts' text written in place of their imports (`run.standalone_copy`), so a
+run folder needs only a Python interpreter to record its receipt. A run with a
+convergence declaration also gets the convergence runner
+(`metadata/run_palace_until_converged.py`, from `run.convergence_runner`), copied
+the same way with `scgsim.contracts.palace_convergence`: it runs the one
+convergence check after each pass on the solver host and stops Palace once the
+declared criteria have converged.
+
+`mesh()` discards derived state before checking prerequisites. Geometry preparation then applies the vacuum region to the
+stack, interprets the physical geometry, records Route-A metadata, and returns
+the prepared stack, geometry input, physical plan and optional material
+mapping. The simulation stores
 that mapping only after preparation returns, so a failure during preparation or
 a non-mapping `materials` value retains the prior mapping, while a
 mesh-construction failure retains the newly prepared mapping. Eigenmode resolves authored ports before those transformations and
 caches the resolved ports only after mesh construction succeeds.
 
-Both public `write_config()` methods invalidate config and handoff state before
-their existing prerequisite and mesh-existence checks. Solver-specific lowering
-still occurs before persistence. A shared private writer replaces each
+Each `write_config()` discards config and handoff state before its
+prerequisite and mesh-file checks. Solver-specific lowering
+still occurs before persistence. The config stage's writer
+(`config.files.persist_problem_files`) replaces each
 caller-ordered metadata file independently and replaces `config.json` last;
 earlier files therefore remain after a later write failure, and `config_path` is
 cached only after the final replacement succeeds. In-memory invalidation does
 not remove an older config file from disk, and this per-file behavior is not a
 whole-workflow transaction guarantee.
 
-The shared stack loader, non-negative-number validator, and stack-material-kind
-validator live in `scgsim.palace.preparation.inputs`. Electrostatic and
-Eigenmode call that module directly while retaining their public methods,
-invalidation timing, shallow top-level stack copy, nested aliases, and
-problem-specific orchestration. The old direct problem-module paths were
-removed; their current defining modules are `preparation.electrostatic` and
-`preparation.eigenmode`.
+`scgsim.palace.source.inputs` reads the explicit materials of a plan's
+stack and checks each material's kind against the regions and layers that use
+it. The shared core calls it when a plan is bound. The simulations are defined
+in `simulation.electrostatic` and `simulation.eigenmode`.
 
 Palace's mesh behavior separates Gmsh geometric order from FEM order and keeps
 the sizing recipe, algorithm choice, quality threshold and result, and
@@ -446,42 +440,28 @@ only this bound request after entry. Its carrier retains the mutable native app
 handle together with detached preparation readback; solve and export consume the
 carrier and cannot reinterpret a caller spec or workspace.
 
-New preparation keeps the handoff and handoff-manifest schemas at V1 while both
-declare that the mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial
-V3 receipt records a declared `runtime-source.v30` preparation-time SCGSim module
-manifest and content digest for 401 sorted, unique paths. V30 starts from all
-current AEDT modules, both AEDT visualization loaders, and the non-AEDT paths retained from V29 except `scgsim/geometry/models/lumped.py`,
-then follows AST-resolved imports and package initializers.
-Against the frozen 285-path V29 roster it adds the AEDT SGB STEP import
-(`scgsim/aedt/preparation/sgb_model.py`, `scgsim/aedt/runtime/families/sgb_import.py`,
-`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/runtime/families/sgb_boundaries.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
-drops `scgsim/aedt/runtime/native/hfss_lumped.py`, `scgsim/aedt/specs/support.py`
-and `scgsim/geometry/models/lumped.py`, which issue #67 decision 8 removed. Before mutation, execution verifies the canonical manifest and binds the
-initial-receipt and prepared-manifest hashes. A canonical historical
-V1 `not_run` handoff with neither marker remains executable, but its resulting
-V3 receipt records preparation provenance as `legacy_v1_not_recorded`; it does
-not fabricate history.
+Preparation writes handoff and handoff-manifest records that declare the
+mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial V3 receipt
+records the preparation-time runtime source: the module bytes and content
+digest of the computed AEDT import closure. Before mutation, execution verifies
+the canonical manifest and binds the initial-receipt and prepared-manifest
+hashes.
 
-Every new completed V3 receipt records a separate declared `runtime-source.v30`
-execution-time module manifest and digest. Its measured module bytes and
-content digest are mandatory; it has no helper-hash map. Preparation and
-execution identities are not required to match: their separation records what
-prepared and what actually executed the handoff. Historical completed V1
-receipts remain subject to their old resolution rules, except that a V1 receipt
-combined with either later-version expectation marker is rejected as an
-inconsistent cohort. Historical completed V2 receipts retain their existing
-resolution rules; new V3-only native PEC checks do not reinterpret them. This
+Every new completed V3 receipt records a separate execution-time runtime
+source. Its measured module bytes and content digest are mandatory.
+Preparation and execution identities are not required to match: their
+separation records what prepared and what actually executed the handoff.
+SCGSim reads only the formats it writes: a receipt, or a runtime source inside
+it, of an earlier schema is refused before anything it binds is read; read it
+with the SCGSim commit that wrote it. This
 consistency contract is not source authenticity for an actor able
 to rewrite the entire unsigned artifact set.
 
-The [AEDT receipt/provenance contract](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance)
-is the unique authority for the exact current V30 401-path inventory and frozen
-historical reader evolution. V1–V12 retain their exact prior path assignments
-and reader interpretations; V13 binds its declared file set, not every
-transitive dependency. One pure, versioned initial-receipt codec owns historical
-V1/V2 and current V3 JSON member order, indentation and final newline; handoff
-writing and initial-receipt reconstruction use that codec. Historical receipt
-hashes are never compared with installed source, and preparation and execution
+The [AEDT current-formats contract](specs/aedt-runtime.qmd#current-formats)
+is the unique authority for the receipt and runtime-source rules. One pure
+initial-receipt codec owns the V3 JSON member order, indentation and final
+newline; handoff writing and initial-receipt reconstruction use that codec.
+Recorded receipt hashes are never compared with installed source, and preparation and execution
 identities remain independent evidence.
 
 Runtime-source provenance is computed inside the receipt-owned failure

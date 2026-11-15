@@ -23,12 +23,17 @@ import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
+from typing import NamedTuple
+
+from scgsim.refusal import refused
 
 from .driver import RoundOutcome, run_round
 from .findings import BadElement, MeshAudit
 from .job import Elevation, MeshJob
 from .mesher import MesherOptions
 from .sizing import LocalSize, SizeRequests, ladder_size
+
+_WHERE_REPAIR = "the RepairPolicy or Budgets of the meshing call"
 
 # Why the loop stopped.  Only "clean" is success; a report-only strategy also delivers on "report_only".
 STOP_CLEAN = "clean"
@@ -92,7 +97,13 @@ class Budgets:
             if not (
                 isinstance(value, (int, float)) and math.isfinite(value) and value > 0
             ):
-                raise ValueError(f"{name} must be a positive number, got {value!r}.")
+                raise ValueError(
+                    refused(
+                        f"{name}",
+                        f"must be a positive number, got {value!r}",
+                        _WHERE_REPAIR,
+                    )
+                )
 
     def time_budget(self, footprint_mm2: float | None) -> TimeBudget:
         """The limit and target for a model of this footprint: the base values times max(1, A / A_ref).
@@ -373,12 +384,23 @@ def wanted_size(element: BadElement, threshold: float, policy: RepairPolicy) -> 
     return policy.edge_fraction * element.edge_max * scale
 
 
+class Reach(NamedTuple):
+    """Where a refinement around a bad element is centred and how far it reaches, in micrometres.
+
+    ``holder`` is the index of the local size whose fine core holds the element, None when none does.
+    """
+
+    holder: int | None
+    centre: tuple[float, float, float]
+    radius: float
+
+
 def refinement_reach(
     element: BadElement,
     local: tuple[LocalSize, ...],
     threshold: float,
     policy: RepairPolicy,
-) -> tuple[int | None, tuple[float, float, float], float]:
+) -> Reach:
     """Where the loop refines a bad element and how far that refinement reaches.
 
     Returns the index of the local size whose fine core holds the element, with that core's centre and radius;
@@ -389,8 +411,8 @@ def refinement_reach(
     holder = _holding(list(local), claim)
     if holder is not None:
         ball = local[holder]
-        return holder, ball.centre, ball.core_radius
-    return None, claim.spot, claim.size if claim.radius is None else claim.radius
+        return Reach(holder, ball.centre, ball.core_radius)
+    return Reach(None, claim.spot, claim.size if claim.radius is None else claim.radius)
 
 
 def _holding(local: list[LocalSize], claim: _Claim) -> int | None:

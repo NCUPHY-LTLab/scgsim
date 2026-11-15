@@ -10,14 +10,14 @@ from pathlib import Path
 
 from sgb_scenes import pad_in_ground, random_layout, slab_model
 
-from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue
+from scgsim.geometry.exact.grid import Grid
+from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records.grid import Grid
 
 TESTS = Path(__file__).resolve().parent
 SCRIPT = (
     f"import sys; sys.path.insert(0, {str(TESTS)!r})\n"
-    "from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue\n"
+    "from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue\n"
     "from sgb_scenes import pad_in_ground, random_layout\n"
     "print(derive_from_catalogue(random_layout(40, 9, 'B')).identity_digest(),"
     " derive_from_catalogue(pad_in_ground('B')).identity_digest())\n"

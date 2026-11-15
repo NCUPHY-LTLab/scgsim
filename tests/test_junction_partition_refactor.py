@@ -10,21 +10,23 @@ import pytest
 from test_rectangular_junction_geometry import fixture
 
 from scgsim.geometry import with_rectangular_junctions
-from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
-from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
-from scgsim.geometry.planning.junction_partition import (
-    DEFAULT_FORMAT,
+from scgsim.geometry.grid.scope import UNGRIDDED
+from scgsim.geometry.junctions.contact import (
     JunctionContactRequest,
-    canonical_sha256,
-    derive_rectangular_junctions,
     junction_contact_inventory,
     junction_source_binding,
-    partition_junctions,
+)
+from scgsim.geometry.junctions.core import (
+    DEFAULT_FORMAT,
+    canonical_sha256,
     plain_record,
 )
-from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
-from scgsim.geometry.planning.junction_planning.model_state import JunctionModel
-from scgsim.geometry.primitives.grid import current_grid_context, geometry_grid_scope
+from scgsim.geometry.junctions.derivation import derive_rectangular_junctions
+from scgsim.geometry.junctions.local_frame import JunctionLocalFrame
+from scgsim.geometry.junctions.model_state import JunctionModel
+from scgsim.geometry.junctions.partition import partition_junctions
+from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
+from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
 
 
 def test_contact_request_keeps_source_binding_distinct_from_effective_fields() -> None:
@@ -53,7 +55,7 @@ def test_missing_physical_plan_fails_before_stored_binding_comparison() -> None:
     first = replace(first, metadata={**first.metadata, "physical_representation": {}})
     invalid = replace(source, entities=(first, *source.entities[1:]))
     with pytest.raises(
-        ValueError, match="junction lowered source requires its common physical plan"
+        ValueError, match="internal: a junction was lowered without its common physical"
     ):
         junction_contact_inventory(
             invalid,
@@ -81,7 +83,7 @@ def test_local_frame_keeps_complete_ring_order_and_deviation_ledger() -> None:
 def test_incidence_registry_retains_first_parameter_on_collapsed_event_error() -> None:
     """Reject distinct source parameters at one registered point without overwriting it."""
     source, _ = fixture()
-    registry = JunctionModel(source, {}, {}, DEFAULT_FORMAT)
+    registry = JunctionModel(source, {}, {}, DEFAULT_FORMAT, UNGRIDDED)
     registry.events = defaultdict(dict)
     registry.members = defaultdict(set)
     edge = ("source", 0, 0)
@@ -114,33 +116,23 @@ def test_independent_derivations_keep_the_complete_source_bound_payload() -> Non
     )
 
 
-def test_empty_partition_looks_up_and_restores_one_real_grid_scope() -> None:
-    """An empty selection still enters its single declared wrapper and restores the outer scope."""
-    source = GeometryBuildInput((), ())
-    outer = GeometryGridContext(0.25)
+def test_empty_partition_reads_the_declared_grid_once_and_returns_its_input() -> None:
+    """An empty selection still reads the input's declared grid, which refuses an input without one."""
+    grid = GeometryGridContext(0.25)
+    source = GeometryBuildInput((), (), metadata={"geometry_grid": grid.to_payload()})
     calls: list[str] = []
 
     def profile(frame: FrameType, event: str, argument: object) -> None:
         if event == "call" and frame.f_code is geometry_grid_context.__code__:
             calls.append("lookup")
-        elif (
-            event == "c_call"
-            and frame.f_code.co_name == "geometry_grid_scope"
-            and frame.f_globals.get("__name__") == "scgsim.geometry.primitives.grid"
-            and getattr(getattr(argument, "__self__", None), "name", None)
-            == "scgsim_geometry_grid"
-        ):
-            operation = getattr(argument, "__name__", None)
-            if operation in {"set", "reset"}:
-                calls.append(operation)
 
-    with geometry_grid_scope(outer):
-        previous = sys.getprofile()
-        try:
-            sys.setprofile(profile)
-            result = partition_junctions(source, (), 0.5)
-        finally:
-            sys.setprofile(previous)
-        assert result is source
-        assert current_grid_context() == outer
-    assert calls == ["lookup", "set", "reset"]
+    previous = sys.getprofile()
+    try:
+        sys.setprofile(profile)
+        result = partition_junctions(source, (), 0.5)
+    finally:
+        sys.setprofile(previous)
+    assert result is source
+    assert calls == ["lookup"]
+    with pytest.raises(ValueError, match="declares no geometry grid"):
+        partition_junctions(GeometryBuildInput((), ()), (), 0.5)

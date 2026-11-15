@@ -16,20 +16,13 @@ from sgb_extreme_cases import (
     FIXTURES,
     build_model,
     cases,
-    catalogue_of,
-    chip,
-    metal,
-    refinement,
 )
-from sgb_scenes import rect_um
 
+from scgsim.contracts.sgb_sidecar import read_sidecar, sidecar_schema
 from scgsim.geometry.sgb.build import emit_model
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
-from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.records.grid import exact_z
-from scgsim.geometry.sgb.sidecar.files import read_sidecar, sidecar_schema
-from scgsim.geometry.sgb.slivers.report import sliver_report
-from scgsim.geometry.sgb.verification.loaded import verify_xao
+from scgsim.geometry.sgb.output.verification.loaded import verify_xao
 
 
 def build(name: str, route: str):
@@ -168,26 +161,6 @@ def test_a_port_edge_on_a_metal_sidewall_keeps_its_group_in_both_routes(route):
     assert "PORT::p1" in build("port_edge_on_metal_sidewall", route).routed.groups
 
 
-def test_a_refinement_curve_ending_on_a_boundary_keeps_that_vertex_on_the_boundary_edge():
-    """Regression: the curve's end on a pad boundary is a vertex of the boundary edge, not a loose point."""
-    family = refinement("ref", (-10_000, 500), (0, 500), exact_z(0))
-    catalogue = catalogue_of(
-        "ref_touch",
-        "A",
-        [*chip(), metal("pad", "N", rect_um(-10, -5, 10, 5), "A")],
-        (family,),
-    )
-    topology = build_model_from_catalogue(catalogue, "A").topology
-    host = next(f for f in topology.faces.values() if f.refinement_edges)
-    boundary = {
-        v
-        for loop in host.loops
-        for eid, _ in loop
-        for v in (topology.edges[eid].v0, topology.edges[eid].v1)
-    }
-    assert topology.edges[host.refinement_edges[0]].v0 in boundary
-
-
 def test_stacked_slabs_touching_at_a_vertex_keep_their_levels_conformal():
     """Same-Net slabs meeting at one corner of a level and a vertex on a wall edge both validate."""
     for name in ("stacked_corner_touch", "stacked_vertex_on_wall_edge"):
@@ -220,7 +193,9 @@ def test_every_fixture_emits_files_gmsh_loads_and_a_sidecar_that_validates(
     )
     report = verify_xao(artifacts.xao, sidecar)
     assert report.ok, report.problems
-    assert sidecar["counts"]["faces"] == model.counts["faces"] - _unemitted_faces(model)
+    assert sidecar["summary"]["counts"]["faces"] == model.counts[
+        "faces"
+    ] - _unemitted_faces(model)
 
 
 def _unemitted_faces(model) -> int:
@@ -241,8 +216,8 @@ def _unemitted_faces(model) -> int:
 def test_every_fixture_passes_the_official_occt_checks(fixture, route, tmp_path):
     """BRepCheck, the Boolean argument analyzer (with self-interference) and ShapeAnalysis, against the plan."""
     pytest.importorskip("OCP")
-    from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
-    from scgsim.geometry.sgb.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
+    from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
+    from scgsim.geometry.sgb.output.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
 
     model = build_model(fixture, route)
     artifacts = emit_model(model, tmp_path)
@@ -259,7 +234,8 @@ def test_every_fixture_passes_the_official_occt_checks(fixture, route, tmp_path)
 )
 def test_snap_drift_stays_within_one_grid_unit_on_every_fixture(fixture, route):
     """Reopen trigger of decision D7: drift above 1 g on the fixture catalogue would revisit bounded-drift snap rounding."""
-    summary = sliver_report(build_model(fixture, route))["summary"]
+    model = build_model(fixture, route)
+    summary = sliver_report(model.labelled, model.topology, model.routed)["summary"]
     assert summary["max_snap_drift_grid"] <= 1.0, (
         f"{fixture.name} {route}: {summary['max_snap_drift_grid']} g"
     )

@@ -17,7 +17,7 @@ lang: zh-TW
 
 ```text
 prepare shared GeometryPlan snapshot
--> set_plan (or fresh standalone geometry / stack / envelope)
+-> set_plan
 -> add exact-net terminals and physical grounds
 -> configure Electrostatic
 -> mesh / config
@@ -34,16 +34,16 @@ prepare shared GeometryPlan snapshot
 | 階段 | 公開方法 | 預定責任 |
 |---|---|---|
 | 共用來源 | `set_plan` | 綁定不可變的共用來源快照。 |
-| 獨立幾何 | `set_geometry` | 將公開 Component 輸入綁定至 SGB 幾何路徑。 |
-| 堆疊輸入 | `set_stack` | 綁定 SGB 使用的層堆疊輸入。 |
-| 空氣盒 | `set_airbox` | 在幾何產生前宣告模擬域包絡。 |
 | 端子綁定 | `add_terminal` | 依確切 SGB Net 身分選取端子。 |
 | 物理 Ground 綁定 | `add_ground` | 依確切 SGB Net 身分選取 Palace Ground 的導體分量。 |
 | 問題控制 | `set_electrostatic` | 宣告 Electrostatic 專屬設定控制。 |
 | 輸出身分 | `set_output_dir` | 綁定網格／設定／交接輸出位置。 |
-| 表面膜 | `set_surface_epr` | 宣告表面膜及其內縮邊距；須在 `mesh()` 之前執行。 |
+| 路徑 | `set_route` | 從未呼叫時為 Route B；`set_route("A")` 使用 `thin_film` 近似設定，或傳入 `approximation_profile`。須在 `mesh()` 之前執行。 |
+| 表面膜 | `set_surface_epr` | 宣告表面膜及其內縮邊距；須在 `mesh()` 之前執行。沒有它時不計算 Surface EPR。 |
 | 網格控制 | `set_mesh(...)` | 選取尺寸配方、網格器選項、修復預算與品質門檻。 |
+| 來源／設定檢視 | `input_summary()` | 回傳獨立的 `mesh()` 建模輸入（計畫套用模擬的真空區域與所選 Route 之後）與設定，不進行檔案或原生 I/O。 |
 | 網格 | `mesh` | 以 SGB 建立幾何，檢查其中的細微結構，用 `scgsim.meshing` 產生網格，並把群組降階為 Palace 屬性。 |
+| 收斂 | `set_convergence` | 宣告決定自適應細化何時已收斂的準則；見[收斂宣告](#convergence-declaration)。 |
 | 設定 | `write_config` | 為已審閱網格身分寫入 Palace Electrostatic 設定。 |
 
 這些方法是公開 API。
@@ -51,6 +51,8 @@ prepare shared GeometryPlan snapshot
 相對於此分階段狀態，設定器具有原子性。Airbox、Surface EPR 與 Eigenmode 控制先驗證所有提供值，才變更任何欄位。因此驗證失敗會保留原設定，以及快取網格、已解析埠、設定檔及交接狀態。成功變更保留既有網格／設定失效邊界；這不改變 `mesh()` 或 `write_config()` 內部的操作失敗行為。
 
 ## Palace 網格控制 {#palace-mesh-controls}
+
+模型需要真空區域：計畫沒有宣告、模擬也沒有呼叫 `set_vacuum_region` 時（或在 `prepare()` 之前呼叫 `plan.set_vacuum_region(...)`），`mesh()` 會在寫出任何檔案之前拋出 `ValueError`。
 
 `mesh()` 以 SGB 建立幾何、用 `scgsim.meshing` 產生網格，再寫出 Palace 網格，因此網格控制就是該模組的控制。兩個 Palace 外觀介面都透過 `set_mesh(...)` 接受這些控制，預設值相同。省略的引數保留目前設定。實際改變任何設定的更新會使網格、設定檔及交接失效；無效的更新提案則保留原狀態。
 
@@ -126,25 +128,120 @@ SGB 寫出的 XAO（位於 `geometry/`）也可以交給其他工具產生網格
 
 執行資料夾包含 SGB 模型（`geometry/`，內有 XAO 與其 sidecar）、網格化報告（`mesh/`，有 JSON 與文字兩種）、`palace.msh`，以及網格清單（`metadata/`）。`palace.msh` 是 Gmsh MSH 2.2 ASCII 檔，即 Palace 讀取的格式。Palace 只根據 sidecar，把 SGB 的具名群組降階為求解器屬性：只有當同一個表面群組的面被不同的 Surface EPR 列或側邊積分時才會拆開，因此屬性會分割這些面，不會重複計算。電氣身分是 Net；Terminal 與 Ground 綁定使用 sidecar 中確切的 Net。
 
-網格化報告說明，minSICN 與低於門檻的四面體數量，是在升階之前的線性網格上量得，並記錄輸出網格的階數。若要量測儲存的求解器網格本身，請使用[網格品質讀取器](../mesh-quality.qmd)。
+網格化報告說明，minSICN 與低於門檻的四面體數量，是在升階之前的線性網格上量得，並記錄輸出網格的階數。其欄位列於[品質報告](../mesh-quality.qmd#quality-report)。
 
 ## 網格清單與獨立摘要 {#mesh-manifest-and-detached-summary}
 
 網格清單（`schema_version` 2）記錄路徑及其策略、sidecar 結構與模型身分摘要、Surface EPR 內縮請求及其產生的帶族與 SGB 略過的面、配方（名稱、版本與參數）、修復策略、網格器選項、預算與門檻、品質報告的路徑與 SHA-256，以及每個求解器屬性一筆、註明來源 SGB 群組的項目。它也記錄 Gmsh 版本、節點與元素類型、物理區域元素數量及邊長統計。高階網格的邊長會明確標為主角點弦長，以微米回報；它們不是曲邊弧長。
 
-兩個 Palace 外觀介面及已解析的 Palace 執行都提供 `mesh_summary()`。它回傳綁定網格與清單身分的獨立值。Palace 報告讀取相同摘要依據。Eigenmode 包含根據主角點四面體拓撲與設定 FEM 階數計算的 Nédélec 拓撲自由度估計。這不是實際求解器自由度數量；變更 FEM 階數會更新估計，不重新產生網格。Electrostatic 的 H1 估計不可用。[網格品質讀取器](../mesh-quality.qmd) 不計算曲面元素品質。
+兩個 Palace 外觀介面及已解析的 Palace 執行都提供 `mesh_summary()`。它回傳綁定網格與清單身分的獨立值。Palace 報告讀取相同摘要依據。Eigenmode 包含根據主角點四面體拓撲與設定 FEM 階數計算的 Nédélec 拓撲自由度估計。這不是實際求解器自由度數量；變更 FEM 階數會更新估計，不重新產生網格。Electrostatic 的 H1 估計不可用。SCGSim 沒有任何紀錄量測彎曲高階元素的品質。
 
 ## Surface EPR 邊距 {#surface-epr-margins}
 
-Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_epr` 要放在 `mesh()` 之前。邊距的鍵、面種類及產生的列，由[本徵模態契約](palace-eigenmode.qmd#surface-epr-margins)負責；Electrostatic 接受相同的規格。再次呼叫 `set_surface_epr` 會使網格、設定檔及交接失效。
+Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_epr` 要放在 `mesh()` 之前。邊距的鍵、面種類及產生的列，由[本徵模態契約](palace-eigenmode.qmd#surface-epr-margins)負責；Electrostatic 接受相同的規格。Surface EPR 在此與 Eigenmode 一樣是選用的：沒有這個呼叫時，`mesh()` 不切任何帶，設定檔也沒有 Surface-EPR 列。再次呼叫 `set_surface_epr`（包括 `None`）會使網格、設定檔及交接失效。
 
 ## 來源與幾何權威 {#source-and-geometry-authority}
 
 來源至建構的說明請見 [SGB 幾何概念](../concepts/geometry.qmd#source-stage)。下列契約定義支援的準備路徑。
 
-共用的來源優先課程建議使用 `set_plan(snapshot)`。獨立的 `set_geometry(component)`／`set_stack(stack)`／明確包絡 API，仍支援新的未綁定模擬；請將此路徑與計畫快照分開。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Route A／B 語意。目前面向來源的幾何權威為 `scgsim.geometry`。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立幾何，並用 `scgsim.meshing` 產生網格。外部 SGB 與 gsim 僅屬衍生歷史。
+模擬由 `set_plan(snapshot)` 取得來源，即一個已準備的 `GeometryPlan`。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Route A／B 語意。目前面向來源的幾何權威為 `scgsim.geometry`。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立幾何，並用 `scgsim.meshing` 產生網格。外部 SGB 與 gsim 僅屬衍生歷史。
 
 [Electrostatic 課程](../course/palace-electrostatic.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。共用私有狀態的失效處理／持久化實作位於[架構](../architecture.qmd#palace-preparation-lifecycle)。
+
+## 收斂宣告 {#convergence-declaration}
+
+`set_convergence(*criteria, minimum_converged_passes=1)` 宣告自適應執行何時算已收斂，兩個 Palace 外觀介面都接受。一條準則是一個量加一個門檻；門檻沒有預設值：
+
+```python
+from scgsim.palace import Capacitance, ErrorIndicator, SurfaceEpr
+
+sim.set_numerical(order=2, amr_max_passes=12)
+sim.set_convergence(
+    Capacitance.diagonal().within(percent=0.1),
+    Capacitance.element("island", "resonator").within(percent=1),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(percent=2),
+    ErrorIndicator().below(1e-2),
+    minimum_converged_passes=2,
+)
+```
+
+上面的數字只示範寫法；門檻由使用者決定。
+
+| 量 | 適用於 | 每個 pass 讀取 |
+|---|---|---|
+| `Capacitance.element(a, b)`、`.diagonal()`、`.sub_diagonal(offset=1)`、`.off_diagonal()`、`.matrix()`、`.elements([(a, b), ...])` | `ElectrostaticSim` | `terminal-C.csv` 中 Maxwell 矩陣的元素 `C[a][b]`，以端子名稱指定。`sub_diagonal` 依端子加入的順序，配對相隔 `offset` 的端子；`off_diagonal` 與 `matrix` 對每對不同端子只取一次。 |
+| `ModeFrequency(modes=None)` | `EigenmodeSim` | `eig.csv` 中每個所選模態的 `Re{f}`，單位 GHz；None 選取所有計算的模態。 |
+| `SurfaceEpr(interface_kind, margin_um=None, modes=None, terminals=None)` | 兩者 | 一種介面類別的參與率：其全表面列的總和，或其在 `margin_um` 的邊距列總和。每個模態（`modes=`，Eigenmode）或每個激發（`terminals=`，Electrostatic）一個數；None 選取全部。`SurfaceEpr.each("MA", "MS", "SA")` 以同一個門檻為每種類別各宣告一條準則。 |
+| `ErrorIndicator()` | 兩者 | Palace 寫入 `error-indicators.csv` 的 `Norm`。 |
+
+`within(percent=...)` 限制與前一個 pass 相比的變化，以該值的百分比表示：$100\,|q_k - q_{k-1}| / |q_k|$。這和 AEDT 那一側表示差值的方式相同：Q3D 矩陣的 `Delta %`、HFSS Eigenmode 的 `Max Delta Freq. %`、HFSS 表達式的 `Max Percent Delta`；報告沿用這些名稱。$q_k$ 為零時，若 $q_{k-1}$ 也為零則變化為零，否則百分比沒有定義，該準則不成立。絕對形式以量所儲存的單位命名：電容用 `absolute_f`（法拉），頻率用 `absolute_ghz`，參與率沒有單位，用 `absolute`。兩者恰好給一個。`ErrorIndicator().below(value)` 限制的是值本身：指標至多為 `value`。
+
+一個 pass 是 Palace 的一次求解：pass 1 求解輸入網格，pass $k$ 在 $k-1$ 次細化之後。變化準則比較 pass $k$ 與 pass $k-1$，所以在 pass 1 不可能成立。有多個數的量，在每個數都成立時才成立；當每條準則在以 $k$ 結尾的連續 `minimum_converged_passes` 個 pass 都成立，執行就在 pass $k$ 收斂。同一類別的全表面列與邊距列從不相加：邊距列是其全表面列的一部分。
+
+::: {.callout-note title="變化準則說明了什麼"}
+變化準則說的是一個量在兩個 pass 之間變動很小，不是它離極限還有多遠。在目前量測過的佈局上，全表面參與率每個 pass 都在成長，沒有任何變化準則在它上面成立，這樣的執行會跑到 pass 上限。邊距以外的參與率（`margin_um=`）確實會穩定下來，但不是每個 pass 都平穩，這正是 `minimum_converged_passes` 的用途。量測紀錄在 [issue 248](https://github.com/NCUPHY-LTLab/scgsim/issues/248#issuecomment-6873586635)。
+:::
+
+再次呼叫會取代整個宣告；`set_convergence(None)` 移除宣告，沒有任何準則的 `set_convergence()` 會被拒絕。此呼叫與 `set_numerical` 一樣保留網格、捨棄設定檔與交接。
+
+### 檢查 {#checks}
+
+`set_convergence` 會拒絕下列情況，並指出要修改的呼叫：
+
+- 模擬不接受的量（`EigenmodeSim` 上的 `Capacitance`、`ElectrostaticSim` 上的 `ModeFrequency`、Electrostatic 上的 `modes=` 或 Eigenmode 上的 `terminals=`），並列出該類別接受的量；
+- 不是正的有限數的門檻，或同時給了兩個門檻，或一個都沒給；
+- 不是至少為 1 的整數的 `minimum_converged_passes`。
+
+`write_config()` 在寫出任何檔案之前會拒絕：
+
+- 模擬沒有的端子名稱，或選不到任何元素的選取；
+- 超過 `num_modes` 的模態；
+- 沒有要求 Surface EPR（`set_surface_epr`）的介面類別，或被 `set_epr_request(surface_interfaces=...)` 排除的類別；
+- 規格沒有宣告的 `margin_um`，並列出已宣告的邊距；
+- 太小、使宣告根本不可能成立的 `amr_max_passes`：`amr_max_passes` 次細化會求解 `amr_max_passes + 1` 次，而宣告需要 `minimum_converged_passes` 次求解，有變化準則時再多一次；
+- 明確給定的 `amr_tolerance`，並寫出應改為宣告的 `ErrorIndicator().below(...)` 準則；
+- `save_adapt_iterations=False`，因為每個 pass 都要讀取。
+
+### 寫出什麼，以及與 AMR 控制的關係 {#what-is-written-and-how-it-relates-to-the-amr-controls}
+
+有宣告時，宣告的準則取代 Palace 自己的容許誤差。`write_config()` 把 `Model.Refinement.Tol` 寫成最小的正規雙精度浮點數，使得只有 `amr_max_passes` 會結束執行，並寫出 `SaveAdaptIterations: true`，讓 Palace 把每個 pass 保留在 `results/palace/iteration<k>`。它把檢查的計畫寫到 `metadata/palace_convergence_plan.json`：每條準則在報告中顯示的標籤；每個數的結果表、列、欄位與欄位的組合方式（參與率是其各列欄位的總和）；檢定、門檻，以及 `minimum_converged_passes`。一個量由哪些欄位組成，只在這裡、依同一份設定寫出的索引對照表條目決定一次。`prepare_handoff()` 把計畫與其他輸入一起封存，因此回傳的執行若計畫已改變會被拒絕。沒有宣告時，以上都不會寫出，設定檔只由 AMR 控制決定。
+
+### 收斂時停止 {#convergence-stop}
+
+有宣告時，宣告的準則一旦收斂，Palace 就會被停止：在準則成立的那個 pass 完成後一到兩秒，所以該 pass 之後的求解不會執行。執行指令碼透過 `prepare_handoff()` 複製到執行資料夾的收斂執行器 `metadata/run_palace_until_converged.py` 啟動 Palace；它只需要 Python 標準函式庫（[執行設定檔](../execution-profiles.qmd#convergence-runner)）。執行器：
+
+1. 在它自己的 session 中啟動指令碼原本會執行的求解指令；Palace 的輸出照舊進入日誌；
+2. 每秒查看一次 `results/palace`。某個 pass 的 `iteration<k>/` 資料夾在兩次查看之間沒有變化時，才算這個 pass；每多一個 pass，執行器就執行與讀取結果時相同的檢查；
+3. 判定為已收斂時，先寫出 `metadata/palace_convergence_decision.json`，再對求解器的 session 送出 SIGTERM，並等到它全部結束：指令本身、它啟動的啟動器，以及由啟動器結束的各個 rank。60 秒後仍有任何一個在執行，就送出 SIGKILL；
+4. 求解器結束後（停止之後，或在 `amr_max_passes` 自行結束），再寫一次決定紀錄，內容是 `results/palace` 當時的 pass 與求解器的結束碼。
+
+執行器不會留下無人看管的求解器。被要求結束時（SIGTERM、SIGINT 或 SIGHUP），它先結束求解器並記下原因。來不及這麼做就被結束時（執行器本身或指令碼的整個行程群組收到 SIGKILL），求解器交給它的守護行程：執行器與求解器一同啟動、位於自己 session 中的行程，一旦執行器不在，就以同樣的方式結束求解器的 session。
+
+Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化網格，因此停止發生在這段細化期間，或下一次求解開始時；已完成 pass 的檔案都不會改變。停止的要求在資料夾出現後一到兩秒送出（執行器每秒查看一次，第二次查看時才計入該 pass），Palace 在要求之後約一秒內結束。回執要到這時才寫出，所以不會有求解器的行程在回執之後寫入檔案。
+
+耗時短於這一到兩秒的 pass 仍然會執行。執行器會把它和前一個 pass 一起計入：判定指出執行在哪個 pass 收斂、其後又讀到幾個 pass，Palace 在最後一個之後被停止，結果就是最後那個 pass。所有 pass 都這麼短的執行，在執行器查看之前就已結束；它照 Palace 結束的樣子算完成。停止省下的是每一個比這更長的 pass，時間都花在那裡：每個 pass 的元素數是前一個的二到三倍。
+
+回執記載求解器如何結束（`ending`），並保留求解器自己的結束碼：
+
+| `ending` | 情況 | 回執 |
+|---|---|---|
+| `solver_ended` | Palace 結束時 SCGSim 沒有停止它 | 所有結束碼為 0 時 `completed`，否則 `failed` |
+| `stopped_at_convergence` | 執行器在判定已收斂的 pass 之後停止它，且它在等待時間內結束 | `completed`，結束碼是停止造成的那一個：Palace 的 `palace` 包裝指令碼被訊號結束時為 143，直接啟動 `mpirun` 時為 1，由 `srun` 啟動時為 137（`srun` 會結束它的 step） |
+| `stop_escalated` | 它沒有因 SIGTERM 結束，被強制終止 | `failed` |
+| `runner_terminated` | 執行器自己被要求結束，並因此結束了 Palace。若 Palace 已在收斂停止後的收尾中才被要求結束，停止照樣成立 | `failed` |
+| `not_recorded` | 執行器沒有留下完整的決定紀錄 | `failed` |
+
+在收斂時停止的執行，其結果是最後一個 pass：讀取結果時從 `iteration<k>/` 取得表格與成本，因為頂層放的是指向它的連結，或正在進行的求解。Palace 也可能剛好在執行器做出決定的那一刻完成最後一次求解。如果它那時已經自行結束（結束碼 0，最後一次求解在頂層），就沒有任何東西被停止，執行記為自行結束。如果停止仍然送到它，執行就是被停止的，結果是頂層的那最後一次求解。
+
+讀取結果時會從回傳的檔案重新計算檢查；下列情況會拒絕這個執行，並說出不一致之處：
+
+- pass 或判定與決定紀錄不同，或決定紀錄不是回執所綁定的那一份；
+- 決定紀錄與回執記載的結束方式不同，或求解器的結束碼不同；
+- 頂層是連結或正在進行的求解，回執卻說 Palace 自行結束；
+- 沒有計畫卻有決定紀錄，或有計畫卻沒有決定紀錄；
+- 結果的某張表格（在頂層或在 `iteration<k>/`）不在回執記載的輸出之中。
+
+`ResolvedPalaceResult.convergence` 與[可信度報告](../report-model.qmd#declared-convergence)會說明執行在哪個 pass 收斂、Palace 在哪裡停止，或在 pass 上限時哪條準則仍不成立、差多少。`ResolvedPalaceResult.solver_end`（一個 `SolverEnd`）保存回執的 `ending`、執行器在哪個 pass 之後停止 Palace，以及上限允許的 pass 數（`amr_max_passes + 1`）。
 
 ## 靜電預設值 {#candidate-electrostatic-defaults}
 
@@ -157,6 +254,8 @@ Surface EPR 的內縮邊距會以帶的形式切進幾何，所以 `set_surface_
 | `exterior_boundary_policy` | `"none"` |
 | `Model.Refinement.Nonconformal` | `false`，除非 Notebook 設定 `amr_nonconformal=True` |
 | `Model.Refinement.SaveAdaptMesh` | 省略，除非 Notebook 設定 `save_adapt_mesh=True` 或 `False` |
+
+`sim.numerical` 以 `NumericalControls` 保存這些控制：以欄位讀取單一控制（`sim.numerical.amr_nonconformal`），以 `sim.numerical.to_payload()` 讀取整筆紀錄，也就是 `metadata/palace_numerical_controls.json` 保存的字典。`sim.surface_epr_specs` 是 `SurfaceEprSpecs`（`sim.surface_epr_specs.by_type["MA"]`，或以 `to_payload()` 取得正規化後的對照）。交給 `ElectrostaticSim(numerical=...)` 的 `NumericalControls` 中未設定的 AMR 控制，會如 `set_numerical(...)` 一樣取得上述 Electrostatic 預設值（0 次迭代、共形、容許誤差 0.01）。有[收斂宣告](#convergence-declaration)時，預設的容許誤差不使用，明確給定的則會被拒絕。
 
 Palace 在省略 `Nonconformal` 鍵時預設為 `true`。SCGSim 一律寫出此鍵，預設為 `false`（共形四面體 AMR）。Notebook 可透過 `set_numerical(amr_nonconformal=True)` 啟用非共形 AMR。
 

@@ -1,4 +1,4 @@
-"""Portable AEDT handoff writing and canonical input cohorts."""
+"""Write one portable AEDT handoff (``prepare_handoff``) without opening AEDT."""
 
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ from scgsim.aedt.preparation.gds import GdsPreflight, gds_preflight, write_impor
 from scgsim.aedt.preparation.handoff_files import (
     handoff_member,
     utc_now,
-    write_analysis_script,
     write_script,
 )
 from scgsim.aedt.preparation.planar import validate_geometry_workers
@@ -30,7 +29,7 @@ from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
     initial_receipt_payload,
-    prepared_runtime_source,
+    record_runtime_source,
 )
 from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
@@ -155,7 +154,7 @@ class _PortableHandoff:
         self.archive_path = self.run_dir / "aedt_handoff.tar.gz"
         self.prepared_at = utc_now()
         self.started = time.perf_counter()
-        self.prepared_source = prepared_runtime_source()
+        self.prepared_source = record_runtime_source("prepared")
 
     def _write_spec(self) -> None:
         write_script(self.script_path)
@@ -413,7 +412,7 @@ class _SavedAnalysisHandoff:
         self.archive_path = self.run_dir / "aedt_handoff.tar.gz"
         self.prepared_at = utc_now()
         self.started = time.perf_counter()
-        self.prepared_source = prepared_runtime_source()
+        self.prepared_source = record_runtime_source("prepared")
         self.payload = self.spec.to_payload()
         self.materials = detached(self.geometry.source)["materials"]
         self.vacuum_ids = sorted(
@@ -427,7 +426,7 @@ class _SavedAnalysisHandoff:
             )
 
     def _write_metadata(self) -> None:
-        write_analysis_script(self.script_path)
+        write_script(self.script_path, analyze_epr=True)
         write_json(self.spec_path, self.payload)
         self.files = {
             "spec": self.spec_path.name,

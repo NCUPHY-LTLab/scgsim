@@ -9,6 +9,7 @@ follow the grid audits are internal invariants: the located audit refuses first.
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 
 import gdstk
@@ -19,23 +20,17 @@ from test_rectangular_junction_geometry import fixture as junction_fixture
 from test_sgb_prisms import with_boundaries
 from test_simulation_drc import check, two_pads
 
+from scgsim.documentation import page_url
+from scgsim.geometry.exact.errors import UnsupportedCurveError
+from scgsim.geometry.grid.booleans import split_gdstk_cutline_loop
+from scgsim.geometry.grid.grid_regions import PolygonRegion
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import BoundaryCurveChainSpec, SourceCurveSpec
-from scgsim.geometry.primitives.grid import (
-    PolygonRegion,
-    geometry_grid_scope,
-    named_source,
-    polygon_world_frame,
-    split_gdstk_cutline_loop,
-)
-from scgsim.geometry.sgb.errors import (
-    ContactError,
-    NonManifoldError,
-    OverlapError,
-    UnsupportedCurveError,
-)
+from scgsim.geometry.sgb.errors import ContactError, NonManifoldError, OverlapError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
-from scgsim.geometry.source.grid import apply_geometry_grid
-from scgsim.geometry.source.ground import derived_ground_polygons
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
+from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
+from scgsim.geometry.source.recipes import audited_declared_source
 from scgsim.palace import EigenmodeSim
 
 # Pad outlines inside the 20 um square of ``two_pads``.
@@ -121,18 +116,13 @@ def test_a_ground_include_refusal_names_the_include_layer():
             "include_selector_points_um": ((5.0, 15.0),),
         },
     )
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
-        derived_ground_polygons(
+    with pytest.raises(ValueError) as error:
+        audited_declared_source(
+            derived_ground_polygons,
+            GridScope(GRID),
             ground,
             polygons_by_layer={(3, 0): (gdstk.Polygon(HOLE_TOUCHING_THE_OUTLINE),)},
-            cell_bounds_um={
-                "x_min_um": 0,
-                "x_max_um": 20,
-                "y_min_um": 0,
-                "y_max_um": 20,
-            },
-            domain_bounds_by_semantic_id={},
-            plane_polygons=(gdstk.rectangle((0, 0), (20, 20)),),
+            plane=DrawnPlane((gdstk.rectangle((0, 0), (20, 20)),)),
         )
     message = str(error.value)
     assert message.startswith(
@@ -151,19 +141,13 @@ def test_a_ground_plane_refusal_names_the_plane_layer():
         net_id="Ground",
         geometry={"mask_layer": (1, 0)},
     )
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
-        derived_ground_polygons(
+    with pytest.raises(ValueError) as error:
+        audited_declared_source(
+            derived_ground_polygons,
+            GridScope(GRID),
             ground,
             polygons_by_layer={(1, 0): (gdstk.rectangle((2, 15), (4, 17)),)},
-            cell_bounds_um={
-                "x_min_um": 0,
-                "x_max_um": 20,
-                "y_min_um": 0,
-                "y_max_um": 20,
-            },
-            domain_bounds_by_semantic_id={},
-            plane_polygons=(gdstk.Polygon(HOLE_TOUCHING_THE_OUTLINE),),
-            plane_layer=(2, 0),
+            plane=DrawnPlane((gdstk.Polygon(HOLE_TOUCHING_THE_OUTLINE),), (2, 0)),
         )
     message = str(error.value)
     assert message.startswith(
@@ -179,13 +163,9 @@ PLACED = (1, 0, 0, 1, 100, 50)
 
 def walk_refusal(walk):
     """The refusal of one drawn boundary walk of ``chip/pad`` on 1/0, read in the placed frame."""
-    with (
-        geometry_grid_scope(GRID),
-        polygon_world_frame(PLACED),
-        named_source("chip/pad", "1/0"),
-        pytest.raises(ValueError) as error,
-    ):
-        split_gdstk_cutline_loop(walk)
+    scope = GridScope(GRID).placed(PLACED).naming("chip/pad", "1/0")
+    with pytest.raises(ValueError) as error:
+        split_gdstk_cutline_loop(scope, walk)
     return str(error.value)
 
 
@@ -272,7 +252,17 @@ def test_conductors_of_one_net_meeting_at_a_corner_are_a_located_pinch(monkeypat
     message = str(error.value)
     assert message.startswith("non-manifold pinch:")
     assert "chip/pad_0000 on layer metal" in message
-    assert "Fix the layout" in message
+    # The corner is inside the planar extent: a pinch between two conductors, not one at the vacuum's edge.
+    assert "pinched between conductors" in message
+    assert message.endswith(
+        "Fix the layout: give them a shared edge or separate them. See "
+        + page_url("docs/known-geometry-problems", "pinch-inside-the-layout")
+    )
+    assert re.search(
+        r" See https://ncuphy-ltlab\.github\.io/scgsim/v\d+\.\d+\.\d+(-dev)?/"
+        r"docs/known-geometry-problems\.html#pinch-inside-the-layout$",
+        message,
+    )
     (place,) = places(message)
     assert on(place, point(20, 0))
 
@@ -302,7 +292,7 @@ def test_a_lumped_port_on_one_conductor_is_located_on_its_layer(monkeypatch):
         check(EigenmodeSim, port_on_the_pad_only(monkeypatch))
     message = str(error.value)
     assert message.startswith(
-        "lumped port 'chip/P1' must land on two conductors to be made a rectangle; "
+        "lumped port 'chip/P1': must land on two conductors to be made a rectangle; "
         "it lands on 1: ['chip/pad_0000']; the sheet is drawn on layer 9/0"
     )
     assert "Fix the layout or the port declaration" in message

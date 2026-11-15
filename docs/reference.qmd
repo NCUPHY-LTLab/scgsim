@@ -26,8 +26,8 @@ choices enter a selected case; the [Driven Modal](course/aedt-driven-modal.qmd) 
 
 ## Mesh and adaptation {#mesh-adaptation}
 
-The [mesh diagnostic contract](mesh-quality.qmd#input-and-ownership) defines
-what the stored-mesh reader measures. The [prepared-backend tutorial](course/solver-observations.qmd)
+The [mesh quality contract](mesh-quality.qmd#audit) defines
+what `mesh()` audits and records about each mesh. The [prepared-backend tutorial](course/solver-observations.qmd)
 shows where to inspect the mesh and native preparation before execution.
 
 ## Execution and handoff {#execution-handoff}
@@ -41,7 +41,7 @@ for portable handoffs and caller-controlled solver runs, then follow the
 The [report contract](report-model.qmd#common-envelope) describes result
 identity, availability, and presentation. The
 [returned-results tutorial](course/returned-results.qmd#interpret-for-scq-use)
-shows how to read a completed package for a selected use.
+shows how to read a completed run folder for a selected use.
 
 ## Saved fields and offline loss {#saved-fields-offline-loss}
 

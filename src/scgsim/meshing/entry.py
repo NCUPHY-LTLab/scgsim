@@ -16,10 +16,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from scgsim.refusal import refused
+
 from .driver import ProbeTimeLimitError, measure_bounding_box
 from .errors import MeshRepairError
 from .features import SidecarFeatures, load_features, read_features
-from .fine_structure import check_fine_structure
+from .fine_structure import FineStructureReport, check_fine_structure
 from .mesher import MesherOptions
 from .recipes import FeatureRecipe, GmshDefaultRecipe, SizingRecipe
 from .repair import (
@@ -36,10 +38,13 @@ from .report import (
     QualityReport,
     RunSettings,
     build_report,
+    meshing_stage_lines,
     place_lines,
     write_report,
 )
 from .stop_places import StopPlace, stop_places
+
+_WHERE_MESH_SGB = "the call to mesh_sgb"
 
 _WORK_DIR_PREFIX = ".meshing-work-"
 
@@ -71,7 +76,7 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
 ) -> MeshResult:
     """Mesh the SGB model in ``xao`` so that no tetrahedron is below ``threshold``.
 
-    ``sidecar`` is the ``scgsim.sgb.sidecar.v2`` file next to the XAO, or its decoded content.  The mesh
+    ``sidecar`` is the ``scgsim.sgb.sidecar.v5`` file next to the XAO, or its decoded content.  The mesh
     ``<xao stem>.msh`` and the report ``<xao stem>.quality.json`` / ``.quality.txt`` are written to
     ``output_dir``.  ``threshold`` has no default: it is the element-quality bound the caller requires.
 
@@ -103,12 +108,19 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     without an accepted mesh (rounds spent, a mesh over the tetrahedron budget even when clean, the time
     limit reached, a bad count that stopped falling, a clean mesh whose order could not be raised, or a
     mesher crash).  The report is written then too, and the last mesh is kept as ``<stem>.rejected.msh``
-    when a round made one.  The report and the error message then say where the remaining bad elements are,
-    in micrometres, and which fine edges and faces the meshing-stage check (:func:`check_fine_structure`)
-    records at those places, with their owner and fix.
+    when a round made one.  The report and the error message then say what the meshing-stage check
+    (:func:`check_fine_structure`) finds anywhere in the model, by class with its smallest finding, and where
+    the remaining bad elements are, in micrometres, with the findings at those places, their owner and fix.
+    The report lists every finding (``meshing_stage``).
     """
     if not math.isfinite(threshold):
-        raise ValueError(f"threshold must be a finite number, got {threshold!r}.")
+        raise ValueError(
+            refused(
+                "threshold",
+                f"must be a finite number, got {threshold!r}",
+                _WHERE_MESH_SGB,
+            )
+        )
     started = time.perf_counter()
     xao = Path(xao)
     files = _Files(Path(output_dir), xao.stem)
@@ -143,11 +155,13 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
                     enforce_threshold=not isinstance(recipe, GmshDefaultRecipe),
                 )
             )
+        meshing_stage = _meshing_stage_of_stop(outcome, sidecar_path)
         report = build_report(
             outcome,
             RunSettings(threshold, recipe, repair, mesher, budgets, time_budget),
             time.perf_counter() - started,
-            _places_of_stop(outcome, sidecar_path, threshold, repair),
+            _places_of_stop(outcome, meshing_stage, threshold, repair),
+            meshing_stage,
         )
         write_report(report, files.report, files.summary)
         return _deliver(outcome, report, files)
@@ -190,22 +204,33 @@ def _resolve_sidecar(
     return Path(sidecar), load_features(Path(sidecar))
 
 
+def _meshing_stage_of_stop(
+    outcome: RepairOutcome, sidecar: Path
+) -> FineStructureReport | None:
+    """The meshing-stage check of the model of a stop; None for a delivered mesh, which needs no one to act."""
+    if outcome.stop in DELIVERED_STOPS:
+        return None
+    return check_fine_structure(sidecar)
+
+
 def _places_of_stop(
-    outcome: RepairOutcome, sidecar: Path, threshold: float, policy: RepairPolicy
+    outcome: RepairOutcome,
+    meshing_stage: FineStructureReport | None,
+    threshold: float,
+    policy: RepairPolicy,
 ) -> list[StopPlace]:
-    """Where the bad elements of a stop are, with the fine structure the sidecar records there.
+    """Where the bad elements of a stop are, with the meshing-stage findings there.
 
     None for a delivered mesh: the places say who must act on a refused one.
     """
-    if outcome.stop in DELIVERED_STOPS or outcome.last_audit is None:
+    if meshing_stage is None or outcome.last_audit is None:
         return []
-    fine = check_fine_structure(sidecar)
     return stop_places(
         outcome.last_audit.bad,
         outcome.local_sizes,
         threshold,
         policy,
-        fine.findings,
+        meshing_stage.findings,
     )
 
 
@@ -222,9 +247,14 @@ def _deliver(
         files.rejected.unlink(missing_ok=True)
         if outcome.last_mesh is not None:
             shutil.move(outcome.last_mesh, files.rejected)
-        where = "\n".join(place_lines(report))
+        where = "\n".join([*meshing_stage_lines(report), *place_lines(report)])
         raise MeshRepairError(
-            f"meshing stopped without a clean mesh ({outcome.stop}); see {files.report}."
+            refused(
+                f"the mesh {files.mesh.name}",
+                f"meshing stopped without a clean mesh ({outcome.stop}); see {files.report}",
+                "the meshing controls (recipe, repair policy, budgets), or the fine structure the "
+                "report finds",
+            )
             + (f"\n{where}" if where else ""),
             dict(report),
         )

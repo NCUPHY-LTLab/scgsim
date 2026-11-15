@@ -15,7 +15,7 @@ from scgsim.aedt.preparation.planar_source import (
 from scgsim.aedt.runtime.native.planar_bodies import native_conductor_geometry
 from scgsim.aedt.runtime.native.saved_geometry import read_saved_hfss_design
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
+from scgsim.geometry.planning.spatial import geometry_ref_surface_z_um
 
 
 def bind_native_surface_references(
@@ -268,7 +268,7 @@ class _SurfaceReferences:
 def verify_saved_native_surface_references(
     project_path, design_name, references
 ) -> list[dict[str, Any]]:
-    """Bind reference membership to the existing pre-Analyze native save.
+    """Bind reference membership to the native save made before Analyze.
 
     Created PyAEDT List properties hold the authored assignment. Only the saved
     GeometryEntityListOperation supplies native serialization membership here;

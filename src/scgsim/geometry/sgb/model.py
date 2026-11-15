@@ -5,9 +5,11 @@ the labelled arrangements, the assembled topology, the route's group plan and th
 validation report.  Validation always runs and a failed invariant raises
 :class:`ValidationError`: no model that failed an invariant is ever returned.
 
-Emission (S10), the sidecar and the cut-family generators build on this result in later
-sub-stages.  ``tiles`` and ``workers`` configure the per-tile runtime; the model is
-identical for every value (property-tested).
+The steps, in order: the prism catalogue (S2); the route and entity-name checks; the cut
+families of the inset requests (S3, measured on the physical pre-pass, S4 and S5 of the
+physical prisms alone); the labelled arrangements with those families (S4 and S5); the
+topology (S6); the route plan (S7 and S8); the validation (S9).  ``build`` writes the files
+of the result (S10).
 """
 
 from __future__ import annotations
@@ -18,25 +20,33 @@ from fractions import Fraction
 
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb import identity
-from scgsim.geometry.sgb.assembly.builder import assemble_topology
-from scgsim.geometry.sgb.assembly.records import Topology
-from scgsim.geometry.sgb.cutfamilies.generate import build_cut_families
-from scgsim.geometry.sgb.cutfamilies.inset_plan import InsetPlan
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, RefinementRequest
-from scgsim.geometry.sgb.derivation.labelled import (
+from scgsim.geometry.sgb.arrangement.derivation.labelled import (
     LabelledArrangements,
-    derive_with_runtime,
-    model_bbox,
+    derive_arrangements,
+    derive_physical_arrangements,
 )
-from scgsim.geometry.sgb.parallel import Runtime
+from scgsim.geometry.sgb.bands.generate import (
+    CutFamilies,
+    build_cut_families,
+    check_request_ids,
+)
+from scgsim.geometry.sgb.bands.inset_plan import InsetPlan, plan_insets
+from scgsim.geometry.sgb.bands.requests import InsetRequest
+from scgsim.geometry.sgb.checks.validation.report import ValidationReport
+from scgsim.geometry.sgb.checks.validation.validate import validate_model
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
+from scgsim.geometry.sgb.records import identity
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
-from scgsim.geometry.sgb.routes.groups import RoutedModel, apply_route
-from scgsim.geometry.sgb.routes.naming import check_entity_names
-from scgsim.geometry.sgb.routes.policy import RoutePolicy, check_route, route_policy
-from scgsim.geometry.sgb.validation.report import ValidationReport
-from scgsim.geometry.sgb.validation.validate import validate_model
+from scgsim.geometry.sgb.stopwatch import Stopwatch
+from scgsim.geometry.sgb.topology.assembly.builder import assemble_topology
+from scgsim.geometry.sgb.topology.assembly.records import Topology
+from scgsim.geometry.sgb.topology.routes.groups import RoutedModel, apply_route
+from scgsim.geometry.sgb.topology.routes.naming import check_entity_names
+from scgsim.geometry.sgb.topology.routes.policy import (
+    RoutePolicy,
+    check_route,
+    route_policy,
+)
 
 LENGTH_UNIT = "um"
 """The unit of the model grid and of every length a hand-off carries."""
@@ -50,21 +60,12 @@ class ConformalModel:
     topology: Topology
     routed: RoutedModel
     report: ValidationReport
-    timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds
-    stage_kind: dict[str, str] = field(
-        default_factory=dict
-    )  # stage -> "serial" | "parallel"
-    amdahl: dict[str, float] = field(
-        default_factory=dict
-    )  # serial/parallel wall, worker work, Amdahl limit
-    counts: dict[str, int] = field(default_factory=dict)
     insets: tuple[
         InsetRequest, ...
-    ] = ()  # the inset requests the model was built with, as given
-    refinements: tuple[RefinementRequest, ...] = ()
-    inset_plan: InsetPlan = field(
-        default_factory=InsetPlan
-    )  # the band families the inset requests became
+    ]  # the inset requests the model was built with, as given
+    inset_plan: InsetPlan  # the band families the inset requests became
+    timings: dict[str, float] = field(default_factory=dict)  # stage -> seconds
+    counts: dict[str, int] = field(default_factory=dict)
 
     @property
     def policy(self) -> RoutePolicy:
@@ -106,42 +107,29 @@ class ConformalModel:
         )
 
 
-def build_conformal_model(  # noqa: PLR0913 - the effective input, the route and its options
+def build_conformal_model(
     build_input: GeometryBuildInput,
     representation: RepresentationContext,
     route: str | RoutePolicy,
     *,
     insets: tuple[InsetRequest, ...] = (),
-    refinements: tuple[RefinementRequest, ...] = (),
-    tiles: int = 1,
-    workers: int = 1,
 ) -> ConformalModel:
-    """The validated conformal model of an effective input under a route, with the requested cut families."""
+    """The validated conformal model of an effective input under a route, with the requested inset bands."""
     catalogue = build_prism_catalogue(build_input, representation)
-    return build_model_from_catalogue(
-        catalogue,
-        route,
-        insets=insets,
-        refinements=refinements,
-        tiles=tiles,
-        workers=workers,
-    )
+    return build_model_from_catalogue(catalogue, route, insets=insets)
 
 
-def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and its options
+def build_model_from_catalogue(
     catalogue: PrismCatalogue,
     route: str | RoutePolicy,
     *,
     insets: tuple[InsetRequest, ...] = (),
-    refinements: tuple[RefinementRequest, ...] = (),
-    tiles: int = 1,
-    workers: int = 1,
     keep_raw: bool = False,
 ) -> ConformalModel:
-    """The validated conformal model of a prism catalogue under a route, with the requested cut families.
+    """The validated conformal model of a prism catalogue under a route, with the requested inset bands.
 
-    ``insets`` (Surface-EPR bands) and ``refinements`` (mesh-size curves) are the typed requests of
-    ``cutfamilies.requests``; they become cut families before the arrangements are built.  Pass bands only as
+    ``insets`` (Surface-EPR bands) are the typed requests of ``bands.requests``; they become cut families
+    before the arrangements are built.  Pass bands only as
     ``insets``: the sidecar reads each band family's support and margins from its request, so a catalogue that
     already carries inset families builds but fails when its sidecar is written.
     """
@@ -150,46 +138,58 @@ def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and 
     check_entity_names(
         p.entity_id for p in catalogue.prisms if p.material_kind != "port"
     )
-    cut_families = build_cut_families(catalogue, insets, refinements)
-    catalogue = cut_families.catalogue
+    cut_families = _cut_families(catalogue, insets)
     # The pipeline allocates millions of small acyclic objects; the cyclic collector would only
     # re-scan them, so it is paused for the build.
     was_enabled = gc.isenabled()
     gc.disable()
     try:
-        with Runtime(tiles, workers, model_bbox(catalogue)) as rt:
-            rt.keep_raw = keep_raw
-            model = _build(catalogue, policy, rt)
-            model.insets, model.refinements = insets, refinements
-            model.inset_plan = cut_families.insets
-            return model
+        return _build(cut_families, insets, policy, keep_raw=keep_raw)
     finally:
         if was_enabled:
             gc.enable()
 
 
+def _cut_families(
+    catalogue: PrismCatalogue, insets: tuple[InsetRequest, ...]
+) -> CutFamilies:
+    """S3 on its pre-pass: the arrangements of the physical prisms alone, the faces the requests land on, the families.
+
+    Without requests there is no pre-pass and no band family.
+    """
+    check_request_ids(insets, catalogue)
+    plan = InsetPlan()
+    if insets:
+        physical = derive_physical_arrangements(catalogue)
+        plan = plan_insets(catalogue, insets, physical)
+    return build_cut_families(catalogue, plan)
+
+
 def _build(
-    catalogue: PrismCatalogue, policy: RoutePolicy, rt: Runtime
+    cut_families: CutFamilies,
+    insets: tuple[InsetRequest, ...],
+    policy: RoutePolicy,
+    *,
+    keep_raw: bool,
 ) -> ConformalModel:
-    labelled = derive_with_runtime(catalogue, rt)
-    topology = assemble_topology(labelled, rt)
-    with rt.serial("routes"):
+    """S4 to S9 on the catalogue with its cut families."""
+    watch = Stopwatch()
+    labelled = derive_arrangements(
+        cut_families.catalogue, keep_raw=keep_raw, watch=watch
+    )
+    topology = assemble_topology(labelled, watch)
+    with watch.stage("routes"):
         routed = apply_route(topology, policy)
-    report = validate_model(labelled, topology, routed, rt)
+    report = validate_model(labelled, topology, routed, watch)
     report.raise_if_failed()
-    timings = {**rt.watch.serial, **rt.watch.parallel}
-    kinds = {
-        **{name: "serial" for name in rt.watch.serial},
-        **{name: "parallel" for name in rt.watch.parallel},
-    }
     counts = {**labelled.counts, **topology.counts(), "groups": len(routed.groups)}
     return ConformalModel(
         labelled,
         topology,
         routed,
         report,
-        dict(timings),
-        kinds,
-        rt.watch.totals(),
+        insets,
+        cut_families.plan,
+        dict(watch.seconds),
         counts,
     )

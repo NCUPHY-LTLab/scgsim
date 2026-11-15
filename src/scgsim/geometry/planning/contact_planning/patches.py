@@ -6,7 +6,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import ModuleType
 
+from scgsim.geometry.grid.booleans import boolean_polygon_region
+from scgsim.geometry.grid.loops import loop_signature, loops_touch_without_area
+from scgsim.geometry.grid.planar_loops import PolygonCoordinates, clean_loop
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import entity_z_range_um
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord
@@ -29,11 +34,7 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
     route_conductor_contact_footprints,
     solution_region_entities,
 )
-from scgsim.geometry.primitives.entities import entity_z_range_um
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import loop_signature, loops_touch_without_area
-from scgsim.geometry.primitives.planar_loops import PolygonCoordinates, clean_loop
-from scgsim.geometry.primitives.spatial import bounds_overlap, coordinate_z_key
+from scgsim.geometry.planning.spatial import bounds_overlap, coordinate_z_key
 
 
 def plan_conductor_contact_patches(
@@ -135,7 +136,7 @@ class _ContactPatchPlanner:
             )
         ):
             overlap_region = boolean_polygon_region(
-                self.gdstk, lower_region, upper_region, "and"
+                UNGRIDDED, self.gdstk, lower_region, upper_region, "and"
             )
             # A collapsed source film can have a same-net lateral seam without
             # horizontal contact area; retain both source bodies and their rings.
@@ -151,7 +152,7 @@ class _ContactPatchPlanner:
             return None
         if overlap_region is None:
             overlap_region = boolean_polygon_region(
-                self.gdstk, lower_region, upper_region, "and"
+                UNGRIDDED, self.gdstk, lower_region, upper_region, "and"
             )
         if not overlap_region:
             if loops_touch_without_area(
@@ -178,7 +179,7 @@ class _ContactPatchPlanner:
         # A wholly covered upper footprint keeps its authored ring so that its
         # sidewall and the lower top hole share the same canonical curves.
         upper_remainder = boolean_polygon_region(
-            self.gdstk, upper_region, overlap_region, "not"
+            UNGRIDDED, self.gdstk, upper_region, overlap_region, "not"
         )
         if not upper_remainder and (not upper.geometry.get("hole_loops")):
             contact_loops = (clean_loop(upper.geometry["outer_loop"]),)
@@ -225,7 +226,7 @@ def _plan_route_c_conductor_contact_patches(
     interfaces: tuple[InterfacePlanRecord, ...],
     representation_context: RepresentationContext | None = None,
 ) -> tuple[InterfacePlanRecord, ...]:
-    """Preserve the pre-A/B Route-C rectangular-contact behavior exactly."""
+    """Plan Route C contacts: where a conductor's top face meets another's bottom face at one Z, the overlap is one rectangle."""
     import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
     generated: list[InterfacePlanRecord] = []
@@ -256,7 +257,7 @@ def _plan_route_c_conductor_contact_patches(
                 ):
                     continue
                 overlap_region = boolean_polygon_region(
-                    gdstk, lower_region, upper_region, "and"
+                    UNGRIDDED, gdstk, lower_region, upper_region, "and"
                 )
                 if not overlap_region:
                     continue

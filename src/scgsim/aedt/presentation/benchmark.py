@@ -1,4 +1,4 @@
-"""AEDT benchmark presentation only."""
+"""Display a recorded AEDT benchmark as a table and Plotly figures."""
 
 from __future__ import annotations
 

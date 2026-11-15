@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area
 from scgsim.geometry.models.topology import SurfacePlanRecord
-from scgsim.geometry.primitives.planar_loops import clean_loop, polygon_area
-from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
+from scgsim.geometry.planning.spatial import geometry_ref_surface_z_um
 
 
 def surface_ring3d_specs(
@@ -66,12 +66,3 @@ def _clean_ring3d(ring: Any) -> tuple[tuple[float, float, float], ...]:
     if len(points) < 3:
         raise ValueError("3D loop requires at least 3 unique points")
     return points
-
-
-def ring3d_edges(
-    ring: tuple[tuple[float, float, float], ...],
-) -> tuple[tuple[tuple[float, float, float], tuple[float, float, float]], ...]:
-    """Read the cyclic directed edges of a three-dimensional ring."""
-    return tuple(
-        (ring[index], ring[(index + 1) % len(ring)]) for index in range(len(ring))
-    )

@@ -18,8 +18,8 @@ from scgsim.geometry import (
     interpret_physical_geometry,
     with_rectangular_junctions,
 )
-from scgsim.geometry.compiler import build_route_construction_plan
-from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
+from scgsim.geometry.junctions.derivation import derive_rectangular_junctions
+from scgsim.geometry.models.grid import GeometryGridContext
 
 SHEET = ((0, 0), (10, 0), (10, 2), (0, 2))
 LEFT = ((-2, 0), (3, 0), (3, 1), (2, 1), (2, 2), (-2, 2))
@@ -93,7 +93,10 @@ def fixture(*, other=False, b_z=0):
     build = GeometryBuildInput(
         tuple(polygons),
         tuple(entities),
-        metadata={"source_dbu_um": 0.5},
+        metadata={
+            "source_dbu_um": 0.5,
+            "geometry_grid": GeometryGridContext(0.001).to_payload(),
+        },
         port_sheet_regions=(region,),
     )
     spec = RectangularJunctionSpec(
@@ -140,11 +143,14 @@ def test_rectangle_and_terminal_owned_ends_cover_free_region_once():
     record = result.metadata["junction_partitions"]["junction"]
     polygons = {item.polygon_id: item for item in result.polygons}
     central = polygons[record["central_polygon_id"]]
-    assert len(central.exterior) == 4 and central.holes == ()
-    assert (
-        len({x for x, _ in central.exterior})
-        == len({y for _, y in central.exterior})
-        == 2
+    # On the grid the central rectangle keeps a vertex wherever a terminal's vertex lies on its side.
+    assert central.holes == ()
+    xs, ys = {x for x, _ in central.exterior}, {y for _, y in central.exterior}
+    assert all(
+        x in (min(xs), max(xs)) or y in (min(ys), max(ys)) for x, y in central.exterior
+    )
+    assert gdstk.Polygon(central.exterior).area() == (max(xs) - min(xs)) * (
+        max(ys) - min(ys)
     )
     parts = [[gdstk.Polygon(central.exterior)]]
     for end, expected in zip(record["ends"], ("chip/left", "chip/right"), strict=False):
@@ -346,30 +352,13 @@ def physical_fixture():
     return (with_rectangular_junctions(source, (spec,)), stack, profile)
 
 
-def test_physical_attachment_then_full_construction_uses_same_derived_rectangle():
-    """Check physical attachment then full construction uses same derived rectangle."""
+def test_physical_attachment_places_the_derived_rectangle_on_the_support_plane():
+    """The derived rectangle sits on the film's attachment face at its source interval."""
     source, stack, profile = physical_fixture()
-    effective, _, physical = interpret_physical_geometry(source, stack, profile)
+    effective, _, _ = interpret_physical_geometry(source, stack, profile)
     record = effective.metadata["junction_partitions"]["junction"]
     assert record["support_plane"]["source_z_um"] == record["z_um"] == 0
     assert record["support_plane"]["source_hosts"][0]["source_interval_um"] == [0, 0.25]
-    construction = build_route_construction_plan(
-        effective, route="A", representation_context=physical.context
-    )
-    port = next(
-        (item for item in construction.surfaces if item.surface_role == "lumped_port")
-    )
-    central = next(
-        (
-            item
-            for item in effective.polygons
-            if item.polygon_id == record["central_polygon_id"]
-        )
-    )
-    assert port.geometry_ref["outer_loop"] == central.exterior
-    assert port.geometry_ref["plane"]["value_um"] == 0
-    assert len(port.metadata["boundary_volume_ids"]) == 2
-    assert construction.surfaces
 
 
 def test_aedt_consumes_common_geometry_without_partitioning_twice():

@@ -7,11 +7,17 @@ structure SGB records for each built model. They are the scripts behind step 2 (
 
 Measurement only: nothing here changes SCGSim, and no solver runs.
 
+The five roster layouts of issue 141 are also checked every night: the Nightly workflow's `roster` job
+runs `scripts/check_roster.py`, which takes each through `simulation_drc` and `mesh()` with bands and
+fails when one does not pass. The roster and the run settings live in `scripts/roster_cases.py`, which
+these scripts import.
+
 ## Where the results are
 
 The stage table, the fine-structure table, the classes of issue 125 and the attribution of every stop
 are in [issue 149](https://github.com/NCUPHY-LTLab/scgsim/issues/149); its comments hold the per-case
-records. They were measured on develop `1bc64ca` with the PDK at `49e539f`. The scripts now run on a
+records. They were measured on develop `1bc64ca` with the PDK at `49e539f`, in a 1 um vacuum shell, and
+each failed mesh again in the vacuum of the PDK's Palace notebooks. The scripts now run on a
 later develop, where several of those numbers differ; [What differs on develop now](#what-differs-on-develop-now)
 says which, and why.
 
@@ -19,9 +25,9 @@ says which, and why.
 
 | Script | What it does |
 |---|---|
-| `cases.py` | How each layout is built: component, layer stack, instances, Net assignment, simulation class. Also the banded scenes of `tests/sgb_supported_*`. |
+| `cases.py` | How each layout is built: component, layer stack, instances, Net assignment, simulation class. The roster comes from `scripts/roster_cases.py`; the other layouts are built here with its helpers. Also the banded scenes of `tests/sgb_supported_*`. |
 | `run_case.py` | One layout through plan, SGB build, `simulation_drc` and `mesh()`, with Surface-EPR bands (Route B, MA/MS/SA at margins 0.5 and 1.0 um by type) or with `--no-bands`. `--scene` builds a test scene and measures its fine structure only. Writes one JSON record. |
-| `run_baseline.py` | Every case in its own process, at most `--jobs` at a time (default 8), each stopped after `--timeout` seconds (default 900). Then every layout that stopped with bands again without bands, and every layout whose banded `mesh()` failed again with the vacuum the PDK's Palace notebooks use (`run_case.py --notebook-vacuum`). It removes a case's earlier record before the case starts, so a rerun into the same folder never shows stages it did not run. |
+| `run_baseline.py` | Every case in its own process, at most `--jobs` at a time (default 8), each stopped after `--timeout` seconds (default 900). Then every layout that stopped with bands again without bands. It removes a case's earlier record before the case starts, so a rerun into the same folder never shows stages it did not run. |
 | `check_records.py` | Checks that a record says only what its run did: a case that stops before its first record leaves no earlier run's stages, a record read while it is rewritten is always complete, and an unreadable record counts as one with no stage. Needs no PDK. |
 | `fine_structure.py` | Counts short edges, narrow faces and small angles from SGB's sliver report, split by whether a band curve is involved, and the classes A, B and C of issue 125. An arc edge, and the column gap of a curved wall, is measured along its arc. |
 | `check_pdk47.py` | Looks for the drawing artifacts of orcapen-sc-pdk#47 (the eight 1 nm claw jogs and the 9.9 nm lead-fan step) in the Disk Qubit builds. |
@@ -35,12 +41,12 @@ cannot use, with their owner and place): the warnings of a pass, or the refusals
 `SimulationDrcError` it raises. The mesh stage keeps the recipe, the counts, the stop reason and the stop
 places of the quality report.
 
-Settings are those `simulation_drc` fixes, so all stages see one model: plan root `chip`, zero coupon
-padding, a 1 um vacuum region when the layout has none, every authored port at 10 nH, every layout at
-`curve_sampling="simulation"`, and the default mesh controls (`FeatureRecipe()`, minSICN 0.01, the default
-time budget). With `--notebook-vacuum` the plan instead gets the vacuum padding of the PDK's Palace
-notebooks: (250, 250, 1000) um for a single die (SimplePad, CircularPad), (0, 0, 1000) um for a flip-chip
-coupon (Kosen Xmon). `simulation_drc` keeps its own fixed settings in both.
+The settings are those of `scripts/roster_cases.py`, the same for every layout: plan root `chip` and zero
+coupon padding, as `simulation_drc` builds its plan; the vacuum the Human set for testing layouts
+([issue 182](https://github.com/NCUPHY-LTLab/scgsim/issues/182)), padding 0 um in x and y and 1000 um below
+and above; every authored port at 10 nH; every layout at `curve_sampling="simulation"`; and the default mesh
+controls (`FeatureRecipe()`, minSICN 0.01, the default time budget). The SGB build and `mesh()` use them;
+`simulation_drc` sets its own vacuum.
 
 ## How to run
 
@@ -79,15 +85,17 @@ The scripts were last run on develop `464ba5b`, through the geometry and meshing
 PDK at `49e539f`: SimplePad, every banded scene, `check_pdk47.py`, `bend_euler` and the B-spline strip
 polygon. The results on issue 149 stay as measured. A rerun on this develop gives these differences:
 
-| What changed on develop | Effect on a rerun | Measured on `464ba5b` |
+| What changed on develop | Effect on a rerun | Measured (on `464ba5b` unless stated) |
 |---|---|---|
 | The default `FeatureRecipe` is `scgsim.meshing.features/2`: every Surface-EPR band boundary curve is sized at 4 × the narrowest band width (PR 158). A model without bands keeps the features/1 sizes. | Every banded `mesh()` row changes. The `--no-bands` rows do not. | SimplePad: 170,631 tetrahedra, minSICN 0.0122, 0 rounds, 16 s of meshing (issue 149: 107,094, 0.0138, 0 rounds, 9 s). |
 | `simulation_drc` adds a meshing stage with the fine-structure limits of issue 125, raises `SimulationDrcError` on its refusal, and `mesh()` runs the same check before the mesher starts (PR 147). | A layout the meshing stage refuses now stops at `simulation_drc`, and its `mesh()` stops before meshing. Issue 149's `simulation_drc` column is the geometry stage alone. | SimplePad: the meshing stage passes with no finding. The B-spline strip polygon: it passes with 3 warnings. |
 | The rule of at most 128 points per full circle is gone (PR 148). | The two spline strip polygons with bands are no longer refused at the SGB build. | B-spline strip polygon with bands: builds, and meshes clean (84,100 tetrahedra, minSICN 0.0167, 3 rounds). The interpolation strip polygon was not rerun. |
 | Two straight band offsets that meet at a convex junction end at their crossing (PR 148). | Fewer short band edges in the scenes. | Band edges under 25 grid steps, issue 149 → now: `cell14_euler_bend` 36 → 0, `cell15_euler_u_turn` 84 → 0, `cell16_coupled_pair` 72 → 0, `cell18_taper` 24 → 0, `cell18_handoff` 12 → 6, `cell21_bspline_resampled` 45 → 9, `cell21_interpolation_resampled` 120 → 6, `junction_fan`, `junction_fan_noport` and `d1_die_defaults` 7 → 5. Unchanged: `junction_straight` and `d1_die_test_build` (8, with the 0.71 nm face and 0.0007° wedge); the other scenes still have none. |
 | `cell24_sheet_circular_pad` left the supported list, because its files cannot be written (PR 155). | `cases.scene_builders` keeps it, so its row is still measured. | Unchanged: 2 source edges under 25 grid steps, 10.1 nm, 5.6°. |
+| Every layout is meshed in the vacuum of issue 182, padding (0, 0, 1000) um, instead of the 1 um shell, and the notebook-vacuum rerun is gone (issues 179 and 182). | Every `mesh()` row changes, and an SGB build's fine structure can. The `simulation_drc` rows do not: it sets its own vacuum. | Measured on `8c9ca76` with `scripts/check_roster.py`, the roster with bands, all clean in 0 rounds: SimplePad 117,138 tetrahedra, minSICN 0.0215, 9 s of meshing; circular pad 86,957, 0.0107, 7 s; airbridge coupon 52,444, 0.0105, 4 s; flip-chip pad 89,758, 0.0131, 7 s; Disk Qubit 569,499, 0.0228, 57 s (in the 1 um shell it stopped at the 180 s limit). |
 
-Not rerun on this develop: the other layouts, the `--no-bands` and `--notebook-vacuum` passes. The SGB
+Not rerun on `464ba5b`: the other layouts, the `--no-bands` pass, and the notebook-vacuum pass the scripts
+had then. The SGB
 build alone (no `simulation_drc`, no mesh) of the Kosen Xmon with bands no longer has its 8 band edges of
 2.2 to 2.8 nm: its shortest band edge is 37.4 nm, and none is under 25 grid steps. The Palace readers that
 now keep the requested modes (PR 157) are not used here, because no solver runs.

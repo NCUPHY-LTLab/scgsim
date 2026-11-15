@@ -30,8 +30,8 @@ from sgb_supported_kit import (
     to_lattice,
 )
 
-from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage, LineEdge
-from scgsim.geometry.sgb.records.grid import exact_z
+from scgsim.geometry.exact.carriers import ArcCarrier, Lineage, LineEdge
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import Footprint, PrismCatalogue, PrismRecord
 
 # --------------------------------------------------------------------------- an arc cut by the die edge

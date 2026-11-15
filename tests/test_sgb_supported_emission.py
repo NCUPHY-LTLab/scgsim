@@ -23,8 +23,8 @@ from sgb_unsupported_cells import straight_lead
 from test_sgb_supported_geometry import SCENES, scene_params
 
 from scgsim.contracts.sgb_sidecar import read_sidecar
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.meshing import check_fine_structure
 
@@ -48,6 +48,26 @@ def test_a_supported_cell_is_written_as_brep_and_xao(name, tmp_path):
     assert artifacts.brep.stat().st_size > 0
     assert artifacts.xao.stat().st_size > 0
     read_sidecar(artifacts.sidecar)
+
+
+def test_a_contact_no_written_volume_bounds_is_a_hidden_contact_of_its_band(tmp_path):
+    """Route B writes no conductor volume, so where a pier stands on the ground no face is written.
+
+    The ground top's family lists that contact in ``hidden_contacts`` by its two conductors and face kind, and
+    its ``bands`` hold only written surface groups (the shared reader checks each one).
+    """
+    sidecar = read_sidecar(
+        emit_model(sample_model(SCENES["cell23_airbridge"]()), tmp_path).sidecar
+    )
+    family = sidecar["band_family"]["ma::ground_lower::top"]
+    assert family["hidden_contacts"] == {
+        "2": [{"entities": ["ground_lower", "pier_lower"], "face_kind": "interface"}]
+    }
+    assert all(
+        sidecar["group"][group]["dim"] == 2
+        for groups in family["bands"].values()
+        for group in groups
+    )
 
 
 @pytest.mark.parametrize("name", sorted(pdk.NOT_WRITTEN))

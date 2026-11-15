@@ -130,7 +130,10 @@ reconstruction overlapping an authored full ring is rejected rather than used
 as an override. To reconstruct from polygon data, create a detached raw
 `GeometryBuildInput` with the selected reconstruction record and without the
 authored curve declaration, then pass it, with its representation context from
-`interpret_physical_geometry`, to `build_sgb_geometry` from `scgsim.geometry.sgb`. `set_plan(snapshot)` continues to honor the
+`interpret_physical_geometry`, to `build_sgb_geometry` from `scgsim.geometry.sgb`.
+That call goes below [the supported entry](../supported-scope.qmd#supported-entry):
+SGB does not repeat the checks of `GeometryPlan`, so the input you build must
+still satisfy them. `set_plan(snapshot)` continues to honor the
 snapshot's declarations. See the
 [GeometryPlan and geometry source-curve contract](../geometry-sgb.qmd#source-curves)
 for curve record and boundary ownership. This does not mutate the component or
@@ -169,9 +172,9 @@ host resources answer different questions. Record the value and purpose of
 each change beside the quantity you plan to inspect. Example controls in a
 lesson are starting inputs, not a universal accuracy recommendation.
 
-Prepare a new run directory and handoff for a changed request. Inspect the
+Prepare a new run folder and handoff for a changed request. Inspect the
 [source summary](source-observations.qmd) and, when useful, the
-[prepared model](solver-observations.qmd), then execute the exact new package.
+[prepared model](solver-observations.qmd), then execute that new handoff.
 Retain each result with its own settings so that a later comparison can name
 which geometry, boundary and request changed.
 

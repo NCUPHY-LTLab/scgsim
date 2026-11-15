@@ -34,7 +34,8 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from scgsim.aedt.runtime.families.sgb_import import ImportedSgbModel
-from scgsim.geometry.sgb.sidecar.aedt import aedt_names
+from scgsim.contracts.sgb_sidecar import Sidecar, views
+from scgsim.geometry.sgb.output.sidecar.aedt import aedt_names
 
 FieldSelector = Literal["surface", "adjacent"]
 DIELECTRIC_SIDE_TYPES = ("MS", "SA", "SHEET")
@@ -73,7 +74,7 @@ class SurfaceSelection:
 
 
 def create_surface_selections(
-    app: Any, sidecar: Mapping[str, Any], imported: ImportedSgbModel
+    app: Any, sidecar: Sidecar, imported: ImportedSgbModel
 ) -> dict[str, SurfaceSelection]:
     """Create the non-model sheet of every Surface-EPR row on the imported model; ``{row: binding}``."""
     bindings = surface_face_bindings(sidecar, imported)
@@ -113,23 +114,24 @@ def _create_selection_sheet(app: Any, binding: SurfaceSelection) -> None:
 
 
 def surface_face_bindings(
-    sidecar: Mapping[str, Any], imported: ImportedSgbModel
+    sidecar: Sidecar, imported: ImportedSgbModel
 ) -> dict[str, SurfaceSelection]:
     """The face-list binding of every Surface-EPR row, without touching AEDT."""
-    rows = sidecar["surface_epr_rows"]
+    rows = sidecar["surface_epr_row"]
     names = aedt_names([(row, f"epr_{row}") for row in sorted(rows)])
     kinds = {
-        name: sidecar["volumes"][solid]["kind"]
+        name: sidecar["volume"][solid]["kind"]
         for solid, name in imported.objects.items()
     }
-    groups = sidecar["physical_groups"]
+    groups = sidecar["group"]
+    members = views.group_members(sidecar)
     bindings = {}
     for row, record in sorted(rows.items()):
-        planned = groups[record["group"]]["ids"]
+        planned = members[record["group"]]
         # A sheet group's faces are read on their dielectric side whatever the row type (see the module).
         side = (
             "SHEET"
-            if groups[record["group"]].get("interface_type") == "SHEET"
+            if groups[record["group"]]["interface_type"] == "SHEET"
             else record["interface_type"]
         )
         faces = tuple(
@@ -139,7 +141,7 @@ def surface_face_bindings(
             row=row,
             group=record["group"],
             interface_type=record["interface_type"],
-            entities=tuple(record["entities"]),
+            entities=tuple(groups[record["group"]]["entities"]),
             band=record["band"],
             selection_name=names[row],
             faces=faces,

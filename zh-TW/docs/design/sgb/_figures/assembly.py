@@ -48,9 +48,9 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from sgb_scenes import airbridge, footprint, rect_um
 from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
-from scgsim.geometry.sgb.assembly import walls as walls_module
-from scgsim.geometry.sgb.records.grid import exact_z
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import PrismRecord
+from scgsim.geometry.sgb.topology.assembly import walls as walls_module
 
 G = 0.001
 
@@ -331,7 +331,7 @@ def _figure_shells(numbers: dict) -> None:
             return ("horizontal face (cell of a level arrangement)", "#9ecae1")
         if spans[fid] > 1:
             return ("wall coalesced over more than one slab", PALETTE["accent"])
-        if model.routed.face_group[fid].startswith("EXT"):
+        if model.routed.faces[fid].interface_type == "EXT":
             return ("wall on the outer chip boundary", "#bdbdbd")
         return ("wall of one slab", "#3a6ea5")
 

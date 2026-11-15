@@ -14,6 +14,8 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from scgsim.refusal import internal
+
 _UM2_PER_MM2 = 1e6
 
 
@@ -93,7 +95,9 @@ def ladder_size(target: float, max_size: float) -> float:
     point, and rounding down never makes a mesh coarser than the target.
     """
     if not target > 0:
-        raise ValueError(f"a ladder size needs a positive target, got {target!r}.")
+        raise ValueError(
+            internal(f"a ladder size needs a positive target, got {target!r}")
+        )
     exponent = 1
     while max_size / 2**exponent > target:
         exponent += 1

@@ -1,9 +1,10 @@
 name: Nightly
 
 # The heavy tier that pull requests skip: the whole public suite with `slow`
-# tests, and the real Quarto render of the Pages site without deploying it.
-# No solver runs here. A failure fails the run, which GitHub reports like any
-# other failed workflow.
+# tests, the real Quarto render of the Pages site without deploying it, and the
+# roster of Palace-stable layouts through simulation_drc and mesh(). No solver
+# runs here. A failure fails the run, which GitHub reports like any other
+# failed workflow.
 on:
   schedule:
     # 18:30 UTC is 02:30 in Taiwan. Scheduled runs use the default branch (develop).
@@ -57,3 +58,32 @@ jobs:
       # main heads, presentation from this checkout. Nothing is uploaded.
       - name: Render frozen sources and version catalogue without execution or deployment
         run: python scripts/build_docs_site.py --output "$RUNNER_TEMP/scgsim-pages"
+
+  # Issue 141's roster, the layouts that define "Palace stable", built from the
+  # PDK pdk-tests pins with Surface-EPR bands: each must pass simulation_drc,
+  # then mesh() within the default time budget in the (0, 0, 1000) um vacuum of
+  # issue 182. Every case's record is uploaded, also when a case fails. Palace
+  # itself does not run.
+  roster:
+    name: roster
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the pinned PDK environment with the current SCGSim wheel
+        uses: ./.github/actions/pdk-environment
+      - name: Run the roster through simulation_drc and mesh()
+        id: roster
+        timeout-minutes: 45
+        run: .venv-pdk/bin/python -I -B scripts/check_roster.py "$RUNNER_TEMP/roster-records"
+      - name: Upload the roster records
+        if: always() && steps.roster.outcome != 'skipped'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: roster-records
+          path: ${{ runner.temp }}/roster-records
+          if-no-files-found: error

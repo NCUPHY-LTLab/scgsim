@@ -4,7 +4,7 @@
 generic ``LumpedRlc``) to all the faces of its port sheet: SGB partitions a port sheet where another face
 meets it (a pad wall, a band), and each of those faces must import exactly once.  :func:`q3d_net_names`
 names the Q3D Nets.  Net, junction and port-sheet IDs such as ``chip/A`` and ``chip_A`` sanitise to the
-same AEDT name, so every name comes from :func:`~scgsim.geometry.sgb.sidecar.aedt.aedt_names`, which
+same AEDT name, so every name comes from :func:`~scgsim.geometry.sgb.output.sidecar.aedt.aedt_names`, which
 appends ``__2``, ``__3`` ... to a later collision; the assignment and its readback then use that one name.
 A model the plan refuses raises :class:`BoundaryPlanError` before the import changes the design.
 """
@@ -17,11 +17,12 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from scgsim.aedt.preparation.sgb_model import SgbJunction, port_group
+from scgsim.aedt.preparation.sgb_model import SgbJunction, net_groups, port_group
 from scgsim.aedt.rlc import rlc_native_topology
 from scgsim.aedt.specs.common import LumpedRlc
-from scgsim.geometry.sgb.exchange.guard import StepGuard
-from scgsim.geometry.sgb.sidecar.aedt import aedt_names
+from scgsim.contracts.sgb_sidecar import Sidecar, views
+from scgsim.geometry.sgb.output.exchange.guard import StepGuard
+from scgsim.geometry.sgb.output.sidecar.aedt import aedt_names
 
 Point = tuple[float, float, float]
 
@@ -50,7 +51,7 @@ class HfssBoundaryPlan:
     """Every HFSS boundary the import assigns, named and checked against the sidecar and guard before AEDT.
 
     ``perfect_e`` maps each Net with Route A sheet faces to its boundary name and its planned faces.  Names
-    are unique among their kind (:func:`~scgsim.geometry.sgb.sidecar.aedt.aedt_names`), so two Nets or two
+    are unique among their kind (:func:`~scgsim.geometry.sgb.output.sidecar.aedt.aedt_names`), so two Nets or two
     treatments whose IDs sanitise alike never claim one boundary.
     """
 
@@ -60,7 +61,7 @@ class HfssBoundaryPlan:
 
 
 def plan_hfss_boundaries(
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
     guard: StepGuard,
     junctions: Sequence[SgbJunction],
     lumped_rlcs: Sequence[LumpedRlc],
@@ -88,17 +89,18 @@ def _planned_copies(guard: StepGuard) -> Counter[str]:
 
 
 def _perfect_e_plan(
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
 ) -> dict[str, tuple[str, tuple[str, ...]]]:
-    groups = sidecar["physical_groups"]
+    groups = sidecar["group"]
+    members = views.group_members(sidecar)
     sheets = {
         net: tuple(
             planned
-            for group in net_groups
+            for group in names
             if groups[group]["interface_type"] == "SHEET"
-            for planned in groups[group]["ids"]
+            for planned in members[group]
         )
-        for net, net_groups in sorted(sidecar["unions"]["nets"].items())
+        for net, names in net_groups(sidecar).items()
     }
     sheets = {net: faces for net, faces in sheets.items() if faces}
     names = aedt_names([(net, f"perfect_e_{net}") for net in sheets])
@@ -106,7 +108,7 @@ def _perfect_e_plan(
 
 
 def _junction_rlcs(
-    sidecar: Mapping[str, Any], copies: Counter[str], junctions: Sequence[SgbJunction]
+    sidecar: Sidecar, copies: Counter[str], junctions: Sequence[SgbJunction]
 ) -> tuple[PortRlc, ...]:
     """Each junction's parallel Lumped RLC (its inductance and capacitance) on its port sheet."""
     names = aedt_names(
@@ -146,7 +148,7 @@ def _junction_rlcs(
 
 
 def _generic_rlcs(
-    sidecar: Mapping[str, Any], copies: Counter[str], lumped_rlcs: Sequence[LumpedRlc]
+    sidecar: Sidecar, copies: Counter[str], lumped_rlcs: Sequence[LumpedRlc]
 ) -> tuple[PortRlc, ...]:
     """Each ``LumpedRlc`` on the port sheet it names: exactly its enabled branches, in its topology."""
     names = aedt_names(
@@ -186,10 +188,10 @@ def rlc_branches(treatment: LumpedRlc) -> dict[str, Any]:
 
 
 def _checked_port(
-    sidecar: Mapping[str, Any], group: str, copies: Counter[str]
+    sidecar: Sidecar, group: str, copies: Counter[str]
 ) -> Mapping[str, Any]:
     """The one sidecar port of ``group``; each of its faces must import exactly once."""
-    ports = [p for p in sidecar["ports"] if p["group"] == group]
+    ports = [p for p in sidecar["port"].values() if p["group"] == group]
     if len(ports) != 1:
         raise BoundaryPlanError(
             f"the sidecar has {len(ports)} lumped ports {group!r}, not one"

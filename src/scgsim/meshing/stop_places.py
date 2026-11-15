@@ -52,6 +52,7 @@ class StopPlace:
                     "location_um": list(f.location_um),
                     "value": f.value,
                     "value_steps": f.value_steps,
+                    "size": f.size,
                     "fix": f.fix,
                 }
                 for f in self.findings

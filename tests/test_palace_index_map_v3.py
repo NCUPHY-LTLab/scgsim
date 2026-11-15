@@ -19,25 +19,31 @@ from palace_sgb_support import (
     surface_epr_specs,
 )
 
+from scgsim.contracts.palace_convergence import ConvergenceCheck
+from scgsim.contracts.palace_run_folder import read_json
 from scgsim.geometry.surface_epr.insets import inset_requests
-from scgsim.palace import resolve_palace_result
-from scgsim.palace.mesh.manifest import MANIFEST_SCHEMA_VERSION, build_mesh_manifest
-from scgsim.palace.mesh.physical_groups import groups_from_sidecar
-from scgsim.palace.preparation.config import (
-    LayoutPortBinding,
-    TerminalBinding,
+from scgsim.palace import EigenmodeSim, ElectrostaticSim, resolve_palace_result
+from scgsim.palace.config.config import (
     build_eigenmode_config,
     build_electrostatic_config,
-    configure_numerical_controls,
 )
-from scgsim.palace.presentation.reports import inspect_run_trustworthiness
-from scgsim.palace.presentation.surface_figures import (
+from scgsim.palace.config.config_records import (
+    ConfigInput,
+    EigenmodeSettings,
+    ElectrostaticSettings,
+    TerminalBinding,
+)
+from scgsim.palace.config.numerical import NumericalControls
+from scgsim.palace.mesh.manifest import MANIFEST_SCHEMA_VERSION, build_mesh_manifest
+from scgsim.palace.mesh.physical_groups import groups_from_sidecar
+from scgsim.palace.reports.reports import inspect_run_trustworthiness
+from scgsim.palace.reports.surface_figures import (
     surface_margin_participation_figure,
     surface_ranking_figure,
 )
-from scgsim.palace.results.artifacts import read_json
+from scgsim.palace.results.convergence import SolverEnd
 from scgsim.palace.results.epr import epr_result, reanalyze_epr
-from scgsim.palace.results.epr_model import PalaceEprResult
+from scgsim.palace.results.epr_records import PalaceEprResult
 from scgsim.palace.results.index_contract import (
     INDEX_MAP_SCHEMA_VERSION,
     RouteConsistency,
@@ -45,7 +51,7 @@ from scgsim.palace.results.index_contract import (
     require_manifest_schema,
     validate_config_index_correspondence,
 )
-from scgsim.palace.results.models import ParsedTable, ResolvedRunData
+from scgsim.palace.results.resolved_records import ParsedTable, ResolvedRunData
 from scgsim.palace.results.surface_readers import (
     SurfaceEprReader,
     SurfaceMarginEprReader,
@@ -53,13 +59,16 @@ from scgsim.palace.results.surface_readers import (
     read_surface_margin_bindings,
 )
 from scgsim.palace.results.tables import count_index_entries
+from scgsim.palace.simulation.core import index_map
+from scgsim.palace.source.ports import LayoutPortBinding
+from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 NETS = {"A": ("left", "right"), "B": ("P", "G")}
 PORTS = {
     "A": LayoutPortBinding(
-        1, "chip/o_junction_lumped", "metal", "port", (1.0, 0.0, 0.0), 1e-9
+        1, "chip/o_junction_lumped", "metal", "port", (1.0, 0.0, 0.0), {"L": 1e-9}
     ),
-    "B": LayoutPortBinding(1, "P1", "metal", "9/0", (1.0, 0.0, 0.0), 1e-9),
+    "B": LayoutPortBinding(1, "P1", "metal", "9/0", (1.0, 0.0, 0.0), {"L": 1e-9}),
 }
 THIN_FILM = {
     "schema_version": 1,
@@ -101,11 +110,7 @@ class Run:
         )
         files = {
             "metadata/mesh_manifest.json": manifest,
-            "metadata/palace_index_map.json": {
-                "schema_version": INDEX_MAP_SCHEMA_VERSION,
-                "entries": entries,
-                **extra,
-            },
+            "metadata/palace_index_map.json": index_map(entries, **extra),
             "config.json": config,
         }
         for name, payload in files.items():
@@ -121,41 +126,42 @@ class Run:
     def _electrostatic(self, specs):
         first, second = NETS[self.route]
         result = build_electrostatic_config(
-            groups=self.groups,
+            self._common("Electrostatic", specs, ElectrostaticSim().numerical),
             terminals=[TerminalBinding("t", first)],
             ground_net_ids=[second],
-            materials=MATERIALS,
-            save_fields=0,
-            unassigned_conductor_policy="error",
-            exterior_boundary_policy="none",
-            mesh_path=Path("palace.msh"),
-            surface_epr_specs=specs,
-            numerical=configure_numerical_controls(),
+            electrostatic=ElectrostaticSettings(unassigned_conductor_policy="error"),
         )
         return (
             result.config,
-            [
-                *result.terminal_index_map,
-                *result.domain_energy_index_map,
-                *result.surface_epr_index_map,
-            ],
+            result.index_entries,
             {"ground_boundary": result.ground_boundary_resolution},
         )
 
     def _eigenmode(self, specs):
         result = build_eigenmode_config(
-            groups=self.groups,
+            self._common(
+                "Eigenmode",
+                specs,
+                NumericalControls(amr_max_passes=0).with_defaults(
+                    EigenmodeSim.numerical_defaults
+                ),
+            ),
             ports=[PORTS[self.route]],
-            materials=MATERIALS,
-            surface_epr_specs=specs,
-            numerical=configure_numerical_controls(amr_max_passes=0),
-            num_modes=3,
-            target_hz=None,
-            eigenmode_tolerance=1e-6,
-            save_fields=0,
-            mesh_path=Path("palace.msh"),
+            eigenmode=EigenmodeSettings(num_modes=3),
         )
         return result.config, result.index_entries, {}
+
+    def _common(self, problem, specs, numerical):
+        return ConfigInput(
+            problem=problem,
+            groups=self.groups,
+            mesh_path=Path("palace.msh"),
+            materials=MATERIALS,
+            surface_epr_specs=None
+            if specs is None
+            else SurfaceEprSpecs.normalized(specs, materials=MATERIALS),
+            numerical=numerical,
+        )
 
     def consistency(self, **overrides) -> RouteConsistency:
         """The route consistency check over this run's metadata."""
@@ -214,10 +220,10 @@ def test_a_producer_made_index_map_round_trips_through_the_readers(run, tmp_path
     wholes = read_surface_bindings(run.index)
     margins = read_surface_margin_bindings(run.index)
     assert wholes and margins
-    assert {b["interface_type"] for b in wholes} == {"MA", "MS", "SA"}
-    assert all(b["baseline_index"] in {w["index"] for w in wholes} for b in margins)
-    assert {m["margin_um"] for m in margins} == {0.5, 1.0}
-    assert all(m["bands"] for m in margins)
+    assert {b.interface_type for b in wholes} == {"MA", "MS", "SA"}
+    assert all(b.baseline_index in {w.index for w in wholes} for b in margins)
+    assert {m.margin_um for m in margins} == {0.5, 1.0}
+    assert all(m.bands for m in margins)
 
     table = tmp_path / "surface-Q.csv"
     _surface_q(run, table)
@@ -232,8 +238,8 @@ def test_a_producer_made_index_map_round_trips_through_the_readers(run, tmp_path
         table, frequencies_ghz=None, bindings=wholes, **kwargs
     ).read()
     (margin_series,) = SurfaceMarginEprReader(table, bindings=margins, **kwargs).read()
-    assert [r.index for r in series.records] == [b["index"] for b in wholes]
-    assert [r.index for r in margin_series.records] == [b["index"] for b in margins]
+    assert [r.index for r in series.records] == [b.index for b in wholes]
+    assert [r.index for r in margin_series.records] == [b.index for b in margins]
     assert all(r.entities and r.rows and r.attributes for r in series.records)
     assert all(r.participation == 0.01 * r.index for r in series.records)
 
@@ -274,7 +280,7 @@ def test_surface_readers_keep_the_requested_modes_of_a_longer_table(run, tmp_pat
         return
     assert [item.series_index for item in series] == [1]
     assert [item.series_index for item in margin_series] == [1]
-    assert [r.index for r in series[0].records] == [b["index"] for b in wholes]
+    assert [r.index for r in series[0].records] == [b.index for b in wholes]
 
 
 def test_the_electrostatic_index_map_keeps_the_ground_evidence(tmp_path):
@@ -298,7 +304,7 @@ def test_old_index_maps_are_rejected_naming_the_recorded_schema(tmp_path, record
     run = Run("B", "Electrostatic", tmp_path)
     old = {**run.index, "schema_version": recorded}
     with pytest.raises(
-        ValueError, match=rf"schema_version {recorded!r} is not readable"
+        ValueError, match=rf"schema_version {recorded!r}: is not readable"
     ):
         require_index_map_schema(old)
     with pytest.raises(ValueError, match=rf"schema_version {recorded!r}"):
@@ -311,7 +317,7 @@ def test_old_manifests_are_rejected_naming_the_recorded_schema(tmp_path, recorde
     run = Run("B", "Eigenmode", tmp_path)
     old = {**run.manifest, "schema_version": recorded}
     with pytest.raises(
-        ValueError, match=rf"schema_version {recorded!r} is not readable"
+        ValueError, match=rf"schema_version {recorded!r}: is not readable"
     ):
         require_manifest_schema(old)
     with pytest.raises(ValueError, match=rf"schema_version {recorded!r}"):
@@ -493,6 +499,8 @@ def _resolved_eigenmode(run: Run) -> ResolvedRunData:
         tables=tables,
         returned_receipt=receipt,
         provenance=provenance,
+        convergence=ConvergenceCheck.not_declared(),
+        solver_end=SolverEnd("solver_ended", None, None),
     )
 
 

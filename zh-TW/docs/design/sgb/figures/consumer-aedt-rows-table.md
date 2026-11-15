@@ -1,4 +1,4 @@
-| 群組（`faces[*].group`） | 面數 | `interface_type` | `entities` | `face_kind` | `z_um` 範圍 | `adjacent_domains` |
+| 群組（`face[*].group`） | 面數 | `interface_type` | `entities` | `face_kind` | `z_um` 範圍 | `adjacent_domains` |
 |:---|---:|:---|:---|:---|:---|:---|
 | <code>MA::ground_0000__sidewall</code> | 11 | `MA` | `ground_0000` | `sidewall` | 0 到 0.2 | `VACUUM_REGION`（vacuum） |
 | <code>MA::ground_0000__top</code> | 1 | `MA` | `ground_0000` | `top` | 0.2 | `VACUUM_REGION`（vacuum） |

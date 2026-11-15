@@ -18,7 +18,7 @@ Palace 與 AEDT 後端實作、測試及技術文件仍屬不同來源責任，�
 
 ## 文件建置 {#documentation-builds}
 
-`scripts/pages_versions.json` 是版本目錄。`scripts/build_docs_site.py` 會固定來源修訂版本與中繼資料，在停用程式碼執行的狀態下渲染乾淨快照，並組合完整網站。目前 `main` 與 `develop` 使用各自的內容；保留的歷史版本沿用原始 README／Quarto 內文，並套用有文件記錄的呈現覆蓋層。
+`scripts/pages_versions.json` 是版本目錄。其中的 `retired_development_lines` 列出開發版根目錄已不再發布的發行線：`v<line>-dev/` 會導向目前的開發版網站，讓已安裝的該發行線預發行版所產生的連結仍能抵達頁面。開發版本號移到下一條發行線時，請把舊的發行線加進去。`scripts/build_docs_site.py` 會固定來源修訂版本與中繼資料，在停用程式碼執行的狀態下渲染乾淨快照，並組合完整網站。目前 `main` 與 `develop` 使用各自的內容；保留的歷史版本沿用原始 README／Quarto 內文，並套用有文件記錄的呈現覆蓋層。
 
 根目錄會選取最新穩定版本。切換版本時，若目前頁面存在就保留該頁，否則前往該版本首頁。`/main/` 與 `/develop/` 是別名。各版本網站會使用一致的行內目錄。套件版本、內容修訂版本、呈現修訂版本、Askr 修訂版本與分支，會在產生的建置記錄中分別列出。
 
@@ -28,7 +28,7 @@ CI 會先判定事件差異的類型。草稿拉取請求只執行分類，並�
 
 非草稿產品變更、推送至 `develop` 或 `main`，以及手動派送，會執行快速層。`build-and-import` 在 Python 3.12 與 3.13 檢查套件版本、發行套件建置、可編輯匯入與隔離 wheel 匯入。`fast-tests` 執行公開離線測試套件，但不含 `slow`、`pdk` 與 `private_golden` 測試。`quality` 執行完整品質入口 `scripts/check_quality.py`，涵蓋 Ruff 格式與程式檢查、可讀性、標準及原有嚴格 Pyright 設定，以及六條匯入層契約。兩者都安裝 `occt` 相依群組，所以 Pyright 能解析 OCP，標記為 `occt` 的 OCCT 檢查也會執行。`docs-smoke` 使用固定版本的公開 PDK，以純檔案準備流程執行目前來源範例。`pdk-tests` 以 `README.md` 安裝的公開 OrcaPen SC PDK 修訂版本，依該 PDK 凍結的鎖定檔建立環境並安裝目前的 SCGSim wheel，執行標記為 `pdk` 的測試。測試工作都會加上 `--fail-on-skip`：它們已安裝測試所需的全部相依套件，因此任何略過都會使執行失敗，不會無聲通過。
 
-Nightly 工作流程在 UTC 18:30（台灣時間 02:30）於 `develop` 執行重型層，也可手動派送到任何分支。`full-tests` 執行含 `slow` 測試的完整公開套件，`docs-render` 執行 Pages 渲染但不部署。任何失敗都會使該次執行失敗。CI 只使用公開輸入並排除私有基準資料，不會呼叫 AEDT 或 Palace 求解器。
+Nightly 工作流程在 UTC 18:30（台灣時間 02:30）於 `develop` 執行重型層，也可手動派送到任何分支。`full-tests` 執行含 `slow` 測試的完整公開套件，`docs-render` 執行 Pages 渲染但不部署。`roster` 以 `pdk-tests` 固定的 PDK 版本建立定義「Palace 穩定」的版圖（issue 141），切出 Surface-EPR 條帶，並要求每個版圖都通過 `simulation_drc`，且在 x、y 方向不加、z 方向各加 1000 µm 的真空區中於預設時間預算內完成網格化（`scripts/check_roster.py`）；每個版圖的紀錄會上傳為 `roster-records` 成品。任何失敗都會使該次執行失敗。CI 只使用公開輸入並排除私有基準資料，不會呼叫 AEDT 或 Palace 求解器。
 
 ## 產生 API 參考頁 {#generated-api-references}
 
@@ -59,7 +59,7 @@ python3 -m http.server 4321 --bind 0.0.0.0 --directory _site
 - [執行環境與結果來源沿革](docs/provenance.qmd)
 - [專案範圍與衍生來源](docs/goals-and-upstream.qmd)
 
-整合時採用的衍生輸入為 gsim 下游版本 `0.2.0+scq.1`、修訂版本 `8f5dc6c05255d003a9c6d8959537bcf8068379d3`，以及歷史 SGB 修訂版本 `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`。這些資料說明來源沿革，不代表執行階段相依性、支援範圍擴張或 API 相容性。目前來源幾何使用樹內的 `scgsim.geometry` API。Palace 以 `scgsim.geometry.sgb` 建立幾何，並用 `scgsim.meshing` 產生網格；`scgsim.geometry.compiler` 仍是進階的路徑建構 API，Palace 不再使用它。
+整合時採用的衍生輸入為 gsim 下游版本 `0.2.0+scq.1`、修訂版本 `8f5dc6c05255d003a9c6d8959537bcf8068379d3`，以及歷史 SGB 修訂版本 `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`。這些資料說明來源沿革，不代表執行階段相依性、支援範圍擴張或 API 相容性。目前來源幾何使用樹內的 `scgsim.geometry` API。Palace 以 `scgsim.geometry.sgb` 建立幾何，並用 `scgsim.meshing` 產生網格。SGB 位於支援的入口（`GeometryPlan` 與模擬類別）以下：以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援範圍](docs/supported-scope.qmd#supported-entry)。
 
 ## 工程收斂 {#engineering-convergence}
 

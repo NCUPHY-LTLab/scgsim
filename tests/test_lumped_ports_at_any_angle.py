@@ -16,11 +16,11 @@ import re
 from dataclasses import dataclass
 
 import pytest
-from test_palace_rectangular_ports import port_group, prepared_port
+from test_palace_rectangular_ports import VACUUM_PADDING_UM, port_group, prepared_port
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
 
 from scgsim.geometry import GeometryPlan
-from scgsim.geometry.planning.junction_partition import lattice_rectangle
+from scgsim.geometry.junctions.lattice import lattice_rectangle
 from scgsim.palace import EigenmodeSim
 
 GRID_UM = 0.001
@@ -256,6 +256,7 @@ def eigenmode_sim(chip, reference):
     """An ``EigenmodeSim`` on the chip's plan with its one lumped port, as a user sets it up."""
     sim = EigenmodeSim()
     sim.set_plan(plan_snapshot(chip, reference))
+    sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port(PORT, layer="metal", layout_sheet=True, inductance=1e-9)
     return sim
 
@@ -589,7 +590,7 @@ def test_a_45_degree_port_on_a_round_pad_keeps_every_band_boundary(monkeypatch):
     sidecar = built_sidecar(monkeypatch, chip, reference, surface_epr_specs=SA_BANDS)
     bands = {
         name.rsplit("::band=", 1)[1]
-        for name in sidecar["physical_groups"]
+        for name in sidecar["group"]
         if name.startswith("SA::") and "::band=" in name
     }
     assert bands == {"0", "1", "2"}

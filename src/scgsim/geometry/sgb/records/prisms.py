@@ -17,16 +17,18 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Literal
 
-from scgsim.geometry.sgb.plane import Point, Ring, ring_twice_area
-from scgsim.geometry.sgb.records.carriers import (
+from scgsim.geometry.exact.carriers import (
     ArcCarrier,
+    KnownCarrier,
     Lineage,
     LineCarrier,
     LineEdge,
     RingPrimitive,
 )
+from scgsim.geometry.exact.grid import Grid
+from scgsim.geometry.exact.plane import Point, Ring, ring_twice_area
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
-from scgsim.geometry.sgb.records.grid import Grid
+from scgsim.refusal import internal
 
 MaterialKind = Literal["conductor", "dielectric", "vacuum", "port"]
 FILM_FEATURE_KINDS = frozenset({"stack_film", "local_film"})
@@ -88,7 +90,9 @@ class Footprint:
                 points.extend(witness[:-1])
                 ring_numbers.extend([primitive.lineage.edge] * (len(witness) - 1))
             if (ring_twice_area(points) > 0) != (ring_index == 0):
-                raise ValueError("ring orientation: outer must be CCW and holes CW")
+                raise ValueError(
+                    internal("ring orientation: outer must be CCW and holes CW")
+                )
             rings.append(tuple(points))
             numbers.append(tuple(ring_numbers))
         return (
@@ -142,7 +146,7 @@ def oriented_ring(ring: Sequence[Point], *, ccw: bool) -> tuple[Ring, tuple[int,
     if len(kept) > 1 and kept[0][0] == kept[-1][0]:
         kept.pop(0)
     if len(kept) < 3:
-        raise ValueError("a ring needs at least three distinct points")
+        raise ValueError(internal("a ring needs at least three distinct points"))
     cleaned = tuple(point for point, _ in kept)
     numbers = tuple(index for _, index in kept)
     if (ring_twice_area(cleaned) > 0) != ccw:
@@ -195,15 +199,19 @@ class PrismRecord:
 
     def __post_init__(self) -> None:
         if self.z1 < self.z0:
-            raise ValueError(f"{self.entity_id}: z1 < z0")
+            raise ValueError(internal(f"{self.entity_id}: z1 < z0"))
         if self.material_kind == "conductor" and not self.net_id:
-            raise ValueError(f"{self.entity_id}: conductor prism needs a net_id")
+            raise ValueError(
+                internal(f"{self.entity_id}: conductor prism needs a net_id")
+            )
         if (self.material_kind == "port") != (self.port is not None):
             raise ValueError(
-                f"{self.entity_id}: exactly the port prisms carry a port identity"
+                internal(
+                    f"{self.entity_id}: exactly the port prisms carry a port identity"
+                )
             )
         if self.material_kind == "port" and self.z0 != self.z1:
-            raise ValueError(f"{self.entity_id}: a port prism is a sheet")
+            raise ValueError(internal(f"{self.entity_id}: a port prism is a sheet"))
 
     @property
     def is_sheet(self) -> bool:
@@ -256,15 +264,22 @@ class PrismRecord:
                         ring[edge],
                         ring[(edge + 1) % count],
                         lineage,
+                        "source_edge",
                     )
                 )
                 edge += 1
                 continue
             arc = arcs[run.arc_id]
-            for piece in arc.piece_ids():
+            for piece in arc.pieces():
                 carriers.append(
                     LineCarrier(
-                        piece, ring[edge], ring[(edge + 1) % count], arc.lineage
+                        piece.id,
+                        ring[edge],
+                        ring[(edge + 1) % count],
+                        arc.lineage,
+                        "arc_chord",
+                        piece.curve,
+                        piece.piece,
                     )
                 )
                 edge += 1
@@ -279,6 +294,28 @@ class PrismCatalogue:
     prisms: tuple[PrismRecord, ...]
     families: tuple[CurveFamilyRecord, ...] = ()
     name: str = "model"
+
+    def known_carriers(self) -> dict[str, KnownCarrier]:
+        """Every carrier id the catalogue makes, with its lineage and the curve it lies on.
+
+        Prism boundary edges (straight edges and the witness chords of arcs), prism arcs, family lines, family
+        arcs and the witness chords of family arcs.  Assembly, the 2D section and the sidecar read where a carrier
+        id on an edge comes from here, never from the id.
+        """
+        known: dict[str, KnownCarrier] = {}
+        for prism in self.prisms:
+            for line in prism.carriers():
+                known[line.id] = KnownCarrier(line.lineage, line.curve or line.id)
+            for arc in prism.arcs:
+                known[arc.id] = KnownCarrier(arc.lineage, arc.id)
+        for family in self.families:
+            for line in family.carriers:
+                known[line.id] = KnownCarrier(line.lineage, line.id)
+            for arc in family.arcs:
+                known[arc.id] = KnownCarrier(arc.lineage, arc.id)
+                for piece in arc.pieces():
+                    known[piece.id] = KnownCarrier(arc.lineage, arc.id)
+        return known
 
     def arc_registry(self) -> dict[str, ArcCarrier]:
         """Every source arc carrier by id (prism arcs and curve-family arcs)."""

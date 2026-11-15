@@ -5,7 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+from scgsim.geometry.grid.booleans import boolean_polygon_region
+from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.grid.scope import UNGRIDDED
 from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import entity_z_range_um
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.planning.contact_planning.geometry import contact_patch_loops
@@ -13,11 +17,8 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
     entity_occupied_region,
     route_conductor_contact_footprints,
 )
-from scgsim.geometry.primitives.constants import TOPOLOGY_EPS_UM
-from scgsim.geometry.primitives.entities import entity_z_range_um
-from scgsim.geometry.primitives.entity_validation import resolve_contact_pad_attachment
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.spatial import same_coordinate_z
+from scgsim.geometry.planning.spatial import same_coordinate_z
+from scgsim.geometry.source.contact_pads import resolve_contact_pad_attachment
 
 
 def validate_volumetric_conductor_contacts(
@@ -66,7 +67,11 @@ def validate_volumetric_conductor_contacts(
             if min(lower_max, upper_max) - max(lower_min, upper_min) <= TOPOLOGY_EPS_UM:
                 continue
             overlap = boolean_polygon_region(
-                gdstk, lower_region, tuple(footprint_regions[upper.semantic_id]), "and"
+                UNGRIDDED,
+                gdstk,
+                lower_region,
+                tuple(footprint_regions[upper.semantic_id]),
+                "and",
             )
             if not overlap:
                 continue
@@ -134,26 +139,3 @@ def _has_explicit_volumetric_normalization(
             for pad, face in ((lower, upper), (upper, lower))
         )
     )
-
-
-def is_fully_normalized_face_metal(
-    build_input: GeometryBuildInput, entity: SemanticEntitySpec
-) -> bool:
-    """Test whether attached contact pads cover the complete face-metal region."""
-    if entity.part_role != "face_metal":
-        return False
-    import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
-
-    face = entity_occupied_region(gdstk, entity)
-    pads = tuple(
-        (
-            entity_occupied_region(gdstk, pad)
-            for pad in build_input.entities
-            if pad.part_role == "contact_pad"
-            and resolve_contact_pad_attachment(pad, build_input.entities) is entity
-        )
-    )
-    covered = boolean_polygon_region(
-        gdstk, face, tuple((polygon for region in pads for polygon in region)), "not"
-    )
-    return not covered

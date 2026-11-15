@@ -1,4 +1,4 @@
-"""Versioned AEDT runtime source provenance and receipt codecs."""
+"""Record the runtime source in a run receipt, and encode and check the receipt's current schema."""
 
 from __future__ import annotations
 
@@ -13,144 +13,73 @@ from typing import Any, Literal, cast
 
 from scgsim.aedt.io import file_sha256
 from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA as SOURCE_SCHEMA,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V1 as SOURCE_SCHEMA_V1,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V2 as SOURCE_SCHEMA_V2,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V3 as SOURCE_SCHEMA_V3,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V4 as SOURCE_SCHEMA_V4,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V5 as SOURCE_SCHEMA_V5,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V6 as SOURCE_SCHEMA_V6,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V7 as SOURCE_SCHEMA_V7,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V8 as SOURCE_SCHEMA_V8,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V9 as SOURCE_SCHEMA_V9,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V10 as SOURCE_SCHEMA_V10,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V11 as SOURCE_SCHEMA_V11,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V12 as SOURCE_SCHEMA_V12,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V13 as SOURCE_SCHEMA_V13,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V15 as SOURCE_SCHEMA_V15,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V16 as SOURCE_SCHEMA_V16,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V17 as SOURCE_SCHEMA_V17,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V18 as SOURCE_SCHEMA_V18,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V19 as SOURCE_SCHEMA_V19,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V20 as SOURCE_SCHEMA_V20,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V21 as SOURCE_SCHEMA_V21,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V22 as SOURCE_SCHEMA_V22,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V23 as SOURCE_SCHEMA_V23,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V24 as SOURCE_SCHEMA_V24,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V25 as SOURCE_SCHEMA_V25,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V26 as SOURCE_SCHEMA_V26,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V27 as SOURCE_SCHEMA_V27,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V28 as SOURCE_SCHEMA_V28,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V29 as SOURCE_SCHEMA_V29,
-)
-from scgsim.aedt.results.runtime_inventory import (
-    SOURCE_SCHEMA_V30 as SOURCE_SCHEMA_V30,
-)
-from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_ROOT,
     current_runtime_source_paths,
-    runtime_source_paths,
 )
 
-RECEIPT_V1 = "scgsim.aedt.receipt.v1"
+_RECEIPT_SCHEMA_PREFIX = "scgsim.aedt.receipt.v"
+_RECEIPT_SCHEMA_NUMBER = 3
 
-RECEIPT_V2 = "scgsim.aedt.receipt.v2"
+RECEIPT_V3 = f"{_RECEIPT_SCHEMA_PREFIX}{_RECEIPT_SCHEMA_NUMBER}"
+"""The receipt schema every handoff and completed run is written with."""
 
-RECEIPT_V3 = "scgsim.aedt.receipt.v3"
+_SOURCE_SCHEMA_PREFIX = "scgsim.aedt.runtime-source.v"
+_SOURCE_SCHEMA_NUMBER = 30
+
+SOURCE_SCHEMA = f"{_SOURCE_SCHEMA_PREFIX}{_SOURCE_SCHEMA_NUMBER}"
+"""The runtime-source schema: a generated import closure checked by shape."""
+
+ENTRY_MODULES = ("src/scgsim/__init__.py", "src/scgsim/aedt/__init__.py")
+"""Paths every AEDT runtime source contains.
+
+Every AEDT import passes through both package initializers, so a list without
+either is not an AEDT closure; as initializers they stay put when modules move
+inside ``scgsim/aedt``.
+"""
+
+_RECORD_KEYS = {
+    "schema_version",
+    "stage",
+    "modules",
+    "content_sha256",
+    "revision_observation",
+}
 
 
-# V17 remains a frozen historical inventory. V18 follows the current AEDT
-# ownership split and declares the relocated helpers and neutral geometry
-# representation used by the current candidate.
+def record_runtime_source(stage: Literal["prepared", "actual"]) -> dict[str, Any]:
+    """Hash the current runtime source into one record for the given stage.
 
-
-# V1–V18 inventories remain historical; V19 adds the public model-stage reader.
-
-
-# V1–V19 remain exact historical inventories. V20 binds the sole neutral
-# physical interpreter and its source serialization dependency.
-
-
-# V1–V20 retain exact historical scopes; V21 adds shared memory attribution.
-
-
-# V1–V21 remain exact historical inventories; V22 binds explicit version
-# selection and the native compatibility routing used by that selection.
-
-
-# V1–V25 retain their historical module paths and receipt interpretation.
-# V26 records current implementation owners after responsibility splits.
-# V27 retains its committed ordered closure. V28 records the AST-resolved
-# internal import closure as a frozen roster. V29 adds the lattice reading of
-# lumped-port sheets that the junction partition imports. V30 adds the AEDT SGB
-# STEP import and SGB's closure, less the modules issue #67 decision 8 removed.
+    ``prepared`` is recorded when a handoff is written and ``actual`` when
+    execution starts; the two are kept apart because they may differ.
+    """
+    modules = _module_manifest()
+    revision = _observed_revision()
+    return {
+        "schema_version": SOURCE_SCHEMA,
+        "stage": stage,
+        "modules": modules,
+        "content_sha256": _content_digest(modules),
+        "revision_observation": (
+            {"status": "available", "revision": revision}
+            if revision is not None
+            else {"status": "unavailable"}
+        ),
+    }
 
 
 def _module_manifest() -> list[dict[str, str]]:
-    source_root = Path(__file__).resolve().parents[3]
     return [
         {
-            "module": path.removeprefix("src/").removesuffix(".py").replace("/", "."),
+            "module": _module_name(path),
             "path": path,
-            "sha256": file_sha256(source_root / path.removeprefix("src/")),
+            "sha256": file_sha256(SOURCE_ROOT / path.removeprefix("src/")),
         }
         for path in current_runtime_source_paths()
     ]
+
+
+def _module_name(path: str) -> str:
+    return path.removeprefix("src/").removesuffix(".py").replace("/", ".")
 
 
 def _content_digest(modules: list[dict[str, str]]) -> str:
@@ -197,190 +126,66 @@ def _observed_revision() -> str | None:
     return revision if re.fullmatch(r"[0-9a-f]{40}", revision) else None
 
 
-def prepared_runtime_source() -> dict[str, Any]:
-    """Return complete module hashes plus an optional truthful Git observation."""
-    modules = _module_manifest()
-    revision = _observed_revision()
-    return {
-        "schema_version": SOURCE_SCHEMA,
-        "stage": "prepared",
-        "modules": modules,
-        "content_sha256": _content_digest(modules),
-        "revision_observation": (
-            {"status": "available", "revision": revision}
-            if revision is not None
-            else {"status": "unavailable"}
-        ),
-    }
-
-
-def runtime_source_identity() -> dict[str, Any]:
-    """Bind execution to measured module bytes and a truthful Git observation."""
-    modules = _module_manifest()
-    revision = _observed_revision()
-    return {
-        "schema_version": SOURCE_SCHEMA,
-        "stage": "actual",
-        "modules": modules,
-        "content_sha256": _content_digest(modules),
-        "revision_observation": (
-            {"status": "available", "revision": revision}
-            if revision is not None
-            else {"status": "unavailable"}
-        ),
-    }
-
-
 def validate_runtime_source(
     value: Any, *, stage: Literal["prepared", "actual"]
 ) -> None:
-    """Validate detached provenance shape without comparing it to installed bytes."""
+    """Check a recorded runtime source by schema, shape and digest.
+
+    The recorded hashes are not compared with installed code: a receipt states
+    which bytes ran, and later code may differ.
+    """
     if not isinstance(value, dict):
         raise RuntimeError(f"{stage} runtime source provenance is invalid")
-    modules = value.get("modules")
-    schema = value.get("schema_version")
-    expected_paths = runtime_source_paths(schema)
-    if (
-        expected_paths is None
-        or value.get("stage") != stage
-        or not isinstance(modules, list)
-        or len(modules) != len(expected_paths)
-    ):
+    _validate_schema(value.get("schema_version"), stage)
+    if set(value) != _RECORD_KEYS or value.get("stage") != stage:
         raise RuntimeError(f"{stage} runtime source provenance is invalid")
-    _validate_module_records(modules, expected_paths, schema, stage)
-    if value.get("content_sha256") != _content_digest(modules):
+    modules = value["modules"]
+    _validate_module_records(modules, stage)
+    if value["content_sha256"] != _content_digest(modules):
         raise RuntimeError(f"{stage} runtime source content digest is invalid")
-    if stage == "prepared":
-        if set(value) != {
-            "schema_version",
-            "stage",
-            "modules",
-            "content_sha256",
-            "revision_observation",
-        }:
-            raise RuntimeError("prepared runtime source provenance is invalid")
-        _validate_revision_observation(value.get("revision_observation"), stage=stage)
-    elif schema in {
-        SOURCE_SCHEMA_V13,
-        SOURCE_SCHEMA_V15,
-        SOURCE_SCHEMA_V16,
-        SOURCE_SCHEMA_V17,
-        SOURCE_SCHEMA_V18,
-        SOURCE_SCHEMA_V19,
-        SOURCE_SCHEMA_V20,
-        SOURCE_SCHEMA_V21,
-        SOURCE_SCHEMA_V22,
-        SOURCE_SCHEMA_V23,
-        SOURCE_SCHEMA_V24,
-        SOURCE_SCHEMA_V25,
-        SOURCE_SCHEMA_V26,
-        SOURCE_SCHEMA_V27,
-        SOURCE_SCHEMA_V28,
-        SOURCE_SCHEMA_V29,
-        SOURCE_SCHEMA_V30,
-    }:
-        if set(value) != {
-            "schema_version",
-            "stage",
-            "modules",
-            "content_sha256",
-            "revision_observation",
-        }:
-            raise RuntimeError("actual runtime source provenance is invalid")
-        _validate_revision_observation(value.get("revision_observation"), stage=stage)
-    else:
-        required_hashes = {
-            "run_py_sha256",
-            "spec_py_sha256",
-            "hfss_convergence_py_sha256",
-            "q2d_convergence_py_sha256",
-            "q3d_convergence_py_sha256",
-            "matrix_export_py_sha256",
-        }
-        current = schema == SOURCE_SCHEMA_V12
-        revision_field = "revision_observation" if current else "revision"
-        if set(value) != {
-            "schema_version",
-            "stage",
-            "modules",
-            "content_sha256",
-            revision_field,
-            *required_hashes,
-        } or any(
-            not re.fullmatch(r"[0-9a-f]{64}", str(value.get(key, "")))
-            for key in required_hashes
-        ):
-            raise RuntimeError("actual runtime source legacy identity is invalid")
-        if current:
-            _validate_revision_observation(
-                value.get("revision_observation"), stage=stage
-            )
-        elif not re.fullmatch(r"[0-9a-f]{40}", str(value.get("revision", ""))):
-            raise RuntimeError("actual runtime source legacy identity is invalid")
-        by_path = {item["path"]: item["sha256"] for item in modules}
-        expected_legacy = {
-            "run_py_sha256": by_path["scgsim/aedt/run.py"],
-            "spec_py_sha256": by_path["scgsim/aedt/spec.py"],
-            "hfss_convergence_py_sha256": by_path["scgsim/aedt/_hfss_convergence.py"],
-            "q2d_convergence_py_sha256": by_path["scgsim/aedt/_q2d_convergence.py"],
-            # Preserve the existing legacy key's historical source-file binding.
-            "q3d_convergence_py_sha256": by_path["scgsim/aedt/_q2d_convergence.py"],
-            "matrix_export_py_sha256": by_path["scgsim/aedt/_matrix_export.py"],
-        }
-        if any(value[key] != digest for key, digest in expected_legacy.items()):
-            raise RuntimeError("actual runtime source legacy identity is invalid")
+    _validate_revision_observation(value["revision_observation"], stage=stage)
 
 
-def _validate_module_records(
-    modules: list[Any],
-    expected_paths: tuple[str, ...],
-    schema: Any,
-    stage: str,
-) -> None:
-    """Check ordered module identities before validating the enclosing digest."""
+def _validate_schema(schema: Any, stage: str) -> None:
+    """Refuse every schema but the current one, naming how to read an older one."""
+    if schema == SOURCE_SCHEMA:
+        return
+    if _is_earlier_source_schema(schema):
+        raise RuntimeError(
+            f"{stage} runtime source {schema} was written by an earlier SCGSim, "
+            f"which this version does not read (it reads {SOURCE_SCHEMA}); read "
+            "this result with the SCGSim commit that wrote it, named by the "
+            "receipt's revision_observation when Git was available"
+        )
+    raise RuntimeError(f"{stage} runtime source provenance is invalid")
+
+
+def _validate_module_records(modules: Any, stage: str) -> None:
+    """Check that the records name a sorted, unique AEDT closure under src/scgsim."""
+    if not isinstance(modules, list):
+        raise RuntimeError(f"{stage} runtime source module manifest is invalid")
     paths: list[str] = []
     for item in modules:
-        expected_module = (
-            item["path"].removeprefix("src/").removesuffix(".py").replace("/", ".")
-            if isinstance(item, dict) and isinstance(item.get("path"), str)
-            else None
-        )
+        path = item.get("path") if isinstance(item, dict) else None
         if (
             not isinstance(item, dict)
             or set(item) != {"module", "path", "sha256"}
-            or item["module"] != expected_module
-            or not isinstance(item["path"], str)
-            or not item["path"].startswith(
-                "src/scgsim/"
-                if schema
-                in {
-                    SOURCE_SCHEMA_V13,
-                    SOURCE_SCHEMA_V15,
-                    SOURCE_SCHEMA_V16,
-                    SOURCE_SCHEMA_V17,
-                    SOURCE_SCHEMA_V18,
-                    SOURCE_SCHEMA_V19,
-                    SOURCE_SCHEMA_V20,
-                    SOURCE_SCHEMA_V21,
-                    SOURCE_SCHEMA_V22,
-                    SOURCE_SCHEMA_V23,
-                    SOURCE_SCHEMA_V24,
-                    SOURCE_SCHEMA_V25,
-                    SOURCE_SCHEMA_V26,
-                    SOURCE_SCHEMA_V27,
-                    SOURCE_SCHEMA_V28,
-                    SOURCE_SCHEMA_V29,
-                    SOURCE_SCHEMA_V30,
-                }
-                else "scgsim/"
-            )
-            or Path(item["path"]).is_absolute()
+            or not isinstance(path, str)
+            or not path.startswith("src/scgsim/")
+            or ".." in Path(path).parts
+            or item["module"] != _module_name(path)
+            or not isinstance(item["sha256"], str)
             or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
         ):
             raise RuntimeError(f"{stage} runtime source module manifest is invalid")
-        paths.append(item["path"])
-    if tuple(paths) != expected_paths:
-        raise RuntimeError(f"{stage} runtime source module manifest is invalid")
+        paths.append(path)
+    if paths != sorted(set(paths)):
+        raise RuntimeError(f"{stage} runtime source paths are not sorted and unique")
+    missing = [path for path in ENTRY_MODULES if path not in paths]
+    if missing:
+        raise RuntimeError(
+            f"{stage} runtime source lacks the AEDT entry modules {missing}"
+        )
 
 
 def _validate_revision_observation(value: Any, *, stage: str) -> None:
@@ -397,7 +202,60 @@ def _validate_revision_observation(value: Any, *, stage: str) -> None:
         raise RuntimeError(f"{stage} runtime source revision observation is invalid")
 
 
-def initial_receipt_payload(  # noqa: PLR0913 -- retain the versioned codec's explicit keyword interface.
+def require_current_receipt(receipt: Any) -> None:
+    """Refuse a receipt an earlier SCGSim wrote before reading anything it binds.
+
+    The receipt schema and the schema of each runtime-source record it carries
+    are checked first, so an old result is refused with how to read it rather
+    than by whichever older request or result format it reaches next.
+    """
+    schema = receipt.get("schema_version") if isinstance(receipt, dict) else None
+    if schema != RECEIPT_V3:
+        number = (
+            schema.removeprefix(_RECEIPT_SCHEMA_PREFIX)
+            if isinstance(schema, str) and schema.startswith(_RECEIPT_SCHEMA_PREFIX)
+            else ""
+        )
+        if number.isdigit() and int(number) < _RECEIPT_SCHEMA_NUMBER:
+            raise RuntimeError(
+                f"receipt {schema} was written by an earlier SCGSim, which this "
+                f"version does not read (it reads {RECEIPT_V3}); read this result "
+                "with the SCGSim commit that wrote it"
+            )
+        raise RuntimeError("handoff receipt schema is invalid")
+    for key, stage in (
+        ("prepared_runtime_source", "prepared"),
+        ("runtime_source", "actual"),
+    ):
+        record = receipt.get(key)
+        if isinstance(record, dict) and _is_earlier_source_schema(
+            record.get("schema_version")
+        ):
+            _validate_schema(record.get("schema_version"), stage)
+    cohort = receipt.get("preparation_cohort")
+    if cohort in _EARLIER_PREPARATION_COHORTS:
+        raise RuntimeError(
+            f"receipt of preparation cohort {cohort} was executed from a handoff an "
+            "earlier SCGSim wrote, which this version does not read (it reads "
+            "prepared_v3); read this result with the SCGSim commit that wrote it"
+        )
+    # A malformed or unknown record is refused as invalid by the full checks.
+
+
+_EARLIER_PREPARATION_COHORTS = {"verified_legacy_v1", "prepared_v2"}
+"""Cohorts of receipt v1 and v2 handoffs; a V3 receipt names one when it ran one."""
+
+
+def _is_earlier_source_schema(schema: Any) -> bool:
+    number = (
+        schema.removeprefix(_SOURCE_SCHEMA_PREFIX)
+        if isinstance(schema, str) and schema.startswith(_SOURCE_SCHEMA_PREFIX)
+        else ""
+    )
+    return number.isdigit() and int(number) < _SOURCE_SCHEMA_NUMBER
+
+
+def initial_receipt_payload(  # noqa: PLR0913 -- retain the codec's explicit keyword interface.
     *,
     schema_version: str,
     mode: Any,
@@ -407,14 +265,16 @@ def initial_receipt_payload(  # noqa: PLR0913 -- retain the versioned codec's ex
     source: Any,
     outputs: Any,
     prepared_at_utc: Any,
-    prepared_runtime_source_value: Any = None,
+    prepared_runtime_source_value: Any,
 ) -> dict[str, Any]:
-    """Build the canonical field order for an initial v1, v2, or v3 receipt."""
-    if schema_version not in {RECEIPT_V1, RECEIPT_V2, RECEIPT_V3}:
+    """Build the canonical field order for an initial receipt."""
+    if schema_version != RECEIPT_V3:
         raise ValueError("initial receipt schema is unsupported")
     if outputs != {}:
         raise ValueError("initial receipt outputs must be empty")
-    result = {
+    if prepared_runtime_source_value is None:
+        raise ValueError("v3 initial receipt requires prepared runtime source")
+    return {
         "schema_version": schema_version,
         "status": "not_run",
         "mode": mode,
@@ -422,23 +282,14 @@ def initial_receipt_payload(  # noqa: PLR0913 -- retain the versioned codec's ex
         "pdk_materials": pdk_materials,
         "vacuum_material_id": vacuum_material_id,
         "source": source,
+        "prepared_runtime_source": prepared_runtime_source_value,
+        "outputs": outputs,
+        "prepared_at_utc": prepared_at_utc,
     }
-    if schema_version in {RECEIPT_V2, RECEIPT_V3}:
-        if prepared_runtime_source_value is None:
-            version = schema_version.rsplit(".", 1)[-1]
-            raise ValueError(
-                f"{version} initial receipt requires prepared runtime source"
-            )
-        result["prepared_runtime_source"] = prepared_runtime_source_value
-    elif prepared_runtime_source_value is not None:
-        raise ValueError("v1 initial receipt excludes prepared runtime source")
-    result["outputs"] = outputs
-    result["prepared_at_utc"] = prepared_at_utc
-    return result
 
 
 def encode_initial_receipt(value: Mapping[str, Any]) -> bytes:
-    """Encode exact historical initial-receipt bytes with fixed indentation."""
+    """Encode exact initial-receipt bytes with fixed indentation."""
     canonical = initial_receipt_payload(
         schema_version=cast(str, value.get("schema_version")),
         mode=value.get("mode"),

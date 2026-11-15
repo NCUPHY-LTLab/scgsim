@@ -6,10 +6,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from typing import Any, Literal
 
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.planning.representation import planned_conductor_representation
 from scgsim.semantics import (
     EvidenceResult,
     SemanticEvidenceFacade,
@@ -40,7 +42,7 @@ def _string_tuple(value: object) -> tuple[str, ...] | None:
 
 
 def _upstream_plain(value: Any) -> Any:
-    """Preserve legacy source fingerprinting outside strict core mappings."""
+    """Reduce a value to plain mappings, lists and sorted sets, so its SHA-256 does not depend on the container types."""
     if isinstance(value, Mapping):
         return {str(key): _upstream_plain(item) for key, item in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):

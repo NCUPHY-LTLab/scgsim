@@ -8,15 +8,15 @@ from typing import Any
 from scgsim.geometry.models.common import (
     RouteLiteral,
 )
-from scgsim.geometry.models.construction import (
-    ConstructionBodyPlanRecord,
-    SurfacePartitionRecord,
-)
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import (
     InterfacePlanRecord,
     MMContactRecord,
+)
+from scgsim.geometry.planning.surface_planning.construction import (
+    ConstructionBodyPlanRecord,
+    SurfacePartitionRecord,
 )
 from scgsim.semantics import SemanticEvidenceFacade
 

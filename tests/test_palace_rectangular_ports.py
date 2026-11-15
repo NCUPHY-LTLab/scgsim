@@ -14,14 +14,15 @@ import math
 import pytest
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, two_pads
 
-import scgsim.palace.preparation.workflow as workflow
+import scgsim.palace.source.workflow as workflow
 from scgsim.geometry import (
     GeometryPlan,
     RectangularJunctionSpec,
-    build_component_stack,
 )
 from scgsim.palace import EigenmodeSim
 
+# (x, y, z) padding in um for the vacuum a model needs; the tests read ports, not the air around them.
+VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
 PAD_RADIUS_UM = 100.0
 PAD_VERTICES = 1024
 # The PDK's circular pad draws its circles with 256 points.
@@ -182,14 +183,15 @@ def eigenmode_sim(component, nets=NETS):
     plan.set_nets(nets)
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
+    sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     return sim
 
 
 def prepared_port(sim):
     """The prepared geometry input of the simulation, with its one port region and partition record."""
-    request = sim._geometry_request(sim.stack)  # noqa: SLF001 -- the preparation mesh() runs
-    prepared = request.source["source_geometry_input"]
+    request = sim._geometry_request(sim._plan)  # noqa: SLF001 -- the preparation mesh() runs
+    prepared = request.source.geometry_input
     (region,) = prepared.port_sheet_regions
     record = prepared.metadata["junction_partitions"][
         region.metadata["rectangular_junction_partition"]
@@ -221,9 +223,7 @@ def built_sidecar(monkeypatch, component, nets=NETS):
 def port_group(sidecar):
     """The one lumped-port physical group of a sidecar."""
     (group,) = [
-        group
-        for name, group in sidecar["physical_groups"].items()
-        if name.startswith("PORT::")
+        group for name, group in sidecar["group"].items() if name.startswith("PORT::")
     ]
     return group
 
@@ -377,52 +377,11 @@ def test_a_port_between_straight_edges_keeps_its_face_and_conductors(
     def conductors_and_port(sidecar):
         return {
             name: (group.get("area_um2"), group.get("entities"), group.get("face_kind"))
-            for name, group in sidecar["physical_groups"].items()
+            for name, group in sidecar["group"].items()
         }
 
     assert conductors_and_port(partitioned) == conductors_and_port(whole)
-    assert partitioned["counts"] == whole["counts"]
-
-
-def test_a_port_on_a_standalone_layout_is_a_rectangle(monkeypatch, tmp_path):
-    """A layout bound by ``set_geometry`` and ``set_stack`` records no source occurrence; its port is cut all the same.
-
-    The sheet and its two conductors share the standalone layout's occurrence identity, so the
-    partition request names them as it names a plan's.  The cuts lie on the straight edges, and
-    SGB builds the 20 x 2 um port face.
-    """
-    component = pad_and_electrode(monkeypatch, round_pad=False)
-    # The standalone form of the same layout: schema 1, a Net on each conductor, and the port
-    # found by its sheet layer instead of a declared port record.
-    semantics = component.info["component_semantics"]
-    semantics["schema_version"] = 1
-    del semantics["ports"]
-    for region in semantics["conductor_regions"]:
-        region["net_id"] = region["semantic_id"]
-    sim = EigenmodeSim()
-    sim.set_geometry(component)
-    sim.set_stack(
-        build_component_stack(
-            component=component,
-            layer_stack=NO_VACUUM_STACK,
-            material_records=MATERIALS,
-            coupon_padding_um=0.0,
-        )
-    )
-    sim.add_port("P1", layer="metal", layout_sheet=True, inductance=1e-9)
-    _, region, record = prepared_port(sim)
-    assert assert_rectangle_along_x(region.exterior) == pytest.approx(
-        (100.0, ELECTRODE_X_UM)
-    )
-    assert [(end["empty_residual"], end["landing"]) for end in record["ends"]] == [
-        (True, False),
-        (True, False),
-    ]
-    geometry = sim._build_geometry(tmp_path)  # noqa: SLF001 -- the build mesh() runs
-    sidecar = json.loads(geometry.artifacts.sidecar.read_bytes())
-    assert port_group(sidecar)["area_um2"] == pytest.approx(
-        (ELECTRODE_X_UM - 100.0) * 2 * SHEET_HALF_WIDTH_UM, abs=1e-9
-    )
+    assert partitioned["summary"]["counts"] == whole["summary"]["counts"]
 
 
 def test_a_port_on_conductors_without_a_net_joins_each_end_to_its_own_conductor(
@@ -439,6 +398,7 @@ def test_a_port_on_conductors_without_a_net_joins_each_end_to_its_own_conductor(
     )
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
+    sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     _, _, record = prepared_port(sim)
     assert [(end["source_entity_id"], end["net_id"]) for end in record["ends"]] == [
@@ -599,7 +559,7 @@ def test_a_boundary_selector_inside_a_landing_end_binds_the_authored_ring(monkey
     nets = {"pad": ("chip/pad",), "ground": ("chip/ground",)}
     _, _, record = prepared_port(eigenmode_sim(component, nets))
     assert all(end["landing"] for end in record["ends"])
-    carriers = json.dumps(built_sidecar(monkeypatch, component, nets)["lineage"])
+    carriers = json.dumps(built_sidecar(monkeypatch, component, nets)["carrier"])
     assert "chip/pad/polygon0/ring0/arc" in carriers
     assert "chip/ground/polygon0/ring1/arc" in carriers
     assert "/polygon1/ring0/arc" not in carriers

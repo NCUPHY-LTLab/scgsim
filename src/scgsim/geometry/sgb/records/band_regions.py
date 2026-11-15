@@ -1,7 +1,7 @@
 """The band regions of an inset family, established before Imprint (design brief sections 5 and 6).
 
-Owns the record that travels from the region construction (``cutfamilies.inset``) to labelling and the
-Imprint check (``labelling.bands``):
+Owns the record that travels from the region construction (``bands.inset``) to labelling and the
+Imprint check (``arrangement.labelling.bands``):
 
 * per margin ``m_k``, the region ``R_{m_k}`` -- the points of the support at least ``m_k`` from its distance
   origins -- as the boundary cycles of its cells (exact integer rings, even-odd containment);
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from scgsim.geometry.sgb.plane import Point, RepPoint, point_in_ring, ring_bbox
+from scgsim.geometry.exact.plane import Point, RepPoint, point_in_ring, ring_bbox
 
 
 @dataclass(frozen=True)

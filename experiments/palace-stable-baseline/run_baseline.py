@@ -4,8 +4,7 @@
     python run_baseline.py RECORDS_DIR [--jobs 8] [--timeout 900] [--only CASE ...]
 
 First every layout with bands and every supported scene; then, for every layout that stopped with bands,
-the same layout without bands; then, for every layout whose banded mesh() failed, the same layout with bands
-and the vacuum the PDK's Palace notebooks give the plan (``--notebook-vacuum``) instead of the 1 um shell.  A case still running after ``--timeout`` seconds is stopped with its whole
+the same layout without bands.  A case still running after ``--timeout`` seconds is stopped with its whole
 process group and recorded as ``timeout``.  The interpreter is this one: run it from the environment that
 has SCGSim and the OrcaPen SC PDK revision under test.
 """
@@ -29,7 +28,7 @@ from run_case import write_record  # noqa: E402
 
 
 def main() -> None:
-    """Run the three passes of the baseline."""
+    """Run the two passes of the baseline."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -45,8 +44,8 @@ def main() -> None:
     sys.path.insert(0, str(HERE.parents[1] / "tests"))
     layouts = [name for name in LAYOUTS if not args.only or name in args.only]
     scenes = [name for name in scene_builders() if not args.only or name in args.only]
-    first = [(name, True, False, False) for name in layouts] + [
-        (name, True, True, False) for name in scenes
+    first = [(name, True, False) for name in layouts] + [
+        (name, True, True) for name in scenes
     ]
     _run_all(first, args)
     banded = {
@@ -54,28 +53,14 @@ def main() -> None:
         for name in layouts
     }
     _run_all(
-        [
-            (name, False, False, False)
-            for name, record in banded.items()
-            if _stopped(record)
-        ],
+        [(name, False, False) for name, record in banded.items() if _stopped(record)],
         args,
     )
-    mesh_failed = [
-        name
-        for name, record in banded.items()
-        if record["stages"].get("mesh", {}).get("result") not in (None, "pass")
-    ]
-    _run_all([(name, True, False, True) for name in mesh_failed], args)
 
 
-def record_file(
-    name: str, bands: bool, scene: bool, notebook_vacuum: bool = False
-) -> str:
+def record_file(name: str, bands: bool, scene: bool) -> str:
     """The file name of one case's record."""
-    variant = ("bands" if bands else "nobands") + (
-        "_notebookvacuum" if notebook_vacuum else ""
-    )
+    variant = "bands" if bands else "nobands"
     return f"{'scene' if scene else 'layout'}__{name}__{variant}.json"
 
 
@@ -93,12 +78,11 @@ def _run_all(jobs, args) -> None:
             print(line, flush=True)
 
 
-def run_one(name: str, bands: bool, scene: bool, notebook_vacuum: bool, args) -> str:
+def run_one(name: str, bands: bool, scene: bool, args) -> str:
     """Run one case in its own process group, write its record to ``args.records`` and say how it ended."""
-    out = args.records / record_file(name, bands, scene, notebook_vacuum)
+    out = args.records / record_file(name, bands, scene)
     command = [sys.executable, str(HERE / "run_case.py"), name, str(out)]
     command += ["--scene"] if scene else ([] if bands else ["--no-bands"])
-    command += ["--notebook-vacuum"] if notebook_vacuum else []
     # A rerun into the same folder must not show an earlier run's stages: a case that stops before its first
     # record (an import error, say) would otherwise leave the old file in place.
     out.unlink(missing_ok=True)
@@ -123,7 +107,6 @@ def run_one(name: str, bands: bool, scene: bool, notebook_vacuum: bool, args) ->
                 "case": name,
                 "bands": bands,
                 "scene": scene,
-                "notebook_vacuum": notebook_vacuum,
                 "stages": {},
             },
         )

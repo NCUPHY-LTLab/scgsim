@@ -1,4 +1,4 @@
-"""Canonical prepared-input path and hash cohort ownership."""
+"""The canonical file set of a prepared handoff and the hash cohort that binds it."""
 
 from __future__ import annotations
 
@@ -95,8 +95,6 @@ def validate_hfss_import_source(
         (HfssEprSpec, HfssEprAnalysisSpec, HfssDrivenGeometrySpec, Q2dSpec, Q3dSpec),
     ):
         return
-    if spec.modeling is None:
-        return  # Historical inventories retain their original source contract.
     gds = raw_payload["gds"]
     if (
         gds.get("source_path") != "geometry/source.gds"

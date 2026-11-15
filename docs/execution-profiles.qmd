@@ -60,6 +60,53 @@ The named profiles above describe Palace launch shapes. AEDT prepared-native
 BatchSolve is a separate EPR package workflow, not a new `ExecutionProfile` or
 SCGSim scheduler submission.
 
+## With a convergence declaration {#convergence-runner}
+
+When the simulation [declared its convergence](specs/palace-electrostatic-sgb.qmd#convergence-stop),
+the script starts the solver command of the table above through the
+convergence runner the handoff copies into the run folder:
+
+```bash
+python3 metadata/run_palace_until_converged.py "$(pwd)" -- "$PALACE_EXECUTABLE" "$PALACE_CONFIG" 2>&1 | tee -a "$PALACE_LOG"
+```
+
+On Slurm the command after `--` is the `srun` line, and the scheduler writes
+the log. The runner starts that command in a session of its own and stops it
+with SIGTERM once the declared criteria have converged; `srun` answers by
+ending its step, so the Palace tasks are killed and `srun` exits with 137. The
+script then exits with the receipt's verdict (0 for a
+completed run), because a solver stopped at convergence exits non-zero although the run completed. It
+also removes an earlier `metadata/palace_convergence_decision.json` before the
+solve. Without a declaration the script is unchanged: it starts the solver
+command itself.
+
+A run folder is run once at a time. Its script started again while it runs
+would have two solvers write one results folder and two runners write one
+decision record, and neither result could be trusted. Jobs that run side by
+side each take a run folder of their own, from their own `prepare_handoff()`.
+
+::: {.callout-note title="Run under Slurm on one node"}
+`slurm-single-node` was run with stock Palace 0.18.1 under Slurm 23.11 on one
+node (`srun` with PMIx, 16 tasks, cgroup process tracking), submitted with
+`sbatch`:
+
+- a declared run stops after the pass at which it converges: the job is
+  `COMPLETED` with exit code 0, the receipt is `completed` with
+  `stopped_at_convergence`, and the solver has ended a third of a second after
+  the stop;
+- a declared run that reaches its limit, and a run without a declaration, end
+  as they do with `direct-local`;
+- `scancel` ends the job with nothing left running and no receipt, so result
+  reading refuses the folder;
+- a runner killed outright has its guard end `srun`'s step within a second;
+  the job is `FAILED` and the receipt is `failed`. Under Slurm that receipt can
+  be written a moment before the tasks are gone, since the scheduler, not a
+  pipe, holds the log.
+
+`slurm-multi-node` goes through the same path and has not been run on more
+than one node.
+:::
+
 ## Handoff lifecycle
 
 ```text
@@ -69,7 +116,7 @@ configure model -> inspect input summary -> prepare handoff
 ```
 
 For Palace, retain `handoff.handoff_id` in preparation-side notes outside the
-transferred package. After the full returned run directory is retrieved,
+transferred package. After the full returned run folder is retrieved,
 `resolve_palace_result(run_dir, expected_handoff_id=...)` checks it against
 that independently retained identity before showing results. Do not learn the
 expected identity from files that arrived with the returned package.
@@ -89,12 +136,12 @@ operation sequence; the [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-
 defines its package and completion requirements. Copying only an EPR JSON or
 frequency export does not replace the full return.
 
-For the direct AEDT path, transfer the prepared run directory to the AEDT host
-and retrieve the complete returned run directory.
+For the direct AEDT path, transfer the prepared run folder to the AEDT host
+and retrieve the complete returned run folder.
 `resolve_results(run_dir)` verifies the receipt-bound artifacts;
 `ResolvedRun.show_all_results()` displays the verified primary, benchmark, and
 requested EPR evidence. Copying only an EPR JSON file is not a substitute for
-resolving the returned package.
+resolving the returned run folder.
 
 External gdsfactory/cloud execution is unsupported and is never a fallback.
 Palace preparation does not silently submit a scheduler job or open AEDT. The

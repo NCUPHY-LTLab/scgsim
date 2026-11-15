@@ -13,17 +13,17 @@ import random
 from collections.abc import Sequence
 from fractions import Fraction
 
-from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
-from scgsim.geometry.sgb.model import ConformalModel
-from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge, Segment
-from scgsim.geometry.sgb.noding.spatial_hash import HotGrid
-from scgsim.geometry.sgb.plane import (
+from scgsim.geometry.exact.carriers import ArcCarrier, Lineage, circle_arcs
+from scgsim.geometry.exact.grid import Grid, exact_z
+from scgsim.geometry.exact.plane import (
     Point,
     segment_point_distance_sq,
     segments_properly_cross,
 )
-from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage, circle_arcs
-from scgsim.geometry.sgb.records.grid import Grid, exact_z
+from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge, Segment
+from scgsim.geometry.sgb.arrangement.noding.spatial_hash import HotGrid
+from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.records.prisms import (
     Footprint,
     LineEdge,

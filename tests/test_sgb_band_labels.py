@@ -15,6 +15,10 @@ from sgb_gmsh_oracle import gmsh_session, mesh_coarsely
 from sgb_inputs import gds_pad_in_ground, thin_film_pair
 from sgb_scenes import slab_model
 
+from scgsim.contracts.sgb_sidecar import read_sidecar, views
+from scgsim.geometry.exact.carriers import EdgeCarrier
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.grid import Grid
 from scgsim.geometry.sgb import build_sgb_geometry
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.arrangement.dcel import (
@@ -23,31 +27,31 @@ from scgsim.geometry.sgb.arrangement.dcel import (
     interior_point,
     strip_cells,
 )
-from scgsim.geometry.sgb.cutfamilies.inset import inset_family
-from scgsim.geometry.sgb.cutfamilies.requests import (
-    ConductorSurface,
-    InsetRequest,
-    RefinementRequest,
-    SolutionInterface,
-)
-from scgsim.geometry.sgb.errors import InputError, ValidationError
-from scgsim.geometry.sgb.labelling.bands import (
+from scgsim.geometry.sgb.arrangement.labelling.bands import (
     check_seams_kept,
     face_bands,
     level_supports,
 )
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import Segment, snap_round
+from scgsim.geometry.sgb.bands.inset import inset_family
+from scgsim.geometry.sgb.bands.requests import (
+    ConductorSurface,
+    InsetRequest,
+    SolutionInterface,
+)
+from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.model import (
     ConformalModel,
     build_conformal_model,
     build_model_from_catalogue,
 )
-from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
+from scgsim.geometry.sgb.output.verification.loaded import (
+    apply_sidecar_embeds,
+    verify_xao,
+)
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
-from scgsim.geometry.sgb.records.grid import Grid
 from scgsim.geometry.sgb.records.prisms import LineEdge
 from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
-from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_xao
 
 MARGINS = (0.5, 1.0)
 SA = SolutionInterface("substrate", "upper_air", z_um=0)
@@ -62,7 +66,7 @@ def arrange(ring: list[tuple[int, int]]) -> Arrangement:
     """The arrangement of one closed ring: a single bounded face."""
     count = len(ring)
     segments = [
-        Segment(ring[i], ring[(i + 1) % count], frozenset([f"e{i}"]))
+        Segment(ring[i], ring[(i + 1) % count], frozenset([EdgeCarrier(f"e{i}")]))
         for i in range(count)
     ]
     return build_arrangement(snap_round(segments).edges)
@@ -480,9 +484,9 @@ def test_the_files_of_a_banded_port_load_and_mesh(banded_port_model, tmp_path):
         output_dir=tmp_path / "out",
     )
     sidecar = read_sidecar(artifacts.sidecar)
-    assert len(sidecar["physical_groups"][group]["ids"]) == 1
-    assert sidecar["physical_groups"][group]["area_um2"] == pytest.approx(area)
-    sa = sidecar["physical_groups"]
+    assert len(views.group_members(sidecar)[group]) == 1
+    assert sidecar["group"][group]["area_um2"] == pytest.approx(area)
+    sa = sidecar["group"]
     found = [
         sa[n]["area_um2"]
         for n in sorted(sa)
@@ -494,24 +498,3 @@ def test_the_files_of_a_banded_port_load_and_mesh(banded_port_model, tmp_path):
     with gmsh_session(artifacts.xao):
         apply_sidecar_embeds(sidecar)
         mesh_coarsely(60.0)
-
-
-def test_a_refinement_curve_across_the_port_is_a_user_cut_and_stays_in_the_port():
-    """Explicit user curves are never clipped: the port holds the pieces of a curve crossing it."""
-    effective = thin_film_pair()
-    inset = InsetRequest("band_sa", SA, MARGINS)
-    across = RefinementRequest("across", 0.0, ((5.0, 0.5), (5.0, 3.5)))
-    model = build_conformal_model(
-        effective.build_input,
-        effective.representation,
-        "A",
-        insets=(inset,),
-        refinements=(across,),
-    )
-    (face_id,) = model.routed.groups["PORT::port_sheet"].ids
-    port = model.topology.faces[face_id]
-    assert (
-        port.refinement_edges
-    )  # the curve is embedded in the port: the seams' clip never touches it
-    assert corner_count(model, port) == 4
-    assert not model.report.failures

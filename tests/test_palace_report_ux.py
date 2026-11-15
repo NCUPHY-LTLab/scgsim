@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import sys
 import tempfile
 import types
@@ -13,6 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.palace import (
     PalaceResultSelection,
     PalaceTrustReport,
@@ -20,14 +22,14 @@ from scgsim.palace import (
     ResolvedPalaceResult,
     inspect_run_trustworthiness,
 )
-from scgsim.palace.execution.returned_receipt import iteration_output_paths
-from scgsim.palace.presentation.surface_figures import surface_ranking_figure
-from scgsim.palace.results.report_data import (
+from scgsim.palace.reports.surface_figures import surface_ranking_figure
+from scgsim.palace.results.inspection_records import (
     AmrPassSnapshot,
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
 )
-from scgsim.palace.results.surface_readers import SurfaceEprReader
+from scgsim.palace.results.surface_readers import SurfaceBinding, SurfaceEprReader
+from scgsim.palace.run.returned_receipt import iteration_output_paths
 
 
 class _Html:
@@ -133,6 +135,7 @@ def _trust_report(
         durations={},
         cost={},
         provenance={},
+        convergence=ConvergenceCheck.not_declared(),
     )
 
 
@@ -164,14 +167,11 @@ def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenari
     results.mkdir(parents=True)
     logs.mkdir()
     (root / "config.json").write_text("{}", encoding="utf-8")
-    (results / "eig.csv").write_text(
-        (
-            "m,Re{f} (GHz)\n1,5.0\n"
-            if conflicting_final_problem_size
-            else "m,Re{f} (GHz)\n"
-        ),
-        encoding="utf-8",
-    )
+    # As Palace 0.18.1 leaves a run killed during the solve after pass 7: iteration07 holds pass 7, and the
+    # top level is that solve under way (eig.csv with its header only), or, when it was killed before the
+    # solve wrote anything, links into iteration07 beside a palace.json that already counts the next mesh.
+    if not conflicting_final_problem_size:
+        (results / "eig.csv").write_text("m,Re{f} (GHz)\n", encoding="utf-8")
     (logs / "palace-1.log").write_text(log_text, encoding="utf-8")
     if include_iteration:
         iteration = results / "iteration07"
@@ -180,22 +180,30 @@ def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenari
             "m,Re{f} (GHz)\n1,5.0\n",
             encoding="utf-8",
         )
-        if conflicting_final_problem_size:
-            (iteration / "palace.json").write_text(
-                json.dumps(
-                    {
-                        "Problem": {"DegreesOfFreedom": 100, "MeshElements": 50},
-                        "ElapsedTime": {"Durations": {"Total": 10.0}},
-                    }
-                )
-                + "\n",
-                encoding="utf-8",
+        (iteration / "palace.json").write_text(
+            json.dumps(
+                {
+                    "Problem": {
+                        "DegreesOfFreedom": 100,
+                        "MeshElements": 50,
+                        "Iteration": 7,
+                    },
+                    "ElapsedTime": {"Durations": {"Total": 10.0}},
+                }
             )
+            + "\n",
+            encoding="utf-8",
+        )
     if conflicting_final_problem_size:
+        os.symlink("iteration07/eig.csv", results / "eig.csv")
         (results / "palace.json").write_text(
             json.dumps(
                 {
-                    "Problem": {"DegreesOfFreedom": 200, "MeshElements": 100},
+                    "Problem": {
+                        "DegreesOfFreedom": 200,
+                        "MeshElements": 100,
+                        "Iteration": 7,
+                    },
                     "ElapsedTime": {"Durations": {"Total": 10.0}},
                 }
             )
@@ -232,12 +240,11 @@ def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenari
     ]
     if seal_iteration:
         output_paths.append("results/palace/iteration07/eig.csv")
-        if conflicting_final_problem_size:
-            output_paths.append("results/palace/iteration07/palace.json")
+        output_paths.append("results/palace/iteration07/palace.json")
     output_files = [_file_record(root, relative) for relative in output_paths]
     receipt: dict[str, object] = {
-        "schema": "palace-returned-run-receipt.v1",
-        "schema_version": 1,
+        "schema": "palace-returned-run-receipt.v2",
+        "schema_version": 2,
         "handoff_id": handoff_id,
         "route": "A",
         "problem": "Eigenmode",
@@ -245,10 +252,12 @@ def _failed_eigenmode_run(  # noqa: PLR0913 - independent native-failure scenari
         "exit_code": solver_exit_code,
         "solver_exit_code": solver_exit_code,
         "tee_exit_code": 0,
+        "ending": "solver_ended",
         "identity_verified": False,
         "input_hashes": input_hashes,
         "output_files": output_files,
         "log": _file_record(root, "logs/palace-1.log"),
+        "convergence_decision": None,
     }
     (metadata / "palace_returned_run_receipt.json").write_text(
         json.dumps(receipt) + "\n",
@@ -270,6 +279,7 @@ class PalaceReportUxTests(unittest.TestCase):
                 result.show_run_trustworthiness,
                 result.show_all_results,
                 result.show_physics_quantities,
+                result.show_simulation_benchmark,
             ):
                 with self.subTest(method=show.__name__):
                     with self.assertRaises(FileNotFoundError):
@@ -332,18 +342,18 @@ class PalaceReportUxTests(unittest.TestCase):
                 return_value=["numerical"],
             ),
             patch(
-                "scgsim.palace.presentation.trust.surface_total_figure",
-                return_value=total,
+                "scgsim.palace.reports.trust.surface_kind_figures",
+                return_value=[total],
             ),
             patch(
-                "scgsim.palace.presentation.trust.surface_percentage_figure",
+                "scgsim.palace.reports.trust.surface_percentage_figure",
                 return_value=percentage,
             ),
             patch(
-                "scgsim.palace.presentation.views.surface_ranking_figure",
+                "scgsim.palace.reports.views.surface_ranking_figure",
                 side_effect=AssertionError("trust must not render physics ranking"),
             ),
-            patch("scgsim.palace.presentation.trust.show_figure", trust_figures.append),
+            patch("scgsim.palace.reports.trust.show_figure", trust_figures.append),
             _captured_notebook_display(),
         ):
             trust._ipython_display_()
@@ -353,20 +363,18 @@ class PalaceReportUxTests(unittest.TestCase):
         physics = trust.show_physics_quantities(ranking_limit=1)
         with (
             patch(
-                "scgsim.palace.presentation.trust.surface_total_figure",
+                "scgsim.palace.reports.trust.surface_kind_figures",
                 side_effect=AssertionError("physics must not redraw convergence"),
             ),
             patch(
-                "scgsim.palace.presentation.trust.surface_percentage_figure",
+                "scgsim.palace.reports.trust.surface_percentage_figure",
                 side_effect=AssertionError("physics must not redraw convergence"),
             ),
             patch(
-                "scgsim.palace.presentation.views.surface_ranking_figure",
+                "scgsim.palace.reports.views.surface_ranking_figure",
                 return_value=ranking,
             ),
-            patch(
-                "scgsim.palace.presentation.views.show_figure", physics_figures.append
-            ),
+            patch("scgsim.palace.reports.views.show_figure", physics_figures.append),
             _captured_notebook_display() as displayed,
         ):
             physics._ipython_display_()
@@ -404,7 +412,7 @@ class PalaceReportUxTests(unittest.TestCase):
         self.assertEqual(trust.passes[0].path.name, "iteration07")
         self.assertEqual(trust.passes[0].frequencies_ghz, (5.0,))
         self.assertEqual(trust.identity["handoff_id"], handoff_id)
-        self.assertEqual(trust.identity["receipt"], "failed / exit 137")
+        self.assertEqual(trust.identity["receipt"], "failed, solver_ended / exit 137")
         self.assertEqual(trust.provenance["returned_receipt"], receipt)
         identity_html = trust.identity_html()
         self.assertIn("Run failed", identity_html)
@@ -500,7 +508,7 @@ class PalaceReportUxTests(unittest.TestCase):
                 "m,Re{f} (GHz)\n1,6.0\n",
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ValueError, "output hash mismatch"):
+            with self.assertRaisesRegex(ValueError, "output hash: mismatch"):
                 inspect_run_trustworthiness(root)
 
     def test_recorder_collects_report_relevant_iteration_files(self) -> None:
@@ -513,7 +521,8 @@ class PalaceReportUxTests(unittest.TestCase):
             (iteration / "surface-Q.csv").write_text("m,p_surf[1]\n1,0.1\n")
             (iteration / "ignored.txt").write_text("ignored\n")
 
-            paths = iteration_output_paths(root, "Eigenmode")
+            config = {"Boundaries": {"Postprocessing": {"Dielectric": [{"Index": 1}]}}}
+            paths = iteration_output_paths(root, "Eigenmode", config=config)
 
         self.assertEqual(
             paths,
@@ -541,18 +550,18 @@ class PalaceReportUxTests(unittest.TestCase):
                 frequencies_ghz=(5.0,),
                 expected_rows=1,
                 bindings=(
-                    {
-                        "index": 1,
-                        "interface_type": "MA",
-                        "name": "SURFACE_1",
-                        "rows": ("ROW_1",),
-                        "face_kinds": ("interface",),
-                        "entities": ("ENTITY_1",),
-                        "nets": ("GROUND",),
-                        "attributes": (7,),
-                        "lineage": {"f:1": {"ENTITY_1": 1.0}},
-                        "loss_tangent": 0.0,
-                    },
+                    SurfaceBinding(
+                        index=1,
+                        interface_type="MA",
+                        name="SURFACE_1",
+                        rows=("ROW_1",),
+                        face_kinds=("interface",),
+                        entities=("ENTITY_1",),
+                        nets=("GROUND",),
+                        attributes=(7,),
+                        lineage={"f:1": {"ENTITY_1": 1.0}},
+                        loss_tangent=0.0,
+                    ),
                 ),
                 surface_count=1,
             ).read()

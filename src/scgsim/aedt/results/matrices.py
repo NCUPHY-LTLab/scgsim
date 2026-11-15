@@ -93,7 +93,7 @@ def read_q2d_rlgc_matrix(
 
 @dataclass(frozen=True)
 class _MatrixExpectation:
-    """The existing optional native header and matrix-label requirements."""
+    """The native header and matrix-label requirements a matrix export is read against; each is optional."""
 
     solver: str
     problem: str

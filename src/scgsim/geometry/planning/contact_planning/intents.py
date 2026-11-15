@@ -5,16 +5,11 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, TypedDict, cast
 
-from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.common import INTERFACE_KIND_ORDER, RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
-from scgsim.geometry.planning.topology import (
-    surface_interface_record_owners,
-    surface_owner_ids,
-)
-from scgsim.geometry.primitives.constants import INTERFACE_KIND_ORDER
-from scgsim.geometry.primitives.entities import intent_supports_route
+from scgsim.geometry.models.topology import InterfacePlanRecord
+from scgsim.geometry.planning.entities import intent_supports_route
 
 
 class InterfaceIntents(TypedDict, total=False):
@@ -23,47 +18,6 @@ class InterfaceIntents(TypedDict, total=False):
     interfaces: Sequence[Mapping[str, Any]]
     metal_metal_contact_edges: Sequence[Mapping[str, Any]]
     metal_ground_contact_patches: Sequence[Mapping[str, Any]]
-
-
-def complete_interface_plan_from_surfaces(
-    *,
-    interfaces: tuple[InterfacePlanRecord, ...],
-    surfaces: tuple[SurfacePlanRecord, ...],
-) -> tuple[InterfacePlanRecord, ...]:
-    """Backfill InterfacePlan records for planned adjacency surfaces."""
-    known = {interface.interface_id for interface in interfaces}
-    completed = list(interfaces)
-    for surface in surfaces:
-        if surface.interface_id is None or surface.interface_id in known:
-            continue
-        kind = surface.interface_id.split("__", 1)[0]
-        if kind not in INTERFACE_KIND_ORDER:
-            raise ValueError(f"invalid surface interface id: {surface.interface_id}")
-        owners = surface_owner_ids(surface)
-        record_owners = surface_interface_record_owners(surface, owners)
-        if len(record_owners) != 2:
-            raise ValueError(
-                f"{surface.surface_id} interface needs two owners, got {owners!r}"
-            )
-        completed.append(
-            InterfacePlanRecord(
-                interface_id=surface.interface_id,
-                kind=kind,
-                owner_semantic_ids=(record_owners[0], record_owners[1]),
-                recognition_rule=str(
-                    surface.metadata.get(
-                        "recognition_rule", "planned_surface_adjacency"
-                    )
-                ),
-                solver_use=surface.solver_use,
-                metadata={
-                    "generated_from_surface_id": surface.surface_id,
-                    **dict(surface.metadata),
-                },
-            )
-        )
-        known.add(surface.interface_id)
-    return tuple(completed)
 
 
 def recognize_route_interfaces(

@@ -5,23 +5,23 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from scgsim.geometry.grid.coordinates import segment_overlap_interval
+from scgsim.geometry.grid.loops import edge_is_covered_by_loop_edge
+from scgsim.geometry.grid.planar_loops import clean_loop, ring_edges
+from scgsim.geometry.models.entities import entity_z_range_um
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.planning.domain_planning.occupancy import (
     solution_id_for_entity_coverage,
     solution_region_entities,
 )
-from scgsim.geometry.primitives.entities import entity_z_range_um
-from scgsim.geometry.primitives.geometry_refs import (
+from scgsim.geometry.planning.geometry_refs import (
     route_entity_geometry_ref,
     sidewall_geometry_refs,
 )
-from scgsim.geometry.primitives.loops import edge_is_covered_by_loop_edge
-from scgsim.geometry.primitives.planar_loops import clean_loop, ring_edges
-from scgsim.geometry.primitives.spatial import (
+from scgsim.geometry.planning.spatial import (
     interval_complement,
     range_within_bounds,
     same_coordinate_z,
-    segment_overlap_interval,
 )
 
 
@@ -108,8 +108,8 @@ def conductor_sidewall_ref_solution_id(
     every wall. Its outer wall can coincide with an authored dielectric bore;
     its inner wall remains adjacent to a ledger-bound vacuum component. Both
     use complete canonical segment coverage and the declared Z interval, not
-    a point, name, bounds proxy, or a guessed conductor role. The boolean result
-    distinguishes this exact binding from legacy whole-footprint coverage.
+    a point, name, bounds proxy, or a guessed conductor role. The boolean says
+    whether a cavity or child was bound this way at all.
     """
     host_id = entity.host_void_semantic_id
     if not isinstance(host_id, str) or not host_id:
@@ -233,7 +233,7 @@ def _auto_vacuum_sidewall_is_exterior_only(
     if z_max <= z_min:
         raise ValueError(f"{entity.semantic_id} has non-positive sidewall extent.")
     base_ref = route_entity_geometry_ref(
-        build_input, "B", entity, representation="cutout_boundary_shell"
+        "B", entity, representation="cutout_boundary_shell"
     )
     sidewalls = sidewall_geometry_refs(base_ref)
     if not sidewalls:

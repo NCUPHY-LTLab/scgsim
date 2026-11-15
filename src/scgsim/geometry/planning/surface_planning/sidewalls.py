@@ -6,48 +6,45 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.grid.coordinates import segment_overlap_interval
+from scgsim.geometry.grid.planar_loops import clean_loop, ring_edges
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import (
     HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES,
     RouteLiteral,
 )
+from scgsim.geometry.models.entities import entity_z_range_um, is_solution_entity
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import (
     InterfacePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.domain_planning.hosts import (
     adjacent_auto_vacuum_sidewall_component_id,
     conductor_sidewall_adjacent_solution_id,
     conductor_sidewall_ref_solution_id,
-    route_conductor_contact_footprints,
     sidewall_is_auto_vacuum_envelope_edge,
+)
+from scgsim.geometry.planning.domain_planning.occupancy import (
+    route_conductor_contact_footprints,
     sidewall_on_solution_outer_boundary,
 )
-from scgsim.geometry.planning.representation import (
-    planned_conductor_representation,
-)
-from scgsim.geometry.planning.surface_planning.contacts import (
-    subtract_contact_patches_from_face,
-)
-from scgsim.geometry.primitives.constants import (
-    TOPOLOGY_EPS_UM,
-)
-from scgsim.geometry.primitives.entities import (
-    entity_by_id,
-    entity_z_range_um,
-)
-from scgsim.geometry.primitives.entity_validation import is_solution_entity
-from scgsim.geometry.primitives.geometry_refs import (
+from scgsim.geometry.planning.entities import entity_by_id
+from scgsim.geometry.planning.geometry_refs import (
     route_entity_geometry_ref,
     sidewall_geometry_refs,
 )
-from scgsim.geometry.primitives.planar_loops import clean_loop, ring_edges
-from scgsim.geometry.primitives.spatial import (
+from scgsim.geometry.planning.spatial import (
     interpolate_3d,
     interval_complement,
     line_key_2d,
     same_coordinate_z,
-    segment_overlap_interval,
+)
+from scgsim.geometry.planning.surface_planning.contacts import (
+    subtract_contact_patches_from_face,
 )
 
 
@@ -82,7 +79,6 @@ def conductor_sidewall_geometry_refs(
     excluded_footprints = request.excluded_footprints
     representation_context = request.representation_context
     base_ref = route_entity_geometry_ref(
-        build_input,
         route,
         entity,
         representation=representation,

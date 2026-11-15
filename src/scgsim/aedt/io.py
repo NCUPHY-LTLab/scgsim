@@ -20,7 +20,7 @@ def file_sha256(path: Path) -> str:
 
 
 def write_json(path: Path, payload: Mapping[str, Any]) -> None:
-    """Write a detached record with the established JSON layout."""
+    """Write a detached record as two-space-indented JSON with a trailing newline."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 

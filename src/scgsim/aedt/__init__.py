@@ -1,4 +1,9 @@
-"""AEDT request, execution, analysis, and result APIs."""
+"""Prepare, run and read back AEDT (HFSS, Q3D, Q2D) calculations.
+
+In: an AEDT request spec for ``prepare_handoff``, with the request's controls. HFSS Eigenmode and the Q3D C/G preparation can also start from a ``GeometryPlan`` snapshot; Q2D starts from a ``Q2dSpec`` of explicit rectangles and conductor groups.
+Out: a portable handoff that an AEDT run reads; from a finished run the detached results (``ResolvedRun``, ``EprResult``); from a preparation-only run, which never invokes the solver, the ``PreparedModel``.
+Next: ``python -m scgsim.aedt.run`` executes the handoff; notebooks read a finished run through ``resolve_results``, a preparation-only run through ``resolve_prepared_model``, and plot with the plot helpers.
+"""
 
 from importlib import import_module
 from typing import TYPE_CHECKING
@@ -23,7 +28,6 @@ from scgsim.aedt.specs.geometry import (
 
 from .eigenmode import EigenmodeSim
 from .epr.analysis import combine_epr_mode, combine_surface_epr_mode, reanalyze_epr
-from .epr.geometry import planar_junction_from_port
 from .epr.workflow import analyze_epr
 from .preparation.geometry import (
     prepare_hfss_driven_from_geometry,
@@ -32,6 +36,7 @@ from .preparation.geometry import (
 )
 from .preparation.handoff import HandoffPlan, prepare_handoff
 from .preparation.planar import prepare_planar_geometry_input
+from .preparation.planar_junctions import planar_junction_from_port
 from .presentation.epr import plot_epr_result, show_epr
 from .results.epr import resolve_epr_result, resolve_saved_solution
 from .results.prepared import PreparedModel, resolve_prepared_model

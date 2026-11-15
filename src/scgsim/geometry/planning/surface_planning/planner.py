@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from scgsim.geometry.interpretation.representation import is_sheet_context
 from scgsim.geometry.models.common import (
     RouteLiteral,
-)
-from scgsim.geometry.models.construction import (
-    ConstructionBodyPlanRecord,
-    SurfacePartitionRecord,
 )
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
@@ -18,16 +15,17 @@ from scgsim.geometry.models.topology import (
     MMContactRecord,
     SurfacePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.domain_planning.boundaries import (
     plan_substrate_air_surfaces,
 )
 from scgsim.geometry.planning.evidence import (
     require_semantic_evidence_facade,
 )
-from scgsim.geometry.planning.representation import (
-    is_sheet_context,
-)
 from scgsim.geometry.planning.surface_planning.conductors import ConductorSurfacePlanner
+from scgsim.geometry.planning.surface_planning.construction import (
+    ConstructionBodyPlanRecord,
+    SurfacePartitionRecord,
+)
 from scgsim.geometry.planning.surface_planning.contacts import (
     contact_patches_by_entity_face,
     route_a_sheet_contacts_by_face_metal,
@@ -49,7 +47,7 @@ from scgsim.geometry.planning.surface_planning.sheets import (
     SheetSurfacePlanner,
     plan_route_a_sheet_patches,
 )
-from scgsim.geometry.primitives.surface_records import (
+from scgsim.geometry.planning.surface_records import (
     RouteASheetPatch,
     is_route_a_sheet_interface,
 )

@@ -2,4 +2,4 @@
 |:---|---:|---:|
 | Derivation and validation time | 1.13 | 1.05 |
 | Faces | 1.01 | 0.99 |
-| Peak RSS, one tile | 0.85 | 0.95 |
+| Peak RSS | 0.85 | 0.95 |

@@ -8,25 +8,26 @@ from fractions import Fraction
 from itertools import pairwise
 from typing import Any
 
-from scgsim.aedt.preparation.junction_partition import (
+from scgsim.geometry.grid.booleans import polygon_rings
+from scgsim.geometry.grid.planar_loops import (
+    cancel_reversed_planar_edges,
+    simple_planar_loops_from_edges,
+)
+from scgsim.geometry.grid.scope import UNGRIDDED
+from scgsim.geometry.junctions.exact_geometry import (
     closed_contact,
     cross,
     inside_ring,
     section,
 )
-from scgsim.geometry.planning.junction_partition import fraction_overlap
-from scgsim.geometry.primitives.grid import polygon_rings
-from scgsim.geometry.primitives.planar_loops import (
-    cancel_reversed_planar_edges,
-    simple_planar_loops_from_edges,
-)
+from scgsim.geometry.junctions.model_checks import fraction_overlap
 
 # Native CAD readback uses an absolute micrometre tolerance, never relative scaling.
 NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
 
 
 def native_coordinates_close(left, right) -> bool:
-    """Compare coordinates using the existing absolute native-readback resolution."""
+    """Compare coordinates within the absolute native-readback tolerance."""
     return len(left) == len(right) and all(
         math.isfinite(float(a))
         and math.isfinite(float(b))
@@ -292,8 +293,8 @@ def native_end_contact(end, arms) -> bool:
 
 def native_area_contact(left, right) -> bool:
     """Require an overlap piece wider, on average, than the native coordinate tolerance."""
-    for piece in fraction_overlap(left, right):
-        outer, holes = polygon_rings(piece)
+    for piece in fraction_overlap(UNGRIDDED, left, right):
+        outer, holes = polygon_rings(UNGRIDDED, piece)
         rings = (outer, *holes)
         area = abs(_ring_area(outer)) - sum(abs(_ring_area(hole)) for hole in holes)
         perimeter = sum(

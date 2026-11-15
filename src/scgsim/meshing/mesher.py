@@ -7,6 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from scgsim.refusal import refused
+
+_WHERE_MESHER = "the MesherOptions of the meshing call"
+
 # Gmsh Mesh.Algorithm3D values.
 DELAUNAY = 1
 HXT = 10
@@ -37,5 +41,9 @@ class MesherOptions:
         """Reject an order below 1."""
         if self.geometry_order < 1:
             raise ValueError(
-                f"geometry_order must be 1 or more, got {self.geometry_order!r}."
+                refused(
+                    "geometry_order",
+                    f"must be 1 or more, got {self.geometry_order!r}",
+                    _WHERE_MESHER,
+                )
             )

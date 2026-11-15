@@ -33,7 +33,7 @@ from sgb_supported_kit import (
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
-from scgsim.geometry.sgb.records.grid import exact_z
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import Footprint, PrismRecord
 
 CPW_GAP = 6.0

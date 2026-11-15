@@ -51,28 +51,81 @@ left ungrounded here; `exterior_boundary_policy="ground"` is a separate model
 and requires the explicit error policy. [The contract](../specs/palace-electrostatic-sgb.qmd)
 owns these choices and their index-map meaning.
 
+## Declare when refinement has converged
+
+Adaptive refinement is off by default (`amr_max_passes=0`). To refine, give a
+pass limit, then state which numbers must stop changing and by how much. The
+thresholds below show the form; choose your own from what the circuit question
+needs:
+
+```python
+from scgsim.palace import Capacitance, ErrorIndicator
+
+sim.set_numerical(order=2, amr_max_passes=6)
+sim.set_convergence(
+    Capacitance.element("xmon", "xmon").within(percent=0.1),
+    ErrorIndicator().below(1e-2),
+    minimum_converged_passes=2,
+)
+```
+
+Each pass is one Palace solve; pass 1 solves the mesh `mesh()` writes. The
+first criterion holds at a pass when `C[xmon][xmon]` changed by at most 0.1 %
+since the pass before, so it can first hold at pass 2. The second holds when
+Palace's error indicator is at most 0.01. The run has converged at the first pass
+where both have held for two passes in a row; with six refinements there are
+seven solves, enough for that.
+
+`write_config()` checks the declaration against the config before it writes
+anything: `Capacitance.element("xmon", "pad")` is refused because the simulation
+has no terminal `pad`, and `set_numerical(amr_max_passes=1)` is refused because
+two solves cannot give two passes in a row of a change. A stated
+`amr_tolerance` is refused too: with a declaration the criteria decide, and the
+refusal names the `ErrorIndicator().below(...)` line to write instead.
+
+Palace stops at the first pass where the run has converged: the run script
+starts it through a small runner that checks each pass as it completes and
+stops Palace there, so a run that converges at pass 4 never starts the
+expensive solves 5 to 7. When you read the returned run,
+`result.convergence.verdict` and the trust report say where it converged and
+where it stopped, for example:
+
+> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
+> held at passes 3 to 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3.
+> No pass was read after it. SCGSim stopped Palace after pass 4: 3 of the 7
+> passes its limit allows were not run.
+
+The result is then pass 4's tables. A run that does not converge runs all seven
+solves and says so ("Palace ended by itself at its limit of 7 passes").
+
+The [convergence declaration](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)
+lists every quantity (the diagonal, sub-diagonals, the whole matrix, Surface EPR
+by interface kind) and every check.
+
 ## Select the geometry approximation and build inputs
 
 The bound snapshot already supplies the outer envelope. Route B is the default
-finite-metal preparation. To explicitly select it without requesting surface
-films:
+finite-metal preparation, and Surface EPR is computed only when you request it,
+so this setup meshes as it stands:
 
 ```python
-sim.set_surface_epr(representation="B", specs={})
 mesh_path = sim.mesh()
 config_path = sim.write_config()
 print(mesh_path, config_path)
 ```
 
-For a Route-A study, pass `representation="A"` with an explicit
-`approximation_profile` that carries `film_bindings` before meshing;
-`route_a_thin_film` alone does not author them. `substrate_face` preserves physical
-face coordinates; `metal_gap_equivalent` is the separate supported two-face
-normalization. Consult the [geometry contract](../geometry-sgb.qmd) before
+For a Route-A study, call `sim.set_route("A")` before meshing. Route A makes the
+film conductors zero-thickness sheets, while finite bodies such as bumps keep their
+volume. The approximation profile says what happens to the thickness a film had: without one, `set_route("A")` uses `thin_film`, which
+removes the thickness and takes no parameters. For `substrate_face`, which
+preserves physical face coordinates, or `metal_gap_equivalent`, the separate
+supported two-face normalization, pass the profile with its explicit
+`film_bindings`: `sim.set_route("A", approximation_profile=profile)`. Route B
+needs no call. Consult the [geometry contract](../geometry-sgb.qmd) before
 changing that approximation. Surface films are optional postprocessing specifications, with attributed
 thickness/permittivity/loss assumptions rather than inferred material
-measurements. Their inset margins are cut into the geometry, so configure them
-with `set_surface_epr` before `mesh()`; see the
+measurements. Their inset margins are cut into the geometry, so request them
+with `set_surface_epr(specs)` before `mesh()`; see the
 [margin contract](../specs/palace-eigenmode.qmd#surface-epr-margins).
 
 The mesh is a real preparation operation. It can fail natively, and it stops
@@ -84,8 +137,10 @@ After meshing, `sim.mesh_summary()` exposes detached native generation
 observations, including mesh controls, element/region counts and exact mesh
 identities. Those records describe the mesh; they do not decide whether its
 discretization is adequate for a study.
-The [source summary](source-observations.qmd) remains a separate input view;
-`ElectrostaticSim` has no `input_summary()` method.
+Before meshing, `sim.input_summary()` shows the input `mesh()` builds from (the
+plan with the simulation's vacuum region applied) with the terminals, grounds
+and policies; the [source summary](source-observations.qmd) is the view of the
+plan alone.
 
 Next [inspect the prepared mesh](solver-observations.qmd) if useful, then
 [prepare and execute the handoff](execute.qmd). On return,

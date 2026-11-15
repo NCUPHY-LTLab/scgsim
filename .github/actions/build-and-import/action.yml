@@ -53,7 +53,7 @@ runs:
 
         import scgsim
         import scgsim.geometry
-        import scgsim.geometry.compiler
+        from scgsim.geometry import GeometryPlan
         from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
         repo_root = pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()
@@ -62,7 +62,7 @@ runs:
         if not source.is_relative_to(src_root):
             raise SystemExit(f"unexpected scgsim location: {source}")
         print(scgsim.__version__)
-        print(scgsim.geometry.__name__, scgsim.geometry.compiler.__name__,
+        print(scgsim.geometry.__name__, GeometryPlan.__name__,
               ElectrostaticSim.__name__, EigenmodeSim.__name__)
         PY
 
@@ -96,15 +96,15 @@ runs:
         .venv-wheel/bin/python - <<'PY'
         import scgsim
         import scgsim.geometry
-        import scgsim.geometry.compiler
         from importlib.metadata import version as metadata_version
         import pathlib
+        from scgsim.geometry import GeometryPlan
         from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
         print(scgsim.__version__)
         if scgsim.__version__ != metadata_version("scgsim"):
             raise SystemExit("version mismatch between package and metadata")
-        print(scgsim.geometry.__name__, scgsim.geometry.compiler.__name__,
+        print(scgsim.geometry.__name__, GeometryPlan.__name__,
               ElectrostaticSim.__name__, EigenmodeSim.__name__)
         print(pathlib.Path(scgsim.__file__).resolve())
         PY

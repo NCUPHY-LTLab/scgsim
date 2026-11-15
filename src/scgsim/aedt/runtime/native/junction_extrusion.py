@@ -15,7 +15,7 @@ from scgsim.aedt.runtime.native.junction_topology import (
     native_straight_ring,
     native_z_may_contact,
 )
-from scgsim.geometry.primitives.planar_loops import (
+from scgsim.geometry.grid.planar_loops import (
     cancel_reversed_planar_edges,
     simple_planar_loops_from_edges,
 )

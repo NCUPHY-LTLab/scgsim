@@ -147,7 +147,6 @@ def build_example(
     *,
     port_plane: str = "support",
     insets=(),
-    refinements=(),
     **kwargs,
 ):
     """The validated ``ConformalModel`` of the running example."""
@@ -155,7 +154,6 @@ def build_example(
         running_example(route, port_plane=port_plane),
         route,
         insets=insets,
-        refinements=refinements,
         **kwargs,
     )
 

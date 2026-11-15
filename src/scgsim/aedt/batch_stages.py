@@ -334,7 +334,7 @@ def _stage_collection_sources(
 def _run_owned_collection(
     output: Path, context: protocol.CollectionContext
 ) -> ResolvedRun:
-    """Execute the existing handoff transaction on its owned copied inputs."""
+    """Execute the handoff transaction on the owned copied inputs."""
     rc = execute_handoff(
         output / "metadata/aedt_handoff_metadata.json",
         options=ExecutionOptions(batch_collection=context),

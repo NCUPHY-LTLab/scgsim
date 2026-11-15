@@ -40,7 +40,7 @@ from sgb_supported_kit import (
 from shapely.geometry import box
 from shapely.ops import unary_union
 
-from scgsim.geometry.sgb.records.grid import exact_z
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import PrismRecord
 
 DISK_R = 110.5

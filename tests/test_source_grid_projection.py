@@ -9,7 +9,7 @@ from test_rectangular_junction_geometry import fixture
 
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
-from scgsim.geometry.source.grid import apply_geometry_grid
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
 
 
 def _payload_sha256(value: GeometryBuildInput) -> str:
@@ -72,7 +72,7 @@ def test_bound_context_mismatch_fails_before_projection():
     )
 
     with pytest.raises(
-        ValueError, match="geometry grid context differs from the bound input policy"
+        ValueError, match="internal: an input on grid .* was projected on grid"
     ):
         apply_geometry_grid(build, GeometryGridContext(0.002))
 

@@ -2,7 +2,7 @@
 
 Computed here (the page quotes these numbers):
 
-* guarantees of iterated snap rounding (``scgsim.geometry.sgb.noding``) on random segment sets and on layout-like inputs: no crossings, no vertex on an
+* guarantees of iterated snap rounding (``scgsim.geometry.sgb.arrangement.noding``) on random segment sets and on layout-like inputs: no crossings, no vertex on an
   edge interior, minimum edge length, minimum vertex-edge distance, maximum deviation from the carriers, and the same
   measurements after round 1 only (classic snap rounding);
 * cost: snap-rounding plus DCEL time against the number of segments, and hot pixels against N from the production
@@ -36,19 +36,22 @@ from plotly.subplots import make_subplots
 from sgb_emit_cases import pad_requests
 from sgb_scenes import airbridge, random_layout
 
+from scgsim.geometry.exact.carriers import ArcCarrier, EdgeCarrier, Lineage
 from scgsim.geometry.sgb.arrangement.arcs import realise, sample_arc
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
-from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.noding.snap_rounding import (
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
     Segment,
-    SerialEngine,
     assemble_chain,
+    crossing_pixels_kernel,
+    hits_kernel,
     snap_round,
 )
-from scgsim.geometry.sgb.noding.snap_rounding import canonical_key as canonical
-from scgsim.geometry.sgb.noding.spatial_hash import HotGrid
-from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage
-from scgsim.geometry.sgb.slivers.report import sliver_report
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import (
+    canonical_key as canonical,
+)
+from scgsim.geometry.sgb.arrangement.noding.spatial_hash import HotGrid
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
+from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 SQRT_HALF = math.sqrt(2) / 2
 
@@ -58,7 +61,6 @@ SQRT_HALF = math.sqrt(2) / 2
 
 def snap_state(segments, max_rounds=None):
     """Edges (a, b) -> carrier names after ``max_rounds`` rounds (``None``: until nothing changes), and the round count."""
-    engine = SerialEngine()
     edges: dict = {}
     for seg in segments:
         if seg.a != seg.b:
@@ -69,10 +71,10 @@ def snap_state(segments, max_rounds=None):
         rounds += 1
         keys = sorted(edges)
         flags = [k in changed for k in keys]
-        new_hot = engine.crossing_pixels(keys, flags) - hot
+        new_hot = crossing_pixels_kernel(keys, flags) - hot
         hot |= new_hot
         delta |= new_hot
-        hits = engine.hits(keys, flags, hot, delta)
+        hits = hits_kernel(keys, flags, hot, delta)
         new_edges, verified = {}, set()
         for key, h in zip(keys, hits, strict=True):
             chain = assemble_chain(key[0], key[1], h)
@@ -224,13 +226,13 @@ def example_models() -> dict:
 
 def _layout_like() -> dict:
     model = build_model_from_catalogue(random_layout(200, seed=1, route="B"), "B")
-    drift = sliver_report(model)["snap_drift"]
+    drift = sliver_report(model.labelled, model.topology, model.routed)["snap_drift"]
     layers = model.labelled.slabs + model.labelled.level_layers
     rounds = Counter(layer.stats["snap_rounds"] for layer in layers)
     cases = {}
     for case, build in example_models().items():
         built = build()
-        report = sliver_report(built)
+        report = sliver_report(built.labelled, built.topology, built.routed)
         cases[case] = {
             "max_snap_drift_g": report["snap_drift"]["max_grid_units"],
             "edges_measured": report["snap_drift"]["edges_measured"],
@@ -342,9 +344,8 @@ def timed_snap(n: int, seed=7) -> dict:
 
 
 def scaling_rows():
-    """Arrangement sizes and stage times of the one-tile, one-worker production runs of ``why_scaling.py measure``."""
-    measured = json.loads((FIG / "why-scaling-measured.json").read_text())["rows"]
-    rows = [r for r in measured if r["tiles_per_side"] == 1 and r["workers"] == 1]
+    """Arrangement sizes and stage times of the production runs of ``why_scaling.py measure``."""
+    rows = json.loads((FIG / "why-scaling-measured.json").read_text())["rows"]
     return [
         {
             "N": r["n_features"],
@@ -388,24 +389,25 @@ def _chord_counts(radii) -> list[int]:
     return [len(_quarter(r).witness_points()) - 1 for r in radii]
 
 
+FOREIGN = EdgeCarrier("line")  # the foreign segment of the arc example
+
+
 def _arc_example():
     arc = _quarter(24)
     pts = arc.witness_points()
-    pieces = arc.piece_ids()
+    pieces = arc.pieces()
     segs = [
-        Segment(a, b, frozenset([pid]))
-        for pid, a, b in zip(pieces, pts, pts[1:], strict=False)
+        Segment(a, b, frozenset([piece]))
+        for piece, a, b in zip(pieces, pts, pts[1:], strict=False)
     ]
     segs.append(
-        Segment((14, -2), (14, 26), frozenset(["line"]))
+        Segment((14, -2), (14, 26), frozenset([FOREIGN]))
     )  # a foreign vertical segment crossing the arc
     result = snap_round(segs)
     edges = {(e.a, e.b): set(e.carriers) for e in result.edges}
     # merge runs of witness pieces with no foreign vertex between them (what dissolution does)
     degree = Counter(p for k in edges for p in k)
-    arc_edges = [
-        (k, v) for k, v in edges.items() if all(c.startswith("arc#") for c in v)
-    ]
+    arc_edges = [(k, v) for k, v in edges.items() if all(c.curve == arc.id for c in v)]
     nxt: dict = {}
     for (a, b), _ in arc_edges:
         nxt.setdefault(a, []).append(b)
@@ -466,9 +468,9 @@ def _arc_figure(radii, counts) -> dict:
     )
     b = axes[1]
     for (u, v), names in sorted(edges.items()):
-        colour = COLOURS["bad"] if "line" in names else COLOURS["pad"]
+        colour = COLOURS["bad"] if FOREIGN in names else COLOURS["pad"]
         b.plot([u[0], v[0]], [u[1], v[1]], color=colour, lw=1.8, marker="o", ms=3)
-    foreign = sorted({p for (u, v), n in edges.items() if "line" in n for p in (u, v)})
+    foreign = sorted({p for (u, v), n in edges.items() if FOREIGN in n for p in (u, v)})
     b.set_title(
         f"2  After snap rounding: {len(edges)} edges, {result.hot_pixels} hot pixels, {result.rounds} rounds",
         fontsize=9,

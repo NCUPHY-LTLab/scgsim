@@ -1,13 +1,12 @@
 """Protocol-unit ES outputs; these fixtures do not represent native solver runs."""
 
-import argparse
 import json
 from pathlib import Path
 
 import pytest
 
-from scgsim.palace.execution import returned_receipt
 from scgsim.palace.results import resolve
+from scgsim.palace.run import returned_receipt
 
 _ES_TABLES = {
     "terminal-C": "i,C[i][1] (F)\n1,1e-15\n",
@@ -44,28 +43,26 @@ def _unit_outputs(root: Path, boundaries: dict) -> dict:
 
 def _record(root: Path) -> dict:
     """Exercise receipt identity/completeness against actual fixture file hashes."""
-    args = argparse.Namespace(
+    request = returned_receipt._ReturnRequest(  # noqa: SLF001 -- isolate the receipt output contract
+        root=root,
         exit_code=0,
         log_path="logs/unit.log",
-        diagnostic_after_the_fact=False,
+        job={"job_id": "protocol-unit-only", "job_name": None},
+        execution_stage="solver",
         preflight_exit_code=0,
         solver_exit_code=0,
         tee_exit_code=0,
-        execution_stage="solver",
-        job_id="protocol-unit-only",
-        job_name=None,
+        diagnostic_after_the_fact=False,
+        receipt_path="metadata/palace_returned_run_receipt.json",
     )
-    context = returned_receipt._ReceiptContext(  # noqa: SLF001 -- isolate the receipt output contract
-        args=args,
-        root=root,
-        handoff_metadata={"palace_identity": {}},
+    handoff = returned_receipt._Handoff(  # noqa: SLF001 -- isolate the receipt output contract
+        metadata={"palace_identity": {}},
         route="B",
         problem="Electrostatic",
-        input_hashes=[returned_receipt.record_for_path(root, "config.json")],
+        input_hashes=[dict(returned_receipt.record_for_path(root, "config.json"))],
         handoff_id="protocol-unit-only",
-        solver_invoked=True,
     )
-    return returned_receipt._receipt_payload(context)  # noqa: SLF001 -- no native execution in this unit test
+    return dict(returned_receipt._receipt(request, handoff))  # noqa: SLF001 -- no native execution in this unit test
 
 
 def _read(root: Path, config: dict, surfaces: int = 0) -> dict:
@@ -75,6 +72,7 @@ def _read(root: Path, config: dict, surfaces: int = 0) -> dict:
         "Electrostatic",
         {"terminal": 1, "domain": 1, "lumped_port": 0, "surface": surfaces},
         config,
+        receipt=_record(root),
     )
 
 

@@ -58,7 +58,7 @@ from gdsfactory.technology import LayerLevel
 from scgsim.geometry.models.physical import (
     ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
 )
-from scgsim.geometry.planning.physical import interpret_physical_geometry
+from scgsim.geometry.interpretation.physical import interpret_physical_geometry
 
 declaration = PhysicalLayerDeclaration.from_payload(authored_declaration)
 level = LayerLevel(
@@ -117,23 +117,36 @@ authority; this physical-source contract does not admit native jobs.
 
 Fresh physical-source preparation consumes neutral `PhysicalLayerDeclaration`
 records and an explicit `ApproximationProfile`. Fresh `aedt_modeling` metadata
-and role-derived route classification are not adapters. Existing
-`PhysicalLayerSpec` records retain their original serialization and coordinate
-meaning for version-bound historical readers only; using them for a new
-physical-source execution requires replacing them with neutral declarations.
+and role-derived route classification are not adapters. A request
+payload with `PhysicalLayerSpec` records and no tagged representation was
+written by an earlier SCGSim and is refused; a new physical-source execution
+requires neutral declarations.
 Explicit Solid bodies without layer declarations retain their finite source
 geometry through the shared identity plan, without minted physical IDs.
 
-The selected plan's tagged payload is the current prepared physical trace.
-Historical untagged traces remain readable under their original contract and
-retain their original hashes; they do not authorize fresh execution.
+The selected plan's tagged payload is the current prepared physical trace. A
+prepared geometry whose trace is untagged (a `PhysicalLayerSpec` layer map) was
+written by an earlier SCGSim and is refused with a replacement preparation
+instruction; read it with the SCGSim commit that wrote it.
 
 ## Palace caller profile
 
-`ElectrostaticSim` and `EigenmodeSim` accept the typed
-`approximation_profile` constructor field. `set_surface_epr()` accepts the same
-keyword and replaces the selected profile when supplied; omitting it retains
-the constructor-selected profile. The source-authorized bindings
+`ElectrostaticSim` and `EigenmodeSim` select the profile with `set_route()`.
+One call states the whole route setting: it replaces the route and the
+`approximation_profile` together. A profile given is used as given; without one,
+each route has its default: Route A uses `thin_film`, Route B the identity
+`route_b` profile.
+
+| Call | Profile the preparation uses |
+|---|---|
+| `set_route("A")` | `thin_film`, no parameters |
+| `set_route("A", approximation_profile=profile)` | `substrate_face` or `metal_gap_equivalent`, with their bindings |
+| `set_route("B")`, or no call | `route_b` |
+
+`input_summary()` shows the route and the profile the preparation uses, the
+default included. SGB's route check refuses a profile the plan's films do not
+fit (Route A with `route_b` or `solid`, Route B with `thin_film`) when `mesh()`
+builds, not at `set_route()`. The source-authorized bindings
 identify actual normalized supporting Entities and their `lower` or `upper`
 faces; they are not reconstructed from layer names, roles or equal Z values.
 
@@ -145,22 +158,17 @@ profile = ApproximationProfile(
     revision="v1",
     parameters={"film_bindings": authored_film_bindings},
 )
-sim.set_surface_epr(
-    representation="A",
-    specs=authored_surface_specs,
-    approximation_profile=profile,
-)
+sim.set_route("A", approximation_profile=profile)
+sim.set_surface_epr(authored_surface_specs)
 ```
 
 Each `authored_film_bindings` entry is keyed by a declared physical layer ID
 and contains exactly `supporting_entity_id` and `supporting_side`.
 `metal_gap_equivalent` needs its two explicitly bound opposing films. Missing
 bindings fail preparation with a replacement call shape before native work.
-The old `route_a_thin_film` string can disclose or check the selected name; it
-does not author bindings or own coordinate arithmetic. Existing Route B
-selection uses the shared identity `route_b` profile when no explicit profile
-is supplied. Low-level fresh `build_route_mesh()` requires preparation's
-effective normalized input and representation context.
+`set_route()` takes no keyword that repeats the profile's name and does not
+author bindings or own coordinate arithmetic. `build_route_geometry()` requires preparation's effective
+normalized input and representation context.
 
 The unversioned semantic `apply_thin_film_profile`, `derive_thin_film_facts`
 and `normalize_optional_profile` exports are removed. Use

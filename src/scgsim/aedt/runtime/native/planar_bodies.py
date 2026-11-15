@@ -7,17 +7,14 @@ from collections.abc import Mapping
 from typing import Any
 
 from scgsim.aedt.preparation.planar_source import (
-    entity_z_range,
     native_entity_name,
     native_name,
-    route_a_sheet_z,
 )
 from scgsim.aedt.runtime.native.common import (
     read_native_material,
     realize_source_material,
 )
 from scgsim.aedt.specs.epr import PlanarJunction
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 from scgsim.geometry.models.junctions import JunctionGeometry
 from scgsim.semantics.route_a import geometry_z_range
 
@@ -149,21 +146,8 @@ def solution_body(
     return body
 
 
-def prepared_modeling_identity(prepared: PreparedPlanarGeometry) -> dict[str, Any]:
-    """Keep legacy route labels on historical rebinds; new records name modeling."""
-    if prepared.modeling is not None:
-        return {"modeling": prepared.modeling}
-    return {"route": prepared.route}
-
-
-def validate_native_modeling_source(
-    prepared: PreparedPlanarGeometry, source: Mapping[str, Any]
-) -> None:
-    """Keep current effective-layer provenance separate from legacy route reads."""
-    if prepared.modeling is None:
-        if "modeling" in source:
-            raise ValueError("historical EPR geometry has current modeling provenance")
-        return
+def validate_native_modeling_source(source: Mapping[str, Any]) -> None:
+    """Require the source to carry its effective-layer ``modeling`` provenance."""
     if not isinstance(source.get("modeling"), Mapping):
         raise ValueError("prepared EPR effective-layer provenance is unavailable")
 
@@ -172,37 +156,27 @@ def native_conductor_geometry(
     source: Mapping[str, Any], entity: Mapping[str, Any]
 ) -> tuple[str, float, float]:
     """Read the producer's effective native shape and Z without remapping it."""
-    if "modeling" in source:
-        modeling = source["modeling"]
-        if not isinstance(modeling, Mapping):
-            raise TypeError("prepared EPR modeling provenance is unavailable")
-        physical_layer = entity.get("physical_layer")
-        if not isinstance(physical_layer, Mapping):
-            raise ValueError(
-                f"EPR conductor {entity.get('semantic_id')!r} lacks "
-                "effective-layer provenance"
-            )
-        representation = physical_layer.get("representation")
-        if representation not in {"solid", "sheet"}:
-            raise ValueError("prepared EPR conductor representation is invalid")
-        if entity.get("representation") != representation:
-            raise ValueError(
-                f"EPR conductor {entity.get('semantic_id')!r} representation "
-                "differs from its effective layer"
-            )
-        return (
-            str(representation),
-            float(physical_layer["effective_z_min_um"]),
-            float(physical_layer["effective_z_max_um"]),
+    if not isinstance(source.get("modeling"), Mapping):
+        raise TypeError("prepared EPR modeling provenance is unavailable")
+    physical_layer = entity.get("physical_layer")
+    if not isinstance(physical_layer, Mapping):
+        raise ValueError(
+            f"EPR conductor {entity.get('semantic_id')!r} lacks "
+            "effective-layer provenance"
         )
-
-    # Historical saved-project reads retain the recorded route basis. New native
-    # construction is rejected before reaching this reader-only interpretation.
-    z_min_um, z_max_um = entity_z_range(entity)
-    if entity["representation"] == "surface_sheet":
-        z_min_um = z_max_um = route_a_sheet_z(source, entity)
-        return "sheet", z_min_um, z_max_um
-    return "solid", z_min_um, z_max_um
+    representation = physical_layer.get("representation")
+    if representation not in {"solid", "sheet"}:
+        raise ValueError("prepared EPR conductor representation is invalid")
+    if entity.get("representation") != representation:
+        raise ValueError(
+            f"EPR conductor {entity.get('semantic_id')!r} representation "
+            "differs from its effective layer"
+        )
+    return (
+        str(representation),
+        float(physical_layer["effective_z_min_um"]),
+        float(physical_layer["effective_z_max_um"]),
+    )
 
 
 def material_readback(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
@@ -231,7 +205,7 @@ def native_solution_materials(source: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def install_material_catalog(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
-    """Install declared solution materials with the historical vacuum-only default."""
+    """Install the declared vacuum and dielectric materials (a vacuum defaults to permittivity 1); conductors are skipped."""
     observed: dict[str, Any] = {}
     for material_id, record in materials.items():
         if not isinstance(material_id, str) or not isinstance(record, Mapping):
@@ -247,7 +221,7 @@ def install_material_catalog(app: Any, materials: Mapping[str, Any]) -> dict[str
                 raise ValueError(
                     f"prepared material {material_id!r} requires positive permittivity"
                 )
-            # Preserve the existing vacuum-only preparation contract.
+            # A vacuum may omit its permittivity; a dielectric may not.
             requested["permittivity"] = 1.0
         observed[material_id] = realize_source_material(app, material_id, requested)
     return observed

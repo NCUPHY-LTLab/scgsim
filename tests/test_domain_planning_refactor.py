@@ -7,12 +7,14 @@ from scgsim.geometry.models.representation import (
     EntityRepresentation,
     RepresentationContext,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.domain_planning.faces import (
     ConductorFaceRequest,
     conductor_face_solution_pieces,
-    prepare_auto_vacuum_solution_regions,
 )
 from scgsim.geometry.planning.domain_planning.sidewalls import SolutionSidewallPlanner
+from scgsim.geometry.planning.domain_planning.vacuum import (
+    prepare_auto_vacuum_solution_regions,
+)
 
 LOOP = ((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0))
 

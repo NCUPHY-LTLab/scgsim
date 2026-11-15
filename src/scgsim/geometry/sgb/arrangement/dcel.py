@@ -13,7 +13,7 @@ Conventions
   outside), which is a *hole* of the face that encloses the component.
 * Face 0 is always the unbounded face.
 
-Does not own labels (``labelling``), dissolution or snapping.
+Does not own labels (``arrangement.labelling``), dissolution or snapping.
 """
 
 from __future__ import annotations
@@ -24,9 +24,15 @@ from dataclasses import dataclass
 from fractions import Fraction
 from functools import cmp_to_key
 
-from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge
-from scgsim.geometry.sgb.noding.spatial_hash import cell_size_for
-from scgsim.geometry.sgb.plane import Point, RepPoint, fraction_to_rep, point_in_ring
+from scgsim.geometry.exact.plane import (
+    Point,
+    RepPoint,
+    fraction_to_rep,
+    point_in_ring,
+)
+from scgsim.geometry.sgb.arrangement.noding.snap_rounding import NodedEdge
+from scgsim.geometry.sgb.arrangement.noding.spatial_hash import cell_size_for
+from scgsim.refusal import internal
 
 
 @dataclass(frozen=True)
@@ -113,7 +119,7 @@ class Arrangement:
         return -sum(self.cycles[c].twice_area for c in self.faces[0].holes)
 
     def face_anchor(self, face_index: int) -> Point:
-        """The point that decides which tile owns a face: the origin of its outer cycle's first half-edge."""
+        """A point on the face's boundary that locates it in a message: the origin of its outer cycle's first half-edge."""
         outer = self.faces[face_index].outer
         assert outer is not None
         return self.origin(self.cycles[outer].half_edges[0])
@@ -340,7 +346,7 @@ def interior_point(arr: Arrangement, face_index: int) -> RepPoint:
         if intervals:
             left, right = max(intervals, key=lambda i: i[1] - i[0])
             return fraction_to_rep((left + right) / 2, mid)
-    raise ValueError("face has no interior point (degenerate face)")
+    raise ValueError(internal("face has no interior point (degenerate face)"))
 
 
 # Where, across a cell's width, its sample points lie (fractions of the width from the left).

@@ -6,8 +6,12 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import ClassVar
 
+from scgsim.refusal import refused
+
 from ..features import SidecarFeatures
 from ..sizing import BoundingBox, SizeRequests
+
+_WHERE_RECIPE = "the sizing recipe of the meshing call"
 
 _CURVE_DIMENSION = 1
 
@@ -31,7 +35,11 @@ class UniformBoundaryRecipe:
         """Reject sizes whose growth cannot be defined."""
         if not 0 < self.near_um < self.far_um:
             raise ValueError(
-                f"the sizes must satisfy 0 < near_um < far_um, got {self.near_um!r} and {self.far_um!r}."
+                refused(
+                    "the sizes",
+                    f"must satisfy 0 < near_um < far_um, got {self.near_um!r} and {self.far_um!r}",
+                    _WHERE_RECIPE,
+                )
             )
 
     def size_requests(

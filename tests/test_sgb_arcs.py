@@ -15,13 +15,13 @@ from sgb_scenes import LINEAGE, disc_model, pad_in_ground  # noqa: E402
 from shapely.geometry import Point as ShapelyPoint  # noqa: E402
 from shapely.geometry import box  # noqa: E402
 
+from scgsim.geometry.exact.carriers import Lineage, circle_arcs  # noqa: E402
 from scgsim.geometry.sgb.arrangement.arcs import (  # noqa: E402
     face_exact_area,
     realise,
     sampled_crossings,
 )
-from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.records.carriers import Lineage, circle_arcs  # noqa: E402
+from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue  # noqa: E402
 
 TESTS = Path(__file__).resolve().parent
 
@@ -71,7 +71,7 @@ def test_witness_pieces_merge_back_into_exactly_one_edge_per_quarter_arc():
     ]
     assert len(arc_edges) == 4
     assert all(
-        "#" not in c for e in layer.arr.edges for c in e.carriers
+        c.piece is None for e in layer.arr.edges for c in e.carriers
     )  # no witness piece survives
     assert len(faces) == 1
     assert len(layer.arr.cycles[layer.arr.faces[faces[0]].outer].half_edges) == 4
@@ -168,20 +168,12 @@ def test_arc_edges_keep_the_lineage_of_the_source_arc():
     assert lineage == Lineage("polygon_edge", "pad", 0, 1, 0)
 
 
-def test_arc_example_ids_are_identical_for_every_tile_and_worker_count_and_hash_seed():
-    """Arc example ids are identical for every tile and worker count and hash seed."""
+def test_arc_example_ids_are_identical_for_every_hash_seed():
+    """Arc example ids are identical for every hash seed."""
     catalogue = pad_in_ground("B")
-    reference = derive_from_catalogue(catalogue).identity_sets()
-    for tiles, workers in ((2, 1), (3, 1), (4, 2)):
-        assert (
-            derive_from_catalogue(
-                catalogue, tiles=tiles, workers=workers
-            ).identity_sets()
-            == reference
-        )
     code = (
         f"import sys; sys.path.insert(0, {str(TESTS)!r})\n"
-        "from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue\n"
+        "from scgsim.geometry.sgb.arrangement.derivation.labelled import derive_from_catalogue\n"
         "from sgb_scenes import pad_in_ground\n"
         "print(derive_from_catalogue(pad_in_ground('B')).identity_digest())\n"
     )

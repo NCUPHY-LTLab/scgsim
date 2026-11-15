@@ -126,7 +126,6 @@ class _PlanarSource:
                             "source_occurrence_path",
                             "source_local_entity_id",
                             "split_polygon_index",
-                            "ground_bump_id",
                         )
                         if key in item.metadata
                     },
@@ -357,7 +356,7 @@ def native_name(kind: str, *identity: Any) -> str:
 
 
 def native_entity_name(source: Mapping[str, Any], kind: str, *identity: Any) -> str:
-    """Keep historical hash names while giving new Plan entities readable names."""
+    """Name a native entity by the source's ``native_entity_name_policy``: ``hash.v1`` hashes the identity, ``readable.v1`` spells it."""
 
     policy = source.get("native_entity_name_policy", "hash.v1")
     if policy == "hash.v1":
@@ -375,40 +374,6 @@ def native_entity_name(source: Mapping[str, Any], kind: str, *identity: Any) -> 
     prefix = f"SCGSim_{kind}_"
     label = label[: 60 - len(prefix) - len(digest) - 1].rstrip("_")
     return f"{prefix}{label}_{digest}"
-
-
-def route_a_sheet_z(source: Mapping[str, Any], entity: Mapping[str, Any]) -> float:
-    """Resolve the effective sheet height from physical representation evidence."""
-    effective = entity.get("physical_layer")
-    if isinstance(effective, Mapping) and effective.get("representation") == "sheet":
-        return float(effective["effective_z_min_um"])
-    profile = source.get("route_a_thin_film")
-    if not isinstance(profile, Mapping):
-        raise ValueError("Route A conductor lacks thin-film profile provenance")
-    ranges = profile.get("physical_face_metal_z_ranges_um")
-    positions = profile.get("effective_sheet_z_um")
-    if not isinstance(ranges, Mapping) or not isinstance(positions, Mapping):
-        raise ValueError("Route A thin-film profile is incomplete")
-    source_id = entity["source_semantic_id"]
-    sides = tuple(
-        str(side)
-        for side, record in ranges.items()
-        if isinstance(record, Mapping) and source_id in record.get("semantic_ids", ())
-    )
-    if len(sides) != 1:
-        raise ValueError(
-            f"Route A conductor {entity['semantic_id']!r} has no unique sheet side"
-        )
-    value = positions.get(sides[0])
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(float(value))
-    ):
-        raise ValueError(
-            f"Route A conductor {entity['semantic_id']!r} has no finite effective sheet Z"
-        )
-    return float(value)
 
 
 def entity_z_range(entity: Mapping[str, Any]) -> tuple[float, float]:

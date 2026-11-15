@@ -445,3 +445,50 @@ def test_public_composition_rejects_zero_normalization_instead_of_returning_part
     raw["junction_integrals_v_m"]["junction"]["real"]["value"] = 0.0
     with pytest.raises(ValueError, match="normalization energy must be finite and > 0"):
         combine_surface_epr_mode(prepared, raw)
+
+
+def test_public_composition_refuses_raw_without_surface_granularity():
+    """Refuse a raw mode that names no surface granularity; every current run writes one."""
+    prepared, raw = _analytical_inputs()
+    del raw["surface_granularity"]
+    with pytest.raises(ValueError, match="names no surface_granularity"):
+        combine_surface_epr_mode(prepared, raw)
+
+
+def test_public_composition_refuses_geometry_without_surface_evaluation_policy():
+    """Refuse prepared geometry that names no surface evaluation policy."""
+    prepared, raw = _analytical_inputs()
+    payload = prepared.to_payload()
+    del payload["source"]["surface_evaluation_policy"]
+    model = {key: payload[key] for key in ("modeling", "source", "junctions")}
+    payload["model_sha256"] = _digest(model)
+    payload["source_sha256"] = _digest(
+        {
+            **model,
+            **{
+                key: payload[key]
+                for key in ("contribution_catalog", "contributions", "surface_bindings")
+            },
+        }
+    )
+    stripped = PreparedPlanarGeometry.from_payload(payload)
+    with pytest.raises(ValueError, match="names no surface_evaluation_policy"):
+        combine_surface_epr_mode(stripped, raw)
+
+
+def test_reanalysis_refuses_surface_row_without_stored_integrals():
+    """Refuse to rescale a surface row whose stored field integrals are missing."""
+    prepared, raw = _analytical_inputs()
+    result = _analytical_history(prepared, raw)
+    payload = result.to_payload()
+    for row in payload["rows"]:
+        for item in row["surface_contributions"]:
+            del item["normal_integral_v2"]
+    stripped = EprResult.from_payload(payload)
+    with pytest.raises(ValueError, match="needed to recompute it"):
+        reanalyze_epr(
+            stripped,
+            surface_defaults={
+                interface: {"film_thickness_m": 1.0} for interface in ENERGIES
+            },
+        )

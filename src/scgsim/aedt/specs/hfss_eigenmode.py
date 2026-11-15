@@ -65,21 +65,9 @@ class HfssEigenmodeSpec:
     region_padding_um: tuple[float, float, float, float, float, float]
     physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    _historical_modeling: bool = False
     length_mesh: LengthMeshSpec | None = None
     aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
-
-    @property
-    def historical_physical(self) -> bool:
-        """Report whether this request decodes historical physical data."""
-        return self._historical_physical
-
-    @property
-    def historical_modeling(self) -> bool:
-        """Report whether this request decodes historical modeling data."""
-        return self._historical_modeling
 
     @property
     def mode(self) -> Literal["eigenmode"]:
@@ -109,8 +97,6 @@ class HfssEigenmodeSpec:
     def effective_layer_imports(self) -> tuple[dict[str, Any], ...]:
         """Return effective layer imports derived from the source model."""
         mapping = request_modeling(self)
-        if mapping is None:
-            raise ValueError("historical requests have no new execution modeling map")
         pairs = {
             pair: index + 1
             for index, pair in enumerate(
@@ -157,11 +143,7 @@ class HfssEigenmodeSpec:
             },
             "vacuum_material_id": self.vacuum_material_id,
             "gds": {"path": Path(self.gds_path).as_posix()},
-            "layer_imports": (
-                list(self.effective_layer_imports)
-                if self.modeling is not None
-                else [item.to_payload() for item in self.layer_imports]
-            ),
+            "layer_imports": (list(self.effective_layer_imports)),
             "object_bindings": [item.to_payload() for item in self.object_bindings],
             "run_control": self.run_control.to_payload(),
             "region_padding_um": list(self.region_padding_um),
@@ -174,7 +156,6 @@ class HfssEigenmodeSpec:
         payload: dict[str, Any],
         *,
         base_dir: Path | None = None,
-        allow_historical_modeling: bool = False,
     ) -> HfssEigenmodeSpec:
         """Decode a HfssEigenmodeSpec from its canonical payload."""
         if payload.get("schema_version") != EIGENMODE_SCHEMA_VERSION:
@@ -195,9 +176,7 @@ class HfssEigenmodeSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=cast(Modeling, payload.get("modeling")),
-            physical_layers=physical_layers_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
+            physical_layers=physical_layers_from_payload(payload),
             physical_representation=(
                 PhysicalRepresentationPlan.from_payload(
                     payload["physical_representation"]
@@ -205,10 +184,6 @@ class HfssEigenmodeSpec:
                 if "physical_representation" in payload
                 else None
             ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling
-            and "modeling" not in payload,
             gds_path=gds,
             project_name=project_name_from_payload(
                 payload.get("project", {}).get("name")
@@ -235,8 +210,7 @@ class HfssEigenmodeSpec:
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )
-        if result.modeling is not None:
-            verify_effective_records(
-                payload["layer_imports"], result.effective_layer_imports
-            )
+        verify_effective_records(
+            payload["layer_imports"], result.effective_layer_imports
+        )
         return result

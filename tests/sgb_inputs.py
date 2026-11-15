@@ -504,7 +504,6 @@ def electrode_plan(monkeypatch, *, gap_um: float = 10.0, same_net: bool = False)
             "Si": {"kind": "dielectric", "permittivity": 11.45},
         },
         coupon_padding_um=10,
-        grid_size_um=GRID_UM,
     )
     if same_net:
         plan.set_nets({"A": ("chip/pad", "chip/electrode")})

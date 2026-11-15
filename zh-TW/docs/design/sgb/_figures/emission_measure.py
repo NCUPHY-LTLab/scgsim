@@ -19,12 +19,12 @@ from sgb_gmsh_oracle import OracleResult, gmsh_session  # noqa: E402
 from sgb_gmsh_oracle import _build_entities as oracle_build_entities  # noqa: E402  # private-import: the timing figure needs the oracle's entity build apart from its synchronize and physical-group steps, which emit_with_gmsh_api does not expose
 from sgb_scenes import random_layout  # noqa: E402
 
+from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
-from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
-from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
-from scgsim.geometry.sgb.verification.loaded import verify_loaded  # noqa: E402
+from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
+from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file  # noqa: E402
+from scgsim.geometry.sgb.output.verification.loaded import verify_loaded  # noqa: E402
 
 # the children run through ``emission.py`` itself, so each starts with every import of the full script, as a figure run does
 ENTRY_SCRIPT = Path(__file__).resolve().with_name("emission.py")
@@ -53,7 +53,7 @@ def _load_seconds(path: Path) -> float:
 
 
 def head_one(n: int) -> dict:
-    """One random Route B layout through the Gmsh-API oracle, stage by stage, and through the direct writer (16 workers), then both loads."""
+    """One random Route B layout through the Gmsh-API oracle, stage by stage, and through the direct writer, then both loads."""
 
     model = build_model_from_catalogue(
         random_layout(n, seed=RANDOM_SEED, route="B"), "B"
@@ -65,8 +65,8 @@ def head_one(n: int) -> dict:
         plan = plan_brep(model.topology, model.routed)
         plan_s = time.perf_counter() - started
         brep, xao = folder / "direct.brep", folder / "direct.xao"
-        render_brep = write_brep_file(plan, brep, workers=16)
-        render_xao = write_xao_file(plan, xao, name="direct", workers=16, brep=brep)
+        render_brep = write_brep_file(plan, brep)
+        render_xao = write_xao_file(plan, xao, name="direct", brep=brep)
         row["direct"] = {
             "plan_s": plan_s,
             "render_brep_s": render_brep,
@@ -115,7 +115,7 @@ def validator_one(n: int) -> dict:
     )
     build_s = time.perf_counter() - started
     with tempfile.TemporaryDirectory(prefix=f"emission-validator-{n}-") as scratch:
-        artifacts = emit_model(model, Path(scratch), workers=16)
+        artifacts = emit_model(model, Path(scratch))
         sidecar = read_sidecar(artifacts.sidecar)
         with gmsh_session():
             started = time.perf_counter()
@@ -171,10 +171,6 @@ def measure() -> None:
 
 
 def shared_rows() -> dict[int, dict]:
-    """The one-tile, one-worker runs of ``figures/why-scaling-measured.json`` (production build, files, Gmsh load and ``verify_loaded``), by N."""
+    """The runs of ``figures/why-scaling-measured.json`` (production build, files, Gmsh load and ``verify_loaded``), by N."""
     rows = json.loads(SHARED.read_text())["rows"]
-    return {
-        r["n_features"]: r
-        for r in rows
-        if r["tiles_per_side"] == 1 and r["workers"] == 1
-    }
+    return {r["n_features"]: r for r in rows}

@@ -42,11 +42,11 @@ from sgb_emit_cases import CASES, pad_requests
 from sgb_gmsh_oracle import gmsh_session, mesh_quality, mesh_with_cheap_recipe
 from sgb_scenes import airbridge
 
+from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.output.verification.loaded import apply_sidecar_embeds
 from scgsim.geometry.sgb.prisms.levels import build_levels
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
-from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
 
 GROUP_COLOURS = {
     "SA": "#9ecae1",
@@ -405,9 +405,7 @@ def unwritten(model) -> dict:
             {model.routed.face_group.get(f.id) or "(no group)" for f in dead}
         ),
         "edges_only_on_those_faces": sum(
-            1
-            for e in topo.edges.values()
-            if e.id not in used and e.kind != "refinement"
+            1 for e in topo.edges.values() if e.id not in used
         ),
         "arc_centre_vertices": len(
             {e.centre_vertex for e in topo.edges.values() if e.centre_vertex}
@@ -424,7 +422,7 @@ def counts() -> dict:
             artifacts = emit_model(model, Path(tmp))
             sidecar = read_sidecar(artifacts.sidecar)
             gap = unwritten(model)
-        written = sidecar["counts"]
+        written = sidecar["summary"]["counts"]
         assert (
             written["vertices"]
             == model.counts["vertices"] - gap["arc_centre_vertices"]

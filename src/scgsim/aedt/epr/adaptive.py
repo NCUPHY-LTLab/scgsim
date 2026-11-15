@@ -379,7 +379,6 @@ class _AdaptiveJoin:
             result_kind="adaptive_history",
             setup_name=cast(EigenmodeRunControl, self.spec.run_control).setup_name,
             rows=tuple(self.rows),
-            _legacy_payload=self.spec.legacy_payload,
             provenance={
                 "model_source_sha256": self.spec.geometry.model_sha256,
                 "analysis_source_sha256": self.spec.geometry.source_sha256,

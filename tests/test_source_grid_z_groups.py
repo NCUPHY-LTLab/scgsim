@@ -16,7 +16,7 @@ from geometry_grid_fixtures import GRID
 from test_simulation_drc import MATERIALS, level
 
 from scgsim.geometry import GeometryBuildInput, LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.source.grid import apply_geometry_grid
+from scgsim.geometry.source.grid_projection import apply_geometry_grid
 from scgsim.palace import EigenmodeSim
 
 RADIUS_UM = 35.0
@@ -261,7 +261,7 @@ def d0_band_areas(monkeypatch, component):
     (sidecar,) = sidecars
     return {
         name: group["area_um2"]
-        for name, group in sidecar["physical_groups"].items()
+        for name, group in sidecar["group"].items()
         if "band=" in name and ("D0_0000" in name or "D0_SUBSTRATE" in name)
     }
 

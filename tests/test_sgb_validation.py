@@ -8,16 +8,17 @@ from dataclasses import replace
 import pytest
 from sgb_scenes import pad_in_ground
 
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.sgb import model as model_module
-from scgsim.geometry.sgb.assembly.builder import register
-from scgsim.geometry.sgb.errors import SgbError, ValidationError
+from scgsim.geometry.sgb.checks.validation.arrangements import check_band_areas
+from scgsim.geometry.sgb.checks.validation.report import ValidationReport
+from scgsim.geometry.sgb.checks.validation.validate import validate_model
+from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.records.labels import LevelLabel
-from scgsim.geometry.sgb.routes.groups import PhysicalGroup
-from scgsim.geometry.sgb.validation.arrangements import check_band_areas
-from scgsim.geometry.sgb.validation.report import ValidationReport
-from scgsim.geometry.sgb.validation.validate import validate_model
+from scgsim.geometry.sgb.stopwatch import Stopwatch
+from scgsim.geometry.sgb.topology.assembly.builder import register
+from scgsim.geometry.sgb.topology.routes.groups import PhysicalGroup
 
 
 def fresh(route: str = "B"):
@@ -27,7 +28,7 @@ def fresh(route: str = "B"):
 
 def failed(model) -> set[str]:
     """Names of the invariants that now fail."""
-    report = validate_model(model.labelled, model.topology, model.routed, Runtime())
+    report = validate_model(model.labelled, model.topology, model.routed, Stopwatch())
     return {c.name for c in report.failures}
 
 

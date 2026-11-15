@@ -26,16 +26,16 @@ from sgb_gmsh_oracle import (
 )
 from sgb_scenes import random_layout
 
+from scgsim.contracts.sgb_sidecar import read_sidecar, views
+from scgsim.geometry.exact.errors import SgbError
 from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.emission.numbers import angle_of
-from scgsim.geometry.sgb.emission.plan import check_one_tag_per_id, plan_brep
-from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file
-from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
-from scgsim.geometry.sgb.slivers.report import sliver_report
-from scgsim.geometry.sgb.verification.loaded import (
+from scgsim.geometry.sgb.output.emission.numbers import angle_of
+from scgsim.geometry.sgb.output.emission.plan import check_one_tag_per_id, plan_brep
+from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file
+from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
+from scgsim.geometry.sgb.output.verification.loaded import (
     apply_sidecar_embeds,
     verify_loaded,
     verify_xao,
@@ -44,7 +44,13 @@ from scgsim.geometry.sgb.verification.loaded import (
 
 def sidecar_of(model, plan):
     """The sidecar of a model and its plan."""
-    return build_sidecar(model, plan, SidecarContext(sliver_report(model)["summary"]))
+    return build_sidecar(
+        model,
+        plan,
+        SidecarContext(
+            sliver_report(model.labelled, model.topology, model.routed)["summary"]
+        ),
+    )
 
 
 def written(model, tmp_path: Path, suffix: str = "xao", **options):
@@ -169,7 +175,7 @@ def test_round_trip_counts_boundaries_groups_volumes_areas_and_a_conformal_mesh(
         assert report.max_vertex_offset_um < 1e-9
         assert report.boundaries_mismatching == {"edges": 0, "faces": 0, "solids": 0}
         embedded = apply_sidecar_embeds(sidecar)
-        assert embedded["faces"] == sum(
+        assert embedded == sum(
             len(v.embedded_faces)
             for v in model.topology.volumes.values()
             if v.id in model.routed.emitted_volumes
@@ -358,40 +364,18 @@ def test_every_pcurve_lifts_onto_its_3d_curve(tmp_path, emit_models, name):
     assert checked > 0 and worst < 1e-9
 
 
-def test_pcurves_are_not_needed_for_planes_but_are_for_cylinders(tmp_path, emit_models):
-    """Measured on OCCT 7.8.1 / Gmsh 4.15.2: without pcurves planar models load and mesh, a cylinder wall fails at merge."""
-    for name, expect_ok in (("bridge_b", True), ("pad_b", False)):
-        model = emit_models[name]
-        plan = plan_brep(model.topology, model.routed, pcurves=False)
-        path = tmp_path / f"{name}.brep"
-        write_brep_file(plan, path)
-        try:
-            with gmsh_session(path):
-                mesh_coarsely(60.0)
-            ok = True
-        except Exception:  # noqa: BLE001 -- any Gmsh failure is the measured outcome
-            ok = False
-        assert ok is expect_ok, name
-
-
 # --------------------------------------------------------------------------- determinism
 
 
-def test_output_is_byte_identical_for_every_worker_count_and_chunk_size(
-    tmp_path, emit_models
-):
-    """Many tiny chunks so the pool really interleaves; the bytes never change."""
+def test_output_is_byte_identical_for_every_chunk_size(tmp_path, emit_models):
+    """Many tiny chunks and one large one; the bytes never change."""
     model = emit_models["pad_b"]
     plan = plan_brep(model.topology, model.routed)
     blobs = set()
-    for workers, chunk in ((1, 40_000), (1, 7), (2, 7), (4, 3), (4, 40_000)):
-        base = tmp_path / f"w{workers}c{chunk}"
-        write_brep_file(
-            plan, base.with_suffix(".brep"), workers=workers, chunk_items=chunk
-        )
-        write_xao_file(
-            plan, base.with_suffix(".xao"), name="m", workers=workers, chunk_items=chunk
-        )
+    for chunk in (40_000, 7, 3):
+        base = tmp_path / f"c{chunk}"
+        write_brep_file(plan, base.with_suffix(".brep"), chunk_items=chunk)
+        write_xao_file(plan, base.with_suffix(".xao"), name="m", chunk_items=chunk)
         blobs.add(
             (
                 base.with_suffix(".brep").read_bytes(),
@@ -522,37 +506,6 @@ def test_a_pinched_hole_is_written_as_two_wires_that_share_the_pinch_vertex(tmp_
         assert verify_loaded(sidecar_of(model, plan)).ok
 
 
-def test_refinement_only_curve_is_a_free_edge_and_is_reembedded_from_the_sidecar(
-    tmp_path, emit_models
-):
-    """Refinement only curve is a free edge and is reembedded from the sidecar."""
-    model = emit_models["pad_a_refinement"]
-    host = [f for f in model.topology.faces.values() if f.refinement_edges]
-    assert len(host) == 1 and len(host[0].refinement_edges) == 1
-    plan, path = written(model, tmp_path, "xao")
-    sidecar = sidecar_of(model, plan)
-    assert plan.counts["free_edges"] == 1
-    edge_tag = plan.tags()[host[0].refinement_edges[0]][1]
-    with gmsh_session(path):
-        assert verify_loaded(sidecar).ok
-        assert (
-            gmsh.model.getAdjacencies(1, edge_tag)[0].size == 0
-        )  # free: no face owns it in the file
-        assert apply_sidecar_embeds(sidecar) == {"faces": 0, "edges": 1}
-        mesh_coarsely(40.0)
-        assert (
-            gmsh.model.mesh.getElements(1, edge_tag)[1][0].size > 1
-        )  # meshed, embedded in the host face
-    assert sidecar["refinement_edges"] == [
-        {
-            "edge": host[0].refinement_edges[0],
-            "host_face": host[0].id,
-            "family": "ref",
-            "written_as_free_edge": True,
-        }
-    ]
-
-
 # --------------------------------------------------------------------------- inset bands through the direct writer
 
 
@@ -567,10 +520,10 @@ def test_band_faces_through_the_direct_writer(tmp_path, emit_models, name):
     with gmsh_session(path):
         assert verify_loaded(sidecar).ok
         for group in band_groups:
-            native = sidecar["physical_groups"][group]["native_tags"]
+            native = views.native_tags(sidecar, 2, views.group_members(sidecar)[group])
             loaded = sum(gmsh.model.occ.getMass(2, t) for t in native)
             assert loaded == pytest.approx(
-                sidecar["physical_groups"][group]["area_um2"], rel=1e-9
+                sidecar["group"][group]["area_um2"], rel=1e-9
             )
         tags = plan.tags()
         refine_near(
@@ -622,9 +575,7 @@ def test_pad_b_bands_meshed_with_the_cheap_recipe_has_no_flat_tetrahedron(
 # --------------------------------------------------------------------------- the Gmsh-API oracle
 
 
-@pytest.mark.parametrize(
-    "name", ["pad_a", "pad_b", "pad_a_bands", "pad_a_refinement", "void_shell_b"]
-)
+@pytest.mark.parametrize("name", ["pad_a", "pad_b", "pad_a_bands", "void_shell_b"])
 def test_the_gmsh_api_oracle_agrees_on_entities_groups_and_face_areas(
     tmp_path, emit_models, name
 ):
@@ -665,20 +616,20 @@ SCRIPT = (
     f"import sys; sys.path.insert(0, {str(Path(__file__).resolve().parent)!r})\n"
     "import hashlib, pathlib, tempfile\n"
     "from sgb_emit_cases import pad_model\n"
-    "from scgsim.geometry.sgb.emission.plan import plan_brep\n"
-    "from scgsim.geometry.sgb.emission.writer import write_xao_file\n"
+    "from scgsim.geometry.sgb.output.emission.plan import plan_brep\n"
+    "from scgsim.geometry.sgb.output.emission.writer import write_xao_file\n"
     "digests = []\n"
     "for route in 'ABC':\n"
-    "    model = pad_model(route, bands=True, refine=route != 'C')\n"
+    "    model = pad_model(route, bands=True)\n"
     "    path = pathlib.Path(tempfile.mkdtemp()) / 'm.xao'\n"
-    "    write_xao_file(plan_brep(model.topology, model.routed), path, name='m', workers=2, chunk_items=50)\n"
+    "    write_xao_file(plan_brep(model.topology, model.routed), path, name='m', chunk_items=50)\n"
     "    digests.append(hashlib.sha256(path.read_bytes()).hexdigest())\n"
     "print(*digests)\n"
 )
 
 
-def test_the_xao_bytes_do_not_depend_on_python_hash_randomisation_or_the_pool():
-    """Three hash seeds, a forked pool and tiny chunks: one digest per route."""
+def test_the_xao_bytes_do_not_depend_on_python_hash_randomisation():
+    """Three hash seeds and tiny chunks: one digest per route."""
     outputs = set()
     for hash_seed in ("0", "7", "31337"):
         result = subprocess.run(
@@ -694,9 +645,9 @@ def test_the_xao_bytes_do_not_depend_on_python_hash_randomisation_or_the_pool():
 
 @pytest.mark.slow
 @pytest.mark.parametrize("route", ["A", "B", "C"])
-def test_a_random_layout_round_trips_with_workers(tmp_path, route):
-    """150 random features: written with a pool, loaded in Gmsh, checked against the sidecar alone."""
+def test_a_random_layout_round_trips(tmp_path, route):
+    """150 random features: written, loaded in Gmsh, checked against the sidecar alone."""
     catalogue = random_layout(150, seed=2, route="A" if route == "A" else "B")
-    model = build_model_from_catalogue(catalogue, route, tiles=2, workers=2)
-    artifacts = emit_model(model, tmp_path, workers=2)
+    model = build_model_from_catalogue(catalogue, route)
+    artifacts = emit_model(model, tmp_path)
     assert verify_xao(artifacts.xao, read_sidecar(artifacts.sidecar)).ok

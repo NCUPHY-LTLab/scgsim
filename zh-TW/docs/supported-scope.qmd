@@ -9,7 +9,7 @@ scgsim-id: "docs/supported-scope"
 
 只要版圖遵守本頁的規則，SCGSim 就會在同一套固定格點上，完全依照版圖的宣告建出幾何，並切出您要求的 Surface-EPR 條帶。接著它為 Palace 產生網格，讓每個四面體都達到網格品質門檻；做不到時，它會停止並附上報告。SCGSim 從不為了讓版圖能用而修改版圖：違反規則的版圖會被拒絕，錯誤訊息會指出違反的是哪條規則。
 
-為模擬繪製版圖之前，或建構、產生網格失敗時，請先讀本頁。規則依主題分組，每一列都連到記載細節的頁面。
+為模擬繪製版圖之前，或建構、產生網格失敗時，請先讀本頁。規則依主題分組，每一列都連到記載細節的頁面。這些規則是針對經由[支援的入口](#supported-entry)進入的版圖而言，也就是 `GeometryPlan` 與模擬類別。
 
 ## 三個階段，三個負責人 {#stages-and-owners}
 
@@ -33,6 +33,25 @@ scgsim-id: "docs/supported-scope"
 - **條帶**（band）是切進幾何中的一段表面，用來在其上積分 Surface EPR。它的**邊距**（margin）是它與**間隙邊**（gap edge）的距離；間隙邊是導體面向裸露基板的邊。見 [Surface EPR 邊距](specs/palace-eigenmode.qmd#surface-epr-margins)。
 - **Route B** 把每個導體建成有限金屬體，其表面為理想導體；**Route A** 把面金屬建成零厚度薄片。見[選擇幾何近似](concepts/model-and-numerics.qmd#choose-the-geometric-approximation)。**Route C** 把每個導體體積保留在模型中，供會在導體內部求解的後端使用。SGB 三種都能建構；Palace 模擬接受 Route A 與 Route B。
 - **微細結構**是比周圍特徵小得多的幾何：只有幾個格點間距長的邊，或只有奈米寬的尖刺與狹縫，例如 [C2 與 C3](known-geometry-problems.qmd#c2-c3-slits) 的狹縫。
+
+## 支援的入口 {#supported-entry}
+
+版圖經由公開 API 進入 SCGSim：`GeometryPlan`，以及 `scgsim.palace` 與 `scgsim.aedt` 的模擬類別。本頁的規則、保證與負責人，都是針對這樣進入的版圖而言。
+
+以請求規格搭配 `prepare_handoff` 進入的 AEDT 計算（GDS 對應、Q3D 實體或 Q2D 截面），同樣屬於公開 API，也在支援範圍內。它們的規則列於 [AEDT 執行期系列](specs/aedt-runtime.qmd)，不在本頁。各項計算接受什麼輸入，列於[支援的計算](backend-support.qmd)。
+
+SCGSim 也為這個入口以下的一個 API 提供文件，您可以用自行建立的輸入呼叫它：`scgsim.geometry.sgb.build_sgb_geometry`（幾何建構器），搭配您自行建構的 `GeometryBuildInput`，用來取代 `GeometryPlan` 快照所帶的那一份。
+
+這個套件內部接受更低階紀錄的函式，例如接受 prism catalogue（SGB 自己的清單，每一筆是一塊沿一段高度範圍擠出的平面輪廓）的函式，屬於內部實作，不是有文件的 API。
+
+用自行建立的輸入呼叫這個 API，屬於內部或進階用法，**它的先決條件就是支援的入口所保證的事項**：這份輸入必須是 `GeometryPlan` 與模擬類別本來就能產生的輸入。它從那兩者的檢查之後才開始，不會重做那些檢查。直接呼叫 `build_sgb_geometry` 時，既不會執行 `GeometryPlan` 的規劃檢查，也不會執行 `mesh()` 與 `simulation_drc()` 的網格階段檢查。
+
+只有這個 API 才建得出來的輸入，不屬於支援的用法。對這樣的輸入，SCGSim 只承諾下列事項：
+
+- 若它在沒有任何錯誤的情況下給出看似合理、實際上卻錯誤的結果，而且在輸入進入之處加一項低成本的檢查就能明確拒絕它，SCGSim 會加上這項檢查。
+- 其他情況下，SCGSim 會在該 API 的文件中把先決條件寫明一次，或者只記錄這個案例，行為維持不變。
+
+直接呼叫失敗，或回傳的結果不如預期時，回報之前請先用 `GeometryPlan` 與模擬類別建構同一份版圖。本頁的規則與負責人適用於那一次建構。
 
 ## 版圖必須保證的事項 {#layout-rules}
 
@@ -60,7 +79,7 @@ scgsim-id: "docs/supported-scope"
 
 | 規則 | SCGSim 為何需要它 | 回報方式 | 細節 |
 |---|---|---|---|
-| 規劃的 `grid_size_um` 等於版圖的資料庫單位，或設為 `None` 直接採用它。精確曲線的端點落在格點上。 | SCGSim 以整數格點座標計算；第二套格點會移動版圖沒有移動的點。 | 規劃時 `ValueError`；曲線端點不在格點上時，建構時 `InputError` | [幾何契約](geometry-sgb.qmd#component-to-backend-geometry-contract) |
+| 格點就是版圖的資料庫單位；SCGSim 從 GDS 讀取它。精確曲線的端點落在格點上。 | SCGSim 以整數格點座標計算；第二套格點會移動版圖沒有移動的點。 | 曲線端點不在格點上時，建構時 `InputError` | [幾何契約](geometry-sgb.qmd#component-to-backend-geometry-contract) |
 | 對齊格點不改變任何拓撲：沒有等於或小於一個格點間距的頸部、縫隙、孔洞或狹縫。 | SCGSim 把每個頂點放到格點上。在 1 nm 格點上，兩個導體間 0.4 nm 的縫隙會閉合，兩塊分開的金屬就變成一塊。 | 規劃時 `ValueError`：「… topology changed at grid」、「… contact changed at grid」 | [幾何契約](geometry-sgb.qmd#component-to-backend-geometry-contract) |
 | 輪廓中沒有微細結構：側壁下方沒有短於 10 個格點間距的外框邊，也沒有窄於 10 個格點間距、或有小於 1° 尖角的水平面。SCGSim 會照原樣保留這類結構，不會刪除。 | 1 nm 的邊或狹縫是合法幾何，但網格產生器必須以同樣尺寸的元素解析它。 | 網格產生前，在 `mesh()` 與 `simulation_drc()` 中以 `SimulationDrcError` 拒絕，並附上位置；短於 25 個格點間距的自由水平邊則只發出警告 | [網格階段回報什麼](layout-modeling-check.qmd#what-the-meshing-stage-reports) |
 
@@ -71,7 +90,7 @@ scgsim-id: "docs/supported-scope"
 | 不同 Net 的導體互不接觸，包括版圖對齊格點後才閉合的縫隙。 | 兩個 Net 之間的接觸就是短路；SCGSim 不替您決定哪個 Net 才對。 | 建構時 `ContactError`，附位置 | [版圖建模檢查](layout-modeling-check.qmd) |
 | 不同 Net 的導體互不重疊。 | 同上：兩個 Net 重疊的金屬沒有單一歸屬。 | 建構時 `OverlapError`，附位置 | [版圖建模檢查](layout-modeling-check.qmd) |
 | 同一 Net 中互相重疊的導體具有不同的優先序，由其中一個擁有重疊區。 | 同一 Net 的兩個 Entity 可以重疊，但重疊區必須恰好屬於其中一個。 | 建構時 `OverlapError`（「… overlap … with equal priority」） | [幾何契約](geometry-sgb.qmd) |
-| 任何區域都不只沿一條垂直邊與自己接觸。例如同一 Net 的兩塊金屬只在一個角點相接。 | 同一體積的兩個區塊只共用一個頂點時，會形成無法產生網格的非流形實體。 | 建構時 `NonManifoldError`，附位置 | 本頁 |
+| 任何區域都不只沿一條垂直邊與自己接觸。例如同一 Net 的兩塊金屬只在一個角點相接；或導體只在一點碰到版圖的平面範圍。 | 同一體積的兩個區塊只共用一個頂點時，會形成無法產生網格的非流形實體。 | 建構時 `NonManifoldError`，附位置 | [只在一點碰到邊界的導體](known-geometry-problems.qmd#boundary-point-pinch) |
 | 每個 Entity 不是薄片（經物理解讀後厚度為零），就是 Z 範圍為正的實體。 | 有厚度的薄片或沒有厚度的實體，在堆疊中都沒有一致的位置。 | 建構時 `InputError`（「… is a sheet but its effective Z interval is …」、「… has a non-positive Z extent …」） | [物理表示](specs/physical-representation.qmd) |
 
 ### 埠 {#rules-ports}
@@ -107,7 +126,7 @@ Palace 模擬採用的兩種 Route 都支援條帶：Route A 的薄片，以及 
 
 - **在格點上建出宣告的幾何。** 每個 Entity 都依宣告建出，頂點都在格點上。不新增、不合併、不刪除任何東西；唯一的例外是每個集總埠薄片在中央矩形以外的空出部分會併入薄片所落的導體，見[集總埠一律切成矩形](supported-geometry.qmd#lumped-port-rectangle)。
 - **條帶與精確幾何相符。** 每個條帶的面積與同一組多邊形的精確侵蝕（erosion）相比，差異在格點的 snap 界限之內，界限的定義見[支援的幾何](supported-geometry.qmd#what-supported-means)。
-- **達到品質門檻的網格，否則附上報告。** `mesh()` 產生網格之前，會先對建好的模型執行網格階段檢查，若有項目拒絕此模型，就拋出 `SimulationDrcError`。之後 `mesh()` 回傳的網格中，每個四面體都達到 `quality_threshold`：最小有號反條件數（minSICN）至少為 0.01，除非您以 `set_mesh` 設定其他數值。它在 `Budgets` 的限制之內完成：預設為 8 輪細化、2,000,000 個四面體，以及 x 乘 y 範圍不超過 4 mm² 的模型 180 秒，範圍更大的模型按比例給予更多時間。否則它拋出附有品質報告的 `MeshRepairError`，不回傳網格。門檻是在線性網格上檢查的。`geometry_order` 大於 1 時，通過檢查的網格會再提升到該階數並寫出，不再檢查第二次；要量測儲存下來的網格，請用[四面體網格品質](mesh-quality.qmd)讀取器。這些控制項與預設值見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
+- **達到品質門檻的網格，否則附上報告。** `mesh()` 產生網格之前，會先對建好的模型執行網格階段檢查，若有項目拒絕此模型，就拋出 `SimulationDrcError`。之後 `mesh()` 回傳的網格中，每個四面體都達到 `quality_threshold`：最小有號反條件數（minSICN）至少為 0.01，除非您以 `set_mesh` 設定其他數值。它在 `Budgets` 的限制之內完成：預設為 8 輪細化、2,000,000 個四面體，以及 x 乘 y 範圍不超過 4 mm² 的模型 180 秒，範圍更大的模型按比例給予更多時間。否則它拋出附有品質報告的 `MeshRepairError`，不回傳網格。門檻是在線性網格上檢查的。`geometry_order` 大於 1 時，通過檢查的網格會再提升到該階數並寫出，不再檢查第二次；稽核記錄的內容見[四面體網格品質](mesh-quality.qmd)。這些控制項與預設值見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
 [支援的幾何](supported-geometry.qmd)列出 SCGSim 測試過的版圖圖形。這份清單驗證的是每個圖形都能建構，且條帶與精確幾何相符；它本身並不表示版圖能產生網格或完成求解。
 
@@ -127,13 +146,13 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 
 ## 模擬之前先檢查版圖 {#check-a-layout}
 
-請在版圖的測試中、以及繪圖過程中，呼叫 `EigenmodeSim.simulation_drc`、`ElectrostaticSim.simulation_drc`，或兩者都呼叫。每個檢查都以您的 Net 與 Surface-EPR 邊距，執行該類別 `mesh()` 所執行的規劃與幾何建構，再執行 `mesh()` 也會先執行的網格階段檢查，並拋出相同的錯誤。呼叫方式見[版圖建模檢查](layout-modeling-check.qmd)。
+請在版圖的測試中、以及繪圖過程中，呼叫 `EigenmodeSim.simulation_drc`、`ElectrostaticSim.simulation_drc`，或兩者都呼叫。每個檢查都在您傳入的 route 上、以您的 Net 與 Surface-EPR 邊距，執行該類別 `mesh()` 所執行的規劃與幾何建構，再執行 `mesh()` 也會先執行的網格階段檢查，並拋出相同的錯誤。route 為 Route A 或 Route B，以 `set_route` 接受的方式傳入（`route` 與 `approximation_profile`），未傳入時為 Route B。呼叫方式見[版圖建模檢查](layout-modeling-check.qmd)。
 
-通過檢查表示這次檢查所建的模型被接受：Route B、您傳入的 Net 與邊距，以及[檢查使用的設定](layout-modeling-check.qmd#what-the-check-uses)所列的固定設定。它只確立這次建構實際檢查過的規則：
+通過檢查表示這次檢查所建的模型被接受：您傳入的 route 與近似設定、Net 與邊距，以及[檢查使用的設定](layout-modeling-check.qmd#what-the-check-uses)所列的固定設定。它只確立這次建構實際檢查過的規則：
 
 - [埠的規則](#rules-ports)只由 `EigenmodeSim.simulation_drc` 檢查。`ElectrostaticSim` 不選用埠薄片，所以它的檢查不會測到埠的規則。
 
-檢查在產生網格之前就停止。它的網格階段會依[網格階段的類別](layout-modeling-check.qmd#what-the-meshing-stage-reports)找出微細結構，但通過檢查不代表模型一定能產生網格。它也不檢查 Route A、其他設定或 AEDT。
+檢查在產生網格之前就停止。它的網格階段會依[網格階段的類別](layout-modeling-check.qmd#what-the-meshing-stage-reports)找出微細結構，但通過檢查不代表模型一定能產生網格。它也不檢查所傳入之外的 route 或近似設定、其他設定、Route C 或 AEDT。
 
 ## 失敗時怎麼辦 {#when-something-fails}
 
@@ -147,7 +166,7 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 | `ValidationError`「the inset curve … is not closed near (x, y)」 | SCGSim | 該點附近兩條相鄰的條帶偏移既不相接也不相交。請把版圖回報給 SCGSim。 |
 | 不同 Net 之間的 `ContactError` 或 `OverlapError` | 版圖，或 Net 宣告 | 若兩個導體應為同一導體，就把它們放進同一個 Net；否則在圖面上把它們分開，間距大於一個格點間距。使用 `simulation_drc` 時，傳入模擬所用的 `nets`。 |
 | `OverlapError`「… with equal priority」 | 宣告 | 為同一 Net 中互相重疊的 Entity 指定不同的優先序。 |
-| `NonManifoldError` | 版圖 | 在回報的位置讓兩塊幾何共用一條邊，或把它們分開。 |
+| `NonManifoldError` | 版圖 | 依訊息結尾的連結處理：在版圖內部，讓兩塊幾何共用一條邊，或把它們分開（[原因](known-geometry-problems.qmd#pinch-inside-the-layout)）；在邊界上，請在訊息指出的對象周圍畫出 die 外框或接地平面，或讓訊息指出的區域的輪廓沿著一條邊碰到邊界，或完全不碰到邊界（[原因](known-geometry-problems.qmd#boundary-point-pinch)）。 |
 | 關於埠薄片、Entity id、圓弧或邊距的 `InputError` | 版圖及其宣告 | 閱讀訊息，它會指出埠、Entity 或請求。修正它指出的圖形或設定。 |
 | `ValueError`「Surface EPR bands narrower than the meshing stage's face-width limit …」 | 宣告 | 加大訊息所指的邊距，讓每條條帶至少 10 個格點間距寬。 |
 | `NoGapEdgeError` | 宣告 | 在 `inset_margins_by_entity_um` 中指名的導體，在該面上沒有間隙邊。把它從該處移除，或改以類型切條帶。 |

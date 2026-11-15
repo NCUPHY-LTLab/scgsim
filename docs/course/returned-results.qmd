@@ -28,7 +28,7 @@ resolved = resolve_palace_result(
 resolved.show_all_results()
 ```
 
-Point the paths to your actual retrieved package and preparation-side note.
+Point the paths to your actual retrieved run folder and preparation-side note.
 Never obtain the expected ID from the return you are trying to identify. The
 strict resolver requires completed receipt-bound output, matching geometry,
 config, handoff and hashes. It does not accept a failed run because a frequency

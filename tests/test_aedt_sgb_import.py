@@ -57,6 +57,7 @@ from scgsim.aedt.runtime.families.sgb_import import (  # noqa: E402
     segment_length_um,
 )
 from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort  # noqa: E402
+from scgsim.contracts.sgb_sidecar import views  # noqa: E402
 from scgsim.geometry.surface_epr import normalize_surface_epr_specs  # noqa: E402
 
 pytestmark = pytest.mark.occt
@@ -173,7 +174,7 @@ def test_route_c_rows_read_ms_and_sa_on_the_substrate_and_ma_on_the_conductor(mo
     """MS faces import on the conductor and the substrate; the row reads the substrate's copy, once."""
     sidecar, imported = _as_imported(models["solid"])
     bindings = surface_face_bindings(sidecar, imported)
-    assert set(bindings) == set(sidecar["surface_epr_rows"])
+    assert set(bindings) == set(sidecar["surface_epr_row"])
     owners = {
         binding.interface_type: {name for name, _ in binding.faces}
         for binding in bindings.values()
@@ -182,7 +183,7 @@ def test_route_c_rows_read_ms_and_sa_on_the_substrate_and_ma_on_the_conductor(mo
     assert owners["SA"] == {"substrate"}
     assert owners["MA"] <= {"chip_left", "chip_right"}
     for binding in bindings.values():
-        planned = sidecar["physical_groups"][binding.group]["ids"]
+        planned = views.group_members(sidecar)[binding.group]
         assert len(binding.faces) == len(planned) == len(set(binding.faces))
     names = [binding.selection_name for binding in bindings.values()]
     assert len(set(names)) == len(names)
@@ -203,7 +204,7 @@ def test_route_a_sheet_rows_read_the_substrate_face_under_the_sheet(models):
 def test_a_face_with_two_copies_and_no_dielectric_side_is_refused(models):
     """An MA face on two imported solids has no copy its type reads."""
     sidecar, imported = _as_imported(models["solid"])
-    face = sidecar["physical_groups"]["MA::chip/left__sidewall"]["ids"][0]
+    face = views.group_members(sidecar)["MA::chip/left__sidewall"][0]
     copies = {**imported.face_copies, face: {"chip_left": 1, "substrate": 2}}
     with pytest.raises(SurfaceBindingError, match="none of them"):
         surface_face_bindings(sidecar, ImportedSgbModel(imported.objects, copies, {}))
@@ -314,10 +315,10 @@ def test_route_a_bump_rows_read_the_body_as_route_c_reads_a_conductor(models):
     """Decision 8: a retained Route A bump is read like a Route C conductor; the sheets stay on the substrate."""
     sidecar, imported = _as_imported(models["bump"])
     bindings = surface_face_bindings(sidecar, imported)
-    assert set(bindings) == set(sidecar["surface_epr_rows"])
+    assert set(bindings) == set(sidecar["surface_epr_row"])
     bodies = {
         imported.objects[solid]
-        for solid, volume in sidecar["volumes"].items()
+        for solid, volume in sidecar["volume"].items()
         if volume["kind"] == "conductor"
     }
     assert len(bodies) == 1
@@ -332,7 +333,7 @@ def test_route_a_bump_rows_read_the_body_as_route_c_reads_a_conductor(models):
         *bodies,
     }  # sheet rows on the substrate, bump rows on the bump
     for binding in bindings.values():
-        planned = sidecar["physical_groups"][binding.group]["ids"]
+        planned = views.group_members(sidecar)[binding.group]
         assert len(binding.faces) == len(planned) == len(set(binding.faces))
 
 
@@ -427,7 +428,7 @@ def test_a_port_sheet_split_into_several_faces_takes_one_rlc_over_all_of_them(tm
     assert len(planned.port["faces"]) == 2
     objects, copies = _rebuilt_sheets(exported.guard)
     design = _FakeDesign(objects)
-    tolerance_um = import_tolerance_um(float(sidecar["grid_um"]))
+    tolerance_um = import_tolerance_um(float(sidecar["model"]["grid_um"]))
     record = assign_port_rlc(design, planned, copies, tolerance_um)
     kind, props = design.boundaries["rlc_p1"]
     assert kind == "Lumped RLC" and list(design.boundaries) == ["rlc_p1"]
@@ -455,7 +456,7 @@ def test_a_port_face_that_does_not_import_once_is_refused_before_aedt_is_touched
     guard = json.loads(model.path("guard").read_text(encoding="utf-8"))
     owners = Counter(f["face"] for solid in guard["solids"] for f in solid["faces"])
     shared = min(face for face, count in owners.items() if count == 2)
-    (port,) = sidecar["ports"]
+    (port,) = sidecar["port"].values()
     port["faces"] = [*port["faces"], shared]
     monkeypatch.setattr(sgb_import, "read_sidecar", lambda _: sidecar)
     # ``app`` is None: any use of the design raises AttributeError instead of the refusal.
@@ -466,15 +467,11 @@ def test_a_port_face_that_does_not_import_once_is_refused_before_aedt_is_touched
 
 
 def _renamed_nets(sidecar, renames):
-    """``sidecar`` with its Nets renamed, in its Net union and on its volumes."""
+    """``sidecar`` with its Nets renamed, on its groups and on its volumes."""
     out = json.loads(json.dumps(sidecar))
-    nets = out["unions"]["nets"]
-    out["unions"]["nets"] = {
-        renames.get(net, net): groups for net, groups in nets.items()
-    }
-    for volume in out["volumes"].values():
-        if volume["net"] in renames:
-            volume["net"] = renames[volume["net"]]
+    for record in (*out["group"].values(), *out["volume"].values()):
+        if record["net"] in renames:
+            record["net"] = renames[record["net"]]
     return out
 
 

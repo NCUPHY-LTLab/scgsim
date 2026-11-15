@@ -27,17 +27,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-from scgsim.geometry.sgb.cutfamilies.requests import (
-    FACE_KINDS,
+from scgsim.contracts.sgb_sidecar import Sidecar
+from scgsim.contracts.sgb_sidecar.records import SurfaceGroup
+from scgsim.geometry.exact.grid import Grid
+from scgsim.geometry.sgb.bands.requests import (
+    BANDED_FACE_KINDS,
+    CONDUCTOR_SIDES,
+    ConductorSide,
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
-    Side,
 )
-from scgsim.geometry.sgb.records.grid import Grid
-
-# The kinds of face a conductor Entity has that SGB can band: a concrete request names one of these.
-CONDUCTOR_FACE_KINDS: tuple[Side, ...] = ("sheet", "top", "bottom")
 
 
 def check_bandable_face_kinds(interface_type: str, face_kinds: list[str]) -> None:
@@ -47,11 +47,11 @@ def check_bandable_face_kinds(interface_type: str, face_kinds: list[str]) -> Non
     ``sheet``, ``top``, ``bottom`` and ``interface`` map onto themselves.  The remaining kind a surface group
     has, ``sidewall``, has no SGB equivalent because SGB never bands sidewalls.
     """
-    unbandable = [kind for kind in face_kinds if kind not in FACE_KINDS]
+    unbandable = [kind for kind in face_kinds if kind not in BANDED_FACE_KINDS]
     if unbandable:
         raise ValueError(
             f"Surface EPR {interface_type} face_kinds {unbandable} cannot carry inset margins; "
-            f"SGB bands only {list(FACE_KINDS)} (sidewalls are never banded)."
+            f"SGB bands only {list(BANDED_FACE_KINDS)} (sidewalls are never banded)."
         )
 
 
@@ -72,7 +72,7 @@ def needs_unbanded_build(specs: Mapping[str, Mapping[str, Any]] | None) -> bool:
 
 def inset_requests(
     specs: Mapping[str, Mapping[str, Any]],
-    unbanded_sidecar: Mapping[str, Any] | None = None,
+    unbanded_sidecar: Sidecar | None = None,
 ) -> tuple[InsetRequest, ...]:
     """The inset requests of ``specs``.
 
@@ -83,7 +83,8 @@ def inset_requests(
     if needs_unbanded_build(specs):
         if unbanded_sidecar is None:
             raise ValueError(
-                "inset_margins_by_entity_um needs the sidecar of an unbanded build to find the faces."
+                "inset_requests: specs with inset_margins_by_entity_um need unbanded_sidecar, the sidecar "
+                "of an unbanded build of the same input (build_banded_geometry builds it first)."
             )
         named = _named_conductor_requests(specs, unbanded_sidecar)
     by_type = [
@@ -110,7 +111,7 @@ def _type_request(interface_type: str, spec: Mapping[str, Any]) -> InsetRequest:
 
 
 def _named_conductor_requests(
-    specs: Mapping[str, Mapping[str, Any]], sidecar: Mapping[str, Any]
+    specs: Mapping[str, Mapping[str, Any]], sidecar: Sidecar
 ) -> list[InsetRequest]:
     """One concrete request per face of a customised conductor, with the one set of margins the face takes.
 
@@ -118,7 +119,7 @@ def _named_conductor_requests(
     that reaches it must give it the same margins: the customised ones by entity, the others by type.  Two
     concrete requests may not name one face, so the specs' margins become one request.
     """
-    grid = Grid(sidecar["grid_um"])
+    grid = Grid(sidecar["model"]["grid_um"])
     asks_by_face: dict[ConductorSurface, list[_Ask]] = defaultdict(list)
     for interface_type, spec in sorted(specs.items()):
         for entity in sorted(spec.get("inset_margins_by_entity_um") or ()):
@@ -162,7 +163,7 @@ def _ask_for(interface_type: str, spec: Mapping[str, Any], entity: str) -> _Ask:
 def _add_type_level_asks(
     asks_by_face: dict[ConductorSurface, list[_Ask]],
     specs: Mapping[str, Mapping[str, Any]],
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
 ) -> None:
     """Add the type-level margins of the specs that reach a customised face without customising it.
 
@@ -220,22 +221,23 @@ def _conductor_faces(
     interface_type: str,
     spec: Mapping[str, Any],
     entity: str,
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
 ) -> set[ConductorSurface]:
     """The faces of ``entity`` that carry a Surface-EPR row of ``interface_type``, within the spec's face kinds."""
     face_kinds = spec.get("face_kinds")
-    groups = sidecar["physical_groups"]
+    groups = sidecar["group"]
     faces: set[ConductorSurface] = set()
-    for row in sidecar["surface_epr_rows"].values():
-        group = groups[row["group"]]
+    for row in sidecar["surface_epr_row"].values():
+        # A row names a surface group: the shared reader checked the group's dimension.
+        group = cast(SurfaceGroup, groups[row["group"]])
         kind = group["face_kind"]
         if (
             row["interface_type"] == interface_type
             and entity in group["entities"]
-            and kind in CONDUCTOR_FACE_KINDS
+            and kind in CONDUCTOR_SIDES
             and (face_kinds is None or kind in face_kinds)
         ):
-            faces.add(ConductorSurface(entity, cast(Side, kind)))
+            faces.add(ConductorSurface(entity, cast(ConductorSide, kind)))
     return faces
 
 

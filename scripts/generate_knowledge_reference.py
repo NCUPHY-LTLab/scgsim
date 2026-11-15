@@ -19,10 +19,7 @@ NAMESPACES = (
     "aedt",
     "aedt.specs",
     "geometry",
-    "geometry.compiler",
-    "geometry.models",
     "palace",
-    "palace.mesh.quality",
     "semantics",
     "visualization",
 )

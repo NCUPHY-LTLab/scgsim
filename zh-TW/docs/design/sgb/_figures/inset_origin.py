@@ -38,16 +38,16 @@ from inset_kit import Label, Line, Panel, Poly, Pts, primitive_polyline  # noqa:
 from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
 from sgb_scenes import slab_model  # noqa: E402
 
-from scgsim.geometry.sgb.build import build_sgb_geometry  # noqa: E402
-from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
+from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
+from scgsim.geometry.exact.carriers import LineEdge  # noqa: E402
+from scgsim.geometry.exact.errors import InputError  # noqa: E402
+from scgsim.geometry.sgb.bands.requests import (  # noqa: E402
     ConductorSurface,
     InsetRequest,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.errors import InputError  # noqa: E402
+from scgsim.geometry.sgb.build import build_sgb_geometry  # noqa: E402
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.records.carriers import LineEdge  # noqa: E402
-from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
 
 G = kit.G_UM
 MARGINS = (0.5, 1.0)
@@ -487,19 +487,22 @@ def figure_section(model, ys_um: tuple[float, float] = (50.0, 44.0)) -> dict:
 # --------------------------------------------------------------------------- numbers
 
 
-def band_areas(sidecar: dict, request_id: str) -> list[dict]:
-    """Per band of one inset request: the group names, their total area (um^2) and their face count."""
-    entry = next(i for i in sidecar["insets"] if i["request_id"] == request_id)
+def band_areas(sidecar: dict, family_id: str) -> list[dict]:
+    """Per band of one band family (the sidecar's ``band_family``): the group names and their total area (um^2).
+
+    Each name of ``bands`` is a group the reader checked; a metal-metal contact no group carries is in
+    ``hidden_contacts`` and has no area to add.
+    """
+    family = sidecar["band_family"][family_id]
+    written = sidecar["group"]
     out = []
-    for band in sorted(entry["bands"], key=int):
-        groups = entry["bands"][band]
+    for band in sorted(family["bands"], key=int):
+        groups = family["bands"][band]
         out.append(
             {
                 "band": int(band),
                 "groups": groups,
-                "area_um2": round(
-                    sum(sidecar["physical_groups"][g]["area_um2"] for g in groups), 6
-                ),
+                "area_um2": round(sum(written[g]["area_um2"] for g in groups), 6),
             }
         )
     return out
@@ -514,17 +517,14 @@ def describe(model, sidecar: dict, counts: dict) -> dict:
             "free_boundary_length_um": round(
                 length_um(family.support.free_boundary), 6
             ),
-            "support_area_um2": next(
-                i["support_area_um2"]
-                for i in sidecar["insets"]
-                if i["request_id"] == family.family_id
-            ),
+            "support_area_um2": sidecar["band_family"][family.family_id][
+                "support_area_um2"
+            ],
             "bands": band_areas(sidecar, family.family_id),
         }
     port_groups = {
-        n: g["area_um2"]
-        for n, g in sidecar["physical_groups"].items()
-        if n.startswith("PORT::")
+        port["group"]: sidecar["group"][port["group"]]["area_um2"]
+        for port in sidecar["port"].values()
     }
     return {
         "supports": supports,

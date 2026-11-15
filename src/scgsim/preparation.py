@@ -11,6 +11,10 @@ from dataclasses import dataclass, field
 from threading import RLock
 from typing import TypeVar
 
+from scgsim.refusal import internal, refused
+
+_WHERE_PREPARATION_CALL = "the call to preparation_resources"
+
 _T = TypeVar("_T")
 _R = TypeVar("_R")
 
@@ -25,9 +29,12 @@ class _PreparationState:
     lock: RLock = field(default_factory=RLock)
 
 
+# Ambient by design: the worker budget only decides how many threads run a map whose outputs keep input order,
+# so no result or message depends on it.
 _state: ContextVar[_PreparationState | None] = ContextVar(
     "scgsim_preparation", default=None
 )
+# Ambient by design: the nesting depth only makes a map inside a worker run serially; it changes no result.
 _worker_depth: ContextVar[int] = ContextVar("scgsim_preparation_depth", default=0)
 
 
@@ -46,9 +53,21 @@ def preparation_resources(*, max_workers: int) -> Iterator[None]:
     native environment settings or scientific input/output payloads.
     """
     if isinstance(max_workers, bool) or not isinstance(max_workers, int):
-        raise TypeError("max_workers must be a positive integer.")
+        raise TypeError(
+            refused(
+                "max_workers",
+                f"must be a positive integer; got {max_workers!r}",
+                _WHERE_PREPARATION_CALL,
+            )
+        )
     if max_workers <= 0:
-        raise ValueError("max_workers must be a positive integer.")
+        raise ValueError(
+            refused(
+                "max_workers",
+                f"must be a positive integer; got {max_workers!r}",
+                _WHERE_PREPARATION_CALL,
+            )
+        )
     if _state.get() is not None:
         yield
         return
@@ -143,7 +162,9 @@ def native_preparation() -> Iterator[None]:
         yield
         return
     if _worker_depth.get():
-        raise RuntimeError("Native meshing cannot run inside a preparation worker.")
+        raise RuntimeError(
+            internal("Native meshing cannot run inside a preparation worker")
+        )
     with state.lock:
         token = _worker_depth.set(1)
         try:

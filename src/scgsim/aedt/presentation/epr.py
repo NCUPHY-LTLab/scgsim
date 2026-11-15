@@ -1,4 +1,4 @@
-"""EPR-specific plots and notebook presentation only."""
+"""Plot (``plot_epr_result``) and show (``show_epr``) an EPR result in a notebook."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ import html
 import textwrap
 from typing import Any
 
-from scgsim.aedt.epr.models import EprResult, detached
+from scgsim.aedt.data import detached
+from scgsim.aedt.epr.models import EprResult
 from scgsim.aedt.presentation.epr_projection import (
     history_view,
     native_reference_table_data,

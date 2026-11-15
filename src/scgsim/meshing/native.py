@@ -97,14 +97,9 @@ def bounding_box_of(xao: Path) -> BoundingBox:
 
 
 def _embed(features: SidecarFeatures) -> None:
-    """Re-apply the embeddings the XAO cannot carry: sheet faces inside volumes, curves inside faces."""
+    """Re-apply the embedding the XAO cannot carry: sheet faces inside volumes."""
     for sheet in features.embedded_faces:
         gmsh.model.mesh.embed(2, [sheet.face], 3, sheet.host_volume)
-    curves_by_host: dict[int, list[int]] = defaultdict(list)
-    for curve in features.embedded_edges:
-        curves_by_host[curve.host_face].append(curve.edge)
-    for host_face, curves in sorted(curves_by_host.items()):
-        gmsh.model.mesh.embed(1, curves, 2, host_face)
 
 
 def _set_options(job: MeshJob) -> None:

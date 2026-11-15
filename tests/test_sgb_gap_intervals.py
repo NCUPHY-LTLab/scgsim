@@ -15,23 +15,23 @@ from fractions import Fraction
 import pytest
 from sgb_scenes import GRID, LINEAGE, conductor, footprint, rect_um
 
-from scgsim.geometry.sgb.cutfamilies.gap_intervals import (
+from scgsim.geometry.exact.carriers import (
+    LineEdge,
+    RingPrimitive,
+    circle_arcs,
+)
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.grid import exact_z
+from scgsim.geometry.exact.plane import point_in_ring
+from scgsim.geometry.sgb.bands.gap_intervals import (
     ArcSpan,
     LineSpan,
     Piece,
     split_at_gaps,
 )
-from scgsim.geometry.sgb.cutfamilies.requests import ConductorSurface, InsetRequest
-from scgsim.geometry.sgb.emission.measures import planned_face_area_um2
-from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.bands.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.plane import point_in_ring
-from scgsim.geometry.sgb.records.carriers import (
-    LineEdge,
-    RingPrimitive,
-    circle_arcs,
-)
-from scgsim.geometry.sgb.records.grid import exact_z
+from scgsim.geometry.sgb.output.emission.measures import planned_face_area_um2
 from scgsim.geometry.sgb.records.prisms import (
     Footprint,
     PrismCatalogue,

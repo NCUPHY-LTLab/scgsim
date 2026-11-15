@@ -8,11 +8,12 @@ from pathlib import Path
 import gdstk
 import pytest
 
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.primitives.grid import geometry_grid_scope
 from scgsim.geometry.source.plan_assembly import transform_source_direction
 from scgsim.geometry.source.ports import (
+    PortSheetHost,
     port_sheet_overlaps,
     port_sheet_regions_from_stack_metadata,
 )
@@ -52,6 +53,7 @@ def test_port_regions_preserve_ids_metadata_and_overlap_ownership() -> None:
     }
 
     regions = port_sheet_regions_from_stack_metadata(
+        GridScope(GeometryGridContext(0.001)),
         metadata,
         polygons_by_layer={(9, 2): (source_polygon,)},
         host_entities=(host,),
@@ -73,7 +75,7 @@ def test_port_regions_preserve_ids_metadata_and_overlap_ownership() -> None:
                 "port_polygon_id": "PORT_SHEET_9_2__P0000",
                 "host_semantic_id": "metal",
                 "host_polygon_id": "host-poly",
-                "overlap_loop": ((3.0, 3.0), (1.0, 3.0), (1.0, 1.0), (3.0, 1.0)),
+                "overlap_loop": ((3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)),
                 "operation": "local_fragment_required",
                 "metadata": {"overlap_polygon_index": 0},
             },
@@ -93,8 +95,9 @@ def test_port_regions_preserve_ids_metadata_and_overlap_ownership() -> None:
 
 def test_port_regions_keep_validation_error_order() -> None:
     """Reject a bad source kind before later missing field validation."""
-    with pytest.raises(ValueError, match="currently supports only"):
+    with pytest.raises(ValueError, match="source must be palace_lumped_port_sheet"):
         port_sheet_regions_from_stack_metadata(
+            GridScope(GeometryGridContext(0.001)),
             {"port_sheet_source_layers": ({"source": "other"},)},
             polygons_by_layer={},
             host_entities=(),
@@ -116,6 +119,7 @@ def test_port_regions_keep_selector_and_occurrence_polygon_paths() -> None:
         "direction": (1, 0, 0),
     }
     selected = port_sheet_regions_from_stack_metadata(
+        GridScope(GeometryGridContext(0.001)),
         {"port_sheet_source_layers": ({**common, "selector_point_um": (3.5, 0.5)},)},
         polygons_by_layer={(9, 0): (first, second)},
         host_entities=(),
@@ -124,6 +128,7 @@ def test_port_regions_keep_selector_and_occurrence_polygon_paths() -> None:
     assert selected[0].source_polygon_id == "PORT_SHEET_9_0__P0001"
 
     occurrence = port_sheet_regions_from_stack_metadata(
+        GridScope(GeometryGridContext(0.001)),
         {
             "port_sheet_source_layers": (
                 {
@@ -208,6 +213,7 @@ def test_occurrence_port_overlaps_only_owned_and_contributed_hosts() -> None:
     }
 
     region = port_sheet_regions_from_stack_metadata(
+        GridScope(GeometryGridContext(0.001)),
         {"port_sheet_source_layers": (port_record,)},
         polygons_by_layer={},
         host_entities=entities,
@@ -221,7 +227,7 @@ def test_occurrence_port_overlaps_only_owned_and_contributed_hosts() -> None:
             "port_polygon_id": "PORT_SHEET__port__SOURCE__P0000",
             "host_semantic_id": "intended",
             "host_polygon_id": "intended-poly",
-            "overlap_loop": ((2.0, 1.0), (0.0, 1.0), (0.0, 0.0), (2.0, 0.0)),
+            "overlap_loop": ((2.0, 0.0), (2.0, 1.0), (0.0, 1.0), (0.0, 0.0)),
             "operation": "local_fragment_required",
             "metadata": {"overlap_polygon_index": 0},
         },
@@ -231,7 +237,7 @@ def test_occurrence_port_overlaps_only_owned_and_contributed_hosts() -> None:
             "port_polygon_id": "PORT_SHEET__port__SOURCE__P0000",
             "host_semantic_id": "nested",
             "host_polygon_id": "nested-poly",
-            "overlap_loop": ((2.0, 1.0), (0.0, 1.0), (0.0, 0.0), (2.0, 0.0)),
+            "overlap_loop": ((2.0, 0.0), (2.0, 1.0), (0.0, 1.0), (0.0, 0.0)),
             "operation": "local_fragment_required",
             "metadata": {"overlap_polygon_index": 0},
         },
@@ -241,14 +247,14 @@ def test_occurrence_port_overlaps_only_owned_and_contributed_hosts() -> None:
             "port_polygon_id": "PORT_SHEET__port__SOURCE__P0000",
             "host_semantic_id": "ground-carrier",
             "host_polygon_id": "ground-poly",
-            "overlap_loop": ((2.0, 1.0), (0.0, 1.0), (0.0, 0.0), (2.0, 0.0)),
+            "overlap_loop": ((2.0, 0.0), (2.0, 1.0), (0.0, 1.0), (0.0, 0.0)),
             "operation": "local_fragment_required",
             "metadata": {"overlap_polygon_index": 0},
         },
     )
 
 
-@pytest.mark.parametrize("grid_um", (None, 0.001))
+@pytest.mark.parametrize("grid_um", (0.001,))
 def test_port_overlap_preserves_port_and_host_holes(grid_um) -> None:
     """Subtract both authored holes through the shared polygon conversion path."""
     outer = ((0, 0), (4, 0), (4, 4), (0, 4))
@@ -275,15 +281,13 @@ def test_port_overlap_preserves_port_and_host_holes(grid_um) -> None:
         geometry={"gds_layer": 5, "gds_datatype": 0},
         metadata={"logical_layer_id": "M5"},
     )
-    context = None if grid_um is None else GeometryGridContext(grid_um)
-    with geometry_grid_scope(context):
-        overlaps = port_sheet_overlaps(
-            port_sheet_id="P1",
-            port_polygon=port,
-            target_layer="M5",
-            host_entity_by_polygon_id={"host": entity},
-            host_polygons_by_id={"host": host},
-        )
+    overlaps = port_sheet_overlaps(
+        GridScope(GeometryGridContext(grid_um)),
+        port_sheet_id="P1",
+        port_polygon=port,
+        target_layer="M5",
+        hosts={"host": PortSheetHost(entity, host)},
+    )
     assert sum(gdstk.Polygon(item.overlap_loop).area() for item in overlaps) == 14.0
     assert {item.host_semantic_id for item in overlaps} == {"metal"}
 
@@ -301,11 +305,10 @@ def _source_import_dependencies() -> dict[str, set[str]]:
         "occurrence_validation": Path(
             "src/scgsim/geometry/source/occurrence_validation.py"
         ),
-        "grid": Path("src/scgsim/geometry/source/grid.py"),
+        "grid_projection": Path("src/scgsim/geometry/source/grid_projection.py"),
         "junctions": Path("src/scgsim/geometry/source/junctions.py"),
         "ports": Path("src/scgsim/geometry/source/ports.py"),
         "ground": Path("src/scgsim/geometry/source/ground.py"),
-        "polygon_ops": Path("src/scgsim/geometry/source/polygon_ops.py"),
     }
     dependencies = {name: set() for name in module_paths}
     for name, path in module_paths.items():

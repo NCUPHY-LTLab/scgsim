@@ -18,11 +18,15 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from scgsim.refusal import internal, refused
+
 from .errors import MeshingError
 from .findings import MeshAudit
 from .job import MeshJob
 from .mesher import DELAUNAY, HXT
 from .sizing import BoundingBox
+
+_WHERE_BUDGETS = "the Budgets of the meshing call"
 
 _STDERR_TAIL_CHARS = 400
 _OTHER_ALGORITHM = {HXT: DELAUNAY, DELAUNAY: HXT}
@@ -65,18 +69,28 @@ def measure_bounding_box(
     A probe still running after ``timeout_seconds`` is killed and :class:`ProbeTimeLimitError` raised.
     """
     if timeout_seconds is not None and timeout_seconds <= 0:
-        raise ProbeTimeLimitError(f"no time left to read the model extent of {xao}.")
+        raise ProbeTimeLimitError(
+            refused(
+                f"the model extent of {xao}",
+                "cannot be read: no time is left in the time budget",
+                _WHERE_BUDGETS,
+            )
+        )
     work_dir.mkdir(parents=True, exist_ok=True)
     result_path = work_dir / "probe.json"
     result_path.unlink(missing_ok=True)
     finished = launch_worker(["probe", str(xao), str(result_path)], timeout_seconds)
     if finished.timed_out:
         raise ProbeTimeLimitError(
-            f"reading the model extent of {xao} did not finish within {timeout_seconds:.3g} s."
+            refused(
+                f"reading the model extent of {xao}",
+                f"did not finish within {timeout_seconds:.3g} s",
+                _WHERE_BUDGETS,
+            )
         )
     if finished.returncode != 0 or not result_path.is_file():
         raise MeshingError(
-            f"could not read the model extent of {xao}: {_describe(finished)}"
+            internal(f"could not read the model extent of {xao}: {_describe(finished)}")
         )
     raw = json.loads(result_path.read_text(encoding="utf-8"))
     return BoundingBox(tuple(raw["minimum"]), tuple(raw["maximum"]))

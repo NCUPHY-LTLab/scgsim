@@ -81,8 +81,9 @@ def _attribute_node_memory(
         descendants.extend(
             _attribute_node_memory(child, path, in_resources, source_bound)
         )
-    # Stored historical aggregates may include unqualified Machine information.
-    # Rebuild only the detached attribution, never the receipt-bound artifact.
+    # Drop any stage_memory_peak the node already carries and recompute it from
+    # qualified descendants. Only the detached attribution is rebuilt, never
+    # the receipt-bound artifact.
     node.pop("stage_memory_peak", None)
     if descendants:
         peak = max(

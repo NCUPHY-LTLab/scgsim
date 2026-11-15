@@ -22,7 +22,7 @@ source_data = summary.data
 
 請依最終指派核對 Entity／occurrence／Net 表，再檢查材料、Z 與真空紀錄。埠表會標示編寫的薄片及其承載物／方向。未知值仍維持未知；未設定的請求不等於已知的零。`.data` 是分離資料，因此修改回傳字典不會改變保留的來源快照。
 
-設定完成後，兩種 Eigenmode 外觀介面也提供 `sim.input_summary()`。此檢視會在正規化來源資訊中加入後端設定。Electrostatic 沒有此介面方法：請使用上方獨立來源摘要，再檢查寫出的設定檔及確切端子／接地索引。
+設定完成後，兩種 Eigenmode 外觀介面也提供 `sim.input_summary()`。此檢視會在正規化來源資訊中加入後端設定。Palace 的檢視呈現 `mesh()` 將用來建模的來源，因此包含在模擬上設定的真空區域，且只列出模擬所要求的埠。`ElectrostaticSim` 也提供相同的 `sim.input_summary()`，以端子、接地與政策取代埠；`write_config()` 之後，再檢查確切的端子／接地索引。
 
 ## 保留可攜式配對來源 {#retain-a-portable-paired-source}
 
@@ -48,6 +48,6 @@ print(snapshot.gds_sha256)
 print(tuple(entity.semantic_id for entity in reloaded.entities))
 ```
 
-保留先前的來源配對時，請選擇新的研究位置並將兩個檔案放在一起：堆疊讀取器會檢查紀錄中的 GDS 識別與已註冊的 occurrence 幾何。列印出的 Entity ID 表示來源脈絡，不代表每個 Entity 都有一筆場量測，也不代表求解器連通性。
+保留先前的來源配對時，請選擇新的研究位置並將兩個檔案放在一起：堆疊帶有 `prepare()` 從該 GDS 讀出的多邊形，因此堆疊讀取器會拒絕其他 GDS，並列出兩者的 SHA-256 摘要。列印出的 Entity ID 表示來源脈絡，不代表每個 Entity 都有一筆場量測，也不代表求解器連通性。
 
 來源摘要與配對來源讀取可確認正規化輸入資訊；它們不會產生網格、不會查詢原生 AEDT，也無法證明已完成求解。下一階段需選擇物理模型：[Palace Electrostatic](palace-electrostatic.qmd)、[Palace Eigenmode](palace-eigenmode.qmd) 或 [AEDT source-first Eigenmode/EPR](../tutorial-xmon-aedt.qmd)。[幾何概念](../concepts/geometry.qmd)說明這些後端如何共用來源識別，同時採用不同原生表示法。

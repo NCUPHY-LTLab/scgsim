@@ -37,7 +37,7 @@ The layout generator is `random_layout` of the SGB test suite (`tests/sgb_scenes
 
 The seed is 2 throughout. Seed 1 is not used because at 20,000 features it draws two shapes of one Net (`f5879` and `f5879b`) that touch at a single vertex. The production build rejects such an input with `NonManifoldError`: a same-Net pinch is invalid by design, so the rejection is correct. Seeds 2 to 9 all build at 20,000 features.
 
-The scaling run measures 1,000, 5,000 and 20,000 features under nine tile and worker schedules, 27 cases, each in its own Python process so that peak memory belongs to that case; it took 970 s in total. The Gmsh API comparison and the validator timings use 500, 1,000 and 2,000 features and 1,000, 5,000 and 20,000 features respectively.
+The scaling run measures 1,000, 5,000 and 20,000 features, each in its own Python process so that peak memory belongs to that case. The Gmsh API comparison and the validator timings use 500, 1,000 and 2,000 features and 1,000, 5,000 and 20,000 features respectively.
 
 ## Data files
 
@@ -45,7 +45,7 @@ The files are stored with the SGB design pages, in `zh-TW/docs/design/sgb/figure
 
 | File | Holds | Written by |
 |---|---|---|
-| `why-scaling-measured.json` | 27 cases: stage times, counts, peak memory, identity digests; files, Gmsh load and `verify_loaded` of the one-tile runs | `why_scaling.py measure` |
+| `why-scaling-measured.json` | one case per N: stage times, counts, peak memory, identity digest, the written files, the Gmsh load and `verify_loaded` | `why_scaling.py measure` |
 | `why-scaling-oracle.json` | Gmsh API construction at 500, 1,000 and 2,000 features: times and solid masses | `why_scaling.py oracle` |
 | `why-validator-scaling.json` | time of twelve structural checks at 1,000, 5,000 and 20,000 features; a second timing, not plotted here | `why_scaling.py validators` |
 | `emission-timing-data.json` | Gmsh API against the direct writer, stage by stage, and the timing of every check (structural and on the loaded model) | `emission.py --measure` |
@@ -60,7 +60,7 @@ SGB_CORE=<SGB core checkout>
 PY=<Python interpreter of the SGB core environment, with gmsh and OCP installed>
 export SGB_CORE
 
-$PY zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # about 16 minutes
+$PY zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # about 5 minutes
 $PY zh-TW/docs/design/sgb/_figures/why_scaling.py oracle
 $PY zh-TW/docs/design/sgb/_figures/why_scaling.py validators
 $PY zh-TW/docs/design/sgb/_figures/emission.py --measure

@@ -9,7 +9,8 @@ import textwrap
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.aedt.epr.models import EprResult, detached
+from scgsim.aedt.data import detached
+from scgsim.aedt.epr.models import EprResult
 from scgsim.presentation.notebook import (
     details,
     display_text,

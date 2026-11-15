@@ -92,7 +92,7 @@ python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execut
 Execution opens the owned Desktop, prepares the selected native family, solves,
 exports and reads back actual outputs, then saves/releases and seals the
 receipt. A native failure, missing export or release failure does not become a
-completed result. A run directory is a single prepared execution unit; use a
+completed result. A run folder is a single prepared execution unit; use a
 new output directory when preparing another request instead of overwriting its
 receipt/history.
 

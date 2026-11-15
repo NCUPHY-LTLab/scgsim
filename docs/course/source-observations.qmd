@@ -30,9 +30,12 @@ the same as a known zero. `.data` is detached, so editing the returned dictionar
 does not change the retained source snapshot.
 
 Both Eigenmode facades also offer `sim.input_summary()` after configuration.
-That view adds the backend settings to the normalized source. Electrostatic has
-no such facade method: use the standalone source summary above, then inspect
-its written config and exact terminal/ground index.
+That view adds the backend settings to the normalized source. The Palace view
+shows the source as `mesh()` will build it, so it includes a vacuum region set
+on the simulation and lists only the ports the simulation requested.
+`ElectrostaticSim` offers the same `sim.input_summary()`, with its terminals,
+grounds and policies in place of ports; after `write_config()`, inspect its
+exact terminal/ground index.
 
 ## Retain a portable paired source
 
@@ -61,8 +64,8 @@ print(tuple(entity.semantic_id for entity in reloaded.entities))
 ```
 
 Choose your own new study location when preserving an earlier pair. Keep the
-pair together: the stack reader checks the recorded GDS identity and registered
-occurrence geometry. The printed Entity IDs are source lineage. They do not
+pair together: the stack carries the polygons `prepare()` read from that GDS,
+so the stack reader refuses any other GDS, naming both SHA-256 digests. The printed Entity IDs are source lineage. They do not
 establish one field measurement per Entity or solver connectivity.
 
 A source summary and paired-source read establish normalized input facts.

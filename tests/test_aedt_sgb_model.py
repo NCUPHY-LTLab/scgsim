@@ -182,19 +182,19 @@ def test_thin_film_keeps_a_finite_body_as_a_conductor_solid_beside_the_sheets(tm
     model = _prepare(tmp_path, "thin_film", bump=True)
     assert model.route == "A"
     sidecar = json.loads(model.path("sidecar").read_text(encoding="utf-8"))
-    assert sidecar["route"] == "A"
-    assert sidecar["route_policy"] == {
+    assert sidecar["model"]["route"] == "A"
+    assert sidecar["model"]["route_policy"] == {
         "conductor_volumes": "retained",
         "conductor_sheets": True,
     }
     solids = {s["solid"]: s["aedt_name"] for s in _guard(model)["solids"]}
-    kinds = {sidecar["volumes"][solid]["kind"] for solid in solids}
+    kinds = {sidecar["volume"][solid]["kind"] for solid in solids}
     assert kinds == {"dielectric", "conductor"}
-    bodies = [s for s in solids if sidecar["volumes"][s]["kind"] == "conductor"]
-    assert [sidecar["volumes"][s]["net"] for s in bodies] == ["A"]
+    bodies = [s for s in solids if sidecar["volume"][s]["kind"] == "conductor"]
+    assert [sidecar["volume"][s]["net"] for s in bodies] == ["A"]
     sheets = [
         name
-        for name, group in sidecar["physical_groups"].items()
-        if group.get("interface_type") == "SHEET"
+        for name, group in sidecar["group"].items()
+        if group["interface_type"] == "SHEET"
     ]
     assert sheets  # the films are still sheets

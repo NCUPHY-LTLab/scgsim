@@ -1,47 +1,45 @@
-"""Resolve a sealed manual Palace run into validated data and convenience views.
+"""Read a sealed manual Palace run folder into the checked run record ``ResolvedRunData``.
 
-Validation retains the recorded artifact order; this module never runs a solver."""
+Validation keeps the recorded artifact order; this module never runs a solver."""
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-from scgsim.palace.presentation.amr import PalaceAmrReport, show_amr_analysis
-from scgsim.palace.presentation.plotting import ReportTheme
-from scgsim.palace.presentation.reports import (
-    show_all_results,
-    show_physics_quantities,
-    show_run_trustworthiness,
-    show_simulation_benchmark,
+from scgsim.contracts.palace_run_folder import (
+    ARCHIVE_MANIFEST,
+    CONFIG,
+    HANDOFF_METADATA,
+    INDEX_MAP,
+    MESH,
+    MESH_MANIFEST,
+    NATIVE_METADATA,
+    NATIVE_METADATA_NAME,
+    OUTPUT_DIR,
+    RESOURCE_RECORD,
+    RETURNED_RECEIPT,
+    RUN_METADATA,
+    output_table,
+    palace_problem,
+    read_json,
 )
-from scgsim.palace.results.amr_analysis import analyze_amr
-from scgsim.palace.results.amr_models import CapacitanceReference, PalaceAmrAnalysis
 from scgsim.palace.results.artifacts import (
     as_float_map,
     expect_int,
     expect_scalar,
-    read_json,
     to_float,
     validate_contract_schema,
 )
-from scgsim.palace.results.epr import epr_result
+from scgsim.palace.results.convergence import passes_allowed, returned_convergence
 from scgsim.palace.results.index_contract import (
     RouteConsistency,
     require_index_map_schema,
     require_manifest_schema,
     validate_config_index_correspondence,
     validate_config_problem,
-)
-from scgsim.palace.results.models import (
-    PalaceCost,
-    PalacePerformance,
-    PalaceProvenance,
-    PalaceReturnedReceipt,
-    ParsedTable,
-    ResolvedRunData,
 )
 from scgsim.palace.results.provenance_contract import (
     validate_archive_manifest,
@@ -53,278 +51,339 @@ from scgsim.palace.results.provenance_contract import (
     validate_scalar_identity,
 )
 from scgsim.palace.results.receipt_contract import (
-    RETURNED_RECEIPT_FILE,
     ReceiptValidation,
     build_returned_receipt,
     validate_returned_state_agreement,
 )
+from scgsim.palace.results.resolved_records import (
+    PalaceCost,
+    PalacePerformance,
+    PalaceProvenance,
+    ParsedTable,
+    ResolvedRunData,
+)
 from scgsim.palace.results.tables import (
-    PROBLEM_FAMILIES,
     count_index_entries,
     output_families,
     read_result_table,
 )
+from scgsim.palace.run.archive import RETURNED_RUN_FOLDER
+from scgsim.refusal import Declared, found_text
+
+_WHERE_RESOLVE_CALL = "the call to resolve_palace_result"
 
 _REQUIRED_FILES = (
-    "metadata/palace_handoff_metadata.json",
-    "metadata/palace_run_metadata.json",
-    "metadata/palace_resource_record.json",
-    "metadata/palace_handoff_archive_manifest.json",
-    "metadata/palace_index_map.json",
-    "metadata/mesh_manifest.json",
-    "metadata/palace_returned_run_receipt.json",
-    "config.json",
-    "palace.msh",
-    "results/palace/palace.json",
+    HANDOFF_METADATA,
+    RUN_METADATA,
+    RESOURCE_RECORD,
+    ARCHIVE_MANIFEST,
+    INDEX_MAP,
+    MESH_MANIFEST,
+    RETURNED_RECEIPT,
+    CONFIG,
+    MESH,
+    NATIVE_METADATA,
 )
 
 
-_SCHEMA_FILES = (
-    "metadata/palace_index_map.json",
-    "metadata/mesh_manifest.json",
-)
+_SCHEMA_FILES = (INDEX_MAP, MESH_MANIFEST)
 
 
 def _require_file(path: Path) -> None:
     """Raise when a required artifact of the run folder is missing."""
     if not path.exists():
-        raise FileNotFoundError(f"required artifact missing: {path}")
-
-
-@dataclass(frozen=True)
-class ResolvedPalaceResult(ResolvedRunData):
-    """Complete resolved view of one Palace run directory."""
-
-    def analyze_amr(
-        self, reference: CapacitanceReference | None = None
-    ) -> PalaceAmrAnalysis:
-        """Detach native refinement metrics and optional identified reference errors."""
-        return analyze_amr(self, reference)
-
-    def show_amr_analysis(
-        self,
-        *,
-        reference: CapacitanceReference | None = None,
-        theme: ReportTheme = "light",
-    ) -> PalaceAmrReport:
-        """Display the offline AMR analysis without changing its source observations."""
-        return show_amr_analysis(analyze_amr(self, reference), theme=theme)
-
-    def epr_result(self):
-        """Detach the verified final Eigenmode EPR quantities for offline work."""
-
-        return epr_result(self)
-
-    def show_run_trustworthiness(
-        self, *, theme: str = "light", show_details: bool = False
-    ):
-        """Build the identity and AMR view using the original artifact-validation order."""
-        return show_run_trustworthiness(
-            self,
-            theme=cast(ReportTheme, theme),
-            show_details=show_details,
-        )
-
-    def show_all_results(
-        self,
-        *,
-        theme: str = "light",
-        ranking_limit: int | None = 20,
-        show_details: bool = False,
-        amr_analysis: PalaceAmrAnalysis | None = None,
-    ) -> None:
-        """Display identity, benchmark and physics views in the established notebook sequence."""
-        show_all_results(
-            self,
-            theme=cast(ReportTheme, theme),
-            ranking_limit=ranking_limit,
-            show_details=show_details,
-            amr_analysis=amr_analysis,
-        )
-
-    def show_physics_quantities(
-        self, *, theme: str = "light", ranking_limit: int | None = 20
-    ):
-        """Build the selected physics view from this sealed run without recomputing solver data."""
-        return show_physics_quantities(
-            self, theme=cast(ReportTheme, theme), ranking_limit=ranking_limit
-        )
-
-    def show_simulation_benchmark(
-        self,
-        *,
-        show_details: bool = False,
-        amr_analysis: PalaceAmrAnalysis | None = None,
-    ):
-        """Project recorded run cost and timing while retaining complete benchmark metadata."""
-        return show_simulation_benchmark(
-            self, show_details=show_details, amr_analysis=amr_analysis
+        raise FileNotFoundError(
+            Declared("required artifact", RETURNED_RUN_FOLDER).refusal(
+                f"missing: {path}"
+            )
         )
 
 
-def resolve_palace_result(
+def read_resolved_run(
     run_dir: str | Path, *, expected_handoff_id: str
-) -> ResolvedPalaceResult:
-    """Validate and resolve a completed Palace manual-handoff run directory."""
+) -> ResolvedRunData:
+    """Read a completed Palace run folder and check every record in it against the handoff it must match."""
 
     if not isinstance(expected_handoff_id, str) or not expected_handoff_id:
-        raise ValueError("expected_handoff_id must be a non-empty string.")
-
+        raise ValueError(
+            Declared("expected_handoff_id", _WHERE_RESOLVE_CALL).refusal(
+                f"must be a non-empty string; got {expected_handoff_id!r}. Pass the handoff_id that prepare_handoff() returned"
+            )
+        )
     root = Path(run_dir).expanduser().resolve()
-    # The recorded schemas come first: a run folder of an older schema is rejected with its recorded
-    # version, whatever solver output it lacks.
+    try:
+        return _checked_run(root, expected_handoff_id)
+    except (FileNotFoundError, TypeError, ValueError) as error:
+        # Each check names what disagrees; every one of them is acted on the same way.
+        error.add_note(
+            f"Run folder {root}, expected handoff {expected_handoff_id!r}: resolve_palace_result reads only "
+            "the folder Palace returned for that handoff, complete and unchanged. Fetch the returned folder "
+            "again, or prepare and run a new handoff."
+        )
+        raise
+
+
+def _checked_run(root: Path, expected_handoff_id: str) -> ResolvedRunData:
+    """Read the run folder's records, check them in the recorded order and read the result tables."""
+    records = _read_records(root)
+    handoff = records.handoff_metadata
+    route = expect_scalar(handoff, "route", str)
+    problem = expect_scalar(handoff, "problem", str)
+    if route not in {"A", "B"}:
+        raise ValueError(
+            Declared(
+                f"route {route!r} of {HANDOFF_METADATA}", RETURNED_RUN_FOLDER
+            ).refusal("must be 'A' or 'B'")
+        )
+    palace_problem(
+        problem
+    )  # refuses a problem SCGSim does not write, naming those it does
+    _check_identity(
+        root,
+        records,
+        expected_handoff_id=expected_handoff_id,
+        route=route,
+        problem=problem,
+    )
+    index_counts = count_index_entries(records.index_map)
+    _check_index_and_config(records, index_counts, route=route, problem=problem)
+    returned_receipt = build_returned_receipt(records.returned_receipt)
+    # The passes are read only for a declared run, so one without a plan costs what it did before.
+    convergence = returned_convergence(
+        root,
+        handoff,
+        problem,
+        records.returned_receipt,
+        passes_allowed(records.config),
+    )
+    records = _with_result_metadata(root, records, convergence.result_folder)
+    tables = _discover_results(
+        root,
+        problem,
+        index_counts,
+        records.config,
+        result_folder=convergence.result_folder,
+        receipt=records.returned_receipt,
+    )
+    cost = _build_cost(records.palace_json)
+    performance = _build_performance(records.palace_json)
+    return ResolvedRunData(
+        run_dir=root,
+        problem=problem,
+        route=route,
+        has_returned_outputs=True,
+        status=expect_scalar(records.run_metadata, "status", str),
+        performance=performance,
+        cost=cost,
+        tables=tables,
+        returned_receipt=returned_receipt,
+        provenance=records,
+        convergence=convergence.check,
+        solver_end=convergence.end,
+    )
+
+
+def _read_records(root: Path) -> PalaceProvenance:
+    """Read every record of the run folder, the two schema records first.
+
+    A run folder of another schema is refused with its recorded version, whatever solver output it lacks.
+    """
     for relative in _SCHEMA_FILES:
         _require_file(root / relative)
-    index_map = read_json(root / "metadata/palace_index_map.json")
-    mesh_manifest = read_json(root / "metadata/mesh_manifest.json")
+    index_map = read_json(root / INDEX_MAP)
+    mesh_manifest = read_json(root / MESH_MANIFEST)
     require_manifest_schema(mesh_manifest)
     require_index_map_schema(index_map)
     for relative in _REQUIRED_FILES:
         _require_file(root / relative)
-
-    handoff_metadata = read_json(root / "metadata" / "palace_handoff_metadata.json")
-    run_metadata = read_json(root / "metadata" / "palace_run_metadata.json")
-    resource_record = read_json(root / "metadata" / "palace_resource_record.json")
-    archive_manifest = read_json(
-        root / "metadata" / "palace_handoff_archive_manifest.json"
+    return PalaceProvenance(
+        handoff_metadata=read_json(root / HANDOFF_METADATA),
+        run_metadata=read_json(root / RUN_METADATA),
+        resource_record=read_json(root / RESOURCE_RECORD),
+        handoff_archive_manifest=read_json(root / ARCHIVE_MANIFEST),
+        index_map=index_map,
+        mesh_manifest=mesh_manifest,
+        config=read_json(root / CONFIG),
+        palace_json=read_json(root / NATIVE_METADATA),
+        returned_receipt=read_json(root / RETURNED_RECEIPT),
     )
-    config = read_json(root / "config.json")
-    palace_payload = read_json(root / "results/palace/palace.json")
-    receipt_payload = read_json(root / RETURNED_RECEIPT_FILE)
 
-    route = expect_scalar(handoff_metadata, "route", str)
-    problem = expect_scalar(handoff_metadata, "problem", str)
 
-    if route not in {"A", "B"}:
-        raise ValueError(f"invalid route {route!r}; expected 'A' or 'B'.")
-    if problem not in PROBLEM_FAMILIES:
-        raise ValueError(
-            f"unsupported problem {problem!r}; expected one of {tuple(PROBLEM_FAMILIES)}."
-        )
-
-    _validate_metadata_headers(handoff_metadata, resource_record, run_metadata)
-
-    validate_scalar_identity(handoff_metadata, run_metadata)
-    validate_execution_identity(root, handoff_metadata)
-    validate_handoff_id(handoff_metadata, expected_handoff_id)
-    validate_resource_identity(resource_record, handoff_metadata)
-
+def _check_identity(
+    root: Path,
+    records: PalaceProvenance,
+    *,
+    expected_handoff_id: str,
+    route: str,
+    problem: str,
+) -> None:
+    """Check that the metadata, the receipt, the hashes and the archive all name the expected handoff."""
+    handoff, run, resource = (
+        records.handoff_metadata,
+        records.run_metadata,
+        records.resource_record,
+    )
+    _validate_metadata_headers(handoff, resource, run)
+    validate_scalar_identity(handoff, run)
+    validate_execution_identity(root, handoff)
+    validate_handoff_id(handoff, expected_handoff_id)
+    validate_resource_identity(resource, handoff)
     ReceiptValidation(
-        receipt_payload=receipt_payload,
+        receipt_payload=records.returned_receipt,
         expected_handoff_id=expected_handoff_id,
-        handoff_metadata=handoff_metadata,
-        run_metadata=run_metadata,
+        handoff_metadata=handoff,
+        run_metadata=run,
         problem=problem,
         route=route,
         root=root,
     ).validate()
     validate_returned_state_agreement(
-        receipt_payload=receipt_payload,
-        run_metadata=run_metadata,
-        resource_record=resource_record,
+        receipt_payload=records.returned_receipt,
+        run_metadata=run,
+        resource_record=resource,
     )
-    validate_hashes(root, handoff_metadata, "handoff")
-    validate_hashes(root, run_metadata, "run")
-    validate_archive_record(root, resource_record)
-    validate_archive_manifest(root, archive_manifest, resource_record, handoff_metadata)
-    index_counts = count_index_entries(index_map)
+    validate_hashes(root, handoff, "handoff")
+    validate_hashes(root, run, "run")
+    validate_archive_record(root, resource)
+    validate_archive_manifest(root, records.handoff_archive_manifest, resource, handoff)
+
+
+def _check_index_and_config(
+    records: PalaceProvenance,
+    index_counts: dict[str, int],
+    *,
+    route: str,
+    problem: str,
+) -> None:
+    """Check that the route, the mesh manifest, the index map and the config describe one model."""
     RouteConsistency(
         route,
-        run_metadata,
-        handoff_metadata,
-        mesh_manifest,
-        index_map,
+        records.run_metadata,
+        records.handoff_metadata,
+        records.mesh_manifest,
+        records.index_map,
         index_counts,
         problem,
     ).validate()
-    validate_config_problem(config, problem)
-    validate_config_index_correspondence(config, index_map, index_counts, problem)
-
-    tables = _discover_results(root, problem, index_counts, config)
-
-    returned_receipt = build_returned_receipt(receipt_payload)
-    cost = _build_cost(palace_payload)
-    performance = _build_performance(palace_payload)
-
-    return ResolvedPalaceResult(
-        run_dir=root,
-        problem=problem,
-        route=route,
-        has_returned_outputs=True,
-        status=expect_scalar(run_metadata, "status", str),
-        performance=performance,
-        cost=cost,
-        tables=tables,
-        returned_receipt=returned_receipt,
-        provenance=PalaceProvenance(
-            handoff_metadata=handoff_metadata,
-            run_metadata=run_metadata,
-            resource_record=resource_record,
-            handoff_archive_manifest=archive_manifest,
-            index_map=index_map,
-            mesh_manifest=mesh_manifest,
-            config=config,
-            palace_json=palace_payload,
-            returned_receipt=receipt_payload,
-        ),
+    validate_config_problem(records.config, problem)
+    validate_config_index_correspondence(
+        records.config, records.index_map, index_counts, problem
     )
 
 
-def _discover_results(
+def _with_result_metadata(
+    root: Path, records: PalaceProvenance, result_folder: str
+) -> PalaceProvenance:
+    """The records with the ``palace.json`` of the run's result, which for a stopped run is its last pass's.
+
+    The top-level ``palace.json`` of a stopped run may already describe the mesh of the solve that was cut
+    short, so the cost of the result is read beside the result's own tables.
+    """
+    if result_folder == OUTPUT_DIR:
+        return records
+    relative = f"{result_folder}/{NATIVE_METADATA_NAME}"
+    _require_receipt_bound(records.returned_receipt, relative)
+    return replace(records, palace_json=read_json(root / relative))
+
+
+def _discover_results(  # noqa: PLR0913 -- the tables, where they are, and what binds them
     root: Path,
     problem: str,
     index_counts: dict[str, int],
     config: dict[str, Any],
+    *,
+    receipt: dict[str, Any],
+    result_folder: str = OUTPUT_DIR,
 ) -> dict[str, ParsedTable]:
-    """Read every required final native table and validate its sealed config/index correspondence."""
-    results_root = root / "results" / "palace"
+    """Read every required native table of the run's result and validate its sealed config/index correspondence.
+
+    The result is the top level of ``results/palace`` or ``result_folder``.  Wherever it is, a table is read
+    only when ``receipt`` lists it: the receipt check compared a listed file's hash, so its bytes are the
+    ones returned.
+    """
     discovered: dict[str, ParsedTable] = {}
     for family in output_families(problem, index_counts):
-        path = results_root / f"{family}.csv"
+        relative = output_table(family, result_folder)
+        path = root / relative
         if not path.is_file():
-            raise FileNotFoundError(f"required result family is missing: {path}")
+            raise FileNotFoundError(
+                Declared("required result family", RETURNED_RUN_FOLDER).refusal(
+                    f"is missing: {path}"
+                )
+            )
+        _require_receipt_bound(receipt, relative)
         discovered[family] = read_result_table(path, problem, index_counts, config)
     return discovered
+
+
+def _require_receipt_bound(receipt: dict[str, Any], relative: str) -> None:
+    """A result file is read only when the receipt lists it (its hash was checked)."""
+    listed = {
+        entry.get("path")
+        for entry in receipt.get("output_files", [])
+        if isinstance(entry, dict) and entry.get("present") is True
+    }
+    if relative not in listed:
+        raise ValueError(
+            Declared(f"result file {relative}", RETURNED_RUN_FOLDER).refusal(
+                f"is not among the outputs {RETURNED_RECEIPT} records, so its bytes are not the ones returned"
+            )
+        )
+
+
+def _numeric_timings(elapsed: dict[str, Any], block: str) -> dict[str, float]:
+    """The numeric entries of one ``ElapsedTime`` block, as floats; other entries are left out."""
+    raw = elapsed.get(block)
+    if not isinstance(raw, dict):
+        raise TypeError(
+            Declared(
+                f"{NATIVE_METADATA_NAME} ElapsedTime.{block}", RETURNED_RUN_FOLDER
+            ).refusal("must be a mapping")
+        )
+    return {
+        str(key): float(value)
+        for key, value in raw.items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
 
 
 def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
     """Detach native elapsed counts and durations without filling absent measurements."""
     elapsed = palace_payload.get("ElapsedTime")
     if not isinstance(elapsed, dict):
-        raise TypeError("palace.json missing ElapsedTime block.")
+        raise TypeError(
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                "missing ElapsedTime block"
+            )
+        )
 
-    counts_raw = elapsed.get("Counts")
-    durations_raw = elapsed.get("Durations")
-    if not isinstance(counts_raw, dict):
-        raise TypeError("palace.json ElapsedTime.Counts must be a mapping.")
-    if not isinstance(durations_raw, dict):
-        raise TypeError("palace.json ElapsedTime.Durations must be a mapping.")
-
-    counts: dict[str, int | float] = {
-        str(key): float(value)
-        for key, value in counts_raw.items()
-        if isinstance(value, (int, float)) and not isinstance(value, bool)
-    }
-    durations: dict[str, float] = {
-        str(key): float(value)
-        for key, value in durations_raw.items()
-        if isinstance(value, (int, float)) and not isinstance(value, bool)
-    }
+    counts: dict[str, int | float] = dict(_numeric_timings(elapsed, "Counts"))
+    durations = _numeric_timings(elapsed, "Durations")
     if not counts or not durations:
         raise ValueError(
-            "palace.json performance payload is missing numeric timing data."
+            Declared(
+                f"{NATIVE_METADATA_NAME} performance payload", RETURNED_RUN_FOLDER
+            ).refusal("is missing numeric timing data")
         )
     if any(not math.isfinite(value) or value < 0 for value in counts.values()) or any(
         not math.isfinite(value) or value < 0 for value in durations.values()
     ):
-        raise ValueError("palace.json timing payload contains invalid numeric data.")
+        raise ValueError(
+            Declared(
+                f"{NATIVE_METADATA_NAME} timing payload", RETURNED_RUN_FOLDER
+            ).refusal("contains invalid numeric data")
+        )
     if (
         "Total" not in counts
         or "Total" not in durations
         or counts["Total"] < 1
         or durations["Total"] < 0
     ):
-        raise ValueError("palace.json timing payload must include non-negative Total.")
+        raise ValueError(
+            Declared(
+                f"{NATIVE_METADATA_NAME} timing payload", RETURNED_RUN_FOLDER
+            ).refusal("must include non-negative Total")
+        )
     return PalacePerformance(counts=counts, durations=durations)
 
 
@@ -332,17 +391,32 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
     """Detach solver, mesh, memory and parallel-resource observations from Palace JSON."""
     problem_block = palace_payload.get("Problem")
     if not isinstance(problem_block, dict):
-        raise TypeError("palace.json missing Problem block.")
+        raise TypeError(
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                "missing Problem block"
+            )
+        )
 
     linear_solver = palace_payload.get("LinearSolver")
     if not isinstance(linear_solver, dict):
         linear_solver = {}
 
     cost = PalaceCost(
-        problem_degrees_of_freedom=expect_int(problem_block.get("DegreesOfFreedom")),
-        mesh_elements=expect_int(problem_block.get("MeshElements")),
-        mpi_size=expect_int(problem_block.get("MPISize")),
-        openmp_threads=expect_int(problem_block.get("OpenMPThreads")),
+        problem_degrees_of_freedom=expect_int(
+            problem_block.get("DegreesOfFreedom"),
+            f"{NATIVE_METADATA_NAME} Problem.DegreesOfFreedom",
+        ),
+        mesh_elements=expect_int(
+            problem_block.get("MeshElements"),
+            f"{NATIVE_METADATA_NAME} Problem.MeshElements",
+        ),
+        mpi_size=expect_int(
+            problem_block.get("MPISize"), f"{NATIVE_METADATA_NAME} Problem.MPISize"
+        ),
+        openmp_threads=expect_int(
+            problem_block.get("OpenMPThreads"),
+            f"{NATIVE_METADATA_NAME} Problem.OpenMPThreads",
+        ),
         peak_memory_megabytes=as_float_map(
             palace_payload.get("PeakMemoryMegabytes"),
             ("Average", "Max", "Min", "Total"),
@@ -352,7 +426,7 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
             ("Average", "Max", "Min", "Total"),
         ),
         linear_solver={
-            key: to_float(value)
+            key: to_float(value, f"{NATIVE_METADATA_NAME} LinearSolver.{key}")
             for key, value in linear_solver.items()
             if isinstance(linear_solver, dict)
             and isinstance(key, str)
@@ -365,55 +439,65 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
             else None
         ),
     )
-    if any(
-        value is None
-        for value in (
-            cost.problem_degrees_of_freedom,
-            cost.mesh_elements,
-            cost.mpi_size,
-            cost.openmp_threads,
-            cost.git_tag,
-        )
-    ):
-        raise ValueError("palace.json is missing required solver cost metadata.")
-    if any(
-        value is None or value <= 0
-        for value in (
-            cost.problem_degrees_of_freedom,
-            cost.mesh_elements,
-            cost.mpi_size,
-            cost.openmp_threads,
-        )
-    ):
-        raise ValueError("palace.json has invalid solver cost metadata.")
-    if (
-        not cost.linear_solver
-        or any(
-            value is None or not math.isfinite(value) or value < 0
-            for value in cost.peak_memory_megabytes.values()
-        )
-        or any(
-            value is None or not math.isfinite(value) or value < 0
-            for value in cost.peak_node_memory_megabytes.values()
-        )
-        or any(
-            not math.isfinite(value) or value < 0
-            for value in cost.linear_solver.values()
-        )
-    ):
-        raise ValueError("palace.json is missing required resource cost metadata.")
+    _check_cost(cost)
     return cost
 
 
-__all__ = [
-    "PalaceCost",
-    "PalacePerformance",
-    "PalaceProvenance",
-    "PalaceReturnedReceipt",
-    "ParsedTable",
-    "ResolvedPalaceResult",
-    "resolve_palace_result",
-]
+def _check_cost(cost: PalaceCost) -> None:
+    """Refuse a cost record that lacks a size, a positive size, the tag, or readable memory and solver figures."""
+    sizes = {
+        "Problem.DegreesOfFreedom": cost.problem_degrees_of_freedom,
+        "Problem.MeshElements": cost.mesh_elements,
+        "Problem.MPISize": cost.mpi_size,
+        "Problem.OpenMPThreads": cost.openmp_threads,
+    }
+    missing = [
+        name
+        for name, value in {**sizes, "GitTag": cost.git_tag}.items()
+        if value is None
+    ]
+    if missing:
+        raise ValueError(
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                f"is missing required solver cost metadata: {missing}; the run Palace returned is incomplete"
+            )
+        )
+    not_positive = {
+        name: value for name, value in sizes.items() if value is None or value <= 0
+    }
+    if not_positive:
+        raise ValueError(
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                f"has invalid solver cost metadata: {not_positive} must be positive"
+            )
+        )
+    unreadable = [
+        *([] if cost.linear_solver else ["LinearSolver"]),
+        *(
+            f"PeakMemoryMegabytes.{key}"
+            for key, value in cost.peak_memory_megabytes.items()
+            if value is None or not math.isfinite(value) or value < 0
+        ),
+        *(
+            f"PeakNodeMemoryMegabytes.{key}"
+            for key, value in cost.peak_node_memory_megabytes.items()
+            if value is None or not math.isfinite(value) or value < 0
+        ),
+        *(
+            f"LinearSolver.{key}"
+            for key, value in cost.linear_solver.items()
+            if not math.isfinite(value) or value < 0
+        ),
+    ]
+    if unreadable:
+        raise ValueError(
+            Declared(f"{NATIVE_METADATA_NAME}", RETURNED_RUN_FOLDER).refusal(
+                f"is missing required resource cost metadata: {unreadable} are absent, negative or not finite"
+            )
+        )
+
+
+__all__ = ["read_resolved_run"]
 
 
 def _validate_metadata_headers(
@@ -421,14 +505,32 @@ def _validate_metadata_headers(
 ) -> None:
     """Validate manual-handoff kind, schema and nonempty state before identity checks."""
     if run_metadata.get("kind") != "manual_handoff":
-        raise ValueError("run metadata does not identify manual_handoff kind.")
+        raise ValueError(
+            Declared(
+                "run metadata does not identify manual_handoff kind",
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(run_metadata.get("kind"), "manual_handoff"))
+        )
     if handoff_metadata.get("kind") != "manual_handoff":
-        raise ValueError("handoff metadata does not identify manual_handoff kind.")
+        raise ValueError(
+            Declared(
+                "handoff metadata does not identify manual_handoff kind",
+                RETURNED_RUN_FOLDER,
+            ).refusal(found_text(handoff_metadata.get("kind"), "manual_handoff"))
+        )
     validate_contract_schema(handoff_metadata, "handoff metadata")
     validate_contract_schema(run_metadata, "run metadata")
     validate_contract_schema(resource_record, "resource record")
 
     if expect_scalar(run_metadata, "status", str, fallback="") == "":
-        raise ValueError("run metadata status must be a non-empty string.")
+        raise ValueError(
+            Declared(
+                "run metadata status must be a non-empty string", RETURNED_RUN_FOLDER
+            ).refusal(found_text(run_metadata.get("status")))
+        )
     if expect_scalar(resource_record, "status", str, fallback="") == "":
-        raise ValueError("resource record status must be a non-empty string.")
+        raise ValueError(
+            Declared(
+                "resource record status must be a non-empty string", RETURNED_RUN_FOLDER
+            ).refusal(found_text(resource_record.get("status")))
+        )

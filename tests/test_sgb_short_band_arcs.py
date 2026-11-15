@@ -14,8 +14,8 @@ from fractions import Fraction
 import pytest
 from sgb_scenes import GRID, chip_prisms, conductor, units
 
-from scgsim.geometry.sgb.cutfamilies.inset import SHORT_ARC_GRID_STEPS
-from scgsim.geometry.sgb.cutfamilies.requests import ConductorSurface, InsetRequest
+from scgsim.geometry.sgb.bands.inset import SHORT_ARC_GRID_STEPS
+from scgsim.geometry.sgb.bands.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 

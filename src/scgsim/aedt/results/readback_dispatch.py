@@ -15,7 +15,6 @@ from scgsim.aedt.results.q2d_readback import validate_q2d_readback
 from scgsim.aedt.results.q3d_readback import validate_q3d_readback
 from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.results.terminal_readback import (
-    CURRENT_TERMINAL_NATIVE_SCHEMAS,
     validate_body_terminal_readback,
     validate_terminal_native_evidence,
 )
@@ -25,7 +24,7 @@ from scgsim.aedt.specs.q3d import Q3dSpec
 
 
 def validate_result_readback(root: Path, receipt: dict[str, Any], spec: Any) -> None:
-    """Validate native result readback in its historical family order."""
+    """Check the receipt's connected versions, then the native readback of the spec's family (Q2D, Q3D, Eigenmode or scattering)."""
     connected = receipt.get("connected")
     if not isinstance(connected, dict) or connected != {
         "aedt_version": spec.aedt_version,
@@ -91,12 +90,7 @@ def validate_result_readback(root: Path, receipt: dict[str, Any], spec: Any) -> 
         if isinstance(spec, HfssDrivenGeometrySpec):
             validate_body_terminal_readback(receipt, spec)
         else:
-            validate_terminal_native_evidence(
-                ports,
-                spec,
-                current=receipt.get("runtime_source", {}).get("schema_version")
-                in CURRENT_TERMINAL_NATIVE_SCHEMAS,
-            )
+            validate_terminal_native_evidence(ports, spec)
     else:
         validate_modal_native_evidence(ports, spec)
     validate_hfss_setup_and_convergence(root, receipt, spec)

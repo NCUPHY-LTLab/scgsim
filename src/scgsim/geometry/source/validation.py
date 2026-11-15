@@ -1,4 +1,7 @@
-"""Own existing input-only validation before compilation. Shared Entity predicates are lower operations, not duplicate validators."""
+"""Validate a ``GeometryBuildInput`` from its own contents: polygons, entities, attachments and port regions.
+
+The entity predicates it uses are in ``models.entities``; the contact-pad attachment is in ``source.contact_pads``.
+"""
 
 from __future__ import annotations
 
@@ -6,14 +9,20 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from math import isfinite
 
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.regions import PortSheetRegionRecord
-from scgsim.geometry.primitives.entity_validation import (
+from scgsim.geometry.models.entities import (
     is_solution_entity,
     is_vacuum_solution_entity,
     requires_route_representation,
-    resolve_contact_pad_attachment,
 )
+from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.source.contact_pads import resolve_contact_pad_attachment
+from scgsim.refusal import Declared
+
+
+def has_vacuum_solution_region(build_input: GeometryBuildInput) -> bool:
+    """Whether the input holds a vacuum solution region: the one rule validation and Palace preparation share."""
+    return any(is_vacuum_solution_entity(entity) for entity in build_input.entities)
 
 
 def validate_geometry_input(build_input: GeometryBuildInput) -> GeometryBuildInput:
@@ -23,10 +32,15 @@ def validate_geometry_input(build_input: GeometryBuildInput) -> GeometryBuildInp
     _validate_entities(state)
     _validate_attachments(state)
     _validate_port_regions(state)
-    if not any(is_vacuum_solution_entity(entity) for entity in build_input.entities):
+    if not has_vacuum_solution_region(build_input):
         state.errors.append("GeometryBuildInput requires a vacuum solution_region")
     if state.errors:
-        raise ValueError("Invalid GeometryBuildInput: " + "; ".join(state.errors))
+        raise ValueError(
+            Declared(
+                "the geometry input",
+                "the input: build it with GeometryPlan.prepare() or build_gds_stack_geometry_input",
+            ).refusal("Invalid GeometryBuildInput: " + "; ".join(state.errors))
+        )
     return build_input
 
 

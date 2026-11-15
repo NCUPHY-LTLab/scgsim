@@ -9,6 +9,7 @@ from math import isfinite
 from typing import Any, Mapping
 
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.refusal import Declared
 
 # The class A wall-column limit, in grid steps (decided on issue 125): a side wall standing on an
 # outline edge shorter than this is refused by the meshing stage, and a junction partition keeps
@@ -28,11 +29,36 @@ class GeometryGridContext:
         if isinstance(self.grid_size_um, bool) or not isinstance(
             self.grid_size_um, (int, float)
         ):
-            raise TypeError("grid_size_um must be a positive length in micrometres")
+            raise TypeError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "grid_size_um",
+                    "a positive length in micrometres",
+                    self.grid_size_um,
+                )
+            )
         if not isfinite(self.grid_size_um) or self.grid_size_um <= 0:
-            raise ValueError("grid_size_um must be a positive finite length")
+            raise ValueError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "grid_size_um", "a positive finite length", self.grid_size_um
+                )
+            )
         if self.coordinate_frame != "assembly_xy":
-            raise ValueError("geometry grid requires the assembly_xy layout frame")
+            raise ValueError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "coordinate_frame",
+                    "the assembly_xy layout frame",
+                    self.coordinate_frame,
+                )
+            )
 
     def to_payload(self) -> dict[str, str | float]:
         """Return the canonical versioned metadata representation."""
@@ -46,18 +72,38 @@ class GeometryGridContext:
     def from_payload(cls, value: Mapping[str, Any]) -> GeometryGridContext:
         """Validate canonical metadata and reconstruct its grid policy."""
         if set(value) != {"schema_version", "grid_size_um", "coordinate_frame"}:
-            raise ValueError("geometry grid payload members are not canonical")
+            raise ValueError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "payload",
+                    "exactly schema_version, grid_size_um and coordinate_frame",
+                    sorted(value),
+                )
+            )
         if value["schema_version"] != "scgsim.geometry.grid.v1":
-            raise ValueError("unsupported geometry grid schema")
+            raise ValueError(
+                Declared(
+                    "the geometry grid",
+                    "the layout's GDS database unit, or the input's metadata 'geometry_grid'",
+                ).expected(
+                    "schema_version", "scgsim.geometry.grid.v1", value["schema_version"]
+                )
+            )
         return cls(value["grid_size_um"], value["coordinate_frame"])
 
 
-def geometry_grid_context(
-    build_input: GeometryBuildInput,
-) -> GeometryGridContext | None:
-    """Read the optional grid policy without inferring one for older inputs."""
+def geometry_grid_context(build_input: GeometryBuildInput) -> GeometryGridContext:
+    """The model grid the input declares; an input without one is refused, never defaulted."""
     value = build_input.metadata.get("geometry_grid")
-    return None if value is None else GeometryGridContext.from_payload(value)
+    if value is None:
+        raise ValueError(
+            "the geometry input declares no geometry grid (metadata 'geometry_grid'). "
+            "Build it with GeometryPlan.prepare() or build_gds_stack_geometry_input, "
+            "which put its XY coordinates on the layout's database-unit grid."
+        )
+    return GeometryGridContext.from_payload(value)
 
 
 NM_PER_UM = 1000
@@ -86,6 +132,12 @@ def format_box(bounds: Sequence[float], grid_um: float | None) -> str:
     corner = format_point(x0, y0, grid_um)
     other = format_point(x1, y1, grid_um)
     return corner if corner == other else f"{corner.removesuffix(' um')}..{other}"
+
+
+def format_extent(points: Sequence[Sequence[float]], grid_um: float | None) -> str:
+    """Where points of the plane lie: the box around them, as :func:`format_box` prints it."""
+    xs, ys = [x for x, _ in points], [y for _, y in points]
+    return format_box((min(xs), min(ys), max(xs), max(ys)), grid_um)
 
 
 def format_length(length_um: float, grid_um: float | None) -> str:

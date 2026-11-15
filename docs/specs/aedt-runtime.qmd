@@ -6,11 +6,11 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/aedt-runtime"
 ---
 
-The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications, failure rules and historical reader contracts.
+The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications and failure rules, and the [current formats](#current-formats) this version reads.
 
 The Solid/Thin-Film modeling extension below does not revise the v2
-transaction, historical-reader, or Q3D body-v3 contracts except where this
-page explicitly describes the required 3D modeling selection.
+transaction or Q3D body-v3 contracts except where this page explicitly
+describes the required 3D modeling selection.
 
 ## One shared lifecycle
 
@@ -239,124 +239,114 @@ preparation copies that canonical name unchanged and binds only the copied GDS
 path in its independent payload. It does not reinterpret old truncated names,
 rewrite existing artifacts, or provide a legacy-name fallback.
 
-## Receipt cohorts and source provenance
+## Current formats and older results {#current-formats}
 
-New handoffs retain `scgsim.aedt.handoff.v1` and
-`scgsim.aedt.handoff-manifest.v1`. Both records add
-`expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
-V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v30` manifest for the current source, with 401 sorted, unique
-paths. V30 starts from all current AEDT modules, both AEDT visualization loaders,
-and the non-AEDT paths retained from V29 except `scgsim/geometry/models/lumped.py`, then follows AST-resolved imports and
-package initializers. Against the frozen 285-path V29 roster it adds the AEDT SGB STEP import
-(`scgsim/aedt/preparation/sgb_model.py`, `scgsim/aedt/runtime/families/sgb_import.py`,
-`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/runtime/families/sgb_boundaries.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
-drops `scgsim/aedt/runtime/native/hfss_lumped.py`, `scgsim/aedt/specs/support.py`
-and `scgsim/geometry/models/lumped.py`, which issue #67 decision 8 removed. The fields are `schema_version`, `stage`,
-`modules`, `content_sha256`, and `revision_observation`; there is no helper-hash
-map. Each declared module has measured bytes and the content digest binds that
-inventory. The Git observation is either available with the actual 40-hex
-commit or explicitly unavailable.
-A source checkout or fabricated revision is not required for byte-bound
-identity.
+SCGSim reads only the formats it writes. A handoff, receipt, request or result
+written by an earlier SCGSim is read with the SCGSim commit that wrote it; this
+version does not convert or migrate it.
 
-Before writing `running`, the shared transaction accepts its established
-initial-receipt cohorts: a V3 receipt with both V3 expectation markers and a
-canonical manifest; a V2 receipt with both V2 markers and a canonical
-manifest; or an exact V1 `not_run` receipt with both markers absent and the
-canonical historical manifest. A historical handoff may continue through its
-supported family path under those cohort rules; this does not bypass family
-request requirements.
+| Record | Current format |
+|---|---|
+| Handoff metadata | `scgsim.aedt.handoff.v1` for the GDS-import and Q2D/Q3D families; `scgsim.aedt.handoff.v2` for the body-first and EPR families |
+| Handoff manifest | `scgsim.aedt.handoff-manifest.v1` and `.v2`, paired with the handoff above |
+| Receipt | `scgsim.aedt.receipt.v3`, initial and completed |
+| Runtime source | `scgsim.aedt.runtime-source.v30` ([rule](#runtime-source)) |
+| HFSS EPR request | `scgsim.aedt.hfss-eigenmode-epr.v2`; `.v3` with one expression-cache convergence control, `.v4` with a collection |
+| Saved-field analysis request | `scgsim.aedt.hfss-eigenmode-epr-analysis.v2`; `.v3` with surface field selectors |
+| Prepared planar geometry | `scgsim.aedt.epr-planar.v2` |
+| EPR result and mode-energy row | `scgsim.aedt.epr-result.v2` and `scgsim.aedt.epr-mode-energy.v2` |
+| Saved-solution manifest and receipt | `scgsim.aedt.saved-solution-manifest.v2` and `scgsim.aedt.saved-solution-receipt.v2` |
 
-Every new Q3D or HFSS 3D execution requires explicit `modeling`; a
-`thin_film` request also needs its corresponding source declarations before
-receipt mutation. A previously supported Q3D/HFSS result payload without
-`modeling` remains under its original reader and hash interpretation and cannot
-start a new execution. The shared V1/V2 handoff compatibility remains
-available to unchanged families such as Q2D, but does not bypass the current
-Q3D/HFSS request requirement. Q3D input-v1 and input-v2 request schemas remain
-removed.
+Every HFSS 3D and Q3D request carries explicit `modeling` and its neutral
+`physical_representation`; a request payload without the representation is
+refused. A surface contribution always records `loss_tangent`, `source` and
+`preset`, and an EPR analysis request always records `bulk_domain_ids`.
+
+Every receipt reader (execution, `resolve_results()` and the prepared-model
+reader) first checks the receipt schema and the schema of each runtime-source
+record it carries. A receipt `scgsim.aedt.receipt.v1` or `.v2`, or a V3 receipt
+whose runtime source has an earlier schema, is refused with a message saying
+it was written by an earlier SCGSim and naming how to read it. This check comes
+before any request or result is read, so an old result is refused by this one
+rule rather than by whichever older format it would reach next. A v1 EPR
+result or a v1 saved-solution manifest read on its own is refused with the same
+message.
+
+A new handoff writes `expected_receipt_schema: scgsim.aedt.receipt.v3` into its
+metadata and manifest, and its initial V3 receipt contains
+`prepared_runtime_source`, the [runtime source](#runtime-source) of the code
+that prepared it. Before writing `running`, the shared transaction requires a
+V3 receipt with both V3 expectation markers, a canonical manifest and the
+current runtime source. Every new Q3D or HFSS 3D execution requires explicit
+`modeling`; a `thin_film` request also needs its corresponding source
+declarations before receipt mutation.
 
 The verified initial-receipt hash and prepared-manifest hash are copied into
-the mutable V3 receipt. The final receipt is intentionally not compared with
-its initial hash because execution must mutate it. Unknown versions, mixed or
-partial markers, noncanonical members, and hash mismatches reject before
-receipt mutation.
+the mutable V3 receipt as `preparation_cohort: prepared_v3`. The final receipt
+is intentionally not compared with its initial hash because execution must
+mutate it. Unknown versions, mixed or partial markers, noncanonical members,
+and hash mismatches reject before receipt mutation.
 
-Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v30` and a content digest for the code that actually executed
-it. Declared module bytes and the digest are mandatory; V30 has no redundant
-helper-hash fields. `revision_observation` carries the actual 40-hex commit
-when available and records `unavailable` truthfully for an immutable wheel
-without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
-or cohort still fails closed. Preparation and execution hashes are evidence
-with different timing, not an equality requirement, and historical hashes are
-not compared to the currently installed package.
+Every completed receipt has a separate `runtime_source` record, with stage
+`actual`, for the code that executed it. `resolve_results()` verifies the exact
+cohort, markers, canonical prepared manifest, initial-receipt binding and
+complete actual runtime manifest before applying the family result checks;
+HFSS completion requires sealed native PEC binding evidence. These unsigned
+consistency checks do not authenticate an artifact set against an actor able
+to rewrite every member.
 
-`resolve_results()` preserves the existing rules for genuine historical
-completed V1 and V2 receipts. A receipt relabeled below its preparation markers
-is an inconsistent downgrade and rejects. V2 and V3 resolution verify their
-exact cohorts, markers, canonical prepared manifest, initial-receipt binding,
-and complete actual runtime manifest before applying their version-specific
-family result checks. Only V3 HFSS completion requires sealed native PEC binding
-evidence; this requirement is never projected onto historical V1/V2 receipts.
-These unsigned consistency checks do not authenticate an artifact set against
-an actor able to rewrite every member.
+A pure initial-receipt codec owns the exact V3 member order, two-space JSON
+indentation, and the trailing newline; prepared provenance sits between
+`source` and `outputs`.
 
-`runtime-source.v1` is a frozen thirteen-module reader contract, not a live
-enumeration rule. The V2–V29 inventories retain their original module paths as well. V4 added
-`scgsim/aedt/_presentation.py`; V5 added `scgsim/sgb/geometry_plan.py` and
-`scgsim/sgb/__init__.py`. V7 added
-`scgsim/_notebook_presentation.py` to V6. V8 added
-`scgsim/aedt/_junction_partition.py` to V7. V9 added
-`scgsim/aedt/__init__.py`, `scgsim/aedt/_q3d_geometry.py`,
-`scgsim/sgb/adapter.py`, and `scgsim/sgb/stack.py` to V8. V10 added the shared
-`scgsim/aedt/_handoff_cohort.py` to V9; V11 added
-`scgsim/aedt/_q3d_bodies.py` to V10. V12 is frozen with V11's exact path
-membership. V13 retains its frozen inventory, mandatory declared module bytes
-and digest, and optional `revision_observation`; V1–V17 retain their frozen path
-membership, field meanings, and version-specific reader rules. V14 is unused:
-SCGSim has no V14 inventory. V16 added the HFSS Eigenmode native implementation module to the
-V15 inventory. V17 added the shared lumped-model and HFSS lumped-native modules,
-plus the AEDT specs package initializer, to V16. V18 removed the former
-EPR-private `epr/junction_partition.py` path and included
-`preparation/junction_partition.py`, the relocated AEDT data/RLC/terminal
-helpers, geometry/EPR/support specs, modeling/planar preparation, HFSS geometry
-runtime, neutral geometry representation modules, and the shared source-ground
-construction helper with its polygon-operation leaf. V19 added the model-only
-prepared-model reader; V20–V22 retain their separate declared historical
-inventories. V24 adds `scgsim/aedt/runtime/batch_protocol.py`,
-`scgsim/aedt/runtime/batch_runner.py`, and `scgsim/aedt/epr/evidence.py` to the
-V23 inventory. V25 adds the matrix run-control implementation.
-V26 freezes 167 paths for the request, preparation, transaction, native-family,
-EPR-expression, result-reader, and shared geometry modules after responsibility
-splits. V27 freezes 283 sorted, unique paths, seeded by 118 AEDT modules, both
-AEDT visualization loaders, and the retained non-AEDT paths, then closed over
-AST-resolved imports and package initializers. V28 freezes 284 paths; it
-adds `scgsim/geometry/primitives/topology_validation.py` to V27. V29 freezes
-285 paths; it adds `scgsim/geometry/planning/junction_planning/lattice.py` to V28.
-V30 is current with 401 paths; it adds the AEDT SGB STEP import and the SGB
-modules it imports to V29, and drops the three modules issue #67 decision 8
-removed. V23–V30 use the
-same five record fields described above, with no helper-hash map. Each
-version's exact path list is its declared implementation inventory. These
-manifests bind their declared file inventories, not an exhaustive transitive
-dependency attestation. The frozen V12 inventory, for example, does not separately hash
-`scgsim/sgb/engine_gates.py`. They do not change the V3 receipt schema. A pure
-initial-receipt codec owns exact V1/V2/V3 member
-order, two-space JSON indentation, and the trailing newline. V1 omits prepared
-provenance; V2 and V3 insert it between `source` and `outputs`. Reading
-historical evidence uses the declared frozen schema and does not compare
-historical hashes with the installed package.
+### Runtime source {#runtime-source}
 
-Execution computes mandatory runtime-source provenance inside the receipt-bound
-failure transaction, before importing PyAEDT or constructing Desktop. Current
-V30 may record `revision_observation` as unavailable; that alone does not fail
-byte-bound identity or prevent execution. Missing or corrupt declared module
-bytes, digest, schema, or cohort still yield a failed V3 receipt without a
-Desktop launch rather than escaping receipt finalization. V1–V17 retain their
-version-specific historical validation rules, including revision requirements
-where declared.
+The runtime source names the SCGSim source files an AEDT run is made of and the
+SHA-256 of each. It is computed on each use, not frozen: the static import
+closure of every module under `scgsim/aedt` and of the two AEDT visualization
+loaders, `scgsim/visualization/loaders/aedt.py` and `aedt_receipt.py`. The walk
+follows every `import` and `from ... import` that names an `scgsim` module,
+including imports inside functions, and adds each package initializer on the
+way. A file elsewhere in `src` that AEDT does not import is not listed, so
+moving, renaming or deleting it does not affect AEDT preparation or execution.
+
+A record has five fields:
+
+| Field | Meaning |
+|---|---|
+| `schema_version` | `scgsim.aedt.runtime-source.v30` |
+| `stage` | `prepared` when the handoff is written, `actual` when execution starts |
+| `modules` | one `module`, `path` and `sha256` per file, in path order |
+| `content_sha256` | SHA-256 of the canonical JSON of `modules` |
+| `revision_observation` | an object: `{"status": "available", "revision": "<40-hex Git commit>"}`, or `{"status": "unavailable"}` (for example a wheel without VCS metadata) |
+
+A reader accepts a record when all of these hold:
+
+- `schema_version` is the current one and `stage` is the one expected;
+- the paths are sorted and unique, each lies under `src/scgsim/` without `..`,
+  and each `module` is the dotted name of its path;
+- the paths include `src/scgsim/__init__.py` and `src/scgsim/aedt/__init__.py`.
+  Every AEDT import passes through both package initializers, so a list without
+  either is not an AEDT closure, and they stay in place when modules move
+  inside `scgsim/aedt`;
+- `content_sha256` matches the recorded `modules`;
+- `revision_observation` is exactly `{"status": "unavailable"}`, or an object with the two keys `status` (`"available"`) and `revision` (a 40-hex commit).
+
+The reader does not compare the recorded hashes with the installed package:
+they state which bytes ran, and the installed code may since differ. An
+`unavailable` revision does not fail the record.
+
+A record with an earlier schema, `runtime-source.v1` to `v29`, is refused with
+a message saying it was written by an earlier SCGSim. Read such a result with
+the SCGSim commit that wrote it; its `revision_observation` names that commit
+when Git was available. Every receipt or handoff written before
+`runtime-source.v30` carries an earlier schema.
+
+Execution computes the `actual` record inside the receipt-bound failure
+transaction, before importing PyAEDT or constructing Desktop. A missing source
+file or a damaged record yields a failed V3 receipt without a Desktop launch
+rather than escaping receipt finalization. The `prepared` and `actual` records
+are evidence taken at different times and need not be equal.
 
 The family save contract remains fail-closed. `save_project()` returning false
 before solve aborts before native execution; returning false after export aborts
@@ -531,12 +521,11 @@ normal thickness. A TSV wall's radial thickness is not its axial span.
 Explicit Solid geometry without layer declarations can use the common
 identity plan without inventing physical IDs.
 
-Historical `PhysicalLayerSpec` payloads and untagged coordinate traces retain
-their original interpretation and hash meaning through reader-only,
-version-bound decoding. They are not silently converted into fresh neutral
-declarations. Fresh execution of an old physical-source request fails before
-Desktop creation with a replacement preparation instruction. Existing pinned
-source and sealed artifacts are unchanged. Historical zero-width conductor
+A request payload without a tagged neutral `physical_representation`, whose
+physical layers are `PhysicalLayerSpec` records, was written by an earlier
+SCGSim. It is refused with a replacement preparation instruction and is not
+converted into fresh neutral declarations; read it with the SCGSim commit that
+wrote it ([current formats](#current-formats)). Historical zero-width conductor
 imports remain their recorded Sheet representation and are not relabeled as
 Solid volumes.
 
@@ -752,10 +741,7 @@ its native value with unknown scope; no host-capacity or usage meaning is inferr
 Stage memory peaks include only qualified task rows and remain unavailable when
 none exist. They are maxima of observed task peaks, not a whole-host peak or sum.
 One pure detached projection serves capture, verified offline reading, and direct
-Report display. Historical receipt-bound files stay unchanged; their returned
-interpretation corrects prior unconditional scope and descendant aggregates.
-Runtime source V21 adds this shared attribution leaf while preserving V1–V20
-inventories and readers. Receipt V3 and benchmark v1 remain unchanged.
+Report display. Receipt V3 and benchmark v1 carry this shared attribution leaf.
 
 `ResolvedRun.simulation_benchmark()` retains its four existing summary keys and
 adds the verified benchmark record.
@@ -1041,7 +1027,7 @@ records, while source-backed v3 has eight allowed paths and seven records.
 ## Eigenmode saved fields and Surface-EPR direction
 
 The Eigenmode Surface-EPR path is an additive lifecycle, not a
-reinterpretation of a completed V1/V2/V3 receipt. It starts from shared source
+reinterpretation of a completed V3 receipt. It starts from shared source
 polygons, holes, material/domain facts, route profile, and declared junction
 intent, then records a separate AEDT binding from those facts to native bodies,
 sheets, faces, material sides, and calculator selections. Native adjacency is
@@ -1168,8 +1154,8 @@ native face list or an explicit sum of individually bound faces.
 `ExpressionCacheConvergenceSet(controls=(...))` carries a nonempty ordered
 collection of unit `ExpressionCacheConvergence` controls. The public setter and
 preparation helper accept either a unit or a collection. A collection serializes
-as `scgsim.aedt.hfss-eigenmode-epr.v4`; singleton V3 and historical V1/V2 payloads
-retain their existing serialization. Duplicate target/mode pairs are rejected.
+as `scgsim.aedt.hfss-eigenmode-epr.v4`; a unit control serializes as V3 and a
+request without one as V2. Duplicate target/mode pairs are rejected.
 
 ```python
 from scgsim.aedt import (
@@ -1228,8 +1214,7 @@ Each selected control's mode must also be selected by the configured
 For the singleton case, the setter enables one expression-cache item for a
 caller-selected mode and explicit criterion, and the handoff records that
 setting in `scgsim.aedt.hfss-eigenmode-epr.v3`. A collection uses V4 as described
-above. V1/V2 handoffs remain readable and retain their prior schema on round
-trip. With no control selected, SCGSim authors no auxiliary expression and
+above; a request without a control uses V2. With no control selected, SCGSim authors no auxiliary expression and
 submits the same non-converging primitive cache items as before. The low-level
 `prepare_hfss_eigenmode_from_geometry()` requires both `aedt_version` and
 `modeling`, and accepts the same `expression_convergence` argument.
@@ -1331,7 +1316,7 @@ those outcomes require an actual target-run observation.
 `prepare_planar_geometry_input()` requires an explicit `modeling` choice and
 validates/detaches shared source polygons, holes, entities, solution domains,
 junctions, and surface-analysis requests. Any Route A/B choice belongs to the
-upstream geometry compiler; it is not an AEDT preparation argument.
+upstream Palace geometry; it is not an AEDT preparation argument.
 `prepare_hfss_eigenmode_from_geometry()` requires `aedt_version` and `modeling`,
 binds the prepared source request to an HFSS Eigenmode spec, and emits one
 portable handoff. Direct GDS authoring remains available; its 3D spec now also requires
@@ -1339,7 +1324,7 @@ the explicit modeling choice.
 
 For AEDT EPR, the preparation order is source geometry and an explicit
 `modeling` choice, declared junction partition into local PEC ends and the
-central RLC rectangle, then geometry-compiler surface planning and the
+central RLC rectangle, then geometry surface planning and the
 contribution catalogue. Any Route A/B choice belongs to the upstream source.
 Route A adapter-generated sheet footprints are refreshed from that final conductor
 geometry; caller-authored declarations remain present. The catalogue carries
@@ -1360,7 +1345,7 @@ flowchart TB
   INPUT["GeometryBuildInput<br/>normalized polygons, Entities, domains"]
   PALACE["Palace preparation<br/>existing port and junction model"]
   PARTITION["AEDT junction partition<br/>local PEC ends + central RLC rectangle"]
-  PLAN["geometry compiler SurfacePlanRecord + contribution ledger<br/>surface patches and source evidence"]
+  PLAN["geometry planning SurfacePlanRecord + contribution ledger<br/>surface patches and source evidence"]
   PREPARED["PreparedPlanarGeometry<br/>detached source, catalogue, bindings, hashes"]
   NATIVE["PreparedEprHfss<br/>native model, non-model sheets, expressions/cache"]
   RAW["Native raw integrals + evaluation evidence"]
@@ -1380,7 +1365,7 @@ flowchart TB
 |---|---|
 | `GeometryBuildInput` | Shared normalized source polygons, semantic Entities, solution domains, material and provenance facts. It is input to the backend planners. |
 | Final AEDT junction geometry | `prepare_planar_geometry_input()` partitions declared junction sheets before surface planning. Derived PEC ends and the central RLC rectangle retain source-owner and material lineage; original source input remains unchanged. |
-| `SurfacePlanRecord` and `surface_contribution_ledger` | The geometry compiler plans physical surface patches and records owner, interface, side, effective domain, source and aggregation evidence. The ledger is the authority for numeric surface catalog entries; a semantic declaration alone adds none. |
+| `SurfacePlanRecord` and `surface_contribution_ledger` | Geometry surface planning plans physical surface patches and records owner, interface, side, effective domain, source and aggregation evidence. The ledger is the authority for numeric surface catalog entries; a semantic declaration alone adds none. |
 | `PreparedPlanarGeometry` | Detached pre-native AEDT request containing source/junction facts, catalog, selected contributions, surface bindings, and model/source digests. It does not claim that native geometry or a solve was validated. |
 | `PreparedEprHfss` | In-process owner of the active AEDT application handle, prepared geometry and setup records, non-model sheets, expressions/cache, and timing/readback state. It is not a portable result or evidence of a completed solve. |
 | `EprResult` | Detached per-mode or per-mode/pass rows. `raw_integrals` and `raw_integral_evidence` retain observed quantities and evaluation context; the existing combination step computes domain, surface, and junction values with the model-wide normalization. |
@@ -1790,7 +1775,7 @@ split or omit other group members. Each resolved binding keeps its own
 classification, side, adjacent domains, materials and masks remain validated
 for each patch.
 
-The catalogue is built from the geometry compiler's physical
+The catalogue is built from geometry surface planning's physical
 surface-contribution ledger. A generic declaration without physical ledger evidence remains
 semantic metadata and does not add a numeric EPR contribution. For Route B
 finite-shell top and bottom patches, the mask and analysis-sheet plane use the

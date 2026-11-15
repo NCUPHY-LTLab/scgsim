@@ -9,38 +9,38 @@ from math import isfinite
 from types import ModuleType
 from typing import Any
 
-from scgsim.geometry.models.common import RouteLiteral
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.planning.domain_planning.envelope import (
-    auto_vacuum_envelope_bounds,
-    auto_vacuum_padding,
-    auto_vacuum_solution_region,
-    is_auto_vacuum_subtractor,
-)
-from scgsim.geometry.planning.domain_planning.occupancy import (
-    auto_vacuum_component_contacts_subtractor,
-    auto_vacuum_subtractor_xy_region,
-    domain_bounds_loop,
-    loop_domain_bounds,
-    solution_entity_xy_region,
-)
-from scgsim.geometry.primitives.constants import TOPOLOGY_EPS_UM
-from scgsim.geometry.primitives.entities import entity_z_range_um
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import (
+from scgsim.geometry.grid.booleans import boolean_polygon_region
+from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.grid.loops import (
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
     loop_signature,
 )
-from scgsim.geometry.primitives.spatial import same_coordinate_z
+from scgsim.geometry.grid.scope import UNGRIDDED
+from scgsim.geometry.interpretation.envelope import (
+    auto_vacuum_envelope_bounds,
+    auto_vacuum_padding,
+    auto_vacuum_solution_region,
+    is_auto_vacuum_subtractor,
+    loop_domain_bounds,
+)
+from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import entity_z_range_um
+from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.representation import RepresentationContext
+from scgsim.geometry.planning.domain_planning.occupancy import (
+    auto_vacuum_component_contacts_subtractor,
+    auto_vacuum_subtractor_xy_region,
+    domain_bounds_loop,
+    solution_entity_xy_region,
+)
+from scgsim.geometry.planning.spatial import same_coordinate_z
 
 
 def prepare_auto_vacuum_solution_regions(
     build_input: GeometryBuildInput,
     route: RouteLiteral | None,
     *,
-    native_complement: bool = False,
     representation_context: RepresentationContext | None = None,
 ) -> GeometryBuildInput:
     """Replace auto VACUUM_REGION with planner-side complement components."""
@@ -51,9 +51,7 @@ def prepare_auto_vacuum_solution_regions(
         raise ValueError(
             "auto vacuum region must have vacuum material_kind before planning"
         )
-    return _VacuumSweep(
-        build_input, route, native_complement, representation_context, auto_region
-    ).build()
+    return _VacuumSweep(build_input, route, representation_context, auto_region).build()
 
 
 @dataclass
@@ -62,7 +60,6 @@ class _VacuumSweep:
 
     build_input: GeometryBuildInput
     route: RouteLiteral | None
-    native_complement: bool
     representation_context: RepresentationContext | None
     auto_region: SemanticEntitySpec
     auto_metadata: dict[str, Any] = field(init=False)
@@ -81,20 +78,6 @@ class _VacuumSweep:
     def build(self) -> GeometryBuildInput:
         """Prepare the envelope, sweep its complement and retain source order."""
         self.prepare_envelope()
-        # The curved compiler uses this same authored envelope and padding, then
-        # computes its complement in the shared native planar arrangement.
-        if self.native_complement:
-            return replace(
-                self.build_input,
-                entities=tuple(
-                    (
-                        self.auto_region
-                        if entity.semantic_id == self.auto_region.semantic_id
-                        else entity
-                        for entity in self.build_input.entities
-                    )
-                ),
-            )
         self.prepare_sweep()
         import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
@@ -242,14 +225,19 @@ class _VacuumSweep:
             active_subtractors.append(entity)
             if active_subtractor_region:
                 active_subtractor_region = boolean_polygon_region(
-                    self.gdstk, active_subtractor_region, subtractor_regions, "or"
+                    UNGRIDDED,
+                    self.gdstk,
+                    active_subtractor_region,
+                    subtractor_regions,
+                    "or",
                 )
             else:
                 active_subtractor_region = subtractor_regions
         vacuum_region_refs = geometry_refs_from_gdstk_region(
+            UNGRIDDED,
             {"outer_loop": self.envelope_loop},
             boolean_polygon_region(
-                self.gdstk, base_region, active_subtractor_region, "not"
+                UNGRIDDED, self.gdstk, base_region, active_subtractor_region, "not"
             ),
         )
         if not vacuum_region_refs:
@@ -267,7 +255,7 @@ class _VacuumSweep:
         active_subtractors: list[SemanticEntitySpec],
     ) -> None:
         """Append one complement component with exact source boundary ledgers."""
-        component_region = gdstk_surface_region(geometry_ref)
+        component_region = gdstk_surface_region(UNGRIDDED, geometry_ref)
         component_subtractor_ids = tuple(
             sorted(
                 (
@@ -296,7 +284,7 @@ class _VacuumSweep:
                 self.gdstk, self.build_input, entity
             )
             if boolean_polygon_region(
-                self.gdstk, component_region, entity_region, "and"
+                UNGRIDDED, self.gdstk, component_region, entity_region, "and"
             ):
                 boundary_entity_ids[boundary_key].append(entity.semantic_id)
         self.component_index += 1

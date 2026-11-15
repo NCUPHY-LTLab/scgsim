@@ -1,7 +1,8 @@
 """The meshing stage of ``simulation_drc``: fine edges and faces of the built model, located and attributed by lineage.
 
 Every scene is a small synthetic layout built by the real SGB build: a 20 um pad beside a 30 um electrode, on a
-substrate wrapped in the check's 1 um vacuum.  What changes is the pad's outline:
+substrate, in the vacuum the check adds (padding (x, y, z) = (0, 0, 1000) um).  What changes is the pad's
+outline:
 
 * ``clean`` -- a square;
 * ``jog`` -- a 1 nm step in the edge facing the electrode (layout fine structure: a wall face 1 grid step
@@ -26,6 +27,7 @@ with Gmsh.
 from __future__ import annotations
 
 import math
+from collections import Counter
 from dataclasses import replace
 
 import pytest
@@ -44,11 +46,12 @@ import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.meshing.entry as meshing_entry
 import scgsim.meshing.repair as meshing_repair
 import scgsim.palace.mesh.build as build_module
-import scgsim.palace.preparation.drc as drc_module
+import scgsim.palace.simulation.drc as drc_module
 from scgsim.geometry.models.input import BoundaryCurveChainSpec, SourceCurveSpec
 from scgsim.geometry.sgb.errors import OverlapError
 from scgsim.meshing import (
     Budgets,
+    FineFeature,
     FineStructureLimits,
     MeshRepairError,
     check_fine_structure,
@@ -58,8 +61,8 @@ from scgsim.meshing.findings import BadElement
 from scgsim.meshing.repair import RepairPolicy
 from scgsim.meshing.sizing import BoundingBox
 from scgsim.meshing.stop_places import stop_places
-from scgsim.palace import EigenmodeSim, ElectrostaticSim, SimulationDrcError
-from scgsim.palace.preparation.layout_snapshot import (
+from scgsim.palace import EigenmodeSim, SimulationDrcError
+from scgsim.palace.source.layout_snapshot import (
     DRC_VACUUM_PADDING_UM,
     prepare_layout_snapshot,
 )
@@ -122,7 +125,7 @@ def scene(monkeypatch, pad, electrode=ELECTRODE):
 
 
 def check(simulation, component, **options):
-    """``simulation.simulation_drc`` on a layout with no vacuum of its own, so the check wraps it in 1 um."""
+    """``simulation.simulation_drc`` on a layout with no vacuum of its own, so the check adds its vacuum."""
     return simulation.simulation_drc(
         component,
         layer_stack=NO_VACUUM_STACK,
@@ -168,7 +171,9 @@ def test_the_bands_of_a_layout_jog_belong_to_the_layout(monkeypatch):
     """Band offsets that repeat a layout jog are the layout's: they lie within the band margin of the jog.
 
     The jog sits on the pad's top edge, which the 20 um electrode leaves flush with the model's edge, so the
-    bands along it repeat the 1 nm step as seam pieces of one grid step.
+    bands along it repeat the 1 nm step as seam pieces of one grid step.  That edge is the layout's planar
+    extent, where the vacuum ends, so the step also leaves a wall 1 nm wide in the model's side at the
+    electrode's far corner: both walls are the layout's.
     """
     top_jog = ((0, 0), (20, 0), (20, 20), (10, 20), (10, 20.001), (0, 20.001))
     flush = ((30, 0), (60, 0), (60, 20), (30, 20))
@@ -177,7 +182,15 @@ def test_the_bands_of_a_layout_jog_belong_to_the_layout(monkeypatch):
     )
     refusals = [f for f in error.report.meshing.findings if f.action == "refuse"]
     warnings = [f for f in error.report.meshing.findings if f.action == "warn"]
-    assert [(f.rule, f.owner) for f in refusals] == [("A", "layout")]
+    assert [(f.rule, f.owner) for f in refusals] == [("A", "layout"), ("A", "layout")]
+    assert [f.location_um for f in refusals] == [
+        pytest.approx((10.0, 20.0005, 0.1)),
+        pytest.approx((60.0, 20.0005, 0.1)),
+    ]
+    assert [f.groups for f in refusals] == [
+        ("MA::chip/pad_0000__sidewall",),
+        ("EXT::VACUUM_REGION__sidewall",),
+    ]
     assert warnings
     assert {(f.rule, f.owner) for f in warnings} == {("C", "layout")}
     assert all(f.value_steps == pytest.approx(1) for f in warnings)
@@ -305,8 +318,8 @@ def set_up_as_the_check(simulation, component, run_dir, specs=None, nets=None):
     sim = simulation()
     sim.set_plan(snapshot)
     sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
-    if specs is not None or simulation is ElectrostaticSim:
-        sim.set_surface_epr(representation="B", specs=specs or {})
+    if specs is not None:
+        sim.set_surface_epr(specs)
     sim.set_output_dir(run_dir)
     return sim
 
@@ -326,7 +339,10 @@ def test_mesh_refuses_layout_fine_structure_before_the_mesher_starts(
     assert started == []
     assert raised.value.report == expected
     assert "(20.0005, 10.0000, 0.1000) um" in str(raised.value)
-    with pytest.raises(RuntimeError, match="requires a generated mesh"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"has no mesh to summarise. Change it in the call order: call mesh\(\)",
+    ):
         sim.mesh_summary()
 
 
@@ -379,7 +395,7 @@ def built_jog(monkeypatch, tmp_path, pad="jog"):
     )
     sim = EigenmodeSim()
     sim.set_plan(snapshot)
-    sim.set_vacuum_region(1.0)
+    sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
     return sim._build_geometry(tmp_path / "run").artifacts  # noqa: SLF001 -- the geometry half simulation_drc runs
 
 
@@ -563,7 +579,7 @@ def test_a_meshing_stop_names_where_and_who_must_act(monkeypatch, tmp_path):
     monkeypatch.setattr(
         meshing_entry,
         "measure_bounding_box",
-        lambda *_args, **_kwargs: BoundingBox((-1, -1, -6), (61, 26, 1.2)),
+        lambda *_args, **_kwargs: BoundingBox((0, 0, -1005), (60, 25, 1000.2)),
     )
 
     def round_with_bad_elements(job, *_args, **_kwargs):
@@ -589,6 +605,67 @@ def test_a_meshing_stop_names_where_and_who_must_act(monkeypatch, tmp_path):
     message = str(raised.value)
     assert "layout must act: A wall column gap" in message
     assert "the mesher's to answer for" in message
+
+
+def test_a_mesh_stop_gives_the_meshing_stage_warnings_before_its_places(
+    monkeypatch, tmp_path
+):
+    """The convex scene's class C warnings are given, by class and with the smallest in full, before the places.
+
+    The scene meshes clean with the default controls.  Set through ``set_mesh`` to no repair round and a
+    threshold of 0.3, ``mesh()`` stops with bad elements at several places, some with no finding; those keep
+    their own line and its attribution.  The findings are those ``simulation_drc`` gives for the same set-up.
+    """
+    pytest.importorskip("gmsh", reason="the meshing module needs Gmsh (extra: palace)")
+    warned = check(
+        EigenmodeSim,
+        scene(monkeypatch, PADS["convex"], CONTACT_ELECTRODE),
+        surface_epr_specs=BANDED,
+        nets=ONE_NET,
+    ).meshing.findings
+    assert warned
+    assert {(f.rule, f.action) for f in warned} == {("C", "warn")}
+    sim = set_up_as_the_check(
+        EigenmodeSim,
+        scene(monkeypatch, PADS["convex"], CONTACT_ELECTRODE),
+        tmp_path / "run",
+        BANDED,
+        ONE_NET,
+    )
+    sim.set_mesh(quality_threshold=0.3, budgets=Budgets(max_rounds=0))
+    with pytest.raises(MeshRepairError) as raised:
+        sim.mesh()
+    report = raised.value.report
+    assert [
+        FineFeature.from_json(raw) for raw in report["meshing_stage"]["findings"]
+    ] == list(warned)
+    assert any(not place["fine_structure"] for place in report["stop_places"])
+
+    smallest = min(warned, key=lambda f: (f.value, f.entity))
+    owners = ", ".join(
+        f"{owner} {count}"
+        for owner, count in sorted(Counter(f.owner for f in warned).items())
+    )
+    summary = [
+        f"  the meshing-stage check of this model gave {len(warned)} finding(s); fine structure can cost "
+        "the repair loop rounds wherever it is, so act on these as well as on the places below:",
+        f"    {len(warned)} class C warning(s), edge length down to {smallest.size}; by owner: {owners}",
+        f"      the smallest: {smallest.describe()}",
+        "    every finding is listed under meshing_stage.findings in the quality report (.quality.json)",
+    ]
+    lines = str(raised.value).splitlines()
+    first_place = next(
+        i for i, line in enumerate(lines) if line.startswith("  where: ")
+    )
+    assert lines[1:first_place] == summary
+    assert (
+        "    no fine edge or face below the meshing-stage limits there: the mesher's to answer "
+        "for; report it to SCGSim with this report"
+    ) in lines[first_place:]
+    text = (
+        tmp_path / "run" / "mesh" / "semantic_geometry_route_b.quality.txt"
+    ).read_text(encoding="utf-8")
+    assert "\n".join(summary) in text
 
 
 @pytest.mark.slow

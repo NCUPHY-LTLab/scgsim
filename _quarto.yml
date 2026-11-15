@@ -131,7 +131,6 @@ website:
       - docs/research/geometry-build/scaling.qmd
       - docs/research/geometry-build/emission-and-load.qmd
       - docs/research/geometry-build/validation-cost.qmd
-      - docs/research/geometry-build/parallelism.qmd
       - docs/research/geometry-build/reproduction.qmd
     - docs/history/curved-source-installation.qmd
   - id: contract
@@ -169,6 +168,7 @@ website:
     collapse-level: 1
     contents:
     - docs/contributing.qmd
+    - docs/code-map.qmd
     - docs/documentation-map.qmd
     - docs/ownership.qmd
     - section: Project background

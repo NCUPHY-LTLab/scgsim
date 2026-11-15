@@ -1,8 +1,7 @@
-"""Private source/effective representation facts for neutral geometry planning.
+"""The prepared representation of each entity, and the effective enclosure, that interpretation hands to the stages after it.
 
-These records are an in-process handoff from a preparation owner to shared
-planning primitives. They are not source metadata, a serialized schema, or a
-backend-specific plan.
+They are in-process records: not source metadata, not a serialized schema, and not a
+backend plan.
 """
 
 from __future__ import annotations

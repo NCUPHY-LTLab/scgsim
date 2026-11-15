@@ -15,47 +15,7 @@ SCGSim 區分 PDK 事實、元件意圖、語意幾何、求解器準備、執�
 
 ## 目前套件結構 {#current-package-structure}
 
-套件將來源幾何、幾何編譯、求解器後端、結果處理與呈現分開。下列樹列出共用套件責任；Palace 與 AEDT 各自保有準備、執行與結果生命週期。
-
-```text
-scgsim/
-├── geometry/
-│   ├── source/       # component input, occurrence, stack and normalization
-│   ├── models/       # source and construction records
-│   ├── compiler/     # advanced build API, derived records and validators
-│   ├── sgb/          # SGB core: arrangement, XAO and sidecar that Palace builds on
-│   ├── planning/     # domain, interface, surface, volume and tag planning
-│   ├── construction/ # native OCC construction, correspondence and export
-│   └── primitives/   # 共用 Entity、環線、網格及空間操作
-├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
-├── semantics/        # immutable solver-independent facts
-├── palace/
-│   ├── preparation/  # distinct Electrostatic and Eigenmode input state owners
-│   ├── mesh/         # SGB build, meshing call, group lowering, summaries and offline quality
-│   │   └── quality/  # detached offline MSH reader and report
-│   ├── execution/    # manual handoff and host receipt recorder
-│   ├── results/      # custody-aware result and EPR reading
-│   └── presentation/ # Palace-specific reports and figures
-├── aedt/
-│   ├── eigenmode.py  # retained mutable high-level state facade
-│   ├── specs/        # detached requests, prepared geometry and parsing
-│   ├── preparation/ # source binding, effective geometry, handoff and cohorts
-│   ├── runtime/     # transaction, family-native and batch owners
-│   │   ├── batch_protocol.py # stdlib package/file protocol
-│   │   └── batch_runner.py   # standalone process and CLI
-│   ├── epr/         # EPR surface support, fields/cache and analysis composition
-│   ├── results/     # strict readers and convergence observations
-│   ├── presentation/
-│   └── run.py       # supported CLI, delegates to transaction owner
-├── visualization/
-│   ├── loaders/      # 後端產物讀取及共用檔案檢查
-│   ├── scene.py
-│   ├── preview.py
-│   └── rendering.py
-└── presentation/     # shared physics-neutral notebook formatting
-```
-
-曲線建構由 `geometry.construction.curved` 外觀模組提供；分工明確的操作位於 `curved_geometry`，分別負責來源邊界、平面排列、原生核心、共用表面及標準紀錄。
+[程式碼地圖](code-map.qmd)列出套件的每個資料夾、各自是哪個階段，以及 Palace 與 AEDT 路線中工作依序經過哪些階段。Palace 與 AEDT 各自保有準備、執行與結果生命週期。
 
 責任修正讓每個獨立 AEDT 要求紀錄只有一個定義。`aedt.specs.geometry` 負責 `PreparedPlanarGeometry`；`aedt.specs.epr` 負責接面、表面及分析宣告；共用要求基本型別負責一般 `LumpedRlc`。既有公開匯入重新匯出相同類別。酬載成員、歷史標記及模型／來源雜湊規則維持不變。私有標準函式庫資料輔助函式負責凍結、分離及正規雜湊；準備與要求解碼共用純支撐投影，不匯入準備或原生流程。
 
@@ -63,38 +23,34 @@ scgsim/
 
 HFSS 家族負責一般來源支援的 Eigenmode 準備、求解及匯出。EPR 將此流程與積分表面、場、快取及分析組合。接面宣告獨立於 EPR 分析要求控制接面建構：省略分析不會移除已宣告接面。交易保留唯一 Desktop 與憑證責任。一般本體、支撐、材料及包絡原生操作屬於 `runtime.native`；一般 RLC 指派及儲存後讀回屬於原生集總元件模組。
 
-幾何來源準備與編譯器規劃各有負責者：來源準備使用共用基本操作，編譯器協調分工明確的規劃模組，建構模組則將規劃結果轉成原生幾何並匯出。後端家族使用共用幾何，不互相匯入。`semantics` 維持只依賴標準函式庫的不可變事實邊界。Palace 與 AEDT 保有各自可變模擬狀態、交易生命週期及物理結果意義。共用呈現模組格式化獨立值，不負責求解器物理或計算。視覺化讀取求解器權威中繼資料與產物，不啟動求解或決定執行狀態。
+幾何來源準備、解讀與模型建構各有負責者：來源階段使用網格引擎，解讀與接面分區把它準備好的輸入轉成有效輸入，SGB 則從該輸入建立模型；只有 AEDT 的原生建構使用 `scgsim.geometry.planning`。後端家族使用共用幾何，不互相匯入。`semantics` 維持只依賴標準函式庫的不可變事實邊界。Palace 與 AEDT 保有各自可變模擬狀態、交易生命週期及物理結果意義。共用呈現模組格式化獨立值，不負責求解器物理或計算。視覺化讀取求解器權威中繼資料與產物，不啟動求解或決定執行狀態。
 
 公開性依據明確套件外觀介面、宣告的子模組匯出及文件契約，不因可匯入就成為公開。SCGSim 2.0 保留高階 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 與 `scgsim.visualization` 入口，並在 [API 遷移參考](api-migration.qmd) 提供新舊子模組及符號映射。搬移的私有實作不因位置改變而公開。現行實作只有一套，不保留舊 `scgsim.sgb` 相容包裝器，也不恢復 Q3D input-v1／v2 路徑。正式 `python -m scgsim.aedt.run` 入口仍受支援；它是 AEDT 交易 CLI，不是舊版包裝器。
 
-`geometry` 外觀模組是來源建模的入口，提供 `GeometryPlan`、獨立快照、正規化輸入紀錄、元件及堆疊轉接、物理表示解讀與輸入摘要。進階建構使用 `geometry.compiler` 外觀模組，其中提供 `SemanticGeometryBuilder`、路徑建構規劃、衍生紀錄、階段操作及驗證器。輸入驗證定義於 `geometry.source.validation`，並由編譯器外觀模組重新匯出。Palace 不經由這個外觀模組建置：它呼叫 `scgsim.geometry.sgb` 的 `build_sgb_geometry`，再用 `scgsim.meshing` 為結果產生網格。
+`geometry` 外觀模組是來源建模的入口，提供 `GeometryPlan`、獨立快照、正規化輸入紀錄、GDS 與堆疊檔轉接器、物理表示解讀與輸入摘要。Palace 呼叫 `scgsim.geometry.sgb` 的 `build_sgb_geometry`，再用 `scgsim.meshing` 為結果產生網格。`scgsim.geometry.sgb` 位於支援的入口以下：版圖經由 `GeometryPlan`，以及 `scgsim.palace` 與 `scgsim.aedt` 的模擬類別進入；以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。
 
-`scgsim.geometry.interpret_physical_geometry` 會回傳有效輸入、堆疊及表示規劃。若只需要建構規劃，將 `plan.context` 傳給 `scgsim.geometry.compiler.build_route_construction_plan`；若要繼續執行原生建構並匯出實體群組，則傳給 `SemanticGeometryBuilder.build`。
+`scgsim.geometry.interpret_physical_geometry` 會回傳有效輸入、堆疊及表示規劃。
 
-內部模組依責任分工；一般使用者應透過上述兩個外觀模組操作。
+內部模組依責任分工；使用者經由支援的入口操作。
 
 | 內部負責模組 | 責任 |
 |---|---|
 | `scgsim.geometry.source.plan_assembly` | 組合元件實例、座標變換、堆疊事實與呼叫者指定的 Net，形成來源輸入。 |
 | `scgsim.geometry.planning.contact_planning` | 辨認宣告的介面、接觸區域及金屬間接觸歸屬。 |
-| `scgsim.geometry.planning.junction_planning` | 解析指定支撐面與相鄰導體歸屬，再推導精確矩形接面分區。 |
-| `scgsim.geometry.planning.port_planning` | 將來源埠片轉成後端幾何，並驗證路徑專屬埠結構。 |
+| `scgsim.geometry.junctions` | 解析指定支撐面與相鄰導體歸屬，再推導精確矩形接面分區。 |
 | `scgsim.geometry.planning.surface_planning` | 建立求解器使用的表面、接觸涵蓋、貢獻區域及分區。 |
-| `scgsim.geometry.planning.volume_planning` | 規劃保留體積、建構切割主體、宿主排除區及殼體方向。 |
-| `scgsim.geometry.planning.topology_planning` | 指派標準點、曲線、環線及共用表面歸屬。 |
-| `scgsim.geometry.primitives.tagged_grid_faces` 與 `tagged_grid_operations` | 分開處理面與邊界來源資訊，以及 Shapely 網格操作轉接。 |
-| `scgsim.geometry.construction.native_geometry` | 透過 Gmsh/OCC 降階建構規劃、保留拓撲對應，並產生 XAO 與符合性紀錄。 |
-| `scgsim.geometry.source.ground_bump_geometry` | 稽核已繪製的凸塊位置、選取填充晶格位置，並建立來源幾何紀錄。 |
+| `scgsim.geometry.planning.topology_planning` | 為表面規劃解析共用表面歸屬與環線幾何。 |
+| `scgsim.geometry.grid.tagged_grid_faces` 與 `tagged_grid_operations` | 分開處理面與邊界來源資訊，以及 Shapely 網格操作轉接。 |
 
-這些模組是內部實作邊界；支援的匯入路徑見[API 遷移參考](api-migration.qmd)。原生對應、殼修復、曲線排列及實體群組匯出仍由幾何建構模組負責。
+這些模組是內部實作邊界；支援的匯入路徑見[API 遷移參考](api-migration.qmd)。
 
-Palace 保有兩個不同的可變準備負責者：Electrostatic 與 Eigenmode 的設定狀態、失效處理及失敗順序仍各屬其外觀介面。網格建構保留工作程序邊界：網格化模組在子程序中執行 Gmsh，Palace 再用另一個工作程序把群組降階為求解器屬性；離線網格品質讀取仍分開。手動交接及獨立主機紀錄器屬於執行層；嚴格結果／EPR 解析維持離線，Palace 報告維持求解器專屬。AEDT 同樣保留 `EigenmodeSim` 狀態外觀介面，但由單一執行期交易負責憑證轉換及唯一 Desktop 生命週期；家族執行期負責原生準備／求解／匯出／讀回。EPR 準備與已儲存場分析維持在 EPR 流程；嚴格解析不執行求解器，呈現只使用獨立結果。這些是不同責任邊界，不是共用求解器基底類別。可用的 Solid Surface-EPR 契約，對選定 MA／MS／SA 貢獻加入獨立的原始原生面參考積分；其擁有者與支撐不同於遮罩 Sheet 結果，不納入參與率或損耗總量。參考積分可能與 Sheet 使用不同支撐或材料基礎。必要原生成員讀回，在既有儲存後檢查點使用已儲存設計中相符的 `EntityList`；指派時的 `props.List` 是快取狀態，不是獨立原生讀回。目前一次 SimplePad Solid 執行在兩個自適應迭代中，各記錄六個原始原生面參考，FaceList 成員與已儲存設計的 `EntityList` 相符。該執行在兩次迭代上限未收斂（delta 79.181），不確立準確性或入射材料等價性。接著模態 1、迭代 2 的已儲存場分析完成六個原始參考；嚴格解析及 Report 呈現揭露原始積分與成員。ThinFilm Surface-EPR 也對遮罩及未遮罩支撐使用分開的非模型積分薄片。其計算器 `Surface`／`Adjacent` 選取器，依每個薄片的 `FacePrimitive.normal` 及來源貢獻要求的材料側選定，獨立於幾何法向投影。此映射仍是經驗規則，不是一般化驗證的原生側別查詢；呼叫會發出此限制的警告。請見[場側契約](specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction)。
+Palace 的兩個模擬 Electrostatic 與 Eigenmode 共用 `scgsim.palace.simulation` 中的同一個核心：綁定、幾何設定、網格化、摘要、交接與生命週期只寫一次，各問題類別只加上自己的設定方法與設定檔。網格建構保留工作程序邊界：網格化模組在子程序中執行 Gmsh，Palace 再用另一個工作程序把群組降階為求解器屬性。手動交接及獨立主機紀錄器屬於執行層；嚴格結果／EPR 解析維持離線，Palace 報告維持求解器專屬。AEDT 同樣保留 `EigenmodeSim` 狀態外觀介面，但由單一執行期交易負責憑證轉換及唯一 Desktop 生命週期；家族執行期負責原生準備／求解／匯出／讀回。EPR 準備與已儲存場分析維持在 EPR 流程；嚴格解析不執行求解器，呈現只使用獨立結果。這些是不同責任邊界，不是共用求解器基底類別。可用的 Solid Surface-EPR 契約，對選定 MA／MS／SA 貢獻加入獨立的原始原生面參考積分；其擁有者與支撐不同於遮罩 Sheet 結果，不納入參與率或損耗總量。參考積分可能與 Sheet 使用不同支撐或材料基礎。必要原生成員讀回，在既有儲存後檢查點使用已儲存設計中相符的 `EntityList`；指派時的 `props.List` 是快取狀態，不是獨立原生讀回。目前一次 SimplePad Solid 執行在兩個自適應迭代中，各記錄六個原始原生面參考，FaceList 成員與已儲存設計的 `EntityList` 相符。該執行在兩次迭代上限未收斂（delta 79.181），不確立準確性或入射材料等價性。接著模態 1、迭代 2 的已儲存場分析完成六個原始參考；嚴格解析及 Report 呈現揭露原始積分與成員。ThinFilm Surface-EPR 也對遮罩及未遮罩支撐使用分開的非模型積分薄片。其計算器 `Surface`／`Adjacent` 選取器，依每個薄片的 `FacePrimitive.normal` 及來源貢獻要求的材料側選定，獨立於幾何法向投影。此映射仍是經驗規則，不是一般化驗證的原生側別查詢；呼叫會發出此限制的警告。請見[場側契約](specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction)。
 
-Palace 內部由 `results.report_data` 負責獨立報告紀錄與快照讀取器；`presentation.reports` 負責可信度／物理量檢視及圖形。套件外觀介面保留既有公開結果與報告名稱。
+在 Palace 內部，`results` 把回傳的執行資料夾讀成經過檢查的紀錄：`results.resolve` 讀完成的執行（`ResolvedRunData`），`results.snapshots` 與 `results.inspection` 讀出 `results.inspection_records` 中的 AMR 快照、結果選擇與失敗診斷。`reports` 存放使用者讀取的內容：`reports.resolved_result` 由 `resolve_palace_result` 回傳 `ResolvedPalaceResult`，`reports.reports` 建立可信度、物理量與效能檢視及圖形。所有公開名稱都從 `scgsim.palace` 匯入。
 
-SCGSim 2.0 的第一個產生器輸出 `scgsim.aedt.runtime-source.v13`，具有 61 個正規宣告模組路徑，包含 41 個 AEDT 模組。紀錄攜帶 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`；模組位元組及其摘要為必要，真實 Git 觀察則可能不可用。V13 沒有輔助函式雜湊映射，也不宣稱涵蓋全部遞移來源。歷史執行期來源清單繼續依原始模組路徑與身分解讀；搬移不重寫或重新解讀憑證。目前的產生器輸出 runtime-source v30，同時保留憑證 V3；宣告清單綁定搬移後的實作。
+AEDT 收據記錄執行期來源：`scgsim/aedt` 與兩個 AEDT 視覺化載入器之匯入閉包中的每個檔案及其 SHA-256，結構版本為 `scgsim.aedt.runtime-source.v30`。清單在每次使用時計算，因此移動或刪除模組只會改變清單，不會使 AEDT 失效（[執行期來源契約](specs/aedt-runtime.qmd#runtime-source)）。
 
-下圖呈現目前的來源結構。幾何來源準備與編譯器規劃分別負責，兩個後端都不定義來源身分。
+下圖呈現目前的來源結構。幾何來源準備與模型建構分別負責，兩個後端都不定義來源身分。
 
 ```{mermaid}
 flowchart LR
@@ -116,9 +72,7 @@ flowchart LR
   RESULTS --> REPORT["統一 Plotly 報告外層結構"]
 ```
 
-目前幾何實作由元件局部來源事實與具名出現實例開始。`GeometryPlan` 持有展開的實體清單及 Notebook 最終 `Net -> Entity` 映射，再為正規化 `GeometryBuildInput` 邊界準備單一不可變來源快照。來源模型在快照中包含指定曲線宣告及明確 GDS 重建紀錄，同時保留 Entity／Net 歸屬。`scgsim.geometry` 負責面向來源的計畫及快照；`scgsim.geometry.compiler` 負責路徑規劃及衍生建構紀錄。Palace 透過 SGB（`scgsim.geometry.sgb`）建構線段與圓弧曲線；AEDT 不支援曲線轉換。[GeometryPlan 契約](geometry-sgb.qmd) 負責確切曲線身分及排列語意。原生觀察不取代來源身分，也不確立連通性。AEDT 綁定資料經過原生彙總後，仍保留來源成員與涵蓋範圍。
-
-在編譯器的 OCC 路徑，標準殼 AutoFix 修正殼方向時可能替換原生面標記。幾何建構透過完整原生線框／邊對應，將修復後的面映射至來源表面，並將此映射帶入匯出與後端建構。來源 `SurfaceID` 維持權威；數值 Gmsh 標記可以改變。在已觀察的 Circle Route B 建構中，共用面與金屬切口邊界仍綁定來源，埠薄片仍獨立。此觀察限於該幾何案例。若無法建立必要對應，建構會失敗。幾何契約負責確切行為及失敗邊界。
+目前幾何實作由元件局部來源事實與具名出現實例開始。`GeometryPlan` 持有展開的實體清單及 Notebook 最終 `Net -> Entity` 映射，再為正規化 `GeometryBuildInput` 邊界準備單一不可變來源快照。來源模型在快照中包含指定曲線宣告及明確 GDS 重建紀錄，同時保留 Entity／Net 歸屬。`scgsim.geometry` 負責面向來源的計畫及快照。Palace 透過 SGB（`scgsim.geometry.sgb`）建構線段與圓弧曲線；AEDT 不支援曲線轉換。[GeometryPlan 契約](geometry-sgb.qmd) 負責確切曲線身分及排列語意。原生觀察不取代來源身分，也不確立連通性。AEDT 綁定資料經過原生彙總後，仍保留來源成員與涵蓋範圍。
 
 ## 契約邊界 {#contract-boundaries}
 
@@ -131,7 +85,7 @@ flowchart LR
 | 具名出現實例及最終 `Net -> Entity` 指派 | Notebook `GeometryPlan` |
 | 不可變的正規化來源幾何 | `GeometryPlan` 與 `GeometryBuildInput` |
 | 綁定版本的材料、介面、擁有者、側別及資料事實 | `scgsim.semantics` 內部標準函式庫核心 |
-| 幾何名稱、拓撲、Route A／B 表面 | Palace 用 `scgsim.geometry.sgb`；進階建構器用 `scgsim.geometry.compiler` |
+| 幾何名稱、拓撲、Route A／B 表面 | `scgsim.geometry.sgb` |
 | 針對 SGB 幾何的四面體網格化、尺寸配方與品質門檻 | `scgsim.meshing` |
 | Palace 與 AEDT 實作 | `scgsim.palace` 與 `scgsim.aedt` |
 | 原生幾何綁定及衍生彙總 | 後端轉接器，保留來源成員與涵蓋範圍 |
@@ -139,16 +93,15 @@ flowchart LR
 | 執行身分、交接、執行設定及憑證 | 單一共用 SCGSim 契約 |
 | 物理結果意義 | 求解器專屬，不壓平成虛假的共用物理量 |
 | 報告導覽、來源資訊及成本呈現 | SCGSim 報告／解析器介面 |
-| 離線四面體網格診斷 | `scgsim.palace.mesh.quality`，透過 `scgsim.palace` 提供 |
 | 公開元件模擬 Notebook 來源 | OrPen SC PDK |
 
 ## 內部語意事實 {#internal-semantic-facts}
 
 `scgsim.semantics` 是不依賴求解器的標準函式庫邊界。它將一般值分離為遞迴不可變、綁定版本的快照，並回傳獨立序列化資料。資料補丁保留分類時使用的快照；缺少或不同的版本身分會失敗，不默默重新綁定事實。原生標記維持不透明觀察，不作為猜測接觸的來源。
 
-幾何編譯器規劃時重用單一來源／模型投影，不在每次鄰接呼叫深複製堆疊。域排序、薄片擁有者及彙總物理群組擁有者仍是不同投影。即使原生幾何彙總表面，語意帳冊仍保留貢獻重數。物理意義請見 [SGB 幾何概念](concepts/geometry.qmd#planning-stage)，確切指定規則請見 [GeometryPlan／路徑契約](geometry-sgb.qmd)。
+幾何規劃重用單一來源／模型投影，不在每次鄰接呼叫深複製堆疊。域排序、薄片擁有者及彙總物理群組擁有者仍是不同投影。即使原生幾何彙總表面，語意帳冊仍保留貢獻重數。物理意義請見 [SGB 幾何概念](concepts/geometry.qmd#planning-stage)，確切指定規則請見 [GeometryPlan／路徑契約](geometry-sgb.qmd)。
 
-AEDT 原生建構不使用 Gmsh 標記或建構計畫。其綁定附屬檔經過原生本體、薄片、面與計算器選取後，仍保留來源成員及涵蓋範圍。[AEDT 契約](specs/aedt-runtime.qmd) 負責確切側別選取與結果規則。僅供顯示的輔助函式位於 `scgsim.aedt.presentation`，公開方法委派至該處；呈現不新增求解器執行或共用物理結構。
+AEDT 原生建構不使用 Gmsh 標記。其綁定附屬檔經過原生本體、薄片、面與計算器選取後，仍保留來源成員及涵蓋範圍。[AEDT 契約](specs/aedt-runtime.qmd) 負責確切側別選取與結果規則。僅供顯示的輔助函式位於 `scgsim.aedt.presentation`，公開方法委派至該處；呈現不新增求解器執行或共用物理結構。
 
 ## Notebook 與實作邊界 {#notebook-and-implementation-boundaries}
 
@@ -156,17 +109,31 @@ OrPen SC PDK 負責公開元件範例，直接呼叫共用執行期。SCGSim 負
 
 各家族支援的計算及目前限制維護於[後端支援矩陣](backend-support.qmd)。
 
-Palace 網格品質檢查是 `scgsim.palace.mesh.quality` 下、讀取產出 MSH 檔的離線讀取器。它不負責網格建構（品質門檻由 `scgsim.meshing` 的稽核負責），也不啟動原生後端。讀取器將單一不可變解析快照綁定至檔案位元組；網格接受及科學收斂不在報告契約內。請見[四面體網格品質](mesh-quality.qmd)。
+網格品質就是 `mesh()` 執行的 `scgsim.meshing` 稽核：它負責品質門檻並寫出品質報告。科學收斂不在該報告內。請見[四面體網格品質](mesh-quality.qmd)。
 
 ## Palace 準備生命週期 {#palace-preparation-lifecycle}
 
-`ElectrostaticSim` 與 `EigenmodeSim` 仍是各自可變網格、設定、已解析埠及交接狀態的公開負責者。共用私有流程只準備值並持久化呼叫端提供的 JSON 酬載；它不是模擬基底物件，也不接收回呼來操作模擬狀態。
+`ElectrostaticSim` 與 `EigenmodeSim` 是各自可變網格、設定、已解析埠及交接狀態的公開負責者。兩者都是同一個私有基底 `scgsim.palace.simulation.core.PalaceSimulation` 的子類別，基底持有兩者共用的一切：`set_plan`、`set_output_dir`、`set_vacuum_region`、`set_route`、`set_surface_epr`、`set_mesh`、`input_summary()`、`mesh()`、`simulation_drc`、`mesh_summary()` 與 `prepare_handoff()`。各問題檔案 `simulation/eigenmode.py` 與 `simulation/electrostatic.py` 只呈現該問題新增的部分：設定方法、數值預設值與 `write_config()`。
 
-兩個公開 `mesh()` 方法都在檢查先決條件前使衍生狀態失效。幾何準備接著依序對堆疊套用真空區域、銦凸塊填充與空氣盒，再解讀物理幾何並記錄 Route-A 中繼資料，然後回傳準備好的元件、堆疊、凸塊填充紀錄及選用材料映射。模擬只在準備完成後儲存該映射，因此準備過程中的失敗或非映射 `materials` 值會保留原映射；網格建構失敗則保留新準備的映射。Eigenmode 在這些轉換之前解析來源指定埠，且只有網格建構成功後才快取已解析埠。
+生命週期是一張表，位於 `scgsim.palace.simulation.lifecycle`。模擬處於 `UNBOUND`、`BOUND`（`set_plan`）、`MESHED`（`mesh()`）、`CONFIG_WRITTEN`（`write_config()`）或 `HANDED_OFF`（`prepare_handoff()`）。這張表說明每個呼叫需要哪個階段，以及每個呼叫退回到哪個階段：`mesh()` 會讀取其值的設定方法（輸出資料夾、真空、路徑、Surface EPR、網格控制、Eigenmode 的埠）退回 `BOUND`，只有 `write_config()` 讀取的設定方法退回 `MESHED`。在所需階段之前呼叫會被拒絕，訊息會指出應先呼叫哪個方法。兩種問題的規則相同：Route B 是預設值，且只有呼叫過 `set_surface_epr(specs)` 才會計算 Surface EPR。
 
-兩個公開 `write_config()` 方法都在既有先決條件及網格存在檢查前，使設定與交接狀態失效。求解器專屬轉換仍在持久化之前發生。共用私有寫入器依呼叫端順序獨立替換每個中繼資料檔，最後才替換 `config.json`；因此後續寫入失敗時，較早檔案仍保留，只有最終替換成功才快取 `config_path`。記憶體失效處理不刪除磁碟上的舊設定檔，此逐檔行為也不保證整個流程具有交易原子性。
+`mesh()` 在檢查先決條件前捨棄衍生狀態。幾何準備接著對堆疊套用真空區域，再解讀物理幾何並記錄 Route-A 中繼資料，然後回傳準備好的堆疊、幾何輸入、物理計畫及選用材料映射。模擬只在準備完成後儲存該映射，因此準備過程中的失敗或非映射 `materials` 值會保留原映射；網格建構失敗則保留新準備的映射。Eigenmode 在這些轉換之前解析來源指定埠，且只有網格建構成功後才快取已解析埠。
 
-共用堆疊載入器、非負數驗證器及堆疊材料種類驗證器位於 `scgsim.palace.preparation.inputs`。Electrostatic 與 Eigenmode 直接呼叫此模組，同時保留公開方法、失效時間點、淺層頂層堆疊複製、巢狀別名及問題專屬協調。舊的直接問題模組路徑已移除；目前定義模組為 `preparation.electrostatic` 與 `preparation.eigenmode`。
+模擬以具名、凍結的值保存設定；每個值在建立時檢查自身，並定義在最先讀取它的階段：
+
+| 屬性 | 型別 | 階段 | 讀取者 |
+|---|---|---|---|
+| `numerical` | `NumericalControls` | `config.numerical` | `write_config()`、`mesh_summary()`（FEM 階數） |
+| `surface_epr_specs` | `SurfaceEprSpecs`（每個介面型別一個 `SurfaceEprSpec`） | `source.surface_epr` | `mesh()`（頻帶）、`write_config()`（`Dielectric` 列） |
+| `epr_request`（Eigenmode） | `EprRequest` | `config.index` | `write_config()`（`check_epr_request` 與索引對照） |
+
+`write_config()` 把 `ConfigInput`（網格、材料、Surface-EPR 規格與數值控制）以及該問題自己的 `EigenmodeSettings` 或 `ElectrostaticSettings` 交給設定建構器。建構器以每個設定區段一種紀錄回傳索引項目（`PortEntry`、`TerminalEntry`、`EnergyEntry`、`SurfaceEprEntry`）；`to_payload()` 依 `palace_index_map.json` 的形式寫出每一項。Palace 各階段依流程順序 `source`、`mesh`、`config`、`run` 單向 import：一個階段可以 import 在它之前的階段，不可 import 之後的階段，因此 `source` 不 import 其餘三個。import-linter 契約 `palace-stage-layers` 檢查這一點。
+
+各階段都從同一個模組 `scgsim.contracts.palace_run_folder` 取得執行資料夾的配置：每個檔案的路徑（`CONFIG`、`MESH`、`MESH_MANIFEST`、`INDEX_MAP`、交接紀錄、紀錄器、`OUTPUT_DIR`）、每種紀錄的結構版本（`CONFIG_SCHEMA`、`MANIFEST_SCHEMA_VERSION`、`INDEX_MAP_SCHEMA_VERSION` 與回執的結構版本），以及交接識別碼（`HandoffIdentity`）。交接寫入識別碼，`resolve_palace_result` 檢查它。同一模組為每個問題保存一筆紀錄：`EIGENMODE` 與 `ELECTROSTATIC`（`PalaceProblem`）。紀錄寫明兩個問題的差異：問題在 `config.json` 中的名稱、Palace 會寫出的表格、激發問題的 `Boundaries` 區塊，以及表格的一列是一個模態還是一次激發。因問題而異的程式讀取這筆紀錄，不比較問題名稱。`PalaceProblem.written_families` 決定一次執行必須交回哪些表格：回執紀錄器用它列出輸出，`results` 用它要求這些輸出。`collects_adapted_meshes` 比較交接所記錄的 `config_schema` 與寫入端使用的同一個常數 `CONFIG_SCHEMA`，因此提高結構版本不會讓紀錄器停止收集自適應網格。契約也寫明紀錄器所寫紀錄的欄位（`ReturnedReceipt`、`FileRecord`）。此契約只 import 標準函式庫，因此用自己的 `refused` 寫拒絕訊息，句型與 `scgsim.refusal` 相同。執行資料夾中的紀錄器（`metadata/record_palace_return.py`）是紀錄器模組本身，只是其中 import 契約的那幾行換成契約的全文（`run.standalone_copy`），因此執行資料夾只需要 Python 直譯器就能寫出回執。有收斂宣告的執行另外得到收斂執行器（`metadata/run_palace_until_converged.py`，來自 `run.convergence_runner`），以同樣方式帶著 `scgsim.contracts.palace_convergence` 複製：它在求解主機上於每個 pass 之後執行同一個收斂檢查，並在宣告的準則收斂後停止 Palace。
+
+每個 `write_config()` 都在先決條件及網格檔案檢查前，捨棄設定與交接狀態。求解器專屬轉換仍在持久化之前發生。設定階段的寫入器（`config.files.persist_problem_files`）依呼叫端順序獨立替換每個中繼資料檔，最後才替換 `config.json`；因此後續寫入失敗時，較早檔案仍保留，只有最終替換成功才快取 `config_path`。記憶體失效處理不刪除磁碟上的舊設定檔，此逐檔行為也不保證整個流程具有交易原子性。
+
+`scgsim.palace.source.inputs` 讀取 plan 堆疊中明確宣告的材料，並依使用各材料的區域與層檢查其種類。共用核心在綁定 plan 時呼叫它。兩個模擬分別定義於 `simulation.electrostatic` 與 `simulation.eigenmode`。
 
 Palace 的網格行為區分 Gmsh 幾何階數與 FEM 階數，並將尺寸配方、演算法選擇、品質門檻與結果，以及高階最佳化結果與產生網格一同保留。`mesh_summary()` 回傳綁定網格與清單身分的獨立網格資料；Palace 報告及已解析結果檢視讀取相同紀錄依據。Eigenmode 摘要的拓撲自由度估計不是實際求解器自由度數量，Electrostatic 也不宣稱不可用的 H1 估計。
 
@@ -210,11 +177,11 @@ AEDT 交易在工作站準備並釋放每個原生 EPR 模型。`scgsim.aedt.bat
 
 進入家族時，單一私有綁定要求固定絕對執行工作區，並分離解析後規格酬載。即使程序工作資料夾後來改變，相對來源路徑仍以該綁定工作區解讀；絕對來源路徑保留指定的詞法身分。進入後，準備階段只讀取此綁定要求。其載體保留可變原生應用程式控制代碼，以及獨立準備讀回；求解與匯出使用該載體，不能重新解讀呼叫端規格或工作區。
 
-新準備維持交接及交接清單結構為 V1，兩者都宣告可變執行憑證使用 `scgsim.aedt.receipt.v3`。初始 V3 憑證記錄宣告的 `runtime-source.v30` 準備期 SCGSim 模組清單與內容摘要，共 401 條路徑。V30 從目前所有 AEDT 模組、兩個 AEDT 視覺化載入器，以及 V29 保留的非 AEDT 路徑（`scgsim/geometry/models/lumped.py` 除外）開始，再沿 AST 解析的匯入及套件初始化檔閉合；相較凍結的 V29 285 條路徑，新增 AEDT SGB STEP 匯入（`scgsim/aedt/preparation/sgb_model.py`、`scgsim/aedt/runtime/families/sgb_import.py`、`scgsim/aedt/runtime/families/sgb_faces.py`、`scgsim/aedt/runtime/families/sgb_boundaries.py`、`scgsim/aedt/epr/sgb_surfaces.py`）及其匯入的 SGB 模組，並移除 issue #67 決策 8 刪除的 `scgsim/aedt/runtime/native/hfss_lumped.py`、`scgsim/aedt/specs/support.py` 與 `scgsim/geometry/models/lumped.py`。變更之前，執行會驗證正規清單，並綁定初始憑證及準備清單雜湊。兩種標記都沒有的正規歷史 V1 `not_run` 交接仍可執行，但產生的 V3 憑證將準備來源記為 `legacy_v1_not_recorded`，不虛構歷史。
+準備寫出的交接及交接清單記錄，都宣告可變執行憑證使用 `scgsim.aedt.receipt.v3`。初始 V3 憑證記錄準備期執行期來源：計算出的 AEDT 匯入閉包之模組位元組與內容摘要。變更之前，執行會驗證正規清單，並綁定初始憑證及準備清單雜湊。
 
-每份新完成 V3 憑證另外記錄宣告的 `runtime-source.v30` 執行期模組清單與摘要。量測的模組位元組與內容摘要為必要；沒有輔助函式雜湊映射。準備與執行身分不要求相同：分開記錄何者準備、何者實際執行交接。歷史完成 V1 憑證仍依舊解析規則，但 V1 憑證若搭配任一後續版本預期標記，會以同批產物不一致遭拒。歷史完成 V2 憑證保留既有解析規則；新的 V3 專屬原生 PEC 檢查不重新解讀它們。此一致性契約無法對能重寫整組未簽署產物的行為者提供來源真實性保證。
+每份新完成 V3 憑證另外記錄執行時的執行期來源，量測的模組位元組與內容摘要為必要。準備與執行身分不要求相同：分開記錄何者準備、何者實際執行交接。SCGSim 只讀取它寫出的格式：結構版本較早的憑證，或其中結構版本較早的執行期來源，會在讀取它所綁定的任何內容之前遭拒；請以寫入它的 SCGSim commit 讀取。此一致性契約無法對能重寫整組未簽署產物的行為者提供來源真實性保證。
 
-[AEDT 憑證／來源契約](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance) 是目前確切 V30、共 401 條路徑的清單及凍結歷史讀取器演進的唯一依據。V1–V12 保留原有確切路徑分派與讀取器解讀；V13 綁定宣告檔案集，不涵蓋每個遞移依賴。單一純函式、具版本的初始憑證編解碼器，負責歷史 V1／V2 及目前 V3 JSON 成員順序、縮排與結尾換行；交接寫入與初始憑證重建都使用此編解碼器。歷史憑證雜湊不與已安裝來源比較，準備與執行身分維持為獨立資料。
+[AEDT 目前格式契約](specs/aedt-runtime.qmd#current-formats) 是憑證與執行期來源規則的唯一依據。單一純函式的初始憑證編解碼器，負責 V3 JSON 成員順序、縮排與結尾換行；交接寫入與初始憑證重建都使用此編解碼器。記錄的憑證雜湊不與已安裝來源比較，準備與執行身分維持為獨立資料。
 
 執行期來源資訊在 PyAEDT 匯入及 Desktop 建構之前，於憑證負責的失敗交易內計算。新 HFSS V3 憑證也區分來源材料身分與已驗證原生 PEC 實作：實體為原生 `pec`，且停用 Solve Inside；薄片接收 Perfect E，並要求完整原生面涵蓋範圍。
 

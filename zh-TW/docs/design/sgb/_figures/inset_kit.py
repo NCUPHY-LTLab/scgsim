@@ -1,4 +1,4 @@
-"""Shared helpers for the inset, identity and parallel figure scripts.
+"""Shared helpers for the inset and identity figure scripts.
 
 Owns three things only:
 
@@ -48,14 +48,14 @@ from plotly.subplots import make_subplots  # noqa: E402
 try:
     from sgb_scenes import lumped_port, pad_in_ground, rect_um  # noqa: E402
 
+    from scgsim.geometry.exact.carriers import LineEdge  # noqa: E402
     from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: E402
-    from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
+    from scgsim.geometry.sgb.bands.requests import (  # noqa: E402
         ConductorSurface,
         InsetRequest,
         SolutionInterface,
     )
     from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue  # noqa: E402
-    from scgsim.geometry.sgb.records.carriers import LineEdge  # noqa: E402
     from scgsim.geometry.sgb.records.prisms import PrismCatalogue  # noqa: E402
 except ImportError as error:  # pragma: no cover -- a usage message, not logic
     raise SystemExit(
@@ -143,29 +143,24 @@ def pad_requests(
     return tuple(out)
 
 
-def pad_model(  # noqa: PLR0913 -- the route, the bands and the build switches of the running example
+def pad_model(
     route: str = "A",
     margins: tuple[float, ...] | None = MARGINS,
     *,
     with_port: bool = True,
     regions: tuple[str, ...] = ("pad", "gap"),
-    tiles: int = 1,
-    workers: int = 1,
     keep_raw: bool = False,
     **scene_options,
 ) -> ConformalModel:
     """The validated production model of the running example (``margins=None``: no bands).
 
-    ``tiles`` and ``workers`` configure the per-tile runtime (the model is the same for every value); ``keep_raw`` keeps the
-    pre-dissolution arrangements; ``scene_options`` go to ``pad_in_ground``.
+    ``keep_raw`` keeps the pre-dissolution arrangements; ``scene_options`` go to ``pad_in_ground``.
     """
     insets = pad_requests(route, margins, regions=regions) if margins else ()
     return build_model_from_catalogue(
         pad_catalogue(route, with_port=with_port, **scene_options),
         route,
         insets=insets,
-        tiles=tiles,
-        workers=workers,
         keep_raw=keep_raw,
     )
 

@@ -1,8 +1,8 @@
 """The markers the sidecar records attach to their types, each with the JSON Schema keyword it stands for.
 
 Owns the small vocabulary :mod:`.records` needs beyond plain Python types: a description, the numeric and
-length bounds the format states, a string pattern, and the mark of a record that accepts keys beyond its
-fields.  A marker goes inside ``Annotated[...]`` (``Annotated[float, ExclusiveMinimum(0)]``) and only
+length bounds the format states, a string pattern, the table an id names, and the mark of a record that
+accepts keys beyond its fields.  A marker goes inside ``Annotated[...]`` (``Annotated[float, ExclusiveMinimum(0)]``) and only
 :mod:`.schema` interprets it, through :meth:`keywords`; Python's type checker sees the plain type.
 """
 
@@ -79,7 +79,29 @@ class MinProperties:
         return {"minProperties": self.count}
 
 
-Marker = Doc | Minimum | ExclusiveMinimum | Pattern | Length | MinProperties
+class Ref:
+    """The value is the id of a record of the table ``table`` (a reference); for a group, of a group of
+    ``dimension``.
+
+    :mod:`.references` checks that it is a key of that table.  In the schema it is an annotation, which no
+    JSON Schema validator enforces: ``x-references`` names the table and ``x-dimension`` the group dimension.
+    """
+
+    __slots__ = ("dimension", "table")
+
+    def __init__(self, table: str, *, dimension: int | None = None) -> None:
+        self.table = table
+        self.dimension = dimension
+
+    def keywords(self) -> dict[str, Any]:
+        """``x-references``, and ``x-dimension`` when given."""
+        named: dict[str, Any] = {"x-references": self.table}
+        if self.dimension is not None:
+            named["x-dimension"] = self.dimension
+        return named
+
+
+Marker = Doc | Minimum | ExclusiveMinimum | Pattern | Length | MinProperties | Ref
 
 _EXTRA_KEYS = "__sidecar_extra_keys__"
 

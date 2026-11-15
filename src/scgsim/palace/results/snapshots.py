@@ -1,28 +1,43 @@
-"""Read ordered AMR passes while retaining final/iteration snapshot selection rules."""
+"""Read the AMR passes of a returned run folder as detached snapshots, one per pass.
+
+Which folder is which pass is decided once, by ``scgsim.contracts.palace_convergence.returned_passes``, from
+the identity of the files (each folder's own ``Problem.Iteration``, links into ``iteration<k>/``, an unfinished
+top level); the convergence check uses the same enumeration.  This module reads the tables of each pass it
+returns and compares no physics to decide which folder is which.
+"""
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, NamedTuple
 
-from scgsim.palace.results.observations import as_int, mapping_max, read_optional_json
-from scgsim.palace.results.report_models import (
+from scgsim.contracts.palace_convergence import ReturnedPasses, returned_passes
+from scgsim.contracts.palace_run_folder import (
+    NATIVE_METADATA_NAME,
+    OUTPUT_DIR,
+    palace_problem,
+    table_name,
+)
+from scgsim.palace.results.artifacts import (
+    as_int,
+    mapping_max,
+    read_optional_json,
+)
+from scgsim.palace.results.inspection_records import (
     AmrPassSnapshot,
     CollectedSnapshots,
     SurfaceEprSeriesSnapshot,
     SurfaceMarginEprSeriesSnapshot,
 )
 from scgsim.palace.results.surface_readers import (
+    SurfaceBinding,
     SurfaceEprReader,
+    SurfaceMarginBinding,
     SurfaceMarginEprReader,
 )
 from scgsim.palace.results.tables import read_csv_table, read_requested_modes
-
-_ITERATION_DIR = re.compile(r"^iteration(\d+)$")
-
 
 _FREQ_HEADER = "Re{f} (GHz)"
 
@@ -39,80 +54,43 @@ _SKIP_EIG_COLUMNS = {"Error (Bkwd.)", "Error (Abs.)"}
 _ERROR_INDICATOR_TRACES = ("Norm", "Maximum", "Mean")
 
 
-def _parent_has_physics(results: Path, problem: str) -> bool:
-    """Check for the problem-specific final physics table before reading a parent snapshot."""
-    if problem == "Eigenmode":
-        return (results / "eig.csv").is_file()
-    return (results / "terminal-C.csv").is_file()
-
-
-def _same_primary_physics(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bool:
-    """Compare matching mode frequencies or capacitance matrices across two snapshots."""
-    if left.frequencies_ghz is not None and right.frequencies_ghz is not None:
-        return left.frequencies_ghz == right.frequencies_ghz
-    if left.capacitance_matrix_f is not None and right.capacitance_matrix_f is not None:
-        return left.capacitance_matrix_f == right.capacitance_matrix_f
-    return False
-
-
-def _same_margin_physics(
-    left: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None,
-    right: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None,
-) -> bool:
-    """Compare margin-row contributions while preserving unavailable margin data."""
-    if left is None or right is None:
-        return left is right
-    return tuple(
-        (snapshot.series_index, snapshot.series_kind, snapshot.records)
-        for snapshot in left
-    ) == tuple(
-        (snapshot.series_index, snapshot.series_kind, snapshot.records)
-        for snapshot in right
-    )
-
-
-def _problem_size_conflicts(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bool:
-    """Detect conflicting recorded mesh or solver sizes between otherwise matching snapshots."""
-    return any(
-        left_value is not None and right_value is not None and left_value != right_value
-        for left_value, right_value in (
-            (left.degrees_of_freedom, right.degrees_of_freedom),
-            (left.mesh_elements, right.mesh_elements),
-        )
-    )
-
-
-def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface bindings and two read conditions
+def collect_amr_passes(
     root: Path,
     problem: str,
-    surface_bindings: tuple[dict[str, Any], ...] | None,
-    surface_margin_bindings: tuple[dict[str, Any], ...] | None,
+    surface_bindings: tuple[SurfaceBinding, ...] | None,
+    surface_margin_bindings: tuple[SurfaceMarginBinding, ...] | None,
     *,
-    failed_attempt: bool,
     mode_count: int | None = None,
 ) -> CollectedSnapshots:
-    """Read ordered native iterations and retain the existing final-snapshot replacement rules.
+    """Read every pass ``returned_passes`` finds in the run folder, in order of its number.
+
+    A pass whose two folders hold different tables is left out (which of them is that solve cannot be told),
+    and so is one whose snapshot cannot be read.  ``final_snapshot_status`` is ``"readable"`` when the top level
+    of ``results/palace`` is a solve of its own and was read, ``"missing"`` when it holds no table or not the
+    problem's own table, and ``"unreadable"`` otherwise: links into an iteration, a solve under way, a copy of
+    an iteration, or a number not established; ``final_reason`` and ``set_aside`` say why.
 
     ``mode_count`` is the requested Eigenmode count when the run's config is known.
     Each pass then keeps those modes of the tables Palace wrote for every converged
     eigenpair, and a pass whose mode index is not those modes in order is unreadable.
     Without it a pass reports the rows it finds.
     """
-    results = root / "results" / "palace"
+    results = root / OUTPUT_DIR
     if not results.is_dir():
-        return CollectedSnapshots((), "missing")
-    iteration_dirs = []
-    for child in results.iterdir():
-        match = _ITERATION_DIR.match(child.name)
-        if match and child.is_dir():
-            iteration_dirs.append((int(match.group(1)), child))
-    iteration_dirs.sort()
+        return CollectedSnapshots((), "missing", "there is no results/palace folder")
+    returned = returned_passes(results)
     snapshots: list[AmrPassSnapshot] = []
-    for index, path in iteration_dirs:
+    final_read = False
+    for folder in returned.passes:
+        is_final = folder.path == results
+        if folder.identity_problem is not None:
+            continue
+        if is_final and not _has_primary_table(results, problem):
+            continue
         snapshot = SnapshotReader(
-            pass_index=index - 1,
-            source=path.name,
-            path=path,
+            pass_index=folder.number - 1,
+            source="final" if is_final else folder.path.name,
+            path=folder.path,
             problem=problem,
             surface_bindings=surface_bindings,
             surface_margin_bindings=surface_margin_bindings,
@@ -120,35 +98,29 @@ def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface b
         ).load_optional()
         if snapshot is not None:
             snapshots.append(snapshot)
-    if not _parent_has_physics(results, problem):
-        return CollectedSnapshots(tuple(snapshots), "missing")
-    parent = SnapshotReader(
-        pass_index=max((index for index, _path in iteration_dirs), default=0),
-        source="final",
-        path=results,
-        problem=problem,
-        surface_bindings=surface_bindings,
-        surface_margin_bindings=surface_margin_bindings,
-        mode_count=mode_count,
-    ).load_optional()
-    if parent is None:
-        return CollectedSnapshots(tuple(snapshots), "unreadable")
-    if snapshots and _same_primary_physics(snapshots[-1], parent):
-        if failed_attempt and _problem_size_conflicts(snapshots[-1], parent):
-            return CollectedSnapshots(tuple(snapshots), "unreadable")
-        # Equal electrical values do not identify a mesh-refinement round.
-        if (
-            parent.native_iteration is None
-            or snapshots[-1].native_iteration != parent.native_iteration
-        ):
-            return CollectedSnapshots((*snapshots, parent), "readable")
-        parent = replace(parent, pass_index=snapshots[-1].pass_index)
-        if _same_margin_physics(
-            snapshots[-1].surface_margin_epr, parent.surface_margin_epr
-        ):
-            snapshots[-1] = replace(parent, pass_index=snapshots[-1].pass_index)
-            return CollectedSnapshots(tuple(snapshots), "readable")
-    return CollectedSnapshots((*snapshots, parent), "readable")
+            final_read = final_read or is_final
+    return CollectedSnapshots(
+        tuple(snapshots),
+        _final_status(returned, results, problem, final_read),
+        returned.final_reason,
+        returned.set_aside,
+    )
+
+
+def _has_primary_table(results: Path, problem: str) -> bool:
+    """Whether a folder holds the problem's own table (``eig.csv`` or ``terminal-C.csv``)."""
+    return (results / table_name(palace_problem(problem).primary_table)).is_file()
+
+
+def _final_status(
+    returned: ReturnedPasses, results: Path, problem: str, final_read: bool
+) -> Literal["readable", "missing", "unreadable"]:
+    """How the top level of ``results/palace`` reads: a solve of its own, nothing, or something else."""
+    if returned.final == "missing" or (
+        returned.final == "pass" and not _has_primary_table(results, problem)
+    ):
+        return "missing"
+    return "readable" if returned.final == "pass" and final_read else "unreadable"
 
 
 @dataclass(frozen=True)
@@ -159,8 +131,8 @@ class SnapshotReader:
     source: str
     path: Path
     problem: str
-    surface_bindings: tuple[dict[str, Any], ...] | None
-    surface_margin_bindings: tuple[dict[str, Any], ...] | None
+    surface_bindings: tuple[SurfaceBinding, ...] | None
+    surface_margin_bindings: tuple[SurfaceMarginBinding, ...] | None
     mode_count: int | None = None
 
     def load_optional(self) -> AmrPassSnapshot | None:
@@ -172,89 +144,39 @@ class SnapshotReader:
 
     def load(self) -> AmrPassSnapshot:
         """Read native electrical, surface, mesh and cost observations for this AMR pass."""
-        eig_columns = (
-            _read_numeric_table_columns(self.path / "eig.csv", self.mode_count)
-            if self.problem == "Eigenmode"
-            else None
+        tables = self._electrical_tables()
+        error_indicators = _read_error_indicators(
+            self.path / table_name("error-indicators")
         )
-        port_epr = (
-            _read_numeric_table_columns(self.path / "port-EPR.csv", self.mode_count)
-            if self.problem == "Eigenmode"
-            else None
+        frequencies = (
+            None if tables.eig_columns is None else tables.eig_columns.get(_FREQ_HEADER)
         )
-        capacitance = (
-            _read_capacitance(self.path / "terminal-C.csv")
-            if self.problem == "Electrostatic"
-            else None
-        )
-        error_indicators = _read_error_indicators(self.path / "error-indicators.csv")
-        frequencies = None if eig_columns is None else eig_columns.get(_FREQ_HEADER)
         expected_rows = (
             len(frequencies)
             if frequencies is not None
-            else len(capacitance)
-            if capacitance is not None
+            else len(tables.capacitance)
+            if tables.capacitance is not None
             else 0
         )
-        # Margin rows are Dielectric rows of the same table, so both readers expect all of its columns.
-        surface_count = len(self.surface_bindings or ()) + len(
-            self.surface_margin_bindings or ()
-        )
-        surface_epr = SurfaceEprReader(
-            self.path / "surface-Q.csv",
-            problem=self.problem,
-            pass_index=self.pass_index,
-            source=self.source,
-            frequencies_ghz=frequencies,
-            expected_rows=expected_rows,
-            bindings=self.surface_bindings,
-            surface_count=surface_count,
-            mode_count=self.mode_count,
-        ).read()
-        surface_margin_epr = SurfaceMarginEprReader(
-            self.path / "surface-Q.csv",
-            problem=self.problem,
-            pass_index=self.pass_index,
-            source=self.source,
-            expected_rows=expected_rows,
-            bindings=self.surface_margin_bindings,
-            surface_count=surface_count,
-            mode_count=self.mode_count,
-        ).read()
+        surface_epr = self._whole_surface_epr(frequencies, expected_rows)
+        surface_margin_epr = self._margin_epr(expected_rows)
         error_norm = None if error_indicators is None else error_indicators.get("Norm")
-        palace_payload = read_optional_json(self.path / "palace.json")
+        palace_payload = read_optional_json(self.path / NATIVE_METADATA_NAME)
         problem_block = palace_payload.get("Problem") if palace_payload else None
-        elapsed = None
-        if palace_payload is not None:
-            durations = palace_payload.get("ElapsedTime", {})
-            if isinstance(durations, dict):
-                duration_map = durations.get("Durations")
-                if isinstance(duration_map, dict) and isinstance(
-                    duration_map.get("Total"), (int, float)
-                ):
-                    elapsed = float(duration_map["Total"])
         return AmrPassSnapshot(
             pass_index=self.pass_index,
             source=self.source,
             path=self.path,
             frequencies_ghz=frequencies,
-            eig_columns=eig_columns,
-            port_epr=port_epr,
-            capacitance_matrix_f=capacitance,
+            eig_columns=tables.eig_columns,
+            port_epr=tables.port_epr,
+            capacitance_matrix_f=tables.capacitance,
             surface_epr=surface_epr,
             error_indicators=error_indicators,
             error_norm=error_norm,
-            degrees_of_freedom=as_int(
-                problem_block.get("DegreesOfFreedom")
-                if isinstance(problem_block, dict)
-                else None
-            ),
-            mesh_elements=as_int(
-                problem_block.get("MeshElements")
-                if isinstance(problem_block, dict)
-                else None
-            ),
-            elapsed_total_s=elapsed,
+            degrees_of_freedom=_problem_count(problem_block, "DegreesOfFreedom"),
+            mesh_elements=_problem_count(problem_block, "MeshElements"),
+            elapsed_total_s=_recorded_total_seconds(palace_payload),
             peak_node_memory_mb=mapping_max(
                 palace_payload.get("PeakNodeMemoryMegabytes")
                 if palace_payload
@@ -263,6 +185,89 @@ class SnapshotReader:
             surface_margin_epr=surface_margin_epr,
             native_iteration=_native_iteration(problem_block),
         )
+
+    def _electrical_tables(self) -> _ElectricalTables:
+        """The pass's mode tables (Eigenmode) or its capacitance matrix (Electrostatic)."""
+        if palace_problem(self.problem).solves_modes:
+            return _ElectricalTables(
+                eig_columns=_read_numeric_table_columns(
+                    self.path / table_name("eig"), self.mode_count
+                ),
+                port_epr=_read_numeric_table_columns(
+                    self.path / table_name("port-EPR"), self.mode_count
+                ),
+                capacitance=None,
+            )
+        return _ElectricalTables(
+            eig_columns=None,
+            port_epr=None,
+            capacitance=_read_capacitance(self.path / table_name("terminal-C")),
+        )
+
+    def _surface_count(self) -> int:
+        """Margin rows are Dielectric rows of the same table, so both readers expect all of its columns."""
+        return len(self.surface_bindings or ()) + len(
+            self.surface_margin_bindings or ()
+        )
+
+    def _whole_surface_epr(
+        self, frequencies: tuple[float, ...] | None, expected_rows: int
+    ) -> tuple[SurfaceEprSeriesSnapshot, ...] | None:
+        """Read the whole-surface Surface-EPR rows of this pass's ``surface-Q`` table."""
+        return SurfaceEprReader(
+            self.path / table_name("surface-Q"),
+            problem=self.problem,
+            pass_index=self.pass_index,
+            source=self.source,
+            frequencies_ghz=frequencies,
+            expected_rows=expected_rows,
+            bindings=self.surface_bindings,
+            surface_count=self._surface_count(),
+            mode_count=self.mode_count,
+        ).read()
+
+    def _margin_epr(
+        self, expected_rows: int
+    ) -> tuple[SurfaceMarginEprSeriesSnapshot, ...] | None:
+        """Read the margin rows of this pass's ``surface-Q`` table."""
+        return SurfaceMarginEprReader(
+            self.path / table_name("surface-Q"),
+            problem=self.problem,
+            pass_index=self.pass_index,
+            source=self.source,
+            expected_rows=expected_rows,
+            bindings=self.surface_margin_bindings,
+            surface_count=self._surface_count(),
+            mode_count=self.mode_count,
+        ).read()
+
+
+class _ElectricalTables(NamedTuple):
+    """One pass's electrical tables: the mode columns and port EPR of an Eigenmode run, or the capacitances."""
+
+    eig_columns: dict[str, tuple[float, ...]] | None
+    port_epr: dict[str, tuple[float, ...]] | None
+    capacitance: tuple[tuple[float, ...], ...] | None
+
+
+def _problem_count(problem_block: Any, key: str) -> int | None:
+    """An integer count of Palace's ``Problem`` record, None when the record or the count is absent."""
+    return as_int(problem_block.get(key) if isinstance(problem_block, dict) else None)
+
+
+def _recorded_total_seconds(palace_payload: dict[str, Any] | None) -> float | None:
+    """The ``ElapsedTime.Durations.Total`` Palace recorded for a pass, None when it is absent."""
+    if palace_payload is None:
+        return None
+    durations = palace_payload.get("ElapsedTime", {})
+    if not isinstance(durations, dict):
+        return None
+    duration_map = durations.get("Durations")
+    if isinstance(duration_map, dict) and isinstance(
+        duration_map.get("Total"), (int, float)
+    ):
+        return float(duration_map["Total"])
+    return None
 
 
 def _native_iteration(problem: Any) -> int | None:

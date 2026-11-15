@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
@@ -16,7 +17,6 @@ from scgsim.geometry.planning.contact_planning.overlap import (
 from scgsim.geometry.planning.domain_planning.occupancy import (
     route_conductor_contact_footprints,
 )
-from scgsim.geometry.primitives.planar_loops import clean_loop, polygon_area
 
 
 def plan_mm_contact_records(

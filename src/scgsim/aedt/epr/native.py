@@ -25,7 +25,7 @@ from scgsim.aedt.runtime.native.common import (
     native_object_evidence,
 )
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
+from scgsim.geometry.planning.spatial import geometry_ref_surface_z_um
 
 
 def _analysis_surface_sheet(
@@ -111,8 +111,8 @@ def _native_sheet_side_binding(
         # points toward Adjacent. This is not a direct native arrow-vector accessor.
         adjacent_side = orientation > 0.0
     else:
-        # Preserve the pre-existing Solid/historical convention; its physical
-        # face-side correspondence has not been established by this change.
+        # Solid modeling takes the opposite sign; which physical side this
+        # corresponds to is not established.
         adjacent_side = orientation < 0.0
     return desired, adjacent_side
 

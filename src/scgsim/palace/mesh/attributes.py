@@ -11,7 +11,7 @@ no Gmsh group overlaps another and nothing is counted twice.  This module reads 
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -38,17 +38,19 @@ class SurfacePart:
 
 def lower_surface_group(
     name: str,
-    record: Mapping[str, Any],
+    faces: Sequence[str],
+    tags: Sequence[int],
     rows: Mapping[str, Mapping[str, Any]],
     first_attribute: int,
 ) -> list[SurfacePart]:
     """Split one primary surface group into attributes numbered from ``first_attribute``.
 
-    ``rows`` are the sidecar ``surface_epr_rows`` whose ``group`` is ``name``.  The parts are ordered by
-    signature, so numbering is the same for every run of the same sidecar.
+    ``faces`` are the group's faces and ``tags`` their native tags; ``rows`` are the sidecar
+    ``surface_epr_row`` records whose ``group`` is ``name``.  The parts are ordered by signature, so numbering
+    is the same for every run of the same sidecar.
     """
     faces_by_signature: dict[RowSignature, list[tuple[str, int]]] = defaultdict(list)
-    for face, tag in zip(record["ids"], record["native_tags"], strict=True):
+    for face, tag in zip(faces, tags, strict=True):
         faces_by_signature[_signature(face, rows)].append((face, tag))
     signatures = sorted(
         faces_by_signature,

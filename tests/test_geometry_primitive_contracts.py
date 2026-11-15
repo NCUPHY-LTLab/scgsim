@@ -2,24 +2,22 @@
 
 from dataclasses import replace
 
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
-from scgsim.geometry.primitives.entity_validation import (
-    entities_have_finite_overlap,
+from scgsim.geometry.grid.coordinates import coordinate_2d_key, segment_overlap_interval
+from scgsim.geometry.models.entities import (
     is_solution_entity,
     is_vacuum_solution_entity,
     requires_route_representation,
-    resolve_contact_pad_attachment,
 )
-from scgsim.geometry.primitives.geometry_refs import (
+from scgsim.geometry.models.input import SemanticEntitySpec
+from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
+from scgsim.geometry.planning.geometry_refs import (
     entity_geometry_ref,
     route_entity_geometry_ref,
     sidewall_geometry_refs,
 )
-from scgsim.geometry.primitives.spatial import (  # private-import: lock down shared tolerance and canonicalization contracts
+from scgsim.geometry.planning.spatial import (
     bounds_contains_point,
     bounds_overlap,
-    coordinate_2d_key,
     coordinate_key,
     coordinate_z_key,
     geometry_ref_surface_z_um,
@@ -29,15 +27,15 @@ from scgsim.geometry.primitives.spatial import (  # private-import: lock down sh
     interval_complement,
     line_key_2d,
     range_within_bounds,
-    segment_overlap_interval,
-    undirected_xy_edge,
-    vector_cross,
-    vector_subtract,
 )
-from scgsim.geometry.primitives.surface_records import (
+from scgsim.geometry.planning.surface_records import (
     canonical_face_signature_3d,
     interface_kinds,
     surface_boundary_volume_ids,
+)
+from scgsim.geometry.source.contact_pads import (
+    entities_have_finite_overlap,
+    resolve_contact_pad_attachment,
 )
 
 
@@ -58,15 +56,11 @@ def _entity(
     )
 
 
-def test_spatial_keys_and_vector_operations_keep_coordinate_order():
-    """Keep coordinate rounding, directed math, and undirected edge identity stable."""
+def test_spatial_keys_and_interpolation_keep_coordinate_order():
+    """Keep coordinate rounding and interpolation stable."""
     assert coordinate_key((1.0000000004, -2.0, 3.25)) == (1.0, -2.0, 3.25)
     assert coordinate_2d_key((1.0000000004, -2.0)) == (1.0, -2.0)
     assert coordinate_z_key(2.0000000004) == 2.0
-    assert undirected_xy_edge((2, 1), (0, 3)) == ((0.0, 3.0), (2.0, 1.0))
-    assert undirected_xy_edge((0, 3), (2, 1)) == ((0.0, 3.0), (2.0, 1.0))
-    assert vector_subtract((4, 3, 2), (1, 1, 1)) == (3, 2, 1)
-    assert vector_cross((1, 0, 0), (0, 1, 0)) == (0, 0, 1)
     assert interpolate_2d((0, 2), (4, 6), 0.25) == (1.0, 3.0)
     assert interpolate_3d((0, 2, 4), (4, 6, 8), 0.25) == (1.0, 3.0, 5.0)
 
@@ -194,7 +188,6 @@ def test_route_a_cutout_ref_uses_recognized_contact_planes_only():
     )
 
     projected = route_entity_geometry_ref(
-        build_input=GeometryBuildInput((), (entity,)),
         route="A",
         entity=entity,
         representation="cutout_boundary_shell",

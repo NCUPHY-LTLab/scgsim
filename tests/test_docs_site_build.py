@@ -224,6 +224,7 @@ def publisher(tmp_path, monkeypatch):
             {
                 "development_ref": "develop",
                 "stable_ref": "main",
+                "retired_development_lines": ["1.9.0"],
                 "historical": [
                     {"version": "1.1.0", "commit": STABLE},
                     {"version": "1.0.0", "commit": HISTORY},
@@ -282,6 +283,16 @@ def test_versions_overlay_only_presentation_and_publish_after_all_renders(publis
         assert 'content="0;url=/scgsim/v1.1.0/"' in (output / name).read_text()
     assert "/scgsim/v2.0.0-dev/" in (output / "develop/index.html").read_text()
     assert "location.search + location.hash" in (output / "404.html").read_text()
+    # A retired development root leads to the development site, for its home and, through the
+    # missing page, for every page below it.
+    assert (
+        'content="0;url=/scgsim/v2.0.0-dev/"'
+        in (output / "v1.9.0-dev/index.html").read_text()
+    )
+    assert (
+        '"/scgsim/v1.9.0-dev/": "/scgsim/v2.0.0-dev/"'
+        in (output / "404.html").read_text()
+    )
     for version in ("v2.0.0-dev", "v1.1.0", "v1.0.0"):
         menu = json.loads((output / version / "askr-versions.json").read_text())
         assert menu["versions"][1] == {
@@ -401,9 +412,11 @@ def test_candidate_must_be_a_clean_export(publisher, forbidden):
     assert not any(call[0] == "archive" for call in publisher.calls)
 
 
-@pytest.mark.parametrize("failure", ("prerelease", "history-version", "root-conflict"))
+@pytest.mark.parametrize(
+    "failure", ("prerelease", "history-version", "root-conflict", "retired-published")
+)
 def test_invalid_version_sources_fail_before_any_render(publisher, failure):
-    """Source version mismatches and conflicting roots fail before rendering starts."""
+    """Source version mismatches, conflicting roots and a retired line still published fail before rendering."""
     if failure == "prerelease":
         publisher.sources[STABLE] = _source_files("1.1.0rc1", "stable")
         message = "current stable source has prerelease metadata"
@@ -412,6 +425,11 @@ def test_invalid_version_sources_fail_before_any_render(publisher, failure):
             "1.0.1", "historical", historical=True
         )
         message = "historical content version differs from the catalogue"
+    elif failure == "retired-published":
+        policy = json.loads((publisher.root / "catalog.json").read_text())
+        policy["retired_development_lines"] = ["2.0.0"]
+        (publisher.root / "catalog.json").write_text(json.dumps(policy))
+        message = "development line 2.0.0 is published at /scgsim/v2.0.0-dev/"
     else:
         policy = json.loads((publisher.root / "catalog.json").read_text())
         policy["historical"][-1]["version"] = "1.1.0"

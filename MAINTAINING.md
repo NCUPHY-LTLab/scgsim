@@ -42,7 +42,11 @@ identity separate from generated presentation identity.
 
 ## Documentation builds
 
-`scripts/pages_versions.json` is the version catalogue.
+`scripts/pages_versions.json` is the version catalogue. Its `retired_development_lines`
+names release lines whose development root is no longer published: `v<line>-dev/`
+then leads to the current development site, so links made by installed prereleases
+of that line still reach the page. Add a line there when the development version
+moves to the next release line.
 `scripts/build_docs_site.py` freezes source revisions and metadata, renders
 clean snapshots with code execution disabled and assembles the combined site.
 Current main/develop use their own content; retained historical versions keep
@@ -87,8 +91,10 @@ and historical SGB revision `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`.
 They explain origin, not runtime dependencies, support expansion or API
 compatibility. Current source geometry uses the in-tree `scgsim.geometry` API.
 Palace builds its geometry with `scgsim.geometry.sgb` and meshes it with
-`scgsim.meshing`; `scgsim.geometry.compiler` remains the advanced route-building
-API and Palace no longer uses it.
+`scgsim.meshing`. SGB sits below the supported entry (`GeometryPlan` and the
+simulation classes): a direct call with an input built
+by hand assumes what that entry guarantees, as
+[Supported Scope](docs/supported-scope.qmd#supported-entry) states.
 
 ## Engineering convergence
 
@@ -131,7 +137,12 @@ unnoticed.
 The Nightly workflow runs the heavy tier at 18:30 UTC (02:30 in Taiwan) on
 `develop`, and on any branch by manual dispatch. `full-tests` runs the whole
 public suite with the `slow` tests, and `docs-render` runs the Pages render
-without deploying it. A failure fails the run. CI uses public inputs and
+without deploying it. `roster` builds the layouts that define "Palace
+stable" (issue 141) from the PDK `pdk-tests` pins, with Surface-EPR bands, and
+requires each to pass `simulation_drc` and to mesh within the default time
+budget in a vacuum padded 0 µm in x and y and 1000 µm in z
+(`scripts/check_roster.py`); it uploads one record per layout as the
+`roster-records` artifact. A failure fails the run. CI uses public inputs and
 excludes private golden data; it does not invoke AEDT or Palace solvers.
 
 Pages renders the frozen version catalogue, stable pages and history on

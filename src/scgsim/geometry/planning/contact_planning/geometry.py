@@ -6,6 +6,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
+from scgsim.geometry.grid.booleans import boolean_polygon_region
+from scgsim.geometry.grid.loops import canonical_loop_sort_key, loop_signature
+from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area, ring_edges
+from scgsim.geometry.grid.scope import UNGRIDDED
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import (
@@ -18,12 +25,8 @@ from scgsim.geometry.planning.domain_planning.faces import (
     route_a_sheet_plane_z_um_from_solutions,
 )
 from scgsim.geometry.planning.domain_planning.occupancy import required_host_solution_id
-from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.primitives.entities import unique_ids
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import canonical_loop_sort_key, loop_signature
-from scgsim.geometry.primitives.planar_loops import clean_loop, polygon_area, ring_edges
-from scgsim.geometry.primitives.spatial import coordinate_z_key, same_coordinate_z
+from scgsim.geometry.planning.entities import unique_ids
+from scgsim.geometry.planning.spatial import coordinate_z_key, same_coordinate_z
 
 
 @dataclass(frozen=True)
@@ -174,7 +177,7 @@ def contact_patch_loops(
     """Extract and deterministically order finite conductor contact loops."""
     import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
-    polygons = boolean_polygon_region(gdstk, overlap_region, (), "or")
+    polygons = boolean_polygon_region(UNGRIDDED, gdstk, overlap_region, (), "or")
     if not polygons:
         raise ValueError(
             f"{lower_id} and {upper_id} contact must produce at least one polygon, got {len(polygons)}"
@@ -189,10 +192,10 @@ def contact_patch_loops(
 def single_rectangular_contact_loop(
     overlap_region: Sequence[Any], lower_id: str, upper_id: str
 ) -> tuple[tuple[float, float], ...]:
-    """Route-C legacy contact recognizer: exactly one rectangular patch."""
+    """Return the one axis-aligned rectangle an overlap forms, or refuse an overlap that is not one."""
     import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
-    polygons = boolean_polygon_region(gdstk, overlap_region, (), "or")
+    polygons = boolean_polygon_region(UNGRIDDED, gdstk, overlap_region, (), "or")
     if len(polygons) != 1:
         raise ValueError(
             f"{lower_id} and {upper_id} contact must produce one polygon, got {len(polygons)}"

@@ -9,6 +9,7 @@ from typing import Any, NotRequired, TypedDict, cast
 from scgsim.geometry.models.common import PolygonRing, RouteLiteral
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
+from scgsim.refusal import internal
 
 
 class _SheetInterface(TypedDict):
@@ -53,7 +54,7 @@ def route_a_sheet_interfaces(
         intent_origin, recognition_rule, valid_routes, z_um = selection
         supports = _sheet_supports(entity, polygons_by_id)
         for index, support in enumerate(supports):
-            # Conditional expansion retains the established serialized key order.
+            # Conditional expansion keeps the serialized key order.
             interface = cast(
                 _SheetInterface,
                 {
@@ -126,7 +127,9 @@ def _sheet_supports(
         polygon = polygons_by_id.get(polygon_id)
         if polygon is None:
             raise ValueError(
-                f"{entity.semantic_id} sheet intent references missing polygon {polygon_id!r}"
+                internal(
+                    f"the sheet intent of {entity.semantic_id!r} names polygon {polygon_id!r}, which the input does not hold"
+                )
             )
         supports.append(_SheetSupport((polygon_id,), polygon.exterior, polygon.holes))
     return tuple(supports)

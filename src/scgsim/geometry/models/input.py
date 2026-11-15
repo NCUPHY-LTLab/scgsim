@@ -1,14 +1,14 @@
-"""Adapter-normalized input records for route-aware geometry construction.
+"""The build input: layout polygons, curves, semantic entities, the vacuum region, and the ``GeometryBuildInput`` that holds them.
 
-These immutable records preserve source facts and provenance before compiler
-planning; compiled geometry records are defined in their own modules.
+The records are immutable and keep the source facts and provenance as the source stage read them.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import Any
 
 from scgsim.geometry.models.common import (
@@ -18,6 +18,7 @@ from scgsim.geometry.models.common import (
     RouteLiteral,
 )
 from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.refusal import Declared
 
 
 @dataclass(frozen=True)
@@ -110,8 +111,8 @@ class GdsBoundaryReconstructionSpec:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
-# A refusal lists at most this many drawn vertices, then counts the rest.
-_LISTED_VERTICES = 5
+# A refusal lists at most this many findings, then counts the rest.
+_LISTED = 5
 
 
 def ring_without_drawn_order(what: str, ring_place: str) -> str:
@@ -135,14 +136,275 @@ def ring_lost_drawn_order(what: str, findings: Sequence[str]) -> str:
     ``findings`` say, for each drawn vertex at fault, where it lies and what the ring does
     with it (:func:`drawn_vertices_off_ring` finds them).
     """
-    shown = "; ".join(findings[:_LISTED_VERTICES])
-    rest = len(findings) - _LISTED_VERTICES
-    more = f"; and {rest} more drawn vertices" if rest > 0 else ""
     return (
         f"{what}: the ring it selects no longer holds each vertex of its drawn ring once, "
-        f"in drawn order: {shown}{more}. Its drawn segments cannot be found on it. Fix the "
-        "layout: draw the ring's vertices at least one grid step apart, so the source "
-        "stage keeps each one."
+        f"in drawn order: {_listed(findings, 'drawn vertices')}. Its drawn segments cannot "
+        "be found on it. Fix the layout: draw the ring's vertices at least one grid step "
+        "apart, so the source stage keeps each one."
+    )
+
+
+def reconstruction_chain_refusal(
+    record: GdsBoundaryReconstructionSpec,
+    what: str,
+    count: int,
+    drawn_place: Callable[[int], str],
+    ring_place: str,
+) -> str | None:
+    """The refusal of a reconstruction whose indices name no chain of its drawn ring, or None.
+
+    This is the one rule for the indices a reconstruction may give.  ``count`` is the number
+    of vertices of the selected ring as drawn, ``drawn_place(i)`` where drawn vertex ``i``
+    lies and ``ring_place`` where the ring lies, in micrometres; ``what`` names the record,
+    its Entity and its layer.  Its segments are drawn segments, each once, in drawn order,
+    and it is ``closed`` exactly when they run once around the ring.  Its anchors are
+    vertices of that chain, three for a circular arc, and an open chain's first and last
+    anchors are its ends.  A refusal names the indices at fault and where they lie; the
+    declaration must change.
+    """
+    segments = tuple(record.segment_indices)
+    return (
+        _segment_refusal(what, segments, count, drawn_place, ring_place)
+        or _closure_refusal(record, what, count, drawn_place, ring_place)
+        or _anchor_refusal(record, what, count, drawn_place)
+    )
+
+
+def _segment_refusal(
+    what: str,
+    segments: tuple[int, ...],
+    count: int,
+    place: Callable[[int], str],
+    ring_place: str,
+) -> str | None:
+    misnamed = [i for i in segments if not _is_drawn_index(i, count)]
+    if not segments or misnamed:
+        if not segments:
+            given = "it lists none"
+        elif len(misnamed) == 1:
+            given = f"segment index {misnamed[0]!r} names no drawn segment"
+        else:
+            given = f"segment indices {', '.join(map(repr, misnamed))} name no drawn segment"
+        return (
+            f"{what} requires explicit original segment indices: {given}; the ring it "
+            f"selects, at {ring_place}, has {count} drawn segments, numbered 0 to "
+            f"{count - 1}. Fix the declaration: list the drawn segments it replaces; "
+            "segment i runs from drawn vertex i to drawn vertex i + 1 of the ring as drawn."
+        )
+    repeated = [i for i in dict.fromkeys(segments) if segments.count(i) > 1]
+    breaks = [
+        (a, b)
+        for a, b in zip(segments, segments[1:], strict=False)
+        if b != (a + 1) % count
+    ]
+    if not repeated and not breaks:
+        return None
+    findings = (
+        [
+            f"segment {i}, from {place(i)} to {place((i + 1) % count)}, is listed "
+            f"{segments.count(i)} times"
+            for i in repeated
+        ]
+        if repeated
+        else [
+            f"segment {a} ends at {place((a + 1) % count)}, but segment {b}, listed "
+            f"next, starts at {place(b)}"
+            for a, b in breaks
+        ]
+    )
+    return (
+        f"{what} segments must form one ordered source chain: "
+        f"{_listed(findings, 'segments')}. Fix the declaration: list each drawn segment it "
+        "replaces once, in drawn order, each starting where the one before it ends."
+    )
+
+
+def _closure_refusal(
+    record: GdsBoundaryReconstructionSpec,
+    what: str,
+    count: int,
+    place: Callable[[int], str],
+    ring_place: str,
+) -> str | None:
+    segments = record.segment_indices
+    whole = len(segments) == count and (segments[-1] + 1) % count == segments[0]
+    if record.closed == whole:
+        return None
+    finding = (
+        f"it is declared closed, but its segments run from {place(segments[0])} to "
+        f"{place((segments[-1] + 1) % count)}, over {len(segments)} of the {count} drawn "
+        f"segments of the ring at {ring_place}"
+        if record.closed
+        else "it is declared open, but its segments run once around the whole ring at "
+        f"{ring_place}, from and back to {place(segments[0])}"
+    )
+    return (
+        f"{what} closure differs from the selected source chain: {finding}. Fix the "
+        "declaration: declare it closed exactly when its segments run once around the "
+        "whole ring."
+    )
+
+
+def _anchor_refusal(
+    record: GdsBoundaryReconstructionSpec,
+    what: str,
+    count: int,
+    place: Callable[[int], str],
+) -> str | None:
+    segments = record.segment_indices
+    vertices = (*segments, (segments[-1] + 1) % count)
+    anchors = tuple(record.anchor_indices) or vertices
+    chain = (
+        f"its chain runs once around the ring from drawn vertex {segments[0]} at "
+        f"{place(segments[0])}"
+        if record.closed
+        else f"its chain runs from drawn vertex {vertices[0]} at {place(vertices[0])} to "
+        f"drawn vertex {vertices[-1]} at {place(vertices[-1])}"
+    )
+    stray = [a for a in anchors if a not in vertices]
+    if stray:
+        findings = [
+            f"anchor {a}, the drawn vertex at {place(a)}, is not a vertex of its chain"
+            if _is_drawn_index(a, count)
+            else f"anchor {a!r} names no drawn vertex of the ring, which has {count}"
+            for a in stray
+        ]
+        return (
+            f"{what} anchors must belong to the selected source chain: "
+            f"{_listed(findings, 'anchors')}; {chain}. Fix the declaration: choose each "
+            "anchor among the drawn vertices of the segments it replaces."
+        )
+    if record.kind == "circular_arc" and len(anchors) != 3:
+        listed = _listed(
+            [f"drawn vertex {a} at {place(a)}" for a in anchors], "anchors"
+        )
+        given = (
+            f"it gives {len(anchors)}: {listed}"
+            if record.anchor_indices
+            else f"it lists none, so its anchors are every vertex of its chain, "
+            f"{len(anchors)} in all: {listed}"
+        )
+        return (
+            f"{what} circular reconstruction requires exactly three anchors: {given}. Fix "
+            "the declaration: give three drawn vertices of its chain, not on one line, as "
+            "its anchors."
+        )
+    if not record.closed and (anchors[0] != vertices[0] or anchors[-1] != vertices[-1]):
+        return (
+            f"{what} reconstruction must retain the original chain endpoints: {chain}, but "
+            f"its anchors start at drawn vertex {anchors[0]} at {place(anchors[0])} and end "
+            f"at drawn vertex {anchors[-1]} at {place(anchors[-1])}. Fix the declaration: "
+            "give the chain's first and last drawn vertices as its first and last anchors."
+        )
+    return None
+
+
+def _is_drawn_index(index: object, count: int) -> bool:
+    return not isinstance(index, bool) and isinstance(index, int) and 0 <= index < count
+
+
+def _listed(findings: Sequence[str], noun: str) -> str:
+    """The findings of a refusal, at most ``_LISTED`` of them, then how many more ``noun``."""
+    rest = len(findings) - _LISTED
+    more = f"; and {rest} more {noun}" if rest > 0 else ""
+    return "; ".join(findings[:_LISTED]) + more
+
+
+def reconstruction_anchors(
+    record: GdsBoundaryReconstructionSpec, count: int
+) -> tuple[int, ...]:
+    """A reconstruction's anchors as drawn vertex indices of a ring of ``count`` vertices.
+
+    They are those it gives or, when it gives none, every vertex of its chain.
+    """
+    segments = tuple(record.segment_indices)
+    return tuple(record.anchor_indices) or (*segments, (segments[-1] + 1) % count)
+
+
+def reconstruction_without_circle(
+    what: str, anchors: Sequence[int], drawn_place: Callable[[int], str]
+) -> str:
+    """The refusal of a circular reconstruction whose three anchors define no circle, at them.
+
+    ``anchors`` are the record's anchors as drawn vertex indices, after
+    :func:`reconstruction_chain_refusal` found none at fault, and ``drawn_place(i)`` is where
+    drawn vertex ``i`` lies, in micrometres; the declaration must change.
+    """
+    at = ", ".join(f"drawn vertex {a} at {drawn_place(a)}" for a in anchors)
+    how = (
+        "two of them are one vertex"
+        if len(set(anchors)) < len(anchors)
+        else "they lie on one line"
+    )
+    return (
+        f"{what}: the three arc points are collinear, so they define no circle: its "
+        f"anchors are {at}; {how}. Fix the declaration: choose three anchors of its "
+        "chain that do not lie on one line."
+    )
+
+
+ExactPoint = tuple[Fraction | int, Fraction | int]
+
+
+def exact_point_um(point: Sequence[float]) -> tuple[Fraction, Fraction]:
+    """A point in micrometres, exactly as the decimals it is written with.
+
+    Each coordinate is read from its shortest decimal text, not its binary expansion, as SGB's
+    grid reads a declared length: ``0.2`` is exactly 1/5.
+    """
+    return (Fraction(repr(float(point[0]))), Fraction(repr(float(point[1]))))
+
+
+def twice_area(a: ExactPoint, b: ExactPoint, c: ExactPoint) -> Fraction | int:
+    """Twice the signed area of the triangle ``a b c``, exactly; a circle through them divides by it."""
+    return a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1])
+
+
+def collinear(a: ExactPoint, b: ExactPoint, c: ExactPoint) -> bool:
+    """Whether three points lie on one line (two of them may be one point), so no circle runs through them.
+
+    This is the one rule for an arc that defines no circle, and it is exact.  The source stage
+    gives it a declaration in its own frame, before any occurrence transform: a component's
+    arc points as written, a reconstruction's anchors as their cell draws them.  A binding
+    stage gives it the exact points it solves the circle on, SGB its lattice and grid units,
+    the construction stages the micrometres as :func:`exact_point_um` reads them; that decides
+    an arc declared in assembly coordinates and keeps the stage from dividing by zero.  In
+    floats, (0, 0), (0.2, 0.6) and (2, 6) um have an area of 2.2e-16 in one frame and 0 in
+    another.
+    """
+    return twice_area(a, b, c) == 0
+
+
+def arc_without_circle(what: str, places: Sequence[str]) -> str:
+    """The refusal of an authored circular arc whose three points define no circle, at them.
+
+    ``what`` names the record, its Entity, its layer and the curve; ``places`` are where the
+    arc's start, middle and end points lie, in micrometres, as the layout author wrote them.
+    """
+    start, middle, end = places
+    return (
+        f"{what}: the three arc points are collinear, so they define no circle: its start "
+        f"{start}, middle point {middle} and end {end} lie on one line. Fix the layout: "
+        "draw the arc through three points that do not lie on one line, or draw it as a "
+        "line segment."
+    )
+
+
+def ring_runs(indices: Sequence[int], count: int, place: Callable[[int], str]) -> str:
+    """Where a ring's segments at these indices run, those that follow each other as one.
+
+    The ring has ``count`` vertices; segment ``i`` runs from vertex ``i`` to vertex
+    ``i + 1`` and ``place(i)`` is where vertex ``i`` lies, in micrometres.  A stage's ring may
+    run the other way from the drawing, so a run is named by its two ends.
+    """
+    runs: list[list[int]] = []
+    for i in indices:
+        if runs and i == (runs[-1][-1] + 1) % count:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+    return ", ".join(
+        f"between {place(run[0])} and {place((run[-1] + 1) % count)}" for run in runs
     )
 
 
@@ -295,7 +557,9 @@ class VacuumRegionSpec:
         """Normalize scalar, 3-sequence, or sparse six-face vacuum padding."""
         if isinstance(value, bool) or value is None:
             raise TypeError(
-                "vacuum padding must be a number, 3-sequence, or six-face mapping."
+                _PADDING.expected(
+                    "padding", "a number, a 3-sequence or a six-face mapping", value
+                )
             )
 
         if isinstance(value, (int, float)):
@@ -305,7 +569,9 @@ class VacuumRegionSpec:
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
             if len(value) != 3:
                 raise ValueError(
-                    "vacuum 3-sequence padding must contain exactly 3 items for x/y/z."
+                    _PADDING.expected(
+                        "padding", "exactly 3 items, for x, y and z", value
+                    )
                 )
             x_padding, y_padding, z_padding = (
                 _non_negative_float(value[0], "x_padding"),
@@ -322,39 +588,50 @@ class VacuumRegionSpec:
             )
 
         if not isinstance(value, Mapping):
-            raise TypeError("vacuum padding must be a number, 3-sequence, or mapping.")
-
-        required = {
-            "x_minus_um",
-            "x_plus_um",
-            "y_minus_um",
-            "y_plus_um",
-            "z_minus_um",
-            "z_plus_um",
-        }
-        keys = set(value.keys())
-        if not keys <= required:
-            extras = tuple(sorted(keys - required))
-            raise ValueError(
-                f"vacuum face padding mapping has unsupported keys: {extras!r}."
+            raise TypeError(
+                _PADDING.expected(
+                    "padding", "a number, a 3-sequence or a six-face mapping", value
+                )
             )
 
-        face_map = {
-            key: _non_negative_float(value.get(key, 0.0), key) for key in required
-        }
-        return cls(**{key: value for key, value in face_map.items()})
+        return cls(**_face_padding(value))
+
+
+_PADDING = Declared("the vacuum region padding", "the call to set_vacuum_region")
+_FACES = (
+    "x_minus_um",
+    "x_plus_um",
+    "y_minus_um",
+    "y_plus_um",
+    "z_minus_um",
+    "z_plus_um",
+)
+
+
+def _face_padding(value: Mapping[str, Any]) -> dict[str, float]:
+    """A six-face padding mapping, each face it omits padded by zero."""
+    required = set(_FACES)
+    keys = set(value.keys())
+    if not keys <= required:
+        extras = tuple(sorted(keys - required))
+        raise ValueError(
+            _PADDING.expected(
+                "face mapping", f"keyed only by {sorted(required)}", extras
+            )
+        )
+    return {key: _non_negative_float(value.get(key, 0.0), key) for key in required}
 
 
 def _non_negative_float(value: Any, field: str) -> float:
     if value is None:
-        raise ValueError(f"vacuum padding field {field!r} is required.")
+        raise ValueError(_PADDING.expected(field, "given", value))
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"vacuum padding field {field!r} must be numeric.")
+        raise TypeError(_PADDING.expected(field, "a number of micrometres", value))
     text = float(value)
     if not math.isfinite(text):
-        raise ValueError(f"vacuum padding field {field!r} must be finite.")
+        raise ValueError(_PADDING.expected(field, "finite", value))
     if text < 0.0:
-        raise ValueError(f"vacuum padding field {field!r} must be non-negative.")
+        raise ValueError(_PADDING.expected(field, "non-negative", value))
     return text
 
 

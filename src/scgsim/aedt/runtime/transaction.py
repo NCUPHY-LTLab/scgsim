@@ -23,16 +23,17 @@ from scgsim.aedt.epr.native_workflow import (
     solve_and_export_epr,
 )
 from scgsim.aedt.io import file_sha256, read_json, write_json
+from scgsim.aedt.preparation.handoff_files import utc_now
 from scgsim.aedt.preparation.planar import (
     validate_geometry_workers,
 )
 from scgsim.aedt.results.epr import seal_saved_solution
 from scgsim.aedt.results.provenance import (
-    RECEIPT_V1,
-    RECEIPT_V2,
     RECEIPT_V3,
-    runtime_source_identity,
+    record_runtime_source,
+    require_current_receipt,
 )
+from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.runtime.batch_protocol import (
     CollectionContext,
     collection_source,
@@ -60,7 +61,6 @@ from scgsim.aedt.runtime.families.q3d import (
 )
 from scgsim.aedt.runtime.handoff_validation import (
     canonical_metadata_files,
-    contained,
     execution_resources,
     json_object,
     require_pristine_run,
@@ -241,12 +241,7 @@ class _ExecutionTransaction:
         )
         self.receipt_path = self.run_dir / self.files["receipt"]
         self.receipt = json_object(read_json(self.receipt_path), "receipt")
-        if self.receipt.get("schema_version") not in {
-            RECEIPT_V1,
-            RECEIPT_V2,
-            RECEIPT_V3,
-        }:
-            raise RuntimeError("handoff receipt schema is invalid")
+        require_current_receipt(self.receipt)
         if self.receipt.get("status") != "not_run":
             raise RuntimeError("one-shot handoff is not in not_run state")
         self.spec_path = self.run_dir / self.files["spec"]
@@ -298,7 +293,7 @@ class _ExecutionTransaction:
         warn_thin_film_surfaces(self.spec)
 
     def _start_receipt(self) -> None:
-        self.started = _utc_now()
+        self.started = utc_now()
         self.execution_started = time.perf_counter()
         self.receipt.update(
             {
@@ -382,7 +377,7 @@ class _ExecutionTransaction:
     def _run_native(self) -> None:
         self.receipt["mode"] = self.spec.mode
         verify_prepared_hashes(self.metadata, self.spec_path, self.spec)
-        self.receipt["runtime_source"] = runtime_source_identity()
+        self.receipt["runtime_source"] = record_runtime_source("actual")
         if pyaedt_version() != self.profile.pyaedt_version:
             raise RuntimeError("PyAEDT lock mismatch")
         if isinstance(self.spec, Q3dSpec) and not self.options.prepare_only:
@@ -664,7 +659,7 @@ class _ExecutionTransaction:
                 else "process_terminal_collection_failed"
             )
         self.receipt["status"] = self.status
-        self.receipt["finished_at_utc"] = _utc_now()
+        self.receipt["finished_at_utc"] = utc_now()
         self.receipt["execution_seconds"] = round(
             time.perf_counter() - self.execution_started, 6
         )
@@ -792,7 +787,3 @@ class _ExecutionTransaction:
                     if self.failure is None:
                         self.failure = seal_error
                         self.receipt["error"] = self.failure
-
-
-def _utc_now() -> str:
-    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

@@ -87,13 +87,11 @@ def test_current_terminal_readback_rejects_malformed_nested_properties(
     native[field] = value
 
     with pytest.raises(TypeError, match=message):
-        validate_terminal_native_evidence(
-            records, cast(HfssDrivenSpec, spec), current=True
-        )
+        validate_terminal_native_evidence(records, cast(HfssDrivenSpec, spec))
 
 
 def test_current_terminal_readback_accepts_complete_nested_properties() -> None:
     """Keep the complete current terminal evidence shape accepted."""
     records, spec = _terminal_fixture()
 
-    validate_terminal_native_evidence(records, cast(HfssDrivenSpec, spec), current=True)
+    validate_terminal_native_evidence(records, cast(HfssDrivenSpec, spec))

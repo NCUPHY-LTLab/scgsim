@@ -1,9 +1,10 @@
-"""Normalize authored boundaries, bind them to source rings, and restore them after stack preparation.
+"""Normalize authored boundaries and bind them to source rings.
 
 This module owns source XY curve identity, including each source polygon's
 drawn GDS rings (``LayoutPolygonSpec.drawn_rings``), whose vertices
-reconstruction indices name. Prepared geometry owns its Z, materials, and
-solution-region state.
+reconstruction indices name.
+
+It also decides, before any occurrence transform, whether a declared arc's points lie on one line.
 """
 
 from __future__ import annotations
@@ -14,21 +15,31 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Literal, cast, overload
 
+from scgsim.geometry.grid.grid_regions import canonical_grid_point, region_key
+from scgsim.geometry.grid.planar_loops import cutline_boundary_loops
 from scgsim.geometry.models.common import PolygonRing
-from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.grid import (
+    format_extent,
+    format_point,
+    geometry_grid_context,
+)
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     GdsBoundaryReconstructionSpec,
     GeometryBuildInput,
     LayoutPolygonSpec,
-    SemanticEntitySpec,
     SourceCurveSpec,
+    arc_without_circle,
+    collinear,
+    drawn_ring_of,
+    exact_point_um,
+    reconstruction_anchors,
+    reconstruction_chain_refusal,
+    reconstruction_without_circle,
 )
-from scgsim.geometry.models.regions import PortSheetRegionRecord
-from scgsim.geometry.primitives.grid_regions import canonical_grid_point
-from scgsim.geometry.primitives.planar_loops import cutline_boundary_loops
 from scgsim.geometry.source.occurrence import read_polygons_by_layer
 from scgsim.geometry.source.plan_assembly import transform_source_point
+from scgsim.refusal import Declared
 
 _BoundaryRecord = BoundaryCurveChainSpec | GdsBoundaryReconstructionSpec
 _BoundaryInput = _BoundaryRecord | Mapping[str, Any]
@@ -37,27 +48,18 @@ _Ring = Sequence[Sequence[float]]
 GdsPoint = tuple[float, float]
 # One GDS polygon's vertices in the order the polygon walks them.
 GdsWalk = tuple[GdsPoint, ...]
-# Keep tuple keys so binding errors retain the established source identifier text.
-BoundaryKey = tuple[str, str, str, int | None]
-SourceRings = dict[str, list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]]
 
 
-@dataclass(frozen=True)
-class _PreparedSourceGeometry:
-    """Source-owned polygon and entity records in prepared input order."""
-
-    polygons: tuple[LayoutPolygonSpec, ...]
-    entities: tuple[SemanticEntitySpec, ...]
+_BOUNDARY_SOURCE = (
+    "its declaration: GeometryPlan.set_boundary_curves or set_boundary_reconstruction, "
+    "the component's component_semantics, or the stack file's metadata"
+)
 
 
-@dataclass(frozen=True)
-class _SourceEntityIndex:
-    """Authored and prepared entity views used during source restoration."""
-
-    active_ids: set[str]
-    source_by_id: Mapping[str, SemanticEntitySpec]
-    prepared_by_id: Mapping[str, SemanticEntitySpec]
-    split_hosts: Mapping[str, str]
+def _boundary(boundary_id: object = None) -> Declared:
+    """An authored boundary or source curve, which its declaration states."""
+    name = "authored boundary" if boundary_id is None else f"boundary {boundary_id!r}"
+    return Declared(name, _BOUNDARY_SOURCE)
 
 
 def source_curve(value: SourceCurveSpec | Mapping[str, Any]) -> SourceCurveSpec:
@@ -65,7 +67,9 @@ def source_curve(value: SourceCurveSpec | Mapping[str, Any]) -> SourceCurveSpec:
     if isinstance(value, SourceCurveSpec):
         value = {name: getattr(value, name) for name in value.__dataclass_fields__}
     if not isinstance(value, Mapping):
-        raise TypeError("source curve must be a SourceCurveSpec or mapping")
+        raise TypeError(
+            _boundary().expected("source curve", "a SourceCurveSpec or mapping", value)
+        )
     record = SourceCurveSpec(**dict(value))
     if record.kind not in {
         "line_segment",
@@ -73,14 +77,30 @@ def source_curve(value: SourceCurveSpec | Mapping[str, Any]) -> SourceCurveSpec:
         "interpolation_spline",
         "bspline",
     }:
-        raise ValueError(f"unsupported source curve kind {record.kind!r}")
+        raise ValueError(
+            _boundary().expected(
+                "source curve kind",
+                "line_segment, circular_arc, interpolation_spline or bspline",
+                record.kind,
+            )
+        )
     points = tuple(tuple(float(x) for x in point) for point in record.points_um)
     if any(len(point) != 2 for point in points):
-        raise ValueError("source curve points must be XY coordinates in micrometres")
+        raise ValueError(
+            _boundary().expected(
+                "source curve points", "XY coordinates in micrometres", points
+            )
+        )
     if record.kind == "line_segment" and len(points) != 2:
-        raise ValueError("source line needs two endpoints")
+        raise ValueError(
+            _boundary().expected("source line points", "two endpoints", points)
+        )
     if record.kind == "circular_arc" and len(points) != 3:
-        raise ValueError("source circular arc needs start, on-arc and end points")
+        raise ValueError(
+            _boundary().expected(
+                "source circular arc points", "start, on-arc and end points", points
+            )
+        )
     return replace(
         record,
         points_um=points,
@@ -125,7 +145,9 @@ def boundary_binding(
     if isinstance(value, cls):
         value = {name: getattr(value, name) for name in value.__dataclass_fields__}
     if not isinstance(value, Mapping):
-        raise TypeError("boundary binding must be a source record or mapping")
+        raise TypeError(
+            _boundary().expected("binding", "a source record or mapping", value)
+        )
     # Caller mappings are JSON-shaped external records; model construction validates fields.
     data = cast(dict[str, Any], copy.deepcopy(dict(value)))
     if not reconstruction:
@@ -136,18 +158,34 @@ def boundary_binding(
     data["selector_point_um"] = tuple(data["selector_point_um"])
     record = cls(**data)
     if not record.boundary_id or not record.entity_id:
-        raise ValueError("boundary and Entity identities must be nonempty")
+        raise ValueError(
+            _boundary(record.boundary_id).refusal(
+                "boundary and Entity identities must be nonempty"
+            )
+        )
     if record.role not in {"outer", "hole"}:
-        raise ValueError("source boundary role must be outer or hole")
+        raise ValueError(
+            _boundary(record.boundary_id).expected("role", "outer or hole", record.role)
+        )
     if record.role == "hole":
         if (
             isinstance(record.hole_index, bool)
             or not isinstance(record.hole_index, int)
             or record.hole_index < 0
         ):
-            raise ValueError("hole boundary needs a zero-based source hole index")
+            raise ValueError(
+                _boundary(record.boundary_id).expected(
+                    "hole_index of a hole boundary",
+                    "a zero-based source hole index",
+                    record.hole_index,
+                )
+            )
     elif record.hole_index is not None:
-        raise ValueError("outer boundary cannot have a hole index")
+        raise ValueError(
+            _boundary(record.boundary_id).expected(
+                "hole_index of an outer boundary", "None", record.hole_index
+            )
+        )
     return record
 
 
@@ -196,7 +234,9 @@ def transform_boundary(
     record = boundary_binding(value, reconstruction=reconstruction)
     if "/" in record.entity_id or "/" in record.boundary_id:
         raise ValueError(
-            "component-authored boundary and Entity IDs must be local names"
+            _boundary(record.boundary_id).refusal(
+                "component-authored boundary and Entity IDs must be local names"
+            )
         )
     boundary_id = f"{path}/{record.boundary_id}"
     entity_id = f"{path}/{record.entity_id}"
@@ -240,38 +280,109 @@ def transform_boundary(
     )
 
 
-def select_boundary(
-    record: _BoundaryRecord,
-    rings: SourceRings,
-    end_pieces: frozenset[str] = frozenset(),
-) -> tuple[BoundaryKey, PolygonRing]:
-    """Bind one boundary record to the ring its selector point and role name.
+def placed_boundary_curves(
+    values: Iterable[BoundaryCurveChainSpec | Mapping[str, Any]],
+    path: str,
+    transform: tuple[float, ...],
+    emitted: GeometryBuildInput,
+) -> list[BoundaryCurveChainSpec]:
+    """One occurrence's component-authored boundaries in the assembly, an arc with no circle refused.
 
-    The selector lies in exactly one Entity-owned logical polygon; ``role`` and
-    ``hole_index`` then name that polygon's exterior or one of its holes.
+    Whether an arc's three points lie on one line is a fact of the declaration, in the
+    component's own frame.  The occurrence transform turns each point in floats, where three
+    points on one line seldom stay on one line exactly, so ``collinear`` decides here, on the
+    declared decimals, and the refusal places the arc where the occurrence puts it.
     """
-    candidates = _selected_polygons(record, rings, end_pieces)
-    if len(candidates) != 1:
-        raise ValueError(
-            f"{record.boundary_id} selector must bind one Entity-owned logical polygon"
+    placed = []
+    for value in values:
+        declared = boundary_binding(value)
+        record = transform_boundary(
+            declared, path=path, transform=transform, point=transform_source_point
         )
-    pid, outer, holes = candidates[0]
-    ring = outer if record.role == "outer" else holes[cast(int, record.hole_index)]
-    return (record.entity_id, pid, record.role, record.hole_index), cast(
-        PolygonRing, tuple(tuple(float(x) for x in xy) for xy in ring)
+        for index, curve in enumerate(declared.curves):
+            if curve.kind != "circular_arc" or not collinear(
+                *map(exact_point_um, curve.points_um)
+            ):
+                continue
+            owned = {
+                polygon_id
+                for entity in emitted.entities
+                if entity.semantic_id == record.entity_id
+                for polygon_id in entity.polygon_ids
+            }
+            layers = [p.layer for p in emitted.polygons if p.polygon_id in owned]
+            size = _grid_size_um(emitted)
+            where = [
+                format_point(x, y, size) for x, y in record.curves[index].points_um
+            ]
+            raise ValueError(
+                arc_without_circle(f"{_named(record, layers)} curve {index}", where)
+            )
+        placed.append(record)
+    return placed
+
+
+def _named(record: _BoundaryRecord, layers: Iterable[str]) -> str:
+    # The record, its Entity and its layer, as the binding stages' refusals name them.
+    on = ", ".join(sorted(set(layers)))
+    return f"{record.boundary_id} (Entity {record.entity_id!r}{on and ', layer ' + on})"
+
+
+def _grid_size_um(emitted: GeometryBuildInput) -> float:
+    return geometry_grid_context(emitted).grid_size_um
+
+
+def _selector_finding(
+    record: _BoundaryRecord,
+    matched: Sequence[tuple[str, PolygonRing]],
+    owned: Sequence[tuple[str, PolygonRing]],
+    layer_of: Callable[[str], str | None],
+    grid_size_um: float | None,
+) -> str:
+    """Where a boundary's selector point lies, and the polygons of its Entity with their layers.
+
+    An Entity that owns no polygon has no layer to name: the record names no Entity of
+    the input, or one without geometry.
+    """
+    x, y = record.selector_point_um
+    point = format_point(x, y, grid_size_um)
+    if not owned:
+        return f"the Entity owns no polygon; the selector point lies at {point}"
+    if not matched:
+        extent = format_extent([p for _, ring in owned for p in ring], grid_size_um)
+        return (
+            f"the selector point lies at {point}, outside every polygon of the Entity"
+            f"{_on_layers([layer_of(pid) for pid, _ in owned])}, which lie within {extent}"
+        )
+    where = ", ".join(
+        f"{format_extent(ring, grid_size_um)}{_on_layers([layer_of(pid)])}"
+        for pid, ring in matched
     )
+    return f"the selector point lies at {point}, inside each of its polygons: {where}"
+
+
+def _on_layers(layers: Sequence[str | None]) -> str:
+    """`` on layer L`` or `` on layers L1, L2`` for the layers named, or nothing."""
+    named = sorted({layer for layer in layers if layer})
+    if not named:
+        return ""
+    return f" on layer{'s' if len(named) > 1 else ''} {', '.join(named)}"
 
 
 def _selected_polygons(
-    record: _BoundaryRecord, rings: SourceRings, end_pieces: frozenset[str]
-) -> list[tuple[str, PolygonRing, tuple[PolygonRing, ...]]]:
+    record: _BoundaryRecord,
+    polygons: Sequence[LayoutPolygonSpec],
+    end_pieces: frozenset[str],
+) -> list[LayoutPolygonSpec]:
+    """The record's Entity's polygons that hold its selector point; junction end pieces never do."""
     # GDS polygon selection is optional until source boundaries are bound.
     import gdstk  # noqa: PLC0415 - optional native layout dependency
 
     candidates = []
-    for pid, outer, holes in rings.get(record.entity_id, ()):
+    for polygon in polygons:
+        outer, holes = polygon.exterior, polygon.holes
         # A junction end piece can overlap the terminal the selector names; it is never selected.
-        if pid in end_pieces:
+        if polygon.polygon_id in end_pieces:
             continue
         region = [gdstk.Polygon(outer)]
         if holes:
@@ -279,7 +390,7 @@ def _selected_polygons(
                 gdstk.boolean(region, [gdstk.Polygon(h) for h in holes], "not") or []
             )
         if gdstk.inside([record.selector_point_um], region)[0]:
-            candidates.append((pid, outer, holes))
+            candidates.append(polygon)
     return candidates
 
 
@@ -324,10 +435,28 @@ class DrawnWalks:
     loops: tuple[tuple[GdsPoint, ...], ...]
     by_vertex: Mapping[GdsPoint, tuple[int, ...]]
     grid_size_um: float
+    # Each loop vertex as its cell draws it, before the occurrence transform and the grid.
+    cell_vertex: Mapping[GdsPoint, GdsPoint]
 
     @classmethod
-    def read(cls, walks: Sequence[_Ring], grid_size_um: float) -> DrawnWalks:
-        """Split each walk into its loops and index them by vertex."""
+    def read(
+        cls,
+        walks: Sequence[_Ring],
+        grid_size_um: float,
+        cell_walks: Sequence[_Ring] | None = None,
+    ) -> DrawnWalks:
+        """Split each walk into its loops and index them by vertex.
+
+        ``cell_walks`` are the same walks in their cell's own frame, vertex for vertex;
+        walks given without them are already in that frame.
+        """
+        cell_vertex: dict[GdsPoint, GdsPoint] = {}
+        for walk, cell_walk in zip(
+            walks, walks if cell_walks is None else cell_walks, strict=True
+        ):
+            for point, drawn in zip(walk, cell_walk, strict=True):
+                node = cast(GdsPoint, canonical_grid_point(point, grid_size_um))
+                cell_vertex.setdefault(node, (float(drawn[0]), float(drawn[1])))
         loops: list[tuple[GdsPoint, ...]] = []
         for walk in walks:
             nodes = _walk_nodes(walk, grid_size_um)
@@ -345,6 +474,7 @@ class DrawnWalks:
             tuple(loops),
             {node: tuple(found) for node, found in by_vertex.items()},
             grid_size_um,
+            cell_vertex,
         )
 
     def drawn_ring(self, ring: _Ring) -> PolygonRing | None:
@@ -457,187 +587,65 @@ def occurrence_drawn_walks(
             return None
         if path not in by_path:
             context = geometry_grid_context(build_input)
-            if context is None:
-                return None
             cell, _, transform = instances[path]
             polygons = read_polygons_by_layer(
                 source_cells[cell.name],
                 excluded_reference_indexes=child_reference_indexes[path],
             )
             by_path[path] = DrawnWalks.read(
-                gds_walks(polygons, transform), context.grid_size_um
+                gds_walks(polygons, transform),
+                context.grid_size_um,
+                gds_walks(polygons),
             )
         return by_path[path]
 
     return drawn_walks
 
 
-def bind_source_curves(
-    prepared_input: GeometryBuildInput, source_input: GeometryBuildInput
-) -> GeometryBuildInput:
-    """Carry detached authored XY bindings across a prepared-stack Z update.
+def refuse_reconstructions_without_circle(
+    emitted: GeometryBuildInput,
+    drawn_walks_of: Callable[[LayoutPolygonSpec], DrawnWalks | None],
+) -> None:
+    """Refuse a circular reconstruction whose three anchors lie on one line as their cell draws them.
 
-    Entity/source polygon identities stay authored. Stack preparation owns Z and
-    solution regions; this helper never recovers curves from prepared surfaces.
+    The anchors are drawn GDS vertices, exact in their cell's database units.  An occurrence
+    turns them in floats and the grid rounds them, where three vertices on one line seldom
+    stay on one line, so ``collinear`` decides here, on the vertices as drawn.  It decides
+    every record, a component's and one set on the plan alike: either names drawn vertices
+    by index and carries no point of its own, and a rigid transform keeps three points on one
+    line, so a circle through them after the turn is rounding, not the declared arc.  A record with
+    another fault (its selector, its ring, its indices) is left to the binding stages, which
+    refuse it located; so is a ring whose walks were not read.
     """
-    active = {
-        record.entity_id
-        for record in (
-            *source_input.boundary_curves,
-            *source_input.boundary_reconstruction,
-        )
-    }
-    source_entities = {entity.semantic_id: entity for entity in source_input.entities}
-    prepared_entities = {
-        entity.semantic_id: entity for entity in prepared_input.entities
-    }
-    split_hosts = _restore_split_source_entities(
-        prepared_input, source_entities, prepared_entities, active
-    )
-    source_index = _SourceEntityIndex(
-        active, source_entities, prepared_entities, split_hosts
-    )
-    restored_geometry = _restore_authored_geometry(
-        prepared_input,
-        source_input,
-        source_index,
-    )
-    restored_ports = _restore_prepared_ports(prepared_input, source_input, split_hosts)
-    return replace(
-        prepared_input,
-        polygons=restored_geometry.polygons,
-        entities=restored_geometry.entities,
-        port_sheet_regions=restored_ports,
-        boundary_curves=copy.deepcopy(source_input.boundary_curves),
-        boundary_reconstruction=copy.deepcopy(source_input.boundary_reconstruction),
-    )
-
-
-def _restore_authored_geometry(
-    prepared_input: GeometryBuildInput,
-    source_input: GeometryBuildInput,
-    source_index: _SourceEntityIndex,
-) -> _PreparedSourceGeometry:
-    """Reattach authored polygons and geometry while retaining prepared Z state."""
-    polygons = {polygon.polygon_id: polygon for polygon in prepared_input.polygons}
-    source_polygons = {polygon.polygon_id: polygon for polygon in source_input.polygons}
-    entities = []
-    emitted = set()
-    for prepared_entity in prepared_input.entities:
-        entity_id = source_index.split_hosts.get(
-            prepared_entity.semantic_id, prepared_entity.semantic_id
-        )
-        if entity_id in emitted:
+    by_id = {polygon.polygon_id: polygon for polygon in emitted.polygons}
+    owned = {entity.semantic_id: entity.polygon_ids for entity in emitted.entities}
+    for record in emitted.boundary_reconstruction:
+        if record.kind != "circular_arc":
             continue
-        emitted.add(entity_id)
-        entity = source_index.prepared_by_id[entity_id]
-        if entity.semantic_id in source_index.active_ids:
-            source = source_index.source_by_id[entity.semantic_id]
-            for polygon_id in source.polygon_ids:
-                polygons[polygon_id] = source_polygons[polygon_id]
-            geometry = dict(entity.geometry)
-            for key in ("outer_loop", "hole_loops", "source_occurrence_polygons_um"):
-                if key in source.geometry:
-                    geometry[key] = copy.deepcopy(source.geometry[key])
-            entity = replace(entity, polygon_ids=source.polygon_ids, geometry=geometry)
-        entities.append(entity)
-    return _PreparedSourceGeometry(tuple(polygons.values()), tuple(entities))
-
-
-def _restore_prepared_ports(
-    prepared_input: GeometryBuildInput,
-    source_input: GeometryBuildInput,
-    split_hosts: Mapping[str, str],
-) -> tuple[PortSheetRegionRecord, ...]:
-    """Restore authored overlap rows where prepared hosts were split."""
-    source_ports = {
-        region.port_sheet_id: region for region in source_input.port_sheet_regions
-    }
-    return _restore_source_port_overlaps(
-        prepared_input.port_sheet_regions, source_ports, split_hosts
-    )
-
-
-def _restore_split_source_entities(
-    prepared_input: GeometryBuildInput,
-    source_entities: Mapping[str, SemanticEntitySpec],
-    prepared_entities: dict[str, SemanticEntitySpec],
-    active: set[str],
-) -> dict[str, str]:
-    """Rejoin only prepared children carrying explicit source lineage."""
-    split_hosts: dict[str, str] = {}
-    for entity_id in sorted(active - prepared_entities.keys()):
-        children = tuple(
-            entity
-            for entity in prepared_input.entities
-            if entity.metadata.get("source_semantic_id") == entity_id
-            and "split_polygon_index" in entity.metadata
+        polygons = [by_id[i] for i in owned.get(record.entity_id, ()) if i in by_id]
+        selected = _selected_polygons(record, polygons, frozenset())
+        if len(selected) != 1:
+            continue
+        polygon = by_id[selected[0].polygon_id]
+        walks = drawn_walks_of(polygon)
+        ring = drawn_ring_of(
+            polygon, 0 if record.role == "outer" else 1 + cast(int, record.hole_index)
         )
-        if not children:
-            raise ValueError("prepared stack lost a curve-bound source Entity")
-        first = children[0]
-        source = source_entities[entity_id]
-        fields = tuple(
-            name
-            for name in first.__dataclass_fields__
-            if name not in {"semantic_id", "polygon_ids", "geometry", "metadata"}
+        if walks is None or ring is None:
+            continue
+        what = _named(record, [polygon.layer])
+        size = _grid_size_um(emitted)
+        places = [format_point(x, y, size) for x, y in ring]
+        faulty = reconstruction_chain_refusal(
+            record, what, len(ring), places.__getitem__, format_extent(ring, size)
         )
-        z_fields = ("z_um", "z_min_um", "z_max_um", "thickness_um")
-        incompatible_children = any(
-            any(getattr(child, name) != getattr(first, name) for name in fields)
-            or any(
-                child.geometry.get(name) != first.geometry.get(name)
-                for name in z_fields
-            )
-            or child.metadata.get("source_occurrence_path")
-            != source.metadata.get("source_occurrence_path")
-            for child in children
-        )
-        if incompatible_children or first.net_id != source.net_id:
+        if faulty is not None:
+            continue
+        anchors = reconstruction_anchors(record, len(ring))
+        # Each anchor in its cell's database units, where a drawn vertex is an integer point.
+        dbu_um = emitted.metadata["source_dbu_um"]
+        units = [region_key(walks.cell_vertex[ring[a]], dbu_um) for a in anchors]
+        if collinear(*units):
             raise ValueError(
-                "prepared curve-bound Entity children have incompatible ownership"
+                reconstruction_without_circle(what, anchors, places.__getitem__)
             )
-        metadata = dict(first.metadata)
-        metadata.pop("split_polygon_index", None)
-        prepared_entities[entity_id] = replace(
-            first, semantic_id=entity_id, metadata=metadata
-        )
-        split_hosts.update((child.semantic_id, entity_id) for child in children)
-    return split_hosts
-
-
-def _restore_source_port_overlaps(
-    prepared_regions: Sequence[PortSheetRegionRecord],
-    source_ports: Mapping[str, PortSheetRegionRecord],
-    split_hosts: Mapping[str, str],
-) -> tuple[PortSheetRegionRecord, ...]:
-    """Restore authored host overlap records where preparation split a host."""
-    ports = []
-    for region in prepared_regions:
-        overlaps = []
-        emitted_hosts: set[str] = set()
-        for overlap in region.overlaps:
-            host_id = split_hosts.get(overlap.host_semantic_id)
-            if host_id is None:
-                overlaps.append(overlap)
-                continue
-            if host_id in emitted_hosts:
-                continue
-            original = source_ports.get(region.port_sheet_id)
-            matches = (
-                ()
-                if original is None
-                else tuple(
-                    item
-                    for item in original.overlaps
-                    if item.host_semantic_id == host_id
-                )
-            )
-            if not matches:
-                raise ValueError(
-                    "prepared curve-bound port lost its source host overlap"
-                )
-            overlaps.extend(copy.deepcopy(matches))
-            emitted_hosts.add(host_id)
-        ports.append(replace(region, overlaps=tuple(overlaps)))
-    return tuple(ports)

@@ -13,11 +13,12 @@ from scgsim.geometry.models.input import (
     GeometryBuildInput,
 )
 from scgsim.geometry.source import plan as source_plan
+from scgsim.geometry.source.recipes import Audited
 
 
 def _make_plan(monkeypatch, semantics_by_path):
     """Build a plan double that reaches only its source-boundary collection."""
-    root = SimpleNamespace(name="root-cell", kcl=SimpleNamespace(dbu=0.001))
+    root = SimpleNamespace(name="root-cell")
     root.write_gds = lambda path: Path(path).write_bytes(b"source")
     child = SimpleNamespace(name="child-cell")
     plan = source_plan.GeometryPlan.__new__(source_plan.GeometryPlan)
@@ -25,7 +26,6 @@ def _make_plan(monkeypatch, semantics_by_path):
     vars(plan).update(
         {
             "_component": root,
-            "_grid_size_um": None,
             "_nets": {},
             "_vacuum_region": None,
             "_instances": {
@@ -62,12 +62,13 @@ def _make_plan(monkeypatch, semantics_by_path):
     monkeypatch.setattr(
         source_plan,
         "source_recipe_map",
-        lambda _runner, jobs: list(jobs),
+        lambda _runner, jobs: Audited(list(jobs)),
     )
+    monkeypatch.setattr(source_plan, "stack_records", lambda stack, _metadata: stack)
     monkeypatch.setattr(
         source_plan,
-        "build_gds_stack_geometry_input",
-        lambda **_kwargs: GeometryBuildInput(
+        "lower_layout",
+        lambda *_args, **_kwargs: GeometryBuildInput(
             (),
             (),
             metadata={
@@ -79,7 +80,9 @@ def _make_plan(monkeypatch, semantics_by_path):
     )
     monkeypatch.setattr(source_plan, "diagnostic_stage", lambda _name: nullcontext())
     fake_gdstk = ModuleType("gdstk")
-    vars(fake_gdstk)["read_gds"] = lambda _path: SimpleNamespace(cells=[])
+    vars(fake_gdstk)["read_gds"] = lambda _path: SimpleNamespace(
+        cells=[], precision=1e-9
+    )
     monkeypatch.setitem(sys.modules, "gdstk", fake_gdstk)
     return plan
 
@@ -163,5 +166,5 @@ def test_prepare_preserves_per_instance_boundary_error_priority(monkeypatch):
     }
     plan = _make_plan(monkeypatch, semantics)
 
-    with pytest.raises(ValueError, match="source boundary role"):
+    with pytest.raises(ValueError, match="role must be outer or hole"):
         plan.prepare()

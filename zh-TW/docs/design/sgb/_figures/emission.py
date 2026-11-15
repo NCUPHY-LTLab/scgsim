@@ -14,7 +14,7 @@ sidecar's ``ids_by_tag`` and the written BREP's shell records) and reopened in G
 (``--measure``, one subprocess per N so the peak memory is honest) and stored in ``figures/emission-timing-data.json``; the other
 runs read that file.  Only what ``figures/why-scaling-measured.json`` (``why_scaling.py``) does not hold is measured here: the Gmsh-API
 oracle stage by stage next to the direct writer at N = 500, 1000 and 2000, and the time of every check at N = 1000, 5000 and 20000.
-The direct writer's tail (plan, render with 1 and 16 workers, reports, sidecar, Gmsh load, ``verify_loaded``, file sizes) is read from
+The direct writer's tail (plan, render, reports, sidecar, Gmsh load, ``verify_loaded``, file sizes) is read from
 that shared file.  The OCCT checks use OCP (the ``occt`` group of the SGB core).  Outputs go to ``docs/design/sgb/figures/``
 with the prefix ``emission-``:
 

@@ -17,8 +17,7 @@ meshing. The documentation build does not mesh or run Palace.
 
 The immutable snapshot already contains the GDS, prepared stack, final Net
 map, and shared outer vacuum envelope. Palace uses that envelope as supplied.
-This coupon already contains eight authored ground shorts, so this example
-does not add a second fill lattice. The source port is the prepared
+The coupon's eight ground shorts are bumps drawn in its layout. The source port is the prepared
 `chip/device/o_junction_lumped` sheet; its qualified name and target layer come
 from the component annotation.
 
@@ -46,8 +45,7 @@ sim = EigenmodeSim()
 sim.set_plan(snapshot)
 sim.set_output_dir(palace_run_dir)
 sim.set_surface_epr(
-    representation="B",
-    specs={
+    {
         kind: {
             "thickness": record["thickness"],
             "permittivity": record["permittivity"],
@@ -57,7 +55,7 @@ sim.set_surface_epr(
             "inset_margins_um": (0.5, 1.0),
         }
         for kind, record in interface_presets.items()
-    },
+    }
 )
 sim.add_port(
     port_name,
@@ -110,8 +108,11 @@ for the boundary comparison and interpretation limits.
 
 ## Review normalized inputs before meshing
 
-`input_summary()` displays the bound normalized input and current Palace
-settings. It does not mesh or start a solver.
+`input_summary()` displays the input `mesh()` will build from and the current
+Palace settings: the bound plan with the simulation's vacuum region,
+requested ports and route applied. It does not mesh or start a solver.
+A model needs a vacuum region: this call and `mesh()` refuse a plan with none
+unless `sim.set_vacuum_region(...)` was called.
 
 ```python
 from IPython.display import display

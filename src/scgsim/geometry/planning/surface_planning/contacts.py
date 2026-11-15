@@ -6,24 +6,23 @@ from collections.abc import Mapping, Sequence
 from math import isfinite
 from typing import Any, cast
 
-from scgsim.geometry.models.common import PolygonRing, Vector3D
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.topology import (
-    InterfacePlanRecord,
-    MMContactRecord,
-)
-from scgsim.geometry.primitives.constants import (
-    TOPOLOGY_EPS_UM,
-)
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import (
+from scgsim.geometry.grid.booleans import boolean_polygon_region
+from scgsim.geometry.grid.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.grid.loops import (
     canonical_loop_sort_key,
     contact_holes_are_simple,
     gdstk_surface_region,
     geometry_refs_from_gdstk_region,
     same_loop_geometry,
 )
-from scgsim.geometry.primitives.planar_loops import clean_loop
+from scgsim.geometry.grid.planar_loops import clean_loop
+from scgsim.geometry.grid.scope import UNGRIDDED
+from scgsim.geometry.models.common import PolygonRing, Vector3D
+from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.topology import (
+    InterfacePlanRecord,
+    MMContactRecord,
+)
 
 
 def contact_patches_by_entity_face(
@@ -211,15 +210,16 @@ def subtract_contact_patches_from_face(
         "hole_loops": tuple(remaining_holes),
         "contact_hole_loops": tuple(clean_loop(loop) for loop in contact_loops),
     }
-    if contact_holes_are_simple(outer_loop, remaining_holes):
+    if contact_holes_are_simple(UNGRIDDED, outer_loop, remaining_holes):
         return (simple_ref,)
 
     import gdstk  # noqa: PLC0415 - optional native polygon dependency
 
     live_region = boolean_polygon_region(
+        UNGRIDDED,
         gdstk,
-        gdstk_surface_region(geometry_ref),
+        gdstk_surface_region(UNGRIDDED, geometry_ref),
         tuple(gdstk.Polygon(loop) for loop in contact_loops),
         "not",
     )
-    return geometry_refs_from_gdstk_region(geometry_ref, live_region)
+    return geometry_refs_from_gdstk_region(UNGRIDDED, geometry_ref, live_region)

@@ -11,10 +11,15 @@ from typing import Any, cast
 from scgsim.aedt.epr.models import EprResult
 from scgsim.aedt.epr.selection import finite_value
 from scgsim.aedt.epr.surface import surface_energy_j
-from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
+from scgsim.semantics.epr import (
+    FilmAssumptions,
+    FilmUpdate,
+    film_assumptions,
+    inverse_quality_factor,
+)
 
 
-def _surface_original_assumptions(surface: Mapping[str, Any]) -> dict[str, Any]:
+def _surface_original_assumptions(surface: Mapping[str, Any]) -> FilmAssumptions:
     if "original_assumptions" in surface:
         return film_assumptions(surface["original_assumptions"], allow_unknown=True)
     if "assumptions" in surface:
@@ -33,7 +38,7 @@ def _surface_original_assumptions(surface: Mapping[str, Any]) -> dict[str, Any]:
 
 def _film_updates(
     updates: Mapping[str, Mapping[str, Any]] | None, *, name: str
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, FilmUpdate]:
     if updates is None:
         return {}
     if not isinstance(updates, Mapping) or any(
@@ -163,7 +168,7 @@ def _updated_assumptions(
     current: Mapping[str, Any],
     applied: Mapping[str, Any],
     group_update: Mapping[str, Any],
-) -> dict[str, Any]:
+) -> FilmAssumptions:
     candidate = {**current, **applied}
     if any(
         name in applied
@@ -215,24 +220,26 @@ def _recomputed_energy_and_participation(
     recombination_terms = {"normal_integral_v2", "tangential_integral_v2"}
     if surface["interface_kind"] == "MS":
         recombination_terms.add("substrate_relative_permittivity")
-    if recombination_terms <= set(surface):
-        energy = surface_energy_j(
-            surface["interface_kind"],
-            updated["film_thickness_m"],
-            updated["film_relative_permittivity"],
-            finite_value(
-                surface.get("substrate_relative_permittivity", 1.0),
-                "substrate epsilon",
-            ),
-            (
-                finite_value(surface["normal_integral_v2"], "normal integral"),
-                finite_value(surface["tangential_integral_v2"], "tangential integral"),
-            ),
+    missing = sorted(recombination_terms - set(surface))
+    if missing:
+        raise ValueError(
+            f"surface row lacks {missing} needed to recompute it; reanalyze a "
+            "result of a current run, whose surface rows store them"
         )
-        return energy, energy / normalization
-    return _recompute_historical_surface(
-        surface, original, updated, original_energy, original_participation
+    energy = surface_energy_j(
+        surface["interface_kind"],
+        updated["film_thickness_m"],
+        updated["film_relative_permittivity"],
+        finite_value(
+            surface.get("substrate_relative_permittivity", 1.0),
+            "substrate epsilon",
+        ),
+        (
+            finite_value(surface["normal_integral_v2"], "normal integral"),
+            finite_value(surface["tangential_integral_v2"], "tangential integral"),
+        ),
     )
+    return energy, energy / normalization
 
 
 def _validate_reanalysis_coefficients(
@@ -242,38 +249,12 @@ def _validate_reanalysis_coefficients(
         original["film_thickness_m"] is None
         or original["film_relative_permittivity"] is None
     ):
-        raise ValueError("historical film coefficients are unavailable for reanalysis")
+        raise ValueError("stored film coefficients are unavailable for reanalysis")
     if (
         updated["film_thickness_m"] is None
         or updated["film_relative_permittivity"] is None
     ):
         raise ValueError("film coefficients cannot be cleared")
-
-
-def _recompute_historical_surface(
-    surface: Mapping[str, Any],
-    original: Mapping[str, Any],
-    updated: Mapping[str, Any],
-    original_energy: float,
-    original_participation: float,
-) -> tuple[float, float]:
-    if "group_id" in surface:
-        raise ValueError("grouped surface result lacks original field integrals")
-    if (
-        surface["interface_kind"] == "SA"
-        and updated["film_relative_permittivity"]
-        != original["film_relative_permittivity"]
-    ):
-        raise ValueError(
-            "SA epsilon change needs stored normal and tangential integrals"
-        )
-    ratio = updated["film_thickness_m"] / original["film_thickness_m"]
-    if surface["interface_kind"] in {"MA", "MS"}:
-        ratio *= (
-            original["film_relative_permittivity"]
-            / updated["film_relative_permittivity"]
-        )
-    return original_energy * ratio, original_participation * ratio
 
 
 def _assumption_update_record(

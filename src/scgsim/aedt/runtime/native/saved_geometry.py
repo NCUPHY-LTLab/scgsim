@@ -17,7 +17,7 @@ from scgsim.aedt.runtime.native.junction_topology import (
     native_polygon_correspondence,
 )
 from scgsim.aedt.runtime.native.planar_bodies import junction_geometry
-from scgsim.geometry.planning.junction_partition import junction_terminal_line
+from scgsim.geometry.junctions.terminal import junction_terminal_line
 
 
 def read_saved_hfss_design(project_path, design_name, *, purpose):
@@ -55,7 +55,7 @@ def read_saved_junction_lines(app, project_path, design_name, prepared, geometry
     source = detached(prepared.source)
     partitions = source.get("junction_partitions", {})
     if not partitions:
-        return  # Historical geometry retains its existing binding contract.
+        return  # Without partitions there are no junction boundaries to bind.
     digest, boundaries = _read_junction_boundaries(app, project_path, design_name)
     polygons = {p["polygon_id"]: p for p in source["polygons"]}
     bindings = {j["junction_id"]: j for j in geometry["junctions"]}

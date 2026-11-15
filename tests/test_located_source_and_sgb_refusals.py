@@ -22,19 +22,15 @@ from test_sgb_prisms import with_boundaries
 from test_simulation_drc import LAYER_STACK, MATERIALS, check, level, two_pads
 
 from scgsim.geometry import GeometryPlan
+from scgsim.geometry.exact.errors import InputError, SgbError
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
     SourceCurveSpec,
 )
-from scgsim.geometry.primitives.grid import geometry_grid_scope
-from scgsim.geometry.sgb.errors import (
-    InputError,
-    NoGapEdgeError,
-    OverlapError,
-    SgbError,
-)
+from scgsim.geometry.sgb.errors import NoGapEdgeError, OverlapError
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
-from scgsim.geometry.source.ground import derived_ground_polygons
+from scgsim.geometry.source.ground import DrawnPlane, derived_ground_polygons
 from scgsim.geometry.source.occurrence import (
     gds_polygons_for_entity,
     occurrence_ground_polygons_for_entity,
@@ -44,6 +40,7 @@ from scgsim.geometry.source.occurrence_validation import (
     validate_ground_contribution_ownership,
 )
 from scgsim.geometry.source.ports import port_sheet_regions_from_stack_metadata
+from scgsim.geometry.source.recipes import audited_declared_source
 from scgsim.palace import EigenmodeSim
 
 FIX_SELECTOR = (
@@ -130,8 +127,13 @@ def test_two_selector_points_in_one_region_are_located():
         selector_point_um=(5.0, 5.0),
         exclude_selector_points_um=[(6.0, 6.0)],
     )
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
-        gds_polygons_for_entity(entity, polygons_by_layer=PAD_LAYER)
+    with pytest.raises(ValueError) as error:
+        audited_declared_source(
+            gds_polygons_for_entity,
+            GridScope(GRID),
+            entity,
+            polygons_by_layer=PAD_LAYER,
+        )
     message = str(error.value)
     assert message.startswith(
         "chip/pad selector points must match distinct polygons: chip/pad on layer 1/0"
@@ -145,8 +147,13 @@ def test_two_selector_points_in_one_region_are_located():
 def test_an_unfused_selector_point_that_misses_is_located():
     """A stack-file selector at (30, 30) um misses the 20 um pad on layer 1/0."""
     entity = pad_entity(selector_point_um=(30.0, 30.0))
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
-        gds_polygons_for_entity(entity, polygons_by_layer=PAD_LAYER)
+    with pytest.raises(ValueError) as error:
+        audited_declared_source(
+            gds_polygons_for_entity,
+            GridScope(GRID),
+            entity,
+            polygons_by_layer=PAD_LAYER,
+        )
     message = str(error.value)
     assert message.startswith(
         "chip/pad selector_point_um matched 0 polygons: chip/pad on layer 1/0"
@@ -194,8 +201,9 @@ def test_a_stack_port_selector_that_misses_is_located():
         "selector_point_um": (10.0, 10.0),
     }
     sheet = gdstk.Polygon([(1, 1), (3, 1), (3, 3), (1, 3)], layer=9, datatype=2)
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
+    with pytest.raises(ValueError) as error:
         port_sheet_regions_from_stack_metadata(
+            GridScope(GRID),
             {"port_sheet_source_layers": (record,)},
             polygons_by_layer={(9, 2): (sheet,)},
             host_entities=(),
@@ -232,13 +240,15 @@ def test_a_ground_include_selector_that_misses_is_located():
     ground = ground_entity(
         include_layer=(3, 0), include_selector_points_um=((10.0, 10.0),)
     )
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
-        derived_ground_polygons(
+    with pytest.raises(ValueError) as error:
+        audited_declared_source(
+            derived_ground_polygons,
+            GridScope(GRID),
             ground,
             polygons_by_layer={(3, 0): (gdstk.rectangle((2, 15), (4, 17)),)},
-            cell_bounds_um=BOUNDS,
-            domain_bounds_by_semantic_id={},
-            plane_polygons=(gdstk.rectangle((0, 0), (20, 20)),),
+            plane=DrawnPlane(
+                (gdstk.rectangle((0, 0), (20, 20)),),
+            ),
         )
     message = str(error.value)
     assert message.startswith(
@@ -252,13 +262,15 @@ def test_a_ground_include_selector_that_misses_is_located():
 
 def test_a_ground_its_mask_covers_whole_is_located_at_the_plane():
     """A mask over the whole 20 um plane leaves the Ground nothing."""
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
-        derived_ground_polygons(
+    with pytest.raises(ValueError) as error:
+        audited_declared_source(
+            derived_ground_polygons,
+            GridScope(GRID),
             ground_entity(),
             polygons_by_layer={(1, 0): (gdstk.rectangle((-1, -1), (21, 21)),)},
-            cell_bounds_um=BOUNDS,
-            domain_bounds_by_semantic_id={},
-            plane_polygons=(gdstk.rectangle((0, 0), (20, 20)),),
+            plane=DrawnPlane(
+                (gdstk.rectangle((0, 0), (20, 20)),),
+            ),
         )
     message = str(error.value)
     assert message.startswith(
@@ -272,10 +284,10 @@ def test_a_ground_its_mask_covers_whole_is_located_at_the_plane():
 
 def test_an_occurrence_ground_without_its_plane_is_located_where_the_occurrence_draws():
     """A Ground occurrence placed at (100, 50) um draws only on 1/0, nothing on its plane layer 2/0."""
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
+    with pytest.raises(ValueError) as error:
         occurrence_ground_polygons_for_entity(
+            GridScope(GRID),
             ground_entity(),
-            cell=None,
             transform=PLACED,
             plane_layer=(2, 0),
             polygons_by_layer={(1, 0): (gdstk.rectangle((2, 3), (4, 5)),)},
@@ -296,10 +308,10 @@ def test_a_ground_contribution_that_misses_is_located_in_the_layout():
         "selector_point_um": (110.0, 60.0),
         "source_local_id": "fill",
     }
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
+    with pytest.raises(ValueError) as error:
         occurrence_include_polygon(
+            GridScope(GRID),
             record,
-            cell=None,
             transform=PLACED,
             polygons_by_layer={(3, 0): (gdstk.rectangle((2, 3), (4, 5)),)},
         )
@@ -339,8 +351,8 @@ def test_a_ground_contribution_over_a_named_conductor_is_located_at_the_overlap(
             ]
         },
     }
-    with geometry_grid_scope(GRID), pytest.raises(ValueError) as error:
-        validate_ground_contribution_ownership([plane, other])
+    with pytest.raises(ValueError) as error:
+        validate_ground_contribution_ownership(GridScope(GRID), [plane, other])
     message = str(error.value)
     assert message.startswith(
         "ground contribution 'fill' also contains local Entity 'chip/device/pad': fill on layer 3/0"
@@ -453,7 +465,7 @@ def test_two_boundaries_of_one_ring_are_located_at_the_ring(monkeypatch):
         InputError, component=with_pad_boundary(monkeypatch, extra=(second,))
     )
     assert message.startswith(
-        "multiple complete authored boundaries claim ring ('chip/pad', 0, 0): "
+        "multiple complete authored boundaries claim the outer ring of polygon 0: "
         "chip/PAD_OUTER and chip/PAD_OUTER_2 (Entity 'chip/pad' on layer 1/0)"
     )
     assert message.endswith(
@@ -502,7 +514,7 @@ def test_an_authored_and_a_reconstructed_boundary_of_one_ring_are_located(tmp_pa
         build_prism_catalogue(curved.build_input, curved.representation)
     message = str(error.value)
     assert message.startswith(
-        "authored and reconstructed boundaries both claim ring ('pad', 0, 0): "
+        "authored and reconstructed boundaries both claim the outer ring of polygon 0: "
         "pad_outline and pad_corner (Entity 'pad'"
     )
     assert "Fix the declaration: describe the ring by one authored boundary" in message

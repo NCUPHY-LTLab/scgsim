@@ -23,10 +23,8 @@ from typing import (
 
 from scgsim.aedt.epr.selection import surface_integral_groups
 from scgsim.aedt.specs.common import (
-    EPR_ANALYSIS_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
     EPR_ANALYSIS_SCHEMA_VERSION_V3,
-    EPR_EIGENMODE_SCHEMA_VERSION,
     EPR_EIGENMODE_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION_V3,
     EPR_EIGENMODE_SCHEMA_VERSION_V4,
@@ -77,28 +75,10 @@ class HfssEprSpec:
     run_control: EigenmodeRunControl | None = None
     physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    _historical_modeling: bool = False
     epr_request: Any = None
     aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
-    _legacy_payload: bool = False
     expression_convergence: Any = None
-
-    @property
-    def historical_physical(self) -> bool:
-        """Report whether this request decodes historical physical data."""
-        return self._historical_physical
-
-    @property
-    def historical_modeling(self) -> bool:
-        """Report whether this request decodes historical modeling data."""
-        return self._historical_modeling
-
-    @property
-    def legacy_payload(self) -> bool:
-        """Report whether this request came from the legacy payload schema."""
-        return self._legacy_payload
 
     @property
     def lumped_rlcs(self) -> tuple[LumpedRlc, ...]:
@@ -124,31 +104,23 @@ class HfssEprSpec:
         )
         if not isinstance(self.geometry, PreparedPlanarGeometry):
             raise TypeError("geometry must be PreparedPlanarGeometry")
-        if not self._historical_modeling and self.geometry.modeling != self.modeling:
+        if self.geometry.modeling != self.modeling:
             raise ValueError("request and prepared geometry modeling differ")
-        if not self._historical_modeling:
-            declared = source_plan_layers(self.geometry.source)
-            if self.physical_layers and {
-                item.physical_layer_id: item for item in self.physical_layers
-            } != {item.physical_layer_id: item for item in declared}:
-                raise ValueError(
-                    "request physical layers differ from prepared source map"
-                )
-            object.__setattr__(self, "physical_layers", declared)
+        declared = source_plan_layers(self.geometry.source)
+        if self.physical_layers and {
+            item.physical_layer_id: item for item in self.physical_layers
+        } != {item.physical_layer_id: item for item in declared}:
+            raise ValueError("request physical layers differ from prepared source map")
+        object.__setattr__(self, "physical_layers", declared)
 
         if self.run_control is not None and not isinstance(
             self.run_control, EigenmodeRunControl
         ):
             raise TypeError("run_control must be EigenmodeRunControl or None")
         if self.run_control is None and (
-            self.epr_request is not None
-            or self.expression_convergence is not None
-            or self._legacy_payload
-            or self._historical_modeling
+            self.epr_request is not None or self.expression_convergence is not None
         ):
-            raise ValueError(
-                "EPR analysis/cache and historical requests require run_control"
-            )
+            raise ValueError("EPR analysis/cache requests require run_control")
         if self.epr_request is not None and not isinstance(
             self.epr_request, EprAnalysisRequest
         ):
@@ -160,26 +132,20 @@ class HfssEprSpec:
             raise TypeError(
                 "expression_convergence must be a unit control, collection, or None"
             )
-        if self._legacy_payload and self.expression_convergence is not None:
-            raise ValueError("legacy EPR payload cannot add expression convergence")
         _validate_epr_selection(self)
 
     def to_payload(self) -> dict[str, Any]:
         """Return the canonical HfssEprSpec payload."""
         schema_version = (
-            EPR_EIGENMODE_SCHEMA_VERSION
-            if self._legacy_payload
-            else (
-                (
-                    EPR_EIGENMODE_SCHEMA_VERSION_V4
-                    if isinstance(
-                        self.expression_convergence, ExpressionCacheConvergenceSet
-                    )
-                    else EPR_EIGENMODE_SCHEMA_VERSION_V3
+            (
+                EPR_EIGENMODE_SCHEMA_VERSION_V4
+                if isinstance(
+                    self.expression_convergence, ExpressionCacheConvergenceSet
                 )
-                if self.expression_convergence is not None
-                else EPR_EIGENMODE_SCHEMA_VERSION_V2
+                else EPR_EIGENMODE_SCHEMA_VERSION_V3
             )
+            if self.expression_convergence is not None
+            else EPR_EIGENMODE_SCHEMA_VERSION_V2
         )
         return {
             **modeling_payload(self),
@@ -206,9 +172,7 @@ class HfssEprSpec:
         }
 
     @classmethod
-    def from_payload(
-        cls, payload: dict[str, Any], *, allow_historical_modeling: bool = False
-    ) -> HfssEprSpec:
+    def from_payload(cls, payload: dict[str, Any]) -> HfssEprSpec:
         """Decode a HfssEprSpec from its canonical payload."""
         schema = _validate_hfss_epr_payload(payload)
         run = payload.get("run_control")
@@ -220,9 +184,7 @@ class HfssEprSpec:
         geometry = PreparedPlanarGeometry.from_payload(payload.get("geometry"))
         return cls(
             modeling=cast(Modeling, payload.get("modeling")),
-            physical_layers=physical_layers_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
+            physical_layers=physical_layers_from_payload(payload),
             physical_representation=(
                 PhysicalRepresentationPlan.from_payload(
                     payload["physical_representation"]
@@ -230,10 +192,6 @@ class HfssEprSpec:
                 if "physical_representation" in payload
                 else None
             ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling
-            and "modeling" not in payload,
             project_name=project_name_from_payload(project.get("name")),
             design_name=text_value(project.get("design"), "project.design"),
             geometry=geometry,
@@ -261,14 +219,12 @@ class HfssEprSpec:
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
             ),
-            _legacy_payload=schema == EPR_EIGENMODE_SCHEMA_VERSION,
         )
 
 
 def _validate_hfss_epr_payload(payload: dict[str, Any]) -> str:
     schema = payload.get("schema_version")
     supported = {
-        EPR_EIGENMODE_SCHEMA_VERSION,
         EPR_EIGENMODE_SCHEMA_VERSION_V2,
         EPR_EIGENMODE_SCHEMA_VERSION_V3,
         EPR_EIGENMODE_SCHEMA_VERSION_V4,
@@ -312,15 +268,9 @@ class HfssEprAnalysisSpec:
     saved_solution: Any
     aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
-    _legacy_payload: bool = False
     surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = (
         field(default=None, kw_only=True)
     )
-
-    @property
-    def legacy_payload(self) -> bool:
-        """Report whether this analysis came from the legacy payload schema."""
-        return self._legacy_payload
 
     @property
     def mode(self) -> Literal["eigenmode"]:
@@ -368,10 +318,6 @@ class HfssEprAnalysisSpec:
             raise ValueError(
                 "surface field selectors reference unknown or unselected contributions"
             )
-        if self._legacy_payload and selectors:
-            raise ValueError(
-                "legacy saved-analysis payload cannot add surface field selectors"
-            )
         object.__setattr__(self, "surface_field_selectors", MappingProxyType(selectors))
         if self.saved_solution.project_path.stem != self.project_name:
             raise ValueError("saved solution project does not match project_name")
@@ -391,13 +337,9 @@ class HfssEprAnalysisSpec:
         """Return the canonical HfssEprAnalysisSpec payload."""
         return {
             "schema_version": (
-                EPR_ANALYSIS_SCHEMA_VERSION
-                if self._legacy_payload
-                else (
-                    EPR_ANALYSIS_SCHEMA_VERSION_V3
-                    if self.surface_field_selectors
-                    else EPR_ANALYSIS_SCHEMA_VERSION_V2
-                )
+                EPR_ANALYSIS_SCHEMA_VERSION_V3
+                if self.surface_field_selectors
+                else EPR_ANALYSIS_SCHEMA_VERSION_V2
             ),
             "mode": self.mode,
             "aedt": {"requested_version": self.aedt_version},
@@ -424,7 +366,6 @@ class HfssEprAnalysisSpec:
         """Decode a HfssEprAnalysisSpec from its canonical payload."""
         schema = payload.get("schema_version")
         if schema not in {
-            EPR_ANALYSIS_SCHEMA_VERSION,
             EPR_ANALYSIS_SCHEMA_VERSION_V2,
             EPR_ANALYSIS_SCHEMA_VERSION_V3,
         }:
@@ -471,7 +412,6 @@ class HfssEprAnalysisSpec:
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
             ),
-            _legacy_payload=schema == EPR_ANALYSIS_SCHEMA_VERSION,
             surface_field_selectors=(
                 payload["surface_field_selectors"]
                 if schema == EPR_ANALYSIS_SCHEMA_VERSION_V3

@@ -53,10 +53,10 @@ from sgb_supported_kit import (
 )
 from sgb_unsupported_cells import arc_cut_by_the_die_edge, strip_into_notch
 
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, InterfaceSurfaces
-from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.grid import exact_z
+from scgsim.geometry.sgb.bands.requests import InsetRequest, InterfaceSurfaces
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import (
     Footprint,
     PrismCatalogue,
@@ -121,7 +121,12 @@ def cap_arcs(model: ConformalModel, family_id: str) -> list:
     (family,) = [
         f for f in model.labelled.catalogue.families if f.family_id == family_id
     ]
-    return [arc for arc in family.arcs if "/cap" in arc.id]
+    return [
+        arc
+        for arc in family.arcs
+        if arc.lineage.band_member is not None
+        and arc.lineage.band_member.role in ("capstart", "capend")
+    ]
 
 
 @pytest.mark.parametrize(

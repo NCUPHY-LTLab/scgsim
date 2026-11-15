@@ -28,9 +28,9 @@ from sgb_supported_kit import (
     die_footprint,
 )
 
-from scgsim.geometry.sgb.prisms.arcs import arc_through_points
-from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage, LineEdge
-from scgsim.geometry.sgb.records.grid import exact_z
+from scgsim.geometry.exact.carriers import ArcCarrier, Lineage, LineEdge
+from scgsim.geometry.exact.grid import exact_z
+from scgsim.geometry.exact.source_arcs import arc_through_points
 from scgsim.geometry.sgb.records.prisms import Footprint, PrismCatalogue, PrismRecord
 
 SNAP_BOUND_UM = (

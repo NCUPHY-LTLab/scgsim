@@ -12,34 +12,30 @@ A run or report binds, as applicable:
 
 - SCGSim distribution version and measured runtime-source module/content identity;
 - SCGSim Git revision observation when available, and backend revision;
-- Geometry source, compiler and topology identity;
+- Geometry source and topology identity;
 - solver and schema version;
 - machine profile and run receipt;
 - config, mesh, handoff, result, and report artifact identities;
 - validation and failure state.
 
-Use the returned package together with its preparation-side source and model
+Use the returned run folder together with its preparation-side source and model
 notes. A distribution version alone does not identify the runtime code bytes,
 layout, settings or native result of a particular study. The current
 runtime-source manifest and content digest identify the module bytes used for
 execution; a Git revision is recorded only when truthfully available.
 
-Current AEDT manifests use `runtime-source.v30` with 401 sorted, unique paths.
-V30 starts from all current AEDT modules, both AEDT visualization loaders, and
-the non-AEDT paths retained from V29 except `scgsim/geometry/models/lumped.py`, then closes over AST-resolved imports and
-package initializers. Against the frozen 285-path V29 roster it adds the AEDT SGB STEP import
-(`scgsim/aedt/preparation/sgb_model.py`, `scgsim/aedt/runtime/families/sgb_import.py`,
-`scgsim/aedt/runtime/families/sgb_faces.py`, `scgsim/aedt/runtime/families/sgb_boundaries.py`, `scgsim/aedt/epr/sgb_surfaces.py`) and the SGB modules they import, and
-drops `scgsim/aedt/runtime/native/hfss_lumped.py`, `scgsim/aedt/specs/support.py`
-and `scgsim/geometry/models/lumped.py`, which issue #67 decision 8 removed. Preparation and execution record their
-declared module bytes and content digest separately. Historical V1–V29 manifests
-keep their original paths and interpretation.
+AEDT computes its runtime source on each use: the import closure of every
+module under `scgsim/aedt` and the two AEDT visualization loaders, recorded
+under `runtime-source.v30`. Preparation and execution record their module
+bytes and content digest separately. A result whose runtime source has an
+earlier schema is refused; read it with the SCGSim commit that wrote it
+([AEDT runtime source](specs/aedt-runtime.qmd#runtime-source)).
 
 The current Palace geometry authority is `scgsim.geometry.sgb`. Palace
 continues to serialize the established `scgsim_sgb` field, whose current value
 names that authority. The field name does not request an import from the former
-package. Historical receipt values and runtime-source inventories retain the
-module identities they recorded and are not rewritten to the current paths.
+package. Historical receipt values retain the module identities they recorded
+and are not rewritten to the current paths.
 
 ## Publication boundary
 

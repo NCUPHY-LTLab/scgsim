@@ -18,14 +18,15 @@ reconstruct geometry meaning from solver-generated labels.
 `scgsim.geometry` is the source-facing facade: `GeometryPlan`, detached
 snapshots, normalized input models, adapters, stack/vacuum/curve preparation,
 and summaries. Palace builds this geometry with `scgsim.geometry.sgb`
-(`build_sgb_geometry`) and meshes it with `scgsim.meshing`. `scgsim.geometry.compiler`
-remains the advanced route builder, with derived construction records, stage
-validators, and dispatch; Palace does not use it. The source
-validator is defined in `scgsim.geometry.source.validation` and re-exported by
-the compiler facade. Direct defining modules and model aliases are listed in
-the [API migration reference](api-migration.qmd#geometry-and-compiler-api).
+(`build_sgb_geometry`) and meshes it with `scgsim.meshing`. SGB sits below the
+supported entry: a layout enters through `GeometryPlan` and the simulation
+classes, and a direct call with an input built by hand assumes what that entry
+guarantees; see [the supported entry](supported-scope.qmd#supported-entry). The source
+validator is defined in `scgsim.geometry.source.validation`. Direct defining
+modules and model aliases are listed in the
+[API migration reference](api-migration.qmd#geometry-api).
 
-`build_component_stack()` composes two explicit authorities. PDK
+`GeometryPlan` composes two explicit authorities. PDK
 `LayerStack` records supply materials, process layers, Z/thickness,
 conductor/solution roles, and exact host volumes. Component annotations supply
 local entity identity, ports, functional conductor regions, and topology
@@ -37,12 +38,11 @@ region wins over a vacuum region regardless of `mesh_order` (conductors are
 resolved before solution regions and never compete on priority). Only
 between solution regions of the same kind does `LayerLevel.mesh_order` decide,
 following the gdsfactory convention that the lower value wins.
-`build_component_stack()` converts it once into the internal `priority`
+`GeometryPlan` converts it once into the internal `priority`
 (`priority = -mesh_order`) on both solution-region and conductor records.
 `SemanticEntitySpec.priority`, and `priority` in a saved stack or annotation
 record, always means the higher value wins; `mesh_order` is never used as a
-priority directly. Source stacks recorded before this conversion carry
-the previous priority values, so they keep their recorded identity.
+priority directly.
 
 In the public Xmon composition, the reusable child keeps its local pad,
 coupler, mask, and a ground-arm metal contribution. That arm overlaps the
@@ -117,7 +117,10 @@ there is no live Gmsh model in the source snapshot.
 Index `i` is the edge from drawn vertex `i` to drawn vertex `(i + 1) % N` of
 the selected ring: the polygon's vertex sequence as the GDS stores it, from the
 vertex its walk starts at and in the direction it runs, carried through any
-instance transform. A mirroring transform reverses the ring's orientation and
+instance transform. Three anchors that lie on one line as the GDS draws them
+define no circle: the plan refuses the record when it is prepared, a
+component's record and a plan-level record alike, and turning the occurrence
+does not change this. A mirroring transform reverses the ring's orientation and
 keeps the sequence. The indices keep this meaning when the source stage later
 rounds the ring, starts it elsewhere or nodes into it the crossings of a port
 sheet. A gdsfactory component stores a polygon as KLayout normalizes it, so read
@@ -144,11 +147,6 @@ face keeps its source identity in the sidecar, and Gmsh only opens the written
 XAO to check it before meshing. A construction error stops the build; there is
 no straight-edge fallback or volume repair.
 
-The advanced builder `scgsim.geometry.compiler`, which Palace does not use,
-keeps its own records for curved input: an OCC planar arrangement, typed
-`MMContactRecord` contacts and `metadata.curved_arrangement`. Its route dispatch
-refuses active curves on Route C.
-
 Geometry order and finite element order are separate choices. Curved model
 geometry does not make a positive surface inset an exact curved-perimeter
 distance; see the
@@ -169,9 +167,9 @@ immutable `GeometryPlanSnapshot`; `GeometryBuildInput` remains the normalized
 geometry boundary consumed by the backend preparation paths.
 
 Create the plan with `GeometryPlan(component=assembled, root_id="chip",
-layer_stack=..., material_records=..., coupon_padding_um=...,
-grid_size_um=layoutgrid_um)`. Set the source layout DBU to the selected
-`layoutgrid_um` before constructing cells. Register each named reference
+layer_stack=..., material_records=..., coupon_padding_um=...)`. The model grid
+is the layout's database unit (DBU): set the source layout DBU to the grid you
+want before constructing cells. Register each named reference
 occurrence in parent-first order with `register_instance("chip/q0", q0_ref)`.
 `plan.entities` exposes the existing semantic entity inventory with
 slash-qualified `.semantic_id` values. The Notebook supplies the final map with
@@ -181,16 +179,15 @@ bytes and digest, and detached source-occurrence records. It retains no live
 component references. Palace and AEDT consume that exact snapshot through
 `EigenmodeSim.set_plan(snapshot)`.
 
-`GeometryPlan`, `build_gds_stack_geometry_input(...)`, and
-`build_gdsfactory_geometry_input(...)` accept `grid_size_um=None`. With `None`,
-the actual emitted `source_dbu_um` supplies the shared layout grid; an explicit
-mismatch raises an error naming `grid_size_um` and `source_dbu_um`. SCGSim
-checks the source DBU and does not mutate shared PDK or global state.
+`GeometryPlan` and `build_gds_stack_geometry_input(...)` take the grid from
+the GDS they read: its database unit, `source_dbu_um`, is the shared layout
+grid. SCGSim reads the DBU and does not mutate shared PDK or global state.
 `metadata.geometry_grid` records `schema_version` with value
-`scgsim.geometry.grid.v1`, the selected `grid_size_um`, and `coordinate_frame`
+`scgsim.geometry.grid.v1`, the grid's `grid_size_um`, and `coordinate_frame`
 with value `assembly_xy`. It identifies the shared fixed-precision grid for
-assembly XY/layer arrangement. Saved inputs without `metadata.geometry_grid`
-retain historical interpretation. Original source identity is retained alongside the
+assembly XY/layer arrangement. Every later stage reads the grid from it; an
+input without `metadata.geometry_grid` is refused with a `ValueError` that names
+the two calls which declare it. Original source identity is retained alongside the
 computational change ledger, and walls inherit their snapped layout endpoints.
 Z coordinates, film thickness, mesh, quadrature, and solver tolerances remain
 separate; the XY grid does not assert that every 3D coordinate lies on it.
@@ -256,12 +253,10 @@ not infer connectivity or promise separate measurements.
 The plan owns the shared outer vacuum envelope. Set it before `prepare()` with
 `plan.set_vacuum_region(padding=...)`, using the existing scalar, X/Y/Z tuple,
 or six-face micrometre mapping forms. Both backends receive that same envelope;
-once a `Sim` consumes a plan snapshot, attempts to add standalone
-`set_geometry()` or `set_stack()` input, or a conflicting Palace
-`set_vacuum_region()` / `set_airbox()` value, fail atomically. They cannot
-replace only part of the bound source. To change the component, stack, or
-boundary, update the plan and prepare a new snapshot, then call `set_plan()`
-with it. A legacy standalone-input workflow uses a fresh `Sim`. No default
+once a `Sim` consumes a plan snapshot with its own vacuum, a Palace
+`set_vacuum_region()` value fails atomically. It cannot replace only part of
+the bound source. To change the component, stack, or boundary, update the plan
+and prepare a new snapshot, then call `set_plan()` with it. No default
 padding is inferred. Authored `D0_TO_D1_GAP` remains a separate vacuum entity
 inside the outer region.
 
@@ -341,13 +336,92 @@ solve or returned matrix observation.
 | Route B | The closed exterior boundary shell of a finite construction metal volume is PEC; its interior is excluded from Palace solution domains and receives no tetrahedra | Yes | Yes |
 | Route C | Each conductor volume stays in the model as a solution domain | Yes | No |
 
-The Palace simulations take Route A and Route B: `set_surface_epr` and `mesh()`
+The Palace simulations take Route A and Route B: `set_route` and `mesh()`
 refuse any other route with `ValueError`. Route C is for backends that keep
 conductor volumes. AEDT is to consume the same SGB output; its current
 preparation reads the GeometryPlan snapshot through its own planar path.
 
 Surface-EPR margin bands are cut into the model by SGB when `mesh()` builds the
 geometry; see the [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins).
+
+## 2D models {#section-models}
+
+A 2D model is the cross-section of an infinitely long, uniform line. SGB builds
+it as the exact plane section of its own validated 3D model along a cut line
+the study author declares, so the 2D model has the 3D model's Entities, Nets,
+materials, surface kinds and Surface-EPR bands by construction. Nothing is
+derived again from the sources: priority, contacts, route policy, naming and
+band geometry are the 3D model's.
+
+```python
+from scgsim.geometry.models.section import CutLine
+
+cut = CutLine(start_um=(0.0, -91.0), end_um=(0.0, 91.0))
+```
+
+`CutLine` is a straight segment along x or y in the plan's assembly frame, the
+frame of selector points, in micrometres. The section has its own frame: `u`
+is the distance from `start_um` along the cut and the second coordinate is the
+stack height `z`, both in micrometres. SGB holds the section in memory as a
+`SectionModel`, built from a validated 3D model by
+`scgsim.geometry.sgb.section.build_section_model(model, cut)`. The 3D model is
+always the whole layout, so every build-stage rule of the
+[supported scope](supported-scope.qmd) applies to the whole layout, also far
+from the cut.
+
+The section follows one rule: every part of the 2D model is the trace of a part
+of the 3D model.
+
+| 2D model | Trace of | Group |
+|---|---|---|
+| Horizontal edge at level `z` | The horizontal face at that level, over the stretch of the cut it covers | That face's group, band index included |
+| Vertical edge at `u` | The wall the cut crosses there | That wall's group (sidewalls carry no band) |
+| Face | One connected part of an emitted volume's cross-section; a volume the cut crosses twice gives two faces | The volume's, its owning Entity |
+| End edges, top and bottom | The model's boundary walls and faces | `EXT::<domain>__<face kind>` |
+
+Groups have dimension 2 (faces) and 1 (edges). The section keeps the 3D
+unions, Surface-EPR rows and band families that the cut crosses. A band margin
+keeps its 3D meaning, the distance from the nearest gap edge, which on a
+uniform section is the distance along the cut.
+
+For example, `finite_ground_cpw_coupon` at the OrcaPen SC PDK defaults (signal
+10 um, gaps 6 um, grounds 80 um, Al 100 nm on 500 um Si), Route B with MA, MS
+and SA bands at margins 0.5 and 1.0 um and the vacuum padded by (0, 0, 1000) um,
+cut across its middle at x = 0, gives this section:
+
+| Region | `u` (um) | `z` (um) | Edges |
+|---|---|---|---|
+| Ground `chip/GROUND_MINUS` (excluded) | 0 to 80 | 0 to 0.1 | `MA::chip/GROUND_MINUS__top::band=k` above, `MS::...__bottom::band=k` below, `MA::...__sidewall` at 80 |
+| Gap (vacuum) | 80 to 86 | 0 to 0.1 | SA band edges at z = 0: band 0 from 80 to 80.5, band 1 to 81, band 2 to 85, then band 1 and band 0 up to the signal |
+| Signal `chip/SIGNAL` (excluded) | 86 to 96 | 0 to 0.1 | MA top, MS bottom and MA sidewalls at 86 and 96 |
+| Gap (vacuum) | 96 to 102 | 0 to 0.1 | SA bands as in the first gap |
+| Ground `chip/GROUND_PLUS` (excluded) | 102 to 182 | 0 to 0.1 | as the first ground, sidewall at 102 |
+| Substrate `D0_SUBSTRATE` | 0 to 182 | -500 to 0 | unbanded SA at its underside, `EXT` sidewalls at both ends |
+| Vacuum `VACUUM_REGION` | 0 to 182 | -1500 to -500 and 0.1 to 1000.1 | `EXT` at the ends, top and bottom |
+
+The SA band edges are in the groups
+`SA::D0_SUBSTRATE|VACUUM_REGION__interface::band=k`. In Route B a conductor is a
+rectangle of its film's thickness, excluded from the domain and bounded by its
+MA top, MS bottom and MA sidewall edges.
+
+### Cut rules {#cut-rules}
+
+The 2D model stands for a line with this one cross-section, so the cut must
+cross a straight, uniform section of the line, from one edge of the model to
+the other. SGB refuses any other cut with an `InputError` that names what the
+cut meets (the Entity and its source layer, or the band family and its
+margin), the level, the place in micrometres and the fix, and counts the
+further places along the cut that break a rule.
+
+| Rule | Refused cut | Fix |
+|---|---|---|
+| Ends on the grid | An end off the model grid | Put both ends on the grid |
+| Whole cross-section | An end beyond the model's planar extent (vacuum region included), an end inside the model where a region continues past it, or a stretch outside the model | Run the cut from one edge of the extent to the other |
+| Right angle | A crossing at another angle: an oblique section widens the gaps and gives a plausible but wrong L and C | Cut where the line's edges run straight across the cut |
+| No edge along the cut | The cut runs along an edge, where the section lies on the edge | Move the cut off the edge |
+| No corner | The cut passes through a vertex of the layout or of a band seam | Move the cut along the line to a uniform section |
+| No arc | The cut crosses an arc, or comes within half a grid step of one: a bend, a rounded corner, or a band seam turning round a corner | Move the cut onto a straight section, farther than the largest margin from a corner |
+| No point contact | In the section, conductors, or a conductor and the model's edge, touch only at a point, which pinches the 2D domain | Draw the conductors so that they overlap along an edge or stay apart, or move the cut |
 
 ## Internal semantic projection
 
@@ -376,9 +450,10 @@ physical-name prefix; the surrounding sheet may still carry its independently
 classified MA/MS evidence.
 
 Route-A profile selection is optional for a direct semantic-core consumer.
-Existing explicit Palace Route-A entry points still require
-`substrate_face` or `metal_gap_equivalent`, and Route B still rejects either
-profile. With no core profile, coordinates remain unchanged and no collapse is
+A Palace simulation on Route A without a profile uses `thin_film`
+(`set_route("A")`); `substrate_face` or `metal_gap_equivalent` with their film
+bindings are passed as `set_route("A", approximation_profile=...)`. Route B
+without a profile uses the identity profile `route_b`. With no core profile, coordinates remain unchanged and no collapse is
 recorded. `metal_gap_equivalent` remains the existing effective coordinate
 normalization; no reversible-collapse claim is made.
 
@@ -436,8 +511,8 @@ A handoff preserves:
 
 External SGB revisions remain derivation history only. The in-tree
 `scgsim.geometry` API is the current authority; its source-facing plan and
-compiler stages remain separate. No direct external consumer or fallback path
-is implied.
+SGB's model construction remain separate. No direct external consumer or
+fallback path is implied.
 
 ## Shared source facts for AEDT
 
@@ -503,7 +578,7 @@ freshly read GDS cell and excluded-reference list. The cache ends with that
 call.
 
 Immutable raw polygons and pure subdivisions are also reused within a prepare,
-adapter or compiler call when the complete ordered operands and grid context
+or adapter call when the complete ordered operands and grid context
 match. Selectors,
 source-record comparisons and physical/contact audits still execute on each
 invocation.
@@ -523,9 +598,12 @@ its checks.
 
 `scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` returns an
 `InputSummary` with detached `.data` and an HTML representation for notebook
-display. Both Eigenmode facades expose `input_summary()` to combine this
-normalized source with their configured backend settings. AEDT summarizes its
-normalized build input and stack; Palace requires its bound `GeometryPlan`.
+display. Both Eigenmode facades and `ElectrostaticSim` expose `input_summary()`
+to combine this normalized source with their configured backend settings. AEDT summarizes its
+normalized build input and stack. Palace requires its bound `GeometryPlan` and
+summarizes the input its `mesh()` prepares from that plan, so a vacuum region
+or port set on the simulation and the route's conductor representation
+appear as the model will have them.
 Passing a raw component without explicit normalization fails rather than
 guessing a stack. The summary records source, entity, Net, material, Z/vacuum,
 port, EPR, and run-control inputs; unset or unknown values stay explicit. It

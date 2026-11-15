@@ -1,14 +1,13 @@
 """Effective source entities as prisms (stage S2).
 
 Owns the rules that give each entity of an effective ``GeometryBuildInput`` its Z
-interval, Net, material and priority, and builds its prisms.  They follow what the
-compiler's planning read:
+interval, Net, material and priority, and builds its prisms:
 
 * **Z interval.**  The prepared representation (``RepresentationContext.entities``)
   carries the effective interval and whether the conductor is a *sheet* (a zero
   thickness interval) or a *solid*; solution regions fall back to their effective
-  geometry (``z_min_um``/``z_max_um``, else ``z_um`` + ``thickness_um``), the same
-  fields ``primitives.entities.entity_z_range_um`` read.  The automatic vacuum
+  geometry (``z_min_um``/``z_max_um``, else ``z_um`` + ``thickness_um``), the fields
+  ``primitives.entities.entity_z_range_um`` reads.  The automatic vacuum
   envelope takes the Z of its prepared enclosure.  Levels are exactly these values:
   no Z threshold merges or drops any of them.
 * **Net.**  A conductor without a declared Net is its own Net (a floating
@@ -28,15 +27,15 @@ from collections.abc import Mapping
 from fractions import Fraction
 from typing import cast
 
+from scgsim.geometry.exact.boundaries import RingKey
+from scgsim.geometry.exact.carriers import ArcCarrier
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.exact.footprints import SourceFootprint, is_auto_vacuum_region
+from scgsim.geometry.exact.grid import exact_z
+from scgsim.geometry.exact.plane import Ring
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.physical import PHYSICAL_LAYER_FIELD
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.plane import Ring
-from scgsim.geometry.sgb.prisms.curves import RingKey
-from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, is_auto_vacuum_region
-from scgsim.geometry.sgb.records.carriers import ArcCarrier
-from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import (
     Footprint,
     LineEdge,
@@ -188,7 +187,10 @@ def _footprint(
     source: SourceFootprint, ring_primitives: RingPrimitives
 ) -> tuple[Footprint, tuple[ArcCarrier, ...]]:
     """The oriented footprint of a source polygon; rings with bound curves go through their primitives."""
-    keys = [(source.entity_id, source.polygon, i) for i in range(len(source.rings()))]
+    keys = [
+        RingKey(entity_id=source.entity_id, polygon=source.polygon, ring=i)
+        for i in range(len(source.rings()))
+    ]
     if not any(key in ring_primitives for key in keys):
         return Footprint.from_rings(source.outer, source.holes), ()
     rings = [

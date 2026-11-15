@@ -104,7 +104,7 @@ class MatrixParseOptions(TypedDict, total=False):
 
 
 def matrix_parse_options(spec: Q3dSpec, problem: str) -> MatrixParseOptions:
-    """Select the existing signal-label validation for capacitance matrices."""
+    """Select the label check for a matrix: a capacitance matrix must name exactly the Signal nets."""
     if problem == "C":
         return {
             "expected_label_set": {

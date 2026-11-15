@@ -19,11 +19,11 @@ import math
 import pytest
 from sgb_scenes import GRID, chip_prisms, exact_band_areas, footprint, rect_um, units
 
+from scgsim.geometry.exact.carriers import Lineage, circle_arcs
+from scgsim.geometry.exact.grid import exact_z
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, InterfaceSurfaces
+from scgsim.geometry.sgb.bands.requests import InsetRequest, InterfaceSurfaces
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.records.carriers import Lineage, circle_arcs
-from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import (
     Footprint,
     LineEdge,

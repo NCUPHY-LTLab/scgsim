@@ -55,13 +55,26 @@ def test_the_layout_can_be_modeled():
             material_records=material_records,
             nets=nets,
             surface_epr_specs=surface_epr_specs,
+            route="A",  # the route the simulations will use; Route B when omitted
+            approximation_profile=approximation_profile,
         )
         print(report.render_text())  # the warnings, if any
 ```
 
 Call it from the repository's tests and while the layout is being drawn. Pass
+`route` and `approximation_profile` with the route the simulations will use:
+they are the arguments of
+[`set_route`](specs/physical-representation.qmd#palace-caller-profile), with
+its defaults and refusals. Without them the check is Route B; `route="A"` alone
+uses the `thin_film` profile, and `route="A"` with a `substrate_face` or
+`metal_gap_equivalent` profile uses that profile and its `film_bindings`. A
+profile the plan's films do not fit is refused by the geometry build, with the
+error `mesh()` raises. Route C is not a Palace route and is refused, as
+`set_route` refuses it; a refusal of the route or the profile names the
+`simulation_drc` call. A layout meant for both routes calls the check once for
+each. Pass
 `surface_epr_specs` with the specs the simulations will use: they are the ones
-[`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins) takes, and
+[`set_surface_epr(specs)`](specs/palace-eigenmode.qmd#surface-epr-margins) takes, and
 their margins are cut into the geometry as bands, so a layout that cannot carry
 them is refused here too. Bands are cut only on the faces the specs select, so
 a layout with no such face passes with no bands. For an assembly, pass
@@ -127,8 +140,9 @@ refuses; see [Surface-EPR margins](supported-scope.qmd#rules-margins).
 :::
 
 Each finding names its stage, class, measure and size, the SGB entity and its
-physical group, the layout objects and band requests it comes from, its
-location and box in µm, why the mesher fails on it, and the fix. Its owner
+physical group, the layout objects and band requests it comes from and the
+layers those objects were drawn on, its location and box in µm, why the mesher
+fails on it, and the fix. Its owner
 comes from the lineage the sidecar records:
 
 - **layout**: the feature is bounded only by source curves, or it is a band
@@ -138,13 +152,15 @@ comes from the lineage the sidecar records:
 - **erosion**: band offsets of two source edges that are not neighbours meet
   here, as when a conductor is barely wider than twice the margin. The exact
   erosion has this structure. Change the margins in `surface_epr_specs` or the
-  conductor's width.
+  conductor's width. Also a short band edge that offsets a straight source
+  edge shorter than its band margin, such as one chord of a curve drawn as a
+  polygon: the fix names that source edge, where it runs and how long it is.
+  Declare the arc exactly, or draw it with longer chords.
 - **sgb**: a band curve where the source has no fine structure. This is an SGB
   defect; report it to SCGSim with the finding. The layout needs no change.
 
-The sidecar does not record how many edges a band's support ring has, so a
-pair of offsets from a ring's first and last edges counts as neighbours, and
-such a feature is attributed to SGB.
+Two source edges are neighbours when they share a vertex, including the last
+and first edges of a closed outline.
 
 ## The same check inside `mesh()` {#the-same-check-inside-mesh}
 
@@ -157,29 +173,47 @@ this meshing stage on the model they built, and only then start the mesher:
 - **Warnings only** do not stop `mesh()`; it meshes the model as usual.
 
 `mesh()` checks the model of its own settings, such as the vacuum region you
-set, while `simulation_drc` checks the model of its fixed settings (below).
-When the two models differ, so can their findings.
+set, while `simulation_drc` checks the model of the route it is given and its
+fixed settings (below). For the same plan, the same route and profile build the
+same model in both; when the two models differ, so can their findings.
 
-`mesh()` also reports places in the same terms. When its repair loop stops
-without a clean mesh, the error and the quality report (`stop_places`) give the
-µm location of the remaining bad elements and the meshing-stage findings at
-those places, with their owner and fix. A place is the reach of the refinement
-the loop applied there. A place with no finding is SCGSim's to answer for.
+`mesh()` also reports in the same terms when its repair loop stops without a
+clean mesh. The error and the text quality report first give what the meshing
+stage found anywhere in the model: for each class and measure, the number of
+findings and whether they refuse or warn, the smallest size in µm and grid
+steps, the count per owner, and the smallest finding in full with its owner and
+fix. Fine structure can cost the repair loop rounds wherever it is, so these
+findings can matter even at a place that has none of its own. The JSON quality
+report lists every finding under `meshing_stage`. Then come the µm locations of
+the remaining bad elements (`stop_places`) and the findings at those places,
+with their owner and fix. A place is the reach of the refinement the loop
+applied there. A place with no finding is SCGSim's to answer for; when the
+model has findings elsewhere, act on those as well.
 
 ## What the check uses
 
-The settings are fixed:
+The route is the one you pass; the other settings are fixed:
 
-- Route B and Palace's default airbox;
-- a 1 µm vacuum region on all six faces when the layout has no vacuum of its
-  own, and the layout's own vacuum when it has one, so the metal has air faces
-  for `MA` and `SA` bands;
+- the route and profile given as `route` and `approximation_profile`, as
+  `set_route` takes them, and Route B when they are not given;
+- when the layout has no vacuum of its own, a vacuum region padded by
+  (x, y, z) = (0, 0, 1000) µm, the setting layouts are tested and used with:
+  it ends at the layout's planar extent and reaches 1000 µm below and above,
+  so the metal has air faces for `MA` and `SA` bands. When the layout has its
+  own vacuum, the check uses that;
 - zero coupon padding;
 - the Net assignment given as `nets`, and no Net when it is not given;
 - for `EigenmodeSim`, every authored port with a fixed inductance, which does
   not change the geometry;
-- for `ElectrostaticSim`, no terminals, and an empty Surface EPR when
-  `surface_epr_specs` is not given, because `mesh()` requires Surface EPR.
+- for `ElectrostaticSim`, no terminals, which are not needed before meshing;
+- the bands of `surface_epr_specs`, and no bands when it is not given.
+
+Because that vacuum ends at the layout's planar extent, draw what sets the
+extent: the die outline or a ground plane. A conductor that reaches the extent
+only at a point, such as a lone round pad with nothing drawn around it, is
+refused with `NonManifoldError`;
+[A conductor that touches the boundary at one point](known-geometry-problems.qmd#boundary-point-pinch)
+explains why and what to draw.
 
 `simulation_drc()` writes into a temporary folder and removes it. The geometry
 stage adds no rules of its own, so its error is the one that class's `mesh()`
@@ -187,11 +221,12 @@ raises for the same layout and settings. The meshing stage's rules are the
 classes above.
 
 ::: {.callout-note title="What a pass means"}
-A pass means the model built with the fixed settings above was accepted and
-has no edge or face that a meshing-stage class refuses; it does not say how
-many bands were cut. It does not promise that other settings will model: Route A,
-Electrostatic terminals, junctions, lumped supports, indium bumps or a
-different vacuum region. To check a specific set-up, run that simulation's own `mesh()`.
+A pass means the model built on the route and profile checked, with the fixed
+settings above, was accepted and has no edge or face that a meshing-stage class
+refuses; it does not say how many bands were cut. It does not promise that
+other settings will model: another route or profile, Electrostatic terminals,
+junctions, lumped supports or a different vacuum region. To check a specific
+set-up, run that simulation's own `mesh()`.
 Nor does a pass promise a clean mesh: the meshing-stage classes guard against
 fine structure, and `mesh()` can still stop with `MeshRepairError`, which then
 names the places where it stopped.

@@ -6,6 +6,7 @@ import pytest
 from palace_sgb_support import effective_input, sidecar_of
 from test_sgb_band_labels import PORT_CASES, all_interface_insets
 
+from scgsim.contracts.sgb_sidecar import views
 from scgsim.palace.mesh.attributes import lower_surface_group
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar, rows_of
 
@@ -47,14 +48,14 @@ def test_volumes_are_the_dim_3_groups_with_one_attribute_each(routed):
     """Volumes come from ``dim == 3`` groups, with material and kind from the sidecar."""
     _, sidecar = routed
     volumes = groups_from_sidecar(sidecar)["volumes"]
-    expected = {n for n, g in sidecar["physical_groups"].items() if g["dim"] == 3}
+    expected = {n for n, g in sidecar["group"].items() if g["dim"] == 3}
     assert set(volumes) == expected
     assert sorted(a for v in volumes.values() for a in v["attributes"]) == list(
         range(1, len(expected) + 1)
     )
     for name, volume in volumes.items():
-        group = sidecar["physical_groups"][name]
-        assert volume["tags"] == group["native_tags"]
+        group = sidecar["group"][name]
+        assert volume["tags"] == group_tags(sidecar, name)
         assert (volume["kind"], volume["material"]) == (
             group["kind"],
             group["material"],
@@ -66,10 +67,10 @@ def test_boundaries_ports_and_pec_follow_the_sidecar_rules(routed):
     _, sidecar = routed
     groups = groups_from_sidecar(sidecar)
     boundaries = groups["boundary_surfaces"]
-    port_groups = {p["group"] for p in sidecar["ports"]}
+    port_groups = {p["group"] for p in sidecar["port"].values()}
     assert not port_groups & set(boundaries)
     for name, record in boundaries.items():
-        group = sidecar["physical_groups"][name]
+        group = sidecar["group"][name]
         assert (record["source"] == "domain_boundary") == (
             group["interface_type"] == "EXT"
         )
@@ -80,24 +81,28 @@ def test_boundaries_ports_and_pec_follow_the_sidecar_rules(routed):
     for name, record in pec.items():
         assert record["interface_type"] in {"MA", "MS", "SHEET"}
         assert record["net"] is not None
-        assert record["entity"] == sidecar["physical_groups"][name]["entities"][0]
+        assert record["entity"] == sidecar["group"][name]["entities"][0]
     for key, port in groups["port_surfaces"].items():
-        (source,) = (p for p in sidecar["ports"] if f"P{p['port_index']}" == key)
+        (source,) = (
+            p for p in sidecar["port"].values() if f"P{p['port_index']}" == key
+        )
         assert port["group"] == source["group"]
         assert port["host_entity_ids"] == source["host_entity_ids"]
-        assert (
-            port["tags"] == sidecar["physical_groups"][source["group"]]["native_tags"]
-        )
+        assert port["tags"] == group_tags(sidecar, source["group"])
 
 
-def test_pec_surfaces_are_exactly_the_union_of_the_nets(routed):
-    """The conductor surfaces by Net are the sidecar's ``unions.nets``: Terminal and Ground bind the same groups."""
+def test_pec_surfaces_are_exactly_the_conductor_groups_of_each_net(routed):
+    """The conductor surfaces by Net are the MA, MS and SHEET groups with that Net: Terminal and Ground bind them."""
     _, sidecar = routed
     pec = groups_from_sidecar(sidecar)["pec_surfaces"]
     by_net: dict[str, set[str]] = {}
     for name, record in pec.items():
         by_net.setdefault(record["net"], set()).add(name)
-    assert by_net == {n: set(g) for n, g in sidecar["unions"]["nets"].items()}
+    conductor: dict[str, set[str]] = {}
+    for name, group in sidecar["group"].items():
+        if group["interface_type"] in ("MA", "MS", "SHEET") and group["net"]:
+            conductor.setdefault(group["net"], set()).add(name)
+    assert by_net == conductor
 
 
 def test_conductor_component_ids_are_the_entity_ids_of_the_component(routed):
@@ -123,9 +128,9 @@ def test_attributes_partition_the_faces_of_each_dimension(routed):
     assert len(tags) == len(set(tags))
     surface_tags = {
         tag
-        for g in sidecar["physical_groups"].values()
+        for n, g in sidecar["group"].items()
         if g["dim"] == 2
-        for tag in g["native_tags"]
+        for tag in group_tags(sidecar, n)
     }
     assert set(tags) == surface_tags
 
@@ -138,10 +143,17 @@ def test_a_group_with_one_signature_keeps_one_attribute_under_its_name(routed):
         assert record["parts"][0]["name"] == name
 
 
-def _synthetic_group(sides: dict[str, tuple[str, str]]) -> tuple[dict, dict]:
+def group_tags(sidecar, name):
+    """The native tags of a group's members."""
+    return views.native_tags(
+        sidecar, sidecar["group"][name]["dim"], views.group_members(sidecar)[name]
+    )
+
+
+def _synthetic_group(sides: dict[str, tuple[str, str]]) -> tuple[tuple, dict]:
     """A sheet group of faces f1..fn and its MA and MS rows; ``sides[f] = (ma side, ms side)`` ('' = no row)."""
     faces = list(sides)
-    record = {"ids": faces, "native_tags": list(range(1, len(faces) + 1))}
+    record = (faces, list(range(1, len(faces) + 1)))
     rows: dict[str, dict] = {}
     for position, row_type in enumerate(("MA", "MS")):
         face_sides = {f: s[position] for f, s in sides.items() if s[position]}
@@ -158,7 +170,7 @@ def test_a_sheet_over_vacuum_and_dielectric_gives_ma_and_ms_on_one_attribute():
     record, rows = _synthetic_group(
         {"f1": ("above", "below"), "f2": ("above", "below")}
     )
-    (part,) = lower_surface_group("e", record, rows, 5)
+    (part,) = lower_surface_group("e", *record, rows, 5)
     assert part.attribute == 5
     assert part.rows == (("MA::e__sheet", "above"), ("MS::e__sheet", "below"))
 
@@ -166,7 +178,7 @@ def test_a_sheet_over_vacuum_and_dielectric_gives_ma_and_ms_on_one_attribute():
 def test_a_floating_sheet_with_vacuum_on_both_sides_has_an_ma_row_and_no_ms_row():
     """A sheet in vacuum: one attribute carrying only MA, integrated on both sides."""
     record, rows = _synthetic_group({"f1": ("both", ""), "f2": ("both", "")})
-    (part,) = lower_surface_group("e", record, rows, 1)
+    (part,) = lower_surface_group("e", *record, rows, 1)
     assert part.rows == (("MA::e__sheet", "both"),)
 
 
@@ -180,7 +192,7 @@ def test_a_sheet_over_vacuum_and_dielectric_in_different_places_splits_by_signat
             "f4": ("both", ""),
         }
     )
-    parts = lower_surface_group("e", record, rows, 10)
+    parts = lower_surface_group("e", *record, rows, 10)
     assert [p.attribute for p in parts] == [10, 11, 12]
     assert [p.name for p in parts] == ["e#1", "e#2", "e#3"]
     by_faces = {p.faces: p.rows for p in parts}
@@ -196,7 +208,7 @@ def test_a_sheet_over_vacuum_and_dielectric_in_different_places_splits_by_signat
 def test_a_group_row_that_covers_only_some_faces_leaves_the_others_unsigned():
     """A row listing some faces of its group puts the rest on an attribute with no row."""
     record, rows = _synthetic_group({"f1": ("above", ""), "f2": ("", "")})
-    parts = lower_surface_group("e", record, rows, 1)
+    parts = lower_surface_group("e", *record, rows, 1)
     assert sorted(p.rows for p in parts) == [(), (("MA::e__sheet", "above"),)]
 
 

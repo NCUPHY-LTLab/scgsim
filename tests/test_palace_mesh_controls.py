@@ -6,7 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 from palace_sgb_support import FILM
+from test_simulation_drc import LAYER_STACK, MATERIALS, two_pads
 
+from scgsim.geometry import GeometryPlan
 from scgsim.meshing import (
     Budgets,
     FeatureRecipe,
@@ -16,13 +18,26 @@ from scgsim.meshing import (
 )
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.mesh.controls import DEFAULT_QUALITY_THRESHOLD, MeshControls
-from scgsim.palace.preparation import eigenmode, electrostatic
+from scgsim.palace.simulation import core
+from scgsim.palace.simulation.lifecycle import Stage
+from scgsim.palace.source import layout_ports
 
 STACK = {
     "materials": {"Si": {"kind": "dielectric", "permittivity": 11.45}},
     "solution_regions": {"substrate": {"material_id": "Si"}},
     "layers": [{"semantic_id": "chip"}],
 }
+
+
+def two_pad_snapshot(monkeypatch):
+    """The prepared plan of two pads in the stand-in PDK's vacuum, as a user binds it with ``set_plan``."""
+    return GeometryPlan(
+        two_pads(monkeypatch, gap_um=10.0),
+        root_id="chip",
+        layer_stack=LAYER_STACK,
+        material_records=MATERIALS,
+        coupon_padding_um=0.0,
+    ).prepare()
 
 
 @pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
@@ -49,10 +64,12 @@ def test_set_mesh_retains_omitted_controls_and_invalidates_only_on_change(sim_ty
         0.05,
     )
     sim._mesh_result = object()  # noqa: SLF001 -- stands for a generated mesh
+    sim._stage = Stage.MESHED  # noqa: SLF001 -- stands for mesh()
     sim.set_mesh(recipe=UniformBoundaryRecipe())
     assert sim._mesh_result is not None  # noqa: SLF001
     sim.set_mesh(recipe=GlobalSizeRecipe())
     assert sim._mesh_result is None  # noqa: SLF001
+    assert sim._stage is Stage.BOUND  # noqa: SLF001 -- a geometry setter falls back to BOUND
     assert sim.mesh_controls.recipe == GlobalSizeRecipe()
 
 
@@ -71,14 +88,14 @@ def test_set_mesh_retains_omitted_controls_and_invalidates_only_on_change(sim_ty
     ),
 )
 def test_the_old_mesh_options_are_gone(sim_type, removed):
-    """No separate size or Gmsh options remain on ``set_mesh`` or ``set_numerical``, nor in the numerical dict."""
+    """No separate size or Gmsh options remain on ``set_mesh`` or ``set_numerical``, nor in the numerical controls."""
     sim = sim_type()
     with pytest.raises(TypeError):
         sim.set_mesh(**{removed: 1})
     if removed in ("refined_mesh_size", "max_mesh_size"):
         with pytest.raises(TypeError):
             sim.set_numerical(**{removed: 1.0})
-    assert removed not in sim.numerical
+    assert removed not in sim.numerical.to_payload()
 
 
 class PlainRecipe:
@@ -122,13 +139,13 @@ def test_invalid_mesh_controls_are_refused():
 def stand_in_mesh_stages(monkeypatch, module, tmp_path):
     """Replace the geometry build, the meshing-stage check and the mesher ``mesh()`` calls; record their order.
 
-    The record holds the geometry build's keywords, then the check, then the mesher with its controls.
+    The record holds the geometry build's request, then the check, then the mesher with its controls.
     """
     calls = []
     geometry = object()
 
-    def build(**kwargs):
-        calls.append(("geometry", kwargs))
+    def build(request, *, output_dir):
+        calls.append(("geometry", request))
         return geometry
 
     def check(built):
@@ -154,29 +171,24 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
 
     The meshing-stage check runs between the two.
     """
-    module = electrostatic if sim_type is ElectrostaticSim else eigenmode
-    calls = stand_in_mesh_stages(monkeypatch, module, tmp_path)
+    # Both problems run mesh() of the shared core and prepare through the shared geometry request.
+    calls = stand_in_mesh_stages(monkeypatch, core, tmp_path)
     prepared = SimpleNamespace(
-        component=object(),
         stack=STACK,
-        indium_ground_bump_fill=None,
         materials=None,
         geometry_input=object(),
         physical_plan=SimpleNamespace(context=object()),
     )
-    monkeypatch.setattr(module, "prepare_mesh_input", lambda **kwargs: prepared)
+    monkeypatch.setattr(layout_ports, "prepare_mesh_input", lambda **kwargs: prepared)
     sim = sim_type()
-    sim.set_stack(STACK)
-    sim.set_geometry(SimpleNamespace(write_gds=lambda path: None))
+    sim.set_plan(two_pad_snapshot(monkeypatch))
     sim.set_output_dir(tmp_path / "run")
-    sim.set_surface_epr(
-        representation="B", specs={"MA": {**FILM, "inset_margins_um": [0.5]}}
-    )
+    sim.set_surface_epr({"MA": {**FILM, "inset_margins_um": [0.5]}})
     sim.set_mesh(quality_threshold=0.02, budgets=Budgets(max_rounds=1))
     sim.mesh()
     assert [stage for stage, _ in calls] == ["geometry", "check", "mesh"]
     (_, geometry), _, (_, controls) = calls
-    assert geometry["surface_epr_specs"]["MA"]["inset_margins_um"] == [0.5]
+    assert geometry.surface_epr_specs["MA"]["inset_margins_um"] == [0.5]
     assert controls == MeshControls(
         FeatureRecipe(), MesherOptions(), Budgets(max_rounds=1), 0.02
     )
@@ -185,30 +197,11 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
 def test_surface_epr_set_after_mesh_invalidates_it():
     """Surface EPR is geometry: calling ``set_surface_epr`` again discards the mesh, config and handoff."""
     sim = ElectrostaticSim()
-    sim.set_stack(STACK)
+    sim._materials = STACK["materials"]  # noqa: SLF001 -- stands for set_plan()
     sim._mesh_result = object()  # noqa: SLF001 -- stands for a generated mesh
     sim.config_path = "config.json"  # type: ignore[assignment]
-    sim.set_surface_epr(representation="B", specs={"MA": {**FILM}})
+    sim._stage = Stage.CONFIG_WRITTEN  # noqa: SLF001 -- stands for set_plan(), mesh() and write_config()
+    sim.set_surface_epr({"MA": {**FILM}})
     assert sim._mesh_result is None  # noqa: SLF001
     assert sim.config_path is None
-
-
-def test_eigenmode_without_surface_epr_requests_no_insets(monkeypatch, tmp_path):
-    """Eigenmode may skip Surface EPR: ``mesh()`` then passes no specs, so no bands are requested."""
-    calls = stand_in_mesh_stages(monkeypatch, eigenmode, tmp_path)
-    prepared = SimpleNamespace(
-        component=object(),
-        stack=STACK,
-        indium_ground_bump_fill=None,
-        materials=None,
-        geometry_input=object(),
-        physical_plan=SimpleNamespace(context=object()),
-    )
-    monkeypatch.setattr(eigenmode, "prepare_mesh_input", lambda **kwargs: prepared)
-    sim = EigenmodeSim()
-    sim.set_stack(STACK)
-    sim.set_geometry(SimpleNamespace(write_gds=lambda path: None))
-    sim.set_output_dir(tmp_path)
-    sim.mesh()
-    (_, geometry), *_ = calls
-    assert geometry["surface_epr_specs"] is None
+    assert sim._stage is Stage.BOUND  # noqa: SLF001

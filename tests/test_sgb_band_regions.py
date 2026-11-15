@@ -20,9 +20,12 @@ from sgb_scenes import (
     units,
 )
 
-import scgsim.geometry.sgb.derivation.level_layers as level_layers
+import scgsim.geometry.sgb.arrangement.derivation.level_layers as level_layers
+from scgsim.geometry.exact.carriers import Lineage, circle_arcs
+from scgsim.geometry.exact.grid import exact_z
+from scgsim.geometry.exact.plane import point_in_ring
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
@@ -30,9 +33,6 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
 )
 from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
-from scgsim.geometry.sgb.plane import point_in_ring
-from scgsim.geometry.sgb.records.carriers import Lineage, circle_arcs
-from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import (
     Footprint,
     LineEdge,
@@ -231,9 +231,7 @@ def dropping(monkeypatch, family_id: str, keep):
         if family.family_id != family_id:
             return segments
         seams = {s.carrier_id: s for s in family.regions.seams}
-        return [
-            s for s in segments if keep(seams[next(iter(s.carriers)).split("#", 1)[0]])
-        ]
+        return [s for s in segments if keep(seams[next(iter(s.carriers)).curve_id])]
 
     monkeypatch.setattr(level_layers, "family_segments", without)
 

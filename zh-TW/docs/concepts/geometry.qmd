@@ -91,7 +91,7 @@ SCGSim 保留呼叫者宣告的 Net。依目前接觸規則，不同 Net 的導�
 :::
 
 ::: {.callout-note title="來源 DBU 與共用 XY 網格"}
-GDS 的資料庫單位（database unit，DBU）決定來源能表示的座標刻度。組裝版圖會在 XY 平面使用一套固定精度網格；當 `grid_size_um=None` 時，採用實際輸出的 source DBU。若明確指定不同網格，SCGSim 會報錯，不會改寫共用 PDK 或 GDSFactory 全域設定。本頁[案例索引](../images/sgb-concept/public-case-binding.json)記錄的公開案例使用 `0.001 µm`，也就是 `1 nm`。
+GDS 的資料庫單位（database unit，DBU）決定來源能表示的座標刻度。組裝版圖會在 XY 平面使用一套固定精度網格：實際輸出之來源 GDS 的 DBU。SCGSim 從 GDS 讀取它，不會改寫共用 PDK 或 GDSFactory 全域設定。本頁[案例索引](../images/sgb-concept/public-case-binding.json)記錄的公開案例使用 `0.001 µm`，也就是 `1 nm`。
 
 這套網格用來整理組裝後的 XY 邊界，不代表後續每個運算都精確落在同一刻度上。例如線段從 $(0,0)$ 到 $(3,1)$ nm，與 $x=1$ nm 相交於 $(1,\frac13)$ nm；這個交點不在 1 nm 網格上，必須由共用 arrangement 一起處理。Z、薄膜厚度與有限元素網格尺寸各有不同意義。
 :::

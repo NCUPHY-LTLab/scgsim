@@ -8,10 +8,8 @@ from typing import Any
 from scgsim.aedt.specs.common import (
     DRIVEN_GEOMETRY_SCHEMA_VERSION,
     EIGENMODE_SCHEMA_VERSION,
-    EPR_ANALYSIS_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
     EPR_ANALYSIS_SCHEMA_VERSION_V3,
-    EPR_EIGENMODE_SCHEMA_VERSION,
     EPR_EIGENMODE_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION_V3,
     EPR_EIGENMODE_SCHEMA_VERSION_V4,
@@ -38,46 +36,27 @@ def parse_aedt_spec(
     payload: dict[str, Any],
     *,
     base_dir: Path | None = None,
-    allow_historical_modeling: bool = False,
 ) -> AedtSpec:
     """Dispatch one explicit AEDT schema without inferring solver family."""
     if payload.get("schema_version") == DRIVEN_GEOMETRY_SCHEMA_VERSION:
-        return HfssDrivenGeometrySpec.from_payload(
-            payload, allow_historical_modeling=allow_historical_modeling
-        )
+        return HfssDrivenGeometrySpec.from_payload(payload)
     if payload.get("schema_version") == SCHEMA_VERSION:
-        return HfssDrivenSpec.from_payload(
-            payload,
-            base_dir=base_dir,
-            allow_historical_modeling=allow_historical_modeling,
-        )
+        return HfssDrivenSpec.from_payload(payload, base_dir=base_dir)
     if payload.get("schema_version") == EIGENMODE_SCHEMA_VERSION:
-        return HfssEigenmodeSpec.from_payload(
-            payload,
-            base_dir=base_dir,
-            allow_historical_modeling=allow_historical_modeling,
-        )
+        return HfssEigenmodeSpec.from_payload(payload, base_dir=base_dir)
     if payload.get("schema_version") in {
-        EPR_EIGENMODE_SCHEMA_VERSION,
         EPR_EIGENMODE_SCHEMA_VERSION_V2,
         EPR_EIGENMODE_SCHEMA_VERSION_V3,
         EPR_EIGENMODE_SCHEMA_VERSION_V4,
     }:
-        return HfssEprSpec.from_payload(
-            payload, allow_historical_modeling=allow_historical_modeling
-        )
+        return HfssEprSpec.from_payload(payload)
     if payload.get("schema_version") in {
-        EPR_ANALYSIS_SCHEMA_VERSION,
         EPR_ANALYSIS_SCHEMA_VERSION_V2,
         EPR_ANALYSIS_SCHEMA_VERSION_V3,
     }:
         return HfssEprAnalysisSpec.from_payload(payload, base_dir=base_dir)
     if payload.get("schema_version") == Q3D_SCHEMA_VERSION:
-        return Q3dSpec.from_payload(
-            payload,
-            base_dir=base_dir,
-            allow_historical_modeling=allow_historical_modeling,
-        )
+        return Q3dSpec.from_payload(payload, base_dir=base_dir)
     if payload.get("schema_version") in {Q2D_SCHEMA_VERSION, Q2D_SCHEMA_VERSION_V2}:
         return Q2dSpec.from_payload(payload)
     raise ValueError("unsupported AEDT schema")

@@ -46,35 +46,33 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from sgb_scenes import airbridge, footprint, rect_um
 from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.exact.grid import exact_z
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.emission.plan import plan_brep
-from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file
+from scgsim.geometry.sgb.checks.validation.validate import validate_model
 from scgsim.geometry.sgb.errors import (
     ContactError,
     NonManifoldError,
     OverlapError,
     RouteError,
-    SgbError,
     ValidationError,
 )
-from scgsim.geometry.sgb.parallel import Runtime
-from scgsim.geometry.sgb.records.grid import exact_z
+from scgsim.geometry.sgb.output.emission.plan import plan_brep
+from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file
+from scgsim.geometry.sgb.output.verification.occt import check_file
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismRecord
-from scgsim.geometry.sgb.validation.validate import validate_model
-from scgsim.geometry.sgb.verification.occt import check_file
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 G = 0.001
 MARGINS = (0.1, 0.5, 2.0)
 
 
 def _revalidate(model):
-    return validate_model(model.labelled, model.topology, model.routed, Runtime())
+    return validate_model(model.labelled, model.topology, model.routed, Stopwatch())
 
 
 def _fresh():
@@ -468,14 +466,6 @@ def _early_errors(numbers: dict) -> None:
         ],
         NonManifoldError,
     )
-    try:
-        build_model(
-            catalogue,
-            "B",
-            refinements=(RefinementRequest("r", 0.2, ((32.0, 55.0), (38.0, 55.0))),),
-        )
-    except SgbError as e:
-        out["SgbError (refinement curve in a cell with no face, assembly)"] = str(e)
     numbers["early_errors"] = out
 
 

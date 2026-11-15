@@ -23,7 +23,7 @@ from sgb_supported_kit import (
     type_bands,
 )
 
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, SolutionInterface
+from scgsim.geometry.sgb.bands.requests import InsetRequest, SolutionInterface
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.records import support
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue

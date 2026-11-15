@@ -40,33 +40,68 @@ def normalize_surface_epr_specs(
     return result
 
 
+SPEC_FIELDS = frozenset(
+    {
+        "thickness",
+        "film_thickness_m",
+        "permittivity",
+        "material_id",
+        "loss_tangent",
+        "source",
+        "preset",
+        "face_kinds",
+        "required",
+        "inset_margins_um",
+        "inset_margins_by_entity_um",
+    }
+)
+"""The fields a Surface-EPR spec may carry."""
+
+
 def _normalize_interface_spec(
     interface_type: str,
     raw: Mapping[str, Any],
     materials: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """Normalize one interface without changing validation or material precedence."""
+    """Normalize one interface: its fields, film thickness, film material, face kinds and margins, in that order."""
     if not isinstance(raw, Mapping):
         raise TypeError(f"Surface EPR {interface_type} spec must be a mapping.")
-    unknown = set(raw).difference(
-        {
-            "thickness",
-            "film_thickness_m",
-            "permittivity",
-            "material_id",
-            "loss_tangent",
-            "source",
-            "preset",
-            "face_kinds",
-            "required",
-            "inset_margins_um",
-            "inset_margins_by_entity_um",
-        }
-    )
+    _check_fields(interface_type, raw)
+    thickness = _film_thickness(interface_type, raw)
+    numeric, loss_tangent, resolved = _film_material(interface_type, raw, materials)
+    source = raw.get("source", "material" if "material_id" in resolved else "explicit")
+    preset = raw.get("preset")
+    film_assumptions({"source": source, "preset": preset}, partial=True)
+    _set_face_kinds(interface_type, raw, resolved)
+    required = raw.get("required", True)
+    if not isinstance(required, bool):
+        raise TypeError(f"Surface EPR {interface_type} required must be a bool.")
+    _set_inset_margins(interface_type, raw, resolved)
+    if "face_kinds" in resolved and (
+        "inset_margins_um" in resolved or "inset_margins_by_entity_um" in resolved
+    ):
+        check_bandable_face_kinds(interface_type, resolved["face_kinds"])
+    return {
+        **thickness,
+        "permittivity": float(cast(Any, numeric)),
+        "loss_tangent": None if loss_tangent is None else float(loss_tangent),
+        "source": source,
+        "preset": preset,
+        "required": required,
+        **resolved,
+    }
+
+
+def _check_fields(interface_type: str, raw: Mapping[str, Any]) -> None:
+    unknown = set(raw).difference(SPEC_FIELDS)
     if unknown:
         raise ValueError(
             f"Surface EPR {interface_type} has unknown fields: {sorted(unknown)}."
         )
+
+
+def _film_thickness(interface_type: str, raw: Mapping[str, Any]) -> dict[str, float]:
+    """The film thickness as the spec states it: native ``thickness`` or ``film_thickness_m``, exactly one."""
     thickness = raw.get("thickness")
     thickness_m = raw.get("film_thickness_m")
     if (thickness is None) == (thickness_m is None):
@@ -77,6 +112,16 @@ def _normalize_interface_spec(
         raise ValueError(f"Surface EPR {interface_type} requires positive thickness.")
     if thickness_m is not None:
         film_assumptions({"film_thickness_m": thickness_m}, partial=True)
+        return {"film_thickness_m": float(cast(Any, thickness_m))}
+    return {"thickness": float(cast(Any, thickness))}
+
+
+def _film_material(
+    interface_type: str,
+    raw: Mapping[str, Any],
+    materials: Mapping[str, Mapping[str, Any]],
+) -> tuple[Any, Any, dict[str, Any]]:
+    """The film's permittivity, its loss tangent, and the material it names (``{"material_id": ...}`` or empty)."""
     numeric = raw.get("permittivity")
     material_id = raw.get("material_id")
     if (numeric is None) == (material_id is None):
@@ -92,42 +137,24 @@ def _normalize_interface_spec(
         )
     loss_tangent = raw.get("loss_tangent", default_loss)
     film_assumptions({"loss_tangent": loss_tangent}, partial=True)
-    source = raw.get("source", "material" if material_id is not None else "explicit")
-    preset = raw.get("preset")
-    film_assumptions({"source": source, "preset": preset}, partial=True)
+    return numeric, loss_tangent, resolved
+
+
+def _set_face_kinds(
+    interface_type: str, raw: Mapping[str, Any], resolved: dict[str, Any]
+) -> None:
+    """Retain the face kinds the spec narrows its faces to, lower-cased and sorted."""
     face_kinds = raw.get("face_kinds")
-    if face_kinds is not None:
-        if not isinstance(face_kinds, (list, tuple)) or not face_kinds:
-            raise ValueError(
-                f"Surface EPR {interface_type} face_kinds must be a non-empty sequence."
-            )
-        normalized_faces = sorted({str(value).strip().lower() for value in face_kinds})
-        if not all(value for value in normalized_faces):
-            raise ValueError(
-                f"Surface EPR {interface_type} face_kinds must be non-empty."
-            )
-        resolved["face_kinds"] = normalized_faces
-    required = raw.get("required", True)
-    if not isinstance(required, bool):
-        raise TypeError(f"Surface EPR {interface_type} required must be a bool.")
-    _set_inset_margins(interface_type, raw, resolved)
-    if "face_kinds" in resolved and (
-        "inset_margins_um" in resolved or "inset_margins_by_entity_um" in resolved
-    ):
-        check_bandable_face_kinds(interface_type, resolved["face_kinds"])
-    return {
-        **(
-            {"thickness": float(thickness)}
-            if thickness is not None
-            else {"film_thickness_m": float(cast(Any, thickness_m))}
-        ),
-        "permittivity": float(cast(Any, numeric)),
-        "loss_tangent": None if loss_tangent is None else float(loss_tangent),
-        "source": source,
-        "preset": preset,
-        "required": required,
-        **resolved,
-    }
+    if face_kinds is None:
+        return
+    if not isinstance(face_kinds, (list, tuple)) or not face_kinds:
+        raise ValueError(
+            f"Surface EPR {interface_type} face_kinds must be a non-empty sequence."
+        )
+    normalized_faces = sorted({str(value).strip().lower() for value in face_kinds})
+    if not all(value for value in normalized_faces):
+        raise ValueError(f"Surface EPR {interface_type} face_kinds must be non-empty.")
+    resolved["face_kinds"] = normalized_faces
 
 
 def _resolve_film_material(

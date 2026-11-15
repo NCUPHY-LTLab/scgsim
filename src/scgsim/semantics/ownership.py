@@ -29,38 +29,6 @@ def surface_declared_owner_ids(raw: object, fallback: str) -> tuple[str, ...]:
     return (fallback,)
 
 
-def project_legacy_interface_record_owners(
-    owners: tuple[str, ...],
-    boundary_volume_ids: object,
-    *,
-    surface_id: str,
-) -> tuple[str, ...]:
-    """Project oversized legacy ownership onto its explicit boundary pair.
-
-    Existing records with at most two owners retain their order unchanged. A
-    larger record must provide the two boundary owners rather than guessing.
-    """
-    if len(owners) <= 2:
-        return owners
-    # Legacy records supply this field as an iterable, not a scalar.
-    raw_boundary_ids = (
-        ()
-        if isinstance(boundary_volume_ids, str)
-        else cast(Iterable[object], boundary_volume_ids)
-    )
-    boundary_ids = tuple(str(value) for value in raw_boundary_ids)
-    if (
-        len(boundary_ids) != 2
-        or len(set(boundary_ids)) != 2
-        or not set(boundary_ids).issubset(owners)
-    ):
-        raise ValueError(
-            f"{surface_id} structured interface requires exactly two "
-            "distinct boundary_volume_ids from its owners"
-        )
-    return (boundary_ids[0], boundary_ids[1])
-
-
 def interface_surface_owner_ids(
     explicit_owner_ids: object | None,
     *,

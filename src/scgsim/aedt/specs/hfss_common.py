@@ -25,8 +25,6 @@ from scgsim.aedt.specs.common import (
 
 def direct_hfss_enclosure(spec: Any) -> dict[str, Any] | None:
     """Project selected GDS geometry's original full envelope exactly once."""
-    if spec.historical_physical or spec.historical_modeling:
-        return None
     # Keep the compiled GDS reader out of spec-only paths; this step alone reads
     # polygons to derive the direct-import source envelope.
     import gdstk  # noqa: PLC0415
@@ -114,7 +112,7 @@ class FrequencySweepSpec:
         return {
             "start_ghz": self.start_ghz,
             "stop_ghz": self.stop_ghz,
-            # Preserve authored count representation in historical payload identity.
+            # Keep ``points`` as authored so the payload hash does not change.
             "points": self.points,
         }
 

@@ -45,6 +45,7 @@ study notes. `save` controls native saved-field output. A fresh
 sets `amr_max_passes=0`, which disables adaptive refinement. Before
 `write_config()`, provide `amr_max_passes` through `set_numerical(...)`; a
 positive pass limit also requires caller-selected `amr_tolerance` and
+`amr_update_fraction`, or, with a convergence declaration (below), only
 `amr_update_fraction`. Later calls that omit these controls retain their
 current values. Record selected numerical and output controls beside the
 action they govern rather than hiding them in notebook helpers.
@@ -54,6 +55,47 @@ It displays normalized source and settings without meshing or solving. The
 vacuum envelope came from the plan, and the unspecified external Eigenmode
 surface retains Palace's natural PMC condition. That differs from the default
 Perfect E exterior in the AEDT EPR model.
+
+## Declare when refinement has converged
+
+With adaptive refinement, say which numbers must settle instead of giving
+Palace a tolerance. The thresholds below show the form; choose your own:
+
+```python
+from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
+
+sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
+sim.set_convergence(
+    ModeFrequency(modes=[1]).within(percent=0.001),
+    SurfaceEpr.each("MA", "MS", "SA", margin_um=1.0).within(percent=2),
+    ErrorIndicator().below(1e-2),
+)
+```
+
+`amr_max_passes=8` allows eight refinements, so nine solves; each solve is one
+pass, and pass 1 solves the mesh `mesh()` writes. Mode 1's frequency holds at a
+pass when it moved by at most 0.001 % since the pass before. The
+Surface-EPR line declares one criterion per interface kind, each on that kind's
+participation beyond 1 µm of every mode; it needs `set_surface_epr` with all
+three specs, each asking for that [margin](#surface-epr-margin-rows), before
+`mesh()`. The whole-surface participation is left out on purpose: it kept
+growing with every refinement on the layouts measured, so a change criterion
+on it would not hold. With a declaration Palace's own tolerance no longer
+ends the run, so `amr_tolerance` is left out: `write_config()` refuses it and
+names the `ErrorIndicator().below(...)` line to write instead. It also refuses
+`ModeFrequency(modes=[3])` while `num_modes=2`, and a kind that
+`set_epr_request(surface_interfaces=...)` leaves out.
+
+Palace stops at the first pass where every criterion has held, so the solves
+after it are not run (the stop comes one to two seconds after that pass); a run
+that does not converge runs all nine. The
+returned run's `result.convergence` and the trust report say at which pass every
+criterion had held, which one held last and after which pass SCGSim stopped
+Palace, or which one still fails at the last pass and by how much against its
+threshold. The
+[Eigenmode contract](../specs/palace-eigenmode.qmd#eigenmode-convergence) and
+the shared [convergence declaration](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)
+list every quantity and check.
 
 ## Build the real backend inputs
 
@@ -111,7 +153,8 @@ the part of the surface at least a given distance from the gaps. Request them
 with `inset_margins_um` in the `set_surface_epr` spec, for example
 `"inset_margins_um": (0.5, 1.0)`, and call `set_surface_epr` before
 `mesh()`, because SGB cuts the margins into the geometry. Omit the key to request
-only the baseline. The rows are ordinary Palace attributes, so a stock Palace
+only the baseline. Without a `set_surface_epr(specs)` call, no Surface EPR is
+computed. The rows are ordinary Palace attributes, so a stock Palace
 executable is enough. Keys, face kinds and limits are in the
 [Eigenmode contract](../specs/palace-eigenmode.qmd#surface-epr-margins), and the
 public [Xmon EPR extension](../tutorial-xmon-palace.qmd) shows the source

@@ -16,18 +16,19 @@ from sgb_scenes import (
     rect_um,
 )
 
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.exact.errors import InputError
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
-    RefinementRequest,
     SolutionInterface,
 )
-from scgsim.geometry.sgb.errors import InputError, ValidationError
+from scgsim.geometry.sgb.checks.validation.validate import validate_model
+from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.parallel import Runtime
+from scgsim.geometry.sgb.output.sidecar.lineage import CarrierLineage
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
-from scgsim.geometry.sgb.validation.validate import validate_model
+from scgsim.geometry.sgb.stopwatch import Stopwatch
 
 MARGINS = (0.1, 0.5, 2.0)
 PAD_AREA_UM2 = 100 * 60 - 20 * 15 - 12 * 12 / 2 - 25 * (1 - math.pi / 4) - math.pi * 64
@@ -256,19 +257,26 @@ def test_route_b_and_c_band_the_pad_top_as_ma_and_the_pad_bottom_as_ms():
 
 
 def test_straight_inset_members_keep_their_generating_primitive_in_the_lineage(banded):
-    """Straight and arc members both name ``<support>/ring<r>/edge<k>``; reflex arcs name their corner."""
+    """Straight members offset a primitive of the support (role ``edge``); arc members offset one or turn round
+    a reflex corner; the emitted edges carry members of the family's outer ring."""
     pad = family(banded, "band_pad_top")
+    rings = pad.support.rings
     for carrier in pad.carriers:
-        ring_edge = carrier.id.split("@")[0]
-        assert ring_edge.startswith("band_pad_top/ring") and "/edge" in ring_edge
-        assert (
-            carrier.lineage.member == ring_edge
-            and carrier.lineage.family_id == "band_pad_top"
-        )
-    members = {a.lineage.member for a in pad.arcs}
-    assert any("/corner" in m for m in members) and any("/edge" in m for m in members)
-    sources = {s for srcs in banded.topology.lineage.values() for s in srcs}
-    assert any(s.startswith("band_pad_top/ring0/edge") for s in sources)
+        member = carrier.lineage.band_member
+        assert carrier.lineage.family_id == "band_pad_top" and member is not None
+        assert member.role == "edge" and member.index < len(rings[member.ring])
+    roles = {a.lineage.band_member.role for a in pad.arcs if a.lineage.band_member}
+    assert {"corner", "edge"} <= roles
+    lineage = CarrierLineage.of(banded)
+    members = [
+        found.band_member
+        for sources in banded.topology.lineage.values()
+        for s in sources
+        if (found := lineage.lineage(s)) is not None
+        and found.family_id == "band_pad_top"
+        and found.band_member is not None
+    ]
+    assert any(m.ring == 0 and m.role == "edge" for m in members)
 
 
 def test_band_area_monotonicity_is_validated_and_a_broken_partition_fails_closed(
@@ -290,7 +298,7 @@ def test_band_area_monotonicity_is_validated_and_a_broken_partition_fails_closed
     )
     try:
         report = validate_model(
-            banded.labelled, banded.topology, banded.routed, Runtime()
+            banded.labelled, banded.topology, banded.routed, Stopwatch()
         )
         assert any(c.name == "band_area_monotone" for c in report.failures)
         with pytest.raises(ValidationError):
@@ -313,16 +321,6 @@ def test_face_membership_is_area_weighted_and_non_exclusive(banded):
         for f in faces.values()
         if banded.routed.face_group[f.id] == "PORT::p1"
     )
-
-
-def test_band_models_have_one_identity_for_every_tile_count():
-    """Bands, their families and the pre-pass are tile-independent."""
-    catalogue = pad_in_ground("B")
-    reference = build_model_from_catalogue(catalogue, "B", insets=pad_requests("B"))
-    tiled = build_model_from_catalogue(
-        catalogue, "B", insets=pad_requests("B"), tiles=3
-    )
-    assert tiled.identity_digest() == reference.identity_digest()
 
 
 # --------------------------------------------------------------------------- requests fail closed
@@ -398,26 +396,6 @@ def test_request_ids_must_be_unique_and_the_interface_z_must_be_unambiguous():
     assert "share no interface" in request_error(request, "B", stacked)
 
 
-def test_the_refinement_request_embeds_pieces_and_a_curve_in_no_face_is_an_error():
-    """A refinement request is refinement_only; a piece inside an excluded conductor fails, never dropped."""
-    gap = RefinementRequest("ref", 0.0, ((60.0, 40.0), (70.0, 40.0)))
-    model = build_model_from_catalogue(pad_in_ground("B"), "B", refinements=(gap,))
-    hosts = [f for f in model.topology.faces.values() if f.refinement_edges]
-    assert len(hosts) == 1
-    inside_metal = RefinementRequest("ref", 0.1, ((-40.0, 20.0), (-30.0, 20.0)))
-    with pytest.raises(Exception, match="no face"):
-        build_model_from_catalogue(pad_in_ground("B"), "B", refinements=(inside_metal,))
-    assert "off the" in str(
-        pytest.raises(
-            InputError,
-            build_model_from_catalogue,
-            pad_in_ground("B"),
-            "B",
-            refinements=(RefinementRequest("r", 0.0, ((0.0005, 0.0), (1.0, 1.0))),),
-        ).value
-    )
-
-
 # --------------------------------------------------------------------------- the band extreme fixtures
 
 
@@ -459,14 +437,20 @@ def test_a_reflex_corner_with_a_tiny_angle_keeps_the_bands_consistent(route, ora
 
 
 @pytest.mark.parametrize("route", ["A", "B", "C"])
-def test_a_refinement_curve_crossing_band_edges_is_split_at_every_crossing(route):
-    """The curve at y = 0.5 um crosses the 0.5 and 2 um band boundaries at x = -9.5, -8, 8 and 9.5."""
-    model = build_model(FIXTURES["refinement_crossing_band_edge"], route)
-    pieces = sum(len(f.refinement_edges) for f in model.topology.faces.values())
-    assert pieces == 5
-    for face in model.topology.faces.values():
-        if face.refinement_edges:
-            assert model.routed.face_group[face.id].startswith(("pad", "MA::pad"))
+def test_cut_family_curves_crossing_band_edges_are_split_at_every_crossing(route):
+    """The rectangle's long sides at y = 0.5 and 1.5 um cross the 0.5 and 2 um band boundaries at x = -9.5, -8, 8 and 9.5."""
+    model = build_model(FIXTURES["family_crossing_band_edge"], route)
+    assert not model.report.failures
+    known = model.labelled.catalogue.known_carriers()
+    pieces = [
+        e
+        for e in model.topology.edges.values()
+        if e.kind == "horizontal"
+        and any(c in known and known[c].lineage.family_id == "guide" for c in e.sources)
+    ]
+    assert (
+        len(pieces) == 2 * 5 + 2
+    )  # each long side in five pieces, each short side whole
 
 
 # --------------------------------------------------------------------------- real inputs and new levels
@@ -493,7 +477,10 @@ def test_bands_on_a_real_thin_film_sheet_use_the_qualified_entity_id():
         == "chip/left::band=2"
     )
     fam = family(model, "bands/left")
-    assert all(c.lineage.member.startswith("bands/left/ring") for c in fam.carriers)
+    assert all(
+        c.lineage.family_id == "bands/left" and c.lineage.band_member is not None
+        for c in fam.carriers
+    )
     assert not model.report.failures
 
 
@@ -519,7 +506,7 @@ def test_bands_on_the_top_of_a_real_finite_conductor(tmp_path):
 
 def test_a_family_at_a_z_no_prism_defines_adds_an_ordinary_level():
     """A required family at z = 0.1 um in a Route A model: a new level, no active-set change, a valid model."""
-    from scgsim.geometry.sgb.records.carriers import Lineage, LineCarrier  # noqa: PLC0415 -- used by this test only
+    from scgsim.geometry.exact.carriers import Lineage, LineCarrier  # noqa: PLC0415 -- used by this test only
     from scgsim.geometry.sgb.records.families import CurveFamilyRecord  # noqa: PLC0415 -- used by this test only
 
     base = pad_in_ground("A")
@@ -528,8 +515,9 @@ def test_a_family_at_a_z_no_prism_defines_adds_an_ordinary_level():
         (60_000, 40_000),
         (70_000, 40_000),
         Lineage("family_member", family_id="cap", member="cap0"),
+        "family_line",
     )
-    cap = CurveFamilyRecord("cap", "cap", (carrier,), (Fraction(1, 10),), "required")
+    cap = CurveFamilyRecord("cap", "cap", (carrier,), (Fraction(1, 10),))
     plain = build_model_from_catalogue(base, "A")
     model = build_model_from_catalogue(
         PrismCatalogue(base.grid, base.prisms, (cap,)), "A"

@@ -1,25 +1,18 @@
 """Pure call-local subdivision memoization; no native or performance claims."""
 
-import ast
 from dataclasses import replace
-from pathlib import Path
 from threading import Barrier, Lock
 
 import pytest
 
-from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry.primitives.grid import (
-    SOURCE_AUDITS,
-    GridOperand,
-    geometry_grid_scope,
-    source_grid_audits,
-    source_recipe_map,
-)
-from scgsim.geometry.primitives.grid_cache import (
+from scgsim.geometry.grid.grid_cache import (
     cached_subdivision,
     grid_work_cache_scope,
     with_grid_work_cache,
 )
+from scgsim.geometry.grid.grid_regions import GridOperand
+from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.source.recipes import Audited, source_recipe_map
 from scgsim.preparation import preparation_resources
 
 BASE = GridOperand("A", ((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)))
@@ -140,47 +133,17 @@ def test_concurrent_misses_and_per_call_audits_remain_independent():
     def recipe(index):
         value = cached_subdivision((BASE,), CONTEXT, apply_grid=True, build=build)
         # Audit ownership is outside the cached pure builder, once per invocation.
-        SOURCE_AUDITS.get().append({"recipe": index})
-        return value
+        return Audited(value, ({"recipe": index},))
 
     with (
         preparation_resources(max_workers=2),
-        geometry_grid_scope(CONTEXT),
         grid_work_cache_scope(),
     ):
-        assert source_recipe_map(recipe, (0, 1)) == [
-            (("immutable",),),
-            (("immutable",),),
-        ]
+        first = source_recipe_map(recipe, (0, 1))
+        assert first.value == [(("immutable",),), (("immutable",),)]
         assert len(calls) == 2
-        assert source_grid_audits() == ({"recipe": 0}, {"recipe": 1})
-        assert source_recipe_map(recipe, (2, 3)) == [
-            (("immutable",),),
-            (("immutable",),),
-        ]
+        assert first.audits == ({"recipe": 0}, {"recipe": 1})
+        second = source_recipe_map(recipe, (2, 3))
+        assert second.value == [(("immutable",),), (("immutable",),)]
         assert len(calls) == 2
-        assert source_grid_audits() == tuple({"recipe": i} for i in range(4))
-
-
-def test_compiler_build_owns_cache_scope_without_executing_geometry():
-    """Verify that compiler build owns cache scope without executing geometry."""
-    path = Path(__file__).parents[1] / "src/scgsim/geometry/compiler/builder.py"
-    module = ast.parse(path.read_text())
-    owner = next(
-        n
-        for n in module.body
-        if isinstance(n, ast.ClassDef) and n.name == "SemanticGeometryBuilder"
-    )
-    build = next(
-        n for n in owner.body if isinstance(n, ast.FunctionDef) and n.name == "build"
-    )
-    assert any(
-        isinstance(n, ast.Name) and n.id == "with_grid_work_cache"
-        for n in build.decorator_list
-    )
-    assert any(
-        isinstance(n, ast.ImportFrom)
-        and n.module == "scgsim.geometry.primitives.grid_cache"
-        and any(a.name == "with_grid_work_cache" for a in n.names)
-        for n in module.body
-    )
+        assert second.audits == ({"recipe": 2}, {"recipe": 3})

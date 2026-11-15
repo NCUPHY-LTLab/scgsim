@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
+
+from scgsim.refusal import found_text, internal
 
 from .interfaces import (
     conductor_solution_interface_kind,
@@ -58,7 +60,13 @@ class SourcedPatch:
     def __post_init__(self) -> None:
         """Freeze sequence and observation inputs at the record boundary."""
         if self.evidence_stage not in _STAGE_ORDER:
-            raise ValueError("evidence_stage must be declared, planned, or observed")
+            raise ValueError(
+                internal(
+                    "evidence_stage must be declared, planned, or observed"
+                    + ": "
+                    + found_text(self.evidence_stage)
+                )
+            )
         for field_name in ("source_owner_ids", "aggregate_owner_ids"):
             object.__setattr__(self, field_name, tuple(getattr(self, field_name)))
         for field_name in (
@@ -76,7 +84,11 @@ class SourcedPatch:
             self.snapshot_reference, SemanticSnapshotReference
         ):
             raise TypeError(
-                "snapshot_reference must be a SemanticSnapshotReference or None"
+                internal(
+                    "snapshot_reference must be a SemanticSnapshotReference or None"
+                    + ": "
+                    + found_text(type(self.snapshot_reference).__name__)
+                )
             )
 
     def semantic_identity(self) -> tuple[Any, ...]:
@@ -121,7 +133,13 @@ class EvidenceResult:
     def __post_init__(self) -> None:
         """Normalize ordered collections and validate the bound snapshot."""
         if not isinstance(self.snapshot_reference, SemanticSnapshotReference):
-            raise TypeError("snapshot_reference must be a SemanticSnapshotReference")
+            raise TypeError(
+                internal(
+                    "snapshot_reference must be a SemanticSnapshotReference"
+                    + ": "
+                    + found_text(type(self.snapshot_reference).__name__)
+                )
+            )
         for field_name in (
             "patch_ids",
             "source_owner_ids",
@@ -167,7 +185,9 @@ class SemanticEvidenceFacade:
         for result in self.results((patch,)):
             if result.contribution_id == patch.contribution_id:
                 return result
-        raise RuntimeError(f"missing evidence result for {patch.contribution_id!r}")
+        raise RuntimeError(
+            internal(f"missing evidence result for {patch.contribution_id!r}")
+        )
 
     def results(
         self, patches: Sequence[SourcedPatch] = ()
@@ -190,7 +210,7 @@ class SemanticEvidenceFacade:
                 for record in records[1:]
             ):
                 raise ValueError(
-                    f"conflicting semantic evidence for {contribution_id!r}"
+                    internal(f"conflicting semantic evidence for {contribution_id!r}")
                 )
             classification, source_owner_ids = _classify_patch(self.snapshot, first)
             stages: tuple[EvidenceStage, ...] = tuple(
@@ -231,7 +251,9 @@ class SemanticEvidenceFacade:
 
 def _validate_interface_intent(patch: SourcedPatch) -> None:
     if patch.interface_intent not in _INTERFACE_INTENTS:
-        raise ValueError(f"unsupported interface intent {patch.interface_intent!r}")
+        raise ValueError(
+            internal(f"unsupported interface intent {patch.interface_intent!r}")
+        )
 
 
 def _validate_snapshot_reference(
@@ -240,34 +262,53 @@ def _validate_snapshot_reference(
 ) -> None:
     if patch.snapshot_reference is None:
         raise ValueError(
-            f"semantic evidence {patch.patch_id!r} has no snapshot reference"
+            internal(f"semantic evidence {patch.patch_id!r} has no snapshot reference")
         )
     if patch.snapshot_reference != expected_reference:
         raise ValueError(
-            f"semantic evidence {patch.patch_id!r} belongs to a different snapshot"
+            internal(
+                f"semantic evidence {patch.patch_id!r} belongs to a different snapshot"
+            )
         )
+
+
+class _PatchClass(NamedTuple):
+    """The interface kind a patch is classified as and its owners, in the order that kind names them."""
+
+    kind: str
+    owner_ids: tuple[str, ...]
 
 
 def _classify_patch(
     snapshot: SemanticFactsSnapshot, patch: SourcedPatch
-) -> tuple[str, tuple[str, ...]]:
+) -> _PatchClass:
     domains = patch.effective_domain_ids
     if patch.interface_intent == "conductor_solution":
         if domains is None or len(domains) != 1:
             raise ValueError(
-                "conductor_solution evidence requires one effective domain"
+                internal(
+                    "conductor_solution evidence requires one effective domain"
+                    + ": "
+                    + found_text(domains)
+                )
             )
         material_kind = _material_kind(snapshot, domains[0])
-        return conductor_solution_interface_kind(material_kind), patch.source_owner_ids
+        return _PatchClass(
+            conductor_solution_interface_kind(material_kind), patch.source_owner_ids
+        )
     if patch.interface_intent == "solution_solution":
         if domains is None or len(domains) != 2:
             raise ValueError(
-                "solution_solution evidence requires two ordered effective domains"
+                internal(
+                    "solution_solution evidence requires two ordered effective domains"
+                    + ": "
+                    + found_text(domains)
+                )
             )
         lower_kind = _material_kind(snapshot, domains[0])
         upper_kind = _material_kind(snapshot, domains[1])
         kind = solution_interface_kind(lower_kind, upper_kind)
-        return (
+        return _PatchClass(
             kind,
             solution_interface_owner_ids(
                 kind,
@@ -277,15 +318,23 @@ def _classify_patch(
             ),
         )
     if patch.interface_intent == "metal_metal_contact":
-        return "MM", patch.source_owner_ids
+        return _PatchClass("MM", patch.source_owner_ids)
     if patch.interface_intent == "unknown":
-        return "unknown", patch.source_owner_ids
-    raise AssertionError(f"unvalidated interface intent {patch.interface_intent!r}")
+        return _PatchClass("unknown", patch.source_owner_ids)
+    raise AssertionError(
+        internal(f"unvalidated interface intent {patch.interface_intent!r}")
+    )
 
 
 def _material_kind(snapshot: SemanticFactsSnapshot, semantic_id: str) -> str:
     entity = snapshot.facts.get("entities", {}).get(semantic_id)
     value = entity.get("material_kind") if isinstance(entity, Mapping) else None
     if not isinstance(value, str):
-        raise ValueError(f"{semantic_id} has no snapshotted material kind")
+        raise ValueError(
+            internal(
+                f"{semantic_id} has no snapshotted material kind"
+                + ": "
+                + found_text(value)
+            )
+        )
     return value

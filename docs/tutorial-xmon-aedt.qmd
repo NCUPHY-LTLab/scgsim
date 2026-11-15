@@ -241,4 +241,4 @@ released cohort and evaluate its matching geometry/request in a native
 workcopy without solving again. Only then use its final `epr-result.json` in
 [offline EPR](course/offline-epr.qmd). Newly evaluated margins are not inserted
 into the old adaptive curve. Exact native bindings, inset construction and
-historical receipt rules remain in the [AEDT contract](specs/aedt-runtime.qmd).
+receipt rules remain in the [AEDT contract](specs/aedt-runtime.qmd).

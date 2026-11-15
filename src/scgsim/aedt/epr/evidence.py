@@ -1,7 +1,7 @@
 """Shared file-evidence interpretation for prepared EPR control and saved cache.
 
-This private codec preserves the existing receipt fields. Saved configuration is
-an observation of configuration, independent of adaptive convergence results.
+This private codec reads and writes the receipt's cache fields. Saved configuration
+is an observation of configuration, independent of adaptive convergence results.
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ class PreparedEprEvidence:
         saved = SavedCacheEvidence.from_payload(
             cache.get("items"), cache.get("serialized_readback")
         )
-        # Keep the historical CLC codec's list/dict wire representation.
+        # The CLC codec takes plain lists and dicts, not frozen records.
         expression_payloads = [
             cast(dict[str, object], _thaw(item)) for item in expressions
         ]
@@ -167,7 +167,7 @@ class PreparedEprEvidence:
         )
 
     def to_payload(self) -> dict[str, object]:
-        """Return the established setup, cache and expression payload."""
+        """Return the setup, cache and expression payloads as one record."""
         return {
             "setup": _payload(self.setup),
             "cache": self.cache_payload(),

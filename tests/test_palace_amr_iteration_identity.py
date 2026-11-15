@@ -20,9 +20,7 @@ def test_equal_capacitance_keeps_distinct_native_iterations(tmp_path, final_iter
     """An unchanged matrix can belong to a different genuine refinement round."""
     _snapshot(tmp_path / "results/palace/iteration1", 1)
     _snapshot(tmp_path / "results/palace", final_iteration)
-    observed = collect_amr_passes(
-        tmp_path, "Electrostatic", None, None, failed_attempt=False
-    )
+    observed = collect_amr_passes(tmp_path, "Electrostatic", None, None)
     assert tuple(item.native_iteration for item in observed.passes) == (
         1,
         final_iteration,
@@ -33,24 +31,30 @@ def test_equal_capacitance_keeps_distinct_native_iterations(tmp_path, final_iter
     )
 
 
-def test_same_known_native_iteration_replaces_archived_copy(tmp_path):
-    """A parent copy of the same native round replaces its archived copy."""
+def test_a_top_level_copy_of_an_iteration_is_that_pass_read_from_the_iteration(
+    tmp_path,
+):
+    """A top level that records iteration 1 with iteration1's very bytes is pass 1 once, read from iteration1.
+
+    A tool that follows links turns a stopped run's linked top level into such copies; its palace.json can
+    describe the next solve, so the iteration's own record is the one read.
+    """
     _snapshot(tmp_path / "results/palace/iteration1", 1)
     _snapshot(tmp_path / "results/palace", 1)
-    observed = collect_amr_passes(
-        tmp_path, "Electrostatic", None, None, failed_attempt=False
-    )
+    observed = collect_amr_passes(tmp_path, "Electrostatic", None, None)
     assert len(observed.passes) == 1
     assert observed.passes[0].native_iteration == 1
-    assert observed.passes[0].source == "final"
+    assert observed.passes[0].source == "iteration1"
+    assert observed.final_snapshot_status == "unreadable"
 
 
-def test_missing_native_identity_does_not_infer_round_from_equal_matrix(tmp_path):
-    """Unknown identity remains unknown instead of deduplicating by values."""
+def test_a_folder_that_records_no_iteration_is_no_pass(tmp_path):
+    """Without its own Problem.Iteration a folder has no established pass number, so none is invented."""
     _snapshot(tmp_path / "results/palace/iteration1", None)
     _snapshot(tmp_path / "results/palace", None)
-    observed = collect_amr_passes(
-        tmp_path, "Electrostatic", None, None, failed_attempt=False
-    )
-    assert len(observed.passes) == 2
-    assert all(item.native_iteration is None for item in observed.passes)
+    observed = collect_amr_passes(tmp_path, "Electrostatic", None, None)
+    assert observed.passes == ()
+    assert [item.reason for item in observed.set_aside] == [
+        "iteration1 has a palace.json that records no Problem.Iteration",
+        "the final result has a palace.json that records no Problem.Iteration",
+    ]

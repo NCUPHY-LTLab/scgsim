@@ -4,105 +4,34 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
-from scgsim.geometry.models.common import RouteLiteral
-from scgsim.geometry.models.input import (
-    GeometryBuildInput,
-    LayoutPolygonSpec,
-    SemanticEntitySpec,
-)
-from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.primitives.entities import entity_by_id, entity_z_range_um
-from scgsim.geometry.primitives.entity_validation import is_solution_entity
-from scgsim.geometry.primitives.grid import (
+from scgsim.geometry.grid.booleans import (
     boolean_polygon_region,
     polygon_boolean,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry.primitives.loops import (
+from scgsim.geometry.grid.loops import (
     geometry_refs_from_gdstk_region,
     loops_share_edge_overlap,
 )
-from scgsim.geometry.primitives.planar_loops import clean_loop, filter_gdstk_polygons
-from scgsim.geometry.primitives.spatial import range_within_bounds, same_coordinate_z
-from scgsim.semantics.route_a import geometry_z_range, record_geometry, same_z
+from scgsim.geometry.grid.planar_loops import clean_loop, filter_gdstk_polygons
+from scgsim.geometry.grid.scope import UNGRIDDED
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
+from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import is_solution_entity
+from scgsim.geometry.models.input import (
+    GeometryBuildInput,
+    SemanticEntitySpec,
+)
+from scgsim.geometry.models.representation import RepresentationContext
+from scgsim.geometry.planning.entities import entity_by_id
+from scgsim.geometry.planning.spatial import range_within_bounds, same_coordinate_z
 
 if TYPE_CHECKING:
-    from gdstk import Polygon
-
-
-def verified_route_a_substrate_support(
-    build_input: GeometryBuildInput, stack: Mapping[str, Any]
-) -> dict[str, dict[str, str]]:
-    """Bind each face metal to one positive-area dielectric contact plane.
-
-    The normalized face polygons and modeled substrate region (rectangle or
-    explicit outer/hole loops) are intersected as regions. A metal overhang
-    remains exposed; neither bounds nor a point/edge touch establishes contact.
-    """
-    import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
-
-    layers = stack.get("layers")
-    if isinstance(layers, str | bytes) or not isinstance(layers, Sequence):
-        raise TypeError("Route A requires a sequence of stack layers.")
-    polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
-    substrates = tuple(
-        (
-            entity
-            for entity in build_input.entities
-            if is_solution_entity(entity) and entity.material_kind == "dielectric"
-        )
-    )
-    result: dict[str, dict[str, str]] = {}
-    for record in layers:
-        if not isinstance(record, Mapping):
-            raise TypeError("Route A stack layers must contain mappings.")
-        if record.get("part_role") != "face_metal":
-            continue
-        source_id = record.get("semantic_id")
-        if not isinstance(source_id, str) or not source_id:
-            raise ValueError("face_metal requires semantic_id for substrate support.")
-        face_z_min, face_z_max = geometry_z_range(
-            record_geometry(record, source_id), source_id
-        )
-        if face_z_max <= face_z_min:
-            raise ValueError(f"{source_id} physical face-metal thickness must be > 0.")
-        face_entities = tuple(
-            (
-                entity
-                for entity in build_input.entities
-                if entity.semantic_id == source_id
-                or entity.metadata.get("semantic_group_id") == source_id
-                or entity.metadata.get("source_semantic_id") == source_id
-            )
-        )
-        face_regions = _face_metal_regions(gdstk, polygons, face_entities, source_id)
-        if not face_regions:
-            raise ValueError(
-                f"{source_id} has no normalized face-metal polygon for substrate attachment."
-            )
-        matches: list[tuple[str, str]] = []
-        for substrate in substrates:
-            sub_z_min, sub_z_max = entity_z_range_um(substrate)
-            sides = (
-                *(("lower",) if same_z(sub_z_max, face_z_min) else ()),
-                *(("upper",) if same_z(sub_z_min, face_z_max) else ()),
-            )
-            if not sides:
-                continue
-            substrate_region = solution_entity_xy_region(gdstk, substrate)
-            if boolean_polygon_region(gdstk, face_regions, substrate_region, "and"):
-                matches.extend(((side, substrate.semantic_id) for side in sides))
-        if len(matches) != 1:
-            raise ValueError(
-                f"{source_id} requires exactly one positive-area dielectric substrate contact at its physical face; matched {matches!r} among {tuple((entity.semantic_id for entity in substrates))!r}."
-            )
-        side, substrate_id = matches[0]
-        result[source_id] = {"side": side, "substrate_id": substrate_id}
-    return result
+    pass
 
 
 def solution_entity_xy_region(
@@ -137,7 +66,7 @@ def auto_vacuum_subtractor_xy_region(
         region = (
             polygon_region
             if not region
-            else boolean_polygon_region(gdstk, region, polygon_region, "or")
+            else boolean_polygon_region(UNGRIDDED, gdstk, region, polygon_region, "or")
         )
     if not entity.polygon_ids:
         return solution_entity_xy_region(gdstk, entity)
@@ -148,7 +77,7 @@ def _xy_region_from_loops(
     gdstk: Any, outer_loop: Any, hole_loops: Sequence[Any]
 ) -> tuple[Any, ...]:
     outer = clean_loop(outer_loop)
-    split_outer, *split_holes = split_gdstk_cutline_loop(outer)
+    split_outer, *split_holes = split_gdstk_cutline_loop(UNGRIDDED, outer)
     holes = tuple(
         (
             clean_loop(loop)
@@ -160,28 +89,13 @@ def _xy_region_from_loops(
         return (gdstk.Polygon(split_outer),)
     return filter_gdstk_polygons(
         polygon_boolean(
+            UNGRIDDED,
             (gdstk.Polygon(split_outer),),
             tuple((gdstk.Polygon(hole_loop) for hole_loop in holes)),
             "not",
             precision=1e-09,
         )
     )
-
-
-def loop_domain_bounds(
-    outer_loop: tuple[tuple[float, float], ...],
-    hole_loops: tuple[tuple[tuple[float, float], ...], ...] = (),
-) -> dict[str, float]:
-    """Compute XY bounds across the outer and hole rings."""
-    points = tuple(
-        (point for loop in (outer_loop, *hole_loops) for point in clean_loop(loop))
-    )
-    return {
-        "x_min_um": min((point[0] for point in points)),
-        "y_min_um": min((point[1] for point in points)),
-        "x_max_um": max((point[0] for point in points)),
-        "y_max_um": max((point[1] for point in points)),
-    }
 
 
 def active_route_conductor_entities(
@@ -294,7 +208,7 @@ def auto_vacuum_component_contacts_subtractor(
     subtractor_region = auto_vacuum_subtractor_xy_region(gdstk, build_input, subtractor)
     if not subtractor_region:
         return False
-    subtractor_refs = geometry_refs_from_gdstk_region({}, subtractor_region)
+    subtractor_refs = geometry_refs_from_gdstk_region(UNGRIDDED, {}, subtractor_region)
     component_loops = (
         clean_loop(component_geometry_ref["outer_loop"]),
         *(clean_loop(loop) for loop in component_geometry_ref.get("hole_loops", ())),
@@ -332,7 +246,7 @@ def entity_occupied_region(
     )
     if not holes:
         return filter_gdstk_polygons((outer,))
-    return boolean_polygon_region(gdstk, (outer,), holes, "not")
+    return boolean_polygon_region(UNGRIDDED, gdstk, (outer,), holes, "not")
 
 
 def domain_bounds_loop(bounds: Mapping[str, Any]) -> tuple[tuple[float, float], ...]:
@@ -386,7 +300,11 @@ def solution_id_for_entity_coverage(
         if not matches:
             continue
         uncovered_region = boolean_polygon_region(
-            gdstk, occupied_region, solution_entity_xy_region(gdstk, solution), "not"
+            UNGRIDDED,
+            gdstk,
+            occupied_region,
+            solution_entity_xy_region(gdstk, solution),
+            "not",
         )
         if not uncovered_region:
             candidates.append(solution.semantic_id)
@@ -454,24 +372,3 @@ def required_host_solution_id(
             f"{entity.semantic_id} host_void_semantic_id {host_id!r} is not a solution_region"
         )
     return host_id
-
-
-def _face_metal_regions(
-    gdstk: ModuleType,
-    polygons: Mapping[str, LayoutPolygonSpec],
-    face_entities: Sequence[SemanticEntitySpec],
-    source_id: str,
-) -> list[Polygon]:
-    """Collect normalized face-metal regions while retaining source failures."""
-    face_regions: list[Any] = []
-    for entity in face_entities:
-        for polygon_id in entity.polygon_ids:
-            polygon = polygons.get(polygon_id)
-            if polygon is None:
-                raise ValueError(
-                    f"{source_id} references missing normalized polygon {polygon_id!r}."
-                )
-            exterior = (gdstk.Polygon(clean_loop(polygon.exterior)),)
-            holes = tuple((gdstk.Polygon(clean_loop(hole)) for hole in polygon.holes))
-            face_regions.extend(boolean_polygon_region(gdstk, exterior, holes, "not"))
-    return face_regions

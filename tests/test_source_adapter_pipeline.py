@@ -13,7 +13,6 @@ import gdstk
 import pytest
 
 from scgsim.geometry import build_gds_stack_geometry_input
-from scgsim.geometry.source.adapter import build_gdsfactory_geometry_input
 from scgsim.preparation import preparation_resources
 
 
@@ -169,22 +168,22 @@ def test_public_native_pipeline_preserves_holes_ports_curves_and_metadata(
         (
             {"layers": None, "solution_regions": None},
             TypeError,
-            "stack_file must define sequence 'layers'",
+            "the stack file: layers must be a sequence, not None. Change it in the stack_file passed to build_gds_stack_geometry_input.",
         ),
         (
             {"solution_regions": None, "materials": None},
             TypeError,
-            "stack_file must define mapping 'solution_regions'",
+            "the stack file: solution_regions must be a mapping, not None. Change it in the stack_file passed to build_gds_stack_geometry_input.",
         ),
         (
             {"materials": None, "metadata": None},
             TypeError,
-            "stack_file must define mapping 'materials'",
+            "the stack file: materials must be a mapping, not None. Change it in the stack_file passed to build_gds_stack_geometry_input.",
         ),
         (
             {"metadata": None},
             TypeError,
-            "stack_file 'metadata' must be a mapping when provided",
+            "the stack file: metadata must be a mapping when given, not None. Change it in the stack_file passed to build_gds_stack_geometry_input.",
         ),
     ],
 )
@@ -204,10 +203,8 @@ def test_stack_container_failures_keep_priority(
 
 
 @pytest.mark.parametrize("workers", (None, 2))
-def test_schema_two_identity_failure_precedes_occurrence_validation(
-    native_inputs, workers
-) -> None:
-    """Compare the actual GDS digest before malformed occurrence metadata."""
+def test_a_plan_stack_with_another_gds_is_refused(native_inputs, workers) -> None:
+    """A GeometryPlan stack read with a GDS other than its own names both digests."""
     gds, stack_path, stack = native_inputs
     stack["metadata"].update(
         component_semantics_schema_version=2,
@@ -220,8 +217,27 @@ def test_schema_two_identity_failure_precedes_occurrence_validation(
     )
     with scope, pytest.raises(ValueError) as failure:
         build_gds_stack_geometry_input(gds_file=gds, stack_file=stack_path)
-    assert (
-        str(failure.value) == "GeometryPlan GDS identity differs from its paired stack"
+    actual = hashlib.sha256(gds.read_bytes()).hexdigest()
+    assert str(failure.value) == (
+        "GeometryPlan stack_file was written for the GDS with SHA-256 'invalid', "
+        f"but gds_file has SHA-256 {actual!r}. Pass the GDS saved with this stack "
+        "(the snapshot's gds_bytes), or prepare the plan again."
+    )
+
+
+@pytest.mark.parametrize("version", (1, 3, "2"))
+def test_an_unknown_component_semantics_version_is_refused(
+    native_inputs, version
+) -> None:
+    """Only schema 2 carries occurrence lineage; another version is not skipped."""
+    gds, stack_path, stack = native_inputs
+    stack["metadata"]["component_semantics_schema_version"] = version
+    _write_stack(stack_path, stack)
+    with pytest.raises(ValueError) as failure:
+        build_gds_stack_geometry_input(gds_file=gds, stack_file=stack_path)
+    assert str(failure.value) == (
+        "the stack file: metadata component_semantics_schema_version must be 2, "
+        f"which GeometryPlan writes, not {version!r}. Change it in the stack_file passed to build_gds_stack_geometry_input."
     )
 
 
@@ -240,9 +256,7 @@ def test_public_adapter_wrappers_keep_introspection() -> None:
         "stack_file",
         "top_cell_name",
         "metadata",
-        "grid_size_um",
     }
-    assert "work_dir" in inspect.signature(build_gdsfactory_geometry_input).parameters
 
 
 def test_schema_two_real_ground_keeps_geometry_across_workers(tmp_path: Path) -> None:

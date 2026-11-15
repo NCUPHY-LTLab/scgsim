@@ -25,12 +25,10 @@ import matplotlib.pyplot as plt
 from plots_common import (
     OUTPUT,
     ROOT,
-    SCHEDULES,
     SIZES,
     end_to_end,
-    one_process_rows,
+    measured_rows,
     read,
-    schedule_rows,
     slope,
     slopes,
     tail_steps,
@@ -38,11 +36,8 @@ from plots_common import (
 )
 from plots_scaling import (
     api_comparison_figure,
-    parallel_figure,
-    parallel_tables,
     scaling_figure,
     scaling_tables,
-    speedups,
     tail_figure,
 )
 from plots_tables import (
@@ -72,8 +67,7 @@ plt.rcParams.update(
 # --------------------------------------------------------------------------- quoted numbers
 
 
-def quoted_numbers(  # noqa: PLR0913 -- the six measured inputs, each read from its own file
-    by_schedule: dict,
+def quoted_numbers(
     ones: dict[int, dict],
     timing: dict,
     oracle: dict,
@@ -83,10 +77,9 @@ def quoted_numbers(  # noqa: PLR0913 -- the six measured inputs, each read from 
     """The values the prose of the pages states, so a reviewer can compare the sentences with the data."""
     return {
         **_scaling_numbers(ones),
-        **_tail_numbers(ones, by_schedule),
+        **_tail_numbers(ones),
         **_api_numbers(timing, oracle),
         **_validation_numbers(timing, validator),
-        **_parallel_numbers(ones, by_schedule),
         "occt_all_ok_on_examples": example["occt"]["all_ok"],
     }
 
@@ -115,17 +108,14 @@ def _scaling_numbers(ones: dict[int, dict]) -> dict:
     }
 
 
-def _tail_numbers(ones: dict[int, dict], by_schedule: dict) -> dict:
-    """The steps from topology to a loadable model, and what a faster derivation would gain end to end."""
+def _tail_numbers(ones: dict[int, dict]) -> dict:
+    """The steps from topology to a loadable model."""
     row = ones[20000]
     tail = tail_steps(row)
-    base = end_to_end(row, row["build_wall_s"])
-    best = by_schedule[(20000, 8, 8)]["build_wall_s"]
-    limit = row["amdahl"]["amdahl_speedup_limit"]
     return {
         "tail_s_at_20000": {k: round(v, 1) for k, v in tail.items()},
         "tail_total_one_process": round(
-            tail["write_w1"]
+            tail["write"]
             + tail["reports"]
             + tail["sidecar"]
             + tail["load"]
@@ -137,14 +127,9 @@ def _tail_numbers(ones: dict[int, dict], by_schedule: dict) -> dict:
                 round(s, 2)
                 for s in slopes(list(SIZES), [tail_steps(ones[n])[k] for n in SIZES])
             ]
-            for k in ("write_w1", "reports", "sidecar", "load", "verify")
+            for k in ("write", "reports", "sidecar", "load", "verify")
         },
-        "end_to_end_one_process_s": round(base, 1),
-        "end_to_end_with_best_derivation_s": round(end_to_end(row, best), 1),
-        "end_to_end_gain_best": round(base / end_to_end(row, best), 3),
-        "end_to_end_gain_at_amdahl_limit": round(
-            base / end_to_end(row, row["build_wall_s"] / limit), 3
-        ),
+        "end_to_end_s": round(end_to_end(row, row["build_wall_s"]), 1),
         "sidecar_mb": {
             n: round(ones[n]["emission"]["file_bytes"]["sidecar"] / 1e6, 1)
             for n in SIZES
@@ -217,53 +202,6 @@ def _validation_numbers(timing: dict, validator: dict) -> dict:
     }
 
 
-def _parallel_numbers(ones: dict[int, dict], by_schedule: dict) -> dict:
-    """Speed-up, the serial share of the stages, memory and identity across the schedules."""
-    gain = speedups(by_schedule)
-    workers_rss = {
-        n: [by_schedule[(n, t, w)]["peak_worker_rss_mb"] for t, w in SCHEDULES if w > 1]
-        for n in SIZES
-    }
-    return {
-        "speedup_best": {
-            n: round(max(v for (t, w), v in gain[n].items() if w > 1), 2) for n in SIZES
-        },
-        "speedup_one_worker_tiled": {
-            n: [
-                round(min(gain[n][(t, 1)] for t in (4, 8)), 2),
-                round(max(gain[n][(t, 1)] for t in (4, 8)), 2),
-            ]
-            for n in SIZES
-        },
-        "serial_share_of_stages": {
-            n: round(
-                ones[n]["amdahl"]["serial_stages_s"]
-                / (
-                    ones[n]["amdahl"]["serial_stages_s"]
-                    + ones[n]["amdahl"]["parallel_stages_wall_s"]
-                ),
-                3,
-            )
-            for n in SIZES
-        },
-        "amdahl_limit": {n: ones[n]["amdahl"]["amdahl_speedup_limit"] for n in SIZES},
-        "worker_peak_rss_range_mb": {
-            n: [min(v), max(v)] for n, v in workers_rss.items()
-        },
-        "parent_peak_rss_20000_mb": {
-            f"{t}x{t}/{w}": by_schedule[(20000, t, w)]["peak_rss_mb"]
-            for t, w in SCHEDULES
-        },
-        "distinct_identity_digests": {
-            n: len({by_schedule[(n, t, w)]["identity_digest"] for t, w in SCHEDULES})
-            for n in SIZES
-        },
-        "all_validation_passed": all(
-            r["validation_passed"] for r in by_schedule.values()
-        ),
-    }
-
-
 # --------------------------------------------------------------------------- main
 
 
@@ -273,14 +211,13 @@ def main() -> None:
     timing = read("emission-timing-data.json")
     oracle = read("why-scaling-oracle.json")
     example = read("emission-example-numbers.json")
-    ones = one_process_rows(measured)
-    by_schedule = schedule_rows(measured)
+    ones = measured_rows(measured)
     numbers = quoted_numbers(
-        by_schedule, ones, timing, oracle, example, read("why-validator-scaling.json")
+        ones, timing, oracle, example, read("why-validator-scaling.json")
     )
     for language, folder in OUTPUT.items():
         t = TEXT[language]
-        scaling_figure(t, ones, by_schedule, folder)
+        scaling_figure(t, ones, folder)
         scaling_tables(language, ones, folder)
         api_comparison_figure(t, timing, folder)
         tail_figure(t, ones, folder)
@@ -288,8 +225,6 @@ def main() -> None:
         validation_figure(t, timing, folder)
         validation_tables(language, timing, folder)
         occt_table(language, example, folder)
-        parallel_figure(t, by_schedule, folder)
-        parallel_tables(language, by_schedule, ones, folder)
         (folder / "numbers.json").write_text(
             json.dumps(numbers, indent=1, sort_keys=True) + "\n"
         )

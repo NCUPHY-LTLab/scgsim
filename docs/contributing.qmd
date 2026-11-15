@@ -21,7 +21,8 @@ uv sync --group dev
 The `dev` group installs every optional extra together with the test, quality
 and OpenCASCADE tools: the same set the CI test job uses.
 
-Read [architecture and data flow](architecture.qmd) for module ownership,
+Read the [code map](code-map.qmd) for the stages of the package and which
+folder is which, [architecture and data flow](architecture.qmd) for module ownership,
 the [maintainer guide](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)
 for repository and documentation maintenance, and the
 [documentation map](documentation-map.qmd) to find each page's role.

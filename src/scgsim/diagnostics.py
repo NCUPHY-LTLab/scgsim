@@ -21,6 +21,10 @@ from threading import Lock
 from typing import TextIO, TypedDict
 from uuid import uuid4
 
+from scgsim.refusal import refused
+
+_WHERE_DIAGNOSTICS_CALL = "the call to preparation_diagnostics"
+
 
 class _DiagnosticPayload(TypedDict):
     """JSON-safe worker configuration shared across the native process boundary."""
@@ -59,17 +63,43 @@ class _DiagnosticConfig:
         session = payload["session_id"]
         parent = payload.get("parent_span_id")
         if not isinstance(directory, str) or not Path(directory).is_absolute():
-            raise ValueError("Diagnostic output_dir must be absolute.")
+            raise ValueError(
+                refused(
+                    "Diagnostic output_dir", "must be absolute", _WHERE_DIAGNOSTICS_CALL
+                )
+            )
         if isinstance(interval, bool) or not isinstance(interval, (int, float)):
-            raise TypeError("Diagnostic progress_interval_s must be numeric.")
+            raise TypeError(
+                refused(
+                    "Diagnostic progress_interval_s",
+                    "must be numeric",
+                    _WHERE_DIAGNOSTICS_CALL,
+                )
+            )
         if not math.isfinite(interval) or interval < 0:
             raise ValueError(
-                "Diagnostic progress_interval_s must be finite and nonnegative."
+                refused(
+                    "Diagnostic progress_interval_s",
+                    "must be finite and nonnegative",
+                    _WHERE_DIAGNOSTICS_CALL,
+                )
             )
         if not isinstance(profile, bool) or not isinstance(session, str) or not session:
-            raise TypeError("Invalid diagnostic profile/session configuration.")
+            raise TypeError(
+                refused(
+                    "Diagnostic profile",
+                    f"must be a bool and session_id a non-empty string; got profile={profile!r}, session_id={session!r}",
+                    _WHERE_DIAGNOSTICS_CALL,
+                )
+            )
         if parent is not None and not isinstance(parent, str):
-            raise TypeError("Invalid diagnostic parent span.")
+            raise TypeError(
+                refused(
+                    "Diagnostic parent_span_id",
+                    f"must be a string or None; got {parent!r}",
+                    _WHERE_DIAGNOSTICS_CALL,
+                )
+            )
         return cls(directory, float(interval), profile, session, parent)
 
 
@@ -135,7 +165,9 @@ def _rss() -> dict[str, object]:
         return {"process_peak_rss_bytes": None, "rss_status": "unavailable"}
 
 
+# Ambient by design: the recorder only writes timing and memory files beside a result; no result reads it.
 _recorder: ContextVar[_Recorder | None] = ContextVar("scgsim_diagnostics", default=None)
+# Ambient by design: the open span only names the parent of the next timing record; no result reads it.
 _span: ContextVar[_Span | None] = ContextVar("scgsim_diagnostic_span", default=None)
 
 
@@ -192,7 +224,13 @@ def _diagnostic_session(config: _DiagnosticConfig) -> Iterator[None]:
     directory = Path(config.output_dir)
     directory.mkdir(parents=True, exist_ok=True)
     if config.profile and sys.getprofile() is not None:
-        raise RuntimeError("A current-thread profiler is already active.")
+        raise RuntimeError(
+            refused(
+                "A current-thread profiler",
+                "is already active",
+                _WHERE_DIAGNOSTICS_CALL,
+            )
+        )
     stem = f"{config.session_id}-{os.getpid()}-{uuid4().hex}"
     # Exclusive creation rejects invalid/unwritable destinations before preparation.
     stream = (directory / f"{stem}.jsonl").open("x", encoding="utf-8")
@@ -227,7 +265,11 @@ def _diagnostic_session(config: _DiagnosticConfig) -> Iterator[None]:
         except Exception as error:  # noqa: BLE001 -- retain the user's error and report cleanup failure as a note
             recorder.errors.append(type(error).__name__)
         if recorder.errors:
-            detail = "Preparation diagnostics failed: " + ", ".join(recorder.errors)
+            detail = refused(
+                "Preparation diagnostics",
+                "failed: " + ", ".join(recorder.errors),
+                f"the diagnostics folder {directory}",
+            )
             if primary is not None:
                 primary.add_note(detail)
             else:

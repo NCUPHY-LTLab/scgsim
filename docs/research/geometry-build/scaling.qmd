@@ -19,9 +19,9 @@ scgsim-id: "docs/research/geometry-build/scaling"
 
 ## Time and memory against N
 
-![Derivation and validation time (left) and peak memory of the build process (right) against the number of features, on logarithmic axes. The dotted line has slope 1 from the N = 1,000 point.](figures/scaling.svg){#fig-scaling fig-alt="Two log-log charts for N = 1,000, 5,000 and 20,000. Left: derivation and validation time rises from 2.3 to 61.6 seconds, slightly steeper than a dotted reference line of slope 1. Right: peak memory rises from 135 to 2,000 megabytes for one tile and for 4 by 4 tiles, slightly flatter than the reference line."}
+![Derivation and validation time (left) and peak memory of the build process (right) against the number of features, on logarithmic axes. The dotted line has slope 1 from the N = 1,000 point.](figures/scaling.svg){#fig-scaling fig-alt="Two log-log charts for N = 1,000, 5,000 and 20,000. Left: derivation and validation time rises from 2.3 to 61.6 seconds, slightly steeper than a dotted reference line of slope 1. Right: peak memory rises from 135 to 2,000 megabytes, slightly flatter than the reference line."}
 
-In @fig-scaling, the time curve lies slightly above the slope-1 line and the memory curves slightly below it.
+In @fig-scaling, the time curve lies slightly above the slope-1 line and the memory curve slightly below it.
 
 ::: {.askr-table-compact .askr-table-numeric}
 {{< include figures/scaling-table.md >}}
@@ -37,6 +37,6 @@ In @fig-scaling, the time curve lies slightly above the slope-1 line and the mem
 
 Within the measured range the build is close to linear in the size of the model. Each step from 1,000 to 5,000 and from 5,000 to 20,000 features multiplies the time by slightly more than the size factor, so the per-face cost rises by about a third over the whole range. The measurements do not reach beyond 20,000 features, so the trend is not extended past it.
 
-Memory grows a little slower than the model. Tiling the derivation into 4 × 4 tiles does not change the peak memory of the parent process (see [Parallel derivation](parallelism.qmd#memory)).
+Memory grows a little slower than the model.
 
 What happens after the derivation, and what it costs, is in [Direct writer and Gmsh load](emission-and-load.qmd).

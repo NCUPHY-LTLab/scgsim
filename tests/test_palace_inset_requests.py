@@ -7,7 +7,7 @@ from palace_sgb_support import effective_input, mesh_run, sidecar_of, surface_ep
 
 import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
-from scgsim.geometry.sgb.cutfamilies.requests import (
+from scgsim.geometry.sgb.bands.requests import (
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
@@ -27,7 +27,7 @@ class StopAfterGeometry(Exception):
 
 
 def geometry_builds(monkeypatch, route, directory, specs):
-    """The ``insets`` of every SGB build ``build_route_mesh`` makes for ``specs`` before it would mesh."""
+    """The ``insets`` of every SGB build ``mesh_run`` makes for ``specs`` before it would mesh."""
     builds: list[tuple[InsetRequest, ...]] = []
     real = banded_build.build_sgb_geometry
 
@@ -192,7 +192,10 @@ def test_an_off_grid_customised_margin_is_refused_before_comparing(
     route_a_sidecar, ma, ms
 ):
     """On a 0.003 um grid, 1.0 um is off the lattice; compared raw it would pass for grid index 1."""
-    sidecar = {**route_a_sidecar, "grid_um": 0.003}
+    sidecar = {
+        **route_a_sidecar,
+        "model": {**route_a_sidecar["model"], "grid_um": 0.003},
+    }
     specs = customised({"chip/left": ma}, MA=None, MS=None)
     if ms is not None:
         specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": ms}

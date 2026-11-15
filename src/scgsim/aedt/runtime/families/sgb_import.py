@@ -48,14 +48,14 @@ from scgsim.aedt.runtime.native.common import (
     native_object_property,
     realize_source_material,
 )
-from scgsim.geometry.sgb.exchange.guard import (
+from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
+from scgsim.geometry.sgb.output.exchange.guard import (
     FreeFace,
     LoopSegment,
     StepGuard,
     read_step_guard,
 )
-from scgsim.geometry.sgb.sidecar.aedt import aedt_names
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
+from scgsim.geometry.sgb.output.sidecar.aedt import aedt_names
 
 Family = Literal["hfss", "q3d"]
 Point = tuple[float, float, float]
@@ -101,7 +101,7 @@ def import_sgb_model(
     net_names = q3d_net_names(roles)
     # AEDT's readback is coarser than the sidecar's tolerance_um (decision 9), so every comparison with what
     # AEDT reports uses a thousandth of the bound model's own grid.
-    tolerance_um = import_tolerance_um(float(sidecar["grid_um"]))
+    tolerance_um = import_tolerance_um(float(sidecar["model"]["grid_um"]))
     _import_step(app, model, guard)
     face_copies = _match_faces(app, guard, tolerance_um)
     sheets = _rebuild_free_faces(app, guard["free_faces"], tolerance_um)
@@ -153,16 +153,16 @@ def _check_supported(model: PreparedSgbModel, family: Family) -> None:
         )
 
 
-def _check_ports(
-    model: PreparedSgbModel, sidecar: Mapping[str, Any], family: Family
-) -> None:
+def _check_ports(model: PreparedSgbModel, sidecar: Sidecar, family: Family) -> None:
     """In HFSS every lumped-port sheet must carry a junction or an RLC; an untreated one has no AEDT meaning."""
     if family != "hfss":
         return
     bound = {item.port_group for item in model.junctions} | {
         port_group(item.port_sheet_id) for item in model.lumped_rlcs
     }
-    unbound = sorted(p["group"] for p in sidecar["ports"] if p["group"] not in bound)
+    unbound = sorted(
+        p["group"] for p in sidecar["port"].values() if p["group"] not in bound
+    )
     if unbound:
         raise ValueError(
             f"port sheets {unbound} carry no junction or LumpedRlc; give each one its treatment"
@@ -323,14 +323,14 @@ def segment_length_um(segment: LoopSegment) -> float:
 def _assign_materials(
     app: Any,
     model: PreparedSgbModel,
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
     objects: Mapping[str, str],
     family: Family,
 ) -> list[dict[str, Any]]:
     """Realize each imported solid's material: its stack dielectric, or PEC for a conductor (Route C)."""
     records = []
     for solid_id, name in objects.items():
-        volume = sidecar["volumes"][solid_id]
+        volume = sidecar["volume"][solid_id]
         obj = app.modeler[name]
         if volume["kind"] == "conductor":
             # A Route C conductor interior is the solid itself, PEC in both families (decision 7); HFSS
@@ -368,7 +368,7 @@ def _assign_materials(
 def _create_region(
     app: Any,
     model: PreparedSgbModel,
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
     family: Family,
     tolerance_um: float,
 ) -> dict[str, Any]:
@@ -390,7 +390,7 @@ def _create_region(
             f"the Region spans {list(observed)} um, not the VACUUM_REGION box "
             f"{list(model.vacuum_bounds_um)} um"
         )
-    vacuum = [v for v in sidecar["volumes"].values() if v["kind"] == "vacuum"]
+    vacuum = [v for v in sidecar["volume"].values() if v["kind"] == "vacuum"]
     if len(vacuum) != 1:
         raise SgbImportError(f"the model has {len(vacuum)} vacuum volumes, not one")
     material_id = vacuum[0]["material"]
@@ -549,7 +549,7 @@ def _port_end_midpoint(
 
 
 def q3d_net_roles(
-    model: PreparedSgbModel, sidecar: Mapping[str, Any]
+    model: PreparedSgbModel, sidecar: Sidecar
 ) -> dict[str, Literal["Signal", "Ground"]]:
     """Each conductor Net's Q3D role from the model's ground declaration: Ground if declared, else Signal."""
     if model.ground_net_ids is None:
@@ -559,8 +559,8 @@ def q3d_net_roles(
         )
     nets = {
         volume["net"]
-        for volume in sidecar["volumes"].values()
-        if volume["kind"] == "conductor"
+        for volume in sidecar["volume"].values()
+        if volume["kind"] == "conductor" and volume["net"] is not None
     }
     missing = sorted(set(model.ground_net_ids) - nets)
     if missing:
@@ -568,13 +568,12 @@ def q3d_net_roles(
     return {
         net: "Ground" if net in model.ground_net_ids else "Signal"
         for net in sorted(nets)
-        if net is not None
     }
 
 
 def assign_q3d_nets(
     app: Any,
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
     objects: Mapping[str, str],
     roles: Mapping[str, Literal["Signal", "Ground"]],
     net_names: Mapping[str, str],
@@ -585,7 +584,7 @@ def assign_q3d_nets(
     """
     by_net: dict[str, list[str]] = {}
     for solid_id, name in objects.items():
-        volume = sidecar["volumes"][solid_id]
+        volume = sidecar["volume"][solid_id]
         if volume["kind"] == "conductor":
             if volume["net"] is None:
                 raise SgbImportError(f"conductor {name} has no Net")

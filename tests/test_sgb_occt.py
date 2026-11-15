@@ -27,16 +27,16 @@ from OCP.TopTools import TopTools_IndexedMapOfShape  # noqa: E402
 from sgb_emit_cases import CASES  # noqa: E402
 from sgb_scenes import random_layout, slab_model  # noqa: E402
 
-from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
-from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: E402
-from scgsim.geometry.sgb.exchange.step import StepExportError, export_aedt_step  # noqa: E402
+from scgsim.geometry.exact.grid import Grid  # noqa: E402
+from scgsim.geometry.sgb.checks.slivers.report import sliver_report  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
-from scgsim.geometry.sgb.records.grid import Grid  # noqa: E402
-from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar  # noqa: E402
-from scgsim.geometry.sgb.sidecar.files import write_sidecar  # noqa: E402
-from scgsim.geometry.sgb.slivers.report import sliver_report  # noqa: E402
-from scgsim.geometry.sgb.verification import ocp  # noqa: E402
-from scgsim.geometry.sgb.verification.occt import (
+from scgsim.geometry.sgb.output.emission.plan import plan_brep  # noqa: E402
+from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xao_file  # noqa: E402
+from scgsim.geometry.sgb.output.exchange.step import StepExportError, export_aedt_step  # noqa: E402
+from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar  # noqa: E402
+from scgsim.geometry.sgb.output.sidecar.files import write_sidecar  # noqa: E402
+from scgsim.geometry.sgb.output.verification import ocp  # noqa: E402
+from scgsim.geometry.sgb.output.verification.occt import (
     OcctCheckError,
     check_file,
     check_shape,
@@ -226,20 +226,6 @@ def test_the_uncorrupted_file_is_clean_so_the_controls_are_meaningful(pad):
 # --------------------------------------------------------------------------- what the argument analyzer must not see
 
 
-def test_refinement_curve_is_excluded_from_the_argument_analyzer_but_not_from_brepcheck(
-    tmp_path, emit_models
-):
-    """Refinement curve is excluded from the argument analyzer but not from brepcheck."""
-    model = emit_models["pad_a_refinement"]
-    plan = plan_brep(model.topology, model.routed)
-    write_brep_file(plan, tmp_path / "m.brep")
-    report = check_file(tmp_path / "m.brep", model.topology, plan)
-    assert (
-        report.arguments["excluded_free_edges"] == 1
-    )  # an embedded curve interferes with its host face by design
-    assert report.ok and report.brepcheck["checked"]["edge"] == len(plan.edge_ids)
-
-
 def test_embedded_free_faces_are_excluded_from_the_solid_analysis_and_analysed_on_their_own(
     tmp_path, emit_models
 ):
@@ -303,13 +289,13 @@ def test_the_step_is_an_assembly_of_named_solids_in_micrometres(exported):
     products = re.findall(r"PRODUCT\('([^']*)'", text)
     expected = {
         v["aedt_name"]
-        for v in sidecar["volumes"].values()
+        for v in sidecar["volume"].values()
         if v["emitted"] and v["kind"] != "vacuum"
     }
     assert export.object_names == expected
     assert "substrate" in expected and "vacuum" not in expected
     assert {"conductor"} <= {
-        v["kind"] for v in sidecar["volumes"].values() if v["aedt_name"] in expected
+        v["kind"] for v in sidecar["volume"].values() if v["aedt_name"] in expected
     }
     assert set(products) == expected | {"SGB_MODEL"}
     assert export.unit == "UM" and "SI_UNIT(.MICRO.,.METRE.)" in text
@@ -352,7 +338,7 @@ def test_the_step_reads_back_with_the_planned_volumes(exported):
     )
     planned = sorted(
         v["volume_um3"]
-        for v in sidecar["volumes"].values()
+        for v in sidecar["volume"].values()
         if v["emitted"] and v["kind"] != "vacuum"
     )
     assert volumes == pytest.approx(planned, rel=1e-7)
@@ -366,13 +352,13 @@ def test_the_guard_lists_every_face_of_each_solid_in_occ_order_with_area_and_cen
     ids = {s["solid"] for s in export.solids}
     assert ids == {
         v
-        for v, rec in sidecar["volumes"].items()
+        for v, rec in sidecar["volume"].items()
         if rec["emitted"] and rec["kind"] != "vacuum"
     }
     for solid in export.solids:
         planned_faces = {
             fid
-            for fid, f in sidecar["faces"].items()
+            for fid, f in sidecar["face"].items()
             if solid["solid"] in (f["negative_volume"], f["positive_volume"])
             and f["negative_volume"] != f["positive_volume"]
         }  # an embedded sheet has the same volume on both sides and bounds no shell
@@ -382,8 +368,7 @@ def test_the_guard_lists_every_face_of_each_solid_in_occ_order_with_area_and_cen
         )
     tags = sidecar["binding"]["ids_by_tag"]["3"]
     for solid in export.solids:
-        expected_faces = sidecar["expected"]["solid_faces"][tags.index(solid["solid"])]
-        assert len(solid["faces"]) == len(expected_faces)
+        assert len(solid["faces"]) == len(sidecar["volume"][solid["solid"]]["faces"])
     assert plan.solid_ids == tags
 
 
@@ -392,7 +377,11 @@ def written(model, folder):
     plan = plan_brep(model.topology, model.routed)
     write_brep_file(plan, folder / "m.brep")
     sidecar = build_sidecar(
-        model, plan, SidecarContext(sliver_report(model)["summary"])
+        model,
+        plan,
+        SidecarContext(
+            sliver_report(model.labelled, model.topology, model.routed)["summary"]
+        ),
     )
     write_sidecar(folder / "m.sidecar.json", sidecar)
     return folder / "m.brep", sidecar
@@ -510,12 +499,10 @@ def test_random_layouts_of_a_hundred_features_pass_every_official_check(
 def test_a_random_layout_of_a_thousand_features_passes_the_cheap_official_checks(
     tmp_path,
 ):
-    """The cheap checks (self-interference off, as the strict mode runs them) at N = 1000."""
-    model = build_model_from_catalogue(
-        random_layout(1000, seed=1, route="B"), "B", workers=2, tiles=2
-    )
+    """The cheap checks (self-interference off, the cheap form) at N = 1000."""
+    model = build_model_from_catalogue(random_layout(1000, seed=1, route="B"), "B")
     plan = plan_brep(model.topology, model.routed)
-    write_brep_file(plan, tmp_path / "m.brep", workers=2)
+    write_brep_file(plan, tmp_path / "m.brep")
     report = check_file(
         tmp_path / "m.brep", model.topology, plan, self_interference=False
     )

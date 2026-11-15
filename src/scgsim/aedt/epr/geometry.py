@@ -1,7 +1,6 @@
 """EPR analysis-sheet naming and inset planning over prepared source geometry.
 
-General source preparation is owned by preparation.planar; public preparation
-helpers are direct reexports of those same function objects.
+General source preparation lives in ``preparation.planar``.
 """
 
 from __future__ import annotations
@@ -16,15 +15,7 @@ from multiprocessing import get_context
 from typing import Any
 
 from scgsim.aedt.data import canonical_sha256
-from scgsim.aedt.preparation.planar import (
-    prepare_planar_geometry_input as prepare_planar_geometry_input,
-)
-from scgsim.aedt.preparation.planar import (
-    validate_geometry_workers as validate_geometry_workers,
-)
-from scgsim.aedt.preparation.planar_junctions import (
-    planar_junction_from_port as planar_junction_from_port,
-)
+from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.preparation.planar_masks import (
     INSET_CIRCLE_POINTS,
     INSET_METHOD,
@@ -98,8 +89,9 @@ def _sheet_name(
     tail = f"_{classification}_{side}_{margin}{part_label}_{digest}"
     owner_budget = 60 - len("EPR_") - len(tail)
     if owner_budget < 1:
-        # Preserve successful legacy labels; compact only overflow of SCG's
-        # inherited identifier budget, not an asserted native naming limit.
+        # A name that fits the 60-character budget keeps its readable label; only
+        # an overflow is compacted to a hash token. The budget is SCGSim's own,
+        # not a limit AEDT states.
         token = (
             base64.b32encode(bytes.fromhex(identity_sha256)).decode("ascii").rstrip("=")
         )
@@ -230,32 +222,6 @@ def _klayout_inset(support: Any, radius: int, k: Any) -> Any:
         k.Box(-radius, -radius, radius, radius), INSET_CIRCLE_POINTS
     )
     return (support - complement.minkowski_sum(circle).merged()).merged()
-
-
-def inset_surface_regions(
-    binding: Mapping[str, Any],
-    margin_um: float,
-    support_insets: dict[tuple[str, int], Any],
-) -> list[dict[str, Any]]:
-    """Inset complete physical support, then attribute its surviving pieces."""
-
-    import klayout.db as k  # noqa: PLC0415 -- optional KLayout is required only when calculating a requested source-support inset.
-
-    if not math.isfinite(margin_um) or margin_um < 0.0:
-        raise ValueError("surface EPR margin must be finite and nonnegative")
-    support = binding["mask_support"]
-    if support["klayout_version"] != version("klayout"):
-        raise RuntimeError("prepared EPR KLayout version differs from runtime")
-    dbu_um = float(support["source_dbu_um"])
-    if margin_um / dbu_um >= _KLAYOUT_COORD_MAX:
-        raise OverflowError("EPR margin exceeds KLayout integer range")
-    radius = k.DPoint(margin_um, 0).to_itype(dbu_um).x
-    key = (str(support["group_identity_sha256"]), radius)
-    if key not in support_insets:
-        physical = klayout_region(support["support_regions"], dbu_um, k)
-        support_insets[key] = _klayout_inset(physical, radius, k)
-    attribution = klayout_region(support["attribution_regions"], dbu_um, k)
-    return regions_from_klayout(support_insets[key] & attribution, dbu_um)
 
 
 def _inset_group_task(

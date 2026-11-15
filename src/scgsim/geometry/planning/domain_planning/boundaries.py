@@ -6,7 +6,22 @@ from collections.abc import Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass
 from typing import Any, cast
 
+from scgsim.geometry.grid.booleans import boolean_polygon_region
+from scgsim.geometry.grid.loops import (
+    gdstk_surface_region,
+    geometry_ref_from_gdstk_polygon,
+    geometry_refs_from_gdstk_region,
+    loop_centroid,
+    loop_signature,
+    simple_interior_hole_loops,
+)
+from scgsim.geometry.grid.planar_loops import clean_loop, polygon_area
+from scgsim.geometry.grid.scope import UNGRIDDED
+from scgsim.geometry.interpretation.representation import (
+    planned_conductor_representation,
+)
 from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.entities import entity_z_range_um, is_solution_entity
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import SurfacePlanRecord
@@ -25,25 +40,12 @@ from scgsim.geometry.planning.domain_planning.occupancy import (
 )
 from scgsim.geometry.planning.domain_planning.sidewalls import SolutionSidewallPlanner
 from scgsim.geometry.planning.evidence import solution_solution_evidence
-from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.primitives.entities import entity_z_range_um
-from scgsim.geometry.primitives.entity_validation import is_solution_entity
-from scgsim.geometry.primitives.grid import boolean_polygon_region
-from scgsim.geometry.primitives.loops import (
-    gdstk_surface_region,
-    geometry_ref_from_gdstk_polygon,
-    geometry_refs_from_gdstk_region,
-    loop_centroid,
-    loop_signature,
-    simple_interior_hole_loops,
-)
-from scgsim.geometry.primitives.planar_loops import clean_loop, polygon_area
-from scgsim.geometry.primitives.spatial import (
+from scgsim.geometry.planning.spatial import (
     geometry_ref_surface_z_um,
     intersect_bounds,
     same_coordinate_z,
 )
-from scgsim.geometry.primitives.surface_records import (
+from scgsim.geometry.planning.surface_records import (
     RouteASheetPatch,
     surface_contribution_provenance,
 )
@@ -69,6 +71,7 @@ def plan_substrate_air_surfaces(
     surface_index = 0
     for lower, upper, z_um, _bounds in _solution_interface_planes(build_input):
         interface_region = boolean_polygon_region(
+            UNGRIDDED,
             gdstk,
             solution_entity_xy_region(gdstk, lower),
             solution_entity_xy_region(gdstk, upper),
@@ -105,7 +108,7 @@ def plan_substrate_air_surfaces(
         )
         for patch in interface_region:
             base_geometry_ref = geometry_ref_from_gdstk_polygon(
-                {"plane": {"axis": "z", "value_um": z_um}}, patch
+                UNGRIDDED, {"plane": {"axis": "z", "value_um": z_um}}, patch
             )
             plane_conductors = _conductor_entities_on_solution_plane(
                 _SolutionPlaneRequest(
@@ -128,8 +131,9 @@ def plan_substrate_air_surfaces(
                         geometry_ref_surface_z_um(sheet_patch.geometry_ref), z_um
                     )
                     and boolean_polygon_region(
+                        UNGRIDDED,
                         gdstk,
-                        gdstk_surface_region(sheet_patch.geometry_ref),
+                        gdstk_surface_region(UNGRIDDED, sheet_patch.geometry_ref),
                         (patch,),
                         "and",
                     )
@@ -184,13 +188,14 @@ def _solution_interface_geometry_refs(
     import gdstk  # noqa: PLC0415 -- defer the optional polygon engine until this operation reaches native geometry.
 
     hole_loops = simple_interior_hole_loops(
+        UNGRIDDED,
         parent_geometry_ref,
         plane_conductors,
         conductor_geometry_refs=conductor_geometry_refs,
     )
     if hole_loops is not None:
         return ({**dict(parent_geometry_ref), "hole_loops": hole_loops},)
-    base_region = gdstk_surface_region(parent_geometry_ref)
+    base_region = gdstk_surface_region(UNGRIDDED, parent_geometry_ref)
     conductor_region = tuple(
         (
             polygon
@@ -201,11 +206,13 @@ def _solution_interface_geometry_refs(
         (
             polygon
             for geometry_ref in conductor_geometry_refs
-            for polygon in gdstk_surface_region(geometry_ref)
+            for polygon in gdstk_surface_region(UNGRIDDED, geometry_ref)
         )
     )
-    live_region = boolean_polygon_region(gdstk, base_region, conductor_region, "not")
-    return geometry_refs_from_gdstk_region(parent_geometry_ref, live_region)
+    live_region = boolean_polygon_region(
+        UNGRIDDED, gdstk, base_region, conductor_region, "not"
+    )
+    return geometry_refs_from_gdstk_region(UNGRIDDED, parent_geometry_ref, live_region)
 
 
 def _plan_solution_domain_boundary_surfaces(
@@ -366,7 +373,11 @@ def _conductor_entities_on_solution_plane(
             or "outer_loop" not in entity.geometry
             or (
                 not boolean_polygon_region(
-                    gdstk, entity_occupied_region(gdstk, entity), patch_region, "and"
+                    UNGRIDDED,
+                    gdstk,
+                    entity_occupied_region(gdstk, entity),
+                    patch_region,
+                    "and",
                 )
             )
         ):
@@ -400,7 +411,7 @@ def _conductor_entities_on_solution_plane(
             continue
         entity_region = entity_occupied_region(gdstk, entity)
         local_overlap = boolean_polygon_region(
-            gdstk, entity_region, patch_region, "and"
+            UNGRIDDED, gdstk, entity_region, patch_region, "and"
         )
         if not local_overlap:
             continue
@@ -452,17 +463,17 @@ def _solution_exterior_face_geometry_refs(
             continue
         if subtractor_region:
             subtractor_region = boolean_polygon_region(
-                gdstk, subtractor_region, candidate, "or"
+                UNGRIDDED, gdstk, subtractor_region, candidate, "or"
             )
         else:
             subtractor_region = candidate
     residual_region = boolean_polygon_region(
-        gdstk, base_region, subtractor_region, "not"
+        UNGRIDDED, gdstk, base_region, subtractor_region, "not"
     )
     if not residual_region:
         return ()
     geometry_refs = geometry_refs_from_gdstk_region(
-        {"plane": {"axis": "z", "value_um": z_um}}, residual_region
+        UNGRIDDED, {"plane": {"axis": "z", "value_um": z_um}}, residual_region
     )
     return tuple(
         sorted(

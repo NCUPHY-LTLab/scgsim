@@ -4,6 +4,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import cast
 
+from scgsim.geometry.grid.grid_regions import grid_change_message
+from scgsim.geometry.grid.scope import GridScope
 from scgsim.geometry.models.grid import format_box, geometry_grid_context
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
@@ -19,22 +21,31 @@ from scgsim.geometry.models.regions import (
     PortSheetOverlapRecord,
     PortSheetRegionRecord,
 )
-from scgsim.geometry.primitives.grid import with_input_grid
-from scgsim.geometry.primitives.grid_regions import grid_change_message
-from scgsim.geometry.source.ports import port_sheet_overlaps
+from scgsim.geometry.source.ports import port_sheet_hosts, port_sheet_overlaps
+from scgsim.refusal import Declared
+
+_REQUEST = Declared(
+    "rectangular junction request",
+    "the RectangularJunctionSpec passed to the plan or the simulation",
+)
 
 
-@with_input_grid
 def with_rectangular_junctions(
     build_input: GeometryBuildInput, specs: Iterable[object]
 ) -> GeometryBuildInput:
-    """Bind caller-selected source owners without searching other occurrences."""
+    """Bind caller-selected source owners without searching other occurrences.
+
+    The sheet's overlaps with its terminals are measured on the input's declared grid.
+    """
+    scope = GridScope(geometry_grid_context(build_input))
     requests = _validated_requests(specs)
     _validate_unique_request_ids(requests)
     entities = {item.semantic_id: item for item in build_input.entities}
     polygons = {item.polygon_id: item for item in build_input.polygons}
     replacements = {
-        request.port_sheet_id: _bind_request(build_input, request, entities, polygons)
+        request.port_sheet_id: _bind_request(
+            scope, build_input, request, entities, polygons
+        )
         for request in requests
     }
     return replace(
@@ -54,7 +65,9 @@ def _validated_requests(specs: Iterable[object]) -> tuple[RectangularJunctionSpe
     """Materialize requests once, then retain the original type error contract."""
     requests = tuple(specs)
     if any(not isinstance(item, RectangularJunctionSpec) for item in requests):
-        raise TypeError("rectangular junctions require RectangularJunctionSpec")
+        raise TypeError(
+            _REQUEST.expected("every request", "a RectangularJunctionSpec", requests)
+        )
     # The runtime check establishes this tuple's record type without coercion.
     return cast(tuple[RectangularJunctionSpec, ...], requests)
 
@@ -66,10 +79,13 @@ def _validate_unique_request_ids(
     for field in ("junction_id", "port_sheet_id"):
         identities = [getattr(item, field) for item in requests]
         if len(set(identities)) != len(identities):
-            raise ValueError(f"duplicate rectangular junction {field}")
+            raise ValueError(
+                _REQUEST.refusal(f"duplicate rectangular junction {field}")
+            )
 
 
 def _bind_request(
+    scope: GridScope,
     build_input: GeometryBuildInput,
     request: RectangularJunctionSpec,
     entities: Mapping[str, SemanticEntitySpec],
@@ -82,11 +98,18 @@ def _bind_request(
         if item.port_sheet_id == request.port_sheet_id
     ]
     if len(matches) != 1:
-        raise ValueError("rectangular junction requires one exact source sheet")
+        raise ValueError(
+            _REQUEST.part(repr(request.junction_id)).expected(
+                "port_sheet_id",
+                "exactly one port sheet of the input",
+                request.port_sheet_id,
+            )
+        )
     region = matches[0]
     _validate_sheet_ownership(region, request)
     selected = _selected_terminal_polygons(request, entities)
     overlaps = port_sheet_overlaps(
+        scope,
         port_sheet_id=region.port_sheet_id,
         port_polygon=LayoutPolygonSpec(
             region.source_polygon_id,
@@ -95,8 +118,7 @@ def _bind_request(
             region.holes,
         ),
         target_layer=region.metadata["target_layer"],
-        host_entity_by_polygon_id=selected,
-        host_polygons_by_id={pid: polygons[pid] for pid in selected},
+        hosts=port_sheet_hosts(selected, {pid: polygons[pid] for pid in selected}),
     )
     expected_hosts = {
         request.terminal_a.source_entity_id,
@@ -120,8 +142,7 @@ def _overlap_count_refusal(
     request: RectangularJunctionSpec,
 ) -> str:
     """Where the sheet overlaps each terminal, when it does not overlap each one exactly once."""
-    grid = geometry_grid_context(build_input)
-    grid_um = None if grid is None else grid.grid_size_um
+    grid_um = geometry_grid_context(build_input).grid_size_um
     findings = []
     for terminal in (request.terminal_a, request.terminal_b):
         host = terminal.source_entity_id
@@ -159,7 +180,11 @@ def _validate_sheet_ownership(
         region.source_polygon_id != request.source_polygon_id
         or junction_occurrence_path(region.metadata) != request.source_occurrence_path
     ):
-        raise ValueError("rectangular junction source sheet ownership differs")
+        raise ValueError(
+            _REQUEST.part(repr(request.junction_id)).refusal(
+                "its source sheet ownership (polygon and occurrence) differs from the sheet's"
+            )
+        )
 
 
 def _selected_terminal_polygons(
@@ -171,7 +196,11 @@ def _selected_terminal_polygons(
         entity = entities.get(terminal.source_entity_id)
         if entity is None or entity.material_kind != "conductor":
             raise ValueError(
-                "rectangular junction terminal source Entity is missing or not conductor"
+                _REQUEST.part(repr(request.junction_id)).expected(
+                    "terminal source Entity",
+                    "a conductor Entity of the input",
+                    terminal.source_entity_id,
+                )
             )
         if (
             junction_net_id(entity) != terminal.net_id
@@ -179,7 +208,9 @@ def _selected_terminal_polygons(
             != terminal.source_occurrence_path
         ):
             raise ValueError(
-                "rectangular junction terminal Net/occurrence ownership differs"
+                _REQUEST.part(repr(request.junction_id)).refusal(
+                    f"terminal {terminal.source_entity_id!r} Net/occurrence ownership differs from the Entity's"
+                )
             )
         selected.update({polygon_id: entity for polygon_id in entity.polygon_ids})
     return selected

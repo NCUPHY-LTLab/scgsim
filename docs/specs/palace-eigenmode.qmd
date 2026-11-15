@@ -7,23 +7,25 @@ scgsim-id: "docs/specs/palace-eigenmode"
 ---
 
 `scgsim.palace.EigenmodeSim` owns mutable mesh, config, resolved-port and handoff
-state. It is separate from Electrostatic and AEDT, with no common simulation
-base object. The [Palace lesson](../course/palace-eigenmode.qmd) teaches the
+state. It shares one private core with `ElectrostaticSim` (binding, geometry
+settings, `mesh()`, summaries, handoff and the lifecycle) and adds only its
+Eigenmode setters and config; it shares nothing with AEDT. The [Palace lesson](../course/palace-eigenmode.qmd) teaches the
 ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics.
 
 | Stage | Public surface |
 |---|---|
 | Shared source | `set_plan(GeometryPlanSnapshot)` |
-| Standalone source | `set_geometry(component)` and `set_stack(stack)` on a fresh unbound simulation |
 | Output | `set_output_dir(path)` |
 | Eigenmode | `set_eigenmode(*, num_modes=10, target=None, tolerance=1e-6, save=0)` |
 | Mesh controls | `set_mesh(...)` accepts the shared sizing recipe, mesher options, repair budgets and quality threshold |
 | Mesh summary | `mesh_summary()` returns detached meshing evidence |
 | Numerical controls | `set_numerical(...)` retains explicit order, linear solver, AMR and output choices |
-| Source/settings view | `input_summary()` returns detached source plus settings, no file/native I/O |
-| Surface model | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`, before `mesh()` |
+| Source/settings view | `input_summary()` returns the detached input `mesh()` builds from (the plan with the simulation's vacuum region, requested ports and route applied) plus settings, no file/native I/O |
+| Route | `set_route(route, *, approximation_profile=None)`, before `mesh()`; Route B when never called, Route A with no profile uses `thin_film` |
+| Surface EPR | `set_surface_epr(specs)`, before `mesh()`; computed only when called with specs, `None` turns it off and `{}` is refused |
 | Authored port | `add_port(name, *, layer, layout_sheet=True, inductance)`; `layout_sheet` must be `True` (its signature default `False` is refused) |
 | Output selection | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
+| Convergence | `set_convergence(*criteria, minimum_converged_passes=1)` with `ModeFrequency`, `SurfaceEpr` and `ErrorIndicator` criteria; see [the convergence declaration](palace-electrostatic-sgb.qmd#convergence-declaration) |
 | Preparation | `mesh()`, `write_config()`, then `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
 Geometric order is distinct from the FEM order configured through
@@ -34,6 +36,22 @@ defaults, described in the
 also state that fine structure refuses `mesh()` before meshing and that a mesh
 below the quality threshold stops it.
 
+The setters store frozen, checked values. `sim.numerical` is a
+`NumericalControls`: read a control as a field (`sim.numerical.amr_max_passes`,
+`sim.numerical.order`) and the whole record with `sim.numerical.to_payload()`,
+the dictionary `metadata/palace_numerical_controls.json` holds.
+`sim.surface_epr_specs` is a `SurfaceEprSpecs`, with one `SurfaceEprSpec` per
+interface type (`sim.surface_epr_specs.by_type["MA"].inset_margins_um`;
+`to_payload()` gives the normalized mapping). `sim.epr_request` is an
+`EprRequest` (`sim.epr_request.surface_interfaces`), or None before
+`set_epr_request`. To pass controls to the constructor, give a
+`NumericalControls` (`EigenmodeSim(numerical=NumericalControls(...))`). The
+record leaves `amr_max_passes`, `amr_nonconformal` and `amr_tolerance` to the
+problem: the constructor and `set_numerical(...)` fill the ones it does not set
+from the same Eigenmode defaults, so `EigenmodeSim(numerical=NumericalControls(order=2))`
+holds the same controls as `EigenmodeSim()` followed by `set_numerical(order=2)`:
+nonconformal, with the pass limit still to choose before `write_config()`.
+
 ## Eigenmode mesh and AMR defaults
 
 A fresh `EigenmodeSim` uses the shared default mesh controls
@@ -42,10 +60,11 @@ threshold) and writes `Model.Refinement.Nonconformal=true`. Before
 `write_config()`, provide `amr_max_passes` through `set_numerical(...)`. For a
 positive pass limit, also provide `amr_tolerance` and `amr_update_fraction`;
 setting `amr_max_passes=0` disables adaptive refinement and allows those two
-values to remain unset. In later `set_numerical(...)` calls, omitted
+values to remain unset. With a convergence declaration, the declared criteria end
+the run in place of `amr_tolerance`: a positive pass limit then needs only
+`amr_update_fraction`, and a stated `amr_tolerance` is refused. In later `set_numerical(...)` calls, omitted
 `ksp_type`, `amr_max_passes`, `amr_nonconformal`, `amr_nc_levels`,
-`amr_tolerance`, `amr_update_fraction` and `save_adapt_diagnostics` retain their
-current settings; every other omitted value (`order`, `tolerance`,
+`amr_tolerance` and `amr_update_fraction` retain their current settings; every other omitted value (`order`, `tolerance`,
 `max_iterations`, `solver_type`, `preconditioner`, `device`,
 `save_adapt_iterations`, `save_adapt_mesh`, `estimator_mg`, `output_paraview`
 and `output_grid_function`) takes its default. These are input controls, not adequacy
@@ -61,11 +80,42 @@ adequacy.
 
 Target frequency is in hertz, mesh lengths in micrometres, inductance in henries.
 Ordinary Eigenmode does not require surface specs, ports or an EPR request.
-A bound plan carries the shared envelope and cannot be partially replaced by
-standalone geometry/stack or conflicting envelope setters. The
+A bound plan that carries its own vacuum refuses `set_vacuum_region` on the
+simulation. A model needs a vacuum region: `mesh()` and
+`input_summary()` refuse a plan with none unless `set_vacuum_region` was called
+on the simulation (or `plan.set_vacuum_region(...)` before `prepare()`). The
 [GeometryPlan contract](../geometry-sgb.qmd) owns source identity and route
 preparation. The [Electrostatic/shared Palace contract](palace-electrostatic-sgb.qmd)
 owns the shared mesh controls and config controls.
+
+## Convergence on Eigenmode {#eigenmode-convergence}
+
+`EigenmodeSim.set_convergence` takes `ModeFrequency`, `SurfaceEpr` and
+`ErrorIndicator`; the shared [convergence declaration](palace-electrostatic-sgb.qmd#convergence-declaration)
+defines them, their checks and what `write_config()` writes:
+
+```python
+from scgsim.palace import ErrorIndicator, ModeFrequency, SurfaceEpr
+
+sim.set_eigenmode(num_modes=2, target=5e9)
+sim.set_numerical(amr_max_passes=8, amr_update_fraction=0.7)
+sim.set_convergence(
+    ModeFrequency().within(percent=0.001),
+    SurfaceEpr("MA", margin_um=1.0, modes=[1]).within(percent=1),
+    ErrorIndicator().below(1e-2),
+)
+```
+
+A mode is a mode number from 1 to `num_modes`. A Surface-EPR kind must have a
+spec and must not be left out by `set_epr_request(surface_interfaces=...)`.
+`EigenmodeSim.set_numerical` keeps an omitted `amr_tolerance`, so a tolerance
+stated once stays until the simulation is built again with controls that leave
+it out; `write_config()` refuses it together with a declaration.
+
+The [stop at convergence](palace-electrostatic-sgb.qmd#convergence-stop) is the
+same for both problems. An Eigenmode solve starts `eig.csv` and `port-EPR.csv`
+with their header only, so a stop during the next solve leaves those tables at
+the top level; the result is read from the last `iteration<k>/` all the same.
 
 ## Lumped ports {#lumped-ports}
 
@@ -124,7 +174,8 @@ configuration, and no special Palace build is needed. The
 ::: {.callout-important title="Call set_surface_epr before mesh()"}
 Margins are geometry: `mesh()` hands them to SGB with the rest of the model.
 Configure `set_surface_epr` first. Calling it after `mesh()` invalidates the mesh,
-config and handoff, and `mesh()` must run again.
+config and handoff, and `mesh()` must run again. Without the call, `mesh()` cuts
+no bands and the config has no Surface-EPR rows.
 :::
 
 Each spec (`"MA"`, `"MS"`, `"SA"`) takes these margin keys next to its film

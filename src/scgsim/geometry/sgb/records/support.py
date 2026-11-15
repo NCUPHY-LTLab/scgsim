@@ -10,7 +10,7 @@ Containment is exact (even-odd over the witness polygon, in integer arithmetic).
 measured on the exact primitives in floating point, from the region's *distance origins*: the boundary
 primitives the bands are measured from.  A conductor face has its whole boundary as origins; a solution
 interface has only the parts of its boundary where it meets a conductor.  Distances decide the band of a
-cell from the area it covers (``labelling.bands``), never a topological question.
+cell from the area it covers (``arrangement.labelling.bands``), never a topological question.
 
 The die edge is a dicing line: a straight origin that runs onto it belongs to a conductor the dicing cut, so
 distances are measured from that origin continued straight past the die edge (Issue #138), as if the
@@ -24,13 +24,14 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from functools import cached_property
 
-from scgsim.geometry.sgb.plane import Point, RepPoint, point_in_ring
-from scgsim.geometry.sgb.records.carriers import (
+from scgsim.geometry.exact.carriers import (
     ArcCarrier,
     LineEdge,
     RingPrimitive,
     round_to_lattice,
 )
+from scgsim.geometry.exact.plane import Point, RepPoint, point_in_ring
+from scgsim.refusal import internal
 
 ORIGIN_CELL = 64.0
 """Smallest cell, in grid units, of the grid that finds the nearest distance origin of a point."""
@@ -109,13 +110,17 @@ class SupportRegion:
 
     ``origin_mask`` says, per ring and primitive, whether the primitive is a distance origin; empty
     means every boundary primitive is one.  ``die_edge_mask`` says, the same way, whether a primitive that is
-    no origin lies on the die edge (the substrate's outer edge); empty means none does.
+    no origin lies on the die edge (the substrate's outer edge); empty means none does.  ``sources`` names, the
+    same way, the source curves each primitive lies on: the carrier ids of the source polygon edges and arcs
+    drawn along it, one per Entity whose outline runs there; a region resolved from a model always records
+    them, and empty means a region drawn directly (in a test), whose primitives come from no source.
     """
 
     rings: tuple[tuple[RingPrimitive, ...], ...]
     margins: tuple[int, ...]  # grid units, strictly increasing
     origin_mask: tuple[tuple[bool, ...], ...] = ()
     die_edge_mask: tuple[tuple[bool, ...], ...] = ()
+    sources: tuple[tuple[tuple[str, ...], ...], ...] = ()
     _witness_cache: list[list[Point]] = field(
         default_factory=list, compare=False, repr=False
     )
@@ -157,7 +162,7 @@ class SupportRegion:
         die the continued edge is as far from every point as the whole line is, and each offset of it ends at
         least one margin outside the die, clear of snapping.  A longer continuation gives the same distances in
         the die.  Where the die outline comes back beside a continuation, the build is refused when the support
-        is resolved (``cutfamilies.die_cuts``).
+        is resolved (``bands.die_cuts``).
 
         Not cut, so its end keeps the half circle of the bands about it: a line where the die edge turns back
         over it (a die that is not convex there), which has no straight way out.  An arc origin that ends on the
@@ -188,7 +193,7 @@ class SupportRegion:
 
         A conductor cut by the die edge is measured as continuing past it (:attr:`die_cuts`), and a straight
         origin has one way on, along its own line.  An arc has none that the layout states, so SGB does not
-        model it: the build is refused when the support is resolved (``cutfamilies.die_cuts``, Issue #138).
+        model it: the build is refused when the support is resolved (``bands.die_cuts``, Issue #138).
         """
         cuts: list[ArcCut] = []
         for ri, ring in enumerate(self.rings):
@@ -387,7 +392,7 @@ class _OriginGrid:
     def __init__(self, origins: tuple[RingPrimitive, ...]) -> None:
         if not origins:
             raise ValueError(
-                "a support region without distance origins has no distances"
+                internal("a support region without distance origins has no distances")
             )
         self.origins = origins
         boxes = [_bounding_box(prim) for prim in origins]

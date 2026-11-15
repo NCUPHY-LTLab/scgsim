@@ -295,7 +295,6 @@ def extreme_band_comparisons() -> dict:
         "neck_split_by_inset",
         "band_vanishes",
         "reflex_small_angle",
-        "refinement_crossing_band_edge",
     ):
         for route in "ABC":
             model = build_model(FIXTURES[name], route)

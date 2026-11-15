@@ -8,20 +8,17 @@ from fractions import Fraction
 from typing import Any
 
 from scgsim.aedt.preparation.junction_partition import (
-    closed_contact,
     junction_contact_inventory,
     junction_geometry,
-    junction_source_binding,
 )
 from scgsim.aedt.specs.epr import (
     PlanarJunction,
 )
 from scgsim.geometry import GeometryBuildInput
-from scgsim.geometry.planning.junction_partition import (
-    drawn_exterior,
-    junction_terminal_line,
-    lattice_rectangle,
-)
+from scgsim.geometry.junctions.contact import junction_source_binding
+from scgsim.geometry.junctions.exact_geometry import closed_contact
+from scgsim.geometry.junctions.lattice import drawn_exterior, lattice_rectangle
+from scgsim.geometry.junctions.terminal import junction_terminal_line
 from scgsim.geometry.source.validation import validate_geometry_input
 
 
@@ -31,7 +28,7 @@ def junction_polygon(
     """Select the authored or partitioned polygon recorded for one junction."""
     record = source.get("junction_partitions", {}).get(junction.junction_id)
     if record is None:
-        # Historical prepared geometry retains its recorded authored sheet.
+        # A junction with no partition record keeps its authored sheet.
         return polygons[junction.source_polygon_id], None
     if record.get("method") != "scgsim.aedt.junction-partition.v1":
         raise ValueError("unknown junction partition method")

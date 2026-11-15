@@ -14,7 +14,7 @@ AEDT models the geometry Palace meshes (issue #67).  One preparation runs, in or
    (decision 8): Route A's faces, with the bodies' interiors kept as solids instead of excluded;
    ``solid`` builds Route C (conductor solids), which is how AEDT realizes a Route B request
    (decision 7): the same faces and bands, with the conductor interiors kept as solids;
-4. :func:`scgsim.geometry.sgb.exchange.step.export_aedt_step`, which writes the STEP without the vacuum and
+4. :func:`scgsim.geometry.sgb.output.exchange.step.export_aedt_step`, which writes the STEP without the vacuum and
    its durable guard.  AEDT creates its own Region from the plan's ``VACUUM_REGION`` bounds instead.
 
 The result, :class:`PreparedSgbModel`, binds the files by SHA-256 so the runtime checks them again before
@@ -38,15 +38,19 @@ from scgsim.aedt.specs.common import (
 )
 from scgsim.aedt.specs.epr import PlanarJunction
 from scgsim.aedt.specs.modeling import Modeling, modeling_from_value
+from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar, views
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.sgb.exchange.guard import file_sha256, read_step_guard
-from scgsim.geometry.sgb.exchange.step import export_aedt_step
-from scgsim.geometry.sgb.routes.policy import (
+from scgsim.geometry.sgb.output.exchange.guard import (
+    file_sha256,
+    guard_model,
+    read_step_guard,
+)
+from scgsim.geometry.sgb.output.exchange.step import export_aedt_step
+from scgsim.geometry.sgb.topology.routes.policy import (
     ROUTE_A_RETAINED_BODIES,
     ROUTE_C,
     RoutePolicy,
 )
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.surface_epr import build_banded_geometry
 
 SCHEMA = "scgsim.aedt.sgb-model.v1"
@@ -292,8 +296,8 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
         route=REALIZED_ROUTE[modeling],
         model_dir=model_dir,
         files=files,
-        model_identity=sidecar["model"],
-        tolerance_um=float(sidecar["tolerance_um"]),
+        model_identity=guard_model(sidecar),
+        tolerance_um=float(sidecar["model"]["tolerance_um"]),
         vacuum_bounds_um=bounds,
         materials=model_materials(sidecar, effective_stack),
         junctions=bound_junctions,
@@ -331,29 +335,29 @@ def vacuum_bounds_um(
 
 
 def model_materials(
-    sidecar: Mapping[str, Any], stack: Mapping[str, Any]
+    sidecar: Sidecar, stack: Mapping[str, Any]
 ) -> dict[str, dict[str, Any]]:
     """The stack's record of each material a volume of the model names; a volume naming none is refused."""
     catalog = stack.get("materials", {})
-    names = sorted({volume["material"] for volume in sidecar["volumes"].values()})
+    names = sorted({volume["material"] for volume in sidecar["volume"].values()})
     missing = [name for name in names if not isinstance(catalog.get(name), Mapping)]
     if missing:
         raise ValueError(f"the stack has no material record for {missing}")
     return {name: dict(catalog[name]) for name in names}
 
 
-def check_region_box(sidecar: Mapping[str, Any], bounds: Sequence[float]) -> None:
+def check_region_box(sidecar: Sidecar, bounds: Sequence[float]) -> None:
     """Refuse a model whose own box is not the ``VACUUM_REGION`` box AEDT's Region will take.
 
     Palace's outer boundary is the box of the SGB model; AEDT's is its Region.  The two agree only when
     every vertex of the model lies in the vacuum box and the box's corners are reached, so the box of
     the model's vertices must equal ``bounds`` within the sidecar's tolerance.
     """
-    vertices = sidecar["expected"]["vertices_um"]
+    vertices = views.expected(sidecar)["vertices_um"]
     observed = [min(v[k] for v in vertices) for k in range(3)] + [
         max(v[k] for v in vertices) for k in range(3)
     ]
-    tolerance = float(sidecar["tolerance_um"])
+    tolerance = float(sidecar["model"]["tolerance_um"])
     if any(abs(a - b) > tolerance for a, b in zip(observed, bounds, strict=True)):
         raise ValueError(
             f"the SGB model spans {observed} um, not the VACUUM_REGION box {list(bounds)} um "
@@ -449,12 +453,12 @@ def check_port_sheet_owners(
 
 
 def _check_port_groups(
-    sidecar: Mapping[str, Any],
+    sidecar: Sidecar,
     junctions: Sequence[SgbJunction],
     lumped_rlcs: Sequence[LumpedRlc],
     lumped_ports: Sequence[LumpedTerminalPort],
 ) -> None:
-    groups = {port["group"] for port in sidecar["ports"]}
+    groups = {port["group"] for port in sidecar["port"].values()}
     named = [
         *(item.port_group for item in junctions),
         *(port_group(item.port_sheet_id) for item in lumped_rlcs),
@@ -465,13 +469,20 @@ def _check_port_groups(
         raise ValueError(f"the SGB model has no lumped-port group {missing}")
 
 
-def _check_ground_nets(
-    sidecar: Mapping[str, Any], ground_net_ids: Sequence[str] | None
-) -> None:
+def _check_ground_nets(sidecar: Sidecar, ground_net_ids: Sequence[str] | None) -> None:
     if ground_net_ids is None:
         return
     if isinstance(ground_net_ids, str):
         raise TypeError("ground_net_ids must be a sequence of Net ids, not one string")
-    unknown = sorted(set(ground_net_ids) - set(sidecar["unions"]["nets"]))
+    unknown = sorted(set(ground_net_ids) - set(net_groups(sidecar)))
     if unknown:
         raise ValueError(f"ground Nets {unknown} are not Nets of the SGB model")
+
+
+def net_groups(sidecar: Sidecar) -> dict[str, list[str]]:
+    """Net -> the surface groups that are that Net's exposed conductor surface, sorted; the Nets of the model."""
+    out: dict[str, list[str]] = {}
+    for name, group in sorted(sidecar["group"].items()):
+        if group["dim"] == 2 and group["net"] is not None:
+            out.setdefault(group["net"], []).append(name)
+    return out
