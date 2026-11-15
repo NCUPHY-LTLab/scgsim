@@ -10,7 +10,6 @@ from scgsim.aedt.io import file_sha256, read_json
 from scgsim.aedt.preparation.cohort import (
     canonical_handoff_paths,
     canonical_member_paths,
-    validate_hfss_import_source,
 )
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
@@ -119,8 +118,6 @@ def _validate_cohort_file_map(cohort: CompletionCohort) -> None:
         "spec": "aedt_spec.json",
         "receipt": "metadata/aedt_run_receipt.json",
     }
-    if cohort.mode not in {"q2d", "q3d"} and not cohort.epr:
-        expected_files["gds"] = "geometry/design.gds"
     if cohort.metadata.get("files") != expected_files:
         raise RuntimeError(
             f"completed {cohort.version} preparation file map is not canonical"
@@ -176,7 +173,6 @@ def _validate_cohort_members(
             f"completed {cohort.version} manifest members are not canonical"
         )
     _verify_cohort_member_hashes(root, cohort, members, prepared_receipt_sha)
-    validate_hfss_import_source(root, read_json(root / "aedt_spec.json"), spec)
 
 
 def _verify_cohort_member_hashes(

@@ -1,98 +1,19 @@
 ---
 title: "AEDT: HFSS Driven Modal"
-description: "Bind explicit integration lines and prepare the current two-port modal network request."
+description: "HFSS Driven Modal waits for its ports on the SGB model (issue #135)."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-modal"
 ---
 
-This page is the detailed Driven Modal reference and continues from the shared
-[CPW input lesson](aedt-inputs.qmd). Driven Modal asks for a network response,
-not unexcited resonant modes. Its ports use explicit integration lines. The two
-ordered ports on the CPW end faces establish excitation and reported port order;
-a picture of the gap cannot replace those line endpoints.
-The inputs page imports M1 at a single height, which describes a zero-thickness
-sheet. A Thin Film request declares the film instead: this example replaces
-`layer_imports` with the 0.2 µm `NB_FILM` interval and declares that film with
-a `PhysicalLayerDeclaration` whose lower face is the attachment face, so the
-HFSS sheet stays at z = 0. The example writes this declaration itself; the
-coupon GDS carries none.
+HFSS runs on the SGB model, the same model Palace meshes, and SCGSim builds no
+AEDT geometry itself. A Driven Modal port (`ModalPort`) has no realization on
+that model yet: `prepare_sgb_model` refuses a request that declares one, naming
+[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135), where Driven
+Modal ports and Driven Terminal wave ports follow. The earlier Modal workflow
+built its model from a GDS import (`HfssDrivenSpec`, `gds_path`, `LayerImport`,
+`ObjectBinding`, `LengthMeshSpec`); that route is removed.
 
-```python
-from pathlib import Path
-from scgsim.aedt import (
-    FrequencySweepSpec, HfssDrivenSpec, HfssRunControl, LayerImport,
-    LengthMeshSpec, ModalPort, prepare_handoff,
-)
-from scgsim.geometry import PhysicalLayerDeclaration
-
-AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
-metal_thickness_um = 0.2
-physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerDeclaration(
-    physical_layer_id=physical_layer_id,
-    source_level_id="D0_TOP_M1",
-    source_level_and_gds_pair={"layer": 1, "datatype": 0},
-    source_interval_um=(0.0, metal_thickness_um),
-    material_id="Nb",
-    feature_kind="stack_film",
-    physical_dimensions={"normal_thickness_um": metal_thickness_um},
-    source_contact_facts={"layer_attachment_face": "lower"},
-)
-layer_imports = (
-    LayerImport(
-        1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
-        physical_layer_id=physical_layer_id,
-    ),
-    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
-)
-
-ports = (
-    ModalPort(1, "o1", "-X", ((-250.0, 0.0, 0.0), (-250.0, 20.0, 0.0))),
-    ModalPort(2, "o2", "+X", ((250.0, 0.0, 0.0), (250.0, 20.0, 0.0))),
-)
-spec = HfssDrivenSpec(
-    aedt_version=AEDT_VERSION,
-    mode="modal", gds_path=source_gds, modeling="thin_film",
-    project_name="public_cpw_modal", design_name="CpwFiniteGroundModal",
-    materials=materials, vacuum_material_id="vacuum",
-    layer_imports=layer_imports, object_bindings=object_bindings,
-    physical_layers=(physical_layer,),
-    ports=ports,
-    run_control=HfssRunControl(
-        "Setup1", "Fast20000", FrequencySweepSpec(3.0, 8.0, 20_000)
-    ),
-    region_padding_um=(0.0, 0.0, 100.0, 100.0, 1000.0, 1000.0),
-    length_mesh=LengthMeshSpec(("D0_TOP_M1_1",), ground_objects, 10.0),
-)
-handoff = prepare_handoff(
-    spec=spec, output_dir=Path(".artifacts/public-cpw-modal")
-)
-print(handoff.spec_path, handoff.script_path)
-```
-
-Endpoints and mesh length are micrometres; sweep bounds are GHz. Ports 1 and 2
-retain their declared order. Choose sweep bounds and `points` for the part of
-the network response you need to resolve. The example requests 20,000 points,
-the default of `FrequencySweepSpec`; native setup and returned data use that
-same count. The [sweep reference](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)
-provides its exact input rules. The line coordinates and bounds come from the
-pinned OrPen CPW specimen. Padding is zero on its declared port sides so those
-faces remain the intended ends.
-
-Before [execution](execute.qmd), inspect the copied spec's port sides, line
-orientation and source bindings. Native preparation reads back the actual
-port assignments and setup; requested Python objects alone cannot establish
-completion. On [strict return](returned-results.qmd), read ordered modal
-S-parameters, impedance and Touchstone as this network's output. Do not call
-its port ordering terminal-reference evidence or turn the export into an
-unimplemented SCGSim circuit model.
-
-Read the frequency-dependent response with its port convention and actual
-controls. Keep native status and the available reported changes with it; the
-[runtime reference](../specs/aedt-runtime.qmd#hfss-convergence-observations)
-owns the raw-record and failure details.
-
-For reference-conductor ports on the same public source, choose
-[Driven Terminal](aedt-driven-terminal.qmd). The exact distinction and native
-export requirements live in the [AEDT contract](../specs/aedt-runtime.qmd).
+For a two-port network response today, use
+[HFSS Driven Terminal](aedt-driven-terminal.qmd) with lumped ports on the
+model's port sheets.

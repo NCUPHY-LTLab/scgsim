@@ -11,7 +11,6 @@ from scgsim.aedt.io import file_sha256, read_json
 from scgsim.aedt.preparation.cohort import (
     canonical_handoff_paths,
     canonical_member_paths,
-    validate_hfss_import_source,
 )
 from scgsim.aedt.preparation.sgb_handoff import SOURCE_KEYS, check_sgb_model_source
 from scgsim.aedt.results.provenance import (
@@ -23,8 +22,6 @@ from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.specs.common import AedtResources
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
@@ -96,8 +93,11 @@ def canonical_metadata_files(
         "q2d",
         "q3d",
     }:
-        expected["gds"] = "geometry/design.gds"
-    elif schema == "scgsim.aedt.handoff.v2" and workflow == "epr_analysis":
+        raise RuntimeError(
+            "this handoff was written for the GDS-import HFSS route, which AEDT no longer runs since "
+            "issue #67; prepare it again"
+        )
+    if schema == "scgsim.aedt.handoff.v2" and workflow == "epr_analysis":
         for key in ("saved_project", "saved_results"):
             value = files.get(key)
             if (
@@ -129,29 +129,17 @@ def verify_prepared_hashes(
         raise RuntimeError("receipt source paths are not canonical")
     if file_sha256(spec_path) != _text(source.get("spec_sha256"), "source.spec_sha256"):
         raise RuntimeError("prepared spec hash mismatch")
-    if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec, Q3dSpec)):
-        _verify_sgb_model_hashes(metadata, source, spec)
-        return
-    if isinstance(spec, HfssDrivenGeometrySpec):
-        _verify_planar_hashes(metadata, source, spec)
-        return
     if isinstance(spec, Q2dSpec):
         if set(source) != {"spec", "spec_sha256"} or "gds_sha256" in metadata:
             raise RuntimeError("Q2D handoff must not contain a GDS source")
         return
-    gds_path = cast(Path, spec.gds_path)
-    if source.get("gds") != "geometry/design.gds":
-        raise RuntimeError("receipt GDS path is not canonical")
-    if file_sha256(gds_path) != _text(metadata.get("gds_sha256"), "gds_sha256"):
-        raise RuntimeError("copied GDS hash mismatch")
-    if file_sha256(gds_path) != _text(source.get("gds_sha256"), "source.gds_sha256"):
-        raise RuntimeError("receipt GDS hash mismatch")
+    _verify_sgb_model_hashes(metadata, source, spec)
 
 
 def _verify_sgb_model_hashes(
     metadata: dict[str, Any],
     source: dict[str, Any],
-    spec: HfssEprAnalysisSpec | HfssEprSpec | Q3dSpec,
+    spec: HfssEprAnalysisSpec | HfssEprSpec | HfssDrivenGeometrySpec | Q3dSpec,
 ) -> None:
     """The receipt binds the request's SGB model; a native builder's handoff is refused (decision 6)."""
     try:
@@ -170,27 +158,6 @@ def _verify_sgb_model_hashes(
         and source.get("saved_solution_sha256") != spec.saved_solution.content_sha256
     ):
         raise RuntimeError("prepared saved solution hash mismatch")
-
-
-def _verify_planar_hashes(
-    metadata: dict[str, Any],
-    source: dict[str, Any],
-    spec: HfssDrivenGeometrySpec,
-) -> None:
-    expected_source_keys = {
-        "spec",
-        "spec_sha256",
-        "planar_source_sha256",
-        "planar_model_sha256",
-    }
-    if set(source) != expected_source_keys:
-        raise RuntimeError("Driven handoff source members are not canonical")
-    if source.get("planar_source_sha256") != spec.geometry.source_sha256:
-        raise RuntimeError("prepared planar source hash mismatch")
-    if source.get("planar_model_sha256") != spec.geometry.model_sha256:
-        raise RuntimeError("prepared planar model hash mismatch")
-    if "gds_sha256" in metadata:
-        raise RuntimeError("Driven handoff must not contain a GDS source")
 
 
 def verify_prepared_cohort(
@@ -237,7 +204,6 @@ def verify_prepared_cohort(
         ):
             raise RuntimeError(f"handoff manifest member mismatch: {relative}")
         hashes[relative] = item["sha256"]
-    validate_hfss_import_source(run_dir, read_json(run_dir / "aedt_spec.json"), spec)
     return {
         "preparation_cohort": cohort.name,
         "prepared_runtime_source": cohort.runtime_source,
@@ -309,21 +275,6 @@ def validate_execution_flags(
     spec: AedtSpec, run_dir: Path, prepare_only: bool, analyze_epr: bool
 ) -> None:
     """Require the canonical source path and matching execution action."""
-    if (
-        not isinstance(
-            spec,
-            (
-                HfssEprAnalysisSpec,
-                HfssEprSpec,
-                HfssDrivenGeometrySpec,
-                Q2dSpec,
-                Q3dSpec,
-            ),
-        )
-        and cast(Path, spec.gds_path).resolve()
-        != (run_dir / "geometry/design.gds").resolve()
-    ):
-        raise RuntimeError("prepared spec must use geometry/design.gds")
     valid_flags = (
         (
             isinstance(
@@ -331,8 +282,6 @@ def validate_execution_flags(
                 (
                     HfssEprSpec,
                     HfssDrivenGeometrySpec,
-                    HfssDrivenSpec,
-                    HfssEigenmodeSpec,
                     Q3dSpec,
                     Q2dSpec,
                 ),

@@ -7,7 +7,6 @@ from typing import Any
 
 from scgsim.aedt.specs.common import (
     DRIVEN_GEOMETRY_SCHEMA_VERSION,
-    EIGENMODE_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
     EPR_ANALYSIS_SCHEMA_VERSION_V3,
     EPR_EIGENMODE_SCHEMA_VERSION_V2,
@@ -16,12 +15,9 @@ from scgsim.aedt.specs.common import (
     Q2D_SCHEMA_VERSION,
     Q2D_SCHEMA_VERSION_V2,
     Q3D_SCHEMA_VERSION,
-    SCHEMA_VERSION,
 )
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
     HfssSpec,
@@ -39,11 +35,7 @@ def parse_aedt_spec(
 ) -> AedtSpec:
     """Dispatch one explicit AEDT schema without inferring solver family."""
     if payload.get("schema_version") == DRIVEN_GEOMETRY_SCHEMA_VERSION:
-        return HfssDrivenGeometrySpec.from_payload(payload)
-    if payload.get("schema_version") == SCHEMA_VERSION:
-        return HfssDrivenSpec.from_payload(payload, base_dir=base_dir)
-    if payload.get("schema_version") == EIGENMODE_SCHEMA_VERSION:
-        return HfssEigenmodeSpec.from_payload(payload, base_dir=base_dir)
+        return HfssDrivenGeometrySpec.from_payload(payload, base_dir=base_dir)
     if payload.get("schema_version") in {
         EPR_EIGENMODE_SCHEMA_VERSION_V2,
         EPR_EIGENMODE_SCHEMA_VERSION_V3,

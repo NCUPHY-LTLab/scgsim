@@ -20,7 +20,6 @@ from scgsim.aedt.preparation.handoff import (
     prepare_handoff,
 )
 from scgsim.aedt.preparation.handoff_files import handoff_member, utc_now, write_script
-from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.preparation.sgb_handoff import attach_sgb_model, sgb_model_source
 from scgsim.aedt.preparation.sgb_model import (
     PreparedSgbModel,
@@ -38,17 +37,12 @@ from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
     AedtResources,
-    LumpedTerminalPort,
     MatrixRunControl,
-    TerminalPort,
 )
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     ExpressionCacheConvergence,
     ExpressionCacheConvergenceSet,
-)
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
 )
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
@@ -183,7 +177,6 @@ def prepare_hfss_eigenmode_from_geometry(  # noqa: PLR0913 -- preserve the suppo
         materials=detached(model.materials),
         output_dir=output_dir,
         workflow="epr" if epr_request is not None else "body_first_eigenmode",
-        geometry_workers=None,
         resources=resources,
     ).build()
 
@@ -191,32 +184,31 @@ def prepare_hfss_eigenmode_from_geometry(  # noqa: PLR0913 -- preserve the suppo
 def prepare_hfss_driven_from_geometry(  # noqa: PLR0913 -- preserve the supported explicit preparation keyword API.
     *,
     aedt_version: str,
-    modeling: Modeling,
-    geometry: PreparedPlanarGeometry,
+    model: PreparedSgbModel,
     project_name: str,
     design_name: str,
     run_control: HfssRunControl | None = None,
-    ports: Sequence[TerminalPort | LumpedTerminalPort],
     output_dir: str | Path,
-    geometry_workers: int | None = None,
     resources: AedtResources | None = None,
 ) -> HandoffPlan:
-    """Prepare a Terminal model and ports, with optional complete solve setup."""
+    """Prepare the HFSS Driven Terminal handoff of an SGB model; omitted run_control authors no solve setup.
+
+    The ports are the model's two lumped Terminal ports (``prepare_sgb_model(..., ports=...)``).  The handoff
+    carries the model's four files in its ``model/`` folder (issue #67).
+    """
     spec = HfssDrivenGeometrySpec(
         aedt_version=aedt_version,
-        modeling=modeling,
-        geometry=geometry,
+        modeling=model.modeling,
+        model=model,
         project_name=project_name,
         design_name=design_name,
         run_control=run_control,
-        ports=tuple(ports),
     )
     return _BodyHfssHandoff(
         spec=spec,
-        materials=detached(geometry.source)["materials"],
+        materials=detached(model.materials),
         output_dir=output_dir,
         workflow="body_first_driven_terminal",
-        geometry_workers=geometry_workers,
         resources=resources,
     ).build()
 
@@ -229,7 +221,6 @@ class _BodyHfssHandoff:
     materials: dict[str, Any]
     output_dir: str | Path
     workflow: str
-    geometry_workers: int | None
     resources: AedtResources | None
 
     def build(self) -> HandoffPlan:
@@ -240,7 +231,6 @@ class _BodyHfssHandoff:
         return self._package()
 
     def _prepare_payload(self) -> None:
-        validate_geometry_workers(self.geometry_workers)
         if self.resources is not None and not isinstance(self.resources, AedtResources):
             raise TypeError("resources must be AedtResources or None")
         self.run_dir = Path(self.output_dir).expanduser().resolve()
@@ -260,8 +250,7 @@ class _BodyHfssHandoff:
         self.started = time.perf_counter()
         self.prepared_source = record_runtime_source("prepared")
         self.payload = self.spec.to_payload()
-        if isinstance(self.spec, HfssEprSpec):
-            attach_sgb_model(self.spec.model, self.run_dir)
+        attach_sgb_model(self.spec.model, self.run_dir)
         self.vacuum_ids = sorted(
             material_id
             for material_id, record in self.materials.items()
@@ -290,7 +279,6 @@ class _BodyHfssHandoff:
             "vacuum_material_id": self.vacuum_ids[0],
             "run_control": self.payload["run_control"],
             "execution": {
-                "geometry_workers": self.geometry_workers,
                 "resources": self.resources.to_payload() if self.resources else None,
             },
             "pyaedt": self.payload["pyaedt"],
@@ -302,14 +290,7 @@ class _BodyHfssHandoff:
         self.source = {
             "spec": self.spec_path.name,
             "spec_sha256": file_sha256(self.spec_path),
-            **(
-                sgb_model_source(self.spec.model)
-                if isinstance(self.spec, HfssEprSpec)
-                else {
-                    "planar_source_sha256": self.spec.geometry.source_sha256,
-                    "planar_model_sha256": self.spec.geometry.model_sha256,
-                }
-            ),
+            **sgb_model_source(self.spec.model),
         }
         write_json(self.metadata_path, self.metadata)
 

@@ -5,20 +5,16 @@ from __future__ import annotations
 from scgsim.aedt.specs.hfss import (
     EigenmodeRunControl,
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
     HfssRunControl,
 )
 
-HfssModelSpec = HfssDrivenSpec | HfssDrivenGeometrySpec | HfssEigenmodeSpec
-HfssGdsSpec = HfssDrivenSpec | HfssEigenmodeSpec
-HfssDrivenModelSpec = HfssDrivenSpec | HfssDrivenGeometrySpec
-HfssEigenmodeModelSpec = HfssEigenmodeSpec | HfssEprSpec | HfssEprAnalysisSpec
+HfssModelSpec = HfssDrivenGeometrySpec
+HfssEigenmodeModelSpec = HfssEprSpec | HfssEprAnalysisSpec
 
 
-def driven_control(spec: HfssDrivenModelSpec) -> HfssRunControl:
+def driven_control(spec: HfssDrivenGeometrySpec) -> HfssRunControl:
     """Require the complete driven controls at a native setup or export boundary."""
     if spec.run_control is None:
         raise ValueError("HFSS solving requires an explicit complete run_control")

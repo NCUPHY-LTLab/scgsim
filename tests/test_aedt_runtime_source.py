@@ -16,19 +16,11 @@ from scgsim.aedt.results.provenance import (
     record_runtime_source,
     validate_runtime_source,
 )
-from scgsim.aedt.results.readback_dispatch import validate_result_readback
 from scgsim.aedt.results.runtime_inventory import (
     SOURCE_ROOT,
     current_runtime_source_paths,
     runtime_import_closure,
 )
-from scgsim.aedt.specs.common import (
-    LayerImport,
-    ObjectBinding,
-    PdkMaterial,
-    TerminalPort,
-)
-from scgsim.aedt.specs.hfss import FrequencySweepSpec, HfssDrivenSpec, HfssRunControl
 
 
 def _write_tree(source_root: Path, sources: dict[str, str]) -> None:
@@ -248,136 +240,3 @@ def test_an_unknown_schema_is_refused(schema):
         RuntimeError, match="prepared runtime source provenance is invalid"
     ):
         validate_runtime_source(record, stage="prepared")
-
-
-def _terminal_spec() -> HfssDrivenSpec:
-    return HfssDrivenSpec(
-        modeling="solid",
-        aedt_version="2024.2",
-        mode="terminal",
-        gds_path="synthetic.gds",
-        project_name="Synthetic",
-        design_name="Design",
-        materials={
-            "vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum"),
-            "silicon": PdkMaterial("silicon", "dielectric", False, "Silicon"),
-            "metal": PdkMaterial("metal", "superconductor", True, None),
-        },
-        vacuum_material_id="vacuum",
-        layer_imports=(
-            LayerImport(1, 0, "SignalLayer", 0, 1),
-            LayerImport(2, 0, "GroundLayer", 0, 1),
-            LayerImport(3, 0, "SubstrateLayer", -10, 0),
-        ),
-        object_bindings=(
-            ObjectBinding("Signal", 1, "signal", "metal"),
-            ObjectBinding("Ground", 2, "ground", "metal"),
-            ObjectBinding("Substrate", 3, "substrate", "silicon"),
-        ),
-        ports=(
-            TerminalPort(1, "P1", "-X", ("Ground",)),
-            TerminalPort(2, "P2", "+X", ("Ground",)),
-        ),
-        run_control=HfssRunControl(
-            "Setup", "Sweep", FrequencySweepSpec(1, 2, points=3)
-        ),
-        region_padding_um=(0, 0, 10, 10, 10, 10),
-    )
-
-
-def _terminal_port_record(spec: HfssDrivenSpec, port: TerminalPort) -> dict[str, Any]:
-    """Terminal evidence as AEDT reports it for the default deembed of 0 um.
-
-    AEDT reports ``Deembed: False`` and its own renormalizing impedance. The
-    checks once kept for receipts before runtime-source v19 expected
-    ``Deembed: True`` and ``50ohm``, and refused this evidence.
-    """
-    terminal_name = f"{port.name}_T1"
-    impedance = "50.0ohm"
-    return {
-        "index": port.index,
-        "boundary": port.name,
-        "terminal_excitation": terminal_name,
-        "face_id": port.index,
-        "face_center_um": [0, 0, 0],
-        "requested": {
-            "reference_objects": list(port.reference_objects),
-            "renormalize": False,
-            "deembed_um": port.deembed_um,
-        },
-        "native": {
-            "excitation_names": [item.name for item in spec.ports[: port.index]],
-            "terminal_names": [terminal_name],
-            "reference_conductors": list(port.reference_objects),
-            "reference_conductor_ids": [10 + port.index],
-            "boundary_properties": {
-                "Deembed": False,
-                "Deembed Dist": f"{port.deembed_um:g}um",
-                "Name": port.name,
-                "Num Terminals": "1",
-                "Renorm All Terminals": False,
-                "Type": "Wave Port",
-                "Wave Port Type": "Terminal",
-            },
-            "terminal_properties": {
-                "Name": terminal_name,
-                "Port Name": port.name,
-                "Terminal Renormalizing Impedance": impedance,
-                "Type": "Terminal",
-            },
-            "inactive_renormalizing_impedance": impedance,
-        },
-    }
-
-
-def _terminal_receipt(spec: HfssDrivenSpec) -> dict[str, Any]:
-    """A completed terminal receipt up to its ports; it has no setup record."""
-    sweep = {
-        "records": 3,
-        "frequency_unit": "GHz",
-        "first_frequency_ghz": 1,
-        "last_frequency_ghz": 2,
-        "strictly_increasing": True,
-    }
-    ports = [
-        _terminal_port_record(spec, port)
-        for port in spec.ports
-        if isinstance(port, TerminalPort)
-    ]
-    return {
-        "connected": {
-            "aedt_version": spec.aedt_version,
-            "pyaedt_version": spec.pyaedt_version,
-        },
-        "runtime_source": record_runtime_source("actual"),
-        "ports": ports,
-        "result_readback": {
-            "terminal_st": sweep,
-            "touchstone": {
-                **sweep,
-                "path": "terminal.s2p",
-                "ports": 2,
-                "port_order": [record["terminal_excitation"] for record in ports],
-                "bytes": 100,
-            },
-        },
-    }
-
-
-def test_a_current_terminal_receipt_takes_the_current_terminal_checks(tmp_path):
-    """Defect F2: a terminal receipt of the current schema passes the port checks.
-
-    The receipt has no setup record, so the readback stops at the setup check
-    after the terminal port checks accepted the evidence; damaged evidence
-    stops at the port checks.
-    """
-    spec = _terminal_spec()
-    receipt = _terminal_receipt(spec)
-    validate_runtime_source(receipt["runtime_source"], stage="actual")
-    with pytest.raises((RuntimeError, TypeError)) as refused:
-        validate_result_readback(tmp_path, receipt, spec)
-    assert "terminal" not in str(refused.value)
-
-    receipt["ports"][0]["native"]["boundary_properties"]["Deembed"] = "maybe"
-    with pytest.raises(RuntimeError, match="terminal native property mismatch"):
-        validate_result_readback(tmp_path, receipt, spec)

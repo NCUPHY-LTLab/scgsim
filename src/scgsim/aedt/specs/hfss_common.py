@@ -10,75 +10,14 @@ from numbers import (
 )
 from typing import (
     Any,
-    Literal,
-    cast,
 )
 
 from scgsim.aedt.specs.common import (
     POINT_COUNT,
-    PdkMaterial,
     adaptive_controls,
     finite_number,
     text_value,
 )
-
-
-def direct_hfss_enclosure(spec: Any) -> dict[str, Any] | None:
-    """Project selected GDS geometry's original full envelope exactly once."""
-    # Keep the compiled GDS reader out of spec-only paths; this step alone reads
-    # polygons to derive the direct-import source envelope.
-    import gdstk  # noqa: PLC0415
-
-    library = gdstk.read_gds(spec.gds_path)
-    scale = library.unit * 1e6
-    selected = []
-    for record in spec.effective_layer_imports:
-        polygons = tuple(
-            polygon
-            for cell in library.top_level()
-            for polygon in cast(Any, cell).get_polygons(
-                layer=record["native_import_layer"], datatype=0
-            )
-        )
-        if polygons:
-            selected.append(
-                (
-                    record,
-                    tuple(point for polygon in polygons for point in polygon.points),
-                )
-            )
-    if not selected:
-        raise ValueError("selected HFSS import layers have no source polygons")
-    xy = {
-        f"{axis}_{edge}_um": operation(
-            float(point[index]) * scale for _, points in selected for point in points
-        )
-        for index, axis in enumerate(("x", "y"))
-        for edge, operation in (("min", min), ("max", max))
-    }
-    source_bounds = {
-        **xy,
-        "z_min_um": min(record["z_min_um"] for record, _ in selected),
-        "z_max_um": max(record["z_max_um"] for record, _ in selected),
-    }
-    effective_bounds = {
-        **xy,
-        "z_min_um": min(record["effective_z_min_um"] for record, _ in selected),
-        "z_max_um": max(record["effective_z_max_um"] for record, _ in selected),
-    }
-    keys = (
-        "x_plus_um",
-        "x_minus_um",
-        "y_plus_um",
-        "y_minus_um",
-        "z_plus_um",
-        "z_minus_um",
-    )
-    return spec.physical_representation.project_enclosure(
-        source_body_bounds_um=source_bounds,
-        effective_body_bounds_um=effective_bounds,
-        source_padding_um=dict(zip(keys, spec.region_padding_um, strict=True)),
-    )
 
 
 @dataclass(frozen=True)
@@ -211,54 +150,3 @@ class EigenmodeRunControl:
             "minimum_converged_passes": self.minimum_converged_passes,
             "percent_refinement": self.percent_refinement,
         }
-
-
-@dataclass(frozen=True)
-class LengthMeshSpec:
-    """The explicit uniform-CPW exception to the ordinary ground mesh rule."""
-
-    signal_objects: tuple[str, ...]
-    ground_objects: tuple[str, ...]
-    maximum_length_um: float
-    uniform_cpw_mtl: Literal[True] = True
-
-    def __post_init__(self) -> None:
-        signals = tuple(
-            text_value(value, "signal_object") for value in self.signal_objects
-        )
-        grounds = tuple(
-            text_value(value, "ground_object") for value in self.ground_objects
-        )
-        if not signals or not grounds:
-            raise ValueError(
-                "length mesh requires explicit signal_objects and ground_objects"
-            )
-        maximum = finite_number(self.maximum_length_um, "maximum_length_um")
-        if maximum <= 0:
-            raise ValueError("maximum_length_um must be > 0")
-        if self.uniform_cpw_mtl is not True:
-            raise ValueError("length mesh requires uniform_cpw_mtl=True")
-        object.__setattr__(self, "signal_objects", signals)
-        object.__setattr__(self, "ground_objects", grounds)
-        object.__setattr__(self, "maximum_length_um", maximum)
-
-    def to_payload(self) -> dict[str, Any]:
-        """Return the canonical LengthMeshSpec payload."""
-        return {
-            "uniform_cpw_mtl": True,
-            "signal_objects": list(self.signal_objects),
-            "ground_objects": list(self.ground_objects),
-            "maximum_length_um": self.maximum_length_um,
-        }
-
-
-def decode_pdk_materials(value: Any) -> dict[str, PdkMaterial]:
-    """Decode the material declarations used by HFSS layer imports."""
-    if not isinstance(value, dict):
-        raise TypeError("materials must be a JSON object")
-    materials: dict[str, PdkMaterial] = {}
-    for material_id, item in value.items():
-        if not isinstance(material_id, str) or not isinstance(item, dict):
-            raise TypeError("materials must map string material_id values to objects")
-        materials[material_id] = PdkMaterial(**item)
-    return materials

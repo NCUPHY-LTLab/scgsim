@@ -370,110 +370,66 @@ uses the separate `run_control=None` path described above.
 
 ### Lumped port sheets and terminal RLC {#hfss-shared-lumped-support}
 
-This HFSS lumped-element support adds generic circuit
-elements while preserving the existing Wave Terminal and Josephson-junction
-contracts.
-
 `LumpedRlc` and `LumpedTerminalPort` name a `port_sheet_id`: a port sheet of
 the plan, which the SGB model carries as the `PORT::<port_sheet_id>` group, as
 Palace's lumped elements do (issue #67 decision 8). There is no separate
 support record. `prepare_sgb_model()` binds each one to its group and refuses
 a name the model has no group for, and a port sheet that a junction, an RLC
-or a lumped port share. The native planar builder has no port sheets, so it
-refuses both records. The body-first workflow uses `HfssDrivenGeometrySpec`
-with `mode="terminal"` and schema `hfss-driven-geometry.v1`, through
-`prepare_hfss_driven_from_geometry()`. `body_first_driven_terminal` names the
-preparation workflow, not the spec mode. The geometry request carries no RLC
-field. Existing Wave `TerminalPort.signal_entity_ids` remains optional in
-legacy payloads; it is required when using the body-first route, whose
-frontend declares the Signal and references explicitly. The legacy GDS
-reference binding is unchanged.
+or a lumped port share. In HFSS every port sheet must carry a junction, an
+RLC or a lumped Terminal port.
 
-In the SGB flow, the HFSS import puts each `LumpedRlc` on its port face the
-same way as a junction: one Lumped RLC on the imported face, with the current
-line joining the midpoints of that face's own edges at both ends along the
-sidecar `direction`. Every port sheet must carry a junction or an RLC. The
-SGB flow refuses a Driven wave `TerminalPort` and a Driven Modal port, with a
-message naming NCUPHY-LTLab/scgsim#135; until that Issue lands, AEDT Driven
-wave and modal runs are not available once the native builder is removed. The
-import also refuses lumped Terminal ports until the SGB flow sets up a Driven
-Terminal design.
+The HFSS import puts each `LumpedRlc` on its port face the same way as a
+junction: one Lumped RLC on the imported faces, with the current line joining
+the midpoints of those faces' own edges at both ends along the sidecar
+`direction`.
 
-AEDT keeps only `[A-Za-z0-9_]` of a name, so a Net's AEDT name (its Q3D Net
-and its HFSS `perfect_e_<name>` boundary) is its ID with every other
-character replaced by `_`. `prepare_sgb_model()` refuses two Nets whose IDs
-become the same name, such as `chip/A` and `chip_A`, naming both Net IDs and
-the shared name, before AEDT is touched; neither is renamed. The same rule
-names a junction's Lumped RLC `junction_rlc_<junction_id>` and a port sheet's
-`LumpedRlc` `rlc_<port_sheet_id>`: two junction IDs, or two port-sheet IDs,
-whose names coincide are refused the same way, with no `__2` suffix.
+The SGB flow refuses a Driven wave `TerminalPort` and a Driven Modal port, with
+a message naming NCUPHY-LTLab/scgsim#135; until that Issue lands, AEDT Driven
+wave and modal runs are not available.
 
-A handoff of the SGB flow carries its model: the STEP, the BREP it was
-written from, the sidecar and the guard are copied into the handoff's
-`model/` folder, and the request names that relative folder. Where AEDT runs,
-every file is checked against its recorded SHA-256 before anything is
-imported. The handoff's source record binds the model's identity and the four
-file hashes; a record without them belongs to a natively built model, which
-is refused (issue #67 decision 6).
+### HFSS Driven Terminal on the SGB model {#hfss-driven-terminal-sgb}
 
-The EPR of an SGB model reads what it integrates from the sidecar and the
-prepared record, without AEDT (`scgsim.aedt.epr.sgb_source`). The domains
-are the imported dielectric solids, by AEDT object name, and the `Region`;
-a conductor solid is PEC and holds no field. Each sidecar Surface-EPR row of a
-declared type is integrated once, on the non-model sheet of its faces. The
-reported contributions group the rows as Palace's `Dielectric` rows do: per
-interface type and surface unit (an unbanded row, or every band of one band
-family) a baseline over all its rows, and per inset margin an entry over its
-bands from the margin's band on, under Palace's entry names; an entry's energy
-is the sum of its rows'. AEDT has no Palace `Model.L0`, so a film given in
-Palace's native `thickness` is refused; give `film_thickness_m`. A junction's
-voltage is the area integral of the field along its port's sidecar
-`direction`, divided by the port sheet's width across it, read from the
-sidecar's port record; `prepare_sgb_model()` refuses a `PlanarJunction` whose
-`width_um` is not that width within the model's `tolerance_um`. Each row has
-three expressions on its sheet (normal and tangential electric integrals and
-the area); a row can hold faces of several orientations and curved walls, so
-the normal is the sheet's own at each point (`Operation('Normal')`), not one
-vector. A junction's voltage is integrated on a non-model sheet copied from
-its port faces. The public HFSS Eigenmode flow runs on this (see
-[Eigenmode saved fields](#eigenmode-saved-fields-and-surface-epr-direction)).
+`prepare_hfss_driven_from_geometry(model=...)` prepares the Driven Terminal
+handoff of a `PreparedSgbModel` whose `lumped_ports` are its two ports
+(`prepare_sgb_model(..., ports=...)`). `HfssDrivenGeometrySpec` (schema
+`hfss-driven-geometry.v1`, mode `terminal`) carries the model; its `ports` are
+the model's. The request requires ports 1 and 2 with distinct names and one
+shared ordered reference; each port sheet's two host Entities must be one of
+its port's signal Entities and one of its reference Entities. A Driven model
+carries no junctions, lumped RLCs or Surface-EPR specs. The handoff carries the
+model's four files in `model/`, and the receipt source binds `sgb_model_sha256`
+and `sgb_model_files`, as for HFSS Eigenmode. A request payload with `geometry`
+(the native builder's) is refused with the reason.
 
-In AEDT, `modeling="thin_film"` builds Route A with its finite bodies (bumps,
-posts) retained as conductor solids (`ROUTE_A_RETAINED_BODIES`; the sidecar's
-`route_policy.conductor_volumes` is `retained`), and the import makes them
-PEC, the same way a Route B request is built as Route C. A sheet face that
-such a body stands on imports on the body and on the substrate; its
-Surface-EPR rows read the substrate's copy, the copy it has when the body is
-excluded.
+In AEDT the run imports the STEP into an empty Driven Terminal design
+(`import_sgb_model`), with the Region, its Perfect H and the Perfect E of each
+Route A Net as for Eigenmode. A model with lumped Terminal ports is imported
+only into a Driven Terminal design, and a Driven Terminal design only takes a
+model that has them. Each port is then:
 
-`TerminalPort` remains the existing Wave-port input. `LumpedTerminalPort` is a
-separate Driven Terminal input with an explicit port sheet, terminal and
-reference assignment and a required `impedance_ohm`. It has no RLC-network field. A value
-such as 50 ohm is an operation input, not a package default. There is no
-conversion from a Lumped request to a Wave port.
+1. **The sheet.** A port face on an imported solid is drawn again as one sheet
+   object, `port_sheet_<port_sheet_id>`, from the guard's exact vertex loop of
+   each face, checked against the guard's area; a face that is not a flat
+   polygon of its vertices is refused. AEDT 2024.2 imports a substrate face
+   about 2e-8 um from the conductor solids beside it, too far for a Terminal
+   port to find them (development check, 2026-11-15). A free face is already
+   such a sheet.
+2. **The port.** A Terminal `Lumped Port` named as the request names it, over
+   the sheet's faces, with the request's impedance and `renormalize`.
+3. **The Terminal.** `<name>_T1`, on the sheet's straight edges at the signal
+   host's end along the sidecar `direction` (which points from the sheet's
+   first host to its second); those edges must form one unbroken segment.
+   AEDT makes a lumped port with an integration line a Modal port with no
+   Terminal, even in a Driven Terminal design, so the Terminal is assigned on
+   the edges.
 
-For the current Wave Terminal contract, the source-directed pair annotation
-records Wave-port reference provenance; it is not a Modal `IntLine`. The
-request uses renormalization disabled and a physical de-embedding shift of
-zero. An inactive native 50-ohm setting in this state is not a source load,
-renormalization target, or solved characteristic impedance. The actual native
-de-embedding-enabled flag is recorded separately; a zero shift does not imply
-that the flag is disabled.
-
-Every `HfssDrivenGeometrySpec` Terminal port must use the same ordered source
-Entity reference tuple: `LumpedTerminalPort.reference_entity_ids` for Lumped
-ports and `TerminalPort.reference_objects` for Wave ports. This applies to
-Lumped, Wave and mixed requests; selectors are neither sorted nor merged.
-Existing ownership, port-family and all-Wave side checks run first. Native
-readback verifies the design-level `TerminalReferenceConductors` inventory;
-it does not establish distinct per-port reference assignments. Historical
-payloads with different reference tuples are rejected by current constructors,
-including payload decoding; their original execution evidence remains historical.
-Saved body-first Terminal child assignments are read back as native `Edges` or
-`Faces`, with each assigned ID resolved to exactly one source-built conductor
-object. Missing or ambiguous assignment kinds and owners fail readback. The
-parent port's `Faces` support assignment remains separate from child signal
-ownership.
+After the save, every port is read back from the saved design: a Terminal
+`Lumped Port` on exactly its faces, its one Terminal the saved child on exactly
+its edges. The receipt keeps these records, the native properties and the
+reference conductors AEDT records. Result reading requires the receipt's
+geometry to be the request's model as imported (its identity and the guard's
+solids), each port record to be the one the import made, and the ordered
+S-parameters and Touchstone of the declared sweep.
 
 `LumpedRlc` requires an explicit `series` or `parallel` topology. Its R, L and
 C components are independently selected; `None` disables the corresponding

@@ -14,7 +14,6 @@ from scgsim.aedt.results.convergence.files import (
 )
 from scgsim.aedt.specs.hfss import (
     EigenmodeRunControl,
-    HfssEigenmodeSpec,
     HfssEprSpec,
     HfssRunControl,
     HfssSpec,
@@ -24,7 +23,7 @@ from scgsim.aedt.specs.hfss import (
 def read_hfss_convergence(run_dir: Path, spec: HfssSpec) -> dict[str, Any]:
     """Parse and bind HFSS Driven or Eigenmode adaptive convergence."""
     root = run_dir.resolve()
-    if isinstance(spec, (HfssEigenmodeSpec, HfssEprSpec)):
+    if isinstance(spec, HfssEprSpec):
         return _read_eigenmode_convergence(root, spec)
     solver = f"HFSS {spec.mode}"
     results_dir = contained_evidence_path(
@@ -57,7 +56,7 @@ def read_hfss_convergence(run_dir: Path, spec: HfssSpec) -> dict[str, Any]:
             "percent",
             cast(EigenmodeRunControl, control).maximum_delta_frequency_percent,
         )
-        if isinstance(spec, (HfssEigenmodeSpec, HfssEprSpec))
+        if isinstance(spec, HfssEprSpec)
         else (
             "maximum_magnitude_delta_s",
             "ratio",
@@ -105,14 +104,11 @@ def read_hfss_convergence(run_dir: Path, spec: HfssSpec) -> dict[str, Any]:
     }
 
 
-def _read_eigenmode_convergence(
-    root: Path, spec: HfssEigenmodeSpec | HfssEprSpec
-) -> dict[str, Any]:
+def _read_eigenmode_convergence(root: Path, spec: HfssEprSpec) -> dict[str, Any]:
     control = cast(EigenmodeRunControl, spec.run_control)
     solver = "HFSS Eigenmode"
-    folder = "epr" if isinstance(spec, HfssEprSpec) else "eigenmode"
     path = contained_evidence_path(
-        root, f"results/{folder}/adaptive-convergence.prop", solver
+        root, "results/epr/adaptive-convergence.prop", solver
     )
     native = read_evidence_text(path, solver)
 

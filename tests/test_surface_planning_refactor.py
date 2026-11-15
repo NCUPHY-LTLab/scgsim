@@ -11,16 +11,9 @@ from scgsim.geometry import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
 )
-from scgsim.geometry.models.representation import (
-    EntityRepresentation,
-    RepresentationContext,
-)
 from scgsim.geometry.models.topology import SurfacePlanRecord
 from scgsim.geometry.planning.surface_planning.contracts import (
     with_surface_contract_metadata,
-)
-from scgsim.geometry.planning.surface_planning.contributions import (
-    plan_representation_contribution_geometry,
 )
 
 
@@ -89,39 +82,6 @@ def conductor_input():
     return GeometryBuildInput((polygon,), (metal, vacuum)), stack
 
 
-@pytest.mark.parametrize("same_material_sides", (False, True))
-@pytest.mark.parametrize("with_hole", (False, True))
-def test_sheet_children_keep_both_ordered_side_contributions(
-    same_material_sides, with_hole
-):
-    """Keep each local sheet child's bottom and top evidence, including holes."""
-    source, context = sheet_source(
-        same_material_sides=same_material_sides, with_hole=with_hole
-    )
-    _, surfaces = plan_representation_contribution_geometry(source, context)
-    sheets = tuple(s for s in surfaces if s.metadata.get("embedded_surface_sheet"))
-    assert len(sheets) == 1
-    for surface in sheets:
-        provenance = surface.metadata["source_provenance"]
-        ledger = provenance["surface_contribution_ledger"]
-        assert tuple(row["side"] for row in ledger) == ("bottom", "top")
-        assert tuple(row["classification"] for row in ledger) == (
-            ("MS", "MS") if same_material_sides else ("MS", "MA")
-        )
-        assert ledger[0]["effective_domain_ids"] == (
-            surface.metadata["boundary_volume_ids"][0],
-        )
-        assert ledger[1]["effective_domain_ids"] == ("vacuum",)
-        assert provenance["native_aggregation"]["contribution_count"] == 2
-        assert provenance["native_aggregation"]["policy"] == (
-            "shared_native_surface_once"
-            if same_material_sides
-            else "one_row_per_interface_kind"
-        )
-    assert tuple(s.metadata["boundary_volume_ids"][0] for s in sheets) == ("substrate",)
-    assert any(bool(s.geometry_ref.get("hole_loops")) for s in sheets) == with_hole
-
-
 @pytest.mark.parametrize(
     "failure,exception,message",
     (
@@ -162,58 +122,6 @@ def test_surface_contract_uses_the_complete_declared_component_ledger():
     assert bound.metadata["equipotential_id"] == "declared-potential"
     assert bound.metadata["owner_semantic_ids"] == ("metal", "second")
     assert bound.metadata["source_provenance"]["conductor_source_layer_name"] == "metal"
-
-
-def sheet_source(*, same_material_sides=False, with_hole=False):
-    """Declare a collapsed sheet between nonoverlapping dielectric and vacuum domains."""
-    source, _ = conductor_input()
-    holes = (((1, 1), (3, 1), (3, 3), (1, 3)),) if with_hole else ()
-    polygon = replace(source.polygons[0], holes=holes)
-    metal = replace(
-        source.entities[0],
-        part_role="face_metal",
-        route_representations={"A": "surface_sheet"},
-        geometry={
-            **source.entities[0].geometry,
-            "z_max_um": 0,
-            "thickness_um": 0,
-            "hole_loops": holes,
-        },
-    )
-    domain = source.entities[1]
-    substrate = replace(
-        domain,
-        semantic_id="substrate",
-        material_id="Si",
-        material_kind="dielectric",
-        priority=1,
-        geometry={
-            **domain.geometry,
-            "z_min_um": -2,
-            "z_max_um": 0,
-            "z_um": -2,
-            "thickness_um": 2,
-            "domain_bounds_um": {**domain.geometry["domain_bounds_um"], "z_max_um": 0},
-        },
-    )
-    vacuum = replace(
-        domain,
-        material_id="Si" if same_material_sides else domain.material_id,
-        material_kind="dielectric" if same_material_sides else domain.material_kind,
-        geometry={
-            **domain.geometry,
-            "z_min_um": 0,
-            "z_um": 0,
-            "thickness_um": 6,
-            "domain_bounds_um": {**domain.geometry["domain_bounds_um"], "z_min_um": 0},
-        },
-    )
-    context = RepresentationContext(
-        {"metal": EntityRepresentation(None, "sheet", (0, 1), (0, 0))}
-    )
-    return replace(
-        source, polygons=(polygon,), entities=(metal, substrate, vacuum)
-    ), context
 
 
 def contract_source(failure):

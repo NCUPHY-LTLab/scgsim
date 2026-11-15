@@ -21,9 +21,6 @@ from scgsim.aedt.specs.epr import (
     PlanarJunction,
     SavedSolution,
 )
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
 
 from .eigenmode import EigenmodeSim
 from .epr.reanalysis import reanalyze_epr
@@ -34,7 +31,6 @@ from .preparation.geometry import (
     prepare_q3d_from_geometry,
 )
 from .preparation.handoff import HandoffPlan, prepare_handoff
-from .preparation.planar import prepare_planar_geometry_input
 from .preparation.planar_junctions import planar_junction_from_port
 from .preparation.sgb_model import PreparedSgbModel, prepare_sgb_model
 from .presentation.epr import plot_epr_result, show_epr
@@ -44,12 +40,9 @@ from .results.resolve import ResolvedRun, resolve_results
 from .runtime.control import request_q3d_abort_and_save, request_q3d_stop_and_save
 from .specs.common import (
     AedtResources,
-    HfssDrivenMode,
-    LayerImport,
     LumpedTerminalPort,
     MatrixRunControl,
     ModalPort,
-    ObjectBinding,
     PdkMaterial,
     TerminalPort,
 )
@@ -57,15 +50,11 @@ from .specs.hfss import (
     EigenmodeRunControl,
     FrequencySweepSpec,
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
     HfssRunControl,
     HfssSpec,
-    LengthMeshSpec,
 )
-from .specs.modeling import PhysicalLayerSpec
 from .specs.parse import AedtSpec, parse_aedt_spec
 from .specs.q2d import Q2dConductorSpec, Q2dRectangleSpec, Q2dSpec
 from .specs.q3d import Q3dNetSpec, Q3dSpec, Q3dTerminalPair
@@ -90,27 +79,19 @@ __all__ = [
     "ExpressionCacheConvergenceSet",
     "FrequencySweepSpec",
     "HandoffPlan",
-    "HfssDrivenMode",
-    "HfssDrivenSpec",
     "HfssDrivenGeometrySpec",
     "LumpedRlc",
     "LumpedTerminalPort",
-    "HfssEigenmodeSpec",
     "HfssEprAnalysisSpec",
     "HfssEprSpec",
     "HfssRunControl",
     "HfssSpec",
-    "LayerImport",
-    "LengthMeshSpec",
     "MatrixRunControl",
     "ModalPort",
     "NativeExpressionDefinition",
     "NormalizedSurfaceEprTotal",
-    "ObjectBinding",
     "PdkMaterial",
-    "PhysicalLayerSpec",
     "PlanarJunction",
-    "PreparedPlanarGeometry",
     "PreparedModel",
     "PreparedSgbModel",
     "Q2dConductorSpec",
@@ -129,7 +110,6 @@ __all__ = [
     "prepare_handoff",
     "prepare_hfss_eigenmode_from_geometry",
     "prepare_hfss_driven_from_geometry",
-    "prepare_planar_geometry_input",
     "prepare_q3d_from_geometry",
     "prepare_sgb_model",
     "reanalyze_epr",

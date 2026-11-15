@@ -9,11 +9,10 @@ from __future__ import annotations
 import json
 
 import pytest
-from test_aedt_public_preparation import file_only_geometry, produce_request
+from test_aedt_public_preparation import produce_request
 
 from scgsim.aedt import (
     EprAnalysisRequest,
-    PreparedPlanarGeometry,
     resolve_epr_result,
     resolve_saved_solution,
 )
@@ -114,29 +113,13 @@ def test_a_request_of_the_native_builder_is_refused(tmp_path):
         parse_aedt_spec(payload, base_dir=tmp_path / "request")
 
 
-def test_a_planar_geometry_on_a_route_basis_is_refused():
-    """A prepared planar payload with ``route`` and no ``modeling`` is not decoded."""
-    payload = file_only_geometry().to_payload()
-    payload["route"] = "A"
-    del payload["modeling"]
-    with pytest.raises(ValueError, match="has no 'modeling'"):
-        PreparedPlanarGeometry.from_payload(payload)
-
-
-def test_a_planar_geometry_with_an_untagged_layer_map_is_refused():
-    """A source trace that is a layer map, not a tagged plan, is not read."""
-    payload = file_only_geometry().to_payload()
-    payload["source"]["modeling"] = {"modeling": "solid", "source_layers": []}
-    with pytest.raises(ValueError, match="no tagged physical representation plan"):
-        PreparedPlanarGeometry.from_payload(payload)
-
-
-def test_an_earlier_planar_geometry_schema_is_refused():
-    """The v1 prepared planar geometry payload is not decoded."""
-    payload = file_only_geometry().to_payload()
-    payload["schema_version"] = "scgsim.aedt.epr-planar.v1"
-    with pytest.raises(ValueError, match="prepared planar payload is not canonical"):
-        PreparedPlanarGeometry.from_payload(payload)
+@pytest.mark.parametrize(
+    "schema", ["scgsim.aedt.hfss-driven.v1", "scgsim.aedt.hfss-eigenmode.v1"]
+)
+def test_a_request_of_the_gds_import_route_is_unsupported(tmp_path, schema):
+    """The GDS-import HFSS requests are removed (#67 decision 4); their schemas are not decoded."""
+    with pytest.raises(ValueError, match="unsupported AEDT schema"):
+        parse_aedt_spec({"schema_version": schema}, base_dir=tmp_path)
 
 
 def test_records_without_their_current_members_are_refused():

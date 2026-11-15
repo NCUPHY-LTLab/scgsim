@@ -21,9 +21,6 @@ from scgsim.aedt.epr.native_workflow import (
 )
 from scgsim.aedt.io import file_sha256, read_json, write_json
 from scgsim.aedt.preparation.handoff_files import utc_now
-from scgsim.aedt.preparation.planar import (
-    validate_geometry_workers,
-)
 from scgsim.aedt.results.epr import seal_saved_solution
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
@@ -78,8 +75,6 @@ from scgsim.aedt.runtime.receipt import (
 )
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
@@ -125,11 +120,6 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Analyze the sealed saved-copy EPR request without solving",
     )
-    parser.add_argument(
-        "--geometry-workers",
-        type=int,
-        help="Override pure EPR inset geometry workers before AEDT launch",
-    )
     parser.add_argument("--cores", type=int, help="Override local solve core count")
     parser.add_argument(
         "--ram-limit-percent",
@@ -139,8 +129,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.stop_and_save or args.abort_and_save:
         if any((args.execute, args.prepare_only, args.analyze_epr)) or any(
-            value is not None
-            for value in (args.geometry_workers, args.cores, args.ram_limit_percent)
+            value is not None for value in (args.cores, args.ram_limit_percent)
         ):
             parser.error(
                 "--stop-and-save/--abort-and-save are exclusive with other actions and overrides"
@@ -165,7 +154,6 @@ def main(argv: list[str] | None = None) -> int:
         options=ExecutionOptions(
             prepare_only=args.prepare_only,
             analyze_epr=args.analyze_epr,
-            geometry_workers=args.geometry_workers,
             cores=args.cores,
             ram_limit_percent=args.ram_limit_percent,
         ),
@@ -178,7 +166,6 @@ class ExecutionOptions:
 
     prepare_only: bool = False
     analyze_epr: bool = False
-    geometry_workers: int | None = None
     cores: int | None = None
     ram_limit_percent: int | None = None
     batch_collection: CollectionContext | None = None
@@ -377,13 +364,6 @@ class _ExecutionTransaction:
             raise RuntimeError("PyAEDT lock mismatch")
         if isinstance(self.spec, Q3dSpec) and not self.options.prepare_only:
             write_json(self.receipt_path, self.receipt)
-        setting = self.metadata.get("execution", {}).get("geometry_workers")
-        workers = (
-            self.options.geometry_workers
-            if self.options.geometry_workers is not None
-            else setting
-        )
-        validate_geometry_workers(workers)
         self.receipt["native_compatibility"] = {}
         self.transport_stack.enter_context(
             native_compatibility(
@@ -480,12 +460,11 @@ class _ExecutionTransaction:
                 "project": prepared.project_path.relative_to(
                     prepared.request.workspace
                 ).as_posix(),
-                "materials": prepared.materials,
-                "region": prepared.region,
-                "mesh": prepared.mesh,
+                "materials": prepared.geometry["materials"],
+                "region": prepared.geometry["region"],
                 "ports": prepared.ports,
                 "setup": prepared.setup,
-                **({"geometry": prepared.geometry} if prepared.geometry else {}),
+                "geometry": prepared.geometry,
                 "save": {"ok": True},
                 "solver_invoked": False,
             }
@@ -692,8 +671,6 @@ class _ExecutionTransaction:
                     Q3dSpec,
                     Q2dSpec,
                     HfssDrivenGeometrySpec,
-                    HfssDrivenSpec,
-                    HfssEigenmodeSpec,
                     HfssEprSpec,
                 ),
             )

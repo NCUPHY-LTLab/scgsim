@@ -225,11 +225,13 @@ LEFT_EDGE_UM = 4.0
 RIGHT_EDGE_UM = 6.0
 
 
-def _rectangle(x0: float, x1: float, y0: float = 1.0, y1: float = 3.0):
+def rectangle(x0: float, x1: float, y0: float = 1.0, y1: float = 3.0):
+    """The loop of the axis-aligned rectangle from (x0, y0) to (x1, y1)."""
     return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
 
 
-def _solution_region(name: str, kind: str, material: str, bounds, holes=()):
+def solution_region(name: str, kind: str, material: str, bounds, holes=()):
+    """A solution-region Entity of ``material`` filling ``bounds`` (x0, x1, y0, y1, z0, z1) in um."""
     x0, x1, y0, y1, z0, z1 = bounds
     return SemanticEntitySpec(
         name,
@@ -239,7 +241,7 @@ def _solution_region(name: str, kind: str, material: str, bounds, holes=()):
         0,
         "polygon",
         geometry={
-            "outer_loop": _rectangle(x0, x1, y0, y1),
+            "outer_loop": rectangle(x0, x1, y0, y1),
             "hole_loops": holes,
             "z_min_um": z0,
             "z_max_um": z1,
@@ -277,8 +279,8 @@ def thin_film_pair(
         {"layer_attachment_face": "lower"},
     )
     loops = {
-        "left": _rectangle(0.0, LEFT_EDGE_UM, 0.0, 4.0),
-        "right": _rectangle(RIGHT_EDGE_UM, 10.0, 0.0, 4.0),
+        "left": rectangle(0.0, LEFT_EDGE_UM, 0.0, 4.0),
+        "right": rectangle(RIGHT_EDGE_UM, 10.0, 0.0, 4.0),
     }
     metals = tuple(
         SemanticEntitySpec(
@@ -307,7 +309,7 @@ def thin_film_pair(
     )
     if bump:
         metals = (*metals, _bump_entity())
-    port_loop = _rectangle(LEFT_EDGE_UM - landing_um, RIGHT_EDGE_UM + landing_um)
+    port_loop = rectangle(LEFT_EDGE_UM - landing_um, RIGHT_EDGE_UM + landing_um)
     port = PortSheetRegionRecord(
         "port_sheet",
         "port",
@@ -320,7 +322,7 @@ def thin_film_pair(
                 "port_polygon",
                 "chip/left",
                 "left",
-                _rectangle(LEFT_EDGE_UM - landing_um, LEFT_EDGE_UM),
+                rectangle(LEFT_EDGE_UM - landing_um, LEFT_EDGE_UM),
             ),
             PortSheetOverlapRecord(
                 "right_overlap",
@@ -328,7 +330,7 @@ def thin_film_pair(
                 "port_polygon",
                 "chip/right",
                 "right",
-                _rectangle(RIGHT_EDGE_UM, RIGHT_EDGE_UM + landing_um),
+                rectangle(RIGHT_EDGE_UM, RIGHT_EDGE_UM + landing_um),
             ),
         ),
         metadata={
@@ -345,17 +347,15 @@ def thin_film_pair(
         *((LayoutPolygonSpec("bump", "bump", BUMP_LOOP),) if bump else ()),
         LayoutPolygonSpec("port_polygon", "port", port_loop),
     )
-    substrate = _solution_region(
-        "substrate", "dielectric", "Si", (-3, 13, -1, 5, -2, 0)
-    )
-    lower = _solution_region(
+    substrate = solution_region("substrate", "dielectric", "Si", (-3, 13, -1, 5, -2, 0))
+    lower = solution_region(
         "lower_air",
         "vacuum",
         "air",
         (-4, 14, -2, 6, -2, 0),
         (substrate.geometry["outer_loop"],),
     )
-    upper = _solution_region("upper_air", "vacuum", "air", (-4, 14, -2, 6, 0, 4.25))
+    upper = solution_region("upper_air", "vacuum", "air", (-4, 14, -2, 6, 0, 4.25))
     regions = {
         item.semantic_id: {
             "semantic_id": item.semantic_id,
@@ -625,10 +625,8 @@ def rectangular_junction_source(
             "direction_sign_convention": "gdsfactory_port_orientation_outward",
         },
     )
-    substrate = _solution_region(
-        "substrate", "dielectric", "Si", (-4, 14, -2, 4, -2, 0)
-    )
-    upper = _solution_region(
+    substrate = solution_region("substrate", "dielectric", "Si", (-4, 14, -2, 4, -2, 0))
+    upper = solution_region(
         vacuum,
         "vacuum",
         "air",

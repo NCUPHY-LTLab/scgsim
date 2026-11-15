@@ -2,7 +2,8 @@
 
 * the free-face loop drawn as one closed AEDT polyline, and its segment lengths;
 * the junction current line read from a port face's own edges, and a generic RLC's native branches;
-* the refusal of a port sheet with no treatment, and of lumped ports, before AEDT is touched;
+* the refusal of a port sheet with no treatment, and of lumped ports outside a Driven Terminal design,
+  before AEDT is touched;
 * a port treatment over every face of a port sheet SGB partitions, checked before AEDT is touched;
 * boundary and Net names unique across Net IDs that sanitise alike, assigned and read back under one name;
 * which imported copy of a face each Surface-EPR row integrates, and the ``surface``/``adjacent`` choice by
@@ -49,16 +50,20 @@ from scgsim.aedt.runtime.families.sgb_boundaries import (  # noqa: E402
     q3d_net_names,
     rlc_branches,
 )
-from scgsim.aedt.runtime.families.sgb_faces import import_tolerance_um  # noqa: E402
+from scgsim.aedt.runtime.families.sgb_faces import (  # noqa: E402
+    SgbImportError,
+    import_tolerance_um,
+)
 from scgsim.aedt.runtime.families.sgb_import import (  # noqa: E402
     ImportedSgbModel,
-    SgbImportError,
-    assign_port_rlc,
     assign_sheet_perfect_e,
-    current_line_um,
     import_sgb_model,
     polyline_of_loop,
     segment_length_um,
+)
+from scgsim.aedt.runtime.families.sgb_ports import (  # noqa: E402
+    assign_port_rlc,
+    current_line_um,
 )
 from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort  # noqa: E402
 from scgsim.aedt.specs.epr import PlanarJunction  # noqa: E402
@@ -286,17 +291,32 @@ def test_a_port_sheet_without_a_junction_or_rlc_is_refused_before_aedt(tmp_path)
     """A port sheet with no treatment has no AEDT meaning; the import refuses it before touching the design."""
     model = _bare_model(tmp_path)
     with pytest.raises(
-        ValueError, match=r"PORT::sheet.*carry no junction or LumpedRlc"
+        ValueError,
+        match=r"PORT::sheet.*carry no junction, LumpedRlc or LumpedTerminalPort",
     ):
         import_sgb_model(None, model, family="hfss")
 
 
-def test_lumped_ports_are_refused_until_the_driven_terminal_design_exists(tmp_path):
-    """The import sets up no Driven Terminal design, so a model with lumped ports is refused."""
-    port = LumpedTerminalPort(1, "p1", "sheet", ("chip_left",), ("chip_right",), 50.0)
+@pytest.mark.parametrize("solution_type", ["Eigenmode", "Modal"])
+def test_lumped_ports_are_imported_only_into_a_driven_terminal_design(
+    tmp_path, solution_type
+):
+    """A model with lumped Terminal ports is refused in any other design before the STEP is imported."""
+    port = LumpedTerminalPort(1, "p1", "sheet", ("chip/left",), ("chip/right",), 50.0)
     model = _bare_model(tmp_path, ports=(port,))
-    with pytest.raises(NotImplementedError, match="Driven Terminal design"):
-        import_sgb_model(None, model, family="hfss")
+    design = SimpleNamespace(solution_type=solution_type)
+    with pytest.raises(SgbImportError, match="lumped Terminal ports; they go together"):
+        import_sgb_model(design, model, family="hfss")
+
+
+def test_a_driven_terminal_design_needs_lumped_ports(tmp_path):
+    """A Driven Terminal design of a model without lumped ports is refused before the STEP is imported."""
+    model = _bare_model(
+        tmp_path, lumped_rlcs=(LumpedRlc("sheet", "parallel", inductance_h=1e-8),)
+    )
+    design = SimpleNamespace(solution_type="Terminal")
+    with pytest.raises(SgbImportError, match="0 lumped Terminal ports"):
+        import_sgb_model(design, model, family="hfss")
 
 
 def test_q3d_refuses_a_lumped_rlc(tmp_path):
@@ -403,10 +423,10 @@ def _rebuilt_sheets(guard):
     for k, free in enumerate(guard["free_faces"]):
         edges = [
             SimpleNamespace(
-                vertices=[_vertex(s["points_um"][0]), _vertex(s["points_um"][-1])]
+                id=2000 + 100 * k + n,
+                vertices=[_vertex(s["points_um"][0]), _vertex(s["points_um"][-1])],
             )
-            for loop in free["loops"]
-            for s in loop
+            for n, s in enumerate(s for loop in free["loops"] for s in loop)
         ]
         face = SimpleNamespace(id=1000 + k, edges=edges)
         objects[f"sheet{k}"] = SimpleNamespace(faces=[face])

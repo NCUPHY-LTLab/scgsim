@@ -30,6 +30,10 @@ RELATIVE_AREA_TOLERANCE = 1e-9
 IMPORT_TOLERANCE_PER_GRID = 1e-3
 
 
+class SgbImportError(RuntimeError):
+    """The AEDT design does not hold the guarded SGB model, or an assignment did not take."""
+
+
 class FaceMatchError(RuntimeError):
     """The imported faces of a solid do not correspond one to one to its guarded faces."""
 

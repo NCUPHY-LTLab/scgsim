@@ -8,7 +8,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 from scgsim.aedt.data import (
     detached,
@@ -17,7 +17,6 @@ from scgsim.aedt.io import file_sha256, write_json
 from scgsim.aedt.preparation.cohort import (
     canonical_handoff_paths,
 )
-from scgsim.aedt.preparation.gds import GdsPreflight, gds_preflight, write_import_gds
 from scgsim.aedt.preparation.handoff_files import (
     handoff_member,
     utc_now,
@@ -41,8 +40,6 @@ from scgsim.aedt.specs.epr import (
     SavedSolution,
 )
 from scgsim.aedt.specs.hfss import (
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
 )
 from scgsim.aedt.specs.hfss_common import EigenmodeRunControl
@@ -68,7 +65,16 @@ class HandoffPlan:
 def prepare_handoff(
     *, spec: AedtSpec, output_dir: str | Path, resources: AedtResources | None = None
 ) -> HandoffPlan:
-    """Prepare one portable source cohort without opening AEDT."""
+    """Prepare one portable Q3D or Q2D source cohort without opening AEDT.
+
+    An HFSS request is prepared with :func:`prepare_hfss_eigenmode_from_geometry` or
+    :func:`prepare_hfss_driven_from_geometry`, which attach its SGB model.
+    """
+    if not isinstance(spec, (Q3dSpec, Q2dSpec)):
+        raise TypeError(
+            f"prepare_handoff takes a Q3dSpec or Q2dSpec, not {type(spec).__name__}; prepare an HFSS "
+            "request with prepare_hfss_eigenmode_from_geometry or prepare_hfss_driven_from_geometry"
+        )
     return _PortableHandoff(spec, output_dir, resources).build()
 
 
@@ -92,33 +98,8 @@ class _PortableHandoff:
     def _validate_source(self) -> None:
         if self.resources is not None and not isinstance(self.resources, AedtResources):
             raise TypeError("resources must be AedtResources or None")
-        if (
-            not isinstance(self.spec, Q2dSpec)
-            and getattr(self.spec, "modeling", None) is None
-        ):
+        if isinstance(self.spec, Q3dSpec) and self.spec.modeling is None:
             raise ValueError("new AEDT 3D execution requires explicit modeling")
-        self.source_gds: Path | None = None
-        self.preflight: GdsPreflight | None = None
-        if not isinstance(self.spec, (Q2dSpec, Q3dSpec)):
-            self.source_gds = cast(
-                Path, cast(HfssDrivenSpec | HfssEigenmodeSpec, self.spec).gds_path
-            ).resolve()
-            if not self.source_gds.is_file():
-                raise FileNotFoundError(
-                    f"gds_path must be an existing file: {self.source_gds}"
-                )
-            self.preflight = gds_preflight(self.source_gds)
-            actual_pairs = self.preflight["polygon_layer_datatypes"]
-            declared_pairs = {
-                (item.layer, item.datatype)
-                for item in cast(
-                    HfssDrivenSpec | HfssEigenmodeSpec, self.spec
-                ).layer_imports
-            }
-            if actual_pairs != declared_pairs:
-                raise ValueError(
-                    f"GDS layer/datatype pairs {sorted(actual_pairs)!r} do not match spec {sorted(declared_pairs)!r}"
-                )
 
     def _copy_source(self) -> None:
         self.run_dir = Path(self.output_dir).expanduser().resolve()
@@ -128,21 +109,6 @@ class _PortableHandoff:
             )
         self.metadata_dir = self.run_dir / "metadata"
         self.metadata_dir.mkdir(parents=True)
-        self.copied_gds: Path | None = None
-        if self.source_gds is not None:
-            geometry_dir = self.run_dir / "geometry"
-            geometry_dir.mkdir()
-            self.copied_gds = geometry_dir / "design.gds"
-            self.original_gds = geometry_dir / "source.gds"
-            shutil.copy2(self.source_gds, self.original_gds)
-            write_import_gds(
-                self.source_gds,
-                self.copied_gds,
-                cast(
-                    HfssDrivenSpec | HfssEigenmodeSpec, self.spec
-                ).effective_layer_imports,
-            )
-
         self.script_path = self.run_dir / "run_aedt.sh"
         self.spec_path = self.run_dir / "aedt_spec.json"
         self.metadata_path = self.metadata_dir / "aedt_handoff_metadata.json"
@@ -156,25 +122,6 @@ class _PortableHandoff:
     def _write_spec(self) -> None:
         write_script(self.script_path)
         self.payload = self.spec.to_payload()
-        if not isinstance(self.spec, (Q2dSpec, Q3dSpec)):
-            self.payload["gds"]["path"] = "geometry/design.gds"
-            self.payload["gds"]["source_path"] = "geometry/source.gds"
-            self.payload["gds"]["source_sha256"] = file_sha256(self.original_gds)
-            self.payload["gds"]["import_layer_map"] = [
-                {
-                    key: item[key]
-                    for key in (
-                        "layer",
-                        "datatype",
-                        "layer_name",
-                        "physical_layer_id",
-                        "native_import_layer",
-                    )
-                }
-                for item in cast(
-                    HfssDrivenSpec | HfssEigenmodeSpec, self.spec
-                ).effective_layer_imports
-            ]
         if isinstance(self.spec, Q3dSpec):
             attach_sgb_model(self.spec.model, self.run_dir)
             self.materials = detached(self.spec.model.materials)
@@ -223,20 +170,6 @@ class _PortableHandoff:
                 else {}
             ),
         }
-        if self.copied_gds is not None and self.preflight is not None:
-            self.files["gds"] = "geometry/design.gds"
-            self.metadata["gds_sha256"] = file_sha256(self.copied_gds)
-            self.metadata["gds_preflight"] = {
-                "polygon_layer_datatypes": [
-                    list(pair)
-                    for pair in sorted(self.preflight["polygon_layer_datatypes"])
-                ],
-                "path_count": self.preflight["path_count"],
-                "label_count": self.preflight["label_count"],
-                "labels": "ignored as non-geometry",
-            }
-            self.source["gds"] = "geometry/design.gds"
-            self.source["gds_sha256"] = file_sha256(self.copied_gds)
         write_json(self.metadata_path, self.metadata)
 
     def _write_receipt(self) -> None:
@@ -453,7 +386,7 @@ class _SavedAnalysisHandoff:
             "materials": self.materials,
             "vacuum_material_id": self.vacuum_ids[0],
             "run_control": self.payload["run_control"],
-            "execution": {"geometry_workers": None},
+            "execution": {"resources": None},
             "pyaedt": self.payload["pyaedt"],
             "aedt": self.payload["aedt"],
             "files": self.files,

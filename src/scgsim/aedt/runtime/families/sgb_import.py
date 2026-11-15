@@ -15,13 +15,15 @@ before any assignment when what AEDT imported is not the guarded model:
    on the Region's faces: Palace assigns nothing to its exterior, which is its natural PMC condition, and
    the two realizations must have the same outer boundary condition;
 7. HFSS: one Perfect E per Net over the Route A sheet faces, and a Lumped RLC over the port-sheet faces of
-   each junction and of each generic ``LumpedRlc`` (issue #67 decision 8).  Each assignment and its
-   readback use the planned name.  Q3D assigns its Nets, with their request's types, and their sources and
+   each junction and of each generic ``LumpedRlc`` (issue #67 decision 8); in a Driven Terminal design, a
+   lumped port over the port-sheet faces of each ``LumpedTerminalPort``, its integration line read from
+   those faces' edges as the Lumped RLC's current line is.  Each assignment and its readback use the
+   planned name.  Q3D assigns its Nets, with their request's types, and their sources and
    sinks after the import (:mod:`.q3d_terminals`); in Route A it first rebuilds each conductor-sheet group
    as one sheet object, a PEC thin conductor of its film's thickness, since Q3D puts a Net on objects only.
 
-Every port sheet must carry a junction or an RLC.  Lumped Terminal ports wait for the SGB flow's Driven
-Terminal design, and a model that has them is refused, not approximated.
+Every port sheet must carry a junction, an RLC or a lumped Terminal port.  Lumped Terminal ports are
+assigned only in a Driven Terminal design, and junctions and RLCs only outside one.
 """
 
 from __future__ import annotations
@@ -35,15 +37,16 @@ from scgsim.aedt.preparation.sgb_model import PreparedSgbModel, port_group
 from scgsim.aedt.preparation.sgb_q3d import sheet_object_names
 from scgsim.aedt.runtime.families.sgb_boundaries import (
     HfssBoundaryPlan,
-    PortRlc,
     plan_hfss_boundaries,
 )
 from scgsim.aedt.runtime.families.sgb_faces import (
     ImportedFace,
+    SgbImportError,
     area_tolerance_um2,
     import_tolerance_um,
     match_solid_faces,
 )
+from scgsim.aedt.runtime.families.sgb_ports import assign_lumped_port, assign_port_rlc
 from scgsim.aedt.runtime.native.common import (
     detached_data,
     native_boundary_type,
@@ -64,10 +67,6 @@ Family = Literal["hfss", "q3d"]
 Point = tuple[float, float, float]
 REGION_NAME = "Region"
 OUTER_BOUNDARY_NAME = "outer_perfect_h"
-
-
-class SgbImportError(RuntimeError):
-    """The AEDT design does not hold the guarded SGB model, or an assignment did not take."""
 
 
 @dataclass(frozen=True)
@@ -96,13 +95,16 @@ def import_sgb_model(
     sidecar = read_sidecar(model.path("sidecar"))
     _check_ports(model, sidecar, family)
     hfss = (
-        plan_hfss_boundaries(sidecar, guard, model.junctions, model.lumped_rlcs)
+        plan_hfss_boundaries(
+            sidecar, guard, model.junctions, model.lumped_rlcs, model.lumped_ports
+        )
         if family == "hfss"
         else None
     )
     # AEDT's readback is coarser than the sidecar's tolerance_um (decision 9), so every comparison with what
     # AEDT reports uses a thousandth of the bound model's own grid.
     tolerance_um = import_tolerance_um(float(sidecar["model"]["grid_um"]))
+    _check_design(app, model, family)
     _import_step(app, model, guard)
     face_copies = _match_faces(app, guard, tolerance_um)
     sheets = _rebuild_free_faces(app, guard["free_faces"], tolerance_um)
@@ -126,6 +128,12 @@ def import_sgb_model(
             assign_port_rlc(app, rlc, face_copies, tolerance_um)
             for rlc in hfss.lumped_rlcs
         ]
+        if hfss.lumped_ports:
+            port_faces = lumped_port_faces(guard, sheets)
+            imported.record["lumped_ports"] = [
+                assign_lumped_port(app, item, port_faces, tolerance_um)
+                for item in hfss.lumped_ports
+            ]
     if family == "q3d":
         imported.record["conductor_sheets"] = rebuild_conductor_sheets(
             app, model, sidecar, imported
@@ -133,6 +141,15 @@ def import_sgb_model(
     imported.record["readback_tolerance_um"] = tolerance_um
     imported.record["model_identity_sha256"] = model.identity_sha256
     return imported
+
+
+def lumped_port_faces(guard: StepGuard, sheets: Mapping[str, str]) -> dict[str, Any]:
+    """Planned face -> the sheet object it was rebuilt as (a free face), or its guard record (on a solid)."""
+    faces: dict[str, Any] = {
+        face["face"]: face for solid in guard["solids"] for face in solid["faces"]
+    }
+    faces.update(sheets)
+    return faces
 
 
 def imported_geometry_record(imported: ImportedSgbModel) -> dict[str, Any]:
@@ -155,27 +172,43 @@ def _check_supported(model: PreparedSgbModel, family: Family) -> None:
         raise ValueError(
             "Q3D has no junctions or lumped RLCs; they belong to HFSS Eigenmode"
         )
-    if model.lumped_ports:
-        names = [port.name for port in model.lumped_ports]
-        raise NotImplementedError(
-            f"lumped Terminal ports {names} need the SGB flow's Driven Terminal design, "
-            "which this import does not set up"
+    if family == "q3d" and model.lumped_ports:
+        raise ValueError("Q3D has no lumped Terminal ports; they belong to HFSS Driven")
+    if model.lumped_ports and (model.junctions or model.lumped_rlcs):
+        raise ValueError(
+            "a model with lumped Terminal ports is a Driven model; its junctions and lumped RLCs "
+            "belong to HFSS Eigenmode"
+        )
+
+
+def _check_design(app: Any, model: PreparedSgbModel, family: Family) -> None:
+    """Lumped Terminal ports need a Driven Terminal design, and a Driven Terminal design needs them."""
+    if family != "hfss":
+        return
+    terminal = app.solution_type == "Terminal"
+    if bool(model.lumped_ports) != terminal:
+        raise SgbImportError(
+            f"the design solves {app.solution_type!r} and the model has "
+            f"{len(model.lumped_ports)} lumped Terminal ports; they go together"
         )
 
 
 def _check_ports(model: PreparedSgbModel, sidecar: Sidecar, family: Family) -> None:
-    """In HFSS every lumped-port sheet must carry a junction or an RLC; an untreated one has no AEDT meaning."""
+    """In HFSS every port sheet must carry a junction, an RLC or a lumped port; an untreated one has no AEDT meaning."""
     if family != "hfss":
         return
-    bound = {item.port_group for item in model.junctions} | {
-        port_group(item.port_sheet_id) for item in model.lumped_rlcs
+    bound = {
+        *(item.port_group for item in model.junctions),
+        *(port_group(item.port_sheet_id) for item in model.lumped_rlcs),
+        *(port_group(item.port_sheet_id) for item in model.lumped_ports),
     }
     unbound = sorted(
         p["group"] for p in sidecar["port"].values() if p["group"] not in bound
     )
     if unbound:
         raise ValueError(
-            f"port sheets {unbound} carry no junction or LumpedRlc; give each one its treatment"
+            f"port sheets {unbound} carry no junction, LumpedRlc or LumpedTerminalPort; give each one "
+            "its treatment"
         )
 
 
@@ -592,106 +625,6 @@ def assign_sheet_perfect_e(
     return records
 
 
-def assign_port_rlc(
-    app: Any,
-    rlc: PortRlc,
-    face_copies: Mapping[str, Mapping[str, int]],
-    tolerance_um: float,
-) -> dict[str, Any]:
-    """One Lumped RLC over every face of its port sheet, its current line read from those faces' own edges.
-
-    SGB partitions a port sheet where another face meets it (a pad wall, a band), so the RLC takes all of
-    its faces and the current line crosses their union along the port's ``direction``.  A face two solids
-    share imports twice, about 4e-5 um apart on arcs (E4), so the line ends come from the imported faces
-    themselves, never from the sidecar's coordinates.
-    """
-    faces: list[tuple[str, int]] = []
-    edges: list[tuple[Point, ...]] = []
-    for planned in rlc.port["faces"]:
-        ((object_name, face_id),) = face_copies[planned].items()
-        face = next(f for f in app.modeler[object_name].faces if int(f.id) == face_id)
-        faces.append((object_name, face_id))
-        edges += [
-            tuple(_point(vertex.position) for vertex in edge.vertices)
-            for edge in face.edges
-        ]
-    start, end = current_line_um(edges, rlc.direction, tolerance_um)
-    props = {
-        "Faces": [face_id for _, face_id in faces],
-        "CurrentLine": {
-            "Start": [f"{value}um" for value in start],
-            "End": [f"{value}um" for value in end],
-        },
-        **rlc.branches,
-    }
-    # PyAEDT's Lumped RLC helpers take sheet names only and refuse all-falsy values; the native writer takes
-    # the face ids (E4) and keeps an authored zero branch.
-    boundary = app._create_boundary(rlc.name, props, "Lumped RLC")  # noqa: SLF001 -- the pinned native writer is the only face-id route.
-    if not boundary or native_boundary_type(app, rlc.name) != "Lumped RLC":
-        raise SgbImportError(f"AEDT did not assign the Lumped RLC {rlc.name!r}")
-    return {
-        **rlc.evidence,
-        "boundary": rlc.name,
-        "port_group": rlc.port["group"],
-        "faces": [
-            {"object_name": object_name, "face_id": face_id}
-            for object_name, face_id in faces
-        ],
-        "host_entity_ids": list(rlc.port["host_entity_ids"]),
-        "current_line_um": [list(start), list(end)],
-        "branches": dict(rlc.branches),
-    }
-
-
-def current_line_um(
-    edges: Sequence[Sequence[Point]], direction: Point, tolerance_um: float
-) -> tuple[Point, Point]:
-    """Start and end of the current line across a port face along ``direction``.
-
-    At each end of the face's extent along ``direction`` its straight edges there must form one unbroken
-    segment across it (SGB may split it where another face meets the port); the line joins the midpoints of
-    the two segments, from the lower end to the upper.  The sidecar's ``direction`` points from the first host
-    conductor to the second, so the line does too.
-    """
-    vertices = [point for edge in edges for point in edge]
-    low = min(_dot(point, direction) for point in vertices)
-    high = max(_dot(point, direction) for point in vertices)
-    start, end = (
-        _port_end_midpoint(edges, direction, extreme, tolerance_um)
-        for extreme in (low, high)
-    )
-    return start, end
-
-
-def _port_end_midpoint(
-    edges: Sequence[Sequence[Point]],
-    direction: Point,
-    extreme: float,
-    tolerance_um: float,
-) -> Point:
-    """The midpoint of the one unbroken segment the face's edges at ``extreme`` along ``direction`` form."""
-    across = [
-        edge
-        for edge in edges
-        if len(edge) == 2
-        and all(abs(_dot(p, direction) - extreme) <= tolerance_um for p in edge)
-    ]
-    points = [p for edge in across for p in edge]
-    if not across:
-        raise SgbImportError(
-            f"the port face has no edge across its direction at {extreme} um"
-        )
-    a, b = max(
-        ((p, q) for p in points for q in points), key=lambda pair: math.dist(*pair)
-    )
-    covered = sum(math.dist(*edge) for edge in across)
-    if abs(covered - math.dist(a, b)) > len(across) * tolerance_um:
-        raise SgbImportError(
-            f"the port face's edges at {extreme} um along its direction do not form one segment"
-        )
-    return _point([(a[k] + b[k]) / 2 for k in range(3)])
-
-
 # ---------------------------------------------------------------- small vector helpers
 
 
@@ -702,7 +635,3 @@ def _point(values: Sequence[Any]) -> Point:
 
 def _mean(points: Sequence[Point]) -> Point:
     return _point([sum(p[k] for p in points) / len(points) for k in range(3)])
-
-
-def _dot(a: Sequence[float], b: Sequence[float]) -> float:
-    return sum(x * y for x, y in zip(a, b, strict=True))

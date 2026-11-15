@@ -26,13 +26,11 @@ from scgsim.aedt import (  # noqa: E402
     AedtResources,
     EigenmodeRunControl,
     PlanarJunction,
-    PreparedPlanarGeometry,
     prepare_hfss_eigenmode_from_geometry,
     prepare_sgb_model,
 )
 from scgsim.aedt.preparation.sgb_model import PreparedSgbModel  # noqa: E402
 from scgsim.aedt.specs.parse import parse_aedt_spec  # noqa: E402
-from scgsim.geometry import ApproximationProfile, interpret_physical_layers  # noqa: E402
 
 pytestmark = pytest.mark.occt
 
@@ -45,33 +43,6 @@ def _digest(value):
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-
-
-def file_only_geometry():
-    """A structural planar geometry for the codec tests of the Driven route; no native evidence."""
-    physical = interpret_physical_layers((), ApproximationProfile("solid", "v1", {}))
-    source = {
-        "materials": {"vacuum": {"kind": "vacuum", "permittivity": 1.0}},
-        "modeling": physical.to_payload(),
-        "conductors": [],
-    }
-    model = {"modeling": "solid", "source": source, "junctions": []}
-    complete = {
-        **model,
-        "contribution_catalog": [],
-        "contributions": [],
-        "surface_bindings": [],
-    }
-    return PreparedPlanarGeometry(
-        modeling="solid",
-        source=source,
-        junctions=(),
-        contribution_catalog=(),
-        contributions=(),
-        surface_bindings=(),
-        model_sha256=_digest(model),
-        source_sha256=_digest(complete),
-    )
 
 
 @functools.cache

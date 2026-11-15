@@ -1,7 +1,8 @@
-"""Accepted caller-owned sweep counts; transport data below is synthetic.
+"""Accepted caller-owned sweep counts of an HFSS Driven Terminal request; transport data below is synthetic.
 
-No fixture represents a completed native run. Complete and partial synthetic
-readbacks exercise the real validator without bypassing native identity checks.
+The request is a real one, on the SGB model of two lumped ports (``sgb_driven_inputs``).  No fixture
+represents a completed native run.  Complete and partial synthetic readbacks exercise the real validator
+without bypassing native identity checks.  Skipped where OCP (the ``occt`` group) is missing.
 """
 
 from __future__ import annotations
@@ -15,56 +16,65 @@ from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+pytest.importorskip("OCP")
+
+from sgb_driven_inputs import driven_model  # noqa: E402
+
 from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
 from scgsim.aedt.results.readback_dispatch import validate_result_readback
 from scgsim.aedt.runtime.families import hfss_exports as exports
 from scgsim.aedt.runtime.families import hfss_setup as setup
-from scgsim.aedt.specs.common import (
-    LayerImport,
-    ModalPort,
-    ObjectBinding,
-    PdkMaterial,
-    TerminalPort,
+from scgsim.aedt.specs.hfss import (
+    FrequencySweepSpec,
+    HfssDrivenGeometrySpec,
+    HfssRunControl,
 )
-from scgsim.aedt.specs.hfss import FrequencySweepSpec, HfssDrivenSpec, HfssRunControl
+from scgsim.geometry.sgb.output.exchange.guard import read_step_guard
+
+pytestmark = pytest.mark.occt
 
 
-def _spec(points=3, mode="modal"):
-    ports = tuple(
-        ModalPort(i, f"P{i}", side, ((x, 0, 0), (x, 1, 0)))
-        if mode == "modal"
-        else TerminalPort(i, f"P{i}", side, ("Ground",))
-        for i, side, x in ((1, "-X", 0), (2, "+X", 10))
-    )
-    return HfssDrivenSpec(
+def _spec(points=3):
+    return HfssDrivenGeometrySpec(
         modeling="solid",
         aedt_version="2024.2",
-        mode=mode,
-        gds_path="synthetic.gds",
         project_name="Synthetic",
         design_name="Design",
-        materials={
-            "vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum"),
-            "silicon": PdkMaterial("silicon", "dielectric", False, "Silicon"),
-            "metal": PdkMaterial("metal", "superconductor", True, None),
-        },
-        vacuum_material_id="vacuum",
-        layer_imports=(
-            LayerImport(1, 0, "SignalLayer", 0, 1),
-            LayerImport(2, 0, "GroundLayer", 0, 1),
-            LayerImport(3, 0, "SubstrateLayer", -10, 0),
-        ),
-        object_bindings=(
-            ObjectBinding("Signal", 1, "signal", "metal"),
-            ObjectBinding("Ground", 2, "ground", "metal"),
-            ObjectBinding("Substrate", 3, "substrate", "silicon"),
-        ),
-        ports=ports,
+        model=driven_model(),
         run_control=HfssRunControl(
             "Setup", "Sweep", FrequencySweepSpec(1, 2, points=points)
         ),
-        region_padding_um=(0, 0, 10, 10, 10, 10),
     )
+
+
+def _port_records(spec):
+    """The lumped-port records an import makes, Terminals ``P1`` and ``P2``, each on one face."""
+    return [
+        {
+            "index": port.index,
+            "kind": "lumped",
+            "requested": port.to_payload(),
+            "boundary": port.name,
+            "terminal_excitation": f"P{port.index}",
+            "port_group": f"PORT::{port.port_sheet_id}",
+            "faces": [{"object_name": "substrate", "face_id": 10 + port.index}],
+            "host_entity_ids": ["chip/ground", f"chip/pad_{port.index}"],
+            "signal_host": f"chip/pad_{port.index}",
+            "terminal_edges": [20 + port.index],
+        }
+        for port in spec.ports
+    ]
+
+
+def _geometry(spec, ports):
+    guard = read_step_guard(spec.model.path("guard"))
+    return {
+        "objects": {solid["solid"]: solid["aedt_name"] for solid in guard["solids"]},
+        "model_identity_sha256": spec.model.identity_sha256,
+        "lumped_ports": ports,
+    }
 
 
 class _SolutionData:
@@ -145,51 +155,26 @@ class HfssSweepCountTests(unittest.TestCase):
                 transport,
                 root,
                 spec,
-                [{"modal_excitation": "P1"}, {"modal_excitation": "P2"}],
+                [{"terminal_excitation": "P1"}, {"terminal_excitation": "P2"}],
             )
-            ports = []
-            for port in spec.ports:
-                line = [list(point) for point in port.integration_line_um]
-                ports.append(
-                    {
-                        "index": port.index,
-                        "boundary": port.name,
-                        "modal_excitation": port.name,
-                        "face_id": port.index,
-                        "face_center_um": [0, 0, 0],
-                        "effective": {"integration_line_um": line},
-                        "requested": {
-                            "integration_line_um": line,
-                            "modes": 1,
-                            "renormalize": False,
-                            "deembed_um": 0.0,
-                            "characteristic_impedance": "Zpi",
+            assigned = _port_records(spec)
+            ports = [
+                {
+                    **record,
+                    "native": {
+                        "saved_boundary": {
+                            "BoundType": "Lumped Port",
+                            "LumpedPortType": "Terminal",
+                            "Faces": [10 + record["index"]],
                         },
-                        "native": {
-                            "excitation_names": [
-                                p.name for p in spec.ports[: port.index]
-                            ],
-                            "boundary_properties": {
-                                "Deembed": False,
-                                "Name": port.name,
-                                "Num Modes": "1",
-                                "Renorm All Modes": False,
-                                "Type": "Wave Port",
-                            },
-                            "saved_boundary": {
-                                "bound_type": "Wave Port",
-                                "wave_port_type": "Modal",
-                                "faces": [port.index],
-                                "num_modes": 1,
-                                "deembed": False,
-                                "mode_number": 1,
-                                "use_integration_line": True,
-                                "characteristic_impedance": "Zpi",
-                                "integration_line_um": line,
-                            },
+                        "saved_terminal": {
+                            "BoundType": "Terminal",
+                            "Edges": [20 + record["index"]],
                         },
-                    }
-                )
+                    },
+                }
+                for record in assigned
+            ]
             results = root / "Synthetic.aedtresults"
             profiles = results / "Design.results"
             profiles.mkdir(parents=True)
@@ -211,6 +196,7 @@ class HfssSweepCountTests(unittest.TestCase):
                     "pyaedt_version": spec.pyaedt_version,
                 },
                 "ports": ports,
+                "geometry": _geometry(spec, assigned),
                 "result_readback": readback,
                 "setup": {
                     "name": "Setup",
@@ -234,7 +220,11 @@ class HfssSweepCountTests(unittest.TestCase):
                 },
             }
             self.assertIsNone(validate_result_readback(root, receipt, spec))
-            for key in ("modal_s", "touchstone"):
+            moved = deepcopy(receipt)
+            moved["ports"][1]["native"]["saved_boundary"]["Faces"] = [99]
+            with self.assertRaisesRegex(RuntimeError, "port 'p2' is not the requested"):
+                validate_result_readback(root, moved, spec)
+            for key in ("terminal_st", "touchstone"):
                 with self.subTest(count_mismatch=key):
                     bad = deepcopy(receipt)
                     bad["result_readback"][key]["records"] = 20000
@@ -275,25 +265,32 @@ class HfssSweepCountTests(unittest.TestCase):
 
     def test_authored_count_flows_through_setup_export_and_strict_readback(self):
         """Carry authored counts through native setup, exported files and strict readback."""
-        for mode, points in (("modal", 3), ("terminal", 5.0)):
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+        mode = "terminal"
+        for points in (3, 5.0):
+            with (
+                self.subTest(points=points),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
                 root = Path(temporary)
-                spec = _spec(points, mode)
+                spec = _spec(points)
                 transport = _NativeTransport(int(points))
                 setup.setup_hfss(transport, spec)
                 self.assertEqual(
                     transport.sweep_kwargs["num_of_freq_points"], int(points)
                 )
                 self.assertIs(type(transport.sweep_kwargs["num_of_freq_points"]), int)
-                key = "modal_excitation" if mode == "modal" else "terminal_excitation"
                 ports = [
-                    {"index": i, key: f"P{i}", "unresolved_native": True}
+                    {
+                        "index": i,
+                        "terminal_excitation": f"P{i}",
+                        "unresolved_native": True,
+                    }
                     for i in (1, 2)
                 ]
                 hashes, readback = exports.export_hfss_results(
                     transport, root, spec, ports
                 )
-                prefix = "S" if mode == "modal" else "St"
+                prefix = "St"
                 self.assertEqual(
                     transport.query["expressions"],
                     [f"{prefix}({a},{b})" for a in ("P1", "P2") for b in ("P1", "P2")],
@@ -322,11 +319,7 @@ class HfssSweepCountTests(unittest.TestCase):
                     "ports": ports,
                     "result_readback": readback,
                 }
-                error = (
-                    "modal request does not match spec"
-                    if mode == "modal"
-                    else "unresolved terminal native evidence"
-                )
+                error = "not the request's SGB model"
                 with self.assertRaisesRegex(RuntimeError, error):
                     validate_result_readback(root, receipt, spec)
                 result_key = f"{mode}_{prefix.lower()}"
@@ -392,12 +385,12 @@ class HfssSweepCountTests(unittest.TestCase):
                     transport,
                     root,
                     _spec(),
-                    [{"modal_excitation": "P1"}, {"modal_excitation": "P2"}],
+                    [{"terminal_excitation": "P1"}, {"terminal_excitation": "P2"}],
                 )
             with self.assertRaisesRegex(RuntimeError, "expression length mismatch"):
                 exports.write_complex_csv(
                     _SolutionData(3, True),
-                    ["S(P1,P1)"],
+                    ["St(P1,P1)"],
                     root / "short.csv",
                     suffix="",
                     spec=_spec(),

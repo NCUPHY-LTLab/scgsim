@@ -1,13 +1,14 @@
 """Plan the boundaries the AEDT SGB import assigns, from the model's sidecar and guard, before AEDT is touched.
 
-:func:`plan_hfss_boundaries` names every HFSS boundary and binds each port treatment (a junction or a
-generic ``LumpedRlc``) to all the faces of its port sheet: SGB partitions a port sheet where another face
+:func:`plan_hfss_boundaries` names every HFSS boundary and binds each port treatment (a junction, a
+generic ``LumpedRlc`` or a Driven ``LumpedTerminalPort``) to all the faces of its port sheet: SGB partitions a port sheet where another face
 meets it (a pad wall, a band), and each of those faces must import exactly once.  :func:`q3d_net_names`
 names the Q3D Nets.  A Net's AEDT name is its sanitised ID
 (:func:`~scgsim.aedt.preparation.sgb_model.aedt_net_names`); two Nets whose IDs sanitise alike (``chip/A``
 and ``chip_A``) are refused, as preparation already refuses them.  A junction's Lumped RLC is named
 ``junction_rlc_<id>`` and a port sheet's ``LumpedRlc`` ``rlc_<id>``, sanitised the same way; two ids whose
-names coincide are refused too (:func:`~scgsim.aedt.preparation.sgb_model.junction_rlc_names`).
+names coincide are refused too (:func:`~scgsim.aedt.preparation.sgb_model.junction_rlc_names`).  A
+lumped Terminal port's boundary takes the port's own name.
 A model the plan refuses raises :class:`BoundaryPlanError` before the import changes the design.
 """
 
@@ -28,7 +29,7 @@ from scgsim.aedt.preparation.sgb_model import (
     port_group,
 )
 from scgsim.aedt.rlc import rlc_native_topology
-from scgsim.aedt.specs.common import LumpedRlc
+from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort
 from scgsim.contracts.sgb_sidecar import Sidecar, views
 from scgsim.geometry.sgb.output.exchange.guard import StepGuard
 
@@ -55,6 +56,15 @@ class PortRlc:
 
 
 @dataclass(frozen=True)
+class PortTerminal:
+    """One Driven lumped Terminal port the import assigns: the request's port, its sidecar port and unit direction."""
+
+    port: LumpedTerminalPort
+    sheet: Mapping[str, Any]
+    direction: Point
+
+
+@dataclass(frozen=True)
 class HfssBoundaryPlan:
     """Every HFSS boundary the import assigns, named and checked against the sidecar and guard before AEDT.
 
@@ -65,6 +75,7 @@ class HfssBoundaryPlan:
     perfect_e: Mapping[str, tuple[str, tuple[str, ...]]]
     junctions: tuple[PortRlc, ...]
     lumped_rlcs: tuple[PortRlc, ...]
+    lumped_ports: tuple[PortTerminal, ...] = ()
 
 
 def plan_hfss_boundaries(
@@ -72,8 +83,9 @@ def plan_hfss_boundaries(
     guard: StepGuard,
     junctions: Sequence[SgbJunction],
     lumped_rlcs: Sequence[LumpedRlc],
+    lumped_ports: Sequence[LumpedTerminalPort] = (),
 ) -> HfssBoundaryPlan:
-    """The HFSS boundaries of the model: Perfect E per Net, and a Lumped RLC per port treatment.
+    """The HFSS boundaries of the model: Perfect E per Net, a Lumped RLC per RLC treatment, a lumped port per port.
 
     Each port treatment takes every face of its port sheet; each of those faces must import exactly once
     (on one solid, or as a rebuilt free face), and a junction must run along its port sheet.
@@ -83,6 +95,13 @@ def plan_hfss_boundaries(
         perfect_e=_perfect_e_plan(sidecar),
         junctions=_junction_rlcs(sidecar, copies, junctions),
         lumped_rlcs=_generic_rlcs(sidecar, copies, lumped_rlcs),
+        lumped_ports=tuple(
+            PortTerminal(port, sheet, _unit(sheet["direction"]))
+            for port in lumped_ports
+            for sheet in (
+                _checked_port(sidecar, port_group(port.port_sheet_id), copies),
+            )
+        ),
     )
 
 
