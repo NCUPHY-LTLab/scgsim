@@ -21,9 +21,10 @@ from pathlib import Path
 from scgsim.aedt import parse_aedt_spec, resolve_saved_solution
 
 returned_run_dir = Path(".artifacts/returned-aedt-epr")
-spec = parse_aedt_spec(json.loads(
-    (returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
-))
+spec = parse_aedt_spec(
+    json.loads((returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")),
+    base_dir=returned_run_dir,  # the request's SGB model is in its model/ folder
+)
 saved = resolve_saved_solution(returned_run_dir / "saved-solution-manifest.json")
 ```
 
@@ -38,7 +39,7 @@ AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 final_epr = analyze_epr(
     aedt_version=AEDT_VERSION,
     saved_solution=saved,
-    geometry=spec.geometry,
+    model=spec.model,
     project_name=spec.project_name,
     design_name=spec.design_name,
     run_control=spec.run_control,
@@ -47,7 +48,7 @@ final_epr = analyze_epr(
 )
 ```
 
-可選擇明確指定原生薄片場選擇器。若呼叫端要選擇原生計算器所用的一側，可傳入 `surface_field_selectors={contribution_id: "surface"}`，或對現有且已選取的貢獻 ID 使用 `"adjacent"`。每個項目會套用至該貢獻的所有綁定與指定元件、評估及遮罩邊距。未知或未選取的 ID，以及不支援的值，都會明確失敗。若省略貢獻項目，則保留現有依據法向量的選擇器行為。此選擇不會變更來源 `SurfaceEprSpec.field_side`，也不會驗證取樣的材料側。原生命令／名稱讀回資料記錄選擇器操作，不是材料側識別證明。此選擇不會觸發再次求解或重建幾何。
+場選擇器可選擇明確指定。傳入 `surface_field_selectors={group: "surface"}` 或 `"adjacent"`，以請求所選的 sidecar Surface-EPR 群組為鍵：`surface` 讀取每一列在其 sheet 上的場，`adjacent` 讀取緊鄰其外的場。未指定的群組讀取 `surface`。未知或未選取的群組，以及不支援的值，都會明確失敗。此選擇不會觸發再次求解或重建幾何；原生命令／名稱讀回資料記錄選擇器操作，不是材料側識別證明。
 
 新的輸出目錄會保留原始已釋出解算結果與一般執行收據。SCGSim 會封存／複製不可變證據、重新開啟工作複本、檢查已綁定的背景資料與運算式定義，接著不求解、不呼叫匯出而評估指定場。若場或定義無法取得，流程會明確失敗，不會從自適應歷程虛構 EPR。
 

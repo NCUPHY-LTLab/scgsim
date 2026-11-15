@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from scgsim.aedt.io import file_sha256, read_json
+from scgsim.aedt.preparation.sgb_handoff import sgb_model_paths
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
     HfssEprAnalysisSpec,
@@ -27,6 +28,8 @@ GEOMETRY_SOURCE_PATHS = {
 def canonical_handoff_paths(spec: AedtSpec) -> list[str]:
     """Return the complete canonical file set for one prepared workflow."""
     paths = ["run_aedt.sh", "aedt_spec.json"]
+    if isinstance(spec, (HfssEprSpec, HfssEprAnalysisSpec)):
+        paths.extend(sgb_model_paths(spec.model))
     if isinstance(spec, HfssEprAnalysisSpec):
         paths.extend(f"saved/{item['path']}" for item in spec.saved_solution.members)
     elif not isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec, Q2dSpec, Q3dSpec)):

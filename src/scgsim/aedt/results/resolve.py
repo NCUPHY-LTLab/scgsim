@@ -12,6 +12,7 @@ from scgsim.aedt.io import file_sha256, read_json
 from scgsim.aedt.preparation.cohort import (
     validate_geometry_source,
 )
+from scgsim.aedt.preparation.sgb_handoff import SOURCE_KEYS, check_sgb_model_source
 from scgsim.aedt.presentation.benchmark import display_benchmark
 from scgsim.aedt.presentation.runs import display_resolved_run
 from scgsim.aedt.results.benchmark import read_simulation_benchmark
@@ -22,6 +23,7 @@ from scgsim.aedt.results.hfss_readback import (
     validate_hfss_pec_bindings,
 )
 from scgsim.aedt.results.matrices import parse_matrix_export, read_q2d_rlgc_matrix
+from scgsim.aedt.results.prepared import validate_imported_sgb_model
 from scgsim.aedt.results.provenance import require_current_receipt
 from scgsim.aedt.results.readback_dispatch import validate_result_readback
 from scgsim.aedt.results.receipt_validation import (
@@ -287,9 +289,9 @@ def _resolved_adaptive_epr(
     if (
         result.result_kind != "adaptive_history"
         or result.setup_name != run_control.setup_name
-        or result.provenance.get("model_source_sha256") != spec.geometry.model_sha256
+        or result.provenance.get("model_source_sha256") != spec.model.identity_sha256
         or result.provenance.get("analysis_source_sha256")
-        != spec.geometry.source_sha256
+        != spec.model.files["sidecar"]["sha256"]
         or tuple(result.provenance.get("requested_modes", ())) != requested_modes
         or result.provenance.get("solver_last_completed_pass")
         != convergence["final_pass"]
@@ -368,7 +370,14 @@ def _read_completed_receipt(root: Path) -> tuple[Path, dict[str, Any]]:
 
 def _validate_source_binding(root: Path, source: dict[str, Any], spec: Any) -> None:
     """Verify canonical source members for the resolved model family."""
-    if isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec)):
+    if isinstance(spec, HfssEprSpec):
+        try:
+            check_sgb_model_source(source, spec.model)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
+        if set(source) != {"spec", "spec_sha256", *SOURCE_KEYS}:
+            raise RuntimeError("HFSS Eigenmode source members are not canonical")
+    elif isinstance(spec, HfssDrivenGeometrySpec):
         expected_source = {
             "spec",
             "spec_sha256",
@@ -376,7 +385,7 @@ def _validate_source_binding(root: Path, source: dict[str, Any], spec: Any) -> N
             "planar_model_sha256",
         }
         if set(source) != expected_source:
-            raise RuntimeError("body-first Eigenmode source members are not canonical")
+            raise RuntimeError("body-first Driven source members are not canonical")
         if (
             source["planar_source_sha256"] != spec.geometry.source_sha256
             or source["planar_model_sha256"] != spec.geometry.model_sha256
@@ -411,6 +420,7 @@ def _validate_result_family(
         raise RuntimeError("AEDT receipt mode is invalid")
     result_mode = cast(Literal["terminal", "modal", "eigenmode", "q3d", "q2d"], mode)
     if isinstance(spec, HfssEprSpec):
+        validate_imported_sgb_model(receipt, spec.model)
         if spec.lumped_rlcs:
             validate_eigenmode_readback(receipt, spec)
         if receipt.get("workflow_status") != "completed":

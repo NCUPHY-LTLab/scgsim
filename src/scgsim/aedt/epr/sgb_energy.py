@@ -21,17 +21,17 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-from scgsim.aedt.epr.selection import exact_mapping
+from scgsim.aedt.epr.integrals import SURFACE_GRANULARITY
 from scgsim.aedt.epr.sgb_source import SgbEprSource, SurfaceEntry
 from scgsim.aedt.epr.surface import (
     VACUUM_PERMITTIVITY_F_PER_M,
+    exact_mapping,
     quantity,
     surface_energy_j,
 )
 from scgsim.aedt.specs.epr import EprAnalysisRequest
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
-SURFACE_GRANULARITY = "sgb_surface_epr_row.v1"
 MODE_ENERGY_SCHEMA = "scgsim.aedt.epr-mode-energy.v2"
 _MU_0_H_PER_M = 1.25663706212e-6
 

@@ -49,7 +49,7 @@ def parse_aedt_spec(
         EPR_EIGENMODE_SCHEMA_VERSION_V3,
         EPR_EIGENMODE_SCHEMA_VERSION_V4,
     }:
-        return HfssEprSpec.from_payload(payload)
+        return HfssEprSpec.from_payload(payload, base_dir=base_dir)
     if payload.get("schema_version") in {
         EPR_ANALYSIS_SCHEMA_VERSION_V2,
         EPR_ANALYSIS_SCHEMA_VERSION_V3,

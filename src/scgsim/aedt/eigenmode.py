@@ -1,4 +1,8 @@
-"""``EigenmodeSim``: configure an Eigenmode or EPR run on a geometry plan and prepare its handoff."""
+"""``EigenmodeSim``: configure an Eigenmode or EPR run on a geometry plan and prepare its handoff.
+
+``prepare_handoff`` builds the plan's SGB model for AEDT (:func:`prepare_sgb_model`) and writes the HFSS
+Eigenmode handoff that carries it (issue #67); ``prepared_model`` is then the model in that handoff.
+"""
 
 from __future__ import annotations
 
@@ -20,10 +24,6 @@ from scgsim.aedt.specs.epr import (
     ExpressionCacheConvergence,
     ExpressionCacheConvergenceSet,
     PlanarJunction,
-    SurfaceEprSpec,
-)
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
 )
 from scgsim.geometry import (
     GeometryBuildInput,
@@ -32,12 +32,13 @@ from scgsim.geometry import (
     build_gds_stack_geometry_input,
     summarize_geometry_input,
 )
-from scgsim.semantics.epr import FilmUpdate, film_assumptions
+from scgsim.geometry.surface_epr import normalize_surface_epr_specs
 
-from .epr.analysis import reanalyze_epr
+from .epr.reanalysis import reanalyze_epr
 from .preparation.geometry import prepare_hfss_eigenmode_from_geometry
 from .preparation.handoff import HandoffPlan
-from .preparation.planar import prepare_planar_geometry_input, validate_geometry_workers
+from .preparation.sgb_handoff import SGB_MODEL_DIR
+from .preparation.sgb_model import PreparedSgbModel, prepare_sgb_model
 from .presentation.epr import show_epr
 from .results.resolve import ResolvedRun, resolve_results
 from .specs.common import AedtResources
@@ -60,16 +61,14 @@ class EigenmodeSim:
     design_name: str | None = None
     run_control: EigenmodeRunControl | None = None
     resources: AedtResources | None = None
-    geometry_workers: int | None = None
-    surface_contributions: tuple[SurfaceEprSpec, ...] = ()
-    surface_defaults: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
     junctions: tuple[PlanarJunction, ...] = ()
     lumped_rlcs: tuple[LumpedRlc, ...] = ()
     epr_request: EprAnalysisRequest | None = None
     expression_convergence: (
         ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None
     ) = None
-    prepared_geometry: PreparedPlanarGeometry | None = field(default=None, init=False)
+    prepared_model: PreparedSgbModel | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
     _plan_snapshot: GeometryPlanSnapshot | None = field(
         default=None, init=False, repr=False
@@ -87,7 +86,7 @@ class EigenmodeSim:
         object.__setattr__(self, name, value)
 
     def _invalidate_model(self) -> None:
-        self.prepared_geometry = None
+        self.prepared_model = None
         self.handoff_plan = None
 
     def set_geometry(self, component: Any | GeometryBuildInput) -> None:
@@ -147,7 +146,6 @@ class EigenmodeSim:
         design_name: str,
         run_control: EigenmodeRunControl | None = None,
         resources: AedtResources | None = None,
-        geometry_workers: int | None = None,
     ) -> None:
         """Declare native model identity and an optional complete solve setup."""
         if (
@@ -164,51 +162,40 @@ class EigenmodeSim:
         modeling_from_value(self.modeling)
         if resources is not None and not isinstance(resources, AedtResources):
             raise TypeError("resources must be AedtResources or None")
-        validate_geometry_workers(geometry_workers)
         self.project_name, self.design_name, self.run_control = (
             project_name,
             design_name,
             run_control,
         )
-        self.resources, self.geometry_workers = resources, geometry_workers
+        self.resources = resources
         self.handoff_plan = None
 
-    def set_surface_epr(
-        self,
-        *,
-        contributions: Sequence[SurfaceEprSpec] = (),
-        defaults: Mapping[str, Mapping[str, Any]] | None = None,
-    ) -> None:
-        """Set surface contributions and fill only missing authored defaults."""
-        if isinstance(contributions, (str, bytes)):
-            raise TypeError("contributions must be SurfaceEprSpec records")
-        selected = tuple(contributions)
-        if any(not isinstance(item, SurfaceEprSpec) for item in selected):
-            raise TypeError("contributions must be SurfaceEprSpec records")
-        if len({item.contribution_id for item in selected}) != len(selected):
-            raise ValueError("surface contribution IDs must be unique")
-        if defaults is None:
-            normalized: dict[str, FilmUpdate] = {}
-        elif not isinstance(defaults, Mapping) or set(defaults) - {"MA", "MS", "SA"}:
-            raise ValueError("surface defaults must be keyed by MA, MS, or SA")
+    def set_surface_epr(self, specs: Mapping[str, Mapping[str, Any]] | None) -> None:
+        """Request Surface EPR with ``specs`` by interface type, or turn it off again with ``None``.
+
+        The specs are Palace's (``MA``, ``MS``, ``SA``; see ``scgsim.palace`` ``set_surface_epr``): their film
+        assumptions, ``face_kinds`` and inset margins.  The margins become bands of the SGB model, so this
+        discards the prepared model.  The specs are checked against the stack's materials, so the plan or
+        stack is set first; an empty mapping is refused, as in Palace.
+        """
+        if specs is None:
+            self.surface_epr_specs = None
         else:
-            normalized = {
-                kind: film_assumptions(update, partial=True)
-                for kind, update in defaults.items()
-            }
-        resolved = tuple(
-            replace(
-                item,
-                **{
-                    name: value
-                    for name, value in normalized.get(item.interface_kind, {}).items()
-                    if name in {"loss_tangent", "source", "preset"}
-                    and getattr(item, name) is None
-                },
+            if isinstance(specs, Mapping) and not specs:
+                raise ValueError(
+                    "set_surface_epr({}) requests no Surface EPR; to have none, do not call "
+                    "set_surface_epr(), or call set_surface_epr(None) to turn it off again"
+                )
+            stack = (
+                self._plan_snapshot.stack
+                if self._plan_snapshot is not None
+                else self.stack
             )
-            for item in selected
-        )
-        self.surface_contributions, self.surface_defaults = resolved, normalized
+            if stack is None:
+                raise ValueError("set_surface_epr() needs the plan or stack first")
+            self.surface_epr_specs = normalize_surface_epr_specs(
+                specs, materials=stack["materials"]
+            )
         self._invalidate_model()
 
     def add_lumped_rlc(self, treatment: LumpedRlc) -> None:
@@ -304,11 +291,7 @@ class EigenmodeSim:
             "resources": None
             if self.resources is None
             else self.resources.to_payload(),
-            "geometry_workers": self.geometry_workers,
-            "surface_contributions": [
-                item.to_payload() for item in self.surface_contributions
-            ],
-            "surface_defaults": self.surface_defaults,
+            "surface_epr_specs": self.surface_epr_specs,
             "junctions": [item.to_payload() for item in self.junctions],
             "lumped_rlcs": [item.to_payload() for item in self.lumped_rlcs],
             "epr_request": (
@@ -323,7 +306,7 @@ class EigenmodeSim:
         return InputSummary(data)
 
     def prepare_handoff(self) -> HandoffPlan:
-        """Prepare reusable geometry, then capture the AEDT execution handoff."""
+        """Build the plan's SGB model for AEDT, then write the HFSS Eigenmode handoff that carries it."""
         source_stack = (
             self._plan_snapshot.stack if self._plan_snapshot is not None else self.stack
         )
@@ -336,31 +319,32 @@ class EigenmodeSim:
             raise ValueError(
                 "geometry, stack, output_dir, project_name, and design_name are required"
             )
-        geometry = self.prepared_geometry
-        if geometry is None:
-            source = self._source_input()
-            geometry = prepare_planar_geometry_input(
-                source,
-                prepared_stack=source_stack,
-                modeling=self.modeling,
-                junctions=self.junctions,
-                lumped_rlcs=self.lumped_rlcs,
-                contributions=self.surface_contributions,
+        with TemporaryDirectory(prefix="scgsim-aedt-model-") as build_dir:
+            model = self.prepared_model
+            if model is None:
+                model = prepare_sgb_model(
+                    self._source_input(),
+                    prepared_stack=source_stack,
+                    modeling=self.modeling,
+                    output_dir=build_dir,
+                    junctions=self.junctions,
+                    lumped_rlcs=self.lumped_rlcs,
+                    surface_epr_specs=self.surface_epr_specs,
+                )
+            plan = prepare_hfss_eigenmode_from_geometry(
+                aedt_version=self.aedt_version,
+                model=model,
+                project_name=self.project_name,
+                design_name=self.design_name,
+                run_control=self.run_control,
+                output_dir=self.output_dir,
+                epr_request=self.epr_request,
+                expression_convergence=self.expression_convergence,
+                resources=self.resources,
             )
-        plan = prepare_hfss_eigenmode_from_geometry(
-            aedt_version=self.aedt_version,
-            modeling=self.modeling,
-            geometry=geometry,
-            project_name=self.project_name,
-            design_name=self.design_name,
-            run_control=self.run_control,
-            output_dir=self.output_dir,
-            epr_request=self.epr_request,
-            expression_convergence=self.expression_convergence,
-            geometry_workers=self.geometry_workers,
-            resources=self.resources,
-        )
-        self.prepared_geometry, self.handoff_plan = geometry, plan
+        # The build folder is gone; the model now lives in the handoff, which travels with it.
+        self.prepared_model = replace(model, model_dir=plan.run_dir / SGB_MODEL_DIR)
+        self.handoff_plan = plan
         return plan
 
     def resolve_results(self, run_dir: str | Path | None = None) -> ResolvedRun:

@@ -32,7 +32,7 @@ without solving again.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -78,10 +78,18 @@ class SurfaceSelection:
 
 
 def create_surface_selections(
-    app: Any, sidecar: Sidecar, imported: ImportedSgbModel
+    app: Any,
+    sidecar: Sidecar,
+    imported: ImportedSgbModel,
+    rows: Collection[str] | None = None,
 ) -> dict[str, SurfaceSelection]:
-    """Create the non-model sheet of every Surface-EPR row on the imported model; ``{row: binding}``."""
+    """Create the non-model sheet of each Surface-EPR row in ``rows`` (``None``: every row); ``{row: binding}``."""
     bindings = surface_face_bindings(sidecar, imported)
+    if rows is not None:
+        unknown = sorted(set(rows) - set(bindings))
+        if unknown:
+            raise SurfaceBindingError(f"the model has no Surface-EPR rows {unknown}")
+        bindings = {row: bindings[row] for row in sorted(rows)}
     for binding in bindings.values():
         create_selection_sheet(
             app, f"row {binding.row}", binding.faces, binding.selection_name
@@ -147,7 +155,7 @@ def junction_face_bindings(
     out: dict[str, JunctionSelection] = {}
     by_name: dict[str, str] = {}
     for junction_id, group in sorted(junction_groups.items()):
-        name = sanitise_aedt_name(f"epr_junction_{junction_id}")
+        name = junction_selection_name(junction_id)
         if name in by_name:
             raise SurfaceBindingError(
                 f"junctions {by_name[name]!r} and {junction_id!r} both become the AEDT name {name!r}"
@@ -159,6 +167,11 @@ def junction_face_bindings(
         )
         out[junction_id] = JunctionSelection(junction_id, group, name, faces)
     return out
+
+
+def junction_selection_name(junction_id: str) -> str:
+    """The AEDT name of the voltage sheet of junction ``junction_id``."""
+    return sanitise_aedt_name(f"epr_junction_{junction_id}")
 
 
 def create_junction_selections(

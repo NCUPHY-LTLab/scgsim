@@ -96,7 +96,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 - **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.q3d`.** 基準名稱： `Q3dBodySpec`, `Q3dNetSpec`, `Q3dSpec`.
 - **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.parse`.** 基準名稱： `AedtSpec`, `parse_aedt_spec`.
 - **基準 `scgsim.aedt._epr_models` → 目前標準負責模組 `scgsim.aedt.epr.models`.** 基準名稱： `EprResult`.
-- **基準 `scgsim.aedt._epr_models` → 目前標準負責模組 `scgsim.aedt.specs.epr`.** 基準名稱： `EprAnalysisRequest`, `ExpressionCacheConvergence`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PlanarJunction`, `SavedSolution`, `SurfaceEprSpec`.
+- **基準 `scgsim.aedt._epr_models` → 目前標準負責模組 `scgsim.aedt.specs.epr`.** 基準名稱： `EprAnalysisRequest`, `ExpressionCacheConvergence`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PlanarJunction`, `SavedSolution`.
 - **基準 `scgsim.aedt._epr_models` → 目前標準負責模組 `scgsim.aedt.specs.geometry`.** 基準名稱： `PreparedPlanarGeometry`.
 - **基準 `scgsim.aedt.handoff` → 目前標準負責模組 `scgsim.aedt.preparation.handoff`.** 基準名稱： `HandoffPlan`, `prepare_handoff`.
 - **基準 `scgsim.aedt.handoff` → 目前標準負責模組 `scgsim.aedt.preparation.geometry`.** 基準名稱： `prepare_hfss_eigenmode_from_geometry`, `prepare_q3d_from_geometry`.
@@ -105,13 +105,15 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 - **基準 `scgsim.aedt.resolve` → 目前標準負責模組 `scgsim.aedt.results.resolve`.** 基準名稱： `ResolvedRun`, `resolve_results`.
 - **基準 `scgsim.aedt._epr_geometry` → 目前標準負責模組 `scgsim.aedt.preparation.planar_junctions`.** 基準名稱： `planar_junction_from_port`.
 - **基準 `scgsim.aedt._epr_geometry` → 目前標準負責模組 `scgsim.aedt.preparation.planar`.** 基準名稱： `prepare_planar_geometry_input`.
-- **基準 `scgsim.aedt._epr_results` → 目前標準負責模組 `scgsim.aedt.epr.analysis`.** 基準名稱： `combine_epr_mode`, `combine_surface_epr_mode`, `reanalyze_epr`.
+- **基準 `scgsim.aedt._epr_results` → 目前標準負責模組 `scgsim.aedt.epr.reanalysis`.** 基準名稱： `reanalyze_epr`.
+- **issue #67 新增 → 標準負責模組 `scgsim.aedt.preparation.sgb_model`。** 名稱：`PreparedSgbModel`、`prepare_sgb_model`；`prepare_hfss_eigenmode_from_geometry` 接收 `model=`。
+- **由 issue #67 移除（HFSS Eigenmode 改用 SGB 模型）。** `SurfaceEprSpec`（改以 `EigenmodeSim.set_surface_epr(specs)` 宣告 Surface EPR，即 Palace 依介面型別的 specs）、`EprAnalysisRequest.surface_contribution_ids`（改為 `surface_epr_groups`，即 sidecar 的 Surface-EPR 群組）、`combine_epr_mode` 與 `combine_surface_epr_mode`（平面組合），以及 `analyze_epr(geometry=..., geometry_workers=...)`（改為 `analyze_epr(model=...)`）。
 - **基準 `scgsim.aedt._epr_results` → 目前標準負責模組 `scgsim.aedt.results.epr`.** 基準名稱： `resolve_epr_result`, `resolve_saved_solution`.
 - **基準 `scgsim.aedt._epr_results and _presentation` → 目前標準負責模組 `scgsim.aedt.presentation.epr`.** 基準名稱： `plot_epr_result`, `show_epr`.
 - **基準 `scgsim.aedt.run` → 目前標準負責模組 `scgsim.aedt.run`.** 基準名稱： `main`.
 
 
-套件目前完整的 `__all__` 清單為： `AedtResources`, `AedtSpec`, `EigenmodeRunControl`, `EigenmodeSim`, `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `FrequencySweepSpec`, `HandoffPlan`, `HfssDrivenMode`, `HfssDrivenSpec`, `HfssEigenmodeSpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssRunControl`, `HfssSpec`, `LayerImport`, `LengthMeshSpec`, `MatrixRunControl`, `ModalPort`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `ObjectBinding`, `PdkMaterial`, `PlanarJunction`, `PreparedPlanarGeometry`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dBodySpec`, `Q3dNetSpec`, `Q3dSpec`, `ResolvedRun`, `SavedSolution`, `SurfaceEprSpec`, `TerminalPort`, `analyze_epr`, `combine_epr_mode`, `combine_surface_epr_mode`, `parse_aedt_spec`, `planar_junction_from_port`, `plot_epr_result`, `prepare_handoff`, `prepare_hfss_eigenmode_from_geometry`, `prepare_planar_geometry_input`, `prepare_q3d_from_geometry`, `reanalyze_epr`, `resolve_epr_result`, `resolve_results`, `resolve_saved_solution`, `show_epr`.
+套件目前完整的 `__all__` 清單為： `AedtResources`, `AedtSpec`, `EigenmodeRunControl`, `EigenmodeSim`, `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `FrequencySweepSpec`, `HandoffPlan`, `HfssDrivenMode`, `HfssDrivenSpec`, `HfssEigenmodeSpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssRunControl`, `HfssSpec`, `LayerImport`, `LengthMeshSpec`, `MatrixRunControl`, `ModalPort`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `ObjectBinding`, `PdkMaterial`, `PlanarJunction`, `PreparedPlanarGeometry`, `PreparedSgbModel`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dBodySpec`, `Q3dNetSpec`, `Q3dSpec`, `ResolvedRun`, `SavedSolution`, `TerminalPort`, `analyze_epr`, `parse_aedt_spec`, `planar_junction_from_port`, `plot_epr_result`, `prepare_handoff`, `prepare_hfss_eigenmode_from_geometry`, `prepare_planar_geometry_input`, `prepare_q3d_from_geometry`, `prepare_sgb_model`, `reanalyze_epr`, `resolve_epr_result`, `resolve_results`, `resolve_saved_solution`, `show_epr`.
 
 新的責任結構沿用既有邊界：
 

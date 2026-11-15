@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -15,6 +14,7 @@ from scgsim.aedt.preparation.cohort import (
     validate_geometry_source,
     validate_hfss_import_source,
 )
+from scgsim.aedt.preparation.sgb_handoff import SOURCE_KEYS, check_sgb_model_source
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     require_current_receipt,
@@ -130,7 +130,10 @@ def verify_prepared_hashes(
         raise RuntimeError("receipt source paths are not canonical")
     if file_sha256(spec_path) != _text(source.get("spec_sha256"), "source.spec_sha256"):
         raise RuntimeError("prepared spec hash mismatch")
-    if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec, HfssDrivenGeometrySpec)):
+    if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec)):
+        _verify_sgb_model_hashes(metadata, source, spec)
+        return
+    if isinstance(spec, HfssDrivenGeometrySpec):
         _verify_planar_hashes(metadata, source, spec)
         return
     if isinstance(spec, (Q2dSpec, Q3dSpec)):
@@ -150,10 +153,34 @@ def verify_prepared_hashes(
         raise RuntimeError("receipt GDS hash mismatch")
 
 
+def _verify_sgb_model_hashes(
+    metadata: dict[str, Any],
+    source: dict[str, Any],
+    spec: HfssEprAnalysisSpec | HfssEprSpec,
+) -> None:
+    """The receipt binds the request's SGB model; a native builder's handoff is refused (decision 6)."""
+    try:
+        check_sgb_model_source(source, spec.model)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    expected_source_keys = {"spec", "spec_sha256", *SOURCE_KEYS}
+    if isinstance(spec, HfssEprAnalysisSpec):
+        expected_source_keys.add("saved_solution_sha256")
+    if set(source) != expected_source_keys:
+        raise RuntimeError("HFSS Eigenmode handoff source members are not canonical")
+    if "gds_sha256" in metadata:
+        raise RuntimeError("HFSS Eigenmode handoff must not contain a GDS source")
+    if (
+        isinstance(spec, HfssEprAnalysisSpec)
+        and source.get("saved_solution_sha256") != spec.saved_solution.content_sha256
+    ):
+        raise RuntimeError("prepared saved solution hash mismatch")
+
+
 def _verify_planar_hashes(
     metadata: dict[str, Any],
     source: dict[str, Any],
-    spec: HfssEprAnalysisSpec | HfssEprSpec | HfssDrivenGeometrySpec,
+    spec: HfssDrivenGeometrySpec,
 ) -> None:
     expected_source_keys = {
         "spec",
@@ -161,21 +188,14 @@ def _verify_planar_hashes(
         "planar_source_sha256",
         "planar_model_sha256",
     }
-    if isinstance(spec, HfssEprAnalysisSpec):
-        expected_source_keys.add("saved_solution_sha256")
     if set(source) != expected_source_keys:
-        raise RuntimeError("EPR handoff source members are not canonical")
+        raise RuntimeError("Driven handoff source members are not canonical")
     if source.get("planar_source_sha256") != spec.geometry.source_sha256:
         raise RuntimeError("prepared planar source hash mismatch")
     if source.get("planar_model_sha256") != spec.geometry.model_sha256:
         raise RuntimeError("prepared planar model hash mismatch")
     if "gds_sha256" in metadata:
-        raise RuntimeError("EPR handoff must not contain a GDS source")
-    if (
-        isinstance(spec, HfssEprAnalysisSpec)
-        and source.get("saved_solution_sha256") != spec.saved_solution.content_sha256
-    ):
-        raise RuntimeError("prepared saved solution hash mismatch")
+        raise RuntimeError("Driven handoff must not contain a GDS source")
 
 
 def verify_prepared_cohort(
@@ -337,35 +357,3 @@ def validate_execution_flags(
         raise RuntimeError(
             "EPR execution flags do not match the prepared handoff workflow"
         )
-
-
-def warn_thin_film_surfaces(spec: AedtSpec) -> None:
-    """Preserve the pinned-version thin-film surface interpretation warning."""
-    if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec)):
-        geometry = spec.geometry
-        request = spec.epr_request
-        selected_surfaces = (
-            None if request is None else request.surface_contribution_ids
-        )
-        if (
-            geometry.modeling == "thin_film"
-            and request is not None
-            and any(
-                contribution.interface_kind != "MM"
-                and (
-                    selected_surfaces is None
-                    or contribution.contribution_id in selected_surfaces
-                )
-                for contribution in geometry.contributions
-            )
-        ):
-            warnings.warn(
-                "ThinFilm Surface-EPR uses FacePrimitive.normal as a geometric "
-                "direction, not native calculator-side readback. The "
-                "Surface/Adjacent mapping is empirical for pinned PyAEDT 1.3.0 / "
-                "AEDT 2024.2; it is unverified for 2023.2 and may select the "
-                "wrong material side; ThinFilm "
-                "MA/MS participation and loss are not physically validated.",
-                UserWarning,
-                stacklevel=2,
-            )

@@ -24,7 +24,8 @@ from scgsim.aedt.preparation.handoff_files import (
     utc_now,
     write_script,
 )
-from scgsim.aedt.preparation.planar import validate_geometry_workers
+from scgsim.aedt.preparation.sgb_handoff import attach_sgb_model, sgb_model_source
+from scgsim.aedt.preparation.sgb_model import PreparedSgbModel
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
@@ -39,9 +40,6 @@ from scgsim.aedt.specs.common import (
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     SavedSolution,
-)
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
 )
 from scgsim.aedt.specs.hfss import (
     HfssDrivenSpec,
@@ -297,26 +295,24 @@ def prepare_epr_analysis_handoff(  # noqa: PLR0913 -- preserve the saved-field p
     *,
     aedt_version: str,
     saved_solution: SavedSolution,
-    geometry: PreparedPlanarGeometry,
+    model: PreparedSgbModel,
     project_name: str,
     design_name: str,
     run_control: EigenmodeRunControl,
     epr_request: EprAnalysisRequest,
     output_dir: str | Path,
-    geometry_workers: int | None,
     surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
 ) -> HandoffPlan:
     """Prepare one portable source cohort without opening AEDT."""
     return _SavedAnalysisHandoff(
         aedt_version,
         saved_solution,
-        geometry,
+        model,
         project_name,
         design_name,
         run_control,
         epr_request,
         output_dir,
-        geometry_workers,
         surface_field_selectors,
     ).build()
 
@@ -327,13 +323,12 @@ class _SavedAnalysisHandoff:
 
     aedt_version: str
     saved_solution: SavedSolution
-    geometry: PreparedPlanarGeometry
+    model: PreparedSgbModel
     project_name: str
     design_name: str
     run_control: EigenmodeRunControl
     epr_request: EprAnalysisRequest
     output_dir: str | Path
-    geometry_workers: int | None
     surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None
 
     def build(self) -> HandoffPlan:
@@ -348,7 +343,6 @@ class _SavedAnalysisHandoff:
     def _copy_saved_solution(self) -> None:
         if not isinstance(self.saved_solution, SavedSolution):
             raise TypeError("saved_solution must be SavedSolution")
-        validate_geometry_workers(self.geometry_workers)
         self.aedt_version = normalize_aedt_version(self.aedt_version)
         self.run_dir = Path(self.output_dir).expanduser().resolve()
         if self.run_dir.exists():
@@ -358,7 +352,6 @@ class _SavedAnalysisHandoff:
         self.saved_root = self.run_dir / "saved"
         self.metadata_dir = self.run_dir / "metadata"
         self.metadata_dir.mkdir(parents=True)
-        self.copied_paths: list[Path] = []
         for member in self.saved_solution.members:
             relative = Path(member["path"])
             source = (self.saved_solution.root / relative).resolve()
@@ -378,7 +371,6 @@ class _SavedAnalysisHandoff:
             target = self.saved_root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-            self.copied_paths.append(target)
 
     def _bind_spec(self) -> None:
         self.copied_solution = SavedSolution(
@@ -397,11 +389,12 @@ class _SavedAnalysisHandoff:
             aedt_version=self.aedt_version,
             project_name=self.project_name,
             design_name=self.design_name,
-            geometry=self.geometry,
+            model=self.model,
             run_control=self.run_control,
             epr_request=self.epr_request,
             saved_solution=self.copied_solution,
         )
+        attach_sgb_model(self.model, self.run_dir)
 
     def _prepare_payload(self) -> None:
         self.script_path = self.run_dir / "run_aedt.sh"
@@ -414,7 +407,7 @@ class _SavedAnalysisHandoff:
         self.started = time.perf_counter()
         self.prepared_source = record_runtime_source("prepared")
         self.payload = self.spec.to_payload()
-        self.materials = detached(self.geometry.source)["materials"]
+        self.materials = detached(self.model.materials)
         self.vacuum_ids = sorted(
             material_id
             for material_id, record in self.materials.items()
@@ -454,7 +447,7 @@ class _SavedAnalysisHandoff:
             "materials": self.materials,
             "vacuum_material_id": self.vacuum_ids[0],
             "run_control": self.payload["run_control"],
-            "execution": {"geometry_workers": self.geometry_workers},
+            "execution": {"geometry_workers": None},
             "pyaedt": self.payload["pyaedt"],
             "aedt": self.payload["aedt"],
             "files": self.files,
@@ -464,8 +457,7 @@ class _SavedAnalysisHandoff:
         self.source = {
             "spec": self.spec_path.name,
             "spec_sha256": file_sha256(self.spec_path),
-            "planar_source_sha256": self.geometry.source_sha256,
-            "planar_model_sha256": self.geometry.model_sha256,
+            **sgb_model_source(self.model),
             "saved_solution_sha256": self.copied_solution.content_sha256,
         }
         write_json(self.metadata_path, self.metadata)
@@ -493,13 +485,8 @@ class _SavedAnalysisHandoff:
         )
 
     def _package(self) -> HandoffPlan:
-        self.allowed = (
-            self.script_path,
-            self.spec_path,
-            *sorted(self.copied_paths),
-            self.metadata_path,
-            self.receipt_path,
-            self.manifest_path,
+        self.allowed = tuple(
+            self.run_dir / path for path in canonical_handoff_paths(self.spec)
         )
         write_json(
             self.manifest_path,

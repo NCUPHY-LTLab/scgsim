@@ -20,14 +20,13 @@ from scgsim.aedt.specs.epr import (
     NormalizedSurfaceEprTotal,
     PlanarJunction,
     SavedSolution,
-    SurfaceEprSpec,
 )
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
 )
 
 from .eigenmode import EigenmodeSim
-from .epr.analysis import combine_epr_mode, combine_surface_epr_mode, reanalyze_epr
+from .epr.reanalysis import reanalyze_epr
 from .epr.workflow import analyze_epr
 from .preparation.geometry import (
     prepare_hfss_driven_from_geometry,
@@ -37,6 +36,7 @@ from .preparation.geometry import (
 from .preparation.handoff import HandoffPlan, prepare_handoff
 from .preparation.planar import prepare_planar_geometry_input
 from .preparation.planar_junctions import planar_junction_from_port
+from .preparation.sgb_model import PreparedSgbModel, prepare_sgb_model
 from .presentation.epr import plot_epr_result, show_epr
 from .results.epr import resolve_epr_result, resolve_saved_solution
 from .results.prepared import PreparedModel, resolve_prepared_model
@@ -112,6 +112,7 @@ __all__ = [
     "PlanarJunction",
     "PreparedPlanarGeometry",
     "PreparedModel",
+    "PreparedSgbModel",
     "Q2dConductorSpec",
     "Q2dRectangleSpec",
     "Q2dSpec",
@@ -121,11 +122,8 @@ __all__ = [
     "Q3dTerminalPair",
     "ResolvedRun",
     "SavedSolution",
-    "SurfaceEprSpec",
     "TerminalPort",
     "analyze_epr",
-    "combine_epr_mode",
-    "combine_surface_epr_mode",
     "parse_aedt_spec",
     "planar_junction_from_port",
     "plot_epr_result",
@@ -134,6 +132,7 @@ __all__ = [
     "prepare_hfss_driven_from_geometry",
     "prepare_planar_geometry_input",
     "prepare_q3d_from_geometry",
+    "prepare_sgb_model",
     "reanalyze_epr",
     "request_q3d_stop_and_save",
     "request_q3d_abort_and_save",

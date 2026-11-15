@@ -1,11 +1,9 @@
 """Keep live and saved junction terminal roles independent of polygon ring order."""
 
 from fractions import Fraction
-from types import SimpleNamespace
 
 import pytest
 
-from scgsim.aedt.runtime.native import saved_geometry
 from scgsim.aedt.runtime.native.junction_readback import JunctionReadback
 from scgsim.aedt.runtime.native.junction_topology import native_junction_corners
 from scgsim.aedt.specs.epr import PlanarJunction
@@ -104,89 +102,3 @@ def test_live_wrong_net_corner_contact_still_fails(ring):
     readback._verify_central_interior()  # noqa: SLF001 -- isolate the live corner guard from SDK object construction.
     with pytest.raises(RuntimeError, match="forbidden side/wrong-net corner contact"):
         readback._verify_edge_contacts()  # noqa: SLF001 -- preserve checks against every potentially contacting net.
-
-
-def _saved_case(ring, attached):
-    """Describe one saved RLC sheet with stable, identity-bound terminal edges."""
-    edges = [
-        {
-            "edge_id": index,
-            "vertices_um": [list(a) + [0.0], list(b) + [0.0]],
-            "midpoint_um": [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0.0],
-        }
-        for index, (a, b) in enumerate(
-            zip(CANONICAL, (*CANONICAL[1:], CANONICAL[0]), strict=True)
-        )
-    ]
-    positions = (
-        [
-            {
-                "IsAttachedToEntity": True,
-                "PositionType": "EdgeCenter",
-                "EntityID": edge_id,
-            }
-            for edge_id in (3, 1)
-        ]
-        if attached
-        else [
-            {
-                "IsAttachedToEntity": False,
-                "PositionType": "AbsolutePosition",
-                "XPosition": x,
-                "YPosition": 0.0,
-                "ZPosition": 0.0,
-            }
-            for x in (100.0, 120.0)
-        ]
-    )
-    source = {
-        "junction_partitions": {"jj": {"z_um": 0.0, "central_polygon_id": "central"}},
-        "polygons": [{"polygon_id": "central", "exterior": ring, "holes": []}],
-    }
-    prepared = SimpleNamespace(source=source, junctions=(_junction(),))
-    binding = {
-        "junction_id": "jj",
-        "boundary_name": "rlc",
-        "object_name": "sheet",
-        "_partition_live_readback": {"maximum_source_coordinate_deviation_um": 0.0},
-    }
-    central = SimpleNamespace(name="sheet", faces=[SimpleNamespace(edges=edges)])
-    app = SimpleNamespace(
-        modeler=SimpleNamespace(
-            get_object_from_name=lambda name: central,
-            oeditor=SimpleNamespace(GetObjectIDByName=lambda name: 42),
-        )
-    )
-    boundary = {
-        "BoundType": "Lumped RLC",
-        "Objects": [42],
-        "CurrentLine": {"GeometryPosition": positions},
-    }
-    return prepared, binding, app, boundary, edges
-
-
-@pytest.mark.parametrize("ring", RINGS)
-@pytest.mark.parametrize("attached", [False, True])
-def test_saved_line_uses_the_same_terminal_frame(monkeypatch, ring, attached):
-    """Resolve both saved position kinds to the correct native end-edge identities."""
-    prepared, binding, app, boundary, edges = _saved_case(ring, attached)
-    monkeypatch.setattr(
-        saved_geometry,
-        "_read_junction_boundaries",
-        lambda *args: ("digest", {"rlc": boundary}),
-    )
-
-    def planar_loops(central, z_um, observations):
-        observations.append({"edges": edges})
-        return [(tuple(map(_rational, CANONICAL)),)]
-
-    monkeypatch.setattr(saved_geometry, "native_planar_loops", planar_loops)
-    saved_geometry.read_saved_junction_lines(
-        app, "unused.aedt", "design", prepared, {"junctions": [binding]}
-    )
-    readback = binding["partition_readback"]
-    assert readback["integration_line_um"] == [[100.0, 0.0, 0.0], [120.0, 0.0, 0.0]]
-    assert (
-        readback["actual_terminal_edge_midpoints_um"] == readback["integration_line_um"]
-    )
-    assert "_partition_live_readback" not in binding

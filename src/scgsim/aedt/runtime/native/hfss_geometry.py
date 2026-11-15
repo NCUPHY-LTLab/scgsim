@@ -20,7 +20,6 @@ from scgsim.aedt.runtime.native.junction_readback import native_junction_live_re
 from scgsim.aedt.runtime.native.planar_bodies import (
     install_material_catalog,
     junction_geometry,
-    material_readback,
     native_conductor_geometry,
     native_solution_materials,
     polygon_sheet,
@@ -146,71 +145,6 @@ def prepare_native_planar_geometry(
         "geometry_phases": {
             key: round(value, 6) for key, value in phase_seconds.items()
         },
-    }
-
-
-def bind_saved_planar_geometry(
-    app: Any, prepared: PreparedPlanarGeometry
-) -> dict[str, Any]:
-    """Bind deterministic native objects in a saved project without creating CAD."""
-
-    if not isinstance(prepared, PreparedPlanarGeometry):
-        raise TypeError("prepared must be PreparedPlanarGeometry")
-    source = detached(prepared.source)
-    validate_native_modeling_source(source)
-    if (
-        source.get("native_region", {}).get("method")
-        != "single_region_absolute_offset.v1"
-    ):
-        raise ValueError("saved EPR geometry predates single Region; reprepare")
-    objects = _bind_saved_solution_bodies(app, source)
-    region_plan = source["native_region"]
-
-    _bind_saved_conductors(app, prepared, source, objects)
-
-    junctions: list[dict[str, Any]] = []
-    for junction in prepared.junctions:
-        name = native_name("junction", junction.junction_id)
-        evidence = native_object_evidence(app, name)
-        if evidence["native_object_type"] != "Sheet":
-            raise RuntimeError(f"saved junction {name!r} is not a sheet")
-        partition_readback = (
-            native_junction_live_readback(app, source, junction)
-            if junction.junction_id in source.get("junction_partitions", {})
-            else None
-        )
-        junctions.append(
-            {
-                "junction_id": junction.junction_id,
-                "source_polygon_id": junction.source_polygon_id,
-                "object_name": name,
-                "boundary_name": native_name("junction_rlc", junction.junction_id),
-                **(
-                    {"_partition_live_readback": partition_readback}
-                    if partition_readback is not None
-                    else {}
-                ),
-                **evidence,
-            }
-        )
-
-    selections: list[dict[str, Any]] = []
-    if region_plan.get("outer_boundary_policy") != "hfss_default.v1":
-        raise ValueError("saved EPR Region boundary policy requires re-preparation")
-    enclosure = {
-        **implicit_closed_enclosure(app, source),
-        "binding_stage": "saved_project_readback_without_cad_creation",
-    }
-    return {
-        "schema_version": "scgsim.aedt.epr-native-binding.v1",
-        "modeling": prepared.modeling,
-        "source_sha256": prepared.source_sha256,
-        "objects": objects,
-        "junctions": junctions,
-        "surface_selections": selections,
-        "material_readback": material_readback(app, native_solution_materials(source)),
-        "closed_enclosure": enclosure,
-        "binding_stage": "saved_project_readback_without_cad_creation",
     }
 
 

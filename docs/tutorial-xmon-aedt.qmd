@@ -1,6 +1,6 @@
 ---
 title: "Public Xmon: AEDT Route B Eigenmode"
-description: "Bind junction-aware catalogue sources and prepare the shared-source AEDT EPR request."
+description: "Bind the junction, declare Surface EPR and prepare the AEDT EPR request on the SGB model."
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/tutorial-xmon-aedt"
@@ -33,14 +33,12 @@ describes the native Region representation. This static page claims no native
 HFSS geometry check. When comparing results, note the outer boundary, Region
 size, and backend settings.
 
-### Bind the junction before building the catalogue
+### Bind the junction
 
 The component annotation identifies the authored port sheet and its host
 geometry; the Notebook `GeometryPlan` supplies the final terminal Nets. Bind
-that normalized sheet to the explicit Nets and circuit values before
-cataloguing surfaces. The same `junction` is supplied to the catalogue
-geometry below and added to `EigenmodeSim` before final handoff preparation, so
-both preparations use the same partition request. Closed-XY binder contact
+that normalized sheet to the explicit Nets and circuit values; the
+`junction` is added to `EigenmodeSim` before handoff preparation. Closed-XY binder contact
 finds candidate owners; preparation still checks the complete designated end
 edge against the shared emitted geometry. See the
 [partition contract](specs/aedt-runtime.qmd#aedt-automatic-junction-partition)
@@ -66,71 +64,38 @@ junction = planar_junction_from_port(
 )
 ```
 
-Build each MA/MS/SA contribution from the catalogue prepared with the same
-snapshot and junction. A catalogue source identity can be an original conductor
-polygon, a junction-partition identity or an SA topology surface ID. It is not
-required to be a polygon in the original snapshot. Keep the contribution's
-field side and retained source identities; do not discard SA rows merely because
-their source ID starts with `SURF__SA__`.
-
-For this pinned Xmon example, selecting the first retained catalogue source ID
-binds each requested contribution, including the SA topology rows. This is a
-revision-bound specimen choice, not a rule for every component. For a different
-study, inspect the whole row and select a source identity retained by that
-contribution under the contract. Film thickness, permittivity, loss and source
-come from OrPen's synthetic `LiteratureCentral` presets; margins are alternative
-evaluations relative to the separately retained unmasked baseline.
+Declare Surface EPR the way Palace does: one spec per interface type, with its
+film assumptions and inset margins. The margins become bands of the SGB model
+AEDT imports, and every sidecar Surface-EPR row of a declared type is
+integrated, sidewalls included. Film thickness, permittivity, loss and source
+come from OrPen's synthetic `LiteratureCentral` presets; margins are
+alternative evaluations relative to the unmasked baseline of each surface.
 
 ```python
 from orcapen_sc_pdk.materials import validate_interface_preset_records
-from scgsim.aedt import SurfaceEprSpec, prepare_planar_geometry_input
 
-prepared = prepare_planar_geometry_input(
-    snapshot.geometry_input,
-    prepared_stack=snapshot.stack,
-    modeling="solid",
-    junctions=(junction,),
-)
-catalogue = prepared.contribution_catalog
 presets = validate_interface_preset_records()
-margins_um = (0.5, 1.0)
-surface_specs = []
-
-for record in catalogue:
-    kind = record["interface_kind"]
-    if kind not in {"MA", "MS", "SA"}:
-        continue
+surface_epr_specs = {}
+for kind in ("MA", "MS", "SA"):
     preset_name = f"LiteratureCentral_{kind}"
     preset = presets[preset_name]
     if preset["interface_type"] != kind:
         raise ValueError(f"{preset_name} is not a {kind} preset")
-    source_polygon_id = record["source_polygon_ids"][0]
-    surface_specs.append(
-        SurfaceEprSpec(
-            contribution_id=record["contribution_id"],
-            source_polygon_id=source_polygon_id,
-            interface_kind=kind,
-            field_side=record["field_side"],
-            margins_um=margins_um,
-            film_thickness_m=preset["thickness"] * 1e-6,
-            film_relative_permittivity=preset["permittivity"],
-            loss_tangent=preset["loss_tangent"],
-            source=preset["source"],
-            preset=preset_name,
-        )
-    )
-
-print([(row["interface_kind"], row["field_side"], row["source_polygon_ids"])
-       for row in catalogue])
+    surface_epr_specs[kind] = {
+        "film_thickness_m": preset["thickness"] * 1e-6,
+        "permittivity": preset["permittivity"],
+        "loss_tangent": preset["loss_tangent"],
+        "source": preset["source"],
+        "preset": preset_name,
+        "inset_margins_um": [0.5, 1.0],
+    }
 ```
 
 ## Select reported rows and prepare a handoff
 
-The selection below requests mode 1, every catalogue-derived surface
-contribution, the declared junction, and the configured bulk domains. Available bulk IDs come from the prepared solution records, replacing the
-logical outer-vacuum pieces with the single native `Region` selector. The pinned
-Xmon retains `D0_SUBSTRATE`, `D0_TO_D1_GAP`, `D1_SUBSTRATE` and `Region`; the
-outer-region replacement does not erase the authored inter-die gap.
+The selection below requests mode 1, every sidecar Surface-EPR group, the
+declared junction, and every bulk domain: the imported dielectric solids by
+AEDT object name and the single `Region` that stands for the plan's vacuum.
 For AEDT requests, `None` selects all configured entries, `()` selects none,
 and an explicit tuple selects those IDs. These selections filter reported
 rows; they do not remove physical domains, junctions, or the surface model and
@@ -158,14 +123,6 @@ aedt_resources = AedtResources(
     cores=int(os.environ["SCGSIM_AEDT_CORES"]),
     ram_limit_percent=int(os.environ["SCGSIM_AEDT_RAM_LIMIT_PERCENT"]),
 )
-bulk_ids = {row["semantic_id"] for row in prepared.source["solution_regions"]}
-native_region = prepared.source.get("native_region")
-if native_region is not None:
-    bulk_ids.difference_update(native_region["logical_vacuum_ids"])
-    bulk_ids.add("Region")
-bulk_domain_ids = tuple(sorted(bulk_ids))
-print(bulk_domain_ids)
-
 AEDT_VERSION = "2024.2"  # This example explicitly selects AEDT 2024.2.
 sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
 sim.set_plan(snapshot)
@@ -184,16 +141,14 @@ sim.set_eigenmode(
     ),
     resources=aedt_resources,
 )
-sim.set_surface_epr(contributions=surface_specs)
+sim.set_surface_epr(surface_epr_specs)
 sim.add_junction(junction)
 sim.set_epr_request(
     EprAnalysisRequest(
         mode_indices=(1,),
-        surface_contribution_ids=tuple(
-            item.contribution_id for item in surface_specs
-        ),
+        surface_epr_groups=None,  # every sidecar Surface-EPR group
         junction_ids=(junction.junction_id,),
-        bulk_domain_ids=bulk_domain_ids,
+        bulk_domain_ids=None,  # every imported dielectric solid and the Region
     )
 )
 ```
@@ -232,7 +187,7 @@ For the study's selected mode and surface contribution, inspect participation
 and its changes as well as frequency; frequency-only stopping does not describe
 the adequacy of a separate EPR quantity. Use the recorded criterion and native
 status as evidence without turning either into a universal acceptance rule.
-Preparation here constructs Python source/catalogue/request records; it does
+Preparation here builds the SGB model and the request records; it does
 not create native CAD or establish calculator field-side accuracy.
 
 Adaptive history is separate from the final saved-field evaluation. Use

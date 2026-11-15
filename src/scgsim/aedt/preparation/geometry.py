@@ -8,12 +8,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Any, Literal
 
 from scgsim.aedt.data import (
     detached,
 )
 from scgsim.aedt.io import file_sha256, write_json
+from scgsim.aedt.preparation.cohort import canonical_handoff_paths
 from scgsim.aedt.preparation.handoff import (
     HandoffPlan,
     prepare_handoff,
@@ -21,6 +22,8 @@ from scgsim.aedt.preparation.handoff import (
 from scgsim.aedt.preparation.handoff_files import handoff_member, utc_now, write_script
 from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.preparation.q3d_geometry import lower_q3d_geometry
+from scgsim.aedt.preparation.sgb_handoff import attach_sgb_model, sgb_model_source
+from scgsim.aedt.preparation.sgb_model import PreparedSgbModel
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
@@ -31,7 +34,6 @@ from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
     AedtResources,
-    LumpedRlc,
     LumpedTerminalPort,
     MatrixRunControl,
     PdkMaterial,
@@ -102,40 +104,37 @@ def prepare_q3d_from_geometry(  # noqa: PLR0913 -- preserve the supported explic
 def prepare_hfss_eigenmode_from_geometry(  # noqa: PLR0913 -- preserve the supported explicit preparation keyword API.
     *,
     aedt_version: str,
-    modeling: Modeling,
-    geometry: PreparedPlanarGeometry,
+    model: PreparedSgbModel,
     project_name: str,
     design_name: str,
     run_control: EigenmodeRunControl | None = None,
     output_dir: str | Path,
     epr_request: EprAnalysisRequest | None = None,
-    lumped_rlcs: Sequence[LumpedRlc] | None = None,
     expression_convergence: ExpressionCacheConvergence
     | ExpressionCacheConvergenceSet
     | None = None,
-    geometry_workers: int | None = None,
     resources: AedtResources | None = None,
 ) -> HandoffPlan:
-    """Prepare a body-first model; omitted run_control authors no solve setup."""
+    """Prepare the HFSS Eigenmode handoff of an SGB model; omitted run_control authors no solve setup.
 
-    if lumped_rlcs is not None:
-        geometry = geometry.with_lumped_rlcs(lumped_rlcs)
+    The handoff carries the model's four files in its ``model/`` folder (issue #67).
+    """
     spec = HfssEprSpec(
         aedt_version=aedt_version,
-        modeling=modeling,
+        modeling=model.modeling,
         project_name=project_name,
         design_name=design_name,
-        geometry=geometry,
+        model=model,
         run_control=run_control,
         epr_request=epr_request,
         expression_convergence=expression_convergence,
     )
     return _BodyHfssHandoff(
         spec=spec,
-        geometry=geometry,
+        materials=detached(model.materials),
         output_dir=output_dir,
         workflow="epr" if epr_request is not None else "body_first_eigenmode",
-        geometry_workers=geometry_workers,
+        geometry_workers=None,
         resources=resources,
     ).build()
 
@@ -165,7 +164,7 @@ def prepare_hfss_driven_from_geometry(  # noqa: PLR0913 -- preserve the supporte
     )
     return _BodyHfssHandoff(
         spec=spec,
-        geometry=geometry,
+        materials=detached(geometry.source)["materials"],
         output_dir=output_dir,
         workflow="body_first_driven_terminal",
         geometry_workers=geometry_workers,
@@ -178,7 +177,7 @@ class _BodyHfssHandoff:
     """Carry one request through canonical file writing and packaging."""
 
     spec: HfssDrivenGeometrySpec | HfssEprSpec
-    geometry: PreparedPlanarGeometry
+    materials: dict[str, Any]
     output_dir: str | Path
     workflow: str
     geometry_workers: int | None
@@ -212,7 +211,8 @@ class _BodyHfssHandoff:
         self.started = time.perf_counter()
         self.prepared_source = record_runtime_source("prepared")
         self.payload = self.spec.to_payload()
-        self.materials = detached(self.geometry.source)["materials"]
+        if isinstance(self.spec, HfssEprSpec):
+            attach_sgb_model(self.spec.model, self.run_dir)
         self.vacuum_ids = sorted(
             material_id
             for material_id, record in self.materials.items()
@@ -253,8 +253,14 @@ class _BodyHfssHandoff:
         self.source = {
             "spec": self.spec_path.name,
             "spec_sha256": file_sha256(self.spec_path),
-            "planar_source_sha256": self.geometry.source_sha256,
-            "planar_model_sha256": self.geometry.model_sha256,
+            **(
+                sgb_model_source(self.spec.model)
+                if isinstance(self.spec, HfssEprSpec)
+                else {
+                    "planar_source_sha256": self.spec.geometry.source_sha256,
+                    "planar_model_sha256": self.spec.geometry.model_sha256,
+                }
+            ),
         }
         write_json(self.metadata_path, self.metadata)
 
@@ -281,12 +287,8 @@ class _BodyHfssHandoff:
         )
 
     def _package(self) -> HandoffPlan:
-        self.allowed = (
-            self.script_path,
-            self.spec_path,
-            self.metadata_path,
-            self.receipt_path,
-            self.manifest_path,
+        self.allowed = tuple(
+            self.run_dir / path for path in canonical_handoff_paths(self.spec)
         )
         write_json(
             self.manifest_path,

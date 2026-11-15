@@ -12,7 +12,7 @@ scgsim-status: "CONVERGING"
 
 ## Minimal call
 
-This block resolves the retained saved-field solution and parses its matching EPR specification before calling `analyze_epr`. Replace the example directory with the returned run folder for your study.
+This block resolves the retained saved-field solution and parses its matching EPR specification, whose SGB model is bound to the run folder's `model/` files, before calling `analyze_epr`. Replace the example directory with the returned run folder for your study.
 
 ```python
 import json
@@ -21,15 +21,16 @@ from pathlib import Path
 from scgsim.aedt import analyze_epr, parse_aedt_spec, resolve_saved_solution
 
 returned_run_dir = Path(".artifacts/returned-aedt-epr")
-spec = parse_aedt_spec(json.loads(
-    (returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
-))
+spec = parse_aedt_spec(
+    json.loads((returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")),
+    base_dir=returned_run_dir,
+)
 saved = resolve_saved_solution(returned_run_dir / "saved-solution-manifest.json")
 
 result = analyze_epr(
     saved_solution=saved,
     aedt_version="2024.2",
-    geometry=spec.geometry,
+    model=spec.model,
     project_name=spec.project_name,
     design_name=spec.design_name,
     run_control=spec.run_control,
@@ -44,13 +45,12 @@ result = analyze_epr(
 |---|---|
 | `saved_solution` | Verified saved-field cohort resolved as `SavedSolution`. |
 | `aedt_version` | Explicit AEDT release: `"2023.2"` or `"2024.2"`. |
-| `geometry` | Prepared planar geometry used by the original request. |
+| `model` | The `PreparedSgbModel` the saved solution was solved from: `spec.model` of the returned run, or `EigenmodeSim.prepared_model`. A solution of another model, or of the native builder, is refused. |
 | `project_name`, `design_name` | Native project and design identities for the saved model. |
 | `run_control` | Eigenmode setup and pass controls associated with the saved solution. |
 | `epr_request` | Surface, bulk and junction quantities to evaluate. |
 | `output_dir` | New destination for the analysis handoff and returned result. |
-| `geometry_workers` | Optional worker count for pure geometry preparation; omit to use the implementation default. |
-| `surface_field_selectors` | Optional mapping from selected contribution IDs to `"surface"` or `"adjacent"` AEDT calculator operations. This selection is separate from `SurfaceEprSpec.field_side`, which identifies the physical contribution side. |
+| `surface_field_selectors` | Optional mapping from sidecar Surface-EPR groups (those `epr_request.surface_epr_groups` selects) to `"surface"` (the field on the row's faces) or `"adjacent"` (the field just off them). A group without a selector reads `"surface"`. |
 
 ## Signature
 
@@ -59,13 +59,12 @@ def analyze_epr(
     *,
     saved_solution: SavedSolution,
     aedt_version: str,
-    geometry: PreparedPlanarGeometry,
+    model: PreparedSgbModel,
     project_name: str,
     design_name: str,
     run_control: EigenmodeRunControl,
     epr_request: EprAnalysisRequest,
     output_dir: str | Path,
-    geometry_workers: int | None = None,
     surface_field_selectors: Mapping[str, Literal['surface', 'adjacent']] | None = None,
 ) -> Any: ...
 ```
@@ -74,7 +73,7 @@ def analyze_epr(
 
 | Source | SHA-256 |
 |---|---|
-| `src/scgsim/aedt/epr/workflow.py` | `e820d10b5c7ef94a160d1e985a2466da5952c49522d656651f35c9bc313f4162` |
-| `docs/api/analyze-epr-usage.md` | `ec6ae101228de84e9a1948c510238f9bda1fc916a4cb15057fbfaadd555ef127` |
+| `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
+| `docs/api/analyze-epr-usage.md` | `c1e040aa9af091eb00262c62615cf4a2b8ec594cf0090dda61cfbba11e739f6c` |
 
-[Complete generation index](input-index.qmd), SHA-256 `0663997a30cef8d05425f1ea0b0343950b7ce15c64c407d8937c5a62737b5ad9`.
+[Complete generation index](input-index.qmd), SHA-256 `22003231c674bda24133cd7f72f9d1167eb18164675945dce877f97356213181`.

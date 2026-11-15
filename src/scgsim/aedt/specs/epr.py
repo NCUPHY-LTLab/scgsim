@@ -226,14 +226,14 @@ class EprAnalysisRequest:
     """Optional analysis/cache selection independent of model construction."""
 
     mode_indices: tuple[int, ...] | None = None
-    surface_contribution_ids: tuple[str, ...] | None = None
+    surface_epr_groups: tuple[str, ...] | None = None
     junction_ids: tuple[str, ...] | None = None
     bulk_domain_ids: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         for name in (
             "mode_indices",
-            "surface_contribution_ids",
+            "surface_epr_groups",
             "junction_ids",
             "bulk_domain_ids",
         ):
@@ -258,10 +258,10 @@ class EprAnalysisRequest:
             "mode_indices": (
                 None if self.mode_indices is None else list(self.mode_indices)
             ),
-            "surface_contribution_ids": (
+            "surface_epr_groups": (
                 None
-                if self.surface_contribution_ids is None
-                else list(self.surface_contribution_ids)
+                if self.surface_epr_groups is None
+                else list(self.surface_epr_groups)
             ),
             "junction_ids": (
                 None if self.junction_ids is None else list(self.junction_ids)
@@ -278,7 +278,7 @@ class EprAnalysisRequest:
             raise TypeError("EPR analysis request must be a mapping")
         expected = {
             "mode_indices",
-            "surface_contribution_ids",
+            "surface_epr_groups",
             "junction_ids",
         }
         if set(value) != expected | {"bulk_domain_ids"}:

@@ -12,9 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from scgsim.aedt.epr.geometry import (
-    precompute_inset_surfaces,
-)
 from scgsim.aedt.epr.native_workflow import (
     analyze_saved_epr,
     collect_batch_epr,
@@ -67,7 +64,6 @@ from scgsim.aedt.runtime.handoff_validation import (
     validate_execution_flags,
     verify_prepared_cohort,
     verify_prepared_hashes,
-    warn_thin_film_surfaces,
 )
 from scgsim.aedt.runtime.native.common import (
     owned_application_constructor,
@@ -290,7 +286,6 @@ class _ExecutionTransaction:
         self.cohort = verify_prepared_cohort(
             self.run_dir, self.metadata, self.receipt, self.spec
         )
-        warn_thin_film_surfaces(self.spec)
 
     def _start_receipt(self) -> None:
         self.started = utc_now()
@@ -389,21 +384,6 @@ class _ExecutionTransaction:
             else setting
         )
         validate_geometry_workers(workers)
-        self.inset_plan = None
-        if (
-            self.batch_parent is None
-            and isinstance(self.spec, (HfssEprSpec, HfssEprAnalysisSpec))
-            and self.spec.epr_request is not None
-        ):
-            geometry_started = time.perf_counter()
-            self.inset_plan = precompute_inset_surfaces(
-                self.spec.geometry, self.spec.epr_request, workers
-            )
-            self.receipt["geometry_precompute"] = {
-                "seconds": round(time.perf_counter() - geometry_started, 6),
-                "members": len(self.inset_plan),
-                "requested_workers": workers,
-            }
         self.receipt["native_compatibility"] = {}
         self.transport_stack.enter_context(
             native_compatibility(
@@ -457,7 +437,6 @@ class _ExecutionTransaction:
                 owned_application_constructor(Hfss, self.desktop, profile=self.profile),
                 self.run_dir,
                 self.spec,
-                cast(dict[tuple[str, float], dict[str, Any]], self.inset_plan),
                 connected_aedt_version=cast(str, self.actual_aedt_version),
             )
             self.status = "epr_analysis_completed"
@@ -538,7 +517,6 @@ class _ExecutionTransaction:
                 owned_application_constructor(Hfss, self.desktop, profile=self.profile),
                 self.run_dir,
                 spec,
-                self.inset_plan,
             )
         if self.options.prepare_only:
             self.result = (
@@ -765,7 +743,7 @@ class _ExecutionTransaction:
                         project_name=self.spec.project_name,
                         design_name=self.spec.design_name,
                         setup_name=cast(Any, self.spec.run_control).setup_name,
-                        model_source_sha256=self.spec.geometry.model_sha256,
+                        model_source_sha256=self.spec.model.identity_sha256,
                         evidence=result["saved_field_evidence"],
                         aedt_version=cast(str, self.actual_aedt_version),
                     )

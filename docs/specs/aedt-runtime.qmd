@@ -435,7 +435,8 @@ three expressions on its sheet (normal and tangential electric integrals and
 the area); a row can hold faces of several orientations and curved walls, so
 the normal is the sheet's own at each point (`Operation('Normal')`), not one
 vector. A junction's voltage is integrated on a non-model sheet copied from
-its port faces. The public EPR flow does not use this yet.
+its port faces. The public HFSS Eigenmode flow runs on this (see
+[Eigenmode saved fields](#eigenmode-saved-fields-and-surface-epr-direction)).
 
 In AEDT, `modeling="thin_film"` builds Route A with its finite bodies (bumps,
 posts) retained as conductor solids (`ROUTE_A_RETAINED_BODIES`; the sidecar's
@@ -593,8 +594,8 @@ physical Ground role and the solver's native Net type are separate explicit
 facts.
 
 The conductor's source normal thickness or `physical_thickness_um` is not the
-interface-film thickness used by the EPR model. `SurfaceEprSpec.film_thickness_m`
-is an independent model input for the selected MA, MS, or SA contribution. Do
+interface-film thickness used by the EPR model. The `film_thickness_m` of the
+MA, MS or SA spec given to `set_surface_epr()` is an independent model input. Do
 not substitute the conductor thickness for that interface assumption.
 
 An ideal superconductor is determined by the source PDK material declaration,
@@ -1064,97 +1065,52 @@ records, while source-backed v3 has eight allowed paths and seven records.
 
 ## Eigenmode saved fields and Surface-EPR direction
 
-The Eigenmode Surface-EPR path is an additive lifecycle, not a
-reinterpretation of a completed V3 receipt. It starts from shared source
-polygons, holes, material/domain facts, route profile, and declared junction
-intent, then records a separate AEDT binding from those facts to native bodies,
-sheets, faces, material sides, and calculator selections. Native adjacency is
-observed geometry evidence and is not proof of source contact intent.
+HFSS Eigenmode runs on the SGB model Palace meshes (issue #67).
+`EigenmodeSim.prepare_handoff()` builds it with `prepare_sgb_model()` from the
+plan, its junctions, lumped RLCs and Surface-EPR specs, and writes the handoff
+that carries it; `EigenmodeSim.prepared_model` is then the model in that
+handoff. Where AEDT runs, the request is read against the handoff folder, the
+model's four files are checked again, and the Eigenmode design is made in this
+order:
 
-The native construction target is planar Solid or Thin Film modeling with real
-isotropic dielectrics and PEC conductors. Covered polygon sheets, local hole
-subtraction, sweeps or thickenings, and explicit boxes are allowed; blanket
-geometry unites or subtractions are not. Curved or tilted geometry,
-anisotropic or dispersive materials, open-radiation models, Driven EPR, and
-multi-sheet junctions remain excluded.
+1. `import_sgb_model()` imports the guarded STEP, matches every face to its
+   planned face, rebuilds the free faces, realizes the materials and the
+   Region, and assigns Perfect E, the junction Lumped RLCs and the generic
+   RLCs;
+2. for an EPR request, one non-model sheet per selected Surface-EPR row and
+   one voltage sheet per junction are copied from the imported faces;
+3. the setup is created;
+4. the EPR expressions are compiled from the sidecar rows and loaded once,
+   and a requested expression cache is submitted;
+5. the project is saved and the setup is read back.
 
-The current Surface-EPR analysis scope is horizontal top/bottom MA, MS, and
-SA patches only. Source and native solver CAD still include conductor and
-substrate sidewalls; no sidewall analysis sheets, integrals, or cache items are
-created. Omitted sidewall film energy is not a measured zero and is not
-included in reported surface participation. A separate Q2D sidewall
-correction is outside this AEDT workflow. New handoffs reject explicit
-sidewall Surface-EPR requests; there is no sidewall-selection switch or
-legacy authoring path. Historical result artifacts retain their
-original scope and are read without rewriting their values.
+The receipt's geometry record is the import record: each planned solid and its
+AEDT object, the imported copies of each planned face, the rebuilt sheets,
+every assignment, the selection sheets and the model identity. Result reading
+refuses a receipt whose model identity, guard solids or bound file hashes are
+not those of the request's model.
 
-MA and MS remain separate field-side evaluations even when they use the same
-physical sheet footprint: each contribution carries its own `field_side` and
-native side selection. Sharing a footprint does not merge their integrals or
-make the conductor's physical thickness the interface-film thickness.
+`EprAnalysisRequest.surface_epr_groups` selects sidecar Surface-EPR groups
+(`None`: every group); `junction_ids` and `bulk_domain_ids` select the
+reported junctions and domains, while every domain and junction stays in the
+normalization. Surface EPR is declared with `EigenmodeSim.set_surface_epr(specs)`,
+Palace's specs by interface type. Their inset margins become bands of the
+model, and each row is integrated over all of its faces, sidewalls included.
 
-For an explicit Solid EPR request selecting MA, MS, or SA contributions, the
-specified path records a native-face reference for each selected contribution.
-It resolves the source-bound Solid owner and source cap from the constructed
-model. The required readback at the existing post-save checkpoint, before
-Analyze, is the matching native design `EntityList` record, with its native
-name, type, ID, and face IDs verified. Assignment-time `props.List` is cached
-property state, not independent native-member readback. The existing save is
-reused; this adds no save, solve, or getter. An earlier native attempt failed
-before Solve on the incorrect property read. A subsequent SimplePad Solid run
-completed native solve, save, and release; both of its two adaptive passes
-recorded six raw native-face references, with FaceList membership matching
-the saved design's `EntityList`. It did not converge at its two-pass maximum
-(delta 79.181). These observations establish neither accuracy nor
-incident-material equivalence. A separate mode 1, pass 2 saved-field analysis
-completed with `epr_analysis_completed`, `Analyze0`, save, and release; it
-retained six raw references and the saved-membership evidence. The 35 original
-sealed project members remained unchanged.
-
-For the current horizontal constant-section swept or box construction, native
-face centers identify the upper or lower source cap; this does not establish a
-general normal or face-orientation rule. The reference uses the existing normal
-and tangential quadratic integrands with `EnterSurface` on the face list and no
-Sheet `Adjacent` selector. Native normals define projection only and do not
-prove which incident material supplied the field. No nearest-point selection,
-normal-to-Sheet-side inference, or convenience selector resolves a reference.
-
-The distinct `native_surface_references` mapping is retained in each raw
-integral record and as a sequence on combined result rows. Each reference
-retains its identity, selected contribution IDs, native owner/face-list/face
-membership, source and native support, incident-domain and projection basis,
-normal and tangential integrals in V^2, native area in m^2, and expression
-identity evidence. Native reference support can differ from the masked Sheet
-support; SA records its actual dielectric-owner basis separately from the
-existing vacuum-formula basis. Presentation labels those supports separately
-beside the masked Sheet results so users can inspect their trends without
-assuming equivalence.
-
-References are raw measurements, not participation, loss, inverse-Q, or a
-universal material-side equivalence. They are not added to masked surface
-maps, energy or loss totals, or the normalization denominator. Margins do not
-create duplicate native-face references, and references add no convergence
-condition. Public `resolve_results()` and `show_all_results()` completed in a
-fresh kernel and presented the raw V^2/m^2 values and face membership. Report
-generation used no native operations and produced HTML with 12 Plotly figures;
-the existing Plotly JSON data and layout were unchanged, and all 56 original
-inputs remained preserved. Report generation does not establish accuracy or
-incident-material equivalence.
+A saved analysis (`analyze_epr(model=...)`) copies the saved project and
+rebinds it by name: the guard's solids, the Region and every row and junction
+sheet its expressions read must be in the saved design, and the saved
+solution must name the same model identity. `surface_field_selectors` are
+keyed by the same groups: `surface` reads a row's field on its sheet
+(`EnterSurface`), `adjacent` just off it (`EnterAdjacentSurface`); the area
+is the sheet's either way. A handoff, saved solution or receipt of the native
+builder is refused (issue #67 decision 6).
 
 Each required field quantity is evaluated in an explicitly bound setup,
 `LastAdaptive` solution, mode, frequency, phase, and excitation context. That
 context is read back with the value: a saved expression name or expression
 digest alone is not solution identity because an unevaluated calculator stack
-can follow later context changes. Both Solid and Thin Film modeling use
-non-model analysis sheets for masked evaluations and the unmasked baseline.
-Their `Surface`/`Adjacent` selector is distinct from geometric normal
-projection, and the ThinFilm mapping remains empirical as described below.
-The stored `effective_domain_id` is binding metadata, not a native domain
-restriction and not proof that the selected field belongs to that material.
-`Smooth` and field magnitude are not substitutes for side selection. Solid
-native-face references are a separate raw measurement path using verified
-source-bound face lists. The recorded raw values do not establish
-incident-material field ownership or resolve the Sheet-side ambiguity.
+can follow later context changes.
 
 ### Mode binding and pass cache
 
@@ -1351,233 +1307,13 @@ those outcomes require an actual target-run observation.
 
 ### Public EPR surface {#public-epr-candidate-surface}
 
-`prepare_planar_geometry_input()` requires an explicit `modeling` choice and
-validates/detaches shared source polygons, holes, entities, solution domains,
-junctions, and surface-analysis requests. Any Route A/B choice belongs to the
-upstream Palace geometry; it is not an AEDT preparation argument.
-`prepare_hfss_eigenmode_from_geometry()` requires `aedt_version` and `modeling`,
-binds the prepared source request to an HFSS Eigenmode spec, and emits one
-portable handoff. Direct GDS authoring remains available; its 3D spec now also requires
-the explicit modeling choice.
-
-For AEDT EPR, the preparation order is source geometry and an explicit
-`modeling` choice, declared junction partition into local PEC ends and the
-central RLC rectangle, then geometry surface planning and the
-contribution catalogue. Any Route A/B choice belongs to the upstream source.
-Route A adapter-generated sheet footprints are refreshed from that final conductor
-geometry; caller-authored declarations remain present. The catalogue carries
-only physically planned ledger evidence, so generic declarations without a
-physical ledger entry do not add numeric contributions. Palace keeps its
-existing junction model; the AEDT-local partition is not a cross-backend
-geometry conversion.
-
-#### Data flow and backend responsibility
-
-The shared `GeometryBuildInput` starts both backend paths. The AEDT path adds
-its junction geometry before planning surfaces; Palace retains its own port
-model. The records below show where source facts become backend geometry,
-native integrals, and detached results.
-
-```{mermaid}
-flowchart TB
-  INPUT["GeometryBuildInput<br/>normalized polygons, Entities, domains"]
-  PALACE["Palace preparation<br/>existing port and junction model"]
-  PARTITION["AEDT junction partition<br/>local PEC ends + central RLC rectangle"]
-  PLAN["geometry planning SurfacePlanRecord + contribution ledger<br/>surface patches and source evidence"]
-  PREPARED["PreparedPlanarGeometry<br/>detached source, catalogue, bindings, hashes"]
-  NATIVE["PreparedEprHfss<br/>native model, non-model sheets, expressions/cache"]
-  RAW["Native raw integrals + evaluation evidence"]
-  COMBINE["Existing EPR combination<br/>model-wide normalization"]
-  RESULT["EprResult<br/>normalized rows and provenance"]
-  INPUT --> PALACE
-  INPUT --> PARTITION
-  PARTITION --> PLAN
-  PLAN --> PREPARED
-  PREPARED --> NATIVE
-  NATIVE --> RAW
-  RAW --> COMBINE
-  COMBINE --> RESULT
-```
-
-| Carrier | Responsibility |
-|---|---|
-| `GeometryBuildInput` | Shared normalized source polygons, semantic Entities, solution domains, material and provenance facts. It is input to the backend planners. |
-| Final AEDT junction geometry | `prepare_planar_geometry_input()` partitions declared junction sheets before surface planning. Derived PEC ends and the central RLC rectangle retain source-owner and material lineage; original source input remains unchanged. |
-| `SurfacePlanRecord` and `surface_contribution_ledger` | Geometry surface planning plans physical surface patches and records owner, interface, side, effective domain, source and aggregation evidence. The ledger is the authority for numeric surface catalog entries; a semantic declaration alone adds none. |
-| `PreparedPlanarGeometry` | Detached pre-native AEDT request containing source/junction facts, catalog, selected contributions, surface bindings, and model/source digests. It does not claim that native geometry or a solve was validated. |
-| `PreparedEprHfss` | In-process owner of the active AEDT application handle, prepared geometry and setup records, non-model sheets, expressions/cache, and timing/readback state. It is not a portable result or evidence of a completed solve. |
-| `EprResult` | Detached per-mode or per-mode/pass rows. `raw_integrals` and `raw_integral_evidence` retain observed quantities and evaluation context; the existing combination step computes domain, surface, and junction values with the model-wide normalization. |
-
-| Model aspect | Palace | AEDT EPR |
-|---|---|---|
-| Local junction | `layout_sheet=True` binds the authored port to a layer and inductance; Palace reports its signed native port participation. | A declared `PlanarJunction` partitions the source sheet into two local PEC ends and a central Lumped RLC rectangle, with its own inductance/capacitance model and nonnegative $p_L$/$p_C$. |
-| Outer vacuum boundary | An unspecified external boundary remains at Palace's natural PMC condition. | The current EPR model uses one native `Region` with the shared six-face padding and HFSS's default Perfect E on background-exposed faces; only generated auto-vacuum components collapse into that physical Region, while authored gaps remain separate. |
-
-These choices are backend-specific. The common input does not convert Palace's
-port or PMC boundary into the AEDT junction or Perfect E model, or vice versa.
-
-For new EPR preparations, source vacuum components remain logical topology
-and field-side provenance, not separate native solids. Native model CAD has
-one vacuum `Region` with six editable Absolute Offset padding values from the
-source vacuum record. New preparations use
-`outer_boundary_policy: hfss_default.v1` without an explicit assignment on the
-Region exterior; HFSS applies its default Perfect E boundary to model surfaces
-exposed to the background ([HFSS Perfect E boundaries](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/HFSS/PerfectEBoundaries.htm)).
-SCGSim still verifies all six Region faces and bounds. The closed-enclosure
-evidence records this policy with `explicit_assignment: false` and does not
-invent a boundary name or type. Saved-field readback verifies the same policy.
-A pre-execution handoff without this marker must be prepared again; saved
-historical projects without it remain readable through the original named
-Perfect E validation path. Substrate domains stay separate. This outer Region
-boundary policy is independent of the local PEC ends created around an AEDT
-junction; the shared input does not convert Palace's natural PMC exterior to
-HFSS's Perfect E default or the reverse.
-`native_region.logical_vacuum_ids` lists planner-generated auto-vacuum
-components represented by the native Region; only those logical components
-collapse to that one physical domain. Explicitly authored vacuum solution
-domains, including a host gap, remain distinct and retain their own integrals.
-Electric and magnetic integrals count the physical Region once alongside the
-retained solution domains, so the collapsed auto components do not multiply
-the normalization denominator. Historical per-component result records
-remain readable under their original source contract.
-New surface analysis also emits one unmasked baseline per selected physical
-owner/interface group in addition to the explicitly requested margins. The
-baseline has its own `unmasked_baseline` evaluation identity at zero shrink;
-`margins_um` remains exactly the caller's requested mask list. A caller's
-explicit zero-margin request is a separate labelled evaluation, even when it
-uses the same geometry. Historical records without this evaluation policy do
-not acquire invented baseline rows.
-
-`analyze_epr()` is the only public entry that may perform native saved-field
-analysis. It enters the same `run.py` transaction owner and delegates to the
-private Eigenmode analysis path; the offline resolver never imports PyAEDT or
-owns Desktop. `resolve_saved_solution()` verifies an immutable project plus
-complete result-directory inventory. `resolve_epr_result()` structurally
-validates and loads partial history or final saved-field result JSON without
-filling missing values; this is not artifact authentication. A detached EPR
-record retains its recorded source identities and, where present, the
-saved-solution content hash, but these values do not authenticate the detached
-JSON.
-
-### Explicit native field selectors for saved analysis
-
-`analyze_epr()` accepts the optional
-`surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None`
-keyword. Keys are existing selected `contribution_id` values in the EPR
-request. `"surface"` requests the native `EnterSurface` selector and
-`"adjacent"` requests `EnterAdjacentSurface`. A supplied choice applies to
-every binding, component, evaluation, and margin for that contribution; it
-does not filter or combine requested patches or margins. Unspecified
-contributions retain the existing normal-derived selector behavior. Unknown
-or unselected contribution IDs and unsupported values fail explicitly.
-
-The override changes only the native one-sided field selector used during
-saved-field analysis. The original `SurfaceEprSpec.field_side` and its source
-meaning remain unchanged. Requested selector, applied native carrier binding,
-and actual calculator command/name readback remain distinct provenance. The
-readback establishes which selector was requested by the native calculator;
-it does not establish that the sampled field is on the intended material
-side. No automatic material-side correction or certainty is implied. Analysis
-continues on the verified saved `LastAdaptive` workcopy without another
-Eigenmode `Analyze`, mesh operation, or physical geometry rebuild, and keeps
-the existing grouping and normalization. A nonempty override uses the explicit
-saved-analysis request codec; `None` or an empty mapping retains the existing
-no-override codec and selector behavior.
-
-For example, a caller may pass
-`surface_field_selectors={contribution_id: "surface"}` after choosing an
-existing contribution ID from its request. The choice is caller-owned; the
-producer does not infer or supply it.
-
-`reanalyze_epr()` recomputes film estimates from stored evidence without
-reopening AEDT, and `show_epr()` gives a standalone surface/bulk/junction
-Plotly view. Neither is wired into the unified Visualizer. The older
-`plot_epr_result()` view remains available. Missing native values and unknown
-film loss tangents remain unknown rather than becoming zero. When the film loss
-tangent is known, the reported surface inverse-Q contribution is
-$p\tan\delta$; an explicit zero produces zero, while an unknown value makes
-that contribution unavailable. See the [EPR Concept](../eigenmode-epr.qmd) for physical interpretation.
-Backend APIs are described in the [AEDT EPR reference](#public-epr-candidate-surface)
-and [Palace Eigenmode reference](palace-eigenmode.qmd#results-and-offline-analysis).
-The [offline EPR lesson](../course/offline-epr.qmd#interpret-an-assumption-change)
-explains reanalysis precedence; the [report reference](../report-model.qmd#eigenmode-epr-presentation)
-describes coverage.
-
-For adaptive Eigenmode frequency traces whose native reported unit is exactly
-an empty string, SCGSim also requests explicit SI real and imaginary frequency
-values from the same returned native variations using
-`GetRealDataValues(expression, True)` and `GetImagDataValues(expression, True)`.
-Their native SI basis is Hz. The original raw values and empty unit remain
-recorded; the companion retains query, variation, intrinsic and Pass identity.
-Only associated SI evidence supplies the frequency used for EPR normalization.
-Unavailable native retrieval or coordinate association retains a partial row
-and its reason. Recognized Hz/GHz traces, other unsupported or absent units,
-integral traces and historical records without this companion retain their
-existing handling; no final-mode frequency substitution or guessed unit is used.
-
-Strict `resolve_results()` also resolves the declared adaptive-mode-history and
-adaptive-EPR JSON artifacts and verifies their captured hashes. It validates
-the EPR payload's existing source, setup, mode, and pass provenance; the history
-artifact remains receipt-hash evidence and is not parsed for those checks.
-`ResolvedRun.epr_result()` returns
-the immutable EPR result, or `None` only when the handoff requested no EPR. A
-missing or corrupt requested artifact fails resolution; valid partial history
-remains partial. Result presentation uses the resolved object and its captured
-artifact identities rather than consulting a current `EigenmodeSim` or
-re-reading native AEDT state. The distinct saved-field `analyze_epr()` workflow
-is unchanged.
-
-`planar_junction_from_port(build_input, *, port_name, junction_id,
-terminal_a_net, terminal_b_net, inductance_h, capacitance_f)` returns a
-`PlanarJunction` when `port_name` matches exactly one normalized port's
-recorded `source_name`. The helper uses the recorded source sheet for direction
-and width, while the caller supplies the terminal nets and circuit values
-explicitly. Missing, ambiguous, or invalid source sheets fail; the helper does
-not infer connectivity. It retains the existing rectangular-sheet and
-owner-overlap checks. Binder discovery uses closed-XY contact with candidate
-terminal-owner geometry, including area overlap or boundary contact. This
-identifies a candidate binding but does not qualify the final partition.
-Preparation separately checks complete coverage of the designated central end
-edge.
-
-Both this binder and `prepare_planar_geometry_input()` accept the complete
-source input. Do not omit other-face conductors or prepare a same-face submodel
-to bypass contact checks. One shared per-junction inventory resolves the
-physical source support plane before considering projected XY contact. Exact
-port overlap host Entity/polygon references establish the source hosts; their
-authored `PhysicalLayerDeclaration` film attachment planes, or genuine
-zero-thickness source sheet planes, must agree. Finite body intervals can
-confirm incidence but do not invent a support plane. With boundary-only
-contacts or a manually constructed `PlanarJunction`, the same resolver requires
-one unique authored support-plane candidate incident to the closed-XY contacts
-of both explicit terminal Nets. Missing or ambiguous binding fails explicitly;
-a layer name, Net, projected overlap, or a Solid's lower endpoint alone is not
-a plane binding.
-
-The source interval is the actual body interval, preserved in
-`physical_representation.source_interval_um` after lowering. A source-disjoint
-conductor is excluded from this junction's contact inventory even if Thin Film
-collapse places it at the same effective Z. Source interval endpoints are
-included. For source-incident candidates, effective incidence is also required.
-The existing common `PhysicalRepresentationPlan` projects the support through
-`project_support_point()` with its bound host physical identity; no separate
-junction profile/Z map is introduced. Genuine same-plane terminal, third-net,
-end/corner and open-side failures remain unchanged.
-
-The public helper records the source binding in the existing
-`PlanarJunction.metadata["junction_support_plane"]` mapping, with schema
-`scgsim.aedt.junction-support-plane.v1`, source polygon/plane, binding basis and
-exact source host Entity/polygon/physical-layer/actual-interval records. The
-constructor and canonical payload shape are unchanged. Preparation recomputes
-these facts and rejects a conflicting recorded binding; older manually authored
-junctions without that metadata derive available source evidence through the
-same resolver or fail if it is missing or ambiguous. Partition provenance
-retains this source binding, its effective plane and eligible original Entity
-IDs under `support_plane`; `z_um` is that effective plane. These same per-junction
-IDs govern initial contact classification, reconstructed arm/sheet incidence
-and Booleans, and final emitted-geometry checks, including derived ends through
-their original Entity lineage. All other conductors remain in the full model.
-These source/projection records do not prove native contact or field side.
+The public HFSS Eigenmode entries are `EigenmodeSim` (with `set_plan`,
+`set_eigenmode`, `set_surface_epr`, `add_junction`, `add_lumped_rlc` and
+`set_epr_request`), `prepare_sgb_model()` with
+`prepare_hfss_eigenmode_from_geometry(model=...)`, and `analyze_epr(model=...)`
+for a saved solution. All of them take the one `PreparedSgbModel` of an SGB
+build; there is no planar Eigenmode preparation. HFSS Driven still uses
+`PreparedPlanarGeometry` until its own SGB route.
 
 #### Automatic rectangular junction partition {#aedt-automatic-junction-partition}
 
@@ -1784,464 +1520,6 @@ or solver result has been validated here. Historical artifacts keep their
 recorded geometry.
 
 ![Authored source sheet and the prepared conductor pieces: pale existing A and B terminals, darker added A- and B-side conductor ends, and the central RLC rectangle.](../assets/junction-partition-generic.svg){fig-alt="Generic authored sheet with pale existing terminal metal, darker added conductor ends, and the central RLC rectangle." fig-cap="Generic solver-free prepared geometry; the lighter terminal fills remain part of each complete conductor. This is not native AEDT readback or solver evidence." width="95%"}
-
-#### Catalogue-driven handoff
-
-The inputs below are the real `GeometryBuildInput` and prepared-stack mapping
-from the existing in-tree geometry workflow. They carry the source geometry,
-material and vacuum-region facts; the AEDT request separately selects its
-`modeling` representation. Route A/B is not an argument to this AEDT helper.
-See
-[GeometryPlan and SGB](../geometry-sgb.qmd#shared-source-facts-for-aedt).
-The first call requests no analysis contributions and exposes the horizontal
-top/bottom `contribution_catalog` after applying the declared junctions. A row
-can retain original or derived polygon IDs, or a planned SA surface ID. In
-this helper, the caller selects one contribution and explicitly supplies a
-source ID retained by that catalogue row; the ID need not belong to the
-original `build_input.polygons`. Missing or ambiguous contribution selection
-and a source ID not retained by the selected row fail before constructing
-`SurfaceEprSpec`. The helper does not choose a source or modeling mode for the
-caller. Supply an explicit `modeling` value; Thin Film additionally requires
-the source PDK's qualified physical-layer declarations.
-
-`contribution_id` selects every existing patch in that catalogue group.
-`SurfaceEprSpec.source_polygon_id` is a group provenance anchor: it must be
-retained by at least one member of the selected group's catalogue union,
-including the existing planned SA surface-ID fallback. It does not filter,
-split or omit other group members. Each resolved binding keeps its own
-`contribution` evidence and `geometry_ref` as the true per-patch provenance;
-classification, side, adjacent domains, materials and masks remain validated
-for each patch.
-
-The catalogue is built from geometry surface planning's physical
-surface-contribution ledger. A generic declaration without physical ledger evidence remains
-semantic metadata and does not add a numeric EPR contribution. For Route B
-finite-shell top and bottom patches, the mask and analysis-sheet plane use the
-same resolved source Z: `z_max_um` (or `z_min_um + thickness_um`) for the top,
-and `z_min_um` for the bottom. This keeps the non-model field sheet on the
-physical face rather than on the shell's lower plane.
-
-```python
-from collections.abc import Mapping
-from pathlib import Path
-from typing import Any, Literal
-
-from scgsim.aedt import (
-    AedtResources,
-    EprAnalysisRequest,
-    EigenmodeRunControl,
-    HandoffPlan,
-    PlanarJunction,
-    PreparedPlanarGeometry,
-    SurfaceEprSpec,
-    prepare_hfss_eigenmode_from_geometry,
-    prepare_planar_geometry_input,
-)
-from scgsim.geometry import GeometryBuildInput
-
-
-def prepare_surface_epr_handoff(
-    *,
-    aedt_version: str,
-    build_input: GeometryBuildInput,
-    prepared_stack: Mapping[str, Any],
-    junctions: tuple[PlanarJunction, ...],
-    modeling: Literal["solid", "thin_film"],
-    contribution_id: str,
-    source_polygon_id: str,
-    film_thickness_m: float,
-    film_relative_permittivity: float,
-    margins_um: tuple[float, ...],
-    project_name: str,
-    design_name: str,
-    run_control: EigenmodeRunControl,
-    resources: AedtResources | None,
-    mode_indices: tuple[int, ...],
-    output_dir: Path,
-) -> tuple[PreparedPlanarGeometry, EprAnalysisRequest, HandoffPlan]:
-    catalogue_geometry = prepare_planar_geometry_input(
-        build_input,
-        prepared_stack=prepared_stack,
-        modeling=modeling,
-        junctions=junctions,
-    )
-    for record in catalogue_geometry.contribution_catalog:
-        print(
-            record["contribution_id"],
-            record["interface_kind"],
-            record["field_side"],
-            record["source_polygon_ids"],
-        )
-
-    matches = [
-        record
-        for record in catalogue_geometry.contribution_catalog
-        if record["contribution_id"] == contribution_id
-    ]
-    if len(matches) != 1:
-        raise ValueError("select exactly one contribution_id from the catalogue")
-    record = matches[0]
-    if source_polygon_id not in record["source_polygon_ids"]:
-        raise ValueError("source_polygon_id must be retained by the selected catalogue row")
-
-    surface = SurfaceEprSpec(
-        contribution_id=record["contribution_id"],
-        source_polygon_id=source_polygon_id,
-        interface_kind=record["interface_kind"],
-        field_side=record["field_side"],
-        margins_um=margins_um,
-        film_thickness_m=film_thickness_m,
-        film_relative_permittivity=film_relative_permittivity,
-    )
-    geometry = prepare_planar_geometry_input(
-        build_input,
-        prepared_stack=prepared_stack,
-        modeling=modeling,
-        junctions=junctions,
-        contributions=(surface,),
-    )
-    request = EprAnalysisRequest(
-        mode_indices=mode_indices,
-        surface_contribution_ids=(surface.contribution_id,),
-        junction_ids=tuple(item.junction_id for item in junctions),
-    )
-    handoff = prepare_hfss_eigenmode_from_geometry(
-        aedt_version=aedt_version,
-        modeling=modeling,
-        geometry=geometry,
-        project_name=project_name,
-        design_name=design_name,
-        run_control=run_control,
-        output_dir=output_dir,  # must be a new, unused directory
-        epr_request=request,
-        resources=resources,
-    )
-    print("handoff:", handoff.run_dir)
-    print("script:", handoff.script_path)
-    print("spec:", handoff.spec_path)
-    print("receipt:", handoff.receipt_path)
-    print("archive:", handoff.archive_path)
-    return geometry, request, handoff
-```
-
-Call this local example with the existing geometry outputs, an explicit
-`modeling` choice, the exact IDs printed from the catalogue, the same declared
-`PlanarJunction` objects for both geometry preparations, PDK film properties,
-the selected `EigenmodeRunControl`, and a new path such as
-`runs/cpw-epr-prepare-only`. For `thin_film`, the source must also carry the
-qualified physical-layer interval, kind, and contact declarations described
-above. On the AEDT host, the
-generated script's explicit preparation-only invocation is
-`<handoff.run_dir>/run_aedt.sh --prepare-only`; this saves and releases the
-prepared model but does not solve or produce field integrals. Preparation
-consumes that handoff: its receipt is no longer `not_run`, so a later solve
-requires a newly prepared handoff in a different, unused `output_dir`. No-EPR
-Eigenmode handoffs omit the request and retain their separate one-shot path.
-For a local solve, a Notebook can pass, for example,
-`AedtResources(cores=60, ram_limit_percent=88)` as `resources`; a
-preparation-only handoff records but does not activate it. The ordinary
-`prepare_handoff(spec=..., output_dir=..., resources=...)` entry point accepts
-the same value. At execution, `--cores` and `--ram-limit-percent` may override
-prepared values individually; when no value was prepared, both overrides are
-required. Saved-field `analyze_epr()` has no solve resources.
-
-After a completed saved-field run, `resolve_saved_solution()` verifies the
-sealed project and complete result directory. `analyze_epr()` operates on a
-separate workcopy and returns a resolved result; `resolve_epr_result()` can
-also load a result record offline, and `plot_epr_result()` plots recorded
-values without filling missing ones. For an offline plot, use the written
-result artifact and save the figure explicitly:
-
-```python
-from pathlib import Path
-
-from scgsim.aedt import plot_epr_result, resolve_epr_result
-
-result = resolve_epr_result(
-    Path("runs/cpw-epr-solve/results/epr/adaptive-epr-result.json")
-)
-figure = plot_epr_result(result, mode=1, show_convergence=True)
-report_path = Path("runs/cpw-epr-solve/reports/epr-result.html")
-report_path.parent.mkdir(parents=True, exist_ok=True)
-figure.write_html(report_path)
-```
-
-`combine_epr_mode()` accepts one complete raw pass/mode integral mapping, its
-exact prepared geometry, and the matching request for offline
-film-coefficient recombination. It keeps the complete frequency-dependent
-quantities. `combine_surface_epr_mode()` uses the same domain-normalization and
-surface-combination logic but returns only `normalization_energy_j` and
-`surface_contributions`; it does not require frequency, magnetic integrals,
-relative permeability, or effective domain volumes. It does require electric
-integrals for every effective model domain and junction voltage integrals for
-all prepared junctions, because all model-domain electric energy and junction
-capacitive energy form the shared denominator. Output selections do not remove
-domains or junction capacitances from that denominator. Both functions retain
-the prepared grouping, lineage, and units. Changing film thickness or
-permittivity can reuse the raw surface integrals; changing a margin changes the
-integration domain and requires a new saved-field evaluation. None of these
-offline APIs substitutes a historical cache row for a final saved-field row.
-
-The EPR authoring path writes dependency-ordered CLC definitions and a combined
-`metadata/epr_expressions/scgsim_epr_batch.clc` library, then submits the
-requested definitions through `FieldsReporter.LoadNamedExpressions`. Adjacent
-side integrals use the native `EnterAdjacentSurface` command. The required
-definitions are the requested expression roots and their recursively
-referenced named helpers. Missing or conflicting root/helper definitions
-remain fatal. The native `SaveNamedExpressions` readback still requires the
-returned definition names to match the exact requested native names. Separately,
-the retained `validated_expression_readback` treats its complete shared CLC as
-a library: it must contain the required roots and helper closure, while
-unrelated extra definitions are retained and allowed. The native exact-name
-check is not relaxed by this package-evidence rule. The native path records the
-returned artifact at `metadata/epr_expressions/scgsim_epr_native_readback.clc`.
-Its readback record binds the file's SHA-256 and byte count, returned definition
-names, each definition's digest, and its field-selection operations; the
-operations must match those authored for the requested definitions. Names are
-derived from each expression's identity and are enumerated in the record,
-rather than being a fixed global list. Preparation and saved-field analysis use
-this same authoring/readback path. These source-level requirements describe
-what an execution must observe; they do not themselves claim that a native
-load or readback has succeeded. Native expression failures remain fatal.
-
-History export starts from the native available solutions and selects the
-declared setup's adaptive passes. It records actual categories, quantities,
-contexts, trace axes, native units when reported, and their native item/mode
-association. Each cache quantity is queried with its persisted item context;
-reported postprocessing variables are filtered to the matching one-hot mode
-before the trace is indexed by adaptive pass. When those variables are absent
-from native axes, association requires exact persisted-item and scoped
-single-quantity query evidence. The join key is run, setup, physical variation,
-native pass, native mode, item, and context; row position is not a key. Missing or partial
-rows remain missing, blank units remain unknown, trace arrays retain their
-native axes and lengths, and SCGSim performs no interpolation or zero fill. The
-last completed solver pass comes from independent solver/convergence evidence
-and is not inferred from the largest cached pass. Adaptive history and a
-separately reopened `LastAdaptive` saved-field evaluation are different
-evidence surfaces and never substitute for each other.
-For Eigenmode, SCGSim saves the solved project before requesting the exact-setup
-native `ExportConvergence` property file. It passes empty `VariationKeys`, so
-HFSS uses the current nominal variation, then requires the file to exist and
-the convergence parser to succeed. The parser supplies the pass,
-delta-frequency, status, and solved-element count; that count is not relabeled
-as a tetrahedron count from a solver profile. An export or parse failure fails
-the operation without skipping convergence evidence or substituting a fallback.
-
-The transaction temporarily disables PyAEDT's `release_on_exception` while it
-owns the Desktop, then restores its prior value after SCGSim cleanup. The
-original native error remains the operation's primary failure. On a failed
-export, `save.ok` may remain at its initial `false` even when the family saved
-the project before the export failed. `release.ok` records the result of the
-SDK Desktop-release call; it does not establish that every operating-system
-descendant exited. Failed runs remain failed and are not rewritten or sealed
-as successful saved-solution manifests; retained native files are diagnostic
-artifacts. ⚠️ Native verification: this source
-change was not checked in a new AEDT run, and behavior across AEDT versions is
-not established.
-Historical profile-backed receipts remain bound to their recorded profile
-sources; they are not reinterpreted as new property-file exports.
-
-Native execution remains bound to one explicitly owned Desktop PID, endpoint,
-project, design, and setup. Preparation, solve, cache inspection, project
-save/reopen, and result analysis retain that binding and record release or
-bounded cleanup separately. Notebook authors may supply one `AedtResources`
-value (`cores`, `ram_limit_percent`) when preparing an ordinary HFSS, Eigenmode,
-Q3D, Q2D, or EPR solve handoff. These are local solve-execution settings, not
-physical model identity or inset `geometry_workers`. An explicit value creates
-a run-specific AEDT ACF with one task, zero GPUs, disabled automatic HPC
-selection, and the requested core count and RAM percentage. Execution loads
-and verifies that configuration before the designated setup solve and restores
-the prior active design-type configuration afterward. The available native
-readback confirms the selected configuration name; the requested numeric
-settings are evidenced by the generated ACF, not independently read back as
-effective solver limits. The ACF is an AEDT
-Desktop/user configuration, not a saved project or setup property; its RAM
-percentage is not a hard byte cap. The handoff and final receipt distinguish
-requested settings, generated ACF, observed activation, restoration, and
-failure. Without explicit resources SCGSim does not override AEDT's active
-configuration; this supersedes the earlier implicit two-core EPR override.
-A solve exception or false return remains the primary failure;
-SCGSim releases the owned Desktop without automatically saving or exporting a
-partial result. Partial cache or saved records produced by an otherwise
-successful run remain reportable evidence, but cannot be relabelled as complete
-or fall back to another pass, mode, setup, or final-field result.
-
-The EPR preparation receipt times pure geometry precompute, Desktop startup,
-application attachment, native model/material/Region/boundary construction,
-setup, base and inset analysis sheets, PP source installation, expression
-compilation and library checks/import, cache setup, save, readback, and release.
-Nested geometry and expression phases are subdivisions, not additive to their
-parent durations; `execution_seconds` is the complete transaction wall time.
-Fresh-project reopen timing is separate external evidence, not part of the
-preparation total. These are client-observed durations, not an AEDT-internal
-profiler or a prediction of field-solve time.
-
-Each pass/mode records raw native integrals before Python derives SI energy,
-participation, or junction values. Cache and saved-field integrals share one
-narrow, recipe-specific unit normalization: native values and reported units
-remain evidence, recognized whitespace differences are normalized, and a
-missing suffix is assigned scale one only from that exact CLC recipe's SI
-dimension. This is not a generic assumption that arbitrary values are SI.
-Unsupported reported units fail closed. The raw set includes normal and
-tangential surface-field squares, electric and magnetic domain integrals,
-separate real and imaginary junction-voltage integrals, and frequency. One
-denominator is reused for every contribution in a pass/mode. Junction voltage
-can remain available when frequency is absent, but inductive energy cannot be
-derived without that same pass/mode frequency. Film coefficients may be
-recombined offline only when their complete raw integrals and identities are
-present. New preparation caches native sums by physical owner, interface,
-compatible film/substrate coefficients, margin, and mode. Each sum retains its
-constituent binding/contribution IDs, side, domain, and source geometry
-provenance; it is one measured aggregate, not a set of inferred per-face
-values. Individual native inset-sheet expressions remain the source of the sums,
-including their field-side selection. Historical per-binding raw records remain
-readable, but new grouped records never expand an aggregate into fictitious
-patch integrals. New preparation and result provenance identify the
-horizontal-only analysis scope; absent sidewall rows do not encode zero
-energy. The same grouping is used for saved-field analysis. This
-reduces cache items, not a demonstrated field-solve or calculator runtime.
-
-Physical patch support is derived from the full source contribution topology
-before requested-contribution filtering; selecting fewer output contributions
-does not change another patch's physical boundary. The saved SA field-side
-domain ID is the selected vacuum domain, but remains provenance metadata rather
-than a native solver-domain restriction. In each source plane, preparation
-unites the complete physical support, applies a constant-distance inward
-offset for a positive margin, and only then intersects the result with the
-owner attribution. Margin zero uses the unoffset support intersection. The
-resulting contours become non-model integration sheets at the original
-field plane; the unmasked baseline is also a separate non-model integration
-sheet over the unoffset support, not a sample of a native model face. Model
-CAD, boundaries, and mesh are unchanged. Split components are integrated
-separately and summed; an empty intersection is an explicit zero.
-Generated analysis-sheet names are human-readable labels, not source
-authority. The existing readable form identifies physical owner/support,
-classification and field side, then `Unmasked` or the effective margin in
-nanometres. A `PartNN` suffix appears only when there are multiple pieces;
-when one geometry serves multiple contributions, its name identifies the
-complete shared membership rather than an arbitrary first contribution.
-Previously successful names remain byte-identical. SCG applies an internal
-60-character generated-identifier budget; the inspected AEDT documentation
-does not establish 60 characters as a universal native object-name limit. If
-the readable semantic and `PartNN` tail exceeds SCG's budget, the generated
-name is `EPR_` plus the 52-character base32 encoding of the full canonical
-SHA256 naming identity, for 56 ASCII characters total. The canonical identity
-binds the source geometry SHA256, sorted full member tuples, and sorted part
-indices. Existing preparation/native provenance retains the full geometry
-SHA256, member tuples, part indices, and full naming-identity SHA256. Distinct
-identities that collide at the generated name fail explicitly; names never
-merge memberships or replace the retained identity evidence.
-ThinFilm Surface-EPR remains available under the supported PyAEDT 1.3.0 /
-AEDT 2024.2 profile with its current normal-based side selector. Interpret each
-standalone planar analysis sheet's `FacePrimitive.normal` as its
-`Adjacent`-side direction. Derive the requested material side from that
-binding's source contribution side/effective domain: for ThinFilm, a positive
-normal dot product with the requested side selects `Adjacent`, while an
-opposed direction selects `Surface`. The calculator selector chooses the
-one-sided field sample independently of geometric normal projection. Resolve
-each actual sheet independently, including insets and saved-copy reconstruction;
-do not transfer a base sheet's direction to an inset. Keep the projection
-`native_normal` distinct from this calculator selector. Solid mode and
-historical records retain the previous inverse selector convention and their
-original identity. Preserve the existing unavailable/ambiguous-normal failure
-behavior.
-
-This mapping is empirical, not a validated general native calculator-side
-query. The two observed unsolved Ground and Pad sheets support the current
-rule, but do not establish it for arbitrary AEDT versions or polygon orderings,
-non-model sheets, or sheets with holes. A ThinFilm Surface-EPR call emits a
-warning about this side-selection risk. Ansys documents `Adjacent` as using
-field data from the adjacent side of a sheet, while `Normal` computes a vector
-component along the surface unit normal ([Geometry Command](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/ReportsandPostProc/GeometryCommand.htm),
-[Normal Command](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/ReportsandPostProc/NormalCommand.htm)).
-These are distinct calculator operations and do not define a universal mapping
-from `FacePrimitive.normal` to the sampled material side. Flipping the
-projection normal changes the projected component's sign; it does not change
-which one-sided field `Surface` or `Adjacent` samples. Selecting the wrong
-material side can change the MA/MS integrals and the resulting participation
-or loss. These observations do not establish numerical accuracy, convergence,
-or speed, and add no new
-evidence for Solid mode. Inspect MA/MS/SA trends across margin, mode, and
-adaptive pass for consistency when those records are available. These trends
-have no automatic pass/fail interpretation; no equality, tolerance, or
-monotonicity requirement is imposed. The same geometry construction serves
-preparation and saved-field analysis; the former point-to-edge calculator
-mask is not a fallback.
-
-For a continuous physical planar patch, the mask is
-
-$$
-\chi_{patch}\,
-\mathbf{1}[d_{finite\ original\ boundary}\geq margin].
-$$
-
-The displayed mask is the continuous target, not a claim of exact circular CAD
-arcs. Its current implementation uses KLayout integer geometry at the source
-layout's database unit (DBU), not a global PDK grid. Detached geometry must
-carry an explicit source DBU. Input lengths remain in micrometres; source
-coordinates and requested margins are quantized by KLayout's native DPoint
-conversion, with requested, integer-grid, and effective margins retained.
-For positive margins, the complement of the complete physical support is
-dilated by a 128-vertex circular polygon and subtracted from that support
-before owner attribution. The finite complement box extends beyond the
-support by more than the dilation radius. Margin zero skips dilation but
-still intersects owner attribution. KLayout retains exterior and hole contours
-directly; split components are separate non-model sheets and empty members
-give a geometric zero. Circular corners are polygonal approximations; the
-method, DBU, KLayout version, and actual contours are retained as evidence.
-Coplanar owner seams are removed, while physical top/bottom perimeter edges
-remain mask boundaries; the adjoining sidewall faces are not integrated.
-Margins are alternative
-evaluations rather than additive contributions, and MA/MS on one sheet remain
-distinct. Neither this discretization nor unsolved expression setup proves
-quadrature or EPR numerical accuracy.
-
-#### Inset contour coherence {#epr-inset-contour-coherence}
-
-The 128-vertex circle erosion remains the inset definition. Per-edge sizing
-(`Region.sized`) uses a different corner policy and can produce a different
-domain; it is not an interchangeable fallback. At the shared region-to-CAD
-conversion, SCGSim applies KLayout minimum coherence with
-`Region.merged(True, 1)` and lowers every resulting simple polygon separately.
-KLayout describes this mode as resolving kissing-corner contacts into separate
-polygons ([`Region.merged`](https://www.klayout.de/doc/code/class_Region.html)).
-This partitions a self-touching ring without moving its contact or changing the
-inset domain. The existing order remains: union full physical support, apply
-the circle inset, intersect with the owner's attribution, normalize contours,
-then create one CAD polyline per piece. Holes and all resulting pieces are
-retained, including pieces that meet at a point.
-
-Each piece keeps its owner, interface, field side, contribution, and margin
-identity. Disjoint pieces are summed only within that one logical evaluation;
-alternative margins remain separate. Baseline and requested-zero evaluations
-also remain distinct, so they are never counted twice as one result. A
-geometrically empty inset is a zero contribution; a failed CAD polyline
-creation remains an error. The motivating prepare-only failure was AEDT's
-`CreatePolyline` crossing-edge rejection of a self-contacting contour. The
-figures below are synthetic geometry diagnostics, not native AEDT runs.
-
-![Generic acute-tip diagnostic at a 900 nm inset: the circle result self-contacts at (5.999, 0.900) um, while minimum coherence partitions the unchanged domain into two valid polygons.](../assets/inset-coherence/acute-contact.png){fig-alt="Synthetic acute-tip region with the circle128 self-contact marked, a sized-mode comparison, and a zoom of the contact." fig-cap="A kissing-corner contact becomes two simple pieces without moving the contact." width="95%"}
-
-![Generic two-hole ligament diagnostic at 500 and 1000 nm: circle128 erosion retains six pieces at 1000 nm, while per-edge sizing mode 2 produces no positive-area pieces.](../assets/inset-coherence/hole-ligament.png){fig-alt="Synthetic two-hole ligament at 500 and 1000 nm, comparing circle128 erosion with per-edge sizing mode 2." fig-cap="Different corner policies can produce different domains; sizing is not an equivalent fallback." width="95%"}
-
-In synthetic validation with KLayout 0.30.10, minimum-coherence normalization
-produced valid simple rings and an empty KLayout XOR against each
-pre-normalized region in all 1,224 configuration/margin cases. The 900 nm
-acute case normalized from one invalid ring to two valid pieces. At 1000 nm,
-the neck case split into two pieces and the hole case retained six circle128
-pieces (1.718672 um²), while sizing mode 2 produced none. Serial, grouped, and
-two-worker precomputation agreed on 16 checked plans. No sampled nesting
-violation was observed, but this finite sample does not prove strict
-monotonicity. Native AEDT polyline acceptance and numerical EPR accuracy remain
-unvalidated by these offline checks.
-
-Pure inset contours may be precomputed in separate spawned processes before
-Desktop construction. The optional geometry-worker count controls only that
-preparation stage: one worker uses the same serial algorithm, while an omitted
-count uses available logical CPUs, capped by independent support tasks. Native
-AEDT authoring remains in the single owned Desktop session. Saved-field
-analysis uses the same inset definition and does not reuse historical
-point-to-edge expression names as the new geometry definition.
 
 ### Surface estimates and junction normalization {#surface-estimates-and-junction-normalization}
 

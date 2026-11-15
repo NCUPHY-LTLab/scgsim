@@ -42,7 +42,7 @@ from pathlib import Path
 
 from scgsim.aedt import (
     AedtResources, EprAnalysisRequest, EigenmodeRunControl, EigenmodeSim,
-    SurfaceEprSpec, prepare_native_batch, prepare_planar_geometry_input,
+    prepare_native_batch,
 )
 
 AEDT_VERSION = "2023.2"  # Select the same installed release on all three hosts.
@@ -65,41 +65,22 @@ run_control = EigenmodeRunControl(
     maximum_passes=20, maximum_delta_frequency_percent=0.1,
     minimum_passes=1, minimum_converged_passes=1,
 )
+surface_epr_specs = {}
+for kind in ("MA", "MS", "SA"):
+    preset_name = f"LiteratureCentral_{kind}"
+    preset = presets[preset_name]
+    if preset["interface_type"] != kind:
+        raise ValueError(f"{preset_name} is not a {kind} preset")
+    surface_epr_specs[kind] = {
+        "film_thickness_m": preset["thickness"] * 1e-6,
+        "permittivity": preset["permittivity"],
+        "loss_tangent": preset["loss_tangent"],
+        "source": preset["source"], "preset": preset_name,
+        "inset_margins_um": [0.5, 1.0],
+    }
 rows = []
 for case_id, inductance_h in case_parameters:
     case_junction = replace(junction, inductance_h=inductance_h)
-    catalogue_geometry = prepare_planar_geometry_input(
-        snapshot.geometry_input, prepared_stack=snapshot.stack,
-        modeling="solid", junctions=(case_junction,),
-    )
-    surface_specs = []
-    for record in catalogue_geometry.contribution_catalog:
-        kind = record["interface_kind"]
-        if kind not in {"MA", "MS", "SA"}:
-            continue
-        preset_name = f"LiteratureCentral_{kind}"
-        preset = presets[preset_name]
-        if preset["interface_type"] != kind:
-            raise ValueError(f"{preset_name} is not a {kind} preset")
-        # Retain the pinned Xmon tutorial's catalogue anchor selection.
-        surface_specs.append(SurfaceEprSpec(
-            contribution_id=record["contribution_id"],
-            source_polygon_id=record["source_polygon_ids"][0],
-            interface_kind=kind, field_side=record["field_side"],
-            margins_um=(0.5, 1.0),
-            film_thickness_m=preset["thickness"] * 1e-6,
-            film_relative_permittivity=preset["permittivity"],
-            loss_tangent=preset["loss_tangent"],
-            source=preset["source"], preset=preset_name,
-        ))
-    bulk_ids = {
-        record["semantic_id"]
-        for record in catalogue_geometry.source["solution_regions"]
-    }
-    native_region = catalogue_geometry.source.get("native_region")
-    if native_region is not None:
-        bulk_ids.difference_update(native_region["logical_vacuum_ids"])
-        bulk_ids.add("Region")
 
     sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
     sim.set_plan(snapshot)
@@ -108,13 +89,13 @@ for case_id, inductance_h in case_parameters:
         project_name=f"xmon_{case_id}", design_name="Xmon",
         run_control=run_control, resources=resources,
     )
-    sim.set_surface_epr(contributions=surface_specs)
+    sim.set_surface_epr(surface_epr_specs)
     sim.add_junction(case_junction)
     sim.set_epr_request(EprAnalysisRequest(
         mode_indices=(1,),
-        surface_contribution_ids=tuple(s.contribution_id for s in surface_specs),
+        surface_epr_groups=None,  # every sidecar Surface-EPR group
         junction_ids=(case_junction.junction_id,),
-        bulk_domain_ids=tuple(sorted(bulk_ids)),
+        bulk_domain_ids=None,  # every imported dielectric solid and the Region
     ))
     handoff = sim.prepare_handoff()  # File-only request preparation.
     subprocess.run(

@@ -14,7 +14,6 @@ from test_aedt_public_preparation import file_only_geometry, produce_request
 from scgsim.aedt import (
     EprAnalysisRequest,
     PreparedPlanarGeometry,
-    SurfaceEprSpec,
     resolve_epr_result,
     resolve_saved_solution,
 )
@@ -107,25 +106,12 @@ def test_an_earlier_epr_request_schema_is_unsupported(tmp_path, schema):
         parse_aedt_spec(payload, base_dir=tmp_path)
 
 
-def test_a_request_without_a_physical_representation_is_refused(tmp_path):
-    """Requests written before the neutral physical plan are not decoded."""
+def test_a_request_of_the_native_builder_is_refused(tmp_path):
+    """An HFSS Eigenmode request that carries a native planar geometry is refused with the reason (#67)."""
     payload = _epr_request_payload(tmp_path)
-    del payload["physical_representation"]
-    with pytest.raises(
-        ValueError, match="require a tagged neutral physical_representation"
-    ):
-        parse_aedt_spec(payload, base_dir=tmp_path)
-
-
-def test_a_request_without_modeling_is_refused(tmp_path):
-    """A request payload that names no modeling is refused before it is decoded."""
-    payload = _epr_request_payload(tmp_path)
-    del payload["modeling"]
-    del payload["physical_layers"]
-    with pytest.raises(
-        ValueError, match="require a tagged neutral physical_representation"
-    ):
-        parse_aedt_spec(payload, base_dir=tmp_path)
+    payload["geometry"] = payload.pop("model")
+    with pytest.raises(ValueError, match="natively built geometry"):
+        parse_aedt_spec(payload, base_dir=tmp_path / "request")
 
 
 def test_a_planar_geometry_on_a_route_basis_is_refused():
@@ -154,14 +140,7 @@ def test_an_earlier_planar_geometry_schema_is_refused():
 
 
 def test_records_without_their_current_members_are_refused():
-    """The v1 member sets of a surface contribution and an EPR request are refused."""
-    surface = SurfaceEprSpec("MM1", "poly", "MM", "top").to_payload()
-    for name in ("loss_tangent", "source", "preset"):
-        del surface[name]
-    with pytest.raises(
-        ValueError, match="surface EPR payload members are not canonical"
-    ):
-        SurfaceEprSpec.from_payload(surface)
+    """The v1 member set of an EPR request is refused."""
     request = EprAnalysisRequest().to_payload()
     del request["bulk_domain_ids"]
     with pytest.raises(

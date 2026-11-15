@@ -37,9 +37,10 @@ from pathlib import Path
 from scgsim.aedt import parse_aedt_spec, resolve_saved_solution
 
 returned_run_dir = Path(".artifacts/returned-aedt-epr")
-spec = parse_aedt_spec(json.loads(
-    (returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
-))
+spec = parse_aedt_spec(
+    json.loads((returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")),
+    base_dir=returned_run_dir,  # the request's SGB model is in its model/ folder
+)
 saved = resolve_saved_solution(returned_run_dir / "saved-solution-manifest.json")
 ```
 
@@ -58,7 +59,7 @@ AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 final_epr = analyze_epr(
     aedt_version=AEDT_VERSION,
     saved_solution=saved,
-    geometry=spec.geometry,
+    model=spec.model,
     project_name=spec.project_name,
     design_name=spec.design_name,
     run_control=spec.run_control,
@@ -67,17 +68,14 @@ final_epr = analyze_epr(
 )
 ```
 
-An explicit native sheet-field selector is optional. Pass
-`surface_field_selectors={contribution_id: "surface"}` or use `"adjacent"`
-for an existing selected contribution ID when the caller wants to choose the
-native calculator side. Each entry applies to every binding and requested
-component, evaluation, and margin for that contribution. Unknown or unselected
-IDs and unsupported values fail explicitly. Omitting a contribution preserves
-its existing normal-derived selector behavior. This choice does not change
-the source `SurfaceEprSpec.field_side` and does not verify the sampled material
-side. Native command/name readback records the selector operation, not a
-material-side identity proof. The choice does not trigger another solve or
-geometry rebuild.
+An explicit field selector is optional. Pass
+`surface_field_selectors={group: "surface"}` or `"adjacent"`, keyed by a
+sidecar Surface-EPR group the request selects: `surface` reads each row's field
+on its sheet, `adjacent` just off it. A group without a selector reads
+`surface`. Unknown or unselected groups and unsupported values fail
+explicitly. The choice does not trigger another solve or geometry rebuild, and
+native command/name readback records the selector operation, not a
+material-side identity proof.
 
 The new output directory preserves the original released solution and normal
 run receipt. SCGSim archives/copies the immutable evidence, reopens the working

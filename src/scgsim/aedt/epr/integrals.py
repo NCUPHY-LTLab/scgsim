@@ -12,14 +12,9 @@ from scgsim.aedt.data import (
     detached,
     freeze,
 )
-from scgsim.aedt.runtime.native.common import detached_data
 
-SURFACE_ANALYSIS_SCOPE = {
-    "included_field_sides": ["top", "bottom"],
-    "excluded_field_sides": ["sidewall"],
-    "excluded_sidewall_energy": "not_evaluated_not_zero",
-    "q2d_sidewall_correction": "not_applied",
-}
+# Each surface integral is of one sidecar Surface-EPR row of an SGB model (issue #67).
+SURFACE_GRANULARITY = "sgb_surface_epr_row.v1"
 
 IntegralKind = Literal[
     "effective_volume",
@@ -28,9 +23,6 @@ IntegralKind = Literal[
     "electric_normal",
     "electric_tangential",
     "masked_area",
-    "native_surface_reference_normal",
-    "native_surface_reference_tangential",
-    "native_surface_reference_area",
     "junction_voltage_real",
     "junction_voltage_imag",
 ]
@@ -42,9 +34,6 @@ _INTEGRAL_KINDS: tuple[IntegralKind, ...] = (
     "electric_normal",
     "electric_tangential",
     "masked_area",
-    "native_surface_reference_normal",
-    "native_surface_reference_tangential",
-    "native_surface_reference_area",
     "junction_voltage_real",
     "junction_voltage_imag",
 )
@@ -73,18 +62,7 @@ def integral_target(purpose: str, selection: Mapping[str, Any]) -> IntegralTarge
     if kind in {"effective_volume", "electric_volume", "magnetic_energy"}:
         selection_kind, key = "volume", "semantic_id"
     elif kind in {"electric_normal", "electric_tangential", "masked_area"}:
-        # An SGB model integrates each sidecar Surface-EPR row (issue #67); the planner integrated groups.
-        selection_kind, key = (
-            ("surface_row", "row")
-            if selection.get("kind") == "surface_row"
-            else ("surface_group", "group_id")
-        )
-    elif kind in {
-        "native_surface_reference_normal",
-        "native_surface_reference_tangential",
-        "native_surface_reference_area",
-    }:
-        selection_kind, key = "native_surface_reference", "reference_id"
+        selection_kind, key = "surface_row", "row"
     else:
         selection_kind, key = "junction_sheet", "junction_id"
     scope_id = selection.get(key)
@@ -172,30 +150,6 @@ def store_integral(
         _record_surface_group(raw, target)
         key = target.scope_id
         raw["masked_areas_m2"][key] = value
-    elif target.kind in {
-        "native_surface_reference_normal",
-        "native_surface_reference_tangential",
-        "native_surface_reference_area",
-    }:
-        key = target.scope_id
-        selection = detached(target.selection)
-        references = raw["native_surface_references"]
-        record = references.setdefault(
-            key, {"selection": selection, "expression_identities": {}}
-        )
-        if record["selection"] != selection:
-            raise RuntimeError("native surface reference provenance differs")
-        component = {
-            "native_surface_reference_normal": "normal",
-            "native_surface_reference_tangential": "tangential",
-            "native_surface_reference_area": "area",
-        }[target.kind]
-        if component in record:
-            raise RuntimeError("native surface reference integral repeats")
-        if expression_identity is None:
-            raise RuntimeError("native surface reference lacks expression identity")
-        record[component] = value
-        record["expression_identities"][component] = detached(expression_identity)
     elif target.kind in {"junction_voltage_real", "junction_voltage_imag"}:
         record = raw["junction_integrals_v_m"].setdefault(target.scope_id, {})
         component = "real" if target.kind == "junction_voltage_real" else "imag"
@@ -215,46 +169,6 @@ def _record_surface_group(raw: dict[str, Any], target: IntegralTarget) -> None:
     raw["surface_group_provenance"][key] = selection
 
 
-def attach_saved_native_surface_membership(
-    raw: dict[str, Any],
-    result_row: dict[str, Any],
-    references: list[dict[str, Any]],
-) -> None:
-    """Attach saved-project membership beside, not inside, expression data."""
-
-    membership_by_id: dict[str, dict[str, Any]] = {}
-    for reference in references:
-        reference_id = reference["reference_id"]
-        face_list = reference["face_list"]
-        saved_membership = face_list.get("saved_membership")
-        if not isinstance(saved_membership, Mapping):
-            raise RuntimeError(
-                f"native surface reference {reference_id!r} lacks saved membership"
-            )
-        membership_by_id[reference_id] = detached_data(saved_membership)
-
-    raw_references = raw.get("native_surface_references", {})
-    if not isinstance(raw_references, Mapping):
-        raise TypeError("raw native surface references are invalid")
-    for reference_id, record in raw_references.items():
-        membership = membership_by_id.get(reference_id)
-        if membership is None:
-            raise RuntimeError(
-                f"raw native surface reference {reference_id!r} was not saved"
-            )
-        record["saved_membership"] = detached_data(membership)
-
-    result_references = result_row.get("native_surface_references", ())
-    for reference in result_references:
-        reference_id = reference["reference_id"]
-        membership = membership_by_id.get(reference_id)
-        if membership is None:
-            raise RuntimeError(
-                f"result native surface reference {reference_id!r} was not saved"
-            )
-        reference["saved_membership"] = detached_data(membership)
-
-
 def purpose_unit(kind: IntegralKind) -> str:
     """Return the canonical SI unit for one persisted integral kind."""
     if kind == "effective_volume":
@@ -266,13 +180,6 @@ def purpose_unit(kind: IntegralKind) -> str:
     if kind in {"electric_normal", "electric_tangential"}:
         return "V^2"
     if kind == "masked_area":
-        return "m^2"
-    if kind in {
-        "native_surface_reference_normal",
-        "native_surface_reference_tangential",
-    }:
-        return "V^2"
-    if kind == "native_surface_reference_area":
         return "m^2"
     if kind in {"junction_voltage_real", "junction_voltage_imag"}:
         return "V*m"
@@ -289,8 +196,7 @@ def empty_raw_integrals() -> dict[str, Any]:
         "relative_permeability": {},
         "surface_integrals_v2": {},
         "masked_areas_m2": {},
-        "surface_granularity": "owner_interface_margin.v1",
+        "surface_granularity": SURFACE_GRANULARITY,
         "surface_group_provenance": {},
-        "native_surface_references": {},
         "junction_integrals_v_m": {},
     }

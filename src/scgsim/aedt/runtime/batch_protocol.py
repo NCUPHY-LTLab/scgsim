@@ -644,8 +644,9 @@ def collection_source(
         or object_record(prepared.get("save")).get("ok") is not True
         or prepared.get("solver_invoked") is not False
         or source.get("spec_sha256") != package.spec_sha256
-        or source.get("planar_model_sha256") != package.model_sha256
-        or source.get("planar_source_sha256") != package.source_sha256
+        or source.get("sgb_model_sha256") != package.model_sha256
+        or object_record(source.get("sgb_model_files")).get("sidecar")
+        != package.source_sha256
         or sha256(package_root / "native" / package.project)
         != object_record(prepared["save"])["project_sha256"]
     ):

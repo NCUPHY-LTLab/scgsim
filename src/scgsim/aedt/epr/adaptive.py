@@ -8,15 +8,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-from scgsim.aedt.epr.analysis import (
-    combine_epr_mode,
-)
 from scgsim.aedt.epr.cache_config import (
     cache_intrinsics,
 )
+from scgsim.aedt.epr.expression_authoring import spec_epr_source
 from scgsim.aedt.epr.integrals import (
-    SURFACE_ANALYSIS_SCOPE,
-    attach_saved_native_surface_membership,
     canonical_integral,
     empty_raw_integrals,
     integral_target,
@@ -26,6 +22,7 @@ from scgsim.aedt.epr.integrals import (
 from scgsim.aedt.epr.models import (
     EprResult,
 )
+from scgsim.aedt.epr.sgb_energy import combine_sgb_epr_mode
 from scgsim.aedt.runtime.families.hfss_history import (
     read_body_eigenmode_history,
     solution_trace,
@@ -153,11 +150,9 @@ def adaptive_epr_result(
     spec: HfssEprSpec,
     history: dict[str, Any],
     convergence: dict[str, Any],
-    *,
-    native_surface_references: list[dict[str, Any]] | None = None,
 ) -> EprResult:
     """Combine each available mode and native pass while retaining partial rows."""
-    return _AdaptiveJoin(spec, history, convergence, native_surface_references).build()
+    return _AdaptiveJoin(spec, history, convergence).build()
 
 
 @dataclass
@@ -167,7 +162,6 @@ class _AdaptiveJoin:
     spec: HfssEprSpec
     history: dict[str, Any]
     convergence: dict[str, Any]
-    native_surface_references: list[dict[str, Any]] | None
 
     def build(self) -> EprResult:
         self._initialize()
@@ -185,6 +179,7 @@ class _AdaptiveJoin:
         self.trace_by_title = self.cache["traces"]
         self.query_by_title = self.cache.get("queries", {})
         self.rows: list[dict[str, Any]] = []
+        self.source = spec_epr_source(self.spec)
         self.selected_modes = (
             tuple(
                 range(1, cast(EigenmodeRunControl, self.spec.run_control).num_modes + 1)
@@ -305,10 +300,6 @@ class _AdaptiveJoin:
     def _finish_row(self) -> dict[str, Any]:
         self.row["raw_integrals"] = self.raw
         self.row["raw_integral_evidence"] = self.integral_evidence
-        if self.native_surface_references:
-            attach_saved_native_surface_membership(
-                self.raw, self.row, self.native_surface_references
-            )
         if self.unit_mismatches:
             self.row["unit_mismatches"] = self.unit_mismatches
         frequency = self.frequencies.get(self.pass_id)
@@ -361,14 +352,10 @@ class _AdaptiveJoin:
             return self.row
         try:
             self.row.update(
-                combine_epr_mode(
-                    self.spec.geometry, self.raw, request=self.spec.epr_request
+                combine_sgb_epr_mode(
+                    self.source, self.raw, request=self.spec.epr_request
                 )
             )
-            if self.native_surface_references:
-                attach_saved_native_surface_membership(
-                    self.raw, self.row, self.native_surface_references
-                )
             self.row["status"] = "complete"
         except (TypeError, ValueError, RuntimeError) as exc:
             self.row["combination_error"] = f"{type(exc).__name__}: {exc}"
@@ -380,9 +367,9 @@ class _AdaptiveJoin:
             setup_name=cast(EigenmodeRunControl, self.spec.run_control).setup_name,
             rows=tuple(self.rows),
             provenance={
-                "model_source_sha256": self.spec.geometry.model_sha256,
-                "analysis_source_sha256": self.spec.geometry.source_sha256,
-                "surface_analysis_scope": SURFACE_ANALYSIS_SCOPE,
+                "model_source_sha256": self.spec.model.identity_sha256,
+                # The EPR source is read from the model's sidecar.
+                "analysis_source_sha256": self.spec.model.files["sidecar"]["sha256"],
                 "solver_last_completed_pass": self.convergence["final_pass"],
                 "requested_modes": list(self.selected_modes),
                 "cache_status": self.cache["status"],
