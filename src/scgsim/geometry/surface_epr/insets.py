@@ -17,7 +17,7 @@ A Route A sheet carries both an ``MA`` and an ``MS`` row, so the requests of bot
 One face is one band family with one set of margins, so those requests must ask the same margins (compared on
 the model grid, so ``0.3`` and ``0.1 + 0.2`` agree); differing ones are an error, found here on the custom
 path and by SGB on the default path.  Each spec selects its margins from the family (see
-:func:`~scgsim.geometry.surface_epr.specs.margins_of`).
+:func:`~scgsim.geometry.source.surface_epr_specs.margins_of`).
 """
 
 from __future__ import annotations
@@ -30,29 +30,12 @@ from typing import Any, cast
 from scgsim.contracts.sgb_sidecar import Sidecar
 from scgsim.contracts.sgb_sidecar.records import SurfaceGroup
 from scgsim.geometry.exact.grid import Grid
+from scgsim.geometry.models.band_faces import CONDUCTOR_SIDES, ConductorSide
 from scgsim.geometry.sgb.bands.requests import (
-    BANDED_FACE_KINDS,
-    CONDUCTOR_SIDES,
-    ConductorSide,
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
 )
-
-
-def check_bandable_face_kinds(interface_type: str, face_kinds: list[str]) -> None:
-    """Refuse a face kind SGB cannot band.
-
-    A spec names a face by the ``face_kind`` of the sidecar group it lies on, which is SGB's own vocabulary:
-    ``sheet``, ``top``, ``bottom`` and ``interface`` map onto themselves.  The remaining kind a surface group
-    has, ``sidewall``, has no SGB equivalent because SGB never bands sidewalls.
-    """
-    unbandable = [kind for kind in face_kinds if kind not in BANDED_FACE_KINDS]
-    if unbandable:
-        raise ValueError(
-            f"Surface EPR {interface_type} face_kinds {unbandable} cannot carry inset margins; "
-            f"SGB bands only {list(BANDED_FACE_KINDS)} (sidewalls are never banded)."
-        )
 
 
 def requests_wanted(specs: Mapping[str, Mapping[str, Any]] | None) -> bool:

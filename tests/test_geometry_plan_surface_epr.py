@@ -1,6 +1,6 @@
 """``GeometryPlan.set_surface_epr``: the one place the Surface-EPR specs are given (Issue #268).
 
-The plan checks the specs by the shared rules of ``scgsim.geometry.surface_epr.specs``, against its own
+The plan checks the specs by the shared rules of ``scgsim.geometry.source.surface_epr_specs``, against its own
 material records, when they are set, and ``prepare()`` puts them, normalized against the stack it prepares,
 into the snapshot every simulation reads.  The refusals are those a simulation's ``set_surface_epr`` gave at
 3.0.0rc3.  Each plan here is the two-pad layout of ``test_simulation_drc``; no test meshes or solves.
@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from test_simulation_drc import BANDED, FILM, layout_plan, two_pads
 
-from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 
 EMPTY = (
     "set_surface_epr({}) requests no Surface EPR: to have none, do not call plan.set_surface_epr(), "

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.refusal import Declared
 
 

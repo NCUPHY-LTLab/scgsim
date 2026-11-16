@@ -17,7 +17,7 @@ from sgb_inputs import EffectiveInput, gds_pad_in_ground, thin_film_pair
 from scgsim.contracts.sgb_sidecar import read_sidecar
 from scgsim.geometry.sgb import build_sgb_geometry
 from scgsim.geometry.sgb.bands.requests import InsetRequest
-from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.palace.config.surface_epr import build_surface_epr_postprocessing
 from scgsim.palace.mesh.build import (
     MeshBuildResult,
@@ -72,7 +72,7 @@ def surface_epr_specs(**margins: list[float] | None) -> dict[str, dict[str, Any]
 
 def surface_epr_spec_records(**margins: list[float] | None) -> SurfaceEprSpecs:
     """The specs of ``surface_epr_specs`` as a simulation holds them, for the config builders."""
-    return SurfaceEprSpecs.normalized(_film_specs(margins), materials={})
+    return SurfaceEprSpecs.of_normalized(surface_epr_specs(**margins))
 
 
 def lower_surface_epr(
@@ -80,7 +80,9 @@ def lower_surface_epr(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """The ``Dielectric`` rows of ``specs`` (a spec mapping) and their index entries as the index map holds them."""
     built = build_surface_epr_postprocessing(
-        groups, SurfaceEprSpecs.normalized(specs, materials={}), **options
+        groups,
+        SurfaceEprSpecs.of_normalized(normalize_surface_epr_specs(specs, materials={})),
+        **options,
     )
     return built.rows, [entry.to_payload() for entry in built.entries]
 

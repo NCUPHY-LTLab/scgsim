@@ -21,6 +21,7 @@ from palace_sgb_support import (
 
 from scgsim.contracts.palace_convergence import ConvergenceCheck
 from scgsim.contracts.palace_run_folder import read_json
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.geometry.surface_epr.insets import inset_requests
 from scgsim.palace import EigenmodeSim, ElectrostaticSim, resolve_palace_result
 from scgsim.palace.config.config import (
@@ -159,7 +160,9 @@ class Run:
             materials=MATERIALS,
             surface_epr_specs=None
             if specs is None
-            else SurfaceEprSpecs.normalized(specs, materials=MATERIALS),
+            else SurfaceEprSpecs.of_normalized(
+                normalize_surface_epr_specs(specs, materials=MATERIALS)
+            ),
             numerical=numerical,
         )
 

@@ -9,8 +9,8 @@ summary.en = "The geometry API: build a prepared input from a layout and a stack
 summary.zh = "幾何 API：從版圖與堆疊建立準備好的輸入，並為建構做物理解讀。"
 
 ["geometry/models"]
-summary.en = "Typed records that cross stages, and the reads of them that more than one stage makes: the build input and its entities, the grid context, physical layers, representation, junctions and regions."
-summary.zh = "跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面與區域。"
+summary.en = "Typed records that cross stages, and the reads of them that more than one stage makes: the build input and its entities, the grid context, physical layers, representation, junctions, regions and the faces a band can lie on."
+summary.zh = "跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面、區域，以及帶可以落在哪些面上。"
 In.en = "nothing; this folder imports no other geometry code, so every stage can build and read these records."
 In.zh = "沒有；這個資料夾不匯入其他幾何程式碼，因此每個階段都能建立與讀取這些紀錄。"
 Out.en = "the values one stage hands to the next, each imported from its defining module."
@@ -31,12 +31,12 @@ Next.zh = "junction 分割（``junctions``）讀取集總埠端子的綁定環�
 ["geometry/source"]
 summary.en = "The source stage: from a layout and a stack to a prepared snapshot."
 summary.zh = "來源階段：從版圖與堆疊到準備好的 snapshot。"
-In.en = "a layout (components, GDS) and a stack, with the declared grid, vacuum region and port sheets."
-In.zh = "版圖（元件、GDS）與堆疊，加上宣告的格點、真空區域與埠面。"
+In.en = "a layout (components, GDS) and a stack, with the declared grid, vacuum region, port sheets and Surface-EPR specs."
+In.zh = "版圖（元件、GDS）與堆疊，加上宣告的格點、真空區域、埠面與 Surface-EPR 規格。"
 Out.en = "a ``GeometryPlan`` and its snapshot, whose ``GeometryBuildInput`` and stack keep every input identity and carry the hashes and source audits the later stages record. Each declared recipe returns its value with its audits (``recipes``); ``grid_projection`` puts the read polygons on the layout's grid."
 Out.zh = "``GeometryPlan`` 與它的 snapshot；其中的 ``GeometryBuildInput`` 與堆疊保留每個輸入身分，並帶有後續階段記錄的雜湊值與來源稽核。每個宣告的 recipe 連同它的稽核一起傳回結果（``recipes``）；``grid_projection`` 把讀到的多邊形放上版圖的格點。"
-Next.en = "``interpretation`` reads the prepared input. ``contact_pads`` resolves the face metal each contact pad attaches to."
-Next.zh = "``interpretation`` 讀取準備好的輸入。``contact_pads`` 找出每個接觸墊所附著的面金屬。"
+Next.en = "``interpretation`` reads the prepared input. ``contact_pads`` resolves the face metal each contact pad attaches to. ``surface_epr_specs`` holds the Surface-EPR spec rules the plan checks by, which ``surface_epr``, Palace and AEDT read the specs and their margins with."
+Next.zh = "``interpretation`` 讀取準備好的輸入。``contact_pads`` 找出每個接觸墊所附著的面金屬。``surface_epr_specs`` 持有計畫檢查規格所依的 Surface-EPR 規則，``surface_epr``、Palace 與 AEDT 依它讀取規格與其邊距。"
 
 ["geometry/grid"]
 summary.en = "Shared grid operations: noding on the model grid, polygon Booleans, tagged regions, overlays, loops and polygon operations."
@@ -69,14 +69,14 @@ Next.en = "``interpretation`` returns that input, and ``sgb`` builds from it and
 Next.zh = "``interpretation`` 回傳該輸入，``sgb`` 由它建構並讀取這筆紀錄；SGB 從不匯入這個資料夾，這個資料夾也不讀取 SGB 的任何部分。"
 
 ["geometry/surface_epr"]
-summary.en = "Backend-neutral Surface-EPR geometry: normalized specs, their SGB band requests and the banded build."
-summary.zh = "不依賴後端的 Surface-EPR 幾何：正規化的規格、對應的 SGB 帶狀請求，以及帶有內縮帶的建構。"
-In.en = "the ``MA``/``MS``/``SA`` specs of a Palace simulation (from ``palace/source``); for the banded build, the effective ``GeometryBuildInput``, its ``RepresentationContext`` and the route (from ``palace/mesh``, which calls it)."
-In.zh = "Palace 模擬的 ``MA``／``MS``／``SA`` 規格（來自 ``palace/source``）；帶狀建構另外需要有效的 ``GeometryBuildInput``、它的 ``RepresentationContext`` 與路線（來自呼叫它的 ``palace/mesh``）。"
-Out.en = "the normalized specs and the margins each face takes, the SGB inset requests, and the banded build's files (``SgbArtifacts``: XAO, BREP and sidecar), which it builds by calling ``sgb.build_sgb_geometry`` with those requests."
-Out.zh = "正規化的規格與每個面採用的邊距、SGB 內縮請求，以及帶狀建構的檔案（``SgbArtifacts``：XAO、BREP 與 sidecar），由它以這些請求呼叫 ``sgb.build_sgb_geometry`` 建構。"
-Next.en = "``palace/mesh`` meshes the banded build, and ``palace/source``, ``palace/config`` and ``palace/results`` read the specs and their margins."
-Next.zh = "``palace/mesh`` 為帶狀建構產生網格；``palace/source``、``palace/config`` 與 ``palace/results`` 讀取規格與其邊距。"
+summary.en = "Surface-EPR band geometry after the specs: their SGB inset requests and the banded build."
+summary.zh = "規格之後的 Surface-EPR 帶狀幾何：對應的 SGB 內縮請求，以及帶有內縮帶的建構。"
+In.en = "the normalized ``MA``/``MS``/``SA`` specs of the plan's snapshot, read by the rules of ``source.surface_epr_specs``; for the banded build, the effective ``GeometryBuildInput``, its ``RepresentationContext`` and the route (from ``palace/mesh`` or the AEDT model preparation, which call it)."
+In.zh = "計畫 snapshot 中正規化的 ``MA``／``MS``／``SA`` 規格，依 ``source.surface_epr_specs`` 的規則讀取；帶狀建構另外需要有效的 ``GeometryBuildInput``、它的 ``RepresentationContext`` 與路線（來自呼叫它的 ``palace/mesh`` 或 AEDT 模型準備）。"
+Out.en = "the SGB inset requests of the specs' margins, and the banded build's files (``SgbArtifacts``: XAO, BREP and sidecar), which it builds by calling ``sgb.build_sgb_geometry`` with those requests."
+Out.zh = "規格邊距對應的 SGB 內縮請求，以及帶狀建構的檔案（``SgbArtifacts``：XAO、BREP 與 sidecar），由它以這些請求呼叫 ``sgb.build_sgb_geometry`` 建構。"
+Next.en = "``palace/mesh`` meshes the banded build and the AEDT preparation exports it."
+Next.zh = "``palace/mesh`` 為帶狀建構產生網格，AEDT 準備則匯出它。"
 
 ["geometry/sgb"]
 summary.en = "Semantic geometry builder (SGB) core: the prism-based, Boolean-free pipeline."

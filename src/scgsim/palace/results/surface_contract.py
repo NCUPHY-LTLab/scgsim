@@ -16,7 +16,7 @@ from typing import Any, NamedTuple
 
 from scgsim.contracts.palace_index_map import DIELECTRIC_SECTION
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
-from scgsim.geometry.surface_epr.specs import margins_of
+from scgsim.geometry.source.surface_epr_specs import margins_of
 from scgsim.palace.results.artifacts import (
     checked_number,
     expect_list,

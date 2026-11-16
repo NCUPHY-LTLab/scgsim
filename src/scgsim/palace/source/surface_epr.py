@@ -2,7 +2,7 @@
 
 ``MA`` is the metal-air interface, ``MS`` metal-substrate and ``SA`` substrate-air.  ``GeometryPlan.set_surface_epr``
 takes the specs and the plan's snapshot carries them normalized, by the rules of
-``scgsim.geometry.surface_epr.specs``, which Palace and AEDT share; ``SurfaceEprSpecs.of_plan`` reads them as
+``scgsim.geometry.source.surface_epr_specs``, which Palace and AEDT share; ``SurfaceEprSpecs.of_plan`` reads them as
 records.  ``mesh`` cuts the margins into the model as bands and ``config`` writes one Palace ``Dielectric`` row
 per spec and margin.  ``to_payload()`` gives the normalized mapping back key for key, as the geometry build reads
 it and the index map records it.
@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
-from scgsim.geometry.surface_epr.specs import margins_of, normalize_surface_epr_specs
+from scgsim.geometry.source.surface_epr_specs import margins_of
 from scgsim.refusal import internal
 
 
@@ -76,7 +76,7 @@ class SurfaceEprSpec:
         if self.thickness is None:
             raise ValueError(
                 internal(
-                    f"Surface EPR {self.interface_type} has no thickness: read it with SurfaceEprSpecs.of_plan(), whose specs require one"
+                    f"Surface EPR {self.interface_type} has no thickness: build it with SurfaceEprSpecs.of_plan() or of_normalized(), whose specs require one"
                 )
             )
         return self.thickness
@@ -93,38 +93,22 @@ class SurfaceEprSpecs:
     by_type: Mapping[str, SurfaceEprSpec]
 
     @classmethod
-    def normalized(
-        cls,
-        specs: Mapping[str, Mapping[str, Any]],
-        *,
-        materials: Mapping[str, Mapping[str, Any]],
-    ) -> SurfaceEprSpecs:
-        """Check ``specs`` against ``materials`` and hold them normalized, as ``GeometryPlan.prepare()`` does.
-
-        Raises:
-            TypeError: ``specs`` or a spec is not a mapping, or a field has the wrong type.
-            ValueError: an interface type other than MA, MS, SA, an unknown field, or an invalid value.
-        """
-        return cls._of_normalized(
-            normalize_surface_epr_specs(specs, materials=materials)
-        )
-
-    @classmethod
-    def of_plan(cls, snapshot: GeometryPlanSnapshot) -> SurfaceEprSpecs | None:
-        """The specs ``snapshot`` carries, already normalized by ``GeometryPlan.prepare()``; None when the plan has none."""
-        normalized = snapshot.surface_epr_specs
-        return None if normalized is None else cls._of_normalized(normalized)
-
-    @classmethod
-    def _of_normalized(
+    def of_normalized(
         cls, normalized: Mapping[str, Mapping[str, Any]]
     ) -> SurfaceEprSpecs:
+        """The records of specs already normalized by the shared rules (``normalize_surface_epr_specs``), key for key."""
         return cls(
             {
                 interface_type: _spec(interface_type, payload)
                 for interface_type, payload in normalized.items()
             }
         )
+
+    @classmethod
+    def of_plan(cls, snapshot: GeometryPlanSnapshot) -> SurfaceEprSpecs | None:
+        """The specs ``snapshot`` carries, normalized by ``GeometryPlan.prepare()``; None when the plan has none."""
+        normalized = snapshot.surface_epr_specs
+        return None if normalized is None else cls.of_normalized(normalized)
 
     def to_payload(self) -> dict[str, dict[str, Any]]:
         """The normalized specs as ``{interface_type: spec mapping}``, as the geometry build reads them."""

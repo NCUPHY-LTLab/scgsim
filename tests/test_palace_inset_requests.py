@@ -12,12 +12,12 @@ from scgsim.geometry.sgb.bands.requests import (
     InsetRequest,
     InterfaceSurfaces,
 )
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.geometry.surface_epr.insets import (
     inset_requests,
     needs_unbanded_build,
     requests_wanted,
 )
-from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 
 FILM = {"film_thickness_m": 2e-9, "permittivity": 4}
 

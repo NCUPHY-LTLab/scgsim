@@ -171,6 +171,6 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 | `ValueError`「Surface EPR bands narrower than the meshing stage's face-width limit …」 | 宣告 | 加大訊息所指的邊距，讓每條條帶至少 10 個格點間距寬。 |
 | `NoGapEdgeError` | 宣告 | 在 `inset_margins_by_entity_um` 中指名的導體，在該面上沒有間隙邊。把它從該處移除，或改以類型切條帶。 |
 | `ValidationError`「… invariant(s) failed」 | SCGSim | SGB 對已接受的輸入做結構檢查時失敗。請把版圖一併回報給 SCGSim。 |
-| `SimulationDrcError` | 各項發現所指明的負責方：layout、erosion 或 sgb | 每個拒絕項目都列出類別、尺寸、以 µm 表示的位置與修改方式。`layout`：在該處修正圖面。`erosion`：修改交給 `plan.set_surface_epr` 的內縮邊距，或導體的寬度。`sgb`：附上該項發現回報給 SCGSim。 |
+| `SimulationDrcError` | 各項發現所指明的負責方：layout、erosion 或 sgb | 每個拒絕項目都列出類別、尺寸、以 µm 表示的位置與修改方式。`layout`：在該處修正圖面。`erosion`：修改交給 `plan.set_surface_epr` 的邊距，或導體的寬度。`sgb`：附上該項發現回報給 SCGSim。 |
 | `MeshRepairError` | 先檢查版圖，再看 SCGSim | 閱讀品質報告，它寫出中止原因，並列出剩下的不良元素及其接觸的特徵。若它們落在版圖的微細結構上，請修正圖面。若該處版圖沒有微細結構，請調整[網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)；若不良元素落在條帶邊界上，請回報給 SCGSim。 |
 | 訊息與您畫的版圖對不上的錯誤 | SCGSim | 把版圖與訊息一併回報給 SCGSim。 |

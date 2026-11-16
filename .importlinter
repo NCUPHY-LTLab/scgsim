@@ -100,8 +100,6 @@ ignore_imports =
 # junction partition shares with SGB is the exact kernel, which both read.
 # scgsim.geometry.* matches every folder of the geometry package, present or added later; import-linter
 # skips the forbidden folders themselves, and surface_epr calling SGB is the allowed direction.
-# The one other reader is the plan, which holds the Surface-EPR specs (issue #268): its bindings check
-# them by the shared spec rules and read nothing else of surface_epr.
 [importlinter:contract:stages-do-not-read-sgb]
 name = The stages before SGB do not read it
 type = forbidden
@@ -113,7 +111,6 @@ forbidden_modules =
 ignore_imports =
     scgsim.geometry.surface_epr.** -> scgsim.geometry.sgb.**
     scgsim.geometry.surface_epr.** -> scgsim.geometry.sgb
-    scgsim.geometry.source.plan_bindings -> scgsim.geometry.surface_epr.specs
 
 # SGB's folders in the order they import: a folder reads the folders before it, never one after it;
 # import-linter lists the last first. This is the order of dependency. The order in time is the step list

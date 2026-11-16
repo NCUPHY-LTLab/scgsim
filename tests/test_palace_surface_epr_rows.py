@@ -11,8 +11,8 @@ from palace_sgb_support import (
 )
 from test_sgb_band_labels import PORT_CASES, all_interface_insets
 
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.geometry.surface_epr.insets import inset_requests, needs_unbanded_build
-from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 
 

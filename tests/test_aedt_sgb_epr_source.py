@@ -43,7 +43,7 @@ from scgsim.aedt.specs.epr import (  # noqa: E402
 )
 from scgsim.contracts.sgb_sidecar import read_sidecar, views  # noqa: E402
 from scgsim.geometry.sgb.output.exchange.guard import read_step_guard  # noqa: E402
-from scgsim.geometry.surface_epr import normalize_surface_epr_specs  # noqa: E402
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs  # noqa: E402
 
 pytestmark = pytest.mark.occt
 

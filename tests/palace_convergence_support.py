@@ -14,8 +14,8 @@ from types import SimpleNamespace
 from palace_sgb_support import MATERIALS, effective_input, sidecar_of, surface_epr_specs
 
 from scgsim.contracts.palace_run_folder import MESH, MESH_MANIFEST, route_provenance
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.geometry.surface_epr.insets import inset_requests
-from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.mesh.build import MeshBuildResult
 from scgsim.palace.mesh.manifest import build_mesh_manifest
