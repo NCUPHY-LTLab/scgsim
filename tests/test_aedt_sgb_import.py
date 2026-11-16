@@ -34,6 +34,7 @@ from test_sgb_step_guard import export  # noqa: E402
 import scgsim.aedt.runtime.families.sgb_import as sgb_import  # noqa: E402
 from scgsim.aedt.epr.sgb_surfaces import (  # noqa: E402
     SurfaceBindingError,
+    row_faces,
     surface_face_bindings,
 )
 from scgsim.aedt.preparation.sgb_model import (  # noqa: E402
@@ -191,8 +192,12 @@ def test_route_c_rows_read_ms_and_sa_on_the_substrate_and_ma_on_the_conductor(mo
     assert owners["MS"] == {"substrate"}
     assert owners["SA"] == {"substrate"}
     assert owners["MA"] <= {"chip_left", "chip_right"}
+    rows = sidecar["surface_epr_row"]
     for binding in bindings.values():
-        planned = views.group_members(sidecar)[binding.group]
+        # A sheet row takes only the faces its face_sides names: the face under the bump has no MA side.
+        planned = row_faces(
+            rows[binding.row], views.group_members(sidecar)[binding.group]
+        )
         assert len(binding.faces) == len(planned) == len(set(binding.faces))
     names = [binding.selection_name for binding in bindings.values()]
     assert len(set(names)) == len(names)
@@ -334,8 +339,12 @@ def test_route_a_bump_rows_read_the_body_as_route_c_reads_a_conductor(models):
         "substrate",
         *bodies,
     }  # sheet rows on the substrate, bump rows on the bump
+    rows = sidecar["surface_epr_row"]
     for binding in bindings.values():
-        planned = views.group_members(sidecar)[binding.group]
+        # A sheet row takes only the faces its face_sides names: the face under the bump has no MA side.
+        planned = row_faces(
+            rows[binding.row], views.group_members(sidecar)[binding.group]
+        )
         assert len(binding.faces) == len(planned) == len(set(binding.faces))
 
 
