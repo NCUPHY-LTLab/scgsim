@@ -29,6 +29,7 @@ from scgsim.geometry.sgb.output.emission.writer import write_brep_file, write_xa
 from scgsim.geometry.sgb.output.sidecar.build import SidecarContext, build_sidecar
 from scgsim.geometry.sgb.output.sidecar.files import write_sidecar
 from scgsim.geometry.sgb.stopwatch import elapsed_seconds
+from scgsim.geometry.sgb.topology.routes.policy import RoutePolicy
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,7 @@ def build_sgb_geometry(  # noqa: PLR0913 - the effective input, the route and th
     build_input: GeometryBuildInput,
     representation: RepresentationContext,
     *,
-    route: str,
+    route: str | RoutePolicy,
     insets: tuple[InsetRequest, ...] = (),
     output_dir: Path,
 ) -> SgbArtifacts:

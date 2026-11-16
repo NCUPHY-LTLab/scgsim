@@ -1,111 +1,83 @@
 ---
 title: "AEDT: HFSS Driven Terminal"
-description: "Use explicit shared ground references for the current two-port terminal network."
+description: "Prepare a two-port HFSS Driven Terminal network on the SGB model, with lumped ports on its port sheets."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-terminal"
 ---
 
-This page is the detailed Driven Terminal reference and continues from the
-shared [CPW input lesson](aedt-inputs.qmd). Terminal ports identify reference
-conductors explicitly. They use the same source GDS and PDK material mapping as
-Modal, but this model's reference assignment has its own native evidence and
-result meaning. A similar network curve would not make the two port models
-identical. As in the Eigenmode lesson, replace the inputs page's zero-thickness
-M1 import with the 0.2 µm `NB_FILM` interval and declare that film with a
-`PhysicalLayerDeclaration` whose lower face is the attachment face, so the HFSS
-sheet stays at z = 0. The example writes this declaration itself; the coupon
-GDS carries none.
+HFSS Driven Terminal solves the two-port network of an SGB model, the same
+model Palace meshes. Start from a `GeometryPlan` snapshot whose layout carries
+two lumped-port sheets, one where each port meets its conductors. Each port is
+a `LumpedTerminalPort` that names its sheet (`port_sheet_id`, the model's
+`PORT::<port_sheet_id>` group), the signal and reference Entities the sheet
+joins, and the port impedance.
 
 ```python
 from pathlib import Path
 from scgsim.aedt import (
-    FrequencySweepSpec, HfssDrivenSpec, HfssRunControl, LayerImport,
-    LengthMeshSpec, TerminalPort, prepare_handoff,
+    FrequencySweepSpec, HfssRunControl, LumpedTerminalPort,
+    prepare_hfss_driven_from_geometry, prepare_sgb_model,
 )
-from scgsim.geometry import PhysicalLayerDeclaration
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
-metal_thickness_um = 0.2
-physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerDeclaration(
-    physical_layer_id=physical_layer_id,
-    source_level_id="D0_TOP_M1",
-    source_level_and_gds_pair={"layer": 1, "datatype": 0},
-    source_interval_um=(0.0, metal_thickness_um),
-    material_id="Nb",
-    feature_kind="stack_film",
-    physical_dimensions={"normal_thickness_um": metal_thickness_um},
-    source_contact_facts={"layer_attachment_face": "lower"},
-)
-layer_imports = (
-    LayerImport(
-        1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
-        physical_layer_id=physical_layer_id,
-    ),
-    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
-)
-
 ports = (
-    TerminalPort(1, "o1", "-X", ground_objects),
-    TerminalPort(2, "o2", "+X", ground_objects),
+    LumpedTerminalPort(1, "p1", "port_1", ("chip/pad_1",), ("chip/ground",), 50.0),
+    LumpedTerminalPort(2, "p2", "port_2", ("chip/pad_2",), ("chip/ground",), 50.0),
 )
-spec = HfssDrivenSpec(
-    aedt_version=AEDT_VERSION,
-    mode="terminal", gds_path=source_gds, modeling="thin_film",
-    project_name="public_cpw_terminal", design_name="CpwFiniteGroundTerminal",
-    materials=materials, vacuum_material_id="vacuum",
-    layer_imports=layer_imports, object_bindings=object_bindings,
-    physical_layers=(physical_layer,),
+model = prepare_sgb_model(
+    snapshot.geometry_input,
+    prepared_stack=snapshot.stack,
+    modeling="solid",  # or "thin_film"
+    output_dir=Path(".artifacts/driven-model"),
     ports=ports,
-    run_control=HfssRunControl(
-        "Setup1", "Fast20000", FrequencySweepSpec(3.0, 8.0, 20_000)
-    ),
-    region_padding_um=(0.0, 0.0, 100.0, 100.0, 1000.0, 1000.0),
-    length_mesh=LengthMeshSpec(("D0_TOP_M1_1",), ground_objects, 10.0),
 )
-handoff = prepare_handoff(
-    spec=spec, output_dir=Path(".artifacts/public-cpw-terminal")
+handoff = prepare_hfss_driven_from_geometry(
+    aedt_version=AEDT_VERSION,
+    model=model,
+    project_name="two_port",
+    design_name="DrivenTerminal",
+    run_control=HfssRunControl(
+        "Setup1", "Sweep1", FrequencySweepSpec(4.0, 8.0, points=201)
+    ),
+    output_dir=Path(".artifacts/driven-handoff"),
 )
 print(handoff.spec_path, handoff.archive_path)
 ```
 
-Both ports share the ordered global reference tuple
-`("D0_TOP_M1_2", "D0_TOP_M1_3")`, the declared ground objects. References must
-name those exact source bindings; the current contract does not infer a ground
-from touching geometry. Optional `deembed_um` is a nonnegative micrometre input
-on `TerminalPort`; this example leaves it at zero.
+The ports belong to the model: `prepare_sgb_model(..., ports=...)` binds each
+one to its port sheet and refuses a sheet the model does not have. The Driven
+request takes exactly two ports, 1 and 2, with distinct names and one shared
+ordered reference. Each sheet must join one of its port's signal Entities and
+one of its reference Entities. A Driven model carries no junctions, lumped
+RLCs or Surface-EPR specs; those belong to HFSS Eigenmode. The handoff carries
+the model's STEP, BREP, sidecar and guard in its `model/` folder.
 
-The example requests 20,000 points, the default of `FrequencySweepSpec`.
-Choose `points` and sweep bounds for the network response your study needs;
-native setup and returned readback retain that request. The
-[sweep reference](../specs/aedt-runtime.qmd#hfss-driven-sweep-count) provides
-its exact input rules.
+In AEDT the run imports the STEP into an empty Driven Terminal design, as the
+Eigenmode run does, and puts each port on its sheet: a Terminal lumped port
+over the sheet's faces, and its Terminal on the edges where the sheet meets the
+signal conductor. The [runtime contract](../specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)
+gives the rules. The returned resolver checks that the receipt's geometry is
+the request's model as imported, that each port and Terminal was read back from
+the saved design on the faces and edges it was given, and the ordered
+S-parameters and Touchstone of the declared sweep.
 
-Review the copied spec's port order, references and end faces, then
-[execute on the native host](execute.qmd). The returned resolver checks actual
-terminal/reference readback and ordered S-parameters/Touchstone, not just the
-requested references. [Restart and resolve](returned-results.qmd) before
-passing that network response into your downstream analysis. Native benchmark
-and adaptive evidence describe the run separately from the physical response.
-Keep the native status, actual controls and available changes with the
-response. Use the terminal-reference convention when interpreting S-parameters,
-rather than treating this output as the modal integration-line model.
+The example requests 201 points. Choose `points` and the sweep bounds for the
+network response your study needs; the native setup and the returned readback
+keep that request. The [sweep reference](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)
+gives its exact input rules.
 
-Use [Modal](aedt-driven-modal.qmd) when the intended model calls for explicit
-integration lines. The [runtime contract](../specs/aedt-runtime.qmd) owns
-failure behavior and the bounded two-port interface.
+Review the copied spec's ports, then [execute on the native host](execute.qmd)
+and [restart and resolve](returned-results.qmd) before passing the network
+response into a downstream analysis. Native benchmark and adaptive evidence
+describe the run separately from the physical response.
 
-### Wave and Lumped Terminal ports
+### Ports that wait for issue #135
 
-The example above uses Wave `TerminalPort` inputs. A Lumped excitation uses a
-separate `LumpedTerminalPort` declaration with explicit source-backed support,
-terminal and reference assignments and a required `impedance_ohm`. The two
-port kinds have distinct native models, so a Lumped request does not fall back
-to Wave-port creation. Generic Series/Parallel RLC model elements belong to
-the Eigenmode model's `PreparedPlanarGeometry.lumped_rlcs` collection; they
-are separate from a Driven Terminal's scalar port impedance and from
-Josephson-junction/EPR models. The runtime reference describes source-backed
-support identity and the body-first path. In that body-first route,
-`TerminalPort.signal_entity_ids` is required so the declared Signal and its
-references are explicit; the existing GDS reference binding is unchanged.
+A wave `TerminalPort` on a Region face and every Driven Modal port
+(`ModalPort`) have no realization on the SGB model yet. `prepare_sgb_model`
+refuses a request that declares one, naming
+[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135); there is no
+Driven Modal workflow until that issue lands. The GDS-import route
+(`HfssDrivenSpec`, `gds_path`, `LayerImport`, `ObjectBinding`, `LengthMeshSpec`)
+is removed.

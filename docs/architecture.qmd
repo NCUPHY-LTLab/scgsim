@@ -29,36 +29,36 @@ each one is and the order the work flows through them on the Palace and AEDT
 routes. Palace and AEDT retain their own preparation, execution, and result
 lifecycles.
 
-The responsibility correction keeps one definition for every detached AEDT
-request record. `aedt.specs.geometry` owns `PreparedPlanarGeometry`;
-`aedt.specs.epr` owns junction, surface and analysis declarations; shared
-request primitives own generic `LumpedRlc`. Existing public imports re-export
-these same classes. Payload members, historical markers and model/source hash
+Every detached AEDT request record has one definition. `aedt.specs.epr` owns
+junction and analysis declarations; shared request primitives own generic
+`LumpedRlc`; `aedt.preparation.sgb_model` owns `PreparedSgbModel`, the SGB
+model every 3D request carries. Existing public imports re-export these same
+classes. Payload members, historical markers and model/source hash
 rules remain unchanged. Private stdlib data helpers own freeze, detachment and
 canonical hashing; pure support projection is shared by preparation and
 request decoding without importing a preparation or native workflow.
 
-`aedt.specs.modeling` owns physical-layer declarations and the pure Z map.
-`aedt.preparation` owns source acquisition, Entity binding and effective
-geometry, stack and enclosure conversion. It supplies the backend-neutral
-private representation context consumed by the shared geometry planner;
-serialized AEDT provenance remains source-bound data, rather than a planner
-route or a second coordinate-map authority. Palace route orchestration and
-explicit effective-representation planning share one contact/coverage algorithm.
+`aedt.specs.modeling` owns the `modeling` selector. `aedt.preparation` builds
+the plan's SGB model (`prepare_sgb_model`, the same `build_sgb_geometry` Palace
+meshes, then `export_aedt_step`), carries it into a handoff (`sgb_handoff`)
+and writes each family's handoff. The physical interpretation and the
+coordinate map are the geometry stage's; AEDT keeps no second copy.
 
 The HFSS family owns ordinary source-backed Eigenmode preparation, solve and
 export. EPR composes that workflow with integration surfaces, fields, cache and
 analysis. Junction declarations control junction construction independently of
 an EPR analysis request: omitting analysis never removes a declared junction.
-The transaction retains sole Desktop and receipt ownership. General body,
-support, material and enclosure native operations belong to `runtime.native`;
-generic RLC assignment and saved readback belong to the native lumped owner.
+The transaction retains sole Desktop and receipt ownership. AEDT builds no
+geometry of its own: `runtime.families.sgb_import` imports the model's STEP,
+checks it against the guard and assigns materials, Perfect E, junction and RLC
+elements from the sidecar; `sgb_ports` puts the Driven Terminal ports on their
+port sheets. `runtime.native` keeps the shared material, setup, resource and
+saved-design calls.
 
 Geometry source preparation, interpretation and model construction have
 separate owners: the source stage uses the grid engine, interpretation and the
 junction partition turn its prepared input into the effective input, and SGB
-builds the model from that input. Only AEDT's native construction uses
-`scgsim.geometry.planning`.
+builds the model from that input. Palace and AEDT both solve that model.
 Backend families consume the shared geometry without importing one another.
 `semantics` remains a stdlib-only immutable fact boundary. Palace and AEDT keep
 separate mutable simulation state, transaction lifetime, and physical result
@@ -95,10 +95,7 @@ boundaries; callers use the supported entry.
 | Internal owner | Responsibility |
 |---|---|
 | `scgsim.geometry.source.plan_assembly` | Compose component occurrences, transforms, stack facts, and caller-assigned Nets into source input. |
-| `scgsim.geometry.planning.contact_planning` | Recognize declared interfaces, contact patches, and metal-to-metal contact ownership. |
 | `scgsim.geometry.junctions` | Resolve authored support and incident-conductor binding, then derive exact rectangular-junction partitions. |
-| `scgsim.geometry.planning.surface_planning` | Build solver-facing surfaces, contact coverage, contribution patches, and partitions. |
-| `scgsim.geometry.planning.topology_planning` | Resolve shared surface ownership and ring geometry for surface planning. |
 | `scgsim.geometry.grid.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
 
 The [API migration reference](api-migration.qmd) lists the supported import
@@ -117,26 +114,9 @@ runtime transaction owns receipt transitions and the sole Desktop lifecycle;
 family runtimes own native prepare/solve/export/readback. EPR preparation and
 saved-field analysis stay in their EPR workflow, strict resolution does not
 execute a solver, and presentation consumes detached results. These are
-separate ownership boundaries, not shared solver base classes. The available
-Solid Surface-EPR contract adds distinct raw native-face reference integrals
-for selected MA/MS/SA contributions; it keeps their owner and support separate
-from masked Sheet results and does not fold them into participation or loss
-totals. The references may cover different support or material basis from the
-Sheets. Required native-member readback uses the saved design's matching
-`EntityList` at the existing post-save checkpoint; assignment-time
-`props.List` is cached state, not independent native readback. A current
-SimplePad Solid run recorded six raw native-face references in each of two
-adaptive passes, with FaceList membership matching the saved design's
-`EntityList`. The run did not converge at its two-pass maximum (delta 79.181);
-this does not establish accuracy or incident-material equivalence. Mode 1,
-pass 2 saved-field analysis then completed with six raw references; strict
-resolution and Report presentation exposed the raw integrals and membership.
-ThinFilm Surface-EPR also uses separate non-model integration sheets for
-masked and unmasked support. Its calculator `Surface`/`Adjacent` selector is
-chosen from each sheet's `FacePrimitive.normal` and the source contribution's
-requested material side, independently from geometric normal projection. This
-mapping remains empirical, not a generally validated native side query; the
-call emits a warning about that limitation. See the
+separate ownership boundaries, not shared solver base classes. Surface EPR on the SGB
+model integrates each sidecar Surface-EPR row on a non-model sheet copied from
+its faces, with the sheet's own normal at each point; see the
 [field-side contract](specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction).
 
 Within Palace, `results` reads a returned run folder into checked records:
@@ -166,8 +146,8 @@ flowchart LR
   SNAPSHOT --> INPUT["Normalized GeometryBuildInput"]
   INPUT --> SOURCE["scgsim.geometry source API"]
   SOURCE --> SGB["scgsim.geometry.sgb"]
-  INPUT --> AEDT["AEDT native geometry and bindings"]
   SGB --> MESHING["scgsim.meshing"]
+  SGB --> AEDT["AEDT STEP import and sidecar bindings"]
   MESHING --> PALACE["Palace backend preparation"]
   PALACE --> HANDOFF["Run-and-handoff contracts"]
   AEDT --> HANDOFF
@@ -183,12 +163,12 @@ the Notebook's final `Net -> Entity` map, then prepares one immutable source
 snapshot for the normalized `GeometryBuildInput` boundary. The source model
 includes authored curve declarations and explicit GDS
 reconstruction records in that snapshot while preserving Entity/Net ownership.
-`scgsim.geometry` owns the source-facing plan and snapshot. Palace builds line and circular-arc curves through SGB (`scgsim.geometry.sgb`); AEDT curve
-lowering is unsupported. The
+`scgsim.geometry` owns the source-facing plan and snapshot. Palace and AEDT get line and circular-arc curves through SGB
+(`scgsim.geometry.sgb`): AEDT imports them as exact arcs in the model's STEP. The
 [GeometryPlan contract](geometry-sgb.qmd) owns exact curve identity and
 arrangement semantics. Native observations do not replace source identity or
-establish connectivity. AEDT binding evidence retains source members and
-coverage through native aggregation.
+establish connectivity. AEDT names every object, face group and boundary from
+the sidecar and checks the imported shape against the guard.
 
 ## Contract boundaries
 
@@ -198,7 +178,7 @@ coverage through native aggregation.
 | Local entities, polygon and authored curve boundaries, ports, and topology selectors | Component designer |
 | Named occurrences and the final `Net -> Entity` assignment | Notebook `GeometryPlan` |
 | Immutable normalized source geometry | `GeometryPlan` and `GeometryBuildInput` |
-| Revision-bound material, interface, owner, side, and evidence facts | `scgsim.semantics` internal stdlib core |
+| Revision-bound fact snapshots, the Route A source projection and EPR records | `scgsim.semantics` internal stdlib core |
 | Geometry names, topology, Route A/B surfaces | `scgsim.geometry.sgb` |
 | Tetrahedral meshing of SGB geometry, sizing recipes and the quality threshold | `scgsim.meshing` |
 | Palace and AEDT implementation | `scgsim.palace` and `scgsim.aedt` |
@@ -213,21 +193,16 @@ coverage through native aggregation.
 
 `scgsim.semantics` is a solver-independent stdlib boundary. It detaches plain
 values into recursively immutable, revision-bound snapshots and returns detached
-serialization. Evidence patches retain the snapshot that classified them;
-missing/different revision identity fails rather than silently rebinding facts.
+serialization. Missing or different revision identity fails rather than
+silently rebinding facts.
 Native tags remain opaque observations, not sources of guessed contact.
+Material identity, approximation and native implementation stay separate. The
+[GeometryPlan/route contract](geometry-sgb.qmd) owns their public meaning; this
+page explains which modules implement it.
 
-Geometry planning reuses one source/model projection instead of deep-copying
-stacks at every adjacency call. Domain ordering, sheet owners and aggregate
-physical-group owners remain separate projections. Contribution multiplicity
-is retained by the semantic ledger even when native geometry aggregates a
-surface. Material identity, approximation and native implementation stay
-separate. The [GeometryPlan/route contract](geometry-sgb.qmd) owns their public
-meaning; this page explains which modules implement it.
-
-AEDT's native construction does not consume Gmsh tags.
-Its binding sidecar retains source members and coverage through native bodies,
-sheets, faces and calculator selections. The [AEDT contract](specs/aedt-runtime.qmd)
+AEDT does not consume Gmsh tags. It imports the SGB model's STEP; the sidecar
+names its solids, face groups, port faces and Surface-EPR rows, and the guard
+checks the imported shape before anything is named. The [AEDT contract](specs/aedt-runtime.qmd)
 owns exact side-selection and result rules. Display-only helpers live under
 `scgsim.aedt.presentation`, with public methods delegating to them; presentation
 adds no solver execution or shared physics schema.

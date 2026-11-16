@@ -15,8 +15,7 @@ because the stages use them; the stages follow in their order:
 - ``interpretation`` (stage 2): from a prepared input to its physical representation and vacuum enclosure;
   its last steps derive the rectangular junctions and bind the sheet interfaces.
 - ``surface_epr`` (Palace only): from Surface-EPR specs to the inset requests of the SGB build.
-- ``sgb`` (stage 3): the geometry builder, from the effective input.
-- ``planning`` (AEDT only): what AEDT's native construction uses, called from ``scgsim.aedt``.
+- ``sgb`` (stage 3): the geometry builder, from the effective input; Palace meshes its model and AEDT imports it.
 """
 
 from scgsim.geometry.interpretation.physical import interpret_physical_geometry
@@ -42,7 +41,6 @@ from scgsim.geometry.models.junctions import (
     JunctionTerminalBinding,
     RectangularJunctionSpec,
 )
-from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalLayerDeclaration,
@@ -75,7 +73,6 @@ __all__ = [
     "GeometryPlanSnapshot",
     "InputSummary",
     "LayoutPolygonSpec",
-    "LumpedSupport",
     "PathInput",
     "PolygonRing",
     "PortSheetOverlapRecord",

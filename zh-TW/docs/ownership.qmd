@@ -20,9 +20,9 @@ SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域
 | 目標區域 | 負責範圍 | 不得接管的範圍 |
 |---|---|---|
 | `scgsim.geometry` | 面向來源的元件／出現位置與堆疊調適、GeometryPlan／snapshot、正規化輸入、真空／曲線準備及脫離原物件的摘要 | 模型建構、Palace／AEDT 物理或執行狀態 |
-| `scgsim.geometry.sgb` | Palace 用來建立幾何的 SGB 核心：arrangement、XAO 與 sidecar、帶 | 網格化、求解器狀態或元件來源所有權 |
+| `scgsim.geometry.sgb` | Palace 與 AEDT 用來建立幾何的 SGB 核心：arrangement、XAO、AEDT STEP 及其 guard、sidecar、帶 | 網格化、求解器狀態或元件來源所有權 |
 | `scgsim.meshing` | 針對 SGB 的 XAO 提供尺寸配方、品質稽核、修復迴圈與網格化報告 | Palace 屬性、求解器狀態或物理收斂判定 |
-| `scgsim.geometry.models` 與 `scgsim.geometry.grid` | 單一標準模型／型別定義，以及來源、解讀、接面分割與規劃共同呼叫的網格引擎（節點化、標記區域、疊合、環線、多邊形運算），和多個階段共用的 Entity 讀取函式 | 重複定義、來源至規劃的相依循環 |
+| `scgsim.geometry.models` 與 `scgsim.geometry.grid` | 單一標準模型／型別定義，以及來源、解讀與接面分割共同呼叫的網格引擎（節點化、標記區域、疊合、環線、多邊形運算），和多個階段共用的 Entity 讀取函式 | 重複定義或階段之間的相依循環 |
 | `scgsim.semantics` | 僅使用標準函式庫、不可變且受修訂版本約束的事實 | 可變後端物件、將求解器標記解讀為來源真實資料 |
 | `scgsim.palace.simulation` | 兩個模擬類別共用一個核心；分開的 Electrostatic 與 Eigenmode 設定物件、可變狀態／失效處理及生命週期 | Palace 提交或合併狀態擁有者 |
 | `scgsim.palace.source` | 幾何請求：把綁定 plan 的埠、真空區域與 Surface-EPR 規格準備成幾何建置的輸入 | 網格化、`config.json` 或求解器狀態 |
@@ -31,11 +31,11 @@ SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域
 | `scgsim.palace.run` | 手動交接（執行資料夾的執行腳本、中繼資料與封存檔）及獨立主機收據記錄 | 自動提交求解器或解讀結果 |
 | `scgsim.palace.results` | 回傳產物／保管驗證、結果資料及脫離原物件的 EPR | 求解器執行或繪圖狀態 |
 | `scgsim.palace.reports` | Palace 信任度、物理與成本投影，以及報告圖表 | 共用的跨求解器物理量模型 |
-| `scgsim.aedt.specs` | 標準請求與已準備幾何宣告、共用電性記錄及明確解析器派送 | 執行階段／Desktop 狀態，或 Q3D 輸入 v1／v2 |
-| `scgsim.aedt.preparation` | 來源綁定、有效幾何與物理層對應、可攜式交接及標準 cohort 成員資格 | Desktop 生命週期、可變 EigenmodeSim 狀態或求解結果 |
-| `scgsim.aedt.runtime` | 準備、直接執行與批次收集的唯一交易／收據協調器及 Desktop 生命週期；派送至各家族的原生流程 | 共用幾何來源所有權或跨家族物理 |
+| `scgsim.aedt.specs` | 標準請求宣告、共用電性記錄及明確解析器派送 | 執行階段／Desktop 狀態，或 Q3D 輸入 v1／v2 |
+| `scgsim.aedt.preparation` | 計畫供 AEDT 使用的 SGB 模型（`PreparedSgbModel`）、攜帶它的可攜式交接及標準 cohort 成員資格 | Desktop 生命週期、可變 EigenmodeSim 狀態或求解結果 |
+| `scgsim.aedt.runtime` | 準備、直接執行與批次收集的唯一交易／收據協調器及 Desktop 生命週期；派送至各家族流程，由其匯入模型的 STEP 並依 sidecar 指派 | 共用幾何來源所有權或跨家族物理 |
 | `scgsim.aedt.batch` | 單一模型原生 EPR 套件、僅限求解器的獨立執行嘗試與回傳驗證；將完整原生收集交由執行階段交易處理 | Desktop／模型建構、排程提交，或合併的多模型求解專案 |
-| `scgsim.aedt.runtime.native` | 共用實體／支撐／材料／外殼建構、已宣告接面與一般 RLC 指派，以及已儲存原生幾何讀回 | EPR 分析請求或來源準備 |
+| `scgsim.aedt.runtime.native` | 各家族之下共用的原生材料、設定、資源與已儲存設計呼叫 | 幾何建構、EPR 分析請求或來源準備 |
 | `scgsim.aedt.epr` | 分析選擇、場／快取、EPR 分析，以及 HFSS 家族流程中的儲存場組合 | 一般本徵模建構／求解／匯出、Desktop 生命週期或一般結果保管 |
 | `scgsim.aedt.results` | 嚴格執行／EPR 解析、來源沿革讀取器、收斂與矩陣觀察 | 求解器執行或顯示狀態 |
 | `scgsim.aedt.presentation` | 顯示專用投影與採延遲載入的選擇性匯入繪圖功能 | 原生計算或結果驗證 |
@@ -44,11 +44,11 @@ SCGSim 2.0 的每個套件區域負責下列範圍，且不得接管其他區域
 
 `scgsim.geometry.sgb` 位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。
 
-以來源為基礎的本徵模準備、求解與匯出，屬於 HFSS 家族，即使沒有要求 EPR 分析也一樣。已宣告的接面與一般 RLC 負載會獨立於該請求建構。EPR 會將分析選擇與場／快取工作加入同一個原生模型及求解生命週期。純 RLC 單位／拓撲解讀與 Q3D 來源外部鏈選擇，由僅使用標準函式庫的私有輔助工具供原生寫入器與離線讀取器共用；共用解讀方式不會取代各自獨立的原生收據與來源歸屬檢查。
+以來源為基礎的本徵模準備、求解與匯出，屬於 HFSS 家族，即使沒有要求 EPR 分析也一樣。已宣告的接面與一般 RLC 負載會獨立於該請求建構。EPR 會將分析選擇與場／快取工作加入同一個原生模型及求解生命週期。純 RLC 單位／拓撲解讀由僅使用標準函式庫的私有輔助工具供原生寫入器與離線讀取器共用；共用解讀方式不會取代各自獨立的原生收據與來源歸屬檢查。
 
 幾何、AEDT、Palace 與 visualization 的基準 facade 和直接子模組符號對應，以及目前的負責模組，列於 [API 遷移參考](api-migration.qmd)。公開性取決於文件所述的 facade／契約與宣告的匯出項目，不取決於 Python 模組是否剛好可匯入。v2 刻意不保留 `scgsim.sgb` 相容包裝器或 Q3D 輸入 v1／v2 路徑；公開 AEDT 指令 `python -m scgsim.aedt.run` 仍受支援，並會交由交易擁有者處理。
 
-狀態界線必須保持可觀察。Palace Electrostatic 與 Eigenmode 準備流程各自保留可變狀態及失效／失敗順序；Gmsh 工作程序是程序界線，其網格觀察器不是離線品質讀取器。AEDT `EigenmodeSim` 保留可變設定與失效狀態；單一交易則負責收據狀態轉換與 Desktop 釋放優先順序。幾何 snapshot 保持脫離原物件；規劃記錄是衍生輸出；後端標記是觀察資料，不是來源權威。搬移程式碼時必須保留這些所有權與失敗契約。
+狀態界線必須保持可觀察。Palace Electrostatic 與 Eigenmode 準備流程各自保留可變狀態及失效／失敗順序；Gmsh 工作程序是程序界線，其網格觀察器不是離線品質讀取器。AEDT `EigenmodeSim` 保留可變設定與失效狀態；單一交易則負責收據狀態轉換與 Desktop 釋放優先順序。幾何 snapshot 保持脫離原物件；後端標記是觀察資料，不是來源權威。搬移程式碼時必須保留這些所有權與失敗契約。
 
 Palace 與 AEDT 後端實作、測試及技術文件仍屬不同來源責任，詳見[儲存庫根目錄指南](../../AGENTS.md)。原生觀察與求解器專屬結果解讀仍維持各自的技術界線；目錄重整不代表這些工作已完成。貢獻者協調與交付請遵循共用的 [$github-flow](https://github.com/arfiligol/agent-skills/tree/main/github-flow)。
 

@@ -28,7 +28,7 @@ from test_palace_rectangular_ports import (
     pad_in_round_opening,
     prepared_port,
 )
-from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
+from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, layout_plan
 
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.exact.errors import InputError
@@ -505,10 +505,7 @@ def test_a_pad_drawn_as_two_polygons_has_no_drawn_ring_and_is_refused_at_it(
     assert pad.drawn_rings == (None,)
     with pytest.raises(InputError) as error:
         EigenmodeSim.simulation_drc(
-            component,
-            layer_stack=NO_VACUUM_STACK,
-            material_records=MATERIALS,
-            nets=NETS,
+            layout_plan(component, layer_stack=NO_VACUUM_STACK, nets=NETS)
         )
     message = str(error.value)
     assert message.startswith(
@@ -551,10 +548,7 @@ def test_a_pad_fused_with_a_protruding_polygon_keeps_no_drawn_ring(monkeypatch):
     assert pad.drawn_rings == (None,)
     with pytest.raises(InputError) as error:
         EigenmodeSim.simulation_drc(
-            component,
-            layer_stack=NO_VACUUM_STACK,
-            material_records=MATERIALS,
-            nets=NETS,
+            layout_plan(component, layer_stack=NO_VACUUM_STACK, nets=NETS)
         )
     message = str(error.value)
     assert "the ring it selects has no drawn GDS ring recorded for it" in message

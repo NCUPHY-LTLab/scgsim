@@ -16,16 +16,22 @@ you need, then choose the appropriate source and boundary model.
 |---|---|---|---|
 | Electrostatic | Palace | GeometryPlan, terminal and ground Nets | Ordered capacitance matrix |
 | Eigenmode | Palace | GeometryPlan, optional inductive ports | Mode frequency/native Q, energies; requested EPR |
-| Eigenmode | HFSS | `modeling="solid"` or `"thin_film"`; GDS mapping or source-first GeometryPlan | Mode frequency/native Q; requested EPR |
-| Driven Modal | HFSS | `modeling="solid"` or `"thin_film"`; GDS mapping and integration-line ports | Complex S-parameters, CSV and Touchstone |
-| Driven Terminal | HFSS | `modeling="solid"` or `"thin_film"`; GDS mapping and explicit reference conductors | Complex S-parameters, CSV and Touchstone |
-| Finite 3D extraction | Q3D | `modeling="solid"` or `"thin_film"`; `Q3dSpec` v3 bodies or GeometryPlan-backed C/G preparation | C/G and optional AC/RL extraction matrices |
+| Eigenmode | HFSS | `modeling="solid"` or `"thin_film"`; the SGB model of a GeometryPlan (`EigenmodeSim`, `prepare_hfss_eigenmode_from_geometry`) | Mode frequency/native Q; requested EPR |
+| Driven Terminal | HFSS | `modeling="solid"` or `"thin_film"`; the SGB model of a GeometryPlan with two `LumpedTerminalPort` port sheets (`prepare_hfss_driven_from_geometry`) | Complex S-parameters, CSV and Touchstone |
+| Finite 3D extraction | Q3D | `modeling="solid"` or `"thin_film"`; the SGB model of a GeometryPlan (`prepare_q3d_from_geometry`, C/G) | C/G extraction matrix |
 | Cross-section extraction | Q2D | Explicit rectangles and conductor groups | Per-unit-length C/G/L/R blocks |
 
 :::
 
 Every new Q3D and HFSS 3D request must select its modeling representation
-explicitly; there is no default. AEDT requests also require an explicit
+explicitly; there is no default. HFSS and Q3D import the STEP of the same SGB
+model Palace meshes; SCGSim builds no AEDT geometry itself. HFSS Driven Modal
+ports and Driven Terminal wave ports on a Region face have no realization on
+the SGB model yet: a request that declares one is refused, and they follow in
+[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135). Q3D extracts
+C/G only; AC/RL is designed again in
+[issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265). The GDS-import
+HFSS route (`gds_path`, `LayerImport`, `ObjectBinding`) is removed. AEDT requests also require an explicit
 `aedt_version` of `"2023.2"` or `"2024.2"`; both use PyAEDT 1.3.0, with the
 selected AEDT Desktop running on the same host as SCGSim. The table describes
 supported request families and intended returned quantities, not solver
@@ -70,9 +76,9 @@ the rows.
 
 ## Source and result differences
 
-GeometryPlan is shared by Palace, source-first HFSS Eigenmode and the Q3D C/G
-preparation frontend. Q3D also supports source-free v3 body authoring; Q2D
-takes cross-section facts, not an inferred slice. Shared source geometry does
+GeometryPlan is shared by Palace, HFSS Eigenmode, HFSS Driven Terminal and
+Q3D C/G: each solves the plan's SGB model. Q2D takes cross-section facts, not
+an inferred slice. Shared source geometry does
 not equalize boundary conditions or make lumped capacitance, resonance,
 S-parameters and per-length matrices interchangeable. Use each result's units
 and native conductor/port/mode order.

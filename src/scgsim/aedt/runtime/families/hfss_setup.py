@@ -16,28 +16,21 @@ from scgsim.aedt.runtime.native.common import (
     saved_setup_properties as _saved_setup_properties,
 )
 from scgsim.aedt.runtime.native.hfss_eigenmode import (
-    create_eigenmode_setup,
     read_eigenmode_setup,
 )
 from scgsim.aedt.specs.hfss import (
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
 
 
 def setup_hfss(hfss: Any, spec: HfssModelSpec) -> None:
-    """Create the explicit driven or eigenmode setup with its authored controls."""
-    if isinstance(spec, HfssEigenmodeSpec):
-        create_eigenmode_setup(hfss, spec.run_control)
-        return
+    """Create the explicit Driven Terminal setup and its sweep with their authored controls."""
     control = driven_control(spec)
     if hfss.setup_names:
         raise RuntimeError("new V1 design must not inherit a setup")
     setup = hfss.create_setup(control.setup_name)
-    setup.props["SolveType"] = (
-        "DrivenTerminal" if spec.mode == "terminal" else "DrivenModal"
-    )
+    setup.props["SolveType"] = "DrivenTerminal"
     if not setup.enable_adaptive_setup_broadband(
         f"{control.sweep.start_ghz}GHz",
         f"{control.sweep.stop_ghz}GHz",
@@ -80,9 +73,7 @@ def setup_hfss(hfss: Any, spec: HfssModelSpec) -> None:
 
 
 def read_hfss_setup(hfss: Any, spec: HfssModelSpec) -> dict[str, Any]:
-    """Compare the saved native HFSS setup with the explicit run controls."""
-    if isinstance(spec, HfssEigenmodeSpec):
-        return read_eigenmode_setup(hfss, spec.run_control)
+    """Compare the saved native Driven setup with the explicit run controls."""
     control = driven_control(spec)
     raw = _saved_setup_properties(hfss, control.setup_name)
     frequencies = raw.get("MultipleAdaptiveFreqsSetup")

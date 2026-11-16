@@ -1,17 +1,17 @@
-"""Own Q3D model preparation, solve and result orchestration."""
+"""Q3D on an imported SGB model: preparation, solving and the returned matrices."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
-from scgsim.aedt.io import file_sha256, read_json
-from scgsim.aedt.preparation.cohort import GEOMETRY_SOURCE_PATHS
+from scgsim.aedt.io import file_sha256
 from scgsim.aedt.results.convergence.q3d import read_q3d_convergence
 from scgsim.aedt.runtime.benchmark import attach_simulation_benchmark
 from scgsim.aedt.runtime.control import Q3dStopControl
 from scgsim.aedt.runtime.families.q3d_exports import export_q3d_matrices
+from scgsim.aedt.runtime.families.q3d_nets import assign_q3d_nets
 from scgsim.aedt.runtime.families.q3d_prepared import PreparedQ3d
 from scgsim.aedt.runtime.families.q3d_prepared import (
     prepared_q3d_result as prepared_q3d_result,
@@ -21,24 +21,18 @@ from scgsim.aedt.runtime.families.q3d_region import (
     seal_q3d_region,
 )
 from scgsim.aedt.runtime.families.q3d_setup import read_q3d_setup, setup_q3d
-from scgsim.aedt.runtime.families.q3d_terminals import (
-    assign_q3d_nets,
-    verify_saved_q3d_sheet_terminals,
-)
 from scgsim.aedt.runtime.families.q3d_termination import termination_q3d_result
+from scgsim.aedt.runtime.families.sgb_import import (
+    import_sgb_model,
+    imported_geometry_record,
+)
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
     detached_data,
-    realize_source_material,
-    source_material_properties,
-)
-from scgsim.aedt.runtime.native.common import (
-    create_region as _create_region,
 )
 from scgsim.aedt.runtime.native.common import (
     pyaedt_version as _pyaedt_version,
 )
-from scgsim.aedt.runtime.native.q3d_bodies import construct_q3d_bodies
 from scgsim.aedt.runtime.native.resources import analyze_with_resources
 from scgsim.aedt.specs.common import AedtResources
 from scgsim.aedt.specs.q3d import Q3dSpec
@@ -90,50 +84,14 @@ def run_q3d(  # noqa: PLR0913 -- family runner preserves transaction resource an
     )
 
 
-def source_material_bindings(
-    run_dir: Path, spec: Q3dSpec
-) -> dict[str, dict[str, Any]] | None:
-    """Select the transaction-verified stack's referenced non-PEC materials.
-
-    Validate all explicit same-name property bindings before writing any native
-    material. Optional missing properties do not conflict with supplied values.
-    """
-    if spec.geometry_source is None:
-        return None
-    catalog = read_json(run_dir / GEOMETRY_SOURCE_PATHS["stack"])["materials"]
-    referenced = {spec.vacuum_material_id} | {
-        body.material_id
-        for body in spec.bodies
-        if not spec.materials[body.material_id].is_superconducting
-    }
-    bindings: dict[str, dict[str, Any]] = {}
-    supplied: dict[str, dict[str, tuple[str, float]]] = {}
-    for material_id in sorted(referenced):
-        record = catalog[material_id]
-        native_name = cast(str, spec.materials[material_id].library_name)
-        properties = source_material_properties(record)
-        same_name = supplied.setdefault(native_name.casefold(), {})
-        for key, value in properties.items():
-            previous = same_name.get(key)
-            if previous is not None and previous[1] != value:
-                raise ValueError(
-                    f"Q3D source materials {previous[0]!r} and {material_id!r} "
-                    f"bind conflicting {key!r} values to native {native_name!r}"
-                )
-            same_name[key] = (material_id, value)
-        bindings[material_id] = {"record": record, "native_name": native_name}
-    return bindings
-
-
 def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
-    """Construct and read back the Q3D model before the explicit solve stage."""
+    """Import the request's SGB model, assign its Nets and terminals, set up, save and read back (no solve)."""
     request = BoundAedtRequest.bind(run_dir, spec)
     bound_spec = request.parse()
     if not isinstance(bound_spec, Q3dSpec):
         raise TypeError("bound Q3D request did not retain a Q3D spec")
     run_dir = request.workspace
     spec = bound_spec
-    source_bindings = source_material_bindings(run_dir, spec)
     project_path = run_dir / f"{spec.project_name}.aedt"
     app = Q3d(
         project=str(project_path),
@@ -142,27 +100,11 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
         close_on_exit=False,
     )
     app.modeler.model_units = "um"
-    material_realizations = (
-        {
-            material_id: realize_source_material(
-                app, material_id, binding["record"], native_name=binding["native_name"]
-            )
-            for material_id, binding in source_bindings.items()
-        }
-        if source_bindings is not None
-        else None
-    )
-    materials = construct_q3d_bodies(
-        app, spec, material_realizations=material_realizations
-    )
-    region = _create_region(app, spec)
-    if material_realizations is not None:
-        region["source_material_realization"] = material_realizations[
-            spec.vacuum_material_id
-        ]
+    geometry = imported_geometry_record(import_sgb_model(app, spec.model, family="q3d"))
     nets = assign_q3d_nets(app, spec)
+    region = dict(geometry["region"])
     if spec.grounded_region_net is not None:
-        grounded_region = seal_q3d_region(app, spec)
+        grounded_region = seal_q3d_region(app, spec, region["native_material"])
         region["native_region_object_id"] = grounded_region["native_region_object_id"]
         region["native_bounding_box_um"] = grounded_region["native_bounding_box_um"]
         region["grounded_region"] = grounded_region
@@ -170,7 +112,6 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
         setup_q3d(app, spec, spec.run_control)
     if not app.save_project() or not project_path.is_file():
         raise RuntimeError("Q3D project was not saved before solve")
-    verify_saved_q3d_sheet_terminals(app, nets)
     setup = (
         read_q3d_setup(app, spec, spec.run_control)
         if spec.run_control is not None
@@ -190,15 +131,7 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
             "method": "ValidateDesign",
             "ok": True,
         }
-    return PreparedQ3d(
-        app,
-        request,
-        project_path,
-        materials,
-        region,
-        nets,
-        setup,
-    )
+    return PreparedQ3d(app, request, project_path, geometry, region, nets, setup)
 
 
 def solve_q3d(
@@ -257,8 +190,9 @@ def export_q3d(prepared: PreparedQ3d) -> dict[str, Any]:
             "pyaedt_version": _pyaedt_version(),
         },
         "project": relative,
+        "geometry": detached_data(prepared.geometry),
+        "materials": detached_data(prepared.geometry["materials"]),
         "nets": detached_data(prepared.nets),
-        "materials": detached_data(prepared.materials),
         "region": region,
         "setup": detached_data(prepared.setup),
         "convergence": convergence,

@@ -44,7 +44,7 @@ The base package reads returned results. To prepare Palace runs, add an extra to
 uv add --extra palace scgsim
 ```
 
-Use `aedt`, `aedt-epr`, or `visualization` when you need those features. The extra is added to the existing Git dependency and keeps its configured source.
+Use `aedt`, `aedt-epr`, or `visualization` when you need those features. The extra is added to the existing Git dependency and keeps its configured source. `aedt` and `aedt-epr` include OCP (`cadquery-ocp-novtk`), the geometry kernel that writes the STEP file AEDT imports.
 
 ## Rebuild the environment on another computer
 

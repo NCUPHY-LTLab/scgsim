@@ -10,8 +10,6 @@ from scgsim.aedt.io import file_sha256
 from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
@@ -30,6 +28,7 @@ def record_result_before_release(
             "outputs",
             "connected",
             "project",
+            "geometry",
             "materials",
             "region",
             "nets",
@@ -46,8 +45,6 @@ def record_result_before_release(
                 Q3dSpec,
                 Q2dSpec,
                 HfssDrivenGeometrySpec,
-                HfssDrivenSpec,
-                HfssEigenmodeSpec,
             ),
         )
         and result.get("solver_invoked") is False
@@ -63,7 +60,7 @@ def record_result_before_release(
             "solver_invoked",
         ):
             receipt[name] = result[name]
-        for name in ("nets", "ports", "conductors", "mesh", "geometry"):
+        for name in ("nets", "ports", "conductors", "geometry"):
             if name in result:
                 receipt[name] = result[name]
     elif isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec)):

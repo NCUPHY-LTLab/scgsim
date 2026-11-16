@@ -447,8 +447,8 @@ class PhysicalRepresentationPlan:
             if not low <= z <= high:
                 raise ValueError(
                     Declared(
-                        "lumped support contact",
-                        "the LumpedSupport passed to GeometryPlan.set_lumped_supports",
+                        "layer-bound contact",
+                        "the port sheet or junction that binds it to its film",
                     ).expected(
                         "source plane",
                         f"inside its bound film {contact_physical_layer_id!r}, "

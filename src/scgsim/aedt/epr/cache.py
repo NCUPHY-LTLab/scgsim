@@ -15,7 +15,6 @@ from scgsim.aedt.epr.cache_config import (
 )
 from scgsim.aedt.epr.evidence import SavedCacheEvidence
 from scgsim.aedt.epr.expression_authoring import author_epr_expressions
-from scgsim.aedt.runtime.native.common import detached_data
 from scgsim.aedt.runtime.native.hfss_eigenmode import (
     submit_eigenmode_cache,
 )
@@ -58,9 +57,6 @@ def _submit_epr_cache(
         "items": items,
         "source_assignment": authoring["source_assignment"],
         "postprocessing_variables": authoring["postprocessing_variables"],
-        "native_surface_references": detached_data(
-            authoring["native_surface_references"]
-        ),
         "native_readback": {
             "status": "PENDING_SAVED_SETUP_READBACK",
             "reason": (
@@ -76,18 +72,11 @@ def prepare_expressions_and_cache(
     app: Any,
     run_dir: Path,
     spec: HfssEprSpec,
-    native_geometry: dict[str, Any],
-    inset_plan: dict[tuple[str, float], dict[str, Any]] | None,
+    geometry: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     """Author the prepared library before submitting its solve-time cache request."""
-    if inset_plan is None:
-        raise RuntimeError("EPR inset geometry must be precomputed before Desktop")
     expressions, authoring, phase_timings = author_epr_expressions(
-        app,
-        run_dir,
-        spec,
-        native_geometry,
-        inset_plan,
+        app, run_dir, spec, geometry
     )
     started = time.perf_counter()
     cache = _submit_epr_cache(app, spec, expressions, authoring)

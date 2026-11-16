@@ -85,8 +85,12 @@ def test_input_summary_refuses_a_model_with_no_vacuum(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
-def test_simulation_drc_adds_its_vacuum(monkeypatch, simulation):
-    """``simulation_drc`` on a layout with no vacuum of its own still passes: it adds its default vacuum first."""
+def test_simulation_drc_adds_no_vacuum_of_its_own(monkeypatch, simulation):
+    """``simulation_drc`` on a plan with no vacuum is refused as ``mesh()`` refuses it (Issue #266); with the plan's vacuum it passes."""
     component = two_pads(monkeypatch, gap_um=10.0, port=True)
 
+    with pytest.raises(ValueError, match="the model: has no vacuum region"):
+        check(
+            simulation, component, layer_stack=NO_VACUUM_STACK, vacuum_padding_um=None
+        )
     assert check(simulation, component, layer_stack=NO_VACUUM_STACK).passed

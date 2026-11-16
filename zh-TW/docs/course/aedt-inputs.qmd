@@ -1,68 +1,48 @@
 ---
 lang: zh-TW
 title: "AEDT 分支：準備公開 CPW 輸入"
-description: "準備一般 HFSS 教學使用的明確 GDS 與 PDK 對應。"
+description: "把公開 CPW 準備成 GeometryPlan 快照；每一堂 AEDT 教學都從它建立 SGB 模型。"
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/course/aedt-inputs"
 ---
 
-完成[安裝](installation.qmd)後，使用此分支進行一般 HFSS Eigenmode 與 Driven Modal／Terminal。這些模型會直接匯入 GDS，並明確綁定圖層與物件；它們不會自動使用 Xmon GeometryPlan 或其 EPR 目錄。目前的 Q3D 使用 [Q3D 教學](aedt-q3d.qmd)所述的 v3 實體輸入，而非此 GDS 匯入對應；有來源依據的 Q3D 準備流程使用獨立的 GeometryPlan 前端。Q2D 則有專屬的[橫截面教學](aedt-q2d.qmd)。
+每一個 3D AEDT 模型（HFSS Eigenmode、HFSS Driven Terminal 與 Q3D）求解的都是 `GeometryPlan` 快照的 SGB 模型，也就是 Palace 網格化的同一個模型。本頁在[安裝](installation.qmd)之後，為公開的有限接地 CPW 準備這個快照。Q2D 求解 2D 橫截面，有專屬的[橫截面教學](aedt-q2d.qmd)。
 
-公開樣本與可執行 Notebook 來源屬於 [OrPen 固定版本的 CPW 群組](../examples.qmd#public-inputs)。其中 CPW 長 500 µm，訊號寬 10 µm、間隙 6 µm、接地寬 80 µm，基板厚 500 µm。這些是範例設計輸入，不是量測所得的元件幾何，也不是通用求解器設定。GDS 包含三個金屬矩形與基板區域；PDK 提供圖層配對及材料／函式庫資訊。這些教學沿用 PDK CPW Driven 來源中的 Nb 導體；同一版本的 CPW Eigenmode 與 Q3D 筆記本則改用 100 nm 的 Al 薄膜。
+這個 CPW 是 OrPen 的 `finite_ground_cpw_coupon`，來自[固定版本的 CPW 群組](../examples.qmd#public-inputs)：長 500 µm，訊號寬 10 µm、間隙 6 µm，兩條接地各寬 80 µm，位於 D0 基板上。這些是範例設計輸入，不是量測所得的元件幾何，也不是通用求解器設定。PDK 提供多邊形、其 Entity（`SIGNAL`、`GROUND_PLUS`、`GROUND_MINUS`）、單晶片層疊（500 µm Si 基板，其上為 100 nm Al 的 `D0_TOP_M1` 薄膜）與材料紀錄；SCGSim 不保留這些事實的第二份副本。
 
-![公開有限接地 CPW 的來源幾何：基板、中央訊號線、兩條接地帶及 Modal 積分線位置。此圖呈現宣告的版圖，不是求解結果。](../assets/cpw-source.svg){#fig-public-cpw-source}
+![公開有限接地 CPW 的來源幾何：基板、中央訊號線與兩條接地帶。圖中也標出 Driven Modal 積分線曾經的位置；Driven Modal 等待 issue #135。此圖呈現宣告的版圖，不是求解結果。](../assets/cpw-source.svg){#fig-public-cpw-source}
 
-## 建立共用來源與對應 {#make-the-shared-source-and-mapping}
+## 建立 CPW 計畫 {#make-the-cpw-plan}
 
 ```python
-from pathlib import Path
-import gdsfactory as gf
 import orcapen_sc_pdk
-from orcapen_sc_pdk.tech import LAYER
-from orcapen_sc_pdk.materials import get_material_records
-from scgsim.aedt import LayerImport, ObjectBinding, PdkMaterial
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.cells import finite_ground_cpw_coupon
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
 
 orcapen_sc_pdk.activate()
-coupon = gf.Component()
-coupon << gf.components.rectangle(size=(500.0, 10.0), centered=True,
-                                  layer=LAYER.D0_TOP_M1_DRAW)
-upper = coupon << gf.components.rectangle(size=(500.0, 80.0), centered=True,
-                                          layer=LAYER.D0_TOP_M1_DRAW)
-upper.movey(51.0)
-lower = coupon << gf.components.rectangle(size=(500.0, 80.0), centered=True,
-                                          layer=LAYER.D0_TOP_M1_DRAW)
-lower.movey(-51.0)
-coupon << gf.components.rectangle(size=(500.0, 182.0), centered=True,
-                                  layer=LAYER.D0_SUBSTRATE_AREA)
-source_gds = Path(".artifacts/public-cpw-source/cpw.gds")
-source_gds.parent.mkdir(parents=True, exist_ok=True)
-coupon.write_gds(source_gds, with_metadata=False)
-
-records = get_material_records()
-materials = {
-    name: PdkMaterial(name, records[name]["material_kind"],
-                      records[name]["is_superconducting"],
-                      records[name]["aedt_library_name"])
-    for name in ("vacuum", "Si", "Nb")
-}
-layer_imports = (
-    LayerImport(1, 0, "D0_TOP_M1", 0.0, 0.0),
-    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
+plan = GeometryPlan(
+    finite_ground_cpw_coupon(),
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
 )
-object_bindings = (
-    ObjectBinding("D0_TOP_M1_1", 1, "signal", "Nb"),
-    ObjectBinding("D0_TOP_M1_2", 1, "ground", "Nb"),
-    ObjectBinding("D0_TOP_M1_3", 1, "ground", "Nb"),
-    ObjectBinding("D0_SUBSTRATE_4", 201, "substrate", "Si"),
-)
-ground_objects = ("D0_TOP_M1_2", "D0_TOP_M1_3")
+plan.set_nets({
+    "signal": ("chip/SIGNAL",),
+    "ground": ("chip/GROUND_PLUS", "chip/GROUND_MINUS"),
+})
+plan.set_vacuum_region(padding=(100.0, 100.0, 1000.0))
+snapshot = plan.prepare()
 ```
 
-宣告的匯入物件名稱依照此固定樣本及匯入順序排列；SCGSim 後續要求原生讀回名稱完全相符，不會根據相似名稱推測語意。此處金屬 Z 厚度為零，表示 HFSS 薄片。此對應不會自動轉換成 Q3D 實體。即使超導近似會降階為 PEC，材料識別仍是 Nb。Si 與真空使用 PDK 中確切的 AEDT 函式庫名稱；SCGSim 不會自行建立其材料性質。
+每個呼叫決定的內容：
 
-請一起檢視 `layer_imports` 與 `object_bindings`。綁定中的 role 會告訴模型哪個匯入導體是訊號或接地，而 `material_id` 保留 PDK 來源資訊。每組 GDS layer/datatype 都必須符合宣告的匯入項目。檢視試片只是在觀察來源；實際原生物件類型、材料與指派會於執行時讀回。
+- `root_id="chip"` 為試片的 Entity ID 加上範圍，所以訊號線是 `chip/SIGNAL`。Net 對應使用這些完整 ID；它是研究者的選擇，不是 PDK 的。
+- `get_single_die_layer_stack()` 只選取 D0 基板與上層金屬，沒有上方晶片。`coupon_padding_um=0.0` 讓基板維持試片本身 500 µm × 182 µm 的範圍。
+- `set_vacuum_region(padding=(x, y, z))` 設定模型外圍的 Region：X 與 Y 每側 100 µm，上下各 1000 µm。每個 AEDT 模型都照原樣使用這個 Region，不會自行增加補距。
+- `plan.prepare()` 回傳不可變的 `snapshot`：`snapshot.geometry_input` 保存完整的 Entity 與多邊形，`snapshot.stack` 則是分離的層疊。準備它只確立來源身分，不會建立模型，也不會開啟 AEDT。
 
-原生六面補距順序為 `(+X, -X, +Y, -Y, +Z, -Z)`，與 PyAEDT 相同。此順序不同於 Q2D 的四值順序。請依規格文件所列順序設定，不要複製其他模型的註解。
-
-在 HFSS 分支中保留 `source_gds`、`materials`、`layer_imports`、`object_bindings` 與 `ground_objects`。接著閱讀[一般 Eigenmode](aedt-eigenmode.qmd)、[Driven Modal](aedt-driven-modal.qmd)或 [Driven Terminal](aedt-driven-terminal.qmd)。Q3D 請使用獨立的 body-backed input-v3 教學。此共用教學不建立元件 Notebook；消費端工作流程以 OrPen 的標準 Notebook 為來源依據。
+請在此工作階段保留 `snapshot`。接著閱讀 [HFSS Eigenmode](aedt-eigenmode.qmd) 或 [Q3D](aedt-q3d.qmd)，兩者都直接使用它。[Driven Terminal](aedt-driven-terminal.qmd) 需要在每個埠處另有集總埠薄片的版圖；此試片沒有。消費端工作流程以 OrPen 的標準 Notebook 為來源依據；本教學不建立元件 Notebook。

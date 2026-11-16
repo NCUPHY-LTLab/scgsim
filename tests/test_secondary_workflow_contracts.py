@@ -18,9 +18,6 @@ from scgsim.aedt import (
     Q2dConductorSpec,
     Q2dRectangleSpec,
     Q2dSpec,
-    Q3dBodySpec,
-    Q3dNetSpec,
-    Q3dSpec,
     parse_aedt_spec,
 )
 from scgsim.geometry import ApproximationProfile
@@ -81,104 +78,6 @@ def test_q2d_public_request_roundtrip_preserves_caller_values(tmp_path, version)
     )
     assert tuple(item.to_payload() for item in restored.conductors) == tuple(
         item.to_payload() for item in conductors
-    )
-
-
-def _q3d_bodies():
-    # The public CPW lesson provides the four finite outlines and Z spans in um.
-    return (
-        Q3dBodySpec(
-            "signal",
-            ((-250.0, -5.0), (250.0, -5.0), (250.0, 5.0), (-250.0, 5.0)),
-            (),
-            0.0,
-            0.2,
-            "metal",
-            "signal",
-            "Signal",
-        ),
-        Q3dBodySpec(
-            "ground_upper",
-            ((-250.0, 11.0), (250.0, 11.0), (250.0, 91.0), (-250.0, 91.0)),
-            (),
-            0.0,
-            0.2,
-            "metal",
-            "ground",
-            "Ground",
-        ),
-        Q3dBodySpec(
-            "ground_lower",
-            ((-250.0, -91.0), (250.0, -91.0), (250.0, -11.0), (-250.0, -11.0)),
-            (),
-            0.0,
-            0.2,
-            "metal",
-            "ground",
-            "Ground",
-        ),
-        Q3dBodySpec(
-            "substrate",
-            ((-250.0, -91.0), (250.0, -91.0), (250.0, 91.0), (-250.0, 91.0)),
-            (),
-            -500.0,
-            0.0,
-            "silicon",
-            "substrate",
-            None,
-        ),
-    )
-
-
-@pytest.mark.parametrize("version", VERSIONS)
-@pytest.mark.parametrize("model_only", (False, True))
-def test_q3d_public_request_roundtrip_preserves_explicit_stage(
-    tmp_path, version, model_only
-):
-    """Keep the Q3D model-only choice and explicit solve controls after decoding."""
-    control = (
-        None
-        if model_only
-        else MatrixRunControl(
-            "Setup1",
-            frequency_ghz=6.0,
-            maximum_passes=3,
-            convergence_percent=1.0,
-            minimum_passes=1,
-            minimum_converged_passes=1,
-            percent_refinement=30.0,
-        )
-    )
-    bodies = _q3d_bodies()
-    nets = (
-        Q3dNetSpec("Signal", "Signal", ("signal",), "signal", "-X", "signal", "+X"),
-        Q3dNetSpec("Ground", "Ground", ("ground_upper", "ground_lower")),
-    )
-    request = Q3dSpec(
-        aedt_version=version,
-        modeling="solid",
-        project_name="CodecQ3d",
-        design_name="Q3DDesign1",
-        materials=_materials(),
-        vacuum_material_id="vacuum",
-        bodies=bodies,
-        nets=nets,
-        run_control=control,
-        solve_ac_rl=True,
-        region_padding_um=(0.0, 0.0, 100.0, 100.0, 1000.0, 1000.0),
-    )
-    payload = json.loads(json.dumps(request.to_payload()))
-    restored = parse_aedt_spec(payload, base_dir=tmp_path)
-    assert isinstance(restored, Q3dSpec)
-    assert restored.to_payload() == payload
-    assert (restored.aedt_version, restored.modeling) == (version, "solid")
-    assert restored.run_control == control
-    assert restored.solve_ac_rl is True
-    assert tuple(item.to_payload() for item in restored.bodies) == tuple(
-        item.to_payload() for item in bodies
-    )
-    assert tuple(item.to_payload() for item in restored.nets) == tuple(
-        item.to_payload() for item in nets
     )
 
 

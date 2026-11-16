@@ -19,7 +19,9 @@ AEDT.  What E4 measured and this module applies:
   (:mod:`~scgsim.geometry.sgb.output.exchange.guard`): per solid its faces in that order with area, centre of mass,
   vertices and a curved flag, bound to the STEP, BREP/XAO and sidecar by SHA-256.  The importer reads it
   again every time and fails closed.
-* **Free faces** (faces no exported solid carries) cannot travel in STEP at micrometre scale; the guard
+* **No vacuum, no Route B.** AEDT creates its own Region, so the vacuum solid is not exported; a Route B
+  model has no conductor solids and is refused (AEDT realises Route B as the Route C model).
+* **Free faces** (sheet and port faces no exported solid carries) cannot travel in STEP at micrometre scale; the guard
   records their loops from the written BREP so the importer rebuilds them from SGB output.
 """
 
@@ -70,6 +72,7 @@ from scgsim.geometry.sgb.output.exchange.guard import (
     LoopSegment,
     SolidGuard,
     StepGuard,
+    exported_solid_ids,
     free_face_ids,
     guard_mismatches,
     guard_model,
@@ -85,6 +88,10 @@ LENGTH_UNIT = (
     "UM"  # the label of the written numbers; the numbers themselves are micrometres
 )
 ASSEMBLY_NAME = "SGB_MODEL"
+AEDT_ROUTES = (
+    "A",
+    "C",
+)  # Route B is realised in AEDT as the Route C model of the same input
 
 
 class StepExportError(SgbError):
@@ -118,9 +125,11 @@ class StepExport:
 def export_aedt_step(
     geometry_file: Path, sidecar_file: Path, step_path: Path
 ) -> StepExport:
-    """Write the solids of ``geometry_file`` (BREP or XAO) as a named STEP assembly in micrometres, and its guard.
+    """Write the non-vacuum solids of ``geometry_file`` (BREP or XAO) as a named STEP assembly in micrometres, and its guard.
 
-    Solids are matched to the sidecar in ``sidecar_file`` by tag order (the ``TopExp::MapShapes`` order of
+    AEDT models Route A (sheets) and Route C (conductor solids); a Route B model has no conductor solids, so
+    its metal faces would land on no imported object, and is refused.  The vacuum is not exported: AEDT
+    creates its own Region from the same vacuum declaration.  Solids are matched to the sidecar in ``sidecar_file`` by tag order (the ``TopExp::MapShapes`` order of
     the file), so each gets the ``aedt_name`` of its planned volume.  A file that does not belong to the
     sidecar (counts, vertex positions, face areas or solid volumes differ from its load-side view) raises
     :class:`StepExportError` before any name, STEP or guard is written, and so does a file whose solids do
@@ -135,17 +144,23 @@ def export_aedt_step(
     """
     require_ocp()
     sidecar = read_sidecar(sidecar_file)
+    if sidecar["model"]["route"] not in AEDT_ROUTES:
+        raise StepExportError(
+            f"AEDT imports Route A or Route C models, not Route {sidecar['model']['route']}; "
+            "build the Route C model of the same input for solid conductors"
+        )
     shape = read_shape(geometry_file)
     _check_belongs(shape, sidecar, geometry_file, sidecar_file)
     solids = _indexed(shape, TopAbs_SOLID)
     faces = _FaceIndex(
         _indexed(shape, TopAbs_FACE), sidecar["binding"]["ids_by_tag"]["2"]
     )
-    solid_guards = _solid_guards(sidecar, solids, faces)
-    free_faces = _free_faces(sidecar, faces)
+    exported = _exported_solids(sidecar)  # (tag, planned id) of every non-vacuum solid
+    solid_guards = _solid_guards(sidecar, solids, faces, exported)
+    free_faces = _free_faces(sidecar, faces, [vid for _, vid in exported])
     _check_planned_faces(solid_guards, free_faces, sidecar, geometry_file)
     _write_assembly(
-        [solids.FindKey(i + 1) for i in range(solids.Extent())],
+        [solids.FindKey(tag) for tag, _ in exported],
         [solid["aedt_name"] for solid in solid_guards],
         step_path,
     )
@@ -167,6 +182,15 @@ def export_aedt_step(
     return StepExport(step_path, guard_path, guard)
 
 
+def _exported_solids(sidecar: Sidecar) -> list[tuple[int, str]]:
+    """``(native tag, planned id)`` of every solid AEDT imports (:func:`exported_solid_ids`), in tag order."""
+    tag_of = {
+        vid: tag
+        for tag, vid in enumerate(sidecar["binding"]["ids_by_tag"]["3"], start=1)
+    }
+    return [(tag_of[vid], vid) for vid in exported_solid_ids(sidecar)]
+
+
 def _check_belongs(
     shape: Any, sidecar: Sidecar, geometry_file: Path, sidecar_file: Path
 ) -> None:
@@ -180,22 +204,25 @@ def _check_belongs(
         )
 
 
-def _solid_guards(sidecar: Sidecar, solids: Any, faces: _FaceIndex) -> list[SolidGuard]:
-    """Each written solid in tag order: its planned volume, its AEDT name and the guards of its faces."""
-    solid_ids = sidecar["binding"]["ids_by_tag"]["3"]
+def _solid_guards(
+    sidecar: Sidecar, solids: Any, faces: _FaceIndex, exported: list[tuple[int, str]]
+) -> list[SolidGuard]:
+    """Each exported solid in tag order: its planned volume, its AEDT name and the guards of its faces."""
     return [
         {
             "solid": vid,
             "aedt_name": _aedt_name(sidecar, vid),
-            "faces": [faces.guard(f) for f in _faces_of(solids.FindKey(i + 1))],
+            "faces": [faces.guard(f) for f in _faces_of(solids.FindKey(tag))],
         }
-        for i, vid in enumerate(solid_ids)
+        for tag, vid in exported
     ]
 
 
-def _free_faces(sidecar: Sidecar, faces: _FaceIndex) -> list[FreeFace]:
-    """The guards of the written faces no solid bounds, in tag order."""
-    free_ids = set(free_face_ids(sidecar, sidecar["binding"]["ids_by_tag"]["3"]))
+def _free_faces(
+    sidecar: Sidecar, faces: _FaceIndex, solid_ids: list[str]
+) -> list[FreeFace]:
+    """The guards of the sheet and port faces no exported solid bounds, in tag order."""
+    free_ids = set(free_face_ids(sidecar, solid_ids))
     return [
         faces.free_face(face, sidecar["face"][fid]["group"])
         for face, fid in faces.in_tag_order()

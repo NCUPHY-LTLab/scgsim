@@ -9,8 +9,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from scgsim.aedt.epr.models import EprResult
-from scgsim.aedt.epr.selection import finite_value
-from scgsim.aedt.epr.surface import surface_energy_j
+from scgsim.aedt.epr.surface import finite_value, surface_energy_j
 from scgsim.semantics.epr import (
     FilmAssumptions,
     FilmUpdate,

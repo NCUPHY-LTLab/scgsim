@@ -7,81 +7,64 @@ scgsim-id: "docs/course/aedt-eigenmode"
 ---
 
 For a complete mode workflow, use a PDK notebook from [Choose a simulation](../examples.qmd#getting-started).
-This backend reference continues from [CPW inputs](aedt-inputs.qmd). Ordinary
-HFSS Eigenmode has no driven excitation ports. It searches for the requested modes
-using an explicit adaptive setup; it does not create a source-first Surface-EPR
-catalogue or saved-field analysis request merely because its name is Eigenmode.
-The Eigenmode API can include a generic linear RLC model element through
-`EigenmodeSim.add_lumped_rlc()`. This is distinct from a Josephson junction:
-it does not create a `PlanarJunction`, junction participation, or an EPR
-contribution. The loads are stored in `PreparedPlanarGeometry.lumped_rlcs`;
-`HfssEprSpec` projects the prepared values without becoming a second editable
-source. The EPR junction contract remains separate.
-The inputs page's equal-Z M1 mapping is a historical sheet request. This
-current Thin Film example adds the CPW source owner's explicit `NB_FILM`
-interval and lower contact side, preserving the existing sheet plane without
-claiming that c997 embeds this declaration.
+This backend reference continues from [CPW inputs](aedt-inputs.qmd), with its
+`snapshot`. Ordinary HFSS Eigenmode has no driven excitation ports: it searches
+for the requested modes with an explicit adaptive setup. `EigenmodeSim` builds
+the snapshot's SGB model and writes a handoff that carries it; the run imports
+the model's STEP into an empty Eigenmode design. A mode search alone requests
+no Surface EPR and no saved-field analysis.
 
 ```python
 from pathlib import Path
-from scgsim.aedt import (
-    EigenmodeRunControl, HfssEigenmodeSpec, LayerImport,
-    prepare_handoff,
-)
-from scgsim.geometry import PhysicalLayerDeclaration
+from scgsim.aedt import EigenmodeRunControl, EigenmodeSim
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
-metal_thickness_um = 0.2
-physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerDeclaration(
-    physical_layer_id=physical_layer_id,
-    source_level_id="D0_TOP_M1",
-    source_level_and_gds_pair={"layer": 1, "datatype": 0},
-    source_interval_um=(0.0, metal_thickness_um),
-    material_id="Nb",
-    feature_kind="stack_film",
-    physical_dimensions={"normal_thickness_um": metal_thickness_um},
-    source_contact_facts={"layer_attachment_face": "lower"},
-)
-layer_imports = (
-    LayerImport(
-        1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
-        physical_layer_id=physical_layer_id,
-    ),
-    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
-)
-
-spec = HfssEigenmodeSpec(
-    aedt_version=AEDT_VERSION,
-    modeling="thin_film",
-    gds_path=source_gds,
+sim = EigenmodeSim(modeling="thin_film", aedt_version=AEDT_VERSION)
+sim.set_plan(snapshot)
+sim.set_output_dir(Path(".artifacts/public-cpw-eigenmode"))
+sim.set_eigenmode(
     project_name="public_cpw_eigenmode",
     design_name="CpwFiniteGroundEigenmode",
-    materials=materials,
-    vacuum_material_id="vacuum",
-    layer_imports=layer_imports,
-    physical_layers=(physical_layer,),
-    object_bindings=object_bindings,
     run_control=EigenmodeRunControl(
         setup_name="Setup1", minimum_frequency_ghz=3.0, num_modes=2,
         maximum_passes=6, maximum_delta_frequency_percent=5.0,
     ),
-    region_padding_um=(100.0, 100.0, 100.0, 100.0, 1000.0, 1000.0),
 )
-handoff = prepare_handoff(
-    spec=spec, output_dir=Path(".artifacts/public-cpw-eigenmode")
-)
+handoff = sim.prepare_handoff()
 print(handoff.spec_path, handoff.archive_path)
 ```
+
+What the call does with its inputs:
+
+- `modeling="thin_film"` builds each conductor as a sheet on its film's face
+  (SGB Route A); `"solid"` builds it as a solid of the film's thickness
+  (Route C). The film is the stack's 100 nm Al.
+- The materials are the stack's records. The Region is the plan's
+  `set_vacuum_region(...)`, with the vacuum's material.
+- `prepare_handoff()` writes `aedt_spec.json`, the model's STEP, BREP, sidecar
+  and guard in the handoff's `model/` folder, and the archive. It opens no
+  Desktop.
+
+Before preparing, `EigenmodeSim.simulation_drc(plan, modeling=...)`, given the
+`GeometryPlan` before `prepare()`, checks without AEDT that the plan's model
+builds and imports on the route
+`modeling` realizes; see
+[the AEDT Eigenmode check](../layout-modeling-check.qmd#aedt-eigenmode-check).
+
+A generic linear RLC on a port sheet is `EigenmodeSim.add_lumped_rlc()`: each
+load names the port sheet it sits on (`port_sheet_id`) and is stored in the
+model's `lumped_rlcs`. It is distinct from a Josephson junction: it creates no
+`PlanarJunction`, no junction participation and no EPR contribution. The
+CPW coupon has no port sheet, so this example declares none.
 
 The public CPW example supplies these search/pass values. They are request
 controls, not a promised mode frequency or a universal SCQ sufficiency rule.
 Keep the actual controls and any changes in the Notebook. On return, read the
 requested mode and its available changes for the
 [intended research use](returned-results.qmd#interpret-for-scq-use); retain
-native convergence status without treating it as the research conclusion. The Region encloses the model in the six-face native order described
-in the input lesson. Review the serialized spec and copied source before
-[explicit host execution](execute.qmd). Preparing the package opens no Desktop.
+native convergence status without treating it as the research conclusion.
+Review the serialized spec and the copied model before
+[explicit host execution](execute.qmd).
 
 After [return and strict resolution](returned-results.qmd), the normalized
 `eigenmodes.csv` retains ordered mode index, real `frequency_ghz` and native

@@ -5,7 +5,9 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from test_aedt_q3d_sgb import junction_q3d_spec
 
+from scgsim.aedt.preparation.sgb_handoff import attach_sgb_model
 from scgsim.aedt.results import provenance
 from scgsim.aedt.results.runtime_inventory import current_runtime_source_paths
 from scgsim.aedt.runtime import control
@@ -13,38 +15,6 @@ from scgsim.aedt.runtime.desktop_lifecycle import release_owned_desktop
 from scgsim.aedt.runtime.families import q3d, q3d_prepared, q3d_termination
 from scgsim.aedt.runtime.native.common import BoundAedtRequest
 from scgsim.aedt.runtime.native.resources import analyze_with_resources
-from scgsim.aedt.specs.common import MatrixRunControl, PdkMaterial
-from scgsim.aedt.specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec
-
-
-def _spec(version="2024.2"):
-    return Q3dSpec(
-        project_name="Stopped",
-        design_name="Design",
-        aedt_version=version,
-        modeling="solid",
-        materials={
-            "vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum"),
-            "metal": PdkMaterial("metal", "superconductor", True, None),
-        },
-        vacuum_material_id="vacuum",
-        bodies=(
-            Q3dBodySpec(
-                "pad",
-                ((0, 0), (2, 0), (2, 2), (0, 2)),
-                (),
-                0,
-                1,
-                "metal",
-                "signal",
-                "Signal",
-            ),
-        ),
-        nets=(Q3dNetSpec("Signal", "Signal", ("pad",)),),
-        run_control=MatrixRunControl("Setup1", 1.0, 3),
-        solve_ac_rl=False,
-        region_padding_um=(1, 1, 1, 1, 1, 1),
-    )
 
 
 @pytest.fixture
@@ -60,7 +30,7 @@ def stored_control(tmp_path, monkeypatch):
         "spec_sha256": "b" * 64,
         "manifest_sha256": "c" * 64,
     }
-    spec = _spec()
+    spec = junction_q3d_spec()
     monkeypatch.setattr(control, "_inputs", lambda path: (inputs, spec))
     monkeypatch.setattr(control, "record_runtime_source", lambda stage: source)
     (metadata.parent / "aedt_run_receipt.json").write_text(
@@ -147,7 +117,8 @@ def test_native_identity_rejects_wrong_endpoint_before_project_access(
 
 
 def _prepared(tmp_path, monkeypatch, save):
-    spec = _spec()
+    spec = junction_q3d_spec()
+    attach_sgb_model(spec.model, tmp_path)
     monkeypatch.setattr(q3d_prepared, "_pyaedt_version", lambda: "1.3.0")
     project = tmp_path / "Stopped.aedt"
     project.write_bytes(b"older preparation bytes")
@@ -155,7 +126,13 @@ def _prepared(tmp_path, monkeypatch, save):
         save_project=save, desktop_class=SimpleNamespace(aedt_version_id="2024.2")
     )
     return q3d.PreparedQ3d(
-        app, BoundAedtRequest.bind(tmp_path, spec), project, [], {}, [], {}
+        app,
+        BoundAedtRequest.bind(tmp_path, spec),
+        project,
+        {"materials": []},
+        {},
+        [],
+        {},
     )
 
 

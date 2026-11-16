@@ -142,13 +142,13 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 | 由互相接觸的幾何推斷 Net | 以 `set_nets` 宣告每個 Net。 |
 | 展開陣列參照 | 註冊之前先展開成個別參照。 |
 | 在 Palace 模擬中使用 Route C | 使用 Route A 或 Route B。SGB 為保留導體體積的後端建構 Route C；見 [GeometryPlan 與 SGB](geometry-sgb.qmd)。 |
-| 以 `simulation_drc` 檢查 AEDT 模型 | 此檢查只涵蓋 Palace 的建構；見[版圖建模檢查](layout-modeling-check.qmd)。 |
+| 以 `simulation_drc` 檢查 HFSS Driven Terminal 或 Q3D 模型 | 它們沒有模擬類別；`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 會在 AEDT 啟動前拒絕匯入無法實現的模型。見[該執行哪個檢查](layout-modeling-check.qmd#which-check-to-run)。 |
 
 ## 模擬之前先檢查版圖 {#check-a-layout}
 
-請在版圖的測試中、以及繪圖過程中，呼叫 `EigenmodeSim.simulation_drc`、`ElectrostaticSim.simulation_drc`，或兩者都呼叫。每個檢查都在您傳入的 route 上、以您的 Net 與 Surface-EPR 邊距，執行該類別 `mesh()` 所執行的規劃與幾何建構，再執行 `mesh()` 也會先執行的網格階段檢查，並拋出相同的錯誤。route 為 Route A 或 Route B，以 `set_route` 接受的方式傳入（`route` 與 `approximation_profile`），未傳入時為 Route B。呼叫方式見[版圖建模檢查](layout-modeling-check.qmd)。
+請在版圖的測試中、以及繪圖過程中，以模擬將拿到的 `GeometryPlan`，呼叫版圖所要用的每個模擬的檢查（[該執行哪個檢查](layout-modeling-check.qmd#which-check-to-run)）。每個 Palace 檢查都在您傳入的 route 上、以您的 Surface-EPR 邊距，對該計畫執行該類別 `mesh()` 所執行的幾何建構，再執行 `mesh()` 也會先執行的網格階段檢查，並拋出相同的錯誤。route 為 Route A 或 Route B，以 `set_route` 接受的方式傳入（`route` 與 `approximation_profile`），未傳入時為 Route B。呼叫方式見[版圖建模檢查](layout-modeling-check.qmd)。
 
-通過檢查表示這次檢查所建的模型被接受：您傳入的 route 與近似設定、Net 與邊距，以及[檢查使用的設定](layout-modeling-check.qmd#what-the-check-uses)所列的固定設定。它只確立這次建構實際檢查過的規則：
+通過檢查表示這次檢查所建的模型被接受：計畫、您傳入的 route、近似設定與邊距，以及[檢查使用的設定](layout-modeling-check.qmd#what-the-check-uses)所列的設定。它只確立這次建構實際檢查過的規則：
 
 - [埠的規則](#rules-ports)只由 `EigenmodeSim.simulation_drc` 檢查。`ElectrostaticSim` 不選用埠薄片，所以它的檢查不會測到埠的規則。
 
@@ -164,7 +164,7 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 | `ValueError`「… topology changed at grid」或「… contact changed at grid」 | 版圖 | 有頸部、縫隙、孔洞或狹縫等於或小於一個格點間距。在圖面上把它加寬或封閉。 |
 | `UnsupportedCurveError` | 版圖 | 以線段與圓弧宣告曲線，或把它畫成多邊形。 |
 | `ValidationError`「the inset curve … is not closed near (x, y)」 | SCGSim | 該點附近兩條相鄰的條帶偏移既不相接也不相交。請把版圖回報給 SCGSim。 |
-| 不同 Net 之間的 `ContactError` 或 `OverlapError` | 版圖，或 Net 宣告 | 若兩個導體應為同一導體，就把它們放進同一個 Net；否則在圖面上把它們分開，間距大於一個格點間距。使用 `simulation_drc` 時，傳入模擬所用的 `nets`。 |
+| 不同 Net 之間的 `ContactError` 或 `OverlapError` | 版圖，或 Net 宣告 | 若兩個導體應為同一導體，就把它們放進同一個 Net；否則在圖面上把它們分開，間距大於一個格點間距。請把模擬所用的 Net 交給計畫；`simulation_drc` 從計畫讀取。 |
 | `OverlapError`「… with equal priority」 | 宣告 | 為同一 Net 中互相重疊的 Entity 指定不同的優先序。 |
 | `NonManifoldError` | 版圖 | 依訊息結尾的連結處理：在版圖內部，讓兩塊幾何共用一條邊，或把它們分開（[原因](known-geometry-problems.qmd#pinch-inside-the-layout)）；在邊界上，請在訊息指出的對象周圍畫出 die 外框或接地平面，或讓訊息指出的區域的輪廓沿著一條邊碰到邊界，或完全不碰到邊界（[原因](known-geometry-problems.qmd#boundary-point-pinch)）。 |
 | 關於埠薄片、Entity id、圓弧或邊距的 `InputError` | 版圖及其宣告 | 閱讀訊息，它會指出埠、Entity 或請求。修正它指出的圖形或設定。 |

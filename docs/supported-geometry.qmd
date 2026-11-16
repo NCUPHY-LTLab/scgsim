@@ -20,9 +20,10 @@ must follow, and who owns a failure, are on [Supported Scope](supported-scope.qm
 
 Run the check of each simulation the component is for:
 `EigenmodeSim.simulation_drc` for an Eigenmode simulation,
-`ElectrostaticSim.simulation_drc` for an electrostatic one, or both. Each runs
-the same preparation and geometry build as that class's `mesh()`, with your
-Surface-EPR margins, and raises the error `mesh()` would raise. The
+`ElectrostaticSim.simulation_drc` for an electrostatic one, or both. Each takes
+the `GeometryPlan` the simulation will be given, runs the same preparation and
+geometry build as that class's `mesh()` on it, with your Surface-EPR margins,
+and raises the error `mesh()` would raise. The
 [layout modeling check](layout-modeling-check.qmd) shows the call and what it
 needs.
 
@@ -354,10 +355,11 @@ The partition record of each port carries what SCGSim did under `lattice`:
 | `cuts` | each cut's `index` (cut positions from A), `from_corner_a_um` and its two `ends_um` |
 | `modelled_sheet_um` | the sheet with its long sides straight between the cuts, present only when they were not |
 
-The AEDT preparation returns the record as
-`prepare_planar_geometry_input(...).source["junction_partitions"][junction_id]["lattice"]`.
-A Palace simulation prepares its port from the same record and keeps it on the
-port sheet of its prepared geometry, under `rectangular_junction_lattice`.
+The partition records it in the prepared input as
+`metadata["junction_partitions"][junction_id]["lattice"]`, and the SGB model
+Palace and AEDT both solve is built from that record. A Palace simulation keeps
+it on the port sheet of its prepared geometry, under
+`rectangular_junction_lattice`.
 
 ## Curved outlines drawn as polygons {#curve-rule}
 

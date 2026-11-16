@@ -23,11 +23,3 @@ def interpret_geometry(build_input: Any, stack: Any, modeling: Modeling):
         detached(stack)
     )
     return effective_input, effective_stack, plan
-
-
-def effective_geometry_input(build_input: Any, stack: Any, modeling: Modeling):
-    """Return the effective geometry input, the effective stack and the plan's context."""
-    effective_input, effective_stack, plan = interpret_geometry(
-        build_input, stack, modeling
-    )
-    return effective_input, effective_stack, plan.context

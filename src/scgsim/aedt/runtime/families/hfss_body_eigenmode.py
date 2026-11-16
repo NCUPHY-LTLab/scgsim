@@ -1,4 +1,10 @@
-"""Own source-backed eigenmode preparation, solving and collection."""
+"""HFSS Eigenmode on an imported SGB model: preparation, solving and collection.
+
+:func:`prepare_body_eigenmode` imports the request's SGB model into an empty Eigenmode design
+(:func:`scgsim.aedt.runtime.families.sgb_import.import_sgb_model`), lets the EPR workflow add its selection
+sheets, creates the setup, authors the EPR expressions when they are requested, saves the project and
+reads the setup back.  The geometry record a receipt keeps is :func:`imported_geometry_record`.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +22,11 @@ from scgsim.aedt.runtime.benchmark import (
 from scgsim.aedt.runtime.families.hfss_exports import export_eigenmode
 from scgsim.aedt.runtime.families.hfss_history import read_body_eigenmode_history
 from scgsim.aedt.runtime.families.hfss_setup import read_body_eigenmode_setup
+from scgsim.aedt.runtime.families.sgb_import import (
+    ImportedSgbModel,
+    import_sgb_model,
+    imported_geometry_record,
+)
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
     detached_data,
@@ -24,19 +35,10 @@ from scgsim.aedt.runtime.native.common import (
 from scgsim.aedt.runtime.native.hfss_eigenmode import (
     create_eigenmode_setup,
 )
-from scgsim.aedt.runtime.native.hfss_geometry import (
-    prepare_native_planar_geometry,
-)
-from scgsim.aedt.runtime.native.hfss_lumped import (
-    assign_generic_rlcs,
-    read_generic_rlcs,
-)
 from scgsim.aedt.runtime.native.resources import analyze_with_resources
-from scgsim.aedt.runtime.native.saved_geometry import read_saved_junction_lines
 from scgsim.aedt.specs.common import (
     AedtResources,
 )
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 from scgsim.aedt.specs.hfss import (
     HfssEprSpec,
 )
@@ -72,7 +74,7 @@ def prepare_body_eigenmode(  # noqa: PLR0913 -- preserve the family geometry/ana
     run_dir: Path,
     spec: HfssEprSpec,
     *,
-    geometry_extension: Callable[[Any, PreparedPlanarGeometry, dict[str, Any]], None]
+    geometry_extension: Callable[[Any, HfssEprSpec, dict[str, Any]], None]
     | None = None,
     analysis_author: Callable[
         [Any, Path, HfssEprSpec, dict[str, Any]],
@@ -82,16 +84,14 @@ def prepare_body_eigenmode(  # noqa: PLR0913 -- preserve the family geometry/ana
     analysis_readback: Callable[[Any, HfssEprSpec, dict[str, Any], Path], None]
     | None = None,
 ) -> PreparedBodyEigenmode:
-    """Create, save, and read back one body-first no-solve Eigenmode model."""
+    """Import, set up, save and read back one no-solve Eigenmode model of the request's SGB model."""
 
     request = BoundAedtRequest.bind(run_dir, spec)
     bound = request.parse()
     if not isinstance(bound, HfssEprSpec):
         raise TypeError("bound EPR request did not retain its schema")
-    if bound.modeling not in {"solid", "thin_film"} or (
-        bound.geometry.modeling != bound.modeling
-    ):
-        raise ValueError("new EPR HFSS preparation requires explicit modeling")
+    if bound.modeling not in {"solid", "thin_film"}:
+        raise ValueError("HFSS Eigenmode preparation requires explicit modeling")
     project_path = request.workspace / f"{bound.project_name}.aedt"
     timings: dict[str, Any] = {}
     preparation_started = time.perf_counter()
@@ -106,12 +106,12 @@ def prepare_body_eigenmode(  # noqa: PLR0913 -- preserve the family geometry/ana
     timings["native_open_seconds"] = round(time.perf_counter() - started, 6)
     app.modeler.model_units = "um"
     started = time.perf_counter()
-    geometry = prepare_native_planar_geometry(app, bound.geometry)
+    geometry = imported_geometry_record(
+        import_sgb_model(app, bound.model, family="hfss")
+    )
     if geometry_extension is not None:
-        geometry_extension(app, bound.geometry, geometry)
-    assign_generic_rlcs(app, bound, geometry)
+        geometry_extension(app, bound, geometry)
     timings["geometry_seconds"] = round(time.perf_counter() - started, 6)
-    timings["geometry_phases"] = geometry.pop("geometry_phases")
     started = time.perf_counter()
     if bound.run_control is not None:
         create_eigenmode_setup(app, bound.run_control)
@@ -139,10 +139,6 @@ def prepare_body_eigenmode(  # noqa: PLR0913 -- preserve the family geometry/ana
         raise RuntimeError("HFSS EPR project was not saved after preparation")
     timings["save_seconds"] = round(time.perf_counter() - started, 6)
     started = time.perf_counter()
-    read_saved_junction_lines(
-        app, project_path, bound.design_name, bound.geometry, geometry
-    )
-    read_generic_rlcs(app, geometry)
     setup = (
         read_body_eigenmode_setup(app, bound) if bound.run_control is not None else None
     )
@@ -178,6 +174,15 @@ def prepare_body_eigenmode(  # noqa: PLR0913 -- preserve the family geometry/ana
         tuple(expressions),
         cache,
         timings,
+    )
+
+
+def imported_model(geometry: dict[str, Any]) -> ImportedSgbModel:
+    """The imported model a geometry record (:func:`imported_geometry_record`) names."""
+    return ImportedSgbModel(
+        objects=geometry["objects"],
+        face_copies=geometry["face_copies"],
+        sheets=geometry["sheets"],
     )
 
 

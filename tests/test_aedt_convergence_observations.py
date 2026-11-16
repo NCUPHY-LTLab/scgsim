@@ -1,6 +1,7 @@
 """Accepted native convergence observations using generic synthetic text only.
 
-Files exercise real parsers, not native solving or completed-run resolution.
+Files exercise real parsers, not native solving or completed-run resolution.  The HFSS requests are real
+ones on SGB models, so the module is skipped where OCP (the ``occt`` group) is missing.
 """
 
 from __future__ import annotations
@@ -10,68 +11,44 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("OCP")
+
+from sgb_driven_inputs import driven_model  # noqa: E402
+from test_aedt_public_preparation import junction_model  # noqa: E402
+
 from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
 from scgsim.aedt.results.convergence.q2d import read_q2d_convergence
-from scgsim.aedt.specs.common import (
-    LayerImport,
-    MatrixRunControl,
-    ModalPort,
-    ObjectBinding,
-    PdkMaterial,
-)
+from scgsim.aedt.specs.common import MatrixRunControl, PdkMaterial
 from scgsim.aedt.specs.hfss import (
     EigenmodeRunControl,
     FrequencySweepSpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
+    HfssDrivenGeometrySpec,
+    HfssEprSpec,
     HfssRunControl,
 )
 from scgsim.aedt.specs.q2d import Q2dConductorSpec, Q2dRectangleSpec, Q2dSpec
 
 
-def _gds_inputs():
-    return dict(
-        modeling="solid",
-        aedt_version="2024.2",
-        gds_path="synthetic.gds",
-        project_name="Synthetic",
-        design_name="Design",
-        materials={
-            "vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum"),
-            "silicon": PdkMaterial("silicon", "dielectric", False, "Silicon"),
-            "metal": PdkMaterial("metal", "superconductor", True, None),
-        },
-        vacuum_material_id="vacuum",
-        layer_imports=(
-            LayerImport(1, 0, "SignalLayer", 0, 1),
-            LayerImport(2, 0, "GroundLayer", 0, 1),
-            LayerImport(3, 0, "SubstrateLayer", -10, 0),
-        ),
-        object_bindings=(
-            ObjectBinding("Signal", 1, "signal", "metal"),
-            ObjectBinding("Ground", 2, "ground", "metal"),
-            ObjectBinding("Substrate", 3, "substrate", "silicon"),
-        ),
-        region_padding_um=(0, 0, 10, 10, 10, 10),
-    )
-
-
 def _hfss_spec(eigenmode=False):
-    inputs = _gds_inputs()
+    names = {
+        "aedt_version": "2024.2",
+        "project_name": "Synthetic",
+        "design_name": "Design",
+    }
     if eigenmode:
-        return HfssEigenmodeSpec(
-            **inputs,
+        return HfssEprSpec(
+            modeling="solid",
+            model=junction_model(),
             run_control=EigenmodeRunControl(
                 "Setup", 1, 1, 10, 0.1, minimum_converged_passes=2
             ),
+            **names,
         )
-    return HfssDrivenSpec(
-        **inputs,
-        mode="modal",
-        ports=(
-            ModalPort(1, "P1", "-X", ((0, 0, 0), (0, 1, 0))),
-            ModalPort(2, "P2", "+X", ((10, 0, 0), (10, 1, 0))),
-        ),
+    return HfssDrivenGeometrySpec(
+        modeling="solid",
+        model=driven_model(),
         run_control=HfssRunControl(
             "Setup",
             "Sweep",
@@ -79,6 +56,7 @@ def _hfss_spec(eigenmode=False):
             maximum_passes=10,
             maximum_delta_s=0.1,
         ),
+        **names,
     )
 
 
@@ -118,7 +96,7 @@ def _write_eigenmode(  # noqa: PLR0913 -- independent native text fields enable 
     target=0.1,
     malformed=False,
 ):
-    path = root / "results" / "eigenmode" / "adaptive-convergence.prop"
+    path = root / "results" / "epr" / "adaptive-convergence.prop"
     path.parent.mkdir(parents=True)
     table_final = current if table_final is None else table_final
     text = (
@@ -137,12 +115,15 @@ def _write_eigenmode(  # noqa: PLR0913 -- independent native text fields enable 
 
 def _matrix_spec():
     control = MatrixRunControl("Setup", 6, 3, 1)
-    inputs = _gds_inputs()
     return Q2dSpec(
         aedt_version="2024.2",
-        project_name=inputs["project_name"],
-        design_name=inputs["design_name"],
-        materials=inputs["materials"],
+        project_name="Synthetic",
+        design_name="Design",
+        materials={
+            "vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum"),
+            "silicon": PdkMaterial("silicon", "dielectric", False, "Silicon"),
+            "metal": PdkMaterial("metal", "superconductor", True, None),
+        },
         vacuum_material_id="vacuum",
         rectangles=(
             Q2dRectangleSpec("Substrate", (0, -10), (20, 10), "silicon"),

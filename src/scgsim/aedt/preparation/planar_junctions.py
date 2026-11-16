@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
 from fractions import Fraction
-from typing import Any
 
 from scgsim.aedt.preparation.junction_partition import (
     junction_contact_inventory,
@@ -20,21 +18,6 @@ from scgsim.geometry.junctions.exact_geometry import closed_contact
 from scgsim.geometry.junctions.lattice import drawn_exterior, lattice_rectangle
 from scgsim.geometry.junctions.terminal import junction_terminal_line
 from scgsim.geometry.source.validation import validate_geometry_input
-
-
-def junction_polygon(
-    source: Mapping[str, Any], junction: PlanarJunction, polygons: Mapping[str, Any]
-):
-    """Select the authored or partitioned polygon recorded for one junction."""
-    record = source.get("junction_partitions", {}).get(junction.junction_id)
-    if record is None:
-        # A junction with no partition record keeps its authored sheet.
-        return polygons[junction.source_polygon_id], None
-    if record.get("method") != "scgsim.aedt.junction-partition.v1":
-        raise ValueError("unknown junction partition method")
-    if record["authored_polygon_id"] != junction.source_polygon_id:
-        raise ValueError("junction partition authored source identity differs")
-    return polygons[record["central_polygon_id"]], record
 
 
 def planar_junction_from_port(  # noqa: PLR0913 -- preserve the supported explicit preparation keyword API.

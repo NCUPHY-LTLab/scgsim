@@ -5,11 +5,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import Any
-
-from scgsim.aedt.epr.expression_codec import compile_named_expression
-from scgsim.aedt.epr.expression_loading import load_compiled_expressions
 
 
 def parse_native_scalar(value: Any) -> dict[str, Any]:
@@ -272,6 +268,63 @@ def field_integral_operations(
     return [*value, *terminal]
 
 
+def surface_row_operations(
+    *, quantity: str, selection_name: str, adjacent_side: bool = False
+) -> list[str]:
+    """The HFSS stack of one Surface-EPR row integral on its sheet, with the sheet's own normal at each point.
+
+    A sidecar row can hold faces of several orientations (the walls around a pad) and curved walls, so no
+    single normal vector serves it: ``Operation('Normal')`` pushes the unit normal of the surface the
+    integral is entered on.  Only ``|E.n|^2`` is used, so the normal's orientation does not matter.
+    ``electric_tangential`` is ``|E|^2 - |E.n|^2``; ``adjacent_side`` reads the field just off the sheet
+    (``EnterAdjacentSurf``), for the two field quantities only.
+    """
+    if quantity == "masked_area":
+        if adjacent_side:
+            raise ValueError("adjacent_side is valid only for surface field quantities")
+        value = _constant(1.0)
+    elif quantity in {"electric_normal", "electric_tangential"}:
+        normal_square = _binary(
+            _square(
+                [
+                    "Fundamental_Quantity('E')",
+                    "Operation('Real')",
+                    "Operation('Normal')",
+                    "Operation('Dot')",
+                ]
+            ),
+            _square(
+                [
+                    "Fundamental_Quantity('E')",
+                    "Operation('Imag')",
+                    "Operation('Normal')",
+                    "Operation('Dot')",
+                ]
+            ),
+            "+",
+        )
+        if quantity == "electric_normal":
+            value = normal_square
+        else:
+            full_real = ["Fundamental_Quantity('E')", "Operation('Real')"]
+            full_imag = ["Fundamental_Quantity('E')", "Operation('Imag')"]
+            full_square = _binary(
+                [*full_real, *full_real, "Operation('Dot')"],
+                [*full_imag, *full_imag, "Operation('Dot')"],
+                "+",
+            )
+            value = _binary(full_square, normal_square, "-")
+    else:
+        raise ValueError(f"unsupported Surface-EPR row quantity {quantity!r}")
+    enter = "EnterAdjacentSurf" if adjacent_side else "EnterSurface"
+    return [
+        *value,
+        f"{enter}('{selection_name}')",
+        "Operation('SurfaceValue')",
+        "Operation('Integrate')",
+    ]
+
+
 def junction_voltage_operations(
     *, quantity: str, selection_name: str, direction_xy: Sequence[float]
 ) -> list[str]:
@@ -295,78 +348,3 @@ def junction_voltage_operations(
         "Operation('SurfaceValue')",
         "Operation('Integrate')",
     ]
-
-
-def create_verified_face_list(
-    app: Any, *, name: str, face_ids: Sequence[int], reuse_existing: bool = False
-) -> dict[str, Any]:
-    """Bind native list identity and check created/restored wrapper membership."""
-    ids = [int(value) for value in face_ids]
-    if not ids or len(ids) != len(set(ids)) or any(value <= 0 for value in ids):
-        raise ValueError("face list requires distinct positive native face ids")
-    existing = [item for item in app.modeler.user_lists if str(item.name) == name]
-    if existing and not reuse_existing:
-        raise RuntimeError(f"HFSS face-list name already exists: {name!r}")
-    if len(existing) > 1:
-        raise RuntimeError(f"HFSS face-list name is ambiguous: {name!r}")
-    item = existing[0] if existing else app.modeler.create_face_list(ids, name=name)
-    if (
-        item is False
-        or item is None
-        or item.name != name
-        or item.props.get("Type") != "Face"
-    ):
-        raise RuntimeError(f"HFSS face-list creation failed: {name!r}")
-    native_id = app.modeler.get_entitylist_id(name)
-    if (
-        type(native_id) is not int
-        or native_id <= 0
-        or native_id != item.props.get("ID")
-    ):
-        raise RuntimeError(f"HFSS face-list readback failed: {name!r}")
-    # PyAEDT exposes both created and restored EntityList membership as List.
-    members = item.props.get("List")
-    if isinstance(members, (int, str)):
-        members = [members]
-    if [int(value) for value in members or ()] != ids:
-        raise RuntimeError(f"HFSS face-list membership differs: {name!r}")
-    return {
-        "name": name,
-        "native_id": native_id,
-        "face_ids": ids,
-        "assignment_basis": (
-            "PyAEDT created/restored List property; not independent native membership"
-        ),
-    }
-
-
-def author_named_expression(  # noqa: PLR0913 -- preserve the established field-expression keyword API.
-    app: Any,
-    *,
-    purpose: str,
-    operations: Sequence[str],
-    solution: str,
-    phase_degrees: float,
-    dependencies: Mapping[str, str],
-    selection: Mapping[str, Any],
-    evidence_dir: Path,
-    namespace: str = "prepared",
-    adjacent_selection_name: str | None = None,
-) -> dict[str, Any]:
-    """Author one immutable expression through the same local batch compiler."""
-
-    compiled = compile_named_expression(
-        purpose=purpose,
-        operations=operations,
-        solution=solution,
-        phase_degrees=phase_degrees,
-        dependencies=dependencies,
-        selection=selection,
-        namespace=namespace,
-        adjacent_selection_name=adjacent_selection_name,
-    )
-    load_compiled_expressions(app, [compiled], evidence_dir)
-    # Loading attaches the native CLC readback to the authored expression.
-    # ``compiled`` is (expression_dict, definitions, evidence), not a list of
-    # per-expression records.
-    return compiled[0]

@@ -16,26 +16,6 @@ from scgsim.aedt.data import (
     text_value,
 )
 from scgsim.aedt.versions import normalize_aedt_version
-from scgsim.semantics.epr import film_assumptions
-
-InterfaceKind = Literal["MA", "MS", "SA", "MM"]
-FieldSide = Literal["top", "bottom", "sidewall"]
-
-
-def surface_evaluations(
-    margins_um: Sequence[float], *, policy: str | None
-) -> tuple[tuple[str, float], ...]:
-    """Keep the automatic baseline distinct from each requested mask."""
-
-    requested = tuple(("requested_margin", float(value)) for value in margins_um)
-    if policy is None:
-        raise ValueError(
-            "prepared geometry names no surface_evaluation_policy; prepare it "
-            "again with prepare_planar_geometry_input"
-        )
-    if policy != "unmasked_plus_requested.v1":
-        raise ValueError("unsupported surface evaluation policy")
-    return (("unmasked_baseline", 0.0), *requested)
 
 
 @dataclass(frozen=True)
@@ -119,121 +99,18 @@ class PlanarJunction:
 
 
 @dataclass(frozen=True)
-class SurfaceEprSpec:
-    """One complete physical-side contribution group and its alternative margins.
-
-    ``source_polygon_id`` anchors provenance in the group's catalogue union; it
-    does not filter patches. Each resolved binding retains its own contribution
-    evidence and geometry reference for per-patch provenance.
-    """
-
-    contribution_id: str
-    source_polygon_id: str
-    interface_kind: InterfaceKind
-    field_side: FieldSide
-    margins_um: tuple[float, ...] = (0.0,)
-    film_thickness_m: float | None = None
-    film_relative_permittivity: float | None = None
-    loss_tangent: float | None = None
-    source: str | None = None
-    preset: str | None = None
-    metadata: Mapping[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        for name in ("contribution_id", "source_polygon_id"):
-            object.__setattr__(self, name, text_value(getattr(self, name), name))
-        if self.interface_kind not in {"MA", "MS", "SA", "MM"}:
-            raise ValueError(f"unsupported EPR interface kind {self.interface_kind!r}")
-        if self.field_side not in {"top", "bottom", "sidewall"}:
-            raise ValueError(f"unsupported EPR field side {self.field_side!r}")
-        margins = tuple(number_value(value, "margin_um") for value in self.margins_um)
-        if not margins or len(margins) != len(set(margins)):
-            raise ValueError("margins_um must be non-empty and unique")
-        object.__setattr__(self, "margins_um", margins)
-        optional = (
-            "film_thickness_m",
-            "film_relative_permittivity",
-        )
-        for name in optional:
-            value = getattr(self, name)
-            if value is not None:
-                number = number_value(value, name)
-                if number <= 0.0:
-                    raise ValueError(f"{name} must be > 0 when provided")
-                object.__setattr__(self, name, number)
-        if self.interface_kind in {"MA", "MS", "SA"} and (
-            self.film_thickness_m is None or self.film_relative_permittivity is None
-        ):
-            raise ValueError(
-                f"{self.interface_kind} requires film thickness and permittivity"
-            )
-        film_assumptions(
-            {
-                "film_thickness_m": self.film_thickness_m,
-                "film_relative_permittivity": self.film_relative_permittivity,
-                "loss_tangent": self.loss_tangent,
-                "source": self.source,
-                "preset": self.preset,
-            }
-            if self.interface_kind in {"MA", "MS", "SA"}
-            else {
-                "loss_tangent": self.loss_tangent,
-                "source": self.source,
-                "preset": self.preset,
-            },
-            partial=self.interface_kind == "MM",
-        )
-        object.__setattr__(self, "metadata", freeze(self.metadata))
-
-    def to_payload(self) -> dict[str, Any]:
-        """Return the canonical SurfaceEprSpec payload."""
-        return {
-            "contribution_id": self.contribution_id,
-            "source_polygon_id": self.source_polygon_id,
-            "interface_kind": self.interface_kind,
-            "field_side": self.field_side,
-            "margins_um": list(self.margins_um),
-            "film_thickness_m": self.film_thickness_m,
-            "film_relative_permittivity": self.film_relative_permittivity,
-            "metadata": detached(self.metadata),
-            "loss_tangent": self.loss_tangent,
-            "source": self.source,
-            "preset": self.preset,
-        }
-
-    @classmethod
-    def from_payload(cls, value: Any) -> SurfaceEprSpec:
-        """Decode a SurfaceEprSpec from its canonical payload."""
-        if not isinstance(value, Mapping):
-            raise TypeError("surface EPR payload must be a mapping")
-        expected = {
-            "contribution_id",
-            "source_polygon_id",
-            "interface_kind",
-            "field_side",
-            "margins_um",
-            "film_thickness_m",
-            "film_relative_permittivity",
-            "metadata",
-        }
-        if set(value) != expected | {"loss_tangent", "source", "preset"}:
-            raise ValueError("surface EPR payload members are not canonical")
-        return cls(**dict(value))
-
-
-@dataclass(frozen=True)
 class EprAnalysisRequest:
     """Optional analysis/cache selection independent of model construction."""
 
     mode_indices: tuple[int, ...] | None = None
-    surface_contribution_ids: tuple[str, ...] | None = None
+    surface_epr_groups: tuple[str, ...] | None = None
     junction_ids: tuple[str, ...] | None = None
     bulk_domain_ids: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         for name in (
             "mode_indices",
-            "surface_contribution_ids",
+            "surface_epr_groups",
             "junction_ids",
             "bulk_domain_ids",
         ):
@@ -258,10 +135,10 @@ class EprAnalysisRequest:
             "mode_indices": (
                 None if self.mode_indices is None else list(self.mode_indices)
             ),
-            "surface_contribution_ids": (
+            "surface_epr_groups": (
                 None
-                if self.surface_contribution_ids is None
-                else list(self.surface_contribution_ids)
+                if self.surface_epr_groups is None
+                else list(self.surface_epr_groups)
             ),
             "junction_ids": (
                 None if self.junction_ids is None else list(self.junction_ids)
@@ -278,7 +155,7 @@ class EprAnalysisRequest:
             raise TypeError("EPR analysis request must be a mapping")
         expected = {
             "mode_indices",
-            "surface_contribution_ids",
+            "surface_epr_groups",
             "junction_ids",
         }
         if set(value) != expected | {"bulk_domain_ids"}:

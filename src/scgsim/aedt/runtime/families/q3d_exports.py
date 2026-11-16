@@ -1,12 +1,11 @@
-"""Own Q3D matrix export and normalized result files."""
+"""Own the Q3D capacitance/conductance matrix export and its readback summary."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, TypedDict
 
-from scgsim.aedt.io import file_sha256, write_csv
+from scgsim.aedt.io import file_sha256
 from scgsim.aedt.results.matrices import parse_matrix_export
 from scgsim.aedt.specs.common import MatrixRunControl
 from scgsim.aedt.specs.q3d import Q3dSpec
@@ -15,60 +14,27 @@ from scgsim.aedt.specs.q3d import Q3dSpec
 def export_q3d_matrices(
     app: Any, run_dir: Path, spec: Q3dSpec
 ) -> tuple[dict[str, str], dict[str, Any]]:
-    """Export each requested matrix and retain independent native readback summaries."""
+    """Export the capacitance/conductance matrix and retain its independent native readback summary."""
     control = _matrix_control(spec)
     output_dir = run_dir / "results" / "q3d"
     output_dir.mkdir(parents=True, exist_ok=True)
-    hashes: dict[str, str] = {}
-    summaries: dict[str, Any] = {}
-    row_counts: dict[str, int] = {}
-    exports = (("C", "c"), ("AC RL", "ac_rl")) if spec.solve_ac_rl else (("C", "c"),)
-    normalized: list[dict[str, Any]] = []
-    for problem, stem in exports:
-        path = output_dir / f"{stem}_matrix.csv"
-        export_matrix_file(app, path, spec, problem)
-        titles = {
-            "C": {"Capacitance Matrix": "C", "Conductance Matrix": "G"},
-            "AC RL": {"AC Inductance Matrix": "L", "AC Resistance Matrix": "R"},
-        }[problem]
-        matrix_options = matrix_parse_options(spec, problem)
-        rows, summary = parse_matrix_export(
-            path,
-            "Q3D",
-            problem,
-            control.frequency_ghz,
-            titles,
-            **matrix_options,
-        )
-        if spec.solve_ac_rl:
-            normalized.extend(rows)
-        summaries[stem] = summary
-        row_counts[stem] = len(rows)
-        hashes[path.relative_to(run_dir).as_posix()] = file_sha256(path)
-    if not spec.solve_ac_rl:
-        path = output_dir / "c_matrix.csv"
-        return hashes, {
-            "matrices": {
-                "path": path.relative_to(run_dir).as_posix(),
-                "frequency_ghz": control.frequency_ghz,
-                "native": summaries["c"],
-                "primary_rows": row_counts["c"],
-            }
-        }
-    normalized_path = output_dir / "matrices.csv"
-    write_csv(
-        normalized_path,
-        list[Mapping[str, Any]](normalized),
-        fieldnames=["problem_type", "quantity", "row", "column", "value", "unit"],
+    path = output_dir / "c_matrix.csv"
+    export_matrix_file(app, path, spec, "C")
+    rows, summary = parse_matrix_export(
+        path,
+        "Q3D",
+        "C",
+        control.frequency_ghz,
+        {"Capacitance Matrix": "C", "Conductance Matrix": "G"},
+        **matrix_parse_options(spec, "C"),
     )
-    hashes[normalized_path.relative_to(run_dir).as_posix()] = file_sha256(
-        normalized_path
-    )
-    return hashes, {
+    relative = path.relative_to(run_dir).as_posix()
+    return {relative: file_sha256(path)}, {
         "matrices": {
+            "path": relative,
             "frequency_ghz": control.frequency_ghz,
-            "native": summaries,
-            "normalized_rows": len(normalized),
+            "native": summary,
+            "primary_rows": len(rows),
         }
     }
 

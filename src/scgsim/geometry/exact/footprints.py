@@ -4,16 +4,14 @@ Owns resolving the footprint rings of an effective entity and putting them on th
 model grid:
 
 * a **solution region** is its ``outer_loop`` / ``hole_loops`` when authored, else the
-  rectangle of ``domain_bounds_um`` (``domain_planning.occupancy.solution_entity_xy_region``);
+  rectangle of ``domain_bounds_um``;
 * the **automatic vacuum envelope** is the rectangle of the prepared enclosure
   (``RepresentationContext.enclosures``), which already holds the mapped effective
-  bounds; padding is provenance and is never applied a second time
-  (``domain_planning.vacuum``);
+  bounds; padding is provenance and is never applied a second time;
 * a **conductor** is one footprint per owned source polygon -- the entity-owned
   logical polygons the boundary records bind to.  The entity's ``outer_loop`` is the grid
   union of those same polygons (``source.grid._project_entities``), so the covered
-  region is identical; it is the fallback for an entity without polygons
-  (``domain_planning.occupancy.route_conductor_contact_footprints``).
+  region is identical; it is the fallback for an entity without polygons.
 
 Rings are kept in source order here: boundary-curve bindings address them by index.
 """

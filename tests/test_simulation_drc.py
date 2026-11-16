@@ -160,11 +160,52 @@ def two_pads(monkeypatch, *, gap_um, port=False, pad=None, electrode=None):
     return component
 
 
-def check(simulation, component, *, layer_stack=LAYER_STACK, **options):
-    """``simulation.simulation_drc`` with the stand-in PDK data."""
-    return simulation.simulation_drc(
-        component, layer_stack=layer_stack, material_records=MATERIALS, **options
+# The vacuum a layout author pads a stack without one by: none in the plane, 1000 um below and above (Issue #182).
+AUTHOR_VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
+PLAN_OPTIONS = ("layer_stack", "instances", "nets", "vacuum_padding_um")
+
+
+def layout_plan(  # noqa: PLR0913 -- the layout and each plan setting an author writes
+    component,
+    *,
+    layer_stack=LAYER_STACK,
+    material_records=MATERIALS,
+    instances=None,
+    nets=None,
+    vacuum_padding_um=AUTHOR_VACUUM_PADDING_UM,
+    junctions=(),
+):
+    """The ``GeometryPlan`` a layout author builds for ``component``, with the stand-in PDK data by default.
+
+    Root ``"chip"``, zero coupon padding, the ``instances`` registered, then the ``nets`` and the rectangular
+    ``junctions``.  A stack without its own vacuum gets the plan's vacuum padded by ``vacuum_padding_um``;
+    None leaves the plan without one.
+    """
+    plan = GeometryPlan(
+        component,
+        root_id="chip",
+        layer_stack=layer_stack,
+        material_records=material_records,
+        coupon_padding_um=0.0,
     )
+    for path, reference in (instances or {}).items():
+        plan.register_instance(path, reference)
+    if nets is not None:
+        plan.set_nets(nets)
+    if junctions:
+        plan.set_rectangular_junctions(junctions)
+    if vacuum_padding_um is not None and "VACUUM_REGION" not in layer_stack.layers:
+        plan.set_vacuum_region(vacuum_padding_um)
+    return plan
+
+
+def check(simulation, component, **options):
+    """``simulation.simulation_drc`` on the plan a layout author builds for ``component``.
+
+    The options :func:`layout_plan` takes go to the plan; the rest are the check's own.
+    """
+    plan_options = {key: options.pop(key) for key in PLAN_OPTIONS if key in options}
+    return simulation.simulation_drc(layout_plan(component, **plan_options), **options)
 
 
 def configured(simulation, snapshot, specs):
@@ -185,19 +226,12 @@ def configured(simulation, snapshot, specs):
 
 
 def mesh_refusal(simulation, component, tmp_path, monkeypatch, specs=None):
-    """The error ``mesh()`` raises before meshing, for the plan and settings ``simulation_drc`` builds."""
+    """The error ``mesh()`` raises before meshing, for the plan ``simulation_drc`` is given and its settings."""
 
     def meshing_reached(*_args, **_kwargs):
         raise MeshingReached
 
-    plan = GeometryPlan(
-        component,
-        root_id="chip",
-        layer_stack=LAYER_STACK,
-        material_records=MATERIALS,
-        coupon_padding_um=0.0,
-    )
-    sim = configured(simulation, plan.prepare(), specs)
+    sim = configured(simulation, layout_plan(component).prepare(), specs)
     sim.set_output_dir(tmp_path / "run")
     monkeypatch.setattr(build_module, "mesh_sgb", meshing_reached)
     with pytest.raises(Exception) as error:  # noqa: PT011 -- the type is what the test compares
@@ -306,10 +340,8 @@ def ma_band_groups(sidecar):
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
-def test_a_layout_with_no_vacuum_is_wrapped_so_ma_bands_are_cut(
-    monkeypatch, simulation
-):
-    """With no vacuum in the layout the check adds one, so the metal has air faces to band."""
+def test_the_plans_vacuum_is_banded_when_the_stack_has_none(monkeypatch, simulation):
+    """A stack with no vacuum and the plan's own vacuum region: the metal has air faces to band."""
     component = two_pads(monkeypatch, gap_um=10.0)
     (sidecar,) = check_sidecars(
         monkeypatch,
@@ -365,12 +397,10 @@ def built_bounds(sidecar):
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
-def test_a_layout_with_no_vacuum_is_wrapped_in_the_decided_padding(
-    monkeypatch, simulation
-):
-    """The built vacuum ends at the layout's planar extent and reaches 1000 um below and above it (Issue #182).
+def test_the_check_builds_the_vacuum_the_plan_sets(monkeypatch, simulation):
+    """The built vacuum is the plan's: padded (0, 0, 1000) um, it ends at the layout's planar extent and reaches 1000 um below and above.
 
-    The layout is the two pads on their substrate: x 0 to 60 um, y 0 to 20 um, z from the substrate's
+    The check adds no vacuum of its own (Issue #266).  The layout is the two pads on their substrate: x 0 to 60 um, y 0 to 20 um, z from the substrate's
     bottom at -5 um to the metal's top at 0.2 um.
     """
     (sidecar,) = check_sidecars(
@@ -734,24 +764,6 @@ def test_a_gdsfactory_circle_conductor_prepares_and_passes(monkeypatch, radius_u
         {"semantic_id": "ground", "level": "metal", "gds_layer": [2, 0]}
     )
     assert check(EigenmodeSim, component, layer_stack=NO_VACUUM_STACK).passed
-
-
-@pytest.mark.parametrize("simulation", SIMULATIONS)
-def test_a_layout_with_its_own_vacuum_gets_no_vacuum_region(monkeypatch, simulation):
-    """When the stack carries ``VACUUM_REGION`` the check adds none and does not raise."""
-    added = []
-    real = simulation.set_vacuum_region
-
-    def recording(self, padding=0.0):
-        added.append(padding)
-        return real(self, padding)
-
-    monkeypatch.setattr(simulation, "set_vacuum_region", recording)
-    component = two_pads(monkeypatch, gap_um=10.0)
-    assert check(simulation, component, surface_epr_specs=BANDED).passed
-    assert added == []
-    assert check(simulation, component, layer_stack=NO_VACUUM_STACK).passed
-    assert added == [(0.0, 0.0, 1000.0)]
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)

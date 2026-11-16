@@ -6,19 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.aedt.io import file_sha256
-from scgsim.aedt.results.hfss_readback import (
-    validate_eigenmode_readback,
-    validate_hfss_setup_and_convergence,
-    validate_modal_native_evidence,
-)
+from scgsim.aedt.results.hfss_readback import validate_hfss_setup_and_convergence
 from scgsim.aedt.results.q2d_readback import validate_q2d_readback
 from scgsim.aedt.results.q3d_readback import validate_q3d_readback
 from scgsim.aedt.results.receipt_validation import contained
-from scgsim.aedt.results.terminal_readback import (
-    validate_body_terminal_readback,
-    validate_terminal_native_evidence,
-)
-from scgsim.aedt.specs.hfss import HfssDrivenGeometrySpec, HfssEigenmodeSpec
+from scgsim.aedt.results.terminal_readback import validate_body_terminal_readback
+from scgsim.aedt.specs.hfss import HfssDrivenGeometrySpec
 from scgsim.aedt.specs.q2d import Q2dSpec
 from scgsim.aedt.specs.q3d import Q3dSpec
 
@@ -40,26 +33,26 @@ def validate_result_readback(root: Path, receipt: dict[str, Any], spec: Any) -> 
         validate_q3d_readback(root, receipt, spec)
         _validate_diagnostics(root, receipt.get("diagnostics"))
         return
-    if isinstance(spec, HfssEigenmodeSpec):
-        validate_eigenmode_readback(receipt, spec)
-        validate_hfss_setup_and_convergence(root, receipt, spec)
-        _validate_diagnostics(root, receipt.get("diagnostics"))
-        return
-    key = "terminal_st" if spec.mode == "terminal" else "modal_s"
+    if not isinstance(spec, HfssDrivenGeometrySpec):
+        raise TypeError(f"no result readback for {type(spec).__name__}")
+    if spec.run_control is None:
+        raise RuntimeError("a completed Driven receipt needs its request's run_control")
+    sweep = spec.run_control.sweep
+    key = "terminal_st"
     if not isinstance(readback, dict) or not isinstance(readback.get(key), dict):
         raise TypeError("completed receipt has no canonical result readback")
     frequency = readback[key]
     if frequency != {
-        "records": int(spec.run_control.sweep.points),
+        "records": int(sweep.points),
         "frequency_unit": "GHz",
-        "first_frequency_ghz": spec.run_control.sweep.start_ghz,
-        "last_frequency_ghz": spec.run_control.sweep.stop_ghz,
+        "first_frequency_ghz": sweep.start_ghz,
+        "last_frequency_ghz": sweep.stop_ghz,
         "strictly_increasing": True,
     }:
         raise RuntimeError("completed receipt result frequency readback is invalid")
     touchstone = readback.get("touchstone")
     ports = receipt.get("ports")
-    port_key = "terminal_excitation" if spec.mode == "terminal" else "modal_excitation"
+    port_key = "terminal_excitation"
     port_order = (
         [record.get(port_key) for record in ports]
         if isinstance(ports, list)
@@ -72,10 +65,10 @@ def validate_result_readback(root: Path, receipt: dict[str, Any], spec: Any) -> 
         not isinstance(touchstone, dict)
         or touchstone.get("path") != f"{spec.mode}.s2p"
         or touchstone.get("ports") != 2
-        or touchstone.get("records") != int(spec.run_control.sweep.points)
+        or touchstone.get("records") != int(sweep.points)
         or touchstone.get("frequency_unit") != "GHz"
-        or touchstone.get("first_frequency_ghz") != spec.run_control.sweep.start_ghz
-        or touchstone.get("last_frequency_ghz") != spec.run_control.sweep.stop_ghz
+        or touchstone.get("first_frequency_ghz") != sweep.start_ghz
+        or touchstone.get("last_frequency_ghz") != sweep.stop_ghz
         or touchstone.get("strictly_increasing") is not True
         or touchstone.get("port_order") != port_order
         or not all(isinstance(name, str) and name for name in port_order or [])
@@ -86,13 +79,7 @@ def validate_result_readback(root: Path, receipt: dict[str, Any], spec: Any) -> 
         raise RuntimeError(
             "completed receipt is missing a two-port Touchstone readback"
         )
-    if spec.mode == "terminal":
-        if isinstance(spec, HfssDrivenGeometrySpec):
-            validate_body_terminal_readback(receipt, spec)
-        else:
-            validate_terminal_native_evidence(ports, spec)
-    else:
-        validate_modal_native_evidence(ports, spec)
+    validate_body_terminal_readback(receipt, spec)
     validate_hfss_setup_and_convergence(root, receipt, spec)
     _validate_diagnostics(root, receipt.get("diagnostics"))
 

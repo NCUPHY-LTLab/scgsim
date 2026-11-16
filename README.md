@@ -52,7 +52,6 @@ from scgsim.geometry import GeometryPlan
 from scgsim.aedt import (
     AedtResources,
     MatrixRunControl,
-    PdkMaterial,
     prepare_q3d_from_geometry,
     resolve_results,
 )
@@ -85,14 +84,6 @@ def main():
     snapshot = plan.prepare()
 
     # 2. Prepare a new, portable Q3D input directory.
-    materials = {
-        name: PdkMaterial(
-            name, records[name]["material_kind"],
-            records[name]["is_superconducting"],
-            records[name]["aedt_library_name"],
-        )
-        for name in ("Al", "Si", "vacuum")
-    }
     handoff = prepare_q3d_from_geometry(
         snapshot,
         aedt_version="2024.2",
@@ -100,14 +91,12 @@ def main():
         output_dir=Path(".artifacts/simplepad-q3d") / uuid4().hex[:12],
         project_name="SimplePad",
         design_name="Capacitance",
-        materials=materials,
         net_types={"pad": "Signal", "ground": "Signal"},
         physical_ground_nets=("ground",),
         run_control=MatrixRunControl(
             setup_name="Setup1", frequency_ghz=5.0,
             maximum_passes=10, convergence_percent=1.0,
         ),
-        region_padding_um=(250.0, 250.0, 250.0, 250.0, 1000.0, 1000.0),
         resources=AedtResources(cores=4, ram_limit_percent=80),
     )
     print("Inputs:", handoff.run_dir)
@@ -142,7 +131,7 @@ Each invocation creates a new run folder under `.artifacts/simplepad-q3d/`. Prin
 
 To inspect the inputs first, run `uv run simplepad_q3d.py --handoff-only`. This option prepares the inputs and portable archive without opening AEDT. The complete mode runs and reads results on the same host.
 
-Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground_nets` records the physical Ground role separately. The [Q3D lesson](docs/course/aedt-q3d.qmd) explains the body, Net and extraction choices, and [returned results](docs/course/returned-results.qmd) explains how to read the matrix.
+Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground_nets` records the physical Ground role separately. The [Q3D lesson](docs/course/aedt-q3d.qmd) explains the model, Net and extraction choices, and [returned results](docs/course/returned-results.qmd) explains how to read the matrix.
 
 ## Choose your next simulation
 

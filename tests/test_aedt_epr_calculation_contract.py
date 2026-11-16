@@ -1,225 +1,137 @@
-"""Independent analytical EPR arithmetic; no layout, fields, or native result.
+"""Independent analytical EPR arithmetic of an SGB model's EPR source; no layout, fields, or native result.
 
-The detached input carrier holds only material/owner/binding identities needed by
-these public pure calculations. Synthetic mode/pass labels test result identity,
-not native observations. No receipt, saved project, or native evidence is made.
+The source is written by hand: two dielectric domains, one junction and, per interface type, two
+Surface-EPR rows (band 0 and band 1).  Each type reports a baseline over both rows and a 1 um inset
+margin over band 1 only.  Synthetic mode/pass labels test result identity, not native observations.
 
 Hand calculation, using the contract's SI vacuum permittivity below:
-  thickness=1/2 m, film epsilon=2, substrate epsilon=4, N=8 V², T=2 V².
+  thickness=1/2 m, film epsilon=2, substrate epsilon=4; each row N=4 V², T=1 V², so a baseline sums
+  N=8 V², T=2 V².
   MA: epsilon0*N/8 = epsilon0.
   MS: 2*epsilon0*N = 16*epsilon0.
   SA: epsilon0*N/8 + epsilon0*T/2 = 2*epsilon0.
   Bulk: epsilon0*4*8/2 = 16*epsilon0 J.
-  Junction: C=32*epsilon0 F, |V|=1 V -> 16*epsilon0 J.
-Thus the denominator is 32*epsilon0 J and p=(1/32,1/2,1/16).
-Masked inputs halve N and T. All scale factors are powers of two, so exact
-binary64 comparisons need no test-chosen numerical tolerance.
+  Junction: C=32*epsilon0 F, |V|=1 V (1 V*m over a 1 m width) -> 16*epsilon0 J.
+Thus the denominator is 32*epsilon0 J and p=(1/32,1/2,1/16).  The margin entry holds one row, so it
+is half the baseline.  All scale factors are powers of two, so exact binary64 comparisons need no
+test-chosen numerical tolerance.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
 from copy import deepcopy
 
 import pytest
 
-from scgsim.aedt import (
-    EprResult,
-    PlanarJunction,
-    PreparedPlanarGeometry,
-    SurfaceEprSpec,
-    combine_epr_mode,
-    combine_surface_epr_mode,
-    reanalyze_epr,
+from scgsim.aedt import EprResult, PlanarJunction, reanalyze_epr
+from scgsim.aedt.epr.integrals import SURFACE_GRANULARITY
+from scgsim.aedt.epr.sgb_energy import combine_sgb_epr_mode
+from scgsim.aedt.epr.sgb_source import (
+    EprDomain,
+    EprSurfaceRow,
+    JunctionSheet,
+    SgbEprSource,
+    SurfaceEntry,
+    SurfaceFilm,
 )
 from scgsim.aedt.epr.surface import surface_energy_coefficients
 
 EPSILON_0 = 8.8541878128e-12  # SI constant, independently written, not imported from the formula.
 ENERGIES = {"MA": EPSILON_0, "MS": 16 * EPSILON_0, "SA": 2 * EPSILON_0}
 PARTICIPATIONS = {"MA": 1 / 32, "MS": 1 / 2, "SA": 1 / 16}
-EVALUATIONS = (
-    ("unmasked_baseline", 0.0),
-    ("requested_margin", 0.0),
-    ("requested_margin", 1.0),
-)
-
-
-def _digest(value):
-    return hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+EVALUATIONS = (("unmasked_baseline", 0.0), ("requested_margin", 1.0))
 
 
 def _quantity(value, unit):
     return {"value": value, "unit": unit}
 
 
-def _analytical_inputs():
-    """Build typed detached arithmetic inputs without invoking a geometry producer."""
-    source = {
-        "materials": {
-            "vacuum": {"kind": "vacuum", "permittivity": 1.0},
-            "dielectric": {"kind": "dielectric", "permittivity": 4.0},
-        },
-        "solution_regions": [
-            {
-                "semantic_id": "substrate",
-                "material_id": "dielectric",
-                "material_kind": "dielectric",
-            },
-            {
-                "semantic_id": "vacuum",
-                "material_id": "vacuum",
-                "material_kind": "vacuum",
-            },
-        ],
-        "conductors": [{"semantic_id": "metal"}],
-        "surface_evaluation_policy": "unmasked_plus_requested.v1",
+def _source() -> SgbEprSource:
+    films = {
+        kind: SurfaceFilm(kind, 0.5, 2.0, 1e-3, "analytical", None) for kind in ENERGIES
     }
-    junction = PlanarJunction(
-        "junction",
-        "junction_polygon",
-        "terminal_a",
-        "terminal_b",
-        (1.0, 0.0),
-        width_um=1_000_000.0,
-        inductance_h=1.0,
-        capacitance_f=32 * EPSILON_0,
-    )
-    specs = []
-    bindings = []
-    groups = []
-    for interface in ("MA", "MS", "SA"):
-        contribution_id = "analytic_" + interface
-        side = "bottom" if interface == "MS" else "top"
-        owners = ["substrate"] if interface == "SA" else ["metal", "substrate"]
-        spec = SurfaceEprSpec(
-            contribution_id,
-            interface + "_patch_1",
-            interface,
-            side,
-            margins_um=(0.0, 1.0),
-            film_thickness_m=0.5,
-            film_relative_permittivity=2.0,
-            loss_tangent=0.25,
-            source="analytical_input",
+    rows = {}
+    entries = []
+    for kind in ENERGIES:
+        substrate = None if kind == "MA" else 4.0
+        names = (f"{kind}_row_0", f"{kind}_row_1")
+        for band, row in enumerate(names):
+            rows[row] = EprSurfaceRow(
+                row=row,
+                group=f"{kind}::owner__band_{band}",
+                interface_type=kind,
+                band=band,
+                family=f"{kind}::owner",
+                banded_surface=f"{kind}::owner",
+                entities=("owner",),
+                face_kind="top",
+                substrate_relative_permittivity=substrate,
+                selection_name=f"epr_{row}",
+            )
+        entries.append(
+            SurfaceEntry(
+                f"{kind}::owner",
+                kind,
+                "unmasked_baseline",
+                0.0,
+                names,
+                ("owner",),
+                substrate,
+            )
         )
-        specs.append(spec)
-        members = []
-        for part in (1, 2):
-            binding_id = f"{interface}_binding_{part}"
-            geometry_ref = {"source_polygon_id": f"{interface}_patch_{part}"}
-            effective_domain = "substrate" if interface == "MS" else "vacuum"
-            effective_material_id = "dielectric" if interface == "MS" else "vacuum"
-            bindings.append(
-                {
-                    "binding_id": binding_id,
-                    "contribution": {
-                        "contribution_id": contribution_id,
-                        "classification": interface,
-                        "side": side,
-                        "source_owner_ids": owners,
-                    },
-                    "owner_semantic_id": "substrate" if interface == "SA" else "metal",
-                    "effective_domain_id": effective_domain,
-                    "effective_material_id": effective_material_id,
-                    "effective_material": source["materials"][effective_material_id],
-                    "substrate_domain_id": "substrate",
-                    "substrate_material": source["materials"]["dielectric"],
-                    "geometry_ref": geometry_ref,
-                }
+        entries.append(
+            SurfaceEntry(
+                f"{kind}::owner__inset_0",
+                kind,
+                "requested_margin",
+                1.0,
+                names[1:],
+                ("owner",),
+                substrate,
             )
-            members.append(
-                {
-                    "binding_id": binding_id,
-                    "contribution_id": contribution_id,
-                    "source_polygon_id": spec.source_polygon_id,
-                    "source_owner_ids": owners,
-                    "field_side": side,
-                    "effective_domain_id": effective_domain,
-                    "effective_material_id": effective_material_id,
-                    "substrate_domain_id": "substrate",
-                    "geometry_ref": geometry_ref,
-                }
-            )
-        for evaluation, margin in EVALUATIONS:
-            identity = {
-                "owner_id": "substrate" if interface == "SA" else "metal",
-                "interface_kind": interface,
-                "film_thickness_m": 0.5,
-                "film_relative_permittivity": 2.0,
-                "substrate_relative_permittivity": 1.0 if interface == "MA" else 4.0,
-                "margin_um": margin,
-                "evaluation_kind": evaluation,
-            }
-            # This supplies the existing raw-group identity codec, not an energy expectation.
-            groups.append(
-                {
-                    "group_id": "surface_group_" + _digest(identity)[:24],
-                    **identity,
-                    "members": members,
-                }
-            )
-    model = {
-        "modeling": "solid",
-        "source": source,
-        "junctions": [junction.to_payload()],
-    }
-    complete = {
-        **model,
-        "contribution_catalog": [],
-        "contributions": [item.to_payload() for item in specs],
-        "surface_bindings": bindings,
-    }
-    prepared = PreparedPlanarGeometry(
-        modeling="solid",
-        source=source,
-        junctions=(junction,),
-        contribution_catalog=(),
-        contributions=tuple(specs),
-        surface_bindings=tuple(bindings),
-        model_sha256=_digest(model),
-        source_sha256=_digest(complete),
+        )
+    junction = PlanarJunction(
+        "junction", "sheet_polygon", "A", "B", (1, 0), 2.0, 10e-9, 32 * EPSILON_0
     )
-    return prepared, _raw_integrals(groups)
+    return SgbEprSource(
+        domains={
+            "substrate": EprDomain("substrate", "Si", 4.0),
+            "Region": EprDomain("Region", "air", 1.0),
+        },
+        films=films,
+        rows=rows,
+        entries=tuple(entries),
+        junctions={
+            "junction": JunctionSheet(
+                junction, "PORT::junction", ("face",), (1.0, 0.0, 0.0), 1e6
+            )
+        },
+    )
 
 
-def _raw_integrals(groups):
-    """Build the existing scalar domain, junction and grouped-surface arithmetic inputs."""
-    raw = {
+def _raw(source: SgbEprSource) -> dict:
+    domains = tuple(source.domains)
+    return {
         "frequency_hz": _quantity(8.0, "Hz"),
         "electric_domain_integrals_v2_m": {
             "substrate": _quantity(8.0, "V^2*m"),
-            "vacuum": _quantity(0.0, "V^2*m"),
+            "Region": _quantity(0.0, "V^2*m"),
         },
         "magnetic_domain_integrals_a2_m": {
-            key: _quantity(0.0, "A^2*m") for key in ("substrate", "vacuum")
+            key: _quantity(0.0, "A^2*m") for key in domains
         },
-        "relative_permeability": {
-            key: _quantity(1.0, "1") for key in ("substrate", "vacuum")
-        },
-        "effective_domain_volumes_m3": {
-            key: _quantity(1.0, "m^3") for key in ("substrate", "vacuum")
-        },
+        "relative_permeability": {key: _quantity(1.0, "1") for key in domains},
+        "effective_domain_volumes_m3": {key: _quantity(1.0, "m^3") for key in domains},
         "junction_integrals_v_m": {
             "junction": {"real": _quantity(1.0, "V*m"), "imag": _quantity(0.0, "V*m")}
         },
-        "surface_granularity": "owner_interface_margin.v1",
-        "surface_group_provenance": {group["group_id"]: group for group in groups},
+        "surface_granularity": SURFACE_GRANULARITY,
         "surface_integrals_v2": {
-            group["group_id"]: {
-                "normal": _quantity(4.0 if group["margin_um"] else 8.0, "V^2"),
-                "tangential": _quantity(1.0 if group["margin_um"] else 2.0, "V^2"),
-            }
-            for group in groups
+            row: {"normal": _quantity(4.0, "V^2"), "tangential": _quantity(1.0, "V^2")}
+            for row in source.rows
         },
-        "masked_areas_m2": {
-            group["group_id"]: _quantity(0.5 if group["margin_um"] else 1.0, "m^2")
-            for group in groups
-        },
+        "masked_areas_m2": {row: _quantity(0.5, "m^2") for row in source.rows},
     }
-    return raw
 
 
 @pytest.mark.parametrize(
@@ -233,7 +145,6 @@ def _raw_integrals(groups):
 def test_peak_phasor_coefficients_match_independent_hand_calculation(
     interface, normal, tangential
 ):
-    # This coefficient-only helper is internal; public integrations are checked below.
     """Match peak-phasor energy coefficients against independent scalar calculations."""
     assert surface_energy_coefficients(interface, 0.5, 2.0, 4.0) == (
         normal,
@@ -242,19 +153,16 @@ def test_peak_phasor_coefficients_match_independent_hand_calculation(
 
 
 def _assert_surface_arithmetic(rows, *, thickness_scale=1):
-    assert (
-        len(rows) == 9
-    )  # Three interfaces x three logical evaluations, not eighteen patches.
-    identities = {
+    # Three interfaces x two reported evaluations, not one row per Surface-EPR row.
+    assert len(rows) == 6
+    assert {
         (row["interface_kind"], row["evaluation_kind"], row["margin_um"])
         for row in rows
-    }
-    assert identities == {
+    } == {
         (interface, kind, margin)
         for interface in ENERGIES
         for kind, margin in EVALUATIONS
     }
-    assert len({row["group_id"] for row in rows}) == 9
     for row in rows:
         scale = 0.5 if row["margin_um"] else 1
         assert (
@@ -264,41 +172,33 @@ def _assert_surface_arithmetic(rows, *, thickness_scale=1):
             row["participation"]
             == PARTICIPATIONS[row["interface_kind"]] * scale * thickness_scale
         )
-        assert len(row["members"]) == 2
-        assert {member["binding_id"] for member in row["members"]} == {
-            row["interface_kind"] + "_binding_1",
-            row["interface_kind"] + "_binding_2",
-        }
+        assert [member["band"] for member in row["members"]] == (
+            [1] if row["margin_um"] else [0, 1]
+        )
 
 
-def test_public_surface_and_complete_composition_share_full_denominator_and_group_once():
-    """Use the complete energy denominator and count each surface group once."""
-    prepared, raw = _analytical_inputs()
-    surface = combine_surface_epr_mode(prepared, raw)
-    full = combine_epr_mode(prepared, raw)
+def test_the_composition_uses_the_full_denominator_and_counts_each_row_once():
+    """Bulk plus junction capacitive energy normalize; each entry sums its own rows."""
+    source = _source()
+    full = combine_sgb_epr_mode(source, _raw(source))
     assert full["electric_energy_j"] == 16 * EPSILON_0
     assert full["junction_capacitive_energy_j"] == 16 * EPSILON_0
-    assert (
-        full["normalization_energy_j"]
-        == surface["normalization_energy_j"]
-        == 32 * EPSILON_0
-    )
-    assert full["surface_contributions"] == surface["surface_contributions"]
+    assert full["normalization_energy_j"] == 32 * EPSILON_0
     _assert_surface_arithmetic(full["surface_contributions"])
 
 
-def _analytical_history(prepared, raw):
+def _analytical_history(source):
     rows = []
     for mode in (1, 2):
         for native_pass in (1, 2):
-            record = deepcopy(raw)
+            record = deepcopy(_raw(source))
             record["frequency_hz"] = _quantity(8.0 * mode, "Hz")
             rows.append(
                 {
                     "mode": mode,
                     "native_pass": native_pass,
                     "status": "complete",
-                    **combine_epr_mode(prepared, record),
+                    **combine_sgb_epr_mode(source, record),
                 }
             )
     return EprResult(
@@ -306,8 +206,8 @@ def _analytical_history(prepared, raw):
         setup_name="AnalyticalCalculationOnly",
         rows=tuple(rows),
         provenance={
-            "model_source_sha256": prepared.model_sha256,
-            "analysis_source_sha256": prepared.source_sha256,
+            "model_source_sha256": "0" * 64,
+            "analysis_source_sha256": "1" * 64,
             "requested_modes": (1, 2),
             "input_kind": "analytical_contract",
             "native_observed": False,
@@ -315,10 +215,9 @@ def _analytical_history(prepared, raw):
     )
 
 
-def test_public_reanalysis_preserves_mode_pass_margin_identity_and_power_two_scaling():
+def test_reanalysis_preserves_mode_pass_margin_identity_and_power_two_scaling():
     """Preserve mode/pass identity and quadratic field scaling during reanalysis."""
-    prepared, raw = _analytical_inputs()
-    result = _analytical_history(prepared, raw)
+    result = _analytical_history(_source())
     original = result.to_payload()
     updated = reanalyze_epr(
         result,
@@ -355,8 +254,7 @@ def test_public_reanalysis_preserves_mode_pass_margin_identity_and_power_two_sca
 
 def test_epr_result_preserves_mode_error_precedence_over_raw_integral_shape():
     """Report invalid mode identity before malformed raw-integral data."""
-    prepared, raw = _analytical_inputs()
-    result = _analytical_history(prepared, raw)
+    result = _analytical_history(_source())
     with pytest.raises(
         ValueError, match="EPR result row mode must be a positive integer"
     ):
@@ -370,8 +268,7 @@ def test_epr_result_preserves_mode_error_precedence_over_raw_integral_shape():
 
 def test_reanalysis_loss_tangent_only_preserves_stored_energy_and_participation():
     """Change loss tangent without changing stored energy or participation."""
-    prepared, raw = _analytical_inputs()
-    result = _analytical_history(prepared, raw)
+    result = _analytical_history(_source())
     loss_tangent = 0.012
     updated = reanalyze_epr(
         result,
@@ -393,20 +290,21 @@ def test_reanalysis_loss_tangent_only_preserves_stored_energy_and_participation(
 
 
 @pytest.mark.parametrize("field", ("electric", "normal", "area", "junction"))
-def test_public_composition_rejects_wrong_canonical_units(field):
+def test_the_composition_rejects_wrong_canonical_units(field):
     """Reject integral records with noncanonical physical units."""
-    prepared, raw = _analytical_inputs()
-    group_id = next(iter(raw["surface_integrals_v2"]))
+    source = _source()
+    raw = _raw(source)
+    row = next(iter(raw["surface_integrals_v2"]))
     if field == "electric":
         raw["electric_domain_integrals_v2_m"]["substrate"]["unit"] = "V^2"
     elif field == "normal":
-        raw["surface_integrals_v2"][group_id]["normal"]["unit"] = "V^2*m"
+        raw["surface_integrals_v2"][row]["normal"]["unit"] = "V^2*m"
     elif field == "area":
-        raw["masked_areas_m2"][group_id]["unit"] = "um^2"
+        raw["masked_areas_m2"][row]["unit"] = "um^2"
     else:
         raw["junction_integrals_v_m"]["junction"]["real"]["unit"] = "V"
     with pytest.raises(ValueError, match="canonical unit"):
-        combine_surface_epr_mode(prepared, raw)
+        combine_sgb_epr_mode(source, raw)
 
 
 @pytest.mark.parametrize(
@@ -417,69 +315,51 @@ def test_public_composition_rejects_wrong_canonical_units(field):
         "junction_integrals_v_m",
     ),
 )
-def test_public_composition_requires_raw_quantity_maps(missing):
-    """Require the declared raw quantity maps for public EPR composition."""
-    prepared, raw = _analytical_inputs()
+def test_the_composition_requires_raw_quantity_maps(missing):
+    """Require the declared raw quantity maps."""
+    source = _source()
+    raw = _raw(source)
     del raw[missing]
     with pytest.raises(TypeError, match="must be a string-keyed mapping"):
-        combine_surface_epr_mode(prepared, raw)
+        combine_sgb_epr_mode(source, raw)
 
 
-def test_public_composition_requires_complete_domain_and_group_membership():
-    """Require every declared domain and surface-group member during composition."""
-    prepared, raw = _analytical_inputs()
-    raw["electric_domain_integrals_v2_m"].pop("vacuum")
-    with pytest.raises(ValueError, match="cover every prepared solution domain"):
-        combine_surface_epr_mode(prepared, raw)
-    prepared, raw = _analytical_inputs()
+def test_the_composition_requires_every_domain_and_row():
+    """Require every domain and every Surface-EPR row of the source."""
+    source = _source()
+    raw = _raw(source)
+    raw["electric_domain_integrals_v2_m"].pop("Region")
+    with pytest.raises(ValueError, match="must cover the domains"):
+        combine_sgb_epr_mode(source, raw)
+    raw = _raw(source)
     raw["surface_integrals_v2"].pop(next(iter(raw["surface_integrals_v2"])))
-    with pytest.raises(ValueError, match="do not cover prepared groups"):
-        combine_surface_epr_mode(prepared, raw)
+    with pytest.raises(ValueError, match="must cover the Surface-EPR rows"):
+        combine_sgb_epr_mode(source, raw)
 
 
-def test_public_composition_rejects_zero_normalization_instead_of_returning_participation():
+def test_the_composition_rejects_zero_normalization_instead_of_returning_participation():
     """Reject zero normalization before producing a participation result."""
-    prepared, raw = _analytical_inputs()
+    source = _source()
+    raw = _raw(source)
     for value in raw["electric_domain_integrals_v2_m"].values():
         value["value"] = 0.0
     raw["junction_integrals_v_m"]["junction"]["real"]["value"] = 0.0
     with pytest.raises(ValueError, match="normalization energy must be finite and > 0"):
-        combine_surface_epr_mode(prepared, raw)
+        combine_sgb_epr_mode(source, raw)
 
 
-def test_public_composition_refuses_raw_without_surface_granularity():
-    """Refuse a raw mode that names no surface granularity; every current run writes one."""
-    prepared, raw = _analytical_inputs()
-    del raw["surface_granularity"]
-    with pytest.raises(ValueError, match="names no surface_granularity"):
-        combine_surface_epr_mode(prepared, raw)
-
-
-def test_public_composition_refuses_geometry_without_surface_evaluation_policy():
-    """Refuse prepared geometry that names no surface evaluation policy."""
-    prepared, raw = _analytical_inputs()
-    payload = prepared.to_payload()
-    del payload["source"]["surface_evaluation_policy"]
-    model = {key: payload[key] for key in ("modeling", "source", "junctions")}
-    payload["model_sha256"] = _digest(model)
-    payload["source_sha256"] = _digest(
-        {
-            **model,
-            **{
-                key: payload[key]
-                for key in ("contribution_catalog", "contributions", "surface_bindings")
-            },
-        }
-    )
-    stripped = PreparedPlanarGeometry.from_payload(payload)
-    with pytest.raises(ValueError, match="names no surface_evaluation_policy"):
-        combine_surface_epr_mode(stripped, raw)
+def test_the_composition_refuses_raw_of_another_surface_granularity():
+    """Refuse a raw mode that is not of the SGB model's Surface-EPR rows."""
+    source = _source()
+    raw = _raw(source)
+    raw["surface_granularity"] = "owner_interface_margin.v1"
+    with pytest.raises(ValueError, match="surface granularity"):
+        combine_sgb_epr_mode(source, raw)
 
 
 def test_reanalysis_refuses_surface_row_without_stored_integrals():
     """Refuse to rescale a surface row whose stored field integrals are missing."""
-    prepared, raw = _analytical_inputs()
-    result = _analytical_history(prepared, raw)
+    result = _analytical_history(_source())
     payload = result.to_payload()
     for row in payload["rows"]:
         for item in row["surface_contributions"]:

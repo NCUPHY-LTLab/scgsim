@@ -304,6 +304,9 @@ jobs:
         run: |
           uv build --python 3.12.14 --wheel --out-dir .ci/scgsim-wheel .
           uv pip install --python .venv-docs/bin/python --no-deps .ci/scgsim-wheel/scgsim-*.whl
+      - name: Install the geometry kernel the AEDT route exports its STEP with
+        # The wheel is installed without dependencies and the pinned PDK's notebook group has no OCP.
+        run: uv pip install --python .venv-docs/bin/python --no-deps cadquery-ocp-novtk==7.8.1.1.post1
       - name: Run installed SCGSim documentation through file-only preparation
         run: .venv-docs/bin/python -I -B scripts/check_docs_examples.py
 

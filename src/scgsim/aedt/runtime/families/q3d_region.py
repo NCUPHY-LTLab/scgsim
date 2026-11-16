@@ -198,8 +198,11 @@ def _same_q3d_bounds(observed: Any, expected: list[float]) -> bool:
     )
 
 
-def seal_q3d_region(app: Any, spec: Q3dSpec) -> dict[str, Any]:
-    """Create the six grounded enclosure sheets while preserving declared net assignments."""
+def seal_q3d_region(app: Any, spec: Q3dSpec, vacuum_material: str) -> dict[str, Any]:
+    """Create the six grounded enclosure sheets while preserving declared net assignments.
+
+    ``vacuum_material`` is the AEDT material of the imported Region, which the final Region keeps.
+    """
     initial_region = app.modeler.get_object_from_name("Region")
     if initial_region is None or initial_region.name != "Region":
         raise RuntimeError("Q3D Region is unavailable for grounding")
@@ -238,7 +241,7 @@ def seal_q3d_region(app: Any, spec: Q3dSpec) -> dict[str, Any]:
                 f"Q3D Region grounding sheet creation failed for {direction}"
             )
         created[direction] = _CreatedRegionSheet(sheet, expected_bounds)
-    region = _create_grounded_region(app, spec, intended_bounds)
+    region = _create_grounded_region(app, vacuum_material, intended_bounds)
     bounds = _q3d_region_bounds(region)
     faces = _q3d_region_faces(region, bounds)
     records: list[dict[str, Any]] = []
@@ -303,7 +306,7 @@ def read_q3d_region_ground(
         or not _same_q3d_bounds(evidence.get("native_bounding_box_um"), list(bounds))
         or evidence.get("native_final_region_padding_um") != [0.0] * 6
         or _native_object_property(region, "Material").strip('"').casefold()
-        != cast(str, spec.materials[spec.vacuum_material_id].library_name).casefold()
+        != str(region_record["native_material"]).casefold()
     ):
         raise RuntimeError("Q3D grounded Region geometry changed after save")
     boundary_setup = app.design_properties.get("BoundarySetup")
@@ -412,7 +415,7 @@ def read_q3d_region_ground(
 
 
 def _create_grounded_region(
-    app: Any, spec: Q3dSpec, intended_bounds: tuple[float, ...]
+    app: Any, vacuum_material: str, intended_bounds: tuple[float, ...]
 ) -> Any:
     """Recreate the final vacuum Region with zero offsets and verify its source bounds."""
     region = app.modeler.create_region(
@@ -420,12 +423,11 @@ def _create_grounded_region(
         pad_type="Absolute Offset",
         name="Region",
     )
-    vacuum = spec.materials[spec.vacuum_material_id]
-    region.material_name = vacuum.library_name
+    region.material_name = vacuum_material
     if (
         region.name != "Region"
         or _native_object_property(region, "Material").strip('"').casefold()
-        != cast(str, vacuum.library_name).casefold()
+        != vacuum_material.casefold()
         or not _same_q3d_bounds(region.bounding_box, list(intended_bounds))
     ):
         raise RuntimeError("Q3D final grounded Region readback failed")

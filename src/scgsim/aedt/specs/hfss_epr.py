@@ -1,27 +1,22 @@
-"""HFSS Eigenmode EPR requests and selection validation."""
+"""HFSS Eigenmode requests on an SGB model, and the check of their EPR selection against it.
+
+Both requests carry the :class:`PreparedSgbModel` AEDT imports (issue #67).  A request payload is a handoff
+payload: its model lives in the handoff's ``model/`` folder, so a payload is decoded against the directory
+that holds it (``base_dir``) and every model file is checked again there.  A payload of the native builder
+(one that carries ``geometry``) is refused with the reason (issue #67 decision 6).
+"""
 
 from __future__ import annotations
 
-from collections.abc import (
-    Mapping,
-)
-from dataclasses import (
-    dataclass,
-    field,
-)
-from pathlib import (
-    Path,
-)
-from types import (
-    MappingProxyType,
-)
-from typing import (
-    Any,
-    Literal,
-    cast,
-)
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Literal, cast
 
-from scgsim.aedt.epr.selection import surface_integral_groups
+from scgsim.aedt.epr.sgb_source import sgb_epr_source
+from scgsim.aedt.preparation.sgb_handoff import bind_sgb_model, model_payload
+from scgsim.aedt.preparation.sgb_model import PreparedSgbModel
 from scgsim.aedt.specs.common import (
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
     EPR_ANALYSIS_SCHEMA_VERSION_V3,
@@ -43,47 +38,40 @@ from scgsim.aedt.specs.epr import (
     SavedSolution,
     iter_expression_convergence,
 )
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 from scgsim.aedt.specs.hfss_common import EigenmodeRunControl
-from scgsim.aedt.specs.modeling import (
-    Modeling,
-    PhysicalLayerDeclaration,
-    PhysicalLayerSpec,
-    PhysicalRepresentationPlan,
-    modeling_payload,
-    physical_layers_from_payload,
-    request_modeling,
-    source_plan_layers,
-)
-from scgsim.aedt.versions import (
-    normalize_aedt_version,
+from scgsim.aedt.specs.modeling import Modeling
+from scgsim.aedt.versions import normalize_aedt_version
+
+NATIVE_PAYLOAD_REFUSAL = (
+    "this HFSS Eigenmode request carries a natively built geometry; AEDT runs and reads only SGB models "
+    "since issue #67, prepare it again"
 )
 
 
 @dataclass(frozen=True)
 class HfssEprSpec:
-    """One body-first Eigenmode model with optional solve setup.
+    """One HFSS Eigenmode model built from an SGB model, with an optional solve setup and EPR request.
 
-    An explicit null run_control declares model-only preparation; EPR analysis
-    and cache requests retain their complete setup requirement.
+    An explicit null run_control declares model-only preparation; EPR analysis and cache requests require
+    the complete setup.
     """
 
     modeling: Modeling
     project_name: str
     design_name: str
-    geometry: Any
+    model: PreparedSgbModel
     run_control: EigenmodeRunControl | None = None
-    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
-    physical_representation: PhysicalRepresentationPlan | None = None
-    epr_request: Any = None
+    epr_request: EprAnalysisRequest | None = None
     aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
-    expression_convergence: Any = None
+    expression_convergence: (
+        ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None
+    ) = None
 
     @property
     def lumped_rlcs(self) -> tuple[LumpedRlc, ...]:
-        """Return lumped RLC treatments attached to the geometry."""
-        return self.geometry.lumped_rlcs
+        """The generic RLC treatments of the model's port sheets."""
+        return self.model.lumped_rlcs
 
     @property
     def mode(self) -> Literal["eigenmode"]:
@@ -91,28 +79,9 @@ class HfssEprSpec:
         return "eigenmode"
 
     def __post_init__(self) -> None:
-        request_modeling(self)
-        object.__setattr__(
-            self, "aedt_version", normalize_aedt_version(self.aedt_version)
-        )
-        if self.pyaedt_version != LOCKED_PYAEDT:
-            raise ValueError("EPR V1 requires PyAEDT 1.3.0")
-        project = project_filename(self.project_name, "project_name")
-        object.__setattr__(self, "project_name", project.stem)
-        object.__setattr__(
-            self, "design_name", text_value(self.design_name, "design_name")
-        )
-        if not isinstance(self.geometry, PreparedPlanarGeometry):
-            raise TypeError("geometry must be PreparedPlanarGeometry")
-        if self.geometry.modeling != self.modeling:
-            raise ValueError("request and prepared geometry modeling differ")
-        declared = source_plan_layers(self.geometry.source)
-        if self.physical_layers and {
-            item.physical_layer_id: item for item in self.physical_layers
-        } != {item.physical_layer_id: item for item in declared}:
-            raise ValueError("request physical layers differ from prepared source map")
-        object.__setattr__(self, "physical_layers", declared)
-
+        _check_identity(self)
+        if self.model.modeling != self.modeling:
+            raise ValueError("request and prepared model modeling differ")
         if self.run_control is not None and not isinstance(
             self.run_control, EigenmodeRunControl
         ):
@@ -132,10 +101,10 @@ class HfssEprSpec:
             raise TypeError(
                 "expression_convergence must be a unit control, collection, or None"
             )
-        _validate_epr_selection(self)
+        validate_epr_selection(self)
 
     def to_payload(self) -> dict[str, Any]:
-        """Return the canonical HfssEprSpec payload."""
+        """Return the canonical HfssEprSpec payload; its model names the handoff's ``model/`` folder."""
         schema_version = (
             (
                 EPR_EIGENMODE_SCHEMA_VERSION_V4
@@ -148,9 +117,9 @@ class HfssEprSpec:
             else EPR_EIGENMODE_SCHEMA_VERSION_V2
         )
         return {
-            **modeling_payload(self),
             "schema_version": schema_version,
             "mode": self.mode,
+            "modeling": self.modeling,
             "aedt": {"requested_version": self.aedt_version},
             "pyaedt": {
                 "locked_version": self.pyaedt_version,
@@ -160,7 +129,7 @@ class HfssEprSpec:
             "run_control": (
                 None if self.run_control is None else self.run_control.to_payload()
             ),
-            "geometry": self.geometry.to_payload(),
+            "model": model_payload(self.model),
             "epr": (
                 None if self.epr_request is None else self.epr_request.to_payload()
             ),
@@ -172,8 +141,10 @@ class HfssEprSpec:
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> HfssEprSpec:
-        """Decode a HfssEprSpec from its canonical payload."""
+    def from_payload(
+        cls, payload: dict[str, Any], *, base_dir: Path | None
+    ) -> HfssEprSpec:
+        """Decode a HfssEprSpec from its canonical payload, binding its model under ``base_dir``."""
         schema = _validate_hfss_epr_payload(payload)
         run = payload.get("run_control")
         if run is not None and not isinstance(run, dict):
@@ -181,20 +152,11 @@ class HfssEprSpec:
         project = payload.get("project")
         if not isinstance(project, dict):
             raise TypeError("project must be a JSON object")
-        geometry = PreparedPlanarGeometry.from_payload(payload.get("geometry"))
         return cls(
             modeling=cast(Modeling, payload.get("modeling")),
-            physical_layers=physical_layers_from_payload(payload),
-            physical_representation=(
-                PhysicalRepresentationPlan.from_payload(
-                    payload["physical_representation"]
-                )
-                if "physical_representation" in payload
-                else None
-            ),
             project_name=project_name_from_payload(project.get("name")),
             design_name=text_value(project.get("design"), "project.design"),
-            geometry=geometry,
+            model=_bound_model(payload, base_dir),
             run_control=None if run is None else EigenmodeRunControl(**run),
             epr_request=(
                 None
@@ -231,20 +193,19 @@ def _validate_hfss_epr_payload(payload: dict[str, Any]) -> str:
     }
     if schema not in supported:
         raise ValueError("unsupported HFSS EPR schema")
+    if "geometry" in payload:
+        raise ValueError(NATIVE_PAYLOAD_REFUSAL)
     expected = {
         "schema_version",
         "mode",
+        "modeling",
         "aedt",
         "pyaedt",
         "project",
         "run_control",
-        "geometry",
+        "model",
         "epr",
     }
-    if "modeling" in payload:
-        expected.update({"modeling", "physical_layers"})
-    if "physical_representation" in payload:
-        expected.add("physical_representation")
     if schema in {EPR_EIGENMODE_SCHEMA_VERSION_V3, EPR_EIGENMODE_SCHEMA_VERSION_V4}:
         expected.add("expression_convergence")
         if payload.get("expression_convergence") is None:
@@ -258,14 +219,18 @@ def _validate_hfss_epr_payload(payload: dict[str, Any]) -> str:
 
 @dataclass(frozen=True)
 class HfssEprAnalysisSpec:
-    """One saved-copy-only Eigenmode EPR analysis request."""
+    """One saved-copy-only Eigenmode EPR analysis of a solved SGB model.
+
+    ``surface_field_selectors`` are keyed by sidecar Surface-EPR group: ``surface`` reads a row's field on
+    its faces, ``adjacent`` just off them.
+    """
 
     project_name: str
     design_name: str
-    geometry: Any
+    model: PreparedSgbModel
     run_control: EigenmodeRunControl
-    epr_request: Any
-    saved_solution: Any
+    epr_request: EprAnalysisRequest
+    saved_solution: SavedSolution
     aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
     surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = (
@@ -278,25 +243,14 @@ class HfssEprAnalysisSpec:
         return "eigenmode"
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "aedt_version", normalize_aedt_version(self.aedt_version)
-        )
-        if self.pyaedt_version != LOCKED_PYAEDT:
-            raise ValueError("EPR V1 requires PyAEDT 1.3.0")
-        project = project_filename(self.project_name, "project_name")
-        object.__setattr__(self, "project_name", project.stem)
-        object.__setattr__(
-            self, "design_name", text_value(self.design_name, "design_name")
-        )
-        if not isinstance(self.geometry, PreparedPlanarGeometry):
-            raise TypeError("geometry must be PreparedPlanarGeometry")
+        _check_identity(self)
         if not isinstance(self.run_control, EigenmodeRunControl):
             raise TypeError("run_control must be EigenmodeRunControl")
         if not isinstance(self.saved_solution, SavedSolution):
             raise TypeError("saved_solution must be SavedSolution")
         if not isinstance(self.epr_request, EprAnalysisRequest):
             raise TypeError("epr_request must be EprAnalysisRequest")
-        _validate_epr_selection(self)
+        groups = validate_epr_selection(self)
         requested = self.surface_field_selectors
         if requested is None:
             requested = {}
@@ -304,26 +258,22 @@ class HfssEprAnalysisSpec:
             not isinstance(key, str) for key in requested
         ):
             raise TypeError(
-                "surface_field_selectors must be a contribution-ID mapping or None"
+                "surface_field_selectors must be a Surface-EPR group mapping or None"
             )
         selectors = dict(requested)
         if any(value not in ("surface", "adjacent") for value in selectors.values()):
             raise ValueError("surface field selectors must be 'surface' or 'adjacent'")
-        selected = (
-            {item.contribution_id for item in self.geometry.contributions}
-            if self.epr_request.surface_contribution_ids is None
-            else set(self.epr_request.surface_contribution_ids)
-        )
-        if not set(selectors) <= selected:
+        unknown = sorted(set(selectors) - groups)
+        if unknown:
             raise ValueError(
-                "surface field selectors reference unknown or unselected contributions"
+                f"surface field selectors name groups no selected Surface-EPR row carries: {unknown}"
             )
         object.__setattr__(self, "surface_field_selectors", MappingProxyType(selectors))
         if self.saved_solution.project_path.stem != self.project_name:
             raise ValueError("saved solution project does not match project_name")
         identity = self.saved_solution.identity
         expected = {
-            "model_source_sha256": self.geometry.model_sha256,
+            "model_source_sha256": self.model.identity_sha256,
             "project_name": self.project_name,
             "design_name": self.design_name,
             "setup_name": self.run_control.setup_name,
@@ -349,7 +299,7 @@ class HfssEprAnalysisSpec:
             },
             "project": {"name": self.project_name, "design": self.design_name},
             "run_control": self.run_control.to_payload(),
-            "geometry": self.geometry.to_payload(),
+            "model": model_payload(self.model),
             "epr": self.epr_request.to_payload(),
             "saved_solution": self.saved_solution.to_payload(),
             **(
@@ -363,7 +313,7 @@ class HfssEprAnalysisSpec:
     def from_payload(
         cls, payload: dict[str, Any], *, base_dir: Path | None
     ) -> HfssEprAnalysisSpec:
-        """Decode a HfssEprAnalysisSpec from its canonical payload."""
+        """Decode a HfssEprAnalysisSpec from its canonical payload, binding its model under ``base_dir``."""
         schema = payload.get("schema_version")
         if schema not in {
             EPR_ANALYSIS_SCHEMA_VERSION_V2,
@@ -372,6 +322,8 @@ class HfssEprAnalysisSpec:
             raise ValueError("unsupported HFSS EPR analysis schema")
         if base_dir is None:
             raise ValueError("HFSS EPR analysis requires a bound base directory")
+        if "geometry" in payload:
+            raise ValueError(NATIVE_PAYLOAD_REFUSAL)
         expected = {
             "schema_version",
             "mode",
@@ -379,7 +331,7 @@ class HfssEprAnalysisSpec:
             "pyaedt",
             "project",
             "run_control",
-            "geometry",
+            "model",
             "epr",
             "saved_solution",
         }
@@ -401,7 +353,7 @@ class HfssEprAnalysisSpec:
         return cls(
             project_name=project_name_from_payload(project.get("name")),
             design_name=text_value(project.get("design"), "project.design"),
-            geometry=PreparedPlanarGeometry.from_payload(payload.get("geometry")),
+            model=_bound_model(payload, base_dir),
             run_control=EigenmodeRunControl(**run),
             epr_request=EprAnalysisRequest.from_payload(payload.get("epr")),
             saved_solution=SavedSolution.from_payload(
@@ -420,22 +372,37 @@ class HfssEprAnalysisSpec:
         )
 
 
-def _validate_epr_selection(spec: HfssEprSpec | HfssEprAnalysisSpec) -> None:
+def _bound_model(payload: Mapping[str, Any], base_dir: Path | None) -> PreparedSgbModel:
+    if base_dir is None:
+        raise ValueError(
+            "an HFSS Eigenmode request is read against the handoff directory that holds its model"
+        )
+    return bind_sgb_model(payload.get("model") or {}, Path(base_dir))
+
+
+def _check_identity(spec: HfssEprSpec | HfssEprAnalysisSpec) -> None:
+    object.__setattr__(spec, "aedt_version", normalize_aedt_version(spec.aedt_version))
+    if spec.pyaedt_version != LOCKED_PYAEDT:
+        raise ValueError("EPR V1 requires PyAEDT 1.3.0")
+    project = project_filename(spec.project_name, "project_name")
+    object.__setattr__(spec, "project_name", project.stem)
+    object.__setattr__(spec, "design_name", text_value(spec.design_name, "design_name"))
+    if not isinstance(spec.model, PreparedSgbModel):
+        raise TypeError("model must be PreparedSgbModel")
+
+
+def validate_epr_selection(spec: HfssEprSpec | HfssEprAnalysisSpec) -> set[str]:
+    """Check the request's selection against the model; return the Surface-EPR groups its rows carry.
+
+    The modes must be configured Eigenmodes, the junctions and bulk domains the model's, and every
+    normalized-surface convergence target must select a Surface-EPR entry.  Reading the model's EPR
+    source also refuses an unknown or empty Surface-EPR group and a film without its thickness.
+    """
     request = spec.epr_request
     if request is None:
         if getattr(spec, "expression_convergence", None) is not None:
             raise ValueError("expression convergence requires an EPR analysis request")
-        return
-    if any(
-        item.field_side == "sidewall" for item in spec.geometry.contributions
-    ) or any(
-        item["contribution"]["side"] == "sidewall"
-        for item in spec.geometry.surface_bindings
-    ):
-        raise ValueError(
-            "sidewall Surface-EPR is excluded; reprepare a horizontal-only "
-            "handoff before EPR execution"
-        )
+        return set()
     run_control = cast(EigenmodeRunControl, spec.run_control)
     modes = (
         tuple(range(1, run_control.num_modes + 1))
@@ -444,48 +411,28 @@ def _validate_epr_selection(spec: HfssEprSpec | HfssEprAnalysisSpec) -> None:
     )
     if not modes or any(mode > run_control.num_modes for mode in modes):
         raise ValueError("EPR mode_indices must select configured Eigenmodes")
-    surface_ids = {item.contribution_id for item in spec.geometry.contributions}
-    selected_surfaces = (
-        surface_ids
-        if request.surface_contribution_ids is None
-        else set(request.surface_contribution_ids)
-    )
-    if not selected_surfaces <= surface_ids:
-        raise ValueError("EPR request selects an unknown surface contribution")
-    junction_ids = {item.junction_id for item in spec.geometry.junctions}
-    selected_junctions = (
-        junction_ids if request.junction_ids is None else set(request.junction_ids)
-    )
-    if not selected_junctions <= junction_ids:
+    source = sgb_epr_source(spec.model, surface_epr_groups=request.surface_epr_groups)
+    if request.junction_ids is not None and not set(request.junction_ids) <= set(
+        source.junctions
+    ):
         raise ValueError("EPR request selects an unknown junction")
-    source_domains = {
-        item["semantic_id"] for item in spec.geometry.source["solution_regions"]
-    }
-    native_region = spec.geometry.source.get("native_region")
-    if native_region is not None:
-        source_domains.difference_update(native_region["logical_vacuum_ids"])
-        source_domains.add("Region")
-    if (
-        request.bulk_domain_ids is not None
-        and not set(request.bulk_domain_ids) <= source_domains
+    if request.bulk_domain_ids is not None and not set(request.bulk_domain_ids) <= set(
+        source.domains
     ):
         raise ValueError("EPR request selects an unknown bulk domain")
-    groups = surface_integral_groups(spec.geometry, request)
-    convergence = getattr(spec, "expression_convergence", None)
-    for control in iter_expression_convergence(convergence):
+    for control in iter_expression_convergence(
+        getattr(spec, "expression_convergence", None)
+    ):
         if control.mode not in modes:
             raise ValueError("expression convergence mode must be selected for EPR")
         target = control.target
-        if isinstance(target, NormalizedSurfaceEprTotal):
-            selected_groups = [
-                group
-                for group in groups
-                if group["interface_kind"] == target.interface_kind
-                and group.get("evaluation_kind", "requested_margin")
-                == target.evaluation_kind
-                and float(group["margin_um"]) == target.margin_um
-            ]
-            if not selected_groups:
-                raise ValueError(
-                    "normalized surface convergence target selects no prepared owner groups"
-                )
+        if isinstance(target, NormalizedSurfaceEprTotal) and not any(
+            entry.interface_type == target.interface_kind
+            and entry.evaluation_kind == target.evaluation_kind
+            and entry.margin_um == float(target.margin_um)
+            for entry in source.entries
+        ):
+            raise ValueError(
+                "normalized surface convergence target selects no Surface-EPR entry"
+            )
+    return {row.group for row in source.rows.values()}

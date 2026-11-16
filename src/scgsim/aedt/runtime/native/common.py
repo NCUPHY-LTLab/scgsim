@@ -12,9 +12,7 @@ from typing import Any, cast
 
 from scgsim.aedt.data import detached
 from scgsim.aedt.specs.common import LOCKED_PYAEDT
-from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
 from scgsim.aedt.specs.parse import AedtSpec, parse_aedt_spec
-from scgsim.aedt.specs.q3d import Q3dSpec
 from scgsim.aedt.versions import AedtVersionProfile
 
 
@@ -290,34 +288,6 @@ def detached_data(value: Any) -> Any:
     return value
 
 
-def native_object_evidence(hfss: Any, object_name: str) -> dict[str, Any]:
-    """Read object identity, shape kind, and faces directly from the editor."""
-    editor = hfss.modeler.oeditor
-    object_id = int(editor.GetObjectIDByName(object_name))
-    memberships = [
-        object_type
-        for object_type, group in (
-            ("Solid", "Solids"),
-            ("Sheet", "Sheets"),
-            ("Line", "Lines"),
-            ("Unclassified", "Unclassified"),
-        )
-        if object_name in {str(name) for name in editor.GetObjectsInGroup(group)}
-    ]
-    if len(memberships) != 1:
-        raise RuntimeError(
-            f"native object type is ambiguous for {object_name!r}: {memberships!r}"
-        )
-    face_ids = [int(face_id) for face_id in editor.GetFaceIDs(object_name)]
-    if len(face_ids) != len(set(face_ids)) or not face_ids:
-        raise RuntimeError(f"native object faces are invalid for {object_name!r}")
-    return {
-        "native_object_id": object_id,
-        "native_object_type": memberships[0],
-        "native_face_ids": face_ids,
-    }
-
-
 def native_boundary_type(hfss: Any, name: str) -> str:
     """Read the unique boundary type from the live native boundary inventory."""
     raw = [str(value) for value in hfss.oboundary.GetBoundaries()]
@@ -327,115 +297,6 @@ def native_boundary_type(hfss: Any, name: str) -> str:
     if len(matches) != 1:
         raise RuntimeError(f"native boundary type is unavailable for {name!r}")
     return matches[0]
-
-
-def resolve_native_assignment(
-    hfss: Any, raw_ids: list[int]
-) -> tuple[list[dict[str, Any]], set[int], set[str]]:
-    """Resolve AEDT's face-or-object boundary IDs without guessing their kind."""
-    by_object_id: dict[int, tuple[str, list[int]]] = {}
-    by_face_id: dict[int, str] = {}
-    for object_name in [str(name) for name in hfss.modeler.object_names]:
-        native = native_object_evidence(hfss, object_name)
-        object_id = native["native_object_id"]
-        face_ids = native["native_face_ids"]
-        if object_id in by_object_id:
-            raise RuntimeError(f"duplicate native object ID: {object_id}")
-        by_object_id[object_id] = (object_name, face_ids)
-        for face_id in face_ids:
-            if face_id in by_face_id:
-                raise RuntimeError(f"ambiguous native face ID: {face_id}")
-            by_face_id[face_id] = object_name
-
-    resolved: list[dict[str, Any]] = []
-    covered_faces: set[int] = set()
-    covered_objects: set[str] = set()
-    for raw_id in raw_ids:
-        object_match = by_object_id.get(raw_id)
-        face_match = by_face_id.get(raw_id)
-        if object_match is not None and face_match is not None:
-            raise RuntimeError(f"ambiguous PEC native assignment ID: {raw_id}")
-        if object_match is not None:
-            object_name, face_ids = object_match
-            resolved.append(
-                {
-                    "raw_id": raw_id,
-                    "native_kind": "object",
-                    "object_name": object_name,
-                    "face_ids": list(face_ids),
-                }
-            )
-            covered_faces.update(face_ids)
-            covered_objects.add(object_name)
-        elif face_match is not None:
-            resolved.append(
-                {
-                    "raw_id": raw_id,
-                    "native_kind": "face",
-                    "object_name": face_match,
-                    "face_ids": [raw_id],
-                }
-            )
-            covered_faces.add(raw_id)
-            covered_objects.add(face_match)
-        else:
-            raise RuntimeError(f"unknown PEC native assignment ID: {raw_id}")
-    return resolved, covered_faces, covered_objects
-
-
-def create_region(
-    hfss: Any, spec: HfssDrivenSpec | HfssEigenmodeSpec | Q3dSpec
-) -> dict[str, Any]:
-    """Create and verify the requested GDS-family solution Region."""
-    if hfss.modeler.get_object_from_name("Region") is not None:
-        raise RuntimeError("new V1 design unexpectedly already has Region")
-    envelope = spec.effective_region
-    keys = (
-        "x_plus_um",
-        "x_minus_um",
-        "y_plus_um",
-        "y_minus_um",
-        "z_plus_um",
-        "z_minus_um",
-    )
-    effective_padding = (
-        tuple(envelope["effective_padding_um"][key] for key in keys)
-        if envelope is not None
-        else spec.region_padding_um
-    )
-    region = hfss.modeler.create_region(
-        pad_value=list(effective_padding),
-        pad_type="Absolute Offset",
-        name="Region",
-    )
-    vacuum = spec.materials[spec.vacuum_material_id]
-    library_name: Any = vacuum.library_name
-    if not hfss.materials.exists_material(library_name):
-        raise RuntimeError(f"AEDT vacuum material is unavailable: {library_name!r}")
-    region.material_name = library_name
-    observed_material = native_object_property(region, "Material").strip('"')
-    if (
-        region.name != "Region"
-        or observed_material.casefold() != library_name.casefold()
-    ):
-        raise RuntimeError("vacuum region readback failed")
-    result = {
-        "material_id": vacuum.material_id,
-        "requested_library_name": library_name,
-        "observed_material_name": observed_material,
-        "padding_um": list(spec.region_padding_um),
-    }
-    if envelope is not None:
-        result["requested_padding_um"] = list(spec.region_padding_um)
-        result["padding_um"] = list(effective_padding)
-        result["source_effective_envelope"] = envelope
-        result["native_bounding_box_um"] = list(q3d_region_bounds(region))
-    if isinstance(spec, Q3dSpec):
-        result["native_region_object_id"] = int(region.id)
-        if envelope is None:
-            result["native_bounding_box_um"] = list(q3d_region_bounds(region))
-        result["requested_padding_um"] = list(spec.region_padding_um)
-    return result
 
 
 def q3d_region_bounds(region: Any) -> tuple[float, float, float, float, float, float]:

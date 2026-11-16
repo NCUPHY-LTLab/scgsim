@@ -8,23 +8,22 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 from scgsim.aedt.data import (
     detached,
 )
 from scgsim.aedt.io import file_sha256, write_json
 from scgsim.aedt.preparation.cohort import (
-    GEOMETRY_SOURCE_PATHS,
     canonical_handoff_paths,
 )
-from scgsim.aedt.preparation.gds import GdsPreflight, gds_preflight, write_import_gds
 from scgsim.aedt.preparation.handoff_files import (
     handoff_member,
     utc_now,
     write_script,
 )
-from scgsim.aedt.preparation.planar import validate_geometry_workers
+from scgsim.aedt.preparation.sgb_handoff import attach_sgb_model, sgb_model_source
+from scgsim.aedt.preparation.sgb_model import PreparedSgbModel
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
@@ -40,12 +39,7 @@ from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     SavedSolution,
 )
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
 from scgsim.aedt.specs.hfss import (
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
 )
 from scgsim.aedt.specs.hfss_common import EigenmodeRunControl
@@ -71,7 +65,16 @@ class HandoffPlan:
 def prepare_handoff(
     *, spec: AedtSpec, output_dir: str | Path, resources: AedtResources | None = None
 ) -> HandoffPlan:
-    """Prepare one portable source cohort without opening AEDT."""
+    """Prepare one portable Q3D or Q2D source cohort without opening AEDT.
+
+    An HFSS request is prepared with :func:`prepare_hfss_eigenmode_from_geometry` or
+    :func:`prepare_hfss_driven_from_geometry`, which attach its SGB model.
+    """
+    if not isinstance(spec, (Q3dSpec, Q2dSpec)):
+        raise TypeError(
+            f"prepare_handoff takes a Q3dSpec or Q2dSpec, not {type(spec).__name__}; prepare an HFSS "
+            "request with prepare_hfss_eigenmode_from_geometry or prepare_hfss_driven_from_geometry"
+        )
     return _PortableHandoff(spec, output_dir, resources).build()
 
 
@@ -95,33 +98,8 @@ class _PortableHandoff:
     def _validate_source(self) -> None:
         if self.resources is not None and not isinstance(self.resources, AedtResources):
             raise TypeError("resources must be AedtResources or None")
-        if (
-            not isinstance(self.spec, Q2dSpec)
-            and getattr(self.spec, "modeling", None) is None
-        ):
+        if isinstance(self.spec, Q3dSpec) and self.spec.modeling is None:
             raise ValueError("new AEDT 3D execution requires explicit modeling")
-        self.source_gds: Path | None = None
-        self.preflight: GdsPreflight | None = None
-        if not isinstance(self.spec, (Q2dSpec, Q3dSpec)):
-            self.source_gds = cast(
-                Path, cast(HfssDrivenSpec | HfssEigenmodeSpec, self.spec).gds_path
-            ).resolve()
-            if not self.source_gds.is_file():
-                raise FileNotFoundError(
-                    f"gds_path must be an existing file: {self.source_gds}"
-                )
-            self.preflight = gds_preflight(self.source_gds)
-            actual_pairs = self.preflight["polygon_layer_datatypes"]
-            declared_pairs = {
-                (item.layer, item.datatype)
-                for item in cast(
-                    HfssDrivenSpec | HfssEigenmodeSpec, self.spec
-                ).layer_imports
-            }
-            if actual_pairs != declared_pairs:
-                raise ValueError(
-                    f"GDS layer/datatype pairs {sorted(actual_pairs)!r} do not match spec {sorted(declared_pairs)!r}"
-                )
 
     def _copy_source(self) -> None:
         self.run_dir = Path(self.output_dir).expanduser().resolve()
@@ -131,21 +109,6 @@ class _PortableHandoff:
             )
         self.metadata_dir = self.run_dir / "metadata"
         self.metadata_dir.mkdir(parents=True)
-        self.copied_gds: Path | None = None
-        if self.source_gds is not None:
-            geometry_dir = self.run_dir / "geometry"
-            geometry_dir.mkdir()
-            self.copied_gds = geometry_dir / "design.gds"
-            self.original_gds = geometry_dir / "source.gds"
-            shutil.copy2(self.source_gds, self.original_gds)
-            write_import_gds(
-                self.source_gds,
-                self.copied_gds,
-                cast(
-                    HfssDrivenSpec | HfssEigenmodeSpec, self.spec
-                ).effective_layer_imports,
-            )
-
         self.script_path = self.run_dir / "run_aedt.sh"
         self.spec_path = self.run_dir / "aedt_spec.json"
         self.metadata_path = self.metadata_dir / "aedt_handoff_metadata.json"
@@ -159,37 +122,20 @@ class _PortableHandoff:
     def _write_spec(self) -> None:
         write_script(self.script_path)
         self.payload = self.spec.to_payload()
-        if not isinstance(self.spec, (Q2dSpec, Q3dSpec)):
-            self.payload["gds"]["path"] = "geometry/design.gds"
-            self.payload["gds"]["source_path"] = "geometry/source.gds"
-            self.payload["gds"]["source_sha256"] = file_sha256(self.original_gds)
-            self.payload["gds"]["import_layer_map"] = [
-                {
-                    key: item[key]
-                    for key in (
-                        "layer",
-                        "datatype",
-                        "layer_name",
-                        "physical_layer_id",
-                        "native_import_layer",
-                    )
-                }
-                for item in cast(
-                    HfssDrivenSpec | HfssEigenmodeSpec, self.spec
-                ).effective_layer_imports
+        if isinstance(self.spec, Q3dSpec):
+            attach_sgb_model(self.spec.model, self.run_dir)
+            self.materials = detached(self.spec.model.materials)
+            vacuum = [
+                material_id
+                for material_id, record in self.materials.items()
+                if record.get("kind") == "vacuum"
             ]
-        if isinstance(self.spec, Q3dSpec) and self.spec.geometry_source is not None:
-            geometry_source = detached(self.spec.geometry_source)
-            for key, destination in GEOMETRY_SOURCE_PATHS.items():
-                reference = geometry_source["files"][key]
-                source_path = Path(reference["path"])
-                if file_sha256(source_path) != reference["sha256"]:
-                    raise ValueError(f"Q3D source attachment identity differs: {key}")
-                target = self.run_dir / destination
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source_path, target)
-                reference["path"] = destination
-            self.payload["geometry_source"] = geometry_source
+            if len(vacuum) != 1:
+                raise ValueError("a Q3D SGB model requires exactly one vacuum material")
+            self.vacuum_material_id = vacuum[0]
+        else:
+            self.materials = self.payload["materials"]
+            self.vacuum_material_id = self.payload["vacuum_material_id"]
         write_json(self.spec_path, self.payload)
 
     def _write_metadata(self) -> None:
@@ -203,8 +149,8 @@ class _PortableHandoff:
             "status": "prepared",
             "mode": self.spec.mode,
             "project": self.payload["project"],
-            "materials": self.payload["materials"],
-            "vacuum_material_id": self.payload["vacuum_material_id"],
+            "materials": self.materials,
+            "vacuum_material_id": self.vacuum_material_id,
             "run_control": self.payload["run_control"],
             "execution": {
                 "resources": self.resources.to_payload() if self.resources else None
@@ -218,21 +164,12 @@ class _PortableHandoff:
         self.source = {
             "spec": self.spec_path.name,
             "spec_sha256": file_sha256(self.spec_path),
+            **(
+                sgb_model_source(self.spec.model)
+                if isinstance(self.spec, Q3dSpec)
+                else {}
+            ),
         }
-        if self.copied_gds is not None and self.preflight is not None:
-            self.files["gds"] = "geometry/design.gds"
-            self.metadata["gds_sha256"] = file_sha256(self.copied_gds)
-            self.metadata["gds_preflight"] = {
-                "polygon_layer_datatypes": [
-                    list(pair)
-                    for pair in sorted(self.preflight["polygon_layer_datatypes"])
-                ],
-                "path_count": self.preflight["path_count"],
-                "label_count": self.preflight["label_count"],
-                "labels": "ignored as non-geometry",
-            }
-            self.source["gds"] = "geometry/design.gds"
-            self.source["gds_sha256"] = file_sha256(self.copied_gds)
         write_json(self.metadata_path, self.metadata)
 
     def _write_receipt(self) -> None:
@@ -246,8 +183,8 @@ class _PortableHandoff:
                         "pyaedt_version": self.spec.pyaedt_version,
                         "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
                     },
-                    pdk_materials=self.payload["materials"],
-                    vacuum_material_id=self.payload["vacuum_material_id"],
+                    pdk_materials=self.materials,
+                    vacuum_material_id=self.vacuum_material_id,
                     source=self.source,
                     prepared_runtime_source_value=self.prepared_source,
                     outputs={},
@@ -297,26 +234,24 @@ def prepare_epr_analysis_handoff(  # noqa: PLR0913 -- preserve the saved-field p
     *,
     aedt_version: str,
     saved_solution: SavedSolution,
-    geometry: PreparedPlanarGeometry,
+    model: PreparedSgbModel,
     project_name: str,
     design_name: str,
     run_control: EigenmodeRunControl,
     epr_request: EprAnalysisRequest,
     output_dir: str | Path,
-    geometry_workers: int | None,
     surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
 ) -> HandoffPlan:
     """Prepare one portable source cohort without opening AEDT."""
     return _SavedAnalysisHandoff(
         aedt_version,
         saved_solution,
-        geometry,
+        model,
         project_name,
         design_name,
         run_control,
         epr_request,
         output_dir,
-        geometry_workers,
         surface_field_selectors,
     ).build()
 
@@ -327,13 +262,12 @@ class _SavedAnalysisHandoff:
 
     aedt_version: str
     saved_solution: SavedSolution
-    geometry: PreparedPlanarGeometry
+    model: PreparedSgbModel
     project_name: str
     design_name: str
     run_control: EigenmodeRunControl
     epr_request: EprAnalysisRequest
     output_dir: str | Path
-    geometry_workers: int | None
     surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None
 
     def build(self) -> HandoffPlan:
@@ -348,7 +282,6 @@ class _SavedAnalysisHandoff:
     def _copy_saved_solution(self) -> None:
         if not isinstance(self.saved_solution, SavedSolution):
             raise TypeError("saved_solution must be SavedSolution")
-        validate_geometry_workers(self.geometry_workers)
         self.aedt_version = normalize_aedt_version(self.aedt_version)
         self.run_dir = Path(self.output_dir).expanduser().resolve()
         if self.run_dir.exists():
@@ -358,7 +291,6 @@ class _SavedAnalysisHandoff:
         self.saved_root = self.run_dir / "saved"
         self.metadata_dir = self.run_dir / "metadata"
         self.metadata_dir.mkdir(parents=True)
-        self.copied_paths: list[Path] = []
         for member in self.saved_solution.members:
             relative = Path(member["path"])
             source = (self.saved_solution.root / relative).resolve()
@@ -378,7 +310,6 @@ class _SavedAnalysisHandoff:
             target = self.saved_root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-            self.copied_paths.append(target)
 
     def _bind_spec(self) -> None:
         self.copied_solution = SavedSolution(
@@ -397,11 +328,12 @@ class _SavedAnalysisHandoff:
             aedt_version=self.aedt_version,
             project_name=self.project_name,
             design_name=self.design_name,
-            geometry=self.geometry,
+            model=self.model,
             run_control=self.run_control,
             epr_request=self.epr_request,
             saved_solution=self.copied_solution,
         )
+        attach_sgb_model(self.model, self.run_dir)
 
     def _prepare_payload(self) -> None:
         self.script_path = self.run_dir / "run_aedt.sh"
@@ -414,7 +346,7 @@ class _SavedAnalysisHandoff:
         self.started = time.perf_counter()
         self.prepared_source = record_runtime_source("prepared")
         self.payload = self.spec.to_payload()
-        self.materials = detached(self.geometry.source)["materials"]
+        self.materials = detached(self.model.materials)
         self.vacuum_ids = sorted(
             material_id
             for material_id, record in self.materials.items()
@@ -454,7 +386,7 @@ class _SavedAnalysisHandoff:
             "materials": self.materials,
             "vacuum_material_id": self.vacuum_ids[0],
             "run_control": self.payload["run_control"],
-            "execution": {"geometry_workers": self.geometry_workers},
+            "execution": {"resources": None},
             "pyaedt": self.payload["pyaedt"],
             "aedt": self.payload["aedt"],
             "files": self.files,
@@ -464,8 +396,7 @@ class _SavedAnalysisHandoff:
         self.source = {
             "spec": self.spec_path.name,
             "spec_sha256": file_sha256(self.spec_path),
-            "planar_source_sha256": self.geometry.source_sha256,
-            "planar_model_sha256": self.geometry.model_sha256,
+            **sgb_model_source(self.model),
             "saved_solution_sha256": self.copied_solution.content_sha256,
         }
         write_json(self.metadata_path, self.metadata)
@@ -493,13 +424,8 @@ class _SavedAnalysisHandoff:
         )
 
     def _package(self) -> HandoffPlan:
-        self.allowed = (
-            self.script_path,
-            self.spec_path,
-            *sorted(self.copied_paths),
-            self.metadata_path,
-            self.receipt_path,
-            self.manifest_path,
+        self.allowed = tuple(
+            self.run_dir / path for path in canonical_handoff_paths(self.spec)
         )
         write_json(
             self.manifest_path,

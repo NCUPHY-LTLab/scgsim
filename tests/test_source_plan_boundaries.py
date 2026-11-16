@@ -34,7 +34,6 @@ def _make_plan(monkeypatch, semantics_by_path):
             },
             "_boundary_curves": (),
             "_boundary_reconstruction": (),
-            "_lumped_supports": (),
             "_rectangular_junctions": (),
         }
     )

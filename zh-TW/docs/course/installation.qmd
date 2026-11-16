@@ -45,7 +45,7 @@ uv run python -c 'import scgsim; from importlib.metadata import version; print(v
 uv add --extra palace scgsim
 ```
 
-需要其他功能時，可改用 `aedt`、`aedt-epr` 或 `visualization`。加入 extra 會沿用原有 Git 相依來源。
+需要其他功能時，可改用 `aedt`、`aedt-epr` 或 `visualization`。加入 extra 會沿用原有 Git 相依來源。`aedt` 與 `aedt-epr` 包含 OCP（`cadquery-ocp-novtk`），也就是寫出 AEDT 所匯入 STEP 檔的幾何核心。
 
 ## 在另一台電腦重建環境
 

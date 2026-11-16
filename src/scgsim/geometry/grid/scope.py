@@ -5,7 +5,7 @@ operation returns or what its refusal says. A caller builds one from the model g
 works on (``GridScope(grid)``), places it in an occurrence's frame (:meth:`GridScope.placed`),
 names the declared object it reads (:meth:`GridScope.naming`) or evaluates the unrounded
 reference (:meth:`GridScope.as_reference`); every operation it calls receives it whole.
-``UNGRIDDED`` is the scope of work on no model grid: AEDT's native planning and a junction's
+``UNGRIDDED`` is the scope of work on no model grid: a contact pad's overlap test and a junction's
 off-axis local frame.
 """
 

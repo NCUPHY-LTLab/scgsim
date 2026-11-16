@@ -14,9 +14,13 @@ from scgsim.aedt.versions import normalize_aedt_version
 
 @dataclass(frozen=True)
 class LumpedRlc:
-    """Electrical treatment of a neutral support; None disables a component."""
+    """Electrical treatment of one lumped-port sheet; None disables a component.
 
-    support_id: str
+    ``port_sheet_id`` names the plan's port sheet, the ``PORT::<port_sheet_id>`` group of the SGB model,
+    as Palace's lumped elements do (issue #67 decision 8).
+    """
+
+    port_sheet_id: str
     topology: Literal["series", "parallel"]
     resistance_ohm: float | None = None
     inductance_h: float | None = None
@@ -24,7 +28,7 @@ class LumpedRlc:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "support_id", text_value(self.support_id, "support_id")
+            self, "port_sheet_id", text_value(self.port_sheet_id, "port_sheet_id")
         )
         if self.topology not in {"series", "parallel"}:
             raise ValueError("lumped topology must be series or parallel")
@@ -46,7 +50,7 @@ class LumpedRlc:
     def to_payload(self) -> dict[str, Any]:
         """Return this request record in its canonical payload shape."""
         return {
-            "support_id": self.support_id,
+            "port_sheet_id": self.port_sheet_id,
             "topology": self.topology,
             "resistance_ohm": self.resistance_ohm,
             "inductance_h": self.inductance_h,
@@ -59,17 +63,9 @@ class LumpedRlc:
         return cls(**dict(value))
 
 
-HfssDrivenMode = Literal["terminal", "modal"]
-
-LayerRole = Literal["ground", "signal", "substrate"]
-
 PdkMaterialKind = Literal["vacuum", "dielectric", "superconductor"]
 
 Side = Literal["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
-
-SCHEMA_VERSION = "scgsim.aedt.hfss-driven.v1"
-
-EIGENMODE_SCHEMA_VERSION = "scgsim.aedt.hfss-eigenmode.v1"
 
 EPR_EIGENMODE_SCHEMA_VERSION_V2 = "scgsim.aedt.hfss-eigenmode-epr.v2"
 
@@ -84,7 +80,6 @@ EPR_ANALYSIS_SCHEMA_VERSION_V3 = "scgsim.aedt.hfss-eigenmode-epr-analysis.v3"
 
 Q3D_SCHEMA_VERSION = "scgsim.aedt.q3d.v3"
 
-Q3D_GEOMETRY_SOURCE_SCHEMA_VERSION = "scgsim.aedt.q3d-geometry-source.v3"
 
 Q2D_SCHEMA_VERSION = "scgsim.aedt.q2d.v1"
 
@@ -95,8 +90,6 @@ OFFICIAL_PYAEDT_SOURCE_URL = "https://github.com/ansys/pyaedt/tree/v1.3.0"
 LOCKED_PYAEDT = "1.3.0"
 
 POINT_COUNT = 20_000
-
-SURFACE_APPROXIMATION_LEVEL = 9
 
 
 @dataclass(frozen=True)
@@ -153,12 +146,6 @@ def finite_number(value: Any, field: str) -> float:
     return result
 
 
-def _nonnegative_int(value: Any, field: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-        raise ValueError(f"{field} must be a non-negative integer")
-    return value
-
-
 def adaptive_controls(
     maximum_passes: Any,
     minimum_passes: Any,
@@ -179,50 +166,6 @@ def adaptive_controls(
     if not 0 < refinement <= 100:
         raise ValueError("percent_refinement must be in (0, 100]")
     return refinement
-
-
-@dataclass(frozen=True)
-class LayerImport:
-    """One numeric GDS layer and its explicit PyAEDT destination layer group."""
-
-    layer: int
-    datatype: int
-    layer_name: str
-    z_min_um: float
-    z_max_um: float
-    physical_layer_id: str | None = None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "layer", _nonnegative_int(self.layer, "layer"))
-        object.__setattr__(
-            self, "datatype", _nonnegative_int(self.datatype, "datatype")
-        )
-        object.__setattr__(
-            self, "layer_name", text_value(self.layer_name, "layer_name")
-        )
-        low = finite_number(self.z_min_um, "z_min_um")
-        high = finite_number(self.z_max_um, "z_max_um")
-        if high < low:
-            raise ValueError(
-                "z_max_um must be >= z_min_um; equal values are conductor sheets"
-            )
-        object.__setattr__(self, "z_min_um", low)
-        object.__setattr__(self, "z_max_um", high)
-
-    def to_payload(self) -> dict[str, Any]:
-        """Return this request record in its canonical payload shape."""
-        return {
-            **(
-                {"physical_layer_id": self.physical_layer_id}
-                if self.physical_layer_id is not None
-                else {}
-            ),
-            "layer": self.layer,
-            "datatype": self.datatype,
-            "layer_name": self.layer_name,
-            "z_min_um": self.z_min_um,
-            "z_max_um": self.z_max_um,
-        }
 
 
 @dataclass(frozen=True)
@@ -272,42 +215,16 @@ class PdkMaterial:
 
 
 @dataclass(frozen=True)
-class ObjectBinding:
-    """Exact object readback and PDK material reference after numeric-layer import."""
-
-    object_name: str
-    layer: int
-    role: LayerRole
-    material_id: str
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "object_name", text_value(self.object_name, "object_name")
-        )
-        object.__setattr__(self, "layer", _nonnegative_int(self.layer, "binding.layer"))
-        if self.role not in {"ground", "signal", "substrate"}:
-            raise ValueError("role must be ground, signal, or substrate")
-        object.__setattr__(
-            self, "material_id", text_value(self.material_id, "material_id")
-        )
-
-    def to_payload(self) -> dict[str, Any]:
-        """Return this request record in its canonical payload shape."""
-        return {
-            "object_name": self.object_name,
-            "layer": self.layer,
-            "role": self.role,
-            "material_id": self.material_id,
-        }
-
-
-@dataclass(frozen=True)
 class LumpedTerminalPort:
-    """Driven Terminal excitation on an explicit source support, not Region."""
+    """Driven Terminal excitation on one lumped-port sheet, not on the Region.
+
+    ``port_sheet_id`` names the plan's port sheet, the ``PORT::<port_sheet_id>`` group of the SGB model
+    (issue #67 decision 8).
+    """
 
     index: int
     name: str
-    support_id: str
+    port_sheet_id: str
     signal_entity_ids: tuple[str, ...]
     reference_entity_ids: tuple[str, ...]
     impedance_ohm: float
@@ -317,7 +234,7 @@ class LumpedTerminalPort:
     def __post_init__(self) -> None:
         if self.index not in {1, 2}:
             raise ValueError("two-port V1 uses port indices 1 and 2")
-        for key in ("name", "support_id"):
+        for key in ("name", "port_sheet_id"):
             object.__setattr__(self, key, text_value(getattr(self, key), key))
         for key in ("signal_entity_ids", "reference_entity_ids"):
             values = tuple(text_value(value, key) for value in getattr(self, key))
@@ -339,7 +256,7 @@ class LumpedTerminalPort:
             "kind": "lumped",
             "index": self.index,
             "name": self.name,
-            "support_id": self.support_id,
+            "port_sheet_id": self.port_sheet_id,
             "signal_entity_ids": list(self.signal_entity_ids),
             "reference_entity_ids": list(self.reference_entity_ids),
             "impedance_ohm": self.impedance_ohm,
@@ -446,20 +363,6 @@ class ModalPort:
         }
 
 
-def validate_region_padding(
-    values: tuple[float, float, float, float, float, float],
-) -> tuple[float, float, float, float, float, float]:
-    """Validate the six face-specific AEDT region padding values."""
-    if len(values) != 6:
-        raise ValueError(
-            "region_padding_um requires six PyAEDT face values: +X,-X,+Y,-Y,+Z,-Z"
-        )
-    result = tuple(finite_number(value, "region_padding_um") for value in values)
-    if any(value < 0 for value in result):
-        raise ValueError("region_padding_um values must be >= 0")
-    return cast(tuple[float, float, float, float, float, float], result)
-
-
 def validate_planar_padding(
     values: tuple[float, float, float, float],
 ) -> tuple[float, float, float, float]:
@@ -504,64 +407,6 @@ def normalize_common_spec(spec: Any) -> dict[str, PdkMaterial]:
     object.__setattr__(spec, "materials", materials)
     object.__setattr__(spec, "vacuum_material_id", vacuum_id)
     return materials
-
-
-def normalize_gds_spec(spec: Any) -> tuple[set[str], set[str]]:
-    """Normalize the shared PDK/GDS model contract for 3D AEDT families."""
-    materials = normalize_common_spec(spec)
-    gds = Path(spec.gds_path)
-    if not str(gds) or gds.name in {"", "."}:
-        raise ValueError("gds_path must name a GDS file")
-    object.__setattr__(spec, "gds_path", gds)
-    imports = tuple(spec.layer_imports)
-    if (
-        not imports
-        or len({(item.layer, item.datatype) for item in imports}) != len(imports)
-        or len({item.layer_name for item in imports}) != len(imports)
-        or any(
-            other.layer_name.startswith(item.layer_name)
-            for item in imports
-            for other in imports
-            if item is not other
-        )
-    ):
-        raise ValueError(
-            "layer_imports must contain unique non-prefixing numeric and destination layer mappings"
-        )
-    object.__setattr__(spec, "layer_imports", imports)
-    bindings = tuple(spec.object_bindings)
-    if (
-        not bindings
-        or len({item.object_name for item in bindings}) != len(bindings)
-        or {item.layer for item in bindings} != {item.layer for item in imports}
-        or any(item.material_id not in materials for item in bindings)
-    ):
-        raise ValueError(
-            "object_bindings must be unique and refer to declared import layers"
-        )
-    object.__setattr__(spec, "object_bindings", bindings)
-    grounds = {item.object_name for item in bindings if item.role == "ground"}
-    signals = {item.object_name for item in bindings if item.role == "signal"}
-    substrates = [item for item in bindings if item.role == "substrate"]
-    if not grounds or not signals or not substrates:
-        raise ValueError(
-            "HFSS model requires explicit signal, ground, and substrate bindings"
-        )
-    if any(
-        not materials[item.material_id].is_superconducting
-        for item in bindings
-        if item.role in {"signal", "ground"}
-    ):
-        raise ValueError("signal and ground bindings require PDK superconductors")
-    if any(
-        materials[item.material_id].is_superconducting
-        or materials[item.material_id].kind != "dielectric"
-        for item in substrates
-    ):
-        raise ValueError(
-            "substrate bindings require non-superconducting PDK dielectrics"
-        )
-    return grounds, signals
 
 
 @dataclass(frozen=True)

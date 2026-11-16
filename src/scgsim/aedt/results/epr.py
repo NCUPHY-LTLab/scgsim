@@ -14,7 +14,7 @@ from scgsim.aedt.data import (
 from scgsim.aedt.epr.models import (
     EprResult,
 )
-from scgsim.aedt.epr.selection import exact_mapping
+from scgsim.aedt.epr.surface import exact_mapping
 from scgsim.aedt.io import file_sha256, read_json, write_json
 from scgsim.aedt.specs.epr import (
     SavedSolution,

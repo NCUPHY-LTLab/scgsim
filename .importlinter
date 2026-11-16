@@ -24,16 +24,14 @@ exhaustive = true
 
 # The folders a layout passes through before SGB, in the order they import: the shared records, the exact
 # kernel (exact arithmetic on the model grid and the binding of boundary records), the float grid
-# operations, the source stage, the junction step and the physical interpretation that runs it. AEDT's
-# planning reads them all. A folder reads the folders before it, never one after it; import-linter lists
+# operations, the source stage, the junction step and the physical interpretation that runs it. A folder reads the folders before it, never one after it; import-linter lists
 # the last folder first.
 [importlinter:contract:geometry-stage-layers]
-name = Geometry stages import only the stages before them (models, exact, grid, source, junctions, interpretation, planning)
+name = Geometry stages import only the stages before them (models, exact, grid, source, junctions, interpretation)
 type = layers
 containers =
     scgsim.geometry
 layers =
-    planning
     interpretation
     junctions
     source

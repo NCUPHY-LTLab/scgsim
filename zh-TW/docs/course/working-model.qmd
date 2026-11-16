@@ -77,10 +77,10 @@ component = gf.get_component(
 先確認現在需要哪個數值。端子電容需要選擇端子與參考／接地。共振場模型還需要適當邊界與明確的集總支路。驅動響應需要埠與波參考；傳輸線擷取則需要定義橫截面。請使用[概念說明](../concepts/problems.qmd)，區分物理選擇與後端 API 表示法。
 
 ::: {.callout-note title="Q3D 與 Q2D 使用各自的輸入"}
-Q3D v3 使用明確的有限厚度實體，並指定環、多邊形、材料、物理角色與最終 Net 成員資格。獨立的 source-first 前端可從 GeometryPlan 快照準備這些實體；沒有來源的呼叫端則直接編寫實體。AC/RL 請求也要提供完整的 Signal 源端／汲端端子。Q2D 使用明確的橫截面矩形與導體群組，不會從 GeometryPlan 產生切片。
+Q3D 求解 GeometryPlan 快照的 SGB 模型及其最終 Net 成員資格，只擷取 C/G。Q2D 使用明確的橫截面矩形與導體群組，不會從 GeometryPlan 產生切片。
 :::
 
-若要研究其他網路問題，請接著閱讀 [Driven Modal](aedt-driven-modal.qmd)或 [Driven Terminal](aedt-driven-terminal.qmd)。有限導體擷取請使用 [Q3D](aedt-q3d.qmd)；每單位長度傳輸線矩陣則使用 [Q2D](aedt-q2d.qmd)。[CPW 輸入](aedt-inputs.qmd)教學提供 HFSS 的直接 GDS 對應；Q3D 則有獨立的 body-backed 輸入契約。
+若要研究雙埠網路，請接著閱讀 [Driven Terminal](aedt-driven-terminal.qmd)；Driven Modal 等待 issue #135（[Driven Modal](aedt-driven-modal.qmd)）。有限導體擷取請使用 [Q3D](aedt-q3d.qmd)；每單位長度傳輸線矩陣則使用 [Q2D](aedt-q2d.qmd)。[CPW 輸入](aedt-inputs.qmd)教學準備 `GeometryPlan` 快照，HFSS 與 Q3D 求解的就是它的 SGB 模型。
 
 ## 變更求解器請求 {#change-a-solver-request}
 

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import pytest
 from test_palace_rectangular_ports import VACUUM_PADDING_UM, port_group, prepared_port
-from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
+from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, layout_plan
 
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.junctions.lattice import lattice_rectangle
@@ -295,11 +295,12 @@ def built_sidecar(monkeypatch, chip, reference, **options):
 
     monkeypatch.setattr(EigenmodeSim, "_build_geometry", recording)
     assert EigenmodeSim.simulation_drc(
-        chip,
-        layer_stack=NO_VACUUM_STACK,
-        material_records=MATERIALS,
-        instances={"chip/device": reference},
-        nets=NETS,
+        layout_plan(
+            chip,
+            layer_stack=NO_VACUUM_STACK,
+            instances={"chip/device": reference},
+            nets=NETS,
+        ),
         **options,
     ).passed
     (sidecar,) = sidecars
@@ -596,11 +597,10 @@ def test_a_45_degree_port_on_a_round_pad_keeps_every_band_boundary(monkeypatch):
     assert bands == {"0", "1", "2"}
 
 
-def test_aedt_binds_a_45_degree_sheet_to_its_central_lattice_rectangle(monkeypatch):
-    """The AEDT preparation reads the bent 45 degree sheet as Palace does: the same rectangle, v = (1, 1)."""
+def test_aedt_binds_a_45_degree_sheet_as_palace_does(monkeypatch):
+    """The AEDT junction of the bent 45 degree sheet runs as Palace's port does, v = (1, 1), the sheet wide."""
     from scgsim.aedt import (  # noqa: PLC0415 -- the optional AEDT adapter, loaded only for its own check
         planar_junction_from_port,
-        prepare_planar_geometry_input,
     )
 
     layout = BENT_45
@@ -615,23 +615,6 @@ def test_aedt_binds_a_45_degree_sheet_to_its_central_lattice_rectangle(monkeypat
         inductance_h=1e-8,
         capacitance_f=0.0,
     )
-    s0, _, t0, t1 = layout.sheet
+    _, _, t0, t1 = layout.sheet
     assert junction.direction_xy == pytest.approx((math.sqrt(0.5), math.sqrt(0.5)))
     assert junction.width_um == pytest.approx((t1 - t0) * layout.spacing_um)
-    prepared = prepare_planar_geometry_input(
-        snapshot.geometry_input,
-        prepared_stack=snapshot.stack,
-        modeling="solid",
-        junctions=(junction,),
-    )
-    record = prepared.source["junction_partitions"]["jj"]
-    # The AEDT source keeps its records as tuples.
-    assert list(record["lattice"]["direction_grid"]) == [1, 1]
-    ((central,),) = record["central_model_regions"]
-    gap_end = layout.electrode[0]
-    expected = {
-        tuple(round(v, 9) for v in turned(layout.point_um(s, t), 90))
-        for s in (0, gap_end)
-        for t in (t0, t1)
-    }
-    assert {tuple(round(float(v), 9) for v in p) for p in central} == expected

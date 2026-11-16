@@ -1,4 +1,10 @@
-"""Author, solve, and collect EPR using the transaction-owned HFSS application."""
+"""Author, solve, and collect the EPR of an imported SGB model using the transaction-owned HFSS application.
+
+A prepared model gets one non-model selection sheet per selected Surface-EPR row and one voltage sheet per
+junction (:func:`add_epr_selections`).  A saved analysis or a batch collection opens a saved design and
+rebinds it by name (:func:`rebind_saved_model`): the guard's solids, the Region and every sheet its
+expressions read must be there, and the saved solution must name the same model identity.
+"""
 
 from __future__ import annotations
 
@@ -17,18 +23,18 @@ from scgsim.aedt.epr.adaptive import (
     trace_by_pass,
     trace_for_cache_context,
 )
-from scgsim.aedt.epr.analysis import combine_epr_mode
 from scgsim.aedt.epr.cache import prepare_expressions_and_cache, read_cache
 from scgsim.aedt.epr.evidence import PreparedEprEvidence
-from scgsim.aedt.epr.expression_authoring import author_epr_expressions
+from scgsim.aedt.epr.expression_authoring import (
+    author_epr_expressions,
+    spec_epr_source,
+)
 from scgsim.aedt.epr.expression_codec import read_native_named_expressions
 from scgsim.aedt.epr.fields import (
     install_variables,
     parse_native_scalar,
 )
 from scgsim.aedt.epr.integrals import (
-    SURFACE_ANALYSIS_SCOPE,
-    attach_saved_native_surface_membership,
     canonical_integral,
     empty_raw_integrals,
     integral_target,
@@ -37,50 +43,48 @@ from scgsim.aedt.epr.integrals import (
 from scgsim.aedt.epr.models import (
     EprResult,
 )
-from scgsim.aedt.epr.native import (
-    add_analysis_surfaces,
-    bind_saved_analysis_surfaces,
+from scgsim.aedt.epr.sgb_energy import combine_sgb_epr_mode
+from scgsim.aedt.epr.sgb_source import SgbEprSource
+from scgsim.aedt.epr.sgb_surfaces import (
+    create_junction_selections,
+    create_surface_selections,
+    junction_selection_name,
 )
-from scgsim.aedt.epr.surface_references import verify_saved_native_surface_references
 from scgsim.aedt.io import file_sha256, write_json
 from scgsim.aedt.runtime.families.hfss_body_eigenmode import (
     PreparedBodyEigenmode,
     collect_body_eigenmode,
+    imported_model,
     prepare_body_eigenmode,
     prepared_body_eigenmode_result,
     solve_and_export_body_eigenmode,
 )
 from scgsim.aedt.runtime.families.hfss_exports import export_eigenmode
 from scgsim.aedt.runtime.families.hfss_setup import read_body_eigenmode_setup
+from scgsim.aedt.runtime.families.sgb_import import REGION_NAME
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
     detached_data,
     pyaedt_version,
 )
-from scgsim.aedt.runtime.native.hfss_geometry import (
-    bind_saved_planar_geometry,
-)
-from scgsim.aedt.runtime.native.hfss_lumped import bind_saved_generic_rlcs
-from scgsim.aedt.runtime.native.saved_geometry import read_saved_junction_lines
 from scgsim.aedt.specs.common import AedtResources
 from scgsim.aedt.specs.hfss import (
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
+from scgsim.contracts.sgb_sidecar import read_sidecar
+from scgsim.geometry.sgb.output.exchange.guard import read_step_guard
 
 
 def analyze_saved_epr(
     Hfss: Any,
     run_dir: Path,
     spec: HfssEprAnalysisSpec,
-    inset_plan: dict[tuple[str, float], dict[str, Any]],
     *,
     connected_aedt_version: str,
 ) -> dict[str, Any]:
     """Analyze an immutable saved-field cohort through a disposable project copy."""
-    analysis = _SavedFieldAnalysis(
-        Hfss, run_dir, spec, inset_plan, connected_aedt_version
-    )
+    analysis = _SavedFieldAnalysis(Hfss, run_dir, spec, connected_aedt_version)
     return analysis.run()
 
 
@@ -92,13 +96,12 @@ class _SavedFieldAnalysis:
         Hfss: Any,
         run_dir: Path,
         spec: HfssEprAnalysisSpec,
-        inset_plan: dict[tuple[str, float], dict[str, Any]],
         connected_aedt_version: str,
     ) -> None:
         self.Hfss = Hfss
         self.run_dir = run_dir
         self.spec = spec
-        self.inset_plan = inset_plan
+        self.source = spec_epr_source(spec)
         self.connected_aedt_version = connected_aedt_version
 
     def run(self) -> dict[str, Any]:
@@ -174,21 +177,7 @@ class _SavedFieldAnalysis:
 
     def _rebind_geometry(self) -> None:
         started = time.perf_counter()
-        self.geometry = bind_saved_planar_geometry(self.app, self.spec.geometry)
-        bind_saved_analysis_surfaces(
-            self.app,
-            self.spec.geometry,
-            self.geometry,
-            surface_field_selectors=self.spec.surface_field_selectors,
-        )
-        bind_saved_generic_rlcs(self.app, self.spec.geometry, self.geometry)
-        read_saved_junction_lines(
-            self.app,
-            self.project_path,
-            self.spec.design_name,
-            self.spec.geometry,
-            self.geometry,
-        )
+        self.geometry = rebind_saved_model(self.app, self.spec, self.source)
         self.timings["geometry_rebind_seconds"] = round(
             time.perf_counter() - started, 6
         )
@@ -200,7 +189,6 @@ class _SavedFieldAnalysis:
             self.work_root,
             self.spec,
             self.geometry,
-            self.inset_plan,
             namespace=f"analysis_{self.spec.saved_solution.content_sha256[:16]}",
         )
         self.timings["expression_authoring_seconds"] = round(
@@ -245,8 +233,8 @@ class _SavedFieldAnalysis:
                     "status": "complete",
                     "raw_integrals": raw,
                     "raw_integral_evidence": evidence,
-                    **combine_epr_mode(
-                        self.spec.geometry, raw, request=self.spec.epr_request
+                    **combine_sgb_epr_mode(
+                        self.source, raw, request=self.spec.epr_request
                     ),
                 }
             )
@@ -261,9 +249,9 @@ class _SavedFieldAnalysis:
 
     def _record_provenance(self) -> None:
         self.result_provenance = {
-            "model_source_sha256": self.spec.geometry.model_sha256,
-            "analysis_source_sha256": self.spec.geometry.source_sha256,
-            "surface_analysis_scope": SURFACE_ANALYSIS_SCOPE,
+            "model_source_sha256": self.spec.model.identity_sha256,
+            # The EPR source is read from the model's sidecar.
+            "analysis_source_sha256": self.spec.model.files["sidecar"]["sha256"],
             "saved_solution_content_sha256": self.spec.saved_solution.content_sha256,
             "saved_solution_identity": detached(self.spec.saved_solution.identity),
             "saved_solution_aedt_version": self.spec.saved_solution.aedt_version,
@@ -319,30 +307,6 @@ class _SavedFieldAnalysis:
         self.timings["workcopy_save_seconds"] = round(time.perf_counter() - started, 6)
         self.project_relative = self.project_path.relative_to(self.run_dir).as_posix()
         self.outputs[self.project_relative] = file_sha256(self.project_path)
-        native_references = self.cache.get("native_surface_references", [])
-        if native_references:
-            native_references = verify_saved_native_surface_references(
-                self.project_path, self.spec.design_name, native_references
-            )
-            self.cache["native_surface_references"] = native_references
-            for row in self.rows:
-                attach_saved_native_surface_membership(
-                    row["raw_integrals"], row, native_references
-                )
-            self.result = EprResult(
-                result_kind="saved_field",
-                setup_name=self.spec.run_control.setup_name,
-                rows=tuple(self.rows),
-                provenance=self.result_provenance,
-            )
-            started = time.perf_counter()
-            write_json(self.result_path, self.result.to_payload())
-            self.outputs[self.result_path.relative_to(self.run_dir).as_posix()] = (
-                file_sha256(self.result_path)
-            )
-            self.timings["result_write_seconds"] = round(
-                self.timings["result_write_seconds"] + time.perf_counter() - started, 6
-            )
 
     def _result_payload(self) -> dict[str, Any]:
         return {
@@ -455,47 +419,108 @@ def _evaluate_mode_integrals(
 
 def _analysis_readback(app, spec, cache, project_path):
     cache["serialized_readback"] = read_cache(app, spec, cache["items"])
-    references = cache["native_surface_references"]
-    if references:
-        cache["native_surface_references"] = verify_saved_native_surface_references(
-            project_path, spec.design_name, references
-        )
 
 
-def _prepared_analysis_readback(app, spec, cache, project_path):
-    references = cache.get("native_surface_references", [])
-    if references:
-        cache["native_surface_references"] = verify_saved_native_surface_references(
-            project_path, spec.design_name, references
+def add_epr_selections(app: Any, spec: HfssEprSpec, geometry: dict[str, Any]) -> None:
+    """Create the selection sheets the request's EPR reads and record them in ``geometry``."""
+    source = spec_epr_source(spec)
+    sidecar = read_sidecar(spec.model.path("sidecar"))
+    imported = imported_model(geometry)
+    rows = create_surface_selections(app, sidecar, imported, rows=source.rows)
+    junctions = create_junction_selections(
+        app,
+        sidecar,
+        {
+            junction_id: sheet.port_group
+            for junction_id, sheet in source.junctions.items()
+        },
+        imported,
+    )
+    geometry["surface_selections"] = {
+        row: binding.to_payload() for row, binding in rows.items()
+    }
+    geometry["junction_selections"] = {
+        junction_id: {
+            "junction_id": binding.junction_id,
+            "port_group": binding.port_group,
+            "selection_name": binding.selection_name,
+            "faces": [list(face) for face in binding.faces],
+        }
+        for junction_id, binding in junctions.items()
+    }
+
+
+def rebind_saved_model(
+    app: Any, spec: HfssEprSpec | HfssEprAnalysisSpec, source: SgbEprSource
+) -> dict[str, Any]:
+    """The geometry record of a saved design of the request's model, rebound by name (see the module).
+
+    Face ids are not read again: the expressions read the sheets by name, and the guard's face match ran
+    when the model was imported.
+    """
+    guard = read_step_guard(spec.model.path("guard"))
+    objects = {solid["solid"]: solid["aedt_name"] for solid in guard["solids"]}
+    rows = {
+        row_id: {
+            "row": row.row,
+            "group": row.group,
+            "interface_type": row.interface_type,
+            "entities": list(row.entities),
+            "band": row.band,
+            "selection_name": row.selection_name,
+            "faces": [],
+        }
+        for row_id, row in source.rows.items()
+    }
+    junctions = {
+        junction_id: {
+            "junction_id": junction_id,
+            "port_group": sheet.port_group,
+            "selection_name": junction_selection_name(junction_id),
+            "faces": [],
+        }
+        for junction_id, sheet in source.junctions.items()
+    }
+    wanted = {
+        *objects.values(),
+        REGION_NAME,
+        *(item["selection_name"] for item in rows.values()),
+        *(item["selection_name"] for item in junctions.values()),
+    }
+    present = {str(name) for name in app.modeler.object_names}
+    missing = sorted(wanted - present)
+    if missing:
+        raise RuntimeError(
+            f"the saved design has no objects {missing}; it is not the request's SGB model as prepared"
         )
+    return {
+        "objects": objects,
+        "model_identity_sha256": spec.model.identity_sha256,
+        "surface_selections": rows,
+        "junction_selections": junctions,
+        "rebound_by": "object and sheet names",
+    }
 
 
 def prepare_epr_hfss(
     Hfss: Any,
     run_dir: Path,
     spec: HfssEprSpec,
-    inset_plan: dict[tuple[str, float], dict[str, Any]] | None = None,
 ) -> PreparedBodyEigenmode:
-    """Compose EPR analysis authoring with common body-first HFSS preparation."""
+    """Compose EPR analysis authoring with the HFSS Eigenmode preparation of the SGB model."""
     return prepare_body_eigenmode(
         Hfss,
         run_dir,
         spec,
-        geometry_extension=add_analysis_surfaces,
-        analysis_author=lambda app, workspace, bound, geometry: (
-            prepare_expressions_and_cache(app, workspace, bound, geometry, inset_plan)
-        ),
+        geometry_extension=add_epr_selections,
+        analysis_author=prepare_expressions_and_cache,
         analysis_readback=_analysis_readback,
     )
 
 
 def prepared_epr_result(prepared: PreparedBodyEigenmode) -> dict[str, Any]:
-    """Return preparation evidence after saved native surface readback."""
-    result = prepared_body_eigenmode_result(
-        prepared, analysis_readback=_prepared_analysis_readback
-    )
-    result["surface_analysis_scope"] = SURFACE_ANALYSIS_SCOPE
-    return result
+    """Return the preparation evidence of the EPR model."""
+    return prepared_body_eigenmode_result(prepared)
 
 
 def _export_epr_analysis(  # noqa: PLR0913 -- match the existing family analysis_export callback contract.
@@ -513,12 +538,7 @@ def _export_epr_analysis(  # noqa: PLR0913 -- match the existing family analysis
     history_path = output_dir / "adaptive-mode-history.json"
     write_json(history_path, history)
     outputs[history_path.relative_to(run_dir).as_posix()] = file_sha256(history_path)
-    adaptive_result = adaptive_epr_result(
-        spec,
-        history,
-        convergence,
-        native_surface_references=prepared.cache.get("native_surface_references", []),
-    )
+    adaptive_result = adaptive_epr_result(spec, history, convergence)
     result_path = output_dir / "adaptive-epr-result.json"
     write_json(result_path, adaptive_result.to_payload())
     outputs[result_path.relative_to(run_dir).as_posix()] = file_sha256(result_path)
@@ -526,10 +546,7 @@ def _export_epr_analysis(  # noqa: PLR0913 -- match the existing family analysis
     return (
         history,
         adaptive_result.to_payload(),
-        {
-            "surface_analysis_scope": SURFACE_ANALYSIS_SCOPE,
-            "saved_field_evidence": saved_field_evidence,
-        },
+        {"saved_field_evidence": saved_field_evidence},
     )
 
 
@@ -570,12 +587,7 @@ def collect_batch_epr(Hfss, run_dir, spec, prepared_receipt):
     )
     if app.design_name != spec.design_name or app.design_type != "HFSS":
         raise RuntimeError("returned batch design identity differs")
-    geometry = bind_saved_planar_geometry(app, spec.geometry)
-    bind_saved_analysis_surfaces(app, spec.geometry, geometry)
-    bind_saved_generic_rlcs(app, spec.geometry, geometry)
-    read_saved_junction_lines(
-        app, project_path, spec.design_name, spec.geometry, geometry
-    )
+    geometry = rebind_saved_model(app, spec, spec_epr_source(spec))
     setup = read_body_eigenmode_setup(app, spec)
     evidence_dir = run_dir / "metadata/epr_expressions"
     evidence_dir.mkdir(parents=True, exist_ok=False)
@@ -600,11 +612,6 @@ def collect_batch_epr(Hfss, run_dir, spec, prepared_receipt):
             "definitions": {name: observed["definitions"][name] for name in names},
         }
     cache["serialized_readback"] = read_cache(app, spec, cache["items"])
-    references = cache.get("native_surface_references", [])
-    if references:
-        cache["native_surface_references"] = verify_saved_native_surface_references(
-            project_path, spec.design_name, references
-        )
     prepared = PreparedBodyEigenmode(
         app,
         BoundAedtRequest.bind(run_dir, spec),

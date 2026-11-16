@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -225,11 +225,13 @@ LEFT_EDGE_UM = 4.0
 RIGHT_EDGE_UM = 6.0
 
 
-def _rectangle(x0: float, x1: float, y0: float = 1.0, y1: float = 3.0):
+def rectangle(x0: float, x1: float, y0: float = 1.0, y1: float = 3.0):
+    """The loop of the axis-aligned rectangle from (x0, y0) to (x1, y1)."""
     return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
 
 
-def _solution_region(name: str, kind: str, material: str, bounds, holes=()):
+def solution_region(name: str, kind: str, material: str, bounds, holes=()):
+    """A solution-region Entity of ``material`` filling ``bounds`` (x0, x1, y0, y1, z0, z1) in um."""
     x0, x1, y0, y1, z0, z1 = bounds
     return SemanticEntitySpec(
         name,
@@ -239,7 +241,7 @@ def _solution_region(name: str, kind: str, material: str, bounds, holes=()):
         0,
         "polygon",
         geometry={
-            "outer_loop": _rectangle(x0, x1, y0, y1),
+            "outer_loop": rectangle(x0, x1, y0, y1),
             "hole_loops": holes,
             "z_min_um": z0,
             "z_max_um": z1,
@@ -277,8 +279,8 @@ def thin_film_pair(
         {"layer_attachment_face": "lower"},
     )
     loops = {
-        "left": _rectangle(0.0, LEFT_EDGE_UM, 0.0, 4.0),
-        "right": _rectangle(RIGHT_EDGE_UM, 10.0, 0.0, 4.0),
+        "left": rectangle(0.0, LEFT_EDGE_UM, 0.0, 4.0),
+        "right": rectangle(RIGHT_EDGE_UM, 10.0, 0.0, 4.0),
     }
     metals = tuple(
         SemanticEntitySpec(
@@ -307,7 +309,7 @@ def thin_film_pair(
     )
     if bump:
         metals = (*metals, _bump_entity())
-    port_loop = _rectangle(LEFT_EDGE_UM - landing_um, RIGHT_EDGE_UM + landing_um)
+    port_loop = rectangle(LEFT_EDGE_UM - landing_um, RIGHT_EDGE_UM + landing_um)
     port = PortSheetRegionRecord(
         "port_sheet",
         "port",
@@ -320,7 +322,7 @@ def thin_film_pair(
                 "port_polygon",
                 "chip/left",
                 "left",
-                _rectangle(LEFT_EDGE_UM - landing_um, LEFT_EDGE_UM),
+                rectangle(LEFT_EDGE_UM - landing_um, LEFT_EDGE_UM),
             ),
             PortSheetOverlapRecord(
                 "right_overlap",
@@ -328,7 +330,7 @@ def thin_film_pair(
                 "port_polygon",
                 "chip/right",
                 "right",
-                _rectangle(RIGHT_EDGE_UM, RIGHT_EDGE_UM + landing_um),
+                rectangle(RIGHT_EDGE_UM, RIGHT_EDGE_UM + landing_um),
             ),
         ),
         metadata={
@@ -345,17 +347,15 @@ def thin_film_pair(
         *((LayoutPolygonSpec("bump", "bump", BUMP_LOOP),) if bump else ()),
         LayoutPolygonSpec("port_polygon", "port", port_loop),
     )
-    substrate = _solution_region(
-        "substrate", "dielectric", "Si", (-3, 13, -1, 5, -2, 0)
-    )
-    lower = _solution_region(
+    substrate = solution_region("substrate", "dielectric", "Si", (-3, 13, -1, 5, -2, 0))
+    lower = solution_region(
         "lower_air",
         "vacuum",
         "air",
         (-4, 14, -2, 6, -2, 0),
         (substrate.geometry["outer_loop"],),
     )
-    upper = _solution_region("upper_air", "vacuum", "air", (-4, 14, -2, 6, 0, 4.25))
+    upper = solution_region("upper_air", "vacuum", "air", (-4, 14, -2, 6, 0, 4.25))
     regions = {
         item.semantic_id: {
             "semantic_id": item.semantic_id,
@@ -532,6 +532,7 @@ def geometry_plan_electrodes(monkeypatch, *, gap_um: float = 10.0) -> EffectiveI
 JUNCTION_SHEET = ((0, 0), (10, 0), (10, 2), (0, 2))
 JUNCTION_LEFT = ((-2, 0), (3, 0), (3, 1), (2, 1), (2, 2), (-2, 2))
 JUNCTION_RIGHT = ((7, 0), (12, 0), (12, 2), (8, 2), (8, 1), (7, 1))
+JUNCTION_BUMP_LOOP = ((-1.5, 0.5), (0.5, 0.5), (0.5, 1.5), (-1.5, 1.5))
 JUNCTION_GRID_UM = 0.5
 
 
@@ -540,6 +541,29 @@ def rectangular_junction_pair() -> EffectiveInput:
 
     The junction partition replaces the authored sheet by its central rectangle, which touches the
     two terminal-owned end polygons; the thin-film profile makes both terminals Route-A sheets.
+    """
+    source, stack = rectangular_junction_source()
+    effective, _, plan = interpret_physical_geometry(
+        source, stack, ApproximationProfile("thin_film", "v1", {})
+    )
+    return EffectiveInput(effective, plan.context)
+
+
+def rectangular_junction_source(
+    vacuum: str = "upper_air",
+    *,
+    bump: bool = False,
+    substrate_x_min_um: float = -4,
+    vacuum_z_min_um: float | None = None,
+) -> tuple[GeometryBuildInput, dict[str, Any]]:
+    """The source and stack of :func:`rectangular_junction_pair` before physical interpretation.
+
+    ``vacuum`` names the vacuum region above the metals (``VACUUM_REGION`` for an AEDT model, whose
+    Region is that box).  With ``bump`` a 2.75 um tall ``finite_volume`` body of Net ``A`` stands on the
+    left film (:data:`JUNCTION_BUMP_LOOP`): a finite body that is not a film.  ``substrate_x_min_um``
+    above -2 leaves the left end of the left film over vacuum, and ``vacuum_z_min_um`` below -2 puts
+    vacuum under the substrate as well (both for ``VACUUM_REGION``, whose box fills what the substrate
+    leaves).
     """
     declaration = PhysicalLayerDeclaration(
         "film",
@@ -563,7 +587,7 @@ def rectangular_junction_pair() -> EffectiveInput:
             part_role="face_metal",
             net_id=net,
             polygon_ids=(name,),
-            host_void_semantic_id="upper_air",
+            host_void_semantic_id=vacuum,
             geometry={
                 "geometry_source": "gds_polygon",
                 "z_um": 0,
@@ -578,6 +602,18 @@ def rectangular_junction_pair() -> EffectiveInput:
         )
         for name, net, loop in terminals
     )
+    if bump:
+        body = _bump_entity()
+        metals = (
+            *metals,
+            replace(
+                body,
+                net_id="A",
+                host_void_semantic_id=vacuum,
+                geometry={**body.geometry, "outer_loop": JUNCTION_BUMP_LOOP},
+                metadata={**body.metadata, "source_occurrence_path": "chip"},
+            ),
+        )
     region = PortSheetRegionRecord(
         "sheet",
         "junction",
@@ -596,10 +632,16 @@ def rectangular_junction_pair() -> EffectiveInput:
             "direction_sign_convention": "gdsfactory_port_orientation_outward",
         },
     )
-    substrate = _solution_region(
-        "substrate", "dielectric", "Si", (-4, 14, -2, 4, -2, 0)
+    substrate = solution_region(
+        "substrate", "dielectric", "Si", (substrate_x_min_um, 14, -2, 4, -2, 0)
     )
-    upper = _solution_region("upper_air", "vacuum", "air", (-4, 14, -2, 4, 0, 4.25))
+    floor = -2 if vacuum_z_min_um is None else vacuum_z_min_um
+    upper = solution_region(
+        vacuum,
+        "vacuum",
+        "air",
+        (-4, 14, -2, 4, floor if vacuum == "VACUUM_REGION" else 0, 4.25),
+    )
     regions = {
         item.semantic_id: {
             "semantic_id": item.semantic_id,
@@ -626,7 +668,10 @@ def rectangular_junction_pair() -> EffectiveInput:
         "metadata": {},
     }
     source = GeometryBuildInput(
-        tuple(LayoutPolygonSpec(name, "metal", loop) for name, _, loop in terminals),
+        (
+            *(LayoutPolygonSpec(name, "metal", loop) for name, _, loop in terminals),
+            *((LayoutPolygonSpec("bump", "bump", JUNCTION_BUMP_LOOP),) if bump else ()),
+        ),
         (*metals, substrate, upper),
         solution_regions=regions,
         metadata={
@@ -643,9 +688,4 @@ def rectangular_junction_pair() -> EffectiveInput:
         JunctionTerminalBinding("chip/left", "chip", "A"),
         JunctionTerminalBinding("chip/right", "chip", "B"),
     )
-    effective, _, plan = interpret_physical_geometry(
-        with_rectangular_junctions(source, (request,)),
-        stack,
-        ApproximationProfile("thin_film", "v1", {}),
-    )
-    return EffectiveInput(effective, plan.context)
+    return with_rectangular_junctions(source, (request,)), stack

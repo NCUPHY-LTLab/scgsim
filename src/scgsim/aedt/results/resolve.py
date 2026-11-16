@@ -9,9 +9,7 @@ from typing import Any, Literal, cast
 
 from scgsim.aedt.epr.models import EprResult
 from scgsim.aedt.io import file_sha256, read_json
-from scgsim.aedt.preparation.cohort import (
-    validate_geometry_source,
-)
+from scgsim.aedt.preparation.sgb_handoff import SOURCE_KEYS, check_sgb_model_source
 from scgsim.aedt.presentation.benchmark import display_benchmark
 from scgsim.aedt.presentation.runs import display_resolved_run
 from scgsim.aedt.results.benchmark import read_simulation_benchmark
@@ -19,25 +17,21 @@ from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
 from scgsim.aedt.results.epr import resolve_epr_result, resolve_saved_solution
 from scgsim.aedt.results.hfss_readback import (
     validate_eigenmode_readback,
-    validate_hfss_pec_bindings,
 )
 from scgsim.aedt.results.matrices import parse_matrix_export, read_q2d_rlgc_matrix
 from scgsim.aedt.results.provenance import require_current_receipt
+from scgsim.aedt.results.readback_common import validate_imported_sgb_model
 from scgsim.aedt.results.readback_dispatch import validate_result_readback
 from scgsim.aedt.results.receipt_validation import (
     contained,
     validate_completion_cohort,
     verified,
 )
-from scgsim.aedt.results.terminal_readback import validate_lumped_readback
 from scgsim.aedt.runtime.batch_protocol import CollectionContext, collection_source
 from scgsim.aedt.runtime.benchmark import BENCHMARK_RELATIVE
 from scgsim.aedt.specs.common import MatrixRunControl
 from scgsim.aedt.specs.hfss import (
     EigenmodeRunControl,
-    HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprSpec,
 )
 from scgsim.aedt.specs.parse import parse_aedt_spec
@@ -163,17 +157,16 @@ class ResolvedRun:
             if not isinstance(spec, Q3dSpec):
                 raise RuntimeError("resolved Q3D result has a non-Q3D spec")
             run_control = cast(MatrixRunControl, spec.run_control)
-            if not spec.solve_ac_rl:
-                rows, _ = parse_matrix_export(
-                    self.primary_csv,
-                    "Q3D",
-                    "C",
-                    run_control.frequency_ghz,
-                    {"Capacitance Matrix": "C", "Conductance Matrix": "G"},
-                )
-                return tuple(
-                    {key: str(value) for key, value in row.items()} for row in rows
-                )
+            rows, _ = parse_matrix_export(
+                self.primary_csv,
+                "Q3D",
+                "C",
+                run_control.frequency_ghz,
+                {"Capacitance Matrix": "C", "Conductance Matrix": "G"},
+            )
+            return tuple(
+                {key: str(value) for key, value in row.items()} for row in rows
+            )
 
         with self.primary_csv.open(newline="", encoding="utf-8-sig") as stream:
             return tuple(dict(row) for row in csv.DictReader(stream))
@@ -288,9 +281,9 @@ def _resolved_adaptive_epr(
     if (
         result.result_kind != "adaptive_history"
         or result.setup_name != run_control.setup_name
-        or result.provenance.get("model_source_sha256") != spec.geometry.model_sha256
+        or result.provenance.get("model_source_sha256") != spec.model.identity_sha256
         or result.provenance.get("analysis_source_sha256")
-        != spec.geometry.source_sha256
+        != spec.model.files["sidecar"]["sha256"]
         or tuple(result.provenance.get("requested_modes", ())) != requested_modes
         or result.provenance.get("solver_last_completed_pass")
         != convergence["final_pass"]
@@ -369,33 +362,16 @@ def _read_completed_receipt(root: Path) -> tuple[Path, dict[str, Any]]:
 
 def _validate_source_binding(root: Path, source: dict[str, Any], spec: Any) -> None:
     """Verify canonical source members for the resolved model family."""
-    if isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec)):
-        expected_source = {
-            "spec",
-            "spec_sha256",
-            "planar_source_sha256",
-            "planar_model_sha256",
-        }
-        if set(source) != expected_source:
-            raise RuntimeError("body-first Eigenmode source members are not canonical")
-        if (
-            source["planar_source_sha256"] != spec.geometry.source_sha256
-            or source["planar_model_sha256"] != spec.geometry.model_sha256
-        ):
-            raise RuntimeError("body-first Eigenmode source identity differs")
-    elif isinstance(spec, (Q2dSpec, Q3dSpec)):
+    if isinstance(spec, Q2dSpec):
         if set(source) != {"spec", "spec_sha256"}:
-            raise RuntimeError(
-                "Q2D receipt must not contain a GDS source"
-                if isinstance(spec, Q2dSpec)
-                else "Q3D body receipt must not contain an imported GDS source"
-            )
-        if isinstance(spec, Q3dSpec):
-            validate_geometry_source(root, source, spec)
-    else:
-        if source.get("gds") != "geometry/design.gds":
-            raise RuntimeError("receipt GDS path is not canonical")
-        verified(root, "geometry/design.gds", source, "gds_sha256")
+            raise RuntimeError("Q2D receipt must not contain a GDS source")
+        return
+    try:
+        check_sgb_model_source(source, spec.model)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    if set(source) != {"spec", "spec_sha256", *SOURCE_KEYS}:
+        raise RuntimeError(f"{spec.mode} source members are not canonical")
 
 
 def _validate_result_family(
@@ -412,7 +388,7 @@ def _validate_result_family(
         raise RuntimeError("AEDT receipt mode is invalid")
     result_mode = cast(Literal["terminal", "modal", "eigenmode", "q3d", "q2d"], mode)
     if isinstance(spec, HfssEprSpec):
-        validate_lumped_readback(receipt, spec.geometry)
+        validate_imported_sgb_model(receipt, spec.model)
         if spec.lumped_rlcs:
             validate_eigenmode_readback(receipt, spec)
         if receipt.get("workflow_status") != "completed":
@@ -423,8 +399,6 @@ def _validate_result_family(
             raise RuntimeError("body-first Eigenmode native readback is incomplete")
     else:
         _validate_readback(root, receipt, spec)
-    if isinstance(spec, (HfssDrivenSpec, HfssEigenmodeSpec)):
-        validate_hfss_pec_bindings(receipt, spec)
     return result_mode
 
 
@@ -502,10 +476,7 @@ def _resolve_q3d_outputs(context: OutputContext) -> ResolvedRun:
     if context.benchmark_path is not None:
         expected.add(BENCHMARK_RELATIVE)
     primary = "results/q3d/c_matrix.csv"
-    if context.spec.solve_ac_rl:
-        expected.update({"results/q3d/ac_rl_matrix.csv", "results/q3d/matrices.csv"})
-        primary = "results/q3d/matrices.csv"
-    elif any(
+    if any(
         contained(context.root, relative).exists()
         for relative in ("results/q3d/ac_rl_matrix.csv", "results/q3d/matrices.csv")
     ):
@@ -526,10 +497,8 @@ def _resolve_q3d_outputs(context: OutputContext) -> ResolvedRun:
 
 
 def _resolve_eigenmode_outputs(context: OutputContext) -> ResolvedRun:
-    """Select the matching saved-solution or ordinary Eigenmode evidence path."""
-    if isinstance(context.spec, HfssEprSpec):
-        return _resolve_epr_outputs(context)
-    return _resolve_standard_eigenmode_outputs(context)
+    """Resolve the EPR evidence of an HFSS Eigenmode run."""
+    return _resolve_epr_outputs(context)
 
 
 def _resolve_epr_outputs(context: OutputContext) -> ResolvedRun:
@@ -622,34 +591,6 @@ def _resolve_epr_outputs(context: OutputContext) -> ResolvedRun:
             epr_result=adaptive_result,
             saved_solution_aedt_version=saved_solution_aedt_version,
         ),
-    )
-
-
-def _resolve_standard_eigenmode_outputs(context: OutputContext) -> ResolvedRun:
-    """Verify the standard Eigenmode output manifest and artifacts."""
-    expected = {
-        context.project_relative,
-        "results/eigenmode/eigenmodes.csv",
-        "results/eigenmode/eigenmodes.eig",
-    }
-    if context.benchmark_path is not None:
-        expected.add(BENCHMARK_RELATIVE)
-    expected.add("results/eigenmode/adaptive-convergence.prop")
-    if set(context.outputs) != expected:
-        raise RuntimeError("Eigenmode output manifest is not canonical")
-    verified(
-        context.root, "results/eigenmode/adaptive-convergence.prop", context.outputs
-    )
-    return ResolvedRun(
-        "eigenmode",
-        context.project,
-        verified(context.root, "results/eigenmode/eigenmodes.csv", context.outputs),
-        None,
-        verified(context.root, "results/eigenmode/eigenmodes.eig", context.outputs),
-        context.receipt_path,
-        convergence=context.receipt["convergence"],
-        benchmark_path=context.benchmark_path,
-        **_captured_fields(context.receipt, context.outputs, context.spec),
     )
 
 

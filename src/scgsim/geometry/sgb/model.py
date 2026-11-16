@@ -110,7 +110,7 @@ class ConformalModel:
 def build_conformal_model(
     build_input: GeometryBuildInput,
     representation: RepresentationContext,
-    route: str,
+    route: str | RoutePolicy,
     *,
     insets: tuple[InsetRequest, ...] = (),
 ) -> ConformalModel:
@@ -121,7 +121,7 @@ def build_conformal_model(
 
 def build_model_from_catalogue(
     catalogue: PrismCatalogue,
-    route: str,
+    route: str | RoutePolicy,
     *,
     insets: tuple[InsetRequest, ...] = (),
     keep_raw: bool = False,

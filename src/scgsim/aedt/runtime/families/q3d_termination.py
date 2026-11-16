@@ -72,9 +72,7 @@ def termination_q3d_result(
     def artifact(path: Path, call: Callable[[], Any]) -> dict[str, Any]:
         return _collect_artifact(path, call, run_dir, result["outputs"])
 
-    for problem, stem in (
-        (("C", "c"), ("AC RL", "ac_rl")) if spec.solve_ac_rl else (("C", "c"),)
-    ):
+    for problem, stem in (("C", "c"),):
         path = run_dir / "results/q3d" / f"{stem}_matrix.csv"
         item = artifact(
             path,

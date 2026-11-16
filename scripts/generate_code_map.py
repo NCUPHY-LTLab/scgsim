@@ -65,8 +65,8 @@ def _parts(stage: str, *names: str) -> tuple[Folder, ...]:
 
 
 # The one statement of the order the work flows. A layout enters ``geometry/source``; the Palace route goes on
-# through ``surface_epr``, ``sgb``, ``meshing`` and the Palace stages, the AEDT route through ``planning`` and
-# the AEDT stages. ``contracts`` holds the files between stages.
+# through ``surface_epr``, ``sgb``, ``meshing`` and the Palace stages, the AEDT route through the AEDT stages,
+# which build the same SGB model. ``contracts`` holds the files between stages.
 AREAS = (
     Area(
         "geometry",
@@ -79,14 +79,6 @@ AREAS = (
             Folder("geometry/junctions"),
             Folder("geometry/interpretation"),
             Folder("geometry/surface_epr"),
-            Folder("geometry/planning"),
-            *_parts(
-                "geometry/planning",
-                "contact_planning",
-                "domain_planning",
-                "surface_planning",
-                "topology_planning",
-            ),
         ),
     ),
     Area(

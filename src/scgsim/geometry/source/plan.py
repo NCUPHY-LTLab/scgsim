@@ -25,7 +25,6 @@ from scgsim.geometry.models.input import (
     VacuumRegionSpec,
 )
 from scgsim.geometry.models.junctions import RectangularJunctionSpec
-from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.source.adapter import (
     LayoutOrigin,
     layout_grid,
@@ -42,11 +41,6 @@ from scgsim.geometry.source.curves import (
     with_drawn_rings,
 )
 from scgsim.geometry.source.junctions import with_rectangular_junctions
-from scgsim.geometry.source.lumped_supports import (
-    check_lumped_terminals,
-    lumped_support_plane,
-    occurrence_lumped_polygon,
-)
 from scgsim.geometry.source.normalization import (
     finite_number,
 )
@@ -131,11 +125,6 @@ class GeometryPlanSnapshot:
         """Return detached occurrence identity and transform records."""
         return copy.deepcopy(self._source_occurrences)
 
-    @property
-    def lumped_supports(self) -> tuple[LumpedSupport, ...]:
-        """Return the snapshot's detached lumped-support records."""
-        return copy.deepcopy(self._geometry_input.lumped_supports)
-
 
 @dataclass(frozen=True)
 class _WrittenLayout:
@@ -207,7 +196,6 @@ class GeometryPlan:
         self._vacuum_region: VacuumRegionSpec | None = None
         self._boundary_curves = ()
         self._boundary_reconstruction = ()
-        self._lumped_supports = ()
         self._rectangular_junctions = ()
 
     def set_rectangular_junctions(self, specs) -> None:
@@ -228,23 +216,6 @@ class GeometryPlan:
                     ).refusal(f"duplicate rectangular junction {field}")
                 )
         self._rectangular_junctions = requests
-
-    def set_lumped_supports(self, supports: Sequence[LumpedSupport]) -> None:
-        """Bind caller-declared local nonmetal supports; no excitation is inferred."""
-        records = tuple(supports)
-        if any(not isinstance(record, LumpedSupport) for record in records):
-            raise TypeError(
-                plan_call("set_lumped_supports", "lumped supports").expected(
-                    "every support", "a LumpedSupport record", records
-                )
-            )
-        if len({record.support_id for record in records}) != len(records):
-            raise ValueError(
-                plan_call("set_lumped_supports", "lumped supports").refusal(
-                    "lumped support IDs must be unique"
-                )
-            )
-        self._lumped_supports = records
 
     def set_boundary_curves(self, boundaries) -> None:
         """Bind explicitly authored curves in assembled source coordinates."""
@@ -454,10 +425,7 @@ class GeometryPlan:
             source,
             merged_audits(occurrence_audits, include_audits, port_audits),
         )
-        lumped_supports = self._resolve_lumped_supports(scope, build_input, source)
-        return self._assemble_snapshot(
-            build_input, stack, source, occurrences, lumped_supports
-        )
+        return self._assemble_snapshot(build_input, stack, source, occurrences)
 
     def _validated_stack(self) -> dict[str, Any]:
         stack = self._stack()
@@ -675,48 +643,12 @@ class GeometryPlan:
                 LayoutOrigin(source_audits=source_audits),
             )
 
-    def _resolve_lumped_supports(
-        self, scope: GridScope, build_input: GeometryBuildInput, source: _WrittenLayout
-    ) -> list[LumpedSupport]:
-        lumped_supports = []
-        entities = {entity.semantic_id: entity for entity in build_input.entities}
-        for support in self._lumped_supports:
-            path = support.source_occurrence_path
-            owner = plan_call(
-                "set_lumped_supports", f"lumped support {support.support_id!r}"
-            )
-            if path not in self._instances:
-                raise ValueError(
-                    owner.refusal(f"its occurrence {path!r} is not registered")
-                )
-            cell, _, transform = self._instances[path]
-            source_z_um = lumped_support_plane(support, self._layer_stack, owner)
-            check_lumped_terminals(support, entities, owner)
-            polygon = occurrence_lumped_polygon(
-                scope,
-                support,
-                cell=source.source_cells[cell.name],
-                excluded_reference_indexes=source.child_reference_indexes[path],
-                transform=transform,
-            )
-            lumped_supports.append(
-                replace(
-                    support,
-                    exterior=polygon.exterior,
-                    holes=polygon.holes,
-                    source_transform=transform,
-                    source_z_um=source_z_um,
-                )
-            )
-        return lumped_supports
-
     def _assemble_snapshot(
         self,
         build_input: GeometryBuildInput,
         stack: dict[str, Any],
         source: _WrittenLayout,
         occurrences: tuple[Mapping[str, Any], ...],
-        lumped_supports: list[LumpedSupport],
     ) -> GeometryPlanSnapshot:
         # The source remains self-contained after its temporary files disappear.
         metadata = dict(build_input.metadata)
@@ -730,7 +662,6 @@ class GeometryPlan:
             metadata=metadata,
             boundary_curves=boundary_curves,
             boundary_reconstruction=reconstruction,
-            lumped_supports=tuple(lumped_supports),
         )
         # Reconstruction indices name rings as drawn in the GDS; the source stage has
         # since fused, rounded and noded them, so each polygon keeps its drawn rings.
@@ -789,3 +720,26 @@ class GeometryPlan:
                 for value in semantics.get("boundary_reconstruction", ())
             )
         return tuple(boundary_curves), tuple(reconstruction)
+
+
+# The plan a simulation is given, as a check that takes it shows its caller how to build one.
+_PLAN_TO_BUILD = (
+    "plan = GeometryPlan(component=..., root_id=..., layer_stack=..., material_records=..., "
+    "coupon_padding_um=...); plan.set_nets({...})"
+)
+
+
+def simulation_plan(value: object, call: str) -> GeometryPlan:
+    """``value`` when it is the ``GeometryPlan`` ``call`` takes; otherwise the refusal that shows how to build one.
+
+    A backend's ``simulation_drc`` takes the plan its simulation is given, unprepared; a prepared snapshot,
+    a Component or anything else is refused here, before anything is read.
+    """
+    if not isinstance(value, GeometryPlan):
+        raise TypeError(
+            Declared(f"the first argument of {call}", f"the call to {call}").refusal(
+                f"must be the GeometryPlan the simulation is given, not {type(value).__name__}; "
+                f"build it as {_PLAN_TO_BUILD}"
+            )
+        )
+    return value

@@ -1,21 +1,20 @@
-"""Strict offline validation for Q3D native bodies, region grounds, setup, and matrices."""
+"""Strict offline validation of a Q3D run on an SGB model: Nets, Region, setup and the C/G matrix."""
 
 from __future__ import annotations
 
-import csv
 import math
-import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 from scgsim.aedt.results.convergence.q3d import read_q3d_convergence
 from scgsim.aedt.results.matrices import parse_matrix_export
-from scgsim.aedt.results.readback_common import positive_unique_ids
+from scgsim.aedt.results.readback_common import (
+    positive_unique_ids,
+    validate_imported_sgb_model,
+)
 from scgsim.aedt.results.receipt_validation import contained
 from scgsim.aedt.specs.common import MatrixRunControl
 from scgsim.aedt.specs.q3d import Q3dSpec
-from scgsim.aedt.terminal_chain import q3d_terminal_segments
 
 _Q3D_REGION_DIRECTIONS = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
 
@@ -32,71 +31,44 @@ _Q3D_REGION_SHEET_NAMES = {
 def validate_q3d_model_readback(
     root: Path, receipt: dict[str, Any], spec: Q3dSpec, *, prepared: bool = False
 ) -> None:
-    """Bind model assignments separately from setup and matrix evidence."""
+    """Bind the receipt's model to the request: the imported SGB model, its Nets and Region."""
     if ("ports" in receipt or not prepared) and receipt.get("ports") != []:
         raise RuntimeError("Q3D receipt must not contain HFSS ports")
+    validate_imported_sgb_model(receipt, spec.model)
+    _validate_conductor_sheets(receipt["geometry"], spec)
     nets = receipt.get("nets")
     if not isinstance(nets, list) or len(nets) != len(spec.nets):
         raise RuntimeError("Q3D receipt has invalid net evidence")
     for record, expected in zip(nets, spec.nets, strict=True):
-        _validate_q3d_net_terminals(record, expected, spec)
-        if expected.net_type == "Signal" and expected.source_object is not None:
-            for kind, object_name, side in (
-                ("source", expected.source_object, expected.source_side),
-                ("sink", expected.sink_object, expected.sink_side),
-            ):
-                terminal = record.get(kind)
-                if (
-                    not isinstance(terminal, dict)
-                    or terminal.get("name") != f"{expected.name}{kind.title()}"
-                    or terminal.get("object_name") != object_name
-                    or terminal.get("side") != side
-                ):
-                    raise RuntimeError("Q3D native terminal evidence is invalid")
-                effective = {body["body_id"]: body for body in spec.effective_bodies}
-                if effective and effective[object_name]["representation"] == "sheet":
-                    body = next(
-                        body for body in spec.bodies if body.body_id == object_name
-                    )
-                    indices = q3d_terminal_segments(body, cast(str, side))
-                    edges = terminal.get("native_edge_ids")
-                    if (
-                        not isinstance(edges, list)
-                        or not positive_unique_ids(edges, len(indices))
-                        or terminal.get("source_edges")
-                        != [
-                            {"source_segment_index": index, "native_edge_id": edge}
-                            for index, edge in zip(indices, edges, strict=True)
-                        ]
-                        or terminal.get("terminal_type") != "ConstantVoltage"
-                        or "native_face_ids" in terminal
-                    ):
-                        raise RuntimeError(
-                            "Q3D Sheet terminal evidence differs from source exterior"
-                        )
-                else:
-                    faces = terminal.get("native_face_ids")
-                    if not isinstance(faces, list) or not positive_unique_ids(faces, 1):
-                        raise RuntimeError(
-                            "Q3D Solid terminal face evidence is invalid"
-                        )
-        elif "source" in record or "sink" in record:
-            raise RuntimeError("Q3D net receipt contains undeclared terminals")
+        _validate_q3d_net(record, expected)
     net_object_ids = [
         object_id for record in nets for object_id in record["native_object_ids"]
     ]
     if len(set(net_object_ids)) != len(net_object_ids):
         raise RuntimeError("Q3D native object IDs must be unique across nets")
-    _validate_q3d_body_bindings(receipt, spec, nets)
     _validate_q3d_region_ground(receipt, spec, nets)
 
 
-def _validate_q3d_net_terminals(
-    record: dict[str, Any], expected: Any, spec: Q3dSpec
-) -> None:
-    """Verify declared Q3D terminal identities and their native face or edge IDs."""
+def _validate_conductor_sheets(geometry: dict[str, Any], spec: Q3dSpec) -> None:
+    """Each Route A sheet group is one thin conductor of the model's thickness; Route C has none."""
+    sheets = geometry.get("conductor_sheets")
+    expected = dict(spec.model.sheet_thickness_um)
+    if (
+        not isinstance(sheets, list)
+        or {record.get("group"): record.get("thickness_um") for record in sheets}
+        != expected
+        or any(str(record.get("material", "")).casefold() != "pec" for record in sheets)
+    ):
+        raise RuntimeError(
+            "the Q3D conductor sheets are not the model's sheet groups at their thickness"
+        )
+
+
+def _validate_q3d_net(record: Any, expected: Any) -> None:
+    """A Net record names the request's Net, type and objects, with one native id per object, and nothing else."""
     if (
         not isinstance(record, dict)
+        or set(record) != {"name", "net_type", "object_names", "native_object_ids"}
         or record.get("name") != expected.name
         or record.get("net_type") != expected.net_type
         or record.get("object_names") != list(expected.object_names)
@@ -117,22 +89,6 @@ def validate_q3d_readback(root: Path, receipt: dict[str, Any], spec: Q3dSpec) ->
         raise RuntimeError("Q3D native convergence evidence is invalid")
     readback = receipt.get("result_readback")
     matrices = readback.get("matrices") if isinstance(readback, dict) else None
-    if spec.solve_ac_rl:
-        if (
-            not isinstance(matrices, dict)
-            or matrices.get("frequency_ghz") != run_control.frequency_ghz
-            or set(matrices.get("native", {})) != {"c", "ac_rl"}
-            or not isinstance(matrices.get("normalized_rows"), int)
-            or matrices["normalized_rows"] <= 0
-        ):
-            raise RuntimeError("Q3D matrix readback is invalid")
-        _validate_normalized_matrices(
-            contained(root, "results/q3d/matrices.csv"),
-            matrices["normalized_rows"],
-            {"C", "AC RL"},
-        )
-        _read_q3d_original_cg(root, spec)
-        return
     rows, summary = _read_q3d_original_cg(root, spec)
     expected_matrices = {
         "path": "results/q3d/c_matrix.csv",
@@ -161,18 +117,6 @@ def validate_q3d_setup(receipt: dict[str, Any], spec: Q3dSpec) -> None:
             "dc_enabled": False,
         },
     }
-    if spec.solve_ac_rl:
-        expected_setup["native"].update(
-            {
-                "ac_rl_maximum_passes": run_control.maximum_passes,
-                "ac_rl_minimum_passes": run_control.minimum_passes,
-                "ac_rl_minimum_converged_passes": (
-                    run_control.minimum_converged_passes
-                ),
-                "ac_rl_convergence_percent": run_control.convergence_percent,
-                "ac_rl_percent_refinement": run_control.percent_refinement,
-            }
-        )
     if receipt.get("setup") != expected_setup:
         raise RuntimeError("Q3D native setup evidence is invalid")
 
@@ -196,248 +140,25 @@ def _read_q3d_original_cg(
     )
 
 
-@dataclass
-class Q3dBodyBindingContext:
-    """Source and native inventories shared across Q3D body checks."""
-
-    spec: Q3dSpec
-    effective_bodies: dict[str, Any]
-    net_object_ids: dict[str, int]
-    seen_native_ids: set[int]
-
-
-def _validate_q3d_body_bindings(
-    receipt: dict[str, Any], spec: Q3dSpec, nets: list[dict[str, Any]]
-) -> None:
-    """Bind every created body to its declared geometry and final native identity."""
-    materials = receipt.get("materials")
-    if not isinstance(materials, list) or len(materials) != len(spec.bodies):
-        raise RuntimeError("Q3D body material readback is invalid")
-    net_object_ids = {
-        name: native_id
-        for net_record, net_spec in zip(nets, spec.nets, strict=True)
-        for name, native_id in zip(
-            net_spec.object_names, net_record["native_object_ids"], strict=True
-        )
-    }
-    records = {
-        record.get("object_name"): record
-        for record in materials
-        if isinstance(record, dict)
-    }
-    if len(records) != len(materials) or set(records) != {
-        body.body_id for body in spec.bodies
-    }:
-        raise RuntimeError("Q3D native body inventory differs from the spec")
-    effective_bodies = {body["body_id"]: body for body in spec.effective_bodies}
-    context = Q3dBodyBindingContext(spec, effective_bodies, net_object_ids, set())
-    for body in spec.bodies:
-        record = records[body.body_id]
-        material = spec.materials[body.material_id]
-        _validate_q3d_body_material(context, body, material, record)
-        evidence = record.get("body_binding")
-        if not isinstance(evidence, dict):
-            raise RuntimeError("Q3D native body binding is absent")
-        native_id, faces = _validate_q3d_body_identity(context, body, record, evidence)
-        _validate_q3d_effective_body(context, body, record, evidence)
-        context.seen_native_ids.add(native_id)
-        _validate_q3d_body_incidence(evidence, faces)
-
-
-def _validate_q3d_body_material(
-    context: Q3dBodyBindingContext, body: Any, material: Any, record: dict[str, Any]
-) -> None:
-    observed = record.get("observed")
-    sheet = context.effective_bodies[body.body_id]["representation"] == "sheet"
-    observed_key = "native_boundary_material_name" if sheet else "native_material_name"
-    expected_native_material = (
-        "pec" if material.is_superconducting else material.library_name
-    )
-    if (
-        record.get("material_id") != body.material_id
-        or record.get("role") != body.physical_role
-        or record.get("kind") != material.kind
-        or record.get("is_superconducting") is not material.is_superconducting
-        or record.get("requested_library_name") != material.library_name
-        or not isinstance(observed, dict)
-        or not isinstance(observed.get(observed_key), str)
-        or observed[observed_key].casefold() != expected_native_material.casefold()
-    ):
-        raise RuntimeError("Q3D body material binding differs from the spec")
-    if sheet and (
-        observed.get("native_material_property") != "not_applicable_sheet"
-        or "native_material_name" in observed
-    ):
-        raise RuntimeError("Q3D Sheet evidence must identify boundary-only material")
-
-
-def _validate_q3d_body_identity(
-    context: Q3dBodyBindingContext,
-    body: Any,
-    record: dict[str, Any],
-    evidence: dict[str, Any],
-) -> tuple[int, list[int]]:
-    effective = context.effective_bodies.get(body.body_id)
-    native_id = evidence.get("native_object_id")
-    faces = evidence.get("native_face_ids")
-    if (
-        evidence.get("body") != body.to_payload()
-        or evidence.get("object_name") != body.body_id
-        or evidence.get("native_object_type")
-        != (
-            "Sheet" if effective and effective["representation"] == "sheet" else "Solid"
-        )
-        or not positive_unique_ids([native_id], 1)
-        or native_id in context.seen_native_ids
-        or not isinstance(faces, list)
-        or not faces
-        or not positive_unique_ids(faces, len(faces))
-        or (
-            body.net_id is not None
-            and context.net_object_ids.get(body.body_id) != native_id
-        )
-    ):
-        raise RuntimeError(
-            "Q3D body binding differs from the native identity/source declaration"
-        )
-    return cast(int, native_id), cast(list[int], faces)
-
-
-def _validate_q3d_effective_body(
-    context: Q3dBodyBindingContext,
-    body: Any,
-    record: dict[str, Any],
-    evidence: dict[str, Any],
-) -> None:
-    effective = context.effective_bodies[body.body_id]
-    native_id = evidence["native_object_id"]
-    if evidence.get("effective_geometry") != effective:
-        raise RuntimeError("Q3D effective geometry binding differs from the spec")
-    thin = evidence.get("thin_conductor")
-    if effective["representation"] == "sheet":
-        _validate_q3d_thin_conductor(context, body, record, thin, native_id)
-    elif thin is not None:
-        raise RuntimeError("Q3D Solid body contains Sheet boundary evidence")
-
-
-def _validate_q3d_thin_conductor(
-    context: Q3dBodyBindingContext,
-    body: Any,
-    record: dict[str, Any],
-    thin: Any,
-    native_id: int,
-) -> None:
-    effective = context.effective_bodies[body.body_id]
-    body_id = body.body_id
-    if not isinstance(thin, dict):
-        raise RuntimeError("Q3D ThinConductor evidence is not recorded")
-    raw_material = thin.get("material_raw")
-    if (
-        isinstance(raw_material, list)
-        and len(raw_material) == 2
-        and raw_material[0] == "Material:="
-    ):
-        raw_material = raw_material[1]
-    if not isinstance(raw_material, str):
-        raise RuntimeError("Q3D ThinConductor Material has unknown native shape")
-    material_name = raw_material.strip('"')
-    raw_thickness = thin.get("thickness")
-    length = re.fullmatch(
-        r"\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)([A-Za-z]+)",
-        raw_thickness if isinstance(raw_thickness, str) else "",
-    )
-    scales = {
-        "fm": 1e-15,
-        "pm": 1e-12,
-        "nm": 1e-9,
-        "um": 1e-6,
-        "mm": 1e-3,
-        "cm": 1e-2,
-        "dm": 1e-1,
-        "meter": 1.0,
-        "km": 1e3,
-        "uin": 0.0254 * 1e-6,
-        "mil": 0.0254 * 1e-3,
-        "in": 0.0254,
-        "ft": 0.0254 * 12,
-        "yd": 0.0254 * 36,
-        "mile": 0.0254 * 63360,
-    }
-    if length is None or length[2].lower() not in scales:
-        raise RuntimeError("Q3D ThinConductor Thickness is not a native length")
-    thickness_um = float(length[1]) * scales[length[2].lower()] / 1e-6
-    raw_ids = thin.get("native_assignment_ids_raw")
-    if not isinstance(raw_ids, list) or any(
-        not (
-            type(value) is int
-            or (isinstance(value, str) and re.fullmatch(r"[0-9]+", value))
-        )
-        for value in raw_ids
-    ):
-        raise RuntimeError("Q3D ThinConductor assignment readback is malformed")
-    assigned_ids = [int(value) for value in raw_ids]
-    expected_thin = {
-        "name": f"{body_id}ThinConductor",
-        "bound_type": "ThinConductor",
-        "material": material_name,
-        "material_raw": thin.get("material_raw"),
-        "thickness": raw_thickness,
-        "thickness_um": thickness_um,
-        "native_assignment_ids_raw": raw_ids,
-        "native_object_ids": assigned_ids,
-    }
-    observed = record.get("observed", {})
-    observed_key = "native_boundary_material_name"
-    if (
-        thin != expected_thin
-        or material_name.casefold() != "pec"
-        or material_name != observed[observed_key]
-        or thickness_um != effective["physical_thickness_um"]
-        or assigned_ids != [native_id]
-    ):
-        raise RuntimeError("Q3D ThinConductor binding differs from physical source")
-
-
-def _validate_q3d_body_incidence(evidence: dict[str, Any], faces: list[int]) -> None:
-    incidence = evidence.get("incidence")
-    if not isinstance(incidence, dict):
-        raise RuntimeError("Q3D body incidence availability is not recorded")
-    if incidence.get("status") == "unavailable":
-        if (
-            not isinstance(incidence.get("unavailable_reason"), str)
-            or not incidence["unavailable_reason"]
-        ):
-            raise RuntimeError("Q3D unavailable incidence lacks a reason")
-    elif incidence.get("status") == "observed":
-        if (
-            incidence.get("face_ids") != faces
-            or not isinstance(incidence.get("face_edge_ids"), dict)
-            or not isinstance(incidence.get("edge_vertex_ids"), dict)
-        ):
-            raise RuntimeError("Q3D observed native incidence is malformed")
-    else:
-        raise RuntimeError("Q3D native incidence status is invalid")
-
-
 def _validate_q3d_region_ground(
     receipt: dict[str, Any], spec: Q3dSpec, nets: list[Any]
 ) -> None:
     region = receipt.get("region")
     if not isinstance(region, dict):
         raise TypeError("Q3D receipt has invalid Region evidence")
-    requested_padding = list(spec.region_padding_um)
+    tolerance = receipt["geometry"].get("readback_tolerance_um")
+    bounds = region.get("bounds_um")
     if (
-        region.get("padding_um") != list(spec.effective_region_padding_um)
-        or region.get("requested_padding_um") != requested_padding
-    ):
-        raise RuntimeError("Q3D receipt Region padding does not match the spec")
-    if (
-        spec.effective_region is not None
-        and region.get("source_effective_envelope") != spec.effective_region
-    ):
-        raise RuntimeError(
-            "Q3D Region envelope differs from the bound neutral physical plan"
+        region.get("object_name") != "Region"
+        or not isinstance(tolerance, float)
+        or not isinstance(bounds, list)
+        or len(bounds) != 6
+        or any(
+            abs(float(a) - b) > tolerance
+            for a, b in zip(bounds, spec.model.vacuum_bounds_um, strict=True)
         )
+    ):
+        raise RuntimeError("the Q3D Region is not the model's VACUUM_REGION box")
     evidence = region.get("grounded_region")
     if spec.grounded_region_net is None:
         if evidence is not None:
@@ -662,28 +383,3 @@ def _q3d_face_normal_matches(direction: str, value: Any) -> bool:
         for index, item in enumerate(normal)
         if index != axis
     )
-
-
-def _validate_normalized_matrices(
-    path: Path, expected_rows: int, problem_types: set[str]
-) -> None:
-    with path.open(newline="", encoding="utf-8") as stream:
-        rows = list(csv.DictReader(stream))
-    if len(rows) != expected_rows or not rows:
-        raise RuntimeError("normalized matrix row count is invalid")
-    expected_quantities = {"C", "G", "L", "R"}
-    if {row.get("quantity") for row in rows} != expected_quantities:
-        raise RuntimeError("normalized matrix quantities are incomplete")
-    for row in rows:
-        try:
-            value = float(row["value"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise RuntimeError("normalized matrix value is invalid") from exc
-        if (
-            not math.isfinite(value)
-            or row.get("problem_type") not in problem_types
-            or not row.get("row")
-            or not row.get("column")
-            or not row.get("unit")
-        ):
-            raise RuntimeError("normalized matrix row is invalid")

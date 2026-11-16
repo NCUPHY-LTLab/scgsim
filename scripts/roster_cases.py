@@ -6,11 +6,11 @@ airbridge coupon (single die), the flip-chip pad, and ``disk_flip_chip_qubit`` a
 chip).  Each is a :class:`Layout`: the component, drawn at ``curve_sampling="simulation"``, the PDK layer
 stack, the registered instances and the Net assignment its simulation's plan is given.
 
-The settings: plan root ``chip`` and zero coupon padding, as ``simulation_drc`` builds its plan; the vacuum
-the Human set for testing layouts (issue 182), padding 0 um in x and y and 1000 um below and above, when the
-layout has none of its own; every authored port at 10 nH; and Route B Surface EPR with the PDK's
-literature-central MA (metal-air), MS (metal-substrate) and SA (substrate-air) presets, cut as bands at margins
-0.5 and 1.0 um by type.  ``simulation_drc`` sets its own vacuum.
+The settings: the plan (:func:`geometry_plan`) has root ``chip``, zero coupon padding and, when the layout's
+stack has no vacuum of its own, the vacuum the Human set for testing layouts (issue 182), padding 0 um in x and
+y and 1000 um below and above; the simulation adds every authored port at 10 nH and Route B Surface EPR with
+the PDK's literature-central MA (metal-air), MS (metal-substrate) and SA (substrate-air) presets, cut as bands
+at margins 0.5 and 1.0 um by type.  ``simulation_drc`` and ``mesh()`` are given the same plan (issue 266).
 
 ``scripts/check_roster.py`` runs the roster every night.  The Palace baseline experiment
 (``experiments/palace-stable-baseline``) builds its other layouts from the same helpers and measures them with
@@ -193,8 +193,11 @@ def surface_epr_specs(bands: bool) -> dict[str, dict[str, Any]]:
     return specs
 
 
-def prepare_plan(layout: Layout, material_records):
-    """The prepared plan as ``simulation_drc`` builds it: root ``chip``, no coupon padding, no vacuum of its own."""
+def geometry_plan(layout: Layout, material_records) -> GeometryPlan:
+    """The plan ``simulation_drc`` and the simulation are given: root ``chip``, no coupon padding, the roster's vacuum.
+
+    The vacuum is set on the plan only when the layout's stack has no ``VACUUM_REGION`` of its own.
+    """
     plan = GeometryPlan(
         layout.component,
         root_id="chip",
@@ -206,7 +209,14 @@ def prepare_plan(layout: Layout, material_records):
         plan.register_instance(path, reference)
     if layout.nets is not None:
         plan.set_nets(layout.nets)
-    return plan.prepare()
+    if "VACUUM_REGION" not in layout.layer_stack.layers:
+        plan.set_vacuum_region(VACUUM_PADDING_UM)
+    return plan
+
+
+def prepare_plan(layout: Layout, material_records):
+    """The prepared :func:`geometry_plan`, as ``set_plan`` takes it."""
+    return geometry_plan(layout, material_records).prepare()
 
 
 def simulation_class(layout: Layout) -> type[EigenmodeSim] | type[ElectrostaticSim]:
@@ -215,11 +225,9 @@ def simulation_class(layout: Layout) -> type[EigenmodeSim] | type[ElectrostaticS
 
 
 def configured_simulation(layout: Layout, snapshot, specs):
-    """The simulation the roster is meshed with: the (0, 0, 1000) um vacuum, every authored port, Route B Surface EPR."""
+    """The simulation the roster is meshed with: the plan's snapshot, every authored port, Route B Surface EPR."""
     sim = simulation_class(layout)()
     sim.set_plan(snapshot)
-    if "VACUUM_REGION" not in snapshot.stack["solution_regions"]:
-        sim.set_vacuum_region(VACUUM_PADDING_UM)
     if layout.simulation == "eigenmode":
         for port in snapshot.stack["metadata"].get("port_sheet_source_layers", ()):
             sim.add_port(

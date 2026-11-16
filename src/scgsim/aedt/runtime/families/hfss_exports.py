@@ -17,8 +17,6 @@ from scgsim.aedt.runtime.families.hfss_requests import (
 )
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
@@ -27,18 +25,12 @@ from scgsim.aedt.specs.hfss import (
 def export_hfss_results(
     hfss: Any, run_dir: Path, spec: HfssModelSpec, ports: list[dict[str, Any]]
 ) -> tuple[dict[str, str], dict[str, Any]]:
-    """Export native HFSS responses and verify their declared sweep and port identity."""
+    """Export the Driven Terminal S-parameters and verify their declared sweep and port identity."""
     output_dir = run_dir / "results" / spec.mode
     output_dir.mkdir(parents=True, exist_ok=True)
-    if isinstance(spec, HfssEigenmodeSpec):
-        return export_eigenmode(hfss, run_dir, output_dir, spec)
     control = driven_control(spec)
     setup_sweep = f"{control.setup_name} : {control.sweep_name}"
-    terminal = spec.mode == "terminal"
-    names = [
-        record["terminal_excitation" if terminal else "modal_excitation"]
-        for record in ports
-    ]
+    names = [record["terminal_excitation"] for record in ports]
     hashes: dict[str, str] = {}
     readback: dict[str, Any] = {}
     touchstone = output_dir / f"{spec.mode}.s2p"
@@ -52,14 +44,12 @@ def export_hfss_results(
     ):
         raise RuntimeError(f"{spec.mode} Touchstone export failed")
     readback["touchstone"] = _verify_touchstone(touchstone, spec, names)
-    prefix = "St" if terminal else "S"
+    prefix = "St"
     expressions = [f"{prefix}({left},{right})" for left in names for right in names]
     data = hfss.post.get_solution_data(
         expressions=expressions,
         setup_sweep_name=setup_sweep,
-        report_category=(
-            "Terminal Solution Data" if terminal else "Modal Solution Data"
-        ),
+        report_category="Terminal Solution Data",
     )
     csv_path = output_dir / f"{spec.mode}_{prefix.casefold()}.csv"
     readback[f"{spec.mode}_{prefix.casefold()}"] = write_complex_csv(
@@ -74,7 +64,7 @@ def export_eigenmode(
     hfss: Any,
     run_dir: Path,
     output_dir: Path,
-    spec: HfssEigenmodeSpec | HfssEprSpec | HfssEprAnalysisSpec,
+    spec: HfssEprSpec | HfssEprAnalysisSpec,
 ) -> tuple[dict[str, str], dict[str, Any]]:
     """Export the native eigenmode table for a GDS or source-backed eigenmode request."""
     control = eigenmode_control(spec)
@@ -109,7 +99,7 @@ def export_eigenmode(
 
 
 def _parse_eigenmode_export(
-    path: Path, spec: HfssEigenmodeSpec | HfssEprSpec | HfssEprAnalysisSpec
+    path: Path, spec: HfssEprSpec | HfssEprAnalysisSpec
 ) -> list[dict[str, Any]]:
     control = eigenmode_control(spec)
     lines = path.read_text(encoding="utf-8").splitlines()
@@ -193,7 +183,7 @@ def write_complex_csv(
     path: Path,
     *,
     suffix: str,
-    spec: HfssDrivenSpec | HfssDrivenGeometrySpec,
+    spec: HfssDrivenGeometrySpec,
 ) -> dict[str, Any]:
     """Validate every complex trace before writing the complete authored frequency grid."""
     control = driven_control(spec)
@@ -256,7 +246,7 @@ def write_complex_csv(
 
 def _verify_touchstone(
     path: Path,
-    spec: HfssDrivenSpec | HfssDrivenGeometrySpec,
+    spec: HfssDrivenGeometrySpec,
     native_port_names: list[str],
 ) -> dict[str, Any]:
     control = driven_control(spec)

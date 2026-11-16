@@ -20,15 +20,11 @@ from scgsim.aedt.specs.epr import (
     NormalizedSurfaceEprTotal,
     PlanarJunction,
     SavedSolution,
-    SurfaceEprSpec,
 )
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
-from scgsim.geometry.models.lumped import LumpedSupport
 
+from .drc import SimulationDrcReport, StageResult
 from .eigenmode import EigenmodeSim
-from .epr.analysis import combine_epr_mode, combine_surface_epr_mode, reanalyze_epr
+from .epr.reanalysis import reanalyze_epr
 from .epr.workflow import analyze_epr
 from .preparation.geometry import (
     prepare_hfss_driven_from_geometry,
@@ -36,8 +32,8 @@ from .preparation.geometry import (
     prepare_q3d_from_geometry,
 )
 from .preparation.handoff import HandoffPlan, prepare_handoff
-from .preparation.planar import prepare_planar_geometry_input
 from .preparation.planar_junctions import planar_junction_from_port
+from .preparation.sgb_model import PreparedSgbModel, prepare_sgb_model
 from .presentation.epr import plot_epr_result, show_epr
 from .results.epr import resolve_epr_result, resolve_saved_solution
 from .results.prepared import PreparedModel, resolve_prepared_model
@@ -45,12 +41,9 @@ from .results.resolve import ResolvedRun, resolve_results
 from .runtime.control import request_q3d_abort_and_save, request_q3d_stop_and_save
 from .specs.common import (
     AedtResources,
-    HfssDrivenMode,
-    LayerImport,
     LumpedTerminalPort,
     MatrixRunControl,
     ModalPort,
-    ObjectBinding,
     PdkMaterial,
     TerminalPort,
 )
@@ -58,18 +51,14 @@ from .specs.hfss import (
     EigenmodeRunControl,
     FrequencySweepSpec,
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
     HfssRunControl,
     HfssSpec,
-    LengthMeshSpec,
 )
-from .specs.modeling import PhysicalLayerSpec
 from .specs.parse import AedtSpec, parse_aedt_spec
 from .specs.q2d import Q2dConductorSpec, Q2dRectangleSpec, Q2dSpec
-from .specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec, Q3dTerminalPair
+from .specs.q3d import Q3dNetSpec, Q3dSpec
 
 if TYPE_CHECKING:
     from .batch import (
@@ -91,51 +80,40 @@ __all__ = [
     "ExpressionCacheConvergenceSet",
     "FrequencySweepSpec",
     "HandoffPlan",
-    "HfssDrivenMode",
-    "HfssDrivenSpec",
     "HfssDrivenGeometrySpec",
-    "LumpedSupport",
     "LumpedRlc",
     "LumpedTerminalPort",
-    "HfssEigenmodeSpec",
     "HfssEprAnalysisSpec",
     "HfssEprSpec",
     "HfssRunControl",
     "HfssSpec",
-    "LayerImport",
-    "LengthMeshSpec",
     "MatrixRunControl",
     "ModalPort",
     "NativeExpressionDefinition",
     "NormalizedSurfaceEprTotal",
-    "ObjectBinding",
     "PdkMaterial",
-    "PhysicalLayerSpec",
     "PlanarJunction",
-    "PreparedPlanarGeometry",
     "PreparedModel",
+    "PreparedSgbModel",
     "Q2dConductorSpec",
     "Q2dRectangleSpec",
     "Q2dSpec",
-    "Q3dBodySpec",
     "Q3dNetSpec",
     "Q3dSpec",
-    "Q3dTerminalPair",
     "ResolvedRun",
     "SavedSolution",
-    "SurfaceEprSpec",
+    "SimulationDrcReport",
+    "StageResult",
     "TerminalPort",
     "analyze_epr",
-    "combine_epr_mode",
-    "combine_surface_epr_mode",
     "parse_aedt_spec",
     "planar_junction_from_port",
     "plot_epr_result",
     "prepare_handoff",
     "prepare_hfss_eigenmode_from_geometry",
     "prepare_hfss_driven_from_geometry",
-    "prepare_planar_geometry_input",
     "prepare_q3d_from_geometry",
+    "prepare_sgb_model",
     "reanalyze_epr",
     "request_q3d_stop_and_save",
     "request_q3d_abort_and_save",
