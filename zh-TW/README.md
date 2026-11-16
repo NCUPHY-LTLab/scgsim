@@ -21,7 +21,7 @@ SCGSim 會準備 Palace 與 Ansys AEDT 模擬，並回傳具單位的電容、�
 ```bash
 uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc2' \
+uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc3' \
   'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 

@@ -62,7 +62,7 @@ the current package and the corresponding old-to-new map.
 
 ## AEDT studies on the SGB model {#aedt-sgb-migration}
 
-An AEDT study now prepares every 3D family from a `GeometryPlan` snapshot:
+From `3.0.0rc3` an AEDT study prepares every 3D family from a `GeometryPlan` snapshot:
 AEDT imports the plan's SGB model, the model Palace meshes, and builds no
 geometry of its own (issue #67). A study written for the earlier route meets
 four changes.
