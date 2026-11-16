@@ -20,9 +20,10 @@ must follow, and who owns a failure, are on [Supported Scope](supported-scope.qm
 
 Run the check of each simulation the component is for:
 `EigenmodeSim.simulation_drc` for an Eigenmode simulation,
-`ElectrostaticSim.simulation_drc` for an electrostatic one, or both. Each runs
-the same preparation and geometry build as that class's `mesh()`, with your
-Surface-EPR margins, and raises the error `mesh()` would raise. The
+`ElectrostaticSim.simulation_drc` for an electrostatic one, or both. Each takes
+the `GeometryPlan` the simulation will be given, runs the same preparation and
+geometry build as that class's `mesh()` on it, with your Surface-EPR margins,
+and raises the error `mesh()` would raise. The
 [layout modeling check](layout-modeling-check.qmd) shows the call and what it
 needs.
 

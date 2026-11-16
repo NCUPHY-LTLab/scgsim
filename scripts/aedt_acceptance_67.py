@@ -241,8 +241,8 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _plan() -> tuple[GeometryPlanSnapshot, PlanarJunction]:
-    """The plan of the pad pair with its junction declared, and the junction bound to its port sheet."""
+def _geometry_plan() -> GeometryPlan:
+    """The plan of the pad pair with its junction declared, as ``simulation_drc`` and the simulation take it."""
     plan = GeometryPlan(
         _component(),
         root_id="chip",
@@ -271,7 +271,12 @@ def _plan() -> tuple[GeometryPlanSnapshot, PlanarJunction]:
             ),
         )
     )
-    snapshot = plan.prepare()
+    return plan
+
+
+def _plan() -> tuple[GeometryPlanSnapshot, PlanarJunction]:
+    """The prepared plan of the pad pair, and the junction bound to its port sheet."""
+    snapshot = _geometry_plan().prepare()
     junction = planar_junction_from_port(
         snapshot.geometry_input,
         port_name=PORT_NAME,

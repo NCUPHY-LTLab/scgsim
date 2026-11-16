@@ -1,4 +1,4 @@
-"""``scgsim.aedt.EigenmodeSim.simulation_drc`` runs the geometry half of its own AEDT pipeline on a layout, without AEDT.
+"""``scgsim.aedt.EigenmodeSim.simulation_drc`` runs the geometry half of its own AEDT pipeline on a plan, without AEDT.
 
 Every test builds a real SGB model and its STEP (OCP), as ``prepare_handoff()`` does; none starts AEDT.  Where
 the check is compared with the simulation, the simulation is set up from the settings a user would write and
@@ -11,20 +11,23 @@ import pytest
 from test_simulation_drc import (
     BANDED,
     LAYER_STACK,
-    MATERIALS,
     NO_VACUUM_STACK,
+    layout_plan,
     two_pads,
 )
+from test_simulation_drc_meshing_stage import PADS, scene
 
 pytest.importorskip("OCP")
 
 import scgsim.aedt.drc as drc_module  # noqa: E402
+import scgsim.palace as palace  # noqa: E402
 from scgsim.aedt import EigenmodeSim, LumpedRlc  # noqa: E402
 from scgsim.aedt.drc import SimulationDrcReport  # noqa: E402
 from scgsim.aedt.runtime.families.sgb_boundaries import BoundaryPlanError  # noqa: E402
 from scgsim.aedt.runtime.families.sgb_import import planned_import  # noqa: E402
 from scgsim.contracts.sgb_sidecar import read_sidecar  # noqa: E402
-from scgsim.geometry import GeometryPlan  # noqa: E402
+from scgsim.geometry import RectangularJunctionSpec  # noqa: E402
+from scgsim.geometry.models.junctions import JunctionTerminalBinding  # noqa: E402
 from scgsim.geometry.sgb.output.exchange.guard import read_step_guard  # noqa: E402
 
 MODELINGS = ["solid", "thin_film"]
@@ -54,22 +57,17 @@ def test_the_planned_import_holds_each_guarded_face_once_per_solid_and_each_free
         assert planned.face_copies[face] == {name: 0}
 
 
-def check(component, *, layer_stack=LAYER_STACK, **options):
-    """``EigenmodeSim.simulation_drc`` with the stand-in PDK data."""
-    return EigenmodeSim.simulation_drc(
-        component, layer_stack=layer_stack, material_records=MATERIALS, **options
+def check(component, *, layer_stack=LAYER_STACK, nets=None, junctions=(), **options):
+    """``EigenmodeSim.simulation_drc`` on the plan a layout author builds for ``component``."""
+    plan = layout_plan(
+        component, layer_stack=layer_stack, nets=nets, junctions=junctions
     )
+    return EigenmodeSim.simulation_drc(plan, **options)
 
 
-def handoff_refusal(component, modeling, tmp_path, specs=None):
-    """The error ``prepare_handoff()`` raises for the plan and settings ``simulation_drc`` builds."""
-    snapshot = GeometryPlan(
-        component,
-        root_id="chip",
-        layer_stack=LAYER_STACK,
-        material_records=MATERIALS,
-        coupon_padding_um=0.0,
-    ).prepare()
+def handoff_refusal(plan, modeling, tmp_path, specs=None):
+    """The error ``prepare_handoff()`` raises for ``plan``, with the port treatments ``simulation_drc`` gives."""
+    snapshot = plan.prepare()
     sim = EigenmodeSim(modeling=modeling, aedt_version="2024.2")
     sim.set_plan(snapshot)
     for region in snapshot.geometry_input.port_sheet_regions:
@@ -138,14 +136,14 @@ def test_a_refused_layout_raises_the_error_prepare_handoff_raises(
 ):
     """Overlapping electrodes are refused with the type and message of ``prepare_handoff()``."""
     component = two_pads(monkeypatch, gap_um=-5.0)
-    expected = handoff_refusal(component, modeling, tmp_path)
+    expected = handoff_refusal(layout_plan(component), modeling, tmp_path)
     with pytest.raises(type(expected)) as raised:
         check(component, modeling=modeling)
     assert str(raised.value) == str(expected)
 
 
-def test_a_layout_without_vacuum_is_checked_in_the_fixed_vacuum(monkeypatch):
-    """A stack with no ``VACUUM_REGION`` gets Palace's check vacuum, so AEDT has a Region box to check."""
+def test_the_check_builds_the_vacuum_the_plan_sets(monkeypatch):
+    """A stack with no ``VACUUM_REGION`` and the plan's own vacuum region: the Region box is the plan's."""
     (sidecar,) = built_models(
         monkeypatch, modeling="solid", layer_stack=NO_VACUUM_STACK
     )
@@ -155,19 +153,122 @@ def test_a_layout_without_vacuum_is_checked_in_the_fixed_vacuum(monkeypatch):
     assert vacuum
 
 
-def test_a_modeling_that_is_not_solid_or_thin_film_is_refused_before_the_layout_is_read(
+@pytest.mark.parametrize("modeling", MODELINGS)
+def test_a_plan_without_a_vacuum_is_refused_as_prepare_handoff_refuses_it(
+    monkeypatch, tmp_path, modeling
+):
+    """The check adds no vacuum (Issue #266): a plan with none is refused with ``prepare_handoff()``'s error."""
+    plan = layout_plan(
+        two_pads(monkeypatch, gap_um=10.0),
+        layer_stack=NO_VACUUM_STACK,
+        vacuum_padding_um=None,
+    )
+    expected = handoff_refusal(plan, modeling, tmp_path)
+    assert "set_vacuum_region" in str(expected)
+    with pytest.raises(type(expected)) as raised:
+        EigenmodeSim.simulation_drc(plan, modeling=modeling)
+    assert str(raised.value) == str(expected)
+
+
+def test_the_check_leaves_the_callers_plan_as_it_was(monkeypatch):
+    """The plan prepares to the same snapshot after the check as before it."""
+    plan = layout_plan(two_pads(monkeypatch, gap_um=10.0, port=True))
+    before = plan.prepare()
+    assert EigenmodeSim.simulation_drc(plan, modeling="solid").passed
+    after = plan.prepare()
+    assert (after.gds_sha256, after.stack) == (before.gds_sha256, before.stack)
+
+
+def test_a_first_argument_that_is_not_a_plan_is_refused_with_the_plan_to_build(
     monkeypatch,
 ):
-    """The modeling selector is checked first, with the message ``EigenmodeSim`` gives."""
+    """A Component or a prepared snapshot is refused before the modeling is read, with the plan to build."""
+    component = two_pads(monkeypatch, gap_um=10.0)
+    for value in (component, layout_plan(component).prepare()):
+        with pytest.raises(TypeError) as raised:
+            EigenmodeSim.simulation_drc(value, modeling="route_b")
+        message = str(raised.value)
+        assert message.startswith(
+            "the first argument of EigenmodeSim.simulation_drc: must be the GeometryPlan the "
+            f"simulation is given, not {type(value).__name__}; build it as plan = GeometryPlan("
+            "component=..., root_id=..., layer_stack=..., material_records=..., "
+            "coupon_padding_um=...); plan.set_nets({...})"
+        )
 
-    def layout_read(*_args, **_kwargs):
-        raise AssertionError("the layout was read")
+
+# The two pads' authored port sheet, bound as a rectangular junction between the pad (Net A) and the electrode (Net B).
+JUNCTION_NETS = {"A": ("chip/pad",), "B": ("chip/electrode",)}
+JUNCTION = RectangularJunctionSpec(
+    "jj",
+    "PORT_SHEET__chip/P1__0000",
+    "PORT_SHEET__chip/P1__SOURCE__P0000",
+    "chip",
+    JunctionTerminalBinding("chip/pad_0000", "chip", "A"),
+    JunctionTerminalBinding("chip/electrode_0000", "chip", "B"),
+)
+SHEET_EDGES = {
+    f"PORT_SHEET__chip/P1__0000/polygon0/ring0/edge{index}" for index in range(4)
+}
+
+
+def port_sheet_carriers(sidecar):
+    """The sheet curves that bound the model's one port face."""
+    (face,) = [
+        face for face in sidecar["face"].values() if face["group"].startswith("PORT::")
+    ]
+    return {
+        carrier
+        for loop in face["loops"]
+        for edge in loop["edges"]
+        for carrier in sidecar["edge"][edge]["carriers"]
+        if carrier.startswith("PORT_SHEET__")
+    }
+
+
+@pytest.mark.parametrize("modeling", MODELINGS)
+def test_a_plans_rectangular_junction_is_checked_with_its_port_sheet_cut(
+    monkeypatch, modeling
+):
+    """The plan's rectangular junction is in the model: its sheet is cut to the rectangle between its terminals.
+
+    The port face is bounded by the sheet's four cut edges, where the same sheet without the junction keeps
+    its drawn outline; the sheet gets the fixed parallel inductance, so the import treats it.
+    """
+    component = two_pads(monkeypatch, gap_um=10.0, port=True)
+    models = []
+    real = drc_module.check_eigenmode_model
+
+    def recording(model):
+        models.append((model, read_sidecar(model.path("sidecar"))))
+        real(model)
 
     import scgsim.aedt.eigenmode as eigenmode_module  # noqa: PLC0415 -- the module whose import is replaced
 
-    monkeypatch.setattr(eigenmode_module, "layout_snapshot", layout_read)
+    monkeypatch.setattr(eigenmode_module, "check_eigenmode_model", recording)
+    assert check(component, nets=JUNCTION_NETS, modeling=modeling).passed
+    assert check(
+        component, nets=JUNCTION_NETS, junctions=[JUNCTION], modeling=modeling
+    ).passed
+    (_, drawn), (model, cut) = models
+    assert port_sheet_carriers(cut) == SHEET_EDGES
+    assert port_sheet_carriers(drawn) != SHEET_EDGES
+    assert model.lumped_rlcs == (
+        LumpedRlc("PORT_SHEET__chip/P1__0000", "parallel", inductance_h=1e-9),
+    )
+
+
+def test_a_modeling_that_is_not_solid_or_thin_film_is_refused_before_the_plan_is_prepared(
+    monkeypatch,
+):
+    """The modeling selector is checked before the plan is prepared, with the message ``EigenmodeSim`` gives."""
+    plan = layout_plan(two_pads(monkeypatch, gap_um=10.0))
+
+    def prepared(*_args, **_kwargs):
+        raise AssertionError("the plan was prepared")
+
+    monkeypatch.setattr(plan, "prepare", prepared)
     with pytest.raises(ValueError, match="explicitly 'solid' or 'thin_film'"):
-        check(object(), modeling="route_b")
+        EigenmodeSim.simulation_drc(plan, modeling="route_b")
 
 
 def test_an_empty_surface_epr_mapping_is_refused_as_set_surface_epr_refuses_it(
@@ -197,3 +298,24 @@ def test_the_import_plan_refusal_is_the_checks_refusal(monkeypatch):
     monkeypatch.setattr(drc_module, "plan_import", refused)
     with pytest.raises(BoundaryPlanError, match="PORT::P1"):
         check(two_pads(monkeypatch, gap_um=10.0, port=True), modeling="solid")
+
+
+@pytest.mark.parametrize("modeling", MODELINGS)
+def test_a_palace_pass_does_not_stand_for_the_aedt_check(monkeypatch, modeling):
+    """Two Net IDs that become one AEDT name: Palace models the plan, AEDT's import cannot name its Nets."""
+    plan = layout_plan(
+        two_pads(monkeypatch, gap_um=10.0),
+        nets={"chip/A": ("chip/pad",), "chip_A": ("chip/electrode",)},
+    )
+    assert palace.EigenmodeSim.simulation_drc(plan).passed
+    with pytest.raises(ValueError, match="chip_A"):
+        EigenmodeSim.simulation_drc(plan, modeling=modeling)
+
+
+@pytest.mark.parametrize("modeling", MODELINGS)
+def test_an_aedt_pass_does_not_stand_for_the_palace_check(monkeypatch, modeling):
+    """A 1 nm jog in a pad's edge: AEDT builds and imports it, Palace's meshing stage refuses it."""
+    plan = layout_plan(scene(monkeypatch, PADS["jog"]), layer_stack=NO_VACUUM_STACK)
+    assert EigenmodeSim.simulation_drc(plan, modeling=modeling).passed
+    with pytest.raises(palace.SimulationDrcError):
+        palace.EigenmodeSim.simulation_drc(plan)

@@ -35,7 +35,7 @@ print(handoff.spec_path, handoff.archive_path)
 - 材料取自層疊的紀錄。Region 是計畫的 `set_vacuum_region(...)`，材料為真空。
 - `prepare_handoff()` 會寫出 `aedt_spec.json`、交接 `model/` 資料夾中的模型 STEP、BREP、sidecar 與 guard，以及封存檔。它不會開啟 Desktop。
 
-準備之前，`EigenmodeSim.simulation_drc(component, ..., modeling=...)` 不需要 AEDT 即可檢查版圖的模型能否在 `modeling` 所實現的路徑上建立並匯入；見 [AEDT 本徵模態的檢查](../layout-modeling-check.qmd#aedt-eigenmode-check)。
+準備之前，以 `prepare()` 之前的 `GeometryPlan` 呼叫 `EigenmodeSim.simulation_drc(plan, modeling=...)`，不需要 AEDT 即可檢查計畫的模型能否在 `modeling` 所實現的路徑上建立並匯入；見 [AEDT 本徵模態的檢查](../layout-modeling-check.qmd#aedt-eigenmode-check)。
 
 埠片上的一般線性 RLC 使用 `EigenmodeSim.add_lumped_rlc()`：每個負載指名它所在的埠片（`port_sheet_id`），儲存在模型的 `lumped_rlcs`。它與 Josephson 接面不同：不會建立 `PlanarJunction`、接面參與量或 EPR 貢獻。CPW 試片沒有埠片，因此此範例不宣告任何負載。
 

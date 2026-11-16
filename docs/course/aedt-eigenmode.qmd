@@ -45,8 +45,9 @@ What the call does with its inputs:
   and guard in the handoff's `model/` folder, and the archive. It opens no
   Desktop.
 
-Before preparing, `EigenmodeSim.simulation_drc(component, ..., modeling=...)`
-checks without AEDT that the layout's model builds and imports on the route
+Before preparing, `EigenmodeSim.simulation_drc(plan, modeling=...)`, given the
+`GeometryPlan` before `prepare()`, checks without AEDT that the plan's model
+builds and imports on the route
 `modeling` realizes; see
 [the AEDT Eigenmode check](../layout-modeling-check.qmd#aedt-eigenmode-check).
 

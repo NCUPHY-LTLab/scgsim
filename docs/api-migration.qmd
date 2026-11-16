@@ -434,6 +434,38 @@ Changed for every run, declared or not:
 The layout of each view is in the
 [report model](report-model.qmd#declared-convergence).
 
+### Layout modeling check {#simulation-drc-migration}
+
+`3.0.0rc3` changes the first argument of `simulation_drc` on
+`scgsim.palace.EigenmodeSim`, `scgsim.palace.ElectrostaticSim` and
+`scgsim.aedt.EigenmodeSim`: it is the `GeometryPlan` the simulation will be
+given, before `prepare()`. `layer_stack`, `material_records`, `instances` and
+`nets` are gone; they are the plan's. `surface_epr_specs`, `route`,
+`approximation_profile` and `modeling` stay. A first argument that is not a
+`GeometryPlan` is refused with the plan to build.
+
+```python
+# Before
+EigenmodeSim.simulation_drc(component, layer_stack=layer_stack, material_records=material_records, nets=nets, route="A")
+
+# Now
+plan = GeometryPlan(component=component, root_id="chip", layer_stack=layer_stack, material_records=material_records, coupon_padding_um=0.0)
+plan.set_nets(nets)
+plan.set_vacuum_region((0.0, 0.0, 1000.0))  # when the layer stack has no VACUUM_REGION
+plan.set_rectangular_junctions([...])  # when the layout has rectangular junctions
+EigenmodeSim.simulation_drc(plan, route="A")
+```
+
+The check adds nothing to the plan. Before, it checked with zero coupon
+padding and, when the layout had no vacuum, a vacuum padded by (0, 0, 1000) µm;
+now it uses the plan's coupon padding and vacuum, and a plan without a vacuum
+is refused with the simulation's own error. Register an assembly's instances
+with `plan.register_instance` before `set_nets`. The AEDT check now covers the
+plan's rectangular junctions, their sheets cut. `prepare_hfss_driven_from_geometry`
+and `prepare_q3d_from_geometry` now run the import's first step before they
+write the handoff, so they refuse a model the import cannot realize. See
+[Layout modeling check](layout-modeling-check.qmd#build-the-plan).
+
 ## Palace package symbols
 
 `scgsim.palace` declares 26 package-facade names. The inventory groups them by

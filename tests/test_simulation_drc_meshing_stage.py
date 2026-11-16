@@ -37,10 +37,11 @@ from sgb_inputs import gds_pad_in_ground
 from test_simulation_drc import (
     BANDED,
     FILM,
-    MATERIALS,
     NO_VACUUM_STACK,
     SIMULATIONS,
+    layout_plan,
 )
+from test_simulation_drc import check as plan_check
 
 import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.meshing.entry as meshing_entry
@@ -62,10 +63,6 @@ from scgsim.meshing.repair import RepairPolicy
 from scgsim.meshing.sizing import BoundingBox
 from scgsim.meshing.stop_places import stop_places
 from scgsim.palace import EigenmodeSim, SimulationDrcError
-from scgsim.palace.source.layout_snapshot import (
-    DRC_VACUUM_PADDING_UM,
-    prepare_layout_snapshot,
-)
 
 ELECTRODE = ((30, 0), (60, 0), (60, 25), (30, 25))
 PADS = {
@@ -125,13 +122,8 @@ def scene(monkeypatch, pad, electrode=ELECTRODE):
 
 
 def check(simulation, component, **options):
-    """``simulation.simulation_drc`` on a layout with no vacuum of its own, so the check adds its vacuum."""
-    return simulation.simulation_drc(
-        component,
-        layer_stack=NO_VACUUM_STACK,
-        material_records=MATERIALS,
-        **options,
-    )
+    """``simulation.simulation_drc`` on the plan of a stack with no vacuum, whose plan sets one."""
+    return plan_check(simulation, component, layer_stack=NO_VACUUM_STACK, **options)
 
 
 def refusal(simulation, component, **options):
@@ -305,19 +297,11 @@ def stop_at_the_mesher(monkeypatch):
 def set_up_as_the_check(simulation, component, run_dir, specs=None, nets=None):
     """A ``simulation`` set up as ``simulation_drc`` sets it up for ``component``, writing into ``run_dir``.
 
-    The layout has no vacuum of its own, so it gets the check's vacuum region; ``ElectrostaticSim`` needs
-    Surface EPR, so none given means ``{}``.
+    The stack has no vacuum of its own, so the plan sets one, as ``check`` gives it.
     """
-    snapshot = prepare_layout_snapshot(
-        component,
-        layer_stack=NO_VACUUM_STACK,
-        material_records=MATERIALS,
-        instances=None,
-        nets=nets,
-    )
+    snapshot = layout_plan(component, layer_stack=NO_VACUUM_STACK, nets=nets).prepare()
     sim = simulation()
     sim.set_plan(snapshot)
-    sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
     if specs is not None:
         sim.set_surface_epr(specs)
     sim.set_output_dir(run_dir)
@@ -386,16 +370,11 @@ def test_gmsh_meshes_a_model_with_only_warnings(monkeypatch, tmp_path):
 
 def built_jog(monkeypatch, tmp_path, pad="jog"):
     """A jog scene built by the geometry stage into ``tmp_path``: its SGB artifacts."""
-    snapshot = prepare_layout_snapshot(
-        scene(monkeypatch, PADS[pad]),
-        layer_stack=NO_VACUUM_STACK,
-        material_records=MATERIALS,
-        instances=None,
-        nets=None,
-    )
+    snapshot = layout_plan(
+        scene(monkeypatch, PADS[pad]), layer_stack=NO_VACUUM_STACK
+    ).prepare()
     sim = EigenmodeSim()
     sim.set_plan(snapshot)
-    sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
     return sim._build_geometry(tmp_path / "run").artifacts  # noqa: SLF001 -- the geometry half simulation_drc runs
 
 

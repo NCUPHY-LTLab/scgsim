@@ -147,6 +147,25 @@ def test_net_types_must_name_exactly_the_models_nets(tmp_path, monkeypatch):
         _prepare(monkeypatch, tmp_path / "run", net_types={"A": "Signal"})
 
 
+def test_the_imports_first_step_runs_before_the_handoff_is_written(
+    tmp_path, monkeypatch
+):
+    """Issue #266: a model the Q3D import refuses is refused at preparation, before anything is written."""
+    import scgsim.aedt.preparation.geometry as geometry_module  # noqa: PLC0415 -- the module whose step is replaced
+
+    families = []
+
+    def refused(model, *, family):
+        families.append(family)
+        raise ValueError("the import cannot realize this model")
+
+    monkeypatch.setattr(geometry_module, "plan_import", refused)
+    with pytest.raises(ValueError, match="cannot realize"):
+        _prepare(monkeypatch, tmp_path / "run")
+    assert families == ["q3d"]
+    assert not (tmp_path / "run").exists()
+
+
 def test_a_request_whose_nets_are_not_the_models_is_refused():
     """A missing Net and a Net over other objects than the model's are refused."""
     spec = junction_q3d_spec()

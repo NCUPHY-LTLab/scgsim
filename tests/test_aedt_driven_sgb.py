@@ -91,6 +91,25 @@ def test_the_handoff_carries_the_model_and_its_two_lumped_ports(tmp_path):
     assert len(model_files) == 4
 
 
+def test_the_imports_first_step_runs_before_the_handoff_is_written(
+    tmp_path, monkeypatch
+):
+    """Issue #266: a model the HFSS import refuses is refused at preparation, before anything is written."""
+    import scgsim.aedt.preparation.geometry as geometry_module  # noqa: PLC0415 -- the module whose step is replaced
+
+    families = []
+
+    def refused(model, *, family):
+        families.append(family)
+        raise ValueError("the import cannot realize this model")
+
+    monkeypatch.setattr(geometry_module, "plan_import", refused)
+    with pytest.raises(ValueError, match="cannot realize"):
+        _handoff(tmp_path / "handoff")
+    assert families == ["hfss"]
+    assert not (tmp_path / "handoff").exists()
+
+
 def test_a_driven_request_of_the_native_builder_is_refused(tmp_path):
     """A Driven request that carries a native planar geometry is refused with the reason (decision 6)."""
     plan = _handoff(tmp_path / "handoff")

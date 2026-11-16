@@ -12,7 +12,7 @@ import json
 import math
 
 import pytest
-from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, two_pads
+from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, layout_plan, two_pads
 
 import scgsim.palace.source.workflow as workflow
 from scgsim.geometry import (
@@ -211,10 +211,7 @@ def built_sidecar(monkeypatch, component, nets=NETS):
 
     monkeypatch.setattr(EigenmodeSim, "_build_geometry", recording)
     assert EigenmodeSim.simulation_drc(
-        component,
-        layer_stack=NO_VACUUM_STACK,
-        material_records=MATERIALS,
-        nets=nets,
+        layout_plan(component, layer_stack=NO_VACUUM_STACK, nets=nets)
     ).passed
     (sidecar,) = sidecars
     return sidecar
@@ -406,7 +403,7 @@ def test_a_port_on_conductors_without_a_net_joins_each_end_to_its_own_conductor(
         ("chip/electrode_0000", "chip/electrode_0000"),
     ]
     assert EigenmodeSim.simulation_drc(
-        component, layer_stack=NO_VACUUM_STACK, material_records=MATERIALS
+        layout_plan(component, layer_stack=NO_VACUUM_STACK)
     ).passed
 
 

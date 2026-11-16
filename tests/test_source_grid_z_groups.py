@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 from geometry_grid_fixtures import GRID
-from test_simulation_drc import MATERIALS, level
+from test_simulation_drc import layout_plan, level
 
 from scgsim.geometry import GeometryBuildInput, LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.source.grid_projection import apply_geometry_grid
@@ -252,9 +252,7 @@ def d0_band_areas(monkeypatch, component):
 
     monkeypatch.setattr(EigenmodeSim, "_build_geometry", recording)
     report = EigenmodeSim.simulation_drc(
-        component,
-        layer_stack=FLIP_CHIP_STACK,
-        material_records=MATERIALS,
+        layout_plan(component, layer_stack=FLIP_CHIP_STACK),
         surface_epr_specs={"MA": FILM, "MS": FILM, "SA": FILM},
     )
     assert report.passed

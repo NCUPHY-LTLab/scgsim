@@ -720,3 +720,26 @@ class GeometryPlan:
                 for value in semantics.get("boundary_reconstruction", ())
             )
         return tuple(boundary_curves), tuple(reconstruction)
+
+
+# The plan a simulation is given, as a check that takes it shows its caller how to build one.
+_PLAN_TO_BUILD = (
+    "plan = GeometryPlan(component=..., root_id=..., layer_stack=..., material_records=..., "
+    "coupon_padding_um=...); plan.set_nets({...})"
+)
+
+
+def simulation_plan(value: object, call: str) -> GeometryPlan:
+    """``value`` when it is the ``GeometryPlan`` ``call`` takes; otherwise the refusal that shows how to build one.
+
+    A backend's ``simulation_drc`` takes the plan its simulation is given, unprepared; a prepared snapshot,
+    a Component or anything else is refused here, before anything is read.
+    """
+    if not isinstance(value, GeometryPlan):
+        raise TypeError(
+            Declared(f"the first argument of {call}", f"the call to {call}").refusal(
+                f"must be the GeometryPlan the simulation is given, not {type(value).__name__}; "
+                f"build it as {_PLAN_TO_BUILD}"
+            )
+        )
+    return value

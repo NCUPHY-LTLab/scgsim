@@ -44,6 +44,7 @@ from roster_cases import (  # noqa: E402
     ROSTER,
     Layout,
     configured_simulation,
+    geometry_plan,
     prepare_plan,
     simulation_class,
     surface_epr_specs,
@@ -168,12 +169,7 @@ def _build_layout(name: str) -> Layout:
 
 def _simulation_drc(layout: Layout, material_records, specs):
     return simulation_class(layout).simulation_drc(
-        layout.component,
-        layer_stack=layout.layer_stack,
-        material_records=material_records,
-        instances=dict(layout.instances) or None,
-        nets=layout.nets,
-        surface_epr_specs=specs,
+        geometry_plan(layout, material_records), surface_epr_specs=specs
     )
 
 

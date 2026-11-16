@@ -232,21 +232,23 @@ These are not supported today:
 | Inferring Nets from geometry that touches | Declare every Net with `set_nets`. |
 | Expanding array references | Expand them into individual references before registering them. |
 | Route C in a Palace simulation | Use Route A or Route B. SGB builds Route C for backends that keep conductor volumes; see [GeometryPlan and SGB](geometry-sgb.qmd). |
-| Checking an AEDT model with `simulation_drc` | The check covers the Palace build only; see [Layout modeling check](layout-modeling-check.qmd). |
+| Checking an HFSS Driven Terminal or Q3D model with `simulation_drc` | They have no simulation class; `prepare_hfss_driven_from_geometry` and `prepare_q3d_from_geometry` refuse a model the import cannot realize before AEDT starts. See [Which check to run](layout-modeling-check.qmd#which-check-to-run). |
 
 ## Check a layout before simulating it {#check-a-layout}
 
-Call `EigenmodeSim.simulation_drc`, `ElectrostaticSim.simulation_drc`, or both,
-from the layout's tests and while you draw. Each runs the plan and the geometry
-build that its class's `mesh()` runs, on the route you pass and with your Nets
-and Surface-EPR margins, and then the meshing-stage check that `mesh()` also
-runs first; it raises the same errors. The route is Route A or Route B, given
+Call the check of each simulation the layout is for
+([Which check to run](layout-modeling-check.qmd#which-check-to-run)) from the
+layout's tests and while you draw, with the `GeometryPlan` the simulation will
+be given. Each Palace check runs the geometry build that its class's `mesh()`
+runs on that plan, on the route you pass and with your Surface-EPR margins, and
+then the meshing-stage check that `mesh()` also runs first; it raises the same
+errors. The route is Route A or Route B, given
 as `set_route` takes it (`route` and `approximation_profile`), and Route B when
 not given. The [layout modeling check](layout-modeling-check.qmd) shows the
 call.
 
-A pass means that the model built for that check was accepted: the route and
-profile, the Nets and margins you passed, and the fixed settings listed under
+A pass means that the model built for that check was accepted: the plan, the
+route, profile and margins you passed, and the inputs listed under
 [What the check uses](layout-modeling-check.qmd#what-the-check-uses). It
 establishes the rules that build checks, and no others:
 
@@ -269,7 +271,7 @@ Find the error you see, then follow the owner's next action.
 | `ValueError` "… topology changed at grid" or "… contact changed at grid" | Layout | A neck, gap, hole or slit is at or below one grid step. Widen it or close it in the drawing. |
 | `UnsupportedCurveError` | Layout | Declare the curve as lines and circular arcs, or draw it as a polygon. |
 | `ValidationError` "the inset curve … is not closed near (x, y)" | SCGSim | Two neighbouring band offsets near that point neither meet nor cross. Report it to SCGSim with the layout. |
-| `ContactError` or `OverlapError` between different Nets | Layout, or the Net declaration | If the two conductors should be one, put them in one Net. Otherwise separate them in the drawing, by more than one grid step. In `simulation_drc`, pass the `nets` the simulation uses. |
+| `ContactError` or `OverlapError` between different Nets | Layout, or the Net declaration | If the two conductors should be one, put them in one Net. Otherwise separate them in the drawing, by more than one grid step. Give the plan the Nets the simulation uses; `simulation_drc` reads them from it. |
 | `OverlapError` "… with equal priority" | Declarations | Give the overlapping Entities of one Net different priorities. |
 | `NonManifoldError` | Layout | Follow the link at the end of the message: inside the layout, give the two pieces a shared edge or separate them ([why](known-geometry-problems.qmd#pinch-inside-the-layout)); at the boundary, draw the die outline or a ground plane around what the message names, or give a named region an outline that meets the boundary along an edge or not at all ([why](known-geometry-problems.qmd#boundary-point-pinch)). |
 | `InputError` about a port sheet, an Entity id, an arc or a margin | Layout and declarations | Read the message: it names the port, Entity or request. Fix the drawing or the setting it names. |

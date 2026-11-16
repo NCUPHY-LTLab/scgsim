@@ -18,6 +18,7 @@ from test_simulation_drc import (
     MeshingReached,
     check,
     configured,
+    layout_plan,
     two_pads,
 )
 
@@ -199,16 +200,18 @@ def test_a_profile_that_is_not_an_approximation_profile_is_refused_naming_the_ch
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
-def test_a_refused_route_is_refused_before_the_layout_is_read(monkeypatch, simulation):
-    """The route is checked first, so a refused route costs no preparation of the layout."""
-    component = two_pads(monkeypatch, gap_um=10.0)
+def test_a_refused_route_is_refused_before_the_plan_is_prepared(
+    monkeypatch, simulation
+):
+    """The route is checked first, so a refused route costs no preparation of the plan."""
+    plan = layout_plan(two_pads(monkeypatch, gap_um=10.0))
 
-    def layout_read(*_args, **_kwargs):
-        raise AssertionError("the layout was prepared before the route was checked")
+    def prepared(*_args, **_kwargs):
+        raise AssertionError("the plan was prepared before the route was checked")
 
-    monkeypatch.setattr(core, "prepare_layout_snapshot", layout_read)
+    monkeypatch.setattr(plan, "prepare", prepared)
     with pytest.raises(ValueError, match="Route C"):
-        check(simulation, component, route="C")
+        simulation.simulation_drc(plan, route="C")
 
 
 def test_thin_film_is_the_default_route_a_profile_of_the_check(monkeypatch):

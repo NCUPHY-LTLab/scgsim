@@ -33,6 +33,7 @@ from scgsim.aedt.results.provenance import (
     initial_receipt_payload,
     record_runtime_source,
 )
+from scgsim.aedt.runtime.families.sgb_import import plan_import
 from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
@@ -72,7 +73,9 @@ def prepare_q3d_from_geometry(  # noqa: PLR0913 -- preserve the supported explic
     The plan is built as the SGB model AEDT imports (:func:`prepare_sgb_model`, issue #67); its Region is the
     plan's ``VACUUM_REGION`` (decision 5).  ``net_types`` gives every Net of the model its Q3D type, keyed
     by Net id; ``physical_ground_nets`` records which Nets are physically ground, independently of their Q3D
-    type.  Omitted ``run_control`` declares model-only preparation without solve setup.
+    type.  Omitted ``run_control`` declares model-only preparation without solve setup.  The import's own
+    first step (:func:`plan_import`) runs on the model before the handoff is written, so a model the Q3D
+    import cannot realize is refused here, before AEDT is started (issue #266).
     """
     if isinstance(physical_ground_nets, str | bytes):
         raise TypeError("physical_ground_nets must be a sequence of Net ids")
@@ -86,6 +89,7 @@ def prepare_q3d_from_geometry(  # noqa: PLR0913 -- preserve the supported explic
             output_dir=Path(temporary),
             ground_net_ids=tuple(physical_ground_nets),
         )
+        plan_import(model, family="q3d")
         spec = Q3dSpec(
             aedt_version=aedt_version,
             modeling=model.modeling,
@@ -169,8 +173,11 @@ def prepare_hfss_driven_from_geometry(  # noqa: PLR0913 -- preserve the supporte
     """Prepare the HFSS Driven Terminal handoff of an SGB model; omitted run_control authors no solve setup.
 
     The ports are the model's two lumped Terminal ports (``prepare_sgb_model(..., ports=...)``).  The handoff
-    carries the model's four files in its ``model/`` folder (issue #67).
+    carries the model's four files in its ``model/`` folder (issue #67).  The import's own first step
+    (:func:`plan_import`) runs on the model first, so a model the HFSS import cannot realize is refused here,
+    before AEDT is started (issue #266).
     """
+    plan_import(model, family="hfss")
     spec = HfssDrivenGeometrySpec(
         aedt_version=aedt_version,
         modeling=model.modeling,

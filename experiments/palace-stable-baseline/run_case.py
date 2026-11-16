@@ -35,6 +35,7 @@ sys.path.insert(0, str(HERE.parents[1] / "scripts"))
 import fine_structure  # noqa: E402
 from roster_cases import (  # noqa: E402
     configured_simulation,
+    geometry_plan,
     prepare_plan,
     simulation_class,
     surface_epr_specs,
@@ -88,12 +89,7 @@ def run_layout(name: str, bands: bool) -> dict[str, Any]:
         stages,
         "simulation_drc",
         lambda: drc_class.simulation_drc(
-            layout.component,
-            layer_stack=layout.layer_stack,
-            material_records=get_material_records(),
-            instances=dict(layout.instances) or None,
-            nets=layout.nets,
-            surface_epr_specs=specs,
+            geometry_plan(layout, get_material_records()), surface_epr_specs=specs
         ),
     )
     if drc_report is None:

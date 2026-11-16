@@ -226,6 +226,24 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 
 各份報告的版面見[報告模型](report-model.qmd#declared-convergence)。
 
+### 版圖建模檢查 {#simulation-drc-migration}
+
+`3.0.0rc3` 改變 `scgsim.palace.EigenmodeSim`、`scgsim.palace.ElectrostaticSim` 與 `scgsim.aedt.EigenmodeSim` 上 `simulation_drc` 的第一個引數：它是模擬將拿到的 `GeometryPlan`（在 `prepare()` 之前）。`layer_stack`、`material_records`、`instances` 與 `nets` 已移除，它們屬於計畫。`surface_epr_specs`、`route`、`approximation_profile` 與 `modeling` 保留。第一個引數不是 `GeometryPlan` 時會被拒絕，訊息中列出該建立的計畫。
+
+```python
+# 之前
+EigenmodeSim.simulation_drc(component, layer_stack=layer_stack, material_records=material_records, nets=nets, route="A")
+
+# 現在
+plan = GeometryPlan(component=component, root_id="chip", layer_stack=layer_stack, material_records=material_records, coupon_padding_um=0.0)
+plan.set_nets(nets)
+plan.set_vacuum_region((0.0, 0.0, 1000.0))  # 層堆疊沒有 VACUUM_REGION 時
+plan.set_rectangular_junctions([...])  # 版圖有矩形接面時
+EigenmodeSim.simulation_drc(plan, route="A")
+```
+
+檢查不再為計畫加入任何設定。之前它以零 coupon 填充檢查，版圖沒有真空時再加上以 (0, 0, 1000) µm 填充的真空；現在它使用計畫的 coupon 填充與真空，沒有真空的計畫會以模擬自己的錯誤被拒絕。組裝件的實例請在 `set_nets` 之前以 `plan.register_instance` 註冊。AEDT 的檢查現在涵蓋計畫的矩形接面，並裁切其薄片。`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 現在會在寫出 handoff 之前執行匯入的第一步，因此會拒絕匯入無法實現的模型。見[版圖建模檢查](layout-modeling-check.qmd#build-the-plan)。
+
 ## Palace 套件符號 {#palace-package-symbols}
 
 `scgsim.palace` 宣告 26 個套件門面名稱。下列清單依 v2 責任模組分組。

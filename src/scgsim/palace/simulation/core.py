@@ -27,7 +27,11 @@ from scgsim.contracts.palace_run_folder import (
 )
 from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
-from scgsim.geometry.source.plan import GeometryPlanSnapshot
+from scgsim.geometry.source.plan import (
+    GeometryPlan,
+    GeometryPlanSnapshot,
+    simulation_plan,
+)
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 from scgsim.refusal import Declared, found_text
@@ -49,11 +53,6 @@ from ..mesh.summary import MeshSummary, summary_from_files
 from ..run.handoff import HandoffPlan, prepare_handoff
 from ..source.inputs import stack_materials
 from ..source.layout_ports import LayoutGeometryRequest, layout_geometry_request
-from ..source.layout_snapshot import (
-    DRC_VACUUM_PADDING_UM,
-    prepare_layout_snapshot,
-    snapshot_owns_vacuum,
-)
 from ..source.ports import LayoutPortBinding, RequestedPort
 from ..source.surface_epr import SurfaceEprSpecs
 from ..source.workflow import (
@@ -173,7 +172,7 @@ class PalaceSimulation(ABC):
                     _WHERE_SET_PLAN,
                 ).refusal(found_text(type(snapshot).__name__))
             )
-        if snapshot_owns_vacuum(snapshot) and self.vacuum_region is not None:
+        if _owns_vacuum(snapshot) and self.vacuum_region is not None:
             raise ValueError(_TWO_VACUUMS)
         self._plan = snapshot
         self._materials = stack_materials(snapshot.stack)
@@ -205,7 +204,7 @@ class PalaceSimulation(ABC):
         Raises:
             ValueError: the bound plan has its own vacuum.
         """
-        if self._plan is not None and snapshot_owns_vacuum(self._plan):
+        if self._plan is not None and _owns_vacuum(self._plan):
             raise ValueError(_TWO_VACUUMS)
         self.vacuum_region = VacuumRegionSpec.from_padding(padding)
         self._fall_back("set_vacuum_region")
@@ -440,32 +439,31 @@ class PalaceSimulation(ABC):
         return self._mesh_result.mesh_path
 
     @classmethod
-    def simulation_drc(  # noqa: PLR0913 -- the layout, its PDK data, and the plan settings the simulation takes
+    def simulation_drc(
         cls,
-        component: Any,
+        plan: GeometryPlan,
         *,
-        layer_stack: Any,
-        material_records: Mapping[str, Mapping[str, Any]],
-        instances: Mapping[str, Any] | None = None,
-        nets: Mapping[str, Sequence[str]] | None = None,
         surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
         route: Literal["A", "B"] = "B",
         approximation_profile: ApproximationProfile | None = None,
     ) -> SimulationDrcReport:
-        """Check that this simulation can model and mesh ``component``, in two stages, and return their report.
+        """Check that this simulation can model and mesh ``plan``, in two stages, and return their report.
+
+        ``plan`` is the ``GeometryPlan`` the simulation will be given, unprepared: the check prepares it, as
+        ``set_plan(plan.prepare())`` is given it, and leaves the caller's plan as it was.  Its Nets,
+        instances, coupon padding, vacuum region, port sheets and rectangular junctions are used as the
+        simulation uses them; the check adds none of its own.  A plan without its own vacuum is refused with
+        the error ``mesh()`` raises when neither the plan nor the simulation sets one.
 
         The geometry stage runs the preparation and SGB geometry build of ``mesh()`` on the route the
         simulation will use: ``route`` and ``approximation_profile`` are the arguments of ``set_route``, with
         its defaults and refusals, and a refusal names this call.  Without them the check is Route B.  The
-        other settings are fixed: zero coupon padding, the problem's own fixed inputs (``EigenmodeSim``:
-        every authored port with a fixed inductance, which the geometry never reads; ``ElectrostaticSim``:
-        no terminals, which are not needed before meshing) and, when the layout has no vacuum of its own, a
-        vacuum region padded by (x, y, z) = (0, 0, 1000) um: it ends at the layout's planar extent and
-        reaches 1000 um below and above.  A conductor that reaches that extent only at a point, such as a
-        lone round pad with no die outline or ground plane around it, pinches this vacuum and is refused.  A
-        layout it refuses raises the error ``mesh()`` raises, unchanged.  With ``surface_epr_specs`` the
-        bands are cut as ``set_surface_epr(surface_epr_specs)`` would cut them, and the specs are checked as
-        it checks them; without them no bands are cut.
+        problem's own inputs are fixed: ``EigenmodeSim`` adds every authored port sheet as a lumped port
+        with a fixed inductance, which the geometry never reads; ``ElectrostaticSim`` adds no terminals,
+        which are not needed before meshing, and cuts no port sheet.  A plan it refuses raises the error
+        ``mesh()`` raises, unchanged.  With ``surface_epr_specs`` the bands are cut as
+        ``set_surface_epr(surface_epr_specs)`` would cut them, and the specs are checked as it checks them;
+        without them no bands are cut.
 
         Only a model that built goes to the meshing stage, ``scgsim.meshing.check_fine_structure``: the fine
         edges and faces the mesher cannot use, each with its location, size, owner and fix.  A refusal there
@@ -474,39 +472,28 @@ class PalaceSimulation(ABC):
         the geometry is written to a temporary folder that is removed.  ``mesh()`` runs the same meshing
         stage on the model it builds, before the mesher starts.
 
-        A pass means the layout can be modeled on the route and profile checked, with these fixed settings.
-        It does not promise that other settings (another route or profile, terminals, junctions, lumped
-        supports, another vacuum region) will model; run that simulation's own ``mesh()`` for that.  Route C
-        is not a Palace route, so it is refused here as ``set_route`` refuses it.
+        A pass means the plan can be modeled on the route and profile checked, with these problem inputs.
+        It does not promise that other settings (another route or profile, a vacuum set on the simulation,
+        terminals, lumped supports) will model; run that simulation's own ``mesh()`` for that.  Route C is
+        not a Palace route, so it is refused here as ``set_route`` refuses it.
 
         Args:
-            component: The layout Component under check.
-            layer_stack: The PDK layer stack, as ``GeometryPlan`` takes it.
-            material_records: The PDK material records, as ``GeometryPlan`` takes them.
-            instances: ``{"chip/device": reference, ...}`` for an assembly, as ``GeometryPlan.register_instance``.
-            nets: ``{"Ground": ("chip/plane", ...), ...}``, the Net assignment the simulation's plan is given, as
-                ``GeometryPlan.set_nets`` takes it.  Without it no conductor has a Net, so any two conductors
-                that touch are refused as a different-Net contact.
+            plan: The ``GeometryPlan`` the simulation will be given, before ``prepare()``.
             surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
             route: ``"A"`` or ``"B"``, as ``set_route`` takes it.
             approximation_profile: The ``ApproximationProfile`` ``set_route`` takes; None for the route's
                 default (``thin_film`` for Route A, ``route_b`` for Route B).
 
         Raises:
+            TypeError: ``plan`` is not a ``GeometryPlan``, or ``approximation_profile`` is not an
+                ``ApproximationProfile``.
             ValueError: ``route`` is not ``"A"`` or ``"B"``.
-            TypeError: ``approximation_profile`` is not an ``ApproximationProfile``.
         """
+        plan = simulation_plan(plan, f"{cls.__name__}.simulation_drc")
         sim = cls()
-        # The route is checked before the layout is read, so a refused route costs no preparation.
+        # The route is checked before the plan is prepared, so a refused route costs no preparation.
         sim._set_route(route, approximation_profile, SIMULATION_DRC)  # noqa: SLF001 -- the check is a classmethod of the same class
-        snapshot = prepare_layout_snapshot(
-            component,
-            layer_stack=layer_stack,
-            material_records=material_records,
-            instances=instances,
-            nets=nets,
-        )
-        sim._bind_for_drc(snapshot, surface_epr_specs)  # noqa: SLF001 -- the check is a classmethod of the same class
+        sim._bind_for_drc(plan.prepare(), surface_epr_specs)  # noqa: SLF001 -- the check is a classmethod of the same class
         return run_stages(sim._build_geometry)  # noqa: SLF001 -- the check is a classmethod of the same class
 
     def _bind_for_drc(
@@ -514,11 +501,8 @@ class PalaceSimulation(ABC):
         snapshot: GeometryPlanSnapshot,
         surface_epr_specs: Mapping[str, Mapping[str, Any]] | None,
     ) -> None:
-        """Bind ``snapshot`` with the fixed settings ``simulation_drc`` documents, on the route already set."""
+        """Bind ``snapshot`` with the problem inputs ``simulation_drc`` documents, on the route already set."""
         self.set_plan(snapshot)
-        if not snapshot_owns_vacuum(snapshot):
-            # Without vacuum above it a conductor has no metal-air face, so MA and SA bands would cut nothing.
-            self.set_vacuum_region(DRC_VACUUM_PADDING_UM)
         self._add_drc_inputs(snapshot)
         if surface_epr_specs is not None:
             self.set_surface_epr(surface_epr_specs)
@@ -700,6 +684,15 @@ class PalaceSimulation(ABC):
             self.config_path = None
         self.handoff_plan = None
         self._stage = keep
+
+
+def _owns_vacuum(snapshot: GeometryPlanSnapshot) -> bool:
+    """Whether the plan carries its own outer vacuum envelope, the fact ``set_vacuum_region`` refuses on.
+
+    The envelope is the solution region named ``VACUUM_REGION``.  A vacuum-material region under another
+    name, such as the flip-chip gap of a PDK, fills a cavity and is not the envelope.
+    """
+    return "VACUUM_REGION" in snapshot.stack["solution_regions"]
 
 
 _TWO_VACUUMS = Declared(

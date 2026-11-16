@@ -166,9 +166,9 @@ or a ground plane so that it, not the pad, sets that edge.
 :::
 
 **Where the boundary is.** In the plane, the model ends where the layout ends.
-The vacuum that `simulation_drc` adds to a layout with no vacuum of its own is
-padded by (x, y, z) = (0, 0, 1000) µm, so it stops at the layout's planar extent,
-and so does any vacuum region with no planar padding. In the figures the die is
+The vacuum layouts are tested and simulated in, the plan's vacuum padded by
+(x, y, z) = (0, 0, 1000) µm, stops at the layout's planar extent, and so does
+any vacuum region with no planar padding. In the figures the die is
 60 × 40 µm, its left edge x = 0 is the boundary, the light area is the vacuum at
 the height of the metal, and white is outside the model.
 
@@ -211,9 +211,9 @@ and 1.0 µm:
 Bands play no part: the refusal comes before any band is cut, and the layouts
 that pass also pass with bands.
 
-**Why SCGSim does not work around it.** SCGSim checks a layout in the vacuum it
-is tested and simulated in, which ends at the layout's edge; a planar padding of
-its own would check a different model from the one you simulate. SCGSim also
+**Why SCGSim does not work around it.** `simulation_drc` checks a layout in
+the vacuum of the plan it is given, the one you simulate in; a planar padding
+of SCGSim's own would check a different model from the one you simulate. SCGSim also
 builds the outline it is given, so it does not move the vertex off the boundary.
 
 ![The fix: the ground drawn round the pad's left side, 4 µm from it, moves the boundary to x = −10 µm, and the ground takes up all of it (heavy line).](assets/supported-geometry/problem-boundary-fixed.svg){fig-alt="The round pad between two ground strips joined by a third strip on its left, so the ground runs along the whole left edge of the die, and a zoom showing the vacuum between the pad and that strip."}
@@ -221,10 +221,10 @@ builds the outline it is given, so it does not move the vertex off the boundary.
 **The layout fix.** Draw the die outline or a ground plane so that it, not the
 pad, sets the planar boundary, as on a real chip. With the ground drawn round
 the left side of the round pad or the diamond, 4 µm from it, both pass, without
-bands and with `MA` bands. For a simulation, whose `mesh()` uses the vacuum
-region you set, a vacuum region with planar padding also moves the boundary away
-from the pad; `simulation_drc` keeps its vacuum fixed, so for the check, draw the
-outline.
+bands and with `MA` bands. A vacuum region with planar padding also moves the
+boundary away from the pad, in `mesh()` and in `simulation_drc` alike, since
+both use the plan's vacuum; it changes the model you simulate, so prefer
+drawing the outline.
 
 A region that is not a conductor pinches the vacuum the same way: a finite
 dielectric island whose outline touches the boundary at one point is refused,

@@ -11,7 +11,7 @@ scgsim-id: "docs/supported-geometry"
 
 ## 模擬之前先檢查 layout
 
-請執行元件所要用的每種模擬的檢查：Eigenmode 模擬用 `EigenmodeSim.simulation_drc`，靜電模擬用 `ElectrostaticSim.simulation_drc`，兩者都要用時兩個都執行。每個檢查都以您的 Surface-EPR margin 執行與該類別 `mesh()` 相同的準備與幾何建構，並拋出 `mesh()` 會拋出的錯誤。呼叫方式與所需資料見[版圖建模檢查](layout-modeling-check.qmd)。
+請執行元件所要用的每種模擬的檢查：Eigenmode 模擬用 `EigenmodeSim.simulation_drc`，靜電模擬用 `ElectrostaticSim.simulation_drc`，兩者都要用時兩個都執行。每個檢查都接受模擬將拿到的 `GeometryPlan`，以您的 Surface-EPR margin 對它執行與該類別 `mesh()` 相同的準備與幾何建構，並拋出 `mesh()` 會拋出的錯誤。呼叫方式與所需資料見[版圖建模檢查](layout-modeling-check.qmd)。
 
 ## 「支援」的意思 {#what-supported-means}
 

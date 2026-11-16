@@ -32,13 +32,13 @@ from scgsim.geometry import (
     build_gds_stack_geometry_input,
     summarize_geometry_input,
 )
+from scgsim.geometry.source.plan import GeometryPlan, simulation_plan
 from scgsim.geometry.surface_epr import normalize_surface_epr_specs
 
 from .drc import (
     SimulationDrcReport,
     check_eigenmode_model,
     fixed_port_rlcs,
-    layout_snapshot,
     run_geometry_stage,
 )
 from .epr.reanalysis import reanalyze_epr
@@ -348,58 +348,50 @@ class EigenmodeSim:
         return plan
 
     @classmethod
-    def simulation_drc(  # noqa: PLR0913 -- the layout, its PDK data, and the plan settings the simulation takes
+    def simulation_drc(
         cls,
-        component: Any,
+        plan: GeometryPlan,
         *,
-        layer_stack: Any,
-        material_records: Mapping[str, Mapping[str, Any]],
-        instances: Mapping[str, Any] | None = None,
-        nets: Mapping[str, Sequence[str]] | None = None,
         surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
         modeling: Modeling,
     ) -> SimulationDrcReport:
-        """Check that this simulation can build its AEDT model of ``component``, without AEDT, and return the report.
+        """Check that this simulation can build its AEDT model of ``plan``, without AEDT, and return the report.
+
+        ``plan`` is the ``GeometryPlan`` the simulation will be given, unprepared: the check prepares it, as
+        ``set_plan(plan.prepare())`` is given it, and leaves the caller's plan as it was.  Its Nets,
+        instances, coupon padding, vacuum region, port sheets and rectangular junctions are used as the
+        simulation uses them; the check adds none of its own.  A plan without ``set_vacuum_region`` is
+        refused with the error ``prepare_handoff()`` raises, since AEDT's Region is the plan's vacuum box.
 
         The check runs the geometry half of ``prepare_handoff()`` and of the HFSS import, everything before
         AEDT is started (:mod:`scgsim.aedt.drc`): the plan's SGB model on the route ``modeling`` realizes
         (``"thin_film"`` Route A, ``"solid"`` Route C) with its STEP and import guard, the boundaries the
         import plans on the guarded faces, and the selection of every Surface-EPR row.  A step that refuses
-        raises the error that step raises in the simulation, unchanged.  The other settings are fixed: zero
-        coupon padding; every authored port sheet with a parallel inductance, which the geometry never
-        reads; and, when the layout has no vacuum of its own, the plan's vacuum region padded by
-        (x, y, z) = (0, 0, 1000) um, the vacuum of Palace's check.  With ``surface_epr_specs`` the bands are
-        cut as ``set_surface_epr(surface_epr_specs)`` would cut them, and the specs are checked as it checks
-        them; without them no bands are cut.
+        raises the error that step raises in the simulation, unchanged.  Every port sheet of the plan, the
+        sheet of each rectangular junction included, gets a parallel inductance the geometry never reads, so
+        the import treats it; a rectangular junction's sheet is cut as its ``RectangularJunctionSpec``
+        derives it.  With ``surface_epr_specs`` the bands are cut as ``set_surface_epr(surface_epr_specs)``
+        would cut them, and the specs are checked as it checks them; without them no bands are cut.
 
         AEDT meshes the model itself, so the report has a geometry stage only.  The model is built in a
         temporary folder that is removed.  A pass means that model can be built and imported with these
-        fixed settings; it does not promise other settings (the other ``modeling``, junctions, lumped RLCs,
-        another vacuum region), nor that AEDT meshes or solves it.
+        port treatments; it does not promise the other ``modeling``, the junctions' widths and Nets (which
+        ``prepare_handoff()`` compares), nor that AEDT meshes or solves it.
 
         Args:
-            component: The layout Component under check.
-            layer_stack: The PDK layer stack, as ``GeometryPlan`` takes it.
-            material_records: The PDK material records, as ``GeometryPlan`` takes them.
-            instances: ``{"chip/device": reference, ...}`` for an assembly, as ``GeometryPlan.register_instance``.
-            nets: ``{"Ground": ("chip/plane", ...), ...}``, the Net assignment the simulation's plan is given, as
-                ``GeometryPlan.set_nets`` takes it.  Without it no conductor has a Net.
+            plan: The ``GeometryPlan`` the simulation will be given, before ``prepare()``.
             surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
             modeling: ``"solid"`` or ``"thin_film"``, as ``EigenmodeSim`` takes it; there is no default.
 
         Raises:
+            TypeError: ``plan`` is not a ``GeometryPlan``.
             ValueError: ``modeling`` is not ``"solid"`` or ``"thin_film"``, or a step of the pipeline
-                refuses the layout.
+                refuses the plan.
         """
-        # The modeling is checked before the layout is read, so a refused one costs no preparation.
+        plan = simulation_plan(plan, f"{cls.__name__}.simulation_drc")
+        # The modeling is checked before the plan is prepared, so a refused one costs no preparation.
         modeling = modeling_from_value(modeling)
-        snapshot = layout_snapshot(
-            component,
-            layer_stack=layer_stack,
-            material_records=material_records,
-            instances=instances,
-            nets=nets,
-        )
+        snapshot = plan.prepare()
         specs = (
             None
             if surface_epr_specs is None

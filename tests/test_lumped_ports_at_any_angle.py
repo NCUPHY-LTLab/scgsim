@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import pytest
 from test_palace_rectangular_ports import VACUUM_PADDING_UM, port_group, prepared_port
-from test_simulation_drc import MATERIALS, NO_VACUUM_STACK
+from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, layout_plan
 
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.junctions.lattice import lattice_rectangle
@@ -295,11 +295,12 @@ def built_sidecar(monkeypatch, chip, reference, **options):
 
     monkeypatch.setattr(EigenmodeSim, "_build_geometry", recording)
     assert EigenmodeSim.simulation_drc(
-        chip,
-        layer_stack=NO_VACUUM_STACK,
-        material_records=MATERIALS,
-        instances={"chip/device": reference},
-        nets=NETS,
+        layout_plan(
+            chip,
+            layer_stack=NO_VACUUM_STACK,
+            instances={"chip/device": reference},
+            nets=NETS,
+        ),
         **options,
     ).passed
     (sidecar,) = sidecars
