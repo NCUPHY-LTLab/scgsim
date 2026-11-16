@@ -36,7 +36,7 @@ enforces, and who owns each failure, are on [Supported Scope](supported-scope.qm
 
 The check takes the `GeometryPlan` the simulation will be given, before
 `prepare()`, so the model it checks is the model that simulation builds. Build
-the plan once in the layout repository and pass it to each check: five lines.
+the plan once in the layout repository and pass it to each check: six lines.
 
 ```python
 from scgsim.geometry import GeometryPlan
@@ -46,7 +46,8 @@ plan = GeometryPlan(component=component, root_id="chip", layer_stack=layer_stack
 plan.set_nets({"Ground": ("chip/D0_TOP_GROUND_PLANE", ...), ...})
 plan.set_vacuum_region((0.0, 0.0, 1000.0))  # when the layer stack has no VACUUM_REGION
 plan.set_rectangular_junctions([...])  # when the layout has rectangular junctions
-report = EigenmodeSim.simulation_drc(plan, surface_epr_specs=surface_epr_specs, route="A")
+plan.set_surface_epr(surface_epr_specs)  # when the simulations compute Surface EPR
+report = EigenmodeSim.simulation_drc(plan, route="A")
 
 print(report.render_text())  # the warnings, if any
 ```
@@ -70,9 +71,13 @@ The check uses the plan as the simulation uses it and adds nothing to it:
   simulation raises for it. `(0, 0, 1000)` µm is the setting layouts are
   tested and used with: the vacuum ends at the layout's planar extent and
   reaches 1000 µm below and above, so the metal has air faces for `MA` and
-  `SA` bands. A Palace simulation can instead set its vacuum on itself
-  (`sim.set_vacuum_region`); the check reads only the plan, so give the
-  vacuum to the plan.
+  `SA` bands.
+- **Surface EPR.** The plan's `set_surface_epr(specs)`, the specs the
+  simulations will use (the [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins)
+  lists their keys). Their margins are cut into the geometry as bands, so a
+  layout that cannot carry them is refused here too. Bands are cut only on the
+  faces the specs select, so a layout with no such face passes with no bands;
+  a plan without specs gets no bands.
 - **Coupon padding, port sheets and rectangular junctions.** As the plan
   declares them.
 
@@ -92,12 +97,7 @@ profile the plan's films do not fit is refused by the geometry build, with the
 error `mesh()` raises. Route C is not a Palace route and is refused, as
 `set_route` refuses it; a refusal of the route or the profile names the
 `simulation_drc` call. A layout meant for both routes calls the check once for
-each. Pass
-`surface_epr_specs` with the specs the simulations will use: they are the ones
-[`set_surface_epr(specs)`](specs/palace-eigenmode.qmd#surface-epr-margins) takes, and
-their margins are cut into the geometry as bands, so a layout that cannot carry
-them is refused here too. Bands are cut only on the faces the specs select, so
-a layout with no such face passes with no bands.
+each.
 
 The check builds the geometry and does not mesh or solve, so it can be repeated
 as the layout changes. The geometry stage stops at its first refusal; the
@@ -149,7 +149,7 @@ checks = [
     (scgsim.aedt.EigenmodeSim, {"modeling": "solid"}),
 ]
 for simulation, options in checks:
-    report = simulation.simulation_drc(plan, surface_epr_specs=surface_epr_specs, **options)
+    report = simulation.simulation_drc(plan, **options)
     print(f"{simulation.__module__}.{simulation.__name__}")
     print(report.render_text())
 ```
@@ -204,10 +204,11 @@ comes from the lineage the sidecar records:
   not cause is a layout problem: SCGSim reports it and does not repair it.
 - **erosion**: band offsets of two source edges that are not neighbours meet
   here, as when a conductor is barely wider than twice the margin. The exact
-  erosion has this structure. Change the margins in `surface_epr_specs` or the
-  conductor's width. Also a short band edge that offsets a straight source
-  edge shorter than its band margin, such as one chord of a curve drawn as a
-  polygon: the fix names that source edge, where it runs and how long it is.
+  erosion has this structure. Change the inset margins given to
+  `plan.set_surface_epr` or the conductor's width. Also a short band edge that
+  offsets a straight source edge shorter than its band margin, such as one
+  chord of a curve drawn as a polygon: the fix names that source edge, where
+  it runs and how long it is.
   Declare the arc exactly, or draw it with longer chords.
 - **sgb**: a band curve where the source has no fine structure. This is an SGB
   defect; report it to SCGSim with the finding. The layout needs no change.
@@ -226,7 +227,7 @@ this meshing stage on the model they built, and only then start the mesher:
 - **Warnings only** do not stop `mesh()`; it meshes the model as usual.
 
 `mesh()` checks the model of the plan and of the simulation's own settings,
-such as a vacuum region set on the simulation, while `simulation_drc` checks
+such as its route and ports, while `simulation_drc` checks
 the model of the plan it is given, on the route it is given, with the inputs of
 [What the check uses](#what-the-check-uses). For the same plan, the same route
 and profile build the same model in both; when the two models differ, so can
@@ -255,8 +256,7 @@ call's or fixed:
   `set_route` takes them, and Route B when they are not given;
 - for `EigenmodeSim`, every authored port sheet of the plan as a lumped port
   with a fixed inductance, which does not change the geometry;
-- for `ElectrostaticSim`, no terminals, which are not needed before meshing;
-- the bands of `surface_epr_specs`, and no bands when it is not given.
+- for `ElectrostaticSim`, no terminals, which are not needed before meshing.
 
 A vacuum padded by (0, 0, 1000) µm ends at the layout's planar extent, so draw
 what sets the extent: the die outline or a ground plane. A conductor that
@@ -275,8 +275,7 @@ A pass means the model of the plan, built on the route and profile checked
 with the inputs above, was accepted and has no edge or face that a
 meshing-stage class refuses; it does not say how many bands were cut. It does
 not promise that other settings will model: another route or profile,
-Electrostatic terminals, lumped supports, or a vacuum set on the simulation
-instead of the plan. To check a specific set-up, run that simulation's own
+Electrostatic terminals or lumped supports. To check a specific set-up, run that simulation's own
 `mesh()`. Nor does a pass promise a clean mesh: the meshing-stage classes guard
 against fine structure, and `mesh()` can still stop with `MeshRepairError`,
 which then names the places where it stopped.
@@ -301,7 +300,7 @@ before AEDT starts, and needs no AEDT:
 ```python
 from scgsim.aedt import EigenmodeSim
 
-report = EigenmodeSim.simulation_drc(plan, surface_epr_specs=surface_epr_specs, modeling="solid")  # or "thin_film"; no default
+report = EigenmodeSim.simulation_drc(plan, modeling="solid")  # or "thin_film"; no default
 print(report.render_text())  # geometry stage: passed
 ```
 

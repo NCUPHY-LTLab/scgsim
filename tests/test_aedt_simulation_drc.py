@@ -57,15 +57,27 @@ def test_the_planned_import_holds_each_guarded_face_once_per_solid_and_each_free
         assert planned.face_copies[face] == {name: 0}
 
 
-def check(component, *, layer_stack=LAYER_STACK, nets=None, junctions=(), **options):
+def check(  # noqa: PLR0913 -- the layout, each plan setting an author writes, and the check's own options
+    component,
+    *,
+    layer_stack=LAYER_STACK,
+    nets=None,
+    junctions=(),
+    surface_epr_specs=None,
+    **options,
+):
     """``EigenmodeSim.simulation_drc`` on the plan a layout author builds for ``component``."""
     plan = layout_plan(
-        component, layer_stack=layer_stack, nets=nets, junctions=junctions
+        component,
+        layer_stack=layer_stack,
+        nets=nets,
+        junctions=junctions,
+        surface_epr_specs=surface_epr_specs,
     )
     return EigenmodeSim.simulation_drc(plan, **options)
 
 
-def handoff_refusal(plan, modeling, tmp_path, specs=None):
+def handoff_refusal(plan, modeling, tmp_path):
     """The error ``prepare_handoff()`` raises for ``plan``, with the port treatments ``simulation_drc`` gives."""
     snapshot = plan.prepare()
     sim = EigenmodeSim(modeling=modeling, aedt_version="2024.2")
@@ -74,8 +86,6 @@ def handoff_refusal(plan, modeling, tmp_path, specs=None):
         sim.add_lumped_rlc(
             LumpedRlc(region.port_sheet_id, "parallel", inductance_h=1e-9)
         )
-    if specs is not None:
-        sim.set_surface_epr(specs)
     sim.set_output_dir(tmp_path / "run")
     sim.set_eigenmode(project_name="check", design_name="eigenmode")
     with pytest.raises(Exception) as error:  # noqa: PT011 -- the type is what the test compares
@@ -271,14 +281,14 @@ def test_a_modeling_that_is_not_solid_or_thin_film_is_refused_before_the_plan_is
         EigenmodeSim.simulation_drc(plan, modeling="route_b")
 
 
-def test_an_empty_surface_epr_mapping_is_refused_as_set_surface_epr_refuses_it(
+def test_the_check_has_no_surface_epr_argument_and_the_simulation_no_setter(
     monkeypatch,
 ):
-    """``surface_epr_specs={}`` requests no Surface EPR and is refused as the simulation refuses it."""
-    with pytest.raises(ValueError, match="requests no Surface EPR"):
-        check(
-            two_pads(monkeypatch, gap_um=10.0), modeling="solid", surface_epr_specs={}
-        )
+    """Surface EPR is the plan's (``GeometryPlan.set_surface_epr``): the check reads it from the plan it is given."""
+    plan = layout_plan(two_pads(monkeypatch, gap_um=10.0))
+    with pytest.raises(TypeError, match="surface_epr_specs"):
+        EigenmodeSim.simulation_drc(plan, modeling="solid", surface_epr_specs=BANDED)  # type: ignore[call-arg]
+    assert not hasattr(EigenmodeSim, "set_surface_epr")
 
 
 def test_nets_that_become_one_aedt_name_are_refused_naming_both(monkeypatch):

@@ -3,18 +3,18 @@
 ``layout_geometry_request`` is everything before the SGB build.  For a problem whose layout sheets are
 lumped ports (Eigenmode) it binds each requested port to an authored sheet of the plan, then prepares the
 geometry input with exactly the sheets requested; for a problem with no lumped ports (Electrostatic) it
-prepares the plan's geometry input with its sheets as authored.  The simulation core builds its model from
-it in ``mesh()`` and in ``simulation_drc``, and ``input_summary()`` summarises the same prepared input, so
-the summary shows the vacuum, ports and conductors the model is built from.  The request holds no
-simulation state: the simulation passes its settings in, and ``mesh()`` keeps the materials the
-preparation returns.  A port's circuit is carried through unread; the geometry reads only the sheet, its
+prepares the plan's geometry input with its sheets as authored.  The vacuum and the Surface-EPR specs are
+the plan's, read from its snapshot.  The simulation core builds its model from it in ``mesh()`` and in
+``simulation_drc``, and ``input_summary()`` summarises the same prepared input, so the summary shows the
+vacuum, ports and conductors the model is built from.  The request holds no simulation state: the
+simulation passes its settings in, and ``mesh()`` keeps the materials the preparation returns.  A port's circuit is carried through unread; the geometry reads only the sheet, its
 target layer and its direction.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
 from scgsim.geometry.models.input import GeometryBuildInput
@@ -23,6 +23,7 @@ from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.refusal import Declared, found_text
 
 from .ports import LayoutPortBinding, RequestedPort
+from .surface_epr import SurfaceEprSpecs
 from .workflow import GeometrySettings, prepare_mesh_input
 
 _WHERE_ADD_PORT = "the call to add_port"
@@ -37,7 +38,7 @@ class GeometryBuildRequest:
     ``stack`` is the prepared stack and ``gds_bytes`` the plan's GDS it is paired with; ``geometry_input``
     is the prepared geometry input and ``representation`` its representation context.  ``route`` is the
     Surface-EPR representation and ``surface_epr_specs`` the normalized specs as the build reads them, a
-    mapping by interface type, None when the simulation set none.
+    mapping by interface type, None when the plan has none.
     """
 
     stack: Mapping[str, Any]
@@ -75,16 +76,13 @@ def layout_geometry_request(
     resolved, source_records = (
         ([], None) if ports is None else _resolve_plan_ports(plan, ports)
     )
-    source_stack = plan.stack
-    if "VACUUM_REGION" in source_stack["solution_regions"]:
-        settings = replace(settings, vacuum_region=None)  # the plan's own vacuum
     prepared = prepare_mesh_input(
-        stack=source_stack,
+        stack=plan.stack,
         build_input=plan.geometry_input,
         settings=settings,
         port_sheet_source_layers=source_records,
     )
-    specs = settings.surface_epr_specs
+    specs = SurfaceEprSpecs.of_plan(plan)
     return LayoutGeometryRequest(
         resolved,
         GeometryBuildRequest(

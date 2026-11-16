@@ -72,15 +72,6 @@ def test_a_handoff_before_the_config_names_write_config(sim_type):
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
-def test_surface_epr_before_a_plan_names_set_plan(sim_type):
-    """The specs are checked against the bound plan's materials, so ``set_surface_epr`` needs ``BOUND``."""
-    with pytest.raises(
-        ValueError, match=r"call set_plan\(\) before set_surface_epr\(\)"
-    ):
-        sim_type().set_surface_epr(None)
-
-
-@pytest.mark.parametrize("sim_type", SIMS)
 def test_mesh_without_an_output_folder_names_set_output_dir(sim_type, monkeypatch):
     """A bound simulation still needs its run folder."""
     sim = sim_type()

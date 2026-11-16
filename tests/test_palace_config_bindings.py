@@ -11,6 +11,7 @@ from palace_sgb_support import (
     effective_input,
     sidecar_of,
     surface_epr_spec_records,
+    surface_epr_specs,
 )
 
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
@@ -323,7 +324,8 @@ def test_eigenmode_epr_request_is_checked_against_the_rows_of_the_index(case, tm
         mesh_manifest_path=manifest,
     )
     sim._stage = Stage.MESHED  # noqa: SLF001 -- stands for set_plan() and mesh()
-    sim.surface_epr_specs = surface_epr_spec_records(MA=None)
+    # Stands for set_plan() of a plan prepared with an MA spec.
+    sim._plan = SimpleNamespace(surface_epr_specs=surface_epr_specs(MA=None))  # noqa: SLF001
     sim.set_numerical(amr_max_passes=0)
     sim.set_epr_request(surface_interfaces=["MA"])
     assert sim.write_config() == tmp_path / "config.json"

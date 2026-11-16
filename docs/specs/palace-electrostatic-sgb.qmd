@@ -57,18 +57,19 @@ preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
 | Problem controls | `set_electrostatic` | Declare Electrostatic-specific config controls. |
 | Output identity | `set_output_dir` | Bind the mesh/config/handoff output location. |
 | Route | `set_route` | Route B when never called; `set_route("A")` uses the `thin_film` profile, or pass an `approximation_profile`. Run it before `mesh()`. |
-| Surface films | `set_surface_epr` | Declare surface films and their inset margins; run it before `mesh()`. Without it, no Surface EPR is computed. |
 | Mesh controls | `set_mesh(...)` | Select the sizing recipe, mesher options, repair budgets and quality threshold. |
-| Source/settings view | `input_summary()` | Return the detached input `mesh()` builds from (the plan with the simulation's vacuum region and route applied) plus the settings, with no file or native I/O. |
+| Source/settings view | `input_summary()` | Return the detached input `mesh()` builds from (the plan with its vacuum region and route applied) plus the settings, with no file or native I/O. |
 | Mesh | `mesh` | Build the SGB geometry, check it for fine structure, mesh it with `scgsim.meshing` and lower its groups to Palace attributes. |
 | Convergence | `set_convergence` | Declare the criteria that decide when adaptive refinement has converged; see [the convergence declaration](#convergence-declaration). |
 | Config | `write_config` | Write the Palace Electrostatic configuration for the reviewed mesh identities. |
 
-These methods are public APIs.
+These methods are public APIs. Surface films and their inset margins are the
+plan's: `GeometryPlan.set_surface_epr(specs)` before `prepare()`, read from the
+bound snapshot ([Surface-EPR margins](#surface-epr-margins)).
 
-Configuration setters are atomic with respect to this staged state. Airbox,
-Surface EPR, and Eigenmode controls validate every supplied value before
-changing any field. A validation failure therefore preserves the prior
+Configuration setters are atomic with respect to this staged state. Route,
+mesh and Eigenmode controls validate every supplied value before changing any
+field. A validation failure therefore preserves the prior
 configuration together with cached mesh, resolved-port, config, and handoff
 state. A successful change retains the existing mesh/config invalidation
 boundary; this does not change operational failures inside `mesh()` or
@@ -76,9 +77,9 @@ boundary; this does not change operational failures inside `mesh()` or
 
 ## Palace mesh controls {#palace-mesh-controls}
 
-A model needs a vacuum region: `mesh()` raises `ValueError` before writing any
-file when the plan declares none and `set_vacuum_region` was not called on the
-simulation (or `plan.set_vacuum_region(...)` before `prepare()`).
+A model needs a vacuum region, and the vacuum is the plan's: `mesh()` raises
+`ValueError` before writing any file when the plan declares none (the stack's
+`VACUUM_REGION`, or `plan.set_vacuum_region(...)` before `prepare()`).
 
 `mesh()` builds the geometry with SGB, meshes it with `scgsim.meshing` and
 writes the Palace mesh, so the mesh controls are the controls of that module.
@@ -267,12 +268,13 @@ high-order elements.
 
 ## Surface-EPR margins {#surface-epr-margins}
 
-Surface-EPR inset margins are cut into the geometry as bands, so `set_surface_epr`
-belongs before `mesh()`. The [Eigenmode contract](palace-eigenmode.qmd#surface-epr-margins)
-owns the margin keys, the face kinds and the rows they produce, and Electrostatic
-accepts the same specs. Surface EPR is optional here as in Eigenmode: without the
-call, `mesh()` cuts no bands and the config has no Surface-EPR rows. Calling
-`set_surface_epr` again, `None` included, invalidates the mesh, config and handoff.
+Surface-EPR inset margins are cut into the geometry as bands, so the specs are
+the plan's: `plan.set_surface_epr(specs)` before `plan.prepare()`. The
+[Eigenmode contract](palace-eigenmode.qmd#surface-epr-margins) owns the margin
+keys, the face kinds and the rows they produce, and Electrostatic reads the same
+specs. Surface EPR is optional here as in Eigenmode: for a plan without specs,
+`mesh()` cuts no bands and the config has no Surface-EPR rows. Binding a plan
+prepared with other specs invalidates the mesh, config and handoff.
 
 ## Source and geometry authority
 
@@ -368,7 +370,7 @@ and discards the config and handoff, as `set_numerical` does.
 
 - a terminal name the simulation does not have, or a selection with no element;
 - a mode beyond `num_modes`;
-- an interface kind with no Surface EPR requested (`set_surface_epr`), or one
+- an interface kind with no Surface EPR requested (`plan.set_surface_epr`), or one
   `set_epr_request(surface_interfaces=...)` leaves out;
 - a `margin_um` its spec does not declare, naming the margins it does;
 - an `amr_max_passes` too small for the declaration to hold at all: a run of
@@ -498,9 +500,9 @@ recommendations or adequacy Gates:
 `sim.numerical` holds these controls as a `NumericalControls`: read a control
 as a field (`sim.numerical.amr_nonconformal`) and the whole record with
 `sim.numerical.to_payload()`, the dictionary
-`metadata/palace_numerical_controls.json` holds. `sim.surface_epr_specs` is a
-`SurfaceEprSpecs` (`sim.surface_epr_specs.by_type["MA"]`, or `to_payload()`
-for the normalized mapping). A `NumericalControls` given to
+`metadata/palace_numerical_controls.json` holds. `sim.surface_epr_specs` reads
+the bound plan's specs as a `SurfaceEprSpecs` (`sim.surface_epr_specs.by_type["MA"]`,
+or `to_payload()` for the normalized mapping), None when the plan has none. A `NumericalControls` given to
 `ElectrostaticSim(numerical=...)` gets the Electrostatic defaults above for the
 AMR controls it does not set (0 passes, conformal, tolerance 0.01), as
 `set_numerical(...)` does. With a [convergence declaration](#convergence-declaration)

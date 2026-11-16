@@ -31,8 +31,8 @@ does not change the retained source snapshot.
 
 Both Eigenmode facades also offer `sim.input_summary()` after configuration.
 That view adds the backend settings to the normalized source. The Palace view
-shows the source as `mesh()` will build it, so it includes a vacuum region set
-on the simulation and lists only the ports the simulation requested.
+shows the source as `mesh()` will build it, so it includes the plan's vacuum
+region and lists only the ports the simulation requested.
 `ElectrostaticSim` offers the same `sim.input_summary()`, with its terminals,
 grounds and policies in place of ports; after `write_config()`, inspect its
 exact terminal/ground index.

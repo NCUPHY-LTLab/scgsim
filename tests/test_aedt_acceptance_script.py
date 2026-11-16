@@ -56,10 +56,9 @@ def test_the_handoff_is_the_route_c_epr_model_of_the_pad_pair(acceptance, tmp_pa
 
 
 def test_the_acceptance_layout_passes_the_aedt_eigenmode_check(acceptance):
-    """``EigenmodeSim.simulation_drc`` accepts the plan the script builds, junction included, on the route it builds."""
+    """``EigenmodeSim.simulation_drc`` accepts the plan the script builds, junction and Surface EPR included, on the route it builds."""
     report = EigenmodeSim.simulation_drc(
-        acceptance._geometry_plan(),  # noqa: SLF001 -- the script's own plan, its junction declared
-        surface_epr_specs=acceptance.SURFACE_EPR_SPECS,
+        acceptance._geometry_plan(),  # noqa: SLF001 -- the script's own plan, its junction and Surface EPR declared
         modeling="solid",
     )
     assert report.passed

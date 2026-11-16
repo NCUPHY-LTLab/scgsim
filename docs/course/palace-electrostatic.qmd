@@ -125,7 +125,7 @@ needs no call. Consult the [geometry contract](../geometry-sgb.qmd) before
 changing that approximation. Surface films are optional postprocessing specifications, with attributed
 thickness/permittivity/loss assumptions rather than inferred material
 measurements. Their inset margins are cut into the geometry, so request them
-with `set_surface_epr(specs)` before `mesh()`; see the
+on the plan with `plan.set_surface_epr(specs)` before `prepare()`; see the
 [margin contract](../specs/palace-eigenmode.qmd#surface-epr-margins).
 
 The mesh is a real preparation operation. It can fail natively, and it stops
@@ -138,7 +138,7 @@ observations, including mesh controls, element/region counts and exact mesh
 identities. Those records describe the mesh; they do not decide whether its
 discretization is adequate for a study.
 Before meshing, `sim.input_summary()` shows the input `mesh()` builds from (the
-plan with the simulation's vacuum region applied) with the terminals, grounds
+plan with its vacuum region applied) with the terminals, grounds
 and policies; the [source summary](source-observations.qmd) is the view of the
 plan alone.
 

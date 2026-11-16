@@ -23,7 +23,7 @@ execute:
 
 有效的 SCGSim 2.0.0rc9 僅準備交接套件，可繼續使用 rc10 封裝與收集。請保留其記錄的來源識別資訊與收據，不要只為了更換封裝執行環境而重做原生準備。
 
-請在同一個 Python 工作階段完成[公開 Xmon 輸入](../tutorial-xmon-input.qmd)與[公開 Xmon AEDT](../tutorial-xmon-aedt.qmd)的設定章節。停在該教學原始交接的執行步驟之前。以下程式碼只使用三個具名變數：`snapshot`（不可變來源與堆疊）、`junction`（綁定來源的 `PlanarJunction`），以及 `presets`（已驗證的介面材料記錄）。
+請在同一個 Python 工作階段完成[公開 Xmon 輸入](../tutorial-xmon-input.qmd)與[公開 Xmon AEDT](../tutorial-xmon-aedt.qmd)的設定章節。停在該教學原始交接的執行步驟之前。以下程式碼只使用兩個具名變數：`snapshot`（不可變來源與堆疊，含計畫的 Surface-EPR 規格）與 `junction`（綁定來源的 `PlanarJunction`）。
 
 實體幾何、最終 Nets 與體積材料屬於該來源。以下三個電感值是明確的電路模型選擇，不是元件實測值。若要掃描幾何，每個案例都必須重新編寫來源 snapshot，並重新綁定接面與目錄。
 
@@ -66,19 +66,6 @@ run_control = EigenmodeRunControl(
     maximum_passes=20, maximum_delta_frequency_percent=0.1,
     minimum_passes=1, minimum_converged_passes=1,
 )
-surface_epr_specs = {}
-for kind in ("MA", "MS", "SA"):
-    preset_name = f"LiteratureCentral_{kind}"
-    preset = presets[preset_name]
-    if preset["interface_type"] != kind:
-        raise ValueError(f"{preset_name} is not a {kind} preset")
-    surface_epr_specs[kind] = {
-        "film_thickness_m": preset["thickness"] * 1e-6,
-        "permittivity": preset["permittivity"],
-        "loss_tangent": preset["loss_tangent"],
-        "source": preset["source"], "preset": preset_name,
-        "inset_margins_um": [0.5, 1.0],
-    }
 rows = []
 for case_id, inductance_h in case_parameters:
     case_junction = replace(junction, inductance_h=inductance_h)
@@ -90,7 +77,6 @@ for case_id, inductance_h in case_parameters:
         project_name=f"xmon_{case_id}", design_name="Xmon",
         run_control=run_control, resources=resources,
     )
-    sim.set_surface_epr(surface_epr_specs)
     sim.add_junction(case_junction)
     sim.set_epr_request(EprAnalysisRequest(
         mode_indices=(1,),

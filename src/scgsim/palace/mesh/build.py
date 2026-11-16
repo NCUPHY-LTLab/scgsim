@@ -53,7 +53,7 @@ from .process import lower_mesh_in_worker
 from .source import route_a_thin_film_provenance, scgsim_version
 
 _WHERE_OUTPUT_FOLDER = "the folder passed to set_output_dir"
-_WHERE_SURFACE_EPR = "the call to set_surface_epr"
+_WHERE_SURFACE_EPR = "the call to GeometryPlan.set_surface_epr"
 
 
 @dataclass(frozen=True)
@@ -229,7 +229,7 @@ def _refuse_bands_narrower_than_a_face(
                 f"Surface EPR bands narrower than the meshing stage's face-width limit of {limit:g} grid steps ({limit * grid_um:g} um)",
                 _WHERE_SURFACE_EPR,
             ).refusal(
-                f"{'; '.join(narrow)}. A band this narrow is a face the mesher cannot use. Widen the margins in surface_epr_specs so that every band is at least {limit:g} grid steps wide"
+                f"{'; '.join(narrow)}. A band this narrow is a face the mesher cannot use. Widen the inset margins given to plan.set_surface_epr so that every band is at least {limit:g} grid steps wide"
             )
         )
 

@@ -162,7 +162,13 @@ def two_pads(monkeypatch, *, gap_um, port=False, pad=None, electrode=None):
 
 # The vacuum a layout author pads a stack without one by: none in the plane, 1000 um below and above (Issue #182).
 AUTHOR_VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
-PLAN_OPTIONS = ("layer_stack", "instances", "nets", "vacuum_padding_um")
+PLAN_OPTIONS = (
+    "layer_stack",
+    "instances",
+    "nets",
+    "vacuum_padding_um",
+    "surface_epr_specs",
+)
 
 
 def layout_plan(  # noqa: PLR0913 -- the layout and each plan setting an author writes
@@ -174,12 +180,13 @@ def layout_plan(  # noqa: PLR0913 -- the layout and each plan setting an author 
     nets=None,
     vacuum_padding_um=AUTHOR_VACUUM_PADDING_UM,
     junctions=(),
+    surface_epr_specs=None,
 ):
     """The ``GeometryPlan`` a layout author builds for ``component``, with the stand-in PDK data by default.
 
     Root ``"chip"``, zero coupon padding, the ``instances`` registered, then the ``nets`` and the rectangular
     ``junctions``.  A stack without its own vacuum gets the plan's vacuum padded by ``vacuum_padding_um``;
-    None leaves the plan without one.
+    None leaves the plan without one.  ``surface_epr_specs`` go to ``set_surface_epr``; None sets none.
     """
     plan = GeometryPlan(
         component,
@@ -196,6 +203,8 @@ def layout_plan(  # noqa: PLR0913 -- the layout and each plan setting an author 
         plan.set_rectangular_junctions(junctions)
     if vacuum_padding_um is not None and "VACUUM_REGION" not in layer_stack.layers:
         plan.set_vacuum_region(vacuum_padding_um)
+    if surface_epr_specs is not None:
+        plan.set_surface_epr(surface_epr_specs)
     return plan
 
 
@@ -208,7 +217,7 @@ def check(simulation, component, **options):
     return simulation.simulation_drc(layout_plan(component, **plan_options), **options)
 
 
-def configured(simulation, snapshot, specs):
+def configured(simulation, snapshot):
     """A ``simulation`` set up as ``simulation_drc`` sets it up, from the settings a user would write."""
     sim = simulation()
     sim.set_plan(snapshot)
@@ -220,18 +229,16 @@ def configured(simulation, snapshot, specs):
                 layout_sheet=True,
                 inductance=1e-9,
             )
-    if specs is not None:
-        sim.set_surface_epr(specs)
     return sim
 
 
-def mesh_refusal(simulation, component, tmp_path, monkeypatch, specs=None):
+def mesh_refusal(simulation, component, tmp_path, monkeypatch):
     """The error ``mesh()`` raises before meshing, for the plan ``simulation_drc`` is given and its settings."""
 
     def meshing_reached(*_args, **_kwargs):
         raise MeshingReached
 
-    sim = configured(simulation, layout_plan(component).prepare(), specs)
+    sim = configured(simulation, layout_plan(component).prepare())
     sim.set_output_dir(tmp_path / "run")
     monkeypatch.setattr(build_module, "mesh_sgb", meshing_reached)
     with pytest.raises(Exception) as error:  # noqa: PT011 -- the type is what the test compares
@@ -304,17 +311,6 @@ def test_the_check_never_meshes_and_leaves_no_folder(monkeypatch, tmp_path, simu
     component = two_pads(monkeypatch, gap_um=10.0)
     assert check(simulation, component, surface_epr_specs=BANDED).passed
     assert list(tmp_path.iterdir()) == []
-
-
-@pytest.mark.parametrize("simulation", SIMULATIONS)
-@pytest.mark.parametrize("specs", [[], ""])
-def test_invalid_surface_epr_specs_are_refused_as_set_surface_epr_refuses_them(
-    monkeypatch, simulation, specs
-):
-    """A falsy non-mapping is not read as "no Surface EPR"; the setter refuses it, as it does in a simulation."""
-    component = two_pads(monkeypatch, gap_um=10.0)
-    with pytest.raises(TypeError, match="surface_epr specs must be a mapping"):
-        check(simulation, component, surface_epr_specs=specs)
 
 
 def check_sidecars(monkeypatch, simulation, component, **options):

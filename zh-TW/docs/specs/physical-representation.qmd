@@ -89,8 +89,9 @@ profile = ApproximationProfile(
     parameters={"film_bindings": authored_film_bindings},
 )
 sim.set_route("A", approximation_profile=profile)
-sim.set_surface_epr(authored_surface_specs)
 ```
+
+這類執行的 Surface-EPR 規格屬於計畫：在 `prepare()` 之前呼叫 `plan.set_surface_epr(authored_surface_specs)`。
 
 每個 `authored_film_bindings` 項目以宣告的物理層 ID 為索引，且恰好包含 `supporting_entity_id` 與 `supporting_side`。`metal_gap_equivalent` 需要兩個明確綁定且相對的薄膜。缺少綁定時，準備階段會在原生工作之前失敗，並提供替代呼叫形式。`set_route()` 沒有重述近似設定名稱的關鍵字，也不負責指定綁定或座標運算。`build_route_geometry()` 要求準備階段產生的有效正規化輸入及表示內容。
 

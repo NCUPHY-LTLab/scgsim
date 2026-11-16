@@ -259,12 +259,7 @@ def test_public_simplepad_prepares_route_a_thin_film_ports():
     prepared = prepare_mesh_input(
         stack=snapshot.stack,
         build_input=snapshot.geometry_input,
-        settings=GeometrySettings(
-            route="A",
-            approximation_profile=None,
-            vacuum_region=None,
-            surface_epr_specs=None,
-        ),
+        settings=GeometrySettings(route="A", approximation_profile=None),
     )
     overlap_widths = {
         item.host_semantic_id: max(x for x, _ in item.overlap_loop)

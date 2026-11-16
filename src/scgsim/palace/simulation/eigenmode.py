@@ -1,6 +1,6 @@
 """The Eigenmode problem: lumped ports, the EPR selection, the mode controls and the Eigenmode config.
 
-Everything else (plan, vacuum, route, Surface EPR, mesh controls, ``mesh()``, ``simulation_drc``, the summaries and
+Everything else (the plan with its vacuum and Surface EPR, route, mesh controls, ``mesh()``, ``simulation_drc``, the summaries and
 the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what the Eigenmode problem adds.
 """
 
@@ -42,11 +42,11 @@ class EigenmodeSim(PalaceSimulation):
 
     The calls run in this order; each later call needs the earlier ones::
 
+        plan.set_surface_epr(specs)  # optional, on the plan: without it, no Surface EPR
         sim = EigenmodeSim()
         sim.set_plan(plan.prepare())
         sim.set_output_dir("runs/xmon")
         sim.set_route("B")  # optional: Route B is the default
-        sim.set_surface_epr(specs)  # optional: without it, no Surface EPR
         sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=10e-9)
         sim.set_eigenmode(num_modes=2, target=4e9)
         sim.set_numerical(amr_max_passes=0)

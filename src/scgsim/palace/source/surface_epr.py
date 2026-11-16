@@ -1,10 +1,11 @@
-"""The Surface-EPR specs a simulation holds: one normalized film per interface type, with its band margins.
+"""The Surface-EPR specs a simulation reads from its plan: one normalized film per interface type, with its band margins.
 
-``MA`` is the metal-air interface, ``MS`` metal-substrate and ``SA`` substrate-air.  ``set_surface_epr`` builds
-``SurfaceEprSpecs.normalized`` from what the user passes; the rules are those of
-``scgsim.geometry.surface_epr.specs``, which Palace and AEDT share.  ``mesh`` cuts the margins into the model
-as bands and ``config`` writes one Palace ``Dielectric`` row per spec and margin.  ``to_payload()`` gives the
-normalized mapping back key for key, as the geometry build reads it and the index map records it.
+``MA`` is the metal-air interface, ``MS`` metal-substrate and ``SA`` substrate-air.  ``GeometryPlan.set_surface_epr``
+takes the specs and the plan's snapshot carries them normalized, by the rules of
+``scgsim.geometry.surface_epr.specs``, which Palace and AEDT share; ``SurfaceEprSpecs.of_plan`` reads them as
+records.  ``mesh`` cuts the margins into the model as bands and ``config`` writes one Palace ``Dielectric`` row
+per spec and margin.  ``to_payload()`` gives the normalized mapping back key for key, as the geometry build reads
+it and the index map records it.
 """
 
 from __future__ import annotations
@@ -13,13 +14,14 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.surface_epr.specs import margins_of, normalize_surface_epr_specs
 from scgsim.refusal import internal
 
 
 @dataclass(frozen=True)
 class SurfaceEprSpec:
-    """The film of one interface type and the margins (µm) of its bands, as ``set_surface_epr`` normalized them.
+    """The film of one interface type and the margins (µm) of its bands, as the plan normalized them.
 
     Exactly one of ``thickness`` (in units of Palace ``Model.L0``) and ``film_thickness_m`` is set.  An unknown
     ``loss_tangent`` stays None; Palace gets 0.  ``material_id`` names the dielectric the permittivity was read
@@ -74,7 +76,7 @@ class SurfaceEprSpec:
         if self.thickness is None:
             raise ValueError(
                 internal(
-                    f"Surface EPR {self.interface_type} has no thickness: build it with SurfaceEprSpecs.normalized(), which requires one"
+                    f"Surface EPR {self.interface_type} has no thickness: read it with SurfaceEprSpecs.of_plan(), whose specs require one"
                 )
             )
         return self.thickness
@@ -86,7 +88,7 @@ class SurfaceEprSpec:
 
 @dataclass(frozen=True)
 class SurfaceEprSpecs:
-    """A simulation's Surface-EPR specs by interface type, in type order; empty asks for no film and no band."""
+    """A plan's Surface-EPR specs by interface type, in type order."""
 
     by_type: Mapping[str, SurfaceEprSpec]
 
@@ -97,13 +99,26 @@ class SurfaceEprSpecs:
         *,
         materials: Mapping[str, Mapping[str, Any]],
     ) -> SurfaceEprSpecs:
-        """Check ``specs`` against the stack's ``materials`` and hold them normalized.
+        """Check ``specs`` against ``materials`` and hold them normalized, as ``GeometryPlan.prepare()`` does.
 
         Raises:
             TypeError: ``specs`` or a spec is not a mapping, or a field has the wrong type.
             ValueError: an interface type other than MA, MS, SA, an unknown field, or an invalid value.
         """
-        normalized = normalize_surface_epr_specs(specs, materials=materials)
+        return cls._of_normalized(
+            normalize_surface_epr_specs(specs, materials=materials)
+        )
+
+    @classmethod
+    def of_plan(cls, snapshot: GeometryPlanSnapshot) -> SurfaceEprSpecs | None:
+        """The specs ``snapshot`` carries, already normalized by ``GeometryPlan.prepare()``; None when the plan has none."""
+        normalized = snapshot.surface_epr_specs
+        return None if normalized is None else cls._of_normalized(normalized)
+
+    @classmethod
+    def _of_normalized(
+        cls, normalized: Mapping[str, Mapping[str, Any]]
+    ) -> SurfaceEprSpecs:
         return cls(
             {
                 interface_type: _spec(interface_type, payload)

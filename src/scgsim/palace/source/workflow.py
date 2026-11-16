@@ -1,8 +1,9 @@
 """The preparation of a plan's geometry input under the simulation's geometry settings.
 
 The simulation holds the settings and the lifecycle; this module takes them as ``GeometrySettings`` and
-holds no state.  It applies them in a fixed order: vacuum, port sheets, solution regions, authored ports,
-the physical interpretation of the route.  The route rule is here too: ``set_route`` and ``simulation_drc``
+holds no state.  The vacuum and the Surface-EPR specs are the plan's, already in the snapshot.  It applies
+the settings in a fixed order: port sheets, solution regions, authored ports, the physical interpretation of
+the route.  The route rule is here too: ``set_route`` and ``simulation_drc``
 both state a route setting, and ``checked_route_setting`` checks it for either, naming the call it was given in.
 """
 
@@ -13,22 +14,19 @@ from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from scgsim.geometry.interpretation.physical import interpret_physical_geometry
-from scgsim.geometry.models.input import GeometryBuildInput, VacuumRegionSpec
+from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalRepresentationPlan,
 )
-from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
-from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.geometry.source.validation import has_vacuum_solution_region
 from scgsim.refusal import Declared, found_text, internal
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from .ports import with_rectangular_ports
-from .surface_epr import SurfaceEprSpecs
 
-_WHERE_VACUUM = "the GeometryPlan, or the call to set_vacuum_region"
+_WHERE_VACUUM = "the GeometryPlan"
 
 
 @dataclass(frozen=True)
@@ -62,14 +60,11 @@ class GeometrySettings:
     """The simulation settings the geometry preparation and build read, as the simulation holds them.
 
     ``route`` is how the conductors are modelled (``"A"`` thin-film sheets, ``"B"`` 3D conductors), with
-    the ``approximation_profile`` given to ``set_route``, None for the route's default profile;
-    ``vacuum_region`` is the simulation's own vacuum, None when the plan has one or none was set.
+    the ``approximation_profile`` given to ``set_route``, None for the route's default profile.
     """
 
     route: str
     approximation_profile: ApproximationProfile | None
-    vacuum_region: VacuumRegionSpec | None
-    surface_epr_specs: SurfaceEprSpecs | None
 
 
 @dataclass(frozen=True)
@@ -89,16 +84,12 @@ def prepare_mesh_input(
     settings: GeometrySettings,
     port_sheet_source_layers: Sequence[Mapping[str, Any]] | None = None,
 ) -> PreparedMeshInput:
-    """Prepare a stack and geometry input for the build: vacuum, ports and the route's interpretation, in that order.
+    """Prepare a stack and geometry input for the build: ports and the route's interpretation, in that order.
 
     ``port_sheet_source_layers`` lists the authored sheets cut as lumped ports, None for a problem with none.
     """
     route = settings.route
-    prepared_stack = _stack_with_vacuum_and_ports(
-        stack, settings.vacuum_region, port_sheet_source_layers
-    )
-    # Synchronize source selections before the single physical interpretation.
-    build_input = _synchronize_solution_regions(build_input, prepared_stack)
+    prepared_stack = _stack_with_ports(stack, port_sheet_source_layers)
     build_input = _select_authored_ports(build_input, port_sheet_source_layers)
     if port_sheet_source_layers is not None:
         # Every selected sheet is a Lumped Port or RLC; the physical interpretation cuts its rectangle.
@@ -111,7 +102,7 @@ def prepare_mesh_input(
     if not has_vacuum_solution_region(effective_input):
         raise ValueError(
             Declared("the model", _WHERE_VACUUM).refusal(
-                "has no vacuum region: the plan declares none and none was set on the simulation; call plan.set_vacuum_region(...) before prepare() or sim.set_vacuum_region(...) before mesh()"
+                "has no vacuum region: the plan declares none; call plan.set_vacuum_region(...) before prepare()"
             )
         )
     if route == "A":
@@ -127,27 +118,18 @@ def prepare_mesh_input(
     )
 
 
-def _stack_with_vacuum_and_ports(
+def _stack_with_ports(
     stack: Mapping[str, Any],
-    vacuum_region: VacuumRegionSpec | None,
     port_sheet_source_layers: Sequence[Mapping[str, Any]] | None,
 ) -> Mapping[str, Any]:
-    """The stack with the simulation's vacuum region applied and its port sheets recorded in the metadata."""
-    prepared_stack = stack
-    if vacuum_region is not None:
-        prepared_stack = apply_vacuum_region_to_stack(stack, vacuum_region)
-    if port_sheet_source_layers is not None:
-        prepared_stack = {
-            **prepared_stack,
-            "metadata": {
-                **prepared_stack.get("metadata", {}),
-                "port_sheet_source_layers": [],
-            },
-        }
-        prepared_stack = with_port_sheet_metadata(
-            prepared_stack, port_sheet_source_layers
-        )
-    return prepared_stack
+    """The stack with exactly its lumped-port sheets recorded in the metadata; as given for a problem with none."""
+    if port_sheet_source_layers is None:
+        return stack
+    cleared = {
+        **stack,
+        "metadata": {**stack.get("metadata", {}), "port_sheet_source_layers": []},
+    }
+    return with_port_sheet_metadata(cleared, port_sheet_source_layers)
 
 
 def _route_a_thin_film(
@@ -180,35 +162,6 @@ def _stack_material_records(
         for material_id, material in prepared_materials.items()
         if isinstance(material, Mapping)
     }
-
-
-def _synchronize_solution_regions(
-    build_input: GeometryBuildInput, prepared_stack: Mapping[str, Any]
-) -> GeometryBuildInput:
-    """Replace changed solution regions without disturbing retained entity order."""
-    if prepared_stack["solution_regions"] != build_input.solution_regions:
-        regions = tuple(
-            solution_region_entity(
-                key,
-                record,
-                materials=prepared_stack["materials"],
-                cell_bounds_um=build_input.metadata["cell_bounds_um"],
-            )
-            for key, record in prepared_stack["solution_regions"].items()
-        )
-        by_id = {entity.semantic_id: entity for entity in regions}
-        old_ids = set(build_input.solution_regions)
-        retained = tuple(
-            by_id.pop(entity.semantic_id) if entity.semantic_id in by_id else entity
-            for entity in build_input.entities
-            if entity.semantic_id not in old_ids or entity.semantic_id in by_id
-        )
-        build_input = replace(
-            build_input,
-            entities=(*retained, *by_id.values()),
-            solution_regions=prepared_stack["solution_regions"],
-        )
-    return build_input
 
 
 def _select_authored_ports(

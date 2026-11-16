@@ -1,9 +1,11 @@
-"""Check what a GeometryPlan's caller binds: the final Nets and the Entities' overlap priorities."""
+"""Check what a GeometryPlan's caller binds: the final Nets, the Entities' overlap priorities and the Surface-EPR specs."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import Any
 
+from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.refusal import Declared
 
 
@@ -99,3 +101,23 @@ def validated_priorities(
             )
         prepared[entity_id] = value
     return prepared
+
+
+def checked_surface_epr_specs(
+    specs: Mapping[str, Mapping[str, Any]],
+    materials: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """``specs`` normalized against ``materials`` by the shared Surface-EPR rules, Palace's and AEDT's.
+
+    "No Surface EPR" has one spelling, no call or ``set_surface_epr(None)``, so an empty mapping is refused.
+    """
+    if isinstance(specs, Mapping) and not specs:
+        raise ValueError(
+            plan_call(
+                "set_surface_epr", "set_surface_epr({}) requests no Surface EPR"
+            ).refusal(
+                "to have none, do not call plan.set_surface_epr(), or call "
+                "plan.set_surface_epr(None) to turn it off again"
+            )
+        )
+    return normalize_surface_epr_specs(specs, materials=materials)

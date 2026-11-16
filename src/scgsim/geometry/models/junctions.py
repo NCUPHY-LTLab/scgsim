@@ -135,7 +135,7 @@ def junction_net_id(entity: Any) -> str:
     return entity.net_id or entity.semantic_id
 
 
-# A standalone layout, bound by ``set_geometry``, records no source occurrences; its port
+# A layout prepared without a GeometryPlan records no source occurrences; its port
 # sheets and conductors all share this one occurrence identity.
 STANDALONE_OCCURRENCE_PATH = "<standalone>"
 

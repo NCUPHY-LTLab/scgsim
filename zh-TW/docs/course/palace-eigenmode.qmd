@@ -45,7 +45,7 @@ sim.set_convergence(
 )
 ```
 
-`amr_max_passes=8` 允許八次細化，也就是九次求解；每次求解是一個 pass，pass 1 求解 `mesh()` 寫出的網格。模態 1 的頻率在某個 pass 成立，是指它與前一個 pass 相比變化至多 0.001 %。Surface EPR 這一行為每種介面類別各宣告一條準則，各自作用於該類別每個模態在 1 µm 邊距以外的參與率；它需要在 `mesh()` 之前以三種規格呼叫 `set_surface_epr`，且每種規格都要求這個[邊距](#surface-epr-margin-rows)。這裡刻意不宣告全表面參與率：在量測過的佈局上，它每細化一次都還在成長，變化準則不會在它上面成立。有宣告時 Palace 自己的容許誤差不再結束執行，所以不給 `amr_tolerance`：`write_config()` 會拒絕它，並寫出應改寫的 `ErrorIndicator().below(...)`。它也會在 `num_modes=2` 時拒絕 `ModeFrequency(modes=[3])`，以及被 `set_epr_request(surface_interfaces=...)` 排除的類別。
+`amr_max_passes=8` 允許八次細化，也就是九次求解；每次求解是一個 pass，pass 1 求解 `mesh()` 寫出的網格。模態 1 的頻率在某個 pass 成立，是指它與前一個 pass 相比變化至多 0.001 %。Surface EPR 這一行為每種介面類別各宣告一條準則，各自作用於該類別每個模態在 1 µm 邊距以外的參與率；它需要在 `prepare()` 之前以三種規格呼叫計畫的 `set_surface_epr`，且每種規格都要求這個[邊距](#surface-epr-margin-rows)。這裡刻意不宣告全表面參與率：在量測過的佈局上，它每細化一次都還在成長，變化準則不會在它上面成立。有宣告時 Palace 自己的容許誤差不再結束執行，所以不給 `amr_tolerance`：`write_config()` 會拒絕它，並寫出應改寫的 `ErrorIndicator().below(...)`。它也會在 `num_modes=2` 時拒絕 `ModeFrequency(modes=[3])`，以及被 `set_epr_request(surface_interfaces=...)` 排除的類別。
 
 Palace 會在每條準則都已成立的第一個 pass 停止（在該 pass 完成後一到兩秒），之後的求解不會執行；沒有收斂的執行會跑完全部九次。回傳執行的 `result.convergence` 與可信度報告會說明每條準則在哪個 pass 都已成立、最後成立的是哪一條、SCGSim 在哪個 pass 之後停止 Palace，或在最後一個 pass 上哪一條仍不成立、與門檻差多少。所有的量與檢查列在[本徵模態契約](../specs/palace-eigenmode.qmd#eigenmode-convergence)與共用的[收斂宣告](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)。
 
@@ -69,7 +69,7 @@ print(mesh_path, config_path)
 
 ## Surface EPR 的邊距列 {#surface-epr-margin-rows}
 
-Palace Surface EPR 除了每個整面的基準列，還能回報距間隙至少某個距離的那一部分表面。請在 `set_surface_epr` 規格中用 `inset_margins_um` 要求這些列，例如 `"inset_margins_um": (0.5, 1.0)`，並在 `mesh()` 之前呼叫 `set_surface_epr`，因為 SGB 會把邊距切進幾何。省略此鍵就只要求基準列。沒有呼叫 `set_surface_epr(specs)` 時，不計算 Surface EPR。這些列是普通的 Palace 屬性，一般的 Palace 執行檔即可。鍵、面種類與限制見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)，公開的 [Xmon EPR 延伸範例](../tutorial-xmon-palace.qmd)示範來源設定。
+Palace Surface EPR 除了每個整面的基準列，還能回報距間隙至少某個距離的那一部分表面。請在交給計畫 `set_surface_epr` 的規格中用 `inset_margins_um` 要求這些列，例如 `"inset_margins_um": (0.5, 1.0)`，並在 `plan.prepare()` 之前呼叫 `plan.set_surface_epr`，因為 SGB 會把邊距切進幾何。省略此鍵就只要求基準列。沒有呼叫 `plan.set_surface_epr(specs)` 時，不計算 Surface EPR。這些列是普通的 Palace 屬性，一般的 Palace 執行檔即可。鍵、面種類與限制見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)，公開的 [Xmon EPR 延伸範例](../tutorial-xmon-palace.qmd)示範來源設定。
 
 ## Circular Pad LC 研究 {#circular-pad-lc-study}
 

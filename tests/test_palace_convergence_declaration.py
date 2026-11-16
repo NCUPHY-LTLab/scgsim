@@ -403,14 +403,14 @@ def test_removing_the_declaration_removes_the_plan(tmp_path):
                 SurfaceEpr("SA", margin_um=1.0).within(percent=0.1)
             ),
             r"margin 1 um, which the SA spec does not declare; it declares no margin",
-            "set_convergence and set_surface_epr",
+            "set_convergence and GeometryPlan.set_surface_epr",
         ),
         (
             lambda sim: sim.set_convergence(
                 SurfaceEpr("MA", margin_um=0.75).within(percent=0.1)
             ),
             r"its margins are \[0.5, 1.0\] um",
-            "set_convergence and set_surface_epr",
+            "set_convergence and GeometryPlan.set_surface_epr",
         ),
     ],
 )
@@ -435,7 +435,7 @@ def test_a_kind_without_surface_epr_is_refused(tmp_path):
     sim.set_convergence(SurfaceEpr("MS").within(percent=0.1))
     with pytest.raises(
         ValueError,
-        match=r"Surface EPR is not requested for MS: call set_surface_epr\(\)",
+        match=r"Surface EPR is not requested for MS: call plan.set_surface_epr\(\)",
     ):
         sim.write_config()
 

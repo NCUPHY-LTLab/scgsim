@@ -9,8 +9,8 @@ execute:
 ---
 
 Run the [shared Xmon input tutorial](tutorial-xmon-input.qmd) first in the
-same Python session. This page uses its immutable `snapshot`, `port_name`, and
-`coupon` to prepare a portable HFSS Eigenmode handoff with surface, bulk, and
+same Python session. This page adds Surface EPR to its `plan`, prepares it again
+and uses the new `snapshot`, `port_name`, and `coupon` to prepare a portable HFSS Eigenmode handoff with surface, bulk, and
 junction EPR outputs. The Python input-preparation environment needs the
 SCGSim `aedt-epr` extra and matched public OrPen inputs. The extra supplies
 layout-geometry and PyAEDT Python dependencies; it does not install AEDT or
@@ -32,6 +32,42 @@ These backend choices are intentional and are not auto-converted. The
 describes the native Region representation. This static page claims no native
 HFSS geometry check. When comparing results, note the outer boundary, Region
 size, and backend settings.
+
+### Declare Surface EPR
+
+Declare Surface EPR on the plan, as for Palace: one spec per interface type,
+with its film assumptions and inset margins. The margins become bands of the SGB model
+AEDT imports, and every sidecar Surface-EPR row of a declared type is
+integrated, sidewalls included. Film thickness, permittivity, loss and source
+come from OrPen's synthetic `LiteratureCentral` presets; margins are
+alternative evaluations relative to the unmasked baseline of each surface.
+
+```python
+from orcapen_sc_pdk.materials import validate_interface_preset_records
+
+presets = validate_interface_preset_records()
+surface_epr_specs = {}
+for kind in ("MA", "MS", "SA"):
+    preset_name = f"LiteratureCentral_{kind}"
+    preset = presets[preset_name]
+    if preset["interface_type"] != kind:
+        raise ValueError(f"{preset_name} is not a {kind} preset")
+    surface_epr_specs[kind] = {
+        "film_thickness_m": preset["thickness"] * 1e-6,
+        "permittivity": preset["permittivity"],
+        "loss_tangent": preset["loss_tangent"],
+        "source": preset["source"],
+        "preset": preset_name,
+        "inset_margins_um": [0.5, 1.0],
+    }
+plan.set_surface_epr(surface_epr_specs)
+snapshot = plan.prepare()
+```
+
+Surface EPR is part of the geometry, so it is set on the plan of the input
+tutorial with `plan.set_surface_epr` and the plan is prepared again; the new
+`snapshot` carries the specs to `EigenmodeSim`, which has no Surface-EPR setter
+of its own.
 
 ### Bind the junction
 
@@ -62,33 +98,6 @@ junction = planar_junction_from_port(
     inductance_h=11.78e-9,
     capacitance_f=0.0,  # Explicit inductive-only modeling assumption.
 )
-```
-
-Declare Surface EPR the way Palace does: one spec per interface type, with its
-film assumptions and inset margins. The margins become bands of the SGB model
-AEDT imports, and every sidecar Surface-EPR row of a declared type is
-integrated, sidewalls included. Film thickness, permittivity, loss and source
-come from OrPen's synthetic `LiteratureCentral` presets; margins are
-alternative evaluations relative to the unmasked baseline of each surface.
-
-```python
-from orcapen_sc_pdk.materials import validate_interface_preset_records
-
-presets = validate_interface_preset_records()
-surface_epr_specs = {}
-for kind in ("MA", "MS", "SA"):
-    preset_name = f"LiteratureCentral_{kind}"
-    preset = presets[preset_name]
-    if preset["interface_type"] != kind:
-        raise ValueError(f"{preset_name} is not a {kind} preset")
-    surface_epr_specs[kind] = {
-        "film_thickness_m": preset["thickness"] * 1e-6,
-        "permittivity": preset["permittivity"],
-        "loss_tangent": preset["loss_tangent"],
-        "source": preset["source"],
-        "preset": preset_name,
-        "inset_margins_um": [0.5, 1.0],
-    }
 ```
 
 ## Select reported rows and prepare a handoff
@@ -141,7 +150,6 @@ sim.set_eigenmode(
     ),
     resources=aedt_resources,
 )
-sim.set_surface_epr(surface_epr_specs)
 sim.add_junction(junction)
 sim.set_epr_request(
     EprAnalysisRequest(

@@ -9,7 +9,7 @@ execute:
 ---
 
 Run the [shared Xmon input tutorial](tutorial-xmon-input.qmd) first in the
-same Python session. It defines `snapshot` and `port_name` from public component and coupon inputs. This extends [ordinary Palace Eigenmode](course/palace-eigenmode.qmd) with
+same Python session. It defines `plan`, `snapshot` and `port_name` from public component and coupon inputs. This extends [ordinary Palace Eigenmode](course/palace-eigenmode.qmd) with
 attributed films and a source-linked inductive port. Configure these before
 meshing. The documentation build does not mesh or run Palace.
 
@@ -17,6 +17,8 @@ meshing. The documentation build does not mesh or run Palace.
 
 The immutable snapshot already contains the GDS, prepared stack, final Net
 map, and shared outer vacuum envelope. Palace uses that envelope as supplied.
+Surface EPR is part of the geometry too, so the films below are set on the
+plan with `plan.set_surface_epr` and the plan is prepared again.
 The coupon's eight ground shorts are bumps drawn in its layout. The source port is the prepared
 `chip/device/o_junction_lumped` sheet; its qualified name and target layer come
 from the component annotation.
@@ -41,10 +43,7 @@ for kind, record in interface_presets.items():
     if record["interface_type"] != kind:
         raise ValueError(f"{preset_names[kind]} is not an {kind} preset")
 
-sim = EigenmodeSim()
-sim.set_plan(snapshot)
-sim.set_output_dir(palace_run_dir)
-sim.set_surface_epr(
+plan.set_surface_epr(
     {
         kind: {
             "thickness": record["thickness"],
@@ -57,6 +56,11 @@ sim.set_surface_epr(
         for kind, record in interface_presets.items()
     }
 )
+snapshot = plan.prepare()
+
+sim = EigenmodeSim()
+sim.set_plan(snapshot)
+sim.set_output_dir(palace_run_dir)
 sim.add_port(
     port_name,
     layer="D1_BOTTOM_M1",
@@ -89,8 +93,8 @@ sim.set_numerical(
 
 The example requests margin rows through `inset_margins_um`. Each margin adds a
 row for the part of the surface at least that many micrometres from the nearest
-gap edge, next to the whole-surface baseline row. `set_surface_epr` runs before
-`mesh()` because SGB cuts the margins into the geometry; the
+gap edge, next to the whole-surface baseline row. The specs are set on the plan,
+before `prepare()`, because SGB cuts the margins into the geometry; the
 [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins) lists the
 keys and limits. Omit `inset_margins_um` when only the baseline is needed. The
 example sets no mesh controls, so `mesh()` uses the default `FeatureRecipe` and
@@ -109,10 +113,10 @@ for the boundary comparison and interpretation limits.
 ## Review normalized inputs before meshing
 
 `input_summary()` displays the input `mesh()` will build from and the current
-Palace settings: the bound plan with the simulation's vacuum region,
-requested ports and route applied. It does not mesh or start a solver.
-A model needs a vacuum region: this call and `mesh()` refuse a plan with none
-unless `sim.set_vacuum_region(...)` was called.
+Palace settings: the bound plan with its vacuum region, requested ports and
+route applied. It does not mesh or start a solver. A model needs a vacuum
+region: this call and `mesh()` refuse a plan with none, so a stack without its
+own takes `plan.set_vacuum_region(...)` before `prepare()`.
 
 ```python
 from IPython.display import display

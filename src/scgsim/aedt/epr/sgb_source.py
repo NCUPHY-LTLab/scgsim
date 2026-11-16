@@ -284,7 +284,7 @@ def surface_rows(
         ):
             raise ValueError(
                 f"Required Surface EPR {interface_type} has no row in the SGB model; pass required=False "
-                f"in its spec, or set_surface_epr() without {interface_type}"
+                f"in its spec, or plan.set_surface_epr() without {interface_type}"
             )
     return out
 

@@ -18,7 +18,7 @@ scgsim-id: "docs/layout-modeling-check"
 
 ## 建立模擬將拿到的計畫 {#build-the-plan}
 
-檢查接受的是模擬將拿到的 `GeometryPlan`（在 `prepare()` 之前），因此它檢查的模型，就是該模擬會建出的模型。請在版圖儲存庫中建立一次計畫，再把它傳給每個檢查：共五行。
+檢查接受的是模擬將拿到的 `GeometryPlan`（在 `prepare()` 之前），因此它檢查的模型，就是該模擬會建出的模型。請在版圖儲存庫中建立一次計畫，再把它傳給每個檢查：共六行。
 
 ```python
 from scgsim.geometry import GeometryPlan
@@ -28,7 +28,8 @@ plan = GeometryPlan(component=component, root_id="chip", layer_stack=layer_stack
 plan.set_nets({"Ground": ("chip/D0_TOP_GROUND_PLANE", ...), ...})
 plan.set_vacuum_region((0.0, 0.0, 1000.0))  # 層堆疊沒有 VACUUM_REGION 時
 plan.set_rectangular_junctions([...])  # 版圖有矩形接面時
-report = EigenmodeSim.simulation_drc(plan, surface_epr_specs=surface_epr_specs, route="A")
+plan.set_surface_epr(surface_epr_specs)  # 模擬要計算 Surface EPR 時
+report = EigenmodeSim.simulation_drc(plan, route="A")
 
 print(report.render_text())  # 若有警告，會列在這裡
 ```
@@ -38,12 +39,13 @@ SCGSim 不依賴 PDK，因此由版圖儲存庫把層堆疊與材料紀錄傳給
 檢查以模擬使用計畫的方式使用它，不加入任何自己的設定：
 
 - **Net。** 計畫的 `set_nets`，每個成員都是計畫根之下的完整 Entity ID。沒有 Net 時任何導體都沒有 Net，因此相接觸的兩個導體都會被當作不同 Net 的接觸而拒絕。銦凸塊連接兩片接地面的覆晶版圖都會因此被拒絕，直到兩片接地面與所有凸塊都在同一個 Ground net 中。不同 Net 的兩個導體相接觸時，無論如何都會被拒絕。
-- **真空。** 計畫自己的真空：層堆疊的 `VACUUM_REGION`，或計畫的 `set_vacuum_region`。兩者皆無的計畫，會以模擬對它拋出的錯誤被拒絕。`(0, 0, 1000)` µm 是測試與使用版圖時的設定：真空止於版圖的平面範圍，並向下、向上各延伸 1000 µm，使金屬有空氣面可供切出 `MA` 與 `SA` 條帶。Palace 模擬也可以把真空設在自己身上（`sim.set_vacuum_region`）；檢查只讀取計畫，所以請把真空交給計畫。
+- **真空。** 計畫自己的真空：層堆疊的 `VACUUM_REGION`，或計畫的 `set_vacuum_region`。兩者皆無的計畫，會以模擬對它拋出的錯誤被拒絕。`(0, 0, 1000)` µm 是測試與使用版圖時的設定：真空止於版圖的平面範圍，並向下、向上各延伸 1000 µm，使金屬有空氣面可供切出 `MA` 與 `SA` 條帶。
+- **Surface EPR。** 計畫的 `set_surface_epr(specs)`，也就是模擬將使用的規格（鍵列於[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)）。其邊界間距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。條帶只切在規格所選的面上，所以沒有這類面的版圖會通過，但不會切出條帶；沒有規格的計畫不切條帶。
 - **coupon 填充、端口薄片與矩形接面。** 依計畫的宣告。
 
 您傳入的計畫保持原樣。第一個引數若不是 `GeometryPlan`（例如 Component 或 `plan.prepare()`），會被拒絕，訊息中列出該建立的計畫。各類別自己加入的設定見[檢查使用的設定](#what-the-check-uses)。
 
-請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請以 `route` 與 `approximation_profile` 傳入模擬將使用的 route：它們就是 [`set_route`](specs/physical-representation.qmd#palace-caller-profile) 的引數，預設值與拒絕方式都相同。未傳入時檢查為 Route B；只給 `route="A"` 時使用 `thin_film` 近似設定；`route="A"` 搭配 `substrate_face` 或 `metal_gap_equivalent` 近似設定時，使用該設定及其 `film_bindings`。與計畫中薄膜不相符的近似設定，會由幾何建構拒絕，錯誤與 `mesh()` 拋出的相同。Route C 不是 Palace 的 route，會像 `set_route` 一樣被拒絕；route 或近似設定被拒絕時，訊息指向 `simulation_drc` 的呼叫。兩個 route 都要用的版圖，請對每個 route 各呼叫一次檢查。請傳入模擬將使用的 `surface_epr_specs`：它與 [`set_surface_epr(specs)`](specs/palace-eigenmode.qmd#surface-epr-margins) 接受的規格相同，其邊界間距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。條帶只切在規格所選的面上，所以沒有這類面的版圖會通過，但不會切出條帶。
+請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請以 `route` 與 `approximation_profile` 傳入模擬將使用的 route：它們就是 [`set_route`](specs/physical-representation.qmd#palace-caller-profile) 的引數，預設值與拒絕方式都相同。未傳入時檢查為 Route B；只給 `route="A"` 時使用 `thin_film` 近似設定；`route="A"` 搭配 `substrate_face` 或 `metal_gap_equivalent` 近似設定時，使用該設定及其 `film_bindings`。與計畫中薄膜不相符的近似設定，會由幾何建構拒絕，錯誤與 `mesh()` 拋出的相同。Route C 不是 Palace 的 route，會像 `set_route` 一樣被拒絕；route 或近似設定被拒絕時，訊息指向 `simulation_drc` 的呼叫。兩個 route 都要用的版圖，請對每個 route 各呼叫一次檢查。
 
 檢查只建構幾何，不建立網格也不求解，因此可在版圖變動時反覆執行。幾何階段會在第一個拒絕處停止；網格階段則一次列出所有發現。閱讀訊息、修正版圖，再執行一次。[失敗時怎麼辦](supported-scope.qmd#when-something-fails)列出每種錯誤的負責人與下一步。
 
@@ -77,7 +79,7 @@ checks = [
     (scgsim.aedt.EigenmodeSim, {"modeling": "solid"}),
 ]
 for simulation, options in checks:
-    report = simulation.simulation_drc(plan, surface_epr_specs=surface_epr_specs, **options)
+    report = simulation.simulation_drc(plan, **options)
     print(f"{simulation.__module__}.{simulation.__name__}")
     print(report.render_text())
 ```
@@ -105,7 +107,7 @@ for simulation, options in checks:
 每項發現都標明其階段、類別、量測方式與尺寸、SGB 實體及其物理群組、它所來自的版圖物件與條帶請求及這些物件所在的圖層、以 µm 表示的位置與外框、網格器為何無法處理，以及修改方式。負責方依 sidecar 記錄的來源判定：
 
 - **layout（版圖）**：只由來源曲線圍成的結構，或位於這類結構的條帶最寬邊界間距之內、重現該結構的條帶曲線。由繪製版圖的一方修正。不是 SGB 造成的極細邊或面屬於版圖問題：SCGSim 只回報，不修補。
-- **erosion（侵蝕）**：兩條互不相鄰的來源邊的條帶偏移在此相遇，例如導體寬度只比兩倍邊界間距略大。精確侵蝕本身就有這個結構。請修改 `surface_epr_specs` 中的邊界間距，或修改導體寬度。另一種情形是條帶的短邊偏移自一條比其邊界間距還短的直線來源邊，例如以多邊形畫出的曲線上的一段弦：修改方式會指出那條來源邊、它的位置與長度。請把這段圓弧宣告為精確圓弧，或改用較長的弦來畫。
+- **erosion（侵蝕）**：兩條互不相鄰的來源邊的條帶偏移在此相遇，例如導體寬度只比兩倍邊界間距略大。精確侵蝕本身就有這個結構。請修改交給 `plan.set_surface_epr` 的內縮邊距，或修改導體寬度。另一種情形是條帶的短邊偏移自一條比其邊界間距還短的直線來源邊，例如以多邊形畫出的曲線上的一段弦：修改方式會指出那條來源邊、它的位置與長度。請把這段圓弧宣告為精確圓弧，或改用較長的弦來畫。
 - **sgb**：來源沒有細微結構之處出現的條帶曲線。這是 SGB 的缺陷；請附上該項發現回報給 SCGSim，版圖不需修改。
 
 兩條來源邊共用一個頂點時即為相鄰，封閉外框的最後一條邊與第一條邊也是如此。
@@ -117,7 +119,7 @@ for simulation, options in checks:
 - **有拒絕項目時**，在產生任何網格之前拋出 `SimulationDrcError`。其 `report` 所含的發現，與 `simulation_drc` 對同一模型給出的相同。建出的幾何會留在輸出資料夾中，且不回傳網格路徑。
 - **只有警告時**，`mesh()` 不會停止，照常為模型建立網格。
 
-`mesh()` 檢查的是以計畫及模擬自己的設定（例如設在模擬上的真空區域）建出的模型，`simulation_drc` 檢查的則是以傳入的計畫、傳入的 route 及[檢查使用的設定](#what-the-check-uses)建出的模型。對同一個計畫，相同的 route 與近似設定在兩者中建出相同的模型；兩個模型不同時，發現的項目也可能不同。
+`mesh()` 檢查的是以計畫及模擬自己的設定（例如它的 route 與埠）建出的模型，`simulation_drc` 檢查的則是以傳入的計畫、傳入的 route 及[檢查使用的設定](#what-the-check-uses)建出的模型。對同一個計畫，相同的 route 與近似設定在兩者中建出相同的模型；兩個模型不同時，發現的項目也可能不同。
 
 修補迴圈未得到乾淨網格而停止時，`mesh()` 也以相同的方式回報。錯誤訊息與文字品質報告先列出網格階段在整個模型中找到的項目：每個類別與量測方式各有幾項、是拒絕還是警告、以 µm 與格點步數表示的最小尺寸、各負責方的數量，以及最小的那一項的完整內容，附上負責方與修改方式。細微結構無論在哪裡都可能耗費修補迴圈的輪數，因此即使某個位置本身沒有發現，這些項目也可能有關。JSON 品質報告在 `meshing_stage` 下列出每一項發現。接著是剩餘劣質元素以 µm 表示的位置（`stop_places`），以及這些位置上的發現，附上負責方與修改方式。一個位置是迴圈在該處所施加細化的涵蓋範圍。沒有任何發現的位置，由 SCGSim 負責說明；模型在其他地方有發現時，也要處理那些項目。
 
@@ -128,14 +130,13 @@ for simulation, options in checks:
 - 以 `route` 與 `approximation_profile` 傳入的 route 與近似設定，與 `set_route` 接受的相同；未傳入時為 Route B；
 - `EigenmodeSim`：計畫中所有已定義的端口薄片都作為集總端口，電感為固定值，不影響幾何；
 - `ElectrostaticSim`：不設端子，網格化之前不需要端子；
-- `surface_epr_specs` 的條帶；未給時不切條帶。
 
 以 (0, 0, 1000) µm 填充的真空止於版圖的平面範圍，所以請畫出決定這個範圍的幾何：die 外框或接地平面。只在一點碰到這個範圍的導體，例如周圍沒有畫任何東西的單獨圓形焊墊，會被 `NonManifoldError` 拒絕；[只在一點碰到邊界的導體](known-geometry-problems.qmd#boundary-point-pinch)說明原因與該畫什麼。
 
 `simulation_drc()` 寫入暫存資料夾並於結束後移除。幾何階段不加入自己的規則，因此其錯誤與相同計畫、相同設定下該類別 `mesh()` 所拋出的相同。網格階段的規則就是上述類別。
 
 ::: {.callout-note title="通過代表什麼"}
-通過代表計畫的模型，在所檢查的 route 與近似設定上以上述設定建出後被接受，且沒有任何會被網格階段類別拒絕的邊或面，但不代表切出了多少條帶。它不保證其他設定能夠建模：其他 route 或近似設定、Electrostatic 端子、集總支撐，或設在模擬上而非計畫上的真空。若要檢查特定設定，請執行該模擬自己的 `mesh()`。通過也不保證能得到乾淨的網格：網格階段的類別用來防範細微結構，`mesh()` 仍可能以 `MeshRepairError` 中止，此時錯誤會指出中止的位置。
+通過代表計畫的模型，在所檢查的 route 與近似設定上以上述設定建出後被接受，且沒有任何會被網格階段類別拒絕的邊或面，但不代表切出了多少條帶。它不保證其他設定能夠建模：其他 route 或近似設定、Electrostatic 端子或集總支撐。若要檢查特定設定，請執行該模擬自己的 `mesh()`。通過也不保證能得到乾淨的網格：網格階段的類別用來防範細微結構，`mesh()` 仍可能以 `MeshRepairError` 中止，此時錯誤會指出中止的位置。
 :::
 
 ## AEDT 本徵模態模擬的檢查 {#aedt-eigenmode-check}
@@ -150,7 +151,7 @@ for simulation, options in checks:
 ```python
 from scgsim.aedt import EigenmodeSim
 
-report = EigenmodeSim.simulation_drc(plan, surface_epr_specs=surface_epr_specs, modeling="solid")  # 或 "thin_film"；沒有預設值
+report = EigenmodeSim.simulation_drc(plan, modeling="solid")  # 或 "thin_film"；沒有預設值
 print(report.render_text())  # geometry stage: passed
 ```
 

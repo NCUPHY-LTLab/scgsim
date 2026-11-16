@@ -9,11 +9,11 @@ execute:
   enabled: false
 ---
 
-請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。該教學會使用公開元件與 coupon 輸入定義 `snapshot` 和 `port_name`。本頁以[一般 Palace 本徵模](course/palace-eigenmode.qmd)為基礎，加入具來源歸屬的薄膜與來源連結的電感端口。請在建立網格前完成設定。文件建置不會建立網格，也不會執行 Palace。
+請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。該教學會使用公開元件與 coupon 輸入定義 `plan`、`snapshot` 和 `port_name`。本頁以[一般 Palace 本徵模](course/palace-eigenmode.qmd)為基礎，加入具來源歸屬的薄膜與來源連結的電感端口。請在建立網格前完成設定。文件建置不會建立網格，也不會執行 Palace。
 
 ## 設定本徵模與 EPR 輸出 {#configure-eigenmode-and-epr-outputs}
 
-不可變的 snapshot 已包含 GDS、準備好的堆疊、最終 Net 對應，以及共用的外部真空範圍。Palace 會直接使用此真空範圍。此 coupon 的八個接地短路凸塊是其版圖中繪製的凸塊。來源端口是已準備的 `chip/device/o_junction_lumped` 薄片；其限定名稱與目標層來自元件註記。
+不可變的 snapshot 已包含 GDS、準備好的堆疊、最終 Net 對應，以及共用的外部真空範圍。Palace 會直接使用此真空範圍。Surface EPR 也是幾何的一部分，所以下方的薄膜以 `plan.set_surface_epr` 設定在計畫上，再重新準備計畫。此 coupon 的八個接地短路凸塊是其版圖中繪製的凸塊。來源端口是已準備的 `chip/device/o_junction_lumped` 薄片；其限定名稱與目標層來自元件註記。
 
 ```python
 from pathlib import Path
@@ -35,10 +35,7 @@ for kind, record in interface_presets.items():
     if record["interface_type"] != kind:
         raise ValueError(f"{preset_names[kind]} is not an {kind} preset")
 
-sim = EigenmodeSim()
-sim.set_plan(snapshot)
-sim.set_output_dir(palace_run_dir)
-sim.set_surface_epr(
+plan.set_surface_epr(
     {
         kind: {
             "thickness": record["thickness"],
@@ -51,6 +48,11 @@ sim.set_surface_epr(
         for kind, record in interface_presets.items()
     }
 )
+snapshot = plan.prepare()
+
+sim = EigenmodeSim()
+sim.set_plan(snapshot)
+sim.set_output_dir(palace_run_dir)
 sim.add_port(
     port_name,
     layer="D1_BOTTOM_M1",
@@ -81,13 +83,13 @@ sim.set_numerical(
 )
 ```
 
-本例透過 `inset_margins_um` 要求邊距列。每個邊距會在整面基準列旁，多一列距最近 gap edge 至少那麼多微米的那部分表面。`set_surface_epr` 要在 `mesh()` 之前執行，因為 SGB 會把邊距切進幾何；鍵與限制列於[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。只需要基準時，請省略 `inset_margins_um`。本例沒有設定網格控制，所以 `mesh()` 使用預設的 `FeatureRecipe` 與品質門檻，見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
+本例透過 `inset_margins_um` 要求邊距列。每個邊距會在整面基準列旁，多一列距最近 gap edge 至少那麼多微米的那部分表面。規格在 `prepare()` 之前設定在計畫上，因為 SGB 會把邊距切進幾何；鍵與限制列於[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。只需要基準時，請省略 `inset_margins_um`。本例沒有設定網格控制，所以 `mesh()` 使用預設的 `FeatureRecipe` 與品質門檻，見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
 MA／MS／SA 記錄是 OrPen `LiteratureCentral` 建模預設值，不是材料量測值。只有在你的研究採用具明確來源歸屬的記錄時，才替換這些值。要求的兩個邊距是基準列以外的替代估算。`bulk_domain_ids=None` 會選取所有已設定的體積能量項目；此選擇不會移除物理區域，也不會改變正規化。若未另行指定，Palace 外部 Region 表面仍使用自然 PMC；邊界比較與解讀限制請見 [EPR 方法指南](eigenmode-epr.qmd#workflow-and-state-contract)。
 
 ## 建立網格前檢視正規化輸入 {#review-normalized-inputs-before-meshing}
 
-`input_summary()` 會顯示 `mesh()` 將用來建模的輸入與目前 Palace 設定：已綁定的計畫，加上模擬的真空區域、所要求的埠，以及所選的 Route A 或 Route B。它不會建立網格或啟動求解器。模型需要真空區域：未呼叫 `sim.set_vacuum_region(...)` 且計畫沒有真空時，此呼叫與 `mesh()` 會拒絕。
+`input_summary()` 會顯示 `mesh()` 將用來建模的輸入與目前 Palace 設定：已綁定的計畫及其真空區域，加上所要求的埠，以及所選的 Route A 或 Route B。它不會建立網格或啟動求解器。模型需要真空區域：計畫沒有真空時，此呼叫與 `mesh()` 會拒絕，所以層堆疊沒有自己的真空時，請在 `prepare()` 之前呼叫 `plan.set_vacuum_region(...)`。
 
 ```python
 from IPython.display import display

@@ -181,9 +181,9 @@ def eigenmode_sim(component, nets=NETS):
         coupon_padding_um=0.0,
     )
     plan.set_nets(nets)
+    plan.set_vacuum_region(VACUUM_PADDING_UM)
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
-    sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     return sim
 
@@ -393,9 +393,9 @@ def test_a_port_on_conductors_without_a_net_joins_each_end_to_its_own_conductor(
         material_records=MATERIALS,
         coupon_padding_um=0.0,
     )
+    plan.set_vacuum_region(VACUUM_PADDING_UM)
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
-    sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     _, _, record = prepared_port(sim)
     assert [(end["source_entity_id"], end["net_id"]) for end in record["ends"]] == [

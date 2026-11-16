@@ -66,7 +66,7 @@ def meshed_until_the_mesher(  # noqa: PLR0913 -- the layout, the test fixtures, 
         material_records=MATERIALS,
         coupon_padding_um=0.0,
     )
-    sim = configured(simulation, plan.prepare(), None)
+    sim = configured(simulation, plan.prepare())
     sim.set_route(route, approximation_profile=approximation_profile)
     sim.set_output_dir(tmp_path / "run")
     monkeypatch.setattr(build_module, "mesh_sgb", meshing_reached)
