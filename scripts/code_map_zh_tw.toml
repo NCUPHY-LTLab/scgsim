@@ -237,8 +237,8 @@ Next.zh = "使用者執行 Palace；``results`` 讀取回傳的資料夾。``cor
 ["palace/source"]
 summary.en = "From a bound plan to the input of the geometry build."
 summary.zh = "從綁定的計畫到幾何建構的輸入。"
-In.en = "a ``GeometryPlanSnapshot`` and the simulation's vacuum region, ports and Surface-EPR specs."
-In.zh = "``GeometryPlanSnapshot``，以及模擬的真空區域、埠與 Surface-EPR 規格。"
+In.en = "a ``GeometryPlanSnapshot``, with its vacuum region and Surface-EPR specs, and the simulation's route and ports."
+In.zh = "``GeometryPlanSnapshot``（含其真空區域與 Surface-EPR 規格），以及模擬的 route 與埠。"
 Out.en = "the prepared geometry request."
 Out.zh = "準備好的幾何請求。"
 Next.en = "``mesh``."
