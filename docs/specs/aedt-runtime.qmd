@@ -413,9 +413,13 @@ is refused (issue #67 decision 6).
 
 The EPR of an SGB model reads what it integrates from the sidecar and the
 prepared record, without AEDT (`scgsim.aedt.epr.sgb_source`). The domains
-are the imported dielectric solids, by AEDT object name, and the `Region`;
-a conductor solid is PEC and holds no field. Each sidecar Surface-EPR row of a
-declared type is integrated once, on the non-model sheet of its faces. The
+are the imported dielectric solids, by AEDT object name, and the `Region`:
+one domain however many vacuum volumes the box holds (a substrate spanning it
+splits the vacuum above and below), since the Region is one box and they must
+share one material. A conductor solid is PEC and holds no field. Each sidecar
+Surface-EPR row of a declared type is integrated once, on the non-model sheet
+of its faces; a sheet row's faces are those its `face_sides` names, so the
+`MS` row of a sheet that overhangs vacuum leaves the overhang out. The
 reported contributions group the rows as Palace's `Dielectric` rows do: per
 interface type and surface unit (an unbanded row, or every band of one band
 family) a baseline over all its rows, and per inset margin an entry over its
@@ -449,7 +453,8 @@ handoff of a `PreparedSgbModel` whose `lumped_ports` are its two ports
 `hfss-driven-geometry.v1`, mode `terminal`) carries the model; its `ports` are
 the model's. The request requires ports 1 and 2 with distinct names and one
 shared ordered reference; each port sheet's two host Entities must be one of
-its port's signal Entities and one of its reference Entities. A Driven model
+its port's signal Entities and one of its reference Entities, and no Entity
+of a port may be both, so the two hosts take the two roles. A Driven model
 carries no junctions, lumped RLCs or Surface-EPR specs. The handoff carries the
 model's four files in `model/`, and the receipt source binds `sgb_model_sha256`
 and `sgb_model_files`, as for HFSS Eigenmode. A request payload with `geometry`
@@ -479,8 +484,11 @@ model that has them. Each port is then:
 
 After the save, every port is read back from the saved design: a Terminal
 `Lumped Port` on exactly its faces, its one Terminal the saved child on exactly
-its edges. The receipt keeps these records, the native properties and the
-reference conductors AEDT records. Result reading requires the receipt's
+its edges. The reference conductors AEDT records, when it records any, must be
+the conductor solids of the ports' reference hosts; AEDT 2024.2 recorded none
+in the development runs of either route, and a Route A host is a Perfect E
+sheet, not a solid. The receipt keeps these records, the native properties and
+the reference conductors AEDT records. Result reading requires the receipt's
 geometry to be the request's model as imported (its identity and the guard's
 solids), each port record to be the one the import made, and the ordered
 S-parameters and Touchstone of the declared sweep.

@@ -550,13 +550,20 @@ def rectangular_junction_pair() -> EffectiveInput:
 
 
 def rectangular_junction_source(
-    vacuum: str = "upper_air", *, bump: bool = False
+    vacuum: str = "upper_air",
+    *,
+    bump: bool = False,
+    substrate_x_min_um: float = -4,
+    vacuum_z_min_um: float | None = None,
 ) -> tuple[GeometryBuildInput, dict[str, Any]]:
     """The source and stack of :func:`rectangular_junction_pair` before physical interpretation.
 
     ``vacuum`` names the vacuum region above the metals (``VACUUM_REGION`` for an AEDT model, whose
     Region is that box).  With ``bump`` a 2.75 um tall ``finite_volume`` body of Net ``A`` stands on the
-    left film (:data:`JUNCTION_BUMP_LOOP`): a finite body that is not a film.
+    left film (:data:`JUNCTION_BUMP_LOOP`): a finite body that is not a film.  ``substrate_x_min_um``
+    above -2 leaves the left end of the left film over vacuum, and ``vacuum_z_min_um`` below -2 puts
+    vacuum under the substrate as well (both for ``VACUUM_REGION``, whose box fills what the substrate
+    leaves).
     """
     declaration = PhysicalLayerDeclaration(
         "film",
@@ -625,12 +632,15 @@ def rectangular_junction_source(
             "direction_sign_convention": "gdsfactory_port_orientation_outward",
         },
     )
-    substrate = solution_region("substrate", "dielectric", "Si", (-4, 14, -2, 4, -2, 0))
+    substrate = solution_region(
+        "substrate", "dielectric", "Si", (substrate_x_min_um, 14, -2, 4, -2, 0)
+    )
+    floor = -2 if vacuum_z_min_um is None else vacuum_z_min_um
     upper = solution_region(
         vacuum,
         "vacuum",
         "air",
-        (-4, 14, -2, 4, -2 if vacuum == "VACUUM_REGION" else 0, 4.25),
+        (-4, 14, -2, 4, floor if vacuum == "VACUUM_REGION" else 0, 4.25),
     )
     regions = {
         item.semantic_id: {

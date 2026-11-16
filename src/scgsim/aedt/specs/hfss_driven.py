@@ -161,8 +161,9 @@ class HfssDrivenGeometrySpec:
 def validate_driven_ports(model: PreparedSgbModel) -> None:
     """Check the model's lumped ports against the two-port V1 contract and the sidecar's port sheets.
 
-    The ports are 1 and 2 with distinct names and one shared, ordered reference.  Each port sheet joins two
-    host conductors; one must be a signal Entity of its port and the other a reference Entity.
+    The ports are 1 and 2 with distinct names and one shared, ordered reference.  No Entity of a port is both
+    signal and reference.  Each port sheet joins two host conductors; one must be a signal Entity of its port
+    and the other a reference Entity.
     """
     ports = model.lumped_ports
     if (
@@ -182,6 +183,12 @@ def validate_driven_ports(model: PreparedSgbModel) -> None:
         for record in sidecar["port"].values()
     }
     for port in ports:
+        both = sorted(set(port.signal_entity_ids) & set(port.reference_entity_ids))
+        if both:
+            raise ValueError(
+                f"port {port.name!r}: {both} is both a signal and a reference Entity; a lumped port's "
+                "Terminal goes on its signal conductor and the other conductor is its reference"
+            )
         sheet_hosts = hosts[port_group(port.port_sheet_id)]
         signal = [h for h in sheet_hosts if h in port.signal_entity_ids]
         reference = [h for h in sheet_hosts if h in port.reference_entity_ids]

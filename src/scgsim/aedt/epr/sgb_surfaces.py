@@ -1,7 +1,9 @@
 """Bind each Surface-EPR row and junction of an imported SGB model to one AEDT surface selection, and choose how it is integrated.
 
 A Surface-EPR row of the sidecar (``surface_epr_rows``) is one interface type on one group: ``MA``
-(metal-air), ``MS`` (metal-substrate) or ``SA`` (substrate-air).  Its faces are the group's planned faces.
+(metal-air), ``MS`` (metal-substrate) or ``SA`` (substrate-air).  Its faces are the group's planned faces;
+a sheet row's are only those its ``face_sides`` names, so the ``MS`` row of a sheet overhanging vacuum leaves
+the overhang out (:func:`row_faces`).
 A face two imported solids share imports once on each (issue #67), so each face is counted once, on the copy
 owned by the solid on the type's dielectric side, the way Palace sides a shared sheet by its type:
 
@@ -183,7 +185,7 @@ def surface_face_bindings(
     members = views.group_members(sidecar)
     bindings = {}
     for row, record in sorted(rows.items()):
-        planned = members[record["group"]]
+        planned = row_faces(record, members[record["group"]])
         # A sheet group's faces are read on their dielectric side whatever the row type (see the module).
         side = (
             "SHEET"
@@ -203,6 +205,18 @@ def surface_face_bindings(
             faces=faces,
         )
     return bindings
+
+
+def row_faces(record: Mapping[str, Any], members: Sequence[str]) -> list[str]:
+    """The faces of a Surface-EPR row: its group's ``members``, only those its ``face_sides`` names for a sheet row.
+
+    The two rows of one sheet group share its faces but not always their support: a face over vacuum on both
+    sides has an ``MA`` side and no ``MS`` side, so the ``MS`` row's ``face_sides`` leaves it out.
+    """
+    face_sides = record["face_sides"]
+    if face_sides is None:
+        return list(members)
+    return [face for face in members if face in face_sides]
 
 
 def selected_copy(

@@ -3,8 +3,10 @@
 :func:`~scgsim.aedt.runtime.families.sgb_ports.assign_lumped_port` records each port as it is assigned.
 After the project is saved, :func:`read_saved_lumped_ports` checks every record against the saved design:
 the port is a Terminal ``Lumped Port`` on exactly the faces it was given, and its one Terminal is the saved
-child of that port on exactly the edges it was given.  The saved records, the port's and Terminal's native
-properties and the reference conductors AEDT chose are kept in the receipt.
+child of that port on exactly the edges it was given.  The reference conductors AEDT records, when it records
+any, must be the conductor solids of the ports' reference hosts (each sheet's host that is not its signal
+host); a Route A host is a Perfect E sheet, not a solid, so there it records none.  The saved records, the
+port's and Terminal's native properties and the reference conductors AEDT chose are kept in the receipt.
 """
 
 from __future__ import annotations
@@ -13,10 +15,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from scgsim.aedt.runtime.native.common import detached_data
+from scgsim.contracts.sgb_sidecar import Sidecar
 
 
 def read_saved_lumped_ports(
-    hfss: Any, ports: list[dict[str, Any]]
+    hfss: Any, ports: list[dict[str, Any]], sidecar: Sidecar
 ) -> list[dict[str, Any]]:
     """Each assigned lumped-port record with its saved port and Terminal; a difference raises."""
     setup = hfss.design_properties["BoundarySetup"]
@@ -27,6 +30,13 @@ def read_saved_lumped_ports(
             "TerminalReferenceConductors", ()
         )
     ]
+    declared = declared_reference_objects(sidecar, ports)
+    # AEDT 2024.2 recorded none in the development runs of both routes, so an empty record is kept as read.
+    if references and sorted(references) != declared:
+        raise RuntimeError(
+            f"the saved design's Terminal reference conductors are {sorted(references)}; the ports' "
+            f"reference hosts are the conductors {declared}"
+        )
     out = []
     for record in ports:
         name, terminal = record["boundary"], record["terminal_excitation"]
@@ -66,6 +76,25 @@ def read_saved_lumped_ports(
             }
         )
     return out
+
+
+def declared_reference_objects(
+    sidecar: Sidecar, ports: list[dict[str, Any]]
+) -> list[str]:
+    """The AEDT objects of the ports' reference hosts: each conductor solid of a sheet host that is not its signal host."""
+    hosts = {
+        host
+        for record in ports
+        for host in record["host_entity_ids"]
+        if host != record["signal_host"]
+    }
+    return sorted(
+        str(volume["aedt_name"])
+        for volume in sidecar["volume"].values()
+        if volume["kind"] == "conductor"
+        and volume["emitted"]
+        and volume["entity"] in hosts
+    )
 
 
 def _oo_properties(hfss: Any, path: str) -> dict[str, Any]:

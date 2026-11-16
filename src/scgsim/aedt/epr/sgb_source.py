@@ -3,7 +3,8 @@
 :func:`sgb_epr_source` reads, without AEDT:
 
 1. the **domains**: each imported dielectric solid, by its AEDT object name, and the ``Region``, the vacuum
-   AEDT creates from the plan's ``VACUUM_REGION`` box.  A conductor solid is PEC, so it holds no field;
+   AEDT creates from the plan's ``VACUUM_REGION`` box: one domain however many vacuum volumes the box holds,
+   since they share one material.  A conductor solid is PEC, so it holds no field;
 2. the **films**: one per interface type the prepared Surface-EPR specs declare, ``MA`` (metal-air), ``MS``
    (metal-substrate) or ``SA`` (substrate-air), with its thickness in metres, permittivity and loss tangent;
 3. the **rows**: every sidecar Surface-EPR row of a declared type on a selected group (``surface_epr_groups``,
@@ -153,20 +154,25 @@ def sgb_epr_source(
 def epr_domains(model: PreparedSgbModel, sidecar: Sidecar) -> dict[str, EprDomain]:
     """The imported dielectric solids by AEDT object name, then the Region of the vacuum's material."""
     out: dict[str, EprDomain] = {}
-    vacuum: list[str] = []
+    vacuum: set[str] = set()
     for volume_id, volume in sorted(sidecar["volume"].items()):
         if volume["kind"] == "vacuum":
-            vacuum.append(volume["material"])
+            vacuum.add(volume["material"])
         elif volume["kind"] == "dielectric" and volume["emitted"]:
             name = volume["aedt_name"]
             if name is None:
                 raise ValueError(f"the emitted volume {volume_id!r} has no AEDT name")
             out[name] = _domain(model, name, volume["material"])
-    if len(vacuum) != 1 or REGION in out:
+    # The vacuum may be several volumes (a substrate spanning the box splits it above and below); the Region
+    # is one box, so they must share one material, as the import requires.
+    if len(vacuum) != 1:
         raise ValueError(
-            f"the SGB model needs one vacuum volume for the Region and no solid named {REGION!r}"
+            f"the SGB model's vacuum volumes have materials {sorted(vacuum)}; the Region is one box "
+            "of one material"
         )
-    out[REGION] = _domain(model, REGION, vacuum[0])
+    if REGION in out:
+        raise ValueError(f"the SGB model has a dielectric solid named {REGION!r}")
+    out[REGION] = _domain(model, REGION, vacuum.pop())
     return out
 
 

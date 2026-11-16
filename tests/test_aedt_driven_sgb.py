@@ -16,7 +16,12 @@ import pytest
 
 pytest.importorskip("OCP")
 
-from sgb_driven_inputs import DRIVEN_PORTS, driven_model  # noqa: E402
+from sgb_driven_inputs import (  # noqa: E402
+    DRIVEN_PORTS,
+    TWO_PORT_SHEETS,
+    driven_model,
+    lumped_two_port_source,
+)
 from sgb_extreme_cases import FIXTURES, build_model  # noqa: E402
 from test_aedt_public_preparation import junction_model  # noqa: E402
 from test_sgb_step_guard import export  # noqa: E402
@@ -28,6 +33,10 @@ from scgsim.aedt import (  # noqa: E402
     LumpedTerminalPort,
     prepare_handoff,
     prepare_hfss_driven_from_geometry,
+)
+from scgsim.aedt.preparation.sgb_model import prepare_sgb_model  # noqa: E402
+from scgsim.aedt.runtime.families.hfss_ports import (  # noqa: E402
+    read_saved_lumped_ports,
 )
 from scgsim.aedt.runtime.families.sgb_boundaries import (  # noqa: E402
     plan_hfss_boundaries,
@@ -110,6 +119,30 @@ def test_the_imports_first_step_runs_before_the_handoff_is_written(
     assert not (tmp_path / "handoff").exists()
 
 
+def test_an_untreated_port_sheet_is_refused_before_the_handoff_is_written(tmp_path):
+    """Issue #67 review B4: two treated port sheets and one untreated one; preparation refuses, writing nothing."""
+    source, stack = lumped_two_port_source(
+        sheets=(*TWO_PORT_SHEETS, ("port_3", 3, "pad_1", 4.5, 5))
+    )
+    model = prepare_sgb_model(
+        source,
+        prepared_stack=stack,
+        modeling="solid",
+        output_dir=tmp_path / "model",
+        ports=DRIVEN_PORTS,
+    )
+    with pytest.raises(ValueError, match=r"PORT::port_3"):
+        prepare_hfss_driven_from_geometry(
+            aedt_version="2024.2",
+            model=model,
+            project_name="Driven",
+            design_name="Design",
+            run_control=RUN,
+            output_dir=tmp_path / "handoff",
+        )
+    assert not (tmp_path / "handoff").exists()
+
+
 def test_a_driven_request_of_the_native_builder_is_refused(tmp_path):
     """A Driven request that carries a native planar geometry is refused with the reason (decision 6)."""
     plan = _handoff(tmp_path / "handoff")
@@ -126,6 +159,24 @@ def test_a_port_whose_sheet_does_not_join_its_signal_and_reference_is_refused():
     wrong = replace(DRIVEN_PORTS[0], signal_entity_ids=("chip/pad_2",))
     model = replace(driven_model(), lumped_ports=(wrong, DRIVEN_PORTS[1]))
     with pytest.raises(ValueError, match="port 'p1': its sheet 'port_1' joins"):
+        _spec(model)
+
+
+def test_a_port_whose_signal_is_also_its_reference_is_refused():
+    """Issue #67 review B3: ground as both roles of both ports passes each count alone, so it is refused by name."""
+    both = tuple(
+        replace(
+            port,
+            signal_entity_ids=("chip/ground",),
+            reference_entity_ids=("chip/ground",),
+        )
+        for port in DRIVEN_PORTS
+    )
+    model = replace(driven_model(), lumped_ports=both)
+    with pytest.raises(
+        ValueError,
+        match=r"port 'p1': \['chip/ground'\] is both a signal and a reference Entity",
+    ):
         _spec(model)
 
 
@@ -383,3 +434,66 @@ def test_a_port_face_that_is_not_its_guarded_polygon_is_refused():
     faces[planned] = {**faces[planned], "area_um2": 8.0}
     with pytest.raises(SgbImportError, match="not a flat polygon of its vertices"):
         assign_lumped_port(_Design(_DrawingModeler()), first, faces, tolerance)
+
+
+class _SavedDesign:
+    """The saved design a lumped-port readback reads: its boundaries, reference conductors and port children."""
+
+    def __init__(self, reference_names):
+        ids = {name: 100 + k for k, name in enumerate(reference_names)}
+        self.design_properties = {
+            "BoundarySetup": {
+                "Boundaries": {
+                    "p1": {
+                        "ID": 3,
+                        "BoundType": "Lumped Port",
+                        "LumpedPortType": "Terminal",
+                        "Faces": [1],
+                        "TerminalIDList": [7],
+                    },
+                    "p1_T1": {
+                        "ID": 7,
+                        "BoundType": "Terminal",
+                        "ParentBndID": 3,
+                        "Edges": [5],
+                    },
+                },
+                "ProductSpecificData": {
+                    "TerminalReferenceConductors": list(ids.values())
+                },
+            }
+        }
+        names = {value: name for name, value in ids.items()}
+        self.oeditor = SimpleNamespace(GetObjectNameByID=names.__getitem__)
+        self.odesign = None
+        child = SimpleNamespace(GetPropNames=lambda: ["Name"], GetPropValue=str)
+        self.get_oo_object = lambda design, path: child
+
+
+_PORT_RECORD = {
+    "boundary": "p1",
+    "terminal_excitation": "p1_T1",
+    "faces": [{"object_name": "port_sheet_port_1", "face_id": 1}],
+    "terminal_edges": [5],
+    "host_entity_ids": ["chip/ground", "chip/pad_1"],
+    "signal_host": "chip/pad_1",
+}
+
+
+@pytest.mark.parametrize("recorded", [[], ["chip_ground"]])
+def test_the_saved_reference_conductors_are_the_reference_hosts(recorded):
+    """Issue #67 review B3: AEDT's reference conductors, when it records any, are the reference host's solids."""
+    sidecar = read_sidecar(driven_model().path("sidecar"))
+    (port,) = read_saved_lumped_ports(_SavedDesign(recorded), [_PORT_RECORD], sidecar)
+    assert port["native"]["reference_conductors"] == recorded
+
+
+def test_saved_reference_conductors_other_than_the_reference_hosts_are_refused():
+    """A saved Terminal referred to the signal pad is not the declared excitation, so the readback stops."""
+    sidecar = read_sidecar(driven_model().path("sidecar"))
+    with pytest.raises(
+        RuntimeError,
+        match=r"reference conductors are \['chip_pad_1'\]; the ports' reference hosts are the "
+        r"conductors \['chip_ground'\]",
+    ):
+        read_saved_lumped_ports(_SavedDesign(["chip_pad_1"]), [_PORT_RECORD], sidecar)

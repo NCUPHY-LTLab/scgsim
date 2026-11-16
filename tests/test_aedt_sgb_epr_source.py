@@ -7,8 +7,6 @@ by hand.  Skipped where OCP (the ``occt`` group) is missing.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 pytest.importorskip("OCP")
@@ -37,12 +35,14 @@ from scgsim.aedt.epr.sgb_surfaces import (  # noqa: E402
 )
 from scgsim.aedt.epr.surface import VACUUM_PERMITTIVITY_F_PER_M  # noqa: E402
 from scgsim.aedt.preparation.sgb_model import prepare_sgb_model  # noqa: E402
-from scgsim.aedt.runtime.families.sgb_import import ImportedSgbModel  # noqa: E402
+from scgsim.aedt.runtime.families.sgb_import import planned_import  # noqa: E402
 from scgsim.aedt.specs.epr import (  # noqa: E402
     EprAnalysisRequest,
     NormalizedSurfaceEprTotal,
     PlanarJunction,
 )
+from scgsim.contracts.sgb_sidecar import read_sidecar, views  # noqa: E402
+from scgsim.geometry.sgb.output.exchange.guard import read_step_guard  # noqa: E402
 from scgsim.geometry.surface_epr import normalize_surface_epr_specs  # noqa: E402
 
 pytestmark = pytest.mark.occt
@@ -63,8 +63,8 @@ def _specs(**overrides):
     )
 
 
-def _prepare(tmp_path, modeling, *, specs=None, junction=JUNCTION):
-    source, stack = rectangular_junction_source("VACUUM_REGION")
+def _prepare(tmp_path, modeling, *, specs=None, junction=JUNCTION, **source_options):
+    source, stack = rectangular_junction_source("VACUUM_REGION", **source_options)
     return prepare_sgb_model(
         source,
         prepared_stack=stack,
@@ -159,6 +159,52 @@ def test_a_route_a_sheet_carries_ma_and_ms_rows(tmp_path):
         "MS::chip/left__sheet",
         "MS::chip/left__sheet__inset_0",
     }
+
+
+def test_vacuum_split_by_the_substrate_is_one_region(tmp_path):
+    """Vacuum above and below a substrate spanning the box is two SGB volumes of one material: one Region."""
+    model = _prepare(tmp_path, "solid", vacuum_z_min_um=-3)
+    sidecar = read_sidecar(model.path("sidecar"))
+    vacuum = [v for v in sidecar["volume"].values() if v["kind"] == "vacuum"]
+    assert len(vacuum) == 2
+    source = sgb_epr_source(model)
+    assert {
+        name: (d.material_id, d.relative_permittivity)
+        for name, d in source.domains.items()
+    } == {"substrate": ("Si", 4.0), "Region": ("air", 1.0)}
+
+
+def test_vacuum_volumes_of_two_materials_are_refused(tmp_path):
+    """The Region is one box of one material, so vacuum volumes of two materials have no Region."""
+    model = _prepare(tmp_path, "solid", vacuum_z_min_um=-3)
+    sidecar = read_sidecar(model.path("sidecar"))
+    first = next(v for v in sidecar["volume"].values() if v["kind"] == "vacuum")
+    first["material"] = "other_air"
+    with pytest.raises(
+        ValueError, match=r"vacuum volumes have materials \['air', 'other_air'\]"
+    ):
+        sgb_epr_source(model, sidecar=sidecar)
+
+
+def test_a_sheet_row_selects_only_the_faces_its_face_sides_names(tmp_path):
+    """The left film overhangs the substrate: its MS row leaves the overhang face out, its MA row keeps it."""
+    # No inset margin: a band would need the die outline farther from the cut film than its margin.
+    specs = normalize_surface_epr_specs(dict.fromkeys(("MA", "MS"), FILM), materials={})
+    model = _prepare(tmp_path, "thin_film", specs=specs, substrate_x_min_um=-1)
+    sidecar, imported = _as_imported(model)
+    rows = sidecar["surface_epr_row"]
+    members = views.group_members(sidecar)["chip/left"]
+    ms_faces = set(rows["MS::chip/left__sheet"]["face_sides"])
+    (overhang,) = set(members) - ms_faces
+    assert rows["MA::chip/left__sheet"]["face_sides"][overhang] == "both"
+    bindings = surface_face_bindings(sidecar, imported)
+    # Over vacuum on both sides the overhang is a free face, imported once as its rebuilt sheet.
+    ((sheet, face_id),) = imported.face_copies[overhang].items()
+    assert overhang in imported.sheets
+    assert (sheet, face_id) in bindings["MA::chip/left__sheet"].faces
+    assert (sheet, face_id) not in bindings["MS::chip/left__sheet"].faces
+    assert len(bindings["MS::chip/left__sheet"].faces) == len(ms_faces) == 1
+    assert len(bindings["MA::chip/left__sheet"].faces) == len(members) == 2
 
 
 def test_a_film_in_palace_native_units_is_refused(tmp_path):
@@ -260,15 +306,9 @@ def test_integrals_of_another_model_are_refused(solid):
 
 
 def _as_imported(model):
-    """The import AEDT makes of ``model``: every guarded face once on each solid that bounds it."""
-    guard = json.loads(model.path("guard").read_text(encoding="utf-8"))
-    sidecar = json.loads(model.path("sidecar").read_text(encoding="utf-8"))
-    copies: dict = {}
-    for k, solid in enumerate(guard["solids"]):
-        for j, face in enumerate(solid["faces"]):
-            copies.setdefault(face["face"], {})[solid["aedt_name"]] = 100 * k + j
-    objects = {s["solid"]: s["aedt_name"] for s in guard["solids"]}
-    return sidecar, ImportedSgbModel(objects, copies, {})
+    """The sidecar of ``model`` and the import its guard plans (each face once on each solid, free faces as sheets)."""
+    guard = read_step_guard(model.path("guard"))
+    return read_sidecar(model.path("sidecar")), planned_import(guard)
 
 
 def _requests(model, **selectors):

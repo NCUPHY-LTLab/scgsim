@@ -64,13 +64,14 @@ def _two_port_sheet(name: str, index: int, pad: str, x0: float, x1: float):
 
 
 def lumped_two_port_source(
-    vacuum: str = "VACUUM_REGION",
+    vacuum: str = "VACUUM_REGION", *, sheets=TWO_PORT_SHEETS
 ) -> tuple[GeometryBuildInput, dict[str, Any]]:
     """Two pads beside one ground strip, and a lumped-port sheet from the strip up to each pad.
 
     The pads ``chip/pad_1`` (Net ``P1``) and ``chip/pad_2`` (``P2``) and the strip ``chip/ground`` (``G``) are
     0.25 um face metals on a 2 um substrate.  Port sheet ``port_<k>`` spans the 3 um gap from the strip to
-    pad ``k`` along +y: the source of a two-port HFSS Driven Terminal model.
+    pad ``k`` along +y: the source of a two-port HFSS Driven Terminal model.  ``sheets`` are the port sheets
+    as :data:`TWO_PORT_SHEETS` gives them.
     """
     declaration = PhysicalLayerDeclaration(
         "film",
@@ -108,7 +109,7 @@ def lumped_two_port_source(
         )
         for name, net, loop in TWO_PORT_PADS
     )
-    sheets = tuple(_two_port_sheet(*sheet) for sheet in TWO_PORT_SHEETS)
+    sheets = tuple(_two_port_sheet(*sheet) for sheet in sheets)
     substrate = solution_region("substrate", "dielectric", "Si", (-4, 19, -8, 5, -2, 0))
     upper = solution_region(
         vacuum,

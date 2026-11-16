@@ -36,6 +36,7 @@ from scgsim.aedt.runtime.native.resources import analyze_with_resources
 from scgsim.aedt.specs.common import (
     AedtResources,
 )
+from scgsim.contracts.sgb_sidecar import read_sidecar
 
 
 @dataclass(frozen=True)
@@ -97,7 +98,9 @@ def prepare_hfss(Hfss: Any, run_dir: Path, spec: HfssModelSpec) -> PreparedHfss:
     if not app.save_project() or not project_path.is_file():
         raise RuntimeError("HFSS project was not saved before native port readback")
     setup = read_hfss_setup(app, bound) if bound.run_control is not None else None
-    ports = read_saved_lumped_ports(app, geometry["lumped_ports"])
+    ports = read_saved_lumped_ports(
+        app, geometry["lumped_ports"], read_sidecar(bound.model.path("sidecar"))
+    )
     return PreparedHfss(app, request, project_path, geometry, ports, setup)
 
 
