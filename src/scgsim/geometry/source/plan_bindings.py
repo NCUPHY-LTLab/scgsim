@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -121,3 +122,26 @@ def checked_surface_epr_specs(
             )
         )
     return normalize_surface_epr_specs(specs, materials=materials)
+
+
+def authored_surface_epr_specs(
+    specs: Mapping[str, Mapping[str, Any]],
+    materials: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """``specs`` as the caller wrote them, checked against ``materials`` and detached from the caller.
+
+    The plan keeps what was written, a ``material_id`` included, because ``prepare()`` normalizes it against
+    the stack it prepares.  Every mapping becomes an ordinary dictionary and every sequence a list, so a
+    read-only mapping (``MappingProxyType``) is held like any other.
+    """
+    checked_surface_epr_specs(specs, materials)
+    return _detached(specs)
+
+
+def _detached(value: Any) -> Any:
+    """A copy of ``value`` that shares nothing with it, with plain dictionaries and lists as its containers."""
+    if isinstance(value, Mapping):
+        return {key: _detached(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_detached(item) for item in value]
+    return copy.deepcopy(value)

@@ -68,6 +68,7 @@ from scgsim.geometry.source.plan_assembly import (
     transform_source_point,
 )
 from scgsim.geometry.source.plan_bindings import (
+    authored_surface_epr_specs,
     check_bindings_still_hold,
     checked_surface_epr_specs,
     plan_call,
@@ -276,10 +277,10 @@ class GeometryPlan:
                 and ``SA``, or a spec is invalid (margins not strictly increasing positive reals included).
         """
         if specs is not None:
-            checked_surface_epr_specs(
+            specs = authored_surface_epr_specs(
                 specs, normalize_material_records(self._material_records)
             )
-        self._surface_epr_specs = copy.deepcopy(specs)
+        self._surface_epr_specs = specs
 
     def register_instance(self, path: str, reference: Any) -> None:
         """Register one authored child occurrence and its composed transform."""

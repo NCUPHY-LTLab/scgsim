@@ -8,6 +8,8 @@ into the snapshot every simulation reads.  The refusals are those a simulation's
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 import pytest
 from test_simulation_drc import BANDED, FILM, layout_plan, two_pads
 
@@ -104,6 +106,29 @@ def test_a_plan_without_specs_or_turned_off_prepares_none(plan):
     plan.set_surface_epr(BANDED)
     plan.set_surface_epr(None)
     assert plan.prepare().surface_epr_specs is None
+
+
+READ_ONLY = {
+    "the specs": MappingProxyType({"MA": {**FILM, "inset_margins_um": [0.5, 1.0]}}),
+    "one spec": {"MA": MappingProxyType({**FILM, "inset_margins_um": (0.5, 1.0)})},
+    "the margins by entity": {
+        "MA": {
+            **FILM,
+            "inset_margins_by_entity_um": MappingProxyType({"chip/PAD": (0.5, 1.0)}),
+        }
+    },
+}
+
+
+@pytest.mark.parametrize("case", READ_ONLY)
+def test_a_read_only_mapping_is_held_like_any_other(plan, case):
+    """The setter takes a ``Mapping``: a ``MappingProxyType`` at any depth, with tuples for its margins, is accepted."""
+    specs = READ_ONLY[case]
+    plan.set_surface_epr(specs)
+    snapshot = plan.prepare()
+    assert snapshot.surface_epr_specs == normalize_surface_epr_specs(
+        specs, materials=snapshot.stack["materials"]
+    )
 
 
 def test_the_specs_are_detached_from_the_caller_and_the_snapshot(plan):
