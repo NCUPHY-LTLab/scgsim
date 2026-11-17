@@ -246,7 +246,7 @@ EigenmodeSim.simulation_drc(plan, route="A")
 
 ### 計畫上的 Surface EPR 與真空 {#plan-owns-surface-epr}
 
-`3.0.0rc3` 之後，Surface-EPR 規格與真空區域只在 `GeometryPlan` 上設定一次，別處不再設定（issue #268）：兩者都改變幾何，也都與求解器無關。模擬從 `set_plan` 綁定的快照讀取它們，`simulation_drc` 從它拿到的計畫讀取。被移除的呼叫沒有相容層。
+從 `3.0.0rc4` 起，Surface-EPR 規格與真空區域只在 `GeometryPlan` 上設定一次，別處不再設定（issue #268）：兩者都改變幾何，也都與求解器無關。模擬從 `set_plan` 綁定的快照讀取它們，`simulation_drc` 從它拿到的計畫讀取。被移除的呼叫沒有相容層。
 
 ::: {.askr-table-compact}
 | 已移除 | 取代方式 |

@@ -470,7 +470,7 @@ write the handoff, so they refuse a model the import cannot realize. See
 
 ### Surface EPR and the vacuum on the plan {#plan-owns-surface-epr}
 
-After `3.0.0rc3` the Surface-EPR specs and the vacuum region are set on the
+From `3.0.0rc4` the Surface-EPR specs and the vacuum region are set on the
 `GeometryPlan`, once, and nowhere else (issue #268): both change the geometry
 and neither depends on the solver. The simulation reads them from the snapshot
 `set_plan` binds, and `simulation_drc` from the plan it is given. The removed
