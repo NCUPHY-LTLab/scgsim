@@ -29,15 +29,21 @@ STACK = {
 }
 
 
-def two_pad_snapshot(monkeypatch):
-    """The prepared plan of two pads in the stand-in PDK's vacuum, as a user binds it with ``set_plan``."""
-    return GeometryPlan(
+def two_pad_snapshot(monkeypatch, surface_epr_specs=None):
+    """The prepared plan of two pads in the stand-in PDK's vacuum, as a user binds it with ``set_plan``.
+
+    ``surface_epr_specs``, when given, are the plan's.
+    """
+    plan = GeometryPlan(
         two_pads(monkeypatch, gap_um=10.0),
         root_id="chip",
         layer_stack=LAYER_STACK,
         material_records=MATERIALS,
         coupon_padding_um=0.0,
-    ).prepare()
+    )
+    if surface_epr_specs is not None:
+        plan.set_surface_epr(surface_epr_specs)
+    return plan.prepare()
 
 
 @pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
@@ -167,7 +173,7 @@ def stand_in_mesh_stages(monkeypatch, module, tmp_path):
 def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     sim_type, monkeypatch, tmp_path
 ):
-    """``mesh()`` hands the Surface-EPR specs (their margins become bands) to the geometry and the controls to the mesher.
+    """``mesh()`` hands the plan's Surface-EPR specs (their margins become bands) to the geometry and the controls to the mesher.
 
     The meshing-stage check runs between the two.
     """
@@ -181,9 +187,10 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     )
     monkeypatch.setattr(layout_ports, "prepare_mesh_input", lambda **kwargs: prepared)
     sim = sim_type()
-    sim.set_plan(two_pad_snapshot(monkeypatch))
+    sim.set_plan(
+        two_pad_snapshot(monkeypatch, {"MA": {**FILM, "inset_margins_um": [0.5]}})
+    )
     sim.set_output_dir(tmp_path / "run")
-    sim.set_surface_epr({"MA": {**FILM, "inset_margins_um": [0.5]}})
     sim.set_mesh(quality_threshold=0.02, budgets=Budgets(max_rounds=1))
     sim.mesh()
     assert [stage for stage, _ in calls] == ["geometry", "check", "mesh"]
@@ -194,14 +201,14 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     )
 
 
-def test_surface_epr_set_after_mesh_invalidates_it():
-    """Surface EPR is geometry: calling ``set_surface_epr`` again discards the mesh, config and handoff."""
+def test_a_plan_with_other_surface_epr_invalidates_the_mesh(monkeypatch):
+    """Surface EPR is geometry: binding the plan prepared with other specs discards the mesh, config and handoff."""
     sim = ElectrostaticSim()
-    sim._materials = STACK["materials"]  # noqa: SLF001 -- stands for set_plan()
+    sim.set_plan(two_pad_snapshot(monkeypatch))
     sim._mesh_result = object()  # noqa: SLF001 -- stands for a generated mesh
     sim.config_path = "config.json"  # type: ignore[assignment]
-    sim._stage = Stage.CONFIG_WRITTEN  # noqa: SLF001 -- stands for set_plan(), mesh() and write_config()
-    sim.set_surface_epr({"MA": {**FILM}})
+    sim._stage = Stage.CONFIG_WRITTEN  # noqa: SLF001 -- stands for mesh() and write_config()
+    sim.set_plan(two_pad_snapshot(monkeypatch, {"MA": {**FILM}}))
     assert sim._mesh_result is None  # noqa: SLF001
     assert sim.config_path is None
     assert sim._stage is Stage.BOUND  # noqa: SLF001

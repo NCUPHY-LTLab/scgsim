@@ -113,7 +113,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 - **基準 `scgsim.aedt._epr_geometry` → 目前標準負責模組 `scgsim.aedt.preparation.planar_junctions`.** 基準名稱： `planar_junction_from_port`.
 - **基準 `scgsim.aedt._epr_results` → 目前標準負責模組 `scgsim.aedt.epr.reanalysis`.** 基準名稱： `reanalyze_epr`.
 - **issue #67 新增 → 標準負責模組 `scgsim.aedt.preparation.sgb_model`。** 名稱：`PreparedSgbModel`、`prepare_sgb_model`；`prepare_hfss_eigenmode_from_geometry` 與 `prepare_hfss_driven_from_geometry` 接收 `model=`。
-- **由 issue #67 移除（HFSS Eigenmode 改用 SGB 模型）。** `SurfaceEprSpec`（改以 `EigenmodeSim.set_surface_epr(specs)` 宣告 Surface EPR，即 Palace 依介面型別的 specs）、`EprAnalysisRequest.surface_contribution_ids`（改為 `surface_epr_groups`，即 sidecar 的 Surface-EPR 群組）、`combine_epr_mode` 與 `combine_surface_epr_mode`（平面組合），以及 `analyze_epr(geometry=..., geometry_workers=...)`（改為 `analyze_epr(model=...)`）。
+- **由 issue #67 移除（HFSS Eigenmode 改用 SGB 模型）。** `SurfaceEprSpec`（改以 `GeometryPlan.set_surface_epr(specs)` 宣告 Surface EPR，即 Palace 依介面型別的 specs；見[計畫上的 Surface EPR 與真空](#plan-owns-surface-epr)）、`EprAnalysisRequest.surface_contribution_ids`（改為 `surface_epr_groups`，即 sidecar 的 Surface-EPR 群組）、`combine_epr_mode` 與 `combine_surface_epr_mode`（平面組合），以及 `analyze_epr(geometry=..., geometry_workers=...)`（改為 `analyze_epr(model=...)`）。
 - **由 issue #67 移除（Q3D 改用 SGB 模型）。** `Q3dBodySpec` 與不經來源的本體請求（`Q3dSpec` 改帶 `PreparedSgbModel` 與該模型的 Net），以及 `prepare_q3d_from_geometry` 的 `materials` 與 `region_padding_um` 參數（材料取自堆疊，Region 為計畫的 `VACUUM_REGION`，決策 5）。
 - **由 issue #67 移除（HFSS Driven Terminal 改用 SGB 模型、原生建構器與 GDS 路徑）。** `HfssEigenmodeSpec`、`HfssDrivenSpec`、`HfssDrivenMode`、`LayerImport`、`ObjectBinding`、`LengthMeshSpec` 與 `gds_path`（改從 `GeometryPlan` 快照準備：Eigenmode 用 `EigenmodeSim`，Driven Terminal 用 `prepare_sgb_model(..., ports=...)` 與 `prepare_hfss_driven_from_geometry(model=...)`）；`PreparedPlanarGeometry` 與 `prepare_planar_geometry_input`（要求改帶 `PreparedSgbModel`）；`prepare_hfss_driven_from_geometry` 的 `modeling`、`geometry`、`ports` 與 `geometry_workers` 參數；`--geometry-workers` 與 `ExecutionOptions.geometry_workers`。`prepare_handoff(spec=...)` 只接受 `Q3dSpec` 與 `Q2dSpec`，並拒絕 HFSS 要求，指出應使用的 HFSS 準備函式。
 - **由 issue #67 移除（Q3D 只有 C/G；AC/RL 在 issue #265 中重新設計）。** `Q3dTerminalPair` 與 `prepare_q3d_from_geometry` 的 `terminal_pairs` 參數、`Q3dSpec.solve_ac_rl`，以及 `Q3dNetSpec` 的 `source_object`、`source_side`、`sink_object` 與 `sink_side` 欄位。Q3D 要求只擷取電容與電導。
@@ -178,8 +178,8 @@ Palace 現在以 SGB 建立幾何，並用 `scgsim.meshing` 產生網格。本�
 
 Surface EPR 邊距變成了幾何，隨之而來的改變如下：
 
-- 請在 `mesh()` 之前呼叫 `set_surface_epr`。在它之後呼叫，會使網格失效。
-- 路徑與 Surface EPR 是兩個設定。`set_surface_epr(*, representation, specs, route_a_thin_film=None, approximation_profile=None)` 改為 `set_route(route, *, approximation_profile=None)` 與 `set_surface_epr(specs)`。Route B 是預設值，所以 Route B 模擬兩者都不必為路徑呼叫。只有呼叫過 `set_surface_epr(specs)` 才會計算 Surface EPR，Eigenmode 與 Electrostatic 相同：請刪除原本不要求任何東西的呼叫（Route B 搭配空的 `specs`），因為空映射現在會被拒絕；要再次關閉 Surface EPR，請用 `set_surface_epr(None)`。Route A 寫成 `set_route("A")`，以 `thin_film` 近似設定降低薄膜；`substrate_face` 與 `metal_gap_equivalent` 以 `set_route("A", approximation_profile=profile)` 傳入。`representation` 與 `route_a_thin_film` 關鍵字已移除，也沒有 `thin_film` 關鍵字：近似設定的名稱已說明降低方式。模擬的 `thin_film` 欄位與 `input_summary()` 的 `thin_film` 鍵一併移除；`input_summary()` 顯示準備階段使用的近似設定名稱，預設值也包含在內。
+- 請在計畫上設定 Surface EPR：在 `plan.prepare()` 之前呼叫 `plan.set_surface_epr(specs)`（[計畫上的 Surface EPR 與真空](#plan-owns-surface-epr)）。
+- 路徑與 Surface EPR 是兩個設定。`set_surface_epr(*, representation, specs, route_a_thin_film=None, approximation_profile=None)` 改為 `sim.set_route(route, *, approximation_profile=None)` 與 `plan.set_surface_epr(specs)`。Route B 是預設值，所以 Route B 模擬兩者都不必為路徑呼叫。只有計畫有規格時才會計算 Surface EPR，Eigenmode 與 Electrostatic 相同：請刪除原本不要求任何東西的呼叫（Route B 搭配空的 `specs`），因為空映射現在會被拒絕；要再次關閉 Surface EPR，請用 `plan.set_surface_epr(None)`。Route A 寫成 `set_route("A")`，以 `thin_film` 近似設定降低薄膜；`substrate_face` 與 `metal_gap_equivalent` 以 `set_route("A", approximation_profile=profile)` 傳入。`representation` 與 `route_a_thin_film` 關鍵字已移除，也沒有 `thin_film` 關鍵字：近似設定的名稱已說明降低方式。模擬的 `thin_film` 欄位與 `input_summary()` 的 `thin_film` 鍵一併移除；`input_summary()` 顯示準備階段使用的近似設定名稱，預設值也包含在內。
 - `inset_margins_um` 向 SGB 要求帶。它只接受正的嚴格遞增邊距，所以請去掉開頭的 `0.0`：基準列一定存在。
 - Palace 不再寫出原生 `Mask` 或 `Inset`，所以邊距列不需要 Palace 分支版本。結果讀取器會拒絕含有原生 `Mask` 列的設定檔。
 - `inset_margins_by_entity_um` 是新增的，用於 `MA` 與 `MS` 的逐導體邊距。`face_kinds` 接受 `sheet`、`top`、`bottom` 與 `interface`，規格要求邊距時會拒絕 `sidewall`。
@@ -228,7 +228,7 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 
 ### 版圖建模檢查 {#simulation-drc-migration}
 
-`3.0.0rc3` 改變 `scgsim.palace.EigenmodeSim`、`scgsim.palace.ElectrostaticSim` 與 `scgsim.aedt.EigenmodeSim` 上 `simulation_drc` 的第一個引數：它是模擬將拿到的 `GeometryPlan`（在 `prepare()` 之前）。`layer_stack`、`material_records`、`instances` 與 `nets` 已移除，它們屬於計畫。`surface_epr_specs`、`route`、`approximation_profile` 與 `modeling` 保留。第一個引數不是 `GeometryPlan` 時會被拒絕，訊息中列出該建立的計畫。
+`3.0.0rc3` 改變 `scgsim.palace.EigenmodeSim`、`scgsim.palace.ElectrostaticSim` 與 `scgsim.aedt.EigenmodeSim` 上 `simulation_drc` 的第一個引數：它是模擬將拿到的 `GeometryPlan`（在 `prepare()` 之前）。`layer_stack`、`material_records`、`instances` 與 `nets` 已移除，它們屬於計畫。`route`、`approximation_profile` 與 `modeling` 保留；Surface-EPR 規格也屬於計畫（[見下節](#plan-owns-surface-epr)）。第一個引數不是 `GeometryPlan` 時會被拒絕，訊息中列出該建立的計畫。
 
 ```python
 # 之前
@@ -243,6 +243,39 @@ EigenmodeSim.simulation_drc(plan, route="A")
 ```
 
 檢查不再為計畫加入任何設定。之前它以零 coupon 填充檢查，版圖沒有真空時再加上以 (0, 0, 1000) µm 填充的真空；現在它使用計畫的 coupon 填充與真空，沒有真空的計畫會以模擬自己的錯誤被拒絕。組裝件的實例請在 `set_nets` 之前以 `plan.register_instance` 註冊。AEDT 的檢查現在涵蓋計畫的矩形接面，並裁切其薄片。`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 現在會在寫出 handoff 之前執行匯入的第一步，因此會拒絕匯入無法實現的模型。見[版圖建模檢查](layout-modeling-check.qmd#build-the-plan)。
+
+### 計畫上的 Surface EPR 與真空 {#plan-owns-surface-epr}
+
+`3.0.0rc3` 之後，Surface-EPR 規格與真空區域只在 `GeometryPlan` 上設定一次，別處不再設定（issue #268）：兩者都改變幾何，也都與求解器無關。模擬從 `set_plan` 綁定的快照讀取它們，`simulation_drc` 從它拿到的計畫讀取。被移除的呼叫沒有相容層。
+
+::: {.askr-table-compact}
+| 已移除 | 取代方式 |
+|---|---|
+| `scgsim.palace.EigenmodeSim`、`scgsim.palace.ElectrostaticSim` 與 `scgsim.aedt.EigenmodeSim` 上的 `sim.set_surface_epr(specs)` | 在 `plan.prepare()` 之前呼叫 `plan.set_surface_epr(specs)`；`None` 關閉它，`{}` 會被拒絕，與之前相同 |
+| Palace 模擬上的 `sim.set_vacuum_region(padding)` | 在 `plan.prepare()` 之前呼叫 `plan.set_vacuum_region(padding)` |
+| 三個類別上的 `simulation_drc(plan, surface_epr_specs=specs, ...)` | 先 `plan.set_surface_epr(specs)`，再 `simulation_drc(plan, ...)`；`route`、`approximation_profile` 與 `modeling` 保留 |
+| Palace 模擬建構子的 `surface_epr_specs` 與 `vacuum_region` 引數，以及 `scgsim.aedt.EigenmodeSim` 的 `surface_epr_specs` | 計畫的設定方法；`sim.surface_epr_specs` 讀取綁定計畫的規格 |
+| `scgsim.aedt.EigenmodeSim.set_geometry(...)`、`set_stack(...)` 及其 `component`、`build_input` 與 `stack` 引數 | `sim.set_plan(plan.prepare())`，唯一的來源 |
+:::
+
+```python
+# 之前
+sim = EigenmodeSim()
+sim.set_plan(plan.prepare())
+sim.set_vacuum_region((0.0, 0.0, 1000.0))
+sim.set_surface_epr(specs)
+EigenmodeSim.simulation_drc(plan, surface_epr_specs=specs, route="A")
+
+# 現在
+plan.set_vacuum_region((0.0, 0.0, 1000.0))
+plan.set_surface_epr(specs)
+EigenmodeSim.simulation_drc(plan, route="A")
+sim = EigenmodeSim()
+sim.set_route("A")
+sim.set_plan(plan.prepare())
+```
+
+規格以相同規則、對照計畫的材料檢查：設定時一次，`prepare()` 時再一次。計算 Surface EPR 的模擬會讀取它們：Palace Eigenmode 與 Electrostatic，以及 HFSS Eigenmode。HFSS Driven Terminal 與 Q3D 不讀取它們，也不切條帶，與之前相同。原本指向模擬上 `set_surface_epr` 的拒絕訊息，現在指向 `GeometryPlan.set_surface_epr`。模型、Palace 設定檔與執行資料夾都沒有改變：`3.0.0rc3` 寫出的執行資料夾照常讀取。
 
 ## Palace 套件符號 {#palace-package-symbols}
 

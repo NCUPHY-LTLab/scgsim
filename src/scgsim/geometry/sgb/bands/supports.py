@@ -62,6 +62,11 @@ from scgsim.geometry.exact.carriers import (
 )
 from scgsim.geometry.exact.errors import InputError
 from scgsim.geometry.exact.grid import Grid, exact_z
+from scgsim.geometry.models.band_faces import (
+    BANDED_FACE_KINDS,
+    BandedFaceKind,
+    ConductorSide,
+)
 from scgsim.geometry.models.grid import format_box
 from scgsim.geometry.sgb.arrangement.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.arrangement.derivation.layer import Layer
@@ -77,10 +82,7 @@ from scgsim.geometry.sgb.bands.gap_intervals import (
     split_at_gaps,
 )
 from scgsim.geometry.sgb.bands.requests import (
-    BANDED_FACE_KINDS,
-    BandedFaceKind,
     ConcreteSupport,
-    ConductorSide,
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
@@ -113,7 +115,7 @@ class ResolvedSupport:
 class FaceId:
     """One bandable face, whoever asked for it: its kind, the entities it belongs to and the level it lies on.
 
-    ``kind`` is one of :data:`~scgsim.geometry.sgb.bands.requests.BANDED_FACE_KINDS`.  A conductor face has its one
+    ``kind`` is one of :data:`~scgsim.geometry.models.band_faces.BANDED_FACE_KINDS`.  A conductor face has its one
     entity; an interface has its two solution regions, the dielectric first (the order of its group name).
     Two requests land on the same face exactly when their :class:`FaceId` s are equal.
     """

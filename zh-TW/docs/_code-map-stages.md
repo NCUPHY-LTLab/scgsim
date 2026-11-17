@@ -5,13 +5,13 @@
 | 資料夾 | 它是什麼 | In | Out | Next |
 | --- | --- | --- | --- | --- |
 | `geometry` | 幾何 API：從版圖與堆疊建立準備好的輸入，並為建構做物理解讀。 | 這一區本身的資料夾：docstring 描述整個區。 |  |  |
-| `geometry/models` | 跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面與區域。 | 沒有；這個資料夾不匯入其他幾何程式碼，因此每個階段都能建立與讀取這些紀錄。 | 一個階段交給下一個階段的值，每個都從定義它的模組匯入。 | `source` 建立它們；`interpretation`、`junctions` 與 `sgb` 讀取它們。 |
+| `geometry/models` | 跨階段傳遞的型別紀錄，以及不只一個階段會做的讀取：建構輸入與其實體、格點情境、物理層、表示方式、接面、區域，以及帶可以落在哪些面上。 | 沒有；這個資料夾不匯入其他幾何程式碼，因此每個階段都能建立與讀取這些紀錄。 | 一個階段交給下一個階段的值，每個都從定義它的模組匯入。 | `source` 建立它們；`interpretation`、`junctions` 與 `sgb` 讀取它們。 |
 | `geometry/exact` | 模型格點上的精確算術與邊界紀錄的綁定：各幾何階段共用的核心。 | 有效的 `GeometryBuildInput`（來自 `models`），供宣告的格點、輪廓與邊界綁定使用；這個資料夾只讀取 `models`。 | 模型格點、精確的平面判定、圓的算術、載體與其來歷、每個 Entity 在格點上的輪廓及其綁定到精確直線與圓弧的邊界紀錄，以及這個核心的拒絕。 | junction 分割（`junctions`）讀取集總埠端子的綁定環，`surface_epr` 與 Palace 的 Surface-EPR 設定讀取 `Grid`，SGB 的每個階段讀取全部內容。 |
 | `geometry/grid` | 共用的格點運算：在模型格點上切點、多邊形布林運算、帶標記的區域、疊加、環與多邊形運算。 | 多邊形環，以及讀取它們的 `GridScope`（`scope`）：模型格點、實例座標系、是否計算未取整的參考，以及拒絕訊息要指名的宣告來源。 | 在該格點上切好點的環（`arrangement`）、布林運算結果（`booleans`），以及保留來源出處的環運算；任何運算無法證明的變更，都在發生處以該 scope 的用語被拒絕。 | `source` 用它們建立 snapshot；`interpretation` 與 `junctions` 呼叫同樣的運算，接面的離軸座標系不在格點上運算（`UNGRIDDED`）。各階段共用的紀錄在 `models`。 |
-| `geometry/source` | 來源階段：從版圖與堆疊到準備好的 snapshot。 | 版圖（元件、GDS）與堆疊，加上宣告的格點、真空區域與埠面。 | `GeometryPlan` 與它的 snapshot；其中的 `GeometryBuildInput` 與堆疊保留每個輸入身分，並帶有後續階段記錄的雜湊值與來源稽核。每個宣告的 recipe 連同它的稽核一起傳回結果（`recipes`）；`grid_projection` 把讀到的多邊形放上版圖的格點。 | `interpretation` 讀取準備好的輸入。`contact_pads` 找出每個接觸墊所附著的面金屬。 |
+| `geometry/source` | 來源階段：從版圖與堆疊到準備好的 snapshot。 | 版圖（元件、GDS）與堆疊，加上宣告的格點、真空區域、埠面與 Surface-EPR 規格。 | `GeometryPlan` 與它的 snapshot；其中的 `GeometryBuildInput` 與堆疊保留每個輸入身分，並帶有後續階段記錄的雜湊值與來源稽核。每個宣告的 recipe 連同它的稽核一起傳回結果（`recipes`）；`grid_projection` 把讀到的多邊形放上版圖的格點。 | `interpretation` 讀取準備好的輸入。`contact_pads` 找出每個接觸墊所附著的面金屬。`surface_epr_specs` 持有計畫檢查規格所依的 Surface-EPR 規則，`surface_epr`、Palace 與 AEDT 依它讀取規格與其邊距。 |
 | `geometry/junctions` | 集總埠周圍的矩形分割：切割規則、精確輸出與檢查；是 `interpretation` 的接面步驟。 | 來自 `interpretation` 的有效輸入與其矩形 junction 請求，每個請求指名一個來源多邊形與它的兩個端子 net；端子的綁定環來自精確核心（`exact`），與 SGB 使用的綁定相同。 | 每個被請求的多邊形切成中央矩形與屬於兩端端子的端塊、再放回輸入格點後的輸入，以及記錄這次切割的 `junction_partitions`。 | `interpretation` 回傳該輸入，`sgb` 由它建構並讀取這筆紀錄；SGB 從不匯入這個資料夾，這個資料夾也不讀取 SGB 的任何部分。 |
 | `geometry/interpretation` | 準備好的輸入的物理解讀，以及它的真空包絡。 | 準備好的 `GeometryBuildInput` 與堆疊，以及選定的近似設定。 | 有效輸入與堆疊，帶有物理表示計畫與自動真空包絡；輸入的矩形接面在其上導出，薄片介面綁定到所選的近似設定。 | 它的接面步驟執行 `junctions`；接著 `sgb` 從有效輸入建構。 |
-| `geometry/surface_epr` | 不依賴後端的 Surface-EPR 幾何：正規化的規格、對應的 SGB 帶狀請求，以及帶有內縮帶的建構。 | Palace 模擬的 `MA`／`MS`／`SA` 規格（來自 `palace/source`）；帶狀建構另外需要有效的 `GeometryBuildInput`、它的 `RepresentationContext` 與路線（來自呼叫它的 `palace/mesh`）。 | 正規化的規格與每個面採用的邊距、SGB 內縮請求，以及帶狀建構的檔案（`SgbArtifacts`：XAO、BREP 與 sidecar），由它以這些請求呼叫 `sgb.build_sgb_geometry` 建構。 | `palace/mesh` 為帶狀建構產生網格；`palace/source`、`palace/config` 與 `palace/results` 讀取規格與其邊距。 |
+| `geometry/surface_epr` | 規格之後的 Surface-EPR 帶狀幾何：對應的 SGB 內縮請求，以及帶有內縮帶的建構。 | 計畫 snapshot 中正規化的 `MA`／`MS`／`SA` 規格，依 `source.surface_epr_specs` 的規則讀取；帶狀建構另外需要有效的 `GeometryBuildInput`、它的 `RepresentationContext` 與路線（來自呼叫它的 `palace/mesh` 或 AEDT 模型準備）。 | 規格邊距對應的 SGB 內縮請求，以及帶狀建構的檔案（`SgbArtifacts`：XAO、BREP 與 sidecar），由它以這些請求呼叫 `sgb.build_sgb_geometry` 建構。 | `palace/mesh` 為帶狀建構產生網格，AEDT 準備則匯出它。 |
 
 ### `geometry/sgb`
 
@@ -51,7 +51,7 @@
 | --- | --- | --- | --- | --- |
 | `palace` | 從準備好的計畫執行 Palace 模擬到執行資料夾，並讀取 Palace 回傳的執行結果。 | 這一區本身的資料夾：docstring 描述整個區。 |  |  |
 | `palace/simulation` | 使用者操作的階段：綁定準備好的計畫、設定問題，接著產生網格、寫出設定並交接。 | `GeometryPlanSnapshot` 與問題的設定。 | 包含 `palace.msh`、`config.json` 與執行腳本的執行資料夾（`HandoffPlan`）。 | 使用者執行 Palace；`results` 讀取回傳的資料夾。`core` 放兩種問題共用的部分，`lifecycle` 說明每個呼叫需要哪個階段，`eigenmode` 與 `electrostatic` 放各問題額外的部分，`drc` 是建模檢查。 |
-| `palace/source` | 從綁定的計畫到幾何建構的輸入。 | `GeometryPlanSnapshot`，以及模擬的真空區域、埠與 Surface-EPR 規格。 | 準備好的幾何請求。 | `mesh`。 |
+| `palace/source` | 從綁定的計畫到幾何建構的輸入。 | `GeometryPlanSnapshot`（含其真空區域與 Surface-EPR 規格），以及模擬的 route 與埠。 | 準備好的幾何請求。 | `mesh`。 |
 | `palace/mesh` | 從準備好的幾何請求到 Palace 讀取的網格。 | 來自 `source` 的準備好的幾何請求，以及網格控制。 | `palace.msh`、它的物理群組與網格清單。 | `config`。 |
 | `palace/config` | 從網格的物理群組與問題的設定到 Palace 的輸入。 | 群組、埠或端子、材料、Surface-EPR 規格、數值控制與收斂宣告。 | `config.json`、索引對照表，以及宣告收斂時的收斂計畫。 | `run`。 |
 | `palace/run` | 交給 Palace 的執行資料夾，以及回傳的內容。 | 包含網格與設定的資料夾。 | 執行腳本、收據記錄器、宣告收斂時的收斂執行器與封存檔；Palace 執行後則是執行器的決定紀錄與回傳的收據。 | `results`。 |

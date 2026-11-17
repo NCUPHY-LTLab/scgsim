@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from palace_sgb_support import MATERIALS, effective_input, sidecar_of, surface_epr_specs
 
 from scgsim.contracts.palace_run_folder import MESH, MESH_MANIFEST, route_provenance
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.geometry.surface_epr.insets import inset_requests
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.mesh.build import MeshBuildResult
@@ -20,7 +22,6 @@ from scgsim.palace.mesh.manifest import build_mesh_manifest
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 from scgsim.palace.simulation.lifecycle import Stage
 from scgsim.palace.source.ports import LayoutPortBinding
-from scgsim.palace.source.surface_epr import SurfaceEprSpecs
 
 MARGINS = {"MA": [0.5, 1.0], "MS": [0.5, 1.0], "SA": None}
 PORT = LayoutPortBinding(1, "P1", "metal", "9/0", (1.0, 0.0, 0.0), {"L": 1e-9})
@@ -58,8 +59,9 @@ def meshed(sim, directory: Path, *, surface_epr: bool = True):
     (run / route_provenance("B")).write_text('{"route": "B"}\n', encoding="utf-8")
     sim.output_dir = run
     sim._materials = MATERIALS  # noqa: SLF001 -- stands for set_plan()
-    if surface_epr:
-        sim.surface_epr_specs = SurfaceEprSpecs.normalized(
+    # Stands for set_plan() of a plan prepared with these Surface-EPR specs, or with none.
+    sim._plan = SimpleNamespace(  # noqa: SLF001
+        surface_epr_specs=normalize_surface_epr_specs(
             {
                 kind: {
                     "film_thickness_m": 2e-9,
@@ -71,6 +73,9 @@ def meshed(sim, directory: Path, *, surface_epr: bool = True):
             },
             materials=MATERIALS,
         )
+        if surface_epr
+        else None
+    )
     if isinstance(sim, EigenmodeSim):
         sim._resolved_ports = [PORT]  # noqa: SLF001 -- stands for mesh()
     sim._mesh_result = MeshBuildResult(  # noqa: SLF001 -- stands for mesh()

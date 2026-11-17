@@ -76,9 +76,9 @@ sim.set_convergence(
 pass, and pass 1 solves the mesh `mesh()` writes. Mode 1's frequency holds at a
 pass when it moved by at most 0.001 % since the pass before. The
 Surface-EPR line declares one criterion per interface kind, each on that kind's
-participation beyond 1 µm of every mode; it needs `set_surface_epr` with all
-three specs, each asking for that [margin](#surface-epr-margin-rows), before
-`mesh()`. The whole-surface participation is left out on purpose: it kept
+participation beyond 1 µm of every mode; it needs the plan's
+`set_surface_epr` with all three specs, each asking for that
+[margin](#surface-epr-margin-rows), before `prepare()`. The whole-surface participation is left out on purpose: it kept
 growing with every refinement on the layouts measured, so a change criterion
 on it would not hold. With a declaration Palace's own tolerance no longer
 ends the run, so `amr_tolerance` is left out: `write_config()` refuses it and
@@ -150,11 +150,11 @@ nonnegative junction participation.
 
 Palace Surface EPR can report, next to each whole-surface baseline row, rows for
 the part of the surface at least a given distance from the gaps. Request them
-with `inset_margins_um` in the `set_surface_epr` spec, for example
-`"inset_margins_um": (0.5, 1.0)`, and call `set_surface_epr` before
-`mesh()`, because SGB cuts the margins into the geometry. Omit the key to request
-only the baseline. Without a `set_surface_epr(specs)` call, no Surface EPR is
-computed. The rows are ordinary Palace attributes, so a stock Palace
+with `inset_margins_um` in the spec given to the plan's `set_surface_epr`, for
+example `"inset_margins_um": (0.5, 1.0)`, and call `plan.set_surface_epr` before
+`plan.prepare()`, because SGB cuts the margins into the geometry. Omit the key to
+request only the baseline. Without a `plan.set_surface_epr(specs)` call, no
+Surface EPR is computed. The rows are ordinary Palace attributes, so a stock Palace
 executable is enough. Keys, face kinds and limits are in the
 [Eigenmode contract](../specs/palace-eigenmode.qmd#surface-epr-margins), and the
 public [Xmon EPR extension](../tutorial-xmon-palace.qmd) shows the source

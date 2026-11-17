@@ -30,7 +30,7 @@ Palace Driven 與 Magnetostatic 未實作；Meep 不屬於 SCGSim 範圍。Palac
 
 ## 能量參與與損耗 {#energy-participation-and-loss}
 
-Palace 與 HFSS 本徵模支援表面、體積及電感端口／接面分析。請求會從已設定的物理模型中選取物理量；未提供的通道不會因此變成零。表面薄膜使用明確指定的厚度、介電率與損耗假設。AEDT 表面估算涵蓋水平的頂部／底部介面，不包含側壁薄膜能量。因此，已知損耗的小計不一定等於元件總損耗。
+Palace 與 HFSS 本徵模支援表面、體積及電感端口／接面分析。請求會從已設定的物理模型中選取物理量；未提供的通道不會因此變成零。表面薄膜使用明確指定的厚度、介電率與損耗假設，與真空區域一樣以 `GeometryPlan.set_surface_epr(specs)` 設定在計畫上：Palace Eigenmode 與 Electrostatic 以及 HFSS Eigenmode 讀取它們並把邊距切成條帶，HFSS Driven Terminal 與 Q3D 不讀取它們，也不切條帶。AEDT 表面估算涵蓋水平的頂部／底部介面，不包含側壁薄膜能量。因此，已知損耗的小計不一定等於元件總損耗。
 
 AEDT 可使用保留的原生儲存場計算 EPR，無須重新求解本徵模；但此操作仍需要 AEDT。離線重新分析則可在不執行原生評估的情況下，變更已記錄 EPR 結果所採用的歸因損耗假設。
 

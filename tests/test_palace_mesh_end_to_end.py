@@ -20,6 +20,7 @@ from palace_sgb_support import (
 from sgb_inputs import EffectiveInput, gds_pad_in_ground, rectangular_junction_pair
 from test_sgb_curved_port_landing import circular_pad_input
 
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.meshing import Budgets, MesherOptions, MeshRepairError
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.config.config import (
@@ -116,7 +117,9 @@ def config_of(result, route, specs=None):
         groups=result.groups,
         mesh_path=result.mesh_path,
         materials=MATERIALS,
-        surface_epr_specs=SurfaceEprSpecs.normalized(specs or {}, materials=MATERIALS),
+        surface_epr_specs=SurfaceEprSpecs.of_normalized(
+            normalize_surface_epr_specs(specs or {}, materials=MATERIALS)
+        ),
         numerical=NumericalControls().with_defaults(
             ElectrostaticSim.numerical_defaults
         ),
@@ -417,8 +420,8 @@ def test_a_junction_support_plane_port_meshes_on_route_a(tmp_path):
         groups=result.groups,
         mesh_path=result.mesh_path,
         materials=materials,
-        surface_epr_specs=SurfaceEprSpecs.normalized(
-            surface_epr_specs(MA=None, MS=None), materials=materials
+        surface_epr_specs=SurfaceEprSpecs.of_normalized(
+            surface_epr_specs(MA=None, MS=None)
         ),
         numerical=NumericalControls(amr_max_passes=0).with_defaults(
             EigenmodeSim.numerical_defaults

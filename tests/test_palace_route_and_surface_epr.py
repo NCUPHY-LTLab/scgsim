@@ -1,9 +1,9 @@
-"""The two geometry settings of a Palace simulation: the route (``set_route``) and Surface EPR (``set_surface_epr``).
+"""The route of a Palace simulation (``set_route``), and the Surface EPR it reads from its plan.
 
 Route B is the default; one ``set_route`` call states the whole route setting.  Surface EPR is computed only
-when ``set_surface_epr`` was called with specs, by the same rule for Eigenmode and Electrostatic: without it
-``mesh()`` asks for no bands, the config has no Surface-EPR rows and ``input_summary()`` says it is not
-requested.  No test here runs the mesher.
+when the plan was given specs (``GeometryPlan.set_surface_epr``), by the same rule for Eigenmode and
+Electrostatic: without them ``mesh()`` asks for no bands, the config has no Surface-EPR rows and
+``input_summary()`` says it is not requested.  No test here runs the mesher.
 """
 
 from __future__ import annotations
@@ -230,10 +230,10 @@ def test_set_route_discards_the_mesh_config_and_handoff(sim_type, monkeypatch):
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
-def test_without_set_surface_epr_mesh_requests_no_bands(
+def test_a_plan_without_surface_epr_meshes_with_no_bands(
     sim_type, monkeypatch, tmp_path
 ):
-    """Both problems mesh without Surface EPR, and the geometry build is given no specs."""
+    """Both problems mesh a plan without Surface EPR, and the geometry build is given no specs."""
     calls = stand_in_mesh_stages(monkeypatch, core, tmp_path)
     monkeypatch.setattr(layout_ports, "prepare_mesh_input", _prepared_stand_in)
     sim = sim_type()
@@ -259,41 +259,40 @@ def test_without_surface_epr_the_config_has_no_surface_epr_rows(
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
-def test_an_empty_mapping_is_refused_with_the_next_step(sim_type, monkeypatch):
-    """ "No Surface EPR" has one spelling: no call, or ``None`` to turn it off again."""
+def test_the_simulation_reads_the_specs_of_the_plan_it_is_bound_to(
+    sim_type, monkeypatch
+):
+    """No plan, no specs; a plan's specs as it normalized them; a plan without specs, none."""
     sim = sim_type()
+    assert sim.surface_epr_specs is None
+    sim.set_plan(
+        two_pad_snapshot(monkeypatch, {"MA": {**FILM, "inset_margins_um": [0.5]}})
+    )
+    assert sim.surface_epr_specs is not None
+    assert sim.surface_epr_specs.to_payload()["MA"]["inset_margins_um"] == [0.5]
     sim.set_plan(two_pad_snapshot(monkeypatch))
-    with pytest.raises(
-        ValueError,
-        match=r"do not call set_surface_epr\(\), or call set_surface_epr\(None\)",
-    ):
-        sim.set_surface_epr({})
     assert sim.surface_epr_specs is None
 
 
 @pytest.mark.parametrize("sim_type", SIMS)
-def test_set_surface_epr_none_clears_the_specs_and_discards_later_stages(sim_type):
-    """``None`` turns Surface EPR off again, and the mesh cut with its bands is discarded."""
-    sim = sim_type()
-    sim._materials = STACK["materials"]  # noqa: SLF001 -- stands for set_plan()
-    sim._stage = Stage.BOUND  # noqa: SLF001 -- stands for set_plan()
-    sim.set_surface_epr({"MA": {**FILM, "inset_margins_um": [0.5]}})
-    assert sim.surface_epr_specs is not None
-    handed_off(sim)
-    sim.set_surface_epr(None)
-    assert sim.surface_epr_specs is None
-    assert sim._stage is Stage.BOUND  # noqa: SLF001
-    assert (sim._mesh_result, sim.config_path, sim.handoff_plan) == (None, None, None)  # noqa: SLF001
+def test_a_simulation_has_no_setter_of_its_own_for_surface_epr_or_the_vacuum(sim_type):
+    """Both are the plan's: ``GeometryPlan.set_surface_epr`` and ``GeometryPlan.set_vacuum_region``."""
+    assert not hasattr(sim_type, "set_surface_epr")
+    assert not hasattr(sim_type, "set_vacuum_region")
 
 
-def test_input_summary_shows_surface_epr_not_requested_then_the_specs(monkeypatch):
-    """The summary holds None (shown as "not requested") until specs are set, then the specs."""
+def test_input_summary_shows_surface_epr_not_requested_or_the_plans_specs(monkeypatch):
+    """The summary holds None (shown as "not requested") for a plan without specs, the specs for a plan with them."""
     sim = eigenmode_sim(monkeypatch, LAYER_STACK)
     summary = sim.input_summary()
     assert summary.data["backend"]["surface_epr_specs"] is None
     assert "not requested" in _surface_section(summary._repr_html_())  # noqa: SLF001
 
-    sim.set_surface_epr({"MA": {**FILM, "inset_margins_um": [0.5, 1.0]}})
+    sim = eigenmode_sim(
+        monkeypatch,
+        LAYER_STACK,
+        surface_epr_specs={"MA": {**FILM, "inset_margins_um": [0.5, 1.0]}},
+    )
     summary = sim.input_summary()
     specs = summary.data["backend"]["surface_epr_specs"]
     assert list(specs) == ["MA"]

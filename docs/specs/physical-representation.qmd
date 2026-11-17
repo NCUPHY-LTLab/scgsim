@@ -159,8 +159,10 @@ profile = ApproximationProfile(
     parameters={"film_bindings": authored_film_bindings},
 )
 sim.set_route("A", approximation_profile=profile)
-sim.set_surface_epr(authored_surface_specs)
 ```
+
+The Surface-EPR specs of such a run are the plan's,
+`plan.set_surface_epr(authored_surface_specs)` before `prepare()`.
 
 Each `authored_film_bindings` entry is keyed by a declared physical layer ID
 and contains exactly `supporting_entity_id` and `supporting_side`.

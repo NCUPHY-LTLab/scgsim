@@ -557,8 +557,8 @@ _LAYOUT_FIX = {
     "edge length": "join the short outline edge into its neighbours.",
 }
 _EROSION_FIX = (
-    "the band margin meets the conductor's local width here; change the margins in "
-    "surface_epr_specs or the width of the conductor."
+    "the band margin meets the conductor's local width here; change the inset margins "
+    "given to plan.set_surface_epr or the width of the conductor."
 )
 _SGB_FIX = (
     "an SGB defect: the band offsets leave this where the layout has no fine structure. "

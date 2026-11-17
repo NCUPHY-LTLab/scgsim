@@ -22,7 +22,7 @@ Prepare each model on a licensed AEDT workstation, send one bundle to HPC for so
 
 A valid SCGSim 2.0.0rc9 prepare-only handoff can continue through rc10 packaging and collection. Keep its recorded source identities and receipt unchanged; do not repeat native preparation just to change the packaging runtime.
 
-Complete [Public Xmon inputs](../tutorial-xmon-input.qmd) and the configuration sections of [Public Xmon AEDT](../tutorial-xmon-aedt.qmd) in the same Python session. Stop before executing that tutorial's original handoff. The following code inherits exactly three named variables: `snapshot` (the immutable source and stack), `junction` (the source-bound `PlanarJunction`), and `presets` (the validated interface material records).
+Complete [Public Xmon inputs](../tutorial-xmon-input.qmd) and the configuration sections of [Public Xmon AEDT](../tutorial-xmon-aedt.qmd) in the same Python session. Stop before executing that tutorial's original handoff. The following code inherits exactly two named variables: `snapshot` (the immutable source and stack, with the plan's Surface-EPR specs) and `junction` (the source-bound `PlanarJunction`).
 
 The physical geometry, final Nets and bulk materials belong to that source. The three inductances below are explicit circuit-model choices, not measured device values. A geometry sweep instead requires a newly authored source snapshot and freshly bound junction and catalogue for every case.
 
@@ -65,19 +65,6 @@ run_control = EigenmodeRunControl(
     maximum_passes=20, maximum_delta_frequency_percent=0.1,
     minimum_passes=1, minimum_converged_passes=1,
 )
-surface_epr_specs = {}
-for kind in ("MA", "MS", "SA"):
-    preset_name = f"LiteratureCentral_{kind}"
-    preset = presets[preset_name]
-    if preset["interface_type"] != kind:
-        raise ValueError(f"{preset_name} is not a {kind} preset")
-    surface_epr_specs[kind] = {
-        "film_thickness_m": preset["thickness"] * 1e-6,
-        "permittivity": preset["permittivity"],
-        "loss_tangent": preset["loss_tangent"],
-        "source": preset["source"], "preset": preset_name,
-        "inset_margins_um": [0.5, 1.0],
-    }
 rows = []
 for case_id, inductance_h in case_parameters:
     case_junction = replace(junction, inductance_h=inductance_h)
@@ -89,7 +76,6 @@ for case_id, inductance_h in case_parameters:
         project_name=f"xmon_{case_id}", design_name="Xmon",
         run_control=run_control, resources=resources,
     )
-    sim.set_surface_epr(surface_epr_specs)
     sim.add_junction(case_junction)
     sim.set_epr_request(EprAnalysisRequest(
         mode_indices=(1,),

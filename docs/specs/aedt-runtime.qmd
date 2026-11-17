@@ -602,7 +602,7 @@ facts.
 
 The conductor's source normal thickness or `physical_thickness_um` is not the
 interface-film thickness used by the EPR model. The `film_thickness_m` of the
-MA, MS or SA spec given to `set_surface_epr()` is an independent model input. Do
+MA, MS or SA spec given to `GeometryPlan.set_surface_epr()` is an independent model input. Do
 not substitute the conductor thickness for that interface assumption.
 
 An ideal superconductor is determined by the stack's material record; the
@@ -1064,8 +1064,10 @@ not those of the request's model.
 `EprAnalysisRequest.surface_epr_groups` selects sidecar Surface-EPR groups
 (`None`: every group); `junction_ids` and `bulk_domain_ids` select the
 reported junctions and domains, while every domain and junction stays in the
-normalization. Surface EPR is declared with `EigenmodeSim.set_surface_epr(specs)`,
-Palace's specs by interface type. Their inset margins become bands of the
+normalization. Surface EPR is declared on the plan with
+`GeometryPlan.set_surface_epr(specs)`, Palace's specs by interface type, and
+`EigenmodeSim` reads them from the snapshot `set_plan` binds; it has no
+Surface-EPR setter of its own. HFSS Driven Terminal and Q3D do not read them. Their inset margins become bands of the
 model, and each row is integrated over all of its faces, sidewalls included.
 
 A saved analysis (`analyze_epr(model=...)`) copies the saved project and
@@ -1278,9 +1280,9 @@ those outcomes require an actual target-run observation.
 
 ### Public EPR surface {#public-epr-candidate-surface}
 
-The public HFSS Eigenmode entries are `EigenmodeSim` (with `set_plan`,
-`set_eigenmode`, `set_surface_epr`, `add_junction`, `add_lumped_rlc` and
-`set_epr_request`), `prepare_sgb_model()` with
+The public HFSS Eigenmode entries are `EigenmodeSim` (with `set_plan`, its only
+source, `set_eigenmode`, `add_junction`, `add_lumped_rlc` and
+`set_epr_request`; Surface EPR is the plan's `set_surface_epr`), `prepare_sgb_model()` with
 `prepare_hfss_eigenmode_from_geometry(model=...)`, and `analyze_epr(model=...)`
 for a saved solution. All of them take the one `PreparedSgbModel` of an SGB
 build; there is no planar Eigenmode preparation. HFSS Driven Terminal takes

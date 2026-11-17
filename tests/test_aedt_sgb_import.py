@@ -68,7 +68,7 @@ from scgsim.aedt.runtime.families.sgb_ports import (  # noqa: E402
 from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort  # noqa: E402
 from scgsim.aedt.specs.epr import PlanarJunction  # noqa: E402
 from scgsim.contracts.sgb_sidecar import views  # noqa: E402
-from scgsim.geometry.surface_epr import normalize_surface_epr_specs  # noqa: E402
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs  # noqa: E402
 
 pytestmark = pytest.mark.occt
 

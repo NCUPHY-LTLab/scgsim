@@ -1,9 +1,12 @@
-"""Check what a GeometryPlan's caller binds: the final Nets and the Entities' overlap priorities."""
+"""Check what a GeometryPlan's caller binds: the final Nets, the Entities' overlap priorities and the Surface-EPR specs."""
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Mapping, Sequence
+from typing import Any
 
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.refusal import Declared
 
 
@@ -99,3 +102,46 @@ def validated_priorities(
             )
         prepared[entity_id] = value
     return prepared
+
+
+def checked_surface_epr_specs(
+    specs: Mapping[str, Mapping[str, Any]],
+    materials: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """``specs`` normalized against ``materials`` by the shared Surface-EPR rules, Palace's and AEDT's.
+
+    "No Surface EPR" has one spelling, no call or ``set_surface_epr(None)``, so an empty mapping is refused.
+    """
+    if isinstance(specs, Mapping) and not specs:
+        raise ValueError(
+            plan_call(
+                "set_surface_epr", "set_surface_epr({}) requests no Surface EPR"
+            ).refusal(
+                "to have none, do not call plan.set_surface_epr(), or call "
+                "plan.set_surface_epr(None) to turn it off again"
+            )
+        )
+    return normalize_surface_epr_specs(specs, materials=materials)
+
+
+def authored_surface_epr_specs(
+    specs: Mapping[str, Mapping[str, Any]],
+    materials: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """``specs`` as the caller wrote them, checked against ``materials`` and detached from the caller.
+
+    The plan keeps what was written, a ``material_id`` included, because ``prepare()`` normalizes it against
+    the stack it prepares.  Every mapping becomes an ordinary dictionary and every sequence a list, so a
+    read-only mapping (``MappingProxyType``) is held like any other.
+    """
+    checked_surface_epr_specs(specs, materials)
+    return _detached(specs)
+
+
+def _detached(value: Any) -> Any:
+    """A copy of ``value`` that shares nothing with it, with plain dictionaries and lists as its containers."""
+    if isinstance(value, Mapping):
+        return {key: _detached(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_detached(item) for item in value]
+    return copy.deepcopy(value)

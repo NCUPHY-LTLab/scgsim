@@ -34,7 +34,7 @@ from .numerical import build_output_formats, build_refinement, linear_solver
 from .surface_epr import build_surface_epr_postprocessing
 
 _WHERE_PLAN_CONDUCTORS = "the GeometryPlan's conductors"
-_WHERE_PORTS_ON_LOSS = "the calls to add_port and set_surface_epr"
+_WHERE_PORTS_ON_LOSS = "the calls to add_port and GeometryPlan.set_surface_epr"
 _WHERE_STACK_MATERIALS = "the stack file's materials"
 
 __all__ = [

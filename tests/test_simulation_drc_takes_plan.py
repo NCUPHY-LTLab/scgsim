@@ -1,7 +1,7 @@
 """Each Palace ``simulation_drc`` takes the ``GeometryPlan`` its simulation is given and adds nothing to it (Issue #266).
 
-It refuses anything but a plan, leaves the caller's plan as it was, sets no vacuum of its own, and on a plan
-without port sheets the two Palace classes check one model.  No test here meshes or solves.
+It refuses anything but a plan, leaves the caller's plan as it was, and on a plan without port sheets the two
+Palace classes check one model.  No test here meshes or solves.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from test_simulation_drc import (
     BANDED,
     NO_VACUUM_STACK,
     SIMULATIONS,
-    check,
     check_sidecars,
     configured,
     layout_plan,
@@ -20,30 +19,13 @@ from test_simulation_drc import (
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
-def test_the_check_sets_no_vacuum_of_its_own(monkeypatch, simulation):
-    """The vacuum is the plan's: the check never calls the simulation's ``set_vacuum_region`` (Issue #266)."""
-    added = []
-    real = simulation.set_vacuum_region
-
-    def recording(self, padding=0.0):
-        added.append(padding)
-        return real(self, padding)
-
-    monkeypatch.setattr(simulation, "set_vacuum_region", recording)
-    component = two_pads(monkeypatch, gap_um=10.0)
-    assert check(simulation, component, surface_epr_specs=BANDED).passed
-    assert check(simulation, component, layer_stack=NO_VACUUM_STACK).passed
-    assert added == []
-
-
-@pytest.mark.parametrize("simulation", SIMULATIONS)
 def test_a_plan_without_a_vacuum_is_refused_as_mesh_refuses_it(
     monkeypatch, tmp_path, simulation
 ):
-    """A plan with no vacuum is refused with the error ``mesh()`` raises when neither plan nor simulation sets one."""
+    """A plan with no vacuum is refused with the error ``mesh()`` raises for it."""
     component = two_pads(monkeypatch, gap_um=10.0)
     plan = layout_plan(component, layer_stack=NO_VACUUM_STACK, vacuum_padding_um=None)
-    sim = configured(simulation, plan.prepare(), None)
+    sim = configured(simulation, plan.prepare())
     sim.set_output_dir(tmp_path / "run")
     with pytest.raises(ValueError, match="has no vacuum region") as expected:
         sim.mesh()
@@ -55,11 +37,17 @@ def test_a_plan_without_a_vacuum_is_refused_as_mesh_refuses_it(
 @pytest.mark.parametrize("simulation", SIMULATIONS)
 def test_the_check_leaves_the_callers_plan_as_it_was(monkeypatch, simulation):
     """The plan prepares to the same snapshot after the check as before it: the check changes nothing on it."""
-    plan = layout_plan(two_pads(monkeypatch, gap_um=10.0, port=True))
+    plan = layout_plan(
+        two_pads(monkeypatch, gap_um=10.0, port=True), surface_epr_specs=BANDED
+    )
     before = plan.prepare()
-    assert simulation.simulation_drc(plan, surface_epr_specs=BANDED).passed
+    assert simulation.simulation_drc(plan).passed
     after = plan.prepare()
-    assert (after.gds_sha256, after.stack) == (before.gds_sha256, before.stack)
+    assert (after.gds_sha256, after.stack, after.surface_epr_specs) == (
+        before.gds_sha256,
+        before.stack,
+        before.surface_epr_specs,
+    )
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)

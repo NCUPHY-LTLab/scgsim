@@ -58,7 +58,11 @@ describes the underlying AEDT automation library.
 Palace and HFSS Eigenmode support surface, bulk and inductive port/junction
 analysis. A request selects quantities from the configured physical model;
 it does not make missing channels zero. Surface films use explicit thickness,
-permittivity and loss assumptions. AEDT surface estimates cover horizontal
+permittivity and loss assumptions, set on the plan with
+`GeometryPlan.set_surface_epr(specs)` with its vacuum region: Palace
+Eigenmode and Electrostatic and HFSS Eigenmode read them and cut their inset
+margins as bands, while HFSS Driven Terminal and Q3D do not read them and cut
+no bands. AEDT surface estimates cover horizontal
 top/bottom interfaces, not sidewall film energy. A reported known-loss subtotal
 is therefore not automatically total device loss.
 

@@ -1,6 +1,6 @@
 """The Electrostatic problem: terminals, grounds, the boundary policies and the Electrostatic config.
 
-Everything else (plan, vacuum, route, Surface EPR, mesh controls, ``mesh()``, ``simulation_drc``, the summaries and
+Everything else (the plan with its vacuum and Surface EPR, route, mesh controls, ``mesh()``, ``simulation_drc``, the summaries and
 the handoff) is ``PalaceSimulation`` in ``core``; this file shows only what the Electrostatic problem adds.
 """
 
@@ -43,11 +43,11 @@ class ElectrostaticSim(PalaceSimulation):
 
     The calls run in this order; each later call needs the earlier ones::
 
+        plan.set_surface_epr(specs)  # optional, on the plan: without it, no Surface EPR
         sim = ElectrostaticSim()
         sim.set_plan(plan.prepare())
         sim.set_output_dir("runs/pads")
         sim.set_route("B")  # optional: Route B is the default
-        sim.set_surface_epr(specs)  # optional: without it, no Surface EPR
         sim.add_terminal("pad", net_id="pad")
         sim.add_ground(net_id="ground")
         sim.set_electrostatic(save_fields=1)

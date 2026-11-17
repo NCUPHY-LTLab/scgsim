@@ -1,10 +1,12 @@
-"""Surface-EPR specs: the ``MA``/``MS``/``SA`` film parameters and the inset margins SGB cuts as bands.
+"""Surface-EPR specs: the ``MA``/``MS``/``SA`` film parameters and the inset margins SGB cuts as bands; the plan's rules.
 
 ``MA`` is the metal-air interface, ``MS`` metal-substrate and ``SA`` substrate-air.  A spec gives the film
 (thickness, permittivity or a dielectric material, loss tangent) and, optionally, the inset margins of its
 bands: ``inset_margins_um`` for every face of its type, ``inset_margins_by_entity_um`` for chosen conductors.
-Both are backend-neutral: Palace and AEDT read the same normalized specs, and the margins are geometry that
-:mod:`scgsim.geometry.surface_epr.build` turns into SGB inset requests.
+Both are backend-neutral: ``GeometryPlan.set_surface_epr`` checks the specs by these rules and its snapshot
+carries them normalized, Palace and AEDT read the same normalized specs, and the margins are geometry that
+:mod:`scgsim.geometry.surface_epr` turns into SGB inset requests.  The rules read nothing of SGB: the faces a
+band can lie on are the shared vocabulary of :mod:`scgsim.geometry.models.band_faces`.
 """
 
 from __future__ import annotations
@@ -14,9 +16,8 @@ from collections.abc import Iterable, Mapping
 from numbers import Real
 from typing import Any, cast
 
+from scgsim.geometry.models.band_faces import BANDED_FACE_KINDS
 from scgsim.semantics.epr import film_assumptions
-
-from .insets import check_bandable_face_kinds
 
 
 def normalize_surface_epr_specs(
@@ -90,6 +91,21 @@ def _normalize_interface_spec(
         "required": required,
         **resolved,
     }
+
+
+def check_bandable_face_kinds(interface_type: str, face_kinds: list[str]) -> None:
+    """Refuse a face kind SGB cannot band.
+
+    A spec names a face by the ``face_kind`` of the sidecar group it lies on, which is SGB's own vocabulary:
+    ``sheet``, ``top``, ``bottom`` and ``interface`` map onto themselves.  The remaining kind a surface group
+    has, ``sidewall``, has no SGB equivalent because SGB never bands sidewalls.
+    """
+    unbandable = [kind for kind in face_kinds if kind not in BANDED_FACE_KINDS]
+    if unbandable:
+        raise ValueError(
+            f"Surface EPR {interface_type} face_kinds {unbandable} cannot carry inset margins; "
+            f"SGB bands only {list(BANDED_FACE_KINDS)} (sidewalls are never banded)."
+        )
 
 
 def _check_fields(interface_type: str, raw: Mapping[str, Any]) -> None:

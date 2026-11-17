@@ -259,7 +259,7 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
     """Build the SGB model of ``build_input`` for AEDT into ``output_dir`` and bind its files.
 
     ``surface_epr_specs`` are Palace's ``MA``/``MS``/``SA`` specs after
-    :func:`scgsim.geometry.surface_epr.normalize_surface_epr_specs`; their margins become bands.
+    :func:`scgsim.geometry.source.surface_epr_specs.normalize_surface_epr_specs`; their margins become bands.
     ``ground_net_ids`` records the Nets that are physically ground, as Palace's electrostatic ground declares
     them; every one must be a Net of the model.  A Q3D request gives each Net its Q3D type itself.
     ``lumped_rlcs`` and the ``LumpedTerminalPort`` entries of ``ports`` name the plan's port sheets; a wave

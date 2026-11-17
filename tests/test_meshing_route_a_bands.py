@@ -61,6 +61,7 @@ def test_the_default_recipe_meshes_simplepad_on_route_a_with_bands_clean(tmp_pat
         }
         for kind in INTERFACE_KINDS
     }
+    plan.set_surface_epr(specs)
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
     sim.set_output_dir(tmp_path / "run")
@@ -71,7 +72,6 @@ def test_the_default_recipe_meshes_simplepad_on_route_a_with_bands_clean(tmp_pat
         inductance=PORT_INDUCTANCE_H,
     )
     sim.set_route("A")
-    sim.set_surface_epr(specs)
 
     sim.mesh()
 

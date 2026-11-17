@@ -35,7 +35,7 @@ from scgsim.contracts.sgb_sidecar import Sidecar, read_sidecar
 from scgsim.contracts.sgb_sidecar.records import SurfaceGroup
 from scgsim.geometry.exact.grid import Grid
 from scgsim.geometry.sgb.output.sidecar.aedt import aedt_names
-from scgsim.geometry.surface_epr.specs import margins_of
+from scgsim.geometry.source.surface_epr_specs import margins_of
 
 REGION = "Region"
 SURFACE_TYPES = ("MA", "MS", "SA")
@@ -284,7 +284,7 @@ def surface_rows(
         ):
             raise ValueError(
                 f"Required Surface EPR {interface_type} has no row in the SGB model; pass required=False "
-                f"in its spec, or set_surface_epr() without {interface_type}"
+                f"in its spec, or plan.set_surface_epr() without {interface_type}"
             )
     return out
 

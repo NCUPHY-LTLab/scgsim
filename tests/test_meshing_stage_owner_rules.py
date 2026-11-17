@@ -110,7 +110,7 @@ def test_a_core_where_the_support_ring_wraps_round_is_the_erosion_on_either_side
         ("C", "erosion"),
     }
     for finding in report.findings:
-        assert "change the margins in surface_epr_specs" in finding.fix
+        assert "change the inset margins given to plan.set_surface_epr" in finding.fix
 
 
 # --------------------------------------------------------------------------- a source edge shorter than its margin

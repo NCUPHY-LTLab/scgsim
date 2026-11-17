@@ -251,7 +251,7 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 對由 GeometryPlan 轉換的幾何，衍生子物件的 Ground 身份仍限於來源元件實例。保留來源外框、孔洞、呼叫者 Net 成員及所記錄實例變換，且只套用變換一次。不從父物件、Net 名稱或外接框推定物理 Ground。物理 Ground 角色與求解器原生 Net 型別是兩項分開的明確事實。
 
-導體來源法向厚度或 `physical_thickness_um`，不是 EPR 模型的介面膜厚。交給 `set_surface_epr()` 的 MA、MS 或 SA spec 的 `film_thickness_m` 是獨立的模型輸入；不以導體厚度取代介面假設。
+導體來源法向厚度或 `physical_thickness_um`，不是 EPR 模型的介面膜厚。交給 `GeometryPlan.set_surface_epr()` 的 MA、MS 或 SA spec 的 `film_thickness_m` 是獨立的模型輸入；不以導體厚度取代介面假設。
 
 理想超導體由層疊的材料紀錄決定，並保留 Al、Nb 等原材料 ID。實體映射到原生 `pec`；薄 Q3D 本體使用 `ThinConductor`、材料 `pec` 與具有明確單位的宣告物理厚度；薄 HFSS 本體使用 `Perfect E`。非超導介電與真空指派採明確 PDK AEDT 材料庫對應。不支援的材料模型明確失敗，不改用室溫材料或損耗模型。
 
@@ -395,7 +395,7 @@ HFSS Eigenmode 在 Palace 網格化的同一個 SGB 模型上執行（issue #67�
 
 收據的幾何紀錄就是匯入紀錄：每個規劃的實體與其 AEDT 物件、每個規劃面的匯入副本、重建的 sheet、每一項指派、選取用的 sheet 與模型識別。讀取結果時，模型識別、guard 實體或綁定檔案雜湊與請求的模型不符的收據會被拒絕。
 
-`EprAnalysisRequest.surface_epr_groups` 選取 sidecar 的 Surface-EPR 群組（`None`：全部群組）；`junction_ids` 與 `bulk_domain_ids` 選取要回報的 junction 與區域，而每個區域與 junction 都留在正規化之中。Surface EPR 以 `EigenmodeSim.set_surface_epr(specs)` 宣告，即 Palace 依介面型別給的 specs。其 inset margin 成為模型的 band，每一列在其全部的面上積分，側壁也包含在內。
+`EprAnalysisRequest.surface_epr_groups` 選取 sidecar 的 Surface-EPR 群組（`None`：全部群組）；`junction_ids` 與 `bulk_domain_ids` 選取要回報的 junction 與區域，而每個區域與 junction 都留在正規化之中。Surface EPR 以 `GeometryPlan.set_surface_epr(specs)` 在計畫上宣告，即 Palace 依介面型別給的 specs；`EigenmodeSim` 從 `set_plan` 綁定的快照讀取，本身沒有 Surface-EPR 設定方法。HFSS Driven Terminal 與 Q3D 不讀取它們。其 inset margin 成為模型的 band，每一列在其全部的面上積分，側壁也包含在內。
 
 儲存場分析（`analyze_epr(model=...)`）複製已儲存的專案並以名稱重新綁定：guard 的實體、Region，以及其運算式讀取的每一張列與 junction sheet 都必須在已儲存的設計中，且已儲存的解必須指向相同的模型識別。`surface_field_selectors` 以相同的群組為鍵：`surface` 讀取列在其 sheet 上的場（`EnterSurface`），`adjacent` 讀取緊鄰其外的場（`EnterAdjacentSurface`）；兩者的面積都是 sheet 的面積。原生建模器的交接資料、已儲存的解或收據會被拒絕（issue #67 決定 6）。
 
@@ -500,7 +500,7 @@ sim.set_expression_cache_convergence(
 
 ### 公開 EPR 介面 {#public-epr-candidate-surface}
 
-公開的 HFSS Eigenmode 入口是 `EigenmodeSim`（`set_plan`、`set_eigenmode`、`set_surface_epr`、`add_junction`、`add_lumped_rlc` 與 `set_epr_request`）、`prepare_sgb_model()` 搭配 `prepare_hfss_eigenmode_from_geometry(model=...)`，以及用於已儲存解的 `analyze_epr(model=...)`。它們都接收一次 SGB 建模的同一個 `PreparedSgbModel`；沒有平面 Eigenmode 準備流程。HFSS Driven Terminal 接收同一種 `PreparedSgbModel`（[其路徑](#hfss-driven-terminal-sgb)）。
+公開的 HFSS Eigenmode 入口是 `EigenmodeSim`（`set_plan` 是它唯一的來源，另有 `set_eigenmode`、`add_junction`、`add_lumped_rlc` 與 `set_epr_request`；Surface EPR 是計畫的 `set_surface_epr`）、`prepare_sgb_model()` 搭配 `prepare_hfss_eigenmode_from_geometry(model=...)`，以及用於已儲存解的 `analyze_epr(model=...)`。它們都接收一次 SGB 建模的同一個 `PreparedSgbModel`；沒有平面 Eigenmode 準備流程。HFSS Driven Terminal 接收同一種 `PreparedSgbModel`（[其路徑](#hfss-driven-terminal-sgb)）。
 
 #### 自動矩形接面分割 {#aedt-automatic-junction-partition}
 

@@ -230,7 +230,7 @@ def test_a_core_the_exact_erosion_leaves_is_attributed_to_the_erosion(monkeypatc
     )
     assert finding.value == pytest.approx(0.004, abs=1e-6)
     assert finding.groups == ("MA::chip/pad_0000__top::band=2",)
-    assert "surface_epr_specs" in finding.fix
+    assert "plan.set_surface_epr" in finding.fix
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
@@ -299,11 +299,11 @@ def set_up_as_the_check(simulation, component, run_dir, specs=None, nets=None):
 
     The stack has no vacuum of its own, so the plan sets one, as ``check`` gives it.
     """
-    snapshot = layout_plan(component, layer_stack=NO_VACUUM_STACK, nets=nets).prepare()
+    snapshot = layout_plan(
+        component, layer_stack=NO_VACUUM_STACK, nets=nets, surface_epr_specs=specs
+    ).prepare()
     sim = simulation()
     sim.set_plan(snapshot)
-    if specs is not None:
-        sim.set_surface_epr(specs)
     sim.set_output_dir(run_dir)
     return sim
 
@@ -493,7 +493,7 @@ def test_a_band_narrower_than_the_face_width_limit_is_refused_before_the_build(
     message = str(raised.value)
     assert named in message
     assert "face-width limit of 10 grid steps (0.01 um)" in message
-    assert "Widen the margins in surface_epr_specs" in message
+    assert "Widen the inset margins given to plan.set_surface_epr" in message
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)

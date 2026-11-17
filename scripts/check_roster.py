@@ -169,13 +169,13 @@ def _build_layout(name: str) -> Layout:
 
 def _simulation_drc(layout: Layout, material_records, specs):
     return simulation_class(layout).simulation_drc(
-        geometry_plan(layout, material_records), surface_epr_specs=specs
+        geometry_plan(layout, material_records, specs)
     )
 
 
 def _mesh(layout: Layout, material_records, specs, run: Path) -> dict[str, Any]:
     """``mesh()`` into ``run`` of the simulation ``configured_simulation`` sets up; the delivered mesh's quality report."""
-    sim = configured_simulation(layout, prepare_plan(layout, material_records), specs)
+    sim = configured_simulation(layout, prepare_plan(layout, material_records, specs))
     sim.set_output_dir(run)
     sim.mesh()
     # mesh_sgb writes `<xao stem>.quality.json` beside the mesh it delivers; the run folder holds one model.

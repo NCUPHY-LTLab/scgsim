@@ -616,7 +616,7 @@ def test_anchors_that_define_a_circle_on_the_plan_build_in_a_turned_occurrence(
 ):
     """The zigzag's anchors (0, 0), (1, 1) and (7, 0) um on the plan, turned by 20 degrees: SGB builds the arc."""
     snapshot = zigzag_plan(monkeypatch, (1, 2, 5), 20.0).prepare()
-    sim = configured(EigenmodeSim, snapshot, None)
+    sim = configured(EigenmodeSim, snapshot)
     sim.set_output_dir(tmp_path / "run")
 
     def meshing_reached(*_args, **_kwargs):

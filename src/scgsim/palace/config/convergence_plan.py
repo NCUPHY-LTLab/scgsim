@@ -215,7 +215,7 @@ def _surface_values(
 
 def _surface_columns(quantity: SurfaceEpr, context: PlanContext) -> tuple[str, ...]:
     """The ``p_surf`` columns of the kind's whole-surface entries, or of its margin entries at the margin."""
-    where = "the calls to set_convergence and set_surface_epr"
+    where = "the calls to set_convergence and GeometryPlan.set_surface_epr"
     kind = quantity.interface_kind
     if (
         context.surface_interfaces is not None
@@ -239,7 +239,7 @@ def _surface_columns(quantity: SurfaceEpr, context: PlanContext) -> tuple[str, .
         raise ValueError(
             Declared(f"{quantity_name(quantity)} criterion", where).refusal(
                 f"reads {kind} participation, and Surface EPR is not requested for {kind}: call "
-                f"set_surface_epr() with a {kind} spec"
+                f"plan.set_surface_epr() with a {kind} spec"
             )
         )
     if quantity.margin_um is None:

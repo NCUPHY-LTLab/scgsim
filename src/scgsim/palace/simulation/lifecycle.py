@@ -10,7 +10,6 @@ Call                   Needs                  Falls back to before it runs or on
 =====================  =====================  ===========================================
 ``set_plan``           nothing                ``BOUND`` (a new plan; nothing built is kept)
 geometry setters       nothing                ``BOUND``
-``set_surface_epr``    ``BOUND``              ``BOUND`` (its specs are checked against the plan's materials)
 problem setters        nothing                ``MESHED``
 ``input_summary``      ``BOUND``              nothing is discarded
 ``mesh``               ``BOUND``              ``BOUND``
@@ -19,9 +18,10 @@ problem setters        nothing                ``MESHED``
 ``prepare_handoff``    ``CONFIG_WRITTEN``     nothing is discarded
 =====================  =====================  ===========================================
 
-The geometry setters are the others whose value ``mesh()`` reads (output folder, vacuum, route, mesh
-controls, Eigenmode ports); the problem setters are those only ``write_config()`` reads.  ``CALLS`` is
-that table as code; the simulation core reads it and nothing else decides these rules.
+The geometry setters are the others whose value ``mesh()`` reads (output folder, route, mesh controls,
+Eigenmode ports); the vacuum and Surface EPR are the plan's, so a new value comes with ``set_plan``.  The
+problem setters are those only ``write_config()`` reads.  ``CALLS`` is that table as code; the simulation
+core reads it and nothing else decides these rules.
 """
 
 from __future__ import annotations
@@ -46,9 +46,7 @@ class Stage(IntEnum):
 Call = Literal[
     "set_plan",
     "set_output_dir",
-    "set_vacuum_region",
     "set_route",
-    "set_surface_epr",
     "set_mesh",
     "add_port",
     "set_epr_request",
@@ -91,17 +89,7 @@ def _out_of_order(problem: str, fix: str) -> str:
 CALLS: dict[Call, CallRule] = {
     "set_plan": _GEOMETRY_CHANGE,
     "set_output_dir": _GEOMETRY_CHANGE,
-    "set_vacuum_region": _GEOMETRY_CHANGE,
     "set_route": _GEOMETRY_CHANGE,
-    "set_surface_epr": CallRule(
-        needs=Stage.BOUND,
-        falls_back_to=Stage.BOUND,
-        # The specs name materials, and the bound plan's stack is what they are checked against.
-        refusal=_out_of_order(
-            "has no plan materials to check the Surface EPR specs against",
-            "set_plan() before set_surface_epr()",
-        ),
-    ),
     "set_mesh": _GEOMETRY_CHANGE,
     "add_port": _GEOMETRY_CHANGE,
     "set_epr_request": _PROBLEM_CHANGE,

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
+from scgsim.geometry.source.surface_epr_specs import normalize_surface_epr_specs
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.config.config_records import (
     ConfigInput,
@@ -40,7 +40,9 @@ SPECS = {
 def test_surface_epr_specs_write_the_normalized_mapping_key_for_key():
     """``to_payload()`` is the shared normalization, in the same key order, so the index map keeps its bytes."""
     expected = normalize_surface_epr_specs(SPECS, materials=MATERIALS)
-    payload = SurfaceEprSpecs.normalized(SPECS, materials=MATERIALS).to_payload()
+    payload = SurfaceEprSpecs.of_normalized(
+        normalize_surface_epr_specs(SPECS, materials=MATERIALS)
+    ).to_payload()
     assert payload == expected
     assert list(payload) == list(expected)
     for interface_type, spec in expected.items():
@@ -49,7 +51,9 @@ def test_surface_epr_specs_write_the_normalized_mapping_key_for_key():
 
 def test_a_spec_gives_a_conductor_its_own_margins_and_its_native_thickness():
     """A chosen conductor takes its own margins, every other face the type's; thickness is in Model.L0 units."""
-    specs = SurfaceEprSpecs.normalized(SPECS, materials=MATERIALS)
+    specs = SurfaceEprSpecs.of_normalized(
+        normalize_surface_epr_specs(SPECS, materials=MATERIALS)
+    )
     ma = specs.by_type["MA"]
     assert ma.margins_for(["chip/pad_0000"]) == [0.5, 1.0, 1.5]
     assert ma.margins_for(["chip/other"]) == [0.5, 1.0]

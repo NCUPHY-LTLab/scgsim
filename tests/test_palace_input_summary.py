@@ -1,7 +1,7 @@
 """``input_summary()`` summarises the input ``mesh()`` builds from, not the plan as it was bound.
 
-A plan with no vacuum of its own gets its vacuum from the simulation, so the summary has to show that vacuum
-as the model has it (Issue #193).  Each comparison runs the real preparation and SGB geometry build of
+The summary has to show the vacuum as the model has it (Issue #193): a stack's own vacuum, or the region the plan
+pads around a stack without one, lowered with the film on Route A.  Each comparison runs the real preparation and SGB geometry build of
 ``mesh()``; only the mesher is replaced by a marker error, so no test here runs Gmsh or a solver.
 Both simulations take the summary from the shared core; ``ElectrostaticSim`` adds its own settings.
 """
@@ -28,14 +28,15 @@ from scgsim.geometry.source.summary import summarize_geometry_input
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
 # The two pads on their substrate span z from -5 um to the metal's top at 0.2 um; this padding, as
-# ``set_vacuum_region`` takes it, adds nothing in the plane and 1000 um below and above.
+# ``GeometryPlan.set_vacuum_region`` takes it, adds nothing in the plane and 1000 um below and above.
 VACUUM_PADDING_UM = (0.0, 0.0, 1000.0)
 
 
-def eigenmode_sim(monkeypatch, layer_stack, *, route="B"):
+def eigenmode_sim(monkeypatch, layer_stack, *, route="B", surface_epr_specs=None):
     """An ``EigenmodeSim`` on the two-pad plan of ``layer_stack`` with its authored port, as a user sets it up.
 
-    A plan with no vacuum of its own is given ``VACUUM_PADDING_UM`` on the simulation.
+    A stack with no vacuum of its own is given ``VACUUM_PADDING_UM`` on the plan; ``surface_epr_specs``, when
+    given, go to the plan too.
     """
     plan = GeometryPlan(
         two_pads(monkeypatch, gap_um=10.0, port=True),
@@ -45,10 +46,12 @@ def eigenmode_sim(monkeypatch, layer_stack, *, route="B"):
         coupon_padding_um=0.0,
     )
     plan.set_nets({"pad": ("chip/pad",), "electrode": ("chip/electrode",)})
+    if layer_stack is NO_VACUUM_STACK:
+        plan.set_vacuum_region(VACUUM_PADDING_UM)
+    if surface_epr_specs is not None:
+        plan.set_surface_epr(surface_epr_specs)
     sim = EigenmodeSim()
     sim.set_plan(plan.prepare())
-    if layer_stack is NO_VACUUM_STACK:
-        sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_port("chip/P1", layer="metal", layout_sheet=True, inductance=1e-9)
     if route == "A":
         sim.set_route("A")
@@ -87,14 +90,14 @@ def built_by_mesh(monkeypatch, sim, output_dir):
         (NO_VACUUM_STACK, "B", (-1005.0, 1000.2)),
         (NO_VACUUM_STACK, "A", (-1005.0, 1000.0)),
     ],
-    ids=["plan-vacuum", "simulation-vacuum", "simulation-vacuum-route-a"],
+    ids=["stack-vacuum", "padded-vacuum", "padded-vacuum-route-a"],
 )
 def test_the_summary_shows_the_vacuum_mesh_builds(
     monkeypatch, tmp_path, layer_stack, route, vacuum_z_um
 ):
     """The summary's vacuum is the vacuum of the built model, and its source half is that of the input ``mesh()`` builds from.
 
-    The plan's own vacuum spans z -10 to 12 um.  A plan without one gets the simulation's region, 1000 um
+    The stack's own vacuum spans z -10 to 12 um.  A stack without one gets the plan's padded region, 1000 um
     below the substrate's bottom and above the metal's top; on Route A the film is lowered to a sheet at
     z = 0, so the region the model has ends 0.2 um lower than the bound plan and the padding give.
     """
@@ -122,8 +125,7 @@ def test_the_summary_shows_the_vacuum_mesh_builds(
 def test_the_summary_leaves_the_simulation_as_it_was(monkeypatch):
     """Preparing the summary keeps nothing: the materials the simulation holds are still the bound plan's.
 
-    The prepared stack completes the vacuum material of the region the simulation set; only ``mesh()``
-    keeps that.
+    Only ``mesh()`` keeps the materials of the stack it prepares.
     """
     sim = eigenmode_sim(monkeypatch, NO_VACUUM_STACK)
     before = copy.copy(sim)
@@ -136,7 +138,7 @@ def test_the_summary_leaves_the_simulation_as_it_was(monkeypatch):
 def test_the_electrostatic_summary_shows_the_vacuum_mesh_builds_and_its_settings(
     monkeypatch, tmp_path
 ):
-    """``ElectrostaticSim`` has the same summary: the vacuum the simulation set, then its terminals and policies.
+    """``ElectrostaticSim`` has the same summary: the vacuum the plan padded, then its terminals and policies.
 
     Its source half is that of the input its ``mesh()`` builds from; no sheet is cut as a lumped port.
     """
@@ -148,9 +150,9 @@ def test_the_electrostatic_summary_shows_the_vacuum_mesh_builds_and_its_settings
         coupon_padding_um=0.0,
     )
     plan.set_nets({"pad": ("chip/pad",), "electrode": ("chip/electrode",)})
+    plan.set_vacuum_region(VACUUM_PADDING_UM)
     sim = ElectrostaticSim()
     sim.set_plan(plan.prepare())
-    sim.set_vacuum_region(VACUUM_PADDING_UM)
     sim.add_terminal("pad", net_id="pad")
     sim.add_ground(net_id="electrode")
 

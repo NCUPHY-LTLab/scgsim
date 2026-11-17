@@ -232,11 +232,17 @@ def placed(device, rotation_degrees: float):
     return chip, reference
 
 
-def plan_snapshot(chip, reference, *, outer_vacuum_um: float | None = None):
+def plan_snapshot(
+    chip,
+    reference,
+    *,
+    outer_vacuum_um: float | None = None,
+    vacuum_padding_um: tuple[float, float, float] | None = None,
+):
     """The prepared plan of the chip, its device registered as ``chip/device``.
 
     ``outer_vacuum_um`` adds the plan's own vacuum region that far above the layout, as the
-    AEDT preparation needs.
+    AEDT preparation needs; ``vacuum_padding_um`` adds it with that padding.
     """
     plan = GeometryPlan(
         chip,
@@ -249,14 +255,15 @@ def plan_snapshot(chip, reference, *, outer_vacuum_um: float | None = None):
     plan.set_nets(NETS)
     if outer_vacuum_um is not None:
         plan.set_vacuum_region(padding=(0.0, 0.0, outer_vacuum_um))
+    if vacuum_padding_um is not None:
+        plan.set_vacuum_region(vacuum_padding_um)
     return plan.prepare()
 
 
 def eigenmode_sim(chip, reference):
-    """An ``EigenmodeSim`` on the chip's plan with its one lumped port, as a user sets it up."""
+    """An ``EigenmodeSim`` on the chip's plan, in its vacuum, with its one lumped port, as a user sets it up."""
     sim = EigenmodeSim()
-    sim.set_plan(plan_snapshot(chip, reference))
-    sim.set_vacuum_region(VACUUM_PADDING_UM)
+    sim.set_plan(plan_snapshot(chip, reference, vacuum_padding_um=VACUUM_PADDING_UM))
     sim.add_port(PORT, layer="metal", layout_sheet=True, inductance=1e-9)
     return sim
 
@@ -300,8 +307,8 @@ def built_sidecar(monkeypatch, chip, reference, **options):
             layer_stack=NO_VACUUM_STACK,
             instances={"chip/device": reference},
             nets=NETS,
-        ),
-        **options,
+            **options,
+        )
     ).passed
     (sidecar,) = sidecars
     return sidecar

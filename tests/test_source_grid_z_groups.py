@@ -252,8 +252,11 @@ def d0_band_areas(monkeypatch, component):
 
     monkeypatch.setattr(EigenmodeSim, "_build_geometry", recording)
     report = EigenmodeSim.simulation_drc(
-        layout_plan(component, layer_stack=FLIP_CHIP_STACK),
-        surface_epr_specs={"MA": FILM, "MS": FILM, "SA": FILM},
+        layout_plan(
+            component,
+            layer_stack=FLIP_CHIP_STACK,
+            surface_epr_specs={"MA": FILM, "MS": FILM, "SA": FILM},
+        )
     )
     assert report.passed
     (sidecar,) = sidecars

@@ -9,33 +9,15 @@ execute:
   enabled: false
 ---
 
-請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。本頁使用其中不可變的 `snapshot`、`port_name` 與 `coupon`，準備可攜式 HFSS 本徵模交接套件，輸出表面、體積與接面 EPR。Python 輸入準備環境需要 SCGSim `aedt-epr` extra 與相符的公開 OrPen 輸入。此 extra 提供版圖幾何與 PyAEDT 的 Python 相依項目；不會安裝 AEDT 或提供授權。本範例明確選擇 AEDT 2024.2。目標執行主機需要該 AEDT 版本、PyAEDT 1.3.0 與適當授權。請使用[範例](examples.qmd)列出的相符 SCGSim 來源修訂版本。Quarto 不會開啟 AEDT、建立原生幾何或求解此模型。snapshot 保留其來源物理堆疊；本頁為 AEDT 選擇 `modeling="solid"`。Route A／B 描述上游幾何建構方式，不是 AEDT 準備參數。
+請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。本頁在其 `plan` 上加入 Surface EPR、重新準備，並使用新的 `snapshot`、`port_name` 與 `coupon`，準備可攜式 HFSS 本徵模交接套件，輸出表面、體積與接面 EPR。Python 輸入準備環境需要 SCGSim `aedt-epr` extra 與相符的公開 OrPen 輸入。此 extra 提供版圖幾何與 PyAEDT 的 Python 相依項目；不會安裝 AEDT 或提供授權。本範例明確選擇 AEDT 2024.2。目標執行主機需要該 AEDT 版本、PyAEDT 1.3.0 與適當授權。請使用[範例](examples.qmd)列出的相符 SCGSim 來源修訂版本。Quarto 不會開啟 AEDT、建立原生幾何或求解此模型。snapshot 保留其來源物理堆疊；本頁為 AEDT 選擇 `modeling="solid"`。Route A／B 描述上游幾何建構方式，不是 AEDT 準備參數。
 
 ## 設定表面與接面 EPR {#configure-surface-and-junction-epr}
 
 共用 snapshot 會將已定義的 `D0_TO_D1_GAP` 與產生的外部真空區域分開。AEDT 契約記錄 HFSS 對背景暴露表面採用的預設 Perfect E 政策；Palace 則使用自然 PMC 邊界。這些後端選擇是刻意設定，不會自動轉換。[AEDT 執行環境參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)說明原生 Region 表示方式。此靜態頁面不宣稱已檢查原生 HFSS 幾何。比較結果時，請記下外部邊界、Region 尺寸與後端設定。
 
-### 綁定接面 {#bind-the-junction}
+### 宣告 Surface EPR {#declare-surface-epr}
 
-元件註記會識別已定義端口薄片及其主幾何；Notebook 的 `GeometryPlan` 提供最終端點 Nets。請先將該正規化薄片綁定至明確 Nets 與電路值，準備交接套件前，將此 `junction` 加入 `EigenmodeSim`。Closed-XY binder 接觸會找出可能的擁有者；準備階段仍會依共用輸出幾何，檢查完整的指定端邊。其共用座標建構、讀回解析、拓撲與搜尋假設，請參閱[分區契約](specs/aedt-runtime.qmd#aedt-automatic-junction-partition)。
-
-公開 Palace 範例以電感 $L=11.78\,\mathrm{nH}$ 模型化端口。此 AEDT 範例將 $C=0$ 設為僅含電感的明確電路模型假設；這不代表實體元件電容為零，也不表示曾量得電容。
-
-```python
-from scgsim.aedt import planar_junction_from_port
-
-junction = planar_junction_from_port(
-    snapshot.geometry_input,
-    port_name=port_name,
-    junction_id="jj",
-    terminal_a_net="Ground",
-    terminal_b_net="xmon_pad",
-    inductance_h=11.78e-9,
-    capacitance_f=0.0,  # Explicit inductive-only modeling assumption.
-)
-```
-
-以 Palace 的方式宣告 Surface EPR：每個介面型別一個 spec，包含其薄膜假設與 inset margin。margin 會成為 AEDT 匯入的 SGB 模型的 band，已宣告型別的每一列 sidecar Surface-EPR 列都會積分，側壁也包含在內。薄膜厚度、介電常數、損耗與來源取自 OrPen 的合成 `LiteratureCentral` 預設值；margin 是相對於每個表面未遮罩 baseline 的替代評估。
+與 Palace 相同，在計畫上宣告 Surface EPR：每個介面型別一個 spec，包含其薄膜假設與 inset margin。margin 會成為 AEDT 匯入的 SGB 模型的 band，已宣告型別的每一列 sidecar Surface-EPR 列都會積分，側壁也包含在內。薄膜厚度、介電常數、損耗與來源取自 OrPen 的合成 `LiteratureCentral` 預設值；margin 是相對於每個表面未遮罩 baseline 的替代評估。
 
 ```python
 from orcapen_sc_pdk.materials import validate_interface_preset_records
@@ -55,6 +37,30 @@ for kind in ("MA", "MS", "SA"):
         "preset": preset_name,
         "inset_margins_um": [0.5, 1.0],
     }
+plan.set_surface_epr(surface_epr_specs)
+snapshot = plan.prepare()
+```
+
+Surface EPR 是幾何的一部分，所以以 `plan.set_surface_epr` 設定在輸入教學的計畫上，再重新準備計畫；新的 `snapshot` 把規格帶給 `EigenmodeSim`，它本身沒有 Surface-EPR 設定方法。
+
+### 綁定接面 {#bind-the-junction}
+
+元件註記會識別已定義端口薄片及其主幾何；Notebook 的 `GeometryPlan` 提供最終端點 Nets。請先將該正規化薄片綁定至明確 Nets 與電路值，準備交接套件前，將此 `junction` 加入 `EigenmodeSim`。Closed-XY binder 接觸會找出可能的擁有者；準備階段仍會依共用輸出幾何，檢查完整的指定端邊。其共用座標建構、讀回解析、拓撲與搜尋假設，請參閱[分區契約](specs/aedt-runtime.qmd#aedt-automatic-junction-partition)。
+
+公開 Palace 範例以電感 $L=11.78\,\mathrm{nH}$ 模型化端口。此 AEDT 範例將 $C=0$ 設為僅含電感的明確電路模型假設；這不代表實體元件電容為零，也不表示曾量得電容。
+
+```python
+from scgsim.aedt import planar_junction_from_port
+
+junction = planar_junction_from_port(
+    snapshot.geometry_input,
+    port_name=port_name,
+    junction_id="jj",
+    terminal_a_net="Ground",
+    terminal_b_net="xmon_pad",
+    inductance_h=11.78e-9,
+    capacitance_f=0.0,  # Explicit inductive-only modeling assumption.
+)
 ```
 
 ## 選取回報資料列並準備交接 {#select-reported-rows-and-prepare-a-handoff}
@@ -97,7 +103,6 @@ sim.set_eigenmode(
     ),
     resources=aedt_resources,
 )
-sim.set_surface_epr(surface_epr_specs)
 sim.add_junction(junction)
 sim.set_epr_request(
     EprAnalysisRequest(

@@ -242,7 +242,7 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _geometry_plan() -> GeometryPlan:
-    """The plan of the pad pair with its junction declared, as ``simulation_drc`` and the simulation take it."""
+    """The plan of the pad pair with its Surface EPR and junction declared, as ``simulation_drc`` and the simulation take it."""
     plan = GeometryPlan(
         _component(),
         root_id="chip",
@@ -252,6 +252,7 @@ def _geometry_plan() -> GeometryPlan:
     )
     plan.set_nets({"A": ("chip/pad_a",), "B": ("chip/pad_b",)})
     plan.set_vacuum_region(VACUUM_PADDING_UM)
+    plan.set_surface_epr(SURFACE_EPR_SPECS)
     (region,) = plan.prepare().geometry_input.port_sheet_regions
     hosts = {
         relation["host_entity_id"].split("/")[1].rsplit("_", 1)[0]: relation[
@@ -305,7 +306,6 @@ def _handoff(
         run_control=RUN_CONTROL,
         resources=resources,
     )
-    sim.set_surface_epr(SURFACE_EPR_SPECS)
     sim.add_junction(junction)
     sim.set_epr_request(EPR_REQUEST)
     return sim.prepare_handoff()

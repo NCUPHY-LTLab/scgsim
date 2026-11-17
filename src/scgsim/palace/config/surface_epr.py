@@ -16,14 +16,14 @@ from typing import Any
 
 from scgsim.contracts.palace_run_folder import SURFACE_FILM_SCHEMA
 from scgsim.geometry.exact.grid import Grid
-from scgsim.geometry.surface_epr.specs import positive_real
+from scgsim.geometry.source.surface_epr_specs import positive_real
 from scgsim.refusal import Declared, found_text, internal
 
 from ..mesh.physical_groups import Groups, rows_of
 from ..source.surface_epr import SurfaceEprSpec, SurfaceEprSpecs
 from .index import IndexedRows, InsetSelection, SurfaceEprEntry, SurfaceRow
 
-_WHERE_SURFACE_EPR = "the call to set_surface_epr"
+_WHERE_SURFACE_EPR = "the call to GeometryPlan.set_surface_epr"
 
 
 def build_surface_epr_postprocessing(
@@ -56,7 +56,7 @@ def build_surface_epr_postprocessing(
                 Declared(
                     f"Required Surface EPR {interface_type}", _WHERE_SURFACE_EPR
                 ).refusal(
-                    f"has no matching structured group: pass required=False in its spec, or set_surface_epr() without {interface_type}"
+                    f"has no matching structured group: pass required=False in its spec, or plan.set_surface_epr() without {interface_type}"
                 )
             )
         snapshot = _spec_snapshot(spec, model_l0_m)

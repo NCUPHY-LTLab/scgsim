@@ -1,6 +1,8 @@
 """Compose components into a detached source: place each occurrence with its transform and take the Net membership the caller sets last.
 
-A component's local facts stay as the component declares them.
+A component's local facts stay as the component declares them.  The plan also holds the facts of the model that
+do not depend on the solver: its vacuum region and its Surface-EPR specs, which every backend reads from the
+snapshot ``prepare()`` returns.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ from scgsim.geometry.source.curves import (
 from scgsim.geometry.source.junctions import with_rectangular_junctions
 from scgsim.geometry.source.normalization import (
     finite_number,
+    normalize_material_records,
 )
 from scgsim.geometry.source.occurrence import (
     occurrence_ground_polygons_for_entity,
@@ -65,7 +68,9 @@ from scgsim.geometry.source.plan_assembly import (
     transform_source_point,
 )
 from scgsim.geometry.source.plan_bindings import (
+    authored_surface_epr_specs,
     check_bindings_still_hold,
+    checked_surface_epr_specs,
     plan_call,
     validated_nets,
     validated_priorities,
@@ -85,11 +90,13 @@ from scgsim.refusal import Declared, internal
 
 @dataclass(frozen=True)
 class GeometryPlanSnapshot:
-    """One detached GDS, stack, normalized input, and source-identity pair.
+    """One detached GDS, stack, normalized input, and source-identity pair, with the plan's Surface-EPR specs.
 
     ``GeometryPlan.prepare()`` builds it: the stack and the normalized input name
     ``gds_sha256``, the digest of ``gds_bytes``, because prepare() wrote all three
-    from the one GDS it hashed.
+    from the one GDS it hashed.  ``surface_epr_specs`` are the specs
+    ``GeometryPlan.set_surface_epr`` was given, normalized against the stack's materials, or
+    None when the plan has none.
     """
 
     _geometry_input: GeometryBuildInput
@@ -97,6 +104,7 @@ class GeometryPlanSnapshot:
     gds_bytes: bytes
     gds_sha256: str
     _source_occurrences: tuple[Mapping[str, Any], ...]
+    _surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self._geometry_input, GeometryBuildInput):
@@ -108,6 +116,9 @@ class GeometryPlanSnapshot:
         object.__setattr__(self, "_geometry_input", copy.deepcopy(self._geometry_input))
         object.__setattr__(
             self, "_source_occurrences", copy.deepcopy(self._source_occurrences)
+        )
+        object.__setattr__(
+            self, "_surface_epr_specs", copy.deepcopy(self._surface_epr_specs)
         )
 
     @property
@@ -124,6 +135,13 @@ class GeometryPlanSnapshot:
     def source_occurrences(self) -> tuple[Mapping[str, Any], ...]:
         """Return detached occurrence identity and transform records."""
         return copy.deepcopy(self._source_occurrences)
+
+    @property
+    def surface_epr_specs(self) -> dict[str, dict[str, Any]] | None:
+        """Return a detached copy of the normalized Surface-EPR specs by interface type, or None."""
+        return copy.deepcopy(
+            cast("dict[str, dict[str, Any]] | None", self._surface_epr_specs)
+        )
 
 
 @dataclass(frozen=True)
@@ -148,8 +166,10 @@ class _WrittenLayout:
 class GeometryPlan:
     """Bind named source occurrences and final Nets before backend preparation."""
 
-    # Immutable default, so a plan assembled without ``__init__`` (tests build them that way) has no priorities.
+    # Immutable defaults, so a plan assembled without ``__init__`` (tests build them that way) has no priorities
+    # and no Surface EPR.
     _entity_priorities: Mapping[str, int] = MappingProxyType({})
+    _surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
 
     def __init__(  # noqa: PLR0913 - each argument is a public setting of the plan
         self,
@@ -194,6 +214,7 @@ class GeometryPlan:
         self._nets: dict[str, tuple[str, ...]] = {}
         self._entity_priorities = MappingProxyType({})
         self._vacuum_region: VacuumRegionSpec | None = None
+        self._surface_epr_specs = None
         self._boundary_curves = ()
         self._boundary_reconstruction = ()
         self._rectangular_junctions = ()
@@ -235,6 +256,31 @@ class GeometryPlan:
         """Set one explicit six-face outer envelope for the next snapshot."""
         prepared = VacuumRegionSpec.from_padding(padding)
         self._vacuum_region = prepared
+
+    def set_surface_epr(self, specs: Mapping[str, Mapping[str, Any]] | None) -> None:
+        """Request Surface EPR with ``specs`` by interface type for the next snapshot, or turn it off with ``None``.
+
+        Surface EPR is part of the geometry: Palace ``EigenmodeSim`` and ``ElectrostaticSim`` and AEDT
+        ``EigenmodeSim`` cut the inset margins of the specs into their model as bands and read each spec's
+        film; HFSS Driven Terminal and Q3D do not read them.  Without a call, the snapshot carries none.
+
+        Each spec (``"MA"`` metal-air, ``"MS"`` metal-substrate, ``"SA"`` substrate-air) gives its film (one
+        of ``thickness`` or ``film_thickness_m``, one of ``permittivity`` or a dielectric ``material_id`` of
+        the plan's materials, an optional ``loss_tangent``) and may carry ``inset_margins_um``, ``face_kinds``
+        and ``inset_margins_by_entity_um``, as the Palace Eigenmode contract lists them.  The specs are
+        checked here against the plan's material records and again by ``prepare()``; a refused call leaves
+        the earlier specs.
+
+        Raises:
+            TypeError: ``specs`` or a spec is not a mapping, or a field has the wrong type.
+            ValueError: ``specs`` is an empty mapping, names an interface type other than ``MA``, ``MS``
+                and ``SA``, or a spec is invalid (margins not strictly increasing positive reals included).
+        """
+        if specs is not None:
+            specs = authored_surface_epr_specs(
+                specs, normalize_material_records(self._material_records)
+            )
+        self._surface_epr_specs = specs
 
     def register_instance(self, path: str, reference: Any) -> None:
         """Register one authored child occurrence and its composed transform."""
@@ -410,6 +456,11 @@ class GeometryPlan:
         """Prepare a detached source snapshot in its required phase order."""
         self._validate_registered_sources()
         stack = self._validated_stack()
+        surface_epr_specs = (
+            None
+            if self._surface_epr_specs is None
+            else checked_surface_epr_specs(self._surface_epr_specs, stack["materials"])
+        )
         occurrences = self._occurrence_records()
         source = self._write_layout(stack, occurrences)
         scope = GridScope(source.grid)
@@ -425,7 +476,9 @@ class GeometryPlan:
             source,
             merged_audits(occurrence_audits, include_audits, port_audits),
         )
-        return self._assemble_snapshot(build_input, stack, source, occurrences)
+        return self._assemble_snapshot(
+            build_input, stack, source, occurrences, surface_epr_specs
+        )
 
     def _validated_stack(self) -> dict[str, Any]:
         stack = self._stack()
@@ -649,6 +702,7 @@ class GeometryPlan:
         stack: dict[str, Any],
         source: _WrittenLayout,
         occurrences: tuple[Mapping[str, Any], ...],
+        surface_epr_specs: Mapping[str, Mapping[str, Any]] | None,
     ) -> GeometryPlanSnapshot:
         # The source remains self-contained after its temporary files disappear.
         metadata = dict(build_input.metadata)
@@ -694,6 +748,7 @@ class GeometryPlan:
             source.gds_bytes,
             source.gds_sha256,
             occurrences,
+            surface_epr_specs,
         )
 
     def _placed_boundaries(
