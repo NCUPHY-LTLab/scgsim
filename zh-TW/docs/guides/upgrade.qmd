@@ -1,7 +1,7 @@
 ---
-title: "SCGSim API 遷移對照"
+title: "升級到 3.0.0rc4"
 lang: zh-TW
-description: "目前公開的幾何、AEDT、Palace 與視覺化符號對應至目前的負責模組，包含 AEDT 建模與版本選擇契約。"
+description: "找出你的程式碼是為哪個版本寫的，再依該版本的清單升級到 3.0.0rc4，附最終程式碼。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
@@ -9,266 +9,41 @@ aliases:
   - ../api-migration.html
 ---
 
-本參考頁將已固定的 v1 API 介面（下文稱為基準）對應至 SCGSim 3.0 目前的負責模組。為 SCGSim 2.0 撰寫的研究，需要[SGB 模型上的 AEDT 研究](#aedt-sgb-migration)與 [Palace 網格化與 Surface EPR](#palace-mesh-migration) 兩節的變更；為較早的 3.0 預發行版撰寫的研究，需要標明較新版本的部分。
+SCGSim 3.0 的每個預發行版都改了一些呼叫，而且沒有相容層：為較早版本寫的腳本會停下來，錯誤訊息會指出要改哪個呼叫。先找出你的程式碼是為哪個版本寫的，再照該版本的清單逐項修改。每份清單都直接帶你到 3.0.0rc4，只列出最終的程式碼。還沒準備好之前，維持研究專案目前釘選的版本即可，什麼都不會變。
 
-Solid/Thin-Film 三維要求擴充規定：每個新的 Q3D 與 HFSS 三維要求，都必須在要求層級明確設定 `modeling` 為 `"solid"` 或 `"thin_film"`。此欄位沒有預設值，也不會替這些系列推定省略的模式。先前支援的結果酬載只能透過原系列／結構版本的讀取器讀取，原始酬載與雜湊保持不變。這不改變 Q2D 等未變更系列的共用版本化交接相容性；Q2D 與 Palace 的其餘契約也保持不變。
+## 找出你的版本 {#find-your-version}
 
-## AEDT 版本選擇 {#aedt-release-selection}
+版本就是你的專案安裝的 tag（`pyproject.toml` 中的 `@v3.0.0rc3`），或是 `python -c 'from importlib.metadata import version; print(version("scgsim"))'` 印出的值。
 
-目前 AEDT 原生要求、已儲存場分析與交接 API，都要求明確提供 `aedt_version`，且只能為 `"2023.2"` 或 `"2024.2"`；不會推定或預設選擇版本。此值隨交接資料傳遞，選擇本機交易執行期。兩個版本均使用 PyAEDT 1.3.0，並在與 SCGSim 相同的主機上執行本機 AEDT Desktop。
-
-AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並在清理時還原：`use_grpc_api=True`、`grpc_secure_mode=False`、`grpc_local=True`、`grpc_listen_all=False` 及 `PYAEDT_USE_PRE_GRPC_ARGS="True"`。AEDT 2024.2 不覆寫傳輸設定。要求的版本之間沒有備援切換或降版。已儲存產物的來源版本，與要求版本及實際連線版本各自獨立；未知來源維持 `None`，分析仍可使用另外明確指定的版本執行，不需查找或遷移。
-
-套件層級門面仍是受支援的高階入口。此移動不會替舊內部路徑新增相容包裝。既有消費端釘選保持不變；消費端只有在明確採用目前的套件及其新舊對照時才遷移。
-
-## 遷移規則 {#migration-rules}
-
-- 保留 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 及 `scgsim.visualization` 作為套件入口。Palace 以 SGB 建立幾何：見 [Palace 網格化與 Surface EPR](#palace-mesh-migration)。
-- 以文件列出的門面與宣告匯出為公開介面；私有或可匯入的實作模組不會自動成為受支援 API。
-- 將每個受支援符號移至單一責任模組，從套件門面重新匯出核准的高階符號；不保留可呼叫的第二份舊實作或相容包裝。
-- 不恢復 Q3D input-v1 或 input-v2；SGB 模型上的 input-v3 是 Q3D 契約。
-- 保留正式命令 `python -m scgsim.aedt.run` 作為 AEDT 交易入口；它是受支援 CLI，不是舊版包裝。
-- AEDT 收據記錄產生的執行期來源 `scgsim.aedt.runtime-source.v30`：AEDT 模組的匯入閉包，以及每個檔案的 SHA-256。以較早執行期來源結構版本記錄的結果會遭拒，請以寫入它的 SCGSim commit 讀取。遷移不重寫或重新解釋舊收據。
-
-## SGB 模型上的 AEDT 研究 {#aedt-sgb-migration}
-
-從 `3.0.0rc3` 起，AEDT 研究從 `GeometryPlan` 快照準備每一個 3D 模型：AEDT 匯入計畫的 SGB 模型，也就是 Palace 網格化的同一個模型，不再自行建立幾何。為較早路徑撰寫的研究會遇到四項變更。
-
-- **入口是計畫。** HFSS Eigenmode 使用 `EigenmodeSim.set_plan(snapshot)` 與 `sim.prepare_handoff()`；Driven Terminal 使用 `prepare_sgb_model(snapshot.geometry_input, prepared_stack=snapshot.stack, ports=...)` 與 `prepare_hfss_driven_from_geometry(model=...)`；Q3D 使用 `prepare_q3d_from_geometry(snapshot, ...)`。GDS 路徑（`HfssEigenmodeSpec`、`HfssDrivenSpec`、`LayerImport`、`ObjectBinding`、`LengthMeshSpec`、`gds_path`）與 `PreparedPlanarGeometry` 已移除；[AEDT API 清單](#aedt-api-transaction-and-state-ownership)列出各自的替代。
-- **Region 屬於計畫。** `set_vacuum_region(...)` 為每個模型設定 Region；`region_padding_um` 已移除。
-- **尚未提供 Driven Modal 與波埠。** `prepare_sgb_model` 會拒絕 `ModalPort` 與波 `TerminalPort`，並指向 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)。目前的雙埠網路請使用 Driven Terminal，在計畫的埠片上放置 `LumpedTerminalPort`。
-- **原生建構器的執行資料夾不會被讀取。** `execute_handoff`、`resolve_results()` 與 `analyze_epr()` 會拒絕其交接、要求與已儲存解。請以此版本重新準備並執行研究；舊結果請以寫入它的 SCGSim commit 讀取。
-
-## 實體／薄膜要求遷移 {#solidthin-film-request-migration}
-
-新的 Q3D 與 HFSS 三維要求必須明確選擇 `modeling="solid"` 或 `modeling="thin_film"`。省略或提供其他模式不會啟用隱含相容路徑。PDK／來源契約也提供精確的物理層身份、特徵種類（堆疊膜、局部膜或有限體積）、物理厚度，以及適用時的薄膜附著面。既有 Object、Net、埠、連通外框與孔洞身份，仍是要求的來源依據。
-
-此選擇沿用既有 Q3D v3 與 HFSS 系列結構識別字；它決定模型建立所用的 SGB 路徑（`thin_film` 為 Route A，`solid` 為 Route C）。沒有 `modeling`，或為原生建構器寫出的 Q3D／HFSS 要求酬載，由較早的 SCGSim 寫入而遭拒；請以寫入它的 SCGSim commit 讀取。執行路徑不會推定或補上缺少的模式。新的要求在唯一編寫的 `LayerStack` 座標系中以 `PhysicalLayerDeclaration` 紀錄宣告層，其欄位列於[物理表示契約](../reference/specs/physical-representation.qmd)。薄膜宣告以 `physical_dimensions["normal_thickness_um"]` 記錄原始法向厚度，膜物理厚度輸出直接回報此值，不由端點重新計算。較早的 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side, source_thickness_um=None)` 紀錄已隨 AEDT 要求本身的物理層一併移除：計畫以 `PhysicalLayerDeclaration` 宣告物理層。同一物理層 ID 在多邊形、元件實例及 Net 成員間只計算一次，不新增每層 `stack_id`。座標映射使用端點跨度；有限體積維持自己的本體範圍。
-
-模式選擇決定幾何表示，不選擇求解器系列或公開 A/B/C 執行路徑。完整的座標轉換、材料、終端、僅建構與失敗行為，定義於 [AEDT 實體與薄膜契約](../reference/specs/aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 與 Palace 不在這次遷移範圍。Q3D input-v1/v2 要求結構仍已移除；其他受支援系列路徑的共用 V1/V2 交接相容性，不會恢復這些 Q3D 要求結構，也不會略過明確模式要求。
-
-此擴充引入 AEDT 執行期來源身份 `scgsim.aedt.runtime-source.v15`。目前的產生器以 v30 從 AEDT 匯入閉包計算清單；以較早身份記錄的結果，請以寫入它的 SCGSim commit 讀取。
-
-上方連結的 AEDT 實體與薄膜契約定義這些建模路徑中，元件實例局部 Ground、場側與厚度的區別。
-
-## 幾何 API {#geometry-api}
-
-基準 `scgsim.sgb` 門面對應到兩個介面。`scgsim.geometry` 負責來源端規劃、快照、正規化輸入、GDS 與堆疊檔轉接器、真空準備及獨立摘要；`scgsim.geometry.models` 的各模組存放標準輸入與紀錄定義，每個名稱從其定義模組匯入。版圖經由 `GeometryPlan` 與模擬類別進入；`scgsim.geometry.sgb` 的 `build_sgb_geometry` 從準備好的輸入建立模型，位於該入口以下，以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援的入口](../reference/supported-scope.qmd#supported-entry)。下列每個名稱只有一個現行定義，不保留舊路徑相容包裝。
-
-
-- **基準 `scgsim.sgb` → 目前負責模組 `scgsim.geometry`.** 宣告名稱： `BoundaryCurveChainSpec`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GeometryPlan`, `GeometryPlanSnapshot`, `InputSummary`, `LayoutPolygonSpec`, `PathInput`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RouteLiteral`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`, `Vector3D`, `apply_vacuum_region_to_stack`, `build_gds_stack_geometry_input`, `summarize_geometry_input`.
-- **基準 `scgsim.sgb.geometry_plan` → 目前負責模組 `scgsim.geometry`.** 宣告名稱： `GeometryPlan`, `GeometryPlanSnapshot`.
-- **基準 `scgsim.sgb.models` → 目前定義模組位於 `scgsim.geometry.models` 之下（見下列）.** 宣告名稱： `BoundaryCurveChainSpec`, `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `DEFAULT_INTERFACE_SOLVER_USE`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `InterfaceKindLiteral`, `LayoutPolygonSpec`, `PathInput`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RouteLiteral`, `SemanticEntitySpec`, `SolverUseLiteral`, `SourceCurveSpec`, `VacuumRegionSpec`, `Vector3D`.
-- **基準 `scgsim.sgb.vacuum` → 目前負責模組 `scgsim.geometry`.** 宣告名稱： `apply_vacuum_region_to_stack`.
-- **基準路徑建構器：`scgsim.sgb`、`scgsim.sgb.pipeline`、`scgsim.sgb.planning`、`scgsim.sgb.export` 與 `scgsim.sgb.validation` → 沒有支援的匯入路徑。** 宣告名稱： `SemanticGeometryBuilder`、`build_route_construction_plan`、`export_physical_group_records`，各階段函式（`plan_conductor_contact_patches`、`plan_cut_host_operations`、`plan_mm_contact_records`、`plan_route_construction_bodies`、`plan_route_surfaces`、`plan_route_tags`、`plan_route_volumes`、`plan_surface_partitions`、`recognize_route_interfaces`），所有 `validate_*` 驗證器，規劃紀錄 `BackendEntityTagRecord`、`ConstructionPlanRecord`、`CurvePlanRecord`、`CurveRefRecord`、`CutHostOperationRecord`、`FinalPhysicalGroupRecord`、`InnerPecVoidShellRecord`、`PointPlanRecord`、`RouteABConstructionPlanRecord`、`RouteABVolumePlanRecord`、`StructuredFinalPhysicalGroupRecord`、`SurfaceLoopRecord`、`SurfaceRefRecord`、`TagPlanRecord`、`VolumePlanRecord`，以及常值 `DimensionLiteral`、`GmshDimTag`、`ROUTE_ALLOWED_REPRESENTATIONS`、`RUN_METADATA_DIR`、`SEMANTIC_GEOMETRY_METADATA_DIR`、`SurfaceLoopRoleLiteral`、`SurfaceOrientationLiteral` 與 `TagSourceKindLiteral`。版圖經由 `GeometryPlan` 與 `scgsim.palace` 的 `EigenmodeSim` 或 `ElectrostaticSim` 建立；自行準備的輸入以 `build_sgb_geometry` 建立。
-- **基準元件轉接器、`scgsim.sgb.stack` 與 `scgsim.sgb.source_curves` → 沒有支援的匯入路徑。** 宣告名稱： `build_gdsfactory_geometry_input`、`build_component_stack`、`bind_source_curves`。帶有 `component_semantics` schema 2 宣告的元件經由 `GeometryPlan` 進入；它從 PDK 層堆疊建立堆疊，並自行攜帶作者宣告的曲線綁定。
-
-
-每個定義模型都在 `scgsim.geometry.models` 的一個紀錄模組中保有一個標準類別／型別定義。`scgsim.geometry` 重新匯出它列出的輸入紀錄；其他紀錄從其定義模組匯入。下列直接別名列出仍有現行負責模組的基準子模組項目；每一項記錄建議使用的支援門面，定義可位於較低層模組以維持相依方向。
-
-
-- **基準 `scgsim.sgb.adapter` → 目前定義模組 `scgsim.geometry.source.adapter`.** 宣告名稱： `build_gds_stack_geometry_input`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.geometry_plan` → 目前定義模組 `scgsim.geometry.source.plan`.** 宣告名稱： `GeometryPlan`, `GeometryPlanSnapshot`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.models.common` → 目前定義模組 `scgsim.geometry.models.common`.** 宣告名稱： `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `PathInput`, `PolygonRing`, `RouteLiteral`, `Vector3D`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.models.common` → 目前定義模組 `scgsim.geometry.models.common`.** 宣告名稱： `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `DEFAULT_INTERFACE_SOLVER_USE`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `InterfaceKindLiteral`, `SolverUseLiteral`. 建議 API： `scgsim.geometry.models.common`.
-- **於 3.0.0rc3 移除（原生 AEDT 建構器的規劃）。** `scgsim.geometry.planning` 與 `scgsim.geometry.models.topology`（`InterfacePlanRecord`、`MMContactRecord`、`SurfacePlanRecord`），以及 construction 紀錄 `ConstructionBodyPlanRecord` 與 `SurfacePartitionRecord`：AEDT 匯入 SGB 模型，已沒有呼叫者，也沒有替代的支援匯入。
-- **基準 `scgsim.sgb.models.input` → 目前定義模組 `scgsim.geometry.models.input`.** 宣告名稱： `BoundaryCurveChainSpec`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `LayoutPolygonSpec`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.models.regions` → 目前定義模組 `scgsim.geometry.models.regions`.** 宣告名稱： `PortSheetOverlapRecord`, `PortSheetRegionRecord`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.summary` → 目前定義模組 `scgsim.geometry.source.summary`.** 宣告名稱： `InputSummary`, `summarize_geometry_input`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.vacuum` → 目前定義模組 `scgsim.geometry.source.vacuum`.** 宣告名稱： `apply_vacuum_region_to_stack`. 建議 API： `scgsim.geometry`.
-
-
-共用多邊形、空間與 Entity 基元位於來源階段下方；來源程式不匯入規劃。來源身份、快照分離、呼叫者負責的最終 Net 成員及原生對應，維持目前各自的責任歸屬。
-
-共用實作模組依責任分工。網格引擎位於 `scgsim.geometry.grid`，其中包括 `grid_cache` 與 `tagged_grid`；`source._normalization` 與 `source._occurrence` 分別移至 `source.normalization` 與 `source.occurrence`，`source._polygon_ops` 則移至 `scgsim.geometry.grid.polygon_ops`。這些內部名稱不會擴大受支援的 API；請使用上列 `geometry` 外觀模組。
-
-規劃與標記網格模組也依相同責任邊界組織。支援的匯入路徑仍是套件外觀模組：
-
-| 實作範圍 | 使用的支援匯入路徑 |
-|---|---|
-| 來源組裝與元件實例準備 | 從 `scgsim.geometry` 匯入 `GeometryPlan` |
-| 物理表示準備 | 從 `scgsim.geometry` 匯入 `interpret_physical_geometry` |
-| 矩形接面宣告與推導 | 從 `scgsim.geometry` 使用 `RectangularJunctionSpec` 與 `with_rectangular_junctions`，再呼叫 `interpret_physical_geometry` |
-| Palace 研究的模型建構 | 從 `scgsim.palace` 使用 `EigenmodeSim` 或 `ElectrostaticSim`；自行準備的輸入使用 `scgsim.geometry.sgb` 的 `build_sgb_geometry` |
-
-負責模組包括 `scgsim.geometry.source.plan_assembly`、`scgsim.geometry.junctions`、`scgsim.geometry.grid.tagged_grid_faces` 及 `scgsim.geometry.grid.tagged_grid_operations`。這些模組整理內部實作，不新增支援的匯入路徑。
-
-接面規劃會為明確宣告的矩形接面推導精確分區。來源與 AEDT 準備共用內部服務 `junction_contact_inventory(build_input, request)` 及 `JunctionContactRequest`，以解析來源支撐面與相鄰導體。這些橋接名稱不是 `scgsim.geometry` 的匯出；呼叫端透過幾何外觀模組宣告要求，再使用標準物理解讀步驟。
-
-## AEDT API、交易與狀態歸屬 {#aedt-api-transaction-and-state-ownership}
-
-下列清單將基準套件匯出對應至目前的負責模組，也記錄 `run.main` 等只能直接匯入的入口。套件根匯出維持既有符號與語意；在此列出私有定義模組，不會使其成為公開介面。
-
-
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.common`.** 基準名稱： `AedtResources`, `PdkMaterial`, `TerminalPort`, `ModalPort`, `MatrixRunControl`.
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.hfss`.** 基準名稱： `FrequencySweepSpec`, `HfssRunControl`, `EigenmodeRunControl`, `HfssSpec`, `HfssEprSpec`, `HfssEprAnalysisSpec`.
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.q2d`.** 基準名稱： `Q2dRectangleSpec`, `Q2dConductorSpec`, `Q2dSpec`.
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.q3d`.** 基準名稱： `Q3dNetSpec`, `Q3dSpec`.
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.parse`.** 基準名稱： `AedtSpec`, `parse_aedt_spec`.
-- **基準 `scgsim.aedt._epr_models` → 目前標準負責模組 `scgsim.aedt.epr.models`.** 基準名稱： `EprResult`.
-- **基準 `scgsim.aedt._epr_models` → 目前標準負責模組 `scgsim.aedt.specs.epr`.** 基準名稱： `EprAnalysisRequest`, `ExpressionCacheConvergence`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PlanarJunction`, `SavedSolution`.
-- **基準 `scgsim.aedt.handoff` → 目前標準負責模組 `scgsim.aedt.preparation.handoff`.** 基準名稱： `HandoffPlan`, `prepare_handoff`.
-- **基準 `scgsim.aedt.handoff` → 目前標準負責模組 `scgsim.aedt.preparation.geometry`.** 基準名稱： `prepare_hfss_eigenmode_from_geometry`, `prepare_q3d_from_geometry`.
-- **基準 `scgsim.aedt.handoff` → 目前標準負責模組 `scgsim.aedt.epr.workflow`.** 基準名稱： `analyze_epr`.
-- **基準 `scgsim.aedt.eigenmode` → 目前標準負責模組 `scgsim.aedt.eigenmode`.** 基準名稱： `EigenmodeSim`.
-- **基準 `scgsim.aedt.resolve` → 目前標準負責模組 `scgsim.aedt.results.resolve`.** 基準名稱： `ResolvedRun`, `resolve_results`.
-- **基準 `scgsim.aedt._epr_geometry` → 目前標準負責模組 `scgsim.aedt.preparation.planar_junctions`.** 基準名稱： `planar_junction_from_port`.
-- **基準 `scgsim.aedt._epr_results` → 目前標準負責模組 `scgsim.aedt.epr.reanalysis`.** 基準名稱： `reanalyze_epr`.
-- **3.0.0rc3 新增 → 標準負責模組 `scgsim.aedt.preparation.sgb_model`。** 名稱：`PreparedSgbModel`、`prepare_sgb_model`；`prepare_hfss_eigenmode_from_geometry` 與 `prepare_hfss_driven_from_geometry` 接收 `model=`。
-- **於 3.0.0rc3 移除（HFSS Eigenmode 改用 SGB 模型）。** `SurfaceEprSpec`（改以 `GeometryPlan.set_surface_epr(specs)` 宣告 Surface EPR，即 Palace 依介面型別的 specs；見[計畫上的 Surface EPR 與真空](#plan-owns-surface-epr)）、`EprAnalysisRequest.surface_contribution_ids`（改為 `surface_epr_groups`，即 sidecar 的 Surface-EPR 群組）、`combine_epr_mode` 與 `combine_surface_epr_mode`（平面組合），以及 `analyze_epr(geometry=..., geometry_workers=...)`（改為 `analyze_epr(model=...)`）。
-- **於 3.0.0rc3 移除（Q3D 改用 SGB 模型）。** `Q3dBodySpec` 與不經來源的本體請求（`Q3dSpec` 改帶 `PreparedSgbModel` 與該模型的 Net），以及 `prepare_q3d_from_geometry` 的 `materials` 與 `region_padding_um` 參數（材料取自堆疊，Region 為計畫的 `VACUUM_REGION`）。
-- **於 3.0.0rc3 移除（HFSS Driven Terminal 改用 SGB 模型、原生建構器與 GDS 路徑）。** `HfssEigenmodeSpec`、`HfssDrivenSpec`、`HfssDrivenMode`、`LayerImport`、`ObjectBinding`、`LengthMeshSpec` 與 `gds_path`（改從 `GeometryPlan` 快照準備：Eigenmode 用 `EigenmodeSim`，Driven Terminal 用 `prepare_sgb_model(..., ports=...)` 與 `prepare_hfss_driven_from_geometry(model=...)`）；`PreparedPlanarGeometry` 與 `prepare_planar_geometry_input`（要求改帶 `PreparedSgbModel`）；`prepare_hfss_driven_from_geometry` 的 `modeling`、`geometry`、`ports` 與 `geometry_workers` 參數；`--geometry-workers` 與 `ExecutionOptions.geometry_workers`。`prepare_handoff(spec=...)` 只接受 `Q3dSpec` 與 `Q2dSpec`，並拒絕 HFSS 要求，指出應使用的 HFSS 準備函式。
-- **於 3.0.0rc3 移除（Q3D 只有 C/G；AC/RL 追蹤於 issue #265）。** `Q3dTerminalPair` 與 `prepare_q3d_from_geometry` 的 `terminal_pairs` 參數、`Q3dSpec.solve_ac_rl`，以及 `Q3dNetSpec` 的 `source_object`、`source_side`、`sink_object` 與 `sink_side` 欄位。Q3D 要求只擷取電容與電導。
-- **基準 `scgsim.aedt._epr_results` → 目前標準負責模組 `scgsim.aedt.results.epr`.** 基準名稱： `resolve_epr_result`, `resolve_saved_solution`.
-- **基準 `scgsim.aedt._epr_results and _presentation` → 目前標準負責模組 `scgsim.aedt.presentation.epr`.** 基準名稱： `plot_epr_result`, `show_epr`.
-- **基準 `scgsim.aedt.run` → 目前標準負責模組 `scgsim.aedt.run`.** 基準名稱： `main`.
-
-
-套件目前完整的 `__all__` 清單為： `AedtResources`, `AedtSpec`, `EigenmodeRunControl`, `EigenmodeSim`, `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `ExpressionCacheConvergenceSet`, `FrequencySweepSpec`, `HandoffPlan`, `HfssDrivenGeometrySpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssRunControl`, `HfssSpec`, `LumpedRlc`, `LumpedTerminalPort`, `MatrixRunControl`, `ModalPort`, `NativeBatchPackage`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PdkMaterial`, `PlanarJunction`, `PreparedModel`, `PreparedSgbModel`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dNetSpec`, `Q3dSpec`, `ResolvedRun`, `SavedSolution`, `SimulationDrcReport`, `StageResult`, `TerminalPort`, `analyze_epr`, `collect_native_batch`, `parse_aedt_spec`, `planar_junction_from_port`, `plot_epr_result`, `prepare_handoff`, `prepare_hfss_driven_from_geometry`, `prepare_hfss_eigenmode_from_geometry`, `prepare_native_batch`, `prepare_q3d_from_geometry`, `prepare_sgb_model`, `reanalyze_epr`, `request_q3d_abort_and_save`, `request_q3d_stop_and_save`, `resolve_epr_result`, `resolve_prepared_model`, `resolve_results`, `resolve_saved_solution`, `run_native_batch`, `show_epr`.
-
-新的責任結構沿用既有邊界：
-
-- `aedt.specs` 負責共用、HFSS、Q2D 與 Q3D-v3 要求資料，以及明確系列解析；不恢復 Q3D input-v1/v2。
-- `aedt.preparation` 負責供 AEDT 使用的 SGB 模型、攜帶它的可攜式交接及標準相容群組成員。
-- `aedt.runtime.transaction` 是唯一 Desktop 負責者及收據狀態協調者。系列執行期各自負責原生準備／求解／匯出／讀回；狹義共用原生輔助模組不負責系列或 Desktop。
-- `aedt.epr` 負責 EPR 模型、來源幾何、場／快取及工作流程；`aedt.results` 負責嚴格交接／結果解析、來源資訊、收斂、矩陣及封存 EPR 讀取器。結果讀取不啟動求解。
-- `aedt.presentation` 負責純顯示投影與繪圖，嚴格結果解析不載入其延遲匯入。
-
-`EigenmodeSim` 仍是幾何／堆疊、EPR 設定、準備及交接失效處理的高階可變狀態負責者；準備輔助函式不接管該狀態。交易順序仍明確：驗證要求與輸入相容群組，在 PyAEDT／Desktop 之前寫入執行中收據，執行一次系列交易，在 Desktop 釋放前保存回傳事實，再封存已儲存的 EPR 結果。若釋放也失敗，先前的原生／系列錯誤仍為主要錯誤；解析只驗證回傳產物，不執行 AEDT。不新增共用 Simulation 基底或共用物理結果模型。
-
-文件列出的直接模組介面依下列方式遷移：`spec` 移至 `specs.common/hfss/q2d/q3d/parse`；`handoff` 分至 `preparation.handoff`、`preparation.geometry` 與 `epr.workflow`；`eigenmode` 維持負責狀態的門面；`resolve` 移至 `results.resolve`；`run.main` 留在 `scgsim.aedt.run` 作為輕量委派。可匯入但未匯出的 `aedt.util` 移至內部 I/O 葉節點，不保留包裝。EPR 分析、結果讀取器與呈現模組，移至上述責任結構中的具名負責模組，不擴大套件門面。
-
-保留 `python -m scgsim.aedt.run`、`main(argv)` 及 `__main__` 行為。產生的交接與 EPR 腳本繼續以既有引數呼叫此命令，交易實作移至 CLI 薄層之後。動態 EPR 工作流程匯入會呼叫唯一的交易負責者；EPR 對 HFSS 匯出／讀回的相依性成為明確內部服務。視覺化從標準規格負責模組匯入現行 PyAEDT 常數，而不把它們變成公開匯出。
-
-目前產生端記錄 runtime-source v30，於每次使用時計算為每個 AEDT 模組與兩個 AEDT 視覺化載入器的匯入閉包；見[執行期來源契約](../reference/specs/aedt-runtime.qmd#runtime-source)。各模組雜湊綁定所列檔案，正規清單摘要識別該來源快照；兩者都不是永久的程式碼值。以較早執行期來源結構版本記錄的結果，請以寫入它的 SCGSim commit 讀取；舊模組字串不會映射到新路徑。交接與收據歷史和 Q3D 要求版本分開；Q3D 仍只支援 v3。此對照不宣稱原生 Q3D 已完成。
-
-## Palace 網格化與 Surface EPR {#palace-mesh-migration}
-
-Palace 現在以 SGB 建立幾何，並用 `scgsim.meshing` 產生網格。本節把每個被移除的網格選項對應到它的替代，並列出 Palace 研究還需要做的其他修改。舊選項已移除，沒有相容層，所以仍傳入舊選項的腳本會失敗，直到更新為止。
-
-### 幾何
-
-`mesh()` 以 `scgsim.geometry.sgb` 的 `build_sgb_geometry` 建立模型。基準路徑建構器沒有現行對應，見[幾何 API](#geometry-api)。
-
-### 網格控制
-
-`set_mesh` 現在接受 `recipe`、`mesher`、`budgets` 與 `quality_threshold`，定義見 [Palace 網格控制](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。兩個外觀介面上的 `set_mesh` 同樣改了，本徵模態與 Electrostatic 共用預設值。
-
-::: {.askr-table-compact}
-| 已移除 | 替代 |
-|---|---|
-| `size_policy`、`refined_mesh_size`、`max_mesh_size`；`set_numerical(refined_mesh_size=, max_mesh_size=)` | `recipe`：`FeatureRecipe`（預設）、`GlobalSizeRecipe` 或 `UniformBoundaryRecipe` |
-| `algorithm_3d` | `mesher=MesherOptions(algorithm_3d=...)`，搭配 `scgsim.meshing.DELAUNAY` 或 `HXT` |
-| `geometry_order`、`high_order_optimize` | `MesherOptions(geometry_order=..., high_order_optimize=...)` |
-| `threads`、`surface_threads` | 無。網格化只用單一執行緒，因為多執行緒的 HXT 無法重現。 |
-| 無 | `quality_threshold`（預設 0.01 minSICN）與 `budgets`（`Budgets`） |
-:::
-
-下表列出最接近每個舊尺寸選擇的配方，以及改用後有什麼不同。兩個配方都不會逐元素重現舊網格。
-
-::: {.askr-table-compact}
-| 舊設定 | 最接近的配方 | 改變之處 |
+| 你的程式碼是為哪個版本寫的 | 最大的改變 | 你的清單 |
 |---|---|---|
-| `scgsim_default`（細化 5 µm、最大 300 µm） | `UniformBoundaryRecipe()` | 以前只替 `boundary_surfaces`、`pec_surfaces` 與 `port_surfaces` 群組的邊界曲線設尺寸，尺寸可設定，2D 演算法為 5。現在模型的每條曲線都設尺寸，2D 演算法由 `MesherOptions` 決定（傳入 `algorithm_2d=5` 可對齊），且門檻與修復都會作用。 |
-| `gmsh_default`（沒有尺寸場） | `GlobalSizeRecipe()` | 以前由 Gmsh 自選尺寸，沒有最大值。現在最大尺寸是包圍盒對角線除以 20，`MesherOptions()` 使用 Delaunay（量測此配方的基準測試用的是 HXT），且門檻與修復都會作用。 |
-| `algorithm_3d`、`threads` | `MesherOptions(algorithm_3d=...)` | 網格化只用單一執行緒。 |
-:::
+| 3.0.0rc3 | Surface EPR 與真空區域改為設定在計畫上，不再設定在模擬上 | [從 3.0.0rc3 升級](#from-3-0-0rc3) |
+| 3.0.0rc1 或 3.0.0rc2 | 版圖檢查改為接收計畫，AEDT 的每個 3D 模型都從計畫建立 | [從 3.0.0rc1 或 rc2 升級](#from-rc1-or-rc2) |
+| 2.0（某個 2.0.0 預發行版） | Palace 改用 SGB 建立模型，網格設定換新；route 與 Surface EPR 分成兩個設定；舊的執行資料夾不再讀取 | [從 2.0 升級](#from-2-0) |
 
-預設值不是上述任何一個：`FeatureRecipe()` 為幾何本身需要的曲線設尺寸，並搭配 `MesherOptions()`（Delaunay）與 `Budgets()`。網格達不到品質門檻時，現在會拋出 `MeshRepairError` 並中止執行；以前網格品質從不阻擋執行。
+比 2.0 更早、仍匯入 `scgsim.sgb` 的程式碼，請先依[舊匯入對照](../contribute/internals/api-owners.qmd#geometry-api)改好匯入，再照「從 2.0 升級」進行。
 
-### Surface EPR
+## 從 3.0.0rc3 升級 {#from-3-0-0rc3}
 
-Surface EPR 邊距變成了幾何，隨之而來的改變如下：
+[]{#plan-owns-surface-epr}Surface EPR 與真空區域都會改變幾何，而且與求解器無關，所以從 3.0.0rc4 起，它們只在 `GeometryPlan` 上設定一次。3.0.0rc3 寫出的執行資料夾照常可讀：模型、Palace 設定與結果都沒有改變。
 
-- 請在計畫上設定 Surface EPR：在 `plan.prepare()` 之前呼叫 `plan.set_surface_epr(specs)`（[計畫上的 Surface EPR 與真空](#plan-owns-surface-epr)）。
-- 路徑與 Surface EPR 是兩個設定。`set_surface_epr(*, representation, specs, route_a_thin_film=None, approximation_profile=None)` 改為 `sim.set_route(route, *, approximation_profile=None)` 與 `plan.set_surface_epr(specs)`。Route B 是預設值，所以 Route B 模擬兩者都不必為路徑呼叫。只有計畫有規格時才會計算 Surface EPR，Eigenmode 與 Electrostatic 相同：請刪除原本不要求任何東西的呼叫（Route B 搭配空的 `specs`），因為空映射現在會被拒絕；要再次關閉 Surface EPR，請用 `plan.set_surface_epr(None)`。Route A 寫成 `set_route("A")`，以 `thin_film` 近似設定降低薄膜；`substrate_face` 與 `metal_gap_equivalent` 以 `set_route("A", approximation_profile=profile)` 傳入。`representation` 與 `route_a_thin_film` 關鍵字已移除，也沒有 `thin_film` 關鍵字：近似設定的名稱已說明降低方式。模擬的 `thin_film` 欄位與 `input_summary()` 的 `thin_film` 鍵一併移除；`input_summary()` 顯示準備階段使用的近似設定名稱，預設值也包含在內。
-- `inset_margins_um` 向 SGB 要求帶。它只接受正的嚴格遞增邊距，所以請去掉開頭的 `0.0`：基準列一定存在。
-- Palace 不再寫出原生 `Mask` 或 `Inset`，所以邊距列不需要 Palace 分支版本。結果讀取器會拒絕含有原生 `Mask` 列的設定檔。
-- `inset_margins_by_entity_um` 是新增的，用於 `MA` 與 `MS` 的逐導體邊距。`face_kinds` 接受 `sheet`、`top`、`bottom` 與 `interface`，規格要求邊距時會拒絕 `sidewall`。
+1. 把 `sim.set_surface_epr(specs)` 換成 `plan.set_surface_epr(specs)`，並放在 `plan.prepare()` 之前；Palace 的 `EigenmodeSim`、`ElectrostaticSim` 與 AEDT 的 `EigenmodeSim` 都一樣。`None` 關閉它，`{}` 會被拒絕，與以前相同。
+2. 把 Palace 的 `sim.set_vacuum_region(padding)` 換成 `plan.set_vacuum_region(padding)`，並放在 `plan.prepare()` 之前。
+3. 拿掉三個類別 `simulation_drc(...)` 中的 `surface_epr_specs=`：檢查會讀計畫上的設定。`route`、`approximation_profile` 與 `modeling` 保留。
+4. 拿掉 Palace 模擬建構子的 `surface_epr_specs` 與 `vacuum_region` 引數，以及 AEDT `EigenmodeSim` 的 `surface_epr_specs`。`sim.surface_epr_specs` 現在讀的是所綁定計畫的規格。
+5. AEDT 的 `EigenmodeSim`：把 `set_geometry(...)`、`set_stack(...)` 以及 `component`、`build_input`、`stack` 引數，換成 `sim.set_plan(plan.prepare())`，這是它唯一的來源。
 
-鍵與列的定義見[本徵模態契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)。SGB 群組名稱以 `__` 接上面種類，例如 `MA::pad__top::band=1`；名稱的格式見[本徵模態契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)。
-
-### 結果
-
-Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_version` 3，且只讀這兩種。舊結構的執行資料夾與 `scgsim.palace.epr-result.v1` 的獨立 EPR 結果都會被拒絕，見 [Palace 執行結構](../reference/specs/report-model.qmd#palace-run-schemas)。下列更名沒有舊名稱別名。
-
-::: {.askr-table-compact}
-| 以前 | 現在 |
-|---|---|
-| `SurfaceMaskEprRecord`、`SurfaceMaskEprSeriesSnapshot` | `SurfaceMarginEprRecord`、`SurfaceMarginEprSeriesSnapshot` |
-| `PhysicsQuantitiesReport.masked_snapshots` | `PhysicsQuantitiesReport.margin_snapshots` |
-| `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v2` |
-| `surface-mask-Q.csv` 與 `surface-mask-energy.csv` | 邊距列從 `surface-Q.csv` 讀取 |
-:::
-
-### 收斂與報告 {#palace-convergence-migration}
-
-`3.0.0rc2` 新增收斂宣告，並改變報告顯示的內容。
-
-**`3.0.0rc1` 或更早版本寫出的執行資料夾不再讀取。** 回傳的回執現在是第 2 版，並記載求解器如何結束。讀取結果時會拒絕第 1 版的回執，並指出要讀那個資料夾應使用寫出它的版本；要用這個版本讀一項研究，請重新準備並執行。
-
-新增且可選用：
-
-- `sim.set_convergence(...)` 宣告執行何時算收斂，準則可針對電容、模態頻率、Surface EPR 與 Palace 的誤差指標（[宣告](../reference/specs/palace-electrostatic-sgb.qmd#convergence-declaration)）。變化以該值的百分比表示：`Capacitance.diagonal().within(percent=0.5)`。準則收斂的那個 pass 之後，Palace 會被[停止](../reference/specs/palace-electrostatic-sgb.qmd#convergence-stop)，其後的 pass 不再執行。有宣告時 `amr_tolerance` 不使用，明確給定會被拒絕。
-- `ResolvedPalaceResult.convergence` 保存每個 pass 的檢查與判定，`ResolvedPalaceResult.solver_end` 保存 Palace 如何結束。
-
-不論有沒有宣告，每次執行都會遇到的改變：
-
-::: {.askr-table-compact}
-| 之前 | 現在 |
-|---|---|
-| Run Identity 顯示所有紀錄欄位 | Problem、Route、Profile、AMR passes recorded 與 MPI × OpenMP；其餘使用 `show_details=True` |
-| `|Δ …| vs AMR pass` 圖 | 已移除。有宣告時，每個量後面接著它宣告的變化（百分比） |
-| 一張圖畫 MA、MS、SA | 每種介面一張圖，一條線是整個表面，每個 inset 各一條線 |
-| `show_physics_quantities()` 從表面排名開始 | 從電容矩陣，或各模態的頻率與 Q 開始 |
-| `show_all_results()`：可信度、基準、物理量 | 可信度、物理量、基準 |
-| `show_simulation_benchmark()` 沒有 `theme` | 每份報告都接受 `theme="light"` 或 `"dark"` |
-| 電容圖命名為 `C[1][1]` | 以端點命名，`C[signal][signal]` |
-:::
-
-各份報告的版面見[報告模型](../reference/specs/report-model.qmd#declared-convergence)。
-
-### 版圖建模檢查 {#simulation-drc-migration}
-
-`3.0.0rc3` 改變 `scgsim.palace.EigenmodeSim`、`scgsim.palace.ElectrostaticSim` 與 `scgsim.aedt.EigenmodeSim` 上 `simulation_drc` 的第一個引數：它是模擬將拿到的 `GeometryPlan`（在 `prepare()` 之前）。`layer_stack`、`material_records`、`instances` 與 `nets` 已移除，它們屬於計畫。`route`、`approximation_profile` 與 `modeling` 保留；Surface-EPR 規格也屬於計畫（[見下節](#plan-owns-surface-epr)）。第一個引數不是 `GeometryPlan` 時會被拒絕，訊息中列出該建立的計畫。
+程式碼會變成：
 
 ```python
-# 之前
-EigenmodeSim.simulation_drc(component, layer_stack=layer_stack, material_records=material_records, nets=nets, route="A")
-
-# 現在
-plan = GeometryPlan(component=component, root_id="chip", layer_stack=layer_stack, material_records=material_records, coupon_padding_um=0.0)
-plan.set_nets(nets)
-plan.set_vacuum_region((0.0, 0.0, 1000.0))  # 層堆疊沒有 VACUUM_REGION 時
-plan.set_rectangular_junctions([...])  # 版圖有矩形接面時
-EigenmodeSim.simulation_drc(plan, route="A")
-```
-
-檢查不再為計畫加入任何設定。之前它以零 coupon 填充檢查，版圖沒有真空時再加上以 (0, 0, 1000) µm 填充的真空；現在它使用計畫的 coupon 填充與真空，沒有真空的計畫會以模擬自己的錯誤被拒絕。組裝件的實例請在 `set_nets` 之前以 `plan.register_instance` 註冊。AEDT 的檢查現在涵蓋計畫的矩形接面，並裁切其薄片。`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 現在會在寫出 handoff 之前執行匯入的第一步，因此會拒絕匯入無法實現的模型。見[版圖建模檢查](check-a-layout.qmd#build-the-plan)。
-
-### 計畫上的 Surface EPR 與真空 {#plan-owns-surface-epr}
-
-從 `3.0.0rc4` 起，Surface-EPR 規格與真空區域只在 `GeometryPlan` 上設定一次，別處不再設定：兩者都改變幾何，也都與求解器無關。模擬從 `set_plan` 綁定的快照讀取它們，`simulation_drc` 從它拿到的計畫讀取。被移除的呼叫沒有相容層。
-
-::: {.askr-table-compact}
-| 已移除 | 取代方式 |
-|---|---|
-| `scgsim.palace.EigenmodeSim`、`scgsim.palace.ElectrostaticSim` 與 `scgsim.aedt.EigenmodeSim` 上的 `sim.set_surface_epr(specs)` | 在 `plan.prepare()` 之前呼叫 `plan.set_surface_epr(specs)`；`None` 關閉它，`{}` 會被拒絕，與之前相同 |
-| Palace 模擬上的 `sim.set_vacuum_region(padding)` | 在 `plan.prepare()` 之前呼叫 `plan.set_vacuum_region(padding)` |
-| 三個類別上的 `simulation_drc(plan, surface_epr_specs=specs, ...)` | 先 `plan.set_surface_epr(specs)`，再 `simulation_drc(plan, ...)`；`route`、`approximation_profile` 與 `modeling` 保留 |
-| Palace 模擬建構子的 `surface_epr_specs` 與 `vacuum_region` 引數，以及 `scgsim.aedt.EigenmodeSim` 的 `surface_epr_specs` | 計畫的設定方法；`sim.surface_epr_specs` 讀取綁定計畫的規格 |
-| `scgsim.aedt.EigenmodeSim.set_geometry(...)`、`set_stack(...)` 及其 `component`、`build_input` 與 `stack` 引數 | `sim.set_plan(plan.prepare())`，唯一的來源 |
-:::
-
-```python
-# 之前
+# Before
 sim = EigenmodeSim()
 sim.set_plan(plan.prepare())
 sim.set_vacuum_region((0.0, 0.0, 1000.0))
 sim.set_surface_epr(specs)
 EigenmodeSim.simulation_drc(plan, surface_epr_specs=specs, route="A")
 
-# 現在
+# Now
 plan.set_vacuum_region((0.0, 0.0, 1000.0))
 plan.set_surface_epr(specs)
 EigenmodeSim.simulation_drc(plan, route="A")
@@ -277,52 +52,130 @@ sim.set_route("A")
 sim.set_plan(plan.prepare())
 ```
 
-規格以相同規則、對照計畫的材料檢查：設定時一次，`prepare()` 時再一次。計算 Surface EPR 的模擬會讀取它們：Palace Eigenmode 與 Electrostatic，以及 HFSS Eigenmode。HFSS Driven Terminal 與 Q3D 不讀取它們，也不切條帶，與之前相同。原本指向模擬上 `set_surface_epr` 的拒絕訊息，現在指向 `GeometryPlan.set_surface_epr`。模型、Palace 設定檔與執行資料夾都沒有改變：`3.0.0rc3` 寫出的執行資料夾照常讀取。
+規格在設定時，以及在 `prepare()` 中，都會依計畫的材料用同樣的規則檢查。原本指向模擬上 `set_surface_epr` 的拒絕訊息，現在指向 `GeometryPlan.set_surface_epr`。HFSS Driven Terminal 與 Q3D 仍然不讀 Surface EPR，也不切條帶。
 
-## Palace 套件符號 {#palace-package-symbols}
+## 從 3.0.0rc1 或 rc2 升級 {#from-rc1-or-rc2}
 
-`scgsim.palace` 宣告 26 個套件門面名稱。下列清單依 v2 責任模組分組。
+請依序進行：
 
+1. **舊的執行資料夾。** 3.0.0rc1 寫出的 Palace 執行資料夾不再讀取：從 3.0.0rc2 起，回傳的記錄會說明求解器如何結束，沒有這項記錄的資料夾會被拒絕。3.0.0rc1 或 rc2 寫出的 HFSS 與 Q3D 執行資料夾，是由 AEDT 自己的幾何建構器產生的，而這個建構器已經移除：AEDT 執行程式、`resolve_results()` 與 `analyze_epr()` 都會拒絕它們。請重新準備並執行這類研究，或用寫出舊資料夾的那個版本讀取它。
+2. []{#simulation-drc-migration}**版圖檢查改為接收計畫。** `simulation_drc` 的第一個引數，是模擬將拿到的 `GeometryPlan`（在 `prepare()` 之前）；`layer_stack`、`material_records`、`instances`、`nets` 與 `surface_epr_specs` 都拿掉了，因為它們屬於計畫。
 
-- **目前負責模組與責任：** `scgsim.palace.simulation`; 兩個模擬類別共用同一個核心與生命週期。 **門面匯出：** `ElectrostaticSim`, `EigenmodeSim`.
-- **目前負責模組與責任：** `scgsim.palace.simulation.drc`; 兩階段 `simulation_drc` 的報告與拒絕，`mesh()` 在網格化之前也會丟出同一個拒絕。 **門面匯出：** `SimulationDrcError`, `SimulationDrcReport`, `StageResult`.
-- **目前負責模組與責任：** `scgsim.palace.results.resolved_records`; 回傳執行經過檢查的紀錄。 **門面匯出：** `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`.
-- **目前負責模組與責任：** `scgsim.palace.reports.resolved_result`; 使用者拿到的已解析結果及其筆記本視圖。 **門面匯出：** `ResolvedPalaceResult`, `resolve_palace_result`.
-- **目前負責模組與責任：** `scgsim.palace.results.epr` 與 `scgsim.palace.results.epr_records`; 獨立 EPR 數值與離線重新分析。 **門面匯出：** `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`.
-- **目前負責模組與責任：** `scgsim.palace.reports`; 依求解器對獨立 EPR 繪圖。 **門面匯出：** `show_epr`.
-- **目前負責模組與責任：** `scgsim.palace.results.inspection_records`; 供 Palace 呈現使用的獨立資料。 **門面匯出：** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`.
-- **目前負責模組與責任：** `scgsim.palace.reports`; 根據保留結果證據提供可信度、物理與效能比較檢視（`reports.reports`、`reports.trust`、`reports.views`）。 **門面匯出：** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
+   ```python
+   # Before
+   EigenmodeSim.simulation_drc(component, layer_stack=layer_stack, material_records=material_records, nets=nets, route="A")
 
+   # Now
+   plan = GeometryPlan(component=component, root_id="chip", layer_stack=layer_stack, material_records=material_records, coupon_padding_um=0.0)
+   plan.set_nets(nets)
+   plan.set_vacuum_region((0.0, 0.0, 1000.0))
+   plan.set_rectangular_junctions(junctions)  # when the layout has rectangular junctions
+   plan.set_surface_epr(specs)  # when the simulations compute Surface EPR
+   EigenmodeSim.simulation_drc(plan, route="A")
+   ```
 
-## Palace 直接子模組匯出 {#palace-direct-submodule-exports}
+   檢查不會為計畫加任何東西。以前它使用零的試片外加量，版圖沒有真空時還會自己加上 (0, 0, 1000) µm 的真空；現在它使用計畫上的設定，沒有真空區域的計畫會被拒絕。組合的實例請在 `set_nets` 之前以 `plan.register_instance` 註冊。檢查及其報告見[檢查版圖](check-a-layout.qmd)。
+3. **Surface EPR 與真空區域改到計畫上。** 依[從 3.0.0rc3 升級](#from-3-0-0rc3)的第 1 到 5 步。
+4. []{#aedt-sgb-migration}**AEDT 從計畫建立模型。** AEDT 的每個 3D 計算都從 `GeometryPlan` 快照準備：AEDT 匯入的就是 Palace 產生網格的那個模型，自己不再建構任何幾何。
 
-這些名稱不以下劃線開頭的模組各自宣告 `__all__`，因此除了套件門面外，也需要明確的遷移項目。
+   | 計算 | 移除 | 現在 |
+   |---|---|---|
+   | HFSS Eigenmode | `HfssEigenmodeSpec`、`gds_path` | `EigenmodeSim(modeling=..., aedt_version=...)`、`sim.set_plan(plan.prepare())`、`sim.prepare_handoff()`；見 [HFSS Eigenmode](modes-hfss.qmd) |
+   | HFSS Driven Terminal | `HfssDrivenSpec`、`HfssDrivenMode`、`LayerImport`、`ObjectBinding`、`LengthMeshSpec`、`PreparedPlanarGeometry`、`prepare_planar_geometry_input`；`prepare_hfss_driven_from_geometry` 的 `modeling`、`geometry`、`ports` 與 `geometry_workers` 引數 | `prepare_sgb_model(snapshot.geometry_input, prepared_stack=snapshot.stack, modeling=..., output_dir=..., ports=...)`，接著 `prepare_hfss_driven_from_geometry(model=..., ...)`；見 [HFSS Driven Terminal](s-parameters-hfss.qmd) |
+   | Q3D | `Q3dBodySpec`；`prepare_q3d_from_geometry` 的 `materials` 與 `region_padding_um` 引數 | `prepare_q3d_from_geometry(snapshot, ...)`，材料取自層堆疊；見 [Q3D](capacitance-q3d.qmd) |
 
+   這一步的其他改變：
 
-- **基準直接匯入 `scgsim.palace.electrostatic` → 目前負責模組 `scgsim.palace.simulation.electrostatic`.** 宣告符號： `ElectrostaticSim`.
-- **基準直接匯入 `scgsim.palace.eigenmode` → 目前負責模組 `scgsim.palace.simulation.eigenmode`.** 宣告符號： `EigenmodeSim`.
-- **基準直接匯入 `scgsim.palace.handoff` → 目前負責模組 `scgsim.palace.run.handoff`.** 宣告符號： `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
-- **基準直接匯入 `scgsim.palace.resolve`.** 宣告符號： `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`. 目前負責模組：紀錄位於 `scgsim.palace.results.resolved_records`，`ResolvedPalaceResult` 與 `resolve_palace_result` 位於 `scgsim.palace.reports.resolved_result`；請從 `scgsim.palace` 匯入。
-- **基準直接匯入 `scgsim.palace.report`.** 宣告符號： `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. 目前負責模組：`inspect_run_trustworthiness` 位於 `scgsim.palace.reports.reports`，`PalaceTrustReport` 位於 `scgsim.palace.reports.trust`，`PhysicsQuantitiesReport` 位於 `scgsim.palace.reports.views`，資料紀錄位於 `scgsim.palace.results.inspection_records`；請從 `scgsim.palace` 匯入。
+   - AEDT 的 Region 就是計畫的真空區域，所有計算都一樣；`region_padding_um` 已移除。
+   - AEDT 請求自己的物理層（`PhysicalLayerSpec`）已移除：改由計畫的層堆疊以 `PhysicalLayerDeclaration` 宣告。
+   - HFSS Eigenmode 的 Surface EPR 取自計畫：`SurfaceEprSpec`、`combine_epr_mode` 與 `combine_surface_epr_mode` 已移除。`EprAnalysisRequest.surface_contribution_ids` 改名為 `surface_epr_groups`，`analyze_epr(geometry=..., geometry_workers=...)` 改為 `analyze_epr(model=...)`。
+   - `prepare_handoff(spec=...)` 只接受 `Q3dSpec` 與 `Q2dSpec`；HFSS 請求會被拒絕，訊息會指出該呼叫哪個 HFSS 函式。`--geometry-workers` 與 `ExecutionOptions.geometry_workers` 已移除。
+   - Driven Modal 與波埠無法使用：`prepare_sgb_model` 會拒絕 `ModalPort` 與波形式的 `TerminalPort`。雙埠網路請用 Driven Terminal，在計畫的埠片上放 `LumpedTerminalPort`（Driven Modal 的進度見 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)）。
+   - Q3D 只擷取電容與電導：`Q3dTerminalPair`、`terminal_pairs`、`Q3dSpec.solve_ac_rl`，以及 `Q3dNetSpec` 的 `source_object`、`source_side`、`sink_object` 與 `sink_side` 欄位都已移除（AC/RL 的進度見 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)）。
+   - `prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 現在會在寫出交接套件之前，就拒絕 AEDT 匯入無法實現的模型，不需要 AEDT。
+5. []{#palace-convergence-migration}**收斂與報告**（3.0.0rc2 新增；從 rc2 升級可略過這一步）。你現在可以用 `sim.set_convergence(...)` [宣告執行何時算收斂](convergence-and-reports.qmd#declare-convergence)；Palace 會在那一輪停下。有宣告時，另外指定的 `amr_tolerance` 會被拒絕。不論有沒有宣告，每次執行的報告都有以下改變：
 
+   ::: {.askr-table-compact}
+   | 以前 | 現在 |
+   |---|---|
+   | Run Identity 顯示每個記錄欄位 | Problem、Route、Profile、AMR passes recorded 與 MPI × OpenMP；其餘用 `show_details=True` 顯示 |
+   | `|Δ …| vs AMR pass` 圖 | 移除。有宣告時，每個物理量之後接著它宣告的百分比變化 |
+   | 一張包含 MA、MS、SA 的表面圖 | 每種介面一張圖，整個表面一條線，每個邊距一條線 |
+   | `show_physics_quantities()` 以表面排名開頭 | 以電容矩陣，或每個模態的頻率與 Q 值開頭 |
+   | `show_all_results()`：可信度、成本、物理 | 可信度、物理、成本 |
+   | `show_simulation_benchmark()` 不接受 `theme` | 每個檢視都接受 `theme="light"` 或 `"dark"` |
+   | 電容圖名為 `C[1][1]` | 以端子命名，例如 `C[signal][signal]` |
+   :::
 
-目前 `scgsim.palace.results.inspection_records` 模組定義 `AmrPassSnapshot`、`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceEprRecord`、`SurfaceEprSeriesSnapshot`、`SurfaceMarginEprRecord` 及 `SurfaceMarginEprSeriesSnapshot`。每個模組只宣告它定義的名稱；所有受支援的名稱都從套件門面 `scgsim.palace` 匯入。
+   `ResolvedPalaceResult.convergence` 保存每一輪的檢查與判定，`ResolvedPalaceResult.solver_end` 則說明 Palace 如何結束。
 
-`scgsim.palace._epr_results` 是基準私有實作路徑，受支援名稱由 `scgsim.palace` 重新匯出。目前由 `scgsim.palace.results` 負責；舊私有匯入路徑不是相容介面。
+## 從 2.0 升級 {#from-2-0}
 
-## 視覺化符號 {#visualization-symbols}
+請依序進行以下各步，再從[從 3.0.0rc1 或 rc2 升級](#from-rc1-or-rc2)的第 2 步繼續。
 
+1. **舊的執行資料夾。** Palace 現在寫出網格清單 `schema_version` 2 與索引對照 `schema_version` 3，也只讀這兩個版本；2.0 寫出的執行資料夾，以及 `scgsim.palace.epr-result.v1` 的分離 EPR 結果都會被拒絕（[哪些資料夾](../reference/specs/report-model.qmd#palace-run-schemas)）。執行來源（runtime source）結構早於 `scgsim.aedt.runtime-source.v30` 的 AEDT 結果也會被拒絕。請重新準備並執行，或用寫出舊結果的那個版本讀取它。
+2. **匯入。** 每個公開名稱都從它的套件匯入：`scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 或 `scgsim.visualization`。套件底下的模組在 3.0 中搬了位置，也沒有保留別名：例如 `scgsim.palace.preparation.eigenmode` 已經不存在，請改用 `from scgsim.palace import EigenmodeSim`。公開名稱列在 [API 索引](../reference/api-index.qmd)。
+3. []{#palace-mesh-migration}[]{#geometry}[]{#幾何}**Palace 以 SGB 建立模型。** `mesh()` 以 SGB 建構幾何，再以 `scgsim.meshing` 產生網格。[]{#mesh-controls}[]{#網格控制}`set_mesh` 改用新的設定，兩個 Palace 模擬都一樣（見 [Palace 網格設定](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)）：
 
-- **`GeometryPreview`, `GeometryPreviewArtifact` → `scgsim.visualization.preview`.** 責任： 綁定來源的預覽物件，以及回傳產物／無法提供模式。
-- **`inspect_palace_geometry` → `scgsim.visualization.loaders.palace`.** 責任： 讀取 Palace 網格、清單、索引對照與設定，產生語意預覽模式。
-- **`inspect_aedt_geometry` → `scgsim.visualization.loaders.aedt`.**
-  責任：綁定 AEDT 原生／收據身份並載入求解器指定的幾何。原始 `.aedt` 路徑需明確指定 `aedt_version` 與設計；已封存的執行資料夾使用綁定規格的版本，不允許覆寫。
-- **場景資料與共用繪製 → `scgsim.visualization.scene`, `scgsim.visualization.rendering`.** 責任： 維持場景建構與繪製可重用，不接管求解器物理或模擬狀態。
-- **共用載入器檔案身份輔助函式 → `scgsim.visualization.loaders.common`.** 責任： 在載入器層以單一實作處理 JSON、雜湊及受限路徑觀察。
+   ::: {.askr-table-compact}
+   | 移除 | 取代為 |
+   |---|---|
+   | `size_policy`、`refined_mesh_size`、`max_mesh_size`；`set_numerical(refined_mesh_size=, max_mesh_size=)` | `recipe`：`FeatureRecipe`（預設）、`GlobalSizeRecipe` 或 `UniformBoundaryRecipe` |
+   | `algorithm_3d` | `mesher=MesherOptions(algorithm_3d=...)`，搭配 `scgsim.meshing.DELAUNAY` 或 `HXT` |
+   | `geometry_order`、`high_order_optimize` | `MesherOptions(geometry_order=..., high_order_optimize=...)` |
+   | `threads`、`surface_threads` | 無：網格以單一執行緒產生，因為多執行緒的 HXT 結果無法重現 |
+   | 無 | `quality_threshold`（預設 0.01 minSICN）與 `budgets`（`Budgets`） |
+   :::
 
+   沒有任何配方能逐元素重現舊的網格。與舊尺寸選項最接近的配方：
 
-`scgsim.visualization` 套件門面繼續只匯出 `GeometryPreview`、`GeometryPreviewArtifact`、`inspect_aedt_geometry` 與 `inspect_palace_geometry`。預覽檔與其清單和求解器、交接身份分開。Palace 預覽保留高階元素連接與節點座標；來源曲線與原生曲線排列事實保留在網格清單及獨立網格摘要中，移動模組不會捨棄這些資料。
+   ::: {.askr-table-compact}
+   | 舊設定 | 最接近的配方 | 改變 |
+   |---|---|---|
+   | `scgsim_default`（細化 5 µm，最大 300 µm） | `UniformBoundaryRecipe()` | 以前只設定邊界、PEC 與埠曲線的尺寸；現在每條曲線都設定。若要保留舊的 2D 演算法，請傳入 `MesherOptions(algorithm_2d=5)`。 |
+   | `gmsh_default`（沒有尺寸場） | `GlobalSizeRecipe()` | 最大尺寸改為包圍盒對角線的 1/20，網格器預設為 Delaunay。 |
+   | `algorithm_3d`、`threads` | `MesherOptions(algorithm_3d=...)` | 網格以單一執行緒產生。 |
+   :::
 
-## 共用呈現 {#shared-presentation}
+   預設不是上面任何一個：`FeatureRecipe()` 依幾何需要設定曲線尺寸。不論用哪個配方，網格若達不到品質門檻，`mesh()` 現在都會以 `MeshRepairError` 停下；以前網格品質從不會擋下執行。
+4. []{#surface-epr}**route 與 Surface EPR 分成兩個設定。** 模擬上的 `set_surface_epr(*, representation, specs, route_a_thin_film=None, approximation_profile=None)`，改為 `sim.set_route(route, *, approximation_profile=None)` 與 `plan.set_surface_epr(specs)`：
 
-基準 `scgsim._notebook_presentation` 包含幾何與 AEDT 使用、與物理無關的格式化輔助函式；現行實作位於 `scgsim.presentation.notebook`。格式化函式不負責 Palace／AEDT 投影、計算或結果狀態，這些呈現仍依求解器分開。移動私有輔助模組，不會把函式名稱變成新公開 API。
+   ```python
+   # Before
+   sim.set_surface_epr(representation="A", specs=specs)
+
+   # Now
+   plan.set_surface_epr(specs)  # before plan.prepare()
+   sim.set_route("A")
+   ```
+
+   - Route B 是預設，所以 Route B 的模擬完全不用呼叫 `set_route`。Route A 是 `set_route("A")`，使用 `thin_film` 近似設定；`substrate_face` 與 `metal_gap_equivalent` 則是 `set_route("A", approximation_profile=profile)`。關鍵字 `representation` 與 `route_a_thin_film` 已移除，模擬的 `thin_film` 欄位與 `input_summary()` 的 `thin_film` 鍵也一併移除，`input_summary()` 改為顯示近似設定的名稱。
+   - 只有計畫給了規格時才會計算 Surface EPR，本徵模態與靜電皆然。原本「不要 Surface EPR」的呼叫（Route B 搭配空的 `specs`）請直接刪掉：空的對照會被拒絕。
+   - `inset_margins_um` 只接受嚴格遞增的正數邊距，所以請刪掉開頭的 `0.0`：整個表面的那一列一定會有。
+   - Palace 不再寫出原生的 `Mask` 或 `Inset`，所以邊距列不需要特製的 Palace；含有原生 `Mask` 列的設定檔，結果讀取時會被拒絕。
+   - 新增 `inset_margins_by_entity_um`，可為 `MA` 與 `MS` 的個別導體指定邊距。`face_kinds` 接受 `sheet`、`top`、`bottom` 與 `interface`；規格要求邊距時，會拒絕 `sidewall`。
+
+   各鍵與各列的名稱（例如 `MA::pad__top::band=1`）定義在[本徵模態契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)。
+5. []{#results}[]{#結果}**結果記錄改名。** 新名稱沒有別名：
+
+   ::: {.askr-table-compact}
+   | 以前 | 現在 |
+   |---|---|
+   | `SurfaceMaskEprRecord`、`SurfaceMaskEprSeriesSnapshot` | `SurfaceMarginEprRecord`、`SurfaceMarginEprSeriesSnapshot` |
+   | `PhysicsQuantitiesReport.masked_snapshots` | `PhysicsQuantitiesReport.margin_snapshots` |
+   | `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v2` |
+   | `surface-mask-Q.csv` 與 `surface-mask-energy.csv` | 邊距列改從 `surface-Q.csv` 讀取 |
+   :::
+
+## 給貢獻者 {#for-contributors}
+
+每個公開名稱定義在哪裡，以及搬動公開名稱的規則，見 [API 擁有者](../contribute/internals/api-owners.qmd)：
+
+- []{#migration-rules}[搬動公開名稱的規則](../contribute/internals/api-owners.qmd#migration-rules)；
+- []{#geometry-api}[幾何名稱：從 `scgsim.sgb` 到 `scgsim.geometry`](../contribute/internals/api-owners.qmd#geometry-api)；
+- []{#aedt-api-transaction-and-state-ownership}[AEDT 名稱與模組擁有者](../contribute/internals/api-owners.qmd#aedt-api-transaction-and-state-ownership)；
+- []{#palace-package-symbols}[Palace 名稱](../contribute/internals/api-owners.qmd#palace-package-symbols)與[]{#palace-direct-submodule-exports}[Palace 子模組](../contribute/internals/api-owners.qmd#palace-direct-submodule-exports)；
+- []{#visualization-symbols}[視覺化名稱](../contribute/internals/api-owners.qmd#visualization-symbols)與[]{#shared-presentation}[共用呈現](../contribute/internals/api-owners.qmd#shared-presentation)；
+- []{#solidthin-film-request-migration}[AEDT 請求的 `modeling` 值](../contribute/internals/api-owners.qmd#solidthin-film-request-migration)。
+
+[]{#aedt-release-selection}AEDT 請求指定的版本（`"2023.2"` 或 `"2024.2"`）說明在 [AEDT 執行期參考](../reference/specs/aedt-runtime.qmd#aedt-version-selection)。
