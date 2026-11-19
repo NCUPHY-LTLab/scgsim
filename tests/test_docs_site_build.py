@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import runpy
 import subprocess
 import sys
@@ -388,6 +389,48 @@ def test_a_moved_page_keeps_its_older_page_in_older_menus(publisher):
     assert "      href: docs/legacy.qmd\n" in config
     assert "docs/area/moved.qmd" not in config
     assert historical["docs/legacy.qmd"] == "Original historical legacy body.\n"
+
+
+def _missing_page_route(missing_page, path):
+    """Where the missing page's script sends ``path``: the first alias it is in, else its version root."""
+    routes = json.loads(re.search(r"const routes=(\{.*?\});", missing_page, re.S)[1])
+
+    def within(root):
+        return path == root[:-1] or path.startswith(root)
+
+    alias = next((alias for alias in routes["aliases"] if within(alias)), None)
+    if alias:
+        return routes["aliases"][alias] + path[len(alias) :]
+    return next((root for root in routes["roots"] if within(root)), None)
+
+
+def test_a_moved_folder_routes_its_old_files_to_the_new_folder(publisher):
+    """A chart beside a moved page keeps its name in the page's new folder; its old URL is routed there.
+
+    Only versions that moved the folder get the route, and a folder with a renamed page gets none.
+    """
+    moved = "---\ntitle: Moved\naliases:\n  - ../../old/moved.html\n---\n"
+    renamed = "---\ntitle: Renamed\naliases:\n  - ../../kept/before.html\n---\n"
+    for commit in (DEVELOP, PRESENTATION):
+        publisher.sources[commit] |= {
+            "docs/area/new/moved.qmd": moved,
+            "docs/area/new/chart.html": "<p>chart</p>\n",
+            "docs/area/other/after.qmd": renamed,
+        }
+
+    output = publisher.invoke()
+    missing = (output / "404.html").read_text()
+    root = "/scgsim/v2.0.0-dev/"
+    assert (
+        _missing_page_route(missing, root + "docs/old/chart.html")
+        == root + "docs/area/new/chart.html"
+    )
+    assert _missing_page_route(missing, root + "docs/kept/figure.svg") == root
+    assert (
+        _missing_page_route(missing, "/scgsim/v1.0.0/docs/old/chart.html")
+        == "/scgsim/v1.0.0/"
+    )
+    assert not (output / "v2.0.0-dev/docs/old").exists()
 
 
 def test_unknown_missing_menu_destination_still_fails(publisher):
