@@ -71,7 +71,7 @@ SGB 對這個階層使用兩種順序，兩者對審查都很重要。
 ::: {.callout-note}
 ## 設計決策 D8：直接序列化 BREP／XAO
 
-Lead 已決定由 SGB 把規劃好的階層直接寫成 OpenCASCADE 的 `CASCADE Topology V1` 文字檔，需要 physical group 時再包成 XAO；production 已實作，architecture review 尚待進行。Gmsh 只用來對寫出的模型做 mesh，以及作為 test oracle，絕不用來建構幾何。理由有三：量測到的成本、Gmsh API 無法控制的 solid sense，以及一個附帶的好處：planned id 到 native tag 的對應，在 Gmsh 執行之前就已知道。含 foreign vertex 的 curved wall 由 assembly 切成各自在一個圓上的精確 cylinder，所以 writer 只需處理單一圓上的 wall，見[限制與風險](#limits-and-risks)。替代方案與未決事項見 [decisions](decisions.qmd)。
+SGB 把規劃好的階層直接寫成 OpenCASCADE 的 `CASCADE Topology V1` 文字檔，需要 physical group 時再包成 XAO（決策 D8）。Gmsh 只用來對寫出的模型做 mesh，以及作為 test oracle，絕不用來建構幾何。理由有三：量測到的成本、Gmsh API 無法控制的 solid sense，以及一個附帶的好處：planned id 到 native tag 的對應，在 Gmsh 執行之前就已知道。含 foreign vertex 的 curved wall 由 assembly 切成各自在一個圓上的精確 cylinder，所以 writer 只需處理單一圓上的 wall，見[限制與風險](#limits-and-risks)。替代方案與未決事項見 [decisions](decisions.qmd)。
 :::
 
 Gmsh API 還有第二個弱點，是任何計時都看不出來的：`addSurfaceLoop` 只收 face 的 tag，不收 orientation，所以無法指定一個封閉 shell 的哪一側是內部，solid 的 sense 無法控制。在同一批隨機 layout 上，這個 oracle 的 solid mass 是錯的：N = 1,000 時 vacuum 是 $2.37 \times 10^9$ µm³、substrate 是 $-2.23 \times 10^9$ µm³（負號表示內外相反），而 direct writer 寫出的兩個 solid 是 $6.91 \times 10^9$ 與 $6.92 \times 10^9$ µm³（`figures/why-scaling-oracle.json`；N = 500 與 2,000 同樣如此，substrate 都是負的）。direct writer 則明確寫出每一個 orientation。
@@ -185,7 +185,7 @@ Gmsh 只用來對寫出的模型做 mesh，以及作為 test oracle，絕不建�
 
 ```{mermaid}
 %%| label: fig-handoff
-%%| fig-cap: "mesher 的概念性流程。步驟 3 的 embedding 由 production 的 apply_sidecar_embeds 實作並有測試；步驟 5 是 solver 設定，屬於 Palace adopter（階段 3）。"
+%%| fig-cap: "mesher 的概念性流程。步驟 3 的 embedding 由 production 的 apply_sidecar_embeds 實作並有測試；步驟 5 是 solver 設定，由 Palace 的 palace/config 負責。"
 %%{init: {"flowchart": {"rankSpacing": 22, "nodeSpacing": 20, "padding": 6}}}%%
 flowchart TB
   A["1. 開啟 XAO：幾何與 primary physical group 連同名稱一起載入"] --> C["2. 讀取同一次 build 的 sidecar：由 ids_by_tag 得到 planned id 到 tag 的對應"]
@@ -300,7 +300,7 @@ HXT 在某些模型上會讓 Gmsh 4.15.2 的 process 直接中止（heap 損毀�
 
 ## 交給 AEDT {#handing-the-solids-to-aedt}
 
-SGB 以 `export_aedt_step` 把具名 solid 匯出成 XDE assembly 的 STEP：band 在寫檔時就切好，face identity 來自每個 solid 內的 face 順序，並另外寫出 guard 檔。AEDT 使用的就是這份輸出：`aedt/preparation/sgb_model.py` 呼叫 `export_aedt_step`，`aedt/runtime/families/sgb_import.py` 把 STEP 匯入空白的 HFSS 或 Q3D 設計。
+SGB 以 `export_aedt_step` 把具名 solid 匯出成 XDE assembly 的 STEP：band 在寫檔時就切好；另外寫出 guard 檔，依每個 solid 的 face 順序列出它的 face 與幾何（面積、中心、vertex）。AEDT 使用的就是這份輸出：`aedt/preparation/sgb_model.py` 呼叫 `export_aedt_step`，`aedt/runtime/families/sgb_import.py` 把 STEP 匯入空白的 HFSS 或 Q3D 設計，檢查匯入的物件正好是 guard 的 solid，再**依幾何**把每個匯入的 face 對到它規劃的 face，不依賴 AEDT 的 face 順序（為什麼這樣設計，見 [D4](decisions.qmd#d4)）。
 
 ## 限制與風險 {#limits-and-risks}
 

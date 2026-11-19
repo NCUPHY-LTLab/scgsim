@@ -13,7 +13,7 @@ aliases:
 **Results.**
 
 - The direct writer needs 0.20, 0.35 and 0.77 s at 500, 1,000 and 2,000 features; the Gmsh API needs 2.35, 8.48 and 64.7 s, which is 12, 24 and 84 times as long. The Gmsh API run at 5,000 features was stopped after 10 minutes without finishing, against 2.2 to 2.8 s for the direct writer.
-- The Gmsh API route also builds solids with the wrong sign of mass (the substrate comes out negative).
+- The test-side Gmsh API builder used as the reference also builds solids with the wrong sign of mass (its substrate comes out negative); the direct writer's solids have the right mass.
 - After the derivation, the rest of the path costs 148 s at 20,000 features, more than twice the 61.6 s of the derivation itself. Every step scales almost linearly.
 
 ## Direct writer against the Gmsh API
@@ -28,17 +28,17 @@ In @fig-api the Gmsh API line is steeper than the reference: its local slope aga
 {{< include figures/api-table.md >}}
 :::
 
-*Direct writer* is the planning plus the rendering of BREP and XAO, which this run spread over 16 processes; *Faces* is the number of faces written. These times come from a run of their own. The tail table below times the same direct write in the scaling run: at 1,000 features it reads 0.44 s there against 0.35 s here.
+*Direct writer* is the planning plus the rendering of BREP and XAO, which this run spread over 16 processes; *Faces* is the number of faces written. These times and those of the tail table below come from different runs; [Reproduction](reproduction.qmd#one-caveat-for-all-numbers) says how far two runs differ.
 
-### The solids come out with the wrong mass
+### The test-side builder's solids have the wrong mass {#the-solids-come-out-with-the-wrong-mass}
 
-A Gmsh API solid is built from a surface loop, and the API does not let the caller choose which side of the faces is the inside. The test builder's solids were reopened and their mass (signed volume) was measured:
+The test-side builder makes each solid from a surface loop through the Gmsh API and does not choose which side of the faces is the inside. Its solids were reopened and their mass (signed volume) was measured:
 
 ::: {.askr-table-compact .askr-table-numeric}
 {{< include figures/mass-table.md >}}
 :::
 
-The substrate has a negative mass and the vacuum a positive one, and neither matches the direct writer's solids. The direct writer's two solids both have positive mass, and the substrate's equals the chip area times its thickness. A solid with negative mass still meshes, so the error stays invisible unless it is checked. The direct writer writes the orientation of every face explicitly, and the check on the loaded model compares the volumes with the plan (see [Cost of the checks](validation-cost.qmd)).
+The builder's substrate has a negative mass and its vacuum a positive one, and neither matches the direct writer's solids. The direct writer's two solids both have positive mass, and the substrate's equals the chip area times its thickness. A solid with negative mass still meshes, so the error stays invisible unless it is checked. The direct writer writes the orientation of every face explicitly, and the check on the loaded model compares the volumes with the plan (see [Cost of the checks](validation-cost.qmd)).
 
 ## What follows the derivation
 

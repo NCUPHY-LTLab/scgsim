@@ -15,7 +15,7 @@ support plane z = 0.  Route A needs zero-thickness conductors, so Route A is the
 is not the real input and says so in the numbers: the stage-level scene ``pad_in_ground("B")`` of ``tests/sgb_scenes.py``
 (port in the metal's mid-plane, a sheet inside one volume).
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/routes.py
+Run:  uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/routes.py
 """
 
 from __future__ import annotations

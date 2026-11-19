@@ -33,13 +33,13 @@ All three sizes come from one run per size, which builds the model, writes the f
 
 ![Left: the twelve most expensive checks at 20,000 features. Right: the total of the structural checks and of the checks on the loaded model against the number of features, with a slope-1 line from the 1,000-feature point.](figures/validation.svg){#fig-validation fig-alt="Left: horizontal bars for twelve checks at 20,000 features. Planarity is longest at about 4.5 seconds, followed by face_areas, shells, counts_and_vertex_placement and boundaries at 3 to 4 seconds; the others are below 1.5 seconds. Right: log-log lines for the structural total, rising from 0.33 to 11.2 seconds, and the loaded-model total, rising from 0.58 to 14.4 seconds, both close to a slope-1 reference."}
 
-In @fig-validation, the five most expensive checks (`planarity`, `face_areas`, `shells`, `counts_and_vertex_placement` and `boundaries`) take 3.1 to 4.5 s each at 20,000 features, and three of them run on the loaded model. All nineteen checks follow. The slope column is taken against the number of faces F between the smallest and the largest size:
+In @fig-validation, the five most expensive checks (`planarity`, `face_areas`, `shells`, `counts_and_vertex_placement` and `boundaries`) take 3.1 to 4.5 s each at 20,000 features, and three of them run on the loaded model. The table lists all nineteen timed checks: the twelve timed groups of the build's validation report, the build's contact and manifold checks, and the five checks of `verify_loaded`. The validation report itself records 31 individual checks, four of them warnings that do not stop the build; a timed group runs several of them. The slope column is taken against the number of faces F between the smallest and the largest size:
 
 ::: {.askr-table-compact .askr-table-numeric}
 {{< include figures/validator-table.md >}}
 :::
 
-Most checks visit every vertex, edge or face once, and their slopes lie close to 1. The checks with the highest slopes are `counts_and_vertex_placement` (1.35), `groups` (1.25) and `shells` (1.24); the lowest is `arcs` (0.89), which checks arc edges and has none to check in these layouts. Another timing of twelve of the structural checks, taken in the scaling run, agrees with this one to within 1.3% at 5,000 and 20,000 features and 8% at 1,000.
+Most checks visit every vertex, edge or face once, and their slopes lie close to 1. The checks with the highest slopes are `counts_and_vertex_placement` (1.35), `groups` (1.25) and `shells` (1.24); the lowest is `arcs` (0.89), which checks arc edges and has none to check in these layouts. Another timing of the twelve groups, taken in the scaling run, agrees with this one to within 1.3% at 5,000 and 20,000 features and 8% at 1,000.
 
 ## OCCT checks
 
@@ -49,7 +49,7 @@ The OCCT checks ran on the test models of the SGB test suite, which are small: t
 {{< include figures/occt-table.md >}}
 :::
 
-Each range is the shortest to the longest time over the reports of that set. All 14 reports of the example models were accepted, and the largest relative error of a face area against the plan was 1.3e-12. These models are small (the Route B pad in a ground plane has 35 faces, the smallest layout in this study 14,215), so the table gives the order of magnitude of the cost (milliseconds to a quarter of a second) and says nothing about how it grows.
+Each range is the shortest to the longest time over the reports of that set. All 14 reports of the example models were accepted, and the largest relative error of a face area against the plan was 1.3e-12, about one part in $10^{12}$. These models are small (the Route B pad in a ground plane has 35 faces, the smallest layout in this study 14,215), so the table gives the order of magnitude of the cost (milliseconds to a quarter of a second) and says nothing about how it grows.
 
 ## Interpretation
 

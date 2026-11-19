@@ -2,7 +2,7 @@
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/inset.py
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/inset.py
 
 Every geometry figure is computed by the production package: the pad-in-ground running example
 (``tests/sgb_scenes.py::pad_in_ground``, its lumped port on the support plane z = 0) is built with

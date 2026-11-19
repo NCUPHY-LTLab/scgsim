@@ -20,8 +20,8 @@ aliases:
 ::: {.askr-table-compact}
 | Stage | 名稱 | 輸入 → 輸出 | 工作單位 | Production 的計時 stage（`ConformalModel.timings`） |
 |---|---|---|---|---|
-| S0 | Source snapshot | `GeometryPlan` → normalized source（沿用 develop 的 fixed-grid source preparation） | occurrence | 不在 package 中（develop） |
-| S1 | Physical interpretation | source → effective input（含 Route A 的零厚度 sheet） | entity | 不在 package 中（develop） |
+| S0 | Source snapshot | `GeometryPlan` → normalized source（fixed-grid source preparation） | occurrence | 不在 SGB package 中（`geometry/source`） |
+| S1 | Physical interpretation | source → effective input（含 Route A 的零厚度 sheet） | entity | 不在 SGB package 中（`geometry/interpretation`） |
 | S2 | Prism catalogue | effective input → `PrismCatalogue`（`PrismRecord`）、`LevelStructure` | entity | `levels` |
 | S3 | Cut families | prism + 請求（`InsetRequest`）→ `CurveFamilyRecord` | region × margin | 不單獨計時（在 arrangement 之前的 pre-pass） |
 | S4 | Arrangement | curve → snap-rounded $S_i$、$A_i$ | level 或 slab | `noding_kernels`、`noding_driver`、`dcel_faces`、`linking`、`arc_realisation` |
@@ -41,7 +41,7 @@ Route A、Route B 與 Route C 是 S7 的 labelling 政策（以及 S1 的 prism 
 
 ### S0 Source snapshot
 
-S0 與 S1 沿用 develop 中已有的 fixed-grid source preparation：source 的正規化與 polygon Boolean 都在宣告的 grid 上進行，它的 `GeometryGridContext` 攜帶模型 grid $g$，S4 就使用這個 $g$。從 S4 起才是新的 pipeline。
+S0 與 S1 是 `scgsim.geometry` 的 fixed-grid source preparation 與物理解讀：source 的正規化與 polygon Boolean 都在宣告的 grid 上進行，它的 `GeometryGridContext` 攜帶模型 grid $g$，S4 就使用這個 $g$。從 S2 起是 SGB 本身。
 
 ::: {.askr-table-compact}
 | | |
@@ -112,7 +112,7 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 |---|---|
 | 輸入 | arrangement、prism、family 的 edge 政策 |
 | 輸出 | slab label（`Domain`）、level label（`LevelLabel`），然後是 dissolve 後的 arrangement：移除非 required 的 edge、合併 cell、移除同一 carrier 上的 degree-2 vertex；cut family 的 edge 一律保留 |
-| Record | `Domain`、`SheetOwner`、`LevelLabel`、`FamilyPolicies`、`Dissolved` |
+| Record | `Domain`、`SheetOwner`、`LevelLabel`、`Dissolved` |
 | 工作單位 | cell（labelling）；dissolution 逐 layer |
 | 失敗 | `OverlapError`：不同 Net 的 conductor 重疊、同一個 Net 的兩個 Entity 以相同 priority 重疊（訊息指出該補哪個 priority 來源）、不同 owner 的 sheet 重疊、同 priority 但材料不同的 dielectric |
 :::
@@ -138,7 +138,7 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 |---|---|
 | 輸入 | topology、route 政策 |
 | 輸出 | 哪些 volume 要輸出（Route A 與 B 排除 conductor volume；Route C 保留它們）、每個 face 與 volume 的 primary group（`RoutedModel`） |
-| Record | `RoutePolicy`（`name`、`exclude_conductor_volumes`、`allows_sheets`、`rejects_finite_films`）；Route A、B、C 各是一個常數，另有 AEDT 用的 `ROUTE_A_RETAINED_BODIES`（Route A 的 sheet，有限導體 body 保留為 volume，issue #67 decision 8） |
+| Record | `RoutePolicy`（`name`、`exclude_conductor_volumes`、`allows_sheets`、`rejects_finite_films`）；Route A、B、C 各是一個常數，另有 AEDT 用的 `ROUTE_A_RETAINED_BODIES`（Route A 的 sheet，有限導體 body 保留為 volume） |
 | 工作單位 | face 或 volume（label 規則） |
 | 失敗 | `RouteError`（route check，在任何 arrangement 之前） |
 :::
@@ -166,7 +166,7 @@ production 依 D5 以 Entity 歸屬命名 group，見 [D5](decisions.qmd#d5)。
 | 輸出 | `ValidationReport`（`Check`：name、passed、warning、detail；一次 build 31 項，4 項是警告）與 sliver 報告 |
 | Record | `Check`、`ValidationReport`；sliver 報告是普通 mapping |
 | 工作單位 | 彼此獨立的檢查；shell 檢查逐 volume |
-| 失敗 | `ValidationError`，列出失敗的 invariant；warning（arc 偏差、非平面 wall、薄於 $g$ 的 slab 與垂直 edge）不會停止 build。production build 無法關閉 validation；關閉開關只存在於原型的測試中 |
+| 失敗 | `ValidationError`，列出失敗的 invariant；warning（arc 偏差、非平面 wall、薄於 $g$ 的 slab 與垂直 edge）不會停止 build。production build 無法關閉 validation |
 :::
 
 Validation 分兩層，production 都已實作：（1）開發階段的測試以 OCP 執行 OCCT 的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`，並做 Gmsh 載入檢查（OCP 在 `occt` dependency group；`dev` group 包含它，CI 以 `dev` group 安裝，所以 PR 的測試會執行 `occt` 測試，標為 `slow` 的則在每晚的完整測試執行）；（2）每個 production build 在寫出前以 SGB 自己的結構 invariant 失敗即停，mesher 信任寫出的檔案，不再檢查（Gmsh 載入檢查 `verify_loaded` 屬於第 1 層的測試）；build 本身不執行 OCCT 檢查；OCCT 檢查是對寫出的檔案另外執行的一步（`verification.occt.check_file`，需要 OCP），由標為 `occt` 的測試執行。終端使用者的安裝（例如經由 OrcaPen SC PDK）不會裝 OCP。
@@ -229,7 +229,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 
 ## Physical group 名稱
 
-primary group 命名為 `<kind>::<qualified entity id>__<face kind>[::band=k]`（D5，production 已實作）。face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface` 之一；port 與 volume 不帶 face kind；兩個 family 共用 band group 時 `interface` 後另帶 `__top` 或 `__bottom`（[命名規則](identity.qmd#band-group-names)）。MA、MS、SA 等的總和是 sidecar 中的 `unions.interface_types`，Net 層級的 union 在 `unions.nets`，只用於 Electrostatic。
+primary group 命名為 `<kind>::<qualified entity id>__<face kind>[::band=k]`（D5，production 已實作）。face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface` 之一；port 與 volume 不帶 face kind；兩個 family 共用 band group 時 `interface` 後另帶 `__top` 或 `__bottom`（[命名規則](identity.qmd#band-group-names)）。某個 interface 種類（MA、MS、SA 等）或某個 Net 的 group 清單，由 group 的 `interface_type` 與 `net` 欄位篩出，sidecar 不另存聯集；Net 層級的清單只用於 Electrostatic。
 
 ::: {.askr-table-compact}
 | 名稱 | 意義 |

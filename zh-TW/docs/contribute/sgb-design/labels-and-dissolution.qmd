@@ -144,7 +144,7 @@ dissolution 改變的是數量，不是面積。驗證器（[驗證](validation.
 - 表面**預設依 Entity 歸屬**。不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；primary group 的命名規則是 `<kind>::<qualified entity id>__<face kind>[::band=k]`（例如 `MA::chip/q0/pad__top::band=2`；Route A 的 sheet 與 volume 一樣以裸的 entity id 命名，sheet 為 `<entity>[::band=k]`）；
 - 報告依 **interface type**（MA／MS／SA）彙總並可顯示總和，這些總和依 sidecar 中 group 的 `interface_type` 加總；
 - Net 只在後端需要電性身分時使用（例如 Electrostatic 的 terminal 與 ground），Net 層級的 union 也只用於這種情形；
-- 同一個 Net 的重疊區域，屬於宣告 priority 較高的 Entity；priority 相同或缺少時 fail closed（Lead 的預設，可改）。
+- 同一個 Net 的重疊區域，屬於宣告 priority 較高的 Entity；priority 相同或缺少時 fail closed。
 
 同一個 Net 的兩個 Entity 因此是兩個不同的 domain：各自成為獨立的 volume，之間的共用 face 保留（兩個導體之間是 `MM::<a>|<b>__<face kind>`），輸掉重疊的 Entity 仍在 membership 中列出自己的份額。以上面的 pad 與 tab 為例，若 tab 是另一個 Entity `pad_tab`（Net 相同、`priority=1`），production 不會把它們 dissolve 成一個 cell：slab $(0, 0.2)$ µm 的 label 有 `pad` 與 `pad_tab` 兩個導體 Entity，cell 為 5 個、edge 為 28 條（上面的 dissolution 例子是同一個 Entity 的兩個多邊形：4 個、25 條）；pad 與 tab 各有自己的 face 與 group（`MA::pad__top` 與 `MA::pad_tab__top`），重疊區屬於 priority 較高的 `pad_tab`。
 
@@ -178,4 +178,4 @@ dissolution 改變的是數量，不是面積。驗證器（[驗證](validation.
 
 ## 補充：重現資料
 
-本頁的圖與數字由 `zh-TW/docs/contribute/sgb-design/_figures/labels_and_dissolution.py` 以 production 套件 `scgsim.geometry.sgb` 產生（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行）；文中的數字除非另有說明，皆記錄在 `figures/labels-numbers.json`。執行範例是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`（Route B）。dissolution 的例子是把 pad 的第二個多邊形（`polygon=1`）加進它的 prism catalogue，沒有改動任何 pipeline 程式；錯誤訊息是對同一個 catalogue 加上一個 prism 後的實際訊息；圓弧 chord 的數字取自 stage 層 scene `tests/sgb_scenes.py` 的 `pad_in_ground("B")`。Brief 對應第 2、4 與 14 節；production 模組為 `arrangement/labelling`（`prism_set`、`linking`、`dissolve`、`membership`）、`arrangement/derivation/contacts` 與 `topology/routes`；測試 `tests/test_sgb_dissolve.py`、`tests/test_sgb_labelled.py`、`tests/test_sgb_priority.py`。名詞見[詞彙表](index.qmd#glossary)。
+本頁的圖與數字由 `zh-TW/docs/contribute/sgb-design/_figures/labels_and_dissolution.py` 以 production 套件 `scgsim.geometry.sgb` 產生（在 repository 根目錄以 `uv run --locked --no-sync python` 執行）；文中的數字除非另有說明，皆記錄在 `figures/labels-numbers.json`。執行範例是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`（Route B）。dissolution 的例子是把 pad 的第二個多邊形（`polygon=1`）加進它的 prism catalogue，沒有改動任何 pipeline 程式；錯誤訊息是對同一個 catalogue 加上一個 prism 後的實際訊息；圓弧 chord 的數字取自 stage 層 scene `tests/sgb_scenes.py` 的 `pad_in_ground("B")`。Brief 對應第 2、4 與 14 節；production 模組為 `arrangement/labelling`（`prism_set`、`linking`、`dissolve`、`membership`）、`arrangement/derivation/contacts` 與 `topology/routes`；測試 `tests/test_sgb_dissolve.py`、`tests/test_sgb_labelled.py`、`tests/test_sgb_priority.py`。名詞見[詞彙表](index.qmd#glossary)。

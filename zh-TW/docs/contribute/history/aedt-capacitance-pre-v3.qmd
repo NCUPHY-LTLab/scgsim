@@ -9,7 +9,9 @@ aliases:
   - ../../history/aedt-capacitance-pre-v3.html
 ---
 
-本頁保留較早的 SimplePad Q3D 電容範例及其原生觀察結果。目前 Q3D 輸入撰寫方式請參閱[以實體為來源的 Q3D 課程](../../guides/capacitance-q3d.qmd)。
+::: {.callout-important title="此流程已不再適用"}
+本頁描述的是已移除的流程：把 GDS 版圖匯入 AEDT 的 Q3D 請求；這裡記錄的執行使用 SCGSim `1.0.1`。現在 Q3D 在 `GeometryPlan` 的 SGB 模型上執行，也就是 Palace 產生網格的同一個模型；請照 [Q3D 電容](../../guides/capacitance-q3d.qmd)操作。本頁只把較早的範例與它回報的數值保留為紀錄。
+:::
 
 ## 模型與來源 {#model-and-source}
 
@@ -23,9 +25,9 @@ aliases:
 | 頂層金屬 | 鋁，厚 0.2 µm |
 | 基板 | 矽，厚 500 µm |
 
-標準公開來源為 OrPen 固定版本 [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)。其中 [`aedt_q3d.ipynb`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_q3d.ipynb) 與[可編輯 QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd)定義較早的 GDS 匯入工作流程。
+公開來源為 OrcaPen SC PDK 的固定版本 [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)。其中 [`aedt_q3d.ipynb`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_q3d.ipynb) 與[可編輯 QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd)定義較早的 GDS 匯入工作流程。
 
-![公開 SimplePad 版圖：中央焊盤、周圍 Ground，以及已定義的東側邊緣集總端口定位器。](../../assets/simple-pad-layout.png){#fig-simple-pad-layout}
+![公開 SimplePad 版圖：中央焊盤、周圍 Ground，以及已定義的東側邊緣集總埠定位器。](../../assets/simple-pad-layout.png){#fig-simple-pad-layout}
 
 定位器是來源版圖的一部分。以下 Q3D 請求只計算 C/G，不會加入電感支路。將鋁映射至原生 PEC，以及使用開放 Q3D Region，都是此已記錄求解器模型的一部分。模型沒有第二個晶粒、背面金屬、讀出結構或凸塊。此開放 Region 請求不包含外部接地外殼；尺寸與堆疊是模型輸入，不代表實測電容或準確度主張。
 
@@ -35,13 +37,13 @@ Notebook 要求以下萃取與自適應控制：
 
 | 設定 | 數值 |
 |---|---:|
-| `EXTRACTION_FREQUENCY_GHZ` | 5.0 |
-| `SOLVE_AC_RL` | `False` |
-| `GROUNDED_REGION_NET` | `None` |
-| `MAXIMUM_PASSES` | 10 |
-| `CONVERGENCE_PERCENT` | 1.0 |
+| 萃取頻率 | 5.0 GHz |
+| AC RL 求解 | 關閉 |
+| 接地的 Region Net | 無 |
+| 自適應 pass 上限 | 10 |
+| 收斂 | 1.0 % |
 
-主機請求使用 `AEDT_VERSION = "2024.2"`、`PYAEDT_VERSION = "1.3.0"`，以及 `RESOURCES = AedtResources(cores=4, ram_limit_percent=80)`。原始 Notebook 是取得原始儲存格順序與設定的來源。
+它在 AEDT 2024.2、PyAEDT 1.3.0 上執行，使用 4 個核心，記憶體上限 80 %。原始的儲存格與設定，以公開 Notebook 為準。
 
 ## 回報的電容 {#reported-capacitance}
 
@@ -54,6 +56,6 @@ Notebook 要求以下萃取與自適應控制：
 
 原生材料讀回記錄的矽相對介電率為 11.9，鋁則以 PEC 表示。Palace 使用自然靜電外部邊界；此 Q3D 請求使用開放 Region。兩個結果分別描述各自的模型與邊界選擇，不代表必須達成數值一致。
 
-參考輸出背景與完整精度資料列見公開的 [SimplePad 證據 README](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/README.md)與[結果 CSV](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/results.csv)。記錄中的 SimplePad 來源為 `24ae5a4`，其元件與 Notebook 位元組和公開 OrPen `51985d9` 相同；SCGSim 來源為 `1.0.1`，修訂版本為 `9c032e3`。
+參考輸出背景與完整精度資料列見公開的 [SimplePad 證據 README](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/README.md)與[結果 CSV](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/results.csv)。記錄中的執行使用的元件與 Notebook 位元組，與該公開 PDK 版本相同；SCGSim 為 `1.0.1`。
 
-這些數值是文件所述模型的觀察結果，不是新執行的數值目標。較早的 GDS 匯入請求，與目前[Q3D 課程](../../guides/capacitance-q3d.qmd)說明的實體來源輸入不同。
+這些數值是文件所述模型的觀察結果，不是新執行的數值目標。

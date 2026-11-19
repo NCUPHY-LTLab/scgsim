@@ -9,9 +9,9 @@ Writes ``figures/index-example-input.svg`` (plan view of the source prisms and a
 ``figures/index-example-3d.html`` plus ``.svg`` (the written XAO of Route B, every face drawn once for each volume it
 bounds, pulled apart) and ``figures/index-numbers.json`` (the counts the page quotes).
 
-Run (from the repository root; see ``intro_common.py`` for ``SGB_CORE``)::
+Run (from the repository root; see ``intro_common.py``)::
 
-    $SGB_CORE/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/index_example.py
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/index_example.py
 """
 
 from __future__ import annotations

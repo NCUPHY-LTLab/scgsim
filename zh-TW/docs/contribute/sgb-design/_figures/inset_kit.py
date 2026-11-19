@@ -2,7 +2,7 @@
 
 Owns three things only:
 
-* locating the production SGB core (``scgsim.geometry.sgb``, the ``SGB_CORE`` checkout) with its test-side scene
+* locating the production SGB core (``scgsim.geometry.sgb``, in this checkout or the one ``SGB_CORE`` names) with its test-side scene
   builders, the shared pad-in-ground running example, and the small geometry helpers that turn a level arrangement
   into polylines;
 * one small scene description (panels of lines, polygons, points and labels) that is drawn twice,
@@ -10,9 +10,9 @@ Owns three things only:
 * the colour palette used on those pages.
 
 It computes nothing about SGB by itself; every number comes from the production package or from the page's own script.
-Run the scripts that import this module with the Python of the SGB core checkout::
+Run the scripts that import this module from the repository root, in its locked development environment::
 
-    SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/<script>.py
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/<script>.py
 """
 
 from __future__ import annotations
@@ -60,8 +60,8 @@ try:
 except ImportError as error:  # pragma: no cover -- a usage message, not logic
     raise SystemExit(
         f"{error}\nThese figures are computed by the production SGB core: set SGB_CORE to a checkout that contains "
-        "scgsim.geometry.sgb and its tests/, and run this script with that checkout's Python "
-        "(<sgb-core>/.artifacts/env/bin/python)."
+        "scgsim.geometry.sgb and its tests/, or run this script from the root of this checkout with "
+        "uv run --locked --no-sync python."
     ) from error
 
 G_UM = 0.001  # um per grid unit (default grid, 1 nm)
