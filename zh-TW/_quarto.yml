@@ -154,6 +154,7 @@ website:
       - docs/reference/specs/execution-profiles.qmd
       - docs/reference/specs/mesh-quality.qmd
       - docs/reference/specs/report-model.qmd
+      - docs/reference/specs/layout-check.qmd
   - id: contribute
     title: 頁面
     style: floating
@@ -166,6 +167,7 @@ website:
     - section: 內部實作
       contents:
       - docs/contribute/internals/geometry.qmd
+      - docs/contribute/internals/api-owners.qmd
     - section: SGB 設計
       contents:
       - docs/contribute/sgb-design/index.qmd

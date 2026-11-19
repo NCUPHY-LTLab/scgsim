@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
-title: "使用自己的模型"
-description: "變更來源幾何、Entity 至 Net 指派及求解器請求，並明確保留其識別。"
+title: "準備版圖"
+description: "先畫好 cell，再建立每個模擬都要用的 GeometryPlan：Net、真空區域、接面與 Surface EPR，附一個完整範例。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/working-model"
@@ -9,95 +9,155 @@ aliases:
   - ../course/working-model.html
 ---
 
-先完成[選擇模擬目標](../start/choose-a-simulation.qmd#getting-started)中一份電容或共振／EPR 筆記本，再開始本教學。接著可變更模型的一個部分，並了解該變更會影響哪些輸入與結果。準備新執行前，請先保存原始模型與結果。
+SCGSim 用你給的兩樣東西建立 3D 模型：一是你用 GDSFactory 畫的 cell，二是一份 `GeometryPlan`（計畫），說明哪些圖形屬於同一個導體，以及求解器要把晶片周圍多大的空間算進去。這一頁以[第一個模擬](../start/first-simulation.qmd)的方形焊墊為例，一步一步建立它的計畫。同一份計畫會交給[版圖檢查](check-a-layout.qmd)，也會交給每一個模擬。你自己的版圖必須滿足哪些條件，列在[支援範圍](../reference/supported-scope.qmd#layout-rules)。
 
-## 變更來源幾何 {#change-the-source-geometry}
+## 範例 {#example}
 
-元件會定義本地 Entity 識別與編寫的幾何。放置後的 occurrence 會透過其註冊路徑限定這些識別。最終 Net 指派屬於組合後的模型：多個來源 Entity 可屬於同一個導體 Net，同時保留各自的來源脈絡。
-
-對語意元件組合而言，`GeometryPlan` 會明確記錄這些選擇：
-
-```python
-from scgsim.geometry import GeometryPlan
-
-plan = GeometryPlan(
-    component=component,
-    root_id="chip",
-    layer_stack=layer_stack,
-    material_records=material_records,
-    coupon_padding_um=coupon_padding_um,
-)
-```
-
-此處的 `component`、stack、材料紀錄與補距是來源建構提供的實際模型輸入。請使用 `plan.register_instance(path, reference)` 註冊實際具名的參照；不要從展平多邊形名稱猜測路徑。Root-local Entity 已屬於 `chip`。指定電氣成員資格前，請先檢查限定後的識別：
-
-```python
-print(tuple(entity.semantic_id for entity in plan.entities))
-```
-
-使用 `plan.set_nets(net_membership)`，提供最終 Net ID 到清單中確切 Entity ID 的對應。請依預計建模的電路決定成員資格，包括哪些導體共用 Ground。[幾何參考](../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract)說明指派契約；[Xmon 建構教學](xmon/inputs.qmd)提供更完整的階層範例。
-
-使用 `plan.set_vacuum_region(...)` 宣告外部真空包覆，並呼叫 `plan.prepare()` 保留來源快照。幾何、材料堆疊、Net 指派或包覆一旦改變，就需要新的快照。修改分離的摘要字典不會改變求解器將收到的幾何。
-
-### 將曲線來源帶入 Palace plan {#carry-a-curved-source-into-the-palace-plan}
-
-圓形範例請使用 OrPen 的 `circular_pad_capacitor`，設定 `R=100 µm`、`gap=20 µm` 與 `die=1000 µm`。標準 Circle Pad LC 模型沒有內孔；`80 µm` 的內半徑屬於另外選用的環形示意。堆疊與材料定義請保留在 OrPen；GeometryPlan 會使用該來源提供的元件、堆疊與材料紀錄。
-
-公開的 OrPen Notebook 會使用 GDSFactory 註冊的 cell，並包含完整的來源至交接範例。確切修訂版與 Notebook 連結見[安裝教學](../start/install.qmd#select-the-curved-source-cell)。來源 cell 的建構方式如下：
+一塊 200 µm 見方的焊墊，四周留 20 µm 間隙，外面是 1000 µm 晶片上的接地金屬。下面的腳本用 OrcaPen SC PDK 畫出它，並建立計畫：
 
 ```python
 import gdsfactory as gf
 import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
 
+# 1. The cell: a 200 µm pad in a 20 µm gap, on a 1000 µm die.
 orcapen_sc_pdk.activate()
 component = gf.get_component(
-    "circular_pad_capacitor",
-    outer_radius_um=100.0,
-    inner_radius_um=0.0,
-    gap_um=20.0,
-    die_side_um=1000.0,
-    junction_width_um=2.0,
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+
+# 2. The plan: the cell, its layer stack and its materials.
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+print(tuple(entity.semantic_id for entity in plan.entities))
+
+# 3. The Nets: which shapes act as one conductor.
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+
+# 4. The vacuum region: the empty space around the chip that the solver includes.
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 5. The snapshot a simulation is given.
+snapshot = plan.prepare()
+```
+
+它會印出計畫找到的兩個圖形：
+
+```text
+('chip/PAD', 'chip/GROUND')
+```
+
+以下各節逐步說明，最後再為同一份計畫加上接面與 Surface EPR。
+
+## 畫好 cell {#draw-the-cell}
+
+cell 就是一般的 GDSFactory 元件，但 SCGSim 從中讀取的不只是多邊形：
+
+- **Entity。** 每塊金屬都要宣告成一個 Entity，也就是 cell 在其元件語意（component semantics）中列出、有名字的圖形，這裡是 `PAD` 與 `GROUND`。SCGSim 從不根據圖形猜測哪些是導體。PDK 的 cell 已經宣告好 Entity；你自己的 cell 也用同樣方式宣告（見[宣告](../reference/supported-scope.qmd#rules-declarations)）。
+- **圖層。** 每個多邊形都畫在層堆疊認得的圖層上，層堆疊決定它的高度、厚度與材料。
+- **埠片。** 集總埠或接面是一片橫跨間隙的薄片，例如[第一個模擬的版圖](../start/first-simulation.qmd#the-layout)中，焊墊東側邊緣的那片橘色薄片。
+- []{#carry-a-curved-source-into-the-palace-plan}<span id="fig-circular-pad-source-layout"></span>**曲線。** 要做成圓弧的邊，必須宣告為圓弧，不能只畫成多邊形；SCGSim 能建構直線與圓弧，不支援樣條曲線（見[曲線](../reference/supported-scope.qmd#rules-curves)與[來源曲線](../reference/specs/geometry-plan.qmd#source-curves)）。
+- **格點。** 每個點都落在版圖的格點上，這裡是 1 nm。只有幾個格點寬的細縫或短邊，會照你畫的樣子保留下來，再由[版圖檢查](check-a-layout.qmd)拒絕。
+
+## 建立計畫 {#build-the-plan}
+
+[]{#change-the-source-geometry}`GeometryPlan` 接收 cell，以及 SCGSim 本身沒有的製程資料：
+
+- `root_id="chip"` 為 cell 命名，每個 Entity 都會得到它底下的 ID：`chip/PAD`、`chip/GROUND`。
+- `layer_stack` 與 `material_records` 來自 PDK：每一層的厚度與材料，以及每種材料的性質。
+- `coupon_padding_um` 是在 cell 邊緣外再加的基板；`0.0` 表示模型在晶片邊緣結束。
+
+`plan.entities` 會列出這些 Entity 與它們的 ID。指定 Net 之前先印出來，並照印出的樣子使用。
+
+### Net {#nets}
+
+Net 是一塊有名字、被當成同一個導體的金屬。`set_nets` 把每個 Net 的名字對應到它包含的 Entity ID；這裡每個 Net 各有一個 Entity。一個 Net 也可以包含好幾個 Entity：例如覆晶版圖中，兩片接地面和連接它們的每一顆銦凸塊，都屬於同一個 `Ground` Net。不同 Net 的金屬不能互相接觸：SCGSim 會把接觸當成短路回報，絕不會因為兩塊金屬碰在一起就把它們合併。模擬中的端子與接地，指的都是這些 Net。
+
+如果 cell 裡放了其他 cell，請在 `set_nets` 之前註冊每個放置，先父層、再子層：`plan.register_instance("chip/device", reference)`。這些 cell 的 Entity 會得到 `chip/device/PAD` 這類 ID。[Xmon 輸入](xmon/inputs.qmd)就建立了這樣的組合。
+
+### 真空區域 {#vacuum-region}
+
+真空區域是晶片周圍、求解器一併計算的那一塊空間。`padding=(0.0, 0.0, 1000.0)` µm 表示 x、y 方向不往外加，所以這個盒子在晶片邊緣結束；z 方向則往晶片上下各延伸 1000 µm。計畫若沒有真空區域（既沒有呼叫這個方法，層堆疊也沒有 `VACUUM_REGION` 層），檢查與每個模擬都會拒絕它。因為盒子在版圖的範圍邊緣結束，請把決定這個範圍的東西畫出來，例如晶片外框或接地面；只在一個點碰到這個範圍的導體會被拒絕（[原因](../reference/known-geometry-problems.qmd#boundary-point-pinch)）。
+
+### 接面 {#junctions}
+
+矩形接面是兩個導體之間的一片埠片，SCGSim 會把它切成橫跨間隙的矩形，用來代表 Josephson 接面這類集總元件。電容計算用不到它；含接面的共振器研究則需要。先從準備好的快照讀出這片薄片的 ID，再指定它的兩個導體與各自的 Net：
+
+```python
+from scgsim.geometry import JunctionTerminalBinding, RectangularJunctionSpec
+
+sheet = snapshot.geometry_input.port_sheet_regions[0]
+print(sheet.port_sheet_id)
+plan.set_rectangular_junctions(
+    [
+        RectangularJunctionSpec(
+            junction_id="pad_junction",
+            port_sheet_id=sheet.port_sheet_id,
+            source_polygon_id=sheet.source_polygon_id,
+            source_occurrence_path="chip",
+            terminal_a=JunctionTerminalBinding("chip/PAD", "chip", "pad"),
+            terminal_b=JunctionTerminalBinding("chip/GROUND", "chip", "ground"),
+        )
+    ]
 )
 ```
 
-![1000 µm 晶粒上的 Circular Pad 來源版圖；細節圖標示東側非金屬接面定位器。](../assets/circular-pad-layout.png){#fig-circular-pad-source-layout}
+```text
+PORT_SHEET__chip/o_junction_lumped__0000
+```
 
-來源版圖取自[目前公開的 OrPen Circular Pad 研究修訂版 `ecc9062`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/source_layout.png)。圖中顯示編寫的來源幾何與定位器，不是求解場。
+兩個導體與它們的 Net 都必須不同。各欄位說明見[幾何契約](../reference/specs/geometry-plan.qmd)；接面的電感在 [Palace：共振模態](modes-palace.qmd)中設定。
 
-此為連結的 LC 工作流程所用 Circle Pad 來源，不是選用的環形示意。元件提供已編寫的圓形邊界紀錄；準備好的 `GeometryPlan` 快照會連同元件的 Entity 與 Net 識別，將它們帶入 Palace Route B。獨立的 GDS 邊界重建 API 僅供呼叫端選擇重建時使用，不會覆寫這些已編寫曲線。較早的 SCGSim 版本如何產生已發布的 Circular Pad 結果，記錄在[曲線來源安裝筆記](../contribute/history/curved-source-installation.qmd)。
+### Surface EPR {#surface-epr}
 
-請依手邊來源選擇曲線描述方式。對於已編寫幾何，元件可在 `component.info["component_semantics"]["boundary_curves"]` 中帶有 `BoundaryCurveChainSpec` 紀錄，列出既有 Entity 與邊界，並依序記錄線段或圓弧；SGB 會以 `UnsupportedCurveError` 拒絕樣條曲線。GeometryPlan 會依註冊 occurrence 限定這些本地識別，並一併轉換曲線鏈。若在組合完成後才建立紀錄，請使用組合座標系中的限定 ID 呼叫 `plan.set_boundary_curves(...)`。若只有 GDS 邊界頂點，請在 `component.info["component_semantics"]["boundary_reconstruction"]` 選擇 `GdsBoundaryReconstructionSpec`，或將限定紀錄傳給 `plan.set_boundary_reconstruction(...)`。請使用來源邊界中的線段與錨點識別；未選取的線段維持直線。SCGSim 不會從預覽推斷曲線意圖，也不會自動平滑多邊形邊線。
+Surface EPR（表面能量參與比）是電場能量中，落在某個表面薄損耗膜裡的比例；表面分為金屬–空氣（`MA`）、金屬–基板（`MS`）與基板–空氣（`SA`）。它可以對整個表面計算，也可以只算離間隙邊緣至少某個距離（稱為邊距）的部分。SCGSim 會把這些邊距當成條帶切進模型，所以 Surface EPR 要設定在計畫上，而且要在 `prepare()` 之前。下面的請求使用 PDK 的薄膜預設值與兩個邊距：
 
-接續上方 plan 流程：註冊來源中的實際參照、檢查 `plan.entities`、使用 `plan.set_nets(net_membership)` 指派預期的最終 Net ID、設定真空區域，再呼叫 `plan.prepare()`。快照會保留選定的曲線宣告及其 Entity 和 occurrence 識別。SGB 在每種路徑上都會建構線段與圓弧曲線；Palace 接受 Route A 與 B，AEDT 則在模型的 STEP 中以精確圓弧匯入這些曲線。未宣告曲線時，既有的純多邊形行為維持不變。
+```python
+from orcapen_sc_pdk import (
+    get_interface_preset_records,
+    validate_interface_preset_records,
+)
 
-::: {.callout-note title="已編寫曲線與 GDS 重建是不同輸入"}
-兩個 `GeometryPlan` setter 只會替換呼叫端擁有的清單；`prepare()` 也會加入元件宣告。因此，`plan.set_boundary_curves([])` 不會移除 OrPen 編寫的曲線；若 GDS 重建結果與已編寫的完整環重疊，系統會拒絕而非將其視為覆寫。若要從多邊形資料重建，請建立分離的原始 `GeometryBuildInput`，其中包含選定的重建紀錄且不含已編寫曲線宣告，連同 `interpret_physical_geometry` 給出的表示脈絡，傳給 `scgsim.geometry.sgb` 的 `build_sgb_geometry`。這個呼叫位於[支援的入口](../reference/supported-scope.qmd#supported-entry)以下：SGB 不會重做 `GeometryPlan` 的檢查，所以您建立的輸入仍須滿足那些檢查。`set_plan(snapshot)` 會繼續遵循快照宣告。曲線紀錄與邊界歸屬請參閱 [GeometryPlan 與幾何來源曲線契約](../reference/specs/geometry-plan.qmd#source-curves)。這不會變更元件或其快照。
-:::
+presets = validate_interface_preset_records(get_interface_preset_records())
+plan.set_surface_epr(
+    {
+        kind: {
+            "thickness": presets[f"LiteratureCentral_{kind}"]["thickness"],
+            "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+            "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+            "inset_margins_um": (0.5, 1.0),
+        }
+        for kind in ("MA", "MS", "SA")
+    }
+)
+snapshot = plan.prepare()
+```
 
-## 變更物理模型 {#change-the-physical-model}
+`(0.5, 1.0)` 表示除了整個表面，還要各算一列「離間隙邊緣 0.5 µm 以上」與「1.0 µm 以上」的部分。每條條帶至少要有 10 個格點寬，在這個格點上就是 0.01 µm。邊距的意義見 [Surface EPR](../concepts/surface-epr.qmd)；所有鍵列在[本徵模態契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)。
 
-先確認現在需要哪個數值。端子電容需要選擇端子與參考／接地。共振場模型還需要適當邊界與明確的集總支路。驅動響應需要埠與波參考；傳輸線擷取則需要定義橫截面。請使用[概念說明](../concepts/problems.qmd)，區分物理選擇與後端 API 表示法。
+`prepare()` 回傳的是快照，也就是計畫凍結後的複本。拿到快照的模擬看不到之後對計畫的修改：改了計畫，就要再呼叫一次 `prepare()`。
 
-::: {.callout-note title="Q3D 與 Q2D 使用各自的輸入"}
-Q3D 求解 GeometryPlan 快照的 SGB 模型及其最終 Net 成員資格，只擷取 C/G。Q2D 使用明確的橫截面矩形與導體群組，不會從 GeometryPlan 產生切片。
-:::
+## 檢查計畫 {#check-the-plan}
 
-若要研究雙埠網路，請接著閱讀 [Driven Terminal](s-parameters-hfss.qmd)；此版本尚未提供 Driven Modal 與波埠。有限導體擷取請使用 [Q3D](capacitance-q3d.qmd)；每單位長度傳輸線矩陣則使用 [Q2D](line-parameters-q2d.qmd)。[CPW 輸入](aedt-cpw-inputs.qmd)教學準備 `GeometryPlan` 快照，HFSS 與 Q3D 求解的就是它的 SGB 模型。
+設定模擬之前，先對計畫執行[版圖檢查](check-a-layout.qmd)。它會建出每個模擬將建立的模型，並拒絕網格器無法處理的部分；檢查很快，也不產生網格。
 
-## 變更求解器請求 {#change-a-solver-request}
+## 改了什麼，要重做什麼 {#decide-whether-a-rerun-is-needed}
 
-請將來源參數與原生控制項分開處理。網格配方與門檻、網格階數、Eigenmode 搜尋目標、請求模態數、自適應控制項與主機資源各自回答不同問題。請在預計檢視的數值旁，記錄每項變更的值與用途。教學中的範例控制項只是起始輸入，不是通用精度建議。
+[]{#change-the-physical-model}[]{#change-a-solver-request}要重做哪些步驟，取決於你改了什麼：
 
-請為變更後的請求準備新的執行資料夾與交接套件。檢視[來源摘要](inspect-the-source.qmd)，必要時也檢查[已準備模型](inspect-the-prepared-model.qmd)，再執行這份新的交接套件。每筆結果都要連同各自設定保留，方便日後比較時指出幾何、邊界與請求的差異。
-
-## 判斷是否需要重新執行 {#decide-whether-a-rerun-is-needed}
-
-| 變更項目 | 下一步操作 |
+| 你改的是 | 接下來 |
 |---|---|
-| 形狀、堆疊、Net 成員資格或外部區域 | 新的來源快照／匯入綁定、準備與求解 |
-| 邊界、端子／埠或接面電路模型 | 新的後端模型、準備與求解 |
-| 網格或原生求解控制項 | 準備並求解新的請求 |
-| 對已儲存 AEDT 場資料要求的場側／邊界距離評估 | 若封存場資料支援，請明確執行[原生儲存場分析](saved-fields.qmd) |
-| 既有分離 EPR 結果的損耗假設 | [離線重新分析](offline-loss.qmd)，並保留場證據 |
+| 圖形、圖層、Net 成員、真空區域、接面或 Surface EPR | 修改計畫，呼叫 `prepare()`，檢查，把新的快照交給模擬，再重新產生網格並求解 |
+| 模擬的端子、接地或埠，或要計算的物理量 | 從 `mesh()` 開始重新準備模擬，再求解 |
+| 網格設定、求解器設定或[收斂宣告](convergence-and-reports.qmd#declare-convergence) | 從該設定所屬的步驟重新準備，再求解 |
+| 已完成的本徵模態 EPR 結果的損耗假設 | 不必重新求解：[變更損耗假設](offline-loss.qmd) |
+| 要在 AEDT 已保存的場上評估的邊距 | 不必重新求解：若執行有保存場，請[分析已保存的場](saved-fields.qmd) |
 
-每次執行後，請讀取實際選定的數值及其可用歷程。保留原生狀態並明確顯示缺少的通道。[結果讀取教學](convergence-and-reports.qmd#interpret-for-scq-use)會將這些證據連結至模型的工程或物理用途。
+每個結果都要連同產生它的設定一起保存，日後比較時才說得出改了什麼。

@@ -155,6 +155,7 @@ website:
       - docs/reference/specs/execution-profiles.qmd
       - docs/reference/specs/mesh-quality.qmd
       - docs/reference/specs/report-model.qmd
+      - docs/reference/specs/layout-check.qmd
   - id: contribute
     title: Pages
     style: floating
@@ -167,6 +168,7 @@ website:
     - section: Internals
       contents:
       - docs/contribute/internals/geometry.qmd
+      - docs/contribute/internals/api-owners.qmd
     - docs/contribute/provenance.qmd
     - docs/contribute/notebook-contract.qmd
     - docs/contribute/documentation-map.qmd
