@@ -59,4 +59,4 @@ AEDT 版本是你在這裡選的版本。若取回的計算沒有記錄是哪個
 
 表面的場可以在薄膜所在的薄片上讀，也可以在薄片旁邊讀：`surface_field_selectors={group: "surface"}`（預設）或 `{group: "adjacent"}`，鍵是請求中的表面 EPR 群組。請求沒有選的群組，或其他值，都是錯誤。這個選擇不改變幾何，也不會開始求解；[執行參考](../reference/specs/aedt-runtime.qmd)說明兩種讀法，[`analyze_epr` 參考](../reference/api/analyze-epr.qmd)列出所有參數。
 
-最終場的參與率與自適應回合的參與率是不同的結果：在這裡計算的內縮邊距只屬於這個結果，不屬於歷程。接著到[不重新求解，改變損耗假設](offline-loss.qmd#aedt-final-fields-and-adaptive-history-stay-separate)，把其他損耗正切套用到 `final_epr`。
+最終場的參與率與自適應回合的參與率是不同的結果：在這裡計算的邊距只屬於這個結果，不屬於歷程。接著到[不重新求解，改變損耗假設](offline-loss.qmd#aedt-final-fields-and-adaptive-history-stay-separate)，把其他損耗正切套用到 `final_epr`。

@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
 title: "以 AEDT 計算覆晶 Xmon"
-description: "準備覆晶 Xmon 的 HFSS 本徵模態計算：modeling=\"solid\"、表面薄膜、內縮邊距與接面，求頻率、Q 值與 EPR。"
+description: "準備覆晶 Xmon 的 HFSS 本徵模態計算：modeling=\"solid\"、表面薄膜、邊距與接面，求頻率、Q 值與 EPR。"
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/tutorial-xmon-aedt"
@@ -22,7 +22,7 @@ aliases:
 
 ## 表面薄膜 {#configure-surface-and-junction-epr}
 
-[]{#declare-surface-epr}在計畫上設定薄膜，與 [Palace 頁](palace.qmd#configure-eigenmode-and-epr-outputs)完全相同：每類表面一層，MA（金屬–空氣）、MS（金屬–基板）與 SA（基板–空氣），各厚 2 nm，使用 PDK 的 `LiteratureCentral` 預設值（建模假設），並設 0.5 µm 與 1.0 µm 兩個離間隙邊緣的內縮邊距。
+[]{#declare-surface-epr}在計畫上設定薄膜，與 [Palace 頁](palace.qmd#configure-eigenmode-and-epr-outputs)完全相同：每類表面一層，MA（金屬–空氣）、MS（金屬–基板）與 SA（基板–空氣），各厚 2 nm，使用 PDK 的 `LiteratureCentral` 預設值（建模假設），並設 0.5 µm 與 1.0 µm 兩個離間隙邊緣的邊距。
 
 ```python
 from orcapen_sc_pdk import validate_interface_preset_records

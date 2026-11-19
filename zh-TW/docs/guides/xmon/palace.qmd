@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
 title: "以 Palace 計算覆晶 Xmon"
-description: "準備覆晶 Xmon 的 Palace 本徵模態計算：表面薄膜、內縮邊距、以電感表示的接面，並細化到量子位元頻率穩定為止。"
+description: "準備覆晶 Xmon 的 Palace 本徵模態計算：表面薄膜、邊距、以電感表示的接面，並細化到量子位元頻率穩定為止。"
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/tutorial-xmon-palace"
@@ -62,7 +62,7 @@ sim.set_convergence(ModeFrequency(modes=[1]).within(percent=0.1))
 它設定了什麼：
 
 - **表面薄膜。** 每類表面一層薄膜：MA（金屬–空氣）、MS（金屬–基板）與 SA（基板–空氣），各厚 2 nm，介電常數與損耗正切取自 PDK 的 `LiteratureCentral` 預設值；這些是依文獻整理的建模假設，不是量測值。薄膜是幾何的一部分，所以設在計畫上，再重新準備計畫。
-- **內縮邊距。** `"inset_margins_um": (0.5, 1.0)` 會在每個整面列旁邊，再加上各表面離間隙邊緣至少 0.5 µm 與至少 1.0 µm 的那部分的列；電場在間隙邊緣最強（[內縮邊距](../../concepts/surface-epr.qmd#surface-distance-band-correction)）。邊距列是整面列的另一種算法，不能相加。
+- **邊距。** `"inset_margins_um": (0.5, 1.0)` 會在每個整面列旁邊，再加上各表面離間隙邊緣至少 0.5 µm 與至少 1.0 µm 的那部分的列；電場在間隙邊緣最強（[邊距](../../concepts/surface-epr.qmd#surface-distance-band-correction)）。邊距列是整面列的另一種算法，不能相加。
 - **接面。** `add_port` 在 D1 金屬層 `D1_BOTTOM_M1` 的接面薄片上放一個 11.78 nH 電感。
 - **模態。** 2 GHz 以上的前兩個模態。
 - **回報的參與率。** 三類表面、所有塊體區域（`bulk_domain_ids=None`）與接面。這個選擇只篩選要回報的內容，不會改變求解。

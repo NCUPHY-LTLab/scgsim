@@ -55,7 +55,10 @@ from scgsim.palace import reanalyze_epr, resolve_epr_result, show_epr
 recorded = resolve_epr_result(Path(".artifacts/pad-modes-epr.json"))
 updated = reanalyze_epr(recorded, surface_defaults={"MA": {"loss_tangent": 2.0e-4}})
 for label, epr in (("recorded", recorded), ("updated", updated)):
-    surfaces = epr.rows[0]["surface"]
+    surfaces = [
+        item for item in epr.rows[0]["surface"]
+        if item["evaluation_kind"] == "unmasked_baseline"
+    ]
     inverse_q = {
         kind: sum(item["inverse_q"] for item in surfaces if item["interface_kind"] == kind)
         for kind in ("MA", "MS", "SA")
@@ -65,6 +68,9 @@ show_epr(recorded, mode=1).write_html("pad-epr-recorded.html")
 show_epr(updated, mode=1).write_html("pad-epr-updated.html")
 ```
 
+It totals each kind's whole-surface rows only: a margin row, if the run has
+any, is another evaluation of part of the same surface, never a term of the
+total ([Surface EPR near the gaps](modes-palace.qmd#surface-epr-margin-rows)).
 It prints the numbers of the table above:
 
 ```text
@@ -84,17 +90,20 @@ recorded and the updated assumptions side by side.
 `group_overrides` to single surfaces by their group ID (`group_id` in the
 result's rows). Any field you leave out keeps its recorded value.
 
-| You give | It means |
+| You give | What changes |
 |---|---|
-| `{"loss_tangent": 2.0e-4}` | This loss tangent; the participation is unchanged, the loss follows it. |
+| `{"loss_tangent": 2.0e-4}` | The loss only: the participation stays, and 1/Q = p tan δ follows the new loss tangent. |
 | `{"loss_tangent": None}` | The loss is unknown: the surface has no loss value and is left out of the known total. |
 | `{"loss_tangent": 0.0}` | The loss is known to be zero. |
+| `{"film_thickness_m": ...}` | The participation too. Palace scales it by the new over the old thickness; AEDT computes the film's energy again from the field integrals the run stored. The loss follows. |
+| `{"film_relative_permittivity": ...}` | The participation too. For MA and MS films, Palace scales it by the old over the new permittivity; Palace refuses a new permittivity for an SA film, whose result lacks the integrals it would need, so change only its thickness or loss tangent. AEDT computes the film's energy again for all three kinds. |
 | A group ID that the result does not have | An error, not ignored. |
 
-Only the loss can change: reanalysis does not create fields or surfaces that
-the run did not compute. The surfaces, the bulk regions and the ports stay
-separate, and a row for an inset margin (the part of a surface away from the
-gap edges) is an alternative to its whole-surface row, not an addition to it.
+Reanalysis does not create fields or surfaces that the run did not compute:
+everything is computed from what the run recorded. The surfaces, the bulk
+regions and the ports stay separate, and a row for an inset margin (the part
+of a surface away from the gap edges) is an alternative to its whole-surface
+row, not an addition to it.
 The total of the known losses leaves out unknown losses and everything the
 model does not contain, so it is not the device's Q or T1
 ([Surface EPR](../concepts/surface-epr.qmd)).

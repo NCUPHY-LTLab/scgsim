@@ -96,9 +96,9 @@ srun "$PALACE_EXECUTABLE" "$PALACE_CONFIG"
 - **Palace：** Palace 0.18.1、你的執行設定用到的 MPI 或 Slurm，以及 `python3`：腳本會用一支自帶的小腳本記錄執行結果，只需要 Python 標準函式庫。請見 [Palace 安裝說明](https://awslabs.github.io/palace/stable/install/)。那台電腦不需要安裝 SCGSim。
 - **AEDT：** 準備時指定的 AEDT 版本（2023.2 或 2024.2）及其授權，以及裝有 SCGSim 與其 `aedt` extra 的 Python 環境；這個 extra 會帶入 PyAEDT 1.3.0（[安裝 SCGSim](../start/install.qmd#extras)）。
 
-## 在另一台電腦執行 {#move-a-run}
+## 在另一台電腦執行 Palace {#move-a-run}
 
-`prepare_handoff` 也會在執行資料夾旁邊寫出它的 `.tar.gz` 封存檔（`handoff.archive_path`）。要在別處執行：
+以下步驟只適用於 Palace；AEDT 的步驟在 [AEDT 的執行](#aedt-execute-the-prepared-package-locally)。Palace 的 `prepare_handoff` 也會在執行資料夾旁邊寫出它的 `.tar.gz` 封存檔（`handoff.archive_path`）。要在別處執行：
 
 1. 在準備的電腦上保留 `handoff.handoff_id`，例如寫進執行資料夾以外的一個檔案。之後讀取結果時，會用它核對取回的資料夾（[收斂與報告](convergence-and-reports.qmd#palace-bind-the-independently-retained-preparation-id)）。
 2. 把封存檔複製到求解器電腦、解開，在解開的資料夾內執行腳本（`bash run_palace.sh` 或 `sbatch run_palace.sbatch`）。
@@ -115,7 +115,14 @@ AEDT 的執行資料夾裡有模型、請求 `aedt_spec.json`，以及只有一�
 python -m scgsim.aedt.run --handoff "$run_dir/metadata/aedt_handoff_metadata.json" --execute "$@"
 ```
 
-執行時會開啟自己的 AEDT 工作階段：匯入模型、設定並求解、匯出並讀回結果、儲存專案，再關閉 AEDT。任何一步失敗，包括少了一個匯出檔，這次執行都算失敗，而不會成為結果。每個執行資料夾只用一次；要再執行，請準備新的資料夾。和 Palace 一樣把整個資料夾複製回來，再[讀取它](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)。
+執行時會開啟自己的 AEDT 工作階段：匯入模型、設定並求解、匯出並讀回結果、儲存專案，再關閉 AEDT。任何一步失敗，包括少了一個匯出檔，這次執行都算失敗，而不會成為結果。每個執行資料夾只用一次；要再執行，請準備新的資料夾。
+
+要在另一台電腦執行：
+
+1. 把執行資料夾，或只把其中的封存檔 `aedt_handoff.tar.gz`（`handoff.archive_path`，位在執行資料夾內）複製到 AEDT 電腦。封存檔裡是資料夾中的檔案，沒有外層資料夾，所以請解開到一個空資料夾中。
+2. 在那個資料夾內執行 `bash run_aedt.sh`。
+3. 執行結束時，`metadata/aedt_run_receipt.json` 會記錄結束的情形；能讀取的執行記載 `"status": "completed"`。
+4. 把整個資料夾連同儲存的專案、結果與 `metadata/` 複製回來，用 `resolve_results(folder)` [讀取它](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)。AEDT 的準備結果沒有需要另外保留的 ID：資料夾中的收據記錄了這次執行，讀取時會檢查收據與它記錄的檔案。
 
 `bash run_aedt.sh --prepare-only` 只建立並儲存 AEDT 專案，不求解。[在 HPC 上做參數掃描](hpc-sweep.qmd)會用到它。
 

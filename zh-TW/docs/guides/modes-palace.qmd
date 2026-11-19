@@ -107,8 +107,11 @@ for junction in epr["junction"]:
     print(f"junction  p = {junction['participation']:+.4f}")
 for domain in epr["bulk"]:
     print(f"{domain['domain_id']:<13} p = {domain['participation']:.4f}")
+whole_surfaces = [
+    item for item in epr["surface"] if item["evaluation_kind"] == "unmasked_baseline"
+]
 for kind in ("MA", "MS", "SA"):
-    surfaces = [item for item in epr["surface"] if item["interface_kind"] == kind]
+    surfaces = [item for item in whole_surfaces if item["interface_kind"] == kind]
     participation = sum(item["participation"] for item in surfaces)
     inverse_q = sum(item["inverse_q"] for item in surfaces)
     print(f"{kind:<13} p = {participation:.3e}, 1/Q = {inverse_q:.3e}")
@@ -147,7 +150,7 @@ $$
 
 模型中若沒有任何有損耗的材料，就完全沒有損耗，Palace 會回報無限大的 Q；報告會標示為「native-reported infinite Q」（[本徵模態參考](../reference/specs/palace-eigenmode.qmd#native-eigenmode-q)）。
 
-**表面損耗。** 表面薄膜不在求解之中。求解之後，Palace 由表面上的電場與薄膜的厚度、介電常數算出每個表面的參與率 p，並以 1/Q = p tan δ 算出損耗。最後三行是各類表面的總和：
+**表面損耗。** 表面薄膜不在求解之中。求解之後，Palace 由表面上的電場與薄膜的厚度、介電常數算出每個表面的參與率 p，並以 1/Q = p tan δ 算出損耗。最後三行是各類表面整面列（`evaluation_kind` 為 `"unmasked_baseline"`）的總和；這次計算沒有其他列：
 
 | 表面 | 參與率 p | 損耗正切 | 1/Q |
 |---|---:|---:|---:|
@@ -166,4 +169,14 @@ $$
 
 ## 間隙附近的表面 EPR {#surface-epr-margin-rows}
 
-電場以及表面參與率在間隙邊緣最大。在 `plan.set_surface_epr` 某層薄膜的規格中加上 `"inset_margins_um": (0.5, 1.0)`，會在每個整面列旁邊，再加上離間隙邊緣至少 0.5 µm 與至少 1.0 µm 的那部分表面的列。邊距會切進幾何，所以同樣要在 `prepare()` 之前設在計畫上。[內縮邊距](../concepts/surface-epr.qmd#surface-distance-band-correction)以圖說明，[本徵模態參考](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)列出鍵與限制，[覆晶 Xmon 範例](xmon/palace.qmd)實際使用了它們。
+電場以及表面參與率在間隙邊緣最大。在 `plan.set_surface_epr` 某層薄膜的規格中加上 `"inset_margins_um": (0.5, 1.0)`，會在每個整面列旁邊，再加上離間隙邊緣至少 0.5 µm 與至少 1.0 µm 的那部分表面的列。邊距會切進幾何，所以同樣要在 `prepare()` 之前設在計畫上。
+
+邊距列（`evaluation_kind` 為 `"requested_margin"`，距離記在 `margin_um`）計算的是整面列已經包含的一部分表面：它是同一個表面的另一種算法，絕不是可以相加的一項。所以腳本只加總整面列。若要讀邊距列，請逐列列出：
+
+```python
+for item in epr["surface"]:
+    if item["evaluation_kind"] == "requested_margin":
+        print(item["name"], item["margin_um"], f"p = {item['participation']:.3e}")
+```
+
+[邊距](../concepts/surface-epr.qmd#surface-distance-band-correction)以圖說明，[本徵模態參考](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)列出鍵與限制，[覆晶 Xmon 範例](xmon/palace.qmd)實際使用了它們。

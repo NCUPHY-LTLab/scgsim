@@ -45,7 +45,10 @@ from scgsim.palace import reanalyze_epr, resolve_epr_result, show_epr
 recorded = resolve_epr_result(Path(".artifacts/pad-modes-epr.json"))
 updated = reanalyze_epr(recorded, surface_defaults={"MA": {"loss_tangent": 2.0e-4}})
 for label, epr in (("recorded", recorded), ("updated", updated)):
-    surfaces = epr.rows[0]["surface"]
+    surfaces = [
+        item for item in epr.rows[0]["surface"]
+        if item["evaluation_kind"] == "unmasked_baseline"
+    ]
     inverse_q = {
         kind: sum(item["inverse_q"] for item in surfaces if item["interface_kind"] == kind)
         for kind in ("MA", "MS", "SA")
@@ -55,7 +58,7 @@ show_epr(recorded, mode=1).write_html("pad-epr-recorded.html")
 show_epr(updated, mode=1).write_html("pad-epr-updated.html")
 ```
 
-它印出上表的數字：
+它只加總各類表面的整面列：若計算有邊距列，那是同一個表面一部分的另一種算法，絕不是總和中的一項（[間隙附近的表面 EPR](modes-palace.qmd#surface-epr-margin-rows)）。它印出上表的數字：
 
 ```text
 recorded MA 2.354e-09, MS 3.919e-08, SA 1.097e-07
@@ -68,14 +71,16 @@ updated MA 1.427e-10, MS 3.919e-08, SA 1.097e-07
 
 `reanalyze_epr` 從記錄的假設開始，先把 `surface_defaults` 套用到某一類（`"MA"`、`"MS"`、`"SA"`）的所有表面，再把 `group_overrides` 依群組 ID（結果各列中的 `group_id`）套用到個別表面。沒有給的欄位保持記錄的值。
 
-| 你給的值 | 意思 |
+| 你給的值 | 改變什麼 |
 |---|---|
-| `{"loss_tangent": 2.0e-4}` | 使用這個損耗正切；參與率不變，損耗隨之改變。 |
+| `{"loss_tangent": 2.0e-4}` | 只改損耗：參與率不變，1/Q = p tan δ 隨新的損耗正切改變。 |
 | `{"loss_tangent": None}` | 損耗未知：這個表面沒有損耗值，不計入已知的總和。 |
 | `{"loss_tangent": 0.0}` | 已知損耗為零。 |
+| `{"film_thickness_m": ...}` | 參與率也會改變。Palace 依新厚度與舊厚度的比例縮放它；AEDT 則用計算時存下的場積分重新算出薄膜的能量。損耗隨之改變。 |
+| `{"film_relative_permittivity": ...}` | 參與率也會改變。MA 與 MS 薄膜在 Palace 中依舊介電常數與新介電常數的比例縮放；Palace 拒絕改變 SA 薄膜的介電常數，因為結果中沒有所需的積分，SA 只能改厚度或損耗正切。AEDT 對三類薄膜都會重新算出薄膜的能量。 |
 | 結果中沒有的群組 ID | 錯誤，不會被忽略。 |
 
-能改的只有損耗：重新分析不會產生計算時沒有算出的場或表面。表面、塊體區域與埠彼此分開；內縮邊距的列（表面上離間隙邊緣一段距離以外的部分）是整面列的另一種算法，不能加到整面列上。已知損耗的總和不含未知的損耗與模型沒有的一切，所以它不是元件的 Q 或 T1（[Surface EPR](../concepts/surface-epr.qmd)）。
+重新分析不會產生計算時沒有算出的場或表面：一切都由計算記錄的內容算出。表面、塊體區域與埠彼此分開；邊距的列（表面上離間隙邊緣一段距離以外的部分）是整面列的另一種算法，不能加到整面列上。已知損耗的總和不含未知的損耗與模型沒有的一切，所以它不是元件的 Q 或 T1（[Surface EPR](../concepts/surface-epr.qmd)）。
 
 ## AEDT：最終場與自適應歷程 {#aedt-final-fields-and-adaptive-history-stay-separate}
 

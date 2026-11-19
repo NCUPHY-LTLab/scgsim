@@ -128,10 +128,11 @@ The rules behind the table:
   licence, and a Python environment with SCGSim and its `aedt` extra, which
   brings PyAEDT 1.3.0 ([Install SCGSim](../start/install.qmd#extras)).
 
-## Run it on another computer {#move-a-run}
+## Run Palace on another computer {#move-a-run}
 
-`prepare_handoff` also writes a copy of the run folder as a `.tar.gz` archive
-beside it (`handoff.archive_path`). To run elsewhere:
+These steps are for Palace; AEDT has its own, in [AEDT runs](#aedt-execute-the-prepared-package-locally).
+For a Palace run, `prepare_handoff` also writes a copy of the run folder as a
+`.tar.gz` archive beside it (`handoff.archive_path`). To run it elsewhere:
 
 1. Keep `handoff.handoff_id` on the computer that prepared the run, for
    example in a file outside the run folder. Reading the result later checks
@@ -166,8 +167,22 @@ The run opens its own AEDT session, imports the model, sets up and solves it,
 exports and reads back the results, saves the project and closes AEDT. A
 failure in any step, including a missing export, ends the run as failed
 rather than as a result. Each run folder is used once: prepare a new folder
-for another run. Copy the whole folder back as for Palace, then
-[read it](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence).
+for another run.
+
+To run it on another computer:
+
+1. Copy the run folder to the AEDT computer, or only its archive
+   `aedt_handoff.tar.gz` (`handoff.archive_path`, inside the run folder). The
+   archive holds the folder's files without a folder of their own, so extract
+   it into an empty folder.
+2. Run `bash run_aedt.sh` from inside that folder.
+3. When it ends, `metadata/aedt_run_receipt.json` records how; a run that can
+   be read has `"status": "completed"`.
+4. Copy the whole folder back, with the saved project, its results and
+   `metadata/`, and [read it](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)
+   with `resolve_results(folder)`. AEDT's handoff has no ID to keep apart: the
+   receipt in the folder records the run, and reading checks it and the files
+   it records.
 
 `bash run_aedt.sh --prepare-only` builds and saves the AEDT project without
 solving. [Parameter sweep on HPC](hpc-sweep.qmd) uses it.

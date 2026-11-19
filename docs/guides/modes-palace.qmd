@@ -117,8 +117,11 @@ for junction in epr["junction"]:
     print(f"junction  p = {junction['participation']:+.4f}")
 for domain in epr["bulk"]:
     print(f"{domain['domain_id']:<13} p = {domain['participation']:.4f}")
+whole_surfaces = [
+    item for item in epr["surface"] if item["evaluation_kind"] == "unmasked_baseline"
+]
 for kind in ("MA", "MS", "SA"):
-    surfaces = [item for item in epr["surface"] if item["interface_kind"] == kind]
+    surfaces = [item for item in whole_surfaces if item["interface_kind"] == kind]
     participation = sum(item["participation"] for item in surfaces)
     inverse_q = sum(item["inverse_q"] for item in surfaces)
     print(f"{kind:<13} p = {participation:.3e}, 1/Q = {inverse_q:.3e}")
@@ -192,7 +195,8 @@ reports an infinite Q; the report shows it as "native-reported infinite Q"
 **Surface loss.** The surface films are not part of the solve. After it,
 Palace computes each surface's participation p from the field at that surface
 and the film's thickness and permittivity, and its loss as 1/Q = p tan δ. The
-last three lines sum each kind's surfaces:
+last three lines sum each kind's whole-surface rows (`evaluation_kind` is
+`"unmasked_baseline"`); this run has no others:
 
 | Surface | Participation p | Loss tangent | 1/Q |
 |---|---:|---:|---:|
@@ -231,7 +235,20 @@ Adding `"inset_margins_um": (0.5, 1.0)` to a film's spec in
 `plan.set_surface_epr` adds, next to each whole-surface row, rows for the part
 of the surface at least 0.5 µm and at least 1.0 µm away from the gap edges.
 The margins are cut into the geometry, so they too are set on the plan before
-`prepare()`. [Inset margins](../concepts/surface-epr.qmd#surface-distance-band-correction)
+`prepare()`.
+
+A margin row (`evaluation_kind` is `"requested_margin"`, with its distance in
+`margin_um`) evaluates a part of a surface that its whole-surface row already
+contains: it is an alternative evaluation of that surface, never a term to add.
+That is why the script totals only the whole-surface rows. To read the margin
+rows, list them one by one:
+
+```python
+for item in epr["surface"]:
+    if item["evaluation_kind"] == "requested_margin":
+        print(item["name"], item["margin_um"], f"p = {item['participation']:.3e}")
+```
+ [Inset margins](../concepts/surface-epr.qmd#surface-distance-band-correction)
 explains them with a figure, the
 [Eigenmode reference](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)
 gives the keys and limits, and the [flip-chip Xmon example](xmon/palace.qmd)
