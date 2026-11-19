@@ -19,8 +19,9 @@ See [supported calculations](backend-support.qmd) and the [tutorials](examples.q
 The source model includes explicit authored curve boundaries
 and caller-selected GDS boundary reconstruction. Curves remain bound to source
 Entities and placed occurrences; polygon-only inputs retain their polygon
-boundaries. Palace builds line and circular-arc curves through `scgsim.geometry.sgb`, while
-AEDT curve lowering remains unsupported. Palace also
+boundaries. Palace and AEDT get line and circular-arc curves through
+`scgsim.geometry.sgb`: Palace meshes them, and AEDT imports them as exact arcs
+in the model's STEP; spline curves are refused. Palace also
 separates Gmsh geometric order from finite-element order and exposes
 mesh-generation records through a detached summary. The
 [GeometryPlan contract](geometry-sgb.qmd) owns exact

@@ -1,11 +1,15 @@
 ---
 title: "Palace 與 AEDT 的欄位對應"
-description: "今天 Palace 的 group dict 與 record 欄位、AEDT 的 contribution ledger、Electrostatic 的 Net 終端，各自對到新 sidecar 的哪個欄位；哪些沒有對應、哪些要同一次切換、哪些之後移除，以及留給 Architecture Lead 的開放項目。"
+description: "切換前 Palace 的 group dict 與 record 欄位、AEDT 的 contribution ledger、Electrostatic 的 Net 終端，各自對到新 sidecar 的哪個欄位；哪些沒有對應、哪些要同一次切換、哪些之後移除，以及留給 Architecture Lead 的開放項目。"
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/consumer-mapping"
 ---
+
+::: {.callout-important title="切換已完成"}
+本頁是切換前寫的遷移對照表：文中的「今天」指切換前的程式。切換已經完成，`SemanticGeometryBuilder`、`surface_contribution_ledger` 與 `planning/` 都已移除；Palace 與 AEDT 都讀同一個 SGB 模型的 sidecar。
+:::
 
 [上一頁](consumer-contract.qmd)說明 SGB 交出什麼。本頁是採用端的對照表：今天 Palace 從 SGB 取得的資料，以及 AEDT 今天從舊 planning 取得的 contribution ledger，各自要從新 sidecar 的哪個欄位取得。每一列標示三種狀態之一：**直接**（欄位語意相同）、**推得**（由 sidecar 欄位按一條規則算出）、**open**（新 sidecar 沒有對應，由採用端決定；不代表缺陷，只代表舊欄位是 Palace 或舊 planning 自己的字串）。
 
@@ -163,7 +167,7 @@ STEP 匯出與 face 順序把關的步驟在[上一頁](consumer-contract.qmd#se
 
 ### Route C 的採用端需求 {#route-c}
 
-Route C 保留導體 volume 並在內部 mesh，目的是有限導電率，以及未來的超導材料模型。sidecar 已經表達它：`model.route_policy.conductor_volumes` 是 `"retained"`，每個導體是一個以 `<entity>` 命名的 volume group，`kind` 為 `conductor`，並帶 `net` 與 `material`。Palace 端今天做不到：
+Route C 保留導體 volume 並在內部 mesh，目的是有限導電率，以及未來的超導材料模型。sidecar 已經表達它：`model.route_policy.conductor_volumes` 是 `"retained"`，每個導體是一個以 `<entity>` 命名的 volume group，`kind` 為 `conductor`，並帶 `net` 與 `material`。Route C 由 SGB 建構，供 AEDT 的 `modeling="solid"` 使用；Palace 只提供 Route A 與 B（`set_route` 與 `mesh()` 只接受這兩者），這是支援範圍。Palace 若要接受 Route C，需要：
 
 - volume 的 `material_kinds` 只接受 `vacuum` 與 `dielectric`（`physical_groups.py` 197–210）；config 要求每個 volume 恰有一個 `material_ids`，且 `stack["materials"][id]` 的 `kind` 是 vacuum 或 dielectric、`permittivity > 0`（`config.py` 470–545）。導體需要新的 material kind，以及 conductivity 欄位。
 - 「live 3D group 名稱等於 volume group」的檢查會多出導體 volume。

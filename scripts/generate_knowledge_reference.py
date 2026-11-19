@@ -259,6 +259,12 @@ def _render_detail(usage: str, page: _DetailPage) -> str:
         "## 函式簽章\n\n```python\n" if page.chinese else "## Signature\n\n```python\n"
     )
     parts.extend((page.signature, "\n```\n\n"))
+    label = "完整產生索引" if page.chinese else "Complete generation index"
+    index_path = CHINESE_INDEX_PATH if page.chinese else INDEX_PATH
+    index_hash = hashlib.sha256(page.index.encode("utf-8")).hexdigest()
+    parts.append(f"[{label}]({Path(index_path).name}).\n\n")
+    # The hashes bind the page to its sources in the offline bundle; the rendered page leaves them out.
+    parts.append("::: {.content-hidden}\n\n")
     parts.append(
         "## 直接來源\n\n| 來源 | SHA-256 |\n|---|---|\n"
         if page.chinese
@@ -270,10 +276,7 @@ def _render_detail(usage: str, page: _DetailPage) -> str:
                 f"Reference source is missing from source inventory: {source}"
             )
         parts.append(f"| `{source}` | `{_digest(page.root, source)}` |\n")
-    label = "完整產生索引" if page.chinese else "Complete generation index"
-    index_path = CHINESE_INDEX_PATH if page.chinese else INDEX_PATH
-    index_hash = hashlib.sha256(page.index.encode("utf-8")).hexdigest()
-    parts.append(f"\n[{label}]({Path(index_path).name}), SHA-256 `{index_hash}`.\n")
+    parts.append(f"\n{label}, SHA-256 `{index_hash}`.\n\n:::\n")
     return "".join(parts)
 
 

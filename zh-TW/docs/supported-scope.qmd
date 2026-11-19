@@ -32,13 +32,13 @@ scgsim-id: "docs/supported-scope"
 - **格點**是 SCGSim 放置每個座標所用的固定間距，也就是版圖的資料庫單位；OrcaPen SC PDK 版圖為 1 nm。**一個格點間距**就是這個間距。
 - **條帶**（band）是切進幾何中的一段表面，用來在其上積分 Surface EPR。它的**邊距**（margin）是它與**間隙邊**（gap edge）的距離；間隙邊是導體面向裸露基板的邊。見 [Surface EPR 邊距](specs/palace-eigenmode.qmd#surface-epr-margins)。
 - **Route B** 把每個導體建成有限金屬體，其表面為理想導體；**Route A** 把面金屬建成零厚度薄片。見[選擇幾何近似](concepts/model-and-numerics.qmd#choose-the-geometric-approximation)。**Route C** 把每個導體體積保留在模型中，供會在導體內部求解的後端使用。SGB 三種都能建構；Palace 模擬接受 Route A 與 Route B。
-- **微細結構**是比周圍特徵小得多的幾何：只有幾個格點間距長的邊，或只有奈米寬的尖刺與狹縫，例如 [C2 與 C3](known-geometry-problems.qmd#c2-c3-slits) 的狹縫。
+- **微細結構**是比周圍特徵小得多的幾何：只有幾個格點間距長的邊，或只有奈米寬的尖刺與狹縫。
 
 ## 支援的入口 {#supported-entry}
 
 版圖經由公開 API 進入 SCGSim：`GeometryPlan`，以及 `scgsim.palace` 與 `scgsim.aedt` 的模擬類別。本頁的規則、保證與負責人，都是針對這樣進入的版圖而言。
 
-以請求規格搭配 `prepare_handoff` 進入的 AEDT 計算（GDS 對應、Q3D 實體或 Q2D 截面），同樣屬於公開 API，也在支援範圍內。它們的規則列於 [AEDT 執行期系列](specs/aedt-runtime.qmd)，不在本頁。各項計算接受什麼輸入，列於[支援的計算](backend-support.qmd)。
+以請求規格搭配 `prepare_handoff` 進入的 AEDT 計算（以 SGB 模型提出的 Q3D 請求，或 Q2D 截面），同樣屬於公開 API，也在支援範圍內。它們的規則列於 [AEDT 執行期系列](specs/aedt-runtime.qmd)，不在本頁。各項計算接受什麼輸入，列於[支援的計算](backend-support.qmd)。
 
 SCGSim 也為這個入口以下的一個 API 提供文件，您可以用自行建立的輸入呼叫它：`scgsim.geometry.sgb.build_sgb_geometry`（幾何建構器），搭配您自行建構的 `GeometryBuildInput`，用來取代 `GeometryPlan` 快照所帶的那一份。
 

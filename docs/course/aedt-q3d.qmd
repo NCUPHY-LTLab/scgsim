@@ -69,7 +69,7 @@ the matrix.
 ## Know which formulation you requested
 
 Q3D on the SGB model extracts capacitance and conductance only. It returns the
-native `results/q3d/c_matrix.csv` and creates no AC-RL or DC setup. AC/RL is not available on the SGB model; it is designed again, with sources and sinks of their own, in
+native `results/q3d/c_matrix.csv` and creates no AC-RL or DC setup. AC/RL is not available in this version; it is tracked in
 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265).
 
 A dedicated grounded Region enclosure is an additional optional choice:

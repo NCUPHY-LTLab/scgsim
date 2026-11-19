@@ -9,7 +9,7 @@ execute:
   enabled: false
 ---
 
-在具備授權的 AEDT 工作站準備每個模型，將一個套件傳送至 HPC 僅供求解，再於具備授權的工作站收集回傳結果。本教學使用公開的 **SCGSim 2.0.0rc10** 批次 API，掃描既有 Xmon 模型中明確設定的接面電感。
+在具備授權的 AEDT 工作站準備每個模型，將一個套件傳送至 HPC 僅供求解，再於具備授權的工作站收集回傳結果。本教學使用公開的 **SCGSim 3.0.0rc4** 批次 API，掃描既有 Xmon 模型中明確設定的接面電感。
 
 ⚠️ 原生驗證待完成：此流程尚未以 AEDT 2023.2 完整執行過端對端批次掃描。
 
@@ -19,9 +19,7 @@ execute:
 |---|---|
 | 來源與原生準備 | 相符的 Xmon 來源相依項目、SCGSim `aedt-epr`、PyAEDT 1.3.0、明確選定的 AEDT 版本與授權，以及可用的 Desktop 工作階段 |
 | HPC 求解 | Python 3.12 標準函式庫、選定的 AEDT 命令列執行檔與授權；此階段不需要可用的 Desktop 工作階段、SCGSim 安裝或 PyAEDT |
-| 原生結果收集 | SCGSim 2.0.0rc10、PyAEDT 1.3.0、選定的 AEDT 版本與授權，以及可用的 Desktop 工作階段 |
-
-有效的 SCGSim 2.0.0rc9 僅準備交接套件，可繼續使用 rc10 封裝與收集。請保留其記錄的來源識別資訊與收據，不要只為了更換封裝執行環境而重做原生準備。
+| 原生結果收集 | SCGSim 3.0.0rc4、PyAEDT 1.3.0、選定的 AEDT 版本與授權，以及可用的 Desktop 工作階段 |
 
 請在同一個 Python 工作階段完成[公開 Xmon 輸入](../tutorial-xmon-input.qmd)與[公開 Xmon AEDT](../tutorial-xmon-aedt.qmd)的設定章節。停在該教學原始交接的執行步驟之前。以下程式碼只使用兩個具名變數：`snapshot`（不可變來源與堆疊，含計畫的 Surface-EPR 規格）與 `junction`（綁定來源的 `PlanarJunction`）。
 

@@ -47,7 +47,7 @@ print(handoff.spec_path, handoff.archive_path)
 
 ## 確認請求的模型形式 {#know-which-formulation-you-requested}
 
-SGB 模型上的 Q3D 只擷取電容與電導。它回傳原生 `results/q3d/c_matrix.csv`，不建立 AC-RL 或 DC 設定。SGB 模型上沒有 AC/RL；它會連同自己的源與匯，在 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265) 中重新設計。
+SGB 模型上的 Q3D 只擷取電容與電導。它回傳原生 `results/q3d/c_matrix.csv`，不建立 AC-RL 或 DC 設定。此版本尚未提供 AC/RL，追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)。
 
 專用的接地 Region 包覆是額外可選項：`grounded_region_net="EnclosureGround"`，新的 Net 名稱必須與模型所有 Net 不同。此設定會要求六個原生 PEC 面薄片，並保留模型的 Net；它不會合併薄片、不會加入橋接，也不代表存在 AC/DC 回流路徑。[契約](../specs/aedt-runtime.qmd#q3d-extraction-and-region-ground-candidate)說明原生驗證／讀回，以及包覆接地與實體接地的差異。改變包覆或擷取形式代表進行不同實驗，不能當作離線更新舊結果。
 

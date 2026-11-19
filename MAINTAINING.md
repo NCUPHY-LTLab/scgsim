@@ -194,10 +194,3 @@ for current scope and open items.
 Route major architecture, cross-package contract, or system-wide proposals
 through the repository's shared contribution process. Preserve the source and
 solver ownership boundaries in [AGENTS.md](AGENTS.md).
-
-## Historical structural acceptance
-
-The v2 module and API structure was accepted on 2026-10-09 and later integrated
-through PR34. That historical milestone describes the structure only; it does
-not set the semantic or delivery state of the separate engineering-convergence
-work.

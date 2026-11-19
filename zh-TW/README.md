@@ -135,6 +135,6 @@ uv run simplepad_q3d.py
 
 ## 選擇下一個模擬目標
 
-[模擬目標選擇頁](docs/examples.qmd#getting-started)連結 OrcaPen SC PDK 的完整筆記本，涵蓋電容、共振模態與能量參與率，以及單位長度傳輸線參數。Driven S 參數請從 [Driven Modal](docs/course/aedt-driven-modal.qmd) 或 [Driven Terminal](docs/course/aedt-driven-terminal.qmd) 教學開始。
+[模擬目標選擇頁](docs/examples.qmd#getting-started)連結 OrcaPen SC PDK 的完整筆記本，涵蓋電容、共振模態與能量參與率，以及單位長度傳輸線參數。Driven S 參數請使用 [Driven Terminal](docs/course/aedt-driven-terminal.qmd) 教學；版圖需要兩片集總埠片，每個埠一片。此版本尚未提供 Driven Modal 與波埠。
 
 模擬自己的版圖之前，請先閱讀[支援範圍](docs/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。

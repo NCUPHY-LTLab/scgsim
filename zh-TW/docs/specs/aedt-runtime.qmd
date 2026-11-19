@@ -9,8 +9,6 @@ scgsim-id: "docs/specs/aedt-runtime"
 
 [課程地圖](../examples.qmd)連結所有已實作的 AEDT 系列課程。本頁定義精確規格、失敗規則，以及此版本讀取的[目前格式](#current-formats)。
 
-下方實體／薄膜建模擴充除本頁明列的必要三維建模選擇外，不修訂 v2 交易或 Q3D v3 契約。
-
 ## 共用生命週期 {#one-shared-lifecycle}
 
 SCGSim 負責唯一的可攜式 AEDT 生命週期：
@@ -117,13 +115,13 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 每個系列在原生準備前只綁定要求一次。私有已綁定要求固定絕對執行工作區及獨立不可變規格酬載；後續即使 `chdir`，相對規格路徑仍以該工作區為基準，絕對來源路徑則保留原文字身份。系列準備只解析綁定酬載，再回傳含原生應用程式控制代碼及獨立準備讀回的承載物件。求解與匯出只接受此物件。匯出輔助函式使用另外的副本，因此輔助函式失敗或回傳結果被修改，都不能更動承載物件保留的準備證據。
 
-專案名稱有兩種明確表示。直接 Python 編寫沿用檔名正規化：移除所提供檔名最後的副檔名。標準 JSON 酬載保存已正規化專案名稱，因此反覆解析與序列化時保持逐位元組一致，包含名稱內的句點及本身以 `.aedt` 結尾的文字。交接準備原樣複製標準名稱，只在獨立酬載中綁定複製的 GDS 路徑；不重新解釋舊截短名稱、不重寫既有產物，也不提供舊名稱備援。
+專案名稱有兩種明確表示。直接 Python 編寫沿用檔名正規化：移除所提供檔名最後的副檔名。標準 JSON 酬載保存已正規化專案名稱，因此反覆解析與序列化時保持逐位元組一致，包含名稱內的句點及本身以 `.aedt` 結尾的文字。交接準備原樣複製標準名稱。
 
 ## 目前格式與較早的結果 {#current-formats}
 
 SCGSim 只讀取它自己寫出的格式。較早的 SCGSim 寫出的交接、收據、要求或結果，請以寫入它的 SCGSim commit 讀取；此版本不轉換也不遷移它們。
 
-此版本已沒有原生 AEDT 建構器（issue #67），它的執行資料夾不會被讀取：`execute_handoff`、`resolve_results()` 與 `analyze_epr()` 會拒絕其交接、要求與已儲存解，訊息說明請以此版本重新準備並執行研究。酬載帶有 `geometry`（原生建構器的）的要求、GDS 匯入路徑的 v1 HFSS 交接，以及缺少 `sgb_model_sha256` 與 `sgb_model_files` 的來源紀錄，都以這種方式遭拒。
+此版本已沒有原生 AEDT 建構器，它的執行資料夾不會被讀取：`execute_handoff`、`resolve_results()` 與 `analyze_epr()` 會拒絕其交接、要求與已儲存解，訊息說明請以此版本重新準備並執行研究。酬載帶有 `geometry`（原生建構器的）的要求、GDS 匯入路徑的 v1 HFSS 交接，以及缺少 `sgb_model_sha256` 與 `sgb_model_files` 的來源紀錄，都以這種方式遭拒。
 
 | 記錄 | 目前格式 |
 |---|---|
@@ -187,12 +185,12 @@ SCGSim 只讀取它自己寫出的格式。較早的 SCGSim 寫出的交接、�
 | HFSS Driven Terminal | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型，其兩個 `LumpedTerminalPort` 位於埠片上，具明確訊號／參考身份（[見下](#hfss-driven-terminal-sgb)）；求解需完整 `HfssRunControl` | 依序排列的終端 S 參數及 Touchstone |
 | HFSS Driven Modal | 等待其在 SGB 模型上的埠（[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)）；`prepare_sgb_model` 拒絕 `ModalPort` | 無 |
 | HFSS Eigenmode | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型；不使用埠；求解需完整 `EigenmodeRunControl`，包含模式數與搜尋頻率；一般 RLC 模型元件和 `PlanarJunction`、EPR 接面資料分開 | 一般實數模式頻率、原生 Q 與收斂證據；EPR 歷史及已儲存場結果使用獨立結果契約 |
-| Q3D | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型；精確導體 Net 成員；只有 C/G，沒有終端（AC/RL 在 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265) 中重新設計）；可選精確六面 Region 接地封閉；求解需完整系列控制 | 原生電容／電導矩陣 |
+| Q3D | 明確 `modeling="solid"` 或 `modeling="thin_film"` 的 SGB 模型；精確導體 Net 成員；只有 C/G，沒有終端（此版本尚未提供 AC/RL，追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)）；可選精確六面 Region 接地封閉；求解需完整系列控制 | 原生電容／電導矩陣 |
 | Q2D | 明確剖面幾何與導體／參考指派 | 每單位長度電容／電導及電阻／電感矩陣 |
 
 ### 集總埠片與終端 RLC {#hfss-shared-lumped-support}
 
-`LumpedRlc` 與 `LumpedTerminalPort` 指名一個 `port_sheet_id`：計畫中的一個埠片，SGB 模型把它記成 `PORT::<port_sheet_id>` group，與 Palace 的集總元件相同（issue #67 decision 8）。不再有另外的支撐紀錄。`prepare_sgb_model()` 把每一個綁到它的 group；模型中沒有該 group 的名稱會被拒絕，接面、RLC 或集總埠共用同一個埠片也會被拒絕。在 HFSS 中，每個埠片都必須帶有一個接面、一個 RLC 或一個集總 Terminal 埠。
+`LumpedRlc` 與 `LumpedTerminalPort` 指名一個 `port_sheet_id`：計畫中的一個埠片，SGB 模型把它記成 `PORT::<port_sheet_id>` group，與 Palace 的集總元件相同。不再有另外的支撐紀錄。`prepare_sgb_model()` 把每一個綁到它的 group；模型中沒有該 group 的名稱會被拒絕，接面、RLC 或集總埠共用同一個埠片也會被拒絕。在 HFSS 中，每個埠片都必須帶有一個接面、一個 RLC 或一個集總 Terminal 埠。
 
 HFSS 匯入把每個 `LumpedRlc` 放在它的埠面上，方式與接面相同：在匯入的 face 上建立一個 Lumped RLC，電流線沿 sidecar 的 `direction`，連接這些 face 自身兩端 edge 的中點。
 
@@ -200,7 +198,7 @@ SGB 流程拒絕 Driven wave `TerminalPort` 與 Driven Modal 埠，訊息指向 
 
 AEDT 的名稱只保留 `[A-Za-z0-9_]`，因此 Net 的 AEDT 名稱（它的 Q3D Net 與 HFSS `perfect_e_<name>` 邊界）是把 ID 中其他字元換成 `_` 的結果。兩個 Net 的 ID 變成同一個名稱時（例如 `chip/A` 與 `chip_A`），`prepare_sgb_model()` 在接觸 AEDT 之前就拒絕，訊息指出兩個 Net ID 與共用的名稱；不替任何一個改名。同一規則也用於 junction 的 Lumped RLC（`junction_rlc_<junction_id>`）與 port sheet 的 `LumpedRlc`（`rlc_<port_sheet_id>`）：兩個 junction ID 或兩個 port sheet ID 的名稱相同時同樣被拒絕，不加 `__2` 後綴。
 
-SGB 流程的 handoff 帶著它的模型：STEP、寫出它的 BREP、sidecar 與 guard 複製到 handoff 的 `model/` 資料夾，要求中記錄的是這個相對資料夾。在執行 AEDT 的機器上，匯入任何東西之前，每個檔案都會依記錄的 SHA-256 再檢查一次。handoff 的來源紀錄綁定模型的識別與四個檔案的雜湊；沒有這些的紀錄屬於原生建構的模型，會被拒絕（issue #67 decision 6）。
+SGB 流程的 handoff 帶著它的模型：STEP、寫出它的 BREP、sidecar 與 guard 複製到 handoff 的 `model/` 資料夾，要求中記錄的是這個相對資料夾。在執行 AEDT 的機器上，匯入任何東西之前，每個檔案都會依記錄的 SHA-256 再檢查一次。handoff 的來源紀錄綁定模型的識別與四個檔案的雜湊；沒有這些的紀錄屬於原生建構的模型，會被拒絕。
 
 SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分的對象（`scgsim.aedt.epr.sgb_source`）。區域是匯入的介電實體（以 AEDT 物件名稱為鍵）與 `Region`：不論方盒內有幾個真空體積（橫跨整個方盒的基板會把真空分成上下兩塊），都只有一個 `Region` 區域，因為 Region 是一個方盒，這些體積必須共用一種材料。導體實體是 PEC，內部沒有場。每一列已宣告型別的 sidecar Surface-EPR 列各積分一次，積分在由它的面複製出的非模型 sheet 上；sheet 列的面只取其 `face_sides` 列出的那些，所以懸空在真空上的 sheet，其 `MS` 列不含懸空的面。回報的貢獻依 Palace `Dielectric` 列的方式分組：每個介面型別與表面單元（一列沒有 band 的列，或一個 band family 的全部 band）有一個涵蓋全部列的 baseline，每個 inset margin 另有一項涵蓋從該 margin 的 band 起到最後的 band，名稱與 Palace 的項目相同；一項的能量是其各列能量之和。AEDT 沒有 Palace 的 `Model.L0`，所以以 Palace 原生 `thickness` 給的 film 會被拒絕；請給 `film_thickness_m`。junction 電壓是沿其 port 在 sidecar 中的 `direction` 的場的面積分，除以 port sheet 橫跨該方向的寬度，寬度讀自 sidecar 的 port 紀錄；`PlanarJunction` 的 `width_um` 與此寬度相差超過模型的 `tolerance_um` 時，`prepare_sgb_model()` 會拒絕。每一列在它的 sheet 上有三個運算式（電場法向與切向積分及面積）；一列可能包含多個朝向的面與曲面牆，所以法向量取 sheet 在每一點自己的法向（`Operation('Normal')`），而非單一向量。junction 電壓在由其 port 面複製出的非模型 sheet 上積分。公開的 HFSS Eigenmode 流程以此執行（見 [Eigenmode 已儲存場](#eigenmode-saved-fields-and-surface-epr-direction)）。
 
@@ -212,7 +210,7 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 在 AEDT 中，執行會把 STEP 匯入空白的 Driven Terminal 設計（`import_sgb_model`），Region、其 Perfect H 與每個 Route A Net 的 Perfect E 都與 Eigenmode 相同。帶有集總 Terminal 埠的模型只匯入 Driven Terminal 設計，而 Driven Terminal 設計也只接受帶有這些埠的模型。接著每個埠依序為：
 
-1. **薄片。** 位於匯入實體上的埠面，會依 guard 中每個面的精確頂點迴圈重新畫成一個薄片物件 `port_sheet_<port_sheet_id>`，並與 guard 的面積比對；不是其頂點所成平面多邊形的面會遭拒。AEDT 2024.2 匯入的基板面與旁邊導體實體相距約 2e-8 µm，Terminal 埠找不到這些導體（開發檢查，2026-11-15）。自由面本身已是這樣的薄片。
+1. **薄片。** 位於匯入實體上的埠面，會依 guard 中每個面的精確頂點迴圈重新畫成一個薄片物件 `port_sheet_<port_sheet_id>`，並與 guard 的面積比對；不是其頂點所成平面多邊形的面會遭拒。AEDT 2024.2 匯入的基板面與旁邊導體實體相距約 2e-8 µm，Terminal 埠找不到這些導體。自由面本身已是這樣的薄片。
 2. **埠。** 一個 Terminal `Lumped Port`，以要求中的名稱命名，覆蓋薄片各面，使用要求的阻抗與 `renormalize`。
 3. **Terminal。** `<name>_T1`，位於薄片在訊號宿主一端、沿 sidecar `direction`（由薄片第一個宿主指向第二個）的直線邊上；這些邊必須構成一條連續線段。AEDT 會把帶積分線的集總埠做成沒有 Terminal 的 Modal 埠，即使在 Driven Terminal 設計中亦然，因此 Terminal 指派在邊上。
 
@@ -322,7 +320,7 @@ Q2D／Q3D 契約將原生觀察方向套用到下列兩項額外資格，和先�
 
 `Q3dNetSpec.name` 是 Net 的 AEDT 名稱（清理後的 ID），`Q3dNetSpec.object_names` 指向模型中屬於該 Net 的導體物件，因此一個 Net 可含多個物件，每個導體物件恰屬一個 Net。Net 不帶源或匯。
 
-Q3D 要求只擷取電容與電導：Q3D 只建立電容／電導設定，並封存與解析唯一的原生 `results/q3d/c_matrix.csv`；已儲存的 AC-RL 或 DC 區塊、`ACRLConv` 收斂區塊或 AC-RL 矩陣檔都會遭拒。SGB 模型上沒有 AC/RL；它會連同自己的源與匯，在 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265) 中重新設計。
+Q3D 要求只擷取電容與電導：Q3D 只建立電容／電導設定，並封存與解析唯一的原生 `results/q3d/c_matrix.csv`；已儲存的 AC-RL 或 DC 區塊、`ACRLConv` 收斂區塊或 AC-RL 矩陣檔都會遭拒。此版本尚未提供 AC/RL，追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)。
 
 `Q3dSpec.grounded_region_net` 可為 `null` 以保留開放形式，或為非空文字，指定 SCGSim 新建、專屬 Region 包絡的 `GroundNet`。產生名稱不能與任何宣告物理 Net 衝突。此建構是電容／電導建構，不宣稱 DC 或 AC-RL 回流路徑。
 
@@ -338,7 +336,7 @@ Region 接地時，SCGSim 從名為 `Region` 的 AEDT 物件六個原生面，�
 
 ### SGB 模型上的 Q3D {#q3d-sgb-model}
 
-Q3D 模擬的是 Palace 網格化的同一幾何（issue #67）。結構化前端為 `prepare_q3d_from_geometry(snapshot: GeometryPlanSnapshot, *,
+Q3D 模擬的是 Palace 網格化的同一幾何。結構化前端為 `prepare_q3d_from_geometry(snapshot: GeometryPlanSnapshot, *,
 aedt_version: str, modeling, output_dir, project_name, design_name,
 net_types: Mapping[str, Literal["Signal", "Ground"]],
 physical_ground_nets: Sequence[str],
@@ -350,7 +348,7 @@ resources: AedtResources | None = None) -> HandoffPlan`。它以 `prepare_sgb_mo
 3. 每個 Net 成為一個 `Q3dNetSpec`，涵蓋模型中屬於該 Net 的導體物件：guard 的導體實體，以及 Route A 中重建為物件的導體片。ID 會變成同一 AEDT 名稱的 Net 會被拒絕。
 4. 材料是堆疊中模型體積所指材料的紀錄。Route C 導體實體為 `pec`；介電體取其堆疊材料；Region 取真空的材料。
 
-交接在 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard，清單中列於 `aedt_spec.json` 之後；收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`。在 AEDT 機器上，要求會對照該資料夾解碼，並再次檢查每個檔案。宣告原生建構 `bodies` 或 `region_padding_um` 的要求，或缺少模型鍵的收據來源，會附理由拒絕（決策 6）；不轉換舊 Q3D 要求。
+交接在 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard，清單中列於 `aedt_spec.json` 之後；收據來源綁定 `sgb_model_sha256` 與 `sgb_model_files`。在 AEDT 機器上，要求會對照該資料夾解碼，並再次檢查每個檔案。宣告原生建構 `bodies` 或 `region_padding_um` 的要求，或缺少模型鍵的收據來源，會附理由拒絕；不轉換舊 Q3D 要求。
 
 執行期把受 guard 保護的 STEP 匯入空的 Q3D 設計（`import_sgb_model`）：物件必須恰為 guard 的實體，每個面對應到其規劃面，材料與 Region 建立後讀回。在 Route A 中，先把每個導體片群組（`SHEET`）從其所在面複製重建為一個以群組命名的片物件，並設為厚度取自堆疊層薄膜物理厚度（`PreparedSgbModel.sheet_thickness_um`）的 PEC `ThinConductor`，再讀回。接著以各 Net 的 Q3D 類型指派要求的 Net，並讀回每個 Net 的物件。
 
@@ -385,7 +383,7 @@ Analyze 結束後，recorder 關閉新請求並觀察一次原生 `odesktop.AreT
 
 ## Eigenmode 已儲存場與 Surface-EPR 方向 {#eigenmode-saved-fields-and-surface-epr-direction}
 
-HFSS Eigenmode 在 Palace 網格化的同一個 SGB 模型上執行（issue #67）。`EigenmodeSim.prepare_handoff()` 以 `prepare_sgb_model()` 從 plan 及其 junction、集總 RLC 與 Surface-EPR specs 建出模型，並寫出攜帶它的交接資料；之後 `EigenmodeSim.prepared_model` 就是交接資料中的模型。在執行 AEDT 的位置，請求以交接資料夾為基準讀取，模型的四個檔案再檢查一次，然後依下列順序建立 Eigenmode 設計：
+HFSS Eigenmode 在 Palace 網格化的同一個 SGB 模型上執行。`EigenmodeSim.prepare_handoff()` 以 `prepare_sgb_model()` 從 plan 及其 junction、集總 RLC 與 Surface-EPR specs 建出模型，並寫出攜帶它的交接資料；之後 `EigenmodeSim.prepared_model` 就是交接資料中的模型。在執行 AEDT 的位置，請求以交接資料夾為基準讀取，模型的四個檔案再檢查一次，然後依下列順序建立 Eigenmode 設計：
 
 1. `import_sgb_model()` 匯入受 guard 保護的 STEP，將每個面對應到規劃的面，重建 free faces，實現材料與 Region，並指派 Perfect E、junction 的 Lumped RLC 與一般 RLC；
 2. 對 EPR 請求，從匯入的面複製出每個選取的 Surface-EPR 列一張非模型 sheet，每個 junction 一張電壓 sheet；
@@ -397,7 +395,7 @@ HFSS Eigenmode 在 Palace 網格化的同一個 SGB 模型上執行（issue #67�
 
 `EprAnalysisRequest.surface_epr_groups` 選取 sidecar 的 Surface-EPR 群組（`None`：全部群組）；`junction_ids` 與 `bulk_domain_ids` 選取要回報的 junction 與區域，而每個區域與 junction 都留在正規化之中。Surface EPR 以 `GeometryPlan.set_surface_epr(specs)` 在計畫上宣告，即 Palace 依介面型別給的 specs；`EigenmodeSim` 從 `set_plan` 綁定的快照讀取，本身沒有 Surface-EPR 設定方法。HFSS Driven Terminal 與 Q3D 不讀取它們。其 inset margin 成為模型的 band，每一列在其全部的面上積分，側壁也包含在內。
 
-儲存場分析（`analyze_epr(model=...)`）複製已儲存的專案並以名稱重新綁定：guard 的實體、Region，以及其運算式讀取的每一張列與 junction sheet 都必須在已儲存的設計中，且已儲存的解必須指向相同的模型識別。`surface_field_selectors` 以相同的群組為鍵：`surface` 讀取列在其 sheet 上的場（`EnterSurface`），`adjacent` 讀取緊鄰其外的場（`EnterAdjacentSurface`）；兩者的面積都是 sheet 的面積。原生建模器的交接資料、已儲存的解或收據會被拒絕（issue #67 決定 6）。
+儲存場分析（`analyze_epr(model=...)`）複製已儲存的專案並以名稱重新綁定：guard 的實體、Region，以及其運算式讀取的每一張列與 junction sheet 都必須在已儲存的設計中，且已儲存的解必須指向相同的模型識別。`surface_field_selectors` 以相同的群組為鍵：`surface` 讀取列在其 sheet 上的場（`EnterSurface`），`adjacent` 讀取緊鄰其外的場（`EnterAdjacentSurface`）；兩者的面積都是 sheet 的面積。原生建模器的交接資料、已儲存的解或收據會被拒絕。
 
 每個所需場量都在明確綁定的 setup、`LastAdaptive` 解、模態、頻率、相位與激發條件下評估，並與數值一同讀回；單靠已儲存的運算式名稱或摘要不構成解的識別，因為未評估的計算器堆疊可能跟隨之後的條件改變。
 
@@ -538,7 +536,7 @@ sim.set_expression_cache_convergence(
 
 這項比較規則是 SCG 選定的浮點表示政策，不是 AEDT 儲存精度保證或物理準確度主張。Python 的 [`sys.float_info.dig` 文件](https://docs.python.org/3.12/library/sys.html#sys.float_info)定義選用的十進位往返精度，未說明 AEDT 內部儲存或格式。AEDT `GetPropValue` 文件不保證這些屬性的精確文字或十進位表示。因此標準化一致不代表原生位元相同，捨入區間邊界仍是比較解析度限制。此診斷修正不表示實際原生成功，也不在觀察值可用前指定物理原因；不授權自動重試或求解器 `Analyze`。
 
-儲存檔使用 PyAEDT 1.3.0 的 [`load_entire_aedt_file()` 解析器](https://github.com/ansys/pyaedt/blob/7084127f52679a70b52e0a550d039673171caefe/src/ansys/aedt/core/internal/load_aedt_file.py)讀取。[公開已儲存專案範例](https://github.com/zlatko-minev/pyEPR/blob/97be9f15212e6ddd427e7ee310dacfa778240fe0/_example_files/pyEPR_tutorial1.aedt)顯示 `CurrentLine` 以附著實體的 `GeometryPosition` 紀錄儲存。該範例僅提供格式資訊，不證明 SCGSim 使用端執行，也不是跨版本 AEDT 序列化契約。原生幾何、接觸與屬性讀回仍需另行 AEDT 驗證；此處尚未驗證使用端專案或求解結果。歷史成品保留記錄的幾何。
+儲存檔使用 PyAEDT 1.3.0 的 [`load_entire_aedt_file()` 解析器](https://github.com/ansys/pyaedt/blob/v1.3.0/src/ansys/aedt/core/internal/load_aedt_file.py)讀取。[pyEPR 1.0.2 的公開已儲存專案範例](https://github.com/zlatko-minev/pyEPR/blob/1.0.2/_example_files/pyEPR_tutorial1.aedt)顯示 `CurrentLine` 以附著實體的 `GeometryPosition` 紀錄儲存。該範例僅提供格式資訊，不證明 SCGSim 使用端執行，也不是跨版本 AEDT 序列化契約。原生幾何、接觸與屬性讀回仍需另行 AEDT 驗證；此處尚未驗證使用端專案或求解結果。歷史成品保留記錄的幾何。
 
 ![宣告來源片與準備後導體片：淺色為既有 A、B 端點，深色為新增 A、B 側導體端部，中央為 RLC 矩形。](../assets/junction-partition-generic.svg){fig-alt="一般宣告片，含淺色既有端點金屬、深色新增導體端部與中央 RLC 矩形。" fig-cap="未執行求解器的一般準備幾何；淺色端點填色仍屬各完整導體。這不是原生 AEDT 讀回或求解證據。" width="95%"}
 
@@ -578,7 +576,7 @@ EPR 與一般 Eigenmode 執行使用相同 `EigenmodeRunControl` 設定映射與
 
 一般結果解析預設使用最後完成求解通過次數。呼叫端可明確選取其他記錄通過次數與模態，但缺值不退回較早通過次數。歷史快取資料與獨立驗證的最終儲存場結果維持不同報告輸入：求解後新增邊距只能使用最終場結果，不可插入自適應歷程曲線。
 
-方法參考固定為 AEDT 2024.2 Fields Calculator 幾何、一般與純量命令、PyAEDT 1.3.0 已安裝來源、Palace 修訂 `5168949c8312dde19cbc4c74cdd858b9ecff74e6`，以及僅供比較的 pyEPR 修訂 `29d4513a52df8b530656afcd7aff249c6add639c`。pyEPR 不是執行期相依套件，也不取代上述公式的權威。
+方法參考固定為 AEDT 2024.2 Fields Calculator 幾何、一般與純量命令、PyAEDT 1.3.0 已安裝來源，以及僅供比較的 Palace 原始碼與 pyEPR 1.0.1。pyEPR 不是執行期相依套件，也不取代上述公式的權威。
 
 ## 目前排除範圍 {#current-exclusions}
 

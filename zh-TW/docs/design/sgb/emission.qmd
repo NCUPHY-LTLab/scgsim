@@ -298,7 +298,7 @@ HXT 在某些模型上會讓 Gmsh 4.15.2 的 process 直接中止（heap 損毀�
 
 ## 交給 AEDT {#handing-the-solids-to-aedt}
 
-SGB 以 `export_aedt_step` 把具名 solid 匯出成 XDE assembly 的 STEP：band 在寫檔時就切好，face identity 來自每個 solid 內的 face 順序，並另外寫出 guard 檔。AEDT 的方向是使用這份輸出；develop 上的 AEDT 流程尚未呼叫它。
+SGB 以 `export_aedt_step` 把具名 solid 匯出成 XDE assembly 的 STEP：band 在寫檔時就切好，face identity 來自每個 solid 內的 face 順序，並另外寫出 guard 檔。AEDT 使用的就是這份輸出：`aedt/preparation/sgb_model.py` 呼叫 `export_aedt_step`，`aedt/runtime/families/sgb_import.py` 把 STEP 匯入空白的 HFSS 或 Q3D 設計。
 
 ## 限制與風險 {#limits-and-risks}
 

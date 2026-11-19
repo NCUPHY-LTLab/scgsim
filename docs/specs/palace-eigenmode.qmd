@@ -167,9 +167,11 @@ An inset margin $m$ selects the part of a surface at least $m$ µm from the
 nearest gap edge, the edge of a conductor footprint that faces exposed
 substrate. SGB cuts that part into the model as band faces, so stock Palace
 integrates ordinary attributes; SCGSim writes no native `Mask` or `Inset`
-configuration, and no special Palace build is needed. The
-[SGB design pages](../../zh-TW/docs/design/sgb/inset-imprint.html#band-measure)
-(Traditional Chinese) define how distance is measured.
+configuration, and no special Palace build is needed. Distance is measured
+from gap edges only: an edge on the die or model boundary, an edge where two
+conductors touch and an edge with only vacuum beside it are not origins,
+because the 2D correction of Surface EPR comes from the metal–gap–metal
+profile.
 
 ::: {.callout-important title="Set Surface EPR on the plan"}
 Margins are geometry: `mesh()` hands them to SGB with the rest of the model.
@@ -210,10 +212,11 @@ separately and do not add them. SGB bands a face only where it has a gap edge, s
 a face without one, such as the underside of a substrate, is covered only by the
 baseline row. The manifest lists the faces SGB skipped.
 
-Group names attach the face kind to the entity with `__`, for example
-`MA::pad__top::band=1`. The [naming rule](../../zh-TW/docs/design/sgb/identity.html#band-group-names)
-is owned by the SGB design pages; read band membership from the index map instead
-of parsing names.
+Group names attach the face kind to the entity with `__` and separate every
+other part with `::`, as `<kind>::<entity>__<face kind>[::band=k]`, for example
+`MA::pad__top::band=1`; the face kind is `top`, `bottom`, `sidewall`, `sheet`
+or `interface`. Read band membership from the index map instead of parsing
+names.
 
 ::: {.callout-note collapse="true" title="Rows, sides and cracked sheets"}
 The index map (schema v3) records, for each surface row, its `row` and `group`,

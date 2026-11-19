@@ -6,21 +6,17 @@ sidebar: contribution
 
 請從「教學」選擇五種完整計算流程之一。各後端課程頁保留原有網址與定位點，作為細節參考。若要在版圖儲存庫中檢查版圖能否建模，請使用[版圖建模檢查](layout-modeling-check.qmd)。
 
-## 頁面位置 {#page-migration}
+## 網站的區域 {#areas}
 
-| 目前頁面 | 本網站的安排 |
-| --- | --- |
-| `README.md`、`index.qmd`、`docs/course/installation.qmd` | 保留為套件總覽與安裝入口。 |
-| `docs/examples.qmd` | 依模擬目標選擇流程的入口。 |
-| `docs/course/*.qmd` | 保留各後端與工作細節的原網址，並經由模擬目標選擇頁連結至 PDK 筆記本。 |
-| `docs/tutorial-xmon-input.qmd`、`docs/tutorial-xmon-palace.qmd`、`docs/tutorial-xmon-aedt.qmd` | 「教學」中的覆晶 Xmon 範例。 |
-| `docs/concepts/*.qmd`、`docs/eigenmode-epr.qmd` | 保留於「概念」。 |
-| `docs/backend-support.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/layout-modeling-check.qmd`、`docs/supported-scope.qmd`、`docs/supported-geometry.qmd`、`docs/known-geometry-problems.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd`、`docs/geometry-sgb.qmd`、`docs/geometry-preview.qmd`、`docs/conventions.qmd`、`docs/knowledge-guide.qmd`、`docs/api/*.qmd` | 保留於「契約」，作為支援行為與詳細介面的依據。 |
-| `docs/contributing.qmd`、`docs/code-map.qmd`、`docs/documentation-map.qmd`、`docs/architecture.qmd`、`docs/goals-and-upstream.qmd`、`docs/provenance.qmd`、`docs/ownership.qmd` | 保留原網址，並歸入「貢獻」中的專案參考。 |
-| `docs/research/index.qmd`、`docs/research/geometry-build/*.qmd` | 保留於「研究」，作為量測研究。 |
-| `docs/history/aedt-capacitance-pre-v3.qmd` | 保留於「教學」的歷史參考。 |
-| `docs/history/curved-source-installation.qmd` | 保留於「研究」，作為 Circular Pad 研究所固定的歷史環境與 Palace 原生設定。 |
-| `zh-TW/docs/design/sgb/*.qmd` | SGB 設計頁，只有繁體中文版，使用自己的側欄。 |
+| 區域 | 內容 | 頁面 |
+| --- | --- | --- |
+| 總覽 | 套件總覽、安裝指令與第一個範例 | `README.md`，由 `index.qmd` 顯示 |
+| 教學 | 選擇模擬、安裝、準備與執行模型並讀取結果、各後端課程，以及覆晶 Xmon 範例 | `docs/examples.qmd`、`docs/course/*.qmd`、`docs/tutorial-xmon-input.qmd`、`docs/tutorial-xmon-palace.qmd`、`docs/tutorial-xmon-aedt.qmd`、`docs/history/aedt-capacitance-pre-v3.qmd` |
+| 概念 | 物理問題、版圖如何成為模型、能量參與率，以及模型與數值方法 | `docs/concepts/*.qmd`、`docs/eigenmode-epr.qmd` |
+| 研究 | 量測研究與歷史 Circular Pad 設定 | `docs/research/index.qmd`、`docs/research/geometry-build/*.qmd`、`docs/history/curved-source-installation.qmd` |
+| 契約 | 支援的行為與詳細介面 | `docs/reference.qmd`、`docs/conventions.qmd`、`docs/backend-support.qmd`、`docs/knowledge-guide.qmd`、`docs/api/*.qmd`、`docs/supported-scope.qmd`、`docs/geometry-sgb.qmd`、`docs/supported-geometry.qmd`、`docs/known-geometry-problems.qmd`、`docs/geometry-preview.qmd`、`docs/layout-modeling-check.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd` |
+| 貢獻 | 給貢獻者的專案參考 | `docs/contributing.qmd`、`docs/code-map.qmd`、`docs/documentation-map.qmd`、`docs/ownership.qmd`、`docs/architecture.qmd`、`docs/goals-and-upstream.qmd`、`docs/provenance.qmd` |
+| SGB 設計（只有繁體中文） | SGB 設計頁，使用自己的側欄 | `zh-TW/docs/design/sgb/*.qmd` |
 
 ## 依模擬目標的 PDK 筆記本 {#pdk-notebooks-by-goal}
 

@@ -84,7 +84,3 @@ manifest 是讀取器的輸入，不代表有權存取或發布其資料。缺�
 ## 跨專案的大型提案 {#larger-proposals-across-projects}
 
 重大架構、跨套件契約或系統層級提案，請遵循儲存庫共用的貢獻流程。並維持 [AGENTS.md](../AGENTS.md) 所列的來源與求解器所有權界線。
-
-## 歷史結構驗收 {#historical-structural-acceptance}
-
-v2 模組與 API 結構於 2026-10-09 獲接受，之後透過 PR34 整合。此歷史里程碑只描述結構，不會設定另一項工程收斂工作的語意或交付狀態。

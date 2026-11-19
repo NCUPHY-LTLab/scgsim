@@ -1,13 +1,13 @@
 ---
 lang: zh-TW
 title: "安裝 SCGSim"
-description: "使用 uv 建立專案，並從 develop 分支安裝 SCGSim。"
+description: "使用 uv 建立專案，安裝 SCGSim 3.0.0rc4 與 OrcaPen SC PDK，兩者都固定到明確的修訂版本。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/installation"
 ---
 
-使用 `uv` 建立研究專案，再從目前的 `develop` 分支加入 SCGSim。SCGSim 支援 Python `>=3.12,<3.14`。
+使用 `uv` 建立研究專案，再加入 SCGSim `3.0.0rc4` 與 OrcaPen SC PDK；PDK 是每個範例都會匯入的元件庫。SCGSim 支援 Python `>=3.12,<3.14`。
 
 ## 1. 安裝 uv 與 Git
 
@@ -17,15 +17,16 @@ scgsim-id: "docs/course/installation"
 
 ## 2. 建立專案並加入 SCGSim
 
-以 Python 3.12 初始化專案，再從 `develop` 加入 SCGSim：
+以 Python 3.12 初始化專案，再加入 SCGSim 與 PDK。這些指令與[首頁](../../index.qmd)相同：SCGSim 固定在標籤 `v3.0.0rc4` 並附帶 `aedt` extra，PDK 固定在範例使用的修訂版本。
 
 ```bash
-uv init --bare --python 3.12 scgsim-study
+uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim @ git+https://github.com/NCUPHY-LTLab/scgsim.git' --branch develop
+uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4' \
+  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
-`uv.lock` 會記錄相依項目解析時選定的確切 Git 修訂版。
+`uv.lock` 會記錄每個相依項目的確切 Git 修訂版。
 
 ## 3. 確認安裝
 
@@ -39,13 +40,13 @@ uv run python -c 'import scgsim; from importlib.metadata import version; print(v
 
 ## 加入後端 extra
 
-基礎套件可讀取回傳結果。若要準備 Palace 執行套件，請為現有 SCGSim 相依項目加入 extra：
+基礎套件可讀取回傳結果；上面的指令已加入 `aedt` extra。若要準備 Palace 執行套件，請為現有 SCGSim 相依項目加入 `palace` extra：
 
 ```bash
 uv add --extra palace scgsim
 ```
 
-需要其他功能時，可改用 `aedt`、`aedt-epr` 或 `visualization`。加入 extra 會沿用原有 Git 相依來源。`aedt` 與 `aedt-epr` 包含 OCP（`cadquery-ocp-novtk`），也就是寫出 AEDT 所匯入 STEP 檔的幾何核心。
+需要其他功能時，也可用相同方式加入 `aedt-epr` 或 `visualization`。加入 extra 會沿用原有 Git 相依來源。`aedt` 與 `aedt-epr` 包含 OCP（`cadquery-ocp-novtk`），也就是寫出 AEDT 所匯入 STEP 檔的幾何核心。
 
 ## 在另一台電腦重建環境
 

@@ -153,9 +153,8 @@ distance; see the
 [EPR interpretation](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions).
 
 Palace builds declared lines and circular arcs through SGB on Route A or
-Route B; other curve kinds raise `UnsupportedCurveError`. AEDT's current planar
-lowering explicitly rejects active declarations; it does not silently
-substitute the diagnostic polygon witness.
+Route B, and AEDT imports them as exact arcs in the STEP of its SGB model;
+other curve kinds raise `UnsupportedCurveError`.
 
 ## Component-to-backend geometry contract
 
@@ -253,10 +252,9 @@ not infer connectivity or promise separate measurements.
 The plan owns the shared outer vacuum envelope. Set it before `prepare()` with
 `plan.set_vacuum_region(padding=...)`, using the existing scalar, X/Y/Z tuple,
 or six-face micrometre mapping forms. Both backends receive that same envelope;
-once a `Sim` consumes a plan snapshot with its own vacuum, a Palace
-`set_vacuum_region()` value fails atomically. It cannot replace only part of
-the bound source. To change the component, stack, or boundary, update the plan
-and prepare a new snapshot, then call `set_plan()` with it. No default
+a simulation has no vacuum setting of its own. To change the component, stack,
+boundary or vacuum, update the plan and prepare a new snapshot, then call
+`set_plan()` with it. No default
 padding is inferred. Authored `D0_TO_D1_GAP` remains a separate vacuum entity
 inside the outer region.
 
@@ -317,15 +315,14 @@ solver execution.
 
 ### Q3D source normalization {#accepted-q3d-source-normalization}
 
-The Q3D GeometryPlan frontend is part of the v2 API. Its recognized `airbridge_deck`
+The Q3D GeometryPlan frontend is part of the public API. Its recognized `airbridge_deck`
 and `airbridge_post` records remain role-neutral source
 geometry in the normalized snapshot; they are not given a Palace route
 representation or a native conductor role by normalization. A selected Palace
-route continues to reject conductors it cannot represent. AEDT Q3D consumes
-the snapshot's final caller-authored Net membership and explicit physical
-ground roles through its separate finite C/G source frontend. Source curve
-intent is still rejected by current AEDT lowering rather than silently
-linearized. This source contract does not assert completion of a Q3D
+route continues to reject conductors it cannot represent. AEDT Q3D solves
+the SGB model of the snapshot, with its final caller-authored Net membership
+and explicit physical ground roles; authored arcs reach it as exact arcs in the
+model's STEP. This source contract does not assert completion of a Q3D
 solve or returned matrix observation.
 
 ## Routes {#current-surface-epr-direction}
@@ -338,8 +335,9 @@ solve or returned matrix observation.
 
 The Palace simulations take Route A and Route B: `set_route` and `mesh()`
 refuse any other route with `ValueError`. Route C is for backends that keep
-conductor volumes. AEDT is to consume the same SGB output; its current
-preparation reads the GeometryPlan snapshot through its own planar path.
+conductor volumes. AEDT imports the STEP of the same SGB model:
+`modeling="thin_film"` builds the Route A model and `modeling="solid"` the
+Route C model.
 
 Surface-EPR margin bands are cut into the model by SGB when `mesh()` builds the
 geometry; see the [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins).
@@ -440,10 +438,7 @@ records remain distinguishable. Native tags and groups are opaque observations,
 not reconstructed successes, and duplicate observations do not multiply one
 semantic contribution.
 
-`plan_route_surfaces()` owns the public projection boundary: it creates the
-facade once when omitted, or verifies a supplied facade against the same route
-and build-input fingerprint, then reuses it at the existing adjacency call
-sites. Explicit authored interface kind and owner metadata take precedence
+Explicit authored interface kind and owner metadata take precedence
 over derived defaults. Route-A sheet contact footprints remain an `MM`
 topology relation but lower as the existing `MS` cap with its established
 physical-name prefix; the surrounding sheet may still carry its independently
@@ -459,7 +454,7 @@ normalization; no reversible-collapse claim is made.
 
 For a stack with no PDK vacuum layer, omitted conductor host declarations are
 bound to the internally generated background only when the caller selects
-`set_vacuum_region()`. The same normalized polygon-versus-substrate-region
+`plan.set_vacuum_region()`. The same normalized polygon-versus-substrate-region
 contact check supplies Route-A physical support for both authored-host and
 generated-background stacks. It considers complete exteriors and holes and
 requires a unique positive-area contact; a bounding-box intersection,
@@ -483,9 +478,6 @@ unsupported.
 The same local-domain partition is used when conductor faces are removed from
 an SA patch. The planner subtracts only the face overlap with that exact
 solution-pair patch, even when one conductor spans several adjacent domains.
-After AEDT junction partitioning, only adapter-generated Route-A sheet
-footprints are rebuilt from the final conductor polygons; caller-authored
-interface declarations remain intact.
 
 Route B keeps finite geometry and records local top, bottom, and sidewall
 material-side evidence. Geometry adjacency remains a set, whereas the additive
@@ -493,11 +485,7 @@ contribution ledger preserves semantic multiplicity. Two same-kind MA sides
 on one Route-A child share one native surface and one aggregate Palace row;
 they are not duplicated or multiplied. That aggregate requires Palace's
 internal-boundary cracking and does not imply side-resolved numeric output.
-The AEDT contribution catalogue is sourced from physically planned ledger
-entries and groups one catalogue row by contribution identity while retaining
-each distinct patch binding. A generic declaration without physical ledger
-evidence remains semantic metadata and does not create an additional numeric
-EPR contribution.
+AEDT reads its Surface-EPR rows from the sidecar of the same SGB model.
 
 ## Identity requirements
 
@@ -522,26 +510,16 @@ hole loops), entities, solution regions, source provenance, and route profile,
 along with the prepared stack and source-occurrence records. Source-linked
 junction declarations retain their terminal nets, direction, dimensions,
 inductance, and capacitance; those fields are not retroactively attributed to
-the normalized `GeometryBuildInput`. AEDT does not consume
-`ConstructionPlanRecord`, Gmsh surfaces, physical groups, or native tags.
+the normalized `GeometryBuildInput`. AEDT builds the SGB model of the
+snapshot with `prepare_sgb_model` and imports its STEP; it takes object names,
+face groups and Surface-EPR rows from that model's sidecar and guard, not from
+Gmsh surfaces, physical groups or native tags.
 
-AEDT preparation also builds a private, in-process representation context from
-the explicit source/effective layer records. It binds each semantic entity's
-physical-layer identity, source and effective Z intervals, and sheet/solid
-representation, plus the already-mapped outer enclosure. The shared planar
-contribution planner consumes those facts directly; it does not infer AEDT
-modeling from entity metadata or treat the context as a Palace Route A, B, or
-C selection. The context does not alter the public plan snapshot, source GDS,
-or serialized source schema. Palace compilation continues to use its explicit
-Route A/B/C contract.
-
-An AEDT-owned binding sidecar must separately record each created body, sheet,
-face, material side, selection, and saved-field expression against those
-source identities. A native face overlap or adjacency query is observed
-geometry evidence; it cannot manufacture source contact intent. Route-A
-profile normalization still happens once at the shared frontend boundary, and
-Route-B finite-body facts stay distinct from PEC approximation and the AEDT
-implementation that realizes them.
+The run checks what AEDT imported against the guard: every object and face must
+match the model's sidecar and guard, or the run stops. A native face overlap or
+adjacency query is observed geometry evidence; it cannot manufacture source
+contact intent. Route-A profile normalization still happens once at the shared
+frontend boundary.
 
 ## Preparation resources {#preparation-resources}
 

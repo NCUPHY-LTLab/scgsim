@@ -135,6 +135,6 @@ Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground
 
 ## Choose your next simulation
 
-The [simulation chooser](docs/examples.qmd#getting-started) links the complete OrcaPen SC PDK notebook for capacitance, resonant modes and energy participation, and per-unit-length transmission-line parameters. For driven S-parameters, start from the [Driven Modal](docs/course/aedt-driven-modal.qmd) or [Driven Terminal](docs/course/aedt-driven-terminal.qmd) lesson.
+The [simulation chooser](docs/examples.qmd#getting-started) links the complete OrcaPen SC PDK notebook for capacitance, resonant modes and energy participation, and per-unit-length transmission-line parameters. For driven S-parameters, use the [Driven Terminal](docs/course/aedt-driven-terminal.qmd) lesson; it needs a layout with a lumped-port sheet for each of its two ports. Driven Modal and wave ports are not available in this version.
 
 Before you simulate a layout of your own, read the [supported scope](docs/supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.

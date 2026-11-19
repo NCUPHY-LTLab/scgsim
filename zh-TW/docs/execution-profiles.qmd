@@ -52,14 +52,7 @@ python3 metadata/run_palace_until_converged.py "$(pwd)" -- "$PALACE_EXECUTABLE" 
 一個執行資料夾同一時間只執行一次。在它執行期間再次啟動它的指令碼，會讓兩個求解器寫入同一個結果資料夾、兩個執行器寫入同一份決定紀錄，兩邊的結果都不可信。要並行的工作，請各自使用由自己的 `prepare_handoff()` 產生的執行資料夾。
 
 ::: {.callout-note title="已在單節點的 Slurm 下執行"}
-`slurm-single-node` 已用原版 Palace 0.18.1，在單一節點的 Slurm 23.11 下（`srun` 搭配 PMIx、16 個任務、以 cgroup 追蹤行程）以 `sbatch` 提交執行過：
-
-- 有宣告的執行在收斂的那個 pass 之後停止：工作狀態為 `COMPLETED`、結束碼 0，回執為 `completed` 與 `stopped_at_convergence`，求解器在停止後約三分之一秒結束；
-- 跑到上限的宣告執行，以及沒有宣告的執行，結束的方式與 `direct-local` 相同；
-- `scancel` 會結束工作，不留下任何行程，也沒有回執，所以讀取結果時會拒絕這個資料夾；
-- 執行器被直接強制終止時，它的守護行程會在一秒內結束 `srun` 的 step；工作狀態為 `FAILED`，回執為 `failed`。在 Slurm 下，這份回執可能比任務全部結束早一點寫出，因為日誌由排程器而不是管線持有。
-
-`slurm-multi-node` 走同一條路徑，尚未在多個節點上執行過。
+`slurm-single-node` 已在單一節點的 Slurm 下執行過：有宣告的執行會在收斂的那個 pass 之後停止；以 `scancel` 結束的工作不會留下回執，所以讀取結果時會拒絕它的資料夾。`slurm-multi-node` 走同一條路徑，尚未在多個節點上執行過。
 :::
 
 ## 交接生命週期 {#handoff-lifecycle}

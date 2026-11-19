@@ -27,7 +27,7 @@ scgsim-id: "docs/research/geometry-build/reproduction"
 
 | 項目 | 版本 |
 |---|---|
-| SGB core（`scgsim.geometry.sgb`，production 套件） | commit `c034f61` |
+| SGB core（`scgsim.geometry.sgb`，production 套件） | 其開發分支合併前的 commit `c034f61` |
 | Python | 3.12.14 |
 | Gmsh（Python API） | 4.15.2 |
 | OCP（`cadquery-ocp-novtk`，OCCT 檢查使用） | 7.8.1.1.post1，建立在 OCCT 7.8.1 之上 |
@@ -54,17 +54,14 @@ scaling 量測 1,000、5,000 與 20,000 個特徵；每個 case 在自己的 Pyt
 
 ## 指令
 
-在 repository 根目錄，使用位於上述 commit 的 SGB core checkout 的 Python 環境執行。`SGB_CORE` 指向那個 checkout，腳本匯入的測試端 builder 也在其中。
+量測腳本在本 repository 的 checkout 根目錄執行，使用其鎖定的開發環境（已含 Gmsh 與 OCP），並從該 checkout 的 `tests/` 匯入測試端 builder。腳本量的是當時 checkout 的版本：本研究各頁的數字來自 commit `c034f61`，在較新的版本上執行，得到的是該版本的數字。
 
 ```bash
-SGB_CORE=<SGB core checkout>
-PY=<SGB core 環境的 Python 直譯器，已安裝 gmsh 與 OCP>
-export SGB_CORE
-
-$PY zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # 約 5 分鐘
-$PY zh-TW/docs/design/sgb/_figures/why_scaling.py oracle
-$PY zh-TW/docs/design/sgb/_figures/why_scaling.py validators
-$PY zh-TW/docs/design/sgb/_figures/emission.py --measure
+uv sync --locked --group dev
+uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # 約 5 分鐘
+uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py oracle
+uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py validators
+uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/emission.py --measure
 ```
 
 本研究的圖表只需要 `matplotlib` 與這些 JSON 檔，由同一個腳本為兩種語言寫出：

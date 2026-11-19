@@ -21,8 +21,9 @@ describes how source declarations reach backend preparation.
 Read [Entities, occurrences, and Nets](concepts/geometry.qmd#entity-occurrence-and-net)
 with the [driven-response concept](concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency).
 The [model preparation tutorial](course/working-model.qmd) shows how those
-choices enter a selected case; the [Driven Modal](course/aedt-driven-modal.qmd) and
-[Driven Terminal](course/aedt-driven-terminal.qmd) lessons show the Modal and Wave Terminal declarations.
+choices enter a selected case; the [Driven Terminal](course/aedt-driven-terminal.qmd)
+lesson shows the lumped-port declarations. Driven Modal and wave ports are not
+available in this version.
 
 ## Mesh and adaptation {#mesh-adaptation}
 

@@ -27,11 +27,10 @@ Every new Q3D and HFSS 3D request must select its modeling representation
 explicitly; there is no default. HFSS and Q3D import the STEP of the same SGB
 model Palace meshes; SCGSim builds no AEDT geometry itself. HFSS Driven Modal
 ports and Driven Terminal wave ports on a Region face have no realization on
-the SGB model yet: a request that declares one is refused, and they follow in
-[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135). Q3D extracts
-C/G only; AC/RL is designed again in
-[issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265). The GDS-import
-HFSS route (`gds_path`, `LayerImport`, `ObjectBinding`) is removed. AEDT requests also require an explicit
+the SGB model in this version: a request that declares one is refused. They
+are tracked in [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135).
+Q3D extracts C/G only; AC/RL is not available in this version and is tracked in
+[issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265). AEDT requests also require an explicit
 `aedt_version` of `"2023.2"` or `"2024.2"`; both use PyAEDT 1.3.0, with the
 selected AEDT Desktop running on the same host as SCGSim. The table describes
 supported request families and intended returned quantities, not solver
@@ -87,12 +86,12 @@ not equalize boundary conditions or make lumped capacitance, resonance,
 S-parameters and per-length matrices interchangeable. Use each result's units
 and native conductor/port/mode order.
 
-The Palace source path supports authored line segments and circular arcs, and
-caller-selected circular-arc GDS boundary reconstruction; `interpolation_spline`
-and `bspline` curves raise `UnsupportedCurveError`. These inputs retain
-their source Entity and occurrence identity and are built by
-`scgsim.geometry.sgb`.
-AEDT curve intent is unsupported. Palace `MesherOptions.geometry_order` controls the
+The source path of Palace and AEDT supports authored line segments and circular
+arcs, and caller-selected circular-arc GDS boundary reconstruction;
+`interpolation_spline` and `bspline` curves raise `UnsupportedCurveError`. These
+inputs retain their source Entity and occurrence identity and are built by
+`scgsim.geometry.sgb`; Palace meshes that model, and AEDT imports the arcs as
+exact arcs in the model's STEP. Palace `MesherOptions.geometry_order` controls the
 geometric mesh representation; it is separate from the FEM order used by the
 field problem. These controls and the returned mesh summary describe mesh
 generation, not solver accuracy.
