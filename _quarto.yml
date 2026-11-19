@@ -18,6 +18,7 @@ project:
   - docs/contribute/research/*.qmd
   - docs/contribute/research/*/*.qmd
   - docs/contribute/history/*.qmd
+  - docs/contribute/internals/*.qmd
   - '!zh-TW/**'
   post-render: python3 scripts/build_bilingual_docs.py
 execute:
@@ -153,6 +154,7 @@ website:
       - docs/reference/specs/execution-profiles.qmd
       - docs/reference/specs/mesh-quality.qmd
       - docs/reference/specs/report-model.qmd
+      - docs/reference/specs/layout-check.qmd
   - id: contribute
     title: Pages
     style: floating
@@ -166,6 +168,9 @@ website:
     - docs/contribute/goals-and-upstream.qmd
     - docs/contribute/provenance.qmd
     - docs/contribute/notebook-contract.qmd
+    - section: Internals
+      contents:
+      - docs/contribute/internals/api-owners.qmd
     - section: Research
       contents:
       - docs/contribute/research/index.qmd

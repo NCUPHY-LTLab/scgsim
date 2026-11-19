@@ -18,6 +18,7 @@ project:
   - docs/contribute/research/*.qmd
   - docs/contribute/research/*/*.qmd
   - docs/contribute/history/*.qmd
+  - docs/contribute/internals/*.qmd
   - docs/contribute/sgb-design/*.qmd
 execute:
   enabled: false
@@ -152,6 +153,7 @@ website:
       - docs/reference/specs/execution-profiles.qmd
       - docs/reference/specs/mesh-quality.qmd
       - docs/reference/specs/report-model.qmd
+      - docs/reference/specs/layout-check.qmd
   - id: contribute
     title: 頁面
     style: floating
@@ -165,6 +167,9 @@ website:
     - docs/contribute/goals-and-upstream.qmd
     - docs/contribute/provenance.qmd
     - docs/contribute/notebook-contract.qmd
+    - section: 內部結構
+      contents:
+      - docs/contribute/internals/api-owners.qmd
     - section: 研究
       contents:
       - docs/contribute/research/index.qmd
