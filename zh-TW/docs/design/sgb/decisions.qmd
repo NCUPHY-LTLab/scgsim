@@ -35,7 +35,7 @@ Route C 把有限厚度的金屬保留為 conductor volume，並在內部做 mes
 |---|---|
 | 決定 | Route C 納入 v1。它是 S7 的第三種 labelling 政策，不是另一條 pipeline。**production 已實作**（階段 1）：每個導體 Entity 的 volume 都被輸出並在內部 mesh，導體–dielectric 與導體–vacuum 的界面是共用 face；導體 sheet 被拒絕；lumped port 與 Route B 一樣位於 host 的 support plane，是 substrate 與 vacuum 之間、邊與導體 wall 共用的 face。 |
 | 選項 | （a）不支援。（b）當成第三種 labelling 政策支援（已選）。 |
-| 後果 | 會出現 conductor 內部的 volume group（以 `<entity>` 命名）；「Net X 的 PEC」的意義在 Route C 不再是一組 PEC face，因為界面是 conductor 與 dielectric 之間的共用 face；Palace 端的 material domain 與 Surface EPR 的 lowering 都要有對應規則；Palace 目前不接受 Route C。Route A 與 Route B 的 contract 不變。 |
+| 後果 | 會出現 conductor 內部的 volume group（以 `<entity>` 命名）；「Net X 的 PEC」的意義在 Route C 不再是一組 PEC face，因為界面是 conductor 與 dielectric 之間的共用 face；Palace 端的 material domain 與 Surface EPR 的 lowering 都要有對應規則；Route C 供 AEDT 的 `modeling="solid"` 使用，Palace 只提供 Route A 與 B，這是支援範圍。Route A 與 Route B 的 contract 不變。 |
 | 決定者 | Human 已決定範圍；labelling 政策的細節由 architecture review。 |
 :::
 

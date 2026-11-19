@@ -7,7 +7,7 @@ scgsim-id: "docs/architecture"
 lang: zh-TW
 ---
 
-這份次要實作參考供貢獻者使用。研究者入門請先閱讀[語意幾何](concepts/geometry.qmd)或[教學](examples.qmd)。儲存庫操作程序位於[維護者入口](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md)。
+這份次要實作參考供貢獻者使用。研究者入門請先閱讀[語意幾何](concepts/geometry.qmd)或[教學](examples.qmd)。儲存庫操作程序位於[維護者入口](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)。
 
 SCGSim 區分 PDK 事實、元件意圖、語意幾何、求解器準備、執行、結果載入及呈現。求解器後端可以實作自己的物理模型，但不能重新定義幾何身分、執行身分或共用來源資訊。
 
