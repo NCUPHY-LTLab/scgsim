@@ -1,6 +1,6 @@
 ---
-title: "Overview"
-description: "Find the model, mesh, handoff, and result topic you need."
+title: "Reference"
+description: "Find the page that answers your question: supported calculations, layout rules, terms, API names, and the exact behaviour of each solver workflow."
 sidebar: reference
 scgsim-id: "docs/reference"
 scgsim-kind: "reference"
@@ -9,65 +9,58 @@ aliases:
   - ../reference.html
 ---
 
-Start with a goal notebook from [Choose a simulation](../start/choose-a-simulation.qmd#getting-started), then use the topic links below to find the model, geometry, mesh, execution or result guidance for that task. Check [Terms and units](terms-and-units.qmd) when a technical term or unit needs clarification.
-
-## Model and materials {#model-materials}
-
-Start with the [physical problem](../concepts/problems.qmd) and
-[model assumptions](../concepts/model-and-numerics.qmd#define-the-physical-model).
-The [physical representation contract](specs/physical-representation.qmd#typed-source-carrier-and-plan)
-describes how source declarations reach backend preparation.
-
-## Conductors and ports {#conductors-ports}
-
-Read [Entities, occurrences, and Nets](../concepts/geometry.qmd#entity-occurrence-and-net)
-with the [driven-response concept](../concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency).
-The [model preparation tutorial](../guides/prepare-a-layout.qmd) shows how those
-choices enter a selected case; the [Driven Terminal](../guides/s-parameters-hfss.qmd)
-lesson shows the lumped-port declarations. Driven Modal and wave ports are not
-available in this version.
-
-## Mesh and adaptation {#mesh-adaptation}
-
-The [mesh quality contract](specs/mesh-quality.qmd#audit) defines
-what `mesh()` audits and records about each mesh. The [prepared-backend tutorial](../guides/inspect-the-prepared-model.qmd)
-shows where to inspect the mesh and native preparation before execution.
-
-## Execution and handoff {#execution-handoff}
-
-Use the [execution profile contract](specs/execution-profiles.qmd#handoff-lifecycle)
-for portable handoffs and caller-controlled solver runs, then follow the
-[handoff tutorial](../guides/run-elsewhere.qmd).
-
-## Results and reports {#results-reports}
-
-The [report contract](specs/report-model.qmd#common-envelope) describes result
-identity, availability, and presentation. The
-[returned-results tutorial](../guides/convergence-and-reports.qmd#interpret-for-scq-use)
-shows how to read a completed run folder for a selected use.
-
-## Saved fields and offline loss {#saved-fields-offline-loss}
-
-Use the [saved-field tutorial](../guides/saved-fields.qmd#recover-the-exact-prepared-model)
-for native field evaluation and the [offline EPR tutorial](../guides/offline-loss.qmd#interpret-an-assumption-change)
-for assumption changes on recorded results.
-<span id="native-and-offline-epr-steps"></span>`analyze_epr` evaluates retained saved fields through native AEDT and needs an
-explicitly selected AEDT release and its license; `reanalyze_epr` updates the
-assumptions of a resolved EPR result offline. The
-[analyze_epr reference](api/analyze-epr.qmd) gives its parameters and
-signature.
+Find your question below; each line names the page that answers it. To learn
+a workflow from the start, use [Choose a simulation](../start/choose-a-simulation.qmd)
+and the Guides.
 
 ## Find the right reference {#find-the-right-reference}
 
-| Need | Start here |
+[]{#model-materials}[]{#conductors-ports}
+
+**Before you draw**
+
+| Question | Page |
 |---|---|
-| Check which solver workflows SCGSim supports | [Supported calculations](supported-calculations.qmd) |
-| Prepare, seal and evaluate saved AEDT fields | [AEDT: analyze saved fields](../guides/saved-fields.qmd) |
-| Change the assumptions of an existing EPR result offline | [Change loss assumptions without solving](../guides/offline-loss.qmd) |
-| Look up the parameters and signature of `analyze_epr` | [analyze_epr](api/analyze-epr.qmd) |
-| Browse the declared public names of each package | [API index](api-index.qmd) |
-| Review source ownership and API boundaries | [Architecture](../contribute/architecture.qmd) |
+| Which calculations can I run, with which solver, and what do I get? | [Supported calculations](supported-calculations.qmd) |
+| What must my layout guarantee, and who fixes a failed build? | [Supported scope](supported-scope.qmd) |
+| Which layout patterns are tested, and how is a port sheet cut? | [Supported geometry](supported-geometry.qmd) |
+| My build failed on a spline or a single-point touch: why? | [Known geometry problems](known-geometry-problems.qmd) |
+| What does a term or a unit mean? | [Terms and units](terms-and-units.qmd) |
 
-## Junction capacitance reference {#junction-capacitance-reference}
+**Setting up a model**
 
-For one junction in a given mode and pass, $V$ is its complex peak-phasor voltage and $U_{norm}$ is the electric-energy normalization, not total electric-plus-magnetic energy. For nonzero $V$, the effective modal capacitance is $C_{mode}=2U_{norm}/|V|^2$, the branch capacitance is $C_j=2U_{C,j}/|V|^2$, and the participation ratio is $p_{C,j}=C_j/C_{mode}$. At $V=0$, the ratio is undefined. The [AEDT runtime contract](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization) records the full voltage, energy and normalization definitions.
+| Question | Page |
+|---|---|
+| Which calls build a `GeometryPlan`, and which curves and sheets does it take? | [GeometryPlan and SGB](specs/geometry-plan.qmd) |
+| Is my film a sheet or a volume, and how do the heights change? | [Physical representation](specs/physical-representation.qmd) |
+| How do I set up a Palace capacitance run, the mesh and its convergence? | [Palace Electrostatic, mesh and convergence](specs/palace-electrostatic-sgb.qmd) |
+| How do I set up Palace modes, ports and Surface-EPR margins? | [Palace Eigenmode and EPR](specs/palace-eigenmode.qmd) |
+| Which AEDT versions, `solid` or `thin_film`, and what does each AEDT calculation return? | [AEDT: what runs and what comes back](specs/aedt-runtime.qmd) |
+
+[]{#mesh-adaptation}[]{#execution-handoff}[]{#results-reports}
+
+**Running and reading**
+
+| Question | Page |
+|---|---|
+| Is my mesh good enough? | [Tetrahedral mesh quality](specs/mesh-quality.qmd) |
+| Which resources do I give Palace, and what command runs? | [Execution profiles](specs/execution-profiles.qmd) |
+| What do the run, physics and cost views of a result show? | [Reading a run: the three views](specs/report-model.qmd) |
+
+[]{#saved-fields-offline-loss}[]{#native-and-offline-epr-steps}
+
+**Functions and names**
+
+| Question | Page |
+|---|---|
+| What does `analyze_epr` take? It computes EPR again from fields AEDT saved, with AEDT and its license. | [analyze_epr](api/analyze-epr.qmd) |
+| Which public names does each package export? | [API index](api-index.qmd) |
+
+To change the loss assumptions of a finished EPR result without AEDT or
+Palace, `reanalyze_epr` works offline; see
+[Change loss assumptions without solving](../guides/offline-loss.qmd).
+How SCGSim is built inside is under [Contribute](../contribute/index.qmd).
+
+[]{#junction-capacitance-reference}A junction's capacitive participation and
+its effective modal capacitance are defined with the other EPR formulas in
+[How EPR is normalized](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization).

@@ -1,6 +1,4 @@
-# `analyze_epr`: saved-field EPR usage
-
-`analyze_epr` evaluates retained fields through native AEDT and requires an explicitly selected release and license; `reanalyze_epr` updates assumptions on a resolved result offline. Follow the complete [saved-fields lesson](../../guides/saved-fields.qmd) and use the [Reference overview](../index.qmd) for related references.
+[]{#analyze_epr-saved-field-epr-usage}Use `analyze_epr` to compute the EPR of an HFSS Eigenmode run again from the fields AEDT saved, for example for other Surface-EPR groups or field sides, without solving again. It opens AEDT, so it needs an AEDT release installed on the host, named by `aedt_version`, and its license. To change only the loss assumptions of a finished result, use `reanalyze_epr`, which works offline ([Change loss assumptions without solving](../../guides/offline-loss.qmd)). The [saved-fields guide](../../guides/saved-fields.qmd) runs the whole procedure.
 
 ## Minimal call
 
@@ -30,6 +28,16 @@ result = analyze_epr(
     output_dir=Path(".artifacts/saved-field-epr"),
 )
 ```
+
+`result` is an `EprResult`. `show_epr` draws one mode at the last pass as a Plotly figure:
+
+```python
+from scgsim.aedt import show_epr
+
+show_epr(result, mode=1)
+```
+
+`native_pass=` selects another recorded pass, and `theme="dark"` suits a dark notebook.
 
 ## Parameters
 

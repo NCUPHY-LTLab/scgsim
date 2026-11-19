@@ -1,6 +1,4 @@
-# `analyze_epr`：儲存場 EPR 用法
-
-`analyze_epr` 會透過 AEDT 原生功能評估保留場資料，必須明確選擇 AEDT 版本並提供授權；`reanalyze_epr` 則離線更新已解析結果的假設。請依[儲存場完整教學](../../guides/saved-fields.qmd)操作，相關參考資料見[參考總覽](../index.qmd)。
+[]{#analyze_epr儲存場-epr-用法}`analyze_epr` 用 AEDT 已儲存的場，重新計算 HFSS 本徵模態計算的 EPR，例如換一組 Surface-EPR 群組或場的取用面，不必重新求解。它會開啟 AEDT，所以需要主機上已安裝、以 `aedt_version` 指定的 AEDT 版本與授權。若只想改變已完成結果的損耗假設，請用離線運作的 `reanalyze_epr`（[不重新求解，改變損耗假設](../../guides/offline-loss.qmd)）。完整流程見[儲存場教學](../../guides/saved-fields.qmd)。
 
 ## 最小呼叫
 
@@ -30,6 +28,16 @@ result = analyze_epr(
     output_dir=Path(".artifacts/saved-field-epr"),
 )
 ```
+
+`result` 是 `EprResult`。`show_epr` 以 Plotly 圖畫出最後一個回合（pass）的某個模態：
+
+```python
+from scgsim.aedt import show_epr
+
+show_epr(result, mode=1)
+```
+
+`native_pass=` 可選其他已記錄的回合；深色筆記本可用 `theme="dark"`。
 
 ## 參數
 

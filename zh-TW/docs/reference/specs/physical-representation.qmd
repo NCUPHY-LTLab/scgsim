@@ -1,86 +1,51 @@
 ---
-title: "共用物理表示"
-description: "來源物理宣告，以及供求解器準備使用的單一選定近似設定解讀。"
+title: "物理表示：薄膜、薄片與體積"
+lang: zh-TW
+description: "決定金屬薄膜成為薄片或體積、以及堆疊高度如何改變的近似方式，附尺寸範例，以及選擇它們的 Palace set_route 呼叫。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/physical-representation"
-lang: zh-TW
 aliases:
   - ../../specs/physical-representation.html
 ---
 
-物理分類由來源作者負責。選定的來源輸入使用單一 LayerStack 組裝座標系，每個實體薄膜具有一個物理層身分，並由其 Entity、多邊形及子出現實例共同使用。放置轉換在近似設定解讀之前只套用一次。獨立堆疊座標系需要明確的來源關聯，不在本契約範圍內。
+一層 100 nm 的金屬薄膜，可以用這個厚度的體積進入模型，也可以是零厚度的薄片。 *近似方式*（approximation profile）為堆疊中的每層薄膜做這個選擇，並決定它上方的高度如何改變。Palace 模擬以 `set_route` 選擇近似方式，AEDT 要求以 `modeling` 選擇。何時用哪一種，見 [Route A 與 Route B](../../concepts/routes.qmd)；本頁列出每種近似方式的確切效果。
 
-物理宣告區分堆疊薄膜、局部薄膜及有限體積。原始材料、薄膜法向厚度、附著面、來源區間、Entity 身分、多邊形孔洞及實際本體端點都保留為來源事實。有限體積的名義層區間不能取代個別本體的區間。TSV 壁的徑向厚度與軸向跨度不同。非金屬支撐定位點不會成為導體薄膜。
+## 近似方式 {#profiles}
 
-單一中性的物理表示計畫負責選定的近似設定、來源至有效座標的追蹤、各本體表示、支撐投影及完整包絡映射。Palace 與 AEDT 使用此計畫；後端建構、最終 Net、埠、接面、RLC 處理及數值控制仍各有其負責者。Net、角色、材料名稱及本體大小都不能補足缺少的物理分類。
+以 500 µm 矽基板上的 100 nm 鋁膜為例：矽從 z = −500 到 0 µm，薄膜從 0 到 0.1 µm，上方是真空。五種近似方式彼此不同，沒有一個是另一個的別名。
 
-`solid`、`thin_film`、`substrate_face`、`metal_gap_equivalent` 與 `route_b` 都是明確的近似設定，彼此不是別名。堆疊薄膜移除對每個物理身分只發生一次。局部薄膜的薄片投影使用來源指定的附著面，不會從無關區間扣除厚度。保留的體積映射其實際端點。完整的要求來源包絡只映射一次，後端不會對已縮短的本體再次套用來源留白。
+| 近似方式 | 路徑 | 薄膜變成 | 薄膜上方的高度 | 由誰選擇 |
+|---|---|---|---|---|
+| `route_b` | B | 0.1 µm 的體積，表面為理想導體，內部不產生網格 | 不變 | Palace `set_route("B")`，預設 |
+| `thin_film` | A | z = 0 的薄片，即薄膜所在處 | 下移 0.1 µm | Palace `set_route("A")`；AEDT `modeling="thin_film"` |
+| `substrate_face` | A | 你綁定的基板面上的薄片，z = 0 | 不變 | Palace `set_route("A", approximation_profile=...)` |
+| `metal_gap_equivalent` | A | 覆晶的兩層相對薄膜，各成為自己基板面上的薄片；兩層的厚度都移除 | 依各薄膜厚度下移 | Palace `set_route("A", approximation_profile=...)` |
+| `solid` | C | 保留在模型中的 0.1 µm 體積 | 不變 | AEDT `modeling="solid"` |
 
-實際接觸及宿主關聯維持為綁定來源的紀錄。缺少合格關聯時就保留缺項，不阻擋獨立的物理轉換。需要該關聯的使用端應回報具體限制，不依距離、名稱或 Net 成員資格猜測。來源接觸法向不能確立 HFSS 計算器 Surface／Adjacent 的場側語意或原生電氣連續性。
+對覆晶來說，差別出現在間隙。兩片晶粒各有 0.1 µm 薄膜，下方基板面在 z = 0、上方基板面在 z = 10.2 µm，兩層薄膜之間有 10.0 µm 真空時：
 
-歷史要求、來源雜湊、執行期清單及已封存的同批產物保留其紀錄的解讀方式，不能成為新物理來源準備的第二個權威。來源準備及離線追蹤不代表已完成原生建構、收斂或數值準確性驗證。
+| 近似方式 | 下方薄片 | 上方薄片 | 薄片之間的間隙 |
+|---|---|---|---|
+| `thin_film` | z = 0 | z = 10.0 | 10.0 µm，即金屬到金屬的間隙 |
+| `substrate_face` | z = 0 | z = 10.2 | 10.2 µm，即基板到基板的間隙 |
+| `metal_gap_equivalent` | z = 0 | z = 10.0 | 10.0 µm，即金屬到金屬的間隙 |
 
-## 型別化來源載體與計畫 {#typed-source-carrier-and-plan}
+`thin_film` 移除堆疊中的每層薄膜；`metal_gap_equivalent` 只移除你綁定的那兩層相對薄膜，一層附著於下表面、一層附著於上表面，分別位於兩片不同的基板上。凸塊與柱在每種近似方式中都仍是體積，它們的端點隨高度移動。輪廓、孔洞、材料與 Net 名稱在各近似方式中都相同。
 
-來源作者的 `LayerLevel.info["physical_layer"]` 存放序列化的中性宣告。加入此載體時，保留所有原始 Level 引數及既有 info；不將求解器目標材料寫入其中。
+這些高度是以 SCGSim 自己的映射（`scgsim.geometry.interpret_physical_layers`），對這些薄膜的宣告計算出來的。
 
-```python
-from gdsfactory.technology import LayerLevel
-from scgsim.geometry.models.physical import (
-    ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
-)
-from scgsim.geometry.interpretation.physical import interpret_physical_geometry
+## Palace：`set_route` {#palace-caller-profile}
 
-declaration = PhysicalLayerDeclaration.from_payload(authored_declaration)
-level = LayerLevel(
-    **authored_level_arguments,  # existing source arguments, excluding info
-    info={**authored_level_info, "physical_layer": declaration.to_payload()},
-)
-profile = ApproximationProfile("thin_film", "v1", {})
-effective_input, effective_stack, plan = interpret_physical_geometry(
-    normalized_source_input, source_stack, profile,
-)
-recorded_plan = plan.to_payload()
-read_plan = PhysicalRepresentationPlan.from_payload(recorded_plan)
-body = read_plan.map_body(
-    declared_physical_layer_id, actual_source_interval_um, original_source_geometry,
-)
-```
+`ElectrostaticSim` 與 `EigenmodeSim` 在 `mesh()` 之前以 `set_route()` 選擇近似方式。一次呼叫就說明全部設定：它同時取代路徑與近似方式。
 
-`PhysicalLayerDeclaration` 具有下列確切欄位：
-
-- `physical_layer_id`、`source_level_id`、`source_level_and_gds_pair` 及 `source_interval_um`：來源身分、選取器關聯及名義跨度。
-- `material_id` 與 `feature_kind`：原始材料，以及 `stack_film`、`local_film` 或 `finite_volume` 分類。
-- `physical_dimensions`：來源薄膜法向厚度或有限體積事實；徑向壁厚與軸向跨度維持區別。
-- `source_contact_facts`：來源指定的附著面及可用的來源法向。
-- `actual_entity_contact_graph`：既有的來源接觸圖；無法取得時為 `None`。製程連通性描述不是合格的放置後平面範圍或接觸證明。
-
-此計畫使用結構版本 `scgsim.geometry.physical-representation.v1`。其帶標記的酬載記錄明確近似設定、來源身分、宣告、壓縮區間、薄片錨點、各 Entity 事實及完整包絡追蹤。`context` 將這些事實投影供共用規劃使用；`map_body()`、`project_support_point()` 與 `project_enclosure()` 提供使用端投影，不另設第二個近似設定解讀器。
-
-宣告的原始 `material_id` 保留為來源身分。原生 AEDT PEC 材料或 Perfect E／ThinConductor 指派屬於後端實現與另外觀察的資料，永遠不取代來源身分。
-
-## 選定宣告與來源關聯 {#selected-declarations-and-source-incidence}
-
-宣告目錄不等於選定模型。只使用選定來源明確綁定的物理層；未使用的目錄薄膜不會產生壓縮事件。選定的橋接組裝目前提供合格的 M1 至基板、立柱至 Ground，以及橋面至立柱來源關聯。保留這些來源紀錄及其合格的本體／出現實例歸屬。它們建立的是來源關聯，不是原生連續性或 HFSS 計算器場側證明。一般橋接／凸塊關聯若未由來源指定，仍維持不可用；不虛構缺少的紀錄，也不將其變成獨立物理轉換的先決條件。TSV 求解控制由另外的 Human 指定權限選定；本物理來源契約不授權原生工作。
-
-## 新宣告與歷史紀錄 {#fresh-and-historical-layer-records}
-
-新的物理來源準備使用中性 `PhysicalLayerDeclaration` 紀錄及明確的 `ApproximationProfile`。新的 `aedt_modeling` 中繼資料及由角色推導的路徑分類不是轉接器。帶 `PhysicalLayerSpec` 紀錄而沒有帶標記表示的要求酬載，由較早的 SCGSim 寫入而遭拒；新物理來源執行需要中性宣告。沒有層宣告的明確 Solid 本體，透過共用恆等映射計畫保留有限來源幾何，不產生新的物理 ID。
-
-選定計畫的帶標記酬載是目前準備好的物理追蹤。追蹤未帶標記（`PhysicalLayerSpec` 層映射）的準備幾何，由較早的 SCGSim 寫入，會遭拒並指示重新準備；請以寫入它的 SCGSim commit 讀取。
-
-## Palace 呼叫端近似設定 {#palace-caller-profile}
-
-`ElectrostaticSim` 與 `EigenmodeSim` 以 `set_route()` 選擇近似設定。一次呼叫陳述完整的路徑設定：它同時取代路徑與 `approximation_profile`。提供的近似設定照原樣使用；省略時各路徑有預設值：Route A 使用 `thin_film`，Route B 使用恆等映射 `route_b`。
-
-| 呼叫 | 準備階段使用的近似設定 |
+| 呼叫 | 使用的近似方式 |
 |---|---|
-| `set_route("A")` | `thin_film`，無參數 |
-| `set_route("A", approximation_profile=profile)` | `substrate_face` 或 `metal_gap_equivalent`，帶其綁定 |
 | `set_route("B")`，或不呼叫 | `route_b` |
+| `set_route("A")` | `thin_film` |
+| `set_route("A", approximation_profile=profile)` | `substrate_face` 或 `metal_gap_equivalent`，附其綁定 |
 
-`input_summary()` 顯示路徑與準備階段使用的近似設定，預設值也包含在內。當計畫的薄膜與近似設定不合（Route A 搭配 `route_b` 或 `solid`、Route B 搭配 `thin_film`），SGB 的路徑檢查在 `mesh()` 建立時拒絕，而不是在 `set_route()`。來源授權的綁定指出實際正規化支撐 Entity 及其 `lower` 或 `upper` 面，不從層名稱、角色或相同 Z 值重建。
+面型近似方式為每層薄膜指名它所在的介質 Entity 與該 Entity 的哪一面：
 
 ```python
 from scgsim.geometry.models.physical import ApproximationProfile
@@ -93,8 +58,14 @@ profile = ApproximationProfile(
 sim.set_route("A", approximation_profile=profile)
 ```
 
-這類執行的 Surface-EPR 規格屬於計畫：在 `prepare()` 之前呼叫 `plan.set_surface_epr(authored_surface_specs)`。
+`authored_film_bindings` 把每個宣告的物理層 ID 對應到恰好兩項：`supporting_entity_id` （一個介質 Entity）與 `supporting_side`（`"upper"` 或 `"lower"`），例如 `{"D0_M1": {"supporting_entity_id": "D0_SUB", "supporting_side": "upper"}}`。 `substrate_face` 接受一或兩個綁定；`metal_gap_equivalent` 恰好兩個，位於彼此相對的兩片不同基板上。缺少或錯誤的綁定會在任何原生工作之前被拒絕，並附上應使用的呼叫形式。
 
-每個 `authored_film_bindings` 項目以宣告的物理層 ID 為索引，且恰好包含 `supporting_entity_id` 與 `supporting_side`。`metal_gap_equivalent` 需要兩個明確綁定且相對的薄膜。缺少綁定時，準備階段會在原生工作之前失敗，並提供替代呼叫形式。`set_route()` 沒有重述近似設定名稱的關鍵字，也不負責指定綁定或座標運算。`build_route_geometry()` 要求準備階段產生的有效正規化輸入及表示內容。
+`input_summary()` 顯示路徑與近似方式，包括預設值。規劃的薄膜不符合的近似方式（Route A 配 `route_b` 或 `solid`，Route B 配 `thin_film`）會在 `mesh()` 建構時被拒絕，而不是在 `set_route()` 時。不論近似方式為何，Surface-EPR 薄膜都屬於規劃，即 `plan.set_surface_epr(specs)`。
 
-未版本化的語意匯出 `apply_thin_film_profile`、`derive_thin_film_facts` 與 `normalize_optional_profile` 已移除。請搭配 `interpret_physical_layers()` 或 `interpret_physical_geometry()` 使用中性宣告；原始固定版本來源及凍結的歷史產物保留原始程式與酬載身分。
+## AEDT：`modeling` {#aedt-modeling}
+
+HFSS 或 Q3D 要求在 `modeling="thin_film"` 時使用 `thin_film`，在 `modeling="solid"` 時使用 `solid`；高度見 [AEDT：solid 還是 thin_film](aedt-runtime.qmd#aedt-solid-thin-film)。 Q2D 使用自己的截面，不使用近似方式。
+
+## 宣告從哪裡來 {#declarations}
+
+[]{#typed-source-carrier-and-plan}[]{#selected-declarations-and-source-incidence}[]{#fresh-and-historical-layer-records}近似方式讀取 PDK 堆疊中每一層的物理宣告：它是堆疊薄膜、局部薄膜還是有限體積，以及它的材料、厚度與附著面。這些由 PDK 撰寫，筆記本不需要。PDK 作者如何撰寫它們、哪些較早的記錄會被拒絕，見 [GeometryPlan 內部實作](../../contribute/internals/geometry-plan.qmd#physical-declarations)。

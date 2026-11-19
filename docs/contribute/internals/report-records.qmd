@@ -1,0 +1,362 @@
+---
+title: "Run and report records"
+description: "The records a Palace run writes (preflight, mesh manifest, index map, convergence plan and runner decision) and how result reading and the report views use them."
+scgsim-kind: "implementation"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/contribute/internals/report-records"
+---
+
+This page is for contributors to `scgsim.palace` run preparation and result
+reading, and to the AEDT result views. It records which files a Palace run
+writes and reads back, how result reading decides which folder holds which
+pass, which records carry the margin rows, and what the views check before
+they show a number. What each view shows a user is on
+[Reading a run: the three views](../../reference/specs/report-model.qmd); the
+Palace setup a user makes is on [Palace Electrostatic](../../reference/specs/palace-electrostatic-sgb.qmd)
+and [Palace Eigenmode](../../reference/specs/palace-eigenmode.qmd).
+
+## Which folder holds which pass {#pass-folders}
+
+An AMR pass is one Palace solve, counted from 1: pass 1 solves the input mesh.
+Which folder of `results/palace` holds which pass is decided by what its files
+are, once, for the trust report and the convergence check alike:
+
+- `iteration<k>/` is pass $k$ when its own `palace.json` records
+  `Problem.Iteration` $k$ and its tables are regular files. Palace 0.18.1 moves
+  the tables of solve $k$ there before it refines again.
+- The top level is a pass of its own only when its `palace.json` and every table
+  are regular files with data rows; its number is the iteration it records. This
+  is the last solve of a run that ended by itself.
+- A top level whose tables are links into `iteration<k>/` holds pass $k$'s
+  files, not a solve of its own: a run stopped right after pass $k$. One that
+  mixes links with new files, or holds a table with its header only, is a
+  solve under way and is no pass.
+- Two folders that record the same pass are one pass when they hold the same
+  tables, byte for byte (a stopped run copied by a tool that follows links).
+  Otherwise their readings conflict and that pass is not read.
+- A folder whose own record is missing, unreadable or names another pass is no
+  pass. No number is ever taken from a folder's place in the listing.
+- A table that cannot be read (no permission, or bytes that are not text) does
+  not stop the listing. A top level that holds one is set aside with the reason;
+  two folders of one pass that cannot be compared for it leave that pass unread;
+  a declared number in such a table is unavailable at that pass. The other
+  folders are read all the same.
+
+Every AMR pass axis of the trust report counts this way. A change is measured
+only between two readable passes whose numbers are consecutive. The verdict
+names the passes read, the passes before it that were not read, and every
+folder set aside or pass not read, with why.
+
+## Partly returned runs {#partly-returned-runs}
+
+`inspect_run_trustworthiness()` supports completed, failed, and partly returned
+run folders. It preserves the recorded receipt status and may expose the latest
+readable evidence without promoting an incomplete run. The strict
+`resolve_palace_result(..., expected_handoff_id=...)` path accepts only a
+completed run folder whose handoff, receipt, solver, and artifact hashes validate.
+
+A number that cannot be read without ambiguity (a table that repeats a column,
+or two rows with the same index) is unavailable, with the reason, and never
+holds. A plan that is present but was not sealed by the handoff, or that
+changed after it, is refused by both readers.
+
+## Margin rows of Palace Surface EPR {#palace-margin-rows}
+
+The existing inspection and strict-resolution split also governs Palace margin
+rows. A margin row is a `Dielectric` row over the bands SGB cut at and beyond
+that margin, so it sits in the same `surface-Q.csv` table as the baseline rows.
+`inspect_run_trustworthiness()` may inspect a completed, failed, or partly
+returned run folder and marks unavailable margin data as unavailable without changing the
+receipt state. Each source reads its margin rows as one all-or-nothing snapshot:
+if its table cannot be read or does not match the index map, that source has no
+margin snapshot. A strict completed resolution of a run that requested surface
+rows requires the sealed `surface-Q.csv` from the same required result source;
+a missing file prevents strict resolution, and an existing receipt or artifact
+SHA-256 mismatch remains fatal.
+
+`PhysicsQuantitiesReport.snapshots` remains the baseline-only surface. The typed
+`PhysicsQuantitiesReport.margin_snapshots` surface exposes
+`SurfaceMarginEprSeriesSnapshot` values, each holding
+`SurfaceMarginEprRecord` rows with the interface, margin value (`margin_um`) and
+ordinal (`margin_index`), the baseline row it belongs to (`baseline_index`), the
+bands it covers, its entities and Nets, the mode or excitation, the refinement
+pass, the native index and the source identity. Each margin row is one of several
+alternatives to its baseline row; duplicate requested margins stay separately
+traceable and are never duplicate contributions to a loss total.
+
+## What the EPR views check {#epr-view-checks}
+
+Scientific keys, not display labels, identify plotted data. Shared readable
+labels appear across figures; hover data and metadata retain full group,
+members, side, and source identity.
+
+An AEDT `ResolvedRun` provides `epr_result()` for its bound EPR record and
+`show_all_results(show_details=False)` for the integrated run view; the latter
+returns `None`. The view uses all requested modes at the actual last completed
+pass and includes the adaptive history. Missing or partial values remain
+unavailable; presentation does not fall back to an earlier complete pass. It
+checks consumed result CSVs and benchmark data against hashes captured during
+resolution, without consulting a live simulation object or rereading native
+AEDT state. See the
+[AEDT runtime reference](aedt-runtime.qmd) for strict resolution and
+missing-artifact behavior.
+
+Adaptive frequency has its own availability rule: a finite, positive numeric
+value that is not a boolean is plotted even when that mode's EPR row is partial.
+Participation and energy still require a complete row; row status, integrity
+checks, pass selection, and gaps in the plotted history remain unchanged.
+
+Palace and AEDT quantities resolved from original run folders remain bound to
+their applicable receipt, artifact-hash, handoff, and solver identities. A
+detached Palace EPR result retains original artifact identity and hash
+references, but those references do not authenticate the detached JSON itself.
+Presentation does not weaken source bindings and makes no
+numerical-convergence or cross-solver-agreement claim.
+
+## Mesh context of a Palace report {#palace-mesh-context}
+
+The Palace report reads the same detached `mesh_summary()` authority exposed by
+the facade and resolved run. It binds the recorded sizing recipe, repair policy,
+mesher options, quality threshold and the minSICN measured on the linear mesh
+(before any elevation), together with the Gmsh version, native node/element/region
+counts, the order of the delivered mesh, high-order optimization outcome and edge
+length statistics, to the mesh and manifest identities. For elevated geometric
+order, reported edge lengths are primary-corner chords rather than curved-edge
+lengths. The Eigenmode degree-of-freedom value is a topological estimate, not a
+solver-reported count.
+
+## Palace run records {#palace-run-records}
+
+### The dry-run preflight {#palace-preflight}
+
+Before a generated script starts the solve, the exact copied `config.json` is
+passed to the selected Palace executable with its native `--dry-run` option.
+Only a successful dry-run of those exact bytes establishes config/runtime
+compatibility. The compatibility artifact and returned receipt preserve the
+config hash and observed native GitTag. When the configured executable is
+directly and truthfully resolvable as the Palace binary, its basename and
+SHA-256 are also retained. SCGSim does not inspect behind a wrapper to discover
+its hidden binary. GitTag, commit, and any available binary hash are provenance
+for reproducibility and diagnosis; their presence or value is not a
+runtime-eligibility Gate.
+
+If this preflight fails, the returned receipt records
+`execution_stage="config_compatibility"`, `solver_invoked=false`, its separate
+preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
+`execution_stage="solver"` only after the solver command was actually invoked.
+
+### Staged state of a simulation {#staged-state}
+
+Configuration setters are atomic with respect to this staged state. Route,
+mesh and Eigenmode controls validate every supplied value before changing any
+field. A validation failure therefore preserves the prior
+configuration together with cached mesh, resolved-port, config, and handoff
+state. A successful change retains the existing mesh/config invalidation
+boundary; this does not change operational failures inside `mesh()` or
+`write_config()`.
+
+Shared staged invalidation and per-file persistence are described under
+[the architecture](../architecture.qmd#palace-preparation-lifecycle).
+Invalidation is not a promise of whole-workflow atomic disk replacement.
+
+### Attributes and the mesh manifest {#mesh-manifest}
+
+The run folder holds the SGB model (`geometry/`, with the XAO and its sidecar),
+the meshing report (`mesh/`, as JSON and text), `palace.msh` and the mesh
+manifest (`metadata/`). `palace.msh` is a Gmsh MSH 2.2 ASCII file, the format
+Palace reads. Palace lowers SGB's named groups to solver attributes from the
+sidecar alone: it splits a surface group only where its faces are integrated by
+different Surface-EPR rows or sides, so the attributes partition the faces and
+nothing is counted twice. Electrical identity is the Net; the Terminal and
+Ground bindings use the exact Net of the sidecar.
+
+The mesh manifest (`schema_version` 2) records the route and its policy, the
+sidecar schema and model identity digest, the Surface-EPR inset requests with
+the band families they produced and the faces SGB skipped, the recipe (name,
+version and parameters), repair policy, mesher options, budgets and threshold,
+the path and SHA-256 of the quality report, and one entry per solver attribute
+with the SGB group it came from. It also records the Gmsh version, node and
+element types, physical-region element counts and edge-length statistics. Edge
+lengths for high-order meshes are explicitly labeled as primary-corner chords
+and reported in micrometres; they are not curved-edge arc lengths.
+
+Both Palace facades and a resolved Palace run expose `mesh_summary()`. It returns
+a detached value bound to the mesh and manifest identities. The Palace report
+reads this same summary authority. Eigenmode includes an Nédélec topological
+degree-of-freedom estimate based on primary-corner tetrahedron topology and the
+configured FEM order. It is not an actual solver degree-of-freedom count;
+changing FEM order updates the estimate without remeshing. Electrostatic's
+H1 estimate is unavailable. No SCGSim record measures the quality of curved
+high-order elements.
+
+### Mesh version identities {#mesh-version-identities}
+
+A recipe's version goes up only when the sizes it asks for change. `FeatureRecipe`
+went from `features/1` to `features/2` when it began to size every Surface-EPR
+band boundary curve. So two reports with the same recipe version and the same
+parameters asked for the same initial sizes, even when they were made by
+different package releases; a different recipe version means the meshes were
+made by different sizing rules. The recipe version covers the initial sizes
+only: the repair policy is recorded in each report, and the Gmsh version in the
+mesh manifest.
+
+The versions are separate because one version for the whole meshing module
+would change whenever any recipe changed, and could not say which one did. A
+run with `UniformBoundaryRecipe` keeps its version when `FeatureRecipe` changes,
+so its reports stay comparable across that change.
+
+For example, the same default `FeatureRecipe()` on a flip-chip qubit with bands
+of 0.5 and 1 µm (the OrcaPen SC PDK `disk_flip_chip_qubit` under common ground
+planes, Route B) gives two different meshes under the two versions:
+
+::: {.askr-table-compact}
+| | `scgsim.meshing.features/1` | `scgsim.meshing.features/2` |
+|---|---|---|
+| Sizes asked for | 1.30 µm on the 801 film-wall curves | 1.30 µm on 3,104 curves: the film walls and every band boundary curve |
+| First mesh | 402,784 tetrahedra, 1 below the quality threshold | 569,325 tetrahedra, none below it |
+| Result | clean after one repair round: 407,093 tetrahedra, 82.5 s | clean in the first mesh: 569,325 tetrahedra, 53.4 s |
+:::
+
+The two quality reports name different recipe versions, so the different mesh
+comes from the sizing rules, not from anything else in the run.
+
+### Index map rows, sides and cracked sheets {#index-map-rows}
+
+::: {.callout-note collapse="true" title="Rows, sides and cracked sheets"}
+The index map (schema v3) records, for each surface row, its `row` and `group`,
+`interface_type`, `band`, `side`, `face_sides`, `entities`, `net` and
+`attributes`, and the lineage membership as attribution only: lineage weights
+nothing. A one-sided row maps `above` or `below` to Palace's postprocessing side.
+A Route A sheet with vacuum on both sides is one face integrated from both sides,
+which needs Palace's internal-boundary cracking; SCGSim writes
+`Model.CrackInternalBoundaryElements` exactly when a configured row has a
+`shared_face_group`, so a run that configures no `MA` or `MS` film on a sheet
+keeps Palace's default. A sheet over vacuum and dielectric in different places gives
+separate `MA` and `MS` rows on different attributes.
+:::
+
+### Surface-film producer {#surface-film-producer}
+
+Surface-film inputs bind exact source surfaces and physical attributes to the
+Palace `MA`, `MS`, or `SA` type and its film assumptions. Provide exactly one
+of `thickness` (native model units) or `film_thickness_m` (converted using
+`Model.L0`), and exactly one of numeric `permittivity` or `material_id` that
+resolves to an explicit dielectric. `loss_tangent` may be supplied directly or
+read from that material; an unknown value remains distinguishable in SCGSim's
+index. The current `surface-film.v2` producer rejects missing or duplicated
+surface and physical-attribute identities rather than dropping or deduplicating
+them. Film thickness sets the surface model, and
+[inset margins](../../reference/specs/palace-eigenmode.qmd#surface-epr-margins) set any requested exclusion near the gaps.
+
+Palace 0.18.1 forms native surface integrands from the configured type and the
+neighboring solution elements: `MA` and `SA` use the vacuum-side trace, while
+`MS` uses the substrate-side trace. `MA` uses normal electric field, `MS` uses
+the substrate-permittivity-weighted normal field, and `SA` combines tangential
+and normal terms with the film permittivity. See Palace 0.18.1's
+[configuration](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/utils/configfile.cpp#L624)
+and [neighbor-material rules](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/fem/coefficient.hpp#L331)
+for the native mapping. Choose `MA`, `MS`, or `SA` to match the
+intended native interface model.
+
+### The convergence plan {#convergence-plan-record}
+
+With a declaration, the declared criteria take the place of Palace's own
+tolerance. `write_config()` writes `Model.Refinement.Tol` as the smallest normal
+double, so that only `amr_max_passes` ends the run, and
+`SaveAdaptIterations: true`, so that Palace keeps every pass in
+`results/palace/iteration<k>`. It writes the plan of the check to
+`metadata/palace_convergence_plan.json`: for each criterion its label as the
+report shows it, and for each number the result table, the row, the columns and
+how they combine (a participation sums the columns of its rows), the test, the
+threshold, and `minimum_converged_passes`. Which columns make up a quantity is
+decided there once, from the index map entries the same config writes.
+`prepare_handoff()` seals the plan with the other inputs, so a returned run with
+a changed plan is refused. Without a declaration nothing of this is written and
+the config is what the AMR controls alone give.
+
+### The convergence runner {#convergence-runner}
+
+The run script starts the solver command through the convergence runner,
+`metadata/run_palace_until_converged.py`, which `prepare_handoff()` copies
+into the run folder and which needs only Python's standard library. The
+runner:
+
+1. starts the solver command the script would have run, in a session of its
+   own; Palace's output reaches the log as before;
+2. looks at `results/palace` every second. A pass counts once its
+   `iteration<k>/` folder is unchanged between two looks, and after each new pass
+   the runner runs the same check that result reading runs;
+3. when the verdict is converged, writes
+   `metadata/palace_convergence_decision.json` first, then sends SIGTERM to the
+   solver's session and waits until all of it has ended: the command, the
+   launcher it started and the ranks the launcher ends. If any of it is still
+   running 60 s later, it sends SIGKILL;
+4. when the solver has ended, after the stop or by itself at `amr_max_passes`,
+   writes the decision record again with the passes `results/palace` then holds
+   and the solver's exit code.
+
+The runner does not leave the solver running unwatched. Told to end (SIGTERM,
+SIGINT or SIGHUP), it ends the solver first and records why. Ended without that
+chance (SIGKILL, to the runner or to the script's whole process group), it
+leaves the solver to its guard: a process the runner starts with the solver, in
+a session of its own, which ends the solver's session in the same way once the
+runner is gone.
+
+Palace 0.18.1 completes pass $k$ in `iteration<k>/` before it refines the mesh
+for pass $k+1$, so the stop comes during that refinement or at the start of the
+next solve; no file of a completed pass changes. The stop is requested one to
+two seconds after the folder appears (the runner looks every second and counts a
+pass at its second look), and Palace has ended within about a second of the
+request. The receipt is written only then, so no solver process writes a file
+after it.
+
+A pass that takes less than those one to two seconds still runs. The runner then
+counts it with the pass before it: the verdict names the pass at which the run
+converged and how many passes were read after it, Palace is stopped after the
+last of them, and the result is that last pass. A run whose passes are all that
+short has ended before the runner looked; it is complete as Palace ended it.
+What the stop saves is every pass longer than that, which is where the time
+goes: a pass has two to three times the elements of the one before.
+
+The receipt states how the solver ended (`ending`) and keeps the solver's own
+exit code:
+
+| `ending` | When | Receipt |
+|---|---|---|
+| `solver_ended` | Palace ended without a stop from SCGSim | `completed` when every exit code is 0, `failed` otherwise |
+| `stopped_at_convergence` | the runner stopped it after a pass at which the verdict is converged, and it ended within the wait | `completed`, with the exit code the stop gave: 143 for Palace's `palace` wrapper script, which the signal ends, 1 for `mpirun` started directly, and 137 for `srun`, which ends its step |
+| `stop_escalated` | it did not end on SIGTERM and was killed | `failed` |
+| `runner_terminated` | the runner itself was told to end and ended Palace for that reason. Told to end while Palace is already ending after the stop at convergence, the stop stands | `failed` |
+| `not_recorded` | the runner left no complete decision record | `failed` |
+
+The result of a run stopped at convergence is its last pass: result reading
+takes the tables and the cost from `iteration<k>/`, since the top level holds
+links into it or a solve under way. Palace can also complete its last solve in
+the moment the runner decides. If it has ended by itself by then (exit code 0,
+its last solve at the top level), nothing was stopped and the run is recorded
+as ended by itself. If the stop still reaches it, the run was stopped and its
+result is that last solve, at the top level.
+
+Result reading computes the check again from the returned files and refuses
+the run, naming what disagrees, when:
+
+- the passes or the verdict differ from the decision record, or the record is
+  not the one the receipt binds;
+- the decision record and the receipt state different endings, or different
+  exit codes of the solver;
+- the top level holds links or a solve under way, and the receipt says Palace
+  ended by itself;
+- a decision record is present without a plan, or a plan has none;
+- a table of the result, at the top level or in `iteration<k>/`, is not among
+  the outputs the receipt records.
+
+On Slurm the command after `--` is the `srun` line, and the scheduler writes
+the log. The runner starts that command in a session of its own and stops it
+with SIGTERM once the declared criteria have converged; `srun` answers by
+ending its step, so the Palace tasks are killed and `srun` exits with 137. The
+script then exits with the receipt's verdict (0 for a
+completed run), because a solver stopped at convergence exits non-zero although the run completed. It
+also removes an earlier `metadata/palace_convergence_decision.json` before the
+solve. Without a declaration the script is unchanged: it starts the solver
+command itself.
+

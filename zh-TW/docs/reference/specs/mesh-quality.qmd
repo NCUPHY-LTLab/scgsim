@@ -1,6 +1,6 @@
 ---
 title: "四面體網格品質"
-description: "mesh() 執行的品質稽核、它寫出的報告、邊統計，以及網格的版本識別。"
+description: "網格夠好嗎：mesh() 對每個四面體做的 minSICN 檢查、它寫出的品質報告與一份真實範例、邊長統計，以及分辨兩個網格的版本。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/mesh-quality"
@@ -9,60 +9,58 @@ aliases:
   - ../../mesh-quality.html
 ---
 
-準備階段的閱讀順序請見[求解器觀察](../../guides/inspect-the-prepared-model.qmd)。本頁負責 Palace 執行對其網格品質所記錄的內容。
+`mesh()` 以品質門檻（預設 0.01）檢查每個四面體，不交付任何未通過的網格；它在執行資料夾的 `mesh/` 中寫出報告，說明發現了什麼。本頁說明這個量測、展示一份真實報告，並列出報告與網格摘要記錄的內容。求解前要看哪裡，見[檢查已準備的模型](../../guides/inspect-the-prepared-model.qmd)。
 
-## `mesh()` 稽核什麼 {#audit}
+## `mesh()` 檢查什麼 {#audit}
 
-`mesh()` 以 `scgsim.meshing` 為 SGB 模型產生網格，該模組會稽核每一輪網格中的每個四面體。量測值是每個元素的最小有號反條件數（minSICN），在升階到幾何階數之前的線性網格上量測。每個四面體都必須達到網格的 `quality_threshold`（預設 `0.01`）；低於門檻的元素會在修復迴圈的下一輪細化，預算見 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls)。無法達到門檻的網格會使 `mesh()` 停止，且不交付 `palace.msh`。受稽核的網格從哪些尺寸開始，包括薄膜側壁與 Surface-EPR 條帶邊界曲線上的尺寸，由尺寸配方決定（見[尺寸配方](palace-electrostatic-sgb.qmd#palace-mesh-recipes)）。
+量測是每個四面體的最小帶號反條件數 **minSICN**。正四面體為 1，元素越扁越趨近 0，反轉的元素為負。每個四面體都必須達到 `quality_threshold`，除非你以 `set_mesh` 另設，否則為 0.01。作為參考：下方的真實報告最低 minSICN 為 0.04212；在[條帶邊界量測](palace-electrostatic-sgb.qmd#palace-mesh-band-edges)中，交付的網格以倍數 2 達到 0.08 至 0.23，焊墊以倍數 8 為 0.014 至 0.019，而停滯的網格留有 0.003 至 0.004 的元素。
 
-此門檻是網格化模組對有效元素的接受檢查，不是科學接受門檻：結果是否收斂，要從求解器自己的輸出判讀。
+低於門檻的元素會在下一輪修補中細化，不超過[預算](palace-electrostatic-sgb.qmd#palace-mesh-controls)。無法提升到門檻的網格會使 `mesh()` 停止，不交付 `palace.msh`。檢查在線性網格上進行，早於任何提升到幾何階數的步驟。
+
+通過的網格是元素有效的網格，不是收斂的結果：收斂要從求解器的各回合（pass）讀出（[收斂宣告](palace-electrostatic-sgb.qmd#convergence-declaration)）。
 
 ## 品質報告 {#quality-report}
 
-每次執行都會在執行資料夾的 `mesh/` 寫出報告：JSON（`<model>.quality.json`）與簡短文字摘要（`<model>.quality.txt`）。網格清單記錄報告的路徑與 SHA-256。
+每次計算都把報告寫到 `mesh/`，一份 JSON（`<model>.quality.json`）與一份簡短文字（`<model>.quality.txt`）。下面是一份真實報告的文字：SCGSim 測試模型，100 µm 晶粒上 40 µm 接地開孔中的 20 µm 焊墊，Route B，MA、MS 與 SA 條帶邊距 0.5 與 1.0 µm，由網格模組以 Gmsh 4.15.2 及預設設定產生：
+
+```text
+scgsim.meshing scgsim.meshing.features/2: clean after 0 refinement rounds
+  quality measure minSICN, threshold 0.01
+  19722 tetrahedra, min quality 0.04212, 0 below the threshold (linear mesh before elevation); algorithm 1, geometry order 1
+  143 sized curves, 0 local sizes, smallest -
+  total 1.7 s; limit 180 s, target 60 s for 0.0196 mm2
+```
+
+先讀前三行：修補如何結束（`clean`，或停止原因）、最低品質，以及有多少元素低於門檻。 JSON 保存完整記錄：
 
 ::: {.askr-table-compact}
-| 欄位 | 記錄內容 |
+| 欄位 | 記錄 |
 |---|---|
-| `quality_measure`、`threshold` | `minSICN` 與執行所依循的門檻。 |
-| `stop`、`rounds`、`history` | 修復迴圈如何結束，以及每一輪改變了什麼。 |
-| `mesh` | 四面體與節點數、`min_quality`、低於門檻的 `bad_count`、`measured_on`（`linear mesh before elevation`）、交付的 `geometry_order` 與 3D 演算法。沒有任何一輪產生網格時為 `null`。 |
-| `meshing_stage` | 模型的網格階段檢查找到的每一項發現及所用的限制，與 `simulation_drc` 回報的相同。交付網格時為 `null`。 |
-| `remaining_bad`、`stop_places` | 仍低於門檻的元素及其位置、群組與特徵類別，以及它們以微米計聚集的位置與該處找到的細邊或細面。乾淨停止時為空。 |
-| `recipe`、`repair`、`mesher`、`budgets`、`time_budget` | 執行使用的設定。 |
-| `timing` | 總計、每輪、網格化與稽核的秒數。集中在同一個鍵下，因此相同輸入的兩次執行在去掉它之後相等。 |
+| `quality_measure`、`threshold` | `minSICN` 與這次計算採用的門檻。 |
+| `stop`、`rounds`、`history` | 修補如何結束，以及每一輪改變了什麼。 |
+| `mesh` | 四面體與節點數、`min_quality`、低於門檻的 `bad_count`、`measured_on`（`linear mesh before elevation`）、交付的 `geometry_order` 與三維演算法。沒有任何一輪產生網格時為 `null`。 |
+| `meshing_stage` | 網格階段檢查的每項發現及其使用的限制，與 `simulation_drc` 的回報相同。交付網格時為 `null`。 |
+| `remaining_bad`、`stop_places` | 仍低於門檻的元素，含位置、群組與特徵種類，以及它們聚集的位置與該處的細邊或細面。正常結束時為空。 |
+| `recipe`、`repair`、`mesher`、`budgets`、`time_budget` | 這次計算使用的設定。 |
+| `timing` | 總計、每輪、網格產生與檢查的秒數，集中在一個鍵下，所以同一輸入的兩次計算除此之外完全相同。 |
 :::
 
-minSICN 在升階之前量測，因此報告不描述交付的 `palace.msh` 中彎曲的高階元素。網格清單記錄寫出網格的階數與原生元素類型。
+網格清單記錄報告的路徑與 SHA-256、寫出網格的階數及其元素類型。報告量測的是線性網格，所以不描述彎曲的高階元素。
 
-## 邊統計 {#edge-statistics}
+## 邊長統計 {#edge-statistics}
 
-Palace [網格摘要](palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)記錄每個物理區域的唯一主角點邊數，以及直線弦長的最小值、平均值與最大值，單位為微米。在彎曲高階元素上，它們仍是弦長，不是曲線弧長或高階品質指標。點區域的邊數為零，沒有長度極值。缺少的歷史統計保持 `not_recorded`。
+[網格摘要](palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)給出每個物理區域的邊數，以及最短、平均與最長的邊長（微米），以角節點之間的直線弦長量測，彎曲元素也是如此。
 
-## 網格的版本識別 {#version-identities}
+## 分辨兩個網格 {#version-identities}
 
-`mesh()` 寫出的網格帶有三種版本。比較兩個網格是否以相同方式產生時，請讀這三種版本。
+一個網格帶有三個版本；比對它們，就能知道兩個網格是否以相同方式產生。
 
 ::: {.askr-table-compact}
-| 識別 | 範例 | 記錄位置 | 何時改變 |
+| 識別 | 範例 | 記錄在哪裡 | 何時改變 |
 |---|---|---|---|
-| 套件版本 | `scgsim 3.0.0rc4` | 執行來源記錄中的 `scgsim_version`（`metadata/route_b_provenance.json`；Route A 為 `route_a_…`） | SCGSim 每次發行都會改變。 |
-| 配方版本 | `FeatureRecipe` 為 `scgsim.meshing.features/N`、`UniformBoundaryRecipe` 為 `scgsim.meshing.uniform-boundary/N`、`GlobalSizeRecipe` 為 `scgsim.meshing.global-size/N` | 每份品質報告與網格清單中的 `recipe.version`，與 `recipe.parameters` 並列 | 只在配方要求的尺寸改變時。 |
-| 報告格式 | `scgsim.meshing.report/N` | 每份品質報告中的 `report_version` | 品質報告的欄位改變時。 |
+| 套件版本 | `scgsim <version>` | 計算來源資訊中的 `scgsim_version`（`metadata/route_b_provenance.json`，Route A 為 `route_a_…`） | SCGSim 每次發行 |
+| 配方版本 | `FeatureRecipe` 為 `scgsim.meshing.features/2`；其他配方為 `uniform-boundary/N`、`global-size/N` | 每份品質報告與網格清單中的 `recipe.version`，與 `recipe.parameters` 並列 | 只有配方要求的尺寸改變時 |
+| 報告格式 | `scgsim.meshing.report/N` | 每份品質報告的 `report_version` | 報告欄位改變時 |
 :::
 
-配方版本只在配方要求的尺寸改變時才會提高。`FeatureRecipe` 開始為每一條 Surface-EPR 條帶邊界曲線設尺寸時，版本從 `features/1` 變成 `features/2`。因此，兩份報告的配方版本與參數都相同時，它們要求的初始尺寸就相同，即使出自不同的套件發行版；配方版本不同，代表兩個網格出自不同的尺寸規則。配方版本只涵蓋初始尺寸：修復策略記錄在每份報告中，Gmsh 版本記錄在網格清單中。
-
-這些版本彼此分開，是因為整個網格模組若只有一個版本，任何一個配方改變時它都會改變，卻無法說出是哪一個配方改了。`FeatureRecipe` 改變時，使用 `UniformBoundaryRecipe` 的執行仍保有原本的版本，因此它的報告在這次改變前後仍可互相比較。
-
-舉例來說，對帶有 0.5 與 1 µm 條帶的覆晶量子位元（OrcaPen SC PDK 的 `disk_flip_chip_qubit`，置於共用接地平面下，採 Route B），同樣使用預設的 `FeatureRecipe()`，在兩個版本下會得到不同的網格：
-
-::: {.askr-table-compact}
-| | `scgsim.meshing.features/1` | `scgsim.meshing.features/2` |
-|---|---|---|
-| 要求的尺寸 | 801 條薄膜側壁曲線上 1.30 µm | 3,104 條曲線上 1.30 µm：薄膜側壁與每一條條帶邊界曲線 |
-| 第一次網格 | 402,784 個四面體，1 個低於品質門檻 | 569,325 個四面體，沒有低於門檻者 |
-| 結果 | 一輪修復後合格：407,093 個四面體，82.5 s | 第一次網格即合格：569,325 個四面體，53.4 s |
-:::
-
-兩份品質報告記錄的配方版本不同，因此網格的差異來自尺寸規則，而不是這次執行的其他部分。
+配方版本與參數都相同的兩份報告，要求的起始尺寸相同，即使來自不同的 SCGSim 版本；配方版本不同，表示尺寸規則不同。修補設定記錄在每份報告中，Gmsh 版本記錄在網格清單中。為什麼這些版本分開記錄，以及兩個配方版本的量測範例，見[內部實作](../../contribute/internals/report-records.qmd#mesh-version-identities)。

@@ -1,6 +1,6 @@
 ---
-title: "Unified Report Model"
-description: "Report ordering, solver-specific quantities and availability without invented evidence."
+title: "Reading a run: the three views"
+description: "What the run, physics and cost views of a Palace or AEDT result show, how the convergence table is laid out, and what an unknown loss or a missing value looks like."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/report-model"
@@ -8,336 +8,171 @@ aliases:
   - ../../report-model.html
 ---
 
-Use [restart and resolve](../../guides/convergence-and-reports.qmd) for the report reading sequence and [offline EPR](../../guides/offline-loss.qmd) for assumption changes. This page owns visible result behavior.
+After a run, `show_all_results()` shows three views, in the order you ask
+about a run: **is it trustworthy** (which run, did it converge), **what physics
+came out**, and **what it cost**. This page is the reference of what each view
+shows. [Convergence and reports](../../guides/convergence-and-reports.qmd) is
+the task page: it declares convergence, runs, and reads a real report.
 
-SCGSim is an independent downstream toolkit, not official gsim. It provides
-strict solver-specific resolvers and a consistent notebook reading surface
-that binds identity before exposing solver-specific quantities. Its displayed
-order supports traceability; the research question determines how the caller
-interprets the available quantity and history.
+## The three views {#common-envelope}
 
-## Common envelope
+A resolved Palace run (`ResolvedPalaceResult`) has one call per view:
 
-Current Palace `show_all_results()` presentation follows this order:
+| Call | Shows |
+|---|---|
+| `show_run_trustworthiness()` | Which run it is and whether it converged: the trust report, [below](#declared-convergence) |
+| `show_physics_quantities()` | The capacitance matrix or the mode frequencies, and Surface EPR |
+| `show_simulation_benchmark()` | The time and size of each pass |
+| `show_all_results()` | All three, in this order |
 
-1. run trustworthiness: which run it is and whether it converged;
-2. available solver-specific physics: the numbers the run was solved for and
-   its surface participation;
-3. the simulation benchmark: what the run cost.
+A resolved AEDT run (`ResolvedRun`) has `show_all_results()`, in the order
+identity (project, setup, requested modes, the last pass and whether it
+completed), numerical evidence, benchmark, physics and details, and
+`show_simulation_benchmark()` on its own
+([AEDT time and memory](aedt-runtime.qmd#native-simulation-benchmark)).
 
-This is the order a reader asks about a run. Each view is also a call of its
-own: `show_run_trustworthiness()`, `show_physics_quantities()` and
-`show_simulation_benchmark()`. Every one of them takes `theme="light"` (the
-default) or `theme="dark"` for its figures, and `show_all_results(theme=...)`
-passes it to all three.
+Every view takes `theme="light"` (the default) or `theme="dark"` for its
+figures, and `show_all_results(theme=...)` passes it on. With
+`show_details=True` a view also opens the full run record: the receipt, the
+artifact hashes and the long tables. It changes nothing in what is selected.
+Without Plotly the tables are still shown, and each missing plot is named.
 
-`inspect_run_trustworthiness()` supports completed, failed, and partly returned
-run folders. It preserves the recorded receipt status and may expose the latest
-readable evidence without promoting an incomplete run. The strict
-`resolve_palace_result(..., expected_handoff_id=...)` path accepts only a
-completed run folder whose handoff, receipt, solver, and artifact hashes validate.
+`resolve_palace_result(run_dir, expected_handoff_id=...)` reads only a run
+that completed and whose files match its handoff and receipt. For a run that
+failed or came back in part, use `inspect_run_trustworthiness(run_dir)`: it
+shows what the folder holds and keeps the run's recorded state, so an
+incomplete run is never shown as complete.
 
-The AEDT `ResolvedRun.show_all_results()` order is identity, numerical
-evidence, benchmark, physics, then details. Identity uses the recorded project,
-backend, setup, requested modes, actual final pass, and completion state.
-Canonical relative receipt paths and artifact hashes appear only in details;
-absolute host paths are not displayed. For example,
-`resolved.show_all_results(show_details=False, theme="light")` collapses raw
-source and long tables; `show_details=True` opens them without changing result
-selection. If Plotly is unavailable, HTML tables remain available and the
-unavailable plots are identified.
+## The trust report {#declared-convergence}
 
-Numerical figures show frequency, surface participation by mode and interface,
-junction history, and energy balance. They preserve existing projections and
-eligibility; a valid partial-row frequency remains visible while unavailable
-EPR values stay as gaps, with no fallback to an earlier pass.
+This is the view you open to place a Palace run and judge its convergence. It
+shows, in order:
 
-## Palace mesh context {#palace-mesh-context}
-
-The Palace report reads the same detached `mesh_summary()` authority exposed by
-the facade and resolved run. It binds the recorded sizing recipe, repair policy,
-mesher options, quality threshold and the minSICN measured on the linear mesh
-(before any elevation), together with the Gmsh version, native node/element/region
-counts, the order of the delivered mesh, high-order optimization outcome and edge
-length statistics, to the mesh and manifest identities. For elevated geometric
-order, reported edge lengths are primary-corner chords rather than curved-edge
-lengths. The Eigenmode degree-of-freedom value is a topological estimate, not a
-solver-reported count.
-
-::: {#palace-run-schemas .callout-important title="Palace run folders of older schemas are not read"}
-Resolution and inspection read only mesh manifest `schema_version` 2 and Palace
-index map `schema_version` 3, and detached EPR results read only
-`scgsim.palace.epr-result.v2`. A run folder with manifest `schema_version` 1 or
-index map `schema_version` 1 or 2, and a detached result of an older schema, is
-rejected with an error that names the recorded version, whatever else it holds.
-To read such a study again, rerun the preparation with the current package and
-execute it again.
-:::
-
-## Research interpretation and retained observations
-
-Use the [result-reading lesson](../../guides/convergence-and-reports.qmd#interpret-for-scq-use)
-to relate a quantity and its changes to the intended SCQ use. Caller-authored
-criteria, changes to those criteria, native completion/convergence status and
-recorded history remain observations for the Notebook to retain. The report
-does not replace them with a universal research-sufficiency threshold. Native
-convergence and a usable numerical artifact are not an automatic judgement
-that the research question has been answered. This interpretation does not
-replace native status, hashes, pass selection or genuine execution failure
-meaning. HFSS Driven/Eigenmode reporting removes only the
-three extra convergence qualifications described in the
-[HFSS contract](aedt-runtime.qmd#hfss-convergence-observations). Its
-reports present the existing structured convergence fields, with request and
-cross-export consistency intact. Keep the caller's criteria with the native
-records: Eigenmode's consecutive-pass count and native history remain in the
-hash-bound `adaptive-convergence.prop` export, rather than being exposed as a
-normalized count or full raw history in the report. They do not turn failed/incomplete work into completion, infer an
-unknown stopping cause from pass count, or change Q2D/Q3D policies.
-
-## Declared convergence of a Palace run {#declared-convergence}
-
-A Palace run whose simulation called
-[`set_convergence`](palace-electrostatic-sgb.qmd#convergence-declaration)
-carries its criteria as a sealed plan. Result reading runs the one convergence
-check on the returned pass folders, `results/palace/iteration<k>` and the final
-`results/palace`: `ResolvedPalaceResult.convergence` holds the plan, the check
-of every pass (each number, what its test measured, whether it holds) and the
-verdict. A run folder without a plan has the verdict `not_declared`.
-
-An AMR pass is one Palace solve, counted from 1: pass 1 solves the input mesh.
-Which folder of `results/palace` holds which pass is decided by what its files
-are, once, for the trust report and the convergence check alike:
-
-- `iteration<k>/` is pass $k$ when its own `palace.json` records
-  `Problem.Iteration` $k$ and its tables are regular files. Palace 0.18.1 moves
-  the tables of solve $k$ there before it refines again.
-- The top level is a pass of its own only when its `palace.json` and every table
-  are regular files with data rows; its number is the iteration it records. This
-  is the last solve of a run that ended by itself.
-- A top level whose tables are links into `iteration<k>/` holds pass $k$'s
-  files, not a solve of its own: a run stopped right after pass $k$. One that
-  mixes links with new files, or holds a table with its header only, is a
-  solve under way and is no pass.
-- Two folders that record the same pass are one pass when they hold the same
-  tables, byte for byte (a stopped run copied by a tool that follows links).
-  Otherwise their readings conflict and that pass is not read.
-- A folder whose own record is missing, unreadable or names another pass is no
-  pass. No number is ever taken from a folder's place in the listing.
-- A table that cannot be read (no permission, or bytes that are not text) does
-  not stop the listing. A top level that holds one is set aside with the reason;
-  two folders of one pass that cannot be compared for it leave that pass unread;
-  a declared number in such a table is unavailable at that pass. The other
-  folders are read all the same.
-
-Every AMR pass axis of the trust report counts this way. A change is measured
-only between two readable passes whose numbers are consecutive. The verdict
-names the passes read, the passes before it that were not read, and every
-folder set aside or pass not read, with why.
-
-The trust report is what a reader opens to place a run and judge its
-convergence. It shows, in this order:
-
-1. **Run Identity**: the problem, the route, the profile, the AMR passes
-   recorded and the MPI and OpenMP counts. A run that is not complete says so
-   here, and a failed run adds a notice with its category.
-2. **Convergence**, with a declaration: one table laid out as AEDT's
-   convergence table. A row is a pass with its solved elements. A column is a
-   criterion, headed by its name and its threshold (`C diagonal`, `≤ 0.5 %`),
-   so each number below is read against the threshold above it; a cell holds
-   the criterion's number at that pass and whether it holds (`N/A` for a
-   change at pass 1, which has no pass before it). Surface EPR criteria at one
-   inset stand under the inset's name, said once: `Surface EPR, inset 0.5 um`
-   over `MA`, `MS` and `SA`, where `inset 0.5 um` is the part of the surfaces
-   0.5 um or more from the gap edge. The criteria of one inset stand side by
-   side whatever the order they were declared in. The last column says for how
-   many passes in a row every criterion has held. A run of one pass has no
-   trend to plot: its status is shown, then this table.
-3. Each quantity against the pass, followed by the figure of its declared
-   change on a log axis with the threshold as the dashed line. A change is a
-   percentage of the value and carries the name the AEDT side gives it:
-   `Delta %` for a capacitance, `Max Delta Freq. %` for a mode frequency,
-   `Max Percent Delta` for a participation. The error indicator figure carries
-   the declared `ErrorIndicator` threshold, or the configured Palace `Tol`
-   when nothing is declared.
+1. **Run Identity**: the problem, the route, the profile, the passes recorded,
+   and the MPI and OpenMP counts. A run that is not complete says so here; a
+   failed run adds a notice with its category.
+2. **Convergence**, when the simulation [declared](palace-electrostatic-sgb.qmd#convergence-declaration)
+   its criteria: one table laid out as AEDT's convergence table. A row is a
+   pass, with its solved elements. A column is a criterion, headed by its name
+   and threshold (`C diagonal`, `≤ 0.5 %`), so each number is read against the
+   threshold above it; a cell holds the criterion's number at that pass and
+   whether it holds (`N/A` for a change at pass 1, which has nothing to compare
+   with). Surface-EPR criteria at one inset stand together under the inset's
+   name, `Surface EPR, inset 0.5 um` over `MA`, `MS` and `SA`: the part of the
+   surfaces 0.5 µm or more from a gap edge. The last column counts the passes
+   in a row at which every criterion held.
+3. **Each quantity against the pass**, then its declared change on a log axis
+   with the threshold as a dashed line. A change carries the name AEDT gives
+   it: `Delta %` for a capacitance, `Max Delta Freq. %` for a mode frequency,
+   `Max Percent Delta` for a participation. The error-indicator figure carries
+   the declared `ErrorIndicator` threshold, or Palace's `Tol` when nothing is
+   declared.
 4. **Surface EPR Convergence**: for each mode or excitation, one figure per
-   interface kind, because their participations differ by orders of magnitude,
-   with a line for the whole surfaces and one for each inset the run records;
-   then the declared changes, one figure per inset with a line per kind.
+   interface type, since their participations differ by orders of magnitude,
+   with a line for the whole surfaces and one for each inset; then the
+   declared changes.
 
-`show_run_trustworthiness(show_details=True)` adds what the run folder
-records: the remaining identity cards (completeness, the snapshots, selection
-integrity, `AMR MaxIts`, `AMR Tol`, the `Convergence` card, the receipt, the
-Palace version and the handoff id), the verdict as a sentence above the table,
-a notice for a run stopped at convergence, and the provenance. The sentence
-says, when converged, the pass, the passes that held in a row, the criterion
-that was the last to hold and how many of the passes read come after it; when
-not, each criterion that fails at the last pass read, its worst number, the
-declared threshold and how many times the threshold that is.
-`ResolvedPalaceResult.convergence` holds the same verdict for a program.
+A pass is one Palace solve: pass 1 solves the input mesh. A change is measured
+only between two passes read one after the other. How result reading decides
+which folder of `results/palace` holds which pass is in
+[the internals](../../contribute/internals/report-records.qmd#pass-folders).
 
-`inspect_run_trustworthiness()` shows the same table for the passes a partly
-returned run folder holds; the verdict then counts the passes read (for
-example "3 passes read (passes 1, 4 and 5)"), not the passes Palace ran. A
-number that cannot be read without ambiguity (a table that repeats a column, or
-two rows with the same index) is unavailable, with the reason, and never holds.
-A plan that is present but was not sealed by the
-handoff, or that changed after it, is refused by both readers.
-
-With a declaration Palace is
-[stopped at convergence](palace-electrostatic-sgb.qmd#convergence-stop),
-and the verdict sentence then says how it ended, from the receipt and the
-runner's decision record:
+With `show_details=True` the report also states the verdict as a sentence
+above the table. For a run [stopped at convergence](palace-electrostatic-sgb.qmd#convergence-stop)
+it reads, for example:
 
 > Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
 > held at passes 3 to 4, 2 in a row. Last to hold: C diagonal, from pass 3. No
 > pass was read after it. SCGSim stopped Palace after pass 4: 2 of the 6 passes
 > its limit allows were not run.
 
-A run that did not converge ends at its limit: "Not converged in the 6 passes
-read (passes 1 to 6). At pass 6: ... Palace ended by itself at its limit of 6
-passes." A stopped run has no final solve at the top level of `results/palace`:
-its result, its benchmark and its cost are those of its last pass. With
-`show_details` the `Convergence` card reads "converged at pass 4, stopped after
-pass 4", the card `Final snapshot` reads "none: stopped at convergence", and a
-notice names the pass used. A stop that did not complete the run (`stop_escalated`,
-`runner_terminated`, `not_recorded`) is a failed run, with the failure category
-`convergence_stop`. The criteria are the caller's: the verdict states whether
-they held, not whether the research question is answered.
+A run that did not converge says which criterion fails at the last pass read,
+its worst number, the threshold and how many times the threshold that is, and
+ends: "Palace ended by itself at its limit of 6 passes." A stopped run has no
+final solve of its own: its result, benchmark and cost are those of its last
+pass. A stop that did not complete is a failed run, with the failure category
+`convergence_stop`. `ResolvedPalaceResult.convergence` holds the same verdict
+for a program.
 
-## Honesty rule
+For a run that came back in part, `inspect_run_trustworthiness()` shows the
+same table for the passes the folder holds, and the verdict counts the passes
+read, for example "3 passes read (passes 1, 4 and 5)".
 
-Solver-specific quantities remain solver-specific. Electrostatic matrices,
-eigenfrequencies, driven network responses, field-energy participation, Q3D
-matrices, and Q2D per-unit-length results must retain their own units,
-extraction authority, and failure meaning.
+## Physics quantities {#physics-quantities}
 
-For Palace, `LossTan=0.0` is also the backend-compatible config value when no
-loss tangent was supplied. It does not turn an unknown assumption into a known
-zero: the v2 index and detached `PalaceEprResult` retain `loss_tangent=None`,
-and SCGSim leaves the corresponding inverse-Q contribution unavailable. An
-explicit known zero instead gives a zero contribution. Neither state creates a
-surface-loss lifetime claim. The [Eigenmode and Offline EPR guide](../../concepts/surface-epr.qmd)
-documents its analysis methods and assumptions. Palace's generic `domain-E.csv`
-Volume Energy table still has no general-purpose report renderer.
+Each quantity stays the solver's, with its own units, conductor or port order
+and failure meaning: an electrostatic capacitance matrix, mode frequencies, a
+driven network response, field-energy participation, a Q3D matrix and Q2D
+per-unit-length values are not interchangeable.
 
-## Eigenmode EPR presentation
+### Surface EPR {#eigenmode-epr-presentation}
 
-AEDT and Palace keep separate `show_epr()` inputs and return a Plotly `Figure`;
-the view consumes an existing result and does not resolve files or start a
-solver. This page owns the report's visible availability and coverage contract.
+`show_epr(result)` returns a Plotly figure of an existing result; it reads no
+files and starts no solver. It shows surface and bulk participation apart.
+AEDT shows a junction's inductive and capacitive participation together on a
+junction axis; Palace shows its signed native port participation, which
+depends on the phase convention and is not AEDT's pair. Each surface bar names
+its owner, its interface and whether it is the whole surface or a margin; the
+hover text keeps the source members, the field side and the loss assumptions.
+The colours are fixed per interface: MA, MS and SA.
 
-Each figure separates surface and bulk participation. AEDT shows junction
-inductive and capacitive participation together on a junction axis; Palace
-shows its signed native port participation separately. Surface bars identify the
-semantic owner or owners, interface, and baseline or requested-margin
-evaluation. Hover data retains source members, field side, and loss assumptions.
-The coverage annotation counts reported surface rows and source bindings or
-surfaces, bulk domains, and junctions or ports.
+In the integrated AEDT report, each requested mode at the last pass has a
+ranking of surface owners, separate bulk and junction plots, and a surface
+table with owner, interface, margin, participation, loss and inverse-Q.
 
-In the integrated AEDT report, each requested mode at the actual final pass
-has a descending horizontal surface-owner ranking, separate bulk and junction
-participation plots, and a surface table with owner, interface, evaluation,
-margin, participation, loss, and inverse-Q. Junction inductive and capacitive
-participation have separate plots and tables. Requested margins form trends
-per mode and pass; the unmasked baseline is separate and is not connected to
-the margin line. Every evaluation remains visible: `Unmasked` and
-`Requested 0` are distinct, and alternative margins or split aggregates are
-never summed together. The known baseline subtotal and unknown-loss count stay
-separate; the report does not claim total device Q or T1.
+[]{#palace-margin-rows}**Margin rows are alternatives, not parts.** A margin
+row covers the part of a surface beyond that margin, so it overlaps the
+whole-surface row and every other margin row of that surface. Read each on its
+own and never add them. `show_physics_quantities()` plots the latest margin
+participation against the margin for each mode or excitation and interface.
+A participation of zero means the native contribution is zero; on its own it
+does not show that a region was left out of the geometry.
 
-Scientific keys, not display labels, identify plotted data. Shared readable
-labels appear across figures; hover data and metadata retain full group,
-members, side, and source identity.
+The inverse-Q subtotal counts only known whole-surface terms. Unknown losses
+are counted as unknown and margin rows are not added. The views show the evidence;
+they do not claim a total device Q or a lifetime.
 
-`InputSummary` HTML inherits the front-end light/dark palette. AEDT report and
-Plotly views use their explicit theme choice, defaulting to light; they do not
-automatically follow the front-end theme. Surface interfaces retain MA
-`#56B4E9`, MS `#E69F00`, and SA `#009E73`; same-interface owners remain
-distinguishable by labels, dash patterns, and markers.
+When Palace reports an infinite Q for a mode (`+inf` in `eig.csv`), the report
+labels it **native-reported infinite Q** and gives no finite Q for it; the
+frequency and energies of that mode are shown as usual
+([Eigenmode reference](palace-eigenmode.qmd#native-eigenmode-q)).
 
-An AEDT `ResolvedRun` provides `epr_result()` for its bound EPR record and
-`show_all_results(show_details=False)` for the integrated run view; the latter
-returns `None`. The view uses all requested modes at the actual last completed
-pass and includes the adaptive history. Missing or partial values remain
-unavailable; presentation does not fall back to an earlier complete pass. It
-checks consumed result CSVs and benchmark data against hashes captured during
-resolution, without consulting a live simulation object or rereading native
-AEDT state. See the
-[AEDT runtime reference](aedt-runtime.qmd) for strict resolution and
-missing-artifact behavior.
+### Unknown loss is not zero loss {#honesty-rule}
 
-Adaptive frequency has its own availability rule: a finite, positive numeric
-value that is not a boolean is plotted even when that mode's EPR row is partial.
-Participation and energy still require a complete row; row status, integrity
-checks, pass selection, and gaps in the plotted history remain unchanged.
+When you give no loss tangent, Palace's configuration still needs a number and
+gets `LossTan=0.0`, but SCGSim records the loss tangent as unknown and shows
+that inverse-Q contribution as unavailable. A loss tangent you give as `0`
+is a known zero and gives a contribution of zero. For example, an MA film with
+no `loss_tangent` shows its participation and no inverse-Q; the same film with
+`loss_tangent=0` shows an inverse-Q of 0. [Surface EPR](../../concepts/surface-epr.qmd)
+explains the loss assumptions, and [Change loss assumptions without
+solving](../../guides/offline-loss.qmd) changes them on a finished result.
 
-The displayed inverse-Q subtotal includes only known, unmasked baseline
-surface terms. Unknown baseline losses are counted as unknown; requested mask
-margins are alternative views and are not added to the subtotal. Sidewall
-energy remains labeled uncomputed where it was not evaluated. These figures
-show the available evidence and do not claim total device loss or a lifetime.
+## Mesh in the report {#palace-mesh-context}
 
-Palace and AEDT quantities resolved from original run folders remain bound to
-their applicable receipt, artifact-hash, handoff, and solver identities. A
-detached Palace EPR result retains original artifact identity and hash
-references, but those references do not authenticate the detached JSON itself.
-Presentation does not weaken source bindings and makes no
-numerical-convergence or cross-solver-agreement claim.
+The Palace report shows the run's mesh summary (`mesh_summary()`): the sizing
+recipe and its settings, the quality threshold and the lowest element quality
+(minSICN, measured on the linear mesh), the node, element and region counts,
+the order of the delivered mesh and the edge lengths. The Eigenmode
+degree-of-freedom number is an estimate, not Palace's count;
+[Tetrahedral mesh quality](mesh-quality.qmd) explains the numbers.
 
-For Palace only, the report preserves
-positive infinity in the native Eigenmode `eig.csv` `Q` column and explicitly
-labels it **native-reported infinite Q**. A finite Q-based view is unavailable
-for that value; the report does not infer a physical lossless model or replace
-it with a finite number or zero. Other otherwise valid frequency/energy
-evidence is not rejected solely for this Q value. The
-[Palace native Q contract](palace-eigenmode.qmd#native-eigenmode-q) owns
-the narrow raw-value allowance and unchanged other-column/NaN/negative-infinity
-policies. EPR normalization and unknown-loss interpretation remain separate.
+::: {#palace-run-schemas .callout-important title="Palace run folders of older schemas are not read"}
+Result reading reads mesh manifest `schema_version` 2, Palace index map
+`schema_version` 3 and detached EPR results `scgsim.palace.epr-result.v2`. A
+run folder or detached result of an older schema is refused with an error that
+names its version. To read such a study again, prepare it with the current
+package and run it again.
+:::
 
-## Margin rows of Palace Surface EPR {#palace-margin-rows}
+## What the views do not judge {#research-interpretation-and-retained-observations}
 
-The existing inspection and strict-resolution split also governs Palace margin
-rows. A margin row is a `Dielectric` row over the bands SGB cut at and beyond
-that margin, so it sits in the same `surface-Q.csv` table as the baseline rows.
-`inspect_run_trustworthiness()` may inspect a completed, failed, or partly
-returned run folder and marks unavailable margin data as unavailable without changing the
-receipt state. Each source reads its margin rows as one all-or-nothing snapshot:
-if its table cannot be read or does not match the index map, that source has no
-margin snapshot. A strict completed resolution of a run that requested surface
-rows requires the sealed `surface-Q.csv` from the same required result source;
-a missing file prevents strict resolution, and an existing receipt or artifact
-SHA-256 mismatch remains fatal.
+The views report the solver's status and your criteria. Whether a result
+answers your research question is your judgement; keep your criteria and any
+change to them with the run. [Convergence and reports](../../guides/convergence-and-reports.qmd)
+says how to read them for a study.
 
-`PhysicsQuantitiesReport.snapshots` remains the baseline-only surface. The typed
-`PhysicsQuantitiesReport.margin_snapshots` surface exposes
-`SurfaceMarginEprSeriesSnapshot` values, each holding
-`SurfaceMarginEprRecord` rows with the interface, margin value (`margin_um`) and
-ordinal (`margin_index`), the baseline row it belongs to (`baseline_index`), the
-bands it covers, its entities and Nets, the mode or excitation, the refinement
-pass, the native index and the source identity. Each margin row is one of several
-alternatives to its baseline row; duplicate requested margins stay separately
-traceable and are never duplicate contributions to a loss total.
+## Not available {#current-palace-scope}
 
-`show_physics_quantities()` presents the latest margin participation versus
-margin for each mode or excitation and exact interface, using the native
-surface traces. Run trustworthiness remains the authority for AMR history and
-evidence; the physics presentation does not reinterpret refinement evidence.
-
-A native zero participation or surface energy means only that the native
-contribution is zero. Without supporting geometry evidence, it does not prove
-that a region was geometrically fully excluded. An unavailable inverse-Q
-contribution caused by unknown loss remains unavailable rather than being
-converted into a lifetime claim; participation and energy evidence stay
-visible.
-
-This report surface adds no cumulative disjoint edge-band interpretation,
-portable export format, or scientific acceptance claim.
-
-## Current Palace scope
-
-The support derived from upstream gsim #61 is limited to Domain Energy,
-MA/MS/SA Surface EPR, exact index mapping, and Electrostatic/Eigenmode reports.
-SCGSim does not implement the upstream #171 cumulative inset-band presentation.
-Palace Driven and Magnetostatic implementation/reports, a Volume Energy
-renderer, and a portable report snapshot/export API are outside this current
-contract.
+Palace Driven and Magnetostatic reports, a plot of Palace's `domain-E.csv`
+volume energy, and an export format for a report.

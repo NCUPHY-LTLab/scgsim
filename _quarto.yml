@@ -15,6 +15,7 @@ project:
   - docs/reference/api/*.qmd
   - docs/reference/specs/*.qmd
   - docs/contribute/*.qmd
+  - docs/contribute/internals/*.qmd
   - docs/contribute/research/*.qmd
   - docs/contribute/research/*/*.qmd
   - docs/contribute/history/*.qmd
@@ -166,6 +167,11 @@ website:
     - docs/contribute/goals-and-upstream.qmd
     - docs/contribute/provenance.qmd
     - docs/contribute/notebook-contract.qmd
+    - section: Internals
+      contents:
+      - docs/contribute/internals/aedt-runtime.qmd
+      - docs/contribute/internals/geometry-plan.qmd
+      - docs/contribute/internals/report-records.qmd
     - section: Research
       contents:
       - docs/contribute/research/index.qmd

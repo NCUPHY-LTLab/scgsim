@@ -106,5 +106,348 @@
     "zh-TW/docs/start/choose-a-simulation.qmd",
     "zh-TW/docs/start/install.qmd",
     "zh-TW/index.qmd"
-  ]
+  ],
+  "api_groups": {
+    "geometry": {
+      "title": "Build a plan",
+      "title_zh": "建立幾何規劃",
+      "groups": [
+        {
+          "title": "The plan",
+          "title_zh": "規劃",
+          "gloss": "Build the layout's plan and freeze it into a snapshot.",
+          "gloss_zh": "建立版圖的規劃，並凍結成快照。",
+          "page": "specs/geometry-plan.qmd",
+          "names": [
+            "GeometryPlan",
+            "GeometryPlanSnapshot",
+            "JunctionTerminalBinding",
+            "RectangularJunctionSpec",
+            "SemanticEntitySpec",
+            "VacuumRegionSpec",
+            "with_rectangular_junctions"
+          ]
+        },
+        {
+          "title": "Curves",
+          "title_zh": "曲線",
+          "gloss": "Declare exact lines and circular arcs on the layout's outlines.",
+          "gloss_zh": "在版圖輪廓上宣告精確的直線與圓弧。",
+          "page": "specs/geometry-plan.qmd#source-curves",
+          "names": [
+            "BoundaryCurveChainSpec",
+            "Coordinate",
+            "CurveKindLiteral",
+            "CurveOrientationLiteral",
+            "GdsBoundaryReconstructionSpec",
+            "PathInput",
+            "PolygonRing",
+            "SourceCurveSpec",
+            "Vector3D"
+          ]
+        },
+        {
+          "title": "Films and profiles",
+          "title_zh": "薄膜與近似方式",
+          "gloss": "Choose how each film becomes a sheet or a volume.",
+          "gloss_zh": "決定每層薄膜成為薄片或體積。",
+          "page": "specs/physical-representation.qmd",
+          "names": [
+            "ApproximationProfile",
+            "PhysicalLayerDeclaration",
+            "PhysicalRepresentationPlan",
+            "RouteLiteral",
+            "interpret_physical_geometry",
+            "interpret_physical_layers"
+          ]
+        },
+        {
+          "title": "Normalized input",
+          "title_zh": "正規化輸入",
+          "gloss": "The normalized input a snapshot carries, and its summary.",
+          "gloss_zh": "快照所帶的正規化輸入及其摘要。",
+          "page": "specs/geometry-plan.qmd#pre-solve-input-summary",
+          "names": [
+            "GeometryBuildInput",
+            "InputSummary",
+            "LayoutPolygonSpec",
+            "PortSheetOverlapRecord",
+            "PortSheetRegionRecord",
+            "apply_vacuum_region_to_stack",
+            "build_gds_stack_geometry_input",
+            "summarize_geometry_input"
+          ]
+        }
+      ]
+    },
+    "palace": {
+      "title": "Simulate with Palace",
+      "title_zh": "以 Palace 模擬",
+      "groups": [
+        {
+          "title": "Simulations",
+          "title_zh": "模擬",
+          "gloss": "Set up, check and prepare a capacitance or eigenmode run.",
+          "gloss_zh": "設定、檢查並準備電容或本徵模態計算。",
+          "page": "specs/palace-electrostatic-sgb.qmd",
+          "names": [
+            "EigenmodeSim",
+            "ElectrostaticSim",
+            "SimulationDrcError",
+            "SimulationDrcReport"
+          ]
+        },
+        {
+          "title": "Convergence",
+          "title_zh": "收斂",
+          "gloss": "Declare when adaptive refinement has converged.",
+          "gloss_zh": "宣告自適應細化何時算收斂。",
+          "page": "specs/palace-electrostatic-sgb.qmd#convergence-declaration",
+          "names": [
+            "Capacitance",
+            "ConvergenceCheck",
+            "ConvergencePlan",
+            "ConvergenceVerdict",
+            "Criterion",
+            "CriterionGroup",
+            "ErrorIndicator",
+            "ModeFrequency",
+            "SurfaceEpr"
+          ]
+        },
+        {
+          "title": "Read a run",
+          "title_zh": "讀取計算結果",
+          "gloss": "Read a returned run folder and its records.",
+          "gloss_zh": "讀取回傳的執行資料夾與其記錄。",
+          "page": "specs/report-model.qmd",
+          "names": [
+            "PalaceFailureDiagnosis",
+            "PalaceProvenance",
+            "PalaceResultSelection",
+            "PalaceReturnedReceipt",
+            "ParsedTable",
+            "ResolvedPalaceResult",
+            "SolverEnd",
+            "StageResult",
+            "inspect_run_trustworthiness",
+            "resolve_palace_result"
+          ]
+        },
+        {
+          "title": "Reports",
+          "title_zh": "報告",
+          "gloss": "The run, physics and cost views of a result.",
+          "gloss_zh": "結果的執行、物理量與成本三個視圖。",
+          "page": "specs/report-model.qmd#common-envelope",
+          "names": [
+            "PalaceCost",
+            "PalacePerformance",
+            "PalaceTrustReport",
+            "PassCostRecord",
+            "PhysicsQuantitiesReport",
+            "SimulationBenchmarkReport",
+            "SurfaceMarginEprRecord",
+            "SurfaceMarginEprSeriesSnapshot"
+          ]
+        },
+        {
+          "title": "EPR",
+          "title_zh": "EPR",
+          "gloss": "Detach, reread, reanalyze and plot an EPR result.",
+          "gloss_zh": "取出、重新讀取、重新分析並繪製 EPR 結果。",
+          "page": "specs/palace-eigenmode.qmd#results-and-offline-analysis",
+          "names": [
+            "PalaceEprResult",
+            "epr_result",
+            "reanalyze_epr",
+            "resolve_epr_result",
+            "show_epr"
+          ]
+        }
+      ]
+    },
+    "aedt": {
+      "title": "Simulate with AEDT",
+      "title_zh": "以 AEDT 模擬",
+      "groups": [
+        {
+          "title": "Preparation",
+          "title_zh": "準備",
+          "gloss": "Build the SGB model of a plan and prepare an HFSS, Q3D or Q2D handoff.",
+          "gloss_zh": "由規劃建立 SGB 模型，並準備 HFSS、Q3D 或 Q2D 的交接。",
+          "page": "specs/aedt-runtime.qmd#one-shared-lifecycle",
+          "names": [
+            "EigenmodeSim",
+            "HandoffPlan",
+            "PreparedSgbModel",
+            "SimulationDrcReport",
+            "parse_aedt_spec",
+            "prepare_handoff",
+            "prepare_hfss_driven_from_geometry",
+            "prepare_hfss_eigenmode_from_geometry",
+            "prepare_q3d_from_geometry",
+            "prepare_sgb_model"
+          ]
+        },
+        {
+          "title": "Request specs",
+          "title_zh": "要求規格",
+          "gloss": "The request each AEDT calculation is prepared from.",
+          "gloss_zh": "每種 AEDT 計算據以準備的要求。",
+          "page": "specs/aedt-runtime.qmd#solver-specific-contracts",
+          "names": [
+            "AedtSpec",
+            "HfssDrivenGeometrySpec",
+            "HfssEprAnalysisSpec",
+            "HfssEprSpec",
+            "HfssSpec",
+            "PdkMaterial",
+            "Q2dConductorSpec",
+            "Q2dRectangleSpec",
+            "Q2dSpec",
+            "Q3dNetSpec",
+            "Q3dSpec"
+          ]
+        },
+        {
+          "title": "Ports, junctions and RLCs",
+          "title_zh": "埠、接面與 RLC",
+          "gloss": "What sits on a port sheet.",
+          "gloss_zh": "放在埠片上的元件。",
+          "page": "specs/aedt-runtime.qmd#hfss-shared-lumped-support",
+          "names": [
+            "LumpedRlc",
+            "LumpedTerminalPort",
+            "ModalPort",
+            "PlanarJunction",
+            "TerminalPort",
+            "planar_junction_from_port"
+          ]
+        },
+        {
+          "title": "Run controls",
+          "title_zh": "求解控制",
+          "gloss": "Setup, sweep and resources of a solve.",
+          "gloss_zh": "求解的設定、掃描與資源。",
+          "page": "specs/aedt-runtime.qmd#aedt-family-setup-controls",
+          "names": [
+            "AedtResources",
+            "EigenmodeRunControl",
+            "FrequencySweepSpec",
+            "HfssRunControl",
+            "MatrixRunControl"
+          ]
+        },
+        {
+          "title": "EPR",
+          "title_zh": "EPR",
+          "gloss": "Request, converge on, compute again and plot energy participation.",
+          "gloss_zh": "要求、收斂、重新計算並繪製能量參與比。",
+          "page": "specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction",
+          "names": [
+            "EprAnalysisRequest",
+            "EprResult",
+            "ExpressionCacheConvergence",
+            "ExpressionCacheConvergenceSet",
+            "NativeExpressionDefinition",
+            "NormalizedSurfaceEprTotal",
+            "SavedSolution",
+            "analyze_epr",
+            "plot_epr_result",
+            "reanalyze_epr",
+            "resolve_epr_result",
+            "resolve_saved_solution",
+            "show_epr"
+          ]
+        },
+        {
+          "title": "Batch solve on another host",
+          "title_zh": "在另一台主機批次求解",
+          "gloss": "Package an HFSS EPR model, solve it, and collect it.",
+          "gloss_zh": "封裝 HFSS EPR 模型、求解並收回。",
+          "page": "specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch",
+          "names": [
+            "NativeBatchPackage",
+            "collect_native_batch",
+            "prepare_native_batch",
+            "run_native_batch"
+          ]
+        },
+        {
+          "title": "Results and control",
+          "title_zh": "結果與控制",
+          "gloss": "Read a returned run, a prepared model, or stop a Q3D run.",
+          "gloss_zh": "讀取回傳的執行、已準備的模型，或停止 Q3D 計算。",
+          "page": "specs/aedt-runtime.qmd#q3d-user-requested-stopabort-and-save",
+          "names": [
+            "PreparedModel",
+            "ResolvedRun",
+            "StageResult",
+            "request_q3d_abort_and_save",
+            "request_q3d_stop_and_save",
+            "resolve_prepared_model",
+            "resolve_results"
+          ]
+        }
+      ]
+    },
+    "aedt.specs": {
+      "title": "AEDT specs module",
+      "title_zh": "AEDT 規格模組",
+      "groups": [
+        {
+          "title": "Driven Terminal specs",
+          "title_zh": "Driven Terminal 規格",
+          "gloss": "The same Driven Terminal names, importable from the specs module.",
+          "gloss_zh": "同一組 Driven Terminal 名稱，也可由規格模組匯入。",
+          "page": "specs/aedt-runtime.qmd#hfss-driven-terminal-sgb",
+          "names": [
+            "HfssDrivenGeometrySpec",
+            "LumpedRlc",
+            "LumpedTerminalPort",
+            "TerminalPort"
+          ]
+        }
+      ]
+    },
+    "visualization": {
+      "title": "Preview the geometry",
+      "title_zh": "預覽幾何",
+      "groups": [
+        {
+          "title": "Preview",
+          "title_zh": "預覽",
+          "gloss": "Look at the geometry a solver will use, before it runs.",
+          "gloss_zh": "在求解前查看求解器會使用的幾何。",
+          "page": "../guides/preview-the-geometry.qmd",
+          "names": [
+            "GeometryPreview",
+            "GeometryPreviewArtifact",
+            "inspect_aedt_geometry",
+            "inspect_palace_geometry"
+          ]
+        }
+      ]
+    },
+    "semantics": {
+      "title": "Semantic snapshots",
+      "title_zh": "語意快照",
+      "groups": [
+        {
+          "title": "Snapshots",
+          "title_zh": "快照",
+          "gloss": "Hashable snapshots of semantic facts, for tool and PDK authors.",
+          "gloss_zh": "語意事實的可雜湊快照，供工具與 PDK 作者使用。",
+          "page": "../contribute/architecture.qmd",
+          "names": [
+            "SemanticFactsSnapshot",
+            "SemanticSnapshotReference",
+            "canonical_sha256",
+            "create_snapshot"
+          ]
+        }
+      ]
+    }
+  }
 }

@@ -1,7 +1,7 @@
 ---
 title: "術語與單位"
-description: "本頁說明 SCGSim 英文技術用語、符號與單位記法。"
 lang: zh-TW
+description: "SCGSim 各頁使用的術語的白話定義，從 Net、快照到 Route A、邊距與 Surface EPR，以及結果的單位。"
 sidebar: reference
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
@@ -10,70 +10,98 @@ aliases:
   - ../conventions.html
 ---
 
-閱讀工作流程或結果頁時，可在此查詢專有名詞。中文文件會保留英文術語，首次提及時附上簡短中文解釋；API 名稱、欄位與實際介面字串則維持原樣。定義依據目前 SCGSim 契約，詳細工作流程請見各連結頁。
+每個術語用一兩句話說明，並連結到完整解釋它的頁面。
 
-## Analysis
+## 計算 {#analysis}
 
-[Electrostatic]{#term-electrostatic}（靜電分析）依指定電壓求解導體電荷，並回傳有序電容矩陣。詳見[物理問題總覽](../concepts/problems.qmd#capacitance-charge-response-to-conductor-voltage)。
+[Electrostatic]{#term-electrostatic}：在給定電壓下計算每個導體上的電荷；回傳電容矩陣。見[問題類型](../concepts/problems.qmd#capacitance-charge-response-to-conductor-voltage)。
 
-[Eigenmode]{#term-eigenmode}（本徵模分析）依模型邊界與電路元件求得共振頻率及場。本徵模結果與驅動響應是不同物理量，詳見[物理問題總覽](../concepts/problems.qmd#resonance-modes-of-a-field-and-circuit-model)。
+[Eigenmode（本徵模態）]{#term-eigenmode}：計算模型的共振模態，每個模態有頻率、Q 與場。共振模態不是驅動響應。見[問題類型](../concepts/problems.qmd#resonance-modes-of-a-field-and-circuit-model)。
 
-[Driven Modal]{#term-driven-modal}（驅動模態分析）是 HFSS 的驅動工作流程，使用模態埠及其積分線宣告，回傳複數 S 參數。
+[Driven Terminal]{#term-driven-terminal}：HFSS 的計算，以參考導體激發各埠，回傳複數 S 參數。
 
-[Driven Terminal]{#term-driven-terminal}（驅動端點分析）是 HFSS 的驅動工作流程，使用明確指定的參考導體，回傳複數 S 參數。
+[Driven Modal]{#term-driven-modal}：使用模態埠的 HFSS 計算。此版本 SCGSim 不提供（[不支援](specs/aedt-runtime.qmd#current-exclusions)）。
 
-## Geometry and workflow
+## 版圖與規劃 {#geometry-and-workflow}
 
-[Net]{#term-net}（電氣集合）是呼叫端為來源 Entity 指定的電氣分組，用來記錄連接指派；幾何 API 不會依形狀接觸情形推斷電氣連接。
+[Entity]{#term-entity}：版圖中一塊具名的幾何，例如一個焊墊或一片接地平面，以它在組裝中的路徑識別（`chip/q0/pad`）。見[來源身分、出現實例與 Net](../concepts/geometry.qmd#entity-occurrence-and-net)。
 
-[Ground]{#term-ground}（接地）指所選模型或工作流程中的物理或電氣接地選擇。它不等同特定原生 `Net` 類型；其表示方式須依後端契約判讀。
+[Occurrence（出現實例）]{#term-occurrence}：元件在版圖中的一次放置。同一元件放兩次就是兩個出現實例，各有自己的 Entity 路徑。
 
-[Body]{#term-body}（幾何物件）是在來源或後端模型中表示的幾何物件。其意義依幾何契約而定；來源物件可解讀或降階為 Sheet 或 Solid，因此 Body 本身不必然指原生三維實體，也不表示依名目堆疊區間推定層跨度。
+[Net]{#term-net}：一塊具名、作為同一個導體的金屬，由你以 `plan.set_nets` 宣告它包含哪些 Entity。SCGSim 從不由彼此接觸的形狀組成 Net。
 
-[Occurrence]{#term-occurrence}（出現位置）是元件階層中具名的元件實例。限定名稱可區分重複放置的實例，同時保留共用的元件定義。
+[Ground（接地）]{#term-ground}：計算中哪個導體、或哪個外表面保持 0 V 的選擇。它不等同名為 "ground" 的 Net，也不等同求解器自己的接地類型；每種計算各自說明如何設定。
 
-[GeometryPlan]{#term-geometry-plan}（幾何規劃器）是 Notebook 中可變更的建構器，用來整理元件 Entity 與最終 Net 指派。呼叫 `prepare()` 會產生分離且不可變的快照。
+[Region（區域）]{#term-region}：模型中不是金屬的體積：基板、介質，或真空區域，即模型周圍的那一盒空間。
 
-[Snapshot]{#term-snapshot}（快照）是已準備來源幾何及其識別資訊的分離唯讀紀錄，可傳遞準備後的輸入，且不保留即時元件參照。
+[GeometryPlan]{#term-geometry-plan}：你在筆記本中由版圖、層堆疊、Net、真空區域與 Surface-EPR 薄膜建立的物件；每個模擬都使用它。見 [GeometryPlan 與 SGB](specs/geometry-plan.qmd)。
 
-[Mesh]{#term-mesh}（網格）是場求解器使用的離散幾何域。網格摘要描述網格建構與數量，本身不能證明求解器準確度。
+[快照]{#term-snapshot}：`plan.prepare()` 回傳的規劃凍結副本，與版圖之間沒有即時連結。模擬以 `set_plan` 取得快照；要改任何東西，就準備一份新的。
 
-[Adaptive Pass]{#term-adaptive-pass}（自適應迭代）是自適應工作流程中求解器逐次進行的網格／解迭代。判讀數值時，應使用實際完成的迭代及後端記錄的歷程。
+[SGB]{#term-sgb}：SCGSim 的幾何建構器，把快照變成每個求解器使用的三維模型。
 
-[AMR]{#term-amr}（Adaptive Mesh Refinement，自適應網格細化）指求解器依原生自適應程序，在流程中局部或整體細化網格。
+[Sidecar]{#term-sidecar}：SGB 寫在模型旁的檔案，記錄模型的每個面與體積來自哪個 Entity、 Net 與條帶。
 
-[Nonconformal AMR]{#term-nonconformal-amr}（非共形自適應網格細化）允許局部細化後相鄰元素位於不同細化層級，並在非共形網格介面形成懸掛節點。Palace 以 `Model.Refinement.Nonconformal` 設定此項；詳見 [MFEM 說明](https://mfem.org/howto/ncmesh/)。
+## 幾何 {#geometry}
 
-[Solver]{#term-solver}（求解器）是評估準備後模型的原生計算程式。SCGSim 會圍繞所選求解器準備請求並解析回傳證據。
+[Body（本體）]{#term-body}：來源或模型中的一塊幾何。它成為薄片還是實體取決於路徑； Body 這個詞本身不說明。
 
-[Handoff]{#term-handoff}（交接套件）是從模型準備傳遞至呼叫端控制之求解器執行與結果回傳的具識別性套件。交接本身不代表求解器已執行或完成。
+[Sheet（薄片）]{#term-sheet}：零厚度的表面，例如 Route A 上的金屬薄膜或埠片。
 
-[Run folder]{#term-run-folder}（執行資料夾）是模擬寫入網格、設定與交接資料，求解器再寫入結果的資料夾；程式碼裡的名稱是 `run_dir`。結果從執行資料夾解析。「套件」（package）只用來指為了在主機之間傳送而打包的東西，例如交接時寫在執行資料夾旁邊的 `.tar.gz` 封存檔。
+[Solid（實體）]{#term-solid}：體積；在 AEDT 中，是 `modeling="solid"` 選擇的表示方式，每層薄膜保留其厚度。
 
-## Results
+[Thin Film（薄膜）]{#term-thin-film}：在 AEDT 中，是 `modeling="thin_film"` 選擇的表示方式，每層薄膜成為薄片。見 [solid 還是 thin_film](specs/aedt-runtime.qmd#aedt-solid-thin-film)。
 
-[Sheet]{#term-sheet}（薄片）是二維來源或原生幾何表面；依宣告角色不同，可代表薄膜區域或埠表面。
+[Route A 與 Route B]{#term-route}：Palace 模型表示金屬的兩種方式。Route A 把每層薄膜變成零厚度的理想導體薄片；Route B 讓每個導體保持有限體積，其表面為理想導體。以 `sim.set_route("A")` 或 `"B"`（預設）選擇。見 [Route A 與 Route B](../concepts/routes.qmd)。
 
-[Solid]{#term-solid}（實體建模）是透過 `modeling="solid"` 選取的體積幾何表示法。
+[Port（埠）]{#term-port}：跨越間隙的一張薄片，電路元件、接面或激發接在上面。
 
-[Thin Film]{#term-thin-film}（薄膜建模）是明確選取、且與 Solid 分開設定的薄膜幾何表示法。薄膜假設與後端支援情形見[功能表](supported-calculations.qmd)。
+[Terminal（端子）]{#term-terminal}：在電容計算中，依序被設為 1 V 的導體；在 HFSS Driven Terminal 中，是埠對其參考所激發的導體邊。
 
-[Port]{#term-port}（埠）是驅動計算中宣告的激發或量測邊界。埠類型與參考方式決定如何解讀回傳的網路響應。
+## Surface EPR {#surface-epr-terms}
 
-[Terminal]{#term-terminal}（端點）是端點公式中的導體端點；其參考導體屬於模型定義的一部分。
+[Surface EPR]{#term-surface-epr}：一個模態的電場能量中，會落在模型某個表面上一層薄損耗膜裡的比例，由該表面的場估計。見 [Surface EPR](../concepts/surface-epr.qmd)。
 
-[C]{#term-c}表示電容；[G]{#term-g}表示電導；[RLGC]{#term-rlgc}（Resistance、Inductance、Conductance、Capacitance，電阻、電感、電導、電容）是傳輸線參數；截面萃取通常以每單位長度回報 RLGC。
+[MA、MS、SA]{#term-ma-ms-sa}：三種薄膜表面：金屬-空氣（MA）、金屬-基板（MS）與基板-空氣（SA）。
 
-[Maxwell capacitance matrix]{#term-maxwell-capacitance-matrix}（Maxwell 電容矩陣）依萃取所用的接地方式與排序慣例，表示導體電荷與電壓的關係。應保留原生導體順序與單位。
+[間隙邊]{#term-gap-edge}：導體面向裸露基板的邊。條帶從間隙邊量起。
 
-[EPR]{#term-epr}（Energy Participation Ratio，能量參與率）是指定能量分子除以後端定義的正規化能量。分子與[分母慣例](../concepts/surface-epr.qmd#quantities-and-normalization)依後端而異；薄膜估算只作為分子，不會加進分母。
+[邊距]{#term-inset-margin}：與間隙邊的距離，單位 µm。Surface EPR 的邊距列只計算表面上距間隙邊至少這麼遠的部分。不同邊距的列互相重疊，絕不相加。
 
-[SPR]{#term-spr}（Surface Participation Ratio，表面參與率）是指定介面薄膜的估算能量分子除以該工作流程聲明的正規化能量。分母依工作流程而定；這是介面估算，不一定是總能量中互不重疊的一部分。
+[條帶]{#term-band}：表面上兩個邊距之間的一段，切進模型以便積分其參與比。邊距 0.5 與 1.0 µm 給出 0 至 0.5 µm 與 0.5 至 1.0 µm 的條帶。
 
-判讀 EPR 與 SPR 時，須同時確認分子與分母。兩者是無因次比例，不等同百分比，也不等同逆 Q 等還需考量損耗假設的損耗貢獻。
+[EPR]{#term-epr}：能量參與比：模型某一部分的能量除以模型的正規化能量。薄膜估計值不加入這個分母。見[正規化](../concepts/surface-epr.qmd#quantities-and-normalization)。
 
-[Convergence]{#term-convergence}（收斂）描述指定量是否依聲明的迭代判準趨於穩定。應記錄量、判準與停止原因，並分開判讀原生求解器旗標及呼叫端另訂的指標。
+[SPR]{#term-spr}：表面參與比：某個介面薄膜中的估計能量，除以所述的正規化能量。它是介面的估計值，不是總能量中互不重疊的一部分。
 
-## 符號與單位
+EPR 與 SPR 都是無因次的比值。它們不是百分比，也不是損耗：像 inverse-Q 這樣的損耗貢獻還需要損耗正切。
 
-電容可用法拉（`F`）或飛法（`fF`）表示，`1 fF = 10⁻¹⁵ F`。比例為無因次量；百萬分率（`ppm`）是縮放後的比例，`1 ppm = 10⁻⁶`。各 API 與結果契約的單位不盡相同，使用前請查閱該項契約。
+## 網格與收斂 {#mesh-and-convergence}
+
+[網格]{#term-mesh}：場求解器在其上計算的四面體。網格摘要告訴你網格的大小，不告訴你答案是否準確。
+
+[自適應回合（pass）]{#term-adaptive-pass}：在兩次求解之間細化網格的計算中的一次求解；第 1 回合求解第一個網格。
+
+[AMR]{#term-amr}：自適應網格細化：求解器在兩個回合之間，於誤差估計最大處細化網格。
+
+[Nonconformal AMR]{#term-nonconformal-amr}：可以只細化某個元素而不細化其相鄰元素的 AMR，會留下懸空節點；即 Palace 的 `Model.Refinement.Nonconformal`。見 [MFEM 的說明](https://mfem.org/howto/ncmesh/)。
+
+[收斂]{#term-convergence}：你宣告的物理量在回合之間的變化是否小於你的門檻。見[收斂宣告](specs/palace-electrostatic-sgb.qmd#convergence-declaration)。
+
+## 執行 {#running}
+
+[求解器]{#term-solver}：計算場的程式：Palace，或 AEDT 中的 HFSS、Q3D 與 Q2D。
+
+[交接]{#term-handoff}：模擬為一次求解所準備的資料夾：模型、求解器輸入與執行腳本。準備交接不會執行求解器。
+
+[執行資料夾]{#term-run-folder}：模擬寫入網格、設定與交接，求解器寫入結果的資料夾；程式碼稱它 `run_dir`。結果從執行資料夾讀取。*封裝*（package）是執行資料夾的 `.tar.gz` 壓縮檔，用來帶到另一台主機。
+
+## 結果 {#results}
+
+[C]{#term-c} 是電容，[G]{#term-g} 是電導。[RLGC]{#term-rlgc}：傳輸線單位長度的電阻、電感、電導與電容。
+
+[Maxwell 電容矩陣]{#term-maxwell-capacitance-matrix}：由各導體電壓給出各導體電荷的矩陣。對角線是每個導體的總電容，非對角元素是負的耦合。請保留它的導體順序與單位。
+
+## 符號與單位 {#symbols-and-units}
+
+[]{#符號與單位}電容的單位是法拉（`F`）或飛法拉（`fF`）：1 fF = 10⁻¹⁵ F。比值沒有單位；百萬分之一（`ppm`）以百萬分之幾計算比值，1 ppm = 10⁻⁶。SCGSim 的 API 並不都使用同一種單位：長度為微米，Palace 的頻率在設定時為 Hz、在結果中為 GHz，AEDT 的頻率為 GHz，薄膜厚度為公尺（`film_thickness_m`）或模型單位（`thickness`）。每個 API 各自說明。
