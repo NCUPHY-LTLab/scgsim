@@ -106,7 +106,9 @@ def page_at(edition: Path, url: str) -> Path | None:
         return source
     for page in (edition / "docs").rglob("*.qmd"):
         folder = page.parent.relative_to(edition).as_posix()
-        if any(posixpath.normpath(posixpath.join(folder, a)) == url for a in aliases(page)):
+        if any(
+            posixpath.normpath(posixpath.join(folder, a)) == url for a in aliases(page)
+        ):
             return page
     return None
 
