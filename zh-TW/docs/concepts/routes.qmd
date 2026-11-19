@@ -1,0 +1,83 @@
+---
+title: "Route A 與 Route B"
+description: "版圖的金屬在 3D 模型中怎麼畫：Route B 保留膜厚，Route A 把金屬變成零厚度薄片。每種 Route A 近似設定做什麼、AEDT 的 modeling 怎麼對應，以及該選哪一種。"
+lang: zh-TW
+scgsim-kind: "concept"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/concepts/routes"
+---
+
+Route（路徑）決定 SCGSim 在 3D 模型中怎麼畫你的金屬。OrcaPen SC PDK 的單一晶粒層堆疊，是 500 µm 矽上的一層 0.1 µm（100 nm）鋁膜。**Route B** 把這層膜保留成 0.1 µm 厚的理想導體塊。**Route A** 把它換成矽表面上零厚度的薄片。除非你呼叫 `sim.set_route("A")`，Palace 都用 Route B。AEDT 沒有預設值：`modeling="solid"` 建出 Route B 的幾何，`modeling="thin_film"` 建出 Route A 的幾何。
+
+## 同一個焊墊，兩種 route {#same-pad}
+
+@fig-routes-cross-section 切過[第一個模擬](../start/first-simulation.qmd)那塊焊墊的 20 µm 間隙。這塊焊墊 200 µm 見方，四周是接地金屬，晶片 1000 µm 見方。圖中的高度，就是 SCGSim 為這個版圖實際建出的高度；真空區域延伸到晶片上方 1000 µm。
+
+![焊墊的間隙邊緣：PDK 的層堆疊，以及 SCGSim 能從它建出的三種模型。高度未依比例。](../assets/concepts/routes-cross-section.zh-TW.svg){#fig-routes-cross-section}
+
+| 模型 | 金屬 | 晶片上方的真空 | 焊墊的 Surface EPR 面 |
+|---|---|---|---|
+| Route B | z = 0 到 0.1 µm 的導體塊；表面是理想導體，內部沒有網格 | z = 0 到 1000.1 µm，包住金屬並延伸到上方 | 頂面與側壁是 MA，下方是 MS |
+| Route A，`thin_film` | z = 0 的薄片 | z = 0 到 1000.0 µm：移除膜的 0.1 µm，膜上方的一切往下移 | 一片薄片：上側（真空）是 MA，下側（矽）是 MS；沒有側壁 |
+| Route A，`substrate_face` | z = 0 的薄片 | z = 0 到 1000.1 µm：所有高度不變，膜原來的位置變成真空 | 同 `thin_film` |
+
+MA、MS、SA 是評估 Surface EPR 的介面，說明見[Surface EPR](surface-epr.qmd#interfaces)。它們依金屬旁邊的材料命名，所以表中的「頂面」、「上側」只適用於這塊單一晶粒的焊墊；覆晶的上方晶粒上，金屬掛在基板下方，MS 在金屬上方，MA 在下方。兩種 route 切出的 Surface EPR 條帶相同：這塊焊墊在邊距 0.5 與 1 µm 時，三個條帶分別是 399、397 與 39,204 µm²。
+
+兩種 route 的金屬都是理想導體：都不模擬鋁的電阻或損耗。
+
+## Route A 的近似設定 {#route-a-profiles}
+
+薄片沒有厚度，所以 Route A 必須決定膜原本的厚度怎麼處理。這個決定就是**近似設定**（approximation profile）。`set_route("A")` 使用 `thin_film`；另外兩種以 `set_route("A", approximation_profile=profile)` 傳入。
+
+| 近似設定 | 做什麼 | 單一晶粒（Si 上的 Al 0.1 µm） | 覆晶（兩個晶粒，相對的兩面各有 0.1 µm Al，兩片矽表面相距 8.2 µm） |
+|---|---|---|---|
+| `thin_film` | 移除層堆疊中每一層膜的厚度；膜上方的一切往下移，移動量等於膜厚 | 薄片在 z = 0；真空到 1000.0 µm | 薄片在 z = 0 與 8.0 µm：兩個金屬面仍相距 8.0 µm，兩個晶粒靠近 0.2 µm |
+| `substrate_face` | 把每層指定的膜放成它所指定基板面上的薄片，所有高度不變 | 薄片在 z = 0；真空到 1000.1 µm | 薄片在 z = 0 與 8.2 µm：晶粒位置不變，兩片薄片相距 8.2 µm |
+| `metal_gap_equivalent` | 只用於兩個相對晶粒上恰好兩層指定的膜：移除它們的厚度，讓兩片薄片的距離等於原本兩個金屬面的距離 | 無法使用：需要兩層相對的膜 | 薄片在 z = 0 與 8.0 µm |
+
+覆晶的數字來自 PDK 的雙晶粒層堆疊。版圖只用到這兩層膜時，`thin_film` 與 `metal_gap_equivalent` 得到相同高度；`metal_gap_equivalent` 只移除它指定的兩層膜，`thin_film` 則移除版圖用到的每一層膜。
+
+`substrate_face` 與 `metal_gap_equivalent` 要指定膜，以及膜所在的面。單一晶粒層堆疊的寫法如下：
+
+```python
+from scgsim.geometry import ApproximationProfile
+
+profile = ApproximationProfile(
+    "substrate_face",
+    "v1",
+    {
+        "film_bindings": {
+            "orcapen_sc_pdk:D0_TOP_M1": {
+                "supporting_entity_id": "D0_SUBSTRATE",
+                "supporting_side": "upper",
+            }
+        }
+    },
+)
+sim.set_route("A", approximation_profile=profile)
+```
+
+`"orcapen_sc_pdk:D0_TOP_M1"` 是這層膜在 PDK 層堆疊中的物理層 ID，`"upper"` 是它所在基板的頂面。`metal_gap_equivalent` 要兩組這樣的綁定，每個晶粒一組。鍵與拒絕條件見[物理表示參考](../reference/specs/physical-representation.qmd#palace-caller-profile)。
+
+## AEDT：`modeling="solid"` 與 `"thin_film"` {#aedt-modeling}
+
+HFSS 與 Q3D 匯入的，是 Palace 產生網格的同一個 SGB 模型，格式是 STEP 檔。每個 AEDT 要求都要寫明 modeling，沒有預設值。
+
+- `modeling="solid"` 把每個導體保留成膜厚的實體，設為理想導體；HFSS 不在其內部求解。指南把這個模型稱為 Route C，這是 SGB 對「保留導體體積」的模型的稱呼。理想導體實體，與 Route B「挖空、表面為理想導體」的體積，是同一個物理模型。
+- `modeling="thin_film"` 就是 Route A 加上 `thin_film` 近似設定，和 Palace `set_route("A")` 的薄片相同。HFSS 在薄片上加 Perfect E 邊界；Q3D 把每片薄片設成膜厚的薄導體。
+
+| 你要的模型 | Palace | HFSS 與 Q3D |
+|---|---|---|
+| 保留厚度的金屬 | Route B：不呼叫，或 `set_route("B")` | `modeling="solid"` |
+| 移除厚度的金屬薄片 | `set_route("A")` | `modeling="thin_film"` |
+| 基板面上的薄片，高度不變 | `set_route("A", approximation_profile=...)`，用 `substrate_face` | 無 |
+| 以金屬間距相對的兩片薄片 | `set_route("A", approximation_profile=...)`，用 `metal_gap_equivalent` | 無 |
+
+## 該用哪一種 {#which-route}
+
+- **從 Route B 開始。** 它是 Palace 的預設值，保留 PDK 宣告的厚度。
+- **你要的模型是零厚度薄片時，用 Route A**。依哪個距離必須和層堆疊一致來選近似設定：`thin_film` 讓薄片留在膜與基板的交界，並移動其上方的一切；`substrate_face` 保留所有高度；`metal_gap_equivalent` 保留兩個相對金屬面的間距。
+- **比較 Palace 與 HFSS 或 Q3D 時，route 要成對：** Palace Route B 對 `modeling="solid"`，Palace `set_route("A")` 對 `modeling="thin_film"`。每一對都從計畫建出相同的面與條帶。
+- **Route 是模型的一部分，不是網格設定。** 換 route 修不好建不出來的網格；兩種 route 的結果是兩個模型，不是同一個模型的細化。請用你要執行的 route 檢查版圖：`simulation_drc` 接受和 `set_route` 相同的 `route` 與 `approximation_profile`（[檢查版圖](../guides/check-a-layout.qmd)）。
+
+有一個版圖比較過兩種 route：在 SimplePad 加上 10 nH 接面的一次 Palace 執行紀錄中（[執行紀錄](https://github.com/NCUPHY-LTLab/scgsim/issues/84#issuecomment-6789403273)；最多兩次細化，不是收斂結果），模態 1 在 Route B 是 5.135702 GHz，在 Route A（`thin_film`）是 5.135740 GHz；焊墊下方的金屬－基板參與率分別是 7.741675 × 10⁻⁵ 與 7.883729 × 10⁻⁵。這只是一塊焊墊在粗網格上的結果，不是適用於其他版圖的規則。

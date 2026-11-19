@@ -18,6 +18,7 @@ project:
   - docs/contribute/research/*.qmd
   - docs/contribute/research/*/*.qmd
   - docs/contribute/history/*.qmd
+  - docs/contribute/internals/*.qmd
   - '!zh-TW/**'
   post-render: python3 scripts/build_bilingual_docs.py
 execute:
@@ -128,6 +129,7 @@ website:
     contents:
     - docs/concepts/problems.qmd
     - docs/concepts/geometry.qmd
+    - docs/concepts/routes.qmd
     - docs/concepts/surface-epr.qmd
     - docs/concepts/model-and-numerics.qmd
   - id: reference
@@ -162,7 +164,9 @@ website:
     - docs/contribute/code-map.qmd
     - docs/contribute/architecture.qmd
     - docs/contribute/ownership.qmd
-    # The "Internals" section (docs/contribute/internals/) goes here, after the reading order's first three pages.
+    - section: Internals
+      contents:
+      - docs/contribute/internals/geometry.qmd
     - docs/contribute/provenance.qmd
     - docs/contribute/notebook-contract.qmd
     - docs/contribute/documentation-map.qmd
