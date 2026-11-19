@@ -307,7 +307,7 @@ authored port name and does not choose the physical terminal owners.
 | Backend lowering | Palace and AEDT consume the same prepared source snapshot through their existing preparation paths. Native aggregates retain their source members and coverage. This does not promise per-patch native results, per-Entity raw measurements, or per-Entity field expressions. |
 | Vacuum geometry | Authored vacuum entities keep their names, materials, hosts, and per-domain analysis identity. At the source-input level, the plan adds one outer background domain as the semantic complement of modeled bodies and custom regions under the established SGB priority/cut rules. The backend owns how it represents that partition natively. The public `D0_TO_D1_GAP` remains a distinct vacuum entity. |
 | AEDT object names | New native names are readable and deterministic, sanitized and disambiguated as needed, and remain bound to the original qualified Entity ID. Historical prepared names keep their version-specific reader policy. |
-| Boundary defaults | Palace leaves an unspecified external vacuum boundary at its natural PMC condition. AEDT uses HFSS's default Perfect E. The shared input does not convert one policy into the other. |
+| Boundary defaults | Palace leaves an unspecified external vacuum boundary at its natural PMC condition. HFSS assigns the same condition, Perfect H, on the faces of its Region. |
 
 Source preparation establishes
 the geometry input contract; it does not imply native geometry validation or

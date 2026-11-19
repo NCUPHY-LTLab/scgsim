@@ -28,7 +28,7 @@ display(sim.input_summary())
 
 這些是範例明確指定的控制項：target 單位是 Hz，配方的尺寸單位是微米。請依 SCQ 研究所需的模態與數量選擇設定，並在研究紀錄中保留所選值與後續變更。`save` 控制原生儲存場輸出。全新的 `EigenmodeSim` 會寫入 `Nonconformal=true`。此單網格範例明確設定 `amr_max_passes=0`，以停用自適應細化。呼叫 `write_config()` 前，請透過 `set_numerical(...)` 提供 `amr_max_passes`；若通過次數上限大於零，也必須由呼叫端選定 `amr_tolerance` 與 `amr_update_fraction`；有收斂宣告（見下節）時只需要 `amr_update_fraction`。後續呼叫若省略這些控制項，會沿用目前值。請在其所控制的操作旁記錄選用的數值與輸出控制項，不要將它們藏在 Notebook 輔助程式中。
 
-請依研究需求檢視摘要中的模態／搜尋／資源設定。摘要會顯示正規化來源與設定，但不會產生網格或求解。真空包覆來自 plan；未指定的外部 Eigenmode 表面沿用 Palace 的自然 PMC 條件。這與 AEDT EPR 模型預設的 Perfect E 外部邊界不同。
+請依研究需求檢視摘要中的模態／搜尋／資源設定。摘要會顯示正規化來源與設定，但不會產生網格或求解。真空包覆來自 plan；未指定的外部 Eigenmode 表面沿用 Palace 的自然 PMC 條件；HFSS 在其 Region 的各面指派相同的條件，即 Perfect H。
 
 ## 宣告細化何時已收斂 {#declare-when-refinement-has-converged}
 

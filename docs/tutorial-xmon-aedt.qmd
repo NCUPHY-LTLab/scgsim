@@ -25,9 +25,8 @@ its film's thickness.
 ## Configure surface and junction EPR
 
 The shared snapshot keeps authored `D0_TO_D1_GAP` separate from the generated
-outer vacuum domain. The AEDT contract records HFSS's default Perfect E
-policy for background-exposed surfaces; Palace uses its natural PMC boundary.
-These backend choices are intentional and are not auto-converted. The
+outer vacuum domain. Palace leaves its exterior at the natural PMC boundary,
+and HFSS assigns the same condition, Perfect H, on the faces of its Region. The
 [AEDT runtime reference](specs/aedt-runtime.qmd#public-epr-candidate-surface)
 describes the native Region representation. This static page claims no native
 HFSS geometry check. When comparing results, note the outer boundary, Region

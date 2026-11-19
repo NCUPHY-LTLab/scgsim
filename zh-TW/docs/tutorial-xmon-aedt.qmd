@@ -13,7 +13,7 @@ execute:
 
 ## 設定表面與接面 EPR {#configure-surface-and-junction-epr}
 
-共用 snapshot 會將已定義的 `D0_TO_D1_GAP` 與產生的外部真空區域分開。AEDT 契約記錄 HFSS 對背景暴露表面採用的預設 Perfect E 政策；Palace 則使用自然 PMC 邊界。這些後端選擇是刻意設定，不會自動轉換。[AEDT 執行環境參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)說明原生 Region 表示方式。此靜態頁面不宣稱已檢查原生 HFSS 幾何。比較結果時，請記下外部邊界、Region 尺寸與後端設定。
+共用 snapshot 會將已定義的 `D0_TO_D1_GAP` 與產生的外部真空區域分開。Palace 讓外部維持自然 PMC 邊界，HFSS 則在其 Region 的各面指派相同的條件，即 Perfect H。[AEDT 執行環境參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)說明原生 Region 表示方式。此靜態頁面不宣稱已檢查原生 HFSS 幾何。比較結果時，請記下外部邊界、Region 尺寸與後端設定。
 
 ### 宣告 Surface EPR {#declare-surface-epr}
 

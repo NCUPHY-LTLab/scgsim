@@ -53,8 +53,8 @@ action they govern rather than hiding them in notebook helpers.
 Read the summary's configured mode/search/resource choices against your study.
 It displays normalized source and settings without meshing or solving. The
 vacuum envelope came from the plan, and the unspecified external Eigenmode
-surface retains Palace's natural PMC condition. That differs from the default
-Perfect E exterior in the AEDT EPR model.
+surface retains Palace's natural PMC condition; HFSS assigns the same condition,
+Perfect H, on the faces of its Region.
 
 ## Declare when refinement has converged
 
