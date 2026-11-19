@@ -36,25 +36,27 @@ display(summary)
 
 也就是說，焊墊與接地金屬都是 0.1 µm 厚的鋁，位在 500 µm 厚的矽基板上，分屬 `pad` 與 `ground` 兩個 Net；真空區域延伸到基板下方 1000 µm、金屬上方 1000 µm，正如外加量 `(0.0, 0.0, 1000.0)` 所要求的。基板與真空不屬於任何 Net，表中顯示為 `unknown`：沒有設定的值會顯示為 unknown，絕不會顯示成零。
 
-接下來幾張表列出 Net 成員（`ground`：`chip/GROUND`；`pad`：`chip/PAD`）、每種材料的性質（矽的介電常數 11.9、鋁的導電率），以及埠片。方形焊墊有一片埠片 `chip/o_junction_lumped`，位在 `chip/PAD` 與 `chip/GROUND` 上，圖層為 `D0_TOP_M1`。接面、Surface-EPR 薄膜與求解器設定，要等計畫或模擬設定之後才會有內容。
+接下來幾張表列出 Net 成員（`ground`：`chip/GROUND`；`pad`：`chip/PAD`）、每種材料的性質（矽的介電常數 11.9、鋁的導電率），以及埠片。方形焊墊有一片埠片 `chip/o_junction_lumped`，位在 `chip/PAD` 與 `chip/GROUND` 上，圖層為 `D0_TOP_M1`。
+
+這份摘要只顯示來源。不論計畫用 `set_rectangular_junctions` 或 `set_surface_epr` 設定了什麼，它的接面表與 Surface-EPR 表都會是空的，也沒有求解器設定：這裡的表是空的，不代表那些設定不存在。要檢查這些設定，請用下面的 `sim.input_summary()`。
 
 `summary.data` 以字典形式提供同樣的內容，方便腳本使用。它是一份複本：修改它不會改變快照。
 
 ## 加上模擬的設定 {#with-settings}
 
-設定好模擬之後，`sim.input_summary()` 會顯示同樣的表，並加上該模擬自己的設定。Palace 模擬顯示的是 `mesh()` 實際會用的輸入：它的 route 與近似設定、計畫的 Surface-EPR 請求，以及只有這個模擬用到的埠；`ElectrostaticSim` 還會列出端子、接地與相關政策。`write_config()` 之後，執行的索引對照會說明哪個導體成了哪個端子，見 [Palace：端子電容](capacitance-palace.qmd)。
+設定好模擬之後，`sim.input_summary()` 會顯示同樣的表，並加上該模擬自己的設定。Palace 模擬顯示的是 `mesh()` 實際會用的輸入：它的 route 與近似設定、計畫的 Surface-EPR 請求，以及只有這個模擬用到的埠。`EigenmodeSim` 會列出每個埠及其電感，`ElectrostaticSim` 則列出端子、接地與相關政策；AEDT 的 `EigenmodeSim` 會列出計畫的 Surface-EPR 請求與它的接面。`write_config()` 之後，執行的索引對照會說明哪個導體成了哪個端子，見 [Palace：端子電容](capacitance-palace.qmd)。
 
 ## 把來源和結果放在一起 {#retain-a-portable-paired-source}
 
-快照帶著建立它的 GDS 檔與層堆疊。兩者都存下來，之後的工作階段不需要 PDK 或 GDSFactory，也能讀到同一份來源：
+快照帶著建立它的 GDS 檔與層堆疊。兩者都存下來，之後的工作階段不需要 PDK 或 GDSFactory，也能讀到同一份來源。每個要保留的研究都放進自己的新資料夾：`exist_ok=False` 會拒絕已經存在的資料夾，所以之後的研究絕不會取代較早研究的檔案。
 
 ```python
 import json
 from pathlib import Path
 from scgsim.geometry import build_gds_stack_geometry_input
 
-source_dir = Path(".artifacts/study-source")
-source_dir.mkdir(parents=True, exist_ok=True)
+source_dir = Path(".artifacts/sources/square-pad-20um")  # a new folder per study
+source_dir.mkdir(parents=True, exist_ok=False)
 gds_path = source_dir / "model.gds"
 stack_path = source_dir / "model.stack.json"
 gds_path.write_bytes(snapshot.gds_bytes)

@@ -38,6 +38,7 @@ SCGSim 3.0 的每個預發行版都改了一些呼叫，而且沒有相容層：
 ```python
 # Before
 sim = EigenmodeSim()
+sim.set_route("A")
 sim.set_plan(plan.prepare())
 sim.set_vacuum_region((0.0, 0.0, 1000.0))
 sim.set_surface_epr(specs)
@@ -52,7 +53,7 @@ sim.set_route("A")
 sim.set_plan(plan.prepare())
 ```
 
-規格在設定時，以及在 `prepare()` 中，都會依計畫的材料用同樣的規則檢查。原本指向模擬上 `set_surface_epr` 的拒絕訊息，現在指向 `GeometryPlan.set_surface_epr`。HFSS Driven Terminal 與 Q3D 仍然不讀 Surface EPR，也不切條帶。
+這一步不改變 route：檢查會自己建立一個暫時的模擬，所以它的 `route=` 必須與模擬用 `set_route` 設定的相同（沒有呼叫 `set_route` 的模擬是 Route B，沒有給 `route=` 的檢查也是）。規格在設定時，以及在 `prepare()` 中，都會依計畫的材料用同樣的規則檢查。原本指向模擬上 `set_surface_epr` 的拒絕訊息，現在指向 `GeometryPlan.set_surface_epr`。HFSS Driven Terminal 與 Q3D 仍然不讀 Surface EPR，也不切條帶。
 
 ## 從 3.0.0rc1 或 rc2 升級 {#from-rc1-or-rc2}
 

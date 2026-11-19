@@ -104,7 +104,8 @@ Below the facade the modules carry responsibility names. The grid engine is
 
 ## AEDT names and module owners {#aedt-api-transaction-and-state-ownership}
 
-Every public AEDT name is exported by `scgsim.aedt`; the
+Every public AEDT name below is exported by `scgsim.aedt`, except the CLI's
+`main`, which stays in `scgsim.aedt.run`; the
 [API index](../../reference/api-index.qmd) lists them. The baseline modules
 map to their owners as follows; listing a module here does not make it public.
 
@@ -187,17 +188,19 @@ export.
 
 ## Palace submodules {#palace-direct-submodule-exports}
 
-The baseline's Palace submodules declared their own `__all__`. Their names
-now come from `scgsim.palace`:
+The baseline's Palace submodules declared their own `__all__`. A name that
+`scgsim.palace` exports is imported from it; the others have no supported
+import, and the table says what replaces them:
 
-| Baseline import | Current owner |
-|---|---|
-| `scgsim.palace.electrostatic` (`ElectrostaticSim`) | `scgsim.palace.simulation.electrostatic` |
-| `scgsim.palace.eigenmode` (`EigenmodeSim`) | `scgsim.palace.simulation.eigenmode` |
-| `scgsim.palace.handoff` (`HandoffPlan`, `HandoffProfile`, `prepare_handoff`) | `scgsim.palace.run.handoff` |
-| `scgsim.palace.resolve` (`PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`) | The records in `scgsim.palace.results.resolved_records`; `ResolvedPalaceResult` and `resolve_palace_result` in `scgsim.palace.reports.resolved_result` |
-| `scgsim.palace.report` (`AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`) | `inspect_run_trustworthiness` in `scgsim.palace.reports.reports`, `PalaceTrustReport` in `scgsim.palace.reports.trust`, `PhysicsQuantitiesReport` in `scgsim.palace.reports.views`, the records in `scgsim.palace.results.inspection_records` |
-| `scgsim.palace._epr_results` (private) | `scgsim.palace.results`; the old path is no compatibility surface |
+| Baseline import | Import now | Defining module |
+|---|---|---|
+| `scgsim.palace.electrostatic` (`ElectrostaticSim`) | `scgsim.palace` | `scgsim.palace.simulation.electrostatic` |
+| `scgsim.palace.eigenmode` (`EigenmodeSim`) | `scgsim.palace` | `scgsim.palace.simulation.eigenmode` |
+| `scgsim.palace.handoff` (`HandoffPlan`, `HandoffProfile`, `prepare_handoff`) | None of the three is exported. A handoff is prepared with the simulation's method `sim.prepare_handoff(profile=..., executable=..., resources=...)`, which returns the `HandoffPlan`; `HandoffProfile` is the literal type of its `profile` values (`"direct-local"`, `"slurm-single-node"`, `"slurm-multi-node"`). | `scgsim.palace.run.handoff` (internal) |
+| `scgsim.palace.resolve` (`PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`) | `scgsim.palace`, all seven | The records in `scgsim.palace.results.resolved_records`; `ResolvedPalaceResult` and `resolve_palace_result` in `scgsim.palace.reports.resolved_result` |
+| `scgsim.palace.report` (`PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`) | `scgsim.palace` | `inspect_run_trustworthiness` in `scgsim.palace.reports.reports`, `PalaceTrustReport` in `scgsim.palace.reports.trust`, `PhysicsQuantitiesReport` in `scgsim.palace.reports.views`, the records in `scgsim.palace.results.inspection_records` |
+| `scgsim.palace.report` (`AmrPassSnapshot`) | Not exported: an internal record of the trust report's passes | `scgsim.palace.results.inspection_records` (internal) |
+| `scgsim.palace._epr_results` (private) | Its supported names, re-exported by `scgsim.palace`; the old path is no compatibility surface | `scgsim.palace.results` |
 
 ## Visualization names {#visualization-symbols}
 

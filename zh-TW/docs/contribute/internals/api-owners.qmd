@@ -42,7 +42,7 @@ scgsim-id: "docs/contribute/internals/api-owners"
 
 ## AEDT 名稱與模組擁有者 {#aedt-api-transaction-and-state-ownership}
 
-每個公開的 AEDT 名稱都由 `scgsim.aedt` 匯出，列在 [API 索引](../../reference/api-index.qmd)。基準模組與目前擁有者的對應如下；列在這裡不代表該模組是公開的。
+下表每個公開的 AEDT 名稱都由 `scgsim.aedt` 匯出，只有 CLI 的 `main` 留在 `scgsim.aedt.run`；它們列在 [API 索引](../../reference/api-index.qmd)。基準模組與目前擁有者的對應如下；列在這裡不代表該模組是公開的。
 
 | 基準 | 目前的擁有者 | 名稱 |
 |---|---|---|
@@ -99,16 +99,17 @@ scgsim-id: "docs/contribute/internals/api-owners"
 
 ## Palace 子模組 {#palace-direct-submodule-exports}
 
-基準的 Palace 子模組各自宣告 `__all__`。這些名稱現在都從 `scgsim.palace` 匯入：
+基準的 Palace 子模組各自宣告 `__all__`。`scgsim.palace` 有匯出的名稱就從它匯入；其餘名稱沒有受支援的匯入，下表說明取代它們的是什麼：
 
-| 基準匯入 | 目前的擁有者 |
-|---|---|
-| `scgsim.palace.electrostatic`（`ElectrostaticSim`） | `scgsim.palace.simulation.electrostatic` |
-| `scgsim.palace.eigenmode`（`EigenmodeSim`） | `scgsim.palace.simulation.eigenmode` |
-| `scgsim.palace.handoff`（`HandoffPlan`、`HandoffProfile`、`prepare_handoff`） | `scgsim.palace.run.handoff` |
-| `scgsim.palace.resolve`（`PalaceCost`、`PalacePerformance`、`PalaceProvenance`、`PalaceReturnedReceipt`、`ParsedTable`、`ResolvedPalaceResult`、`resolve_palace_result`） | 記錄在 `scgsim.palace.results.resolved_records`；`ResolvedPalaceResult` 與 `resolve_palace_result` 在 `scgsim.palace.reports.resolved_result` |
-| `scgsim.palace.report`（`AmrPassSnapshot`、`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PalaceTrustReport`、`PassCostRecord`、`PhysicsQuantitiesReport`、`inspect_run_trustworthiness`） | `inspect_run_trustworthiness` 在 `scgsim.palace.reports.reports`，`PalaceTrustReport` 在 `scgsim.palace.reports.trust`，`PhysicsQuantitiesReport` 在 `scgsim.palace.reports.views`，各記錄在 `scgsim.palace.results.inspection_records` |
-| `scgsim.palace._epr_results`（私有） | `scgsim.palace.results`；舊路徑不是相容介面 |
+| 基準匯入 | 現在的匯入 | 定義模組 |
+|---|---|---|
+| `scgsim.palace.electrostatic`（`ElectrostaticSim`） | `scgsim.palace` | `scgsim.palace.simulation.electrostatic` |
+| `scgsim.palace.eigenmode`（`EigenmodeSim`） | `scgsim.palace` | `scgsim.palace.simulation.eigenmode` |
+| `scgsim.palace.handoff`（`HandoffPlan`、`HandoffProfile`、`prepare_handoff`） | 三者都沒有匯出。交接套件由模擬的方法 `sim.prepare_handoff(profile=..., executable=..., resources=...)` 準備，它回傳 `HandoffPlan`；`HandoffProfile` 是其 `profile` 值（`"direct-local"`、`"slurm-single-node"`、`"slurm-multi-node"`）的常值型別。 | `scgsim.palace.run.handoff`（內部） |
+| `scgsim.palace.resolve`（`PalaceCost`、`PalacePerformance`、`PalaceProvenance`、`PalaceReturnedReceipt`、`ParsedTable`、`ResolvedPalaceResult`、`resolve_palace_result`） | `scgsim.palace`，七個都是 | 記錄在 `scgsim.palace.results.resolved_records`；`ResolvedPalaceResult` 與 `resolve_palace_result` 在 `scgsim.palace.reports.resolved_result` |
+| `scgsim.palace.report`（`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PalaceTrustReport`、`PassCostRecord`、`PhysicsQuantitiesReport`、`inspect_run_trustworthiness`） | `scgsim.palace` | `inspect_run_trustworthiness` 在 `scgsim.palace.reports.reports`，`PalaceTrustReport` 在 `scgsim.palace.reports.trust`，`PhysicsQuantitiesReport` 在 `scgsim.palace.reports.views`，各記錄在 `scgsim.palace.results.inspection_records` |
+| `scgsim.palace.report`（`AmrPassSnapshot`） | 沒有匯出：可信度報告各回合的內部記錄 | `scgsim.palace.results.inspection_records`（內部） |
+| `scgsim.palace._epr_results`（私有） | 其受支援的名稱由 `scgsim.palace` 重新匯出；舊路徑不是相容介面 | `scgsim.palace.results` |
 
 ## 視覺化名稱 {#visualization-symbols}
 

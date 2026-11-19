@@ -59,6 +59,7 @@ The code becomes:
 ```python
 # Before
 sim = EigenmodeSim()
+sim.set_route("A")
 sim.set_plan(plan.prepare())
 sim.set_vacuum_region((0.0, 0.0, 1000.0))
 sim.set_surface_epr(specs)
@@ -73,7 +74,10 @@ sim.set_route("A")
 sim.set_plan(plan.prepare())
 ```
 
-The specs are checked by the same rules, against the plan's materials, when
+The route is unchanged by this step: the check builds its own temporary
+simulation, so its `route=` must be the one the simulation sets with
+`set_route` (a simulation without `set_route` is Route B, and so is a check
+without `route=`). The specs are checked by the same rules, against the plan's materials, when
 you set them and again in `prepare()`. A refusal that named `set_surface_epr`
 on the simulation now names `GeometryPlan.set_surface_epr`. HFSS Driven
 Terminal and Q3D still read no Surface EPR and cut no bands.

@@ -49,8 +49,13 @@ The next tables list the Net membership (`ground`: `chip/GROUND`; `pad`:
 `chip/PAD`), the properties of each material (silicon with permittivity 11.9,
 aluminium with its conductivity) and the port sheets. The square pad has one,
 `chip/o_junction_lumped`, lying on `chip/PAD` and `chip/GROUND` on layer
-`D0_TOP_M1`. Junctions, Surface-EPR films and solver settings stay empty until
-the plan or a simulation sets them.
+`D0_TOP_M1`.
+
+This summary shows the source only. Its junction and Surface-EPR tables stay
+empty whatever the plan sets with `set_rectangular_junctions` or
+`set_surface_epr`, and it has no solver settings: an empty table here does not
+mean the setting is missing. To check those settings, use `sim.input_summary()`
+(below).
 
 `summary.data` holds the same content as a dictionary for a script. It is a
 copy: editing it changes nothing in the snapshot.
@@ -60,23 +65,28 @@ copy: editing it changes nothing in the snapshot.
 Once a simulation is set up, `sim.input_summary()` shows the same tables with
 its own settings added. A Palace simulation shows the input as `mesh()` will
 build it: with its route and approximation profile, the plan's Surface-EPR
-request, and only the ports the simulation uses; `ElectrostaticSim` adds its
-terminals, grounds and policies. After `write_config()`, the run's index map
-says which conductor became which terminal; see
+request, and only the ports the simulation uses. `EigenmodeSim` lists each port
+with its inductance, and `ElectrostaticSim` its terminals, grounds and
+policies; an AEDT `EigenmodeSim` lists the plan's Surface-EPR request and its
+junctions. After `write_config()`, the run's index map says which conductor
+became which terminal; see
 [Palace: terminal capacitance](capacitance-palace.qmd).
 
 ## Keep the source with your results {#retain-a-portable-paired-source}
 
 A snapshot carries the GDS file and the layer stack it was built from. Saving
-both lets a later session read the same source without the PDK or GDSFactory:
+both lets a later session read the same source without the PDK or GDSFactory.
+Give each study you keep its own new folder: `exist_ok=False` refuses a folder
+that already exists, so a later study never replaces the files of an earlier
+one.
 
 ```python
 import json
 from pathlib import Path
 from scgsim.geometry import build_gds_stack_geometry_input
 
-source_dir = Path(".artifacts/study-source")
-source_dir.mkdir(parents=True, exist_ok=True)
+source_dir = Path(".artifacts/sources/square-pad-20um")  # a new folder per study
+source_dir.mkdir(parents=True, exist_ok=False)
 gds_path = source_dir / "model.gds"
 stack_path = source_dir / "model.stack.json"
 gds_path.write_bytes(snapshot.gds_bytes)
