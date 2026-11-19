@@ -10,11 +10,11 @@ aliases:
 
 **Question.** On what were these numbers measured, and how are they reproduced?
 
-**Result.** Everything was measured on one workstation with the production SGB core at one commit, on random layouts of seed 2. The measuring scripts write JSON data files; one plotting script turns those files into the figures and tables of this study.
+**Result.** Everything was measured on one workstation, on random layouts of seed 2, with the SGB core at revision `c034f61` of its development branch, before that branch was merged. The branch is no longer in this repository, so these exact numbers cannot be measured again from it. The measuring scripts do run on a checkout of this repository and measure the revision checked out; the plotting script turns the stored data files into the figures and tables of this study.
 
 ## One caveat for all numbers
 
-Each case ran once, on a workstation that was not isolated from other work: around the Gmsh API and validator runs its load average was between 1.6 and 3.5, and it was not recorded for the scaling run. Times measured in more than one run agree to within about 25% (the direct writer at 1,000 features: 0.35 s and 0.44 s; the Gmsh API at 2,000 features: 63.3 s and 64.7 s). The Gmsh API run at 2,000 features was repeated three times and the stored 64.7 s is the last; another job on the machine made the first take 83.6 s. Read the numbers for orders of magnitude and slopes, not for small differences between two cases.
+Each case ran once, on a workstation that was not isolated from other work. Times measured in more than one run agree to within about 25% (the direct writer at 1,000 features: 0.35 s and 0.44 s; the Gmsh API at 2,000 features: 63.3 s and 64.7 s, the stored value). Read the numbers for orders of magnitude and slopes, not for small differences between two cases.
 
 ## Machine
 
@@ -28,7 +28,7 @@ Each case ran once, on a workstation that was not isolated from other work: arou
 
 | Item | Version |
 |---|---|
-| SGB core (`scgsim.geometry.sgb`, production package) | commit `c034f61` of its development branch, before it was merged |
+| SGB core (`scgsim.geometry.sgb`, production package) | revision `c034f61` of its development branch, before it was merged |
 | Python | 3.12.14 |
 | Gmsh (Python API) | 4.15.2 |
 | OCP (`cadquery-ocp-novtk`, used by the OCCT checks) | 7.8.1.1.post1, on OCCT 7.8.1 |
@@ -43,19 +43,19 @@ The scaling run measures 1,000, 5,000 and 20,000 features, each in its own Pytho
 
 ## Data files
 
-The files are stored with the SGB design pages, in `zh-TW/docs/contribute/sgb-design/figures/`.
+The files are stored with the SGB design pages, which share them, in `zh-TW/docs/contribute/sgb-design/figures/`; the scripts live beside those pages too, in `_figures/`.
 
 | File | Holds | Written by |
 |---|---|---|
 | `why-scaling-measured.json` | one case per N: stage times, counts, peak memory, identity digest, the written files, the Gmsh load and `verify_loaded` | `why_scaling.py measure` |
 | `why-scaling-oracle.json` | Gmsh API construction at 500, 1,000 and 2,000 features: times and solid masses | `why_scaling.py oracle` |
-| `why-validator-scaling.json` | time of twelve structural checks at 1,000, 5,000 and 20,000 features; a second timing, not plotted here | `why_scaling.py validators` |
+| `why-validator-scaling.json` | time of the twelve timed groups of the structural checks at 1,000, 5,000 and 20,000 features, and the number of checks the report records (31); a second timing, not plotted here | `why_scaling.py validators` |
 | `emission-timing-data.json` | Gmsh API against the direct writer, stage by stage, and the timing of every check (structural and on the loaded model) | `emission.py --measure` |
 | `emission-example-numbers.json` | counts of the example model and the OCCT check timings on the test models | `emission.py` |
 
 ## Commands
 
-The measuring scripts run from the root of a checkout of this repository, in its locked development environment, which has Gmsh and OCP; they import the test builders from that checkout's `tests/`. They measure the checked-out revision: the numbers on these pages are those of commit `c034f61`, and a run on a later revision gives that revision's numbers.
+The measuring scripts run from the root of a checkout of this repository, in its locked development environment, which has Gmsh and OCP; they import the test builders from that checkout's `tests/`. A run measures the checked-out revision and overwrites the stored data files with its own numbers, which then differ from the numbers on these pages.
 
 ```bash
 uv sync --locked --group dev
@@ -65,10 +65,10 @@ uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/why_s
 uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/emission.py --measure
 ```
 
-The figures and tables of this study need only `matplotlib` and the JSON files. They are written for both languages by one script:
+The figures and tables of this study need only `matplotlib` and the JSON files. They are written for both languages by one script; on the stored data it writes the same tables and numbers, and SVG files that differ only in matplotlib's generated element ids:
 
 ```bash
-python3 docs/contribute/research/geometry-build/_figures/plots.py
+uv run --locked --no-sync python docs/contribute/research/geometry-build/_figures/plots.py
 ```
 
 The script writes the SVG figures and Markdown tables to `figures/` beside each language's pages, and `numbers.json` with the values the text quotes. Edit the data only by rerunning the measuring scripts; the plotting script holds no numbers.

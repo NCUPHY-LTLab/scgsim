@@ -1,77 +1,130 @@
-# 維護 SCGSim {#maintaining-scgsim}
+<a id="maintaining-scgsim"></a>
 
-本參考頁說明文件建置與套件維護方式。次要的[維護者指南](docs/contribute/ownership.qmd)連結至實作與專案參考資料。研究者無須上層工作區，可從[課程](docs/start/choose-a-simulation.qmd)開始。
+# 維護 SCGSim
 
-## 來源與產生輸出 {#sources-and-generated-output}
+這是維護者指南：每個 CI 工作檢查什麼、文件網站如何建置與發布，以及產生的頁面如何更新。貢獻者頁面的閱讀順序，以及開 pull request 之前檢查變更的指令，寫在[為 SCGSim 貢獻](docs/contribute/index.qmd)。<a id="implementation-and-project-references"></a>
 
-`src/scgsim/` 負責可重用產品程式碼。`docs/` 與 README 負責撰寫說明；`_quarto.yml` 負責網站導覽與執行設定。`scripts/` 負責建置及版本工具；`tests/` 負責維護中的套件測試。產生的 HTML、搜尋索引與封裝知識都是衍生輸出。公開元件與可執行 Notebook 來源由 OrPen SC PDK 維護。
+- [來源與產生的輸出](#sources-and-generated-output)
+- [來源分工](#source-ownership)
+- [撰寫文件](#writing-documentation)
+- [原生呈現](#native-presentation)
+- [文件建置](#documentation-builds)
+- [雙語文件編寫](#bilingual-authoring)
+- [產生的 API 參考頁](#generated-api-references)與[產生的程式碼地圖](#generated-code-map)
+- [CI 工作](#ci-jobs)
+- [修復用的 pull request](#fix-pull-requests)
 
-## 來源分工 {#source-ownership}
+<a id="sources-and-generated-output"></a>
 
-Palace 與 AEDT 後端實作、測試及技術文件仍屬不同來源責任，詳見[儲存庫根目錄指南](../AGENTS.md)。原生求解器觀察與結果解讀應維持各自明定的技術界線。貢獻者協調與交付請遵循根目錄指南及共用 `$github-flow`。
+## 來源與產生的輸出
 
-## 原生呈現 {#native-presentation}
+`src/scgsim/` 負責可重用的產品程式碼。`docs/` 與各 README 負責撰寫的說明；`_quarto.yml` 與 `zh-TW/_quarto.yml` 負責網站導覽與執行設定。`scripts/` 負責建置與版本工具；`tests/` 負責維護中的套件測試。產生的 HTML、搜尋索引與封裝的知識套件都是衍生輸出。公開的元件來源與可執行 Notebook 屬於 OrcaPen SC PDK。
 
-網站使用完整的上游 Askr 擴充功能，搭配原生 Quarto 結構。編輯用擴充功能與多版本網站建置器固定使用 Askr v0.14.0，修訂版本為 `ab12c10b61d590c00ce1316f700ed56227027d71`，支援 Quarto >=1.9.38 且 <1.11。本機文件檢查使用 Quarto 1.10.19；Pages 工作流程使用相容範圍內的 1.10.18。
+<a id="source-ownership"></a>
 
-表格、提示框與導覽採用原生元件；程式碼以 `code-overflow: scroll` 保留原始行結構。來源修訂版本與呈現修訂版本分別記錄。
+## 來源分工
 
-## 文件建置 {#documentation-builds}
+Palace 與 AEDT 的後端實作、它們的測試與技術文件是各自獨立的來源責任，見 [AGENTS.md](../AGENTS.md)。原生求解器的觀察與結果解讀，留在各自寫明的技術界線內。協調與交付依照 [AGENTS.md](../AGENTS.md) 與共用的 `$github-flow`；重大架構、跨套件契約或系統層級的提案，也走同一個流程。<a id="larger-proposals-across-projects"></a>
 
-`scripts/pages_versions.json` 是版本目錄。其中的 `retired_development_lines` 列出開發版根目錄已不再發布的發行線：`v<line>-dev/` 會導向目前的開發版網站，讓已安裝的該發行線預發行版所產生的連結仍能抵達頁面。開發版本號移到下一條發行線時，請把舊的發行線加進去。`scripts/build_docs_site.py` 會固定來源修訂版本與中繼資料，在停用程式碼執行的狀態下渲染乾淨快照，並組合完整網站。目前 `main` 與 `develop` 使用各自的內容；保留的歷史版本沿用原始 README／Quarto 內文，並套用有文件記錄的呈現覆蓋層。
+<a id="writing-documentation"></a>
 
-根目錄會選取最新穩定版本。切換版本時，若目前頁面存在就保留該頁，否則前往該版本首頁。`/main/` 與 `/develop/` 是別名。各版本網站會使用一致的行內目錄：發布腳本會為每個版本的每個語言專案寫入版本選單（`askr-versions.json`），渲染前寫入一次、渲染後在頁面旁再寫入一次；其中每個根目錄都相對於該專案的資料夾，這是 Askr 讀取它的方式。儲存庫中提交的 `askr-versions.json` 只供本機預覽使用。套件版本、內容修訂版本、呈現修訂版本、Askr 修訂版本與分支，會在產生的建置記錄中分別列出。
+## 撰寫文件
 
-Documentation Pages 工作流程會在推送至 `develop`／`main` 或手動派送工作流程時建置；拉取請求不會發布。必要渲染若失敗，就不會發布，並保留上一個已部署的網站。來源變更透過 `develop` 至 `main` 的升版流程推進；穩定版套件中繼資料屬於 `main`。版本目錄變更應使用既有的維護版版本工具，以及交付資料包中指派的觀察項目進行檢查。
+SCGSim 的來源、封裝欄位、撰寫規則與術語，依照 [DOCS_STYLE.md](../DOCS_STYLE.md)。共用的 [docs-design Skill](https://github.com/arfiligol/agent-skills/blob/main/docs-design/SKILL.md) 負責讀者原則；[quarto-docs Skill](https://github.com/arfiligol/agent-skills/blob/main/quarto-docs/SKILL.md) 與它的 Askr 採用說明負責網站實作與主題使用。
 
-CI 會先判定事件差異的類型。草稿拉取請求只執行分類，並刻意略過產品工作；將拉取請求標記為 Ready 後，才會啟動適用的檢查。確認為純 Markdown 文字的 `README.md` 或 `docs/**/*.md` 變更，會在本機驗證 Markdown 連結路徑；含有行內程式碼歧義的文件則走產品檢查流程。可執行或不支援的內容、QMD／Notebook 檔案、共用設定、相依套件與來源變更，也會執行產品檢查。若無法取得比較資訊，同樣執行產品檢查。
+<a id="native-presentation"></a>
 
-非草稿產品變更、推送至 `develop` 或 `main`，以及手動派送，會執行快速層。`build-and-import` 在 Python 3.12 與 3.13 檢查套件版本、發行套件建置、可編輯匯入與隔離 wheel 匯入。`fast-tests` 執行公開離線測試套件，但不含 `slow`、`pdk` 與 `private_golden` 測試。`quality` 執行完整品質入口 `scripts/check_quality.py`，涵蓋 Ruff 格式與程式檢查、可讀性、標準及原有嚴格 Pyright 設定，以及六條匯入層契約。兩者都安裝 `occt` 相依群組，所以 Pyright 能解析 OCP，標記為 `occt` 的 OCCT 檢查也會執行。`docs-smoke` 使用固定版本的公開 PDK，以純檔案準備流程執行目前來源範例；它會安裝與 `aedt` extra 相同版本的 OCP，因為 AEDT 的範例會匯出 STEP。`pdk-tests` 以 `README.md` 安裝的公開 OrcaPen SC PDK 修訂版本，依該 PDK 凍結的鎖定檔建立環境並安裝目前的 SCGSim wheel，執行標記為 `pdk` 的測試。測試工作都會加上 `--fail-on-skip`：它們已安裝測試所需的全部相依套件，因此任何略過都會使執行失敗，不會無聲通過。
+## 原生呈現
 
-Nightly 工作流程在 UTC 18:30（台灣時間 02:30）於 `develop` 執行重型層，也可手動派送到任何分支。`full-tests` 執行含 `slow` 測試的完整公開套件，`docs-render` 執行 Pages 渲染但不部署。`roster` 以 `pdk-tests` 固定的 PDK 版本建立定義「Palace 穩定」的版圖（issue 141），切出 Surface-EPR 條帶，並要求每個版圖都通過 `simulation_drc`，且在 x、y 方向不加、z 方向各加 1000 µm 的真空區中於預設時間預算內完成網格化（`scripts/check_roster.py`）；每個版圖的紀錄會上傳為 `roster-records` 成品。任何失敗都會使該次執行失敗。CI 只使用公開輸入並排除私有基準資料，不會呼叫 AEDT 或 Palace 求解器。
+網站使用完整的上游 Askr 擴充功能，不加本機 CSS 或 JS。Askr 的修訂版本與 Pages 建置使用的 Quarto 版本，是 `scripts/build_docs_site.py` 中的常數 `ASKR_COMMIT` 與 `QUARTO_VERSION`；`_extensions/` 中供編寫使用的副本是同一個 Askr 版本，並寫明它支援的 Quarto 範圍。表格、提示框與導覽使用原生 Quarto 結構；來源識別與產生的呈現識別分開保存。
 
-## 產生 API 參考頁 {#generated-api-references}
+<a id="documentation-builds"></a>
 
-修改 `docs/reference/api/` 與 `zh-TW/docs/reference/api/` 的正式 Markdown 使用說明，或所屬 Python 公開宣告，再產生並檢查衍生頁面：
+## 文件建置
+
+`scripts/pages_versions.json` 是版本目錄。其中的 `retired_development_lines` 列出開發版根目錄已不再發布的發行線：`v<line>-dev/` 會導向目前的開發版網站，讓已安裝的該發行線預發行版所產生的連結仍能抵達頁面。開發版本號移到下一條發行線時，請把舊的發行線加進去。`scripts/build_docs_site.py` 會固定來源修訂版本與中繼資料，在停用程式碼執行的狀態下渲染乾淨的快照，並組合完整網站。目前的 `main` 與 `develop` 使用各自的內容；保留的歷史版本沿用原本的 README 與 Quarto 內文，並套用有文件記錄的呈現覆蓋層。
+
+根目錄會選取最新的穩定版本。切換版本時，若目前頁面存在就留在該頁，否則開啟該版本的首頁。`/main/` 與 `/develop/` 是別名。每個版本網站的行內目錄都相同：發布腳本會為每個版本的每個語言專案寫入版本選單（`askr-versions.json`），渲染前寫一次、渲染後在頁面旁再寫一次；其中每個根目錄都相對於該專案的資料夾，這是 Askr 讀取它的方式。儲存庫中提交的 `askr-versions.json` 只供本機預覽使用。套件版本、內容修訂版本、呈現修訂版本、Askr 修訂版本與分支，在產生的建置紀錄中是分開的欄位。
+
+Documentation Pages 工作流程在推送到 `develop` 與 `main`、以及手動派送時建置；pull request 不會發布。必要的渲染失敗時不會發布，上一次部署的網站保持不變。來源變更經由從 `develop` 升版進入 `main`；穩定版套件的中繼資料屬於 `main`。版本或目錄的變更，以 `tests/test_docs_site_build.py` 與 `tests/test_documentation_links.py` 檢查。
+
+<a id="bilingual-authoring"></a>
+
+## 雙語文件編寫
+
+根目錄的 Quarto 專案負責英文網站；`zh-TW/` 負責繁體中文網站，兩者的頁面路徑相同。兩個專案各自有導覽與搜尋索引，Askr 的語言選擇器連結兩邊的首頁。翻譯時，請保持頁面錨點、程式碼、單位與科學意義一致。
+
+在儲存庫根目錄執行 `quarto render --no-execute` 會渲染英文網站。它的渲染後步驟 `scripts/build_bilingual_docs.py` 會把共用的 Askr 擴充功能、`docs/assets/` 與 `docs/images/` 複製到 `zh-TW/`，把中文專案渲染到 `_site/zh-TW/`（`zh-TW/_quarto-pages.yml` 存在時使用 `pages` 設定檔），並寫出各節已移到其他頁面的轉址（`SPLIT_PAGES`）。複製過去的檔案是衍生副本，不是另一份可編輯的主題。不會執行任何 Notebook 儲存格或求解器。根專案的渲染清單排除 `zh-TW/**`。請以靜態伺服器提供合併後的網站，讓每種語言保有自己的導覽與搜尋，再開啟 `/` 與 `/zh-TW/`：
+
+```bash
+python3 -m http.server 4321 --bind 127.0.0.1 --directory _site
+```
+
+<a id="generated-api-references"></a>
+
+## 產生的 API 參考頁
+
+修改 `docs/reference/api/` 與 `zh-TW/docs/reference/api/` 中撰寫的使用說明 Markdown，或所屬的 Python 公開宣告，再更新並檢查衍生的參考頁：
 
 ```bash
 python scripts/generate_knowledge_reference.py
 python scripts/generate_knowledge_reference.py --check
 ```
 
-提交的 QMD 是衍生輸出。一般測試會檢查內容是否更新；套件建置將它們收錄至離線知識套件，過程不匯入 SCGSim 或啟動求解器。
+提交的 QMD 頁面是衍生輸出。快速測試會檢查它們是否為最新；套件建置把它們收進離線知識套件，過程中不匯入 SCGSim，也不啟動求解器。
 
-## 雙語文件編寫 {#bilingual-authoring}
+<a id="generated-pages"></a>
+<a id="generated-code-map"></a>
 
-根目錄 Quarto 專案負責完整英文版。`zh-TW/` 負責完整繁體中文版，並使用相同的頁面路徑。兩個專案各自有導覽與搜尋索引；Askr 的語言選擇器會連結至兩者首頁。更新翻譯時，請保持頁面錨點、程式碼、單位與科學意義一致。
+## 產生的程式碼地圖
 
-在儲存庫根目錄執行 `quarto render --no-execute`，可渲染英文版，並由渲染後輔助工具 `scripts/build_bilingual_docs.py` 暫存共用且未修改的 Askr 擴充功能與科學素材，再渲染中文專案至 `_site/zh-TW/`。共用暫存素材是衍生副本，不是另一份可編輯的主題。若存在 `_quarto-pages.yml`，中文專案會使用 `pages` 設定檔。Notebook 儲存格與原生求解器都不會執行。請以靜態伺服器提供合併後的網站，讓各語言保有自己的導覽與搜尋索引。根專案的渲染清單須排除 `zh-TW/**`。
+[程式碼地圖](docs/contribute/code-map.qmd)的階段表格（`docs/contribute/_code-map-stages.md` 與它的中文副本）由各套件資料夾的 docstring 產生。要修改某一列，請編輯該資料夾 `__init__.py` 的 docstring，在 `scripts/code_map_zh_tw.toml` 翻譯改動的文字，再執行：
 
 ```bash
-python3 -m http.server 4321 --bind 0.0.0.0 --directory _site
+python scripts/generate_code_map.py
+python scripts/generate_code_map.py --check
 ```
 
-檢查：開啟 `/` 與 `/zh-TW/`，分別進入教學；導覽後應維持選擇的語言。
+各列的順序只寫在該腳本的 `AREAS` 一處，翻譯檔的每一筆都記錄它所翻譯的英文。腳本會拒絕 `AREAS` 沒有列出的套件資料夾、缺少 `In:`、`Out:` 或 `Next:` 其中一行的階段、沒有翻譯的資料夾、對應資料夾已不存在的翻譯，以及所記錄的英文已不等於 docstring 的翻譯；最後這種情況會印出需要記錄並重新翻譯的新英文。表格與 docstring 或翻譯不一致時，`tests/test_code_map.py` 會失敗。
 
-## 實作與專案參考資料 {#implementation-and-project-references}
+<a id="engineering-convergence"></a>
+<a id="ci-jobs"></a>
 
-- [架構與資料流程](docs/contribute/architecture.qmd)
-- [執行環境與結果來源沿革](docs/contribute/provenance.qmd)
-- [專案範圍與衍生來源](docs/contribute/goals-and-upstream.qmd)
+## CI 工作
 
-整合時採用的衍生輸入為 gsim 下游版本 `0.2.0+scq.1`、修訂版本 `8f5dc6c05255d003a9c6d8959537bcf8068379d3`，以及歷史 SGB 修訂版本 `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`。這些資料說明來源沿革，不代表執行階段相依性、支援範圍擴張或 API 相容性。目前來源幾何使用樹內的 `scgsim.geometry` API。Palace 以 `scgsim.geometry.sgb` 建立幾何，並用 `scgsim.meshing` 產生網格。SGB 位於支援的入口（`GeometryPlan` 與模擬類別）以下：以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援範圍](docs/reference/supported-scope.qmd#supported-entry)。
+變更經由 pull request 進入 `develop`，必須通過必要檢查，不得略過。每個 CI 工作都是獨立的檢查，失敗時會直接指出是哪一項：`change-scope`、`build-and-import (3.12)`、`build-and-import (3.13)`、`fast-tests`、`quality`、`docs-smoke` 與 `pdk-tests`（`.github/workflows/ci.yml`）。因條件而略過的工作（草稿 pull request，或只改文字的流程）會回報成功。分類失敗時其他工作也會略過，所以 `change-scope` 本身也是必要檢查。失敗或取消的工作都算失敗。
 
-## 工程收斂 {#engineering-convergence}
+`change-scope` 先判定事件比較的類型。草稿 pull request 只執行這項分類；標記為 Ready 後才會啟動其他工作。只改 `README.md` 或 `docs/**/*.md` 中 Markdown 文字的變更，會在本機檢查它的 Markdown 連結路徑，而不執行產品工作。有行內程式碼歧義的文件、可執行或不支援的內容、QMD 與 Notebook 檔案、共用設定、相依套件與來源變更，都走產品工作；無法讀取比較結果時也一樣。
 
-請在各項工作的 GitHub Issue 與 pull request 中，分別追蹤語意狀態與儲存庫交付狀態。
+產品工作在非草稿 pull request、推送到 `develop` 與 `main`，以及手動派送時執行：
 
-必要交付流程是建立拉取請求、通過必要檢查，且不得略過檢查。每個 CI 工作都是獨立的檢查，失敗時會直接顯示是哪一項：`change-scope`、`build-and-import (3.12)`、`build-and-import (3.13)`、`fast-tests`、`quality`、`docs-smoke` 與 `pdk-tests`。因條件而略過的工作（草稿拉取請求或純文件流程）會回報成功。分類失敗時其他工作也會略過，所以 `change-scope` 本身也是必要檢查。失敗或取消的工作都視為失敗。
+| 工作 | 檢查什麼 |
+|---|---|
+| `build-and-import (3.12)`、`(3.13)` | 在 Python 3.12 與 3.13 上檢查套件版本、發行套件建置、可編輯匯入，以及隔離環境中的 wheel 匯入。 |
+| `fast-tests` | 公開的離線測試套件，但不含 `slow`、`pdk` 與 `private_golden` 測試。 |
+| `quality` | `scripts/check_quality.py`：Ruff 格式與程式檢查、可讀性檢查、Pyright（標準模式，加上 `pyproject.toml` 列出的嚴格檔案），以及 `.importlinter` 的匯入層契約。 |
+| `docs-smoke` | 以固定版本的公開 PDK，透過純檔案準備流程執行目前來源中的範例（`scripts/check_docs_examples.py`）；它安裝與 `aedt` extra 相同版本的 OCP，因為 AEDT 的範例會匯出 STEP。 |
+| `pdk-tests` | 以 `README.md` 安裝的公開 OrcaPen SC PDK 版本，依該 PDK 凍結的鎖定檔並搭配目前的 SCGSim wheel，執行標記為 `pdk` 的測試。 |
 
-每個修復拉取請求都應附上回歸案例，或說明未納入案例的理由、採用的替代證據及任何尚存缺口。若變更涉及計算，請使用獨立的公開解析回歸案例確認正規化、參與率與群組識別，並將這些結果與回傳資料相容性分開報告。計算程序不明的歷史彙總不是正確性判準；請保留其歷史紀錄，不要據此推導容許差異。
+`fast-tests` 與 `quality` 安裝 `dev` 群組，其中包含 `occt`，所以 Pyright 能解析 OCP，標記為 `occt` 的檢查也會執行。測試工作都加上 `--fail-on-skip`：它們已安裝測試需要的全部相依套件，所以任何略過都會讓執行失敗，不會無聲通過。
 
-若經授權執行真實資料相容性檢查，只回報允許公開的產物雜湊、識別資訊與收據參照。請說明公開結果是否保留原始記錄（包括未知值），並回報輸入缺漏、內容不符與識別資訊不符的負向案例。公開文字不得包含私有數值、名稱、路徑或內容。若檢查尚未完成，請標記為 `IN PROGRESS`。
+Nightly 工作流程（`.github/workflows/nightly.yml`）在 UTC 18:30（台灣時間 02:30）於 `develop` 執行，也可以手動派送到任何分支：
 
-若 Tier A 變更受影響，請回報指派的私有基準資料狀態。若必要資料或存取權限無法取得，請記錄 `NOT RUN`，並保留相關主張待確認。經擁有者授權的執行方式，會透過公開測試入口點、明確執行旗標與 manifest 執行：
+| 工作 | 檢查什麼 |
+|---|---|
+| `full-tests` | 完整的公開測試套件，包含 `slow` 測試。 |
+| `docs-render` | `scripts/build_docs_site.py` 的 Pages 渲染，但不部署。 |
+| `roster` | `scripts/roster_cases.py` 的每個版圖，以 `pdk-tests` 固定版本的 PDK 建立並切出 Surface-EPR 條帶，必須先通過 `simulation_drc`，再於預設時間預算內完成網格化；真空區域在 x 與 y 方向不加邊、上下各加 1000 µm（`scripts/check_roster.py`）。每個版圖的紀錄上傳為 `roster-records` 成品。 |
+
+CI 只使用公開輸入，從不執行 AEDT 或 Palace。Documentation Pages 的渲染與 CI 分開：它在推送到 `develop` 與 `main` 時執行，不在 pull request 上執行。
+
+<a id="fix-pull-requests"></a>
+
+## 修復用的 pull request
+
+修復用的 pull request 要附上回歸案例，或說明為什麼沒有、改用什麼證據，以及還剩下什麼缺口。若變更涉及計算，請用獨立的公開解析案例確認正規化、參與率與群組識別，並把它們和與回傳資料的相容性分開報告。計算程序不明的歷史彙總不是正確性的判準：請把它保留為歷史，不要從它推導容許差。
+
+`private_golden` 測試讀取保存在儲存庫之外的回傳資料。它們只在帶有明確旗標與 manifest 時執行，公開 CI 會排除它們；manifest 是讀取器的輸入，不代表有權存取或公開它的資料：
 
 ```sh
 python -m pytest tests/test_private_golden.py \
@@ -79,8 +132,4 @@ python -m pytest tests/test_private_golden.py \
   --private-golden-manifest /path/to/authorized-manifest.json
 ```
 
-manifest 是讀取器的輸入，不代表有權存取或發布其資料。缺少必要 manifest 輸入屬於使用方式錯誤；略過的測試狀態是 `NOT RUN`，不是基準結果。公開 CI 會排除 `private_golden` 標記。基準資料必須保留在公開儲存庫之外。Tier B 仍受支援，不會因本次收斂工作而重新分類。目前範圍與待處理項目請參閱[拉取請求範本](../.github/PULL_REQUEST_TEMPLATE.md)與相關的 Issue。
-
-## 跨專案的大型提案 {#larger-proposals-across-projects}
-
-重大架構、跨套件契約或系統層級提案，請遵循儲存庫共用的貢獻流程。並維持 [AGENTS.md](../AGENTS.md) 所列的來源與求解器所有權界線。
+這類執行的報告只列出允許公開的產物雜湊、識別資訊與收據參照，從不包含私有的數值、名稱、路徑或內容。變更的範圍與待處理項目，請見 [pull request 範本](../.github/PULL_REQUEST_TEMPLATE.md)與相關的 Issue。

@@ -161,24 +161,7 @@ website:
     - docs/contribute/code-map.qmd
     - docs/contribute/architecture.qmd
     - docs/contribute/ownership.qmd
-    - docs/contribute/documentation-map.qmd
-    - docs/contribute/goals-and-upstream.qmd
-    - docs/contribute/provenance.qmd
-    - docs/contribute/notebook-contract.qmd
-    - section: 研究
-      contents:
-      - docs/contribute/research/index.qmd
-      - section: 幾何建構效能
-        contents:
-        - docs/contribute/research/geometry-build/index.qmd
-        - docs/contribute/research/geometry-build/scaling.qmd
-        - docs/contribute/research/geometry-build/emission-and-load.qmd
-        - docs/contribute/research/geometry-build/validation-cost.qmd
-        - docs/contribute/research/geometry-build/reproduction.qmd
-    - section: 歷史
-      contents:
-      - docs/contribute/history/aedt-capacitance-pre-v3.qmd
-      - docs/contribute/history/curved-source-installation.qmd
+    # The "Internals" section (docs/contribute/internals/) goes here, after the reading order's first three pages.
     - section: SGB 設計
       contents:
       - docs/contribute/sgb-design/index.qmd
@@ -196,9 +179,26 @@ website:
       - docs/contribute/sgb-design/emission.qmd
       - docs/contribute/sgb-design/brep-format.qmd
       - docs/contribute/sgb-design/consumer-contract.qmd
-      - docs/contribute/sgb-design/consumer-mapping.qmd
       - docs/contribute/sgb-design/pipeline-reference.qmd
       - docs/contribute/sgb-design/decisions.qmd
+    - docs/contribute/provenance.qmd
+    - docs/contribute/notebook-contract.qmd
+    - docs/contribute/documentation-map.qmd
+    - docs/contribute/goals-and-upstream.qmd
+    - section: 研究
+      contents:
+      - docs/contribute/research/index.qmd
+      - section: 幾何建構效能
+        contents:
+        - docs/contribute/research/geometry-build/index.qmd
+        - docs/contribute/research/geometry-build/scaling.qmd
+        - docs/contribute/research/geometry-build/emission-and-load.qmd
+        - docs/contribute/research/geometry-build/validation-cost.qmd
+        - docs/contribute/research/geometry-build/reproduction.qmd
+    - section: 歷史
+      contents:
+      - docs/contribute/history/aedt-capacitance-pre-v3.qmd
+      - docs/contribute/history/curved-source-installation.qmd
 format:
   askr-html:
     html-math-method: mathjax

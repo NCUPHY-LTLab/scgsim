@@ -162,10 +162,11 @@ website:
     - docs/contribute/code-map.qmd
     - docs/contribute/architecture.qmd
     - docs/contribute/ownership.qmd
-    - docs/contribute/documentation-map.qmd
-    - docs/contribute/goals-and-upstream.qmd
+    # The "Internals" section (docs/contribute/internals/) goes here, after the reading order's first three pages.
     - docs/contribute/provenance.qmd
     - docs/contribute/notebook-contract.qmd
+    - docs/contribute/documentation-map.qmd
+    - docs/contribute/goals-and-upstream.qmd
     - section: Research
       contents:
       - docs/contribute/research/index.qmd

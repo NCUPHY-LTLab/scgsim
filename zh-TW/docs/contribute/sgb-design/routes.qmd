@@ -11,7 +11,7 @@ aliases:
 
 同一顆晶片的導體，可以用不同的方式交給 solver：把薄膜當成零厚度的 sheet（Route A）、把有限厚度的金屬 volume 從求解區域中挖掉、只留下它的邊界（Route B），或把導體 volume 保留下來並在內部 mesh（Route C）。SGB 把這個選擇放在 labelling 層：arrangement、cell 與 face 的推導對每種 route 都是同一份程式，route 只決定導體的 cell 在輸出中代表什麼，以及哪些 volume 會被輸出。
 
-三種 route 在 production（`scgsim.geometry.sgb`，階段 1）都已實作並有測試。本頁先用執行範例看 Route A 與 Route B 的差別，再說明 route 決定什麼、Route A 的導體從何而來、physical group 如何劃分、lumped port 放在哪個平面（以及它對 SA 的影響），最後說明 Route C。[Cell 與其 label](labels-and-dissolution.qmd) 以及 [face、wall 與 volume](assembly.qmd) 是這一頁的基礎。
+三種 route 在 production（`scgsim.geometry.sgb`）都已實作並有測試。本頁先用執行範例看 Route A 與 Route B 的差別，再說明 route 決定什麼、Route A 的導體從何而來、physical group 如何劃分、lumped port 放在哪個平面（以及它對 SA 的影響），最後說明 Route C。[Cell 與其 label](labels-and-dissolution.qmd) 以及 [face、wall 與 volume](assembly.qmd) 是這一頁的基礎。
 
 ## 執行範例的觀點
 
@@ -155,7 +155,7 @@ production 的 port 因為上面的規則，不會出現在 volume 內部：真�
 
 D1 已決定 **Route C 屬於 v1**，production 已實作。導體 volume 保留在模型中並在內部 mesh，導體內部是 solution domain；導體與 dielectric、導體與 vacuum 的介面是共用 face。目的是現在能處理有限導電率，未來能接上超導材料模型。它是 S7 的第三種 labelling policy，不是另一條 pipeline：arrangement、label 與 assembly 本來就為導體建立 volume 與它的 shell，Route C 只是不把它排除。
 
-在 Route C 中，每個導體 Entity 的 volume 都被輸出，volume group 為 `<entity>`；導體的表面仍用 `MA::`、`MS::` 的 face 名稱，只是 face 兩側的 volume 都存在；兩個導體 Entity 之間的 face 是 `MM::<a>|<b>__interface`（它不是某個 Net 暴露的導體表面，所以 group 的 `net` 是 `null`）。碰到模型邊界的導體有自己的 `EXT::<entity>__sidewall`（真實輸入的 vacuum region 把 ground 包在裡面，所以沒有；stage 層 scene `pad_in_ground("C")` 的 ground 貼著晶片外緣，有 `EXT::ground__sidewall`）。導體 sheet 被拒絕；lumped port 與 Route B 相同，位於 host 的 support plane。「Net X 的 PEC」在 Route C 不再是一組 PEC face，Palace 端如何把導體 volume 當成 material domain、如何 lower Surface EPR，是階段 3 的工作（見[欄位對應](consumer-mapping.qmd)）。
+在 Route C 中，每個導體 Entity 的 volume 都被輸出，volume group 為 `<entity>`；導體的表面仍用 `MA::`、`MS::` 的 face 名稱，只是 face 兩側的 volume 都存在；兩個導體 Entity 之間的 face 是 `MM::<a>|<b>__interface`（它不是某個 Net 暴露的導體表面，所以 group 的 `net` 是 `null`）。碰到模型邊界的導體有自己的 `EXT::<entity>__sidewall`（真實輸入的 vacuum region 把 ground 包在裡面，所以沒有；stage 層 scene `pad_in_ground("C")` 的 ground 貼著晶片外緣，有 `EXT::ground__sidewall`）。導體 sheet 被拒絕；lumped port 與 Route B 相同，位於 host 的 support plane。「Net X 的 PEC」在 Route C 不再是一組 PEC face。Route C 供 AEDT 的 `modeling="solid"` 使用；Palace 只接受 Route A 與 B（見[使用契約](consumer-contract.qmd#route-c)）。
 
 ## 邊界情形
 
