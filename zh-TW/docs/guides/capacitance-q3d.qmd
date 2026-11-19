@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
-title: "AEDT：Q3D 擷取"
-description: "擷取 GeometryPlan 之 SGB 模型的電容矩陣，含精確 Net 與可選的接地包覆。"
+title: "以 Q3D 計算電容"
+description: "以 AEDT Q3D 從 Palace 使用的同一個 3D 模型，萃取版圖導體的電容與電導矩陣。"
 scgsim-kind: "course"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/course/aedt-q3d"
@@ -9,15 +9,13 @@ aliases:
   - ../course/aedt-q3d.html
 ---
 
-Q3D 求解的是 Palace 網格化的同一幾何：`prepare_q3d_from_geometry` 會建立計畫的 SGB 模型，並寫出攜帶該模型的交接套件。不再有手寫實體，也沒有 Region 邊距；Region 即計畫的 `VACUUM_REGION`。
+Q3D 是 Ansys AEDT 的準靜態萃取器，會回傳導體的電容與電導矩陣。SCGSim 由你的版圖建立 3D 模型（與 Palace 建網格用的是同一個模型），並寫出一個執行資料夾，由 AEDT 匯入並求解。下面的腳本對[第一個模擬](../start/first-simulation.qmd)的 200 µm 焊墊做這件事，每個矩陣元素印一行：物理量（`C` 或 `G`）、列與行的 Net、數值，以及 Q3D 匯出時的單位。
 
-## 完整執行：SimplePad 電容 {#a-complete-run}
+這個儲存庫沒有這支腳本的執行結果。這個範例較早的版本是把 GDS 檔直接匯入 Q3D、金屬為 0.2 µm 的鋁，當時回報 C[pad][pad] = 87.00 fF（[3.0 之前的紀錄](../contribute/history/aedt-capacitance-pre-v3.qmd)）。這個版本的模型以 Palace 計算得到 95.43 fF（[以 Palace 計算電容](capacitance-palace.qmd)）；兩次計算的真空區域與求解器都不同。
 
-這是[第一個模擬](../start/first-simulation.qmd)的 AEDT 版本。本例採用公開 PDK 的標稱 100 nm 鋁層，並以 200 µm 方形金屬焊盤、20 µm 間隙及周圍接地配置在 1000 µm 方形晶片上。元件庫提供版圖、材料與層堆疊；腳本明確宣告 `pad` 與 `ground` 的電氣歸屬，再交給 Q3D 抽取電容與電導矩陣。執行它需要 `aedt` extra（見[安裝 SCGSim](../start/install.qmd#extras)），以及本機已安裝、具可用授權的 AEDT Q3D 2024.2。
+## 完整的一次執行 {#a-complete-run}
 
-![SimplePad 版圖：方形焊盤、周圍接地與已繪製定位片。](../assets/simple-pad-layout.png)
-
-將以下完整程式存成 `simplepad_q3d.py`。四個區塊依序完成「建立來源 → 準備求解器輸入 → 執行 → 讀取」。
+這支腳本需要含 `aedt-epr` extra 的 SCGSim 與 OrcaPen SC PDK（[安裝 SCGSim](../start/install.qmd#extras)），以及同一台電腦上有可用授權的 AEDT Q3D 2024.2。存成 `simplepad_q3d.py`：
 
 ```python
 from pathlib import Path
@@ -103,60 +101,39 @@ if __name__ == "__main__":
     main()
 ```
 
-在研究專案資料夾執行：
+在研究專案中執行：
 
 ```bash
 uv run simplepad_q3d.py
 ```
 
-每次執行都會在 `.artifacts/simplepad-q3d/` 建立新的結果資料夾。終端機列出的矩陣項目包含物理量、列名、欄名、數值與原生匯出單位；使用結果時，請一起保留這些欄位。[讀取完整回傳結果](convergence-and-reports.qmd)說明如何讀取矩陣。
+每次執行都會在 `.artifacts/simplepad-q3d/` 下建立新的執行資料夾。加上 `--handoff-only` 時，腳本只準備執行資料夾與封存檔，在開啟 AEDT 之前停下；之後可以[在另一台電腦執行這個資料夾](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)。
 
-若要先檢視輸入，執行 `uv run simplepad_q3d.py --handoff-only`。此選項只準備輸入與可攜套件，不會開啟 AEDT；完整模式則在同一主機執行並讀回結果。以下各節說明這個呼叫的輸入。
+四個編號段落依序建立計畫、準備執行資料夾、執行 AEDT、讀取結果。計畫與第一個模擬相同，只是真空區域延伸到晶片邊緣外 250 µm，讓 Q3D 的 Region（它求解的空間範圍）不會止於金屬。
 
-## 以 GeometryPlan 準備 C/G {#geometryplan-backed-cg-preparation}
+## Net 與導體 {#geometryplan-backed-cg-preparation}
 
-共用的 [Xmon 輸入教學](xmon/inputs.qmd)會準備含最終 Net 指派及 `set_vacuum_region(...)` 的不可變 `snapshot`。前端會建立此快照的 SGB 模型，並準備僅含電容的交接套件。
+Net 是一塊具名、作為同一個導體的金屬，由計畫的 `plan.set_nets` 定義。`prepare_q3d_from_geometry` 把模型中的每個 Net 變成一個 Q3D net：
 
-```python
-from pathlib import Path
-from scgsim.aedt import MatrixRunControl, prepare_q3d_from_geometry
+- `net_types` 給每個 Net 一個 Q3D 類型，`"Signal"` 或 `"Ground"`，而且必須正好列出模型中的所有 Net。`Signal` net 在矩陣中有一列一行；`Ground` net 是 Q3D 的參考，沒有列與行。這裡兩個都是 `Signal`，所以矩陣是 2 × 2，也包含接地金屬。
+- `physical_ground_nets` 另外記錄哪些 Net 實際上接地，與它們的 Q3D 類型無關。這裡是 `ground`。
+- Q3D 以 Net 名稱命名每個 net，字母、數字與 `_` 以外的字元會被替換；替換後撞名的兩個 Net 會被拒絕。執行資料夾中的 `aedt_spec.json` 列出這些名稱，這裡是 `pad` 與 `ground`。
+- `modeling="solid"` 把金屬建成具有薄膜厚度的實體（這裡是 100 nm 的鋁）；`"thin_film"` 則建成薄膜面上的薄片。兩者的差別見[選擇幾何近似](../concepts/model-and-numerics.qmd#choose-the-geometric-approximation)。
 
-AEDT_VERSION = "2024.2"  # 請明確選擇：2023.2 或 2024.2。
+## Q3D 萃取什麼 {#know-which-formulation-you-requested}
 
-handoff = prepare_q3d_from_geometry(
-    snapshot,
-    aedt_version=AEDT_VERSION,
-    modeling="solid",
-    output_dir=Path(".artifacts/public-xmon-q3d-cg"),
-    project_name="public_xmon_q3d_cg",
-    design_name="PublicXmonQ3dCg",
-    net_types={"xmon_pad": "Signal", "Ground": "Signal"},
-    physical_ground_nets=("Ground",),
-    run_control=MatrixRunControl(
-        "Setup1", frequency_ghz=6.0, maximum_passes=3,
-    ),
-)
-print(handoff.spec_path, handoff.archive_path)
+在這個模型上，Q3D 只萃取電容與電導，頻率由 `MatrixRunControl` 指定（這裡是 5 GHz）。它不求解交流或直流的電阻與電感；這在本版本中不提供，追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)。
+
+`MatrixRunControl` 也設定 Q3D 自己的自適應細化：`maximum_passes=10` 允許最多十個 pass，`convergence_percent=1.0` 在兩個 pass 之間的變化不超過 1 % 時停止。取回結果後，報告會把 Q3D 的收斂狀態、它回報的變化與你設定的控制值放在矩陣旁邊（[收斂與報告](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）。
+
+Region 就是計畫的真空區域，外圍是開放的。若要讓 Region 的六個面成為接地外殼，那是 Q3D 請求中的一個欄位 `Q3dSpec(grounded_region_net=...)`，`prepare_q3d_from_geometry` 不會設定它；[Q3D 參考](../reference/specs/aedt-runtime.qmd#q3d-extraction-and-region-ground-candidate)有說明。
+
+## 只建模、不求解 {#build-only-then-solve}
+
+要只建立 AEDT 專案而不求解，先以 `--handoff-only` 準備執行資料夾，再以 `--prepare-only` 執行它，路徑填入腳本印出的資料夾：
+
+```bash
+python -m scgsim.aedt.run --handoff <run-folder>/metadata/aedt_handoff_metadata.json --execute --prepare-only
 ```
 
-此呼叫如何使用各輸入：
-
-- `modeling="solid"` 將導體建為實體（SGB Route C）；`"thin_film"` 將導體建為薄片（Route A）。
-- `net_types` 以 Net ID 為鍵，為模型的每個 Net 指定 Q3D 類型，且必須恰好列出模型的 Net。此例兩個 Net 都是 `Signal`，因此都留在矩陣中。
-- `physical_ground_nets` 記錄哪些 Net 在物理上接地，與其 Q3D 類型分開。
-- 每個 Net 成為一個 `Q3dNetSpec`，涵蓋模型中屬於該 Net 的導體物件，並以其 AEDT 名稱命名（Net ID 中 `[A-Za-z0-9_]` 以外的字元皆被取代）。會共用同一 AEDT 名稱的兩個 Net 會被拒絕。
-- 材料取自堆疊紀錄；交接套件在 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard。
-
-6 GHz 頻率與三次通過上限是研究輸入。請在研究紀錄中保存實際擷取準則、任何變更，以及原生完成／收斂狀態。[結果讀取教學](convergence-and-reports.qmd#interpret-for-scq-use)說明如何將選用的矩陣量及其可用歷程連結至預期 SCQ 用途；原生停止旗標本身無法判定是否足夠。[矩陣觀測契約](../reference/specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)說明原生狀態、回報差值與實際控制項如何與矩陣一併保存。
-
-## 確認請求的模型形式 {#know-which-formulation-you-requested}
-
-SGB 模型上的 Q3D 只擷取電容與電導。它回傳原生 `results/q3d/c_matrix.csv`，不建立 AC-RL 或 DC 設定。此版本尚未提供 AC/RL，追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)。
-
-專用的接地 Region 包覆是額外可選項：`grounded_region_net="EnclosureGround"`，新的 Net 名稱必須與模型所有 Net 不同。此設定會要求六個原生 PEC 面薄片，並保留模型的 Net；它不會合併薄片、不會加入橋接，也不代表存在 AC/DC 回流路徑。[契約](../reference/specs/aedt-runtime.qmd#q3d-extraction-and-region-ground-candidate)說明原生驗證／讀回，以及包覆接地與實體接地的差異。改變包覆或擷取形式代表進行不同實驗，不能當作離線更新舊結果。
-
-## 先僅建置，再求解 {#build-only-then-solve}
-
-原生僅建置操作會使用既有 CLI 與已準備的交接套件：`python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only`（請代入 `prepare_q3d_from_geometry` 回傳的資料夾）。此操作會匯入模型，指派 Net、Region 與設定並讀回，接著儲存專案並釋放其管理的 Desktop；過程不會呼叫 `Analyze` 或匯出 C/G 矩陣。此交接套件只能使用一次；日後求解前請準備新的交接套件。一般 `--execute` 流程會求解並回傳矩陣。[Q3D 契約](../reference/specs/aedt-runtime.qmd#q3d-sgb-model)說明匯入、收據與嚴格結果讀取。
-
-準備交接套件的機器請使用 `aedt-epr` 安裝 extra：它帶入 GDSFactory／KLayout 來源與匯出 SGB STEP 所需的 OCP。設定的資源值會記錄為執行輸入；單憑這些值無法保證嚴格的程序記憶體上限，也不會回報獨立觀測到的有效求解器配置。
+AEDT 會匯入模型、指定 net、Region 與求解設定、讀回確認並儲存專案，但不求解，也不匯出矩陣。這會用掉這個執行資料夾：要求解前，請準備新的資料夾。[Q3D 參考](../reference/specs/aedt-runtime.qmd#q3d-sgb-model)說明匯入過程，以及對取回結果的檢查。
