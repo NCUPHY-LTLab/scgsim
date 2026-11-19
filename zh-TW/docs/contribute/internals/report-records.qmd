@@ -106,7 +106,7 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 
 ### 收斂執行器 {#convergence-runner}
 
-執行腳本透過收斂執行器 `metadata/run_palace_until_converged.py` 啟動求解器命令； `prepare_handoff()` 把它複製到執行資料夾，它只需要 Python 標準函式庫。執行器：
+執行腳本透過收斂執行器 `metadata/run_palace_until_converged.py` 啟動求解器命令；`prepare_handoff()` 把它複製到執行資料夾，它只需要 Python 標準函式庫。執行器：
 
 1. 在它自己的 session 中啟動指令碼原本會執行的求解指令；Palace 的輸出照舊進入日誌；
 2. 每秒查看一次 `results/palace`。某個回合的 `iteration<k>/` 資料夾在兩次查看之間沒有變化時，才算這個回合；每多一個回合，執行器就執行與讀取結果時相同的檢查；

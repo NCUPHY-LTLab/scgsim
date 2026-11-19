@@ -13,7 +13,7 @@ SCGSim 在你的電腦上準備 AEDT 計算，由 Ansys AEDT 求解，再讀回�
 
 ## 一次計算的流程 {#one-shared-lifecycle}
 
-1. **準備。** 準備呼叫會寫出一份*交接*：一個資料夾，內含模型、要求（`aedt_spec.json`）與執行腳本。這一步不求解，也不啟動 AEDT。HFSS Eigenmode 用 `EigenmodeSim.prepare_handoff()`，Driven Terminal 用 `prepare_hfss_driven_from_geometry(...)`，Q3D 用 `prepare_q3d_from_geometry(...)`， Q2D 用 `prepare_handoff(spec=...)`。
+1. **準備。** 準備呼叫會寫出一份*交接*：一個資料夾，內含模型、要求（`aedt_spec.json`）與執行腳本。這一步不求解，也不啟動 AEDT。HFSS Eigenmode 用 `EigenmodeSim.prepare_handoff()`，Driven Terminal 用 `prepare_hfss_driven_from_geometry(...)`，Q3D 用 `prepare_q3d_from_geometry(...)`，Q2D 用 `prepare_handoff(spec=...)`。
 2. **執行。** 在裝有 AEDT 與授權的主機上：
 
    ```sh
@@ -103,14 +103,14 @@ Driven Modal 與 wave port 不可用；見[不支援](#current-exclusions)。
 
 `EigenmodeSim(modeling=..., aedt_version=...)` 以 `set_plan` 取得規劃，以 `set_eigenmode` 設定求解，並可用 `add_junction`、`add_lumped_rlc` 與 `set_epr_request`。Surface EPR 屬於規劃（在 `prepare()` 之前呼叫 `plan.set_surface_epr(specs)`）：它的邊距會切進模型成為條帶。所宣告類型的每一個 Surface-EPR 列都在它所有的面上積分，包含側壁，除非規格的 `face_kinds` 把側壁排除。[以 HFSS 計算模態](../../guides/modes-hfss.qmd)依序執行這些呼叫。
 
-`EprAnalysisRequest` 選擇要回報什麼：`surface_epr_groups`（`None` 表示全部）、 `junction_ids` 與 `bulk_domain_ids`。不論回報哪些，所有區域與接面都留在正規化之中。
+`EprAnalysisRequest` 選擇要回報什麼：`surface_epr_groups`（`None` 表示全部）、`junction_ids` 與 `bulk_domain_ids`。不論回報哪些，所有區域與接面都留在正規化之中。
 
 要用 AEDT 已儲存的場重新計算 EPR、而不重新求解，用 [`analyze_epr`](../api/analyze-epr.qmd)。它會開啟 AEDT，所以需要授權。
 []{#public-epr-candidate-surface}這些呼叫都使用規劃的同一個 `PreparedSgbModel` （`EigenmodeSim.prepared_model`）。
 
 #### 以 EPR 物理量判斷收斂 {#epr-expression-cache-convergence}
 
-HFSS 預設在模態頻率穩定時停止細化（`maximum_delta_frequency_percent`）。 `set_expression_cache_convergence` 再加上參與比作為收斂條件：AEDT 只有在頻率與每個選定的參與比，其變化都小於各自的標準時才停止。下例要求模態 1 在 0.5 µm 邊距以外的 MA 與 MS 參與比，每個回合之間的變化都在 5 % 以內：
+HFSS 預設在模態頻率穩定時停止細化（`maximum_delta_frequency_percent`）。`set_expression_cache_convergence` 再加上參與比作為收斂條件：AEDT 只有在頻率與每個選定的參與比，其變化都小於各自的標準時才停止。下例要求模態 1 在 0.5 µm 邊距以外的 MA 與 MS 參與比，每個回合之間的變化都在 5 % 以內：
 
 ```python
 from scgsim.aedt import (
@@ -149,7 +149,7 @@ AEDT 把接面的電感放在一個矩形上。SCGSim 把畫出的接面薄片�
 
 ### Q3D {#q3d-sgb-model}
 
-[]{#q3d-extraction-and-region-ground-candidate}`prepare_q3d_from_geometry(snapshot, ...)` 接受快照、`modeling`、每個 Net 的 Q3D 類型（`net_types`，以 Net ID 為鍵： `"Signal"` 或 `"Ground"`），以及實體上接地的 Net（`physical_ground_nets`）；呼叫方式見 [Q3D 指南](../../guides/capacitance-q3d.qmd)。規劃需要真空區域： Q3D 的 Region 就是規劃的真空區域。Q3D 只萃取 C 與 G。
+[]{#q3d-extraction-and-region-ground-candidate}`prepare_q3d_from_geometry(snapshot, ...)` 接受快照、`modeling`、每個 Net 的 Q3D 類型（`net_types`，以 Net ID 為鍵：`"Signal"` 或 `"Ground"`），以及實體上接地的 Net（`physical_ground_nets`）；呼叫方式見 [Q3D 指南](../../guides/capacitance-q3d.qmd)。規劃需要真空區域：Q3D 的 Region 就是規劃的真空區域。Q3D 只萃取 C 與 G。
 
 `Q3dSpec.grounded_region_net` 決定外邊界；它是你自行建立並交給 `prepare_handoff` 的 `Q3dSpec` 欄位，`prepare_q3d_from_geometry` 一律讓它為 `None`。`None` 讓 Region 保持開放。給一個名稱時，SCGSim 以理想導體薄片蓋住 Region 的六個面，並把它們指派給以該名稱新建的接地 Net；這個名稱不可與模型中任何 Net 相同。
 
@@ -206,11 +206,11 @@ python -m scgsim.aedt.batch collect \
   --output "$COLLECTED_RUN_DIR"
 ```
 
-`--cores` 是正整數，`--ram-limit-percent` 是 1 至 99 的整數；`--dependency` 可以重複。這三步也有對應的 Python 呼叫：`prepare_native_batch`、`run_native_batch` 與 `collect_native_batch`。請帶回完整的封裝與嘗試資料夾，包括 `.aedt` 專案與它的 `.aedtresults` 資料夾；只有頻率匯出檔無法收回。一份封裝只含一個模型； [AEDT：在 HPC 上做參數掃描](../../guides/hpc-sweep.qmd)處理多個模型。
+`--cores` 是正整數，`--ram-limit-percent` 是 1 至 99 的整數；`--dependency` 可以重複。這三步也有對應的 Python 呼叫：`prepare_native_batch`、`run_native_batch` 與 `collect_native_batch`。請帶回完整的封裝與嘗試資料夾，包括 `.aedt` 專案與它的 `.aedtresults` 資料夾；只有頻率匯出檔無法收回。一份封裝只含一個模型；[AEDT：在 HPC 上做參數掃描](../../guides/hpc-sweep.qmd)處理多個模型。
 
 ## 計算的時間與記憶體 {#native-simulation-benchmark}
 
-每次完成的 AEDT 求解，都記錄 AEDT 回報的各階段與各回合的時間、記憶體與網格大小。 `ResolvedRun.show_simulation_benchmark(theme="light")` 以卡片、表格，以及 AEDT 有回報自適應數值時的曲線顯示它們；深色筆記本可用 `theme="dark"`。AEDT 沒有回報的值保持缺少，絕不當成零。AEDT 依工作回報記憶體，所以峰值是最大那個工作的峰值，不是整台主機的。
+每次完成的 AEDT 求解，都記錄 AEDT 回報的各階段與各回合的時間、記憶體與網格大小。`ResolvedRun.show_simulation_benchmark(theme="light")` 以卡片、表格，以及 AEDT 有回報自適應數值時的曲線顯示它們；深色筆記本可用 `theme="dark"`。AEDT 沒有回報的值保持缺少，絕不當成零。AEDT 依工作回報記憶體，所以峰值是最大那個工作的峰值，不是整台主機的。
 
 ## EPR 如何正規化 {#surface-estimates-and-junction-normalization}
 

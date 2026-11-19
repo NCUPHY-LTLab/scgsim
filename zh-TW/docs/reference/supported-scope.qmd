@@ -16,7 +16,7 @@ aliases:
 
 ## 版圖必須保證什麼 {#layout-rules}
 
-*格點*是版圖的資料庫單位，OrcaPen SC PDK 的版圖為 1 nm；每個座標都落在格點上。 *Net* 是一塊具名、作為同一個導體的金屬，由你宣告它包含哪些 Entity。*條帶*是為 Surface EPR 切進模型的一段表面，從*間隙邊*量起；間隙邊是導體面向裸露基板的邊。其餘術語見[術語與單位](terms-and-units.qmd)。
+*格點*是版圖的資料庫單位，OrcaPen SC PDK 的版圖為 1 nm；每個座標都落在格點上。*Net* 是一塊具名、作為同一個導體的金屬，由你宣告它包含哪些 Entity。*條帶*是為 Surface EPR 切進模型的一段表面，從*間隙邊*量起；間隙邊是導體面向裸露基板的邊。其餘術語見[術語與單位](terms-and-units.qmd)。
 
 1. **自己宣告每個 Net**，以 `plan.set_nets`，每個 Entity 最多屬於一個 Net。SCGSim 從不合併彼此接觸的形狀：兩個互相接觸、卻分屬不同 Net 的焊墊是短路。
 2. **註冊每個子元件**：帶有自身語意的子元件都以 `register_instance` 註冊，先父後子，每個 GDS reference 一次；陣列 reference 要先展開。
@@ -41,8 +41,8 @@ aliases:
 
 錯誤會在三個時機之一引發：
 
-- **規劃時**，在你建立 `GeometryPlan` 的過程中（建構子、`register_instance`、 `set_nets` 或 `prepare()`）：`ValueError`；
-- **建構時**，在 `mesh()` 或 `simulation_drc()` 中建立幾何時： `scgsim.geometry.sgb.errors` 的類別之一（`InputError`、`UnsupportedCurveError`、 `ContactError` 等）；
+- **規劃時**，在你建立 `GeometryPlan` 的過程中（建構子、`register_instance`、`set_nets` 或 `prepare()`）：`ValueError`；
+- **建構時**，在 `mesh()` 或 `simulation_drc()` 中建立幾何時：`scgsim.geometry.sgb.errors` 的類別之一（`InputError`、`UnsupportedCurveError`、`ContactError` 等）；
 - **產生網格之前**，在 `mesh()` 與 `simulation_drc()` 對建好的模型執行的網格階段檢查中：`scgsim.palace` 的 `SimulationDrcError`。
 
 找到你看到的錯誤，照負責者的下一步處理。負責者是 SCGSim 時，請附上版圖與訊息回報。
@@ -52,14 +52,14 @@ aliases:
 | 規劃時關於 `component_semantics`、註冊、Net、選取點、埠或接地貢獻的 `ValueError` | 版圖及其宣告 | 閱讀訊息，它會指出出現實例或 Entity。在元件或筆記本中修正該宣告。 |
 | `ValueError`「… topology changed at grid」或「… contact changed at grid」 | 版圖 | 有頸部、縫隙、孔洞或狹縫等於或小於一個格點間距。在圖面上把它加寬或封閉。 |
 | `UnsupportedCurveError` | 版圖 | 以線段與圓弧宣告曲線，或把它畫成多邊形。 |
-| `ValidationError`「the inset curve … is not closed near (x, y)」 | SCGSim | 該點附近兩條相鄰的條帶偏移既不相接也不相交。|
+| `ValidationError`「the inset curve … is not closed near (x, y)」 | SCGSim | 該點附近兩條相鄰的條帶偏移既不相接也不相交。 |
 | 不同 Net 之間的 `ContactError` 或 `OverlapError` | 版圖，或 Net 宣告 | 若兩個導體應為同一導體，就把它們放進同一個 Net；否則在圖面上把它們分開，間距大於一個格點間距。請把模擬所用的 Net 交給計畫；`simulation_drc` 從計畫讀取。 |
 | `OverlapError`「… with equal priority」 | 宣告 | 為同一 Net 中互相重疊的 Entity 指定不同的優先序。 |
 | `NonManifoldError` | 版圖 | 依訊息結尾的連結處理：在版圖內部，讓兩塊幾何共用一條邊，或把它們分開（[原因](known-geometry-problems.qmd#pinch-inside-the-layout)）；在邊界上，請在訊息指出的對象周圍畫出 die 外框或接地平面，或讓訊息指出的區域的輪廓沿著一條邊碰到邊界，或完全不碰到邊界（[原因](known-geometry-problems.qmd#boundary-point-pinch)）。 |
 | 關於埠薄片、Entity id、圓弧或邊距的 `InputError` | 版圖及其宣告 | 閱讀訊息，它會指出埠、Entity 或請求。修正它指出的圖形或設定。 |
 | `ValueError`「Surface EPR bands narrower than the meshing stage's face-width limit …」 | 宣告 | 加大訊息所指的邊距，讓每條條帶至少 10 個格點間距寬。 |
 | `NoGapEdgeError` | 宣告 | 在 `inset_margins_by_entity_um` 中指名的導體，在該面上沒有間隙邊。把它從該處移除，或改以類型切條帶。 |
-| `ValidationError`「… invariant(s) failed」 | SCGSim | SGB 對已接受的輸入做結構檢查時失敗。|
+| `ValidationError`「… invariant(s) failed」 | SCGSim | SGB 對已接受的輸入做結構檢查時失敗。 |
 | `SimulationDrcError` | 各項發現所指明的負責方：layout、erosion 或 sgb | 每個拒絕項目都列出類別、尺寸、以 µm 表示的位置與修改方式。`layout`：在該處修正圖面。`erosion`：修改交給 `plan.set_surface_epr` 的邊距，或導體的寬度。`sgb`：屬於 SCGSim。 |
 | `MeshRepairError` | 先檢查版圖，再看 SCGSim | 閱讀品質報告，它寫出中止原因，並列出剩下的不良元素及其接觸的特徵。若它們落在版圖的細微結構上，請修正圖面。若該處版圖沒有細微結構，請調整[網格設定](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)；若不良元素落在條帶邊界上，失敗屬於 SCGSim。 |
 | 訊息與你畫的版圖對不上的錯誤 | SCGSim | 回報它。 |

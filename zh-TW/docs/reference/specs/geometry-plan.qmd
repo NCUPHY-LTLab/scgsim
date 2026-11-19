@@ -44,7 +44,7 @@ sim.set_plan(plan.prepare())
 
 ### 格點 {#the-grid}
 
-模型格點就是版圖的資料庫單位，由 GDS 讀出：OrcaPen SC PDK 的版圖是 1 nm。請在畫單元之前設定好。模型的每個 XY 座標都落在格點上；高度、薄膜厚度與網格則不受此限。 SCGSim 不修改 PDK 或 GDSFactory 的設定。
+模型格點就是版圖的資料庫單位，由 GDS 讀出：OrcaPen SC PDK 的版圖是 1 nm。請在畫單元之前設定好。模型的每個 XY 座標都落在格點上；高度、薄膜厚度與網格則不受此限。SCGSim 不修改 PDK 或 GDSFactory 的設定。
 
 ### 重疊區歸誰 {#overlap-priority}
 
@@ -53,7 +53,7 @@ sim.set_plan(plan.prepare())
 1. **導體先於一切。** 金屬最先放置，求解區域從不與它競爭。
 2. **介質優先於真空**，不論兩者的 `mesh_order`。
 3. **兩個介質之間，`LayerLevel.mesh_order` 較小者優先**，這是 GDSFactory 的慣例。
-4. **同一 Net 的兩個 Entity 之間，priority 較高者優先**：元件註記中的 `priority`，或用於彼此重疊放置之出現實例的 `plan.set_entity_priorities(...)`。 priority 相同或未給時，會出現列出兩個 Entity 的 `OverlapError`。不同 Net 的導體完全不可重疊。
+4. **同一 Net 的兩個 Entity 之間，priority 較高者優先**：元件註記中的 `priority`，或用於彼此重疊放置之出現實例的 `plan.set_entity_priorities(...)`。priority 相同或未給時，會出現列出兩個 Entity 的 `OverlapError`。不同 Net 的導體完全不可重疊。
 
 例如一塊 20 × 20 µm 的氮化矽區塊，`mesh_order=1`，位於 `mesh_order=2` 的矽區域上：重疊處是氮化矽。若那塊區塊是真空，不論數字為何，重疊處都歸矽。規劃內部儲存 `priority = -mesh_order`，所以儲存的 `priority` 一律是數值較高者優先。
 
@@ -65,7 +65,7 @@ sim.set_plan(plan.prepare())
 
 ### 子元件加到接地平面的金屬 {#ground-plane-contributions-user}
 
-子元件可以把金屬加到根元件的接地平面，例如 Xmon 接地伸進淨空區的那段臂。它宣告 `component_semantics.ground_plane_contributions`：每筆記錄恰好包含 `local_id`、 `plane_id`（它併入的根平面）、`level`（導體層，必須與該平面相同）、`layer` 與 `selector_point_um`。這塊金屬成為該平面的一部分；它不是獨立的 Entity，也沒有自己的 Net。記錄如何解析，見[內部實作](../../contribute/internals/geometry-plan.qmd#ground-plane-contributions)。
+子元件可以把金屬加到根元件的接地平面，例如 Xmon 接地伸進淨空區的那段臂。它宣告 `component_semantics.ground_plane_contributions`：每筆記錄恰好包含 `local_id`、`plane_id`（它併入的根平面）、`level`（導體層，必須與該平面相同）、`layer` 與 `selector_point_um`。這塊金屬成為該平面的一部分；它不是獨立的 Entity，也沒有自己的 Net。記錄如何解析，見[內部實作](../../contribute/internals/geometry-plan.qmd#ground-plane-contributions)。
 
 ### 矩形接面 {#explicit-rectangular-junctions}
 
@@ -79,11 +79,11 @@ sim.set_plan(plan.prepare())
 
 `SourceCurveSpec` 以 XY 微米描述一條曲線。種類有 `line_segment`（兩個端點）與 `circular_arc`（起點、弧上一點、終點）；`interpolation_spline` 與 `bspline` 可以宣告，但 SGB 會拒絕。可選的 `parameter_interval` 只修剪曲線，不重新擬合。
 
-`BoundaryCurveChainSpec` 把一條有序封閉邊界綁定到 `entity_id`、`boundary_id` 與 `selector_point_um`。選取點落在該 Entity 的金屬中。`role="outer"` 選外輪廓； `role="hole", hole_index=0` 選該多邊形的第一個孔，它的選取點仍落在金屬中，不在孔裡。
+`BoundaryCurveChainSpec` 把一條有序封閉邊界綁定到 `entity_id`、`boundary_id` 與 `selector_point_um`。選取點落在該 Entity 的金屬中。`role="outer"` 選外輪廓；`role="hole", hole_index=0` 選該多邊形的第一個孔，它的選取點仍落在金屬中，不在孔裡。
 
 元件以本地 ID 宣告 `boundary_curves` 或 `boundary_reconstruction` 記錄；規劃以出現實例完整命名它們，並只套用一次其變換。對已組好的輸入，以完整 ID 呼叫 `plan.set_boundary_curves(records)` 或 `plan.set_boundary_reconstruction(records)`。
 
-`GdsBoundaryReconstructionSpec` 把畫出的多邊形邊還原成圓弧。它以 `segment_indices` 指名邊：索引 `i` 是從畫出的頂點 `i` 到頂點 `(i + 1) % N` 的邊，順序依 GDS 儲存多邊形的方式（請從元件讀取，例如 `component.get_polygons()`，因為 GDSFactory 會依 KLayout 的儲存方式正規化多邊形）。封閉圓取三個 `anchor_indices`；開放圓弧取起點、弧上一點與終點。三個共線的錨點定義不出圓，會在 `prepare()` 被拒絕。 `closed=True` 選取整個環。兩個還原不可宣稱同一組邊；由兩個畫出的多邊形融合而成的環沒有畫出的順序，因此其上的還原會被拒絕。
+`GdsBoundaryReconstructionSpec` 把畫出的多邊形邊還原成圓弧。它以 `segment_indices` 指名邊：索引 `i` 是從畫出的頂點 `i` 到頂點 `(i + 1) % N` 的邊，順序依 GDS 儲存多邊形的方式（請從元件讀取，例如 `component.get_polygons()`，因為 GDSFactory 會依 KLayout 的儲存方式正規化多邊形）。封閉圓取三個 `anchor_indices`；開放圓弧取起點、弧上一點與終點。三個共線的錨點定義不出圓，會在 `prepare()` 被拒絕。`closed=True` 選取整個環。兩個還原不可宣稱同一組邊；由兩個畫出的多邊形融合而成的環沒有畫出的順序，因此其上的還原會被拒絕。
 
 ## 路徑 {#current-surface-epr-direction}
 
@@ -95,7 +95,7 @@ sim.set_plan(plan.prepare())
 | Route B | 每個導體是有限金屬體積，表面為理想導體，內部不產生網格 | Palace（`set_route("B")`，預設） |
 | Route C | 每個導體體積留在模型中 | AEDT `modeling="solid"` |
 
-Palace 的 `set_route` 與 `mesh()` 以 `ValueError` 拒絕 A、B 以外的路徑。 [Route A 與 Route B](../../concepts/routes.qmd) 以截面圖說明如何選擇， [AEDT：solid 還是 thin_film](aedt-runtime.qmd#aedt-solid-thin-film)列出兩者的高度。不論哪種路徑，建立模型時都會切出 Surface-EPR 條帶。
+Palace 的 `set_route` 與 `mesh()` 以 `ValueError` 拒絕 A、B 以外的路徑。[Route A 與 Route B](../../concepts/routes.qmd) 以截面圖說明如何選擇，[AEDT：solid 還是 thin_film](aedt-runtime.qmd#aedt-solid-thin-film)列出兩者的高度。不論哪種路徑，建立模型時都會切出 Surface-EPR 條帶。
 
 ## 薄膜與近似方式 {#physical-representation}
 
@@ -169,6 +169,6 @@ with preparation_resources(max_workers=30):
 
 ## 輸入摘要 {#pre-solve-input-summary}
 
-`sim.input_summary()` 在寫出任何檔案之前，顯示模型將會是什麼樣子：來源、Entity、出現實例、Net、材料、高度、真空、埠、EPR 要求與求解設定，以筆記本卡片呈現，獨立的資料在 `.data`。在 Palace 上，它顯示 `mesh()` 將建立的輸入，已套用規劃的真空、模擬的埠與路徑。未知的值保持未知，絕不當成零。 `scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 對正規化輸入給出同樣的摘要。
+`sim.input_summary()` 在寫出任何檔案之前，顯示模型將會是什麼樣子：來源、Entity、出現實例、Net、材料、高度、真空、埠、EPR 要求與求解設定，以筆記本卡片呈現，獨立的資料在 `.data`。在 Palace 上，它顯示 `mesh()` 將建立的輸入，已套用規劃的真空、模擬的埠與路徑。未知的值保持未知，絕不當成零。`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 對正規化輸入給出同樣的摘要。
 
 []{#internal-semantic-projection}[]{#identity-requirements}[]{#shared-source-facts-for-aedt}[]{#accepted-q3d-source-normalization}SGB 如何投影來源、交接保留哪些身分、AEDT 從快照讀取的事實，以及 Q3D 空橋記錄，見 [GeometryPlan 內部實作](../../contribute/internals/geometry-plan.qmd)。

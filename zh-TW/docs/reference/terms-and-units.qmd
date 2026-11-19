@@ -40,11 +40,11 @@ aliases:
 
 [SGB]{#term-sgb}：SCGSim 的幾何建構器，把快照變成每個求解器使用的三維模型。
 
-[Sidecar]{#term-sidecar}：SGB 寫在模型旁的檔案，記錄模型的每個面與體積來自哪個 Entity、 Net 與條帶。
+[Sidecar]{#term-sidecar}：SGB 寫在模型旁的檔案，記錄模型的每個面與體積來自哪個 Entity、Net 與條帶。
 
 ## 幾何 {#geometry}
 
-[Body（本體）]{#term-body}：來源或模型中的一塊幾何。它成為薄片還是實體取決於路徑； Body 這個詞本身不說明。
+[Body（本體）]{#term-body}：來源或模型中的一塊幾何。它成為薄片還是實體取決於路徑；Body 這個詞本身不說明。
 
 [Sheet（薄片）]{#term-sheet}：零厚度的表面，例如 Route A 上的金屬薄膜或埠片。
 

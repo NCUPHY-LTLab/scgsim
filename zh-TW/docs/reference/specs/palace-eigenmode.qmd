@@ -132,7 +132,7 @@ sim.set_convergence(
 
 ## 結果包含什麼 {#results-and-offline-analysis}
 
-`resolve_palace_result(run_dir, expected_handoff_id=...)` 讀取完成的計算； `result.epr_result()` 以 `PalaceEprResult` 給出它的 EPR，可用 `to_payload()` 儲存，再以 `resolve_epr_result(path)` 讀回。 `reanalyze_epr(result, surface_defaults=..., group_overrides=...)` 不重新求解就改變損耗假設，`show_epr(result, mode=...)` 把它畫出來；兩者都不啟動 Palace。兩者的用法見[不重新求解，改變損耗假設](../../guides/offline-loss.qmd)。
+`resolve_palace_result(run_dir, expected_handoff_id=...)` 讀取完成的計算；`result.epr_result()` 以 `PalaceEprResult` 給出它的 EPR，可用 `to_payload()` 儲存，再以 `resolve_epr_result(path)` 讀回。`reanalyze_epr(result, surface_defaults=..., group_overrides=...)` 不重新求解就改變損耗假設，`show_epr(result, mode=...)` 把它畫出來；兩者都不啟動 Palace。兩者的用法見[不重新求解，改變損耗假設](../../guides/offline-loss.qmd)。
 
 結果恰好包含你要求的 `num_modes` 個模態。Palace 可能回報更多已收斂的模態；SCGSim 依 Palace 的順序保留模態 1 至 `num_modes`。列數較少、或模態編號不是依序 1、2、… 的表格會被拒絕。
 

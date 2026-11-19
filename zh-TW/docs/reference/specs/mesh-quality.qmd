@@ -31,7 +31,7 @@ scgsim.meshing scgsim.meshing.features/2: clean after 0 refinement rounds
   total 1.7 s; limit 180 s, target 60 s for 0.0196 mm2
 ```
 
-先讀前三行：修補如何結束（`clean`，或停止原因）、最低品質，以及有多少元素低於門檻。 JSON 保存完整記錄：
+先讀前三行：修補如何結束（`clean`，或停止原因）、最低品質，以及有多少元素低於門檻。JSON 保存完整記錄：
 
 ::: {.askr-table-compact}
 | 欄位 | 記錄 |

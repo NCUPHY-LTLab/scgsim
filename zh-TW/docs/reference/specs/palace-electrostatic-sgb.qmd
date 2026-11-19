@@ -76,7 +76,7 @@ handoff = sim.prepare_handoff(
 - 不良元素數連續兩輪沒有低於其最低值（`stalled`）；
 - 接受的網格無法提升到 `geometry_order`，或 Gmsh 沒有產生網格。
 
-**怎麼辦。** 看不良元素在哪裡；報告在執行資料夾的 `mesh/` 中，最後一個網格存成 `.rejected.msh` 檔。停滯通常代表任何網格都修補不了的幾何，例如只有一個格點寬的邊或面：請在版圖中修正。否則就選一個把該區域切得更細的配方、提高 `Budgets.max_rounds` 或時間上限，或降低 `quality_threshold` 並把較低的值與研究一起記錄。 `Budgets(max_rounds=0)` 只產生一次網格、不修補；低於門檻的第一個網格仍會被拒絕。只有 `GmshDefaultRecipe` 會交付低於門檻的網格。
+**怎麼辦。** 看不良元素在哪裡；報告在執行資料夾的 `mesh/` 中，最後一個網格存成 `.rejected.msh` 檔。停滯通常代表任何網格都修補不了的幾何，例如只有一個格點寬的邊或面：請在版圖中修正。否則就選一個把該區域切得更細的配方、提高 `Budgets.max_rounds` 或時間上限，或降低 `quality_threshold` 並把較低的值與研究一起記錄。`Budgets(max_rounds=0)` 只產生一次網格、不修補；低於門檻的第一個網格仍會被拒絕。只有 `GmshDefaultRecipe` 會交付低於門檻的網格。
 :::
 
 ### 尺寸配方 {#palace-mesh-recipes}
@@ -96,7 +96,7 @@ handoff = sim.prepare_handoff(
 
 #### 條帶邊界曲線 {#palace-mesh-band-edges}
 
-*條帶*是為 Surface EPR 切進模型的一段表面：邊距為 0.5 與 1.0 µm 時，條帶是距間隙邊 0 至 0.5 µm 與 0.5 至 1.0 µm 的兩段，各寬 0.5 µm，面的其餘部分在它們之外。 `FeatureRecipe` 讓每條條帶邊界上的元素大小為 `band_mesh_size_multiple` 乘以該面最窄的條帶寬度，再向下取整為粗尺寸除以 2 的冪次。以上述邊距，預設值 4 要求 2 µm，依模型範圍得到 1.1 至 2.0 µm。沒有條帶的模型沒有條帶邊界，這個倍數不起作用。
+*條帶*是為 Surface EPR 切進模型的一段表面：邊距為 0.5 與 1.0 µm 時，條帶是距間隙邊 0 至 0.5 µm 與 0.5 至 1.0 µm 的兩段，各寬 0.5 µm，面的其餘部分在它們之外。`FeatureRecipe` 讓每條條帶邊界上的元素大小為 `band_mesh_size_multiple` 乘以該面最窄的條帶寬度，再向下取整為粗尺寸除以 2 的冪次。以上述邊距，預設值 4 要求 2 µm，依模型範圍得到 1.1 至 2.0 µm。沒有條帶的模型沒有條帶邊界，這個倍數不起作用。
 
 請保留預設值 4。較小的倍數（2）讓條帶處的元素形狀較好，但四面體約多一倍，帶條帶的覆晶量子位元因此無法在時間上限內產生網格。較大的倍數（8）只在條帶邊界決定尺寸處省下元素，而在 Route A 上會讓焊墊的 minSICN 接近預設門檻。要改用其他倍數，呼叫 `set_mesh(recipe=FeatureRecipe(band_mesh_size_multiple=...))`。
 
@@ -112,7 +112,7 @@ handoff = sim.prepare_handoff(
 | 條帶邊界不定尺寸，作為對照 | 修補一輪後無不良元素；407,093 個四面體；83 s | 停滯於 minSICN 0.003 至 0.004 | 無不良元素；9,600 至 13,500 個四面體；0.7 至 0.8 s |
 :::
 
-覆晶量子位元是置於共用接地平面下的 OrcaPen SC PDK `disk_flip_chip_qubit`， Route B；焊墊是 `square_pad_capacitor`（200 µm 焊墊、1 mm 晶粒）。每個金屬-空氣、金屬-基板與基板-空氣面都有 0.5 與 1 µm 的條帶。各案例與每次計算見[條帶邊量測](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/experiments/meshing-benchmark/band_edge.md)。
+覆晶量子位元是置於共用接地平面下的 OrcaPen SC PDK `disk_flip_chip_qubit`，Route B；焊墊是 `square_pad_capacitor`（200 µm 焊墊、1 mm 晶粒）。每個金屬-空氣、金屬-基板與基板-空氣面都有 0.5 與 1 µm 的條帶。各案例與每次計算見[條帶邊量測](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/experiments/meshing-benchmark/band_edge.md)。
 :::
 
 ### 網格產生器選項 {#palace-mesh-mesher}
@@ -159,7 +159,7 @@ sim.set_convergence(
 | `SurfaceEpr(interface_kind, margin_um=None, modes=None, terminals=None)` | 兩者 | 一種介面類型的參與比：其整個表面各列的總和，或其在 `margin_um` 的邊距列總和。每個模態（`modes=`，Eigenmode）或每個激發（`terminals=`，Electrostatic）一個數；`None` 選取全部。`SurfaceEpr.each("MA", "MS", "SA")` 以同一門檻為每種類型宣告一個條件。 |
 | `ErrorIndicator()` | 兩者 | Palace 寫入 `error-indicators.csv` 的 `Norm`。 |
 
-`within(percent=p)` 限制與前一個回合相比的變化，以該值的百分比表示， $100\,|q_k - q_{k-1}| / |q_k|$：這就是 AEDT 對 Q3D 矩陣回報的 `Delta %` 與 HFSS Eigenmode 的 `Max Delta Freq. %`。$q_k$ 為零時，若 $q_{k-1}$ 也是零，變化為零，否則沒有定義，條件不成立。絕對形式以該物理量的儲存單位命名：電容用 `absolute_f` （法拉），頻率用 `absolute_ghz`，參與比沒有單位，用 `absolute`。請恰好給一個。 `ErrorIndicator().below(value)` 限制的是值本身。
+`within(percent=p)` 限制與前一個回合相比的變化，以該值的百分比表示，$100\,|q_k - q_{k-1}| / |q_k|$：這就是 AEDT 對 Q3D 矩陣回報的 `Delta %` 與 HFSS Eigenmode 的 `Max Delta Freq. %`。$q_k$ 為零時，若 $q_{k-1}$ 也是零，變化為零，否則沒有定義，條件不成立。絕對形式以該物理量的儲存單位命名：電容用 `absolute_f` （法拉），頻率用 `absolute_ghz`，參與比沒有單位，用 `absolute`。請恰好給一個。`ErrorIndicator().below(value)` 限制的是值本身。
 
 一個回合是 Palace 的一次求解：第 1 回合求解輸入網格，第 $k$ 回合在 $k-1$ 次細化之後。變化條件比較第 $k$ 回合與第 $k-1$ 回合，所以在第 1 回合不會成立。有多個數字的物理量，每個數字都成立才算成立。計算在第 $k$ 回合收斂，是指每個條件在以 $k$ 結束的 `minimum_converged_passes` 個回合中都成立。邊距列是其整個表面列的一部分，兩者絕不相加。
 
@@ -203,7 +203,7 @@ sim.set_convergence(
 | `stopped_at_convergence` | SCGSim 在收斂的回合之後停止它 | 完成 |
 | `stop_escalated`、`runner_terminated`、`not_recorded` | 停止沒有順利完成，或計算被外部終止 | 失敗 |
 
-結果讀取會比對回傳的檔案、執行器的決定記錄與收據，三者不一致的資料夾會被拒絕。 `ResolvedPalaceResult.convergence` 與[可信度報告](report-model.qmd#declared-convergence)說明計算在第幾個回合收斂、Palace 在哪裡停止；`ResolvedPalaceResult.solver_end` 保存收據的 `ending`。執行器如何監看並停止 Palace，見[內部實作](../../contribute/internals/report-records.qmd#convergence-runner)。
+結果讀取會比對回傳的檔案、執行器的決定記錄與收據，三者不一致的資料夾會被拒絕。`ResolvedPalaceResult.convergence` 與[可信度報告](report-model.qmd#declared-convergence)說明計算在第幾個回合收斂、Palace 在哪裡停止；`ResolvedPalaceResult.solver_end` 保存收據的 `ending`。執行器如何監看並停止 Palace，見[內部實作](../../contribute/internals/report-records.qmd#convergence-runner)。
 
 ## 預設值與接地 {#electrostatic-defaults}
 
@@ -220,6 +220,6 @@ sim.set_convergence(
 
 Palace 自己把 `Nonconformal` 預設為 `true`；SCGSim 一律寫出這個鍵，並預設為 `false`。`set_numerical(save_adapt_mesh=...)` 接受 `True`、`False` 或 `None`（不寫出這個鍵）。設定可以用 `sim.numerical` 讀回，它是一個 `NumericalControls` （`sim.numerical.amr_nonconformal`；`to_payload()` 給出 `metadata/palace_numerical_controls.json` 中的字典），規劃的薄膜則用 `sim.surface_epr_specs` 讀回。有[收斂宣告](#convergence-declaration)時，預設容差會被擱置，寫出的容差會被拒絕。
 
-**接地。** 既不是端子也不是接地的導體，預設會接地（`unassigned_conductor_policy="ground"`）。設為 `unassigned_conductor_policy="error"` 時，如開頭的範例，每個導體都必須是端子或接地：那裡焊墊是端子，接地 Net 由 `add_ground` 保持 0 V。`add_ground(net_id=...)` 讓實際的導體接地； `exterior_boundary_policy="ground"` 則讓模型的外表面接地，兩者分開記錄。
+**接地。** 既不是端子也不是接地的導體，預設會接地（`unassigned_conductor_policy="ground"`）。設為 `unassigned_conductor_policy="error"` 時，如開頭的範例，每個導體都必須是端子或接地：那裡焊墊是端子，接地 Net 由 `add_ground` 保持 0 V。`add_ground(net_id=...)` 讓實際的導體接地；`exterior_boundary_policy="ground"` 則讓模型的外表面接地，兩者分開記錄。
 
 []{#source-and-geometry-authority}模擬的幾何只來自它所取得的規劃；其參考是 [GeometryPlan 與 SGB](geometry-plan.qmd)。

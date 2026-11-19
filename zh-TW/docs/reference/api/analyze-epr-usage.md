@@ -43,11 +43,11 @@ show_epr(result, mode=1)
 
 | 參數 | 說明 |
 |---|---|
-| `saved_solution` | 已驗證並解析為 `SavedSolution` 的儲存場資料。 |
-| `aedt_version` | 明確選定的 AEDT 版本：`"2023.2"` 或 `"2024.2"`。 |
-| `model` | 儲存解所求解的 `PreparedSgbModel`：回傳執行的 `spec.model`，或 `EigenmodeSim.prepared_model`。其他模型或原生建模器的解會被拒絕。 |
-| `project_name`、`design_name` | 儲存模型的原生專案與設計識別名稱。 |
-| `run_control` | 與儲存解相符的本徵模設定與求解通過控制。 |
-| `epr_request` | 要評估的表面、體積與接面物理量。 |
-| `output_dir` | 新分析交接資料與回傳結果的目的地。 |
-| `surface_field_selectors` | 可選對照表，將 sidecar 的 Surface-EPR 群組（`epr_request.surface_epr_groups` 所選者）對應至 `"surface"`（讀取該列面上的場）或 `"adjacent"`（讀取緊鄰面外的場）。未指定的群組讀取 `"surface"`。 |
+| `saved_solution` | 已驗證並解析為 `SavedSolution` 的儲存場資料。|
+| `aedt_version` | 明確選定的 AEDT 版本：`"2023.2"` 或 `"2024.2"`。|
+| `model` | 儲存解所求解的 `PreparedSgbModel`：回傳執行的 `spec.model`，或 `EigenmodeSim.prepared_model`。其他模型或原生建模器的解會被拒絕。|
+| `project_name`、`design_name` | 儲存模型的原生專案與設計識別名稱。|
+| `run_control` | 與儲存解相符的本徵模設定與求解通過控制。|
+| `epr_request` | 要評估的表面、體積與接面物理量。|
+| `output_dir` | 新分析交接資料與回傳結果的目的地。|
+| `surface_field_selectors` | 可選對照表，將 sidecar 的 Surface-EPR 群組（`epr_request.surface_epr_groups` 所選者）對應至 `"surface"`（讀取該列面上的場）或 `"adjacent"`（讀取緊鄰面外的場）。未指定的群組讀取 `"surface"`。|

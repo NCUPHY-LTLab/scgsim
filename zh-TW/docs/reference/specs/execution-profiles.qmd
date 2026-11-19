@@ -25,7 +25,7 @@ aliases:
 
 下面每個區塊，是 SCGSim 的腳本產生器依所列 `resources` 寫出的幾行（腳本中還有其他行），`executable` 設為 Palace 的執行檔或它的 `palace` 包裝腳本。
 
-**`direct-local`，`command_style="binary"`**（預設）： `resources={"command_style": "binary", "threads": 4}` 產生
+**`direct-local`，`command_style="binary"`**（預設）：`resources={"command_style": "binary", "threads": 4}` 產生
 
 ```sh
 PALACE_PROCESSES=1
@@ -47,7 +47,7 @@ export OMP_NUM_THREADS="$PALACE_THREADS"
 
 Palace 的 `palace` 腳本會自行啟動 MPI 啟動器（預設為 `mpirun`）；見 [Palace 執行說明](https://awslabs.github.io/palace/stable/run/)。
 
-**`slurm-single-node`**： `resources={"nodes": 1, "ntasks": 16, "cpus_per_task": 1, "time": "02:00:00"}` 產生
+**`slurm-single-node`**：`resources={"nodes": 1, "ntasks": 16, "cpus_per_task": 1, "time": "02:00:00"}` 產生
 
 ```sh
 #SBATCH --nodes=1
@@ -63,9 +63,9 @@ export OMP_NUM_THREADS="$PALACE_THREADS"
 srun "$PALACE_EXECUTABLE" "$PALACE_CONFIG"
 ```
 
-**`slurm-multi-node`**： `resources={"nodes": 2, "ntasks": 64, "cpus_per_task": 1, "mem_per_cpu": "4G"}` 產生同樣的腳本，但為 `#SBATCH --nodes=2`、`--ntasks=64` 與 `--mem-per-cpu=4G`。
+**`slurm-multi-node`**：`resources={"nodes": 2, "ntasks": 64, "cpus_per_task": 1, "mem_per_cpu": "4G"}` 產生同樣的腳本，但為 `#SBATCH --nodes=2`、`--ntasks=64` 與 `--mem-per-cpu=4G`。
 
-`resources` 的其他鍵都成為一行 `#SBATCH`，就像這裡的 `time`；`launcher`、 `command_style`、`threads` 與 `processes` 由腳本自己使用，`output`、`error` 與 `open_mode` 則固定綁定到計算的記錄檔。請以 `sbatch` 提交腳本。`srun` 是啟動器（可用 `launcher` 換成別的），所以 Slurm 設定檔使用 Palace 執行檔與 `command_style="binary"`；包裝腳本在這裡會被拒絕。除非你給 `threads`， `OMP_NUM_THREADS` 就是 `cpus_per_task`。執行檔、啟動器與設定命令都必須符合目標主機； SCGSim 不猜測 MPI 設定。
+`resources` 的其他鍵都成為一行 `#SBATCH`，就像這裡的 `time`；`launcher`、`command_style`、`threads` 與 `processes` 由腳本自己使用，`output`、`error` 與 `open_mode` 則固定綁定到計算的記錄檔。請以 `sbatch` 提交腳本。`srun` 是啟動器（可用 `launcher` 換成別的），所以 Slurm 設定檔使用 Palace 執行檔與 `command_style="binary"`；包裝腳本在這裡會被拒絕。除非你給 `threads`，`OMP_NUM_THREADS` 就是 `cpus_per_task`。執行檔、啟動器與設定命令都必須符合目標主機；SCGSim 不猜測 MPI 設定。
 
 求解之前，每個腳本都以 `--dry-run` 讓 Palace 檢查複製過去的 `config.json`；Palace 拒絕時就不會求解，收據會記錄原因（[細節](palace-electrostatic-sgb.qmd#electrostatic-calls)）。
 
