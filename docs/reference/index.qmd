@@ -9,7 +9,7 @@ aliases:
   - ../reference.html
 ---
 
-Start with a goal notebook from [Choose a simulation](../start/choose-a-simulation.qmd#getting-started), then use the topic links below to find the model, geometry, mesh, execution or result guidance for that task. Check the [Convention dictionary](terms-and-units.qmd) when a technical term or unit needs clarification.
+Start with a goal notebook from [Choose a simulation](../start/choose-a-simulation.qmd#getting-started), then use the topic links below to find the model, geometry, mesh, execution or result guidance for that task. Check [Terms and units](terms-and-units.qmd) when a technical term or unit needs clarification.
 
 ## Model and materials {#model-materials}
 

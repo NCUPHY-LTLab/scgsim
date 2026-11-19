@@ -203,7 +203,7 @@ use the capacitance for.
 
 - [Palace: resonant modes](../guides/modes-palace.qmd) computes the
   frequencies and Q of a layout's resonant modes.
-- [Layout Modeling Check](../guides/check-a-layout.qmd) explains what the check
+- [Check a layout](../guides/check-a-layout.qmd) explains what the check
   reports and how to fix what it finds.
 - [Supported Scope](../reference/supported-scope.qmd) says what a layout of your own
   must guarantee before you simulate it.

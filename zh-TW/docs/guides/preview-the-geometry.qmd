@@ -1,5 +1,5 @@
 ---
-title: "無顯示幾何預覽"
+title: "預覽幾何"
 description: "綁定求解器中繼資料的預覽 API、產物身分及明確的不可用模式。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"

@@ -1,5 +1,5 @@
 ---
-title: "SGB: from layout sources to buildable geometry"
+title: "How a layout becomes a model"
 description: "A worked explanation of how source shapes, process data and assembly declarations become shared CAD geometry for Gmsh and Palace."
 lang: en
 toc-title: On this page

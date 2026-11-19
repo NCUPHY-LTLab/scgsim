@@ -145,5 +145,5 @@ Palace 的記錄中會有一則警告，說部分外部邊界沒有設定邊界�
 ## 下一步 {#next}
 
 - [Palace：共振模態](../guides/modes-palace.qmd)：計算版圖中各共振模態的頻率與 Q 值。
-- [版圖建模檢查](../guides/check-a-layout.qmd)：說明檢查會回報什麼，以及怎麼修正它找到的問題。
+- [檢查版圖](../guides/check-a-layout.qmd)：說明檢查會回報什麼，以及怎麼修正它找到的問題。
 - [支援範圍](../reference/supported-scope.qmd)：模擬你自己的版圖之前，版圖必須保證哪些條件。

@@ -68,16 +68,16 @@ Use their terminology and link to them when introducing a technical term.
 | Term | Owning explanation |
 |---|---|
 | Entity | [Source identity, Occurrence and Net](docs/concepts/geometry.qmd#entity-occurrence-and-net) |
-| Net | [Convention](docs/reference/terms-and-units.qmd#term-net) and [geometry contact rules](docs/reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract) |
-| GeometryPlan | [Convention](docs/reference/terms-and-units.qmd#term-geometry-plan) |
-| Snapshot | [Convention](docs/reference/terms-and-units.qmd#term-snapshot) |
-| Handoff / run package | [Convention](docs/reference/terms-and-units.qmd#term-handoff) and [execution](docs/guides/run-elsewhere.qmd) |
+| Net | [Terms and units](docs/reference/terms-and-units.qmd#term-net) and [geometry contact rules](docs/reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract) |
+| GeometryPlan | [Terms and units](docs/reference/terms-and-units.qmd#term-geometry-plan) |
+| Snapshot | [Terms and units](docs/reference/terms-and-units.qmd#term-snapshot) |
+| Handoff / run package | [Terms and units](docs/reference/terms-and-units.qmd#term-handoff) and [execution](docs/guides/run-elsewhere.qmd) |
 | `handoff_id` | [Preparation-side identity and result resolution](docs/guides/convergence-and-reports.qmd#palace-bind-the-independently-retained-preparation-id) |
 | Resolve | [Returned-result loading and checks](docs/guides/convergence-and-reports.qmd) |
 | Route A / Route B | [Geometric approximations](docs/concepts/model-and-numerics.qmd#choose-the-geometric-approximation) |
 
-The English [Convention](docs/reference/terms-and-units.qmd) and
-[Chinese Convention](zh-TW/docs/reference/terms-and-units.qmd) collect reader terminology.
+The English [Terms and units](docs/reference/terms-and-units.qmd) and
+[Chinese terms and units](zh-TW/docs/reference/terms-and-units.qmd) collect reader terminology.
 Chinese reader pages retain the English technical terms requested for this
 project, with a Chinese explanation on first use. Keep API names and actual
 interface strings unchanged.

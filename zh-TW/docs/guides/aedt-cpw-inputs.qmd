@@ -1,6 +1,6 @@
 ---
 lang: zh-TW
-title: "AEDT 分支：準備公開 CPW 輸入"
+title: "AEDT：準備 CPW 輸入"
 description: "把公開 CPW 準備成 GeometryPlan 快照；每一堂 AEDT 教學都從它建立 SGB 模型。"
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"

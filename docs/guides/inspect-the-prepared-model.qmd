@@ -1,5 +1,5 @@
 ---
-title: "Inspect the prepared backend"
+title: "Inspect the prepared model"
 description: "Read bound mesh or native assignments before interpreting a solver result."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"

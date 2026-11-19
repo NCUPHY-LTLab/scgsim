@@ -28,4 +28,4 @@ behavior, inputs, outputs, and implementation checks. For example,
 [Tetrahedral Mesh Quality](../../reference/specs/mesh-quality.qmd) describes what the meshing
 audit measures; it remains in Contract.
 
-[Convention](../../reference/terms-and-units.qmd) explains the technical terms used in both Areas.
+[Terms and units](../../reference/terms-and-units.qmd) explains the technical terms used in both Areas.

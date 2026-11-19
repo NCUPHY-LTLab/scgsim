@@ -1,6 +1,6 @@
 ---
 lang: zh-TW
-title: "在本機或求解器主機執行交接套件"
+title: "執行已準備的模型"
 description: "在本機執行已準備的模型，或將完整原生套件傳至求解器主機並取回結果。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"

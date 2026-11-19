@@ -485,5 +485,5 @@ earlier cache pass, and a new postsolve margin is a final-field calculation,
 not invented pass history.
 
 See [Folder tree and ownership](ownership.qmd) for repository placement and
-[Headless Geometry Preview](../guides/preview-the-geometry.qmd) for the static and connected
+[Preview the geometry](../guides/preview-the-geometry.qmd) for the static and connected
 Notebook inspection contract.

@@ -1,5 +1,5 @@
 ---
-title: "Execute a handoff locally or on its solver host"
+title: "Run a prepared model"
 description: "Run a prepared model locally or transfer the complete native package to its solver host and return the results."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"

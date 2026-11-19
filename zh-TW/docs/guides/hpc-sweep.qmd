@@ -1,5 +1,5 @@
 ---
-title: "使用免 Desktop 的 HPC 求解器進行參數掃描"
+title: "AEDT：在 HPC 上做參數掃描"
 description: "在本機準備獨立 HFSS EPR 模型，傳送一個掃描套件，在 HPC 上不啟動 Desktop 執行求解，再收集完整自適應 EPR。"
 lang: zh-TW
 scgsim-id: "docs/course/aedt-hpc-sweep"
@@ -23,7 +23,7 @@ aliases:
 | HPC 求解 | Python 3.12 標準函式庫、選定的 AEDT 命令列執行檔與授權；此階段不需要可用的 Desktop 工作階段、SCGSim 安裝或 PyAEDT |
 | 原生結果收集 | SCGSim 3.0.0rc4、PyAEDT 1.3.0、選定的 AEDT 版本與授權，以及可用的 Desktop 工作階段 |
 
-請在同一個 Python 工作階段完成[公開 Xmon 輸入](xmon/inputs.qmd)與[公開 Xmon AEDT](xmon/aedt.qmd)的設定章節。停在該教學原始交接的執行步驟之前。以下程式碼只使用兩個具名變數：`snapshot`（不可變來源與堆疊，含計畫的 Surface-EPR 規格）與 `junction`（綁定來源的 `PlanarJunction`）。
+請在同一個 Python 工作階段完成[覆晶 Xmon 輸入](xmon/inputs.qmd)與[覆晶 Xmon AEDT](xmon/aedt.qmd)的設定章節。停在該教學原始交接的執行步驟之前。以下程式碼只使用兩個具名變數：`snapshot`（不可變來源與堆疊，含計畫的 Surface-EPR 規格）與 `junction`（綁定來源的 `PlanarJunction`）。
 
 實體幾何、最終 Nets 與體積材料屬於該來源。以下三個電感值是明確的電路模型選擇，不是元件實測值。若要掃描幾何，每個案例都必須重新編寫來源 snapshot，並重新綁定接面與目錄。
 

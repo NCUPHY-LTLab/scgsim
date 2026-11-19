@@ -1,5 +1,5 @@
 ---
-title: "Convention"
+title: "Terms and units"
 description: "Definitions of SCGSim's English technical terms, symbols and unit notation."
 sidebar: reference
 scgsim-kind: "contract"

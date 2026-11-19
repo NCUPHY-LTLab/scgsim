@@ -1,5 +1,5 @@
 ---
-title: "Flip-chip Xmon：共用來源輸入"
+title: "覆晶 Xmon：共用來源輸入"
 description: "將具名的公開 Xmon 出現位置與最終 Nets 編寫至同一個不可變來源 snapshot。"
 lang: zh-TW
 scgsim-kind: "course"

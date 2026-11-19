@@ -1,5 +1,5 @@
 ---
-title: "Headless Geometry Preview"
+title: "Preview the geometry"
 description: "Solver-metadata-bound preview APIs, artifact identity and explicit unavailable modes."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"

@@ -1,5 +1,5 @@
 ---
-title: "Convention"
+title: "術語與單位"
 description: "本頁說明 SCGSim 英文技術用語、符號與單位記法。"
 lang: zh-TW
 sidebar: reference

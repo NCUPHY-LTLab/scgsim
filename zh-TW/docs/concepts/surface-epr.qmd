@@ -1,5 +1,5 @@
 ---
-title: "解讀本徵模 EPR"
+title: "解讀本徵模態 EPR"
 description: "能量正規化、物理分區、內縮邊距與歸因損耗假設。"
 lang: zh-TW
 scgsim-kind: "concept"

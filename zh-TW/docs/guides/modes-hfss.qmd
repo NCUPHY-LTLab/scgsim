@@ -1,6 +1,6 @@
 ---
 lang: zh-TW
-title: "AEDT：一般 HFSS Eigenmode"
+title: "AEDT：HFSS Eigenmode"
 description: "準備無埠模態請求，並在回傳時保留原生頻率與 Q。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"

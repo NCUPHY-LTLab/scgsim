@@ -540,7 +540,7 @@ runtime geometry authority is the in-tree `scgsim.geometry.sgb` and the
 current `scgsim.palace` implementation.
 
 See [GeometryPlan and SGB](geometry-plan.qmd),
-[Headless Geometry Preview](../../guides/preview-the-geometry.qmd),
+[Preview the geometry](../../guides/preview-the-geometry.qmd),
 [Execution Profiles and Local/Manual-HPC Handoff](execution-profiles.qmd),
 and [Provenance and Data Boundaries](../../contribute/provenance.qmd) for the surrounding
 contracts.

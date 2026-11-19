@@ -1,5 +1,5 @@
 ---
-title: "公開 Xmon：以實體金屬進行 AEDT 本徵模"
+title: "覆晶 Xmon：以實體金屬進行 AEDT 本徵模態"
 description: "綁定接面、宣告 Surface EPR，並在 SGB 模型上準備 AEDT EPR 請求。"
 lang: zh-TW
 scgsim-kind: "course"

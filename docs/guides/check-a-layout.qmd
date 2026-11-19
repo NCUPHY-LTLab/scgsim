@@ -1,5 +1,5 @@
 ---
-title: "Layout Modeling Check"
+title: "Check a layout"
 description: "Check from a layout repository that a simulation can model the plan of a layout, before any simulation is set up."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"

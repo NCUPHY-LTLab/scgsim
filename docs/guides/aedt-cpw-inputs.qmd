@@ -1,5 +1,5 @@
 ---
-title: "AEDT branch: prepare the public CPW inputs"
+title: "AEDT: prepare the CPW inputs"
 description: "Prepare the public CPW as a GeometryPlan snapshot, the source every AEDT lesson builds its SGB model from."
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"

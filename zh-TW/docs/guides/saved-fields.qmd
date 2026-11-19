@@ -1,5 +1,5 @@
 ---
-title: "AEDT：分析已封存的儲存場解算結果"
+title: "AEDT：分析已保存的場"
 description: "驗證已儲存的 cohort，並在原生工作複本中評估 EPR，無須再次求解。"
 lang: zh-TW
 scgsim-kind: "course"

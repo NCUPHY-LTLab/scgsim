@@ -1,5 +1,5 @@
 ---
-title: "Public Xmon: AEDT Eigenmode with solid metal"
+title: "Flip-chip Xmon: AEDT Eigenmode with solid metal"
 description: "Bind the junction, declare Surface EPR and prepare the AEDT EPR request on the SGB model."
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"

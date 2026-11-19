@@ -1,5 +1,5 @@
 ---
-title: "SGB：從版圖來源到可建構幾何"
+title: "版圖如何變成模型"
 description: "以一個公開案例說明元件形狀、製程資料與組裝宣告如何成為 Gmsh 和 Palace 可建構的共用幾何。"
 lang: zh-TW
 toc-title: 本頁內容

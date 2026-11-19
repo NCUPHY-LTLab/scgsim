@@ -1,5 +1,5 @@
 ---
-title: "AEDT: ordinary HFSS Eigenmode"
+title: "AEDT: HFSS Eigenmode"
 description: "Prepare a port-free mode request and retain native frequency and Q on return."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"

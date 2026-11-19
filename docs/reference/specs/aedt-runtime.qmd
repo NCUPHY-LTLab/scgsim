@@ -113,7 +113,7 @@ The preparation must include its bound source and project, setup and cache
 readback, and native calculator-definition evidence. Packaging does not open
 Desktop or alter the authored model, setup, margins, modes, or EPR criteria.
 
-For a complete multi-model procedure, follow [Parameter sweep with a Desktop-free HPC solver](../../guides/hpc-sweep.qmd). It creates one native package per model, transports them in one ordinary archive, and collects each returned attempt separately. The outer archive and serial loop are caller composition; the public batch API continues to own one model per package.
+For a complete multi-model procedure, follow [AEDT: parameter sweep on HPC](../../guides/hpc-sweep.qmd). It creates one native package per model, transports them in one ordinary archive, and collects each returned attempt separately. The outer archive and serial loop are caller composition; the public batch API continues to own one model per package.
 
 The public Python entry points are:
 
@@ -1578,5 +1578,5 @@ selection, arbitrary legacy recipe ingestion, custom AEDT material definitions,
 or compatibility fallbacks for old private runtimes. Those are independent
 future scopes.
 
-See [Headless Geometry Preview](../../guides/preview-the-geometry.qmd) for the separate
+See [Preview the geometry](../../guides/preview-the-geometry.qmd) for the separate
 off-screen inspection contract and the AEDT modes that may be unavailable.

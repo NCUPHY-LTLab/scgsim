@@ -1,6 +1,6 @@
 ---
 lang: zh-TW
-title: "檢視已準備的後端"
+title: "檢視已準備的模型"
 description: "解讀求解器結果前，先讀取已綁定網格或原生指派。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"

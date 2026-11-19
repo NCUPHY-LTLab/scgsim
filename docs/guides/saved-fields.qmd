@@ -1,5 +1,5 @@
 ---
-title: "AEDT: analyze a sealed saved-field solution"
+title: "AEDT: analyze saved fields"
 description: "Verify a saved cohort and evaluate EPR in a native workcopy without requesting another solve."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"

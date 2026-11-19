@@ -1,5 +1,5 @@
 ---
-title: "版圖建模檢查"
+title: "檢查版圖"
 description: "在版圖儲存庫中，於建立任何模擬之前，檢查模擬能否為版圖的計畫建模。"
 lang: zh-TW
 scgsim-kind: "contract"
