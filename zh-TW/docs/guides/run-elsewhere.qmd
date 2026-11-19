@@ -103,7 +103,7 @@ srun "$PALACE_EXECUTABLE" "$PALACE_CONFIG"
 1. 在準備的電腦上保留 `handoff.handoff_id`，例如寫進執行資料夾以外的一個檔案。之後讀取結果時，會用它核對取回的資料夾（[收斂與報告](convergence-and-reports.qmd#palace-bind-the-independently-retained-preparation-id)）。
 2. 把封存檔複製到求解器電腦、解開，在解開的資料夾內執行腳本（`bash run_palace.sh` 或 `sbatch run_palace.sbatch`）。
 3. 等執行結束。在 Slurm 下，`sbatch` 在作業排入佇列時就返回；作業結束時執行才結束，屆時 `metadata/palace_returned_run_receipt.json` 會記錄執行如何結束。
-4. 把整個執行資料夾連同 `results/`、`logs/`、`metadata/` 一起複製回來。只複製結果表格是讀不了的。
+4. 把整個執行資料夾連同 `results/`、`logs/`、`metadata/` 一起複製回來，並以準備時的名稱放在它的 `.tar.gz` 封存檔旁邊。讀取結果時會確認資料夾旁的封存檔就是和它一起準備的那一份，所以改過名的資料夾、旁邊沒有封存檔的資料夾，以及只複製結果表格的副本，都會被拒絕。
 
 如果求解器在第一步檢查（Palace 對 `config.json` 的 `--dry-run`）就拒絕輸入，Palace 不會開始求解，收據會記載執行停在這一步檢查，因此不會把被拒絕的輸入誤認為求解失敗。
 

@@ -142,7 +142,10 @@ beside it (`handoff.archive_path`). To run elsewhere:
    is queued; the run has ended when the job has, and
    `metadata/palace_returned_run_receipt.json` then records how it ended.
 4. Copy the whole run folder back, with its `results/`, `logs/` and
-   `metadata/`. A copy of only the result tables cannot be read.
+   `metadata/`, and put it under the name it was prepared with, beside its
+   `.tar.gz` archive. Reading the result checks that the archive beside the
+   folder is the one prepared with it, so it refuses a renamed folder, a
+   folder without its archive, and a copy of only the result tables.
 
 If the solver rejects the input in its first check (Palace's `--dry-run` on
 `config.json`), Palace never starts solving and the receipt says the run
