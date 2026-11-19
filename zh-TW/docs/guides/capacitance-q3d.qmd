@@ -9,7 +9,109 @@ aliases:
   - ../course/aedt-q3d.html
 ---
 
-完整的焊墊電容流程請使用[選擇模擬](../start/choose-a-simulation.qmd#getting-started)中的 PDK notebook。Q3D 求解的是 Palace 網格化的同一幾何：`prepare_q3d_from_geometry` 會建立計畫的 SGB 模型，並寫出攜帶該模型的交接套件。不再有手寫實體，也沒有 Region 邊距；Region 即計畫的 `VACUUM_REGION`。
+Q3D 求解的是 Palace 網格化的同一幾何：`prepare_q3d_from_geometry` 會建立計畫的 SGB 模型，並寫出攜帶該模型的交接套件。不再有手寫實體，也沒有 Region 邊距；Region 即計畫的 `VACUUM_REGION`。
+
+## 完整執行：SimplePad 電容 {#a-complete-run}
+
+這是[第一個模擬](../start/first-simulation.qmd)的 AEDT 版本。本例採用公開 PDK 的標稱 100 nm 鋁層，並以 200 µm 方形金屬焊盤、20 µm 間隙及周圍接地配置在 1000 µm 方形晶片上。元件庫提供版圖、材料與層堆疊；腳本明確宣告 `pad` 與 `ground` 的電氣歸屬，再交給 Q3D 抽取電容與電導矩陣。執行它需要 `aedt` extra（見[安裝 SCGSim](../start/install.qmd#extras)），以及本機已安裝、具可用授權的 AEDT Q3D 2024.2。
+
+![SimplePad 版圖：方形焊盤、周圍接地與已繪製定位片。](../assets/simple-pad-layout.png)
+
+將以下完整程式存成 `simplepad_q3d.py`。四個區塊依序完成「建立來源 → 準備求解器輸入 → 執行 → 讀取」。
+
+```python
+from pathlib import Path
+from uuid import uuid4
+import argparse
+import subprocess
+import sys
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.aedt import (
+    AedtResources,
+    MatrixRunControl,
+    prepare_q3d_from_geometry,
+    resolve_results,
+)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--handoff-only", action="store_true")
+    args = parser.parse_args()
+
+    # 1. Build the layout and declare electrical ownership.
+    orcapen_sc_pdk.activate()
+    component = gf.get_component(
+        "square_pad_capacitor",
+        pad_side_um=200.0,
+        gap_um=20.0,
+        die_side_um=1000.0,
+        junction_width_um=2.0,
+    )
+    records = get_material_records()
+    plan = GeometryPlan(
+        component=component,
+        root_id="chip",
+        layer_stack=get_single_die_layer_stack(),
+        material_records=records,
+        coupon_padding_um=0.0,
+    )
+    plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+    plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
+    snapshot = plan.prepare()
+
+    # 2. Prepare a new, portable Q3D input directory.
+    handoff = prepare_q3d_from_geometry(
+        snapshot,
+        aedt_version="2024.2",
+        modeling="solid",
+        output_dir=Path(".artifacts/simplepad-q3d") / uuid4().hex[:12],
+        project_name="SimplePad",
+        design_name="Capacitance",
+        net_types={"pad": "Signal", "ground": "Signal"},
+        physical_ground_nets=("ground",),
+        run_control=MatrixRunControl(
+            setup_name="Setup1", frequency_ghz=5.0,
+            maximum_passes=10, convergence_percent=1.0,
+        ),
+        resources=AedtResources(cores=4, ram_limit_percent=80),
+    )
+    print("Inputs:", handoff.run_dir)
+    if args.handoff_only:
+        return
+
+    # 3. Run AEDT on this licensed host using the current Python environment.
+    subprocess.run(
+        [sys.executable, "-m", "scgsim.aedt.run",
+         "--handoff", str(handoff.metadata_path), "--execute"],
+        cwd=handoff.run_dir,
+        check=True,
+    )
+
+    # 4. Read the returned matrix entries with their names and exported units.
+    result = resolve_results(handoff.run_dir)
+    for row in result.physics_results():
+        print(row)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+在研究專案資料夾執行：
+
+```bash
+uv run simplepad_q3d.py
+```
+
+每次執行都會在 `.artifacts/simplepad-q3d/` 建立新的結果資料夾。終端機列出的矩陣項目包含物理量、列名、欄名、數值與原生匯出單位；使用結果時，請一起保留這些欄位。[讀取完整回傳結果](convergence-and-reports.qmd)說明如何讀取矩陣。
+
+若要先檢視輸入，執行 `uv run simplepad_q3d.py --handoff-only`。此選項只準備輸入與可攜套件，不會開啟 AEDT；完整模式則在同一主機執行並讀回結果。以下各節說明這個呼叫的輸入。
 
 ## 以 GeometryPlan 準備 C/G {#geometryplan-backed-cg-preparation}
 

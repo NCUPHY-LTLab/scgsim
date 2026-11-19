@@ -54,4 +54,4 @@ print(handoff.spec_path, handoff.archive_path)
 
 ### 等待 issue #135 的埠 {#ports-that-wait-for-issue-135}
 
-Region 面上的波 `TerminalPort` 與每一種 Driven Modal 埠（`ModalPort`）在 SGB 模型上都還沒有實作。宣告這類埠的請求會被 `prepare_sgb_model` 拒絕，並指向 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)；在該 issue 完成前沒有 Driven Modal 工作流程。GDS 匯入路徑（`HfssDrivenSpec`、`gds_path`、`LayerImport`、`ObjectBinding`、`LengthMeshSpec`）已移除。
+Region 面上的波 `TerminalPort` 與每一種 Driven Modal 埠（`ModalPort`）在 SGB 模型上都還沒有實作。宣告這類埠的請求會被 `prepare_sgb_model` 拒絕，並指向 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)；在該 issue 完成前沒有 Driven Modal 工作流程；在那之前，雙埠元件的網路響應請用上述集總埠取得。GDS 匯入路徑（`HfssDrivenSpec`、`gds_path`、`LayerImport`、`ObjectBinding`、`LengthMeshSpec`）已移除。

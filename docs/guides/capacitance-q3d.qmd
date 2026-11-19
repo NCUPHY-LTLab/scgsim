@@ -8,11 +8,127 @@ aliases:
   - ../course/aedt-q3d.html
 ---
 
-For a complete pad-capacitance workflow, use a PDK notebook from [Choose a simulation](../start/choose-a-simulation.qmd#getting-started).
 Q3D solves the geometry Palace meshes: `prepare_q3d_from_geometry` builds the
 plan's SGB model and writes a handoff that carries it. There are no
 hand-written bodies and no Region padding; the Region is the plan's
 `VACUUM_REGION`.
+
+## A complete run: SimplePad capacitance {#a-complete-run}
+
+This is the AEDT counterpart of [First simulation](../start/first-simulation.qmd).
+It uses the public PDK's nominal 100 nm aluminum stack and places a 200 µm
+square metal pad, a 20 µm gap and surrounding Ground on a 1000 µm square die.
+The component library supplies the layout, materials and layer stack. The
+script declares the final `pad` and `ground` electrical membership, then asks
+Q3D for capacitance and conductance matrices. It needs the `aedt` extra
+([Install SCGSim](../start/install.qmd#extras)) and AEDT Q3D 2024.2 with a
+working license on this computer.
+
+![SimplePad layout: square pad, surrounding Ground and authored locator.](../assets/simple-pad-layout.png)
+
+Save the complete program below as `simplepad_q3d.py`. Its four sections build
+the source, prepare solver inputs, execute, and read the result.
+
+```python
+from pathlib import Path
+from uuid import uuid4
+import argparse
+import subprocess
+import sys
+
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.aedt import (
+    AedtResources,
+    MatrixRunControl,
+    prepare_q3d_from_geometry,
+    resolve_results,
+)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--handoff-only", action="store_true")
+    args = parser.parse_args()
+
+    # 1. Build the layout and declare electrical ownership.
+    orcapen_sc_pdk.activate()
+    component = gf.get_component(
+        "square_pad_capacitor",
+        pad_side_um=200.0,
+        gap_um=20.0,
+        die_side_um=1000.0,
+        junction_width_um=2.0,
+    )
+    records = get_material_records()
+    plan = GeometryPlan(
+        component=component,
+        root_id="chip",
+        layer_stack=get_single_die_layer_stack(),
+        material_records=records,
+        coupon_padding_um=0.0,
+    )
+    plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+    plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
+    snapshot = plan.prepare()
+
+    # 2. Prepare a new, portable Q3D input directory.
+    handoff = prepare_q3d_from_geometry(
+        snapshot,
+        aedt_version="2024.2",
+        modeling="solid",
+        output_dir=Path(".artifacts/simplepad-q3d") / uuid4().hex[:12],
+        project_name="SimplePad",
+        design_name="Capacitance",
+        net_types={"pad": "Signal", "ground": "Signal"},
+        physical_ground_nets=("ground",),
+        run_control=MatrixRunControl(
+            setup_name="Setup1", frequency_ghz=5.0,
+            maximum_passes=10, convergence_percent=1.0,
+        ),
+        resources=AedtResources(cores=4, ram_limit_percent=80),
+    )
+    print("Inputs:", handoff.run_dir)
+    if args.handoff_only:
+        return
+
+    # 3. Run AEDT on this licensed host using the current Python environment.
+    subprocess.run(
+        [sys.executable, "-m", "scgsim.aedt.run",
+         "--handoff", str(handoff.metadata_path), "--execute"],
+        cwd=handoff.run_dir,
+        check=True,
+    )
+
+    # 4. Read the returned matrix entries with their names and exported units.
+    result = resolve_results(handoff.run_dir)
+    for row in result.physics_results():
+        print(row)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+Run it from the study project:
+
+```bash
+uv run simplepad_q3d.py
+```
+
+Each invocation creates a new run folder under `.artifacts/simplepad-q3d/`.
+Printed matrix entries retain the quantity, row, column, value and native
+exported unit; keep these fields together when using the result.
+[Read a complete returned result](convergence-and-reports.qmd) explains how to
+read the matrix.
+
+To inspect the inputs first, run `uv run simplepad_q3d.py --handoff-only`. This
+option prepares the inputs and portable archive without opening AEDT. The
+complete mode runs and reads results on the same host. The sections below
+explain the call's inputs.
 
 ## GeometryPlan-backed C/G preparation
 

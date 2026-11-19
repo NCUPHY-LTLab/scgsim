@@ -51,3 +51,23 @@ shows how to read a completed run folder for a selected use.
 Use the [saved-field tutorial](../guides/saved-fields.qmd#recover-the-exact-prepared-model)
 for native field evaluation and the [offline EPR tutorial](../guides/offline-loss.qmd#interpret-an-assumption-change)
 for assumption changes on recorded results.
+`analyze_epr` evaluates retained saved fields through native AEDT and needs an
+explicitly selected AEDT release and its license; `reanalyze_epr` updates the
+assumptions of a resolved EPR result offline. The
+[analyze_epr reference](api/analyze-epr.qmd) gives its parameters and
+signature.
+
+## Find the right reference {#find-the-right-reference}
+
+| Need | Start here |
+|---|---|
+| Check which solver workflows SCGSim supports | [Supported calculations](supported-calculations.qmd) |
+| Prepare, seal and evaluate saved AEDT fields | [AEDT: analyze saved fields](../guides/saved-fields.qmd) |
+| Change the assumptions of an existing EPR result offline | [Change loss assumptions without solving](../guides/offline-loss.qmd) |
+| Look up the parameters and signature of `analyze_epr` | [analyze_epr](api/analyze-epr.qmd) |
+| Browse the declared public names of each package | [API index](api-index.qmd) |
+| Review source ownership and API boundaries | [Architecture](../contribute/architecture.qmd) |
+
+## Junction capacitance reference {#junction-capacitance-reference}
+
+For one junction in a given mode and pass, $V$ is its complex peak-phasor voltage and $U_{norm}$ is the electric-energy normalization, not total electric-plus-magnetic energy. For nonzero $V$, the effective modal capacitance is $C_{mode}=2U_{norm}/|V|^2$, the branch capacitance is $C_j=2U_{C,j}/|V|^2$, and the participation ratio is $p_{C,j}=C_j/C_{mode}$. At $V=0$, the ratio is undefined. The [AEDT runtime contract](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization) records the full voltage, energy and normalization definitions.

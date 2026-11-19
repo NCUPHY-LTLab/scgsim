@@ -6,7 +6,7 @@ aliases:
   - ../reference.html
 ---
 
-請先從[選擇模擬目標](../start/choose-a-simulation.qmd#getting-started)依目標選擇一份筆記本，再從下方主題連結尋找模型、幾何、網格、執行或結果說明。遇到專有名詞或單位需要確認時，請查閱[Convention 術語字典](terms-and-units.qmd)。
+請先從[選擇模擬目標](../start/choose-a-simulation.qmd#getting-started)依目標選擇一份筆記本，再從下方主題連結尋找模型、幾何、網格、執行或結果說明。遇到專有名詞或單位需要確認時，請查閱[術語與單位](terms-and-units.qmd)。
 
 ## 模型與材料 {#model-materials}
 
@@ -30,4 +30,19 @@ aliases:
 
 ## 儲存場與離線損耗 {#saved-fields-offline-loss}
 
-使用[儲存場教學](../guides/saved-fields.qmd#recover-the-exact-prepared-model)評估原生場，並使用[離線 EPR 教學](../guides/offline-loss.qmd#interpret-an-assumption-change)變更已記錄結果所採用的假設。
+使用[儲存場教學](../guides/saved-fields.qmd#recover-the-exact-prepared-model)評估原生場，並使用[離線 EPR 教學](../guides/offline-loss.qmd#interpret-an-assumption-change)變更已記錄結果所採用的假設。`analyze_epr` 會透過 AEDT 原生功能評估保留的儲存場，需要明確選定 AEDT 版本並具備授權；`reanalyze_epr` 則離線更新已解析 EPR 結果的假設。參數與簽章見 [analyze_epr 參考](api/analyze-epr.qmd)。
+
+## 尋找合適的參考資料 {#find-the-right-reference}
+
+| 需求 | 從這裡開始 |
+|---|---|
+| 確認 SCGSim 支援哪些求解流程 | [支援的計算](supported-calculations.qmd) |
+| 準備、封存並評估 AEDT 儲存場 | [AEDT：分析已保存的場](../guides/saved-fields.qmd) |
+| 離線變更既有 EPR 結果的假設 | [不重新求解即可變更損耗假設](../guides/offline-loss.qmd) |
+| 查詢 `analyze_epr` 的參數與簽章 | [analyze_epr](api/analyze-epr.qmd) |
+| 瀏覽各套件宣告的公開名稱 | [API 索引](api-index.qmd) |
+| 查看來源責任與 API 邊界 | [架構與資料流程](../contribute/architecture.qmd) |
+
+## 接面電容參考 {#junction-capacitance-reference}
+
+對同一模態、同一求解通過中的單一接面，$V$ 是其複數峰值相量電壓，$U_{norm}$ 是電能正規化量，不是電能與磁能的總和。$V$ 非零時，有效模態電容為 $C_{mode}=2U_{norm}/|V|^2$，支路電容為 $C_j=2U_{C,j}/|V|^2$，參與率為 $p_{C,j}=C_j/C_{mode}$。若 $V=0$，此比值未定義。[AEDT 執行契約](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)列出完整電壓、能量與正規化定義。

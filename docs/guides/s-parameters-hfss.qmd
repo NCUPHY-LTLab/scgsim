@@ -80,7 +80,8 @@ describe the run separately from the physical response.
 A wave `TerminalPort` on a Region face and every Driven Modal port
 (`ModalPort`) have no realization on the SGB model yet. `prepare_sgb_model`
 refuses a request that declares one, naming
-[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135); there is no
-Driven Modal workflow until that issue lands. The GDS-import route
+[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135). There is no
+Driven Modal workflow until that issue lands; until then, the lumped ports
+above give a two-port's network response. The GDS-import route
 (`HfssDrivenSpec`, `gds_path`, `LayerImport`, `ObjectBinding`, `LengthMeshSpec`)
 is removed.
