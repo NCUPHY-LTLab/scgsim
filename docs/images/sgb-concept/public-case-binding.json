@@ -1,7 +1,7 @@
 {
   "case_id": "public-attached-junction-hole-bands",
   "classification": "PUBLIC_GENERIC_FIXTURE",
-  "repository": "https://github.com/OrPenStrike/scgsim",
+  "repository": "https://github.com/NCUPHY-LTLab/scgsim",
   "revision": "2ed85adc",
   "source_file": "tests/test_rectangular_junction_geometry.py",
   "source_file_sha256": "5bac5805e4530c54695c4dad544b2ef8c8ccd51b80a039d77dc6c97c213f309d",

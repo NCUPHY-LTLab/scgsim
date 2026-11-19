@@ -69,6 +69,10 @@ def analyze_epr(
 ) -> Any: ...
 ```
 
+[Complete generation index](input-index.qmd).
+
+::: {.content-hidden}
+
 ## Direct sources
 
 | Source | SHA-256 |
@@ -76,4 +80,6 @@ def analyze_epr(
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/api/analyze-epr-usage.md` | `c1e040aa9af091eb00262c62615cf4a2b8ec594cf0090dda61cfbba11e739f6c` |
 
-[Complete generation index](input-index.qmd), SHA-256 `8255ed1f7b30cb2ab0a123a96ca0dc42c9fb22f84b3dcfcee1c769e76094ef3e`.
+Complete generation index, SHA-256 `712b61d498c866cb63c3f309b53d99b1d0661055298cfc510c80803fd6994ffa`.
+
+:::

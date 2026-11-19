@@ -21,7 +21,7 @@ scgsim-id: "docs/history/aedt-capacitance-pre-v3"
 | 頂層金屬 | 鋁，厚 0.2 µm |
 | 基板 | 矽，厚 500 µm |
 
-標準公開來源為 OrPen 固定版本 [`51985d9`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)。其中 [`aedt_q3d.ipynb`](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_q3d.ipynb) 與[可編輯 QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd)定義較早的 GDS 匯入工作流程。
+標準公開來源為 OrPen 固定版本 [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)。其中 [`aedt_q3d.ipynb`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_q3d.ipynb) 與[可編輯 QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd)定義較早的 GDS 匯入工作流程。
 
 ![公開 SimplePad 版圖：中央焊盤、周圍 Ground，以及已定義的東側邊緣集總端口定位器。](../assets/simple-pad-layout.png){#fig-simple-pad-layout}
 
@@ -52,6 +52,6 @@ Notebook 要求以下萃取與自適應控制：
 
 原生材料讀回記錄的矽相對介電率為 11.9，鋁則以 PEC 表示。Palace 使用自然靜電外部邊界；此 Q3D 請求使用開放 Region。兩個結果分別描述各自的模型與邊界選擇，不代表必須達成數值一致。
 
-參考輸出背景與完整精度資料列見公開的 [SimplePad 證據 README](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/README.md)與[結果 CSV](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/results.csv)。記錄中的 SimplePad 來源為 `24ae5a4`，其元件與 Notebook 位元組和公開 OrPen `51985d9` 相同；SCGSim 來源為 `1.0.1`，修訂版本為 `9c032e3`。
+參考輸出背景與完整精度資料列見公開的 [SimplePad 證據 README](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/README.md)與[結果 CSV](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/results.csv)。記錄中的 SimplePad 來源為 `24ae5a4`，其元件與 Notebook 位元組和公開 OrPen `51985d9` 相同；SCGSim 來源為 `1.0.1`，修訂版本為 `9c032e3`。
 
 這些數值是文件所述模型的觀察結果，不是新執行的數值目標。較早的 GDS 匯入請求，與目前[Q3D 課程](../course/aedt-q3d.qmd)說明的實體來源輸入不同。

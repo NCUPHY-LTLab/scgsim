@@ -1,12 +1,12 @@
 ---
 title: "Install SCGSim"
-description: "Create a uv project and install SCGSim from the develop branch."
+description: "Create a uv project and install SCGSim 3.0.0rc4 and the OrcaPen SC PDK, each pinned to an exact revision."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/installation"
 ---
 
-Create a study project with `uv`, then add SCGSim from the current `develop` branch. SCGSim supports Python `>=3.12,<3.14`.
+Create a study project with `uv`, then add SCGSim `3.0.0rc4` and the OrcaPen SC PDK, the component library every example imports. SCGSim supports Python `>=3.12,<3.14`.
 
 ## 1. Install uv and Git
 
@@ -16,15 +16,16 @@ Check: `uv --version` and `git --version` each print an installed version.
 
 ## 2. Create the project and add SCGSim
 
-Initialize a project with Python 3.12 and add SCGSim from `develop`:
+Initialize a project with Python 3.12 and add SCGSim and the PDK. These are the commands of the [home page](../../index.qmd#install): SCGSim at the tag `v3.0.0rc4` with its `aedt` extra, and the PDK at the revision the examples use.
 
 ```bash
-uv init --bare --python 3.12 scgsim-study
+uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim @ git+https://github.com/NCUPHY-LTLab/scgsim.git' --branch develop
+uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4' \
+  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
-`uv.lock` records the exact Git revision selected when the dependency is resolved.
+`uv.lock` records the exact Git revision of each dependency.
 
 ## 3. Check the installation
 
@@ -38,13 +39,13 @@ Check: the command prints the installed SCGSim version without an import error.
 
 ## Add a backend extra
 
-The base package reads returned results. To prepare Palace runs, add an extra to the existing SCGSim dependency:
+The base package reads returned results; the command above adds the `aedt` extra. To prepare Palace runs, add the `palace` extra to the existing SCGSim dependency:
 
 ```bash
 uv add --extra palace scgsim
 ```
 
-Use `aedt`, `aedt-epr`, or `visualization` when you need those features. The extra is added to the existing Git dependency and keeps its configured source. `aedt` and `aedt-epr` include OCP (`cadquery-ocp-novtk`), the geometry kernel that writes the STEP file AEDT imports.
+Use `aedt-epr` or `visualization` the same way when you need those features. The extra is added to the existing Git dependency and keeps its configured source. `aedt` and `aedt-epr` include OCP (`cadquery-ocp-novtk`), the geometry kernel that writes the STEP file AEDT imports.
 
 ## Rebuild the environment on another computer
 

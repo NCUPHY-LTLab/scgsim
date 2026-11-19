@@ -26,7 +26,7 @@ Each case ran once, on a workstation that was not isolated from other work: arou
 
 | Item | Version |
 |---|---|
-| SGB core (`scgsim.geometry.sgb`, production package) | commit `c034f61` |
+| SGB core (`scgsim.geometry.sgb`, production package) | commit `c034f61` of its development branch, before it was merged |
 | Python | 3.12.14 |
 | Gmsh (Python API) | 4.15.2 |
 | OCP (`cadquery-ocp-novtk`, used by the OCCT checks) | 7.8.1.1.post1, on OCCT 7.8.1 |
@@ -53,17 +53,14 @@ The files are stored with the SGB design pages, in `zh-TW/docs/design/sgb/figure
 
 ## Commands
 
-Run from the repository root with the Python environment of an SGB core checkout at the commit above. `SGB_CORE` points to that checkout, which also holds the test builders the scripts import.
+The measuring scripts run from the root of a checkout of this repository, in its locked development environment, which has Gmsh and OCP; they import the test builders from that checkout's `tests/`. They measure the checked-out revision: the numbers on these pages are those of commit `c034f61`, and a run on a later revision gives that revision's numbers.
 
 ```bash
-SGB_CORE=<SGB core checkout>
-PY=<Python interpreter of the SGB core environment, with gmsh and OCP installed>
-export SGB_CORE
-
-$PY zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # about 5 minutes
-$PY zh-TW/docs/design/sgb/_figures/why_scaling.py oracle
-$PY zh-TW/docs/design/sgb/_figures/why_scaling.py validators
-$PY zh-TW/docs/design/sgb/_figures/emission.py --measure
+uv sync --locked --group dev
+uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # about 5 minutes
+uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py oracle
+uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py validators
+uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/emission.py --measure
 ```
 
 The figures and tables of this study need only `matplotlib` and the JSON files. They are written for both languages by one script:

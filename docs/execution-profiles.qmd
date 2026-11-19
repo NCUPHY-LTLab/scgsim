@@ -86,25 +86,10 @@ decision record, and neither result could be trusted. Jobs that run side by
 side each take a run folder of their own, from their own `prepare_handoff()`.
 
 ::: {.callout-note title="Run under Slurm on one node"}
-`slurm-single-node` was run with stock Palace 0.18.1 under Slurm 23.11 on one
-node (`srun` with PMIx, 16 tasks, cgroup process tracking), submitted with
-`sbatch`:
-
-- a declared run stops after the pass at which it converges: the job is
-  `COMPLETED` with exit code 0, the receipt is `completed` with
-  `stopped_at_convergence`, and the solver has ended a third of a second after
-  the stop;
-- a declared run that reaches its limit, and a run without a declaration, end
-  as they do with `direct-local`;
-- `scancel` ends the job with nothing left running and no receipt, so result
-  reading refuses the folder;
-- a runner killed outright has its guard end `srun`'s step within a second;
-  the job is `FAILED` and the receipt is `failed`. Under Slurm that receipt can
-  be written a moment before the tasks are gone, since the scheduler, not a
-  pipe, holds the log.
-
-`slurm-multi-node` goes through the same path and has not been run on more
-than one node.
+`slurm-single-node` has been run under Slurm on one node: a declared run
+stops after the pass at which it converges, and a job ended with `scancel`
+leaves no receipt, so result reading refuses its folder. `slurm-multi-node`
+goes through the same path and has not been run on more than one node.
 :::
 
 ## Handoff lifecycle

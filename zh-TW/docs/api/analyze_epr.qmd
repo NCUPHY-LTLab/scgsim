@@ -69,6 +69,10 @@ def analyze_epr(
 ) -> Any: ...
 ```
 
+[完整產生索引](input-index.qmd).
+
+::: {.content-hidden}
+
 ## 直接來源
 
 | 來源 | SHA-256 |
@@ -76,4 +80,6 @@ def analyze_epr(
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `zh-TW/docs/api/analyze-epr-usage.md` | `b5db4425fc362af6b6f24e4226669ef2756444347938ecbe544ec3a1c2e911d5` |
 
-[完整產生索引](input-index.qmd), SHA-256 `cc8dc74849c18f237e236b314a4ab7fba66412775b5f3819f9bfdb667436854a`.
+完整產生索引, SHA-256 `98fac2e9fe7e4041422e13581226812e9689bc08f3f569a3253355b4acbbf566`.
+
+:::

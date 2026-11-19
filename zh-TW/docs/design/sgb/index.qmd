@@ -12,7 +12,7 @@ scgsim-id: "docs/design/sgb/index"
 重新設計的 semantic geometry builder（SGB）把順序倒過來。它把晶片描述成有限個 **prism**，**在任何 CAD kernel 介入之前**就推導出完整的 topology 與每個 cell 的意義，再自己把結果寫成 BREP/XAO 檔案。Gmsh 不建立幾何：它載入檔案並對其產生 **mesh**，測試中也把它當作 oracle。模型上不執行任何三維 Boolean 運算。
 
 ::: {.callout-note title="SGB 的實作"}
-這個設計的 production 實作是 `scgsim.geometry.sgb`。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 以 SGB 建立幾何、以 `scgsim.meshing` 產生網格，並只接受 Route A 與 Route B。AEDT 目前經由自己的平面路徑準備幾何，方向是使用同一份 SGB 輸出；舊的幾何路徑因此仍在（[D6](decisions.qmd#d6)）。要使用 SGB 的輸出，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
+這個設計的 production 實作是 `scgsim.geometry.sgb`。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 以 SGB 建立幾何、以 `scgsim.meshing` 產生網格，並只接受 Route A 與 Route B。AEDT 匯入同一個 SGB 模型以 `export_aedt_step` 寫出的 STEP；舊的幾何路徑與 AEDT 原生建構器都已移除（[D6](decisions.qmd#d6)）。要使用 SGB 的輸出，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
 :::
 
 ## 執行範例：輸入與輸出
@@ -52,7 +52,7 @@ production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<
 
 設計中有兩個層次，production 都已實作：
 
-1. **開發測試**：在 fixture 與隨機 layout 上，以 OCP 綁定執行 OpenCASCADE 自己的檢查（`BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`），並做 Gmsh 載入檢查 `verify_loaded`（數量、邊界、面積、體積、group）。OCP 在 `occt` dependency group（`cadquery-ocp-novtk==7.8.1.1.post1`），相關測試標為 `occt`；目前 CI 還沒有安裝這個 group，所以 `occt` 測試在 CI 中被略過，只在安裝了該 group 的環境執行。
+1. **開發測試**：在 fixture 與隨機 layout 上，以 OCP 綁定執行 OpenCASCADE 自己的檢查（`BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`），並做 Gmsh 載入檢查 `verify_loaded`（數量、邊界、面積、體積、group）。OCP 在 `occt` dependency group（`cadquery-ocp-novtk==7.8.1.1.post1`），相關測試標為 `occt`；`dev` group 包含 `occt`，CI 的 `fast-tests` 工作安裝 `dev` group，所以 `occt` 測試在 CI 中執行。
 2. **每一次 production build 都 fail closed**：寫出任何東西之前，先檢查 SGB 自己的 structural invariant（一次 build 記錄 31 項，其中 4 項是不使 build 失敗的警告）。production 中無法關閉驗證。mesher 信任同一次 build 寫出的檔案，不再檢查（見 [Validation](validation.qmd)）。
 
 production 的 extreme-case catalogue（`tests/sgb_catalogue_report.py`，每個 fixture 與 route 一列）結果如下。
@@ -63,7 +63,7 @@ production 的 extreme-case catalogue（`tests/sgb_catalogue_report.py`，每個
 - **隨機 layout 與注入缺陷。** 測試在 $N = 100$ 的隨機 layout（三種 route）上跑完整的 OCCT 檢查，在 $N = 1000$（Route B，標為 `slow`）上跑 self-interference 關閉的便宜檢查，皆通過。五種注入的缺陷（內環反向、共用 face 在一個 shell 中翻面、vertex 偏離曲線 $10^{-4}$ µm、缺一個 face、wire 有缺口）每一種都被 `BRepCheck_Analyzer` 抓到，其餘檢查的涵蓋範圍見 [Validation](validation.qmd)。
 - **Runtime validator 的成本（production 量測）。** 在 $N = 1000$、5 000、20 000、seed 2 的 polygon-only layout 上（14 215、71 969、285 871 個 face），31 項檢查合計的時間是 0.33 s、2.20 s、10.59 s，對 face 數的局部斜率是 1.16 與 1.14，也就是近乎線性。逐項看，除了 `cylinders` 之外，每一項 validator 的局部斜率介於 0.97 與 1.31；`cylinders` 的 1.6 只出現在 $N = 1000$ 到 5 000，這些 layout 沒有 cylinder wall，那項檢查在這兩個 $N$ 都不到 0.01 s，近乎雜訊（`figures/why-validator-scaling.json`，`python why_scaling.py validators`）。這是單次執行，不含圓弧與 band。
 
-還有三件事要說清楚。第一，AEDT 端：`export_aedt_step` 只做匯出，production 的輸出尚未實際匯入 AEDT 測試過；匯入的證據仍是原型時期的 E4 實驗（[交給 AEDT](emission.qmd#handing-the-solids-to-aedt)）。第二，catalogue 的 fixture 都很小（不到 100 個 face），所以以上的檢查成本與 mesh 數字不代表大型 layout。第三，決定性（逐位元組相同）在同一台機器上測過；跨平台只是論證，尚未實測（見[使用契約](consumer-contract.qmd#determinism)）。各項檢查的細節見 [Validation](validation.qmd)。
+還有三件事要說清楚。第一，AEDT 端：AEDT 匯入的就是 `export_aedt_step` 的輸出，`aedt/runtime/families/sgb_import.py` 把它匯入空白的 HFSS 或 Q3D 設計，並以 guard 檢查匯入的物件與面；為什麼這樣設計，依據的是原型時期的 E4 實驗（[交給 AEDT](emission.qmd#handing-the-solids-to-aedt)）。第二，catalogue 的 fixture 都很小（不到 100 個 face），所以以上的檢查成本與 mesh 數字不代表大型 layout。第三，決定性（逐位元組相同）在同一台機器上測過；跨平台只是論證，尚未實測（見[使用契約](consumer-contract.qmd#determinism)）。各項檢查的細節見 [Validation](validation.qmd)。
 
 ## Pipeline 全貌
 

@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/consumer-contract"
 
 Palace 的 mesh 流程與 AEDT 的 geometry 流程要採用新的 SGB，需要知道兩件事：SGB 交給它們什麼，以及怎麼讀。本頁回答第一件事與讀取的順序：入口函式 `build_sgb_geometry`、它寫出的五個檔案、sidecar 的欄位，以及兩個讀取端的流程。今天的 Palace 與 AEDT 契約如何對到這些欄位，另見[對應表](consumer-mapping.qmd)。
 
-這裡描述的程式是 SGB core。Palace 使用這個入口，AEDT 不使用它，`export_aedt_step` 只提供匯出端；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v5`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band）。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
+這裡描述的程式是 SGB core。Palace 與 AEDT 都使用這個入口：AEDT 以它建出模型，再以 `export_aedt_step` 寫出它匯入的 STEP；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v5`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band）。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
 
 ## 呼叫與回傳 {#call}
 
@@ -285,7 +285,7 @@ gmsh.model.mesh.generate(3)
 5. **建立 port。**port 位於 support plane，是兩個 solid 共用的 face，已在 STEP 的 solid 裡（guard 列出它），可由 `port[*].faces` 找到；需要的是 boundary 指派，或依 `port` 記錄的幾何在 AEDT 內原生建立 sheet 與 lumped port。這一步由 face 結構與 route 的定義推得；STEP 匯出只在 Route B 的案例上測過，port 在 AEDT 內的建立尚未用這個 STEP 跑過。不在任何匯出 solid 上的導體 sheet 與 port sheet face（例如 Route A 中兩側都是 vacuum 的 sheet，或不在 support plane 上的 port sheet）無法經由 STEP 傳遞；只介於 vacuum 之間或位在 vacuum 外邊界的 face 由 Region 取代，不列入。guard 在 `free_faces` 中記錄每個這樣的 face：它的 group、面積、法向量，以及從寫出的 BREP 讀出的 loop（外圈在前，後面是洞；每個 edge 依行進方向寫成兩點的 `line`，或起點、中點、終點三點的 `arc`）。匯入端依這些 loop 重建 sheet。
 6. 以 `volume[*].aedt_name` 與 `material` 指派 material，以每個 group 的成員 face（`face[*].group` 指向該 group 的 face）指派 boundary（face 到 AEDT face id 的對應由第 4 步的順序給出）。band 已預先切在 solid 的 face 裡，所以不需要 AEDT 的 Imprint。
 
-已測的部分：STEP 是具名的 assembly、單位與數字正確、重新讀回的 volume 等於規劃值、guard 列出每個 solid 的所有 face 且順序為 OCC 順序、可從 XAO 匯出；此外 `export_aedt_step` 在為 solid 命名之前，先把檔案與由 sidecar 算出的規劃值（`views.expected`：依 tag 順序的 vertex 位置、face 面積、solid 體積與各類 entity 數量）逐項比對，不符即拒絕匯出，也不寫出 guard。guard 的 vertex 等於規劃的 vertex 位置，`curved` 恰好標出 sidecar 中 `face[*].curved` 為真的 face；改動任何綁定檔案的一個 byte、缺少檔案、換成另一個 model 的 sidecar 都會被 `read_step_guard` 拒絕；hash 正確但改了 free face 的 group、solid 的 face id、solid 名稱、`curved` 旗標、solid 的順序、vertex 平均位置，交換同一個 solid 中兩個平面 face 的 id 或兩個 free face 的 id，移動 free face loop 中一個 edge 的終點使 loop 斷開，或少列一個 face 或 free face，也都會被拒絕，缺少或多出 key 的 guard 亦同；free face 的 loop 是封閉且相連的，依 loop 算出的面積等於 face 的面積，含 arc 的 face 也一樣（`tests/test_sgb_step_guard.py`）。**沒有測的部分：**用這個新的 STEP 匯入 AEDT。E4 在 AEDT 2024.2 上驗證的是原型的 STEP；production 的匯出採用同一個配方，但這個匯出本身尚未在 AEDT 上跑過。
+已測的部分：STEP 是具名的 assembly、單位與數字正確、重新讀回的 volume 等於規劃值、guard 列出每個 solid 的所有 face 且順序為 OCC 順序、可從 XAO 匯出；此外 `export_aedt_step` 在為 solid 命名之前，先把檔案與由 sidecar 算出的規劃值（`views.expected`：依 tag 順序的 vertex 位置、face 面積、solid 體積與各類 entity 數量）逐項比對，不符即拒絕匯出，也不寫出 guard。guard 的 vertex 等於規劃的 vertex 位置，`curved` 恰好標出 sidecar 中 `face[*].curved` 為真的 face；改動任何綁定檔案的一個 byte、缺少檔案、換成另一個 model 的 sidecar 都會被 `read_step_guard` 拒絕；hash 正確但改了 free face 的 group、solid 的 face id、solid 名稱、`curved` 旗標、solid 的順序、vertex 平均位置，交換同一個 solid 中兩個平面 face 的 id 或兩個 free face 的 id，移動 free face loop 中一個 edge 的終點使 loop 斷開，或少列一個 face 或 free face，也都會被拒絕，缺少或多出 key 的 guard 亦同；free face 的 loop 是封閉且相連的，依 loop 算出的面積等於 face 的面積，含 arc 的 face 也一樣（`tests/test_sgb_step_guard.py`）。**沒有測的部分：**用這個新的 STEP 匯入 AEDT。E4 在 AEDT 2024.2 上驗證的是原型的 STEP；production 的匯出採用同一個配方，AEDT 以 `aedt/runtime/families/sgb_import.py` 依上述步驟匯入它並把關。
 
 ## 補充：重現資料 {#reproduction-data}
 

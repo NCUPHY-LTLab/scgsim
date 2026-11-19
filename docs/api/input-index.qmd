@@ -40,7 +40,7 @@ This index lists names declared by nine public facades; it does not replace each
 
 | Source | SHA-256 |
 |---|---|
-| `scripts/generate_knowledge_reference.py` | `e3636d6624eba7c32462f0a95e174bd0ebf26e73896cfc7c88d5a02508375a83` |
+| `scripts/generate_knowledge_reference.py` | `7672629117cda833959d1fd1ef2ce86473e17625f3f86e19df0f4319828e2454` |
 | `docs/knowledge-sources.json` | `d92a7d580e2615fe8ae4d0eea399936c0679e59e4dbc2b8a67402e4684fb507a` |
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
 | `docs/api/analyze-epr-usage.md` | `c1e040aa9af091eb00262c62615cf4a2b8ec594cf0090dda61cfbba11e739f6c` |

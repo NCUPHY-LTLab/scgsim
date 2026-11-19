@@ -28,7 +28,7 @@ display(sim.input_summary())
 
 這些是範例明確指定的控制項：target 單位是 Hz，配方的尺寸單位是微米。請依 SCQ 研究所需的模態與數量選擇設定，並在研究紀錄中保留所選值與後續變更。`save` 控制原生儲存場輸出。全新的 `EigenmodeSim` 會寫入 `Nonconformal=true`。此單網格範例明確設定 `amr_max_passes=0`，以停用自適應細化。呼叫 `write_config()` 前，請透過 `set_numerical(...)` 提供 `amr_max_passes`；若通過次數上限大於零，也必須由呼叫端選定 `amr_tolerance` 與 `amr_update_fraction`；有收斂宣告（見下節）時只需要 `amr_update_fraction`。後續呼叫若省略這些控制項，會沿用目前值。請在其所控制的操作旁記錄選用的數值與輸出控制項，不要將它們藏在 Notebook 輔助程式中。
 
-請依研究需求檢視摘要中的模態／搜尋／資源設定。摘要會顯示正規化來源與設定，但不會產生網格或求解。真空包覆來自 plan；未指定的外部 Eigenmode 表面沿用 Palace 的自然 PMC 條件。這與 AEDT EPR 模型預設的 Perfect E 外部邊界不同。
+請依研究需求檢視摘要中的模態／搜尋／資源設定。摘要會顯示正規化來源與設定，但不會產生網格或求解。真空包覆來自 plan；未指定的外部 Eigenmode 表面沿用 Palace 的自然 PMC 條件；HFSS 在其 Region 的各面指派相同的條件，即 Perfect H。
 
 ## 宣告細化何時已收斂 {#declare-when-refinement-has-converged}
 
@@ -70,35 +70,3 @@ print(mesh_path, config_path)
 ## Surface EPR 的邊距列 {#surface-epr-margin-rows}
 
 Palace Surface EPR 除了每個整面的基準列，還能回報距間隙至少某個距離的那一部分表面。請在交給計畫 `set_surface_epr` 的規格中用 `inset_margins_um` 要求這些列，例如 `"inset_margins_um": (0.5, 1.0)`，並在 `plan.prepare()` 之前呼叫 `plan.set_surface_epr`，因為 SGB 會把邊距切進幾何。省略此鍵就只要求基準列。沒有呼叫 `plan.set_surface_epr(specs)` 時，不計算 Surface EPR。這些列是普通的 Palace 屬性，一般的 Palace 執行檔即可。鍵、面種類與限制見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)，公開的 [Xmon EPR 延伸範例](../tutorial-xmon-palace.qmd)示範來源設定。
-
-## Circular Pad LC 研究 {#circular-pad-lc-study}
-
-目前公開的 OrPen 教學版本為 [`ecc9062`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/ecc90623b62e55f95afaa5a1f1048a71f81cae52)：[標準來源教學](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/src/ComponentSimulation/CircularPad/palace_eigenmode.qmd)、[衍生 Notebook](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/palace_eigenmode.ipynb)，以及 [Fresh08 結果證據](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md)。來源定義半徑 100 µm 的焊墊及徑向間隙 20 µm，並使用含 500 µm Si 與 0.2 µm Al 的單晶粒堆疊。它建立寬 2 µm、朝東的接面埠，並宣告線性 10 nH 電感支路且 C=0（不增加電容支路）。目前來源選擇方式見[安裝教學](installation.qmd#select-the-curved-source-cell)。已發布結果來自較晚的教學修訂版；其實際執行輸入列於下方。
-
-::: {.callout-note title="此曲線 Uniform 埠所需的原生 Palace"}
-此研究請使用以[修訂版 `4e9e1b7`](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37)建置的原生 Palace 執行檔，或包含[曲線埠範圍修正](https://github.com/arfiligol/palace/blob/4e9e1b7232b4c8ca8b964be7e70f1848f578de37/palace/utils/geodata_impl.cpp)的後續版本。SCGSim Python extra 無法取代原生執行檔；請參閱[安裝說明](installation.qmd#native-palace-for-this-curved-uniform-port)。此研究會透過原生 MPI 包裝程式啟動 8 個 MPI 程序 × 1 個 OpenMP 執行緒；直接執行 ELF 檔不能取代該包裝命令。此原生需求適用於此曲線 Uniform 埠範例。
-:::
-
-準備流程會透過 Palace Route B 傳遞編寫的曲線。網格設定當時是 HXT、幾何階數 2，並執行一次 `HighOrder` 最佳化，今天可用 `MesherOptions(algorithm_3d=HXT, geometry_order=2, high_order_optimize=True)` 設定。這些設定描述網格幾何。Palace FEM 階數 2 是獨立的場近似設定；設定的 AMR 通過次數上限為四，只限制允許的適應工作量，不代表實際完成四次通過。
-
-### 讀取並延續回傳研究 {#read-and-continue-the-returned-study}
-
-Fresh08 完成一次原生執行、四次細化與五個求解／估算快照。收據綁定的 Resolve 選取完整最終快照，既有 Report 也已完成。模態 1 的最終頻率為 **5.573354161115 GHz**。圖中與[頻率／AMR CSV](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/frequency_amr.csv)列出頻率歷程與原生指標。
-
-![Fresh08 五個快照中的模態 1 頻率與原生誤差指標。](../assets/circular-pad-frequency-amr.png){#fig-circular-pad-frequency-amr}
-
-最終指標為 **0.1186681863426**，高於設定值 **0.02**。Palace 在完成設定的四次細化後停止，並未證明已達到容差；此比較是觀測結果，不是充分性準則。五個後處理階段都在 10000 次迭代時回報兩次 PCG 未收斂，初始外部屬性 11 與 3 也保留自然 PMC／ZeroCharge 警告。程序正常結束且 Resolve 嚴格解析成功，仍無法消除這些警告或證明網格收斂。
-
-Notebook 開啟時會使用 `WORKFLOW_ACTION = "analyze_handoff"`，讀取公開套件未附上的保留執行產物。若要準備自己的模型，請選 `prepare_handoff`；若要準備並以全新的 `RUN_ID` 啟動 Palace，請選 `run`。原生 Palace 執行檔須依上方說明另行安裝。結果包含九個表面、兩個體積及一個接面貢獻。[具型別的 EPR CSV](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/typed_epr.csv)保留 Palace 的正負號慣例：接面值為 **−0.9948401783541**（`signed_palace=true`），不可取絕對值，也不可解讀為負的物理儲存能量。表面值是整面的基準列，沒有內縮；LiteratureCentral 損耗輸入是合成假設，不是製程量測值。已知損耗輸出不是元件 Q／T1；解讀方式請參閱 [EPR 概念](../eigenmode-epr.qmd)。
-
-::: {.callout-note title="Uniform 埠模型"}
-集總埠使用固定的 +x 方向，等效寬度為 $w=A/l$，其中 $A$ 是埠區塊面積，$l$ 是沿該方向的長度。此均勻投影不是曲線間隙兩側的精確局部電壓，也不是等電位端子電壓。宣告的 10 nH 是電路模型輸入，不是量測所得的電感。
-:::
-
-::: {.callout-note title="原生執行細節" collapse="true"}
-最終中繼資料記錄 846008 個 ND 未知數與 114197 個四面體，使用 8 個 MPI 程序 × 1 個 OpenMP 執行緒。細化後，在另行雜湊且仍存在的最終邊界 VTU 中，一個有來源綁定的 Pad MA 側壁網格單元呈現局部非仿射座標。此 VTU 片段未列入嚴格回傳收據；單一網格單元無法證明精確的 R100 保真度、整體幾何精度或共用節點移動情況。詳情見[公開證據頁面](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md)。
-:::
-
-## 執行來源資訊 {#execution-provenance}
-
-Fresh08 使用固定版 OrPen `c79b91ef882079d937fce20129f3cbd477e8438d` 產生器匯出，以及 SHA-256 為 `925a096b4ae247fddc2ac357cdf8025979f50463721312a808ff4cefafc35b40` 的 SCGSim wheel；其執行階段位元組與公開 SCGSim develop commit `2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71` 相符（`1.1.0rc1`，可安裝的 develop 修訂版，非穩定版）。原生 Palace 來源為 `4e9e1b7232b4c8ca8b964be7e70f1848f578de37`；其 CLI 版本未確認。較晚的 OrPen checkpoint `1590199` 及本頁發布修訂版 `ecc9062` 都不是 Fresh08 的執行輸入。[公開執行 manifest](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/run_set.json)會綁定詳細來源與產物識別。

@@ -1,5 +1,5 @@
 ---
-title: "Public Xmon: AEDT Route B Eigenmode"
+title: "Public Xmon: AEDT Eigenmode with solid metal"
 description: "Bind the junction, declare Surface EPR and prepare the AEDT EPR request on the SGB model."
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
@@ -19,15 +19,14 @@ run host needs that AEDT release, PyAEDT 1.3.0, and an appropriate license. Use
 the matching SCGSim source revision listed in
 [Examples](examples.qmd). Quarto does not open AEDT, create native geometry, or
 solve this model. The snapshot retains its source physical stack; this page
-selects `modeling="solid"` for AEDT. A Route A/B choice describes upstream
-geometry construction and is not an AEDT preparation argument.
+selects `modeling="solid"` for AEDT, which builds each conductor as a solid of
+its film's thickness.
 
 ## Configure surface and junction EPR
 
 The shared snapshot keeps authored `D0_TO_D1_GAP` separate from the generated
-outer vacuum domain. The AEDT contract records HFSS's default Perfect E
-policy for background-exposed surfaces; Palace uses its natural PMC boundary.
-These backend choices are intentional and are not auto-converted. The
+outer vacuum domain. Palace leaves its exterior at the natural PMC boundary,
+and HFSS assigns the same condition, Perfect H, on the faces of its Region. The
 [AEDT runtime reference](specs/aedt-runtime.qmd#public-epr-candidate-surface)
 describes the native Region representation. This static page claims no native
 HFSS geometry check. When comparing results, note the outer boundary, Region
@@ -127,7 +126,7 @@ from scgsim.aedt import (
     EigenmodeSim,
 )
 
-aedt_run_dir = Path.cwd() / ".artifacts" / "public-xmon-aedt-route-b"
+aedt_run_dir = Path.cwd() / ".artifacts" / "public-xmon-aedt-solid"
 aedt_resources = AedtResources(
     cores=int(os.environ["SCGSIM_AEDT_CORES"]),
     ram_limit_percent=int(os.environ["SCGSIM_AEDT_RAM_LIMIT_PERCENT"]),
@@ -137,7 +136,7 @@ sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
 sim.set_plan(snapshot)
 sim.set_output_dir(aedt_run_dir)
 sim.set_eigenmode(
-    project_name="public_xmon_route_b_eigenmode",
+    project_name="public_xmon_solid_eigenmode",
     design_name="Xmon",
     run_control=EigenmodeRunControl(
         setup_name="Setup1",

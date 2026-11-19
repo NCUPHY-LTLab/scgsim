@@ -8,10 +8,6 @@ scgsim-id: "docs/specs/aedt-runtime"
 
 The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications and failure rules, and the [current formats](#current-formats) this version reads.
 
-The Solid/Thin-Film modeling extension below does not revise the v2
-transaction or Q3D v3 contracts except where this page explicitly
-describes the required 3D modeling selection.
-
 ## One shared lifecycle
 
 SCGSim owns one portable AEDT lifecycle:
@@ -235,9 +231,7 @@ the existing filename normalization: a supplied filename loses its final
 suffix. The canonical JSON payload stores the already-normalized project name,
 so parsing and serializing that payload repeatedly preserves it byte-for-byte,
 including internal dots and text that itself ends in `.aedt`. Handoff
-preparation copies that canonical name unchanged and binds only the copied GDS
-path in its independent payload. It does not reinterpret old truncated names,
-rewrite existing artifacts, or provide a legacy-name fallback.
+preparation copies that canonical name unchanged.
 
 ## Current formats and older results {#current-formats}
 
@@ -245,8 +239,8 @@ SCGSim reads only the formats it writes. A handoff, receipt, request or result
 written by an earlier SCGSim is read with the SCGSim commit that wrote it; this
 version does not convert or migrate it.
 
-Run folders of the native AEDT builder, which this version no longer has
-(issue #67), are not read: `execute_handoff`, `resolve_results()` and
+Run folders of the native AEDT builder, which this version no longer has,
+are not read: `execute_handoff`, `resolve_results()` and
 `analyze_epr()` refuse their handoffs, requests and saved solutions, and the
 message says to prepare and run the study again with this version. A request
 whose payload carries `geometry` (the native builder's), a v1 HFSS handoff of
@@ -372,14 +366,14 @@ uses the separate `run_control=None` path described above.
 | HFSS Driven Terminal | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"` whose two `LumpedTerminalPort`s sit on its port sheets, with explicit signal/reference identity ([below](#hfss-driven-terminal-sgb)); complete `HfssRunControl` for solving | ordered terminal S-parameters and Touchstone |
 | HFSS Driven Modal | waits for its ports on the SGB model ([issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)); `prepare_sgb_model` refuses a `ModalPort` | none |
 | HFSS Eigenmode | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"`; port-free; complete `EigenmodeRunControl`, including mode count and search frequency, for solving; generic RLC model elements are distinct from `PlanarJunction` and EPR junction records | ordinary real mode frequency, native Q, and convergence evidence; EPR history and saved-field results use their separate result contract |
-| Q3D | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; C/G only, with no terminals (AC/RL is designed again in [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)); optional exact six-face Region ground seal; complete family controls for solving | native capacitance/conductance matrix |
+| Q3D | an SGB model of explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; C/G only, with no terminals (AC/RL is not available in this version; tracked in [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)); optional exact six-face Region ground seal; complete family controls for solving | native capacitance/conductance matrix |
 | Q2D | explicit cross-section geometry and conductor/reference assignments | per-unit-length capacitance/conductance and resistance/inductance matrices |
 
 ### Lumped port sheets and terminal RLC {#hfss-shared-lumped-support}
 
 `LumpedRlc` and `LumpedTerminalPort` name a `port_sheet_id`: a port sheet of
 the plan, which the SGB model carries as the `PORT::<port_sheet_id>` group, as
-Palace's lumped elements do (issue #67 decision 8). There is no separate
+Palace's lumped elements do. There is no separate
 support record. `prepare_sgb_model()` binds each one to its group and refuses
 a name the model has no group for, and a port sheet that a junction, an RLC
 or a lumped port share. In HFSS every port sheet must carry a junction, an
@@ -409,7 +403,7 @@ written from, the sidecar and the guard are copied into the handoff's
 every file is checked against its recorded SHA-256 before anything is
 imported. The handoff's source record binds the model's identity and the four
 file hashes; a record without them belongs to a natively built model, which
-is refused (issue #67 decision 6).
+is refused.
 
 The EPR of an SGB model reads what it integrates from the sidecar and the
 prepared record, without AEDT (`scgsim.aedt.epr.sgb_source`). The domains
@@ -471,7 +465,7 @@ model that has them. Each port is then:
    each face, checked against the guard's area; a face that is not a flat
    polygon of its vertices is refused. AEDT 2024.2 imports a substrate face
    about 2e-8 um from the conductor solids beside it, too far for a Terminal
-   port to find them (development check, 2026-11-15). A free face is already
+   port to find them. A free face is already
    such a sheet.
 2. **The port.** A Terminal `Lumped Port` named as the request names it, over
    the sheet's faces, with the request's impedance and `renormalize`.
@@ -834,7 +828,7 @@ one Net. A Net carries no source or sink.
 A Q3D request extracts capacitance and conductance only: Q3D creates only the
 capacitance/conductance setup and seals and resolves exactly the native
 `results/q3d/c_matrix.csv`; a saved AC-RL or DC block, an `ACRLConv`
-convergence block or an AC-RL matrix file is refused. AC/RL is not available on the SGB model; it is designed again, with sources and sinks of their own, in
+convergence block or an AC-RL matrix file is refused. AC/RL is not available in this version; it is tracked in
 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265).
 
 `Q3dSpec.grounded_region_net` is either `null`, retaining the open formulation,
@@ -877,7 +871,7 @@ There is no compatibility fallback, physical bridge, or unite path.
 
 ### Q3D on the SGB model {#q3d-sgb-model}
 
-Q3D models the geometry Palace meshes (issue #67). The structured frontend is
+Q3D models the geometry Palace meshes. The structured frontend is
 `prepare_q3d_from_geometry(snapshot: GeometryPlanSnapshot, *,
 aedt_version: str, modeling, output_dir, project_name, design_name,
 net_types: Mapping[str, Literal["Signal", "Ground"]],
@@ -907,7 +901,7 @@ folder, listed in the manifest after `aedt_spec.json`, and its receipt source
 binds `sgb_model_sha256` and `sgb_model_files`. On the AEDT machine the request
 is decoded against that folder and every file is checked again. A request that
 declares natively built `bodies` or `region_padding_um`, or a receipt source
-without the model's keys, is refused with the reason (decision 6); there is no
+without the model's keys, is refused with the reason; there is no
 conversion from an earlier Q3D request.
 
 The runtime imports the guarded STEP into an empty Q3D design
@@ -1036,7 +1030,7 @@ hashes of the other files, nine allowed paths and eight records.
 
 ## Eigenmode saved fields and Surface-EPR direction
 
-HFSS Eigenmode runs on the SGB model Palace meshes (issue #67).
+HFSS Eigenmode runs on the SGB model Palace meshes.
 `EigenmodeSim.prepare_handoff()` builds it with `prepare_sgb_model()` from the
 plan, its junctions, lumped RLCs and Surface-EPR specs, and writes the handoff
 that carries it; `EigenmodeSim.prepared_model` is then the model in that
@@ -1077,7 +1071,7 @@ solution must name the same model identity. `surface_field_selectors` are
 keyed by the same groups: `surface` reads a row's field on its sheet
 (`EnterSurface`), `adjacent` just off it (`EnterAdjacentSurface`); the area
 is the sheet's either way. A handoff, saved solution or receipt of the native
-builder is refused (issue #67 decision 6).
+builder is refused.
 
 Each required field quantity is evaluated in an explicitly bound setup,
 `LastAdaptive` solution, mode, frequency, phase, and excitation context. That
@@ -1483,8 +1477,8 @@ This diagnostic repair does not establish actual native success or identify a
 physical cause before the observed values are available. It authorizes no
 automatic retry or solver `Analyze`.
 
-This reads the saved file with PyAEDT 1.3.0's [`load_entire_aedt_file()` parser](https://github.com/ansys/pyaedt/blob/7084127f52679a70b52e0a550d039673171caefe/src/ansys/aedt/core/internal/load_aedt_file.py).
-A [public saved-project example](https://github.com/zlatko-minev/pyEPR/blob/97be9f15212e6ddd427e7ee310dacfa778240fe0/_example_files/pyEPR_tutorial1.aedt)
+This reads the saved file with PyAEDT 1.3.0's [`load_entire_aedt_file()` parser](https://github.com/ansys/pyaedt/blob/v1.3.0/src/ansys/aedt/core/internal/load_aedt_file.py).
+A [public saved-project example of pyEPR 1.0.2](https://github.com/zlatko-minev/pyEPR/blob/1.0.2/_example_files/pyEPR_tutorial1.aedt)
 shows `CurrentLine` stored as entity-attached `GeometryPosition` records. That
 example is format evidence only, not proof of an SCGSim consumer run or a
 version-independent AEDT serialization contract. Native geometry, contact, and
@@ -1571,9 +1565,8 @@ postsolve margin may use only the final field result and cannot be inserted into
 the adaptive history curve.
 
 Method references are fixed to AEDT 2024.2 Fields Calculator geometry,
-general, and scalar commands, PyAEDT 1.3.0 installed source, Palace revision
-`5168949c8312dde19cbc4c74cdd858b9ecff74e6`, and pyEPR revision
-`29d4513a52df8b530656afcd7aff249c6add639c` for comparison only. pyEPR is not a
+general, and scalar commands, PyAEDT 1.3.0 installed source, and, for
+comparison only, the Palace source and pyEPR 1.0.1. pyEPR is not a
 runtime dependency or an authority that replaces the formulas above.
 
 ## Current exclusions

@@ -62,11 +62,10 @@ their own interpretation rather than direct comparison as interchangeable
 junction numbers.
 
 State the exterior boundary and vacuum-region size alongside the geometry.
-Palace's unspecified Eigenmode exterior uses natural PMC. The documented AEDT
-EPR policy uses HFSS's default Perfect E on background-exposed surfaces of its
-native Region. A particular study's prepared native model determines its actual
-boundary; a layout preview alone does not establish it. A shared layout does
-not equalize these field models.
+Palace's unspecified Eigenmode exterior uses natural PMC, and HFSS assigns the
+same condition, Perfect H, on the faces of its Region. A particular study's
+prepared native model determines its actual boundary; a layout preview alone
+does not establish it. A shared layout does not equalize these field models.
 
 ## Interfaces and loss assumptions {#surface-identity-masks-and-loss-assumptions}
 

@@ -69,9 +69,9 @@ The source-cell construction is:
 
 ```python
 import gdsfactory as gf
-import orpen_sc_pdk
+import orcapen_sc_pdk
 
-orpen_sc_pdk.activate()
+orcapen_sc_pdk.activate()
 component = gf.get_component(
     "circular_pad_capacitor",
     outer_radius_um=100.0,
@@ -93,10 +93,9 @@ ring illustration. The component supplies its authored circular boundary
 records; the prepared `GeometryPlan` snapshot carries them into Palace Route B
 with the component's Entity and Net identities. The separate GDS-boundary
 reconstruction API is for a caller-selected reconstruction and does not
-override these authored curves. The current OrPen lesson presents the Fresh08
-Palace result; see the [resonant-mode lesson](palace-eigenmode.qmd#circular-pad-lc-study)
-for its execution provenance, observed frequency, adaptation history and
-limitations.
+override these authored curves. How an earlier SCGSim version produced the
+published Circular Pad result is recorded in the
+[curved-source installation notes](../history/curved-source-installation.qmd).
 
 Choose the curve description from the source you have. For authored geometry,
 the component can carry `BoundaryCurveChainSpec` records in
@@ -118,8 +117,8 @@ inspect `plan.entities`, assign the intended final Net IDs with
 `plan.set_nets(net_membership)`, set the vacuum region, and call
 `plan.prepare()`. The snapshot retains the selected curve declarations and
 their Entity and occurrence identities. SGB builds line and circular-arc
-curves on every route; Palace takes Route A and Route B, and AEDT planar
-preparation rejects active curve declarations. With no curve declaration,
+curves on every route; Palace takes Route A and Route B, and AEDT imports the
+curves as exact arcs in the model's STEP. With no curve declaration,
 existing polygon-only behavior is unchanged.
 
 ::: {.callout-note title="Authored curves and GDS reconstruction are separate inputs"}
@@ -156,7 +155,7 @@ does not generate a slice of the GeometryPlan.
 :::
 
 For a two-port network, continue to [Driven Terminal](aedt-driven-terminal.qmd);
-Driven Modal waits for issue #135 ([Driven Modal](aedt-driven-modal.qmd)). For
+Driven Modal and wave ports are not available in this version. For
 finite conductor extraction, use [Q3D](aedt-q3d.qmd); for per-unit-length line
 matrices, use [Q2D](aedt-q2d.qmd). The [CPW inputs](aedt-inputs.qmd) lesson
 prepares the `GeometryPlan` snapshot whose SGB model HFSS and Q3D solve.

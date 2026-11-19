@@ -54,7 +54,11 @@ original README/Quarto bodies with a documented presentation overlay.
 
 The root selects latest stable. Version changes retain the current page where
 it exists, otherwise use that version's home. `/main/` and `/develop/` are aliases.
-The inline catalogue is consistent across version sites. Package version,
+The inline catalogue is consistent across version sites: the publisher writes the
+menu (`askr-versions.json`) of each language project of every version, before
+rendering and beside the rendered pages, and each root in it is relative to that
+project's folder, as Askr reads it. The committed `askr-versions.json` files
+serve a local preview only. Package version,
 content revision, presentation revision, Askr revision and branch remain
 separate fields in generated build records.
 
@@ -190,10 +194,3 @@ for current scope and open items.
 Route major architecture, cross-package contract, or system-wide proposals
 through the repository's shared contribution process. Preserve the source and
 solver ownership boundaries in [AGENTS.md](AGENTS.md).
-
-## Historical structural acceptance
-
-The v2 module and API structure was accepted on 2026-10-09 and later integrated
-through PR34. That historical milestone describes the structure only; it does
-not set the semantic or delivery state of the separate engineering-convergence
-work.

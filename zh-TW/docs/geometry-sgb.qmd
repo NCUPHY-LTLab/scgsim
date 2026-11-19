@@ -43,7 +43,7 @@ SGB 把宣告的線段與圓弧在整數格點上建成單一精確平面排列�
 
 幾何階數與有限元素階數是不同選擇。曲面模型幾何不會讓正表面內縮成為精確曲線周界距離；請見 [EPR 解讀](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions)。
 
-Palace 在 Route A 或 Route B 上透過 SGB 建構宣告的線段與圓弧；其他曲線類型會引發 `UnsupportedCurveError`。目前 AEDT 平面轉換明確拒絕啟用宣告，不默默替代為診斷用多邊形。
+Palace 在 Route A 或 Route B 上透過 SGB 建構宣告的線段與圓弧，AEDT 則在其 SGB 模型的 STEP 中以精確圓弧匯入它們；其他曲線類型會引發 `UnsupportedCurveError`。
 
 ## 元件至後端幾何契約 {#component-to-backend-geometry-contract}
 
@@ -61,7 +61,7 @@ Palace 在 Route A 或 Route B 上透過 SGB 建構宣告的線段與圓弧；�
 
 準備使用選取器，在宣告的來源 GDS 層解析出一個連通的出現實例局部金屬區域。此區域可包含多個融合的原始 GDS 多邊形。根平面與出現實例路徑使用相同局部平面／遮罩／納入幾何配方。GeometryPlan 套用出現實例轉換一次，依配對 GDS 驗證所得外環與孔洞環，並記錄於根平面的 `geometry.source_occurrence_includes`。根平面 `metadata.ground_plane_contribution_sources` 保留出現實例路徑、局部 ID、物理層級及來源層。選定區域若包含同一物理層級另外宣告的局部導體，會遭拒。這些納入區域在多邊形轉換前成為殘餘平面的一部分；它們不是獨立導體 Entity 或 Net 指派，GeometryPlan 不推論連通性或保證分開量測。
 
-計畫負責共用外部真空包絡。在 `prepare()` 之前，以 `plan.set_vacuum_region(padding=...)` 設定，使用既有純量、X／Y／Z 元組，或六面微米映射形式。兩個後端取得相同包絡；`Sim` 使用帶有自己真空的計畫快照後，Palace 的 `set_vacuum_region()` 值會以原子方式失敗。不能只替換部分綁定來源。若要變更元件、堆疊或邊界，請更新計畫並準備新快照，再以新快照呼叫 `set_plan()`。不推論預設留白。來源指定的 `D0_TO_D1_GAP` 仍是外部區域內獨立真空實體。
+計畫負責共用外部真空包絡。在 `prepare()` 之前，以 `plan.set_vacuum_region(padding=...)` 設定，使用既有純量、X／Y／Z 元組，或六面微米映射形式。兩個後端取得相同包絡；模擬本身沒有真空設定。若要變更元件、堆疊、邊界或真空，請更新計畫並準備新快照，再以新快照呼叫 `set_plan()`。不推論預設留白。來源指定的 `D0_TO_D1_GAP` 仍是外部區域內獨立真空實體。
 
 元件註記結構 v2 將導體區域身分、層級、層及拓撲選取器保留在元件局部，移除元件層級 Net 及群組指派。選用埠紀錄識別局部來源層及目標邏輯層。計畫準備驗證每個來源埠與薄片，並轉換薄片一次。限定譜系可識別如 `chip/q0/o_junction_lumped` 的項目。Palace 將此限定埠名綁定至目標邏輯層；AEDT 接面使用相同正規化來源薄片及紀錄的重疊。
 
@@ -86,13 +86,13 @@ Palace 在 Route A 或 Route B 上透過 SGB 建構宣告的線段與圓弧；�
 | 後端轉換 | Palace 與 AEDT 透過既有準備路徑使用同一準備來源快照。原生彙總保留來源成員與涵蓋範圍。不保證逐片原生結果、逐 Entity 原始量測或逐 Entity 場運算式。 |
 | 真空幾何 | 來源指定的真空實體保留名稱、材料、宿主及逐域分析身分。在來源輸入層級，計畫依既有 SGB 優先序／切割規則，加入一個外部背景域，作為已建模本體及自訂區域的語意補集。後端負責原生分割表示。公開 `D0_TO_D1_GAP` 保持獨立真空實體。 |
 | AEDT 物件名稱 | 新原生名稱可讀且可重現，依需要清理及消除歧義，仍綁定原始限定 Entity ID。歷史準備名稱保留版本專屬讀取器策略。 |
-| 邊界預設值 | Palace 將未指定的外部真空邊界保留為自然 PMC 條件。AEDT 使用 HFSS 預設 Perfect E。共用輸入不將一種政策轉成另一種。 |
+| 邊界預設值 | Palace 將未指定的外部真空邊界保留為自然 PMC 條件。HFSS 在其 Region 的各面指派相同的條件，即 Perfect H。 |
 
 來源準備建立幾何輸入契約，不代表原生幾何驗證或求解器執行。
 
 ### Q3D 來源正規化 {#accepted-q3d-source-normalization}
 
-Q3D GeometryPlan 前端屬於 v2 API。識別的 `airbridge_deck` 及 `airbridge_post` 紀錄，在正規化快照中仍是角色中立的來源幾何；正規化不賦予 Palace 路徑表示或原生導體角色。選定的 Palace 路徑繼續拒絕無法表示的導體。AEDT Q3D 透過獨立有限 C／G 來源前端，使用快照中呼叫端指定的最終 Net 成員及明確物理接地角色。目前 AEDT 轉換仍拒絕來源曲線意圖，不默默線性化。此來源契約不宣稱 Q3D 求解完成或已觀察回傳矩陣。
+Q3D GeometryPlan 前端屬於公開 API。識別的 `airbridge_deck` 及 `airbridge_post` 紀錄，在正規化快照中仍是角色中立的來源幾何；正規化不賦予 Palace 路徑表示或原生導體角色。選定的 Palace 路徑繼續拒絕無法表示的導體。AEDT Q3D 求解快照的 SGB 模型，使用其中呼叫端指定的最終 Net 成員及明確物理接地角色；已定義的圓弧在模型的 STEP 中以精確圓弧傳到 Q3D。此來源契約不宣稱 Q3D 求解完成或已觀察回傳矩陣。
 
 ## 路徑 {#current-surface-epr-direction}
 
@@ -102,7 +102,7 @@ Q3D GeometryPlan 前端屬於 v2 API。識別的 `airbridge_deck` 及 `airbridge
 | Route B | 有限建構金屬體積的閉合外部邊界殼為 PEC；其內部從 Palace 求解域排除，不產生四面體 | 是 | 是 |
 | Route C | 每個導體體積都以求解域的形式留在模型中 | 是 | 否 |
 
-Palace 模擬接受 Route A 與 Route B：`set_route` 與 `mesh()` 會以 `ValueError` 拒絕其他路徑。Route C 供保留導體體積的後端使用。AEDT 的方向是使用同一份 SGB 輸出；它目前的準備流程經由自己的平面路徑讀取 GeometryPlan 快照。
+Palace 模擬接受 Route A 與 Route B：`set_route` 與 `mesh()` 會以 `ValueError` 拒絕其他路徑。Route C 供保留導體體積的後端使用。AEDT 匯入同一個 SGB 模型的 STEP：`modeling="thin_film"` 建構 Route A 模型，`modeling="solid"` 建構 Route C 模型。
 
 Surface EPR 邊距的條帶由 SGB 在 `mesh()` 建立幾何時切進模型；請見[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。
 
@@ -163,17 +163,17 @@ SGB 對每個來源／模型版本，將已驗證來源事實投影至 `scgsim.s
 
 投影可表達有限 PEC、表面薄片 MA／MS、局部 MM／MA 片段資料、明確側別意義，以及外環／孔洞／接縫譜系，不將分類當成接觸證明。宣告、規劃與觀察紀錄仍可區分。原生標記與群組是不透明觀察，不是重建的成功結果；重複觀察不會倍增單一語意貢獻。
 
-`plan_route_surfaces()` 負責公開投影邊界：省略外觀物件時建立一次，提供時則驗證相同路徑及建構輸入指紋，再於既有鄰接呼叫位置重用。明確指定的介面種類及擁有者中繼資料，優先於衍生預設值。Route-A 薄片接觸平面範圍維持 `MM` 拓撲關係，但轉換為既有 `MS` 端帽並使用既定物理名稱前綴；周圍薄片仍可攜帶獨立分類的 MA／MS 資料。
+明確指定的介面種類及擁有者中繼資料，優先於衍生預設值。Route-A 薄片接觸平面範圍維持 `MM` 拓撲關係，但轉換為既有 `MS` 端帽並使用既定物理名稱前綴；周圍薄片仍可攜帶獨立分類的 MA／MS 資料。
 
 直接語意核心使用端可選擇不提供 Route-A 近似設定。Palace 模擬使用 Route A 而不提供近似設定時，使用 `thin_film`（`set_route("A")`）；帶有薄膜綁定的 `substrate_face` 或 `metal_gap_equivalent` 以 `set_route("A", approximation_profile=...)` 傳入。Route B 不提供近似設定時使用恆等映射 `route_b`。核心沒有近似設定時，座標不變且不記錄壓縮。`metal_gap_equivalent` 保持既有有效座標正規化，不宣稱可逆壓縮。
 
-堆疊沒有 PDK 真空層時，只有呼叫端選用 `set_vacuum_region()`，省略導體宿主宣告才綁定至內部產生的背景。相同正規化多邊形對基板區域接觸檢查，同時為指定宿主與產生背景的堆疊提供 Route-A 物理支撐。它考慮完整外環與孔洞，要求唯一正面積接觸；包圍盒相交、點／邊接觸或自動區域邊不足以成立。已指定但無法解析的宿主名稱仍失敗，不默默重新綁定。單基板 `substrate_face` 沒有相對晶粒或間隙值；兩個相對基板保留物理 `substrate_face`，以及不同且限雙面的 `metal_gap_equivalent` 正規化。產生的 Region 在來源幾何之後套用近似設定，並繞實際介電與有限 PEC 佔據區分割。Route-A 薄片不扣除虛構體積。
+堆疊沒有 PDK 真空層時，只有呼叫端選用 `plan.set_vacuum_region()`，省略導體宿主宣告才綁定至內部產生的背景。相同正規化多邊形對基板區域接觸檢查，同時為指定宿主與產生背景的堆疊提供 Route-A 物理支撐。它考慮完整外環與孔洞，要求唯一正面積接觸；包圍盒相交、點／邊接觸或自動區域邊不足以成立。已指定但無法解析的宿主名稱仍失敗，不默默重新綁定。單基板 `substrate_face` 沒有相對晶粒或間隙值；兩個相對基板保留物理 `substrate_face`，以及不同且限雙面的 `metal_gap_equivalent` 正規化。產生的 Region 在來源幾何之後套用近似設定，並繞實際介電與有限 PEC 佔據區分割。Route-A 薄片不扣除虛構體積。
 
 Route-A 支撐是局部的，不是整片標籤。薄片多邊形在建立裸露 SA／AA 表面之前，先依確切底部／頂部求解覆蓋分割，因此基板孔洞保持為孔洞，部分支撐的壓力測試案例保留支撐與暴露的不同子表面。每個子表面保留有序底部／頂部資料；MM 接觸端帽只保留接觸切割後剩餘側別。埠平面範圍選取相交子表面，若跨越不相容局部域配對則失敗。不支援完全懸空薄片。
 
-從 SA 片段移除導體面時使用相同局部域分割。即使單一導體橫跨數個相鄰域，規劃器只扣除與該確切求解配對片段的面重疊。AEDT 接面分割後，只有轉接器產生的 Route-A 薄片平面範圍，會從最終導體多邊形重建；呼叫端指定的介面宣告保留不變。
+從 SA 片段移除導體面時使用相同局部域分割。即使單一導體橫跨數個相鄰域，規劃器只扣除與該確切求解配對片段的面重疊。
 
-Route B 保留有限幾何，並記錄局部頂部、底部及側壁的材料側資料。幾何鄰接仍是集合，新增貢獻帳冊則保留語意重數。同一 Route-A 子表面的兩個同類 MA 側，共用單一原生表面及單一彙總 Palace 資料列，不重複或倍增。該彙總需要 Palace 內部邊界切開，不代表側別解析數值輸出。AEDT 貢獻目錄來自物理規劃帳冊項目，依貢獻身分分組為一列目錄，同時保留每個不同片段綁定。沒有物理帳冊資料的一般宣告，仍是語意中繼資料，不產生額外數值 EPR 貢獻。
+Route B 保留有限幾何，並記錄局部頂部、底部及側壁的材料側資料。幾何鄰接仍是集合，新增貢獻帳冊則保留語意重數。同一 Route-A 子表面的兩個同類 MA 側，共用單一原生表面及單一彙總 Palace 資料列，不重複或倍增。該彙總需要 Palace 內部邊界切開，不代表側別解析數值輸出。AEDT 從同一個 SGB 模型的 sidecar 讀取其 Surface-EPR 列。
 
 ## 身分要求 {#identity-requirements}
 
@@ -189,11 +189,9 @@ Route B 保留有限幾何，並記錄局部頂部、底部及側壁的材料側
 
 ## AEDT 共用來源事實 {#shared-source-facts-for-aedt}
 
-`GeometryPlan` 是 Palace 與 AEDT 的共用來源前端。準備快照包含正規化 `GeometryBuildInput` 多邊形（含孔洞環）、實體、求解區域、來源資訊及路徑近似設定，以及準備堆疊與來源出現實例紀錄。連結來源的接面宣告保留端子 Net、方向、尺寸、電感與電容；這些欄位不追溯歸屬至正規化 `GeometryBuildInput`。AEDT 不使用 `ConstructionPlanRecord`、Gmsh 表面、物理群組或原生標記。
+`GeometryPlan` 是 Palace 與 AEDT 的共用來源前端。準備快照包含正規化 `GeometryBuildInput` 多邊形（含孔洞環）、實體、求解區域、來源資訊及路徑近似設定，以及準備堆疊與來源出現實例紀錄。連結來源的接面宣告保留端子 Net、方向、尺寸、電感與電容；這些欄位不追溯歸屬至正規化 `GeometryBuildInput`。AEDT 以 `prepare_sgb_model` 建構快照的 SGB 模型並匯入其 STEP；物件名稱、面群組與 Surface-EPR 列取自該模型的 sidecar 與 guard，而不是 Gmsh 表面、物理群組或原生標記。
 
-AEDT 準備也從明確來源／有效層紀錄，建立私有程序內表示內容。它綁定各語意實體的物理層身分、來源與有效 Z 區間及薄片／實體表示，以及已映射外部包絡。共用平面貢獻規劃器直接使用這些事實，不從實體中繼資料推論 AEDT 建模，也不將內容視為 Palace Route A、B 或 C 選取。此內容不改變公開計畫快照、來源 GDS 或序列化來源結構。Palace 編譯繼續使用明確 Route A／B／C 契約。
-
-AEDT 負責的綁定附屬檔，必須另外記錄每個建立的本體、薄片、面、材料側、選取及已儲存場運算式與來源身分的關係。原生面重疊或鄰接查詢是觀察幾何資料，不能製造來源接觸意圖。Route-A 近似設定正規化仍在共用前端邊界只發生一次；Route-B 有限本體事實仍與 PEC 近似及實現它們的 AEDT 實作區分。
+執行時會以 guard 檢查 AEDT 匯入的內容：每個物件與面都必須與模型的 sidecar 及 guard 相符，否則執行停止。原生面重疊或鄰接查詢是觀察幾何資料，不能製造來源接觸意圖。Route-A 近似設定正規化仍在共用前端邊界只發生一次。
 
 ## 準備資源 {#preparation-resources}
 

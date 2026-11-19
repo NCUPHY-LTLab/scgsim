@@ -19,13 +19,12 @@ Repository layout, implementation responsibilities, documentation builds and
 release procedures belong to the secondary
 [maintainer entry](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md).
 
-## SCGSim 2.0 ownership
+## SCGSim 3.0 ownership {#scgsim-2.0-ownership}
 
-Each SCGSim 2.0 package area owns the responsibilities below and must not take
+Each SCGSim 3.0 package area owns the responsibilities below and must not take
 over those of another area. The [code map](code-map.qmd) shows which stage each
-folder is and the order the work flows through them. Existing consumers stay on their recorded pins
-until they choose to migrate; the
-[migration reference](api-migration.qmd) maps the v1 names to their 2.0
+folder is and the order the work flows through them. The
+[migration reference](api-migration.qmd) maps the v1 names to their 3.0
 owners.
 
 | Target area | Owns | Must not take ownership of |

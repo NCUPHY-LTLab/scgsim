@@ -223,5 +223,5 @@ Palace 的 Surface EPR 邊距：`mesh()` 建立幾何時，`inset_margins_um` �
 一般多邊形輪廓即使近似圓弧，仍是多邊形。明確宣告的曲線是線段與圓弧，由 SGB 自行處理；其他曲線類型會引發 `UnsupportedCurveError`。詳見[曲線契約](../geometry-sgb.qmd#source-curves)。來源、物理表示及後端的正式契約請參閱[SGB 幾何契約](../geometry-sgb.qmd)。
 
 ::: {.callout-note collapse="true" title="公開案例來源與範圍"}
-本文案例來自公開的矩形接面與孔洞測試 [`tests/test_rectangular_junction_geometry.py`](https://github.com/OrPenStrike/scgsim/blob/2ed85adc/tests/test_rectangular_junction_geometry.py#L230)。[案例索引](../images/sgb-concept/public-case-binding.json)記錄來源版本、單位、物理表示及各圖對應階段。本頁以來源、物理表示及接面圖解釋目前保留的流程。
+本文案例來自公開的矩形接面與孔洞測試：[`tests/test_rectangular_junction_geometry.py`](https://github.com/NCUPHY-LTLab/scgsim/blob/v3.0.0rc4/tests/test_rectangular_junction_geometry.py#L252) 中的 `physical_fixture()`。[案例索引](../images/sgb-concept/public-case-binding.json)記錄來源版本、單位、物理表示及各圖對應階段。本頁以來源、物理表示及接面圖解釋目前保留的流程。
 :::

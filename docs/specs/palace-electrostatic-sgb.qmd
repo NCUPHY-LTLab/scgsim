@@ -292,8 +292,7 @@ authority is `scgsim.geometry`. Palace builds its geometry with
 The [Electrostatic lesson](../course/palace-electrostatic.qmd) teaches exact Net
 terminals/ground and the real mesh/config sequence. The separate
 [Eigenmode contract](palace-eigenmode.qmd) defines mode and EPR output selection.
-Neither preparation path starts Palace or submits a job. Shared private state
-invalidation/persistence implementation lives in [architecture](../architecture.qmd#palace-preparation-lifecycle).
+Neither preparation path starts Palace or submits a job.
 
 ## Convergence declaration {#convergence-declaration}
 

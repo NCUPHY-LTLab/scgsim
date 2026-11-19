@@ -93,19 +93,3 @@ assumptions. Continue to [offline EPR](offline-epr.qmd), where `reanalyze_epr`
 updates assumptions on these recorded numerators without native execution.
 The [runtime contract](../specs/aedt-runtime.qmd) owns exact saved-field context,
 material-side support and analysis failure behavior.
-
-## Optional project-instruction block
-
-Optionally copy this guidance into the study's own project instructions or
-`LESSONS` when an authorized saved-field comparison needs careful SurfaceEPR
-interpretation:
-
-```markdown
-For an authorized SurfaceEPR saved-field comparison:
-- Preserve the original completed run, exact final saved-field cohort, source/spec, and result files. The public `scgsim.aedt.analyze_epr()` function analyzes a resolved `SavedSolution` in an owned workcopy; pass the same prepared model, run control, EPR request, an explicit AEDT version, and a new output directory. This saved-field analysis call does not request another solve. If choosing `surface_field_selectors`, set only the caller-selected contributions; `surface` and `adjacent` select calculator operations, not physical material sides.
-- Compare with the original final saved-field result for the same geometry, mode, and pass. Report the recorded mode and pass identities for both results; if either is missing or differs, state that instead of treating them as a matched comparison.
-- For each contribution and binding, inspect the returned evaluation and binding/selection evidence to establish the support actually used. `evaluation_kind` and `margin_um` label an evaluation; they do not by themselves establish that one mask is nested in another. If available support evidence cannot establish nesting, report it as unknown. Treat requested masks as alternative evaluations of the same physical interface, not as additional physical films. An unmasked baseline is a reference evaluation, not another chosen mask.
-- For each compared contribution of `results/epr/epr-result.json`, read `interface_kind`, `evaluation_kind`, `margin_um`, `substrate_relative_permittivity` (MS and SA) and `members`: each member names a sidecar Surface-EPR row (`row`), its `group`, its `band` and the selection sheet it was integrated on (`selection_name`). In the model's sidecar, `surface_epr_row[<row>]` gives the row's `interface_type` and, for a Route A sheet row, `face_sides` (each face the row integrates, with the side it reads: `above`, `below` or `both`) and `side`. The original run receipt's geometry record `surface_selections[<row>]` lists the imported faces that sheet was copied from; the analysis receipt rebinds the same sheet by name, so its `faces` is empty. Where selectors were passed, the result's `provenance.surface_field_selector_bindings` gives, per row and quantity, the `field_selector`, the expression name and identity, and the native readback of its operations (`EnterSurface` or `EnterAdjacentSurf` on that sheet). Compare expression identity and evaluation/margin context with raw integral values and units and recorded normalization. Which side of the sheet `adjacent` reads in AEDT is not recorded, and nothing compares it with the sidecar's `face_sides`: the material-side correspondence stays unverified, and a selector name or the sheet's own normal does not establish it.
-- Preserve and link the original and new outputs. Report observed changes, limits, and missingness. Do not swap labels or values, clamp results, choose the smaller result, or introduce a tolerance. Geometry, materials, mode, pass controls, masks/evaluation criteria, EPR request, environment, resources, or replacing/writing source data require their separate authorization.
-- Use only the study's existing permission and resource allocation. SCGSim records caller choices; it does not choose a physical side or grant compute permission.
-```

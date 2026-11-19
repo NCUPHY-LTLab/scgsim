@@ -12,7 +12,7 @@ sidebar: contract
 
 ## 導體與埠 {#conductors-ports}
 
-閱讀[實體、出現項與電氣集合](concepts/geometry.qmd#entity-occurrence-and-net)，以及[Driven 響應概念](concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency)。[模型準備教學](course/working-model.qmd)示範如何將這些選擇帶入指定案例；[Driven Modal](course/aedt-driven-modal.qmd) 與 [Driven Terminal](course/aedt-driven-terminal.qmd) 教學則呈現 Modal 與 Wave Terminal 宣告。
+閱讀[實體、出現項與電氣集合](concepts/geometry.qmd#entity-occurrence-and-net)，以及[Driven 響應概念](concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency)。[模型準備教學](course/working-model.qmd)示範如何將這些選擇帶入指定案例；[Driven Terminal](course/aedt-driven-terminal.qmd) 教學則呈現集總埠宣告。此版本尚未提供 Driven Modal 與波埠。
 
 ## 網格與自適應 {#mesh-adaptation}
 

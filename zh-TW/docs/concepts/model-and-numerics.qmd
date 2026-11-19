@@ -11,7 +11,7 @@ scgsim-id: "docs/concepts/model-and-numerics"
 
 ## 定義物理模型 {#define-the-physical-model}
 
-記錄導體接地方式、外部邊界、基板與真空範圍、端口或接面元件，以及材料假設。變更接地導體或接面電感，就會改變所研究的問題。共用版圖不代表外部條件相同：未指定時，Palace 本徵模使用自然 PMC 條件；目前以來源為起點的 HFSS EPR 模型則使用已記錄的 HFSS 預設 Perfect E 外部邊界。
+記錄導體接地方式、外部邊界、基板與真空範圍、端口或接面元件，以及材料假設。變更接地導體或接面電感，就會改變所研究的問題。共用版圖本身不會讓外部條件相同：未指定時，Palace 本徵模使用自然 PMC 條件，HFSS 則在其 Region 的各面指派 Perfect H 來與它一致。
 
 ## 選擇幾何近似 {#choose-the-geometric-approximation}
 

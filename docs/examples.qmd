@@ -26,9 +26,9 @@ Each row links the PDK notebook source at revision `49e539f`, the revision the
 The PDK has no current notebook for the two-port S-parameters of the
 finite-ground CPW; its HFSS Driven Terminal notebooks use the
 [17-bridge CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge),
-and the [Driven Modal](course/aedt-driven-modal.qmd) and
-[Driven Terminal](course/aedt-driven-terminal.qmd) lessons prepare the
-finite-ground CPW request.
+and the [Driven Terminal](course/aedt-driven-terminal.qmd) lesson prepares a
+two-port request with lumped ports. Driven Modal and wave ports are not
+available in this version.
 
 Before you simulate a layout of your own, read the [supported scope](supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.
 

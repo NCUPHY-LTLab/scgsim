@@ -7,7 +7,10 @@ scgsim-id: "docs/api-migration"
 ---
 
 This reference maps the frozen v1 API surfaces, called the baseline below, to
-their current owners in SCGSim 3.0.
+their current owners in SCGSim 3.0. A study written for SCGSim 2.0 needs the
+changes in [AEDT studies on the SGB model](#aedt-sgb-migration) and
+[Palace meshing and Surface EPR](#palace-mesh-migration); a study written for an
+earlier 3.0 release candidate needs the parts that name a later one.
 
 The Solid/Thin-Film 3D request extension requires a request-level `modeling`
 value of `"solid"` or `"thin_film"` for
@@ -64,7 +67,7 @@ the current package and the corresponding old-to-new map.
 
 From `3.0.0rc3` an AEDT study prepares every 3D family from a `GeometryPlan` snapshot:
 AEDT imports the plan's SGB model, the model Palace meshes, and builds no
-geometry of its own (issue #67). A study written for the earlier route meets
+geometry of its own. A study written for the earlier route meets
 four changes.
 
 - **The entry is the plan.** HFSS Eigenmode is `EigenmodeSim.set_plan(snapshot)`
@@ -78,7 +81,7 @@ four changes.
   replacement.
 - **The Region is the plan's.** `set_vacuum_region(...)` sets it for every
   family; `region_padding_um` is removed.
-- **Driven Modal and wave ports wait for issue #135.** `prepare_sgb_model`
+- **Driven Modal and wave ports are not available.** `prepare_sgb_model`
   refuses a `ModalPort` and a wave `TerminalPort`, naming
   [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135). A two-port
   network today is Driven Terminal with `LumpedTerminalPort`s on the plan's
@@ -170,7 +173,7 @@ direction.
 - **Baseline `scgsim.sgb.geometry_plan` → current defining module `scgsim.geometry.source.plan`.** Declared names: `GeometryPlan`, `GeometryPlanSnapshot`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.models.common` → current defining module `scgsim.geometry.models.common`.** Declared names: `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `PathInput`, `PolygonRing`, `RouteLiteral`, `Vector3D`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.models.common` → current defining module `scgsim.geometry.models.common`.** Declared names: `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `DEFAULT_INTERFACE_SOLVER_USE`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `InterfaceKindLiteral`, `SolverUseLiteral`. Preferred API: `scgsim.geometry.models.common`.
-- **Removed by issue #67 (the native AEDT builder's planning).** `scgsim.geometry.planning` with `scgsim.geometry.models.topology` (`InterfacePlanRecord`, `MMContactRecord`, `SurfacePlanRecord`) and the construction records `ConstructionBodyPlanRecord` and `SurfacePartitionRecord`: AEDT imports the SGB model, so nothing calls them. No supported import replaces them.
+- **Removed in 3.0.0rc3 (the native AEDT builder's planning).** `scgsim.geometry.planning` with `scgsim.geometry.models.topology` (`InterfacePlanRecord`, `MMContactRecord`, `SurfacePlanRecord`) and the construction records `ConstructionBodyPlanRecord` and `SurfacePartitionRecord`: AEDT imports the SGB model, so nothing calls them. No supported import replaces them.
 - **Baseline `scgsim.sgb.models.input` → current defining module `scgsim.geometry.models.input`.** Declared names: `BoundaryCurveChainSpec`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `LayoutPolygonSpec`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.models.regions` → current defining module `scgsim.geometry.models.regions`.** Declared names: `PortSheetOverlapRecord`, `PortSheetRegionRecord`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.summary` → current defining module `scgsim.geometry.source.summary`.** Declared names: `InputSummary`, `summarize_geometry_input`. Preferred API: `scgsim.geometry`.
@@ -236,11 +239,11 @@ private definition module here does not make it public.
 - **Baseline `scgsim.aedt.resolve` → current canonical owner `scgsim.aedt.results.resolve`.** Baseline names: `ResolvedRun`, `resolve_results`.
 - **Baseline `scgsim.aedt._epr_geometry` → current canonical owner `scgsim.aedt.preparation.planar_junctions`.** Baseline names: `planar_junction_from_port`.
 - **Baseline `scgsim.aedt._epr_results` → current canonical owner `scgsim.aedt.epr.reanalysis`.** Baseline names: `reanalyze_epr`.
-- **New for issue #67 → canonical owner `scgsim.aedt.preparation.sgb_model`.** Names: `PreparedSgbModel`, `prepare_sgb_model`; `prepare_hfss_eigenmode_from_geometry` and `prepare_hfss_driven_from_geometry` take `model=`.
-- **Removed by issue #67 (HFSS Eigenmode on the SGB model).** `SurfaceEprSpec` (declare Surface EPR with `GeometryPlan.set_surface_epr(specs)`, Palace's specs by interface type; see [Surface EPR and the vacuum on the plan](#plan-owns-surface-epr)), `EprAnalysisRequest.surface_contribution_ids` (now `surface_epr_groups`, sidecar Surface-EPR groups), `combine_epr_mode` and `combine_surface_epr_mode` (the planar combination), and `analyze_epr(geometry=..., geometry_workers=...)` (now `analyze_epr(model=...)`).
-- **Removed by issue #67 (Q3D on the SGB model).** `Q3dBodySpec` and the source-free body request (a `Q3dSpec` carries the `PreparedSgbModel` and the model's Nets), and the `materials` and `region_padding_um` parameters of `prepare_q3d_from_geometry` (the materials are the stack's and the Region is the plan's `VACUUM_REGION`, decision 5).
-- **Removed by issue #67 (HFSS Driven Terminal on the SGB model, the native builder and the GDS route).** `HfssEigenmodeSpec`, `HfssDrivenSpec`, `HfssDrivenMode`, `LayerImport`, `ObjectBinding`, `LengthMeshSpec` and `gds_path` (prepare from a `GeometryPlan` snapshot: `EigenmodeSim` for Eigenmode, `prepare_sgb_model(..., ports=...)` and `prepare_hfss_driven_from_geometry(model=...)` for Driven Terminal); `PreparedPlanarGeometry` and `prepare_planar_geometry_input` (the request carries `PreparedSgbModel`); the `modeling`, `geometry`, `ports` and `geometry_workers` parameters of `prepare_hfss_driven_from_geometry`; `--geometry-workers` and `ExecutionOptions.geometry_workers`. `prepare_handoff(spec=...)` takes only `Q3dSpec` and `Q2dSpec` and refuses an HFSS request, naming the HFSS preparation functions.
-- **Removed by issue #67 (Q3D is C/G only; AC/RL is designed again in issue #265).** `Q3dTerminalPair` and the `terminal_pairs` parameter of `prepare_q3d_from_geometry`, `Q3dSpec.solve_ac_rl`, and the `source_object`, `source_side`, `sink_object` and `sink_side` fields of `Q3dNetSpec`. A Q3D request extracts capacitance and conductance only.
+- **New in 3.0.0rc3 → canonical owner `scgsim.aedt.preparation.sgb_model`.** Names: `PreparedSgbModel`, `prepare_sgb_model`; `prepare_hfss_eigenmode_from_geometry` and `prepare_hfss_driven_from_geometry` take `model=`.
+- **Removed in 3.0.0rc3 (HFSS Eigenmode on the SGB model).** `SurfaceEprSpec` (declare Surface EPR with `GeometryPlan.set_surface_epr(specs)`, Palace's specs by interface type; see [Surface EPR and the vacuum on the plan](#plan-owns-surface-epr)), `EprAnalysisRequest.surface_contribution_ids` (now `surface_epr_groups`, sidecar Surface-EPR groups), `combine_epr_mode` and `combine_surface_epr_mode` (the planar combination), and `analyze_epr(geometry=..., geometry_workers=...)` (now `analyze_epr(model=...)`).
+- **Removed in 3.0.0rc3 (Q3D on the SGB model).** `Q3dBodySpec` and the source-free body request (a `Q3dSpec` carries the `PreparedSgbModel` and the model's Nets), and the `materials` and `region_padding_um` parameters of `prepare_q3d_from_geometry` (the materials are the stack's and the Region is the plan's `VACUUM_REGION`, decision 5).
+- **Removed in 3.0.0rc3 (HFSS Driven Terminal on the SGB model, the native builder and the GDS route).** `HfssEigenmodeSpec`, `HfssDrivenSpec`, `HfssDrivenMode`, `LayerImport`, `ObjectBinding`, `LengthMeshSpec` and `gds_path` (prepare from a `GeometryPlan` snapshot: `EigenmodeSim` for Eigenmode, `prepare_sgb_model(..., ports=...)` and `prepare_hfss_driven_from_geometry(model=...)` for Driven Terminal); `PreparedPlanarGeometry` and `prepare_planar_geometry_input` (the request carries `PreparedSgbModel`); the `modeling`, `geometry`, `ports` and `geometry_workers` parameters of `prepare_hfss_driven_from_geometry`; `--geometry-workers` and `ExecutionOptions.geometry_workers`. `prepare_handoff(spec=...)` takes only `Q3dSpec` and `Q2dSpec` and refuses an HFSS request, naming the HFSS preparation functions.
+- **Removed in 3.0.0rc3 (Q3D is C/G only; AC/RL is tracked in issue #265).** `Q3dTerminalPair` and the `terminal_pairs` parameter of `prepare_q3d_from_geometry`, `Q3dSpec.solve_ac_rl`, and the `source_object`, `source_side`, `sink_object` and `sink_side` fields of `Q3dNetSpec`. A Q3D request extracts capacitance and conductance only.
 - **Baseline `scgsim.aedt._epr_results` → current canonical owner `scgsim.aedt.results.epr`.** Baseline names: `resolve_epr_result`, `resolve_saved_solution`.
 - **Baseline `scgsim.aedt._epr_results and _presentation` → current canonical owner `scgsim.aedt.presentation.epr`.** Baseline names: `plot_epr_result`, `show_epr`.
 - **Baseline `scgsim.aedt.run` → current canonical owner `scgsim.aedt.run`.** Baseline names: `main`.
@@ -376,8 +379,8 @@ Surface-EPR margins became geometry, and the changes follow from that:
 
 The [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins) defines
 the keys and rows. SGB group names attach the face kind with `__`, as in
-`MA::pad__top::band=1`; the rule is in the
-[SGB design pages](../zh-TW/docs/design/sgb/identity.html#band-group-names).
+`MA::pad__top::band=1`; the [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins)
+gives the form of the names.
 
 ### Results
 
@@ -471,7 +474,7 @@ write the handoff, so they refuse a model the import cannot realize. See
 ### Surface EPR and the vacuum on the plan {#plan-owns-surface-epr}
 
 From `3.0.0rc4` the Surface-EPR specs and the vacuum region are set on the
-`GeometryPlan`, once, and nowhere else (issue #268): both change the geometry
+`GeometryPlan`, once, and nowhere else: both change the geometry
 and neither depends on the solver. The simulation reads them from the snapshot
 `set_plan` binds, and `simulation_drc` from the plan it is given. The removed
 calls have no compatibility layer.

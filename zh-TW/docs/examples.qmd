@@ -18,7 +18,7 @@ SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別�
 | SimplePad 的模態頻率，以及每個模態的表面、體積與支路能量參與率 | [Palace Eigenmode 與 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd)・[HFSS Eigenmode 與表面 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
 | 有限接地 CPW 橫截面的單位長度 C、G、L 與 R 矩陣 | [AEDT Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.qmd) |
 
-PDK 沒有有限接地 CPW 雙埠 S 參數的現行筆記本；其 HFSS Driven Terminal 筆記本使用 [17 座橋的 CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge)，而 [Driven Modal](course/aedt-driven-modal.qmd) 與 [Driven Terminal](course/aedt-driven-terminal.qmd) 教學會準備有限接地 CPW 的請求。
+PDK 沒有有限接地 CPW 雙埠 S 參數的現行筆記本；其 HFSS Driven Terminal 筆記本使用 [17 座橋的 CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge)，而 [Driven Terminal](course/aedt-driven-terminal.qmd) 教學會準備使用集總埠的雙埠請求。此版本尚未提供 Driven Modal 與波埠。
 
 模擬自己的版圖之前，請先閱讀[支援範圍](supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。
 

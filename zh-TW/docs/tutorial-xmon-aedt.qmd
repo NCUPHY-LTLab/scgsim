@@ -1,5 +1,5 @@
 ---
-title: "公開 Xmon：AEDT Route B 本徵模"
+title: "公開 Xmon：以實體金屬進行 AEDT 本徵模"
 description: "綁定接面、宣告 Surface EPR，並在 SGB 模型上準備 AEDT EPR 請求。"
 lang: zh-TW
 scgsim-kind: "course"
@@ -9,11 +9,11 @@ execute:
   enabled: false
 ---
 
-請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。本頁在其 `plan` 上加入 Surface EPR、重新準備，並使用新的 `snapshot`、`port_name` 與 `coupon`，準備可攜式 HFSS 本徵模交接套件，輸出表面、體積與接面 EPR。Python 輸入準備環境需要 SCGSim `aedt-epr` extra 與相符的公開 OrPen 輸入。此 extra 提供版圖幾何與 PyAEDT 的 Python 相依項目；不會安裝 AEDT 或提供授權。本範例明確選擇 AEDT 2024.2。目標執行主機需要該 AEDT 版本、PyAEDT 1.3.0 與適當授權。請使用[範例](examples.qmd)列出的相符 SCGSim 來源修訂版本。Quarto 不會開啟 AEDT、建立原生幾何或求解此模型。snapshot 保留其來源物理堆疊；本頁為 AEDT 選擇 `modeling="solid"`。Route A／B 描述上游幾何建構方式，不是 AEDT 準備參數。
+請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。本頁在其 `plan` 上加入 Surface EPR、重新準備，並使用新的 `snapshot`、`port_name` 與 `coupon`，準備可攜式 HFSS 本徵模交接套件，輸出表面、體積與接面 EPR。Python 輸入準備環境需要 SCGSim `aedt-epr` extra 與相符的公開 OrPen 輸入。此 extra 提供版圖幾何與 PyAEDT 的 Python 相依項目；不會安裝 AEDT 或提供授權。本範例明確選擇 AEDT 2024.2。目標執行主機需要該 AEDT 版本、PyAEDT 1.3.0 與適當授權。請使用[範例](examples.qmd)列出的相符 SCGSim 來源修訂版本。Quarto 不會開啟 AEDT、建立原生幾何或求解此模型。snapshot 保留其來源物理堆疊；本頁為 AEDT 選擇 `modeling="solid"`，把每個導體建成與其薄膜同厚的實體。
 
 ## 設定表面與接面 EPR {#configure-surface-and-junction-epr}
 
-共用 snapshot 會將已定義的 `D0_TO_D1_GAP` 與產生的外部真空區域分開。AEDT 契約記錄 HFSS 對背景暴露表面採用的預設 Perfect E 政策；Palace 則使用自然 PMC 邊界。這些後端選擇是刻意設定，不會自動轉換。[AEDT 執行環境參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)說明原生 Region 表示方式。此靜態頁面不宣稱已檢查原生 HFSS 幾何。比較結果時，請記下外部邊界、Region 尺寸與後端設定。
+共用 snapshot 會將已定義的 `D0_TO_D1_GAP` 與產生的外部真空區域分開。Palace 讓外部維持自然 PMC 邊界，HFSS 則在其 Region 的各面指派相同的條件，即 Perfect H。[AEDT 執行環境參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)說明原生 Region 表示方式。此靜態頁面不宣稱已檢查原生 HFSS 幾何。比較結果時，請記下外部邊界、Region 尺寸與後端設定。
 
 ### 宣告 Surface EPR {#declare-surface-epr}
 
@@ -80,7 +80,7 @@ from scgsim.aedt import (
     EigenmodeSim,
 )
 
-aedt_run_dir = Path.cwd() / ".artifacts" / "public-xmon-aedt-route-b"
+aedt_run_dir = Path.cwd() / ".artifacts" / "public-xmon-aedt-solid"
 aedt_resources = AedtResources(
     cores=int(os.environ["SCGSIM_AEDT_CORES"]),
     ram_limit_percent=int(os.environ["SCGSIM_AEDT_RAM_LIMIT_PERCENT"]),
@@ -90,7 +90,7 @@ sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
 sim.set_plan(snapshot)
 sim.set_output_dir(aedt_run_dir)
 sim.set_eigenmode(
-    project_name="public_xmon_route_b_eigenmode",
+    project_name="public_xmon_solid_eigenmode",
     design_name="Xmon",
     run_control=EigenmodeRunControl(
         setup_name="Setup1",

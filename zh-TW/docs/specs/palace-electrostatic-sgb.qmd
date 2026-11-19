@@ -145,7 +145,7 @@ Surface EPR 的內縮邊距會以帶的形式切進幾何，所以規格屬於�
 
 模擬由 `set_plan(snapshot)` 取得來源，即一個已準備的 `GeometryPlan`。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Route A／B 語意。目前面向來源的幾何權威為 `scgsim.geometry`。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立幾何，並用 `scgsim.meshing` 產生網格。外部 SGB 與 gsim 僅屬衍生歷史。
 
-[Electrostatic 課程](../course/palace-electrostatic.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。共用私有狀態的失效處理／持久化實作位於[架構](../architecture.qmd#palace-preparation-lifecycle)。
+[Electrostatic 課程](../course/palace-electrostatic.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。
 
 ## 收斂宣告 {#convergence-declaration}
 

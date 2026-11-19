@@ -15,9 +15,9 @@ another.
 Record the conductor grounds, exterior boundary, substrate and vacuum extent,
 port or junction elements, and material assumptions. Changing a grounded
 conductor or junction inductance changes the experiment. Shared layout does
-not imply matching exterior conditions: unspecified Palace Eigenmode uses its
-natural PMC condition; the current source-first HFSS EPR model uses the recorded
-HFSS default Perfect E exterior.
+not by itself make the exterior conditions match: unspecified Palace Eigenmode
+uses its natural PMC condition, and HFSS matches it by assigning Perfect H on
+the faces of its Region.
 
 ## Choose the geometric approximation
 
