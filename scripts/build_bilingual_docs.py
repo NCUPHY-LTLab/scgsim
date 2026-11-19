@@ -84,18 +84,14 @@ def _translate_workflow():
 def _translate_source_diagrams():
     diagram_labels = {
         "cpw-source.svg": {
-            "Declared finite-ground CPW source geometry": "公開有限接地 CPW 來源幾何",
-            "A 500 micrometre long substrate rectangle carries a 10 micrometre center signal with 6 micrometre gaps and two 80 micrometre grounds. Modal integration lines are shown at the negative and positive X end faces. Geometry only, no solver results.": "長 500 微米的基板矩形上有寬 10 微米的中央訊號線，與兩條寬 80 微米的接地相隔 6 微米。圖中於負 X 與正 X 端面標出 Modal 積分線。此圖僅呈現幾何，不含求解器結果。",
+            "Declared finite-ground CPW source geometry": "有限接地 CPW 的版圖幾何",
+            "A 500 micrometre long substrate rectangle carries a 10 micrometre center signal with 6 micrometre gaps and two 80 micrometre grounds. Geometry only, no solver results.": "長 500 微米的基板矩形上有寬 10 微米的中央訊號線，與兩條寬 80 微米的接地相隔 6 微米。此圖僅呈現幾何，不含求解器結果。",
             "Finite-ground CPW source · dimensions in µm": "有限接地 CPW 來源 · 尺寸單位：µm",
             "Si substrate · 500 × 182": "Si 基板 · 500 × 182",
             "Ground · 80": "接地 · 80",
             "6 µm gap": "6 µm 間隙",
             "Signal · 10": "訊號線 · 10",
-            "Port 1 · −X": "埠 1 · −X",
-            "Port 2 · +X": "埠 2 · +X",
             "500 µm · source length": "500 µm · 來源長度",
-            "Modal integration-line": "Modal 積分線",
-            "endpoints are declared": "端點已明確宣告",
         },
         "q2d-cross-section.svg": {
             "Explicit Q2D CPW cross-section": "明確的 Q2D CPW 橫截面",
