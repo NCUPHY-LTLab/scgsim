@@ -68,15 +68,21 @@ interchangeable numbers. The box around the chip is part of the model too; see
 
 ## MA, MS and SA {#interfaces}
 
-Surface EPR assumes a thin lossy film at three kinds of interface
-(@fig-surface-epr-bands, top):
+Surface EPR assumes a thin lossy film at three kinds of interface, each named
+by the two materials it separates:
 
-- **MA, metal–air**: the top of the metal and its side walls, where metal meets
-  vacuum. On a Route A sheet, its upper side.
-- **MS, metal–substrate**: under the metal, where it meets the substrate. On a
-  Route A sheet, its lower side.
-- **SA, substrate–air**: the bare substrate, mostly in the gaps between
-  conductors.
+- **MA, metal–air**: where metal meets vacuum. A Route A sheet's MA is its side
+  that faces vacuum.
+- **MS, metal–substrate**: where metal meets the substrate. A Route A sheet's
+  MS is its side that faces the substrate.
+- **SA, substrate–air**: where bare substrate meets vacuum, mostly in the gaps
+  between conductors.
+
+On the single-die pad of @fig-surface-epr-bands (top), MA is the top of the
+metal and its side walls and MS is underneath. The sides follow the
+neighbouring material, not the height: on the upper die of a flip chip the
+metal hangs beneath its substrate, so MS is above the metal and MA below it.
+A sheet with vacuum on both sides, over a hole in the substrate, is MA on both.
 
 The film is not drawn in the geometry. You give its thickness, permittivity
 and loss tangent per interface type with `plan.set_surface_epr(specs)` before

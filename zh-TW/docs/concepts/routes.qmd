@@ -18,10 +18,10 @@ Route（路徑）決定 SCGSim 在 3D 模型中怎麼畫你的金屬。OrcaPen S
 | 模型 | 金屬 | 晶片上方的真空 | 焊墊的 Surface EPR 面 |
 |---|---|---|---|
 | Route B | z = 0 到 0.1 µm 的導體塊；表面是理想導體，內部沒有網格 | z = 0 到 1000.1 µm，包住金屬並延伸到上方 | 頂面與側壁是 MA，下方是 MS |
-| Route A，`thin_film` | z = 0 的薄片 | z = 0 到 1000.0 µm：移除膜的 0.1 µm，膜上方的一切往下移 | 一片薄片：上側是 MA，下側是 MS；沒有側壁 |
+| Route A，`thin_film` | z = 0 的薄片 | z = 0 到 1000.0 µm：移除膜的 0.1 µm，膜上方的一切往下移 | 一片薄片：上側（真空）是 MA，下側（矽）是 MS；沒有側壁 |
 | Route A，`substrate_face` | z = 0 的薄片 | z = 0 到 1000.1 µm：所有高度不變，膜原來的位置變成真空 | 同 `thin_film` |
 
-MA、MS、SA 是評估 Surface EPR 的介面，說明見[Surface EPR](surface-epr.qmd#interfaces)。兩種 route 切出的 Surface EPR 條帶相同：這塊焊墊在邊距 0.5 與 1 µm 時，三個條帶分別是 399、397 與 39,204 µm²。
+MA、MS、SA 是評估 Surface EPR 的介面，說明見[Surface EPR](surface-epr.qmd#interfaces)。它們依金屬旁邊的材料命名，所以表中的「頂面」、「上側」只適用於這塊單一晶粒的焊墊；覆晶的上方晶粒上，金屬掛在基板下方，MS 在金屬上方，MA 在下方。兩種 route 切出的 Surface EPR 條帶相同：這塊焊墊在邊距 0.5 與 1 µm 時，三個條帶分別是 399、397 與 39,204 µm²。
 
 兩種 route 的金屬都是理想導體：都不模擬鋁的電阻或損耗。
 

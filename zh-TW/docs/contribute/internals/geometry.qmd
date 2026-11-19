@@ -73,4 +73,4 @@ SCGSim 在兩個地方建立這種排列，決定歸屬的方式不同：
 
 ## 產生網格 {#meshing}
 
-Palace 的 `mesh()` 透過 `scgsim.meshing`，為 XAO 及其 sidecar 產生網格。配方決定起始元素大小（預設為 `FeatureRecipe()`）。每一輪都在新的 Gmsh 工作程序中產生網格，並以品質門檻稽核線性網格；低於門檻的元素，會在周圍一個球形範圍內得到更細的局部尺寸，下一輪再重新產生。網格乾淨時迴圈停止；若預算用完（輪數、四面體數、時間，或不良元素數不再下降），`mesh()` 就拋出 `MeshRepairError`。較高的幾何階數，在通過稽核的那一輪之後才提升。Palace 的屬性由 sidecar 的實體群組轉換而來（`palace.mesh.physical_groups`）。控制項見 [Palace 網格參考](../../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
+Palace 的 `mesh()` 透過 `scgsim.meshing`，為 XAO 及其 sidecar 產生網格。配方決定起始元素大小（預設為 `FeatureRecipe()`）。每一輪都在新的 Gmsh 工作程序中產生網格，並以品質門檻稽核線性網格；低於門檻的元素，會在周圍一個球形範圍內得到更細的局部尺寸，下一輪再重新產生。網格乾淨時迴圈停止；若預算用完（輪數、四面體數、時間，或不良元素數不再下降），`mesh()` 就拋出 `MeshRepairError`。較高的幾何階數，在通過稽核的那一輪之後才提升。除了一種配方之外，每種配方都走這個迴圈：`GmshDefaultRecipe()` 只做報告（`scgsim.meshing.entry`）。它用 Gmsh 自己的尺寸產生一次網格、不做修復，不論品質都交出網格，報告以 `stop="report_only"` 記錄低於門檻的元素；四面體與時間預算以及階數提升仍然適用。Palace 的屬性由 sidecar 的實體群組轉換而來（`palace.mesh.physical_groups`）。控制項見 [Palace 網格參考](../../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。

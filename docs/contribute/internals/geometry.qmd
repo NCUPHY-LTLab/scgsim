@@ -153,7 +153,12 @@ the quality threshold; every element below it gets a finer local size in a ball
 around it, and the next round meshes again. The loop stops when the mesh is
 clean, or when a budget ends it (rounds, tetrahedra, time, or a bad count that
 no longer falls), and `mesh()` then raises `MeshRepairError`. A higher geometry
-order is raised after the round that passes. Palace's attributes are lowered
+order is raised after the round that passes. That loop runs for every recipe
+but one: `GmshDefaultRecipe()` is report-only (`scgsim.meshing.entry`). It
+meshes once with Gmsh's own sizes and no repair, delivers the mesh whatever its
+quality, and its report records the elements below the threshold with
+`stop="report_only"`; the tetrahedron and time budgets and the order elevation
+still apply. Palace's attributes are lowered
 from the sidecar's physical groups (`palace.mesh.physical_groups`). The
 controls are in the
 [Palace mesh reference](../../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).

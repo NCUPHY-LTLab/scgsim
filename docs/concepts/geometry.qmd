@@ -223,7 +223,9 @@ SGB then builds the 3D model in three steps.
 3. **Mesh.** For Palace, Gmsh fills the model with tetrahedra. Where an element
    is too badly shaped, SCGSim refines the mesh around it and meshes again; if
    that does not succeed within its budget, `mesh()` stops with
-   `MeshRepairError`. A finer mesh changes the elements, not the model.
+   `MeshRepairError`. This holds for the default recipe and every recipe but
+   `GmshDefaultRecipe()`, which meshes once without repair and delivers the
+   mesh whatever its quality. A finer mesh changes the elements, not the model.
 
 How SGB does each step, with worked examples, is on
 [Geometry builder internals](../contribute/internals/geometry.qmd). The mesh

@@ -26,11 +26,14 @@ for that layout with its vacuum region reaching 1000 µm above the chip.
 | Model | The metal | The vacuum above the chip | Surface-EPR faces of the pad |
 |---|---|---|---|
 | Route B | A block from z = 0 to 0.1 µm; its surface is a perfect conductor and its inside has no mesh | z = 0 to 1000.1 µm, around and above the metal | MA on the top and the side walls, MS underneath |
-| Route A, `thin_film` | A sheet at z = 0 | z = 0 to 1000.0 µm: the film's 0.1 µm is removed and everything above it moves down | One sheet: MA on its upper side, MS on its lower side; no side walls |
+| Route A, `thin_film` | A sheet at z = 0 | z = 0 to 1000.0 µm: the film's 0.1 µm is removed and everything above it moves down | One sheet: MA on its upper side (vacuum), MS on its lower side (silicon); no side walls |
 | Route A, `substrate_face` | A sheet at z = 0 | z = 0 to 1000.1 µm: every height is kept and the film's place is vacuum | As `thin_film` |
 
 MA, MS and SA, the interfaces where Surface EPR is evaluated, are explained
-on [Surface EPR](surface-epr.qmd#interfaces). Both routes cut the same
+on [Surface EPR](surface-epr.qmd#interfaces). They are named by the material
+next to the metal, so "top" and "upper" in the table hold for this single-die
+pad; on the upper die of a flip chip the metal hangs beneath its substrate, and
+MS is above it and MA below. Both routes cut the same
 Surface-EPR bands: on this pad, 399, 397 and 39,204 µm² for margins of 0.5
 and 1 µm.
 

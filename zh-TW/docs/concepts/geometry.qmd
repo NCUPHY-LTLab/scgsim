@@ -152,7 +152,7 @@ SCGSim 把你的版圖變成求解器能產生網格的 3D 模型。你要給它
 
 1. **共用的邊。** 它在模型網格上，把每條輪廓在和其他輪廓相交的地方切開，讓相接的形狀共用完全相同的邊，相鄰的面也共用完整的邊。哪種材料擁有哪個面，不由 CAD 布林運算決定。
 2. **檔案與 sidecar。** 它把模型寫成給 Gmsh 的 BREP 與 XAO 檔、給 AEDT 的 STEP 檔，以及一個 **sidecar**：一個 JSON 檔，記錄這些檔案中的每個面與體積來自哪個 Entity、Net、介面與 Surface EPR 條帶。Palace 的屬性與 AEDT 的指派都依 sidecar 建立。
-3. **網格。** 對 Palace，Gmsh 用四面體填滿模型。某個元素形狀太差時，SCGSim 在它周圍細化網格再重新產生；若在預算內做不到，`mesh()` 就以 `MeshRepairError` 停止。更細的網格改變的是元素，不是模型。
+3. **網格。** 對 Palace，Gmsh 用四面體填滿模型。某個元素形狀太差時，SCGSim 在它周圍細化網格再重新產生；若在預算內做不到，`mesh()` 就以 `MeshRepairError` 停止。預設配方與 `GmshDefaultRecipe()` 以外的每種配方都是如此；`GmshDefaultRecipe()` 只產生一次網格、不做修復，不論品質都交出網格。更細的網格改變的是元素，不是模型。
 
 SGB 每一步怎麼做，附實例說明，見[幾何建構器內部實作](../contribute/internals/geometry.qmd)。網格控制項見 [Palace 網格參考](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 

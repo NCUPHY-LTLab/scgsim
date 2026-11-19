@@ -19,9 +19,12 @@ route and the materials stay as you set them.
 the vacuum, with tetrahedra; a Route B conductor's inside gets none. On each
 tetrahedron the solver approximates the field by a polynomial whose degree is
 the FEM order (`set_numerical(order=...)`). The mesh recipe sets the starting
-element sizes, and every tetrahedron must pass a shape-quality threshold:
-SCGSim refines around those that do not, or stops with `MeshRepairError`.
-The controls are in the
+element sizes. With the default recipe, `FeatureRecipe()`, and every other
+recipe except one, each tetrahedron must pass a shape-quality threshold:
+SCGSim refines around those that do not, or stops with `MeshRepairError`. The
+exception is `GmshDefaultRecipe()`, which meshes once with Gmsh's own defaults
+and no repair and delivers the mesh whatever its quality; its report records
+the elements below the threshold (`stop="report_only"`). The controls are in the
 [Palace mesh reference](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
 ## What refinement does {#refinement}
@@ -59,8 +62,12 @@ Each change is from the pass before. Three quantities, three behaviours:
 Each quantity converges at its own rate, so judge the one you will use: a
 frequency that has settled says nothing about a surface participation. To make
 that judgement part of the run, **declare convergence**: name the numbers that
-must stop changing and by how much. SCGSim then stops Palace at the first pass
-where every criterion holds and reports which held and when.
+must stop changing and by how much, and in how many passes in a row
+(`minimum_converged_passes`, 1 by default). SCGSim then stops Palace at the
+first pass where every criterion has held for that many passes in a row, and
+reports which held and when. With the default, that is the first pass where
+they all hold. The beyond-1 µm column above is a reminder that even two small
+changes in a row can be followed by a larger one.
 [Convergence and reports](../guides/convergence-and-reports.qmd) shows how.
 
 Palace's own indicators, its error estimate and the eigenvalue residual,

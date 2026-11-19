@@ -11,7 +11,7 @@ scgsim-id: "docs/concepts/model-and-numerics"
 
 ## 網格是什麼 {#mesh}
 
-`mesh()` 建出模型，並用四面體填滿每個求解體積，也就是基板與真空；Route B 導體的內部不放任何四面體。在每個四面體上，求解器用多項式近似場，多項式的次數就是 FEM 階數（`set_numerical(order=...)`）。網格配方決定起始元素大小，每個四面體都必須通過形狀品質門檻：沒通過的，SCGSim 會在它周圍細化，否則以 `MeshRepairError` 停止。控制項見 [Palace 網格參考](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
+`mesh()` 建出模型，並用四面體填滿每個求解體積，也就是基板與真空；Route B 導體的內部不放任何四面體。在每個四面體上，求解器用多項式近似場，多項式的次數就是 FEM 階數（`set_numerical(order=...)`）。網格配方決定起始元素大小。使用預設配方 `FeatureRecipe()`，以及除了一種之外的其他配方時，每個四面體都必須通過形狀品質門檻：沒通過的，SCGSim 會在它周圍細化，否則以 `MeshRepairError` 停止。例外是 `GmshDefaultRecipe()`：它用 Gmsh 自己的預設值產生一次網格、不做修復，不論品質都交出網格；報告會記錄低於門檻的元素（`stop="report_only"`）。控制項見 [Palace 網格參考](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
 ## 細化做什麼 {#refinement}
 
@@ -32,7 +32,7 @@ scgsim-id: "docs/concepts/model-and-numerics"
 
 ## 為什麼要收斂 {#read-numerical-changes-beside-the-quantity}
 
-每個物理量以自己的速度收斂，所以要看你實際會用的那一個：頻率穩定了，不代表表面參與率也穩定了。要把這個判斷放進執行本身，請**宣告收斂**：指定哪些數字必須停止變化、變化要小於多少。SCGSim 會在每個條件都成立的第一個回合停止 Palace，並報告哪些條件在何時成立。做法見[收斂與報告](../guides/convergence-and-reports.qmd)。
+每個物理量以自己的速度收斂，所以要看你實際會用的那一個：頻率穩定了，不代表表面參與率也穩定了。要把這個判斷放進執行本身，請**宣告收斂**：指定哪些數字必須停止變化、變化要小於多少，以及要連續成立幾個回合（`minimum_converged_passes`，預設為 1）。SCGSim 會在每個條件都已連續成立這麼多個回合的第一個回合停止 Palace，並報告哪些條件在何時成立。用預設值時，就是每個條件都成立的第一個回合。上表 1 µm 以外那一欄提醒你：即使連續兩次小變化，之後仍可能出現較大的變化。做法見[收斂與報告](../guides/convergence-and-reports.qmd)。
 
 Palace 自己的指標，也就是誤差估計與特徵值殘差，描述的是它們自己的量，不是你的電容或參與率。網格摘要中的自由度數字，是問題規模的估計，不是準確度的估計。
 
