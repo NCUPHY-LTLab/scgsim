@@ -1,9 +1,9 @@
-"""Figures and tables for ``docs/design/sgb/emission.qmd``.
+"""Figures and tables for ``zh-TW/docs/contribute/sgb-design/emission.qmd``.
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/emission.py            # figures and tables
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/emission.py --measure  # also rerun the timings
+    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/emission.py            # figures and tables
+    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/emission.py --measure  # also rerun the timings
     ... emission.py --measure-only                                                                           # only the timings
     ... emission.py --occt-only                                                                              # only the OCCT and catalogue tables
 
@@ -15,7 +15,7 @@ sidecar's ``ids_by_tag`` and the written BREP's shell records) and reopened in G
 runs read that file.  Only what ``figures/why-scaling-measured.json`` (``why_scaling.py``) does not hold is measured here: the Gmsh-API
 oracle stage by stage next to the direct writer at N = 500, 1000 and 2000, and the time of every check at N = 1000, 5000 and 20000.
 The direct writer's tail (plan, render, reports, sidecar, Gmsh load, ``verify_loaded``, file sizes) is read from
-that shared file.  The OCCT checks use OCP (the ``occt`` group of the SGB core).  Outputs go to ``docs/design/sgb/figures/``
+that shared file.  The OCCT checks use OCP (the ``occt`` group of the SGB core).  Outputs go to ``zh-TW/docs/contribute/sgb-design/figures/``
 with the prefix ``emission-``:
 
 * ``emission-timing``         write and load cost of the Gmsh-API oracle emitter against the direct writer (html + svg)

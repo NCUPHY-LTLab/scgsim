@@ -5,11 +5,13 @@ description: "把公開 CPW 準備成 GeometryPlan 快照；每一堂 AEDT 教�
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/course/aedt-inputs"
+aliases:
+  - ../course/aedt-inputs.html
 ---
 
-每一個 3D AEDT 模型（HFSS Eigenmode、HFSS Driven Terminal 與 Q3D）求解的都是 `GeometryPlan` 快照的 SGB 模型，也就是 Palace 網格化的同一個模型。本頁在[安裝](installation.qmd)之後，為公開的有限接地 CPW 準備這個快照。Q2D 求解 2D 橫截面，有專屬的[橫截面教學](aedt-q2d.qmd)。
+每一個 3D AEDT 模型（HFSS Eigenmode、HFSS Driven Terminal 與 Q3D）求解的都是 `GeometryPlan` 快照的 SGB 模型，也就是 Palace 網格化的同一個模型。本頁在[安裝](../start/install.qmd)之後，為公開的有限接地 CPW 準備這個快照。Q2D 求解 2D 橫截面，有專屬的[橫截面教學](line-parameters-q2d.qmd)。
 
-這個 CPW 是 OrPen 的 `finite_ground_cpw_coupon`，來自[固定版本的 CPW 群組](../examples.qmd#public-inputs)：長 500 µm，訊號寬 10 µm、間隙 6 µm，兩條接地各寬 80 µm，位於 D0 基板上。這些是範例設計輸入，不是量測所得的元件幾何，也不是通用求解器設定。PDK 提供多邊形、其 Entity（`SIGNAL`、`GROUND_PLUS`、`GROUND_MINUS`）、單晶片層疊（500 µm Si 基板，其上為 100 nm Al 的 `D0_TOP_M1` 薄膜）與材料紀錄；SCGSim 不保留這些事實的第二份副本。
+這個 CPW 是 OrPen 的 `finite_ground_cpw_coupon`，來自[固定版本的 CPW 群組](../start/choose-a-simulation.qmd#public-inputs)：長 500 µm，訊號寬 10 µm、間隙 6 µm，兩條接地各寬 80 µm，位於 D0 基板上。這些是範例設計輸入，不是量測所得的元件幾何，也不是通用求解器設定。PDK 提供多邊形、其 Entity（`SIGNAL`、`GROUND_PLUS`、`GROUND_MINUS`）、單晶片層疊（500 µm Si 基板，其上為 100 nm Al 的 `D0_TOP_M1` 薄膜）與材料紀錄；SCGSim 不保留這些事實的第二份副本。
 
 ![公開有限接地 CPW 的來源幾何：基板、中央訊號線與兩條接地帶。圖中也標出 Driven Modal 積分線曾經的位置；Driven Modal 等待 issue #135。此圖呈現宣告的版圖，不是求解結果。](../assets/cpw-source.svg){#fig-public-cpw-source}
 
@@ -45,4 +47,4 @@ snapshot = plan.prepare()
 - `set_vacuum_region(padding=(x, y, z))` 設定模型外圍的 Region：X 與 Y 每側 100 µm，上下各 1000 µm。每個 AEDT 模型都照原樣使用這個 Region，不會自行增加補距。
 - `plan.prepare()` 回傳不可變的 `snapshot`：`snapshot.geometry_input` 保存完整的 Entity 與多邊形，`snapshot.stack` 則是分離的層疊。準備它只確立來源身分，不會建立模型，也不會開啟 AEDT。
 
-請在此工作階段保留 `snapshot`。接著閱讀 [HFSS Eigenmode](aedt-eigenmode.qmd) 或 [Q3D](aedt-q3d.qmd)，兩者都直接使用它。[Driven Terminal](aedt-driven-terminal.qmd) 需要在每個埠處另有集總埠薄片的版圖；此試片沒有。消費端工作流程以 OrPen 的標準 Notebook 為來源依據；本教學不建立元件 Notebook。
+請在此工作階段保留 `snapshot`。接著閱讀 [HFSS Eigenmode](modes-hfss.qmd) 或 [Q3D](capacitance-q3d.qmd)，兩者都直接使用它。[Driven Terminal](s-parameters-hfss.qmd) 需要在每個埠處另有集總埠薄片的版圖；此試片沒有。消費端工作流程以 OrPen 的標準 Notebook 為來源依據；本教學不建立元件 Notebook。

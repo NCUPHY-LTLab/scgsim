@@ -1,6 +1,6 @@
 # `analyze_epr`：儲存場 EPR 用法
 
-`analyze_epr` 會透過 AEDT 原生功能評估保留場資料，必須明確選擇 AEDT 版本並提供授權；`reanalyze_epr` 則離線更新已解析結果的假設。請依[儲存場完整教學](../course/aedt-saved-fields.qmd)操作，相關參考資料見[參考指南](../knowledge-guide.qmd)。
+`analyze_epr` 會透過 AEDT 原生功能評估保留場資料，必須明確選擇 AEDT 版本並提供授權；`reanalyze_epr` 則離線更新已解析結果的假設。請依[儲存場完整教學](../../guides/saved-fields.qmd)操作，相關參考資料見[參考總覽](../index.qmd)。
 
 ## 最小呼叫
 

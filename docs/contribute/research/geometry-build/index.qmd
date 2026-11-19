@@ -4,6 +4,8 @@ description: "How long the SGB geometry build takes as a chip grows, what comes 
 scgsim-kind: "research"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/research/geometry-build/index"
+aliases:
+  - ../../../research/geometry-build/index.html
 ---
 
 **Conclusion.** The SGB geometry build is fast enough as one serial process. Its time and memory grow almost linearly with the number of features on the chip, and writing it is about 80 times faster than building the same geometry through the Gmsh API at 2,000 features, a gap that widens with size.
@@ -25,6 +27,6 @@ The evidence, in the order the pages give it:
 
 ## What was measured
 
-The measurements run the production SGB core (`scgsim.geometry.sgb`; see [GeometryPlan and SGB](../../geometry-sgb.qmd)) on random layouts: N small features on one chip, each in its own ground cutout, built with Route B. The layouts contain polygons only, with no circular arcs and no inset bands, so the cost of arcs and bands at large size is not measured and these numbers do not extend to them. The design reasoning behind the pipeline is written in Traditional Chinese: [Why plan first](../../../zh-TW/docs/design/sgb/why-plan-first.html).
+The measurements run the production SGB core (`scgsim.geometry.sgb`; see [GeometryPlan and SGB](../../../reference/specs/geometry-plan.qmd)) on random layouts: N small features on one chip, each in its own ground cutout, built with Route B. The layouts contain polygons only, with no circular arcs and no inset bands, so the cost of arcs and bands at large size is not measured and these numbers do not extend to them. The design reasoning behind the pipeline is written in Traditional Chinese: [Why plan first](../../../../zh-TW/docs/contribute/sgb-design/why-plan-first.html).
 
 All numbers come from one machine with 64 hardware threads and 503 GiB of memory; each case ran once. [Reproduction](reproduction.qmd) lists the machine, the software versions, the data files and the commands.

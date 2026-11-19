@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/brep-format"
+aliases:
+  - ../../design/sgb/brep-format.html
 ---
 
 這一頁是參考頁，給審查或修改 writer 的 contributor 使用；只想了解 SGB 設計的讀者可以略過，改讀 [emission](emission.qmd)。
@@ -155,4 +157,4 @@ Ed
 
 ## 補充：重現資料 {#reproduction-data}
 
-本頁的摘錄來自 production 的 `build_sgb_geometry` 管線對 running example 寫出的 `semantic_geometry_route_b.brep` 與 `.xao`：`tests/sgb_scenes.py` 的 `pad_in_ground("B")`，lumped port 換成同一片 sheet 放在 z = 0（support plane；scene 本身為了測試 embedded sheet 把 Route B 的 port 放在金屬的中間平面，compiler 不會這樣放，見 [Routes](routes.qmd#port-support-plane)），以 `emit_model` 寫出。production 的 writer 測試在 `tests/test_sgb_emission.py`（檔案區段、tolerance、共用 face 只寫一次、pcurve、cylinder、byte-determinism）。`docs/design/sgb/_figures/emission_snippets_check.py` 會用 production 重新寫出這個範例，把每個區塊與檔案的對應行逐行比對，不一致時以非零狀態結束。
+本頁的摘錄來自 production 的 `build_sgb_geometry` 管線對 running example 寫出的 `semantic_geometry_route_b.brep` 與 `.xao`：`tests/sgb_scenes.py` 的 `pad_in_ground("B")`，lumped port 換成同一片 sheet 放在 z = 0（support plane；scene 本身為了測試 embedded sheet 把 Route B 的 port 放在金屬的中間平面，compiler 不會這樣放，見 [Routes](routes.qmd#port-support-plane)），以 `emit_model` 寫出。production 的 writer 測試在 `tests/test_sgb_emission.py`（檔案區段、tolerance、共用 face 只寫一次、pcurve、cylinder、byte-determinism）。`zh-TW/docs/contribute/sgb-design/_figures/emission_snippets_check.py` 會用 production 重新寫出這個範例，把每個區塊與檔案的對應行逐行比對，不一致時以非零狀態結束。

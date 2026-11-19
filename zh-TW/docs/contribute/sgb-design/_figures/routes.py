@@ -1,6 +1,6 @@
 """Figures and numbers of ``routes.qmd``: Route A, B and C of the running example (computed with the production package).
 
-Writes into ``docs/design/sgb/figures/``:
+Writes into ``zh-TW/docs/contribute/sgb-design/figures/``:
 
 * ``routes-cells.svg/.html``  the cells of the metal-layer levels of the running example, each coloured by the primary
   physical group of its face: Route A at z = 0 (sheet plane), Route B at z = 0 (metal bottom, where the port lies) and at
@@ -15,7 +15,7 @@ support plane z = 0.  Route A needs zero-thickness conductors, so Route A is the
 is not the real input and says so in the numbers: the stage-level scene ``pad_in_ground("B")`` of ``tests/sgb_scenes.py``
 (port in the metal's mid-plane, a sheet inside one volume).
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/routes.py
+Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/routes.py
 """
 
 from __future__ import annotations

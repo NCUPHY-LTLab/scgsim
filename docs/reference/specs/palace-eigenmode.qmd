@@ -4,13 +4,15 @@ description: "Eigenmode input and output selections, shared mesh controls and de
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/specs/palace-eigenmode"
+aliases:
+  - ../../specs/palace-eigenmode.html
 ---
 
 `scgsim.palace.EigenmodeSim` owns mutable mesh, config, resolved-port and handoff
 state. It shares one private core with `ElectrostaticSim` (binding, geometry
 settings, `mesh()`, summaries, handoff and the lifecycle) and adds only its
-Eigenmode setters and config; it shares nothing with AEDT. The [Palace lesson](../course/palace-eigenmode.qmd) teaches the
-ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics.
+Eigenmode setters and config; it shares nothing with AEDT. The [Palace lesson](../../guides/modes-palace.qmd) teaches the
+ordinary sequence; [Xmon EPR](../../guides/xmon/palace.qmd) adds optional physics.
 
 | Stage | Public surface |
 |---|---|
@@ -84,7 +86,7 @@ Ordinary Eigenmode does not require surface specs, ports or an EPR request.
 The vacuum region is the plan's: the stack's own `VACUUM_REGION` or
 `plan.set_vacuum_region(...)` before `prepare()`. A model needs one: `mesh()`
 and `input_summary()` refuse a plan with none. The
-[GeometryPlan contract](../geometry-sgb.qmd) owns source identity and route
+[GeometryPlan contract](geometry-plan.qmd) owns source identity and route
 preparation. The [Electrostatic/shared Palace contract](palace-electrostatic-sgb.qmd)
 owns the shared mesh controls and config controls.
 
@@ -268,12 +270,12 @@ contract.
 Native port participation is signed and phase-convention dependent. It is not
 AEDT's nonnegative inductive/capacitive junction pair. Loss assumptions and
 unknowns retain their meaning across detachment and updates; the
-[EPR concept](../eigenmode-epr.qmd) owns normalization and loss interpretation.
-The [report contract](../report-model.qmd) owns coverage, baseline versus margin
+[EPR concept](../../concepts/surface-epr.qmd) owns normalization and loss interpretation.
+The [report contract](report-model.qmd) owns coverage, baseline versus margin
 presentation, partial availability and solver-specific quantities.
 
 Shared staged invalidation and per-file persistence are described under
-[implementation](../architecture.qmd#palace-preparation-lifecycle). Invalidation
+[implementation](../../contribute/architecture.qmd#palace-preparation-lifecycle). Invalidation
 is not a promise of whole-workflow atomic disk replacement. Handoff preparation
-never executes or submits Palace; the [execution contract](../execution-profiles.qmd)
+never executes or submits Palace; the [execution contract](execution-profiles.qmd)
 owns the selected profile, resources and returned receipt.

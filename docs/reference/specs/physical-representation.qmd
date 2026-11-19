@@ -4,6 +4,8 @@ description: "Source physical declarations and one selected-profile interpretati
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/physical-representation"
+aliases:
+  - ../../specs/physical-representation.html
 ---
 
 Physical classification belongs to the source author. A selected source input

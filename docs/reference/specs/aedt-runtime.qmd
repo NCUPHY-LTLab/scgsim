@@ -4,9 +4,11 @@ description: "AEDT family specifications, native readback, receipt cohorts and s
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/aedt-runtime"
+aliases:
+  - ../../specs/aedt-runtime.html
 ---
 
-The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications and failure rules, and the [current formats](#current-formats) this version reads.
+The [course map](../../start/choose-a-simulation.qmd) links every implemented AEDT family lesson. This page owns exact specifications and failure rules, and the [current formats](#current-formats) this version reads.
 
 ## One shared lifecycle
 
@@ -111,7 +113,7 @@ The preparation must include its bound source and project, setup and cache
 readback, and native calculator-definition evidence. Packaging does not open
 Desktop or alter the authored model, setup, margins, modes, or EPR criteria.
 
-For a complete multi-model procedure, follow [Parameter sweep with a Desktop-free HPC solver](../course/aedt-hpc-sweep.qmd). It creates one native package per model, transports them in one ordinary archive, and collects each returned attempt separately. The outer archive and serial loop are caller composition; the public batch API continues to own one model per package.
+For a complete multi-model procedure, follow [Parameter sweep with a Desktop-free HPC solver](../../guides/hpc-sweep.qmd). It creates one native package per model, transports them in one ordinary archive, and collects each returned attempt separately. The outer archive and serial loop are caller composition; the public batch API continues to own one model per package.
 
 The public Python entry points are:
 
@@ -679,7 +681,7 @@ controls and returned evidence must still belong to the same run. The separate
 [Q2D/Q3D observation contract](#q2d-q3d-convergence-observations) below covers
 matrix-family qualifications. The caller interprets quantity/history
 for the intended SCQ use as taught in the
-[result-reading lesson](../course/returned-results.qmd#interpret-for-scq-use);
+[result-reading lesson](../../guides/convergence-and-reports.qmd#interpret-for-scq-use);
 this direction adds no numerical sufficiency threshold or scientific certification.
 
 ### Q2D/Q3D convergence observations {#q2d-q3d-convergence-observations}
@@ -1486,11 +1488,11 @@ property readback still require separate AEDT validation; no consumer project
 or solver result has been validated here. Historical artifacts keep their
 recorded geometry.
 
-![Authored source sheet and the prepared conductor pieces: pale existing A and B terminals, darker added A- and B-side conductor ends, and the central RLC rectangle.](../assets/junction-partition-generic.svg){fig-alt="Generic authored sheet with pale existing terminal metal, darker added conductor ends, and the central RLC rectangle." fig-cap="Generic solver-free prepared geometry; the lighter terminal fills remain part of each complete conductor. This is not native AEDT readback or solver evidence." width="95%"}
+![Authored source sheet and the prepared conductor pieces: pale existing A and B terminals, darker added A- and B-side conductor ends, and the central RLC rectangle.](../../assets/junction-partition-generic.svg){fig-alt="Generic authored sheet with pale existing terminal metal, darker added conductor ends, and the central RLC rectangle." fig-cap="Generic solver-free prepared geometry; the lighter terminal fills remain part of each complete conductor. This is not native AEDT readback or solver evidence." width="95%"}
 
 ### Surface estimates and junction normalization {#surface-estimates-and-junction-normalization}
 
-Use the [saved-field API guide](../api/analyze_epr.qmd) for the `analyze_epr` call
+Use the [saved-field API guide](../api/analyze-epr.qmd) for the `analyze_epr` call
 and parameter meanings. For a nonzero junction voltage $V$, the voltage-based effective
 modal capacitance is $C_{mode}=2U_{norm}/|V|^2$ and the branch capacitance is
 $C_j=2U_{C,j}/|V|^2$, so $p_{C,j}=C_j/C_{mode}$. When $V=0$, this capacitance ratio is
@@ -1576,5 +1578,5 @@ selection, arbitrary legacy recipe ingestion, custom AEDT material definitions,
 or compatibility fallbacks for old private runtimes. Those are independent
 future scopes.
 
-See [Headless Geometry Preview](../geometry-preview.qmd) for the separate
+See [Headless Geometry Preview](../../guides/preview-the-geometry.qmd) for the separate
 off-screen inspection contract and the AEDT modes that may be unavailable.

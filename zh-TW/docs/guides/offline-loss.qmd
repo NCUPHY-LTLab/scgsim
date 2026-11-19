@@ -5,13 +5,15 @@ description: "離線重新分析已記錄的 EPR 證據，並匯出清楚標示�
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/offline-epr"
+aliases:
+  - ../course/offline-epr.html
 ---
 
-開始前，請備妥經確認的 Palace Eigenmode 回傳資料中分離出的實際 EPR 結果、AEDT 自適應歷程紀錄，或獨立的 AEDT 最終[儲存場分析](aedt-saved-fields.qmd)。本教學會根據已記錄證據變更薄膜／損耗假設；不會改變區塊選擇、不會建立 CAD、不會重新開啟場資料，也不會求解。將參與量解讀為損耗前，請先閱讀 [EPR 概念](../eigenmode-epr.qmd)。
+開始前，請備妥經確認的 Palace Eigenmode 回傳資料中分離出的實際 EPR 結果、AEDT 自適應歷程紀錄，或獨立的 AEDT 最終[儲存場分析](saved-fields.qmd)。本教學會根據已記錄證據變更薄膜／損耗假設；不會改變區塊選擇、不會建立 CAD、不會重新開啟場資料，也不會求解。將參與量解讀為損耗前，請先閱讀 [EPR 概念](../concepts/surface-epr.qmd)。
 
 ## Palace：分離已確認的最終結果 {#palace-detach-the-verified-final-result}
 
-在[回傳資料教學](returned-results.qmd)中，嚴格解析 Palace Eigenmode 執行資料夾後：
+在[回傳資料教學](convergence-and-reports.qmd)中，嚴格解析 Palace Eigenmode 執行資料夾後：
 
 ```python
 import json
@@ -81,10 +83,10 @@ print([(row["mode"], row["native_pass"], row["status"]) for row in history.rows]
 
 ## 依預期用途讀取 EPR 歷程 {#read-epr-history-for-the-intended-use}
 
-解讀損耗更新前，先確認研究所需的模態、歸屬／介面，以及基線或指定邊界距離的數值。請將參與量歷程及其變化與對應頻率歷程一併檢視；兩者不能互相替代。保留實際準則與原生狀態，不要只因收斂旗標就將某個快照判定為足夠。Notebook 中的判斷請依照[研究解讀流程](returned-results.qmd#interpret-for-scq-use)。離線假設變更會沿用相同場證據，無法補足尚未解析或不可用的參與量歷程。
+解讀損耗更新前，先確認研究所需的模態、歸屬／介面，以及基線或指定邊界距離的數值。請將參與量歷程及其變化與對應頻率歷程一併檢視；兩者不能互相替代。保留實際準則與原生狀態，不要只因收斂旗標就將某個快照判定為足夠。Notebook 中的判斷請依照[研究解讀流程](convergence-and-reports.qmd#interpret-for-scq-use)。離線假設變更會沿用相同場證據，無法補足尚未解析或不可用的參與量歷程。
 
 ## 解讀假設變更 {#interpret-an-assumption-change}
 
 重新分析時依序套用已記錄假設、介面預設值，再套用精確群組覆寫。省略欄位會保留原值；`loss_tangent=None` 明確表示損耗未知，`0.0` 則表示已知為零。未知群組 ID 會導致失敗，不會遭到忽略。重新分析無法修補缺漏場資料，也無法還原未計算的側壁。
 
-Surface、bulk 與 port／junction 分區仍各自獨立。不同的內縮邊界距離是分開評估，不是可相加的邊緣帶；基準列也要與邊距列分開保留（對 AEDT 而言，包括明確要求的零距離）。已知基線的反 Q 小計不包含未知損耗與未計算通道；它不是元件總 Q 或 T1。[報告契約](../report-model.qmd)定義可見範圍與排序；[EPR 概念](../eigenmode-epr.qmd)定義正規化與假設。選擇下一個物理模型時，請回到[課程索引](../examples.qmd)。
+Surface、bulk 與 port／junction 分區仍各自獨立。不同的內縮邊界距離是分開評估，不是可相加的邊緣帶；基準列也要與邊距列分開保留（對 AEDT 而言，包括明確要求的零距離）。已知基線的反 Q 小計不包含未知損耗與未計算通道；它不是元件總 Q 或 T1。[報告契約](../reference/specs/report-model.qmd)定義可見範圍與排序；[EPR 概念](../concepts/surface-epr.qmd)定義正規化與假設。選擇下一個物理模型時，請回到[課程索引](../start/choose-a-simulation.qmd)。

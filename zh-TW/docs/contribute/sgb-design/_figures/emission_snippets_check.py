@@ -1,8 +1,8 @@
-"""Check that the file excerpts quoted in ``docs/design/sgb/emission.qmd`` and ``brep-format.qmd`` are real.
+"""Check that the file excerpts quoted in ``zh-TW/docs/contribute/sgb-design/emission.qmd`` and ``brep-format.qmd`` are real.
 
 Run from the repository root with the package's environment::
 
-    uv run --extra palace --group dev python zh-TW/docs/design/sgb/_figures/emission_snippets_check.py
+    uv run --extra palace --group dev python zh-TW/docs/contribute/sgb-design/_figures/emission_snippets_check.py
 
 The running example (the pad-in-ground scene of ``tests/sgb_scenes.py`` under Route B, its lumped port on the support plane
 z = 0; see ``inset_kit.pad_catalogue``) is written by ``emit_model`` into scratch folders, in a child process of the same

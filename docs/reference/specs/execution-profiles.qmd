@@ -4,9 +4,11 @@ description: "Exact launch profiles, caller resources, handoff identity and retu
 scgsim-kind: "contract"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/execution-profiles"
+aliases:
+  - ../../execution-profiles.html
 ---
 
-Follow [execute a handoff](course/execute.qmd) for the preparation-to-return procedure. This page owns profile/resource and identity requirements.
+Follow [execute a handoff](../../guides/run-elsewhere.qmd) for the preparation-to-return procedure. This page owns profile/resource and identity requirements.
 
 SCGSim prepares portable handoffs; the caller owns where and how a prepared
 solver runs. A profile records the launch shape and the resources supplied by
@@ -62,7 +64,7 @@ SCGSim scheduler submission.
 
 ## With a convergence declaration {#convergence-runner}
 
-When the simulation [declared its convergence](specs/palace-electrostatic-sgb.qmd#convergence-stop),
+When the simulation [declared its convergence](palace-electrostatic-sgb.qmd#convergence-stop),
 the script starts the solver command of the table above through the
 convergence runner the handoff copies into the run folder:
 
@@ -116,8 +118,8 @@ expected identity from files that arrived with the returned package.
 
 Each package is one independent model. A sweep may transfer its separate
 package archives together, but each package has its own solver attempt and
-collection. The [HPC EPR sweep guide](course/aedt-hpc-sweep.qmd) gives the
-operation sequence; the [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
+collection. The [HPC EPR sweep guide](../../guides/hpc-sweep.qmd) gives the
+operation sequence; the [AEDT runtime contract](aedt-runtime.qmd#prepared-native-hfss-epr-batch)
 defines its package and completion requirements. Copying only an EPR JSON or
 frequency export does not replace the full return.
 
@@ -130,5 +132,5 @@ resolving the returned run folder.
 
 External gdsfactory/cloud execution is unsupported and is never a fallback.
 Palace preparation does not silently submit a scheduler job or open AEDT. The
-[Palace tutorial](tutorial-xmon-palace.qmd) and [AEDT tutorial](tutorial-xmon-aedt.qmd)
+[Palace tutorial](../../guides/xmon/palace.qmd) and [AEDT tutorial](../../guides/xmon/aedt.qmd)
 show their backend-specific handoff and return steps.

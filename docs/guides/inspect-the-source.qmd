@@ -4,11 +4,13 @@ description: "Read normalized source facts and save the paired GDS and stack wit
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/source-observations"
+aliases:
+  - ../course/source-observations.html
 ---
 
 Continue from a model that supplies a prepared semantic `snapshot`, such as
-the [beginner examples](../examples.qmd#getting-started) or the deeper
-[Xmon construction](../tutorial-xmon-input.qmd). Before asking a backend to build geometry, inspect
+the [beginner examples](../start/choose-a-simulation.qmd#getting-started) or the deeper
+[Xmon construction](xmon/inputs.qmd). Before asking a backend to build geometry, inspect
 what you actually supplied. A missing Net, wrong material interval or unintended
 vacuum envelope is easier to understand at the source boundary.
 
@@ -71,8 +73,8 @@ establish one field measurement per Entity or solver connectivity.
 A source summary and paired-source read establish normalized input facts.
 They do not mesh, query native AEDT, or demonstrate a solve. The next stage
 chooses a physical model:
-[Palace Electrostatic](palace-electrostatic.qmd),
-[Palace Eigenmode](palace-eigenmode.qmd), or
-[AEDT source-first Eigenmode/EPR](../tutorial-xmon-aedt.qmd).
+[Palace Electrostatic](capacitance-palace.qmd),
+[Palace Eigenmode](modes-palace.qmd), or
+[AEDT source-first Eigenmode/EPR](xmon/aedt.qmd).
 The [geometry concept](../concepts/geometry.qmd) explains why those backends can
 share source identity while using different native representations.

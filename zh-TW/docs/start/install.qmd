@@ -5,6 +5,9 @@ description: "使用 uv 建立專案，安裝 SCGSim 3.0.0rc4 與 OrcaPen SC PDK
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/installation"
+aliases:
+  - ../course/installation.html
+  - ../knowledge-guide.html
 ---
 
 使用 `uv` 建立研究專案，再加入 SCGSim `3.0.0rc4` 與 OrcaPen SC PDK；PDK 是每個範例都會匯入的元件庫。SCGSim 支援 Python `>=3.12,<3.14`。
@@ -63,8 +66,8 @@ uv sync
 
 ## 下一步
 
-- [選擇模擬目標](../examples.qmd)及其 PDK 筆記本。
-- [執行已準備的模型](execute.qmd)。
-- [讀取回傳結果](returned-results.qmd)。
+- [選擇模擬目標](choose-a-simulation.qmd)及其 PDK 筆記本。
+- [執行已準備的模型](../guides/run-elsewhere.qmd)。
+- [讀取回傳結果](../guides/convergence-and-reports.qmd)。
 
-Circular Pad 的來源與 PDK 配對細節請見[曲線來源安裝筆記](../history/curved-source-installation.qmd)。
+Circular Pad 的來源與 PDK 配對細節請見[曲線來源安裝筆記](../contribute/history/curved-source-installation.qmd)。

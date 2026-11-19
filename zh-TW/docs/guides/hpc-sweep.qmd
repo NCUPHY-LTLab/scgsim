@@ -7,6 +7,8 @@ scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 execute:
   enabled: false
+aliases:
+  - ../course/aedt-hpc-sweep.html
 ---
 
 在具備授權的 AEDT 工作站準備每個模型，將一個套件傳送至 HPC 僅供求解，再於具備授權的工作站收集回傳結果。本教學使用公開的 **SCGSim 3.0.0rc4** 批次 API，掃描既有 Xmon 模型中明確設定的接面電感。
@@ -21,7 +23,7 @@ execute:
 | HPC 求解 | Python 3.12 標準函式庫、選定的 AEDT 命令列執行檔與授權；此階段不需要可用的 Desktop 工作階段、SCGSim 安裝或 PyAEDT |
 | 原生結果收集 | SCGSim 3.0.0rc4、PyAEDT 1.3.0、選定的 AEDT 版本與授權，以及可用的 Desktop 工作階段 |
 
-請在同一個 Python 工作階段完成[公開 Xmon 輸入](../tutorial-xmon-input.qmd)與[公開 Xmon AEDT](../tutorial-xmon-aedt.qmd)的設定章節。停在該教學原始交接的執行步驟之前。以下程式碼只使用兩個具名變數：`snapshot`（不可變來源與堆疊，含計畫的 Surface-EPR 規格）與 `junction`（綁定來源的 `PlanarJunction`）。
+請在同一個 Python 工作階段完成[公開 Xmon 輸入](xmon/inputs.qmd)與[公開 Xmon AEDT](xmon/aedt.qmd)的設定章節。停在該教學原始交接的執行步驟之前。以下程式碼只使用兩個具名變數：`snapshot`（不可變來源與堆疊，含計畫的 Surface-EPR 規格）與 `junction`（綁定來源的 `PlanarJunction`）。
 
 實體幾何、最終 Nets 與體積材料屬於該來源。以下三個電感值是明確的電路模型選擇，不是元件實測值。若要掃描幾何，每個案例都必須重新編寫來源 snapshot，並重新綁定接面與目錄。
 
@@ -193,4 +195,4 @@ for row in sweep["cases"]:
 | 外部執行嘗試的實際版本 | 可能仍未知；請檢查保留的求解器證據，不要以要求的版本替代 |
 | 收集器連線的版本 | 收集交易實際開啟的版本 |
 
-比較案例時，請分開看待模型參數、數值控制、EPR 選擇與資源。本範例固定來源幾何、材料預設值、模態、遮罩／內縮邊距與自適應控制，只變更接面電感。套件內容、失敗行為與資源意義請參閱[批次 API 契約](../specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)。
+比較案例時，請分開看待模型參數、數值控制、EPR 選擇與資源。本範例固定來源幾何、材料預設值、模態、遮罩／內縮邊距與自適應控制，只變更接面電感。套件內容、失敗行為與資源意義請參閱[批次 API 契約](../reference/specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)。

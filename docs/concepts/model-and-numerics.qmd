@@ -29,7 +29,7 @@ turns the ideal PEC approximation into a measured conductor-loss model.
 Route A's `substrate_face` and `metal_gap_equivalent` profiles have different
 coordinate/normalization meanings. Select them for the intended model; changing
 route is not an automatic repair for a difficult mesh. See the
-[geometry reference](../geometry-sgb.qmd) for exact supported forms.
+[geometry reference](../reference/specs/geometry-plan.qmd) for exact supported forms.
 
 ## Read numerical changes beside the quantity
 
@@ -48,7 +48,7 @@ quality report also does not evaluate curved high-order element quality.
 Keep the three high-order controls separate: `MesherOptions.geometry_order` creates the mesh
 geometry, FEM order controls the field approximation, and Palace
 `HighOrderOutput` controls serialization. Palace's native import default
-`RemoveCurvature=false` preserves imported high-order geometry nodes. For Palace Surface EPR, each inset margin is a separate evaluation over bands that SGB cuts into the geometry, so Palace needs no special configuration for it; see the [Eigenmode contract](../specs/palace-eigenmode.qmd#surface-epr-margins).
+`RemoveCurvature=false` preserves imported high-order geometry nodes. For Palace Surface EPR, each inset margin is a separate evaluation over bands that SGB cuts into the geometry, so Palace needs no special configuration for it; see the [Eigenmode contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins).
 
 An algebraic eigenpair residual and an adaptive mesh indicator describe
 different quantities. A frequency can change little while a field-sensitive
@@ -65,4 +65,4 @@ A source preview displays declared geometry; a mesh/native readback displays
 backend construction; a solved field supports physical postprocessing. Missing
 sidewall energy or an unknown loss tangent remains missing or unknown, even if
 other parts of the result are readable. Continue with
-[EPR interpretation](../eigenmode-epr.qmd) or [result reading](../course/returned-results.qmd).
+[EPR interpretation](surface-epr.qmd) or [result reading](../guides/convergence-and-reports.qmd).

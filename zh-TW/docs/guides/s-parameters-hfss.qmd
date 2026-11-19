@@ -5,6 +5,9 @@ description: "在 SGB 模型上準備雙埠 HFSS Driven Terminal 網路，集總
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-terminal"
+aliases:
+  - ../course/aedt-driven-terminal.html
+  - ../course/aedt-driven-modal.html
 ---
 
 HFSS Driven Terminal 求解 SGB 模型的雙埠網路，也就是 Palace 網格化的同一個模型。請從一個 `GeometryPlan` 快照開始，其版圖帶有兩個集總埠薄片，各位於一個埠與其導體相接之處。每個埠是一個 `LumpedTerminalPort`，指名它的薄片（`port_sheet_id`，即模型的 `PORT::<port_sheet_id>` 群組）、薄片相接的訊號與參考 Entity，以及埠阻抗。
@@ -43,11 +46,11 @@ print(handoff.spec_path, handoff.archive_path)
 
 埠屬於模型：`prepare_sgb_model(..., ports=...)` 把每個埠綁定到它的埠片，並拒絕模型中不存在的薄片。Driven 請求正好需要兩個埠 1 與 2，名稱不同，並共用一個有序參考。每個薄片都必須連接該埠的一個訊號 Entity 與一個參考 Entity。Driven 模型不帶接面、集總 RLC 或 Surface-EPR 規格；這些屬於 HFSS Eigenmode。交接在其 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard。
 
-在 AEDT 中，執行會像 Eigenmode 一樣把 STEP 匯入空白的 Driven Terminal 設計，並把每個埠放在它的薄片上：薄片各面上的 Terminal 集總埠，以及位於薄片與訊號導體相接邊上的 Terminal。[執行階段契約](../specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)列出這些規則。回傳解析器會檢查收據的幾何就是請求的模型匯入後的樣子、每個埠與 Terminal 都是從已儲存的設計中、在指定的面與邊上讀回，並檢查所宣告掃頻的有序 S 參數與 Touchstone。
+在 AEDT 中，執行會像 Eigenmode 一樣把 STEP 匯入空白的 Driven Terminal 設計，並把每個埠放在它的薄片上：薄片各面上的 Terminal 集總埠，以及位於薄片與訊號導體相接邊上的 Terminal。[執行階段契約](../reference/specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)列出這些規則。回傳解析器會檢查收據的幾何就是請求的模型匯入後的樣子、每個埠與 Terminal 都是從已儲存的設計中、在指定的面與邊上讀回，並檢查所宣告掃頻的有序 S 參數與 Touchstone。
 
-範例請求 201 個點。請依研究所需的網路響應選擇 `points` 與掃頻範圍；原生設定與回傳讀回都會保留此請求。[掃頻參考](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)列出其精確的輸入規則。
+範例請求 201 個點。請依研究所需的網路響應選擇 `points` 與掃頻範圍；原生設定與回傳讀回都會保留此請求。[掃頻參考](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)列出其精確的輸入規則。
 
-請先檢查複製規格中的埠，再[在原生主機上執行](execute.qmd)並[重新開始與解析](returned-results.qmd)，之後才把網路響應交給下游分析。原生基準與自適應證據描述的是這次執行，與物理響應分開。
+請先檢查複製規格中的埠，再[在原生主機上執行](run-elsewhere.qmd)並[重新開始與解析](convergence-and-reports.qmd)，之後才把網路響應交給下游分析。原生基準與自適應證據描述的是這次執行，與物理響應分開。
 
 ### 等待 issue #135 的埠 {#ports-that-wait-for-issue-135}
 

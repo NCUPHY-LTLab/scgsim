@@ -5,6 +5,8 @@ description: "SGB 幾何建構的推導與驗證時間、模型大小與 peak me
 scgsim-kind: "research"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/research/geometry-build/scaling"
+aliases:
+  - ../../../research/geometry-build/scaling.html
 ---
 
 **問題。**晶片上的特徵變多時，建構要多花多少時間、多少記憶體？

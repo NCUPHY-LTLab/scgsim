@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/why-plan-first"
+aliases:
+  - ../../design/sgb/why-plan-first.html
 ---
 
 SGB 在呼叫 CAD kernel **之前**先推導晶片的 topology，而不是為每個 prism 建一個 solid、再請 kernel 一次對全部 solid 做 fragment。理由有兩個：全域 fragment 在晶片尺度下預期很慢，而且它交回的只是幾何，每個 face 的意義與來源必須事後還原。本頁依序說明這兩點，再用實測的 scaling 說明規劃後的 pipeline 實際花費多少。
@@ -98,7 +100,7 @@ flowchart TB
 
 ## 規劃能換來什麼：實測
 
-本節的數字另有[幾何建構效能](../../research/geometry-build/index.qmd)研究逐頁整理：scaling、direct writer 與載入、檢查成本，以及機器、版本與重現指令。
+本節的數字另有[幾何建構效能](../research/geometry-build/index.qmd)研究逐頁整理：scaling、direct writer 與載入、檢查成本，以及機器、版本與重現指令。
 
 這一節是 production `scgsim.geometry.sgb` 的量測。scaling 執行建立 Route B 的隨機 layout（`tests/sgb_scenes.py` 的 `random_layout`，間距 260 µm），特徵數為 $N = 1000, 5000, 20000$，每個都有三個 slab 與四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 14 215 成長到 285 871。每個 $N$ 都以一個新的 Python 行程建立，所以記憶體是該次執行自己的；量測在一台 64 核心的機器上執行。**這些 scaling 執行全是 polygon-only 的 layout：沒有圓弧、沒有 witness 的弦、沒有圓柱 wall，也沒有 band。** 因此圓弧與 band 在大規模下的成本與 exactness 並沒有量測，本頁不外推。數字的來源列在本頁最後的補充。
 
@@ -124,7 +126,7 @@ flowchart TB
 
 ### Emission 是尾巴
 
-逐步驟的時間、檔案大小與整條路徑的記憶體，見研究頁 [Direct writer 與 Gmsh 載入](../../research/geometry-build/emission-and-load.qmd)。
+逐步驟的時間、檔案大小與整條路徑的記憶體，見研究頁 [Direct writer 與 Gmsh 載入](../research/geometry-build/emission-and-load.qmd)。
 
 推導完成之後，必須寫出 CAD 檔案與 sidecar，再由 Gmsh 載入；量測還包含測試用的載入檢查 `verify_loaded`。這些步驟是循序的，在 $N = 20000$ 時合計比推導還長。逐一呼叫來建立幾何的 Gmsh API，只保留作為**測試用 oracle**（`tests/sgb_gmsh_oracle.py`）；這裡的比較就是決策 D8 的證據，D8 讓 direct writer 成為 emission 的路徑。
 
@@ -180,6 +182,6 @@ solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序
 
 本頁的圖與數字是**計算所得**，全部來自 production `scgsim.geometry.sgb`。Gmsh sewing 的成本與 vacuum 內外顛倒在大型 layout 上的情形沒有用 production 量測，主文只用 production oracle 的 solid 質量說明方向問題。
 
-- `docs/design/sgb/_figures/why_structure.py` 對測試 scene 的隨機 layout 產生器（`tests/sgb_scenes.py` 的 `random_layout`，Route B，間距 260 µm，seed 2）計數 box pair、wire 與 coplanar face，數字在 `figures/why-structure-numbers.json`；它不執行任何 Boolean 運算。
-- `docs/design/sgb/_figures/why_scaling.py measure` 對 $N = 1000, 5000, 20000$ 各在一個新行程中建立模型並量測，寫出 BREP/XAO、以 Gmsh 載入並執行 `verify_loaded`，原始資料在 `figures/why-scaling-measured.json`（機器為 64 核心，Python 3.12）。`why_scaling.py oracle` 量測測試用的 Gmsh-API oracle（$N = 500, 1000, 2000$，含 solid 質量），`why_scaling.py validators` 量測每一項結構驗證的時間（`figures/why-validator-scaling.json`）。不帶參數執行時，腳本由這三個檔案畫出 `why-scaling` 與 `why-tail` 的圖，並寫出 `figures/why-scaling-numbers.json`。
-- 以 Python 3.12 與 `sgb-core` 分支的環境執行：`SGB_CORE=<sgb-core 工作樹> $SGB_CORE/.artifacts/env/bin/python docs/design/sgb/_figures/why_scaling.py measure`。
+- `zh-TW/docs/contribute/sgb-design/_figures/why_structure.py` 對測試 scene 的隨機 layout 產生器（`tests/sgb_scenes.py` 的 `random_layout`，Route B，間距 260 µm，seed 2）計數 box pair、wire 與 coplanar face，數字在 `figures/why-structure-numbers.json`；它不執行任何 Boolean 運算。
+- `zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py measure` 對 $N = 1000, 5000, 20000$ 各在一個新行程中建立模型並量測，寫出 BREP/XAO、以 Gmsh 載入並執行 `verify_loaded`，原始資料在 `figures/why-scaling-measured.json`（機器為 64 核心，Python 3.12）。`why_scaling.py oracle` 量測測試用的 Gmsh-API oracle（$N = 500, 1000, 2000$，含 solid 質量），`why_scaling.py validators` 量測每一項結構驗證的時間（`figures/why-validator-scaling.json`）。不帶參數執行時，腳本由這三個檔案畫出 `why-scaling` 與 `why-tail` 的圖，並寫出 `figures/why-scaling-numbers.json`。
+- 以 Python 3.12 與 `sgb-core` 分支的環境執行：`SGB_CORE=<sgb-core 工作樹> $SGB_CORE/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py measure`。

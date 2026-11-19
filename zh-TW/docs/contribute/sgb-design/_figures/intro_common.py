@@ -8,7 +8,7 @@ Run every script with the Python of the sgb-core checkout (branch ``claude/sgb-c
 ``geometry.sgb`` installed::
 
     SGB_CORE=<sgb-core worktree>   # optional; defaults to this checkout
-    $SGB_CORE/.artifacts/env/bin/python docs/design/sgb/_figures/<script>.py
+    $SGB_CORE/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/<script>.py
 
 The test-side scene builders (``sgb_scenes``, ``sgb_emit_cases``, ``sgb_catalogue_report`` ...) are imported from
 ``$SGB_CORE/tests``, which is put on ``sys.path`` here at run time; nothing of them is copied.

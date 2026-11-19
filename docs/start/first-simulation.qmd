@@ -18,7 +18,7 @@ Capacitance matrix (fF): pad
 
 You need SCGSim `3.0.0rc4` with its `palace` extra and the OrcaPen SC PDK, the
 component library that draws the layout, in a study project
-([Install SCGSim](../course/installation.qmd)), and Palace 0.18.1 installed on
+([Install SCGSim](install.qmd)), and Palace 0.18.1 installed on
 the same computer ([Palace installation](https://awslabs.github.io/palace/stable/install/)).
 No AEDT licence is needed.
 
@@ -195,15 +195,15 @@ This number comes from one solve on the first mesh, without adaptive
 refinement (Palace refining the mesh where its error estimate is largest and
 solving again). `Convergence: not_declared` means the script did not state
 which numbers must stop changing between refinements, so nothing here shows
-that 112.54 fF has settled. [Declare when refinement has converged](../course/palace-electrostatic.qmd#declare-when-refinement-has-converged)
+that 112.54 fF has settled. [Declare when refinement has converged](../guides/capacitance-palace.qmd#declare-when-refinement-has-converged)
 shows how to declare it; how small a change you accept depends on what you
 use the capacitance for.
 
 ## Next {#next}
 
-- [Palace: resonant modes](../course/palace-eigenmode.qmd) computes the
+- [Palace: resonant modes](../guides/modes-palace.qmd) computes the
   frequencies and Q of a layout's resonant modes.
-- [Layout Modeling Check](../layout-modeling-check.qmd) explains what the check
+- [Layout Modeling Check](../guides/check-a-layout.qmd) explains what the check
   reports and how to fix what it finds.
-- [Supported Scope](../supported-scope.qmd) says what a layout of your own
+- [Supported Scope](../reference/supported-scope.qmd) says what a layout of your own
   must guarantee before you simulate it.

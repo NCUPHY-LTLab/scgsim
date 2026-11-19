@@ -5,6 +5,8 @@ scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/physical-representation"
 lang: zh-TW
+aliases:
+  - ../../specs/physical-representation.html
 ---
 
 物理分類由來源作者負責。選定的來源輸入使用單一 LayerStack 組裝座標系，每個實體薄膜具有一個物理層身分，並由其 Entity、多邊形及子出現實例共同使用。放置轉換在近似設定解讀之前只套用一次。獨立堆疊座標系需要明確的來源關聯，不在本契約範圍內。

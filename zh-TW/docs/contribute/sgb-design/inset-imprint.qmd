@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/inset-imprint"
+aliases:
+  - ../../design/sgb/inset-imprint.html
 ---
 
 **Inset** 選出一個 surface 上距 **gap edge**（面向裸露 substrate 的金屬邊，定義見 [Inset band 怎麼量](#band-measure)）至少 $m$ 的部分；相鄰兩個 margin 之間的差形成 **band**。Surface EPR 在這些區域之上，還需要一個 field solution 與選定的 loss model：把 field 在各個區域上積分，才能估計 surface loss 有多少集中在邊緣附近。這一頁說明 SGB 如何把這些區域做成模型中精確的幾何：inset 曲線的規則、band 如何組成累積的「距邊緣至少 $m_k$」selection、solver 端有什麼改變，以及它與現行的 mask 做法有何不同。SGB 在 CAD／XAO 中直接解決 inset：一般的（upstream）Palace 只需要對普通的 surface group 積分，不需要、也不支援 fork 版 Palace 的原生 Mask／Inset。
@@ -103,7 +105,7 @@ band 的區域、seam 與標記怎麼建立、在哪裡會拒絕，見下一節[
 SGB 先替每個 support 與每個 margin 算出 **band 區域** $R_m$（support 中距 gap edge 至少 $m$ 的部分），再只在不同 band 之間切 **seam**（band 之間的分界 edge），之後檢查 Imprint 把每條 seam 都保留下來，最後以區域決定每個 face 的 band。這樣 band 的分界在 Imprint 之前就已確定，不需要事後從 face 的面積猜回來。
 
 ::: {.callout-note title="以多邊形畫成的曲線"}
-在兩條直線邊相交的凸頂點上，兩條 offset 會在它們的交點結束，共用同一個格點；兩條 offset 的端點落在格點後若彼此真正相交，這個格點就是該交點所在的 pixel，否則是精確交點取整後的格點。交點之後的重疊段離另一條邊不到 $m$，本來就不是 $R_m$ 的邊界，所以去掉它不改變等距曲線。這需要兩條邊都比 $m \max(\sin\theta, \tan(\theta/2))$ 長（$\theta$ 為轉角），且比兩端各自裁掉的長度總和長；不滿足時兩條 offset 保持原樣，由 cell 判斷。SGB 不設每個頂點的最小轉角，也不設每整圈的最多點數；量測過的例子見[支援的幾何](../../supported-geometry.qmd#curve-rule)。
+在兩條直線邊相交的凸頂點上，兩條 offset 會在它們的交點結束，共用同一個格點；兩條 offset 的端點落在格點後若彼此真正相交，這個格點就是該交點所在的 pixel，否則是精確交點取整後的格點。交點之後的重疊段離另一條邊不到 $m$，本來就不是 $R_m$ 的邊界，所以去掉它不改變等距曲線。這需要兩條邊都比 $m \max(\sin\theta, \tan(\theta/2))$ 長（$\theta$ 為轉角），且比兩端各自裁掉的長度總和長；不滿足時兩條 offset 保持原樣，由 cell 判斷。SGB 不設每個頂點的最小轉角，也不設每整圈的最多點數；量測過的例子見[支援的幾何](../../reference/supported-geometry.qmd#curve-rule)。
 
 `inset family '…': the inset curve at m = … um is not closed near (x, y) um` 這則拒絕只作為保護：用於不在上述情形內、相鄰 offset 仍既不相接也不相交的地方（例如直線與圓弧相接處），SGB 拒絕而不輸出錯誤的 band。
 :::
@@ -163,7 +165,7 @@ band 的編號跟著 margin 的區間：某個區間沒有面積時，它的 ban
 Imprint 檢查證明的是**已建立的邊界在 Imprint 之後仍在**，不證明候選 offset 涵蓋了整條等距曲線。等距曲線不封閉時，同一個 cell 兩側都有，SGB 以 `the inset curve at m = … um is not closed` 拒絕（見上面的提醒）；其他候選 offset 漏掉的部分不會成為 seam，也不會被這個檢查發現。
 
 ::: {.callout-note collapse="true" title="量得的範圍：以多邊形近似的圓"}
-正 $n$ 邊形圓（Route B，MA、MS 與 SA band，margin 0.5 與 1.0 µm，grid 1 nm）在 $n$ = 16 至 128 與 256、半徑 5、10、50 與 150 µm 時，band 都與精確侵蝕相符；256 邊形在半徑 20 µm 時，兩個 margin 的 $R_m$ 都是一個 256 邊形。以真正圓弧畫的圓在三種半徑都通過，面積與精確值相差 $\le 2.3 \times 10^{-6}$。完整的量測表見[支援的幾何](../../supported-geometry.qmd#curve-rule)。
+正 $n$ 邊形圓（Route B，MA、MS 與 SA band，margin 0.5 與 1.0 µm，grid 1 nm）在 $n$ = 16 至 128 與 256、半徑 5、10、50 與 150 µm 時，band 都與精確侵蝕相符；256 邊形在半徑 20 µm 時，兩個 margin 的 $R_m$ 都是一個 256 邊形。以真正圓弧畫的圓在三種半徑都通過，面積與精確值相差 $\le 2.3 \times 10^{-6}$。完整的量測表見[支援的幾何](../../reference/supported-geometry.qmd#curve-rule)。
 :::
 
 ::: {.callout-note collapse="true" title="空的 band 與建構錯誤不同"}
@@ -287,7 +289,7 @@ $R_m$ 的邊界由 origin 依每種特徵各一條規則得出（下表以 $O = 
 | 一串 origin 的端點（下一段邊不是 origin） | 以端點為圓心、半徑 $m$ 的半圓；端點在 die edge 上而 origin 是直線時沒有半圓，offset 直線一直延伸到 die edge；端點在 die edge 上而 origin 是圓弧時，建構被拒絕 | 範例中沒有（整條邊界都是 origin） |
 :::
 
-**被 die edge 切斷的直線 origin 越過 die edge 繼續延伸。** die edge 是切割線，導體在那裡被切斷，而不是結束。一串 origin 停在 die edge 上、而最後一段是直線時，SGB 把這段直線沿自己的方向延長到 die edge 之外，直到端點距 die edge 在該處的切線兩個最大 margin；距離從延長後的直線量起，offset 直線在 die 外結束，由 die edge 裁切，端點不畫半圓。die 是凸的時候，最大 margin 的 disk 以延長後的端點為圓心也完全在 die 外，所以 die 內每一點的距離都與整條直線的距離相同，延長得更長結果也一樣。若畫半圓，交角不是直角時，半圓會有一段留在 die 內，長度是 $m$ 乘以交角與 90° 的差，是 mesher 用不了的短 arc（Issue #138）。die edge 在端點處折回、直線無法離開 die 的情形，不延長，仍畫半圓。一串 origin 以圓弧停在 die edge 上時，圓弧沒有直線的延伸，SGB 也不改畫半圓：解析 support 時就以 `InputError` 拒絕，指出導體與切點（見[支援的幾何](../../supported-geometry.qmd#unsupported-arc-die-cut)）。
+**被 die edge 切斷的直線 origin 越過 die edge 繼續延伸。** die edge 是切割線，導體在那裡被切斷，而不是結束。一串 origin 停在 die edge 上、而最後一段是直線時，SGB 把這段直線沿自己的方向延長到 die edge 之外，直到端點距 die edge 在該處的切線兩個最大 margin；距離從延長後的直線量起，offset 直線在 die 外結束，由 die edge 裁切，端點不畫半圓。die 是凸的時候，最大 margin 的 disk 以延長後的端點為圓心也完全在 die 外，所以 die 內每一點的距離都與整條直線的距離相同，延長得更長結果也一樣。若畫半圓，交角不是直角時，半圓會有一段留在 die 內，長度是 $m$ 乘以交角與 90° 的差，是 mesher 用不了的短 arc（Issue #138）。die edge 在端點處折回、直線無法離開 die 的情形，不延長，仍畫半圓。一串 origin 以圓弧停在 die edge 上時，圓弧沒有直線的延伸，SGB 也不改畫半圓：解析 support 時就以 `InputError` 拒絕，指出導體與切點（見[支援的幾何](../../reference/supported-geometry.qmd#unsupported-arc-die-cut)）。
 
 **短的 reflex arc 改成兩條 offset 的交點。** 轉角 $\theta$ 的 reflex vertex 上，arc 長 $m\theta$。兩側都是直線、且 $m\theta$ 不到 25 個 grid step（`SHORT_ARC_GRID_STEPS`）時，SGB 不畫 arc，而是把兩條 offset 直線延伸到交點。交點落在 vertex 的角平分線上、距 vertex $m / \cos(\theta/2)$，比 arc 遠 $m(1/\cos(\theta/2) - 1)$。只有這個差小於一個 grid step 時才替換，否則 arc 保留。這段幾步長的 arc 是精確的幾何，但 mesher 用不了（Issue #125）。25 步是 $0.5$ µm 乘上 2.8125°（128 點圓一個頂點的轉角）；在 margin 0.5 µm 時，差最大約 0.16 grid step。
 
@@ -386,7 +388,7 @@ Band **逐 support face** 產生：
 - **需要特製的 solver。** 原生 Mask／Inset 只存在於 fork 版 Palace，而且有效能問題。SGB 的 band 是普通的 physical group，任何一般的 Palace 都能直接積分。
 - **距離定義不在幾何裡。** Solver 端 mask 的距離原點取決於 solver 如何看待 patch 的周長；SGB 的距離原點是寫在幾何裡的 gap edge。
 
-AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STEP 的 solid 中（D4，見[設計決議](decisions.qmd#d4)），預先切好的 band face 就是積分範圍，不需要 AEDT Imprint。現行 AEDT 的做法（128 邊形 circle erosion 加 non-model sheet）見 [AEDT runtime 規格](../../specs/aedt-runtime.qmd#epr-inset-contour-coherence)。
+AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STEP 的 solid 中（D4，見[設計決議](decisions.qmd#d4)），預先切好的 band face 就是積分範圍，不需要 AEDT Imprint。現行 AEDT 的做法（128 邊形 circle erosion 加 non-model sheet）見 [AEDT runtime 規格](../../reference/specs/aedt-runtime.qmd#epr-inset-contour-coherence)。
 
 ## 與 KLayout 交叉檢查
 
@@ -420,7 +422,7 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 
 ## 補充：重現資料
 
-本頁的圖與數字由 `zh-TW/docs/design/sgb/_figures/inset.py` 與 `inset_origin.py` 對 production 計算（「Inset band 怎麼量」一節的圖與數字由 `inset_origin.py` 產生，輸入是 `tests/sgb_inputs.py` 的 `gds_pad_in_ground` 與 `thin_film_pair`，以 `build_sgb_geometry` 建出，數字在 `figures/inset-origin-numbers.json`；以下說明 `inset.py` 的部分）：以 `SGB_CORE` 指向含 `scgsim.geometry.sgb` 與其 `tests/` 的 checkout，並用該 checkout 的 Python 執行。running example 是測試端的 stage-level scene `tests/sgb_scenes.py::pad_in_ground`（ground 的 cutout，pad 有 chamfer、20 × 15 µm 的 notch、5 µm 的 rounded corner 與半徑 8 µm 的圓 hole），以 `build_model_from_catalogue` 配上 `InsetRequest` 建出，band 請求與 `tests/sgb_emit_cases.py` 的 `pad_requests` 相同（三個 margin 0.1、0.5、2 µm，pad 與 substrate–vacuum 的 gap）。這個 scene 把 Route B 的 port 放在金屬的中間平面（為了測試 embedded sheet），compiler 不會這樣放：port 位於 host 的 support plane，所以 `inset.py` 把它換成同一片 sheet 放在 z = 0，Route A 的 port 本來就在那裡。所有 band 面積、arc 偏差、edge 數與 Route B 的數量都從 production 的 `ConformalModel` 與 sidecar 讀出；KLayout 交叉檢查用測試端的 oracle `tests/sgb_klayout.py`，mesh 檢查用 production 的 direct writer 寫出 XAO 再以 Gmsh 做 mesh（`tests/sgb_gmsh_oracle.py` 的 `refine_near`、`mesh_coarsely`、`band_mesh_report`）。產生的表格另存於 `figures/inset-tables.md`，其餘數字在 `figures/inset-numbers.json` 與 `figures/inset-klayout-comparison.json`；production 的 KLayout 交叉檢查也在 `tests/test_sgb_inset.py`（需要 KLayout，沒有安裝時略過）。2-D 的 mask 對 imprint 示意只用 Gmsh，與 SGB 無關。
+本頁的圖與數字由 `zh-TW/docs/contribute/sgb-design/_figures/inset.py` 與 `inset_origin.py` 對 production 計算（「Inset band 怎麼量」一節的圖與數字由 `inset_origin.py` 產生，輸入是 `tests/sgb_inputs.py` 的 `gds_pad_in_ground` 與 `thin_film_pair`，以 `build_sgb_geometry` 建出，數字在 `figures/inset-origin-numbers.json`；以下說明 `inset.py` 的部分）：以 `SGB_CORE` 指向含 `scgsim.geometry.sgb` 與其 `tests/` 的 checkout，並用該 checkout 的 Python 執行。running example 是測試端的 stage-level scene `tests/sgb_scenes.py::pad_in_ground`（ground 的 cutout，pad 有 chamfer、20 × 15 µm 的 notch、5 µm 的 rounded corner 與半徑 8 µm 的圓 hole），以 `build_model_from_catalogue` 配上 `InsetRequest` 建出，band 請求與 `tests/sgb_emit_cases.py` 的 `pad_requests` 相同（三個 margin 0.1、0.5、2 µm，pad 與 substrate–vacuum 的 gap）。這個 scene 把 Route B 的 port 放在金屬的中間平面（為了測試 embedded sheet），compiler 不會這樣放：port 位於 host 的 support plane，所以 `inset.py` 把它換成同一片 sheet 放在 z = 0，Route A 的 port 本來就在那裡。所有 band 面積、arc 偏差、edge 數與 Route B 的數量都從 production 的 `ConformalModel` 與 sidecar 讀出；KLayout 交叉檢查用測試端的 oracle `tests/sgb_klayout.py`，mesh 檢查用 production 的 direct writer 寫出 XAO 再以 Gmsh 做 mesh（`tests/sgb_gmsh_oracle.py` 的 `refine_near`、`mesh_coarsely`、`band_mesh_report`）。產生的表格另存於 `figures/inset-tables.md`，其餘數字在 `figures/inset-numbers.json` 與 `figures/inset-klayout-comparison.json`；production 的 KLayout 交叉檢查也在 `tests/test_sgb_inset.py`（需要 KLayout，沒有安裝時略過）。2-D 的 mask 對 imprint 示意只用 Gmsh，與 SGB 無關。
 
 mesh 檢查（含 band 的 Route A 模型；最大 40 µm，band 曲線附近 1 µm 的 size field，13 377 個 node、71 994 個 tetrahedron，無重複 node，conformal）：
 

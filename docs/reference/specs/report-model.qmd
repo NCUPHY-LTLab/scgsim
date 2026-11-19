@@ -4,9 +4,11 @@ description: "Report ordering, solver-specific quantities and availability witho
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/report-model"
+aliases:
+  - ../../report-model.html
 ---
 
-Use [restart and resolve](course/returned-results.qmd) for the report reading sequence and [offline EPR](course/offline-epr.qmd) for assumption changes. This page owns visible result behavior.
+Use [restart and resolve](../../guides/convergence-and-reports.qmd) for the report reading sequence and [offline EPR](../../guides/offline-loss.qmd) for assumption changes. This page owns visible result behavior.
 
 SCGSim is an independent downstream toolkit, not official gsim. It provides
 strict solver-specific resolvers and a consistent notebook reading surface
@@ -74,7 +76,7 @@ execute it again.
 
 ## Research interpretation and retained observations
 
-Use the [result-reading lesson](course/returned-results.qmd#interpret-for-scq-use)
+Use the [result-reading lesson](../../guides/convergence-and-reports.qmd#interpret-for-scq-use)
 to relate a quantity and its changes to the intended SCQ use. Caller-authored
 criteria, changes to those criteria, native completion/convergence status and
 recorded history remain observations for the Notebook to retain. The report
@@ -84,7 +86,7 @@ that the research question has been answered. This interpretation does not
 replace native status, hashes, pass selection or genuine execution failure
 meaning. HFSS Driven/Eigenmode reporting removes only the
 three extra convergence qualifications described in the
-[HFSS contract](specs/aedt-runtime.qmd#hfss-convergence-observations). Its
+[HFSS contract](aedt-runtime.qmd#hfss-convergence-observations). Its
 reports present the existing structured convergence fields, with request and
 cross-export consistency intact. Keep the caller's criteria with the native
 records: Eigenmode's consecutive-pass count and native history remain in the
@@ -95,7 +97,7 @@ unknown stopping cause from pass count, or change Q2D/Q3D policies.
 ## Declared convergence of a Palace run {#declared-convergence}
 
 A Palace run whose simulation called
-[`set_convergence`](specs/palace-electrostatic-sgb.qmd#convergence-declaration)
+[`set_convergence`](palace-electrostatic-sgb.qmd#convergence-declaration)
 carries its criteria as a sealed plan. Result reading runs the one convergence
 check on the returned pass folders, `results/palace/iteration<k>` and the final
 `results/palace`: `ResolvedPalaceResult.convergence` holds the plan, the check
@@ -182,7 +184,7 @@ A plan that is present but was not sealed by the
 handoff, or that changed after it, is refused by both readers.
 
 With a declaration Palace is
-[stopped at convergence](specs/palace-electrostatic-sgb.qmd#convergence-stop),
+[stopped at convergence](palace-electrostatic-sgb.qmd#convergence-stop),
 and the verdict sentence then says how it ended, from the receipt and the
 runner's decision record:
 
@@ -214,7 +216,7 @@ loss tangent was supplied. It does not turn an unknown assumption into a known
 zero: the v2 index and detached `PalaceEprResult` retain `loss_tangent=None`,
 and SCGSim leaves the corresponding inverse-Q contribution unavailable. An
 explicit known zero instead gives a zero contribution. Neither state creates a
-surface-loss lifetime claim. The [Eigenmode and Offline EPR guide](eigenmode-epr.qmd)
+surface-loss lifetime claim. The [Eigenmode and Offline EPR guide](../../concepts/surface-epr.qmd)
 documents its analysis methods and assumptions. Palace's generic `domain-E.csv`
 Volume Energy table still has no general-purpose report renderer.
 
@@ -261,7 +263,7 @@ unavailable; presentation does not fall back to an earlier complete pass. It
 checks consumed result CSVs and benchmark data against hashes captured during
 resolution, without consulting a live simulation object or rereading native
 AEDT state. See the
-[AEDT runtime reference](specs/aedt-runtime.qmd) for strict resolution and
+[AEDT runtime reference](aedt-runtime.qmd) for strict resolution and
 missing-artifact behavior.
 
 Adaptive frequency has its own availability rule: a finite, positive numeric
@@ -288,7 +290,7 @@ labels it **native-reported infinite Q**. A finite Q-based view is unavailable
 for that value; the report does not infer a physical lossless model or replace
 it with a finite number or zero. Other otherwise valid frequency/energy
 evidence is not rejected solely for this Q value. The
-[Palace native Q contract](specs/palace-eigenmode.qmd#native-eigenmode-q) owns
+[Palace native Q contract](palace-eigenmode.qmd#native-eigenmode-q) owns
 the narrow raw-value allowance and unchanged other-column/NaN/negative-infinity
 policies. EPR normalization and unknown-loss interpretation remain separate.
 

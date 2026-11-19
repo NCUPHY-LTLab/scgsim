@@ -36,13 +36,13 @@ class Selection:
 
 SELECTIONS = (
     Selection(
-        "docs/course/aedt-inputs.qmd",
+        "docs/guides/aedt-cpw-inputs.qmd",
         "Make the CPW plan",
         1,
         "snapshot = plan.prepare()",
     ),
     Selection(
-        "docs/course/aedt-eigenmode.qmd",
+        "docs/guides/modes-hfss.qmd",
         None,
         1,
         "handoff = sim.prepare_handoff()",

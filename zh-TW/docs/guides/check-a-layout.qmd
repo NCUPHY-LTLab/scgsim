@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/layout-modeling-check"
+aliases:
+  - ../layout-modeling-check.html
 ---
 
 每個 Palace 模擬類別都有類別層級的 `simulation_drc()`，讓版圖儲存庫得知該模擬能否為其版圖建模並建立網格，不能時該修改哪裡。它分兩個階段執行，且從不建立網格：
@@ -14,7 +16,7 @@ scgsim-id: "docs/layout-modeling-check"
 
 兩個階段都通過的版圖會回傳 `SimulationDrcReport`，其中列出網格階段的警告。每個類別的 `mesh()` 都會在網格器啟動之前，對自己建出的模型執行同一個網格階段，見[`mesh()` 內的同一個檢查](#the-same-check-inside-mesh)。
 
-幾何階段能找出使建模失敗的版圖缺陷：形狀不正確、重疊、微小的錯位、錯誤的語意宣告、沒有落在應有位置的端口薄片，以及放不進所繪間隙的 Surface EPR 條帶。它不預測最終的模擬幾何。SCGSim 經過測試的圖形列在[支援的幾何](supported-geometry.qmd)，已知的失敗情況及版圖的修改方式列在[已知的幾何問題](known-geometry-problems.qmd)。檢查所執行的規則，以及各種失敗由誰負責，見[支援範圍](supported-scope.qmd)。
+幾何階段能找出使建模失敗的版圖缺陷：形狀不正確、重疊、微小的錯位、錯誤的語意宣告、沒有落在應有位置的端口薄片，以及放不進所繪間隙的 Surface EPR 條帶。它不預測最終的模擬幾何。SCGSim 經過測試的圖形列在[支援的幾何](../reference/supported-geometry.qmd)，已知的失敗情況及版圖的修改方式列在[已知的幾何問題](../reference/known-geometry-problems.qmd)。檢查所執行的規則，以及各種失敗由誰負責，見[支援範圍](../reference/supported-scope.qmd)。
 
 ## 建立模擬將拿到的計畫 {#build-the-plan}
 
@@ -40,14 +42,14 @@ SCGSim 不依賴 PDK，因此由版圖儲存庫把層堆疊與材料紀錄傳給
 
 - **Net。** 計畫的 `set_nets`，每個成員都是計畫根之下的完整 Entity ID。沒有 Net 時任何導體都沒有 Net，因此相接觸的兩個導體都會被當作不同 Net 的接觸而拒絕。銦凸塊連接兩片接地面的覆晶版圖都會因此被拒絕，直到兩片接地面與所有凸塊都在同一個 Ground net 中。不同 Net 的兩個導體相接觸時，無論如何都會被拒絕。
 - **真空。** 計畫自己的真空：層堆疊的 `VACUUM_REGION`，或計畫的 `set_vacuum_region`。兩者皆無的計畫，會以模擬對它拋出的錯誤被拒絕。`(0, 0, 1000)` µm 是測試與使用版圖時的設定：真空止於版圖的平面範圍，並向下、向上各延伸 1000 µm，使金屬有空氣面可供切出 `MA` 與 `SA` 條帶。
-- **Surface EPR。** 計畫的 `set_surface_epr(specs)`，也就是模擬將使用的規格（鍵列於[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)）。其邊距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。條帶只切在規格所選的面上，所以沒有這類面的版圖會通過，但不會切出條帶；沒有規格的計畫不切條帶。
+- **Surface EPR。** 計畫的 `set_surface_epr(specs)`，也就是模擬將使用的規格（鍵列於[本徵模態契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)）。其邊距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。條帶只切在規格所選的面上，所以沒有這類面的版圖會通過，但不會切出條帶；沒有規格的計畫不切條帶。
 - **coupon 填充、端口薄片與矩形接面。** 依計畫的宣告。
 
 您傳入的計畫保持原樣。第一個引數若不是 `GeometryPlan`（例如 Component 或 `plan.prepare()`），會被拒絕，訊息中列出該建立的計畫。各類別自己加入的設定見[檢查使用的設定](#what-the-check-uses)。
 
-請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請以 `route` 與 `approximation_profile` 傳入模擬將使用的 route：它們就是 [`set_route`](specs/physical-representation.qmd#palace-caller-profile) 的引數，預設值與拒絕方式都相同。未傳入時檢查為 Route B；只給 `route="A"` 時使用 `thin_film` 近似設定；`route="A"` 搭配 `substrate_face` 或 `metal_gap_equivalent` 近似設定時，使用該設定及其 `film_bindings`。與計畫中薄膜不相符的近似設定，會由幾何建構拒絕，錯誤與 `mesh()` 拋出的相同。Route C 不是 Palace 的 route，會像 `set_route` 一樣被拒絕；route 或近似設定被拒絕時，訊息指向 `simulation_drc` 的呼叫。兩個 route 都要用的版圖，請對每個 route 各呼叫一次檢查。
+請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請以 `route` 與 `approximation_profile` 傳入模擬將使用的 route：它們就是 [`set_route`](../reference/specs/physical-representation.qmd#palace-caller-profile) 的引數，預設值與拒絕方式都相同。未傳入時檢查為 Route B；只給 `route="A"` 時使用 `thin_film` 近似設定；`route="A"` 搭配 `substrate_face` 或 `metal_gap_equivalent` 近似設定時，使用該設定及其 `film_bindings`。與計畫中薄膜不相符的近似設定，會由幾何建構拒絕，錯誤與 `mesh()` 拋出的相同。Route C 不是 Palace 的 route，會像 `set_route` 一樣被拒絕；route 或近似設定被拒絕時，訊息指向 `simulation_drc` 的呼叫。兩個 route 都要用的版圖，請對每個 route 各呼叫一次檢查。
 
-檢查只建構幾何，不建立網格也不求解，因此可在版圖變動時反覆執行。幾何階段會在第一個拒絕處停止；網格階段則一次列出所有發現。閱讀訊息、修正版圖，再執行一次。[失敗時怎麼辦](supported-scope.qmd#when-something-fails)列出每種錯誤的負責人與下一步。
+檢查只建構幾何，不建立網格也不求解，因此可在版圖變動時反覆執行。幾何階段會在第一個拒絕處停止；網格階段則一次列出所有發現。閱讀訊息、修正版圖，再執行一次。[失敗時怎麼辦](../reference/supported-scope.qmd#when-something-fails)列出每種錯誤的負責人與下一步。
 
 幾何階段的拒絕也可能來自 SGB 的缺陷，而非版圖本身。若訊息與你所繪的版圖不符，請回報給 SCGSim。
 
@@ -101,7 +103,7 @@ for simulation, options in checks:
 您要求的每條條帶，寬度都必須至少等於類別 B 的界限，也就是 10 個網格步長。第一條條帶的寬度等於第一個邊距，之後每條條帶的寬度是相鄰兩個邊距的差：`[0.5, 1.0]` µm 會切出兩條 0.5 µm 寬的條帶。較窄的條帶會在建構任何東西之前以 `ValueError` 拒絕，訊息會指出規格（或 `inset_margins_by_entity_um` 中的導體）、條帶、以 µm 與網格步長表示的寬度，以及界限。請加大邊距。寬度恰好等於界限的條帶，在被截斷之處（例如晶片邊緣）仍可能被類別 B 拒絕：截斷的一段，其寬度 2A/P 會略小於條帶寬度。請選擇比界限更寬的條帶。
 
 ::: {.callout-tip title="讓每個導體的核心保持夠寬"}
-使用 Surface-EPR 條帶時，請讓每個導體的核心（超出最大邊距的區域）比它的條帶寬得多。導體收窄到恰好是最大邊距的兩倍時，兩側的條帶在中線相遇：模型仍是精確的侵蝕，也能建立網格，只是在這個頸部會有類別 C 的短邊警告。再寬一點，導體就會留下一條細窄的核心，被類別 B 拒絕，見 [Surface-EPR 邊距](supported-scope.qmd#rules-margins)。
+使用 Surface-EPR 條帶時，請讓每個導體的核心（超出最大邊距的區域）比它的條帶寬得多。導體收窄到恰好是最大邊距的兩倍時，兩側的條帶在中線相遇：模型仍是精確的侵蝕，也能建立網格，只是在這個頸部會有類別 C 的短邊警告。再寬一點，導體就會留下一條細窄的核心，被類別 B 拒絕，見 [Surface-EPR 邊距](../reference/supported-scope.qmd#rules-margins)。
 :::
 
 每項發現都標明其階段、類別、量測方式與尺寸、SGB 實體及其物理群組、它所來自的版圖物件與條帶請求及這些物件所在的圖層、以 µm 表示的位置與外框、網格器為何無法處理，以及修改方式。負責方依 sidecar 記錄的來源判定：
@@ -131,7 +133,7 @@ for simulation, options in checks:
 - `EigenmodeSim`：計畫中所有已定義的端口薄片都作為集總端口，電感為固定值，不影響幾何；
 - `ElectrostaticSim`：不設端子，網格化之前不需要端子；
 
-以 (0, 0, 1000) µm 填充的真空止於版圖的平面範圍，所以請畫出決定這個範圍的幾何：die 外框或接地平面。只在一點碰到這個範圍的導體，例如周圍沒有畫任何東西的單獨圓形焊墊，會被 `NonManifoldError` 拒絕；[只在一點碰到邊界的導體](known-geometry-problems.qmd#boundary-point-pinch)說明原因與該畫什麼。
+以 (0, 0, 1000) µm 填充的真空止於版圖的平面範圍，所以請畫出決定這個範圍的幾何：die 外框或接地平面。只在一點碰到這個範圍的導體，例如周圍沒有畫任何東西的單獨圓形焊墊，會被 `NonManifoldError` 拒絕；[只在一點碰到邊界的導體](../reference/known-geometry-problems.qmd#boundary-point-pinch)說明原因與該畫什麼。
 
 `simulation_drc()` 寫入暫存資料夾並於結束後移除。幾何階段不加入自己的規則，因此其錯誤與相同計畫、相同設定下該類別 `mesh()` 所拋出的相同。網格階段的規則就是上述類別。
 

@@ -1,9 +1,9 @@
 # Maintaining SCGSim
 
 This repository reference covers documentation builds and package maintenance.
-The secondary [maintainer guide](docs/ownership.qmd) links the implementation
+The secondary [maintainer guide](docs/contribute/ownership.qmd) links the implementation
 and project references. Researchers can start with the
-[course](docs/examples.qmd) without a parent workspace.
+[course](docs/start/choose-a-simulation.qmd) without a parent workspace.
 
 ## Sources and generated output
 
@@ -71,7 +71,7 @@ version tooling and the delivery packet's assigned observations.
 
 ## Generated API references
 
-Edit the authored usage Markdown under `docs/api/` and `zh-TW/docs/api/`, or the
+Edit the authored usage Markdown under `docs/reference/api/` and `zh-TW/docs/reference/api/`, or the
 owning public Python declarations. Refresh and check the derived references:
 
 ```bash
@@ -85,9 +85,9 @@ SCGSim or starting a solver.
 
 ## Implementation and project references
 
-- [Architecture and data flow](docs/architecture.qmd)
-- [Runtime and result provenance](docs/provenance.qmd)
-- [Project scope and derivation](docs/goals-and-upstream.qmd)
+- [Architecture and data flow](docs/contribute/architecture.qmd)
+- [Runtime and result provenance](docs/contribute/provenance.qmd)
+- [Project scope and derivation](docs/contribute/goals-and-upstream.qmd)
 
 The integrated derivation inputs were gsim downstream
 `0.2.0+scq.1`, revision `8f5dc6c05255d003a9c6d8959537bcf8068379d3`,
@@ -98,7 +98,7 @@ Palace builds its geometry with `scgsim.geometry.sgb` and meshes it with
 `scgsim.meshing`. SGB sits below the supported entry (`GeometryPlan` and the
 simulation classes): a direct call with an input built
 by hand assumes what that entry guarantees, as
-[Supported Scope](docs/supported-scope.qmd#supported-entry) states.
+[Supported Scope](docs/reference/supported-scope.qmd#supported-entry) states.
 
 ## Engineering convergence
 

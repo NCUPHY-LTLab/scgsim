@@ -1,8 +1,8 @@
-"""Figures and numbers for the section "Inset band 怎麼量" of ``docs/design/sgb/inset-imprint.qmd``.
+"""Figures and numbers for the section "Inset band 怎麼量" of ``zh-TW/docs/contribute/sgb-design/inset-imprint.qmd``.
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/inset_origin.py
+    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/inset_origin.py
 
 Two real inputs of the production tests (``tests/sgb_inputs.py``) are built with ``build_sgb_geometry`` and bands on every
 surface, margins (0.5, 1.0) um:
@@ -14,7 +14,7 @@ surface, margins (0.5, 1.0) um:
 
 The drawings read the z = 0 level arrangement of the validated model (every cell with its band label) and the distance
 origins of each support region (``SupportRegion.origins`` and ``free_boundary``); the numbers come from the sidecar the
-build wrote.  Outputs go to ``docs/design/sgb/figures/`` with the prefix ``inset-origin-``:
+build wrote.  Outputs go to ``zh-TW/docs/contribute/sgb-design/figures/`` with the prefix ``inset-origin-``:
 
 * ``inset-origin-ma``       the pad-in-ground die coloured by band, with zooms on the cutout corner, the port and the die corner
 * ``inset-origin-sa``       the thin-film pair coloured by band

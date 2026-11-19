@@ -3,12 +3,12 @@
 **使用 Python 模擬超導電路版圖。**
 
 [![License: Apache-2.0](../docs/assets/badges/license.svg)](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/LICENSE)
-[![Python: 3.12–3.13](../docs/assets/badges/python.svg)](docs/course/installation.qmd)
-[![Tutorial: Layout EM](../docs/assets/badges/tutorial.svg)](docs/examples.qmd)
-[![AEDT: HFSS / Q3D / Q2D](../docs/assets/badges/aedt.svg)](docs/backend-support.qmd)
-[![Palace: Electrostatic / Eigenmode](../docs/assets/badges/palace.svg)](docs/course/palace-eigenmode.qmd)
+[![Python: 3.12–3.13](../docs/assets/badges/python.svg)](docs/start/install.qmd)
+[![Tutorial: Layout EM](../docs/assets/badges/tutorial.svg)](docs/start/choose-a-simulation.qmd)
+[![AEDT: HFSS / Q3D / Q2D](../docs/assets/badges/aedt.svg)](docs/reference/supported-calculations.qmd)
+[![Palace: Electrostatic / Eigenmode](../docs/assets/badges/palace.svg)](docs/guides/modes-palace.qmd)
 [![Gmsh: Meshing](../docs/assets/badges/gmsh.svg)](docs/concepts/geometry.qmd)
-[![gsim: Unofficial Downstream](../docs/assets/badges/gsim.svg)](docs/goals-and-upstream.qmd)
+[![gsim: Unofficial Downstream](../docs/assets/badges/gsim.svg)](docs/contribute/goals-and-upstream.qmd)
 
 ![SCGSim 虎鯨與企鵝，介紹晶片版圖、有限元素網格與電磁場示意。](../docs/assets/scgsim-overview-orca-penguin.png)
 
@@ -27,7 +27,7 @@ uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4'
 
 `uv` 會建立 `.venv`，並將解析後的版本寫入 `uv.lock`。把 `pyproject.toml` 和 `uv.lock` 留在研究專案中，其他電腦即可用 `uv sync` 重建環境。
 
-> **執行條件：** 下列範例需要本機已安裝 AEDT Q3D 2024.2 並具有可用授權。Python 套件不包含原生求解器；其他後端的設定見[安裝指南](docs/course/installation.qmd)。
+> **執行條件：** 下列範例需要本機已安裝 AEDT Q3D 2024.2 並具有可用授權。Python 套件不包含原生求解器；其他後端的設定見[安裝指南](docs/start/install.qmd)。
 
 ## 使用範例：用一支腳本完成 SimplePad 電容抽取
 
@@ -131,12 +131,12 @@ uv run simplepad_q3d.py
 
 若要先檢視輸入，執行 `uv run simplepad_q3d.py --handoff-only`。此選項只準備輸入與可攜套件，不會開啟 AEDT；完整模式則在同一主機執行並讀回結果。
 
-本例把兩個 Net 都設為 Q3D 的 `Signal`，讓兩者保留在矩陣中；`physical_ground_nets` 另外記錄接地的物理角色。[Q3D 教學](docs/course/aedt-q3d.qmd)說明本體、Net 與擷取選擇，[讀取回傳結果](docs/course/returned-results.qmd)說明如何讀取矩陣。
+本例把兩個 Net 都設為 Q3D 的 `Signal`，讓兩者保留在矩陣中；`physical_ground_nets` 另外記錄接地的物理角色。[Q3D 教學](docs/guides/capacitance-q3d.qmd)說明本體、Net 與擷取選擇，[讀取回傳結果](docs/guides/convergence-and-reports.qmd)說明如何讀取矩陣。
 
 ## 選擇下一個模擬目標
 
 想不用 AEDT 授權、改用 Palace 計算電容，請從[第一個模擬](docs/start/first-simulation.qmd)開始。
 
-[模擬目標選擇頁](docs/examples.qmd#getting-started)連結 OrcaPen SC PDK 的完整筆記本，涵蓋電容、共振模態與能量參與率，以及單位長度傳輸線參數。Driven S 參數請使用 [Driven Terminal](docs/course/aedt-driven-terminal.qmd) 教學；版圖需要兩片集總埠片，每個埠一片。此版本尚未提供 Driven Modal 與波埠。
+[模擬目標選擇頁](docs/start/choose-a-simulation.qmd#getting-started)連結 OrcaPen SC PDK 的完整筆記本，涵蓋電容、共振模態與能量參與率，以及單位長度傳輸線參數。Driven S 參數請使用 [Driven Terminal](docs/guides/s-parameters-hfss.qmd) 教學；版圖需要兩片集總埠片，每個埠一片。此版本尚未提供 Driven Modal 與波埠。
 
-模擬自己的版圖之前，請先閱讀[支援範圍](docs/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。
+模擬自己的版圖之前，請先閱讀[支援範圍](docs/reference/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。

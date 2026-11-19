@@ -4,6 +4,8 @@ description: "Current public geometry, AEDT, Palace and visualization symbols ma
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
+aliases:
+  - ../api-migration.html
 ---
 
 This reference maps the frozen v1 API surfaces, called the baseline below, to
@@ -109,7 +111,7 @@ refused; read it with the SCGSim commit that wrote it. The execution path never
 infers or supplies a missing mode. Fresh requests declare layers
 with `PhysicalLayerDeclaration` records in the single authored `LayerStack`
 coordinate system; the
-[physical representation contract](specs/physical-representation.qmd) lists
+[physical representation contract](../reference/specs/physical-representation.qmd) lists
 their fields. A film declaration carries its original normal thickness in
 `physical_dimensions["normal_thickness_um"]`, and film physical-thickness
 output reports that value without recomputing it from endpoints. The earlier
@@ -123,7 +125,7 @@ volumes keep their own body extent.
 The mode selection chooses geometry representation; it does not choose a solver
 family or a public A/B/C execution route. The complete transform and material,
 terminal, build-only, and failure behavior is defined in the
-[AEDT Solid and thin-film contract](specs/aedt-runtime.qmd#aedt-solid-thin-film).
+[AEDT Solid and thin-film contract](../reference/specs/aedt-runtime.qmd#aedt-solid-thin-film).
 Q2D and Palace are outside this migration. Q3D input-v1/v2 request schemas
 remain removed; shared V1/V2 handoff compatibility for other supported family
 paths does not restore those Q3D request schemas or bypass the explicit-mode
@@ -147,7 +149,7 @@ name is imported from its defining module. A layout enters through
 `GeometryPlan` and the simulation classes; `build_sgb_geometry` in
 `scgsim.geometry.sgb` builds the model from a prepared input and sits below that
 entry, so a direct call with an input built by hand assumes what the entry
-guarantees (see [the supported entry](supported-scope.qmd#supported-entry)).
+guarantees (see [the supported entry](../reference/supported-scope.qmd#supported-entry)).
 Each name below has one current definition, without an old-path compatibility
 wrapper.
 
@@ -295,7 +297,7 @@ them public exports.
 
 The current producer records runtime-source v30, computed on each use as the
 import closure of every AEDT module and both AEDT visualization loaders; see
-the [runtime-source contract](specs/aedt-runtime.qmd#runtime-source). Per-module
+the [runtime-source contract](../reference/specs/aedt-runtime.qmd#runtime-source). Per-module
 hashes bind the listed files, and the canonical manifest digest identifies that
 source snapshot; neither is a permanent code value. Results recorded under an
 earlier runtime-source schema are read with the SCGSim commit that wrote them;
@@ -318,7 +320,7 @@ The baseline route builder has no current equivalent; see the
 ### Mesh controls
 
 `set_mesh` now takes `recipe`, `mesher`, `budgets` and `quality_threshold`; the
-[Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)
+[Palace mesh controls](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)
 define them. `set_mesh` changed alike on both facades, and
 Eigenmode and Electrostatic share the defaults.
 
@@ -377,9 +379,9 @@ Surface-EPR margins became geometry, and the changes follow from that:
   `face_kinds` accepts `sheet`, `top`, `bottom` and `interface`, and rejects
   `sidewall` when the spec asks for margins.
 
-The [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins) defines
+The [Eigenmode contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins) defines
 the keys and rows. SGB group names attach the face kind with `__`, as in
-`MA::pad__top::band=1`; the [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins)
+`MA::pad__top::band=1`; the [Eigenmode contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)
 gives the form of the names.
 
 ### Results
@@ -387,7 +389,7 @@ gives the form of the names.
 Palace now writes mesh manifest `schema_version` 2 and index map `schema_version`
 3, and reads only those. Run folders of older schemas and detached EPR results of
 `scgsim.palace.epr-result.v1` are rejected, as described in
-[Palace run schemas](report-model.qmd#palace-run-schemas). The renames below have no
+[Palace run schemas](../reference/specs/report-model.qmd#palace-run-schemas). The renames below have no
 old-name aliases.
 
 ::: {.askr-table-compact}
@@ -412,10 +414,10 @@ New, and optional:
 
 - `sim.set_convergence(...)` declares when a run has converged, with criteria
   on the capacitance, the mode frequencies, Surface EPR and Palace's error
-  indicator ([declaration](specs/palace-electrostatic-sgb.qmd#convergence-declaration)).
+  indicator ([declaration](../reference/specs/palace-electrostatic-sgb.qmd#convergence-declaration)).
   A change is a percentage of the value:
   `Capacitance.diagonal().within(percent=0.5)`. Palace is
-  [stopped](specs/palace-electrostatic-sgb.qmd#convergence-stop) after the pass
+  [stopped](../reference/specs/palace-electrostatic-sgb.qmd#convergence-stop) after the pass
   at which the criteria have converged, so the passes after it are not run. With
   a declaration `amr_tolerance` is set aside, and stating one is refused.
 - `ResolvedPalaceResult.convergence` holds the check of every pass and the
@@ -436,7 +438,7 @@ Changed for every run, declared or not:
 :::
 
 The layout of each view is in the
-[report model](report-model.qmd#declared-convergence).
+[report model](../reference/specs/report-model.qmd#declared-convergence).
 
 ### Layout modeling check {#simulation-drc-migration}
 
@@ -469,7 +471,7 @@ with `plan.register_instance` before `set_nets`. The AEDT check now covers the
 plan's rectangular junctions, their sheets cut. `prepare_hfss_driven_from_geometry`
 and `prepare_q3d_from_geometry` now run the import's first step before they
 write the handoff, so they refuse a model the import cannot realize. See
-[Layout modeling check](layout-modeling-check.qmd#build-the-plan).
+[Layout modeling check](check-a-layout.qmd#build-the-plan).
 
 ### Surface EPR and the vacuum on the plan {#plan-owns-surface-epr}
 

@@ -2,19 +2,21 @@
 title: "Convention"
 description: "本頁說明 SCGSim 英文技術用語、符號與單位記法。"
 lang: zh-TW
-sidebar: contract
+sidebar: reference
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/conventions"
+aliases:
+  - ../conventions.html
 ---
 
 閱讀工作流程或結果頁時，可在此查詢專有名詞。中文文件會保留英文術語，首次提及時附上簡短中文解釋；API 名稱、欄位與實際介面字串則維持原樣。定義依據目前 SCGSim 契約，詳細工作流程請見各連結頁。
 
 ## Analysis
 
-[Electrostatic]{#term-electrostatic}（靜電分析）依指定電壓求解導體電荷，並回傳有序電容矩陣。詳見[物理問題總覽](concepts/problems.qmd#capacitance-charge-response-to-conductor-voltage)。
+[Electrostatic]{#term-electrostatic}（靜電分析）依指定電壓求解導體電荷，並回傳有序電容矩陣。詳見[物理問題總覽](../concepts/problems.qmd#capacitance-charge-response-to-conductor-voltage)。
 
-[Eigenmode]{#term-eigenmode}（本徵模分析）依模型邊界與電路元件求得共振頻率及場。本徵模結果與驅動響應是不同物理量，詳見[物理問題總覽](concepts/problems.qmd#resonance-modes-of-a-field-and-circuit-model)。
+[Eigenmode]{#term-eigenmode}（本徵模分析）依模型邊界與電路元件求得共振頻率及場。本徵模結果與驅動響應是不同物理量，詳見[物理問題總覽](../concepts/problems.qmd#resonance-modes-of-a-field-and-circuit-model)。
 
 [Driven Modal]{#term-driven-modal}（驅動模態分析）是 HFSS 的驅動工作流程，使用模態埠及其積分線宣告，回傳複數 S 參數。
 
@@ -54,7 +56,7 @@ scgsim-id: "docs/conventions"
 
 [Solid]{#term-solid}（實體建模）是透過 `modeling="solid"` 選取的體積幾何表示法。
 
-[Thin Film]{#term-thin-film}（薄膜建模）是明確選取、且與 Solid 分開設定的薄膜幾何表示法。薄膜假設與後端支援情形見[功能表](backend-support.qmd)。
+[Thin Film]{#term-thin-film}（薄膜建模）是明確選取、且與 Solid 分開設定的薄膜幾何表示法。薄膜假設與後端支援情形見[功能表](supported-calculations.qmd)。
 
 [Port]{#term-port}（埠）是驅動計算中宣告的激發或量測邊界。埠類型與參考方式決定如何解讀回傳的網路響應。
 
@@ -64,7 +66,7 @@ scgsim-id: "docs/conventions"
 
 [Maxwell capacitance matrix]{#term-maxwell-capacitance-matrix}（Maxwell 電容矩陣）依萃取所用的接地方式與排序慣例，表示導體電荷與電壓的關係。應保留原生導體順序與單位。
 
-[EPR]{#term-epr}（Energy Participation Ratio，能量參與率）是指定能量分子除以後端定義的正規化能量。分子與[分母慣例](eigenmode-epr.qmd#quantities-and-normalization)依後端而異；薄膜估算只作為分子，不會加進分母。
+[EPR]{#term-epr}（Energy Participation Ratio，能量參與率）是指定能量分子除以後端定義的正規化能量。分子與[分母慣例](../concepts/surface-epr.qmd#quantities-and-normalization)依後端而異；薄膜估算只作為分子，不會加進分母。
 
 [SPR]{#term-spr}（Surface Participation Ratio，表面參與率）是指定介面薄膜的估算能量分子除以該工作流程聲明的正規化能量。分母依工作流程而定；這是介面估算，不一定是總能量中互不重疊的一部分。
 

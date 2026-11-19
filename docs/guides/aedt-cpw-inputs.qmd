@@ -4,16 +4,18 @@ description: "Prepare the public CPW as a GeometryPlan snapshot, the source ever
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/course/aedt-inputs"
+aliases:
+  - ../course/aedt-inputs.html
 ---
 
 Every 3D AEDT family (HFSS Eigenmode, HFSS Driven Terminal and Q3D) solves the
 SGB model of a `GeometryPlan` snapshot, the same model Palace meshes. This page
 prepares that snapshot for the public finite-ground CPW, after
-[installation](installation.qmd). Q2D solves a 2D cross section and has its own
-[cross-section lesson](aedt-q2d.qmd).
+[installation](../start/install.qmd). Q2D solves a 2D cross section and has its own
+[cross-section lesson](line-parameters-q2d.qmd).
 
 The CPW is OrPen's `finite_ground_cpw_coupon`, from the
-[pinned CPW group](../examples.qmd#public-inputs): 500 µm long, a 10 µm signal,
+[pinned CPW group](../start/choose-a-simulation.qmd#public-inputs): 500 µm long, a 10 µm signal,
 6 µm gaps and two 80 µm grounds on the D0 substrate. These are example design
 inputs, not measured device geometry or universal solver settings. The PDK
 supplies the polygons, their Entities (`SIGNAL`, `GROUND_PLUS`,
@@ -64,8 +66,8 @@ What each call fixes:
   stack. Preparing it establishes source identity; it does not build the model
   or open AEDT.
 
-Keep `snapshot` in this session. Continue to [HFSS Eigenmode](aedt-eigenmode.qmd)
-or [Q3D](aedt-q3d.qmd), which take it directly. [Driven Terminal](aedt-driven-terminal.qmd)
+Keep `snapshot` in this session. Continue to [HFSS Eigenmode](modes-hfss.qmd)
+or [Q3D](capacitance-q3d.qmd), which take it directly. [Driven Terminal](s-parameters-hfss.qmd)
 needs a layout that also carries a lumped-port sheet at each port; this coupon
 has none. The canonical OrPen notebooks are the source authority for their
 consumer workflow; this lesson authors no component notebook.

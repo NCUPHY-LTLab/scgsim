@@ -1,6 +1,6 @@
 # `analyze_epr`: saved-field EPR usage
 
-`analyze_epr` evaluates retained fields through native AEDT and requires an explicitly selected release and license; `reanalyze_epr` updates assumptions on a resolved result offline. Follow the complete [saved-fields lesson](../course/aedt-saved-fields.qmd) and use the [knowledge guide](../knowledge-guide.qmd) for related references.
+`analyze_epr` evaluates retained fields through native AEDT and requires an explicitly selected release and license; `reanalyze_epr` updates assumptions on a resolved result offline. Follow the complete [saved-fields lesson](../../guides/saved-fields.qmd) and use the [Reference overview](../index.qmd) for related references.
 
 ## Minimal call
 

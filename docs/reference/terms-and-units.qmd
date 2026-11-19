@@ -1,10 +1,12 @@
 ---
 title: "Convention"
 description: "Definitions of SCGSim's English technical terms, symbols and unit notation."
-sidebar: contract
+sidebar: reference
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/conventions"
+aliases:
+  - ../conventions.html
 ---
 
 Use this dictionary when a term appears in a workflow or result page. Definitions
@@ -15,12 +17,12 @@ workflow in detail.
 
 [Electrostatic]{#term-electrostatic} solves conductor charge for specified
 voltages and returns an ordered capacitance matrix. See the
-[problem overview](concepts/problems.qmd#capacitance-charge-response-to-conductor-voltage).
+[problem overview](../concepts/problems.qmd#capacitance-charge-response-to-conductor-voltage).
 
 [Eigenmode]{#term-eigenmode} finds resonant frequencies and fields for a model
 with its declared boundaries and circuit elements. An Eigenmode result and a
 driven response are different quantities. See the
-[problem overview](concepts/problems.qmd#resonance-modes-of-a-field-and-circuit-model).
+[problem overview](../concepts/problems.qmd#resonance-modes-of-a-field-and-circuit-model).
 
 [Driven Modal]{#term-driven-modal} is the HFSS driven workflow using modal
 ports, including integration-line port declarations, to return complex
@@ -98,7 +100,7 @@ role.
 
 [Thin Film]{#term-thin-film} is the explicitly selected thin-film geometry
 representation, configured separately from Solid. Its film assumptions and
-backend support are documented in the [capability table](backend-support.qmd).
+backend support are documented in the [capability table](supported-calculations.qmd).
 
 [Port]{#term-port} is a declared excitation or measurement boundary for a
 driven calculation. Its type and reference determine how the returned network
@@ -116,7 +118,7 @@ ordering conventions. Preserve its native conductor order and units.
 
 [EPR]{#term-epr} means Energy Participation Ratio: a selected energy numerator
 divided by the backend-defined normalization energy. The numerator and
-[denominator convention](eigenmode-epr.qmd#quantities-and-normalization) depend
+[denominator convention](../concepts/surface-epr.qmd#quantities-and-normalization) depend
 on backend; thin-film estimates contribute numerators and are not added to the
 denominator.
 

@@ -4,12 +4,14 @@ description: "Bind exact Nets as terminals and physical grounds, then prepare an
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/palace-electrostatic"
+aliases:
+  - ../course/palace-electrostatic.html
 ---
 
-For a complete extraction workflow, use a PDK notebook from [Choose a simulation](../examples.qmd#getting-started).
-This backend reference uses the `snapshot` from [source observations](source-observations.qmd).
+For a complete extraction workflow, use a PDK notebook from [Choose a simulation](../start/choose-a-simulation.qmd#getting-started).
+This backend reference uses the `snapshot` from [source observations](inspect-the-source.qmd).
 The branch asks for Electrostatic terminal response rather than resonant modes.
-The public OrPen [Xmon notebook group](../examples.qmd#public-inputs) owns the
+The public OrPen [Xmon notebook group](../start/choose-a-simulation.qmd#public-inputs) owns the
 component example; this lesson explains the reusable SCGSim stages.
 
 A Terminal identifies a conductor Net whose excitation enters the native
@@ -41,14 +43,14 @@ keeps the default recipe and states the default threshold, so you can see where
 to change it. Geometric order describes the mesh representation and is
 independent of Palace's FEM order. The controls, their defaults and what happens
 when the mesh cannot reach the threshold are in the shared
-[Palace mesh controls](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
+[Palace mesh controls](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
 The terminal and ground selectors are exact final Net IDs. They are not
 geometric center guesses. The explicit `error` policy makes uncovered conductor
 components an input error; the alternative supported `ground` policy grounds
 unassigned components. Choose the policy for your experiment. The exterior is
 left ungrounded here; `exterior_boundary_policy="ground"` is a separate model
-and requires the explicit error policy. [The contract](../specs/palace-electrostatic-sgb.qmd)
+and requires the explicit error policy. [The contract](../reference/specs/palace-electrostatic-sgb.qmd)
 owns these choices and their index-map meaning.
 
 ## Declare when refinement has converged
@@ -98,7 +100,7 @@ where it stopped, for example:
 The result is then pass 4's tables. A run that does not converge runs all seven
 solves and says so ("Palace ended by itself at its limit of 7 passes").
 
-The [convergence declaration](../specs/palace-electrostatic-sgb.qmd#convergence-declaration)
+The [convergence declaration](../reference/specs/palace-electrostatic-sgb.qmd#convergence-declaration)
 lists every quantity (the diagonal, sub-diagonals, the whole matrix, Surface EPR
 by interface kind) and every check.
 
@@ -121,12 +123,12 @@ removes the thickness and takes no parameters. For `substrate_face`, which
 preserves physical face coordinates, or `metal_gap_equivalent`, the separate
 supported two-face normalization, pass the profile with its explicit
 `film_bindings`: `sim.set_route("A", approximation_profile=profile)`. Route B
-needs no call. Consult the [geometry contract](../geometry-sgb.qmd) before
+needs no call. Consult the [geometry contract](../reference/specs/geometry-plan.qmd) before
 changing that approximation. Surface films are optional postprocessing specifications, with attributed
 thickness/permittivity/loss assumptions rather than inferred material
 measurements. Their inset margins are cut into the geometry, so request them
 on the plan with `plan.set_surface_epr(specs)` before `prepare()`; see the
-[margin contract](../specs/palace-eigenmode.qmd#surface-epr-margins).
+[margin contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins).
 
 The mesh is a real preparation operation. It can fail natively, and it stops
 with `MeshRepairError` when a tetrahedron stays below the quality threshold. Writing config
@@ -139,16 +141,16 @@ identities. Those records describe the mesh; they do not decide whether its
 discretization is adequate for a study.
 Before meshing, `sim.input_summary()` shows the input `mesh()` builds from (the
 plan with its vacuum region applied) with the terminals, grounds
-and policies; the [source summary](source-observations.qmd) is the view of the
+and policies; the [source summary](inspect-the-source.qmd) is the view of the
 plan alone.
 
-Next [inspect the prepared mesh](solver-observations.qmd) if useful, then
-[prepare and execute the handoff](execute.qmd). On return,
-[resolve it](returned-results.qmd) before reading the capacitance matrix. Native
+Next [inspect the prepared mesh](inspect-the-prepared-model.qmd) if useful, then
+[prepare and execute the handoff](run-elsewhere.qmd). On return,
+[resolve it](convergence-and-reports.qmd) before reading the capacitance matrix. Native
 terminal/excitation ordering and units remain authoritative; a prepared config
 contains no measured capacitance. State which terminal response your circuit
 question needs, then read that matrix entry and its available refinement
-history in the [research interpretation sequence](returned-results.qmd#interpret-for-scq-use).
+history in the [research interpretation sequence](convergence-and-reports.qmd#interpret-for-scq-use).
 Retain terminal excitation, physical/exterior ground choices, actual criteria
 and native status; a native stopping flag alone does not decide whether the
 capacitance is adequate for that circuit-model use.

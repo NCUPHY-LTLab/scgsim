@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/eigenmode-epr"
+aliases:
+  - ../eigenmode-epr.html
 ---
 
 共振模態會將能量儲存在場與電路元件中。能量參與率描述能量集中在哪些位置，並將模態場分布連結至特定介電質、介面與接面，協助判斷哪些模型通道可能造成損耗。
@@ -37,7 +39,7 @@ $$
 p_i = \frac{U_i}{U_{\mathrm{norm}}}.
 $$
 
-請一併檢視分子與分母。AEDT 使用唯一物理區域的電能，加上已宣告的接面電容能量。Palace 使用其最終原生電能區域與電容能量表。薄膜能量估算是分子，不會加回上述分母。[表面與接面公式](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)定義場慣例與各項支援物理量。
+請一併檢視分子與分母。AEDT 使用唯一物理區域的電能，加上已宣告的接面電容能量。Palace 使用其最終原生電能區域與電容能量表。薄膜能量估算是分子，不會加回上述分母。[表面與接面公式](../reference/specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)定義場慣例與各項支援物理量。
 
 各後端的物理意義也不同。Palace 回報帶正負號的原生端口參與率，數值取決於模態的相位慣例。AEDT 的電感 $p_L$ 與電容 $p_C$ 是非負能量比。這些量必須分別解讀，不應直接當作可互換的接面數值比較。
 
@@ -61,10 +63,10 @@ $$
 
 ## 內縮邊距 {#surface-distance-band-correction}
 
-Palace Surface EPR 以 `inset_margins_um` 提供內縮邊距：每個邊距 $m$ 會在整面基準列旁，多一列距最近 gap edge 至少 $m$ 的那部分表面。SGB 把這些部分切進幾何，一般的 Palace 對普通屬性積分；見[邊距契約](specs/palace-eigenmode.qmd#surface-epr-margins)。基準列一定存在。邊距列是同一表面的替代評估，不是互斥的帶，因此不可相加。
+Palace Surface EPR 以 `inset_margins_um` 提供內縮邊距：每個邊距 $m$ 會在整面基準列旁，多一列距最近 gap edge 至少 $m$ 的那部分表面。SGB 把這些部分切進幾何，一般的 Palace 對普通屬性積分；見[邊距契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)。基準列一定存在。邊距列是同一表面的替代評估，不是互斥的帶，因此不可相加。
 
 ## 探索結果 {#explore-a-result}
 
-請先完成[選擇模擬目標](examples.qmd#getting-started)中的共振／EPR 筆記本，再使用[離線 EPR](course/offline-epr.qmd)檢視已記錄模態並修訂損耗假設。[範例](examples.qmd)會將物理模型與後端流程連結起來。
+請先完成[選擇模擬目標](../start/choose-a-simulation.qmd#getting-started)中的共振／EPR 筆記本，再使用[離線 EPR](../guides/offline-loss.qmd)檢視已記錄模態並修訂損耗假設。[範例](../start/choose-a-simulation.qmd)會將物理模型與後端流程連結起來。
 
-綁定方式與 API 細節請參閱 [AEDT EPR 參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)與 [Palace Eigenmode 參考](specs/palace-eigenmode.qmd)。[報告參考](report-model.qmd#eigenmode-epr-presentation)說明選取方式、排序，以及基準值、遮罩邊距與不可取得物理量之間的區別。
+綁定方式與 API 細節請參閱 [AEDT EPR 參考](../reference/specs/aedt-runtime.qmd#public-epr-candidate-surface)與 [Palace Eigenmode 參考](../reference/specs/palace-eigenmode.qmd)。[報告參考](../reference/specs/report-model.qmd#eigenmode-epr-presentation)說明選取方式、排序，以及基準值、遮罩邊距與不可取得物理量之間的區別。

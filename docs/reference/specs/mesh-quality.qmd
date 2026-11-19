@@ -4,9 +4,11 @@ description: "The quality audit that mesh() runs, the report it writes, edge sta
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/mesh-quality"
+aliases:
+  - ../../mesh-quality.html
 ---
 
-For the preparation-stage reading sequence, use [solver observations](course/solver-observations.qmd). This page owns what a Palace run records about the quality of its mesh.
+For the preparation-stage reading sequence, use [solver observations](../../guides/inspect-the-prepared-model.qmd). This page owns what a Palace run records about the quality of its mesh.
 
 ## What `mesh()` audits {#audit}
 
@@ -16,11 +18,11 @@ condition number (minSICN) of each element, taken on the linear mesh before
 any elevation to the geometry order. Every tetrahedron must reach the mesh's
 `quality_threshold` (default `0.01`); elements below it are refined in the next
 round of the repair loop, within the budgets of
-[Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
+[Palace mesh controls](palace-electrostatic-sgb.qmd#palace-mesh-controls).
 A mesh that cannot be brought to the threshold stops `mesh()`, and no
 `palace.msh` is delivered. The sizes the audited mesh starts from, including
 those at film walls and on Surface-EPR band boundary curves, are the sizing
-recipe's ([Sizing recipes](specs/palace-electrostatic-sgb.qmd#palace-mesh-recipes)).
+recipe's ([Sizing recipes](palace-electrostatic-sgb.qmd#palace-mesh-recipes)).
 
 The threshold is the meshing module's acceptance check for a valid element. It
 is not a scientific acceptance gate: convergence of a result is read from the
@@ -51,7 +53,7 @@ order and the native element types of the mesh that was written.
 ## Edge statistics {#edge-statistics}
 
 The Palace
-[mesh summary](specs/palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)
+[mesh summary](palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)
 records each physical region's unique primary-corner edge count and minimum,
 mean, and maximum straight chord lengths in micrometres. These remain chords on
 curved high-order elements; they are not curved arc lengths or a higher-order

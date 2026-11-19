@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/backend-support"
+aliases:
+  - ../backend-support.html
 ---
 
 SCGSim 提供以下工作流程。求解器可能支援 SCGSim 未實作的其他問題類型。請先依所需物理量選擇計算方式，再選擇合適的來源與邊界模型。
@@ -13,10 +15,10 @@ SCGSim 提供以下工作流程。求解器可能支援 SCGSim 未實作的其�
 
 | Analysis | SCGSim 後端 | 輸入 | 回傳量 |
 |---|---|---|---|
-| [Electrostatic](conventions.qmd#term-electrostatic) | Palace | GeometryPlan、端點與接地 Net | 有序電容矩陣 |
-| [Eigenmode](conventions.qmd#term-eigenmode) | Palace | GeometryPlan、可選的電感端口 | 模態頻率／原生 Q 值、能量；指定的 EPR |
-| [Eigenmode](conventions.qmd#term-eigenmode) | HFSS | `modeling="solid"` 或 `"thin_film"`；GeometryPlan 的 SGB 模型（`EigenmodeSim`、`prepare_hfss_eigenmode_from_geometry`） | 模態頻率／原生 Q 值；指定的 EPR |
-| [Driven Terminal](conventions.qmd#term-driven-terminal) | HFSS | `modeling="solid"` 或 `"thin_film"`；帶兩個 `LumpedTerminalPort` 端口面片的 GeometryPlan SGB 模型（`prepare_hfss_driven_from_geometry`） | 複數 S 參數、CSV 與 Touchstone |
+| [Electrostatic](terms-and-units.qmd#term-electrostatic) | Palace | GeometryPlan、端點與接地 Net | 有序電容矩陣 |
+| [Eigenmode](terms-and-units.qmd#term-eigenmode) | Palace | GeometryPlan、可選的電感端口 | 模態頻率／原生 Q 值、能量；指定的 EPR |
+| [Eigenmode](terms-and-units.qmd#term-eigenmode) | HFSS | `modeling="solid"` 或 `"thin_film"`；GeometryPlan 的 SGB 模型（`EigenmodeSim`、`prepare_hfss_eigenmode_from_geometry`） | 模態頻率／原生 Q 值；指定的 EPR |
+| [Driven Terminal](terms-and-units.qmd#term-driven-terminal) | HFSS | `modeling="solid"` 或 `"thin_film"`；帶兩個 `LumpedTerminalPort` 端口面片的 GeometryPlan SGB 模型（`prepare_hfss_driven_from_geometry`） | 複數 S 參數、CSV 與 Touchstone |
 | Finite 3D extraction | Q3D | `modeling="solid"` 或 `"thin_film"`；GeometryPlan 的 SGB 模型（`prepare_q3d_from_geometry`，C/G） | C/G 萃取矩陣 |
 | Cross-section extraction | Q2D | 明確指定的矩形與導體群組 | 每單位長度 C/G/L/R 區塊 |
 
@@ -24,7 +26,7 @@ SCGSim 提供以下工作流程。求解器可能支援 SCGSim 未實作的其�
 
 每個新的 Q3D 與 HFSS 3D 請求都必須明確選擇建模表示法，沒有預設值。HFSS 與 Q3D 匯入 Palace 所網格化的同一個 SGB 模型的 STEP；SCGSim 不自行建構 AEDT 幾何。HFSS Driven Modal 端口，以及位於 Region 面上的 Driven Terminal wave 端口，目前在 SGB 模型上還沒有實現方式：宣告這類端口的請求會被拒絕，追蹤於 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)。Q3D 只擷取 C/G；此版本尚未提供 AC/RL，追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)。AEDT 請求也必須明確指定 `aedt_version` 為 `"2023.2"` 或 `"2024.2"`；兩者都使用 PyAEDT 1.3.0，且所選 AEDT Desktop 必須與 SCGSim 在同一部主機上執行。此表列出支援的請求類型與預期回傳量，並非新表示法的求解器實測結果。
 
-Prepared-native BatchSolve 是既有 HFSS EPR 工作流程的另一種執行方式。請在工作站的 Desktop 交易中準備並收集原生模型；求解主機只執行封裝後的求解器階段，且須具備明確指定的相同 AEDT 版本、命令列求解器與可用的求解器授權。求解主機不需要 PyAEDT，也不需要可用的 Desktop 工作階段。此方式不會變更 HFSS 模型或 EPR 請求，也不會提交排程工作。[HPC EPR 參數掃描指南](course/aedt-hpc-sweep.qmd)說明如何一併傳送多個獨立套件；[AEDT 執行環境契約](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)說明完整回傳規則。
+Prepared-native BatchSolve 是既有 HFSS EPR 工作流程的另一種執行方式。請在工作站的 Desktop 交易中準備並收集原生模型；求解主機只執行封裝後的求解器階段，且須具備明確指定的相同 AEDT 版本、命令列求解器與可用的求解器授權。求解主機不需要 PyAEDT，也不需要可用的 Desktop 工作階段。此方式不會變更 HFSS 模型或 EPR 請求，也不會提交排程工作。[HPC EPR 參數掃描指南](../guides/hpc-sweep.qmd)說明如何一併傳送多個獨立套件；[AEDT 執行環境契約](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)說明完整回傳規則。
 
 Palace Driven 與 Magnetostatic 未實作；Meep 不屬於 SCGSim 範圍。Palace 的[原生問題類型](https://awslabs.github.io/palace/stable/guide/problem/)涵蓋本表以外的計算。[PyAEDT 使用者指南](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html)介紹底層 AEDT 自動化函式庫。
 
@@ -37,7 +39,7 @@ AEDT 可使用保留的原生儲存場計算 EPR，無須重新求解本徵模�
 ## Palace 執行檔功能
 
 Surface EPR 的邊距列是涵蓋 SGB 切進幾何之各帶的普通 `Dielectric` 列，因此一般的 Palace 執行檔就能計算。SCGSim 不寫出原生 `Mask` 或 `Inset` 設定。[Palace
-本徵模指南](course/palace-eigenmode.qmd#surface-epr-margin-rows)示範如何要求這些列。
+本徵模指南](../guides/modes-palace.qmd#surface-epr-margin-rows)示範如何要求這些列。
 
 ## 來源與結果的差異 {#source-and-result-differences}
 
@@ -45,4 +47,4 @@ Palace、HFSS 本徵模、HFSS Driven Terminal 與 Q3D C/G 共用 GeometryPlan�
 
 Palace 與 AEDT 的來源路徑支援定義的線段與圓弧，以及由呼叫端選擇的圓弧 GDS 邊界重建；`interpolation_spline` 與 `bspline` 曲線會引發 `UnsupportedCurveError`。這些輸入會保留其來源 Entity 與出現位置識別資訊，再由 `scgsim.geometry.sgb` 建成幾何；Palace 對該模型產生網格，AEDT 則從模型的 STEP 匯入這些精確的圓弧。Palace 的 `MesherOptions.geometry_order` 控制幾何網格表示法，與場問題使用的 FEM 階數分開。這些控制項及回傳的網格摘要描述的是網格生成方式，不代表求解器準確度。
 
-請從[教學](examples.qmd)開始。支援請求的確切規格見 [Palace Electrostatic](specs/palace-electrostatic-sgb.qmd)、[Palace Eigenmode](specs/palace-eigenmode.qmd) 與 [AEDT 執行環境類型](specs/aedt-runtime.qmd)。
+請從[教學](../start/choose-a-simulation.qmd)開始。支援請求的確切規格見 [Palace Electrostatic](specs/palace-electrostatic-sgb.qmd)、[Palace Eigenmode](specs/palace-eigenmode.qmd) 與 [AEDT 執行環境類型](specs/aedt-runtime.qmd)。

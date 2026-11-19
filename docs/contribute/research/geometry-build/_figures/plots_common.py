@@ -12,11 +12,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, LogLocator
 
-ROOT = Path(__file__).resolve().parents[4]
-DATA = ROOT / "zh-TW/docs/design/sgb/figures"
+ROOT = Path(__file__).resolve().parents[5]
+DATA = ROOT / "zh-TW/docs/contribute/sgb-design/figures"
 OUTPUT = {
-    "en": ROOT / "docs/research/geometry-build/figures",
-    "zh-TW": ROOT / "zh-TW/docs/research/geometry-build/figures",
+    "en": ROOT / "docs/contribute/research/geometry-build/figures",
+    "zh-TW": ROOT / "zh-TW/docs/contribute/research/geometry-build/figures",
 }
 
 CHINESE_FONTS = (

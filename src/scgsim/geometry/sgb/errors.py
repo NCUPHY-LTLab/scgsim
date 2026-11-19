@@ -3,7 +3,7 @@
 No fallback geometry is ever produced: a source or planning defect surfaces as
 one of these errors, naming the entities and the location involved, and saying who
 must change what.  A caller catches any of the nine classes of ``__all__`` from this
-module (``docs/supported-scope.qmd`` names it).  Six are SGB's own and are defined here.
+module (``docs/reference/supported-scope.qmd`` names it).  Six are SGB's own and are defined here.
 The base class and the two refusals of the exact kernel (``SgbError``, ``InputError``,
 ``UnsupportedCurveError``) are defined in ``scgsim.geometry.exact.errors``, the earliest
 folder that raises them, and listed here for the caller; code inside ``scgsim`` imports

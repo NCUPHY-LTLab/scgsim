@@ -5,6 +5,8 @@ description: "direct BREP writer 與透過 Gmsh API 建構同一份幾何的比�
 scgsim-kind: "research"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/research/geometry-build/emission-and-load"
+aliases:
+  - ../../../research/geometry-build/emission-and-load.html
 ---
 
 **問題。**direct BREP writer 比透過 Gmsh API 建構同一份幾何快多少？推導完成之後，寫出檔案、報告與 sidecar、在 Gmsh 載入，以及檢查載入後的模型，又各要花多少時間？

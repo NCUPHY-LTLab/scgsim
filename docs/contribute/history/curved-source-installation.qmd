@@ -4,10 +4,12 @@ description: "Pinned source and native-solver setup recorded for the Circular Pa
 scgsim-kind: "history"
 scgsim-status: "HISTORICAL"
 scgsim-id: "docs/history/curved-source-installation"
+aliases:
+  - ../../history/curved-source-installation.html
 ---
 
 ::: {.callout-important title="This setup no longer applies"}
-SCGSim 3 runs stock Palace 0.18.1 and needs no Palace fork. This page only explains how an older result was made; to simulate with SCGSim `3.0.0rc4`, follow the [installation lesson](../course/installation.qmd).
+SCGSim 3 runs stock Palace 0.18.1 and needs no Palace fork. This page only explains how an older result was made; to simulate with SCGSim `3.0.0rc4`, follow the [installation lesson](../../start/install.qmd).
 :::
 
 Use this page only to reproduce the historical Circular Pad Uniform-port study. It records SCGSim `1.1.0rc1`, the OrPen SC PDK producer used for execution, and a specific Palace fork; keep this study in its own project environment.

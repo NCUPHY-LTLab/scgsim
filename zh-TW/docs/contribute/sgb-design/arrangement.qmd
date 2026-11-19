@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/arrangement"
+aliases:
+  - ../../design/sgb/arrangement.html
 ---
 
 SGB 把一組精確的曲線變成一個 **arrangement**：一個 planar graph，它的 vertex 全都落在同一個格點上、edge 彼此不交叉，而每條 edge 仍記得它所來自的精確曲線。做法是帶 exact carrier 的 snap rounding，production 實作在 `scgsim.geometry.sgb.arrangement.noding` 與 `arrangement`（整數運算的 iterated snap rounding、half-edge 結構與圓弧的 realisation）。本頁先在一個小範例上走完每一步（以 production 的 noding kernel 逐 round 執行），再說明哪些性質是保證的、哪些是量測的、成本多少，以及圓弧如何納入。
@@ -179,7 +181,7 @@ witness 的代價是大小。半徑為 $r$ 的 quarter arc 約需要 $\sqrt{r/g}
 
 ## 補充：重現資料
 
-本頁的圖與數字是**計算所得**，全部來自 production `scgsim.geometry.sgb`。scaling 與 pipeline 大小的數字取自 `why_scaling.py measure` 的結果 `figures/why-scaling-measured.json`（seed 2 的隨機 layout）。逐步範例由 `docs/design/sgb/_figures/arrangement_steps.py` 產生，數字在 `figures/arrangement-steps-numbers.json`；腳本逐個 round 執行 production 的 noding kernel，並檢查最後的 edge 集合等於 `snap_round` 的結果。保證、drift、成本與圓弧 witness 由 `arrangement_guarantees.py` 產生，數字在 `figures/arrangement-guarantees-numbers.json`；執行範例的數字由該腳本對 production 模型建立 sliver report 與 level 統計得到。
+本頁的圖與數字是**計算所得**，全部來自 production `scgsim.geometry.sgb`。scaling 與 pipeline 大小的數字取自 `why_scaling.py measure` 的結果 `figures/why-scaling-measured.json`（seed 2 的隨機 layout）。逐步範例由 `zh-TW/docs/contribute/sgb-design/_figures/arrangement_steps.py` 產生，數字在 `figures/arrangement-steps-numbers.json`；腳本逐個 round 執行 production 的 noding kernel，並檢查最後的 edge 集合等於 `snap_round` 的結果。保證、drift、成本與圓弧 witness 由 `arrangement_guarantees.py` 產生，數字在 `figures/arrangement-guarantees-numbers.json`；執行範例的數字由該腳本對 production 模型建立 sliver report 與 level 統計得到。
 
 ::: {.askr-table-compact .askr-table-numeric}
 | N | Hot pixel 數 | Level arrangement 的 edge 數 | Slab arrangement 的 edge 數 | noding kernel（階段 wall time，s） | noding driver（s） | DCEL（s） |

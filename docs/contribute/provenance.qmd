@@ -4,6 +4,8 @@ description: "Source and result identity categories plus public/private publicat
 scgsim-kind: "contract"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/provenance"
+aliases:
+  - ../provenance.html
 ---
 
 ## Public provenance contract
@@ -29,7 +31,7 @@ module under `scgsim/aedt` and the two AEDT visualization loaders, recorded
 under `runtime-source.v30`. Preparation and execution record their module
 bytes and content digest separately. A result whose runtime source has an
 earlier schema is refused; read it with the SCGSim commit that wrote it
-([AEDT runtime source](specs/aedt-runtime.qmd#runtime-source)).
+([AEDT runtime source](../reference/specs/aedt-runtime.qmd#runtime-source)).
 
 The current Palace geometry authority is `scgsim.geometry.sgb`. Palace
 continues to serialize the established `scgsim_sgb` field, whose current value

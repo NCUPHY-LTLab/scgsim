@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/layered-model"
+aliases:
+  - ../../design/sgb/layered-model.html
 ---
 
 SGB 處理的模型是有限個 **prism** 的集合：晶片在 **level** 處被切成 **slab**，每個 level 與每個 slab 各有一個 planar arrangement。這些 arrangement 是**局部**的：每一個只收納在三維空間中真正相遇的曲線，而不是把所有層投影到同一個平面。本頁先用執行範例說明 level、slab 與 active set，再說明為什麼局部的做法能避免 phantom sliver。詞彙彙整在[詞彙表](index.qmd#glossary)。
@@ -170,8 +172,8 @@ airbridge 有七個 prism：substrate、vacuum、兩半 ground、兩根 post 與
 
 本頁的圖與數字是**計算所得**，來自 production `scgsim.geometry.sgb`（執行範例是 `tests/sgb_scenes.py` 的 `pad_in_ground` 加上放在 $z = 0$ 的 port，延伸範例是同檔的 `airbridge()`）：
 
-- `docs/design/sgb/_figures/layered_model.py` 產生 level 與 slab 的剖面、arrangement 比較、wall 計數（含 port 在 $z = 0.1$ 的 stage scene）與 airbridge 的 3D 圖，數字在 `figures/layered-numbers.json`。
-- `docs/design/sgb/_figures/layered_phantom.py` 產生兩層金屬的 phantom sliver 範例，數字在 `figures/layered-phantom-numbers.json`。
+- `zh-TW/docs/contribute/sgb-design/_figures/layered_model.py` 產生 level 與 slab 的剖面、arrangement 比較、wall 計數（含 port 在 $z = 0.1$ 的 stage scene）與 airbridge 的 3D 圖，數字在 `figures/layered-numbers.json`。
+- `zh-TW/docs/contribute/sgb-design/_figures/layered_phantom.py` 產生兩層金屬的 phantom sliver 範例，數字在 `figures/layered-phantom-numbers.json`。
 - 全域投影是以一個 snap rounding 後的 arrangement 包含所有 footprint 曲線；局部 arrangement 是 production `build_model_from_catalogue` 的結果。
 
 下一頁[建立 arrangement](arrangement.qmd) 說明一個 arrangement 的曲線如何被 node 到格點上；[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 說明哪些 edge 會被保留；[從 arrangement 到 solid](assembly.qmd) 由共用的 edge 建立 face、wall 與 volume。

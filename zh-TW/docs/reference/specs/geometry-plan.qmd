@@ -5,13 +5,15 @@ scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/geometry-sgb"
 lang: zh-TW
+aliases:
+  - ../../geometry-sgb.html
 ---
 
-來源順序請見[共用 Xmon 輸入](tutorial-xmon-input.qmd)及[來源觀察](course/source-observations.qmd)。[SGB 幾何概念](concepts/geometry.qmd#source-stage) 說明來源、規劃及建構階段；本頁負責它們的確切契約。
+來源順序請見[共用 Xmon 輸入](../../guides/xmon/inputs.qmd)及[來源觀察](../../guides/inspect-the-source.qmd)。[SGB 幾何概念](../../concepts/geometry.qmd#source-stage) 說明來源、規劃及建構階段；本頁負責它們的確切契約。
 
 樹內 `scgsim.geometry` API 是 SCGSim 目前的來源幾何權威。它使用結構化 PDK 與元件語意，不從求解器產生的標籤重建幾何意義。
 
-`scgsim.geometry` 是面向來源的外觀介面：`GeometryPlan`、獨立快照、正規化輸入模型、轉接器、堆疊／真空／曲線準備及摘要。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立此幾何，並用 `scgsim.meshing` 產生網格。SGB 位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。來源驗證器定義於 `scgsim.geometry.source.validation`。直接定義模組及模型別名列於 [API 遷移參考](api-migration.qmd#geometry-api)。
+`scgsim.geometry` 是面向來源的外觀介面：`GeometryPlan`、獨立快照、正規化輸入模型、轉接器、堆疊／真空／曲線準備及摘要。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立此幾何，並用 `scgsim.meshing` 產生網格。SGB 位於支援的入口以下：版圖經由 `GeometryPlan` 與模擬類別進入；以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援的入口](../supported-scope.qmd#supported-entry)。來源驗證器定義於 `scgsim.geometry.source.validation`。直接定義模組及模型別名列於 [API 遷移參考](../../guides/upgrade.qmd#geometry-api)。
 
 `GeometryPlan` 組合兩個明確權威。PDK `LayerStack` 紀錄提供材料、製程層、Z／厚度、導體／求解角色及確切宿主體積。元件註記提供局部實體身分、埠、功能導體區域及拓撲選取器。Notebook 組合具名出現實例並指派最終 Net 映射，不手動指定 PDK 或元件事實。
 
@@ -21,7 +23,7 @@ lang: zh-TW
 
 ## 共用物理來源與表示 {#physical-representation}
 
-[物理表示契約](specs/physical-representation.qmd) 區分來源物理分類及選定求解器表示。單一中性計畫將每個原始 Entity 與物理層，綁定至有效幾何、支撐及完整包絡追蹤。本體保留實際來源端點及孔洞；名義層跨度不能取代本體。缺少合格接觸或宿主關聯時，保留缺項，不加推論。
+[物理表示契約](physical-representation.qmd) 區分來源物理分類及選定求解器表示。單一中性計畫將每個原始 Entity 與物理層，綁定至有效幾何、支撐及完整包絡追蹤。本體保留實際來源端點及孔洞；名義層跨度不能取代本體。缺少合格接觸或宿主關聯時，保留缺項，不加推論。
 
 Palace 與 AEDT 使用同一個選定解讀。不同明確近似設定保留不同近似意義；來源附著法向不決定原生 HFSS 場側選取。歷史紀錄的來源與執行期同批產物，保留原始解讀與身分。
 
@@ -31,7 +33,7 @@ Palace 與 AEDT 使用同一個選定解讀。不同明確近似設定保留不�
 
 `SourceCurveSpec` 以微米描述 XY 座標。其類型為 `line_segment`（兩端點）、`circular_arc`（起點、弧上點、終點）、`interpolation_spline`（通過提供點的原生插值），以及 `bspline`（控制點及明確階數，並在提供時包含有理權重、不同節點及重數）。選用的 `parameter_interval` 修剪原生來源曲線，不縮放或重新擬合幾何。控制點不是拓撲頂點。`circular_arc` 轉換為原生定義域 `[0, 1]` 上單一精確複合有理 B-spline；內部節點分隔精確區段，修剪可跨越這些節點。呼叫端指定 `bspline` 時，所提供階數、權重、節點、重數及原生參數定義域維持權威。
 
-Palace 所用的幾何建構器（SGB）處理 `line_segment` 與 `circular_arc`。它以 `UnsupportedCurveError` 拒絕 `interpolation_spline` 或 `bspline` 宣告，以及 `circular_arc` 以外的邊界重建。供 SGB 使用的版圖請以線段、圓弧或[多邊形](supported-geometry.qmd#curve-rule)繪製。
+Palace 所用的幾何建構器（SGB）處理 `line_segment` 與 `circular_arc`。它以 `UnsupportedCurveError` 拒絕 `interpolation_spline` 或 `bspline` 宣告，以及 `circular_arc` 以外的邊界重建。供 SGB 使用的版圖請以線段、圓弧或[多邊形](../supported-geometry.qmd#curve-rule)繪製。
 
 `BoundaryCurveChainSpec` 將有序閉合邊界綁定至 `entity_id`、`boundary_id` 及 `selector_point_um`。選取點位於所選 Entity 擁有的**正導體區域**。複合來源多邊形在選取前先聯集為邏輯多邊形，包含以橋接方式編碼的 GDS 孔洞。`role="outer"` 選取外環；`role="hole", hole_index=0` 選取同一多邊形紀錄的第一個孔洞。孔洞選取點仍位於導體內，不在空孔內。孔洞順序與來源方向隨出現實例傳遞；原生標記不識別 Entity、Net 或來源邊界。
 
@@ -41,7 +43,7 @@ Palace 所用的幾何建構器（SGB）處理 `line_segment` 與 `circular_arc`
 
 SGB 把宣告的線段與圓弧在整數格點上建成單一精確平面排列，沿指定堆疊擠出，並自行寫出 BREP 與 XAO 檔；過程中不執行 OCC 布林運算，也不修復殼。每個面在 sidecar 中保留來源身分；Gmsh 只在產生網格之前開啟寫出的 XAO 加以檢查。建構錯誤會停止建構，沒有直線邊備援，也沒有體積修復。
 
-幾何階數與有限元素階數是不同選擇。曲面模型幾何不會讓正表面內縮成為精確曲線周界距離；請見 [EPR 解讀](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions)。
+幾何階數與有限元素階數是不同選擇。曲面模型幾何不會讓正表面內縮成為精確曲線周界距離；請見 [EPR 解讀](../../concepts/surface-epr.qmd#surface-identity-masks-and-loss-assumptions)。
 
 Palace 在 Route A 或 Route B 上透過 SGB 建構宣告的線段與圓弧，AEDT 則在其 SGB 模型的 STEP 中以精確圓弧匯入它們；其他曲線類型會引發 `UnsupportedCurveError`。
 
@@ -104,7 +106,7 @@ Q3D GeometryPlan 前端屬於公開 API。識別的 `airbridge_deck` 及 `airbri
 
 Palace 模擬接受 Route A 與 Route B：`set_route` 與 `mesh()` 會以 `ValueError` 拒絕其他路徑。Route C 供保留導體體積的後端使用。AEDT 匯入同一個 SGB 模型的 STEP：`modeling="thin_film"` 建構 Route A 模型，`modeling="solid"` 建構 Route C 模型。
 
-Surface EPR 邊距的條帶由 SGB 在 `mesh()` 建立幾何時切進模型；請見[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。
+Surface EPR 邊距的條帶由 SGB 在 `mesh()` 建立幾何時切進模型；請見[本徵模態契約](palace-eigenmode.qmd#surface-epr-margins)。
 
 ## 2D 模型 {#section-models}
 
@@ -116,7 +118,7 @@ from scgsim.geometry.models.section import CutLine
 cut = CutLine(start_um=(0.0, -91.0), end_um=(0.0, 91.0))
 ```
 
-`CutLine` 是平面組裝座標系（也就是選取點所用的座標系）中沿 x 或 y 的直線段，單位為微米。截面有自己的座標系：`u` 是沿切線與 `start_um` 的距離，第二個座標是堆疊高度 `z`，兩者單位皆為微米。SGB 在記憶體中以 `SectionModel` 保存截面，由 `scgsim.geometry.sgb.section.build_section_model(model, cut)` 從已驗證的 3D 模型建立。3D 模型一律是整個版圖，所以[支援範圍](supported-scope.qmd)中每一條建構階段規則都套用於整個版圖，離切線很遠處也一樣。
+`CutLine` 是平面組裝座標系（也就是選取點所用的座標系）中沿 x 或 y 的直線段，單位為微米。截面有自己的座標系：`u` 是沿切線與 `start_um` 的距離，第二個座標是堆疊高度 `z`，兩者單位皆為微米。SGB 在記憶體中以 `SectionModel` 保存截面，由 `scgsim.geometry.sgb.section.build_section_model(model, cut)` 從已驗證的 3D 模型建立。3D 模型一律是整個版圖，所以[支援範圍](../supported-scope.qmd)中每一條建構階段規則都套用於整個版圖，離切線很遠處也一樣。
 
 截面只遵循一條規則：2D 模型的每個部分，都是 3D 模型某個部分的軌跡。
 

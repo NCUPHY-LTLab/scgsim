@@ -4,13 +4,15 @@ description: "依照要計算的物理量，選擇一份完整的 SCGSim 筆記�
 scgsim-kind: "start"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
+aliases:
+  - ../examples.html
 ---
 
-SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別資訊的回傳結果。完整的元件模擬筆記本屬於 OrcaPen SC PDK，由它負責元件、設定與 SCGSim 環境。請依所需物理量選擇筆記本。API 參數與來源版本配對方式請見[參考指南](knowledge-guide.qmd)。
+SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別資訊的回傳結果。完整的元件模擬筆記本屬於 OrcaPen SC PDK，由它負責元件、設定與 SCGSim 環境。請依所需物理量選擇筆記本。API 參數與來源版本配對方式請見[參考指南](install.qmd)。
 
 ## 選擇模擬目標 {#getting-started}
 
-每一列都連結 PDK 版本 `49e539f` 的筆記本來源，也就是[首頁](../index.qmd)安裝的版本。
+每一列都連結 PDK 版本 `49e539f` 的筆記本來源，也就是[首頁](../../index.qmd)安裝的版本。
 
 | 你會得到 | PDK 筆記本 |
 |---|---|
@@ -18,17 +20,17 @@ SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別�
 | SimplePad 的模態頻率，以及每個模態的表面、體積與支路能量參與率 | [Palace Eigenmode 與 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd)・[HFSS Eigenmode 與表面 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
 | 有限接地 CPW 橫截面的單位長度 C、G、L 與 R 矩陣 | [AEDT Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.qmd) |
 
-PDK 沒有有限接地 CPW 雙埠 S 參數的現行筆記本；其 HFSS Driven Terminal 筆記本使用 [17 座橋的 CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge)，而 [Driven Terminal](course/aedt-driven-terminal.qmd) 教學會準備使用集總埠的雙埠請求。此版本尚未提供 Driven Modal 與波埠。
+PDK 沒有有限接地 CPW 雙埠 S 參數的現行筆記本；其 HFSS Driven Terminal 筆記本使用 [17 座橋的 CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge)，而 [Driven Terminal](../guides/s-parameters-hfss.qmd) 教學會準備使用集總埠的雙埠請求。此版本尚未提供 Driven Modal 與波埠。
 
-模擬自己的版圖之前，請先閱讀[支援範圍](supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。
+模擬自己的版圖之前，請先閱讀[支援範圍](../reference/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。
 
 ## 準備模型並讀取回傳結果
 
-從[安裝](course/installation.qmd)開始，再依物理問題選擇明確的幾何、材料、導體與埠。[模型與材料參考](reference.qmd#model-materials)及[導體與埠參考](reference.qmd#conductors-ports)說明這些選擇。請使用[回傳結果教學](course/returned-results.qmd)，一併保留回傳量、單位、模態或導體識別資訊及求解器狀態。
+從[安裝](install.qmd)開始，再依物理問題選擇明確的幾何、材料、導體與埠。[模型與材料參考](../reference/index.qmd#model-materials)及[導體與埠參考](../reference/index.qmd#conductors-ports)說明這些選擇。請使用[回傳結果教學](../guides/convergence-and-reports.qmd)，一併保留回傳量、單位、模態或導體識別資訊及求解器狀態。
 
 ## 探索較大型範例 {#public-inputs}
 
-較深入的 Xmon 與 CPW 來源筆記本固定使用公開 OrPen SC PDK 版本 [`49e539fd59f3224ecda965d777c7ec3aadcc3b85`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85)，也就是[首頁](../index.qmd)安裝的版本。該版本宣告 `orcapen-sc-pdk` `1.0.0`（匯入名稱為 `orcapen_sc_pdk`）與 GDSFactory 9.48.x。在此版本中，PDK 將 SCGSim 範例放在 `SCGSimExamples/` 之下；Xmon 來源與 CPW Driven Terminal 來源位於其 `ComponentSimulation/` 群組。請依各範例指定的來源版本操作。
+較深入的 Xmon 與 CPW 來源筆記本固定使用公開 OrPen SC PDK 版本 [`49e539fd59f3224ecda965d777c7ec3aadcc3b85`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85)，也就是[首頁](../../index.qmd)安裝的版本。該版本宣告 `orcapen-sc-pdk` `1.0.0`（匯入名稱為 `orcapen_sc_pdk`）與 GDSFactory 9.48.x。在此版本中，PDK 將 SCGSim 範例放在 `SCGSimExamples/` 之下；Xmon 來源與 CPW Driven Terminal 來源位於其 `ComponentSimulation/` 群組。請依各範例指定的來源版本操作。
 
 | 公開筆記本群組 | 用途 |
 |---|---|
@@ -41,10 +43,10 @@ PDK 沒有有限接地 CPW 雙埠 S 參數的現行筆記本；其 HFSS Driven T
 
 ## 繼續閱讀主題參考
 
-- 請從[參考指南](knowledge-guide.qmd)查找來源版本配對方式與公開 API 參考資料。
+- 請從[參考指南](install.qmd)查找來源版本配對方式與公開 API 參考資料。
 
-- 準備後端前，先[檢查來源與幾何](course/source-observations.qmd)。
-- 請在請求與預期模型不同時[檢查準備後的輸入](course/solver-observations.qmd)。
-- 在指定求解主機上[準備並執行可攜式交接](course/execute.qmd)。
-- 請在已記錄的 EPR 資料上[讀取 AEDT 儲存場](course/aedt-saved-fields.qmd)或[離線更新損耗假設](course/offline-epr.qmd)。
-- 深入來源綁定時，請參閱 [Xmon 輸入](tutorial-xmon-input.qmd)、[Palace EPR](tutorial-xmon-palace.qmd)及 [HFSS EPR](tutorial-xmon-aedt.qmd)範例。
+- 準備後端前，先[檢查來源與幾何](../guides/inspect-the-source.qmd)。
+- 請在請求與預期模型不同時[檢查準備後的輸入](../guides/inspect-the-prepared-model.qmd)。
+- 在指定求解主機上[準備並執行可攜式交接](../guides/run-elsewhere.qmd)。
+- 請在已記錄的 EPR 資料上[讀取 AEDT 儲存場](../guides/saved-fields.qmd)或[離線更新損耗假設](../guides/offline-loss.qmd)。
+- 深入來源綁定時，請參閱 [Xmon 輸入](../guides/xmon/inputs.qmd)、[Palace EPR](../guides/xmon/palace.qmd)及 [HFSS EPR](../guides/xmon/aedt.qmd)範例。

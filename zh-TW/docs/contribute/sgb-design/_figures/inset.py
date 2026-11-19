@@ -1,15 +1,15 @@
-"""Figures and tables for ``docs/design/sgb/inset-imprint.qmd``.
+"""Figures and tables for ``zh-TW/docs/contribute/sgb-design/inset-imprint.qmd``.
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/inset.py
+    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/inset.py
 
 Every geometry figure is computed by the production package: the pad-in-ground running example
 (``tests/sgb_scenes.py::pad_in_ground``, its lumped port on the support plane z = 0) is built with
 Surface-EPR inset bands through ``build_model_from_catalogue`` and read from the labelled level arrangement,
 the assembled topology and the route plan.  The KLayout cross-check uses the test-side oracle
 ``tests/sgb_klayout.py``; the mesh check meshes the written XAO with Gmsh (no Palace and no AEDT is run).
-Outputs go to ``docs/design/sgb/figures/`` with the prefix ``inset-``:
+Outputs go to ``zh-TW/docs/contribute/sgb-design/figures/`` with the prefix ``inset-``:
 
 * ``inset-erosion-construction``  corner rule on large margins (computed with margins 1.5, 3, 6 um)
 * ``inset-bands-pad``             the z = 0 level arrangement with bands (margins 0.1, 0.5, 2 um); html + svg

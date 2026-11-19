@@ -4,13 +4,15 @@ description: "Solver-metadata-bound preview APIs, artifact identity and explicit
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/geometry-preview"
+aliases:
+  - ../geometry-preview.html
 ---
 
-For stage-by-stage use, follow [solver observations](course/solver-observations.qmd). This page owns preview binding and availability.
+For stage-by-stage use, follow [solver observations](inspect-the-prepared-model.qmd). This page owns preview binding and availability.
 
 ## Purpose and ownership
 
-The [SGB geometry concept](concepts/geometry.qmd#construction-stage) explains
+The [SGB geometry concept](../concepts/geometry.qmd#construction-stage) explains
 how the source becomes the solver-bound geometry inspected here.
 
 SCGSim provides two views of the same solver-bound semantic scene. An inline
@@ -30,7 +32,7 @@ override. Both paths use the selected same-node AEDT compatibility context and
 the owned-Desktop cleanup lifecycle.
 Palace previews retain high-order connectivity and curved boundary
 representation. The preview does not compute mesh quality; the
-[meshing audit](mesh-quality.qmd) measures it on the linear mesh before
+[meshing audit](../reference/specs/mesh-quality.qmd) measures it on the linear mesh before
 elevation.
 
 ## Public surface

@@ -9,7 +9,7 @@ The scripts compute with the production package (branch ``claude/sgb-core``).  R
 and point ``SGB_CORE`` at the checkout; its ``tests/`` folder is put on ``sys.path`` at run time for the test-side
 builders ``sgb_inputs`` (real inputs), ``sgb_scenes`` (stage-level scenes) and ``sgb_emit_cases`` (named models)::
 
-    SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/<script>.py
+    SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/<script>.py
 """
 
 from __future__ import annotations

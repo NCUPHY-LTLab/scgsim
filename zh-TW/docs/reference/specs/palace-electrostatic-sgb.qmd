@@ -5,6 +5,8 @@ scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/specs/palace-electrostatic-sgb"
 lang: zh-TW
+aliases:
+  - ../../specs/palace-electrostatic-sgb.html
 ---
 
 本契約涵蓋 Palace 靜電分析後端：Route A／B 轉換、交接、Slurm 執行、嚴格結果解析與報告摘要，以及兩個 Palace 外觀介面共用的網格控制。
@@ -59,7 +61,7 @@ prepare shared GeometryPlan snapshot
 SGB 寫出的 XAO（位於 `geometry/`）也可以交給其他工具產生網格；直接使用 Gmsh 已在 SCGSim 的單晶片與覆晶測試模型上試過，可以完成網格化。這不是官方支援的流程，本頁也不說明這樣產生的網格如何銜接 SCGSim 的後續步驟。
 :::
 
-網格器啟動之前，`mesh()` 會對自己建出的幾何執行 `simulation_drc` 的網格階段。有拒絕項目時，拋出 `scgsim.palace.SimulationDrcError`，並附上列出每項發現的位置、負責方與修改方式的報告，且不產生網格；只有警告時，`mesh()` 不會停止。類別與界限見[網格階段回報什麼](../layout-modeling-check.qmd#what-the-meshing-stage-reports)。以下網格控制適用於通過檢查的模型。
+網格器啟動之前，`mesh()` 會對自己建出的幾何執行 `simulation_drc` 的網格階段。有拒絕項目時，拋出 `scgsim.palace.SimulationDrcError`，並附上列出每項發現的位置、負責方與修改方式的報告，且不產生網格；只有警告時，`mesh()` 不會停止。類別與界限見[網格階段回報什麼](../../guides/check-a-layout.qmd#what-the-meshing-stage-reports)。以下網格控制適用於通過檢查的模型。
 
 ::: {.askr-table-compact}
 | 控制 | 預設值 | 意義 |
@@ -91,7 +93,7 @@ SGB 寫出的 XAO（位於 `geometry/`）也可以交給其他工具產生網格
 | `GmshDefaultRecipe` | 不設任何自己的尺寸：由 Gmsh 以自身預設值產生一次網格，沒有最大元素尺寸，也不做修復。無論 minSICN 多低，網格都會交付，報告只記錄其品質，因此不保證網格品質；四面體與時間預算仍然適用。它絕不是預設配方，須以 `set_mesh(recipe=GmshDefaultRecipe())` 明確選用。 | 無 |
 :::
 
-每個配方都有名稱與版本，連同參數一起記錄在網格清單中，因此每次執行都會說明是哪組尺寸規則產生了網格。配方版本只在配方要求的尺寸改變時才改變；見[網格的版本識別](../mesh-quality.qmd#version-identities)。
+每個配方都有名稱與版本，連同參數一起記錄在網格清單中，因此每次執行都會說明是哪組尺寸規則產生了網格。配方版本只在配方要求的尺寸改變時才改變；見[網格的版本識別](mesh-quality.qmd#version-identities)。
 
 #### 條帶邊界曲線 {#palace-mesh-band-edges}
 
@@ -127,7 +129,7 @@ SGB 寫出的 XAO（位於 `geometry/`）也可以交給其他工具產生網格
 
 執行資料夾包含 SGB 模型（`geometry/`，內有 XAO 與其 sidecar）、網格化報告（`mesh/`，有 JSON 與文字兩種）、`palace.msh`，以及網格清單（`metadata/`）。`palace.msh` 是 Gmsh MSH 2.2 ASCII 檔，即 Palace 讀取的格式。Palace 只根據 sidecar，把 SGB 的具名群組降階為求解器屬性：只有當同一個表面群組的面被不同的 Surface EPR 列或側邊積分時才會拆開，因此屬性會分割這些面，不會重複計算。電氣身分是 Net；Terminal 與 Ground 綁定使用 sidecar 中確切的 Net。
 
-網格化報告說明，minSICN 與低於門檻的四面體數量，是在升階之前的線性網格上量得，並記錄輸出網格的階數。其欄位列於[品質報告](../mesh-quality.qmd#quality-report)。
+網格化報告說明，minSICN 與低於門檻的四面體數量，是在升階之前的線性網格上量得，並記錄輸出網格的階數。其欄位列於[品質報告](mesh-quality.qmd#quality-report)。
 
 ## 網格清單與獨立摘要 {#mesh-manifest-and-detached-summary}
 
@@ -141,11 +143,11 @@ Surface EPR 的內縮邊距會以帶的形式切進幾何，所以規格屬於�
 
 ## 來源與幾何權威 {#source-and-geometry-authority}
 
-來源至建構的說明請見 [SGB 幾何概念](../concepts/geometry.qmd#source-stage)。下列契約定義支援的準備路徑。
+來源至建構的說明請見 [SGB 幾何概念](../../concepts/geometry.qmd#source-stage)。下列契約定義支援的準備路徑。
 
-模擬由 `set_plan(snapshot)` 取得來源，即一個已準備的 `GeometryPlan`。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Route A／B 語意。目前面向來源的幾何權威為 `scgsim.geometry`。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立幾何，並用 `scgsim.meshing` 產生網格。外部 SGB 與 gsim 僅屬衍生歷史。
+模擬由 `set_plan(snapshot)` 取得來源，即一個已準備的 `GeometryPlan`。[GeometryPlan 契約](geometry-plan.qmd) 負責出現實例／Net、產生的真空、接觸及 Route A／B 語意。目前面向來源的幾何權威為 `scgsim.geometry`。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立幾何，並用 `scgsim.meshing` 產生網格。外部 SGB 與 gsim 僅屬衍生歷史。
 
-[Electrostatic 課程](../course/palace-electrostatic.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。
+[Electrostatic 課程](../../guides/capacitance-palace.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。
 
 ## 收斂宣告 {#convergence-declaration}
 
@@ -207,7 +209,7 @@ sim.set_convergence(
 
 ### 收斂時停止 {#convergence-stop}
 
-有宣告時，宣告的準則一旦收斂，Palace 就會被停止：在準則成立的那個 pass 完成後一到兩秒，所以該 pass 之後的求解不會執行。執行指令碼透過 `prepare_handoff()` 複製到執行資料夾的收斂執行器 `metadata/run_palace_until_converged.py` 啟動 Palace；它只需要 Python 標準函式庫（[執行設定檔](../execution-profiles.qmd#convergence-runner)）。執行器：
+有宣告時，宣告的準則一旦收斂，Palace 就會被停止：在準則成立的那個 pass 完成後一到兩秒，所以該 pass 之後的求解不會執行。執行指令碼透過 `prepare_handoff()` 複製到執行資料夾的收斂執行器 `metadata/run_palace_until_converged.py` 啟動 Palace；它只需要 Python 標準函式庫（[執行設定檔](execution-profiles.qmd#convergence-runner)）。執行器：
 
 1. 在它自己的 session 中啟動指令碼原本會執行的求解指令；Palace 的輸出照舊進入日誌；
 2. 每秒查看一次 `results/palace`。某個 pass 的 `iteration<k>/` 資料夾在兩次查看之間沒有變化時，才算這個 pass；每多一個 pass，執行器就執行與讀取結果時相同的檢查；
@@ -240,7 +242,7 @@ Palace 0.18.1 先在 `iteration<k>/` 完成 pass $k$，才為 pass $k+1$ 細化�
 - 沒有計畫卻有決定紀錄，或有計畫卻沒有決定紀錄；
 - 結果的某張表格（在頂層或在 `iteration<k>/`）不在回執記載的輸出之中。
 
-`ResolvedPalaceResult.convergence` 與[可信度報告](../report-model.qmd#declared-convergence)會說明執行在哪個 pass 收斂、Palace 在哪裡停止，或在 pass 上限時哪條準則仍不成立、差多少。`ResolvedPalaceResult.solver_end`（一個 `SolverEnd`）保存回執的 `ending`、執行器在哪個 pass 之後停止 Palace，以及上限允許的 pass 數（`amr_max_passes + 1`）。
+`ResolvedPalaceResult.convergence` 與[可信度報告](report-model.qmd#declared-convergence)會說明執行在哪個 pass 收斂、Palace 在哪裡停止，或在 pass 上限時哪條準則仍不成立、差多少。`ResolvedPalaceResult.solver_end`（一個 `SolverEnd`）保存回執的 `ending`、執行器在哪個 pass 之後停止 Palace，以及上限允許的 pass 數（`amr_max_passes + 1`）。
 
 ## 靜電預設值 {#candidate-electrostatic-defaults}
 
@@ -260,8 +262,8 @@ Palace 在省略 `Nonconformal` 鍵時預設為 `true`。SCGSim 一律寫出此�
 
 `set_numerical(save_adapt_mesh=...)` 只接受 `True`、`False` 或 `None`。`None`（包含省略）透過省略 `SaveAdaptMesh`，保留先前的 SCGSim 數值酬載及設定位元組；布林值則將該確切布林值寫至 `Model.Refinement.SaveAdaptMesh`。此控制詢問 Palace 是否儲存最終自適應網格，不保證每次求解或私有流程都產生檔案。
 
-`add_ground(net_id=...)` 是明確的物理導體路徑。它獨立於 `exterior_boundary_policy="ground"`，後者加入有限求解域的外部面。當 `unassigned_conductor_policy="error"` 時，每個導體分量必須恰好由一個 Terminal 或明確 Ground 綁定涵蓋。索引映射分別記錄物理 Ground 及外部 Ground 屬性，它們的確切聯集必須等於 `Boundaries.Ground.Attributes`。既有 `exterior_boundary_policy="none"` 搭配 `unassigned_conductor_policy="ground"`，仍是隱含接地路徑。Electrostatic 指定寫出索引映射結構 v3，它攜帶物理與外部 Ground 的區分。解析器只讀取目前的索引映射與網格清單結構；舊結構的執行資料夾如何處理，請見[報告契約](../report-model.qmd#palace-run-schemas)。
+`add_ground(net_id=...)` 是明確的物理導體路徑。它獨立於 `exterior_boundary_policy="ground"`，後者加入有限求解域的外部面。當 `unassigned_conductor_policy="error"` 時，每個導體分量必須恰好由一個 Terminal 或明確 Ground 綁定涵蓋。索引映射分別記錄物理 Ground 及外部 Ground 屬性，它們的確切聯集必須等於 `Boundaries.Ground.Attributes`。既有 `exterior_boundary_policy="none"` 搭配 `unassigned_conductor_policy="ground"`，仍是隱含接地路徑。Electrostatic 指定寫出索引映射結構 v3，它攜帶物理與外部 Ground 的區分。解析器只讀取目前的索引映射與網格清單結構；舊結構的執行資料夾如何處理，請見[報告契約](report-model.qmd#palace-run-schemas)。
 
 外部 gsim 及歷史 SGB 版本只作為衍生資料。執行期幾何權威是樹內的 `scgsim.geometry.sgb` 及目前的 `scgsim.palace` 實作。
 
-周邊契約請見[GeometryPlan 與 SGB](../geometry-sgb.qmd)、[無顯示幾何預覽](../geometry-preview.qmd)、[執行設定與本機／手動 HPC 交接](../execution-profiles.qmd)，以及[來源與資料界線](../provenance.qmd)。
+周邊契約請見[GeometryPlan 與 SGB](geometry-plan.qmd)、[無顯示幾何預覽](../../guides/preview-the-geometry.qmd)、[執行設定與本機／手動 HPC 交接](execution-profiles.qmd)，以及[來源與資料界線](../../contribute/provenance.qmd)。

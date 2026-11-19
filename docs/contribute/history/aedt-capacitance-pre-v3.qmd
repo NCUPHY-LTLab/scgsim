@@ -4,11 +4,13 @@ description: "Preserve the earlier SimplePad GDS-import Q3D C/G request, result 
 scgsim-kind: "course"
 scgsim-status: "HISTORICAL"
 scgsim-id: "docs/history/aedt-capacitance-pre-v3"
+aliases:
+  - ../../history/aedt-capacitance-pre-v3.html
 ---
 
 This page preserves the earlier SimplePad Q3D capacitance example and its
 reported native observations. For current Q3D input authoring, use the
-[body-backed Q3D lesson](../course/aedt-q3d.qmd).
+[body-backed Q3D lesson](../../guides/capacitance-q3d.qmd).
 
 ## Model and source
 
@@ -29,7 +31,7 @@ Its [`aedt_q3d.ipynb`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985
 and [editable QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd)
 define the earlier GDS-import workflow.
 
-![The public SimplePad layout: centered pad, surrounding Ground and authored east-edge lumped-port locator.](../assets/simple-pad-layout.png){#fig-simple-pad-layout}
+![The public SimplePad layout: centered pad, surrounding Ground and authored east-edge lumped-port locator.](../../assets/simple-pad-layout.png){#fig-simple-pad-layout}
 
 The locator is part of the source layout. The Q3D request below is C/G only;
 it does not add an inductive branch. The Aluminum mapping to native PEC and the
@@ -80,4 +82,4 @@ notebook bytes as public OrPen revision `51985d9`; the SCGSim source was
 
 These values are observations of the documented model, not numerical targets
 for a new run. The earlier GDS-import request is distinct from the current
-body-backed Q3D inputs described in the [Q3D lesson](../course/aedt-q3d.qmd).
+body-backed Q3D inputs described in the [Q3D lesson](../../guides/capacitance-q3d.qmd).

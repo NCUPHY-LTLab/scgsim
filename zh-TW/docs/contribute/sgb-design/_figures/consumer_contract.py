@@ -3,7 +3,7 @@
 Run from the repository root with the package's environment (gmsh comes with the ``palace`` extra, OCP with the
 ``occt`` group)::
 
-    uv run --extra palace --group dev --group occt python zh-TW/docs/design/sgb/_figures/consumer_contract.py
+    uv run --extra palace --group dev --group occt python zh-TW/docs/contribute/sgb-design/_figures/consumer_contract.py
 
 It builds a tiny model with ``build_sgb_geometry`` from the real inputs of the tests (``tests/sgb_inputs.py``):
 ``gds_pad_in_ground`` under Routes B and C (a 100 um die, a ground plane, a 20 um pad, one lumped port; bands of 0.5 and

@@ -6,9 +6,11 @@ scgsim-status: "STABILIZED"
 scgsim-id: "docs/tutorial-xmon-aedt"
 execute:
   enabled: false
+aliases:
+  - ../../tutorial-xmon-aedt.html
 ---
 
-Run the [shared Xmon input tutorial](tutorial-xmon-input.qmd) first in the
+Run the [shared Xmon input tutorial](inputs.qmd) first in the
 same Python session. This page adds Surface EPR to its `plan`, prepares it again
 and uses the new `snapshot`, `port_name`, and `coupon` to prepare a portable HFSS Eigenmode handoff with surface, bulk, and
 junction EPR outputs. The Python input-preparation environment needs the
@@ -17,7 +19,7 @@ layout-geometry and PyAEDT Python dependencies; it does not install AEDT or
 provide a license. This example explicitly selects AEDT 2024.2. The target
 run host needs that AEDT release, PyAEDT 1.3.0, and an appropriate license. Use
 the matching SCGSim source revision listed in
-[Examples](examples.qmd). Quarto does not open AEDT, create native geometry, or
+[Examples](../../start/choose-a-simulation.qmd). Quarto does not open AEDT, create native geometry, or
 solve this model. The snapshot retains its source physical stack; this page
 selects `modeling="solid"` for AEDT, which builds each conductor as a solid of
 its film's thickness.
@@ -27,7 +29,7 @@ its film's thickness.
 The shared snapshot keeps authored `D0_TO_D1_GAP` separate from the generated
 outer vacuum domain. Palace leaves its exterior at the natural PMC boundary,
 and HFSS assigns the same condition, Perfect H, on the faces of its Region. The
-[AEDT runtime reference](specs/aedt-runtime.qmd#public-epr-candidate-surface)
+[AEDT runtime reference](../../reference/specs/aedt-runtime.qmd#public-epr-candidate-surface)
 describes the native Region representation. This static page claims no native
 HFSS geometry check. When comparing results, note the outer boundary, Region
 size, and backend settings.
@@ -76,7 +78,7 @@ that normalized sheet to the explicit Nets and circuit values; the
 `junction` is added to `EigenmodeSim` before handoff preparation. Closed-XY binder contact
 finds candidate owners; preparation still checks the complete designated end
 edge against the shared emitted geometry. See the
-[partition contract](specs/aedt-runtime.qmd#aedt-automatic-junction-partition)
+[partition contract](../../reference/specs/aedt-runtime.qmd#aedt-automatic-junction-partition)
 for its shared-coordinate construction, readback resolution, topology, and
 search assumptions.
 
@@ -108,7 +110,7 @@ For AEDT requests, `None` selects all configured entries, `()` selects none,
 and an explicit tuple selects those IDs. These selections filter reported
 rows; they do not remove physical domains, junctions, or the surface model and
 do not change the normalization. See the [EPR quantity and selection
-contract](eigenmode-epr.qmd#workflow-and-state-contract).
+contract](../../concepts/surface-epr.qmd#workflow-and-state-contract).
 
 Supply resources allowed by the target AEDT host or job allocation. These
 example environment variable names are caller-owned values, not SCGSim
@@ -180,15 +182,15 @@ print(handoff.run_dir, handoff.script_path, handoff.archive_path)
 The run controls set the caller's native search and stopping request. They do
 not establish research sufficiency before a solve. Retain the actual criteria
 and any changes beside the returned native status and quantity history in the
-Notebook, then use the [research interpretation sequence](course/returned-results.qmd#interpret-for-scq-use)
+Notebook, then use the [research interpretation sequence](../convergence-and-reports.qmd#interpret-for-scq-use)
 to explain whether that evidence answers the intended SCQ question. Use a new output directory for each preparation; SCGSim rejects an
 existing path. `prepare_handoff()` writes the portable package but does not
 open AEDT, create native geometry, or run the solver.
 
 ## Execute, resolve and continue the analysis
 
-[Execute the complete package](course/execute.qmd) explicitly on the AEDT host,
-then [restart and resolve the return](course/returned-results.qmd). The report
+[Execute the complete package](../run-elsewhere.qmd) explicitly on the AEDT host,
+then [restart and resolve the return](../convergence-and-reports.qmd). The report
 reads sealed identity, numerical/history and benchmark evidence before physics.
 For the study's selected mode and surface contribution, inspect participation
 and its changes as well as frequency; frequency-only stopping does not describe
@@ -198,9 +200,9 @@ Preparation here builds the SGB model and the request records; it does
 not create native CAD or establish calculator field-side accuracy.
 
 Adaptive history is separate from the final saved-field evaluation. Use
-[the saved-field analysis lesson](course/aedt-saved-fields.qmd) to verify the
+[the saved-field analysis lesson](../saved-fields.qmd) to verify the
 released cohort and evaluate its matching geometry/request in a native
 workcopy without solving again. Only then use its final `epr-result.json` in
-[offline EPR](course/offline-epr.qmd). Newly evaluated margins are not inserted
+[offline EPR](../offline-loss.qmd). Newly evaluated margins are not inserted
 into the old adaptive curve. Exact native bindings, inset construction and
-receipt rules remain in the [AEDT contract](specs/aedt-runtime.qmd).
+receipt rules remain in the [AEDT contract](../../reference/specs/aedt-runtime.qmd).

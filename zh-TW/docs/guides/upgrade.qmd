@@ -5,6 +5,8 @@ description: "目前公開的幾何、AEDT、Palace 與視覺化符號對應至�
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
+aliases:
+  - ../api-migration.html
 ---
 
 本參考頁將已固定的 v1 API 介面（下文稱為基準）對應至 SCGSim 3.0 目前的負責模組。為 SCGSim 2.0 撰寫的研究，需要[SGB 模型上的 AEDT 研究](#aedt-sgb-migration)與 [Palace 網格化與 Surface EPR](#palace-mesh-migration) 兩節的變更；為較早的 3.0 預發行版撰寫的研究，需要標明較新版本的部分。
@@ -41,9 +43,9 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 新的 Q3D 與 HFSS 三維要求必須明確選擇 `modeling="solid"` 或 `modeling="thin_film"`。省略或提供其他模式不會啟用隱含相容路徑。PDK／來源契約也提供精確的物理層身份、特徵種類（堆疊膜、局部膜或有限體積）、物理厚度，以及適用時的薄膜附著面。既有 Object、Net、埠、連通外框與孔洞身份，仍是要求的來源依據。
 
-此選擇沿用既有 Q3D v3 與 HFSS 系列結構識別字；它決定模型建立所用的 SGB 路徑（`thin_film` 為 Route A，`solid` 為 Route C）。沒有 `modeling`，或為原生建構器寫出的 Q3D／HFSS 要求酬載，由較早的 SCGSim 寫入而遭拒；請以寫入它的 SCGSim commit 讀取。執行路徑不會推定或補上缺少的模式。新的要求在唯一編寫的 `LayerStack` 座標系中以 `PhysicalLayerDeclaration` 紀錄宣告層，其欄位列於[物理表示契約](specs/physical-representation.qmd)。薄膜宣告以 `physical_dimensions["normal_thickness_um"]` 記錄原始法向厚度，膜物理厚度輸出直接回報此值，不由端點重新計算。較早的 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side, source_thickness_um=None)` 紀錄已隨 AEDT 要求本身的物理層一併移除：計畫以 `PhysicalLayerDeclaration` 宣告物理層。同一物理層 ID 在多邊形、元件實例及 Net 成員間只計算一次，不新增每層 `stack_id`。座標映射使用端點跨度；有限體積維持自己的本體範圍。
+此選擇沿用既有 Q3D v3 與 HFSS 系列結構識別字；它決定模型建立所用的 SGB 路徑（`thin_film` 為 Route A，`solid` 為 Route C）。沒有 `modeling`，或為原生建構器寫出的 Q3D／HFSS 要求酬載，由較早的 SCGSim 寫入而遭拒；請以寫入它的 SCGSim commit 讀取。執行路徑不會推定或補上缺少的模式。新的要求在唯一編寫的 `LayerStack` 座標系中以 `PhysicalLayerDeclaration` 紀錄宣告層，其欄位列於[物理表示契約](../reference/specs/physical-representation.qmd)。薄膜宣告以 `physical_dimensions["normal_thickness_um"]` 記錄原始法向厚度，膜物理厚度輸出直接回報此值，不由端點重新計算。較早的 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side, source_thickness_um=None)` 紀錄已隨 AEDT 要求本身的物理層一併移除：計畫以 `PhysicalLayerDeclaration` 宣告物理層。同一物理層 ID 在多邊形、元件實例及 Net 成員間只計算一次，不新增每層 `stack_id`。座標映射使用端點跨度；有限體積維持自己的本體範圍。
 
-模式選擇決定幾何表示，不選擇求解器系列或公開 A/B/C 執行路徑。完整的座標轉換、材料、終端、僅建構與失敗行為，定義於 [AEDT 實體與薄膜契約](specs/aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 與 Palace 不在這次遷移範圍。Q3D input-v1/v2 要求結構仍已移除；其他受支援系列路徑的共用 V1/V2 交接相容性，不會恢復這些 Q3D 要求結構，也不會略過明確模式要求。
+模式選擇決定幾何表示，不選擇求解器系列或公開 A/B/C 執行路徑。完整的座標轉換、材料、終端、僅建構與失敗行為，定義於 [AEDT 實體與薄膜契約](../reference/specs/aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 與 Palace 不在這次遷移範圍。Q3D input-v1/v2 要求結構仍已移除；其他受支援系列路徑的共用 V1/V2 交接相容性，不會恢復這些 Q3D 要求結構，也不會略過明確模式要求。
 
 此擴充引入 AEDT 執行期來源身份 `scgsim.aedt.runtime-source.v15`。目前的產生器以 v30 從 AEDT 匯入閉包計算清單；以較早身份記錄的結果，請以寫入它的 SCGSim commit 讀取。
 
@@ -51,7 +53,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 ## 幾何 API {#geometry-api}
 
-基準 `scgsim.sgb` 門面對應到兩個介面。`scgsim.geometry` 負責來源端規劃、快照、正規化輸入、GDS 與堆疊檔轉接器、真空準備及獨立摘要；`scgsim.geometry.models` 的各模組存放標準輸入與紀錄定義，每個名稱從其定義模組匯入。版圖經由 `GeometryPlan` 與模擬類別進入；`scgsim.geometry.sgb` 的 `build_sgb_geometry` 從準備好的輸入建立模型，位於該入口以下，以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援的入口](supported-scope.qmd#supported-entry)。下列每個名稱只有一個現行定義，不保留舊路徑相容包裝。
+基準 `scgsim.sgb` 門面對應到兩個介面。`scgsim.geometry` 負責來源端規劃、快照、正規化輸入、GDS 與堆疊檔轉接器、真空準備及獨立摘要；`scgsim.geometry.models` 的各模組存放標準輸入與紀錄定義，每個名稱從其定義模組匯入。版圖經由 `GeometryPlan` 與模擬類別進入；`scgsim.geometry.sgb` 的 `build_sgb_geometry` 從準備好的輸入建立模型，位於該入口以下，以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援的入口](../reference/supported-scope.qmd#supported-entry)。下列每個名稱只有一個現行定義，不保留舊路徑相容包裝。
 
 
 - **基準 `scgsim.sgb` → 目前負責模組 `scgsim.geometry`.** 宣告名稱： `BoundaryCurveChainSpec`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GeometryPlan`, `GeometryPlanSnapshot`, `InputSummary`, `LayoutPolygonSpec`, `PathInput`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RouteLiteral`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`, `Vector3D`, `apply_vacuum_region_to_stack`, `build_gds_stack_geometry_input`, `summarize_geometry_input`.
@@ -138,7 +140,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 保留 `python -m scgsim.aedt.run`、`main(argv)` 及 `__main__` 行為。產生的交接與 EPR 腳本繼續以既有引數呼叫此命令，交易實作移至 CLI 薄層之後。動態 EPR 工作流程匯入會呼叫唯一的交易負責者；EPR 對 HFSS 匯出／讀回的相依性成為明確內部服務。視覺化從標準規格負責模組匯入現行 PyAEDT 常數，而不把它們變成公開匯出。
 
-目前產生端記錄 runtime-source v30，於每次使用時計算為每個 AEDT 模組與兩個 AEDT 視覺化載入器的匯入閉包；見[執行期來源契約](specs/aedt-runtime.qmd#runtime-source)。各模組雜湊綁定所列檔案，正規清單摘要識別該來源快照；兩者都不是永久的程式碼值。以較早執行期來源結構版本記錄的結果，請以寫入它的 SCGSim commit 讀取；舊模組字串不會映射到新路徑。交接與收據歷史和 Q3D 要求版本分開；Q3D 仍只支援 v3。此對照不宣稱原生 Q3D 已完成。
+目前產生端記錄 runtime-source v30，於每次使用時計算為每個 AEDT 模組與兩個 AEDT 視覺化載入器的匯入閉包；見[執行期來源契約](../reference/specs/aedt-runtime.qmd#runtime-source)。各模組雜湊綁定所列檔案，正規清單摘要識別該來源快照；兩者都不是永久的程式碼值。以較早執行期來源結構版本記錄的結果，請以寫入它的 SCGSim commit 讀取；舊模組字串不會映射到新路徑。交接與收據歷史和 Q3D 要求版本分開；Q3D 仍只支援 v3。此對照不宣稱原生 Q3D 已完成。
 
 ## Palace 網格化與 Surface EPR {#palace-mesh-migration}
 
@@ -150,7 +152,7 @@ Palace 現在以 SGB 建立幾何，並用 `scgsim.meshing` 產生網格。本�
 
 ### 網格控制
 
-`set_mesh` 現在接受 `recipe`、`mesher`、`budgets` 與 `quality_threshold`，定義見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。兩個外觀介面上的 `set_mesh` 同樣改了，本徵模態與 Electrostatic 共用預設值。
+`set_mesh` 現在接受 `recipe`、`mesher`、`budgets` 與 `quality_threshold`，定義見 [Palace 網格控制](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。兩個外觀介面上的 `set_mesh` 同樣改了，本徵模態與 Electrostatic 共用預設值。
 
 ::: {.askr-table-compact}
 | 已移除 | 替代 |
@@ -184,11 +186,11 @@ Surface EPR 邊距變成了幾何，隨之而來的改變如下：
 - Palace 不再寫出原生 `Mask` 或 `Inset`，所以邊距列不需要 Palace 分支版本。結果讀取器會拒絕含有原生 `Mask` 列的設定檔。
 - `inset_margins_by_entity_um` 是新增的，用於 `MA` 與 `MS` 的逐導體邊距。`face_kinds` 接受 `sheet`、`top`、`bottom` 與 `interface`，規格要求邊距時會拒絕 `sidewall`。
 
-鍵與列的定義見[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。SGB 群組名稱以 `__` 接上面種類，例如 `MA::pad__top::band=1`；名稱的格式見[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。
+鍵與列的定義見[本徵模態契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)。SGB 群組名稱以 `__` 接上面種類，例如 `MA::pad__top::band=1`；名稱的格式見[本徵模態契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)。
 
 ### 結果
 
-Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_version` 3，且只讀這兩種。舊結構的執行資料夾與 `scgsim.palace.epr-result.v1` 的獨立 EPR 結果都會被拒絕，見 [Palace 執行結構](report-model.qmd#palace-run-schemas)。下列更名沒有舊名稱別名。
+Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_version` 3，且只讀這兩種。舊結構的執行資料夾與 `scgsim.palace.epr-result.v1` 的獨立 EPR 結果都會被拒絕，見 [Palace 執行結構](../reference/specs/report-model.qmd#palace-run-schemas)。下列更名沒有舊名稱別名。
 
 ::: {.askr-table-compact}
 | 以前 | 現在 |
@@ -207,7 +209,7 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 
 新增且可選用：
 
-- `sim.set_convergence(...)` 宣告執行何時算收斂，準則可針對電容、模態頻率、Surface EPR 與 Palace 的誤差指標（[宣告](specs/palace-electrostatic-sgb.qmd#convergence-declaration)）。變化以該值的百分比表示：`Capacitance.diagonal().within(percent=0.5)`。準則收斂的那個 pass 之後，Palace 會被[停止](specs/palace-electrostatic-sgb.qmd#convergence-stop)，其後的 pass 不再執行。有宣告時 `amr_tolerance` 不使用，明確給定會被拒絕。
+- `sim.set_convergence(...)` 宣告執行何時算收斂，準則可針對電容、模態頻率、Surface EPR 與 Palace 的誤差指標（[宣告](../reference/specs/palace-electrostatic-sgb.qmd#convergence-declaration)）。變化以該值的百分比表示：`Capacitance.diagonal().within(percent=0.5)`。準則收斂的那個 pass 之後，Palace 會被[停止](../reference/specs/palace-electrostatic-sgb.qmd#convergence-stop)，其後的 pass 不再執行。有宣告時 `amr_tolerance` 不使用，明確給定會被拒絕。
 - `ResolvedPalaceResult.convergence` 保存每個 pass 的檢查與判定，`ResolvedPalaceResult.solver_end` 保存 Palace 如何結束。
 
 不論有沒有宣告，每次執行都會遇到的改變：
@@ -224,7 +226,7 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 | 電容圖命名為 `C[1][1]` | 以端點命名，`C[signal][signal]` |
 :::
 
-各份報告的版面見[報告模型](report-model.qmd#declared-convergence)。
+各份報告的版面見[報告模型](../reference/specs/report-model.qmd#declared-convergence)。
 
 ### 版圖建模檢查 {#simulation-drc-migration}
 
@@ -242,7 +244,7 @@ plan.set_rectangular_junctions([...])  # 版圖有矩形接面時
 EigenmodeSim.simulation_drc(plan, route="A")
 ```
 
-檢查不再為計畫加入任何設定。之前它以零 coupon 填充檢查，版圖沒有真空時再加上以 (0, 0, 1000) µm 填充的真空；現在它使用計畫的 coupon 填充與真空，沒有真空的計畫會以模擬自己的錯誤被拒絕。組裝件的實例請在 `set_nets` 之前以 `plan.register_instance` 註冊。AEDT 的檢查現在涵蓋計畫的矩形接面，並裁切其薄片。`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 現在會在寫出 handoff 之前執行匯入的第一步，因此會拒絕匯入無法實現的模型。見[版圖建模檢查](layout-modeling-check.qmd#build-the-plan)。
+檢查不再為計畫加入任何設定。之前它以零 coupon 填充檢查，版圖沒有真空時再加上以 (0, 0, 1000) µm 填充的真空；現在它使用計畫的 coupon 填充與真空，沒有真空的計畫會以模擬自己的錯誤被拒絕。組裝件的實例請在 `set_nets` 之前以 `plan.register_instance` 註冊。AEDT 的檢查現在涵蓋計畫的矩形接面，並裁切其薄片。`prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 現在會在寫出 handoff 之前執行匯入的第一步，因此會拒絕匯入無法實現的模型。見[版圖建模檢查](check-a-layout.qmd#build-the-plan)。
 
 ### 計畫上的 Surface EPR 與真空 {#plan-owns-surface-epr}
 

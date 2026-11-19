@@ -4,6 +4,8 @@ description: "Choose an implemented solver workflow by physical question, input 
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/backend-support"
+aliases:
+  - ../backend-support.html
 ---
 
 SCGSim exposes the workflows below. A solver can support additional problem
@@ -42,7 +44,7 @@ on the workstation; run only the packaged solver stage on a host with the same
 explicitly requested AEDT release, its command-line solver, and an available
 solver license. The solver host does not need PyAEDT or a usable Desktop
 session. This route does not change the HFSS model or EPR request and does not
-submit a scheduler job. The [HPC EPR sweep guide](course/aedt-hpc-sweep.qmd)
+submit a scheduler job. The [HPC EPR sweep guide](../guides/hpc-sweep.qmd)
 shows how to transfer independent packages together; the
 [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
 gives the complete-return rules.
@@ -74,7 +76,7 @@ assumptions on a recorded EPR result without native evaluation.
 Surface-EPR margin rows are ordinary `Dielectric` rows over bands that SGB cuts
 into the geometry, so a stock Palace executable computes them. SCGSim writes no
 native `Mask` or `Inset` configuration. The [Palace Eigenmode
-guide](course/palace-eigenmode.qmd#surface-epr-margin-rows) shows how to request
+guide](../guides/modes-palace.qmd#surface-epr-margin-rows) shows how to request
 the rows.
 
 ## Source and result differences
@@ -96,7 +98,7 @@ geometric mesh representation; it is separate from the FEM order used by the
 field problem. These controls and the returned mesh summary describe mesh
 generation, not solver accuracy.
 
-Start with the [tutorials](examples.qmd). Exact supported requests are described
+Start with the [tutorials](../start/choose-a-simulation.qmd). Exact supported requests are described
 in [Palace Electrostatic](specs/palace-electrostatic-sgb.qmd),
 [Palace Eigenmode](specs/palace-eigenmode.qmd), and
 [AEDT runtime families](specs/aedt-runtime.qmd).

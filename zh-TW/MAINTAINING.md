@@ -1,6 +1,6 @@
 # 維護 SCGSim {#maintaining-scgsim}
 
-本參考頁說明文件建置與套件維護方式。次要的[維護者指南](docs/ownership.qmd)連結至實作與專案參考資料。研究者無須上層工作區，可從[課程](docs/examples.qmd)開始。
+本參考頁說明文件建置與套件維護方式。次要的[維護者指南](docs/contribute/ownership.qmd)連結至實作與專案參考資料。研究者無須上層工作區，可從[課程](docs/start/choose-a-simulation.qmd)開始。
 
 ## 來源與產生輸出 {#sources-and-generated-output}
 
@@ -32,7 +32,7 @@ Nightly 工作流程在 UTC 18:30（台灣時間 02:30）於 `develop` 執行重
 
 ## 產生 API 參考頁 {#generated-api-references}
 
-修改 `docs/api/` 與 `zh-TW/docs/api/` 的正式 Markdown 使用說明，或所屬 Python 公開宣告，再產生並檢查衍生頁面：
+修改 `docs/reference/api/` 與 `zh-TW/docs/reference/api/` 的正式 Markdown 使用說明，或所屬 Python 公開宣告，再產生並檢查衍生頁面：
 
 ```bash
 python scripts/generate_knowledge_reference.py
@@ -55,11 +55,11 @@ python3 -m http.server 4321 --bind 0.0.0.0 --directory _site
 
 ## 實作與專案參考資料 {#implementation-and-project-references}
 
-- [架構與資料流程](docs/architecture.qmd)
-- [執行環境與結果來源沿革](docs/provenance.qmd)
-- [專案範圍與衍生來源](docs/goals-and-upstream.qmd)
+- [架構與資料流程](docs/contribute/architecture.qmd)
+- [執行環境與結果來源沿革](docs/contribute/provenance.qmd)
+- [專案範圍與衍生來源](docs/contribute/goals-and-upstream.qmd)
 
-整合時採用的衍生輸入為 gsim 下游版本 `0.2.0+scq.1`、修訂版本 `8f5dc6c05255d003a9c6d8959537bcf8068379d3`，以及歷史 SGB 修訂版本 `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`。這些資料說明來源沿革，不代表執行階段相依性、支援範圍擴張或 API 相容性。目前來源幾何使用樹內的 `scgsim.geometry` API。Palace 以 `scgsim.geometry.sgb` 建立幾何，並用 `scgsim.meshing` 產生網格。SGB 位於支援的入口（`GeometryPlan` 與模擬類別）以下：以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援範圍](docs/supported-scope.qmd#supported-entry)。
+整合時採用的衍生輸入為 gsim 下游版本 `0.2.0+scq.1`、修訂版本 `8f5dc6c05255d003a9c6d8959537bcf8068379d3`，以及歷史 SGB 修訂版本 `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`。這些資料說明來源沿革，不代表執行階段相依性、支援範圍擴張或 API 相容性。目前來源幾何使用樹內的 `scgsim.geometry` API。Palace 以 `scgsim.geometry.sgb` 建立幾何，並用 `scgsim.meshing` 產生網格。SGB 位於支援的入口（`GeometryPlan` 與模擬類別）以下：以自行建立的輸入直接呼叫時，先決條件是該入口所保證的事項，見[支援範圍](docs/reference/supported-scope.qmd#supported-entry)。
 
 ## 工程收斂 {#engineering-convergence}
 

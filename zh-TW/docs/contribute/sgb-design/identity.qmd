@@ -5,11 +5,13 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/identity"
+aliases:
+  - ../../design/sgb/identity.html
 ---
 
 Solver 回報某個 attribute 的結果時，SGB 讓你能以查表（而不是看幾何）知道它是什麼：從 Palace attribute 一路追到 physical group、face、edge、carrier，最後到 source 曲線。這一頁說明這條 mapping chain、兩層 identity、每種 entity 的 hash 規則、lineage 記錄了什麼，並在 running example 上完整追一次。
 
-本頁以 Route B 含 band 的 pad-in-ground 範例（production 測試端的 stage-level scene `pad_in_ground("B")`，三個 margin 0.1、0.5、2 µm 的 band，lumped port 在 host 的 support plane z = 0）為例。查詢鏈的數字、圖與決定性的量測都由 `zh-TW/docs/design/sgb/_figures/identity.py` 對 production（`scgsim.geometry.sgb`）計算：建出模型、以 `emit_model` 寫出，再以 `read_sidecar` 讀 sidecar `scgsim.sgb.sidecar.v5`，與 consumer 讀到的相同。
+本頁以 Route B 含 band 的 pad-in-ground 範例（production 測試端的 stage-level scene `pad_in_ground("B")`，三個 margin 0.1、0.5、2 µm 的 band，lumped port 在 host 的 support plane z = 0）為例。查詢鏈的數字、圖與決定性的量測都由 `zh-TW/docs/contribute/sgb-design/_figures/identity.py` 對 production（`scgsim.geometry.sgb`）計算：建出模型、以 `emit_model` 寫出，再以 `read_sidecar` 讀 sidecar `scgsim.sgb.sidecar.v5`，與 consumer 讀到的相同。
 
 ## 以 running example 看：attribute 10
 
@@ -184,7 +186,7 @@ Vertex、edge、face、volume 的數量與有多少 ID 在兩次 build 之間保
 
 ## 補充：重現資料
 
-本頁所有數字與圖都由 `zh-TW/docs/design/sgb/_figures/identity.py` 對 production 計算（從 repository 根目錄以 `uv run --extra palace --group dev python` 執行）：範例是 `tests/sgb_scenes.py` 的 `pad_in_ground("B")`，lumped port 換成同一片 sheet 放在 z = 0（support plane；scene 本身為了測試 embedded sheet 把 Route B 的 port 放在金屬的中間平面，compiler 不會這樣放），band 請求與 `tests/sgb_emit_cases.py` 的 `pad_requests("B")` 相同；以 `emit_model` 寫出後以 `read_sidecar` 讀回，查詢只走 sidecar 的表與 `views`（`group`、`face`、`edge`、`carrier`、`support_primitive`、`support_ring`、`source_curve`、`band_family`、`inset_request`），不解析任何 id；port 比較各 build 一次有與沒有 port 的模型，比較 `Topology` 的 ID 集合與各 group 的成員。原始資料另存於 `figures/identity-trace.json`、`figures/identity-determinism.json`、`figures/identity-stability.json`，表格在 `figures/identity-tables.md`。
+本頁所有數字與圖都由 `zh-TW/docs/contribute/sgb-design/_figures/identity.py` 對 production 計算（從 repository 根目錄以 `uv run --extra palace --group dev python` 執行）：範例是 `tests/sgb_scenes.py` 的 `pad_in_ground("B")`，lumped port 換成同一片 sheet 放在 z = 0（support plane；scene 本身為了測試 embedded sheet 把 Route B 的 port 放在金屬的中間平面，compiler 不會這樣放），band 請求與 `tests/sgb_emit_cases.py` 的 `pad_requests("B")` 相同；以 `emit_model` 寫出後以 `read_sidecar` 讀回，查詢只走 sidecar 的表與 `views`（`group`、`face`、`edge`、`carrier`、`support_primitive`、`support_ring`、`source_curve`、`band_family`、`inset_request`），不解析任何 id；port 比較各 build 一次有與沒有 port 的模型，比較 `Topology` 的 ID 集合與各 group 的成員。原始資料另存於 `figures/identity-trace.json`、`figures/identity-determinism.json`、`figures/identity-stability.json`，表格在 `figures/identity-tables.md`。
 
 決定性（production；三個 `PYTHONHASHSEED`；每個格子是 `ConformalModel.identity_digest()`）：
 

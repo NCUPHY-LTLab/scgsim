@@ -11,7 +11,7 @@ bounds, pulled apart) and ``figures/index-numbers.json`` (the counts the page qu
 
 Run (from the repository root; see ``intro_common.py`` for ``SGB_CORE``)::
 
-    $SGB_CORE/.artifacts/env/bin/python docs/design/sgb/_figures/index_example.py
+    $SGB_CORE/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/index_example.py
 """
 
 from __future__ import annotations

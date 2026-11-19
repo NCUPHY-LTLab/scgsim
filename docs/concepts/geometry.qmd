@@ -17,7 +17,7 @@ SGB turns a declared layout and process into geometry that a solver backend can 
 This page follows one public example with a hole, two Nets, a substrate and vacuum, and an explicitly requested rectangular junction. It explains why each preparation step exists and what it passes to the next step. The worked geometric example stops at CAD construction; it is not a mesh or field-solution result.
 
 ::: {.callout-note title="Backend focus: Gmsh and Palace"}
-The construction path described here writes the solid model as BREP and XAO files, creates a mesh with Gmsh and supplies it to Palace. AEDT uses the same source meanings where supported, but constructs its project with the native AEDT Modeler; its construction steps therefore differ. See the [physical representation contract](../specs/physical-representation.qmd) and [geometry contract](../geometry-sgb.qmd) for the shared and backend-specific boundaries.
+The construction path described here writes the solid model as BREP and XAO files, creates a mesh with Gmsh and supplies it to Palace. AEDT uses the same source meanings where supported, but constructs its project with the native AEDT Modeler; its construction steps therefore differ. See the [physical representation contract](../reference/specs/physical-representation.qmd) and [geometry contract](../reference/specs/geometry-plan.qmd) for the shared and backend-specific boundaries.
 :::
 
 ## 1. Start with the facts that define the model {#source-stage}
@@ -87,7 +87,7 @@ The preparation step combines these facts into a detached, immutable **snapshot*
 | Snapshot | One prepared copy of all selected source facts | Downstream steps consume the same fixed input |
 
 ::: {.callout-important title="Different Nets do not merge when shapes touch"}
-SCGSim preserves the caller's Net assignments. Under the current contact rules, a recognized coplanar face contact or conductor-volume overlap between different Nets stops preparation with a short-circuit error; ordinary edge-only or point-only conductor contacts are rejected too. A same-Net lateral seam in the effective film has a specific accepted case. A shared Net still does not replace geometric contact checks. See the [contact rules in the geometry contract](../geometry-sgb.qmd#component-to-backend-geometry-contract).
+SCGSim preserves the caller's Net assignments. Under the current contact rules, a recognized coplanar face contact or conductor-volume overlap between different Nets stops preparation with a short-circuit error; ordinary edge-only or point-only conductor contacts are rejected too. A same-Net lateral seam in the effective film has a specific accepted case. A shared Net still does not replace geometric contact checks. See the [contact rules in the geometry contract](../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract).
 :::
 
 ::: {.callout-note title="The source DBU and the shared XY grid"}
@@ -208,17 +208,17 @@ This section explains how the builder consumes a plan: it writes the planned poi
 
 Palace builds its geometry with SGB and meshes the exported XAO, with the sidecar that pairs with it, using the `scgsim.meshing` module in a fresh Gmsh process. The module creates tetrahedra in solution volumes, gives each bad element a finer local size in a ball around it, and stops with an error if a tetrahedron stays below the quality threshold within its budgets. Palace then lowers SGB's physical groups to solver attributes and writes the mesh input for Palace. The chosen sizing recipe belongs to the meshing step: it controls element sizing, while the source DBU and assembly XY grid control geometry coordinates. A finer mesh does not repair missing source meaning or change a junction's ownership.
 
-For exact mesh controls, see the [Palace mesh controls](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
+For exact mesh controls, see the [Palace mesh controls](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
 ## 4. Capability {#distance-bands}
 
 The current SGB path carries source shapes, material/physical interpretation, final Net declarations, explicit port and junction requests, interface ownership, shared planar membership and canonical three-dimensional boundaries into backend construction. Gmsh/Palace and AEDT share those source facts where each backend supports them, while their native construction and execution remain separate.
 
 ::: {.callout-note title="Surface-EPR bands"}
-Palace Surface-EPR margins: `inset_margins_um` asks SGB to cut inset bands into the model when `mesh()` builds the geometry, and Palace integrates them as ordinary attributes. See the [Eigenmode contract](../specs/palace-eigenmode.qmd#surface-epr-margins) for the keys and limits.
+Palace Surface-EPR margins: `inset_margins_um` asks SGB to cut inset bands into the model when `mesh()` builds the geometry, and Palace integrates them as ordinary attributes. See the [Eigenmode contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins) for the keys and limits.
 :::
 
-Ordinary polygonal outlines remain polygon geometry. Explicitly declared curves are line segments and circular arcs, which SGB carries itself; other curve kinds raise `UnsupportedCurveError`. See the [curve contract](../geometry-sgb.qmd#source-curves). For the formal source, physical representation and backend contracts, continue to the [SGB geometry contract](../geometry-sgb.qmd).
+Ordinary polygonal outlines remain polygon geometry. Explicitly declared curves are line segments and circular arcs, which SGB carries itself; other curve kinds raise `UnsupportedCurveError`. See the [curve contract](../reference/specs/geometry-plan.qmd#source-curves). For the formal source, physical representation and backend contracts, continue to the [SGB geometry contract](../reference/specs/geometry-plan.qmd).
 
 ::: {.callout-note collapse="true" title="Public example source and scope"}
 The worked case is the public rectangular-junction and hole fixture, `physical_fixture()` in [`tests/test_rectangular_junction_geometry.py`](https://github.com/NCUPHY-LTLab/scgsim/blob/v3.0.0rc4/tests/test_rectangular_junction_geometry.py#L252). The [case index](../images/sgb-concept/public-case-binding.json) records its source revision, units, selected profile and figure-stage mapping. This page uses its source, physical and junction views to explain the retained pipeline.

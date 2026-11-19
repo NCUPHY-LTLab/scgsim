@@ -4,6 +4,8 @@ description: "The layout patterns SCGSim builds with Surface-EPR bands, each wit
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/supported-geometry"
+aliases:
+  - ../supported-geometry.html
 ---
 
 This page lists the layout patterns that SCGSim's geometry builder (SGB) is
@@ -24,7 +26,7 @@ Run the check of each simulation the component is for:
 the `GeometryPlan` the simulation will be given, runs the same preparation and
 geometry build as that class's `mesh()` on it, with your Surface-EPR margins,
 and raises the error `mesh()` would raise. The
-[layout modeling check](layout-modeling-check.qmd) shows the call and what it
+[layout modeling check](../guides/check-a-layout.qmd) shows the call and what it
 needs.
 
 ## What "supported" means {#what-supported-means}
@@ -75,29 +77,29 @@ piers and the deck. Dimensions are in µm.
 These are the patterns the flip-chip Disk Qubit uses.
 
 ::: {layout-ncol=2}
-![**1 Disk island.** A 32-point polygon, r 110.5 (119.8 in the test build), 11.25° per vertex.](assets/supported-geometry/cell-01.svg){fig-alt="A 32-point polygon disk on exposed substrate."}
+![**1 Disk island.** A 32-point polygon, r 110.5 (119.8 in the test build), 11.25° per vertex.](../assets/supported-geometry/cell-01.svg){fig-alt="A 32-point polygon disk on exposed substrate."}
 
-![**2 Ground clearance circle.** A 32-point hole of r 350 in the ground of both dies.](assets/supported-geometry/cell-02.svg){fig-alt="A ground square with a 32-point circular hole."}
+![**2 Ground clearance circle.** A 32-point hole of r 350 in the ground of both dies.](../assets/supported-geometry/cell-02.svg){fig-alt="A ground square with a 32-point circular hole."}
 
-![**3 Claw arc.** A 45° ring sector, r 170.5 to 230.5 (width 60), whose inner arc has 4 chords; one on each of the four claws.](assets/supported-geometry/cell-03.svg){fig-alt="A claw: a ring sector tapering into a narrow CPW, inside a ground opening."}
+![**3 Claw arc.** A 45° ring sector, r 170.5 to 230.5 (width 60), whose inner arc has 4 chords; one on each of the four claws.](../assets/supported-geometry/cell-03.svg){fig-alt="A claw: a ring sector tapering into a narrow CPW, inside a ground opening."}
 
-![**4 Rounded inner corner.** r 5 drawn with 4 chords, at the eight inner corners of the claws.](assets/supported-geometry/cell-04.svg){fig-alt="Close view of a claw corner rounded with four chords."}
+![**4 Rounded inner corner.** r 5 drawn with 4 chords, at the eight inner corners of the claws.](../assets/supported-geometry/cell-04.svg){fig-alt="Close view of a claw corner rounded with four chords."}
 
-![**5 Claw-to-CPW taper.** Straight edges at an arbitrary angle, 32.3° (35.1° in the test build), narrowing to a 3 µm neck at r 350.](assets/supported-geometry/cell-05.svg){fig-alt="Straight taper edges narrowing from the claw to a 3 µm CPW."}
+![**5 Claw-to-CPW taper.** Straight edges at an arbitrary angle, 32.3° (35.1° in the test build), narrowing to a 3 µm neck at r 350.](../assets/supported-geometry/cell-05.svg){fig-alt="Straight taper edges narrowing from the claw to a 3 µm CPW."}
 
-![**6 Manhattan CPW straight.** Width 3, gap 40, on the claw lines.](assets/supported-geometry/cell-06.svg){fig-alt="A horizontal CPW: signal strip between two ground strips."}
+![**6 Manhattan CPW straight.** Width 3, gap 40, on the claw lines.](../assets/supported-geometry/cell-06.svg){fig-alt="A horizontal CPW: signal strip between two ground strips."}
 
-![**7 45° CPW straight.** Readout width 7 with gap 6, drive width 4 with gap 6, on the control die.](assets/supported-geometry/cell-07.svg){fig-alt="A CPW running diagonally across the die."}
+![**7 45° CPW straight.** Readout width 7 with gap 6, drive width 4 with gap 6, on the control die.](../assets/supported-geometry/cell-07.svg){fig-alt="A CPW running diagonally across the die."}
 
-![**8 Round CPW tip.** 16-point caps: metal r 2 in an opening r 8; the readout tip has r 3.5.](assets/supported-geometry/cell-08.svg){fig-alt="A CPW ending in a half-circle cap inside a half-circle ground opening."}
+![**8 Round CPW tip.** 16-point caps: metal r 2 in an opening r 8; the readout tip has r 3.5.](../assets/supported-geometry/cell-08.svg){fig-alt="A CPW ending in a half-circle cap inside a half-circle ground opening."}
 
-![**9 Radial taper fan.** The junction lead widens from a 2 µm neck to a 20° arc of the disk; flares of ±8.30°, 29.24° and 26.17°.](assets/supported-geometry/cell-09.svg){fig-alt="The disk's lead widening as a fan onto the disk, and the ground tongue opposite."}
+![**9 Radial taper fan.** The junction lead widens from a 2 µm neck to a 20° arc of the disk; flares of ±8.30°, 29.24° and 26.17°.](../assets/supported-geometry/cell-09.svg){fig-alt="The disk's lead widening as a fan onto the disk, and the ground tongue opposite."}
 
-![**10 Junction region.** The 0.27 × 5.66 lumped sheet between two leads with r 1 round caps.](assets/supported-geometry/cell-10.svg){fig-alt="Two lead ends with round caps and the narrow lumped sheet between them."}
+![**10 Junction region.** The 0.27 × 5.66 lumped sheet between two leads with r 1 round caps.](../assets/supported-geometry/cell-10.svg){fig-alt="Two lead ends with round caps and the narrow lumped sheet between them."}
 
-![**11 Indium bump pads.** Axis-aligned squares of 20 and 40 at 24 sites on r 400, joining the grounds of the two dies.](assets/supported-geometry/cell-11.svg){fig-alt="Three square bumps on the ground near the clearance edge."}
+![**11 Indium bump pads.** Axis-aligned squares of 20 and 40 at 24 sites on r 400, joining the grounds of the two dies.](../assets/supported-geometry/cell-11.svg){fig-alt="Three square bumps on the ground near the clearance edge."}
 
-![**12 Ground with the mask openings.** A 1000 × 1000 square less the mask openings, on both dies.](assets/supported-geometry/cell-12.svg){fig-alt="The qubit die: disk, four claws, junction lead and the ground with its openings."}
+![**12 Ground with the mask openings.** A 1000 × 1000 square less the mask openings, on both dies.](../assets/supported-geometry/cell-12.svg){fig-alt="The qubit die: disk, four claws, junction lead and the ground with its openings."}
 :::
 
 In cell 10 the simulation sees only the lumped sheet and the two leads. The
@@ -114,33 +116,33 @@ margin, so it keeps a core 0.7 nm wide and is refused before meshing; see
 Every CPW here has a 6 µm gap, and every bend a 100 µm radius.
 
 ::: {layout-ncol=2}
-![**13 Circular CPW bend.** R 100 with 8 chords per 90°, edge radii 90.5 to 109.5. Used by `bend_circular`, the Purcell routes and `straight_to_circular_strip`.](assets/supported-geometry/cell-13.svg){fig-alt="A 90° CPW bend drawn with eight chords."}
+![**13 Circular CPW bend.** R 100 with 8 chords per 90°, edge radii 90.5 to 109.5. Used by `bend_circular`, the Purcell routes and `straight_to_circular_strip`.](../assets/supported-geometry/cell-13.svg){fig-alt="A 90° CPW bend drawn with eight chords."}
 
-![**14 Euler 90° bend.** p 0.5, minimum radius 70.61, 14 chords. Used by `bend_euler`, `mtl_*` and `resonator_hanger`.](assets/supported-geometry/cell-14.svg){fig-alt="A 90° CPW Euler bend."}
+![**14 Euler 90° bend.** p 0.5, minimum radius 70.61, 14 chords. Used by `bend_euler`, `mtl_*` and `resonator_hanger`.](../assets/supported-geometry/cell-14.svg){fig-alt="A 90° CPW Euler bend."}
 
-![**15 Euler 180° U-turn.** Minimum radius 90.86, 30 chords, legs 200 apart. Used by `resonator`, `resonator_meander` and the meander coupons.](assets/supported-geometry/cell-15.svg){fig-alt="A CPW turning back on itself through a 180° Euler bend."}
+![**15 Euler 180° U-turn.** Minimum radius 90.86, 30 chords, legs 200 apart. Used by `resonator`, `resonator_meander` and the meander coupons.](../assets/supported-geometry/cell-15.svg){fig-alt="A CPW turning back on itself through a 180° Euler bend."}
 
-![**16 Coupled pair with a ground rib.** Traces 7, gaps 6 and a rib of 3; the traces leave in Euler bends. Used by `n_trace_mtl_section`, `mtl_*`, Purcell and the meander coupons.](assets/supported-geometry/cell-16.svg){fig-alt="Two parallel CPW traces separated by a narrow ground rib, leaving in Euler bends."}
+![**16 Coupled pair with a ground rib.** Traces 7, gaps 6 and a rib of 3; the traces leave in Euler bends. Used by `n_trace_mtl_section`, `mtl_*`, Purcell and the meander coupons.](../assets/supported-geometry/cell-16.svg){fig-alt="Two parallel CPW traces separated by a narrow ground rib, leaving in Euler bends."}
 
-![**17 T-junction and shorted end.** Width 10, gap 6. Used by `cpw_t_junction`, the Kosen Xmon and `resonator`. The shorted end, where the signal joins the ground and each gap is a closed slot, is a sample of its own.](assets/supported-geometry/cell-17.svg){fig-alt="A Manhattan CPW T-junction with three ground pieces."}
+![**17 T-junction and shorted end.** Width 10, gap 6. Used by `cpw_t_junction`, the Kosen Xmon and `resonator`. The shorted end, where the signal joins the ground and each gap is a closed slot, is a sample of its own.](../assets/supported-geometry/cell-17.svg){fig-alt="A Manhattan CPW T-junction with three ground pieces."}
 
-![**18 Shallow linear taper.** Width 10 to 7, with edge kinks of 0.86° and 1.72°. Used by `taper` and `cpw_handoff`.](assets/supported-geometry/cell-18.svg){fig-alt="A CPW narrowing from width 10 to 7 over 50 µm."}
+![**18 Shallow linear taper.** Width 10 to 7, with edge kinks of 0.86° and 1.72°. Used by `taper` and `cpw_handoff`.](../assets/supported-geometry/cell-18.svg){fig-alt="A CPW narrowing from width 10 to 7 over 50 µm."}
 :::
 
 ### Pads, combs, strips and 3-D parts {#pads-and-parts}
 
 ::: {layout-ncol=2}
-![**19 Launcher.** A 150 × 150 pad with taper edges at 25.0° (signal) and 44.8° (opening), and an 85 × 150 port sheet abutting pad and ground. Used by `launcher`, the airbridge sample chip and the meander coupons.](assets/supported-geometry/cell-19.svg){fig-alt="A square launcher pad tapering into a CPW, with the port sheet behind the pad."}
+![**19 Launcher.** A 150 × 150 pad with taper edges at 25.0° (signal) and 44.8° (opening), and an 85 × 150 port sheet abutting pad and ground. Used by `launcher`, the airbridge sample chip and the meander coupons.](../assets/supported-geometry/cell-19.svg){fig-alt="A square launcher pad tapering into a CPW, with the port sheet behind the pad."}
 
-![**20 Interdigitated comb.** 20 fingers, 3.3 wide with 3.3 gaps and 100 long, fed by a funnel at 21.6° (opening 42.7°). Used by `interdigital_capacitor` and Purcell.](assets/supported-geometry/cell-20.svg){fig-alt="Two interleaved finger combs fed by funnels, inside a ground opening."}
+![**20 Interdigitated comb.** 20 fingers, 3.3 wide with 3.3 gaps and 100 long, fed by a funnel at 21.6° (opening 42.7°). Used by `interdigital_capacitor` and Purcell.](../assets/supported-geometry/cell-20.svg){fig-alt="Two interleaved finger combs fed by funnels, inside a ground opening."}
 
-![**21 Spline strip, resampled.** Width 10 in y, resampled to about 3° of turn per vertex. Used by `interpolation_spline_strip` and `bspline_strip`.](assets/supported-geometry/cell-21.svg){fig-alt="A curved strip with no ground around it."}
+![**21 Spline strip, resampled.** Width 10 in y, resampled to about 3° of turn per vertex. Used by `interpolation_spline_strip` and `bspline_strip`.](../assets/supported-geometry/cell-21.svg){fig-alt="A curved strip with no ground around it."}
 
-![**22 Hollow TSV.** A 0.2 µm wall between two 24-point circles (r 29.8 and 30), 500 tall, with an Al landing from r 29.8 to 100 in an opening of r 120 on both faces. Used by the TSV coupons.](assets/supported-geometry/cell-22.svg){fig-alt="A landing annulus around the TSV bore inside a ground opening."}
+![**22 Hollow TSV.** A 0.2 µm wall between two 24-point circles (r 29.8 and 30), 500 tall, with an Al landing from r 29.8 to 100 in an opening of r 120 on both faces. Used by the TSV coupons.](../assets/supported-geometry/cell-22.svg){fig-alt="A landing annulus around the TSV bore inside a ground opening."}
 
-![**23 Airbridge.** A 12 × 84 deck on two 14 × 14 piers over a CPW of width 10, gap 6. Used by `airbridge`, `cpw_airbridge_coupon` and the meander coupons.](assets/supported-geometry/cell-23.svg){fig-alt="A bridge deck on two piers crossing a CPW."}
+![**23 Airbridge.** A 12 × 84 deck on two 14 × 14 piers over a CPW of width 10, gap 6. Used by `airbridge`, `cpw_airbridge_coupon` and the meander coupons.](../assets/supported-geometry/cell-23.svg){fig-alt="A bridge deck on two piers crossing a CPW."}
 
-![**24 Lumped sheet across a gap.** A 2 × 20 sheet over a 20 µm gap, entering pad and ground by 1 nm; square pad 200. Used by the square and flip-chip pad coupons. The same sheet across a 32-point polygon pad of r 100 is not supported: its model builds, but it cannot be written to the geometry file that meshing reads. The circular pad coupon is not this case, because it declares its pad and opening as circular arcs.](assets/supported-geometry/cell-24.svg){fig-alt="A narrow port sheet spanning the gap between a pad edge and the ground."}
+![**24 Lumped sheet across a gap.** A 2 × 20 sheet over a 20 µm gap, entering pad and ground by 1 nm; square pad 200. Used by the square and flip-chip pad coupons. The same sheet across a 32-point polygon pad of r 100 is not supported: its model builds, but it cannot be written to the geometry file that meshing reads. The circular pad coupon is not this case, because it declares its pad and opening as circular arcs.](../assets/supported-geometry/cell-24.svg){fig-alt="A narrow port sheet spanning the gap between a pad edge and the ground."}
 :::
 
 The PDK draws the spline strips of cell 21 with 258 points. The samples
@@ -166,7 +168,7 @@ and red marks the problem. Dimensions are in µm. The rules themselves are on
 
 ### A conductor cut by the die edge along an arc {#unsupported-arc-die-cut}
 
-![A curved strip between two exact arcs about one centre, radii 6.5 and 10, runs into the die edge at x = 0. Near the outer arc's cut, each band boundary would end in a half circle about the cut (red, enlarged on the right).](assets/supported-geometry/unsupported-arc-die-cut.svg){fig-alt="A curved strip running into the die edge, with its band boundaries; near the cut, the boundaries end in short red dashed arcs about the cut point."}
+![A curved strip between two exact arcs about one centre, radii 6.5 and 10, runs into the die edge at x = 0. Near the outer arc's cut, each band boundary would end in a half circle about the cut (red, enlarged on the right).](../assets/supported-geometry/unsupported-arc-die-cut.svg){fig-alt="A curved strip running into the die edge, with its band boundaries; near the cut, the boundaries end in short red dashed arcs about the cut point."}
 
 The die edge is a dicing line, so SCGSim treats a conductor cut by it as
 continuing past it, and a straight edge continues along its own line. An edge
@@ -187,7 +189,7 @@ continues like any straight edge.
 
 ### The die outline beside a cut {#unsupported-notch-beside-cut}
 
-![A strip 3 wide is cut by the floor of an 8 × 4 notch in the die's top edge. Its right side, continued past the die edge (red dashed) to twice the largest margin beyond the floor, ends 0.1 from the notch wall (red), inside the 1.0 margin.](assets/supported-geometry/unsupported-notch-beside-cut.svg){fig-alt="A diagonal strip ending on the floor of a notch in the die edge; a dashed continuation of its side reaches close to the notch wall."}
+![A strip 3 wide is cut by the floor of an 8 × 4 notch in the die's top edge. Its right side, continued past the die edge (red dashed) to twice the largest margin beyond the floor, ends 0.1 from the notch wall (red), inside the 1.0 margin.](../assets/supported-geometry/unsupported-notch-beside-cut.svg){fig-alt="A diagonal strip ending on the floor of a notch in the die edge; a dashed continuation of its side reaches close to the notch wall."}
 
 Bands beside the continuation would be measured from a conductor that is not
 drawn. The same rule refuses a conductor that overhangs the die from a vertex
@@ -199,14 +201,14 @@ and a cut beside a curved stretch of the die outline. The build raises
 
 ### A conductor a little wider than twice its largest margin {#unsupported-lead-core}
 
-![An isolated lead 2.004 wide, from left to right: the lead on its die, a window across its width, and a 20 nm window at its middle. The 0.5 band boundary is the thin dark line; the 1.0 boundary (red) leaves a core 4 nm wide.](assets/supported-geometry/unsupported-lead-core.svg){fig-alt="A straight lead with its band boundaries; enlarged, the two innermost boundaries run 4 nm apart down the middle of the lead."}
+![An isolated lead 2.004 wide, from left to right: the lead on its die, a window across its width, and a 20 nm window at its middle. The 0.5 band boundary is the thin dark line; the 1.0 boundary (red) leaves a core 4 nm wide.](../assets/supported-geometry/unsupported-lead-core.svg){fig-alt="A straight lead with its band boundaries; enlarged, the two innermost boundaries run 4 nm apart down the middle of the lead."}
 
 The core, the face beyond the largest margin, is narrower than the 10 grid
 steps the mesher needs. A lead exactly twice the margin wide has no core and is
 modeled. The meshing stage of `mesh()` and `simulation_drc()` refuses the core
 with `SimulationDrcError`: a class B narrow face owned by `erosion`, with its
 location and the fix, change the margins or the width; see
-[What the meshing stage reports](layout-modeling-check.qmd#what-the-meshing-stage-reports).
+[What the meshing stage reports](../guides/check-a-layout.qmd#what-the-meshing-stage-reports).
 
 ## Lumped ports are made rectangles {#lumped-port-rectangle}
 
@@ -306,7 +308,7 @@ The port is 19.981 µm long, 0.007 µm shorter than the largest rectangle.
 
 ### Worked example: the Xmon's junction port at 45° {#lumped-port-xmon}
 
-The [flip-chip Xmon](tutorial-xmon-input.qmd) draws its junction sheet at 45°
+The [flip-chip Xmon](../guides/xmon/inputs.qmd) draws its junction sheet at 45°
 across the gap between the ground opening and the Xmon pad, on a 1 nm grid. On
 the grid the sheet has eight vertices, four of them added where the two round
 outlines cross its long sides:

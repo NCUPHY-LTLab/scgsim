@@ -1,7 +1,9 @@
 ---
 title: "程式碼地圖"
 description: "src/scgsim 有哪些階段、每條路線中工作依序經過哪些階段、階段之間傳遞什麼，以及哪個資料夾是哪個階段。"
-sidebar: contribution
+sidebar: contribute
+aliases:
+  - ../code-map.html
 ---
 
 本頁讓你從一個地方重建 `src/scgsim` 的結構：有哪些階段、Palace 路線與 AEDT
@@ -11,7 +13,7 @@ sidebar: contribution
 
 ## 兩條路線 {#routes}
 
-這兩條路線就是[後端支援矩陣](backend-support.qmd)中的兩條路線，都以使用者閱讀的結果為終點。
+這兩條路線就是[後端支援矩陣](../reference/supported-calculations.qmd)中的兩條路線，都以使用者閱讀的結果為終點。
 Palace 路線從版圖與堆疊開始。AEDT 路線有兩個入口：HFSS Eigenmode、HFSS Driven Terminal 與 Q3D
 從 `GeometryPlan` 開始，它的 snapshot 先經過共用幾何階段，再由 `aedt/preparation` 以 `geometry/sgb`
 建立 SGB 模型；Q2D 與 Q3D 也接受傳給 `prepare_handoff` 的 AEDT 請求規格，由呼叫者建立 `aedt/specs`
@@ -179,6 +181,6 @@ AEDT 的階段資料夾沒有受檢查的順序；[如何閱讀一個資料夾](
 本頁列出各階段與它們的順序；各階段承諾的內容在下列頁面：
 
 - [架構與資料流程](architecture.qmd)：模組與狀態邊界，以及 Palace 與 AEDT 的生命週期。
-- [GeometryPlan 與 SGB](geometry-sgb.qmd)：從版圖到後端幾何的幾何契約。
-- [支援範圍](supported-scope.qmd#supported-entry)：支援的入口，以及直接呼叫其下層時所假設的條件。
-- [後端支援矩陣](backend-support.qmd)：每條路線支援的計算。
+- [GeometryPlan 與 SGB](../reference/specs/geometry-plan.qmd)：從版圖到後端幾何的幾何契約。
+- [支援範圍](../reference/supported-scope.qmd#supported-entry)：支援的入口，以及直接呼叫其下層時所假設的條件。
+- [後端支援矩陣](../reference/supported-calculations.qmd)：每條路線支援的計算。

@@ -4,6 +4,8 @@ description: "Secondary implementation, project and documentation-build referenc
 scgsim-kind: "project"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/ownership"
+aliases:
+  - ../ownership.html
 ---
 
 SCGSim owns the reusable geometry, solver preparation, handoff, result and
@@ -24,7 +26,7 @@ release procedures belong to the secondary
 Each SCGSim 3.0 package area owns the responsibilities below and must not take
 over those of another area. The [code map](code-map.qmd) shows which stage each
 folder is and the order the work flows through them. The
-[migration reference](api-migration.qmd) maps the v1 names to their 3.0
+[migration reference](../guides/upgrade.qmd) maps the v1 names to their 3.0
 owners.
 
 | Target area | Owns | Must not take ownership of |
@@ -55,7 +57,7 @@ owners.
 `scgsim.geometry.sgb` sits below the supported
 entry: a layout enters through `GeometryPlan` and the simulation classes, and a
 direct call with an input built by hand assumes what that entry guarantees; see
-[the supported entry](supported-scope.qmd#supported-entry).
+[the supported entry](../reference/supported-scope.qmd#supported-entry).
 
 Source-backed Eigenmode preparation, solve and export belong to the HFSS
 family even when no EPR analysis is requested. Declared junctions and generic
@@ -67,7 +69,7 @@ and source-attribution checks.
 
 The baseline facade and direct-submodule symbol maps for geometry, AEDT, Palace
 and visualization, with their current owners, are in the
-[API migration reference](api-migration.qmd).
+[API migration reference](../guides/upgrade.qmd).
 Publicness comes from documented facades/contracts and declared exports, not
 from whether a Python module happens to be importable. The v2 change
 intentionally does not preserve `scgsim.sgb` compatibility wrappers or Q3D
@@ -84,7 +86,7 @@ authority. Relocation must preserve these ownership and failure contracts.
 
 Palace and AEDT backend implementations, tests and technical documentation
 remain distinct source responsibilities as described in the repository
-[root guide](../AGENTS.md). Native observations and solver-specific result
+[root guide](../../AGENTS.md). Native observations and solver-specific result
 interpretation retain their technical boundaries; a directory reorganization
 does not imply that those activities are complete. Follow the shared
 [$github-flow](https://github.com/arfiligol/agent-skills/tree/main/github-flow)

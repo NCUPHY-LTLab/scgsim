@@ -1,6 +1,6 @@
 """Figures and numbers of ``labels-and-dissolution.qmd`` (computed with the production package ``scgsim.geometry.sgb``).
 
-Writes into ``docs/design/sgb/figures/``:
+Writes into ``zh-TW/docs/contribute/sgb-design/figures/``:
 
 * ``labels-slab-cells.svg``      slab labels of the Route B running example: which prisms cover each cell and what wins;
 * ``labels-level-links.svg/.html`` level labels of the same model obtained by linking, with the "needs a face" rule;
@@ -16,7 +16,7 @@ the same tab as a separate entity (production keeps the seam between entities) a
 ``pad_in_ground("B")`` of ``tests/sgb_scenes.py`` (true arcs, mid-plane port), used only to count the chord edges that
 dissolution merges back into arcs.
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/labels_and_dissolution.py
+Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/labels_and_dissolution.py
 """
 
 from __future__ import annotations

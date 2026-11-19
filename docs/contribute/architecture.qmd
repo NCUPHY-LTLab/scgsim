@@ -4,11 +4,13 @@ description: "Module ownership, native transaction phases and staged persistence
 scgsim-kind: "implementation"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/architecture"
+aliases:
+  - ../architecture.html
 ---
 
 This secondary implementation reference is for contributors. For a researcher
-introduction, start with [semantic geometry](concepts/geometry.qmd) or the
-[tutorials](examples.qmd). Repository procedures live in the
+introduction, start with [semantic geometry](../concepts/geometry.qmd) or the
+[tutorials](../start/choose-a-simulation.qmd). Repository procedures live in the
 [maintainer entry](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md).
 
 SCGSim keeps PDK facts, component intent, semantic geometry, solver preparation,
@@ -70,10 +72,10 @@ it does not start a solve or determine run status.
 Publicness follows explicit package facades, declared submodule exports and
 documented contracts—not mere importability. SCGSim 3.0 has four entry
 packages, `scgsim.geometry`, `scgsim.palace`, `scgsim.aedt` and
-`scgsim.visualization`; the [API migration reference](api-migration.qmd) maps
+`scgsim.visualization`; the [API migration reference](../guides/upgrade.qmd) maps
 older submodules and symbols to them. The
-[supported entry](supported-scope.qmd#supported-entry) is a calculation that
-[Supported calculations](backend-support.qmd) lists, entered with a
+[supported entry](../reference/supported-scope.qmd#supported-entry) is a calculation that
+[Supported calculations](../reference/supported-calculations.qmd) lists, entered with a
 `GeometryPlan` and the simulation classes of `scgsim.palace` and `scgsim.aedt`,
 or with an AEDT request spec passed to `prepare_handoff`. Moved private
 implementations do not gain public status by relocation. Each symbol has one
@@ -88,7 +90,7 @@ result with `scgsim.meshing`. `scgsim.geometry.sgb` sits below the supported
 entry: a layout enters through `GeometryPlan` and the simulation classes of
 `scgsim.palace` and `scgsim.aedt`, and a direct call with an input built by
 hand assumes what that entry guarantees; see
-[the supported entry](supported-scope.qmd#supported-entry).
+[the supported entry](../reference/supported-scope.qmd#supported-entry).
 `interpret_physical_geometry` from `scgsim.geometry` returns the effective
 input, stack, and representation plan.
 
@@ -101,7 +103,7 @@ boundaries; callers use the supported entry.
 | `scgsim.geometry.junctions` | Resolve authored support and incident-conductor binding, then derive exact rectangular-junction partitions. |
 | `scgsim.geometry.grid.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
 
-The [API migration reference](api-migration.qmd) lists the supported import
+The [API migration reference](../guides/upgrade.qmd) lists the supported import
 routes for these operations.
 
 Palace's two simulations, Electrostatic and Eigenmode, share one core in
@@ -120,7 +122,7 @@ execute a solver, and presentation consumes detached results. These are
 separate ownership boundaries, not shared solver base classes. Surface EPR on the SGB
 model integrates each sidecar Surface-EPR row on a non-model sheet copied from
 its faces, with the sheet's own normal at each point; see the
-[field-side contract](specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction).
+[field-side contract](../reference/specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction).
 
 Within Palace, `results` reads a returned run folder into checked records:
 `results.resolve` the completed run (`ResolvedRunData`), and `results.snapshots`
@@ -134,7 +136,7 @@ AEDT receipts record the runtime source: every file of the import closure of
 `scgsim/aedt` and the two AEDT visualization loaders, with the SHA-256 of each,
 under `scgsim.aedt.runtime-source.v30`. The list is computed on each use, so
 moving or deleting a module changes the list instead of breaking AEDT
-([runtime-source contract](specs/aedt-runtime.qmd#runtime-source)).
+([runtime-source contract](../reference/specs/aedt-runtime.qmd#runtime-source)).
 
 The flow below shows the source structure. Geometry source preparation
 and model construction have separate owners, and neither backend defines source
@@ -168,7 +170,7 @@ includes authored curve declarations and explicit GDS
 reconstruction records in that snapshot while preserving Entity/Net ownership.
 `scgsim.geometry` owns the source-facing plan and snapshot. Palace and AEDT get line and circular-arc curves through SGB
 (`scgsim.geometry.sgb`): AEDT imports them as exact arcs in the model's STEP. The
-[GeometryPlan contract](geometry-sgb.qmd) owns exact curve identity and
+[GeometryPlan contract](../reference/specs/geometry-plan.qmd) owns exact curve identity and
 arrangement semantics. Native observations do not replace source identity or
 establish connectivity. AEDT names every object, face group and boundary from
 the sidecar and checks the imported shape against the guard.
@@ -200,12 +202,12 @@ serialization. Missing or different revision identity fails rather than
 silently rebinding facts.
 Native tags remain opaque observations, not sources of guessed contact.
 Material identity, approximation and native implementation stay separate. The
-[GeometryPlan/route contract](geometry-sgb.qmd) owns their public meaning; this
+[GeometryPlan/route contract](../reference/specs/geometry-plan.qmd) owns their public meaning; this
 page explains which modules implement it.
 
 AEDT does not consume Gmsh tags. It imports the SGB model's STEP; the sidecar
 names its solids, face groups, port faces and Surface-EPR rows, and the guard
-checks the imported shape before anything is named. The [AEDT contract](specs/aedt-runtime.qmd)
+checks the imported shape before anything is named. The [AEDT contract](../reference/specs/aedt-runtime.qmd)
 owns exact side-selection and result rules. Display-only helpers live under
 `scgsim.aedt.presentation`, with public methods delegating to them; presentation
 adds no solver execution or shared physics schema.
@@ -216,11 +218,11 @@ OrPen SC PDK owns the public component examples and calls the shared runtime
 directly. SCGSim owns the reusable package APIs, not a duplicate notebook source.
 
 The per-family supported calculations and current limits
-are maintained in the [Backend Support Matrix](backend-support.qmd).
+are maintained in the [Backend Support Matrix](../reference/supported-calculations.qmd).
 
 Mesh quality is the `scgsim.meshing` audit that `mesh()` runs: it holds the
 threshold and writes the quality report. Scientific convergence stays outside
-that report. See [Tetrahedral Mesh Quality](mesh-quality.qmd).
+that report. See [Tetrahedral Mesh Quality](../reference/specs/mesh-quality.qmd).
 
 ## Palace preparation lifecycle
 
@@ -343,7 +345,7 @@ HFSS Eigenmode and EPR share one private setup-control mapping; EPR owns only
 its expression-cache extension. Driven HFSS and Q3D/Q2D retain their
 family-specific setup translations. Shared Desktop, ACF/resource, and raw
 saved-setup helpers do not define solver-specific setup fields; see the
-[AEDT setup-control contract](specs/aedt-runtime.qmd#aedt-family-setup-controls).
+[AEDT setup-control contract](../reference/specs/aedt-runtime.qmd#aedt-family-setup-controls).
 
 The Q3D user-requested Stop/Abort-and-save path exposes `request_q3d_stop_and_save(handoff)` for Clean Stop after the current pass and `request_q3d_abort_and_save(handoff)` to interrupt current work, with exclusive CLI flags `--stop-and-save` and `--abort-and-save`. Both use one exact-target local-Linux requester, the owned Desktop and transaction identity/nonce, and the shared control ledger/lock. Repeating the same mode is idempotent; a conflicting committed mode is refused without another native RPC. Raw RPC responses are uninterpreted. Linux stop-managed Q3D refuses PyAEDT documentation mode before Desktop creation because it overrides the close flags needed for exclusive transaction ownership.
 
@@ -390,7 +392,7 @@ sweep uses independent model requests and packages; callers may transfer those
 archives together, but run and collect each package separately. A successful
 external process exit permits collection, but complete adaptive history and
 saved-field EPR readback must still pass the strict resolver before a run is a
-completed result. The [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
+completed result. The [AEDT runtime contract](../reference/specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
 defines the package, attempt, and collection boundaries.
 
 | Stage | Owner | Responsibility and boundary |
@@ -437,7 +439,7 @@ with the SCGSim commit that wrote it. This
 consistency contract is not source authenticity for an actor able
 to rewrite the entire unsigned artifact set.
 
-The [AEDT current-formats contract](specs/aedt-runtime.qmd#current-formats)
+The [AEDT current-formats contract](../reference/specs/aedt-runtime.qmd#current-formats)
 is the unique authority for the receipt and runtime-source rules. One pure
 initial-receipt codec owns the V3 JSON member order, indentation and final
 newline; handoff writing and initial-receipt reconstruction use that codec.
@@ -483,5 +485,5 @@ earlier cache pass, and a new postsolve margin is a final-field calculation,
 not invented pass history.
 
 See [Folder tree and ownership](ownership.qmd) for repository placement and
-[Headless Geometry Preview](geometry-preview.qmd) for the static and connected
+[Headless Geometry Preview](../guides/preview-the-geometry.qmd) for the static and connected
 Notebook inspection contract.

@@ -4,10 +4,12 @@ description: "Circular Pad Uniform-port 研究所記錄的固定來源與原生�
 scgsim-kind: "history"
 scgsim-status: "HISTORICAL"
 scgsim-id: "docs/history/curved-source-installation"
+aliases:
+  - ../../history/curved-source-installation.html
 ---
 
 ::: {.callout-important title="此設定已不再適用"}
-SCGSim 3 使用原版 Palace 0.18.1，不需要 Palace 分支。本頁只說明較早的結果是如何產生的；若要以 SCGSim `3.0.0rc4` 進行模擬，請依照[安裝教學](../course/installation.qmd)。
+SCGSim 3 使用原版 Palace 0.18.1，不需要 Palace 分支。本頁只說明較早的結果是如何產生的；若要以 SCGSim `3.0.0rc4` 進行模擬，請依照[安裝教學](../../start/install.qmd)。
 :::
 
 本頁僅供重現歷史 Circular Pad Uniform-port 研究。內容記錄 SCGSim `1.1.0rc1`、執行時使用的 OrPen SC PDK 產生器，以及特定 Palace 分支；請在獨立的專案環境中重現此研究。

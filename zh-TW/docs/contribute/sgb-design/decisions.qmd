@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/decisions"
+aliases:
+  - ../../design/sgb/decisions.html
 ---
 
 這一頁把 SGB 設計中需要決定、或已由 Human 或 Lead 決定的項目放在一起，讓你一眼看出哪些已定案、哪些仍然開放、哪些數字需要 Human 核准。每一項先說明問題、選項、建議與後果，再列出 prototype 提供的證據。
@@ -215,7 +217,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 
 ## 補充：重現資料
 
-D3、D7、D8 與 D9 的數字可由下列檔案重現；圖與數字的腳本與執行方式列在 `docs/design/sgb/_figures/README.md`，本頁不重跑 prototype。
+D3、D7、D8 與 D9 的數字可由下列檔案重現；圖與數字的腳本與執行方式列在 `zh-TW/docs/contribute/sgb-design/_figures/README.md`，本頁不重跑 prototype。
 
 ::: {.askr-table-compact}
 | 資料 | 來源 |

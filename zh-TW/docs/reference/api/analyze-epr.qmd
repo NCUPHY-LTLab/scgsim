@@ -4,11 +4,13 @@ description: "已保存場 EPR 的參數、最小呼叫與函式簽章。"
 scgsim-id: "docs/api/scgsim-aedt/analyze_epr"
 scgsim-kind: "api"
 scgsim-status: "CONVERGING"
+aliases:
+  - ../../api/analyze_epr.html
 ---
 
 # `analyze_epr`：儲存場 EPR 用法
 
-`analyze_epr` 會透過 AEDT 原生功能評估保留場資料，必須明確選擇 AEDT 版本並提供授權；`reanalyze_epr` 則離線更新已解析結果的假設。請依[儲存場完整教學](../course/aedt-saved-fields.qmd)操作，相關參考資料見[參考指南](../knowledge-guide.qmd)。
+`analyze_epr` 會透過 AEDT 原生功能評估保留場資料，必須明確選擇 AEDT 版本並提供授權；`reanalyze_epr` 則離線更新已解析結果的假設。請依[儲存場完整教學](../../guides/saved-fields.qmd)操作，相關參考資料見[參考總覽](../index.qmd)。
 
 ## 最小呼叫
 
@@ -69,7 +71,7 @@ def analyze_epr(
 ) -> Any: ...
 ```
 
-[完整產生索引](input-index.qmd).
+[完整產生索引](../api-index.qmd).
 
 ::: {.content-hidden}
 
@@ -78,8 +80,8 @@ def analyze_epr(
 | 來源 | SHA-256 |
 |---|---|
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
-| `zh-TW/docs/api/analyze-epr-usage.md` | `b5db4425fc362af6b6f24e4226669ef2756444347938ecbe544ec3a1c2e911d5` |
+| `zh-TW/docs/reference/api/analyze-epr-usage.md` | `4bbb2c5cf6887f6ce6620769f086879cb35724e9df1b239242d4b09ab72e6bb8` |
 
-完整產生索引, SHA-256 `98fac2e9fe7e4041422e13581226812e9689bc08f3f569a3253355b4acbbf566`.
+完整產生索引, SHA-256 `8e9c2aeda77a76f9eebf0c865804584b86a88715bfa0c2cb320780357d61f871`.
 
 :::

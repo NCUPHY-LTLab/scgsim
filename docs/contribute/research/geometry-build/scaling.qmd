@@ -4,6 +4,8 @@ description: "How derivation and validation time, model size and peak memory of 
 scgsim-kind: "research"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/research/geometry-build/scaling"
+aliases:
+  - ../../../research/geometry-build/scaling.html
 ---
 
 **Question.** When a chip has more features, how much longer does the build take and how much memory does it need?

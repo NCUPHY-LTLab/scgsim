@@ -1,7 +1,7 @@
 """Figures and numbers of ``slivers.qmd``: one computed example per sliver source of brief section 10 (production package).
 
 Each example is small and drawn at the scale of the 1 nm grid (pixel grid lines visible).  Writes into
-``docs/design/sgb/figures/``:
+``zh-TW/docs/contribute/sgb-design/figures/``:
 
 * ``slivers-gallery.svg/.html``  four rows, "as the source geometry would give it" next to "what SGB builds":
   1. quantization sliver (three nearly concurrent curves)        -> snap rounding,
@@ -20,7 +20,7 @@ carries every layer's boundary on every level (2), and the noded cells before di
 *emulation* of derived-to-source snapping (production has no such policy): the source curve is moved onto the derived curve by
 4 nm, which gives the same topology the policy would.
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/slivers.py
+Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/slivers.py
 """
 
 from __future__ import annotations

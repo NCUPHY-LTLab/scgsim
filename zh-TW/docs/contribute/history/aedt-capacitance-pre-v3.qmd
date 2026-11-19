@@ -5,9 +5,11 @@ lang: zh-TW
 scgsim-kind: "course"
 scgsim-status: "HISTORICAL"
 scgsim-id: "docs/history/aedt-capacitance-pre-v3"
+aliases:
+  - ../../history/aedt-capacitance-pre-v3.html
 ---
 
-本頁保留較早的 SimplePad Q3D 電容範例及其原生觀察結果。目前 Q3D 輸入撰寫方式請參閱[以實體為來源的 Q3D 課程](../course/aedt-q3d.qmd)。
+本頁保留較早的 SimplePad Q3D 電容範例及其原生觀察結果。目前 Q3D 輸入撰寫方式請參閱[以實體為來源的 Q3D 課程](../../guides/capacitance-q3d.qmd)。
 
 ## 模型與來源 {#model-and-source}
 
@@ -23,7 +25,7 @@ scgsim-id: "docs/history/aedt-capacitance-pre-v3"
 
 標準公開來源為 OrPen 固定版本 [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)。其中 [`aedt_q3d.ipynb`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_q3d.ipynb) 與[可編輯 QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd)定義較早的 GDS 匯入工作流程。
 
-![公開 SimplePad 版圖：中央焊盤、周圍 Ground，以及已定義的東側邊緣集總端口定位器。](../assets/simple-pad-layout.png){#fig-simple-pad-layout}
+![公開 SimplePad 版圖：中央焊盤、周圍 Ground，以及已定義的東側邊緣集總端口定位器。](../../assets/simple-pad-layout.png){#fig-simple-pad-layout}
 
 定位器是來源版圖的一部分。以下 Q3D 請求只計算 C/G，不會加入電感支路。將鋁映射至原生 PEC，以及使用開放 Q3D Region，都是此已記錄求解器模型的一部分。模型沒有第二個晶粒、背面金屬、讀出結構或凸塊。此開放 Region 請求不包含外部接地外殼；尺寸與堆疊是模型輸入，不代表實測電容或準確度主張。
 
@@ -54,4 +56,4 @@ Notebook 要求以下萃取與自適應控制：
 
 參考輸出背景與完整精度資料列見公開的 [SimplePad 證據 README](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/README.md)與[結果 CSV](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/results.csv)。記錄中的 SimplePad 來源為 `24ae5a4`，其元件與 Notebook 位元組和公開 OrPen `51985d9` 相同；SCGSim 來源為 `1.0.1`，修訂版本為 `9c032e3`。
 
-這些數值是文件所述模型的觀察結果，不是新執行的數值目標。較早的 GDS 匯入請求，與目前[Q3D 課程](../course/aedt-q3d.qmd)說明的實體來源輸入不同。
+這些數值是文件所述模型的觀察結果，不是新執行的數值目標。較早的 GDS 匯入請求，與目前[Q3D 課程](../../guides/capacitance-q3d.qmd)說明的實體來源輸入不同。

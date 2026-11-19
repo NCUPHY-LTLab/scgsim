@@ -9,13 +9,13 @@ plus one family written for this page and added without touching any pipeline co
 
 * ``window``  -- a closed rectangle in the gap (a user partition: the cell is split, the group is not).
 
-Writes into ``docs/design/sgb/figures/``:
+Writes into ``zh-TW/docs/contribute/sgb-design/figures/``:
 
 * ``families-level.svg/.html``  level z = 0 with every edge coloured by the family that cut it, cells by primary group;
 * ``families-numbers.json``     ablation counts (what each family adds), band areas with and without the extra families, order
   independence of the build identity and the family record fields.
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/families.py
+Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/families.py
 """
 
 from __future__ import annotations

@@ -4,6 +4,8 @@ description: "Check from a layout repository that a simulation can model the pla
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/layout-modeling-check"
+aliases:
+  - ../layout-modeling-check.html
 ---
 
 Each Palace simulation class has a class-level `simulation_drc()` that tells a
@@ -27,10 +29,10 @@ The geometry stage catches layout defects that stop modeling: malformed shapes,
 overlaps, tiny misalignments, wrong semantic declarations, port sheets that do
 not sit where they should, and Surface EPR bands that do not fit the drawn
 gaps. It does not predict the final simulation geometry. The patterns SCGSim is
-tested on are listed in [Supported Geometry](supported-geometry.qmd), and the
+tested on are listed in [Supported Geometry](../reference/supported-geometry.qmd), and the
 known failures with their layout fixes in
-[Known Geometry Problems](known-geometry-problems.qmd). The rules the check
-enforces, and who owns each failure, are on [Supported Scope](supported-scope.qmd).
+[Known Geometry Problems](../reference/known-geometry-problems.qmd). The rules the check
+enforces, and who owns each failure, are on [Supported Scope](../reference/supported-scope.qmd).
 
 ## Build the plan the simulation is given {#build-the-plan}
 
@@ -73,7 +75,7 @@ The check uses the plan as the simulation uses it and adds nothing to it:
   reaches 1000 µm below and above, so the metal has air faces for `MA` and
   `SA` bands.
 - **Surface EPR.** The plan's `set_surface_epr(specs)`, the specs the
-  simulations will use (the [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins)
+  simulations will use (the [Eigenmode contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)
   lists their keys). Their margins are cut into the geometry as bands, so a
   layout that cannot carry them is refused here too. Bands are cut only on the
   faces the specs select, so a layout with no such face passes with no bands;
@@ -89,7 +91,7 @@ class adds of its own.
 Call the check from the repository's tests and while the layout is being
 drawn. Pass `route` and `approximation_profile` with the route the simulations
 will use: they are the arguments of
-[`set_route`](specs/physical-representation.qmd#palace-caller-profile), with
+[`set_route`](../reference/specs/physical-representation.qmd#palace-caller-profile), with
 its defaults and refusals. Without them the check is Route B; `route="A"` alone
 uses the `thin_film` profile, and `route="A"` with a `substrate_face` or
 `metal_gap_equivalent` profile uses that profile and its `film_bindings`. A
@@ -102,7 +104,7 @@ each.
 The check builds the geometry and does not mesh or solve, so it can be repeated
 as the layout changes. The geometry stage stops at its first refusal; the
 meshing stage lists every finding at once. Read the message, fix the layout,
-and run it again. [When something fails](supported-scope.qmd#when-something-fails)
+and run it again. [When something fails](../reference/supported-scope.qmd#when-something-fails)
 gives the owner and the next action for each error.
 
 A geometry-stage refusal can also come from a defect in SGB rather than from
@@ -189,7 +191,7 @@ largest margin, much wider than its bands. Where a conductor narrows to exactly
 twice its largest margin, the bands meet down its middle: the model is still
 the exact erosion and meshes, with class C warnings for the short band edges at
 that neck. A little wider, the conductor keeps a sliver of core that class B
-refuses; see [Surface-EPR margins](supported-scope.qmd#rules-margins).
+refuses; see [Surface-EPR margins](../reference/supported-scope.qmd#rules-margins).
 :::
 
 Each finding names its stage, class, measure and size, the SGB entity and its
@@ -262,7 +264,7 @@ A vacuum padded by (0, 0, 1000) µm ends at the layout's planar extent, so draw
 what sets the extent: the die outline or a ground plane. A conductor that
 reaches the extent only at a point, such as a lone round pad with nothing drawn
 around it, is refused with `NonManifoldError`;
-[A conductor that touches the boundary at one point](known-geometry-problems.qmd#boundary-point-pinch)
+[A conductor that touches the boundary at one point](../reference/known-geometry-problems.qmd#boundary-point-pinch)
 explains why and what to draw.
 
 `simulation_drc()` writes into a temporary folder and removes it. The geometry

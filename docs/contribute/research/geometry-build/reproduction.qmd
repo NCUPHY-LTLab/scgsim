@@ -4,6 +4,8 @@ description: "The machine, software versions, layouts, data files and commands b
 scgsim-kind: "research"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/research/geometry-build/reproduction"
+aliases:
+  - ../../../research/geometry-build/reproduction.html
 ---
 
 **Question.** On what were these numbers measured, and how are they reproduced?
@@ -41,7 +43,7 @@ The scaling run measures 1,000, 5,000 and 20,000 features, each in its own Pytho
 
 ## Data files
 
-The files are stored with the SGB design pages, in `zh-TW/docs/design/sgb/figures/`.
+The files are stored with the SGB design pages, in `zh-TW/docs/contribute/sgb-design/figures/`.
 
 | File | Holds | Written by |
 |---|---|---|
@@ -57,18 +59,18 @@ The measuring scripts run from the root of a checkout of this repository, in its
 
 ```bash
 uv sync --locked --group dev
-uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # about 5 minutes
-uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py oracle
-uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py validators
-uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/emission.py --measure
+uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py measure       # about 5 minutes
+uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py oracle
+uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py validators
+uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/emission.py --measure
 ```
 
 The figures and tables of this study need only `matplotlib` and the JSON files. They are written for both languages by one script:
 
 ```bash
-python3 docs/research/geometry-build/_figures/plots.py
+python3 docs/contribute/research/geometry-build/_figures/plots.py
 ```
 
 The script writes the SVG figures and Markdown tables to `figures/` beside each language's pages, and `numbers.json` with the values the text quotes. Edit the data only by rerunning the measuring scripts; the plotting script holds no numbers.
 
-The measuring scripts and their inputs are described in `zh-TW/docs/design/sgb/_figures/README.md`.
+The measuring scripts and their inputs are described in `zh-TW/docs/contribute/sgb-design/_figures/README.md`.

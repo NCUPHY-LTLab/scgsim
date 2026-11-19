@@ -4,13 +4,15 @@ description: "Read bound mesh or native assignments before interpreting a solver
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/solver-observations"
+aliases:
+  - ../course/solver-observations.html
 ---
 
 A backend preparation lesson gives you a mesh/config or a portable AEDT
 handoff. Now ask a different question from the source summary: what geometry
 and assignments exist in the backend representation? This lesson is optional
 for execution, but useful when a source declaration and a rendered model appear
-to disagree. It needs the [visualization extra](installation.qmd).
+to disagree. It needs the [visualization extra](../start/install.qmd).
 
 ## Palace: inspect the mesh that will be transferred
 
@@ -75,7 +77,7 @@ archive; a later sidecar is not retroactively part of that archive.
 The quality of the mesh is the meshing step's audit: minSICN of every
 tetrahedron on the linear mesh before elevation, held to the mesh's quality
 threshold. Its report sits in the run's `mesh/` folder; the fields are defined
-by the [mesh contract](../mesh-quality.qmd#quality-report).
+by the [mesh contract](../reference/specs/mesh-quality.qmd#quality-report).
 
 ## AEDT: source preparation and native preparation differ
 
@@ -122,8 +124,8 @@ Passing the sealed run folder binds preview readback to its recorded spec
 and opens native AEDT; Surface-EPR or mesh views can remain unavailable. If you
 instead pass `project_path` directly, supply its design and an explicit
 `aedt_version` matching the target Desktop. It does not turn a screenshot into a
-completed run. The [preview contract](../geometry-preview.qmd) specifies source
+completed run. The [preview contract](preview-the-geometry.qmd) specifies source
 hashes, manifest custody and unavailable modes.
 
-Next, [execute a fresh handoff](execute.qmd) on its host, or return to the
-[course map](../examples.qmd) to choose a different backend model.
+Next, [execute a fresh handoff](run-elsewhere.qmd) on its host, or return to the
+[course map](../start/choose-a-simulation.qmd) to choose a different backend model.

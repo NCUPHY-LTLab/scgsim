@@ -4,6 +4,8 @@ description: "Electrostatic Net binding, the mesh controls both Palace facades s
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/specs/palace-electrostatic-sgb"
+aliases:
+  - ../../specs/palace-electrostatic-sgb.html
 ---
 
 This contract covers the Palace Electrostatic backend: Route A/B lowering,
@@ -99,7 +101,7 @@ Before the mesher starts, `mesh()` runs the meshing stage of `simulation_drc` on
 the geometry it built. A refusing finding raises `scgsim.palace.SimulationDrcError`,
 carrying the report with each finding's location, owner and fix, and no mesh is
 made; warnings do not stop `mesh()`. The classes and limits are in
-[What the meshing stage reports](../layout-modeling-check.qmd#what-the-meshing-stage-reports).
+[What the meshing stage reports](../../guides/check-a-layout.qmd#what-the-meshing-stage-reports).
 The mesh controls below apply to a model that passed.
 
 ::: {.askr-table-compact}
@@ -160,7 +162,7 @@ qubit and on Route A sheets.
 Each recipe has a name and a version, recorded with its parameters in the mesh
 manifest, so a run states which sizing rules produced its mesh. A recipe's
 version changes only when the sizes it asks for change; see
-[Version identities of a mesh](../mesh-quality.qmd#version-identities).
+[Version identities of a mesh](mesh-quality.qmd#version-identities).
 
 #### Band boundary curves {#palace-mesh-band-edges}
 
@@ -243,7 +245,7 @@ Ground bindings use the exact Net of the sidecar.
 The meshing report states that minSICN and the count of tetrahedra below the
 threshold were measured on the linear mesh before any elevation, and records
 the order of the delivered mesh. Its fields are listed in
-[The quality report](../mesh-quality.qmd#quality-report).
+[The quality report](mesh-quality.qmd#quality-report).
 
 ## Mesh manifest and detached summary {#mesh-manifest-and-detached-summary}
 
@@ -278,18 +280,18 @@ prepared with other specs invalidates the mesh, config and handoff.
 
 ## Source and geometry authority
 
-Read the [SGB geometry concept](../concepts/geometry.qmd#source-stage) for the
+Read the [SGB geometry concept](../../concepts/geometry.qmd#source-stage) for the
 source-to-construction explanation. The contracts below define the supported
 preparation paths.
 
 The simulation takes its source from `set_plan(snapshot)`, a prepared
-`GeometryPlan`. The [GeometryPlan contract](../geometry-sgb.qmd) owns occurrence/Nets, generated
+`GeometryPlan`. The [GeometryPlan contract](geometry-plan.qmd) owns occurrence/Nets, generated
 vacuum, contact and Route-A/B semantics. The current source-facing geometry
 authority is `scgsim.geometry`. Palace builds its geometry with
 `scgsim.geometry.sgb` (`build_sgb_geometry`) and meshes it with
 `scgsim.meshing`. External SGB and gsim are derivation history only.
 
-The [Electrostatic lesson](../course/palace-electrostatic.qmd) teaches exact Net
+The [Electrostatic lesson](../../guides/capacitance-palace.qmd) teaches exact Net
 terminals/ground and the real mesh/config sequence. The separate
 [Eigenmode contract](palace-eigenmode.qmd) defines mode and EPR output selection.
 Neither preparation path starts Palace or submits a job.
@@ -404,7 +406,7 @@ the solves after that pass are not run.
 The run script starts Palace through the convergence runner that
 `prepare_handoff()` copies into the run folder,
 `metadata/run_palace_until_converged.py`, which needs only Python's standard
-library ([execution profiles](../execution-profiles.qmd#convergence-runner)).
+library ([execution profiles](execution-profiles.qmd#convergence-runner)).
 The runner:
 
 1. starts the solver command the script would have run, in a session of its
@@ -477,7 +479,7 @@ the run, naming what disagrees, when:
   the outputs the receipt records.
 
 `ResolvedPalaceResult.convergence` and the
-[trust report](../report-model.qmd#declared-convergence) say at which pass the
+[trust report](report-model.qmd#declared-convergence) say at which pass the
 run converged and where Palace stopped, or which criterion still fails at the
 pass limit and by how much. `ResolvedPalaceResult.solver_end` (a `SolverEnd`)
 holds the receipt's `ending`, the pass the runner stopped Palace after, and the
@@ -530,15 +532,15 @@ attributes separately and their exact union must equal
 Electrostatic authoring writes index-map schema v3, which carries the
 physical-versus-exterior Ground split. The resolver reads only the current index
 map and mesh manifest schemas; the
-[report contract](../report-model.qmd#palace-run-schemas) states what happens to
+[report contract](report-model.qmd#palace-run-schemas) states what happens to
 a run folder of an older schema.
 
 External gsim and historical SGB revisions are derivation evidence only. The
 runtime geometry authority is the in-tree `scgsim.geometry.sgb` and the
 current `scgsim.palace` implementation.
 
-See [GeometryPlan and SGB](../geometry-sgb.qmd),
-[Headless Geometry Preview](../geometry-preview.qmd),
-[Execution Profiles and Local/Manual-HPC Handoff](../execution-profiles.qmd),
-and [Provenance and Data Boundaries](../provenance.qmd) for the surrounding
+See [GeometryPlan and SGB](geometry-plan.qmd),
+[Headless Geometry Preview](../../guides/preview-the-geometry.qmd),
+[Execution Profiles and Local/Manual-HPC Handoff](execution-profiles.qmd),
+and [Provenance and Data Boundaries](../../contribute/provenance.qmd) for the surrounding
 contracts.

@@ -3,11 +3,11 @@
 Reads the measurements stored with the SGB design pages and writes, for both languages, the SVG figures and the Markdown
 tables the study pages use.  Nothing is measured here and the site render never runs this file::
 
-    python3 docs/research/geometry-build/_figures/plots.py
+    python3 docs/contribute/research/geometry-build/_figures/plots.py
 
 Only ``matplotlib`` is needed.  The editable data is the set of JSON files below (written by the design figure scripts
 ``why_scaling.py`` and ``emission.py``; the study's reproduction page lists the commands).  Outputs go to
-``docs/research/geometry-build/figures/`` (English) and ``zh-TW/docs/research/geometry-build/figures/`` (Traditional Chinese),
+``docs/contribute/research/geometry-build/figures/`` (English) and ``zh-TW/docs/contribute/research/geometry-build/figures/`` (Traditional Chinese),
 with identical file names; ``numbers.json`` in each folder holds the values the prose quotes.
 
 The work is split over ``plots_common`` (readers, palette and writers), ``plots_text`` (the labels of both languages), ``plots_scaling`` and

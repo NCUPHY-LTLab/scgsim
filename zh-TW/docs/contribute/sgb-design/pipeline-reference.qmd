@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/pipeline-reference"
+aliases:
+  - ../../design/sgb/pipeline-reference.html
 ---
 
 這一頁是查詢用的：每個 stage 讀什麼、產生什麼、出問題時怎麼辦，以及 stage 之間傳遞的 record 欄位。stage 與 record 的設計見[總覽](index.qmd)，名詞見[術語表](index.qmd#glossary)。

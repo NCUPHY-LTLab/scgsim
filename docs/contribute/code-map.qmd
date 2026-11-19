@@ -1,10 +1,12 @@
 ---
 title: "Code map"
 description: "The stages of src/scgsim, the order the work flows through them on each route, what crosses between them and which folder is which stage."
-sidebar: contribution
+sidebar: contribute
 scgsim-id: "docs/code-map"
 scgsim-kind: "contribution"
 scgsim-status: "CONVERGING"
+aliases:
+  - ../code-map.html
 ---
 
 This page lets you rebuild the structure of `src/scgsim` from one place: which
@@ -16,7 +18,7 @@ from the folders' own docstrings, so they say what the code says.
 
 ## The two routes {#routes}
 
-The two routes are those of the [backend support matrix](backend-support.qmd),
+The two routes are those of the [backend support matrix](../reference/supported-calculations.qmd),
 and both end at a result a person reads. The Palace route starts from a layout
 and a stack. The AEDT route has two entries. HFSS Eigenmode, HFSS Driven
 Terminal and Q3D start from a `GeometryPlan`: its snapshot passes through the
@@ -214,9 +216,9 @@ stage promises:
 
 - [Architecture and data flow](architecture.qmd): module and state boundaries
   and the Palace and AEDT lifecycles.
-- [GeometryPlan and SGB](geometry-sgb.qmd): the geometry contract from a layout
+- [GeometryPlan and SGB](../reference/specs/geometry-plan.qmd): the geometry contract from a layout
   to the backend geometry.
-- [Supported scope](supported-scope.qmd#supported-entry): the supported entry
+- [Supported scope](../reference/supported-scope.qmd#supported-entry): the supported entry
   and what a direct call below it assumes.
-- [Backend support matrix](backend-support.qmd): the calculations each route
+- [Backend support matrix](../reference/supported-calculations.qmd): the calculations each route
   supports.

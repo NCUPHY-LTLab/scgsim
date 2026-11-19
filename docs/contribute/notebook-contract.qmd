@@ -4,11 +4,13 @@ description: "OrPen notebook ownership and stage-local package consumer behavior
 scgsim-kind: "contract"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/notebook-ux"
+aliases:
+  - ../notebook-ux.html
 ---
 
 Public component-simulation notebooks are an OrPen SC PDK interface. SCGSim
 owns their reusable runtime APIs and keeps no duplicate notebook source.
-The [course map](examples.qmd#public-inputs) links the canonical public sources.
+The [course map](../start/choose-a-simulation.qmd#public-inputs) links the canonical public sources.
 
 ## Stage-local controls
 
@@ -21,8 +23,8 @@ handoff, Desktop ownership, readback, hashes and resolution do not become
 notebook-local helper implementations.
 
 Source summaries precede preparation. Returned analysis starts with identity,
-numerical evidence and cost before physics. The [report contract](report-model.qmd)
-owns ordering/availability; [execution profiles](execution-profiles.qmd) own
+numerical evidence and cost before physics. The [report contract](../reference/specs/report-model.qmd)
+owns ordering/availability; [execution profiles](../reference/specs/execution-profiles.qmd) own
 scripts/resources/return identity; backend contracts own controls. The notebook
 must not turn an incomplete receipt or unreadable final table into success.
 

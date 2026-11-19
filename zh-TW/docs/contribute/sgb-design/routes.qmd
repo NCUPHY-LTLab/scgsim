@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/routes"
+aliases:
+  - ../../design/sgb/routes.html
 ---
 
 同一顆晶片的導體，可以用不同的方式交給 solver：把薄膜當成零厚度的 sheet（Route A）、把有限厚度的金屬 volume 從求解區域中挖掉、只留下它的邊界（Route B），或把導體 volume 保留下來並在內部 mesh（Route C）。SGB 把這個選擇放在 labelling 層：arrangement、cell 與 face 的推導對每種 route 都是同一份程式，route 只決定導體的 cell 在輸出中代表什麼，以及哪些 volume 會被輸出。
@@ -61,7 +63,7 @@ route 改變存在哪些 prism（S1）以及輸出哪些 volume（S7）。它從
 
 ### Route A 的導體從何而來
 
-Route A 的 sheet 不是使用者直接畫出來的薄片。來源仍保有真實的金屬宣告：例如 100 nm 厚的金屬，以 `PhysicalLayerDeclaration` 記錄厚度與來源身分。S1（`interpret_physical_geometry`）依一個明確的近似設定（例如 `thin_film` profile）把它映射成零厚度的有效 sheet，這個設定的契約見 [Physical representation](../../specs/physical-representation.qmd)。
+Route A 的 sheet 不是使用者直接畫出來的薄片。來源仍保有真實的金屬宣告：例如 100 nm 厚的金屬，以 `PhysicalLayerDeclaration` 記錄厚度與來源身分。S1（`interpret_physical_geometry`）依一個明確的近似設定（例如 `thin_film` profile）把它映射成零厚度的有效 sheet，這個設定的契約見 [Physical representation](../../reference/specs/physical-representation.qmd)。
 
 production 的 Route A 規則因此只看**經過 S1 之後仍是有限厚度的 film**：宣告為 `stack_film` 或 `local_film`、卻沒有被 profile 收成 sheet 的導體，會被 `RouteError` 拒絕，訊息建議選一個會收成 sheet 的 profile（例如 `thin_film`）或改用 Route B 或 C。有限厚度的**本體**（宣告為 `finite_volume` 的 bump、post、TSV 類 volume，或像今天的 `cutout_boundary_shell` 表示法那樣沒有宣告者）照樣被接受，它們的 volume 與 Route B 一樣被排除，邊界面成為相鄰 volume 的 face；例如一顆站在 thin-film sheet 上的 bump，在 Route A 就是 sheet 加上被排除的有限厚度本體。Route B 與 Route C 則反過來，拒絕**導體 sheet**。原型時期在入口以 `RouteError` 拒絕所有有限厚度導體的做法，是原型的捷徑，已被這個規則取代。
 
@@ -112,7 +114,7 @@ solver 常想要的是 *union*，例如「Net `pad` 的所有導體表面」或�
 
 lumped port 的 sheet 放在 host 導體的**物理 support plane**：導體貼附的那個面。0.2 µm 的金屬在 substrate 上，support plane 是 substrate 的上表面 $z = 0$，port 就躺在那個介面上。
 
-這個平面是 source 宣告的，SGB 不從 body 的區間推算。PDK 在每個 film 的 `PhysicalLayerDeclaration` 宣告 `source_contact_facts["layer_attachment_face"]`（`lower` 或 `upper`），它對應 source 區間的下端或上端（`attachment_z_um`）；零厚度的 source sheet 以自己的平面為準。SGB 再經由共同的 `PhysicalRepresentationPlan`（`project_support_point`；Route A 的 sheet 取 sheet anchor）把它投影成 effective 模型的 $z$。AEDT 端準備 junction 時用的是同一條規則（見 [AEDT runtime](../../specs/aedt-runtime.qmd) 規格中 junction 的來源支撐平面：「physical source support plane」）。
+這個平面是 source 宣告的，SGB 不從 body 的區間推算。PDK 在每個 film 的 `PhysicalLayerDeclaration` 宣告 `source_contact_facts["layer_attachment_face"]`（`lower` 或 `upper`），它對應 source 區間的下端或上端（`attachment_z_um`）；零厚度的 source sheet 以自己的平面為準。SGB 再經由共同的 `PhysicalRepresentationPlan`（`project_support_point`；Route A 的 sheet 取 sheet anchor）把它投影成 effective 模型的 $z$。AEDT 端準備 junction 時用的是同一條規則（見 [AEDT runtime](../../reference/specs/aedt-runtime.qmd) 規格中 junction 的來源支撐平面：「physical source support plane」）。
 
 - **所有 host 必須一致。** 每個 host 的宣告平面是同一個 source $z$，投影後也是同一個 effective 平面；有限厚度的 body 區間只用來確認 host 確實碰到這個平面，不會自己產生平面。不一致時 build 以 `InputError` 停止。
 - **沒有宣告就失敗，沒有後備。** host 沒有物理宣告、宣告不是 film（例如 `finite_volume`）或沒有 attachment face，build 以 `InputError` 指名 host，並說明 PDK 必須宣告 `layer_attachment_face`。
@@ -173,7 +175,7 @@ D1 已決定 **Route C 屬於 v1**，production 已實作。導體 volume 保留
 
 ## 補充：重現資料
 
-圖與數字由 `zh-TW/docs/design/sgb/_figures/routes.py` 以 production 套件 `scgsim.geometry.sgb` 產生（用本 repository 的環境執行；sidecar 以 `read_sidecar` 讀回，embedding 與 port 取自 `views`），記錄在 `figures/routes-numbers.json`。Route B 與 C 是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`；Route A 是同一份 GDS 與 stack 以 `thin_film` profile 詮釋（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）。數量是 `build_model_from_catalogue` 得到的 `ConformalModel.counts`，輸出數量取自 `emit_model` 寫出的 BREP plan（`SgbArtifacts.counts`）與 sidecar。兩個不是真實輸入的例子：stage 層的 scene `tests/sgb_scenes.py` 的 `pad_in_ground("B")`（port 在中間平面，embedded face）與真實輸入加一條 dangling refinement curve。Brief 對應第 7 節（group、embedded face）、第 8 節（S7）與第 14 節（naming、contact）；production 模組為 `topology/routes`、`topology/assembly`、`output/emission`。
+圖與數字由 `zh-TW/docs/contribute/sgb-design/_figures/routes.py` 以 production 套件 `scgsim.geometry.sgb` 產生（用本 repository 的環境執行；sidecar 以 `read_sidecar` 讀回，embedding 與 port 取自 `views`），記錄在 `figures/routes-numbers.json`。Route B 與 C 是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`；Route A 是同一份 GDS 與 stack 以 `thin_film` profile 詮釋（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）。數量是 `build_model_from_catalogue` 得到的 `ConformalModel.counts`，輸出數量取自 `emit_model` 寫出的 BREP plan（`SgbArtifacts.counts`）與 sidecar。兩個不是真實輸入的例子：stage 層的 scene `tests/sgb_scenes.py` 的 `pad_in_ground("B")`（port 在中間平面，embedded face）與真實輸入加一條 dangling refinement curve。Brief 對應第 7 節（group、embedded face）、第 8 節（S7）與第 14 節（naming、contact）；production 模組為 `topology/routes`、`topology/assembly`、`output/emission`。
 
 Port 的 SA 面積表來自真實輸入：`experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 的 `all_interfaces` 組（每個 entity 的每個表面與 SA 都要求 band，margin 0.5 與 1 µm）寫在 `out/all_interfaces/route_{a,b,c}/`，摘要在 `out/all_interfaces/summary.json`；「沒有 port」的欄位用 `gds_pad_in_ground(with_port=False)` 以同樣的 band 要求建出。
 

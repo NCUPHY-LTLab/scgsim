@@ -1,14 +1,14 @@
-"""Figures and tables for ``docs/design/sgb/identity.qmd``.
+"""Figures and tables for ``zh-TW/docs/contribute/sgb-design/identity.qmd``.
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/identity.py
+    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/identity.py
 
 Computes, with the production package, a real mapping-chain lookup on the pad-in-ground running example (Route B with
 inset bands, its lumped port on the support plane z = 0) and the determinism evidence quoted by the page.  The model is
 built, written with ``emit_model`` into a scratch folder and the lookup reads the written sidecar
 (``scgsim.sgb.sidecar.v5``) through the contract's reader and views, exactly as a consumer would: every step follows a
-typed reference of one record to another, and no id is parsed.  Outputs go to ``docs/design/sgb/figures/`` (prefix ``identity-``):
+typed reference of one record to another, and no id is parsed.  Outputs go to ``zh-TW/docs/contribute/sgb-design/figures/`` (prefix ``identity-``):
 
 * ``identity-trace.json``        every step of the lookup  Palace attribute -> source curve (also quoted in the page)
 * ``identity-trace-plan.html``   the traced faces and edge in the plan view (+ ``.svg``)

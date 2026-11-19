@@ -4,6 +4,8 @@ description: "Bind returned evidence, then interpret quantities and history for 
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/returned-results"
+aliases:
+  - ../course/returned-results.html
 ---
 
 Use this lesson after explicit host execution and retrieval of the complete run
@@ -39,7 +41,7 @@ from the resolved run and binds it to the sealed mesh and manifest identities.
 The Eigenmode degree-of-freedom value is a primary-corner topology estimate for
 the configured FEM order, not a native solver count. Run folders written before
 the current schemas are not read; see
-[Palace run schemas](../report-model.qmd#palace-run-schemas).
+[Palace run schemas](../reference/specs/report-model.qmd#palace-run-schemas).
 
 Read the report in its displayed order: identity/trustworthiness, numerical
 evidence and cost, then the available physics. Identity and completion tell
@@ -85,14 +87,14 @@ native units and conductor/port order when using those rows downstream.
 
 Keep the native status, actual requested controls and available history beside
 these quantities. The report does not supply missing history or turn an
-incomplete return into a completed solve. The [runtime reference](../specs/aedt-runtime.qmd)
+incomplete return into a completed solve. The [runtime reference](../reference/specs/aedt-runtime.qmd)
 describes which raw records and normalized fields each family retains.
 
 Benchmark records distinguish SCGSim wall time from native task/stage times;
 missing profile data stays unavailable. A missing adaptive profile does not
 invent a pass curve, and overlapping stage times or peaks must not be summed as
 though independent. Details exposes provenance while the main view stays
-readable. [Report contracts](../report-model.qmd) own exact ordering and
+readable. [Report contracts](../reference/specs/report-model.qmd) own exact ordering and
 availability.
 
 ## Interpret the quantity for your SCQ use {#interpret-for-scq-use}
@@ -121,9 +123,9 @@ unrecorded trend or a new universal accuracy cutoff.
 ## Continue with the evidence you actually have
 
 For Palace Eigenmode EPR, `resolved.epr_result()` returns a detached final result
-when available. Preserve it for [offline EPR](offline-epr.qmd). For AEDT,
+when available. Preserve it for [offline EPR](offline-loss.qmd). For AEDT,
 adaptive EPR history and independently evaluated final saved-field EPR are
-separate artifacts. Use the [saved-field analysis bridge](aedt-saved-fields.qmd)
+separate artifacts. Use the [saved-field analysis bridge](saved-fields.qmd)
 when you need the latter. A completed ordinary Eigenmode receipt does not
 supply a missing saved-field cohort or an EPR request retroactively.
 

@@ -4,6 +4,8 @@ description: "Layout geometry that SCGSim refuses or models differently from the
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/known-geometry-problems"
+aliases:
+  - ../known-geometry-problems.html
 ---
 
 This page lists the geometry known to fail in SCGSim, or to build as something
@@ -20,7 +22,7 @@ on it, and the dashed red frames show where.
 SCGSim builds the outline it is given. It does not close nanometre gaps, remove
 short edges or resample curves, because it cannot tell a drawing defect from a
 feature that was meant. A layout check with `EigenmodeSim.simulation_drc` or
-`ElectrostaticSim.simulation_drc` ([layout modeling check](layout-modeling-check.qmd))
+`ElectrostaticSim.simulation_drc` ([layout modeling check](../guides/check-a-layout.qmd))
 finds the cases that stop the build and, in its meshing stage, the fine edges
 and faces the mesher cannot use, each with its location and owner; the others
 need a look at the layout. A fine edge or face that SGB did not cause is a
@@ -28,7 +30,7 @@ layout problem: SCGSim reports it and does not repair it.
 
 ## Spline curves are not read as curves {#spline-curves}
 
-![The B-spline strip and its control polygon (dashed red): the curve a spline boundary declares.](assets/supported-geometry/problem-spline-curve.svg){fig-alt="A curved strip with its five control points joined by a dashed red polygon."}
+![The B-spline strip and its control polygon (dashed red): the curve a spline boundary declares.](../assets/supported-geometry/problem-spline-curve.svg){fig-alt="A curved strip with its five control points joined by a dashed red polygon."}
 
 **What goes wrong.** When a cell declares its edges as spline boundary curves,
 the build stops with `UnsupportedCurveError: … 'bspline' curves are not
@@ -48,13 +50,13 @@ with nothing around it, is refused with `NonManifoldError`. Draw the die outline
 or a ground plane so that it, not the pad, sets that edge.
 
 ::: {layout-ncol=2}
-![**CPW cut off at the boundary: passes.** The centre strip and both ground strips end on the boundary x = 0, each over a stretch of it (heavy line).](assets/supported-geometry/problem-boundary-cpw.svg){fig-alt="A CPW whose three strips end on the left edge of the die, with a heavy line where each strip meets the edge, and a zoom on the centre strip's end."}
+![**CPW cut off at the boundary: passes.** The centre strip and both ground strips end on the boundary x = 0, each over a stretch of it (heavy line).](../assets/supported-geometry/problem-boundary-cpw.svg){fig-alt="A CPW whose three strips end on the left edge of the die, with a heavy line where each strip meets the edge, and a zoom on the centre strip's end."}
 
-![**Square pad along the boundary: passes.** The pad's left edge lies along the boundary over 12 µm.](assets/supported-geometry/problem-boundary-square.svg){fig-alt="A square pad between two ground strips, its left edge on the left edge of the die, and a zoom on its lower corner."}
+![**Square pad along the boundary: passes.** The pad's left edge lies along the boundary over 12 µm.](../assets/supported-geometry/problem-boundary-square.svg){fig-alt="A square pad between two ground strips, its left edge on the left edge of the die, and a zoom on its lower corner."}
 
-![**Round pad touching the boundary at one vertex: refused.** The 64-sided pad meets the boundary only at x = 0, y = 20 µm (red).](assets/supported-geometry/problem-boundary-round.svg){fig-alt="A round pad between two ground strips touching the left edge of the die at one red point, and a zoom where the vacuum above and below the point meets."}
+![**Round pad touching the boundary at one vertex: refused.** The 64-sided pad meets the boundary only at x = 0, y = 20 µm (red).](../assets/supported-geometry/problem-boundary-round.svg){fig-alt="A round pad between two ground strips touching the left edge of the die at one red point, and a zoom where the vacuum above and below the point meets."}
 
-![**Diamond touching the boundary at its tip: refused.** The tip is the only point of the diamond on the boundary (red).](assets/supported-geometry/problem-boundary-diamond.svg){fig-alt="A diamond between two ground strips touching the left edge of the die with its tip, marked red, and a zoom on the tip."}
+![**Diamond touching the boundary at its tip: refused.** The tip is the only point of the diamond on the boundary (red).](../assets/supported-geometry/problem-boundary-diamond.svg){fig-alt="A diamond between two ground strips touching the left edge of the die with its tip, marked red, and a zoom on the tip."}
 :::
 
 **Where the boundary is.** In the plane, the model ends where the layout ends.
@@ -108,7 +110,7 @@ the vacuum of the plan it is given, the one you simulate in; a planar padding
 of SCGSim's own would check a different model from the one you simulate. SCGSim also
 builds the outline it is given, so it does not move the vertex off the boundary.
 
-![The fix: the ground drawn round the pad's left side, 4 µm from it, moves the boundary to x = −10 µm, and the ground takes up all of it (heavy line).](assets/supported-geometry/problem-boundary-fixed.svg){fig-alt="The round pad between two ground strips joined by a third strip on its left, so the ground runs along the whole left edge of the die, and a zoom showing the vacuum between the pad and that strip."}
+![The fix: the ground drawn round the pad's left side, 4 µm from it, moves the boundary to x = −10 µm, and the ground takes up all of it (heavy line).](../assets/supported-geometry/problem-boundary-fixed.svg){fig-alt="The round pad between two ground strips joined by a third strip on its left, so the ground runs along the whole left edge of the die, and a zoom showing the vacuum between the pad and that strip."}
 
 **The layout fix.** Draw the die outline or a ground plane so that it, not the
 pad, sets the planar boundary, as on a real chip. With the ground drawn round

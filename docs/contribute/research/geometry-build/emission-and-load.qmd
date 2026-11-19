@@ -4,6 +4,8 @@ description: "The direct BREP writer against building the same geometry through 
 scgsim-kind: "research"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/research/geometry-build/emission-and-load"
+aliases:
+  - ../../../research/geometry-build/emission-and-load.html
 ---
 
 **Questions.** How much faster is the direct BREP writer than building the same geometry through the Gmsh API? And once the derivation is done, what do writing the files, the reports and the sidecar, loading in Gmsh and checking the loaded model cost?

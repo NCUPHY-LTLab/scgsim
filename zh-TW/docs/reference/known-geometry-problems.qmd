@@ -5,17 +5,19 @@ lang: zh-TW
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/known-geometry-problems"
+aliases:
+  - ../known-geometry-problems.html
 ---
 
 本頁列出已知在 SCGSim 中會失敗、或建出的結果與 layout 原意不同的幾何。每個情況都說明問題在哪裡、出了什麼錯與原因，以及 SCGSim 為何不遷就它。每個情況的修正方式都是修改 layout。SCGSim 支援的圖形列在[支援的幾何](supported-geometry.qmd)；每個 layout 都必須遵守的規則，以及各種失敗由誰負責，見[支援範圍](supported-scope.qmd)。
 
 圖依各情況回報的尺寸，在 SGB 1 nm 的 grid 上重新畫成，不使用任何 PDK 程式碼。問題以紅色標示；右側的面板放大問題處，紅色虛線框標出放大的位置。
 
-SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、刪除短邊或重新取樣曲線，因為它無法分辨繪圖缺陷與刻意畫出的特徵。以 `EigenmodeSim.simulation_drc` 或 `ElectrostaticSim.simulation_drc` 檢查 layout（[版圖建模檢查](layout-modeling-check.qmd)）能找出會停止建構的情況，並在其網格階段找出網格器無法使用的細微邊與面，各附上位置與負責方；其他情況則需要檢視 layout 本身。不是 SGB 造成的細微邊或面屬於 layout 問題：SCGSim 只回報，不修補。
+SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、刪除短邊或重新取樣曲線，因為它無法分辨繪圖缺陷與刻意畫出的特徵。以 `EigenmodeSim.simulation_drc` 或 `ElectrostaticSim.simulation_drc` 檢查 layout（[版圖建模檢查](../guides/check-a-layout.qmd)）能找出會停止建構的情況，並在其網格階段找出網格器無法使用的細微邊與面，各附上位置與負責方；其他情況則需要檢視 layout 本身。不是 SGB 造成的細微邊或面屬於 layout 問題：SCGSim 只回報，不修補。
 
 ## Spline 曲線不會以曲線形式讀取 {#spline-curves}
 
-![B-spline 條帶及其控制多邊形（紅色虛線）：spline 邊界所宣告的曲線。](assets/supported-geometry/problem-spline-curve.svg){fig-alt="一條彎曲條帶，五個控制點以紅色虛線多邊形相連。"}
+![B-spline 條帶及其控制多邊形（紅色虛線）：spline 邊界所宣告的曲線。](../assets/supported-geometry/problem-spline-curve.svg){fig-alt="一條彎曲條帶，五個控制點以紅色虛線多邊形相連。"}
 
 **出了什麼錯。** cell 把邊宣告為 spline 邊界曲線時，建構以 `UnsupportedCurveError: … 'bspline' curves are not supported yet (this version carries lines and circular arcs)` 停止，`interpolation_spline` 也一樣。集總埠所在導體上的 spline，也以同一個錯誤停止建構。
 
@@ -26,13 +28,13 @@ SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、�
 導體的輪廓若只在一點碰到建模區域的邊緣，例如貼著 layout 邊緣畫、周圍什麼都沒有的圓形焊墊或菱形焊墊，會被 `NonManifoldError` 拒絕。請畫出 die 外框或接地平面，讓它而不是焊墊決定這個邊緣。
 
 ::: {layout-ncol=2}
-![**在邊界被截斷的 CPW：通過。** 中心導線與兩條接地條都止於邊界 x = 0，各占邊界的一段（粗線）。](assets/supported-geometry/problem-boundary-cpw.svg){fig-alt="三條導線都止於 die 左緣的 CPW，每條導線與左緣相接處有一段粗線，以及中心導線末端的放大圖。"}
+![**在邊界被截斷的 CPW：通過。** 中心導線與兩條接地條都止於邊界 x = 0，各占邊界的一段（粗線）。](../assets/supported-geometry/problem-boundary-cpw.svg){fig-alt="三條導線都止於 die 左緣的 CPW，每條導線與左緣相接處有一段粗線，以及中心導線末端的放大圖。"}
 
-![**沿著邊界的方形焊墊：通過。** 焊墊的左邊沿著邊界，長 12 µm。](assets/supported-geometry/problem-boundary-square.svg){fig-alt="兩條接地條之間的方形焊墊，左邊位於 die 的左緣，以及其下方角落的放大圖。"}
+![**沿著邊界的方形焊墊：通過。** 焊墊的左邊沿著邊界，長 12 µm。](../assets/supported-geometry/problem-boundary-square.svg){fig-alt="兩條接地條之間的方形焊墊，左邊位於 die 的左緣，以及其下方角落的放大圖。"}
 
-![**只在一個頂點碰到邊界的圓形焊墊：拒絕。** 64 邊形焊墊只在 x = 0、y = 20 µm 這一點碰到邊界（紅色）。](assets/supported-geometry/problem-boundary-round.svg){fig-alt="兩條接地條之間的圓形焊墊，在一個紅點碰到 die 的左緣，以及該點上下兩側真空相接處的放大圖。"}
+![**只在一個頂點碰到邊界的圓形焊墊：拒絕。** 64 邊形焊墊只在 x = 0、y = 20 µm 這一點碰到邊界（紅色）。](../assets/supported-geometry/problem-boundary-round.svg){fig-alt="兩條接地條之間的圓形焊墊，在一個紅點碰到 die 的左緣，以及該點上下兩側真空相接處的放大圖。"}
 
-![**以尖端碰到邊界的菱形焊墊：拒絕。** 尖端是菱形唯一位於邊界上的點（紅色）。](assets/supported-geometry/problem-boundary-diamond.svg){fig-alt="兩條接地條之間的菱形焊墊，以紅色標示的尖端碰到 die 的左緣，以及尖端的放大圖。"}
+![**以尖端碰到邊界的菱形焊墊：拒絕。** 尖端是菱形唯一位於邊界上的點（紅色）。](../assets/supported-geometry/problem-boundary-diamond.svg){fig-alt="兩條接地條之間的菱形焊墊，以紅色標示的尖端碰到 die 的左緣，以及尖端的放大圖。"}
 :::
 
 **邊界在哪裡。** 在平面上，模型止於 layout 的邊緣。測試與模擬 layout 時所用的真空，即計畫以 (x, y, z) = (0, 0, 1000) µm 填充的真空，止於 layout 的平面範圍；任何沒有平面填充的真空區域也是如此。圖中的 die 為 60 × 40 µm，左緣 x = 0 就是邊界；淺色區域是金屬高度上的真空，白色是模型之外。
@@ -61,7 +63,7 @@ See …#boundary-point-pinch
 
 **SCGSim 為何不遷就它。** `simulation_drc` 以傳入計畫的真空檢查 layout，也就是您模擬時所用的真空；若 SCGSim 自行加上平面填充，檢查的就是與您所模擬不同的模型。SCGSim 也依照收到的輪廓建立幾何，因此不會把頂點移離邊界。
 
-![修正方式：在焊墊左側距它 4 µm 處畫上接地，使邊界移到 x = −10 µm，並由接地占滿整條邊界（粗線）。](assets/supported-geometry/problem-boundary-fixed.svg){fig-alt="圓形焊墊位於兩條接地條之間，左側再以第三條接地條相連，使接地沿著 die 的整個左緣，以及焊墊與該接地條之間真空的放大圖。"}
+![修正方式：在焊墊左側距它 4 µm 處畫上接地，使邊界移到 x = −10 µm，並由接地占滿整條邊界（粗線）。](../assets/supported-geometry/problem-boundary-fixed.svg){fig-alt="圓形焊墊位於兩條接地條之間，左側再以第三條接地條相連，使接地沿著 die 的整個左緣，以及焊墊與該接地條之間真空的放大圖。"}
 
 **layout 的修正方式。** 請畫出 die 外框或接地平面，讓它而不是焊墊決定平面邊界，就像實際的晶片一樣。在圓形焊墊或菱形焊墊左側距它 4 µm 處畫上接地後，兩者不切條帶與切 `MA` 條帶時都能通過。帶平面填充的真空區域也能讓邊界離開焊墊，在 `mesh()` 與 `simulation_drc` 中皆然，因為兩者都使用計畫的真空；但它會改變您所模擬的模型，所以請優先畫出外框。
 

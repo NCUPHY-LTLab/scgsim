@@ -1,15 +1,17 @@
 ---
 title: "Contribute to SCGSim"
 description: "Set up the SCGSim development environment and find contributor references."
-sidebar: contribution
+sidebar: contribute
 scgsim-id: "docs/contributing"
 scgsim-kind: "contribution"
 scgsim-status: "CONVERGING"
+aliases:
+  - ../contributing.html
 ---
 
 Use this page to prepare a SCGSim source checkout for documentation and package
 contributions. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-and Git first; the [installation tutorial](course/installation.qmd) covers a
+and Git first; the [installation tutorial](../start/install.qmd) covers a
 study project's Python environment and native solver prerequisites.
 
 ```bash

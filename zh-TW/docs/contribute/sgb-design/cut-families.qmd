@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/cut-families"
+aliases:
+  - ../../design/sgb/cut-families.html
 ---
 
 SGB 中分割一個表面的方式，都共用同一個機制：**把曲線放進 arrangement，再由 labelling 決定這些曲線兩側的 cell 意味著什麼、哪些 edge 要保留**。材料邊界、port、inset band 都是如此。但它們不是每一種都需要同一種 record：有些分割直接來自 prism 的 footprint 與 label，不需要任何額外紀錄；只有無法從 prism 推出的特徵，才需要明確的 `CurveFamilyRecord`。本頁先分清這三類，再說明 family record、family 曲線為什麼一律是 edge、band 距離的 distance-origin 規則、新增 family 的做法，以及哪些特徵以 embed 進入 mesh。
@@ -130,7 +132,7 @@ window = line_family("window", "partition",
                      [(31, 55), (37, 55), (37, 65), (31, 65)], True)
 ```
 
-（`docs/design/sgb/_figures/families.py`；座標單位為 µm，轉換為 1 nm 的 grid。）流程：
+（`zh-TW/docs/contribute/sgb-design/_figures/families.py`；座標單位為 µm，轉換為 1 nm 的 grid。）流程：
 
 1. **撰寫 generator**，回傳 carrier（直線、圓弧），具有唯一的 id 與 lineage。若曲線依賴來源（offset、等值線），要由*來源*與其 support region 計算，而不是由 arrangement 計算。
 2. **選擇 target** level。曲線會在那裡切開 cell：只有要分隔的表面（新的 face、新的 group、solver 要積分的 face）才需要 family；mesh 尺寸交給 mesher。
@@ -174,4 +176,4 @@ XAO 不攜帶 mesh embedding。sidecar 記錄 face-in-volume 的配對（host vo
 
 ## 補充：重現資料
 
-本頁的圖與數字由 `zh-TW/docs/design/sgb/_figures/families.py` 以 production 套件 `scgsim.geometry.sgb` 產生（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行），數字取自 `figures/families-numbers.json`。執行範例是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`，以 `thin_film` profile 詮釋成 Route A（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）；band 是 `InsetRequest`，window 是 script 中直接附加到 catalogue 的 `CurveFamilyRecord`。Family 順序反轉的 identity 以 `ConformalModel.identity_digest()` 比較。Brief 對應第 4–6 節與第 14 節（family、inset、target level）；production 模組為 `exact/families`、`bands`（`requests`、`supports`、`inset`、`generate`）、`arrangement/labelling/dissolve`；測試 `tests/test_sgb_inset.py`。
+本頁的圖與數字由 `zh-TW/docs/contribute/sgb-design/_figures/families.py` 以 production 套件 `scgsim.geometry.sgb` 產生（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行），數字取自 `figures/families-numbers.json`。執行範例是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`，以 `thin_film` profile 詮釋成 Route A（測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原）；band 是 `InsetRequest`，window 是 script 中直接附加到 catalogue 的 `CurveFamilyRecord`。Family 順序反轉的 identity 以 `ConformalModel.identity_digest()` 比較。Brief 對應第 4–6 節與第 14 節（family、inset、target level）；production 模組為 `exact/families`、`bands`（`requests`、`supports`、`inset`、`generate`）、`arrangement/labelling/dissolve`；測試 `tests/test_sgb_inset.py`。

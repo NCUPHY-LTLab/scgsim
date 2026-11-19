@@ -4,6 +4,9 @@ description: "Prepare a two-port HFSS Driven Terminal network on the SGB model, 
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-terminal"
+aliases:
+  - ../course/aedt-driven-terminal.html
+  - ../course/aedt-driven-modal.html
 ---
 
 HFSS Driven Terminal solves the two-port network of an SGB model, the same
@@ -56,7 +59,7 @@ the model's STEP, BREP, sidecar and guard in its `model/` folder.
 In AEDT the run imports the STEP into an empty Driven Terminal design, as the
 Eigenmode run does, and puts each port on its sheet: a Terminal lumped port
 over the sheet's faces, and its Terminal on the edges where the sheet meets the
-signal conductor. The [runtime contract](../specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)
+signal conductor. The [runtime contract](../reference/specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)
 gives the rules. The returned resolver checks that the receipt's geometry is
 the request's model as imported, that each port and Terminal was read back from
 the saved design on the faces and edges it was given, and the ordered
@@ -64,11 +67,11 @@ S-parameters and Touchstone of the declared sweep.
 
 The example requests 201 points. Choose `points` and the sweep bounds for the
 network response your study needs; the native setup and the returned readback
-keep that request. The [sweep reference](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)
+keep that request. The [sweep reference](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)
 gives its exact input rules.
 
-Review the copied spec's ports, then [execute on the native host](execute.qmd)
-and [restart and resolve](returned-results.qmd) before passing the network
+Review the copied spec's ports, then [execute on the native host](run-elsewhere.qmd)
+and [restart and resolve](convergence-and-reports.qmd) before passing the network
 response into a downstream analysis. Native benchmark and adaptive evidence
 describe the run separately from the physical response.
 

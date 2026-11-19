@@ -5,9 +5,11 @@ scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/specs/palace-eigenmode"
 lang: zh-TW
+aliases:
+  - ../../specs/palace-eigenmode.html
 ---
 
-`scgsim.palace.EigenmodeSim` 負責可變的網格、設定、已解析埠及交接狀態。它與 `ElectrostaticSim` 共用同一個私有核心（綁定、幾何設定、`mesh()`、摘要、交接與生命週期），只加上本徵模態專屬的設定方法與設定檔；它與 AEDT 不共用任何部分。[Palace 課程](../course/palace-eigenmode.qmd) 說明一般流程；[Xmon EPR](../tutorial-xmon-palace.qmd) 補充選用的物理分析。
+`scgsim.palace.EigenmodeSim` 負責可變的網格、設定、已解析埠及交接狀態。它與 `ElectrostaticSim` 共用同一個私有核心（綁定、幾何設定、`mesh()`、摘要、交接與生命週期），只加上本徵模態專屬的設定方法與設定檔；它與 AEDT 不共用任何部分。[Palace 課程](../../guides/modes-palace.qmd) 說明一般流程；[Xmon EPR](../../guides/xmon/palace.qmd) 補充選用的物理分析。
 
 | 階段 | 公開介面 |
 |---|---|
@@ -35,7 +37,7 @@ lang: zh-TW
 
 `mesh_summary()` 回報紀錄的網格控制、原生元素與區域數量及網格身分。其 Nédélec 自由度值是根據主角點四面體及設定的 FEM 階數所做的拓撲估計，不是求解器回報的 DOF 數量。變更 FEM 階數會更新此估計，不重新產生網格。這些網格紀錄不確立數值充分性。
 
-目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫若帶有自己的真空，會拒絕模擬上的 `set_vacuum_region`。模型需要真空區域：計畫沒有宣告、模擬也沒有呼叫 `set_vacuum_region` 時（或在 `prepare()` 之前呼叫 `plan.set_vacuum_region(...)`），`mesh()` 與 `input_summary()` 會拒絕。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責共用網格控制與共用設定控制。
+目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫若帶有自己的真空，會拒絕模擬上的 `set_vacuum_region`。模型需要真空區域：計畫沒有宣告、模擬也沒有呼叫 `set_vacuum_region` 時（或在 `prepare()` 之前呼叫 `plan.set_vacuum_region(...)`），`mesh()` 與 `input_summary()` 會拒絕。[GeometryPlan 契約](geometry-plan.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責共用網格控制與共用設定控制。
 
 ## 本徵模態上的收斂 {#eigenmode-convergence}
 
@@ -73,7 +75,7 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 
 ### Surface EPR 邊距 {#surface-epr-margins}
 
-內縮邊距 $m$ 選出表面上距最近 gap edge（導體輪廓上面向裸露 substrate 的邊）至少 $m$ µm 的部分。SGB 把該部分以帶面切進模型，所以一般的 Palace 對普通屬性積分；SCGSim 不寫出原生 `Mask` 或 `Inset` 設定，也不需要特殊的 Palace 建置。距離只從 gap edge 量起：die 或模型邊界上的邊、兩個導體相接的邊，以及旁邊只有真空的邊都不是起點，因為 Surface EPR 的二維修正來自金屬–間隙–金屬的剖面。完整規則見 [SGB 設計頁](../design/sgb/inset-imprint.qmd#band-measure)。
+內縮邊距 $m$ 選出表面上距最近 gap edge（導體輪廓上面向裸露 substrate 的邊）至少 $m$ µm 的部分。SGB 把該部分以帶面切進模型，所以一般的 Palace 對普通屬性積分；SCGSim 不寫出原生 `Mask` 或 `Inset` 設定，也不需要特殊的 Palace 建置。距離只從 gap edge 量起：die 或模型邊界上的邊、兩個導體相接的邊，以及旁邊只有真空的邊都不是起點，因為 Surface EPR 的二維修正來自金屬–間隙–金屬的剖面。完整規則見 [SGB 設計頁](../../contribute/sgb-design/inset-imprint.qmd#band-measure)。
 
 ::: {.callout-important title="在計畫上設定 Surface EPR"}
 邊距是幾何：`mesh()` 會把它們連同其餘模型一起交給 SGB。請在 `plan.prepare()` 之前把規格交給 `plan.set_surface_epr(specs)`；模擬從 `set_plan` 綁定的快照讀取它們。綁定以其他規格準備的計畫，會使網格、設定檔及交接失效，必須重新執行 `mesh()`。計畫沒有規格時，`mesh()` 不切任何帶，設定檔也沒有 Surface-EPR 列。
@@ -95,7 +97,7 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 
 每個表面列都有一個涵蓋全部面的基準列。每個邊距再多一列，涵蓋從該邊距往外的各帶。邊距列是同一表面的替代評估，不是互斥的帶：請分開讀取每一列，不要相加。SGB 只在面有 gap edge 時才切帶，所以沒有 gap edge 的面（例如基板底面）只由基準列涵蓋。SGB 略過的面會列在清單中。
 
-群組名稱以 `__` 把面種類接在 entity 之後，其餘部分以 `::` 分隔，格式為 `<kind>::<entity>__<face kind>[::band=k]`，例如 `MA::pad__top::band=1`；面種類是 `top`、`bottom`、`sidewall`、`sheet` 或 `interface`。完整的[命名規則](../design/sgb/identity.qmd#band-group-names)見 SGB 設計頁；請從索引映射讀取帶的成員，不要解析名稱。
+群組名稱以 `__` 把面種類接在 entity 之後，其餘部分以 `::` 分隔，格式為 `<kind>::<entity>__<face kind>[::band=k]`，例如 `MA::pad__top::band=1`；面種類是 `top`、`bottom`、`sidewall`、`sheet` 或 `interface`。完整的[命名規則](../../contribute/sgb-design/identity.qmd#band-group-names)見 SGB 設計頁；請從索引映射讀取帶的成員，不要解析名稱。
 
 ::: {.callout-note collapse="true" title="列、側與裂開的 sheet"}
 索引映射（結構 v3）為每個表面列記錄 `row` 與 `group`、`interface_type`、`band`、`side`、`face_sides`、`entities`、`net` 與 `attributes`，並以譜系成員資格作為歸屬資訊：譜系不加權任何東西。單側列把 `above` 或 `below` 對應到 Palace 後處理的側。兩側都是真空的 Route A sheet 是一個從兩側積分的面，需要 Palace 的內部邊界裂開；SCGSim 恰好在某個已設定的列有 `shared_face_group` 時寫出 `Model.CrackInternalBoundaryElements`；沒有在 sheet 上設定 `MA` 或 `MS` 膜層的執行，會保留 Palace 的預設值。在不同位置分別位於真空與介電質之上的 sheet，會在不同屬性上得到各自的 `MA` 與 `MS` 列。
@@ -113,6 +115,6 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 
 其他原生欄位及既有 NaN／負無窮大政策維持不變。這不是全面允許非有限值，也不放寬完成狀態、表格結構、模態／索引順序、要求身分或產物完整性。EPR 正規化仍使用其實際能量／頻率通道，不使用原生 Q 特殊值。表面 Q 行為保留既有的獨立契約。
 
-原生埠參與率有正負號，並依賴相位慣例；它不是 AEDT 的非負接面電感／電容配對。損耗假設與未知項在分離及更新之後保留其意義；[EPR 概念](../eigenmode-epr.qmd) 負責正規化與損耗解讀。[報表契約](../report-model.qmd) 負責涵蓋範圍、基準與邊距呈現、部分可用性及求解器專屬物理量。
+原生埠參與率有正負號，並依賴相位慣例；它不是 AEDT 的非負接面電感／電容配對。損耗假設與未知項在分離及更新之後保留其意義；[EPR 概念](../../concepts/surface-epr.qmd) 負責正規化與損耗解讀。[報表契約](report-model.qmd) 負責涵蓋範圍、基準與邊距呈現、部分可用性及求解器專屬物理量。
 
-共用分階段失效處理與逐檔持久化請見[實作](../architecture.qmd#palace-preparation-lifecycle)。失效處理不保證整個流程的磁碟替換具有原子性。交接準備不執行或提交 Palace；[執行契約](../execution-profiles.qmd) 負責選定執行設定、資源及回傳憑證。
+共用分階段失效處理與逐檔持久化請見[實作](../../contribute/architecture.qmd#palace-preparation-lifecycle)。失效處理不保證整個流程的磁碟替換具有原子性。交接準備不執行或提交 Palace；[執行契約](execution-profiles.qmd) 負責選定執行設定、資源及回傳憑證。

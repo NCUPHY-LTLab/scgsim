@@ -1,9 +1,11 @@
 ---
-title: "公開參考輸入與匯出清單"
+title: "API 索引"
 description: "完整列出公開匯出名稱，以及未收錄於離線套件的來源文件。"
 scgsim-id: "docs/api/input-index"
 scgsim-kind: "reference"
 scgsim-status: "CONVERGING"
+aliases:
+  - ../api/input-index.html
 ---
 
 本頁由 `scripts/generate_knowledge_reference.py` 產生；請修改正式來源後重建。
@@ -40,11 +42,11 @@ scgsim-status: "CONVERGING"
 
 | 來源 | SHA-256 |
 |---|---|
-| `scripts/generate_knowledge_reference.py` | `7672629117cda833959d1fd1ef2ce86473e17625f3f86e19df0f4319828e2454` |
-| `docs/knowledge-sources.json` | `d92a7d580e2615fe8ae4d0eea399936c0679e59e4dbc2b8a67402e4684fb507a` |
+| `scripts/generate_knowledge_reference.py` | `3febe02ca102b9669236d38156a96b6e87f983bd6939f14816f5019581a4bfdf` |
+| `docs/knowledge-sources.json` | `ff3ff938edad00d1db20aacce58b90effcdc1835c5f2fd8e825650ced19db566` |
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
-| `docs/api/analyze-epr-usage.md` | `c1e040aa9af091eb00262c62615cf4a2b8ec594cf0090dda61cfbba11e739f6c` |
-| `zh-TW/docs/api/analyze-epr-usage.md` | `b5db4425fc362af6b6f24e4226669ef2756444347938ecbe544ec3a1c2e911d5` |
+| `docs/reference/api/analyze-epr-usage.md` | `5174a09235e092568d70bb537705f05edd8370f06494b00b4dcf16fb07be15e5` |
+| `zh-TW/docs/reference/api/analyze-epr-usage.md` | `4bbb2c5cf6887f6ce6620769f086879cb35724e9df1b239242d4b09ab72e6bb8` |
 | `src/scgsim/aedt/__init__.py` | `69998e1430b07c46d867f408917a6f1882935e3768b0c9a14cf2173a7bf96327` |
 | `src/scgsim/aedt/specs/__init__.py` | `2dce2baa961727dac9e6253167d4448ef8b4e11958e5fb7bdf0d2f571d05300e` |
 | `src/scgsim/geometry/__init__.py` | `49c6c6c8a724a49d3d8eb72b659661904b1231174e51fca0933aa0ebe1f640b6` |
@@ -61,58 +63,56 @@ README 與英文 `docs/*.qmd` 會收錄於離線 bundle；以下文件僅保留�
 - `CODE_STYLE.md`
 - `MAINTAINING.md`
 - `_extensions/arfiligol/askr/THIRD_PARTY.md`
-- `docs/api/analyze-epr-usage.md`
+- `docs/reference/api/analyze-epr-usage.md`
 - `index.qmd`
 - `zh-TW/MAINTAINING.md`
 - `zh-TW/README.md`
-- `zh-TW/docs/api-migration.qmd`
-- `zh-TW/docs/api/analyze-epr-usage.md`
-- `zh-TW/docs/architecture.qmd`
-- `zh-TW/docs/backend-support.qmd`
 - `zh-TW/docs/concepts/geometry.qmd`
 - `zh-TW/docs/concepts/model-and-numerics.qmd`
 - `zh-TW/docs/concepts/problems.qmd`
-- `zh-TW/docs/contributing.qmd`
-- `zh-TW/docs/conventions.qmd`
-- `zh-TW/docs/course/aedt-driven-modal.qmd`
-- `zh-TW/docs/course/aedt-driven-terminal.qmd`
-- `zh-TW/docs/course/aedt-eigenmode.qmd`
-- `zh-TW/docs/course/aedt-hpc-sweep.qmd`
-- `zh-TW/docs/course/aedt-inputs.qmd`
-- `zh-TW/docs/course/aedt-q2d.qmd`
-- `zh-TW/docs/course/aedt-q3d.qmd`
-- `zh-TW/docs/course/aedt-saved-fields.qmd`
-- `zh-TW/docs/course/execute.qmd`
-- `zh-TW/docs/course/installation.qmd`
-- `zh-TW/docs/course/offline-epr.qmd`
-- `zh-TW/docs/course/palace-eigenmode.qmd`
-- `zh-TW/docs/course/palace-electrostatic.qmd`
-- `zh-TW/docs/course/returned-results.qmd`
-- `zh-TW/docs/course/solver-observations.qmd`
-- `zh-TW/docs/course/source-observations.qmd`
-- `zh-TW/docs/course/working-model.qmd`
-- `zh-TW/docs/documentation-map.qmd`
-- `zh-TW/docs/eigenmode-epr.qmd`
-- `zh-TW/docs/examples.qmd`
-- `zh-TW/docs/execution-profiles.qmd`
-- `zh-TW/docs/geometry-preview.qmd`
-- `zh-TW/docs/geometry-sgb.qmd`
-- `zh-TW/docs/goals-and-upstream.qmd`
-- `zh-TW/docs/history/aedt-capacitance-pre-v3.qmd`
-- `zh-TW/docs/history/curved-source-installation.qmd`
-- `zh-TW/docs/knowledge-guide.qmd`
-- `zh-TW/docs/mesh-quality.qmd`
-- `zh-TW/docs/notebook-ux.qmd`
-- `zh-TW/docs/ownership.qmd`
-- `zh-TW/docs/provenance.qmd`
-- `zh-TW/docs/reference.qmd`
-- `zh-TW/docs/report-model.qmd`
-- `zh-TW/docs/research/index.qmd`
-- `zh-TW/docs/specs/aedt-runtime.qmd`
-- `zh-TW/docs/specs/palace-eigenmode.qmd`
-- `zh-TW/docs/specs/palace-electrostatic-sgb.qmd`
-- `zh-TW/docs/specs/physical-representation.qmd`
-- `zh-TW/docs/tutorial-xmon-aedt.qmd`
-- `zh-TW/docs/tutorial-xmon-input.qmd`
-- `zh-TW/docs/tutorial-xmon-palace.qmd`
+- `zh-TW/docs/concepts/surface-epr.qmd`
+- `zh-TW/docs/contribute/architecture.qmd`
+- `zh-TW/docs/contribute/documentation-map.qmd`
+- `zh-TW/docs/contribute/goals-and-upstream.qmd`
+- `zh-TW/docs/contribute/history/aedt-capacitance-pre-v3.qmd`
+- `zh-TW/docs/contribute/history/curved-source-installation.qmd`
+- `zh-TW/docs/contribute/index.qmd`
+- `zh-TW/docs/contribute/notebook-contract.qmd`
+- `zh-TW/docs/contribute/ownership.qmd`
+- `zh-TW/docs/contribute/provenance.qmd`
+- `zh-TW/docs/contribute/research/index.qmd`
+- `zh-TW/docs/guides/aedt-cpw-inputs.qmd`
+- `zh-TW/docs/guides/capacitance-palace.qmd`
+- `zh-TW/docs/guides/capacitance-q3d.qmd`
+- `zh-TW/docs/guides/convergence-and-reports.qmd`
+- `zh-TW/docs/guides/hpc-sweep.qmd`
+- `zh-TW/docs/guides/inspect-the-prepared-model.qmd`
+- `zh-TW/docs/guides/inspect-the-source.qmd`
+- `zh-TW/docs/guides/line-parameters-q2d.qmd`
+- `zh-TW/docs/guides/modes-hfss.qmd`
+- `zh-TW/docs/guides/modes-palace.qmd`
+- `zh-TW/docs/guides/offline-loss.qmd`
+- `zh-TW/docs/guides/prepare-a-layout.qmd`
+- `zh-TW/docs/guides/preview-the-geometry.qmd`
+- `zh-TW/docs/guides/run-elsewhere.qmd`
+- `zh-TW/docs/guides/s-parameters-hfss.qmd`
+- `zh-TW/docs/guides/saved-fields.qmd`
+- `zh-TW/docs/guides/upgrade.qmd`
+- `zh-TW/docs/guides/xmon/aedt.qmd`
+- `zh-TW/docs/guides/xmon/inputs.qmd`
+- `zh-TW/docs/guides/xmon/palace.qmd`
+- `zh-TW/docs/reference/api/analyze-epr-usage.md`
+- `zh-TW/docs/reference/index.qmd`
+- `zh-TW/docs/reference/specs/aedt-runtime.qmd`
+- `zh-TW/docs/reference/specs/execution-profiles.qmd`
+- `zh-TW/docs/reference/specs/geometry-plan.qmd`
+- `zh-TW/docs/reference/specs/mesh-quality.qmd`
+- `zh-TW/docs/reference/specs/palace-eigenmode.qmd`
+- `zh-TW/docs/reference/specs/palace-electrostatic-sgb.qmd`
+- `zh-TW/docs/reference/specs/physical-representation.qmd`
+- `zh-TW/docs/reference/specs/report-model.qmd`
+- `zh-TW/docs/reference/supported-calculations.qmd`
+- `zh-TW/docs/reference/terms-and-units.qmd`
+- `zh-TW/docs/start/choose-a-simulation.qmd`
+- `zh-TW/docs/start/install.qmd`
 - `zh-TW/index.qmd`

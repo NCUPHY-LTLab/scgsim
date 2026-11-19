@@ -4,6 +4,8 @@ description: "Understand SCGSim’s relationship to gsim and its supported resea
 scgsim-kind: "project"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/goals-and-upstream"
+aliases:
+  - ../goals-and-upstream.html
 ---
 
 SCGSim is an independent downstream toolkit derived from
@@ -14,7 +16,7 @@ fallbacks or an automatic promise of API compatibility.
 
 The package connects geometry and material facts to explicit computations,
 then preserves the returned quantity's units, source and model context.
-See [supported calculations](backend-support.qmd) and the [tutorials](examples.qmd).
+See [supported calculations](../reference/supported-calculations.qmd) and the [tutorials](../start/choose-a-simulation.qmd).
 
 The source model includes explicit authored curve boundaries
 and caller-selected GDS boundary reconstruction. Curves remain bound to source
@@ -24,8 +26,8 @@ boundaries. Palace and AEDT get line and circular-arc curves through
 in the model's STEP; spline curves are refused. Palace also
 separates Gmsh geometric order from finite-element order and exposes
 mesh-generation records through a detached summary. The
-[GeometryPlan contract](geometry-sgb.qmd) owns exact
-curve records and the [Palace contracts](specs/palace-electrostatic-sgb.qmd)
+[GeometryPlan contract](../reference/specs/geometry-plan.qmd) owns exact
+curve records and the [Palace contracts](../reference/specs/palace-electrostatic-sgb.qmd)
 own mesh-control and summary meaning.
 
 ## Scope
@@ -47,7 +49,7 @@ geometry with the in-tree `scgsim.geometry.sgb`, which sits below the supported
 entry: a layout enters
 through `GeometryPlan` and the simulation classes, and a direct call with an
 input built by hand assumes what that entry guarantees; see
-[the supported entry](supported-scope.qmd#supported-entry). No external SGB is
+[the supported entry](../reference/supported-scope.qmd#supported-entry). No external SGB is
 used.
 
 ## Contributor references {#v1-acceptance-and-delivery}

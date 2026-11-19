@@ -4,11 +4,13 @@ description: "GeometryPlan source identity, occurrence and Net ownership, route 
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/geometry-sgb"
+aliases:
+  - ../../geometry-sgb.html
 ---
 
-Learn the source sequence in [shared Xmon inputs](tutorial-xmon-input.qmd) and
-[source observations](course/source-observations.qmd). The
-[SGB geometry concept](concepts/geometry.qmd#source-stage) explains the source,
+Learn the source sequence in [shared Xmon inputs](../../guides/xmon/inputs.qmd) and
+[source observations](../../guides/inspect-the-source.qmd). The
+[SGB geometry concept](../../concepts/geometry.qmd#source-stage) explains the source,
 planning and construction stages; this page owns their exact contract.
 
 The in-tree `scgsim.geometry` API is SCGSim's current source-geometry
@@ -21,10 +23,10 @@ and summaries. Palace builds this geometry with `scgsim.geometry.sgb`
 (`build_sgb_geometry`) and meshes it with `scgsim.meshing`. SGB sits below the
 supported entry: a layout enters through `GeometryPlan` and the simulation
 classes, and a direct call with an input built by hand assumes what that entry
-guarantees; see [the supported entry](supported-scope.qmd#supported-entry). The source
+guarantees; see [the supported entry](../supported-scope.qmd#supported-entry). The source
 validator is defined in `scgsim.geometry.source.validation`. Direct defining
 modules and model aliases are listed in the
-[API migration reference](api-migration.qmd#geometry-api).
+[API migration reference](../../guides/upgrade.qmd#geometry-api).
 
 `GeometryPlan` composes two explicit authorities. PDK
 `LayerStack` records supply materials, process layers, Z/thickness,
@@ -59,7 +61,7 @@ does not infer electrical connectivity or merge child net maps.
 ## Shared physical source and representation {#physical-representation}
 
 The
-[physical representation contract](specs/physical-representation.qmd) separates
+[physical representation contract](physical-representation.qmd) separates
 source physical classification from selected solver representation. One neutral
 plan binds each original Entity and physical layer to its effective geometry,
 support and complete enclosure trace. A body retains its actual source
@@ -93,7 +95,7 @@ The geometry builder that Palace uses (SGB) carries `line_segment` and
 `circular_arc`. It refuses an `interpolation_spline` or `bspline` declaration,
 and a boundary reconstruction of any kind other than `circular_arc`, with
 `UnsupportedCurveError`. A layout for SGB uses lines, circular arcs, or
-[polygons](supported-geometry.qmd#curve-rule).
+[polygons](../supported-geometry.qmd#curve-rule).
 
 A `BoundaryCurveChainSpec` binds an ordered closed boundary to `entity_id`,
 `boundary_id`, and `selector_point_um`. The selector lies in the selected
@@ -150,7 +152,7 @@ no straight-edge fallback or volume repair.
 Geometry order and finite element order are separate choices. Curved model
 geometry does not make a positive surface inset an exact curved-perimeter
 distance; see the
-[EPR interpretation](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions).
+[EPR interpretation](../../concepts/surface-epr.qmd#surface-identity-masks-and-loss-assumptions).
 
 Palace builds declared lines and circular arcs through SGB on Route A or
 Route B, and AEDT imports them as exact arcs in the STEP of its SGB model;
@@ -340,7 +342,7 @@ conductor volumes. AEDT imports the STEP of the same SGB model:
 Route C model.
 
 Surface-EPR margin bands are cut into the model by SGB when `mesh()` builds the
-geometry; see the [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins).
+geometry; see the [Eigenmode contract](palace-eigenmode.qmd#surface-epr-margins).
 
 ## 2D models {#section-models}
 
@@ -364,7 +366,7 @@ stack height `z`, both in micrometres. SGB holds the section in memory as a
 `SectionModel`, built from a validated 3D model by
 `scgsim.geometry.sgb.section.build_section_model(model, cut)`. The 3D model is
 always the whole layout, so every build-stage rule of the
-[supported scope](supported-scope.qmd) applies to the whole layout, also far
+[supported scope](../supported-scope.qmd) applies to the whole layout, also far
 from the cut.
 
 The section follows one rule: every part of the 2D model is the trace of a part

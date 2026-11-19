@@ -6,6 +6,8 @@ scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 execute:
   enabled: false
+aliases:
+  - ../course/aedt-hpc-sweep.html
 ---
 
 Prepare each model on a licensed AEDT workstation, send one bundle to HPC for solver-only execution, then collect the returned results on a licensed workstation. This tutorial uses the public **SCGSim 3.0.0rc4** batch API and sweeps the authored junction inductance of the existing Xmon model.
@@ -20,7 +22,7 @@ Prepare each model on a licensed AEDT workstation, send one bundle to HPC for so
 | HPC solve | Python 3.12 standard library, the selected AEDT command-line executable and license; no usable Desktop session, SCGSim installation or PyAEDT is required |
 | Native result collection | SCGSim 3.0.0rc4 with PyAEDT 1.3.0, the selected AEDT release and license, and a usable Desktop session |
 
-Complete [Public Xmon inputs](../tutorial-xmon-input.qmd) and the configuration sections of [Public Xmon AEDT](../tutorial-xmon-aedt.qmd) in the same Python session. Stop before executing that tutorial's original handoff. The following code inherits exactly two named variables: `snapshot` (the immutable source and stack, with the plan's Surface-EPR specs) and `junction` (the source-bound `PlanarJunction`).
+Complete [Public Xmon inputs](xmon/inputs.qmd) and the configuration sections of [Public Xmon AEDT](xmon/aedt.qmd) in the same Python session. Stop before executing that tutorial's original handoff. The following code inherits exactly two named variables: `snapshot` (the immutable source and stack, with the plan's Surface-EPR specs) and `junction` (the source-bound `PlanarJunction`).
 
 The physical geometry, final Nets and bulk materials belong to that source. The three inductances below are explicit circuit-model choices, not measured device values. A geometry sweep instead requires a newly authored source snapshot and freshly bound junction and catalogue for every case.
 
@@ -192,4 +194,4 @@ for row in sweep["cases"]:
 | External attempt actual version | May remain unknown; inspect retained solver evidence rather than substituting the requested version |
 | Collector connected version | Release actually opened by the collection transaction |
 
-Keep model parameters, numerical controls, EPR selection and resources separate when comparing cases. This example holds source geometry, material presets, modes, margins and adaptive controls fixed while changing the junction inductance. See the [batch API contract](../specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch) for package contents, failure behavior and resource semantics.
+Keep model parameters, numerical controls, EPR selection and resources separate when comparing cases. This example holds source geometry, material presets, modes, margins and adaptive controls fixed while changing the junction inductance. See the [batch API contract](../reference/specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch) for package contents, failure behavior and resource semantics.

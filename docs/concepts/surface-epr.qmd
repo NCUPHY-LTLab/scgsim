@@ -4,6 +4,8 @@ description: "Energy normalization, physical partitions, inset margins and attri
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/eigenmode-epr"
+aliases:
+  - ../eigenmode-epr.html
 ---
 
 A resonant mode stores energy in fields and circuit elements. Energy
@@ -52,7 +54,7 @@ Read the numerator and denominator together. AEDT uses the electric energy of
 unique physical domains plus declared junction capacitive energy. Palace uses
 its final native electric-domain and capacitive-energy tables. Thin-film energy
 estimates are numerators and are not added back into these denominators.
-The [surface and junction formulas](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)
+The [surface and junction formulas](../reference/specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)
 define the field convention and each supported quantity.
 
 The backends also differ physically. Palace reports signed native port
@@ -93,7 +95,7 @@ loss as unknown; the inverse-$Q$ contribution remains unavailable.
 
 ## Inset margins {#surface-distance-band-correction}
 
-Palace Surface EPR offers inset margins through `inset_margins_um`: each margin $m$ adds a row for the part of a surface at least $m$ from the nearest gap edge, next to the whole-surface baseline row. SGB cuts those parts into the geometry and stock Palace integrates them as ordinary attributes; see the [margin contract](specs/palace-eigenmode.qmd#surface-epr-margins). The baseline row is always present. Margin rows are alternative evaluations of the same surface, not disjoint bands, so do not add them.
+Palace Surface EPR offers inset margins through `inset_margins_um`: each margin $m$ adds a row for the part of a surface at least $m$ from the nearest gap edge, next to the whole-surface baseline row. SGB cuts those parts into the geometry and stock Palace integrates them as ordinary attributes; see the [margin contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins). The baseline row is always present. Margin rows are alternative evaluations of the same surface, not disjoint bands, so do not add them.
 
 Margin rows are alternative interface estimates. Read a saved baseline row and
 its requested margins separately; do not add them as disjoint bands. AEDT evaluates horizontal top/bottom
@@ -107,17 +109,17 @@ Native $Q$ reflects the mechanisms represented in that solver calculation;
 $p\tan\delta$ attributes loss to the selected material model. Palace can report
 native infinite $Q$ without establishing a physically lossless device. Keep
 that observation separate from unknown losses and the finite-Q view described
-in the [native Q reference](specs/palace-eigenmode.qmd#native-eigenmode-q).
+in the [native Q reference](../reference/specs/palace-eigenmode.qmd#native-eigenmode-q).
 
 ## Explore a result
 
-Start with a resonance/EPR notebook from [Choose a simulation](examples.qmd#getting-started), then use
-[offline EPR](course/offline-epr.qmd) to inspect recorded modes and revise loss
-assumptions. The [examples](examples.qmd) connect the physical model to its
+Start with a resonance/EPR notebook from [Choose a simulation](../start/choose-a-simulation.qmd#getting-started), then use
+[offline EPR](../guides/offline-loss.qmd) to inspect recorded modes and revise loss
+assumptions. The [examples](../start/choose-a-simulation.qmd) connect the physical model to its
 backend workflow.
 
-For binding and API details, use the [AEDT EPR reference](specs/aedt-runtime.qmd#public-epr-candidate-surface)
-and [Palace Eigenmode reference](specs/palace-eigenmode.qmd). The
-[report reference](report-model.qmd#eigenmode-epr-presentation) describes
+For binding and API details, use the [AEDT EPR reference](../reference/specs/aedt-runtime.qmd#public-epr-candidate-surface)
+and [Palace Eigenmode reference](../reference/specs/palace-eigenmode.qmd). The
+[report reference](../reference/specs/report-model.qmd#eigenmode-epr-presentation) describes
 selections, ordering and the separation of baseline, margin and unavailable
 quantities.

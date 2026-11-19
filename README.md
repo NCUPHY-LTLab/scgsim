@@ -3,12 +3,12 @@
 **Simulate superconducting layouts with Python.**
 
 [![License: Apache-2.0](docs/assets/badges/license.svg)](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/LICENSE)
-[![Python: 3.12–3.13](docs/assets/badges/python.svg)](docs/course/installation.qmd)
-[![Tutorial: Layout EM](docs/assets/badges/tutorial.svg)](docs/examples.qmd)
-[![AEDT: HFSS / Q3D / Q2D](docs/assets/badges/aedt.svg)](docs/backend-support.qmd)
-[![Palace: Electrostatic / Eigenmode](docs/assets/badges/palace.svg)](docs/course/palace-eigenmode.qmd)
+[![Python: 3.12–3.13](docs/assets/badges/python.svg)](docs/start/install.qmd)
+[![Tutorial: Layout EM](docs/assets/badges/tutorial.svg)](docs/start/choose-a-simulation.qmd)
+[![AEDT: HFSS / Q3D / Q2D](docs/assets/badges/aedt.svg)](docs/reference/supported-calculations.qmd)
+[![Palace: Electrostatic / Eigenmode](docs/assets/badges/palace.svg)](docs/guides/modes-palace.qmd)
 [![Gmsh: Meshing](docs/assets/badges/gmsh.svg)](docs/concepts/geometry.qmd)
-[![gsim: Unofficial Downstream](docs/assets/badges/gsim.svg)](docs/goals-and-upstream.qmd)
+[![gsim: Unofficial Downstream](docs/assets/badges/gsim.svg)](docs/contribute/goals-and-upstream.qmd)
 
 ![SCGSim orca and penguin introducing a chip layout, finite-element mesh and illustrative electromagnetic field.](docs/assets/scgsim-overview-orca-penguin.png)
 
@@ -27,7 +27,7 @@ uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc4'
 
 `uv` creates `.venv` and records resolved versions in `uv.lock`. Keep `pyproject.toml` and `uv.lock` with the study; run `uv sync` on another computer to recreate the environment.
 
-> **Execution requirements:** The example needs AEDT Q3D 2024.2 installed on this host with a working license. Python packages do not include the native solver. See the [installation guide](docs/course/installation.qmd) for other backend setups.
+> **Execution requirements:** The example needs AEDT Q3D 2024.2 installed on this host with a working license. Python packages do not include the native solver. See the [installation guide](docs/start/install.qmd) for other backend setups.
 
 ## Usage example: one script for SimplePad capacitance
 
@@ -131,12 +131,12 @@ Each invocation creates a new run folder under `.artifacts/simplepad-q3d/`. Prin
 
 To inspect the inputs first, run `uv run simplepad_q3d.py --handoff-only`. This option prepares the inputs and portable archive without opening AEDT. The complete mode runs and reads results on the same host.
 
-Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground_nets` records the physical Ground role separately. The [Q3D lesson](docs/course/aedt-q3d.qmd) explains the model, Net and extraction choices, and [returned results](docs/course/returned-results.qmd) explains how to read the matrix.
+Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground_nets` records the physical Ground role separately. The [Q3D lesson](docs/guides/capacitance-q3d.qmd) explains the model, Net and extraction choices, and [returned results](docs/guides/convergence-and-reports.qmd) explains how to read the matrix.
 
 ## Choose your next simulation
 
 To compute a capacitance with Palace, without an AEDT licence, start with the [First simulation](docs/start/first-simulation.qmd).
 
-The [simulation chooser](docs/examples.qmd#getting-started) links the complete OrcaPen SC PDK notebook for capacitance, resonant modes and energy participation, and per-unit-length transmission-line parameters. For driven S-parameters, use the [Driven Terminal](docs/course/aedt-driven-terminal.qmd) lesson; it needs a layout with a lumped-port sheet for each of its two ports. Driven Modal and wave ports are not available in this version.
+The [simulation chooser](docs/start/choose-a-simulation.qmd#getting-started) links the complete OrcaPen SC PDK notebook for capacitance, resonant modes and energy participation, and per-unit-length transmission-line parameters. For driven S-parameters, use the [Driven Terminal](docs/guides/s-parameters-hfss.qmd) lesson; it needs a layout with a lumped-port sheet for each of its two ports. Driven Modal and wave ports are not available in this version.
 
-Before you simulate a layout of your own, read the [supported scope](docs/supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.
+Before you simulate a layout of your own, read the [supported scope](docs/reference/supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.

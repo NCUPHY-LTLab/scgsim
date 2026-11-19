@@ -18,9 +18,9 @@ Python and are learning SCGSim. Contributor material belongs in
 | Content | Owning source |
 |---|---|
 | Homepage | Each language's README, included by its `index.qmd` |
-| Installation | [Install SCGSim](docs/course/installation.qmd) |
-| Solver execution and host prerequisites | [Run a prepared model](docs/course/execute.qmd) |
-| Returned-result loading and interpretation | [Read returned results](docs/course/returned-results.qmd) |
+| Installation | [Install SCGSim](docs/start/install.qmd) |
+| Solver execution and host prerequisites | [Run a prepared model](docs/guides/run-elsewhere.qmd) |
+| Returned-result loading and interpretation | [Read returned results](docs/guides/convergence-and-reports.qmd) |
 | Public component models and executable notebooks | OrcaPen SC PDK; link its source rather than copying it |
 | API index and signatures | Public Python declarations and authored usage Markdown; regenerate through `scripts/generate_knowledge_reference.py` |
 | Navigation and rendering | Root and `zh-TW/_quarto.yml`; `scripts/build_docs_site.py` owns versioned publication |
@@ -68,16 +68,16 @@ Use their terminology and link to them when introducing a technical term.
 | Term | Owning explanation |
 |---|---|
 | Entity | [Source identity, Occurrence and Net](docs/concepts/geometry.qmd#entity-occurrence-and-net) |
-| Net | [Convention](docs/conventions.qmd#term-net) and [geometry contact rules](docs/geometry-sgb.qmd#component-to-backend-geometry-contract) |
-| GeometryPlan | [Convention](docs/conventions.qmd#term-geometry-plan) |
-| Snapshot | [Convention](docs/conventions.qmd#term-snapshot) |
-| Handoff / run package | [Convention](docs/conventions.qmd#term-handoff) and [execution](docs/course/execute.qmd) |
-| `handoff_id` | [Preparation-side identity and result resolution](docs/course/returned-results.qmd#palace-bind-the-independently-retained-preparation-id) |
-| Resolve | [Returned-result loading and checks](docs/course/returned-results.qmd) |
+| Net | [Convention](docs/reference/terms-and-units.qmd#term-net) and [geometry contact rules](docs/reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract) |
+| GeometryPlan | [Convention](docs/reference/terms-and-units.qmd#term-geometry-plan) |
+| Snapshot | [Convention](docs/reference/terms-and-units.qmd#term-snapshot) |
+| Handoff / run package | [Convention](docs/reference/terms-and-units.qmd#term-handoff) and [execution](docs/guides/run-elsewhere.qmd) |
+| `handoff_id` | [Preparation-side identity and result resolution](docs/guides/convergence-and-reports.qmd#palace-bind-the-independently-retained-preparation-id) |
+| Resolve | [Returned-result loading and checks](docs/guides/convergence-and-reports.qmd) |
 | Route A / Route B | [Geometric approximations](docs/concepts/model-and-numerics.qmd#choose-the-geometric-approximation) |
 
-The English [Convention](docs/conventions.qmd) and
-[Chinese Convention](zh-TW/docs/conventions.qmd) collect reader terminology.
+The English [Convention](docs/reference/terms-and-units.qmd) and
+[Chinese Convention](zh-TW/docs/reference/terms-and-units.qmd) collect reader terminology.
 Chinese reader pages retain the English technical terms requested for this
 project, with a Chinese explanation on first use. Keep API names and actual
 interface strings unchanged.

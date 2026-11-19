@@ -4,11 +4,13 @@ description: "Saved-field EPR parameters, a minimal call and the current functio
 scgsim-id: "docs/api/scgsim-aedt/analyze_epr"
 scgsim-kind: "api"
 scgsim-status: "CONVERGING"
+aliases:
+  - ../../api/analyze_epr.html
 ---
 
 # `analyze_epr`: saved-field EPR usage
 
-`analyze_epr` evaluates retained fields through native AEDT and requires an explicitly selected release and license; `reanalyze_epr` updates assumptions on a resolved result offline. Follow the complete [saved-fields lesson](../course/aedt-saved-fields.qmd) and use the [knowledge guide](../knowledge-guide.qmd) for related references.
+`analyze_epr` evaluates retained fields through native AEDT and requires an explicitly selected release and license; `reanalyze_epr` updates assumptions on a resolved result offline. Follow the complete [saved-fields lesson](../../guides/saved-fields.qmd) and use the [Reference overview](../index.qmd) for related references.
 
 ## Minimal call
 
@@ -69,7 +71,7 @@ def analyze_epr(
 ) -> Any: ...
 ```
 
-[Complete generation index](input-index.qmd).
+[Complete generation index](../api-index.qmd).
 
 ::: {.content-hidden}
 
@@ -78,8 +80,8 @@ def analyze_epr(
 | Source | SHA-256 |
 |---|---|
 | `src/scgsim/aedt/epr/workflow.py` | `67e0c56b737aa0b7d7804b8c2836ebe107af0850573c496fe432b8658eebd760` |
-| `docs/api/analyze-epr-usage.md` | `c1e040aa9af091eb00262c62615cf4a2b8ec594cf0090dda61cfbba11e739f6c` |
+| `docs/reference/api/analyze-epr-usage.md` | `5174a09235e092568d70bb537705f05edd8370f06494b00b4dcf16fb07be15e5` |
 
-Complete generation index, SHA-256 `712b61d498c866cb63c3f309b53d99b1d0661055298cfc510c80803fd6994ffa`.
+Complete generation index, SHA-256 `6a29f999403a2b9999eaa8627f7a0b46d5e333d753c7173a919c9ee82a5e0d15`.
 
 :::

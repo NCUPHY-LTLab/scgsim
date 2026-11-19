@@ -5,9 +5,11 @@ lang: zh-TW
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-saved-fields"
+aliases:
+  - ../course/aedt-saved-fields.html
 ---
 
-先決條件：已完成以來源為起點的 [AEDT Eigenmode／EPR 執行](../tutorial-xmon-aedt.qmd)、已完整取回儲存場 cohort，以及與其相符的已準備模型與請求。請先依照[完整執行解析](returned-results.qmd)。只有專案檔並不足夠：已釋出的專案、完整結果目錄與封存的原生儲存場證據，必須識別出相同的模型、設計、設定、變化與通過項目。
+先決條件：已完成以來源為起點的 [AEDT Eigenmode／EPR 執行](xmon/aedt.qmd)、已完整取回儲存場 cohort，以及與其相符的已準備模型與請求。請先依照[完整執行解析](convergence-and-reports.qmd)。只有專案檔並不足夠：已釋出的專案、完整結果目錄與封存的原生儲存場證據，必須識別出相同的模型、設計、設定、變化與通過項目。
 
 此階段會透過**原生 AEDT**，在專屬且可丟棄的工作複本中評估場。它不會再次求解，但要求請求明確選取 AEDT 2023.2 或 2024.2、PyAEDT 1.3.0 與有效授權。若儲存產物沒有記錄來源版本，該來源仍屬未知；仍可執行分析，並使用明確指定的本機版本，不查找或猜測歷史來源。下一課的 JSON 損耗重新分析才是不必開啟求解器的操作。
 
@@ -52,6 +54,6 @@ final_epr = analyze_epr(
 
 新的輸出目錄會保留原始已釋出解算結果與一般執行收據。SCGSim 會封存／複製不可變證據、重新開啟工作複本、檢查已綁定的背景資料與運算式定義，接著不求解、不呼叫匯出而評估指定場。若場或定義無法取得，流程會明確失敗，不會從自適應歷程虛構 EPR。
 
-如需精簡參數表與最小呼叫範例，請參閱 [`analyze_epr` API 指南](../api/analyze_epr.qmd)。
+如需精簡參數表與最小呼叫範例，請參閱 [`analyze_epr` API 指南](../reference/api/analyze-epr.qmd)。
 
-獨立的分析收據與 `results/epr/epr-result.json` 描述最終儲存場評估。新要求的遮罩／內縮邊距使用此最終場結果；不得將其插入較早自適應通過時彷彿已量得的結果。套用損耗假設前，請確認實際選取的模態與涵蓋範圍。接著閱讀[離線 EPR](offline-epr.qmd)，其中 `reanalyze_epr` 會在不執行原生分析的情況下，更新這些已記錄分子的假設。[執行環境契約](../specs/aedt-runtime.qmd)規範確切的儲存場背景、材料側支援與分析失敗行為。
+獨立的分析收據與 `results/epr/epr-result.json` 描述最終儲存場評估。新要求的遮罩／內縮邊距使用此最終場結果；不得將其插入較早自適應通過時彷彿已量得的結果。套用損耗假設前，請確認實際選取的模態與涵蓋範圍。接著閱讀[離線 EPR](offline-loss.qmd)，其中 `reanalyze_epr` 會在不執行原生分析的情況下，更新這些已記錄分子的假設。[執行環境契約](../reference/specs/aedt-runtime.qmd)規範確切的儲存場背景、材料側支援與分析失敗行為。

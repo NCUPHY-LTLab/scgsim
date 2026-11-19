@@ -5,9 +5,11 @@ description: "AEDT 系列規格、原生讀回、收據相容群組與已儲存�
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/aedt-runtime"
+aliases:
+  - ../../specs/aedt-runtime.html
 ---
 
-[課程地圖](../examples.qmd)連結所有已實作的 AEDT 系列課程。本頁定義精確規格、失敗規則，以及此版本讀取的[目前格式](#current-formats)。
+[課程地圖](../../start/choose-a-simulation.qmd)連結所有已實作的 AEDT 系列課程。本頁定義精確規格、失敗規則，以及此版本讀取的[目前格式](#current-formats)。
 
 ## 共用生命週期 {#one-shared-lifecycle}
 
@@ -54,7 +56,7 @@ Q3D、HFSS Eigenmode 與 HFSS Driven 的公開幾何準備函式，以及 `Eigen
 
 當純求解程序必須與本機 PyAEDT 交易分開執行時，對已完整準備並釋放的 HFSS EPR 使用此流程。準備資料必須包含綁定的來源與專案、設定與快取讀回，以及原生計算器定義證據。封裝不開啟 Desktop，也不更動已編寫的模型、設定、margin、模式或 EPR 準則。
 
-完整多模型步驟見[無 Desktop 的 HPC 求解器參數掃描](../course/aedt-hpc-sweep.qmd)。每個模型建立一份原生套件，以單一普通封存檔傳輸，各次回傳嘗試分開收集。外層封存與循序迴圈由呼叫者組成；公開批次 API 仍是一個套件對應一個模型。
+完整多模型步驟見[無 Desktop 的 HPC 求解器參數掃描](../../guides/hpc-sweep.qmd)。每個模型建立一份原生套件，以單一普通封存檔傳輸，各次回傳嘗試分開收集。外層封存與循序迴圈由呼叫者組成；公開批次 API 仍是一個套件對應一個模型。
 
 公開 Python 入口為：
 
@@ -275,7 +277,7 @@ SGB 模型的 EPR 不經 AEDT，從 sidecar 與準備好的紀錄讀出要積分
 
 原生分類與當時數值一起保留，不獨立認證準則或研究充分性。單憑 pass 數無法解釋原生作業停止原因；未知原因保持未知，不標為 OOM、walltime 或成功提前停止。實際 OOM／walltime 中斷、原生 analyze／save 失敗及不完整／損壞回傳產物，維持真實失敗意義。這項變更不把失敗／未完成作業標成完成，也不重新分類舊 FAILED 收據。
 
-要求設定身份（C4）、跨匯出自洽性（C5）、原生／來源身份、必要格式與產物雜湊仍會檢查。要求控制與回傳證據仍必須屬於同一次執行。下方獨立的 [Q2D／Q3D 觀察契約](#q2d-q3d-convergence-observations)負責矩陣系列資格。呼叫者依[結果閱讀課程](../course/returned-results.qmd#interpret-for-scq-use)針對預定 SCQ 用途解讀數值／歷史；此方向不新增數值充分性門檻或科學認證。
+要求設定身份（C4）、跨匯出自洽性（C5）、原生／來源身份、必要格式與產物雜湊仍會檢查。要求控制與回傳證據仍必須屬於同一次執行。下方獨立的 [Q2D／Q3D 觀察契約](#q2d-q3d-convergence-observations)負責矩陣系列資格。呼叫者依[結果閱讀課程](../../guides/convergence-and-reports.qmd#interpret-for-scq-use)針對預定 SCQ 用途解讀數值／歷史；此方向不新增數值充分性門檻或科學認證。
 
 ### Q2D／Q3D 收斂觀察 {#q2d-q3d-convergence-observations}
 
@@ -538,11 +540,11 @@ sim.set_expression_cache_convergence(
 
 儲存檔使用 PyAEDT 1.3.0 的 [`load_entire_aedt_file()` 解析器](https://github.com/ansys/pyaedt/blob/v1.3.0/src/ansys/aedt/core/internal/load_aedt_file.py)讀取。[pyEPR 1.0.2 的公開已儲存專案範例](https://github.com/zlatko-minev/pyEPR/blob/1.0.2/_example_files/pyEPR_tutorial1.aedt)顯示 `CurrentLine` 以附著實體的 `GeometryPosition` 紀錄儲存。該範例僅提供格式資訊，不證明 SCGSim 使用端執行，也不是跨版本 AEDT 序列化契約。原生幾何、接觸與屬性讀回仍需另行 AEDT 驗證；此處尚未驗證使用端專案或求解結果。歷史成品保留記錄的幾何。
 
-![宣告來源片與準備後導體片：淺色為既有 A、B 端點，深色為新增 A、B 側導體端部，中央為 RLC 矩形。](../assets/junction-partition-generic.svg){fig-alt="一般宣告片，含淺色既有端點金屬、深色新增導體端部與中央 RLC 矩形。" fig-cap="未執行求解器的一般準備幾何；淺色端點填色仍屬各完整導體。這不是原生 AEDT 讀回或求解證據。" width="95%"}
+![宣告來源片與準備後導體片：淺色為既有 A、B 端點，深色為新增 A、B 側導體端部，中央為 RLC 矩形。](../../assets/junction-partition-generic.svg){fig-alt="一般宣告片，含淺色既有端點金屬、深色新增導體端部與中央 RLC 矩形。" fig-cap="未執行求解器的一般準備幾何；淺色端點填色仍屬各完整導體。這不是原生 AEDT 讀回或求解證據。" width="95%"}
 
 ### 表面估計與接面正規化 {#surface-estimates-and-junction-normalization}
 
-`analyze_epr` 的呼叫方式與參數說明見[儲存場 API 指南](../api/analyze_epr.qmd)。當接面電壓 $V$
+`analyze_epr` 的呼叫方式與參數說明見[儲存場 API 指南](../api/analyze-epr.qmd)。當接面電壓 $V$
 非零時，依電壓計算的有效模態電容為 $C_{mode}=2U_{norm}/|V|^2$，支路電容為 $C_j=2U_{C,j}/|V|^2$，因此
 $p_{C,j}=C_j/C_{mode}$。若 $V=0$，此電容比值未定義；計算不套用電壓截止值。
 
@@ -582,4 +584,4 @@ EPR 與一般 Eigenmode 執行使用相同 `EigenmodeRunControl` 設定映射與
 
 此 V1 不提供 S 參數電路模型、自動求解器選擇、任意舊計算程序匯入、自訂 AEDT 材料定義，或舊私有執行期的相容備援。這些屬獨立未來範圍。
 
-獨立離屏檢視契約及可能不可用的 AEDT 模式，參見[無介面幾何預覽](../geometry-preview.qmd)。
+獨立離屏檢視契約及可能不可用的 AEDT 模式，參見[無介面幾何預覽](../../guides/preview-the-geometry.qmd)。

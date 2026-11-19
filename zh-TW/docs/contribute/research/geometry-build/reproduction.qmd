@@ -5,6 +5,8 @@ description: "幾何建構效能研究所用的機器、軟體版本、layout、
 scgsim-kind: "research"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/research/geometry-build/reproduction"
+aliases:
+  - ../../../research/geometry-build/reproduction.html
 ---
 
 **問題。**這些數字是在什麼環境量到的？要如何重現？
@@ -42,7 +44,7 @@ scaling 量測 1,000、5,000 與 20,000 個特徵；每個 case 在自己的 Pyt
 
 ## 資料檔
 
-這些檔案與 SGB 設計頁面的資料放在一起，位於 `zh-TW/docs/design/sgb/figures/`。
+這些檔案與 SGB 設計頁面的資料放在一起，位於 `zh-TW/docs/contribute/sgb-design/figures/`。
 
 | 檔案 | 內容 | 產生者 |
 |---|---|---|
@@ -58,18 +60,18 @@ scaling 量測 1,000、5,000 與 20,000 個特徵；每個 case 在自己的 Pyt
 
 ```bash
 uv sync --locked --group dev
-uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # 約 5 分鐘
-uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py oracle
-uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/why_scaling.py validators
-uv run --locked --no-sync python zh-TW/docs/design/sgb/_figures/emission.py --measure
+uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py measure       # 約 5 分鐘
+uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py oracle
+uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py validators
+uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/emission.py --measure
 ```
 
 本研究的圖表只需要 `matplotlib` 與這些 JSON 檔，由同一個腳本為兩種語言寫出：
 
 ```bash
-python3 docs/research/geometry-build/_figures/plots.py
+python3 docs/contribute/research/geometry-build/_figures/plots.py
 ```
 
 腳本把 SVG 圖與 Markdown 表格寫到各語言頁面旁的 `figures/`，並寫出 `numbers.json`，內含文字引用的數值。資料只能透過重跑量測腳本來修改；繪圖腳本本身不含任何數字。
 
-量測腳本與它們的輸入，說明在 `zh-TW/docs/design/sgb/_figures/README.md`。
+量測腳本與它們的輸入，說明在 `zh-TW/docs/contribute/sgb-design/_figures/README.md`。

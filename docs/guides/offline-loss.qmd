@@ -4,20 +4,22 @@ description: "Reanalyze recorded EPR evidence and export honest owner-labeled fi
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/offline-epr"
+aliases:
+  - ../course/offline-epr.html
 ---
 
 For the complete mode-and-participation workflow, use a PDK notebook from
-[Choose a simulation](../examples.qmd#getting-started). This offline
+[Choose a simulation](../start/choose-a-simulation.qmd#getting-started). This offline
 reference requires an actual detached EPR result from a verified Palace Eigenmode
 return, an AEDT adaptive-history record, or the separate final AEDT
-[saved-field analysis](aedt-saved-fields.qmd). This lesson changes film/loss
+[saved-field analysis](saved-fields.qmd). This lesson changes film/loss
 assumptions on recorded evidence. It does not change patch selection, build CAD,
-reopen fields or solve. Read the [EPR concept](../eigenmode-epr.qmd) before
+reopen fields or solve. Read the [EPR concept](../concepts/surface-epr.qmd) before
 interpreting participation as loss.
 
 ## Palace: detach the verified final result
 
-In the [returned-run lesson](returned-results.qmd), after strict resolution of
+In the [returned-run lesson](convergence-and-reports.qmd), after strict resolution of
 your Palace Eigenmode run folder:
 
 ```python
@@ -108,7 +110,7 @@ baseline or requested-margin quantity that the study needs. Read its recorded
 participation history and changes with the corresponding frequency history;
 one does not stand in for the other. Retain the actual criteria and native
 status rather than labeling a selected snapshot sufficient because of a
-converged flag. Follow the [research interpretation sequence](returned-results.qmd#interpret-for-scq-use)
+converged flag. Follow the [research interpretation sequence](convergence-and-reports.qmd#interpret-for-scq-use)
 for the Notebook's judgement. Offline assumption changes reuse the same field
 evidence and cannot improve an unresolved or unavailable participation history.
 
@@ -125,7 +127,7 @@ margins are separate evaluations, not additive edge bands; keep the baseline row
 distinct from the margin rows (for AEDT, including an explicitly requested zero
 margin). The known
 baseline inverse-Q subtotal omits unknown loss and uncomputed channels. It is
-not total device Q or T1. The [report contract](../report-model.qmd) defines
-visible coverage and ordering; the [EPR concept](../eigenmode-epr.qmd) defines
-normalization and assumptions. Return to the [course map](../examples.qmd) when
+not total device Q or T1. The [report contract](../reference/specs/report-model.qmd) defines
+visible coverage and ordering; the [EPR concept](../concepts/surface-epr.qmd) defines
+normalization and assumptions. Return to the [course map](../start/choose-a-simulation.qmd) when
 choosing the next physical model.

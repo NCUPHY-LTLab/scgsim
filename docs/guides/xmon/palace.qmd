@@ -6,10 +6,12 @@ scgsim-status: "STABILIZED"
 scgsim-id: "docs/tutorial-xmon-palace"
 execute:
   enabled: false
+aliases:
+  - ../../tutorial-xmon-palace.html
 ---
 
-Run the [shared Xmon input tutorial](tutorial-xmon-input.qmd) first in the
-same Python session. It defines `plan`, `snapshot` and `port_name` from public component and coupon inputs. This extends [ordinary Palace Eigenmode](course/palace-eigenmode.qmd) with
+Run the [shared Xmon input tutorial](inputs.qmd) first in the
+same Python session. It defines `plan`, `snapshot` and `port_name` from public component and coupon inputs. This extends [ordinary Palace Eigenmode](../modes-palace.qmd) with
 attributed films and a source-linked inductive port. Configure these before
 meshing. The documentation build does not mesh or run Palace.
 
@@ -95,11 +97,11 @@ The example requests margin rows through `inset_margins_um`. Each margin adds a
 row for the part of the surface at least that many micrometres from the nearest
 gap edge, next to the whole-surface baseline row. The specs are set on the plan,
 before `prepare()`, because SGB cuts the margins into the geometry; the
-[Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins) lists the
+[Eigenmode contract](../../reference/specs/palace-eigenmode.qmd#surface-epr-margins) lists the
 keys and limits. Omit `inset_margins_um` when only the baseline is needed. The
 example sets no mesh controls, so `mesh()` uses the default `FeatureRecipe` and
 quality threshold described in the
-[Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
+[Palace mesh controls](../../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
 The MA/MS/SA records are the OrPen `LiteratureCentral` modeling presets, not
 material measurements. Replace them only with source-attributed records for
@@ -107,7 +109,7 @@ your study. The two requested margins are separate alternatives to the
 baseline row. `bulk_domain_ids=None` selects all configured bulk energy
 entries, and the selection does not remove physical domains or change the
 normalization. Palace's external Region surface remains natural PMC when left
-unspecified; see the [EPR methods guide](eigenmode-epr.qmd#workflow-and-state-contract)
+unspecified; see the [EPR methods guide](../../concepts/surface-epr.qmd#workflow-and-state-contract)
 for the boundary comparison and interpretation limits.
 
 ## Review normalized inputs before meshing
@@ -125,7 +127,7 @@ display(sim.input_summary())
 ```
 
 To learn that SCGSim can model a layout before setting up a simulation, the
-layout repository can run the [layout modeling check](layout-modeling-check.qmd),
+layout repository can run the [layout modeling check](../check-a-layout.qmd),
 which stops before meshing.
 
 ## Build inputs, execute and read the return
@@ -138,14 +140,14 @@ print(mesh_path, config_path)
 
 These are real local preparation operations. The written index binds each
 surface baseline/margin and configured port to its mesh identity; it is not a
-field result. [Inspect the backend](course/solver-observations.qmd) if useful,
-then [prepare and execute its handoff](course/execute.qmd). Retain the Palace
+field result. [Inspect the backend](../inspect-the-prepared-model.qmd) if useful,
+then [prepare and execute its handoff](../run-elsewhere.qmd). Retain the Palace
 handoff ID on the preparation side, outside the transferred package.
 
-After full retrieval, [restart and strictly resolve](course/returned-results.qmd).
+After full retrieval, [restart and strictly resolve](../convergence-and-reports.qmd).
 The report presents identity/numerical/cost evidence before available physics.
 `resolved.epr_result()` detaches available final Eigenmode EPR. Follow
-[offline EPR](course/offline-epr.qmd) to retain it, select a recorded mode and
+[offline EPR](../offline-loss.qmd) to retain it, select a recorded mode and
 change attributed assumptions without solving again. The
-[Palace Eigenmode contract](specs/palace-eigenmode.qmd) owns exact selections;
-[EPR concepts](eigenmode-epr.qmd) explain normalization and signed port meaning.
+[Palace Eigenmode contract](../../reference/specs/palace-eigenmode.qmd) owns exact selections;
+[EPR concepts](../../concepts/surface-epr.qmd) explain normalization and signed port meaning.

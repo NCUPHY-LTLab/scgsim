@@ -5,6 +5,8 @@ description: "SGB 幾何建構的結構檢查、載入後的 Gmsh 模型檢查�
 scgsim-kind: "research"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/research/geometry-build/validation-cost"
+aliases:
+  - ../../../research/geometry-build/validation-cost.html
 ---
 
 **問題。**建構會檢查自己的輸出。這些檢查要花多少時間？成本成長得比模型快嗎？

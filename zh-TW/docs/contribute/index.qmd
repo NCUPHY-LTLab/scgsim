@@ -1,10 +1,12 @@
 ---
 title: "為 SCGSim 貢獻"
 description: "設定 SCGSim 開發環境，並找到貢獻者參考資料。"
-sidebar: contribution
+sidebar: contribute
+aliases:
+  - ../contributing.html
 ---
 
-本頁說明如何準備 SCGSim 原始碼工作目錄，以貢獻文件或套件內容。請先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) 與 Git；[安裝教學](course/installation.qmd)則說明研究專案的 Python 環境與原生求解器需求。
+本頁說明如何準備 SCGSim 原始碼工作目錄，以貢獻文件或套件內容。請先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) 與 Git；[安裝教學](../start/install.qmd)則說明研究專案的 Python 環境與原生求解器需求。
 
 ```bash
 git clone --branch develop https://github.com/NCUPHY-LTLab/scgsim.git

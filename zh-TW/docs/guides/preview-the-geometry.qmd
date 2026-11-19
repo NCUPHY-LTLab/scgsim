@@ -5,19 +5,21 @@ scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/geometry-preview"
 lang: zh-TW
+aliases:
+  - ../geometry-preview.html
 ---
 
-分階段使用方式請見[求解器觀察](course/solver-observations.qmd)。本頁負責預覽綁定與可用性。
+分階段使用方式請見[求解器觀察](inspect-the-prepared-model.qmd)。本頁負責預覽綁定與可用性。
 
 ## 用途與責任 {#purpose-and-ownership}
 
-[SGB 幾何概念](concepts/geometry.qmd#construction-stage) 說明來源如何成為此處檢視的求解器綁定幾何。
+[SGB 幾何概念](../concepts/geometry.qmd#construction-stage) 說明來源如何成為此處檢視的求解器綁定幾何。
 
 SCGSim 對同一個求解器綁定的語意場景提供兩種檢視。內嵌 Notebook 檢視器支援互動旋轉、平移、縮放及重設相機。可重現的無顯示圖集則是可攜、綁定雜湊的審閱產物。兩種介面都不重新定義 PDK 或元件語意、求解器幾何、執行狀態或科學資料。
 
 Palace 預覽透過 `meshio` 讀取 Palace `.msh` 檔案，並以 PyVista 離屏繪製。其依據是網格標記、網格清單及設定／索引映射。AEDT 預覽在無圖形模式使用 PyAEDT 1.3.0：指派及身分來自原生讀回，各原生物件先匯出為 OBJ，再離屏繪製。原始 `.aedt` 來源要求明確的 `aedt_version` 及設計選取。已封存執行來源使用綁定規格中紀錄的版本，不接受版本覆寫。兩條路徑都使用選定的同節點 AEDT 相容性內容及自行擁有的 Desktop 清理生命週期。
 
-Palace 預覽保留高階連接關係及曲面邊界表示。預覽不計算網格品質；[網格化稽核](mesh-quality.qmd)在升階之前的線性網格上量測它。
+Palace 預覽保留高階連接關係及曲面邊界表示。預覽不計算網格品質；[網格化稽核](../reference/specs/mesh-quality.qmd)在升階之前的線性網格上量測它。
 
 ## 公開介面 {#public-surface}
 

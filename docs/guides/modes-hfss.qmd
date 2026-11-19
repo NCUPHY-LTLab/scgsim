@@ -4,10 +4,12 @@ description: "Prepare a port-free mode request and retain native frequency and Q
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-eigenmode"
+aliases:
+  - ../course/aedt-eigenmode.html
 ---
 
-For a complete mode workflow, use a PDK notebook from [Choose a simulation](../examples.qmd#getting-started).
-This backend reference continues from [CPW inputs](aedt-inputs.qmd), with its
+For a complete mode workflow, use a PDK notebook from [Choose a simulation](../start/choose-a-simulation.qmd#getting-started).
+This backend reference continues from [CPW inputs](aedt-cpw-inputs.qmd), with its
 `snapshot`. Ordinary HFSS Eigenmode has no driven excitation ports: it searches
 for the requested modes with an explicit adaptive setup. `EigenmodeSim` builds
 the snapshot's SGB model and writes a handoff that carries it; the run imports
@@ -49,7 +51,7 @@ Before preparing, `EigenmodeSim.simulation_drc(plan, modeling=...)`, given the
 `GeometryPlan` before `prepare()`, checks without AEDT that the plan's model
 builds and imports on the route
 `modeling` realizes; see
-[the AEDT Eigenmode check](../layout-modeling-check.qmd#aedt-eigenmode-check).
+[the AEDT Eigenmode check](check-a-layout.qmd#aedt-eigenmode-check).
 
 A generic linear RLC on a port sheet is `EigenmodeSim.add_lumped_rlc()`: each
 load names the port sheet it sits on (`port_sheet_id`) and is stored in the
@@ -61,12 +63,12 @@ The public CPW example supplies these search/pass values. They are request
 controls, not a promised mode frequency or a universal SCQ sufficiency rule.
 Keep the actual controls and any changes in the Notebook. On return, read the
 requested mode and its available changes for the
-[intended research use](returned-results.qmd#interpret-for-scq-use); retain
+[intended research use](convergence-and-reports.qmd#interpret-for-scq-use); retain
 native convergence status without treating it as the research conclusion.
 Review the serialized spec and the copied model before
-[explicit host execution](execute.qmd).
+[explicit host execution](run-elsewhere.qmd).
 
-After [return and strict resolution](returned-results.qmd), the normalized
+After [return and strict resolution](convergence-and-reports.qmd), the normalized
 `eigenmodes.csv` retains ordered mode index, real `frequency_ghz` and native
 `q_factor`. The hashed `eigenmodes.eig` preserves native raw frequency output,
 including a complex component where present. SCGSim does not calculate damping
@@ -77,14 +79,14 @@ Keep the returned mode and actual controls together when interpreting its
 frequency and Q. The report retains native classification; hash-bound
 `adaptive-convergence.prop` also preserves the native history and consecutive
 pass count, which the existing normalized result/report does not reproduce.
-The [runtime reference](../specs/aedt-runtime.qmd#hfss-convergence-observations)
+The [runtime reference](../reference/specs/aedt-runtime.qmd#hfss-convergence-observations)
 describes those records and failure behavior. Use the available changes in the
 quantity your study needs, rather than treating the native classification as
 an accuracy recommendation.
 
 An `.aedt` file and a completed ordinary receipt do not establish reusable
 saved-field EPR. If that is your task, start with the
-[source-first Xmon EPR model](../tutorial-xmon-aedt.qmd), then follow its
-separate [saved-field analysis](aedt-saved-fields.qmd) after the solve. The
-[AEDT contract](../specs/aedt-runtime.qmd) defines both paths without treating
+[source-first Xmon EPR model](xmon/aedt.qmd), then follow its
+separate [saved-field analysis](saved-fields.qmd) after the solve. The
+[AEDT contract](../reference/specs/aedt-runtime.qmd) defines both paths without treating
 them as interchangeable results.

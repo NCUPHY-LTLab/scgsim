@@ -12,7 +12,7 @@ Owns three things only:
 It computes nothing about SGB by itself; every number comes from the production package or from the page's own script.
 Run the scripts that import this module with the Python of the SGB core checkout::
 
-    SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/<script>.py
+    SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/<script>.py
 """
 
 from __future__ import annotations

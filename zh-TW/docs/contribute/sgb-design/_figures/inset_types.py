@@ -1,8 +1,8 @@
-"""Tables and excerpts for the section "按型別要求 band" of ``docs/design/sgb/inset-imprint.qmd`` and ``consumer-contract.qmd``.
+"""Tables and excerpts for the section "按型別要求 band" of ``zh-TW/docs/contribute/sgb-design/inset-imprint.qmd`` and ``consumer-contract.qmd``.
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/inset_types.py
+    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/inset_types.py
 
 Three Surface-EPR types are asked for at once (``InterfaceSurfaces("MA")``, ``"MS"`` and ``"SA"``, margins 0.5 and 1.0 um)
 on the two real inputs of the production tests (``tests/sgb_inputs.py``), built with ``build_sgb_geometry``:
@@ -12,7 +12,7 @@ on the two real inputs of the production tests (``tests/sgb_inputs.py``), built 
 
 and on one stage-level scene, a ground plane that covers the whole die, where the faces have no gap edge.  The build is
 repeated with the concrete requests that name the same faces (and the ids SGB gives them); the two models must have one
-identity digest.  Outputs go to ``docs/design/sgb/figures/`` with the prefix ``inset-types-``:
+identity digest.  Outputs go to ``zh-TW/docs/contribute/sgb-design/figures/`` with the prefix ``inset-types-``:
 
 * ``inset-types-table.md``    which faces each type expanded into, and which it skipped
 * ``inset-types-record.md``   the ``inset_request`` record of the substrate-air request of the pad-in-ground sidecar and the

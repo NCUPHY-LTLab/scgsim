@@ -4,10 +4,12 @@ description: "Change source geometry, Entity-to-Net assignments and solver reque
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/working-model"
+aliases:
+  - ../course/working-model.html
 ---
 
 Start after one complete capacitance or resonance/EPR notebook from
-[Choose a simulation](../examples.qmd#getting-started). The next useful step is
+[Choose a simulation](../start/choose-a-simulation.qmd#getting-started). The next useful step is
 to change one part of the model and understand which inputs and results that
 change affects. Save the original model and result before preparing a new run.
 
@@ -45,8 +47,8 @@ print(tuple(entity.semantic_id for entity in plan.entities))
 Supply a mapping of final Net IDs to the exact Entity IDs from that inventory
 with `plan.set_nets(net_membership)`. Choose membership from the circuit you
 intend to model, including which conductors share Ground. The
-[geometry reference](../geometry-sgb.qmd#component-to-backend-geometry-contract)
-owns the assignment contract; the [Xmon construction](../tutorial-xmon-input.qmd)
+[geometry reference](../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract)
+owns the assignment contract; the [Xmon construction](xmon/inputs.qmd)
 provides a larger concrete hierarchy example.
 
 Declare the outer vacuum envelope with `plan.set_vacuum_region(...)` and call
@@ -64,7 +66,7 @@ consumes the component, stack, and material records supplied by that source.
 
 The public OrPen notebook uses GDSFactory's registered cell and owns the
 complete source-to-handoff example. Its exact revision and notebook links are
-in the [installation lesson](installation.qmd#select-the-curved-source-cell).
+in the [installation lesson](../start/install.qmd#select-the-curved-source-cell).
 The source-cell construction is:
 
 ```python
@@ -95,7 +97,7 @@ with the component's Entity and Net identities. The separate GDS-boundary
 reconstruction API is for a caller-selected reconstruction and does not
 override these authored curves. How an earlier SCGSim version produced the
 published Circular Pad result is recorded in the
-[curved-source installation notes](../history/curved-source-installation.qmd).
+[curved-source installation notes](../contribute/history/curved-source-installation.qmd).
 
 Choose the curve description from the source you have. For authored geometry,
 the component can carry `BoundaryCurveChainSpec` records in
@@ -130,11 +132,11 @@ as an override. To reconstruct from polygon data, create a detached raw
 `GeometryBuildInput` with the selected reconstruction record and without the
 authored curve declaration, then pass it, with its representation context from
 `interpret_physical_geometry`, to `build_sgb_geometry` from `scgsim.geometry.sgb`.
-That call goes below [the supported entry](../supported-scope.qmd#supported-entry):
+That call goes below [the supported entry](../reference/supported-scope.qmd#supported-entry):
 SGB does not repeat the checks of `GeometryPlan`, so the input you build must
 still satisfy them. `set_plan(snapshot)` continues to honor the
 snapshot's declarations. See the
-[GeometryPlan and geometry source-curve contract](../geometry-sgb.qmd#source-curves)
+[GeometryPlan and geometry source-curve contract](../reference/specs/geometry-plan.qmd#source-curves)
 for curve record and boundary ownership. This does not mutate the component or
 its snapshot.
 :::
@@ -154,10 +156,10 @@ membership, and extracts C/G only. Q2D uses explicit cross-section rectangles an
 does not generate a slice of the GeometryPlan.
 :::
 
-For a two-port network, continue to [Driven Terminal](aedt-driven-terminal.qmd);
+For a two-port network, continue to [Driven Terminal](s-parameters-hfss.qmd);
 Driven Modal and wave ports are not available in this version. For
-finite conductor extraction, use [Q3D](aedt-q3d.qmd); for per-unit-length line
-matrices, use [Q2D](aedt-q2d.qmd). The [CPW inputs](aedt-inputs.qmd) lesson
+finite conductor extraction, use [Q3D](capacitance-q3d.qmd); for per-unit-length line
+matrices, use [Q2D](line-parameters-q2d.qmd). The [CPW inputs](aedt-cpw-inputs.qmd) lesson
 prepares the `GeometryPlan` snapshot whose SGB model HFSS and Q3D solve.
 
 ## Change a solver request
@@ -169,8 +171,8 @@ each change beside the quantity you plan to inspect. Example controls in a
 lesson are starting inputs, not a universal accuracy recommendation.
 
 Prepare a new run folder and handoff for a changed request. Inspect the
-[source summary](source-observations.qmd) and, when useful, the
-[prepared model](solver-observations.qmd), then execute that new handoff.
+[source summary](inspect-the-source.qmd) and, when useful, the
+[prepared model](inspect-the-prepared-model.qmd), then execute that new handoff.
 Retain each result with its own settings so that a later comparison can name
 which geometry, boundary and request changed.
 
@@ -181,10 +183,10 @@ which geometry, boundary and request changed.
 | Shape, stack, Net membership or outer domain | New source snapshot/import bindings, preparation and solve |
 | Boundary, terminal/port or junction circuit model | New backend model, preparation and solve |
 | Mesh or native solve controls | New prepared request and solve |
-| Requested field-side/margin evaluation on saved AEDT fields | Explicit [native saved-field analysis](aedt-saved-fields.qmd) if the sealed fields support it |
-| Loss assumptions on an existing detached EPR result | [Offline reanalysis](offline-epr.qmd), keeping the field evidence |
+| Requested field-side/margin evaluation on saved AEDT fields | Explicit [native saved-field analysis](saved-fields.qmd) if the sealed fields support it |
+| Loss assumptions on an existing detached EPR result | [Offline reanalysis](offline-loss.qmd), keeping the field evidence |
 
 Read the actual selected quantity and its available history after each run.
 Keep native status and missing channels visible. The
-[result-reading lesson](returned-results.qmd#interpret-for-scq-use) connects
+[result-reading lesson](convergence-and-reports.qmd#interpret-for-scq-use) connects
 that evidence to the engineering or physics purpose of your model.

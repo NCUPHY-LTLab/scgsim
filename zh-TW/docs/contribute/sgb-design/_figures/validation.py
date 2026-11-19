@@ -5,7 +5,7 @@ example (the real input ``gds_pad_in_ground`` under Route B) and applies nine ot
 and records which named checks fail (it re-runs ``validate_model`` on the tampered model, the way ``tests/test_sgb_validation.py``
 does).  It also records the errors that stop a build before validation.
 
-Writes into ``docs/design/sgb/figures/``:
+Writes into ``zh-TW/docs/contribute/sgb-design/figures/``:
 
 * ``validation-shell.svg/.html``                the outer shell of the vacuum volume with its top face removed; the edges the shell
   now uses once in red;
@@ -15,7 +15,7 @@ Writes into ``docs/design/sgb/figures/``:
 The defect "a top arc moved to another circle" needs a curved wall; the real input has none, so that one row is built on the
 stage-level scene ``pad_in_ground("B")`` of ``tests/sgb_scenes.py`` and says so in the numbers.
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/validation.py
+Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/validation.py
 """
 
 from __future__ import annotations

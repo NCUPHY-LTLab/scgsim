@@ -5,6 +5,8 @@ lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/consumer-contract"
+aliases:
+  - ../../design/sgb/consumer-contract.html
 ---
 
 Palace 的 mesh 流程與 AEDT 的 geometry 流程要採用新的 SGB，需要知道兩件事：SGB 交給它們什麼，以及怎麼讀。本頁回答第一件事與讀取的順序：入口函式 `build_sgb_geometry`、它寫出的五個檔案、sidecar 的欄位，以及兩個讀取端的流程。今天的 Palace 與 AEDT 契約如何對到這些欄位，另見[對應表](consumer-mapping.qmd)。
@@ -289,10 +291,10 @@ gmsh.model.mesh.generate(3)
 
 ## 補充：重現資料 {#reproduction-data}
 
-本頁的範例由 `zh-TW/docs/design/sgb/_figures/consumer_contract.py` 產生。它用本 repository 測試資料夾中的 `sgb_inputs.gds_pad_in_ground`（Route B 與 C）和 `thin_film_pair`（Route A），呼叫 `build_sgb_geometry` 把檔案寫進暫存資料夾，以 `read_sidecar` 讀回，然後在 Route B 與 C 上執行上文的 Palace 與 AEDT 步驟。Route B 與 C 的 inset 是 pad 上表面的 0.5 與 1 µm；Route A 的 inset 是 `chip/left` 的 sheet。它寫出 `figures/consumer-*.md`（本頁與[對應表](consumer-mapping.qmd)引用的節錄與表格）；重建的 Palace group dict 是 Palace 自己的 `groups_from_sidecar` 的結果。
+本頁的範例由 `zh-TW/docs/contribute/sgb-design/_figures/consumer_contract.py` 產生。它用本 repository 測試資料夾中的 `sgb_inputs.gds_pad_in_ground`（Route B 與 C）和 `thin_film_pair`（Route A），呼叫 `build_sgb_geometry` 把檔案寫進暫存資料夾，以 `read_sidecar` 讀回，然後在 Route B 與 C 上執行上文的 Palace 與 AEDT 步驟。Route B 與 C 的 inset 是 pad 上表面的 0.5 與 1 µm；Route A 的 inset 是 `chip/left` 的 sheet。它寫出 `figures/consumer-*.md`（本頁與[對應表](consumer-mapping.qmd)引用的節錄與表格）；重建的 Palace group dict 是 Palace 自己的 `groups_from_sidecar` 的結果。
 
 ```bash
-uv run --extra palace --group dev --group occt python zh-TW/docs/design/sgb/_figures/consumer_contract.py
+uv run --extra palace --group dev --group occt python zh-TW/docs/contribute/sgb-design/_figures/consumer_contract.py
 ```
 
 按種類要求的 `inset_request` 節錄與展開表另由 `_figures/inset_types.py` 產生（它自己建 `gds_pad_in_ground` 與 `thin_film_pair`）。

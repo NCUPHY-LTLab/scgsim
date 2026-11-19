@@ -6,22 +6,24 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/tutorial-xmon-input"
 execute:
   enabled: false
+aliases:
+  - ../../tutorial-xmon-input.html
 ---
 
-This page builds one reusable source snapshot for the [Palace](tutorial-xmon-palace.qmd)
-and [AEDT](tutorial-xmon-aedt.qmd) workflows. It starts from OrPen's public
+This page builds one reusable source snapshot for the [Palace](palace.qmd)
+and [AEDT](aedt.qmd) workflows. It starts from OrPen's public
 Kosen2024 Xmon preview cell and ground-short coupon. The cell is an independent
 parametric adaptation of Kosen et al., [PRX Quantum 5, 030350
 (2024)](https://doi.org/10.1103/PRXQuantum.5.030350), shared under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); it is not an
 author-supplied mask. The dimensions and coupon settings follow the public
-Palace Route B example linked from [Examples](examples.qmd); they are public
+Palace Route B example linked from [Examples](../../start/choose-a-simulation.qmd); they are public
 simulation inputs, not measured device data or paper-mask dimensions. Use the
 matched SCGSim and OrPen versions listed there. Quarto shows this code without
 executing it.
 
 The goal is one source snapshot shared by two backends. Start with
-[installation](course/installation.qmd), and retain `snapshot` in this session.
+[installation](../../start/install.qmd), and retain `snapshot` in this session.
 
 The [pinned public OrPen Xmon sources](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/Kosen2024_Xmon)
 provide the Palace Route B lumped-port inductance of $11.78\,\mathrm{nH}$ used
@@ -133,7 +135,7 @@ does not make those physical models identical.
 The plan retains no live component references in that snapshot. Preparing it
 establishes source identity, not native geometry validation or a solve.
 
-Continue to [inspect and retain source inputs](course/source-observations.qmd).
+Continue to [inspect and retain source inputs](../inspect-the-source.qmd).
 That lesson reads the summary and portable GDS/stack pair, then links the
-Electrostatic and Eigenmode branches. The [GeometryPlan contract](geometry-sgb.qmd#component-to-backend-geometry-contract)
+Electrostatic and Eigenmode branches. The [GeometryPlan contract](../../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract)
 defines occurrence, assignment and grouping behavior.
