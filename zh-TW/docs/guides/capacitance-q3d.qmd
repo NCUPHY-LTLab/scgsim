@@ -124,7 +124,7 @@ Net 是一塊具名、作為同一個導體的金屬，由計畫的 `plan.set_ne
 
 在這個模型上，Q3D 只萃取電容與電導，頻率由 `MatrixRunControl` 指定（這裡是 5 GHz）。它不求解交流或直流的電阻與電感；這在本版本中不提供，追蹤於 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)。
 
-`MatrixRunControl` 也設定 Q3D 自己的自適應細化：`maximum_passes=10` 允許最多十個 pass，`convergence_percent=1.0` 在兩個 pass 之間的變化不超過 1 % 時停止。取回結果後，報告會把 Q3D 的收斂狀態、它回報的變化與你設定的控制值放在矩陣旁邊（[收斂與報告](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）。
+`MatrixRunControl` 也設定 Q3D 自己的自適應細化：`maximum_passes=10` 允許最多十個回合（pass），`convergence_percent=1.0` 在兩個回合之間的變化不超過 1 % 時停止。取回結果後，報告會把 Q3D 的收斂狀態、它回報的變化與你設定的控制值放在矩陣旁邊（[收斂與報告](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）。
 
 Region 就是計畫的真空區域，外圍是開放的。若要讓 Region 的六個面成為接地外殼，那是 Q3D 請求中的一個欄位 `Q3dSpec(grounded_region_net=...)`，`prepare_q3d_from_geometry` 不會設定它；[Q3D 參考](../reference/specs/aedt-runtime.qmd#q3d-extraction-and-region-ground-candidate)有說明。
 

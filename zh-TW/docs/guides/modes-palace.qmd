@@ -118,7 +118,7 @@ for kind in ("MA", "MS", "SA"):
 
 - **第 2 段**在三種表面上各放一層有損耗的薄膜：MA（金屬–空氣，金屬的頂面與側面）、MS（金屬–基板，金屬底下）與 SA（基板–空氣，間隙中裸露的基板）。每層薄膜厚 2 nm，介電常數與損耗正切取自 PDK 的 `LiteratureCentral` 預設值；這些是依文獻整理的建模假設，不是量測值。薄膜是幾何的一部分，所以設在計畫上；沒有呼叫 `set_surface_epr` 就不會計算表面 EPR。方法見 [Surface EPR](../concepts/surface-epr.qmd)。
 - **第 3 段**做出共振器。`add_port` 在 PDK 的接面薄片 `chip/o_junction_lumped` 上、金屬層 `D0_TOP_M1` 放一個 10 nH 電感。`num_modes=1` 與 `target=3e9` 要求 3 GHz 以上的第一個模態。`set_epr_request` 選擇要回報哪些參與率，不會改變求解。
-- **第 4 段**要求二階元素，讓 Palace 最多細化網格四次，並在模態 1 的頻率與前一個 pass 相比變化不超過 1 % 時停止。宣告的說明見[收斂與報告](convergence-and-reports.qmd#declare-convergence)；請依你的用途選門檻。[]{#declare-when-refinement-has-converged}`amr_update_fraction=0.7` 是每個 pass 要細化的誤差估計比例；本徵模態模擬只要做細化就必須給這個值。
+- **第 4 段**要求二階元素，讓 Palace 最多細化網格四次，並在模態 1 的頻率與前一個回合（pass）相比變化不超過 1 % 時停止。宣告的說明見[收斂與報告](convergence-and-reports.qmd#declare-convergence)；請依你的用途選門檻。[]{#declare-when-refinement-has-converged}`amr_update_fraction=0.7` 是每個回合要細化的誤差估計比例；本徵模態模擬只要做細化就必須給這個值。
 
 在研究專案中、設定過 `SCGSIM_PALACE_EXECUTABLE` 的 shell 裡執行：
 
@@ -130,7 +130,7 @@ uv run pad_modes.py
 
 ## 讀懂結果 {#read-the-result}
 
-**頻率。** Pass 1 在 31,104 個四面體的第一個網格上得到 5.0889 GHz；pass 2 在 63,619 個四面體上得到 5.1040 GHz，變化 0.30 %，所以這次執行在 pass 2 收斂。檢查一下：用[以 Palace 計算電容](capacitance-palace.qmd)得到的焊墊電容 C = 95.43 fF 與 L = 10 nH，理想 LC 電路的共振頻率是
+**頻率。** 第 1 回合在 31,104 個四面體的第一個網格上得到 5.0889 GHz；第 2 回合在 63,619 個四面體上得到 5.1040 GHz，變化 0.30 %，所以這次執行在第 2 回合收斂。檢查一下：用[以 Palace 計算電容](capacitance-palace.qmd)得到的焊墊電容 C = 95.43 fF 與 L = 10 nH，理想 LC 電路的共振頻率是
 
 $$
 f = \frac{1}{2\pi\sqrt{LC}} = \frac{1}{2\pi\sqrt{10\,\mathrm{nH}\times 95.43\,\mathrm{fF}}} = 5.152\ \mathrm{GHz},

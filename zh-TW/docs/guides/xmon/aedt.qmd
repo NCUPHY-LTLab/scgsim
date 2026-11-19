@@ -11,7 +11,7 @@ aliases:
   - ../../tutorial-xmon-aedt.html
 ---
 
-本頁為[共用的計畫](inputs.qmd)中的覆晶 Xmon 準備 HFSS 本徵模態計算，金屬建成實體（`modeling="solid"`）：求量子位元模態的頻率與 Q 值，以及各表面、介電質與接面的參與率，接面以 11.78 nH 電感表示。HFSS 會一直細化，直到模態頻率在 pass 之間的變化不超過 0.1 %，這與 [Palace 頁](palace.qmd)宣告的條件相同。這個儲存庫沒有這次計算的結果紀錄。
+本頁為[共用的計畫](inputs.qmd)中的覆晶 Xmon 準備 HFSS 本徵模態計算，金屬建成實體（`modeling="solid"`）：求量子位元模態的頻率與 Q 值，以及各表面、介電質與接面的參與率，接面以 11.78 nH 電感表示。HFSS 會一直細化，直到模態頻率在回合（pass）之間的變化不超過 0.1 %，這與 [Palace 頁](palace.qmd)宣告的條件相同。這個儲存庫沒有這次計算的結果紀錄。
 
 你需要：
 
@@ -121,7 +121,7 @@ sim.set_epr_request(
 ```
 
 - `modeling="solid"` 把金屬建成具有薄膜厚度的實體，也就是 100 nm 的鋁；`"thin_film"` 則會建成薄片。
-- `EigenmodeRunControl` 要求 3 GHz 以上的第一個模態，最多 20 個自適應 pass，在頻率於 pass 之間的變化不超過 0.1 % 時停止。
+- `EigenmodeRunControl` 要求 3 GHz 以上的第一個模態，最多 20 個自適應回合，在頻率於回合之間的變化不超過 0.1 % 時停止。
 - `AedtResources` 給出 AEDT 可以使用的核心數與記憶體比例；請依你的 AEDT 電腦設定。
 - `EprAnalysisRequest` 選擇要回報的內容：模態 1、所有表面 EPR 群組、接面，以及所有塊體區域：介電質實體（例如兩片矽晶片）與代表計畫真空區域的 Region。`None` 選全部，`()` 不選，ID 的 tuple 則選那些。這個選擇不會改變求解。
 
@@ -144,7 +144,7 @@ print(handoff.run_dir, handoff.script_path, handoff.archive_path)
 
 ## 執行、讀取與後續 {#execute-resolve-and-continue-the-analysis}
 
-在 AEDT 電腦上[執行這個資料夾](../run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)，整個帶回來，再以 `resolve_results` 讀取（[收斂與報告](../convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）：`physics_results()` 給出頻率與 Q，`epr_result()` 給出每個自適應 pass 的參與率。HFSS 的停止條件只看頻率；你需要的參與率，也請看它的歷程（[解讀結果](../convergence-and-reports.qmd#interpret-for-scq-use)）。
+在 AEDT 電腦上[執行這個資料夾](../run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)，整個帶回來，再以 `resolve_results` 讀取（[收斂與報告](../convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）：`physics_results()` 給出頻率與 Q，`epr_result()` 給出每個自適應回合的參與率。HFSS 的停止條件只看頻率；你需要的參與率，也請看它的歷程（[解讀結果](../convergence-and-reports.qmd#interpret-for-scq-use)）。
 
 若要從最終已存的場再算一次參與率，用[從 AEDT 已存的場計算 EPR](../saved-fields.qmd)；若要套用其他損耗正切，用[不重新求解，改變損耗假設](../offline-loss.qmd)。
 

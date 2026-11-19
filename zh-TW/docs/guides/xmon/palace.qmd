@@ -11,7 +11,7 @@ aliases:
   - ../../tutorial-xmon-palace.html
 ---
 
-本頁為[共用的計畫](inputs.qmd)中的覆晶 Xmon 準備 Palace 本徵模態計算：2 GHz 以上的前兩個模態，接面以 11.78 nH 電感表示，並計算每個模態中各表面、基板與接面的參與率。網格會一直細化，直到模態 1 的頻率在 pass 之間的變化不超過 0.1 %，這與 [AEDT 頁](aedt.qmd)給 HFSS 的條件相同。
+本頁為[共用的計畫](inputs.qmd)中的覆晶 Xmon 準備 Palace 本徵模態計算：2 GHz 以上的前兩個模態，接面以 11.78 nH 電感表示，並計算每個模態中各表面、基板與接面的參與率。網格會一直細化，直到模態 1 的頻率在回合（pass）之間的變化不超過 0.1 %，這與 [AEDT 頁](aedt.qmd)給 HFSS 的條件相同。
 
 這是一個大模型：第一個網格有 437,675 個四面體，二階時約 310 萬個未知數，光是建網格就在 16 個核心上花了兩分多鐘。這個儲存庫沒有這次計算的結果紀錄。同樣的步驟用在兩分鐘就能算完的模型上、並附結果的例子，見[以 Palace 計算共振模態](../modes-palace.qmd)。
 
@@ -66,7 +66,7 @@ sim.set_convergence(ModeFrequency(modes=[1]).within(percent=0.1))
 - **接面。** `add_port` 在 D1 金屬層 `D1_BOTTOM_M1` 的接面薄片上放一個 11.78 nH 電感。
 - **模態。** 2 GHz 以上的前兩個模態。
 - **回報的參與率。** 三類表面、所有塊體區域（`bulk_domain_ids=None`）與接面。這個選擇只篩選要回報的內容，不會改變求解。
-- **細化。** 二階元素、線性求解器最多 2000 次迭代、最多細化 20 次，每次細化占誤差估計 15 % 的元素，並使用保形細化（`amr_nonconformal=False`）。`set_convergence` 讓計算停在模態 1 的頻率與前一個 pass 相比變化不超過 0.1 % 的第一個 pass（[收斂與報告](../convergence-and-reports.qmd#declare-convergence)）。
+- **細化。** 二階元素、線性求解器最多 2000 次迭代、最多細化 20 次，每次細化占誤差估計 15 % 的元素，並使用保形細化（`amr_nonconformal=False`）。`set_convergence` 讓計算停在模態 1 的頻率與前一個回合相比變化不超過 0.1 % 的第一個回合（[收斂與報告](../convergence-and-reports.qmd#declare-convergence)）。
 - **網格。** 沒有呼叫 `set_mesh`：使用預設的第一個網格，如[網格與元素階數](../capacitance-palace.qmd#mesh-controls)所述。
 
 真空區域的外表面不給邊界條件，在 Palace 的本徵模態求解器中這等於理想磁導體；HFSS 在其 Region 表面設定的 Perfect H 是同一個條件。

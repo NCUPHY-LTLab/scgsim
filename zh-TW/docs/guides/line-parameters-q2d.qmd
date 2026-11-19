@@ -68,7 +68,7 @@ print(handoff.spec_path, handoff.archive_path)
 - 每個 `Q2dRectangleSpec` 依序是名稱、左下角座標 (x, y)、尺寸（寬, 高）（單位 µm）與材料。基板的 x 從 −100 到 100 µm、y 從 −500 到 0 µm；金屬位在基板上，y 從 0 到 0.2 µm。像這段程式一樣印出規格，對照你想要的間隙確認位置。
 - 每個 `Q2dConductorSpec` 把矩形組成一個導體：每條訊號線一個 `SignalLine`，所有接地矩形放在唯一的 `ReferenceGround` 中。每個金屬矩形正好屬於一個導體；最後一個值是金屬厚度（µm）。
 - 截面周圍的空間是 Q2D 的 Region，不是一個矩形。`region_padding_um` 依 (+x, −x, +y, −y) 的順序給出它在矩形之外的範圍（µm）：左右各 100 µm、上方 1000 µm、下方 100 µm。
-- `MatrixRunControl` 設定頻率 6 GHz，以及最多三個自適應 pass。
+- `MatrixRunControl` 設定頻率 6 GHz，以及最多三個自適應回合（pass）。
 
 ## 讀懂結果 {#read-the-result}
 

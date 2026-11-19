@@ -79,7 +79,7 @@ updated MA 1.427e-10, MS 3.919e-08, SA 1.097e-07
 
 ## AEDT：最終場與自適應歷程 {#aedt-final-fields-and-adaptive-history-stay-separate}
 
-附帶 EPR 的 AEDT 計算會保留兩種不同的結果。自適應歷程記錄每個自適應 pass 的參與率；[已存場分析](saved-fields.qmd)則從最終已存的場再算一次。載入你需要的那一種；這裡是最終結果：
+附帶 EPR 的 AEDT 計算會保留兩種不同的結果。自適應歷程記錄每個自適應回合（pass）的參與率；[已存場分析](saved-fields.qmd)則從最終已存的場再算一次。載入你需要的那一種；這裡是最終結果：
 
 ```python
 from pathlib import Path
@@ -99,7 +99,7 @@ recorded.write_html("aedt-epr-recorded.html")
 changed.write_html("aedt-epr-updated.html")
 ```
 
-自適應歷程是取回執行中的另一個檔案。先列出其中的模態與 pass，再選一個：
+自適應歷程是取回執行中的另一個檔案。先列出其中的模態與回合，再選一個：
 
 ```python
 from scgsim.aedt import plot_epr_result
@@ -109,8 +109,8 @@ history = resolve_epr_result(
 print([(row["mode"], row["native_pass"], row["status"]) for row in history.rows])
 ```
 
-`show_epr(history, mode=mode, native_pass=native_pass)` 畫出一個 pass，`plot_epr_result(history, mode=mode, native_pass=native_pass, show_convergence=True)` 畫出參與率在各 pass 的變化。缺少 EPR 的 pass 會留空，即使它的頻率已知。已存場分析算出的邊距只屬於最終結果，不屬於歷程。
+`show_epr(history, mode=mode, native_pass=native_pass)` 畫出一個回合，`plot_epr_result(history, mode=mode, native_pass=native_pass, show_convergence=True)` 畫出參與率在各回合的變化。缺少 EPR 的回合會留空，即使它的頻率已知。已存場分析算出的邊距只屬於最終結果，不屬於歷程。
 
 ## 依賴一項改變之前 {#read-epr-history-for-the-intended-use}
 
-新的損耗正切改變的是損耗，不是它所乘上的參與率。如果參與率本身在各 pass 之間還沒穩定，請先看它的歷程（[收斂與報告](convergence-and-reports.qmd#interpret-for-scq-use)）。
+新的損耗正切改變的是損耗，不是它所乘上的參與率。如果參與率本身在各回合之間還沒穩定，請先看它的歷程（[收斂與報告](convergence-and-reports.qmd#interpret-for-scq-use)）。
