@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
-title: "檢視並保留來源輸入"
-description: "讀取正規化來源資訊，並保存配對的 GDS 與堆疊資料。"
+title: "檢視來源"
+description: "產生網格之前，印出 SCGSim 從計畫讀到的內容：每個導體的 Net、材料與高度、材料性質、真空區域與埠片。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/source-observations"
@@ -9,7 +9,11 @@ aliases:
   - ../course/source-observations.html
 ---
 
-從提供已準備語意 `snapshot` 的模型開始，例如[入門範例](../start/choose-a-simulation.qmd#getting-started)或較深入的 [Xmon 建構](xmon/inputs.qmd)。要求後端建立幾何前，先檢查實際提供的內容。在來源邊界檢查，更容易發現 Net 遺漏、材料區間錯誤或非預期的真空包覆。
+產生網格之前，先看看 SCGSim 從你的計畫讀到了什麼：一張表列出導體與各區域，以及它們的 Net、材料與高度；接著是 Net 成員、材料性質與埠片。漏掉的 Net、錯的材料，或大小不對的真空區域，在這裡就看得出來；此時還沒有任何求解器在跑，也沒有建出任何東西。
+
+## 顯示摘要 {#summary}
+
+傳入一份已準備好的計畫快照，這裡用[準備版圖](prepare-a-layout.qmd#example)的方形焊墊：
 
 ```python
 from IPython.display import display
@@ -19,16 +23,30 @@ summary = summarize_geometry_input(
     snapshot.geometry_input, prepared_stack=snapshot.stack
 )
 display(summary)
-source_data = summary.data
 ```
 
-請依最終指派核對 Entity／occurrence／Net 表，再檢查材料、Z 與真空紀錄。埠表會標示編寫的薄片及其承載物／方向。未知值仍維持未知；未設定的請求不等於已知的零。`.data` 是分離資料，因此修改回傳字典不會改變保留的來源快照。
+在筆記本中會顯示幾張表。方形焊墊的第一張表是：
 
-設定完成後，兩種 Eigenmode 外觀介面也提供 `sim.input_summary()`。此檢視會在正規化來源資訊中加入後端設定。Palace 的檢視呈現 `mesh()` 將用來建模的來源，因此包含計畫的真空區域，且只列出模擬所要求的埠。`ElectrostaticSim` 也提供相同的 `sim.input_summary()`，以端子、接地與政策取代埠；`write_config()` 之後，再檢查確切的端子／接地索引。
+| Entity | Occurrence | Net | Material | Kind | Z range (µm) | Role |
+|---|---|---|---|---|---|---|
+| D0_SUBSTRATE | unknown | unknown | Si | dielectric | -500–0 | solution_region |
+| VACUUM_REGION | unknown | unknown | vacuum | vacuum | -1500–1000.1 | solution_region |
+| chip/PAD | chip | pad | Al | conductor | 0–0.1 | metal |
+| chip/GROUND | chip | ground | Al | conductor | 0–0.1 | metal |
 
-## 保留可攜式配對來源 {#retain-a-portable-paired-source}
+也就是說，焊墊與接地金屬都是 0.1 µm 厚的鋁，位在 500 µm 厚的矽基板上，分屬 `pad` 與 `ground` 兩個 Net；真空區域延伸到基板下方 1000 µm、金屬上方 1000 µm，正如外加量 `(0.0, 0.0, 1000.0)` 所要求的。基板與真空不屬於任何 Net，表中顯示為 `unknown`：沒有設定的值會顯示為 unknown，絕不會顯示成零。
 
-快照不含即時元件參照。其 GDS 位元組與分離的堆疊資料構成可攜式配對，讓後續工作階段讀取相同來源，而不必在即時 GDSFactory 快取中重建試片。
+接下來幾張表列出 Net 成員（`ground`：`chip/GROUND`；`pad`：`chip/PAD`）、每種材料的性質（矽的介電常數 11.9、鋁的導電率），以及埠片。方形焊墊有一片埠片 `chip/o_junction_lumped`，位在 `chip/PAD` 與 `chip/GROUND` 上，圖層為 `D0_TOP_M1`。接面、Surface-EPR 薄膜與求解器設定，要等計畫或模擬設定之後才會有內容。
+
+`summary.data` 以字典形式提供同樣的內容，方便腳本使用。它是一份複本：修改它不會改變快照。
+
+## 加上模擬的設定 {#with-settings}
+
+設定好模擬之後，`sim.input_summary()` 會顯示同樣的表，並加上該模擬自己的設定。Palace 模擬顯示的是 `mesh()` 實際會用的輸入：它的 route 與近似設定、計畫的 Surface-EPR 請求，以及只有這個模擬用到的埠；`ElectrostaticSim` 還會列出端子、接地與相關政策。`write_config()` 之後，執行的索引對照會說明哪個導體成了哪個端子，見 [Palace：端子電容](capacitance-palace.qmd)。
+
+## 把來源和結果放在一起 {#retain-a-portable-paired-source}
+
+快照帶著建立它的 GDS 檔與層堆疊。兩者都存下來，之後的工作階段不需要 PDK 或 GDSFactory，也能讀到同一份來源：
 
 ```python
 import json
@@ -46,10 +64,9 @@ reloaded = build_gds_stack_geometry_input(
     stack_file=stack_path,
     top_cell_name=snapshot.stack["metadata"]["top_cell_name"],
 )
-print(snapshot.gds_sha256)
 print(tuple(entity.semantic_id for entity in reloaded.entities))
 ```
 
-保留先前的來源配對時，請選擇新的研究位置並將兩個檔案放在一起：堆疊帶有 `prepare()` 從該 GDS 讀出的多邊形，因此堆疊讀取器會拒絕其他 GDS，並列出兩者的 SHA-256 摘要。列印出的 Entity ID 表示來源脈絡，不代表每個 Entity 都有一筆場量測，也不代表求解器連通性。
+這兩個檔案要放在一起：堆疊檔記錄了從那個 GDS 讀出的多邊形，所以拿另一個 GDS 來讀會被拒絕，訊息中會列出兩個檔案的 SHA-256 摘要。
 
-來源摘要與配對來源讀取可確認正規化輸入資訊；它們不會產生網格、不會查詢原生 AEDT，也無法證明已完成求解。下一階段需選擇物理模型：[Palace Electrostatic](capacitance-palace.qmd)、[Palace Eigenmode](modes-palace.qmd) 或 [AEDT source-first Eigenmode/EPR](xmon/aedt.qmd)。[幾何概念](../concepts/geometry.qmd)說明這些後端如何共用來源識別，同時採用不同原生表示法。
+接下來可以[檢查版圖](check-a-layout.qmd)，或在 `mesh()` 之後[檢視已準備的模型](inspect-the-prepared-model.qmd)。

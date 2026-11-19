@@ -1,6 +1,6 @@
 ---
-title: "Work with your own model"
-description: "Change source geometry, Entity-to-Net assignments and solver requests while keeping their identities explicit."
+title: "Prepare a layout"
+description: "Draw the cell, then build the GeometryPlan every simulation takes: its Nets, vacuum region, junctions and Surface EPR, with one complete example."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/working-model"
@@ -8,185 +8,221 @@ aliases:
   - ../course/working-model.html
 ---
 
-Start after one complete capacitance or resonance/EPR notebook from
-[Choose a simulation](../start/choose-a-simulation.qmd#getting-started). The next useful step is
-to change one part of the model and understand which inputs and results that
-change affects. Save the original model and result before preparing a new run.
+SCGSim builds a 3D model from two things you give it: the cell you draw with
+GDSFactory, and a `GeometryPlan` that says which drawn shapes are one
+conductor and how much empty space around the chip the solver includes. This
+page builds the plan of the square pad from
+[First simulation](../start/first-simulation.qmd), one step at a time. The same
+plan goes to the [layout check](check-a-layout.qmd) and to every simulation.
+What a layout of your own must guarantee is listed on
+[Supported scope](../reference/supported-scope.qmd#layout-rules).
 
-## Change the source geometry
+## The example {#example}
 
-A component defines local Entity identities and authored geometry. A placed
-occurrence qualifies those identities with its registered path. The final Net
-assignment belongs to the assembled model: several source Entities can belong
-to one electrical conductor Net without losing their individual lineage.
-
-For a semantic component assembly, `GeometryPlan` makes those choices explicit:
-
-```python
-from scgsim.geometry import GeometryPlan
-
-plan = GeometryPlan(
-    component=component,
-    root_id="chip",
-    layer_stack=layer_stack,
-    material_records=material_records,
-    coupon_padding_um=coupon_padding_um,
-)
-```
-
-Here `component`, stack, material records and padding are the actual model
-inputs from your source construction. Register its actual named references
-with `plan.register_instance(path, reference)`; do not register guessed paths
-from flattened polygon names. Root-local Entities already belong to `chip`.
-Inspect the qualified identities before assigning electrical membership:
-
-```python
-print(tuple(entity.semantic_id for entity in plan.entities))
-```
-
-Supply a mapping of final Net IDs to the exact Entity IDs from that inventory
-with `plan.set_nets(net_membership)`. Choose membership from the circuit you
-intend to model, including which conductors share Ground. The
-[geometry reference](../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract)
-owns the assignment contract; the [Xmon construction](xmon/inputs.qmd)
-provides a larger concrete hierarchy example.
-
-Declare the outer vacuum envelope with `plan.set_vacuum_region(...)` and call
-`plan.prepare()` to retain the source snapshot. A new geometry, material stack,
-Net assignment or envelope needs a new snapshot. Changing a detached summary
-dictionary does not edit the geometry that a solver will receive.
-
-### Carry a curved source into the Palace plan
-
-For a circular example, start from the OrPen `circular_pad_capacitor` with
-`R=100 µm`, `gap=20 µm`, and `die=1000 µm`. The canonical Circle Pad LC model
-has no inner hole; an `80 µm` inner radius is a separate optional ring
-illustration. Keep the stack and material definitions in OrPen; GeometryPlan
-consumes the component, stack, and material records supplied by that source.
-
-The public OrPen notebook uses GDSFactory's registered cell and owns the
-complete source-to-handoff example. Its exact revision and notebook links are
-in the [installation lesson](../start/install.qmd#select-the-curved-source-cell).
-The source-cell construction is:
+A 200 µm square pad sits in a 20 µm gap, inside the ground metal of a 1000 µm
+chip. The script draws it with the OrcaPen SC PDK and builds its plan:
 
 ```python
 import gdsfactory as gf
 import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
 
+# 1. The cell: a 200 µm pad in a 20 µm gap, on a 1000 µm die.
 orcapen_sc_pdk.activate()
 component = gf.get_component(
-    "circular_pad_capacitor",
-    outer_radius_um=100.0,
-    inner_radius_um=0.0,
-    gap_um=20.0,
-    die_side_um=1000.0,
-    junction_width_um=2.0,
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+
+# 2. The plan: the cell, its layer stack and its materials.
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+print(tuple(entity.semantic_id for entity in plan.entities))
+
+# 3. The Nets: which shapes act as one conductor.
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+
+# 4. The vacuum region: the empty space around the chip that the solver includes.
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 5. The snapshot a simulation is given.
+snapshot = plan.prepare()
+```
+
+It prints the two shapes the plan found:
+
+```text
+('chip/PAD', 'chip/GROUND')
+```
+
+The sections below explain each step, then add a junction and Surface EPR to
+the same plan.
+
+## Draw the cell {#draw-the-cell}
+
+The cell is an ordinary GDSFactory component. SCGSim reads more from it than
+its polygons:
+
+- **Entities.** Each piece of metal is declared as an Entity, a named shape the
+  cell lists in its component semantics: here `PAD` and `GROUND`. SCGSim never
+  guesses conductors from the drawing. The PDK's cells declare their Entities;
+  a cell of your own declares them the same way
+  ([declarations](../reference/supported-scope.qmd#rules-declarations)).
+- **Layers.** Every polygon sits on a layer of the layer stack, which gives its
+  height, thickness and material.
+- **Port sheets.** A lumped port or a junction is a sheet drawn across a gap,
+  like the orange sheet on the pad's east edge in
+  [First simulation's layout](../start/first-simulation.qmd#the-layout).
+- []{#carry-a-curved-source-into-the-palace-plan}<span id="fig-circular-pad-source-layout"></span>**Curves.**
+  An arc meant to be round is declared as an arc, not only drawn as a polygon;
+  SCGSim builds lines and circular arcs, not splines
+  ([curves](../reference/supported-scope.qmd#rules-curves),
+  [source curves](../reference/specs/geometry-plan.qmd#source-curves)).
+- **The grid.** Every point lies on the layout's grid, here 1 nm. SCGSim keeps
+  a slit or edge of a few grid steps as you drew it, and the
+  [layout check](check-a-layout.qmd) refuses it.
+
+## Build the plan {#build-the-plan}
+
+[]{#change-the-source-geometry}`GeometryPlan` takes the cell and the process
+data that SCGSim does not have of its own:
+
+- `root_id="chip"` names the cell. Every Entity gets an ID under it:
+  `chip/PAD`, `chip/GROUND`.
+- `layer_stack` and `material_records` come from the PDK: each layer's
+  thickness and material, and each material's properties.
+- `coupon_padding_um` is substrate added beyond the cell's edge; `0.0` ends the
+  model at the die edge.
+
+`plan.entities` lists the Entities with these IDs. Print them before you
+assign Nets, and use them exactly as printed.
+
+### Nets {#nets}
+
+A Net is a named piece of metal that acts as one conductor. `set_nets` maps
+each Net name to the Entity IDs it holds; here each Net holds one Entity.
+Several Entities can be one Net: in a flip-chip layout, both ground planes and
+every indium bump that joins them are one `Ground` Net. Metal of two different
+Nets must not touch: SCGSim reports it as a short, and never merges conductors
+because they touch. A simulation's terminals and grounds name these Nets.
+
+If the cell places other cells, register each placement before `set_nets`,
+a parent before its children: `plan.register_instance("chip/device",
+reference)`. Their Entities then have IDs such as `chip/device/PAD`. The
+[Xmon inputs](xmon/inputs.qmd) build such an assembly.
+
+### Vacuum region {#vacuum-region}
+
+The vacuum region is the box of empty space around the chip that the solver
+includes. `padding=(0.0, 0.0, 1000.0)` µm adds nothing in x and y, so the box
+ends at the die edge, and reaches 1000 µm above and below the chip. A plan
+without one, from this call or from a `VACUUM_REGION` layer of the stack, is
+refused by the check and by every simulation. Because the box ends at the
+layout's extent, draw what sets that extent, such as the die outline or a
+ground plane; a conductor that reaches it at a single point is refused
+([why](../reference/known-geometry-problems.qmd#boundary-point-pinch)).
+
+### Junctions {#junctions}
+
+A rectangular junction is a port sheet between two conductors that SCGSim cuts
+to the rectangle across the gap, for a lumped element such as a Josephson
+junction. A capacitance run does not need one; a resonator study with a
+junction does. Read the sheet's IDs from a prepared snapshot, then name its two
+conductors and their Nets:
+
+```python
+from scgsim.geometry import JunctionTerminalBinding, RectangularJunctionSpec
+
+sheet = snapshot.geometry_input.port_sheet_regions[0]
+print(sheet.port_sheet_id)
+plan.set_rectangular_junctions(
+    [
+        RectangularJunctionSpec(
+            junction_id="pad_junction",
+            port_sheet_id=sheet.port_sheet_id,
+            source_polygon_id=sheet.source_polygon_id,
+            source_occurrence_path="chip",
+            terminal_a=JunctionTerminalBinding("chip/PAD", "chip", "pad"),
+            terminal_b=JunctionTerminalBinding("chip/GROUND", "chip", "ground"),
+        )
+    ]
 )
 ```
 
-![The Circular Pad source layout on a 1000 µm die; the detail marks the east-side non-metal junction locator.](../assets/circular-pad-layout.png){#fig-circular-pad-source-layout}
+```text
+PORT_SHEET__chip/o_junction_lumped__0000
+```
 
-Source layout from the [current public OrPen Circular Pad study at
-`ecc9062`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/source_layout.png).
-It shows the authored source geometry and locator, not the solved field.
+The two conductors and their Nets must differ. The
+[geometry contract](../reference/specs/geometry-plan.qmd) describes the fields;
+[Palace: resonant modes](modes-palace.qmd) gives the junction its inductance.
 
-This is the Circle Pad source used by the linked LC workflow, not the optional
-ring illustration. The component supplies its authored circular boundary
-records; the prepared `GeometryPlan` snapshot carries them into Palace Route B
-with the component's Entity and Net identities. The separate GDS-boundary
-reconstruction API is for a caller-selected reconstruction and does not
-override these authored curves. How an earlier SCGSim version produced the
-published Circular Pad result is recorded in the
-[curved-source installation notes](../contribute/history/curved-source-installation.qmd).
+### Surface EPR {#surface-epr}
 
-Choose the curve description from the source you have. For authored geometry,
-the component can carry `BoundaryCurveChainSpec` records in
-`component.info["component_semantics"]["boundary_curves"]`, naming an existing
-Entity and boundary and listing its ordered line and circular-arc segments; SGB refuses spline kinds with `UnsupportedCurveError`.
-GeometryPlan qualifies those local identities for the registered occurrence
-and transforms the curve chain with it. For records authored after assembly,
-use `plan.set_boundary_curves(...)` with qualified IDs in assembled coordinates.
-If you have only GDS boundary vertices,
-select a `GdsBoundaryReconstructionSpec` in
-`component.info["component_semantics"]["boundary_reconstruction"]` or pass
-qualified records to `plan.set_boundary_reconstruction(...)`. Use segment and
-anchor identities from the source boundary; unselected segments remain
-straight. SCGSim does not infer curve intent from a preview or smooth polygon
-edges implicitly.
+Surface EPR (surface energy participation ratio) is the share of the electric
+energy that sits in a thin lossy film on a surface: metal–air (`MA`),
+metal–substrate (`MS`) or substrate–air (`SA`). It can be evaluated on the
+whole surface and on the part of it at least a given distance, the inset
+margin, from the gap edges. SCGSim cuts those margins into the model as bands,
+so Surface EPR is set on the plan, before `prepare()`. This request uses the
+PDK's film presets and two margins:
 
-Continue with the plan flow above: register the source's actual references,
-inspect `plan.entities`, assign the intended final Net IDs with
-`plan.set_nets(net_membership)`, set the vacuum region, and call
-`plan.prepare()`. The snapshot retains the selected curve declarations and
-their Entity and occurrence identities. SGB builds line and circular-arc
-curves on every route; Palace takes Route A and Route B, and AEDT imports the
-curves as exact arcs in the model's STEP. With no curve declaration,
-existing polygon-only behavior is unchanged.
+```python
+from orcapen_sc_pdk import (
+    get_interface_preset_records,
+    validate_interface_preset_records,
+)
 
-::: {.callout-note title="Authored curves and GDS reconstruction are separate inputs"}
-The two `GeometryPlan` setters replace only their caller-owned lists;
-`prepare()` also adds component declarations. So
-`plan.set_boundary_curves([])` does not remove OrPen-authored curves, and a GDS
-reconstruction overlapping an authored full ring is rejected rather than used
-as an override. To reconstruct from polygon data, create a detached raw
-`GeometryBuildInput` with the selected reconstruction record and without the
-authored curve declaration, then pass it, with its representation context from
-`interpret_physical_geometry`, to `build_sgb_geometry` from `scgsim.geometry.sgb`.
-That call goes below [the supported entry](../reference/supported-scope.qmd#supported-entry):
-SGB does not repeat the checks of `GeometryPlan`, so the input you build must
-still satisfy them. `set_plan(snapshot)` continues to honor the
-snapshot's declarations. See the
-[GeometryPlan and geometry source-curve contract](../reference/specs/geometry-plan.qmd#source-curves)
-for curve record and boundary ownership. This does not mutate the component or
-its snapshot.
-:::
+presets = validate_interface_preset_records(get_interface_preset_records())
+plan.set_surface_epr(
+    {
+        kind: {
+            "thickness": presets[f"LiteratureCentral_{kind}"]["thickness"],
+            "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+            "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+            "inset_margins_um": (0.5, 1.0),
+        }
+        for kind in ("MA", "MS", "SA")
+    }
+)
+snapshot = plan.prepare()
+```
 
-## Change the physical model
+`(0.5, 1.0)` asks for rows of each surface from 0.5 µm and from 1.0 µm away
+from the gap edges, besides the whole surface. Each band must be at least 10
+grid steps wide, 0.01 µm on this grid. [Surface EPR](../concepts/surface-epr.qmd)
+explains the margins; the
+[Eigenmode contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)
+lists every key.
 
-Ask which quantity you now need. Terminal capacitance requires terminal and
-reference/ground choices. A resonant field model additionally needs the
-appropriate boundaries and any explicit lumped branch. A driven response needs
-ports and wave references; a line extraction needs a defined cross section.
-Use [Concept](../concepts/problems.qmd) to separate those physical choices from
-their backend API representation.
+`prepare()` returns a snapshot, a frozen copy of the plan. A simulation given a
+snapshot does not see later changes to the plan: change the plan, then call
+`prepare()` again.
 
-::: {.callout-note title="Q3D and Q2D have their own inputs"}
-Q3D solves the SGB model of a GeometryPlan snapshot, with its final Net
-membership, and extracts C/G only. Q2D uses explicit cross-section rectangles and conductor groups; it
-does not generate a slice of the GeometryPlan.
-:::
+## Check the plan {#check-the-plan}
 
-For a two-port network, continue to [Driven Terminal](s-parameters-hfss.qmd);
-Driven Modal and wave ports are not available in this version. For
-finite conductor extraction, use [Q3D](capacitance-q3d.qmd); for per-unit-length line
-matrices, use [Q2D](line-parameters-q2d.qmd). The [CPW inputs](aedt-cpw-inputs.qmd) lesson
-prepares the `GeometryPlan` snapshot whose SGB model HFSS and Q3D solve.
+Before you set up a simulation, run the [layout check](check-a-layout.qmd) on
+the plan. It builds the model each simulation would build and refuses what the
+mesher cannot use, quickly and without meshing.
 
-## Change a solver request
+## When you change something {#decide-whether-a-rerun-is-needed}
 
-Keep source parameters separate from native controls. Mesh recipe and threshold, mesh order,
-Eigenmode search target, requested number of modes, adaptation controls and
-host resources answer different questions. Record the value and purpose of
-each change beside the quantity you plan to inspect. Example controls in a
-lesson are starting inputs, not a universal accuracy recommendation.
+[]{#change-the-physical-model}[]{#change-a-solver-request}What you redo
+depends on what you change:
 
-Prepare a new run folder and handoff for a changed request. Inspect the
-[source summary](inspect-the-source.qmd) and, when useful, the
-[prepared model](inspect-the-prepared-model.qmd), then execute that new handoff.
-Retain each result with its own settings so that a later comparison can name
-which geometry, boundary and request changed.
-
-## Decide whether a rerun is needed
-
-| Change | Next operation |
+| You change | Then |
 |---|---|
-| Shape, stack, Net membership or outer domain | New source snapshot/import bindings, preparation and solve |
-| Boundary, terminal/port or junction circuit model | New backend model, preparation and solve |
-| Mesh or native solve controls | New prepared request and solve |
-| Requested field-side/margin evaluation on saved AEDT fields | Explicit [native saved-field analysis](saved-fields.qmd) if the sealed fields support it |
-| Loss assumptions on an existing detached EPR result | [Offline reanalysis](offline-loss.qmd), keeping the field evidence |
+| A shape, a layer, Net membership, the vacuum region, a junction or Surface EPR | Change the plan, call `prepare()`, check it, and give the simulation the new snapshot; then mesh and solve again |
+| A terminal, ground or port of the simulation, or the quantity you compute | Prepare the simulation again from `mesh()` on, and solve |
+| Mesh controls, solver settings or the [convergence declaration](convergence-and-reports.qmd#declare-convergence) | Prepare again from the step the setting belongs to, and solve |
+| The loss assumptions of a finished Eigenmode EPR result | No new solve: [change the loss assumptions](offline-loss.qmd) |
+| The margins evaluated on fields an AEDT run saved | No new solve: [analyze the saved fields](saved-fields.qmd), if the run saved them |
 
-Read the actual selected quantity and its available history after each run.
-Keep native status and missing channels visible. The
-[result-reading lesson](convergence-and-reports.qmd#interpret-for-scq-use) connects
-that evidence to the engineering or physics purpose of your model.
+Keep each result with the settings it came from, so that a later comparison can
+say what changed.

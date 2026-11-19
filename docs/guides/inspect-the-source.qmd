@@ -1,6 +1,6 @@
 ---
-title: "Inspect and retain source inputs"
-description: "Read normalized source facts and save the paired GDS and stack without claiming native geometry."
+title: "Inspect the source"
+description: "Before you mesh, print what SCGSim read from your plan: each conductor's Net, material and height, the materials, the vacuum region and the port sheets."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/source-observations"
@@ -8,11 +8,16 @@ aliases:
   - ../course/source-observations.html
 ---
 
-Continue from a model that supplies a prepared semantic `snapshot`, such as
-the [beginner examples](../start/choose-a-simulation.qmd#getting-started) or the deeper
-[Xmon construction](xmon/inputs.qmd). Before asking a backend to build geometry, inspect
-what you actually supplied. A missing Net, wrong material interval or unintended
-vacuum envelope is easier to understand at the source boundary.
+Before you mesh, look at what SCGSim read from your plan: one table for the
+conductors and regions, with each one's Net, material and height, then the Net
+membership, the material properties and the port sheets. A Net you forgot, a
+wrong material or a vacuum region of the wrong size shows here, before any
+solver runs, and nothing is built.
+
+## Show the summary {#summary}
+
+Pass the snapshot of a prepared plan, here the square pad of
+[Prepare a layout](prepare-a-layout.qmd#example):
 
 ```python
 from IPython.display import display
@@ -22,28 +27,48 @@ summary = summarize_geometry_input(
     snapshot.geometry_input, prepared_stack=snapshot.stack
 )
 display(summary)
-source_data = summary.data
 ```
 
-Read the Entity/occurrence/Net table against your final assignment, then the
-material, Z and vacuum records. The port table identifies the authored sheet
-and its host/direction. Unknown values remain unknown; an unset request is not
-the same as a known zero. `.data` is detached, so editing the returned dictionary
-does not change the retained source snapshot.
+In a notebook it shows these tables. For the square pad, the first one reads:
 
-Both Eigenmode facades also offer `sim.input_summary()` after configuration.
-That view adds the backend settings to the normalized source. The Palace view
-shows the source as `mesh()` will build it, so it includes the plan's vacuum
-region and lists only the ports the simulation requested.
-`ElectrostaticSim` offers the same `sim.input_summary()`, with its terminals,
-grounds and policies in place of ports; after `write_config()`, inspect its
-exact terminal/ground index.
+| Entity | Occurrence | Net | Material | Kind | Z range (µm) | Role |
+|---|---|---|---|---|---|---|
+| D0_SUBSTRATE | unknown | unknown | Si | dielectric | -500–0 | solution_region |
+| VACUUM_REGION | unknown | unknown | vacuum | vacuum | -1500–1000.1 | solution_region |
+| chip/PAD | chip | pad | Al | conductor | 0–0.1 | metal |
+| chip/GROUND | chip | ground | Al | conductor | 0–0.1 | metal |
 
-## Retain a portable paired source
+So the pad and the ground are 0.1 µm of aluminium on a 500 µm silicon
+substrate, in the Nets `pad` and `ground`, and the vacuum region reaches 1000 µm
+below the substrate and 1000 µm above the metal, as the padding
+`(0.0, 0.0, 1000.0)` asked. The substrate and the vacuum belong to no Net,
+which the table shows as `unknown`: a value that was not set is shown as
+unknown, never as zero.
 
-The snapshot has no live component references. Its GDS bytes and detached stack
-form a portable pair, allowing a later session to read the same source without
-reconstructing the coupon in a live GDSFactory cache.
+The next tables list the Net membership (`ground`: `chip/GROUND`; `pad`:
+`chip/PAD`), the properties of each material (silicon with permittivity 11.9,
+aluminium with its conductivity) and the port sheets. The square pad has one,
+`chip/o_junction_lumped`, lying on `chip/PAD` and `chip/GROUND` on layer
+`D0_TOP_M1`. Junctions, Surface-EPR films and solver settings stay empty until
+the plan or a simulation sets them.
+
+`summary.data` holds the same content as a dictionary for a script. It is a
+copy: editing it changes nothing in the snapshot.
+
+## With the simulation's settings {#with-settings}
+
+Once a simulation is set up, `sim.input_summary()` shows the same tables with
+its own settings added. A Palace simulation shows the input as `mesh()` will
+build it: with its route and approximation profile, the plan's Surface-EPR
+request, and only the ports the simulation uses; `ElectrostaticSim` adds its
+terminals, grounds and policies. After `write_config()`, the run's index map
+says which conductor became which terminal; see
+[Palace: terminal capacitance](capacitance-palace.qmd).
+
+## Keep the source with your results {#retain-a-portable-paired-source}
+
+A snapshot carries the GDS file and the layer stack it was built from. Saving
+both lets a later session read the same source without the PDK or GDSFactory:
 
 ```python
 import json
@@ -61,20 +86,12 @@ reloaded = build_gds_stack_geometry_input(
     stack_file=stack_path,
     top_cell_name=snapshot.stack["metadata"]["top_cell_name"],
 )
-print(snapshot.gds_sha256)
 print(tuple(entity.semantic_id for entity in reloaded.entities))
 ```
 
-Choose your own new study location when preserving an earlier pair. Keep the
-pair together: the stack carries the polygons `prepare()` read from that GDS,
-so the stack reader refuses any other GDS, naming both SHA-256 digests. The printed Entity IDs are source lineage. They do not
-establish one field measurement per Entity or solver connectivity.
+Keep the two files together: the stack holds the polygons read from that GDS,
+so reading it with another GDS is refused, with both files' SHA-256 digests in
+the message.
 
-A source summary and paired-source read establish normalized input facts.
-They do not mesh, query native AEDT, or demonstrate a solve. The next stage
-chooses a physical model:
-[Palace Electrostatic](capacitance-palace.qmd),
-[Palace Eigenmode](modes-palace.qmd), or
-[AEDT source-first Eigenmode/EPR](xmon/aedt.qmd).
-The [geometry concept](../concepts/geometry.qmd) explains why those backends can
-share source identity while using different native representations.
+Next, [check the layout](check-a-layout.qmd), or after `mesh()`
+[inspect the prepared model](inspect-the-prepared-model.qmd).
