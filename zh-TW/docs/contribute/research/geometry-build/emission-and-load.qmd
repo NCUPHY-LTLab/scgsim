@@ -14,7 +14,7 @@ aliases:
 **結果。**
 
 - 在 500、1,000 與 2,000 個特徵時，direct writer 需要 0.20 s、0.35 s 與 0.77 s；Gmsh API 需要 2.35 s、8.48 s 與 64.7 s，分別是前者的 12、24 與 84 倍。Gmsh API 在 5,000 個特徵時跑了 10 分鐘仍未完成而被中止，direct writer 只要 2.2 到 2.8 s。
-- Gmsh API 建出的 solid 還帶有錯誤的質量正負號（substrate 的質量是負的）。
+- 作為參考的測試端 Gmsh API builder，建出的 solid 還帶有錯誤的質量正負號（它的 substrate 質量是負的）；direct writer 的 solid 質量正確。
 - 推導之後的其餘路徑，在 20,000 個特徵時要 148 s，是推導本身 61.6 s 的兩倍以上；每一步的 scaling 都近乎線性。
 
 ## Direct writer 對 Gmsh API
@@ -29,17 +29,17 @@ aliases:
 {{< include figures/api-table.md >}}
 :::
 
-「直接寫出」是規劃並算繪 BREP 與 XAO 的時間，這次執行把算繪分給 16 個行程；「寫出的 face 數」是寫入 BREP 的 face 數。這些時間來自它們自己的一次執行。下方「推導之後」的表格在 scaling 的那次執行中也量了同一個直接寫出的步驟：1,000 個特徵時，那裡是 0.44 s，這裡是 0.35 s。
+「直接寫出」是規劃並算繪 BREP 與 XAO 的時間，這次執行把算繪分給 16 個行程；「寫出的 face 數」是寫入 BREP 的 face 數。這些時間與下方「推導之後」表格的時間來自不同的執行；兩次執行相差多少，見[重現方式](reproduction.qmd#適用於所有數字的一項限制)。
 
-### Solid 的質量不對
+### 測試端 builder 的 solid 質量不對 {#solid-的質量不對}
 
-Gmsh API 的 solid 是由 surface loop 建成的，而 API 不讓呼叫端指定 face 的哪一側是內部。我們重新開啟測試端 builder 建出的 solid，量測它們的質量（有號體積）：
+測試端 builder 透過 Gmsh API 由 surface loop 建出每個 solid，並沒有指定 face 的哪一側是內部。我們重新開啟它建出的 solid，量測它們的質量（有號體積）：
 
 ::: {.askr-table-compact .askr-table-numeric}
 {{< include figures/mass-table.md >}}
 :::
 
-substrate 的質量是負的，vacuum 為正，兩者都與 direct writer 的 solid 不符。direct writer 的兩個 solid 質量都是正的，其中 substrate 的質量等於晶片面積乘上它的厚度。質量為負的 solid 仍然可以 mesh，所以不檢查就不會發現這個錯誤。direct writer 逐 face 明確寫出每一個方向，載入後的檢查也會把 volume 與規劃比對（見[檢查的成本](validation-cost.qmd)）。
+這個 builder 的 substrate 質量是負的，vacuum 為正，兩者都與 direct writer 的 solid 不符。direct writer 的兩個 solid 質量都是正的，其中 substrate 的質量等於晶片面積乘上它的厚度。質量為負的 solid 仍然可以 mesh，所以不檢查就不會發現這個錯誤。direct writer 逐 face 明確寫出每一個方向，載入後的檢查也會把 volume 與規劃比對（見[檢查的成本](validation-cost.qmd)）。
 
 ## 推導之後 {#what-follows-the-derivation}
 

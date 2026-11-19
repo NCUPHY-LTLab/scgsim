@@ -16,7 +16,7 @@ the same tab as a separate entity (production keeps the seam between entities) a
 ``pad_in_ground("B")`` of ``tests/sgb_scenes.py`` (true arcs, mid-plane port), used only to count the chord edges that
 dissolution merges back into arcs.
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/labels_and_dissolution.py
+Run:  uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/labels_and_dissolution.py
 """
 
 from __future__ import annotations

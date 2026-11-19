@@ -2,7 +2,7 @@
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/identity.py
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/identity.py
 
 Computes, with the production package, a real mapping-chain lookup on the pad-in-ground running example (Route B with
 inset bands, its lumped port on the support plane z = 0) and the determinism evidence quoted by the page.  The model is

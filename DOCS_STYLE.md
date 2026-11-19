@@ -9,9 +9,38 @@ owns Quarto implementation and the Askr adoption policy.
 
 ## 1. Readers
 
-Reader documentation serves researchers who know superconducting circuits and
-Python and are learning SCGSim. Contributor material belongs in
-[MAINTAINING.md](MAINTAINING.md) and its linked references.
+The user pages (Get started, Guides, Concepts and Reference) serve chip
+designers and physicists who know superconducting circuits and Python and are
+learning SCGSim, not its internals; write them in plain words, not in a
+technical way. Contributor material belongs in the Contribute area
+(`docs/contribute/`), whose entry page gives its reading order, and in
+[MAINTAINING.md](MAINTAINING.md). Contribute pages may be technical; they must
+still be correct and current.
+
+### How to write a page
+
+- Open with what the reader gets: the answer, the result, or what they will
+  do. Then the context.
+- Define every term a user may not know in plain words where it is first used
+  (Net, Entity, Route, region, MA/MS/SA, snapshot, handoff, sidecar), or move
+  the material to Contribute.
+- Give an abstract idea a dimensioned example or a figure, with real numbers.
+- Say a limitation once, where the reader meets it, and link to it elsewhere.
+- Show only real results: from a run made for the page, from a run folder or
+  figure in the repository, or a recorded result named as such. Never round a
+  number into a new one.
+- Leave out process noise: no commit hashes (a pinned source link may carry a
+  version), no issue numbers as the provenance of a change, no dates of checks,
+  no internal run names, no lifecycle states. One link to an Issue where a
+  user can follow a known limitation is fine.
+- Keep headings short and plain: no code or formula as a heading, and no long
+  phrase repeated in every heading.
+- Write no prose that only restates a table or a code block, and do not repeat
+  a passage across pages.
+- Write a Chinese page as natural Traditional Chinese (Taiwan), not a
+  sentence-by-sentence translation: short sentences, Chinese punctuation, the
+  terms of [section 5](#chinese-terms) and 你 for the reader, with identifiers,
+  API names and units unchanged.
 
 ## 2. Owning sources
 
@@ -20,7 +49,9 @@ Python and are learning SCGSim. Contributor material belongs in
 | Homepage | Each language's README, included by its `index.qmd` |
 | Installation | [Install SCGSim](docs/start/install.qmd) |
 | Solver execution and host prerequisites | [Run a prepared model](docs/guides/run-elsewhere.qmd) |
-| Returned-result loading and interpretation | [Read returned results](docs/guides/convergence-and-reports.qmd) |
+| Returned-result loading and interpretation | [Convergence and reports](docs/guides/convergence-and-reports.qmd) |
+| Contributor reading order and checks | [Contribute to SCGSim](docs/contribute/index.qmd) |
+| Code map stage tables | The package folders' docstrings; regenerate through `scripts/generate_code_map.py` ([MAINTAINING.md](MAINTAINING.md#generated-code-map)) |
 | Public component models and executable notebooks | OrcaPen SC PDK; link its source rather than copying it |
 | API index and signatures | Public Python declarations and authored usage Markdown; regenerate through `scripts/generate_knowledge_reference.py` |
 | Navigation and rendering | Root and `zh-TW/_quarto.yml`; `scripts/build_docs_site.py` owns versioned publication |
@@ -45,8 +76,9 @@ an alias.
 Keep model prerequisites, physical assumptions, units and result meaning with
 their owning documentation. Retain source versions in example links and
 execution details in the corresponding study or contributor records.
-Model-specific results belong in Research; reusable API behavior and
-implementation checks belong with the tool contracts.
+Model-specific studies belong in Research (`docs/contribute/research/`);
+reusable API behavior and implementation checks belong with the tool
+contracts in Reference.
 
 Each example identifies its compatible component source and SCGSim API.
 Example-specific source pairing belongs with that example; the installation
@@ -114,7 +146,8 @@ API names, interface strings and the solvers' own names (HFSS `Eigenmode`,
 ## 6. Bilingual and derived output
 
 Keep the two languages' page paths, anchors, code, units and scientific meaning
-aligned. Use the native Askr components and site options described by the
+aligned. The SGB design pages (`zh-TW/docs/contribute/sgb-design/`) exist in
+Chinese only. Use the native Askr components and site options described by the
 shared adoption policy. The root extension is shared with the Chinese build;
 staged extensions, rendered sites and packaged knowledge remain derived output.
 

@@ -1,6 +1,6 @@
 ---
 title: "Contribute to SCGSim"
-description: "Set up the SCGSim development environment and find contributor references."
+description: "Who these pages are for, the order to read them in, and the commands that check a change."
 sidebar: contribute
 scgsim-id: "docs/contributing"
 scgsim-kind: "contribution"
@@ -9,22 +9,100 @@ aliases:
   - ../contributing.html
 ---
 
-Use this page to prepare a SCGSim source checkout for documentation and package
-contributions. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-and Git first; the [installation tutorial](../start/install.qmd) covers a
-study project's Python environment and native solver prerequisites.
+These pages are for you if you change SCGSim itself: its code, its tests or
+its documentation. They take you from the folder tree of `src/scgsim` down to
+the contract of the folder you work in, then give the commands that check a
+change before you open a pull request. To use SCGSim for a simulation, start
+from [Install SCGSim](../start/install.qmd) instead.
+
+## Set up a checkout {#set-up}
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git,
+then:
 
 ```bash
 git clone --branch develop https://github.com/NCUPHY-LTLab/scgsim.git
 cd scgsim
-uv sync --group dev
+uv sync --locked --group dev
 ```
 
-The `dev` group installs every optional extra together with the test, quality
-and OpenCASCADE tools: the same set the CI test job uses.
+The `dev` group installs every optional extra with the test, quality and
+OpenCASCADE tools, the same set the CI test jobs install. Native Palace and
+AEDT are not part of it; no check below needs them.
 
-Read the [code map](code-map.qmd) for the stages of the package and which
-folder is which, [architecture and data flow](architecture.qmd) for module ownership,
-the [maintainer guide](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)
-for repository and documentation maintenance, and the
-[documentation map](documentation-map.qmd) to find each page's role.
+## Read in this order {#reading-order}
+
+1. [Code map](code-map.qmd): the folders of `src/scgsim`, which stage each
+   one is, the order the work flows through them on the Palace and the AEDT
+   route, and the import order CI checks. Every other page assumes it.
+2. [Architecture](architecture.qmd): who owns which state, and the
+   lifecycle of a Palace run and of an AEDT run.
+3. [Ownership by area](ownership.qmd): what each area must not take over
+   from another, and what stays outside SCGSim.
+4. The contract page of the folder you change, in Reference:
+   [GeometryPlan](../reference/specs/geometry-plan.qmd) for `geometry`,
+   [Mesh quality](../reference/specs/mesh-quality.qmd) for `meshing`, the
+   [Palace Electrostatic](../reference/specs/palace-electrostatic-sgb.qmd) and
+   [Palace Eigenmode](../reference/specs/palace-eigenmode.qmd) specifications
+   for `palace`, the [AEDT runtime](../reference/specs/aedt-runtime.qmd) for
+   `aedt`, and the [report model](../reference/specs/report-model.qmd) for
+   results and reports. [Supported calculations](../reference/supported-calculations.qmd)
+   and [Supported scope](../reference/supported-scope.qmd) say what a change
+   must keep working.
+5. The pages of the **Internals** section of this sidebar: the parts of a
+   folder's design that its contract page leaves out.
+6. For work in `geometry/sgb`, the
+   [SGB design pages](../../zh-TW/docs/contribute/sgb-design/index.html)
+   (in Traditional Chinese): why the builder plans before it writes, and each
+   stage from the prisms to the files.
+
+[Provenance](provenance.qmd), the [notebook contract](notebook-contract.qmd),
+the [documentation map](documentation-map.qmd) and
+[Scope and origin](goals-and-upstream.qmd) answer narrower questions; read
+them when your change touches what they cover.
+
+## Check a change {#check}
+
+Run these from the root of the checkout. The first two are the `quality` and
+`fast-tests` jobs of CI, with the same arguments:
+
+```bash
+uv run --locked --no-sync python scripts/check_quality.py
+uv run --locked --no-sync python -m pytest tests -m 'not slow and not private_golden and not pdk' -rs --fail-on-skip
+```
+
+`check_quality.py` runs Ruff formatting and lint, the readable-style check,
+Pyright and the import-layer contracts over every tracked Python file. The
+test run fails on a skip, because the `dev` group installs everything the
+tests need.
+
+For a documentation change, also check the generated pages and render the
+site (Quarto in the range `scripts/build_docs_site.py` names):
+
+```bash
+uv run --locked --no-sync python scripts/generate_code_map.py --check
+uv run --locked --no-sync python scripts/generate_knowledge_reference.py --check
+quarto render --no-execute
+```
+
+The render builds the English site into `_site/` and then the Chinese site
+into `_site/zh-TW/`. No notebook cell and no solver runs.
+
+## Rules and delivery {#rules}
+
+- [`AGENTS.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/AGENTS.md):
+  what the repository owns, how work is delivered, and how a pull request is
+  reviewed.
+- [`CODE_STYLE.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/CODE_STYLE.md):
+  how SCGSim's Python is written.
+- [`DOCS_STYLE.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/DOCS_STYLE.md):
+  how the documentation is written, which source owns which page, and the
+  Chinese terms.
+- [`MAINTAINING.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md):
+  the maintainer guide: what each CI job checks, the documentation build and
+  the generated pages.
+
+A change goes to `develop` through a pull request whose body starts with the
+line `Issue:` and the Issue it answers, as the
+[pull request template](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/.github/PULL_REQUEST_TEMPLATE.md)
+shows.

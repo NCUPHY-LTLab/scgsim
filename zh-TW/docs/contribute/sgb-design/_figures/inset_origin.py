@@ -2,7 +2,7 @@
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/inset_origin.py
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/inset_origin.py
 
 Two real inputs of the production tests (``tests/sgb_inputs.py``) are built with ``build_sgb_geometry`` and bands on every
 surface, margins (0.5, 1.0) um:
