@@ -11,7 +11,7 @@ aliases:
 
 Q2D 是 Ansys AEDT 的二維萃取器，會求解傳輸線的截面，回傳每單位長度的矩陣：電容 C、電感 L、電導 G 與電阻 R。由 L 與 C 可以得到傳輸線的特性阻抗與相速度。Q2D 的截面由你給的矩形組成；它不會從版圖或 3D 模型切出截面。
 
-這個儲存庫沒有 Q2D 的計算結果紀錄。作為參考，對於基板夠厚、接地無限寬的共平面波導（CPW），封閉形式的估計值在下方 10 µm 訊號線、10 µm 間隙、矽（εr = 11.9）的情況下是 C ≈ 146 pF/m、L ≈ 491 nH/m，因此 Z₀ ≈ 58 Ω（[讀懂結果](#read-the-result)）。Q2D 對 40 µm 有限寬接地的計算值會與它不同。
+本頁目前還沒有記錄的 Q2D 結果；[讀懂結果](#read-the-result)說明回傳矩陣中哪些元素可以算出特性阻抗與相速度。
 
 ![Q2D 求解的截面：10 µm 的訊號線位在兩條 40 µm 的接地之間，各隔 10 µm，金屬厚 0.2 µm，基板為寬 200 µm、厚 500 µm 的矽。為了看清金屬，垂直比例已放大；圖中是輸入，不是計算結果。](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
 
@@ -81,7 +81,7 @@ print(handoff.spec_path, handoff.archive_path)
 | 電感 L | nH/meter |
 | 電阻 R | ohm/meter |
 
-對無損耗的傳輸線，特性阻抗與相速度由訊號線的 L 與 C 得出：
+對無損耗的傳輸線，特性阻抗與相速度由兩個對角元素得出：L 是列與行都是訊號線導體（這裡是 `Signal`）的 `L` 元素，單位 nH/meter；C 是同一列同一行的 `C` 元素，單位 pF/meter。先換算成 H/m 與 F/m：
 
 $$
 Z_0 = \sqrt{\frac{L}{C}}, \qquad v = \frac{1}{\sqrt{LC}}.
@@ -100,7 +100,5 @@ capacitance = entries[("C", "Signal", "Signal")] * 1e-12  # pF/m to F/m
 print("Z0 =", (inductance / capacitance) ** 0.5, "ohm")
 print("v  =", 1 / (inductance * capacitance) ** 0.5, "m/s")
 ```
-
-以上面的封閉形式估計值為例：L = 491.2 nH/m、C = 146.1 pF/m，得到 Z₀ = √(491.2 × 10⁻⁹ / 146.1 × 10⁻¹²) = 58.0 Ω，v = 1 / √(491.2 × 10⁻⁹ × 146.1 × 10⁻¹²) = 1.18 × 10⁸ m/s，也就是光速除以 √6.45，而 6.45 是矽與真空介電常數的平均。這個估計值使用 k = 10 / (10 + 2 × 10) = 1/3 的完全橢圓積分比 K(k)/K(k′) = 0.6396，以及 C = 4ε₀ε_eff K(k)/K(k′)、L = (μ₀/4) K(k′)/K(k)。
 
 SCGSim 不會替你算 Z₀ 或 v。每單位長度的電容也不是 3D 結構的電容：那請用 [Q3D](capacitance-q3d.qmd) 或 [Palace](capacitance-palace.qmd)。報告會把 Q2D 的收斂狀態、它回報的變化與你的控制值放在矩陣旁邊（[參考](../reference/specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)）。

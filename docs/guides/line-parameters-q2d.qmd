@@ -14,12 +14,9 @@ inductance L, conductance G and resistance R. From L and C you get the line's
 impedance and phase velocity. Q2D takes the cross-section as rectangles you
 give it; it does not cut a section from a layout or a 3D model.
 
-This repository holds no recorded Q2D result. For orientation, the
-closed-form estimate of a coplanar waveguide (CPW) with infinitely wide
-grounds on a thick substrate gives, for the 10 µm signal and 10 µm gaps
-below on silicon (εr = 11.9): C ≈ 146 pF/m, L ≈ 491 nH/m, so Z₀ ≈ 58 Ω
-([Read the result](#read-the-result)). Q2D's numbers for the finite 40 µm
-grounds will differ from it.
+This page has no recorded Q2D result yet; [Read the result](#read-the-result)
+shows which entries of the returned matrices give the impedance and the phase
+velocity.
 
 ![The cross-section Q2D solves: a 10 µm signal between two 40 µm grounds, 10 µm away, all 0.2 µm thick, on a 200 µm wide and 500 µm thick silicon substrate. The vertical scale is enlarged to show the metal; the drawing shows the input, not a result.](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
 
@@ -107,8 +104,10 @@ and the unit as Q2D exported them:
 | Inductance, L | nH/meter |
 | Resistance, R | ohm/meter |
 
-For a lossless line, the impedance and the phase velocity follow from L and
-C of the signal:
+For a lossless line, the impedance and the phase velocity follow from two
+diagonal entries: L, the `L` entry whose row and column are both the signal
+conductor (here `Signal`), in nH/meter, and C, the `C` entry of the same row
+and column, in pF/meter. Convert them to H/m and F/m first:
 
 $$
 Z_0 = \sqrt{\frac{L}{C}}, \qquad v = \frac{1}{\sqrt{LC}}.
@@ -127,14 +126,6 @@ capacitance = entries[("C", "Signal", "Signal")] * 1e-12  # pF/m to F/m
 print("Z0 =", (inductance / capacitance) ** 0.5, "ohm")
 print("v  =", 1 / (inductance * capacitance) ** 0.5, "m/s")
 ```
-
-As a worked example with the closed-form estimate above: L = 491.2 nH/m and
-C = 146.1 pF/m give Z₀ = √(491.2 × 10⁻⁹ / 146.1 × 10⁻¹²) = 58.0 Ω and
-v = 1 / √(491.2 × 10⁻⁹ × 146.1 × 10⁻¹²) = 1.18 × 10⁸ m/s, which is the speed
-of light divided by √6.45, the mean of the permittivities of silicon and
-vacuum. The estimate takes the ratio K(k)/K(k′) = 0.6396 of complete
-elliptic integrals for k = 10 / (10 + 2 × 10) = 1/3, with
-C = 4ε₀ε_eff K(k)/K(k′) and L = (μ₀/4) K(k′)/K(k).
 
 SCGSim does not compute Z₀ or v for you. A per-length capacitance is not the
 capacitance of a 3D structure: for that, use [Q3D](capacitance-q3d.qmd) or
