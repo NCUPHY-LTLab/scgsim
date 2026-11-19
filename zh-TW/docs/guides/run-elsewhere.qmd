@@ -54,7 +54,7 @@ PALACE_COMMAND_STYLE=wrapper
 | `"slurm-single-node"`、`{"nodes": 1, "ntasks": 16, "cpus_per_task": 1, "time": "01:00:00"}` | `run_palace.sbatch` | `srun "$PALACE_EXECUTABLE" "$PALACE_CONFIG"` |
 | `"slurm-multi-node"`、`{"nodes": 2, "ntasks": 32, "cpus_per_task": 1, "mem": "64G", "time": "02:00:00"}` | `run_palace.sbatch` | `srun "$PALACE_EXECUTABLE" "$PALACE_CONFIG"` |
 
-在 Slurm 設定下，每個資源鍵都會成為一行 `#SBATCH`，排程器的輸出也寫進這次執行的紀錄檔。上表的單節點例子再加上一條設定命令時，準備方式與腳本開頭如下：
+在 Slurm 設定下，每個資源鍵都會成為一行 `#SBATCH`，排程器的輸出也寫進這次執行的紀錄檔。上表的單節點例子再加上一條設定命令時，準備方式如下；寫出的 `run_palace.sbatch` 在檢查執行資料夾的各行之間，含有下面這些行：
 
 ```python
 handoff = sim.prepare_handoff(

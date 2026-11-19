@@ -37,7 +37,8 @@ handoff = sim.prepare_handoff(
 ```
 
 `prepare_handoff` writes `run_palace.sh` into the run folder. With
-`executable="palace"`, its settings and its Palace command line are:
+`executable="palace"`, its settings and its Palace command line are these
+lines:
 
 ```bash
 PALACE_EXECUTABLE=palace
@@ -68,7 +69,8 @@ model (the setting lines `PALACE_PROCESSES` and `PALACE_THREADS` come from
 
 For the Slurm profiles, every allocation key becomes an `#SBATCH` line, and
 the scheduler's output goes to the run's log. The single-node example above,
-prepared with a setup command, starts like this:
+prepared with a setup command, writes `run_palace.sbatch` with these lines
+among its checks of the run folder:
 
 ```python
 handoff = sim.prepare_handoff(
