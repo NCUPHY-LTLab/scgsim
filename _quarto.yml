@@ -15,6 +15,7 @@ project:
   - docs/research/*/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
+  - docs/start/*.qmd
   - '!zh-TW/**'
   post-render: python3 scripts/build_bilingual_docs.py
 execute:
@@ -82,6 +83,7 @@ website:
     style: floating
     collapse-level: 1
     contents:
+    - docs/start/first-simulation.qmd
     - docs/examples.qmd
     - docs/course/installation.qmd
     - section: Prepare and inspect a model

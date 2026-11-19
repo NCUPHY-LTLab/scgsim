@@ -135,6 +135,8 @@ Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground
 
 ## Choose your next simulation
 
+To compute a capacitance with Palace, without an AEDT licence, start with the [First simulation](docs/start/first-simulation.qmd).
+
 The [simulation chooser](docs/examples.qmd#getting-started) links the complete OrcaPen SC PDK notebook for capacitance, resonant modes and energy participation, and per-unit-length transmission-line parameters. For driven S-parameters, start from the [Driven Modal](docs/course/aedt-driven-modal.qmd) or [Driven Terminal](docs/course/aedt-driven-terminal.qmd) lesson.
 
 Before you simulate a layout of your own, read the [supported scope](docs/supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.
