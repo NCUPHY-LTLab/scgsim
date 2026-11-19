@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
-title: "Palace：端子電容"
-description: "將精確 Net 綁定為端子與物理接地，再準備 Electrostatic 網格與設定。"
+title: "以 Palace 計算電容"
+description: "以 Palace 計算版圖中各導體的電容矩陣，細化網格直到數值穩定，並讀懂結果。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/palace-electrostatic"
@@ -9,73 +9,144 @@ aliases:
   - ../course/palace-electrostatic.html
 ---
 
-請使用[來源觀測](inspect-the-source.qmd)中的 `snapshot`。此分支要求 Electrostatic 端子響應，而非共振模態。元件範例由公開的 OrPen [Xmon Notebook 群組](../start/choose-a-simulation.qmd#public-inputs)維護；本教學說明可重複使用的 SCGSim 階段。
+Palace 的 Electrostatic 求解器會計算你指定為端子（terminal）的導體之間的電容矩陣。以[第一個模擬](../start/first-simulation.qmd)的 200 µm 焊墊為例，細化網格直到焊墊電容每次細化的變化小於 1 %，本頁的腳本會印出：
 
-Terminal 用來指定激發會進入原生矩陣的導體 Net。Physical Ground 則指定其他導體 Net。將外部求解邊界接地是另一種物理選擇，不能視為導體接地的另一種寫法。此處 Xmon 焊墊是端子，其已指派的 `Ground` Net 則是物理接地：
+```text
+Status: completed
+Convergence: converged at pass 3
+Capacitance matrix (fF): pad
+     pad      95.43
+```
+
+95.43 fF 是焊墊與周圍接地金屬之間的電容。第一個模擬的 112.54 fF 是同一個模型只在第一個網格上、以一階元素求解一次的結果；[讀懂結果](#read-the-result)說明這個數字如何隨網格細化而變。
+
+你需要和第一個模擬相同的安裝：含 `palace` extra 的 SCGSim、OrcaPen SC PDK、Palace 0.18.1，並把 `SCGSIM_PALACE_EXECUTABLE` 設為 `palace` 命令（[第一個模擬](../start/first-simulation.qmd#palace-executable)）。
+
+## 腳本 {#the-script}
+
+把下面的程式存成研究專案裡的 `pad_capacitance.py`：
 
 ```python
+import os
+import subprocess
 from pathlib import Path
-from scgsim.palace import ElectrostaticSim
+from uuid import uuid4
 
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
+from scgsim.geometry import GeometryPlan
+from scgsim.palace import Capacitance, ElectrostaticSim, resolve_palace_result
+
+# 1. The layout and plan of First simulation: a 200 µm pad in a 20 µm gap on a 1000 µm die.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+
+# 2. The problem: the pad is the terminal, the ground Net is held at 0 V.
 sim = ElectrostaticSim()
-sim.set_plan(snapshot)
-sim.set_output_dir(Path(".artifacts/public-xmon-electrostatic"))
-sim.add_terminal("xmon", net_id="xmon_pad")
-sim.add_ground(net_id="Ground")
-sim.set_electrostatic(
-    save_fields=0,
-    unassigned_conductor_policy="error",
-    exterior_boundary_policy="none",
+sim.set_plan(plan.prepare())
+sim.set_output_dir(Path(".artifacts/pad-capacitance") / uuid4().hex[:12])
+sim.add_terminal("pad", net_id="pad")
+sim.add_ground(net_id="ground")
+sim.set_electrostatic(unassigned_conductor_policy="error")
+
+# 3. Refine the mesh until C[pad][pad] settles (see Convergence and reports).
+sim.set_numerical(order=2, amr_max_passes=4)
+sim.set_convergence(Capacitance.element("pad", "pad").within(percent=1.0))
+
+# 4. Mesh, write Palace's input, run Palace with 4 MPI processes.
+sim.mesh()
+sim.write_config()
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
+    resources={"command_style": "wrapper", "processes": 4, "threads": 1},
 )
-sim.set_mesh(quality_threshold=0.01)
+subprocess.run(["bash", "run_palace.sh"], cwd=handoff.run_dir, check=True)
+
+# 5. Read the result: where refinement stopped, and the capacitance matrix in fF.
+result = resolve_palace_result(handoff.run_dir, expected_handoff_id=handoff.handoff_id)
+print("Status:", result.status)
+verdict = result.convergence.verdict
+print("Convergence:", verdict.state, "at pass", verdict.pass_number)
+terminals = {
+    entry["index"]: entry["terminal_name"]
+    for entry in result.provenance.index_map["entries"]
+    if entry["role"] == "terminal"
+}
+print("Capacitance matrix (fF):", *terminals.values())
+for row in result.tables["terminal-C"].rows:
+    values = [row[f"C[i][{column}] (F)"] * 1e15 for column in terminals]
+    print(f"{terminals[int(row['i'])]:>8}", *(f"{value:10.2f}" for value in values))
 ```
 
-`set_mesh(...)` 選擇尺寸 `recipe`、`mesher` 選項（演算法與幾何階數）、修復 `budgets` 與 `quality_threshold`。本範例沿用預設配方並寫出預設門檻，讓你看到該在哪裡修改。幾何階數描述網格表示法，與 Palace 的 FEM 階數彼此獨立。各項控制、預設值，以及網格達不到門檻時會發生什麼事，見共用的 [Palace 網格控制](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
+第 1、4、5 段與第一個模擬相同，每一行的說明見[第一個模擬](../start/first-simulation.qmd#the-script)。新的部分：
 
-端子與接地選擇器使用確切的最終 Net ID，不是幾何中心的估計值。明確指定 `error` 政策會將未涵蓋的導體元件視為輸入錯誤；另一個支援的 `ground` 政策則會將未指派元件接地。請依實驗選擇政策。此處外部邊界不接地；`exterior_boundary_policy="ground"` 是另一種模型，且要求明確使用 error 政策。[契約](../reference/specs/palace-electrostatic-sgb.qmd)說明這些選擇及其索引對照意義。
+- **第 2 段**指定導體。Net 是一塊具名、作為同一個導體的金屬；計畫定義了 `pad` 與 `ground` 兩個 Net。焊墊是端子，接地 Net 保持在 0 V（可選的做法見[端子與接地](#terminals-and-grounds)）。
+- **第 3 段**要求二階有限元素（`order=2`），並讓 Palace 最多細化網格四次（`amr_max_passes=4`）。Palace 的自適應網格細化（AMR）會切分誤差估計最大的元素，再求解一次；每次求解是一個回合（pass）。[]{#declare-when-refinement-has-converged}`set_convergence` 宣告結果何時算穩定：這裡是 `C[pad][pad]` 與前一個回合相比變化不超過 1 % 時。SCGSim 會在第一個符合的回合停下 Palace。[收斂與報告](convergence-and-reports.qmd#declare-convergence)說明這個宣告，以及如何依你的用途選門檻；這裡的 1 % 是 [Q3D 範例](capacitance-q3d.qmd)要求 Q3D 的同一個門檻，不是建議值。
 
-## 宣告細化何時已收斂 {#declare-when-refinement-has-converged}
+在研究專案中、設定過 `SCGSIM_PALACE_EXECUTABLE` 的 shell 裡執行：
 
-自適應細化預設關閉（`amr_max_passes=0`）。要細化時，給一個迭代上限，再說明哪些數必須停止變化、容許變化多少。下面的門檻只示範寫法；請依電路問題的需要自行選擇：
-
-```python
-from scgsim.palace import Capacitance, ErrorIndicator
-
-sim.set_numerical(order=2, amr_max_passes=6)
-sim.set_convergence(
-    Capacitance.element("xmon", "xmon").within(percent=0.1),
-    ErrorIndicator().below(1e-2),
-    minimum_converged_passes=2,
-)
+```bash
+uv run pad_capacitance.py
 ```
 
-每個 pass 是 Palace 的一次求解；pass 1 求解 `mesh()` 寫出的網格。第一條準則在某個 pass 成立，是指 `C[xmon][xmon]` 與前一個 pass 相比變化至多 0.1 %，所以最早在 pass 2 成立。第二條準則在 Palace 的誤差指標至多 0.01 時成立。兩條都已連續成立兩個 pass 的第一個 pass，就是執行收斂的 pass；六次細化有七次求解，足夠達成。
+在一台工作站上以 4 個 MPI 行程執行，大約花了一分半鐘。腳本會先印出 Palace 的紀錄，再印出本頁開頭的那幾行。
 
-`write_config()` 在寫出任何檔案之前，以設定檔檢查宣告：`Capacitance.element("xmon", "pad")` 會被拒絕，因為模擬沒有 `pad` 端子；`set_numerical(amr_max_passes=1)` 也會被拒絕，因為兩次求解不可能讓一條變化準則連續成立兩個 pass。明確給定 `amr_tolerance` 同樣會被拒絕：有宣告時由準則決定，拒絕訊息會寫出應改寫的 `ErrorIndicator().below(...)`。
+## 讀懂結果 {#read-the-result}
 
-Palace 會在執行已收斂的第一個 pass 停止：執行指令碼透過一個小型執行器啟動它，執行器在每個 pass 完成時檢查，並在那裡停止 Palace，因此在 pass 4 收斂的執行不會開始代價高的第 5 到第 7 次求解。讀取回傳的執行時，`result.convergence.verdict` 與可信度報告會說明它在哪裡收斂、在哪裡停止，例如：
+每個回合是在更細的網格上求解一次。執行資料夾在 `results/palace/iteration<N>/` 保留每個回合的結果，報告也列出相同的數字（[收斂與報告](convergence-and-reports.qmd)）：
 
-> Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
-> held at passes 3 to 4, 2 in a row. Last to hold: C[xmon][xmon], from pass 3.
-> No pass was read after it. SCGSim stopped Palace after pass 4: 3 of the 7
-> passes its limit allows were not run.
+| 回合 | 四面體數 | C[pad][pad] | 與前一個回合的變化 |
+|---:|---:|---:|---:|
+| 1 | 31,096 | 97.20 fF | |
+| 2 | 169,255 | 95.89 fF | 1.37 % |
+| 3 | 659,496 | 95.43 fF | 0.48 % |
 
-此時結果是 pass 4 的表格。沒有收斂的執行會跑完全部七次求解，並如實說明（「Palace ended by itself at its limit of 7 passes」）。
+變化在第 3 回合第一次低於 1 %，所以這次執行在第 3 回合收斂，SCGSim 在第四個回合之前停下 Palace，結果就是第 3 回合的表格。同一個模型以較嚴格的宣告再執行時，繼續做了第四個回合，網格有 1,653,207 個四面體，得到 95.22 fF，又變了 0.22 %。需要多小的變化，取決於你拿這個電容做什麼。
 
-所有的量（對角、次對角、整個矩陣、依介面類別的 Surface EPR）與所有檢查，列在[收斂宣告](../reference/specs/palace-electrostatic-sgb.qmd#convergence-declaration)。
+元素階數和網格一樣重要：在同一個第一網格上，一階元素得到第一個模擬的 112.54 fF，二階元素得到 97.20 fF。細化會把元素加在電場最強的地方，也就是焊墊邊緣與間隙附近。
 
-## 選擇幾何近似並建立輸入 {#select-the-geometry-approximation-and-build-inputs}
+只有一個端子時，矩陣只有一個值：焊墊與所有 0 V 導體之間的電容。有多個端子時，Palace 回報 Maxwell 電容矩陣：每個對角元素是一個端子對其他一切的電容，每個非對角元素 C[a][b] 是端子 a 與 b 之間電容的負值（[術語與單位](../reference/terms-and-units.qmd#term-maxwell-capacitance-matrix)）。
 
-已綁定的快照已提供外部包覆。Route B 是預設的有限金屬準備方式，而 Surface EPR 只在你要求時才計算，所以這個設定可以直接產生網格：
+## 端子與接地 {#terminals-and-grounds}
 
-```python
-mesh_path = sim.mesh()
-config_path = sim.write_config()
-print(mesh_path, config_path)
-```
+每個導體都是計畫中的一個 Net，模擬要說明每個 Net 扮演什麼角色：
 
-進行 Route-A 研究時，請在產生網格前呼叫 `sim.set_route("A")`。Route A 把薄膜導體變成零厚度的薄片，bump 這類有限體積的導體則維持體積。近似設定說明薄膜原有的厚度如何處理：不提供時，`set_route("A")` 使用 `thin_film`，它移除厚度且不需參數。`substrate_face` 會保留物理表面座標，`metal_gap_equivalent` 則是另一種受支援的雙面正規化方式，兩者都要有明確的 `film_bindings`，以 `sim.set_route("A", approximation_profile=profile)` 傳入。Route B 不需呼叫。變更此近似前請參閱[幾何契約](../reference/specs/geometry-plan.qmd)。表面薄膜是選用的後處理規格，須附上厚度／介電常數／損耗假設，不可推定為材料量測值。它們的內縮邊距會切進幾何，因此請在 `prepare()` 之前於計畫上用 `plan.set_surface_epr(specs)` 要求；見[邊距契約](../reference/specs/palace-eigenmode.qmd#surface-epr-margins)。
+| 呼叫 | 作用 |
+|---|---|
+| `sim.add_terminal("pad", net_id="pad")` | 這個 Net 是端子：Palace 輪流把它設為 1 V，它在矩陣中有一列一行，名稱為 `pad`。 |
+| `sim.add_ground(net_id="ground")` | 這個 Net 保持在 0 V，在矩陣中沒有列。 |
+| `sim.set_electrostatic(unassigned_conductor_policy="error")` | 不屬於任何端子或接地 Net 的金屬視為錯誤。預設的 `"ground"` 會不聲不響地把這些金屬接地。 |
+| `sim.set_electrostatic(exterior_boundary_policy="ground", unassigned_conductor_policy="error")` | 真空區域的外表面也保持在 0 V，就像晶片外有一個接地的盒子。預設的 `"none"` 不給這些面任何條件，因此沒有電場穿過它們（Palace 的紀錄稱為「ZeroCharge」）。 |
 
-網格產生是真實的準備操作。它可能發生原生失敗，若有四面體持續低於品質門檻，也會以 `MeshRepairError` 中止。寫入設定時會將端子與 Ground 屬性綁定至該網格。請一併檢查確切索引對照與設定檔：schema v3 會區分物理 Ground 與外部 Ground，讓你辨識哪些導體與邊界政策已降階。產生網格後，`sim.mesh_summary()` 會提供分離的原生產生觀測，包括網格控制項、元素／區域數量及精確網格識別。這些紀錄描述網格，不能判定其離散程度是否符合研究需求。網格化之前，`sim.input_summary()` 會顯示 `mesh()` 的建模輸入（計畫套用其真空區域之後）以及端子、Ground 與政策；[來源摘要](inspect-the-source.qmd)則只檢視計畫本身。
+端子與接地以 Net 名稱指定，必須與計畫定義的名稱完全相同。[Electrostatic 參考](../reference/specs/palace-electrostatic-sgb.qmd)列出所有規則。
 
-接著可視需要[檢視已準備的網格](inspect-the-prepared-model.qmd)，再[準備並執行交接套件](run-elsewhere.qmd)。回傳後，請先[解析資料](convergence-and-reports.qmd)，再讀取電容矩陣。原生端子／激發順序與單位仍是判讀依據；已準備的設定不含電容量測值。先說明電路問題需要哪種端子響應，再依[研究解讀流程](convergence-and-reports.qmd#interpret-for-scq-use)讀取矩陣項目及可取得的細化歷程。保留端子激發、物理／外部接地選擇、實際準則與原生狀態；原生停止旗標本身無法判定電容是否足以供該電路模型使用。
+## 網格與元素階數 {#mesh-controls}
+
+`set_mesh(...)` 設定第一個網格：`recipe` 決定元素尺寸，`mesher` 決定 Gmsh 演算法與幾何階數，`budgets` 決定修補低品質元素可以花多少力氣，`quality_threshold` 是允許的最低元素品質（預設 0.01）。腳本使用預設值。若有元素一直低於門檻，`mesh()` 會以 `MeshRepairError` 停下並說明位置（[Palace 網格設定](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)）。
+
+`set_numerical(order=...)` 是 Palace 求解用的有限元素階數，與網格的幾何階數無關。
+
+## 把金屬當成薄片 {#select-the-geometry-approximation-and-build-inputs}
+
+預設情況下，金屬薄膜是有實際厚度的實體，這裡是 100 nm 的鋁（Route B）。在 `mesh()` 之前呼叫 `sim.set_route("A")`，每層薄膜會改成厚度為零的薄片，而凸塊等體積保持原樣（Route A）。何時該用哪一種，見[選擇幾何近似](../concepts/model-and-numerics.qmd#choose-the-geometric-approximation)；以 `set_route("A", approximation_profile=...)` 傳入的 `substrate_face` 與 `metal_gap_equivalent` 兩種 profile，見 [GeometryPlan 參考](../reference/specs/geometry-plan.qmd)。
+
+## 執行之前 {#before-you-run}
+
+- `ElectrostaticSim.simulation_drc(plan)` 在幾秒內、不建網格，就檢查版圖能否建模與建網格（[檢查版圖](check-a-layout.qmd)）。
+- 在 `mesh()` 之前，`sim.input_summary()` 會列出 `mesh()` 將使用的輸入：含真空區域的計畫、端子、接地與各項政策。
+- 在 `mesh()` 之後，`sim.mesh_summary()` 會列出網格：它的設定、元素數與區域數（[檢視準備好的模型](inspect-the-prepared-model.qmd)）。
+- 要在另一台電腦或 Slurm 上執行 Palace，只需改 `prepare_handoff`（[執行已準備的模型](run-elsewhere.qmd)）。

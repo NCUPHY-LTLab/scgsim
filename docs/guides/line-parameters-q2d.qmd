@@ -1,6 +1,6 @@
 ---
-title: "AEDT: Q2D cross-section extraction"
-description: "Author explicit rectangles and conductor groups, then read one native per-unit-length matrix export."
+title: "Line parameters with Q2D"
+description: "Extract the per-length capacitance, inductance, conductance and resistance of a line's cross-section with AEDT Q2D, and turn them into impedance and phase velocity."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-q2d"
@@ -8,15 +8,26 @@ aliases:
   - ../course/aedt-q2d.html
 ---
 
-For the complete workflow, use the PDK's Q2D notebook from [Choose a simulation](../start/choose-a-simulation.qmd#getting-started).
-This page is the backend-specific Q2D reference. Q2D takes explicit cross-section
-rectangles; it does not import a GDS, derive a slice from the Xmon snapshot or
-infer a transmission line from a 3D picture. The public
-[OrPen cross-section source](../start/choose-a-simulation.qmd#public-inputs) supplies this
-specimen: 10 µm signal width, 10 µm gaps, 40 µm grounds, 0.2 µm metal thickness,
-and a 200 µm wide, 500 µm thick substrate. These are model inputs.
+Q2D, the 2D extractor of Ansys AEDT, solves the cross-section of a
+transmission line and returns its per-length matrices: capacitance C,
+inductance L, conductance G and resistance R. From L and C you get the line's
+impedance and phase velocity. Q2D takes the cross-section as rectangles you
+give it; it does not cut a section from a layout or a 3D model.
 
-![Declared Q2D CPW cross-section: silicon substrate, signal, and two reference-ground rectangles. Vertical scale is enlarged to show the 0.2 µm metal thickness; this is source geometry, not a solver result.](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
+This page has no recorded Q2D result yet; [Read the result](#read-the-result)
+shows which entries of the returned matrices give the impedance and the phase
+velocity.
+
+![The cross-section Q2D solves: a 10 µm signal between two 40 µm grounds, 10 µm away, all 0.2 µm thick, on a 200 µm wide and 500 µm thick silicon substrate. The vertical scale is enlarged to show the metal; the drawing shows the input, not a result.](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
+
+This line is not the CPW of [Prepare a coplanar waveguide for AEDT](aedt-cpw-inputs.qmd)
+(6 µm gaps, 80 µm grounds, 100 nm aluminium): it is the PDK's cross-section
+example, with niobium metal.
+
+## Prepare the run {#prepare-the-run}
+
+It needs SCGSim with its `aedt` extra and the OrcaPen SC PDK, for the
+material records; it writes the run folder without opening AEDT.
 
 ```python
 from pathlib import Path
@@ -60,41 +71,64 @@ print(spec.to_payload())
 print(handoff.spec_path, handoff.archive_path)
 ```
 
-Rectangle origins and sizes are micrometres. Read each lower-left position and
-size against the intended gaps; print the source spec before relying on native
-geometry. The vacuum belongs to the Region, not an authored vacuum rectangle.
-There is one `ReferenceGround` group covering both ground rectangles and at
-least one `SignalLine`; every superconducting rectangle belongs to exactly one
-group. The public four-value Q2D Region padding order is **(+X, -X, +Y, -Y)**;
-the runtime reorders it for the native Region call. The 3D input tuple is
-six-value **(+X, -X, +Y, -Y, +Z, -Z)**.
+What the inputs mean:
 
-After [execution](run-elsewhere.qmd), [resolve the full return](convergence-and-reports.qmd).
-Q2D writes one native `results/q2d/rlgc_matrix.csv`,
-containing primary C, G, L and R blocks. `resolved.physics_results()` reads those
-blocks without creating another normalized file. Native coupling or Spice
-blocks can coexist without becoming extra primary matrices. The resolver binds
-frequency, `LastAdaptive` solution, conductor order and per-unit-length units.
-Preserve the native units of each block:
+- Each `Q2dRectangleSpec` is a name, its lower-left corner (x, y) and its size
+  (width, height) in µm, and its material. The substrate spans x from −100
+  to 100 µm and y from −500 to 0 µm; the metal sits on it, from y = 0 to
+  0.2 µm. Print the spec, as the block does, and check the positions against
+  the gaps you mean.
+- Each `Q2dConductorSpec` groups rectangles into one conductor: one
+  `SignalLine` per signal, and a single `ReferenceGround` holding every ground
+  rectangle. Every metal rectangle belongs to exactly one conductor; its last
+  value is the metal thickness in µm.
+- The empty space around the section is Q2D's Region, not a rectangle.
+  `region_padding_um` gives its extent beyond the rectangles, in µm, in the
+  order (+x, −x, +y, −y): 100 µm on each side, 1000 µm above and 100 µm
+  below.
+- `MatrixRunControl` sets the frequency, 6 GHz, and up to three adaptive
+  passes.
 
-| Block | Native unit |
-| --- | --- |
+## Read the result {#read-the-result}
+
+Run the folder on a computer with AEDT
+([Run a prepared model](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally))
+and read it back. `physics_results()` returns one row per matrix entry, with
+the quantity (`C`, `G`, `L` or `R`), the row and column conductor, the value
+and the unit as Q2D exported them:
+
+| Matrix | Unit |
+|---|---|
 | Capacitance, C | pF/meter |
 | Conductance, G | mho/meter |
 | Inductance, L | nH/meter |
 | Resistance, R | ohm/meter |
 
-SCGSim does not convert RLGC into impedance, propagation constant or phase
-velocity.
+For a lossless line, the impedance and the phase velocity follow from two
+diagonal entries: L, the `L` entry whose row and column are both the signal
+conductor (here `Signal`), in nH/meter, and C, the `C` entry of the same row
+and column, in pF/meter. Convert them to H/m and F/m first:
 
-Keep native status, reported delta and actual controls with the matrix result,
-as described by the [matrix observation contract](../reference/specs/aedt-runtime.qmd#q2d-q3d-convergence-observations).
-Use that quantity and its available changes to judge whether its accuracy is
-adequate for your intended study.
+$$
+Z_0 = \sqrt{\frac{L}{C}}, \qquad v = \frac{1}{\sqrt{LC}}.
+$$
 
-Per-unit-length capacitance is not a lumped Electrostatic capacitance, and a
-Q2D cross-section is not the finite 3D Q3D experiment. Preserve those units and
-scope when interpreting the result. Historical separate CG/RL and normalized
-Q2D files are not emitted for new requests. The
-[AEDT contract](../reference/specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)
-owns the exact export and failure behavior.
+```python
+from scgsim.aedt import resolve_results
+
+result = resolve_results(handoff.run_dir)
+entries = {
+    (row["quantity"], row["row"], row["column"]): float(row["value"])
+    for row in result.physics_results()
+}
+inductance = entries[("L", "Signal", "Signal")] * 1e-9  # nH/m to H/m
+capacitance = entries[("C", "Signal", "Signal")] * 1e-12  # pF/m to F/m
+print("Z0 =", (inductance / capacitance) ** 0.5, "ohm")
+print("v  =", 1 / (inductance * capacitance) ** 0.5, "m/s")
+```
+
+SCGSim does not compute Z₀ or v for you. A per-length capacitance is not the
+capacitance of a 3D structure: for that, use [Q3D](capacitance-q3d.qmd) or
+[Palace](capacitance-palace.qmd). The report keeps Q2D's convergence status,
+its reported change and your controls beside the matrices
+([reference](../reference/specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)).

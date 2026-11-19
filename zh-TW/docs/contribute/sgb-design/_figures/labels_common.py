@@ -5,11 +5,12 @@ arrangement cells and edges, the production inputs of the running example, and t
 views.  It derives nothing about SGB; every geometry and number comes from ``scgsim.geometry.sgb`` or from the calling
 script.
 
-The scripts compute with the production package (branch ``claude/sgb-core``).  Run them with that checkout's interpreter
-and point ``SGB_CORE`` at the checkout; its ``tests/`` folder is put on ``sys.path`` at run time for the test-side
-builders ``sgb_inputs`` (real inputs), ``sgb_scenes`` (stage-level scenes) and ``sgb_emit_cases`` (named models)::
+The scripts compute with the production package.  Run them from the repository root, in its locked development
+environment; the checkout's ``tests/`` folder (or that of the checkout ``SGB_CORE`` names) is put on ``sys.path`` at
+run time for the test-side builders ``sgb_inputs`` (real inputs), ``sgb_scenes`` (stage-level scenes) and
+``sgb_emit_cases`` (named models)::
 
-    SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/<script>.py
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/<script>.py
 """
 
 from __future__ import annotations

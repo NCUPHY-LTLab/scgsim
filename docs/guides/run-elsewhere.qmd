@@ -1,6 +1,6 @@
 ---
 title: "Run a prepared model"
-description: "Run a prepared model locally or transfer the complete native package to its solver host and return the results."
+description: "The script a prepared model carries, the command line it runs for each Palace profile, and how to run it on another computer and bring the results back."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/execute"
@@ -8,132 +8,188 @@ aliases:
   - ../course/execute.html
 ---
 
-Prerequisite: complete a backend lesson and retain its `handoff`. Preparation
-creates the input package. Execution is the separate operation that invokes the
-native solver. Keep your preparation-side notes and transfer the complete
-package, not just a mesh, JSON spec or project filename.
+A prepared model is a run folder that holds everything the solver needs, with
+a script that runs it. You run that script on the computer that has the
+solver:
 
-## Prepare the solver host
+| Solver and launch | Command, from inside the run folder |
+|---|---|
+| Palace on this computer (`direct-local`) | `bash run_palace.sh` |
+| Palace under Slurm (`slurm-single-node`, `slurm-multi-node`) | `sbatch run_palace.sbatch` |
+| AEDT (HFSS, Q3D, Q2D) | `bash run_aedt.sh` |
 
-Before running a handoff, confirm that its target host has the native software and tools for the selected backend. Python extras do not install native Palace or AEDT.
+The script first checks that the solver accepts the input, then solves and
+records how the run ended. This page shows the command line the Palace script
+runs for each launch profile, what the solver computer needs, and how to move
+a run folder there and back.
 
-- **Palace:** provide a Palace executable and any MPI wrapper or scheduler tools required by your host. See the [Palace installation guide](https://awslabs.github.io/palace/stable/install/) and the [execution profiles reference](../reference/specs/execution-profiles.qmd).
-- **AEDT Desktop route:** provide the release selected for the handoff, its license, and the required PyAEDT environment. See the [AEDT runtime contract](../reference/specs/aedt-runtime.qmd).
+## One example {#example}
 
-## Palace: select the host's launch shape
-
-The Palace lessons configure `sim`, build its mesh and write its config.
-You now provide the real host executable, resources and setup commands. These
-values belong to your environment, so this example reads them from study-owned
-environment variables instead of prescribing a site's path or core count.
+[First simulation](../start/first-simulation.qmd) runs Palace on the same
+computer with four MPI processes:
 
 ```python
-import json
-import os
-from pathlib import Path
-
 handoff = sim.prepare_handoff(
-    profile=os.environ["SCGSIM_PALACE_PROFILE"],
-    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
-    resources=json.loads(os.environ["SCGSIM_PALACE_RESOURCES_JSON"]),
-    setup_commands=tuple(json.loads(
-        os.environ.get("SCGSIM_PALACE_SETUP_COMMANDS_JSON", "[]")
-    )),
+    profile="direct-local",
+    executable="palace",
+    resources={"command_style": "wrapper", "processes": 4, "threads": 1},
 )
-identity_note = Path(".artifacts/palace-preparation-handoff-id.txt")
-identity_note.parent.mkdir(parents=True, exist_ok=True)
-identity_note.write_text(handoff.handoff_id + "\n", encoding="utf-8")
-print(handoff.script_path, handoff.archive_path)
 ```
 
-Retain this ID note outside the transferred package. If the backend lesson has
-already created a handoff, retain its ID instead of preparing a second one.
-The [profile contract](../reference/specs/execution-profiles.qmd) gives exact resource keys.
-`direct-local` can call a binary or the Palace wrapper. Slurm uses a binary
-inside the scheduler launcher; do not stack an MPI wrapper on top of `srun`.
-Resource requests are your allocation choice, not SCGSim's scientific criteria.
-
-Review the generated script, transfer/extract the complete archive, then run
-from its directory on the target host:
+`prepare_handoff` writes `run_palace.sh` into the run folder. With
+`executable="palace"`, its settings and its Palace command line are these
+lines:
 
 ```bash
-bash run_palace.sh
+PALACE_EXECUTABLE=palace
+PALACE_PROCESSES=4
+PALACE_THREADS=1
+PALACE_COMMAND_STYLE=wrapper
+"$PALACE_EXECUTABLE" -np "$PALACE_PROCESSES" -nt "$PALACE_THREADS" "$PALACE_CONFIG" 2>&1 | tee -a "$PALACE_LOG"
 ```
 
-For the selected Slurm profile, the corresponding action is:
+`palace` is the launcher script that Palace installs. It starts MPI itself,
+here with 4 processes of 1 thread each, and reads `config.json`
+(`$PALACE_CONFIG`). The output also goes to the log in the run folder's
+`logs/`.
+
+## Palace launch profiles {#palace-select-the-hosts-launch-shape}
+
+`profile` says how Palace is started, and `resources` gives the numbers for
+it. These are the four forms, each with the lines it generated for the same
+model (the setting lines `PALACE_PROCESSES` and `PALACE_THREADS` come from
+`processes` and `threads`, or from Slurm's `ntasks` and `cpus_per_task`):
+
+| `profile` and `resources=` | Script | Palace command line |
+|---|---|---|
+| `"direct-local"`, `{"command_style": "wrapper", "processes": 4, "threads": 1}` | `run_palace.sh` | `"$PALACE_EXECUTABLE" -np "$PALACE_PROCESSES" -nt "$PALACE_THREADS" "$PALACE_CONFIG"` |
+| `"direct-local"`, `{"command_style": "binary", "processes": 1, "threads": 1}` | `run_palace.sh` | `"$PALACE_EXECUTABLE" "$PALACE_CONFIG"` |
+| `"slurm-single-node"`, `{"nodes": 1, "ntasks": 16, "cpus_per_task": 1, "time": "01:00:00"}` | `run_palace.sbatch` | `srun "$PALACE_EXECUTABLE" "$PALACE_CONFIG"` |
+| `"slurm-multi-node"`, `{"nodes": 2, "ntasks": 32, "cpus_per_task": 1, "mem": "64G", "time": "02:00:00"}` | `run_palace.sbatch` | `srun "$PALACE_EXECUTABLE" "$PALACE_CONFIG"` |
+
+For the Slurm profiles, every allocation key becomes an `#SBATCH` line, and
+the scheduler's output goes to the run's log. The single-node example above,
+prepared with a setup command, writes `run_palace.sbatch` with these lines
+among its checks of the run folder:
+
+```python
+handoff = sim.prepare_handoff(
+    profile="slurm-single-node",
+    executable="palace-x86_64.bin",
+    resources={"nodes": 1, "ntasks": 16, "cpus_per_task": 1, "time": "01:00:00"},
+    setup_commands=("module load palace/0.18.1",),
+)
+```
 
 ```bash
-sbatch run_palace.sbatch
+#SBATCH --nodes=1
+#SBATCH --ntasks=16
+#SBATCH --cpus-per-task=1
+#SBATCH --time=01:00:00
+#SBATCH --output=logs/palace-%j.log
+#SBATCH --error=logs/palace-%j.log
+#SBATCH --open-mode=append
+PALACE_EXECUTABLE=palace-x86_64.bin
+PALACE_PROCESSES=16
+PALACE_THREADS=1
+PALACE_COMMAND_STYLE=binary
+{ module load palace/0.18.1; } || { echo 'setup command failed' >&2; exit 2; }
+srun "$PALACE_EXECUTABLE" "$PALACE_CONFIG"
 ```
 
-Submission establishes a scheduler request, not completion. The generated
-script first applies native `--dry-run` to the exact copied config, then invokes
-the solve only if that preflight succeeds. A preflight failure records its own
-stage and `solver_invoked=false`; it must not be interpreted as a failed PDE
-solve. Retrieve the full returned directory, including metadata and logs.
+The rules behind the table:
 
-## AEDT: execute the prepared package locally
+- `executable` is written into the script as you give it, so it must be the
+  command on the computer that runs the script. With `"wrapper"` it is the
+  `palace` launcher script; with `"binary"` and under Slurm it is the Palace
+  program itself (`palace-<arch>.bin` in Palace's installation).
+- `"binary"` on `direct-local` adds no MPI launcher: Palace runs as one
+  process. Use `"wrapper"` to run several processes on one computer.
+- Under Slurm, `srun` starts the Palace program inside the job. The Slurm
+  profiles take only `"binary"`; `resources={"launcher": ...}` replaces `srun`.
+  `slurm-single-node` needs `nodes=1`; `slurm-multi-node` needs at least two
+  nodes and a `mem` or `mem_per_cpu` request. Other keys, such as `partition`
+  or `account`, become `#SBATCH` lines as well.
+- `setup_commands` run before Palace, in order; the script stops if one
+  fails.
+- The numbers are your choice for your computer or allocation; SCGSim gives
+  no recommended values. The
+  [execution profiles reference](../reference/specs/execution-profiles.qmd)
+  lists every key and says which profiles have been run.
 
-The AEDT lesson's `handoff` contains copied geometry where needed, spec,
-metadata, initial receipt, manifest and `run_aedt.sh`. Transfer the full package
-to a host with the handoff's explicitly selected AEDT 2023.2 or 2024.2
-release and PyAEDT 1.3.0. The Desktop transaction runs locally on that same
-host. Run from the extracted directory:
+## What the solver computer needs {#prepare-the-solver-host}
+
+- **Palace:** Palace 0.18.1, the MPI or Slurm installation your profile uses,
+  and `python3`: the script records the run with a small script of its own,
+  which needs only Python's standard library. See the
+  [Palace installation guide](https://awslabs.github.io/palace/stable/install/).
+  SCGSim itself is not needed there.
+- **AEDT:** the AEDT release the run was prepared for (2023.2 or 2024.2), its
+  licence, and a Python environment with SCGSim and its `aedt` extra, which
+  brings PyAEDT 1.3.0 ([Install SCGSim](../start/install.qmd#extras)).
+
+## Run Palace on another computer {#move-a-run}
+
+These steps are for Palace; AEDT has its own, in [AEDT runs](#aedt-execute-the-prepared-package-locally).
+For a Palace run, `prepare_handoff` also writes a copy of the run folder as a
+`.tar.gz` archive beside it (`handoff.archive_path`). To run it elsewhere:
+
+1. Keep `handoff.handoff_id` on the computer that prepared the run, for
+   example in a file outside the run folder. Reading the result later checks
+   the returned folder against it
+   ([Convergence and reports](convergence-and-reports.qmd#palace-bind-the-independently-retained-preparation-id)).
+2. Copy the archive to the solver computer, extract it, and run the script
+   from inside the extracted folder (`bash run_palace.sh` or
+   `sbatch run_palace.sbatch`).
+3. Wait for the run to end. Under Slurm, `sbatch` returns as soon as the job
+   is queued; the run has ended when the job has, and
+   `metadata/palace_returned_run_receipt.json` then records how it ended.
+4. Copy the whole run folder back, with its `results/`, `logs/` and
+   `metadata/`, and put it under the name it was prepared with, beside its
+   `.tar.gz` archive. Reading the result checks that the archive beside the
+   folder is the one prepared with it, so it refuses a renamed folder, a
+   folder without its archive, and a copy of only the result tables.
+
+If the solver rejects the input in its first check (Palace's `--dry-run` on
+`config.json`), Palace never starts solving and the receipt says the run
+stopped at that check, so a rejected input is not mistaken for a failed solve.
+
+## AEDT runs {#aedt-execute-the-prepared-package-locally}
+
+An AEDT run folder holds the model, the request `aedt_spec.json` and
+`run_aedt.sh`, which is one line:
 
 ```bash
-bash run_aedt.sh
+python -m scgsim.aedt.run --handoff "$run_dir/metadata/aedt_handoff_metadata.json" --execute "$@"
 ```
 
-The script invokes the common transaction with explicit execution. If using the
-CLI directly, retain the actual metadata path:
+The run opens its own AEDT session, imports the model, sets up and solves it,
+exports and reads back the results, saves the project and closes AEDT. A
+failure in any step, including a missing export, ends the run as failed
+rather than as a result. Each run folder is used once: prepare a new folder
+for another run.
 
-```bash
-python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execute
-```
+To run it on another computer:
 
-Execution opens the owned Desktop, prepares the selected native family, solves,
-exports and reads back actual outputs, then saves/releases and seals the
-receipt. A native failure, missing export or release failure does not become a
-completed result. A run folder is a single prepared execution unit; use a
-new output directory when preparing another request instead of overwriting its
-receipt/history.
+1. Copy the run folder to the AEDT computer, or only its archive
+   `aedt_handoff.tar.gz` (`handoff.archive_path`, inside the run folder). The
+   archive holds the folder's files without a folder of their own, so extract
+   it into an empty folder.
+2. Run `bash run_aedt.sh` from inside that folder.
+3. When it ends, `metadata/aedt_run_receipt.json` records how; a run that can
+   be read has `"status": "completed"`.
+4. Copy the whole folder back, with the saved project, its results and
+   `metadata/`, and [read it](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)
+   with `resolve_results(folder)`. AEDT's handoff has no ID to keep apart: the
+   receipt in the folder records the run, and reading checks it and the files
+   it records.
 
-Retrieve the complete returned directory. An `.aedt` file alone does not prove
-that saved fields exist, and an isolated EPR JSON cannot replace full-run
-resolution. The next lesson [restarts and resolves the return](convergence-and-reports.qmd)
-without opening a solver. Additional saved-field EPR evaluation has its own
-[native analysis lesson](saved-fields.qmd).
+`bash run_aedt.sh --prepare-only` builds and saves the AEDT project without
+solving. [Parameter sweep on HPC](hpc-sweep.qmd) uses it.
 
-## AEDT: run a prepared-native EPR package on HPC
+## AEDT on HPC {#aedt-run-a-prepared-native-epr-package-on-hpc}
 
-The Desktop route above remains the direct AEDT workflow. For HPC BatchSolve,
-first prepare and read back the native HFSS EPR model on a workstation using
-the AEDT version selected in its request. A JSON handoff by itself is not a
-native model package: package the released preparation with its saved project,
-source, setup/cache/calculator readback, and required dependencies using
-`prepare_native_batch()`.
-
-Transfer the package archive to a solver host with the same selected AEDT
-release, its command-line solver, and an available solver license. This stage
-uses the standalone `run_batch.py`; it needs no SCGSim, PyAEDT, model-building
-environment, or usable Desktop session on that host:
-
-```bash
-python run_batch.py solve --package "$PACKAGE_DIR" --output "$ATTEMPT_DIR"
-```
-
-The command runs the packaged design and setup with the one-host BatchSolve
-recipe. It does not submit a scheduler job. Return the full package and attempt
-to the workstation, including the returned `.aedt` project, complete
-`.aedtresults` directory, attempt record, and raw solver output. On the
-workstation, `collect_native_batch()` opens owned copies through the normal
-transaction, reads the complete adaptive cache history and saved-field EPR,
-then seals and resolves the result without rebuilding geometry or running
-Analyze. The [AEDT runtime contract](../reference/specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
-defines the required evidence and failure rules.
-
-For a parameter sweep, repeat native preparation and packaging for each model
-with separate output directories. Transfer the independent archives together,
-then run and collect each package separately; the batch API does not combine
-multiple models into one solver project. See the
-[HPC EPR sweep guide](hpc-sweep.qmd) for the complete repeated workflow.
+An HFSS Eigenmode run with EPR can be solved on an HPC computer without the
+AEDT desktop: the project is built and saved on a workstation, solved on HPC
+with AEDT's command-line solver, and read back on the workstation.
+[Parameter sweep on HPC](hpc-sweep.qmd) shows the whole procedure.

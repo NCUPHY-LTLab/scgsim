@@ -11,7 +11,7 @@ aliases:
 
 **Sliver** 指的是遠小於模型特徵的 face 或 edge：短於 grid $g$ 的 edge，或只有幾奈米寬的 face。sliver 迫使 mesher 在毀掉元素品質與產生大量細小元素之間做選擇；以 Boolean 為基礎的 CAD 也會在它們周圍失去 topology。
 
-SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人為結果，各有一個具體的機制把它們移除；第四種來自來源幾何本身，被視為幾何本來的樣子：SGB 保留它，並在 **sliver report** 中回報（D2，Human 決定：v1 只回報，不設門檻）。本頁依序說明這四種、report 的格式與每個數字的意義，以及 D2 的決定與日後可能的選項。sliver report 與 D2 的行為在 production（`scgsim.geometry.sgb.checks.slivers`）已實作；本頁的圖與範例數字都由 production 算出；第 1 到第 3 種來源與較粗 grid 的範例是手工建的 stage 層 scene（需要真實輸入沒有的 layer 或次 grid 特徵），執行範例與第 4 種來源用真實輸入。
+SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人為結果，各有一個具體的機制把它們移除；第四種來自來源幾何本身，被視為幾何本來的樣子：SGB 保留它，並在 **sliver report** 中回報（D2：只回報，不設門檻）。本頁依序說明這四種、report 的格式與每個數字的意義，以及 D2 的決定與日後可能的選項。sliver report 與 D2 的行為在 production（`scgsim.geometry.sgb.checks.slivers`）已實作；本頁的圖與範例數字都由 production 算出；第 1 到第 3 種來源與較粗 grid 的範例是手工建的 stage 層 scene（需要真實輸入沒有的 layer 或次 grid 特徵），執行範例與第 4 種來源用真實輸入。
 
 ## 執行範例的觀點
 
@@ -143,7 +143,7 @@ report 是已完成 build 的函式（`sliver_report(labelled, topology, routed)
 
 ## D2：來源近乎重合只回報，不設門檻 {#d2}
 
-第四種來源（來源本身近乎重合）視為幾何本來的樣子；v1 只回報 feature size、位置與 lineage，不設門檻、不移動任何曲線（D2，Human 決定）。下表另外兩個 policy 不是 v1 要做的選擇，只是日後可能的選項；若有一天加入，其中每一個門檻都是 Human Gate，pipeline 也不會自行套用。
+第四種來源（來源本身近乎重合）視為幾何本來的樣子；只回報 feature size、位置與 lineage，不設門檻、不移動任何曲線（D2）。下表另外兩個 policy 不是現在要做的選擇，只是日後可能的選項；若有一天加入，其中每一個門檻都是 Human Gate，pipeline 也不會自行套用。
 
 ::: {.askr-table-compact}
 | Policy | 做什麼 | 成本 / 風險 | 狀態 |
@@ -170,20 +170,20 @@ report 是已完成 build 的函式（`sliver_report(labelled, topology, routed)
 production 的極端案例 catalogue 為 sliver 的規則提供了寫出與檢查層級的證據（見[Validation](validation.qmd#catalogue)）：兩個 layer 的邊緣相距 0.4 g（`near_coincident_layers_sub_grid`）時會合併，沒有 sliver，最窄 face 是 1 µm；相距 2 g（`near_coincident_layers_2g`）時是一個真實的 2 nm 寬 face，而這個模型在 Route B 與 Route C 仍通過全部 check，包括 Gmsh 載入、`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer` 與 conformal mesh。也就是說，OCCT 與 mesh conformity 不會抓到這種 sliver，這正是它只能靠 report 與 Human 決定處理的原因。catalogue 現在逐列記錄 mesh 品質（粗略 mesh 的 `minSICN`、`gamma`）與 drift，D2 與 D7 的重新評估條件因此有依據：54 個建出的列沒有 ≤ 0 的元素；`near_coincident_layers_2g` 的 `minSICN` 最小值為 0.001（Route B 與 C），`edges_1_to_3_g` 為 0.0007 到 0.0009；最大 snap drift 為 0 g。stage 層的執行範例 `pad_in_ground_B_bands`（`tests/sgb_emit_cases.py`）在 60 µm 的粗略 mesh（遠粗於 0.1 µm 的 slab）有一個 `minSICN` 為 0 的扁平元素。這是 meshing 的人為結果，不是幾何缺陷：0.1 µm 的 band 條帶被約 60 µm 的元素 mesh，加上 layout 的對稱，使四條平行的 band 邊界 edge 各在 x = 0 有一個 node，3D Delaunay 把這四個共線的 node 連成體積為零的四面體。幾何通過 OCCT 檢查（含 self-interference），Gmsh API 的 oracle 對同一個 topology 重現同樣的四面體；改用 HXT 並把最大尺寸設為 bounding box 對角線的 1/20、不設 size field（[測試用的 mesh 配方](emission.qmd#mesh-recipe)）時，HXT 在這個 case 會中止，改用預設的 3D 演算法後 `minSICN` 為 0.0007，沒有扁平元素。band 的 mesh 尺寸是 Palace adopter 的責任（見[使用契約](consumer-contract.qmd#sidecar)）。這些是記錄，D2 不變，不是門檻。
 
 ::: {.callout-note title="v1 的決定：只回報，不設門檻"}
-Human 已決定（D2）：v1 不設任何 sliver 門檻，上表兩個選用 policy 都不啟用。來源近乎重合被視為幾何本來就長這樣，SGB 照樣建出並回報。只有在真實 layout 或極端案例中出現由窄 face 造成的畸形 mesh 元素時，才重新評估是否需要門檻。
+D2 的決定：不設任何 sliver 門檻，上表兩個選用 policy 都不啟用。來源近乎重合被視為幾何本來就長這樣，SGB 照樣建出並回報。只有在真實 layout 或極端案例中出現由窄 face 造成的畸形 mesh 元素時，才重新評估是否需要門檻。
 :::
 
 ::: {.callout-warning title="陷阱：policy 會改變幾何"}
-兩個選用 policy 都會把幾何改動至多它們的門檻，所以日後若要啟用，數值必須由 Human 指定並寫進 handoff，report 也要記錄每一次移動（位置、距離、carrier、Entity）。
+兩個選用 policy 都會把幾何改動至多它們的門檻，所以日後若要啟用，數值必須明確指定並寫進 handoff，report 也要記錄每一次移動（位置、距離、carrier、Entity）。
 :::
 
 ## 小結
 
 - snap rounding 移除因量化而短於 $g$ 的 edge；local arrangement 移除不相關 layer 的投影；dissolution 移除兩側 label 相同的 seam。這三項各自只涵蓋上面具體說明的情形。
 - 窄的 face 仍然可能存在：來源本身相距幾奈米的邊界是來源事實，會被保留，並連同位置、寬度、carrier 與 Entity 一起回報。
-- 第四種來源（來源本身近乎重合）視為幾何本來的樣子；v1 只回報 feature size、位置與 lineage，不設門檻、不移動任何曲線（D2，Human 決定）。report 只在精確的 carrier 上量測。
+- 第四種來源（來源本身近乎重合）視為幾何本來的樣子；只回報 feature size、位置與 lineage，不設門檻、不移動任何曲線（D2）。report 只在精確的 carrier 上量測。
 - 下一步：驗證器保證什麼、如何失敗，見[結構 invariant 與失敗行為](validation.qmd)。
 
 ## 補充：重現資料
 
-範例由 `zh-TW/docs/contribute/sgb-design/_figures/slivers.py` 以 production 套件 `scgsim.geometry.sgb`（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行）建構並以 `sliver_report` 量測；數字在 `figures/slivers-numbers.json`。第 1 到第 3 種來源與較粗 grid 的替代模擬是手工建的 stage 層 catalogue（用 `tests/sgb_scenes.py` 的 helper）；第 4 種來源的環形 gap 與 derived 對 source 的例子，以及執行範例的 report 表，用 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`（環形 gap 與 derived 例子為 Route A，以 `thin_film` profile 詮釋；測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原），表中標為 stage 層的列取自 `tests/sgb_emit_cases.py` 的 `CASES`。production 的欄位與數值來自 `sliver_report`；catalogue 數字由 `python tests/sgb_catalogue_report.py` 產生。Brief 對應第 10 節與 open decision D2；production 模組為 `checks/slivers`（`report`、`feature_size`）、`arrangement/derivation/contacts`、`arrangement/noding`、`arrangement/labelling/dissolve`；測試 `tests/test_sgb_slivers.py`、`tests/test_sgb_extreme_cases.py`。Snap rounding 的文獻：J. D. Hobby（1999），*Practical segment intersection with finite precision output*；L. J. Guibas 與 D. H. Marimont（1998），*Rounding arrangements dynamically*；D. Halperin 與 E. Packer（2002），*Iterated snap rounding*（見[建立 arrangement](arrangement.qmd)）。名詞見[詞彙表](index.qmd#glossary)。
+範例由 `zh-TW/docs/contribute/sgb-design/_figures/slivers.py` 以 production 套件 `scgsim.geometry.sgb`（在 repository 根目錄以 `uv run --locked --no-sync python` 執行）建構並以 `sliver_report` 量測；數字在 `figures/slivers-numbers.json`。第 1 到第 3 種來源與較粗 grid 的替代模擬是手工建的 stage 層 catalogue（用 `tests/sgb_scenes.py` 的 helper）；第 4 種來源的環形 gap 與 derived 對 source 的例子，以及執行範例的 report 表，用 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`（環形 gap 與 derived 例子為 Route A，以 `thin_film` profile 詮釋；測試的建構函式固定使用 `solid` profile，script 在建構時換掉 profile、並讓兩個金屬共用一個物理 layer 宣告，建完即還原），表中標為 stage 層的列取自 `tests/sgb_emit_cases.py` 的 `CASES`。production 的欄位與數值來自 `sliver_report`；catalogue 數字由 `python tests/sgb_catalogue_report.py` 產生。Brief 對應第 10 節與 open decision D2；production 模組為 `checks/slivers`（`report`、`feature_size`）、`arrangement/derivation/contacts`、`arrangement/noding`、`arrangement/labelling/dissolve`；測試 `tests/test_sgb_slivers.py`、`tests/test_sgb_extreme_cases.py`。Snap rounding 的文獻：J. D. Hobby（1999），*Practical segment intersection with finite precision output*；L. J. Guibas 與 D. H. Marimont（1998），*Rounding arrangements dynamically*；D. Halperin 與 E. Packer（2002），*Iterated snap rounding*（見[建立 arrangement](arrangement.qmd)）。名詞見[詞彙表](index.qmd#glossary)。

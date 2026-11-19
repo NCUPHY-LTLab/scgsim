@@ -1,6 +1,6 @@
 ---
-title: "Provenance and Data Boundaries"
-description: "Source and result identity categories plus public/private publication boundaries."
+title: "Provenance and data boundaries"
+description: "What identities a run and a report record, and what public documentation and fixtures may contain."
 scgsim-kind: "contract"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/provenance"
@@ -8,43 +8,49 @@ aliases:
   - ../provenance.html
 ---
 
-## Public provenance contract
+A result carries enough identity to show which code, inputs and solver
+produced it. This page lists what a run and its report record, for anyone who
+reads a run record or changes what one holds, and what public documentation
+may contain.
 
-A run or report binds, as applicable:
+## What a run records {#public-provenance-contract}
 
-- SCGSim distribution version and measured runtime-source module/content identity;
-- SCGSim Git revision observation when available, and backend revision;
-- Geometry source and topology identity;
-- solver and schema version;
-- machine profile and run receipt;
-- config, mesh, handoff, result, and report artifact identities;
-- validation and failure state.
+A run or report binds, as they apply:
 
-Use the returned run folder together with its preparation-side source and model
-notes. A distribution version alone does not identify the runtime code bytes,
-layout, settings or native result of a particular study. The current
-runtime-source manifest and content digest identify the module bytes used for
-execution; a Git revision is recorded only when truthfully available.
+- the SCGSim distribution version and the measured identity of the runtime
+  source (its modules and their content);
+- the SCGSim Git revision when it is truthfully known, and the backend's
+  revision;
+- the identity of the geometry source and its topology;
+- the solver and schema versions;
+- the machine profile and the run receipt;
+- the identities of the config, mesh, handoff, result and report files;
+- the validation and failure state.
+
+Read a returned run folder together with the source and model records of its
+preparation. A distribution version alone does not identify the code bytes,
+layout, settings or native result of a study; the runtime-source manifest and
+its content digest identify the module bytes that ran.
 
 AEDT computes its runtime source on each use: the import closure of every
-module under `scgsim/aedt` and the two AEDT visualization loaders, recorded
-under `runtime-source.v30`. Preparation and execution record their module
-bytes and content digest separately. A result whose runtime source has an
+module under `scgsim/aedt` and the two AEDT visualization loaders, recorded as
+`scgsim.aedt.runtime-source.v30`. Preparation and execution record their
+module bytes and digest separately. A result whose runtime source has an
 earlier schema is refused; read it with the SCGSim commit that wrote it
 ([AEDT runtime source](../reference/specs/aedt-runtime.qmd#runtime-source)).
 
-The current Palace geometry authority is `scgsim.geometry.sgb`. Palace
-continues to serialize the established `scgsim_sgb` field, whose current value
-names that authority. The field name does not request an import from the former
-package. Historical receipt values retain the module identities they recorded
-and are not rewritten to the current paths.
+The Palace handoff and mesh manifest have a field `scgsim_sgb`. It holds the
+name of the geometry builder that made the model, today
+`scgsim.geometry.sgb`; the field's name is historical and asks for no import.
+An older receipt keeps the module names it recorded; they are not rewritten
+to today's paths.
 
-## Publication boundary
+## What public documentation may contain {#publication-boundary}
 
-Public SCGSim documentation and fixtures must contain no private names, paths,
-dimensions, screenshots, meshes, configs, receipts, data, or artifacts.
-Sanitization alone does not grant publication authority.
+Public SCGSim documentation and fixtures contain no private names, paths,
+dimensions, screenshots, meshes, configs, receipts, data or artifacts.
+Removing identifying details does not by itself make material publishable.
 
-Private consumer validation may inform a public aggregate statement only when
-the statement has separate publication authority and contains no private
+Validation on private data may support a public aggregate statement only when
+that statement has its own permission to publish and contains no private
 identity or payload.

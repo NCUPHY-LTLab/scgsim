@@ -11,11 +11,11 @@ aliases:
 
 **問題。**這些數字是在什麼環境量到的？要如何重現？
 
-**結果。**全部量測都在同一台工作站上，以單一 commit 的 production SGB core、seed 2 的隨機 layout 完成。量測腳本寫出 JSON 資料檔；一個繪圖腳本把這些檔案轉成本研究的圖表。
+**結果。**全部量測都在同一台工作站上，以 seed 2 的隨機 layout 完成；SGB core 是它開發分支合併前的修訂版本 `c034f61`。這個分支已不在本 repository 中，所以無法從它再量一次完全相同的數字。量測腳本可以在本 repository 的 checkout 上執行，量的是當時 checkout 的版本；繪圖腳本把保存的資料檔轉成本研究的圖表。
 
 ## 適用於所有數字的一項限制
 
-每個 case 只跑一次，機器也沒有與其他工作隔離：Gmsh API 與 validator 執行前後，它的 load average 在 1.6 到 3.5 之間，scaling 的那次執行則沒有記錄。有多次量測的時間，彼此相差在約 25% 以內（direct writer 在 1,000 個特徵：0.35 s 與 0.44 s；Gmsh API 在 2,000 個特徵：63.3 s 與 64.7 s）。Gmsh API 在 2,000 個特徵的執行重複了三次，保存的 64.7 s 是最後一次；機器上另一個工作讓第一次花了 83.6 s。請用這些數字看量級與斜率，不要用它們比較兩個 case 之間的小差異。
+每個 case 只跑一次，機器也沒有與其他工作隔離。有多次量測的時間，彼此相差在約 25% 以內（direct writer 在 1,000 個特徵：0.35 s 與 0.44 s；Gmsh API 在 2,000 個特徵：63.3 s 與保存的 64.7 s）。請用這些數字看量級與斜率，不要用它們比較兩個 case 之間的小差異。
 
 ## 機器
 
@@ -29,7 +29,7 @@ aliases:
 
 | 項目 | 版本 |
 |---|---|
-| SGB core（`scgsim.geometry.sgb`，production 套件） | 其開發分支合併前的 commit `c034f61` |
+| SGB core（`scgsim.geometry.sgb`，production 套件） | 其開發分支合併前的修訂版本 `c034f61` |
 | Python | 3.12.14 |
 | Gmsh（Python API） | 4.15.2 |
 | OCP（`cadquery-ocp-novtk`，OCCT 檢查使用） | 7.8.1.1.post1，建立在 OCCT 7.8.1 之上 |
@@ -44,19 +44,19 @@ scaling 量測 1,000、5,000 與 20,000 個特徵；每個 case 在自己的 Pyt
 
 ## 資料檔
 
-這些檔案與 SGB 設計頁面的資料放在一起，位於 `zh-TW/docs/contribute/sgb-design/figures/`。
+這些檔案與 SGB 設計頁面共用，放在 `zh-TW/docs/contribute/sgb-design/figures/`；腳本也在那些頁面旁的 `_figures/`。
 
 | 檔案 | 內容 | 產生者 |
 |---|---|---|
 | `why-scaling-measured.json` | 每個 N 一個 case：各 stage 的時間、數量、peak memory、identity digest、寫出的檔案、Gmsh 載入與 `verify_loaded` | `why_scaling.py measure` |
 | `why-scaling-oracle.json` | Gmsh API 建構在 500、1,000 與 2,000 個特徵時的時間與 solid 質量 | `why_scaling.py oracle` |
-| `why-validator-scaling.json` | 十二項結構檢查在 1,000、5,000 與 20,000 個特徵時的時間；這是第二組計時，本研究不繪製 | `why_scaling.py validators` |
+| `why-validator-scaling.json` | 結構檢查的十二個計時群組在 1,000、5,000 與 20,000 個特徵時的時間，以及報告記錄的檢查數（31）；這是第二組計時，本研究不繪製 | `why_scaling.py validators` |
 | `emission-timing-data.json` | Gmsh API 與 direct writer 逐步驟的比較，以及每一項檢查（結構檢查與載入後的檢查）的時間 | `emission.py --measure` |
 | `emission-example-numbers.json` | 範例模型的數量，以及測試模型上的 OCCT 檢查時間 | `emission.py` |
 
 ## 指令
 
-量測腳本在本 repository 的 checkout 根目錄執行，使用其鎖定的開發環境（已含 Gmsh 與 OCP），並從該 checkout 的 `tests/` 匯入測試端 builder。腳本量的是當時 checkout 的版本：本研究各頁的數字來自 commit `c034f61`，在較新的版本上執行，得到的是該版本的數字。
+量測腳本在本 repository 的 checkout 根目錄執行，使用其鎖定的開發環境（已含 Gmsh 與 OCP），並從該 checkout 的 `tests/` 匯入測試端 builder。執行一次會量當時 checkout 的版本，並以它自己的數字覆寫保存的資料檔，這些數字就會與本研究各頁的數字不同。
 
 ```bash
 uv sync --locked --group dev
@@ -66,10 +66,10 @@ uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/why_s
 uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/emission.py --measure
 ```
 
-本研究的圖表只需要 `matplotlib` 與這些 JSON 檔，由同一個腳本為兩種語言寫出：
+本研究的圖表只需要 `matplotlib` 與這些 JSON 檔，由同一個腳本為兩種語言寫出；以保存的資料執行時，它寫出相同的表格與數字，SVG 檔只有 matplotlib 自動產生的元素 id 不同：
 
 ```bash
-python3 docs/contribute/research/geometry-build/_figures/plots.py
+uv run --locked --no-sync python docs/contribute/research/geometry-build/_figures/plots.py
 ```
 
 腳本把 SVG 圖與 Markdown 表格寫到各語言頁面旁的 `figures/`，並寫出 `numbers.json`，內含文字引用的數值。資料只能透過重跑量測腳本來修改；繪圖腳本本身不含任何數字。

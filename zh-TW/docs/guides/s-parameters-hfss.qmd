@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
-title: "AEDT：HFSS Driven Terminal"
-description: "在 SGB 模型上準備雙埠 HFSS Driven Terminal 網路，集總埠位於其埠片上。"
+title: "以 HFSS 計算 S 參數"
+description: "在版圖中畫好的埠薄片上放集總埠，準備兩埠 HFSS Driven Terminal 計算，以及版圖為此需要什麼。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-terminal"
@@ -10,7 +10,25 @@ aliases:
   - ../course/aedt-driven-modal.html
 ---
 
-HFSS Driven Terminal 求解 SGB 模型的雙埠網路，也就是 Palace 網格化的同一個模型。請從一個 `GeometryPlan` 快照開始，其版圖帶有兩個集總埠薄片，各位於一個埠與其導體相接之處。每個埠是一個 `LumpedTerminalPort`，指名它的薄片（`port_sheet_id`，即模型的 `PORT::<port_sheet_id>` 群組）、薄片相接的訊號與參考 Entity，以及埠阻抗。
+Ansys AEDT 的 HFSS Driven Terminal 會在一段頻率掃描上回傳模型的兩埠 S 參數，並附上 Touchstone 檔。SCGSim 由計畫建立 3D 模型（與 Palace 建網格用的是同一個模型），並在版圖中畫好的兩片埠薄片上各放一個集總埠（lumped port）。這個儲存庫沒有 Driven Terminal 的計算結果紀錄。
+
+[]{#ports-that-wait-for-issue-135}在本版本中，埠只有放在埠薄片上的集總埠這一種：Region 表面上的波埠（wave port），以及整個 HFSS Driven Modal 求解類型都不提供。宣告了這類埠的請求會在 AEDT 啟動前被拒絕；[issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135) 追蹤這兩項。
+
+## 版圖需要什麼 {#what-the-layout-needs}
+
+埠薄片（port sheet）是版圖中位於埠圖層上的一小塊矩形，一端接觸埠的訊號金屬，另一端接觸參考金屬（通常是接地）。元件在 `component_semantics` 的埠清單中宣告它，並註明它所在的金屬層。[第一個模擬的版圖](../start/first-simulation.qmd#the-layout)中，焊墊東側的橘色薄片就是一例：`square_pad_capacitor` 把它宣告為 `o_junction_lumped`，它跨過 20 µm 的間隙，連接焊墊與接地。
+
+兩埠網路需要兩片這樣的薄片。這些指南所用版本的 OrcaPen SC PDK 中，沒有任何版圖有兩片；請在你自己的元件中加上。`plan.prepare()` 之後，埠可以引用的薄片 ID 可以這樣列出：
+
+```python
+print([region.port_sheet_id for region in snapshot.geometry_input.port_sheet_regions])
+```
+
+對第一個模擬的計畫，它印出 `['PORT_SHEET__chip/o_junction_lumped__0000']`。
+
+## 準備計算 {#prepare-the-run}
+
+下面的程式是兩埠請求的形式。薄片 ID `port_1` 與 `port_2`，以及 Entity `chip/pad_1`、`chip/pad_2`、`chip/ground`，代表你版圖中對應的名稱；Entity 是版圖中的一個具名圖形，例如 `chip/PAD`。`snapshot` 是你的計畫準備出的快照，做法如[為 AEDT 準備共平面波導](aedt-cpw-inputs.qmd)。
 
 ```python
 from pathlib import Path
@@ -44,14 +62,11 @@ handoff = prepare_hfss_driven_from_geometry(
 print(handoff.spec_path, handoff.archive_path)
 ```
 
-埠屬於模型：`prepare_sgb_model(..., ports=...)` 把每個埠綁定到它的埠片，並拒絕模型中不存在的薄片。Driven 請求正好需要兩個埠 1 與 2，名稱不同，並共用一個有序參考。每個薄片都必須連接該埠的一個訊號 Entity 與一個參考 Entity。Driven 模型不帶接面、集總 RLC 或 Surface-EPR 規格；這些屬於 HFSS Eigenmode。交接在其 `model/` 資料夾中攜帶模型的 STEP、BREP、sidecar 與 guard。
+各項輸入的意思：
 
-在 AEDT 中，執行會像 Eigenmode 一樣把 STEP 匯入空白的 Driven Terminal 設計，並把每個埠放在它的薄片上：薄片各面上的 Terminal 集總埠，以及位於薄片與訊號導體相接邊上的 Terminal。[執行階段契約](../reference/specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)列出這些規則。回傳解析器會檢查收據的幾何就是請求的模型匯入後的樣子、每個埠與 Terminal 都是從已儲存的設計中、在指定的面與邊上讀回，並檢查所宣告掃頻的有序 S 參數與 Touchstone。
+- 每個 `LumpedTerminalPort` 依序給出埠的編號（1 或 2）、名稱、所在的埠薄片、薄片連接的訊號 Entity 與參考 Entity，以及埠阻抗（Ω）。兩個埠共用同一個參考。
+- `prepare_sgb_model(..., ports=...)` 建立模型，並把每個埠綁到它的薄片上；模型中沒有的薄片，或沒有同時連接該埠某個訊號 Entity 與某個參考 Entity 的薄片，都會被拒絕。
+- `HfssRunControl` 設定求解與掃描：這裡是 4 GHz 到 8 GHz 共 201 點。請依你需要的響應選擇範圍與點數（[掃描參考](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)）。
+- Driven 模型不帶接面、集總 RLC 負載或表面 EPR；這些屬於 [HFSS 本徵模態](modes-hfss.qmd)。
 
-範例請求 201 個點。請依研究所需的網路響應選擇 `points` 與掃頻範圍；原生設定與回傳讀回都會保留此請求。[掃頻參考](../reference/specs/aedt-runtime.qmd#hfss-driven-sweep-count)列出其精確的輸入規則。
-
-請先檢查複製規格中的埠，再[在原生主機上執行](run-elsewhere.qmd)並[重新開始與解析](convergence-and-reports.qmd)，之後才把網路響應交給下游分析。原生基準與自適應證據描述的是這次執行，與物理響應分開。
-
-### 等待 issue #135 的埠 {#ports-that-wait-for-issue-135}
-
-Region 面上的波 `TerminalPort` 與每一種 Driven Modal 埠（`ModalPort`）在 SGB 模型上都還沒有實作。宣告這類埠的請求會被 `prepare_sgb_model` 拒絕，並指向 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)；在該 issue 完成前沒有 Driven Modal 工作流程；在那之前，雙埠元件的網路響應請用上述集總埠取得。GDS 匯入路徑（`HfssDrivenSpec`、`gds_path`、`LayerImport`、`ObjectBinding`、`LengthMeshSpec`）已移除。
+在 AEDT 中，這次計算會把模型匯入空白的 Driven Terminal 設計，並在每片薄片上放一個集總埠，其端子位在薄片與訊號金屬相接的邊上（[參考](../reference/specs/aedt-runtime.qmd#hfss-driven-terminal-sgb)）。在有 AEDT 的電腦上執行這個資料夾（[執行已準備的模型](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)），再讀取它（[收斂與報告](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）：讀取時會確認每個埠都是從儲存的設計中、在指定的薄片上讀回的，並依埠的順序回傳 S 參數與 Touchstone 檔。

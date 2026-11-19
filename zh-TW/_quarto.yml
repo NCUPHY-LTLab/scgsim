@@ -98,8 +98,8 @@ website:
       - docs/guides/capacitance-palace.qmd
       - docs/guides/capacitance-q3d.qmd
       - docs/guides/modes-palace.qmd
-      - docs/guides/modes-hfss.qmd
       - docs/guides/aedt-cpw-inputs.qmd
+      - docs/guides/modes-hfss.qmd
       - docs/guides/s-parameters-hfss.qmd
       - docs/guides/line-parameters-q2d.qmd
     - section: 結果
@@ -128,6 +128,7 @@ website:
     contents:
     - docs/concepts/problems.qmd
     - docs/concepts/geometry.qmd
+    - docs/concepts/routes.qmd
     - docs/concepts/surface-epr.qmd
     - docs/concepts/model-and-numerics.qmd
   - id: reference
@@ -153,6 +154,7 @@ website:
       - docs/reference/specs/execution-profiles.qmd
       - docs/reference/specs/mesh-quality.qmd
       - docs/reference/specs/report-model.qmd
+      - docs/reference/specs/layout-check.qmd
   - id: contribute
     title: 頁面
     style: floating
@@ -162,29 +164,13 @@ website:
     - docs/contribute/code-map.qmd
     - docs/contribute/architecture.qmd
     - docs/contribute/ownership.qmd
-    - docs/contribute/documentation-map.qmd
-    - docs/contribute/goals-and-upstream.qmd
-    - docs/contribute/provenance.qmd
-    - docs/contribute/notebook-contract.qmd
     - section: 內部實作
       contents:
+      - docs/contribute/internals/geometry.qmd
+      - docs/contribute/internals/api-owners.qmd
       - docs/contribute/internals/aedt-runtime.qmd
       - docs/contribute/internals/geometry-plan.qmd
       - docs/contribute/internals/report-records.qmd
-    - section: 研究
-      contents:
-      - docs/contribute/research/index.qmd
-      - section: 幾何建構效能
-        contents:
-        - docs/contribute/research/geometry-build/index.qmd
-        - docs/contribute/research/geometry-build/scaling.qmd
-        - docs/contribute/research/geometry-build/emission-and-load.qmd
-        - docs/contribute/research/geometry-build/validation-cost.qmd
-        - docs/contribute/research/geometry-build/reproduction.qmd
-    - section: 歷史
-      contents:
-      - docs/contribute/history/aedt-capacitance-pre-v3.qmd
-      - docs/contribute/history/curved-source-installation.qmd
     - section: SGB 設計
       contents:
       - docs/contribute/sgb-design/index.qmd
@@ -202,9 +188,26 @@ website:
       - docs/contribute/sgb-design/emission.qmd
       - docs/contribute/sgb-design/brep-format.qmd
       - docs/contribute/sgb-design/consumer-contract.qmd
-      - docs/contribute/sgb-design/consumer-mapping.qmd
       - docs/contribute/sgb-design/pipeline-reference.qmd
       - docs/contribute/sgb-design/decisions.qmd
+    - docs/contribute/provenance.qmd
+    - docs/contribute/notebook-contract.qmd
+    - docs/contribute/documentation-map.qmd
+    - docs/contribute/goals-and-upstream.qmd
+    - section: 研究
+      contents:
+      - docs/contribute/research/index.qmd
+      - section: 幾何建構效能
+        contents:
+        - docs/contribute/research/geometry-build/index.qmd
+        - docs/contribute/research/geometry-build/scaling.qmd
+        - docs/contribute/research/geometry-build/emission-and-load.qmd
+        - docs/contribute/research/geometry-build/validation-cost.qmd
+        - docs/contribute/research/geometry-build/reproduction.qmd
+    - section: 歷史
+      contents:
+      - docs/contribute/history/aedt-capacitance-pre-v3.qmd
+      - docs/contribute/history/curved-source-installation.qmd
 format:
   askr-html:
     html-math-method: mathjax

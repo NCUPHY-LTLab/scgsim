@@ -1,34 +1,42 @@
 ---
 title: "選擇物理問題"
-description: "依電路所需物理量，連結電容、共振、端口響應與矩陣萃取。"
+description: "電容、共振模態或驅動響應：每種計算問什麼、回傳什麼、由哪個求解器執行，並附 SimplePad 的數字。"
 lang: zh-TW
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/concepts/problems"
 ---
 
-同一張圖可以支援多種計算。物理問題決定激發方式、施加哪些邊界，以及答案代表什麼。
+從同一個版圖，SCGSim 可以算出三種答案：電容矩陣、共振模態，或埠上訊號的響應。請選輸出正好是你需要的電路量的那一種。以下例子都是[第一個模擬](../start/first-simulation.qmd)的焊墊：200 µm 見方的焊墊，位在接地金屬中 20 µm 的間隙裡，晶片 1000 µm 見方。
 
-## 電容：導體電壓引起的電荷響應 {#capacitance-charge-response-to-conductor-voltage}
+| 問題 | 它問什麼 | 它回傳什麼 | 求解器 | 例子 |
+|---|---|---|---|---|
+| 電容 | 每個導體每伏特帶多少電荷 | 電容矩陣，單位為法拉 | Palace Electrostatic、Q3D | 焊墊與接地金屬之間 112.54 fF（[第一個模擬](../start/first-simulation.qmd)；第一個網格上解一次） |
+| 共振模態 | 版圖在哪些頻率共振，能量在哪裡 | 每個模態的頻率與 $Q$；要求時另有能量參與率 | Palace Eigenmode、HFSS Eigenmode | 間隙上接 10 nH 接面時，模態 1 為 5.135702 GHz（[Palace 執行紀錄](https://github.com/NCUPHY-LTLab/scgsim/issues/84#issuecomment-6789403273)；最多兩次細化） |
+| 驅動響應 | 版圖在每個頻率下，對埠上訊號如何響應 | 隨頻率變化的複數 S 參數，輸出 CSV 與 Touchstone | HFSS Driven Terminal | 這些頁面還沒有記錄的結果 |
 
-靜電萃取會在指定端點電壓下求解導體電荷。電容矩陣描述電荷與電壓的關係，模型也會保留導體順序與接地選擇。此矩陣可提供電路的焊盤對地電容或互電容。Palace Electrostatic 與 Q3D 是已實作的途徑。外殼外部接地的有限模型，與只將選定實體導體接地的模型不同。
+第四種計算 Q2D，給出傳輸線截面的每單位長度性質；見[下文](#finite-extraction-versus-a-cross-section)。
 
-## 共振：場與電路模型的模態 {#resonance-modes-of-a-field-and-circuit-model}
+## 電容 {#capacitance-charge-response-to-conductor-voltage}
 
-本徵模計算會找出指定模型的共振頻率與場。線性化接面可用電感支路表示；該支路會參與模態，不能只靠圖中的焊盤表示。理想集總 LC 模型的 $f_0=1/(2\pi\sqrt{LC})$ 可作為解讀參考；電磁模型則包含分布場與所選邊界。
+電容計算依序把每個**端子**（你指定的導體）設為 1 V，接地保持 0 V，再算出每個導體上的電荷。結果是依端子順序排列的電容矩陣；對角與非對角元素怎麼讀，見[第一個模擬](../start/first-simulation.qmd#read-the-result)。哪些導體接地也是問題的一部分：外框牆面接地的模型，和只有晶片接地金屬為 0 V 的模型不同。
 
-Palace 與 HFSS 提供已實作的本徵模途徑。可選的 EPR 分析會詢問模態中的能量分布，以及指定損耗假設代表什麼。解讀這些比例前，請先閱讀[能量參與](surface-epr.qmd)。
+## 共振模態 {#resonance-modes-of-a-field-and-circuit-model}
 
-## 驅動響應：以特定頻率激發端口 {#driven-response-excite-a-port-at-a-frequency}
+本徵模態（Eigenmode）計算找出模型共振的頻率，以及每個模態的場。Josephson 接面以線性電感的形式出現，放在跨過間隙的埠片上，例子中是 10 nH；只畫出焊墊本身並沒有這個元件。對理想的集總電路，$f_0=1/(2\pi\sqrt{LC})$ 是好用的參考值，但場計算包含分布的場與晶片周圍的外框。
 
-驅動問題探討模型對外加激發的響應。HFSS Modal 與 Terminal 工作流程會提供複數 S 參數。端口模型、參考導體或積分方向都是問題定義的一部分。驅動響應中的峰值，與本徵模結果不是相同的資料結構。
+Palace 與 HFSS 都能執行本徵模態計算。要求時，它們也會算能量參與率：模態能量在哪裡，以及你給的損耗假設對 $Q$ 代表什麼；使用這些數字前，請先讀[能量參與率與 Surface EPR](surface-epr.qmd)。
 
-## 有限模型萃取與截面萃取 {#finite-extraction-versus-a-cross-section}
+## 驅動響應 {#driven-response-excite-a-port-at-a-frequency}
 
-Q3D 會為有限三維模型萃取導體矩陣。Q2D 會為明確定義的截面萃取每單位長度性質。兩者不能自動互相取代；僅憑每單位長度矩陣，無法還原有限長度、端部幾何與端口處理方式。
+驅動計算在埠上加訊號，算出掃頻中每個頻率的響應。HFSS Driven Terminal 以版圖埠片上的兩個集總埠做這件事，回傳 S 參數。驅動響應中的峰值與本徵模態頻率是兩種不同的結果，不能互相取代。Palace Driven 尚未實作；HFSS 有哪些埠可用，見[支援的計算](../reference/supported-calculations.qmd)。
 
-::: {.callout-tip title="先選擇物理量，再選擇求解器"}
-先寫下所需的導體配對、模態或端口響應、單位，以及預定的電路模型用途，再從[能力表](../reference/supported-calculations.qmd)選擇支援的工作流程。
+## 截面 {#finite-extraction-versus-a-cross-section}
+
+Q3D 萃取有限 3D 模型的矩陣。Q2D 萃取你宣告的截面的每單位長度電容、電導、電感與電阻，前提是傳輸線沿長度方向均勻。兩者不能互相取代：每單位長度矩陣不含有限長度、端點或埠的任何資訊。
+
+::: {.callout-tip title="先選物理量，再選求解器"}
+先寫下你需要的導體對、模態或埠響應、它的單位，以及電路模型會怎麼用它。再從[支援的計算](../reference/supported-calculations.qmd)選擇工作流程。
 :::
 
-原生公式說明請參閱 [Palace 問題類型](https://awslabs.github.io/palace/stable/guide/problem/)與 [PyAEDT 使用者指南](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html)。
+求解器本身的數學形式，見 [Palace 問題類型](https://awslabs.github.io/palace/stable/guide/problem/)與 [PyAEDT 使用者指南](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html)。

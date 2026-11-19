@@ -80,7 +80,7 @@ numbers the page quotes.  Set `SGB_QA_DIR` to a folder to also get a PNG copy of
 
 All six build models in a few seconds each and never edit the package.
 
-## Consumer contract (`consumer-contract.qmd`, `consumer-mapping.qmd`)
+## Consumer contract (`consumer-contract.qmd`)
 
 | Script | Input | Writes | Shows |
 |---|---|---|---|

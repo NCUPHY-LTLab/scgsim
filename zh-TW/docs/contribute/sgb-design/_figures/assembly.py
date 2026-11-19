@@ -20,7 +20,7 @@ level between the metal's bottom and top; the walls figure therefore uses the st
 The "every level cuts every wall" counts are computed by replacing ``assembly.walls._level_cuts_wall`` with a constant
 ``True`` while building (the script restores it); nothing else changes.
 
-Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/assembly.py
+Run:  uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/assembly.py
 """
 
 from __future__ import annotations

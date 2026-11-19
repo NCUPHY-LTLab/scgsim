@@ -1,4 +1,4 @@
-"""Excerpts and tables for ``consumer-contract.qmd`` and ``consumer-mapping.qmd``.
+"""Excerpts and tables for ``consumer-contract.qmd``.
 
 Run from the repository root with the package's environment (gmsh comes with the ``palace`` extra, OCP with the
 ``occt`` group)::

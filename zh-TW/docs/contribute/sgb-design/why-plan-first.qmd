@@ -104,7 +104,7 @@ flowchart TB
 
 這一節是 production `scgsim.geometry.sgb` 的量測。scaling 執行建立 Route B 的隨機 layout（`tests/sgb_scenes.py` 的 `random_layout`，間距 260 µm），特徵數為 $N = 1000, 5000, 20000$，每個都有三個 slab 與四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 14 215 成長到 285 871。每個 $N$ 都以一個新的 Python 行程建立，所以記憶體是該次執行自己的；量測在一台 64 核心的機器上執行。**這些 scaling 執行全是 polygon-only 的 layout：沒有圓弧、沒有 witness 的弦、沒有圓柱 wall，也沒有 band。** 因此圓弧與 band 在大規模下的成本與 exactness 並沒有量測，本頁不外推。數字的來源列在本頁最後的補充。
 
-**隨機 layout 的 seed。** 先前原型的量測用 seed 1。production 對 seed 1、$N = 20000$ 的 layout 以 `NonManifoldError` 拒絕：同一個 Net 的兩個形狀（`f5879` 與 `f5879b`）只在一個 vertex 相接，這是 production fail closed 的輸入，原型當時沒有檢查而建得出來。所以本頁所有 $N$ 都改用 seed 2（seed 2 到 9 在 $N = 20000$ 都建得出來）；上面的結構計數也用同一個 seed。
+**隨機 layout 的 seed。** production 對 seed 1、$N = 20000$ 的 layout 以 `NonManifoldError` 拒絕：同一個 Net 的兩個形狀（`f5879` 與 `f5879b`）只在一個 vertex 相接，這是 production fail closed 的輸入。所以本頁所有 $N$ 都用 seed 2（seed 2 到 9 在 $N = 20000$ 都建得出來）；上面的結構計數也用同一個 seed。
 
 ![規劃後 pipeline 的 wall time（左）與 peak memory（右）對特徵數 N 的關係，座標軸為對數。虛線的斜率為 1。紅線是測試用的 Gmsh-API oracle，只量到 N = 2000。](figures/why-scaling.svg){#fig-scaling fig-alt="N = 500 到 20000 的兩張對數-對數圖。左：推導、direct BREP writer 與 Gmsh 載入 XAO 三條上升的線，N = 1000、5000、20000，各自靠近斜率為 1 的虛線參考線；另一條紅色的 Gmsh API test oracle 只有 N = 500、1000、2000 三點，斜率明顯大於 1。右：建構行程的 peak memory，略低於斜率為 1 的參考線。"}
 
@@ -169,7 +169,7 @@ solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序
 - **密集 layout。** scaling 執行使用的特徵間距為 260 µm，各自位於自己的 cutout。更密的 layout（相鄰特徵重疊更多）不在已量測的範圍內。設計預期同樣的近乎線性形狀，但沒有量測過。
 - **論證取決於 OCCT 文件記載的結構。** 如果改用結構不同的 kernel（例如穩健、帶索引的 3D Boolean 引擎），這個論證需要針對它重新進行。Identity 的論證則不取決於 kernel。
 - **非 prism 的本體**（斜側壁、Z 方向彎曲的橋）在第一版中不在規劃後 pipeline 的範圍內。它們是擴充點，不會被悄悄近似（見[總覽](index.qmd#glossary)）。
-- **Python 的限制。** 推導的計時來自 production 的 Python 實作（階段 1）；編譯式 kernel 尚未撰寫（D9）。它們呈現的是成本的形狀，不是編譯式實作可以達到的數字。
+- **Python 的限制。** 推導的計時來自 production 的 Python 實作；編譯式 kernel 尚未撰寫（D9）。它們呈現的是成本的形狀，不是編譯式實作可以達到的數字。
 
 ## 參考資料
 
@@ -184,4 +184,4 @@ solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序
 
 - `zh-TW/docs/contribute/sgb-design/_figures/why_structure.py` 對測試 scene 的隨機 layout 產生器（`tests/sgb_scenes.py` 的 `random_layout`，Route B，間距 260 µm，seed 2）計數 box pair、wire 與 coplanar face，數字在 `figures/why-structure-numbers.json`；它不執行任何 Boolean 運算。
 - `zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py measure` 對 $N = 1000, 5000, 20000$ 各在一個新行程中建立模型並量測，寫出 BREP/XAO、以 Gmsh 載入並執行 `verify_loaded`，原始資料在 `figures/why-scaling-measured.json`（機器為 64 核心，Python 3.12）。`why_scaling.py oracle` 量測測試用的 Gmsh-API oracle（$N = 500, 1000, 2000$，含 solid 質量），`why_scaling.py validators` 量測每一項結構驗證的時間（`figures/why-validator-scaling.json`）。不帶參數執行時，腳本由這三個檔案畫出 `why-scaling` 與 `why-tail` 的圖，並寫出 `figures/why-scaling-numbers.json`。
-- 以 Python 3.12 與 `sgb-core` 分支的環境執行：`SGB_CORE=<sgb-core 工作樹> $SGB_CORE/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py measure`。
+- 在 repository 根目錄、它鎖定的開發環境中執行：`uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/why_scaling.py measure`。

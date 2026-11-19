@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
-title: "AEDT：Q2D 橫截面擷取"
-description: "明確建立矩形與導體群組，再讀取一份原生每單位長度矩陣匯出資料。"
+title: "以 Q2D 計算傳輸線參數"
+description: "以 AEDT Q2D 萃取傳輸線截面每單位長度的電容、電感、電導與電阻，並換算成特性阻抗與相速度。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-q2d"
@@ -9,9 +9,17 @@ aliases:
   - ../course/aedt-q2d.html
 ---
 
-請在[安裝](../start/install.qmd)後開始。Q2D 使用明確指定的橫截面矩形；它不會匯入 GDS、不會從 Xmon 快照切出截面，也不會從 3D 圖片推斷傳輸線。公開的 [OrPen 橫截面來源](../start/choose-a-simulation.qmd#public-inputs)提供此樣本：訊號寬 10 µm、間隙 10 µm、接地寬 40 µm、金屬厚 0.2 µm，基板寬 200 µm、厚 500 µm。這些都是模型輸入值。
+Q2D 是 Ansys AEDT 的二維萃取器，會求解傳輸線的截面，回傳每單位長度的矩陣：電容 C、電感 L、電導 G 與電阻 R。由 L 與 C 可以得到傳輸線的特性阻抗與相速度。Q2D 的截面由你給的矩形組成；它不會從版圖或 3D 模型切出截面。
 
-![宣告的 Q2D CPW 橫截面：矽基板、訊號線與兩個參考接地矩形。為呈現 0.2 µm 金屬厚度，圖中放大垂直比例；這是來源幾何，不是求解結果。](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
+本頁目前還沒有記錄的 Q2D 結果；[讀懂結果](#read-the-result)說明回傳矩陣中哪些元素可以算出特性阻抗與相速度。
+
+![Q2D 求解的截面：10 µm 的訊號線位在兩條 40 µm 的接地之間，各隔 10 µm，金屬厚 0.2 µm，基板為寬 200 µm、厚 500 µm 的矽。為了看清金屬，垂直比例已放大；圖中是輸入，不是計算結果。](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
+
+這條傳輸線不是[為 AEDT 準備共平面波導](aedt-cpw-inputs.qmd)的 CPW（6 µm 間隙、80 µm 接地、100 nm 鋁）：它是 PDK 的截面範例，金屬為鈮。
+
+## 準備計算 {#prepare-the-run}
+
+需要含 `aedt` extra 的 SCGSim，以及提供材料紀錄的 OrcaPen SC PDK；它會寫出執行資料夾，但不開啟 AEDT。
 
 ```python
 from pathlib import Path
@@ -55,20 +63,42 @@ print(spec.to_payload())
 print(handoff.spec_path, handoff.archive_path)
 ```
 
-矩形原點與尺寸的單位是微米。請核對每個左下角位置與尺寸是否符合預期間隙；依賴原生幾何前，先列印來源規格。真空屬於 Region，不是自行建立的真空矩形。單一 `ReferenceGround` 群組涵蓋兩個接地矩形，且至少有一個 `SignalLine`；每個超導矩形都必須且只能屬於一個群組。Region 的四值補距順序是 **(-X, +X, -Y, +Y)**，與 3D 輸入教學中的原生六值順序不同。
+各項輸入的意思：
 
-在[執行](run-elsewhere.qmd)後，請[解析完整回傳資料](convergence-and-reports.qmd)。Q2D 會寫入一份原生 `results/q2d/rlgc_matrix.csv`，其中包含主要的 C、G、L、R 區塊。`resolved.physics_results()` 會讀取這些區塊，不會另建正規化檔案。原生耦合或 Spice 區塊可同時存在，但不會成為額外的主要矩陣。解析器會綁定頻率、`LastAdaptive` 解、導體順序及每單位長度單位。
-請保留各區塊的原生單位：
+- 每個 `Q2dRectangleSpec` 依序是名稱、左下角座標 (x, y)、尺寸（寬, 高）（單位 µm）與材料。基板的 x 從 −100 到 100 µm、y 從 −500 到 0 µm；金屬位在基板上，y 從 0 到 0.2 µm。像這段程式一樣印出規格，對照你想要的間隙確認位置。
+- 每個 `Q2dConductorSpec` 把矩形組成一個導體：每條訊號線一個 `SignalLine`，所有接地矩形放在唯一的 `ReferenceGround` 中。每個金屬矩形正好屬於一個導體；最後一個值是金屬厚度（µm）。
+- 截面周圍的空間是 Q2D 的 Region，不是一個矩形。`region_padding_um` 依 (+x, −x, +y, −y) 的順序給出它在矩形之外的範圍（µm）：左右各 100 µm、上方 1000 µm、下方 100 µm。
+- `MatrixRunControl` 設定頻率 6 GHz，以及最多三個自適應回合（pass）。
 
-| 矩陣區塊 | 原生單位 |
-| --- | --- |
+## 讀懂結果 {#read-the-result}
+
+在有 AEDT 的電腦上執行這個資料夾（[執行已準備的模型](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)），再讀回來。`physics_results()` 每個矩陣元素回傳一列，包含物理量（`C`、`G`、`L` 或 `R`）、列與行的導體、數值，以及 Q2D 匯出時的單位：
+
+| 矩陣 | 單位 |
+|---|---|
 | 電容 C | pF/meter |
 | 電導 G | mho/meter |
 | 電感 L | nH/meter |
 | 電阻 R | ohm/meter |
 
-SCGSim 不會將 RLGC 轉換為阻抗、傳播常數或相速度。
+對無損耗的傳輸線，特性阻抗與相速度由兩個對角元素得出：L 是列與行都是訊號線導體（這裡是 `Signal`）的 `L` 元素，單位 nH/meter；C 是同一列同一行的 `C` 元素，單位 pF/meter。先換算成 H/m 與 F/m：
 
-依[矩陣觀測契約](../reference/specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)所述，請將原生狀態、回報差值與實際控制項連同矩陣結果保存。請依該數值及可取得的變化量，判斷精度是否符合預期研究需求。
+$$
+Z_0 = \sqrt{\frac{L}{C}}, \qquad v = \frac{1}{\sqrt{LC}}.
+$$
 
-每單位長度電容不是集總 Electrostatic 電容；Q2D 橫截面也不是有限尺寸的 3D Q3D 實驗。解讀結果時，請保留其單位與適用範圍。新請求不會輸出歷史上分開的 CG／RL 檔案與正規化 Q2D 檔案。[AEDT 契約](../reference/specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)說明精確匯出格式與失敗行為。
+```python
+from scgsim.aedt import resolve_results
+
+result = resolve_results(handoff.run_dir)
+entries = {
+    (row["quantity"], row["row"], row["column"]): float(row["value"])
+    for row in result.physics_results()
+}
+inductance = entries[("L", "Signal", "Signal")] * 1e-9  # nH/m to H/m
+capacitance = entries[("C", "Signal", "Signal")] * 1e-12  # pF/m to F/m
+print("Z0 =", (inductance / capacitance) ** 0.5, "ohm")
+print("v  =", 1 / (inductance * capacitance) ** 0.5, "m/s")
+```
+
+SCGSim 不會替你算 Z₀ 或 v。每單位長度的電容也不是 3D 結構的電容：那請用 [Q3D](capacitance-q3d.qmd) 或 [Palace](capacitance-palace.qmd)。報告會把 Q2D 的收斂狀態、它回報的變化與你的控制值放在矩陣旁邊（[參考](../reference/specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)）。

@@ -1,6 +1,6 @@
 ---
 title: "SGB 設計總覽"
-description: "重新設計的 semantic geometry builder 要解決什麼問題、它從 prism 描述產生什麼、production 實作的現況、整條 pipeline、各目標對應的機制、詞彙表，以及其餘設計頁面的閱讀順序。"
+description: "semantic geometry builder（SGB）要解決什麼問題、它從 prism 描述產生什麼、它的實作、整條 pipeline、各目標對應的機制、詞彙表，以及其餘設計頁面的閱讀順序。"
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
@@ -14,7 +14,7 @@ aliases:
 重新設計的 semantic geometry builder（SGB）把順序倒過來。它把晶片描述成有限個 **prism**，**在任何 CAD kernel 介入之前**就推導出完整的 topology 與每個 cell 的意義，再自己把結果寫成 BREP/XAO 檔案。Gmsh 不建立幾何：它載入檔案並對其產生 **mesh**，測試中也把它當作 oracle。模型上不執行任何三維 Boolean 運算。
 
 ::: {.callout-note title="SGB 的實作"}
-這個設計的 production 實作是 `scgsim.geometry.sgb`。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 以 SGB 建立幾何、以 `scgsim.meshing` 產生網格，並只接受 Route A 與 Route B。AEDT 匯入同一個 SGB 模型以 `export_aedt_step` 寫出的 STEP；舊的幾何路徑與 AEDT 原生建構器都已移除（[D6](decisions.qmd#d6)）。要使用 SGB 的輸出，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
+這個設計的 production 實作是 `scgsim.geometry.sgb`。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 以 SGB 建立幾何、以 `scgsim.meshing` 產生網格，並只接受 Route A 與 Route B。AEDT 匯入同一個 SGB 模型以 `export_aedt_step` 寫出的 STEP；舊的幾何路徑與 AEDT 原生建構器都已移除（[D6](decisions.qmd#d6)）。要使用 SGB 的輸出，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的，是設計初期一個已移除的原型程式所做的一次性觀察，它留下的教訓整理在 [`PROTOTYPE_LESSONS.md`](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/experiments/sgb-redesign/PROTOTYPE_LESSONS.md)。
 :::
 
 ## 執行範例：輸入與輸出
@@ -46,7 +46,7 @@ SGB 從這五個 prism 推導出下面的實體模型（Route B）。為了讓�
 3. **Identity**：每個實體有一個 semantic 名稱（例如 `MA::pad__top::band=2`）與一個依內容定址的 atomic id，並附有回到產生它的來源曲線的 lineage。
 4. **CAD 檔案與 sidecar**：直接由 topology 寫出的 BREP 與 XAO 檔案，不經任何 Boolean 運算；以及一個 JSON **sidecar**，記錄每個 native 實體對應的規劃 id、physical group、每條 edge 回到來源曲線的 lineage，以及依面積加權的 membership。
 
-無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見[交給 AEDT](emission.qmd#handing-the-solids-to-aedt)）。
+無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 匯入同樣的 solid 寫成的 STEP（見[交給 AEDT](emission.qmd#handing-the-solids-to-aedt)）。
 
 production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<entity>__<face kind>[::band=k]`（例如 pad 的頂面是 `MA::pad__top`，有 inset band 時是 `MA::pad__top::band=2`；face kind 以雙底線接在 entity 後面，命名規則見 [identity](identity.qmd#band-group-names)），完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。
 
@@ -57,21 +57,15 @@ production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<
 1. **開發測試**：在 fixture 與隨機 layout 上，以 OCP 綁定執行 OpenCASCADE 自己的檢查（`BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`），並做 Gmsh 載入檢查 `verify_loaded`（數量、邊界、面積、體積、group）。OCP 在 `occt` dependency group（`cadquery-ocp-novtk==7.8.1.1.post1`），相關測試標為 `occt`；`dev` group 包含 `occt`，CI 的 `fast-tests` 工作安裝 `dev` group，所以 `occt` 測試在 CI 中執行。
 2. **每一次 production build 都 fail closed**：寫出任何東西之前，先檢查 SGB 自己的 structural invariant（一次 build 記錄 31 項，其中 4 項是不使 build 失敗的警告）。production 中無法關閉驗證。mesher 信任同一次 build 寫出的檔案，不再檢查（見 [Validation](validation.qmd)）。
 
-production 的 extreme-case catalogue（`tests/sgb_catalogue_report.py`，每個 fixture 與 route 一列）結果如下。
+這兩層檢查在 production 的 extreme-case catalogue（23 個 fixture 乘上適用的 route，共 63 列）上跑過：54 列建出模型並通過所有檢查，另外 9 列是預期中的拒絕；逐列的結果、mesh 品質與 validator 的成本見 [Validation](validation.qmd#catalogue)。catalogue 的 fixture 都很小（不到 100 個 face），所以這些數字不代表大型 layout；大型 layout 的成本見[研究：幾何建構效能](../research/geometry-build/index.qmd)。決定性（逐位元組相同）在同一台機器上測過，跨平台只是論證，尚未實測（見[使用契約](consumer-contract.qmd#determinism)）。
 
-- **範圍。** 23 個 fixture 乘上 Route A、B、C，共 63 列。其中 54 列建出模型，並全部通過：build 與結構檢查、direct write、Gmsh 載入（`verify_loaded`）、一次粗略的 3D mesh，以及 `BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`（含 self-interference）與 `ShapeAnalysis` 的 OCCT 檢查。另外 9 列是預期的拒絕：6 個 `NonManifoldError`（`exactly_tangent_arc_line`、`kissing_corners_same_net`、`hole_touches_outer`，各在 Route B 與 Route C）與 3 個 `ContactError`（`kissing_corners_different_nets`，三種 route）。原型時期 direct writer 對 5-edge 圓柱 wall 的拒絕已不存在：`arc_with_foreign_vertex` 與 `arc_with_foreign_vertex_from_post` 在 Route B 與 C 都建得出來（見 [Assembly](assembly.qmd#curved-walls)）。
-- **每個 fixture 的 mesh 品質與 drift。** catalogue 現在每列記錄它們，D2 與 D7 重新評估的條件因此有資料可看。對 54 個建出的列，以 4 µm 的 mesh size 對 40 × 40 × 20 µm 的 fixture 做粗略的四面體 mesh：Gmsh 的 `minSICN`（1 為正四面體，≤ 0 為翻轉或扁平）最小值落在 0.0007 到 0.312 之間，`gamma` 最小值落在 $7 \times 10^{-6}$ 到 0.306 之間；沒有任何一列出現 ≤ 0 的元素。最大的 snap drift 是 0（輸入本來就在格點上），最大的 arc 偏離是 0.760 grid unit（`arcs_crossing_shallow`），低於 1 g，所以 D7 的重新評估條件沒有被觸發（測試以 ≤ 1 g 斷言）。這些數字是記錄，不是驗收門檻。
-- **執行範例。** 七個執行範例（port 放在 support plane 的 `pad_in_ground` 的 Route A、B、C 與各自含 band 的版本，以及 Route B 的 `airbridge`）也全部載入並通過 OCCT 檢查（`zh-TW/docs/contribute/sgb-design/_figures/index_example.py` 以 `tests/sgb_catalogue_report.py` 的 `measure` 重新量測，數字在 `figures/index-numbers.json`）。它們以 60 µm 的 mesh size 做粗略 mesh，相對於 0.2 µm 的金屬與 0.077 µm 的 band 非常粗；七個範例的 `minSICN` 最小值落在 0 到 0.119 之間，`gamma` 最小值落在 0 到 0.122 之間。沒有 band 的四個範例與 `pad_in_ground_A_bands` 的 `minSICN` 最小值都在 $10^{-4}$ 以上，`pad_in_ground_B_bands` 是 $5 \times 10^{-6}$，`pad_in_ground_C_bands` 有一個 `minSICN` 約為 0（$-7 \times 10^{-15}$）、`gamma` 為 0 的扁平元素。這是 meshing 的人為結果，不是幾何缺陷：band 的條帶遠比約 60 µm 的元素窄，3D Delaunay 可能把條帶邊界上共線的 node 連成體積為零的四面體；幾何通過 OCCT 檢查（含 self-interference）。改用 HXT 並把最大尺寸設為 bounding box 對角線的 1/20、不設 size field（[測試用的 mesh 配方](emission.qmd#mesh-recipe)）後，三個含 band 的範例 `minSICN` 最小值為 0.0059（Route A）、0.0051（Route B）與 0.0051（Route C）。`tests/sgb_emit_cases.py` 的 `pad_b_bands` 把 Route B 的 port 放在金屬中間平面 $z = 0.1$（stage 層的 case，所以多一個 level），同樣以 60 µm 粗略 mesh 時 `minSICN` 與 `gamma` 的最小值為 0（一個扁平元素）；上述配方在這個 case 會讓 HXT 中止，改用預設的 3D 演算法後 `minSICN` 為 0.0007，沒有扁平元素。這些數字只是這組 mesh 參數下的結果，不是保證：band 的 mesh 尺寸是 Palace adopter 的責任（見[使用契約](consumer-contract.qmd#sidecar)）。D2 不變：不設門檻。（見 [Sliver](slivers.qmd#d2) 與[設計決議](decisions.qmd#d2)。）
-- **隨機 layout 與注入缺陷。** 測試在 $N = 100$ 的隨機 layout（三種 route）上跑完整的 OCCT 檢查，在 $N = 1000$（Route B，標為 `slow`）上跑 self-interference 關閉的便宜檢查，皆通過。五種注入的缺陷（內環反向、共用 face 在一個 shell 中翻面、vertex 偏離曲線 $10^{-4}$ µm、缺一個 face、wire 有缺口）每一種都被 `BRepCheck_Analyzer` 抓到，其餘檢查的涵蓋範圍見 [Validation](validation.qmd)。
-- **Runtime validator 的成本（production 量測）。** 在 $N = 1000$、5 000、20 000、seed 2 的 polygon-only layout 上（14 215、71 969、285 871 個 face），31 項檢查合計的時間是 0.33 s、2.20 s、10.59 s，對 face 數的局部斜率是 1.16 與 1.14，也就是近乎線性。逐項看，除了 `cylinders` 之外，每一項 validator 的局部斜率介於 0.97 與 1.31；`cylinders` 的 1.6 只出現在 $N = 1000$ 到 5 000，這些 layout 沒有 cylinder wall，那項檢查在這兩個 $N$ 都不到 0.01 s，近乎雜訊（`figures/why-validator-scaling.json`，`python why_scaling.py validators`）。這是單次執行，不含圓弧與 band。
-
-還有三件事要說清楚。第一，AEDT 端：AEDT 匯入的就是 `export_aedt_step` 的輸出，`aedt/runtime/families/sgb_import.py` 把它匯入空白的 HFSS 或 Q3D 設計，並以 guard 檢查匯入的物件與面；為什麼這樣設計，依據的是原型時期的 E4 實驗（[交給 AEDT](emission.qmd#handing-the-solids-to-aedt)）。第二，catalogue 的 fixture 都很小（不到 100 個 face），所以以上的檢查成本與 mesh 數字不代表大型 layout。第三，決定性（逐位元組相同）在同一台機器上測過；跨平台只是論證，尚未實測（見[使用契約](consumer-contract.qmd#determinism)）。各項檢查的細節見 [Validation](validation.qmd)。
+AEDT 匯入的就是 `export_aedt_step` 的輸出：`aedt/runtime/families/sgb_import.py` 把 STEP 匯入空白的 HFSS 或 Q3D 設計，以 guard 檢查匯入的物件，再依幾何把每個 face 對到它規劃的 face（[交給 AEDT](emission.qmd#handing-the-solids-to-aedt)）。
 
 ## Pipeline 全貌
 
-SGB 共有十一個階段（S0 到 S10）。S0 與 S1 沿用 develop 既有的固定格點來源準備：來源的正規化與 polygon Boolean 在已宣告的格點上完成，其 `GeometryGridContext` 帶著模型格點 $g$，這個 $g$ 就是 S4 使用的格點。**S2 起是新的 pipeline**，production 實作在 `scgsim.geometry.sgb`：S2 直接讀 S1 產生的 effective `GeometryBuildInput` 與 `RepresentationContext`，沒有格點資訊的輸入會被拒絕（不使用預設值）。測試涵蓋由 GDS 與 layer stack、由 thin-film 的 profile、由 `GeometryPlan` 的 snapshot 得到的真實輸入；宣告的圓與圓形的重建紀錄成為精確的 `ArcCarrier`，`interpolation_spline` 與 B-spline 邊界在第一版 fail closed。這與原型不同：原型沒有 S0 與 S1，直接建立 prism，所以原型的成功不代表與 `GeometryPlan` 整合。
+SGB 共有十一個階段（S0 到 S10）。S0 與 S1 是 `scgsim.geometry` 的來源準備與物理解讀（`geometry/source`、`geometry/interpretation`），不在 SGB package 中：來源的正規化與 polygon Boolean 在已宣告的格點上完成，其 `GeometryGridContext` 帶著模型格點 $g$，這個 $g$ 就是 S4 使用的格點。**S2 起是 SGB 本身**，實作在 `scgsim.geometry.sgb`：S2 直接讀 S1 產生的 effective `GeometryBuildInput` 與 `RepresentationContext`，沒有格點資訊的輸入會被拒絕（不使用預設值）。測試涵蓋由 GDS 與 layer stack、由 thin-film 的 profile、由 `GeometryPlan` 的 snapshot 得到的真實輸入；宣告的圓與圓形的重建紀錄成為精確的 `ArcCarrier`，`interpolation_spline` 與 B-spline 邊界會被拒絕（fail closed）。
 
-S1 到 S9 是作用在 immutable record 上的純函式（各階段的輸入與輸出見 [pipeline 參考](pipeline-reference.qmd)）。S10 是循序的：它把完成的 topology 序列化，不呼叫任何 CAD kernel 來建立它。Route 是 S7 的一種 labelling policy，不是另一條 pipeline；v1 有三種，都已實作：Route A（sheet 金屬；有限厚度的本體如 bump 仍是 volume）、Route B（排除金屬 volume）與 Route C（保留導體 volume 並在其內部做 mesh，用於有限導電率，以及未來的超導材料模型）。
+S1 到 S9 是作用在 immutable record 上的純函式（各階段的輸入與輸出見 [pipeline 參考](pipeline-reference.qmd)）。S10 是循序的：它把完成的 topology 序列化，不呼叫任何 CAD kernel 來建立它。Route 是 S7 的一種 labelling policy，不是另一條 pipeline；共有三種：Route A（sheet 金屬；有限厚度的本體如 bump 仍是 volume）、Route B（排除金屬 volume）與 Route C（保留導體 volume 並在其內部做 mesh，用於有限導電率，以及未來的超導材料模型）。
 
 ::: {.askr-mermaid-view view-label="檢視圖表"}
 ```{mermaid}
@@ -89,7 +83,7 @@ flowchart TB
     S7["S7 Route 表示<br/>（Route representation）"] --> S8["S8 Identity、<br/>group"] --> S9["S9 驗證<br/>（Validation，fail closed）"]
   end
   P --> A --> N --> S10["S10 Emission（循序）<br/>direct BREP/XAO writer 與 sidecar"]
-  S10 --> M["Gmsh 產生 mesh，Palace 求解<br/>AEDT 之後"]
+  S10 --> M["Gmsh 產生 mesh，Palace 求解<br/>AEDT 匯入 STEP"]
   classDef reused fill:#d9d9d9,stroke:#555,color:#111
   classDef newpar fill:#cfe0f1,stroke:#2a6f9e,color:#111
   classDef seq fill:#f6d9a8,stroke:#e08a1e,color:#111
@@ -99,7 +93,7 @@ flowchart TB
 ```
 :::
 
-圖中灰色的 S0、S1 沿用 develop 的程式；藍色的 S2 到 S9 是新的、作用在 immutable record 上的純函式階段，production 已實作；橘色的 S10 是新的、循序的階段，production 同樣已實作。
+圖中灰色的 S0、S1 在 `scgsim.geometry`；藍色的 S2 到 S9 是作用在 immutable record 上的純函式階段；橘色的 S10 是循序的寫出階段。三者都在 production 中。
 
 這張圖是**概念性**的示意。整個設計由三個想法支撐：
 
@@ -118,7 +112,7 @@ flowchart TB
 | 2 | **沒有全域 fragment；能擴展到大型幾何。** 模型上沒有 3D Boolean；成本隨特徵數近乎線性成長，序列執行即已足夠。 | 每個 level 與 slab 各自的局部 2D arrangement；由共用的 atomic 實體組裝。 | [為什麼先規劃](why-plan-first.qmd) |
 | 3 | **穩定的來源 identity，向前傳遞；route 是早期輸入。** 要建什麼，在建構之前就完全決定。 | 每條曲線都有 lineage；id 由內容雜湊而成；route 改變的是 prism 與 label，不是 pipeline。 | [Identity](identity.qmd)、[Route](routes.qmd) |
 | 4 | **可重現的 handoff identity 與程式化對應**：從每個 solver 實體回到 semantic 表面與來源曲線。 | 主要 physical group、sidecar，以及固定的對應鏈；使用端儲存 group 名稱（native tag 不是 identity）；不做座標或面積比對。 | [Identity](identity.qmd)、[Emission](emission.qmd) |
-| 5 | **與後端無關。** 一個封閉、conformal 的實體模型，供 Palace 以及之後的 AEDT 使用。 | topology 就是產物；BREP/XAO 與 AEDT 的 solid 都是它的序列化，而 Gmsh 只負責 mesh。 | [Assembly](assembly.qmd)、[Emission](emission.qmd) |
+| 5 | **與後端無關。** 一個封閉、conformal 的實體模型，供 Palace 與 AEDT 使用。 | topology 就是產物；BREP/XAO 與 AEDT 的 solid 都是它的序列化，而 Gmsh 只負責 mesh。 | [Assembly](assembly.qmd)、[Emission](emission.qmd) |
 | 6 | **依構造即 conformal；人為產生的 sliver 予以消除，來源本身的事實則予以回報。** | 共用的 atomic vertex 與 edge；snap rounding；local arrangement；dissolution；sliver 報告；fail-closed 驗證，且在任何 route 中不同 Net 的接觸都是錯誤。 | [Assembly](assembly.qmd)、[Sliver](slivers.qmd)、[Validation](validation.qmd) |
 | 7 | **可擴充的分割。** inset imprint 是第一個使用者，不是特例。 | 新的分割種類只需要一個 generator 與一個 target；assembly 與 emission 不需要新的路徑。 | [Cut family](cut-families.qmd)、[Inset imprint](inset-imprint.qmd) |
 :::
@@ -127,7 +121,7 @@ flowchart TB
 
 ## 接下來讀哪裡
 
-初次閱讀請依此順序；每一列說明讀完該頁後你能解釋什麼。第 14 到 17 頁是給需要核對檔案內容、採用 sidecar 或查詢欄位的人，不需要依序讀完；要把 Palace 或 AEDT 接到新的 SGB，從第 15 頁開始。
+初次閱讀請依此順序；每一列說明讀完該頁後你能解釋什麼。第 14 到 17 頁是查閱用的，給需要核對檔案內容、讀取 sidecar 或查詢欄位的人，不需要依序讀完；要修改 Palace 或 AEDT 讀取 SGB 輸出的方式，從第 15 頁開始。
 
 ::: {.askr-table-compact}
 | # | 頁面 | 讀完後你能解釋 |
@@ -146,10 +140,9 @@ flowchart TB
 | 12 | [Validation](validation.qmd) | 各項檢查、兩層驗證，以及 fail-closed 的行為。 |
 | 13 | [Emission](emission.qmd) | direct BREP/XAO writer、sidecar，以及 Gmsh 如何處理它們。 |
 | 14 | [BREP 檔案格式](brep-format.qmd) | direct writer 寫出的 BREP 與 XAO 檔案的結構（給需要讀寫檔案的人）。 |
-| 15 | [SGB 輸出的使用契約](consumer-contract.qmd) | `build_sgb_geometry` 的呼叫與回傳、決定性的保證（測過與論證）、sidecar 的每個欄位，以及 Palace 與 AEDT 讀取端的步驟。 |
-| 16 | [Palace 與 AEDT 的欄位對應](consumer-mapping.qmd) | 今天的 Palace group dict 與 record 欄位、AEDT ledger、Electrostatic 的 Net 各對到新 sidecar 的哪裡；哪些要同時切換；開放項目。 |
-| 17 | [階段與 record 參考](pipeline-reference.qmd) | 每個階段的輸入、輸出與 record，供查閱。 |
-| 20 | [設計決議](decisions.qmd) | 每一項決策的狀態、選項、建議與後果。 |
+| 15 | [SGB 輸出的使用契約](consumer-contract.qmd) | `build_sgb_geometry` 的呼叫與回傳、決定性的保證（測過與論證）、sidecar 的每個欄位、Palace 與 AEDT 讀取端的步驟，以及每個讀取端從 sidecar 取得什麼。 |
+| 16 | [階段與 record 參考](pipeline-reference.qmd) | 每個階段的輸入、輸出與 record，供查閱。 |
+| 17 | [設計決議](decisions.qmd) | 每一項設計決策、它的選項與後果。 |
 :::
 
 想快速找到某個問題的答案：
@@ -158,7 +151,7 @@ flowchart TB
 - *為什麼不會有來自無關層的 sliver face？* [2.5D layered model](layered-model.qmd)。
 - *所有東西都在格點上時，「exact」是什麼意思？* [建立 arrangement](arrangement.qmd)。
 - *一個 Palace attribute 如何追溯到來源曲線？* [Identity](identity.qmd)。
-- *哪些已決定、哪些還開放？* [設計決議](decisions.qmd)。
+- *某項設計為什麼這樣定？* [設計決議](decisions.qmd)。
 
 本設計的圖有兩種：**計算所得**的圖與數字來自 production 的測試與 catalogue 報告（稱為「production」）；文中少數標明「原型計算」的數字是原型時期的觀察，原型程式已移除，無法再由本 repository 重現；**概念性**的圖是手繪的規則示意，圖說會註明是哪一種。互動式圖可以在檢視器中開啟並縮放，每張都附有一張顯示關鍵視角的靜態圖。除非圖中註明「grid units $g$」，長度單位為微米，格點單位為奈米。
 
@@ -219,8 +212,8 @@ flowchart TB
 
 - **Vertex：** 圓弧 edge 在規劃中各帶一個只用來記錄圓心的 vertex，不寫出。規劃的 vertex 數減去圓弧 edge 數（sidecar 的 `summary.counts.arcs`：依欄位順序為 10、5、10、85、0），恰好等於寫出的數量。
 - **Face 與 edge：** 不圍住任何已 emit volume 的 face 不寫出，只屬於它們的 edge 也不寫出。Route A 與 Route C 沒有這類 face。`pad_in_ground_B` 與 `pad_in_ground_B_bands` 各有 4 個（全是 `EXT::ground__sidewall`，ground volume 在晶片邊緣的 wall），只屬於它們的有 4 條垂直 edge。`airbridge_B` 有 10 個：6 個是兩塊 ground 在晶片邊緣的 `EXT::*__sidewall`，4 個是被排除的導體 Entity 之間的 `MM::*__interface`（ground 與 post、deck 與 post），只屬於它們的有 4 條垂直 edge。
-- **Volume：** `airbridge_B` 規劃 7 個 volume，因為 D5 之後每個導體 Entity 各自一個 volume（兩塊 ground、兩根 post、deck、substrate、vacuum）；輸出的是 substrate 與 vacuum。
+- **Volume：** `airbridge_B` 規劃 7 個 volume，因為 D5 讓每個導體 Entity 各自一個 volume（兩塊 ground、兩根 post、deck、substrate、vacuum）；輸出的是 substrate 與 vacuum。
 
-最後一列是 `ValidationReport` 記錄的檢查數。每個範例寫出後都通過 `verify_loaded` 與 OCCT 檢查（見上文 catalogue 報告）。
+最後一列是 `ValidationReport` 記錄的檢查數。每個範例寫出後都通過 `verify_loaded` 與 OCCT 檢查（見 [Validation](validation.qmd#catalogue)）。
 
 這些數字由 `zh-TW/docs/contribute/sgb-design/_figures/index_example.py` 重建：以 `running_example`（`tests/sgb_scenes.py` 的 `pad_in_ground`，port 放在 $z = 0$）與 `airbridge()` 建立模型，`model.counts` 是規劃的數量，寫出後以 `read_sidecar` 讀回的 `summary.counts` 是實際輸出，數字在 `figures/index-numbers.json`。要注意：`tests/sgb_emit_cases.py` 的 `pad_b`、`pad_c`、`pad_b_bands` 等 case 使用 scene 自己的 Route B port，位於金屬中間平面 $z = 0.1$，所以多一個 level 與一個 slab，並把兩道金屬 wall 切開；那組 case 的 `pad_b` 是規劃 41、寫出 37 個 face，`pad_b_bands` 是 62／58，與上表不同。Route A 的 port 本來就在 $z = 0$，所以 `pad_in_ground_A` 在兩組之間相同。`airbridge_B` 的 7 個 volume 是 substrate、vacuum 與每個導體 Entity 各一個，加上 4 個同一個 Net 的不同 Entity 之間的 `MM` 接觸 face（Route B 不輸出）與依 Entity 切開的外側 sidewall，皆為 D5 的 per-Entity 歸屬。`pad_in_ground_B_bands` 的 `SolutionInterface` 取整個 substrate–vacuum 介面，所以 pad 圓形 hole 的 SA face 也被切 band，port 的 footprint 則從 SA 與它的 band 中扣掉（band 的距離只從 gap edge 量起）。圖與數字的腳本與執行方式列在 `zh-TW/docs/contribute/sgb-design/_figures/README.md`。

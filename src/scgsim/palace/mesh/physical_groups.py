@@ -1,7 +1,7 @@
 """Build Palace's group dict from the SGB sidecar alone, with every group lowered to solver attributes.
 
-The rules are those of ``zh-TW/docs/contribute/sgb-design/consumer-mapping.qmd``.  The dict has four keys, each a
-mapping from a name to a JSON-serialisable record:
+The rules are those of ``zh-TW/docs/contribute/sgb-design/consumer-contract.qmd#palace-groups``.  The dict has
+four keys, each a mapping from a name to a JSON-serialisable record:
 
 ``volumes``
     the ``dim == 3`` groups (vacuum and dielectric), by group name;

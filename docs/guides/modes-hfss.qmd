@@ -1,6 +1,6 @@
 ---
-title: "AEDT: HFSS Eigenmode"
-description: "Prepare a port-free mode request and retain native frequency and Q on return."
+title: "Resonant modes with HFSS"
+description: "Prepare an HFSS Eigenmode run of a plan's 3D model, and read each mode's frequency and Q when it returns."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-eigenmode"
@@ -8,13 +8,22 @@ aliases:
   - ../course/aedt-eigenmode.html
 ---
 
-For a complete mode workflow, use a PDK notebook from [Choose a simulation](../start/choose-a-simulation.qmd#getting-started).
-This backend reference continues from [CPW inputs](aedt-cpw-inputs.qmd), with its
-`snapshot`. Ordinary HFSS Eigenmode has no driven excitation ports: it searches
-for the requested modes with an explicit adaptive setup. `EigenmodeSim` builds
-the snapshot's SGB model and writes a handoff that carries it; the run imports
-the model's STEP into an empty Eigenmode design. A mode search alone requests
-no Surface EPR and no saved-field analysis.
+HFSS Eigenmode, in Ansys AEDT, finds a model's resonant modes and returns
+each mode's frequency in GHz and its Q, as HFSS computes them from the
+model's materials and boundaries. It needs no ports. SCGSim builds the 3D
+model from the plan, the same model Palace meshes, and AEDT imports it into an
+empty Eigenmode design.
+
+This page prepares the run for the CPW coupon of
+[Prepare a coplanar waveguide for AEDT](aedt-cpw-inputs.qmd). This repository
+holds no recorded result of it. When the run returns,
+`resolve_results(handoff.run_dir).physics_results()` gives one row per mode,
+with the keys `mode`, `frequency_ghz` and `q_factor`.
+
+## Prepare the run {#prepare-the-run}
+
+Run this in the Python session where you made `snapshot`. It needs SCGSim
+with its `aedt-epr` extra; it writes the run folder without opening AEDT.
 
 ```python
 from pathlib import Path
@@ -36,57 +45,46 @@ handoff = sim.prepare_handoff()
 print(handoff.spec_path, handoff.archive_path)
 ```
 
-What the call does with its inputs:
+What the inputs mean:
 
-- `modeling="thin_film"` builds each conductor as a sheet on its film's face
-  (SGB Route A); `"solid"` builds it as a solid of the film's thickness
-  (Route C). The film is the stack's 100 nm Al.
-- The materials are the stack's records. The Region is the plan's
-  `set_vacuum_region(...)`, with the vacuum's material.
-- `prepare_handoff()` writes `aedt_spec.json`, the model's STEP, BREP, sidecar
-  and guard in the handoff's `model/` folder, and the archive. It opens no
-  Desktop.
+- `modeling="thin_film"` builds each metal film as a sheet on its face;
+  `"solid"` builds it as a solid of the film's thickness, here 100 nm of
+  aluminium. [Choose the geometric approximation](../concepts/model-and-numerics.qmd#choose-the-geometric-approximation)
+  explains the difference.
+- `aedt_version` is the AEDT release the run will use; the solver computer
+  needs exactly that release.
+- `EigenmodeRunControl` is HFSS's own search and refinement: the two lowest
+  modes above 3 GHz, and up to six adaptive passes, which stop once the mode
+  frequencies change by at most 5 % between passes. Choose these for your
+  model; [Convergence and reports](convergence-and-reports.qmd#interpret-for-scq-use)
+  says what the returned convergence status does and does not tell you.
+- The materials come from the plan's records, and HFSS's Region, the box of
+  empty space it solves in, is the plan's vacuum region. HFSS gives its faces
+  Perfect H, the condition Palace's Eigenmode solver also uses at the outer
+  faces of its vacuum region.
+- `prepare_handoff()` writes the run folder: the model, the request
+  `aedt_spec.json`, the script `run_aedt.sh`, and an archive of the folder.
 
-Before preparing, `EigenmodeSim.simulation_drc(plan, modeling=...)`, given the
-`GeometryPlan` before `prepare()`, checks without AEDT that the plan's model
-builds and imports on the route
-`modeling` realizes; see
-[the AEDT Eigenmode check](check-a-layout.qmd#aedt-eigenmode-check).
+## Check, run and read {#check-run-and-read}
 
-A generic linear RLC on a port sheet is `EigenmodeSim.add_lumped_rlc()`: each
-load names the port sheet it sits on (`port_sheet_id`) and is stored in the
-model's `lumped_rlcs`. It is distinct from a Josephson junction: it creates no
-`PlanarJunction`, no junction participation and no EPR contribution. The
-CPW coupon has no port sheet, so this example declares none.
+`EigenmodeSim.simulation_drc(plan, modeling="thin_film")`, given the plan
+before `prepare()`, checks without AEDT that the model builds and can be
+imported ([Check a layout](check-a-layout.qmd#aedt-eigenmode-check)).
 
-The public CPW example supplies these search/pass values. They are request
-controls, not a promised mode frequency or a universal SCQ sufficiency rule.
-Keep the actual controls and any changes in the Notebook. On return, read the
-requested mode and its available changes for the
-[intended research use](convergence-and-reports.qmd#interpret-for-scq-use); retain
-native convergence status without treating it as the research conclusion.
-Review the serialized spec and the copied model before
-[explicit host execution](run-elsewhere.qmd).
+Run the folder on a computer with AEDT
+([Run a prepared model](run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)),
+bring it back whole, and read it with `resolve_results`
+([Convergence and reports](convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)).
+The report keeps HFSS's convergence status and the change between its last
+passes next to the frequencies
+([HFSS convergence reference](../reference/specs/aedt-runtime.qmd#hfss-convergence-observations)).
 
-After [return and strict resolution](convergence-and-reports.qmd), the normalized
-`eigenmodes.csv` retains ordered mode index, real `frequency_ghz` and native
-`q_factor`. The hashed `eigenmodes.eig` preserves native raw frequency output,
-including a complex component where present. SCGSim does not calculate damping
-or replace native Q from that component. Numerical history and benchmark
-availability remain separate evidence.
+## Loss and participation {#loss-and-participation}
 
-Keep the returned mode and actual controls together when interpreting its
-frequency and Q. The report retains native classification; hash-bound
-`adaptive-convergence.prop` also preserves the native history and consecutive
-pass count, which the existing normalized result/report does not reproduce.
-The [runtime reference](../reference/specs/aedt-runtime.qmd#hfss-convergence-observations)
-describes those records and failure behavior. Use the available changes in the
-quantity your study needs, rather than treating the native classification as
-an accuracy recommendation.
-
-An `.aedt` file and a completed ordinary receipt do not establish reusable
-saved-field EPR. If that is your task, start with the
-[source-first Xmon EPR model](xmon/aedt.qmd), then follow its
-separate [saved-field analysis](saved-fields.qmd) after the solve. The
-[AEDT contract](../reference/specs/aedt-runtime.qmd) defines both paths without treating
-them as interchangeable results.
+This run reports frequency and Q only. To see how a mode's energy is shared
+among the surfaces, the substrate and a junction, and what loss that implies,
+add an EPR request to the same simulation: the
+[flip-chip Xmon example](xmon/aedt.qmd) shows it. A port sheet can also carry
+a linear R, L or C, with `EigenmodeSim.add_lumped_rlc()`
+([reference](../reference/specs/aedt-runtime.qmd#hfss-shared-lumped-support));
+this coupon has no port sheet.

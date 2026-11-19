@@ -127,7 +127,7 @@ Ed
 
 **Pcurve** 是以 surface 自身 (u, v) 座標表示的 edge。writer 對每一組 (edge, surface) 產生一筆：範例中有 82 條 edge 位於兩個 surface 上，兩條 edge 位於一個 surface 上（port face 與 substrate–vacuum interface 之間的邊界：兩個 face 在同一個 plane 上，共用那個 surface 的 pcurve），共 166 筆 pcurve。
 
-在 OpenCASCADE 7.8.1 與 Gmsh 4.15.2 上的量測結果：只有 plane 的模型沒有 pcurve 也能載入並產生 mesh，但含 cylinder wall 的範例在 merge 時會失敗。單元測試 `test_pcurves_are_not_needed_for_planes_but_are_for_cylinders` 記錄了這兩種結果，所以 writer 一律寫出 pcurve。另一個測試會解析寫出的檔案，檢查在每條 pcurve 上求值的 surface，在兩端與中點都等於 3-D curve（誤差 < 10^-9 µm）。
+在 OpenCASCADE 7.8.1 與 Gmsh 4.15.2 上的量測結果：只有 plane 的模型沒有 pcurve 也能載入並產生 mesh，但含 cylinder wall 的範例在 merge 時會失敗。所以 writer 一律寫出 pcurve。測試 `test_every_pcurve_lifts_onto_its_3d_curve`（`tests/test_sgb_emission.py`）會解析寫出的檔案，檢查在每條 pcurve 上求值的 surface，在兩端與中點都等於 3-D curve（誤差 < 10^-9 µm）。
 
 ### Tolerance {#tolerance}
 

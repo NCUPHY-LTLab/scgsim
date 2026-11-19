@@ -2,7 +2,7 @@
 
 Run, with the Python of the checkout that contains the production SGB core (``scgsim.geometry.sgb``)::
 
-    SGB_CORE=<sgb-core> <sgb-core>/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/inset_types.py
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/inset_types.py
 
 Three Surface-EPR types are asked for at once (``InterfaceSurfaces("MA")``, ``"MS"`` and ``"SA"``, margins 0.5 and 1.0 um)
 on the two real inputs of the production tests (``tests/sgb_inputs.py``), built with ``build_sgb_geometry``:

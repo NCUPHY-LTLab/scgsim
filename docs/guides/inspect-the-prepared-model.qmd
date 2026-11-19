@@ -1,6 +1,6 @@
 ---
 title: "Inspect the prepared model"
-description: "Read bound mesh or native assignments before interpreting a solver result."
+description: "After mesh(), look at the model a solver will get: materials, terminals and ground, Surface-EPR faces and the mesh for Palace; the model saved in AEDT for AEDT."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/solver-observations"
@@ -8,17 +8,16 @@ aliases:
   - ../course/solver-observations.html
 ---
 
-A backend preparation lesson gives you a mesh/config or a portable AEDT
-handoff. Now ask a different question from the source summary: what geometry
-and assignments exist in the backend representation? This lesson is optional
-for execution, but useful when a source declaration and a rendered model appear
-to disagree. It needs the [visualization extra](../start/install.qmd).
+After `mesh()`, you can look at the model the solver will actually get: the
+material of each region, which surfaces are terminals and ground, where the
+Surface-EPR bands lie, and the mesh with its quality. Look when a result
+surprises you, or before a long run, to see that the model is the one you
+meant. It is optional: nothing here changes the run. It needs the
+`visualization` extra ([Install](../start/install.qmd#extras)).
 
-## Palace: inspect the mesh that will be transferred
+## Palace {#palace-inspect-the-mesh-that-will-be-transferred}
 
-After the Palace lesson's `mesh()` and `write_config()` calls, bind the actual
-run folder. The preview reads the mesh tags, manifest and index mapping;
-it does not infer semantic assignment from colors or object names.
+After `sim.mesh()` and `sim.write_config()`, open the run folder:
 
 ```python
 from scgsim.visualization import inspect_palace_geometry
@@ -30,29 +29,40 @@ preview.show_surface_epr()
 preview.show_mesh()
 ```
 
-The Palace workflow preserves high-order mesh connectivity and curved
-boundary representation in the preview. After `mesh()`,
-`sim.mesh_summary()` returns detached generation evidence bound to the mesh and
-manifest. It records the sizing recipe, mesher options, quality threshold and
-result, and the native element/region counts; the edge-length statistics are
-labeled as primary-corner chords. The preview
-and summary describe prepared geometry, not a solved field or a curved-element
-quality metric.
+Each call shows a sheet of 12 views of the model with a legend, read from the
+mesh and Palace's input file, and saves it in the run folder. This is the
+boundaries sheet of the square pad of
+[Convergence and reports](convergence-and-reports.qmd): the ground metal is
+charcoal, the pad, the terminal, is blue, and the unassigned outer faces are
+light gray.
 
-A resolved Palace report shows its mesh summary as cards: the sizing recipe,
-geometry/FEM order, native node/element counts, the 3D/2D algorithms,
-`HighOrder` optimization status, the quality threshold, the minimum SICN and the
-count of elements below the threshold, the repair loop's outcome, the
-tetrahedron count against its budget, and an ND topological DOF estimate.
-Minimum SICN and the count are measured on the linear mesh, before any
-elevation to the geometry order. Gmsh details and the per-region table are under
-the collapsed **Physical regions and mesh discretization** section. Its edge
-count and minimum/mean/maximum lengths in micrometres are unique straight chords
-between primary corners, not curved arc lengths. A point region has zero edges
-and no length extrema.
+![The boundaries preview of the square pad: the legend names each assignment and the number of mesh triangles it covers; the 12 views show the model from six sides, four diagonals and two cuts through the middle.](../images/preview-the-geometry/square-pad-boundaries.png)
 
-For the full detached control record, read the recipe, repair policy, mesher
-options, budgets and quality report directly:
+That run asked for no Surface EPR, so `show_surface_epr()` reported the mode as
+unavailable instead of drawing an empty picture. `preview.explore("materials")`
+shows the same model in an interactive 3D view in the notebook. What each mode
+draws, and its colors, are in [Preview the geometry](preview-the-geometry.qmd).
+
+`sim.mesh_summary()` returns the record of the mesh: the sizing recipe, the
+mesher's options, the quality threshold and the result, and the element counts
+of each region. The benchmark view of a resolved run shows the same record.
+For that run's first mesh it read:
+
+| Item | Value |
+|---|---|
+| Sizing recipe | features (`scgsim.meshing.features/2`) |
+| Geometry / FEM order | 1 / 2 |
+| Quality threshold | 0.01 (minSICN) |
+| Min SICN / elements below threshold | 0.0471318 / 0 |
+| Repair loop | clean after 0 of 8 rounds |
+| Tetrahedra / budget | 31096 / 2000000 |
+
+minSICN, the minimum signed inverse condition number, measures how well
+shaped the worst tetrahedron is: 1 for a regular one, near 0 for a flat one, and
+negative for an inverted one. Every tetrahedron here is above the threshold,
+so the repair loop had nothing to do. [Tetrahedral mesh
+quality](../reference/specs/mesh-quality.qmd#quality-report) defines the report.
+In a script, read the record as a dictionary:
 
 ```python
 summary = sim.mesh_summary()
@@ -61,71 +71,37 @@ recipe, mesher = meshing["recipe"], meshing["mesher"]
 quality = meshing["linear_mesh"]
 ```
 
-The summary also carries mesh/manifest identities; a resolved result and report
-expose the same data through their own `mesh_summary()` methods. The ND card
-estimates topology from primary-corner tetrahedra before boundary constraints;
-it is not the native solver DOF count. Electrostatic H1 estimation is
-unavailable.
+## AEDT {#aedt-source-preparation-and-native-preparation-differ}
 
-Read the legend's exact semantic IDs and counts against the prepared source.
-Unavailable modes are explicit. For interactive notebook inspection,
-`preview.explore("materials")` displays the bound scene with rotation and zoom.
-The fixed `show_*` views instead write portable contact sheets and a manifest.
-Producing these before `prepare_handoff()` includes them in the existing Palace
-archive; a later sidecar is not retroactively part of that archive.
-
-The quality of the mesh is the meshing step's audit: minSICN of every
-tetrahedron on the linear mesh before elevation, held to the mesh's quality
-threshold. Its report sits in the run's `mesh/` folder; the fields are defined
-by the [mesh contract](../reference/specs/mesh-quality.qmd#quality-report).
-
-## AEDT: source preparation and native preparation differ
-
-An ordinary `prepare_handoff()` writes files without opening AEDT. It therefore
-cannot provide native CAD readback. The EPR path offers a separate explicit
-native preparation operation on the AEDT host:
+`prepare_handoff()` writes files without opening AEDT, so there is no AEDT
+model to look at yet. To see one, build and save the model in AEDT once,
+without solving, on the computer that has AEDT. From the prepared run folder:
 
 ```bash
 python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execute --prepare-only
 ```
 
-Use the handoff's actual metadata path (`handoff.metadata_path`), relative to the
-prepared run folder as in the command above. This operation requires the
-native runtime, builds and verifies the EPR model, saves and releases Desktop,
-and records `native_preparation_only` with `solver_invoked=false`. It is not a
-completed solve and it consumes the prepared run's execution state. Prepare a
-**separate new handoff** for the later solve; do not assume the prepared-only
-receipt can be executed again as pristine input.
+Use the handoff's own metadata path (`handoff.metadata_path`), relative to the
+run folder. This uses up the run folder: it records a preparation only, with no
+solve, and cannot be run again as a fresh run. Prepare a new handoff for the
+solve.
 
-Inspect the sealed run folder; its bound spec supplies the requested AEDT
-version, so the preview does not accept a separate version override:
+Then open that folder:
 
 ```python
-import json
 from pathlib import Path
-from scgsim.aedt import parse_aedt_spec
 from scgsim.visualization import inspect_aedt_geometry
 
-native_run_dir = Path.cwd()  # Start this session in the prepared-only run folder.
-native_spec = parse_aedt_spec(json.loads(
-    (native_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
-))
-receipt = json.loads(
-    (native_run_dir / "metadata/aedt_run_receipt.json").read_text(encoding="utf-8")
-)
-project_path = native_run_dir / receipt["project"]
-preview = inspect_aedt_geometry(native_run_dir)
+prepared_only_run_dir = Path(".artifacts/aedt-prepared-only")  # the folder above
+preview = inspect_aedt_geometry(prepared_only_run_dir)
 preview.show_materials()
 preview.show_boundaries()
 ```
 
-`project_path` above identifies the actual saved `.aedt` file for reference.
-Passing the sealed run folder binds preview readback to its recorded spec
-and opens native AEDT; Surface-EPR or mesh views can remain unavailable. If you
-instead pass `project_path` directly, supply its design and an explicit
-`aedt_version` matching the target Desktop. It does not turn a screenshot into a
-completed run. The [preview contract](preview-the-geometry.qmd) specifies source
-hashes, manifest custody and unavailable modes.
+This opens AEDT, of the version the run folder records, to read the model
+back. The Surface-EPR and mesh views can be unavailable for AEDT. For a saved
+`.aedt` project instead of a run folder, pass its `design` and an
+`aedt_version` that matches the installed AEDT.
 
-Next, [execute a fresh handoff](run-elsewhere.qmd) on its host, or return to the
-[course map](../start/choose-a-simulation.qmd) to choose a different backend model.
+Next, [run the model](run-elsewhere.qmd), or go back to
+[choose a different calculation](../start/choose-a-simulation.qmd).

@@ -4,14 +4,13 @@ Owns: the production import path, output directories, the colour palette, the Pl
 running example (pad in ground, port on the support plane) as a prism catalogue, and the drawing of footprints
 and arrangement cells.  It derives nothing itself; every geometry comes from ``scgsim.geometry.sgb``.
 
-Run every script with the Python of the sgb-core checkout (branch ``claude/sgb-core``), which has ``scgsim`` with
-``geometry.sgb`` installed::
+Run every script from the repository root, in its locked development environment::
 
-    SGB_CORE=<sgb-core worktree>   # optional; defaults to this checkout
-    $SGB_CORE/.artifacts/env/bin/python zh-TW/docs/contribute/sgb-design/_figures/<script>.py
+    uv run --locked --no-sync python zh-TW/docs/contribute/sgb-design/_figures/<script>.py
 
 The test-side scene builders (``sgb_scenes``, ``sgb_emit_cases``, ``sgb_catalogue_report`` ...) are imported from
-``$SGB_CORE/tests``, which is put on ``sys.path`` here at run time; nothing of them is copied.
+the checkout's ``tests/`` (``SGB_CORE`` may name another checkout), which is put on ``sys.path`` here at run time;
+nothing of them is copied.
 """
 
 from __future__ import annotations

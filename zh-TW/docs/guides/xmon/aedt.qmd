@@ -1,7 +1,7 @@
 ---
-title: "覆晶 Xmon：以實體金屬進行 AEDT 本徵模態"
-description: "綁定接面、宣告 Surface EPR，並在 SGB 模型上準備 AEDT EPR 請求。"
 lang: zh-TW
+title: "以 AEDT 計算覆晶 Xmon"
+description: "準備覆晶 Xmon 的 HFSS 本徵模態計算：modeling=\"solid\"、表面薄膜、邊距與接面，求頻率、Q 值與 EPR。"
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/tutorial-xmon-aedt"
@@ -11,49 +11,57 @@ aliases:
   - ../../tutorial-xmon-aedt.html
 ---
 
-請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](inputs.qmd)。本頁在其 `plan` 上加入 Surface EPR、重新準備，並使用新的 `snapshot`、`port_name` 與 `coupon`，準備可攜式 HFSS 本徵模交接套件，輸出表面、體積與接面 EPR。Python 輸入準備環境需要 SCGSim `aedt-epr` extra 與相符的公開 OrPen 輸入。此 extra 提供版圖幾何與 PyAEDT 的 Python 相依項目；不會安裝 AEDT 或提供授權。本範例明確選擇 AEDT 2024.2。目標執行主機需要該 AEDT 版本、PyAEDT 1.3.0 與適當授權。請使用[範例](../../start/choose-a-simulation.qmd)列出的相符 SCGSim 來源修訂版本。Quarto 不會開啟 AEDT、建立原生幾何或求解此模型。snapshot 保留其來源物理堆疊；本頁為 AEDT 選擇 `modeling="solid"`，把每個導體建成與其薄膜同厚的實體。
+本頁為[共用的計畫](inputs.qmd)中的覆晶 Xmon 準備 HFSS 本徵模態計算，金屬建成實體（`modeling="solid"`）：求量子位元模態的頻率與 Q 值，以及各表面、介電質與接面的參與率，接面以 11.78 nH 電感表示。HFSS 會一直細化，直到模態頻率在回合（pass）之間的變化不超過 0.1 %，這與 [Palace 頁](palace.qmd)宣告的條件相同。這個儲存庫沒有這次計算的結果紀錄。
 
-## 設定表面與接面 EPR {#configure-surface-and-junction-epr}
+你需要：
 
-共用 snapshot 會將已定義的 `D0_TO_D1_GAP` 與產生的外部真空區域分開。Palace 讓外部維持自然 PMC 邊界，HFSS 則在其 Region 的各面指派相同的條件，即 Perfect H。[AEDT 執行環境參考](../../reference/specs/aedt-runtime.qmd#public-epr-candidate-surface)說明原生 Region 表示方式。此靜態頁面不宣稱已檢查原生 HFSS 幾何。比較結果時，請記下外部邊界、Region 尺寸與後端設定。
+- 準備計算的電腦：含 `aedt-epr` extra 的 SCGSim 與 OrcaPen SC PDK；準備時不會開啟 AEDT；
+- 執行計算的電腦：AEDT 2024.2、PyAEDT 1.3.0 與授權（[執行已準備的模型](../run-elsewhere.qmd#prepare-the-solver-host)）。
 
-### 宣告 Surface EPR {#declare-surface-epr}
+請先在同一個 Python 工作階段執行[共用的計畫](inputs.qmd)：它定義了 `plan` 與 `port_name`。
 
-與 Palace 相同，在計畫上宣告 Surface EPR：每個介面型別一個 spec，包含其薄膜假設與 inset margin。margin 會成為 AEDT 匯入的 SGB 模型的 band，已宣告型別的每一列 sidecar Surface-EPR 列都會積分，側壁也包含在內。薄膜厚度、介電常數、損耗與來源取自 OrPen 的合成 `LiteratureCentral` 預設值；margin 是相對於每個表面未遮罩 baseline 的替代評估。
+## 表面薄膜 {#configure-surface-and-junction-epr}
+
+[]{#declare-surface-epr}在計畫上設定薄膜，與 [Palace 頁](palace.qmd#configure-eigenmode-and-epr-outputs)完全相同：每類表面一層，MA（金屬–空氣）、MS（金屬–基板）與 SA（基板–空氣），各厚 2 nm，使用 PDK 的 `LiteratureCentral` 預設值（建模假設），並設 0.5 µm 與 1.0 µm 兩個離間隙邊緣的邊距。
 
 ```python
-from orcapen_sc_pdk.materials import validate_interface_preset_records
+from orcapen_sc_pdk import validate_interface_preset_records
 
 presets = validate_interface_preset_records()
-surface_epr_specs = {}
-for kind in ("MA", "MS", "SA"):
-    preset_name = f"LiteratureCentral_{kind}"
-    preset = presets[preset_name]
-    if preset["interface_type"] != kind:
-        raise ValueError(f"{preset_name} is not a {kind} preset")
-    surface_epr_specs[kind] = {
-        "film_thickness_m": preset["thickness"] * 1e-6,
-        "permittivity": preset["permittivity"],
-        "loss_tangent": preset["loss_tangent"],
-        "source": preset["source"],
-        "preset": preset_name,
-        "inset_margins_um": [0.5, 1.0],
+plan.set_surface_epr({
+    kind: {
+        "film_thickness_m": presets[f"LiteratureCentral_{kind}"]["thickness"] * 1e-6,
+        "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+        "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+        "source": presets[f"LiteratureCentral_{kind}"]["source"],
+        "preset": f"LiteratureCentral_{kind}",
+        "inset_margins_um": (0.5, 1.0),
     }
-plan.set_surface_epr(surface_epr_specs)
-snapshot = plan.prepare()
+    for kind in ("MA", "MS", "SA")
+})
 ```
 
-Surface EPR 是幾何的一部分，所以以 `plan.set_surface_epr` 設定在輸入教學的計畫上，再重新準備計畫；新的 `snapshot` 把規格帶給 `EigenmodeSim`，它本身沒有 Surface-EPR 設定方法。
+邊距會切進 AEDT 匯入的模型，宣告的每一類表面都會積分，包含金屬的側面。
 
-### 綁定接面 {#bind-the-junction}
+## 接面 {#bind-the-junction}
 
-元件註記會識別已定義端口薄片及其主幾何；Notebook 的 `GeometryPlan` 提供最終端點 Nets。請先將該正規化薄片綁定至明確 Nets 與電路值，準備交接套件前，將此 `junction` 加入 `EigenmodeSim`。Closed-XY binder 接觸會找出可能的擁有者；準備階段仍會依共用輸出幾何，檢查完整的指定端邊。其共用座標建構、讀回解析、拓撲與搜尋假設，請參閱[分區契約](../../reference/specs/aedt-runtime.qmd#aedt-automatic-junction-partition)。
-
-公開 Palace 範例以電感 $L=11.78\,\mathrm{nH}$ 模型化端口。此 AEDT 範例將 $C=0$ 設為僅含電感的明確電路模型假設；這不代表實體元件電容為零，也不表示曾量得電容。
+AEDT 需要在計畫上宣告接面：它是哪一片薄片、連接哪兩個 Entity，以及它們各屬哪個 Net。接著 `planar_junction_from_port` 把電路值綁到這片薄片上。
 
 ```python
 from scgsim.aedt import planar_junction_from_port
+from scgsim.geometry import JunctionTerminalBinding, RectangularJunctionSpec
 
+plan.set_rectangular_junctions([
+    RectangularJunctionSpec(
+        junction_id="jj",
+        port_sheet_id="PORT_SHEET__chip/device/o_junction_lumped__0000",
+        source_polygon_id="PORT_SHEET__chip/device/o_junction_lumped__SOURCE__P0000",
+        source_occurrence_path="chip/device",
+        terminal_a=JunctionTerminalBinding("chip/D1_BOTTOM_GROUND_PLANE", "chip", "Ground"),
+        terminal_b=JunctionTerminalBinding("chip/device/D1_XMON_PAD", "chip/device", "xmon_pad"),
+    )
+])
+snapshot = plan.prepare()
 junction = planar_junction_from_port(
     snapshot.geometry_input,
     port_name=port_name,
@@ -61,18 +69,19 @@ junction = planar_junction_from_port(
     terminal_a_net="Ground",
     terminal_b_net="xmon_pad",
     inductance_h=11.78e-9,
-    capacitance_f=0.0,  # Explicit inductive-only modeling assumption.
+    capacitance_f=0.0,
 )
 ```
 
-## 選取回報資料列並準備交接 {#select-reported-rows-and-prepare-a-handoff}
+- `port_sheet_id` 與 `source_polygon_id` 是準備好的計畫為接面薄片取的名稱；`[r.port_sheet_id for r in snapshot.geometry_input.port_sheet_regions]` 可以列出它們。
+- 端子 A 是薄片起點所在的 Entity，這裡是 D1 接地平面；端子 B 是它指向的 Entity，也就是 Xmon 焊墊；順序相反會被拒絕。每個端子都寫出它的 Entity、它所屬的放入部分（平面是 `chip`，焊墊是 `chip/device`）與它的 Net。
+- `capacitance_f=0.0` 把接面當成純電感。這是建模選擇，不代表接面沒有電容。
 
-以下選擇會要求模態 1、每個 sidecar Surface-EPR 群組、已宣告接面，以及每個體積區域：以 AEDT 物件名稱表示的匯入介電實體，以及代表 plan 真空的單一 `Region`。對 AEDT 請求而言，`None` 會選取所有已設定項目，`()` 不選取任何項目，而明確 tuple 會選取指定 ID。這些選擇只篩選回報資料列，不會移除物理區域、接面或表面模型，也不會改變正規化。請參閱 [EPR 物理量與選擇契約](../../concepts/surface-epr.qmd#workflow-and-state-contract)。
+AEDT 會把接面放在兩個導體之間的薄片上（[接面參考](../../reference/specs/aedt-runtime.qmd#aedt-automatic-junction-partition)）。
 
-請提供目標 AEDT 主機或工作配置允許的資源。以下環境變數名稱由呼叫端管理，不是 SCGSim 預設值；`AedtResources` 會將選定的核心數與 RAM 限制百分比記錄在交接套件中。
+## 準備計算 {#select-reported-rows-and-prepare-a-handoff}
 
 ```python
-import os
 from pathlib import Path
 
 from scgsim.aedt import (
@@ -82,15 +91,10 @@ from scgsim.aedt import (
     EigenmodeSim,
 )
 
-aedt_run_dir = Path.cwd() / ".artifacts" / "public-xmon-aedt-solid"
-aedt_resources = AedtResources(
-    cores=int(os.environ["SCGSIM_AEDT_CORES"]),
-    ram_limit_percent=int(os.environ["SCGSIM_AEDT_RAM_LIMIT_PERCENT"]),
-)
-AEDT_VERSION = "2024.2"  # This example explicitly selects AEDT 2024.2.
+AEDT_VERSION = "2024.2"  # The AEDT release of the computer that runs it.
 sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
 sim.set_plan(snapshot)
-sim.set_output_dir(aedt_run_dir)
+sim.set_output_dir(Path.cwd() / ".artifacts" / "public-xmon-aedt-solid")
 sim.set_eigenmode(
     project_name="public_xmon_solid_eigenmode",
     design_name="Xmon",
@@ -103,20 +107,25 @@ sim.set_eigenmode(
         minimum_passes=1,
         minimum_converged_passes=1,
     ),
-    resources=aedt_resources,
+    resources=AedtResources(cores=4, ram_limit_percent=80),
 )
 sim.add_junction(junction)
 sim.set_epr_request(
     EprAnalysisRequest(
         mode_indices=(1,),
-        surface_epr_groups=None,  # every sidecar Surface-EPR group
+        surface_epr_groups=None,  # every Surface EPR group
         junction_ids=(junction.junction_id,),
-        bulk_domain_ids=None,  # every imported dielectric solid and the Region
+        bulk_domain_ids=None,  # every dielectric solid and the Region
     )
 )
 ```
 
-建立網格或交接套件前，先檢查正規化來源與已設定的 AEDT 選項：
+- `modeling="solid"` 把金屬建成具有薄膜厚度的實體，也就是 100 nm 的鋁；`"thin_film"` 則會建成薄片。
+- `EigenmodeRunControl` 要求 3 GHz 以上的第一個模態，最多 20 個自適應回合，在頻率於回合之間的變化不超過 0.1 % 時停止。
+- `AedtResources` 給出 AEDT 可以使用的核心數與記憶體比例；請依你的 AEDT 電腦設定。
+- `EprAnalysisRequest` 選擇要回報的內容：模態 1、所有表面 EPR 群組、接面，以及所有塊體區域：介電質實體（例如兩片矽晶片）與代表計畫真空區域的 Region。`None` 選全部，`()` 不選，ID 的 tuple 則選那些。這個選擇不會改變求解。
+
+寫出執行資料夾之前，先看看輸入：
 
 ```python
 from IPython.display import display
@@ -124,17 +133,19 @@ from IPython.display import display
 display(sim.input_summary())
 ```
 
-此摘要是在求解前檢視目前輸入，不會開啟 AEDT，也不代表已建立原生幾何。
+再寫出它：
 
 ```python
 handoff = sim.prepare_handoff()
 print(handoff.run_dir, handoff.script_path, handoff.archive_path)
 ```
 
-執行控制設定的是呼叫端要求的原生搜尋與停止條件。求解前無法據此確認研究是否充分。請在 Notebook 中，將實際準則及其變更與回傳的原生狀態及物理量歷程並列保留，再依[研究判讀流程](../convergence-and-reports.qmd#interpret-for-scq-use)說明這些證據是否回答預定的 SCQ 問題。每次準備都使用新的輸出目錄；若路徑已存在，SCGSim 會拒絕。`prepare_handoff()` 會寫出可攜式套件，但不會開啟 AEDT、建立原生幾何或執行求解器。
+`prepare_handoff()` 建立模型並寫出執行資料夾與封存檔；它不會開啟 AEDT。每次準備都需要新的輸出資料夾。
 
-## 執行、解析並繼續分析 {#execute-resolve-and-continue-the-analysis}
+## 執行、讀取與後續 {#execute-resolve-and-continue-the-analysis}
 
-請在 AEDT 主機明確[執行完整套件](../run-elsewhere.qmd)，接著[重新啟動並解析回傳資料](../convergence-and-reports.qmd)。報告會先讀取封存的識別資訊、數值／歷程與基準證據，再呈現物理結果。對本研究選取的模態與表面貢獻，除頻率外也請檢視參與率及其變化；只依頻率停止，不能說明另一項 EPR 物理量是否足夠。請將記錄的準則與原生狀態做為證據，不要將其轉化為通用驗收規則。此處的準備會建立 SGB 模型與請求記錄，不會建立原生 CAD，也不會確認計算器的場側準確度。
+在 AEDT 電腦上[執行這個資料夾](../run-elsewhere.qmd#aedt-execute-the-prepared-package-locally)，整個帶回來，再以 `resolve_results` 讀取（[收斂與報告](../convergence-and-reports.qmd#aedt-read-the-sealed-family-evidence)）：`physics_results()` 給出頻率與 Q，`epr_result()` 給出每個自適應回合的參與率。HFSS 的停止條件只看頻率；你需要的參與率，也請看它的歷程（[解讀結果](../convergence-and-reports.qmd#interpret-for-scq-use)）。
 
-自適應歷程與最終儲存場評估分開。使用[儲存場分析課程](../saved-fields.qmd)，驗證已釋出的 cohort，並在原生工作複本中以相符的幾何／請求評估場，無須再次求解。完成後，才將最終的 `epr-result.json` 用於[離線 EPR](../offline-loss.qmd)。新評估的遮罩／內縮邊距不會插入舊的自適應曲線。確切原生綁定、內縮建構與收據規則，請參閱 [AEDT 契約](../../reference/specs/aedt-runtime.qmd)。
+若要從最終已存的場再算一次參與率，用[從 AEDT 已存的場計算 EPR](../saved-fields.qmd)；若要套用其他損耗正切，用[不重新求解，改變損耗假設](../offline-loss.qmd)。
+
+兩個頁面從同一個計畫出發，外表面也使用相同的條件：Palace 中是理想磁導體，HFSS 中是 Perfect H。比較結果時，請把每次計算自己的設定與收斂情形放在旁邊。
