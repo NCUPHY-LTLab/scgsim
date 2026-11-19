@@ -99,8 +99,8 @@ website:
       - docs/guides/capacitance-palace.qmd
       - docs/guides/capacitance-q3d.qmd
       - docs/guides/modes-palace.qmd
-      - docs/guides/modes-hfss.qmd
       - docs/guides/aedt-cpw-inputs.qmd
+      - docs/guides/modes-hfss.qmd
       - docs/guides/s-parameters-hfss.qmd
       - docs/guides/line-parameters-q2d.qmd
     - section: Results

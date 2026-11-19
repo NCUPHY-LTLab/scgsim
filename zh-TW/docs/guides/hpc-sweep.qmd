@@ -1,7 +1,7 @@
 ---
-title: "AEDT：在 HPC 上做參數掃描"
-description: "在本機準備獨立 HFSS EPR 模型，傳送一個掃描套件，在 HPC 上不啟動 Desktop 執行求解，再收集完整自適應 EPR。"
 lang: zh-TW
+title: "在 HPC 上做參數掃描"
+description: "在 HFSS 中掃描接面電感：在工作站建立各模型，在 HPC 上不開 AEDT 桌面求解，再收回結果。"
 scgsim-id: "docs/course/aedt-hpc-sweep"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
@@ -11,27 +11,21 @@ aliases:
   - ../course/aedt-hpc-sweep.html
 ---
 
-在具備授權的 AEDT 工作站準備每個模型，將一個套件傳送至 HPC 僅供求解，再於具備授權的工作站收集回傳結果。本教學使用公開的 **SCGSim 3.0.0rc4** 批次 API，掃描既有 Xmon 模型中明確設定的接面電感。
+本頁在 HFSS 本徵模態中，把[以 Palace 計算共振模態](modes-palace.qmd)那個焊墊共振器的電感掃過 10、12、14 nH。三個模型各自在裝有 AEDT 的工作站上建立並儲存，再到 HPC 電腦上以 AEDT 的命令列求解器、不開桌面程式依序求解，最後把結果帶回工作站，讀出每個模型的頻率、Q 值與能量參與率。這個流程尚未以 AEDT 完整跑過一遍，這個儲存庫也沒有它的結果。
 
-⚠️ 原生驗證待完成：此流程尚未以 AEDT 2023.2 完整執行過端對端批次掃描。
+[]{#hosts-and-prerequisites}會用到三台電腦，或三個工作階段：
 
-## 主機與先決條件 {#hosts-and-prerequisites}
+| 階段 | 在哪裡 | 需要什麼 |
+|---|---|---|
+| 1. 建立並封裝各模型 | 工作站 | 含 `aedt-epr` extra 的 SCGSim 與 OrcaPen SC PDK，以及有桌面程式與授權的 AEDT 2024.2 |
+| 2. 求解 | HPC 電腦 | AEDT 2024.2 的命令列求解器與授權，以及 Python 3.12；不需要 SCGSim、PyAEDT 或桌面程式 |
+| 3. 收回結果 | 工作站 | 與階段 1 相同 |
 
-| 階段 | 必要環境 |
-|---|---|
-| 來源與原生準備 | 相符的 Xmon 來源相依項目、SCGSim `aedt-epr`、PyAEDT 1.3.0、明確選定的 AEDT 版本與授權，以及可用的 Desktop 工作階段 |
-| HPC 求解 | Python 3.12 標準函式庫、選定的 AEDT 命令列執行檔與授權；此階段不需要可用的 Desktop 工作階段、SCGSim 安裝或 PyAEDT |
-| 原生結果收集 | SCGSim 3.0.0rc4、PyAEDT 1.3.0、選定的 AEDT 版本與授權，以及可用的 Desktop 工作階段 |
+三處請使用同一個 AEDT 版本。
 
-請在同一個 Python 工作階段完成[覆晶 Xmon 輸入](xmon/inputs.qmd)與[覆晶 Xmon AEDT](xmon/aedt.qmd)的設定章節。停在該教學原始交接的執行步驟之前。以下程式碼只使用兩個具名變數：`snapshot`（不可變來源與堆疊，含計畫的 Surface-EPR 規格）與 `junction`（綁定來源的 `PlanarJunction`）。
+## 1. 建立並封裝各模型 {#prepare-and-package-each-model}
 
-實體幾何、最終 Nets 與體積材料屬於該來源。以下三個電感值是明確的電路模型選擇，不是元件實測值。若要掃描幾何，每個案例都必須重新編寫來源 snapshot，並重新綁定接面與目錄。
-
-## 1. 準備並封裝每個模型 {#prepare-and-package-each-model}
-
-請使用新的研究目錄。先設定由呼叫端管理的環境變數：`SCGSIM_AEDT_CORES`、`SCGSIM_AEDT_RAM_LIMIT_PERCENT` 與 `AEDT_BATCH_EXECUTABLE`。最後一個值是 **HPC 上的**執行檔路徑或指令，會在該主機解析。請選擇該主機允許使用的資源；批次配方接受 1 到 99 的整數 RAM 百分比，做為每部主機的求解器限制，而非作業系統限制。
-
-在準備工作站繼續使用先決條件所建立的 Python 工作階段，執行下列程式：
+把 `AEDT_BATCH_EXECUTABLE` 設為 HPC 電腦上呼叫 AEDT 執行檔的方式；它會寫進每個封裝，在那裡執行。接著在工作站的一個新研究資料夾中執行這支腳本：
 
 ```python
 import json
@@ -41,80 +35,114 @@ import tarfile
 from dataclasses import replace
 from pathlib import Path
 
+import gdsfactory as gf
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
 from scgsim.aedt import (
-    AedtResources, EprAnalysisRequest, EigenmodeRunControl, EigenmodeSim,
-    prepare_native_batch,
+    AedtResources, EigenmodeRunControl, EigenmodeSim, EprAnalysisRequest,
+    planar_junction_from_port, prepare_native_batch,
+)
+from scgsim.geometry import GeometryPlan, JunctionTerminalBinding, RectangularJunctionSpec
+
+# The pad of First simulation, with its junction sheet declared as a junction.
+orcapen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0, die_side_um=1000.0
+)
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=get_single_die_layer_stack(),
+    material_records=get_material_records(),
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(0.0, 0.0, 1000.0))
+plan.set_rectangular_junctions([
+    RectangularJunctionSpec(
+        junction_id="jj",
+        port_sheet_id="PORT_SHEET__chip/o_junction_lumped__0000",
+        source_polygon_id="PORT_SHEET__chip/o_junction_lumped__SOURCE__P0000",
+        source_occurrence_path="chip",
+        terminal_a=JunctionTerminalBinding("chip/PAD", "chip", "pad"),
+        terminal_b=JunctionTerminalBinding("chip/GROUND", "chip", "ground"),
+    )
+])
+snapshot = plan.prepare()
+junction = planar_junction_from_port(
+    snapshot.geometry_input,
+    port_name="chip/o_junction_lumped",
+    junction_id="jj",
+    terminal_a_net="pad",
+    terminal_b_net="ground",
+    inductance_h=10e-9,
+    capacitance_f=0.0,
 )
 
-AEDT_VERSION = "2023.2"  # Select the same installed release on all three hosts.
-resources = AedtResources(
-    cores=int(os.environ["SCGSIM_AEDT_CORES"]),
-    ram_limit_percent=int(os.environ["SCGSIM_AEDT_RAM_LIMIT_PERCENT"]),
-)
-solver_executable = os.environ["AEDT_BATCH_EXECUTABLE"]
-study = (Path.cwd() / ".artifacts" / "xmon-hpc-sweep").resolve()
-study.mkdir(parents=True, exist_ok=False)
+AEDT_VERSION = "2024.2"  # The same release on all three computers.
+resources = AedtResources(cores=4, ram_limit_percent=80)
+study = (Path.cwd() / ".artifacts" / "pad-hpc-sweep").resolve()
 packages = study / "packages"
-packages.mkdir()
-case_parameters = (
-    ("L10nH", 10e-9),
-    ("L12nH", 12e-9),
-    ("L14nH", 14e-9),
-)
-run_control = EigenmodeRunControl(
-    setup_name="Setup1", minimum_frequency_ghz=3.0, num_modes=1,
-    maximum_passes=20, maximum_delta_frequency_percent=0.1,
-    minimum_passes=1, minimum_converged_passes=1,
-)
+packages.mkdir(parents=True, exist_ok=False)
 rows = []
-for case_id, inductance_h in case_parameters:
-    case_junction = replace(junction, inductance_h=inductance_h)
-
+for case_id, inductance_h in (("L10nH", 10e-9), ("L12nH", 12e-9), ("L14nH", 14e-9)):
     sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
     sim.set_plan(snapshot)
     sim.set_output_dir(study / "prepared" / case_id)
     sim.set_eigenmode(
-        project_name=f"xmon_{case_id}", design_name="Xmon",
-        run_control=run_control, resources=resources,
+        project_name=f"pad_{case_id}",
+        design_name="PadLC",
+        run_control=EigenmodeRunControl(
+            setup_name="Setup1", minimum_frequency_ghz=3.0, num_modes=1,
+            maximum_passes=20, maximum_delta_frequency_percent=0.1,
+            minimum_passes=1, minimum_converged_passes=1,
+        ),
+        resources=resources,
     )
-    sim.add_junction(case_junction)
+    sim.add_junction(replace(junction, inductance_h=inductance_h))
     sim.set_epr_request(EprAnalysisRequest(
         mode_indices=(1,),
-        surface_epr_groups=None,  # every sidecar Surface-EPR group
-        junction_ids=(case_junction.junction_id,),
-        bulk_domain_ids=None,  # every imported dielectric solid and the Region
+        surface_epr_groups=None,  # every Surface EPR group of the plan (none here)
+        junction_ids=("jj",),
+        bulk_domain_ids=None,  # every dielectric solid and the Region
     ))
-    handoff = sim.prepare_handoff()  # File-only request preparation.
-    subprocess.run(
-        ["bash", str(handoff.script_path), "--prepare-only"], check=True,
-    )  # Native model/setup/cache authoring, save and release; no solve.
+    handoff = sim.prepare_handoff()  # Writes the run folder; opens no AEDT.
+    subprocess.run(["bash", str(handoff.script_path), "--prepare-only"], check=True)
     package = prepare_native_batch(
-        handoff.run_dir, output_dir=packages / case_id,
-        solver_executable=solver_executable, resources=resources,
+        handoff.run_dir,
+        output_dir=packages / case_id,
+        solver_executable=os.environ["AEDT_BATCH_EXECUTABLE"],
+        resources=resources,
     )
     rows.append({
-        "case_id": case_id, "inductance_h": inductance_h,
+        "case_id": case_id,
+        "inductance_h": inductance_h,
         "package": package.root.relative_to(study).as_posix(),
     })
 
 manifest = study / "sweep.json"
-manifest.write_text(json.dumps({
-    "aedt_version": AEDT_VERSION, "cases": rows,
-}, indent=2) + "\n", encoding="utf-8")
-outbound = study / "xmon-sweep-inputs.tar.gz"
+manifest.write_text(json.dumps({"aedt_version": AEDT_VERSION, "cases": rows}, indent=2) + "\n")
+outbound = study / "pad-sweep-inputs.tar.gz"
 with tarfile.open(outbound, "w:gz") as archive:
     archive.add(manifest, arcname="sweep.json")
     archive.add(packages, arcname="packages")
 print(outbound)
 ```
 
-**檢查：**每個 `packages/<case_id>` 資料夾都包含 `native-batch-package.json`、`run_batch.py` 與 `native_batch.tar.gz`。套件 API 要求原生準備、設定／快取儲存及計算器定義讀回均成功。若有其他原生相依項目，封裝時可透過 `dependencies=(...)` 提供相對於已準備執行目錄的路徑。
+對每個電感值，迴圈會：
 
-每個模型都有各自的物理準備、專案與套件。外層的 `sweep.json` 是呼叫端維護的案例至參數對照表；它不會新增 SCGSim 參數掃描 API。請在工作站保留完整的準備目錄。
+1. 以 `prepare_handoff()` 準備執行資料夾，做法和[以 HFSS 計算共振模態](modes-hfss.qmd)相同，這裡另外要求接面與介電質的 EPR；
+2. 執行該資料夾的 `run_aedt.sh --prepare-only`：AEDT 建立模型、設定求解與 EPR 計算、儲存專案後關閉，不求解；
+3. 以 `prepare_native_batch()` 把儲存的專案封裝給 HPC 求解器。
 
-## 2. 傳送單一封存檔並在 HPC 依序求解 {#transfer-one-archive-and-solve-serially-on-hpc}
+接面需要在 `prepare()` 之前以 `plan.set_rectangular_junctions` 宣告：它指名接面薄片，以及薄片連接的焊墊與接地 Entity，焊墊在前，因為薄片的方向是從焊墊指向接地。三個模型之間只有電感不同，所以共用一個計畫；若要掃描幾何，每個案例都需要新的計畫、快照與接面。`sweep.json` 是你自己的案例表；SCGSim 沒有掃描函式。
 
-使用所在機構的傳輸方式複製 `xmon-sweep-inputs.tar.gz`。在新的 HPC 工作目錄中，使用標準函式庫 Python 執行下列程式；將 `incoming` 設為已傳送封存檔的位置。只解開你建立或信任的套件。
+每個 `packages/<案例>` 裡有 `native-batch-package.json`、`run_batch.py` 與 `native_batch.tar.gz`。請把 `prepared/` 資料夾留在工作站上。
+
+## 2. 在 HPC 上求解 {#transfer-one-archive-and-solve-serially-on-hpc}
+
+把 `pad-sweep-inputs.tar.gz` 複製到 HPC 電腦，在那裡的一個新工作資料夾中，只用 Python 3.12 執行：
 
 ```python
 import json
@@ -123,8 +151,8 @@ import sys
 import tarfile
 from pathlib import Path
 
-incoming = Path("xmon-sweep-inputs.tar.gz").resolve()
-workspace = (Path.cwd() / "xmon-hpc-run").resolve()
+incoming = Path("pad-sweep-inputs.tar.gz").resolve()
+workspace = (Path.cwd() / "pad-hpc-run").resolve()
 workspace.mkdir(exist_ok=False)
 with tarfile.open(incoming, "r:gz") as archive:
     archive.extractall(workspace, filter="data")
@@ -139,22 +167,18 @@ for row in sweep["cases"]:
         "--output", str(attempts / row["case_id"]),
     ], check=True)
 
-returned = workspace.parent / "xmon-sweep-returned.tar.gz"
+returned = workspace.parent / "pad-sweep-returned.tar.gz"
 with tarfile.open(returned, "x:gz") as archive:
     for name in ("sweep.json", "packages", "attempts"):
         archive.add(workspace / name, arcname=name)
 print(returned)
 ```
 
-**檢查：**每次嘗試都包含 `batch-attempt.json`、原始求解器 stdout／stderr，以及完整的 `work/` 樹。若指令失敗，請保留該次嘗試與記錄以供診斷；迴圈會停止，不會自動重試。
+`run_batch.py solve` 在這一台電腦上，以封裝內的資源設定對封裝的專案執行 AEDT 的批次求解；它不會送出排程作業。若要用你所在環境的排程器，請改成每個案例一個作業，而不是用迴圈。每次嘗試都保留 `batch-attempt.json`、求解器的輸出與完整的 `work/` 資料夾。某個案例失敗時，迴圈會停下並保留那次嘗試與紀錄，不會自動重跑。
 
-獨立指令碼會使用原生 BatchSolve／PPE，套用封裝的設計／設定與呼叫端資源。主機名稱與執行檔會在 HPC 上解析。所在機構的排程器可將每個案例指派給一個陣列工作，但提交與資源配置由該機構管理；本教學依序執行，不使用排程器 API。
+## 3. 收回結果 {#return-all-attempts-and-collect-full-epr}
 
-## 3. 回傳所有嘗試並收集完整 EPR {#return-all-attempts-and-collect-full-epr}
-
-將 `xmon-sweep-returned.tar.gz` 複製到具備授權的收集工作站。請保留完整回傳樹，包括 `.aedtresults`；只保留選取的 CSV 或僅匯出 LastAdaptive，都無法取代自適應歷程與儲存場。
-
-請在相符的 SCGSim 環境中執行：
+把 `pad-sweep-returned.tar.gz` 完整複製回工作站：自適應歷程與已存的場都在取回專案的 `.aedtresults` 資料夾中。接著在 SCGSim 環境中執行：
 
 ```python
 import json
@@ -163,36 +187,27 @@ from pathlib import Path
 
 from scgsim.aedt import collect_native_batch
 
-incoming = Path("xmon-sweep-returned.tar.gz").resolve()
-returned_root = (Path.cwd() / "xmon-returned").resolve()
+incoming = Path("pad-sweep-returned.tar.gz").resolve()
+returned_root = (Path.cwd() / "pad-returned").resolve()
 returned_root.mkdir(exist_ok=False)
 with tarfile.open(incoming, "r:gz") as archive:
     archive.extractall(returned_root, filter="data")
 sweep = json.loads((returned_root / "sweep.json").read_text(encoding="utf-8"))
-collected_root = (Path.cwd() / "xmon-collected").resolve()
+collected_root = (Path.cwd() / "pad-collected").resolve()
 collected_root.mkdir(exist_ok=False)
-results = {}
 for row in sweep["cases"]:
     run = collect_native_batch(
         returned_root / row["package"],
         returned_root / "attempts" / row["case_id"],
         output_dir=collected_root / row["case_id"],
     )
-    results[row["case_id"]] = run
-    print(row["case_id"], "L_H=", row["inductance_h"])
+    print(row["case_id"], "L =", row["inductance_h"], "H")
     print(run.physics_results())
     print(run.epr_result())
 ```
 
-**檢查：**每次成功呼叫都會在原生收集、Desktop 釋放與封存後回傳嚴格解析的 `ResolvedRun`。收集流程會重用回傳模型、表面與快取，不會執行 Analyze 或重建幾何。若缺少必要模態／通過歷程或儲存場證據，收集會失敗並保留子目錄輸出供診斷；程序結束碼為零本身不能代表結果完整。
+`collect_native_batch()` 會在 AEDT 中開啟每個取回專案的副本，讀出自適應歷程與已存場的 EPR，並以與 `resolve_results()` 相同的形式回傳結果，不會重新求解或重建模型。`physics_results()` 給出模態的 `frequency_ghz` 與 `q_factor`，`epr_result()` 給出參與率。缺少歷程或已存場的案例會在這裡失敗，並保留輸出以供診斷。
 
-## 判讀版本與階段記錄 {#read-version-and-stage-records}
+## 比較各案例 {#read-version-and-stage-records}
 
-| 記錄 | 意義 |
-|---|---|
-| 套件要求的版本 | 撰寫每個請求時明確選取的 `AEDT_VERSION` |
-| 原生準備所連線的版本 | 實際用於準備原生模型的版本 |
-| 外部執行嘗試的實際版本 | 可能仍未知；請檢查保留的求解器證據，不要以要求的版本替代 |
-| 收集器連線的版本 | 收集交易實際開啟的版本 |
-
-比較案例時，請分開看待模型參數、數值控制、EPR 選擇與資源。本範例固定來源幾何、材料預設值、模態、遮罩／內縮邊距與自適應控制，只變更接面電感。套件內容、失敗行為與資源意義請參閱[批次 API 契約](../reference/specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)。
+三個案例之間只有電感不同：幾何、材料、EPR 請求與求解器設定都相同。比較時，請把每個案例的頻率與它自己的收斂狀態與歷程放在一起看，做法見[收斂與報告](convergence-and-reports.qmd#interpret-for-scq-use)。每個案例的報告也記錄了各階段實際使用的 AEDT 版本。[批次參考](../reference/specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)列出封裝內容與所有失敗規則。

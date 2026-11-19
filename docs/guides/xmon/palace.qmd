@@ -1,6 +1,6 @@
 ---
-title: "Flip-chip Xmon: Palace Route B Eigenmode"
-description: "Add attributed films and a source-linked inductive port to Palace Eigenmode."
+title: "Flip-chip Xmon with Palace"
+description: "Prepare a Palace Eigenmode run of the flip-chip Xmon with surface films, inset margins and the junction as an inductor, refined until the qubit frequency settles."
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/tutorial-xmon-palace"
@@ -10,115 +10,97 @@ aliases:
   - ../../tutorial-xmon-palace.html
 ---
 
-Run the [shared Xmon input tutorial](inputs.qmd) first in the
-same Python session. It defines `plan`, `snapshot` and `port_name` from public component and coupon inputs. This extends [ordinary Palace Eigenmode](../modes-palace.qmd) with
-attributed films and a source-linked inductive port. Configure these before
-meshing. The documentation build does not mesh or run Palace.
+This page prepares a Palace Eigenmode run of the flip-chip Xmon of
+[the shared plan](inputs.qmd): its first two modes above 2 GHz, with the
+junction as an 11.78 nH inductor, and the participations of the surfaces, the
+substrates and the junction in each. The mesh is refined until mode 1's
+frequency changes by at most 0.1 % between passes, the same criterion the
+[AEDT page](aedt.qmd) gives HFSS.
 
-## Configure Eigenmode and EPR outputs
+This is a large model: its first mesh has 437,675 tetrahedra, about 3.1
+million unknowns at second order, and meshing alone took a little over two
+minutes on 16 cores. No result of this run is recorded in this repository.
+For the same steps on a model that runs in two minutes, with its result, see
+[Resonant modes with Palace](../modes-palace.qmd).
 
-The immutable snapshot already contains the GDS, prepared stack, final Net
-map, and shared outer vacuum envelope. Palace uses that envelope as supplied.
-Surface EPR is part of the geometry too, so the films below are set on the
-plan with `plan.set_surface_epr` and the plan is prepared again.
-The coupon's eight ground shorts are bumps drawn in its layout. The source port is the prepared
-`chip/device/o_junction_lumped` sheet; its qualified name and target layer come
-from the component annotation.
+Run the [shared plan](inputs.qmd) first, in the same Python session: it
+defines `plan`, `snapshot` and `port_name`.
+
+## Set up the simulation {#configure-eigenmode-and-epr-outputs}
 
 ```python
 from pathlib import Path
 
-from orcapen_sc_pdk import (
-    get_interface_preset_records,
-    validate_interface_preset_records,
-)
-from scgsim.palace import EigenmodeSim
+from orcapen_sc_pdk import validate_interface_preset_records
+from scgsim.palace import EigenmodeSim, ModeFrequency
 
-palace_run_dir = Path.cwd() / ".artifacts" / "public-xmon-palace-route-b"
-port_inductance_h = 11.78e-9  # Public OrPen model input; not a measured value.
-records = validate_interface_preset_records(get_interface_preset_records())
-preset_names = {
-    kind: f"LiteratureCentral_{kind}" for kind in ("MA", "MS", "SA")
-}
-interface_presets = {kind: records[name] for kind, name in preset_names.items()}
-for kind, record in interface_presets.items():
-    if record["interface_type"] != kind:
-        raise ValueError(f"{preset_names[kind]} is not an {kind} preset")
-
-plan.set_surface_epr(
-    {
-        kind: {
-            "thickness": record["thickness"],
-            "permittivity": record["permittivity"],
-            "loss_tangent": record["loss_tangent"],
-            "source": record["source"],
-            "preset": preset_names[kind],
-            "inset_margins_um": (0.5, 1.0),
-        }
-        for kind, record in interface_presets.items()
+presets = validate_interface_preset_records()
+plan.set_surface_epr({
+    kind: {
+        "film_thickness_m": presets[f"LiteratureCentral_{kind}"]["thickness"] * 1e-6,
+        "permittivity": presets[f"LiteratureCentral_{kind}"]["permittivity"],
+        "loss_tangent": presets[f"LiteratureCentral_{kind}"]["loss_tangent"],
+        "source": presets[f"LiteratureCentral_{kind}"]["source"],
+        "preset": f"LiteratureCentral_{kind}",
+        "inset_margins_um": (0.5, 1.0),
     }
-)
+    for kind in ("MA", "MS", "SA")
+})
 snapshot = plan.prepare()
 
 sim = EigenmodeSim()
 sim.set_plan(snapshot)
-sim.set_output_dir(palace_run_dir)
-sim.add_port(
-    port_name,
-    layer="D1_BOTTOM_M1",
-    layout_sheet=True,
-    inductance=port_inductance_h,
-)
+sim.set_output_dir(Path(".artifacts/xmon-palace"))
+sim.add_port(port_name, layer="D1_BOTTOM_M1", layout_sheet=True, inductance=11.78e-9)
+sim.set_eigenmode(num_modes=2, target=2e9)
 sim.set_epr_request(
     surface_interfaces=("MA", "MS", "SA"),
     bulk_domain_ids=None,
     port_names=(port_name,),
 )
-sim.set_eigenmode(num_modes=2, target=2e9, tolerance=1e-6, save=0)
 sim.set_numerical(
     order=2,
-    tolerance=1e-6,
     max_iterations=2000,
-    solver_type="Default",
-    preconditioner="Default",
-    device="CPU",
     amr_max_passes=20,
     amr_nonconformal=False,
-    amr_tolerance=2e-2,
     amr_update_fraction=0.15,
-    save_adapt_iterations=True,
-    estimator_mg=False,
-    output_paraview=False,
-    output_grid_function=False,
 )
+sim.set_convergence(ModeFrequency(modes=[1]).within(percent=0.1))
 ```
 
-The example requests margin rows through `inset_margins_um`. Each margin adds a
-row for the part of the surface at least that many micrometres from the nearest
-gap edge, next to the whole-surface baseline row. The specs are set on the plan,
-before `prepare()`, because SGB cuts the margins into the geometry; the
-[Eigenmode contract](../../reference/specs/palace-eigenmode.qmd#surface-epr-margins) lists the
-keys and limits. Omit `inset_margins_um` when only the baseline is needed. The
-example sets no mesh controls, so `mesh()` uses the default `FeatureRecipe` and
-quality threshold described in the
-[Palace mesh controls](../../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
+What it sets:
 
-The MA/MS/SA records are the OrPen `LiteratureCentral` modeling presets, not
-material measurements. Replace them only with source-attributed records for
-your study. The two requested margins are separate alternatives to the
-baseline row. `bulk_domain_ids=None` selects all configured bulk energy
-entries, and the selection does not remove physical domains or change the
-normalization. Palace's external Region surface remains natural PMC when left
-unspecified; see the [EPR methods guide](../../concepts/surface-epr.qmd#workflow-and-state-contract)
-for the boundary comparison and interpretation limits.
+- **Surface films.** One film per kind of surface: MA (metal–air), MS
+  (metal–substrate) and SA (substrate–air), each 2 nm thick with the
+  permittivity and loss tangent of the PDK's `LiteratureCentral` presets,
+  which are modelling assumptions drawn from the literature, not
+  measurements. The films are part of the geometry, so they are set on the
+  plan, which is then prepared again.
+- **Inset margins.** `"inset_margins_um": (0.5, 1.0)` adds, next to each
+  whole-surface row, rows for the part of each surface at least 0.5 µm and at
+  least 1.0 µm away from the gap edges, where the field is strongest
+  ([Inset margins](../../concepts/surface-epr.qmd#surface-distance-band-correction)).
+  Each margin row is an alternative to the whole-surface row, not an addition.
+- **Junction.** `add_port` puts an 11.78 nH inductor on the junction sheet,
+  on the D1 metal layer `D1_BOTTOM_M1`.
+- **Modes.** The first two modes above 2 GHz.
+- **Reported participations.** All three surface kinds, every bulk region
+  (`bulk_domain_ids=None`) and the junction. The selection filters what is
+  reported; it does not change the solve.
+- **Refinement.** Second-order elements, up to 2000 iterations of the linear
+  solver, up to 20 refinements that each refine the elements holding 15 % of
+  the error estimate, with conformal refinement (`amr_nonconformal=False`).
+  `set_convergence` stops the run at the first pass where mode 1's frequency
+  has changed by at most 0.1 % since the pass before
+  ([Convergence and reports](../convergence-and-reports.qmd#declare-convergence)).
+- **Mesh.** No `set_mesh` call: the default first mesh, as in
+  [Mesh and element order](../capacitance-palace.qmd#mesh-controls).
 
-## Review normalized inputs before meshing
+The faces of the vacuum region get no boundary condition, which in Palace's
+Eigenmode solver is a perfect magnetic conductor; HFSS gives the faces of its
+Region the same condition, Perfect H.
 
-`input_summary()` displays the input `mesh()` will build from and the current
-Palace settings: the bound plan with its vacuum region, requested ports and
-route applied. It does not mesh or start a solver. A model needs a vacuum
-region: this call and `mesh()` refuse a plan with none, so a stack without its
-own takes `plan.set_vacuum_region(...)` before `prepare()`.
+## Check the input {#review-normalized-inputs-before-meshing}
 
 ```python
 from IPython.display import display
@@ -126,11 +108,12 @@ from IPython.display import display
 display(sim.input_summary())
 ```
 
-To learn that SCGSim can model a layout before setting up a simulation, the
-layout repository can run the [layout modeling check](../check-a-layout.qmd),
-which stops before meshing.
+The summary shows what `mesh()` will build from: the plan with its vacuum
+region, the junction port and the films. It does not mesh. To check in
+seconds that the layout can be built and meshed at all, run
+`EigenmodeSim.simulation_drc(plan)` ([Check a layout](../check-a-layout.qmd)).
 
-## Build inputs, execute and read the return
+## Mesh, run and read {#build-inputs-execute-and-read-the-return}
 
 ```python
 mesh_path = sim.mesh()
@@ -138,16 +121,10 @@ config_path = sim.write_config()
 print(mesh_path, config_path)
 ```
 
-These are real local preparation operations. The written index binds each
-surface baseline/margin and configured port to its mesh identity; it is not a
-field result. [Inspect the backend](../inspect-the-prepared-model.qmd) if useful,
-then [prepare and execute its handoff](../run-elsewhere.qmd). Retain the Palace
-handoff ID on the preparation side, outside the transferred package.
-
-After full retrieval, [restart and strictly resolve](../convergence-and-reports.qmd).
-The report presents identity/numerical/cost evidence before available physics.
-`resolved.epr_result()` detaches available final Eigenmode EPR. Follow
-[offline EPR](../offline-loss.qmd) to retain it, select a recorded mode and
-change attributed assumptions without solving again. The
-[Palace Eigenmode contract](../../reference/specs/palace-eigenmode.qmd) owns exact selections;
-[EPR concepts](../../concepts/surface-epr.qmd) explain normalization and signed port meaning.
+Then prepare and run it as in [Run a prepared model](../run-elsewhere.qmd); a
+model of this size belongs on a workstation with many cores or a cluster. Read
+the returned folder as in [Resonant modes with Palace](../modes-palace.qmd#read-the-result):
+`result.tables["eig"]` holds the frequencies and Q, and
+`result.epr_result()` the participations, with the margin rows beside the
+whole-surface rows. [Change loss assumptions](../offline-loss.qmd) applies
+other loss tangents afterwards without solving again.

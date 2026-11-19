@@ -1,6 +1,6 @@
 ---
-title: "Flip-chip Xmon: shared source inputs"
-description: "Author named public Xmon occurrences and final Nets into one immutable source snapshot."
+title: "Flip-chip Xmon: the shared plan"
+description: "Build the plan of a flip-chip Xmon qubit from the PDK, with its Nets and vacuum region, as the one input of the Palace and AEDT pages that follow."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/tutorial-xmon-input"
@@ -10,39 +10,26 @@ aliases:
   - ../../tutorial-xmon-input.html
 ---
 
-This page builds one reusable source snapshot for the [Palace](palace.qmd)
-and [AEDT](aedt.qmd) workflows. It starts from OrPen's public
-Kosen2024 Xmon preview cell and ground-short coupon. The cell is an independent
-parametric adaptation of Kosen et al., [PRX Quantum 5, 030350
-(2024)](https://doi.org/10.1103/PRXQuantum.5.030350), shared under
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); it is not an
-author-supplied mask. The dimensions and coupon settings follow the public
-Palace Route B example linked from [Examples](../../start/choose-a-simulation.qmd); they are public
-simulation inputs, not measured device data or paper-mask dimensions. Use the
-matched SCGSim and OrPen versions listed there. Quarto shows this code without
-executing it.
+This worked example takes one flip-chip Xmon qubit through both solvers. This
+page builds its plan and prepares it as `snapshot`; the
+[Palace page](palace.qmd) and the [AEDT page](aedt.qmd) start from it, in the
+same Python session. The plan holds this model:
 
-The goal is one source snapshot shared by two backends. Start with
-[installation](../../start/install.qmd), and retain `snapshot` in this session.
+![The flip-chip Xmon as the plan prepares it. Left: the face of the upper chip (D1) that faces the lower chip, to scale: the cross-shaped Xmon pad, 309.5 µm from tip to tip with 24.65 µm wide arms, four couplers 20 µm from its tips, the ground plane around them, and eight indium bumps that join the two chips' ground planes. The red mark is the junction sheet between the pad and the ground plane. Right: the layer stack, not to scale; the two chips face each other across an 8.2 µm vacuum gap.](../../assets/xmon-flip-chip.png){#fig-xmon-flip-chip}
 
-The [pinned public OrPen Xmon sources](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/Kosen2024_Xmon)
-provide the Palace Route B lumped-port inductance of $11.78\,\mathrm{nH}$ used
-in the backend tutorials. The AEDT tutorial sets capacitance to zero as an
-explicit inductive-only circuit-model assumption; this is not a measured zero
-or a claim about the physical device. Its MA/MS/SA film values come from
-OrPen's validated synthetic `LiteratureCentral` presets and remain modeling
-assumptions, as described on the backend pages.
+Two silicon chips, each 500 µm thick, face each other. The lower chip (D0)
+carries a ground plane on its top face; the upper chip (D1) carries the Xmon
+on the face turned down towards it. Eight indium bumps, each 20 µm square,
+connect the two ground planes across the 8.2 µm gap. The model is 1060 µm
+square. The junction is modelled by its sheet, a small sheet that joins the pad
+to the D1 ground plane: both backend pages put an 11.78 nH inductor
+there, the value of the PDK's public notebooks for this qubit.
 
-## Build the component and named coupon occurrences
+You need SCGSim with its `palace` extra for the Palace page or its `aedt-epr`
+extra for the AEDT page, and the OrcaPen SC PDK
+([Install SCGSim](../../start/install.qmd)).
 
-The device component owns local Entity IDs for its pad and couplers, the
-junction port, and source geometry. Its junction ground arm is a local metal
-contribution to the root D1 plane, not a separate conductor Entity. The
-`place_flip_chip_ground_short_bumps` helper returns a final coupon with named
-device and bump references and one root-local D0/D1 ground-plane pair, authored
-by OrPen's `author_common_flip_chip_ground_planes` helper. Register the actual
-device and bump references by their names; do not reconstruct hierarchy from
-flattened polygon names.
+## Draw the coupon {#build-the-component-and-named-coupon-occurrences}
 
 ```python
 import gdsfactory as gf
@@ -70,27 +57,14 @@ coupon = place_flip_chip_ground_short_bumps(
 component = coupon.component
 ```
 
-The zero ring count leaves the public device's authored coupon shorts as the
-only bump instances. The helper may increase `coupon_padding_um` to fit them;
-`coupon.stack_coupon_padding_um` is the corresponding stack value. The common
-planes belong to the final coupon, while the device's local ground-arm
-contribution is resolved against its named occurrence and included in D1.
-The component, layer stack, and material records come from OrPen. SCGSim does
-not author a second copy of those PDK facts.
+`kosen2024_flip_chip_xmon_qubit` draws the Xmon, its four couplers and its
+junction sheet; `bump_ring_count_per_side=0` leaves out the device's own
+rings of bumps. `place_flip_chip_ground_short_bumps` puts it in a coupon, the
+small piece of the chip that is simulated: it adds the two ground planes and
+the eight shorting bumps, two at each corner. The coupon names each placed
+part: `device` for the Xmon and `short_000` to `short_007` for the bumps.
 
-## Assign the final Net map and prepare one snapshot
-
-The component's local Entity IDs are scoped by their occurrence paths. This
-example places the root D0 and D1 planes, four device couplers, and eight
-sibling shorts on `Ground`, and the device's `D1_XMON_PAD` Entity on
-`xmon_pad`. The local junction ground arm is already included in the root D1
-plane, so it is not listed as a separate Net member. The final Net assignment
-is a Notebook operation on `GeometryPlan`. Entity IDs preserve source lineage;
-they do not create one measurement or field expression per Entity. Physical
-mesh groups are separate computational aggregates: the eight same-role,
-same-material Ground bump Entities share one physical group while remaining
-eight qualified Entity members. AEDT's EPR owner/interface/integral grouping
-remains its own backend contract.
+## Make the plan {#assign-the-final-net-map-and-prepare-one-snapshot}
 
 ```python
 plan = GeometryPlan(
@@ -123,19 +97,41 @@ snapshot = plan.prepare()
 port_name = "chip/device/o_junction_lumped"
 ```
 
-The outer Region padding is an explicit shared input, not a backend-specific
-override. The authored `D0_TO_D1_GAP` remains its own vacuum Entity. Palace and
-AEDT choose different external boundary defaults; matching source geometry
-does not make those physical models identical.
+What each step fixes:
 
-## Observe the prepared source and continue
+- `LAYER_STACK` is the PDK's two-chip stack of the figure, and
+  `coupon.stack_coupon_padding_um` the substrate margin the coupon helper
+  chose around the layout.
+- `register_instance` gives each placed part its name in the plan, so that
+  its shapes are found under `chip/device/...` and `chip/short_000/...`.
+  Each named shape is an Entity.
+- `set_nets` groups the Entities into Nets, each a named piece of metal that
+  acts as one conductor:
 
-`snapshot.geometry_input` carries the qualified Entity and polygon inventory;
-`snapshot.stack` is detached and `snapshot.gds_bytes` binds the emitted GDS.
-The plan retains no live component references in that snapshot. Preparing it
-establishes source identity, not native geometry validation or a solve.
+  | Net | Entities |
+  |---|---|
+  | `xmon_pad` | the Xmon pad, `chip/device/D1_XMON_PAD` |
+  | `Ground` | both ground planes, the four couplers and the eight bumps |
 
-Continue to [inspect and retain source inputs](../inspect-the-source.qmd).
-That lesson reads the summary and portable GDS/stack pair, then links the
-Electrostatic and Eigenmode branches. The [GeometryPlan contract](../../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract)
-defines occurrence, assignment and grouping behavior.
+  The couplers are grounded here because the example has no readout or
+  drive line; in a device with them, they would be Nets of their own.
+- `set_vacuum_region` adds 1000 µm of vacuum above and below the two chips
+  (`OUTER_VACUUM_THICKNESS_UM`) and none beyond their sides. The 8.2 µm gap
+  between the chips is part of the stack, not of this region.
+- `port_name` is the junction sheet's name in the plan; both backend pages use
+  it.
+
+## Next {#observe-the-prepared-source-and-continue}
+
+Continue with [Flip-chip Xmon with Palace](palace.qmd) or
+[Flip-chip Xmon with AEDT](aedt.qmd) in the same session. To look at what the
+plan holds before you simulate, see [Inspect the source](../inspect-the-source.qmd);
+the [GeometryPlan reference](../../reference/specs/geometry-plan.qmd#component-to-backend-geometry-contract)
+gives the rules for placed parts, Entities and Nets.
+
+The Xmon cell is OrcaPen's own parametric adaptation of the qubit of Kosen
+et al., [PRX Quantum 5, 030350 (2024)](https://doi.org/10.1103/PRXQuantum.5.030350),
+shared under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); it is
+not the authors' mask, and its dimensions are example inputs, not measured
+device data. The [PDK's notebooks for this qubit](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/ComponentSimulation/Kosen2024_Xmon)
+are the source of its settings.

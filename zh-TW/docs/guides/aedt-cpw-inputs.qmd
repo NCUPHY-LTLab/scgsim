@@ -1,7 +1,7 @@
 ---
 lang: zh-TW
-title: "AEDT：準備 CPW 輸入"
-description: "把公開 CPW 準備成 GeometryPlan 快照；每一堂 AEDT 教學都從它建立 SGB 模型。"
+title: "為 AEDT 準備共平面波導"
+description: "建立一段短共平面波導試片的計畫，作為 HFSS 本徵模態與 Q3D 的輸入。"
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/course/aedt-inputs"
@@ -9,11 +9,11 @@ aliases:
   - ../course/aedt-inputs.html
 ---
 
-每一個 3D AEDT 模型（HFSS Eigenmode、HFSS Driven Terminal 與 Q3D）求解的都是 `GeometryPlan` 快照的 SGB 模型，也就是 Palace 網格化的同一個模型。本頁在[安裝](../start/install.qmd)之後，為公開的有限接地 CPW 準備這個快照。Q2D 求解 2D 橫截面，有專屬的[橫截面教學](line-parameters-q2d.qmd)。
+本頁建立一小段共平面波導（CPW）的計畫，也就是一個試片：長 500 µm、寬 10 µm 的訊號線，兩側各隔 6 µm 是寬 80 µm 的接地條，材料是 500 µm 矽基板上 100 nm 的鋁。它的結果 `snapshot` 是[以 HFSS 計算共振模態](modes-hfss.qmd)的輸入；HFSS、Q3D 與 Palace 的模擬都以相同方式接收計畫的 `snapshot`。
 
-這個 CPW 是 OrPen 的 `finite_ground_cpw_coupon`，來自[固定版本的 CPW 群組](../start/choose-a-simulation.qmd#public-inputs)：長 500 µm，訊號寬 10 µm、間隙 6 µm，兩條接地各寬 80 µm，位於 D0 基板上。這些是範例設計輸入，不是量測所得的元件幾何，也不是通用求解器設定。PDK 提供多邊形、其 Entity（`SIGNAL`、`GROUND_PLUS`、`GROUND_MINUS`）、單晶片層疊（500 µm Si 基板，其上為 100 nm Al 的 `D0_TOP_M1` 薄膜）與材料紀錄；SCGSim 不保留這些事實的第二份副本。
+這個試片不能用來算 S 參數：HFSS Driven Terminal 需要每個埠各有一片埠薄片，而這個試片沒有（[以 HFSS 計算 S 參數](s-parameters-hfss.qmd)）。若要傳輸線每單位長度的電容與電感，Q2D 改用截面作為輸入（[以 Q2D 計算傳輸線參數](line-parameters-q2d.qmd)）。
 
-![公開有限接地 CPW 的來源幾何：基板、中央訊號線與兩條接地帶。圖中也標出 Driven Modal 積分線曾經的位置；Driven Modal 等待 issue #135。此圖呈現宣告的版圖，不是求解結果。](../assets/cpw-source.svg){#fig-public-cpw-source}
+![從上方看 CPW 試片：10 µm 的訊號線（金色）位在兩條 80 µm 的接地條（灰色）之間，各隔 6 µm，基板為 500 µm × 182 µm 的矽。尺寸單位為 µm；圖中是版圖，不是計算結果。](../assets/cpw-source.svg){#fig-public-cpw-source}
 
 ## 建立 CPW 計畫 {#make-the-cpw-plan}
 
@@ -40,11 +40,15 @@ plan.set_vacuum_region(padding=(100.0, 100.0, 1000.0))
 snapshot = plan.prepare()
 ```
 
-每個呼叫決定的內容：
+需要含 `aedt-epr` extra 的 SCGSim 與 OrcaPen SC PDK（[安裝 SCGSim](../start/install.qmd#extras)），不需要 AEDT。
 
-- `root_id="chip"` 為試片的 Entity ID 加上範圍，所以訊號線是 `chip/SIGNAL`。Net 對應使用這些完整 ID；它是研究者的選擇，不是 PDK 的。
-- `get_single_die_layer_stack()` 只選取 D0 基板與上層金屬，沒有上方晶片。`coupon_padding_um=0.0` 讓基板維持試片本身 500 µm × 182 µm 的範圍。
-- `set_vacuum_region(padding=(x, y, z))` 設定模型外圍的 Region：X 與 Y 每側 100 µm，上下各 1000 µm。每個 AEDT 模型都照原樣使用這個 Region，不會自行增加補距。
-- `plan.prepare()` 回傳不可變的 `snapshot`：`snapshot.geometry_input` 保存完整的 Entity 與多邊形，`snapshot.stack` 則是分離的層疊。準備它只確立來源身分，不會建立模型，也不會開啟 AEDT。
+每一行決定的事：
 
-請在此工作階段保留 `snapshot`。接著閱讀 [HFSS Eigenmode](modes-hfss.qmd) 或 [Q3D](capacitance-q3d.qmd)，兩者都直接使用它。[Driven Terminal](s-parameters-hfss.qmd) 需要在每個埠處另有集總埠薄片的版圖；此試片沒有。消費端工作流程以 OrPen 的標準 Notebook 為來源依據；本教學不建立元件 Notebook。
+- `finite_ground_cpw_coupon()` 是 PDK 的元件，使用預設尺寸。PDK 把三個金屬圖形命名為 `SIGNAL`、`GROUND_PLUS` 與 `GROUND_MINUS`；每個都是一個 Entity，也就是 SCGSim 追蹤的具名圖形。
+- `root_id="chip"` 把版圖放在 `chip` 這個名稱下，所以圖形名稱是 `chip/SIGNAL` 等等。
+- `get_single_die_layer_stack()` 是單一晶片：矽基板與其上的鋁膜 `D0_TOP_M1`，上方沒有第二片晶片。`coupon_padding_um=0.0` 不在試片本身的 500 µm × 182 µm 之外多加基板。
+- `set_nets` 把 Entity 分成 Net，每個 Net 是一塊具名、作為同一個導體的金屬：`signal`，以及由兩條接地條組成的 `ground`。怎麼分組由你決定，不是 PDK 決定。
+- `set_vacuum_region(padding=(x, y, z))` 設定模型周圍的真空區域：x 與 y 方向各在試片外延伸 100 µm，上方與下方各 1000 µm。HFSS 與 Q3D 直接把這個範圍當作它們的 Region。
+- `plan.prepare()` 回傳 `snapshot`，也就是模擬所接收的計畫固定快照。它不建立模型，也不開啟 AEDT。
+
+請在同一個 Python 工作階段保留 `snapshot`，接著閱讀[以 HFSS 計算共振模態](modes-hfss.qmd)。[以 Q3D 計算電容](capacitance-q3d.qmd)以相同方式接收快照，而[使用自己的模型](prepare-a-layout.qmd)說明如何為自己的版圖建立計畫。

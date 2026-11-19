@@ -1,6 +1,6 @@
 ---
-title: "AEDT: prepare the CPW inputs"
-description: "Prepare the public CPW as a GeometryPlan snapshot, the source every AEDT lesson builds its SGB model from."
+title: "Prepare a coplanar waveguide for AEDT"
+description: "Build the plan of a short coplanar-waveguide coupon, the input that HFSS Eigenmode and Q3D take."
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/course/aedt-inputs"
@@ -8,22 +8,20 @@ aliases:
   - ../course/aedt-inputs.html
 ---
 
-Every 3D AEDT family (HFSS Eigenmode, HFSS Driven Terminal and Q3D) solves the
-SGB model of a `GeometryPlan` snapshot, the same model Palace meshes. This page
-prepares that snapshot for the public finite-ground CPW, after
-[installation](../start/install.qmd). Q2D solves a 2D cross section and has its own
-[cross-section lesson](line-parameters-q2d.qmd).
+This page builds the plan of a short piece of coplanar waveguide (CPW), a
+coupon: a 500 µm long, 10 µm wide signal strip between two 80 µm ground
+strips, 6 µm away on each side, in 100 nm aluminium on a 500 µm silicon
+substrate. Its result, `snapshot`, is the input of
+[Resonant modes with HFSS](modes-hfss.qmd), and the HFSS, Q3D and Palace
+simulations all take a plan's `snapshot` the same way.
 
-The CPW is OrPen's `finite_ground_cpw_coupon`, from the
-[pinned CPW group](../start/choose-a-simulation.qmd#public-inputs): 500 µm long, a 10 µm signal,
-6 µm gaps and two 80 µm grounds on the D0 substrate. These are example design
-inputs, not measured device geometry or universal solver settings. The PDK
-supplies the polygons, their Entities (`SIGNAL`, `GROUND_PLUS`,
-`GROUND_MINUS`), the single-die layer stack (a 500 µm Si substrate under the
-100 nm Al `D0_TOP_M1` film) and the material records; SCGSim keeps no second
-copy of those facts.
+For S-parameters this coupon is not enough: HFSS Driven Terminal needs a
+port sheet at each port, and this coupon has none
+([S-parameters with HFSS](s-parameters-hfss.qmd)). For the line's
+per-length capacitance and inductance, Q2D takes a cross-section instead
+([Line parameters with Q2D](line-parameters-q2d.qmd)).
 
-![Source geometry for the public finite-ground CPW: substrate, center signal and two ground strips. The figure also marks where Driven Modal integration lines sat; Driven Modal waits for issue #135. This is the declared layout, not a solver result.](../assets/cpw-source.svg){#fig-public-cpw-source}
+![The CPW coupon, seen from above: the 10 µm signal (gold) between two 80 µm grounds (grey), 6 µm away, on a 500 µm × 182 µm silicon substrate. Dimensions in µm; the drawing shows the layout, not a result.](../assets/cpw-source.svg){#fig-public-cpw-source}
 
 ## Make the CPW plan
 
@@ -50,24 +48,31 @@ plan.set_vacuum_region(padding=(100.0, 100.0, 1000.0))
 snapshot = plan.prepare()
 ```
 
-What each call fixes:
+It needs SCGSim with its `aedt-epr` extra and the OrcaPen SC PDK
+([Install SCGSim](../start/install.qmd#extras)); it does not need AEDT.
 
-- `root_id="chip"` scopes the coupon's Entity IDs, so the signal is
-  `chip/SIGNAL`. The Net map names those qualified IDs; it is the study's
-  choice, not the PDK's.
-- `get_single_die_layer_stack()` selects the D0 substrate and top metal only:
-  there is no upper die. `coupon_padding_um=0.0` keeps the substrate the
-  coupon's own 500 µm × 182 µm area.
-- `set_vacuum_region(padding=(x, y, z))` sets the Region around the model:
-  100 µm on each side in X and Y, 1000 µm above and below. Every AEDT family
-  uses this Region as it is; no family adds its own padding.
-- `plan.prepare()` returns an immutable `snapshot`: `snapshot.geometry_input`
-  holds the qualified Entities and polygons, and `snapshot.stack` the detached
-  stack. Preparing it establishes source identity; it does not build the model
-  or open AEDT.
+What each line fixes:
 
-Keep `snapshot` in this session. Continue to [HFSS Eigenmode](modes-hfss.qmd)
-or [Q3D](capacitance-q3d.qmd), which take it directly. [Driven Terminal](s-parameters-hfss.qmd)
-needs a layout that also carries a lumped-port sheet at each port; this coupon
-has none. The canonical OrPen notebooks are the source authority for their
-consumer workflow; this lesson authors no component notebook.
+- `finite_ground_cpw_coupon()` is the PDK cell, at its default sizes. The PDK
+  names its three metal shapes `SIGNAL`, `GROUND_PLUS` and `GROUND_MINUS`;
+  each is an Entity, a named shape SCGSim keeps track of.
+- `root_id="chip"` puts the layout under the name `chip`, so the shapes are
+  `chip/SIGNAL` and so on.
+- `get_single_die_layer_stack()` is one chip: the silicon substrate and the
+  aluminium film `D0_TOP_M1` on it, with no second chip above.
+  `coupon_padding_um=0.0` adds no substrate beyond the coupon's own
+  500 µm × 182 µm.
+- `set_nets` groups the Entities into Nets, each a named piece of metal that
+  acts as one conductor: `signal`, and `ground` made of both ground strips.
+  The grouping is your choice, not the PDK's.
+- `set_vacuum_region(padding=(x, y, z))` sets the box of empty space around
+  the model: 100 µm beyond the coupon on each side in x and in y, and 1000 µm
+  above and below it. HFSS and Q3D use this box as their Region, as it is.
+- `plan.prepare()` returns the `snapshot`, a fixed copy of the plan that a
+  simulation takes. It builds no model and does not open AEDT.
+
+Keep `snapshot` in the same Python session and continue with
+[Resonant modes with HFSS](modes-hfss.qmd).
+[Capacitance with Q3D](capacitance-q3d.qmd) takes a snapshot the same way, and
+[Prepare a layout](prepare-a-layout.qmd) explains the plan for a layout of
+your own.
