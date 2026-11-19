@@ -36,7 +36,11 @@ packaged QMD pages. [build_backend.py](build_backend.py) reads them for the
 offline knowledge bundle; they describe packaging and are not reader-facing
 status labels. Preserve existing resource IDs, also when a page moves, and keep
 `docs/examples` (the page `docs/start/choose-a-simulation.qmd`) as the sole
-resource whose kind is `start`. A moved page keeps its old URL in `aliases:`.
+resource whose kind is `start`. A moved page keeps its old URL in `aliases:`
+and its old section anchors (an empty `<span id>` where a section's content
+now is); a page whose sections go to other pages gets a `SPLIT_PAGES` entry in
+[scripts/build_bilingual_docs.py](scripts/build_bilingual_docs.py) instead of
+an alias.
 
 Keep model prerequisites, physical assumptions, units and result meaning with
 their owning documentation. Retain source versions in example links and

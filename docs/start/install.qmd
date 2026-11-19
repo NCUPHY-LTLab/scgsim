@@ -6,7 +6,6 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/installation"
 aliases:
   - ../course/installation.html
-  - ../knowledge-guide.html
 ---
 
 SCGSim is a Python package: it builds the model, writes the solver's input and
@@ -23,7 +22,7 @@ Check: `uv --version` and `git --version` each print an installed version.
 
 ## 2. Create the study project {#create-the-project}
 
-These are the commands of the [home page](../../index.qmd#install): SCGSim at
+<span id="create-the-project-and-add-scgsim"></span>These are the commands of the [home page](../../index.qmd#install): SCGSim at
 the tag `v3.0.0rc4` with its `palace` extra, and the PDK at the revision the
 examples use.
 
@@ -34,7 +33,7 @@ uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@v3.0.0rc
   'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85'
 ```
 
-`uv` creates the environment in `.venv` and records the exact revision of every
+<span id="check-the-installation"></span>`uv` creates the environment in `.venv` and records the exact revision of every
 dependency in `uv.lock`. Check the installation:
 
 ```bash
@@ -56,7 +55,7 @@ results only.
 | `aedt-epr` | everything in `aedt`, plus GDSFactory and KLayout | prepare AEDT runs from a GDSFactory layout, as the [Q3D](../guides/capacitance-q3d.qmd) and [HPC sweep](../guides/hpc-sweep.qmd) guides do |
 | `visualization` | PyVista, meshio, Pillow | [preview the geometry](../guides/preview-the-geometry.qmd) and look at a prepared model and its mesh |
 
-To add an extra later, run `uv add` again with every extra you want; `uv` keeps
+<span id="add-a-backend-extra"></span>To add an extra later, run `uv add` again with every extra you want; `uv` keeps
 the pinned tag:
 
 ```bash

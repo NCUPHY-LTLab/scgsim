@@ -12,6 +12,8 @@ aliases:
 
 ## 依問題選擇 {#getting-started}
 
+<div id="pdk-notebooks-by-goal"></div>
+
 | 你的問題 | 指南 | PDK 筆記本 |
 |---|---|---|
 | 焊盤的電容是多少？ | [Palace：端子電容](../guides/capacitance-palace.qmd)・[AEDT：Q3D 擷取](../guides/capacitance-q3d.qmd) | SimplePad：[Palace Electrostatic](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd)・[AEDT Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
@@ -38,4 +40,4 @@ aliases:
 
 ## 模擬自己的版圖之前
 
-請先閱讀[支援範圍](../reference/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。接著，指南涵蓋計算前後的各個步驟：[準備版圖](../guides/prepare-a-layout.qmd)與[檢查版圖](../guides/check-a-layout.qmd)、[在其他電腦上執行](../guides/run-elsewhere.qmd)，以及[讀取結果](../guides/convergence-and-reports.qmd)。
+請先閱讀[支援範圍](../reference/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。<span id="準備模型並讀取回傳結果"></span><span id="繼續閱讀主題參考"></span>接著，指南涵蓋計算前後的各個步驟：[準備版圖](../guides/prepare-a-layout.qmd)與[檢查版圖](../guides/check-a-layout.qmd)、[在其他電腦上執行](../guides/run-elsewhere.qmd)，以及[讀取結果](../guides/convergence-and-reports.qmd)。

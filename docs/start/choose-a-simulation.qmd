@@ -16,6 +16,8 @@ Palace, in one script.
 
 ## Choose by your question {#getting-started}
 
+<div id="pdk-notebooks-by-goal"></div>
+
 | Your question | Guide | PDK notebook |
 |---|---|---|
 | What is the capacitance of a pad? | [Palace: terminal capacitance](../guides/capacitance-palace.qmd) · [AEDT: Q3D extraction](../guides/capacitance-q3d.qmd) | SimplePad: [Palace Electrostatic](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd) · [AEDT Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
@@ -52,7 +54,7 @@ recommendation for your design.
 
 Read the [supported scope](../reference/supported-scope.qmd) first: what the
 layout must guarantee, what SCGSim guarantees in return, and who owns a
-failure. The Guides then cover the steps around a calculation:
+failure. <span id="prepare-a-model-and-read-its-return"></span><span id="continue-with-a-focused-reference"></span>The Guides then cover the steps around a calculation:
 [preparing a layout](../guides/prepare-a-layout.qmd) and
 [checking it](../guides/check-a-layout.qmd), [running on another
 computer](../guides/run-elsewhere.qmd) and

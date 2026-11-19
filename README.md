@@ -50,6 +50,8 @@ Capacitance matrix (fF): pad
 
 ## What do you want to compute?
 
+<div id="choose-your-next-simulation"></div>
+
 | What you want to compute | With Palace | With AEDT |
 |---|---|---|
 | The capacitance matrix of pads and electrodes | [Palace: terminal capacitance](docs/guides/capacitance-palace.qmd) | [AEDT: Q3D extraction](docs/guides/capacitance-q3d.qmd) |
@@ -58,7 +60,7 @@ Capacitance matrix (fF): pad
 | The per-length C, G, L and R of a line's cross-section | not in SCGSim | [AEDT: Q2D cross-section extraction](docs/guides/line-parameters-q2d.qmd) |
 
 [Choose a simulation](docs/start/choose-a-simulation.qmd) adds the OrcaPen SC
-PDK notebook for each of these. [AEDT: Q3D extraction](docs/guides/capacitance-q3d.qmd)
+PDK notebook for each of these. <span id="usage-example-one-script-for-simplepad-capacitance"></span>[AEDT: Q3D extraction](docs/guides/capacitance-q3d.qmd)
 opens with the AEDT counterpart of the first simulation: one script that
 prepares, runs and reads a Q3D capacitance run.
 

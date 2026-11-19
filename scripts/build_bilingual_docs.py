@@ -13,6 +13,25 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CHINESE = ROOT / "zh-TW"
+# Old pages whose sections went to different pages (#271): old fragment -> its page and anchor now, relative
+# to the old page; "" is the page itself. The same in both editions; a Chinese heading had a Chinese id.
+SPLIT_PAGES = {
+    "docs/knowledge-guide.html": {
+        "": "start/install.html",
+        "keep-source-revisions-paired": "start/install.html#pair-with-the-pdk",
+        "配對來源版本": "start/install.html#pair-with-the-pdk",
+        "find-the-right-reference": "reference/index.html#find-the-right-reference",
+        "尋找合適的參考資料": "reference/index.html#find-the-right-reference",
+        "native-and-offline-epr-steps": "reference/index.html#native-and-offline-epr-steps",
+        "原生與離線-epr-步驟": "reference/index.html#native-and-offline-epr-steps",
+        "junction-capacitance-reference": "reference/index.html#junction-capacitance-reference",
+        "接面電容參考": "reference/index.html#junction-capacitance-reference",
+    },
+    "docs/documentation-map.html": {
+        "": "contribute/documentation-map.html",
+        "pdk-notebooks-by-goal": "start/choose-a-simulation.html#pdk-notebooks-by-goal",
+    },
+}
 
 
 def main():
@@ -22,6 +41,7 @@ def main():
     stage_assets()
     _render_chinese_project()
     _write_english_geometry_redirect()
+    write_split_page_redirects(ROOT / "_site")
     _write_bilingual_manifest()
 
 
@@ -118,6 +138,27 @@ def _write_english_geometry_redirect():
         '<a href="geometry.html">Read the English SGB documentation</a>'
         "</body></html>\n"
     )
+
+
+def write_split_page_redirects(site: Path) -> None:
+    """Send each section of a page whose sections went to other pages to where it is now, in both editions.
+
+    A Quarto alias sends every fragment of an old URL to one page, so an old section link would land on a
+    page without that section. This redirect looks the fragment up first; an unlisted one, and the page
+    itself, go to the page that replaced it with the fragment kept.
+    """
+    for page, sections in SPLIT_PAGES.items():
+        routes = json.dumps(sections, ensure_ascii=False).replace("<", "\\u003c")
+        for edition in (site, site / "zh-TW"):
+            (edition / page).write_text(
+                '<!doctype html><html><head><meta charset="utf-8">'
+                f'<meta http-equiv="refresh" content="0;url={sections[""]}">'
+                f"<title>Redirect</title><script>var redirects = {routes};\n"
+                "var target = redirects[decodeURIComponent(location.hash.slice(1))];\n"
+                'location.replace(target || redirects[""] + location.search + location.hash);'
+                f'</script></head><body><a href="{sections[""]}">Continue</a></body></html>\n',
+                encoding="utf-8",
+            )
 
 
 def _write_bilingual_manifest():

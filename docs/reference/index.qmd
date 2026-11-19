@@ -51,7 +51,7 @@ shows how to read a completed run folder for a selected use.
 Use the [saved-field tutorial](../guides/saved-fields.qmd#recover-the-exact-prepared-model)
 for native field evaluation and the [offline EPR tutorial](../guides/offline-loss.qmd#interpret-an-assumption-change)
 for assumption changes on recorded results.
-`analyze_epr` evaluates retained saved fields through native AEDT and needs an
+<span id="native-and-offline-epr-steps"></span>`analyze_epr` evaluates retained saved fields through native AEDT and needs an
 explicitly selected AEDT release and its license; `reanalyze_epr` updates the
 assumptions of a resolved EPR result offline. The
 [analyze_epr reference](api/analyze-epr.qmd) gives its parameters and

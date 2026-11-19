@@ -5,8 +5,6 @@ sidebar: contribute
 scgsim-id: "docs/documentation-map"
 scgsim-kind: "contribution"
 scgsim-status: "CONVERGING"
-aliases:
-  - ../documentation-map.html
 ---
 
 The site has five areas, one per navbar item, and each area has one sidebar.
@@ -25,6 +23,12 @@ exist in Chinese only.
 | Contribute | This map, the code map, architecture, ownership, provenance, the notebook contract, research and history; in Chinese also the SGB design | `docs/contribute/` |
 
 A page that moves keeps its old URL as a Quarto `aliases:` entry, so links from
-earlier releases still arrive; links between pages always use the current
-path. The PDK notebook for each calculation is listed on
+earlier releases still arrive, and its old section anchors; links between pages
+always use the current path. When a page's sections go to other pages, its old
+URL is a redirect that sends each old section to its new place (`SPLIT_PAGES`
+in `scripts/build_bilingual_docs.py`). The charts and figures beside a moved
+page keep their names in its new folder, and the site's missing page sends an
+old file URL there. The PDK notebook for each calculation is listed on
 [Choose a simulation](../start/choose-a-simulation.qmd).
+<span id="orcapen-to-scgsim-topics"></span>An OrcaPen page that needs an SCGSim topic links the section of the
+[Reference overview](../reference/index.qmd) that covers it.

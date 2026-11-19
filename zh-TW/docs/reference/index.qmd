@@ -30,7 +30,7 @@ aliases:
 
 ## 儲存場與離線損耗 {#saved-fields-offline-loss}
 
-使用[儲存場教學](../guides/saved-fields.qmd#recover-the-exact-prepared-model)評估原生場，並使用[離線 EPR 教學](../guides/offline-loss.qmd#interpret-an-assumption-change)變更已記錄結果所採用的假設。`analyze_epr` 會透過 AEDT 原生功能評估保留的儲存場，需要明確選定 AEDT 版本並具備授權；`reanalyze_epr` 則離線更新已解析 EPR 結果的假設。參數與簽章見 [analyze_epr 參考](api/analyze-epr.qmd)。
+使用[儲存場教學](../guides/saved-fields.qmd#recover-the-exact-prepared-model)評估原生場，並使用[離線 EPR 教學](../guides/offline-loss.qmd#interpret-an-assumption-change)變更已記錄結果所採用的假設。<span id="native-and-offline-epr-steps"></span>`analyze_epr` 會透過 AEDT 原生功能評估保留的儲存場，需要明確選定 AEDT 版本並具備授權；`reanalyze_epr` 則離線更新已解析 EPR 結果的假設。參數與簽章見 [analyze_epr 參考](api/analyze-epr.qmd)。
 
 ## 尋找合適的參考資料 {#find-the-right-reference}
 
