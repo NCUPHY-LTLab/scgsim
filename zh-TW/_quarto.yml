@@ -15,6 +15,7 @@ project:
   - docs/research/*/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
+  - docs/start/*.qmd
   - docs/design/sgb/*.qmd
 execute:
   enabled: false
@@ -83,6 +84,7 @@ website:
     style: floating
     collapse-level: 1
     contents:
+    - docs/start/first-simulation.qmd
     - docs/examples.qmd
     - docs/course/installation.qmd
     - section: 準備與檢視模型
