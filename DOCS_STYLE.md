@@ -79,7 +79,7 @@ Use their terminology and link to them when introducing a technical term.
 | Handoff / run package | [Terms and units](docs/reference/terms-and-units.qmd#term-handoff) and [execution](docs/guides/run-elsewhere.qmd) |
 | `handoff_id` | [Preparation-side identity and result resolution](docs/guides/convergence-and-reports.qmd#palace-bind-the-independently-retained-preparation-id) |
 | Resolve | [Returned-result loading and checks](docs/guides/convergence-and-reports.qmd) |
-| Route A / Route B | [Geometric approximations](docs/concepts/model-and-numerics.qmd#choose-the-geometric-approximation) |
+| Route A / Route B | [Route A and Route B](docs/concepts/routes.qmd) |
 
 The English [Terms and units](docs/reference/terms-and-units.qmd) and
 [Chinese terms and units](zh-TW/docs/reference/terms-and-units.qmd) collect reader terminology.
@@ -105,6 +105,8 @@ API names, interface strings and the solvers' own names (HFSS `Eigenmode`,
 | coupon | 試片 | The small structure around the device that is simulated. Not 試樣 or coupon. |
 | region | 區域 | For a region of the model, not 區塊. |
 | mesh | 網格 | Not 格網. |
+| refinement | 細化 | Adaptive mesh refinement is 自適應細化. |
+| pass (an AMR pass) | 回合 | Written 回合（pass） on first use in a page. |
 | vacuum region | 真空區域 | The box of empty space the solver includes. Not 真空區, 真空範圍 or 真空盒. |
 | Net | Net | Kept in English. On first use, explain it: 一塊具名、作為同一個導體的金屬. |
 | you | 你 | Not 您. |

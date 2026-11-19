@@ -1,0 +1,76 @@
+---
+title: "幾何建構器內部實作"
+description: "SGB 如何從準備好的輸入建出共形 3D 模型：模型網格上的平面排列、3D 中的共用邊界、直接寫出的 BREP/XAO 與 sidecar，以及網格修復迴圈。"
+lang: zh-TW
+scgsim-kind: "contribution"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/contribute/internals/geometry"
+---
+
+本頁寫給貢獻者，接續[版圖如何變成模型](../../concepts/geometry.qmd)停下的地方：`src/scgsim/geometry/sgb` 中的語意幾何建構器 SGB，如何把準備好的輸入變成共形 3D 模型並寫出，以及模型如何產生網格。`scgsim.geometry.sgb` 的套件 docstring 依匯入順序列出各階段，[程式地圖](../code-map.qmd)說明它們在整個套件中的位置。
+
+## 各階段 {#stages}
+
+SGB 在任何 CAD 核心介入之前，就從稜柱（一個平面輪廓沿一段 Z 區間拉伸）建出模型。`build_sgb_geometry` 是入口；`scgsim.geometry.surface_epr.build_banded_geometry` 呼叫它，並帶入規格要求的 Surface EPR 條帶。
+
+| 階段 | 資料夾 | 輸入 | 輸出 |
+|---|---|---|---|
+| S2 | `prisms` | 有效的 `GeometryBuildInput` 與 `RepresentationContext` | 稜柱、Z 層位與 slab |
+| S3 | `bands` | 邊距要求，在只含物理稜柱的第一趟上量測 | 條帶的切割族 |
+| S4、S5 | `arrangement` | 稜柱與切割族 | 每個 slab 與每個層位的平面排列：在網格上節點化，格子加上標籤並合併 |
+| S6 到 S8 | `topology` | 加上標籤的排列 | 頂點、邊、面、牆、體積與殼；再依 route 決定輸出哪些體積與實體群組 |
+| S9 | `checks` | 套用 route 後的模型 | 結構驗證（失敗即拒絕）與細片報告 |
+| S10 | `output` | 驗證過的模型 | BREP 與 XAO、sidecar，以及給 AEDT 的 STEP |
+
+## 平面排列與歸屬 {#planar-arrangement}
+
+平面運算要產生輸出面之前，必須先知道輸入多邊形在哪裡重疊，以及每個結果格子被哪些輸入覆蓋。運算元的邊界在模型網格上，於每個交點切開，形成一個邊的網路，稱為**排列**（arrangement）；排列中的每個格子都有它的**歸屬**：哪些運算元覆蓋它。
+
+舉例：**A** 是 $[0,4]\times[0,3]$ µm 的矩形，內有 $[1,2]\times[1,2]$ µm 的正方形孔洞；**M** 是 $[3,5]\times[-1,4]$ µm 的矩形。M 只是第二個運算元，不是金屬也不是 Net。@fig-sgb-method-source-edges 是各環與其方向：外環進入多邊形，孔環離開。A 與 M 的邊界相交處，兩者都在同一點切開，所以不會有一方留著長邊、另一方卻在邊上有頂點（T 字接點）。
+
+![A 與 M 的邊界，在共用交點處切開；M 只是幾何運算元。](../../images/sgb-concept/method-source-edges.svg){#fig-sgb-method-source-edges}
+
+沿 $y=0.5$ µm，從歸屬為 $(0,0)$ 的無界外部出發，路徑依序在 $x=0$ 穿過 A 的左邊、$x=3$ 穿過 M 的左邊、$x=4$ 穿過 A 的右邊、$x=5$ 穿過 M 的右邊：歸屬依序為 $(0,0)\rightarrow(1,0)\rightarrow(1,1)\rightarrow(0,1)\rightarrow(0,0)$，第一位代表 A，第二位代表 M。切開後的邊是**原子邊**：邊的內部沒有其他邊界頂點（@fig-sgb-method-network）。
+
+![切開後 A／M 共用的邊網路。](../../images/sgb-concept/method-shared-network.svg){#fig-sgb-method-network}
+
+沿 $y=1.5$ µm，路徑在 $x=1$ 與 $x=2$ 穿過孔洞，A 的位元依序為 $1\rightarrow0\rightarrow1$。@fig-sgb-method-arrangement 是各個格子。孔洞與無界外部的歸屬都是 $(0,0)$，但它們是不同的格子。
+
+![封閉的格子及其 A／M 歸屬。](../../images/sgb-concept/method-arrangement.svg){#fig-sgb-method-arrangement}
+
+| 格子 | 歸屬（A，M） | 面積 |
+|---|---:|---:|
+| 只在 A | (1, 0) | 8 µm² |
+| 同時在 A 與 M | (1, 1) | 3 µm² |
+| 只在 M | (0, 1) | 7 µm² |
+| A 內的孔洞 | (0, 0) | 1 µm² |
+| 無界外部 | (0, 0) | 無界 |
+
+面積可由座標直接算出：A 是 $4\times3=12$ µm²，扣掉孔洞為 11 µm²；重疊為 $1\times3=3$ µm²，所以 A 剩 8 µm²，M 剩 $2\times5-3=7$ µm²。
+
+SCGSim 在兩個地方建立這種排列，決定歸屬的方式不同：
+
+- **來源階段與網格布林運算**（`scgsim.geometry.grid`）：運算元用 GEOS 在模型網格上節點化，再把原子邊組成多邊形。每條有向環邊帶有它所屬運算元的計數變化（有正負號），歸屬從無界格子出發，跨過每條共用邊傳播（`tagged_grid_faces`）。若某個格子從不同路徑得到不同歸屬，或計數不是 0 或 1，就拒絕。
+- **建構本身**（`scgsim.geometry.sgb.arrangement`）：每個 slab 與層位的曲線，在整數網格上以反覆 snap rounding 節點化（`noding`），形成含面、孔洞與精確圓弧邊的半邊結構（`dcel`、`arcs`）。節點化之後，每個格子對每個輪廓不是完全在內就是完全在外，所以格子的標籤由嚴格在其內部的一個精確點，對各輪廓測試而得（`dcel.interior_point`）。標籤相同的格子合併，`labelling.membership` 以整數運算，從原始格子記錄每個 Entity 在格子中所占的面積比例。
+
+排列只是幾何上的整理：它不產生四面體，也不決定材料、Net 或場。這些仍附著在宣告的 Entity 與物理計畫上。
+
+## 3D 中的共用邊界 {#shared-boundaries}
+
+`topology.assembly` 不經 CAD 核心，把層位與 slab 的排列堆疊成一套邊界表示：層位排列的頂點與邊；上下區域不同或有薄片之處的水平面；每段堆疊 slab 邊的一個牆面；以及由相連 slab 格子組成的體積。一根牆柱只在牆段開始或結束、或水平面有頂點的層位上切開，所以相鄰的面共用完整的邊。
+
+蓋面上三個共線點 $p_0=(0,0,1)$、$p_1=(2,0,1)$、$p_2=(4,0,1)$ µm 說明原因。若蓋面只有一條邊 $p_0\rightarrow p_2$，旁邊的牆卻是 $p_0\rightarrow p_1\rightarrow p_2$，蓋面在 $p_1$ 就有 T 字接點。把蓋面的邊切開後，兩個面都使用 $e_{01}$ 與 $e_{12}$；牆以相反方向使用它們（@fig-sgb-method-shared-edge）。
+
+![蓋面與側壁共用相同的邊 ID，方向相反。](../../images/sgb-concept/method-shared-edge.svg){#fig-sgb-method-shared-edge}
+
+每個面保存一條有序外環及其孔環；每個體積的殼列出它的面及方向，兩個相鄰體積以相反方向使用它們共用的面。每個頂點、邊、面與體積都有依內容定址的 ID（`v:…`、`e:…`、`f:…`、`vol:…`）。XY 座標落在模型步長的整數網格上，所以相同的點恰好是同一個頂點，不需要第二次吸附；Z 值是層堆疊的精確層位。這套拓樸與 route 無關：之後才由 `topology.routes` 決定輸出哪些體積，以及每個面屬於哪個實體群組。
+
+## 寫出模型 {#writer}
+
+`output.emission` 把驗證過的模型直接寫成 OpenCASCADE 的文字格式（BREP）與 XAO 外包，不呼叫 Gmsh 或 OCC，沒有布林運算，也不修補；輸出的位元組是確定的。它依 `TopExp::MapShapes` 前序為形狀編號，也就是 Gmsh 開啟檔案時給的 tag 順序。**sidecar**（`scgsim.sgb.sidecar.v5`，JSON）把每個原生 tag 綁定到它的規劃 ID，再經由規劃 ID 連到 Entity、Net、介面、條帶與實體群組。原生 tag 只在一次載入的模型中有效；規劃 ID 才是身分。
+
+給 AEDT 的部分，`output.exchange.step` 把輸出的實體寫成 STEP 組合件，每個實體一個具名元件，不含真空（AEDT 自己建立 Region）。沒有實體承載的薄片與埠面，在這個尺度下無法用 STEP 傳遞，所以由一個 guard 檔記錄它們的環，匯入端再據以重建。Route B 模型沒有導體實體，不會匯出；AEDT 改用同一輸入的 Route C 模型。
+
+## 產生網格 {#meshing}
+
+Palace 的 `mesh()` 透過 `scgsim.meshing`，為 XAO 及其 sidecar 產生網格。配方決定起始元素大小（預設為 `FeatureRecipe()`）。每一輪都在新的 Gmsh 工作程序中產生網格，並以品質門檻稽核線性網格；低於門檻的元素，會在周圍一個球形範圍內得到更細的局部尺寸，下一輪再重新產生。網格乾淨時迴圈停止；若預算用完（輪數、四面體數、時間，或不良元素數不再下降），`mesh()` 就拋出 `MeshRepairError`。較高的幾何階數，在通過稽核的那一輪之後才提升。除了一種配方之外，每種配方都走這個迴圈：`GmshDefaultRecipe()` 只做報告（`scgsim.meshing.entry`）。它用 Gmsh 自己的尺寸產生一次網格、不做修復，不論品質都交出網格，報告以 `stop="report_only"` 記錄低於門檻的元素；四面體與時間預算以及階數提升仍然適用。Palace 的屬性由 sidecar 的實體群組轉換而來（`palace.mesh.physical_groups`）。控制項見 [Palace 網格參考](../../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 600" role="img" aria-labelledby="title desc">
+  <title id="title">MA、MS、SA 介面，以及焊墊頂面的條帶與列</title>
+  <desc id="desc">上圖：SimplePad 間隙處的橫截面。金屬－空氣介面 MA 是接地金屬與焊墊的頂面和側壁，金屬－基板介面 MS 在金屬下方，基板－空氣介面 SA 是間隙中裸露的矽。下圖：從上方看焊墊頂面靠近一條間隙邊的部分。0.5 與 1.0 微米的邊距把它切成條帶 0（距間隙邊 0 到 0.5 微米，399 平方微米）、條帶 1（0.5 到 1.0，397 平方微米）與條帶 2（1.0 以外，39,204 平方微米）。整面列涵蓋三個條帶，0.5 微米邊距列涵蓋條帶 1 與 2，1.0 微米邊距列只涵蓋條帶 2。</desc>
+  <rect width="760" height="600" fill="#ffffff"/>
+  <text x="20" y="34" font-family="sans-serif" font-size="20" font-weight="700" fill="#172554">SimplePad 的表面、條帶與列</text>
+  <text x="20" y="58" font-family="sans-serif" font-size="13" fill="#475569">Route B · 邊距 0.5 與 1.0 µm · 未依比例</text>
+
+  <!-- 第 1 格：三種介面 -->
+  <g transform="translate(0,76)">
+    <rect x="20" y="0" width="720" height="200" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">MA、MS、SA 在哪裡</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">接地金屬與焊墊之間間隙處的橫截面</text>
+    <rect x="40" y="56" width="440" height="78" fill="#eef5fd"/>
+    <text x="52" y="76" font-family="sans-serif" font-size="13" fill="#38536b">真空</text>
+    <rect x="40" y="110" width="160" height="24" fill="#8a96a8"/>
+    <rect x="300" y="110" width="180" height="24" fill="#8a96a8"/>
+    <text x="120" y="127" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#ffffff">接地金屬</text>
+    <text x="390" y="127" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#ffffff">焊墊</text>
+    <text x="250" y="104" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#334155">間隙</text>
+    <rect x="40" y="134" width="440" height="50" fill="#dce9f4"/>
+    <text x="52" y="168" font-family="sans-serif" font-size="13" fill="#38536b">Si 基板</text>
+    <polyline points="40,110 200,110 200,134" fill="none" stroke="#d9822b" stroke-width="4"/>
+    <polyline points="480,110 300,110 300,134" fill="none" stroke="#d9822b" stroke-width="4"/>
+    <line x1="40" y1="136" x2="200" y2="136" stroke="#7b5ea7" stroke-width="4"/>
+    <line x1="300" y1="136" x2="480" y2="136" stroke="#7b5ea7" stroke-width="4"/>
+    <line x1="202" y1="136" x2="298" y2="136" stroke="#4c9a5f" stroke-width="4"/>
+    <rect x="500" y="70" width="14" height="14" fill="#d9822b"/>
+    <text x="522" y="82" font-family="sans-serif" font-size="13" fill="#334155">MA，金屬－空氣：</text>
+    <text x="522" y="99" font-family="sans-serif" font-size="13" fill="#334155">金屬的頂面與側壁</text>
+    <rect x="500" y="114" width="14" height="14" fill="#7b5ea7"/>
+    <text x="522" y="126" font-family="sans-serif" font-size="13" fill="#334155">MS，金屬－基板：</text>
+    <text x="522" y="143" font-family="sans-serif" font-size="13" fill="#334155">金屬下方</text>
+    <rect x="500" y="158" width="14" height="14" fill="#4c9a5f"/>
+    <text x="522" y="170" font-family="sans-serif" font-size="13" fill="#334155">SA，基板－空氣：</text>
+    <text x="522" y="187" font-family="sans-serif" font-size="13" fill="#334155">間隙中裸露的矽</text>
+  </g>
+
+  <!-- 第 2 格：條帶與列 -->
+  <g transform="translate(0,288)">
+    <rect x="20" y="0" width="720" height="300" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">焊墊頂面的條帶與列</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">從上方看一條間隙邊附近；焊墊中心距每條邊 100 µm</text>
+    <rect x="30" y="60" width="30" height="56" fill="#e7f2ea"/>
+    <text x="45" y="92" transform="rotate(-90 45 88)" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#334155">間隙</text>
+    <rect x="60" y="60" width="120" height="56" fill="#f2c79b"/>
+    <rect x="180" y="60" width="120" height="56" fill="#f7dcc0"/>
+    <rect x="300" y="60" width="400" height="56" fill="#fbeee0"/>
+    <line x1="60" y1="56" x2="60" y2="120" stroke="#172554" stroke-width="3"/>
+    <text x="120" y="93" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="700" fill="#334155">條帶 0</text>
+    <text x="240" y="93" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="700" fill="#334155">條帶 1</text>
+    <text x="400" y="93" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="700" fill="#334155">條帶 2</text>
+    <text x="560" y="93" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#334155">…</text>
+    <text x="60" y="134" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#334155">0</text>
+    <text x="180" y="134" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#334155">0.5</text>
+    <text x="300" y="134" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#334155">距間隙邊 1.0 µm</text>
+    <text x="120" y="152" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#475569">399 µm²</text>
+    <text x="240" y="152" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#475569">397 µm²</text>
+    <text x="500" y="152" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#475569">39,204 µm²</text>
+    <text x="60" y="180" font-family="sans-serif" font-size="13" fill="#334155">整面列：條帶 0、1、2 · 40,000 µm²</text>
+    <rect x="60" y="186" width="640" height="14" fill="#d9822b"/>
+    <text x="180" y="224" font-family="sans-serif" font-size="13" fill="#334155">邊距 0.5 µm 列：條帶 1、2 · 39,601 µm²</text>
+    <rect x="180" y="230" width="520" height="14" fill="#d9822b" fill-opacity="0.7"/>
+    <text x="300" y="268" font-family="sans-serif" font-size="13" fill="#334155">邊距 1.0 µm 列：條帶 2 · 39,204 µm²</text>
+    <rect x="300" y="274" width="400" height="14" fill="#d9822b" fill-opacity="0.45"/>
+  </g>
+</svg>

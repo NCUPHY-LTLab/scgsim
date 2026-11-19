@@ -18,6 +18,7 @@ project:
   - docs/contribute/research/*.qmd
   - docs/contribute/research/*/*.qmd
   - docs/contribute/history/*.qmd
+  - docs/contribute/internals/*.qmd
   - docs/contribute/sgb-design/*.qmd
 execute:
   enabled: false
@@ -127,6 +128,7 @@ website:
     contents:
     - docs/concepts/problems.qmd
     - docs/concepts/geometry.qmd
+    - docs/concepts/routes.qmd
     - docs/concepts/surface-epr.qmd
     - docs/concepts/model-and-numerics.qmd
   - id: reference
@@ -165,6 +167,9 @@ website:
     - docs/contribute/goals-and-upstream.qmd
     - docs/contribute/provenance.qmd
     - docs/contribute/notebook-contract.qmd
+    - section: 內部實作
+      contents:
+      - docs/contribute/internals/geometry.qmd
     - section: 研究
       contents:
       - docs/contribute/research/index.qmd
