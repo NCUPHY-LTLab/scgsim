@@ -1,6 +1,6 @@
 ---
 title: "Documentation map"
-description: "Find the reader path for SCGSim topics and their OrcaPen source pages."
+description: "Which area of the site holds which kind of page, and the folder each area lives in."
 sidebar: contribute
 scgsim-id: "docs/documentation-map"
 scgsim-kind: "contribution"
@@ -9,56 +9,22 @@ aliases:
   - ../documentation-map.html
 ---
 
-Use the [simulation chooser](../start/choose-a-simulation.qmd) to find the PDK notebook for a calculation.
-Backend course pages retain their paths and anchors as detailed references.
-To check from a layout repository that a layout can be modeled, use the
-[layout modeling check](../guides/check-a-layout.qmd).
+The site has five areas, one per navbar item, and each area has one sidebar.
+A page belongs to exactly one area: the folder it lives in under `docs/`. The
+Chinese pages have the same paths under `zh-TW/docs/`; the SGB design pages
+exist in Chinese only.
 
 ## Areas of the site {#areas}
 
-| Area | What it holds | Pages |
+| Area | What it holds | Folder |
 | --- | --- | --- |
-| Overview | The package overview, the install command and a first example | `README.md`, shown by `index.qmd` |
-| Tutorial | A first Palace capacitance, choosing a simulation, installing, preparing, running and reading a model, the backend lessons and the flip-chip Xmon examples | `docs/start/first-simulation.qmd`, `docs/examples.qmd`, `docs/course/*.qmd`, `docs/tutorial-xmon-input.qmd`, `docs/tutorial-xmon-palace.qmd`, `docs/tutorial-xmon-aedt.qmd`, `docs/history/aedt-capacitance-pre-v3.qmd` |
-| Concept | The physical problems, how a layout becomes a model, energy participation, and the model and numerics | `docs/concepts/*.qmd`, `docs/eigenmode-epr.qmd` |
-| Research | Measurement studies and the historical Circular Pad setup | `docs/research/index.qmd`, `docs/contribute/research/geometry-build/*.qmd`, `docs/history/curved-source-installation.qmd` |
-| Contract | Supported behavior and detailed interfaces | `docs/reference.qmd`, `docs/conventions.qmd`, `docs/backend-support.qmd`, `docs/knowledge-guide.qmd`, `docs/api/*.qmd`, `docs/supported-scope.qmd`, `docs/geometry-sgb.qmd`, `docs/supported-geometry.qmd`, `docs/known-geometry-problems.qmd`, `docs/geometry-preview.qmd`, `docs/layout-modeling-check.qmd`, `docs/specs/*.qmd`, `docs/execution-profiles.qmd`, `docs/mesh-quality.qmd`, `docs/report-model.qmd`, `docs/api-migration.qmd`, `docs/notebook-ux.qmd` |
-| Contribution | Project references for contributors | `docs/contributing.qmd`, `docs/code-map.qmd`, `docs/documentation-map.qmd`, `docs/ownership.qmd`, `docs/architecture.qmd`, `docs/goals-and-upstream.qmd`, `docs/provenance.qmd` |
-| SGB design (Traditional Chinese only) | The SGB design pages, with their own sidebar | `zh-TW/docs/contribute/sgb-design/*.qmd` |
+| Get started | The home page (`README.md`, shown by `index.qmd`), installing, the first simulation and choosing a simulation | `docs/start/` |
+| Guides | One task per page: preparing and checking a layout, computing a quantity with one solver, reading results, running elsewhere, working with a finished run, the flip-chip Xmon worked example and upgrading | `docs/guides/` |
+| Concepts | The physical problem and the model behind each calculation | `docs/concepts/` |
+| Reference | What is supported, terms and units, the API index and the detailed specifications | `docs/reference/` |
+| Contribute | This map, the code map, architecture, ownership, provenance, the notebook contract, research and history; in Chinese also the SGB design | `docs/contribute/` |
 
-## PDK notebooks by simulation goal {#pdk-notebooks-by-goal}
-
-The OrcaPen SC PDK owns the complete notebook for each goal, with its component,
-settings and SCGSim environment. The links below are the notebook sources at
-PDK revision `49e539f`, the revision the [home page](../../index.qmd#install)
-installs.
-
-| What you get | PDK notebook |
-| --- | --- |
-| SimplePad conductor capacitance matrix | [Palace Electrostatic](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd) · [AEDT Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
-| SimplePad mode frequencies | [Palace Eigenmode and EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd) · [HFSS Eigenmode and surface EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
-| SimplePad surface, bulk and branch energy participation per mode | The same two notebooks: [Palace](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd) · [HFSS](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
-| Finite-ground CPW per-unit-length C, G, L and R matrices | [AEDT Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.qmd) |
-
-The PDK has no current notebook for the finite-ground CPW two-port
-S-parameters; its HFSS Driven Terminal notebooks use the
-[17-bridge CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge).
-
-## OrcaPen to SCGSim topics
-
-OrcaPen supplies the component and process-specific case. Link its page to the
-SCGSim topic that owns the reusable model, solver, mesh, handoff, or result
-detail. Resolve cross-site links to the SCGSim revision named by the selected
-OrcaPen tutorial.
-
-| OrcaPen source page | SCGSim topic entry |
-| --- | --- |
-| `docs/notebooks.qmd` | [Simulation overview](../start/choose-a-simulation.qmd) and [topic index](../reference/index.qmd). |
-| `docs/simulation/requirements/electrostatic-capacitance.qmd` | [Model and materials](../reference/index.qmd#model-materials) and [conductors and ports](../reference/index.qmd#conductors-ports). |
-| `docs/simulation/requirements/eigenmode.qmd`, `docs/simulation/requirements/epr-loss.qmd` | [Model and materials](../reference/index.qmd#model-materials) and [saved fields and offline loss](../reference/index.qmd#saved-fields-offline-loss). |
-| `docs/simulation/tools/mesh-fem-amr.qmd` | [Mesh and adaptation](../reference/index.qmd#mesh-adaptation). |
-| `docs/simulation/tools/handoff-resolve-report.qmd` | [Execution and handoff](../reference/index.qmd#execution-handoff) and [results and reports](../reference/index.qmd#results-reports). |
-
-The OrcaPen links above identify component-source revisions. For reusable
-SCGSim interfaces, use the
-matching topic entry in the [SCGSim reference](../reference/index.qmd).
+A page that moves keeps its old URL as a Quarto `aliases:` entry, so links from
+earlier releases still arrive; links between pages always use the current
+path. The PDK notebook for each calculation is listed on
+[Choose a simulation](../start/choose-a-simulation.qmd).

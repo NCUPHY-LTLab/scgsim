@@ -1,48 +1,21 @@
 ---
 title: "文件導覽圖"
-description: "了解 SCGSim 各主題的閱讀路徑與 OrcaPen 原始頁面。"
+description: "網站的哪一區放哪一類頁面，以及每一區所在的資料夾。"
 sidebar: contribute
 aliases:
   - ../documentation-map.html
 ---
 
-請從「教學」選擇五種完整計算流程之一。各後端課程頁保留原有網址與定位點，作為細節參考。若要在版圖儲存庫中檢查版圖能否建模，請使用[版圖建模檢查](../guides/check-a-layout.qmd)。
+網站分成五區，每區對應導覽列的一個項目，各有一個側欄。每一頁只屬於一區，也就是它在 `docs/` 下所在的資料夾。中文頁面位於 `zh-TW/docs/` 下的相同路徑；SGB 設計頁只有中文版。
 
 ## 網站的區域 {#areas}
 
-| 區域 | 內容 | 頁面 |
+| 區域 | 內容 | 資料夾 |
 | --- | --- | --- |
-| 總覽 | 套件總覽、安裝指令與第一個範例 | `README.md`，由 `index.qmd` 顯示 |
-| 教學 | 第一個 Palace 電容模擬、選擇模擬、安裝、準備與執行模型並讀取結果、各後端課程，以及覆晶 Xmon 範例 | `docs/start/first-simulation.qmd`、`docs/examples.qmd`、`docs/course/*.qmd`、`docs/tutorial-xmon-input.qmd`、`docs/tutorial-xmon-palace.qmd`、`docs/tutorial-xmon-aedt.qmd`、`docs/history/aedt-capacitance-pre-v3.qmd` |
-| 概念 | 物理問題、版圖如何成為模型、能量參與率，以及模型與數值方法 | `docs/concepts/*.qmd`、`docs/eigenmode-epr.qmd` |
-| 研究 | 量測研究與歷史 Circular Pad 設定 | `docs/research/index.qmd`、`docs/contribute/research/geometry-build/*.qmd`、`docs/history/curved-source-installation.qmd` |
-| 契約 | 支援的行為與詳細介面 | `docs/reference.qmd`、`docs/conventions.qmd`、`docs/backend-support.qmd`、`docs/knowledge-guide.qmd`、`docs/api/*.qmd`、`docs/supported-scope.qmd`、`docs/geometry-sgb.qmd`、`docs/supported-geometry.qmd`、`docs/known-geometry-problems.qmd`、`docs/geometry-preview.qmd`、`docs/layout-modeling-check.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd` |
-| 貢獻 | 給貢獻者的專案參考 | `docs/contributing.qmd`、`docs/code-map.qmd`、`docs/documentation-map.qmd`、`docs/ownership.qmd`、`docs/architecture.qmd`、`docs/goals-and-upstream.qmd`、`docs/provenance.qmd` |
-| SGB 設計（只有繁體中文） | SGB 設計頁，使用自己的側欄 | `zh-TW/docs/contribute/sgb-design/*.qmd` |
+| 開始 | 首頁（`README.md`，由 `index.qmd` 顯示）、安裝、第一個模擬與選擇模擬 | `docs/start/` |
+| 使用指南 | 每頁一項工作：準備與檢查版圖、用一種求解器計算一個量、讀取結果、在其他電腦執行、執行完成後的處理、覆晶 Xmon 完整範例，以及升級 | `docs/guides/` |
+| 概念 | 每種計算背後的物理問題與模型 | `docs/concepts/` |
+| 參考 | 支援的範圍、術語與單位、API 索引，以及詳細規格 | `docs/reference/` |
+| 貢獻 | 本導覽圖、程式碼地圖、架構、責任歸屬、來源沿革、筆記本契約、研究與歷史；中文版另有 SGB 設計 | `docs/contribute/` |
 
-## 依模擬目標的 PDK 筆記本 {#pdk-notebooks-by-goal}
-
-OrcaPen SC PDK 負責各目標的完整筆記本，以及其中的元件、設定與 SCGSim 環境。下列連結指向 PDK 版本 `49e539f` 的筆記本來源，也就是[首頁](../../index.qmd)安裝的版本。
-
-| 你會得到 | PDK 筆記本 |
-| --- | --- |
-| SimplePad 導體電容矩陣 | [Palace Electrostatic](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd)・[AEDT Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
-| SimplePad 模態頻率 | [Palace Eigenmode 與 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd)・[HFSS Eigenmode 與表面 EPR](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
-| SimplePad 各模態的表面、體積與支路能量參與率 | 同上兩份筆記本：[Palace](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_eigenmode.qmd)・[HFSS](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
-| 有限接地 CPW 的單位長度 C、G、L 與 R 矩陣 | [AEDT Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.qmd) |
-
-PDK 沒有有限接地 CPW 雙埠 S 參數的現行筆記本；其 HFSS Driven Terminal 筆記本使用 [17 座橋的 CPW–meander coupon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/49e539fd59f3224ecda965d777c7ec3aadcc3b85/notebooks/src/SCGSimExamples/ComponentSimulation/CpwMeanderAirbridge)。
-
-## OrcaPen 與 SCGSim 主題對照 {#orcapen-to-scgsim-topics}
-
-OrcaPen 提供元件與製程案例。請從其頁面連至負責通用模型、求解器、網格、交接或結果細節的 SCGSim 主題。跨網站連結應指向所選 OrcaPen 教學指定的 SCGSim 版本。
-
-| OrcaPen 來源頁面 | SCGSim 主題入口 |
-| --- | --- |
-| `docs/notebooks.qmd` | [模擬總覽](../start/choose-a-simulation.qmd)與[主題索引](../reference/index.qmd)。 |
-| `docs/simulation/requirements/electrostatic-capacitance.qmd` | [模型與材料](../reference/index.qmd#model-materials)及[導體與埠](../reference/index.qmd#conductors-ports)。 |
-| `docs/simulation/requirements/eigenmode.qmd`、`docs/simulation/requirements/epr-loss.qmd` | [模型與材料](../reference/index.qmd#model-materials)及[儲存場與離線損耗](../reference/index.qmd#saved-fields-offline-loss)。 |
-| `docs/simulation/tools/mesh-fem-amr.qmd` | [網格與自適應](../reference/index.qmd#mesh-adaptation)。 |
-| `docs/simulation/tools/handoff-resolve-report.qmd` | [執行與交接](../reference/index.qmd#execution-handoff)及[結果與報表](../reference/index.qmd#results-reports)。 |
-
-上表 OrcaPen 連結標示元件來源版本。SCGSim 介面細節請閱讀[SCGSim 參考索引](../reference/index.qmd)中的對應主題。
+頁面移動後，舊網址會以 Quarto 的 `aliases:` 保留，因此舊版本的連結仍能抵達；頁面之間的連結一律使用目前的路徑。每種計算的 PDK 筆記本列在[選擇模擬](../start/choose-a-simulation.qmd)。

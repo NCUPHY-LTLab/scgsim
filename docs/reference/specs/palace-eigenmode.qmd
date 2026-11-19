@@ -215,10 +215,17 @@ a face without one, such as the underside of a substrate, is covered only by the
 baseline row. The manifest lists the faces SGB skipped.
 
 Group names attach the face kind to the entity with `__` and separate every
-other part with `::`, as `<kind>::<entity>__<face kind>[::band=k]`, for example
-`MA::pad__top::band=1`; the face kind is `top`, `bottom`, `sidewall`, `sheet`
-or `interface`. Read band membership from the index map instead of parsing
-names.
+other part with `::`. The common form is `<kind>::<entity>__<face kind>[::band=k]`,
+for example `MA::pad__top::band=1`; the face kind is `top`, `bottom`,
+`sidewall`, `sheet` or `interface`. Two forms differ from it. When two band
+families would share one banded interface group, every band group of both
+gains the side of the dielectric its faces lie on:
+`SA::substrate|vacuum__interface__top::band=1` (the dielectric is below the
+face) and `...__interface__bottom::band=1` (it is above). A Route A conductor
+sheet's group is the entity alone, `pad::band=k`, and carries the Surface-EPR
+rows `MA::pad__sheet::band=k` where vacuum touches the sheet and
+`MS::pad__sheet::band=k` where a dielectric does. Read band membership from
+the index map instead of parsing names.
 
 ::: {.callout-note collapse="true" title="Rows, sides and cracked sheets"}
 The index map (schema v3) records, for each surface row, its `row` and `group`,
