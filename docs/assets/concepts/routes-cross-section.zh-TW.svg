@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 790" role="img" aria-labelledby="title desc">
+  <title id="title">同一個焊墊邊緣：層堆疊、Route B 與 Route A</title>
+  <desc id="desc">四個橫截面，切過接地金屬與焊墊之間 20 微米的間隙。層堆疊是 500 微米矽上的 0.1 微米鋁膜。Route B 把鋁膜保留成 0.1 微米厚的理想導體塊，真空到 z = 1000.1 微米。Route A 的 thin_film 把鋁膜變成 z = 0 的薄片並移除厚度，真空因此到 z = 1000.0 微米。Route A 的 substrate_face 把鋁膜變成 z = 0 的薄片，其他高度都不變，鋁膜原來的位置變成真空。高度未依比例繪製。</desc>
+  <defs>
+    <pattern id="pec" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#596579"/>
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#cbd5e1" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="760" height="790" fill="#ffffff"/>
+  <text x="20" y="34" font-family="sans-serif" font-size="20" font-weight="700" fill="#172554">同一個焊墊邊緣，三種模型</text>
+  <text x="20" y="58" font-family="sans-serif" font-size="13" fill="#475569">切過 SimplePad 20 µm 間隙的橫截面 · 高度未依比例</text>
+
+  <!-- 第 1 格：層堆疊 -->
+  <g transform="translate(0,76)">
+    <rect x="20" y="0" width="720" height="166" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">層堆疊（PDK，單一晶粒）</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">PDK 宣告的內容：矽上的一層鋁膜</text>
+    <rect x="40" y="56" width="440" height="64" fill="#eef5fd"/>
+    <text x="52" y="76" font-family="sans-serif" font-size="13" fill="#38536b">真空</text>
+    <rect x="40" y="110" width="170" height="10" fill="#8a96a8"/>
+    <rect x="310" y="110" width="170" height="10" fill="#8a96a8"/>
+    <text x="125" y="102" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#334155">接地金屬</text>
+    <text x="395" y="102" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#334155">焊墊</text>
+    <text x="260" y="102" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#334155">間隙 20 µm</text>
+    <rect x="40" y="120" width="440" height="34" fill="#dce9f4"/>
+    <text x="52" y="142" font-family="sans-serif" font-size="13" fill="#38536b">Si 基板，厚 500 µm</text>
+    <text x="500" y="76" font-family="sans-serif" font-size="13" fill="#334155">鋁膜，厚 0.1 µm</text>
+    <line x1="480" y1="110" x2="494" y2="110" stroke="#334155"/>
+    <text x="500" y="114" font-family="sans-serif" font-size="13" fill="#334155">z = 0.1 µm：鋁膜頂面</text>
+    <line x1="480" y1="120" x2="494" y2="120" stroke="#334155"/>
+    <text x="500" y="136" font-family="sans-serif" font-size="13" fill="#334155">z = 0：矽表面</text>
+  </g>
+
+  <!-- 第 2 格：Route B -->
+  <g transform="translate(0,254)">
+    <rect x="20" y="0" width="720" height="166" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">Route B</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">Palace 預設 · AEDT modeling="solid"</text>
+    <rect x="40" y="56" width="440" height="64" fill="#eef5fd"/>
+    <text x="52" y="76" font-family="sans-serif" font-size="13" fill="#38536b">真空，到 z = 1000.1 µm</text>
+    <rect x="40" y="110" width="170" height="10" fill="url(#pec)"/>
+    <rect x="310" y="110" width="170" height="10" fill="url(#pec)"/>
+    <rect x="40" y="120" width="440" height="34" fill="#dce9f4"/>
+    <text x="52" y="142" font-family="sans-serif" font-size="13" fill="#38536b">Si 基板</text>
+    <text x="500" y="76" font-family="sans-serif" font-size="13" fill="#334155">0.1 µm 厚的理想導體塊，</text>
+    <text x="500" y="93" font-family="sans-serif" font-size="13" fill="#334155">內部不建網格</text>
+    <line x1="480" y1="110" x2="494" y2="110" stroke="#334155"/>
+    <text x="500" y="114" font-family="sans-serif" font-size="13" fill="#334155">z = 0.1 µm</text>
+    <line x1="480" y1="120" x2="494" y2="120" stroke="#334155"/>
+    <text x="500" y="136" font-family="sans-serif" font-size="13" fill="#334155">z = 0</text>
+  </g>
+
+  <!-- 第 3 格：Route A，thin_film -->
+  <g transform="translate(0,432)">
+    <rect x="20" y="0" width="720" height="166" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">Route A，thin_film</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">Palace set_route("A") · AEDT modeling="thin_film"</text>
+    <rect x="40" y="56" width="440" height="64" fill="#eef5fd"/>
+    <text x="52" y="76" font-family="sans-serif" font-size="13" fill="#38536b">真空，到 z = 1000.0 µm</text>
+    <line x1="40" y1="120" x2="210" y2="120" stroke="#596579" stroke-width="4"/>
+    <line x1="310" y1="120" x2="480" y2="120" stroke="#596579" stroke-width="4"/>
+    <rect x="40" y="122" width="440" height="32" fill="#dce9f4"/>
+    <text x="52" y="142" font-family="sans-serif" font-size="13" fill="#38536b">Si 基板</text>
+    <text x="500" y="76" font-family="sans-serif" font-size="13" fill="#334155">移除鋁膜厚度：</text>
+    <text x="500" y="93" font-family="sans-serif" font-size="13" fill="#334155">上方一切下移 0.1 µm</text>
+    <line x1="480" y1="120" x2="494" y2="120" stroke="#334155"/>
+    <text x="500" y="124" font-family="sans-serif" font-size="13" fill="#334155">z = 0：薄片</text>
+  </g>
+
+  <!-- 第 4 格：Route A，substrate_face -->
+  <g transform="translate(0,610)">
+    <rect x="20" y="0" width="720" height="166" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">Route A，substrate_face</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">Palace set_route("A", approximation_profile=...) · AEDT 沒有對應選項</text>
+    <rect x="40" y="56" width="440" height="64" fill="#eef5fd"/>
+    <text x="52" y="76" font-family="sans-serif" font-size="13" fill="#38536b">真空，到 z = 1000.1 µm</text>
+    <rect x="40" y="110" width="170" height="10" fill="none" stroke="#94a3b8" stroke-dasharray="4 3"/>
+    <rect x="310" y="110" width="170" height="10" fill="none" stroke="#94a3b8" stroke-dasharray="4 3"/>
+    <line x1="40" y1="120" x2="210" y2="120" stroke="#596579" stroke-width="4"/>
+    <line x1="310" y1="120" x2="480" y2="120" stroke="#596579" stroke-width="4"/>
+    <rect x="40" y="122" width="440" height="32" fill="#dce9f4"/>
+    <text x="52" y="142" font-family="sans-serif" font-size="13" fill="#38536b">Si 基板</text>
+    <text x="500" y="76" font-family="sans-serif" font-size="13" fill="#334155">所有高度不變；鋁膜原來的</text>
+    <text x="500" y="93" font-family="sans-serif" font-size="13" fill="#334155">位置（虛線）變成真空</text>
+    <line x1="480" y1="120" x2="494" y2="120" stroke="#334155"/>
+    <text x="500" y="124" font-family="sans-serif" font-size="13" fill="#334155">z = 0：薄片</text>
+  </g>
+</svg>

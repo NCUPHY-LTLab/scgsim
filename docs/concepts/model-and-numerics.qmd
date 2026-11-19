@@ -1,68 +1,102 @@
 ---
-title: "Boundaries, approximations and numerical results"
-description: "Separate the physical model, its geometric approximation and the numerical calculation."
+title: "Mesh and numerics"
+description: "What a mesh is, what refinement changes and why a result has to converge, with the SimplePad's numbers over four refinement passes; and the model choices that refinement does not change."
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/concepts/model-and-numerics"
 ---
 
-Three choices shape a result: the physical model, the representation of that
-model, and the numerical calculation. Changing one is not the same as refining
-another.
+A solver computes the field on a **mesh**: the model cut into small
+tetrahedra. Every number it returns depends on that mesh. Refining the mesh
+shows how much a number still moves, and a number you use should have stopped
+moving by an amount that is small for your purpose. Refining changes only the
+calculation, never the model: what is grounded, the box around the chip, the
+route and the materials stay as you set them.
 
-## Define the physical model
+## What a mesh is {#mesh}
 
-Record the conductor grounds, exterior boundary, substrate and vacuum extent,
-port or junction elements, and material assumptions. Changing a grounded
-conductor or junction inductance changes the experiment. Shared layout does
-not by itself make the exterior conditions match: unspecified Palace Eigenmode
-uses its natural PMC condition, and HFSS matches it by assigning Perfect H on
-the faces of its Region.
+`mesh()` builds the model and fills every solution volume, the substrate and
+the vacuum, with tetrahedra; a Route B conductor's inside gets none. On each
+tetrahedron the solver approximates the field by a polynomial whose degree is
+the FEM order (`set_numerical(order=...)`). The mesh recipe sets the starting
+element sizes, and every tetrahedron must pass a shape-quality threshold:
+SCGSim refines around those that do not, or stops with `MeshRepairError`.
+The controls are in the
+[Palace mesh reference](../reference/specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
-## Choose the geometric approximation
+## What refinement does {#refinement}
 
-Route A uses zero-thickness face-metal PEC sheets with an explicit profile.
-Route B uses finite metal and its exterior PEC surfaces. In Palace Route B,
-conductor interiors are excluded from solution tetrahedra. Neither approach
-turns the ideal PEC approximation into a measured conductor-loss model.
+With adaptive refinement, Palace solves, estimates where its error is largest,
+refines the mesh there and solves again. Each solve is one **pass**. In a
+recorded study of the [First simulation](../start/first-simulation.qmd) pad
+with a 10 nH junction ([run record](https://github.com/NCUPHY-LTLab/scgsim/issues/248#issuecomment-6873586635);
+Palace Eigenmode, FEM order 2, Surface-EPR margins of 0.5 and 1 µm), four
+passes gave:
 
-Route A's `substrate_face` and `metal_gap_equivalent` profiles have different
-coordinate/normalization meanings. Select them for the intended model; changing
-route is not an automatic repair for a difficult mesh. See the
-[geometry reference](../reference/specs/geometry-plan.qmd) for exact supported forms.
+| Pass | Tetrahedra | Mode 1 frequency | Change | MS participation, whole surface | Change | MS participation beyond 1 µm | Change |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 117,138 | 5.122 GHz | | 1.033 × 10⁻⁴ | | 6.472 × 10⁻⁵ | |
+| 2 | 179,515 | 5.132 GHz | +0.21 % | 1.075 × 10⁻⁴ | +4.1 % | 6.451 × 10⁻⁵ | −0.32 % |
+| 3 | 517,335 | 5.139 GHz | +0.13 % | 1.211 × 10⁻⁴ | +13 % | 6.435 × 10⁻⁵ | −0.24 % |
+| 4 | 1,445,206 | 5.143 GHz | +0.081 % | 1.348 × 10⁻⁴ | +11 % | 6.233 × 10⁻⁵ | −3.1 % |
 
-## Read numerical changes beside the quantity
+Each change is from the pass before. Three quantities, three behaviours:
 
-Mesh sizing, the mesh quality threshold, geometric mesh order, finite-element
-order, adaptive passes, solver settings and search controls determine different
-parts of the numerical calculation. Palace's geometric order controls the mesh representation; FEM
-order controls the field approximation. A native stopping flag describes its
-configured criterion. It is useful alongside the actual changes in the
-capacitance, frequency or participation you intend to use.
+- **The frequency settles.** Each change is about 0.6 of the one before.
+  Extrapolating those changes puts the limit at 5.1500 GHz, 0.13 % above
+  pass 4.
+- **The whole-surface participation does not settle.** It grows by 4 to 13 %
+  at every pass. The growth is in the strip within 1 µm of the gap edges,
+  whose share goes from 3.86 × 10⁻⁵ at pass 1 to 7.25 × 10⁻⁵ at pass 4 (the
+  whole surface minus the part beyond 1 µm); that strip is what inset margins
+  leave out ([Surface EPR](surface-epr.qmd#surface-distance-band-correction)).
+- **The participation beyond 1 µm changes little, then jumps.** Two small
+  changes in a row were followed by a 3.1 % one, so a single small change is
+  not proof that a number has settled.
 
-The Palace mesh summary records the meshing controls and the native
-topology. Its Eigenmode degree-of-freedom value is a topology-based estimate,
-not a native solver count or a convergence measure. The linear-tetrahedron
-quality report also does not evaluate curved high-order element quality.
+## Why convergence matters {#read-numerical-changes-beside-the-quantity}
 
-Keep the three high-order controls separate: `MesherOptions.geometry_order` creates the mesh
-geometry, FEM order controls the field approximation, and Palace
-`HighOrderOutput` controls serialization. Palace's native import default
-`RemoveCurvature=false` preserves imported high-order geometry nodes. For Palace Surface EPR, each inset margin is a separate evaluation over bands that SGB cuts into the geometry, so Palace needs no special configuration for it; see the [Eigenmode contract](../reference/specs/palace-eigenmode.qmd#surface-epr-margins).
+Each quantity converges at its own rate, so judge the one you will use: a
+frequency that has settled says nothing about a surface participation. To make
+that judgement part of the run, **declare convergence**: name the numbers that
+must stop changing and by how much. SCGSim then stops Palace at the first pass
+where every criterion holds and reports which held and when.
+[Convergence and reports](../guides/convergence-and-reports.qmd) shows how.
 
-An algebraic eigenpair residual and an adaptive mesh indicator describe
-different quantities. A frequency can change little while a field-sensitive
-surface contribution still changes. Inspect that contribution's available
-history rather than borrowing confidence from a different observable.
+Palace's own indicators, its error estimate and the eigenvalue residual,
+describe their own quantities, not your capacitance or participation. The
+degree-of-freedom number in the mesh summary is an estimate of the problem's
+size, not of its accuracy.
+
+## What refinement does not change {#define-the-physical-model}
+
+These choices define the model. Changing one gives a different model, not a
+better-resolved one:
+
+| Choice | Example |
+|---|---|
+| What is grounded | A box whose walls are grounded is a different model from one where only the chip's ground metal is at 0 V |
+| The box around the chip | The vacuum region's size. Palace leaves its outer faces without a condition: for Eigenmode that is a perfect magnetic conductor (PMC), and HFSS assigns the same condition, Perfect H, on its Region. For Electrostatic, Palace assumes zero charge there |
+| How the metal is drawn | Route A or Route B, and the Route A profile |
+| Junctions and ports | The 10 nH of the junction above |
+| Materials and films | Permittivities, and the thickness, permittivity and loss tangent of each Surface-EPR film |
+
+### The route {#choose-the-geometric-approximation}
+
+Whether the metal is a block of its real thickness (Route B) or a sheet of zero
+thickness (Route A) is a model choice; a route is not a remedy for a mesh that
+fails. [Route A and Route B](routes.qmd) explains both with the same pad.
 
 ::: {.callout-note title="Keep model and numerical comparisons separate"}
-Refining a mesh investigates one model's discretization. Changing enclosure,
-material or port assumptions investigates a different model. Label those studies
-separately and retain units and mode/conductor identity when comparing results.
+Refining a mesh studies one model's numerics. Changing the box, a material, a
+port or the route studies a different model. Label the two kinds of study
+separately, and keep units and mode or conductor identities when you compare
+results.
 :::
 
-A source preview displays declared geometry; a mesh/native readback displays
-backend construction; a solved field supports physical postprocessing. Missing
-sidewall energy or an unknown loss tangent remains missing or unknown, even if
-other parts of the result are readable. Continue with
-[EPR interpretation](surface-epr.qmd) or [result reading](../guides/convergence-and-reports.qmd).
+A source preview shows the geometry you declared, a mesh shows what the solver
+will compute on, and only a solved field gives physical numbers. Energy that
+was not computed, such as a film you did not request, stays missing; a loss
+tangent you did not give stays unknown. Continue with
+[Energy participation and Surface EPR](surface-epr.qmd) or
+[Convergence and reports](../guides/convergence-and-reports.qmd).

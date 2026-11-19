@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 790" role="img" aria-labelledby="title desc">
+  <title id="title">The same pad edge in the layer stack, Route B and Route A</title>
+  <desc id="desc">Four cross-sections across the 20 micrometre gap between the ground metal and the pad. The layer stack has a 0.1 micrometre aluminium film on 500 micrometres of silicon. Route B keeps the film as a 0.1 micrometre perfect-conductor block and the vacuum reaches z = 1000.1 micrometres. Route A with thin_film makes the film a sheet at z = 0 and removes its thickness, so the vacuum ends at z = 1000.0 micrometres. Route A with substrate_face makes the film a sheet at z = 0 and keeps every height; the film's place becomes vacuum. Heights are not to scale.</desc>
+  <defs>
+    <pattern id="pec" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#596579"/>
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#cbd5e1" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="760" height="790" fill="#ffffff"/>
+  <text x="20" y="34" font-family="sans-serif" font-size="20" font-weight="700" fill="#172554">One pad edge, three models</text>
+  <text x="20" y="58" font-family="sans-serif" font-size="13" fill="#475569">Cross-section across the SimplePad's 20 µm gap · heights not to scale</text>
+
+  <!-- Panel 1: the layer stack -->
+  <g transform="translate(0,76)">
+    <rect x="20" y="0" width="720" height="166" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">Layer stack (PDK, single die)</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">What the PDK declares: an aluminium film on silicon</text>
+    <rect x="40" y="56" width="440" height="64" fill="#eef5fd"/>
+    <text x="52" y="76" font-family="sans-serif" font-size="13" fill="#38536b">vacuum</text>
+    <rect x="40" y="110" width="170" height="10" fill="#8a96a8"/>
+    <rect x="310" y="110" width="170" height="10" fill="#8a96a8"/>
+    <text x="125" y="102" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#334155">ground</text>
+    <text x="395" y="102" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#334155">pad</text>
+    <text x="260" y="102" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#334155">gap 20 µm</text>
+    <rect x="40" y="120" width="440" height="34" fill="#dce9f4"/>
+    <text x="52" y="142" font-family="sans-serif" font-size="13" fill="#38536b">Si substrate, 500 µm thick</text>
+    <text x="500" y="76" font-family="sans-serif" font-size="13" fill="#334155">Al film, 0.1 µm thick</text>
+    <line x1="480" y1="110" x2="494" y2="110" stroke="#334155"/>
+    <text x="500" y="114" font-family="sans-serif" font-size="13" fill="#334155">z = 0.1 µm: film top</text>
+    <line x1="480" y1="120" x2="494" y2="120" stroke="#334155"/>
+    <text x="500" y="136" font-family="sans-serif" font-size="13" fill="#334155">z = 0: Si surface</text>
+  </g>
+
+  <!-- Panel 2: Route B -->
+  <g transform="translate(0,254)">
+    <rect x="20" y="0" width="720" height="166" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">Route B</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">Palace default · AEDT modeling="solid"</text>
+    <rect x="40" y="56" width="440" height="64" fill="#eef5fd"/>
+    <text x="52" y="76" font-family="sans-serif" font-size="13" fill="#38536b">vacuum, up to z = 1000.1 µm</text>
+    <rect x="40" y="110" width="170" height="10" fill="url(#pec)"/>
+    <rect x="310" y="110" width="170" height="10" fill="url(#pec)"/>
+    <rect x="40" y="120" width="440" height="34" fill="#dce9f4"/>
+    <text x="52" y="142" font-family="sans-serif" font-size="13" fill="#38536b">Si substrate</text>
+    <text x="500" y="76" font-family="sans-serif" font-size="13" fill="#334155">0.1 µm block of perfect</text>
+    <text x="500" y="93" font-family="sans-serif" font-size="13" fill="#334155">conductor, no mesh inside</text>
+    <line x1="480" y1="110" x2="494" y2="110" stroke="#334155"/>
+    <text x="500" y="114" font-family="sans-serif" font-size="13" fill="#334155">z = 0.1 µm</text>
+    <line x1="480" y1="120" x2="494" y2="120" stroke="#334155"/>
+    <text x="500" y="136" font-family="sans-serif" font-size="13" fill="#334155">z = 0</text>
+  </g>
+
+  <!-- Panel 3: Route A, thin_film -->
+  <g transform="translate(0,432)">
+    <rect x="20" y="0" width="720" height="166" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">Route A, thin_film</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">Palace set_route("A") · AEDT modeling="thin_film"</text>
+    <rect x="40" y="56" width="440" height="64" fill="#eef5fd"/>
+    <text x="52" y="76" font-family="sans-serif" font-size="13" fill="#38536b">vacuum, up to z = 1000.0 µm</text>
+    <line x1="40" y1="120" x2="210" y2="120" stroke="#596579" stroke-width="4"/>
+    <line x1="310" y1="120" x2="480" y2="120" stroke="#596579" stroke-width="4"/>
+    <rect x="40" y="122" width="440" height="32" fill="#dce9f4"/>
+    <text x="52" y="142" font-family="sans-serif" font-size="13" fill="#38536b">Si substrate</text>
+    <text x="500" y="76" font-family="sans-serif" font-size="13" fill="#334155">film thickness removed:</text>
+    <text x="500" y="93" font-family="sans-serif" font-size="13" fill="#334155">all above it moves 0.1 µm down</text>
+    <line x1="480" y1="120" x2="494" y2="120" stroke="#334155"/>
+    <text x="500" y="124" font-family="sans-serif" font-size="13" fill="#334155">z = 0: sheet</text>
+  </g>
+
+  <!-- Panel 4: Route A, substrate_face -->
+  <g transform="translate(0,610)">
+    <rect x="20" y="0" width="720" height="166" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="36" y="24" font-family="sans-serif" font-size="16" font-weight="700" fill="#172554">Route A, substrate_face</text>
+    <text x="36" y="44" font-family="sans-serif" font-size="13" fill="#475569">Palace set_route("A", approximation_profile=...) · no AEDT counterpart</text>
+    <rect x="40" y="56" width="440" height="64" fill="#eef5fd"/>
+    <text x="52" y="76" font-family="sans-serif" font-size="13" fill="#38536b">vacuum, up to z = 1000.1 µm</text>
+    <rect x="40" y="110" width="170" height="10" fill="none" stroke="#94a3b8" stroke-dasharray="4 3"/>
+    <rect x="310" y="110" width="170" height="10" fill="none" stroke="#94a3b8" stroke-dasharray="4 3"/>
+    <line x1="40" y1="120" x2="210" y2="120" stroke="#596579" stroke-width="4"/>
+    <line x1="310" y1="120" x2="480" y2="120" stroke="#596579" stroke-width="4"/>
+    <rect x="40" y="122" width="440" height="32" fill="#dce9f4"/>
+    <text x="52" y="142" font-family="sans-serif" font-size="13" fill="#38536b">Si substrate</text>
+    <text x="500" y="76" font-family="sans-serif" font-size="13" fill="#334155">every height kept; the film's</text>
+    <text x="500" y="93" font-family="sans-serif" font-size="13" fill="#334155">place (dashed) is vacuum</text>
+    <line x1="480" y1="120" x2="494" y2="120" stroke="#334155"/>
+    <text x="500" y="124" font-family="sans-serif" font-size="13" fill="#334155">z = 0: sheet</text>
+  </g>
+</svg>
