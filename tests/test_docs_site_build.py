@@ -367,6 +367,29 @@ def test_new_area_is_absent_from_versions_without_its_pages(publisher, label):
     assert historical["docs/legacy.qmd"] == "Original historical legacy body.\n"
 
 
+def test_a_moved_page_keeps_its_older_page_in_older_menus(publisher):
+    """The current menu names a moved page by its new path; an older release has it under the URL the page keeps.
+
+    Without the alias the older release's Area would have no page and leave its menu, as a new Area does.
+    """
+    presentation = publisher.sources[PRESENTATION]
+    presentation["_quarto.yml"] = presentation["_quarto.yml"].replace(
+        "      - docs/legacy.qmd\n", "      - docs/area/moved.qmd\n"
+    )
+    presentation["docs/area/moved.qmd"] = (
+        "---\ntitle: Moved\naliases:\n  - ../legacy.html\n---\n\nMoved body.\n"
+    )
+    del presentation["docs/legacy.qmd"]
+
+    output = publisher.invoke()
+    historical = json.loads((output / "v1.0.0/render-observation.json").read_text())
+    config = historical["_quarto.yml"]
+    assert "      - docs/legacy.qmd\n" in config
+    assert "      href: docs/legacy.qmd\n" in config
+    assert "docs/area/moved.qmd" not in config
+    assert historical["docs/legacy.qmd"] == "Original historical legacy body.\n"
+
+
 def test_unknown_missing_menu_destination_still_fails(publisher):
     """Omitting an empty known Area must not conceal an unrelated broken link."""
     presentation = publisher.sources[PRESENTATION]
