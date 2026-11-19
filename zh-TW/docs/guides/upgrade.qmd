@@ -93,7 +93,7 @@ sim.set_plan(plan.prepare())
    - Driven Modal 與波埠無法使用：`prepare_sgb_model` 會拒絕 `ModalPort` 與波形式的 `TerminalPort`。雙埠網路請用 Driven Terminal，在計畫的埠片上放 `LumpedTerminalPort`（Driven Modal 的進度見 [issue #135](https://github.com/NCUPHY-LTLab/scgsim/issues/135)）。
    - Q3D 只擷取電容與電導：`Q3dTerminalPair`、`terminal_pairs`、`Q3dSpec.solve_ac_rl`，以及 `Q3dNetSpec` 的 `source_object`、`source_side`、`sink_object` 與 `sink_side` 欄位都已移除（AC/RL 的進度見 [issue #265](https://github.com/NCUPHY-LTLab/scgsim/issues/265)）。
    - `prepare_hfss_driven_from_geometry` 與 `prepare_q3d_from_geometry` 現在會在寫出交接套件之前，就拒絕 AEDT 匯入無法實現的模型，不需要 AEDT。
-5. []{#palace-convergence-migration}**收斂與報告**（3.0.0rc2 新增；從 rc2 升級可略過這一步）。你現在可以用 `sim.set_convergence(...)` [宣告執行何時算收斂](convergence-and-reports.qmd#declare-convergence)；Palace 會在那一輪停下。有宣告時，另外指定的 `amr_tolerance` 會被拒絕。不論有沒有宣告，每次執行的報告都有以下改變：
+5. []{#palace-convergence-migration}**收斂與報告**（3.0.0rc2 新增；從 rc2 升級可略過這一步）。你現在可以用 `sim.set_convergence(...)` [宣告執行何時算收斂](convergence-and-reports.qmd#declare-convergence)；Palace 會在那個回合（pass）停下。有宣告時，另外指定的 `amr_tolerance` 會被拒絕。不論有沒有宣告，每次執行的報告都有以下改變：
 
    ::: {.askr-table-compact}
    | 以前 | 現在 |
@@ -107,7 +107,7 @@ sim.set_plan(plan.prepare())
    | 電容圖名為 `C[1][1]` | 以端子命名，例如 `C[signal][signal]` |
    :::
 
-   `ResolvedPalaceResult.convergence` 保存每一輪的檢查與判定，`ResolvedPalaceResult.solver_end` 則說明 Palace 如何結束。
+   `ResolvedPalaceResult.convergence` 保存每一回合的檢查與判定，`ResolvedPalaceResult.solver_end` 則說明 Palace 如何結束。
 
 ## 從 2.0 升級 {#from-2-0}
 

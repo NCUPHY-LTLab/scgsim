@@ -12,11 +12,11 @@ aliases:
   - ../course/returned-results.html
 ---
 
-這一頁回答 Palace 執行的兩個問題：收斂了沒有，數值是多少。執行前，你先宣告 Palace 細化網格時，哪些數值必須停止變化、變化要小到多少。SCGSim 會在條件成立後讓 Palace 停下，報告則把每一輪都對照你的條件列出。範例是[第一個模擬](../start/first-simulation.qmd)的方形焊墊：加上宣告後，它的電容在第四輪穩定在 95.21 fF。
+這一頁回答 Palace 執行的兩個問題：收斂了沒有，數值是多少。執行前，你先宣告 Palace 細化網格時，哪些數值必須停止變化、變化要小到多少。SCGSim 會在條件成立後讓 Palace 停下，報告則把每一個回合（pass）都對照你的條件列出。範例是[第一個模擬](../start/first-simulation.qmd)的方形焊墊：加上宣告後，它的電容在第 4 回合穩定在 95.21 fF。
 
 ## 宣告收斂 {#declare-convergence}
 
-Palace 的細化是自適應的：求解一次，估計哪裡誤差最大，在那裡加密網格，再解一次。每次求解稱為一輪（pass）；第 1 輪求解的是 `mesh()` 寫出的網格。收斂宣告說明哪些數值從這一輪到下一輪必須停止變化、變化要小到多少，以及要連續幾輪成立。它要在 `write_config()` 之前設定在模擬上。
+Palace 的細化是自適應的：求解一次，估計哪裡誤差最大，在那裡細化網格，再解一次。每次求解稱為一個回合；第 1 回合求解的是 `mesh()` 寫出的網格。收斂宣告說明哪些數值從這一回合到下一回合必須停止變化、變化要小到多少，以及要連續幾個回合成立。它要在 `write_config()` 之前設定在模擬上。
 
 這支腳本就是第一個模擬的腳本，只在第 4 步加上了宣告：
 
@@ -94,13 +94,13 @@ for row in result.tables["terminal-C"].rows:
 
 第 3 與第 4 步就是宣告：
 
-- `set_numerical(order=2, amr_max_passes=6)` 允許細化六次，所以最多七輪，並使用二階有限元素。沒有給輪數上限時，Palace 完全不細化。
-- `Capacitance.diagonal().within(percent=0.5)` 在某一輪成立的條件是：電容矩陣的每個對角元素（這裡是 `C[pad][pad]`）與上一輪相比，變化不超過 0.5 %。變化需要有上一輪才算得出來，所以最早在第 2 輪才可能成立。
-- `minimum_converged_passes=2` 表示：每個條件都連續兩輪成立的第一輪，就是收斂的那一輪。
+- `set_numerical(order=2, amr_max_passes=6)` 允許細化六次，所以最多七個回合，並使用二階有限元素。沒有給回合數上限時，Palace 完全不細化。
+- `Capacitance.diagonal().within(percent=0.5)` 在某一回合成立的條件是：電容矩陣的每個對角元素（這裡是 `C[pad][pad]`）與上一回合相比，變化不超過 0.5 %。變化需要有上一回合才算得出來，所以最早在第 2 回合才可能成立。
+- `minimum_converged_passes=2` 表示：每個條件都連續兩個回合成立的第一個回合，就是收斂的那一回合。
 
-這些門檻只是範例。合適的門檻取決於你要拿這個數值做什麼：給電路模型用的電容，可能需要比粗估更嚴格的變化量。條件也可以指定矩陣中的單一元素（`Capacitance.element("pad", "pad")`）、模態頻率、Surface EPR，或 Palace 的誤差估計（`ErrorIndicator().below(...)`）；全部列在[收斂宣告](../reference/specs/palace-electrostatic-sgb.qmd#convergence-declaration)。若宣告指定了模擬沒有的端子，或輪數上限不夠達成要求的連續輪數，`write_config()` 會拒絕。
+這些門檻只是範例。合適的門檻取決於你要拿這個數值做什麼：給電路模型用的電容，可能需要比粗估更嚴格的變化量。條件也可以指定矩陣中的單一元素（`Capacitance.element("pad", "pad")`）、模態頻率、Surface EPR，或 Palace 的誤差估計（`ErrorIndicator().below(...)`）；全部列在[收斂宣告](../reference/specs/palace-electrostatic-sgb.qmd#convergence-declaration)。若宣告指定了模擬沒有的端子，或回合數上限不夠達成要求的連續回合數，`write_config()` 會拒絕。
 
-Palace 會在收斂的那一輪之後被停下，所以之後成本最高的幾輪都不會求解（[停止方式](../reference/specs/palace-electrostatic-sgb.qmd#convergence-stop)）。
+Palace 會在收斂的那一回合之後被停下，所以之後成本最高的幾個回合都不會求解（[停止方式](../reference/specs/palace-electrostatic-sgb.qmd#convergence-stop)）。
 
 ## 執行 {#run-it}
 
@@ -113,7 +113,7 @@ Capacitance matrix (fF): pad
      pad      95.21
 ```
 
-執行在第 4 輪收斂，所以 Palace 在那裡停下，第 5 到 7 輪都沒有求解。電容取第 4 輪的值：95.21 fF。
+執行在第 4 回合收斂，所以 Palace 在那裡停下，第 5 到 7 回合都沒有求解。電容取第 4 回合的值：95.21 fF。
 
 ## 讀三個檢視 {#read-the-views}
 
@@ -130,46 +130,46 @@ Capacitance matrix (fF): pad
 
 ### 收斂了嗎？ {#trust-view}
 
-`show_run_trustworthiness()` 先列出執行的身分：Electrostatic 問題、Route B、記錄了 4 輪、16 個 MPI 行程，各 1 個 OpenMP 執行緒。接著是收斂表，每輪一列。`C diagonal ≤ 0.5 %` 這一欄是條件及其門檻，每格是與上一輪相比的變化：
+`show_run_trustworthiness()` 先列出執行的身分：Electrostatic 問題、Route B、記錄了 4 個回合、16 個 MPI 行程，各 1 個 OpenMP 執行緒。接著是收斂表，每個回合一列。`C diagonal ≤ 0.5 %` 這一欄是條件及其門檻，每格是與上一回合相比的變化：
 
-| 輪 | 求解的元素數 | C diagonal ≤ 0.5 % | 每個條件，連續 2 輪 |
+| 回合 | 求解的元素數 | C diagonal ≤ 0.5 % | 每個條件，連續 2 個回合 |
 |---|---|---|---|
 | 1 | 31,096 | N/A | not yet |
 | 2 | 169,380 | 1.37 % ✗ | fails |
 | 3 | 658,735 | 0.485 % ✓ | holds, 1 in a row |
 | 4 | 1,628,883 | 0.223 % ✓ | holds, 2 in a row |
 
-第 1 輪沒有上一輪，所以沒有變化量。條件在第 3 輪首次成立，第 4 輪再次成立：連續兩輪，所以執行在第 4 輪收斂。檢視接著畫出每個物理量隨輪數的變化，以及它的變化量對照宣告的門檻：
+第 1 回合沒有上一回合，所以沒有變化量。條件在第 3 回合首次成立，第 4 回合再次成立：連續兩個回合，所以執行在第 4 回合收斂。檢視接著畫出每個物理量隨回合數的變化，以及它的變化量對照宣告的門檻：
 
-<iframe src="../images/convergence-and-reports/capacitance-by-pass.html" title="C[pad][pad] 隨 AMR 輪數的變化：97.20、95.89、95.43 與 95.21 fF" width="100%" height="460" style="border:0;" loading="lazy"></iframe>
+<iframe src="../images/convergence-and-reports/capacitance-by-pass.html" title="C[pad][pad] 隨 AMR 回合數的變化：97.20、95.89、95.43 與 95.21 fF" width="100%" height="460" style="border:0;" loading="lazy"></iframe>
 
-<iframe src="../images/convergence-and-reports/capacitance-change-by-pass.html" title="C[pad][pad] 與上一輪相比的變化，對數座標，對照 0.5 % 的門檻" width="100%" height="460" style="border:0;" loading="lazy"></iframe>
+<iframe src="../images/convergence-and-reports/capacitance-change-by-pass.html" title="C[pad][pad] 與上一回合相比的變化，對數座標，對照 0.5 % 的門檻" width="100%" height="460" style="border:0;" loading="lazy"></iframe>
 
-第三張圖畫出每一輪 Palace 的誤差估計。加上 `show_details=True` 時，檢視還會用一句話說出判定（以下是原文輸出）：
+第三張圖畫出每一回合 Palace 的誤差估計。加上 `show_details=True` 時，檢視還會用一句話說出判定（以下是原文輸出）：
 
 > Converged at pass 4, of the 4 passes read (passes 1 to 4): every criterion
 > held at passes 3 to 4, 2 in a row. Last to hold: C diagonal, from pass 3. No
 > pass was read after it. SCGSim stopped Palace after pass 4: 3 of the 7 passes
 > its limit allows were not run.
 
-意思是：在讀到的 4 輪中於第 4 輪收斂，條件在第 3、4 輪連續成立；最後成立的是 C diagonal；SCGSim 在第 4 輪後停下 Palace，上限允許的 7 輪中有 3 輪沒有執行。沒有收斂的執行會把上限允許的每一輪都解完，這句話則會列出仍未成立的條件，以及差了多少。
+意思是：在讀到的 4 個回合中於第 4 回合收斂，條件在第 3、4 回合連續成立；最後成立的是 C diagonal；SCGSim 在第 4 回合後停下 Palace，上限允許的 7 個回合中有 3 個沒有執行。沒有收斂的執行會把上限允許的每一回合都解完，這句話則會列出仍未成立的條件，以及差了多少。
 
 ### 數值是多少？ {#physics-view}
 
-`show_physics_quantities()` 顯示最後讀到的那一輪（第 4 輪）的數值：Maxwell 電容矩陣，這裡只有一個元素，`C[pad][pad]` = 95.2144 fF。下面還有一行說 Surface-EPR 的物理量無法取得，因為這次執行沒有要求它。本徵模態執行則改為顯示每個模態的頻率與 Q 值。
+`show_physics_quantities()` 顯示最後讀到的那一回合（第 4 回合）的數值：Maxwell 電容矩陣，這裡只有一個元素，`C[pad][pad]` = 95.2144 fF。下面還有一行說 Surface-EPR 的物理量無法取得，因為這次執行沒有要求它。本徵模態執行則改為顯示每個模態的頻率與 Q 值。
 
 ### 花了多少成本？ {#benchmark-view}
 
-`show_simulation_benchmark()` 顯示成本：Palace 總耗時 93.8 秒，第 4 輪有 2,285,940 個自由度，峰值記憶體 24.37 GiB。它的逐輪表格顯示時間花在哪裡：
+`show_simulation_benchmark()` 顯示成本：Palace 總耗時 93.8 秒，第 4 回合有 2,285,940 個自由度，峰值記憶體 24.37 GiB。它的逐回合表格顯示時間花在哪裡：
 
-| 輪 | 自由度 | 網格元素數 | 本輪耗時 | 峰值記憶體 |
+| 回合 | 自由度 | 網格元素數 | 本回合耗時 | 峰值記憶體 |
 |---|---|---|---|---|
 | 1 | 50,966 | 31,096 | 0.716 s | 1.20 GiB |
 | 2 | 246,415 | 169,380 | 5.15 s | 3.22 GiB |
 | 3 | 928,764 | 658,735 | 25.5 s | 10.22 GiB |
 | 4 | 2,285,940 | 1,628,883 | 62.4 s | 24.37 GiB |
 
-光是第 4 輪就占了三分之二的時間，再往下每一輪只會更貴：這就是 Palace 要在收斂時停下的原因。成本檢視不判斷物理是否正確；Palace 各計時項彼此重疊，所以不能相加。
+光是第 4 回合就占了三分之二的時間，再往下每一回合只會更貴：這就是 Palace 要在收斂時停下的原因。成本檢視不判斷物理是否正確；Palace 各計時項彼此重疊，所以不能相加。
 
 各檢視逐張卡片的版面，見[報告模型](../reference/specs/report-model.qmd#declared-convergence)。
 
@@ -183,8 +183,8 @@ Capacitance matrix (fF): pad
 
 - **說明它的用途**：給電路模型用的電容、某個模態的頻率，或某個表面在某個模態中的參與比。用途決定你要讀哪個物理量，以及能接受多大的變化。
 - **讀物理量本身**：它的單位，以及執行記錄的端子、埠或模態順序。
-- **保存歷程**：每一輪的數值，而不只是最後一輪。這裡第 1 輪是 97.20 fF，第 4 輪是 95.21 fF；第一個模擬對同一塊焊墊只用一階元素、不細化、解一次，得到的是 112.54 fF。只有歷程能顯示單次求解離細化後的數值有多遠。沒有記錄下來的歷程，事後補不回來。
-- **把執行狀態與條件放在旁邊**：Palace 如何結束、收斂宣告、輪數上限與求解器設定。若數值在你的條件下還沒穩定，就照實說明；不要補上執行沒有顯示的趨勢或容許誤差。
+- **保存歷程**：每一回合的數值，而不只是最後一回合。這裡第 1 回合是 97.20 fF，第 4 回合是 95.21 fF；第一個模擬對同一塊焊墊只用一階元素、不細化、解一次，得到的是 112.54 fF。只有歷程能顯示單次求解離細化後的數值有多遠。沒有記錄下來的歷程，事後補不回來。
+- **把執行狀態與條件放在旁邊**：Palace 如何結束、收斂宣告、回合數上限與求解器設定。若數值在你的條件下還沒穩定，就照實說明；不要補上執行沒有顯示的趨勢或容許誤差。
 
 其他指南都連到這裡說明這條原則；它適用於每一種求解器。
 
@@ -219,7 +219,7 @@ report = inspect_run_trustworthiness(returned_run_dir)
 display(report)
 ```
 
-它會對資料夾中有的那幾輪顯示同樣的收斂表、記錄的狀態，失敗時也說明原因。最後一輪可讀的結果會當成部分證據顯示，但不會讓執行變成完成。被系統終止的程式結束代碼是 137，常見原因是記憶體不足，但光憑代碼不能證明；報告會說明實際記錄了什麼。
+它會對資料夾中有的那幾個回合顯示同樣的收斂表、記錄的狀態，失敗時也說明原因。最後一個可讀回合的結果會當成部分證據顯示，但不會讓執行變成完成。被系統終止的程式結束代碼是 137，常見原因是記憶體不足，但光憑代碼不能證明；報告會說明實際記錄了什麼。
 
 ## AEDT 的結果 {#aedt-read-the-sealed-family-evidence}
 
