@@ -29,6 +29,8 @@ SITE_URL = "https://ncuphy-ltlab.github.io/scgsim/"
 PREFIX = "/scgsim/"
 QUARTO_VERSION = "1.10.18"
 ASKR_COMMIT = "ab12c10b61d590c00ce1316f700ed56227027d71"
+# The Quarto projects of one version: English at its root, Traditional Chinese below it.
+LANGUAGE_PROJECTS = ("", "zh-TW/")
 
 
 @dataclass(frozen=True)
@@ -490,26 +492,49 @@ def _stage_publication(sources: _SourceCatalog, work: Path, quarto: str) -> Path
         PREFIX + "main/": latest["root"],
         **_retired_development_aliases(sources, development),
     }
-    manifest: _VersionManifest = {
+    menus = {
+        language: version_menu(sources, latest, language)
+        for language in LANGUAGE_PROJECTS
+    }
+    site = work / "site"
+    site.mkdir()
+    _render_versions(sources, site, menus, quarto)
+    _write_routes(site, sources.entries, latest, aliases)
+    _write_build_manifest(site, sources, latest)
+    return site
+
+
+def version_menu(
+    sources: _SourceCatalog, latest: _VersionEntry, language: str
+) -> _VersionManifest:
+    """The version menu of every version's ``language`` project.
+
+    Askr resolves a menu root against the folder that holds the menu, the language project's own root,
+    not against the site.  Every version is published beside the others under ``PREFIX``, so a root climbs
+    out of the project and into the same language of the other version, or into its English root when
+    that version has no such language.
+    """
+    up = "../" * (1 + language.count("/"))
+
+    def root(item: _VersionEntry) -> str:
+        source = sources.sources[item["slug"]]
+        own = language if (source / language / "_quarto.yml").is_file() else ""
+        return up + item["slug"] + "/" + own
+
+    return {
         "mode": "inline",
         "versions": [
             cast(
                 _MenuEntry,
                 {
                     "label": item["label"],
-                    "root": item["root"],
+                    "root": root(item),
                     **({"latest": True} if item is latest else {}),
                 },
             )
             for item in sources.entries
         ],
     }
-    site = work / "site"
-    site.mkdir()
-    _render_versions(sources, site, manifest, quarto)
-    _write_routes(site, sources.entries, latest, aliases)
-    _write_build_manifest(site, sources, latest)
-    return site
 
 
 def _retired_development_aliases(
@@ -533,7 +558,10 @@ def _retired_development_aliases(
 
 
 def _render_versions(
-    sources: _SourceCatalog, site: Path, manifest: _VersionManifest, quarto: str
+    sources: _SourceCatalog,
+    site: Path,
+    menus: dict[str, _VersionManifest],
+    quarto: str,
 ) -> None:
     """Bind each original source to its presentation and copy its completed render."""
     for entry in sources.entries:
@@ -551,11 +579,27 @@ def _render_versions(
                 ]
             }
         cast(dict[str, object], entry).update(actual_presentation)
+        languages = [
+            language
+            for language in LANGUAGE_PROJECTS
+            if (source / language / "_quarto.yml").is_file()
+        ]
+        # Askr embeds each project's menu in its pages when it renders them, for the first paint, and the
+        # browser then reads the menu published beside the pages; both are the publisher's, not the source's.
+        _write_menus(source, menus, languages)
         render_source(source, entry, actual_presentation, quarto)
         destination = site / entry["slug"]
         shutil.copytree(source / "_site", destination)
-        (destination / "askr-versions.json").write_text(
-            json.dumps(manifest, indent=2) + "\n"
+        _write_menus(destination, menus, languages)
+
+
+def _write_menus(
+    project: Path, menus: dict[str, _VersionManifest], languages: list[str]
+) -> None:
+    """Write the menu of each language project of a version, in its source or its render."""
+    for language in languages:
+        (project / language / "askr-versions.json").write_text(
+            json.dumps(menus[language], indent=2) + "\n"
         )
 
 

@@ -10,6 +10,7 @@ import runpy
 import subprocess
 import sys
 import tarfile
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -135,6 +136,9 @@ class _BuildHarness:
                 raise subprocess.CalledProcessError(19, ["quarto-test", "render"])
             rendered = source / "_site"
             rendered.mkdir()
+            # The real post-render step renders the Chinese project into ``_site/zh-TW``.
+            if (source / "zh-TW/_quarto.yml").is_file():
+                (rendered / "zh-TW").mkdir()
             if not self.missing_home:
                 (rendered / "index.html").write_text("Doubled Quarto home output.\n")
             observed = {
@@ -293,13 +297,51 @@ def test_versions_overlay_only_presentation_and_publish_after_all_renders(publis
         '"/scgsim/v1.9.0-dev/": "/scgsim/v2.0.0-dev/"'
         in (output / "404.html").read_text()
     )
-    for version in ("v2.0.0-dev", "v1.1.0", "v1.0.0"):
-        menu = json.loads((output / version / "askr-versions.json").read_text())
-        assert menu["versions"][1] == {
-            "label": "1.1.0",
-            "root": "/scgsim/v1.1.0/",
-            "latest": True,
-        }
+
+
+def test_every_page_menu_leads_to_the_published_versions(publisher):
+    """Each language project of each version carries the publisher's menu, when rendered and beside its pages.
+
+    Askr reads a menu root against the folder that holds the menu, the project's own root, so each root
+    must lead from there to that version in the same language, or to its English pages when the version
+    has no Chinese project. The source's own menu, with its local preview entry, is replaced.
+    """
+    for name in ("zh-TW/_quarto.yml", "zh-TW/index.qmd"):
+        del publisher.sources[HISTORY][name]
+    for source in publisher.sources.values():
+        source["askr-versions.json"] = (
+            '{"versions": [{"label": "Preview", "root": "/"}]}'
+        )
+    output = publisher.invoke()
+    site = "https://ncuphy-ltlab.github.io/scgsim/"
+    expected = {
+        "": {"2.0.0 dev": "v2.0.0-dev/", "1.1.0": "v1.1.0/", "1.0.0": "v1.0.0/"},
+        "zh-TW/": {
+            "2.0.0 dev": "v2.0.0-dev/zh-TW/",
+            "1.1.0": "v1.1.0/zh-TW/",
+            "1.0.0": "v1.0.0/",
+        },
+    }
+    projects = [
+        ("v2.0.0-dev", ""),
+        ("v2.0.0-dev", "zh-TW/"),
+        ("v1.1.0", ""),
+        ("v1.1.0", "zh-TW/"),
+        ("v1.0.0", ""),
+    ]
+    for slug, language in projects:
+        menu = json.loads((output / slug / language / "askr-versions.json").read_text())
+        rendered = json.loads((output / slug / "render-observation.json").read_text())
+        assert json.loads(rendered[language + "askr-versions.json"]) == menu
+        folder = site + slug + "/" + language
+        assert {
+            item["label"]: urllib.parse.urljoin(folder, item["root"])
+            for item in menu["versions"]
+        } == {label: site + root for label, root in expected[language].items()}
+        assert [item["label"] for item in menu["versions"] if item.get("latest")] == [
+            "1.1.0"
+        ]
+    assert not (output / "v1.0.0/zh-TW").exists()
 
 
 @pytest.mark.parametrize("label", ["Research", "研究"])
